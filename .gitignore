@@ -4,7 +4,8 @@
 # kernel-module and C build artefacts
 *.o
 *.ko
-*.mod
+# kernel-module build artefacts only (go.mod files must be tracked)
+hvx/*.mod
 *.mod.c
 .*.cmd
 modules.order
