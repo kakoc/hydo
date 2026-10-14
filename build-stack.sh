@@ -12,6 +12,9 @@ set -euo pipefail
 # Output name prefix: images go to build/${STACK_OUT}-{ext4,data,disk}.img (default "stack").
 # Lets two lines of work build their own guest image without overwriting each other's.
 STACK_OUT="${STACK_OUT:-stack}"
+# Source directory of the Go front door (default hvx/stack). The explorer builds from a
+# pinned copy (hvx/explore/stack-src) so its image does not change while hvx/stack is edited.
+STACK_GO_SRC="${STACK_GO_SRC:-hvx/stack}"
 mkdir -p build
 
 # --- reproducible cpio (verbatim from build-linux.sh §prelude) ---
@@ -151,11 +154,12 @@ STACK_KAFKA_CLUSTER_ID="P0hH8j92QAKKXdQ2D7Aw7A"
 #     pinned Go toolchain, dependency versions pinned by hvx/stack/go.sum, CGO off,
 #     -trimpath, empty build id. Modules are cached under build/stack-gomod. ---
 mkdir -p build/stack-gomod build/stack-gocache
-( cd hvx/stack && \
-  GOPATH="$PWD/../../build/stack-gopath" GOMODCACHE="$PWD/../../build/stack-gomod" \
-  GOCACHE="$PWD/../../build/stack-gocache" GOFLAGS=-mod=readonly GOTOOLCHAIN=local \
+TOP="$PWD"
+( cd "$STACK_GO_SRC" && \
+  GOPATH="$TOP/build/stack-gopath" GOMODCACHE="$TOP/build/stack-gomod" \
+  GOCACHE="$TOP/build/stack-gocache" GOFLAGS=-mod=readonly GOTOOLCHAIN=local \
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-  "$GO" build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o ../../build/${STACK_OUT}-hydostack . )
+  "$GO" build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o "$TOP/build/${STACK_OUT}-hydostack" . )
 echo "built build/${STACK_OUT}-hydostack ($(stat -c%s build/${STACK_OUT}-hydostack) bytes, static Go, sha256 $(sha256sum build/${STACK_OUT}-hydostack | cut -c1-16))"
 
 # --- 6.2 the ro-root tree: MySQL + JDK closures, Kafka jars, static redis + hydostack.
@@ -536,6 +540,22 @@ case "$PHASE" in
 esac
 SINIT
 chmod +x "$R/sbin/init"
+# The explorer image (STACK_OUT=explore) adds a command-driven "serve" mode to /sbin/init:
+# hvx/explore/stack-explore.sh is installed as /etc/stack-explore.sh and hooked in at two
+# points. Every other image keeps the init above byte-for-byte.
+if [ "$STACK_OUT" = "explore" ]; then
+  cp hvx/explore/stack-explore.sh "$R/etc/stack-explore.sh"
+  "$PY3" - "$R/sbin/init" <<'PYEOF'
+import sys
+p = sys.argv[1]; s = open(p).read()
+a = 'echo "hydo-stack: loopback up"\n'
+b = 'case "$PHASE" in\n'
+assert s.count(a) == 1 and s.count(b) == 1
+s = s.replace(a, a + 'EXPLORE=""; [ "$PHASE" = "serve" ] && { . /etc/stack-explore.sh; explore_s0; }\n')
+s = s.replace(b, '[ -n "$EXPLORE" ] && explore_main\n' + b)
+open(p, "w").write(s)
+PYEOF
+fi
 find "$R" -exec touch --no-dereference -h -d @1600000000 {} + 2>/dev/null || true
 
 # --- 6.3 images: ext4 ro-root (p1) + journaled ext4 data disk (p2) behind a hand-made MBR ---

@@ -701,6 +701,11 @@ done:
 	return rc;
 }
 
+/* hvx_explore.c includes this file for its boot/snapshot/fingerprint machinery and
+ * supplies its own main. */
+#ifdef HVX_STACK_NO_MAIN
+#define main hvx_stack_verify_main
+#endif
 int main(int argc, char **argv)
 {
 	const char *kernel_path, *initrd_path, *disk_path;
