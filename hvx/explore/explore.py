@@ -27,6 +27,7 @@ NORDERS = 30
 HERE = os.path.dirname(os.path.abspath(__file__))
 HVX = os.path.dirname(HERE)
 BUILD = os.path.expanduser("~/hydo/build")
+IMAGE = "explore-disk.img"
 
 
 class SplitMix:
@@ -152,6 +153,49 @@ def finding_class(s):
     return "durable-defaults"
 
 
+# ---------------------------------------------------------------- assertions (hvx/ASSERTIONS.md)
+ASSERT_RE = re.compile(r"HYDO-ASSERT (\{.*\})")
+
+
+def assert_failures(outdir, tag):
+    """Failed property evaluations in one run's console(s): an always / always_or_unreachable
+    with ok=false, or any unreachable that was emitted. Returns sorted assertion ids."""
+    bad = set()
+    for suffix in ("", ".recovery"):
+        path = os.path.join(outdir, "consoles", "%s%s.log" % (tag, suffix))
+        if not os.path.exists(path):
+            continue
+        for line in open(path, errors="replace"):
+            m = ASSERT_RE.search(line)
+            if not m:
+                continue
+            try:
+                rec = json.loads(m.group(1))
+            except ValueError:
+                continue
+            t, ok = rec.get("t"), rec.get("ok")
+            if (t in ("always", "always_or_unreachable") and ok is False) or t == "unreachable":
+                bad.add(rec.get("id", "?"))
+    return sorted(bad)
+
+
+def property_table(outdir, tags):
+    """The exploration-wide property table from hvx/hydo_assert_report (built on the fly),
+    over the consoles of the given runs. Returns its text, or None if no run emitted records."""
+    files = []
+    for t in tags:
+        for suffix in ("", ".recovery"):
+            p = os.path.join(outdir, "consoles", "%s%s.log" % (t, suffix))
+            if os.path.exists(p) and "HYDO-ASSERT" in open(p, errors="replace").read():
+                files.append(p)
+    if not files:
+        return None
+    tool = os.path.join(outdir, "hydo_assert_report")
+    subprocess.run(["cc", "-O2", "-o", tool, os.path.join(HVX, "hydo_assert_report.c")], check=True)
+    r = subprocess.run([tool] + files, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    return r.stdout
+
+
 def verdict_kind(v):
     if "HYDO-ORACLE: OK" in v:
         return "ok"
@@ -176,7 +220,7 @@ class Worker(threading.Thread):
     def run(self):
         cmd = [os.path.expanduser("~/bin/hvx-run"), "sudo", "env", "HVX_SNAP_DIR=/var/tmp/hvx-snap",
                os.path.join(HVX, "hvx_explore"), "serve", os.path.join(BUILD, "bzImage"),
-               os.path.join(BUILD, "initramfs-kafka.cpio.gz"), os.path.join(BUILD, "explore-disk.img"),
+               os.path.join(BUILD, "initramfs-kafka.cpio.gz"), os.path.join(BUILD, IMAGE),
                os.path.join(self.outdir, "consoles")]
         err = open(os.path.join(self.outdir, "worker-%d.err" % self.idx), "w")
         p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err, text=True, bufsize=1)
@@ -293,6 +337,7 @@ def shrink(pool, s, verdict, log, budget=40):
         for (tag, text), c in zip(items, cands):
             v = res[tag][1]["verdict"]
             log.write(json.dumps({"shrink": text, "verdict": v}) + "\n")
+            log.flush()
             if same_failure(cur_v, v):
                 cur, cur_v, progressed = c, v, True
                 break
@@ -305,11 +350,14 @@ def shrink(pool, s, verdict, log, budget=40):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-200")
-    ap.add_argument("--workers", type=int, default=6)
+    ap.add_argument("--workers", type=int, default=3)   # the box has 4 cores: 3 is fastest (M38)
+    ap.add_argument("--image", default="explore-disk.img", help="guest disk image under ~/hydo/build")
     ap.add_argument("--out", required=True)
     ap.add_argument("--schedule", help="run just this schedule (no generation)")
     ap.add_argument("--no-shrink", action="store_true")
     a = ap.parse_args()
+    global IMAGE
+    IMAGE = a.image
     os.makedirs(a.out, exist_ok=True)
     t0 = time.time()
     pool = Pool(a.workers, a.out)
@@ -331,6 +379,10 @@ def main():
         text, r = res[tag]
         s = parse(text)
         rec = {"seed": sd, "schedule": text, "class": finding_class(s), **r}
+        rec["assert_failures"] = assert_failures(a.out, tag)
+        if rec["assert_failures"] and verdict_kind(r["verdict"]) == "ok":
+            # the HYDO-ORACLE line said OK but a property failed: the property wins
+            rec["verdict"] = r["verdict"] = "VIOLATION assertion " + ",".join(rec["assert_failures"])
         runs.write(json.dumps(rec) + "\n")
         if verdict_kind(r["verdict"]) != "ok":
             fails.append(rec)
@@ -370,11 +422,14 @@ def main():
     json.dump({"summary": summary, "failures": fails,
                "shrunk": [{"class": k[0], "signature": k[1], **v} for k, v in shrunk.items()]},
               open(os.path.join(a.out, "report.json"), "w"), indent=1)
-    write_report(a.out, summary, fails, shrunk)
+    table = property_table(a.out, ["seed-%d" % sd for sd in seeds])
+    if table is not None:
+        open(os.path.join(a.out, "properties.txt"), "w").write(table)
+    write_report(a.out, summary, fails, shrunk, table)
     print(json.dumps(summary))
 
 
-def write_report(out, summary, fails, shrunk):
+def write_report(out, summary, fails, shrunk, table=None):
     L = ["# Explorer report", "", "| | |", "|---|---|"]
     for k, v in summary.items():
         L.append("| %s | %s |" % (k, v))
@@ -394,6 +449,11 @@ def write_report(out, summary, fails, shrunk):
               "- verdict: `%s`" % v["min_verdict"],
               "- fingerprint, two runs: `%s` / `%s` (%s)" % (v["fp_a"], v["fp_b"], "identical" if v["fp_a"] == v["fp_b"] else "DIFFERENT"),
               "- by hand: `hvx_explore one <bzImage> <initramfs-kafka.cpio.gz> <explore-disk.img> <outdir> \"%s\"`" % v["minimal"], ""]
+    L += ["## Property table over every schedule (hvx/ASSERTIONS.md)", ""]
+    if table is None:
+        L += ["The guest emitted no HYDO-ASSERT records (an image built without the assertion SDK).", ""]
+    else:
+        L += ["```", table.rstrip(), "```", ""]
     open(os.path.join(out, "report.md"), "w").write("\n".join(L) + "\n")
 
 
