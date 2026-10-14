@@ -1,0 +1,13 @@
+#cloud-config
+# NoCloud seed for the L1 sandbox. run-l1.sh substitutes @PUBKEY@ with the
+# contents of ~/l1/id_l1.pub before building the seed ISO.
+users:
+  - name: dev
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    lock_passwd: false
+    ssh_authorized_keys:
+      - @PUBKEY@
+ssh_pwauth: false
+package_update: false
+package_upgrade: false

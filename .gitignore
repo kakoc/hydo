@@ -1,0 +1,16 @@
+# build outputs (guest images, kernels, staged root trees) are produced on the build box
+/build/
+/target/
+# kernel-module and C build artefacts
+*.o
+*.ko
+*.mod
+*.mod.c
+.*.cmd
+modules.order
+Module.symvers
+# backups and editor files
+*.bak
+*-bak
+*.partA-bak
+.DS_Store

@@ -1,0 +1,20 @@
+[package]
+name = "hydo"
+version = "0.1.0"
+edition = "2021"
+description = "A deterministic KVM hypervisor with record/replay and verified bit-identical execution"
+
+[[bin]]
+name = "hydo"
+path = "src/main.rs"
+
+[dependencies]
+kvm-ioctls = "0.17"
+kvm-bindings = "0.8"
+libc = "0.2"
+blake3 = "1"
+perf-event-open-sys = "4"
+
+[profile.release]
+opt-level = 2
+debug = true
