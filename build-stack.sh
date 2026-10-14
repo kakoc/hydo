@@ -9,6 +9,9 @@
 # Run on the build box:  ./dev.sh "bash ./build-stack.sh"  (the first run downloads the
 # Go modules pinned by hvx/stack/go.sum into build/stack-gomod).
 set -euo pipefail
+# Output name prefix: images go to build/${STACK_OUT}-{ext4,data,disk}.img (default "stack").
+# Lets two lines of work build their own guest image without overwriting each other's.
+STACK_OUT="${STACK_OUT:-stack}"
 mkdir -p build
 
 # --- reproducible cpio (verbatim from build-linux.sh §prelude) ---
@@ -152,12 +155,12 @@ mkdir -p build/stack-gomod build/stack-gocache
   GOPATH="$PWD/../../build/stack-gopath" GOMODCACHE="$PWD/../../build/stack-gomod" \
   GOCACHE="$PWD/../../build/stack-gocache" GOFLAGS=-mod=readonly GOTOOLCHAIN=local \
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-  "$GO" build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o ../../build/hydostack . )
-echo "built build/hydostack ($(stat -c%s build/hydostack) bytes, static Go, sha256 $(sha256sum build/hydostack | cut -c1-16))"
+  "$GO" build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o ../../build/${STACK_OUT}-hydostack . )
+echo "built build/${STACK_OUT}-hydostack ($(stat -c%s build/${STACK_OUT}-hydostack) bytes, static Go, sha256 $(sha256sum build/${STACK_OUT}-hydostack | cut -c1-16))"
 
 # --- 6.2 the ro-root tree: MySQL + JDK closures, Kafka jars, static redis + hydostack.
 #     The closures are staged once and reused; only the small mutable dirs are rebuilt. ---
-R=build/rootfs-stack-root
+R=build/rootfs-${STACK_OUT}-root
 if [ -x "$R$MYSQL/bin/mysqld" ] && [ -x "$R$JDK/bin/java" ] && [ -d "$R/opt/kafka/libs" ]; then
   echo "stack ro-root: reusing the staged closures (remove $R to force fresh)"
   chmod -R u+w "${R:?}/bin" "${R:?}/sbin" "${R:?}/etc" 2>/dev/null || true
@@ -188,7 +191,7 @@ done
 cp build/hvx_seedrng "$R/bin/hvx_seedrng"
 cp "$REDIS_OUT/bin/redis-server" "$R/bin/redis-server"
 cp "$REDIS_OUT/bin/redis-cli" "$R/bin/redis-cli"
-cp build/hydostack "$R/bin/hydostack"
+cp build/${STACK_OUT}-hydostack "$R/bin/hydostack"
 chmod 0755 "$R/bin/hvx_seedrng" "$R/bin/redis-server" "$R/bin/redis-cli" "$R/bin/hydostack"
 cat > "$R/etc/stack-env" <<ENV
 MYSQL=$MYSQL
@@ -538,17 +541,17 @@ find "$R" -exec touch --no-dereference -h -d @1600000000 {} + 2>/dev/null || tru
 # --- 6.3 images: ext4 ro-root (p1) + journaled ext4 data disk (p2) behind a hand-made MBR ---
 STACK_EXT4_MIB=1792
 STACK_DATA_MIB=512
-mkext4_rootfs_reproducible build/stack-ext4.img "$R" $STACK_EXT4_MIB \
+mkext4_rootfs_reproducible build/${STACK_OUT}-ext4.img "$R" $STACK_EXT4_MIB \
   aaaa3535-bbbb-cccc-dddd-eeeeffff0035 35353535-1111-2222-3333-444455556666
-echo "built build/stack-ext4.img ($(stat -c%s build/stack-ext4.img) bytes)"
+echo "built build/${STACK_OUT}-ext4.img ($(stat -c%s build/${STACK_OUT}-ext4.img) bytes)"
 
-: > build/stack-data.img; truncate -s $(( STACK_DATA_MIB * 1024 * 1024 )) build/stack-data.img
+: > build/${STACK_OUT}-data.img; truncate -s $(( STACK_DATA_MIB * 1024 * 1024 )) build/${STACK_OUT}-data.img
 SOURCE_DATE_EPOCH=1600000000 "$FAKETIME_BIN" "$FAKE_TS" "$MKE2FS" -q -F -t ext4 -b 4096 \
   -O ^metadata_csum,^64bit,^flex_bg,^resize_inode,has_journal -J size=16 \
   -U 35350000-2222-3333-4444-5555eeee0035 \
   -E hash_seed=35355555-4444-3333-2222-1111dddd0035,lazy_itable_init=0,lazy_journal_init=0 \
-  build/stack-data.img
-"$PY3" - build/stack-data.img <<'PYEOF'
+  build/${STACK_OUT}-data.img
+"$PY3" - build/${STACK_OUT}-data.img <<'PYEOF'
 import sys, struct, mmap
 f = open(sys.argv[1], "r+b"); mm = mmap.mmap(f.fileno(), 0)
 u16 = lambda o: struct.unpack_from("<H", mm, o)[0]
@@ -574,14 +577,14 @@ for g in range(ng):
                 struct.pack_into("<I", mm, io + o, 0)
 mm.flush(); mm.close(); f.close()
 PYEOF
-echo "built build/stack-data.img ($(stat -c%s build/stack-data.img) bytes, journaled ext4, time-normalized)"
+echo "built build/${STACK_OUT}-data.img ($(stat -c%s build/${STACK_OUT}-data.img) bytes, journaled ext4, time-normalized)"
 
 P1_LBA=2048
 P1_SECTORS=$(( STACK_EXT4_MIB * 1024 * 1024 / 512 ))
 P2_SECTORS=$(( STACK_DATA_MIB * 1024 * 1024 / 512 ))
 P2_LBA=$(( P1_LBA + P1_SECTORS ))
-: > build/stack-disk.img; truncate -s $(( (P2_LBA + P2_SECTORS) * 512 )) build/stack-disk.img
-"$PY3" - build/stack-disk.img "$P1_LBA" "$P1_SECTORS" "$P2_LBA" "$P2_SECTORS" <<'PYEOF'
+: > build/${STACK_OUT}-disk.img; truncate -s $(( (P2_LBA + P2_SECTORS) * 512 )) build/${STACK_OUT}-disk.img
+"$PY3" - build/${STACK_OUT}-disk.img "$P1_LBA" "$P1_SECTORS" "$P2_LBA" "$P2_SECTORS" <<'PYEOF'
 import sys, struct
 img, p1s, p1n, p2s, p2n = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5])
 mbr = bytearray(512)
@@ -599,11 +602,11 @@ mbr[0x1FE] = 0x55; mbr[0x1FF] = 0xAA
 with open(img, "r+b") as f:
     f.write(mbr)
 PYEOF
-dd if=build/stack-ext4.img of=build/stack-disk.img bs=512 seek=$P1_LBA conv=notrunc status=none
-dd if=build/stack-data.img of=build/stack-disk.img bs=512 seek=$P2_LBA conv=notrunc status=none
-echo "built build/stack-disk.img ($(stat -c%s build/stack-disk.img) bytes: MBR + p1 ext4 ro-root @ LBA $P1_LBA + p2 journaled ext4 data @ LBA $P2_LBA)"
-echo "  sha256(hydostack)=$(sha256sum build/hydostack | cut -d' ' -f1)"
-echo "  sha256(stack-ext4.img)=$(sha256sum build/stack-ext4.img | cut -d' ' -f1)"
-echo "  sha256(stack-data.img)=$(sha256sum build/stack-data.img | cut -d' ' -f1)"
-echo "  sha256(stack-disk.img)=$(sha256sum build/stack-disk.img | cut -d' ' -f1)"
+dd if=build/${STACK_OUT}-ext4.img of=build/${STACK_OUT}-disk.img bs=512 seek=$P1_LBA conv=notrunc status=none
+dd if=build/${STACK_OUT}-data.img of=build/${STACK_OUT}-disk.img bs=512 seek=$P2_LBA conv=notrunc status=none
+echo "built build/${STACK_OUT}-disk.img ($(stat -c%s build/${STACK_OUT}-disk.img) bytes: MBR + p1 ext4 ro-root @ LBA $P1_LBA + p2 journaled ext4 data @ LBA $P2_LBA)"
+echo "  sha256(hydostack)=$(sha256sum build/${STACK_OUT}-hydostack | cut -d' ' -f1)"
+echo "  sha256(${STACK_OUT}-ext4.img)=$(sha256sum build/${STACK_OUT}-ext4.img | cut -d' ' -f1)"
+echo "  sha256(${STACK_OUT}-data.img)=$(sha256sum build/${STACK_OUT}-data.img | cut -d' ' -f1)"
+echo "  sha256(${STACK_OUT}-disk.img)=$(sha256sum build/${STACK_OUT}-disk.img | cut -d' ' -f1)"
 echo ">> build-stack.sh: DONE"
