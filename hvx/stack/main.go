@@ -10,19 +10,36 @@
 //	                                 flag records success, and if an earlier attempt for this
 //	                                 id ended in an error (its outcome unknown) the topic is
 //	                                 checked for the key before producing again;
-//	                              3. Redis: SET (idempotent).
-//	                            It ACKs only after all three are confirmed.
+//	                              3. Redis: SET (idempotent), BEST EFFORT (Milestone 39):
+//	                                 Redis is a cache, so a failed cache write never
+//	                                 fails an order that is already durable and published.
+//	                            It ACKs once MySQL and Kafka are confirmed. Every store call,
+//	                            the producer included, is bounded by the request's deadline.
+//	                            A failed Place says which of two things happened (M39):
+//	                              FailedPrecondition "not-applied": nothing was published
+//	                                 and nothing will be -- no produce was ever started for
+//	                                 this id in this process;
+//	                              any other error: OUTCOME UNKNOWN -- a produce for this id
+//	                                 was started (now or earlier), so the order may already
+//	                                 be in Kafka, or may still land there.
 //	hydostack place <n>         client: places orders 0..n-1 through gRPC, one at a time.
 //	hydostack place <from> <to> client: one attempt per order; a failed order is reported
-//	                            and the client moves on. ACKed ids go to $HYDO_ACKED.
+//	                            and the client moves on. ACKed ids go to $HYDO_ACKED; every
+//	                            attempt's outcome ("<id> ack|failed|unknown") goes to
+//	                            $HYDO_OUTCOMES.
 //	hydostack retry <n> <file>  client: re-places, with the SAME id and several attempts,
 //	                            every order in 0..n-1 not yet listed in <file> (the ACKed
 //	                            ids); newly ACKed ids are appended to <file>.
 //	hydostack oracle <n>        after a crash + recovery: every order 0..n-1 is in MySQL and
 //	                            exactly once in Kafka, and Redis never holds a wrong value.
-//	hydostack oracle <n> <file> the same for the ACKed ids in <file>, which must also be
-//	                            marked published; every order NOT acked must not have
-//	                            reached Kafka (no "applied but reported as failed").
+//	hydostack oracle <n> <file> [<failed>]
+//	                            the same for the ACKed ids in <file>, which must also be
+//	                            marked published. An order the client was told definitely
+//	                            FAILED (its last outcome; ids listed in <failed>) must not
+//	                            be in Kafka. An order whose outcome the client could not know
+//	                            (a timeout, a lost ACK, a power cut while it was in flight)
+//	                            MAY be in Kafka: that window is inherent to any request/
+//	                            response protocol and is counted, not reported.
 //
 // Invariants are described with hydo's assertion SDK (package hydoassert, hvx/ASSERTIONS.md):
 // the catalog below is declared up front and written to the console by `server` and
@@ -48,7 +65,9 @@ import (
 	"github.com/segmentio/kafka-go"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"hydostack/hydoassert"
@@ -63,7 +82,8 @@ var (
 	pKafkaOnce      = hydoassert.Always("order.kafka_exactly_once", "every checked order is in Kafka exactly once")
 	pPublished      = hydoassert.AlwaysOrUnreachable("order.acked_marked_published", "an ACKed order is marked published in MySQL")
 	pRedisNotWrong  = hydoassert.Always("order.redis_never_wrong", "Redis never holds a wrong amount (a missing key is allowed)")
-	pAppliedNoAck   = hydoassert.Unreachable("order.applied_but_not_acked", "an order the client was never ACKed for reached Kafka")
+	pToldFailed     = hydoassert.Unreachable("order.told_failed_but_applied", "an order the client was told definitely failed reached Kafka")
+	pUnknownApplied = hydoassert.Sometimes("order.unknown_outcome_applied", "an order whose outcome the client could not know reached Kafka (the inherent lost-ACK window)")
 	pRedisMiss      = hydoassert.Sometimes("oracle.redis_cache_miss", "the oracle saw a Redis cache miss")
 	pPending        = hydoassert.Sometimes("oracle.pending_order", "an un-ACKed order was left pending (unpublished) in MySQL")
 	// the front door
@@ -72,8 +92,13 @@ var (
 	pKafkaRecheck = hydoassert.Sometimes("server.kafka_recheck", "an order whose earlier produce was uncertain was looked up in Kafka first")
 	pDedupHit     = hydoassert.Sometimes("server.kafka_dedup_hit", "the Kafka lookup found the order already there (a duplicate was avoided)")
 	pRedisRedial  = hydoassert.Reachable("server.redis_redialed", "the front door re-dialed Redis after its connection broke")
+	pCacheSkipped = hydoassert.Sometimes("server.cache_write_skipped", "a Redis cache write failed and was skipped; the order was still ACKed")
+	pNotApplied   = hydoassert.Sometimes("server.not_applied", "a Place failed before any produce was started (a definite failure)")
+	pUnknown      = hydoassert.Sometimes("server.outcome_unknown", "a Place failed after a produce had been started (outcome unknown)")
 	// the client
 	pClientFail     = hydoassert.Sometimes("client.place_failed", "a client Place attempt failed")
+	pClientDefinite = hydoassert.Sometimes("client.definite_failure", "the client was told an attempt definitely did not apply")
+	pClientUnknown  = hydoassert.Sometimes("client.outcome_unknown", "an attempt ended with an unknown outcome (timeout, lost ACK, outcome-unknown error)")
 	pRetryRecovered = hydoassert.Sometimes("client.retry_recovered", "an order that had failed was ACKed on a later attempt")
 	pRetryExhausted = hydoassert.Sometimes("client.retry_exhausted", "an order was still un-ACKed after all retry attempts")
 )
@@ -84,6 +109,12 @@ const (
 	redisAddr = "127.0.0.1:6379"
 	mysqlDSN  = "hydo:@tcp(127.0.0.1:3306)/"
 	topic     = "orders"
+
+	// A cache write may not hold up an order: bounded well inside any client deadline.
+	redisTimeout = 2 * time.Second
+	// The producer stops retrying a record after this long, so it never keeps going long
+	// after the client has been answered (the request context bounds it further).
+	produceTimeout = 10 * time.Second
 )
 
 func amount(id int64) int64 { return 100000 + id }
@@ -153,13 +184,38 @@ type orderServer struct {
 	kp        *kgo.Client // idempotent producer
 	rc        *redisConn
 	uncertain map[int64]bool // ids whose produce ended in an error: outcome unknown
+	attempted map[int64]bool // ids for which a produce was ever started (never cleared)
+}
+
+// The two ways a Place can fail (Milestone 39). notApplied is a promise that nothing was
+// published and nothing will be: it is returned only while no produce has ever been
+// started for the id. Anything later is outcome-unknown.
+func notApplied(store string, id int64, err error) error {
+	pStoreError.Check(true, hydoassert.D{"store": store, "order": id})
+	pNotApplied.Check(true, hydoassert.D{"store": store, "order": id})
+	return status.Error(codes.FailedPrecondition, "not-applied: "+err.Error())
+}
+
+func outcomeUnknown(store string, id int64, err error) error {
+	pStoreError.Check(true, hydoassert.D{"store": store, "order": id})
+	pUnknown.Check(true, hydoassert.D{"store": store, "order": id})
+	return status.Error(codes.Unknown, "outcome-unknown: "+err.Error())
+}
+
+// failBefore picks the right kind for a failure that happened before this attempt's
+// produce: definite unless an earlier attempt already started one.
+func (s *orderServer) failBefore(store string, id int64, err error) error {
+	if s.attempted[id] {
+		return outcomeUnknown(store, id, err)
+	}
+	return notApplied(store, id, err)
 }
 
 // kafkaHasKey scans the (small) topic for a record with this key. Used only before
 // re-producing an order whose previous produce ended in an error, so a produce that had
 // in fact succeeded is not written a second time.
-func kafkaHasKey(id int64) (bool, error) {
-	kc, err := kafka.DialLeader(context.Background(), "tcp", kafkaAddr, topic, 0)
+func kafkaHasKey(ctx context.Context, id int64) (bool, error) {
+	kc, err := kafka.DialLeader(ctx, "tcp", kafkaAddr, topic, 0)
 	if err != nil {
 		return false, err
 	}
@@ -173,7 +229,11 @@ func kafkaHasKey(id int64) (bool, error) {
 	}
 	want := strconv.FormatInt(id, 10)
 	for off := first; off < last; {
-		kc.SetReadDeadline(time.Now().Add(15 * time.Second))
+		dl := time.Now().Add(15 * time.Second)
+		if d, ok := ctx.Deadline(); ok && d.Before(dl) {
+			dl = d // never outlive the request
+		}
+		kc.SetReadDeadline(dl)
 		m, err := kc.ReadMessage(1 << 20)
 		if err != nil {
 			return false, err
@@ -189,6 +249,7 @@ func kafkaHasKey(id int64) (bool, error) {
 // redisSet sets one key, re-dialing once if the connection broke (Redis restarted).
 func (s *orderServer) redisSet(k, v string) error {
 	if s.rc != nil {
+		s.rc.c.SetDeadline(time.Now().Add(redisTimeout))
 		if _, _, err := s.rc.cmd("SET", k, v); err == nil {
 			return nil
 		}
@@ -196,11 +257,12 @@ func (s *orderServer) redisSet(k, v string) error {
 		s.rc = nil
 		pRedisRedial.Hit(nil)
 	}
-	rc, err := redisDial()
+	c, err := net.DialTimeout("tcp", redisAddr, redisTimeout)
 	if err != nil {
 		return err
 	}
-	s.rc = rc
+	s.rc = &redisConn{c: c, r: bufio.NewReader(c)}
+	s.rc.c.SetDeadline(time.Now().Add(redisTimeout))
 	_, _, err = s.rc.cmd("SET", k, v)
 	return err
 }
@@ -208,56 +270,57 @@ func (s *orderServer) redisSet(k, v string) error {
 func (s *orderServer) place(ctx context.Context, in *wrapperspb.Int64Value) (*wrapperspb.StringValue, error) {
 	id := in.GetValue()
 	amt := amount(id)
+	// Every call below runs under ctx, which carries the client's deadline (gRPC propagates
+	// it), so nothing here keeps working on an order after the client has given up on it.
+	//
 	// 1. MySQL: upsert -- a retry of an order that is already stored is a no-op.
 	if _, err := s.db.ExecContext(ctx, "INSERT INTO stack.orders (id, amount) VALUES (?, ?) ON DUPLICATE KEY UPDATE id = id", id, amt); err != nil {
-		return nil, storeErr("mysql", id, fmt.Errorf("mysql: %w", err))
+		return nil, s.failBefore("mysql", id, fmt.Errorf("mysql: %w", err))
 	}
 	// 2. Kafka, exactly once: skip if already published; otherwise, if an earlier attempt's
 	// outcome is unknown, look before producing again.
 	var published int
 	if err := s.db.QueryRowContext(ctx, "SELECT published FROM stack.orders WHERE id = ?", id).Scan(&published); err != nil {
-		return nil, storeErr("mysql", id, fmt.Errorf("mysql: %w", err))
+		return nil, s.failBefore("mysql", id, fmt.Errorf("mysql: %w", err))
 	}
 	if published == 0 {
 		have := false
 		if s.uncertain[id] {
 			var err error
-			if have, err = kafkaHasKey(id); err != nil {
-				return nil, storeErr("kafka-check", id, fmt.Errorf("kafka check: %w", err))
+			if have, err = kafkaHasKey(ctx, id); err != nil {
+				return nil, outcomeUnknown("kafka-check", id, fmt.Errorf("kafka check: %w", err))
 			}
 			pKafkaRecheck.Check(true, hydoassert.D{"order": id})
 			pDedupHit.Check(have, hydoassert.D{"order": id})
 		}
 		if !have {
+			// From here on the order may reach Kafka even if this call fails: no later
+			// failure of this id can be reported as definite.
+			s.attempted[id] = true
 			s.uncertain[id] = true
 			res := s.kp.ProduceSync(ctx, &kgo.Record{
 				Key:   []byte(strconv.FormatInt(id, 10)),
 				Value: []byte(strconv.FormatInt(amt, 10)),
 			})
 			if err := res.FirstErr(); err != nil {
-				return nil, storeErr("kafka", id, fmt.Errorf("kafka: %w", err))
+				return nil, outcomeUnknown("kafka", id, fmt.Errorf("kafka: %w", err))
 			}
 		}
 		delete(s.uncertain, id)
 		if _, err := s.db.ExecContext(ctx, "UPDATE stack.orders SET published = 1 WHERE id = ?", id); err != nil {
 			// Kafka has it; the flag will be set by the retry, which finds the key first.
 			s.uncertain[id] = true
-			return nil, storeErr("mysql-publish", id, fmt.Errorf("mysql publish flag: %w", err))
+			return nil, outcomeUnknown("mysql-publish", id, fmt.Errorf("mysql publish flag: %w", err))
 		}
 	}
-	// 3. Redis (idempotent).
+	// 3. Redis: a cache, so best effort. The order is durable and published; failing it now
+	// would tell the client "failed" about an order that has taken effect (the Milestone 38
+	// explorer finding). A skipped write only means a later cache miss.
 	if err := s.redisSet("order:"+strconv.FormatInt(id, 10), strconv.FormatInt(amt, 10)); err != nil {
-		return nil, storeErr("redis", id, fmt.Errorf("redis: %w", err))
+		pCacheSkipped.Check(true, hydoassert.D{"order": id, "error": err.Error()})
 	}
 	pPlaceAcked.Check(true, nil)
 	return wrapperspb.String("ok"), nil
-}
-
-// storeErr records that a Place failed on one store (coverage: the error paths were
-// exercised) and passes the error through.
-func storeErr(store string, id int64, err error) error {
-	pStoreError.Check(true, hydoassert.D{"store": store, "order": id})
-	return err
 }
 
 type orderService interface {
@@ -328,6 +391,7 @@ func server() {
 		kgo.DefaultProduceTopic(topic),
 		kgo.RequiredAcks(kgo.AllISRAcks()),
 		kgo.ProducerLinger(0),
+		kgo.RecordDeliveryTimeout(produceTimeout),
 	)
 	if err != nil {
 		fail("hydostack: kafka producer: %v", err)
@@ -337,10 +401,35 @@ func server() {
 		fail("hydostack: listen: %v", err)
 	}
 	gs := grpc.NewServer()
-	gs.RegisterService(&serviceDesc, &orderServer{db: db, kp: kp, rc: rc, uncertain: map[int64]bool{}})
+	gs.RegisterService(&serviceDesc, &orderServer{db: db, kp: kp, rc: rc, uncertain: map[int64]bool{}, attempted: map[int64]bool{}})
 	fmt.Println("hydostack: server listening on " + grpcAddr)
 	if err := gs.Serve(lis); err != nil {
 		fail("hydostack: serve: %v", err)
+	}
+}
+
+// outcome classifies a failed attempt: "failed" only when the server said nothing was
+// applied; a timeout, a broken connection or any other error leaves it unknown.
+func outcome(err error) string {
+	if status.Code(err) == codes.FailedPrecondition {
+		pClientDefinite.Check(true, nil)
+		return "failed"
+	}
+	pClientUnknown.Check(true, nil)
+	return "unknown"
+}
+
+func openOutcomes() *os.File {
+	if p := os.Getenv("HYDO_OUTCOMES"); p != "" {
+		f, _ := os.OpenFile(p, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+		return f
+	}
+	return nil
+}
+
+func record(f *os.File, id int64, what string) {
+	if f != nil {
+		fmt.Fprintf(f, "%d %s\n", id, what)
 	}
 }
 
@@ -357,6 +446,10 @@ func place(from, to int64, keepGoing bool) {
 	if p := os.Getenv("HYDO_ACKED"); p != "" {
 		ackf, _ = os.OpenFile(p, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	}
+	outf := openOutcomes()
+	if outf != nil {
+		defer outf.Close()
+	}
 	deadline := 120 * time.Second
 	if keepGoing {
 		deadline = 20 * time.Second
@@ -368,7 +461,9 @@ func place(from, to int64, keepGoing bool) {
 		err := cc.Invoke(ctx, "/hydo.OrderService/Place", wrapperspb.Int64(id), out)
 		cancel()
 		if err != nil {
-			fmt.Printf("hydostack: place %d failed: %v\n", id, err)
+			o := outcome(err)
+			record(outf, id, o)
+			fmt.Printf("hydostack: place %d failed (%s): %v\n", id, o, err)
 			pClientFail.Check(true, hydoassert.D{"order": id})
 			failed++
 			if !keepGoing {
@@ -377,6 +472,7 @@ func place(from, to int64, keepGoing bool) {
 			continue
 		}
 		acked++
+		record(outf, id, "ack")
 		if ackf != nil {
 			fmt.Fprintf(ackf, "%d\n", id)
 		}
@@ -410,6 +506,10 @@ func retry(n int64, file string) {
 	}
 	defer cc.Close()
 	ackf, _ := os.OpenFile(file, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	outf := openOutcomes()
+	if outf != nil {
+		defer outf.Close()
+	}
 	var tried, ok, attempts int64
 	for id := int64(0); id < n; id++ {
 		if acked[id] {
@@ -427,13 +527,16 @@ func retry(n int64, file string) {
 				ok++
 				recovered = true
 				pRetryRecovered.Check(true, hydoassert.D{"order": id, "attempt": a + 1})
+				record(outf, id, "ack")
 				if ackf != nil {
 					fmt.Fprintf(ackf, "%d\n", id)
 				}
 				break
 			}
 			pClientFail.Check(true, hydoassert.D{"order": id})
-			fmt.Printf("hydostack: retry %d attempt %d failed: %v\n", id, a+1, err)
+			o := outcome(err)
+			record(outf, id, o)
+			fmt.Printf("hydostack: retry %d attempt %d failed (%s): %v\n", id, a+1, o, err)
 			time.Sleep(time.Second)
 		}
 		pRetryExhausted.Check(!recovered, hydoassert.D{"order": id})
@@ -447,7 +550,7 @@ func retry(n int64, file string) {
 // oracle: every acked order (0..n-1) must be in MySQL with its amount and in the Kafka
 // topic; Redis is a cache, so a missing key is allowed but a WRONG value is not. The first
 // problem found (in id order: mysql, kafka, redis) is reported.
-func oracle(n int64, ackedFile string) {
+func oracle(n int64, ackedFile, failedFile string) {
 	hydoassert.Catalog()
 	// A store that cannot be read is itself a violation (and ends the check).
 	unreadable := func(what string, err error) {
@@ -582,17 +685,36 @@ func oracle(n int64, ackedFile string) {
 		fmt.Printf("HYDO-ORACLE: OK orders=%d consistent (mysql=%d kafka=%d redis-cached=%d)\n", n, len(mysqlHas), len(kafkaHas), cached)
 		return
 	}
-	// Orders the client was never ACKed for must not have taken effect: none may be in
-	// Kafka (that would be an order applied but reported as failed). A MySQL row with
-	// published=0 is a pending order that was never confirmed -- allowed and counted.
-	pending := 0
+	// An order the client was told definitely FAILED must not have taken effect: it may
+	// not be in Kafka. An un-ACKed order whose outcome the client could not know (a
+	// timeout, a lost ACK, a power cut while it was in flight) MAY be in Kafka -- no
+	// request/response protocol can close that window; it is counted, not a violation.
+	// A MySQL row with published=0 is a pending order that was never confirmed -- allowed.
+	toldFailed := map[int64]bool{}
+	if failedFile != "" {
+		if f, err := os.Open(failedFile); err == nil {
+			sc := bufio.NewScanner(f)
+			for sc.Scan() {
+				if id, err := strconv.ParseInt(sc.Text(), 10, 64); err == nil {
+					toldFailed[id] = true
+				}
+			}
+			f.Close()
+		}
+	}
+	pending, unknownApplied := 0, 0
 	for id := int64(0); id < n; id++ {
 		if ackedSet[id] {
 			continue
 		}
 		if kafkaCount[id] > 0 {
-			pAppliedNoAck.Hit(hydoassert.D{"order": id, "kafka_count": kafkaCount[id]})
-			violate("order=%d is in kafka (%d times) but the client was never ACKed", id, kafkaCount[id])
+			if toldFailed[id] {
+				pToldFailed.Hit(hydoassert.D{"order": id, "kafka_count": kafkaCount[id]})
+				violate("order=%d is in kafka (%d times) but the client was told it failed", id, kafkaCount[id])
+			} else {
+				pUnknownApplied.Check(true, hydoassert.D{"order": id})
+				unknownApplied++
+			}
 		}
 		if _, inM := mysqlHas[id]; inM {
 			pPending.Check(true, hydoassert.D{"order": id})
@@ -603,8 +725,8 @@ func oracle(n int64, ackedFile string) {
 		fmt.Println(verdict)
 		return
 	}
-	fmt.Printf("HYDO-ORACLE: OK acked=%d/%d exactly-once (not-acked: %d, pending-in-mysql=%d; redis-cached=%d)\n",
-		len(ids), n, n-int64(len(ids)), pending, cached)
+	fmt.Printf("HYDO-ORACLE: OK acked=%d/%d exactly-once (not-acked: %d, told-failed: %d, unknown-but-applied: %d, pending-in-mysql=%d; redis-cached=%d)\n",
+		len(ids), n, n-int64(len(ids)), len(toldFailed), unknownApplied, pending, cached)
 }
 
 func show(v int64, ok bool) string {
@@ -616,7 +738,7 @@ func show(v int64, ok bool) string {
 
 func main() {
 	if len(os.Args) < 2 {
-		fail("usage: hydostack server | place <n> | place <from> <to> | retry <n> <ackedfile> | oracle <n> [ackedfile]")
+		fail("usage: hydostack server | place <n> | place <from> <to> | retry <n> <ackedfile> | oracle <n> [ackedfile [failedfile]]")
 	}
 	n := int64(0)
 	if len(os.Args) > 2 {
@@ -638,11 +760,14 @@ func main() {
 		}
 		retry(n, os.Args[3])
 	case "oracle":
-		f := ""
+		f, ff := "", ""
 		if len(os.Args) > 3 {
 			f = os.Args[3]
 		}
-		oracle(n, f)
+		if len(os.Args) > 4 {
+			ff = os.Args[4]
+		}
+		oracle(n, f, ff)
 	default:
 		fail("hydostack: unknown mode %s", os.Args[1])
 	}
