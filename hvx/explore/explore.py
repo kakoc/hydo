@@ -182,12 +182,21 @@ def assert_failures(outdir, tag):
 def property_table(outdir, tags):
     """The exploration-wide property table from hvx/hydo_assert_report (built on the fly),
     over the consoles of the given runs. Returns its text, or None if no run emitted records."""
+    # One console file per SCHEDULE: a power cut's recovery boot is part of the same run,
+    # so its console is appended to the workload's (the report tool counts files as runs).
     files = []
+    merged_dir = os.path.join(outdir, "consoles-merged")
+    os.makedirs(merged_dir, exist_ok=True)
     for t in tags:
+        text = ""
         for suffix in ("", ".recovery"):
             p = os.path.join(outdir, "consoles", "%s%s.log" % (t, suffix))
-            if os.path.exists(p) and "HYDO-ASSERT" in open(p, errors="replace").read():
-                files.append(p)
+            if os.path.exists(p):
+                text += open(p, errors="replace").read()
+        if "HYDO-ASSERT" in text:
+            m = os.path.join(merged_dir, "%s.log" % t)
+            open(m, "w").write(text)
+            files.append(m)
     if not files:
         return None
     tool = os.path.join(outdir, "hydo_assert_report")
@@ -408,6 +417,7 @@ def main():
             mt = render(m)
             conf = pool.run_all([("min-a", mt), ("min-b", mt)])
             shrunk[key] = {"from_seed": f["seed"], "minimal": mt, "verdict": mv, "tries": n,
+                           "min_class": finding_class(m),
                            "fp_a": conf["min-a"][1]["fp"], "fp_b": conf["min-b"][1]["fp"],
                            "min_verdict": conf["min-a"][1]["verdict"]}
     slog.close()
@@ -443,12 +453,14 @@ def write_report(out, summary, fails, shrunk, table=None):
                                                      sum(1 for f in fs if f["reproduced"]), len(fs)))
     L += ["", "## Minimal reproducers", ""]
     for (c, sig), v in shrunk.items():
-        L += ["### %s: `%s`" % (c, sig), "",
+        mc = v.get("min_class", c)
+        head = mc if mc == c else "%s (found as %s; the minimal schedule needs only %s)" % (mc, c, mc)
+        L += ["### %s: `%s`" % (head, sig), "",
               "- from seed %d, %d shrink runs" % (v["from_seed"], v["tries"]),
               "- minimal schedule: `%s`" % v["minimal"],
               "- verdict: `%s`" % v["min_verdict"],
               "- fingerprint, two runs: `%s` / `%s` (%s)" % (v["fp_a"], v["fp_b"], "identical" if v["fp_a"] == v["fp_b"] else "DIFFERENT"),
-              "- by hand: `hvx_explore one <bzImage> <initramfs-kafka.cpio.gz> <explore-disk.img> <outdir> \"%s\"`" % v["minimal"], ""]
+              "- by hand: `~/bin/hvx-run sudo ./hvx_explore one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/%s <outdir> \"%s\"`" % (IMAGE, v["minimal"]), ""]
     L += ["## Property table over every schedule (hvx/ASSERTIONS.md)", ""]
     if table is None:
         L += ["The guest emitted no HYDO-ASSERT records (an image built without the assertion SDK).", ""]
