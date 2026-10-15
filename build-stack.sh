@@ -113,8 +113,16 @@ u32 = lambda o: struct.unpack_from("<I", mm, o)[0]
 sb = 1024
 inodes = u32(sb + 0x00); bs = 1024 << u32(sb + 0x18)
 ipg = u32(sb + 0x28); isize = u16(sb + 0x58) or 128
+bpg = u32(sb + 0x20)
 gdtb = 2 if bs == 1024 else 1
 ng = (inodes + ipg - 1) // ipg
+# Superblock time fields in the primary AND every backup copy: mke2fs stamps them from the
+# advancing faked clock too, so a build that crosses a second boundary differed (M39).
+for g in range(ng):
+    o = sb if g == 0 else g * bpg * bs + (1024 if bs == 1024 else 0)
+    if o + 0x3A <= len(mm) and u16(o + 0x38) == 0xEF53:
+        for t in (0x2C, 0x30, 0x40, 0x108):   # s_mtime s_wtime s_lastcheck s_mkfs_time
+            struct.pack_into("<I", mm, o + t, 0)
 for g in range(ng):
     itbl = u32(gdtb * bs + g * 32 + 0x08)
     base = g * ipg
@@ -441,13 +449,18 @@ restart_svc() {
 }
 svc_pid() { case "$1" in mysql) echo $MPID;; kafka) echo $KPID;; redis) echo $RPID;; esac; }
 
-client() {   # $@ = place arguments; ACKed ids accumulate in /tmp/acked
-  HYDO_ACKED=/tmp/acked /bin/hydostack place "$@" >> /tmp/client.log 2>&1
+client() {   # $@ = place arguments; ACKed ids accumulate in /tmp/acked, every attempt's
+             # outcome ("<id> ack|failed|unknown", M39) in /tmp/outcomes
+  HYDO_ACKED=/tmp/acked HYDO_OUTCOMES=/tmp/outcomes /bin/hydostack place "$@" >> /tmp/client.log 2>&1
   echo "hydo-stack: client $* rc=$? (uptime=$(UP)s)"
 }
 
+failed_ids() {   # M39: ids whose LAST outcome was a definite failure -> /tmp/failed
+  $BB awk '{ o[$1] = $2 } END { for (i in o) if (o[i] == "failed") print i }' /tmp/outcomes 2>/dev/null | $BB sort -n > /tmp/failed
+}
+
 retry_unacked() {   # M37: the client re-places every un-ACKed order with the SAME id
-  /bin/hydostack retry $NORDERS /tmp/acked >> /tmp/client.log 2>&1
+  HYDO_OUTCOMES=/tmp/outcomes /bin/hydostack retry $NORDERS /tmp/acked >> /tmp/client.log 2>&1
   echo "hydo-stack: client retry rc=$? (uptime=$(UP)s)"
 }
 
@@ -459,7 +472,8 @@ place_orders() {
   # are exposed to the power cut.
   $BB sync
   echo "hydo-stack: provisioning synced (uptime=$(UP)s)"
-  : > /tmp/acked; : > /tmp/client.log
+  echo "HYDO-SETUP-COMPLETE"   # hvx/ASSERTIONS.md lifecycle: faults may begin here
+  : > /tmp/acked; : > /tmp/outcomes; : > /tmp/client.log
   if [ -n "$NET" ]; then net_fault_on "$NET"; fi
   if [ -n "$KILL" ]; then
     # M36 single-service crash: the guest itself kills one service at a fixed point in the
@@ -499,7 +513,8 @@ run_oracle() {
   # the original check of every order.
   if [ -n "$KILL$NET" ]; then
     $TC qdisc del dev lo root 2>/dev/null   # the oracle itself reads over a clean network
-    /bin/hydostack oracle $NORDERS /tmp/acked > /tmp/oracle.log 2>&1
+    failed_ids
+    /bin/hydostack oracle $NORDERS /tmp/acked /tmp/failed > /tmp/oracle.log 2>&1
   else
     /bin/hydostack oracle $NORDERS > /tmp/oracle.log 2>&1
   fi

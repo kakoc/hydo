@@ -8,9 +8,11 @@
 #
 #   S0  "hydo-explore-ready-S0"  root mounted, data disk NOT mounted, nothing started.
 #       command  provision          -> mount, start the stores + front door, sync, go to S1
-#       command  oracle <id> ...    -> recovery boot after a power cut: mount the durable
+#       command  oracle <id> ... [failed <id> ...]
+#                                   -> recovery boot after a power cut: mount the durable
 #                                      data disk, start the stores (crash recovery), check
-#                                      the ACKed ids listed
+#                                      the ACKed ids listed; the ids after "failed" are the
+#                                      orders the client was told definitely failed (M39)
 #   S1  "hydo-explore-ready-S1"  everything provisioned and synced, no order placed.
 #       command  run <tokens>       -> place orders 0..NORDERS-1 under the schedule:
 #           K=<svc>@<at>+<down>    SIGKILL <svc> before order <at>, restart it before
@@ -41,8 +43,11 @@ explore_s0() {
     provision) EXPLORE=prov;;
     oracle*)
       EXPLORE=oracle; PHASE=oracle
-      : > /tmp/acked
-      for id in ${CMD#oracle}; do echo "$id" >> /tmp/acked; done
+      : > /tmp/acked; : > /tmp/failed
+      dst=/tmp/acked
+      for id in ${CMD#oracle}; do
+        if [ "$id" = failed ]; then dst=/tmp/failed; else echo "$id" >> $dst; fi
+      done
       ;;
     *) echo "HYDO-ORACLE: ERROR explore: unknown S0 command '$CMD'"; EXPLORE=bad;;
   esac
@@ -59,7 +64,7 @@ explore_oracle() {   # $1 = HYDO-ORACLE prefix for a store that will not come ba
       esac || die_oracle "$1 ($s)"
     fi
   done
-  /bin/hydostack oracle $NORDERS /tmp/acked > /tmp/oracle.log 2>&1
+  /bin/hydostack oracle $NORDERS /tmp/acked /tmp/failed > /tmp/oracle.log 2>&1
   $BB grep -a "HYDO-ORACLE" /tmp/oracle.log || { echo "HYDO-ORACLE: ERROR oracle produced no verdict"; $BB tail -6 /tmp/oracle.log; }
   echo "hydo-stack-marker: workload complete"
   echo "hydo-boot-marker: launching shell on ttyS0"
@@ -82,7 +87,7 @@ explore_run() {   # $CMD = "run <tokens>"
   [ -n "$C" ] && cat_=$C
   # order-stream boundaries where something happens, in order
   pts=$(for p in 0 $kat $kup $nfrom $nto $cat_ $NORDERS; do [ "$p" -ge 0 ] 2>/dev/null && [ "$p" -le $NORDERS ] && echo $p; done | $BB sort -n -u)
-  : > /tmp/acked; : > /tmp/client.log
+  : > /tmp/acked; : > /tmp/outcomes; : > /tmp/client.log
   netup=0; down=0; cut=0
   prev=""
   for p in $pts; do
@@ -95,7 +100,9 @@ explore_run() {   # $CMD = "run <tokens>"
     prev=$p
   done
   if [ $cut = 1 ]; then
+    failed_ids
     echo "hydo-explore-acked: $($BB tr '\n' ' ' < /tmp/acked)"
+    echo "hydo-explore-failed: $($BB tr '\n' ' ' < /tmp/failed)"
     $BB grep -a "HYDO-STACK" /tmp/client.log | $BB tail -3
     # NO sync: it would FLUSH the volatile write cache and close the window under test.
     $BB kill -STOP $FPID $KPID $MPID $RPID 2>/dev/null
@@ -108,8 +115,10 @@ explore_run() {   # $CMD = "run <tokens>"
   [ $down = 1 ] && { echo "hydo-explore: restarting $ksvc at the end"; restart_svc $ksvc; }
   $BB kill -0 $FPID 2>/dev/null || { echo "hydo-explore: front door died; restarting it"; start_front || die_oracle "HYDO-ORACLE: ERROR front door restart"; }
   retry_unacked
+  failed_ids
   $BB grep -a "HYDO-STACK" /tmp/client.log | $BB tail -4
   echo "hydo-explore-acked: $($BB tr '\n' ' ' < /tmp/acked)"
+  echo "hydo-explore-failed: $($BB tr '\n' ' ' < /tmp/failed)"
   echo "hydo-explore-workload-done"
   explore_read     # "go": the host has switched disk faults off
   explore_oracle "HYDO-ORACLE: VIOLATION store cannot recover after the faults"
@@ -126,6 +135,7 @@ explore_main() {
       start_all "HYDO-ORACLE: ERROR server start"
       start_front || die_oracle "HYDO-ORACLE: ERROR front door"
       $BB sync
+      echo "HYDO-SETUP-COMPLETE"   # hvx/ASSERTIONS.md lifecycle: faults begin after this
       echo "hydo-explore-ready-S1"
       explore_read
       case "$CMD" in

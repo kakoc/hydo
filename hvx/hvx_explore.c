@@ -38,6 +38,7 @@
 #define S1_MARKER	"hydo-explore-ready-S1"
 #define DONE_MARKER	"hydo-explore-workload-done"
 #define ACKED_PREFIX	"hydo-explore-acked:"
+#define FAILED_PREFIX	"hydo-explore-failed:"
 #define RUN_WALL_SECS	900	/* safety net only; a run that hits it is reported as TIMEOUT */
 
 struct snap {
@@ -165,15 +166,30 @@ static void last_verdict(const struct boot *b, size_t from, char *out, size_t n)
 	out[i] = '\0';
 }
 
-/* "hydo-explore-acked: 0 1 2 ..." after `from` -> "oracle 0 1 2 ...\n" */
-static void oracle_cmd(const struct boot *b, size_t from, char *out, size_t n)
+/* append the rest of the console line starting with `prefix` (after `from`) to out */
+static size_t append_line(const struct boot *b, size_t from, const char *prefix, char *out, size_t o, size_t n)
 {
-	long at = b->ulen > from ? mem_find(b->ubuf + from, b->ulen - from, ACKED_PREFIX) : -1;
-	size_t o = (size_t)snprintf(out, n, "oracle");
+	long at = b->ulen > from ? mem_find(b->ubuf + from, b->ulen - from, prefix) : -1;
 	if (at >= 0) {
-		const uint8_t *p = b->ubuf + from + at + strlen(ACKED_PREFIX);
+		const uint8_t *p = b->ubuf + from + at + strlen(prefix);
 		while (p < b->ubuf + b->ulen && *p != '\n' && *p != '\r' && o + 2 < n)
 			out[o++] = (char)*p++;
+	}
+	return o;
+}
+
+/* "hydo-explore-acked: 0 1 2 ..." and "hydo-explore-failed: 7 ..." after `from`
+ * -> "oracle 0 1 2 ... failed 7 ...\n" (the ids after "failed" are the orders the client
+ * was told definitely failed, Milestone 39) */
+static void oracle_cmd(const struct boot *b, size_t from, char *out, size_t n)
+{
+	size_t o = (size_t)snprintf(out, n, "oracle");
+	o = append_line(b, from, ACKED_PREFIX, out, o, n);
+	/* only images that report definite failures get the extra field, so a pre-M39 image
+	 * receives exactly the command it always did (its old findings reproduce bit-for-bit) */
+	if (b->ulen > from && mem_find(b->ubuf + from, b->ulen - from, FAILED_PREFIX) >= 0 && o + 8 < n) {
+		memcpy(out + o, " failed", 7); o += 7;
+		o = append_line(b, from, FAILED_PREFIX, out, o, n);
 	}
 	out[o++] = '\n'; out[o] = '\0';
 }
