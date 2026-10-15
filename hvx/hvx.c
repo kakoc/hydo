@@ -119,6 +119,28 @@
 #include "hvx_abi.h"
 
 MODULE_LICENSE("GPL");
+
+/* Device name: "hvx" (/dev/hvx). A second copy of this module can be built with
+ * -DHVX_DEVNAME='"hvxpt"' and loaded next to it (each run is a self-contained
+ * VMXON..VMXOFF section, so two copies never share VMX root on one CPU). */
+#ifndef HVX_DEVNAME
+#define HVX_DEVNAME "hvx"
+#endif
+
+/* Intel PT guest tracing forced from module parameters, for running unmodified
+ * harnesses traced (see HVX_VM_PT_TRACE / HVX_SET_PT for the per-VM ioctl). All 0 =
+ * off, which is the default: nothing below runs unless a VM asks for tracing. */
+static int pt_force;			/* bit0 trace guest CPL0, bit1 trace guest CPL3 */
+static int pt_force_mib = 256;		/* trace buffer per VM */
+static unsigned long pt_force_lo0, pt_force_hi0, pt_force_lo1, pt_force_hi1;
+static int pt_force_noretc;		/* 1: no RET compression (every RET emits a TIP) */
+module_param(pt_force, int, 0644);
+module_param(pt_force_mib, int, 0644);
+module_param(pt_force_lo0, ulong, 0644);
+module_param(pt_force_hi0, ulong, 0644);
+module_param(pt_force_lo1, ulong, 0644);
+module_param(pt_force_hi1, ulong, 0644);
+module_param(pt_force_noretc, int, 0644);
 MODULE_AUTHOR("hydo");
 MODULE_DESCRIPTION("hydo VT-x milestone 27: FLAGSHIP on UNMODIFIED Redis (redis-server + redis-cli co-located over the in-kernel 127.0.0.1 loopback) reproducing Redis's documented AOF durability window -- appendfsync=always SURVIVES a faithful volatile-cache power loss while everysec LOSES the last acked writes -- bit-for-bit (replay + branch-from-snapshot). Builds on the M26 UNMODIFIED-SQLite committed-row-loss flagship (seeded virtio-blk DROP fault) and the flush-aware DROP power-loss model (HVX_FAULT_DROP_UNFLUSHED, VIRTIO_BLK_F_FLUSH advertised only when armed); adds a deterministic idle heartbeat + CRNG seed for co-located loopback services. Inert when unused, so every prior fingerprint is preserved");
 
@@ -207,6 +229,29 @@ MODULE_DESCRIPTION("hydo VT-x milestone 27: FLAGSHIP on UNMODIFIED Redis (redis-
 #define PROCBASED_MONITOR_TRAP  (1U << 27)   /* Monitor Trap Flag (single-step) */
 #define PROCBASED_SECONDARY     (1U << 31)
 #define SEC_ENABLE_EPT          (1U << 1)
+#define SEC_CONCEAL_VMX_PT      (1U << 19)  /* no PIP/VMCS packets for VMX transitions */
+#define EXIT_CONCEAL_VMX_PT     (1U << 24)
+#define ENTRY_CONCEAL_VMX_PT    (1U << 17)
+/* Intel PT MSRs (SDM vol 3, chapter "Intel Processor Trace") */
+#define MSR_RTIT_OUTPUT_BASE    0x00000560
+#define MSR_RTIT_OUTPUT_MASK    0x00000561
+#define MSR_RTIT_CTL            0x00000570
+#define MSR_RTIT_STATUS         0x00000571
+#define MSR_RTIT_CR3_MATCH      0x00000572
+#define MSR_RTIT_ADDR0_A        0x00000580	/* ADDRn_A = 0x580 + 2n, ADDRn_B = 0x581 + 2n */
+#define HVX_RTIT_TRACEEN        (1ULL << 0)
+#define HVX_RTIT_OS             (1ULL << 2)
+#define HVX_RTIT_USR            (1ULL << 3)
+#define HVX_RTIT_CR3EN          (1ULL << 7)
+#define HVX_RTIT_TOPA           (1ULL << 8)
+#define HVX_RTIT_DISRETC        (1ULL << 11)
+#define HVX_RTIT_BRANCH         (1ULL << 13)
+#define HVX_RTIT_ADDR_CFG(n)    (1ULL << (32 + 4 * (n)))	/* range n = filter (trace inside) */
+#define HVX_RTIT_ST_ERROR       (1ULL << 4)
+#define HVX_RTIT_ST_STOPPED     (1ULL << 5)
+#define TOPA_END                (1ULL << 0)
+#define TOPA_STOP               (1ULL << 4)
+#define HVX_PT_CHUNK_ORDER      9		/* 2 MiB output regions */
 #define EXIT_HOST_ADDR_SPACE_64 (1U << 9)
 #define EXIT_SAVE_IA32_EFER     (1U << 20)
 #define EXIT_LOAD_IA32_EFER     (1U << 21)
@@ -790,6 +835,17 @@ struct hvx_vm {
 	unsigned int cpu_v2;
 	unsigned int pmu_clock;		/* HVX_VM_PMU_CLOCK */
 	unsigned int pause_exit;	/* HVX_VM_PAUSE_EXIT */
+	/* Intel PT guest trace (HVX_VM_PT_TRACE / HVX_SET_PT / pt_force). Host-owned ToPA
+	 * output; enabled only around VM entry (hvx_vmx_run_pt) and filtered so no host
+	 * code is traced. Diagnostic only: not in the snapshot, invisible to the guest. */
+	bool pt_on;
+	bool pt_allowed;		/* created with HVX_VM_PT_TRACE */
+	u64 pt_ctl;			/* RTIT_CTL while the guest runs (TraceEn set) */
+	u64 pt_lo[2], pt_hi[2], pt_cr3;
+	struct page **pt_chunk;		/* 2 MiB output regions */
+	unsigned int pt_nchunk;
+	struct page *pt_topa;		/* the ToPA table */
+	u64 pt_mask, pt_status;		/* RTIT_OUTPUT_MASK_PTRS / RTIT_STATUS between runs */
 	u64 pmu_period, pmu_tick_tsc;
 
 	/* SHARED guest RAM + EPT (all vCPUs share one physical address space) */
@@ -931,6 +987,114 @@ asm(".text\n"
     "    pop %rbp\n"
     "    ret\n");
 extern long hvx_vmx_run(struct hvx_regs *regs, long resume);
+
+/*
+ * hvx_vmx_run_pt(regs, resume, rtit_ctl): hvx_vmx_run with Intel PT switched on for
+ * exactly the guest's time. This CPU has no VM-entry "load IA32_RTIT_CTL" control, so
+ * TraceEn is written here: after the resume/launch decision (no host branch is taken
+ * while tracing) and before the guest's rax/rcx/rdx/rdi are loaded; it is cleared as
+ * the first thing after the exit. The few host instructions that run with TraceEn set
+ * are in this module, outside every IP filter range (and at CPL0, outside a user-only
+ * trace), so they produce no packets. Same register-file and stack contract as
+ * hvx_vmx_run, with one extra slot: [resume][regs ptr][rtit_ctl][r15..rbp].
+ */
+asm(".text\n"
+    ".globl hvx_vmx_run_pt\n"
+    "hvx_vmx_run_pt:\n"
+    "    push %rbp\n"
+    "    push %rbx\n"
+    "    push %r12\n"
+    "    push %r13\n"
+    "    push %r14\n"
+    "    push %r15\n"
+    "    push %rdx\n"               /* [16(%rsp)] RTIT_CTL for the guest */
+    "    push %rdi\n"               /* [ 8(%rsp)] regs ptr */
+    "    push %rsi\n"               /* [  (%rsp)] resume flag */
+    "    mov $0x6c14, %rdx\n"       /* HOST_RSP = &resume */
+    "    vmwrite %rsp, %rdx\n"
+    "    lea 2f(%rip), %rax\n"
+    "    mov $0x6c16, %rdx\n"       /* HOST_RIP = exit label */
+    "    vmwrite %rax, %rdx\n"
+    "    mov 0x08(%rdi), %rbx\n"
+    "    mov 0x20(%rdi), %rsi\n"
+    "    mov 0x30(%rdi), %rbp\n"
+    "    mov 0x38(%rdi), %r8\n"
+    "    mov 0x40(%rdi), %r9\n"
+    "    mov 0x48(%rdi), %r10\n"
+    "    mov 0x50(%rdi), %r11\n"
+    "    mov 0x58(%rdi), %r12\n"
+    "    mov 0x60(%rdi), %r13\n"
+    "    mov 0x68(%rdi), %r14\n"
+    "    mov 0x70(%rdi), %r15\n"
+    "    cmpq $0, (%rsp)\n"
+    "    jne 5f\n"
+    "    mov 16(%rsp), %rax\n"
+    "    mov %rax, %rdx\n"
+    "    shr $32, %rdx\n"
+    "    mov $0x570, %ecx\n"
+    "    wrmsr\n"                   /* TraceEn = 1 */
+    "    mov 0x00(%rdi), %rax\n"
+    "    mov 0x10(%rdi), %rcx\n"
+    "    mov 0x18(%rdi), %rdx\n"
+    "    mov 0x28(%rdi), %rdi\n"
+    "    vmlaunch\n"
+    "    jmp 6f\n"
+    "5:  mov 16(%rsp), %rax\n"
+    "    mov %rax, %rdx\n"
+    "    shr $32, %rdx\n"
+    "    mov $0x570, %ecx\n"
+    "    wrmsr\n"                   /* TraceEn = 1 */
+    "    mov 0x00(%rdi), %rax\n"
+    "    mov 0x10(%rdi), %rcx\n"
+    "    mov 0x18(%rdi), %rdx\n"
+    "    mov 0x28(%rdi), %rdi\n"
+    "    vmresume\n"
+    "6:  mov $0x570, %ecx\n"       /* VMfail: tracing off again */
+    "    xor %eax, %eax\n"
+    "    xor %edx, %edx\n"
+    "    wrmsr\n"
+    "    add $24, %rsp\n"           /* drop resume, regs ptr, rtit_ctl */
+    "    xor %eax, %eax\n"
+    "    jmp 3f\n"
+    "2:\n"                          /* VM-exit re-enters here */
+    "    push %rax\n"
+    "    push %rcx\n"
+    "    push %rdx\n"
+    "    mov $0x570, %ecx\n"
+    "    xor %eax, %eax\n"
+    "    xor %edx, %edx\n"
+    "    wrmsr\n"                   /* TraceEn = 0 */
+    "    pop %rdx\n"
+    "    pop %rcx\n"
+    "    pop %rax\n"
+    "    push %rax\n"               /* stack: [g_rax][resume][regs ptr][rtit_ctl] */
+    "    mov 16(%rsp), %rax\n"
+    "    mov %rbx, 0x08(%rax)\n"
+    "    mov %rcx, 0x10(%rax)\n"
+    "    mov %rdx, 0x18(%rax)\n"
+    "    mov %rsi, 0x20(%rax)\n"
+    "    mov %rdi, 0x28(%rax)\n"
+    "    mov %rbp, 0x30(%rax)\n"
+    "    mov %r8,  0x38(%rax)\n"
+    "    mov %r9,  0x40(%rax)\n"
+    "    mov %r10, 0x48(%rax)\n"
+    "    mov %r11, 0x50(%rax)\n"
+    "    mov %r12, 0x58(%rax)\n"
+    "    mov %r13, 0x60(%rax)\n"
+    "    mov %r14, 0x68(%rax)\n"
+    "    mov %r15, 0x70(%rax)\n"
+    "    mov (%rsp), %rbx\n"
+    "    mov %rbx, 0x00(%rax)\n"
+    "    add $32, %rsp\n"           /* drop g_rax, resume, regs ptr, rtit_ctl */
+    "    mov $1, %eax\n"
+    "3:  pop %r15\n"
+    "    pop %r14\n"
+    "    pop %r13\n"
+    "    pop %r12\n"
+    "    pop %rbx\n"
+    "    pop %rbp\n"
+    "    ret\n");
+extern long hvx_vmx_run_pt(struct hvx_regs *regs, long resume, u64 rtit_ctl);
 
 /* ---- VMX instruction wrappers (return 0 on success) ---- */
 static inline int vmxon(u64 pa)
@@ -1366,6 +1530,148 @@ static inline u32 seg_ar(u16 ar)
 #define HVX_PMU_LVT_VECTOR	0xf2		/* host POSTED_INTR_VECTOR: handler only EOIs */
 #define APIC_LVTPC_OFF		0x340
 static bool hvx_pmu_ok;			/* CPU + VMX controls can run the branch clock */
+static bool hvx_pt_ok;			/* Intel PT usable in VMX non-root, ToPA output, 2 IP ranges */
+
+/* The last traced VM's buffer, kept after the VM is freed so that a harness that
+ * never asks for the trace (pt_force) can still be read out: HVX_GET_PT / HVX_READ_PT
+ * on an fd with no PT VM refer to it. Protected by hvx_pt_last_lock. */
+static DEFINE_MUTEX(hvx_pt_last_lock);
+static struct page **hvx_pt_last_chunk;
+static unsigned int hvx_pt_last_nchunk;
+static u64 hvx_pt_last_bytes, hvx_pt_last_status;
+
+static void hvx_pt_free_chunks(struct page **ch, unsigned int n)
+{
+	unsigned int i;
+
+	if (!ch)
+		return;
+	for (i = 0; i < n; i++)
+		if (ch[i])
+			__free_pages(ch[i], HVX_PT_CHUNK_ORDER);
+	kfree(ch);
+}
+
+/* bytes written so far, from a saved RTIT_OUTPUT_MASK_PTRS: entry index in bits 31:7,
+ * offset into that entry's region in bits 63:32 */
+static u64 hvx_pt_bytes(u64 mask, unsigned int nchunk)
+{
+	u64 idx = (mask & 0xffffff80ULL) >> 7, off = mask >> 32;
+
+	if (idx >= nchunk)
+		return (u64)nchunk << (PAGE_SHIFT + HVX_PT_CHUNK_ORDER);
+	return (idx << (PAGE_SHIFT + HVX_PT_CHUNK_ORDER)) + off;
+}
+
+static void hvx_pt_release(struct hvx_vm *vm)
+{
+	if (!vm->pt_chunk)
+		return;
+	/* keep the buffer as "the last trace" instead of freeing it */
+	mutex_lock(&hvx_pt_last_lock);
+	hvx_pt_free_chunks(hvx_pt_last_chunk, hvx_pt_last_nchunk);
+	hvx_pt_last_chunk = vm->pt_chunk;
+	hvx_pt_last_nchunk = vm->pt_nchunk;
+	hvx_pt_last_bytes = hvx_pt_bytes(vm->pt_mask, vm->pt_nchunk);
+	hvx_pt_last_status = vm->pt_status;
+	mutex_unlock(&hvx_pt_last_lock);
+	pr_info("hvx: PT trace kept: %llu bytes%s\n", hvx_pt_last_bytes,
+		(vm->pt_status & HVX_RTIT_ST_STOPPED) ? " (buffer FULL, trace truncated)" : "");
+	vm->pt_chunk = NULL;
+	vm->pt_nchunk = 0;
+	if (vm->pt_topa)
+		__free_page(vm->pt_topa);
+	vm->pt_topa = NULL;
+	vm->pt_on = false;
+}
+
+/* Allocate the output (mib MiB in 2 MiB regions, one ToPA table, STOP at the end) and
+ * compute the guest RTIT_CTL. Kernel tracing needs at least one IP range: the host
+ * also runs at CPL0, and the ranges are what keep host code out of the trace. */
+static int hvx_pt_setup(struct hvx_vm *vm, u64 mib, u32 flags, const u64 *lo,
+			const u64 *hi, u64 cr3)
+{
+	unsigned int n, i;
+	u64 *topa, ctl = HVX_RTIT_TRACEEN | HVX_RTIT_TOPA | HVX_RTIT_BRANCH;
+
+	if (!hvx_pt_ok)
+		return -ENODEV;
+	if (vm->pt_chunk || !(flags & (HVX_PT_KERNEL | HVX_PT_USER)))
+		return -EINVAL;
+	if ((flags & HVX_PT_KERNEL) && !hi[0] && !hi[1])
+		return -EINVAL;
+	n = (unsigned int)DIV_ROUND_UP(mib ? mib : 256, 2);
+	if (n < 1 || n > 511)
+		return -EINVAL;
+	vm->pt_chunk = kcalloc(n, sizeof(*vm->pt_chunk), GFP_KERNEL);
+	vm->pt_topa = alloc_page(GFP_KERNEL | __GFP_ZERO);
+	if (!vm->pt_chunk || !vm->pt_topa)
+		goto nomem;
+	vm->pt_nchunk = n;
+	topa = page_address(vm->pt_topa);
+	for (i = 0; i < n; i++) {
+		vm->pt_chunk[i] = alloc_pages(GFP_KERNEL | __GFP_ZERO | __GFP_NOWARN,
+					      HVX_PT_CHUNK_ORDER);
+		if (!vm->pt_chunk[i])
+			goto nomem;
+		topa[i] = page_to_phys(vm->pt_chunk[i]) | ((u64)HVX_PT_CHUNK_ORDER << 6);
+	}
+	topa[n - 1] |= TOPA_STOP;			/* full: stop, do not wrap */
+	topa[n] = page_to_phys(vm->pt_topa) | TOPA_END;
+	if (flags & HVX_PT_KERNEL)
+		ctl |= HVX_RTIT_OS;
+	if (flags & HVX_PT_USER)
+		ctl |= HVX_RTIT_USR;
+	if (flags & HVX_PT_NORETCOMP)
+		ctl |= HVX_RTIT_DISRETC;
+	for (i = 0; i < 2; i++) {
+		vm->pt_lo[i] = lo[i];
+		vm->pt_hi[i] = hi[i];
+		if (hi[i])
+			ctl |= HVX_RTIT_ADDR_CFG(i);
+	}
+	if (flags & HVX_PT_CR3) {
+		vm->pt_cr3 = cr3;
+		ctl |= HVX_RTIT_CR3EN;
+	}
+	vm->pt_ctl = ctl;
+	vm->pt_mask = 0x7f;				/* entry 0, offset 0 */
+	vm->pt_status = 0;
+	vm->pt_on = true;
+	pr_info("hvx: PT guest trace on: %u MiB, ctl=%#llx ranges [%#llx,%#llx) [%#llx,%#llx)\n",
+		n * 2, ctl, lo[0], hi[0], lo[1], hi[1]);
+	return 0;
+nomem:
+	hvx_pt_free_chunks(vm->pt_chunk, n);
+	vm->pt_chunk = NULL;
+	vm->pt_nchunk = 0;
+	if (vm->pt_topa)
+		__free_page(vm->pt_topa);
+	vm->pt_topa = NULL;
+	return -ENOMEM;
+}
+
+/* Copy trace bytes [off, off+len) of a chunk list to userspace. */
+static int hvx_pt_copy(struct page **ch, unsigned int n, u64 total, u64 off, u64 len,
+		       void __user *dst)
+{
+	const u64 csz = 1ULL << (PAGE_SHIFT + HVX_PT_CHUNK_ORDER);
+
+	if (off > total)
+		return -EINVAL;
+	if (len > total - off)
+		len = total - off;
+	while (len) {
+		u64 ci = off / csz, co = off % csz, l = min(len, csz - co);
+
+		if (ci >= n)
+			return -EINVAL;
+		if (copy_to_user(dst, (u8 *)page_address(ch[ci]) + co, l))
+			return -EFAULT;
+		dst += l; off += l; len -= l;
+	}
+	return 0;
+}
 static void __iomem *hvx_lapic;		/* host xAPIC page (NULL when the host is x2APIC) */
 static bool hvx_host_x2apic;
 
@@ -1433,7 +1739,8 @@ static int setup_vmcs(struct hvx_vcpu *vcpu, bool mtf)
 		pr_err("hvx: Monitor Trap Flag not supported by this CPU\n");
 		return -1;
 	}
-	proc2 = adjust_ctl(SEC_ENABLE_EPT, MSR_VMX_PROCBASED2);
+	proc2 = adjust_ctl(SEC_ENABLE_EPT | (vcpu->vm->pt_on ? SEC_CONCEAL_VMX_PT : 0),
+			   MSR_VMX_PROCBASED2);
 	if (!(proc2 & SEC_ENABLE_EPT)) {
 		pr_err("hvx: EPT not supported by this CPU\n");
 		return -1;
@@ -1448,9 +1755,11 @@ static int setup_vmcs(struct hvx_vcpu *vcpu, bool mtf)
 	VMW(EPT_POINTER,   vm->eptp);
 	VMW(VM_EXIT_CTL,   adjust_ctl(EXIT_HOST_ADDR_SPACE_64 |
 				      EXIT_SAVE_IA32_EFER | EXIT_LOAD_IA32_EFER |
-				      (vcpu->pmu_live ? EXIT_LOAD_PERF_GLOBAL : 0), exit_msr));
+				      (vcpu->pmu_live ? EXIT_LOAD_PERF_GLOBAL : 0) |
+				      (vm->pt_on ? EXIT_CONCEAL_VMX_PT : 0), exit_msr));
 	VMW(VM_ENTRY_CTL,  adjust_ctl(ENTRY_IA32E_MODE | ENTRY_LOAD_IA32_EFER |
-				      (vcpu->pmu_live ? ENTRY_LOAD_PERF_GLOBAL : 0), entry_msr));
+				      (vcpu->pmu_live ? ENTRY_LOAD_PERF_GLOBAL : 0) |
+				      (vm->pt_on ? ENTRY_CONCEAL_VMX_PT : 0), entry_msr));
 	if (vcpu->pmu_live) {
 		VMW(GUEST_IA32_PERF_GLOBAL, 1);		/* PMC0 counts in the guest ... */
 		VMW(HOST_IA32_PERF_GLOBAL, 0);		/* ... and nothing counts in the host */
@@ -3901,6 +4210,8 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 	bool msrs_loaded = false;
 	u64 pmu_h_gctl = 0, pmu_h_sel = 0, pmu_h_pmc = 0;	/* host PMU state, restored at exit */
 	u32 pmu_h_lvtpc = 0;
+	u64 pt_h[9];			/* host RTIT state, restored at the end of the run */
+	bool pt_live = false;
 	u64 t0 = ktime_get_ns();	/* DIAGNOSTIC: wall-time accounting (fingerprint-neutral) */
 
 	*(u32 *)vcpu->vmxon_page = hvx_rev;
@@ -3946,6 +4257,32 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 		wrmsrl(MSR_PERFEVTSEL0, HVX_PMU_EVTSEL);
 		if (!vcpu->pmu_next)
 			vcpu->pmu_next = vm->pmu_period;
+	}
+	/* Intel PT: take the trace MSRs for this run. Every RTIT MSR except RTIT_CTL can
+	 * only be written with TraceEn clear, which it is (the host's is cleared first;
+	 * the guest's is only set by hvx_vmx_run_pt around each entry). */
+	if (vm->pt_on && vm->pt_chunk) {
+		int k;
+
+		pt_live = true;
+		pt_h[0] = rd(MSR_RTIT_CTL);
+		if (pt_h[0] & HVX_RTIT_TRACEEN)
+			wrmsrl(MSR_RTIT_CTL, pt_h[0] & ~HVX_RTIT_TRACEEN);
+		pt_h[1] = rd(MSR_RTIT_STATUS);
+		pt_h[2] = rd(MSR_RTIT_OUTPUT_BASE);
+		pt_h[3] = rd(MSR_RTIT_OUTPUT_MASK);
+		pt_h[4] = rd(MSR_RTIT_CR3_MATCH);
+		for (k = 0; k < 4; k++)
+			pt_h[5 + k] = rd(MSR_RTIT_ADDR0_A + k);
+		wrmsrl(MSR_RTIT_CTL, 0);
+		wrmsrl(MSR_RTIT_OUTPUT_BASE, page_to_phys(vm->pt_topa));
+		wrmsrl(MSR_RTIT_OUTPUT_MASK, vm->pt_mask);
+		wrmsrl(MSR_RTIT_STATUS, vm->pt_status);
+		wrmsrl(MSR_RTIT_CR3_MATCH, vm->pt_cr3);
+		for (k = 0; k < 2; k++) {
+			wrmsrl(MSR_RTIT_ADDR0_A + 2 * k, vm->pt_lo[k]);
+			wrmsrl(MSR_RTIT_ADDR0_A + 2 * k + 1, vm->pt_hi[k] ? vm->pt_hi[k] - 1 : 0);
+		}
 	}
 	if (setup_vmcs(vcpu, single_step)) { ret = -EIO; goto out_clear; }
 	if (wr_err) { ret = -EIO; goto out_clear; }
@@ -4224,7 +4561,8 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 			vcpu->reinj_valid = false;
 		}
 		asm volatile("mov %0, %%cr2" :: "r" (vcpu->cr2));
-		ok = hvx_vmx_run(&vcpu->regs, resume);
+		ok = pt_live ? hvx_vmx_run_pt(&vcpu->regs, resume, vm->pt_ctl)
+			     : hvx_vmx_run(&vcpu->regs, resume);
 		asm volatile("mov %%cr2, %0" : "=r" (vcpu->cr2));
 		if (ok) {
 			u32 iv = (u32)vmread(IDT_VECTORING_INFO);
@@ -4647,6 +4985,21 @@ out_clear:
 		wrmsrl(MSR_PERF_GLOBAL_CTRL, pmu_h_gctl);
 		vcpu->pmu_live = false;
 	}
+	if (pt_live) {
+		/* remember where the output got to, then give PT back to the host */
+		int k;
+
+		wrmsrl(MSR_RTIT_CTL, 0);
+		vm->pt_mask = rd(MSR_RTIT_OUTPUT_MASK);
+		vm->pt_status = rd(MSR_RTIT_STATUS);
+		wrmsrl(MSR_RTIT_STATUS, pt_h[1]);
+		wrmsrl(MSR_RTIT_OUTPUT_BASE, pt_h[2]);
+		wrmsrl(MSR_RTIT_OUTPUT_MASK, pt_h[3]);
+		wrmsrl(MSR_RTIT_CR3_MATCH, pt_h[4]);
+		for (k = 0; k < 4; k++)
+			wrmsrl(MSR_RTIT_ADDR0_A + k, pt_h[5 + k]);
+		wrmsrl(MSR_RTIT_CTL, pt_h[0]);
+	}
 	vmclear(vmcs_pa);
 out_vmxoff:
 	if (vmxoff())
@@ -4799,6 +5152,8 @@ static void hvx_vm_free_pages(struct hvx_vm *vm)
 {
 	unsigned int i;
 
+	hvx_pt_release(vm);		/* Intel PT: keep the buffer as the last trace */
+
 	/* virtio-blk backing image (milestone 20; page array as of M28) */
 	vblk_disk_free(&vm->vblk);
 	/* flush-aware DROP volatile write cache (milestone 26) */
@@ -4942,6 +5297,15 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 	vm->cpu_v2 = (cfg->flags & HVX_VM_X86_64_V2) ? 1 : 0;
 	vm->pmu_clock = (cfg->flags & HVX_VM_PMU_CLOCK) ? 1 : 0;
 	vm->pause_exit = (cfg->flags & HVX_VM_PAUSE_EXIT) ? 1 : 0;
+	vm->pt_allowed = !!(cfg->flags & HVX_VM_PT_TRACE);
+	if (pt_force && hvx_pt_ok) {		/* module-parameter tracing (see pt_force) */
+		u64 lo[2] = { pt_force_lo0, pt_force_lo1 }, hi[2] = { pt_force_hi0, pt_force_hi1 };
+		u32 fl = ((pt_force & 1) ? HVX_PT_KERNEL : 0) | ((pt_force & 2) ? HVX_PT_USER : 0) |
+			 (pt_force_noretc ? HVX_PT_NORETCOMP : 0);
+
+		if (hvx_pt_setup(vm, pt_force_mib, fl, lo, hi, 0))
+			pr_warn("hvx: pt_force: could not set up the trace buffer\n");
+	}
 	vm->pmu_period = HVX_PMU_PERIOD;
 	vm->pmu_tick_tsc = HVX_PMU_TICK_TSC;
 
@@ -5705,6 +6069,53 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		ret = 0;
 		break;
 	}
+	case HVX_SET_PT: {
+		struct hvx_pt_config pc;
+
+		if (!vm->n_guest_pages) { ret = -EINVAL; break; }
+		if (copy_from_user(&pc, uarg, sizeof(pc))) { ret = -EFAULT; break; }
+		if (!vm->pt_allowed) { ret = -EPERM; break; }
+		ret = hvx_pt_setup(vm, pc.buf_mib, pc.flags, pc.lo, pc.hi, pc.cr3);
+		break;
+	}
+	case HVX_GET_PT: {
+		struct hvx_pt_status ps;
+
+		memset(&ps, 0, sizeof(ps));
+		if (vm->pt_chunk) {
+			ps.bytes = hvx_pt_bytes(vm->pt_mask, vm->pt_nchunk);
+			ps.buf_bytes = (u64)vm->pt_nchunk << (PAGE_SHIFT + HVX_PT_CHUNK_ORDER);
+			ps.status = vm->pt_status;
+			ps.ctl = vm->pt_ctl;
+		} else {
+			mutex_lock(&hvx_pt_last_lock);
+			ps.bytes = hvx_pt_last_bytes;
+			ps.buf_bytes = (u64)hvx_pt_last_nchunk << (PAGE_SHIFT + HVX_PT_CHUNK_ORDER);
+			ps.status = hvx_pt_last_status;
+			ps.saved = 1;
+			mutex_unlock(&hvx_pt_last_lock);
+		}
+		ret = copy_to_user(uarg, &ps, sizeof(ps)) ? -EFAULT : 0;
+		break;
+	}
+	case HVX_READ_PT: {
+		struct hvx_pt_read pr;
+
+		if (copy_from_user(&pr, uarg, sizeof(pr))) { ret = -EFAULT; break; }
+		if (vm->pt_chunk) {
+			ret = hvx_pt_copy(vm->pt_chunk, vm->pt_nchunk,
+					  hvx_pt_bytes(vm->pt_mask, vm->pt_nchunk), pr.offset, pr.len,
+					  (void __user *)(unsigned long)pr.addr);
+		} else {
+			mutex_lock(&hvx_pt_last_lock);
+			ret = hvx_pt_last_chunk
+			    ? hvx_pt_copy(hvx_pt_last_chunk, hvx_pt_last_nchunk, hvx_pt_last_bytes,
+					  pr.offset, pr.len, (void __user *)(unsigned long)pr.addr)
+			    : -ENOENT;
+			mutex_unlock(&hvx_pt_last_lock);
+		}
+		break;
+	}
 	case HVX_SET_PMU: {
 		struct hvx_pmu pm;
 
@@ -5879,7 +6290,7 @@ static const struct file_operations hvx_fops = {
 
 static struct miscdevice hvx_miscdev = {
 	.minor = MISC_DYNAMIC_MINOR,
-	.name  = "hvx",
+	.name  = HVX_DEVNAME,
 	.fops  = &hvx_fops,
 	.mode  = 0600,
 };
@@ -5940,6 +6351,27 @@ static int __init hvx_init(void)
 		pr_info("hvx: PMU branch clock %s (CPUID.0AH eax=0x%x, host %s)\n",
 			hvx_pmu_ok ? "available" : "NOT available", a,
 			hvx_host_x2apic ? "x2APIC" : "xAPIC");
+
+		/* Intel PT guest tracing: PT itself, usable in VMX operation (VMX_MISC
+		 * bit 14), ToPA output with multiple entries, 2 IP filter ranges, and the
+		 * three "conceal VMX from PT" controls. */
+		{
+			u32 pa, pb, pc, pd, ra, rb, rc, rd2;
+			u64 p2cap = rd(MSR_VMX_PROCBASED2);
+
+			cpuid_count(0x07, 0, &pa, &pb, &pc, &pd);
+			hvx_pt_ok = !!(pb & (1U << 25));
+			if (hvx_pt_ok) {
+				cpuid_count(0x14, 0, &pa, &pb, &pc, &pd);
+				cpuid_count(0x14, 1, &ra, &rb, &rc, &rd2);
+				hvx_pt_ok = (pb & (1U << 2)) && (pc & 3U) == 3U && (ra & 7U) >= 2 &&
+					    (rd(0x485) & (1ULL << 14))	/* IA32_VMX_MISC: PT in VMX */ &&
+					    ((p2cap >> 32) & SEC_CONCEAL_VMX_PT) &&
+					    ((exit_cap >> 32) & EXIT_CONCEAL_VMX_PT) &&
+					    ((entry_cap >> 32) & ENTRY_CONCEAL_VMX_PT);
+			}
+			pr_info("hvx: Intel PT guest tracing %s\n", hvx_pt_ok ? "available" : "NOT available");
+		}
 	}
 
 	err = misc_register(&hvx_miscdev);
@@ -5949,12 +6381,13 @@ static int __init hvx_init(void)
 			iounmap(hvx_lapic);
 		return err;
 	}
-	pr_info("hvx: /dev/hvx ready (minor=%d)\n", hvx_miscdev.minor);
+	pr_info("hvx: /dev/%s ready (minor=%d)\n", HVX_DEVNAME, hvx_miscdev.minor);
 	return 0;
 }
 
 static void __exit hvx_exit(void)
 {
+	hvx_pt_free_chunks(hvx_pt_last_chunk, hvx_pt_last_nchunk);
 	if (hvx_lapic)
 		iounmap(hvx_lapic);
 	misc_deregister(&hvx_miscdev);

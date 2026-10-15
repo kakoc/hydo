@@ -1,0 +1,15 @@
+# Build a second copy of the hvx module as hvxpt.ko with the device /dev/hvxpt, so it
+# can be loaded next to hvx.ko (used for Intel PT coverage work without disturbing
+# runs on /dev/hvx). hvxpt.c is a copy of ../hvx.c made by build-hvxpt.sh.
+obj-m := hvxpt.o
+ccflags-y := -DHVX_DEVNAME='"hvxpt"'
+OBJECT_FILES_NON_STANDARD_hvxpt.o := y
+
+KDIR ?= /lib/modules/$(shell uname -r)/build
+PWD  := $(shell pwd)
+
+all:
+	$(MAKE) -C $(KDIR) M=$(PWD) modules
+
+clean:
+	$(MAKE) -C $(KDIR) M=$(PWD) clean

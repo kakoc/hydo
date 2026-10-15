@@ -89,6 +89,14 @@ struct hvx_config {
  * guest that spins, so it is opt-in. Default 0 = byte-identical to before.
  */
 #define HVX_VM_PAUSE_EXIT	(1u << 3)
+/*
+ * HVX_VM_PT_TRACE: allow Intel Processor Trace of this guest (HVX_SET_PT configures it,
+ * HVX_GET_PT / HVX_READ_PT read the trace). Tracing is switched on only while the guest
+ * runs and filtered so no host code is recorded; it does not change guest execution and
+ * is not part of the snapshot. Needs PT usable in VMX operation (HVX_SET_PT fails with
+ * ENODEV otherwise). Default 0 = byte-identical to before.
+ */
+#define HVX_VM_PT_TRACE		(1u << 4)
 
 /*
  * Guest register file. The first 15 fields (rax..r15) are the general-purpose
@@ -807,5 +815,33 @@ struct hvx_fuzz_input {
 /* Recommended first guest-physical address for userspace-loaded code:
  * pages 0..2 hold the module-built identity page tables. */
 #define HVX_GUEST_CODE_BASE	0x3000UL
+
+/* ---- Intel PT guest coverage (HVX_VM_PT_TRACE) ---- */
+#define HVX_PT_KERNEL		(1u << 0)	/* trace guest CPL0 (needs an IP range: the host is CPL0 too) */
+#define HVX_PT_USER		(1u << 1)	/* trace guest CPL3 */
+#define HVX_PT_CR3		(1u << 2)	/* only while guest CR3 == cr3 */
+#define HVX_PT_NORETCOMP	(1u << 3)	/* every RET emits a TIP (no return compression) */
+struct hvx_pt_config {
+	__u64 buf_mib;		/* output buffer in MiB (rounded up to 2 MiB; max 1022); 0 = 256 */
+	__u32 flags;		/* HVX_PT_* */
+	__u32 pad;
+	__u64 cr3;		/* with HVX_PT_CR3 */
+	__u64 lo[2], hi[2];	/* IP filter ranges [lo, hi); hi = 0 = range unused */
+};
+struct hvx_pt_status {
+	__u64 bytes;		/* trace bytes written */
+	__u64 buf_bytes;	/* buffer size; bytes == buf_bytes with STOPPED = truncated */
+	__u64 status;		/* IA32_RTIT_STATUS (bit 4 error, bit 5 stopped) */
+	__u64 ctl;		/* IA32_RTIT_CTL used for the guest */
+	__u32 saved;		/* 1: this is the last freed VM's trace (no PT VM on this fd) */
+	__u32 pad;
+};
+struct hvx_pt_read {
+	__u64 offset, len;	/* byte range of the trace */
+	__u64 addr;		/* user buffer */
+};
+#define HVX_SET_PT  _IOW(HVX_IOC_MAGIC, 42, struct hvx_pt_config)
+#define HVX_GET_PT  _IOR(HVX_IOC_MAGIC, 43, struct hvx_pt_status)
+#define HVX_READ_PT _IOW(HVX_IOC_MAGIC, 44, struct hvx_pt_read)
 
 #endif /* _HVX_ABI_H */
