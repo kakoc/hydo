@@ -15,6 +15,10 @@ STACK_OUT="${STACK_OUT:-stack}"
 # Source directory of the Go front door (default hvx/stack). The explorer builds from a
 # pinned copy (hvx/explore/stack-src) so its image does not change while hvx/stack is edited.
 STACK_GO_SRC="${STACK_GO_SRC:-hvx/stack}"
+# Go linker flags for the front door. The default strips symbols. A coverage image
+# (Milestone 41) keeps symbols and links the text at a fixed unique address so an Intel PT
+# trace can be filtered to this one program, e.g. STACK_GO_LDFLAGS="-T 0x2000001000 -buildid=".
+STACK_GO_LDFLAGS="${STACK_GO_LDFLAGS:--s -w -buildid=}"
 mkdir -p build
 
 # --- reproducible cpio (verbatim from build-linux.sh §prelude) ---
@@ -167,7 +171,7 @@ TOP="$PWD"
   GOPATH="$TOP/build/stack-gopath" GOMODCACHE="$TOP/build/stack-gomod" \
   GOCACHE="$TOP/build/stack-gocache" GOFLAGS=-mod=readonly GOTOOLCHAIN=local \
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-  "$GO" build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o "$TOP/build/${STACK_OUT}-hydostack" . )
+  "$GO" build -trimpath -buildvcs=false -ldflags="$STACK_GO_LDFLAGS" -o "$TOP/build/${STACK_OUT}-hydostack" . )
 echo "built build/${STACK_OUT}-hydostack ($(stat -c%s build/${STACK_OUT}-hydostack) bytes, static Go, sha256 $(sha256sum build/${STACK_OUT}-hydostack | cut -c1-16))"
 
 # --- 6.2 the ro-root tree: MySQL + JDK closures, Kafka jars, static redis + hydostack.

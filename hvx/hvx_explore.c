@@ -32,6 +32,7 @@
 #include "hvx_stack_verify.c"
 #undef main
 #include <time.h>
+#include "explore/ptedges.h"
 
 #define EXP_MEM_MIB	1024ULL
 #define S0_MARKER	"hydo-explore-ready-S0"
@@ -58,6 +59,65 @@ static double now_s(void)
 	clock_gettime(CLOCK_MONOTONIC, &t);
 	return t.tv_sec + t.tv_nsec / 1e9;
 }
+
+/* ---- Milestone 41: coverage feedback (Intel PT of the front door only) ----
+ * Enabled by HVX_EXPLORE_PT_ELF=<the image's symbol-enabled hydostack, linked at a unique
+ * address>. Each schedule's WORKLOAD VM traces guest user mode inside that program's text
+ * range from the moment the schedule starts (S1) until the workload VM is torn down; the
+ * trace is decoded to an edge file <outdir>/../cov/<tag>.edges. The recovery VM after a
+ * power cut is not traced (it only runs the oracle). Tracing does not change the guest. */
+static int g_pt;
+static uint64_t g_pt_lo, g_pt_hi, g_pt_mib = 256;
+
+static void pt_arm(struct boot *b)
+{
+	struct hvx_pt_config pc;
+
+	if (!g_pt) return;
+	memset(&pc, 0, sizeof(pc));
+	pc.buf_mib = g_pt_mib;
+	pc.flags = HVX_PT_USER | HVX_PT_NORETCOMP;
+	pc.lo[0] = g_pt_lo; pc.hi[0] = g_pt_hi;
+	if (ioctl(b->fd, HVX_SET_PT, &pc) < 0) perror("HVX_SET_PT");
+}
+
+/* Read + decode this VM's trace; writes the edge file and a one-line stats file. */
+static void pt_collect(struct boot *b, const char *tag)
+{
+	struct hvx_pt_status ps;
+	struct hvx_pt_read rq;
+	uint8_t *buf;
+	char path[600], spath[600];
+	uint64_t errs = 0;
+	double t0;
+	long n;
+	FILE *f;
+
+	if (!g_pt) return;
+	memset(&ps, 0, sizeof(ps));
+	if (ioctl(b->fd, HVX_GET_PT, &ps) < 0) { perror("HVX_GET_PT"); return; }
+	buf = malloc(ps.bytes ? ps.bytes : 1);
+	if (!buf) return;
+	rq.offset = 0; rq.len = ps.bytes; rq.addr = (uint64_t)(uintptr_t)buf;
+	if (ps.bytes && ioctl(b->fd, HVX_READ_PT, &rq) < 0) { perror("HVX_READ_PT"); free(buf); return; }
+	snprintf(path, sizeof(path), "%s/../cov/%s.edges", g_outdir, tag);
+	snprintf(spath, sizeof(spath), "%s/../cov/%s.stats", g_outdir, tag);
+	if (getenv("HVX_EXPLORE_PT_SAVE")) {	/* diagnostic: keep the raw trace */
+		char rp[600];
+		snprintf(rp, sizeof(rp), "%s/../cov/%s.pt", g_outdir, tag);
+		if ((f = fopen(rp, "w"))) { fwrite(buf, 1, ps.bytes, f); fclose(f); }
+	}
+	t0 = now_s();
+	n = pte_decode(buf, ps.bytes, path, &errs);
+	if ((f = fopen(spath, "w"))) {
+		fprintf(f, "trace_bytes=%llu truncated=%d edges=%ld decode_errors=%llu decode_secs=%.2f\n",
+			(unsigned long long)ps.bytes, (ps.bytes && ps.bytes >= ps.buf_bytes) ? 1 : 0, n,
+			(unsigned long long)errs, now_s() - t0);
+		fclose(f);
+	}
+	free(buf);
+}
+
 
 /* Run until any of the markers appears in the console AFTER offset `from`. Returns the
  * marker index, -1 on a VM error, -2 when the run exceeds RUN_WALL_SECS. */
@@ -252,6 +312,7 @@ static void run_sched(struct boot *b, const char *tag, const struct sched *sc, s
 	const char *phase = "workload";
 
 	if (set_fault(b, sc->dseed, sc->classes, sc->prob)) { snprintf(verdict, sizeof(verdict), "ERROR harness set_fault"); goto out; }
+	pt_arm(b);
 	snprintf(line, sizeof(line), "%s\n", sc->guest);
 	if (put_input(b, line)) { snprintf(verdict, sizeof(verdict), "ERROR harness put_input"); goto out; }
 	r = run_until_any(b, wk, 2, from);
@@ -273,6 +334,7 @@ static void run_sched(struct boot *b, const char *tag, const struct sched *sc, s
 		ffp = fingerprint(b);
 		last_verdict(b, f2, verdict, sizeof(verdict));
 		save_console(b, f2, tag, "");
+		pt_collect(b, tag);
 		goto out_done;
 	}
 	{	/* power cut: only the flushed disk bytes survive; recover in a fresh VM from S0 */
@@ -286,6 +348,7 @@ static void run_sched(struct boot *b, const char *tag, const struct sched *sc, s
 			FILE *df = fopen(getenv("HVX_EXPLORE_DURABLE_OUT"), "w");
 			if (df) { fwrite(b->disk_mm + E.p2_off, 1, E.p2_len, df); fclose(df); }
 		}
+		pt_collect(b, tag);
 		boot_teardown(b);
 		if (vm_fresh(&ob) || snap_restore(&ob, s0, &durable)) {
 			savebuf_close(&durable);
@@ -381,6 +444,20 @@ int main(int argc, char **argv)
 	if (mbr_partitions(E.base, dlen, &geom) < 0) return 1;
 	E.p1_off = geom.p1_off; E.p1_len = geom.p1_len; E.p2_off = geom.p2_off; E.p2_len = geom.p2_len;
 	setvbuf(stdout, NULL, _IOLBF, 0);
+	if (getenv("HVX_EXPLORE_PT_ELF")) {
+		char cdir[600];
+		if (pte_load_elf(getenv("HVX_EXPLORE_PT_ELF"), &g_pt_lo, &g_pt_hi)) {
+			fprintf(stderr, "hvx_explore: cannot load %s\n", getenv("HVX_EXPLORE_PT_ELF"));
+			return 1;
+		}
+		if (getenv("HVX_EXPLORE_PT_MIB")) g_pt_mib = strtoull(getenv("HVX_EXPLORE_PT_MIB"), NULL, 0);
+		setenv("HVX_PT_TRACE_VM", "1", 1);
+		snprintf(cdir, sizeof(cdir), "%s/../cov", g_outdir);
+		mkdir(cdir, 0755);
+		g_pt = 1;
+		fprintf(stderr, "hvx_explore: coverage on: text [%#llx, %#llx), %llu MiB buffer\n",
+			(unsigned long long)g_pt_lo, (unsigned long long)g_pt_hi, (unsigned long long)g_pt_mib);
+	}
 
 	if (!strcmp(mode, "one")) {
 		struct sched sc;

@@ -28,6 +28,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 HVX = os.path.dirname(HERE)
 BUILD = os.path.expanduser("~/hydo/build")
 IMAGE = "explore-disk.img"
+EXTRA_ENV = []          # extra env for the workers, e.g. coverage: ["HVX_EXPLORE_PT_ELF=..."] (guided.py)
 
 
 class SplitMix:
@@ -227,7 +228,7 @@ class Worker(threading.Thread):
         self.boot_secs = None
 
     def run(self):
-        cmd = [os.path.expanduser("~/bin/hvx-run"), "sudo", "env", "HVX_SNAP_DIR=/var/tmp/hvx-snap",
+        cmd = [os.path.expanduser("~/bin/hvx-run"), "sudo", "env", "HVX_SNAP_DIR=/var/tmp/hvx-snap"] + EXTRA_ENV + [
                os.path.join(HVX, "hvx_explore"), "serve", os.path.join(BUILD, "bzImage"),
                os.path.join(BUILD, "initramfs-kafka.cpio.gz"), os.path.join(BUILD, IMAGE),
                os.path.join(self.outdir, "consoles")]

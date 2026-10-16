@@ -424,6 +424,10 @@ static int boot_setup(struct boot *b, uint64_t mem_size,
 	 * PMU (nested / hybrid) refuses it with ENODEV and we fall back to the exit clock. */
 	if (!(getenv("HVX_PMU_CLOCK") && !strcmp(getenv("HVX_PMU_CLOCK"), "0")))
 		cfg.flags |= HVX_VM_PMU_CLOCK;
+	/* Milestone 41: allow Intel PT tracing of this VM (the explorer's coverage feedback).
+	 * The flag alone traces nothing; HVX_SET_PT switches it on. Off unless asked for. */
+	if (getenv("HVX_PT_TRACE_VM"))
+		cfg.flags |= HVX_VM_PT_TRACE;
 	if (ioctl(b->fd, HVX_CREATE_VM, &cfg) < 0) {
 		static int noted;
 		if (errno != ENODEV || !(cfg.flags & HVX_VM_PMU_CLOCK)) { perror("HVX_CREATE_VM"); return -1; }
