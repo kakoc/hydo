@@ -34,6 +34,7 @@ IMAGE = "explore-disk.img"
 EXTRA_ENV = []          # extra env for the workers, e.g. coverage: ["HVX_EXPLORE_PT_ELF=..."] (guided.py)
 TIMING = False          # --timing: add seeded tick-timing jitter to generated schedules
 TJ_MAX = 500000         # max tick delay in guest branches (the PMU period is 2^20)
+TJ_PM = [50, 100, 200]  # --tj-pm: delayed ticks per 1000 (a workload is often only ~60 ticks)
 TJ_EXPLICIT_MAX = 32    # HVX_TJ_MAX_EXPLICIT
 
 
@@ -95,7 +96,7 @@ def generate(seed):
     if TIMING:              # a separate stream, so the fields above match a run without --timing
         t = SplitMix(seed ^ 0x7417D1CE7417D1CE)
         if t.below(100) < 50:
-            s["tj"] = ("seed", t.next(), t.pick([5, 20]), TJ_MAX, 0, 0)
+            s["tj"] = ("seed", t.next(), t.pick(TJ_PM), TJ_MAX, 0, 0)
     return s
 
 
@@ -450,10 +451,13 @@ def main():
     ap.add_argument("--schedule", help="run just this schedule (no generation)")
     ap.add_argument("--no-shrink", action="store_true")
     ap.add_argument("--timing", action="store_true", help="add seeded tick-timing jitter to half of the schedules")
+    ap.add_argument("--tj-pm", default=",".join(map(str, TJ_PM)),
+                    help="comma list of delayed-ticks-per-1000 densities to pick from")
     a = ap.parse_args()
-    global IMAGE, TIMING
+    global IMAGE, TIMING, TJ_PM
     IMAGE = a.image
     TIMING = a.timing
+    TJ_PM = [int(x) for x in a.tj_pm.split(",")]
     os.makedirs(a.out, exist_ok=True)
     t0 = time.time()
     pool = Pool(a.workers, a.out)
