@@ -15,9 +15,14 @@
  * heals its faults and checks its invariant in the same boot; with one, the flushed data
  * disk is carried into a fresh VM restored from S0, which runs the recovery and the check.
  *
- * A schedule has a host part (disk fault) and a guest part (service kill, network fault,
- * power-cut point, durability knobs), separated by '|':
- *   disk=<none|ioerr:P|cut|lying:P> dseed=<hex> | run [K=..] [N=..] [C=..] [M=..] [R=..]
+ * A schedule has a host part (disk fault, tick timing) and a guest part (service kill,
+ * network fault, power-cut point, durability knobs), separated by '|':
+ *   disk=<none|ioerr:P|cut|lying:P> dseed=<hex> [tj=<hex> tjpm=<n> tjmax=<n> [tjlo=<k> tjhi=<k>]
+ *   | tjx=<k:d,k:d,...>] | run [K=..] [N=..] [C=..] [M=..] [R=..]
+ * The tj tokens delay PMU-clock ticks during the workload (HVX_SET_TJITTER: seeded, or an
+ * explicit tick:delay list) so the guest's threads interleave differently; a schedule
+ * without them runs exactly as before. When jitter is on, the RESULT line also reports the
+ * workload's tick range and how many ticks were delayed (tjk=<first>-<last> tjn=<n>).
  * (guest tokens: see hvx/explore/stack-explore.sh). The schedule generator, the
  * reproduce/shrink logic and the report live in hvx/explore/explore.py.
  *
@@ -265,12 +270,50 @@ static void save_console(const struct boot *b, size_t from, const char *tag, con
 }
 
 struct sched {
-	char host[256];
+	char host[1024];
 	char guest[512];
 	uint32_t classes, prob;
 	uint64_t dseed;
 	int cut;
+	int tj_on;
+	struct hvx_tjitter tj;	/* tick-timing jitter for the workload (tj / tjx tokens) */
 };
+
+/* tj=<hex seed> tjpm=<per mille> tjmax=<branches> [tjlo=<k> tjhi=<k>]  or  tjx=<k:d,...> */
+static int parse_tj(const char *host, struct sched *sc)
+{
+	const char *p;
+
+	if ((p = strstr(host, "tjx="))) {
+		char *end;
+		p += 4;
+		while (*p && *p != ' ' && sc->tj.n_explicit < HVX_TJ_MAX_EXPLICIT) {
+			sc->tj.explicit_[sc->tj.n_explicit].tick = strtoull(p, &end, 10);
+			if (*end != ':') return -1;
+			sc->tj.explicit_[sc->tj.n_explicit].delay = strtoull(end + 1, &end, 10);
+			sc->tj.n_explicit++;
+			p = (*end == ',') ? end + 1 : end;
+		}
+		if (*p && *p != ' ') return -1;		/* more than HVX_TJ_MAX_EXPLICIT entries */
+		sc->tj_on = sc->tj.n_explicit > 0;
+		return 0;
+	}
+	if (!(p = strstr(host, "tj="))) return 0;
+	sc->tj.seed = strtoull(p + 3, NULL, 16);
+	sc->tj.permille = (p = strstr(host, "tjpm=")) ? (uint32_t)strtoul(p + 5, NULL, 10) : 10;
+	sc->tj.max_delay = (p = strstr(host, "tjmax=")) ? strtoull(p + 6, NULL, 10) : 500000;
+	if ((p = strstr(host, "tjlo="))) sc->tj.tick_lo = strtoull(p + 5, NULL, 10);
+	if ((p = strstr(host, "tjhi="))) sc->tj.tick_hi = strtoull(p + 5, NULL, 10);
+	sc->tj_on = sc->tj.permille && sc->tj.max_delay;
+	return 0;
+}
+
+static int set_tj(struct boot *b, const struct hvx_tjitter *tj)
+{
+	static struct hvx_tjitter off;
+	if (ioctl(b->fd, HVX_SET_TJITTER, tj ? tj : &off) < 0) { perror("HVX_SET_TJITTER"); return -1; }
+	return 0;
+}
 
 static int parse_sched(const char *s, struct sched *sc)
 {
@@ -294,6 +337,7 @@ static int parse_sched(const char *s, struct sched *sc)
 	else if (!strcmp(disk, "cut")) { sc->classes = HVX_FAULT_DROP_UNFLUSHED; sc->prob = 100; }
 	else if (!strncmp(disk, "lying:", 6)) { sc->classes = HVX_FAULT_DROP; sc->prob = (uint32_t)atoi(disk + 6); }
 	else return -1;
+	if (parse_tj(sc->host, sc)) return -1;
 	sc->cut = strstr(sc->guest, " C=") != NULL;
 	return 0;
 }
@@ -304,7 +348,7 @@ static void run_sched(struct boot *b, const char *tag, const struct sched *sc, s
 {
 	static const char *const wk[] = { DONE_MARKER, FINAL_MARKER };
 	static const char *const fin[] = { FINAL_MARKER };
-	char line[600], verdict[256] = "", orc[512];
+	char line[600], verdict[256] = "", orc[512], tjinfo[96] = "";
 	uint64_t wfp = 0, ffp = 0;
 	size_t from = b->ulen;
 	double t0 = now_s();
@@ -312,12 +356,29 @@ static void run_sched(struct boot *b, const char *tag, const struct sched *sc, s
 	const char *phase = "workload";
 
 	if (set_fault(b, sc->dseed, sc->classes, sc->prob)) { snprintf(verdict, sizeof(verdict), "ERROR harness set_fault"); goto out; }
+	if (sc->tj_on) {
+		struct hvx_pmu pm;
+		memset(&pm, 0, sizeof(pm));
+		if (set_tj(b, &sc->tj) || ioctl(b->fd, HVX_GET_PMU, &pm) < 0 || !pm.period) {
+			snprintf(verdict, sizeof(verdict), "ERROR harness tick jitter (needs the PMU clock)"); goto out;
+		}
+		snprintf(tjinfo, sizeof(tjinfo), " tjk=%llu", (unsigned long long)(pm.next / pm.period));
+	}
 	pt_arm(b);
 	snprintf(line, sizeof(line), "%s\n", sc->guest);
 	if (put_input(b, line)) { snprintf(verdict, sizeof(verdict), "ERROR harness put_input"); goto out; }
 	r = run_until_any(b, wk, 2, from);
 	if (r < 0) { snprintf(verdict, sizeof(verdict), r == -2 ? "TIMEOUT workload" : "ERROR vm workload"); goto out; }
 	wfp = fingerprint(b);
+	if (sc->tj_on) {		/* the jitter covers the workload only, like the disk fault */
+		static struct hvx_tjitter got;
+		size_t l = strlen(tjinfo);
+		memset(&got, 0, sizeof(got));
+		ioctl(b->fd, HVX_GET_TJITTER, &got);
+		snprintf(tjinfo + l, sizeof(tjinfo) - l, "-%llu tjn=%llu",
+			 (unsigned long long)got.last_tick, (unsigned long long)got.applied);
+		set_tj(b, NULL);
+	}
 	if (r == 1) {			/* the guest gave a verdict during the workload (e.g. setup error) */
 		last_verdict(b, from, verdict, sizeof(verdict));
 		ffp = wfp;
@@ -372,8 +433,9 @@ out:
 	if (b->fd >= 0) save_console(b, from, tag, "");
 out_done:
 	(void)phase;
-	printf("RESULT %s fp=%016llx wfp=%016llx secs=%.1f verdict=%s\n", tag,
-	       (unsigned long long)fnv(wfp, &ffp, sizeof(ffp)), (unsigned long long)wfp, now_s() - t0, verdict);
+	printf("RESULT %s fp=%016llx wfp=%016llx secs=%.1f%s verdict=%s\n", tag,
+	       (unsigned long long)fnv(wfp, &ffp, sizeof(ffp)), (unsigned long long)wfp, now_s() - t0,
+	       tjinfo, verdict);
 	fflush(stdout);
 	boot_teardown(b);
 }
@@ -472,7 +534,7 @@ int main(int argc, char **argv)
 	boot_teardown(&b);
 	printf("READY boot_secs=%.1f\n", now_s() - t0);
 	{
-		char in[1024];
+		char in[4096];
 		while (fgets(in, sizeof(in), stdin)) {
 			char tag[64];
 			int off = 0;

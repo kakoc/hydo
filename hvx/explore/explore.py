@@ -11,8 +11,11 @@ shrinks it to a minimal failing schedule, and writes a report.
   python3 explore.py --schedule "disk=cut dseed=0 | run C=20 M=2" --out ...   # one schedule
 
 Schedule format (see hvx_explore.c / stack-explore.sh):
-  disk=<none|ioerr:P|cut|lying:P> dseed=<hex> | run [K=svc@at+down] [N=svc@from-to:netem,args]
+  disk=<none|ioerr:P|cut|lying:P> dseed=<hex> [timing] | run [K=svc@at+down] [N=svc@from-to:netem,args]
                                                    [C=at] [M=0|1|2] [R=always|everysec|no]
+  timing (only with --timing): tj=<hex> tjpm=<n> tjmax=<n> [tjlo=<k> tjhi=<k>]  delays a
+  seeded share of the PMU-clock ticks, so threads interleave differently; the shrinker turns
+  it into an explicit list tjx=<tick:delay,...> and removes entries.
 Classes of findings:
   durable-defaults  every store configured durably, the disk honest -- the interesting ones
   unsafe-knob       needs a documented-unsafe setting (MySQL trx_commit != 1, Redis
@@ -29,6 +32,9 @@ HVX = os.path.dirname(HERE)
 BUILD = os.path.expanduser("~/hydo/build")
 IMAGE = "explore-disk.img"
 EXTRA_ENV = []          # extra env for the workers, e.g. coverage: ["HVX_EXPLORE_PT_ELF=..."] (guided.py)
+TIMING = False          # --timing: add seeded tick-timing jitter to generated schedules
+TJ_MAX = 500000         # max tick delay in guest branches (the PMU period is 2^20)
+TJ_EXPLICIT_MAX = 32    # HVX_TJ_MAX_EXPLICIT
 
 
 class SplitMix:
@@ -86,7 +92,42 @@ def generate(seed):
     if r.below(100) < 20:
         k = r.pick([("M", 2), ("M", 0), ("R", "everysec"), ("R", "no")])
         s[k[0]] = k[1]
+    if TIMING:              # a separate stream, so the fields above match a run without --timing
+        t = SplitMix(seed ^ 0x7417D1CE7417D1CE)
+        if t.below(100) < 50:
+            s["tj"] = ("seed", t.next(), t.pick([5, 20]), TJ_MAX, 0, 0)
     return s
+
+
+def mix64(x):
+    x = (x + 0x9E3779B97F4A7C15) & M64
+    x = ((x ^ (x >> 30)) * 0xBF58476D1CE4E5B9) & M64
+    x = ((x ^ (x >> 27)) * 0x94D049BB133111EB) & M64
+    return x ^ (x >> 31)
+
+
+def tj_delays(tj, k_first, k_last):
+    """The (tick, delay) pairs a seeded jitter applies to ticks k_first..k_last -- the same
+    formula as hvx_tj_delay() in hvx.c."""
+    _, seed, pm, mx, lo, hi = tj
+    out = []
+    for k in range(max(2, k_first, lo), k_last + 1):
+        if hi and k >= hi:
+            break
+        h = mix64((seed + k * 0x9E3779B97F4A7C15) & M64)
+        if h % 1000 < pm:
+            out.append((k, 1 + (h >> 16) % mx))
+    return out
+
+
+def render_tj(tj):
+    if tj[0] == "x":
+        return " tjx=" + ",".join("%d:%d" % kd for kd in tj[1])
+    _, seed, pm, mx, lo, hi = tj
+    t = " tj=%x tjpm=%d tjmax=%d" % (seed, pm, mx)
+    if lo or hi:
+        t += " tjlo=%d tjhi=%d" % (lo, hi)
+    return t
 
 
 def netem_args(kinds):
@@ -117,12 +158,19 @@ def render(s):
         g.append("M=%d" % s["M"])
     if "R" in s:
         g.append("R=%s" % s["R"])
-    return "disk=%s dseed=%x | %s" % (s["disk"], s["dseed"], " ".join(g))
+    return "disk=%s dseed=%x%s | %s" % (s["disk"], s["dseed"], render_tj(s["tj"]) if "tj" in s else "", " ".join(g))
 
 
 def parse(text):
     host, guest = text.split("|", 1)
     s = {"disk": re.search(r"disk=(\S+)", host).group(1), "dseed": int(re.search(r"dseed=([0-9a-fA-F]+)", host).group(1), 16)}
+    m = re.search(r"tjx=(\S+)", host)
+    if m:
+        s["tj"] = ("x", [tuple(int(v) for v in kd.split(":")) for kd in m.group(1).split(",")])
+    elif re.search(r"\btj=", host):
+        g = lambda k, d: int(re.search(k + r"=(\d+)", host).group(1)) if re.search(k + r"=(\d+)", host) else d
+        s["tj"] = ("seed", int(re.search(r"\btj=([0-9a-fA-F]+)", host).group(1), 16), g("tjpm", 10),
+                   g("tjmax", TJ_MAX), g("tjlo", 0), g("tjhi", 0))
     for t in guest.split()[1:]:
         k, v = t.split("=", 1)
         if k == "K":
@@ -247,12 +295,17 @@ class Worker(threading.Thread):
             p.stdin.write("RUN %s %s\n" % (tag, text))
             p.stdin.flush()
             out = p.stdout.readline()
-            m = re.match(r"RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+) verdict=(.*)", out.strip())
+            m = re.match(r"RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: tj\S+)*) verdict=(.*)", out.strip())
             if not m:
                 self.results.put((tag, text, {"fp": "0", "secs": 0, "verdict": "ERROR worker: %r" % out, "worker": self.idx}))
                 continue
-            self.results.put((tag, text, {"fp": m.group(2), "wfp": m.group(3), "secs": float(m.group(4)),
-                                          "verdict": m.group(5), "worker": self.idx}))
+            res = {"fp": m.group(2), "wfp": m.group(3), "secs": float(m.group(4)),
+                   "verdict": m.group(6), "worker": self.idx}
+            tk = re.search(r"tjk=(\d+)-(\d+) tjn=(\d+)", m.group(5))
+            if tk:      # the workload's tick range and how many ticks were delayed
+                res["tjk"] = [int(tk.group(1)), int(tk.group(2))]
+                res["tjn"] = int(tk.group(3))
+            self.results.put((tag, text, res))
         p.stdin.write("QUIT\n")
         p.stdin.flush()
         p.wait()
@@ -284,8 +337,9 @@ class Pool:
 
 
 # ---------------------------------------------------------------- shrinking
-def candidates(s):
-    """Simpler variants of schedule s, most aggressive first."""
+def candidates(s, tjk=None):
+    """Simpler variants of schedule s, most aggressive first. tjk: the tick range of the
+    run of s (needed to turn a seeded timing jitter into an explicit list)."""
     out = []
     def var(**kw):
         t = dict(s)
@@ -322,7 +376,34 @@ def candidates(s):
         p = int(s["disk"].split(":")[1])
         if p > 1:
             var(disk="%s:%d" % (s["disk"].split(":")[0], max(1, p // 2)))
+    tj_candidates(s, tjk, var)
     return out
+
+
+def tj_candidates(s, tjk, var):
+    """Timing: drop it; a seeded jitter becomes its explicit (tick, delay) list (or, with
+    too many delayed ticks, keeps only one half of its tick window); an explicit list loses
+    one half, then single entries. Removing an early delay changes everything after it, so
+    removals that keep the failure are the informative ones."""
+    if "tj" not in s:
+        return
+    var(tj=None)
+    tj = s["tj"]
+    if tj[0] == "seed" and tjk:
+        pairs = tj_delays(tj, tjk[0] + 1, tjk[1])
+        if pairs and len(pairs) <= TJ_EXPLICIT_MAX:
+            var(tj=("x", pairs))
+        elif pairs:
+            mid = pairs[len(pairs) // 2][0]
+            var(tj=tj[:4] + (tj[4], mid))       # keep the first half of the delays
+            var(tj=tj[:4] + (mid, tj[5]))       # keep the second half
+    elif tj[0] == "x" and len(tj[1]) > 1:
+        kd = tj[1]
+        if len(kd) > 3:
+            var(tj=("x", kd[:len(kd) // 2]))
+            var(tj=("x", kd[len(kd) // 2:]))
+        for i in range(len(kd)):
+            var(tj=("x", kd[:i] + kd[i + 1:]))
 
 
 def same_failure(v_ref, v):
@@ -333,10 +414,12 @@ def same_failure(v_ref, v):
     return signature(v).split(" order=")[0] == signature(v_ref).split(" order=")[0]
 
 
-def shrink(pool, s, verdict, log, budget=40):
+def shrink(pool, s, verdict, log, budget=40, tjk=None):
     cur, cur_v, tries, rnd = s, verdict, 0, 0
+    if "tj" in s:
+        budget *= 3             # explicit tick lists shrink one entry at a time
     while tries < budget:
-        cands = candidates(cur)
+        cands = candidates(cur, tjk)
         if not cands:
             break
         rnd += 1
@@ -350,6 +433,7 @@ def shrink(pool, s, verdict, log, budget=40):
             log.flush()
             if same_failure(cur_v, v):
                 cur, cur_v, progressed = c, v, True
+                tjk = res[tag][1].get("tjk", tjk)
                 break
         if not progressed:
             break
@@ -365,9 +449,11 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--schedule", help="run just this schedule (no generation)")
     ap.add_argument("--no-shrink", action="store_true")
+    ap.add_argument("--timing", action="store_true", help="add seeded tick-timing jitter to half of the schedules")
     a = ap.parse_args()
-    global IMAGE
+    global IMAGE, TIMING
     IMAGE = a.image
+    TIMING = a.timing
     os.makedirs(a.out, exist_ok=True)
     t0 = time.time()
     pool = Pool(a.workers, a.out)
@@ -414,7 +500,7 @@ def main():
         for key, f in reps.items():
             if verdict_kind(f["verdict"]) != "violation":
                 continue
-            m, mv, n = shrink(pool, parse(f["schedule"]), f["verdict"], slog)
+            m, mv, n = shrink(pool, parse(f["schedule"]), f["verdict"], slog, tjk=f.get("tjk"))
             mt = render(m)
             conf = pool.run_all([("min-a", mt), ("min-b", mt)])
             shrunk[key] = {"from_seed": f["seed"], "minimal": mt, "verdict": mv, "tries": n,
@@ -459,6 +545,7 @@ def write_report(out, summary, fails, shrunk, table=None):
         L += ["### %s: `%s`" % (head, sig), "",
               "- from seed %d, %d shrink runs" % (v["from_seed"], v["tries"]),
               "- minimal schedule: `%s`" % v["minimal"],
+              "- needs a tick-timing change: %s" % ("yes" if " tj" in v["minimal"] else "no"),
               "- verdict: `%s`" % v["min_verdict"],
               "- fingerprint, two runs: `%s` / `%s` (%s)" % (v["fp_a"], v["fp_b"], "identical" if v["fp_a"] == v["fp_b"] else "DIFFERENT"),
               "- by hand: `~/bin/hvx-run sudo ./hvx_explore one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/%s <outdir> \"%s\"`" % (IMAGE, v["minimal"]), ""]
