@@ -89,6 +89,84 @@ def generate(seed):
     return s
 
 
+# ---------------------------------------------------------------- swarm testing (Milestone 42)
+# Each fault CATEGORY is switched on or off per run (a seeded choice), and the schedule is
+# drawn only from the categories that are on. Faults of different kinds then stop masking
+# each other, and a run with only one kind of fault is common instead of rare.
+CATEGORIES = ["kill", "net", "cut", "disk", "knob"]
+SWARM_SALT = 0x5A4A5A4A5A4A5A4A          # keeps swarm seed k different from random seed k
+
+
+def swarm_categories(seed):
+    r = SplitMix(seed ^ SWARM_SALT)
+    on = [c for c in CATEGORIES if r.below(2)]
+    if not on:
+        on = [r.pick(CATEGORIES)]
+    return on, r
+
+
+def generate_swarm(seed):
+    """seed -> schedule dict, swarm style. Pure function of the seed. Same schedule format and
+    parameter ranges as generate(); only the per-run choice of fault kinds differs."""
+    on, r = swarm_categories(seed)
+    s = {"disk": "none", "dseed": r.next()}
+    if "kill" in on:
+        at = r.rng(0, NORDERS - 4)
+        s["K"] = (r.pick(SVCS), at, r.rng(1, min(4, NORDERS - at)))
+    if "net" in on:
+        a = r.rng(0, NORDERS - 2)
+        b = r.rng(a + 1, min(NORDERS, a + 15))
+        kinds = []
+        for _ in range(r.rng(1, 2)):
+            k = r.pick(["delay", "loss", "duplicate", "reorder", "corrupt"])
+            if k not in [x[0] for x in kinds]:
+                kinds.append((k, {"delay": r.rng(10, 300), "loss": r.rng(5, 60), "duplicate": r.rng(5, 50),
+                                  "reorder": r.rng(10, 50), "corrupt": r.rng(1, 10)}[k]))
+        s["N"] = (r.pick(SVCS), a, b, kinds)
+    if "disk" in on:                    # a misbehaving disk (wins over a plain cut below)
+        s["disk"] = r.pick(["ioerr:%d" % r.rng(1, 3), "lying:%d" % r.rng(2, 12)])
+        if s["disk"].startswith("lying"):
+            s["C"] = r.rng(1, NORDERS)
+    if "cut" in on and s["disk"] == "none":
+        s["disk"] = "cut"
+        s["C"] = r.rng(1, NORDERS)
+    if "knob" in on:
+        k = r.pick([("M", 2), ("M", 0), ("R", "everysec"), ("R", "no")])
+        s[k[0]] = k[1]
+    return s
+
+
+# ---------------------------------------------------------------- systematic sweeps (Milestone 42)
+# Small fault spaces enumerated exhaustively, every store durable and the disk honest.
+NETEM_SEVERITIES = [[("loss", 20)], [("loss", 40)], [("loss", 60)], [("delay", 100)], [("delay", 1000)]]
+
+
+def sweep(name):
+    """name -> list of (label, schedule dict). dseed is 0: no disk fault draws from it."""
+    out = []
+    if name == "kill":                  # every service killed before every order, 1 order down
+        for svc in SVCS:
+            for at in range(0, NORDERS):
+                out.append(("%s@%d" % (svc, at), {"disk": "none", "dseed": 0, "K": (svc, at, 1)}))
+    elif name == "cut":                 # a power cut before every order
+        for c in range(1, NORDERS + 1):
+            out.append(("C=%d" % c, {"disk": "cut", "dseed": 0, "C": c}))
+    elif name == "net":                 # each service's traffic at a few severities, whole workload
+        for svc in SVCS:
+            for kinds in NETEM_SEVERITIES:
+                out.append(("%s:%s" % (svc, netem_args(kinds)), {"disk": "none", "dseed": 0, "N": (svc, 0, NORDERS, kinds)}))
+    elif name == "killcut":             # kill, then a power cut a few orders later
+        for svc in SVCS:
+            for at in range(0, NORDERS - 1, 5):
+                for d in (1, 2, 4, 8, 13):
+                    if at + d <= NORDERS:
+                        out.append(("%s@%d C=%d" % (svc, at, at + d),
+                                    {"disk": "cut", "dseed": 0, "K": (svc, at, 1), "C": at + d}))
+    else:
+        raise SystemExit("unknown sweep %r (kill, cut, net, killcut)" % name)
+    return out
+
+
 def netem_args(kinds):
     out = []
     has_delay = any(k == "delay" for k, _ in kinds)
@@ -365,6 +443,9 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--schedule", help="run just this schedule (no generation)")
     ap.add_argument("--no-shrink", action="store_true")
+    ap.add_argument("--strategy", choices=["random", "swarm"], default="random",
+                    help="schedule generator for --seeds (Milestone 42)")
+    ap.add_argument("--sweep", help="enumerate a small fault space instead of seeds: kill, cut, net, killcut")
     a = ap.parse_args()
     global IMAGE
     IMAGE = a.image
@@ -376,9 +457,17 @@ def main():
         print(json.dumps(res["manual"][1]))
         pool.close()
         return
-    lo, hi = [int(x) for x in a.seeds.split("-")]
-    seeds = list(range(lo, hi + 1))
-    items = [("seed-%d" % sd, render(generate(sd))) for sd in seeds]
+    if a.sweep:
+        points = sweep(a.sweep)
+        seeds = list(range(1, len(points) + 1))            # sweep point index stands in for the seed
+        items = [("seed-%d" % i, render(sch)) for i, (_, sch) in zip(seeds, points)]
+        open(os.path.join(a.out, "sweep-points.jsonl"), "w").write(
+            "".join(json.dumps({"seed": i, "point": lab}) + "\n" for i, (lab, _) in zip(seeds, points)))
+    else:
+        lo, hi = [int(x) for x in a.seeds.split("-")]
+        seeds = list(range(lo, hi + 1))
+        gen = generate_swarm if a.strategy == "swarm" else generate
+        items = [("seed-%d" % sd, render(gen(sd))) for sd in seeds]
     t_sweep = time.time()
     res = pool.run_all(items)
     t_sweep = time.time() - t_sweep
@@ -426,7 +515,8 @@ def main():
     pool.close()
     total = time.time() - t0
     secs = [res["seed-%d" % sd][1]["secs"] for sd in seeds]
-    summary = {"schedules": len(seeds), "workers": a.workers, "sweep_wall_s": round(t_sweep, 1),
+    summary = {"schedules": len(seeds), "strategy": ("sweep:" + a.sweep) if a.sweep else a.strategy,
+               "image": IMAGE, "workers": a.workers, "sweep_wall_s": round(t_sweep, 1),
                "runs_per_hour": round(len(seeds) / t_sweep * 3600, 1), "mean_run_s": round(sum(secs) / len(secs), 1),
                "worker_boot_s": round(sum(boot) / max(1, len(boot)), 1), "total_wall_s": round(total, 1),
                "failures": len(fails), "reproduced": sum(1 for f in fails if f["reproduced"])}
