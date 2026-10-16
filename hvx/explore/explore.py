@@ -443,6 +443,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
 
 # ---------------------------------------------------------------- main
 def main():
+    global IMAGE, TIMING, TJ_PM
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-200")
     ap.add_argument("--workers", type=int, default=3)   # the box has 4 cores: 3 is fastest (M38)
@@ -454,7 +455,6 @@ def main():
     ap.add_argument("--tj-pm", default=",".join(map(str, TJ_PM)),
                     help="comma list of delayed-ticks-per-1000 densities to pick from")
     a = ap.parse_args()
-    global IMAGE, TIMING, TJ_PM
     IMAGE = a.image
     TIMING = a.timing
     TJ_PM = [int(x) for x in a.tj_pm.split(",")]
