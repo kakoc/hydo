@@ -764,6 +764,7 @@ struct hvx_vcpu {
 	u64 pmu_ticks, pmu_over, pmu_steps, pmu_land;	/* statistics */
 	u32 pmu_flat;			/* consecutive landing steps that retired no branch */
 	u64 pmu_hops;			/* statistics: branch-free stretches skipped (see HVX_PMU_HOP_STEPS) */
+	u64 tj_applied, tj_hash, tj_last;	/* tick-jitter statistics (HVX_GET_TJITTER) */
 
 	struct hvx_regs regs;			/* software guest register file */
 
@@ -847,6 +848,10 @@ struct hvx_vm {
 	struct page *pt_topa;		/* the ToPA table */
 	u64 pt_mask, pt_status;		/* RTIT_OUTPUT_MASK_PTRS / RTIT_STATUS between runs */
 	u64 pmu_period, pmu_tick_tsc;
+	/* seeded tick-timing jitter (HVX_SET_TJITTER); off when tj_on == 0. Not in the
+	 * snapshot (see hvx_abi.h): a restored run takes whatever policy is set. */
+	bool tj_on;
+	struct hvx_tjitter tj;
 
 	/* SHARED guest RAM + EPT (all vCPUs share one physical address space) */
 	unsigned int  n_guest_pages;		/* size of guest RAM in pages */
@@ -4186,6 +4191,51 @@ static bool uart_irq(struct hvx_vm *vm, u32 *vec)
  * Fills *ex on the returned exit (and on VMfail/throttle/step). Returns 0 if
  * VMX-root operation itself succeeded, negative on a host-side VMX setup failure.
  */
+/*
+ * Seeded tick-timing jitter (HVX_SET_TJITTER, see hvx_abi.h). The delay of PMU tick
+ * k is a pure function of the policy and k. The next tick goes on the nominal grid
+ * point after the current target, plus that delay; delays are < period, so the grid
+ * point is recovered from pmu_next alone and a restored snapshot continues the same
+ * schedule without any extra saved state.
+ */
+static u64 hvx_tj_delay(const struct hvx_vm *vm, u64 k)
+{
+	const struct hvx_tjitter *t = &vm->tj;
+	u64 h, d;
+	u32 i;
+
+	if (k <= 1)
+		return 0;
+	if (t->n_explicit) {
+		for (i = 0; i < t->n_explicit; i++)
+			if (t->explicit_[i].tick == k)
+				break;
+		d = (i < t->n_explicit) ? t->explicit_[i].delay : 0;
+	} else {
+		if (k < t->tick_lo || (t->tick_hi && k >= t->tick_hi))
+			return 0;
+		h = fault_mix(t->seed + k * 0x9e3779b97f4a7c15ULL);
+		if (h % 1000 >= t->permille)
+			return 0;
+		d = 1 + (h >> 16) % t->max_delay;
+	}
+	return d < vm->pmu_period ? d : vm->pmu_period - 1;	/* SET_PMU may shrink the period later */
+}
+
+static void hvx_tj_next(struct hvx_vm *vm, struct hvx_vcpu *vcpu)
+{
+	u64 p = vm->pmu_period;
+	u64 base = vcpu->pmu_next - vcpu->pmu_next % p + p;
+	u64 k = base / p, d = hvx_tj_delay(vm, k);
+
+	vcpu->pmu_next = base + d;
+	vcpu->tj_last = k;
+	if (d) {
+		vcpu->tj_applied++;
+		vcpu->tj_hash = (((vcpu->tj_hash ^ k) * 0x100000001b3ULL) ^ d) * 0x100000001b3ULL;
+	}
+}
+
 static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 			bool single_step, u64 max_insns)
 {
@@ -4327,7 +4377,10 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 			while (vcpu->pmu_total >= vcpu->pmu_next) {
 				if (vcpu->pmu_total > vcpu->pmu_next || !vcpu->pmu_step)
 					vcpu->pmu_over++;
-				vcpu->pmu_next += vm->pmu_period;
+				if (vm->tj_on)
+					hvx_tj_next(vm, vcpu);	/* nominal grid + seeded delay */
+				else
+					vcpu->pmu_next += vm->pmu_period;
 				vcpu->pmu_ticks++;
 				vcpu->pmu_land = (vcpu->pmu_land ^ vcpu->regs.rip) * 0x100000001b3ULL;
 				vcpu->pmu_land = (vcpu->pmu_land ^ vcpu->regs.rcx) * 0x100000001b3ULL;
@@ -4869,6 +4922,21 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 				vcpu->regs.rip += (u32)vmread(VM_EXIT_INSN_LEN);
 				VMW(GUEST_RIP, vcpu->regs.rip);
 				retired = true;
+			} else if (basic == EXIT_REASON_HLT && (vcpu->regs.rflags & 0x200) &&
+				   (vcpu->inject_valid || vm->vblk.irq_pending ||
+				    (vm->vnet.present && (vm->vnet.q[0].irq_pending ||
+							  vm->vnet.q[1].irq_pending)))) {
+				/* An interrupt is already pending (latched but not yet
+				 * delivered): it is the wake-up, so step past the HLT and let
+				 * the loop top deliver it, as hardware would. Typical case:
+				 * a tick lands on the STI of Linux's `sti; hlt` idle, the
+				 * STI shadow blocks the injection for one instruction, and
+				 * the HLT exits with the timer interrupt queued. Returning
+				 * that HLT to userspace stopped a healthy guest; it used to
+				 * be handled only for VMs with the idle heartbeat. */
+				vcpu->regs.rip += (u32)vmread(VM_EXIT_INSN_LEN);
+				VMW(GUEST_RIP, vcpu->regs.rip);
+				retired = true;
 			} else if (basic == EXIT_REASON_HLT && vm->idle_hb) {
 				/* UNARMED idle HLT: no timer, no pending completion (see the
 				 * HVX_IDLE_HEARTBEAT_TSC note). Only when the VM opted in via
@@ -4882,20 +4950,7 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 				 * this is a genuine wedge -- fall through and return the HLT. */
 				u32 lvt = vcpu->lapic.reg[X2APIC_LVT_TIMER - X2APIC_BASE_MSR];
 
-				if ((vcpu->regs.rflags & 0x200) &&
-				    (vcpu->inject_valid || vm->vblk.irq_pending ||
-				     (vm->vnet.present && (vm->vnet.q[0].irq_pending ||
-							   vm->vnet.q[1].irq_pending)))) {
-					/* An interrupt is already pending (latched but not yet
-					 * delivered, e.g. the previous one is still in service):
-					 * it is the wake-up, so no synthetic tick is needed --
-					 * just step past the HLT and let the loop-top deliver it.
-					 * Returning the HLT to userspace here stopped a healthy
-					 * guest mid-workload. */
-					vcpu->regs.rip += (u32)vmread(VM_EXIT_INSN_LEN);
-					VMW(GUEST_RIP, vcpu->regs.rip);
-					retired = true;
-				} else if ((lvt & 0xff) >= 0x20 && !(lvt & LVT_MASKED) &&
+				if ((lvt & 0xff) >= 0x20 && !(lvt & LVT_MASKED) &&
 				    (vcpu->regs.rflags & 0x200) && !vcpu->inject_valid) {
 					vcpu->tsc += HVX_IDLE_HEARTBEAT_TSC;
 					vcpu->inject_vector = lvt & 0xff;
@@ -6127,6 +6182,45 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		if (pm.tick_tsc)
 			vm->pmu_tick_tsc = pm.tick_tsc;
 		ret = 0;
+		break;
+	}
+	case HVX_SET_TJITTER: {
+		struct hvx_tjitter t;
+		bool on;
+		u32 i;
+
+		if (!vm->n_guest_pages) { ret = -EINVAL; break; }
+		if (copy_from_user(&t, uarg, sizeof(t))) { ret = -EFAULT; break; }
+		if (t.n_explicit > HVX_TJ_MAX_EXPLICIT) { ret = -EINVAL; break; }
+		on = t.n_explicit || (t.max_delay && t.permille);
+		ret = 0;
+		if (on && !vm->pmu_clock)
+			ret = -EINVAL;			/* the jitter moves PMU-clock ticks */
+		if (!t.n_explicit && t.max_delay >= vm->pmu_period)
+			ret = -EINVAL;
+		for (i = 0; i < t.n_explicit; i++)
+			if (t.explicit_[i].delay >= vm->pmu_period)
+				ret = -EINVAL;
+		if (ret)
+			break;
+		if (t.permille > 1000)
+			t.permille = 1000;
+		t.applied = t.applied_hash = t.last_tick = 0;
+		vm->tj = t;
+		vm->tj_on = on;
+		for (i = 0; i < vm->n_vcpus; i++)
+			vm->vcpu[i].tj_applied = vm->vcpu[i].tj_hash = vm->vcpu[i].tj_last = 0;
+		break;
+	}
+	case HVX_GET_TJITTER: {
+		struct hvx_tjitter t;
+
+		if (!vm->n_guest_pages) { ret = -EINVAL; break; }
+		t = vm->tj;
+		t.applied = vc->tj_applied;
+		t.applied_hash = vc->tj_hash;
+		t.last_tick = vc->tj_last;
+		ret = copy_to_user(uarg, &t, sizeof(t)) ? -EFAULT : 0;
 		break;
 	}
 	case HVX_GET_PMU: {

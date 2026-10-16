@@ -844,4 +844,42 @@ struct hvx_pt_read {
 #define HVX_GET_PT  _IOR(HVX_IOC_MAGIC, 43, struct hvx_pt_status)
 #define HVX_READ_PT _IOW(HVX_IOC_MAGIC, 44, struct hvx_pt_read)
 
+/*
+ * Seeded tick-timing jitter (HVX_SET_TJITTER / HVX_GET_TJITTER). Needs the PMU branch
+ * clock. Tick k of the clock normally lands exactly k*period guest conditional
+ * branches into the run; with jitter on it may land LATER by d < period branches
+ * (never earlier, and it never drifts: every tick is placed relative to the nominal
+ * grid). Moving the tick moves the instruction at which time advances, so it moves
+ * where the guest's timer interrupt -- and with it a thread switch -- happens. That
+ * is how the explorer tries different thread interleavings, each one reproducible.
+ *
+ * A tick's delay is a pure function of (seed, k):
+ *     h = splitmix64(seed + k*GOLDEN)
+ *     delayed if tick_lo <= k < tick_hi (tick_hi 0 = no upper bound) and
+ *                h % 1000 < permille;   d = 1 + (h >> 16) % max_delay
+ * or, when n_explicit > 0, ONLY the listed (tick, delay) pairs are applied (seed,
+ * permille, window and max_delay are ignored). The window and the explicit list let
+ * a shrinker narrow a failing seed down to the few ticks that matter.
+ *
+ * The policy is NOT part of the snapshot, on purpose: restore a snapshot, then set
+ * a different policy, to try many timings from one point. The tick index is derived
+ * from the snapshot's pmu_next (the grid point below it), so a restored run applies
+ * the same delays. Tick 1 is never delayed. Set it before running; off by default
+ * (all zero), so runs without it are unchanged.
+ */
+#define HVX_TJ_MAX_EXPLICIT 32
+struct hvx_tjitter {
+	__u64 seed;
+	__u64 max_delay;	/* seeded mode: max delay in guest branches (< PMU period); 0 = off */
+	__u32 permille;		/* seeded mode: chance (per 1000) that a tick is delayed */
+	__u32 n_explicit;	/* > 0: apply only explicit[0..n_explicit) */
+	__u64 tick_lo, tick_hi;	/* seeded mode: only ticks k in [tick_lo, tick_hi) */
+	struct { __u64 tick, delay; } explicit_[HVX_TJ_MAX_EXPLICIT];
+	__u64 applied;		/* [GET] ticks delayed so far on the current vCPU */
+	__u64 applied_hash;	/* [GET] FNV hash over the (k, d) pairs applied */
+	__u64 last_tick;	/* [GET] index of the last tick processed */
+};
+#define HVX_SET_TJITTER _IOW(HVX_IOC_MAGIC, 45, struct hvx_tjitter)
+#define HVX_GET_TJITTER _IOR(HVX_IOC_MAGIC, 46, struct hvx_tjitter)
+
 #endif /* _HVX_ABI_H */

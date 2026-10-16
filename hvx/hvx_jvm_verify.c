@@ -454,6 +454,7 @@ static int boot_setup(struct boot *b, uint64_t mem_size,
 	struct hvx_regs regs;
 	struct hvx_disk dk;
 	struct hvx_tsc tsc = { .tsc = 0, .step = BOOT_TSC_STEP, .aux = 0, .mode = HVX_TSC_COUNTER };
+	const char *ev;
 
 	memset(b, 0, sizeof(*b));
 	b->fd = -1;
@@ -479,7 +480,24 @@ static int boot_setup(struct boot *b, uint64_t mem_size,
 	 * idle heartbeat so a tickless JVM idle (parked threads / safepoints) cannot stall
 	 * the run. Both opt-in flags -> prior fingerprints unaffected. */
 	cfg.flags = HVX_VM_X86_64_V2 | HVX_VM_IDLE_HEARTBEAT;
+	/* Timing-perturbation experiment knobs (all unset by default -> unchanged runs):
+	 * HVX_TSC_STEP overrides the virtual-TSC step per exit; HVX_PMU_CLOCK=1 turns on
+	 * the PMU branch clock, with HVX_PMU_PERIOD / HVX_PMU_TICK_TSC setting its tick. */
+	if ((ev = getenv("HVX_TSC_STEP")))
+		tsc.step = strtoull(ev, NULL, 0);
+	if ((ev = getenv("HVX_PMU_CLOCK")) && !strcmp(ev, "1"))
+		cfg.flags |= HVX_VM_PMU_CLOCK;
 	if (ioctl(b->fd, HVX_CREATE_VM, &cfg) < 0) { perror("HVX_CREATE_VM"); return -1; }
+	if (cfg.flags & HVX_VM_PMU_CLOCK) {
+		struct hvx_pmu pm;
+		memset(&pm, 0, sizeof(pm));
+		if ((ev = getenv("HVX_PMU_PERIOD")))   pm.period = strtoull(ev, NULL, 0);
+		if ((ev = getenv("HVX_PMU_TICK_TSC"))) pm.tick_tsc = strtoull(ev, NULL, 0);
+		if ((pm.period || pm.tick_tsc) && ioctl(b->fd, HVX_SET_PMU, &pm) < 0) {
+			perror("HVX_SET_PMU");
+			return -1;
+		}
+	}
 
 	b->mem = mmap(NULL, mem_size, PROT_READ | PROT_WRITE, MAP_SHARED, b->fd, 0);
 	if (b->mem == MAP_FAILED) { perror("mmap RAM"); return -1; }
