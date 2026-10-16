@@ -699,6 +699,19 @@ The bare-metal Kaby Lake supports PT inside VMX guests (`IA32_VMX_MISC` bit 14 =
 
 **Also in the tree (commit `bbe170b`, committed by the user):** seeded PMU-tick jitter in `hvx/hvx.c`/`hvx_abi.h` (`HVX_SET_TJITTER`/`HVX_GET_TJITTER`), a HLT-with-queued-interrupt change, JVM-harness knobs, and `hvx/race/`. Not built into the loaded `hvx.ko` on the box (that module is the M40 build); not verified by the regression suite.
 
+### Milestone 42 — DONE (swarm testing + exhaustive sweeps; 2026-10-16)
+
+**Built (commits `bca45b7`, `936781e`):** `explore.py --strategy swarm` switches whole fault categories (kill, network, cut, disk, durability knob) on or off per run from the seed, keeping the schedule format (reproducible by hand, shrinkable). `explore.py --sweep kill|cut|net|killcut` enumerates small spaces exhaustively (durable settings, honest disk; point labels in `sweep-points.jsonl`). `compare.py sweep <dirs>` / `compare.py strategies /var/tmp/m42 old|fix` print the tables. Results under `/var/tmp/m42` on the bare-metal machine.
+
+**Sweeps.** Fixed front door (`explore-fix-disk.img`): each service killed before every order (90 points), power cut before every order (30), netem on each service at 5 severities (15), kill then a cut 1–13 orders later (81) — **0 failures in all**, so the M39 fix holds exhaustively in these spaces. Old front door (`explore-disk.img`), kill-then-cut: **44 of 81 fail**, all reproduced bit-for-bit — Redis killed then any later cut always fails; Kafka killed at order ≥ 5 fails when the cut is ≥ 2 orders later; Kafka killed at order 0 and MySQL killed at any point never fail (consistent with the mechanism: nothing is published before MySQL succeeds).
+
+**Random vs swarm, 3 repetitions × 60 runs** (run of first failure; "-" = not found; table re-generated independently on the bare-metal machine):
+- Old image, durable-settings bug: random found it in 2/3 reps (6, 8), swarm in 3/3 (17, 19, 38). Distinct signatures: random 11/10/8, swarm 16/17/15.
+- Fixed image: MySQL `trx_commit` + cut — random 1/3 (6), swarm 3/3 (11, 22, 24); Redis `everysec` + cut — random 3/3 (10, 39, 60), swarm 2/3 (7, 11); lying disk — random 19/10/1, swarm 1/3/2; I/O errors — random 20/2/4, swarm 4/5/5; distinct signatures random 8/8/8, swarm 10/12/12; failing runs random 18/18/13, swarm 28/32/31. Every failure reproduced bit-for-bit.
+- **Verdict:** swarm is broader (more distinct failure kinds, more failing runs) and more consistent (finds most kinds in every repetition), but not faster on the specific old bug when random happens to find it. No new failure with durable settings and an honest disk on the fixed image; swarm-only signatures were a relaxed-MySQL "acked but not marked published" and an I/O-error test-setup failure (`tc setup failed`), not app bugs.
+
+**Conditions:** the module on the bare-metal machine had been rebuilt by someone else from commit `bbe170b` (tick jitter) before/while this ran; the jitter feature was not used, and both pinned reproducers still gave `2403499c9a3f8419` (old) and `f87130453609a5d6` (fixed). Another explorer from `~/hydo-tj` shared the bare-metal machine, so repetitions were cut from 5 to 3.
+
 ### Roadmap — booting Linux as L2 (phased; from a planning pass over hydo's KVM boot path)
 
 The KVM monitor already boots Linux; hvx must replicate its recipe. Key facts to reuse (from `src/boot.rs`/`src/detlinux.rs`): 64-bit **bzImage** protocol — protected-mode kernel loaded at `0x100000`, **entry `0x100200` directly in 64-bit long mode** (so we DO NOT need real-mode entry or the unrestricted-guest control — a major de-risk), `boot_params`/zero-page @`0x10000` (`RSI`), e820 + cmdline @`0x20000` (`console=ttyS0 earlyprintk=ttyS0 loglevel=8 nokaslr acpi=off`), MP table @`0x9FC00`, initial long-mode GDT/paging (PML4→PDPT→PD with 512×2 MiB identity), CPUID/MSR **synthesized deterministically** (hvx owns CPUID now). Remaining phases, smallest-first:
