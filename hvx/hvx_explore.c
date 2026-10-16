@@ -147,8 +147,13 @@ static int run_until_any(struct boot *b, const char *const *mk, int n, size_t fr
 {
 	struct hvx_exit ex;
 	double t0 = now_s();
+	int i;
+	/* a marker may already be there (a branch request whose first stop already reached
+	 * the end of the workload): stop where we are, as a single run would have */
+	for (i = 0; i < n; i++)
+		if (b->ulen > from && mem_find(b->ubuf + from, b->ulen - from, mk[i]) >= 0)
+			return i;
 	for (;;) {
-		int i;
 		memset(&ex, 0, sizeof(ex));
 		if (g_budget) {
 			struct hvx_run_ctl c;
