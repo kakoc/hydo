@@ -36,6 +36,7 @@ TIMING = False          # --timing: add seeded tick-timing jitter to generated s
 TJ_MAX = 500000         # max tick delay in guest branches (the PMU period is 2^20)
 TJ_PM = [50, 100, 200]  # --tj-pm: delayed ticks per 1000 (a workload is often only ~60 ticks)
 TJ_EXPLICIT_MAX = 32    # HVX_TJ_MAX_EXPLICIT
+BRANCH_BUDGET = 16      # hvx_explore.c: the run budget of a branch (rb=16 in its variants)
 
 
 class SplitMix:
@@ -243,12 +244,16 @@ def render(s):
         g.append("M=%d" % s["M"])
     if "R" in s:
         g.append("R=%s" % s["R"])
-    return "disk=%s dseed=%x%s | %s" % (s["disk"], s["dseed"], render_tj(s["tj"]) if "tj" in s else "", " ".join(g))
+    return "disk=%s dseed=%x%s%s | %s" % (s["disk"], s["dseed"], render_tj(s["tj"]) if "tj" in s else "",
+                                          " rb=%d" % s["rb"] if "rb" in s else "", " ".join(g))
 
 
 def parse(text):
     host, guest = text.split("|", 1)
     s = {"disk": re.search(r"disk=(\S+)", host).group(1), "dseed": int(re.search(r"dseed=([0-9a-fA-F]+)", host).group(1), 16)}
+    m = re.search(r"\brb=(\d+)", host)
+    if m:
+        s["rb"] = int(m.group(1))
     m = re.search(r"tjx=(\S+)", host)
     if m:
         s["tj"] = ("x", [tuple(int(v) for v in kd.split(":")) for kd in m.group(1).split(",")])
@@ -377,6 +382,9 @@ class Worker(threading.Thread):
             if job is None:
                 break
             tag, text = job
+            if text.startswith("BRANCH "):
+                self.results.put((tag, text, self.branch(p, tag, text)))
+                continue
             p.stdin.write("RUN %s %s\n" % (tag, text))
             p.stdin.flush()
             out = p.stdout.readline()
@@ -394,6 +402,41 @@ class Worker(threading.Thread):
         p.stdin.write("QUIT\n")
         p.stdin.flush()
         p.wait()
+
+    def branch(self, p, tag, text):
+        """One BRANCH request: 'BRANCH <n> <pm> <max> <marker> <schedule>'. Returns
+        {"tjlo": k or None, "runs": [(subtag, standalone schedule text, result), ...]}."""
+        n, pm, mx, mark, sched = text[7:].split(" ", 4)
+        p.stdin.write("BRANCH %s %s %s %s %s %s\n" % (tag, n, pm, mx, mark, sched))
+        p.stdin.flush()
+        host, guest = sched.split("|", 1)
+        out = {"tjlo": None, "runs": []}
+        while True:
+            line = p.stdout.readline()
+            if not line or line.startswith("BRANCHEND"):
+                break
+            m = re.match(r"BRANCHPOINT \S+ tjlo=(\d+)", line)
+            if m:
+                out["tjlo"] = int(m.group(1))
+                continue
+            m = re.match(r"RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: tj\S+)*) verdict=(.*)", line.strip())
+            if not m:
+                continue
+            sub = m.group(1)
+            res = {"fp": m.group(2), "wfp": m.group(3), "secs": float(m.group(4)), "verdict": m.group(6),
+                   "worker": self.idx}
+            vm = re.search(r"-v(\d+)$", sub)
+            if vm and out["tjlo"]:      # the variant as a plain schedule (see hvx_explore.c)
+                st = "%s tj=%x tjpm=%s tjmax=%s tjlo=%d tjhi=0 rb=%d |%s" % (
+                    host.rstrip(), int(vm.group(1)), pm, mx, out["tjlo"], BRANCH_BUDGET, guest)
+            else:               # the base run: no jitter, same run budget
+                st = "%s rb=%d |%s" % (host.rstrip(), BRANCH_BUDGET, guest)
+            tk = re.search(r"tjk=(\d+)-(\d+) tjn=(\d+)", m.group(5))
+            if tk:
+                res["tjk"] = [int(tk.group(1)), int(tk.group(2))]
+                res["tjn"] = int(tk.group(3))
+            out["runs"].append((sub, st, res))
+        return out
 
 
 class Pool:
@@ -541,6 +584,10 @@ def main():
     ap.add_argument("--strategy", choices=["random", "swarm"], default="random",
                     help="schedule generator for --seeds (Milestone 42)")
     ap.add_argument("--sweep", help="enumerate a small fault space instead of seeds: kill, cut, net, killcut")
+    ap.add_argument("--branch", metavar="MARKER",
+                    help="mid-run branching: for each seed's schedule (no power cut), snapshot at the first "
+                         "console line containing MARKER and run --variants timing variants from there")
+    ap.add_argument("--variants", type=int, default=8)
     a = ap.parse_args()
     IMAGE = a.image
     TIMING = a.timing
@@ -552,6 +599,9 @@ def main():
         res = pool.run_all([("manual", a.schedule)])
         print(json.dumps(res["manual"][1]))
         pool.close()
+        return
+    if a.branch:
+        branch_main(a, pool, t0)
         return
     if a.sweep:
         points = sweep(a.sweep)
@@ -623,6 +673,65 @@ def main():
     if table is not None:
         open(os.path.join(a.out, "properties.txt"), "w").write(table)
     write_report(a.out, summary, fails, shrunk, table)
+    print(json.dumps(summary))
+
+
+def branch_main(a, pool, t0):
+    """--branch: each seed's schedule (without timing, without a power cut) runs once to the
+    marker; n timing variants then start from a snapshot there. Every failing variant is re-run
+    as its standalone schedule (rb=16, tjlo=..) to check it reproduces from S1 too."""
+    lo, hi = [int(x) for x in a.seeds.split("-")]
+    gen = generate_swarm if a.strategy == "swarm" else generate
+    pm = TJ_PM[len(TJ_PM) // 2]
+    items = []
+    for sd in range(lo, hi + 1):
+        s = gen(sd)
+        if s["disk"] == "cut" or "C" in s:
+            continue
+        items.append(("seed-%d" % sd, "BRANCH %d %d %d %s %s" % (a.variants, pm, TJ_MAX, a.branch, render(s))))
+    t1 = time.time()
+    res = pool.run_all(items)
+    t_sweep = time.time() - t1
+    runs = open(os.path.join(a.out, "runs.jsonl"), "w")
+    fails, nrun, nbp, secs = [], 0, 0, 0.0
+    for tag, _ in items:
+        text, r = res[tag]
+        nbp += r.get("tjlo") is not None
+        for sub, st, rr in r.get("runs", []):
+            nrun += 1
+            secs += rr["secs"]
+            rec = {"tag": sub, "schedule": st, "class": finding_class(parse(st)), "branch_tjlo": r.get("tjlo"), **rr}
+            runs.write(json.dumps(rec) + "\n")
+            if verdict_kind(rr["verdict"]) != "ok":
+                fails.append(rec)
+    runs.close()
+    rep = pool.run_all([("repro-%d" % i, f["schedule"]) for i, f in enumerate(fails)])
+    for i, f in enumerate(fails):
+        rr = rep["repro-%d" % i][1]
+        f["repro_fp"], f["repro_verdict"] = rr["fp"], rr["verdict"]
+        f["reproduced"] = rr["fp"] == f["fp"]
+    base_sig = {}
+    for f in fails:
+        if f["tag"].endswith("-base"):
+            base_sig[f["tag"][:-5]] = signature(f["verdict"])
+    for f in fails:     # a variant that fails while its base run passes (or fails differently) needs the timing
+        f["timing_only"] = not f["tag"].endswith("-base") and \
+            base_sig.get(f["tag"].rsplit("-v", 1)[0]) != signature(f["verdict"])
+    summary = {"schedules": len(items), "branch_points": nbp, "runs": nrun, "variants_per_point": a.variants,
+               "tjpm": pm, "sweep_wall_s": round(t_sweep, 1), "runs_per_hour": round(nrun / max(t_sweep, 1) * 3600, 1),
+               "mean_run_s": round(secs / max(nrun, 1), 1), "failures": len(fails),
+               "reproduced_standalone": sum(1 for f in fails if f["reproduced"]),
+               "timing_only_failures": sum(1 for f in fails if f["timing_only"]),
+               "total_wall_s": round(time.time() - t0, 1)}
+    json.dump({"summary": summary, "failures": fails}, open(os.path.join(a.out, "report.json"), "w"), indent=1)
+    L = ["# Branch report (marker `%s`)" % a.branch, "", "| | |", "|---|---|"]
+    L += ["| %s | %s |" % kv for kv in summary.items()]
+    L += ["", "## Failures", "", "| run | class | timing only | verdict | reproduced standalone |", "|---|---|---|---|---|"]
+    for f in fails:
+        L.append("| %s | %s | %s | `%s` | %s |" % (f["tag"], f["class"], "yes" if f["timing_only"] else "no",
+                                               f["verdict"][:90], "yes" if f["reproduced"] else "NO"))
+    open(os.path.join(a.out, "report.md"), "w").write("\n".join(L) + "\n")
+    pool.close()
     print(json.dumps(summary))
 
 

@@ -111,25 +111,42 @@ static void console_rebase(struct boot *b)
 /* Free-run the guest, draining the console each HVX_RUN, until the reconstructed
  * console contains `marker`. Returns 0 on success; -1 if a terminal exit is hit
  * before the marker (or the iteration cap trips). */
+/*
+ * Every run call returns after at most g_budget deterministic events (HVX_RUNC max_insns),
+ * and a run stops at the first return after its marker appears. The return points are then
+ * the same in a full run and in a run restored from a snapshot taken at a return point, so
+ * the two end at the same instruction and their fingerprints are comparable. (With plain
+ * HVX_RUN the return cadence restarts at every call, and a snapshot shifts every later
+ * stop by a few instructions.)
+ */
+static uint64_t g_budget = 4096;
+
 static int run_until_marker(struct boot *b, const char *marker)
 {
 	struct hvx_exit ex;
 	unsigned long long iters, throttles = 0;
 
 	for (iters = 0; iters < MAX_RUN_ITERS; iters++) {
-		memset(&ex, 0, sizeof(ex));
-		if (ioctl(b->fd, HVX_RUN, &ex) < 0) {
+		struct hvx_run_ctl c;
+
+		memset(&c, 0, sizeof(c));
+		c.max_insns = g_budget;
+		if (ioctl(b->fd, HVX_RUNC, &c) < 0) {
 			if (errno == EINTR)
 				continue;
-			fprintf(stderr, "hvx_race_probe: HVX_RUN: %s\n", strerror(errno));
+			fprintf(stderr, "hvx_race_probe: HVX_RUNC: %s\n", strerror(errno));
 			return -1;
 		}
+		memset(&ex, 0, sizeof(ex));
+		ex.reason = c.reason;
+		ex.qualification = c.qualification;
+		ex.guest_phys = c.guest_phys;
 		console_drain(b);
 
 		if (mem_find(b->ubuf, b->ulen, marker) >= 0)
 			return 0;	/* reached the deterministic stop point */
 
-		if (ex.reason == HVX_EXIT_THROTTLE) {
+		if (ex.reason == HVX_EXIT_THROTTLE || ex.reason == HVX_EXIT_STEP) {
 			if ((++throttles % 512) == 0)
 				fprintf(stderr, "[hvx_race_probe: %llu throttles, %zu console "
 					"bytes, still running]\n", throttles, b->ulen);
@@ -326,6 +343,149 @@ static void boot_teardown(struct boot *b)
 
 #define RACE_MARKER "hydo-race-done"
 
+/* The HYDO-RACE result line after console offset `from`, and its lost= value. */
+static long race_result(const struct boot *b, size_t from, char *line, size_t n)
+{
+	long at = b->ulen > from ? mem_find(b->ubuf + from, b->ulen - from, "HYDO-RACE:") : -1;
+	const char *l;
+	size_t i = 0;
+
+	snprintf(line, n, "HYDO-RACE: (none)");
+	if (at < 0)
+		return -999999;
+	at += (long)from;
+	while ((size_t)at + i < b->ulen && b->ubuf[at + i] != '\r' && b->ubuf[at + i] != '\n' && i + 1 < n) {
+		line[i] = (char)b->ubuf[at + i];
+		i++;
+	}
+	line[i] = '\0';
+	l = strstr(line, "lost=");
+	return l ? atol(l + 5) : -999999;
+}
+
+/*
+ * Branch mode (HVX_BRANCH_PLAN set): boot WITHOUT jitter until the console shows a marker
+ * (HVX_BRANCH_MARK, default HYDO-RACE-NEAR, printed by hydorace a few seats before its
+ * once-per-run window), stopping at a deterministic point (HVX_RUNC in small event budgets),
+ * snapshot there, then run timing variants from the snapshot, each in a fresh VM, with
+ * jitter only on ticks after the snapshot:
+ *   random:N:PM:MAX   seeds 1..N, PM delayed ticks per 1000, delays up to MAX branches
+ *   sweep:L:STEP:MAX  one delayed tick at a time: each of the next L ticks, delays STEP,
+ *                     2*STEP, ... up to MAX (a systematic scan of where that tick lands)
+ *   one:SEED:PM:MAX   one seeded variant (to compare with a straight run that uses
+ *                     HVX_TJ_SEED=SEED HVX_TJ_LO=<the printed tick_lo>)
+ * Prints "BRANCH tick_lo=.." then one "VARIANT .." line per variant.
+ */
+static int branch_main(const char *cmdline, uint64_t mem_size, const uint8_t *image, size_t image_len,
+		       const uint8_t *initrd, size_t initrd_len)
+{
+	const char *plan = getenv("HVX_BRANCH_PLAN");
+	const char *mark = getenv("HVX_BRANCH_MARK") ? getenv("HVX_BRANCH_MARK") : "HYDO-RACE-NEAR";
+	static struct hvx_snapshot sn;
+	static struct hvx_tjitter t;
+	struct hvx_pmu pm;
+	struct boot b;
+	uint8_t *ram, *con;
+	size_t clen;
+	uint64_t lo, a1, a2, a3, i, nvar = 0, hits = 0, first = 0;
+	char kind[16] = "", line[256];
+
+	if (sscanf(plan, "%15[a-z]:%" SCNu64 ":%" SCNu64 ":%" SCNu64, kind, &a1, &a2, &a3) != 4) {
+		fprintf(stderr, "bad HVX_BRANCH_PLAN\n");
+		return 2;
+	}
+	if (boot_setup(&b, mem_size, image, image_len, initrd, initrd_len, cmdline))
+		return 1;
+	for (;;) {
+		struct hvx_run_ctl c;
+
+		memset(&c, 0, sizeof(c));
+		c.max_insns = g_budget;
+		if (ioctl(b.fd, HVX_RUNC, &c) < 0) {
+			if (errno == EINTR) continue;
+			perror("HVX_RUNC");
+			return 1;
+		}
+		console_drain(&b);
+		if (mem_find(b.ubuf, b.ulen, mark) >= 0)
+			break;
+		if (c.reason != HVX_EXIT_STEP && c.reason != HVX_EXIT_THROTTLE) {
+			fprintf(stderr, "guest stopped before the marker: reason %u\n", c.reason);
+			return 1;
+		}
+	}
+	memset(&pm, 0, sizeof(pm));
+	if (ioctl(b.fd, HVX_GET_PMU, &pm) < 0 || !pm.period) { perror("HVX_GET_PMU"); return 1; }
+	lo = pm.next / pm.period + 1;		/* the first tick whose target is not yet set */
+	if (ioctl(b.fd, HVX_GET_SNAPSHOT, &sn) < 0) { perror("HVX_GET_SNAPSHOT"); return 1; }
+	ram = malloc(mem_size);
+	con = malloc(b.ulen);
+	if (!ram || !con) return 1;
+	memcpy(ram, b.mem, mem_size);
+	memcpy(con, b.ubuf, b.ulen);
+	clen = b.ulen;
+	if (!strcmp(kind, "cont") || !strcmp(kind, "same")) {
+		/* diagnostics: cont = just continue this VM; same = restore into this VM */
+		if (!strcmp(kind, "same")) {
+			memset(b.mem, 0, mem_size);
+			if (ioctl(b.fd, HVX_SET_SNAPSHOT, &sn) < 0) { perror("HVX_SET_SNAPSHOT"); return 1; }
+			memcpy(b.mem, ram, mem_size);
+		}
+		if (run_until_marker(&b, RACE_MARKER)) return 1;
+		race_result(&b, clen, line, sizeof(line));
+		printf("%s %s | fp=%016" PRIx64 "\n", kind, line, fingerprint(&b));
+		return 0;
+	}
+	boot_teardown(&b);
+	printf("BRANCH tick_lo=%" PRIu64 " console=%zu plan=%s\n", lo, clen, plan);
+
+	for (i = 0;; i++) {
+		struct boot v;
+		long lost;
+		uint64_t k = 0, d = 0;
+
+		memset(&t, 0, sizeof(t));
+		if (!strcmp(kind, "random")) {
+			if (i >= a1) break;
+			t.seed = i + 1; t.permille = (uint32_t)a2; t.max_delay = a3; t.tick_lo = lo;
+		} else if (!strcmp(kind, "sweep")) {
+			uint64_t per = a3 / a2;	/* delays per tick */
+			if (i >= a1 * per) break;
+			k = lo + i / per; d = (i % per + 1) * a2;
+			t.n_explicit = 1; t.explicit_[0].tick = k; t.explicit_[0].delay = d;
+		} else if (!strcmp(kind, "one")) {
+			if (i >= 1) break;
+			t.seed = a1; t.permille = (uint32_t)a2; t.max_delay = a3; t.tick_lo = lo;
+		} else {
+			fprintf(stderr, "unknown plan kind %s\n", kind);
+			return 2;
+		}
+		if (boot_setup(&v, mem_size, image, image_len, initrd, initrd_len, cmdline)) return 1;
+		if (ioctl(v.fd, HVX_SET_SNAPSHOT, &sn) < 0) { perror("HVX_SET_SNAPSHOT"); return 1; }
+		memcpy(v.mem, ram, mem_size);
+		memcpy(v.ubuf, con, clen);
+		v.ulen = clen;
+		console_rebase(&v);
+		if (ioctl(v.fd, HVX_SET_TJITTER, &t) < 0) { perror("HVX_SET_TJITTER"); return 1; }
+		if (run_until_marker(&v, RACE_MARKER) == 0) {
+			lost = race_result(&v, clen, line, sizeof(line));
+			nvar++;
+			if (lost > 0) { hits++; if (!first) first = nvar; }
+			if (!strcmp(kind, "sweep"))
+				printf("VARIANT %" PRIu64 " tick=%" PRIu64 " delay=%" PRIu64 " lost=%ld fp=%016" PRIx64 "\n",
+				       nvar, k, d, lost, fingerprint(&v));
+			else
+				printf("VARIANT %" PRIu64 " seed=%" PRIu64 " lost=%ld fp=%016" PRIx64 "\n",
+				       nvar, (uint64_t)t.seed, lost, fingerprint(&v));
+		} else {
+			printf("VARIANT %" PRIu64 " ERROR\n", nvar + 1);
+		}
+		boot_teardown(&v);
+	}
+	printf("BRANCH-SUMMARY variants=%" PRIu64 " hits=%" PRIu64 " first_hit=%" PRIu64 "\n", nvar, hits, first);
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	const char *cmdline;
@@ -347,6 +507,10 @@ int main(int argc, char **argv)
 	initrd = read_file(argv[2], &initrd_len);
 	if (!image || !initrd)
 		return 1;
+	if (getenv("HVX_RUN_BUDGET"))
+		g_budget = strtoull(getenv("HVX_RUN_BUDGET"), NULL, 0);
+	if (getenv("HVX_BRANCH_PLAN"))
+		return branch_main(cmdline, mem_size, image, image_len, initrd, initrd_len);
 
 	if (boot_setup(&b, mem_size, image, image_len, initrd, initrd_len, cmdline) == 0 &&
 	    run_until_marker(&b, RACE_MARKER) == 0) {

@@ -11,5 +11,6 @@ cp init ovl/init && chmod 755 ovl/init
 cp hydorace ovl/bin/hydorace
 touch -d @0 ovl ovl/bin ovl/init ovl/bin/hydorace
 (cd ovl && printf 'init\nbin\nbin/hydorace\n' | cpio -o -H newc --reproducible 2>/dev/null | gzip -n) > ovl.cpio.gz
-cat "$B/initramfs.cpio.gz" ovl.cpio.gz > "$B/initramfs-race.cpio.gz"
-sha256sum hydorace "$B/initramfs-race.cpio.gz"
+OUTIMG=${OUTIMG:-initramfs-race.cpio.gz}
+cat "$B/initramfs.cpio.gz" ovl.cpio.gz > "$B/$OUTIMG"
+sha256sum hydorace "$B/$OUTIMG"

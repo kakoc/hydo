@@ -23,6 +23,18 @@
  * explicit tick:delay list) so the guest's threads interleave differently; a schedule
  * without them runs exactly as before. When jitter is on, the RESULT line also reports the
  * workload's tick range and how many ticks were delayed (tjk=<first>-<last> tjn=<n>).
+ * rb=<n> makes every run call return after at most n events (HVX_RUNC), from S1 on: the
+ * return points, and so the end state, are then the same as in a branch (below).
+ *
+ * Branching (mid-run snapshots): "BRANCH <tag> <n> <marker> <schedule>" starts the schedule
+ * from S1 without timing jitter and with rb=16, stops at the first return after <marker>
+ * (no spaces) appears in the workload's console, snapshots there (S2), finishes that run
+ * ("<tag>-base"), then runs n timing variants from S2 ("<tag>-v1".."-vn"), each in a fresh
+ * VM with seeded jitter (seed v) on the ticks after S2 only. Variant v is exactly the plain
+ * schedule  <host> tj=<v> tjpm=<p> tjmax=<m> tjlo=<k> rb=16 | <guest>, with k from the
+ * "BRANCHPOINT <tag> tjlo=<k>" line, so a finding reproduces and shrinks like any other.
+ * Not for power-cut schedules: the module's volatile write cache is not in the snapshot.
+ * Output: BRANCHPOINT, then n+1 RESULT lines, then "BRANCHEND <tag>".
  * (guest tokens: see hvx/explore/stack-explore.sh). The schedule generator, the
  * reproduce/shrink logic and the report live in hvx/explore/explore.py.
  *
@@ -126,6 +138,11 @@ static void pt_collect(struct boot *b, const char *tag)
 
 /* Run until any of the markers appears in the console AFTER offset `from`. Returns the
  * marker index, -1 on a VM error, -2 when the run exceeds RUN_WALL_SECS. */
+/* > 0: every run call returns after at most this many deterministic events (HVX_RUNC), so
+ * return points do not depend on where earlier calls stopped (rb=, branching). 0: HVX_RUN. */
+static uint64_t g_budget;
+#define BRANCH_BUDGET 16
+
 static int run_until_any(struct boot *b, const char *const *mk, int n, size_t from)
 {
 	struct hvx_exit ex;
@@ -133,7 +150,17 @@ static int run_until_any(struct boot *b, const char *const *mk, int n, size_t fr
 	for (;;) {
 		int i;
 		memset(&ex, 0, sizeof(ex));
-		if (ioctl(b->fd, HVX_RUN, &ex) < 0) {
+		if (g_budget) {
+			struct hvx_run_ctl c;
+			memset(&c, 0, sizeof(c));
+			c.max_insns = g_budget;
+			if (ioctl(b->fd, HVX_RUNC, &c) < 0) {
+				if (errno == EINTR) continue;
+				fprintf(stderr, "hvx_explore: HVX_RUNC: %s\n", strerror(errno));
+				return -1;
+			}
+			ex.reason = c.reason == HVX_EXIT_STEP ? HVX_EXIT_THROTTLE : c.reason;
+		} else if (ioctl(b->fd, HVX_RUN, &ex) < 0) {
 			if (errno == EINTR) continue;
 			fprintf(stderr, "hvx_explore: HVX_RUN: %s\n", strerror(errno));
 			return -1;
@@ -277,6 +304,7 @@ struct sched {
 	int cut;
 	int tj_on;
 	struct hvx_tjitter tj;	/* tick-timing jitter for the workload (tj / tjx tokens) */
+	uint64_t rb;		/* rb=<n>: run budget (see g_budget) */
 };
 
 /* tj=<hex seed> tjpm=<per mille> tjmax=<branches> [tjlo=<k> tjhi=<k>]  or  tjx=<k:d,...> */
@@ -338,35 +366,39 @@ static int parse_sched(const char *s, struct sched *sc)
 	else if (!strncmp(disk, "lying:", 6)) { sc->classes = HVX_FAULT_DROP; sc->prob = (uint32_t)atoi(disk + 6); }
 	else return -1;
 	if (parse_tj(sc->host, sc)) return -1;
+	if ((p = strstr(sc->host, "rb="))) sc->rb = strtoull(p + 3, NULL, 10);
 	sc->cut = strstr(sc->guest, " C=") != NULL;
 	return 0;
 }
 
 /* Run one schedule in VM b, which is positioned at S1 (restored or reached by booting).
  * Prints the RESULT line. Consumes b (tears it down). */
-static void run_sched(struct boot *b, const char *tag, const struct sched *sc, struct snap *s0)
+/* RESULT line for a schedule that failed before its workload started; consumes b. */
+static void sched_fail(struct boot *b, const char *tag, size_t from, double t0, const char *tjinfo,
+		       const char *verdict)
+{
+	uint64_t zero = 0;
+	if (b->fd >= 0) save_console(b, from, tag, "");
+	printf("RESULT %s fp=%016llx wfp=%016llx secs=%.1f%s verdict=%s\n", tag,
+	       (unsigned long long)fnv(0, &zero, sizeof(zero)), 0ULL, now_s() - t0, tjinfo, verdict);
+	fflush(stdout);
+	boot_teardown(b);
+}
+
+/* The rest of a schedule once its guest command has been typed: workload to its end, then
+ * the check (same VM) or the power-cut recovery (fresh VM from S0). Prints the RESULT line
+ * and consumes b. `from` is the console offset where the workload started. */
+static void finish_sched(struct boot *b, const char *tag, const struct sched *sc, struct snap *s0,
+			 size_t from, double t0, const char *tjinfo_in)
 {
 	static const char *const wk[] = { DONE_MARKER, FINAL_MARKER };
 	static const char *const fin[] = { FINAL_MARKER };
-	char line[600], verdict[256] = "", orc[512], tjinfo[96] = "";
+	char verdict[256] = "", orc[512], tjinfo[96];
 	uint64_t wfp = 0, ffp = 0;
-	size_t from = b->ulen;
-	double t0 = now_s();
 	int r;
 	const char *phase = "workload";
 
-	if (set_fault(b, sc->dseed, sc->classes, sc->prob)) { snprintf(verdict, sizeof(verdict), "ERROR harness set_fault"); goto out; }
-	if (sc->tj_on) {
-		struct hvx_pmu pm;
-		memset(&pm, 0, sizeof(pm));
-		if (set_tj(b, &sc->tj) || ioctl(b->fd, HVX_GET_PMU, &pm) < 0 || !pm.period) {
-			snprintf(verdict, sizeof(verdict), "ERROR harness tick jitter (needs the PMU clock)"); goto out;
-		}
-		snprintf(tjinfo, sizeof(tjinfo), " tjk=%llu", (unsigned long long)(pm.next / pm.period));
-	}
-	pt_arm(b);
-	snprintf(line, sizeof(line), "%s\n", sc->guest);
-	if (put_input(b, line)) { snprintf(verdict, sizeof(verdict), "ERROR harness put_input"); goto out; }
+	snprintf(tjinfo, sizeof(tjinfo), "%s", tjinfo_in);
 	r = run_until_any(b, wk, 2, from);
 	if (r < 0) { snprintf(verdict, sizeof(verdict), r == -2 ? "TIMEOUT workload" : "ERROR vm workload"); goto out; }
 	wfp = fingerprint(b);
@@ -438,6 +470,113 @@ out_done:
 	       tjinfo, verdict);
 	fflush(stdout);
 	boot_teardown(b);
+}
+
+static void run_sched(struct boot *b, const char *tag, const struct sched *sc, struct snap *s0)
+{
+	char line[600], verdict[256] = "", tjinfo[96] = "";
+	size_t from = b->ulen;
+	double t0 = now_s();
+
+	g_budget = sc->rb;
+	if (set_fault(b, sc->dseed, sc->classes, sc->prob)) { snprintf(verdict, sizeof(verdict), "ERROR harness set_fault"); goto fail; }
+	if (sc->tj_on) {
+		struct hvx_pmu pm;
+		memset(&pm, 0, sizeof(pm));
+		if (set_tj(b, &sc->tj) || ioctl(b->fd, HVX_GET_PMU, &pm) < 0 || !pm.period) {
+			snprintf(verdict, sizeof(verdict), "ERROR harness tick jitter (needs the PMU clock)"); goto fail;
+		}
+		snprintf(tjinfo, sizeof(tjinfo), " tjk=%llu", (unsigned long long)(pm.next / pm.period));
+	}
+	pt_arm(b);
+	snprintf(line, sizeof(line), "%s\n", sc->guest);
+	if (put_input(b, line)) { snprintf(verdict, sizeof(verdict), "ERROR harness put_input"); goto fail; }
+	finish_sched(b, tag, sc, s0, from, t0, tjinfo);
+	g_budget = 0;
+	return;
+fail:
+	sched_fail(b, tag, from, t0, tjinfo, verdict);
+	g_budget = 0;
+}
+
+static void snap_free(struct snap *sn)
+{
+	if (!sn->have) return;
+	savebuf_close(&sn->ram);
+	savebuf_close(&sn->rw);
+	free(sn->s);
+	free(sn->con);
+	sn->have = 0;
+}
+
+/* BRANCH (see the header): one base run to <mark>, a snapshot there, then n timing variants
+ * from the snapshot. VM b is positioned at S1 and is consumed. */
+static void run_branch(struct boot *b, const char *tag, const struct sched *sc, struct snap *s0,
+		       const char *mark, int nvar, uint32_t pm_, uint64_t mx)
+{
+	const char *const mk[] = { mark, DONE_MARKER, FINAL_MARKER };
+	char line[600], sub[96], verdict[256] = "";
+	struct snap s2;
+	struct hvx_pmu pm;
+	size_t from = b->ulen;
+	double t0 = now_s();
+	uint64_t lo;
+	int r, v;
+
+	memset(&s2, 0, sizeof(s2));
+	snprintf(sub, sizeof(sub), "%s-base", tag);
+	g_budget = BRANCH_BUDGET;
+	if (sc->cut || sc->tj_on || sc->rb) {
+		snprintf(verdict, sizeof(verdict), "ERROR branch: not for power-cut, timed or rb= schedules");
+		goto fail;
+	}
+	if (set_fault(b, sc->dseed, sc->classes, sc->prob)) { snprintf(verdict, sizeof(verdict), "ERROR harness set_fault"); goto fail; }
+	snprintf(line, sizeof(line), "%s\n", sc->guest);
+	if (put_input(b, line)) { snprintf(verdict, sizeof(verdict), "ERROR harness put_input"); goto fail; }
+	r = run_until_any(b, mk, 3, from);
+	if (r != 0) {			/* no branch point in this run: just finish it */
+		printf("BRANCHPOINT %s none\n", tag);
+		fflush(stdout);
+		finish_sched(b, sub, sc, s0, from, t0, "");
+		goto end;
+	}
+	memset(&pm, 0, sizeof(pm));
+	if (ioctl(b->fd, HVX_GET_PMU, &pm) < 0 || !pm.period) { snprintf(verdict, sizeof(verdict), "ERROR branch needs the PMU clock"); goto fail; }
+	lo = pm.next / pm.period + 1;	/* the first tick whose target is not set yet */
+	if (snap_take(b, &s2, "s2")) { snprintf(verdict, sizeof(verdict), "ERROR branch snapshot"); goto fail; }
+	printf("BRANCHPOINT %s tjlo=%llu\n", tag, (unsigned long long)lo);
+	fflush(stdout);
+	finish_sched(b, sub, sc, s0, from, t0, "");
+	for (v = 1; v <= nvar; v++) {
+		struct boot vb;
+		struct sched sv = *sc;
+		char tji[64];
+		double tv = now_s();
+
+		memset(&vb, 0, sizeof(vb));
+		vb.fd = -1;
+		snprintf(sub, sizeof(sub), "%s-v%d", tag, v);
+		memset(&sv.tj, 0, sizeof(sv.tj));
+		sv.tj_on = 1;
+		sv.tj.seed = (uint64_t)v;
+		sv.tj.permille = pm_;
+		sv.tj.max_delay = mx;
+		sv.tj.tick_lo = lo;
+		if (vm_fresh(&vb) || snap_restore(&vb, &s2, NULL) || set_tj(&vb, &sv.tj)) {
+			sched_fail(&vb, sub, from, tv, "", "ERROR branch restore");
+			continue;
+		}
+		snprintf(tji, sizeof(tji), " tjk=%llu", (unsigned long long)(lo - 1));
+		finish_sched(&vb, sub, &sv, s0, from, tv, tji);
+	}
+	goto end;
+fail:
+	sched_fail(b, sub, from, t0, "", verdict);
+end:
+	snap_free(&s2);
+	g_budget = 0;
+	printf("BRANCHEND %s\n", tag);
+	fflush(stdout);
 }
 
 /* Boot to S0, snapshot, provision to S1. Leaves b at S1 and fills s0 (and s1 if wanted). */
@@ -540,6 +679,24 @@ int main(int argc, char **argv)
 			int off = 0;
 			struct sched sc;
 			if (!strncmp(in, "QUIT", 4)) break;
+			if (!strncmp(in, "BRANCH ", 7)) {
+				char mark[128];
+				int nv = 0;
+				unsigned bpm = 0;
+				unsigned long long bmx = 0;
+				if (sscanf(in, "BRANCH %63s %d %u %llu %127s %n", tag, &nv, &bpm, &bmx, mark, &off) != 5 ||
+				    off == 0 || parse_sched(in + off, &sc)) {
+					printf("BRANCHEND ? bad request\n");
+					continue;
+				}
+				if (vm_fresh(&b) || snap_restore(&b, &s1, NULL)) {
+					printf("BRANCHEND %s restore failed\n", tag);
+					boot_teardown(&b);
+					continue;
+				}
+				run_branch(&b, tag, &sc, &s0, mark, nv, bpm, bmx);
+				continue;
+			}
 			if (sscanf(in, "RUN %63s %n", tag, &off) != 1 || off == 0 || parse_sched(in + off, &sc)) {
 				printf("RESULT ? fp=0 wfp=0 secs=0 verdict=ERROR bad request\n");
 				continue;

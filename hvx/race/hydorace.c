@@ -11,16 +11,23 @@
  * the bug. On one vCPU the only way to hit it is a preemption landing in the
  * window, which is what timing perturbation is meant to find.
  *
- * Usage: hydorace W OUT SEATS
+ * Once-per-run mode (ONCE > 0): the race window exists only while selling seat number ONCE
+ * (counting down); every other sale has no window. The bug can then happen at most once per
+ * run, at one place. LEAD seats before that, the program prints "HYDO-RACE-NEAR" so a host can
+ * snapshot just before the window and try many timings from there.
+ *
+ * Usage: hydorace W OUT SEATS [ONCE [LEAD]]
  * Prints: HYDO-RACE: W=.. OUT=.. seats=.. sold=.. lost=.. t0=.. t1=..
  * (lost > 0 is the bug.)
  */
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 static volatile long seats;
-static long W, OUT;
+static long W, OUT, ONCE, LEAD;
+static volatile int near_printed;
 
 static void work(long n)
 {
@@ -37,10 +44,16 @@ static void *seller(void *arg)
 		long s;
 
 		work(OUT);
+		/* the marker is printed OUTSIDE the check-then-act window: printing can sleep,
+		 * which inside the window would itself lose a sale */
+		if (ONCE && seats == ONCE + LEAD && !__sync_lock_test_and_set(&near_printed, 1) &&
+		    write(1, "HYDO-RACE-NEAR\n", 15) < 0)
+			return NULL;
 		s = seats;			/* check ... */
 		if (s <= 0)
 			break;
-		work(W);			/* ... the race window ... */
+		if (!ONCE || s == ONCE)
+			work(W);		/* ... the race window ... */
 		seats = s - 1;			/* ... act */
 		sold++;
 	}
@@ -60,6 +73,8 @@ int main(int argc, char **argv)
 	W = atol(argv[1]);
 	OUT = atol(argv[2]);
 	nseats = atol(argv[3]);
+	ONCE = argc > 4 ? atol(argv[4]) : 0;
+	LEAD = argc > 5 ? atol(argv[5]) : 10;
 	seats = nseats;
 	pthread_create(&t[0], NULL, seller, NULL);
 	pthread_create(&t[1], NULL, seller, NULL);

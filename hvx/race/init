@@ -8,6 +8,6 @@ mount -t devtmpfs none /dev 2>/dev/null
 P=$(sed -n 's/.*hydo_race=\([0-9,]*\).*/\1/p' /proc/cmdline)
 [ -n "$P" ] || P=10,50000,5000
 set -- $(echo "$P" | tr , ' ')
-/bin/hydorace "$1" "$2" "$3"
+/bin/hydorace "$@"
 echo "hydo-race-done"
 exec /bin/busybox sh
