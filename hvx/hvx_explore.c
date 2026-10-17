@@ -28,12 +28,16 @@
  *
  * Branching (mid-run snapshots): "BRANCH <tag> <n> <marker> <schedule>" starts the schedule
  * from S1 without timing jitter and with rb=16, stops at the first return after <marker>
- * (no spaces) appears in the workload's console, snapshots there (S2), finishes that run
+ * (no spaces) appears in the workload's console -- or, for "@<N>", at the first return
+ * N clock ticks into the workload, or for "@held", at the first return where the disk's
+ * volatile write cache holds writes (the hard case for a snapshot) -- snapshots there
+ * (S2), finishes that run
  * ("<tag>-base"), then runs n timing variants from S2 ("<tag>-v1".."-vn"), each in a fresh
  * VM with seeded jitter (seed v) on the ticks after S2 only. Variant v is exactly the plain
  * schedule  <host> tj=<v> tjpm=<p> tjmax=<m> tjlo=<k> rb=16 | <guest>, with k from the
  * "BRANCHPOINT <tag> tjlo=<k>" line, so a finding reproduces and shrinks like any other.
- * Not for power-cut schedules: the module's volatile write cache is not in the snapshot.
+ * Power-cut schedules work too: every snapshot also carries the disk's volatile write
+ * cache (HVX_GET_UNSYNC / HVX_SET_UNSYNC), i.e. the writes not flushed yet.
  * Output: BRANCHPOINT, then n+1 RESULT lines, then "BRANCHEND <tag>".
  * (guest tokens: see hvx/explore/stack-explore.sh). The schedule generator, the
  * reproduce/shrink logic and the report live in hvx/explore/explore.py.
@@ -64,6 +68,8 @@ struct snap {
 	struct savebuf ram, rw;
 	size_t ulen;		/* console watermark at the snapshot */
 	uint8_t *con;		/* console text up to the watermark (part of every fingerprint) */
+	uint8_t *unsync;	/* the disk's volatile write cache (HVX_GET_UNSYNC), unsync_n entries */
+	uint32_t unsync_n;
 	int have;
 };
 
@@ -288,6 +294,17 @@ static int snap_take(struct boot *b, struct snap *sn, const char *tag)
 	sn->con = malloc(b->ulen + 1);
 	if (!sn->con) return -1;
 	memcpy(sn->con, b->ubuf, b->ulen);
+	{	/* writes the guest was told are done but no FLUSH made durable yet: not in the
+		 * snapshot struct, and a mid-workload snapshot of a power-cut schedule has some */
+		struct hvx_unsync_io io;
+		memset(&io, 0, sizeof(io));
+		io.len = HVX_UNSYNC_BYTES(HVX_UNSYNC_MAX);
+		sn->unsync = malloc(io.len);
+		if (!sn->unsync) return -1;
+		io.addr = (uint64_t)(uintptr_t)sn->unsync;
+		if (ioctl(b->fd, HVX_GET_UNSYNC, &io) < 0) { perror("HVX_GET_UNSYNC"); return -1; }
+		sn->unsync_n = io.n;
+	}
 	sn->have = 1;
 	return 0;
 }
@@ -316,6 +333,16 @@ static int snap_restore(struct boot *b, struct snap *sn, struct savebuf *rw)
 	memcpy(b->ubuf, sn->con, sn->ulen);	/* console as it was at the snapshot */
 	b->ulen = sn->ulen;
 	console_rebase(b);			/* a fresh VM: drained = its (empty) console */
+	{	/* the held writes, after SET_SNAPSHOT (which restores the fault policy) */
+		struct hvx_unsync_io io;
+		memset(&io, 0, sizeof(io));
+		io.addr = (uint64_t)(uintptr_t)sn->unsync;
+		io.len = HVX_UNSYNC_BYTES(sn->unsync_n);
+		io.n = sn->unsync_n;
+		if (getenv("HVX_EXPLORE_NO_UNSYNC"))	/* diagnostic: drop the held writes (the old bug) */
+			io.n = 0, io.len = 0;
+		if (ioctl(b->fd, HVX_SET_UNSYNC, &io) < 0) { perror("HVX_SET_UNSYNC"); return -1; }
+	}
 	return 0;
 }
 
@@ -580,7 +607,50 @@ static void snap_free(struct snap *sn)
 	savebuf_close(&sn->rw);
 	free(sn->s);
 	free(sn->con);
+	free(sn->unsync);
 	sn->have = 0;
+}
+
+/* Run until the PMU clock reaches tick `target` -- or, with target 0, until the disk's
+ * volatile write cache holds writes -- (returns 0), or the workload ends first (returns 1
+ * for DONE, 2 for FINAL), or an error (< 0). Needs g_budget. */
+static int run_until_tick(struct boot *b, uint64_t target, size_t from)
+{
+	static const char *const ends[] = { DONE_MARKER, FINAL_MARKER };
+	double t0 = now_s();
+	for (;;) {
+		struct hvx_pmu pm;
+		struct hvx_run_ctl c;
+		int i;
+
+		memset(&c, 0, sizeof(c));
+		c.max_insns = g_budget;
+		if (ioctl(b->fd, HVX_RUNC, &c) < 0) {
+			if (errno == EINTR) continue;
+			fprintf(stderr, "hvx_explore: HVX_RUNC: %s\n", strerror(errno));
+			return -1;
+		}
+		console_drain(b);
+		if (c.reason != HVX_EXIT_STEP && c.reason != HVX_EXIT_THROTTLE) {
+			fprintf(stderr, "hvx_explore: guest stopped: reason=%u (%s)\n", c.reason, exit_reason_name(c.reason));
+			return -1;
+		}
+		if (now_s() - t0 > RUN_WALL_SECS)
+			return -2;
+		for (i = 0; i < 2; i++)
+			if (b->ulen > from && mem_find(b->ubuf + from, b->ulen - from, ends[i]) >= 0)
+				return i + 1;
+		if (!target) {
+			struct hvx_unsync_io io;
+			memset(&io, 0, sizeof(io));	/* len 0: only asks for the count (ENOSPC if any) */
+			ioctl(b->fd, HVX_GET_UNSYNC, &io);
+			if (io.n) return 0;
+			continue;
+		}
+		memset(&pm, 0, sizeof(pm));
+		if (ioctl(b->fd, HVX_GET_PMU, &pm) < 0 || !pm.period) return -1;
+		if (pm.next / pm.period >= target) return 0;
+	}
 }
 
 /* BRANCH (see the header): one base run to <mark>, a snapshot there, then n timing variants
@@ -600,14 +670,22 @@ static void run_branch(struct boot *b, const char *tag, const struct sched *sc, 
 	memset(&s2, 0, sizeof(s2));
 	snprintf(sub, sizeof(sub), "%s-base", tag);
 	g_budget = BRANCH_BUDGET;
-	if (sc->cut || sc->tj_on || sc->rb) {
-		snprintf(verdict, sizeof(verdict), "ERROR branch: not for power-cut, timed or rb= schedules");
+	if (sc->tj_on || sc->rb) {
+		snprintf(verdict, sizeof(verdict), "ERROR branch: not for timed or rb= schedules");
 		goto fail;
 	}
 	if (set_fault(b, sc->dseed, sc->classes, sc->prob)) { snprintf(verdict, sizeof(verdict), "ERROR harness set_fault"); goto fail; }
 	snprintf(line, sizeof(line), "%s\n", sc->guest);
 	if (put_input(b, line)) { snprintf(verdict, sizeof(verdict), "ERROR harness put_input"); goto fail; }
-	r = run_until_any(b, mk, 3, from);
+	if (mark[0] == '@') {		/* N ticks into the workload */
+		memset(&pm, 0, sizeof(pm));
+		if (ioctl(b->fd, HVX_GET_PMU, &pm) < 0 || !pm.period) { snprintf(verdict, sizeof(verdict), "ERROR branch needs the PMU clock"); goto fail; }
+		r = run_until_tick(b, strcmp(mark, "@held") ?
+				   pm.next / pm.period + strtoull(mark + 1, NULL, 10) : 0, from);
+	} else {
+		r = run_until_any(b, mk, 3, from);
+	}
+	if (r < 0) { snprintf(verdict, sizeof(verdict), "ERROR vm workload (before the branch point)"); goto fail; }
 	if (r != 0) {			/* no branch point in this run: just finish it */
 		printf("BRANCHPOINT %s none\n", tag);
 		fflush(stdout);
@@ -618,7 +696,7 @@ static void run_branch(struct boot *b, const char *tag, const struct sched *sc, 
 	if (ioctl(b->fd, HVX_GET_PMU, &pm) < 0 || !pm.period) { snprintf(verdict, sizeof(verdict), "ERROR branch needs the PMU clock"); goto fail; }
 	lo = pm.next / pm.period + 1;	/* the first tick whose target is not set yet */
 	if (snap_take(b, &s2, "s2")) { snprintf(verdict, sizeof(verdict), "ERROR branch snapshot"); goto fail; }
-	printf("BRANCHPOINT %s tjlo=%llu\n", tag, (unsigned long long)lo);
+	printf("BRANCHPOINT %s tjlo=%llu held=%u\n", tag, (unsigned long long)lo, s2.unsync_n);
 	fflush(stdout);
 	finish_sched(b, sub, sc, s0, from, t0, "");
 	for (v = 1; v <= nvar; v++) {

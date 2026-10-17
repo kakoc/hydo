@@ -525,8 +525,7 @@ struct hvx_uart {
  * HVX_FAULT_DROP_UNFLUSHED is held (not persisted) until a FLUSH commits it; cap the
  * tracked writes and the per-write bytes (a write bigger than a slot, or one that
  * overflows the table, just persists normally -- a safe, honest fallback). */
-#define HVX_UNSYNC_MAX		256	/* max un-flushed writes tracked at once */
-#define HVX_UNSYNC_ENTBYTES	8192	/* max bytes per tracked write (>= a DB page) */
+/* HVX_UNSYNC_MAX / HVX_UNSYNC_ENTBYTES: hvx_abi.h (HVX_GET_UNSYNC / HVX_SET_UNSYNC) */
 struct hvx_vblk {
 	/* Backing image as a PAGE ARRAY (milestone 28, mirroring guest RAM -- see M11).
 	 * Individually-allocated order-0 pages so a GB-scale image is a robust per-page
@@ -591,10 +590,11 @@ struct hvx_vblk {
 	 * CACHE: a WRITE rolled for that class is stashed here (NOT persisted); reads
 	 * are served from it (read-your-writes); a virtio-blk FLUSH commits it to the
 	 * backing image (durable) and clears it. Un-flushed entries at end-of-run are
-	 * lost -- the faithful power-loss model. Transient device state, EMPTY at flush/
-	 * snapshot boundaries (so it is not in the snapshot; cleared on SET_DISK / device
-	 * reset). unsync_data is lazily kvmalloc'd only when the class is first used, so a
-	 * VM that never uses it is byte-identical to M25. */
+	 * lost -- the faithful power-loss model. Not in struct hvx_snapshot (too big): a
+	 * snapshot taken while writes are held moves it with HVX_GET/SET_UNSYNC (M44).
+	 * Cleared on SET_DISK / SET_FAULT / device reset. unsync_data is lazily kvmalloc'd
+	 * only when the class is first used, so a VM that never uses it is byte-identical
+	 * to M25. Same layout as struct hvx_unsync_rec. */
 	struct hvx_unsync_ent { u64 doff; u32 len; u32 valid; } unsync[HVX_UNSYNC_MAX];
 	u8 *unsync_data;		/* HVX_UNSYNC_MAX * HVX_UNSYNC_ENTBYTES, lazily allocated */
 	u32 unsync_n;			/* live entries */
@@ -5323,6 +5323,7 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 
 	/* compile-time ABI/layout checks (were in the old create path) */
 	BUILD_BUG_ON(SWMSR_COUNT != HVX_NR_SW_MSR);
+	BUILD_BUG_ON(sizeof(struct hvx_unsync_ent) != sizeof(struct hvx_unsync_rec));
 	BUILD_BUG_ON(sizeof(((struct hvx_vcpu *)0)->lapic.reg) !=
 		     sizeof(((struct hvx_snapshot *)0)->lapic_reg));
 	BUILD_BUG_ON(sizeof(vm->ioapic.redir) != sizeof(((struct hvx_snapshot *)0)->ioapic_redir));
@@ -6182,6 +6183,59 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		if (pm.tick_tsc)
 			vm->pmu_tick_tsc = pm.tick_tsc;
 		ret = 0;
+		break;
+	}
+	case HVX_GET_UNSYNC: {
+		struct hvx_unsync_io io;
+		struct hvx_vblk *d = &vm->vblk;
+		u64 meta;
+
+		if (!vm->n_guest_pages) { ret = -EINVAL; break; }
+		if (copy_from_user(&io, uarg, sizeof(io))) { ret = -EFAULT; break; }
+		io.n = d->unsync_n;
+		meta = (u64)io.n * sizeof(struct hvx_unsync_rec);
+		ret = 0;
+		if (io.len < HVX_UNSYNC_BYTES(io.n))
+			ret = -ENOSPC;
+		else if (io.n &&
+			 (copy_to_user((void __user *)(unsigned long)io.addr, d->unsync, meta) ||
+			  copy_to_user((void __user *)(unsigned long)(io.addr + meta), d->unsync_data,
+				       (size_t)io.n * HVX_UNSYNC_ENTBYTES)))
+			ret = -EFAULT;
+		if (copy_to_user(uarg, &io, sizeof(io)))
+			ret = -EFAULT;
+		break;
+	}
+	case HVX_SET_UNSYNC: {
+		struct hvx_unsync_io io;
+		struct hvx_vblk *d = &vm->vblk;
+		u64 meta;
+		u32 i;
+
+		if (!vm->n_guest_pages) { ret = -EINVAL; break; }
+		if (copy_from_user(&io, uarg, sizeof(io))) { ret = -EFAULT; break; }
+		if (io.n > HVX_UNSYNC_MAX || io.len < HVX_UNSYNC_BYTES(io.n)) { ret = -EINVAL; break; }
+		ret = 0;
+		vblk_unsync_clear(d);
+		if (!io.n)
+			break;
+		if (!d->unsync_data) {
+			d->unsync_data = kvmalloc((size_t)HVX_UNSYNC_MAX * HVX_UNSYNC_ENTBYTES, GFP_KERNEL);
+			if (!d->unsync_data) { ret = -ENOMEM; break; }
+		}
+		meta = (u64)io.n * sizeof(struct hvx_unsync_rec);
+		if (copy_from_user(d->unsync, (void __user *)(unsigned long)io.addr, meta) ||
+		    copy_from_user(d->unsync_data, (void __user *)(unsigned long)(io.addr + meta),
+				   (size_t)io.n * HVX_UNSYNC_ENTBYTES)) {
+			ret = -EFAULT;
+			break;
+		}
+		for (i = 0; i < io.n; i++)
+			if (d->unsync[i].len > HVX_UNSYNC_ENTBYTES)
+				ret = -EINVAL;
+		if (ret)
+			break;
+		d->unsync_n = io.n;
 		break;
 	}
 	case HVX_SET_TJITTER: {

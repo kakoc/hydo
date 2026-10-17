@@ -9,6 +9,7 @@ Reads explorer output directories (runs.jsonl, written by explore.py) and prints
   python3 compare.py sweep /var/tmp/m42/sweep-kill-fix
   python3 compare.py strategies /var/tmp/m42 old   # dirs old-<strategy>-<rep>
   python3 compare.py strategies /var/tmp/m42 fix
+  python3 compare.py portfolio /var/tmp/m44-port /var/tmp/m42 old   # portfolio.py vs swarm/random
 """
 import json, os, re, sys, statistics
 
@@ -106,9 +107,62 @@ def cmd_strategies(root, prefix):
             statistics.median([t["sigs"] for t in table[st]])))
 
 
+def cmd_portfolio(port_root, base_root, prefix, base_strats=("swarm", "random")):
+    """Portfolio runs (<port_root>/<prefix>-portfolio-<rep>, from portfolio.py) against single-
+    strategy runs (<base_root>/<prefix>-<strategy>-<rep>, from explore.py), same run budget:
+    failing runs, distinct signatures, first run of each known kind, and distinct features
+    (portfolio.py's reward: signatures + property outcomes) after 20/40/60 runs."""
+    from portfolio import run_features
+    rows = {}
+    for root, st in [(port_root, "portfolio")] + [(base_root, s) for s in base_strats]:
+        if not os.path.isdir(root):
+            continue
+        for x in sorted(os.listdir(root)):
+            if not (x.startswith("%s-%s-" % (prefix, st)) and os.path.isdir(os.path.join(root, x))):
+                continue
+            d = os.path.join(root, x)
+            recs = load(d)
+            first, sigs, seen, curve = {}, set(), set(), {}
+            for i, r in enumerate(recs, 1):
+                for k in kinds(r):
+                    first.setdefault(k, i)
+                if verdict_kind(r["verdict"]) != "ok":
+                    sigs.add(sig_key(r))
+                seen |= run_features(d, r.get("tag", "seed-%d" % r["seed"]), r)
+                if i in (20, 40, 60):
+                    curve[i] = len(seen)
+            fails = [r for r in recs if verdict_kind(r["verdict"]) != "ok"]
+            arms = {}
+            for r in recs:
+                if "arm" in r:
+                    arms[r["arm"]] = arms.get(r["arm"], 0) + 1
+            rows.setdefault(st, []).append({"rep": int(x.rsplit("-", 1)[1]), "runs": len(recs), "first": first,
+                                             "sigs": len(sigs), "fails": len(fails), "feats": curve, "arms": arms,
+                                             "repro": sum(1 for r in fails if r.get("reproduced"))})
+    allk = sorted({k for st in rows for t in rows[st] for k in t["first"]} |
+                  ({"durable-defaults"} if prefix == "old" else {"mysql-trx_commit+cut", "redis-appendfsync+cut", "lying-disk"}))
+    for st in rows:
+        print("== %s (%s image)" % (st, prefix))
+        print("  rep runs fails repro sigs feats@20/40/60  " + "  ".join("%22s" % k for k in allk))
+        for t in sorted(rows[st], key=lambda t: t["rep"]):
+            f = "/".join(str(t["feats"].get(n, "-")) for n in (20, 40, 60))
+            print("  %3d %4d %5d %5d %4d %14s  " % (t["rep"], t["runs"], t["fails"], t["repro"], t["sigs"], f) +
+                  "  ".join("%22s" % t["first"].get(k, "-") for k in allk))
+            if t["arms"]:
+                print("      runs per arm: " + ", ".join("%s %d" % kv for kv in sorted(t["arms"].items())))
+        for k in allk:
+            v = [t["first"].get(k) for t in sorted(rows[st], key=lambda t: t["rep"])]
+            found = [x for x in v if x is not None]
+            print("  %-22s found in %d/%d reps; median first %s; values %s" % (
+                k, len(found), len(v), statistics.median(found) if found else "-", v))
+        print("  distinct signatures per rep: %s" % [t["sigs"] for t in sorted(rows[st], key=lambda t: t["rep"])])
+
+
 if __name__ == "__main__":
     if sys.argv[1] == "sweep":
         for d in sys.argv[2:]:
             cmd_sweep(d)
+    elif sys.argv[1] == "portfolio":
+        cmd_portfolio(sys.argv[2], sys.argv[3], sys.argv[4])
     else:
         cmd_strategies(sys.argv[2], sys.argv[3])
