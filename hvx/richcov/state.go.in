@@ -1,0 +1,99 @@
+package main
+
+// richState -- per-order state coverage for the richer exploration signal (hvx/richcov/DESIGN.md
+// section 2.3). Added to the front door only in the richcov explorer images, by
+// hvx/richcov/patch-src.py; the normal stack and explorer images do not contain it.
+//
+// For every order id 0..n-1 the oracle knows its end state in each place:
+//   client  acked | failed (told definitely failed) | other (not acked: unknown outcome or never tried)
+//   mysql   absent | pending (published=0) | published
+//   kafka   0 | 1 | many
+//   redis   absent | right | wrong
+// One console line per DISTINCT tuple, in sorted order, with the number of orders in it:
+//   HYDO-STATE client=acked mysql=published kafka=1 redis=right n=24
+// Only reads: the Redis GETs are the same reads the oracle makes. Deterministic: the output
+// is a pure function of the stores' contents and the two id files.
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"sort"
+	"strconv"
+	"syscall"
+)
+
+func richIDs(path string) map[int64]bool {
+	set := map[int64]bool{}
+	f, err := os.Open(path)
+	if err != nil {
+		return set
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		if id, err := strconv.ParseInt(sc.Text(), 10, 64); err == nil {
+			set[id] = true
+		}
+	}
+	return set
+}
+
+func richState(n int64, mysqlHas map[int64]int64, mysqlPub map[int64]bool,
+	kafkaHas map[int64]int64, kafkaCount map[int64]int, rc *redisConn) {
+	var acked, failed map[int64]bool
+	if len(os.Args) > 3 {
+		acked = richIDs(os.Args[3])
+	}
+	if len(os.Args) > 4 {
+		failed = richIDs(os.Args[4])
+	}
+	count := map[string]int{}
+	for id := int64(0); id < n; id++ {
+		client := "other"
+		if acked[id] {
+			client = "acked"
+		} else if failed[id] {
+			client = "failed"
+		}
+		my := "absent"
+		if _, ok := mysqlHas[id]; ok {
+			my = "pending"
+			if mysqlPub[id] {
+				my = "published"
+			}
+		}
+		kf := "0"
+		if c := kafkaCount[id]; c == 1 {
+			kf = "1"
+		} else if c > 1 {
+			kf = "many"
+		}
+		rd := "absent"
+		v, ok, err := rc.cmd("GET", "order:"+strconv.FormatInt(id, 10))
+		if err != nil {
+			rd = "error"
+		} else if ok {
+			rd = "wrong"
+			if v == strconv.FormatInt(100000+id, 10) {
+				rd = "right"
+			}
+		}
+		count[fmt.Sprintf("client=%s mysql=%s kafka=%s redis=%s", client, my, kf, rd)]++
+	}
+	keys := make([]string, 0, len(count))
+	for k := range count {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	f, err := os.OpenFile("/dev/ttyS0", os.O_WRONLY|os.O_APPEND|syscall.O_NOCTTY, 0)
+	if err != nil {
+		f = os.Stdout
+	}
+	for _, k := range keys {
+		fmt.Fprintf(f, "HYDO-STATE %s n=%d\n", k, count[k])
+	}
+	if f != os.Stdout {
+		f.Close()
+	}
+}

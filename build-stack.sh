@@ -559,10 +559,10 @@ case "$PHASE" in
 esac
 SINIT
 chmod +x "$R/sbin/init"
-# The explorer images (STACK_OUT=explore*) add a command-driven "serve" mode to /sbin/init:
+# The explorer images (STACK_OUT=explore* or richcov-*, the whole-system coverage variants) add a command-driven "serve" mode to /sbin/init:
 # hvx/explore/stack-explore.sh is installed as /etc/stack-explore.sh and hooked in at two
 # points. Every other image keeps the init above byte-for-byte.
-case "$STACK_OUT" in explore*) EXPLORE_IMAGE=1;; *) EXPLORE_IMAGE=0;; esac
+case "$STACK_OUT" in explore*|richcov-*) EXPLORE_IMAGE=1;; *) EXPLORE_IMAGE=0;; esac
 if [ "$EXPLORE_IMAGE" = 1 ]; then
   cp hvx/explore/stack-explore.sh "$R/etc/stack-explore.sh"
   "$PY3" - "$R/sbin/init" <<'PYEOF'

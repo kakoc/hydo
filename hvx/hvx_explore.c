@@ -92,6 +92,56 @@ static double now_s(void)
 static int g_pt;
 static uint64_t g_pt_lo, g_pt_hi, g_pt_mib = 256;
 
+/* ---- Milestone 44: whole-system coverage (hvx/richcov) ----
+ * HVX_EXPLORE_PT_RANGES="<lo>-<hi>[,<lo>-<hi>]" (hex) programs up to two IP ranges instead of
+ * one ELF's text, and HVX_EXPLORE_PTMULTI="<ptmulti binary> <name>=<elf>[@<bias>] ..." decodes
+ * each workload trace into per-program edge files in <outdir>/../cov/<tag>/ (ptmulti's
+ * output: <name>.edges, <name>.funcs, summary.txt). Without these variables nothing changes. */
+static int g_ptm_nr;
+static uint64_t g_ptm_lo[2], g_ptm_hi[2];
+static const char *g_ptmulti;
+
+static int ptm_parse_ranges(const char *s)
+{
+	char *end;
+	while (*s && g_ptm_nr < 2) {
+		g_ptm_lo[g_ptm_nr] = strtoull(s, &end, 16);
+		if (*end != '-') return -1;
+		g_ptm_hi[g_ptm_nr] = strtoull(end + 1, &end, 16);
+		if (g_ptm_hi[g_ptm_nr] <= g_ptm_lo[g_ptm_nr]) return -1;
+		g_ptm_nr++;
+		s = (*end == ',') ? end + 1 : end;
+	}
+	return (*s || !g_ptm_nr) ? -1 : 0;
+}
+
+/* Run ptmulti on a saved trace; writes <cov>/<tag>/ and a one-line stats file. */
+static void ptm_decode(const char *trace, const char *tag, uint64_t bytes, int truncated)
+{
+	char cmd[4096], dir[600], spath[600];
+	double t0 = now_s();
+	int rc;
+	FILE *f;
+
+	snprintf(dir, sizeof(dir), "%s/../cov/%s", g_outdir, tag);
+	snprintf(spath, sizeof(spath), "%s/../cov/%s.stats", g_outdir, tag);
+	mkdir(dir, 0755);
+	/* g_ptmulti = "<binary> <name>=<elf> ...": the trace and outdir go right after the binary */
+	{
+		const char *sp = strchr(g_ptmulti, ' ');
+		int bl = sp ? (int)(sp - g_ptmulti) : (int)strlen(g_ptmulti);
+		snprintf(cmd, sizeof(cmd), "%.*s %s %s%s > %s/ptmulti.log 2>&1",
+			 bl, g_ptmulti, trace, dir, sp ? sp : "", dir);
+	}
+	rc = system(cmd);
+	if ((f = fopen(spath, "w"))) {
+		fprintf(f, "trace_bytes=%llu truncated=%d ptmulti_rc=%d decode_secs=%.2f\n",
+			(unsigned long long)bytes, truncated, rc, now_s() - t0);
+		fclose(f);
+	}
+	if (!getenv("HVX_EXPLORE_PT_SAVE")) unlink(trace);
+}
+
 static void pt_arm(struct boot *b)
 {
 	struct hvx_pt_config pc;
@@ -101,6 +151,10 @@ static void pt_arm(struct boot *b)
 	pc.buf_mib = g_pt_mib;
 	pc.flags = HVX_PT_USER | HVX_PT_NORETCOMP;
 	pc.lo[0] = g_pt_lo; pc.hi[0] = g_pt_hi;
+	if (g_ptm_nr) {
+		int i;
+		for (i = 0; i < g_ptm_nr; i++) { pc.lo[i] = g_ptm_lo[i]; pc.hi[i] = g_ptm_hi[i]; }
+	}
 	if (ioctl(b->fd, HVX_SET_PT, &pc) < 0) perror("HVX_SET_PT");
 }
 
@@ -119,12 +173,27 @@ static void pt_collect(struct boot *b, const char *tag)
 	if (!g_pt) return;
 	memset(&ps, 0, sizeof(ps));
 	if (ioctl(b->fd, HVX_GET_PT, &ps) < 0) { perror("HVX_GET_PT"); return; }
+	if (ps.saved) {		/* HVX_SET_PT failed (ENOMEM on a busy host): this VM has no trace of
+				 * its own and the module returned the last FREED trace, which may be
+				 * another process's. Never decode it; say so, the scheduler re-runs. */
+		snprintf(spath, sizeof(spath), "%s/../cov/%s.stats", g_outdir, tag);
+		if ((f = fopen(spath, "w"))) { fprintf(f, "no_trace=1\n"); fclose(f); }
+		return;
+	}
 	buf = malloc(ps.bytes ? ps.bytes : 1);
 	if (!buf) return;
 	rq.offset = 0; rq.len = ps.bytes; rq.addr = (uint64_t)(uintptr_t)buf;
 	if (ps.bytes && ioctl(b->fd, HVX_READ_PT, &rq) < 0) { perror("HVX_READ_PT"); free(buf); return; }
 	snprintf(path, sizeof(path), "%s/../cov/%s.edges", g_outdir, tag);
 	snprintf(spath, sizeof(spath), "%s/../cov/%s.stats", g_outdir, tag);
+	if (g_ptmulti) {			/* whole-system: save the trace, decode it with ptmulti */
+		char rp[600];
+		snprintf(rp, sizeof(rp), "%s/../cov/%s.pt", g_outdir, tag);
+		if ((f = fopen(rp, "w"))) { fwrite(buf, 1, ps.bytes, f); fclose(f); }
+		free(buf);
+		ptm_decode(rp, tag, ps.bytes, (ps.bytes && ps.bytes >= ps.buf_bytes) ? 1 : 0);
+		return;
+	}
 	if (getenv("HVX_EXPLORE_PT_SAVE")) {	/* diagnostic: keep the raw trace */
 		char rp[600];
 		snprintf(rp, sizeof(rp), "%s/../cov/%s.pt", g_outdir, tag);
@@ -728,7 +797,26 @@ int main(int argc, char **argv)
 	if (mbr_partitions(E.base, dlen, &geom) < 0) return 1;
 	E.p1_off = geom.p1_off; E.p1_len = geom.p1_len; E.p2_off = geom.p2_off; E.p2_len = geom.p2_len;
 	setvbuf(stdout, NULL, _IOLBF, 0);
-	if (getenv("HVX_EXPLORE_PT_ELF")) {
+	if (getenv("HVX_EXPLORE_CMDLINE_EXTRA")) {	/* e.g. "norandmaps" for the richcov images */
+		static char cmd[1024];
+		snprintf(cmd, sizeof(cmd), "%s %s", E.cmdbase, getenv("HVX_EXPLORE_CMDLINE_EXTRA"));
+		E.cmdbase = cmd;
+	}
+	if (getenv("HVX_EXPLORE_PT_RANGES")) {
+		char cdir[600];
+		if (ptm_parse_ranges(getenv("HVX_EXPLORE_PT_RANGES"))) {
+			fprintf(stderr, "hvx_explore: bad HVX_EXPLORE_PT_RANGES\n");
+			return 1;
+		}
+		g_ptmulti = getenv("HVX_EXPLORE_PTMULTI");
+		if (getenv("HVX_EXPLORE_PT_MIB")) g_pt_mib = strtoull(getenv("HVX_EXPLORE_PT_MIB"), NULL, 0);
+		setenv("HVX_PT_TRACE_VM", "1", 1);
+		snprintf(cdir, sizeof(cdir), "%s/../cov", g_outdir);
+		mkdir(cdir, 0755);
+		g_pt = 1;
+		fprintf(stderr, "hvx_explore: whole-system coverage on: %d range(s), %llu MiB buffer, decoder %s\n",
+			g_ptm_nr, (unsigned long long)g_pt_mib, g_ptmulti ? g_ptmulti : "(none: edges via ptedges.h)");
+	} else if (getenv("HVX_EXPLORE_PT_ELF")) {
 		char cdir[600];
 		if (pte_load_elf(getenv("HVX_EXPLORE_PT_ELF"), &g_pt_lo, &g_pt_hi)) {
 			fprintf(stderr, "hvx_explore: cannot load %s\n", getenv("HVX_EXPLORE_PT_ELF"));
