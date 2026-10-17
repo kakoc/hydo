@@ -52,6 +52,10 @@ explore_read() {   # read one command line from the serial console into CMD
 explore_s0() {
   echo "hydo-explore-ready-S0"
   explore_read
+  # M46: the guest has no RTC, so its realtime clock starts at 1970 + uptime and a backward
+  # clock jump (T=at:-delta) would be refused. Start every boot (provision and recovery) at
+  # a fixed date before any service runs. Deterministic: same instant in every run.
+  $BB date -s @1767225600 > /dev/null && echo "hydo-explore: realtime clock set to $($BB date -u +%Y-%m-%dT%H:%M:%SZ)"
   case "$CMD" in
     provision) EXPLORE=prov;;
     oracle*)
@@ -176,7 +180,12 @@ explore_run() {   # $CMD = "run <tokens>"
     if [ "$p" = "$tat" ]; then
       tnow=$($BB date +%s)
       $BB date -s @$((tnow + tdelta)) > /dev/null || echo "hydo-explore: date -s failed"
-      echo "hydo-explore: CLOCK JUMP of ${tdelta}s before order $p (realtime $tnow -> $($BB date +%s))"
+      tnew=$($BB date +%s)
+      echo "hydo-explore: CLOCK JUMP of ${tdelta}s before order $p (realtime $tnow -> $tnew)"
+      tdiff=$((tnew - tnow - tdelta))
+      if [ $tdiff -gt 5 ] || [ $tdiff -lt -5 ]; then
+        die_oracle "HYDO-ORACLE: ERROR explore: clock jump not applied ($tnow -> $tnew, wanted $tdelta)"
+      fi
       if [ "$tdelta" -lt 0 ]; then xassert reachable fault.clock_back true "the realtime clock was stepped backwards"
       else xassert reachable fault.clock_fwd true "the realtime clock was stepped forwards"; fi
     fi
