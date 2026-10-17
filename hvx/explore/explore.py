@@ -131,7 +131,8 @@ def add_new_faults(s, seed, swarm=False):
         if t.below(2):
             s["P"] = (svc, at, "+", t.rng(1, 3))
         else:
-            s["P"] = (svc, at, "~", t.rng(0, 3000), t.rng(500, 30000))
+            # 30 orders take ~0.5 s of guest time: a 0-500 ms offset lands inside the workload
+            s["P"] = (svc, at, "~", t.rng(0, 500), t.rng(500, 30000))
     if t.below(100) < p_on:                         # clock jump (realtime only)
         s["T"] = (t.rng(0, NORDERS - 1), t.pick(CLOCK_DELTAS))
     if t.below(100) < p_on:                         # one-way network fault
@@ -142,6 +143,19 @@ def add_new_faults(s, seed, swarm=False):
         kinds = [("loss", t.rng(30, 100))] if t.below(2) else [("delay", t.rng(100, 3000))]
         if "N" not in s:                            # one netem root qdisc at a time
             s["O"] = (svc, a, b, d, kinds)
+    return s
+
+
+def durable_only(s):
+    """--durable-only (M46): every store durable and the disk honest -- a lying disk becomes
+    a plain power cut at the same point, I/O errors and relaxed knobs are dropped -- so every
+    failure is a durable-defaults one."""
+    if s["disk"].startswith("lying"):
+        s["disk"] = "cut"
+    elif s["disk"].startswith("ioerr"):
+        s["disk"] = "none"
+    s.pop("M", None)
+    s.pop("R", None)
     return s
 
 
@@ -690,6 +704,8 @@ def main():
                     help="mid-run branching: for each seed's schedule, snapshot at the first "
                          "console line containing MARKER and run --variants timing variants from there")
     ap.add_argument("--variants", type=int, default=8)
+    ap.add_argument("--durable-only", action="store_true",
+                    help="M46: drop disk faults other than a plain power cut and relaxed durability knobs")
     ap.add_argument("--new-faults", action="store_true",
                     help="M46: add pause / realtime-clock-jump / one-way-network faults (separate random stream)")
     a = ap.parse_args()
@@ -718,7 +734,8 @@ def main():
         lo, hi = [int(x) for x in a.seeds.split("-")]
         seeds = list(range(lo, hi + 1))
         gen = generate_swarm if a.strategy == "swarm" else generate
-        items = [("seed-%d" % sd, render(add_timing(add_new_faults(gen(sd), sd, a.strategy == "swarm"), sd)))
+        dur = durable_only if a.durable_only else (lambda s: s)
+        items = [("seed-%d" % sd, render(add_timing(add_new_faults(dur(gen(sd)), sd, a.strategy == "swarm"), sd)))
                  for sd in seeds]
     t_sweep = time.time()
     res = pool.run_all(items)
