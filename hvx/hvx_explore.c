@@ -38,7 +38,9 @@
  * "BRANCHPOINT <tag> tjlo=<k>" line, so a finding reproduces and shrinks like any other.
  * Power-cut schedules work too: every snapshot also carries the disk's volatile write
  * cache (HVX_GET_UNSYNC / HVX_SET_UNSYNC), i.e. the writes not flushed yet.
- * Output: BRANCHPOINT, then n+1 RESULT lines, then "BRANCHEND <tag>".
+ * Output: BRANCHPOINT, then n+1 RESULT lines, then "BRANCHEND <tag>". A negative n runs |n|
+ * variants and does not finish the base run (no "-base" RESULT): for a caller that already
+ * ran the same schedule with rb=16, whose result the base run would only repeat.
  * (guest tokens: see hvx/explore/stack-explore.sh). The schedule generator, the
  * reproduce/shrink logic and the report live in hvx/explore/explore.py.
  *
@@ -698,7 +700,12 @@ static void run_branch(struct boot *b, const char *tag, const struct sched *sc, 
 	if (snap_take(b, &s2, "s2")) { snprintf(verdict, sizeof(verdict), "ERROR branch snapshot"); goto fail; }
 	printf("BRANCHPOINT %s tjlo=%llu held=%u\n", tag, (unsigned long long)lo, s2.unsync_n);
 	fflush(stdout);
-	finish_sched(b, sub, sc, s0, from, t0, "");
+	if (nvar < 0) {			/* the caller already has the base run */
+		boot_teardown(b);
+		nvar = -nvar;
+	} else {
+		finish_sched(b, sub, sc, s0, from, t0, "");
+	}
 	for (v = 1; v <= nvar; v++) {
 		struct boot vb;
 		struct sched sv = *sc;
