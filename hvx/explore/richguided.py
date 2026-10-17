@@ -201,21 +201,29 @@ def main():
         if a.mode != "random" and guiding:
             corpus.append({"s": d, "feats": guiding, "energy": 0})
 
+    seen = set()                 # schedules already run: a mutation that repeats one is redrawn
+
     def next_schedule(i):
         if a.mode == "random" or not corpus or (n + i) % FLOOR == FLOOR - 1:
             return "r", E.generate(rng.getrandbits(64))
         c = max(corpus, key=score)
         c["energy"] += 1
-        if len(corpus) > 1 and rng.random() < 0.2:
-            other = rng.choice([x for x in corpus if x is not c])
-            return "x", splice(c["s"], other["s"], rng)
-        return "m", G.mutate(c["s"], rng)
+        for _ in range(20):
+            if len(corpus) > 1 and rng.random() < 0.2:
+                other = rng.choice([x for x in corpus if x is not c])
+                kind, d = "x", splice(c["s"], other["s"], rng)
+            else:
+                kind, d = "m", G.mutate(c["s"], rng)
+            if E.render(d) not in seen:
+                return kind, d
+        return "r", E.generate(rng.getrandbits(64))
 
     while n < a.budget:
         batch = []
         for i in range(min(a.workers, a.budget - n)):
             kind, d = next_schedule(i)
             batch.append(("%s-%d-%d" % (kind, n, i), d))
+        seen.update(E.render(d) for _, d in batch)
         res = pool.run_all([(t, E.render(d)) for t, d in batch])
         for tag, d in batch:
             consider(tag, d, res[tag][1], features(a.out, tag))
