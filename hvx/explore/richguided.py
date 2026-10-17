@@ -177,6 +177,8 @@ def main():
         nonlocal n
         n += 1
         fs = {f for f in fs if f[0] in "EPDS"}
+        if cov_stats(a.out, tag).get("no_trace"):
+            fs = {f for f in fs if f[0] != "E"}      # still no trace after the retries
         new = [f for f in fs if f not in hits]
         for f in fs:
             hits[f] = hits.get(f, 0) + 1
@@ -191,8 +193,6 @@ def main():
             r["verdict"] = "VIOLATION assertion " + ",".join(af)
             vk = "violation"
         guiding = [f for f in new if f[0] in kinds]
-        if cov_stats(a.out, tag).get("no_trace"):
-            fs = {f for f in fs if f[0] != "E"}      # still no trace after the retries
         rec = {"run": n, "tag": tag, "schedule": E.render(d), "class": cls, "new": newk,
                "corpus": len(corpus), "tot": tot, "E_by_prog": totp, "cov": cov_stats(a.out, tag),
                **r, "assert_failures": af}
