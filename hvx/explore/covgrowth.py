@@ -53,7 +53,10 @@ def main():
             v = at(g, p)
             cells.append("-" if v is None else "%d / %d" % v)
         fc = ["%d (first %d)" % (fails[c], first[c]) if fails[c] else "0" for c in classes]
-        print("| %s | %s | %d | %s | %d | %s | %.0f |" % (os.path.basename(d.rstrip("/")), s["mode"], s["runs"],
+        runs = "%d" % s["runs"]
+        if s.get("pt_retries") or s.get("untraced_runs"):
+            runs += " (%d re-run, %d untraced)" % (s.get("pt_retries", 0), s.get("untraced_runs", 0))
+        print("| %s | %s | %s | %s | %d | %s | %.0f |" % (os.path.basename(d.rstrip("/")), s["mode"], runs,
               " | ".join(cells), s["corpus"], " | ".join(fc), s["runs_per_hour"]))
         rows.append((s["mode"], g, fails))
     print()

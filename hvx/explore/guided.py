@@ -105,13 +105,39 @@ def mutate(s, rng):
     return t
 
 
+def no_trace(outdir, tag):
+    """True if hvx_explore reported that this run's VM got no PT buffer (HVX_SET_PT failed,
+    typically ENOMEM for 2 MiB chunks when the box is busy). Needs the hvx_explore change that
+    writes 'no_trace=1' instead of decoding the module-wide saved trace."""
+    p = os.path.join(outdir, "cov", "%s.stats" % tag)
+    return os.path.exists(p) and "no_trace=1" in open(p).read()
+
+
+PT_RETRIES = 4
+
+
 def run_batch(pool, items, outdir):
-    """items: list of (tag, dict). Runs them, returns tag -> (dict, result, feats)."""
+    """items: list of (tag, dict). Runs them, returns tag -> (dict, result, feats). A run that
+    got no trace is re-run (same schedule, so the same guest run) after compacting host memory;
+    result["pt_retries"] counts the re-runs, result["no_trace"] marks a run never traced."""
     res = pool.run_all([(t, E.render(d)) for t, d in items])
     out = {}
     for tag, d in items:
         text, r = res[tag]
-        out[tag] = (d, r, edges_of(outdir, tag))
+        ctag, k = tag, 0
+        while no_trace(outdir, ctag) and k < PT_RETRIES:
+            k += 1
+            subprocess.run(["sudo", "sh", "-c", "echo 1 > /proc/sys/vm/compact_memory"])
+            time.sleep(5)
+            ctag = "%s-rt%d" % (tag, k)
+            r2 = pool.run_all([(ctag, E.render(d))])[ctag][1]
+            if r2["fp"] != r["fp"]:
+                print("guided: re-run %s changed fp %s -> %s" % (ctag, r["fp"], r2["fp"]), file=sys.stderr)
+            r = r2
+        r["pt_retries"] = k
+        if no_trace(outdir, ctag):
+            r["no_trace"] = True
+        out[tag] = (d, r, edges_of(outdir, ctag))
     return out
 
 
@@ -145,9 +171,13 @@ def main():
     n = 0
     SEEDS0 = 6                  # initial random schedules
 
+    pt_retries = [0, 0]         # re-runs for a missing trace; runs that stayed untraced
+
     def consider(tag, d, r, feats):
         nonlocal n
         n += 1
+        pt_retries[0] += r.get("pt_retries", 0)
+        pt_retries[1] += 1 if r.get("no_trace") else 0
         new = feats - global_feats
         global_feats.update(feats)
         global_plain.update((x, y) for x, y, _ in feats)
@@ -214,6 +244,7 @@ def main():
                "wall_s": round(time.time() - t0, 1), "runs_per_hour": round(n / (time.time() - t0) * 3600, 1),
                "corpus": len(corpus), "global_edges": len(global_feats),
                "global_plain_edges": len(global_plain),
+               "pt_retries": pt_retries[0], "untraced_runs": pt_retries[1],
                "failures": len(fails), "reproduced": sum(1 for f in fails if f.get("reproduced")),
                "first_failure_run_by_class": first_class}
     json.dump({"summary": summary, "growth": growth,
