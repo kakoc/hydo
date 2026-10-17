@@ -125,6 +125,7 @@ def main():
     ap.add_argument("--mode", choices=["guided", "random"], default="guided")
     ap.add_argument("--rng0", type=int, default=1)
     ap.add_argument("--stop-on", default=None, help="stop early when a finding of this class appears")
+    ap.add_argument("--no-shrink", action="store_true", help="re-run failures but do not shrink them")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     E.IMAGE = a.image
@@ -135,6 +136,7 @@ def main():
     corpus = []                 # list of dicts kept for having added coverage
     energy = []                 # times each corpus entry has been mutated
     global_feats = set()
+    global_plain = set()        # the same edges without hit-count buckets
     runs = open(os.path.join(a.out, "runs.jsonl"), "w")
     growth = []                 # (run index, |global_feats|)
     fails = []
@@ -148,7 +150,8 @@ def main():
         n += 1
         new = feats - global_feats
         global_feats.update(feats)
-        growth.append((n, len(global_feats)))
+        global_plain.update((x, y) for x, y, _ in feats)
+        growth.append((n, len(global_feats), len(global_plain)))
         cls = E.finding_class(d)
         vk = E.verdict_kind(r["verdict"])
         af = E.assert_failures(a.out, tag)
@@ -156,7 +159,8 @@ def main():
             r["verdict"] = "VIOLATION assertion " + ",".join(af)
             vk = "violation"
         rec = {"run": n, "tag": tag, "schedule": E.render(d), "class": cls, "new_edges": len(new),
-               "corpus": len(corpus), "global_edges": len(global_feats), **r, "assert_failures": af}
+               "run_edges": len(feats), "corpus": len(corpus), "global_edges": len(global_feats),
+               "global_plain_edges": len(global_plain), **r, "assert_failures": af}
         runs.write(json.dumps(rec) + "\n"); runs.flush()
         if vk != "ok":
             fails.append(rec)
@@ -197,7 +201,7 @@ def main():
         if E.verdict_kind(f["verdict"]) == "violation":
             key = (f["class"], E.signature(f["verdict"]).split(" order=")[0])
             reps.setdefault(key, f)
-    for key, f in reps.items():
+    for key, f in ([] if a.no_shrink else reps.items()):
         m, mv, t = E.shrink(pool, E.parse(f["schedule"]), f["verdict"], slog)
         mt = E.render(m)
         conf = pool.run_all([("min-a", mt), ("min-b", mt)])
@@ -209,15 +213,16 @@ def main():
     summary = {"mode": a.mode, "budget": a.budget, "runs": n, "workers": a.workers,
                "wall_s": round(time.time() - t0, 1), "runs_per_hour": round(n / (time.time() - t0) * 3600, 1),
                "corpus": len(corpus), "global_edges": len(global_feats),
+               "global_plain_edges": len(global_plain),
                "failures": len(fails), "reproduced": sum(1 for f in fails if f.get("reproduced")),
                "first_failure_run_by_class": first_class}
     json.dump({"summary": summary, "growth": growth,
                "shrunk": [{"class": k[0], "signature": k[1], **v} for k, v in shrunk.items()]},
               open(os.path.join(a.out, "report.json"), "w"), indent=1)
     with open(os.path.join(a.out, "growth.csv"), "w") as g:
-        g.write("run,global_edges\n")
-        for r, e in growth:
-            g.write("%d,%d\n" % (r, e))
+        g.write("run,global_edges,global_plain_edges\n")
+        for r, e, pl in growth:
+            g.write("%d,%d,%d\n" % (r, e, pl))
     print(json.dumps(summary))
 
 
