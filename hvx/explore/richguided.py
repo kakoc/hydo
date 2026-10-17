@@ -22,7 +22,9 @@ network fault of one entry with the power cut / disk class of another).
   python3 richguided.py --image richcov-old-disk.img --out /var/tmp/m44-rich/old-rich-1 \
       --mode rich --budget 60 --rng0 1 --stop-on durable-defaults
 
-Modes: rich (all four kinds), edges (E only, same scheduler), random (fresh seeds, same budget;
+Modes: rich (all four kinds), richk (all four kinds, score per kind = weight x mean rarity,
+edges of a truncated trace ignored -- added after the first results, see below), edges (E only,
+same scheduler), random (fresh seeds, same budget;
 every run is still traced, so feature growth is comparable). Everything stays deterministic: a
 schedule renders to one run with one fingerprint; failures are re-run to check that.
 """
@@ -152,14 +154,14 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--budget", type=int, default=60)
     ap.add_argument("--workers", type=int, default=1)
-    ap.add_argument("--mode", choices=["rich", "edges", "random"], default="rich")
+    ap.add_argument("--mode", choices=["rich", "richk", "edges", "random"], default="rich")
     ap.add_argument("--rng0", type=int, default=1)
     ap.add_argument("--stop-on", default=None, help="stop when a failure of this class appears")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     E.IMAGE = a.image
     E.EXTRA_ENV[:] = coverage_env(a.image)
-    kinds = {"rich": "EPDS", "edges": "E", "random": "EPDS"}[a.mode]
+    kinds = {"rich": "EPDS", "richk": "EPDS", "edges": "E", "random": "EPDS"}[a.mode]
     rng = random.Random(a.rng0)
     pool = E.Pool(a.workers, a.out)
 
@@ -171,14 +173,23 @@ def main():
     t0, n = time.time(), 0
 
     def score(c):
+        if a.mode == "richk":     # per kind: weight x MEAN rarity, so thousands of new edges
+            tot = 0.0             # cannot drown one new state tuple (see the M44 notes)
+            for k in "EPDS":
+                fk = [f for f in c["feats"] if f[0] == k]
+                if fk:
+                    tot += WEIGHT[k] * sum(1.0 / hits[f] for f in fk) / len(fk)
+            return tot / (1 + c["energy"])
         return sum(WEIGHT[f[0]] / hits[f] for f in c["feats"]) / (1 + c["energy"])
 
     def consider(tag, d, r, fs):
         nonlocal n
         n += 1
         fs = {f for f in fs if f[0] in "EPDS"}
-        if cov_stats(a.out, tag).get("no_trace"):
-            fs = {f for f in fs if f[0] != "E"}      # still no trace after the retries
+        st = cov_stats(a.out, tag)
+        if st.get("no_trace") or (a.mode == "richk" and st.get("truncated")):
+            fs = {f for f in fs if f[0] != "E"}      # no trace, or (richk) a truncated one:
+                                                     # its edge set depends on where it stopped
         new = [f for f in fs if f not in hits]
         for f in fs:
             hits[f] = hits.get(f, 0) + 1
