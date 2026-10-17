@@ -7,7 +7,7 @@ code. This design widens the signal in two directions and says how a corpus sche
 them. Everything here keeps the explorer's two invariants: a run is a pure function of its
 schedule string, and a failure replays bit-for-bit.
 
-## 1. Whole-system edge coverage (built in this milestone, not yet run on the box)
+## 1. Whole-system edge coverage (built; run on the box in M44)
 
 **Which programs.** The front door (`hydostack`), Redis and MySQL. Kafka runs JIT-compiled Java
 and is left out (see "Not covered").
@@ -48,7 +48,7 @@ AFL hit-count buckets (1, 2, 3, 4-7, 8-15, 16-31, 32-127, 128+). A new feature i
 counts as new coverage, but the scheduler also keeps per-program novelty counts (section 3) so the
 front door's fast saturation no longer dominates.
 
-## 2. Assertion and state coverage (to implement next)
+## 2. Assertion and state coverage (implemented in M44, see "Implementation" below)
 
 The stack already emits `HYDO-ASSERT` records (23 declared properties in `hvx/stack/main.go`,
 format in `hvx/ASSERTIONS.md`). Three feature kinds are derived from a run's console:
@@ -99,6 +99,28 @@ Evaluation, same as M41 so results are comparable: runs-until-first durable-defa
 the old front door (`explore-disk.img` semantics, rebuilt in the richcov layout), several
 repetitions, random vs edges-only vs full signal; and distinct failure signatures on the fixed
 front door at equal budget.
+
+## Implementation (M44)
+
+- **Images.** `RICHCOV_VARIANT=old|fix bash hvx/richcov/build-richcov.sh` builds explorer
+  (serve-mode) images in the coverage layout: `richcov-old-disk.img` (front door
+  `hvx/explore/stack-src-sdk`, which has the M38 bug) and `richcov-fix-disk.img` (`hvx/stack`).
+  `build-stack.sh` treats `STACK_OUT=richcov-*` like `explore*`. The front door source is first
+  run through `patch-src.py`, which adds `richstate.go` (from `state.go.in`: one
+  `HYDO-STATE client=.. mysql=.. kafka=.. redis=.. n=..` line per distinct per-order tuple,
+  printed by the oracle right after the stores are read) and the SDK's distinct-details mode
+  (`distinct.go.in`, a one-line change in `record()`); keys store/what/attempt/count/kafka_count,
+  numbers in power-of-two buckets, at most 16 tuples per outcome. Nothing else changes.
+  Client state is `acked | failed | other` (the oracle cannot tell "unknown outcome" from
+  "never tried"; both are `other`).
+- **Tracing.** `hvx_explore` takes `HVX_EXPLORE_PT_RANGES=<lo>-<hi>,<lo>-<hi>`,
+  `HVX_EXPLORE_PTMULTI="<ptmulti> name=elf[@bias] ..."` and `HVX_EXPLORE_CMDLINE_EXTRA=norandmaps`;
+  without them it is unchanged (the two pinned reproducers give `2403499c9a3f8419` and
+  `f87130453609a5d6` with the new binary). Range 1 = Redis text start .. end of front-door text,
+  range 2 = mysqld's executable segment at 0x555555554000.
+- **Scheduler.** `hvx/explore/richguided.py` (modes `rich`, `edges`, `random`), section 3 as
+  written, plus: a mutation that repeats an already-run schedule is redrawn.
+- **Report.** `hvx/richcov/richreport.py <dir>`.
 
 ## Not covered (and what it would take)
 
