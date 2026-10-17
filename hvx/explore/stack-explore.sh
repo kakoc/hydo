@@ -24,6 +24,19 @@
 #                                  bytes and runs the recovery from S0)
 #           M=<0|1|2>              MySQL innodb_flush_log_at_trx_commit (1 = durable)
 #           R=<always|everysec|no> Redis appendfsync (always = durable)
+#         New fault kinds (M46; absent token = nothing happens):
+#           P=<svc>@<at>+<n>       SIGSTOP <svc> (mysql|kafka|redis|front) before order <at>,
+#                                  SIGCONT before order <at>+<n>  (pause between requests)
+#           P=<svc>@<at>~<off>:<dur>
+#                                  before order <at> start a timer: after <off> ms of guest
+#                                  time SIGSTOP <svc>, after <dur> ms more SIGCONT; the orders
+#                                  go on meanwhile, so the pause can land mid-request
+#           T=<at>:<delta>         before order <at> step the guest's REALTIME clock by
+#                                  <delta> seconds (signed; settimeofday via date -s). The
+#                                  monotonic clock is untouched (an NTP-style step).
+#           O=<svc>@<from>-<to>:<req|resp>:<netem args, commas for spaces>
+#                                  ONE-WAY netem for orders [from,to): req = packets to
+#                                  <svc>'s port only, resp = packets from it only
 #       Without a cut the guest then prints "hydo-explore-workload-done" and waits for "go"
 #       (the host first switches disk faults off), restarts any store that died, and runs
 #       the oracle in the same boot.
@@ -39,6 +52,10 @@ explore_read() {   # read one command line from the serial console into CMD
 explore_s0() {
   echo "hydo-explore-ready-S0"
   explore_read
+  # M46: the guest has no RTC, so its realtime clock starts at 1970 + uptime and a backward
+  # clock jump (T=at:-delta) would be refused. Start every boot (provision and recovery) at
+  # a fixed date before any service runs. Deterministic: same instant in every run.
+  $BB date -s @1767225600 > /dev/null && echo "hydo-explore: realtime clock set to $($BB date -u +%Y-%m-%dT%H:%M:%SZ)"
   case "$CMD" in
     provision) EXPLORE=prov;;
     oracle*)
@@ -71,13 +88,54 @@ explore_oracle() {   # $1 = HYDO-ORACLE prefix for a store that will not come ba
   exec $BB sh
 }
 
+xassert() {   # <type> <id> <ok> <msg>: one HYDO-ASSERT record (hvx/ASSERTIONS.md)
+  echo "HYDO-ASSERT {\"t\":\"$1\",\"id\":\"$2\",\"ok\":$3,\"msg\":\"$4\"}"
+}
+
+oneway_on() {   # $1 = <svc>:<req|resp>:<netem args with commas>
+  osv=${1%%:*}; r=${1#*:}; odir=${r%%:*}; oargs=$(echo "${r#*:}" | $BB tr ',' ' '); oport=$(svc_port $osv)
+  case "$odir" in req) omatch=dport;; resp) omatch=sport;; *) die_oracle "HYDO-ORACLE: ERROR explore: bad one-way direction '$odir'";; esac
+  for m in sch_prio sch_netem cls_u32; do $BB insmod /lib/modules/$m.ko 2>/dev/null; done
+  $TC qdisc add dev lo root handle 1: prio bands 4 priomap 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 && \
+  $TC qdisc add dev lo parent 1:4 handle 40: netem $oargs && \
+  $TC filter add dev lo parent 1:0 protocol ip prio 1 u32 match ip $omatch $oport 0xffff flowid 1:4 || \
+    die_oracle "HYDO-ORACLE: ERROR tc setup failed"
+  echo "hydo-explore: ONE-WAY NET FAULT on $odir packets of $osv (ip $omatch $oport): netem $oargs"
+  xassert reachable fault.oneway_$odir true "a one-way network fault hit the $odir direction"
+}
+
+pause_pid() { case "$1" in front) echo $FPID;; *) svc_pid "$1";; esac; }
+
+pause_timer() {   # $1 svc $2 off-ms $3 dur-ms (runs in the background)
+  $BB sleep $($BB awk "BEGIN{printf \"%.3f\", $2/1000}")
+  pp=$(pause_pid $1)
+  if $BB pgrep -f "hydostack (place|retry)" > /dev/null 2>&1; then mid=true; else mid=false; fi
+  $BB kill -STOP $pp 2>/dev/null
+  echo "hydo-explore: PAUSED $1 (timer, mid_request=$mid)"
+  xassert reachable fault.paused true "a service was paused (SIGSTOP)"
+  [ $mid = true ] && xassert sometimes fault.pause_mid_request true "a pause began while a client request was in flight"
+  $BB sleep $($BB awk "BEGIN{printf \"%.3f\", $3/1000}")
+  $BB kill -CONT $pp 2>/dev/null
+  echo "hydo-explore: RESUMED $1 (timer)"
+}
+
 explore_run() {   # $CMD = "run <tokens>"
-  K=""; N=""; C=""; M=1; R=always
+  K=""; N=""; C=""; M=1; R=always; P=""; T=""; O=""
   for t in ${CMD#run}; do
     case "$t" in
       K=*) K="${t#K=}";; N=*) N="${t#N=}";; C=*) C="${t#C=}";;
       M=*) M="${t#M=}";; R=*) R="${t#R=}";;
+      P=*) P="${t#P=}";; T=*) T="${t#T=}";; O=*) O="${t#O=}";;
     esac
+  done
+  for d in "reachable fault.paused a service was paused (SIGSTOP)" \
+           "sometimes fault.pause_mid_request a pause began while a client request was in flight" \
+           "reachable fault.clock_back the realtime clock was stepped backwards" \
+           "reachable fault.clock_fwd the realtime clock was stepped forwards" \
+           "reachable fault.oneway_req a one-way network fault hit the req direction" \
+           "reachable fault.oneway_resp a one-way network fault hit the resp direction"; do
+    set -- $d; dt=$1; di=$2; shift 2
+    echo "HYDO-ASSERT-DECL {\"t\":\"$dt\",\"id\":\"$di\",\"msg\":\"$*\"}"
   done
   if [ "$M" != 1 ]; then SQL -e "SET GLOBAL innodb_flush_log_at_trx_commit=$M"; echo "hydo-explore: mysql innodb_flush_log_at_trx_commit=$M"; fi
   if [ "$R" != always ]; then /bin/redis-cli -p 6379 CONFIG SET appendfsync "$R" > /dev/null; echo "hydo-explore: redis appendfsync=$R"; fi
@@ -85,10 +143,20 @@ explore_run() {   # $CMD = "run <tokens>"
   if [ -n "$K" ]; then ksvc=${K%@*}; r=${K#*@}; kat=${r%+*}; kup=$((kat + ${r#*+})); fi
   if [ -n "$N" ]; then nsvc=${N%%@*}; r=${N#*@}; rng=${r%%:*}; nargs=${r#*:}; nfrom=${rng%-*}; nto=${rng#*-}; fi
   [ -n "$C" ] && cat_=$C
+  psvc=""; pat=-1; pup=-1; poff=""; pdur=""; tat=-1; tdelta=0; osvc=""; ofrom=-1; oto=-1; ospec=""
+  if [ -n "$P" ]; then
+    psvc=${P%@*}; r=${P#*@}
+    case "$r" in
+      *~*) pat=${r%~*}; r=${r#*~}; poff=${r%:*}; pdur=${r#*:};;
+      *) pat=${r%+*}; pup=$((pat + ${r#*+}));;
+    esac
+  fi
+  if [ -n "$T" ]; then tat=${T%%:*}; tdelta=${T#*:}; fi
+  if [ -n "$O" ]; then osvc=${O%%@*}; r=${O#*@}; rng=${r%%:*}; ospec="$osvc:${r#*:}"; ofrom=${rng%-*}; oto=${rng#*-}; fi
   # order-stream boundaries where something happens, in order
-  pts=$(for p in 0 $kat $kup $nfrom $nto $cat_ $NORDERS; do [ "$p" -ge 0 ] 2>/dev/null && [ "$p" -le $NORDERS ] && echo $p; done | $BB sort -n -u)
+  pts=$(for p in 0 $kat $kup $nfrom $nto $cat_ $pat $pup $tat $ofrom $oto $NORDERS; do [ "$p" -ge 0 ] 2>/dev/null && [ "$p" -le $NORDERS ] && echo $p; done | $BB sort -n -u)
   : > /tmp/acked; : > /tmp/outcomes; : > /tmp/client.log
-  netup=0; down=0; cut=0
+  netup=0; down=0; cut=0; paused=0; ptimer=""; oneup=0
   prev=""
   for p in $pts; do
     if [ -n "$prev" ] && [ "$prev" -lt "$p" ]; then client $prev $p; fi
@@ -97,9 +165,34 @@ explore_run() {   # $CMD = "run <tokens>"
     if [ "$p" = "$kup" ] && [ $down = 1 ]; then echo "hydo-explore: restarting $ksvc before order $p"; restart_svc $ksvc; down=0; fi
     if [ "$p" = "$kat" ]; then $BB kill -9 $(svc_pid $ksvc) 2>/dev/null; down=1; echo "hydo-explore: KILLED $ksvc before order $p"; fi
     if [ "$p" = "$nfrom" ] && [ "$nfrom" -lt "$nto" ]; then net_fault_on "$nsvc:$nargs"; netup=1; fi
+    if [ "$p" = "$oto" ] && [ $oneup = 1 ]; then $TC qdisc del dev lo root 2>/dev/null; oneup=0; echo "hydo-explore: one-way fault healed before order $p"; fi
+    if [ "$p" = "$ofrom" ] && [ "$ofrom" -lt "$oto" ]; then oneway_on "$ospec"; oneup=1; fi
+    if [ "$p" = "$pup" ] && [ $paused = 1 ]; then $BB kill -CONT $(pause_pid $psvc) 2>/dev/null; paused=0; echo "hydo-explore: RESUMED $psvc before order $p"; fi
+    if [ "$p" = "$pat" ]; then
+      if [ -n "$poff" ]; then
+        pause_timer $psvc $poff $pdur & ptimer=$!
+        echo "hydo-explore: pause timer for $psvc armed before order $p (after ${poff}ms, for ${pdur}ms)"
+      else
+        $BB kill -STOP $(pause_pid $psvc) 2>/dev/null; paused=1; echo "hydo-explore: PAUSED $psvc before order $p"
+        xassert reachable fault.paused true "a service was paused (SIGSTOP)"
+      fi
+    fi
+    if [ "$p" = "$tat" ]; then
+      tnow=$($BB date +%s)
+      $BB date -s @$((tnow + tdelta)) > /dev/null || echo "hydo-explore: date -s failed"
+      tnew=$($BB date +%s)
+      echo "hydo-explore: CLOCK JUMP of ${tdelta}s before order $p (realtime $tnow -> $tnew)"
+      tdiff=$((tnew - tnow - tdelta))
+      if [ $tdiff -gt 5 ] || [ $tdiff -lt -5 ]; then
+        die_oracle "HYDO-ORACLE: ERROR explore: clock jump not applied ($tnow -> $tnew, wanted $tdelta)"
+      fi
+      if [ "$tdelta" -lt 0 ]; then xassert reachable fault.clock_back true "the realtime clock was stepped backwards"
+      else xassert reachable fault.clock_fwd true "the realtime clock was stepped forwards"; fi
+    fi
     prev=$p
   done
   if [ $cut = 1 ]; then
+    [ -n "$ptimer" ] && $BB kill $ptimer 2>/dev/null   # no SIGCONT may follow the freeze
     failed_ids
     echo "hydo-explore-acked: $($BB tr '\n' ' ' < /tmp/acked)"
     echo "hydo-explore-failed: $($BB tr '\n' ' ' < /tmp/failed)"
@@ -112,6 +205,9 @@ explore_run() {   # $CMD = "run <tokens>"
   fi
   # no cut: faults are transient -- heal, bring everything back, let the client retry
   [ $netup = 1 ] && { $TC qdisc del dev lo root 2>/dev/null; echo "hydo-explore: network healed at the end"; }
+  [ $oneup = 1 ] && { $TC qdisc del dev lo root 2>/dev/null; echo "hydo-explore: one-way fault healed at the end"; }
+  [ -n "$ptimer" ] && { wait $ptimer 2>/dev/null; $BB kill -CONT $(pause_pid $psvc) 2>/dev/null; }
+  [ $paused = 1 ] && { $BB kill -CONT $(pause_pid $psvc) 2>/dev/null; echo "hydo-explore: RESUMED $psvc at the end"; }
   [ $down = 1 ] && { echo "hydo-explore: restarting $ksvc at the end"; restart_svc $ksvc; }
   $BB kill -0 $FPID 2>/dev/null || { echo "hydo-explore: front door died; restarting it"; start_front || die_oracle "HYDO-ORACLE: ERROR front door restart"; }
   retry_unacked

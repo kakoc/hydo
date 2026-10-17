@@ -13,6 +13,13 @@ shrinks it to a minimal failing schedule, and writes a report.
 Schedule format (see hvx_explore.c / stack-explore.sh):
   disk=<none|ioerr:P|cut|lying:P> dseed=<hex> [timing] | run [K=svc@at+down] [N=svc@from-to:netem,args]
                                                    [C=at] [M=0|1|2] [R=always|everysec|no]
+                                                   [P=svc@at+n | P=svc@at~off:dur] [T=at:delta]
+                                                   [O=svc@from-to:req|resp:netem,args]
+  new fault kinds (only with --new-faults, M46): P pauses a service (SIGSTOP/SIGCONT; svc may
+  be "front"), for n orders or, timed, after off ms for dur ms of guest time; T steps the
+  guest's realtime clock by delta seconds before order at; O is one-way netem (req = packets
+  to the service's port, resp = packets from it). Drawn from a separate random stream, so
+  every other field equals the schedule of the same seed without --new-faults.
   timing (only with --timing): tj=<hex> tjpm=<n> tjmax=<n> [tjlo=<k> tjhi=<k>]  delays a
   seeded share of the PMU-clock ticks, so threads interleave differently; the shrinker turns
   it into an explicit list tjx=<tick:delay,...> and removes entries.
@@ -37,6 +44,9 @@ TJ_MAX = 500000         # max tick delay in guest branches (the PMU period is 2^
 TJ_PM = [50, 100, 200]  # --tj-pm: delayed ticks per 1000 (a workload is often only ~60 ticks)
 TJ_EXPLICIT_MAX = 32    # HVX_TJ_MAX_EXPLICIT
 BRANCH_BUDGET = 16      # hvx_explore.c: the run budget of a branch (rb=16 in its variants)
+NEW_FAULTS = False      # --new-faults: add pause / clock-jump / one-way-network faults (M46)
+NF_SALT = 0x4E46A17C0FFEE046
+CLOCK_DELTAS = [-30 * 86400, -86400, -3600, -300, -30, 30, 300, 3600, 86400, 365 * 86400]
 
 
 class SplitMix:
@@ -104,6 +114,48 @@ def add_timing(s, seed):
         t = SplitMix(seed ^ 0x7417D1CE7417D1CE)
         if t.below(100) < 50:
             s["tj"] = ("seed", t.next(), t.pick(TJ_PM), TJ_MAX, 0, 0)
+    return s
+
+
+def add_new_faults(s, seed, swarm=False):
+    """--new-faults (M46): pause, clock jump and one-way network loss, each on with
+    probability 35% (random) or 50% (swarm: per-run category switch). A separate random
+    stream: every other field of s stays what it was for this seed."""
+    if not NEW_FAULTS:
+        return s
+    t = SplitMix(seed ^ NF_SALT)
+    p_on = 50 if swarm else 35
+    if t.below(100) < p_on:                         # pause
+        svc = t.pick(SVCS + ["front"])
+        at = t.rng(0, NORDERS - 2)
+        if t.below(2):
+            s["P"] = (svc, at, "+", t.rng(1, 3))
+        else:
+            # 30 orders take ~0.5 s of guest time: a 0-500 ms offset lands inside the workload
+            s["P"] = (svc, at, "~", t.rng(0, 500), t.rng(500, 30000))
+    if t.below(100) < p_on:                         # clock jump (realtime only)
+        s["T"] = (t.rng(0, NORDERS - 1), t.pick(CLOCK_DELTAS))
+    if t.below(100) < p_on:                         # one-way network fault
+        svc = t.pick(SVCS)
+        a = t.rng(0, NORDERS - 2)
+        b = t.rng(a + 1, min(NORDERS, a + 10))
+        d = t.pick(["req", "resp"])
+        kinds = [("loss", t.rng(30, 100))] if t.below(2) else [("delay", t.rng(100, 3000))]
+        if "N" not in s:                            # one netem root qdisc at a time
+            s["O"] = (svc, a, b, d, kinds)
+    return s
+
+
+def durable_only(s):
+    """--durable-only (M46): every store durable and the disk honest -- a lying disk becomes
+    a plain power cut at the same point, I/O errors and relaxed knobs are dropped -- so every
+    failure is a durable-defaults one."""
+    if s["disk"].startswith("lying"):
+        s["disk"] = "cut"
+    elif s["disk"].startswith("ioerr"):
+        s["disk"] = "none"
+    s.pop("M", None)
+    s.pop("R", None)
     return s
 
 
@@ -211,8 +263,23 @@ def sweep(name):
                     if at + d <= NORDERS:
                         out.append(("%s@%d C=%d" % (svc, at, at + d),
                                     {"disk": "cut", "dseed": 0, "K": (svc, at, 1), "C": at + d}))
+    elif name == "pause":               # M46: each service (and the front door) paused at a few points
+        for svc in SVCS + ["front"]:
+            for at in range(0, NORDERS, 5):
+                out.append(("%s@%d+2" % (svc, at), {"disk": "none", "dseed": 0, "P": (svc, at, "+", 2)}))
+                out.append(("%s@%d~200:5000" % (svc, at), {"disk": "none", "dseed": 0, "P": (svc, at, "~", 200, 5000)}))
+    elif name == "clock":               # M46: realtime steps, both directions
+        for at in (0, 10, 20):
+            for d in (-86400, -3600, -60, 60, 3600, 86400):
+                out.append(("T=%d:%d" % (at, d), {"disk": "none", "dseed": 0, "T": (at, d)}))
+    elif name == "oneway":              # M46: one direction of one service's traffic, orders 5-15
+        for svc in SVCS:
+            for d in ("req", "resp"):
+                for kinds in ([("loss", 100)], [("loss", 50)], [("delay", 1000)]):
+                    out.append(("%s:%s:%s" % (svc, d, netem_args(kinds)),
+                                {"disk": "none", "dseed": 0, "O": (svc, 5, 15, d, kinds)}))
     else:
-        raise SystemExit("unknown sweep %r (kill, cut, net, killcut)" % name)
+        raise SystemExit("unknown sweep %r (kill, cut, net, killcut, pause, clock, oneway)" % name)
     return out
 
 
@@ -244,6 +311,14 @@ def render(s):
         g.append("M=%d" % s["M"])
     if "R" in s:
         g.append("R=%s" % s["R"])
+    if "P" in s:
+        p = s["P"]
+        g.append("P=%s@%d+%d" % (p[0], p[1], p[3]) if p[2] == "+" else "P=%s@%d~%d:%d" % (p[0], p[1], p[3], p[4]))
+    if "T" in s:
+        g.append("T=%d:%d" % s["T"])
+    if "O" in s:
+        svc, a, b, d, kinds = s["O"]
+        g.append("O=%s@%d-%d:%s:%s" % (svc, a, b, d, netem_args(kinds)))
     return "disk=%s dseed=%x%s%s | %s" % (s["disk"], s["dseed"], render_tj(s["tj"]) if "tj" in s else "",
                                           " rb=%d" % s["rb"] if "rb" in s else "", " ".join(g))
 
@@ -277,6 +352,20 @@ def parse(text):
             s["M"] = int(v)
         elif k == "R":
             s["R"] = v
+        elif k == "P":
+            svc, rest = v.split("@")
+            if "~" in rest:
+                at, r = rest.split("~"); off, dur = r.split(":"); s["P"] = (svc, int(at), "~", int(off), int(dur))
+            else:
+                at, n = rest.split("+"); s["P"] = (svc, int(at), "+", int(n))
+        elif k == "T":
+            at, d = v.split(":"); s["T"] = (int(at), int(d))
+        elif k == "O":
+            svc, rest = v.split("@", 1); rng, d, args = rest.split(":", 2); a, b = rng.split("-")
+            toks = args.split(","); kinds = []; i = 0
+            while i < len(toks):
+                kinds.append((toks[i], int(re.sub(r"\D", "", toks[i + 1])))); i += 2
+            s["O"] = (svc, int(a), int(b), d, kinds)
     return s
 
 
@@ -482,6 +571,9 @@ def candidates(s, tjk=None):
         var(K=None)
     if "N" in s:
         var(N=None)
+    for k in ("P", "T", "O"):
+        if k in s:
+            var(**{k: None})
     for k in ("M", "R"):
         if k in s:
             var(**{k: None})
@@ -505,8 +597,31 @@ def candidates(s, tjk=None):
         p = int(s["disk"].split(":")[1])
         if p > 1:
             var(disk="%s:%d" % (s["disk"].split(":")[0], max(1, p // 2)))
+    nf_candidates(s, var)
     tj_candidates(s, tjk, var)
     return out
+
+
+def nf_candidates(s, var):
+    """M46 faults: shorter pauses, smaller clock steps, a narrower / milder one-way fault."""
+    if "P" in s:
+        p = s["P"]
+        if p[2] == "+" and p[3] > 1:
+            var(P=p[:3] + (1,))
+        if p[2] == "~":
+            if p[4] > 500:
+                var(P=p[:4] + (max(500, p[4] // 2),))
+            if p[3] > 0:
+                var(P=p[:3] + (0, p[4]))
+    if "T" in s and abs(s["T"][1]) > 30:
+        var(T=(s["T"][0], int(s["T"][1] / 2)))
+    if "O" in s:
+        svc, a, b, d, kinds = s["O"]
+        if b - a > 1:
+            var(O=(svc, a, a + max(1, (b - a) // 2), d, kinds))
+        k, v = kinds[0]
+        if v > 1:
+            var(O=(svc, a, b, d, [(k, max(1, v // 2))]))
 
 
 def tj_candidates(s, tjk, var):
@@ -571,7 +686,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
 
 # ---------------------------------------------------------------- main
 def main():
-    global IMAGE, TIMING, TJ_PM
+    global IMAGE, TIMING, TJ_PM, NEW_FAULTS
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-200")
     ap.add_argument("--workers", type=int, default=3)   # the box has 4 cores: 3 is fastest (M38)
@@ -584,12 +699,17 @@ def main():
                     help="comma list of delayed-ticks-per-1000 densities to pick from")
     ap.add_argument("--strategy", choices=["random", "swarm"], default="random",
                     help="schedule generator for --seeds (Milestone 42)")
-    ap.add_argument("--sweep", help="enumerate a small fault space instead of seeds: kill, cut, net, killcut")
+    ap.add_argument("--sweep", help="enumerate a small fault space instead of seeds: kill, cut, net, killcut, pause, clock, oneway")
     ap.add_argument("--branch", metavar="MARKER",
                     help="mid-run branching: for each seed's schedule, snapshot at the first "
                          "console line containing MARKER and run --variants timing variants from there")
     ap.add_argument("--variants", type=int, default=8)
+    ap.add_argument("--durable-only", action="store_true",
+                    help="M46: drop disk faults other than a plain power cut and relaxed durability knobs")
+    ap.add_argument("--new-faults", action="store_true",
+                    help="M46: add pause / realtime-clock-jump / one-way-network faults (separate random stream)")
     a = ap.parse_args()
+    NEW_FAULTS = a.new_faults
     IMAGE = a.image
     TIMING = a.timing
     TJ_PM = [int(x) for x in a.tj_pm.split(",")]
@@ -614,7 +734,9 @@ def main():
         lo, hi = [int(x) for x in a.seeds.split("-")]
         seeds = list(range(lo, hi + 1))
         gen = generate_swarm if a.strategy == "swarm" else generate
-        items = [("seed-%d" % sd, render(add_timing(gen(sd), sd))) for sd in seeds]
+        dur = durable_only if a.durable_only else (lambda s: s)
+        items = [("seed-%d" % sd, render(add_timing(add_new_faults(dur(gen(sd)), sd, a.strategy == "swarm"), sd)))
+                 for sd in seeds]
     t_sweep = time.time()
     res = pool.run_all(items)
     t_sweep = time.time() - t_sweep
