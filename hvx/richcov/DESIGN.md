@@ -122,6 +122,35 @@ front door at equal budget.
   written, plus: a mutation that repeats an already-run schedule is redrawn.
 - **Report.** `hvx/richcov/richreport.py <dir>`.
 
+## Results (M44, bare-metal test machine, 1 worker, shared with two other workstreams)
+
+Raw data under `/var/tmp/m44-rich` on the box; scripts in `hvx/richcov/eval/`; tables from
+`richreport.py`.
+
+- **Layout confirmed.** With `norandmaps`, mysqld runs at 0x555555554000 (36,780 edges, 0 decode
+  errors, 0 instructions outside the three programs on a clean run); Redis at 0x40001000.
+- **Cost.** Trace median 40 MB (max 268 MB), decode median 10 s (max 58 s), run median 25 s.
+  **129 of 439 traces filled the 256 MiB buffer (truncated)**, mostly runs with a service kill
+  and no power cut, and runs with I/O errors (MySQL recovery/restart is long). A 512 MiB buffer
+  failed to allocate (ENOMEM) on the busy box.
+- **Determinism.** Tracing on/off: same fingerprint. Two traced runs of the same schedule: edge
+  files identical on the smoke test; over 29 untruncated schedule pairs, 23 byte-identical edge
+  files and **28/29 identical bucketed features** (the exceptions are +-1 hit counts on a few
+  mysqld edges, and one Redis run with 3 decode errors). All 40 fingerprints identical.
+- **Old front door, runs until the durable-defaults bug (cap 60):** random >60 / 26 / 2;
+  `rich` (as designed) 48 / 8 / 12 -- all three found by the random floor, not by a mutation;
+  `richk` (per-kind normalized score, truncated edges ignored) 9 / 43 / 12 -- two found by
+  mutations of corpus entries, one by the floor (the same floor schedule as rich-3).
+- **Fixed front door, 40 runs:** `rich` and `edges` chose the same schedules (edge features,
+  thousands per run, swamp the few state/property features in the as-designed sum) and ended
+  with 8 state tuples, 16 property firsts; random reached 12 state tuples and 16 property
+  firsts, slightly more edges in hydostack, fewer in Redis/MySQL. No durable-defaults failure in
+  any arm. Guided arms spent their budget on I/O-error schedules (12 of 16 failures).
+- **Verdict.** No demonstrated advantage over random at this sample size: random's spread (2 to
+  >60) is larger than any difference. The as-designed scoring degenerates to edge guidance
+  because MySQL's edge set never saturates (new edges in ~70% of runs); normalizing per kind
+  (`richk`) is what made mutations, not the floor, find the bug -- a hint, not a result.
+
 ## Not covered (and what it would take)
 
 - **Kafka**: its code is JIT-compiled Java. Needs the JVM's perf map
