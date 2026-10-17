@@ -191,6 +191,8 @@ def main():
             r["verdict"] = "VIOLATION assertion " + ",".join(af)
             vk = "violation"
         guiding = [f for f in new if f[0] in kinds]
+        if cov_stats(a.out, tag).get("no_trace"):
+            fs = {f for f in fs if f[0] != "E"}      # still no trace after the retries
         rec = {"run": n, "tag": tag, "schedule": E.render(d), "class": cls, "new": newk,
                "corpus": len(corpus), "tot": tot, "E_by_prog": totp, "cov": cov_stats(a.out, tag),
                **r, "assert_failures": af}
@@ -225,6 +227,17 @@ def main():
             batch.append(("%s-%d-%d" % (kind, n, i), d))
         seen.update(E.render(d) for _, d in batch)
         res = pool.run_all([(t, E.render(d)) for t, d in batch])
+        # a run whose PT buffer could not be allocated has no trace (hvx_explore writes
+        # no_trace=1): never count it as coverage; compact memory and re-run it (<= 4 times)
+        for i, (tag, d) in enumerate(batch):
+            for attempt in range(1, 5):
+                if not cov_stats(a.out, tag).get("no_trace"):
+                    break
+                subprocess.run(["sudo", "sh", "-c", "echo 1 > /proc/sys/vm/compact_memory"])
+                tag2 = "%s-rt%d" % (tag, attempt)
+                res[tag2] = pool.run_all([(tag2, E.render(d))])[tag2]
+                batch[i] = (tag2, d)
+                tag = tag2
         for tag, d in batch:
             consider(tag, d, res[tag][1], features(a.out, tag))
         if a.stop_on and a.stop_on in first_class:

@@ -38,7 +38,7 @@ for d in sorted(glob.glob(os.path.join(D, "old-*-*"))):
 print("\n## Fixed front door: feature growth (cumulative distinct features at run k)\n")
 print("| mode | k | edges hydostack | edges redis | edges mysqld | property firsts | detail buckets | state tuples |")
 print("|---|---|---|---|---|---|---|---|")
-for d in sorted(glob.glob(os.path.join(D, "fix-*-*"))):
+for d in sorted(x for x in glob.glob(os.path.join(D, "fix-*-*")) if os.path.isdir(x)):
     rep, runs = load(d)
     mode = os.path.basename(d).split("-")[1]
     g = rep["growth"] if rep else [{"run": x["run"], **{"tot_" + k: v for k, v in x["tot"].items()},
@@ -50,7 +50,7 @@ for d in sorted(glob.glob(os.path.join(D, "fix-*-*"))):
 print("\n## Fixed front door: failures by class (40 runs)\n")
 print("| mode | failing runs | durable-defaults | unsafe-knob | lying-disk | io-errors | distinct signatures |")
 print("|---|---|---|---|---|---|---|")
-for d in sorted(glob.glob(os.path.join(D, "fix-*-*"))):
+for d in sorted(x for x in glob.glob(os.path.join(D, "fix-*-*")) if os.path.isdir(x)):
     rep, runs = load(d)
     if not rep:
         continue

@@ -167,6 +167,13 @@ static void pt_collect(struct boot *b, const char *tag)
 	if (!g_pt) return;
 	memset(&ps, 0, sizeof(ps));
 	if (ioctl(b->fd, HVX_GET_PT, &ps) < 0) { perror("HVX_GET_PT"); return; }
+	if (ps.saved) {		/* HVX_SET_PT failed (ENOMEM on a busy host): this VM has no trace of
+				 * its own and the module returned the last FREED trace, which may be
+				 * another process's. Never decode it; say so, the scheduler re-runs. */
+		snprintf(spath, sizeof(spath), "%s/../cov/%s.stats", g_outdir, tag);
+		if ((f = fopen(spath, "w"))) { fprintf(f, "no_trace=1\n"); fclose(f); }
+		return;
+	}
 	buf = malloc(ps.bytes ? ps.bytes : 1);
 	if (!buf) return;
 	rq.offset = 0; rq.len = ps.bytes; rq.addr = (uint64_t)(uintptr_t)buf;
