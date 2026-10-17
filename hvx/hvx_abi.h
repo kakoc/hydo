@@ -882,4 +882,32 @@ struct hvx_tjitter {
 #define HVX_SET_TJITTER _IOW(HVX_IOC_MAGIC, 45, struct hvx_tjitter)
 #define HVX_GET_TJITTER _IOR(HVX_IOC_MAGIC, 46, struct hvx_tjitter)
 
+/*
+ * The disk's volatile write cache (HVX_FAULT_DROP_UNFLUSHED, milestone 26): writes the
+ * guest was told are done but that no FLUSH has made durable yet. It is NOT in struct
+ * hvx_snapshot (up to HVX_UNSYNC_MAX * HVX_UNSYNC_ENTBYTES = 2 MiB). A snapshot taken while
+ * writes are held -- in the middle of a power-cut schedule -- must save it with
+ * HVX_GET_UNSYNC and put it back with HVX_SET_UNSYNC after HVX_SET_SNAPSHOT, or the
+ * restored run silently loses those writes. Buffer layout at `addr` (`len` bytes): n
+ * struct hvx_unsync_rec, then n * HVX_UNSYNC_ENTBYTES bytes of data (entry i at offset
+ * i * HVX_UNSYNC_ENTBYTES of the data part). GET sets n (and fails with ENOSPC, n still
+ * set, if len is too small); SET replaces the cache with the n entries (n = 0 empties it).
+ */
+#define HVX_UNSYNC_MAX		256	/* max un-flushed writes held at once */
+#define HVX_UNSYNC_ENTBYTES	8192	/* max bytes per held write (>= a DB page) */
+struct hvx_unsync_rec {
+	__u64 doff;		/* byte offset on the disk */
+	__u32 len;		/* bytes held (<= HVX_UNSYNC_ENTBYTES) */
+	__u32 valid;		/* 0 = superseded by a later persisted write */
+};
+struct hvx_unsync_io {
+	__u64 addr;		/* user buffer */
+	__u64 len;		/* its size in bytes */
+	__u32 n;		/* entries (GET: out, SET: in) */
+	__u32 pad;
+};
+#define HVX_UNSYNC_BYTES(n) ((__u64)(n) * (sizeof(struct hvx_unsync_rec) + HVX_UNSYNC_ENTBYTES))
+#define HVX_GET_UNSYNC _IOWR(HVX_IOC_MAGIC, 47, struct hvx_unsync_io)
+#define HVX_SET_UNSYNC _IOW(HVX_IOC_MAGIC, 48, struct hvx_unsync_io)
+
 #endif /* _HVX_ABI_H */

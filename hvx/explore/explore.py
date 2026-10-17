@@ -415,9 +415,10 @@ class Worker(threading.Thread):
             line = p.stdout.readline()
             if not line or line.startswith("BRANCHEND"):
                 break
-            m = re.match(r"BRANCHPOINT \S+ tjlo=(\d+)", line)
+            m = re.match(r"BRANCHPOINT \S+ tjlo=(\d+)(?: held=(\d+))?", line)
             if m:
                 out["tjlo"] = int(m.group(1))
+                out["held"] = int(m.group(2)) if m.group(2) else None
                 continue
             m = re.match(r"RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: tj\S+)*) verdict=(.*)", line.strip())
             if not m:
@@ -585,7 +586,7 @@ def main():
                     help="schedule generator for --seeds (Milestone 42)")
     ap.add_argument("--sweep", help="enumerate a small fault space instead of seeds: kill, cut, net, killcut")
     ap.add_argument("--branch", metavar="MARKER",
-                    help="mid-run branching: for each seed's schedule (no power cut), snapshot at the first "
+                    help="mid-run branching: for each seed's schedule, snapshot at the first "
                          "console line containing MARKER and run --variants timing variants from there")
     ap.add_argument("--variants", type=int, default=8)
     a = ap.parse_args()
@@ -677,7 +678,7 @@ def main():
 
 
 def branch_main(a, pool, t0):
-    """--branch: each seed's schedule (without timing, without a power cut) runs once to the
+    """--branch: each seed's schedule (without timing) runs once to the
     marker; n timing variants then start from a snapshot there. Every failing variant is re-run
     as its standalone schedule (rb=16, tjlo=..) to check it reproduces from S1 too."""
     lo, hi = [int(x) for x in a.seeds.split("-")]
@@ -686,8 +687,6 @@ def branch_main(a, pool, t0):
     items = []
     for sd in range(lo, hi + 1):
         s = gen(sd)
-        if s["disk"] == "cut" or "C" in s:
-            continue
         items.append(("seed-%d" % sd, "BRANCH %d %d %d %s %s" % (a.variants, pm, TJ_MAX, a.branch, render(s))))
     t1 = time.time()
     res = pool.run_all(items)
@@ -700,7 +699,8 @@ def branch_main(a, pool, t0):
         for sub, st, rr in r.get("runs", []):
             nrun += 1
             secs += rr["secs"]
-            rec = {"tag": sub, "schedule": st, "class": finding_class(parse(st)), "branch_tjlo": r.get("tjlo"), **rr}
+            rec = {"tag": sub, "schedule": st, "class": finding_class(parse(st)), "branch_tjlo": r.get("tjlo"),
+                   "branch_held": r.get("held"), **rr}
             runs.write(json.dumps(rec) + "\n")
             if verdict_kind(rr["verdict"]) != "ok":
                 fails.append(rec)
