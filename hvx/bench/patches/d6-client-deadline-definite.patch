@@ -1,0 +1,40 @@
+--- a/main.go
++++ b/main.go
+@@ -411,7 +411,8 @@
+ // outcome classifies a failed attempt: "failed" only when the server said nothing was
+ // applied; a timeout, a broken connection or any other error leaves it unknown.
+ func outcome(err error) string {
+-	if status.Code(err) == codes.FailedPrecondition {
++	// BENCH DEFECT d6 (client-deadline-definite): "it timed out, so it did not happen".
++	if c := status.Code(err); c == codes.FailedPrecondition || c == codes.DeadlineExceeded {
+ 		pClientDefinite.Check(true, nil)
+ 		return "failed"
+ 	}
+@@ -499,6 +500,27 @@
+ 			}
+ 		}
+ 		f.Close()
++	}
++	// BENCH DEFECT d6, second half: an order whose last outcome was a definite failure is not
++	// retried ("the user was told it failed; they will place it again").
++	if p := os.Getenv("HYDO_OUTCOMES"); p != "" {
++		last := map[int64]string{}
++		if f, err := os.Open(p); err == nil {
++			sc := bufio.NewScanner(f)
++			for sc.Scan() {
++				var id int64
++				var o string
++				if _, err := fmt.Sscanf(sc.Text(), "%d %s", &id, &o); err == nil {
++					last[id] = o
++				}
++			}
++			f.Close()
++		}
++		for id, o := range last {
++			if o == "failed" {
++				acked[id] = true
++			}
++		}
+ 	}
+ 	cc, err := grpc.NewClient(grpcAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+ 	if err != nil {

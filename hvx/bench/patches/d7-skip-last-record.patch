@@ -1,0 +1,13 @@
+--- a/main.go
++++ b/main.go
+@@ -228,7 +228,9 @@
+ 		return false, err
+ 	}
+ 	want := strconv.FormatInt(id, 10)
+-	for off := first; off < last; {
++	// BENCH DEFECT d7 (skip-last-record): "last" read as the offset of the last record, but it
++	// is the next offset to be written -- so the scan stops one record early.
++	for off := first; off < last-1; {
+ 		dl := time.Now().Add(15 * time.Second)
+ 		if d, ok := ctx.Deadline(); ok && d.Before(dl) {
+ 			dl = d // never outlive the request

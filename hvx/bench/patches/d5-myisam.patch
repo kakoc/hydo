@@ -1,0 +1,13 @@
+--- a/main.go
++++ b/main.go
+@@ -359,7 +359,9 @@
+ 	if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS stack"); err != nil {
+ 		fail("hydostack: mysql create db: %v", err)
+ 	}
+-	if _, err := db.Exec("CREATE TABLE IF NOT EXISTS stack.orders (id BIGINT PRIMARY KEY, amount BIGINT NOT NULL, published TINYINT NOT NULL DEFAULT 0) ENGINE=InnoDB"); err != nil {
++	// BENCH DEFECT d5 (myisam): MyISAM ("simpler, no transactions needed") is not crash
++	// safe and never fsyncs its data file: committed rows can vanish on a power cut.
++	if _, err := db.Exec("CREATE TABLE IF NOT EXISTS stack.orders (id BIGINT PRIMARY KEY, amount BIGINT NOT NULL, published TINYINT NOT NULL DEFAULT 0) ENGINE=MyISAM"); err != nil {
+ 		fail("hydostack: mysql create table: %v", err)
+ 	}
+ 	// The topic is created explicitly (one partition) so the first produce never races

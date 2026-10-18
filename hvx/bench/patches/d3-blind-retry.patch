@@ -1,0 +1,12 @@
+--- a/main.go
++++ b/main.go
+@@ -285,7 +285,8 @@
+ 	}
+ 	if published == 0 {
+ 		have := false
+-		if s.uncertain[id] {
++		// BENCH DEFECT d3 (blind-retry): the lookup before re-producing is skipped.
++		if false && s.uncertain[id] {
+ 			var err error
+ 			if have, err = kafkaHasKey(ctx, id); err != nil {
+ 				return nil, outcomeUnknown("kafka-check", id, fmt.Errorf("kafka check: %w", err))

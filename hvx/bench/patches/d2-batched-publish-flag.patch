@@ -1,0 +1,33 @@
+--- a/main.go
++++ b/main.go
+@@ -184,6 +184,7 @@
+ 	kp        *kgo.Client // idempotent producer
+ 	rc        *redisConn
+ 	uncertain map[int64]bool // ids whose produce ended in an error: outcome unknown
++	pending   []int64        // BENCH DEFECT d2: published flags not yet written
+ 	attempted map[int64]bool // ids for which a produce was ever started (never cleared)
+ }
+ 
+@@ -307,10 +308,18 @@
+ 			}
+ 		}
+ 		delete(s.uncertain, id)
+-		if _, err := s.db.ExecContext(ctx, "UPDATE stack.orders SET published = 1 WHERE id = ?", id); err != nil {
+-			// Kafka has it; the flag will be set by the retry, which finds the key first.
+-			s.uncertain[id] = true
+-			return nil, outcomeUnknown("mysql-publish", id, fmt.Errorf("mysql publish flag: %w", err))
++		// BENCH DEFECT d2 (batched-publish-flag): "it is only bookkeeping" -- the published
++		// flags are written five at a time, and the order is ACKed before its flag is stored.
++		s.pending = append(s.pending, id)
++		if len(s.pending) >= 5 {
++			q, args := "UPDATE stack.orders SET published = 1 WHERE id IN (?", []interface{}{s.pending[0]}
++			for _, p := range s.pending[1:] {
++				q += ", ?"
++				args = append(args, p)
++			}
++			if _, err := s.db.ExecContext(ctx, q+")", args...); err == nil {
++				s.pending = nil
++			}
+ 		}
+ 	}
+ 	// 3. Redis: a cache, so best effort. The order is durable and published; failing it now

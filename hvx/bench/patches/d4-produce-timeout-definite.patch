@@ -1,0 +1,33 @@
+--- a/main.go
++++ b/main.go
+@@ -298,12 +298,24 @@
+ 			// failure of this id can be reported as definite.
+ 			s.attempted[id] = true
+ 			s.uncertain[id] = true
+-			res := s.kp.ProduceSync(ctx, &kgo.Record{
+-				Key:   []byte(strconv.FormatInt(id, 10)),
+-				Value: []byte(strconv.FormatInt(amt, 10)),
+-			})
+-			if err := res.FirstErr(); err != nil {
+-				return nil, outcomeUnknown("kafka", id, fmt.Errorf("kafka: %w", err))
++			// BENCH DEFECT d4 (produce-timeout-definite): "don't keep the client waiting" -- the
++			// produce gets 5 s, and a produce that timed out is reported as not applied. But a
++			// timed-out produce may still be written once the broker gets to it.
++			done := make(chan error, 1)
++			go func() {
++				done <- s.kp.ProduceSync(ctx, &kgo.Record{
++					Key:   []byte(strconv.FormatInt(id, 10)),
++					Value: []byte(strconv.FormatInt(amt, 10)),
++				}).FirstErr()
++			}()
++			var err error
++			select {
++			case err = <-done:
++			case <-time.After(5 * time.Second):
++				err = fmt.Errorf("produce timed out after 5s")
++			}
++			if err != nil {
++				return nil, notApplied("kafka", id, fmt.Errorf("kafka: %w", err))
+ 			}
+ 		}
+ 		delete(s.uncertain, id)
