@@ -411,10 +411,16 @@ static void handle_sysreg(void)
 	skip();
 }
 
-static void handle_hvc(void)
+static int idle_wait(void);
+/* Returns 1 when the guest idles with nothing armed (like handle_wfi). */
+static int handle_hvc(void)
 {
 	uint64_t fn = rd(HV_REG_X0);
 	M.n_hvc++;
+	if ((uint32_t)fn == 0xc6000020) {                 /* hydo idle (CONFIG_ARM64_HVM_IDLE_HVC): a WFI that always exits */
+		wr(HV_REG_X0, 0);                         /* PC is already past the HVC */
+		return idle_wait();
+	}
 	uint64_t ret = (uint64_t)-1;                      /* NOT_SUPPORTED */
 	switch ((uint32_t)fn) {
 	case 0x84000000: ret = 0x00000002; break;          /* PSCI_VERSION 0.2 */
@@ -423,6 +429,7 @@ static void handle_hvc(void)
 	case 0x84000001: ret = 0; break;                   /* CPU_SUSPEND: return at once */
 	}
 	wr(HV_REG_X0, ret);                               /* PC is already past the HVC */
+	return 0;
 }
 
 /*
@@ -459,8 +466,18 @@ static void apply_stepping(void)
 /* WFI: if nothing can be delivered, jump time to the timer deadline (or stop: idle forever) */
 static int handle_wfi(void)
 {
-	M.n_wfi++;
 	skip();
+	return idle_wait();
+}
+/*
+ * The guest waits for an interrupt (a trapped WFI, or the idle HVC). A WFI only traps when it
+ * would enter low power: with a host wake-up event pending it completes inside the guest with no
+ * exit, so a guest idling by WFI can run extra idle iterations at host-timed points (README.md).
+ * A kernel built with CONFIG_ARM64_HVM_IDLE_HVC idles through the HVC instead, which always exits.
+ */
+static int idle_wait(void)
+{
+	M.n_wfi++;
 	if (irq_line()) { if (rd(HV_REG_CPSR) & 0x80) start_stepping(); return 0; }
 	uint64_t next = (M.cntp_ctl & 3) == 1 ? M.cntp_cval : 0;   /* the timer deadline (may be already due) */
 	uint64_t vd = virtio_next_due(M.vtime);                 /* a device completion or paced frame */
@@ -592,11 +609,16 @@ static int run_until(const char *marker)
 			exit(3);
 		}
 		uint64_t ec = (esr() >> 26) & 0x3f;
-		if (trace_f) fprintf(trace_f, "%llu %llx %llx %llx %d\n", M.exits, ec, rd(HV_REG_PC), rd(HV_REG_CPSR), line);
+		if (trace_f) {
+			static long watch = -2;   /* HVM_TRACE_WATCH=<RAM offset>: log the guest u64 there at every exit */
+			if (watch == -2) watch = getenv("HVM_TRACE_WATCH") ? strtol(getenv("HVM_TRACE_WATCH"), 0, 0) : -1;
+			if (watch >= 0) fprintf(trace_f, "%llu %llx %llx %llx %d w=%llx\n", M.exits, ec, rd(HV_REG_PC), rd(HV_REG_CPSR), line, *(uint64_t *)(ram + watch));
+			else fprintf(trace_f, "%llu %llx %llx %llx %d\n", M.exits, ec, rd(HV_REG_PC), rd(HV_REG_CPSR), line);
+		}
 		switch (ec) {
 		case 0x24: handle_mmio(); break;
 		case 0x18: handle_sysreg(); break;
-		case 0x16: handle_hvc(); break;
+		case 0x16: if (handle_hvc()) return STOP_IDLE; break;
 		case 0x01: if (handle_wfi()) return STOP_IDLE; break;
 		case 0x32: case 0x33:                          /* software step completed */
 			M.n_steps++;
