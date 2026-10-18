@@ -186,21 +186,86 @@ that the frameworks, functions and events are present. The measurement needs
 spinning guest by itself, because overflow interrupts are not delivered to a user
 program (`README-pmu.md`).
 
+## In the main engine (`hvm.c` + `spin_observer.c`, `hvmx`)
+
+Both resolvers now live in the main VMM. `../spin_observer.c` is the observer and the
+counter-loop rewind from `hvm-spin-count.c`, with the two divergence fixes (HVC idle; re-arm
+when a kick lands away from the armed PC), included by `../hvm.c`, so `hvm` and
+`explore/hvmx` both have it. The side files here stay as the research versions.
+
+**Defaults.**
+- **Observer on** (`HVM_SPIN_OBSERVE=0` restores the bare watchdog). It does nothing until a
+  kick: with no exit-free stretch longer than `HVM_SPIN_MS` it never arms. Unloaded, the M48
+  boot takes 0.04–0.06 s with it on or off, and the disk boot 0.05–0.08 s.
+- **Kick interval 5 ms** (`HVM_SPIN_MS`, was 50 in the side files). A spinning guest waits one
+  interval per loop, so the interval sets its speed: the busy-wait example below (about 17,000
+  resolved spins per run) takes 4.0 s at 1 ms, 9.6 s at 5 ms, 28 s at 20 ms and 60 s at 50 ms.
+  A guest that does not spin only pays for spurious kicks, when its vCPU thread is descheduled
+  on a loaded host: 10 Redis runs at a load average of about 50 took 14 s at 50 ms (1 kick),
+  15 s at 5 ms (12) and 16 s at 1 ms (168). Every kick is invisible; all fingerprints were the
+  same at every interval.
+- **Rewind off in `hvm`, automatic in `hvmx`.** The copy-on-write checkpoint at every exit costs
+  about 8× on a boot (0.34–0.61 s instead of 0.05 s) and about 4× on the Redis table
+  (90 s against 21 s for the eight schedules), so it is used only where it is needed:
+  - `hvm`: `HVM_SPIN_REWIND=1` turns it on.
+  - `hvmx`: `HVM_SPIN_REWIND=auto` (the default) runs a schedule plainly; only if a phase ends as
+    SPIN it restores S1 and runs the schedule again with rewind on, and reports that run.
+    `=1` always rewinds, `=0` never. A host token `spin=rewind` forces it for one schedule.
+  - A plain run that proves a counter loop stops at once (`SPIN: a counter loop (proven
+    infinite)`) instead of waiting out `HVM_SPIN_SECS`, so the re-run starts early: the plain
+    `count` variant now ends in 0.09–0.4 s instead of 6 s.
+
+**Why the reported result is still a function of the schedule.** Rewind mode adds two things:
+copy-on-write checkpoints, which the guest cannot see, and the counter-loop resolution, which
+only happens in a loop proven never to end without an interrupt, where a plain run can only end
+as SPIN. So a schedule that completes plainly gives the same fingerprint with rewind on (the
+eight Redis table schedules: identical in both modes), and a schedule that does not complete
+plainly is never reported from its plain run.
+
+**Resolved spins and other clocks.** The delivery after a resolved loop uses the same rule as an
+idle wait (`next_event()` in `hvm.c`): the pending interrupt if there is one, else virtual time
+jumps to the earliest of the timer deadline and a virtio completion. So a guest spinning while it
+waits for a disk completion is resolved too. With tick jitter (`TJ` in `hvm.c`) the deadline is
+the jittered one, and a kick never re-evaluates the interrupt line: a held tick is not delivered
+at a kick point (a kick keeps the line of the last real entry).
+
+**Snapshot completeness.** Snapshot points are real exits, where nothing is armed (any real exit
+disarms the observer, and a replay cannot reach one). `struct vsnap` now also saves breakpoint
+and watchpoint 0 (restored, not fingerprinted, so no fingerprint moved). `spin_reset()` clears
+the observer and the checkpoint after every restore (`hvm branch`, `hvmx`); the checkpoint is
+retaken at the next entry.
+
+**Proof (M2 Pro).** Rows marked * ran before the merge of main's tick jitter (the first two also before
+the network-fault merge); the observer code is the same in both; the other rows ran on the
+fully merged code, with the 50 ms kick interval except where stated.
+
+| Check | Result |
+|---|---|
+| Spin variants, `hvm`, kicks at 1/5/20/50/100 ms, plain and rewind | every variant one fingerprint per mode, equal to the table above; `count` invalid plainly, `d8c2bb710b72b0db` with rewind |
+| M48 boot, observer on / off / rewind / 1 ms | all `81711ada76a4a236` |
+| Virtio disk check, lying disk `5017e0`, network boot, disk branch | `952991033b38776d`, `8afdcfbe731e3dd9`, `ae4b05bf854a44f3`, IDENTICAL |
+| * Redis table, HVC-idle kernel `2506bb4d…`, serve | all 8 equal `explore/README.md` "Fixed"; the same 8 with rewind always on: identical |
+| Redis table and network-fault schedules, netem kernel `f80c5655…` (`netfault/check.py`: serve, serve, one) | 8 + 7 + 5 of 20 identical, all equal to `explore/README.md` |
+| * Load: 8 engines × `disk=none \| run` + 4 CPU hogs, load average ~40, HVC-idle kernel | **657 of 657** `ca13bcd1d77e2b4b` |
+| * Load: 6 Redis engines + 2 busy-wait engines + 4 hogs, netem kernel | Redis **240 of 240** `7fbc98328b6cf493` (33 spurious kicks, all harmless); busy-wait example 24 of 24 identical per schedule (~17,000 resolved spins per run) |
+| * Busy-wait example (`explore/examples/ledger-spin`), kicks at 1 ms and 50 ms, two serve processes | 4 schedules, each identical at both intervals and equal to `hvmx one`; every one escalated to rewind (the counter loop every tenth entry) |
+| Same, with tick jitter (`tj=7 tjpm=200 tjmax=40`; `tj=9 tjpm=500 tjmax=200` with a kill) | serve, serve, one identical; jittered runs differ from the unjittered one |
+| Busy-wait example, `explore.py --backend hvm --strategy swarm --new-faults`, seeds 1–30, 5 ms kicks | 14 failures, 14 reproduced, all the planted non-idempotent retry; 929 runs/hour |
+
 ## Open
 
-- **A rare divergence under load.** The previous agent saw 1 run in 300 differ under load
-  with `hvm-spin`, by 3 bytes of stale kernel stack, always giving `3820c07d53076f1e`.
-  That is owned by the `mac-divergence` workstream and not chased here. The single invalid
-  rewind-mode run above may or may not be related.
+- **A rare divergence under load** (1 in 300 with `hvm-spin`): fixed by the HVC idle and the
+  re-arm fix (`explore/README.md`, "Fixed"); none in the load runs above.
 - **Whether real software hits counter loops at all.** Redis and PostgreSQL never tripped
   the watchdog in more than 70 boots (`hvx-mac/services/README.md`).
 - **The host-PMU measurement** (root).
-- **Moving into `hvm.c`.** The exact-cycle resolver and the counter-loop rewind still live
-  in these side files (`hvm-spin.c`, `hvm-spin-count.c`); they are not in `hvm.c` or
-  `hvmx` yet.
+- **Rewind cost.** The automatic re-run doubles the work for a schedule that hits a counter
+  loop, and the whole re-run pays the checkpoint cost. Checkpointing only from the last exit
+  before the loop would need the loop to be predicted, which it cannot be.
 
 ## Files
 
+- `../spin_observer.c`: both resolvers as used by `hvm` and `hvmx` (see "In the main engine").
 - `hvm-spin.c`: the exact-cycle resolver (the M48 `hvm.c` plus the observer).
 - `hvm-spin-count.c`: `hvm-spin.c` plus the counter-loop rule, behind `HVM_SPIN_REWIND=1`.
   With the variable unset it behaves the same.

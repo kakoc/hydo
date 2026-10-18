@@ -1,0 +1,10 @@
+#!/bin/sh
+# The ledger CGI (../../ledger) with a busy-wait before each append: /bin/spin_load arms a 100 ms
+# interval timer and spins in user space on a flag its SIGALRM handler clears, with no system call
+# and no clock read -- a loop the Mac VMM can only end by resolving it (../../../../spin_observer.c).
+# Every tenth entry uses /bin/spin_count instead, a loop that also counts in a register, which
+# only the rewind mode resolves (hvmx escalates such a schedule automatically).
+id=${QUERY_STRING#id=}
+case "$id" in *0) /bin/spin_count > /dev/null ;; *) /bin/spin_load > /dev/null ;; esac
+echo "$id" >> /data/ledger/entries
+printf 'Content-Type: text/plain\r\n\r\nOK %s\n' "$id"

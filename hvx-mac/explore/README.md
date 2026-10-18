@@ -177,6 +177,29 @@ The ledger's lost-reply duplicate needs *partial* reply loss: losing 100% of the
 
 **Remaining envelope.** Other guest instructions that complete differently when a host interrupt is pending stay a risk of the same kind: a `WFE` (woken by the exception return of a host interrupt) and an exclusive load/store pair (an exception return clears the exclusive monitor, so `STXR` fails once more and the retry loop runs once more). This kernel uses LSE atomics and has the event stream off, and neither showed up in 3,280 runs, but user programs with LL/SC loops or `WFE` (for example musl's atomics without LSE) could still diverge this way under heavy load. Trapping `WFE` is possible only through a private Hypervisor.framework control (`../spin`); exclusive pairs cannot be trapped.
 
+## Exit-free spins (the spin observer)
+
+`hvmx` includes `../hvm.c`, so it has the spin observer (`../spin_observer.c`,
+`../spin/RESEARCH.md` "In the main engine"): a guest that busy-waits in user space without any
+exit is resolved deterministically instead of ending the run as SPIN.
+- **Exact-repeat loops** (a load, load-acquire, `yield`, same-value store, exclusive load) are
+  resolved in every run.
+- **Counter loops** (`while (flag) n++;`) need the rewind mode. `HVM_SPIN_REWIND=auto` (the
+  default here) runs a schedule plainly and, only if a phase ends as SPIN, restores S1 and runs it
+  again with rewind on; that run is reported, and stderr says so. `=1` always, `=0` never; the
+  host token `spin=rewind` forces it for one schedule. The RESULT line format is unchanged.
+- **Kick interval** `HVM_SPIN_MS`, default 5 ms: lower is faster for a spinning guest, at the
+  price of more (harmless) kicks on a loaded host.
+
+`examples/ledger-spin` is the ledger with a busy-wait in every request (`/bin/spin_load`; every
+tenth entry `/bin/spin_count`, a counter loop), built from `../spin/spinvar.c`. On the netem
+kernel its schedules give one fingerprint each in two serve processes and `hvmx one`, with and
+without tick jitter, and every run escalates to rewind because of the counter loop. A short
+exploration (`explore.py --backend hvm --image explore-ob-ledger-spin-arm64.cpio.gz --strategy swarm
+--new-faults --seeds 1-30 --workers 3`, 5 ms kicks): 14 failures, 14 reproduced, all the planted
+non-idempotent retry (`entry N stored twice`, e.g. seed 6 `P=front@26+2 T=10:-30`, seed 7
+`P=front@10+2`); 929 runs/hour with every schedule re-run in rewind mode.
+
 ## Commands
 
 ```sh

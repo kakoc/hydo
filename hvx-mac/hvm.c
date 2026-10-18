@@ -506,10 +506,12 @@ static void stop_stepping(void)
 	CHK(hv_vcpu_set_sys_reg(vcpu, HV_SYS_REG_MDSCR_EL1, M.mdscr_saved));
 	wr(HV_REG_CPSR, rd(HV_REG_CPSR) & ~(1ULL << 21));
 }
+static int ob_on, ob_stepover, rp_on;                /* spin_observer.c: armed / stepping over / replaying */
 static int trap_dbg_applied = -1;                    /* host-side, re-applied after a vCPU is (re)created */
 static void apply_stepping(void)
 {
-	if (trap_dbg_applied != (int)M.stepping) { CHK(hv_vcpu_set_trap_debug_exceptions(vcpu, M.stepping)); trap_dbg_applied = M.stepping; }
+	int want = M.stepping || ob_on || ob_stepover || rp_on;
+	if (trap_dbg_applied != want) { CHK(hv_vcpu_set_trap_debug_exceptions(vcpu, want)); trap_dbg_applied = want; }
 	if (M.stepping) {
 		CHK(hv_vcpu_set_sys_reg(vcpu, HV_SYS_REG_MDSCR_EL1, M.mdscr_saved | 1 | (1 << 13)));   /* SS | KDE */
 		wr(HV_REG_CPSR, rd(HV_REG_CPSR) | (1ULL << 21));                                         /* PSTATE.SS */
@@ -528,13 +530,21 @@ static int handle_wfi(void)
  * exit, so a guest idling by WFI can run extra idle iterations at host-timed points (README.md).
  * A kernel built with CONFIG_ARM64_HVM_IDLE_HVC idles through the HVC instead, which always exits.
  */
+/* The virtual time of the next event the guest can wait for: the timer deadline (may be already
+ * due; a jittered tick's delayed deadline) or a device completion / paced frame; 0 if nothing is armed. An idle wait (and a resolved
+ * exit-free spin, spin_observer.c) jumps virtual time to it. */
+static uint64_t next_event(void)
+{
+	uint64_t next = (M.cntp_ctl & 3) == 1 ? timer_due() : 0;   /* with tick jitter: the delayed deadline */
+	uint64_t vd = virtio_next_due(M.vtime);
+	if (vd && (!next || vd < next)) next = vd;
+	return next;
+}
 static int idle_wait(void)
 {
 	M.n_wfi++;
 	if (irq_line()) { if (rd(HV_REG_CPSR) & 0x80) start_stepping(); return 0; }
-	uint64_t next = (M.cntp_ctl & 3) == 1 ? timer_due() : 0;   /* the timer deadline (may be already due) */
-	uint64_t vd = virtio_next_due(M.vtime);                 /* a device completion or paced frame */
-	if (vd && (!next || vd < next)) next = vd;
+	uint64_t next = next_event();
 	if (next > M.vtime) { M.vtime = next; M.n_wfi_jump++; return 0; }
 	if (next) return 0;                                /* already due */
 	return 1;                                          /* idle with nothing armed */
@@ -564,28 +574,94 @@ static void vcpu_boot(void)
 	M.gic.pmr = 0;
 }
 
+/* ---------------- vCPU state snapshot (also the spin observer's checkpoint) ---------------- */
+static const hv_sys_reg_t SR[] = {
+	HV_SYS_REG_SCTLR_EL1, HV_SYS_REG_CPACR_EL1, HV_SYS_REG_TTBR0_EL1, HV_SYS_REG_TTBR1_EL1, HV_SYS_REG_TCR_EL1,
+	HV_SYS_REG_SPSR_EL1, HV_SYS_REG_ELR_EL1, HV_SYS_REG_SP_EL0, HV_SYS_REG_SP_EL1, HV_SYS_REG_AFSR0_EL1,
+	HV_SYS_REG_AFSR1_EL1, HV_SYS_REG_ESR_EL1, HV_SYS_REG_FAR_EL1, HV_SYS_REG_PAR_EL1, HV_SYS_REG_MAIR_EL1,
+	HV_SYS_REG_AMAIR_EL1, HV_SYS_REG_VBAR_EL1, HV_SYS_REG_CONTEXTIDR_EL1, HV_SYS_REG_TPIDR_EL1, HV_SYS_REG_CNTKCTL_EL1,
+	HV_SYS_REG_CSSELR_EL1, HV_SYS_REG_TPIDR_EL0, HV_SYS_REG_TPIDRRO_EL0, HV_SYS_REG_CNTV_CTL_EL0, HV_SYS_REG_CNTV_CVAL_EL0,
+	HV_SYS_REG_MDSCR_EL1, HV_SYS_REG_MDCCINT_EL1, HV_SYS_REG_ACTLR_EL1, HV_SYS_REG_SCXTNUM_EL0, HV_SYS_REG_SCXTNUM_EL1,
+	HV_SYS_REG_TPIDR2_EL0, HV_SYS_REG_APIAKEYLO_EL1, HV_SYS_REG_APIAKEYHI_EL1, HV_SYS_REG_APIBKEYLO_EL1,
+	HV_SYS_REG_APIBKEYHI_EL1, HV_SYS_REG_APDAKEYLO_EL1, HV_SYS_REG_APDAKEYHI_EL1, HV_SYS_REG_APDBKEYLO_EL1,
+	HV_SYS_REG_APDBKEYHI_EL1, HV_SYS_REG_APGAKEYLO_EL1, HV_SYS_REG_APGAKEYHI_EL1,
+};
+#define NSR (sizeof SR / sizeof SR[0])
+/* dbg[]: the first breakpoint/watchpoint pair, restored but not fingerprinted (the observer borrows
+ * breakpoint 0 and gives it back before any snapshot point; a guest may use them itself) */
+static const hv_sys_reg_t DR[] = { HV_SYS_REG_DBGBVR0_EL1, HV_SYS_REG_DBGBCR0_EL1, HV_SYS_REG_DBGWVR0_EL1, HV_SYS_REG_DBGWCR0_EL1 };
+#define NDR (sizeof DR / sizeof DR[0])
+struct vsnap { uint64_t x[31], pc, cpsr, fpcr, fpsr, sr[NSR]; hv_simd_fp_uchar16_t q[32]; uint8_t ok[NSR]; uint64_t dbg[NDR]; uint8_t dok[NDR]; };
+static void vtake(struct vsnap *s)
+{
+	memset(s, 0, sizeof *s);
+	for (int i = 0; i < 31; i++) s->x[i] = rd(HV_REG_X0 + i);
+	s->pc = rd(HV_REG_PC); s->cpsr = rd(HV_REG_CPSR); s->fpcr = rd(HV_REG_FPCR); s->fpsr = rd(HV_REG_FPSR);
+	for (int i = 0; i < 32; i++) CHK(hv_vcpu_get_simd_fp_reg(vcpu, HV_SIMD_FP_REG_Q0 + i, &s->q[i]));
+	for (size_t i = 0; i < NSR; i++) s->ok[i] = hv_vcpu_get_sys_reg(vcpu, SR[i], &s->sr[i]) == 0;
+	for (size_t i = 0; i < NDR; i++) s->dok[i] = hv_vcpu_get_sys_reg(vcpu, DR[i], &s->dbg[i]) == 0;
+}
+static void vput(const struct vsnap *s)
+{
+	for (int i = 0; i < 31; i++) wr(HV_REG_X0 + i, s->x[i]);
+	wr(HV_REG_PC, s->pc); wr(HV_REG_CPSR, s->cpsr); wr(HV_REG_FPCR, s->fpcr); wr(HV_REG_FPSR, s->fpsr);
+	for (int i = 0; i < 32; i++) CHK(hv_vcpu_set_simd_fp_reg(vcpu, HV_SIMD_FP_REG_Q0 + i, s->q[i]));
+	for (size_t i = 0; i < NSR; i++) if (s->ok[i]) hv_vcpu_set_sys_reg(vcpu, SR[i], s->sr[i]);
+	for (size_t i = 0; i < NDR; i++) if (s->dok[i]) hv_vcpu_set_sys_reg(vcpu, DR[i], s->dbg[i]);
+}
 /*
- * Spin watchdog (diagnostic only). A guest that loops without any exit never
- * returns from hv_vcpu_run: on this hardware there is no counter to interrupt it
- * at a deterministic instruction (PROBE.md). If no exit happens for HVM_SPIN_SECS
- * of host time (default 10), the watchdog kicks the vCPU out with hv_vcpus_exit and
- * the run stops with STOP_SPIN. The stop point is host-timed, so such a run is
- * reported as invalid, never fingerprinted as a result.
+ * Spin watchdog. A guest that loops without any exit never returns from hv_vcpu_run, and on
+ * this hardware there is no counter to interrupt it at a deterministic instruction (PROBE.md).
+ * After HVM_SPIN_MS (default 5) of host time with no exit the watchdog kicks the vCPU out with
+ * hv_vcpus_exit. The kick changes nothing in the guest: it only lets spin_observer.c look for a
+ * provable loop, whose resolution is a function of the guest state alone (the kick time is a
+ * hint). Each failed look doubles the wait; after HVM_SPIN_SECS (default 10) of exit-free host
+ * time with no provable loop the run stops with STOP_SPIN and is reported invalid.
+ * HVM_SPIN_OBSERVE=0: no observer, the first kick comes after HVM_SPIN_SECS and stops the run.
  */
 static volatile uint64_t wd_exits;
 static volatile int wd_armed;
-static double spin_secs = 10;
+static double spin_secs = 10;                 /* give up (invalid run) after this much exit-free host time */
+static volatile double kick_s = 0.005;        /* HVM_SPIN_MS: exit-free host time before a look (a hint only) */
+static volatile double kick_backoff = 1;      /* doubles after a failed look, reset by any real exit */
+static int spin_observe = 1;                  /* HVM_SPIN_OBSERVE */
 static void *watchdog(void *arg)
 {
 	(void)arg;
 	uint64_t last = ~0ULL; double since = now_s();
 	for (;;) {
-		usleep(200000);
+		double wait = spin_observe ? kick_s * kick_backoff : spin_secs;
+		usleep((useconds_t)(wait * 1e6 / 4) + 200);
 		if (!wd_armed) { last = ~0ULL; since = now_s(); continue; }
 		if (wd_exits != last) { last = wd_exits; since = now_s(); continue; }
-		if (now_s() - since > spin_secs) { hv_vcpus_exit(&vcpu, 1); since = now_s(); }
+		if (now_s() - since > wait) { hv_vcpus_exit(&vcpu, 1); since = now_s(); }
 	}
 	return NULL;
+}
+
+#include "spin_observer.c"
+
+/* back to a clean observer state after the vCPU/RAM were restored from a snapshot: snapshots are
+ * taken at real exits, where nothing is armed; the checkpoint (rewind mode) is retaken at the
+ * next entry. */
+static void spin_reset(void)
+{
+	for (int i = 0; i < n_ck; i++) free(ckp[i].data);
+	n_ck = 0; ck_valid = 0;
+	for (int i = 0; i < n_dirty; i++) free(dirty[i].data);
+	n_dirty = 0;
+	ob_on = ob_stepover = rp_on = 0; sp_protected = 0;
+	kick_backoff = 1;
+	CHK(hv_vm_protect(RAM_BASE, ram_size, HV_MEMORY_READ | HV_MEMORY_WRITE | HV_MEMORY_EXEC));
+}
+static void spin_env(void)
+{
+	if (getenv("HVM_SPIN_SECS")) spin_secs = atof(getenv("HVM_SPIN_SECS"));
+	if (getenv("HVM_SPIN_MS")) kick_s = atof(getenv("HVM_SPIN_MS")) / 1000;
+	if (getenv("HVM_SPIN_OBSERVE")) spin_observe = atoi(getenv("HVM_SPIN_OBSERVE")) != 0;
+	if (getenv("HVM_SPIN_REWIND")) rw_on = !strcmp(getenv("HVM_SPIN_REWIND"), "1");
+	if (getenv("HVM_SPLOG")) splog = fopen(getenv("HVM_SPLOG"), "w");
+	if (rw_on && !spin_observe) { fprintf(stderr, "hvm: HVM_SPIN_REWIND=1 needs the observer (HVM_SPIN_OBSERVE)\n"); exit(2); }
 }
 
 /* ---------------- run loop ---------------- */
@@ -631,6 +707,10 @@ static int run_until(const char *marker)
 {
 	size_t mlen = marker ? strlen(marker) : 0;
 	size_t scan_from = 0;
+	/* after a kick (or one of the observer's own exits) the vCPU must resume with the IRQ line it
+	 * had at the last real entry: re-evaluating the delivery rule at a host-timed point would
+	 * deliver a pending interrupt there if the guest happens to have unmasked IRQs meanwhile */
+	int resume = 0, line = 0;
 	for (;;) {
 		if (M.halted) return STOP_HALT;
 		if (M.exits >= max_exits) return STOP_LIMIT;
@@ -640,23 +720,83 @@ static int run_until(const char *marker)
 			if (memmem(console + start, M.console_len - start, marker, mlen)) return STOP_MARKER;
 			scan_from = M.console_len;
 		}
-		int line = irq_line() && !(rd(HV_REG_CPSR) & 0x80);   /* only where the guest takes it at once */
-		M.n_irq_line += line;
-		if (soft_irq < 0) soft_irq = getenv("HVM_SOFT_IRQ") && atoi(getenv("HVM_SOFT_IRQ"));
-		if (line && soft_irq && !M.stepping && inject_irq_soft()) line = 0;
+		if (!resume) {
+			line = irq_line() && !(rd(HV_REG_CPSR) & 0x80);   /* only where the guest takes it at once */
+			M.n_irq_line += line;
+			if (soft_irq < 0) soft_irq = getenv("HVM_SOFT_IRQ") && atoi(getenv("HVM_SOFT_IRQ"));
+			if (line && soft_irq && !M.stepping && inject_irq_soft()) line = 0;
+			if (rw_on && !ob_on && !rp_on && !ob_stepover) ck_take();   /* rewind mode: checkpoint E */
+		}
+		resume = 0;
 		apply_stepping();
 		CHK(hv_vcpu_set_pending_interrupt(vcpu, HV_INTERRUPT_TYPE_IRQ, line));
 		wd_armed = 1;
 		CHK(hv_vcpu_run(vcpu));
-		wd_armed = 0; wd_exits++;
+		wd_armed = 0;
+		if (ex->reason != HV_EXIT_REASON_CANCELED) wd_exits++;
 		if (ex->reason == HV_EXIT_REASON_CANCELED) {
-			fprintf(stderr, "hvm: SPIN: no VM exit for %.0f s of host time at exit %llu, pc 0x%llx cpsr 0x%llx -- "
+			/* a kick: no exit for a while of host time. It changes nothing in the guest. */
+			sp_kicks++;
+			resume = 1;
+			if (spin_observe && (M.stepping || ob_stepover || rp_on)) continue;
+			/* (re)arm the observer where the guest is now -- also when it is armed elsewhere: a kick can
+			 * land at a host-timed PC outside any loop (the vCPU thread was descheduled, so little guest
+			 * time passed); if that breakpoint was hit once and the guest then spun somewhere else, it
+			 * would never be hit again. Re-arming is invisible to the guest. */
+			if (spin_observe && (!ob_on || ob_hits == 0 || rd(HV_REG_PC) != ob_pc)) ob_arm(rd(HV_REG_PC));
+			if (spin_observe && kick_backoff * kick_s < spin_secs) { kick_backoff *= 2; continue; }
+			fprintf(stderr, "hvm: SPIN: no VM exit and no provable loop for %.0f s of host time at exit %llu, pc 0x%llx cpsr 0x%llx -- "
 			        "the guest loops without exits; this run is not deterministic from here and is invalid\n",
 			        spin_secs, M.exits, rd(HV_REG_PC), rd(HV_REG_CPSR));
+			ob_disarm();
 			return STOP_SPIN;
+		}
+		if (ex->reason == HV_EXIT_REASON_EXCEPTION && rw_on && ck_valid && !sp_protected) {
+			uint64_t e2 = (esr() >> 26) & 0x3f, ipa = ex->exception.physical_address;
+			if (e2 == 0x24 && ipa >= RAM_BASE && ipa < RAM_BASE + ram_size) {   /* checkpoint copy-on-write */
+				uint64_t pg = ipa & ~(PG - 1);
+				ck_note(pg);
+				CHK(hv_vm_protect(pg, PG, HV_MEMORY_READ | HV_MEMORY_WRITE | HV_MEMORY_EXEC));
+				resume = 1; continue;
+			}
+		}
+		if (ex->reason == HV_EXIT_REASON_EXCEPTION && rp_on) {   /* replaying from the checkpoint to a counter loop */
+			uint64_t e2 = (esr() >> 26) & 0x3f;
+			if (ob_stepover && (e2 == 0x32 || e2 == 0x33)) { ob_stepover_done(); resume = 1; continue; }
+			if (e2 == 0x18) { rp_on = 0; ob_on = 1; int h = ob_debug_reg(); ob_on = 0; rp_on = 1; if (h) { resume = 1; continue; } }
+			if (!ob_stepover && (e2 == 0x30 || e2 == 0x31)) {
+				int r = rp_hit();
+				if (r == OB_RESOLVED) { kick_backoff = 1; continue; }
+				if (r == OB_DEADLOCK) { fprintf(stderr, "hvm: spin: counter loop with nothing deliverable at pc 0x%llx\n", rd(HV_REG_PC)); return STOP_IDLE; }
+				resume = 1; continue;
+			}
+			fprintf(stderr, "hvm: spin: replay from the checkpoint took a real exit (EC 0x%llx) before the loop -- nondeterminism, abort\n", e2);
+			exit(3);
+		}
+		if (ex->reason == HV_EXIT_REASON_EXCEPTION && (ob_on || ob_stepover)) {
+			uint64_t e2 = (esr() >> 26) & 0x3f, ipa = ex->exception.physical_address;
+			if (e2 == 0x24 && sp_protected && ipa >= RAM_BASE && ipa < RAM_BASE + ram_size) {   /* our write protection */
+				dirty_add(ipa & ~(PG - 1)); resume = 1; continue;
+			}
+			if (ob_stepover && (e2 == 0x32 || e2 == 0x33)) { ob_stepover_done(); resume = 1; continue; }
+			if (e2 == 0x18 && ob_on && ob_debug_reg()) { resume = 1; continue; }
+			if (ob_on && !ob_stepover && (e2 == 0x30 || e2 == 0x31)) {
+				int r = ob_hit();
+				if (r == OB_RESOLVED) { kick_backoff = 1; continue; }        /* recompute the line: deliver now */
+				if (r == OB_REWOUND) { resume = 0; kick_backoff = 1; continue; }   /* replay from the checkpoint */
+				if (r == OB_NEEDREWIND) {
+					fprintf(stderr, "hvm: SPIN: a counter loop (proven infinite) at pc 0x%llx, exit %llu -- only the rewind mode "
+					        "(HVM_SPIN_REWIND=1) resolves it; this run is invalid\n", rd(HV_REG_PC), M.exits);
+					return STOP_SPIN;
+				}
+				if (r == OB_DEADLOCK) { fprintf(stderr, "hvm: spin: provable loop with nothing deliverable (deadlock) at pc 0x%llx\n", rd(HV_REG_PC)); return STOP_IDLE; }
+				resume = 1; continue;
+			}
+			ob_disarm();                                   /* a real exit: the guest is not spinning; handle it */
 		}
 		M.exits++;
 		M.vtime += STEP;
+		kick_backoff = 1;
 		if (ex->reason != HV_EXIT_REASON_EXCEPTION) {
 			fprintf(stderr, "hvm: unexpected exit reason %d after %llu exits (pc 0x%llx)\n", ex->reason, M.exits, rd(HV_REG_PC));
 			exit(3);
@@ -690,34 +830,6 @@ static int run_until(const char *marker)
 }
 
 /* ---------------- snapshot + fingerprint ---------------- */
-static const hv_sys_reg_t SR[] = {
-	HV_SYS_REG_SCTLR_EL1, HV_SYS_REG_CPACR_EL1, HV_SYS_REG_TTBR0_EL1, HV_SYS_REG_TTBR1_EL1, HV_SYS_REG_TCR_EL1,
-	HV_SYS_REG_SPSR_EL1, HV_SYS_REG_ELR_EL1, HV_SYS_REG_SP_EL0, HV_SYS_REG_SP_EL1, HV_SYS_REG_AFSR0_EL1,
-	HV_SYS_REG_AFSR1_EL1, HV_SYS_REG_ESR_EL1, HV_SYS_REG_FAR_EL1, HV_SYS_REG_PAR_EL1, HV_SYS_REG_MAIR_EL1,
-	HV_SYS_REG_AMAIR_EL1, HV_SYS_REG_VBAR_EL1, HV_SYS_REG_CONTEXTIDR_EL1, HV_SYS_REG_TPIDR_EL1, HV_SYS_REG_CNTKCTL_EL1,
-	HV_SYS_REG_CSSELR_EL1, HV_SYS_REG_TPIDR_EL0, HV_SYS_REG_TPIDRRO_EL0, HV_SYS_REG_CNTV_CTL_EL0, HV_SYS_REG_CNTV_CVAL_EL0,
-	HV_SYS_REG_MDSCR_EL1, HV_SYS_REG_MDCCINT_EL1, HV_SYS_REG_ACTLR_EL1, HV_SYS_REG_SCXTNUM_EL0, HV_SYS_REG_SCXTNUM_EL1,
-	HV_SYS_REG_TPIDR2_EL0, HV_SYS_REG_APIAKEYLO_EL1, HV_SYS_REG_APIAKEYHI_EL1, HV_SYS_REG_APIBKEYLO_EL1,
-	HV_SYS_REG_APIBKEYHI_EL1, HV_SYS_REG_APDAKEYLO_EL1, HV_SYS_REG_APDAKEYHI_EL1, HV_SYS_REG_APDBKEYLO_EL1,
-	HV_SYS_REG_APDBKEYHI_EL1, HV_SYS_REG_APGAKEYLO_EL1, HV_SYS_REG_APGAKEYHI_EL1,
-};
-#define NSR (sizeof SR / sizeof SR[0])
-struct vsnap { uint64_t x[31], pc, cpsr, fpcr, fpsr, sr[NSR]; hv_simd_fp_uchar16_t q[32]; uint8_t ok[NSR]; };
-static void vtake(struct vsnap *s)
-{
-	memset(s, 0, sizeof *s);
-	for (int i = 0; i < 31; i++) s->x[i] = rd(HV_REG_X0 + i);
-	s->pc = rd(HV_REG_PC); s->cpsr = rd(HV_REG_CPSR); s->fpcr = rd(HV_REG_FPCR); s->fpsr = rd(HV_REG_FPSR);
-	for (int i = 0; i < 32; i++) CHK(hv_vcpu_get_simd_fp_reg(vcpu, HV_SIMD_FP_REG_Q0 + i, &s->q[i]));
-	for (size_t i = 0; i < NSR; i++) s->ok[i] = hv_vcpu_get_sys_reg(vcpu, SR[i], &s->sr[i]) == 0;
-}
-static void vput(const struct vsnap *s)
-{
-	for (int i = 0; i < 31; i++) wr(HV_REG_X0 + i, s->x[i]);
-	wr(HV_REG_PC, s->pc); wr(HV_REG_CPSR, s->cpsr); wr(HV_REG_FPCR, s->fpcr); wr(HV_REG_FPSR, s->fpsr);
-	for (int i = 0; i < 32; i++) CHK(hv_vcpu_set_simd_fp_reg(vcpu, HV_SIMD_FP_REG_Q0 + i, s->q[i]));
-	for (size_t i = 0; i < NSR; i++) if (s->ok[i]) hv_vcpu_set_sys_reg(vcpu, SR[i], s->sr[i]);
-}
 static uint64_t fnv(const void *p, size_t n, uint64_t h)
 { const uint8_t *b = p; for (size_t i = 0; i < n; i++) { h ^= b[i]; h *= 0x100000001b3ULL; } return h; }
 
@@ -765,6 +877,10 @@ static void print_fp(const char *tag, struct parts p, int stop, double secs)
 	virtio_stats(tag);
 	if (TJ.on) printf("%s: tick jitter: %llu timer interrupts delayed, last at tick %llu\n", tag,
 	                  (unsigned long long)TJ.applied, (unsigned long long)TJ.last_applied_k);
+	if (sp_kicks) printf("%s: spin kicks %llu, looks %llu, loops resolved %llu, not a loop %llu, look steps %llu, write faults %llu, debug-register accesses emulated %llu\n",
+	                     tag, sp_kicks, sp_checks, sp_resolved, sp_notcycle, sp_steps, sp_writes, sp_dbgreg);
+	if (rw_on) printf("%s: counter loops proven %llu, resolved %llu, rewinds %llu; checkpoints %llu, copy-on-write faults %llu\n",
+	                  tag, sp_aff_proven, sp_aff_resolved, sp_rewinds, sp_ck_takes, sp_ck_faults);
 	fflush(stdout);
 }
 
@@ -786,7 +902,7 @@ int main(int argc, char **argv)
 	if (getenv("HVM_TRACE")) trace_f = fopen(getenv("HVM_TRACE"), "w");
 	const char *bootargs = getenv("HVM_BOOTARGS") ? getenv("HVM_BOOTARGS") : BOOTARGS;
 
-	if (getenv("HVM_SPIN_SECS")) spin_secs = atof(getenv("HVM_SPIN_SECS"));
+	spin_env();
 	if (getenv("HVM_TJ")) {   /* HVM_TJ=<hex seed>,<permille>,<max delay in exits>[,<lo>,<hi>]: tick jitter for the whole run */
 		unsigned long long sd = 0, lo = 0, hi = 0; unsigned pm = 0, mx = 0;
 		sscanf(getenv("HVM_TJ"), "%llx,%u,%u,%llu,%llu", &sd, &pm, &mx, &lo, &hi);
@@ -824,6 +940,7 @@ int main(int argc, char **argv)
 		CHK(hv_vcpu_destroy(vcpu));
 		memset(ram, 0xee, ram_size);
 		CHK(hv_vcpu_create(&vcpu, &ex, NULL)); trap_dbg_applied = -1;
+		spin_reset();
 		memcpy(ram, ram_copy, ram_size); vput(&vs); M = msave; virtio_restore(dsave);
 		int sb = run_until(end);
 		struct parts b = fingerprint(); print_fp("branch-B (restored)", b, sb, now_s() - t0);
