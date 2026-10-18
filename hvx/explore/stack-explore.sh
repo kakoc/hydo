@@ -106,6 +106,14 @@ oneway_on() {   # $1 = <svc>:<req|resp>:<netem args with commas>
 
 pause_pid() { case "$1" in front) echo $FPID;; *) svc_pid "$1";; esac; }
 
+kill_timer() {   # $1 svc $2 off-ms (background): SIGKILL while orders run, e.g. mid-request
+  $BB sleep $($BB awk "BEGIN{printf \"%.3f\", $2/1000}")
+  if $BB pgrep -f "hydostack (place|retry)" > /dev/null 2>&1; then mid=true; else mid=false; fi
+  $BB kill -9 $(pause_pid $1) 2>/dev/null
+  echo "hydo-explore: KILLED $1 (timer, mid_request=$mid)"
+  xassert reachable fault.killed_timer true "a service was killed by a timer while orders ran"
+}
+
 pause_timer() {   # $1 svc $2 off-ms $3 dur-ms (runs in the background)
   $BB sleep $($BB awk "BEGIN{printf \"%.3f\", $2/1000}")
   pp=$(pause_pid $1)
@@ -120,12 +128,12 @@ pause_timer() {   # $1 svc $2 off-ms $3 dur-ms (runs in the background)
 }
 
 explore_run() {   # $CMD = "run <tokens>"
-  K=""; N=""; C=""; M=1; R=always; P=""; T=""; O=""; Q=""
+  K=""; N=""; C=""; M=1; R=always; P=""; T=""; O=""; Q=""; X=""
   for t in ${CMD#run}; do
     case "$t" in
       K=*) K="${t#K=}";; N=*) N="${t#N=}";; C=*) C="${t#C=}";;
       M=*) M="${t#M=}";; R=*) R="${t#R=}";;
-      P=*) P="${t#P=}";; T=*) T="${t#T=}";; O=*) O="${t#O=}";; Q=*) Q="${t#Q=}";;
+      P=*) P="${t#P=}";; T=*) T="${t#T=}";; O=*) O="${t#O=}";; Q=*) Q="${t#Q=}";; X=*) X="${t#X=}";;
     esac
   done
   for d in "reachable fault.paused a service was paused (SIGSTOP)" \
@@ -133,7 +141,8 @@ explore_run() {   # $CMD = "run <tokens>"
            "reachable fault.clock_back the realtime clock was stepped backwards" \
            "reachable fault.clock_fwd the realtime clock was stepped forwards" \
            "reachable fault.oneway_req a one-way network fault hit the req direction" \
-           "reachable fault.oneway_resp a one-way network fault hit the resp direction"; do
+           "reachable fault.oneway_resp a one-way network fault hit the resp direction" \
+           "reachable fault.killed_timer a service was killed by a timer while orders ran"; do
     set -- $d; dt=$1; di=$2; shift 2
     echo "HYDO-ASSERT-DECL {\"t\":\"$dt\",\"id\":\"$di\",\"msg\":\"$*\"}"
   done
@@ -157,9 +166,11 @@ explore_run() {   # $CMD = "run <tokens>"
     esac
   fi
   if [ -n "$T" ]; then tat=${T%%:*}; tdelta=${T#*:}; fi
+  xsvc=""; xat=-1; xoff=""; xtimer=""
+  if [ -n "$X" ]; then xsvc=${X%@*}; r=${X#*@}; xat=${r%~*}; xoff=${r#*~}; fi
   if [ -n "$O" ]; then osvc=${O%%@*}; r=${O#*@}; rng=${r%%:*}; ospec="$osvc:${r#*:}"; ofrom=${rng%-*}; oto=${rng#*-}; fi
   # order-stream boundaries where something happens, in order
-  pts=$(for p in 0 $kat $kup $nfrom $nto $cat_ $pat $pup $tat $ofrom $oto $NORDERS; do [ "$p" -ge 0 ] 2>/dev/null && [ "$p" -le $NORDERS ] && echo $p; done | $BB sort -n -u)
+  pts=$(for p in 0 $kat $kup $nfrom $nto $cat_ $pat $pup $tat $ofrom $oto $xat $NORDERS; do [ "$p" -ge 0 ] 2>/dev/null && [ "$p" -le $NORDERS ] && echo $p; done | $BB sort -n -u)
   : > /tmp/acked; : > /tmp/outcomes; : > /tmp/client.log
   netup=0; down=0; cut=0; paused=0; ptimer=""; oneup=0
   prev=""
@@ -168,6 +179,11 @@ explore_run() {   # $CMD = "run <tokens>"
     [ "$p" = "$cat_" ] && { cut=1; break; }
     if [ "$p" = "$nto" ] && [ $netup = 1 ]; then $TC qdisc del dev lo root 2>/dev/null; netup=0; echo "hydo-explore: network healed before order $p"; fi
     if [ "$p" = "$kup" ] && [ $down = 1 ]; then echo "hydo-explore: restarting $ksvc before order $p"; restart_svc $ksvc; down=0; fi
+    if [ "$p" = "$xat" ]; then
+      kill_timer $xsvc $xoff & xtimer=$!
+      [ "$xsvc" != front ] && { ksvc=$xsvc; down=1; }   # brought back at the end
+      echo "hydo-explore: kill timer for $xsvc armed before order $p (after ${xoff}ms)"
+    fi
     if [ "$p" = "$kat" ]; then $BB kill -9 $(svc_pid $ksvc) 2>/dev/null; down=1; echo "hydo-explore: KILLED $ksvc before order $p"; fi
     if [ "$p" = "$nfrom" ] && [ "$nfrom" -lt "$nto" ]; then net_fault_on "$nsvc:$nargs"; netup=1; fi
     if [ "$p" = "$oto" ] && [ $oneup = 1 ]; then $TC qdisc del dev lo root 2>/dev/null; oneup=0; echo "hydo-explore: one-way fault healed before order $p"; fi
@@ -198,6 +214,7 @@ explore_run() {   # $CMD = "run <tokens>"
   done
   if [ $cut = 1 ]; then
     [ -n "$ptimer" ] && $BB kill $ptimer 2>/dev/null   # no SIGCONT may follow the freeze
+    [ -n "$xtimer" ] && $BB kill $xtimer 2>/dev/null
     failed_ids
     echo "hydo-explore-acked: $($BB tr '\n' ' ' < /tmp/acked)"
     echo "hydo-explore-failed: $($BB tr '\n' ' ' < /tmp/failed)"
@@ -213,6 +230,7 @@ explore_run() {   # $CMD = "run <tokens>"
   [ $oneup = 1 ] && { $TC qdisc del dev lo root 2>/dev/null; echo "hydo-explore: one-way fault healed at the end"; }
   [ -n "$ptimer" ] && { wait $ptimer 2>/dev/null; $BB kill -CONT $(pause_pid $psvc) 2>/dev/null; }
   [ $paused = 1 ] && { $BB kill -CONT $(pause_pid $psvc) 2>/dev/null; echo "hydo-explore: RESUMED $psvc at the end"; }
+  [ -n "$xtimer" ] && wait $xtimer 2>/dev/null
   [ $down = 1 ] && { echo "hydo-explore: restarting $ksvc at the end"; restart_svc $ksvc; }
   $BB kill -0 $FPID 2>/dev/null || { echo "hydo-explore: front door died; restarting it"
     $BB grep -a -m 3 "^fatal error\|^panic" /tmp/front.log | $BB sed "s/^/hydo-explore: front door log: /"

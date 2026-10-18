@@ -448,10 +448,10 @@ net_fault_on() {   # $1 = <svc>:<netem args with commas>
 
 restart_svc() {
   case "$1" in
-    mysql) start_mysql;; kafka) start_kafka;; redis) start_redis;;
+    mysql) start_mysql;; kafka) start_kafka;; redis) start_redis;; front) start_front;;
   esac || die_oracle "HYDO-ORACLE: ERROR $1 restart failed"
 }
-svc_pid() { case "$1" in mysql) echo $MPID;; kafka) echo $KPID;; redis) echo $RPID;; esac; }
+svc_pid() { case "$1" in mysql) echo $MPID;; kafka) echo $KPID;; redis) echo $RPID;; front) echo $FPID;; esac; }
 
 client() {   # $@ = place arguments; ACKed ids accumulate in /tmp/acked, every attempt's
              # outcome ("<id> ack|failed|unknown", M39) in /tmp/outcomes

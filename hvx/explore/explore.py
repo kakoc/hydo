@@ -291,8 +291,16 @@ def sweep(name):
                 for kinds in ([("loss", 100)], [("loss", 50)], [("delay", 1000)]):
                     out.append(("%s:%s:%s" % (svc, d, netem_args(kinds)),
                                 {"disk": "none", "dseed": 0, "O": (svc, 5, 15, d, kinds)}))
+    elif name == "frontkill":           # the order service itself SIGKILLed by a timer while
+        for q in (None, (4, False)):    # orders run, one request at a time and four at a time
+            for at in range(0, NORDERS, 3):
+                for off in (20, 80):
+                    s = {"disk": "none", "dseed": 0, "X": ("front", at, off)}
+                    if q:
+                        s["Q"] = q
+                    out.append(("front@%d~%d%s" % (at, off, " Q=4" if q else ""), s))
     else:
-        raise SystemExit("unknown sweep %r (kill, cut, net, killcut, pause, clock, oneway)" % name)
+        raise SystemExit("unknown sweep %r (kill, cut, net, killcut, pause, clock, oneway, frontkill)" % name)
     return out
 
 
@@ -334,6 +342,8 @@ def render(s):
         g.append("O=%s@%d-%d:%s:%s" % (svc, a, b, d, netem_args(kinds)))
     if "Q" in s:
         g.append("Q=%d%s" % (s["Q"][0], "d" if s["Q"][1] else ""))
+    if "X" in s:
+        g.append("X=%s@%d~%d" % s["X"])
     return "disk=%s dseed=%x%s%s | %s" % (s["disk"], s["dseed"], render_tj(s["tj"]) if "tj" in s else "",
                                           " rb=%d" % s["rb"] if "rb" in s else "", " ".join(g))
 
@@ -383,6 +393,8 @@ def parse(text):
             s["O"] = (svc, int(a), int(b), d, kinds)
         elif k == "Q":
             s["Q"] = (int(v.rstrip("d")), v.endswith("d"))
+        elif k == "X":
+            svc, rest = v.split("@"); at, off = rest.split("~"); s["X"] = (svc, int(at), int(off))
     return s
 
 
@@ -615,6 +627,10 @@ def candidates(s, tjk=None):
         if p > 1:
             var(disk="%s:%d" % (s["disk"].split(":")[0], max(1, p // 2)))
     nf_candidates(s, var)
+    if "X" in s:                                    # timed kill: drop it, then kill earlier
+        var(X=None)
+        if s["X"][2] > 0:
+            var(X=s["X"][:2] + (s["X"][2] // 2,))
     if "Q" in s:                                    # concurrency: drop it, then make it milder
         var(Q=None)
         n, dup = s["Q"]
@@ -723,7 +739,7 @@ def main():
                     help="comma list of delayed-ticks-per-1000 densities to pick from")
     ap.add_argument("--strategy", choices=["random", "swarm"], default="random",
                     help="schedule generator for --seeds (Milestone 42)")
-    ap.add_argument("--sweep", help="enumerate a small fault space instead of seeds: kill, cut, net, killcut, pause, clock, oneway")
+    ap.add_argument("--sweep", help="enumerate a small fault space instead of seeds: kill, cut, net, killcut, pause, clock, oneway, frontkill")
     ap.add_argument("--branch", metavar="MARKER",
                     help="mid-run branching: for each seed's schedule, snapshot at the first "
                          "console line containing MARKER and run --variants timing variants from there")
