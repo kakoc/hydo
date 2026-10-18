@@ -68,6 +68,15 @@ known_svc() { for s in $HYDO_SERVICES; do [ "$s" = "$1" ] && return 0; done; ret
 svc_pid() { $BB cat $H/pid.$1 2>/dev/null; }
 svc_alive() { local _p; _p=$(svc_pid "$1"); [ -n "$_p" ] && $BB kill -0 "$_p" 2>/dev/null; }
 svc_port() { sv "$1" port; }
+svc_tree() {   # <svc>: the service's PID and every descendant (a multi-process server such as
+               # PostgreSQL forks backends; a signal to the first PID alone misses them)
+  local r; r=$(svc_pid "$1"); [ -n "$r" ] || return 0
+  $BB cat /proc/[0-9]*/stat 2>/dev/null | $BB sed 's/ (.*) / x /' | $BB awk -v r="$r" '
+    { p[$1] = $4 } END { s[r] = 1; ch = 1
+      while (ch) { ch = 0; for (i in p) if (!(i in s) && (p[i] in s)) { s[i] = 1; ch = 1 } }
+      print r; for (i in s) if (i != r) print i }'
+}
+svc_sig() { $BB kill -$2 $(svc_tree "$1") 2>/dev/null; }   # <svc> <SIG>: the whole tree
 
 # ---------------------------------------------------------------- services
 start_svc() {   # $1 = name; runs setup (if any), the command in the background, waits ready
@@ -236,14 +245,14 @@ net_off() { $HYDO_TC qdisc del dev lo root 2>/dev/null; }
 xassert() { echo "HYDO-ASSERT {\"t\":\"$1\",\"id\":\"$2\",\"ok\":$3,\"msg\":\"$4\"}"; }
 pause_timer() {   # <svc> <off-ms> <dur-ms>, in the background
   $BB sleep $($BB awk "BEGIN{printf \"%.3f\", $2/1000}")
-  pp=$(svc_pid $1)
+  pp=$1
   if $BB pgrep -f "$HYDO_WORKLOAD_PGREP" > /dev/null 2>&1; then mid=true; else mid=false; fi
-  $BB kill -STOP $pp 2>/dev/null
+  svc_sig $pp STOP
   log "PAUSED $1 (timer, mid_request=$mid)"
   xassert reachable fault.paused true "a service was paused (SIGSTOP)"
   [ $mid = true ] && xassert sometimes fault.pause_mid_request true "a pause began while a client request was in flight"
   $BB sleep $($BB awk "BEGIN{printf \"%.3f\", $3/1000}")
-  $BB kill -CONT $pp 2>/dev/null
+  svc_sig $pp CONT
   log "RESUMED $1 (timer)"
 }
 set_knob() {   # <letter> <value>
@@ -301,20 +310,20 @@ explore_run() {   # $CMD = "run <tokens>"
     [ "$p" = "$cat_" ] && { cut=1; break; }
     if [ "$p" = "$nto" ] && [ $netup = 1 ]; then net_off; netup=0; log "network healed before step $p"; fi
     if [ "$p" = "$kup" ] && [ $down = 1 ]; then log "restarting $ksvc before step $p"; start_svc $ksvc || die_oracle "HYDO-ORACLE: ERROR $ksvc restart failed"; down=0; fi
-    if [ "$p" = "$kat" ]; then $BB kill -9 $(svc_pid $ksvc) 2>/dev/null; down=1; log "KILLED $ksvc before step $p"; fi
+    if [ "$p" = "$kat" ]; then svc_sig $ksvc 9; down=1; log "KILLED $ksvc before step $p"; fi
     if [ "$p" = "$nfrom" ] && [ "$nfrom" -lt "$nto" ]; then net_on $nsvc dport "$nargs" && netup=1; fi
     if [ "$p" = "$oto" ] && [ $oneup = 1 ]; then net_off; oneup=0; log "one-way fault healed before step $p"; fi
     if [ "$p" = "$ofrom" ] && [ "$ofrom" -lt "$oto" ]; then
       case "$odir" in req) om=dport;; resp) om=sport;; *) die_oracle "HYDO-ORACLE: ERROR bad one-way direction '$odir'";; esac
       net_on $osvc $om "$oargs" && { oneup=1; xassert reachable fault.oneway_$odir true "a one-way network fault hit the $odir direction"; }
     fi
-    if [ "$p" = "$pup" ] && [ $paused = 1 ]; then $BB kill -CONT $(svc_pid $psvc) 2>/dev/null; paused=0; log "RESUMED $psvc before step $p"; fi
+    if [ "$p" = "$pup" ] && [ $paused = 1 ]; then svc_sig $psvc CONT; paused=0; log "RESUMED $psvc before step $p"; fi
     if [ "$p" = "$pat" ]; then
       if [ -n "$poff" ]; then
         pause_timer $psvc $poff $pdur & ptimer=$!
         log "pause timer for $psvc armed before step $p (after ${poff}ms, for ${pdur}ms)"
       else
-        $BB kill -STOP $(svc_pid $psvc) 2>/dev/null; paused=1; log "PAUSED $psvc before step $p"
+        svc_sig $psvc STOP; paused=1; log "PAUSED $psvc before step $p"
         xassert reachable fault.paused true "a service was paused (SIGSTOP)"
       fi
     fi
@@ -337,7 +346,7 @@ explore_run() {   # $CMD = "run <tokens>"
     echo "hydo-explore-acked: $($BB tr '\n' ' ' < $HYDO_ACKED)"
     echo "hydo-explore-failed: $($BB tr '\n' ' ' < $HYDO_FAILED)"
     # NO sync: it would FLUSH the volatile write cache and close the window under test.
-    for s in $HYDO_SERVICES; do $BB kill -STOP $(svc_pid $s) 2>/dev/null; done
+    for s in $HYDO_SERVICES; do svc_sig $s STOP; done
     log "POWER CUT before step $cat_ (all services frozen)"
     echo "hydo-explore-workload-done cut"
     while true; do $BB sleep 100; done
@@ -345,8 +354,8 @@ explore_run() {   # $CMD = "run <tokens>"
   # no cut: faults are transient -- heal, bring everything back, let the workload retry
   [ $netup = 1 ] && { net_off; log "network healed at the end"; }
   [ $oneup = 1 ] && { net_off; log "one-way fault healed at the end"; }
-  [ -n "$ptimer" ] && { wait $ptimer 2>/dev/null; $BB kill -CONT $(svc_pid $psvc) 2>/dev/null; }
-  [ $paused = 1 ] && { $BB kill -CONT $(svc_pid $psvc) 2>/dev/null; log "RESUMED $psvc at the end"; }
+  [ -n "$ptimer" ] && { wait $ptimer 2>/dev/null; svc_sig $psvc CONT; }
+  [ $paused = 1 ] && { svc_sig $psvc CONT; log "RESUMED $psvc at the end"; }
   restart_dead "HYDO-ORACLE: ERROR restart after the faults"
   retry_workload
   stop_periodic
