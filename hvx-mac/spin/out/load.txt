@@ -1,0 +1,19 @@
+count load ms=8 fp=7605756a3059e05d 1 invalid
+count load ms=15 fp=d8c2bb710b72b0db 0 invalid
+count load ms=22 fp=d8c2bb710b72b0db 0 invalid
+count load ms=29 fp=d8c2bb710b72b0db 0 invalid
+count load ms=36 fp=d8c2bb710b72b0db 0 invalid
+count load ms=43 fp=d8c2bb710b72b0db 0 invalid
+count load ms=50 fp=d8c2bb710b72b0db 0 invalid
+count load ms=57 fp=d8c2bb710b72b0db 0 invalid
+count load ms=4 fp=d8c2bb710b72b0db 0 invalid
+count load ms=11 fp=d8c2bb710b72b0db 0 invalid
+baseline load fp=81711ada76a4a236
+baseline load fp=81711ada76a4a236
+baseline load fp=81711ada76a4a236
+baseline load fp=81711ada76a4a236
+baseline load fp=81711ada76a4a236
+branch: snapshot at exit 14750 (vtime 944000, console 6926 B)
+branch-A (continue): stop=1 exits=15949 vtime=27359600 (1.140 s virtual) console=7033 B wall=2.19 s | fp=d8c2bb710b72b0db 
+branch-B (restored): stop=1 exits=15949 vtime=27359600 (1.140 s virtual) console=7033 B wall=4.08 s | fp=d8c2bb710b72b0db 
+branch: IDENTICAL

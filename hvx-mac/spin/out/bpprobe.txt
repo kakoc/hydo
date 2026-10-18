@@ -1,0 +1,38 @@
+== bp
+bp: EC 0x30, 200000 hits for 200000 iterations, 0 wrong PC/count, 0.94 s = 211919 hits/s (4.72 us per hit incl. step-over)
+== wp
+wp: EC 0x34 far 0x10080000, 100000 hits, PC not at the load 0 times, 0.29 s = 347135 hits/s
+== prot
+prot: store to a read-only page -> EC 0x24 ISS 0x1c58047 (WnR=1 DFSC=0x7) IPA 0x10080008 pc 0x10000018
+prot: after unprotect + re-run: EC 0x16 (0x16 = reached hvc), stored value 0x1234
+FAIL hv_vm_create(NULL) = 0xfae94002
+== kick
+kick: reason 0 (CANCELED=0) pc 0x10000000 (loop at 0x10000000) x3 3844634775 (155365225 iterations in ~50 ms)
+kick: resumed, next exit EC 0x16 (0x16 = finished normally)
+kick: cancel before run -> reason 0, x3 1000000 (1000000 = no progress)
+kick: and the run after that -> reason 1 EC 0x16
+== privsym
+privsym: _hv_vcpu_get_control_field -> 0x230aa795c
+privsym: _hv_vcpu_set_control_field -> 0x230aa79b8
+privsym: _hv_capability -> 0x230aa7414
+privsym: _hv_vcpu_config_get_fgt_enabled -> 0x230aa7604
+privsym: _hv_vcpu_config_set_fgt_enabled -> 0x230aa7628
+privsym: _hv_vcpu_get_context -> 0x230aa7928
+privsym: _hv_capability(2) = 0xf820270077ffd1c0
+privsym: _hv_capability(3) = 0x80300000
+privsym: _hv_capability(4) = 0x300
+privsym: _hv_capability(7) = 0x1
+privsym: _hv_capability(9) = 0x100000000000000
+privsym: _hv_capability(12) = 0x1
+privsym: _hv_capability(14) = 0xffffffffffffffff
+privsym: _hv_capability(15) = 0xffffffffffffffff
+privsym: _hv_capability(16) = 0xffffffffffffffff
+privsym: _hv_capability(17) = 0xffffffffffffffff
+privsym: _hv_capability(18) = 0xffffffffffffffff
+privsym: _hv_capability(19) = 0x0
+privsym: _hv_capability(22) = 0x1ec00
+privsym: control_field(0) = 0x300001c0000
+== twe
+twe: field0 0x300001c0000 -> set 0x300001c4000 returned 0x0, reads back 0x300001c4000
+twe: exit 0 reason 1 EC 0x1 ISS 0x1e00001 pc 0x10000040
+twe: exit 1 reason 1 EC 0x16 ISS 0x9 pc 0x1000004c

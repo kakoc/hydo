@@ -1,0 +1,26 @@
+frameworks: kperf loaded, kperfdata loaded
+sym: kpc_force_all_ctrs_set       found
+sym: kpc_set_config               found
+sym: kpc_set_counting             found
+sym: kpc_set_thread_counting      found
+sym: kpc_get_thread_counters      found
+sym: kpc_get_counter_count        found
+sym: kpep_db_create               found
+sym: kpep_db_name                 found
+sym: kpep_db_events_count         found
+sym: kpep_db_events               found
+sym: kpep_event_name              found
+sym: kpep_db_event                found
+sym: kpep_config_create           found
+sym: kpep_config_force_counters   found
+sym: kpep_config_add_event        found
+sym: kpep_config_kpc_classes      found
+sym: kpep_config_kpc_count        found
+sym: kpep_config_kpc              found
+sym: kpep_config_kpc_map          found
+db: Apple A15, 60 events
+db: event FIXED_INSTRUCTIONS present
+db: event INST_ALL           present
+db: event INST_BRANCH        present
+db: event FIXED_CYCLES       present
+not root: stopping before programming the counters (run with sudo for the measurements)

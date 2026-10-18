@@ -1,0 +1,12 @@
+n=1 fp=d8c2bb710b72b0db
+n=2 fp=d8c2bb710b72b0db
+n=3 fp=d8c2bb710b72b0db
+n=4 fp=d8c2bb710b72b0db
+n=5 fp=d8c2bb710b72b0db
+n=6 fp=d8c2bb710b72b0db
+n=7 fp=d8c2bb710b72b0db
+n=8 fp=d8c2bb710b72b0db
+n=9 fp=d8c2bb710b72b0db
+n=10 fp=d8c2bb710b72b0db
+n=11 fp=d8c2bb710b72b0db
+n=12 fp=d8c2bb710b72b0db
