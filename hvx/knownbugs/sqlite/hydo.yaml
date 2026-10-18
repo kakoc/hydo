@@ -1,0 +1,44 @@
+# Known-bug target #1: the SQLite WAL-reset corruption (CANDIDATES.md section 1).
+# One manifest builds both versions:
+#   hvx/onboard/hydo-build hvx/knownbugs/sqlite/hydo.yaml                    # 3.51.2 (buggy)
+#   hvx/onboard/hydo-build hvx/knownbugs/sqlite/hydo.yaml --set v=3510300    # 3.51.3 (fixed)
+# No service: the project is one multi-threaded program (walrace.c) using the library.
+# Nothing here names the bug's trigger: writes, checkpoints and reads run concurrently and the
+# invariant is the generic one (no committed write lost, integrity_check ok).
+name: kb-sqlite-{{v}}
+description: SQLite {{v}} in WAL mode, concurrent writers + checkpointer + reader.
+
+params:
+  v: "3510200"              # SQLite version number as in the amalgamation file name
+
+root:
+  files:
+    - {src: bin/walrace-{{v}}, dst: /bin/walrace, mode: "0755"}
+
+data:
+  size_mib: 256
+  dirs: [db]
+
+services: []
+
+workload:
+  steps: 4                  # step = one round of fresh threads (see walrace.c)
+  run: /bin/walrace run /data/db/t.db $HYDO_ACKED $HYDO_OUTCOMES $HYDO_FROM $HYDO_TO
+  timeout: 900
+  process: walrace
+
+knobs:
+  - token: S
+    name: workload seed (writer count, transaction sizes, checkpoint modes, autocheckpoint)
+    default: "0"
+    set: echo $HYDO_VALUE > /tmp/walrace.seed
+
+invariants:
+  - id: sqlite.committed_durable_and_intact
+    msg: every committed write is present with its value and PRAGMA integrity_check is ok
+    cmd: /bin/walrace check /data/db/t.db $HYDO_ACKED
+
+# synchronous=NORMAL (the usual WAL setting): a commit is durable only at the next
+# checkpoint's fsync, so a power cut may legitimately lose recent commits -- no cut here;
+# the bug needs no fault at all.
+faults: [clock]

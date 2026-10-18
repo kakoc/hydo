@@ -6,9 +6,11 @@ it starts the services, runs the workload under the explorer's faults and checks
 invariants. No per-project build script or boot script is written by hand.
 
 This file is the reference for people and for tools that generate manifests (a Claude skill
-that reads a repository and writes `hydo.yaml` is the intended next step). Two complete
-examples: `examples/redis/hydo.yaml` (one service, about 60 lines) and
-`examples/stack/hydo.yaml` (MySQL + Kafka + Redis + a gRPC front door).
+that reads a repository and writes `hydo.yaml` is the intended next step). Complete
+examples: `examples/redis/hydo.yaml` (one service, about 60 lines),
+`examples/stack/hydo.yaml` (MySQL + Kafka + Redis + a gRPC front door), and
+`hvx/knownbugs/sqlite/hydo.yaml` (no service: a multi-threaded program using SQLite; one
+manifest, two versions via `params:`).
 
 ## What the user writes, and what is automatic
 
@@ -78,8 +80,16 @@ env:                           # exported to every command (services, workload, 
 shell: |                       # shell helpers, sourced before every command
   SQL() { mysql -h127.0.0.1 -uroot -N -B "$@"; }
 
-services:                      # required, at least one. Started in this order, moved only
-  - name: db                   #   as far as depends_on requires.
+params:                        # build parameters: {{name}} in any string value below is replaced
+  version: "3.51.2"            #   by the default here or by `hydo-build --set version=3.51.3`.
+                               #   One manifest then builds several versions of a project (a
+                               #   buggy and a fixed release). Values are strings; a {{name}}
+                               #   that is not declared, or a --set of an undeclared name, is an
+                               #   error. The values are recorded in the image as /etc/hydo/params.
+
+services:                      # may be empty ([] or left out): a project that is only a
+  - name: db                   #   workload program (e.g. a library under test). Started in this
+                               #   order, moved only as far as depends_on requires.
     # name: required, [a-z][a-z0-9_]* -- it is also the name fault tokens use (K=db@...)
     cmd: /bin/mydb --data /data/db        # required. runs in the foreground; its output
                                           #   goes to $HYDO_LOG (/tmp/hydo/<name>.log)
@@ -104,7 +114,7 @@ workload:                      # required
                                #   (used by mid-request pauses); default: run's first word
 
 knobs:                         # durability settings the explorer may relax
-  - token: M                   # one capital letter, not K N C P T O (those are faults)
+  - token: M                   # one capital letter, not K N C P T O Q X (built-in schedule tokens)
     name: MySQL innodb_flush_log_at_trx_commit
     default: "1"               # required. the value the image starts with (the safe one)
     set: SQL -e "SET GLOBAL innodb_flush_log_at_trx_commit=$HYDO_VALUE"   # required
@@ -171,8 +181,13 @@ properties that need to see inside it; both kinds of record mix on the console.
 | `<X>=<value>` | a knob from `knobs:` |
 | host side: `disk=ioerr:<p>` / `lying:<p>` | disk I/O errors / a disk that drops acknowledged writes |
 
-A token naming a service the manifest does not have is ignored, so the explorer's fixed
-service names (mysql, kafka, redis, front) work against any project.
+A token naming a service the manifest does not have is ignored. `explore.py` draws its
+faults from the manifest (`hvx/explore/manifest_space.py`): kills and pauses from all
+services, network and one-way faults from services with a `port:`, knob values from
+`knobs:`, fault placement from `workload.steps`, fault kinds from `faults:`. It reads
+`/etc/hydo/hydo.yaml` out of an `explore-ob-*` image automatically; pass `--manifest` for
+any other image. A knob token that collides with a built-in token (K P N O C T Q X) is
+rejected.
 
 ## YAML subset
 
@@ -189,6 +204,7 @@ Quote values YAML would otherwise turn into numbers or booleans when you mean a 
 ```sh
 # on the build machine; tool paths default to build-stack.sh's pins
 HYDO_SEEDRNG=~/hydo/build/hvx_seedrng hvx/onboard/hydo-build path/to/hydo.yaml
+hvx/onboard/hydo-build path/to/hydo.yaml --set version=3.51.3   # a build parameter
 hvx/onboard/hydo-build path/to/hydo.yaml --check         # validate only
 hvx/onboard/hydo-build path/to/hydo.yaml --print-shell   # show the compiled manifest
 # -> build/explore-ob-<name>-disk.img; copy it to ~/hydo/build on the bare-metal machine, then:
@@ -204,7 +220,6 @@ Inside the image: `/etc/hydo/hydo.yaml` (the manifest as written), `/etc/hydo/ma
 
 - No OCI/Docker import yet (`image:` is reserved); files come from store paths or the host.
 - Guest RAM is fixed at 1024 MiB and the kernel command line is the explorer's.
-- The explorer's schedule generator (`explore.py`) knows the service names mysql, kafka,
-  redis, front and the knobs M and R; other names get no kill/pause/network faults from it
-  (hand-written schedules work for any name).
+- The guest console is 64 KiB: a workload that prints every acknowledged id should print
+  short ids, or the done marker can be lost.
 - One data disk, ext4. The workload's step count is the unit of fault placement.
