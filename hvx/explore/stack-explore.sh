@@ -120,12 +120,12 @@ pause_timer() {   # $1 svc $2 off-ms $3 dur-ms (runs in the background)
 }
 
 explore_run() {   # $CMD = "run <tokens>"
-  K=""; N=""; C=""; M=1; R=always; P=""; T=""; O=""
+  K=""; N=""; C=""; M=1; R=always; P=""; T=""; O=""; Q=""
   for t in ${CMD#run}; do
     case "$t" in
       K=*) K="${t#K=}";; N=*) N="${t#N=}";; C=*) C="${t#C=}";;
       M=*) M="${t#M=}";; R=*) R="${t#R=}";;
-      P=*) P="${t#P=}";; T=*) T="${t#T=}";; O=*) O="${t#O=}";;
+      P=*) P="${t#P=}";; T=*) T="${t#T=}";; O=*) O="${t#O=}";; Q=*) Q="${t#Q=}";;
     esac
   done
   for d in "reachable fault.paused a service was paused (SIGSTOP)" \
@@ -137,6 +137,11 @@ explore_run() {   # $CMD = "run <tokens>"
     set -- $d; dt=$1; di=$2; shift 2
     echo "HYDO-ASSERT-DECL {\"t\":\"$dt\",\"id\":\"$di\",\"msg\":\"$*\"}"
   done
+  if [ -n "$Q" ]; then   # Q=<n>[d]: n concurrent requests; d = every order sent twice at once
+    export HYDO_CONC=${Q%d}
+    case "$Q" in *d) export HYDO_DUP=1;; esac
+    echo "hydo-explore: client sends $HYDO_CONC requests at a time${HYDO_DUP:+, every order twice}"
+  fi
   if [ "$M" != 1 ]; then SQL -e "SET GLOBAL innodb_flush_log_at_trx_commit=$M"; echo "hydo-explore: mysql innodb_flush_log_at_trx_commit=$M"; fi
   if [ "$R" != always ]; then /bin/redis-cli -p 6379 CONFIG SET appendfsync "$R" > /dev/null; echo "hydo-explore: redis appendfsync=$R"; fi
   ksvc=""; kat=-1; kup=-1; nsvc=""; nfrom=-1; nto=-1; nargs=""; cat_=-1

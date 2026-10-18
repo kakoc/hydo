@@ -59,6 +59,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -454,6 +455,10 @@ func place(from, to int64, keepGoing bool) {
 	if keepGoing {
 		deadline = 20 * time.Second
 	}
+	if conc, dup := concurrency(); conc > 1 || dup {
+		placeConcurrent(cc, from, to, keepGoing, deadline, conc, dup, ackf, outf)
+		return
+	}
 	var acked, failed int64
 	for id := from; id < to; id++ {
 		out := new(wrapperspb.StringValue)
@@ -484,6 +489,90 @@ func place(from, to int64, keepGoing bool) {
 		fmt.Printf("HYDO-STACK: placed acked=%d/%d via gRPC (orders %d..%d, failed=%d)\n", acked, to-from, from, to-1, failed)
 	} else {
 		fmt.Printf("HYDO-STACK: placed acked=%d/%d via gRPC\n", acked, to-from)
+	}
+}
+
+// concurrency reads $HYDO_CONC (requests in flight at once, default 1) and $HYDO_DUP
+// (1: every order is sent twice at the same time, like a double submit).
+func concurrency() (int, bool) {
+	n, _ := strconv.Atoi(os.Getenv("HYDO_CONC"))
+	if n < 1 {
+		n = 1
+	}
+	return n, os.Getenv("HYDO_DUP") == "1"
+}
+
+// placeConcurrent is place with conc requests in flight at once: conc goroutines take the
+// next order from a shared queue (with dup, each order is queued twice, back to back, so
+// two requests for it usually run at the same time). Outcomes and ACKs are recorded as in
+// place; without keepGoing the first failure stops handing out new orders.
+func placeConcurrent(cc *grpc.ClientConn, from, to int64, keepGoing bool, deadline time.Duration,
+	conc int, dup bool, ackf, outf *os.File) {
+	ids := make(chan int64)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	acked, failed := int64(0), int64(0)
+	stop := false
+	ackedIDs := map[int64]bool{}
+	for w := 0; w < conc; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for id := range ids {
+				out := new(wrapperspb.StringValue)
+				ctx, cancel := context.WithTimeout(context.Background(), deadline)
+				err := cc.Invoke(ctx, "/hydo.OrderService/Place", wrapperspb.Int64(id), out)
+				cancel()
+				mu.Lock()
+				if err != nil {
+					o := outcome(err)
+					record(outf, id, o)
+					fmt.Printf("hydostack: place %d failed (%s): %v\n", id, o, err)
+					pClientFail.Check(true, hydoassert.D{"order": id})
+					failed++
+					if !keepGoing {
+						stop = true
+					}
+				} else {
+					record(outf, id, "ack")
+					if !ackedIDs[id] {
+						ackedIDs[id] = true
+						acked++
+						if ackf != nil {
+							fmt.Fprintf(ackf, "%d\n", id)
+						}
+					}
+				}
+				mu.Unlock()
+			}
+		}()
+	}
+	for id := from; id < to; id++ {
+		copies := 1
+		if dup {
+			copies = 2
+		}
+		for c := 0; c < copies; c++ {
+			mu.Lock()
+			halt := stop
+			mu.Unlock()
+			if halt {
+				break
+			}
+			ids <- id
+		}
+	}
+	close(ids)
+	wg.Wait()
+	if ackf != nil {
+		ackf.Close()
+	}
+	if keepGoing {
+		fmt.Printf("HYDO-STACK: placed acked=%d/%d via gRPC (orders %d..%d, failed=%d, %d requests at a time%s)\n",
+			acked, to-from, from, to-1, failed, conc, map[bool]string{true: ", every order twice", false: ""}[dup])
+	} else {
+		fmt.Printf("HYDO-STACK: placed acked=%d/%d via gRPC (%d requests at a time%s)\n",
+			acked, to-from, conc, map[bool]string{true: ", every order twice", false: ""}[dup])
 	}
 }
 

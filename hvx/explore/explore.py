@@ -46,6 +46,8 @@ TJ_EXPLICIT_MAX = 32    # HVX_TJ_MAX_EXPLICIT
 BRANCH_BUDGET = 16      # hvx_explore.c: the run budget of a branch (rb=16 in its variants)
 NEW_FAULTS = False      # --new-faults: add pause / clock-jump / one-way-network faults (M46)
 NF_SALT = 0x4E46A17C0FFEE046
+CONCURRENCY = False     # --concurrency: several clients place orders at the same time (Q= token)
+CC_SALT = 0x51C0C0C0C0C0C051
 CLOCK_DELTAS = [-30 * 86400, -86400, -3600, -300, -30, 30, 300, 3600, 86400, 365 * 86400]
 
 
@@ -143,6 +145,17 @@ def add_new_faults(s, seed, swarm=False):
         kinds = [("loss", t.rng(30, 100))] if t.below(2) else [("delay", t.rng(100, 3000))]
         if "N" not in s:                            # one netem root qdisc at a time
             s["O"] = (svc, a, b, d, kinds)
+    return s
+
+
+def add_concurrency(s, seed):
+    """--concurrency: Q=<n> runs the client's order placement with n concurrent requests;
+    Q=<n>d also sends every order twice at the same time (a double submit). 60% of schedules
+    get it, from a separate random stream, so every other field stays what it was."""
+    if CONCURRENCY:
+        t = SplitMix(seed ^ CC_SALT)
+        if t.below(100) < 60:
+            s["Q"] = (t.pick([2, 4, 8]), t.below(100) < 30)
     return s
 
 
@@ -319,6 +332,8 @@ def render(s):
     if "O" in s:
         svc, a, b, d, kinds = s["O"]
         g.append("O=%s@%d-%d:%s:%s" % (svc, a, b, d, netem_args(kinds)))
+    if "Q" in s:
+        g.append("Q=%d%s" % (s["Q"][0], "d" if s["Q"][1] else ""))
     return "disk=%s dseed=%x%s%s | %s" % (s["disk"], s["dseed"], render_tj(s["tj"]) if "tj" in s else "",
                                           " rb=%d" % s["rb"] if "rb" in s else "", " ".join(g))
 
@@ -366,6 +381,8 @@ def parse(text):
             while i < len(toks):
                 kinds.append((toks[i], int(re.sub(r"\D", "", toks[i + 1])))); i += 2
             s["O"] = (svc, int(a), int(b), d, kinds)
+        elif k == "Q":
+            s["Q"] = (int(v.rstrip("d")), v.endswith("d"))
     return s
 
 
@@ -598,6 +615,13 @@ def candidates(s, tjk=None):
         if p > 1:
             var(disk="%s:%d" % (s["disk"].split(":")[0], max(1, p // 2)))
     nf_candidates(s, var)
+    if "Q" in s:                                    # concurrency: drop it, then make it milder
+        var(Q=None)
+        n, dup = s["Q"]
+        if dup:
+            var(Q=(n, False))
+        if n > 2:
+            var(Q=(n // 2, dup))
     tj_candidates(s, tjk, var)
     return out
 
@@ -686,7 +710,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
 
 # ---------------------------------------------------------------- main
 def main():
-    global IMAGE, TIMING, TJ_PM, NEW_FAULTS
+    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, CONCURRENCY
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-200")
     ap.add_argument("--workers", type=int, default=3)   # the box has 4 cores: 3 is fastest (M38)
@@ -708,8 +732,11 @@ def main():
                     help="M46: drop disk faults other than a plain power cut and relaxed durability knobs")
     ap.add_argument("--new-faults", action="store_true",
                     help="M46: add pause / realtime-clock-jump / one-way-network faults (separate random stream)")
+    ap.add_argument("--concurrency", action="store_true",
+                    help="several clients place orders at once (Q= token; separate random stream)")
     a = ap.parse_args()
     NEW_FAULTS = a.new_faults
+    CONCURRENCY = a.concurrency
     IMAGE = a.image
     TIMING = a.timing
     TJ_PM = [int(x) for x in a.tj_pm.split(",")]
@@ -727,7 +754,7 @@ def main():
     if a.sweep:
         points = sweep(a.sweep)
         seeds = list(range(1, len(points) + 1))            # sweep point index stands in for the seed
-        items = [("seed-%d" % i, render(add_timing(sch, i))) for i, (_, sch) in zip(seeds, points)]
+        items = [("seed-%d" % i, render(add_concurrency(add_timing(sch, i), i))) for i, (_, sch) in zip(seeds, points)]
         open(os.path.join(a.out, "sweep-points.jsonl"), "w").write(
             "".join(json.dumps({"seed": i, "point": lab}) + "\n" for i, (lab, _) in zip(seeds, points)))
     else:
@@ -735,7 +762,8 @@ def main():
         seeds = list(range(lo, hi + 1))
         gen = generate_swarm if a.strategy == "swarm" else generate
         dur = durable_only if a.durable_only else (lambda s: s)
-        items = [("seed-%d" % sd, render(add_timing(add_new_faults(dur(gen(sd)), sd, a.strategy == "swarm"), sd)))
+        items = [("seed-%d" % sd, render(add_concurrency(add_timing(add_new_faults(dur(gen(sd)), sd,
+                                                                                   a.strategy == "swarm"), sd), sd)))
                  for sd in seeds]
     t_sweep = time.time()
     res = pool.run_all(items)
