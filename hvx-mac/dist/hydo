@@ -182,7 +182,7 @@ def cmd_run(argv):
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     text = p.stdout.decode(errors="replace")
     for line in text.splitlines():
-        if line.startswith("RESULT"):
+        if line.startswith("RESULT") or line.startswith("hvmx: one"):   # the verdict, and any rewind escalation
             print(line)
     cons = sorted(glob.glob(os.path.join(outdir, "*")))
     if cons:
