@@ -1,0 +1,14 @@
+#!/bin/sh
+# /init of the virtio-net test initramfs: bring eth0 up with a static address and let the
+# host's scripted ARP requests (HVM_NET_RX) be answered; the reply is captured (HVM_NET_TX_OUT).
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mount -t devtmpfs dev /dev 2>/dev/null
+ip link set lo up
+ip link set eth0 up
+ip addr add 10.0.0.2/24 dev eth0
+echo "hydo-net: eth0 up $(cat /sys/class/net/eth0/address)"
+sleep 2
+echo "hydo-net: rx_packets $(cat /sys/class/net/eth0/statistics/rx_packets) tx_packets $(cat /sys/class/net/eth0/statistics/tx_packets)"
+echo "hydo-net: done"
+exec sh

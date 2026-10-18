@@ -1,18 +1,19 @@
 """hydo-build --arch arm64: the manifest compiled for the Mac VMM (hvx-mac/, Milestone 48).
 
 Called by hydo-build's main() with its module namespace H (compile_shell, copy_into, mkfs,
-zero_times, uuid_from, fix_mtimes, sha, ManifestError, FIXED_MTIME, HERE). Output, in the
-build dir:  <NAME>-arm64.cpio.gz  -- one initramfs that hvx-mac/explore/hvmx boots with the
-arm64 kernel from hvx-mac/explore/build-guest.sh.
+zero_times, uuid_from, fix_mtimes, sha, write_mbr, ManifestError, FIXED_MTIME, HERE). Output, in
+the build dir:
+    <NAME>-arm64.cpio.gz    the root, as one initramfs
+    <NAME>-arm64-disk.img   the data disk for the virtio-blk device (HVM_DISK): an MBR with a
+                            1 MiB placeholder p1 and the journaled ext4 data partition p2, so
+                            hydo-init.sh mounts /dev/vda2 unchanged
+hvx-mac/explore/hvmx boots them with the arm64 kernel from hvx-mac/explore/build-guest.sh.
 
 The root tree is the same as the x86 image's (busybox applets, the project's files and
-closures, /etc/hydo/{manifest.sh,prelude.sh,hydo.yaml}, hydo-init.sh as /sbin/init), with
-three differences, all because the Mac VMM has no block device yet:
-  * the whole root is the initramfs (in guest RAM), not a read-only ext4 partition;
-  * the data disk is a journaled ext4 image inside the initramfs (/hydo-data.img, built by the
-    same pinned mke2fs as the x86 data disk), attached as a loop device that /init links to
-    /dev/vda2 -- so hydo-init.sh mounts "/dev/vda2" unchanged. Power cuts need a real disk
-    and are not supported until virtio-blk;
+closures, /etc/hydo/{manifest.sh,prelude.sh,hydo.yaml}, hydo-init.sh as /sbin/init), with two
+differences:
+  * the whole root is the initramfs (in guest RAM), not a read-only ext4 partition; a small
+    /init waits for /dev/vda2 and then runs /sbin/init;
   * no tc (the pinned iproute2 is x86): network faults are skipped by hydo-init.sh as on an
     image without a port.
 root.nix and root.files must name arm64 binaries (e.g. aarch64 store paths); nothing checks
@@ -23,10 +24,12 @@ import gzip, io, os, shutil, stat, subprocess
 BUSYBOX_ARM64 = "/nix/store/zbc5fx2yszji1a4aw2ff46m0p99c6yxb-busybox-static-aarch64-unknown-linux-musl-1.36.1/bin/busybox"
 
 SHIM = """#!/bin/busybox sh
-# /init of an arm64 manifest image (hvx/onboard/hydo_build_arm64.py): attach the data disk
-# image as a loop device named /dev/vda2, then the generic init (hydo-init.sh).
+# /init of an arm64 manifest image (hvx/onboard/hydo_build_arm64.py): wait for the data
+# partition of the virtio disk, then the generic init (hydo-init.sh).
 /bin/busybox mount -t devtmpfs none /dev
-/bin/busybox losetup /dev/loop0 /hydo-data.img && /bin/busybox ln -sf /dev/loop0 /dev/vda2
+n=0
+while [ ! -b /dev/vda2 ] && [ $n -lt 200 ]; do /bin/busybox usleep 10000; n=$((n + 1)); done
+[ -b /dev/vda2 ] || echo "hydo-ob: no /dev/vda2 (run with the -arm64-disk.img attached: HVM_DISK)"
 exec /sbin/init
 """
 
@@ -104,7 +107,7 @@ def build(m, manifest_path, out, bdir, H):
         applets = subprocess.run([lister, "--list"], stdout=subprocess.PIPE, text=True, check=True).stdout.split()
     except (OSError, subprocess.CalledProcessError):
         applets = ("sh ash cat echo grep egrep sed awk tr cut sort uniq wc head tail sleep date timeout pgrep pkill kill "
-                   "mount umount mkdir rm cp mv ln ls test [ [[ true false printf env expr seq tee touch sync losetup "
+                   "mount umount mkdir rm cp mv ln ls test [ [[ true false printf env expr seq tee touch sync usleep "
                    "ifconfig ip wget nc httpd md5sum sha256sum xargs find basename dirname uname id hostname dd").split()
     for a in applets:
         p = os.path.join(R, "bin", a)
@@ -148,9 +151,18 @@ def build(m, manifest_path, out, bdir, H):
     data = os.path.join(bdir, "%s-arm64-data.img" % out)
     H["mkfs"](T, data, dmib, H["uuid_from"](m["name"], "data"), H["uuid_from"](m["name"], "data-hash"), journal=True)
     H["zero_times"](data, all_inode_times=True)
-    shutil.copy(data, os.path.join(R, "hydo-data.img"))
+    disk = os.path.join(bdir, "%s-arm64-disk.img" % out)
+    p1, n1 = 2048, 2048                                      # a 1 MiB placeholder: the root is the initramfs
+    p2, n2 = p1 + n1, dmib * 2048
+    with open(disk, "wb") as f:
+        f.truncate((p2 + n2) * 512)
+    H["write_mbr"](disk, [(p1, n1), (p2, n2)])
+    with open(disk, "r+b") as fo, open(data, "rb") as fi:
+        fo.seek(p2 * 512)
+        shutil.copyfileobj(fi, fo, 1 << 20)
     H["fix_mtimes"](R)
     cpio = os.path.join(bdir, "%s-arm64.cpio.gz" % out)
     _cpio(R, cpio, H["FIXED_MTIME"])
-    print("hydo-build: %s (arm64 initramfs, data %d MiB inside)" % (cpio, dmib))
-    print("  sha256(%s)=%s" % (os.path.basename(cpio), H["sha"](cpio)))
+    print("hydo-build: %s (arm64 initramfs) + %s (data %d MiB)" % (cpio, disk, dmib))
+    for p in (cpio, disk):
+        print("  sha256(%s)=%s" % (os.path.basename(p), H["sha"](p)))

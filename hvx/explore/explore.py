@@ -74,6 +74,12 @@ class SplitMix:
 
 
 SVCS = ["mysql", "kafka", "redis"]
+# The fault space (manifest_space.py rebinds these for an onboarded project; --manifest).
+NET_SVCS = SVCS                         # services network faults (N=, O=) pick from
+PAUSE_SVCS = SVCS + ["front"]           # services pause faults (P=) pick from
+KNOBS = [("M", 2), ("M", 0), ("R", "everysec"), ("R", "no")]   # a relaxed-knob draw picks one
+KNOB_TOKENS = ["M", "R"]
+SPACE = None
 
 
 def generate(seed):
@@ -92,7 +98,7 @@ def generate(seed):
             if k not in [x[0] for x in kinds]:
                 kinds.append((k, {"delay": r.rng(10, 300), "loss": r.rng(5, 60), "duplicate": r.rng(5, 50),
                                   "reorder": r.rng(10, 50), "corrupt": r.rng(1, 10)}[k]))
-        s["N"] = (r.pick(SVCS), a, b, kinds)
+        s["N"] = (r.pick(NET_SVCS), a, b, kinds)
     x = r.below(100)
     if x < 45:
         s["disk"] = "none"
@@ -105,7 +111,7 @@ def generate(seed):
     if s["disk"] in ("cut",) or s["disk"].startswith("lying"):
         s["C"] = r.rng(1, NORDERS)
     if r.below(100) < 20:
-        k = r.pick([("M", 2), ("M", 0), ("R", "everysec"), ("R", "no")])
+        k = r.pick(KNOBS)
         s[k[0]] = k[1]
     return s
 
@@ -129,7 +135,7 @@ def add_new_faults(s, seed, swarm=False):
     t = SplitMix(seed ^ NF_SALT)
     p_on = 50 if swarm else 35
     if t.below(100) < p_on:                         # pause
-        svc = t.pick(SVCS + ["front"])
+        svc = t.pick(PAUSE_SVCS)
         at = t.rng(0, NORDERS - 2)
         if t.below(2):
             s["P"] = (svc, at, "+", t.rng(1, 3))
@@ -139,7 +145,7 @@ def add_new_faults(s, seed, swarm=False):
     if t.below(100) < p_on:                         # clock jump (realtime only)
         s["T"] = (t.rng(0, NORDERS - 1), t.pick(CLOCK_DELTAS))
     if t.below(100) < p_on:                         # one-way network fault
-        svc = t.pick(SVCS)
+        svc = t.pick(NET_SVCS)
         a = t.rng(0, NORDERS - 2)
         b = t.rng(a + 1, min(NORDERS, a + 10))
         d = t.pick(["req", "resp"])
@@ -157,8 +163,8 @@ def durable_only(s):
         s["disk"] = "cut"
     elif s["disk"].startswith("ioerr"):
         s["disk"] = "none"
-    s.pop("M", None)
-    s.pop("R", None)
+    for k in KNOB_TOKENS:
+        s.pop(k, None)
     return s
 
 
@@ -226,7 +232,7 @@ def generate_swarm(seed):
             if k not in [x[0] for x in kinds]:
                 kinds.append((k, {"delay": r.rng(10, 300), "loss": r.rng(5, 60), "duplicate": r.rng(5, 50),
                                   "reorder": r.rng(10, 50), "corrupt": r.rng(1, 10)}[k]))
-        s["N"] = (r.pick(SVCS), a, b, kinds)
+        s["N"] = (r.pick(NET_SVCS), a, b, kinds)
     if "disk" in on:                    # a misbehaving disk (wins over a plain cut below)
         s["disk"] = r.pick(["ioerr:%d" % r.rng(1, 3), "lying:%d" % r.rng(2, 12)])
         if s["disk"].startswith("lying"):
@@ -235,7 +241,7 @@ def generate_swarm(seed):
         s["disk"] = "cut"
         s["C"] = r.rng(1, NORDERS)
     if "knob" in on:
-        k = r.pick([("M", 2), ("M", 0), ("R", "everysec"), ("R", "no")])
+        k = r.pick(KNOBS)
         s[k[0]] = k[1]
     return s
 
@@ -256,7 +262,7 @@ def sweep(name):
         for c in range(1, NORDERS + 1):
             out.append(("C=%d" % c, {"disk": "cut", "dseed": 0, "C": c}))
     elif name == "net":                 # each service's traffic at a few severities, whole workload
-        for svc in SVCS:
+        for svc in NET_SVCS:
             for kinds in NETEM_SEVERITIES:
                 out.append(("%s:%s" % (svc, netem_args(kinds)), {"disk": "none", "dseed": 0, "N": (svc, 0, NORDERS, kinds)}))
     elif name == "killcut":             # kill, then a power cut a few orders later
@@ -267,7 +273,7 @@ def sweep(name):
                         out.append(("%s@%d C=%d" % (svc, at, at + d),
                                     {"disk": "cut", "dseed": 0, "K": (svc, at, 1), "C": at + d}))
     elif name == "pause":               # M46: each service (and the front door) paused at a few points
-        for svc in SVCS + ["front"]:
+        for svc in PAUSE_SVCS:
             for at in range(0, NORDERS, 5):
                 out.append(("%s@%d+2" % (svc, at), {"disk": "none", "dseed": 0, "P": (svc, at, "+", 2)}))
                 out.append(("%s@%d~200:5000" % (svc, at), {"disk": "none", "dseed": 0, "P": (svc, at, "~", 200, 5000)}))
@@ -276,7 +282,7 @@ def sweep(name):
             for d in (-86400, -3600, -60, 60, 3600, 86400):
                 out.append(("T=%d:%d" % (at, d), {"disk": "none", "dseed": 0, "T": (at, d)}))
     elif name == "oneway":              # M46: one direction of one service's traffic, orders 5-15
-        for svc in SVCS:
+        for svc in NET_SVCS:
             for d in ("req", "resp"):
                 for kinds in ([("loss", 100)], [("loss", 50)], [("delay", 1000)]):
                     out.append(("%s:%s:%s" % (svc, d, netem_args(kinds)),
@@ -302,6 +308,8 @@ def netem_args(kinds):
 
 
 def render(s):
+    if SPACE:
+        s = SPACE.restrict(s)
     if BACKEND == "hvm":
         s = hvm_backend.hvm_supported(s)
     g = ["run"]
@@ -313,9 +321,12 @@ def render(s):
     if "C" in s:
         g.append("C=%d" % s["C"])
     if "M" in s:
-        g.append("M=%d" % s["M"])
+        g.append("M=%s" % s["M"])
     if "R" in s:
         g.append("R=%s" % s["R"])
+    for k in KNOB_TOKENS:
+        if k not in ("M", "R") and k in s:
+            g.append("%s=%s" % (k, s[k]))
     if "P" in s:
         p = s["P"]
         g.append("P=%s@%d+%d" % (p[0], p[1], p[3]) if p[2] == "+" else "P=%s@%d~%d:%d" % (p[0], p[1], p[3], p[4]))
@@ -354,7 +365,7 @@ def parse(text):
         elif k == "C":
             s["C"] = int(v)
         elif k == "M":
-            s["M"] = int(v)
+            s["M"] = int(v) if v.isdigit() else v
         elif k == "R":
             s["R"] = v
         elif k == "P":
@@ -371,6 +382,8 @@ def parse(text):
             while i < len(toks):
                 kinds.append((toks[i], int(re.sub(r"\D", "", toks[i + 1])))); i += 2
             s["O"] = (svc, int(a), int(b), d, kinds)
+        elif k in KNOB_TOKENS:
+            s[k] = v
     return s
 
 
@@ -381,7 +394,7 @@ def finding_class(s):
         return "lying-disk"
     if s["disk"].startswith("ioerr"):
         return "io-errors"
-    if s.get("M", 1) != 1 or s.get("R", "always") != "always":
+    if SPACE.unsafe_knob(s) if SPACE else (s.get("M", 1) != 1 or s.get("R", "always") != "always"):
         return "unsafe-knob"
     return "durable-defaults"
 
@@ -581,7 +594,7 @@ def candidates(s, tjk=None):
     for k in ("P", "T", "O"):
         if k in s:
             var(**{k: None})
-    for k in ("M", "R"):
+    for k in KNOB_TOKENS:
         if k in s:
             var(**{k: None})
     if s["disk"] != "none":
@@ -693,7 +706,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
 
 # ---------------------------------------------------------------- main
 def main():
-    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, BACKEND, HVM_KERNEL
+    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, BACKEND, HVM_KERNEL
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-200")
     ap.add_argument("--workers", type=int, default=3)   # the box has 4 cores: 3 is fastest (M38)
@@ -718,8 +731,21 @@ def main():
     ap.add_argument("--backend", choices=["hvx", "hvm"], default="hvx",
                     help="hvm: the Mac VMM (hvx-mac/explore/hvmx); --image is then an arm64 manifest initramfs")
     ap.add_argument("--hvm-kernel", help="arm64 kernel for --backend hvm (default hvx-mac/explore/out/Image-explore)")
+    ap.add_argument("--manifest", help="an onboarded project's hydo.yaml: draw faults from its services, ports, "
+                                       "steps and knobs (manifest_space.py); default for explore-ob-* images: "
+                                       "the manifest inside the image")
     a = ap.parse_args()
     BACKEND, HVM_KERNEL = a.backend, a.hvm_kernel
+    if BACKEND == "hvm":
+        hvm_backend.configure(a.image)
+    if a.manifest or a.image.startswith("explore-ob-") or os.path.basename(a.image).startswith("explore-ob-"):
+        import manifest_space
+        if BACKEND == "hvm" and not a.manifest:      # the manifest inside an arm64 initramfs
+            sp = manifest_space.Space(hvm_backend.embedded_manifest(a.image), "hydo.yaml")
+        else:
+            sp = manifest_space.load(a.manifest, os.path.join(BUILD, a.image))
+        sp.apply(globals())
+        print("fault space: %s" % json.dumps(SPACE.describe()), file=sys.stderr)
     NEW_FAULTS = a.new_faults
     IMAGE = a.image
     TIMING = a.timing
@@ -736,6 +762,8 @@ def main():
         branch_main(a, pool, t0)
         return
     if a.sweep:
+        if SPACE:
+            SPACE.check_sweep(a.sweep)
         points = sweep(a.sweep)
         seeds = list(range(1, len(points) + 1))            # sweep point index stands in for the seed
         items = [("seed-%d" % i, render(add_timing(sch, i))) for i, (_, sch) in zip(seeds, points)]
