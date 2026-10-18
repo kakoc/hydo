@@ -6,9 +6,11 @@ it starts the services, runs the workload under the explorer's faults and checks
 invariants. No per-project build script or boot script is written by hand.
 
 This file is the reference for people and for tools that generate manifests (a Claude skill
-that reads a repository and writes `hydo.yaml` is the intended next step). Two complete
-examples: `examples/redis/hydo.yaml` (one service, about 60 lines) and
-`examples/stack/hydo.yaml` (MySQL + Kafka + Redis + a gRPC front door).
+that reads a repository and writes `hydo.yaml` is the intended next step). Complete
+examples: `examples/redis/hydo.yaml` (one service, about 60 lines),
+`examples/stack/hydo.yaml` (MySQL + Kafka + Redis + a gRPC front door), and
+`hvx/knownbugs/sqlite/hydo.yaml` (no service: a multi-threaded program using SQLite; one
+manifest, two versions via `params:`).
 
 ## What the user writes, and what is automatic
 
@@ -78,8 +80,16 @@ env:                           # exported to every command (services, workload, 
 shell: |                       # shell helpers, sourced before every command
   SQL() { mysql -h127.0.0.1 -uroot -N -B "$@"; }
 
-services:                      # required, at least one. Started in this order, moved only
-  - name: db                   #   as far as depends_on requires.
+params:                        # build parameters: {{name}} in any string value below is replaced
+  version: "3.51.2"            #   by the default here or by `hydo-build --set version=3.51.3`.
+                               #   One manifest then builds several versions of a project (a
+                               #   buggy and a fixed release). Values are strings; a {{name}}
+                               #   that is not declared, or a --set of an undeclared name, is an
+                               #   error. The values are recorded in the image as /etc/hydo/params.
+
+services:                      # may be empty ([] or left out): a project that is only a
+  - name: db                   #   workload program (e.g. a library under test). Started in this
+                               #   order, moved only as far as depends_on requires.
     # name: required, [a-z][a-z0-9_]* -- it is also the name fault tokens use (K=db@...)
     cmd: /bin/mydb --data /data/db        # required. runs in the foreground; its output
                                           #   goes to $HYDO_LOG (/tmp/hydo/<name>.log)
@@ -189,6 +199,7 @@ Quote values YAML would otherwise turn into numbers or booleans when you mean a 
 ```sh
 # on the build machine; tool paths default to build-stack.sh's pins
 HYDO_SEEDRNG=~/hydo/build/hvx_seedrng hvx/onboard/hydo-build path/to/hydo.yaml
+hvx/onboard/hydo-build path/to/hydo.yaml --set version=3.51.3   # a build parameter
 hvx/onboard/hydo-build path/to/hydo.yaml --check         # validate only
 hvx/onboard/hydo-build path/to/hydo.yaml --print-shell   # show the compiled manifest
 # -> build/explore-ob-<name>-disk.img; copy it to ~/hydo/build on the bare-metal machine, then:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """hydo-build -- compile a project manifest (hydo.yaml, see MANIFEST.md) into a hydo guest image.
 
-    hydo-build <hydo.yaml> [--out NAME] [--build-dir DIR] [--check] [--print-shell]
+    hydo-build <hydo.yaml> [--set KEY=VALUE ...] [--out NAME] [--build-dir DIR] [--check] [--print-shell]
 
 Produces, in --build-dir (default ./build):
     <NAME>-ext4.img   read-only ext4 root (p1): the project's files + closures, busybox, the
@@ -227,6 +227,46 @@ def parse_yaml(text, name="hydo.yaml"):
     return v
 
 
+# ------------------------------------------------------------------ build parameters
+PARAM_RE = re.compile(r"\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}")
+
+
+def apply_params(m, overrides):
+    """params: {key: default} + --set key=value -> every {{key}} in every string value of the
+    manifest (not in keys) is replaced. Lets one hydo.yaml build several versions of a
+    project. A {{name}} with no such parameter, or a --set of an undeclared key, is an error.
+    Returns the effective parameter values ({} when the manifest declares none)."""
+    params = m.pop("params", None) or {}
+    if not isinstance(params, dict):
+        raise ManifestError("params: must be a mapping of name: default value")
+    vals = {}
+    for k, v in params.items():
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", str(k)):
+            raise ManifestError("params: name %r: letters, digits and '_' only" % k)
+        vals[str(k)] = "" if v is None else str(v)
+    for k, v in overrides:
+        if k not in vals:
+            raise ManifestError("--set %s: the manifest declares no parameter %r (params: %s)" %
+                                (k, k, ", ".join(sorted(vals)) or "none"))
+        vals[k] = v
+
+    def sub(x, where):
+        if isinstance(x, str):
+            def one(mo):
+                if mo.group(1) not in vals:
+                    raise ManifestError("%s: {{%s}} is not a declared parameter" % (where, mo.group(1)))
+                return vals[mo.group(1)]
+            return PARAM_RE.sub(one, x)
+        if isinstance(x, list):
+            return [sub(y, "%s[%d]" % (where, i)) for i, y in enumerate(x)]
+        if isinstance(x, dict):
+            return {k: sub(y, "%s.%s" % (where, k)) for k, y in x.items()}
+        return x
+    for k in list(m):
+        m[k] = sub(m[k], k)
+    return vals
+
+
 # ------------------------------------------------------------------ manifest validation
 class ManifestError(Exception):
     pass
@@ -234,7 +274,7 @@ class ManifestError(Exception):
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 KNOWN_TOP = {"name", "description", "guest", "root", "data", "env", "shell", "services",
-             "provision", "workload", "knobs", "invariants", "faults", "image"}
+             "provision", "workload", "knobs", "invariants", "faults", "image", "params"}
 KNOWN_SVC = {"name", "cmd", "setup", "ready", "ready_timeout", "port", "depends_on",
              "recovery", "description"}
 KNOWN_INV = {"id", "type", "msg", "cmd", "every", "final", "description"}
@@ -269,8 +309,9 @@ def validate(m):
     if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
         raise ManifestError("name: use lowercase letters, digits and '-' (got %r)" % name)
     svcs = m.get("services") or []
-    if not isinstance(svcs, list) or not svcs:
-        raise ManifestError("services: at least one service is required")
+    if not isinstance(svcs, list):
+        raise ManifestError("services: must be a list (it may be empty: a project that is only a workload)")
+    m["services"] = svcs
     seen = {}
     for i, s in enumerate(svcs):
         where = "services[%d]" % i
@@ -535,7 +576,7 @@ def sha(path):
     return h.hexdigest()
 
 
-def build(m, manifest_path, out, bdir):
+def build(m, manifest_path, out, bdir, params=None):
     T = {
         "busybox": tool("HYDO_BUSYBOX", "/nix/store/ahw5fkq085k5ppdsylyd475xlxb18pz1-busybox-static-x86_64-unknown-linux-musl-1.37.0/bin/busybox", os.path.isfile),
         "seedrng": tool("HYDO_SEEDRNG", os.path.join(bdir, "hvx_seedrng"), os.path.isfile),
@@ -619,6 +660,9 @@ def build(m, manifest_path, out, bdir):
     with open(os.path.join(R, "etc/hydo/prelude.sh"), "w") as f:
         f.write(prelude)
     shutil.copy(manifest_path, os.path.join(R, "etc/hydo/hydo.yaml"))
+    if params:      # the parameter values this image was built with (only when declared)
+        with open(os.path.join(R, "etc/hydo/params"), "w") as f:
+            f.write("".join("%s=%s\n" % kv for kv in sorted(params.items())))
     shutil.copy(os.path.join(HERE, "hydo-init.sh"), os.path.join(R, "sbin/init"))
     os.chmod(os.path.join(R, "sbin/init"), 0o755)
     fix_mtimes(R)
@@ -655,9 +699,12 @@ def main():
     path = a[0]
     opt = {"--out": None, "--build-dir": "build"}
     flags = set()
+    sets = []
     i = 1
     while i < len(a):
-        if a[i] in opt:
+        if a[i] == "--set" and i + 1 < len(a) and "=" in a[i + 1]:
+            sets.append(tuple(a[i + 1].split("=", 1))); i += 2
+        elif a[i] in opt:
             opt[a[i]] = a[i + 1]; i += 2
         elif a[i] in ("--check", "--print-shell"):
             flags.add(a[i]); i += 1
@@ -666,6 +713,9 @@ def main():
     try:
         text = open(path).read()
         m = json.loads(text) if path.endswith(".json") else parse_yaml(text, os.path.basename(path))
+        if not isinstance(m, dict):
+            raise ManifestError("the manifest must be a mapping")
+        params = apply_params(m, sets)
         validate(m)
         service_order(m["services"])
     except (YamlError, ManifestError) as e:
@@ -679,7 +729,7 @@ def main():
     out = opt["--out"] or "explore-ob-%s" % m["name"]
     os.makedirs(opt["--build-dir"], exist_ok=True)
     try:
-        build(m, path, out, opt["--build-dir"])
+        build(m, path, out, opt["--build-dir"], params)
     except ManifestError as e:
         print("hydo-build: %s" % e, file=sys.stderr); return 1
     return 0
