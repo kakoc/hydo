@@ -1,0 +1,6 @@
+#!/bin/sh
+# Append one ledger entry, then answer. NOT idempotent: a retry of a request that was applied
+# but whose answer the client never saw appends the entry a second time (the planted defect).
+id=${QUERY_STRING#id=}
+echo "$id" >> /data/ledger/entries
+printf 'Content-Type: text/plain\r\n\r\nOK %s\n' "$id"

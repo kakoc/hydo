@@ -31,6 +31,7 @@ Classes of findings:
   io-errors         the disk returned I/O errors (also on reads of program files)
 """
 import argparse, json, os, queue, re, subprocess, sys, threading, time
+import hvm_backend
 
 M64 = (1 << 64) - 1
 NORDERS = 30
@@ -46,6 +47,8 @@ TJ_EXPLICIT_MAX = 32    # HVX_TJ_MAX_EXPLICIT
 BRANCH_BUDGET = 16      # hvx_explore.c: the run budget of a branch (rb=16 in its variants)
 NEW_FAULTS = False      # --new-faults: add pause / clock-jump / one-way-network faults (M46)
 NF_SALT = 0x4E46A17C0FFEE046
+BACKEND = "hvx"         # --backend hvm: the Mac VMM (hvm_backend.py); HVM_KERNEL = its --hvm-kernel
+HVM_KERNEL = None
 CLOCK_DELTAS = [-30 * 86400, -86400, -3600, -300, -30, 30, 300, 3600, 86400, 365 * 86400]
 
 
@@ -307,6 +310,8 @@ def netem_args(kinds):
 def render(s):
     if SPACE:
         s = SPACE.restrict(s)
+    if BACKEND == "hvm":
+        s = hvm_backend.hvm_supported(s)
     g = ["run"]
     if "K" in s:
         g.append("K=%s@%d+%d" % s["K"])
@@ -472,6 +477,8 @@ class Worker(threading.Thread):
                os.path.join(HVX, "hvx_explore"), "serve", os.path.join(BUILD, "bzImage"),
                os.path.join(BUILD, "initramfs-kafka.cpio.gz"), os.path.join(BUILD, IMAGE),
                os.path.join(self.outdir, "consoles")]
+        if BACKEND == "hvm":
+            cmd = hvm_backend.engine_cmd(IMAGE, os.path.join(self.outdir, "consoles"), HVM_KERNEL)
         err = open(os.path.join(self.outdir, "worker-%d.err" % self.idx), "w")
         p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err, text=True, bufsize=1)
         line = p.stdout.readline()
@@ -699,7 +706,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
 
 # ---------------------------------------------------------------- main
 def main():
-    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE
+    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, BACKEND, HVM_KERNEL
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-200")
     ap.add_argument("--workers", type=int, default=3)   # the box has 4 cores: 3 is fastest (M38)
@@ -721,13 +728,23 @@ def main():
                     help="M46: drop disk faults other than a plain power cut and relaxed durability knobs")
     ap.add_argument("--new-faults", action="store_true",
                     help="M46: add pause / realtime-clock-jump / one-way-network faults (separate random stream)")
+    ap.add_argument("--backend", choices=["hvx", "hvm"], default="hvx",
+                    help="hvm: the Mac VMM (hvx-mac/explore/hvmx); --image is then an arm64 manifest initramfs")
+    ap.add_argument("--hvm-kernel", help="arm64 kernel for --backend hvm (default hvx-mac/explore/out/Image-explore)")
     ap.add_argument("--manifest", help="an onboarded project's hydo.yaml: draw faults from its services, ports, "
                                        "steps and knobs (manifest_space.py); default for explore-ob-* images: "
                                        "the manifest inside the image")
     a = ap.parse_args()
-    if a.manifest or a.image.startswith("explore-ob-"):
+    BACKEND, HVM_KERNEL = a.backend, a.hvm_kernel
+    if BACKEND == "hvm":
+        hvm_backend.configure(a.image)
+    if a.manifest or a.image.startswith("explore-ob-") or os.path.basename(a.image).startswith("explore-ob-"):
         import manifest_space
-        manifest_space.load(a.manifest, os.path.join(BUILD, a.image)).apply(globals())
+        if BACKEND == "hvm" and not a.manifest:      # the manifest inside an arm64 initramfs
+            sp = manifest_space.Space(hvm_backend.embedded_manifest(a.image), "hydo.yaml")
+        else:
+            sp = manifest_space.load(a.manifest, os.path.join(BUILD, a.image))
+        sp.apply(globals())
         print("fault space: %s" % json.dumps(SPACE.describe()), file=sys.stderr)
     NEW_FAULTS = a.new_faults
     IMAGE = a.image
@@ -901,7 +918,8 @@ def write_report(out, summary, fails, shrunk, table=None):
               "- needs a tick-timing change: %s" % ("yes" if " tj" in v["minimal"] else "no"),
               "- verdict: `%s`" % v["min_verdict"],
               "- fingerprint, two runs: `%s` / `%s` (%s)" % (v["fp_a"], v["fp_b"], "identical" if v["fp_a"] == v["fp_b"] else "DIFFERENT"),
-              "- by hand: `~/bin/hvx-run sudo ./hvx_explore one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/%s <outdir> \"%s\"`" % (IMAGE, v["minimal"]), ""]
+              "- by hand: `~/bin/hvx-run sudo ./hvx_explore one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/%s <outdir> \"%s\"`" % (IMAGE, v["minimal"])
+              if BACKEND != "hvm" else "- by hand: `%s`" % hvm_backend.repro_line(IMAGE, v["minimal"], HVM_KERNEL), ""]
     L += ["## Property table over every schedule (hvx/ASSERTIONS.md)", ""]
     if table is None:
         L += ["The guest emitted no HYDO-ASSERT records (an image built without the assertion SDK).", ""]

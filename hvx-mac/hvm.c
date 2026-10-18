@@ -304,20 +304,34 @@ static void gicc_write(uint64_t off, uint32_t v)
 }
 
 /* ---------------- 16550 UART ---------------- */
+/* Receive queue: bytes the host types on the console (hvm_put_input). Not in struct mach: it
+ * is empty at every snapshot point, and with it empty the UART behaves exactly as before. */
+static uint8_t rxq[4096];
+static uint32_t rx_head, rx_tail;
+static int rx_ready(void) { return rx_head != rx_tail; }
+static __attribute__((unused)) void hvm_put_input(const char *s)
+{
+	for (; *s && rx_tail - rx_head < sizeof rxq; s++) rxq[rx_tail++ % sizeof rxq] = (uint8_t)*s;
+}
 static int uart_level(void)
 {
-	return (M.uart.ier & 0x02) != 0;                  /* THR-empty interrupt while THRI is enabled (TX never full) */
+	return (M.uart.ier & 0x02) != 0 ||                /* THR-empty interrupt while THRI is enabled (TX never full) */
+	       ((M.uart.ier & 0x01) && rx_ready());       /* received data available */
 }
 static uint8_t uart_read(uint64_t off)
 {
 	int dlab = M.uart.lcr & 0x80;
 	switch (off) {
-	case 0: return dlab ? M.uart.dll : 0;             /* RBR: no input queued */
+	case 0:                                           /* RBR: the next queued input byte */
+		if (dlab) return M.uart.dll;
+		return rx_ready() ? rxq[rx_head++ % sizeof rxq] : 0;
 	case 1: return dlab ? M.uart.dlm : M.uart.ier;
-	case 2: { uint8_t fifo = (M.uart.fcr & 1) ? 0xc0 : 0; return fifo | ((M.uart.ier & 0x02) ? 0x02 : 0x01); }
+	case 2: { uint8_t fifo = (M.uart.fcr & 1) ? 0xc0 : 0;
+		if ((M.uart.ier & 0x01) && rx_ready()) return fifo | 0x04;   /* received data available */
+		return fifo | ((M.uart.ier & 0x02) ? 0x02 : 0x01); }
 	case 3: return M.uart.lcr;
 	case 4: return M.uart.mcr;
-	case 5: return 0x60;                              /* THRE | TEMT */
+	case 5: return 0x60 | (rx_ready() ? 0x01 : 0);    /* THRE | TEMT, DR while input is queued */
 	case 6:
 		if (M.uart.mcr & 0x10) {                       /* loopback: modem outputs reflected */
 			uint8_t m = M.uart.mcr;
@@ -509,6 +523,40 @@ enum { STOP_MARKER = 1, STOP_HALT, STOP_IDLE, STOP_LIMIT, STOP_SPIN };
 static uint64_t max_exits = 200000000ULL;
 FILE *trace_f;      /* HVM_TRACE=<file>: one line per exit (index, EC, PC, CPSR, IRQ line at entry) */
 
+static int (*hvm_stop_hook)(void);                  /* hvx-mac/explore/serve.c: extra stop conditions */
+
+/*
+ * HVM_SOFT_IRQ=1: deliver an IRQ by emulating the exception entry in software (like KVM's
+ * enter_exception64) instead of raising the vCPU's virtual IRQ line, so the IRQ is taken
+ * exactly at the entry PC by construction rather than by the hardware's promptness. The
+ * M48 boot gives the same fingerprint either way (81711ada76a4a236), i.e. the hardware
+ * line was already taken at the entry there. Off by default; hvx-mac/explore/hvmx turns it on.
+ */
+static int soft_irq = -1;
+static int inject_irq_soft(void)
+{
+	uint64_t cpsr = rd(HV_REG_CPSR), pc = rd(HV_REG_PC), vbar, sctlr, off;
+	if (cpsr & 0x10) return 0;                           /* AArch32: not modelled, use the line */
+	switch (cpsr & 0xf) {
+	case 0x0: off = 0x480; break;                        /* from EL0 (AArch64): lower EL, IRQ */
+	case 0x4: off = 0x080; break;                        /* EL1t: current EL with SP_EL0, IRQ */
+	case 0x5: off = 0x280; break;                        /* EL1h: current EL with SP_ELx, IRQ */
+	default: return 0;
+	}
+	CHK(hv_vcpu_get_sys_reg(vcpu, HV_SYS_REG_VBAR_EL1, &vbar));
+	CHK(hv_vcpu_get_sys_reg(vcpu, HV_SYS_REG_SCTLR_EL1, &sctlr));
+	CHK(hv_vcpu_set_sys_reg(vcpu, HV_SYS_REG_SPSR_EL1, cpsr));
+	CHK(hv_vcpu_set_sys_reg(vcpu, HV_SYS_REG_ELR_EL1, pc));
+	uint64_t n = 0;
+	n |= cpsr & (1ULL << 24);                            /* DIT kept */
+	n |= cpsr & (1ULL << 22);                            /* PAN kept ... */
+	if (!(sctlr & (1ULL << 23))) n |= 1ULL << 22;        /* ... and set when SCTLR_EL1.SPAN is 0 */
+	if (sctlr & (1ULL << 44)) n |= 1ULL << 12;           /* SSBS from SCTLR_EL1.DSSBS */
+	n |= 0x3c0 | 0x5;                                    /* D A I F masked, EL1h */
+	wr(HV_REG_CPSR, n);
+	wr(HV_REG_PC, vbar + off);
+	return 1;
+}
 static int run_until(const char *marker)
 {
 	size_t mlen = marker ? strlen(marker) : 0;
@@ -516,6 +564,7 @@ static int run_until(const char *marker)
 	for (;;) {
 		if (M.halted) return STOP_HALT;
 		if (M.exits >= max_exits) return STOP_LIMIT;
+		if (hvm_stop_hook && hvm_stop_hook()) return STOP_MARKER;
 		if (marker && M.console_len >= mlen) {          /* stop at the first exit after the marker appeared */
 			size_t start = scan_from > mlen ? scan_from - mlen : 0;
 			if (memmem(console + start, M.console_len - start, marker, mlen)) return STOP_MARKER;
@@ -523,6 +572,8 @@ static int run_until(const char *marker)
 		}
 		int line = irq_line() && !(rd(HV_REG_CPSR) & 0x80);   /* only where the guest takes it at once */
 		M.n_irq_line += line;
+		if (soft_irq < 0) soft_irq = getenv("HVM_SOFT_IRQ") && atoi(getenv("HVM_SOFT_IRQ"));
+		if (line && soft_irq && !M.stepping && inject_irq_soft()) line = 0;
 		apply_stepping();
 		CHK(hv_vcpu_set_pending_interrupt(vcpu, HV_INTERRUPT_TYPE_IRQ, line));
 		wd_armed = 1;
@@ -644,6 +695,7 @@ static const char *BOOTARGS =
 	"console=ttyS0 earlycon=uart8250,mmio,0x09000000 clocksource.arm_arch_timer.evtstrm=0 "
 	"nokaslr rdinit=/init loglevel=7 random.trust_bootloader=on";
 
+#ifndef HVM_NO_MAIN
 int main(int argc, char **argv)
 {
 	if (argc < 4) { fprintf(stderr, "usage: hvm run|print|branch <Image> <initrd> [markers...]\n"); return 2; }
@@ -699,3 +751,4 @@ int main(int argc, char **argv)
 	fprintf(stderr, "bad mode\n");
 	return 2;
 }
+#endif /* HVM_NO_MAIN */

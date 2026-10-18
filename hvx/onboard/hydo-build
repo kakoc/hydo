@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """hydo-build -- compile a project manifest (hydo.yaml, see MANIFEST.md) into a hydo guest image.
 
-    hydo-build <hydo.yaml> [--set KEY=VALUE ...] [--out NAME] [--build-dir DIR] [--check] [--print-shell]
+    hydo-build <hydo.yaml> [--set KEY=VALUE ...] [--out NAME] [--build-dir DIR] [--arch x86_64|arm64]
+               [--check] [--print-shell]
 
 Produces, in --build-dir (default ./build):
     <NAME>-ext4.img   read-only ext4 root (p1): the project's files + closures, busybox, the
@@ -9,6 +10,8 @@ Produces, in --build-dir (default ./build):
     <NAME>-data.img   journaled ext4 data disk (p2), mounted on /data: the fault target
     <NAME>-disk.img   both behind a hand-made MBR -- the file the harnesses take
 NAME defaults to explore-ob-<project name> (the "explore" prefix: hvx_explore serves it).
+--arch arm64 builds <NAME>-arm64.cpio.gz instead, one initramfs for the Mac VMM
+(hvx-mac/explore/hvmx; see hydo_build_arm64.py).
 
 Byte-reproducible like the hand-written image scripts (build-stack.sh): pinned mke2fs run
 under a pinned libfaketime, fixed UUIDs and hash seeds derived from the project name,
@@ -697,7 +700,7 @@ def main():
     if not a or a[0] in ("-h", "--help"):
         print(__doc__); return 0
     path = a[0]
-    opt = {"--out": None, "--build-dir": "build"}
+    opt = {"--out": None, "--build-dir": "build", "--arch": "x86_64"}
     flags = set()
     sets = []
     i = 1
@@ -729,7 +732,16 @@ def main():
     out = opt["--out"] or "explore-ob-%s" % m["name"]
     os.makedirs(opt["--build-dir"], exist_ok=True)
     try:
-        build(m, path, out, opt["--build-dir"], params)
+        if opt["--arch"] == "arm64":
+            if params:
+                print("hydo-build: --arch arm64 does not record params: yet", file=sys.stderr); return 2
+            sys.path.insert(0, HERE)
+            import hydo_build_arm64
+            hydo_build_arm64.build(m, path, out, opt["--build-dir"], globals())
+        elif opt["--arch"] != "x86_64":
+            print("hydo-build: --arch is x86_64 or arm64", file=sys.stderr); return 2
+        else:
+            build(m, path, out, opt["--build-dir"], params)
     except ManifestError as e:
         print("hydo-build: %s" % e, file=sys.stderr); return 1
     return 0
