@@ -51,7 +51,7 @@ static uint64_t g_seed;
 static long g_ckpt, g_ckpt_busy, g_ckpt_restartish;
 
 /* per-run shape, drawn once per run from the seed */
-static int W, TXNS, MAXROWS, MAXPAD, AUTOCKPT, CKPT_YIELD, READER, NCKPT;
+static int W, TXNS, MAXROWS, MAXPAD, AUTOCKPT, CKPT_YIELD, READER, NCKPT, MODES, NMODES, MODE[4], MIXED;
 
 static sqlite3 *open_db(void)
 {
@@ -77,6 +77,7 @@ static void *writer(void *p)
 	sqlite3 *db = open_db();
 	static char pad[8192];
 	memset(pad, 'p', sizeof(pad));
+	sqlite3 *ck = MIXED ? open_db() : NULL;     /* mixed: this thread also checkpoints, on its own second connection */
 	sqlite3_stmt *ins;
 	sqlite3_prepare_v2(db, "INSERT INTO t(id, val, pad, n) VALUES(?1, ?2, ?3, ?4)", -1, &ins, 0);
 	for (int i = 0; i < TXNS; i++) {
@@ -103,7 +104,12 @@ static void *writer(void *p)
 		fprintf(g_out, "%lld %s\n", (long long)tx, rc == SQLITE_OK ? "ack" : "failed");
 		fflush(g_acked); fflush(g_out);
 		pthread_mutex_unlock(&g_mu);
+		if (ck && rbelow(&r, 2)) {
+			int log = 0, ckd = 0;
+			sqlite3_wal_checkpoint_v2(ck, NULL, MODE[rbelow(&r, NMODES)], &log, &ckd);
+		}
 	}
+	if (ck) sqlite3_close(ck);
 	sqlite3_finalize(ins);
 	sqlite3_close(db);
 	__sync_fetch_and_sub(&g_writers_left, 1);
@@ -114,13 +120,11 @@ static void *checkpointer(void *p)
 {
 	struct warg *a = p;
 	struct rng r = { mix(g_seed ^ ((uint64_t)a->step << 20) ^ 0xC4EC4E ^ (uint64_t)a->w * 0x1F3) };
-	static const int modes[] = { SQLITE_CHECKPOINT_PASSIVE, SQLITE_CHECKPOINT_FULL,
-				     SQLITE_CHECKPOINT_RESTART, SQLITE_CHECKPOINT_TRUNCATE };
 	sqlite3 *db = open_db();
 	while (g_writers_left > 0) {
 		int burst = 1 + (int)rbelow(&r, 3);     /* checkpoints back to back */
 		for (int b = 0; b < burst; b++) {
-			int log = 0, ck = 0, mode = modes[rbelow(&r, 4)];
+			int log = 0, ck = 0, mode = MODE[rbelow(&r, NMODES)];
 			int rc = sqlite3_wal_checkpoint_v2(db, NULL, mode, &log, &ck);
 			g_ckpt++;
 			if (rc == SQLITE_BUSY) g_ckpt_busy++;
@@ -149,11 +153,20 @@ static void *reader(void *p)
 	return NULL;
 }
 
+static int g_aimed;
+
+/* /tmp/walrace.seed: "<hex seed>" or "<hex seed> aimed". "aimed" is NOT part of the blind
+ * search: it pins the shape to what the bug write-up (sqlite.org wal.html 11.1) and the 3.51.3
+ * fix describe -- back-to-back PASSIVE checkpoints racing writers, no readers -- so that a
+ * separate, labelled experiment can ask whether hydo's preemption points can land in the
+ * window at all once the workload is right. */
 static uint64_t read_seed(void)
 {
 	FILE *f = fopen("/tmp/walrace.seed", "r");
 	unsigned long long v = 0;
-	if (f) { if (fscanf(f, "%llx", &v) != 1) v = 0; fclose(f); }
+	char w[16] = "";
+	if (f) { if (fscanf(f, "%llx %15s", &v, w) < 1) v = 0; fclose(f); }
+	g_aimed = !strcmp(w, "aimed");
 	return v;
 }
 
@@ -169,9 +182,20 @@ static int run(int from, int to)
 	{ static const int ac[] = { 0, 1, 4, 16, 100, 1000 }; AUTOCKPT = ac[rbelow(&shape, 6)]; }
 	CKPT_YIELD = (int)rbelow(&shape, 2);
 	READER = (int)rbelow(&shape, 3);                /* 0..2 reader threads */
+	MIXED = (int)rbelow(&shape, 2);                 /* writers also checkpoint (second connection) */
+	if (g_aimed) { NCKPT = 1; READER = 0; MIXED = 0; CKPT_YIELD = 0; AUTOCKPT = 0; }
+	/* swarm-style: which checkpoint modes this run uses at all (a non-empty subset) */
+	do MODES = (int)rbelow(&shape, 16); while (!MODES);
+	if (g_aimed) MODES = 1;                         /* PASSIVE only */
+	{
+		static const int all[] = { SQLITE_CHECKPOINT_PASSIVE, SQLITE_CHECKPOINT_FULL,
+					   SQLITE_CHECKPOINT_RESTART, SQLITE_CHECKPOINT_TRUNCATE };
+		NMODES = 0;
+		for (int b = 0; b < 4; b++) if (MODES & (1 << b)) MODE[NMODES++] = all[b];
+	}
 	char hdr[256];
-	snprintf(hdr, sizeof(hdr), "walrace: seed=%llx writers=%d ckpters=%d txns=%d rows<=%d pad<=%d autockpt=%d yield=%d readers=%d steps=%d..%d\n",
-		 (unsigned long long)g_seed, W, NCKPT, TXNS, MAXROWS, MAXPAD, AUTOCKPT, CKPT_YIELD, READER, from, to);
+	snprintf(hdr, sizeof(hdr), "walrace: seed=%llx writers=%d ckpters=%d txns=%d rows<=%d pad<=%d autockpt=%d yield=%d readers=%d modes=%x mixed=%d aimed=%d steps=%d..%d\n",
+		 (unsigned long long)g_seed, W, NCKPT, TXNS, MAXROWS, MAXPAD, AUTOCKPT, CKPT_YIELD, READER, MODES, MIXED, g_aimed, from, to);
 	fputs(hdr, stdout);
 	FILE *hc = fopen("/dev/console", "w");
 	if (hc) { fputs(hdr, hc); fclose(hc); }
