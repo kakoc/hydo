@@ -14,7 +14,7 @@ It needed **one small guest-kernel change** (a Kconfig option, below) and no roo
 
 | File | What |
 |---|---|
-| `hvm.c` | the VMM (~750 lines of C): RAM, generated device tree, GICv2 + 16550 UART + PSCI emulation, exit-count clock, snapshot/branch, fingerprint, spin watchdog |
+| `hvm.c` | the VMM (~680 lines of C): RAM, generated device tree, GICv2 + 16550 UART + PSCI emulation, exit-count clock, snapshot/branch, fingerprint, spin watchdog |
 | `build.sh` | builds `probe` and `hvm` and ad-hoc signs them with the hypervisor entitlement |
 | `linux/build-guest.sh` | builds the guest on a Linux box with nix: kernel `Image`, `initramfs.cpio.gz`, `initramfs-spin.cpio.gz`. Byte-reproducible (checked with a clean rebuild in a fresh directory) |
 | `linux/apply-cntpct.py`, `linux/force-cntpct.patch` | the kernel change (script, and the resulting diff for reading) |
