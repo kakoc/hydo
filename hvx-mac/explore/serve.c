@@ -28,8 +28,20 @@
  * root), tick-timing jitter (tj*: no PMU clock here), and disk faults or cuts without a disk.
  * explore.py --backend hvm strips those from generated schedules up front (hvm_supported()).
  *
+ * Exit-free spin loops (../spin_observer.c, ../spin/RESEARCH.md): exact-repeat loops are
+ * resolved in every run. Counter loops need the rewind mode (a checkpoint at every exit, several
+ * times slower), chosen per schedule: HVM_SPIN_REWIND=auto (the default here) runs a schedule
+ * plainly and, only if that ends as SPIN, runs it again from S1 with rewind on, and reports that
+ * second run; =1 always rewinds, =0 never. A host token "spin=rewind" forces it for one schedule.
+ * Reported results stay a pure function of the schedule: rewind mode only adds the checkpoints
+ * (invisible to the guest) and the counter-loop resolution, so a schedule that completes plainly
+ * gives the same fingerprint with rewind on, and one that does not complete plainly is never
+ * reported from its plain run. The RESULT line keeps explore.py's format; stderr says when the
+ * reported run used rewind mode.
+ *
  * Env: HVM_MEM_MB (default 1024, the manifest v1 size), HVM_SNAP_DIR (default /tmp/hvm-snap),
- *      HVM_RUN_EXITS (per-phase exit budget, default 50,000,000), HVM_DISK, plus ../hvm.c's knobs.
+ *      HVM_RUN_EXITS (per-phase exit budget, default 50,000,000), HVM_DISK, plus ../hvm.c's knobs
+ *      (HVM_SPIN_MS, HVM_SPIN_SECS, HVM_SPIN_OBSERVE, HVM_SPLOG).
  */
 #define HVM_NO_MAIN
 #include "../hvm.c"
@@ -45,6 +57,7 @@
 #define FAILED_PREFIX "hydo-explore-failed:"
 
 static const char *outdir = ".";
+static int spin_auto;          /* HVM_SPIN_REWIND=auto (default): escalate a SPIN run to rewind mode */
 static uint64_t run_exits = 50000000ULL;
 
 /* ---------------- stop at the first exit after any of several markers ---------------- */
@@ -129,6 +142,7 @@ static void xsnap_restore(const struct xsnap *s)
 	CHK(hv_vm_create(NULL));
 	CHK(hv_vm_map(ram, RAM_BASE, ram_size, HV_MEMORY_READ | HV_MEMORY_WRITE | HV_MEMORY_EXEC));
 	CHK(hv_vcpu_create(&vcpu, &ex, NULL)); trap_dbg_applied = -1;
+	spin_reset();                  /* nothing armed at a snapshot point; the checkpoint is retaken */
 	memcpy(ram, s->ram, ram_size);
 	/* The host wrote guest code through the data cache; make sure no stale instruction of the
 	 * previous run can be fetched. Defensive as well (README.md, Open). */
@@ -248,7 +262,8 @@ static void oracle_cmd(size_t from, char *out, size_t n)   /* as hvx_explore's *
 	out[o++] = '\n'; out[o] = 0;
 }
 static struct xsnap *g_s0;
-static void run_sched(const char *tag, const char *sched)
+static int spin_hit;           /* a phase of this run ended as SPIN (the run is invalid) */
+static void run_once(const char *tag, const char *sched, int rewound)
 {
 	static const char *const wk[] = { DONE_MARKER, FINAL_MARKER };
 	static const char *const fin[] = { FINAL_MARKER };
@@ -273,14 +288,14 @@ static void run_sched(const char *tag, const char *sched)
 	snprintf(line, sizeof line, "%s\n", guest + 1);
 	hvm_put_input(line);
 	r = run_to(wk, 2, from, &why);
-	if (r < 0) { snprintf(verdict, sizeof verdict, "ERROR workload: %s", stop_name(why)); goto out; }
+	if (r < 0) { spin_hit |= why == STOP_SPIN; snprintf(verdict, sizeof verdict, "ERROR workload: %s", stop_name(why)); goto out; }
 	wfp = xfp(); diag(tag, "w");
 	if (r == 1) { last_verdict(from, verdict, sizeof verdict); ffp = wfp; goto out; }
 	if (!cut) {                    /* same boot: faults off, heal, check */
 		set_fault(0, 0, 0);
 		hvm_put_input("go\n");
 		r = run_to(fin, 1, from, &why);
-		if (r < 0) { snprintf(verdict, sizeof verdict, "ERROR check: %s", stop_name(why)); goto out; }
+		if (r < 0) { spin_hit |= why == STOP_SPIN; snprintf(verdict, sizeof verdict, "ERROR check: %s", stop_name(why)); goto out; }
 		ffp = xfp(); diag(tag, "f");
 		last_verdict(from, verdict, sizeof verdict);
 		goto out;
@@ -297,7 +312,7 @@ static void run_sched(const char *tag, const char *sched)
 		from = M.console_len;
 		hvm_put_input(orc);
 		r = run_to(fin, 1, from, &why);
-		if (r < 0) { snprintf(verdict, sizeof verdict, "ERROR recovery: %s", stop_name(why)); goto out_rec; }
+		if (r < 0) { spin_hit |= why == STOP_SPIN; snprintf(verdict, sizeof verdict, "ERROR recovery: %s", stop_name(why)); goto out_rec; }
 		ffp = xfp(); diag(tag, "f");
 		last_verdict(from, verdict, sizeof verdict);
 	out_rec:;
@@ -308,9 +323,28 @@ static void run_sched(const char *tag, const char *sched)
 out:
 	save_log(tag, from);
 done:
+	if (spin_hit && !rewound && spin_auto) return;   /* not reported: run_sched re-runs it with rewind */
+	if (rewound) fprintf(stderr, "hvmx: %s: reported from a rewind-mode run\n", tag);
 	printf("RESULT %s fp=%016llx wfp=%016llx secs=%.1f verdict=%s\n", tag,
 	       (unsigned long long)fnv(&ffp, 8, wfp), (unsigned long long)wfp, now_s() - t0, verdict);
 	fflush(stdout);
+}
+/* one schedule from the restored S1 (serve) or from the provisioned boot (one); see the header */
+static void run_sched(const char *tag, const char *sched, struct xsnap *s1)
+{
+	const char *bar = strchr(sched, '|');
+	int forced = bar && memmem(sched, (size_t)(bar - sched), "spin=rewind", 11) != NULL;
+	int base = rw_on;
+	spin_hit = 0;
+	if (forced && !rw_on) rw_on = 1;
+	run_once(tag, sched, rw_on);
+	if (spin_hit && !rw_on && spin_auto) {
+		fprintf(stderr, "hvmx: %s ended as SPIN; running it again with rewind (counter loops)\n", tag);
+		if (s1) xsnap_restore(s1); else { fprintf(stderr, "hvmx: no S1 snapshot to re-run from\n"); exit(3); }
+		rw_on = 1; spin_hit = 0;
+		run_once(tag, sched, 1);
+	}
+	rw_on = base;
 }
 
 static int boot_to_s1(struct xsnap *s0, struct xsnap *s1)
@@ -343,7 +377,8 @@ int main(int argc, char **argv)
 	ram_size = (uint64_t)(getenv("HVM_MEM_MB") ? atoi(getenv("HVM_MEM_MB")) : 1024) << 20;
 	if (getenv("HVM_STEP")) STEP = strtoull(getenv("HVM_STEP"), 0, 0);
 	if (getenv("HVM_RUN_EXITS")) run_exits = strtoull(getenv("HVM_RUN_EXITS"), 0, 0);
-	if (getenv("HVM_SPIN_SECS")) spin_secs = atof(getenv("HVM_SPIN_SECS"));
+	spin_env();
+	spin_auto = !getenv("HVM_SPIN_REWIND") || !strcmp(getenv("HVM_SPIN_REWIND"), "auto");
 	echo = getenv("HVM_ECHO") != NULL;
 	soft_irq = getenv("HVM_SOFT_IRQ") ? atoi(getenv("HVM_SOFT_IRQ")) : 1;   /* exact IRQ entry (see ../hvm.c) */
 	if (getenv("HVM_TRACE")) trace_f = fopen(getenv("HVM_TRACE"), "w");
@@ -365,9 +400,9 @@ int main(int argc, char **argv)
 	static struct xsnap s0, s1;
 	g_s0 = &s0;
 	if (!strcmp(mode, "one")) {
-		if (boot_to_s1(&s0, NULL)) return 1;   /* S0 is still needed for a power cut's recovery boot */
+		if (boot_to_s1(&s0, spin_auto ? &s1 : NULL)) return 1;   /* S0 is still needed for a power cut's recovery boot */
 		fprintf(stderr, "hvmx: provisioned in %.1f s (fresh boot, no snapshot restore)\n", now_s() - t0);
-		run_sched("one", argv[5]);
+		run_sched("one", argv[5], &s1);   /* S1 only if a SPIN run must be repeated with rewind */
 		return 0;
 	}
 	if (boot_to_s1(&s0, &s1)) return 1;
@@ -379,7 +414,7 @@ int main(int argc, char **argv)
 		if (!strncmp(in, "BRANCH ", 7)) { printf("BRANCHEND ? unsupported on hvm\n"); fflush(stdout); continue; }
 		if (sscanf(in, "RUN %63s %n", tag, &off) != 1 || !off) { printf("RESULT ? fp=0 wfp=0 secs=0 verdict=ERROR bad request\n"); fflush(stdout); continue; }
 		xsnap_restore(&s1);
-		run_sched(tag, in + off);
+		run_sched(tag, in + off, &s1);
 	}
 	return 0;
 }
