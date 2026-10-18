@@ -29,8 +29,11 @@ PMS = [5, 20, 50, 100, 200, 500, 1000]          # delayed ticks per 1000
 MAXS = [2000, 50000, 500000]                    # max delay in guest branches (< the 2^20 period)
 
 
+ARMS = ["timing", "workload", "both"]
+
+
 def gen(i, salt):
-    arm = ["timing", "workload", "both"][i % 3]
+    arm = ARMS[i % len(ARMS)]
     r = explore.SplitMix((i * 0x9E3779B97F4A7C15 ^ salt) & explore.M64)
     s = {"arm": arm, "S": 0, "tj": None}
     if arm in ("workload", "both"):
@@ -132,9 +135,11 @@ def main():
     ap.add_argument("--salt", type=lambda x: int(x, 0), default=0x5A17E)
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--arms", default="timing,workload,both", help="arms to cycle through")
     ap.add_argument("--stop-after", type=int, default=3, help="stop after this many distinct failures")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
+    ARMS[:] = a.arms.split(",")
     explore.IMAGE = a.image
     t0 = time.time()
     pool = explore.Pool(a.workers, a.out)

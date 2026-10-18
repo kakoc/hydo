@@ -22,7 +22,7 @@ data:
 services: []
 
 workload:
-  steps: 8                  # step = one round of fresh threads (see walrace.c)
+  steps: 4                  # step = one round of fresh threads (see walrace.c)
   run: /bin/walrace run /data/db/t.db $HYDO_ACKED $HYDO_OUTCOMES $HYDO_FROM $HYDO_TO
   timeout: 900
   process: walrace

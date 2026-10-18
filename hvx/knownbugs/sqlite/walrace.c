@@ -51,7 +51,7 @@ static uint64_t g_seed;
 static long g_ckpt, g_ckpt_busy, g_ckpt_restartish;
 
 /* per-run shape, drawn once per run from the seed */
-static int W, TXNS, MAXROWS, MAXPAD, AUTOCKPT, CKPT_YIELD, READER;
+static int W, TXNS, MAXROWS, MAXPAD, AUTOCKPT, CKPT_YIELD, READER, NCKPT;
 
 static sqlite3 *open_db(void)
 {
@@ -78,9 +78,12 @@ static void *writer(void *p)
 	static char pad[8192];
 	memset(pad, 'p', sizeof(pad));
 	sqlite3_stmt *ins;
-	sqlite3_prepare_v2(db, "INSERT INTO t(id, val, pad) VALUES(?1, ?2, ?3)", -1, &ins, 0);
+	sqlite3_prepare_v2(db, "INSERT INTO t(id, val, pad, n) VALUES(?1, ?2, ?3, ?4)", -1, &ins, 0);
 	for (int i = 0; i < TXNS; i++) {
-		int64_t id = (int64_t)a->step * 1000000 + (int64_t)a->w * 100000 + i * 10;
+		/* transaction id (what <acked> records, kept short: the guest prints the acked list
+		 * on its 64 KiB console); its rows are tx*8 .. tx*8+rows-1, row 0 also stores rows */
+		int64_t tx = ((int64_t)a->step * 8 + a->w) * 256 + i;
+		int64_t id = tx * 8;
 		int rows = 1 + (int)rbelow(&r, MAXROWS);
 		int rc = sqlite3_exec(db, "BEGIN IMMEDIATE", 0, 0, 0);
 		for (int k = 0; rc == SQLITE_OK && k < rows; k++) {
@@ -88,6 +91,7 @@ static void *writer(void *p)
 			sqlite3_bind_int64(ins, 1, id + k);
 			sqlite3_bind_int64(ins, 2, value_of(id + k));
 			sqlite3_bind_blob(ins, 3, pad, 1 + (int)rbelow(&r, MAXPAD), SQLITE_STATIC);
+			sqlite3_bind_int(ins, 4, k ? 0 : rows);
 			rc = sqlite3_step(ins) == SQLITE_DONE ? SQLITE_OK : SQLITE_ERROR;
 		}
 		if (rc == SQLITE_OK)
@@ -95,10 +99,8 @@ static void *writer(void *p)
 		else
 			sqlite3_exec(db, "ROLLBACK", 0, 0, 0);
 		pthread_mutex_lock(&g_mu);
-		for (int k = 0; k < rows; k++) {
-			if (rc == SQLITE_OK) fprintf(g_acked, "%lld\n", (long long)(id + k));
-			fprintf(g_out, "%lld %s\n", (long long)(id + k), rc == SQLITE_OK ? "ack" : "failed");
-		}
+		if (rc == SQLITE_OK) fprintf(g_acked, "%lld\n", (long long)tx);
+		fprintf(g_out, "%lld %s\n", (long long)tx, rc == SQLITE_OK ? "ack" : "failed");
 		fflush(g_acked); fflush(g_out);
 		pthread_mutex_unlock(&g_mu);
 	}
@@ -110,8 +112,8 @@ static void *writer(void *p)
 
 static void *checkpointer(void *p)
 {
-	int step = *(int *)p;
-	struct rng r = { mix(g_seed ^ ((uint64_t)step << 20) ^ 0xC4EC4E) };
+	struct warg *a = p;
+	struct rng r = { mix(g_seed ^ ((uint64_t)a->step << 20) ^ 0xC4EC4E ^ (uint64_t)a->w * 0x1F3) };
 	static const int modes[] = { SQLITE_CHECKPOINT_PASSIVE, SQLITE_CHECKPOINT_FULL,
 				     SQLITE_CHECKPOINT_RESTART, SQLITE_CHECKPOINT_TRUNCATE };
 	sqlite3 *db = open_db();
@@ -133,8 +135,8 @@ static void *checkpointer(void *p)
 
 static void *reader(void *p)
 {
-	int step = *(int *)p;
-	struct rng r = { mix(g_seed ^ ((uint64_t)step << 20) ^ 0x8EAD) };
+	struct warg *a = p;
+	struct rng r = { mix(g_seed ^ ((uint64_t)a->step << 20) ^ 0x8EAD ^ (uint64_t)a->w * 0x1F3) };
 	sqlite3 *db = open_db();
 	while (g_writers_left > 0) {
 		sqlite3_exec(db, "BEGIN", 0, 0, 0);
@@ -159,31 +161,42 @@ static int run(int from, int to)
 {
 	g_seed = read_seed();
 	struct rng shape = { mix(g_seed ^ 0x5EA9E) };
-	W = 2 + (int)rbelow(&shape, 2);                 /* 2..3 writers */
-	TXNS = 40 + (int)rbelow(&shape, 80);
+	W = 2 + (int)rbelow(&shape, 4);                 /* 2..5 writers */
+	NCKPT = 1 + (int)rbelow(&shape, 2);             /* 1..2 checkpointer threads */
+	TXNS = 40 + (int)rbelow(&shape, 80);             /* < 256 (transaction id layout) */
 	MAXROWS = 1 + (int)rbelow(&shape, 4);
-	MAXPAD = 64 + (int)rbelow(&shape, 4000);
-	{ static const int ac[] = { 0, 4, 16, 100, 1000 }; AUTOCKPT = ac[rbelow(&shape, 5)]; }
+	MAXPAD = 16 + (int)rbelow(&shape, 1000);
+	{ static const int ac[] = { 0, 1, 4, 16, 100, 1000 }; AUTOCKPT = ac[rbelow(&shape, 6)]; }
 	CKPT_YIELD = (int)rbelow(&shape, 2);
-	READER = (int)rbelow(&shape, 2);
-	printf("walrace: seed=%llx writers=%d txns=%d rows<=%d pad<=%d autockpt=%d yield=%d reader=%d steps=%d..%d\n",
-	       (unsigned long long)g_seed, W, TXNS, MAXROWS, MAXPAD, AUTOCKPT, CKPT_YIELD, READER, from, to);
+	READER = (int)rbelow(&shape, 3);                /* 0..2 reader threads */
+	char hdr[256];
+	snprintf(hdr, sizeof(hdr), "walrace: seed=%llx writers=%d ckpters=%d txns=%d rows<=%d pad<=%d autockpt=%d yield=%d readers=%d steps=%d..%d\n",
+		 (unsigned long long)g_seed, W, NCKPT, TXNS, MAXROWS, MAXPAD, AUTOCKPT, CKPT_YIELD, READER, from, to);
+	fputs(hdr, stdout);
+	FILE *hc = fopen("/dev/console", "w");
+	if (hc) { fputs(hdr, hc); fclose(hc); }
 	sqlite3 *db = open_db();
-	sqlite3_exec(db, "CREATE TABLE IF NOT EXISTS t(id INTEGER PRIMARY KEY, val INTEGER, pad BLOB)", 0, 0, 0);
+	sqlite3_exec(db, "CREATE TABLE IF NOT EXISTS t(id INTEGER PRIMARY KEY, val INTEGER, pad BLOB, n INTEGER)", 0, 0, 0);
 	sqlite3_close(db);
 	for (int step = from; step < to; step++) {
-		pthread_t wt[4], ct, rt;
-		struct warg wa[4];
+		pthread_t wt[8], ct[2], rt[2];
+		struct warg wa[8], ca[2], ra[2];
 		g_writers_left = W;
-		pthread_create(&ct, NULL, checkpointer, &step);
-		if (READER) pthread_create(&rt, NULL, reader, &step);
+		for (int c = 0; c < NCKPT; c++) {
+			ca[c].step = step; ca[c].w = c;
+			pthread_create(&ct[c], NULL, checkpointer, &ca[c]);
+		}
+		for (int c = 0; c < READER; c++) {
+			ra[c].step = step; ra[c].w = c;
+			pthread_create(&rt[c], NULL, reader, &ra[c]);
+		}
 		for (int w = 0; w < W; w++) {
 			wa[w].step = step; wa[w].w = w;
 			pthread_create(&wt[w], NULL, writer, &wa[w]);
 		}
 		for (int w = 0; w < W; w++) pthread_join(wt[w], NULL);
-		pthread_join(ct, NULL);
-		if (READER) pthread_join(rt, NULL);
+		for (int c = 0; c < NCKPT; c++) pthread_join(ct[c], NULL);
+		for (int c = 0; c < READER; c++) pthread_join(rt[c], NULL);
 	}
 	struct rusage ru;
 	getrusage(RUSAGE_SELF, &ru);
@@ -230,32 +243,36 @@ static int check(const char *acked)
 		bad = 1;
 	}
 	FILE *f = fopen(acked, "r");
-	long long id, n = 0, lost = 0, wrong = 0, firstbad = -1;
-	sqlite3_prepare_v2(db, "SELECT val FROM t WHERE id=?1", -1, &st, 0);
-	while (f && fscanf(f, "%lld", &id) == 1) {
+	long long tx, n = 0, lost = 0, wrong = 0, firstbad = -1;
+	sqlite3_prepare_v2(db, "SELECT id, val, n FROM t WHERE id >= ?1 AND id < ?1 + 8 ORDER BY id", -1, &st, 0);
+	while (f && fscanf(f, "%lld", &tx) == 1) {
 		n++;
 		sqlite3_reset(st);
-		sqlite3_bind_int64(st, 1, id);
-		int rc = sqlite3_step(st);
-		if (rc == SQLITE_ROW) {
-			if (sqlite3_column_int64(st, 0) != value_of(id)) { wrong++; if (firstbad < 0) firstbad = id; }
-		} else if (rc == SQLITE_DONE) {
-			lost++; if (firstbad < 0) firstbad = id;
-		} else {
-			printf("HYDO-ORACLE: VIOLATION read of committed id %lld failed: %s\n", id, sqlite3_errmsg(db));
+		sqlite3_bind_int64(st, 1, tx * 8);
+		int rc, got = 0, want = -1, bad = 0;
+		while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
+			long long id = sqlite3_column_int64(st, 0);
+			if (sqlite3_column_int64(st, 1) != value_of(id)) bad = 1;
+			if (id == tx * 8) want = sqlite3_column_int(st, 2);
+			got++;
+		}
+		if (rc != SQLITE_DONE) {
+			printf("HYDO-ORACLE: VIOLATION read of committed transaction %lld failed: %s\n", tx, sqlite3_errmsg(db));
 			sqlite3_finalize(st); sqlite3_close(db);
 			return 1;
 		}
+		if (want < 0 || got != want) { lost++; if (firstbad < 0) firstbad = tx; }
+		else if (bad) { wrong++; if (firstbad < 0) firstbad = tx; }
 	}
 	if (f) fclose(f);
 	sqlite3_finalize(st);
 	sqlite3_close(db);
 	if (lost || wrong) {
-		printf("HYDO-ORACLE: VIOLATION committed writes lost=%lld wrong=%lld of %lld (first id %lld)\n", lost, wrong, n, firstbad);
+		printf("HYDO-ORACLE: VIOLATION committed transactions lost=%lld wrong=%lld of %lld (first tx %lld)\n", lost, wrong, n, firstbad);
 		return 1;
 	}
 	if (bad) return 1;
-	printf("committed=%lld all present, integrity ok (sqlite %s)\n", n, sqlite3_libversion());
+	printf("committed=%lld transactions all present, integrity ok (sqlite %s)\n", n, sqlite3_libversion());
 	return 0;
 }
 
