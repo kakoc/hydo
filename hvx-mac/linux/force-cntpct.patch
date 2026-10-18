@@ -1,0 +1,69 @@
+--- a/drivers/clocksource/Kconfig
++++ b/drivers/clocksource/Kconfig
+@@ -305,6 +305,15 @@
+ 	select TIMER_OF if OF
+ 	select TIMER_ACPI if ACPI
+ 
++config ARM_ARCH_TIMER_FORCE_CNTPCT
++	bool "Use only the physical counter (deterministic hypervisors)"
++	depends on ARM_ARCH_TIMER && ARM64
++	help
++	  Read time only from CNTPCT_EL0, from boot on, and trap EL0 reads of
++	  CNTVCT_EL0. For hypervisors that can trap the physical counter but
++	  not the virtual one (Apple Hypervisor.framework on M1/M2), so they can
++	  give the guest a deterministic clock. Say N on real hardware.
++
+ config ARM_ARCH_TIMER_EVTSTREAM
+ 	bool "Enable ARM architected timer event stream generation by default"
+ 	default y if ARM_ARCH_TIMER
+--- a/drivers/clocksource/arm_arch_timer.c
++++ b/drivers/clocksource/arm_arch_timer.c
+@@ -88,13 +88,16 @@
+ static bool arch_timer_mem_use_virtual __ro_after_init;
+ static bool arch_counter_suspend_stop __ro_after_init;
+ #ifdef CONFIG_GENERIC_GETTIMEOFDAY
+-static enum vdso_clock_mode vdso_default = VDSO_CLOCKMODE_ARCHTIMER;
++static enum vdso_clock_mode vdso_default =
++	IS_ENABLED(CONFIG_ARM_ARCH_TIMER_FORCE_CNTPCT) ? VDSO_CLOCKMODE_NONE : VDSO_CLOCKMODE_ARCHTIMER;
+ #else
+ static enum vdso_clock_mode vdso_default = VDSO_CLOCKMODE_NONE;
+ #endif /* CONFIG_GENERIC_GETTIMEOFDAY */
+ 
+ static cpumask_t evtstrm_available = CPU_MASK_NONE;
+ static bool evtstrm_enable __ro_after_init = IS_ENABLED(CONFIG_ARM_ARCH_TIMER_EVTSTREAM);
++/* hydo: physical counter only (see CONFIG_ARM_ARCH_TIMER_FORCE_CNTPCT) */
++static const bool arch_timer_force_cntpct = IS_ENABLED(CONFIG_ARM_ARCH_TIMER_FORCE_CNTPCT);
+ 
+ static int __init early_evtstrm_cfg(char *buf)
+ {
+@@ -235,7 +238,8 @@
+  * to exist on arm64. arm doesn't use this before DT is probed so even
+  * if we don't have the cp15 accessors we won't have a problem.
+  */
+-u64 (*arch_timer_read_counter)(void) __ro_after_init = arch_counter_get_cntvct;
++u64 (*arch_timer_read_counter)(void) __ro_after_init =
++	IS_ENABLED(CONFIG_ARM_ARCH_TIMER_FORCE_CNTPCT) ? arch_counter_get_cntpct : arch_counter_get_cntvct;
+ EXPORT_SYMBOL_GPL(arch_timer_read_counter);
+ 
+ static u64 arch_counter_read(struct clocksource *cs)
+@@ -973,7 +977,7 @@
+ 	 * need to be workaround. The vdso may have been already
+ 	 * disabled though.
+ 	 */
+-	if (arch_timer_this_cpu_has_cntvct_wa())
++	if (arch_timer_this_cpu_has_cntvct_wa() || arch_timer_force_cntpct)
+ 		pr_info("CPU%d: Trapping CNTVCT access\n", smp_processor_id());
+ 	else
+ 		cntkctl |= ARCH_TIMER_USR_VCT_ACCESS_EN;
+@@ -1108,8 +1112,9 @@
+ 	if (type & ARCH_TIMER_TYPE_CP15) {
+ 		u64 (*rd)(void);
+ 
+-		if ((IS_ENABLED(CONFIG_ARM64) && !is_hyp_mode_available()) ||
+-		    arch_timer_uses_ppi == ARCH_TIMER_VIRT_PPI) {
++		if (!arch_timer_force_cntpct &&
++		    ((IS_ENABLED(CONFIG_ARM64) && !is_hyp_mode_available()) ||
++		     arch_timer_uses_ppi == ARCH_TIMER_VIRT_PPI)) {
+ 			if (arch_timer_counter_has_wa()) {
+ 				rd = arch_counter_get_cntvct_stable;
+ 				scr = raw_counter_get_cntvct_stable;
