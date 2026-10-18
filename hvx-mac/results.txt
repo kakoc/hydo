@@ -1,0 +1,60 @@
+# Mac14,10 Apple M2 Pro, macOS 26.4.1 (25E253)
+== lifecycle
+lifecycle: 200000 HVC exits in 0.152 s = 1313652 exits/s (0.76 us/exit)
+mmio store: exit=1036 EC=0x24 ISS=0x1c18046 FAR(ex)=0x20000000 IPA=0x20000000 pc=0x1000000c
+mmio load : exit=1036 EC=0x24 ISS=0x1c38006 IPA=0x20000000 (ISS.SRT=x3)
+after mmio: exit=9 (9 = done)
+== time
+time: guest CNTFRQ_EL0 = 24000000 Hz
+time: trapped read ISS=0x32f801 (op0=3 op1=3 CRn=14 CRm=0 op2=1) -> CNTPCT_EL0 is op2=1, CNTVCT_EL0 op2=2
+time: 2000 counter reads trapped
+time: default offset: cntvct[0..3] = 19111276120235 19111276120319 19111276120357 19111276120395; cntpct[0] = 7777
+time: no exits were taken by MRS CNTVCT/CNTPCT unless reported above
+time: trapped read ISS=0x32f801 (op0=3 op1=3 CRn=14 CRm=0 op2=1) -> CNTPCT_EL0 is op2=1, CNTVCT_EL0 op2=2
+time: 2000 counter reads trapped
+time: trapped read ISS=0x32f801 (op0=3 op1=3 CRn=14 CRm=0 op2=1) -> CNTPCT_EL0 is op2=1, CNTVCT_EL0 op2=2
+time: 2000 counter reads trapped
+time: driven offset (target 5000+1000k at each entry), 2000 reads: guest-seen minus target min 10 max 37 mean 11.9 ticks
+time: run A vs run B identical counter values: 1071 / 2000
+time: cntpct vs cntvct (driven) first pair: 7777 vs 5037
+== pmu
+pmu: EL2 (nested) supported on this machine: 0
+pmu: MRS/MSR trap ISS=0x30e439 (op0=3 op1=3 CRn=9 CRm=12 op2=0 dir=read Rt=x1)
+pmu: MRS/MSR trap ISS=0x30e49b (op0=3 op1=3 CRn=9 CRm=13 op2=0 dir=read Rt=x4)
+pmu: guest ID_AA64DFR0_EL1 = 0x10305006 (PMUVer = 0)
+== step
+step: loop of 1+100*2 instructions counted 201 and 201 steps (expected 201)
+step: 421578 single steps/s
+== irq
+irq: after 20 stepped insns, IRQ taken with x5=8 ELR=0xd8 | repeat x5=8 ELR=0xd8 SAME
+irq: after 21 stepped insns, IRQ taken with x5=8 ELR=0xd4 | repeat x5=8 ELR=0xd4 SAME
+irq: after 22 stepped insns, IRQ taken with x5=9 ELR=0xd8 | repeat x5=9 ELR=0xd8 SAME
+irq: after 23 stepped insns, IRQ taken with x5=9 ELR=0xd4 | repeat x5=9 ELR=0xd4 SAME
+vtimer: expired CNTV -> exit reason -2 after 1 runs (-2 = VTIMER_ACTIVATED)
+== snapshot
+snapshot: full run b77d1f06f35361be | snapshot at midpoint -> finish b77d1f06f35361be | restore into new vcpu -> finish b77d1f06f35361be => IDENTICAL
+snapshot: 45 of 45 probed system registers readable
+== ids
+ids: config ISAR0 = 0x0221100110212120 RNDR field = 0
+ids: config MMFR0 = 0x000010000f100002 ECV field = 0
+ids: config DFR0  = 0x0000000010305006 PMUVer = 0
+ids: guest exception ESR_EL1=0x2000000 (EC 0x0) at +0xb4 -> treated as UNDEFINED
+ids: guest exception ESR_EL1=0x2000000 (EC 0x0) at +0xb8 -> treated as UNDEFINED
+ids: pass 0 guest sees ISAR0=0x0221100110212120 MMFR0=0x000010000f100002 DFR0=0x0000000010305006 MIDR=0x610f0000 RNDR=0000000000000000 0000000000000000
+ids: set ISAR0 with RNDR cleared -> 0x0
+ids: guest exception ESR_EL1=0x2000000 (EC 0x0) at +0xb4 -> treated as UNDEFINED
+ids: guest exception ESR_EL1=0x2000000 (EC 0x0) at +0xb8 -> treated as UNDEFINED
+ids: pass 1 guest sees ISAR0=0x0221100110212120 MMFR0=0x000010000f100002 DFR0=0x0000000010305006 MIDR=0x610f0000 RNDR=0000000000000000 0000000000000000
+cntp: exit 1024 EC=0x18 ISS=0x34f804 (op2=2 CRm=2 write)
+cntp: exit 1024 EC=0x18 ISS=0x32f804 (op2=1 CRm=2 write)
+cntp: exit 1024 EC=0x18 ISS=0x30f825 (op2=0 CRm=2 read)
+cntp: exit 1024 EC=0x18 ISS=0x32f885 (op2=1 CRm=2 read)
+cntp: no further exits; guest read CNTP_TVAL=0 CNTP_CTL=0x0 CNTV_CTL=0x4
+wfi: exit 1001 EC=0x1 ISS=0x1e00000 (EC 0x01 = WFI/WFE trapped)
+== gic
+gic: hv_gic_create = 0x0 (dist size 65536, redist region 33554432)
+== spin
+spin: 3e9-iteration loop: 0 early returns, 0.90 s
+spin: 3e9-iteration loop: 0 early returns, 0.87 s
+spin: 3e9-iteration loop: 0 early returns, 0.87 s
+wfe: done (sevl; wfe; wfe; yield)
