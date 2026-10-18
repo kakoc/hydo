@@ -185,9 +185,7 @@ type orderServer struct {
 	kp        *kgo.Client // idempotent producer
 	rmu       sync.Mutex  // guards rc: requests run concurrently and share one connection
 	rc        *redisConn
-	mu        sync.Mutex             // guards the three maps below
-	uncertain map[int64]bool         // ids whose produce ended in an error: outcome unknown
-	attempted map[int64]bool         // ids for which a produce was ever started (never cleared)
+	mu        sync.Mutex              // guards inflight
 	inflight  map[int64]chan struct{} // ids with a Place running; closed when it returns
 }
 
@@ -221,25 +219,9 @@ func (s *orderServer) acquire(ctx context.Context, id int64) (func(), error) {
 	}
 }
 
-func (s *orderServer) flag(m map[int64]bool, id int64) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return m[id]
-}
-
-func (s *orderServer) setFlag(m map[int64]bool, id int64, v bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if v {
-		m[id] = true
-	} else {
-		delete(m, id)
-	}
-}
-
 // The two ways a Place can fail (Milestone 39). notApplied is a promise that nothing was
-// published and nothing will be: it is returned only while no produce has ever been
-// started for the id. Anything later is outcome-unknown.
+// published and nothing will be: it is returned only when this request read published=0
+// and failed before marking a send as started. Anything else is outcome-unknown.
 func notApplied(store string, id int64, err error) error {
 	pStoreError.Check(true, hydoassert.D{"store": store, "order": id})
 	pNotApplied.Check(true, hydoassert.D{"store": store, "order": id})
@@ -250,15 +232,6 @@ func outcomeUnknown(store string, id int64, err error) error {
 	pStoreError.Check(true, hydoassert.D{"store": store, "order": id})
 	pUnknown.Check(true, hydoassert.D{"store": store, "order": id})
 	return status.Error(codes.Unknown, "outcome-unknown: "+err.Error())
-}
-
-// failBefore picks the right kind for a failure that happened before this attempt's
-// produce: definite unless an earlier attempt already started one.
-func (s *orderServer) failBefore(store string, id int64, err error) error {
-	if s.flag(s.attempted, id) {
-		return outcomeUnknown(store, id, err)
-	}
-	return notApplied(store, id, err)
 }
 
 // kafkaHasKey scans the (small) topic for a record with this key. Used only before
@@ -333,31 +306,35 @@ func (s *orderServer) place(ctx context.Context, in *wrapperspb.Int64Value) (*wr
 	}
 	defer release()
 	//
-	// 1. MySQL: upsert -- a retry of an order that is already stored is a no-op.
+	// 1. MySQL: upsert -- a retry of an order that is already stored is a no-op. A failure
+	// here is not reported as "not applied": an earlier attempt -- possibly made by an earlier
+	// run of this service, before a crash -- may already have sent the order to Kafka.
 	if _, err := s.db.ExecContext(ctx, "INSERT INTO stack.orders (id, amount) VALUES (?, ?) ON DUPLICATE KEY UPDATE id = id", id, amt); err != nil {
-		return nil, s.failBefore("mysql", id, fmt.Errorf("mysql: %w", err))
+		return nil, outcomeUnknown("mysql", id, fmt.Errorf("mysql: %w", err))
 	}
-	// 2. Kafka, exactly once: skip if already published; otherwise, if an earlier attempt's
-	// outcome is unknown, look before producing again.
+	// 2. Kafka, exactly once. The row's `published` records how far sending got:
+	// 0 = no send started, 2 = a send started (the order may be in Kafka), 1 = published.
+	// It lives in MySQL, not in this process's memory, so a restarted service (after a
+	// crash) still knows to look in Kafka before sending an order a second time.
 	var published int
 	if err := s.db.QueryRowContext(ctx, "SELECT published FROM stack.orders WHERE id = ?", id).Scan(&published); err != nil {
-		return nil, s.failBefore("mysql", id, fmt.Errorf("mysql: %w", err))
+		return nil, outcomeUnknown("mysql", id, fmt.Errorf("mysql: %w", err))
 	}
-	if published == 0 {
+	if published != 1 {
 		have := false
-		if s.flag(s.uncertain, id) {
+		if published == 2 {
 			var err error
 			if have, err = kafkaHasKey(ctx, id); err != nil {
 				return nil, outcomeUnknown("kafka-check", id, fmt.Errorf("kafka check: %w", err))
 			}
 			pKafkaRecheck.Check(true, hydoassert.D{"order": id})
 			pDedupHit.Check(have, hydoassert.D{"order": id})
+		} else if _, err := s.db.ExecContext(ctx, "UPDATE stack.orders SET published = 2 WHERE id = ? AND published = 0", id); err != nil {
+			// Nothing has been sent, and no other request for this order is running
+			// (acquire): a definite failure.
+			return nil, notApplied("mysql", id, fmt.Errorf("mysql: %w", err))
 		}
 		if !have {
-			// From here on the order may reach Kafka even if this call fails: no later
-			// failure of this id can be reported as definite.
-			s.setFlag(s.attempted, id, true)
-			s.setFlag(s.uncertain, id, true)
 			res := s.kp.ProduceSync(ctx, &kgo.Record{
 				Key:   []byte(strconv.FormatInt(id, 10)),
 				Value: []byte(strconv.FormatInt(amt, 10)),
@@ -366,10 +343,8 @@ func (s *orderServer) place(ctx context.Context, in *wrapperspb.Int64Value) (*wr
 				return nil, outcomeUnknown("kafka", id, fmt.Errorf("kafka: %w", err))
 			}
 		}
-		s.setFlag(s.uncertain, id, false)
 		if _, err := s.db.ExecContext(ctx, "UPDATE stack.orders SET published = 1 WHERE id = ?", id); err != nil {
-			// Kafka has it; the flag will be set by the retry, which finds the key first.
-			s.setFlag(s.uncertain, id, true)
+			// Kafka has it; the row stays at 2, so the retry looks in Kafka first.
 			return nil, outcomeUnknown("mysql-publish", id, fmt.Errorf("mysql publish flag: %w", err))
 		}
 	}
@@ -461,7 +436,7 @@ func server() {
 		fail("hydostack: listen: %v", err)
 	}
 	gs := grpc.NewServer()
-	gs.RegisterService(&serviceDesc, &orderServer{db: db, kp: kp, rc: rc, uncertain: map[int64]bool{}, attempted: map[int64]bool{}, inflight: map[int64]chan struct{}{}})
+	gs.RegisterService(&serviceDesc, &orderServer{db: db, kp: kp, rc: rc, inflight: map[int64]chan struct{}{}})
 	fmt.Println("hydostack: server listening on " + grpcAddr)
 	if err := gs.Serve(lis); err != nil {
 		fail("hydostack: serve: %v", err)
@@ -721,7 +696,7 @@ func oracle(n int64, ackedFile, failedFile string) {
 		var id, amt, pub int64
 		if err := rows.Scan(&id, &amt, &pub); err == nil {
 			mysqlHas[id] = amt
-			mysqlPub[id] = pub != 0
+			mysqlPub[id] = pub == 1 // 2 = a send was started but never confirmed
 		}
 	}
 	rows.Close()
