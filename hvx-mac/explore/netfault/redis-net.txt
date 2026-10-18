@@ -1,0 +1,8 @@
+# network faults on Redis (M46 shapes): two-way, one-way requests, one-way replies
+disk=none | run N=redis@8-14:delay,20ms,loss,30%
+disk=none | run N=redis@4-12:delay,20ms,reorder,38%
+disk=none | run N=redis@6-10:delay,259ms,duplicate,13%
+disk=none | run O=redis@5-10:req:loss,100%
+disk=none | run O=redis@5-10:resp:loss,100%
+disk=none | run O=redis@3-9:resp:delay,300ms
+disk=cut | run N=redis@9-12:delay,20ms,reorder,38% C=18

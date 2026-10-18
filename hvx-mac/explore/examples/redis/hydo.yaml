@@ -88,4 +88,4 @@ invariants:
       [ $lost = 0 ] && echo "acked=$(wc -l < $HYDO_ACKED) all present"
       [ $lost = 0 ]
 
-faults: [kill, pause, cut, clock, disk]
+faults: [kill, pause, network, oneway, cut, clock, disk]
