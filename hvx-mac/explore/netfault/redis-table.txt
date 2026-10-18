@@ -1,0 +1,9 @@
+# the README "Fixed" table schedules: verdicts must be unchanged on the new kernel + image
+disk=none | run
+disk=cut | run C=12
+disk=cut | run C=12 R=everysec
+disk=lying:10 dseed=5017e0 | run C=15
+disk=lying:10 dseed=5017e1 | run C=15
+disk=ioerr:5 dseed=1234 | run
+disk=none | run K=redis@5+2
+disk=none | run P=redis@8+2

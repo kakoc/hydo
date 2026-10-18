@@ -14,14 +14,20 @@ closures, /etc/hydo/{manifest.sh,prelude.sh,hydo.yaml}, hydo-init.sh as /sbin/in
 differences:
   * the whole root is the initramfs (in guest RAM), not a read-only ext4 partition; a small
     /init waits for /dev/vda2 and then runs /sbin/init;
-  * no tc (the pinned iproute2 is x86): network faults are skipped by hydo-init.sh as on an
-    image without a port.
+  * tc is the pinned aarch64 iproute2 (TC_ARM64, a dynamically linked nixpkgs build: no static
+    one is in the binary cache), copied with exactly the shared libraries its loader opens
+    (hvx-mac/services/elfdeps.py); the kernel has the qdiscs built in (hvx-mac/explore/
+    hvm-explore.config). HYDO_TC_ARM64= (empty) builds an image without tc, as before.
 root.nix and root.files must name arm64 binaries (e.g. aarch64 store paths); nothing checks
 the architecture. Byte-reproducible: sorted newc cpio, fixed mtimes and owners, gzip -n.
 """
-import gzip, io, os, shutil, stat, subprocess
+import gzip, io, os, shutil, stat, subprocess, sys
 
 BUSYBOX_ARM64 = "/nix/store/zbc5fx2yszji1a4aw2ff46m0p99c6yxb-busybox-static-aarch64-unknown-linux-musl-1.36.1/bin/busybox"
+# nix build --max-jobs 0 --system aarch64-linux nixpkgs#iproute2 (from the binary cache)
+TC_ARM64 = "/nix/store/qmhi9c99dpgxyfg6cipf8xbmcvsr1vx2-iproute2-6.8.0/bin/tc"
+ELFDEPS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                       "hvx-mac", "services", "elfdeps.py")
 
 SHIM = """#!/bin/busybox sh
 # /init of an arm64 manifest image (hvx/onboard/hydo_build_arm64.py): wait for the data
@@ -75,6 +81,21 @@ def _cpio(root, out_gz, mtime):
     with open(out_gz, "wb") as fo:
         with gzip.GzipFile(filename="", mode="wb", fileobj=fo, mtime=0, compresslevel=9) as g:
             g.write(buf.getvalue())
+
+
+def _copy_elf_closure(binary, R):
+    """binary and every file/symlink its dynamic loader opens, each at its own absolute path."""
+    deps = subprocess.run([sys.executable, ELFDEPS, binary], stdout=subprocess.PIPE, text=True, check=True).stdout.split()
+    for p in sorted(set(deps + [binary])):
+        dst = os.path.join(R, p.lstrip("/"))
+        if os.path.lexists(dst):
+            continue
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        if os.path.islink(p):
+            os.symlink(os.readlink(p), dst)
+        else:
+            shutil.copy(p, dst)
+            os.chmod(dst, 0o755 if os.access(p, os.X_OK) else 0o644)
 
 
 def build(m, manifest_path, out, bdir, H):
@@ -136,7 +157,13 @@ def build(m, manifest_path, out, bdir, H):
         if not os.path.exists(p):
             with open(p, "w") as f:
                 f.write(content)
-    manifest_sh, prelude = H["compile_shell"](m, "")
+    tc = os.environ.get("HYDO_TC_ARM64", TC_ARM64)
+    if tc:
+        if not os.path.isfile(tc):
+            raise H["ManifestError"]("arm64 tc %s missing: nix build --max-jobs 0 --system aarch64-linux nixpkgs#iproute2 "
+                                     "(or HYDO_TC_ARM64= for an image without network faults)" % tc)
+        _copy_elf_closure(tc, R)
+    manifest_sh, prelude = H["compile_shell"](m, tc)
     with open(os.path.join(R, "etc/hydo/manifest.sh"), "w") as f:
         f.write(manifest_sh)
     with open(os.path.join(R, "etc/hydo/prelude.sh"), "w") as f:

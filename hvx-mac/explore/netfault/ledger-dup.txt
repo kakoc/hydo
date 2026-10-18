@@ -1,0 +1,5 @@
+# partial reply loss: some connections open, then the answer is lost for longer than the
+# client's 2 s timeout, so the applied request is retried and stored twice
+disk=none | run O=front@0-30:resp:loss,70%
+disk=none | run O=front@0-30:resp:loss,50%
+disk=none | run N=front@0-30:loss,60%
