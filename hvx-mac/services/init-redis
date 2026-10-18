@@ -1,0 +1,51 @@
+#!/bin/sh
+# /init for the Redis service guest under hvm: the hvx/onboard/examples/redis workload and
+# invariant (20 SETs over 127.0.0.1, every acknowledged SET must read back). The AOF lives on
+# ext4 on /dev/vda. Kernel command line:
+#   hydo_phase=solo     workload + invariant in one boot (default)
+#   hydo_phase=cut      workload, then stop at "power cut here": the host keeps only flushed bytes
+#   hydo_phase=recover  start Redis on the disk left by a cut (AOF replay), check hydo_acked=
+#   hydo_fsync=always|everysec|no   Redis appendfsync (default always)
+/bin/busybox --install -s /bin
+export PATH=/bin
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mount -t devtmpfs dev /dev 2>/dev/null
+mount -t tmpfs tmp /tmp
+mkdir -p /data /tmp/hydo
+ip link set lo up
+PH=solo; FS=always; ACK=
+for w in $(cat /proc/cmdline); do case $w in hydo_phase=*) PH=${w#*=};; hydo_fsync=*) FS=${w#*=};; hydo_acked=*) ACK=${w#*=};; esac; done
+done_() { echo "hydo-svc-marker: done"; exec sh; }
+echo "hydo-svc: phase $PH appendfsync $FS, uptime $(cat /proc/uptime)"
+mount -t ext4 /dev/vda /data || { echo "HYDO-ORACLE: VIOLATION the data disk does not mount"; done_; }
+mkdir -p /data/redis
+R=@REDIS@
+sed "s/^appendfsync .*/appendfsync $FS/" /etc/redis.conf > /tmp/hydo/redis.conf
+$R/bin/redis-server /tmp/hydo/redis.conf > /tmp/hydo/redis.log 2>&1 &
+n=0
+until $R/bin/redis-cli ping 2>/dev/null | grep -q PONG; do
+  n=$((n + 1)); [ $n -gt 600 ] && { echo "HYDO-ORACLE: VIOLATION redis never became ready (committed data unrecoverable)"; tail -5 /tmp/hydo/redis.log; done_; }
+  sleep 0.1
+done
+echo "hydo-svc: redis ready after $n polls, uptime $(cat /proc/uptime)"
+ACKED=/tmp/hydo/acked; : > $ACKED
+if [ $PH = recover ]; then
+  echo "$ACK" | tr ',' '\n' | grep . > $ACKED
+else
+  i=0
+  while [ $i -lt 20 ]; do
+    r=$(timeout 2 $R/bin/redis-cli SET k:$i v$i 2>/dev/null)
+    [ "$r" = OK ] && echo $i >> $ACKED
+    i=$((i + 1))
+  done
+  echo "hydo-acked: $(tr '\n' ',' < $ACKED | sed 's/,$//')"
+  if [ $PH = cut ]; then echo "hydo-svc: power cut here, uptime $(cat /proc/uptime)"; done_; fi
+fi
+lost=0
+for i in $(cat $ACKED); do
+  [ "$($R/bin/redis-cli GET k:$i)" = "v$i" ] || { echo "HYDO-ORACLE: VIOLATION key k:$i lost"; lost=1; break; }
+done
+[ $lost = 0 ] && echo "HYDO-ORACLE: OK acked=$(wc -l < $ACKED) all present"
+echo "hydo-svc: uptime $(cat /proc/uptime)"
+done_
