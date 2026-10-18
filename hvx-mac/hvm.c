@@ -197,10 +197,63 @@ static size_t build_fdt(uint8_t *out, const char *bootargs, uint64_t initrd_star
 static int bit(const uint32_t *a, int i) { return (a[i / 32] >> (i % 32)) & 1; }
 static void setb(uint32_t *a, int i, int v) { if (v) a[i / 32] |= 1u << (i % 32); else a[i / 32] &= ~(1u << (i % 32)); }
 
+/*
+ * Seeded tick jitter (hvx's HVX_SET_TJITTER, CLAUDE.md M43), counted in exits. The guest
+ * switches threads at timer interrupts, and they can only be taken at an exit, so the knob is
+ * which exit: the timer interrupt of a deadline in tick period k (k = cval / TJ_PERIOD, the
+ * guest's 4 ms tick) is raised d(k) exits LATER than the deadline, never earlier; the counter
+ * the guest reads is untouched. d(k) is hvx's formula (explore.py tj_delays replicates it):
+ * h = mix(seed + k*GOLDEN), delayed if h % 1000 < permille, d = 1 + (h >> 16) % max_delay,
+ * optionally only for ticks in [lo, hi), or an explicit list of (tick, delay). The policy is
+ * host-side, outside struct mach, so it is in neither the snapshot nor the fingerprint: set it
+ * after a restore, as on hvx. Off by default, and then nothing below changes.
+ */
+#define TJ_PERIOD (CNTFRQ / 250)            /* CONFIG_HZ_250 */
+#define TJ_MAX_EXPLICIT 32
+struct tjit {
+	int on; uint64_t seed; uint32_t permille, max_delay; uint64_t lo, hi;
+	int n_explicit; uint64_t ek[TJ_MAX_EXPLICIT]; uint32_t ed[TJ_MAX_EXPLICIT];
+	uint64_t applied, last_applied_k;         /* statistics: delays that were actually taken */
+};
+static struct tjit TJ;
+static uint64_t tj_mix(uint64_t x)
+{
+	x += 0x9e3779b97f4a7c15ULL;
+	x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+	x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
+	return x ^ (x >> 31);
+}
+static uint64_t tj_delay(uint64_t k)         /* in exits */
+{
+	uint64_t d = 0;
+	if (!TJ.on || k <= 1) return 0;
+	if (TJ.n_explicit) {
+		for (int i = 0; i < TJ.n_explicit; i++) if (TJ.ek[i] == k) d = TJ.ed[i];
+	} else {
+		if (k < TJ.lo || (TJ.hi && k >= TJ.hi)) return 0;
+		uint64_t h = tj_mix(TJ.seed + k * 0x9e3779b97f4a7c15ULL);
+		if (h % 1000 >= TJ.permille) return 0;
+		d = 1 + (h >> 16) % TJ.max_delay;
+	}
+	uint64_t cap = TJ_PERIOD / STEP - 1;        /* stay inside the tick period */
+	return d < cap ? d : cap;
+}
+/* the virtual time at which the timer interrupt is raised: the deadline, plus the delay */
+static uint64_t timer_due(void)
+{
+	if (!TJ.on) return M.cntp_cval;
+	return M.cntp_cval + tj_delay(M.cntp_cval / TJ_PERIOD) * STEP;
+}
 static int timer_level(void)
 {
 	int en = M.cntp_ctl & 1, mask = (M.cntp_ctl >> 1) & 1;
-	return en && !mask && M.vtime >= M.cntp_cval;
+	if (!TJ.on) return en && !mask && M.vtime >= M.cntp_cval;
+	int lv = en && !mask && M.vtime >= timer_due();
+	if (lv && M.vtime >= M.cntp_cval && tj_delay(M.cntp_cval / TJ_PERIOD)) {
+		uint64_t k = M.cntp_cval / TJ_PERIOD;
+		if (k != TJ.last_applied_k) { TJ.applied++; TJ.last_applied_k = k; }
+	}
+	return lv;
 }
 static int uart_level(void);
 /* level-triggered sources feed the pending bit continuously */
@@ -479,7 +532,7 @@ static int idle_wait(void)
 {
 	M.n_wfi++;
 	if (irq_line()) { if (rd(HV_REG_CPSR) & 0x80) start_stepping(); return 0; }
-	uint64_t next = (M.cntp_ctl & 3) == 1 ? M.cntp_cval : 0;   /* the timer deadline (may be already due) */
+	uint64_t next = (M.cntp_ctl & 3) == 1 ? timer_due() : 0;   /* the timer deadline (may be already due) */
 	uint64_t vd = virtio_next_due(M.vtime);                 /* a device completion or paced frame */
 	if (vd && (!next || vd < next)) next = vd;
 	if (next > M.vtime) { M.vtime = next; M.n_wfi_jump++; return 0; }
@@ -710,6 +763,8 @@ static void print_fp(const char *tag, struct parts p, int stop, double secs)
 	printf("%s: cntpct reads %llu, mmio %llu, hvc %llu, wfi %llu (clock jumps %llu), other sysreg traps %llu, entries with IRQ line up %llu, single steps %llu in %llu runs\n",
 	       tag, M.n_cntpct, M.n_mmio, M.n_hvc, M.n_wfi, M.n_wfi_jump, M.n_sysreg_other, M.n_irq_line, M.n_steps, M.n_step_runs);
 	virtio_stats(tag);
+	if (TJ.on) printf("%s: tick jitter: %llu timer interrupts delayed, last at tick %llu\n", tag,
+	                  (unsigned long long)TJ.applied, (unsigned long long)TJ.last_applied_k);
 	fflush(stdout);
 }
 
@@ -732,6 +787,11 @@ int main(int argc, char **argv)
 	const char *bootargs = getenv("HVM_BOOTARGS") ? getenv("HVM_BOOTARGS") : BOOTARGS;
 
 	if (getenv("HVM_SPIN_SECS")) spin_secs = atof(getenv("HVM_SPIN_SECS"));
+	if (getenv("HVM_TJ")) {   /* HVM_TJ=<hex seed>,<permille>,<max delay in exits>[,<lo>,<hi>]: tick jitter for the whole run */
+		unsigned long long sd = 0, lo = 0, hi = 0; unsigned pm = 0, mx = 0;
+		sscanf(getenv("HVM_TJ"), "%llx,%u,%u,%llu,%llu", &sd, &pm, &mx, &lo, &hi);
+		TJ.seed = sd; TJ.permille = pm; TJ.max_delay = mx; TJ.lo = lo; TJ.hi = hi; TJ.on = pm && mx;
+	}
 	{ pthread_t t; pthread_create(&t, NULL, watchdog, NULL); }
 	virtio_setup();
 	vm_create(bootargs);

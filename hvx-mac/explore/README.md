@@ -24,11 +24,29 @@ The fingerprint covers the console, the registers, the machine state, the virtio
 
 **What the Mac backend supports:**
 - **Applied as on the box:** kills, pauses (both forms), realtime clock jumps and the manifest's durability knobs. With the data disk attached it also applies `disk=none|ioerr:P|cut|lying:P` with `dseed`, which use the same seeded fault classes as hvx (`../VIRTIO.md`), and power cuts.
-- **Not applied:**
-  - network faults (`N=`, `O=`), because the arm64 root has no `tc`;
-  - tick-timing jitter (`tj*`), because this hardware has no PMU clock.
+- **Applied differently:** tick-timing jitter (`tj=`, `tjx=`, `--timing`). Linux delays a tick by a number of guest branches, using the PMU clock. The M2 has no PMU clock, so `../hvm.c` delays the timer interrupt by a seeded number of VM exits instead (see "Tick jitter" below). `hvm_supported()` caps a generated `tjmax` at 1,000 exits.
+- **Not applied:** network faults (`N=`, `O=`), because the arm64 root has no `tc`. `hvm_supported()` removes them from generated schedules before they are rendered. If a schedule asks for one anyway, `hvmx` answers `verdict=UNSUPPORTED`.
 
-  `hvm_supported()` removes these from generated schedules before they are rendered. If a schedule asks for one anyway, `hvmx` answers `verdict=UNSUPPORTED`.
+## Tick jitter (counted in exits)
+
+**What it does.** The guest switches threads at timer interrupts, and this VMM can deliver an interrupt only at a VM exit. So the knob is the exit at which the timer interrupt is delivered. Take a deadline in tick period k, where k = deadline / (CNTFRQ/250) is the guest's 4 ms tick. Its interrupt is raised d(k) exits after the deadline: never earlier, and capped inside the period. The counter the guest reads is not changed. d(k) uses hvx's formula, so `explore.py`'s shrinker works unchanged: `h = mix(seed + k*GOLDEN)`; the tick is delayed when `h % 1000 < permille`; then `d = 1 + (h >> 16) % max`. A tick window `tjlo`/`tjhi` and an explicit list `tjx=k:d,...` also work. The policy is host-side state, outside `struct mach`. It is therefore in neither the snapshot nor the fingerprint, and with it off every path is unchanged. `hvmx` turns it on for the workload only, like the disk fault, and its RESULT line gains `tjk=<first>-<last> tjn=<n>`. `hvm` takes `HVM_TJ=<hex seed>,<permille>,<max exits>[,<lo>,<hi>]` for a whole boot.
+
+**The limit.** Thread switches can still happen only at exits. A race window that contains no exit cannot be reached by any jitter, because no exit happens inside it. Linux's branch-counted jitter can reach such a window. On this guest kernel every clock read is an exit, so windows that read the clock (kernel code, system calls that take time, Go and Java programs) are reachable.
+
+**Measured** with `../race/macrace.c`. This is `hvx/race/hydorace.c`'s once-per-run seat race, with two processes on a shared page. Only the sale of seat 10,000 of 20,000 has a window, and between sales each process reads the clock once. Each build was booted 200 times, one jitter seed per boot (`../race/seeds.sh`, kernel `Image-explore-idle`, `HVM_SOFT_IRQ=1`):
+
+| Window | No jitter | Every tick delayed (permille 1000, max 1,000 exits) | 2 ticks in 10 delayed |
+|---|---|---|---|
+| 50 clock reads | no oversell | **10 of 200** oversold, all 10 repeat exactly | 1 of 200 |
+| 50,000 iterations of plain work (no exit) | no oversell | **0 of 200** | not run |
+
+Every seed gave a different fingerprint, so the jitter does change the run. The plain-work window is never hit, as expected. On Linux, hvx's branch-counted jitter found once-per-run plain-memory windows (CLAUDE.md M43).
+
+**Checks.** With jitter off:
+- the M48 boot is still `81711ada76a4a236`;
+- the Redis schedule `disk=none | run` is still `ca13bcd1d77e2b4b`.
+
+With every tick delayed, seed `1234` gives `4e8fb9fc0b222248` both as `hvmx one` and from the S1 snapshot in `hvmx serve`. The next schedule in the same serve process, without jitter, gives `ca13bcd1d77e2b4b` again, so the policy is off between runs. The explicit list and jitter with a power cut both run. The Redis workload spans only 7 ticks (12–19), so low densities often delay nothing. On the Mac, use `--tj-pm 500,1000`. `explore.py --backend hvm --strategy swarm --timing --tj-pm 500,1000 --seeds 1-40`: 17 schedules were timed and 15 of those were actually perturbed. 16 failures, all reproduced, all in expected classes (none needed the timing).
 
 ## Changes outside this directory (hook points)
 

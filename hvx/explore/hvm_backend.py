@@ -11,7 +11,9 @@ attached as the virtio-blk device when it exists; then disk faults and power cut
 the box (same seeded fault classes, same two-boot recovery). What the Mac backend cannot do
 is removed from every schedule BEFORE it is rendered (hvm_supported), so a run never claims
 a fault it did not apply: no tc on the arm64 root (no N=/O= network faults), no PMU clock (no
-tick-timing jitter, no run budget), and without the disk no disk faults or power cuts.
+run budget), and without the disk no disk faults or power cuts. Tick jitter works, but its
+delays are counted in VM exits instead of guest branches (hvx-mac/hvm.c), so a seeded jitter's
+maximum delay is rescaled to HVM_TJ_MAX exits.
 """
 import os
 
@@ -34,6 +36,7 @@ def disk_for(image):
 
 
 HAS_DISK = False        # set by configure()
+HVM_TJ_MAX = 1000       # exits; a busy guest takes about 1,500 exits per 4 ms tick (64 virtual ticks each)
 
 
 def configure(image):
@@ -52,8 +55,11 @@ def hvm_supported(s):
     if not HAS_DISK:
         s["disk"] = "none"
         s.pop("C", None)
-    for k in ("N", "O", "tj", "rb"):
+    for k in ("N", "O", "rb"):
         s.pop(k, None)
+    tj = s.get("tj")
+    if tj and tj[0] == "seed" and tj[3] > HVM_TJ_MAX:
+        s["tj"] = tj[:3] + (HVM_TJ_MAX,) + tj[4:]
     return s
 
 
