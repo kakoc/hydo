@@ -214,7 +214,9 @@ explore_run() {   # $CMD = "run <tokens>"
   [ -n "$ptimer" ] && { wait $ptimer 2>/dev/null; $BB kill -CONT $(pause_pid $psvc) 2>/dev/null; }
   [ $paused = 1 ] && { $BB kill -CONT $(pause_pid $psvc) 2>/dev/null; echo "hydo-explore: RESUMED $psvc at the end"; }
   [ $down = 1 ] && { echo "hydo-explore: restarting $ksvc at the end"; restart_svc $ksvc; }
-  $BB kill -0 $FPID 2>/dev/null || { echo "hydo-explore: front door died; restarting it"; start_front || die_oracle "HYDO-ORACLE: ERROR front door restart"; }
+  $BB kill -0 $FPID 2>/dev/null || { echo "hydo-explore: front door died; restarting it"
+    $BB grep -a -m 3 "^fatal error\|^panic" /tmp/front.log | $BB sed "s/^/hydo-explore: front door log: /"
+    start_front || die_oracle "HYDO-ORACLE: ERROR front door restart"; }
   retry_unacked
   failed_ids
   $BB grep -a "HYDO-STACK" /tmp/client.log | $BB tail -4
