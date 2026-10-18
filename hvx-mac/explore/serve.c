@@ -24,8 +24,9 @@
  * cut (C=) carries only the flushed disk bytes into a recovery boot restored from S0, which
  * gets "oracle <acked ids> [failed <ids>]". The disk boots with the flush-aware class armed at
  * probability 0, so the guest negotiates FLUSH (write-back caching) like hvx's guests.
- * Not supported (the RESULT says UNSUPPORTED): network faults (N=, O=: no tc on the arm64
- * root), tick-timing jitter (tj*: no PMU clock here), and disk faults or cuts without a disk.
+ * Not supported (the RESULT says UNSUPPORTED): tick-timing jitter (tj*: no PMU clock here),
+ * disk faults or cuts without a disk, and network faults (N=, O=) on an image without tc
+ * (initrd_has_tc: its compiled manifest, etc/hydo/manifest.sh, has an empty HYDO_TC).
  * explore.py --backend hvm strips those from generated schedules up front (hvm_supported()).
  *
  * Exit-free spin loops (../spin_observer.c, ../spin/RESEARCH.md): exact-repeat loops are
@@ -48,6 +49,7 @@
 #include "../virtio_int.h"
 #include <errno.h>
 #include <libkern/OSCacheControl.h>
+#include <zlib.h>
 
 #define S0_MARKER    "hydo-explore-ready-S0"
 #define S1_MARKER    "hydo-explore-ready-S1"
@@ -233,6 +235,32 @@ static int parse_disk(const char *host, uint64_t *seed, uint32_t *classes, uint3
 	if (!strncmp(d, "lying:", 6)) { *classes = F_DROP; *prob = atoi(d + 6); return 0; }
 	return -1;
 }
+/* Does the (gzip'd cpio) initramfs carry a tc for hydo-init.sh's network faults? Its compiled
+ * manifest (etc/hydo/manifest.sh, hvx/onboard/hydo-build) says HYDO_TC='<path>' or HYDO_TC=''. */
+static int initrd_has_tc;
+static int scan_has_tc(const uint8_t *gz, size_t len)
+{
+	static const char key[] = "\nHYDO_TC='/", none[] = "\nHYDO_TC=''";
+	z_stream z = { 0 };
+	uint8_t buf[1 << 16], win[sizeof buf + 16];
+	size_t keep = 0;
+	int found = 0, r;
+	if (inflateInit2(&z, 16 + MAX_WBITS) != Z_OK) return 0;
+	z.next_in = (Bytef *)gz; z.avail_in = (uInt)len;
+	do {
+		z.next_out = buf; z.avail_out = sizeof buf;
+		r = inflate(&z, Z_NO_FLUSH);
+		size_t n = sizeof buf - z.avail_out;
+		memcpy(win + keep, buf, n);                 /* the last 15 bytes carry over: a match may span chunks */
+		if (memmem(win, keep + n, key, sizeof key - 1)) { found = 1; break; }
+		if (memmem(win, keep + n, none, sizeof none - 1)) break;
+		size_t total = keep + n;
+		keep = total < 15 ? total : 15;
+		memmove(win, win + total - keep, keep);
+	} while (r == Z_OK);
+	inflateEnd(&z);
+	return found;
+}
 /* why a schedule cannot run here, or NULL */
 static const char *unsupported(const char *host, const char *guest)
 {
@@ -240,7 +268,7 @@ static const char *unsupported(const char *host, const char *guest)
 	if (!virtio_attached() && d && strncmp(d, "disk=none", 9)) return "disk faults and power cuts need the data disk (HVM_DISK)";
 	if (!virtio_attached() && strstr(guest, " C=")) return "power cuts need the data disk (HVM_DISK)";
 	if (strstr(host, "tj=") || strstr(host, "tjx=")) return "tick-timing jitter needs a PMU clock";
-	if (strstr(guest, " N=") || strstr(guest, " O=")) return "network faults need tc on the arm64 root";
+	if (!initrd_has_tc && (strstr(guest, " N=") || strstr(guest, " O="))) return "network faults need tc on the arm64 root";
 	return NULL;
 }
 static size_t append_line(size_t from, const char *prefix, char *out, size_t o, size_t n)
@@ -372,6 +400,7 @@ int main(int argc, char **argv)
 	const char *mode = argv[1];
 	kernel_img = load_file(argv[2], &kernel_len);
 	initrd_img = load_file(argv[3], &initrd_len);
+	initrd_has_tc = scan_has_tc(initrd_img, initrd_len);
 	outdir = argv[4];
 	mkdir(outdir, 0755);
 	ram_size = (uint64_t)(getenv("HVM_MEM_MB") ? atoi(getenv("HVM_MEM_MB")) : 1024) << 20;

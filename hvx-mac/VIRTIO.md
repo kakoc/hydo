@@ -63,8 +63,8 @@ Disk workload: phase `check` writes 16 records of 4 KiB with an fsync after each
 | Disk `check`, 3 fresh boots | all `952991033b38776d`, `HYDO-ORACLE: OK acked=16 durable` |
 | Same, 3 boots with 12 host cores saturated | all `952991033b38776d` |
 | Branch at `hydo-disk: mounted` and at `hydo-rec: acked 7` (mid-workload); restore into a new vCPU | continue = restore = fresh boot, IDENTICAL |
-| Lying disk `drop` @10%, seed `0x5017E0`, twice | `VIOLATION record=12`, records present `1111111111110110`, both `51b40058b1665219` |
-| Same, seed `0x5017E1`, twice | `VIOLATION record=2`, present `1101110111111111`, both `57c54ae6c36aa6ef` (differs from the first seed) |
+| Lying disk `drop` @10%, seed `0x5017E0`, twice | `VIOLATION record=12`, records present `1111111111110110`, both `8afdcfbe731e3dd9` (re-measured 2026-10-18 with the branch's own `hvm` cce2b19 and main's; the earlier `51b40058b1665219` was recorded before the initramfs changed for the `cut` phase) |
+| Same, seed `0x5017E1`, twice | `VIOLATION record=2`, present `1101110111111111`, `bb138c4d2d7e36bc` (re-measured; earlier `57c54ae6c36aa6ef`, same reason) (differs from the first seed) |
 | Same, seed `0x5017E3` | `VIOLATION the record file is missing` (directory metadata dropped), twice `b0cc2184d02eb57b` |
 | `delay`, `reorder`, `torn`, `error`, `delay,reorder,drop,torn` @30%, twice each | identical pairs; delay and reorder OK, torn and the mix lose data, error makes the disk unmountable |
 

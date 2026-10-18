@@ -59,4 +59,4 @@ invariants:
       [ -z "$d" ] || { echo "entry $d stored twice"; exit 1; }
       echo "no duplicates ($(wc -l < /data/ledger/entries) entries)"
 
-faults: [kill, pause, clock]
+faults: [kill, pause, network, oneway, clock]

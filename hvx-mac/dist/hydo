@@ -1,0 +1,217 @@
+#!/usr/bin/env python3
+"""hydo -- deterministic fault testing on an Apple Silicon Mac (the hvx-mac backend).
+
+    hydo build   <hydo.yaml> [--out DIR]          compile the manifest into an arm64 guest image
+    hydo run     "<schedule>" [--image IMG]       run one schedule from a fresh boot
+    hydo repro   "<schedule>" [--image IMG]       the same as run (reproduce a reported failure)
+    hydo explore [--seeds 1-50] [--image IMG] [--workers N] [--strategy swarm] [--out DIR]
+                                                  generate, run, re-run and shrink schedules
+    hydo report  [DIR]                            print the report of the last (or a given) exploration
+    hydo doctor                                   check this Mac and the installation
+
+IMG defaults to the one image in ./hydo-out (what `hydo build` wrote there). Everything runs on
+this Mac: `hydo build` formats the data disk inside a small helper VM (mke2fs in the guest),
+so no Linux machine is needed. Plain Python 3.9+ (macOS's /usr/bin/python3 works).
+"""
+import glob, importlib.machinery, importlib.util, os, platform, shutil, subprocess, sys, tempfile
+
+R = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))     # the release root
+ONBOARD = os.path.join(R, "hvx", "onboard")
+EXPLORE = os.path.join(R, "hvx", "explore")
+HVMX = os.path.join(R, "hvx-mac", "explore", "hvmx")
+HVM = os.path.join(R, "hvx-mac", "hvm")
+KERNEL = os.path.join(R, "hvx-mac", "explore", "out", "Image-explore")
+GUEST = os.path.join(R, "guest")
+OUT = "hydo-out"
+
+
+def die(msg):
+    print("hydo: " + msg, file=sys.stderr)
+    sys.exit(1)
+
+
+def load_hydo_build():
+    loader = importlib.machinery.SourceFileLoader("hydo_build", os.path.join(ONBOARD, "hydo-build"))
+    spec = importlib.util.spec_from_loader("hydo_build", loader)
+    m = importlib.util.module_from_spec(spec)
+    loader.exec_module(m)
+    return m
+
+
+def mac_mkfs(hb):
+    """A replacement for hydo-build's mkfs(): the same mke2fs options, run by a static arm64
+    mke2fs inside a helper VM (hvm) on a raw disk file, instead of the host's mke2fs under
+    libfaketime. The guest clock is deterministic, and hydo-build zeroes every time field
+    afterwards anyway, so the image is a pure function of the options."""
+    import hydo_build_arm64 as a64
+
+    def mkfs(T, out, mib, uuid, seed, src=None, journal=False):
+        if src:
+            die("internal: populating a filesystem (mke2fs -d) is not supported on the Mac path")
+        with open(out, "wb") as f:
+            f.truncate(mib * 1024 * 1024)
+        feats = "^metadata_csum,^64bit,^flex_bg,^resize_inode" + (",has_journal" if journal else "")
+        args = ["/bin/mke2fs", "-q", "-F", "-t", "ext4", "-b", "4096", "-O", feats]
+        if journal:
+            args += ["-J", "size=16"]
+        args += ["-U", uuid, "-E", "hash_seed=%s,lazy_itable_init=0,lazy_journal_init=0" % seed, "/dev/vda"]
+        tmp = tempfile.mkdtemp(prefix="hydo-mkfs-")
+        try:
+            root = os.path.join(tmp, "root")
+            for d in ("bin", "dev", "proc", "sys", "etc"):
+                os.makedirs(os.path.join(root, d))
+            shutil.copy(os.path.join(GUEST, "busybox"), os.path.join(root, "bin", "busybox"))
+            shutil.copy(os.path.join(GUEST, "mke2fs"), os.path.join(root, "bin", "mke2fs"))
+            os.symlink("busybox", os.path.join(root, "bin", "sh"))
+            with open(os.path.join(root, "init"), "w") as f:
+                f.write("#!/bin/busybox sh\n"
+                        "/bin/busybox mount -t devtmpfs none /dev\n"
+                        "/bin/busybox mount -t proc none /proc\n"
+                        "n=0; while [ ! -b /dev/vda ] && [ $n -lt 300 ]; do /bin/busybox usleep 10000; n=$((n+1)); done\n"
+                        "if %s; then /bin/busybox sync; echo HYDO-MKFS-OK; else echo HYDO-MKFS-FAIL; fi\n"
+                        "echo HYDO-MKFS-DONE\n"
+                        "while :; do /bin/busybox sleep 3600; done\n" % " ".join("'%s'" % x for x in args))
+            for p in ("init", "bin/busybox", "bin/mke2fs"):
+                os.chmod(os.path.join(root, p), 0o755)
+            initrd = os.path.join(tmp, "mkfs.cpio.gz")
+            a64._cpio(root, initrd, hb.FIXED_MTIME)
+            env = dict(os.environ, HVM_DISK=os.path.abspath(out), HVM_DISK_OUT=os.path.abspath(out))
+            p = subprocess.run([HVM, "run", KERNEL, initrd, "HYDO-MKFS-DONE"], env=env,
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            con = p.stdout.decode(errors="replace")
+            if "HYDO-MKFS-OK" not in con:
+                sys.stderr.write(con[-3000:])
+                die("formatting the data disk in the helper VM failed (output above)")
+            # mke2fs records whether `char` is signed on the machine that ran it (superblock
+            # s_flags: 1 = signed directory hash, x86; 2 = unsigned, arm64). Record the x86
+            # value, as a Linux build of the same manifest does, so both give the same bytes.
+            # The filesystem is still empty (no hashed directories), so this changes nothing else.
+            with open(out, "r+b") as f:
+                f.seek(1024 + 0x160)
+                fl = int.from_bytes(f.read(4), "little")
+                f.seek(1024 + 0x160)
+                f.write(((fl & ~0x3) | 0x1).to_bytes(4, "little"))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    return mkfs
+
+
+def cmd_build(argv):
+    if not argv or argv[0].startswith("-"):
+        die("usage: hydo build <hydo.yaml> [--out DIR] [--set KEY=VALUE ...]")
+    manifest, rest = argv[0], argv[1:]
+    out = OUT
+    if "--out" in rest:
+        i = rest.index("--out"); out = rest[i + 1]; del rest[i:i + 2]
+    os.environ.setdefault("HYDO_BUSYBOX_ARM64", os.path.join(GUEST, "busybox"))
+    os.environ.setdefault("HYDO_BUSYBOX", os.path.join(GUEST, "busybox-applets"))   # prints the applet list
+    os.environ.setdefault("HYDO_MKE2FS", os.path.join(GUEST, "mke2fs"))             # passed to the helper VM
+    os.environ.setdefault("HYDO_FAKETIME", os.path.join(GUEST, "mke2fs"))           # unused on the Mac path
+    sys.path.insert(0, ONBOARD)
+    hb = load_hydo_build()
+    hb.mkfs = mac_mkfs(hb)
+    sys.argv = ["hydo-build", manifest, "--arch", "arm64", "--build-dir", out] + rest
+    rc = hb.main()
+    if rc == 0:
+        print("hydo: next:  hydo run \"disk=none | run\"     or     hydo explore --seeds 1-20")
+    return rc
+
+
+def default_image(args):
+    if "--image" in args:
+        i = args.index("--image"); img = args[i + 1]; del args[i:i + 2]
+        return os.path.abspath(img)
+    imgs = sorted(glob.glob(os.path.join(OUT, "*-arm64.cpio.gz")))
+    if len(imgs) != 1:
+        die("no image given and %d images in ./%s (run `hydo build hydo.yaml` here, or pass --image)" % (len(imgs), OUT))
+    return os.path.abspath(imgs[0])
+
+
+def disk_env(image):
+    d = image[:-len(".cpio.gz")] + "-disk.img"
+    return dict(os.environ, HVM_DISK=d) if os.path.exists(d) else dict(os.environ)
+
+
+def cmd_run(argv):
+    args = list(argv)
+    image = default_image(args)
+    if len(args) != 1:
+        die("usage: hydo run \"<schedule>\" [--image IMG]   e.g. hydo run \"disk=cut | run C=12\"")
+    sched = args[0]
+    outdir = os.path.join(OUT, "runs", "run-%d" % os.getpid())
+    os.makedirs(outdir, exist_ok=True)
+    p = subprocess.run([HVMX, "one", KERNEL, image, outdir, sched], env=disk_env(image),
+                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    text = p.stdout.decode(errors="replace")
+    for line in text.splitlines():
+        if line.startswith("RESULT"):
+            print(line)
+    cons = sorted(glob.glob(os.path.join(outdir, "*")))
+    if cons:
+        print("hydo: console(s): " + " ".join(cons))
+    if not any(l.startswith("RESULT") for l in text.splitlines()):
+        sys.stderr.write(text[-3000:])
+        die("the run produced no RESULT line (output above)")
+    return 0
+
+
+def cmd_explore(argv):
+    args = list(argv)
+    image = default_image(args)
+    if "--out" not in args:
+        args += ["--out", os.path.join(OUT, "explore")]
+    if "--seeds" not in args and "--schedule" not in args and "--sweep" not in args:
+        args += ["--seeds", "1-20"]
+    if "--workers" not in args:
+        args += ["--workers", "4"]
+    cmd = [sys.executable, os.path.join(EXPLORE, "explore.py"), "--backend", "hvm",
+           "--hvm-kernel", KERNEL, "--image", image] + args
+    rc = subprocess.call(cmd)
+    out = args[args.index("--out") + 1]
+    if rc == 0:
+        print("hydo: report: %s   (hydo report %s)" % (os.path.join(out, "report.md"), out))
+    return rc
+
+
+def cmd_report(argv):
+    d = argv[0] if argv else os.path.join(OUT, "explore")
+    p = os.path.join(d, "report.md")
+    if not os.path.exists(p):
+        die("no report at %s" % p)
+    sys.stdout.write(open(p).read())
+    return 0
+
+
+def cmd_doctor(argv):
+    ok = True
+    def check(cond, what, fix=""):
+        nonlocal ok
+        print("%s %s%s" % ("ok  " if cond else "FAIL", what, "" if cond else "  -> " + fix))
+        ok = ok and cond
+    check(platform.system() == "Darwin" and platform.machine() == "arm64", "Apple Silicon Mac", "hydo needs an M1 or later Mac")
+    v = tuple(int(x) for x in platform.mac_ver()[0].split(".")[:2] if x.isdigit()) if platform.mac_ver()[0] else (0,)
+    check(v >= (13, 0), "macOS 13 or later (found %s)" % platform.mac_ver()[0], "update macOS")
+    check(sys.version_info >= (3, 9), "Python 3.9+ (found %s)" % platform.python_version(), "use /usr/bin/python3 or newer")
+    cc = subprocess.run(["xcrun", "--find", "cc"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL).returncode == 0
+    check(cc, "a C compiler (the explorer compiles its property-table tool)", "xcode-select --install")
+    for p in (HVMX, HVM, KERNEL, os.path.join(GUEST, "busybox"), os.path.join(GUEST, "mke2fs")):
+        check(os.path.exists(p), "present: " + os.path.relpath(p, R), "reinstall")
+    hv = subprocess.run(["sysctl", "-n", "kern.hv_support"], stdout=subprocess.PIPE, text=True).stdout.strip()
+    check(hv == "1", "Hypervisor.framework available (kern.hv_support=%s)" % hv, "not supported on this machine")
+    sig = subprocess.run(["codesign", "-d", "--entitlements", "-", HVMX], stdout=subprocess.PIPE,
+                         stderr=subprocess.STDOUT, text=True).stdout
+    check("com.apple.security.hypervisor" in sig, "hvmx signed with the hypervisor entitlement", "run install.sh again")
+    return 0 if ok else 1
+
+
+def main():
+    cmds = {"build": cmd_build, "run": cmd_run, "repro": cmd_run, "explore": cmd_explore,
+            "report": cmd_report, "doctor": cmd_doctor}
+    if len(sys.argv) < 2 or sys.argv[1] not in cmds:
+        print(__doc__)
+        return 0 if len(sys.argv) >= 2 and sys.argv[1] in ("-h", "--help", "help") else 2
+    return cmds[sys.argv[1]](sys.argv[2:]) or 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
