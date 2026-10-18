@@ -25,3 +25,19 @@ All 664 hits replayed with identical full-state fingerprints. Cost per boot (med
 boot + workload): default and jitter 1.5 s (~413 ticks), pp=2^16 6.2 s (~6650 ticks, 4.1x),
 inserted 4.0 s (~3720 ticks, 2.6x). Files: `pre_race1.sh` (one boot), `pre_campaign.sh`,
 `pre_table.py`; results on the box in `/var/tmp/m49-preempt/camp*.txt`.
+
+## SQLite 3.51.2 WAL-reset corruption (hvx/knownbugs/sqlite, hunt.py arms pp and xt)
+
+600 blind runs on `explore-ob-kb-sqlite-3510200-disk.img` through `/dev/hvxpre`, workload seed
+varied per run: **no violation**, so no minimal schedule and nothing to check on 3.51.3.
+
+| arm | runs | median s | median ticks / extra ticks | median involuntary switches |
+|---|---|---|---|---|
+| pp=2^14 + jitter | 131 | 6.6 | 3753 ticks | 2707 |
+| pp=2^12 + jitter | 169 | 14.5 | 13603 ticks | 6347 |
+| inserted, 8 slots | 157 | 3.7 | 218 extra | 748 |
+| inserted, 32 slots | 143 | 4.2 | 842 extra | 1094 |
+
+For comparison the M48 hunt (default period, jitter) had a median 58 workload ticks, 711
+switches, 4.0 s. Faster guest time also shortens the work a fixed-duration workload does, which
+caps how much the switch count grows. Results: `/var/tmp/m49-preempt/sq-hunt` on the box.
