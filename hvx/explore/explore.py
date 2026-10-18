@@ -47,6 +47,9 @@ TJ_EXPLICIT_MAX = 32    # HVX_TJ_MAX_EXPLICIT
 BRANCH_BUDGET = 16      # hvx_explore.c: the run budget of a branch (rb=16 in its variants)
 NEW_FAULTS = False      # --new-faults: add pause / clock-jump / one-way-network faults (M46)
 NF_SALT = 0x4E46A17C0FFEE046
+PREEMPT = False         # --preempt (M49): shorter tick period pp= or inserted ticks xt= on half the schedules
+PP_VALUES = [1 << 16, 1 << 14]
+XT_RATES = [4, 16]
 CONCURRENCY = False     # --concurrency: several clients place orders at the same time (Q= token)
 CC_SALT = 0x51C0C0C0C0C0C051
 BACKEND = "hvx"         # --backend hvm: the Mac VMM (hvm_backend.py); HVM_KERNEL = its --hvm-kernel
@@ -126,6 +129,28 @@ def add_timing(s, seed):
         if t.below(100) < 50:
             s["tj"] = ("seed", t.next(), t.pick(TJ_PM), TJ_MAX, 0, 0)
     return s
+
+
+def add_preempt(s, seed):
+    """--preempt (M49): half of the schedules get finer preemption during the workload --
+    a shorter PMU tick period (pp=, guest time per tick unchanged, so the timer and a thread
+    switch come more often) or seeded extra ticks between the grid ticks (xt=). A separate
+    random stream: every other field matches the same seed without --preempt."""
+    if PREEMPT:
+        t = SplitMix(seed ^ 0x9EE397C0FFEE9EE3)
+        if t.below(100) < 50:
+            if t.below(2):
+                s["pp"] = t.pick(PP_VALUES)
+            else:
+                s["xt"] = (t.next(), t.pick(XT_RATES), 500)
+    return s
+
+
+def render_preempt(s):
+    out = " pp=%d" % s["pp"] if "pp" in s else ""
+    if "xt" in s:
+        out += " xt=%x xtr=%d xtpm=%d" % s["xt"]
+    return out
 
 
 def add_new_faults(s, seed, swarm=False):
@@ -360,8 +385,8 @@ def render(s):
         g.append("Q=%d%s" % (s["Q"][0], "d" if s["Q"][1] else ""))
     if "X" in s:
         g.append("X=%s@%d~%d" % s["X"])
-    return "disk=%s dseed=%x%s%s | %s" % (s["disk"], s["dseed"], render_tj(s["tj"]) if "tj" in s else "",
-                                          " rb=%d" % s["rb"] if "rb" in s else "", " ".join(g))
+    return "disk=%s dseed=%x%s%s%s | %s" % (s["disk"], s["dseed"], render_tj(s["tj"]) if "tj" in s else "",
+                                            render_preempt(s), " rb=%d" % s["rb"] if "rb" in s else "", " ".join(g))
 
 
 def parse(text):
@@ -370,6 +395,12 @@ def parse(text):
     m = re.search(r"\brb=(\d+)", host)
     if m:
         s["rb"] = int(m.group(1))
+    m = re.search(r"\bpp=(\d+)", host)
+    if m:
+        s["pp"] = int(m.group(1))
+    m = re.search(r"\bxt=([0-9a-fA-F]+) xtr=(\d+) xtpm=(\d+)", host)
+    if m:
+        s["xt"] = (int(m.group(1), 16), int(m.group(2)), int(m.group(3)))
     m = re.search(r"tjx=(\S+)", host)
     if m:
         s["tj"] = ("x", [tuple(int(v) for v in kd.split(":")) for kd in m.group(1).split(",")])
@@ -658,6 +689,12 @@ def candidates(s, tjk=None):
             var(Q=(n, False))
         if n > 2:
             var(Q=(n // 2, dup))
+    if "pp" in s:                                   # finer preemption (M49): drop it, then milder
+        var(pp=None)
+    if "xt" in s:
+        var(xt=None)
+        if s["xt"][1] > 1:
+            var(xt=(s["xt"][0], s["xt"][1] // 2, s["xt"][2]))
     tj_candidates(s, tjk, var)
     return out
 
@@ -746,7 +783,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
 
 # ---------------------------------------------------------------- main
 def main():
-    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL
+    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-200")
     ap.add_argument("--workers", type=int, default=3)   # the box has 4 cores: 3 is fastest (M38)
@@ -770,6 +807,8 @@ def main():
                     help="M46: add pause / realtime-clock-jump / one-way-network faults (separate random stream)")
     ap.add_argument("--concurrency", action="store_true",
                     help="several clients place orders at once (Q= token; separate random stream)")
+    ap.add_argument("--preempt", action="store_true",
+                    help="M49: shorter tick period (pp=) or inserted ticks (xt=) on half the schedules")
     ap.add_argument("--backend", choices=["hvx", "hvm"], default="hvx",
                     help="hvm: the Mac VMM (hvx-mac/explore/hvmx); --image is then an arm64 manifest initramfs")
     ap.add_argument("--hvm-kernel", help="arm64 kernel for --backend hvm (default hvx-mac/explore/out/Image-explore)")
@@ -790,6 +829,7 @@ def main():
         print("fault space: %s" % json.dumps(SPACE.describe()), file=sys.stderr)
     NEW_FAULTS = a.new_faults
     CONCURRENCY = a.concurrency
+    PREEMPT = a.preempt
     IMAGE = a.image
     TIMING = a.timing
     TJ_PM = [int(x) for x in a.tj_pm.split(",")]
@@ -809,7 +849,7 @@ def main():
             SPACE.check_sweep(a.sweep)
         points = sweep(a.sweep)
         seeds = list(range(1, len(points) + 1))            # sweep point index stands in for the seed
-        items = [("seed-%d" % i, render(add_concurrency(add_timing(sch, i), i))) for i, (_, sch) in zip(seeds, points)]
+        items = [("seed-%d" % i, render(add_preempt(add_concurrency(add_timing(sch, i), i), i))) for i, (_, sch) in zip(seeds, points)]
         open(os.path.join(a.out, "sweep-points.jsonl"), "w").write(
             "".join(json.dumps({"seed": i, "point": lab}) + "\n" for i, (lab, _) in zip(seeds, points)))
     else:
@@ -817,8 +857,8 @@ def main():
         seeds = list(range(lo, hi + 1))
         gen = generate_swarm if a.strategy == "swarm" else generate
         dur = durable_only if a.durable_only else (lambda s: s)
-        items = [("seed-%d" % sd, render(add_concurrency(add_timing(add_new_faults(dur(gen(sd)), sd,
-                                                                                   a.strategy == "swarm"), sd), sd)))
+        items = [("seed-%d" % sd, render(add_preempt(add_concurrency(add_timing(add_new_faults(dur(gen(sd)), sd,
+                                                                                   a.strategy == "swarm"), sd), sd), sd)))
                  for sd in seeds]
     t_sweep = time.time()
     res = pool.run_all(items)

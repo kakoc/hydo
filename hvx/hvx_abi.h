@@ -910,4 +910,38 @@ struct hvx_unsync_io {
 #define HVX_GET_UNSYNC _IOWR(HVX_IOC_MAGIC, 47, struct hvx_unsync_io)
 #define HVX_SET_UNSYNC _IOW(HVX_IOC_MAGIC, 48, struct hvx_unsync_io)
 
+/*
+ * Inserted PMU-clock ticks (HVX_SET_XTICK, milestone 49). Needs the PMU clock. A tick
+ * advances the virtual TSC, so it is where the guest's timer interrupt -- and with it a
+ * thread switch -- can happen. With one tick per period (HVX_SET_PMU, default 2^20 guest
+ * branches) a race window of a few hundred instructions is almost never preempted. This
+ * adds EXTRA ticks between the grid ticks, at points that are a pure function of the
+ * policy and the period index j (grid ticks and tick jitter are unchanged):
+ *     seeded:   for slot i in [0, rate): h = splitmix64(seed + j*GOLDEN + (i+1)*SALT);
+ *               if lo <= j < hi (hi 0 = no bound) and h % 1000 < permille, an extra
+ *               tick at guest branch count j*period + 1 + (h >> 16) % (period - 1)
+ *     explicit: when n_explicit > 0, ONLY the listed absolute guest branch counts
+ * Periods j <= 1 get none. An extra tick advances the virtual TSC by `tsc` (0: the PMU
+ * tick_tsc, so guest time runs faster per unit of work, which is what makes the timer
+ * fire there) and icount like a grid tick. Not in the snapshot (like the tick jitter);
+ * off by default (all zero), so runs without it are unchanged.
+ */
+#define HVX_XT_MAX_EXPLICIT	32
+#define HVX_XT_MAX_RATE		64
+struct hvx_xtick {
+	__u64 seed;
+	__u32 rate;		/* seeded mode: extra-tick slots per period (<= HVX_XT_MAX_RATE); 0 = off */
+	__u32 permille;		/* seeded mode: chance (per 1000) that a slot is used */
+	__u64 lo, hi;		/* seeded mode: only periods j in [lo, hi) */
+	__u64 tsc;		/* virtual TSC per extra tick; 0 = the PMU tick_tsc */
+	__u32 n_explicit;	/* > 0: apply only explicit_[0..n_explicit) */
+	__u32 pad;
+	__u64 explicit_[HVX_XT_MAX_EXPLICIT];	/* absolute guest branch counts */
+	__u64 applied;		/* [GET] extra ticks taken so far on the current vCPU */
+	__u64 applied_hash;	/* [GET] FNV hash over the branch counts of those ticks */
+	__u64 first, last;	/* [GET] branch counts of the first and last extra tick */
+};
+#define HVX_SET_XTICK _IOW(HVX_IOC_MAGIC, 49, struct hvx_xtick)
+#define HVX_GET_XTICK _IOR(HVX_IOC_MAGIC, 50, struct hvx_xtick)
+
 #endif /* _HVX_ABI_H */

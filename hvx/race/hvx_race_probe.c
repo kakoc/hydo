@@ -307,6 +307,29 @@ static int boot_setup(struct boot *b, uint64_t mem_size,
 		}
 		if (ioctl(b->fd, HVX_SET_TJITTER, &tj) < 0) { perror("HVX_SET_TJITTER"); return -1; }
 	}
+	if (getenv("HVX_XT_SEED") || getenv("HVX_XT_EXPLICIT")) {
+		/* inserted ticks (milestone 49): HVX_XT_SEED/_RATE/_PERMILLE/_LO/_HI/_TSC, or an
+		 * explicit list of absolute guest branch counts HVX_XT_EXPLICIT="b,b,..." */
+		static struct hvx_xtick xt;
+		const char *e;
+
+		memset(&xt, 0, sizeof(xt));
+		if ((e = getenv("HVX_XT_SEED")))     xt.seed = strtoull(e, NULL, 0);
+		xt.rate = (e = getenv("HVX_XT_RATE")) ? (uint32_t)strtoul(e, NULL, 0) : 4;
+		xt.permille = (e = getenv("HVX_XT_PERMILLE")) ? (uint32_t)strtoul(e, NULL, 0) : 500;
+		if ((e = getenv("HVX_XT_LO")))       xt.lo = strtoull(e, NULL, 0);
+		if ((e = getenv("HVX_XT_HI")))       xt.hi = strtoull(e, NULL, 0);
+		if ((e = getenv("HVX_XT_TSC")))      xt.tsc = strtoull(e, NULL, 0);
+		if ((e = getenv("HVX_XT_EXPLICIT"))) {
+			char *end;
+			while (*e && xt.n_explicit < HVX_XT_MAX_EXPLICIT) {
+				xt.explicit_[xt.n_explicit++] = strtoull(e, &end, 0);
+				if (end == e) break;
+				e = (*end == ',') ? end + 1 : end;
+			}
+		}
+		if (ioctl(b->fd, HVX_SET_XTICK, &xt) < 0) { perror("HVX_SET_XTICK"); return -1; }
+	}
 
 	b->mem = mmap(NULL, mem_size, PROT_READ | PROT_WRITE, MAP_SHARED, b->fd, 0);
 	if (b->mem == MAP_FAILED) { perror("mmap"); return -1; }
@@ -532,9 +555,17 @@ int main(int argc, char **argv)
 			memset(&pm, 0, sizeof(pm));
 			ioctl(b.fd, HVX_GET_TJITTER, &tj);	/* fails harmlessly on an old module */
 			ioctl(b.fd, HVX_GET_PMU, &pm);
-			printf("%s | fp=%016" PRIx64 " ticks=%llu delayed=%llu dhash=%016llx\n", line,
+			printf("%s | fp=%016" PRIx64 " ticks=%llu delayed=%llu dhash=%016llx", line,
 			       fingerprint(&b), (unsigned long long)pm.ticks,
 			       (unsigned long long)tj.applied, (unsigned long long)tj.applied_hash);
+			if (getenv("HVX_XT_SEED") || getenv("HVX_XT_EXPLICIT")) {
+				static struct hvx_xtick xt;
+				memset(&xt, 0, sizeof(xt));
+				ioctl(b.fd, HVX_GET_XTICK, &xt);
+				printf(" xtn=%llu xfirst=%llu xlast=%llu", (unsigned long long)xt.applied,
+				       (unsigned long long)xt.first, (unsigned long long)xt.last);
+			}
+			printf(" steps=%llu\n", (unsigned long long)pm.steps);
 		}
 		rc = 0;
 	}
