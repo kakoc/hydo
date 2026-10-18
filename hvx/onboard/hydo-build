@@ -1,0 +1,688 @@
+#!/usr/bin/env python3
+"""hydo-build -- compile a project manifest (hydo.yaml, see MANIFEST.md) into a hydo guest image.
+
+    hydo-build <hydo.yaml> [--out NAME] [--build-dir DIR] [--check] [--print-shell]
+
+Produces, in --build-dir (default ./build):
+    <NAME>-ext4.img   read-only ext4 root (p1): the project's files + closures, busybox, the
+                      generic /sbin/init (hydo-init.sh), the compiled manifest in /etc/hydo/
+    <NAME>-data.img   journaled ext4 data disk (p2), mounted on /data: the fault target
+    <NAME>-disk.img   both behind a hand-made MBR -- the file the harnesses take
+NAME defaults to explore-ob-<project name> (the "explore" prefix: hvx_explore serves it).
+
+Byte-reproducible like the hand-written image scripts (build-stack.sh): pinned mke2fs run
+under a pinned libfaketime, fixed UUIDs and hash seeds derived from the project name,
+non-lazy init, every superblock and inode time zeroed afterwards, all source mtimes fixed.
+
+Host tools (same defaults as build-stack.sh; override with the environment variables):
+    HYDO_BUSYBOX  static busybox          HYDO_SEEDRNG   prebuilt static hvx_seedrng
+    HYDO_MKE2FS   e2fsprogs mke2fs        HYDO_FAKETIME  libfaketime's faketime
+    HYDO_IPROUTE2 iproute2 store path     HYDO_MODROOT   guest kernel module tree
+Stdlib only (the build box has no PyYAML): the YAML subset is parsed by parse_yaml() below.
+"""
+import hashlib, json, mmap, os, re, shutil, stat, struct, subprocess, sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+FIXED_MTIME = 1600000000
+FAKE_TS = "2020-09-13 16:26:40"
+NETMODS = ["sch_prio", "sch_netem", "cls_u32"]
+
+# ------------------------------------------------------------------ YAML subset parser
+class YamlError(Exception):
+    pass
+
+
+def _strip_comment(line):
+    out, q = [], None
+    for i, c in enumerate(line):
+        if q:
+            if c == "\\" and q == '"':
+                out.append(c); continue
+            if c == q:
+                q = None
+        elif c in "'\"":
+            q = c
+        elif c == "#" and (i == 0 or line[i - 1] in " \t"):
+            break
+        out.append(c)
+    return "".join(out).rstrip()
+
+
+def _scalar(tok, where):
+    t = tok.strip()
+    if t == "":
+        return None
+    if t[0] == '"':
+        if not t.endswith('"') or len(t) < 2:
+            raise YamlError("%s: unterminated string %s" % (where, t))
+        return json.loads(t)
+    if t[0] == "'":
+        if not t.endswith("'") or len(t) < 2:
+            raise YamlError("%s: unterminated string %s" % (where, t))
+        return t[1:-1].replace("''", "'")
+    if t[0] in "[{":
+        v, rest = _flow(t, 0, where)
+        if t[rest:].strip():
+            raise YamlError("%s: junk after %s" % (where, t))
+        return v
+    if t in ("true", "True", "yes"):
+        return True
+    if t in ("false", "False", "no"):
+        return False
+    if t in ("null", "~"):
+        return None
+    if re.fullmatch(r"-?\d+", t):
+        return int(t)
+    return t
+
+
+def _flow(s, i, where):
+    """[a, b] / {k: v} with nesting; returns (value, next index)."""
+    open_c = s[i]
+    close_c = "]" if open_c == "[" else "}"
+    i += 1
+    items, buf, depth, q = [], "", 0, None
+    while i < len(s):
+        c = s[i]
+        if q:
+            buf += c
+            if c == "\\" and q == '"':
+                buf += s[i + 1]; i += 2; continue
+            if c == q:
+                q = None
+        elif c in "'\"":
+            q = c; buf += c
+        elif c in "[{":
+            depth += 1; buf += c
+        elif c in "]}" and depth:
+            depth -= 1; buf += c
+        elif c == close_c:
+            if buf.strip():
+                items.append(buf)
+            break
+        elif c == "," and not depth:
+            items.append(buf); buf = ""
+        else:
+            buf += c
+        i += 1
+    else:
+        raise YamlError("%s: unterminated %s" % (where, open_c))
+    if open_c == "[":
+        return [_scalar(x, where) for x in items], i + 1
+    d = {}
+    for x in items:
+        k, sep, v = x.partition(":")
+        if not sep:
+            raise YamlError("%s: flow mapping entry without ':' (%s)" % (where, x.strip()))
+        d[_scalar(k, where)] = _scalar(v, where)
+    return d, i + 1
+
+
+def parse_yaml(text, name="hydo.yaml"):
+    """Block mappings, block sequences, `|` literal blocks, flow [..]/{..}, quoted and plain
+    scalars, comments. No anchors, tags or multi-documents (MANIFEST.md lists the subset)."""
+    raw = text.split("\n")
+    lines = []          # (lineno, indent, content)
+    i = 0
+    while i < len(raw):
+        ln = raw[i]
+        if "\t" in ln[: len(ln) - len(ln.lstrip())]:
+            raise YamlError("%s:%d: tab in indentation" % (name, i + 1))
+        c = _strip_comment(ln)
+        if c.strip():
+            lines.append((i + 1, len(c) - len(c.lstrip()), c.strip(), i))
+        i += 1
+
+    pos = [0]
+
+    def block_literal(start_raw, parent_indent):
+        # literal block: raw lines after start_raw whose indent > parent_indent (or blank)
+        body, j = [], start_raw + 1
+        ind = None
+        while j < len(raw):
+            ln = raw[j]
+            if ln.strip() == "":
+                body.append(""); j += 1; continue
+            k = len(ln) - len(ln.lstrip())
+            if k <= parent_indent:
+                break
+            if ind is None:
+                ind = k
+            if k < ind:
+                break
+            body.append(ln[ind:]); j += 1
+        while body and body[-1] == "":
+            body.pop()
+        # skip the parsed raw lines
+        while pos[0] < len(lines) and lines[pos[0]][3] < j:
+            pos[0] += 1
+        return "\n".join(body) + "\n"
+
+    def parse_value_after(rest, indent, lineno, raw_idx):
+        if rest in ("|", "|-", "|+"):
+            v = block_literal(raw_idx, indent)
+            return v.rstrip("\n") if rest == "|-" else v
+        if rest in (">", ">-"):       # folded: the lines joined by single spaces
+            v = " ".join(x.strip() for x in block_literal(raw_idx, indent).split("\n") if x.strip())
+            return v if rest == ">-" else v + "\n"
+        if rest == "":
+            if pos[0] < len(lines) and lines[pos[0]][1] > indent:
+                return parse_node(lines[pos[0]][1])
+            if pos[0] < len(lines) and lines[pos[0]][1] == indent and lines[pos[0]][2].startswith("- "):
+                return parse_node(indent)       # "key:\n- a" (sequence at the same indent)
+            return None
+        return _scalar(rest, "%s:%d" % (name, lineno))
+
+    def parse_node(indent):
+        lineno, ind, content, ridx = lines[pos[0]]
+        if content.startswith("- ") or content == "-":
+            seq = []
+            while pos[0] < len(lines) and lines[pos[0]][1] == indent and (lines[pos[0]][2].startswith("- ") or lines[pos[0]][2] == "-"):
+                lineno, ind, content, ridx = lines[pos[0]]
+                item = content[1:].strip()
+                pos[0] += 1
+                if item == "":
+                    seq.append(parse_node(lines[pos[0]][1]) if pos[0] < len(lines) and lines[pos[0]][1] > indent else None)
+                elif re.match(r"^[^'\"\[{][^:]*:( |$)", item) or re.match(r"^\"[^\"]*\":( |$)", item):
+                    # "- key: value" starts a mapping whose other keys sit at indent+2
+                    sub_indent = indent + 2
+                    k, _, rest = item.partition(":")
+                    m = {_scalar(k, name): parse_value_after(rest.strip(), sub_indent, lineno, ridx)}
+                    while pos[0] < len(lines) and lines[pos[0]][1] == sub_indent and not lines[pos[0]][2].startswith("- "):
+                        k2, v2 = parse_pair(sub_indent)
+                        if k2 in m:
+                            raise YamlError("%s:%d: duplicate key %s" % (name, lines[pos[0] - 1][0], k2))
+                        m[k2] = v2
+                    seq.append(m)
+                else:
+                    seq.append(_scalar(item, "%s:%d" % (name, lineno)))
+            return seq
+        m = {}
+        while pos[0] < len(lines) and lines[pos[0]][1] == indent:
+            if lines[pos[0]][2].startswith("- "):
+                raise YamlError("%s:%d: a list item where a key was expected" % (name, lines[pos[0]][0]))
+            k, v = parse_pair(indent)
+            if k in m:
+                raise YamlError("%s:%d: duplicate key %s" % (name, lines[pos[0] - 1][0], k))
+            m[k] = v
+        if pos[0] < len(lines) and lines[pos[0]][1] > indent:
+            raise YamlError("%s:%d: unexpected indentation" % (name, lines[pos[0]][0]))
+        return m
+
+    def parse_pair(indent):
+        lineno, ind, content, ridx = lines[pos[0]]
+        mm = re.match(r'^("(?:[^"\\]|\\.)*"|\'[^\']*\'|[^:]+?):( (.*)|$)', content)
+        if not mm:
+            raise YamlError("%s:%d: expected 'key: value', got %r" % (name, lineno, content))
+        key = _scalar(mm.group(1), "%s:%d" % (name, lineno))
+        rest = (mm.group(3) or "").strip()
+        pos[0] += 1
+        return key, parse_value_after(rest, indent, lineno, ridx)
+
+    if not lines:
+        return {}
+    v = parse_node(lines[0][1])
+    if pos[0] != len(lines):
+        raise YamlError("%s:%d: could not parse from here (indentation?)" % (name, lines[pos[0]][0]))
+    return v
+
+
+# ------------------------------------------------------------------ manifest validation
+class ManifestError(Exception):
+    pass
+
+
+NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+KNOWN_TOP = {"name", "description", "guest", "root", "data", "env", "shell", "services",
+             "provision", "workload", "knobs", "invariants", "faults", "image"}
+KNOWN_SVC = {"name", "cmd", "setup", "ready", "ready_timeout", "port", "depends_on",
+             "recovery", "description"}
+KNOWN_INV = {"id", "type", "msg", "cmd", "every", "final", "description"}
+KNOWN_KNOB = {"token", "name", "default", "set", "values", "safe", "description"}
+FAULT_KINDS = {"kill", "pause", "network", "oneway", "cut", "clock", "disk"}
+
+
+def _need(d, k, where, typ=str):
+    if k not in d or d[k] in (None, ""):
+        raise ManifestError("%s: missing required field '%s'" % (where, k))
+    if typ is str and isinstance(d[k], (int, bool)):
+        return str(d[k])
+    if not isinstance(d[k], typ):
+        raise ManifestError("%s: field '%s' must be a %s" % (where, k, typ.__name__))
+    return d[k]
+
+
+def _unknown(d, known, where):
+    bad = sorted(set(d) - known)
+    if bad:
+        raise ManifestError("%s: unknown field(s) %s (known: %s)" % (where, ", ".join(map(str, bad)), ", ".join(sorted(known))))
+
+
+def validate(m):
+    if not isinstance(m, dict):
+        raise ManifestError("the manifest must be a mapping")
+    _unknown(m, KNOWN_TOP, "top level")
+    if "image" in m:
+        raise ManifestError("top level: 'image:' (OCI/Docker images) is reserved for a later version; "
+                            "use root.nix / root.files for now")
+    name = _need(m, "name", "top level")
+    if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
+        raise ManifestError("name: use lowercase letters, digits and '-' (got %r)" % name)
+    svcs = m.get("services") or []
+    if not isinstance(svcs, list) or not svcs:
+        raise ManifestError("services: at least one service is required")
+    seen = {}
+    for i, s in enumerate(svcs):
+        where = "services[%d]" % i
+        if not isinstance(s, dict):
+            raise ManifestError("%s: must be a mapping" % where)
+        _unknown(s, KNOWN_SVC, where)
+        n = _need(s, "name", where)
+        if not NAME_RE.match(n):
+            raise ManifestError("%s: name %r must match [a-z][a-z0-9_]* (it becomes a shell identifier)" % (where, n))
+        if n in seen:
+            raise ManifestError("%s: duplicate service name %r" % (where, n))
+        seen[n] = s
+        _need(s, "cmd", where); _need(s, "ready", where)
+        if "port" in s and not isinstance(s["port"], int):
+            raise ManifestError("%s: port must be a number" % where)
+        for d in s.get("depends_on") or []:
+            if d not in [x.get("name") for x in svcs]:
+                raise ManifestError("%s: depends_on names unknown service %r" % (where, d))
+    wl = m.get("workload")
+    if not isinstance(wl, dict):
+        raise ManifestError("workload: required (steps + run)")
+    _unknown(wl, {"steps", "run", "retry", "process", "description"}, "workload")
+    st = _need(wl, "steps", "workload", int)
+    if st < 1 or st > 1000:
+        raise ManifestError("workload.steps: between 1 and 1000")
+    _need(wl, "run", "workload")
+    invs = m.get("invariants") or []
+    if not invs:
+        raise ManifestError("invariants: at least one invariant is required (otherwise nothing is checked)")
+    ids = set()
+    for i, v in enumerate(invs):
+        where = "invariants[%d]" % i
+        _unknown(v, KNOWN_INV, where)
+        vid = _need(v, "id", where)
+        if not re.fullmatch(r"[A-Za-z0-9_.\-]+", vid):
+            raise ManifestError("%s: id %r: letters, digits, '.', '_' and '-' only" % (where, vid))
+        if vid in ids:
+            raise ManifestError("%s: duplicate id %r" % (where, vid))
+        ids.add(vid)
+        _need(v, "cmd", where)
+        t = v.get("type", "always")
+        if t not in ("always", "always_or_unreachable"):
+            raise ManifestError("%s: type must be always or always_or_unreachable" % where)
+        if "every" in v and (not isinstance(v["every"], int) or v["every"] < 1):
+            raise ManifestError("%s: every is a whole number of seconds >= 1" % where)
+        if not v.get("final", "every" not in v) and "every" not in v:
+            raise ManifestError("%s: an invariant with final: false needs every:" % where)
+    toks = set()
+    for i, k in enumerate(m.get("knobs") or []):
+        where = "knobs[%d]" % i
+        _unknown(k, KNOWN_KNOB, where)
+        t = _need(k, "token", where)
+        if not re.fullmatch(r"[A-Z]", t) or t in "KNCPTO":
+            raise ManifestError("%s: token must be one capital letter other than K N C P T O (fault tokens)" % where)
+        if t in toks:
+            raise ManifestError("%s: duplicate token %s" % (where, t))
+        toks.add(t)
+        _need(k, "default", where); _need(k, "set", where)
+    for f in m.get("faults") or []:
+        if f not in FAULT_KINDS:
+            raise ManifestError("faults: unknown kind %r (known: %s)" % (f, ", ".join(sorted(FAULT_KINDS))))
+    data = m.get("data") or {}
+    _unknown(data, {"size_mib", "mount", "dirs", "description"}, "data")
+    root = m.get("root") or {}
+    _unknown(root, {"size_mib", "nix", "files", "text", "dirs", "description"}, "root")
+    guest = m.get("guest") or {}
+    _unknown(guest, {"ram_mib", "clock_start", "description"}, "guest")
+    if guest.get("ram_mib", 1024) != 1024:
+        raise ManifestError("guest.ram_mib: v1 runs every guest at 1024 MiB (hvx_explore's fixed size)")
+    return m
+
+
+def service_order(svcs):
+    """Manifest order, moved only as much as depends_on requires (stable topological sort)."""
+    names = [s["name"] for s in svcs]
+    deps = {s["name"]: list(s.get("depends_on") or []) for s in svcs}
+    out, temp = [], set()
+
+    def visit(n):
+        if n in out:
+            return
+        if n in temp:
+            raise ManifestError("services: depends_on has a cycle through %r" % n)
+        temp.add(n)
+        for d in deps[n]:
+            visit(d)
+        temp.discard(n)
+        out.append(n)
+    for n in names:
+        visit(n)
+    return out
+
+
+# ------------------------------------------------------------------ manifest -> shell
+def shq(s):
+    return "'" + str(s).replace("'", "'\\''") + "'"
+
+
+def compile_shell(m, tc_path):
+    svcs = {s["name"]: s for s in m["services"]}
+    order = service_order(m["services"])
+    wl = m["workload"]
+    L = ["# generated by hvx/onboard/hydo-build from hydo.yaml -- do not edit",
+         "HYDO_NAME=%s" % shq(m["name"]),
+         "HYDO_SERVICES=%s" % shq(" ".join(order)),
+         "HYDO_STEPS=%d" % wl["steps"],
+         "HYDO_WORKLOAD_RUN=%s" % shq(wl["run"]),
+         "HYDO_WORKLOAD_RETRY=%s" % shq(wl.get("retry") or ""),
+         "HYDO_WORKLOAD_PGREP=%s" % shq(wl.get("process") or os.path.basename(str(wl["run"]).split()[0])),
+         "HYDO_PROVISION=%s" % shq(m.get("provision") or ""),
+         "HYDO_DATA_OPTS=%s" % shq((m.get("data") or {}).get("mount", "rw")),
+         "HYDO_DATA_DIRS=%s" % shq(" ".join((m.get("data") or {}).get("dirs") or [])),
+         "HYDO_CLOCK_START=%d" % int((m.get("guest") or {}).get("clock_start", 1767225600)),
+         "HYDO_TC=%s" % shq(tc_path or "")]
+    for n in order:
+        s = svcs[n]
+        L += ["HYDO_SVC_%s_cmd=%s" % (n, shq(s["cmd"])),
+              "HYDO_SVC_%s_setup=%s" % (n, shq(s.get("setup") or "")),
+              "HYDO_SVC_%s_ready=%s" % (n, shq(s["ready"])),
+              "HYDO_SVC_%s_timeout=%d" % (n, int(s.get("ready_timeout", 120))),
+              "HYDO_SVC_%s_port=%s" % (n, shq(s.get("port", ""))),
+              "HYDO_SVC_%s_recovery=%d" % (n, 1 if s.get("recovery", True) else 0)]
+    inv_names = []
+    for i, v in enumerate(m["invariants"]):
+        k = "i%d" % i
+        inv_names.append(k)
+        every = v.get("every")
+        final = v.get("final", every is None)
+        L += ["HYDO_INV_%s_id=%s" % (k, shq(v["id"])),
+              "HYDO_INV_%s_type=%s" % (k, shq(v.get("type", "always"))),
+              "HYDO_INV_%s_msg=%s" % (k, shq(v.get("msg", v["id"]))),
+              "HYDO_INV_%s_cmd=%s" % (k, shq(v["cmd"])),
+              "HYDO_INV_%s_every=%s" % (k, shq(every or "")),
+              "HYDO_INV_%s_final=%d" % (k, 1 if final else 0)]
+    L.append("HYDO_INVARIANTS=%s" % shq(" ".join(inv_names)))
+    for k in m.get("knobs") or []:
+        t = k["token"]
+        L += ["HYDO_KNOB_%s_default=%s" % (t, shq(k["default"])),
+              "HYDO_KNOB_%s_set=%s" % (t, shq(k["set"])),
+              "HYDO_KNOB_%s_name=%s" % (t, shq(k.get("name", t)))]
+    manifest_sh = "\n".join(L) + "\n"
+    P = ["# generated by hvx/onboard/hydo-build: the project's env + shell helpers (hydo.yaml)",
+         "export HOME=/tmp TZ=UTC LANG=C"]
+    for k, v in (m.get("env") or {}).items():
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", str(k)):
+            raise ManifestError("env: %r is not a valid variable name" % k)
+        P.append("export %s=%s" % (k, shq(v)))
+    if m.get("shell"):
+        P.append(m["shell"].rstrip("\n"))
+    prelude = "\n".join(P) + "\n"
+    return manifest_sh, prelude
+
+
+# ------------------------------------------------------------------ image building
+def tool(env, default, check):
+    p = os.environ.get(env) or default
+    if not check(p):
+        raise SystemExit("hydo-build: %s not found at %s (set %s)" % (env, p, env))
+    return p
+
+
+def closure(path):
+    out = subprocess.run(["nix-store", "-qR", path], check=True, stdout=subprocess.PIPE, text=True).stdout.split()
+    return sorted(out)
+
+
+def copy_into(src, dst):
+    if os.path.isdir(src) and not os.path.islink(src):
+        shutil.copytree(src, dst, symlinks=True, dirs_exist_ok=True)
+    else:
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        if os.path.lexists(dst):
+            os.chmod(dst, 0o755) if not os.path.islink(dst) else None
+            os.unlink(dst)
+        shutil.copy2(src, dst, follow_symlinks=False)
+
+
+def uuid_from(name, salt):
+    h = hashlib.sha256(("hydo-onboard:%s:%s" % (name, salt)).encode()).hexdigest()
+    return "%s-%s-%s-%s-%s" % (h[0:8], h[8:12], h[12:16], h[16:20], h[20:32])
+
+
+def zero_times(path, all_inode_times):
+    """Zero every superblock time (primary + backups) and inode time mke2fs stamped (same
+    fields as build-stack.sh's passes: the faked clock advances, so a build crossing a
+    second boundary would otherwise differ)."""
+    with open(path, "r+b") as f:
+        mm = mmap.mmap(f.fileno(), 0)
+        u16 = lambda o: struct.unpack_from("<H", mm, o)[0]
+        u32 = lambda o: struct.unpack_from("<I", mm, o)[0]
+        sb = 1024
+        inodes = u32(sb + 0x00); bs = 1024 << u32(sb + 0x18)
+        ipg = u32(sb + 0x28); isize = u16(sb + 0x58) or 128
+        bpg = u32(sb + 0x20)
+        gdtb = 2 if bs == 1024 else 1
+        ng = (inodes + ipg - 1) // ipg
+        for g in range(ng):
+            o = sb if g == 0 else g * bpg * bs + (1024 if bs == 1024 else 0)
+            if o + 0x3A <= len(mm) and u16(o + 0x38) == 0xEF53:
+                for t in (0x2C, 0x30, 0x40, 0x108):
+                    struct.pack_into("<I", mm, o + t, 0)
+        for g in range(ng):
+            itbl = u32(gdtb * bs + g * 32 + 0x08)
+            for i in range(ipg):
+                if g * ipg + i >= inodes:
+                    break
+                io = itbl * bs + i * isize
+                # root: atime (mke2fs -d reading a source file can bump it under relatime),
+                # ctime and dtime; mtime keeps the fixed source mtime. data disk: all four.
+                fields = (0x08, 0x0C, 0x10, 0x14) if all_inode_times else (0x08, 0x0C, 0x14)
+                for o in fields:
+                    struct.pack_into("<I", mm, io + o, 0)
+                if isize > 128:
+                    for o in (0x84, 0x88, 0x8C, 0x90, 0x94):
+                        struct.pack_into("<I", mm, io + o, 0)
+        mm.flush(); mm.close()
+
+
+def mkfs(T, out, mib, uuid, seed, src=None, journal=False):
+    with open(out, "wb") as f:
+        f.truncate(mib * 1024 * 1024)
+    feats = "^metadata_csum,^64bit,^flex_bg,^resize_inode" + (",has_journal" if journal else "")
+    cmd = [T["faketime"], FAKE_TS, T["mke2fs"], "-q", "-F", "-t", "ext4", "-b", "4096", "-O", feats]
+    if journal:
+        cmd += ["-J", "size=16"]
+    cmd += ["-U", uuid, "-E", "hash_seed=%s,lazy_itable_init=0,lazy_journal_init=0" % seed]
+    if src:
+        cmd += ["-d", src]
+    cmd.append(out)
+    subprocess.run(cmd, check=True, env=dict(os.environ, SOURCE_DATE_EPOCH=str(FIXED_MTIME)))
+
+
+def write_mbr(img, parts):
+    mbr = bytearray(512)
+    mbr[0x1B8:0x1BC] = b"\x0b\xd0\xea\x1d"
+    for k, (lba, n) in enumerate(parts):
+        off = 0x1BE + 16 * k
+        mbr[off] = 0
+        mbr[off + 1:off + 4] = b"\xfe\xff\xff"
+        mbr[off + 4] = 0x83
+        mbr[off + 5:off + 8] = b"\xfe\xff\xff"
+        struct.pack_into("<I", mbr, off + 8, lba)
+        struct.pack_into("<I", mbr, off + 12, n)
+    mbr[0x1FE] = 0x55; mbr[0x1FF] = 0xAA
+    with open(img, "r+b") as f:
+        f.write(mbr)
+
+
+def fix_mtimes(root):
+    for dp, dns, fns in os.walk(root):
+        for n in dns + fns:
+            os.utime(os.path.join(dp, n), (FIXED_MTIME, FIXED_MTIME), follow_symlinks=False)
+    os.utime(root, (FIXED_MTIME, FIXED_MTIME))
+
+
+def sha(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for b in iter(lambda: f.read(1 << 20), b""):
+            h.update(b)
+    return h.hexdigest()
+
+
+def build(m, manifest_path, out, bdir):
+    T = {
+        "busybox": tool("HYDO_BUSYBOX", "/nix/store/ahw5fkq085k5ppdsylyd475xlxb18pz1-busybox-static-x86_64-unknown-linux-musl-1.37.0/bin/busybox", os.path.isfile),
+        "seedrng": tool("HYDO_SEEDRNG", os.path.join(bdir, "hvx_seedrng"), os.path.isfile),
+        "mke2fs": tool("HYDO_MKE2FS", "/nix/store/24s0phlx9kly7x7qb8gal3mmn51ndmlx-e2fsprogs-1.47.0-bin/bin/mke2fs", os.path.isfile),
+        "faketime": tool("HYDO_FAKETIME", "/nix/store/fs0gp7zyfjnbvaq82yvwbcsvqh7876d1-libfaketime-0.9.10/bin/faketime", os.path.isfile),
+    }
+    faults = set(m.get("faults") or FAULT_KINDS)
+    want_tc = bool(faults & {"network", "oneway"})
+    iproute2 = None
+    if want_tc:
+        iproute2 = tool("HYDO_IPROUTE2", "/nix/store/dx4fsbxs5v82l9lzmjkpkhx5ygqcwm69-iproute2-6.8.0", lambda p: os.path.isfile(p + "/bin/tc"))
+        modroot = tool("HYDO_MODROOT", "/run/current-system/kernel-modules/lib/modules/6.6.35", os.path.isdir)
+    mdir = os.path.dirname(os.path.abspath(manifest_path))
+    root = m.get("root") or {}
+    R = os.path.join(bdir, "%s-root" % out)
+    # the store closures are big and immutable: stage once, reuse; everything else fresh
+    store = sorted(set(p for n in (root.get("nix") or []) + ([iproute2] if iproute2 else []) for p in closure(n)))
+    stamp = os.path.join(bdir, "%s-root.closures" % out)
+    if os.path.isdir(R) and os.path.exists(stamp) and open(stamp).read() == "\n".join(store):
+        print("hydo-build: reusing the staged closures in %s" % R)
+        for d in os.listdir(R):
+            if d != "nix":
+                p = os.path.join(R, d)
+                subprocess.run(["chmod", "-R", "u+w", p], check=False)
+                shutil.rmtree(p) if os.path.isdir(p) and not os.path.islink(p) else os.unlink(p)
+    else:
+        if os.path.isdir(R):
+            subprocess.run(["chmod", "-R", "u+w", R], check=False)
+            shutil.rmtree(R)
+        os.makedirs(os.path.join(R, "nix/store"))
+        for p in store:
+            subprocess.run(["cp", "-a", p, os.path.join(R, "nix/store/")], check=True)
+        with open(stamp, "w") as f:
+            f.write("\n".join(store))
+        print("hydo-build: staged %d store paths" % len(store))
+    for d in ["bin", "sbin", "proc", "sys", "dev", "data", "tmp", "etc/hydo", "lib/modules"] + [d.lstrip("/") for d in root.get("dirs") or []]:
+        os.makedirs(os.path.join(R, d), exist_ok=True)
+    shutil.copy(T["busybox"], os.path.join(R, "bin/busybox"))
+    shutil.copy(T["seedrng"], os.path.join(R, "bin/hvx_seedrng"))
+    for b in ("bin/busybox", "bin/hvx_seedrng"):
+        os.chmod(os.path.join(R, b), 0o755)
+    # busybox applets the project's commands may call by name (sh, grep, ...)
+    applets = subprocess.run([T["busybox"], "--list"], stdout=subprocess.PIPE, text=True, check=True).stdout.split()
+    for a in applets:
+        p = os.path.join(R, "bin", a)
+        if not os.path.lexists(p):
+            os.symlink("busybox", p)
+    if want_tc:
+        for mod in NETMODS:
+            src = subprocess.run(["find", modroot, "-name", mod + ".ko.xz"], stdout=subprocess.PIPE, text=True).stdout.split()
+            if not src:
+                raise SystemExit("hydo-build: kernel module %s.ko.xz not under %s" % (mod, modroot))
+            with open(os.path.join(R, "lib/modules", mod + ".ko"), "wb") as f:
+                subprocess.run(["xz", "-dc", sorted(src)[0]], stdout=f, check=True)
+    for e in root.get("files") or []:
+        if not isinstance(e, dict) or "src" not in e or "dst" not in e:
+            raise ManifestError("root.files: each entry needs src and dst")
+        src = os.path.expanduser(str(e["src"]))
+        if not os.path.isabs(src):
+            src = os.path.join(mdir, src)
+        if not os.path.exists(src):
+            raise ManifestError("root.files: %s does not exist" % src)
+        dst = os.path.join(R, str(e["dst"]).lstrip("/"))
+        copy_into(src, dst)
+        if "mode" in e:
+            os.chmod(dst, int(str(e["mode"]), 8))
+    for dst, content in (root.get("text") or {}).items():
+        p = os.path.join(R, str(dst).lstrip("/"))
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w") as f:
+            f.write(content)
+    for name, content in (("etc/hosts", "127.0.0.1 localhost\n"), ("etc/passwd", "root:x:0:0:root:/tmp:/bin/sh\n"),
+                          ("etc/group", "root:x:0:\n")):
+        p = os.path.join(R, name)
+        if not os.path.exists(p):
+            with open(p, "w") as f:
+                f.write(content)
+    manifest_sh, prelude = compile_shell(m, (iproute2 + "/bin/tc") if iproute2 else "")
+    with open(os.path.join(R, "etc/hydo/manifest.sh"), "w") as f:
+        f.write(manifest_sh)
+    with open(os.path.join(R, "etc/hydo/prelude.sh"), "w") as f:
+        f.write(prelude)
+    shutil.copy(manifest_path, os.path.join(R, "etc/hydo/hydo.yaml"))
+    shutil.copy(os.path.join(HERE, "hydo-init.sh"), os.path.join(R, "sbin/init"))
+    os.chmod(os.path.join(R, "sbin/init"), 0o755)
+    fix_mtimes(R)
+
+    ext4, data, disk = (os.path.join(bdir, "%s-%s.img" % (out, k)) for k in ("ext4", "data", "disk"))
+    rmib = int(root.get("size_mib", 0)) or None
+    if rmib is None:
+        used = int(subprocess.run(["du", "-sm", R], stdout=subprocess.PIPE, text=True).stdout.split()[0])
+        rmib = max(64, (used * 13 // 10 + 63) // 64 * 64)
+    mkfs(T, ext4, rmib, uuid_from(m["name"], "root"), uuid_from(m["name"], "root-hash"), src=R)
+    zero_times(ext4, all_inode_times=False)
+    dmib = int((m.get("data") or {}).get("size_mib", 512))
+    mkfs(T, data, dmib, uuid_from(m["name"], "data"), uuid_from(m["name"], "data-hash"), journal=True)
+    zero_times(data, all_inode_times=True)
+    p1, n1 = 2048, rmib * 2048
+    p2, n2 = p1 + n1, dmib * 2048
+    with open(disk, "wb") as f:
+        f.truncate((p2 + n2) * 512)
+    write_mbr(disk, [(p1, n1), (p2, n2)])
+    with open(disk, "r+b") as fo:
+        for img, lba in ((ext4, p1), (data, p2)):
+            fo.seek(lba * 512)
+            with open(img, "rb") as fi:
+                shutil.copyfileobj(fi, fo, 1 << 20)
+    print("hydo-build: %s (root %d MiB, data %d MiB)" % (disk, rmib, dmib))
+    for p in (ext4, data, disk):
+        print("  sha256(%s)=%s" % (os.path.basename(p), sha(p)))
+
+
+def main():
+    a = sys.argv[1:]
+    if not a or a[0] in ("-h", "--help"):
+        print(__doc__); return 0
+    path = a[0]
+    opt = {"--out": None, "--build-dir": "build"}
+    flags = set()
+    i = 1
+    while i < len(a):
+        if a[i] in opt:
+            opt[a[i]] = a[i + 1]; i += 2
+        elif a[i] in ("--check", "--print-shell"):
+            flags.add(a[i]); i += 1
+        else:
+            print("hydo-build: unknown argument %s" % a[i], file=sys.stderr); return 2
+    try:
+        text = open(path).read()
+        m = json.loads(text) if path.endswith(".json") else parse_yaml(text, os.path.basename(path))
+        validate(m)
+        service_order(m["services"])
+    except (YamlError, ManifestError) as e:
+        print("hydo-build: %s" % e, file=sys.stderr); return 1
+    if "--print-shell" in flags:
+        ms, pre = compile_shell(m, "/nix/store/...-iproute2/bin/tc")
+        print(ms); print("# ---- prelude.sh"); print(pre); return 0
+    if "--check" in flags:
+        print("hydo-build: %s OK (%d services, %d invariants, %d workload steps)" % (
+            path, len(m["services"]), len(m["invariants"]), m["workload"]["steps"])); return 0
+    out = opt["--out"] or "explore-ob-%s" % m["name"]
+    os.makedirs(opt["--build-dir"], exist_ok=True)
+    try:
+        build(m, path, out, opt["--build-dir"])
+    except ManifestError as e:
+        print("hydo-build: %s" % e, file=sys.stderr); return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
