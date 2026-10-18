@@ -120,6 +120,10 @@ Network faults, all identical (serve, serve, one):
 
 The ledger's lost-reply duplicate needs *partial* reply loss: losing 100% of the server's packets also drops its SYN-ACK, so no connection opens, the request is never applied and the retry stores the only copy. With 50–70% loss some connections open and then lose the answer for longer than the client's 2 s timeout; the retry stores the applied entry again.
 
+**Exploration with network faults** (`explore.py --backend hvm --strategy swarm --new-faults --seeds 1-100 --workers 4`; network faults now drawn because the manifests list them and the images have `tc`):
+- **ledger:** 75 of 100 schedules had a network fault. 39 failures, 39 reproduced. 38 are the planted non-idempotent retry (`entry # stored # times`), 5 of them with a network fault and no pause or kill (e.g. seed 28 `O=front@10-14:resp:loss,78%`, seed 58 `O=front@25-30:resp:loss,93%`). 1 is a harness artefact: seed 40 kills the front door while a 2,295 ms request delay is on its port, so the restart's readiness check (`wget -T 2`) never passes (`ERROR front restart failed`). 6,494 runs/hour.
+- **Redis:** 75 of 100 had a network fault (58 consoles show `NET FAULT`). 36 failures, 36 reproduced, all expected classes: lying disk 18, I/O errors 11, relaxed `appendfsync` 7; none with durable settings and an honest disk. 787 runs/hour (netem delays and the disk make these runs longer).
+
 ## Fixed: a rare divergence under heavy host load (a WFI that does not trap)
 
 **Symptom (before the fix).** With 8 concurrent serve processes on the 12-core Mac and the Mac swapping (15–20 GB of swap in use), about 1 run in 150 ended with a different full-state fingerprint: 14 of 2,240 runs of `disk=none | run` in five stress batches, plus one batch in which one serve process gave the odd value for every run (its S1 snapshot was taken after the divergence). The verdict, the console and the whole exit trace (exit count, exception class, PC, CPSR at every exit) were identical. The odd runs repeat a few discrete alternatives (`fb04c7dca19c1f42` in every batch here).
