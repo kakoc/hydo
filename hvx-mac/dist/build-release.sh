@@ -20,6 +20,7 @@ BUSYBOX=/nix/store/zbc5fx2yszji1a4aw2ff46m0p99c6yxb-busybox-static-aarch64-unkno
 MKE2FS=/nix/store/gnavnl9lh7lwi3kzvf0rzlw3zzplg32i-e2fsprogs-static-aarch64-unknown-linux-musl-1.47.0-bin/bin/mke2fs
 LISTER=/nix/store/ahw5fkq085k5ppdsylyd475xlxb18pz1-busybox-static-x86_64-unknown-linux-musl-1.37.0/bin/busybox
 REDIS_MANIFEST=$TOP/hvx-mac/explore/examples/redis/hydo.yaml
+TC=$(sed -n 's/^TC_ARM64 = "\(.*\)"$/\1/p' "$TOP/hvx/onboard/hydo_build_arm64.py")   # the pinned aarch64 tc
 
 mkdir -p "$A"
 fetch() {   # fetch <remote path> <local name>
@@ -45,6 +46,14 @@ if [ ! -d "$A/redis" ]; then   # tar keeps the libraries' symlinks, as hydo-buil
   ssh "$HOST" "cd / && tar cf - $srcs" | ( cd "$A/redis" && tar xf - )
   find "$A/redis" -type d -exec chmod u+w {} +   # files keep the store's read-only modes, as on Linux
 fi
+if [ ! -d "$A/tc" ]; then   # tc and every file its loader opens (hvx-mac/services/elfdeps.py on $HOST)
+  scp -q "$TOP/hvx-mac/services/elfdeps.py" "$HOST:/dev/shm/hydo-elfdeps.py"
+  ssh "$HOST" "p=\$(ls -d /nix/store/*-python3-3.1*/bin/python3 | head -1); \$p /dev/shm/hydo-elfdeps.py $TC" > "$A/tc-closure.txt"
+  echo "$TC" >> "$A/tc-closure.txt"
+  mkdir -p "$A/tc"
+  ssh "$HOST" "cd / && tar cf - $(sed 's#^/##' "$A/tc-closure.txt" | tr '\n' ' ')" | ( cd "$A/tc" && tar xf - )
+  find "$A/tc" -type d -exec chmod u+w {} +
+fi
 ( cd "$A" && shasum -a 256 -c "$D/assets.sha256" >/dev/null ) || {
   echo "assets do not match assets.sha256 (pinned); remove hvx-mac/dist/assets and fetch again" >&2
   ( cd "$A" && shasum -a 256 -c "$D/assets.sha256" | grep -v ': OK$' ) >&2; exit 1; }
@@ -68,7 +77,8 @@ cp "$TOP/hvx-mac/explore/hvmx" "$REL/hvx-mac/explore/hvmx"
 cp "$TOP/hvx-mac/hv.entitlements" "$REL/hvx-mac/"
 cp "$A/Image-explore" "$REL/hvx-mac/explore/out/Image-explore"
 cp "$A/busybox" "$A/mke2fs" "$REL/guest/"; chmod 755 "$REL/guest/busybox" "$REL/guest/mke2fs"
-cp "$A/busybox-applets.txt" "$REL/guest/"
+cp "$A/busybox-applets.txt" "$A/tc-closure.txt" "$REL/guest/"
+cp -R "$A/tc" "$REL/guest/tc"
 printf '#!/bin/sh\n# stands in for `busybox --list` (hydo-build asks it for the applet set)\ncat "$(dirname "$0")/busybox-applets.txt"\n' > "$REL/guest/busybox-applets"
 chmod 755 "$REL/guest/busybox-applets"
 # the Redis example: the Mac manifest with every /nix/store src made relative to files/
