@@ -23,6 +23,7 @@
  *   hvm print  <Image> <initrd> <end-marker>           boot to marker, print the fingerprint
  *   hvm branch <Image> <initrd> <mid-marker> <end-marker>
  *              boot to mid, snapshot, finish (A); restore into a fresh vCPU, finish (B)
+ * Devices: virtio-mmio block + network with hvx's fault injection (virtio.h: HVM_DISK, HVM_FAULT, HVM_NET, ...).
  * Env: HVM_MEM_MB (default 256), HVM_STEP (ticks per exit, default 64),
  *      HVM_ECHO=1 (echo the console live), HVM_MAX_EXITS (default 2e8),
  *      HVM_TRACE_SYSREG=1 (log unknown sysreg traps).
@@ -38,6 +39,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <pthread.h>
+#include "virtio.h"
 
 #define CHK(x) do { hv_return_t _r = (x); if (_r) { fprintf(stderr, "FAIL %s = 0x%x\n", #x, _r); exit(1); } } while (0)
 
@@ -168,6 +170,17 @@ static size_t build_fdt(uint8_t *out, const char *bootargs, uint64_t initrd_star
 	prop_u32("clock-frequency", 1843200);
 	{ uint32_t i[3] = { 0, UART_SPI, 4 }; prop_u32s("interrupts", i, 3); }
 	endnode();
+	for (int d = 0; d < virtio_ndev(); d++) {          /* virtio-mmio devices (none unless attached) */
+		uint64_t b; int spi; char nm[40];
+		virtio_dev_info(d, &b, &spi);
+		snprintf(nm, sizeof nm, "virtio_mmio@%llx", (unsigned long long)b);
+		node(nm);
+		prop_str("compatible", "virtio,mmio");
+		{ uint32_t r[4] = { 0, (uint32_t)b, 0, VIRTIO_MMIO_SIZE }; prop_u32s("reg", r, 4); }
+		{ uint32_t i[3] = { 0, (uint32_t)spi, 4 }; prop_u32s("interrupts", i, 3); }
+		prop_empty("dma-coherent");
+		endnode();
+	}
 	endnode();
 	s32(9);
 
@@ -195,6 +208,8 @@ static void gic_update_levels(void)
 {
 	setb(M.gic.pending, TIMER_INTID, timer_level());
 	setb(M.gic.pending, UART_INTID, uart_level());
+	virtio_poll(M.vtime);                              /* completions that are due become visible */
+	for (int d = 0; d < virtio_ndev(); d++) { uint64_t b; int spi; virtio_dev_info(d, &b, &spi); setb(M.gic.pending, 32 + spi, virtio_level(d)); }
 }
 /* the highest-priority pending, enabled, inactive interrupt, or 1023 */
 static int gic_best(void)
@@ -346,7 +361,9 @@ static void handle_mmio(void)
 	} else if (ipa >= UART_BASE && ipa < UART_BASE + 0x100) {
 		if (write) uart_write(ipa - UART_BASE, (uint8_t)xget(rt)); else xset(rt, uart_read(ipa - UART_BASE));
 	} else {
-		if (!write) xset(rt, 0);                      /* unmapped: reads as zero, writes ignored */
+		uint64_t v = write ? xget(rt) : 0;
+		if (virtio_mmio(ipa, write, size, &v, M.vtime)) { if (!write) xset(rt, v); }
+		else if (!write) xset(rt, 0);                 /* unmapped: reads as zero, writes ignored */
 	}
 	skip();
 }
@@ -431,8 +448,11 @@ static int handle_wfi(void)
 	M.n_wfi++;
 	skip();
 	if (irq_line()) { if (rd(HV_REG_CPSR) & 0x80) start_stepping(); return 0; }
-	if ((M.cntp_ctl & 3) == 1 && M.cntp_cval > M.vtime) { M.vtime = M.cntp_cval; M.n_wfi_jump++; return 0; }
-	if ((M.cntp_ctl & 3) == 1) return 0;               /* already due */
+	uint64_t next = (M.cntp_ctl & 3) == 1 ? M.cntp_cval : 0;   /* the timer deadline (may be already due) */
+	uint64_t vd = virtio_next_due(M.vtime);                 /* a device completion or paced frame */
+	if (vd && (!next || vd < next)) next = vd;
+	if (next > M.vtime) { M.vtime = next; M.n_wfi_jump++; return 0; }
+	if (next) return 0;                                /* already due */
 	return 1;                                          /* idle with nothing armed */
 }
 
@@ -588,6 +608,7 @@ static struct parts fingerprint(void)
 	/* machine state minus the pure statistics counters */
 	struct mach m = M; m.n_wfi = m.n_wfi_jump = m.n_cntpct = m.n_mmio = m.n_hvc = m.n_sysreg_other = m.n_irq_line = m.n_steps = m.n_step_runs = 0;
 	p.mach = fnv(&m, sizeof m, 0xcbf29ce484222325ULL);
+	if (virtio_attached()) p.mach = virtio_hash(p.mach);   /* device state, disk image, volatile cache, captured TX */
 	p.ram = fnv(ram, ram_size, 0xcbf29ce484222325ULL);
 	h = fnv(&p.console, 8, 0xcbf29ce484222325ULL); h = fnv(&p.regs, 8, h); h = fnv(&p.mach, 8, h); h = fnv(&p.ram, 8, h);
 	p.all = h;
@@ -615,6 +636,7 @@ static void print_fp(const char *tag, struct parts p, int stop, double secs)
 	       tag, stop, M.exits, M.vtime, (double)M.vtime / CNTFRQ, M.console_len, secs, p.all, p.console, p.regs, p.mach, p.ram);
 	printf("%s: cntpct reads %llu, mmio %llu, hvc %llu, wfi %llu (clock jumps %llu), other sysreg traps %llu, entries with IRQ line up %llu, single steps %llu in %llu runs\n",
 	       tag, M.n_cntpct, M.n_mmio, M.n_hvc, M.n_wfi, M.n_wfi_jump, M.n_sysreg_other, M.n_irq_line, M.n_steps, M.n_step_runs);
+	virtio_stats(tag);
 	fflush(stdout);
 }
 
@@ -637,7 +659,9 @@ int main(int argc, char **argv)
 
 	if (getenv("HVM_SPIN_SECS")) spin_secs = atof(getenv("HVM_SPIN_SECS"));
 	{ pthread_t t; pthread_create(&t, NULL, watchdog, NULL); }
+	virtio_setup();
 	vm_create(bootargs);
+	virtio_bind(ram, RAM_BASE, ram_size, STEP);
 	vcpu_boot();
 	double t0 = now_s();
 
@@ -647,6 +671,7 @@ int main(int argc, char **argv)
 		double dt = now_s() - t0;
 		if (!strcmp(mode, "run") && !echo) fwrite(console, 1, M.console_len, stdout);
 		print_fp(mode, fingerprint(), stop, dt);
+		virtio_finish();
 		return stop == STOP_MARKER || (!end && stop != STOP_LIMIT) ? 0 : 1;
 	}
 	if (!strcmp(mode, "branch") && argc >= 6) {
@@ -657,6 +682,7 @@ int main(int argc, char **argv)
 		struct vsnap vs; vtake(&vs);
 		uint8_t *ram_copy = malloc(ram_size); memcpy(ram_copy, ram, ram_size);
 		struct mach msave = M;
+		void *dsave = virtio_save();
 		printf("branch: snapshot at exit %llu (vtime %llu, console %llu B)\n", M.exits, M.vtime, M.console_len);
 		int sa = run_until(end);
 		struct parts a = fingerprint(); print_fp("branch-A (continue)", a, sa, now_s() - t0);
@@ -664,7 +690,7 @@ int main(int argc, char **argv)
 		CHK(hv_vcpu_destroy(vcpu));
 		memset(ram, 0xee, ram_size);
 		CHK(hv_vcpu_create(&vcpu, &ex, NULL)); trap_dbg_applied = -1;
-		memcpy(ram, ram_copy, ram_size); vput(&vs); M = msave;
+		memcpy(ram, ram_copy, ram_size); vput(&vs); M = msave; virtio_restore(dsave);
 		int sb = run_until(end);
 		struct parts b = fingerprint(); print_fp("branch-B (restored)", b, sb, now_s() - t0);
 		printf("branch: %s\n", a.all == b.all ? "IDENTICAL" : "DIFFERENT");

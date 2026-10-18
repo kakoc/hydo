@@ -1,0 +1,32 @@
+#!/bin/sh
+# /init of the virtio-blk test initramfs. Phase from the kernel command line (hydo_phase=):
+#   check   (default) write N records with fsync, unmount, mount again, verify (the oracle reads the device)
+#   cut     write NSYNC records with fsync and N-NSYNC without, let the kernel write the unsynced
+#           ones back to the device WITHOUT a flush (1 s writeback, no journal commit yet), then stop:
+#           the host's power cut keeps only flushed bytes
+#   recover mount the disk left by a cut (ext4 replays its journal) and verify the fsync'd records
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mount -t devtmpfs dev /dev 2>/dev/null
+PH=check; N=16; NS=16
+for w in $(cat /proc/cmdline); do case $w in hydo_phase=*) PH=${w#*=};; hydo_n=*) N=${w#*=};; hydo_sync=*) NS=${w#*=};; esac; done
+echo "hydo-disk: phase $PH n=$N sync=$NS"
+mkdir -p /mnt
+if ! mount -t ext4 /dev/vda /mnt; then echo "HYDO-ORACLE: VIOLATION the data disk does not mount"; echo "hydo-disk: oracle complete"; exec sh; fi
+echo "hydo-disk: mounted"
+case $PH in
+check)
+	/bin/recs write /mnt/log $N $NS
+	umount /mnt
+	if ! mount -t ext4 /dev/vda /mnt; then echo "HYDO-ORACLE: VIOLATION the data disk does not mount after the workload"; else /bin/recs check /mnt/log $N $NS; fi ;;
+cut)
+	echo 1 > /proc/sys/vm/dirty_expire_centisecs
+	echo 1 > /proc/sys/vm/dirty_writeback_centisecs
+	/bin/recs write /mnt/log $N $NS
+	sleep 1
+	echo "hydo-disk: power cut here" ;;
+recover)
+	/bin/recs check /mnt/log $N $NS ;;
+esac
+echo "hydo-disk: oracle complete"
+exec sh
