@@ -25,6 +25,15 @@
  * workload's tick range and how many ticks were delayed (tjk=<first>-<last> tjn=<n>).
  * rb=<n> makes every run call return after at most n events (HVX_RUNC), from S1 on: the
  * return points, and so the end state, are then the same as in a branch (below).
+ * Finer preemption during the workload (milestone 49; both inert when absent):
+ *   pp=<branches> [pptsc=<tsc>]   PMU tick period for the workload (default 2^20 branches);
+ *                 each tick still advances the virtual TSC by the default tick (2 ms) unless
+ *                 pptsc= says otherwise, so a shorter period makes guest time run faster per
+ *                 unit of work and the timer -- and a thread switch -- come more often
+ *   xt=<hex> xtr=<n> xtpm=<n> [xtlo=<j> xthi=<j>] [xtsc=<tsc>]  |  xtx=<b,b,...>
+ *                 extra ticks between the grid ticks (HVX_SET_XTICK): n slots per period,
+ *                 each used with chance xtpm/1000, at seeded points; or the listed absolute
+ *                 guest branch counts. RESULT then also reports xtn=<extra ticks taken>.
  *
  * Branching (mid-run snapshots): "BRANCH <tag> <n> <marker> <schedule>" starts the schedule
  * from S1 without timing jitter and with rb=16, stops at the first return after <marker>
@@ -408,7 +417,50 @@ struct sched {
 	int tj_on;
 	struct hvx_tjitter tj;	/* tick-timing jitter for the workload (tj / tjx tokens) */
 	uint64_t rb;		/* rb=<n>: run budget (see g_budget) */
+	uint64_t pp, pptsc;	/* pp=<branches> pptsc=<tsc>: PMU tick period during the workload */
+	int xt_on;
+	struct hvx_xtick xt;	/* extra ticks during the workload (xt / xtx tokens) */
 };
+
+/* the PMU period and tick TSC to put back after a pp= workload */
+static uint64_t g_pp_old_period, g_pp_old_tsc;
+
+/* pp= pptsc= xt= xtr= xtpm= xtlo= xthi= xtsc= xtx= (see the header) */
+static int parse_preempt(const char *host, struct sched *sc)
+{
+	const char *p;
+
+	if ((p = strstr(host, "pp="))) sc->pp = strtoull(p + 3, NULL, 10);
+	if ((p = strstr(host, "pptsc="))) sc->pptsc = strtoull(p + 6, NULL, 10);
+	if ((p = strstr(host, "xtsc="))) sc->xt.tsc = strtoull(p + 5, NULL, 10);
+	if ((p = strstr(host, "xtx="))) {
+		char *end;
+		p += 4;
+		while (*p && *p != ' ' && sc->xt.n_explicit < HVX_XT_MAX_EXPLICIT) {
+			sc->xt.explicit_[sc->xt.n_explicit++] = strtoull(p, &end, 10);
+			if (end == p) return -1;
+			p = (*end == ',') ? end + 1 : end;
+		}
+		if (*p && *p != ' ') return -1;		/* more than HVX_XT_MAX_EXPLICIT entries */
+		sc->xt_on = sc->xt.n_explicit > 0;
+		return 0;
+	}
+	if (!(p = strstr(host, "xt="))) return 0;
+	sc->xt.seed = strtoull(p + 3, NULL, 16);
+	sc->xt.rate = (p = strstr(host, "xtr=")) ? (uint32_t)strtoul(p + 4, NULL, 10) : 4;
+	sc->xt.permille = (p = strstr(host, "xtpm=")) ? (uint32_t)strtoul(p + 5, NULL, 10) : 500;
+	if ((p = strstr(host, "xtlo="))) sc->xt.lo = strtoull(p + 5, NULL, 10);
+	if ((p = strstr(host, "xthi="))) sc->xt.hi = strtoull(p + 5, NULL, 10);
+	sc->xt_on = sc->xt.rate && sc->xt.permille;
+	return 0;
+}
+
+static int set_xt(struct boot *b, const struct hvx_xtick *xt)
+{
+	static struct hvx_xtick off;
+	if (ioctl(b->fd, HVX_SET_XTICK, xt ? xt : &off) < 0) { perror("HVX_SET_XTICK"); return -1; }
+	return 0;
+}
 
 /* tj=<hex seed> tjpm=<per mille> tjmax=<branches> [tjlo=<k> tjhi=<k>]  or  tjx=<k:d,...> */
 static int parse_tj(const char *host, struct sched *sc)
@@ -469,6 +521,7 @@ static int parse_sched(const char *s, struct sched *sc)
 	else if (!strncmp(disk, "lying:", 6)) { sc->classes = HVX_FAULT_DROP; sc->prob = (uint32_t)atoi(disk + 6); }
 	else return -1;
 	if (parse_tj(sc->host, sc)) return -1;
+	if (parse_preempt(sc->host, sc)) return -1;
 	if ((p = strstr(sc->host, "rb="))) sc->rb = strtoull(p + 3, NULL, 10);
 	sc->cut = strstr(sc->guest, " C=") != NULL;
 	return 0;
@@ -513,6 +566,21 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 		snprintf(tjinfo + l, sizeof(tjinfo) - l, "-%llu tjn=%llu",
 			 (unsigned long long)got.last_tick, (unsigned long long)got.applied);
 		set_tj(b, NULL);
+	}
+	if (sc->xt_on) {		/* extra ticks and the short period also cover the workload only */
+		static struct hvx_xtick got;
+		size_t l = strlen(tjinfo);
+		memset(&got, 0, sizeof(got));
+		ioctl(b->fd, HVX_GET_XTICK, &got);
+		snprintf(tjinfo + l, sizeof(tjinfo) - l, " xtn=%llu", (unsigned long long)got.applied);
+		set_xt(b, NULL);
+	}
+	if (sc->pp || sc->pptsc) {
+		struct hvx_pmu pm;
+		memset(&pm, 0, sizeof(pm));
+		pm.period = g_pp_old_period;
+		pm.tick_tsc = g_pp_old_tsc;
+		ioctl(b->fd, HVX_SET_PMU, &pm);
 	}
 	if (r == 1) {			/* the guest gave a verdict during the workload (e.g. setup error) */
 		last_verdict(b, from, verdict, sizeof(verdict));
@@ -583,6 +651,21 @@ static void run_sched(struct boot *b, const char *tag, const struct sched *sc, s
 
 	g_budget = sc->rb;
 	if (set_fault(b, sc->dseed, sc->classes, sc->prob)) { snprintf(verdict, sizeof(verdict), "ERROR harness set_fault"); goto fail; }
+	if (sc->pp || sc->pptsc) {	/* before the jitter: its delays are checked against the period */
+		struct hvx_pmu pm;
+		memset(&pm, 0, sizeof(pm));
+		if (ioctl(b->fd, HVX_GET_PMU, &pm) < 0 || !pm.period) {
+			snprintf(verdict, sizeof(verdict), "ERROR harness pp= (needs the PMU clock)"); goto fail;
+		}
+		g_pp_old_period = pm.period;
+		g_pp_old_tsc = pm.tick_tsc;
+		pm.period = sc->pp;
+		pm.tick_tsc = sc->pptsc;
+		if (ioctl(b->fd, HVX_SET_PMU, &pm) < 0) { snprintf(verdict, sizeof(verdict), "ERROR harness pp= value"); goto fail; }
+	}
+	if (sc->xt_on && set_xt(b, &sc->xt)) {
+		snprintf(verdict, sizeof(verdict), "ERROR harness extra ticks (needs the PMU clock)"); goto fail;
+	}
 	if (sc->tj_on) {
 		struct hvx_pmu pm;
 		memset(&pm, 0, sizeof(pm));
@@ -672,7 +755,7 @@ static void run_branch(struct boot *b, const char *tag, const struct sched *sc, 
 	memset(&s2, 0, sizeof(s2));
 	snprintf(sub, sizeof(sub), "%s-base", tag);
 	g_budget = BRANCH_BUDGET;
-	if (sc->tj_on || sc->rb) {
+	if (sc->tj_on || sc->rb || sc->pp || sc->pptsc || sc->xt_on) {
 		snprintf(verdict, sizeof(verdict), "ERROR branch: not for timed or rb= schedules");
 		goto fail;
 	}

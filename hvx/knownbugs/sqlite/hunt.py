@@ -9,6 +9,8 @@ So this driver reuses explore.py's worker pool and tick-jitter formulas, and gen
     arm "timing":   disk=none dseed=0 tj=<seed> tjpm=<pm> tjmax=<max> | run          (S fixed 0)
     arm "workload": disk=none dseed=0 | run S=<seed>                                  (no jitter)
     arm "both":     disk=none dseed=0 tj=... | run S=<seed>
+    arm "pp":       disk=none dseed=0 tj=... pp=<16384|4096> | run S=<seed>   (M49: shorter period)
+    arm "xt":       disk=none dseed=0 xt=<seed> xtr=<8|32> xtpm=500 | run S=<seed>  (M49: extra ticks)
 
 Run i uses arm i % 3 and a pure function of (i, --salt), so a run is reproducible from its
 schedule string alone. Nothing is aimed at the bug: the pm/max ranges are the generic ones.
@@ -30,6 +32,8 @@ MAXS = [2000, 50000, 500000]                    # max delay in guest branches (<
 
 
 ARMS = ["timing", "workload", "both"]
+PPS = [1 << 14, 1 << 12]                        # M49 arm "pp": PMU tick period during the workload
+XTRS = [8, 32]                                  # M49 arm "xt": extra-tick slots per period
 
 
 def gen(i, salt):
@@ -40,11 +44,19 @@ def gen(i, salt):
         s["S"] = r.next()
     if arm in ("timing", "both"):
         s["tj"] = ("seed", r.next(), r.pick(PMS), r.pick(MAXS), 0, 0)
+    if arm in ("pp", "xt"):
+        s["S"] = r.next()
+    if arm == "pp":
+        s["pp"] = r.pick(PPS)
+        s["tj"] = ("seed", r.next(), r.pick(PMS), min(r.pick(MAXS), s["pp"] - 1), 0, 0)
+    if arm == "xt":
+        s["xt"] = (r.next(), r.pick(XTRS), 500)
     return s
 
 
 def render(s):
     tj = explore.render_tj(s["tj"]) if s.get("tj") else ""
+    tj += explore.render_preempt({k: v for k, v in s.items() if k in ("pp", "xt") and v})
     g = "run" + (" S=%x" % s["S"] if s.get("S") else "")
     return "disk=none dseed=0%s | %s" % (tj, g)
 
@@ -84,6 +96,12 @@ def shrink(pool, s, verdict, tjk, log, budget=60):
         return failed(res["verdict"]), res
 
     cur = dict(s)
+    for k in ("xt", "pp"):                      # M49 levers first: is the finer preemption needed?
+        if cur.get(k):
+            c = dict(cur, **{k: None})
+            ok, _ = attempt(c, "drop " + k)
+            if ok:
+                cur = c
     if cur.get("tj"):
         c = dict(cur, tj=None)
         ok, _ = attempt(c, "drop jitter")
@@ -136,11 +154,14 @@ def main():
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--out", required=True)
     ap.add_argument("--arms", default="timing,workload,both", help="arms to cycle through")
+    ap.add_argument("--dev", help="hvx device, e.g. /dev/hvxpre for a side-by-side module")
     ap.add_argument("--stop-after", type=int, default=3, help="stop after this many distinct failures")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     ARMS[:] = a.arms.split(",")
     explore.IMAGE = a.image
+    if a.dev:
+        explore.EXTRA_ENV.append("HVX_DEV=" + a.dev)
     t0 = time.time()
     pool = explore.Pool(a.workers, a.out)
     runs = open(os.path.join(a.out, "runs.jsonl"), "a")
@@ -160,7 +181,7 @@ def main():
             j, s = specs[tag]
             r = res[tag][1]
             rec = {"run": j, "arm": s["arm"], "schedule": text, "fp": r["fp"], "secs": r["secs"],
-                   "verdict": r["verdict"], "tjk": r.get("tjk"), "tjn": r.get("tjn"),
+                   "verdict": r["verdict"], "tjk": r.get("tjk"), "tjn": r.get("tjn"), "xtn": r.get("xtn"),
                    "wall": round(time.time() - t0, 1)}
             rec.update(stats(a.out, tag))
             runs.write(json.dumps(rec) + "\n")

@@ -765,6 +765,7 @@ struct hvx_vcpu {
 	u32 pmu_flat;			/* consecutive landing steps that retired no branch */
 	u64 pmu_hops;			/* statistics: branch-free stretches skipped (see HVX_PMU_HOP_STEPS) */
 	u64 tj_applied, tj_hash, tj_last;	/* tick-jitter statistics (HVX_GET_TJITTER) */
+	u64 xt_applied, xt_hash, xt_first, xt_last;	/* inserted-tick statistics (HVX_GET_XTICK) */
 
 	struct hvx_regs regs;			/* software guest register file */
 
@@ -852,6 +853,9 @@ struct hvx_vm {
 	 * snapshot (see hvx_abi.h): a restored run takes whatever policy is set. */
 	bool tj_on;
 	struct hvx_tjitter tj;
+	/* inserted PMU-clock ticks (HVX_SET_XTICK); off when xt_on == 0. Not in the snapshot. */
+	bool xt_on;
+	struct hvx_xtick xt;
 
 	/* SHARED guest RAM + EPT (all vCPUs share one physical address space) */
 	unsigned int  n_guest_pages;		/* size of guest RAM in pages */
@@ -4236,6 +4240,91 @@ static void hvx_tj_next(struct hvx_vm *vm, struct hvx_vcpu *vcpu)
 	}
 }
 
+/*
+ * Inserted ticks (HVX_SET_XTICK, see hvx_abi.h). With them on, the tick targets of
+ * period j (branch counts in [j*p, (j+1)*p)) are its grid tick j*p + d_j (d_j the tick
+ * jitter, 0 when off) plus its extra ticks; the next target is the smallest one above
+ * the current target, looked up in the current period and the next one (which always
+ * has its grid tick). So, as with the jitter alone, pmu_next is enough to continue the
+ * schedule after a restore.
+ */
+static u64 hvx_xt_main(const struct hvx_vm *vm, u64 j)
+{
+	return j * vm->pmu_period + (vm->tj_on ? hvx_tj_delay(vm, j) : 0);
+}
+
+static bool hvx_xt_window(const struct hvx_xtick *x, u64 j)
+{
+	return j >= 2 && j >= x->lo && (!x->hi || j < x->hi);
+}
+
+/* smallest extra tick of period j above t, or U64_MAX */
+static u64 hvx_xt_extra_after(const struct hvx_vm *vm, u64 j, u64 t)
+{
+	const struct hvx_xtick *x = &vm->xt;
+	u64 p = vm->pmu_period, best = U64_MAX, h, e;
+	u32 i;
+
+	if (x->n_explicit) {
+		for (i = 0; i < x->n_explicit; i++) {
+			e = x->explicit_[i];
+			if (e / p == j && e > t && e < best)
+				best = e;
+		}
+		return best;
+	}
+	if (!hvx_xt_window(x, j))
+		return U64_MAX;
+	for (i = 0; i < x->rate; i++) {
+		h = fault_mix(x->seed + j * 0x9e3779b97f4a7c15ULL + (u64)(i + 1) * 0xd1b54a32d192ed03ULL);
+		if (h % 1000 >= x->permille)
+			continue;
+		e = j * p + 1 + (h >> 16) % (p - 1);
+		if (e > t && e < best)
+			best = e;
+	}
+	return best;
+}
+
+/* Advance pmu_next past the tick just taken; returns true if that tick was an extra one. */
+static bool hvx_xt_next(struct hvx_vm *vm, struct hvx_vcpu *vcpu)
+{
+	u64 p = vm->pmu_period, t = vcpu->pmu_next, j = t / p, m, best, e;
+	bool extra = t != hvx_xt_main(vm, j);
+
+	best = U64_MAX;
+	m = hvx_xt_main(vm, j);
+	if (m > t)
+		best = m;
+	e = hvx_xt_extra_after(vm, j, t);
+	if (e < best)
+		best = e;
+	m = hvx_xt_main(vm, j + 1);		/* > t: every target of period j is below (j+1)*p */
+	if (m < best)
+		best = m;
+	e = hvx_xt_extra_after(vm, j + 1, t);
+	if (e < best)
+		best = e;
+	vcpu->pmu_next = best;
+	if (best == hvx_xt_main(vm, best / p) && vm->tj_on) {	/* jitter statistics, as hvx_tj_next */
+		u64 k = best / p, d = best - k * p;
+
+		vcpu->tj_last = k;
+		if (d) {
+			vcpu->tj_applied++;
+			vcpu->tj_hash = (((vcpu->tj_hash ^ k) * 0x100000001b3ULL) ^ d) * 0x100000001b3ULL;
+		}
+	}
+	if (extra) {
+		if (!vcpu->xt_applied)
+			vcpu->xt_first = t;
+		vcpu->xt_last = t;
+		vcpu->xt_applied++;
+		vcpu->xt_hash = (vcpu->xt_hash ^ t) * 0x100000001b3ULL;
+	}
+	return extra;
+}
+
 static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 			bool single_step, u64 max_insns)
 {
@@ -4377,7 +4466,11 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 			while (vcpu->pmu_total >= vcpu->pmu_next) {
 				if (vcpu->pmu_total > vcpu->pmu_next || !vcpu->pmu_step)
 					vcpu->pmu_over++;
-				if (vm->tj_on)
+				bool xtra = false;
+
+				if (vm->xt_on)
+					xtra = hvx_xt_next(vm, vcpu);	/* grid (+ jitter) + inserted ticks */
+				else if (vm->tj_on)
 					hvx_tj_next(vm, vcpu);	/* nominal grid + seeded delay */
 				else
 					vcpu->pmu_next += vm->pmu_period;
@@ -4385,7 +4478,7 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 				vcpu->pmu_land = (vcpu->pmu_land ^ vcpu->regs.rip) * 0x100000001b3ULL;
 				vcpu->pmu_land = (vcpu->pmu_land ^ vcpu->regs.rcx) * 0x100000001b3ULL;
 				vcpu->pmu_land = (vcpu->pmu_land ^ vcpu->regs.rflags) * 0x100000001b3ULL;
-				vcpu->tsc += vm->pmu_tick_tsc;
+				vcpu->tsc += (xtra && vm->xt.tsc) ? vm->xt.tsc : vm->pmu_tick_tsc;
 				vcpu->icount += HVX_PMU_TICK_ICOUNT;
 				stepped++;
 				streak = 0;
@@ -6264,6 +6357,62 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		vm->tj_on = on;
 		for (i = 0; i < vm->n_vcpus; i++)
 			vm->vcpu[i].tj_applied = vm->vcpu[i].tj_hash = vm->vcpu[i].tj_last = 0;
+		break;
+	}
+	case HVX_SET_XTICK: {
+		struct hvx_xtick x;
+		bool on;
+		u32 i;
+
+		if (!vm->n_guest_pages) { ret = -EINVAL; break; }
+		if (copy_from_user(&x, uarg, sizeof(x))) { ret = -EFAULT; break; }
+		if (x.n_explicit > HVX_XT_MAX_EXPLICIT || x.rate > HVX_XT_MAX_RATE) { ret = -EINVAL; break; }
+		on = x.n_explicit || (x.rate && x.permille);
+		ret = 0;
+		if (on && !vm->pmu_clock)
+			ret = -EINVAL;			/* extra ticks are PMU-clock ticks */
+		if (ret)
+			break;
+		if (x.permille > 1000)
+			x.permille = 1000;
+		x.applied = x.applied_hash = x.first = x.last = 0;
+		vm->xt = x;
+		vm->xt_on = on;
+		for (i = 0; i < vm->n_vcpus; i++) {
+			struct hvx_vcpu *v = &vm->vcpu[i];
+
+			v->xt_applied = v->xt_hash = v->xt_first = v->xt_last = 0;
+			if (!on && v->pmu_next) {	/* back on the grid: the target may be an extra tick */
+				u64 j = v->pmu_next / vm->pmu_period, m = hvx_xt_main(vm, j);
+
+				if (m <= v->pmu_total)
+					m = hvx_xt_main(vm, j + 1);
+				if (m != v->pmu_next && m > v->pmu_total)
+					v->pmu_next = m;
+			}
+			if (on && v->pmu_next) {	/* the next target may now be an extra tick */
+				u64 j = v->pmu_next / vm->pmu_period;
+				u64 e = hvx_xt_extra_after(vm, j - (j > 0), v->pmu_total);
+
+				if (e > v->pmu_total && e < v->pmu_next)
+					v->pmu_next = e;
+				e = hvx_xt_extra_after(vm, j, v->pmu_total);
+				if (e > v->pmu_total && e < v->pmu_next)
+					v->pmu_next = e;
+			}
+		}
+		break;
+	}
+	case HVX_GET_XTICK: {
+		struct hvx_xtick x;
+
+		if (!vm->n_guest_pages) { ret = -EINVAL; break; }
+		x = vm->xt;
+		x.applied = vc->xt_applied;
+		x.applied_hash = vc->xt_hash;
+		x.first = vc->xt_first;
+		x.last = vc->xt_last;
+		ret = copy_to_user(uarg, &x, sizeof(x)) ? -EFAULT : 0;
 		break;
 	}
 	case HVX_GET_TJITTER: {

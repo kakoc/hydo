@@ -411,7 +411,7 @@ static int boot_setup(struct boot *b, uint64_t mem_size,
 	if (!b->ubuf) { perror("malloc"); return -1; }
 	if (mbr_partitions(base, disk_len, b) < 0) return -1;
 
-	b->fd = open("/dev/hvx", O_RDWR);
+	b->fd = open(getenv("HVX_DEV") ? getenv("HVX_DEV") : "/dev/hvx", O_RDWR);	/* HVX_DEV: a side-by-side module */
 	if (b->fd < 0) { perror("open /dev/hvx"); return -1; }
 
 	memset(&cfg, 0, sizeof(cfg));
