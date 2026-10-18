@@ -96,6 +96,43 @@ def mac_mkfs(hb):
     return mkfs
 
 
+def use_bundled_tc():
+    """hydo_build_arm64 puts the pinned aarch64 tc (TC_ARM64, a /nix/store path) and the files
+    its loader opens into the root, reading them from the host's /nix/store. The release ships
+    exactly those files under guest/tc/<the same absolute paths> (guest/tc-closure.txt). Point
+    the module's existence check and its copy at that tree; the image gets the same paths, the
+    same bytes and the same modes as a Linux build. Nothing else in the module is affected."""
+    import types
+    import hydo_build_arm64 as a64
+    top = os.path.join(GUEST, "tc")
+    listing = [l.strip() for l in open(os.path.join(GUEST, "tc-closure.txt")) if l.strip()]
+    here = lambda p: os.path.join(top, p.lstrip("/"))
+
+    real_isfile = os.path.isfile
+    path = types.ModuleType("os.path")
+    path.__dict__.update(os.path.__dict__)
+    path.isfile = lambda p: (real_isfile(here(p)) if str(p).startswith("/nix/store/") and os.path.lexists(here(p))
+                             else real_isfile(p))
+    shim = types.ModuleType("os")
+    shim.__dict__.update(os.__dict__)
+    shim.path = path
+    a64.os = shim                                   # only hydo_build_arm64's own view of os
+
+    def copy_closure(binary, R):                    # the same rules as a64._copy_elf_closure
+        for p in sorted(set(listing + [binary])):
+            dst = os.path.join(R, p.lstrip("/"))
+            if os.path.lexists(dst):
+                continue
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            src = here(p)
+            if os.path.islink(src):
+                os.symlink(os.readlink(src), dst)
+            else:
+                shutil.copy(src, dst)
+                os.chmod(dst, 0o755 if os.access(src, os.X_OK) else 0o644)
+    a64._copy_elf_closure = copy_closure
+
+
 def cmd_build(argv):
     if not argv or argv[0].startswith("-"):
         die("usage: hydo build <hydo.yaml> [--out DIR] [--set KEY=VALUE ...]")
@@ -110,6 +147,7 @@ def cmd_build(argv):
     sys.path.insert(0, ONBOARD)
     hb = load_hydo_build()
     hb.mkfs = mac_mkfs(hb)
+    use_bundled_tc()
     sys.argv = ["hydo-build", manifest, "--arch", "arm64", "--build-dir", out] + rest
     rc = hb.main()
     if rc == 0:
@@ -194,7 +232,8 @@ def cmd_doctor(argv):
     check(sys.version_info >= (3, 9), "Python 3.9+ (found %s)" % platform.python_version(), "use /usr/bin/python3 or newer")
     cc = subprocess.run(["xcrun", "--find", "cc"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL).returncode == 0
     check(cc, "a C compiler (the explorer compiles its property-table tool)", "xcode-select --install")
-    for p in (HVMX, HVM, KERNEL, os.path.join(GUEST, "busybox"), os.path.join(GUEST, "mke2fs")):
+    for p in (HVMX, HVM, KERNEL, os.path.join(GUEST, "busybox"), os.path.join(GUEST, "mke2fs"),
+              os.path.join(GUEST, "tc-closure.txt")):
         check(os.path.exists(p), "present: " + os.path.relpath(p, R), "reinstall")
     hv = subprocess.run(["sysctl", "-n", "kern.hv_support"], stdout=subprocess.PIPE, text=True).stdout.strip()
     check(hv == "1", "Hypervisor.framework available (kern.hv_support=%s)" % hv, "not supported on this machine")

@@ -52,6 +52,29 @@ an acknowledged key is gone after the power cut. That is Redis's documented `eve
 found and reproduced deterministically. Run either command again and the fingerprint (`fp=`) is
 the same.
 
+Network faults work the same way. This one drops every reply Redis sends during writes 5 to 9,
+so the client times out on those five writes and does not count them as acknowledged:
+
+```sh
+hydo run "disk=none | run O=redis@5-10:resp:loss,100%"
+```
+
+It ends `OK ... acked=15 all present`: the 15 writes the client saw acknowledged are all there.
+Again, a second run gives the same fingerprint.
+
+hydo can also vary thread timing: the host part of a schedule can delay the guest's timer
+interrupts by a seeded number of VM exits, which changes where the guest switches threads.
+This delays about half of the ticks during the workload by up to 500 exits:
+
+```sh
+hydo run "disk=none tj=7 tjpm=500 tjmax=500 | run"
+```
+
+The `RESULT` line gains `tjk=` (the first and last tick period touched) and `tjn=` (how many
+ticks were delayed). The fingerprint differs from the untimed run, because the timing changed
+the guest's state, and it is the same on every run of this schedule. `hydo explore --timing`
+adds such timing to half of the generated schedules.
+
 ## 3. Explore
 
 Let hydo generate schedules, run them, re-run every failure to check it reproduces, and shrink
@@ -112,8 +135,6 @@ Then the same three commands as above: `hydo build hydo.yaml`, `hydo run "disk=n
 
 ## What the Mac version does not do yet
 
-- Network faults (`N=`, `O=`) are not applied: the guest has no `tc` yet.
-- Thread-timing exploration (tick jitter) is not available yet.
 - A program that busy-waits on a memory flag without any system call can stop a run; hydo marks
   such a run invalid instead of reporting a wrong result.
 - One virtual CPU, and guest RAM up to a few GiB.
