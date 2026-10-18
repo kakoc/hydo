@@ -66,12 +66,13 @@ iv() { eval "printf '%s' \"\${HYDO_INV_${1}_$2}\""; }      # iv <inv> <field>
 kv() { eval "printf '%s' \"\${HYDO_KNOB_${1}_$2}\""; }     # kv <letter> <field>
 known_svc() { for s in $HYDO_SERVICES; do [ "$s" = "$1" ] && return 0; done; return 1; }
 svc_pid() { $BB cat $H/pid.$1 2>/dev/null; }
-svc_alive() { p=$(svc_pid "$1"); [ -n "$p" ] && $BB kill -0 "$p" 2>/dev/null; }
+svc_alive() { local _p; _p=$(svc_pid "$1"); [ -n "$_p" ] && $BB kill -0 "$_p" 2>/dev/null; }
 svc_port() { sv "$1" port; }
 
 # ---------------------------------------------------------------- services
 start_svc() {   # $1 = name; runs setup (if any), the command in the background, waits ready
-  s=$1; L=$H/$s.log
+  local s=$1 L=$H/$1.log setup to n   # local: callers loop over $s / $p
+  L=$H/$s.log
   [ -f $L ] && $BB cat $L >> $H/$s.log.old && : > $L
   export HYDO_SVC=$s HYDO_LOG=$L
   setup=$(sv $s setup)
@@ -91,12 +92,14 @@ start_svc() {   # $1 = name; runs setup (if any), the command in the background,
   log "$s NOT ready after ${to}s"; $BB tail -8 $L; return 1
 }
 start_all() {   # $1 = verdict prefix if a service cannot come up; $2 = recovery (skip recovery: false)
+  local s
   for s in $HYDO_SERVICES; do
     [ "$2" = recovery ] && [ "$(sv $s recovery)" = 0 ] && continue
     start_svc $s || die_oracle "$1 ($s)"
   done
 }
 restart_dead() {   # $1 = verdict prefix
+  local s
   for s in $HYDO_SERVICES; do
     svc_alive $s && continue
     log "$s is down; restarting it"
@@ -118,18 +121,19 @@ declare_all() {
   done
 }
 assert_once() {   # <inv> <true|false> <details>: one HYDO-ASSERT record per (id, outcome)
-  f=$H/asserted.$1.$2
+  local f=$H/asserted.$1.$2
   [ -f $f ] && return 0
   : > $f
   echo "HYDO-ASSERT {\"t\":\"$(iv $1 type)\",\"id\":\"$(iv $1 id)\",\"ok\":$2,\"msg\":\"$(jesc "$(iv $1 msg)")\",\"details\":{\"out\":\"$(jesc "$3")\"}}"
 }
 inv_detail() {   # the invariant's own HYDO-ORACLE line (prefix stripped) or its last line
+  local d
   d=$($BB grep -a "HYDO-ORACLE:" $1 2>/dev/null | $BB tail -1 | $BB sed 's/.*HYDO-ORACLE: *//; s/^OK *//; s/^VIOLATION *//')
   [ -n "$d" ] || d=$($BB grep -av '^ *$' $1 2>/dev/null | $BB grep -av '^HYDO-ASSERT' | $BB tail -1)
   printf '%s' "$d"
 }
 eval_inv() {   # <inv>: 0 holds, 1 violated, 2 could not be evaluated. Output -> $H/inv.<inv>.out
-  o=$H/inv.$1.out
+  local o=$H/inv.$1.out rc
   RUN "$(iv $1 cmd)" > $o 2>&1
   rc=$?
   case $rc in
@@ -142,7 +146,7 @@ eval_inv() {   # <inv>: 0 holds, 1 violated, 2 could not be evaluated. Output ->
 }
 
 periodic_loop() {   # <inv>: every <every> seconds of guest time while the workload runs
-  e=$(iv $1 every)
+  local e; e=$(iv $1 every)
   while [ ! -f $H/stop_periodic ]; do
     $BB sleep $e
     [ -f $H/stop_periodic ] && break
@@ -191,14 +195,17 @@ finish() {   # final invariants + markers (same boot or recovery boot)
 }
 
 # ---------------------------------------------------------------- workload
-step_range() {   # run workload steps [$1,$2)
+step_range() {   # run workload steps [$1,$2), bounded by workload.timeout seconds
+  local rc
   [ "$1" -lt "$2" ] || return 0
-  HYDO_FROM=$1 HYDO_TO=$2 RUN "$HYDO_WORKLOAD_RUN" >> $H/workload.log 2>&1
-  log "workload steps $1..$(($2 - 1)) rc=$? (uptime=$(UP)s)"
+  HYDO_FROM=$1 HYDO_TO=$2 $BB timeout $HYDO_WORKLOAD_TIMEOUT $BB sh -c ". /etc/hydo/prelude.sh; $HYDO_WORKLOAD_RUN" >> $H/workload.log 2>&1
+  rc=$?
+  [ $rc = 143 ] && log "workload steps $1..$(($2 - 1)) TIMED OUT after ${HYDO_WORKLOAD_TIMEOUT}s (killed)"
+  log "workload steps $1..$(($2 - 1)) rc=$rc (uptime=$(UP)s)"
 }
 retry_workload() {
   [ -n "$HYDO_WORKLOAD_RETRY" ] || return 0
-  RUN "$HYDO_WORKLOAD_RETRY" >> $H/workload.log 2>&1
+  $BB timeout $HYDO_WORKLOAD_TIMEOUT $BB sh -c ". /etc/hydo/prelude.sh; $HYDO_WORKLOAD_RETRY" >> $H/workload.log 2>&1
   log "workload retry rc=$? (uptime=$(UP)s)"
 }
 failed_ids() {   # ids whose LAST outcome was a definite failure -> $HYDO_FAILED
@@ -215,6 +222,7 @@ provision() {
 
 # ---------------------------------------------------------------- faults
 net_on() {   # <svc> <match: dport|sport> <netem args with commas>
+  local port args m
   port=$(svc_port $1); args=$(echo "$3" | $BB tr ',' ' ')
   [ -n "$port" ] && [ -n "$HYDO_TC" ] || { log "network fault on $1 skipped (no port or no tc)"; return 1; }
   for m in sch_prio sch_netem cls_u32; do $BB insmod /lib/modules/$m.ko 2>/dev/null; done
@@ -239,7 +247,7 @@ pause_timer() {   # <svc> <off-ms> <dur-ms>, in the background
   log "RESUMED $1 (timer)"
 }
 set_knob() {   # <letter> <value>
-  d=$(kv $1 default)
+  local d; d=$(kv $1 default)
   [ -n "$d" ] || { log "knob $1 not in the manifest, ignored"; return 0; }
   [ "$2" = "$d" ] && return 0
   HYDO_VALUE=$2 RUN "$(kv $1 set)" > /dev/null 2>&1 || die_oracle "HYDO-ORACLE: ERROR knob $1=$2 failed"

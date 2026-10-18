@@ -292,7 +292,7 @@ def validate(m):
     wl = m.get("workload")
     if not isinstance(wl, dict):
         raise ManifestError("workload: required (steps + run)")
-    _unknown(wl, {"steps", "run", "retry", "process", "description"}, "workload")
+    _unknown(wl, {"steps", "run", "retry", "process", "timeout", "description"}, "workload")
     st = _need(wl, "steps", "workload", int)
     if st < 1 or st > 1000:
         raise ManifestError("workload.steps: between 1 and 1000")
@@ -380,6 +380,7 @@ def compile_shell(m, tc_path):
          "HYDO_WORKLOAD_RUN=%s" % shq(wl["run"]),
          "HYDO_WORKLOAD_RETRY=%s" % shq(wl.get("retry") or ""),
          "HYDO_WORKLOAD_PGREP=%s" % shq(wl.get("process") or os.path.basename(str(wl["run"]).split()[0])),
+         "HYDO_WORKLOAD_TIMEOUT=%d" % int(wl.get("timeout", 300)),
          "HYDO_PROVISION=%s" % shq(m.get("provision") or ""),
          "HYDO_DATA_OPTS=%s" % shq((m.get("data") or {}).get("mount", "rw")),
          "HYDO_DATA_DIRS=%s" % shq(" ".join((m.get("data") or {}).get("dirs") or [])),

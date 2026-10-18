@@ -98,6 +98,8 @@ workload:                      # required
   run: /bin/loadgen $HYDO_FROM $HYDO_TO     # required. runs steps [HYDO_FROM, HYDO_TO);
                                #   called several times per run (once per fault-free range)
   retry: /bin/loadgen --retry-unacked       # after faults heal (no power cut), optional
+  timeout: 300                 # seconds per run/retry call; then it is killed (default 300).
+                               #   A client without its own deadline hangs on a paused service.
   process: loadgen             # pattern (pgrep -f) telling whether a request is in flight
                                #   (used by mid-request pauses); default: run's first word
 
