@@ -1,0 +1,98 @@
+count ms=1 stop=1 fp=d8c2bb710b72b0db cycles=0
+27 counters=27 wall=0.75 invalid=0
+count ms=2 stop=1 fp=d8c2bb710b72b0db cycles=0
+27 counters=27 wall=1.03 invalid=0
+count ms=5 stop=1 fp=d8c2bb710b72b0db cycles=0
+27 counters=27 wall=1.10 invalid=0
+count ms=10 stop=1 fp=d8c2bb710b72b0db cycles=0
+27 counters=27 wall=1.51 invalid=0
+count ms=20 stop=1 fp=d8c2bb710b72b0db cycles=0
+27 counters=27 wall=1.58 invalid=0
+count ms=50 stop=1 fp=d8c2bb710b72b0db cycles=0
+27 counters=27 wall=2.50 invalid=0
+count ms=100 stop=1 fp=d8c2bb710b72b0db cycles=0
+27 counters=27 wall=4.68 invalid=0
+spin ms=1 stop=1 fp=3a36c4ee97b37d37 cycles=27
+0 counters=0 wall=0.75 invalid=0
+spin ms=2 stop=1 fp=3a36c4ee97b37d37 cycles=27
+0 counters=0 wall=1.14 invalid=0
+spin ms=5 stop=1 fp=3a36c4ee97b37d37 cycles=27
+0 counters=0 wall=1.08 invalid=0
+spin ms=10 stop=1 fp=3a36c4ee97b37d37 cycles=27
+0 counters=0 wall=1.06 invalid=0
+spin ms=20 stop=1 fp=3a36c4ee97b37d37 cycles=27
+0 counters=0 wall=1.71 invalid=0
+spin ms=50 stop=1 fp=3a36c4ee97b37d37 cycles=27
+0 counters=0 wall=2.47 invalid=0
+spin ms=100 stop=1 fp=3a36c4ee97b37d37 cycles=27
+0 counters=0 wall=4.65 invalid=0
+load ms=1 stop=1 fp=dc4c8b73f35dfdf6 cycles=27
+0 counters=0 wall=0.65 invalid=0
+load ms=2 stop=1 fp=dc4c8b73f35dfdf6 cycles=27
+0 counters=0 wall=1.08 invalid=0
+load ms=5 stop=1 fp=dc4c8b73f35dfdf6 cycles=27
+0 counters=0 wall=1.24 invalid=0
+load ms=10 stop=1 fp=dc4c8b73f35dfdf6 cycles=27
+0 counters=0 wall=1.32 invalid=0
+load ms=20 stop=1 fp=dc4c8b73f35dfdf6 cycles=27
+0 counters=0 wall=1.32 invalid=0
+load ms=50 stop=1 fp=dc4c8b73f35dfdf6 cycles=27
+0 counters=0 wall=2.48 invalid=0
+load ms=100 stop=1 fp=dc4c8b73f35dfdf6 cycles=27
+0 counters=0 wall=4.27 invalid=0
+ldar ms=1 stop=1 fp=3531e6205f0dd0b7 cycles=27
+0 counters=0 wall=0.64 invalid=0
+ldar ms=2 stop=1 fp=3531e6205f0dd0b7 cycles=27
+0 counters=0 wall=0.59 invalid=0
+ldar ms=5 stop=1 fp=3531e6205f0dd0b7 cycles=27
+0 counters=0 wall=0.69 invalid=0
+ldar ms=10 stop=1 fp=3531e6205f0dd0b7 cycles=27
+0 counters=0 wall=0.89 invalid=0
+ldar ms=20 stop=1 fp=3531e6205f0dd0b7 cycles=27
+0 counters=0 wall=1.20 invalid=0
+ldar ms=50 stop=1 fp=3531e6205f0dd0b7 cycles=27
+0 counters=0 wall=2.53 invalid=0
+ldar ms=100 stop=1 fp=3531e6205f0dd0b7 cycles=27
+0 counters=0 wall=4.41 invalid=0
+yield ms=1 stop=1 fp=5d15cf8e746af740 cycles=27
+0 counters=0 wall=0.70 invalid=0
+yield ms=2 stop=1 fp=5d15cf8e746af740 cycles=27
+0 counters=0 wall=0.86 invalid=0
+yield ms=5 stop=1 fp=5d15cf8e746af740 cycles=27
+0 counters=0 wall=0.74 invalid=0
+yield ms=10 stop=1 fp=5d15cf8e746af740 cycles=27
+0 counters=0 wall=1.05 invalid=0
+yield ms=20 stop=1 fp=5d15cf8e746af740 cycles=27
+0 counters=0 wall=1.30 invalid=0
+yield ms=50 stop=1 fp=5d15cf8e746af740 cycles=27
+0 counters=0 wall=2.33 invalid=0
+yield ms=100 stop=1 fp=5d15cf8e746af740 cycles=27
+0 counters=0 wall=4.30 invalid=0
+samestore ms=1 stop=1 fp=fc2eb84419ca21a3 cycles=27
+0 counters=0 wall=0.66 invalid=0
+samestore ms=2 stop=1 fp=fc2eb84419ca21a3 cycles=27
+0 counters=0 wall=0.53 invalid=0
+samestore ms=5 stop=1 fp=fc2eb84419ca21a3 cycles=27
+0 counters=0 wall=0.59 invalid=0
+samestore ms=10 stop=1 fp=fc2eb84419ca21a3 cycles=27
+0 counters=0 wall=0.79 invalid=0
+samestore ms=20 stop=1 fp=fc2eb84419ca21a3 cycles=27
+0 counters=0 wall=1.71 invalid=0
+samestore ms=50 stop=1 fp=fc2eb84419ca21a3 cycles=27
+0 counters=0 wall=2.67 invalid=0
+samestore ms=100 stop=1 fp=fc2eb84419ca21a3 cycles=27
+0 counters=0 wall=4.65 invalid=0
+ldxr ms=1 stop=1 fp=84ac63b0d1f121d3 cycles=27
+0 counters=0 wall=0.54 invalid=0
+ldxr ms=2 stop=1 fp=84ac63b0d1f121d3 cycles=27
+0 counters=0 wall=0.56 invalid=0
+ldxr ms=5 stop=1 fp=84ac63b0d1f121d3 cycles=27
+0 counters=0 wall=0.80 invalid=0
+ldxr ms=10 stop=1 fp=84ac63b0d1f121d3 cycles=27
+0 counters=0 wall=0.77 invalid=0
+ldxr ms=20 stop=1 fp=84ac63b0d1f121d3 cycles=27
+0 counters=0 wall=1.57 invalid=0
+ldxr ms=50 stop=1 fp=84ac63b0d1f121d3 cycles=27
+0 counters=0 wall=2.64 invalid=0
+ldxr ms=100 stop=1 fp=84ac63b0d1f121d3 cycles=27
+0 counters=0 wall=4.38 invalid=0

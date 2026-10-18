@@ -8,3 +8,6 @@ rootfs/dev/
 rootfs/proc/
 rootfs/sys/
 rootfs/tmp/
+hvm-spin-count
+pmuprobe
+out/*.log
