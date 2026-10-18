@@ -183,9 +183,58 @@ func ioReadFull(r *bufio.Reader, b []byte) (int, error) {
 type orderServer struct {
 	db        *sql.DB
 	kp        *kgo.Client // idempotent producer
+	rmu       sync.Mutex  // guards rc: requests run concurrently and share one connection
 	rc        *redisConn
-	uncertain map[int64]bool // ids whose produce ended in an error: outcome unknown
-	attempted map[int64]bool // ids for which a produce was ever started (never cleared)
+	mu        sync.Mutex             // guards the three maps below
+	uncertain map[int64]bool         // ids whose produce ended in an error: outcome unknown
+	attempted map[int64]bool         // ids for which a produce was ever started (never cleared)
+	inflight  map[int64]chan struct{} // ids with a Place running; closed when it returns
+}
+
+// acquire makes Place calls for the same order run one at a time. A second request for an
+// order (a client retry, a double submit) waits until the first one has returned, bounded
+// by its own deadline. Needed because a Place can keep running long after its client gave
+// up: a Kafka produce already sent cannot be cancelled (franz-go keeps an in-flight record
+// of an idempotent producer until the broker answers), and a retry running next to it would
+// not find the record in Kafka yet and publish it a second time.
+func (s *orderServer) acquire(ctx context.Context, id int64) (func(), error) {
+	for {
+		s.mu.Lock()
+		ch, busy := s.inflight[id]
+		if !busy {
+			ch = make(chan struct{})
+			s.inflight[id] = ch
+			s.mu.Unlock()
+			return func() {
+				s.mu.Lock()
+				delete(s.inflight, id)
+				s.mu.Unlock()
+				close(ch)
+			}, nil
+		}
+		s.mu.Unlock()
+		select {
+		case <-ch:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+}
+
+func (s *orderServer) flag(m map[int64]bool, id int64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return m[id]
+}
+
+func (s *orderServer) setFlag(m map[int64]bool, id int64, v bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if v {
+		m[id] = true
+	} else {
+		delete(m, id)
+	}
 }
 
 // The two ways a Place can fail (Milestone 39). notApplied is a promise that nothing was
@@ -206,7 +255,7 @@ func outcomeUnknown(store string, id int64, err error) error {
 // failBefore picks the right kind for a failure that happened before this attempt's
 // produce: definite unless an earlier attempt already started one.
 func (s *orderServer) failBefore(store string, id int64, err error) error {
-	if s.attempted[id] {
+	if s.flag(s.attempted, id) {
 		return outcomeUnknown(store, id, err)
 	}
 	return notApplied(store, id, err)
@@ -249,6 +298,8 @@ func kafkaHasKey(ctx context.Context, id int64) (bool, error) {
 
 // redisSet sets one key, re-dialing once if the connection broke (Redis restarted).
 func (s *orderServer) redisSet(k, v string) error {
+	s.rmu.Lock()
+	defer s.rmu.Unlock()
 	if s.rc != nil {
 		s.rc.c.SetDeadline(time.Now().Add(redisTimeout))
 		if _, _, err := s.rc.cmd("SET", k, v); err == nil {
@@ -272,7 +323,15 @@ func (s *orderServer) place(ctx context.Context, in *wrapperspb.Int64Value) (*wr
 	id := in.GetValue()
 	amt := amount(id)
 	// Every call below runs under ctx, which carries the client's deadline (gRPC propagates
-	// it), so nothing here keeps working on an order after the client has given up on it.
+	// it) -- except a Kafka produce already sent, which runs to the broker's answer, so a
+	// Place can outlive its client. acquire keeps a later request for the same order from
+	// running next to it. If this request gives up waiting, the earlier one may still
+	// publish, so the outcome is unknown, never "not applied".
+	release, err := s.acquire(ctx, id)
+	if err != nil {
+		return nil, outcomeUnknown("in-flight", id, fmt.Errorf("an earlier request for the order is still running: %w", err))
+	}
+	defer release()
 	//
 	// 1. MySQL: upsert -- a retry of an order that is already stored is a no-op.
 	if _, err := s.db.ExecContext(ctx, "INSERT INTO stack.orders (id, amount) VALUES (?, ?) ON DUPLICATE KEY UPDATE id = id", id, amt); err != nil {
@@ -286,7 +345,7 @@ func (s *orderServer) place(ctx context.Context, in *wrapperspb.Int64Value) (*wr
 	}
 	if published == 0 {
 		have := false
-		if s.uncertain[id] {
+		if s.flag(s.uncertain, id) {
 			var err error
 			if have, err = kafkaHasKey(ctx, id); err != nil {
 				return nil, outcomeUnknown("kafka-check", id, fmt.Errorf("kafka check: %w", err))
@@ -297,8 +356,8 @@ func (s *orderServer) place(ctx context.Context, in *wrapperspb.Int64Value) (*wr
 		if !have {
 			// From here on the order may reach Kafka even if this call fails: no later
 			// failure of this id can be reported as definite.
-			s.attempted[id] = true
-			s.uncertain[id] = true
+			s.setFlag(s.attempted, id, true)
+			s.setFlag(s.uncertain, id, true)
 			res := s.kp.ProduceSync(ctx, &kgo.Record{
 				Key:   []byte(strconv.FormatInt(id, 10)),
 				Value: []byte(strconv.FormatInt(amt, 10)),
@@ -307,10 +366,10 @@ func (s *orderServer) place(ctx context.Context, in *wrapperspb.Int64Value) (*wr
 				return nil, outcomeUnknown("kafka", id, fmt.Errorf("kafka: %w", err))
 			}
 		}
-		delete(s.uncertain, id)
+		s.setFlag(s.uncertain, id, false)
 		if _, err := s.db.ExecContext(ctx, "UPDATE stack.orders SET published = 1 WHERE id = ?", id); err != nil {
 			// Kafka has it; the flag will be set by the retry, which finds the key first.
-			s.uncertain[id] = true
+			s.setFlag(s.uncertain, id, true)
 			return nil, outcomeUnknown("mysql-publish", id, fmt.Errorf("mysql publish flag: %w", err))
 		}
 	}
@@ -402,7 +461,7 @@ func server() {
 		fail("hydostack: listen: %v", err)
 	}
 	gs := grpc.NewServer()
-	gs.RegisterService(&serviceDesc, &orderServer{db: db, kp: kp, rc: rc, uncertain: map[int64]bool{}, attempted: map[int64]bool{}})
+	gs.RegisterService(&serviceDesc, &orderServer{db: db, kp: kp, rc: rc, uncertain: map[int64]bool{}, attempted: map[int64]bool{}, inflight: map[int64]chan struct{}{}})
 	fmt.Println("hydostack: server listening on " + grpcAddr)
 	if err := gs.Serve(lis); err != nil {
 		fail("hydostack: serve: %v", err)
