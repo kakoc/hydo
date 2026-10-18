@@ -1,4 +1,4 @@
-2506bb4d900373622e8c535c403ff3d753f6b8de01adcccde9a4df6eb0b2f521  ./Image-explore
+f80c565589f1fecf9ccd49d33cb0717c7a15d5cddf3bb3bec7f2dd2b335b51ac  ./Image-explore
 e0ac633deedb3ea3354ea43b684991e3a2391266bd112ee1406e99e4db25657e  ./busybox
 77791536b5b5aab42f4d509cc93aa67fc4d4681c6815e691dce5798cf2f42747  ./busybox-applets.txt
 31691d6d6d3e522f06ff46016c20beaf7de1fa8f7761716c459a6e6dc4266866  ./mke2fs
@@ -22,3 +22,17 @@ ceedb98457774d6f7db689a778bd5583966d8fa0f21c3af0c476db8e54417814  ./redis/nix/st
 365cafa984b2c8c0f5769a668c10183b7c73c2e26c0866aca5306a2b652ba354  ./redis/nix/store/wmcyf2wn9wh491wi55j18kz6gsdz99cr-libgcrypt-1.10.3/lib/libgcrypt.so.20.4.3
 356a46c4892089d43436f69452f23e5b63cda8c3bee701794311e109a05bec1c  ./redis/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libstdc++.so.6.0.32
 61598f7edb4a290aae416ee9b1c8536a19ea11e1c498e94a548f33e287e799e7  ./redis/nix/store/ywz8lg1h600a888z67hpj632b8gri6wx-zstd-1.5.6/lib/libzstd.so.1.5.6
+5cc70825928a83181753fd3b1af5559a52587b95a2ccc5a29d5cf63c9e70b559  ./tc-closure.txt
+74a023001873c9af4f8821177ca6964120e4c86c4ba6e5bef6a65330c4038dc3  ./tc/nix/store/5nrc0aihwsmns1g8aa9b2d0k60cjax7n-zlib-1.3.1/lib/libz.so.1.3.1
+752b96284e1eca711730b439bf667403b9635df3d3d112c0b4b264e3bdcd97bf  ./tc/nix/store/7lf9ba7lb8418ihzzy8gm985rk16bmbk-xz-5.4.7/lib/liblzma.so.5.4.7
+e84788c1417edcf3f5e99d09532c063c27f1e4da79bbf4da7648bc4cefe45f0d  ./tc/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/ld-linux-aarch64.so.1
+259aba5ab413c2b8a0df5b052da34a64381faa3356a84d48bcbb516c1baa206b  ./tc/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libc.so.6
+20477b76480ce9e98b063c3c261d7645da0e644731bb8d4c17d0d63a884c505a  ./tc/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libdl.so.2
+6849562ce8649372b0462a980423ea82cca531cd5a0310ae8afbb8c6074cc90e  ./tc/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libm.so.6
+2c8e939d4bfdc3b8fe2a2796d1e28a6b43e52fd2a6f5f9ef786499becb7fb3b4  ./tc/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libpthread.so.0
+5cd92879c547cd837fb0c34f56fb0afd4ded737794e89780e172abd36fdb42d9  ./tc/nix/store/94w305vz900pv9lx0c6g1xxzgcikcn5s-libmnl-1.0.5/lib/libmnl.so.0.2.0
+9e6ff691444bdd2b48834bb09819f1e057f1b41a36ef08815080123d39cdf366  ./tc/nix/store/dx22pnc403irq3ib8g8iasdsmk6b4iw9-bzip2-1.0.8/lib/libbz2.so.1.0.8
+e64b341f78fc6ad4f799a81e1282c5ecd4b40e01c912a0f659e99bb8d3b7da42  ./tc/nix/store/qmhi9c99dpgxyfg6cipf8xbmcvsr1vx2-iproute2-6.8.0/bin/tc
+dd1a7c73ba53c7e554ebb3b0eaf2b6642c41fb49f7d80c083c895ea639feb6d6  ./tc/nix/store/y6j6xf1bfshzhdw7hip3swpgd6fqfs3b-iptables-1.8.10/lib/libxtables.so.12.7.0
+61598f7edb4a290aae416ee9b1c8536a19ea11e1c498e94a548f33e287e799e7  ./tc/nix/store/ywz8lg1h600a888z67hpj632b8gri6wx-zstd-1.5.6/lib/libzstd.so.1.5.6
+9d59217695b96851600ac81e739326cada5344bd31d436d6556cb279b3ba2c89  ./tc/nix/store/zdblgi7jblxd4y6j606kva12jga2qzjq-elfutils-0.191/lib/libelf-0.191.so

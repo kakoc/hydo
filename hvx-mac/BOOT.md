@@ -34,7 +34,7 @@ sh build.sh
 ./hvm print  guest/Image guest/initramfs.cpio.gz "hydo-boot-marker: launching shell"   # fingerprint only
 ./hvm branch guest/Image guest/initramfs.cpio.gz "Unpacking initramfs" "hydo-boot-marker: launching shell"
 ```
-Environment: `HVM_MEM_MB` (default 256), `HVM_STEP` (virtual ticks per exit, default 64), `HVM_ECHO=1`, `HVM_MAX_EXITS`, `HVM_SPIN_SECS` (give up on an exit-free spin after this much host time, default 10), `HVM_SPIN_MS` (exit-free host time before the spin observer looks, default 50), `HVM_SPIN_OBSERVE=0` (no observer), `HVM_SPIN_REWIND=1` (also resolve counter loops; slower), `HVM_SPLOG=<file>`, `HVM_BOOTARGS`, `HVM_TRACE=<file>` (one line per exit, plus the interrupted PC at every interrupt acknowledge), `HVM_DUMP=<prefix>` (registers and RAM at the stop), `HVM_TRACE_SYSREG=1`.
+Environment: `HVM_MEM_MB` (default 256), `HVM_STEP` (virtual ticks per exit, default 64), `HVM_ECHO=1`, `HVM_MAX_EXITS`, `HVM_SPIN_SECS` (give up on an exit-free spin after this much host time, default 10), `HVM_SPIN_MS` (exit-free host time before the spin observer looks, default 5), `HVM_SPIN_OBSERVE=0` (no observer), `HVM_SPIN_REWIND=1` (also resolve counter loops; slower), `HVM_SPLOG=<file>`, `HVM_BOOTARGS`, `HVM_TRACE=<file>` (one line per exit, plus the interrupted PC at every interrupt acknowledge), `HVM_DUMP=<prefix>` (registers and RAM at the stop), `HVM_TRACE_SYSREG=1`.
 
 ## Reference numbers (256 MiB guest)
 

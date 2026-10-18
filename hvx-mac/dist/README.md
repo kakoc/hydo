@@ -14,6 +14,7 @@ the user guide; it is shipped inside the release.
 | `hvx-mac/explore/out/Image-explore` | the arm64 kernel (`hvx-mac/explore/build-guest.sh`, HVC idle) |
 | `guest/busybox`, `guest/mke2fs` | static arm64 busybox 1.36.1 and e2fsprogs 1.47.0 (aarch64 nixpkgs) |
 | `guest/busybox-applets[.txt]` | the applet set to link, as the Linux build links it |
+| `guest/tc/`, `guest/tc-closure.txt` | the pinned aarch64 `tc` (iproute2 6.8.0) and every file its loader opens, at their `/nix/store` paths, for network faults |
 | `hvx/onboard/`, `hvx/explore/`, `hvx/hydo_assert_*` | `hydo-build`, the guest init, the manifest format, `explore.py` and the modules it imports |
 | `examples/redis/` | the Redis example, with its arm64 binaries under `files/` (works offline) |
 | `skill/hydo-onboard/` | the Claude Code skill that writes a project's `hydo.yaml` |
@@ -35,8 +36,16 @@ run under `libfaketime` for the data disk. The release provides the first two as
 No `faketime` is needed: the guest clock is deterministic, and `hydo-build` zeroes every time
 field afterwards.
 
+For network faults `hydo_build_arm64.py` copies the pinned aarch64 `tc` and the files its loader
+opens (found with `hvx-mac/services/elfdeps.py`) from the host's `/nix/store`. The release ships
+those files under `guest/tc/`, and `hydo build` points that one module's existence check and its
+copy at that tree (a module-local `os` view and a replacement `_copy_elf_closure` with the same
+rules), so the image gets the same paths, bytes and modes as a Linux build. A cleaner long-term
+form would be an `HYDO_TC_ROOT` prefix in `hydo_build_arm64.py` itself.
+
 **Checked:** for the Redis example the Mac-built data disk is byte-identical to the Linux-built
-one (`9ddfc929…`). The root image differs only where the input differs: the embedded manifest
+one (`9ddfc929…`), and every file of the root image, including the 23 files of the `tc`
+closure, is identical to the Linux build except where the input differs: the embedded manifest
 names `files/...` instead of `/nix/store/...`, and one library symlink is relative (see below).
 Two Mac builds give the same bytes.
 

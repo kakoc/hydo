@@ -24,7 +24,8 @@
  * cut (C=) carries only the flushed disk bytes into a recovery boot restored from S0, which
  * gets "oracle <acked ids> [failed <ids>]". The disk boots with the flush-aware class armed at
  * probability 0, so the guest negotiates FLUSH (write-back caching) like hvx's guests.
- * Not supported (the RESULT says UNSUPPORTED): tick-timing jitter (tj*: no PMU clock here),
+ * Tick jitter (tj=, tjx=) delays timer interrupts by a seeded number of EXITS (../hvm.c TJ);
+ * the RESULT gains tjk=<first>-<last> tjn=<n> as on hvx. Not supported (the RESULT says UNSUPPORTED):
  * disk faults or cuts without a disk, and network faults (N=, O=) on an image without tc
  * (initrd_has_tc: its compiled manifest, etc/hydo/manifest.sh, has an empty HYDO_TC).
  * explore.py --backend hvm strips those from generated schedules up front (hvm_supported()).
@@ -235,6 +236,35 @@ static int parse_disk(const char *host, uint64_t *seed, uint32_t *classes, uint3
 	if (!strncmp(d, "lying:", 6)) { *classes = F_DROP; *prob = atoi(d + 6); return 0; }
 	return -1;
 }
+/* the host part's tick jitter, as hvx_explore's parse_tj; delays are counted in exits here.
+ * Sets TJ (../hvm.c) but leaves it off: run_sched turns it on for the workload. -1 if malformed. */
+static int parse_tj(const char *host, struct tjit *t)
+{
+	const char *p;
+	memset(t, 0, sizeof *t);
+	if ((p = strstr(host, "tjx="))) {
+		char *end;
+		p += 4;
+		while (*p && *p != ' ' && t->n_explicit < TJ_MAX_EXPLICIT) {
+			t->ek[t->n_explicit] = strtoull(p, &end, 10);
+			if (*end != ':') return -1;
+			t->ed[t->n_explicit] = (uint32_t)strtoul(end + 1, &end, 10);
+			t->n_explicit++;
+			p = (*end == ',') ? end + 1 : end;
+		}
+		if (*p && *p != ' ') return -1;
+		return 0;
+	}
+	if (!(p = strstr(host, "tj="))) return 0;
+	t->seed = strtoull(p + 3, NULL, 16);
+	t->permille = (p = strstr(host, "tjpm=")) ? (uint32_t)strtoul(p + 5, NULL, 10) : 10;
+	t->max_delay = (p = strstr(host, "tjmax=")) ? (uint32_t)strtoul(p + 6, NULL, 10) : 1000;
+	if ((p = strstr(host, "tjlo="))) t->lo = strtoull(p + 5, NULL, 10);
+	if ((p = strstr(host, "tjhi="))) t->hi = strtoull(p + 5, NULL, 10);
+	if (!t->permille || !t->max_delay) memset(t, 0, sizeof *t);
+	return 0;
+}
+static int tj_wanted(const struct tjit *t) { return t->n_explicit || (t->permille && t->max_delay); }
 /* Does the (gzip'd cpio) initramfs carry a tc for hydo-init.sh's network faults? Its compiled
  * manifest (etc/hydo/manifest.sh, hvx/onboard/hydo-build) says HYDO_TC='<path>' or HYDO_TC=''. */
 static int initrd_has_tc;
@@ -267,7 +297,6 @@ static const char *unsupported(const char *host, const char *guest)
 	const char *d = strstr(host, "disk=");
 	if (!virtio_attached() && d && strncmp(d, "disk=none", 9)) return "disk faults and power cuts need the data disk (HVM_DISK)";
 	if (!virtio_attached() && strstr(guest, " C=")) return "power cuts need the data disk (HVM_DISK)";
-	if (strstr(host, "tj=") || strstr(host, "tjx=")) return "tick-timing jitter needs a PMU clock";
 	if (!initrd_has_tc && (strstr(guest, " N=") || strstr(guest, " O="))) return "network faults need tc on the arm64 root";
 	return NULL;
 }
@@ -307,15 +336,28 @@ static void run_once(const char *tag, const char *sched, int rewound)
 	if (u) { printf("RESULT %s fp=0 wfp=0 secs=0 verdict=UNSUPPORTED on hvm: %s\n", tag, u); fflush(stdout); return; }
 	uint64_t dseed; uint32_t dcl, dpr;
 	if (parse_disk(host, &dseed, &dcl, &dpr)) { printf("RESULT %s fp=0 wfp=0 secs=0 verdict=ERROR bad disk token\n", tag); fflush(stdout); return; }
+	struct tjit tj;
+	if (parse_tj(host, &tj)) { printf("RESULT %s fp=0 wfp=0 secs=0 verdict=ERROR bad tick-jitter token\n", tag); fflush(stdout); return; }
+	char tjinfo[96] = "";
 	int cut = strstr(guest, " C=") != NULL;
 	size_t from = M.console_len;
 	int why = 0, r;
 	char orc[2048];
 	if (trace_f) fprintf(trace_f, "RUN %s\n", tag);
 	set_fault(dseed, dcl, dpr);
+	if (tj_wanted(&tj)) {            /* the jitter covers the workload only, like the disk fault */
+		TJ = tj; TJ.on = 1;
+		snprintf(tjinfo, sizeof tjinfo, " tjk=%llu", (unsigned long long)(M.vtime / TJ_PERIOD));
+	}
 	snprintf(line, sizeof line, "%s\n", guest + 1);
 	hvm_put_input(line);
 	r = run_to(wk, 2, from, &why);
+	if (TJ.on) {
+		size_t l = strlen(tjinfo);
+		snprintf(tjinfo + l, sizeof tjinfo - l, "-%llu tjn=%llu",
+		         (unsigned long long)(M.vtime / TJ_PERIOD), (unsigned long long)TJ.applied);
+		memset(&TJ, 0, sizeof TJ);
+	}
 	if (r < 0) { spin_hit |= why == STOP_SPIN; snprintf(verdict, sizeof verdict, "ERROR workload: %s", stop_name(why)); goto out; }
 	wfp = xfp(); diag(tag, "w");
 	if (r == 1) { last_verdict(from, verdict, sizeof verdict); ffp = wfp; goto out; }
@@ -353,8 +395,8 @@ out:
 done:
 	if (spin_hit && !rewound && spin_auto) return;   /* not reported: run_sched re-runs it with rewind */
 	if (rewound) fprintf(stderr, "hvmx: %s: reported from a rewind-mode run\n", tag);
-	printf("RESULT %s fp=%016llx wfp=%016llx secs=%.1f verdict=%s\n", tag,
-	       (unsigned long long)fnv(&ffp, 8, wfp), (unsigned long long)wfp, now_s() - t0, verdict);
+	printf("RESULT %s fp=%016llx wfp=%016llx secs=%.1f%s verdict=%s\n", tag,
+	       (unsigned long long)fnv(&ffp, 8, wfp), (unsigned long long)wfp, now_s() - t0, tjinfo, verdict);
 	fflush(stdout);
 }
 /* one schedule from the restored S1 (serve) or from the provisioned boot (one); see the header */

@@ -24,11 +24,29 @@ The fingerprint covers the console, the registers, the machine state, the virtio
 
 **What the Mac backend supports:**
 - **Applied as on hvx (the bare-metal machine):** kills, pauses (both forms), realtime clock jumps, the manifest's durability knobs, and network faults (`N=` two-way, `O=` one-way): `hydo-init.sh` puts netem on `lo` with `tc`, exactly as on the bare-metal machine. With the data disk attached it also applies `disk=none|ioerr:P|cut|lying:P` with `dseed`, which use the same seeded fault classes as hvx (`../VIRTIO.md`), and power cuts.
-- **Not applied:**
-  - tick-timing jitter (`tj*`), because this hardware has no PMU clock;
-  - network faults on an image without `tc` (built with `HYDO_TC_ARM64=`, or before `tc` was added). Both `hvm_backend.py` (`image_has_tc`) and `hvmx` (`scan_has_tc`) read that from the image's compiled manifest (`etc/hydo/manifest.sh`, `HYDO_TC`).
+- **Applied differently:** tick-timing jitter (`tj=`, `tjx=`, `--timing`). Linux delays a tick by a number of guest branches, using the PMU clock. The M2 has no PMU clock, so `../hvm.c` delays the timer interrupt by a seeded number of VM exits instead (see "Tick jitter" below). `hvm_supported()` caps a generated `tjmax` at 1,000 exits.
+- **Not applied:** network faults on an image without `tc` (built with `HYDO_TC_ARM64=`, or before `tc` was added). Both `hvm_backend.py` (`image_has_tc`) and `hvmx` (`scan_has_tc`) read that from the image's compiled manifest (`etc/hydo/manifest.sh`, `HYDO_TC`).
 
-  `hvm_supported()` removes these from generated schedules before they are rendered. If a schedule asks for one anyway, `hvmx` answers `verdict=UNSUPPORTED`.
+## Tick jitter (counted in exits)
+
+**What it does.** The guest switches threads at timer interrupts, and this VMM can deliver an interrupt only at a VM exit. So the knob is the exit at which the timer interrupt is delivered. Take a deadline in tick period k, where k = deadline / (CNTFRQ/250) is the guest's 4 ms tick. Its interrupt is raised d(k) exits after the deadline: never earlier, and capped inside the period. The counter the guest reads is not changed. d(k) uses hvx's formula, so `explore.py`'s shrinker works unchanged: `h = mix(seed + k*GOLDEN)`; the tick is delayed when `h % 1000 < permille`; then `d = 1 + (h >> 16) % max`. A tick window `tjlo`/`tjhi` and an explicit list `tjx=k:d,...` also work. The policy is host-side state, outside `struct mach`. It is therefore in neither the snapshot nor the fingerprint, and with it off every path is unchanged. `hvmx` turns it on for the workload only, like the disk fault, and its RESULT line gains `tjk=<first>-<last> tjn=<n>`. `hvm` takes `HVM_TJ=<hex seed>,<permille>,<max exits>[,<lo>,<hi>]` for a whole boot.
+
+**The limit.** Thread switches can still happen only at exits. A race window that contains no exit cannot be reached by any jitter, because no exit happens inside it. Linux's branch-counted jitter can reach such a window. On this guest kernel every clock read is an exit, so windows that read the clock (kernel code, system calls that take time, Go and Java programs) are reachable.
+
+**Measured** with `../race/macrace.c`. This is `hvx/race/hydorace.c`'s once-per-run seat race, with two processes on a shared page. Only the sale of seat 10,000 of 20,000 has a window, and between sales each process reads the clock once. Each build was booted 200 times, one jitter seed per boot (`../race/seeds.sh`, kernel `Image-explore-idle`, `HVM_SOFT_IRQ=1`):
+
+| Window | No jitter | Every tick delayed (permille 1000, max 1,000 exits) | 2 ticks in 10 delayed |
+|---|---|---|---|
+| 50 clock reads | no oversell | **10 of 200** oversold, all 10 repeat exactly | 1 of 200 |
+| 50,000 iterations of plain work (no exit) | no oversell | **0 of 200** | not run |
+
+Every seed gave a different fingerprint, so the jitter does change the run. The plain-work window is never hit, as expected. On Linux, hvx's branch-counted jitter found once-per-run plain-memory windows (CLAUDE.md M43).
+
+**Checks.** With jitter off:
+- the M48 boot is still `81711ada76a4a236`;
+- the Redis schedule `disk=none | run` is still `ca13bcd1d77e2b4b`.
+
+With every tick delayed, seed `1234` gives `4e8fb9fc0b222248` both as `hvmx one` and from the S1 snapshot in `hvmx serve`. The next schedule in the same serve process, without jitter, gives `ca13bcd1d77e2b4b` again, so the policy is off between runs. The explicit list and jitter with a power cut both run. The Redis workload spans only 7 ticks (12–19), so low densities often delay nothing. On the Mac, use `--tj-pm 500,1000`. `explore.py --backend hvm --strategy swarm --timing --tj-pm 500,1000 --seeds 1-40`: 17 schedules were timed and 15 of those were actually perturbed. 16 failures, all reproduced, all in expected classes (none needed the timing).
 
 ## Changes outside this directory (hook points)
 
@@ -158,6 +176,29 @@ The ledger's lost-reply duplicate needs *partial* reply loss: losing 100% of the
 **The spin observer (`../spin/hvm-spin.c`).** Its 1-in-300 divergence under load was the same WFI effect: on the M48 kernel it gave the same odd value as before (`3820c07d53076f1e`, 2 of 400 runs with `HVM_SPIN_MS` 1–20 under the 8-engine load). On `Image-idle` that value is gone, but a second, rarer problem showed up: 3 of 3,368 runs ended differently, each with a different value. The spin log of one shows why: a kick landed at a host-timed PC outside any loop (in `gic_handle_irq`, while the vCPU thread had been descheduled), the observer armed its breakpoint there, the breakpoint was hit once, and when the guest then spun in the user-space loop the observer never re-armed, so the run ran into the SPIN limit instead of resolving the loop. The observer now re-arms whenever a kick lands away from its armed PC (re-arming is invisible to the guest). With both fixes: **2,000 of 2,000** spin boots identical (`37a4599547ab42f2`, all `stop=1`), `HVM_SPIN_MS` 1–20, under the 8-engine load. The M48 kernel's normal spin fingerprint (`3a36c4ee97b37d37`) is unchanged.
 
 **Remaining envelope.** Other guest instructions that complete differently when a host interrupt is pending stay a risk of the same kind: a `WFE` (woken by the exception return of a host interrupt) and an exclusive load/store pair (an exception return clears the exclusive monitor, so `STXR` fails once more and the retry loop runs once more). This kernel uses LSE atomics and has the event stream off, and neither showed up in 3,280 runs, but user programs with LL/SC loops or `WFE` (for example musl's atomics without LSE) could still diverge this way under heavy load. Trapping `WFE` is possible only through a private Hypervisor.framework control (`../spin`); exclusive pairs cannot be trapped.
+
+## Exit-free spins (the spin observer)
+
+`hvmx` includes `../hvm.c`, so it has the spin observer (`../spin_observer.c`,
+`../spin/RESEARCH.md` "In the main engine"): a guest that busy-waits in user space without any
+exit is resolved deterministically instead of ending the run as SPIN.
+- **Exact-repeat loops** (a load, load-acquire, `yield`, same-value store, exclusive load) are
+  resolved in every run.
+- **Counter loops** (`while (flag) n++;`) need the rewind mode. `HVM_SPIN_REWIND=auto` (the
+  default here) runs a schedule plainly and, only if a phase ends as SPIN, restores S1 and runs it
+  again with rewind on; that run is reported, and stderr says so. `=1` always, `=0` never; the
+  host token `spin=rewind` forces it for one schedule. The RESULT line format is unchanged.
+- **Kick interval** `HVM_SPIN_MS`, default 5 ms: lower is faster for a spinning guest, at the
+  price of more (harmless) kicks on a loaded host.
+
+`examples/ledger-spin` is the ledger with a busy-wait in every request (`/bin/spin_load`; every
+tenth entry `/bin/spin_count`, a counter loop), built from `../spin/spinvar.c`. On the netem
+kernel its schedules give one fingerprint each in two serve processes and `hvmx one`, with and
+without tick jitter, and every run escalates to rewind because of the counter loop. A short
+exploration (`explore.py --backend hvm --image explore-ob-ledger-spin-arm64.cpio.gz --strategy swarm
+--new-faults --seeds 1-30 --workers 3`, 5 ms kicks): 14 failures, 14 reproduced, all the planted
+non-idempotent retry (`entry N stored twice`, e.g. seed 6 `P=front@26+2 T=10:-30`, seed 7
+`P=front@10+2`); 929 runs/hour with every schedule re-run in rewind mode.
 
 ## Commands
 

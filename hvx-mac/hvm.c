@@ -197,10 +197,63 @@ static size_t build_fdt(uint8_t *out, const char *bootargs, uint64_t initrd_star
 static int bit(const uint32_t *a, int i) { return (a[i / 32] >> (i % 32)) & 1; }
 static void setb(uint32_t *a, int i, int v) { if (v) a[i / 32] |= 1u << (i % 32); else a[i / 32] &= ~(1u << (i % 32)); }
 
+/*
+ * Seeded tick jitter (hvx's HVX_SET_TJITTER, CLAUDE.md M43), counted in exits. The guest
+ * switches threads at timer interrupts, and they can only be taken at an exit, so the knob is
+ * which exit: the timer interrupt of a deadline in tick period k (k = cval / TJ_PERIOD, the
+ * guest's 4 ms tick) is raised d(k) exits LATER than the deadline, never earlier; the counter
+ * the guest reads is untouched. d(k) is hvx's formula (explore.py tj_delays replicates it):
+ * h = mix(seed + k*GOLDEN), delayed if h % 1000 < permille, d = 1 + (h >> 16) % max_delay,
+ * optionally only for ticks in [lo, hi), or an explicit list of (tick, delay). The policy is
+ * host-side, outside struct mach, so it is in neither the snapshot nor the fingerprint: set it
+ * after a restore, as on hvx. Off by default, and then nothing below changes.
+ */
+#define TJ_PERIOD (CNTFRQ / 250)            /* CONFIG_HZ_250 */
+#define TJ_MAX_EXPLICIT 32
+struct tjit {
+	int on; uint64_t seed; uint32_t permille, max_delay; uint64_t lo, hi;
+	int n_explicit; uint64_t ek[TJ_MAX_EXPLICIT]; uint32_t ed[TJ_MAX_EXPLICIT];
+	uint64_t applied, last_applied_k;         /* statistics: delays that were actually taken */
+};
+static struct tjit TJ;
+static uint64_t tj_mix(uint64_t x)
+{
+	x += 0x9e3779b97f4a7c15ULL;
+	x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+	x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
+	return x ^ (x >> 31);
+}
+static uint64_t tj_delay(uint64_t k)         /* in exits */
+{
+	uint64_t d = 0;
+	if (!TJ.on || k <= 1) return 0;
+	if (TJ.n_explicit) {
+		for (int i = 0; i < TJ.n_explicit; i++) if (TJ.ek[i] == k) d = TJ.ed[i];
+	} else {
+		if (k < TJ.lo || (TJ.hi && k >= TJ.hi)) return 0;
+		uint64_t h = tj_mix(TJ.seed + k * 0x9e3779b97f4a7c15ULL);
+		if (h % 1000 >= TJ.permille) return 0;
+		d = 1 + (h >> 16) % TJ.max_delay;
+	}
+	uint64_t cap = TJ_PERIOD / STEP - 1;        /* stay inside the tick period */
+	return d < cap ? d : cap;
+}
+/* the virtual time at which the timer interrupt is raised: the deadline, plus the delay */
+static uint64_t timer_due(void)
+{
+	if (!TJ.on) return M.cntp_cval;
+	return M.cntp_cval + tj_delay(M.cntp_cval / TJ_PERIOD) * STEP;
+}
 static int timer_level(void)
 {
 	int en = M.cntp_ctl & 1, mask = (M.cntp_ctl >> 1) & 1;
-	return en && !mask && M.vtime >= M.cntp_cval;
+	if (!TJ.on) return en && !mask && M.vtime >= M.cntp_cval;
+	int lv = en && !mask && M.vtime >= timer_due();
+	if (lv && M.vtime >= M.cntp_cval && tj_delay(M.cntp_cval / TJ_PERIOD)) {
+		uint64_t k = M.cntp_cval / TJ_PERIOD;
+		if (k != TJ.last_applied_k) { TJ.applied++; TJ.last_applied_k = k; }
+	}
+	return lv;
 }
 static int uart_level(void);
 /* level-triggered sources feed the pending bit continuously */
@@ -478,11 +531,11 @@ static int handle_wfi(void)
  * A kernel built with CONFIG_ARM64_HVM_IDLE_HVC idles through the HVC instead, which always exits.
  */
 /* The virtual time of the next event the guest can wait for: the timer deadline (may be already
- * due) or a device completion / paced frame; 0 if nothing is armed. An idle wait (and a resolved
+ * due; a jittered tick's delayed deadline) or a device completion / paced frame; 0 if nothing is armed. An idle wait (and a resolved
  * exit-free spin, spin_observer.c) jumps virtual time to it. */
 static uint64_t next_event(void)
 {
-	uint64_t next = (M.cntp_ctl & 3) == 1 ? M.cntp_cval : 0;
+	uint64_t next = (M.cntp_ctl & 3) == 1 ? timer_due() : 0;   /* with tick jitter: the delayed deadline */
 	uint64_t vd = virtio_next_due(M.vtime);
 	if (vd && (!next || vd < next)) next = vd;
 	return next;
@@ -559,7 +612,7 @@ static void vput(const struct vsnap *s)
 /*
  * Spin watchdog. A guest that loops without any exit never returns from hv_vcpu_run, and on
  * this hardware there is no counter to interrupt it at a deterministic instruction (PROBE.md).
- * After HVM_SPIN_MS (default 50) of host time with no exit the watchdog kicks the vCPU out with
+ * After HVM_SPIN_MS (default 5) of host time with no exit the watchdog kicks the vCPU out with
  * hv_vcpus_exit. The kick changes nothing in the guest: it only lets spin_observer.c look for a
  * provable loop, whose resolution is a function of the guest state alone (the kick time is a
  * hint). Each failed look doubles the wait; after HVM_SPIN_SECS (default 10) of exit-free host
@@ -569,7 +622,7 @@ static void vput(const struct vsnap *s)
 static volatile uint64_t wd_exits;
 static volatile int wd_armed;
 static double spin_secs = 10;                 /* give up (invalid run) after this much exit-free host time */
-static volatile double kick_s = 0.05;         /* HVM_SPIN_MS: exit-free host time before a look (a hint only) */
+static volatile double kick_s = 0.005;        /* HVM_SPIN_MS: exit-free host time before a look (a hint only) */
 static volatile double kick_backoff = 1;      /* doubles after a failed look, reset by any real exit */
 static int spin_observe = 1;                  /* HVM_SPIN_OBSERVE */
 static void *watchdog(void *arg)
@@ -822,6 +875,8 @@ static void print_fp(const char *tag, struct parts p, int stop, double secs)
 	printf("%s: cntpct reads %llu, mmio %llu, hvc %llu, wfi %llu (clock jumps %llu), other sysreg traps %llu, entries with IRQ line up %llu, single steps %llu in %llu runs\n",
 	       tag, M.n_cntpct, M.n_mmio, M.n_hvc, M.n_wfi, M.n_wfi_jump, M.n_sysreg_other, M.n_irq_line, M.n_steps, M.n_step_runs);
 	virtio_stats(tag);
+	if (TJ.on) printf("%s: tick jitter: %llu timer interrupts delayed, last at tick %llu\n", tag,
+	                  (unsigned long long)TJ.applied, (unsigned long long)TJ.last_applied_k);
 	if (sp_kicks) printf("%s: spin kicks %llu, looks %llu, loops resolved %llu, not a loop %llu, look steps %llu, write faults %llu, debug-register accesses emulated %llu\n",
 	                     tag, sp_kicks, sp_checks, sp_resolved, sp_notcycle, sp_steps, sp_writes, sp_dbgreg);
 	if (rw_on) printf("%s: counter loops proven %llu, resolved %llu, rewinds %llu; checkpoints %llu, copy-on-write faults %llu\n",
@@ -848,6 +903,11 @@ int main(int argc, char **argv)
 	const char *bootargs = getenv("HVM_BOOTARGS") ? getenv("HVM_BOOTARGS") : BOOTARGS;
 
 	spin_env();
+	if (getenv("HVM_TJ")) {   /* HVM_TJ=<hex seed>,<permille>,<max delay in exits>[,<lo>,<hi>]: tick jitter for the whole run */
+		unsigned long long sd = 0, lo = 0, hi = 0; unsigned pm = 0, mx = 0;
+		sscanf(getenv("HVM_TJ"), "%llx,%u,%u,%llu,%llu", &sd, &pm, &mx, &lo, &hi);
+		TJ.seed = sd; TJ.permille = pm; TJ.max_delay = mx; TJ.lo = lo; TJ.hi = hi; TJ.on = pm && mx;
+	}
 	{ pthread_t t; pthread_create(&t, NULL, watchdog, NULL); }
 	virtio_setup();
 	vm_create(bootargs);
