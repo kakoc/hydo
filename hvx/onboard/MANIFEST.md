@@ -114,7 +114,7 @@ workload:                      # required
                                #   (used by mid-request pauses); default: run's first word
 
 knobs:                         # durability settings the explorer may relax
-  - token: M                   # one capital letter, not K N C P T O (those are faults)
+  - token: M                   # one capital letter, not K N C P T O Q X (built-in schedule tokens)
     name: MySQL innodb_flush_log_at_trx_commit
     default: "1"               # required. the value the image starts with (the safe one)
     set: SQL -e "SET GLOBAL innodb_flush_log_at_trx_commit=$HYDO_VALUE"   # required
@@ -181,8 +181,13 @@ properties that need to see inside it; both kinds of record mix on the console.
 | `<X>=<value>` | a knob from `knobs:` |
 | host side: `disk=ioerr:<p>` / `lying:<p>` | disk I/O errors / a disk that drops acknowledged writes |
 
-A token naming a service the manifest does not have is ignored, so the explorer's fixed
-service names (mysql, kafka, redis, front) work against any project.
+A token naming a service the manifest does not have is ignored. `explore.py` draws its
+faults from the manifest (`hvx/explore/manifest_space.py`): kills and pauses from all
+services, network and one-way faults from services with a `port:`, knob values from
+`knobs:`, fault placement from `workload.steps`, fault kinds from `faults:`. It reads
+`/etc/hydo/hydo.yaml` out of an `explore-ob-*` image automatically; pass `--manifest` for
+any other image. A knob token that collides with a built-in token (K P N O C T Q X) is
+rejected.
 
 ## YAML subset
 
@@ -215,7 +220,6 @@ Inside the image: `/etc/hydo/hydo.yaml` (the manifest as written), `/etc/hydo/ma
 
 - No OCI/Docker import yet (`image:` is reserved); files come from store paths or the host.
 - Guest RAM is fixed at 1024 MiB and the kernel command line is the explorer's.
-- The explorer's schedule generator (`explore.py`) knows the service names mysql, kafka,
-  redis, front and the knobs M and R; other names get no kill/pause/network faults from it
-  (hand-written schedules work for any name).
+- The guest console is 64 KiB: a workload that prints every acknowledged id should print
+  short ids, or the done marker can be lost.
 - One data disk, ext4. The workload's step count is the unit of fault placement.
