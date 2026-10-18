@@ -30,6 +30,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 HYDO_BUILD = os.path.join(os.path.dirname(HERE), "onboard", "hydo-build")
 ROOT_OFFSET = 2048 * 512            # hydo-build puts the root filesystem at LBA 2048
 FAULT_KINDS = ["kill", "pause", "network", "oneway", "cut", "clock", "disk"]
+# guest schedule tokens with a fixed meaning (faults; Q/X = concurrency and timed kill, hydo-c7's branch);
+# a manifest knob may not reuse one, or parse() would read the knob as that fault. M/R stay knob names.
+RESERVED_TOKENS = {"K", "P", "N", "O", "C", "T", "Q", "X"}
 
 
 def _parser():
@@ -72,6 +75,9 @@ class Space:
         for k in m.get("knobs") or []:
             safe = str(k.get("safe", k["default"]))
             vals = [str(v) for v in (k.get("values") or []) if str(v) != safe]
+            if k["token"] in RESERVED_TOKENS:
+                raise SystemExit("manifest_space: knob token %r collides with a built-in schedule token "
+                                 "(reserved: %s); rename the knob" % (k["token"], " ".join(sorted(RESERVED_TOKENS))))
             self.knobs.append((k["token"], safe, vals))
 
     def describe(self):
