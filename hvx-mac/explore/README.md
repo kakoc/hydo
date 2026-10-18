@@ -23,9 +23,9 @@
 The fingerprint covers the console, the registers, the machine state, the virtio state with the disk and cache, and all RAM.
 
 **What the Mac backend supports:**
-- **Applied as on the box:** kills, pauses (both forms), realtime clock jumps and the manifest's durability knobs. With the data disk attached it also applies `disk=none|ioerr:P|cut|lying:P` with `dseed`, which use the same seeded fault classes as hvx (`../VIRTIO.md`), and power cuts.
+- **Applied as on hvx (the bare-metal machine):** kills, pauses (both forms), realtime clock jumps, the manifest's durability knobs, and network faults (`N=` two-way, `O=` one-way): `hydo-init.sh` puts netem on `lo` with `tc`, exactly as on the bare-metal machine. With the data disk attached it also applies `disk=none|ioerr:P|cut|lying:P` with `dseed`, which use the same seeded fault classes as hvx (`../VIRTIO.md`), and power cuts.
 - **Applied differently:** tick-timing jitter (`tj=`, `tjx=`, `--timing`). Linux delays a tick by a number of guest branches, using the PMU clock. The M2 has no PMU clock, so `../hvm.c` delays the timer interrupt by a seeded number of VM exits instead (see "Tick jitter" below). `hvm_supported()` caps a generated `tjmax` at 1,000 exits.
-- **Not applied:** network faults (`N=`, `O=`), because the arm64 root has no `tc`. `hvm_supported()` removes them from generated schedules before they are rendered. If a schedule asks for one anyway, `hvmx` answers `verdict=UNSUPPORTED`.
+- **Not applied:** network faults on an image without `tc` (built with `HYDO_TC_ARM64=`, or before `tc` was added). Both `hvm_backend.py` (`image_has_tc`) and `hvmx` (`scan_has_tc`) read that from the image's compiled manifest (`etc/hydo/manifest.sh`, `HYDO_TC`).
 
 ## Tick jitter (counted in exits)
 
@@ -99,6 +99,48 @@ The ledger without a disk (first version): 6 schedules, two serve processes and 
   11,568 runs/hour.
 - **Ledger:** 23 failures, all `entry N stored 2 times` (the planted non-idempotent CGI), 23 of 23 reproduced. Shrunk to `disk=none dseed=ea4fb8211cfa3702 | run P=front@26+1`: request 26 is accepted into the paused server's backlog, the client times out, the server applies it after the resume, and the retry applies it again. 8,611 runs/hour.
 - **More workers are slower.** The first ledger version did 8,088 runs/hour with 4 workers but only 1,977 with 8, with the Mac swapping (about 20 GB of swap in use).
+
+## Network faults (N=, O=)
+
+**What it took.** The kernel has the three pieces `hydo-init.sh`'s `net_on()` uses built in (`hvm-explore.config`: `NET_SCH_PRIO`, `NET_SCH_NETEM`, `NET_CLS_U32`), and the arm64 root carries the pinned aarch64 `tc` from nixpkgs (`iproute2-6.8.0`, dynamically linked: no static aarch64 build is in the binary cache) with exactly the shared libraries its loader opens (`hydo_build_arm64.py`, via `../services/elfdeps.py`). netem's randomness and timers are the guest kernel's, which the Mac clock makes deterministic, so nothing in the VMM changed except `hvmx`'s check for `tc`.
+
+**Builds** (two each, byte-identical): `Image-explore` `f80c5655…`; `explore-ob-redis-arm64.cpio.gz` `10f7858a…` (disk `9ddfc929…`, unchanged); `explore-ob-ledger-arm64.cpio.gz` `deb1525d…` (disk `ed04ad2a…`). The two example manifests now list `network` and `oneway` in `faults:`.
+
+**Determinism** (`netfault/check.py`: each schedule in two separate serve processes from the S1 snapshot and once as `hvmx one` from a fresh boot; all three fingerprints equal). The README table schedules on the new kernel and image, same verdicts as before:
+
+| Schedule | Fingerprint | Verdict |
+|---|---|---|
+| `disk=none \| run` | `7fbc98328b6cf493` | OK, 20 acked |
+| `disk=cut \| run C=12` | `0c279a6daae800d9` | OK |
+| `disk=cut \| run C=12 R=everysec` | `096daef84ac92ff9` | VIOLATION `k:0` lost |
+| `disk=lying:10 dseed=5017e0 \| run C=15` | `9674a5cadb027a71` | VIOLATION `k:0` |
+| `disk=lying:10 dseed=5017e1 \| run C=15` | `ab7a074d8e1b725b` | VIOLATION `k:6` |
+| `disk=ioerr:5 dseed=1234 \| run` | `1efa3d55a1de2694` | ERROR: Redis cannot restart |
+| `disk=none \| run K=redis@5+2` | `46bc747f7adfbfae` | OK |
+| `disk=none \| run P=redis@8+2` | `86f670644c044826` | OK |
+
+Network faults, all identical (serve, serve, one):
+
+| Schedule | Fingerprint | Verdict |
+|---|---|---|
+| Redis `N=redis@8-14:delay,20ms,loss,30%` | `64817a74f4032ce5` | OK, 19 acked |
+| Redis `N=redis@4-12:delay,20ms,reorder,38%` | `6732e6a5ae862866` | OK |
+| Redis `N=redis@6-10:delay,259ms,duplicate,13%` | `30ad53fe6f22d5ef` | OK |
+| Redis `O=redis@5-10:req:loss,100%` | `d8bd1940f0487906` | OK, 15 acked |
+| Redis `O=redis@5-10:resp:loss,100%` | `d53075bf34610585` | OK, 15 acked |
+| Redis `O=redis@3-9:resp:delay,300ms` | `a94e4c6a7cc017ff` | OK |
+| Redis `disk=cut \| N=redis@9-12:delay,20ms,reorder,38% C=18` | `4dea8be4c216d44e` | OK |
+| ledger, no fault | `5343027a7c6085cf` | OK, 30 acked |
+| ledger `O=front@5-8:resp:loss,100%` | `f24b64bdecfb1919` | OK (see below) |
+| ledger `O=front@0-30:resp:loss,70%` | `d3f1005e3359d18e` | VIOLATION entry 4 stored 2 times |
+| ledger `O=front@0-30:resp:loss,50%` | `6e2bcdd3355578e4` | VIOLATION entry 9 stored 2 times |
+| ledger `N=front@0-30:loss,60%` | `e7cbdefd36ce87c3` | VIOLATION entry 7 stored 2 times |
+
+The ledger's lost-reply duplicate needs *partial* reply loss: losing 100% of the server's packets also drops its SYN-ACK, so no connection opens, the request is never applied and the retry stores the only copy. With 50–70% loss some connections open and then lose the answer for longer than the client's 2 s timeout; the retry stores the applied entry again.
+
+**Exploration with network faults** (`explore.py --backend hvm --strategy swarm --new-faults --seeds 1-100 --workers 4`; network faults now drawn because the manifests list them and the images have `tc`):
+- **ledger:** 75 of 100 schedules had a network fault. 39 failures, 39 reproduced. 38 are the planted non-idempotent retry (`entry # stored # times`), 5 of them with a network fault and no pause or kill (e.g. seed 28 `O=front@10-14:resp:loss,78%`, seed 58 `O=front@25-30:resp:loss,93%`). 1 is a harness artefact: seed 40 kills the front door while a 2,295 ms request delay is on its port, so the restart's readiness check (`wget -T 2`) never passes (`ERROR front restart failed`). 6,494 runs/hour.
+- **Redis:** 75 of 100 had a network fault (58 consoles show `NET FAULT`). 36 failures, 36 reproduced, all expected classes: lying disk 18, I/O errors 11, relaxed `appendfsync` 7; none with durable settings and an honest disk. 787 runs/hour (netem delays and the disk make these runs longer).
 
 ## Fixed: a rare divergence under heavy host load (a WFI that does not trap)
 

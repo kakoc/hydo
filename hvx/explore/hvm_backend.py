@@ -10,10 +10,12 @@ The data disk (<NAME>-arm64-disk.img next to the initramfs, from hydo-build --ar
 attached as the virtio-blk device when it exists; then disk faults and power cuts work as on
 the box (same seeded fault classes, same two-boot recovery). What the Mac backend cannot do
 is removed from every schedule BEFORE it is rendered (hvm_supported), so a run never claims
-a fault it did not apply: no tc on the arm64 root (no N=/O= network faults), no PMU clock (no
-run budget), and without the disk no disk faults or power cuts. Tick jitter works, but its
-delays are counted in VM exits instead of guest branches (hvx-mac/hvm.c), so a seeded jitter's
-maximum delay is rescaled to HVM_TJ_MAX exits.
+a fault it did not apply: no PMU clock (no run budget), without the disk no disk faults or
+power cuts, and without tc in the image (an arm64 image built with HYDO_TC_ARM64= , or one built
+before tc was added) no N=/O= network faults. Whether the image has tc is read from its compiled
+manifest (etc/hydo/manifest.sh, HYDO_TC), not assumed. Tick jitter works, but its delays are
+counted in VM exits instead of guest branches (hvx-mac/hvm.c), so a seeded jitter's maximum
+delay is capped at HVM_TJ_MAX exits.
 """
 import os
 
@@ -36,12 +38,22 @@ def disk_for(image):
 
 
 HAS_DISK = False        # set by configure()
+HAS_TC = False
 HVM_TJ_MAX = 1000       # exits; a busy guest takes about 1,500 exits per 4 ms tick (64 virtual ticks each)
 
 
 def configure(image):
-    global HAS_DISK
+    global HAS_DISK, HAS_TC
     HAS_DISK = disk_for(image) is not None
+    HAS_TC = image_has_tc(image)
+
+
+def image_has_tc(image):
+    """True if the image's compiled manifest names a tc binary (HYDO_TC non-empty)."""
+    for line in embedded_file(image, "etc/hydo/manifest.sh").splitlines():
+        if line.startswith("HYDO_TC="):
+            return line[len("HYDO_TC="):].strip("'\"") != ""
+    return False
 
 
 def engine_cmd(image, consoles, kernel=None):
@@ -55,7 +67,7 @@ def hvm_supported(s):
     if not HAS_DISK:
         s["disk"] = "none"
         s.pop("C", None)
-    for k in ("N", "O", "rb"):
+    for k in ("rb",) if HAS_TC else ("N", "O", "rb"):
         s.pop(k, None)
     tj = s.get("tj")
     if tj and tj[0] == "seed" and tj[3] > HVM_TJ_MAX:
@@ -70,6 +82,11 @@ def repro_line(image, schedule, kernel=None):
 
 def embedded_manifest(image):
     """etc/hydo/hydo.yaml from an arm64 manifest initramfs (gzip'd newc cpio)."""
+    return embedded_file(image, "etc/hydo/hydo.yaml")
+
+
+def embedded_file(image, path):
+    """One file from an arm64 manifest initramfs (gzip'd newc cpio)."""
     import gzip
     data = gzip.open(resolve_image(image)).read()
     i = 0
@@ -78,9 +95,9 @@ def embedded_manifest(image):
         fsz, nsz = f[6], f[11]
         name = data[i + 110:i + 110 + nsz - 1].decode()
         o = (i + 110 + nsz + 3) & ~3
-        if name == "etc/hydo/hydo.yaml":
+        if name == path:
             return data[o:o + fsz].decode()
         if name == "TRAILER!!!":
             break
         i = (o + fsz + 3) & ~3
-    raise SystemExit("no etc/hydo/hydo.yaml in %s" % image)
+    raise SystemExit("no %s in %s" % (path, image))

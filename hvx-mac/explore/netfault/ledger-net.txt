@@ -1,0 +1,6 @@
+# ledger (non-idempotent CGI): lost replies make the client's retry store an entry twice
+disk=none | run
+disk=none | run O=front@5-8:resp:loss,100%
+disk=none | run O=front@5-8:req:loss,100%
+disk=none | run N=front@10-20:delay,20ms,loss,40%
+disk=none | run O=front@12-14:resp:delay,3000ms
