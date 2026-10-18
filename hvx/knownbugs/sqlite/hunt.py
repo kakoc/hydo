@@ -9,7 +9,7 @@ So this driver reuses explore.py's worker pool and tick-jitter formulas, and gen
     arm "timing":   disk=none dseed=0 tj=<seed> tjpm=<pm> tjmax=<max> | run          (S fixed 0)
     arm "workload": disk=none dseed=0 | run S=<seed>                                  (no jitter)
     arm "both":     disk=none dseed=0 tj=... | run S=<seed>
-    arm "pp":       disk=none dseed=0 tj=... pp=<65536|16384> | run S=<seed>   (M49: shorter period)
+    arm "pp":       disk=none dseed=0 tj=... pp=<16384|4096> | run S=<seed>   (M49: shorter period)
     arm "xt":       disk=none dseed=0 xt=<seed> xtr=<8|32> xtpm=500 | run S=<seed>  (M49: extra ticks)
 
 Run i uses arm i % 3 and a pure function of (i, --salt), so a run is reproducible from its
@@ -32,7 +32,7 @@ MAXS = [2000, 50000, 500000]                    # max delay in guest branches (<
 
 
 ARMS = ["timing", "workload", "both"]
-PPS = [1 << 16, 1 << 14]                        # M49 arm "pp": PMU tick period during the workload
+PPS = [1 << 14, 1 << 12]                        # M49 arm "pp": PMU tick period during the workload
 XTRS = [8, 32]                                  # M49 arm "xt": extra-tick slots per period
 
 
@@ -181,7 +181,7 @@ def main():
             j, s = specs[tag]
             r = res[tag][1]
             rec = {"run": j, "arm": s["arm"], "schedule": text, "fp": r["fp"], "secs": r["secs"],
-                   "verdict": r["verdict"], "tjk": r.get("tjk"), "tjn": r.get("tjn"),
+                   "verdict": r["verdict"], "tjk": r.get("tjk"), "tjn": r.get("tjn"), "xtn": r.get("xtn"),
                    "wall": round(time.time() - t0, 1)}
             rec.update(stats(a.out, tag))
             runs.write(json.dumps(rec) + "\n")

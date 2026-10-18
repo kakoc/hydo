@@ -557,7 +557,7 @@ class Worker(threading.Thread):
             p.stdin.write("RUN %s %s\n" % (tag, text))
             p.stdin.flush()
             out = p.stdout.readline()
-            m = re.match(r"RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: tj\S+)*) verdict=(.*)", out.strip())
+            m = re.match(r"RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: (?:tj|xt)\S+)*) verdict=(.*)", out.strip())
             if not m:
                 self.results.put((tag, text, {"fp": "0", "secs": 0, "verdict": "ERROR worker: %r" % out, "worker": self.idx}))
                 continue
@@ -567,6 +567,9 @@ class Worker(threading.Thread):
             if tk:      # the workload's tick range and how many ticks were delayed
                 res["tjk"] = [int(tk.group(1)), int(tk.group(2))]
                 res["tjn"] = int(tk.group(3))
+            xn = re.search(r"xtn=(\d+)", m.group(5))
+            if xn:      # M49: extra ticks taken during the workload
+                res["xtn"] = int(xn.group(1))
             self.results.put((tag, text, res))
         p.stdin.write("QUIT\n")
         p.stdin.flush()
