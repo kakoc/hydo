@@ -380,10 +380,16 @@ static void handle_sysreg(void)
 	skip();
 }
 
-static void handle_hvc(void)
+static int idle_wait(void);
+/* Returns 1 when the guest idles with nothing armed (like handle_wfi). */
+static int handle_hvc(void)
 {
 	uint64_t fn = rd(HV_REG_X0);
 	M.n_hvc++;
+	if ((uint32_t)fn == 0xc6000020) {                 /* hydo idle (CONFIG_ARM64_HVM_IDLE_HVC): a WFI that always exits */
+		wr(HV_REG_X0, 0);
+		return idle_wait();
+	}
 	uint64_t ret = (uint64_t)-1;                      /* NOT_SUPPORTED */
 	switch ((uint32_t)fn) {
 	case 0x84000000: ret = 0x00000002; break;          /* PSCI_VERSION 0.2 */
@@ -392,6 +398,7 @@ static void handle_hvc(void)
 	case 0x84000001: ret = 0; break;                   /* CPU_SUSPEND: return at once */
 	}
 	wr(HV_REG_X0, ret);                               /* PC is already past the HVC */
+	return 0;
 }
 
 /*
@@ -430,8 +437,12 @@ static void apply_stepping(void)
 /* WFI: if nothing can be delivered, jump time to the timer deadline (or stop: idle forever) */
 static int handle_wfi(void)
 {
-	M.n_wfi++;
 	skip();
+	return idle_wait();
+}
+static int idle_wait(void)   /* a trapped WFI or the idle HVC (see ../hvm.c) */
+{
+	M.n_wfi++;
 	if (irq_line()) { if (rd(HV_REG_CPSR) & 0x80) start_stepping(); return 0; }
 	if ((M.cntp_ctl & 3) == 1 && M.cntp_cval > M.vtime) { M.vtime = M.cntp_cval; M.n_wfi_jump++; return 0; }
 	if ((M.cntp_ctl & 3) == 1) return 0;               /* already due */
@@ -770,7 +781,11 @@ static int run_until(const char *marker)
 			sp_kicks++;
 			resume = 1;
 			if (M.stepping || ob_stepover) continue;
-			if (!ob_on || ob_hits == 0) ob_arm(rd(HV_REG_PC));   /* (re)arm the observer where the guest is now */
+			/* (re)arm the observer where the guest is now. Also when it is armed elsewhere: a kick can land
+			 * at a host-timed PC outside any loop (the vCPU thread was descheduled, so little guest time
+			 * passed); if that breakpoint was hit once and the guest then spun somewhere else, it would
+			 * never be hit again and the run would end as SPIN. Re-arming is invisible to the guest. */
+			if (!ob_on || ob_hits == 0 || rd(HV_REG_PC) != ob_pc) ob_arm(rd(HV_REG_PC));
 			if (kick_backoff * kick_s < spin_secs) kick_backoff *= 2;
 			else {
 				fprintf(stderr, "hvm: SPIN: no VM exit and no provable cycle for %.0f s of host time at exit %llu, pc 0x%llx cpsr 0x%llx -- invalid run\n",
@@ -807,7 +822,7 @@ static int run_until(const char *marker)
 		switch (ec) {
 		case 0x24: handle_mmio(); break;
 		case 0x18: handle_sysreg(); break;
-		case 0x16: handle_hvc(); break;
+		case 0x16: if (handle_hvc()) return STOP_IDLE; break;
 		case 0x01: if (handle_wfi()) return STOP_IDLE; break;
 		case 0x32: case 0x33:                          /* software step completed */
 			M.n_steps++;

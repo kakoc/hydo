@@ -8,7 +8,9 @@
 |---|---|
 | `serve.c` (`hvmx`) | the run engine. It includes `../hvm.c` and speaks `hvx_explore`'s protocol: `READY`, `RUN <tag> <schedule>`, `RESULT ...`, `QUIT`. `hvmx one ...` runs one schedule from a fresh boot |
 | `build.sh` | builds and signs `hvmx` (with `../virtio*.c`) |
-| `build-guest.sh`, `hvm-explore.config` | the arm64 kernel `Image-explore`, built on the Linux box: the M48 kernel with `../linux/hvm-virtio.config`, `../services/svc.config`, MBR partitions and loop |
+| `build-guest.sh`, `hvm-explore.config` | the arm64 kernel `Image-explore`, built on the Linux box: the M48 kernel with `../linux/hvm-virtio.config`, `../services/svc.config`, MBR partitions and loop, and (by default) the HVC idle below. `HVM_IDLE_HVC=0` rebuilds the earlier WFI-idle kernel |
+| `apply-hvcidle.py` | adds `CONFIG_ARM64_HVM_IDLE_HVC`: `cpu_do_idle()` idles through HVC function `0xC6000020` instead of `WFI` (see "Fixed" below) |
+| `build-idle-m48.sh` | the M48 kernel configuration plus the HVC idle (`Image-idle`), for `../spin/hvm-spin.c` and M48-style boots |
 | `examples/ledger/` | a busybox `httpd` with a CGI that appends ledger entries. The CGI is deliberately not idempotent |
 | `examples/redis/` | `hvx/onboard/examples/redis` with the aarch64 Redis 7.2.4 from the nixpkgs cache |
 | `../../hvx/onboard/hydo_build_arm64.py` | `hydo-build --arch arm64` |
@@ -50,7 +52,7 @@ The fingerprint covers the console, the registers, the machine state, the virtio
 **Images.** Byte-identical in two builds each:
 - `explore-ob-ledger-arm64.cpio.gz` `ec5f57f6…`, `-disk.img` `ed04ad2a…`;
 - `explore-ob-redis-arm64.cpio.gz` `4c957510…`, `-disk.img` `9ddfc929…`;
-- kernel `Image-explore` `0e9ad96a…`.
+- kernel `Image-explore` `0e9ad96a…` (WFI idle; the results in this section were measured with it). The default build now gives the HVC-idle kernel `2506bb4d…`; its fingerprints are in "Fixed" below.
 
 **Snapshot branch = fresh boot.** Ten Redis schedules with the disk were each run in two serve processes and as `hvmx one`, and all three agree:
 
@@ -80,35 +82,47 @@ The ledger without a disk (first version): 6 schedules, two serve processes and 
 - **Ledger:** 23 failures, all `entry N stored 2 times` (the planted non-idempotent CGI), 23 of 23 reproduced. Shrunk to `disk=none dseed=ea4fb8211cfa3702 | run P=front@26+1`: request 26 is accepted into the paused server's backlog, the client times out, the server applies it after the resume, and the retry applies it again. 8,611 runs/hour.
 - **More workers are slower.** The first ledger version did 8,088 runs/hour with 4 workers but only 1,977 with 8, with the Mac swapping (about 20 GB of swap in use).
 
-## Open: a rare divergence in long-lived serve processes under heavy host load
+## Fixed: a rare divergence under heavy host load (a WFI that does not trap)
 
-Under heavy host load, about 1 run in 100 to 150 inside a serve process that had already run other schedules ends with a different full-state fingerprint. This was 8 concurrent serve processes on the 12-core Mac with about 20 GB of swap in use.
+**Symptom (before the fix).** With 8 concurrent serve processes on the 12-core Mac and the Mac swapping (15–20 GB of swap in use), about 1 run in 150 ended with a different full-state fingerprint: 14 of 2,240 runs of `disk=none | run` in five stress batches, plus one batch in which one serve process gave the odd value for every run (its S1 snapshot was taken after the divergence). The verdict, the console and the whole exit trace (exit count, exception class, PC, CPSR at every exit) were identical. The odd runs repeat a few discrete alternatives (`fb04c7dca19c1f42` in every batch here).
 
-**What is measured:**
-- **Rate:**
-  - 3 of 624, 3 of 288 and 2 of 288 runs in such stress tests;
-  - 0 of 216 with 2 processes;
-  - 0 of 284 fresh boots (`hvmx one`) under the same 8-way load;
-  - 0 of 48 serve processes that ran one schedule each.
-- **What differs:** the verdict and the console are identical, and so are the exit traces (exit count, exception class, PC and CPSR at every exit). The fingerprint differs by a few bytes of guest RAM: stale values on kernel stacks, such as `0xce4` vs `0xcec` in the idle task's stack (`init_thread_union`) and `0x190` vs `0x191`. Each odd run repeats one of a few alternative values, so the alternatives are discrete.
-- **Tried, did not remove it:**
-  - software IRQ entry (`HVM_SOFT_IRQ`);
-  - an instruction-cache invalidate after the RAM restore;
-  - a fresh VM rather than just a fresh vCPU per restore;
-  - `mlock` of guest RAM.
+**Where.** With `HVMX_DIAG_CHUNKS` the difference is two words of guest RAM, at RAM offsets `0x3ffd14d8` and `0x3ffd1418`, plus a copy of the first on the idle task's stack (`init_thread_union+0x3c70`, inside an `el1h_64_irq` frame). Against `System.map` these are this CPU's per-cpu `context_tracking.state` (`0x854` vs `0x85c`) and a jiffies-valued field of `tick_cpu_sched` (`0xfe` vs `0xff`). The context-tracking state counts RCU extended-quiescent-state transitions in steps of 4, so `+8` is exactly one extra idle entry and exit.
 
-  These stay in, as defensive measures.
-- **Fixed during this work, and not the cause:** S0's restore overwrote the console text that S1's fingerprint covers. It is now saved with each snapshot. It changed every schedule after a power cut and is fixed.
+**When.** `HVM_TRACE` with the new `HVM_TRACE_WATCH=0x3ffd14d8` (the watched guest word on every exit line) pins it to one exit: in a normal and an odd run from the same serve process the 19,818th exit is the trapped `WFI` in `cpu_do_idle` in both, but the word already reads `0x251` vs `0x259` there. So between the previous exit and that WFI exit, the odd run went once more around the idle loop, through a WFI that did NOT exit.
 
-**Most likely cause, not proven:** host-side events that Hypervisor.framework hides from us, such as host interrupts and preemptions of the vCPU thread. Each one is an exception return into the guest. That clears the exclusive monitor and can end a WFE early, which changes only how many times a guest retry or wait loop ran. That would match the "dead stack residue only" signature.
+**Root cause.** On Arm, `WFI` traps to the hypervisor (HCR_EL2.TWI) only if it would actually enter a low-power state. If a wake-up event is already pending at that instant it completes as a no-op, inside the guest. A host interrupt that Hypervisor.framework is about to take at EL2 is such an event, and host interrupts are frequent when the Mac is heavily loaded. The guest then repeats its idle loop (RCU idle entry/exit, a tick_nohz recomputation) and executes the WFI again at the same PC, which traps as usual. Nothing in the exit stream changes; only those counters do, and the counters are in RAM. This is the same signature as the spin observer's 1-in-300 (`3820c07d53076f1e`, M48 kernel).
 
-**Effect on the explorer:** a failure's reproduction check compares fingerprints, so with many workers a real failure can occasionally be reported as not reproduced. With 4 workers none was, in 300 schedules.
+**Fix.** A guest kernel option, `CONFIG_ARM64_HVM_IDLE_HVC` (`apply-hvcidle.py`, on by default in `build-guest.sh`): `cpu_do_idle()` issues `HVC #0` with `x0 = 0xC6000020` instead of `WFI`. An HVC always exits, so every idle entry is a VM exit, and the VMM handles it exactly like a trapped WFI (`idle_wait()` in `../hvm.c`, also in `../spin/hvm-spin.c`). With a WFI-idle kernel nothing changes in the VMM.
+
+**Proof.**
+- `disk=none | run`, 8 serve processes × 250 runs (2,000 runs, the Mac swapping): **2,000 of 2,000 identical** (`ca13bcd1d77e2b4b`); a further 1,280 runs (8 × 160) under extra load from the spin hunt below: 1,280 of 1,280. With the old kernel the same harness gave 14 odd of 2,240.
+- The table schedules (README "Results") in two serve processes and as `hvmx one`, on the new kernel, all identical, with the same verdicts as before:
+
+  | Schedule | Fingerprint (HVC idle) | Verdict |
+  |---|---|---|
+  | `disk=none \| run` | `ca13bcd1d77e2b4b` | OK, 20 acked |
+  | `disk=cut \| run C=12` | `eb7abc5988d8f407` | OK |
+  | `disk=cut \| run C=12 R=everysec` | `5e49fb9cb93d0cf6` | VIOLATION `k:0` lost |
+  | `disk=lying:10 dseed=5017e0 \| run C=15` | `659c131dd3bb7fab` | VIOLATION `k:0` |
+  | `disk=lying:10 dseed=5017e1 \| run C=15` | `aea81d3abae312a0` | VIOLATION `k:6` |
+  | `disk=ioerr:5 dseed=1234 \| run` | `f9d247598212f199` | ERROR: Redis cannot restart |
+  | `disk=none \| run K=redis@5+2` | `4b5eed88d6135958` | OK |
+  | `disk=none \| run P=redis@8+2` | `97f017cccf4e25a6` | OK |
+
+- In total, with the HVC-idle kernel: **4,880 of 4,880** `disk=none | run` runs identical across three 8-engine batches (2,000, 1,280, 1,600), with the Mac at 15–21 GB of swap.
+- On the earlier WFI-idle kernel (`Image-explore` `0e9ad96a…`) the modified `hvmx` reproduces every fingerprint of the "Results" table exactly, so the VMM change is inert for it. The M48 boot (`../hvm`, `81711ada76a4a236`), the virtio network boot (`ae4b05bf854a44f3`) and the virtio disk boot (`952991033b38776d`) are unchanged too; a lying-disk run gives the same fingerprint as main's `hvm`.
+- Kernels are byte-reproducible: `build-guest.sh` gives `2506bb4d…` (and `0e9ad96a…` with `HVM_IDLE_HVC=0`) in two builds each, `build-idle-m48.sh` gives `Image-idle` `a224d893…` in two builds.
+
+**The spin observer (`../spin/hvm-spin.c`).** Its 1-in-300 divergence under load was the same WFI effect: on the M48 kernel it gave the same odd value as before (`3820c07d53076f1e`, 2 of 400 runs with `HVM_SPIN_MS` 1–20 under the 8-engine load). On `Image-idle` that value is gone, but a second, rarer problem showed up: 3 of 3,368 runs ended differently, each with a different value. The spin log of one shows why: a kick landed at a host-timed PC outside any loop (in `gic_handle_irq`, while the vCPU thread had been descheduled), the observer armed its breakpoint there, the breakpoint was hit once, and when the guest then spun in the user-space loop the observer never re-armed, so the run ran into the SPIN limit instead of resolving the loop. The observer now re-arms whenever a kick lands away from its armed PC (re-arming is invisible to the guest). With both fixes: **2,000 of 2,000** spin boots identical (`37a4599547ab42f2`, all `stop=1`), `HVM_SPIN_MS` 1–20, under the 8-engine load. The M48 kernel's normal spin fingerprint (`3a36c4ee97b37d37`) is unchanged.
+
+**Remaining envelope.** Other guest instructions that complete differently when a host interrupt is pending stay a risk of the same kind: a `WFE` (woken by the exception return of a host interrupt) and an exclusive load/store pair (an exception return clears the exclusive monitor, so `STXR` fails once more and the retry loop runs once more). This kernel uses LSE atomics and has the event stream off, and neither showed up in 3,280 runs, but user programs with LL/SC loops or `WFE` (for example musl's atomics without LSE) could still diverge this way under heavy load. Trapping `WFE` is possible only through a private Hypervisor.framework control (`../spin`); exclusive pairs cannot be trapped.
 
 ## Commands
 
 ```sh
-# build machine, scratch dir: the kernel and the images
-WORK=$PWD sh <repo>/hvx-mac/explore/build-guest.sh                               # out/Image-explore
+# the build machine (Linux with Nix), scratch dir: the kernel and the images (a tmpfs such as /dev/shm is fine)
+WORK=$PWD sh <repo>/hvx-mac/explore/build-guest.sh                               # out/Image-explore (HVC idle; HVM_IDLE_HVC=0: WFI idle)
+WORK=$PWD sh <repo>/hvx-mac/explore/build-idle-m48.sh                            # out/Image-idle (M48 config + HVC idle)
 nix shell nixpkgs#python3 --command python3 <repo>/hvx/onboard/hydo-build \
     <repo>/hvx-mac/explore/examples/redis/hydo.yaml --arch arm64 --build-dir ob  # ob/explore-ob-redis-arm64{.cpio.gz,-disk.img}
 # Mac: copy Image-explore and the two images to hvx-mac/explore/out/, then
@@ -124,4 +138,4 @@ Diagnostics:
 - `HVMX_DIAG=1` writes per-component hashes of each run's end state, with RAM in 1 MiB chunks, to `<outdir>/<tag>.diag`.
 - `HVMX_DIAG_CHUNKS=0x700000,...` adds raw copies of those chunks.
 - `HVMX_CHECK_RESTORE=1` reads the registers back after every restore and reports any that differ.
-- `HVM_TRACE=<file>` logs one line per exit, with a `RUN <tag>` line per schedule.
+- `HVM_TRACE=<file>` logs one line per exit, with a `RUN <tag>` line per schedule; `HVM_TRACE_WATCH=<RAM offset>` adds the guest u64 at that offset to every line.

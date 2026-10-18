@@ -17,12 +17,16 @@ mkdir -p "$OUT"
 cd "$WORK"
 rm -rf linux-6.6.35 && tar xf "$KSRC_TAR"
 cat "$LX/hvm.config" "$LX/hvm-virtio.config" "$HERE/../services/svc.config" "$HERE/hvm-explore.config" > hvm-explore.allconfig
+# HVM_IDLE_HVC=0 rebuilds the earlier kernel (idle by WFI; see apply-hvcidle.py for why the default idles by HVC)
+IDLE=${HVM_IDLE_HVC:-1}
+if [ "$IDLE" = 1 ]; then echo CONFIG_ARM64_HVM_IDLE_HVC=y >> hvm-explore.allconfig; NEED=ARM64_HVM_IDLE_HVC; else NEED=; fi
 nix shell $TOOLS --command sh -c "
   set -e
   python3 '$LX/apply-cntpct.py' linux-6.6.35
+  python3 '$HERE/apply-hvcidle.py' linux-6.6.35
   cd linux-6.6.35
   make ARCH=arm64 CROSS_COMPILE=aarch64-unknown-linux-gnu- allnoconfig KCONFIG_ALLCONFIG='$WORK/hvm-explore.allconfig' >/dev/null
-  for c in BLOCK BLK_DEV_LOOP EXT4_FS VIRTIO_MMIO VIRTIO_BLK MSDOS_PARTITION SYSVIPC FILE_LOCKING ARM_ARCH_TIMER_FORCE_CNTPCT ARM64_USE_LSE_ATOMICS; do grep -q \"^CONFIG_\$c=y\" .config || { echo \"missing CONFIG_\$c\"; exit 1; }; done
+  for c in BLOCK BLK_DEV_LOOP EXT4_FS VIRTIO_MMIO VIRTIO_BLK MSDOS_PARTITION SYSVIPC FILE_LOCKING ARM_ARCH_TIMER_FORCE_CNTPCT ARM64_USE_LSE_ATOMICS $NEED; do grep -q \"^CONFIG_\$c=y\" .config || { echo \"missing CONFIG_\$c\"; exit 1; }; done
   make ARCH=arm64 CROSS_COMPILE=aarch64-unknown-linux-gnu- KBUILD_BUILD_TIMESTAMP=2026-01-01 KBUILD_BUILD_USER=hydo KBUILD_BUILD_HOST=hydo KBUILD_BUILD_VERSION=1 -j16 Image >/dev/null
   cp arch/arm64/boot/Image '$OUT/Image-explore'
 "
