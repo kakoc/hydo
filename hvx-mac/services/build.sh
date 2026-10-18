@@ -1,8 +1,10 @@
 #!/bin/sh
 # Build the service guests for hvm.c on a Linux box with nix (the build machine):
-#   - Image:                the M48 kernel (Linux 6.6.35 + FORCE_CNTPCT) with ../linux/hvm.config + svc.config
+#   - Image-svc:            the M48 kernel (Linux 6.6.35 + FORCE_CNTPCT) with ../linux/hvm.config +
+#                           ../linux/hvm-virtio.config (virtio-mmio disk/net, ext4) + svc.config
 #   - redis.cpio.gz:        busybox + redis 7.2.4 (aarch64 nixpkgs, only the files the loader opens)
 #   - miniflux.cpio.gz:     busybox + PostgreSQL 15.7 + miniflux 2.1.3 + curl (same)
+#   - redis-disk.img, pg-disk.img: empty ext4 data disks (64 / 256 MiB) for /dev/vda
 # All binaries are the aarch64-linux builds from the nixpkgs binary cache (pinned store paths below).
 # Byte-reproducible: pinned inputs, fixed kernel build identity, sorted cpio with fixed mtimes, gzip -n.
 set -e
@@ -18,7 +20,8 @@ PGLIB=/nix/store/xrwji1vd9fgc003ws8yp907k7pmfndfy-postgresql-15.7-lib
 TZDATA=/nix/store/rllwcf5hb2zv1m00k792s8k81nixas77-tzdata-2024a
 MINIFLUX=/nix/store/nzv23fam1q1wqp1a3lav8nh5pp8i67cc-miniflux-2.1.3             # nixpkgs#miniflux
 CURL=/nix/store/vmnmr9qd2liycl18frma90mrzbzsr0lm-curl-8.7.1-bin                 # nixpkgs#curl.bin
-for p in "$KSRC_TAR" "$BUSYBOX" "$REDIS" "$PG" "$PGLIB" "$TZDATA" "$MINIFLUX" "$CURL"; do
+E2FS=/nix/store/24s0phlx9kly7x7qb8gal3mmn51ndmlx-e2fsprogs-1.47.0-bin          # the pinned mke2fs of build-linux.sh
+for p in "$KSRC_TAR" "$BUSYBOX" "$REDIS" "$PG" "$PGLIB" "$TZDATA" "$MINIFLUX" "$CURL" "$E2FS"; do
   [ -e "$p" ] || { echo "missing $p: nix build --max-jobs 0 --system aarch64-linux <attr>" >&2; exit 1; }
 done
 TOOLS="nixpkgs#pkgsCross.aarch64-multiplatform.buildPackages.gcc nixpkgs#gnumake nixpkgs#flex nixpkgs#bison nixpkgs#bc nixpkgs#perl nixpkgs#gcc nixpkgs#python3 nixpkgs#cpio nixpkgs#gzip"
@@ -26,17 +29,17 @@ mkdir -p "$OUT"
 cd "$WORK"
 
 # ---- kernel ----
-if [ ! -f "$OUT/Image" ]; then
+if [ ! -f "$OUT/Image-svc" ]; then
   rm -rf linux-6.6.35 && tar xf "$KSRC_TAR"
-  cat "$LINUXDIR/hvm.config" "$HERE/svc.config" > kernel.config
+  cat "$LINUXDIR/hvm.config" "$LINUXDIR/hvm-virtio.config" "$HERE/svc.config" > kernel.config
   nix shell $TOOLS --command sh -c "
     set -e
     python3 '$LINUXDIR/apply-cntpct.py' linux-6.6.35
     cd linux-6.6.35
     make ARCH=arm64 CROSS_COMPILE=aarch64-unknown-linux-gnu- allnoconfig KCONFIG_ALLCONFIG=$WORK/kernel.config >/dev/null
-    for o in SYSVIPC ADVISE_SYSCALLS FILE_LOCKING ARM_ARCH_TIMER_FORCE_CNTPCT ARM64_USE_LSE_ATOMICS; do grep -q \"^CONFIG_\$o=y\" .config || { echo \"kernel config: CONFIG_\$o not set\" >&2; exit 1; }; done
+    for o in SYSVIPC ADVISE_SYSCALLS FILE_LOCKING ARM_ARCH_TIMER_FORCE_CNTPCT ARM64_USE_LSE_ATOMICS VIRTIO_MMIO VIRTIO_BLK EXT4_FS; do grep -q \"^CONFIG_\$o=y\" .config || { echo \"kernel config: CONFIG_\$o not set\" >&2; exit 1; }; done
     make ARCH=arm64 CROSS_COMPILE=aarch64-unknown-linux-gnu- KBUILD_BUILD_TIMESTAMP=2026-01-01 KBUILD_BUILD_USER=hydo KBUILD_BUILD_HOST=hydo KBUILD_BUILD_VERSION=1 -j16 Image >/dev/null
-    cp arch/arm64/boot/Image '$OUT/Image'
+    cp arch/arm64/boot/Image '$OUT/Image-svc'
   "
 fi
 
@@ -95,5 +98,14 @@ copy_files "$M" $(deps "$MINIFLUX/bin/miniflux")
 for r in $(nix-store -q --references "$MINIFLUX"); do case $r in *glibc*) ;; *) copy_store "$M" "$r";; esac; done
 pack "$M" "$OUT/miniflux.cpio.gz"
 
-cd "$OUT" && sha256sum Image redis.cpio.gz miniflux.cpio.gz | tee SHA256SUMS
+# empty ext4 data disks, every time field fixed (this e2fsprogs honours E2FSPROGS_FAKE_TIME; VIRTIO.md)
+mkdisk() {
+  rm -f "$OUT/$1"
+  E2FSPROGS_FAKE_TIME=1600000000 "$E2FS/bin/mke2fs" -q -F -t ext4 -b 4096 -m 0 -U "6879646f-7376-6300-0000-00000000000$3" \
+    -E "hash_seed=6879646f-7376-6300-0000-00000000010$3,lazy_itable_init=0,lazy_journal_init=0" "$OUT/$1" "$2"
+}
+mkdisk redis-disk.img 64M 1
+mkdisk pg-disk.img 256M 2
+
+cd "$OUT" && sha256sum Image-svc redis.cpio.gz miniflux.cpio.gz redis-disk.img pg-disk.img | tee SHA256SUMS
 du -sh "$R" "$M"

@@ -1,15 +1,22 @@
 #!/bin/sh
-# /init for the miniflux + PostgreSQL guest under hvm: the workload and final invariants of
-# hvx/onboard/examples/miniflux (30 category creates over 127.0.0.1:8080; every acked
-# category stored exactly once; no rejected one applied), data on tmpfs.
+# /init for the miniflux + PostgreSQL guest under hvm: the workload and invariants of
+# hvx/onboard/examples/miniflux (30 category creates over 127.0.0.1:8080; every acked category
+# stored exactly once; no rejected one applied). PostgreSQL's data directory lives on ext4 on
+# /dev/vda. Kernel command line:
+#   hydo_phase=solo     setup + workload + invariants in one boot (default)
+#   hydo_phase=cut      setup (made durable by a CHECKPOINT), workload, stop at "power cut here"
+#   hydo_phase=recover  start PostgreSQL on the disk left by a cut (WAL recovery), check hydo_acked=
+#   hydo_sync=on|off    PostgreSQL synchronous_commit for the workload (default on)
 /bin/busybox --install -s /bin
 export PATH=/bin
 mount -t proc proc /proc
 mount -t sysfs sys /sys
 mount -t devtmpfs dev /dev 2>/dev/null
 mount -t tmpfs tmp /tmp
-mkdir -p /data/pg /tmp/hydo
+mkdir -p /data /tmp/hydo
 ip link set lo up
+PH=solo; SC=on; ACK=
+for w in $(cat /proc/cmdline); do case $w in hydo_phase=*) PH=${w#*=};; hydo_sync=*) SC=${w#*=};; hydo_acked=*) ACK=${w#*=};; esac; done
 export PG=@PG@ CURL=@CURL@/bin/curl
 export DATABASE_URL='postgres://miniflux@127.0.0.1/miniflux?sslmode=disable'
 export LISTEN_ADDR=127.0.0.1:8080 BASE_URL=http://127.0.0.1:8080 RUN_MIGRATIONS=1 CREATE_ADMIN=1
@@ -18,35 +25,49 @@ export LANG=C TZ=UTC
 PSQL() { "$PG/bin/psql" -h 127.0.0.1 -U miniflux -d miniflux -tA -c "$1"; }
 P() { "$PG/bin/psql" -h 127.0.0.1 -U postgres -tA -c "$1"; }
 API() { $CURL -s -u "$ADMIN_USERNAME:$ADMIN_PASSWORD" "$@"; }
-fail() { echo "HYDO-ORACLE: VIOLATION $1"; for f in /tmp/hydo/*.log; do echo "--- $f"; tail -20 $f; done; echo "hydo-svc-marker: done"; exec sh; }
+done_() { echo "hydo-svc-marker: done"; exec sh; }
+fail() { echo "HYDO-ORACLE: VIOLATION $1"; for f in /tmp/hydo/*.log; do echo "--- $f"; tail -20 $f; done; done_; }
 wait_for() { n=0; until eval "$1" >/dev/null 2>&1; do n=$((n + 1)); [ $n -gt $2 ] && fail "$3"; sleep 0.2; done; }
 
-echo "hydo-svc: uptime $(cat /proc/uptime)"
-chown postgres /data/pg
-# initdb is a bash wrapper in nixpkgs (adds glibc-bin for `locale`); with --locale=C the wrapped binary suffices
-su postgres -s /bin/sh -c "$PG/bin/.initdb-wrapped -D /data/pg -U postgres --auth=trust -E UTF8 --locale=C" > /tmp/hydo/initdb.log 2>&1 || fail "initdb failed"
-echo "hydo-svc: initdb done, uptime $(cat /proc/uptime)"
+echo "hydo-svc: phase $PH synchronous_commit $SC, uptime $(cat /proc/uptime)"
+mount -t ext4 /dev/vda /data || fail "the data disk does not mount"
+if [ $PH != recover ]; then
+  mkdir -p /data/pg && chown postgres /data/pg
+  # initdb is a bash wrapper in nixpkgs (adds glibc-bin for `locale`); with --locale=C the wrapped binary suffices
+  su postgres -s /bin/sh -c "$PG/bin/.initdb-wrapped -D /data/pg -U postgres --auth=trust -E UTF8 --locale=C" > /tmp/hydo/initdb.log 2>&1 || fail "initdb failed"
+  echo "hydo-svc: initdb done, uptime $(cat /proc/uptime)"
+fi
 su postgres -s /bin/sh -c "exec $PG/bin/postgres -D /data/pg -c listen_addresses=127.0.0.1 -c unix_socket_directories=/tmp -c shared_buffers=32MB -c max_connections=20 -c dynamic_shared_memory_type=mmap" > /tmp/hydo/postgres.log 2>&1 &
-wait_for '"$PG/bin/pg_isready" -h 127.0.0.1 -U postgres' 600 "postgres never became ready"
+wait_for '"$PG/bin/pg_isready" -h 127.0.0.1 -U postgres' 600 "postgres never became ready (committed data unrecoverable)"
 echo "hydo-svc: postgres ready, uptime $(cat /proc/uptime)"
-P "CREATE ROLE miniflux LOGIN" > /dev/null || fail "create role"
-P "CREATE DATABASE miniflux OWNER miniflux" > /dev/null || fail "create database"
-/bin/miniflux > /tmp/hydo/miniflux.log 2>&1 &
-wait_for '/bin/miniflux -healthcheck http://127.0.0.1:8080/healthcheck' 600 "miniflux never became ready"
-echo "hydo-svc: miniflux ready, uptime $(cat /proc/uptime)"
 
 ACKED=/tmp/hydo/acked FAILED=/tmp/hydo/failed; : > $ACKED; : > $FAILED
-i=0
-while [ $i -lt 30 ]; do
-  code=$(API -o /tmp/hydo/resp.$i -w '%{http_code}' --max-time 3 -H 'Content-Type: application/json' \
-         -d "{\"title\":\"c$i\"}" http://127.0.0.1:8080/v1/categories)
-  case $code in
-    201) echo $i >> $ACKED;;
-    4??) echo $i >> $FAILED;;
-  esac
-  i=$((i + 1))
-done
-echo "hydo-svc: workload done, acked=$(wc -l < $ACKED) failed=$(wc -l < $FAILED), uptime $(cat /proc/uptime)"
+if [ $PH = recover ]; then
+  echo "$ACK" | tr ',' '\n' | grep . > $ACKED
+else
+  P "CREATE ROLE miniflux LOGIN" > /dev/null || fail "create role"
+  P "CREATE DATABASE miniflux OWNER miniflux" > /dev/null || fail "create database"
+  /bin/miniflux > /tmp/hydo/miniflux.log 2>&1 &
+  wait_for '/bin/miniflux -healthcheck http://127.0.0.1:8080/healthcheck' 600 "miniflux never became ready"
+  echo "hydo-svc: miniflux ready, uptime $(cat /proc/uptime)"
+  # the knob, then make the setup (initdb, schema, admin user) durable so only the workload is in the cut window
+  P "ALTER SYSTEM SET synchronous_commit = '$SC'" > /dev/null && P "SELECT pg_reload_conf()" > /dev/null || fail "set synchronous_commit"
+  P "CHECKPOINT" > /dev/null || fail "checkpoint"
+  echo "hydo-svc: setup durable, synchronous_commit=$(P 'SHOW synchronous_commit'), uptime $(cat /proc/uptime)"
+  i=0
+  while [ $i -lt 30 ]; do
+    code=$(API -o /tmp/hydo/resp.$i -w '%{http_code}' --max-time 3 -H 'Content-Type: application/json' \
+           -d "{\"title\":\"c$i\"}" http://127.0.0.1:8080/v1/categories)
+    case $code in
+      201) echo $i >> $ACKED;;
+      4??) echo $i >> $FAILED;;
+    esac
+    i=$((i + 1))
+  done
+  echo "hydo-acked: $(tr '\n' ',' < $ACKED | sed 's/,$//')"
+  echo "hydo-svc: workload done, acked=$(wc -l < $ACKED) failed=$(wc -l < $FAILED), uptime $(cat /proc/uptime)"
+  if [ $PH = cut ]; then echo "hydo-svc: power cut here"; done_; fi
+fi
 for i in $(cat $ACKED); do
   n=$(PSQL "SELECT COUNT(*) FROM categories WHERE title='c$i'")
   [ "$n" = 1 ] || fail "category c$i stored $n times"
@@ -55,10 +76,11 @@ for i in $(cat $FAILED); do
   n=$(PSQL "SELECT COUNT(*) FROM categories WHERE title='c$i'")
   [ "$n" = 0 ] || fail "category c$i was rejected but is stored"
 done
-code=$(API -o /tmp/hydo/cats -w '%{http_code}' --max-time 3 http://127.0.0.1:8080/v1/categories)
-[ "$code" = 200 ] || fail "API list returned $code"
-for i in $(cat $ACKED); do grep -q "\"title\":\"c$i\"" /tmp/hydo/cats || fail "acked c$i missing from the API"; done
-echo "HYDO-ORACLE: OK acked=$(wc -l < $ACKED) exactly once, failed=$(wc -l < $FAILED) none applied, API shows all"
+if [ $PH = solo ]; then
+  code=$(API -o /tmp/hydo/cats -w '%{http_code}' --max-time 3 http://127.0.0.1:8080/v1/categories)
+  [ "$code" = 200 ] || fail "API list returned $code"
+  for i in $(cat $ACKED); do grep -q "\"title\":\"c$i\"" /tmp/hydo/cats || fail "acked c$i missing from the API"; done
+fi
+echo "HYDO-ORACLE: OK acked=$(wc -l < $ACKED) exactly once, failed=$(wc -l < $FAILED) none applied"
 echo "hydo-svc: uptime $(cat /proc/uptime)"
-echo "hydo-svc-marker: done"
-exec sh
+done_
