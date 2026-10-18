@@ -39,5 +39,5 @@ varied per run: **no violation**, so no minimal schedule and nothing to check on
 | inserted, 32 slots | 143 | 4.2 | 842 extra | 1094 |
 
 For comparison the M48 hunt (default period, jitter) had a median 58 workload ticks, 711
-switches, 4.0 s. Faster guest time also shortens the work a fixed-duration workload does, which
+switches, 4.0 s. Faster guest time probably also shortens the work the workload does (committed transactions per run vary widely; not checked), which
 caps how much the switch count grows. Results: `/var/tmp/m49-preempt/sq-hunt` on the box.
