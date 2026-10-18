@@ -1,6 +1,8 @@
 f80c565589f1fecf9ccd49d33cb0717c7a15d5cddf3bb3bec7f2dd2b335b51ac  ./Image-explore
 e0ac633deedb3ea3354ea43b684991e3a2391266bd112ee1406e99e4db25657e  ./busybox
 77791536b5b5aab42f4d509cc93aa67fc4d4681c6815e691dce5798cf2f42747  ./busybox-applets.txt
+ee6b28a65652c7481697849ce01c45535f53609c38262611febe8a3182512a98  ./ledger-spin/spin_count
+cc65598fcaf1284cd887f064d5f5595517cd1ad24ce566c7d205f39a30dcef1f  ./ledger-spin/spin_load
 31691d6d6d3e522f06ff46016c20beaf7de1fa8f7761716c459a6e6dc4266866  ./mke2fs
 a462a674f8a69cbe2b4ac60a6c1a20ba97ad3a94f4c43daa9ec7963ee48c8301  ./redis/nix/store/3z92sygrppbacsj05x9gwhpaxkivrzc8-systemd-255.6/lib/libsystemd.so.0.38.0
 752b96284e1eca711730b439bf667403b9635df3d3d112c0b4b264e3bdcd97bf  ./redis/nix/store/7lf9ba7lb8418ihzzy8gm985rk16bmbk-xz-5.4.7/lib/liblzma.so.5.4.7

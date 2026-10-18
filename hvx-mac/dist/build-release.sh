@@ -36,6 +36,12 @@ if [ ! -f "$A/Image-explore" ]; then
   cp "$HYDO_KERNEL" "$A/Image-explore"
 fi
 fetch "$BUSYBOX" busybox
+# the busy-wait example's two static arm64 programs (hvx-mac/spin/spinvar.c, MODE=1 and MODE=5,
+# built with the cross gcc in its header): $HYDO_SPIN_BIN is a directory holding both
+if [ ! -f "$A/ledger-spin/spin_load" ]; then
+  [ -n "$HYDO_SPIN_BIN" ] || { echo "set HYDO_SPIN_BIN to a directory with spin_load and spin_count (hvx-mac/spin/spinvar.c)" >&2; exit 1; }
+  mkdir -p "$A/ledger-spin" && cp "$HYDO_SPIN_BIN/spin_load" "$HYDO_SPIN_BIN/spin_count" "$A/ledger-spin/"
+fi
 fetch "$MKE2FS" mke2fs
 # the applet set the Linux build of hydo-build --arch arm64 links (the x86 build of busybox's --list)
 [ -f "$A/busybox-applets.txt" ] || ssh "$HOST" "$LISTER --list" > "$A/busybox-applets.txt"
@@ -99,6 +105,12 @@ for d, dirs, files in os.walk(top):
 EOF
 sed 's#{src: /nix/store/#{src: files/nix/store/#' "$REDIS_MANIFEST" \
   | sed 's#^\# Build on the Linux box:.*#\# Build:  hydo build hydo.yaml#' > "$REL/examples/redis/hydo.yaml"
+# the busy-wait example (the ledger with a user-space spin in every request)
+cp -R "$TOP/hvx-mac/explore/examples/ledger-spin" "$REL/examples/ledger-spin"
+mkdir -p "$REL/examples/ledger-spin/bin" && cp "$A/ledger-spin/spin_load" "$A/ledger-spin/spin_count" "$REL/examples/ledger-spin/bin/"
+chmod 755 "$REL/examples/ledger-spin/bin/"*
+sed 's#^\#   hvx/onboard/hydo-build .*#\#   hydo build hydo.yaml#' "$REL/examples/ledger-spin/hydo.yaml" > "$REL/examples/ledger-spin/hydo.yaml.new"
+mv "$REL/examples/ledger-spin/hydo.yaml.new" "$REL/examples/ledger-spin/hydo.yaml"
 cp -R "$TOP/.claude/skills/hydo-onboard" "$REL/skill/"
 cp "$D/install.sh" "$REL/install.sh"; chmod 755 "$REL/install.sh"
 cp "$TOP/QUICKSTART-mac.md" "$REL/QUICKSTART-mac.md"

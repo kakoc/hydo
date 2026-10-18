@@ -75,6 +75,29 @@ ticks were delayed). The fingerprint differs from the untimed run, because the t
 the guest's state, and it is the same on every run of this schedule. `hydo explore --timing`
 adds such timing to half of the generated schedules.
 
+### A program that busy-waits
+
+Some programs wait in a tight loop on a memory value without any system call. A deterministic
+machine cannot interrupt such a loop at a fixed point by itself, so hydo watches for it: it
+proves that the loop repeats forever, then delivers the next timer interrupt at a point chosen
+from the loop's own state, so the result does not depend on when hydo noticed. The second
+example spins in every request (`/bin/spin_load`, and a loop that also counts, `/bin/spin_count`,
+in every tenth one):
+
+```sh
+cp -R ~/.hydo/examples/ledger-spin ~/hydo-spin && cd ~/hydo-spin
+hydo build hydo.yaml
+hydo run "disk=none | run"
+hydo run "disk=none | run P=front@10+2"
+```
+
+The first ends `OK ... acked=30 each stored once`. On the way it prints that a run ended at a
+counter loop and was run again in rewind mode: the counting loop needs the slower mode, which
+hydo switches to on its own. The second pauses the web server for two requests, the client's
+retry stores entry 10 twice, and the invariant catches it (`entry 10 stored twice`). This
+example's server is deliberately not idempotent. Each command gives the same fingerprint every
+time. A busy-wait run takes about ten seconds instead of one.
+
 ## 3. Explore
 
 Let hydo generate schedules, run them, re-run every failure to check it reproduces, and shrink
@@ -135,6 +158,7 @@ Then the same three commands as above: `hydo build hydo.yaml`, `hydo run "disk=n
 
 ## What the Mac version does not do yet
 
-- A program that busy-waits on a memory flag without any system call can stop a run; hydo marks
-  such a run invalid instead of reporting a wrong result.
+- A busy-wait loop is resolved only if it repeats exactly (the same registers and memory each
+  time, or only counters that never feed back). Any other loop that never makes a system call
+  marks its run invalid instead of giving a wrong result.
 - One virtual CPU, and guest RAM up to a few GiB.
