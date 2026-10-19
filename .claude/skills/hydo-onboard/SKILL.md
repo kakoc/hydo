@@ -113,7 +113,10 @@ For each: an `id`, a one-line `msg`, the `cmd` (exit 0 holds, 1 violated, 2 cann
 evaluated now — e.g. the service is down), and whether it is `final` (checked after
 recovery), periodic (`every: <s>`, for properties that could break and heal during the run,
 such as stale reads), or both. Use `type: always_or_unreachable` for periodic checks that may
-not get to run while a service is killed.
+not get to run while a service is killed. A periodic check only runs if the workload lasts
+longer than its period: miniflux's 30 creates take about 0.3 s of guest time, so its
+`every: 2` check ran only in runs where a fault slowed the workload. Make the workload long
+enough (more steps, or a short sleep per step), or rely on `final` checks.
 
 Then tell the user plainly: **the invariants are the one part that needs human judgment;
 please review each one**, and say which you are unsure about and why.
