@@ -40,8 +40,14 @@ item and report what you found.
 - **Services that refuse to run as root** (PostgreSQL, some others). Everything in the guest
   runs as root. Add the user to `/etc/passwd` and `/etc/group` under `root.text`, `chown`
   its data directory in `setup`, and start it with `su <user> -s /bin/sh -c "exec …"` so the
-  service keeps the PID that kills and pauses target. Say that this PID behaviour is
-  unverified until a kill schedule has been run.
+  service keeps the PID that kills and pauses target (busybox `su` execs in place; verified
+  for PostgreSQL 15.6 in `hvx/onboard/examples/miniflux`).
+- **Multi-process servers** (PostgreSQL's backends and WAL writer, forking workers).
+  `hydo-init` sends kills, pauses and the power-cut freeze to the service's whole process
+  tree (since commit `8ef674e`). Before that, only the first PID was signalled: a "paused"
+  PostgreSQL kept answering, and its WAL writer kept flushing after a "power cut", which hid
+  the `synchronous_commit=off` loss. A process that leaves the tree (double fork, `setsid`
+  into a new parent) is still missed; check `ps` in the guest for such services.
 - **Daemonizing and PID files.** Services must stay in the foreground, or kills and pauses
   hit the wrong process.
 - **Containers inside the guest.** Docker, cgroups-based sandboxes and overlay filesystems

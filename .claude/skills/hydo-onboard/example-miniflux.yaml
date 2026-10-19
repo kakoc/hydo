@@ -5,6 +5,8 @@
 # internal/api/api.go (POST /v1/categories), internal/database/migrations.go
 # (categories: unique (user_id, title)).
 # Build the binary first on the build box:  CGO_ENABLED=0 go build -o build/miniflux .
+# Booted and explored end to end (miniflux v2.3.3): hvx/onboard/examples/miniflux has the
+# copy that was built (src: miniflux), its build.sh, and RESULTS.md.
 name: miniflux
 description: miniflux + PostgreSQL; every acknowledged category must be stored exactly once.
 
