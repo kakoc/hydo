@@ -1,0 +1,35 @@
+--- a/main.go
++++ b/main.go
+@@ -273,10 +273,20 @@
+ 	// Every call below runs under ctx, which carries the client's deadline (gRPC propagates
+ 	// it), so nothing here keeps working on an order after the client has given up on it.
+ 	//
+-	// 1. MySQL: upsert -- a retry of an order that is already stored is a no-op.
+-	if _, err := s.db.ExecContext(ctx, "INSERT INTO stack.orders (id, amount) VALUES (?, ?) ON DUPLICATE KEY UPDATE id = id", id, amt); err != nil {
+-		return nil, s.failBefore("mysql", id, fmt.Errorf("mysql: %w", err))
+-	}
++	// BENCH DEFECT d1 (kafka-first): publish first, then record the order in MySQL. A MySQL
++	// failure is reported as "not applied" because the order is not in our database -- but
++	// it is already in Kafka, and the client's retry publishes it a second time.
++	res := s.kp.ProduceSync(ctx, &kgo.Record{
++		Key:   []byte(strconv.FormatInt(id, 10)),
++		Value: []byte(strconv.FormatInt(amt, 10)),
++	})
++	if err := res.FirstErr(); err != nil {
++		return nil, outcomeUnknown("kafka", id, fmt.Errorf("kafka: %w", err))
++	}
++	if _, err := s.db.ExecContext(ctx, "INSERT INTO stack.orders (id, amount, published) VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE published = 1", id, amt); err != nil {
++		return nil, notApplied("mysql", id, fmt.Errorf("mysql: %w", err))
++	}
++	if false {
+ 	// 2. Kafka, exactly once: skip if already published; otherwise, if an earlier attempt's
+ 	// outcome is unknown, look before producing again.
+ 	var published int
+@@ -312,6 +322,7 @@
+ 			s.uncertain[id] = true
+ 			return nil, outcomeUnknown("mysql-publish", id, fmt.Errorf("mysql publish flag: %w", err))
+ 		}
++	}
+ 	}
+ 	// 3. Redis: a cache, so best effort. The order is durable and published; failing it now
+ 	// would tell the client "failed" about an order that has taken effect (the Milestone 38
