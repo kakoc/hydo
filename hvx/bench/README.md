@@ -116,8 +116,8 @@ Verdict.
 - random is fastest on the easy defects (median 4-7 runs) but misses d0 and d4 once each;
   swarm finds every reachable defect in every repetition but is slower (median 19-38 on d0,
   d4, d6). That is the M42 trade-off, now seen across seven defects instead of one.
-- `--new-faults` adds nothing for random (identical first detections: its first detections
-  come from schedules where the new faults do not matter) and speeds swarm up on three defects
+- `--new-faults` adds nothing for random (the same first detections except d2 rep 1, 2 -> 5,
+  where a new fault on run 2 hid the defect) and speeds swarm up on three defects
   (d1 8->2, d3 23->5, d6 19->5) by giving Kafka-stalling schedules more often. A Kafka KILL
   already makes "a produce that fails and lands later", which is why d3, d4 and d6 are found
   without the M46 faults at all.
