@@ -3,8 +3,9 @@
 import difflib, os, sys
 
 here = os.path.dirname(os.path.abspath(__file__))
-orig = open(os.path.join(here, "orig.go")).read()
-out = sys.argv[1]
+# the fixed front door; run as: python3 hvx/bench/mkpatches.py hvx/bench/patches
+orig = open(os.path.join(here, "..", "stack", "main.go")).read()
+out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(here, "patches")
 
 
 def sub(src, old, new, count=1):

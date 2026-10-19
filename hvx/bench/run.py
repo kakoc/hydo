@@ -165,6 +165,11 @@ def run_portfolio(a, defect, image, sig):
                         "--out", dout], check=False, stdout=subprocess.DEVNULL)
         recs = [json.loads(l) for l in open(os.path.join(dout, "runs.jsonl"))] if os.path.exists(os.path.join(dout, "runs.jsonl")) else []
         recs.sort(key=lambda r: r["seed"])
+        repro = {}      # portfolio.py re-runs every failure; the result is in report.json
+        rp = os.path.join(dout, "report.json")
+        if os.path.exists(rp):
+            for f in json.load(open(rp)).get("failures", []):
+                repro[f["schedule"]] = f.get("reproduced")
         res = {"defect": defect, "strategy": a.label, "rep": rep, "budget": a.budget, "image": image,
                "runs_done": len(recs), "wall_s": round(time.time() - t0, 1), "detected_at": None,
                "base_bug_hits": []}
@@ -177,7 +182,7 @@ def run_portfolio(a, defect, image, sig):
                     continue
                 res.update({"detected_at": i + 1, "schedule": rec["schedule"], "verdict": rec["verdict"],
                             "fp": rec.get("fp"), "arm": rec.get("arm"),
-                            "reproduced": rec.get("reproduced"),
+                            "reproduced": repro.get(rec["schedule"], rec.get("reproduced")),
                             "signature_match": bool(re.search(sig, rec["verdict"]))})
                 break
         results.append(res)
