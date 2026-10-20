@@ -4,6 +4,8 @@
 
 ## How to build & run (READ FIRST — non-obvious)
 
+- **hvx (the VT-x module) runs on the bare-metal machine** (Milestone 33 on; regression `hvx/deploy-metal.sh [load] [flagships]`), and on Apple Silicon Macs via `hvx-mac/` (Milestones 48, 51, 53). **The nested-VM (L1) tooling was removed on 2026-10-20**: `hvx/run-l1.sh`, `hvx/deploy-hvx.sh`, `hvx/deploy-resume.sh`, `hvx/cloud-init/`, `hvx/kafka-once.sh` and the `hvx/run-*-demo.sh`/`run-fuzz*`/`run-spread*` runners. The milestone notes below that mention them describe history; restore them from git (`git show 2c04001:hvx/run-l1.sh`) if a nested VM is ever needed again (no bare-metal machine, or testing a host without a usable PMU). The build machine is now used only to build guest images.
+
 - **hydo runs only on Linux (KVM); it will not compile on macOS.** You edit files locally on the Mac at `/Users/user/mine/rust/my_projects/hydo`, then build/run on the remote Linux box.
 - **The build machine:** (NixOS, kernel 6.6.35, Intel VT-x, 31 GB RAM, 24 cores). `/dev/kvm` is world-accessible (unprivileged VMs work). **We have NO root there** (sudo needs a password we don't have). **Nested virtualization is enabled** (`kvm_intel.nested = Y`). `perf_event_paranoid = 1` (the user set it; the PMU fast-path needs it).
 - **Workflow:** `./dev.sh "<remote cmd>"` rsyncs the tree to `~/hydo/` on the build machine and runs the command there (since M151 it reaches the machine through the git-ignored `machines.local.sh`, described by the tracked `machines.sh` at the repository root). Example: `./dev.sh "./build-guests.sh && cargo build --release && ./target/release/hydo verify --guest build/det64.bin --mode long --mem 16"`.
