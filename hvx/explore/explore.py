@@ -333,8 +333,32 @@ def sweep(name):
                     if q:
                         s["Q"] = q
                     out.append(("front@%d~%d%s" % (at, off, " Q=4" if q else ""), s))
+    elif name == "tail":                # every fault kind placed at the end of the workload: it
+        last = range(NORDERS - 3, NORDERS)  # starts at one of the last 3 orders (and mostly runs to the end)
+        for svc in SVCS:
+            for at in last:
+                for down in sorted({1, NORDERS - at}):
+                    out.append(("K=%s@%d+%d" % (svc, at, down), {"disk": "none", "dseed": 0, "K": (svc, at, down)}))
+        for svc in PAUSE_SVCS:
+            for at in last:
+                for n in range(1, NORDERS - at + 1):
+                    out.append(("P=%s@%d+%d" % (svc, at, n), {"disk": "none", "dseed": 0, "P": (svc, at, "+", n)}))
+                for off in (0, 200):
+                    out.append(("P=%s@%d~%d:5000" % (svc, at, off),
+                                {"disk": "none", "dseed": 0, "P": (svc, at, "~", off, 5000)}))
+        for svc in NET_SVCS:
+            for at in last:
+                for d in ("req", "resp"):
+                    for kinds in ([("loss", 100)], [("loss", 50)], [("delay", 1000)]):
+                        out.append(("O=%s@%d-%d:%s:%s" % (svc, at, NORDERS, d, netem_args(kinds)),
+                                    {"disk": "none", "dseed": 0, "O": (svc, at, NORDERS, d, kinds)}))
+                for kinds in NETEM_SEVERITIES:
+                    out.append(("N=%s@%d-%d:%s" % (svc, at, NORDERS, netem_args(kinds)),
+                                {"disk": "none", "dseed": 0, "N": (svc, at, NORDERS, kinds)}))
+        for c in range(NORDERS - 2, NORDERS + 1):
+            out.append(("C=%d" % c, {"disk": "cut", "dseed": 0, "C": c}))
     else:
-        raise SystemExit("unknown sweep %r (kill, cut, net, killcut, pause, clock, oneway, frontkill)" % name)
+        raise SystemExit("unknown sweep %r (kill, cut, net, killcut, pause, clock, oneway, frontkill, tail)" % name)
     return out
 
 
@@ -799,7 +823,7 @@ def main():
                     help="comma list of delayed-ticks-per-1000 densities to pick from")
     ap.add_argument("--strategy", choices=["random", "swarm"], default="random",
                     help="schedule generator for --seeds (Milestone 42)")
-    ap.add_argument("--sweep", help="enumerate a small fault space instead of seeds: kill, cut, net, killcut, pause, clock, oneway, frontkill")
+    ap.add_argument("--sweep", help="enumerate a small fault space instead of seeds: kill, cut, net, killcut, pause, clock, oneway, frontkill, tail")
     ap.add_argument("--branch", metavar="MARKER",
                     help="mid-run branching: for each seed's schedule, snapshot at the first "
                          "console line containing MARKER and run --variants timing variants from there")
