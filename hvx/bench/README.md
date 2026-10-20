@@ -126,3 +126,47 @@ Verdict.
 - The narrow defect d7 is the case for systematic search: the M46 `oneway` sweep heals at order
   15, and no generator places a Kafka stall over the last order often enough. A sweep that ends
   faults at the workload's end would find it (its trigger `P=kafka@28+2` is such a point).
+
+## d7 and exploration time (Milestone 55)
+
+**Tail sweep** (`explore.py --sweep tail`: kill, both pause forms, one-way and two-way network
+faults on every service, starting at one of the last 3 orders, plus cuts at 28-30; 165 points,
+about 9 minutes per image on 3 workers). On the d7 image, 7 points fail with
+`kafka order=29 present 2 times` while the same point passes on the control
+(`explore-nf-disk.img`): `K=kafka@27+3`, `K=kafka@28+2`, `P=kafka@27+3`, `P=kafka@28+2`
+(the README trigger, `e3607a4b79305277`), `P=kafka@29+1`, `O=kafka@29-30:resp:loss,100%`,
+`N=mysql@27-30:loss,60%`. One-way 100% loss on Kafka from order 27 or 28 fails on the control
+too (the M50 base bug), so it does not count. `K=kafka@29+1` fails on both images with
+`kafka topic unreadable`: the oracle reads Kafka before it is back up (a harness artefact).
+All other points pass on both. Every failure reproduced.
+
+**Trigger set** (sweep plus 59 validation schedules, `tail-validate.txt` via `listrun.py`):
+Kafka unavailable from some order until the END of the workload, so the order with an
+uncertain send is the last record in the topic when the client retries.
+- A pause reaching the end triggers from any start (20, 26, 27, 28, 29 measured). The
+  generators draw `P=kafka@27+3`, `@28+2`, `@28+3`.
+- A kill reaching the end triggers only from order 27 or 28; `K=kafka@26+4`, the only one the
+  generators can draw, also fails on the control (base bug), so generated kills never count.
+- Timed pauses (`P=kafka@at~off:dur`, at 25-28, dur 10-30 s): 0 of 36 trigger.
+- Reply loss on Kafka over the last order only: 90% and 100% trigger, 30% and 60% do not.
+  The generators never place one there (`a` is at most order 28).
+- `N=mysql@27-30:loss,60%` exactly; loss 50/55% or a start at 25, 26 or 28 does not.
+
+**Per-run probability** (`d7prob.py`, 10^6 seeds per strategy; pure function of the
+generators): random 1 in 10^6, swarm 0 — without `--new-faults` d7 is practically
+unreachable. With `--new-faults`: random 1 in 1,567, swarm 1 in 1,876 schedules in the set.
+Measured precision of the set: 28 of 40 predicted schedules detect d7 (70%); most misses also
+kill a service earlier in the run. The benchmark also counts a detection only in class
+durable-defaults, which excludes any schedule with a relaxed knob (M/R) even when there is no
+cut for it to matter: then 1 in 1,942 (random+nf) and 1 in 4,149 (swarm+nf) before precision,
+about 1 in 2,800 and 1 in 5,900 after.
+
+**Long budget:** random+nf, rep 1, 1,500 runs (2 h 19 min on 3 workers, ~650 runs/hour): run
+1,420 (seed 2420, `K=kafka@24+3 R=everysec P=kafka@28+3 O=redis@18-27:resp:delay,284ms`) hit
+d7 exactly where predicted (`present 2 times`, control OK), but was not counted because of the
+irrelevant `R=everysec` (class unsafe-knob). swarm+nf, rep 3, 300 runs (34 min): the predicted
+hit at run 207 is one of the 30% that do not trigger (an earlier `K=mysql@4+4`); no detection.
+
+**Verdict:** d7 is a placement blind spot, not just short exploration: plain random/swarm never
+reach it, and with the new faults the expected wait is ~2,800 runs (~4.3 h of box time) for
+random and ~5,900 (~9 h) for swarm. The tail sweep finds it in 9 minutes.

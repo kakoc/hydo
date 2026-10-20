@@ -1,0 +1,41 @@
+# schedules d7prob.trigger() predicts, first 20 per strategy from seed 1 (random+nf, swarm+nf)
+disk=none dseed=209c26f8211bd185 | run N=mysql@10-25:delay,20ms,reorder,12% P=kafka@28+3 T=2:-30
+disk=none dseed=a0b640b4272ced71 | run N=mysql@15-27:duplicate,16% P=kafka@28+2
+disk=none dseed=5cc93b4e99817c50 | run K=kafka@24+3 R=everysec P=kafka@28+3 O=redis@18-27:resp:delay,284ms
+disk=none dseed=2396b799ca498407 | run P=kafka@28+3 T=3:-86400 O=kafka@19-21:resp:loss,37%
+disk=none dseed=eb52a4cc17e7286d | run N=kafka@2-3:loss,53%,corrupt,3% P=kafka@28+3
+disk=none dseed=be59f09e50c3e675 | run N=redis@18-24:duplicate,33% P=kafka@27+3
+disk=none dseed=dcda9ea178bf0535 | run K=mysql@4+1 N=mysql@22-23:loss,36%,delay,20ms,reorder,27% R=everysec P=kafka@27+3
+disk=none dseed=b2ff4c4b83024497 | run R=everysec P=kafka@28+2
+disk=none dseed=dcbf18840c916de1 | run N=mysql@10-24:delay,20ms,reorder,38% P=kafka@27+3
+disk=none dseed=76c7aa7060620da7 | run P=kafka@28+3
+disk=none dseed=35ed88d0caf7afb2 | run K=kafka@0+3 P=kafka@28+2 O=redis@10-16:req:loss,69%
+disk=none dseed=fd0c140fef64ef58 | run K=kafka@0+2 P=kafka@27+3 T=11:300 O=mysql@21-30:req:delay,922ms
+disk=none dseed=b45fa5908d23b8af | run K=mysql@24+1 N=redis@27-30:delay,267ms P=kafka@27+3 T=15:-3600
+disk=none dseed=43747ae03c50d119 | run K=redis@4+4 N=mysql@13-22:corrupt,3% P=kafka@28+2 T=5:3600
+disk=none dseed=fa5ee27623123f1f | run P=kafka@28+3
+disk=none dseed=ce29268b514d62c2 | run P=kafka@27+3
+disk=none dseed=7fb777dd4ace3e4e | run N=redis@21-22:loss,40% P=kafka@27+3 T=3:-30
+disk=none dseed=f5d0c3c18052607e | run M=0 P=kafka@28+2 T=24:86400 O=mysql@11-20:resp:delay,1311ms
+disk=none dseed=3e9407d7ff33f39b | run K=mysql@10+1 N=mysql@17-19:delay,252ms P=kafka@28+2 T=0:-30
+disk=none dseed=ac9ef2205e500658 | run N=kafka@11-26:corrupt,9% P=kafka@28+3
+disk=none dseed=2483f5c9174b5f45 | run R=everysec P=kafka@28+2 O=mysql@8-11:req:loss,86%
+disk=none dseed=4d116aca2b3ab7b | run N=mysql@1-2:duplicate,29% P=kafka@27+3
+disk=none dseed=eaefdcf2ac2035e | run K=mysql@4+4 N=redis@3-12:duplicate,11% P=kafka@27+3
+disk=none dseed=3edcff9f309f3c6c | run K=mysql@22+1 N=mysql@5-13:corrupt,4% M=2 P=kafka@28+2 T=19:-86400
+disk=none dseed=3ebf9698a351446 | run M=0 P=kafka@27+3
+disk=none dseed=654f84e1352048b7 | run K=mysql@9+3 P=kafka@27+3 T=15:-3600
+disk=none dseed=9f14d05efb61244 | run K=kafka@9+1 M=0 P=kafka@27+3
+disk=none dseed=d0d4f1e44ea93ca7 | run K=redis@11+3 P=kafka@27+3 T=9:-2592000 O=redis@17-23:req:delay,917ms
+disk=none dseed=141d00ec100e90c4 | run K=kafka@0+3 R=everysec P=kafka@28+3 T=5:-2592000 O=mysql@4-11:req:delay,1529ms
+disk=none dseed=961ee143dc2ac584 | run N=redis@2-6:duplicate,48% P=kafka@28+2
+disk=none dseed=bbf2bd235ae4c733 | run K=redis@4+3 R=no P=kafka@27+3 T=16:30 O=mysql@17-23:resp:loss,53%
+disk=none dseed=be1fa8199a8414fd | run N=redis@6-9:delay,218ms,loss,16% P=kafka@28+2
+disk=none dseed=4709f8e6c099b3ee | run M=2 P=kafka@28+2 T=26:3600
+disk=none dseed=ec231aca409124e8 | run K=mysql@5+4 N=mysql@4-14:delay,20ms,reorder,29%,duplicate,22% R=no P=kafka@27+3
+disk=none dseed=1a920c3032086084 | run K=redis@15+3 P=kafka@27+3 T=8:31536000 O=redis@14-15:resp:loss,75%
+disk=none dseed=1905311326e8b946 | run K=kafka@14+4 M=2 P=kafka@28+2 O=redis@4-14:req:loss,44%
+disk=none dseed=cc7343ae4b72868e | run R=no P=kafka@27+3 T=22:300
+disk=none dseed=14f3b4fd42343183 | run K=redis@1+1 N=redis@26-29:delay,20ms,reorder,40%,duplicate,48% R=everysec P=kafka@28+2
+disk=none dseed=51e3e40b9e69fc24 | run M=2 P=kafka@28+3
+disk=none dseed=de1b9b17fdd3f4e1 | run K=kafka@9+3 R=everysec P=kafka@28+2
