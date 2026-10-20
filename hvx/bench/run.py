@@ -92,7 +92,9 @@ def make_rec(outdir, sd, text, r):
 
 
 def schedules(strategy, seeds, new_faults):
-    gen = ex.generate_swarm if strategy == "swarm" else ex.generate
+    gen = ex.GENERATORS[strategy]
+    if strategy in ("swarm-pos", "process"):      # M56 generators draw every fault kind themselves
+        return [(sd, ex.render(gen(sd))) for sd in seeds]
     ex.NEW_FAULTS = new_faults
     return [(sd, ex.render(ex.add_new_faults(gen(sd), sd, strategy == "swarm"))) for sd in seeds]
 
@@ -220,9 +222,57 @@ def table(dirs):
     print("| defects found (any rep) | " + " | ".join(str(found[s]) for s in strats) + " |")
 
 
+def rescore(a):
+    """Re-score finished runs (runs-rep*.jsonl of random/swarm, rep*/runs.jsonl of portfolio) under
+    ex.KNOB_RULE. Under the M56 rule only MORE runs are durable-defaults, so a new first detection can
+    only be earlier than the old one: every run up to the old detection (or the whole budget) was
+    executed and is re-classified here. A new candidate is attributed only if it passes on the control
+    image (run on a 1-worker pool, as run.py does). Writes <out>/results.jsonl in the run.py format."""
+    os.makedirs(a.out, exist_ok=True)
+    out = open(os.path.join(a.out, "results.jsonl"), "w")
+    for d in a.rescore:
+        label = os.path.basename(d.rstrip("/"))
+        old = {(r["defect"], r["rep"]): r for r in map(json.loads, open(os.path.join(d, "results.jsonl")))}
+        for (defect, rep), r0 in sorted(old.items()):
+            image, sig = DEFECTS[defect]
+            p = os.path.join(d, defect, "runs-rep%d.jsonl" % rep)
+            recs = [json.loads(l) for l in open(p)] if os.path.exists(p) else []
+            if not recs:            # portfolio
+                q = os.path.join(d, defect, "rep%d" % rep, "runs.jsonl")
+                recs = sorted((json.loads(l) for l in open(q)), key=lambda x: x["seed"]) if os.path.exists(q) else []
+            res = dict(r0, strategy=r0["strategy"] + "/" + a.knob_rule)
+            res.update({"detected_at": None, "rescored_from": r0.get("detected_at")})
+            for i, rec in enumerate(recs):
+                rec["class"] = ex.finding_class(ex.parse(rec["schedule"]))
+                if rec["class"] != "durable-defaults" or ex.verdict_kind(rec["verdict"]) != "violation":
+                    continue
+                if r0.get("detected_at") and rec["schedule"] == r0.get("schedule"):
+                    ok = True                                   # already attributed in M54
+                else:
+                    ctl = Control(a, defect)
+                    ok, cr = ctl.passes(rec["schedule"])
+                    ctl.close()
+                    if not ok:
+                        res["base_bug_hits"] = res.get("base_bug_hits", []) + [
+                            {"run": i + 1, "schedule": rec["schedule"], "control_verdict": cr["verdict"]}]
+                if ok:
+                    res.update({"detected_at": i + 1, "schedule": rec["schedule"], "verdict": rec["verdict"],
+                                "fp": rec.get("fp"), "signature_match": bool(re.search(sig, rec["verdict"]))})
+                    break
+            print(json.dumps(res), flush=True)
+            out.write(json.dumps(res) + "\n")
+            out.flush()
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--strategy", choices=["random", "swarm", "portfolio"])
+    ap.add_argument("--strategy", choices=["random", "swarm", "swarm-pos", "process", "portfolio"])
+    ap.add_argument("--knob-rule", choices=["cut", "any"], default="cut",
+                    help="cut (M56 default): a relaxed knob is unsafe only with a power cut or lying disk; "
+                         "any: the M54 rule")
+    ap.add_argument("--rescore", nargs="*", metavar="DIR",
+                    help="re-score finished strategy dirs under --knob-rule (classes only; schedules unchanged); "
+                         "candidates new to the durable class are checked on the control image")
     ap.add_argument("--new-faults", action="store_true")
     ap.add_argument("--defects", default="all")
     ap.add_argument("--reps", default="1-3")
@@ -231,12 +281,16 @@ def main():
     ap.add_argument("--out")
     ap.add_argument("--table", nargs="*")
     a = ap.parse_args()
+    ex.KNOB_RULE = a.knob_rule
     if a.table is not None:
         table(a.table)
         return
+    if a.rescore is not None:
+        rescore(a)
+        return
     lo, hi = [int(x) for x in a.reps.split("-")] if "-" in a.reps else (int(a.reps), int(a.reps))
     a.reps = list(range(lo, hi + 1))
-    a.label = a.strategy + ("+nf" if a.new_faults else "")
+    a.label = a.strategy + ("+nf" if a.new_faults and a.strategy in ("random", "swarm") else "")
     names = list(DEFECTS) if a.defects == "all" else a.defects.split(",")
     os.makedirs(a.out, exist_ok=True)
     out = open(os.path.join(a.out, "results.jsonl"), "a")

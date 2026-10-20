@@ -26,7 +26,12 @@ Schedule format (see hvx_explore.c / stack-explore.sh):
 Classes of findings:
   durable-defaults  every store configured durably, the disk honest -- the interesting ones
   unsafe-knob       needs a documented-unsafe setting (MySQL trx_commit != 1, Redis
-                    appendfsync != always): expected
+                    appendfsync != always) AND a power cut or a lying disk (the settings only
+                    trade durability across a power loss; default since M56, --knob-rule any
+                    restores the old rule "any relaxed setting"): expected.
+                    Caveat: MySQL trx_commit=0 can also lose ~1 s of commits on a mysqld kill;
+                    such a run is now durable-defaults, and the bench's control check
+                    (hvx/bench/run.py) still rejects it because the control image fails too.
   lying-disk        the disk acknowledged writes it never stored: expected
   io-errors         the disk returned I/O errors (also on reads of program files)
 """
@@ -85,6 +90,8 @@ PAUSE_SVCS = SVCS + ["front"]           # services pause faults (P=) pick from
 KNOBS = [("M", 2), ("M", 0), ("R", "everysec"), ("R", "no")]   # a relaxed-knob draw picks one
 KNOB_TOKENS = ["M", "R"]
 SPACE = None
+KNOB_RULE = "cut"       # --knob-rule: "cut" (M56 default: a relaxed knob is unsafe only with a
+                        # power cut or a lying disk) or "any" (the pre-M56 rule)
 
 
 def generate(seed):
@@ -284,6 +291,116 @@ def generate_swarm(seed):
     return s
 
 
+# ---------------------------------------------------------------- fault position (M56)
+# hvx/explore/RESEARCH-search.md: real bugs need few faults but at the right moment, and our
+# generators place every window uniformly, so the end of the workload is rarely faulted (d7
+# of hvx/bench needs Kafka down until the last order: ~1 in 2,800 random runs). Two generators
+# with their own random streams; the old generators and their strings are unchanged.
+POS_SALT = 0x9051710E9051710E
+PROC_SALT = 0x7E5751A47E5751A4
+POSITIONS = ["early", "middle", "late", "end"]
+POS_CATEGORIES = ["kill", "pause", "net", "oneway", "clock", "cut", "disk", "knob"]
+
+
+def pos_start(r, pos):
+    """A start order for a fault in region pos; "end" starts in the last 4 orders."""
+    lo, hi = {"early": (0, NORDERS // 3 - 1), "middle": (NORDERS // 3, 2 * NORDERS // 3 - 1),
+              "late": (2 * NORDERS // 3, NORDERS - 5), "end": (NORDERS - 4, NORDERS - 1)}[pos]
+    return r.rng(lo, hi)
+
+
+def pos_window(r, pos, maxlen):
+    """(start, end) of a window fault; an "end" window always runs to the last order."""
+    a = pos_start(r, pos)
+    b = NORDERS if pos == "end" else r.rng(a + 1, min(NORDERS, a + maxlen))
+    return a, b
+
+
+def generate_swarm_pos(seed):
+    """--strategy swarm-pos: swarm (per-run category switch, M42) over every fault kind incl.
+    the M46 ones, plus a per-run POSITION per category (early / middle / late / end-reaching)
+    instead of uniform placement. Pure function of the seed."""
+    r = SplitMix(seed ^ POS_SALT)
+    on = [c for c in POS_CATEGORIES if r.below(2)] or [r.pick(POS_CATEGORIES)]
+    pos = {c: r.pick(POSITIONS) for c in POS_CATEGORIES}
+    s = {"disk": "none", "dseed": r.next()}
+    if "kill" in on:
+        at = pos_start(r, pos["kill"])
+        s["K"] = (r.pick(SVCS), at, NORDERS - at if pos["kill"] == "end" else r.rng(1, min(4, NORDERS - at)))
+    if "pause" in on:
+        at = pos_start(r, pos["pause"])
+        if pos["pause"] == "end" or r.below(2):
+            s["P"] = (r.pick(PAUSE_SVCS), at, "+", NORDERS - at if pos["pause"] == "end" else r.rng(1, 3))
+        else:
+            s["P"] = (r.pick(PAUSE_SVCS), at, "~", r.rng(0, 500), r.rng(500, 30000))
+    if "net" in on:
+        a, b = pos_window(r, pos["net"], 15)
+        kinds = []
+        for _ in range(r.rng(1, 2)):
+            k = r.pick(["delay", "loss", "duplicate", "reorder", "corrupt"])
+            if k not in [x[0] for x in kinds]:
+                kinds.append((k, {"delay": r.rng(10, 300), "loss": r.rng(5, 60), "duplicate": r.rng(5, 50),
+                                  "reorder": r.rng(10, 50), "corrupt": r.rng(1, 10)}[k]))
+        s["N"] = (r.pick(NET_SVCS), a, b, kinds)
+    if "oneway" in on and "N" not in s:          # one netem root qdisc at a time
+        a, b = pos_window(r, pos["oneway"], 10)
+        kinds = [("loss", r.rng(30, 100))] if r.below(2) else [("delay", r.rng(100, 3000))]
+        s["O"] = (r.pick(NET_SVCS), a, b, r.pick(["req", "resp"]), kinds)
+    if "clock" in on:
+        s["T"] = (pos_start(r, pos["clock"]), r.pick(CLOCK_DELTAS))
+    if "disk" in on:
+        s["disk"] = r.pick(["ioerr:%d" % r.rng(1, 3), "lying:%d" % r.rng(2, 12)])
+        if s["disk"].startswith("lying"):
+            s["C"] = pos_start(r, pos["disk"]) + 1
+    if "cut" in on and s["disk"] == "none":
+        s["disk"] = "cut"
+        s["C"] = pos_start(r, pos["cut"]) + 1
+    if "knob" in on:
+        k = r.pick(KNOBS)
+        s[k[0]] = k[1]
+    return s
+
+
+def generate_process(seed):
+    """--strategy process: a Jepsen-style fault process -- 2-4 faults of different kinds, one
+    after another over the whole workload in staggered, non-overlapping windows (the last one
+    reaches the end half of the time); the guest heals everything before the oracle runs.
+    The schedule format has one token per kind, so the process is one fault of each kind, not
+    a kind repeating. Disk honest, settings durable, a power cut after the faults 1 time in 5."""
+    r = SplitMix(seed ^ PROC_SALT)
+    n = r.rng(2, 4)
+    order = []
+    while len(order) < n:
+        k = r.pick(["K", "P", "net", "T"])
+        if k not in order:
+            order.append(k)
+    s = {"disk": "none", "dseed": r.next()}
+    w = NORDERS // n
+    for i, k in enumerate(order):
+        lo, hi = i * w, (NORDERS if i == n - 1 else (i + 1) * w)
+        a = r.rng(lo, max(lo, hi - 2))
+        b = NORDERS if i == n - 1 and r.below(2) else r.rng(a + 1, hi)
+        if k == "K":
+            s["K"] = (r.pick(SVCS), a, b - a)
+        elif k == "P":
+            s["P"] = (r.pick(PAUSE_SVCS), a, "+", b - a)
+        elif k == "T":
+            s["T"] = (a, r.pick(CLOCK_DELTAS))
+        elif r.below(2):
+            s["N"] = (r.pick(NET_SVCS), a, b, [("loss", r.rng(20, 100))] if r.below(2) else [("delay", r.rng(100, 1000))])
+        else:
+            s["O"] = (r.pick(NET_SVCS), a, b, r.pick(["req", "resp"]),
+                      [("loss", r.rng(30, 100))] if r.below(2) else [("delay", r.rng(100, 3000))])
+    if r.below(5) == 0:
+        s["disk"] = "cut"
+        s["C"] = NORDERS
+    return s
+
+
+GENERATORS = {"random": generate, "swarm": generate_swarm, "swarm-pos": generate_swarm_pos,
+              "process": generate_process}
+
+
 # ---------------------------------------------------------------- systematic sweeps (Milestone 42)
 # Small fault spaces enumerated exhaustively, every store durable and the disk honest.
 NETEM_SEVERITIES = [[("loss", 20)], [("loss", 40)], [("loss", 60)], [("delay", 100)], [("delay", 1000)]]
@@ -357,8 +474,42 @@ def sweep(name):
                                 {"disk": "none", "dseed": 0, "N": (svc, at, NORDERS, kinds)}))
         for c in range(NORDERS - 2, NORDERS + 1):
             out.append(("C=%d" % c, {"disk": "cut", "dseed": 0, "C": c}))
+    elif name in ("depth1", "depth1-old"):
+        # M56: the complete single-fault space -- every fault kind x service x start order x two
+        # durations (one order, or to the end of the workload), durable settings, honest disk.
+        # depth1-old: only the kinds the pre-M46 guest understands (K, N, C), for d0's image.
+        new = name == "depth1"
+        def durs(at):
+            return sorted({1, NORDERS - at})
+        for svc in SVCS:
+            for at in range(NORDERS):
+                for d in durs(at):
+                    out.append(("K=%s@%d+%d" % (svc, at, d), {"disk": "none", "dseed": 0, "K": (svc, at, d)}))
+        for svc in NET_SVCS:
+            for at in range(NORDERS):
+                for d in durs(at):
+                    out.append(("N=%s@%d-%d:loss,60%%" % (svc, at, at + d),
+                                {"disk": "none", "dseed": 0, "N": (svc, at, at + d, [("loss", 60)])}))
+        for c in range(1, NORDERS + 1):
+            out.append(("C=%d" % c, {"disk": "cut", "dseed": 0, "C": c}))
+        if new:
+            for svc in PAUSE_SVCS:
+                for at in range(NORDERS):
+                    for d in durs(at):
+                        out.append(("P=%s@%d+%d" % (svc, at, d), {"disk": "none", "dseed": 0, "P": (svc, at, "+", d)}))
+                    for dur in (500, 30000):
+                        out.append(("P=%s@%d~0:%d" % (svc, at, dur), {"disk": "none", "dseed": 0, "P": (svc, at, "~", 0, dur)}))
+            for svc in NET_SVCS:
+                for at in range(NORDERS):
+                    for d in durs(at):
+                        for dr in ("req", "resp"):
+                            out.append(("O=%s@%d-%d:%s:loss,100%%" % (svc, at, at + d, dr),
+                                        {"disk": "none", "dseed": 0, "O": (svc, at, at + d, dr, [("loss", 100)])}))
+            for at in range(NORDERS):
+                for delta in (-86400, 365 * 86400):
+                    out.append(("T=%d:%d" % (at, delta), {"disk": "none", "dseed": 0, "T": (at, delta)}))
     else:
-        raise SystemExit("unknown sweep %r (kill, cut, net, killcut, pause, clock, oneway, frontkill, tail)" % name)
+        raise SystemExit("unknown sweep %r (kill, cut, net, killcut, pause, clock, oneway, frontkill, tail, depth1, depth1-old)" % name)
     return out
 
 
@@ -478,7 +629,8 @@ def finding_class(s):
         return "lying-disk"
     if s["disk"].startswith("ioerr"):
         return "io-errors"
-    if SPACE.unsafe_knob(s) if SPACE else (s.get("M", 1) != 1 or s.get("R", "always") != "always"):
+    relaxed = SPACE.unsafe_knob(s) if SPACE else (s.get("M", 1) != 1 or s.get("R", "always") != "always")
+    if relaxed and (KNOB_RULE == "any" or s["disk"] == "cut"):     # a lying disk returned above
         return "unsafe-knob"
     return "durable-defaults"
 
@@ -810,7 +962,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
 
 # ---------------------------------------------------------------- main
 def main():
-    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT
+    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT, KNOB_RULE
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-200")
     ap.add_argument("--workers", type=int, default=3)   # the box has 4 cores: 3 is fastest (M38)
@@ -821,9 +973,14 @@ def main():
     ap.add_argument("--timing", action="store_true", help="add seeded tick-timing jitter to half of the schedules")
     ap.add_argument("--tj-pm", default=",".join(map(str, TJ_PM)),
                     help="comma list of delayed-ticks-per-1000 densities to pick from")
-    ap.add_argument("--strategy", choices=["random", "swarm"], default="random",
-                    help="schedule generator for --seeds (Milestone 42)")
-    ap.add_argument("--sweep", help="enumerate a small fault space instead of seeds: kill, cut, net, killcut, pause, clock, oneway, frontkill, tail")
+    ap.add_argument("--strategy", choices=sorted(GENERATORS), default="random",
+                    help="schedule generator for --seeds: random, swarm (M42), swarm-pos (swarm + a per-run "
+                         "fault position, M56), process (a Jepsen-style staggered fault process, M56)")
+    ap.add_argument("--sweep", help="enumerate a small fault space instead of seeds: kill, cut, net, killcut, pause, "
+                                    "clock, oneway, frontkill, tail, depth1 (every single fault, M56), depth1-old")
+    ap.add_argument("--knob-rule", choices=["cut", "any"], default="cut",
+                    help="finding class of a relaxed durability knob: cut (default, M56) = unsafe-knob only with a "
+                         "power cut or lying disk; any = the pre-M56 rule")
     ap.add_argument("--branch", metavar="MARKER",
                     help="mid-run branching: for each seed's schedule, snapshot at the first "
                          "console line containing MARKER and run --variants timing variants from there")
@@ -855,6 +1012,7 @@ def main():
         sp.apply(globals())
         print("fault space: %s" % json.dumps(SPACE.describe()), file=sys.stderr)
     NEW_FAULTS = a.new_faults
+    KNOB_RULE = a.knob_rule
     CONCURRENCY = a.concurrency
     PREEMPT = a.preempt
     IMAGE = a.image
@@ -882,10 +1040,11 @@ def main():
     else:
         lo, hi = [int(x) for x in a.seeds.split("-")]
         seeds = list(range(lo, hi + 1))
-        gen = generate_swarm if a.strategy == "swarm" else generate
+        gen = GENERATORS[a.strategy]
         dur = durable_only if a.durable_only else (lambda s: s)
-        items = [("seed-%d" % sd, render(add_preempt(add_concurrency(add_timing(add_new_faults(dur(gen(sd)), sd,
-                                                                                   a.strategy == "swarm"), sd), sd), sd)))
+        nf = (lambda x, sd: x) if a.strategy in ("swarm-pos", "process") else \
+            (lambda x, sd: add_new_faults(x, sd, a.strategy == "swarm"))      # M56 generators draw them already
+        items = [("seed-%d" % sd, render(add_preempt(add_concurrency(add_timing(nf(dur(gen(sd)), sd), sd), sd), sd)))
                  for sd in seeds]
     t_sweep = time.time()
     res = pool.run_all(items)
@@ -954,7 +1113,7 @@ def branch_main(a, pool, t0):
     marker; n timing variants then start from a snapshot there. Every failing variant is re-run
     as its standalone schedule (rb=16, tjlo=..) to check it reproduces from S1 too."""
     lo, hi = [int(x) for x in a.seeds.split("-")]
-    gen = generate_swarm if a.strategy == "swarm" else generate
+    gen = GENERATORS[a.strategy]
     pm = TJ_PM[len(TJ_PM) // 2]
     items = []
     for sd in range(lo, hi + 1):
