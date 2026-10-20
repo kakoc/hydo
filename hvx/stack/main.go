@@ -309,7 +309,7 @@ func (s *orderServer) place(ctx context.Context, in *wrapperspb.Int64Value) (*wr
 	// 1. MySQL: upsert -- a retry of an order that is already stored is a no-op. A failure
 	// here is not reported as "not applied": an earlier attempt -- possibly made by an earlier
 	// run of this service, before a crash -- may already have sent the order to Kafka.
-	if _, err := s.db.ExecContext(ctx, "INSERT INTO stack.orders (id, amount) VALUES (?, ?) ON DUPLICATE KEY UPDATE id = id", id, amt); err != nil {
+	if _, err := s.execBG(ctx, "INSERT INTO stack.orders (id, amount) VALUES (?, ?) ON DUPLICATE KEY UPDATE id = id", id, amt); err != nil {
 		return nil, outcomeUnknown("mysql", id, fmt.Errorf("mysql: %w", err))
 	}
 	// 2. Kafka, exactly once. The row's `published` records how far sending got:
@@ -324,18 +324,18 @@ func (s *orderServer) place(ctx context.Context, in *wrapperspb.Int64Value) (*wr
 		have := false
 		if published == 2 {
 			var err error
-			if have, err = kafkaHasKey(ctx, id); err != nil {
+			if have, err = s.kafkaHasKeyBG(ctx, id); err != nil {
 				return nil, outcomeUnknown("kafka-check", id, fmt.Errorf("kafka check: %w", err))
 			}
 			pKafkaRecheck.Check(true, hydoassert.D{"order": id})
 			pDedupHit.Check(have, hydoassert.D{"order": id})
-		} else if _, err := s.db.ExecContext(ctx, "UPDATE stack.orders SET published = 2 WHERE id = ? AND published = 0", id); err != nil {
+		} else if _, err := s.execBG(ctx, "UPDATE stack.orders SET published = 2 WHERE id = ? AND published = 0", id); err != nil {
 			// Nothing has been sent, and no other request for this order is running
 			// (acquire): a definite failure.
 			return nil, notApplied("mysql", id, fmt.Errorf("mysql: %w", err))
 		}
 		if !have {
-			res := s.kp.ProduceSync(ctx, &kgo.Record{
+			res := s.produceBG(ctx, &kgo.Record{
 				Key:   []byte(strconv.FormatInt(id, 10)),
 				Value: []byte(strconv.FormatInt(amt, 10)),
 			})
@@ -343,7 +343,7 @@ func (s *orderServer) place(ctx context.Context, in *wrapperspb.Int64Value) (*wr
 				return nil, outcomeUnknown("kafka", id, fmt.Errorf("kafka: %w", err))
 			}
 		}
-		if _, err := s.db.ExecContext(ctx, "UPDATE stack.orders SET published = 1 WHERE id = ?", id); err != nil {
+		if _, err := s.execBG(ctx, "UPDATE stack.orders SET published = 1 WHERE id = ?", id); err != nil {
 			// Kafka has it; the row stays at 2, so the retry looks in Kafka first.
 			return nil, outcomeUnknown("mysql-publish", id, fmt.Errorf("mysql publish flag: %w", err))
 		}
@@ -351,11 +351,11 @@ func (s *orderServer) place(ctx context.Context, in *wrapperspb.Int64Value) (*wr
 	// 3. Redis: a cache, so best effort. The order is durable and published; failing it now
 	// would tell the client "failed" about an order that has taken effect (the Milestone 38
 	// explorer finding). A skipped write only means a later cache miss.
-	if err := s.redisSet("order:"+strconv.FormatInt(id, 10), strconv.FormatInt(amt, 10)); err != nil {
+	if err := s.redisSetBG("order:"+strconv.FormatInt(id, 10), strconv.FormatInt(amt, 10)); err != nil {
 		pCacheSkipped.Check(true, hydoassert.D{"order": id, "error": err.Error()})
 	}
 	pPlaceAcked.Check(true, nil)
-	return wrapperspb.String("ok"), nil
+	return s.ackBG()
 }
 
 type orderService interface {

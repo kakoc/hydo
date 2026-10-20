@@ -32,7 +32,7 @@ ROOT_OFFSET = 2048 * 512            # hydo-build puts the root filesystem at LBA
 FAULT_KINDS = ["kill", "pause", "network", "oneway", "cut", "clock", "disk"]
 # guest schedule tokens with a fixed meaning (faults; Q/X = concurrency and timed kill, hydo-c7's branch);
 # a manifest knob may not reuse one, or parse() would read the knob as that fault. M/R stay knob names.
-RESERVED_TOKENS = {"K", "P", "N", "O", "C", "T", "Q", "X"}
+RESERVED_TOKENS = {"K", "P", "N", "O", "C", "T", "Q", "X", "B"}
 
 
 def _parser():

@@ -41,11 +41,19 @@ DEFECTS = {
     "d7-skip-last-record":        ("explore-bench-d7-skip-last-record-disk.img", r"present \d+ times|kafka_exactly_once"),
 }
 CONTROL = "explore-nf-disk.img"
+BG_IMAGES = False   # --bg-images (M56): the images rebuilt with BUGGIFY fault points (build-bench-bg.sh)
+
+
+def image_of(defect):
+    return "explore-bench-bg-%s-disk.img" % defect if BG_IMAGES else DEFECTS[defect][0]
 
 
 def control_of(defect):
     """The unpatched image in the same guest: d0 runs the pre-M46 guest, so its control is the
-    fixed front door in that guest (explore-fix-disk.img)."""
+    fixed front door in that guest (explore-fix-disk.img). With --bg-images every defect,
+    d0 included, is built in the current guest, so its control is the BUGGIFY control image."""
+    if BG_IMAGES:
+        return "explore-bench-bg-control-disk.img"
     return "explore-fix-disk.img" if defect.startswith("d0-") else CONTROL
 
 
@@ -91,10 +99,10 @@ def make_rec(outdir, sd, text, r):
     return rec
 
 
-def schedules(strategy, seeds, new_faults):
+def schedules(strategy, seeds, new_faults, buggify=False):
     gen = ex.generate_swarm if strategy == "swarm" else ex.generate
-    ex.NEW_FAULTS = new_faults
-    return [(sd, ex.render(ex.add_new_faults(gen(sd), sd, strategy == "swarm"))) for sd in seeds]
+    ex.NEW_FAULTS, ex.BUGGIFY = new_faults, buggify
+    return [(sd, ex.render(ex.add_buggify(ex.add_new_faults(gen(sd), sd, strategy == "swarm"), sd))) for sd in seeds]
 
 
 def run_seeded(a, defect, image, sig):
@@ -107,7 +115,7 @@ def run_seeded(a, defect, image, sig):
     results = []
     for rep in a.reps:
         seeds = list(range(rep * 1000 + 1, rep * 1000 + a.budget + 1))
-        items = schedules(a.strategy, seeds, a.new_faults)
+        items = schedules(a.strategy, seeds, a.new_faults, a.buggify)
         done, nxt, outstanding, found, base = {}, 0, 0, None, []
         t0 = time.time()
         while True:
@@ -224,6 +232,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--strategy", choices=["random", "swarm", "portfolio"])
     ap.add_argument("--new-faults", action="store_true")
+    ap.add_argument("--buggify", action="store_true", help="M56: every schedule carries a BUGGIFY seed (B=)")
+    ap.add_argument("--bg-images", action="store_true", help="M56: use the explore-bench-bg-* images")
     ap.add_argument("--defects", default="all")
     ap.add_argument("--reps", default="1-3")
     ap.add_argument("--budget", type=int, default=60)
@@ -236,12 +246,14 @@ def main():
         return
     lo, hi = [int(x) for x in a.reps.split("-")] if "-" in a.reps else (int(a.reps), int(a.reps))
     a.reps = list(range(lo, hi + 1))
-    a.label = a.strategy + ("+nf" if a.new_faults else "")
+    global BG_IMAGES
+    BG_IMAGES = a.bg_images
+    a.label = a.strategy + ("+nf" if a.new_faults else "") + ("+bg" if a.buggify else "")
     names = list(DEFECTS) if a.defects == "all" else a.defects.split(",")
     os.makedirs(a.out, exist_ok=True)
     out = open(os.path.join(a.out, "results.jsonl"), "a")
     for name in names:
-        image, sig = DEFECTS[name]
+        image, sig = image_of(name), DEFECTS[name][1]
         rs = run_portfolio(a, name, image, sig) if a.strategy == "portfolio" else run_seeded(a, name, image, sig)
         for r in rs:
             out.write(json.dumps(r) + "\n")
