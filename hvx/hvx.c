@@ -600,7 +600,7 @@ struct hvx_vblk {
 	u32 unsync_n;			/* live entries */
 	/* power cut at the k-th FLUSH (HVX_SET_FLUSHCUT); inert while fc_on == 0 */
 	u32 fc_on, fc_off;
-	u64 fc_target, fc_count;
+	u64 fc_target, fc_count, fc_lo, fc_hi, fc_hung;
 };
 
 /*
@@ -2538,14 +2538,33 @@ static void vblk_unsync_commit(struct hvx_vm *vm)
  * icount + HVX_VBLK_LATENCY -- a deterministic instruction, delivered later via
  * the M8 injection path (see the run-loop). No host-nondeterministic input.
  */
-/* type of the request whose descriptor chain starts at `head` (HVX_SET_FLUSHCUT) */
-static u32 vblk_peek_type(struct hvx_vm *vm, struct hvx_vblk *d, u16 head)
+/* HVX_SET_FLUSHCUT: the request starting at `head` -- its type, and whether it touches
+ * the power domain [fc_lo, fc_hi) (a FLUSH always does) */
+static u32 vblk_peek(struct hvx_vm *vm, struct hvx_vblk *d, u16 head, bool *in_domain)
 {
 	struct virtq_desc desc;
+	u8 hdr[16];
 	u32 type = 0;
+	u64 sector = 0, len = 0;
+	u16 di = head;
+	int n;
 
-	if (hvx_guest_rw(vm, d->desc_gpa + (u64)head * 16, &desc, 16, false))
-		hvx_guest_rw(vm, desc.addr, &type, 4, false);
+	*in_domain = true;
+	if (!hvx_guest_rw(vm, d->desc_gpa + (u64)di * 16, &desc, 16, false) ||
+	    !hvx_guest_rw(vm, desc.addr, hdr, 16, false))
+		return 0;
+	memcpy(&type, &hdr[0], 4);
+	memcpy(&sector, &hdr[8], 8);
+	if (type == VIRTIO_BLK_T_FLUSH || !d->fc_hi)
+		return type;
+	for (n = 0; n < (int)d->qsize + 2 && (desc.flags & VIRTQ_DESC_F_NEXT); n++) {
+		di = desc.next;
+		if (!hvx_guest_rw(vm, d->desc_gpa + (u64)di * 16, &desc, 16, false))
+			break;
+		if (desc.flags & VIRTQ_DESC_F_NEXT)	/* a data descriptor (the last is the status) */
+			len += desc.len;
+	}
+	*in_domain = sector * HVX_VBLK_SECTOR < d->fc_hi && sector * HVX_VBLK_SECTOR + len > d->fc_lo;
 	return type;
 }
 
@@ -2561,8 +2580,6 @@ static void virtio_blk_process(struct hvx_vcpu *vcpu)
 	int n_pend = 0;
 
 	if (!d->disk_pages || !d->qready || d->qsize == 0)
-		return;
-	if (d->fc_off)			/* HVX_SET_FLUSHCUT: the device lost power */
 		return;
 	if (!hvx_guest_rw(vm, d->avail_gpa + 2, &avail_idx, 2, false))
 		return;
@@ -2583,14 +2600,22 @@ static void virtio_blk_process(struct hvx_vcpu *vcpu)
 
 		if (!hvx_guest_rw(vm, d->avail_gpa + 4 + 2 * slot, &head, 2, false))
 			break;
-		if (d->fc_on && vblk_peek_type(vm, d, head) == VIRTIO_BLK_T_FLUSH) {
-			/* HVX_SET_FLUSHCUT: count FLUSHes; at the target, lose power BEFORE this
-			 * flush commits anything -- leave it (and everything after) pending */
-			if (d->fc_target && d->fc_count + 1 == d->fc_target) {
-				d->fc_off = 1;
-				break;
+		if (d->fc_on) {		/* HVX_SET_FLUSHCUT */
+			bool dom;
+			u32 t = vblk_peek(vm, d, head, &dom);
+
+			if (!d->fc_off && t == VIRTIO_BLK_T_FLUSH) {
+				if (d->fc_target && d->fc_count + 1 == d->fc_target)
+					d->fc_off = 1;	/* lose power BEFORE this flush commits */
+				else
+					d->fc_count++;
 			}
-			d->fc_count++;
+			if (d->fc_off && dom) {
+				/* dark: consume the request but never complete or persist it */
+				d->fc_hung++;
+				d->last_avail++;
+				continue;
+			}
 		}
 		di = head;
 		for (guardn = 0; guardn < (int)d->qsize + 2; guardn++) {
@@ -6437,6 +6462,9 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		vm->vblk.fc_target = f.on ? f.target : 0;
 		vm->vblk.fc_count = 0;
 		vm->vblk.fc_off = 0;
+		vm->vblk.fc_lo = f.lo;
+		vm->vblk.fc_hi = f.hi;
+		vm->vblk.fc_hung = 0;
 		ret = 0;
 		break;
 	}
@@ -6449,6 +6477,9 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		f.off = vm->vblk.fc_off;
 		f.target = vm->vblk.fc_target;
 		f.count = vm->vblk.fc_count;
+		f.lo = vm->vblk.fc_lo;
+		f.hi = vm->vblk.fc_hi;
+		f.hung = vm->vblk.fc_hung;
 		ret = copy_to_user(uarg, &f, sizeof(f)) ? -EFAULT : 0;
 		break;
 	}

@@ -576,8 +576,9 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 		struct hvx_flushcut fc;
 		memset(&fc, 0, sizeof(fc));
 		ioctl(b->fd, HVX_GET_FLUSHCUT, &fc);
-		fprintf(stderr, "FLUSHCUT %s target=%llu flushes=%llu off=%u\n", tag,
-			(unsigned long long)fc.target, (unsigned long long)fc.count, fc.off);
+		fprintf(stderr, "FLUSHCUT %s target=%llu flushes=%llu off=%u hung=%llu\n", tag,
+			(unsigned long long)fc.target, (unsigned long long)fc.count, fc.off,
+			(unsigned long long)fc.hung);
 	}
 	if (sc->tj_on) {		/* the jitter covers the workload only, like the disk fault */
 		static struct hvx_tjitter got;
@@ -677,6 +678,8 @@ static void run_sched(struct boot *b, const char *tag, const struct sched *sc, s
 		memset(&fc, 0, sizeof(fc));
 		fc.on = 1;
 		fc.target = sc->cf;
+		fc.lo = E.p2_off;		/* only the data partition goes dark; the */
+		fc.hi = E.p2_off + E.p2_len;	/* read-only root on p1 keeps being served */
 		if (ioctl(b->fd, HVX_SET_FLUSHCUT, &fc) < 0) { snprintf(verdict, sizeof(verdict), "ERROR harness cf= (HVX_SET_FLUSHCUT)"); goto fail; }
 	}
 	if (sc->pp || sc->pptsc) {	/* before the jitter: its delays are checked against the period */
