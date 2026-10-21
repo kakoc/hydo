@@ -257,6 +257,19 @@ static int run_until_any(struct boot *b, const char *const *mk, int n, size_t fr
 			return -1;
 		}
 		console_drain(b);
+		if (getenv("HVX_EXPLORE_RETLOG")) {	/* diagnostic: where each run call returned */
+			struct hvx_pmu pm;
+			struct hvx_tsc ts;
+			memset(&pm, 0, sizeof(pm));
+			memset(&ts, 0, sizeof(ts));
+			ioctl(b->fd, HVX_GET_PMU, &pm);
+			ioctl(b->fd, HVX_GET_TSC, &ts);
+			fprintf(stderr, "RET reason=%u ulen=%zu total=%llu ticks=%llu over=%llu land=%016llx steps=%llu hops=%llu tsc=%llu rdtsc=%llu\n",
+				ex.reason, b->ulen, (unsigned long long)pm.total, (unsigned long long)pm.ticks,
+				(unsigned long long)pm.overshoots, (unsigned long long)pm.land_hash,
+				(unsigned long long)pm.steps, (unsigned long long)pm.hops,
+				(unsigned long long)ts.tsc, (unsigned long long)ts.count);
+		}
 		for (i = 0; i < n; i++)
 			if (b->ulen > from && mem_find(b->ubuf + from, b->ulen - from, mk[i]) >= 0)
 				return i;
@@ -541,6 +554,46 @@ static int parse_sched(const char *s, struct sched *sc)
 	return 0;
 }
 
+/* Diagnostic (HVX_EXPLORE_DUMP=<dir>): at each fingerprint point print the parts of the
+ * fingerprint on stderr ("SUBFP <tag> <phase> con= snap= ram= disk=") and write the console,
+ * the snapshot struct, all guest RAM and the data disk to <dir>/<tag>.<phase>.{con,snap,ram,disk}
+ * (HVX_EXPLORE_DUMP_HASHONLY=1: the hashes only). Reads only; the guest does not run here. */
+static void dump_write(const char *dir, const char *tag, const char *phase, const char *ext,
+		       const void *p, size_t n)
+{
+	char path[600];
+	FILE *f;
+	snprintf(path, sizeof(path), "%s/%s.%s.%s", dir, tag, phase, ext);
+	if (!(f = fopen(path, "w"))) { perror(path); return; }
+	if (n && fwrite(p, 1, n, f) != n) perror(path);
+	fclose(f);
+}
+
+static void dump_state(struct boot *b, const char *tag, const char *phase)
+{
+	const char *dir = getenv("HVX_EXPLORE_DUMP");
+	struct hvx_snapshot *s;
+	uint64_t h0 = 0xcbf29ce484222325ULL;
+	if (!dir || b->fd < 0) return;
+	s = calloc(1, sizeof(*s));
+	if (!s) return;
+	if (ioctl(b->fd, HVX_GET_SNAPSHOT, s) < 0) { perror("HVX_GET_SNAPSHOT"); free(s); return; }
+	fprintf(stderr, "SUBFP %s %s ulen=%zu con=%016llx snap=%016llx ram=%016llx disk=%016llx\n", tag, phase,
+		b->ulen,
+		(unsigned long long)fnv(h0, b->ubuf, b->ulen),
+		(unsigned long long)fnv_snapshot(h0, s),
+		(unsigned long long)fnv(h0, b->mem, b->mem_size),
+		(unsigned long long)fnv(h0, b->disk_mm + b->p2_off, b->p2_len));
+	fflush(stderr);
+	if (!getenv("HVX_EXPLORE_DUMP_HASHONLY")) {
+		dump_write(dir, tag, phase, "con", b->ubuf, b->ulen);
+		dump_write(dir, tag, phase, "snap", s, sizeof(*s));
+		dump_write(dir, tag, phase, "ram", b->mem, b->mem_size);
+		dump_write(dir, tag, phase, "disk", b->disk_mm + b->p2_off, b->p2_len);
+	}
+	free(s);
+}
+
 /* Run one schedule in VM b, which is positioned at S1 (restored or reached by booting).
  * Prints the RESULT line. Consumes b (tears it down). */
 /* RESULT line for a schedule that failed before its workload started; consumes b. */
@@ -572,6 +625,7 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 	r = run_until_any(b, wk, 2, from);
 	if (r < 0) { snprintf(verdict, sizeof(verdict), r == -2 ? "TIMEOUT workload" : "ERROR vm workload"); goto out; }
 	wfp = fingerprint(b);
+	dump_state(b, tag, "workload");
 	if (sc->cf_on) {		/* on stderr, so the RESULT line keeps its format */
 		struct hvx_flushcut fc;
 		memset(&fc, 0, sizeof(fc));
@@ -618,6 +672,7 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 		r = run_until_any(b, fin, 1, f2);
 		if (r < 0) { snprintf(verdict, sizeof(verdict), r == -2 ? "TIMEOUT check" : "ERROR vm check"); goto out_save; }
 		ffp = fingerprint(b);
+		dump_state(b, tag, "check");
 		last_verdict(b, f2, verdict, sizeof(verdict));
 		save_console(b, f2, tag, "");
 		pt_collect(b, tag);
@@ -647,6 +702,7 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 		r = run_until_any(b, fin, 1, from);
 		if (r < 0) { snprintf(verdict, sizeof(verdict), r == -2 ? "TIMEOUT recovery" : "ERROR vm recovery"); goto out_save; }
 		ffp = fingerprint(b);
+		dump_state(b, tag, "recovery");
 		last_verdict(b, from, verdict, sizeof(verdict));
 		save_console(b, from, tag, ".recovery");
 		goto out_done;
