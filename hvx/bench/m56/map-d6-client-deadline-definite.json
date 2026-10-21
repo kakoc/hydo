@@ -1,0 +1,1109 @@
+{
+ "triggers": [
+  [
+   "K=kafka@1+1",
+   "HYDO-ORACLE: VIOLATION order=1 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@2+1",
+   "HYDO-ORACLE: VIOLATION order=2 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@3+1",
+   "HYDO-ORACLE: VIOLATION order=3 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@4+1",
+   "HYDO-ORACLE: VIOLATION order=4 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@5+1",
+   "HYDO-ORACLE: VIOLATION order=5 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@6+1",
+   "HYDO-ORACLE: VIOLATION order=6 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@7+1",
+   "HYDO-ORACLE: VIOLATION order=7 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@8+1",
+   "HYDO-ORACLE: VIOLATION order=8 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@9+1",
+   "HYDO-ORACLE: VIOLATION order=9 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@10+1",
+   "HYDO-ORACLE: VIOLATION order=10 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@11+1",
+   "HYDO-ORACLE: VIOLATION order=11 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@12+1",
+   "HYDO-ORACLE: VIOLATION order=12 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@13+1",
+   "HYDO-ORACLE: VIOLATION order=13 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@14+1",
+   "HYDO-ORACLE: VIOLATION order=14 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@15+1",
+   "HYDO-ORACLE: VIOLATION order=15 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@16+1",
+   "HYDO-ORACLE: VIOLATION order=16 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@17+1",
+   "HYDO-ORACLE: VIOLATION order=17 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@18+1",
+   "HYDO-ORACLE: VIOLATION order=18 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@19+1",
+   "HYDO-ORACLE: VIOLATION order=19 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@19+11",
+   "HYDO-ORACLE: VIOLATION order=19 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@20+1",
+   "HYDO-ORACLE: VIOLATION order=20 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@21+1",
+   "HYDO-ORACLE: VIOLATION order=21 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@21+9",
+   "HYDO-ORACLE: VIOLATION order=21 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@22+1",
+   "HYDO-ORACLE: VIOLATION order=22 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@23+1",
+   "HYDO-ORACLE: VIOLATION order=23 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@24+1",
+   "HYDO-ORACLE: VIOLATION order=24 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@25+1",
+   "HYDO-ORACLE: VIOLATION order=25 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@26+1",
+   "HYDO-ORACLE: VIOLATION order=26 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@27+1",
+   "HYDO-ORACLE: VIOLATION order=27 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@27+3",
+   "HYDO-ORACLE: VIOLATION order=27 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@28+1",
+   "HYDO-ORACLE: VIOLATION order=28 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "K=kafka@28+2",
+   "HYDO-ORACLE: VIOLATION order=28 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "N=mysql@1-30:loss,60%",
+   "HYDO-ORACLE: VIOLATION order=14 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "N=mysql@7-30:loss,60%",
+   "HYDO-ORACLE: VIOLATION order=20 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "N=mysql@8-30:loss,60%",
+   "HYDO-ORACLE: VIOLATION order=21 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "N=mysql@13-30:loss,60%",
+   "HYDO-ORACLE: VIOLATION order=15 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "N=mysql@14-30:loss,60%",
+   "HYDO-ORACLE: VIOLATION order=16 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "N=mysql@16-30:loss,60%",
+   "HYDO-ORACLE: VIOLATION order=27 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "N=mysql@21-30:loss,60%",
+   "HYDO-ORACLE: VIOLATION order=26 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "N=mysql@26-30:loss,60%",
+   "HYDO-ORACLE: VIOLATION order=28 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "N=kafka@1-30:loss,60%",
+   "HYDO-ORACLE: VIOLATION order=9 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "N=kafka@3-30:loss,60%",
+   "HYDO-ORACLE: VIOLATION order=11 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "N=kafka@4-30:loss,60%",
+   "HYDO-ORACLE: VIOLATION order=12 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "N=kafka@5-30:loss,60%",
+   "HYDO-ORACLE: VIOLATION order=26 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "N=kafka@7-30:loss,60%",
+   "HYDO-ORACLE: VIOLATION order=23 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "N=kafka@8-30:loss,60%",
+   "HYDO-ORACLE: VIOLATION order=24 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "N=kafka@12-30:loss,60%",
+   "HYDO-ORACLE: VIOLATION order=28 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "N=kafka@15-30:loss,60%",
+   "HYDO-ORACLE: VIOLATION order=19 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=mysql@25~0:30000",
+   "HYDO-ORACLE: VIOLATION order=25 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@1+1",
+   "HYDO-ORACLE: VIOLATION order=1 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@1~0:30000",
+   "HYDO-ORACLE: VIOLATION order=1 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@2+1",
+   "HYDO-ORACLE: VIOLATION order=2 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@2~0:30000",
+   "HYDO-ORACLE: VIOLATION order=2 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@3+1",
+   "HYDO-ORACLE: VIOLATION order=3 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@3~0:30000",
+   "HYDO-ORACLE: VIOLATION order=3 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@4+1",
+   "HYDO-ORACLE: VIOLATION order=4 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@4~0:30000",
+   "HYDO-ORACLE: VIOLATION order=4 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@5+1",
+   "HYDO-ORACLE: VIOLATION order=5 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@5~0:30000",
+   "HYDO-ORACLE: VIOLATION order=5 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@6+1",
+   "HYDO-ORACLE: VIOLATION order=6 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@6~0:30000",
+   "HYDO-ORACLE: VIOLATION order=6 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@7+1",
+   "HYDO-ORACLE: VIOLATION order=7 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@7~0:30000",
+   "HYDO-ORACLE: VIOLATION order=7 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@8+1",
+   "HYDO-ORACLE: VIOLATION order=8 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@8~0:30000",
+   "HYDO-ORACLE: VIOLATION order=8 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@9+1",
+   "HYDO-ORACLE: VIOLATION order=9 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@9~0:30000",
+   "HYDO-ORACLE: VIOLATION order=9 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@10+1",
+   "HYDO-ORACLE: VIOLATION order=10 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@10~0:30000",
+   "HYDO-ORACLE: VIOLATION order=10 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@11+1",
+   "HYDO-ORACLE: VIOLATION order=11 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@11+19",
+   "HYDO-ORACLE: VIOLATION order=11 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@11~0:30000",
+   "HYDO-ORACLE: VIOLATION order=11 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@12+1",
+   "HYDO-ORACLE: VIOLATION order=12 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@12+18",
+   "HYDO-ORACLE: VIOLATION order=12 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@12~0:30000",
+   "HYDO-ORACLE: VIOLATION order=12 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@13+1",
+   "HYDO-ORACLE: VIOLATION order=13 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@13+17",
+   "HYDO-ORACLE: VIOLATION order=13 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@13~0:30000",
+   "HYDO-ORACLE: VIOLATION order=13 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@14+1",
+   "HYDO-ORACLE: VIOLATION order=14 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@14+16",
+   "HYDO-ORACLE: VIOLATION order=14 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@14~0:30000",
+   "HYDO-ORACLE: VIOLATION order=14 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@15+1",
+   "HYDO-ORACLE: VIOLATION order=15 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@15+15",
+   "HYDO-ORACLE: VIOLATION order=15 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@15~0:30000",
+   "HYDO-ORACLE: VIOLATION order=15 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@16+1",
+   "HYDO-ORACLE: VIOLATION order=16 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@16+14",
+   "HYDO-ORACLE: VIOLATION order=16 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@16~0:30000",
+   "HYDO-ORACLE: VIOLATION order=16 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@17+1",
+   "HYDO-ORACLE: VIOLATION order=17 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@17+13",
+   "HYDO-ORACLE: VIOLATION order=17 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@17~0:30000",
+   "HYDO-ORACLE: VIOLATION order=17 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@18+1",
+   "HYDO-ORACLE: VIOLATION order=18 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@18+12",
+   "HYDO-ORACLE: VIOLATION order=18 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@18~0:30000",
+   "HYDO-ORACLE: VIOLATION order=18 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@19+1",
+   "HYDO-ORACLE: VIOLATION order=19 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@19+11",
+   "HYDO-ORACLE: VIOLATION order=19 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@19~0:30000",
+   "HYDO-ORACLE: VIOLATION order=19 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@20+1",
+   "HYDO-ORACLE: VIOLATION order=20 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@20+10",
+   "HYDO-ORACLE: VIOLATION order=20 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@20~0:30000",
+   "HYDO-ORACLE: VIOLATION order=20 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@21+1",
+   "HYDO-ORACLE: VIOLATION order=21 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@21+9",
+   "HYDO-ORACLE: VIOLATION order=21 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@21~0:30000",
+   "HYDO-ORACLE: VIOLATION order=21 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@22+1",
+   "HYDO-ORACLE: VIOLATION order=22 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@22+8",
+   "HYDO-ORACLE: VIOLATION order=22 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@22~0:30000",
+   "HYDO-ORACLE: VIOLATION order=22 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@23+1",
+   "HYDO-ORACLE: VIOLATION order=23 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@23+7",
+   "HYDO-ORACLE: VIOLATION order=23 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@23~0:30000",
+   "HYDO-ORACLE: VIOLATION order=23 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@24+1",
+   "HYDO-ORACLE: VIOLATION order=24 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@24+6",
+   "HYDO-ORACLE: VIOLATION order=24 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@24~0:30000",
+   "HYDO-ORACLE: VIOLATION order=24 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@25+1",
+   "HYDO-ORACLE: VIOLATION order=25 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@25+5",
+   "HYDO-ORACLE: VIOLATION order=25 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@25~0:30000",
+   "HYDO-ORACLE: VIOLATION order=25 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@26+1",
+   "HYDO-ORACLE: VIOLATION order=26 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@26+4",
+   "HYDO-ORACLE: VIOLATION order=26 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@26~0:30000",
+   "HYDO-ORACLE: VIOLATION order=26 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@27+1",
+   "HYDO-ORACLE: VIOLATION order=27 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@27+3",
+   "HYDO-ORACLE: VIOLATION order=27 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@27~0:30000",
+   "HYDO-ORACLE: VIOLATION order=27 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@28+1",
+   "HYDO-ORACLE: VIOLATION order=28 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@28+2",
+   "HYDO-ORACLE: VIOLATION order=28 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@28~0:30000",
+   "HYDO-ORACLE: VIOLATION order=28 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@29+1",
+   "HYDO-ORACLE: VIOLATION order=29 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=kafka@29~0:30000",
+   "HYDO-ORACLE: VIOLATION order=29 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=front@10~0:30000",
+   "HYDO-ORACLE: VIOLATION order=10 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "P=front@21~0:30000",
+   "HYDO-ORACLE: VIOLATION order=21 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@1-2:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=1 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@1-2:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=1 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@2-3:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=2 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@2-3:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=2 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@3-4:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=3 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@3-4:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=3 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@4-5:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=4 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@4-5:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=4 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@5-6:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=5 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@5-6:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=5 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@6-7:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=6 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@6-7:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=6 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@6-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=6 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@6-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=6 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@7-8:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=7 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@7-8:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=7 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@8-9:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=8 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@8-9:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=8 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@9-10:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=9 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@9-10:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=9 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@10-11:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=10 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@10-11:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=10 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@11-12:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=11 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@11-12:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=11 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@12-13:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=12 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@12-13:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=12 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@13-14:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=13 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@13-14:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=13 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@14-15:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=14 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@14-15:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=14 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@15-16:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=15 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@15-16:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=15 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@16-17:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=16 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@16-17:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=16 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@17-18:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=17 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@17-18:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=17 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@18-19:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=18 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@18-19:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=18 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@19-20:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=19 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@19-20:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=19 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@20-21:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=20 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@20-21:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=20 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@21-22:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=21 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@21-22:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=21 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@22-23:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=22 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@22-23:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=22 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@23-24:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=23 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@23-24:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=23 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@24-25:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=24 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@24-25:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=24 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@25-26:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=25 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@25-26:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=25 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@26-27:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=26 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@26-27:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=26 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@27-28:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=27 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@27-28:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=27 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@28-29:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=28 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@28-29:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=28 is in kafka (1 times) but the client was told it failed"
+  ],
+  [
+   "O=kafka@29-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION order=29 is in kafka (1 times) but the client was told it failed"
+  ]
+ ],
+ "both": [
+  [
+   "K=kafka@1+29",
+   "HYDO-ORACLE: VIOLATION kafka order=1 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@2+28",
+   "HYDO-ORACLE: VIOLATION kafka order=2 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@3+27",
+   "HYDO-ORACLE: VIOLATION kafka order=3 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@5+25",
+   "HYDO-ORACLE: VIOLATION kafka order=5 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@6+24",
+   "HYDO-ORACLE: VIOLATION kafka order=6 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@7+23",
+   "HYDO-ORACLE: VIOLATION kafka order=7 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@8+22",
+   "HYDO-ORACLE: VIOLATION kafka order=8 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@9+21",
+   "HYDO-ORACLE: VIOLATION kafka order=9 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@13+17",
+   "HYDO-ORACLE: VIOLATION kafka order=13 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@14+16",
+   "HYDO-ORACLE: VIOLATION kafka order=14 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@15+15",
+   "HYDO-ORACLE: VIOLATION kafka order=15 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@16+14",
+   "HYDO-ORACLE: VIOLATION kafka order=16 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@17+13",
+   "HYDO-ORACLE: VIOLATION kafka order=17 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@22+8",
+   "HYDO-ORACLE: VIOLATION kafka order=22 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@23+7",
+   "HYDO-ORACLE: VIOLATION kafka order=23 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@24+6",
+   "HYDO-ORACLE: VIOLATION kafka order=24 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@25+5",
+   "HYDO-ORACLE: VIOLATION kafka order=25 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@26+4",
+   "HYDO-ORACLE: VIOLATION kafka order=26 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@29+1",
+   "HYDO-ORACLE: VIOLATION kafka topic unreadable (failed to dial: failed to open connection to 127.0.0.1:9092: dial tcp 127.0.0.1:9092: connect: connection refused)"
+  ],
+  [
+   "P=kafka@1+29",
+   "HYDO-ORACLE: VIOLATION kafka order=3 present 2 times (must be exactly once)"
+  ],
+  [
+   "P=kafka@2+28",
+   "HYDO-ORACLE: VIOLATION kafka order=4 present 2 times (must be exactly once)"
+  ],
+  [
+   "P=kafka@3+27",
+   "HYDO-ORACLE: VIOLATION kafka order=5 present 2 times (must be exactly once)"
+  ],
+  [
+   "P=kafka@4+26",
+   "HYDO-ORACLE: VIOLATION kafka order=6 present 2 times (must be exactly once)"
+  ],
+  [
+   "P=kafka@5+25",
+   "HYDO-ORACLE: VIOLATION kafka order=7 present 2 times (must be exactly once)"
+  ],
+  [
+   "P=kafka@6+24",
+   "HYDO-ORACLE: VIOLATION kafka order=8 present 2 times (must be exactly once)"
+  ],
+  [
+   "P=kafka@7+23",
+   "HYDO-ORACLE: VIOLATION kafka order=9 present 2 times (must be exactly once)"
+  ],
+  [
+   "P=kafka@8+22",
+   "HYDO-ORACLE: VIOLATION kafka order=10 present 2 times (must be exactly once)"
+  ],
+  [
+   "P=kafka@9+21",
+   "HYDO-ORACLE: VIOLATION kafka order=11 present 2 times (must be exactly once)"
+  ],
+  [
+   "P=kafka@10+20",
+   "HYDO-ORACLE: VIOLATION kafka order=11 expected=100011 got=MISSING (mysql has it: true)"
+  ],
+  [
+   "O=kafka@1-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=1 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@1-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=2 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@2-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=2 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@2-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=3 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@3-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=3 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@3-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=4 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@4-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=4 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@4-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=5 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@5-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=5 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@5-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=6 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@7-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=7 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@7-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=8 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@8-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=8 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@8-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=9 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@9-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=9 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@9-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=10 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@10-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=10 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@10-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=11 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@11-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=11 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@11-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=12 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@12-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=12 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@12-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=13 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@13-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=13 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@13-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=14 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@14-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=14 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@14-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=15 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@15-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=15 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@15-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=16 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@16-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=16 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@16-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=17 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@17-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=17 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@17-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=18 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@18-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=18 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@18-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=19 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@19-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=19 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@19-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=20 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@20-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=20 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@20-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=21 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@21-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=21 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@21-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=22 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@22-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=22 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@22-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=23 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@23-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=24 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@24-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=24 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@24-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=25 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@25-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=25 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@25-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=26 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@26-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=26 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@26-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=27 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@27-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=27 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@27-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=28 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@28-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=28 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@28-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=29 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@29-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=29 present 2 times (must be exactly once)"
+  ]
+ ],
+ "control_only": [
+  [
+   "K=kafka@4+26",
+   "HYDO-ORACLE: VIOLATION kafka order=4 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@10+20",
+   "HYDO-ORACLE: VIOLATION kafka order=10 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@12+18",
+   "HYDO-ORACLE: VIOLATION kafka order=12 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@18+12",
+   "HYDO-ORACLE: VIOLATION kafka order=18 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@20+10",
+   "HYDO-ORACLE: VIOLATION kafka order=20 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@23-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=23 present 2 times (must be exactly once)"
+  ]
+ ],
+ "nonrepro": []
+}
