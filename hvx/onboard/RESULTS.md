@@ -59,3 +59,9 @@ plain `explore-ob-redis` image built with the new `hydo-build` is byte-identical
 `hydo_assert_report` over the ten consoles: `redis.pending_resolved` 8 ok / 2 fail,
 `FAIL (deadline missed)`, slowest in-time episode 1.04 s,
 `liveness: 1 eventually properties, 1 missed a deadline`.
+
+`explore.py --image explore-ob-redis-live-disk.img --seeds 1-12 --strategy swarm --workers 1`
+(`/var/tmp/m59-live/explore-swarm`): 6 failures, all reproduced, all in the expected classes
+(lying disk, power cut with `R=no`/`everysec`, I/O errors); no liveness miss. The report's new
+Liveness table: `redis.pending_resolved` held in time in 9 schedules (slowest 1.03 s), missed 0;
+the other 3 ended before the final checks (unmountable disk, unrecoverable AOF, failed restart).
