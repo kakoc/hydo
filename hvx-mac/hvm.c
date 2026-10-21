@@ -244,6 +244,55 @@ static uint64_t timer_due(void)
 	if (!TJ.on) return M.cntp_cval;
 	return M.cntp_cval + tj_delay(M.cntp_cval / TJ_PERIOD) * STEP;
 }
+/*
+ * PCT-style forced preemption points (after Burckhardt et al., "A randomized scheduler with
+ * probabilistic guarantees of finding bugs", 2010), counted in exits. PCT switches threads at
+ * d-1 points chosen uniformly among the k steps of a run; here a step is a VM exit, because
+ * that is the only place this VMM can act. At each chosen exit the guest's timer deadline is
+ * made due at once (its clock jumps forward to the deadline), so the guest takes its timer
+ * interrupt there, and its scheduler switches threads if the running one has used its slice.
+ * PCT's other half, choosing which thread runs next by random priorities, is not modelled:
+ * the guest's scheduler picks. Points: PCT.pt[i] = lo + mix(seed + (i+1)*GOLDEN) % (hi - lo),
+ * sorted; or an explicit list. Host-side state like TJ: in neither the snapshot nor the
+ * fingerprint, off by default.
+ */
+#define PCT_MAX 64
+struct pctp {
+	int on; uint32_t n, next; uint64_t pt[PCT_MAX];
+	uint64_t fired, missed;                  /* statistics: points that made a deadline due / found no timer armed */
+};
+static struct pctp PCT;
+static uint64_t timer_due(void);
+static void pct_set(uint64_t seed, uint32_t n, uint64_t lo, uint64_t hi)
+{
+	memset(&PCT, 0, sizeof PCT);
+	if (!n || hi <= lo) return;
+	if (n > PCT_MAX) n = PCT_MAX;
+	for (uint32_t i = 0; i < n; i++) {
+		uint64_t x = seed + (i + 1) * 0x9e3779b97f4a7c15ULL;
+		x += 0x9e3779b97f4a7c15ULL; x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+		x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL; x ^= x >> 31;
+		PCT.pt[i] = lo + x % (hi - lo);
+	}
+	for (uint32_t i = 1; i < n; i++)           /* insertion sort: n is small */
+		for (uint32_t j = i; j > 0 && PCT.pt[j - 1] > PCT.pt[j]; j--) { uint64_t t = PCT.pt[j]; PCT.pt[j] = PCT.pt[j - 1]; PCT.pt[j - 1] = t; }
+	PCT.n = n; PCT.on = 1;
+}
+/* called once per exit, after the exit is counted */
+static void pct_at_exit(void)
+{
+	if (!PCT.on) return;
+	while (PCT.next < PCT.n && PCT.pt[PCT.next] <= M.exits) {
+		if (PCT.pt[PCT.next] == M.exits) {
+			int armed = (M.cntp_ctl & 3) == 1;
+			uint64_t due = timer_due();
+			if (armed && due > M.vtime) { M.vtime = due; PCT.fired++; }
+			else if (!armed) PCT.missed++;
+			else PCT.fired++;                   /* already due: the interrupt is pending anyway */
+		}
+		PCT.next++;
+	}
+}
 static int timer_level(void)
 {
 	int en = M.cntp_ctl & 1, mask = (M.cntp_ctl >> 1) & 1;
@@ -796,6 +845,7 @@ static int run_until(const char *marker)
 		}
 		M.exits++;
 		M.vtime += STEP;
+		pct_at_exit();
 		kick_backoff = 1;
 		if (ex->reason != HV_EXIT_REASON_EXCEPTION) {
 			fprintf(stderr, "hvm: unexpected exit reason %d after %llu exits (pc 0x%llx)\n", ex->reason, M.exits, rd(HV_REG_PC));
@@ -875,6 +925,8 @@ static void print_fp(const char *tag, struct parts p, int stop, double secs)
 	printf("%s: cntpct reads %llu, mmio %llu, hvc %llu, wfi %llu (clock jumps %llu), other sysreg traps %llu, entries with IRQ line up %llu, single steps %llu in %llu runs\n",
 	       tag, M.n_cntpct, M.n_mmio, M.n_hvc, M.n_wfi, M.n_wfi_jump, M.n_sysreg_other, M.n_irq_line, M.n_steps, M.n_step_runs);
 	virtio_stats(tag);
+	if (PCT.n) printf("%s: preemption points: %u chosen, %llu made the timer due, %llu found no timer armed\n", tag,
+	                  PCT.n, (unsigned long long)PCT.fired, (unsigned long long)PCT.missed);
 	if (TJ.on) printf("%s: tick jitter: %llu timer interrupts delayed, last at tick %llu\n", tag,
 	                  (unsigned long long)TJ.applied, (unsigned long long)TJ.last_applied_k);
 	if (sp_kicks) printf("%s: spin kicks %llu, looks %llu, loops resolved %llu, not a loop %llu, look steps %llu, write faults %llu, debug-register accesses emulated %llu\n",
@@ -903,6 +955,11 @@ int main(int argc, char **argv)
 	const char *bootargs = getenv("HVM_BOOTARGS") ? getenv("HVM_BOOTARGS") : BOOTARGS;
 
 	spin_env();
+	if (getenv("HVM_PCT")) {  /* HVM_PCT=<hex seed>,<points>,<first exit>,<last exit>: forced preemption points for the whole run */
+		unsigned long long sd = 0, lo = 0, hi = 0; unsigned n = 0;
+		sscanf(getenv("HVM_PCT"), "%llx,%u,%llu,%llu", &sd, &n, &lo, &hi);
+		pct_set(sd, n, lo, hi);
+	}
 	if (getenv("HVM_TJ")) {   /* HVM_TJ=<hex seed>,<permille>,<max delay in exits>[,<lo>,<hi>]: tick jitter for the whole run */
 		unsigned long long sd = 0, lo = 0, hi = 0; unsigned pm = 0, mx = 0;
 		sscanf(getenv("HVM_TJ"), "%llx,%u,%u,%llu,%llu", &sd, &pm, &mx, &lo, &hi);

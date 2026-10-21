@@ -24,6 +24,9 @@
  * cut (C=) carries only the flushed disk bytes into a recovery boot restored from S0, which
  * gets "oracle <acked ids> [failed <ids>]". The disk boots with the flush-aware class armed at
  * probability 0, so the guest negotiates FLUSH (write-back caching) like hvx's guests.
+ * Forced preemption points (pct=<hex seed> pctn=<points> [pctk=<exits>, default 20000]): pctn
+ * seeded exits among the first pctk exits of the workload make the timer due at once (../hvm.c
+ * PCT); the RESULT gains pctf=<points that fired>.
  * Tick jitter (tj=, tjx=) delays timer interrupts by a seeded number of EXITS (../hvm.c TJ);
  * the RESULT gains tjk=<first>-<last> tjn=<n> as on hvx. Not supported (the RESULT says UNSUPPORTED):
  * disk faults or cuts without a disk, and network faults (N=, O=) on an image without tc
@@ -339,6 +342,11 @@ static void run_once(const char *tag, const char *sched, int rewound)
 	struct tjit tj;
 	if (parse_tj(host, &tj)) { printf("RESULT %s fp=0 wfp=0 secs=0 verdict=ERROR bad tick-jitter token\n", tag); fflush(stdout); return; }
 	char tjinfo[96] = "";
+	const char *pp = strstr(host, "pct=");
+	uint64_t pct_seed = pp ? strtoull(pp + 4, NULL, 16) : 0;
+	uint32_t pct_n = (pp = strstr(host, "pctn=")) ? (uint32_t)strtoul(pp + 5, NULL, 10) : 0;
+	uint64_t pct_k = (pp = strstr(host, "pctk=")) ? strtoull(pp + 5, NULL, 10) : 20000;
+	if (!strstr(host, "pct=")) pct_n = 0;
 	int cut = strstr(guest, " C=") != NULL;
 	size_t from = M.console_len;
 	int why = 0, r;
@@ -349,9 +357,15 @@ static void run_once(const char *tag, const char *sched, int rewound)
 		TJ = tj; TJ.on = 1;
 		snprintf(tjinfo, sizeof tjinfo, " tjk=%llu", (unsigned long long)(M.vtime / TJ_PERIOD));
 	}
+	if (pct_n) pct_set(pct_seed, pct_n, M.exits, M.exits + pct_k);   /* the workload only */
 	snprintf(line, sizeof line, "%s\n", guest + 1);
 	hvm_put_input(line);
 	r = run_to(wk, 2, from, &why);
+	if (pct_n) {
+		size_t l = strlen(tjinfo);
+		snprintf(tjinfo + l, sizeof tjinfo - l, " pctf=%llu", (unsigned long long)PCT.fired);
+		memset(&PCT, 0, sizeof PCT);
+	}
 	if (TJ.on) {
 		size_t l = strlen(tjinfo);
 		snprintf(tjinfo + l, sizeof tjinfo - l, "-%llu tjn=%llu",

@@ -48,6 +48,28 @@ Every seed gave a different fingerprint, so the jitter does change the run. The 
 
 With every tick delayed, seed `1234` gives `4e8fb9fc0b222248` both as `hvmx one` and from the S1 snapshot in `hvmx serve`. The next schedule in the same serve process, without jitter, gives `ca13bcd1d77e2b4b` again, so the policy is off between runs. The explicit list and jitter with a power cut both run. The Redis workload spans only 7 ticks (12–19), so low densities often delay nothing. On the Mac, use `--tj-pm 500,1000`. `explore.py --backend hvm --strategy swarm --timing --tj-pm 500,1000 --seeds 1-40`: 17 schedules were timed and 15 of those were actually perturbed. 16 failures, all reproduced, all in expected classes (none needed the timing).
 
+## Forced preemption points (PCT-style, counted in exits)
+
+**What it does.** PCT (Burckhardt et al. 2010) forces a thread switch at d-1 points chosen at random among the k steps of a run. Its guaranteed chance of finding a bug that needs d orderings is at least 1/(n·k^(d-1)). Here a step is a VM exit, the only place this VMM can act. A race in `../race/macrace.c` spans about 20,500 exits, against about a billion branches. `../hvm.c` (`PCT`, `pct_set`, `pct_at_exit`) picks m exits uniformly in a range from a seed. At each chosen exit it makes the guest's timer deadline due at once: the clock jumps forward to the deadline. So the guest takes its timer interrupt there. The guest's scheduler then switches threads if the running one has used its slice, which happened at about two in three points. PCT's other half, random thread priorities, is not modelled: the guest's scheduler picks the next thread. `hvm` takes `HVM_PCT=<hex seed>,<points>,<first exit>,<last exit>`; `hvmx` takes `pct=<hex seed> pctn=<points> [pctk=<exits>]` (the first pctk exits of the workload, default 20,000) and reports `pctf=`. Host-side state like the tick jitter: in neither the snapshot nor the fingerprint. Without the tokens `hvmx` gives `main`'s results (Redis `7fbc98328b6cf493`, `K=redis@5+2` `46bc747f7adfbfae`). With them, one seed repeats exactly and another seed differs.
+
+**Measured** with `../race/` (`mkimg.sh`, `cells.sh`, `one.sh`), using four builds of the race:
+- one window or two windows (`-DNWIN=2`: seats 15,000 and 5,000; the bug needs both windows to be interleaved);
+- each window made of 50 clock reads (exits) or of plain work (no exit).
+
+The kernel was `Image-explore-idle` with `HVM_SOFT_IRQ=1`. Points were spread over the race's exits 14,327–34,800. Each strategy ran 200 seeds; the table shows runs with the bug, and the median involuntary switches per run (14 with no help):
+
+| Strategy | One clock window | Two clock windows (both needed) | Plain-work windows | Switches |
+|---|---|---|---|---|
+| jitter, every tick | 11 | 0 (window 1: 1, window 2: 0) | 0 | 12 |
+| 1 point | 5 | – | 0 | 14 |
+| 2 points | 6 | 0 (2, 14) | 0 | 15 |
+| 10 points | 11 | 0 (9, 6) | 0 | 19 |
+| 40 points | **17** | 0 (18, 17) | 0 | 41 |
+
+1,000 more seeds of the two-window race: **40 points found it 7 times** (window 1: 90, window 2: 89; 7 is what independent windows predict), and jitter found it 0 times (window 1: 2, window 2: 0). Every hit repeated exactly: 17 one-window hits and 7 two-window hits. Windows of plain work were never hit.
+
+**Reading.** Few points, PCT's own setting (1 or 2 points for a 1- or 2-ordering bug), did no better than jitter. A forced point does not only switch threads: it moves the guest's clock and every later tick. And the guest chooses the next thread, so PCT's guarantee does not carry over. Many points did better: more switches mean more chances to land in a window. Only the many-point setting found the two-ordering bug. It hits each window independently, so a bug that needs two windows costs the product of the two chances. Jitter reaches only a window that happens to sit near a tick: here it hit the second window 0 times in 1,200 runs.
+
 ## Changes outside this directory (hook points)
 
 - **`../hvm.c`**, all inert by default (the M48 boot is still `81711ada76a4a236`):
