@@ -259,8 +259,11 @@ static struct hvx_console con_scratch;
 static void console_drain(struct boot *b)
 {
 	size_t modlen, add;
-	if (ioctl(b->fd, HVX_GET_CONSOLE, &con_scratch) < 0)
-		return;
+	if (ioctl(b->fd, HVX_GET_CONSOLE, &con_scratch) < 0) {
+		/* never ignore a failed read: it would move the stop point (M58) */
+		perror("HVX_GET_CONSOLE");
+		exit(1);
+	}
 	modlen = con_scratch.len;
 	if (modlen > HVX_CONSOLE_SZ) modlen = HVX_CONSOLE_SZ;
 	if (modlen <= b->drained) return;
@@ -272,7 +275,11 @@ static void console_drain(struct boot *b)
 }
 static void console_rebase(struct boot *b)
 {
-	if (ioctl(b->fd, HVX_GET_CONSOLE, &con_scratch) < 0) return;
+	if (ioctl(b->fd, HVX_GET_CONSOLE, &con_scratch) < 0) {
+		/* never ignore a failed read: it would move the stop point (M58) */
+		perror("HVX_GET_CONSOLE");
+		exit(1);
+	}
 	b->drained = con_scratch.len > HVX_CONSOLE_SZ ? HVX_CONSOLE_SZ : con_scratch.len;
 }
 
