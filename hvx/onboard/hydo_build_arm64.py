@@ -43,7 +43,9 @@ exec /sbin/init
 def _cpio(root, out_gz, mtime, meta=None):
     """newc archive of root, entries sorted by path, uid/gid 0, fixed mtime; gzip -n.
     meta (hydo_oci.py): rel path -> (S_IFMT, mode, uid, gid) overriding mode and owner, for the
-    files of image services; symlinks to directories under those paths are archived too."""
+    files of image services.
+    A symlink to a directory is archived as a symlink with its target, like a symlink to a file;
+    it is not followed (os.walk lists it under dirs but does not descend into it)."""
     meta = meta or {}
     paths = []
     for d, dirs, files in os.walk(root):
@@ -52,9 +54,8 @@ def _cpio(root, out_gz, mtime, meta=None):
         if rel != ".":
             paths.append(rel)
         for dn in dirs:
-            r = os.path.normpath(os.path.join(rel, dn))
-            if r in meta and os.path.islink(os.path.join(d, dn)):
-                paths.append(r)
+            if os.path.islink(os.path.join(d, dn)):
+                paths.append(os.path.normpath(os.path.join(rel, dn)))
         for f in sorted(files):
             paths.append(os.path.normpath(os.path.join(rel, f)))
     paths.sort()
