@@ -6082,16 +6082,16 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		break;
 	}
 	case HVX_GET_CONSOLE: {
-		struct hvx_console *c;
+		struct hvx_console __user *uc = uarg;
+		__u32 len = vm->console_len;
+		size_t n = len < HVX_CONSOLE_SZ ? len : HVX_CONSOLE_SZ;
 
 		if (!vm->n_guest_pages) { ret = -EINVAL; break; }
-		c = kzalloc(sizeof(*c), GFP_KERNEL);
-		if (!c) { ret = -ENOMEM; break; }
-		c->len = vm->console_len;
-		memcpy(c->buf, vm->console,
-		       vm->console_len < HVX_CONSOLE_SZ ? vm->console_len : HVX_CONSOLE_SZ);
-		ret = copy_to_user(uarg, c, sizeof(*c)) ? -EFAULT : 0;
-		kfree(c);
+		/* Copy straight from vm->console (the VM lock is held). A 64 KiB kzalloc here
+		 * is an order-5 allocation that fails under host memory fragmentation, and a
+		 * failed read made a harness miss its stop marker (M57). Bytes of buf past
+		 * the console length are left as the caller had them. */
+		ret = (put_user(len, &uc->len) || copy_to_user(uc->buf, vm->console, n)) ? -EFAULT : 0;
 		break;
 	}
 	case HVX_GET_SREGS:
