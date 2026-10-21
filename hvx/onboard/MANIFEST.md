@@ -8,13 +8,15 @@ invariants. No per-project build script or boot script is written by hand.
 This file is the reference for people and for tools that generate manifests (a Claude skill
 that reads a repository and writes `hydo.yaml` is the intended next step). Complete
 examples: `examples/redis/hydo.yaml` (one service, about 60 lines),
-`examples/stack/hydo.yaml` (MySQL + Kafka + Redis + a gRPC front door), and
+`examples/stack/hydo.yaml` (MySQL + Kafka + Redis + a gRPC front door),
+`examples/redis-oci/hydo.yaml` (Redis from the official Docker image, no file list), and
 `hvx/knownbugs/sqlite/hydo.yaml` (no service: a multi-threaded program using SQLite; one
 manifest, two versions via `params:`).
 
 ## What the user writes, and what is automatic
 
-You write: which files make up the guest (store paths or host files), how each service
+You write: which files make up the guest (store paths, host files, or a Docker/OCI image per
+service), how each service
 starts and how to tell it is ready, a workload split into numbered steps, the invariants as
 shell commands, and optionally the durability settings the explorer may relax.
 
@@ -67,7 +69,6 @@ root:                          # what goes on the read-only root filesystem
     /etc/myapp.conf: |
       port 8080
   dirs: [/etc/myapp]           # empty directories to create
-# image: myorg/app:1.4         # RESERVED for OCI/Docker images (a later version); an error today
 
 data:                          # the read-write disk, mounted on /data; the fault target
   size_mib: 512                # default 512
@@ -100,6 +101,19 @@ services:                      # may be empty ([] or left out): a project that i
     port: 5432                            # the port network faults (N=, O=) act on
     depends_on: [cache]                   # start after these
     recovery: true                        # false: not started for the power-cut recovery check
+
+  - name: cache                # a service whose files come from a Docker/OCI image (see below)
+    image: images/redis.tar    # a `docker save` tar or an OCI layout directory, relative to
+                               #   hydo.yaml; or {x86_64: <path>, arm64: <path>}
+    image_ref: redis:7.2.4     # which image in the file: a tag or sha256:<digest> (needed only
+                               #   when the file holds more than one)
+    cmd: redis-server --appendonly yes   # optional: replaces the image's CMD (string = shell
+                               #   words, list = argv); the ENTRYPOINT stays
+    entrypoint: [/bin/sh, -c]  # optional: replaces ENTRYPOINT (and, as in Docker, drops CMD)
+    env: {TZ: UTC}             # optional: added to / overriding the image's Env
+    workdir: /data             # optional: default the image's WorkingDir
+    user: "999:999"            # optional: default the image's User ("" = root)
+    ready: hydo-oci cache redis-cli ping | grep -q PONG
 
 provision: /bin/myapp-admin create-schema   # once, after all services are ready, before S1
 
@@ -139,6 +153,64 @@ invariants:                    # required, at least one
 faults: [kill, pause, network, oneway, cut, clock, disk]   # which kinds make sense here;
                                # network/oneway also pull iproute2 into the image
 ```
+
+### Services from a Docker/OCI image
+
+A service with `image:` takes its files from an image instead of `root.nix`/`root.files`.
+hydo-build never pulls: the image is a file on the build machine. Make one with any of
+
+```sh
+docker save -o redis.tar redis:7.2.4                       # Docker (classic or >= 25 format)
+skopeo copy docker://docker.io/library/redis@sha256:<manifest digest> \
+       docker-archive:redis.tar:redis:7.2.4                # skopeo, a docker-save style tar
+skopeo copy docker://docker.io/library/redis@sha256:<digest> oci:redis-oci:redis:7.2.4
+                                                           # skopeo, an OCI layout directory
+```
+
+(gzip-compressed tars and OCI layouts holding a multi-platform index work too; the build picks
+the `linux/<arch>` manifest. zstd layers are not supported by the build box's Python: re-export
+with `skopeo copy --dest-compress-format gzip`.) Pin by digest: `skopeo copy ...@sha256:...`,
+and/or `image_ref: sha256:<manifest digest>` (OCI layout) or `sha256:<image id>` (docker save).
+Every blob is checked against its digest and every layer against the config's `diff_ids`.
+`examples/redis-oci/fetch-image.sh` is a complete example.
+
+What the build does:
+
+- **A root per service, not a merged root.** The layers are applied in order (whiteouts
+  `.wh.<name>` and opaque directories `.wh..wh..opq` honoured) into `/oci/<service>` on the
+  read-only root, and the service runs chrooted there, as in Docker. Images with different C
+  libraries can coexist, and busybox, `/sbin/init` and the rest of the hydo root are untouched.
+- `/proc`, `/sys`, `/dev`, `/tmp` and `/data` of the guest are bind-mounted into that root.
+  `/data` is the data disk (the fault target): point the program's data directory there (it
+  is the image's `WorkingDir` in many official images). `/tmp` is shared, so `$HYDO_ACKED`
+  etc. are the same files inside. `/etc/hosts` in the image is replaced by
+  `127.0.0.1 localhost` (Docker also writes it at run time).
+- **Defaults from the image config, overridable in the manifest:** `ENTRYPOINT` + `CMD`
+  (Docker semantics: `cmd:` replaces `CMD`; `entrypoint:` replaces `ENTRYPOINT` and drops
+  `CMD`), `Env` (`env:` adds or overrides by name; `HOME` is the user's home from the image's
+  `/etc/passwd`; `PATH` defaults to Docker's), `WorkingDir` (`workdir:`), `User` (`user:`,
+  name or uid[:gid], switched with busybox `chpst`). The manifest's top-level `env:` and
+  `shell:` are NOT exported into the image (they belong to the hydo side); the `HYDO_*`
+  variables are.
+- **Running commands inside the image:** `hydo-oci <service> <command> [args]` runs a command
+  in the service's root with its env and working directory, as root. Use it in `ready:`, the
+  workload, knobs and invariants (`hydo-oci cache redis-cli GET k`). A static busybox is put at
+  `/.hydo/busybox` in each image root for `env -i`, `cd` and the user switch, so images without
+  a shell (distroless) work.
+- A killed, paused or frozen image service is the same process tree as any other service (the
+  launcher `exec`s down to the program), so every fault applies unchanged.
+- **Reproducible:** owners, groups and modes (including setuid) come from the layer tars and
+  are written into the ext4 root with the pinned `debugfs` (x86_64) or into the cpio headers
+  (arm64); timestamps are normalised like every other file (fixed mtime, zeroed
+  ctime/atime/crtime). Two builds from the same image file are byte-identical; the files
+  under `/oci/<service>` depend only on the image's content (`image.json` also records where it
+  came from). Device nodes, FIFOs and extended
+  attributes (file capabilities) in layers are skipped; a path containing `"`, `\` or a newline
+  is refused.
+- **Architecture:** the image config's `architecture` must match the build (`amd64` for the
+  default x86_64 build, `arm64` for `--arch arm64`); anything else is refused with an error.
+- Inside the image: `/etc/hydo/oci/<service>/run` (the launcher), `exec` (used by `hydo-oci`),
+  `image.json` (digests, layers, the image config and the effective command/env/workdir/user).
 
 ### Variables every command sees
 
@@ -267,6 +339,10 @@ Inside the image: `/etc/hydo/hydo.yaml` (the manifest as written), `/etc/hydo/ma
 - No OCI/Docker import yet (`image:` is reserved); files come from store paths or the host.
 - The kernel command line is the explorer's. Guest RAM is per image (`guest.ram_mib`), at most
   3072 MiB on x86_64 (hvx keeps RAM below the 4th-GiB MMIO hole) and 4096 MiB on arm64.
+
+- Images are files on the build machine (no registry pulls); one root per image service, not
+  a merged root; no xattrs/capabilities, devices or FIFOs from layers; no zstd layers.
+- Guest RAM is fixed at 1024 MiB and the kernel command line is the explorer's.
 - The guest console is 64 KiB: a workload that prints every acknowledged id should print
   short ids, or the done marker can be lost.
 - One data disk, ext4. The workload's step count is the unit of fault placement.

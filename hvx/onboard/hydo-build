@@ -279,7 +279,8 @@ NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 KNOWN_TOP = {"name", "description", "guest", "root", "data", "env", "shell", "services",
              "provision", "workload", "knobs", "invariants", "faults", "image", "params"}
 KNOWN_SVC = {"name", "cmd", "setup", "ready", "ready_timeout", "port", "depends_on",
-             "recovery", "description"}
+             "recovery", "description",
+             "image", "image_ref", "entrypoint", "workdir", "user", "env"}   # the last six: hydo_oci.py
 KNOWN_INV = {"id", "type", "msg", "cmd", "every", "final", "description", "within", "after", "poll"}
 LIVE_ANCHORS = ("heal", "start")
 KNOWN_KNOB = {"token", "name", "default", "set", "values", "safe", "description"}
@@ -307,8 +308,8 @@ def validate(m):
         raise ManifestError("the manifest must be a mapping")
     _unknown(m, KNOWN_TOP, "top level")
     if "image" in m:
-        raise ManifestError("top level: 'image:' (OCI/Docker images) is reserved for a later version; "
-                            "use root.nix / root.files for now")
+        raise ManifestError("top level: 'image:' belongs to a service (services[].image: a Docker/OCI "
+                            "image file; MANIFEST.md)")
     name = _need(m, "name", "top level")
     if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
         raise ManifestError("name: use lowercase letters, digits and '-' (got %r)" % name)
@@ -328,7 +329,9 @@ def validate(m):
         if n in seen:
             raise ManifestError("%s: duplicate service name %r" % (where, n))
         seen[n] = s
-        _need(s, "cmd", where); _need(s, "ready", where)
+        if "image" not in s:          # an image service defaults to the image's Entrypoint + Cmd
+            _need(s, "cmd", where)
+        _need(s, "ready", where)
         if "port" in s and not isinstance(s["port"], int):
             raise ManifestError("%s: port must be a number" % where)
         for d in s.get("depends_on") or []:
@@ -650,7 +653,7 @@ def sha(path):
     return h.hexdigest()
 
 
-def build(m, manifest_path, out, bdir, params=None):
+def build(m, manifest_path, out, bdir, params=None, oci=None):
     T = {
         "busybox": tool("HYDO_BUSYBOX", "/nix/store/ahw5fkq085k5ppdsylyd475xlxb18pz1-busybox-static-x86_64-unknown-linux-musl-1.37.0/bin/busybox", os.path.isfile),
         "seedrng": tool("HYDO_SEEDRNG", os.path.join(bdir, "hvx_seedrng"), os.path.isfile),
@@ -738,6 +741,7 @@ def build(m, manifest_path, out, bdir, params=None):
         with open(os.path.join(R, "etc/hydo/params"), "w") as f:
             f.write("".join("%s=%s\n" % kv for kv in sorted(params.items())))
     install_init(m, os.path.join(R, "sbin/init"))
+    oci_meta = _oci_stage(oci, R, T["busybox"], bdir, out)
     fix_mtimes(R)
 
     ext4, data, disk = (os.path.join(bdir, "%s-%s.img" % (out, k)) for k in ("ext4", "data", "disk"))
@@ -746,6 +750,9 @@ def build(m, manifest_path, out, bdir, params=None):
         used = int(subprocess.run(["du", "-sm", R], stdout=subprocess.PIPE, text=True).stdout.split()[0])
         rmib = max(64, (used * 13 // 10 + 63) // 64 * 64)
     mkfs(T, ext4, rmib, uuid_from(m["name"], "root"), uuid_from(m["name"], "root-hash"), src=R)
+    if oci_meta:
+        import hydo_oci
+        hydo_oci.fix_ext4(oci_meta, T, ext4, FAKE_TS)
     zero_times(ext4, all_inode_times=False)
     dmib = int((m.get("data") or {}).get("size_mib", 512))
     mkfs(T, data, dmib, uuid_from(m["name"], "data"), uuid_from(m["name"], "data-hash"), journal=True)
@@ -763,6 +770,25 @@ def build(m, manifest_path, out, bdir, params=None):
     print("hydo-build: %s (root %d MiB, data %d MiB)" % (disk, rmib, dmib))
     for p in (ext4, data, disk):
         print("  sha256(%s)=%s" % (os.path.basename(p), sha(p)))
+
+
+def _oci_prepare(m, path, arch):
+    """services[].image (hydo_oci.py): [] when no service uses an image."""
+    if not any(isinstance(s, dict) and "image" in s for s in m.get("services") or []):
+        return []
+    sys.path.insert(0, HERE)
+    import hydo_oci
+    return hydo_oci.prepare(m, path, arch, ManifestError)
+
+
+def _oci_stage(oci, R, busybox, bdir, out):
+    if not oci:
+        return {}
+    import hydo_oci
+    try:
+        return hydo_oci.stage(oci, R, busybox, os.path.join(bdir, "%s-oci-tmp" % out))
+    except hydo_oci.OciError as e:
+        raise ManifestError(str(e))
 
 
 def main():
@@ -792,6 +818,7 @@ def main():
         validate(m)
         check_ram_arch(m, opt["--arch"])
         service_order(m["services"])
+        oci = _oci_prepare(m, path, opt["--arch"] if opt["--arch"] in ("x86_64", "arm64") else "x86_64")
     except (YamlError, ManifestError) as e:
         print("hydo-build: %s" % e, file=sys.stderr); return 1
     if "--print-shell" in flags:
@@ -810,11 +837,11 @@ def main():
                 print("hydo-build: --arch arm64 does not record params: yet", file=sys.stderr); return 2
             sys.path.insert(0, HERE)
             import hydo_build_arm64
-            hydo_build_arm64.build(m, path, out, opt["--build-dir"], globals())
+            hydo_build_arm64.build(m, path, out, opt["--build-dir"], globals(), oci=oci)
         elif opt["--arch"] != "x86_64":
             print("hydo-build: --arch is x86_64 or arm64", file=sys.stderr); return 2
         else:
-            build(m, path, out, opt["--build-dir"], params)
+            build(m, path, out, opt["--build-dir"], params, oci=oci)
     except ManifestError as e:
         print("hydo-build: %s" % e, file=sys.stderr); return 1
     return 0

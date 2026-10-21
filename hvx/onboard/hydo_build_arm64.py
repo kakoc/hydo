@@ -19,7 +19,7 @@ differences:
     (hvx-mac/services/elfdeps.py); the kernel has the qdiscs built in (hvx-mac/explore/
     hvm-explore.config). HYDO_TC_ARM64= (empty) builds an image without tc, as before.
 root.nix and root.files must name arm64 binaries (e.g. aarch64 store paths); nothing checks
-the architecture. Byte-reproducible: sorted newc cpio, fixed mtimes and owners, gzip -n.
+their architecture (services[].image is checked: the image must be linux/arm64). Byte-reproducible: sorted newc cpio, fixed mtimes and owners, gzip -n.
 """
 import gzip, io, os, shutil, stat, subprocess, sys
 
@@ -40,14 +40,21 @@ exec /sbin/init
 """
 
 
-def _cpio(root, out_gz, mtime):
-    """newc archive of root, entries sorted by path, uid/gid 0, fixed mtime; gzip -n."""
+def _cpio(root, out_gz, mtime, meta=None):
+    """newc archive of root, entries sorted by path, uid/gid 0, fixed mtime; gzip -n.
+    meta (hydo_oci.py): rel path -> (S_IFMT, mode, uid, gid) overriding mode and owner, for the
+    files of image services; symlinks to directories under those paths are archived too."""
+    meta = meta or {}
     paths = []
     for d, dirs, files in os.walk(root):
         dirs.sort()
         rel = os.path.relpath(d, root)
         if rel != ".":
             paths.append(rel)
+        for dn in dirs:
+            r = os.path.normpath(os.path.join(rel, dn))
+            if r in meta and os.path.islink(os.path.join(d, dn)):
+                paths.append(r)
         for f in sorted(files):
             paths.append(os.path.normpath(os.path.join(rel, f)))
     paths.sort()
@@ -55,7 +62,11 @@ def _cpio(root, out_gz, mtime):
 
     def ent(name, mode, data=b"", nlink=1, rdev=(0, 0), ino=[1]):
         nb = name.encode() + b"\0"
-        hdr = "070701" + "".join("%08x" % v for v in (ino[0], mode, 0, 0, nlink, mtime, len(data), 0, 0,
+        uid = gid = 0
+        if name in meta:
+            kind, perm, uid, gid = meta[name]
+            mode = stat.S_IFMT(mode) | (perm if kind != stat.S_IFLNK else 0o777)
+        hdr = "070701" + "".join("%08x" % v for v in (ino[0], mode, uid, gid, nlink, mtime, len(data), 0, 0,
                                                        rdev[0], rdev[1], len(nb), 0))
         ino[0] += 1
         buf.write(hdr.encode()); buf.write(nb)
@@ -98,7 +109,7 @@ def _copy_elf_closure(binary, R):
             os.chmod(dst, 0o755 if os.access(p, os.X_OK) else 0o644)
 
 
-def build(m, manifest_path, out, bdir, H):
+def build(m, manifest_path, out, bdir, H, oci=None):
     T = {
         "busybox": H["tool"]("HYDO_BUSYBOX_ARM64", BUSYBOX_ARM64, os.path.isfile),
         "mke2fs": H["tool"]("HYDO_MKE2FS", "/nix/store/24s0phlx9kly7x7qb8gal3mmn51ndmlx-e2fsprogs-1.47.0-bin/bin/mke2fs", os.path.isfile),
@@ -170,6 +181,7 @@ def build(m, manifest_path, out, bdir, H):
         f.write(prelude)
     shutil.copy(manifest_path, os.path.join(R, "etc/hydo/hydo.yaml"))
     H["install_init"](m, os.path.join(R, "sbin/init"))
+    oci_meta = H["_oci_stage"](oci, R, T["busybox"], bdir, out + "-arm64")   # services[].image
     with open(os.path.join(R, "init"), "w") as f:
         f.write(SHIM)
     os.chmod(os.path.join(R, "init"), 0o755)
@@ -188,7 +200,7 @@ def build(m, manifest_path, out, bdir, H):
         shutil.copyfileobj(fi, fo, 1 << 20)
     H["fix_mtimes"](R)
     cpio = os.path.join(bdir, "%s-arm64.cpio.gz" % out)
-    _cpio(R, cpio, H["FIXED_MTIME"])
+    _cpio(R, cpio, H["FIXED_MTIME"], oci_meta)
     print("hydo-build: %s (arm64 initramfs) + %s (data %d MiB)" % (cpio, disk, dmib))
     for p in (cpio, disk):
         print("  sha256(%s)=%s" % (os.path.basename(p), H["sha"](p)))
