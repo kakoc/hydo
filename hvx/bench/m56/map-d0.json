@@ -1,0 +1,117 @@
+{
+ "triggers": [
+  [
+   "K=kafka@5+25",
+   "HYDO-ORACLE: VIOLATION kafka order=5 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@11+19",
+   "HYDO-ORACLE: VIOLATION kafka order=11 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@20+10",
+   "HYDO-ORACLE: VIOLATION kafka order=20 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@29+1",
+   "HYDO-ORACLE: VIOLATION kafka order=29 present 2 times (must be exactly once)"
+  ]
+ ],
+ "both": [
+  [
+   "K=kafka@1+29",
+   "HYDO-ORACLE: VIOLATION kafka order=1 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@2+28",
+   "HYDO-ORACLE: VIOLATION kafka order=2 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@3+27",
+   "HYDO-ORACLE: VIOLATION kafka order=3 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@4+26",
+   "HYDO-ORACLE: VIOLATION kafka order=4 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@6+24",
+   "HYDO-ORACLE: VIOLATION kafka order=6 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@7+23",
+   "HYDO-ORACLE: VIOLATION kafka order=7 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@8+22",
+   "HYDO-ORACLE: VIOLATION kafka order=8 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@9+21",
+   "HYDO-ORACLE: VIOLATION kafka order=9 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@12+18",
+   "HYDO-ORACLE: VIOLATION kafka order=12 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@13+17",
+   "HYDO-ORACLE: VIOLATION kafka order=13 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@15+15",
+   "HYDO-ORACLE: VIOLATION kafka order=15 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@16+14",
+   "HYDO-ORACLE: VIOLATION kafka order=16 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@17+13",
+   "HYDO-ORACLE: VIOLATION kafka order=17 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@21+9",
+   "HYDO-ORACLE: VIOLATION kafka order=21 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@22+8",
+   "HYDO-ORACLE: VIOLATION kafka order=22 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@23+7",
+   "HYDO-ORACLE: VIOLATION kafka order=23 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@24+6",
+   "HYDO-ORACLE: VIOLATION kafka order=24 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@25+5",
+   "HYDO-ORACLE: VIOLATION kafka order=25 present 2 times (must be exactly once)"
+  ]
+ ],
+ "control_only": [
+  [
+   "K=kafka@10+20",
+   "HYDO-ORACLE: VIOLATION kafka order=10 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@14+16",
+   "HYDO-ORACLE: VIOLATION kafka order=14 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@18+12",
+   "HYDO-ORACLE: VIOLATION kafka order=18 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@19+11",
+   "HYDO-ORACLE: VIOLATION kafka order=19 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@26+4",
+   "HYDO-ORACLE: VIOLATION kafka order=26 present 2 times (must be exactly once)"
+  ]
+ ],
+ "nonrepro": []
+}

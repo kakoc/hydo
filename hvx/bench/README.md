@@ -11,7 +11,11 @@ tokens). The control rebuilt from this tree is byte-identical to the shipped
 ## Detection
 
 A run DETECTS its image's defect when (1) its schedule has durable settings and an honest disk
-(explore.py class `durable-defaults`: no `M=`/`R=` knob, disk `none` or `cut`), (2) its verdict
+(explore.py class `durable-defaults`: disk `none` or `cut`, and no relaxed `M=`/`R=` knob
+together with a cut — since M56 a relaxed knob without a power cut or lying disk no longer makes
+a run `unsafe-knob`, because those settings only trade durability across a power loss;
+`--knob-rule any` restores the M54 rule, under which the M54 Results below were scored; the
+re-scored tables are in the M56 section), (2) its verdict
 is a VIOLATION, and (3) the SAME schedule passes on the control image (`explore-nf-disk.img`;
 for d0, whose image has the pre-M46 guest, `explore-fix-disk.img`). Condition (3) is needed
 because the fixed front door has a bug of its own (below). `run.py` also checks the verdict
@@ -170,3 +174,77 @@ hit at run 207 is one of the 30% that do not trigger (an earlier `K=mysql@4+4`);
 **Verdict:** d7 is a placement blind spot, not just short exploration: plain random/swarm never
 reach it, and with the new faults the expected wait is ~2,800 runs (~4.3 h of box time) for
 random and ~5,900 (~9 h) for swarm. The tail sweep finds it in 9 minutes.
+
+## Milestone 56: positioned faults, a fault process, the depth-1 sweep, and the knob rule
+
+Box results in `/var/tmp/m56-pos/` (driver `drive.sh`, 2 workers); trigger maps and tables
+copied to `hvx/bench/m56/`. Module srcversion `7CA13762C89AF3BF16F2CCF` (the M49 build).
+
+**Knob rule (now the default).** A relaxed `M=`/`R=` knob makes a run `unsafe-knob` only with a
+power cut or lying disk (`explore.py --knob-rule any` restores the M54 rule). Re-scoring all 120
+M54 cells (`run.py --rescore`; candidates new to the durable class checked on the control
+image; none rejected): every strategy still finds the same 7 defects, no missed cell turns into
+a detection, and 10 cells get faster (e.g. swarm d3 23→18 and 54→13, random+nf d3 58→18, swarm
+d6 23→18 and 19→13, random d1 7→3). M54 tables: `m56/tables.md` (both rules).
+
+**New generators** (`explore.py --strategy swarm-pos | process`; 3 reps × ≤60 runs, early
+stop; every detection reproduced its fingerprint):
+
+| defect | process | swarm-pos | best M54 strategy (new rule) |
+|---|---|---|---|
+| d0 | 3/3 (29, 18, 1) | 3/3 (49, 51, 10) | swarm 3/3 (17, 19, 38) |
+| d1 | 3/3 (2, 2, 4) | 3/3 (3, 16, 4) | swarm+nf 3/3 (2, 8, 1) |
+| d2 | 3/3 (6, 1, 1) | 3/3 (3, 1, 17) | swarm 3/3 (2, 4, 4) |
+| d3 | 3/3 (4, 4, 4) | 2/3 (-, 19, 19) | swarm+nf 3/3 (5, 13, 1) |
+| d4 | 3/3 (13, 1, 1) | 3/3 (49, 51, 38) | portfolio 3/3 (18, 27, 21) |
+| d5 | 3/3 (15, 1, 1) | 3/3 (3, 1, 10) | swarm 3/3 (2, 4, 4) |
+| d6 | 3/3 (4, 1, 1) | 3/3 (49, 19, 19) | swarm+nf 3/3 (5, 13, 1) |
+| d7 | **3/3 (28, 27, 4)** | 1/3 (-, 30, -) | none 0/3 |
+| detections / 24 | **24** | 21 | 21 |
+| box time, 24 cells | 1.0 h | 2.4 h | swarm ≈ 2.3 h (3 workers) |
+
+`process` (a Jepsen-style staggered fault process, 2–4 different faults in consecutive windows)
+finds every defect in every repetition, with medians of 1–4 runs on six of eight. One of its 24
+detections (d4 rep 1) has a verdict outside d4's signature (`order=0 ... MISSING (mysql has
+it)`), so 23/24 match. Per-run d7 trigger probability from the generators (`d7prob.py`
+predicate, 2·10^5 seeds): process 1 in 25, swarm-pos 1 in 62 (vs random+nf 1 in 1,567).
+Research predictions (`hvx/explore/RESEARCH-search.md` #2): "d7 3/3 within 20 runs" — NOT met
+by either (process 3/3 but 2 of 3 after run 20; swarm-pos 1/3); "d0–d6 no more than 2× slower
+than swarm" — met by process (faster on all but d0's first rep), NOT met by swarm-pos (d0, d4,
+d6 2–3× slower). Swarm-pos spreads its runs over many categories and needs an honest disk for
+most defects (it switches the disk category on half the time), which explains its slowness.
+
+**Depth-1 sweep** (`--sweep depth1`, 1,274 points: K/N/P "+"/O with one order or to the end,
+timed P 500 ms/30 s, C, T ±; ~2 h per image at ~690 runs/hour on 2 workers; `depth1-old` = the
+384 K/N/C points for d0's pre-M46 guest). Trigger = VIOLATION on the defect image and OK on
+the control at the same point (`depth1map.py`):
+
+| defect | triggers | by kind | matching the defect's signature |
+|---|---|---|---|
+| d7 | 29 | P 20, K 5, O 3, N 1 | 29 |
+| d3 | 196 | P 77, O 59, K 33, N 27 | 196 |
+| d6 | 186 | P 79, O 59, K 32, N 16 | 186 |
+| d4 | 14 | N 6, K 4, P 3, O 1 | **0** — d4 needs two faults (slow Kafka + a cut) |
+| d0 | 4 (of 384) | K 4 | **0** — d0 needs two faults (Redis kill + a cut) |
+
+d1, d2, d5 were not swept (box budget; every strategy finds them within a few runs). The d4
+and d0 "triggers" are all `kafka order=N present 2 times`: the control's own duplicate bug
+(below) landing on different points because the patched front door shifts timing — attribution
+by "passes on the control" is not exact for a timing-dependent base bug; the signature check
+catches it. d7's real trigger set is far larger than the M55 sample: Kafka paused until the end
+from ANY start order 11–29, killed until the end from 11/19/21/27/28, reply loss on the last
+order, one MySQL loss point.
+
+**The control's own bug, mapped.** On `explore-nf-disk.img` (the M46 front door, before the M50
+fixes), 89 of the 1,274 single faults fail: 87 are the M50 duplicate (`kafka order=N present 2
+times`; 55 Kafka one-way, 24 Kafka kills, 8 Kafka pauses — any long Kafka outage), 1 is the
+known harness artefact (`kafka topic unreadable` when Kafka is killed at the last order), 1 a
+MySQL loss. 2 of the 205 failing points on the control + d7 sweeps re-ran with the same verdict
+but a different fingerprint (`O=kafka@12-30:resp:loss,100%` on the control, `P=kafka@4+26` on
+d7; both long Kafka outages) — not investigated.
+
+**Verdict.** Fault position and combination matter more than the search strategy: a simple
+staggered fault process beats every earlier strategy on all eight defects, including d7 and the
+two-fault defects d0 and d4, at under half the box time; per-category positions alone
+(swarm-pos) do not. The depth-1 sweep is the ground truth for single-fault defects but cannot
+reach two-fault ones (d0, d4).
