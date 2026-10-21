@@ -37,8 +37,15 @@ directory, what it depends on, and where you found each fact.
 
 ## 2. Decide where every binary comes from
 
-v1 has no Docker import (`image:` is reserved), so each binary must be one of:
+Each binary must be one of:
 
+- A Docker/OCI image (simplest when the project ships one or uses an official image): a
+  service gets `image:` (a `docker save` tar or an OCI layout directory on the build box,
+  fetched once with `skopeo copy docker://<image>@sha256:<digest> ...` and pinned by digest)
+  and runs chrooted in `/oci/<service>` with the image's entrypoint/cmd/env/workdir/user.
+  Point its data directory at `/data`, and run its tools from `ready:`/workload/invariants
+  with `hydo-oci <service> <command>`. See MANIFEST.md, "Services from a Docker/OCI image",
+  and `hvx/onboard/examples/redis-oci/`.
 - A nix store path (preferred for third-party servers): find one with
   `nix build nixpkgs#<pkg> --print-out-paths` on the build machine and pin the
   exact path under `root.nix`; the whole closure is copied, so it runs unchanged.
