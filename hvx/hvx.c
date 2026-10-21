@@ -769,6 +769,11 @@ struct hvx_vcpu {
 	u64 pmu_hops;			/* statistics: branch-free stretches skipped (see HVX_PMU_HOP_STEPS) */
 	u64 tj_applied, tj_hash, tj_last;	/* tick-jitter statistics (HVX_GET_TJITTER) */
 	u64 xt_applied, xt_hash, xt_first, xt_last;	/* inserted-tick statistics (HVX_GET_XTICK) */
+	/* in-kernel scheduler (HVX_VM_SMP_SCHED); see struct hvx_sched in hvx_abi.h */
+	u64 br_own;			/* guest conditional branches this vCPU retired */
+	u64 sched_turns;		/* turns this vCPU has run */
+	bool halted;			/* stopped at a HLT (RIP still at it) until an interrupt */
+	u32 halt_len;
 
 	struct hvx_regs regs;			/* software guest register file */
 
@@ -839,6 +844,13 @@ struct hvx_vm {
 	 * bits so a real glibc userland (a distro OpenJDK JRE) loads. Set at HVX_CREATE_VM. */
 	unsigned int cpu_v2;
 	unsigned int pmu_clock;		/* HVX_VM_PMU_CLOCK */
+	/* In-kernel vCPU scheduler (HVX_VM_SMP_SCHED with n_vcpus > 1). `sched` holds the
+	 * policy, the scheduler state and the VM-wide clock (its v[] array is unused here:
+	 * the per-vCPU parts live in struct hvx_vcpu). sched_stop is a THROTTLE / max_insns
+	 * stop waiting for a clean boundary (always 0 between ioctls). */
+	unsigned int sched_on;
+	struct hvx_sched sched;
+	u32 sched_stop;
 	unsigned int pause_exit;	/* HVX_VM_PAUSE_EXIT */
 	/* Intel PT guest trace (HVX_VM_PT_TRACE / HVX_SET_PT / pt_force). Host-owned ToPA
 	 * output; enabled only around VM entry (hvx_vmx_run_pt) and filtered so no host
@@ -2101,8 +2113,9 @@ static bool hvx_lapic_wrmsr(struct hvx_vcpu *vcpu, u32 idx, u64 val)
 {
 	if (idx == HVX_MSR_APICBASE) {
 		/* Keep x2APIC latched on (EXTD|EN) regardless of what Linux writes,
-		 * so it never falls back to xAPIC MMIO. */
-		vcpu->lapic.apic_base = APICBASE_DEFAULT;
+		 * so it never falls back to xAPIC MMIO. Only vCPU 0 is the boot CPU. */
+		vcpu->lapic.apic_base = vcpu->index ? (APICBASE_DEFAULT & ~APICBASE_BSP)
+						    : APICBASE_DEFAULT;
 		return true;
 	}
 	if (idx == HVX_MSR_TSC_DEADLINE) {
@@ -4252,7 +4265,21 @@ static bool uart_irq(struct hvx_vm *vm, u32 *vec)
  * point is recovered from pmu_next alone and a restored snapshot continues the same
  * schedule without any extra saved state.
  */
-static u64 hvx_tj_delay(const struct hvx_vm *vm, u64 k)
+/*
+ * The index of the vCPU whose tick schedule this is, mixed into the jitter and
+ * inserted-tick hashes so that vCPUs with their own clocks (several vCPUs driven
+ * from userspace) do not all get the same pattern. It enters the hash as
+ * idx * HVX_CLK_IDX_SALT, i.e. not at all for vCPU 0, so one-vCPU guests are
+ * unchanged. With the in-kernel scheduler the VM has ONE tick grid, owned by
+ * whichever vCPU runs, so the index is 0 there.
+ */
+#define HVX_CLK_IDX_SALT 0xbf58476d1ce4e5b9ULL
+static inline u64 hvx_clk_idx(const struct hvx_vm *vm, const struct hvx_vcpu *v)
+{
+	return vm->sched_on ? 0 : v->index;
+}
+
+static u64 hvx_tj_delay(const struct hvx_vm *vm, u64 k, u64 idx)
 {
 	const struct hvx_tjitter *t = &vm->tj;
 	u64 h, d;
@@ -4268,7 +4295,7 @@ static u64 hvx_tj_delay(const struct hvx_vm *vm, u64 k)
 	} else {
 		if (k < t->tick_lo || (t->tick_hi && k >= t->tick_hi))
 			return 0;
-		h = fault_mix(t->seed + k * 0x9e3779b97f4a7c15ULL);
+		h = fault_mix(t->seed + k * 0x9e3779b97f4a7c15ULL + idx * HVX_CLK_IDX_SALT);
 		if (h % 1000 >= t->permille)
 			return 0;
 		d = 1 + (h >> 16) % t->max_delay;
@@ -4280,7 +4307,7 @@ static void hvx_tj_next(struct hvx_vm *vm, struct hvx_vcpu *vcpu)
 {
 	u64 p = vm->pmu_period;
 	u64 base = vcpu->pmu_next - vcpu->pmu_next % p + p;
-	u64 k = base / p, d = hvx_tj_delay(vm, k);
+	u64 k = base / p, d = hvx_tj_delay(vm, k, hvx_clk_idx(vm, vcpu));
 
 	vcpu->pmu_next = base + d;
 	vcpu->tj_last = k;
@@ -4298,9 +4325,9 @@ static void hvx_tj_next(struct hvx_vm *vm, struct hvx_vcpu *vcpu)
  * has its grid tick). So, as with the jitter alone, pmu_next is enough to continue the
  * schedule after a restore.
  */
-static u64 hvx_xt_main(const struct hvx_vm *vm, u64 j)
+static u64 hvx_xt_main(const struct hvx_vm *vm, u64 j, u64 idx)
 {
-	return j * vm->pmu_period + (vm->tj_on ? hvx_tj_delay(vm, j) : 0);
+	return j * vm->pmu_period + (vm->tj_on ? hvx_tj_delay(vm, j, idx) : 0);
 }
 
 static bool hvx_xt_window(const struct hvx_xtick *x, u64 j)
@@ -4309,7 +4336,7 @@ static bool hvx_xt_window(const struct hvx_xtick *x, u64 j)
 }
 
 /* smallest extra tick of period j above t, or U64_MAX */
-static u64 hvx_xt_extra_after(const struct hvx_vm *vm, u64 j, u64 t)
+static u64 hvx_xt_extra_after(const struct hvx_vm *vm, u64 j, u64 t, u64 idx)
 {
 	const struct hvx_xtick *x = &vm->xt;
 	u64 p = vm->pmu_period, best = U64_MAX, h, e;
@@ -4326,7 +4353,8 @@ static u64 hvx_xt_extra_after(const struct hvx_vm *vm, u64 j, u64 t)
 	if (!hvx_xt_window(x, j))
 		return U64_MAX;
 	for (i = 0; i < x->rate; i++) {
-		h = fault_mix(x->seed + j * 0x9e3779b97f4a7c15ULL + (u64)(i + 1) * 0xd1b54a32d192ed03ULL);
+		h = fault_mix(x->seed + j * 0x9e3779b97f4a7c15ULL + (u64)(i + 1) * 0xd1b54a32d192ed03ULL +
+			      idx * HVX_CLK_IDX_SALT);
 		if (h % 1000 >= x->permille)
 			continue;
 		e = j * p + 1 + (h >> 16) % (p - 1);
@@ -4340,23 +4368,24 @@ static u64 hvx_xt_extra_after(const struct hvx_vm *vm, u64 j, u64 t)
 static bool hvx_xt_next(struct hvx_vm *vm, struct hvx_vcpu *vcpu)
 {
 	u64 p = vm->pmu_period, t = vcpu->pmu_next, j = t / p, m, best, e;
-	bool extra = t != hvx_xt_main(vm, j);
+	u64 idx = hvx_clk_idx(vm, vcpu);
+	bool extra = t != hvx_xt_main(vm, j, idx);
 
 	best = U64_MAX;
-	m = hvx_xt_main(vm, j);
+	m = hvx_xt_main(vm, j, idx);
 	if (m > t)
 		best = m;
-	e = hvx_xt_extra_after(vm, j, t);
+	e = hvx_xt_extra_after(vm, j, t, idx);
 	if (e < best)
 		best = e;
-	m = hvx_xt_main(vm, j + 1);		/* > t: every target of period j is below (j+1)*p */
+	m = hvx_xt_main(vm, j + 1, idx);		/* > t: every target of period j is below (j+1)*p */
 	if (m < best)
 		best = m;
-	e = hvx_xt_extra_after(vm, j + 1, t);
+	e = hvx_xt_extra_after(vm, j + 1, t, idx);
 	if (e < best)
 		best = e;
 	vcpu->pmu_next = best;
-	if (best == hvx_xt_main(vm, best / p) && vm->tj_on) {	/* jitter statistics, as hvx_tj_next */
+	if (best == hvx_xt_main(vm, best / p, idx) && vm->tj_on) {	/* jitter statistics, as hvx_tj_next */
 		u64 k = best / p, d = best - k * p;
 
 		vcpu->tj_last = k;
@@ -4375,6 +4404,124 @@ static bool hvx_xt_next(struct hvx_vm *vm, struct hvx_vcpu *vcpu)
 	return extra;
 }
 
+/*
+ * The LAPIC TSC-deadline timer of one vCPU: once the virtual TSC has reached the
+ * deadline, turn it into a pending one-shot of the LVT-timer vector. Called at the
+ * run-loop top (for the running vCPU) and by the scheduler (for every vCPU).
+ */
+static void hvx_lapic_timer_due(struct hvx_vcpu *vcpu)
+{
+	u64 vtsc = (vcpu->tsc_mode == HVX_TSC_ICOUNT)
+		 ? vcpu->tsc + vcpu->icount * vcpu->tsc_step : vcpu->tsc;
+
+	if (vcpu->lapic.tsc_deadline && vtsc >= vcpu->lapic.tsc_deadline) {
+		u32 lvt = vcpu->lapic.reg[X2APIC_LVT_TIMER - X2APIC_BASE_MSR];
+
+		vcpu->lapic.tsc_deadline = 0;
+		if (!(lvt & LVT_MASKED))
+			hvx_oneshot_post(vcpu, lvt);
+	}
+}
+
+/*
+ * Device events that come due on the instruction clock (all routed to vCPU 0, so
+ * every block is a no-op for any other vCPU). Called at the run-loop top and by the
+ * scheduler's all-halted clock jump.
+ */
+static void hvx_dev_due(struct hvx_vcpu *vcpu)
+{
+	struct hvx_vm *vm = vcpu->vm;
+
+	/*
+	 * virtio-blk deterministic completion (milestone 20). A kick scheduled
+	 * the completion at completion_due = kick_icount + LATENCY (set in a
+	 * retired IO/MMIO exit, so a pure function of icount). Checked here at the
+	 * loop top like the LAPIC timer, so a due completion becomes an injection
+	 * before the next entry; a host-interrupt iteration never advances icount,
+	 * so it fires at a run-independent instruction. Routed to the BSP (vCPU 0),
+	 * matching the device-IRQ-on-BSP rule. Phase A (direct) turns it into a
+	 * one-shot M8 injection; Phase B leaves irq_pending set for the IOAPIC-
+	 * routed level source (vblk_irq) to deliver.
+	 */
+	if (vcpu->index == 0 && vm->vblk.completion_armed &&
+	    vcpu->icount >= vm->vblk.completion_due) {
+		vm->vblk.completion_armed = 0;
+		vm->vblk.irq_pending = 1;
+		if (vm->vblk.irq_mode == VBLK_IRQ_MODE_DIRECT) {
+			/* Phase A: a fire-and-forget one-shot delivered directly (the
+			 * test's ISR does not EOI), so -- exactly like HVX_INJECT -- it
+			 * is NOT gated on a prior EOI. Clear in_service so a completion
+			 * from a previous run/replay cannot block this one. */
+			vcpu->inject_vector = vm->vblk.irq_vec & 0xff;
+			vcpu->inject_at_icount = vcpu->icount;
+			vcpu->inject_valid = 1;
+			vcpu->lapic.in_service = 0;
+			vm->vblk.irq_pending = 0;	/* consumed by the one-shot */
+		}
+	}
+
+	/*
+	 * virtio-net PACED RX delivery (milestone 23 stretch). When paced (a real
+	 * OS), trickle one pending scripted frame per HVX_VNET_RX_PACE instructions
+	 * against the already-posted receive buffers -- a deterministic icount
+	 * cadence (the condition is a pure function of the instruction clock, so two
+	 * runs deliver at the identical instruction). This lets a later frame arrive
+	 * after the interface is fully up. OFF by default (kick-triggered only).
+	 */
+	if (vcpu->index == 0 && vm->vnet.present && vm->vnet.rx_paced &&
+	    vm->vnet.rx_tail != vm->vnet.rx_head && vm->vnet.q[0].qready &&
+	    vcpu->icount >= vm->vnet.rx_next_deliver) {
+		virtio_net_rx_deliver(vcpu, 1);	/* one FIFO frame per paced interval */
+		vm->vnet.rx_next_deliver = vcpu->icount + HVX_VNET_RX_PACE;
+	}
+
+	/*
+	 * virtio-net deterministic completion (milestone 23). Each queue's
+	 * completion was armed at its kick (completion_due = kick_icount +
+	 * HVX_VNET_LATENCY, in the retired MMIO exit), so it is a pure function of
+	 * icount. When due, latch irq_pending for the MSI-X source (vnet_msix_irq)
+	 * to deliver. Same loop-top / retired-mutation split as virtio-blk (M16
+	 * creep discipline). Device IRQs on the BSP (vCPU 0).
+	 */
+	if (vcpu->index == 0 && vm->vnet.present) {
+		int qi;
+
+		for (qi = 0; qi < HVX_VNET_NQUEUES; qi++)
+			if (vm->vnet.q[qi].completion_armed &&
+			    vcpu->icount >= vm->vnet.q[qi].completion_due) {
+				vm->vnet.q[qi].completion_armed = 0;
+				vm->vnet.q[qi].irq_pending = 1;
+			}
+	}
+}
+
+/*
+ * In-kernel scheduler: stops (THROTTLE / max_insns) noticed in the run loop wait in
+ * vm->sched_stop for a clean boundary.
+ */
+#define HVX_SCHED_STOP_THROTTLE	1U
+#define HVX_SCHED_STOP_STEP	2U
+#define HVX_SCHED_QUANTUM	(1ULL << 20)	/* default turn length (guest branches) */
+
+/*
+ * Would the run loop deliver an interrupt to this vCPU at its next entry? (IF=1,
+ * nothing in service, and a due one-shot -- timer / IPI / injection -- or, for
+ * vCPU 0, an asserted device source.) The scheduler wakes a halted vCPU with it.
+ */
+static bool hvx_vcpu_irq_ready(struct hvx_vcpu *v)
+{
+	struct hvx_vm *vm = v->vm;
+	u32 vec, *clr;
+
+	if (!(v->regs.rflags & 0x200) || v->lapic.in_service)
+		return false;
+	if (v->inject_valid && v->icount >= v->inject_at_icount)
+		return true;
+	return v->index == 0 &&
+	       (uart_irq(vm, &vec) || vblk_irq(vm, &vec) || vblk_msix_irq(vm, &vec) ||
+		vnet_msix_irq(vm, &vec, &clr));
+}
+
 static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 			bool single_step, u64 max_insns)
 {
@@ -4388,6 +4535,10 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 	u64 stepped = vcpu->carry_stepped;
 	long resume = 0;
 	int ret = 0;
+	/* In-kernel vCPU scheduler (HVX_VM_SMP_SCHED): this call runs one turn (or the
+	 * rest of one). Every sched-only path below is guarded by this flag, so a VM
+	 * without the scheduler runs exactly the code it ran before. */
+	const bool sched = vm->sched_on;
 	/* host copies of the guest-owned SYSCALL / KERNEL_GS_BASE MSRs (M15). These
 	 * MSRs are NOT in the VMCS and SYSCALL/swapgs do NOT VM-exit, so the guest
 	 * would otherwise run them against the host's values. We load the guest's
@@ -4532,6 +4683,15 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 				vcpu->icount += HVX_PMU_TICK_ICOUNT;
 				stepped++;
 				streak = 0;
+				if (sched) {
+					/* stops wait for a clean boundary (checked below) */
+					if (max_insns && stepped >= max_insns)
+						vm->sched_stop |= HVX_SCHED_STOP_STEP;
+					guard += HVX_PMU_TICK_GUARD;
+					if (guard >= HVX_MAX_INKERNEL_EXITS)
+						vm->sched_stop |= HVX_SCHED_STOP_THROTTLE;
+					continue;
+				}
 				if (max_insns && stepped >= max_insns) {
 					ex->reason = HVX_EXIT_STEP;
 					ex->insn_len = 0;
@@ -4555,6 +4715,39 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 		}
 
 		/*
+		 * In-kernel scheduler: end the turn once the VM-wide branch count reaches
+		 * turn_end (the landing above stops exactly there), and take a pending
+		 * THROTTLE / max_insns stop -- but only at a CLEAN boundary: setup_vmcs
+		 * does not carry an STI / MOV-SS shadow into the next entry, and a half-
+		 * delivered event must be finished first. Until then the PMU block below
+		 * single-steps. Checked before any injection is armed for this entry.
+		 */
+		if (sched) {
+			struct hvx_sched *sc = &vm->sched;
+
+			if (!sc->turn_over && vcpu->pmu_total >= sc->turn_end) {
+				if (vcpu->pmu_total > sc->turn_end || !vcpu->pmu_step)
+					sc->overshoots++;
+				sc->turn_over = 1;
+			}
+			if (sc->turn_over || vm->sched_stop) {
+				if (!vcpu->reinj_valid &&
+				    !((u32)vmread(GUEST_INTERRUPTIBILITY) & 3)) {
+					ex->insn_len = 0;
+					ex->qualification = 0;
+					ex->guest_phys = 0;
+					if (vm->sched_stop)
+						ex->reason = (vm->sched_stop & HVX_SCHED_STOP_THROTTLE)
+							   ? HVX_EXIT_THROTTLE : HVX_EXIT_STEP;
+					else
+						ex->reason = HVX_EXIT_TURN;
+					goto out_clear;
+				}
+				sc->deferred++;
+			}
+		}
+
+		/*
 		 * LAPIC TSC-deadline timer (milestone 15). The virtual TSC is a
 		 * function of the instruction clock in ICOUNT mode; in the free-run
 		 * COUNTER mode used to bring the device model up it creeps forward once
@@ -4567,80 +4760,9 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 		 * The check (not the creep) is done here at the top so a deadline that
 		 * has come due is turned into an injection before the next entry.
 		 */
-		{
-			u64 vtsc = (vcpu->tsc_mode == HVX_TSC_ICOUNT)
-				 ? vcpu->tsc + vcpu->icount * vcpu->tsc_step : vcpu->tsc;
+		hvx_lapic_timer_due(vcpu);
 
-			if (vcpu->lapic.tsc_deadline && vtsc >= vcpu->lapic.tsc_deadline) {
-				u32 lvt = vcpu->lapic.reg[X2APIC_LVT_TIMER - X2APIC_BASE_MSR];
-
-				vcpu->lapic.tsc_deadline = 0;
-				if (!(lvt & LVT_MASKED))
-					hvx_oneshot_post(vcpu, lvt);
-			}
-		}
-
-		/*
-		 * virtio-blk deterministic completion (milestone 20). A kick scheduled
-		 * the completion at completion_due = kick_icount + LATENCY (set in a
-		 * retired IO/MMIO exit, so a pure function of icount). Checked here at the
-		 * loop top like the LAPIC timer, so a due completion becomes an injection
-		 * before the next entry; a host-interrupt iteration never advances icount,
-		 * so it fires at a run-independent instruction. Routed to the BSP (vCPU 0),
-		 * matching the device-IRQ-on-BSP rule. Phase A (direct) turns it into a
-		 * one-shot M8 injection; Phase B leaves irq_pending set for the IOAPIC-
-		 * routed level source (vblk_irq) to deliver.
-		 */
-		if (vcpu->index == 0 && vm->vblk.completion_armed &&
-		    vcpu->icount >= vm->vblk.completion_due) {
-			vm->vblk.completion_armed = 0;
-			vm->vblk.irq_pending = 1;
-			if (vm->vblk.irq_mode == VBLK_IRQ_MODE_DIRECT) {
-				/* Phase A: a fire-and-forget one-shot delivered directly (the
-				 * test's ISR does not EOI), so -- exactly like HVX_INJECT -- it
-				 * is NOT gated on a prior EOI. Clear in_service so a completion
-				 * from a previous run/replay cannot block this one. */
-				vcpu->inject_vector = vm->vblk.irq_vec & 0xff;
-				vcpu->inject_at_icount = vcpu->icount;
-				vcpu->inject_valid = 1;
-				vcpu->lapic.in_service = 0;
-				vm->vblk.irq_pending = 0;	/* consumed by the one-shot */
-			}
-		}
-
-		/*
-		 * virtio-net PACED RX delivery (milestone 23 stretch). When paced (a real
-		 * OS), trickle one pending scripted frame per HVX_VNET_RX_PACE instructions
-		 * against the already-posted receive buffers -- a deterministic icount
-		 * cadence (the condition is a pure function of the instruction clock, so two
-		 * runs deliver at the identical instruction). This lets a later frame arrive
-		 * after the interface is fully up. OFF by default (kick-triggered only).
-		 */
-		if (vcpu->index == 0 && vm->vnet.present && vm->vnet.rx_paced &&
-		    vm->vnet.rx_tail != vm->vnet.rx_head && vm->vnet.q[0].qready &&
-		    vcpu->icount >= vm->vnet.rx_next_deliver) {
-			virtio_net_rx_deliver(vcpu, 1);	/* one FIFO frame per paced interval */
-			vm->vnet.rx_next_deliver = vcpu->icount + HVX_VNET_RX_PACE;
-		}
-
-		/*
-		 * virtio-net deterministic completion (milestone 23). Each queue's
-		 * completion was armed at its kick (completion_due = kick_icount +
-		 * HVX_VNET_LATENCY, in the retired MMIO exit), so it is a pure function of
-		 * icount. When due, latch irq_pending for the MSI-X source (vnet_msix_irq)
-		 * to deliver. Same loop-top / retired-mutation split as virtio-blk (M16
-		 * creep discipline). Device IRQs on the BSP (vCPU 0).
-		 */
-		if (vcpu->index == 0 && vm->vnet.present) {
-			int qi;
-
-			for (qi = 0; qi < HVX_VNET_NQUEUES; qi++)
-				if (vm->vnet.q[qi].completion_armed &&
-				    vcpu->icount >= vm->vnet.q[qi].completion_due) {
-					vm->vnet.q[qi].completion_armed = 0;
-					vm->vnet.q[qi].irq_pending = 1;
-				}
-		}
+		hvx_dev_due(vcpu);
 
 		/*
 		 * Pick the interrupt to deliver this entry: a due one-shot event
@@ -4725,16 +4847,24 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 		}
 
 		if (vcpu->pmu_live) {
-			u64 rem, n;
+			u64 rem, n, tgt = vcpu->pmu_next;
 			u32 pc = (u32)vmread(PROC_EXEC_CTL);
-			bool step;
+			bool step, force = false;
 
-			rem = vcpu->pmu_next - vcpu->pmu_total;
-			step = rem <= HVX_PMU_MARGIN;
+			if (sched) {
+				/* land on whichever comes first: the next tick or the turn's
+				 * end; once the end (or a stop) is due, step to a clean boundary */
+				if (vm->sched.turn_over || vm->sched_stop)
+					force = true;
+				else if (vm->sched.turn_end < tgt)
+					tgt = vm->sched.turn_end;
+			}
+			rem = tgt - vcpu->pmu_total;
+			step = force || rem <= HVX_PMU_MARGIN;
 			n = step ? 0x40000000ULL : rem - HVX_PMU_MARGIN;
 			if (n > 0x40000000ULL)
 				n = 0x40000000ULL;
-			if (step && vcpu->pmu_flat >= HVX_PMU_HOP_STEPS && rem >= HVX_PMU_HOP_MIN) {
+			if (!force && step && vcpu->pmu_flat >= HVX_PMU_HOP_STEPS && rem >= HVX_PMU_HOP_MIN) {
 				step = false;		/* hop over a branch-free stretch */
 				n = 1;
 				vcpu->pmu_flat = 0;
@@ -4777,6 +4907,7 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 			u64 got = (rd(MSR_PMC0) + vcpu->pmu_n) & HVX_PMU_MASK;
 
 			vcpu->pmu_total += got;
+			vcpu->br_own += got;
 			vcpu->pmu_n = 0;
 			if (got || !vcpu->pmu_step)
 				vcpu->pmu_flat = 0;
@@ -4824,14 +4955,15 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 				 * never retires another branch cannot hold the host CPU. */
 				vcpu->pmu_steps++;
 				vcpu->pmu_flat++;
-				if (++safety >= HVX_SAFETY_CAP) {
+				if (++safety >= HVX_SAFETY_CAP && !sched) {
 					ex->reason = HVX_EXIT_THROTTLE;
 					ex->insn_len = 0;
 					ex->qualification = 0;
 					ex->guest_phys = 0;
 					goto out_clear;
 				}
-				if ((++streak >= HVX_PREEMPT_STREAK || need_resched()) &&
+				if ((++streak >= HVX_PREEMPT_STREAK || need_resched() ||
+				     (sched && safety >= HVX_SAFETY_CAP)) &&
 				    (u32)vmread(GUEST_INTERRUPTIBILITY) == 0) {
 					vcpu->carry_guard = guard;
 					vcpu->carry_stepped = stepped;
@@ -4857,14 +4989,15 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 			 * NOT creep the virtual TSC (the creep lives in the retired block,
 			 * so host interrupts -- nondeterministic timing -- never move vm->tsc
 			 * or shift the timer-injection icount) (M16). */
-			if (++safety >= HVX_SAFETY_CAP) {
+			if (++safety >= HVX_SAFETY_CAP && !sched) {
 				ex->reason = HVX_EXIT_THROTTLE;
 				ex->insn_len = 0;
 				ex->qualification = 0;
 				ex->guest_phys = 0;
 				goto out_clear;
 			}
-			if ((++streak >= HVX_PREEMPT_STREAK || need_resched()) &&
+			if ((++streak >= HVX_PREEMPT_STREAK || need_resched() ||
+			     (sched && safety >= HVX_SAFETY_CAP)) &&
 			    (u32)vmread(GUEST_INTERRUPTIBILITY) == 0) {
 				/* let the host schedule; the ioctl re-enters (see
 				 * HVX_PREEMPT_STREAK). Only at a shadow-free boundary,
@@ -4892,7 +5025,7 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 		if (basic == EXIT_REASON_EXC_NMI && !(reason & 0x80000000U) &&
 		    ((u32)vmread(VM_EXIT_INTR_INFO) & 0x80000700U) == 0x80000200U) {
 			asm volatile("int $2" ::: "memory");
-			if (++safety >= HVX_SAFETY_CAP) {
+			if (++safety >= HVX_SAFETY_CAP && !sched) {
 				ex->reason = HVX_EXIT_THROTTLE;
 				ex->insn_len = 0;
 				ex->qualification = 0;
@@ -4911,14 +5044,15 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 		if (basic == EXIT_REASON_INTERRUPT_WINDOW) {
 			/* Not counted toward the deterministic `guard` cadence; does not
 			 * creep the virtual TSC (M16). */
-			if (++safety >= HVX_SAFETY_CAP) {
+			if (++safety >= HVX_SAFETY_CAP && !sched) {
 				ex->reason = HVX_EXIT_THROTTLE;
 				ex->insn_len = 0;
 				ex->qualification = 0;
 				ex->guest_phys = 0;
 				goto out_clear;
 			}
-			if ((++streak >= HVX_PREEMPT_STREAK || need_resched()) &&
+			if ((++streak >= HVX_PREEMPT_STREAK || need_resched() ||
+			     (sched && safety >= HVX_SAFETY_CAP)) &&
 			    (u32)vmread(GUEST_INTERRUPTIBILITY) == 0) {
 				/* let the host schedule; the ioctl re-enters (see
 				 * HVX_PREEMPT_STREAK). Only at a shadow-free boundary,
@@ -4998,6 +5132,11 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 				vcpu->regs.rip += (u32)vmread(VM_EXIT_INSN_LEN);
 				VMW(GUEST_RIP, vcpu->regs.rip);
 				retired = true;
+				/* scheduler: K PAUSEs in a row (a spin-wait) end the turn, at
+				 * the next clean boundary (the loop-top check) */
+				if (sched && vm->sched.pause_k &&
+				    ++vm->sched.pause_run >= vm->sched.pause_k)
+					vm->sched.turn_over = 1;
 			} else if (basic == EXIT_REASON_MONITOR_TRAP) {
 				/* one instruction retired; MTF stays armed for the next */
 				retired = true;
@@ -5021,6 +5160,27 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 					 gpa < vnet_bar_base(&vm->vnet) + HVX_VNET_BAR_SIZE &&
 					 hvx_vnet_mmio(vcpu, gpa, (u32)vmread(VM_EXIT_INSN_LEN)))
 					retired = true;	/* virtio-net BAR MMIO (M23) */
+			} else if (sched && basic == EXIT_REASON_HLT) {
+				/* Scheduler: with an interrupt already deliverable the HLT is
+				 * just stepped over (it is the wake-up). Otherwise the vCPU
+				 * halts: the turn ends here, RIP stays on the HLT, and the
+				 * scheduler skips this vCPU until an interrupt is posted to it.
+				 * Time does not jump here -- only when every vCPU is halted.
+				 * The boundary is clean by construction (the HLT is the end of
+				 * any STI shadow it sat in; on wake-up RIP moves past it). */
+				if (hvx_vcpu_irq_ready(vcpu)) {
+					vcpu->regs.rip += (u32)vmread(VM_EXIT_INSN_LEN);
+					VMW(GUEST_RIP, vcpu->regs.rip);
+					retired = true;
+				} else {
+					vcpu->halted = true;
+					vcpu->halt_len = (u32)vmread(VM_EXIT_INSN_LEN);
+					ex->reason = HVX_EXIT_TURN;
+					ex->insn_len = 0;
+					ex->qualification = 0;
+					ex->guest_phys = 0;
+					goto out_clear;
+				}
 			} else if (basic == EXIT_REASON_HLT &&
 				   (vcpu->lapic.tsc_deadline ||
 				    (vcpu->index == 0 && vm->vblk.completion_armed) ||
@@ -5123,6 +5283,16 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 				safety++;
 				streak = 0;
 
+				if (sched) {
+					/* stops wait for a clean boundary (loop top) */
+					if (basic != EXIT_REASON_PAUSE)
+						vm->sched.pause_run = 0;
+					if (max_insns && stepped >= max_insns)
+						vm->sched_stop |= HVX_SCHED_STOP_STEP;
+					if (++guard >= HVX_MAX_INKERNEL_EXITS)
+						vm->sched_stop |= HVX_SCHED_STOP_THROTTLE;
+					continue;
+				}
 				if (max_insns && stepped >= max_insns) {
 					ex->reason = HVX_EXIT_STEP;
 					ex->insn_len = 0;
@@ -5151,6 +5321,11 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 	}
 
 out_clear:
+	if (sched) {
+		/* the scheduler carries the cadence and step count across turns */
+		vcpu->carry_guard = guard;
+		vcpu->carry_stepped = stepped;
+	}
 	/* Capture the guest's SYSCALL / KERNEL_GS_BASE MSRs (a guest swapgs/WRMSR may
 	 * have changed them mid-run) so they persist into vm->sw_msr + the snapshot,
 	 * then restore the host's. Only if we actually loaded them (msrs_loaded). */
@@ -5254,6 +5429,240 @@ static int hvx_run_resched(struct hvx_vcpu *vc, struct hvx_exit *ex,
 	}
 	vc->carry_guard = 0;
 	vc->carry_stepped = 0;
+	return ret;
+}
+
+/* ---- in-kernel vCPU scheduler (HVX_VM_SMP_SCHED) ----
+ *
+ * One HVX_RUN drives every vCPU. Turns run one vCPU each through hvx_run_vcpu (a
+ * full VMXON..VMXOFF section per turn, so the host CPU is released between turns
+ * and every per-vCPU save/restore path is the one a single vCPU uses). The VM has
+ * ONE clock -- virtual TSC, instruction clock and PMU tick grid -- held in vm->sched
+ * and copied into the vCPU that runs; a vCPU's own branches are counted in br_own.
+ */
+static void hvx_clk_put(const struct hvx_sched *c, struct hvx_vcpu *v)
+{
+	v->tsc = c->tsc;
+	v->tsc_step = c->tsc_step;
+	v->tsc_mode = c->tsc_mode;
+	v->icount = c->icount;
+	v->pmu_total = c->pmu_total;
+	v->pmu_next = c->pmu_next;
+}
+
+static void hvx_clk_sync(struct hvx_vm *vm)
+{
+	unsigned int i;
+
+	for (i = 0; i < vm->n_vcpus; i++)
+		hvx_clk_put(&vm->sched, &vm->vcpu[i]);
+}
+
+/* make v's copy of the clock the VM's clock (after v ran, or after an ioctl set it) */
+static void hvx_clk_take(struct hvx_vm *vm, const struct hvx_vcpu *v)
+{
+	struct hvx_sched *c = &vm->sched;
+
+	c->tsc = v->tsc;
+	c->tsc_step = v->tsc_step;
+	c->tsc_mode = v->tsc_mode;
+	c->icount = v->icount;
+	c->pmu_total = v->pmu_total;
+	c->pmu_next = v->pmu_next;
+	hvx_clk_sync(vm);
+}
+
+/* length of the turn that starts now (turn number c->turns) */
+static u64 hvx_sched_len(const struct hvx_sched *c)
+{
+	if (!c->seed)
+		return c->quantum;
+	return 1 + fault_mix(c->seed + (c->turns + 1) * 0x9e3779b97f4a7c15ULL) % c->quantum;
+}
+
+/* due timers on every vCPU, due device events (vCPU 0) */
+static void hvx_sched_events(struct hvx_vm *vm)
+{
+	unsigned int i;
+
+	for (i = 0; i < vm->n_vcpus; i++)
+		hvx_lapic_timer_due(&vm->vcpu[i]);
+	hvx_dev_due(&vm->vcpu[0]);
+}
+
+/*
+ * Next vCPU to run: round-robin after `cur`. A halted vCPU is skipped unless an
+ * interrupt is now deliverable to it; then it wakes (RIP moves past its HLT, as a
+ * real CPU leaves the halt state). Returns -1 if every vCPU stays halted.
+ */
+static int hvx_sched_pick(struct hvx_vm *vm)
+{
+	unsigned int n = vm->n_vcpus, k;
+
+	hvx_sched_events(vm);
+	for (k = 1; k <= n; k++) {
+		struct hvx_vcpu *v = &vm->vcpu[(vm->sched.cur + k) % n];
+
+		if (v->halted) {
+			if (!hvx_vcpu_irq_ready(v))
+				continue;
+			v->halted = false;
+			v->regs.rip += v->halt_len;
+			vm->sched.wakeups++;
+		}
+		return v->index;
+	}
+	return -1;
+}
+
+/*
+ * Every vCPU is halted: jump the VM clock forward to the earliest armed event -- a
+ * LAPIC deadline (on the TSC) and/or a device completion or scheduled injection (on
+ * the instruction clock), as the one-vCPU idle HLT does. Only forward. Returns
+ * whether anything was armed.
+ */
+static bool hvx_sched_idle_jump(struct hvx_vm *vm)
+{
+	struct hvx_sched *c = &vm->sched;
+	u64 dl = U64_MAX, due = U64_MAX;
+	unsigned int i;
+	int qi;
+
+	for (i = 0; i < vm->n_vcpus; i++) {
+		struct hvx_vcpu *v = &vm->vcpu[i];
+
+		if (v->lapic.tsc_deadline && v->lapic.tsc_deadline < dl)
+			dl = v->lapic.tsc_deadline;
+		if (v->inject_valid && v->inject_at_icount < due)
+			due = v->inject_at_icount;
+	}
+	if (vm->vblk.completion_armed && vm->vblk.completion_due < due)
+		due = vm->vblk.completion_due;
+	if (vm->vnet.present)
+		for (qi = 0; qi < HVX_VNET_NQUEUES; qi++)
+			if (vm->vnet.q[qi].completion_armed && vm->vnet.q[qi].completion_due < due)
+				due = vm->vnet.q[qi].completion_due;
+	if (dl == U64_MAX && due == U64_MAX)
+		return false;
+	if (dl != U64_MAX) {
+		if (c->tsc_mode == HVX_TSC_ICOUNT) {
+			u64 step = c->tsc_step ? c->tsc_step : 1;
+			u64 need = dl > c->tsc ? (dl - c->tsc + step - 1) / step : 0;
+
+			if (need > c->icount)
+				c->icount = need;
+		} else if (dl > c->tsc) {
+			c->tsc = dl;
+		}
+	}
+	if (due != U64_MAX && due > c->icount)
+		c->icount = due;
+	c->time_jumps++;
+	hvx_clk_sync(vm);
+	return true;
+}
+
+static int hvx_sched_run(struct hvx_vm *vm, struct hvx_exit *ex, u64 max_insns)
+{
+	struct hvx_sched *c = &vm->sched;
+	unsigned long last_progress = jiffies;
+	u64 last_total = c->pmu_total, last_turns = c->turns, last_guard = c->guard;
+	u64 last_rcx = vm->vcpu[c->cur].regs.rcx;
+	u64 stepped = 0;
+	int ret = 0;
+
+	vm->sched_stop = 0;
+	hvx_clk_sync(vm);
+	for (;;) {
+		struct hvx_vcpu *v;
+
+		memset(ex, 0, sizeof(*ex));
+		if (!c->in_turn) {
+			int next = hvx_sched_pick(vm);
+
+			if (next < 0 && hvx_sched_idle_jump(vm))
+				next = hvx_sched_pick(vm);
+			if (next < 0) {
+				/* everyone halted, nothing armed: report the HLT */
+				ex->reason = EXIT_REASON_HLT;
+				ex->insn_len = vm->vcpu[c->cur].halt_len;
+				break;
+			}
+			v = &vm->vcpu[next];
+			c->cur = next;
+			c->in_turn = 1;
+			c->turn_over = 0;
+			c->pause_run = 0;
+			c->turn_end = c->pmu_total + hvx_sched_len(c);
+			v->pmu_flat = 0;
+			v->sched_turns++;
+		}
+		v = &vm->vcpu[c->cur];
+		v->carry_guard = (unsigned int)c->guard;
+		v->carry_stepped = stepped;
+		ret = hvx_run_vcpu(v, ex, false, max_insns);
+		c->guard = v->carry_guard;
+		stepped = v->carry_stepped;
+		v->carry_guard = 0;
+		v->carry_stepped = 0;
+		hvx_clk_take(vm, v);
+		if (ret)
+			break;
+		if (ex->reason == HVX_EXIT_TURN) {
+			u64 h = c->turn_hash;
+
+			h = (h ^ v->index) * 0x100000001b3ULL;
+			h = (h ^ v->regs.rip) * 0x100000001b3ULL;
+			h = (h ^ v->regs.rcx) * 0x100000001b3ULL;
+			h = (h ^ v->regs.rflags) * 0x100000001b3ULL;
+			h = (h ^ c->pmu_total) * 0x100000001b3ULL;
+			h = (h ^ (u64)v->halted) * 0x100000001b3ULL;
+			c->turn_hash = h;
+			c->in_turn = 0;
+			c->turn_over = 0;
+			c->turns++;
+			/* a turn switch counts on the THROTTLE cadence, so a guest that runs
+			 * only in tiny turns still returns to userspace */
+			if (++c->guard >= HVX_MAX_INKERNEL_EXITS)
+				vm->sched_stop |= HVX_SCHED_STOP_THROTTLE;
+			memset(ex, 0, sizeof(*ex));
+			if (c->stop_turn && c->turns == c->stop_turn) {
+				ex->reason = HVX_EXIT_TURN;
+				break;
+			}
+			if (vm->sched_stop) {
+				ex->reason = (vm->sched_stop & HVX_SCHED_STOP_THROTTLE)
+					   ? HVX_EXIT_THROTTLE : HVX_EXIT_STEP;
+				break;
+			}
+		} else if (ex->reason != HVX_EXIT_PREEMPT) {
+			break;		/* THROTTLE / STEP (both at clean boundaries), or a real exit */
+		}
+		/* between turns or after a preempt: let the host run, bound a wedge */
+		if (c->guard != last_guard || c->pmu_total != last_total ||
+		    c->turns != last_turns || v->regs.rcx != last_rcx) {
+			last_guard = c->guard;
+			last_total = c->pmu_total;
+			last_turns = c->turns;
+			last_rcx = v->regs.rcx;
+			last_progress = jiffies;
+		}
+		if (time_after(jiffies, last_progress + HVX_STALL_SECS * HZ)) {
+			memset(ex, 0, sizeof(*ex));
+			ex->reason = HVX_EXIT_STALL;
+			break;
+		}
+		if (fatal_signal_pending(current)) {
+			ret = -EINTR;
+			break;
+		}
+		cond_resched();
+	}
+	/* a THROTTLE restarts the cadence -- also when another stop is reported at the
+	 * same boundary, so the next THROTTLE does not depend on which one was */
+	if (vm->sched_stop & HVX_SCHED_STOP_THROTTLE)
+		c->guard = 0;
+	vm->sched_stop = 0;
 	return ret;
 }
 
@@ -5438,7 +5847,11 @@ static void seed_vcpu(struct hvx_vcpu *vc, struct hvx_vm *vm, u32 index)
 
 	/* per-CPU x2APIC starts enabled-by-BIOS (milestone 15) */
 	memset(&vc->lapic, 0, sizeof(vc->lapic));
-	vc->lapic.apic_base = APICBASE_DEFAULT;
+	vc->lapic.apic_base = index ? (APICBASE_DEFAULT & ~APICBASE_BSP) : APICBASE_DEFAULT;
+	vc->br_own = 0;
+	vc->sched_turns = 0;
+	vc->halted = false;
+	vc->halt_len = 0;
 }
 
 static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
@@ -5455,6 +5868,8 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 		return -EINVAL;
 	if ((cfg->flags & HVX_VM_PMU_CLOCK) && !hvx_pmu_ok)
 		return -ENODEV;			/* no usable PMU (nested / hybrid host) */
+	if ((cfg->flags & HVX_VM_SMP_SCHED) && !(cfg->flags & HVX_VM_PMU_CLOCK))
+		return -EINVAL;			/* turns are counted on the PMU branch clock */
 
 	n = cfg->mem_size ? DIV_ROUND_UP(cfg->mem_size, PAGE_SIZE) : 64;
 	if (n < MIN_GPAGES)
@@ -5466,6 +5881,7 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 
 	/* compile-time ABI/layout checks (were in the old create path) */
 	BUILD_BUG_ON(SWMSR_COUNT != HVX_NR_SW_MSR);
+	BUILD_BUG_ON(HVX_SCHED_MAX_VCPUS != HVX_MAX_VCPUS);
 	BUILD_BUG_ON(sizeof(struct hvx_unsync_ent) != sizeof(struct hvx_unsync_rec));
 	BUILD_BUG_ON(sizeof(((struct hvx_vcpu *)0)->lapic.reg) !=
 		     sizeof(((struct hvx_snapshot *)0)->lapic_reg));
@@ -5497,6 +5913,12 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 	vm->pmu_clock = (cfg->flags & HVX_VM_PMU_CLOCK) ? 1 : 0;
 	vm->pause_exit = (cfg->flags & HVX_VM_PAUSE_EXIT) ? 1 : 0;
 	vm->pt_allowed = !!(cfg->flags & HVX_VM_PT_TRACE);
+	vm->sched_on = (cfg->flags & HVX_VM_SMP_SCHED) && nv > 1;
+	memset(&vm->sched, 0, sizeof(vm->sched));
+	vm->sched.quantum = HVX_SCHED_QUANTUM;
+	vm->sched.cur = nv - 1;			/* the first pick is vCPU 0 */
+	vm->sched.tsc_step = 1;			/* the VM clock starts as every vCPU's (seed_vcpu) */
+	vm->sched.tsc_mode = HVX_TSC_COUNTER;
 	if (pt_force && hvx_pt_ok) {		/* module-parameter tracing (see pt_force) */
 		u64 lo[2] = { pt_force_lo0, pt_force_lo1 }, hi[2] = { pt_force_hi0, pt_force_hi1 };
 		u32 fl = ((pt_force & 1) ? HVX_PT_KERNEL : 0) | ((pt_force & 2) ? HVX_PT_USER : 0) |
@@ -5749,6 +6171,8 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		vc->tsc_aux = t.aux;
 		vc->tsc_mode = t.mode;
 		vc->rdtsc_count = 0;
+		if (vm->sched_on)
+			hvx_clk_take(vm, vc);	/* one clock for the whole VM */
 		ret = 0;
 		break;
 	}
@@ -6025,6 +6449,8 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		vc->pmu_next = s->pmu_next;
 		/* FXRSTOR #GPs in the HOST on a reserved MXCSR bit: never trust it */
 		*(u32 *)((u8 *)vc->fx_page + 24) &= 0xffffU;
+		if (vm->sched_on)
+			hvx_clk_take(vm, vc);	/* HVX_SET_SCHED, which follows, sets it too */
 		kfree(s);
 		ret = 0;
 		break;
@@ -6033,6 +6459,12 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		struct hvx_exit ex;
 
 		if (!vm->n_guest_pages) { ret = -EINVAL; break; }
+		if (vm->sched_on) {
+			ret = hvx_sched_run(vm, &ex, 0);
+			if (ret == 0 && copy_to_user(uarg, &ex, sizeof(ex)))
+				ret = -EFAULT;
+			break;
+		}
 		ret = hvx_run_resched(vc, &ex, false, 0);
 		if (ret == 0) {
 			const char *nm = ex.reason == HVX_EXIT_VMFAIL ? "VMFAIL" :
@@ -6053,6 +6485,26 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 		if (!vm->n_guest_pages) { ret = -EINVAL; break; }
 		if (copy_from_user(&ctl, uarg, sizeof(ctl))) { ret = -EFAULT; break; }
+		if (vm->sched_on) {
+			/* the scheduler runs on the PMU clock; MTF single-stepping is the
+			 * userspace round-robin of a VM without it */
+			if (ctl.flags & HVX_RUN_SINGLE_STEP) { ret = -EINVAL; break; }
+			if (ctl.flags & HVX_RUN_RESET_ICOUNT) {
+				vm->sched.icount = 0;
+				hvx_clk_sync(vm);
+			}
+			ret = hvx_sched_run(vm, &ex, ctl.max_insns);
+			if (ret == 0) {
+				ctl.icount = vm->sched.icount;
+				ctl.qualification = ex.qualification;
+				ctl.guest_phys = ex.guest_phys;
+				ctl.reason = ex.reason;
+				ctl.insn_len = ex.insn_len;
+				if (copy_to_user(uarg, &ctl, sizeof(ctl)))
+					ret = -EFAULT;
+			}
+			break;
+		}
 		if (ctl.flags & HVX_RUN_RESET_ICOUNT)
 			vc->icount = 0;
 		ret = hvx_run_resched(vc, &ex, !!(ctl.flags & HVX_RUN_SINGLE_STEP),
@@ -6433,24 +6885,94 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 			v->xt_applied = v->xt_hash = v->xt_first = v->xt_last = 0;
 			if (!on && v->pmu_next) {	/* back on the grid: the target may be an extra tick */
-				u64 j = v->pmu_next / vm->pmu_period, m = hvx_xt_main(vm, j);
+				u64 j = v->pmu_next / vm->pmu_period, m = hvx_xt_main(vm, j, hvx_clk_idx(vm, v));
 
 				if (m <= v->pmu_total)
-					m = hvx_xt_main(vm, j + 1);
+					m = hvx_xt_main(vm, j + 1, hvx_clk_idx(vm, v));
 				if (m != v->pmu_next && m > v->pmu_total)
 					v->pmu_next = m;
 			}
-			if (on && v->pmu_next) {	/* the next target may now be an extra tick */
+			if (on && v->pmu_next) {	/* the next target may now be an extra tick (sched: VM clock, same for all) */
 				u64 j = v->pmu_next / vm->pmu_period;
-				u64 e = hvx_xt_extra_after(vm, j - (j > 0), v->pmu_total);
+				u64 e = hvx_xt_extra_after(vm, j - (j > 0), v->pmu_total, hvx_clk_idx(vm, v));
 
 				if (e > v->pmu_total && e < v->pmu_next)
 					v->pmu_next = e;
-				e = hvx_xt_extra_after(vm, j, v->pmu_total);
+				e = hvx_xt_extra_after(vm, j, v->pmu_total, hvx_clk_idx(vm, v));
 				if (e > v->pmu_total && e < v->pmu_next)
 					v->pmu_next = e;
 			}
 		}
+		if (vm->sched_on)
+			hvx_clk_take(vm, vc);
+		break;
+	}
+	case HVX_GET_SCHED: {
+		struct hvx_sched *sc;	/* heap: keep the ioctl frame small */
+		unsigned int i;
+
+		if (!vm->n_guest_pages) { ret = -EINVAL; break; }
+		sc = kzalloc(sizeof(*sc), GFP_KERNEL);
+		if (!sc) { ret = -ENOMEM; break; }
+		*sc = vm->sched;
+		memset(sc->v, 0, sizeof(sc->v));
+		sc->n_vcpus = vm->n_vcpus;
+		for (i = 0; i < vm->n_vcpus; i++) {
+			struct hvx_vcpu *v = &vm->vcpu[i];
+
+			sc->v[i].branches = v->br_own;
+			sc->v[i].turns = v->sched_turns;
+			sc->v[i].cr2 = v->cr2;
+			sc->v[i].halted = v->halted;
+			sc->v[i].halt_len = v->halt_len;
+			sc->v[i].reinj_valid = v->reinj_valid;
+			sc->v[i].reinj_info = v->reinj_info;
+			sc->v[i].reinj_ec = v->reinj_ec;
+			sc->v[i].reinj_len = v->reinj_len;
+		}
+		ret = copy_to_user(uarg, sc, sizeof(*sc)) ? -EFAULT : 0;
+		kfree(sc);
+		break;
+	}
+	case HVX_SET_SCHED: {
+		struct hvx_sched *sc;
+		unsigned int i;
+
+		if (!vm->n_guest_pages) { ret = -EINVAL; break; }
+		sc = kzalloc(sizeof(*sc), GFP_KERNEL);
+		if (!sc) { ret = -ENOMEM; break; }
+		if (copy_from_user(sc, uarg, sizeof(*sc))) { kfree(sc); ret = -EFAULT; break; }
+		ret = 0;
+		if (vm->sched_on && (!sc->quantum || sc->cur >= vm->n_vcpus ||
+				     (sc->tsc_mode != HVX_TSC_COUNTER && sc->tsc_mode != HVX_TSC_ICOUNT)))
+			ret = -EINVAL;
+		for (i = 0; i < vm->n_vcpus; i++)
+			if (sc->v[i].halt_len > 15 ||
+			    (sc->v[i].reinj_valid && !(sc->v[i].reinj_info & 0x80000000U)))
+				ret = -EINVAL;
+		if (ret) { kfree(sc); break; }
+		if (vm->sched_on) {
+			vm->sched = *sc;
+			memset(vm->sched.v, 0, sizeof(vm->sched.v));
+			vm->sched.n_vcpus = vm->n_vcpus;
+			hvx_clk_sync(vm);
+		}
+		for (i = 0; i < vm->n_vcpus; i++) {
+			struct hvx_vcpu *v = &vm->vcpu[i];
+
+			v->br_own = sc->v[i].branches;
+			v->sched_turns = sc->v[i].turns;
+			v->cr2 = sc->v[i].cr2;
+			v->reinj_valid = !!sc->v[i].reinj_valid;
+			v->reinj_info = sc->v[i].reinj_info & 0x80000fffU;
+			v->reinj_ec = sc->v[i].reinj_ec;
+			v->reinj_len = sc->v[i].reinj_len;
+			if (vm->sched_on) {
+				v->halted = !!sc->v[i].halted;
+				v->halt_len = sc->v[i].halt_len;
+			}
+		}
+		kfree(sc);
 		break;
 	}
 	case HVX_SET_FLUSHCUT: {

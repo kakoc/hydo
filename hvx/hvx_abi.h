@@ -97,6 +97,16 @@ struct hvx_config {
  * ENODEV otherwise). Default 0 = byte-identical to before.
  */
 #define HVX_VM_PT_TRACE		(1u << 4)
+/*
+ * HVX_VM_SMP_SCHED (SMP Stage 1): with n_vcpus > 1, one HVX_RUN / HVX_RUNC drives ALL
+ * vCPUs inside the kernel. They take turns of an exact number of guest conditional
+ * branches (the PMU branch clock, so HVX_VM_PMU_CLOCK is required), round-robin, and
+ * share ONE clock (virtual TSC, instruction clock, PMU tick grid). A vCPU that HLTs is
+ * skipped until an interrupt is posted to it; time jumps forward only when every vCPU
+ * is halted. Policy and state: HVX_GET_SCHED / HVX_SET_SCHED. Ignored with one vCPU;
+ * default 0 = byte-identical to before.
+ */
+#define HVX_VM_SMP_SCHED	(1u << 5)
 
 /*
  * Guest register file. The first 15 fields (rax..r15) are the general-purpose
@@ -972,5 +982,68 @@ struct hvx_flushcut {
 };
 #define HVX_SET_FLUSHCUT _IOW(HVX_IOC_MAGIC, 51, struct hvx_flushcut)
 #define HVX_GET_FLUSHCUT _IOR(HVX_IOC_MAGIC, 52, struct hvx_flushcut)
+
+/*
+ * In-kernel vCPU scheduler (HVX_VM_SMP_SCHED). Turn t of the round-robin lasts
+ *     quantum                                   guest conditional branches (seed == 0)
+ *     1 + splitmix64(seed + (t+1)*GOLDEN) % quantum                       (seed != 0)
+ * counted on the VM-wide branch clock, and ends at the first instruction boundary after
+ * that many branches -- but only at a CLEAN boundary (no STI / MOV-SS interrupt shadow,
+ * no half-delivered event); otherwise the vCPU single-steps on until it is clean. A turn
+ * also ends when the vCPU HLTs (it is then `halted` until an interrupt is posted to it
+ * and it has IF=1), and after `pause_k` consecutive PAUSE exits (needs HVX_VM_PAUSE_EXIT;
+ * 0 = off). Every turn boundary depends only on guest state, never on where an ioctl
+ * returned. With every vCPU halted the clock jumps to the earliest armed event (LAPIC
+ * deadline, device completion, scheduled injection); with nothing armed HVX_RUN returns
+ * the HLT (reason 12).
+ *
+ * Full state of an SMP VM = HVX_GET_SNAPSHOT of every vCPU (HVX_SET_VCPU i) + guest RAM
+ * + HVX_GET_SCHED. Restore: the per-vCPU snapshots first, then HVX_SET_SCHED (it carries
+ * the VM-wide clock and per-vCPU state the snapshot lacks: cr2, re-injection, halted).
+ * With `stop_turn` > 0, HVX_RUN returns HVX_EXIT_TURN right after turn number
+ * `stop_turn` completes (a clean boundary; continuing is identical to never stopping).
+ * The THROTTLE cadence (`guard`) is part of the state, so THROTTLE boundaries too are a
+ * function of the guest timeline only, and every THROTTLE / max_insns stop is taken at a
+ * clean boundary. GET/SET also work on a VM without the scheduler (the per-vCPU cr2 /
+ * re-injection fields; scheduler fields are then ignored).
+ */
+#define HVX_SCHED_MAX_VCPUS	8
+struct hvx_sched_vcpu {
+	__u64 branches;		/* guest conditional branches this vCPU retired */
+	__u64 turns;		/* turns it has run */
+	__u64 cr2;		/* guest CR2 (not a VMCS field) */
+	__u32 halted;		/* 1 = stopped at a HLT (RIP still at it), waiting for an interrupt */
+	__u32 halt_len;		/* length of that HLT */
+	__u32 reinj_valid, reinj_info, reinj_ec, reinj_len;	/* event delivery cut short by an exit */
+};
+struct hvx_sched {
+	/* policy */
+	__u64 quantum;		/* turn length in guest conditional branches (>= 1) */
+	__u64 seed;		/* 0: every turn is `quantum` long; else seeded lengths in [1, quantum] */
+	__u64 stop_turn;	/* > 0: return HVX_EXIT_TURN when `turns` reaches this value */
+	__u32 pause_k;		/* end a turn after this many consecutive PAUSE exits (0 = off) */
+	__u32 n_vcpus;		/* [GET] */
+	/* scheduler state */
+	__u32 cur;		/* vCPU in its turn, or the one that ran last */
+	__u32 in_turn;		/* 1: `cur` is in the middle of a turn ending at turn_end */
+	__u32 turn_over;	/* the turn's end was reached; waiting for a clean boundary */
+	__u32 pause_run;	/* consecutive PAUSE exits in the current turn */
+	__u64 turn_end;		/* VM-wide branch count at which the current turn ends */
+	__u64 turns;		/* turns completed */
+	__u64 guard;		/* THROTTLE cadence (retired exits + ticks + turn switches) */
+	__u64 turn_hash;	/* FNV over (vcpu, rip, rcx, rflags, branches) at every turn end */
+	/* the VM-wide clock (every vCPU's copy equals this at an ioctl boundary) */
+	__u64 tsc, tsc_step, tsc_mode, icount, pmu_total, pmu_next;
+	/* statistics (restored by SET like the rest) */
+	__u64 time_jumps;	/* all-halted clock jumps */
+	__u64 deferred;		/* loop passes a turn end / stop waited for a clean boundary */
+	__u64 overshoots;	/* turn ends found PAST the target (must stay 0) */
+	__u64 wakeups;		/* halted vCPUs woken by an interrupt */
+	struct hvx_sched_vcpu v[HVX_SCHED_MAX_VCPUS];
+};
+#define HVX_GET_SCHED _IOR(HVX_IOC_MAGIC, 53, struct hvx_sched)
+#define HVX_SET_SCHED _IOW(HVX_IOC_MAGIC, 54, struct hvx_sched)
+/* HVX_RUN / HVX_RUNC exit reason: turn `stop_turn` completed (HVX_VM_SMP_SCHED). */
+#define HVX_EXIT_TURN		0xfffffffbU
 
 #endif /* _HVX_ABI_H */

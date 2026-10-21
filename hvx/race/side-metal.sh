@@ -6,6 +6,7 @@ set -u
 DEV=${HVX_DEV:-/dev/hvxpre}
 cd "$(dirname "$0")/.."
 B=~/hydo/build; R=~/bin/hvx-run
+T=${SIDE_TMP:-/tmp}; mkdir -p "$T"	# where the test binaries go (another session may use /tmp/side-*)
 cc -O2 -shared -fPIC -o race/devshim.so race/devshim.c -ldl || exit 1
 SHIM=$PWD/race/devshim.so
 TESTS="hvx_test hvx_rdtsc_test hvx_step_test hvx_tscclock_test hvx_snapshot_test hvx_intr_test
@@ -22,13 +23,13 @@ check() { local name=$1 rc=$2 out=$3; shift 3; local miss=""
   for fp in "$@"; do grep -q "$fp" <<< "$out" || miss="$miss $fp"; done
   if [ "$rc" = 0 ] && [ -z "$miss" ]; then pass=$((pass+1)); echo "  PASS $name"
   else fail=$((fail+1)); echo "  FAIL $name rc=$rc missing:$miss"; fi; }
-for t in $TESTS hvx_boot_verify hvx_disk_boot_verify; do cc -O2 -Wall -o /tmp/side-$t $t.c 2>/dev/null || echo "COMPILE FAIL $t"; done
+for t in $TESTS hvx_boot_verify hvx_disk_boot_verify; do cc -O2 -Wall -o $T/side-$t $t.c 2>/dev/null || echo "COMPILE FAIL $t"; done
 for t in $TESTS; do
-  out=$($R sudo env LD_PRELOAD=$SHIM HVX_DEV=$DEV timeout 150 /tmp/side-$t 2>&1); rc=$?
+  out=$($R sudo env LD_PRELOAD=$SHIM HVX_DEV=$DEV timeout 150 $T/side-$t 2>&1); rc=$?
   check "$t" "$rc" "$out" ${EXP[$t]:-}
 done
-out=$($R sudo env LD_PRELOAD=$SHIM HVX_DEV=$DEV timeout 300 /tmp/side-hvx_boot_verify $B/bzImage $B/initramfs.cpio.gz 2>&1); rc=$?
+out=$($R sudo env LD_PRELOAD=$SHIM HVX_DEV=$DEV timeout 300 $T/side-hvx_boot_verify $B/bzImage $B/initramfs.cpio.gz 2>&1); rc=$?
 check "boot (no disk)" "$rc" "$(grep -a 'fp1\|fp_a' <<< "$out")" 7a5559028ffbf52c
-out=$($R sudo env LD_PRELOAD=$SHIM HVX_DEV=$DEV timeout 300 /tmp/side-hvx_disk_boot_verify $B/bzImage $B/initramfs-disk.cpio.gz $B/vblk-disk.img 2>&1); rc=$?
+out=$($R sudo env LD_PRELOAD=$SHIM HVX_DEV=$DEV timeout 300 $T/side-hvx_disk_boot_verify $B/bzImage $B/initramfs-disk.cpio.gz $B/vblk-disk.img 2>&1); rc=$?
 check "boot (with disk)" "$rc" "$(grep -a 'fp1\|fp_a' <<< "$out")" 36583d533d7c989b
 echo "side-metal ($DEV): $([ $fail = 0 ] && echo "ALL PASS ($pass checks)" || echo "FAIL ($fail of $((pass+fail)))")"
