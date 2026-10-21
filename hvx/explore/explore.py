@@ -574,7 +574,8 @@ def render(s):
     if "B" in s:
         g.append("B=%s" % s["B"])
     return "disk=%s dseed=%x%s%s%s | %s" % (s["disk"], s["dseed"], render_tj(s["tj"]) if "tj" in s else "",
-                                            render_preempt(s), " rb=%d" % s["rb"] if "rb" in s else "", " ".join(g))
+                                            render_preempt(s) + (" cf=%d" % s["cf"] if "cf" in s else ""),
+                                            " rb=%d" % s["rb"] if "rb" in s else "", " ".join(g))
 
 
 def parse(text):
@@ -586,6 +587,9 @@ def parse(text):
     m = re.search(r"\bpp=(\d+)", host)
     if m:
         s["pp"] = int(m.group(1))
+    m = re.search(r"\bcf=(\d+)", host)           # power cut at the k-th disk FLUSH (needs disk=cut)
+    if m:
+        s["cf"] = int(m.group(1))
     m = re.search(r"\bxt=([0-9a-fA-F]+) xtr=(\d+) xtpm=(\d+)", host)
     if m:
         s["xt"] = (int(m.group(1), 16), int(m.group(2)), int(m.group(3)))
