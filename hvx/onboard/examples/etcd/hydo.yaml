@@ -114,8 +114,10 @@ provision: |
 
 workload:
   steps: 30                          # step i: clients 0,1,2 at once each put k<3i+c> and read it
-                                     #   back, through members (c+i) mod 3; after every 5th step
-                                     #   an online defrag of every member
+                                     #   back, through members (c+i) mod 3; every 5th step ends
+                                     #   with one more put and at once an online defrag of every
+                                     #   member (a kill at the next step boundary then lands
+                                     #   right after a defrag)
   timeout: 600
   process: etcdctl
   run: |
@@ -123,7 +125,10 @@ workload:
     while [ $i -lt $HYDO_TO ]; do
       client_op 0 $i & client_op 1 $i & client_op 2 $i &
       wait
-      [ $((i % 5)) = 4 ] && /bin/etcdctl --dial-timeout=1s --command-timeout=5s --endpoints=$EPS defrag > /dev/null 2>&1
+      if [ $((i % 5)) = 4 ]; then     # a write, then at once an online defrag of every member
+        ectl --endpoints=$EPS put hydo-defrag $i > /dev/null 2>&1
+        /bin/etcdctl --dial-timeout=1s --command-timeout=5s --endpoints=$EPS defrag > /dev/null 2>&1
+      fi
       i=$((i + 1))
     done
   retry: |
