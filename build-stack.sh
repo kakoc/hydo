@@ -233,7 +233,9 @@ bind-address=127.0.0.1
 port=3306
 mysqlx=OFF
 skip-name-resolve
-skip-log-bin
+log-bin=binlog
+sync_binlog=1
+server-id=1
 performance_schema=OFF
 auto_generate_certs=OFF
 caching_sha2_password_auto_generate_rsa_keys=OFF
@@ -373,6 +375,7 @@ start_redis() {
 # ---- MySQL ----
 $BB cp /etc/my.cnf /tmp/my.cnf
 echo "innodb_flush_log_at_trx_commit=$TRX" >> /tmp/my.cnf
+[ "$TRX" = 1 ] || echo "sync_binlog=0" >> /tmp/my.cnf   # relaxed: both logs, MySQL's documented fast setting
 SQL() { "$MYSQL/bin/mysql" --no-defaults --protocol=TCP -h127.0.0.1 -P3306 -uhydo --ssl-mode=DISABLED -N -B "$@"; }
 start_mysql() {
   if [ ! -d /data/mysql/mysql ]; then
