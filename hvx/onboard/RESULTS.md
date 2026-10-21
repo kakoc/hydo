@@ -37,3 +37,25 @@ determinism and the generator working on manifest images, not the bug.
 | `disk=none dseed=1 \| run` | OK, acked=20 all present | `712bcab7167a52fe` |
 | `disk=none dseed=1 \| run C=12 R=everysec` | VIOLATION `[redis.acked_writes_survive] key k:3 lost` (Redis's documented fsync window) | `e4f65d61d3320ada` |
 | `disk=none dseed=1 \| run K=redis@5+3 P=redis@12+2 T=8:-86400` | OK, acked=15 (kill window + two 2 s client timeouts) | `eb3cc8787ec1e261` |
+
+## Liveness invariants (`type: eventually`) on Redis (2026-10-21, bare-metal test machine)
+
+Manifest `examples/redis/hydo-live.yaml` (the Redis example + a `retry:` that re-sends every
+SET not yet acknowledged + `redis.pending_resolved`: every SET whose outcome was unknown is
+acknowledged within 10 s of guest time after fault injection ends). Image
+`~/hydo/build/explore-ob-redis-live-disk.img`, sha256 `558a256b…` (two builds identical; the
+plain `explore-ob-redis` image built with the new `hydo-build` is byte-identical to main's,
+`0dd509c2…`). Each schedule run twice with `hvx_explore one`; results under
+`/var/tmp/m59-live`.
+
+| schedule | liveness episode | verdict | fingerprint (both runs) |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | ok, 0.02 s after heal | OK | `a98ba5035745de58` |
+| `disk=none dseed=1 \| run K=redis@5+3` | ok, 1.04 s (the retry acks 5..7) | OK | `98923d5657a64cbf` |
+| `disk=none dseed=1 \| run P=redis@5+3` | ok, 1.03 s | OK | `68728f9760f2d079` |
+| `disk=none dseed=1 \| run C=12` | ok, 0.03 s after the recovery boot starts | OK, acked=12 | `7465c2902bd68b65` |
+| `disk=none dseed=1 \| run P=redis@18~0:20000` | missed: Redis stays paused ~18 s after the last step | VIOLATION `[redis.pending_resolved] not satisfied 10.08s after heal, deadline 10s (last check rc=1: pending=1)` | `a8df6a3e9d90c802` |
+
+`hydo_assert_report` over the ten consoles: `redis.pending_resolved` 8 ok / 2 fail,
+`FAIL (deadline missed)`, slowest in-time episode 1.04 s,
+`liveness: 1 eventually properties, 1 missed a deadline`.
