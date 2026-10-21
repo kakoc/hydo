@@ -4,7 +4,9 @@
 # Downloads the official static release tarball etcd-v<VERSION>-linux-amd64.tar.gz from GitHub
 # into $HYDO_ETCD_DL (default ~/hydo-etcd-dl/v<VERSION>), checks it against the sha256 pinned
 # below (taken from the release's SHA256SUMS), extracts etcd + etcdctl next to hydo.yaml and
-# runs hydo-build with --set version=<VERSION>.
+# runs hydo-build with --set version=<VERSION>. hydo-build takes hvx_seedrng from the build
+# directory (or HYDO_SEEDRNG); build it with the pinned static gcc + musl (hvx/BUILD-PINS.md,
+# build-linux.sh), sha256 c2a440c5..., not with a stand-in.
 # Output: build/explore-ob-etcd-<VERSION>-disk.img
 set -euo pipefail
 V="${1:-3.6.15}"
