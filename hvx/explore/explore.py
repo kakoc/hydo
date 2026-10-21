@@ -64,6 +64,9 @@ CONCURRENCY = False     # --concurrency: several clients place orders at the sam
 CC_SALT = 0x51C0C0C0C0C0C051
 BACKEND = "hvx"         # --backend hvm: the Mac VMM (hvm_backend.py); HVM_KERNEL = its --hvm-kernel
 HVM_KERNEL = None
+RAM_MIB = 1024          # guest RAM: the manifest's guest.ram_mib, or --ram-mib; the engines get
+                        # "--ram-mib N" only when it is not 1024, so default commands are unchanged
+RAM_MIB_BOUNDS = {"hvx": (256, 3072), "hvm": (256, 4096)}  # hvx_explore.c / hvmx (serve.c) check the same
 CLOCK_DELTAS = [-30 * 86400, -86400, -3600, -300, -30, 30, 300, 3600, 86400, 365 * 86400]
 
 
@@ -724,6 +727,22 @@ def verdict_kind(v):
     return "error"            # harness / guest setup problems, timeouts
 
 
+def ram_args():
+    """The engine option for a non-default guest RAM size (none at 1024 MiB)."""
+    return [] if RAM_MIB == 1024 else ["--ram-mib", str(RAM_MIB)]
+
+
+def pick_ram_mib(cli, manifest):
+    """--ram-mib, else the manifest's guest.ram_mib, else 1024; checked against the backend's bounds."""
+    src, v = ("--ram-mib", cli) if cli is not None else \
+        ("guest.ram_mib", (manifest.get("guest") or {}).get("ram_mib", 1024)) if manifest else ("default", 1024)
+    lo, hi = RAM_MIB_BOUNDS[BACKEND]
+    if not isinstance(v, int) or isinstance(v, bool) or not lo <= v <= hi:
+        raise SystemExit("explore.py: %s=%r: guest RAM must be a whole number of MiB in [%d, %d] on --backend %s"
+                         % (src, v, lo, hi, BACKEND))
+    return v
+
+
 def signature(v):
     v = v.replace("HYDO-ORACLE: ", "")
     v = re.sub(r"\d+", "#", v)
@@ -739,11 +758,11 @@ class Worker(threading.Thread):
 
     def run(self):
         cmd = [os.path.expanduser("~/bin/hvx-run"), "sudo", "env", "HVX_SNAP_DIR=/var/tmp/hvx-snap"] + EXTRA_ENV + [
-               os.path.join(HVX, "hvx_explore"), "serve", os.path.join(BUILD, "bzImage"),
+               os.path.join(HVX, "hvx_explore")] + ram_args() + ["serve", os.path.join(BUILD, "bzImage"),
                os.path.join(BUILD, "initramfs-kafka.cpio.gz"), os.path.join(BUILD, IMAGE),
                os.path.join(self.outdir, "consoles")]
         if BACKEND == "hvm":
-            cmd = hvm_backend.engine_cmd(IMAGE, os.path.join(self.outdir, "consoles"), HVM_KERNEL)
+            cmd = hvm_backend.engine_cmd(IMAGE, os.path.join(self.outdir, "consoles"), HVM_KERNEL, ram_args())
         err = open(os.path.join(self.outdir, "worker-%d.err" % self.idx), "w")
         p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err, text=True, bufsize=1)
         line = p.stdout.readline()
@@ -1000,7 +1019,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
 
 # ---------------------------------------------------------------- main
 def main():
-    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT, BUGGIFY, KNOB_RULE
+    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT, BUGGIFY, KNOB_RULE, RAM_MIB
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-200")
     ap.add_argument("--workers", type=int, default=3)   # the box has 4 cores: 3 is fastest (M38)
@@ -1041,6 +1060,8 @@ def main():
     ap.add_argument("--manifest", help="an onboarded project's hydo.yaml: draw faults from its services, ports, "
                                        "steps and knobs (manifest_space.py); default for explore-ob-* images: "
                                        "the manifest inside the image")
+    ap.add_argument("--ram-mib", type=int, help="guest RAM in MiB (default: the manifest's guest.ram_mib, else 1024; "
+                                                "256..3072 on hvx, 256..4096 on hvm)")
     a = ap.parse_args()
     BACKEND, HVM_KERNEL = a.backend, a.hvm_kernel
     if BACKEND == "hvm":
@@ -1053,6 +1074,9 @@ def main():
             sp = manifest_space.load(a.manifest, os.path.join(BUILD, a.image))
         sp.apply(globals())
         print("fault space: %s" % json.dumps(SPACE.describe()), file=sys.stderr)
+    RAM_MIB = pick_ram_mib(a.ram_mib, SPACE.m if SPACE else None)
+    if RAM_MIB != 1024:
+        print("guest RAM: %d MiB" % RAM_MIB, file=sys.stderr)
     NEW_FAULTS = a.new_faults
     KNOB_RULE = a.knob_rule
     CONCURRENCY = a.concurrency
@@ -1142,6 +1166,8 @@ def main():
                "runs_per_hour": round(len(seeds) / t_sweep * 3600, 1), "mean_run_s": round(sum(secs) / len(secs), 1),
                "worker_boot_s": round(sum(boot) / max(1, len(boot)), 1), "total_wall_s": round(total, 1),
                "failures": len(fails), "reproduced": sum(1 for f in fails if f["reproduced"])}
+    if RAM_MIB != 1024:
+        summary["ram_mib"] = RAM_MIB
     json.dump({"summary": summary, "failures": fails,
                "shrunk": [{"class": k[0], "signature": k[1], **v} for k, v in shrunk.items()]},
               open(os.path.join(a.out, "report.json"), "w"), indent=1)
@@ -1198,6 +1224,8 @@ def branch_main(a, pool, t0):
                "reproduced_standalone": sum(1 for f in fails if f["reproduced"]),
                "timing_only_failures": sum(1 for f in fails if f["timing_only"]),
                "total_wall_s": round(time.time() - t0, 1)}
+    if RAM_MIB != 1024:
+        summary["ram_mib"] = RAM_MIB
     json.dump({"summary": summary, "failures": fails}, open(os.path.join(a.out, "report.json"), "w"), indent=1)
     L = ["# Branch report (marker `%s`)" % a.branch, "", "| | |", "|---|---|"]
     L += ["| %s | %s |" % kv for kv in summary.items()]
@@ -1232,8 +1260,8 @@ def write_report(out, summary, fails, shrunk, table=None):
               "- needs a tick-timing change: %s" % ("yes" if " tj" in v["minimal"] else "no"),
               "- verdict: `%s`" % v["min_verdict"],
               "- fingerprint, two runs: `%s` / `%s` (%s)" % (v["fp_a"], v["fp_b"], "identical" if v["fp_a"] == v["fp_b"] else "DIFFERENT"),
-              "- by hand: `~/bin/hvx-run sudo ./hvx_explore one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/%s <outdir> \"%s\"`" % (IMAGE, v["minimal"])
-              if BACKEND != "hvm" else "- by hand: `%s`" % hvm_backend.repro_line(IMAGE, v["minimal"], HVM_KERNEL), ""]
+              "- by hand: `~/bin/hvx-run sudo ./hvx_explore %sone ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/%s <outdir> \"%s\"`" % ("".join(x + " " for x in ram_args()), IMAGE, v["minimal"])
+              if BACKEND != "hvm" else "- by hand: `%s`" % hvm_backend.repro_line(IMAGE, v["minimal"], HVM_KERNEL, ram_args()), ""]
     L += ["## Property table over every schedule (hvx/ASSERTIONS.md)", ""]
     if table is None:
         L += ["The guest emitted no HYDO-ASSERT records (an image built without the assertion SDK).", ""]
