@@ -43,7 +43,9 @@ DEFECTS = {
 # Milestone 59: harder defects, patched into hvx/bench/base/main-m59-control.go (the current
 # order service with the M50 fixes, the BUGGIFY wrappers and a fix for the M58 flush-cut bug),
 # built by build-bench-m59.sh. Their control is that file unpatched. d9's signature is the
-# crash oracle below (the guest's "front door log: panic" line).
+# crash oracle below (the guest's "front door log: panic" line). Images: build-bench-m59.sh with
+# BENCH_SUFFIX=-pin (built from the pinned toolchain, hvx/BUILD-PINS.md); HYDO_M59_SUFFIX=""
+# selects the first build, which used the stand-in hvx_seedrng (superseded).
 M59 = {
     "d8-no-order-lock":       r"present \d+ times|kafka_exactly_once",
     "d9-redis-unlocked":      r"front door crashed",
@@ -51,9 +53,10 @@ M59 = {
     "d11-ack-unflushed-flag": r"not marked published|acked_marked_published",
     "d12-shared-key-buffer":  r"kafka order=\d+ (expected|present)|in_kafka|kafka_exactly_once",
 }
+M59_SUFFIX = os.environ.get("HYDO_M59_SUFFIX", "-pin")   # images rebuilt with the pinned tools
 for _n, _sig in M59.items():
-    DEFECTS[_n] = ("explore-bench-m59-%s-disk.img" % _n, _sig)
-M59_CONTROL = "explore-bench-m59-control-disk.img"
+    DEFECTS[_n] = ("explore-bench-m59-%s%s-disk.img" % (_n, M59_SUFFIX), _sig)
+M59_CONTROL = "explore-bench-m59-control%s-disk.img" % M59_SUFFIX
 CONTROL = "explore-nf-disk.img"
 CRASH_RE = re.compile(r"hydo-explore: front door log: ((?:panic|fatal error).*)")
 

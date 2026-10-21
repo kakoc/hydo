@@ -12,11 +12,13 @@
 #
 #   bash hvx/bench/build-bench-m59.sh                 # control + every m59 defect
 #   bash hvx/bench/build-bench-m59.sh control d8-no-order-lock
+#   BENCH_SUFFIX=-pin bash hvx/bench/build-bench-m59.sh   # explore-bench-m59-<name>-pin-disk.img
 #
 # Run from the repo root on the build box, same environment as build-bench-bg.sh
 # (HYDO_GCC_MUSL, HYDO_MUSL_ROOT, HYDO_REDIS_OUT when the pinned store paths are gone).
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+sfx=${BENCH_SUFFIX:-}
 names=("$@")
 if [ ${#names[@]} -eq 0 ]; then
   names=(control)
@@ -33,10 +35,11 @@ for n in "${names[@]}"; do
     [ -f "$p" ] || { echo "no such defect: $n" >&2; exit 1; }
     ( cd "$src" && patch -s -p1 < "$OLDPWD/$p" )
   fi
-  echo "== $n: building build/explore-bench-m59-$n-disk.img"
-  STACK_OUT=explore-bench-m59-$n STACK_GO_SRC="$src" bash ./build-stack.sh
+  out=explore-bench-m59-$n$sfx
+  echo "== $n: building build/$out-disk.img"
+  STACK_OUT=$out STACK_GO_SRC="$src" bash ./build-stack.sh
   if [ "${BENCH_KEEP:-0}" != 1 ]; then
-    chmod -R u+w build/rootfs-explore-bench-m59-$n-root 2>/dev/null || true
-    rm -rf build/rootfs-explore-bench-m59-$n-root build/explore-bench-m59-$n-ext4.img build/explore-bench-m59-$n-data.img
+    chmod -R u+w build/rootfs-$out-root 2>/dev/null || true
+    rm -rf build/rootfs-$out-root build/$out-ext4.img build/$out-data.img
   fi
 done
