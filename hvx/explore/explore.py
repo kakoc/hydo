@@ -670,7 +670,8 @@ ASSERT_RE = re.compile(r"HYDO-ASSERT (\{.*\})")
 
 def assert_failures(outdir, tag):
     """Failed property evaluations in one run's console(s): an always / always_or_unreachable
-    with ok=false, or any unreachable that was emitted. Returns sorted assertion ids."""
+    with ok=false, an eventually that missed its deadline (ok=false), or any unreachable that
+    was emitted. Returns sorted assertion ids."""
     bad = set()
     for suffix in ("", ".recovery"):
         path = os.path.join(outdir, "consoles", "%s%s.log" % (tag, suffix))
@@ -685,7 +686,7 @@ def assert_failures(outdir, tag):
             except ValueError:
                 continue
             t, ok = rec.get("t"), rec.get("ok")
-            if (t in ("always", "always_or_unreachable") and ok is False) or t == "unreachable":
+            if (t in ("always", "always_or_unreachable", "eventually") and ok is False) or t == "unreachable":
                 bad.add(rec.get("id", "?"))
     return sorted(bad)
 
@@ -714,6 +715,51 @@ def property_table(outdir, tags):
     subprocess.run(["cc", "-O2", "-o", tool, os.path.join(HVX, "hydo_assert_report.c")], check=True)
     r = subprocess.run([tool] + files, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     return r.stdout
+
+
+def liveness_summary(outdir):
+    """Per bounded-liveness (eventually) property, over the merged per-schedule consoles that
+    property_table wrote: schedules where it held in time / missed its deadline, and the
+    slowest in-time and the first missed episode. Lines for report.md, or [] if none."""
+    d = os.path.join(outdir, "consoles-merged")
+    props = {}
+    for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        seen = {}
+        for line in open(os.path.join(d, f), errors="replace"):
+            m = ASSERT_RE.search(line)
+            if not m:
+                continue
+            try:
+                rec = json.loads(m.group(1))
+            except ValueError:
+                continue
+            if rec.get("t") != "eventually":
+                continue
+            det = rec.get("details") or {}
+            el = det.get("elapsed_s")
+            el = float(el) if el not in (None, "?") else det.get("elapsed_ms", 0) / 1000.0
+            seen.setdefault(rec.get("id", "?"), []).append((rec.get("ok") is True, el, det))
+        for pid, eps in seen.items():
+            p = props.setdefault(pid, {"held": 0, "missed": 0, "slowest": None, "first_miss": None})
+            if all(ok for ok, _, _ in eps):
+                p["held"] += 1
+                worst = max(el for _, el, _ in eps)
+                if p["slowest"] is None or worst > p["slowest"][0]:
+                    p["slowest"] = (worst, f[:-4])
+            else:
+                p["missed"] += 1
+                if p["first_miss"] is None:
+                    p["first_miss"] = (f[:-4], next(det for ok, _, det in eps if not ok))
+    if not props:
+        return []
+    L = ["## Liveness (eventually properties, hvx/ASSERTIONS.md)", "",
+         "| property | held in time | missed deadline | slowest in time | first miss |", "|---|---|---|---|---|"]
+    for pid in sorted(props):
+        p = props[pid]
+        slow = "%.2f s (%s)" % p["slowest"] if p["slowest"] else "-"
+        miss = "%s: `%s`" % (p["first_miss"][0], p["first_miss"][1].get("out", "")) if p["first_miss"] else "-"
+        L.append("| `%s` | %d | %d | %s | %s |" % (pid, p["held"], p["missed"], slow, miss))
+    return L + [""]
 
 
 def verdict_kind(v):
@@ -1239,6 +1285,7 @@ def write_report(out, summary, fails, shrunk, table=None):
         L += ["The guest emitted no HYDO-ASSERT records (an image built without the assertion SDK).", ""]
     else:
         L += ["```", table.rstrip(), "```", ""]
+        L += liveness_summary(out)
     open(os.path.join(out, "report.md"), "w").write("\n".join(L) + "\n")
 
 

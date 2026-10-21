@@ -2,7 +2,7 @@
 """hydo-build -- compile a project manifest (hydo.yaml, see MANIFEST.md) into a hydo guest image.
 
     hydo-build <hydo.yaml> [--set KEY=VALUE ...] [--out NAME] [--build-dir DIR] [--arch x86_64|arm64]
-               [--check] [--print-shell]
+               [--check] [--print-shell] [--print-init]
 
 Produces, in --build-dir (default ./build):
     <NAME>-ext4.img   read-only ext4 root (p1): the project's files + closures, busybox, the
@@ -280,7 +280,8 @@ KNOWN_TOP = {"name", "description", "guest", "root", "data", "env", "shell", "se
              "provision", "workload", "knobs", "invariants", "faults", "image", "params"}
 KNOWN_SVC = {"name", "cmd", "setup", "ready", "ready_timeout", "port", "depends_on",
              "recovery", "description"}
-KNOWN_INV = {"id", "type", "msg", "cmd", "every", "final", "description"}
+KNOWN_INV = {"id", "type", "msg", "cmd", "every", "final", "description", "within", "after", "poll"}
+LIVE_ANCHORS = ("heal", "start")
 KNOWN_KNOB = {"token", "name", "default", "set", "values", "safe", "description"}
 FAULT_KINDS = {"kill", "pause", "network", "oneway", "cut", "clock", "disk"}
 
@@ -356,8 +357,25 @@ def validate(m):
         ids.add(vid)
         _need(v, "cmd", where)
         t = v.get("type", "always")
-        if t not in ("always", "always_or_unreachable"):
-            raise ManifestError("%s: type must be always or always_or_unreachable" % where)
+        if t not in ("always", "always_or_unreachable", "eventually"):
+            raise ManifestError("%s: type must be always, always_or_unreachable or eventually" % where)
+        if t == "eventually":
+            # bounded liveness: polled from an anchor until it holds or `within` s pass
+            for k in ("every", "final"):
+                if k in v:
+                    raise ManifestError("%s: an eventually invariant has no %s: (it is polled from "
+                                        "its anchor until it holds or its deadline passes)" % (where, k))
+            w = _need(v, "within", where, int)
+            if isinstance(w, bool) or w < 1 or w > 3600:
+                raise ManifestError("%s: within is a whole number of seconds of guest time, 1..3600" % where)
+            if v.get("after", "heal") not in LIVE_ANCHORS:
+                raise ManifestError("%s: after must be one of %s" % (where, ", ".join(LIVE_ANCHORS)))
+            if "poll" in v and (not isinstance(v["poll"], int) or isinstance(v["poll"], bool) or v["poll"] < 1):
+                raise ManifestError("%s: poll is a whole number of seconds >= 1" % where)
+            continue
+        for k in ("within", "after", "poll"):
+            if k in v:
+                raise ManifestError("%s: %s: is only for type: eventually" % (where, k))
         if "every" in v and (not isinstance(v["every"], int) or v["every"] < 1):
             raise ManifestError("%s: every is a whole number of seconds >= 1" % where)
         if not v.get("final", "every" not in v) and "every" not in v:
@@ -450,6 +468,11 @@ def compile_shell(m, tc_path):
               "HYDO_INV_%s_cmd=%s" % (k, shq(v["cmd"])),
               "HYDO_INV_%s_every=%s" % (k, shq(every or "")),
               "HYDO_INV_%s_final=%d" % (k, 1 if final else 0)]
+        if v.get("type") == "eventually":      # only then: other manifests compile byte-identically
+            L[-1] = "HYDO_INV_%s_final=0" % k
+            L += ["HYDO_INV_%s_within=%d" % (k, v["within"]),
+                  "HYDO_INV_%s_after=%s" % (k, shq(v.get("after", "heal"))),
+                  "HYDO_INV_%s_poll=%d" % (k, v.get("poll", 1))]
     L.append("HYDO_INVARIANTS=%s" % shq(" ".join(inv_names)))
     for k in m.get("knobs") or []:
         t = k["token"]
@@ -470,6 +493,39 @@ def compile_shell(m, tc_path):
 
 
 # ------------------------------------------------------------------ image building
+LIVE_WRAP = ("step_range", "start_periodic", "start_all", "finish")
+LIVE_MARK = "# ---------------------------------------------------------------- main\n"
+
+
+def init_text(m):
+    """/sbin/init for manifest m: hydo-init.sh unchanged, or -- only when an invariant is of
+    type eventually -- with hydo-liveness.sh and renamed copies of the functions it wraps
+    inserted before the "main" section."""
+    base = open(os.path.join(HERE, "hydo-init.sh")).read()
+    if not any(v.get("type") == "eventually" for v in m["invariants"]):
+        return base
+    i = base.find(LIVE_MARK)
+    if i < 0:
+        raise ManifestError("hydo-init.sh: the '# ---- main' section marker is missing (needed for eventually invariants)")
+    copies = []
+    for fn in LIVE_WRAP:
+        mo = re.search(r"^%s\(\) \{.*?^\}\n" % fn, base, re.S | re.M)
+        if not mo:
+            raise ManifestError("hydo-init.sh: function %s() not found (needed for eventually invariants)" % fn)
+        copies.append("_live_orig_" + mo.group(0))
+    live = open(os.path.join(HERE, "hydo-liveness.sh")).read()
+    return base[:i] + "# copies of the init functions hydo-liveness.sh wraps\n" + "".join(copies) + "\n" + live + base[i:]
+
+
+def install_init(m, dst):
+    if any(v.get("type") == "eventually" for v in m["invariants"]):
+        with open(dst, "w") as f:
+            f.write(init_text(m))
+    else:
+        shutil.copy(os.path.join(HERE, "hydo-init.sh"), dst)
+    os.chmod(dst, 0o755)
+
+
 def tool(env, default, check):
     p = os.environ.get(env) or default
     if not check(p):
@@ -666,8 +722,7 @@ def build(m, manifest_path, out, bdir, params=None):
     if params:      # the parameter values this image was built with (only when declared)
         with open(os.path.join(R, "etc/hydo/params"), "w") as f:
             f.write("".join("%s=%s\n" % kv for kv in sorted(params.items())))
-    shutil.copy(os.path.join(HERE, "hydo-init.sh"), os.path.join(R, "sbin/init"))
-    os.chmod(os.path.join(R, "sbin/init"), 0o755)
+    install_init(m, os.path.join(R, "sbin/init"))
     fix_mtimes(R)
 
     ext4, data, disk = (os.path.join(bdir, "%s-%s.img" % (out, k)) for k in ("ext4", "data", "disk"))
@@ -709,7 +764,7 @@ def main():
             sets.append(tuple(a[i + 1].split("=", 1))); i += 2
         elif a[i] in opt:
             opt[a[i]] = a[i + 1]; i += 2
-        elif a[i] in ("--check", "--print-shell"):
+        elif a[i] in ("--check", "--print-shell", "--print-init"):
             flags.add(a[i]); i += 1
         else:
             print("hydo-build: unknown argument %s" % a[i], file=sys.stderr); return 2
@@ -726,6 +781,8 @@ def main():
     if "--print-shell" in flags:
         ms, pre = compile_shell(m, "/nix/store/...-iproute2/bin/tc")
         print(ms); print("# ---- prelude.sh"); print(pre); return 0
+    if "--print-init" in flags:
+        sys.stdout.write(init_text(m)); return 0
     if "--check" in flags:
         print("hydo-build: %s OK (%d services, %d invariants, %d workload steps)" % (
             path, len(m["services"]), len(m["invariants"]), m["workload"]["steps"])); return 0

@@ -15,11 +15,14 @@
  *   always_or_unreachable  FAIL if any evaluation was false; never evaluated is fine
  *   sometimes / reachable  "NOT EXERCISED" if no evaluation was true in any run
  *   unreachable            FAIL if it was ever reached
+ *   eventually             bounded liveness: FAIL if any episode missed its deadline
+ *                          (ok=false); "NOT EVALUATED" if no episode was resolved in any run
  */
 #ifndef HYDO_ASSERT_TABLE_H
 #define HYDO_ASSERT_TABLE_H
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define HA_MAX_PROPS 256
@@ -35,6 +38,7 @@ struct ha_prop {
 	unsigned long passes, fails;	/* evaluation records (ok=true / ok=false) */
 	unsigned long runs_pass, runs_fail;	/* runs with at least one such record */
 	char first_fail[HA_MSG_LEN];	/* details of the first failing record seen */
+	double max_ok_elapsed;		/* eventually: slowest in-time episode, seconds (-1 = none) */
 	/* per-run scratch */
 	int run_pass, run_fail;
 };
@@ -116,6 +120,7 @@ static inline struct ha_prop *ha_get(struct ha_table *t, const char *id, const c
 	memset(&t->p[t->n], 0, sizeof(t->p[0]));
 	snprintf(t->p[t->n].id, HA_ID_LEN, "%s", id);
 	snprintf(t->p[t->n].type, HA_TYPE_LEN, "%s", type);
+	t->p[t->n].max_ok_elapsed = -1;
 	return &t->p[t->n++];
 }
 
@@ -140,6 +145,17 @@ static inline void ha_record(struct ha_table *t, int decl, const char *rec)
 	if (strstr(rec, "\"ok\":true")) {
 		p->passes++;
 		p->run_pass = 1;
+		if (!strcmp(p->type, "eventually")) {	/* "elapsed_s":"1.23" (shell) or "elapsed_ms":1230 (Go) */
+			const char *e;
+			double v = -1;
+
+			if ((e = strstr(rec, "\"elapsed_s\":")))
+				v = atof(e + 12 + (e[12] == '"'));
+			else if ((e = strstr(rec, "\"elapsed_ms\":")))
+				v = atof(e + 13) / 1000.0;
+			if (v > p->max_ok_elapsed)
+				p->max_ok_elapsed = v;
+		}
 	} else {
 		p->fails++;
 		p->run_fail = 1;
@@ -193,6 +209,8 @@ static inline const char *ha_verdict(const struct ha_prop *p)
 		return p->fails ? "FAIL" : "PASS";
 	if (!strcmp(p->type, "unreachable"))
 		return p->fails ? "FAIL (reached)" : "PASS";
+	if (!strcmp(p->type, "eventually"))
+		return p->fails ? "FAIL (deadline missed)" : (p->passes ? "PASS" : "NOT EVALUATED");
 	/* sometimes, reachable */
 	return p->passes ? "PASS" : "NOT EXERCISED";
 }
@@ -209,16 +227,26 @@ static inline int ha_violations(const struct ha_table *t)
 
 static inline void ha_print(const struct ha_table *t, FILE *f)
 {
-	int i;
+	int i, nl = 0, nlf = 0;
+	char slow[48];
 
 	fprintf(f, "%-22s %-32s %7s %7s  %-24s %s\n", "type", "id", "ok", "fail", "verdict", "first failure / description");
 	for (i = 0; i < t->n; i++) {
 		const struct ha_prop *p = &t->p[i];
 
-		fprintf(f, "%-22s %-32s %7lu %7lu  %-24s %s%s\n", p->type, p->id, p->passes, p->fails,
-			ha_verdict(p), p->first_fail[0] ? p->first_fail : p->msg,
+		slow[0] = 0;
+		if (!strcmp(p->type, "eventually")) {
+			nl++;
+			nlf += p->fails ? 1 : 0;
+			if (!p->first_fail[0] && p->max_ok_elapsed >= 0)
+				snprintf(slow, sizeof(slow), "  [slowest in time: %.2f s]", p->max_ok_elapsed);
+		}
+		fprintf(f, "%-22s %-32s %7lu %7lu  %-24s %s%s%s\n", p->type, p->id, p->passes, p->fails,
+			ha_verdict(p), p->first_fail[0] ? p->first_fail : p->msg, slow,
 			p->declared ? "" : "  [not in catalog]");
 	}
+	if (nl)
+		fprintf(f, "liveness: %d eventually properties, %d missed a deadline\n", nl, nlf);
 	fprintf(f, "runs=%lu (setup-complete seen in %lu); properties=%d; violations=%d\n",
 		t->runs, t->runs_setup_complete, t->n, ha_violations(t));
 }
