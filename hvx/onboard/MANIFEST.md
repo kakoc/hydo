@@ -54,7 +54,7 @@ name: myapp                    # required. lowercase letters, digits, '-'
 description: one line          # free text, anywhere below too
 
 guest:
-  ram_mib: 1024                # v1: must be 1024 (the explorer runs every guest at 1 GiB)
+  ram_mib: 1024                # guest RAM in MiB (default 1024): 256..3072 on x86_64, 256..4096 on arm64
   clock_start: 1767225600      # unix seconds the realtime clock starts at (default 2026-01-01)
 
 root:                          # what goes on the read-only root filesystem
@@ -213,13 +213,20 @@ hvx/onboard/hydo-build path/to/hydo.yaml --print-shell   # show the compiled man
 python3 hvx/explore/explore.py --image explore-ob-<name>-disk.img --seeds 1-50 --out <dir>
 ```
 
+Guest RAM: `explore.py` reads `guest.ram_mib` from the manifest inside the image (or from
+`--manifest`) and starts the engine with `--ram-mib N`; `explore.py --ram-mib N` overrides it.
+The size is not part of a schedule, so a hand run of a non-default image needs the same flag:
+`~/bin/hvx-run sudo ./hvx_explore --ram-mib 2048 one ...` (the report's repro line includes it).
+Out-of-range values are rejected by `hydo-build`, `explore.py` and both engines.
+
 Inside the image: `/etc/hydo/hydo.yaml` (the manifest as written), `/etc/hydo/manifest.sh`
 (compiled), `/etc/hydo/prelude.sh` (env + shell helpers), `/sbin/init` (`hydo-init.sh`).
 
 ## Limits of v1
 
 - No OCI/Docker import yet (`image:` is reserved); files come from store paths or the host.
-- Guest RAM is fixed at 1024 MiB and the kernel command line is the explorer's.
+- The kernel command line is the explorer's. Guest RAM is per image (`guest.ram_mib`), at most
+  3072 MiB on x86_64 (hvx keeps RAM below the 4th-GiB MMIO hole) and 4096 MiB on arm64.
 - The guest console is 64 KiB: a workload that prints every acknowledged id should print
   short ids, or the done marker can be lost.
 - One data disk, ext4. The workload's step count is the unit of fault placement.

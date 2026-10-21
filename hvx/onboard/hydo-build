@@ -382,9 +382,24 @@ def validate(m):
     _unknown(root, {"size_mib", "nix", "files", "text", "dirs", "description"}, "root")
     guest = m.get("guest") or {}
     _unknown(guest, {"ram_mib", "clock_start", "description"}, "guest")
-    if guest.get("ram_mib", 1024) != 1024:
-        raise ManifestError("guest.ram_mib: v1 runs every guest at 1024 MiB (hvx_explore's fixed size)")
+    if "ram_mib" in guest:
+        r = guest["ram_mib"]
+        if not isinstance(r, int) or isinstance(r, bool) or not RAM_MIB_MIN <= r <= max(RAM_MIB_MAX.values()):
+            raise ManifestError("guest.ram_mib: a whole number of MiB in [%d, %d] (got %r; x86_64 allows up "
+                                "to %d)" % (RAM_MIB_MIN, max(RAM_MIB_MAX.values()), r, RAM_MIB_MAX["x86_64"]))
     return m
+
+
+# guest RAM the explorer engines accept (hvx_explore / hvmx check the same bounds): x86_64 stays
+# below hvx's 4th-GiB MMIO hole (MAX_GPAGES, M28); the Mac VMM has been run at 4 GiB (M48).
+RAM_MIB_MIN = 256
+RAM_MIB_MAX = {"x86_64": 3072, "arm64": 4096}
+
+
+def check_ram_arch(m, arch):
+    r = (m.get("guest") or {}).get("ram_mib", 1024)
+    if arch in RAM_MIB_MAX and r > RAM_MIB_MAX[arch]:
+        raise ManifestError("guest.ram_mib: %d MiB is more than --arch %s runs (at most %d)" % (r, arch, RAM_MIB_MAX[arch]))
 
 
 def service_order(svcs):
@@ -720,6 +735,7 @@ def main():
             raise ManifestError("the manifest must be a mapping")
         params = apply_params(m, sets)
         validate(m)
+        check_ram_arch(m, opt["--arch"])
         service_order(m["services"])
     except (YamlError, ManifestError) as e:
         print("hydo-build: %s" % e, file=sys.stderr); return 1

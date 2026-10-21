@@ -54,11 +54,14 @@
  * reproduce/shrink logic and the report live in hvx/explore/explore.py.
  *
  * Modes (as root, hvx loaded, through ~/bin/hvx-run):
- *   hvx_explore serve <bzImage> <initramfs> <explore-disk.img> <outdir>
+ *   hvx_explore [--ram-mib N] serve <bzImage> <initramfs> <explore-disk.img> <outdir>
  *       reads "RUN <tag> <schedule>" lines on stdin, answers "RESULT <tag> ..." lines
- *   hvx_explore one <bzImage> <initramfs> <explore-disk.img> <outdir> "<schedule>"
+ *   hvx_explore [--ram-mib N] one <bzImage> <initramfs> <explore-disk.img> <outdir> "<schedule>"
  *       one schedule from a fresh boot with no snapshot restore before the workload --
  *       its fingerprint must equal the serve path's (snapshot branching changes nothing)
+ * Guest RAM: 1024 MiB unless "--ram-mib N" (or env HVX_EXPLORE_RAM_MIB) says otherwise,
+ * N in [256, 3072]; explore.py passes the manifest's guest.ram_mib. The size is not in the
+ * schedule: a hand reproduction must pass the same --ram-mib (report.md's repro line does).
  */
 #define HVX_STACK_NO_MAIN
 #include "hvx_stack_verify.c"
@@ -66,7 +69,9 @@
 #include <time.h>
 #include "explore/ptedges.h"
 
-#define EXP_MEM_MIB	1024ULL
+#define EXP_MEM_MIB	1024ULL	/* default guest RAM; "--ram-mib N" / HVX_EXPLORE_RAM_MIB change it */
+#define EXP_MEM_MIN_MIB	256ULL	/* the smallest real-Linux guest the harnesses run (M27) */
+#define EXP_MEM_MAX_MIB	3072ULL	/* hvx's MAX_GPAGES: RAM stays below the 4th-GiB MMIO hole (M28/M36) */
 #define S0_MARKER	"hydo-explore-ready-S0"
 #define S1_MARKER	"hydo-explore-ready-S1"
 #define DONE_MARKER	"hydo-explore-workload-done"
@@ -947,6 +952,20 @@ static uint8_t *map_file(const char *path, size_t *len)
 	return p;
 }
 
+/* Guest RAM in MiB from "--ram-mib N" or HVX_EXPLORE_RAM_MIB; a whole number in the bounds. */
+static int ram_mib_parse(const char *v, const char *what, unsigned long long *out)
+{
+	char *end;
+	unsigned long long n = strtoull(v, &end, 10);
+	if (!*v || *end || n < EXP_MEM_MIN_MIB || n > EXP_MEM_MAX_MIB) {
+		fprintf(stderr, "hvx_explore: %s=%s: guest RAM must be a whole number of MiB in [%llu, %llu]\n",
+			what, v, EXP_MEM_MIN_MIB, EXP_MEM_MAX_MIB);
+		return -1;
+	}
+	*out = n;
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	const char *mode;
@@ -954,16 +973,25 @@ int main(int argc, char **argv)
 	struct snap s0, s1;
 	size_t dlen = 0;
 	double t0 = now_s();
+	unsigned long long ram_mib = EXP_MEM_MIB;
 
+	if (getenv("HVX_EXPLORE_RAM_MIB") && ram_mib_parse(getenv("HVX_EXPLORE_RAM_MIB"), "HVX_EXPLORE_RAM_MIB", &ram_mib))
+		return 2;
+	while (argc > 2 && !strcmp(argv[1], "--ram-mib")) {	/* explore.py: the manifest's guest.ram_mib */
+		if (ram_mib_parse(argv[2], "--ram-mib", &ram_mib)) return 2;
+		argv[2] = argv[0];
+		argv += 2; argc -= 2;
+	}
 	if (argc < 6) {
-		fprintf(stderr, "usage: %s serve|one <bzImage> <initramfs> <explore-disk.img> <outdir> [\"<schedule>\"]\n", argv[0]);
+		fprintf(stderr, "usage: %s [--ram-mib N] serve|one <bzImage> <initramfs> <explore-disk.img> <outdir> [\"<schedule>\"]\n", argv[0]);
 		return 2;
 	}
 	mode = argv[1];
 	g_outdir = argv[5];
 	mkdir(g_outdir, 0755);
 	memset(&E, 0, sizeof(E));
-	E.mem_size = EXP_MEM_MIB << 20;
+	E.mem_size = ram_mib << 20;
+	if (ram_mib != EXP_MEM_MIB) fprintf(stderr, "hvx_explore: guest RAM %llu MiB\n", ram_mib);
 	E.cmdbase = ROOTFS_CMDLINE;
 	if (!(E.image = map_file(argv[2], &E.image_len)) || !(E.initrd = map_file(argv[3], &E.initrd_len)) ||
 	    !(E.base = map_file(argv[4], &dlen)))
