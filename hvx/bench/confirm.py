@@ -40,12 +40,15 @@ def main():
     ap.add_argument("--workers", type=int, default=3)
     ap.add_argument("--no-control", action="store_true")
     ap.add_argument("--base", action="store_true", help="also re-run the BASE schedules on the control")
+    ap.add_argument("--bg-images", action="store_true", help="M56: the explore-bench-bg-* images and their control")
     a = ap.parse_args()
+    bench.BG_IMAGES = a.bg_images
+    control = bench.control_of("d1-kafka-first")
     names = list(TRIGGERS) if a.defects == "all" else a.defects.split(",")
     os.makedirs(a.out, exist_ok=True)
     log = open(os.path.join(a.out, "confirm.jsonl"), "a")
     for name in names:
-        image, sig = bench.DEFECTS[name]
+        image, sig = bench.image_of(name), bench.DEFECTS[name][1]
         ex.IMAGE = image
         pool = ex.Pool(a.workers, os.path.join(a.out, name))
         items = []
@@ -63,7 +66,7 @@ def main():
             print(json.dumps(rec), flush=True)
             log.write(json.dumps(rec) + "\n"); log.flush()
     if not a.no_control:
-        ex.IMAGE = bench.CONTROL
+        ex.IMAGE = control
         pool = ex.Pool(a.workers, os.path.join(a.out, "control"))
         items = [("%s-t%d" % (n, i), s) for n in names if n != "d0-old-front-door" for i, s in enumerate(TRIGGERS[n])]
         if "d0-old-front-door" in names:
@@ -74,7 +77,7 @@ def main():
         res = pool.run_all(items)
         pool.close()
         for tag, (s, r) in sorted(res.items()):
-            rec = {"control": bench.CONTROL, "for": tag, "schedule": s, "verdict": r["verdict"], "fp": r["fp"],
+            rec = {"control": control, "for": tag, "schedule": s, "verdict": r["verdict"], "fp": r["fp"],
                    "ok": ex.verdict_kind(r["verdict"]) == "ok"}
             print(json.dumps(rec), flush=True)
             log.write(json.dumps(rec) + "\n"); log.flush()

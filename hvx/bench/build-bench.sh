@@ -24,6 +24,10 @@ for n in "${names[@]}"; do
   src=build/bench-src/$n
   rm -rf "$src"; mkdir -p "$src"
   cp -a hvx/stack/. "$src/"
+  # the patches are written against the fixed front door of M39-M46 (commit 0112b48), not the
+  # current hvx/stack/main.go (M50 changed the code they patch), and without the M56 BUGGIFY
+  # wrappers (buggify.go is not built here)
+  cp hvx/bench/base/main-0112b48.go "$src/main.go"; rm -f "$src/buggify.go"
   ( cd "$src" && patch -s -p1 < "$OLDPWD/$p" )
   echo "== $n: building build/explore-bench-$n-disk.img"
   STACK_OUT=explore-bench-$n STACK_GO_SRC="$src" bash ./build-stack.sh

@@ -32,6 +32,8 @@ package hydoassert
 import (
 	"encoding/json"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 )
@@ -218,4 +220,141 @@ func SetupComplete() {
 	if f != nil {
 		f.Write([]byte("HYDO-SETUP-COMPLETE\n"))
 	}
+}
+
+// ---- BUGGIFY: code-level fault points (FoundationDB style, Milestone 56) ----
+//
+// A fault point is a named place in the program where a real dependency can misbehave (a slow
+// call, an error, a reply lost after the work was done). The program asks the point whether to
+// misbehave right now:
+//
+//	var kafkaLostAck = hydoassert.Buggify("kafka.produce.lost_ack", "the record is written but the produce reports a timeout")
+//	...
+//	if kafkaLostAck.Fire(nil) { return errTimeout }
+//
+// Activation is two-level, as in FoundationDB (flow/include/flow/Buggify.h:
+// P_BUGGIFIED_SECTION_ACTIVATED = 0.25, P_BUGGIFIED_SECTION_FIRES = 0.25): for a run, each point
+// is ENABLED with probability enable/1000; an enabled point FIRES on each evaluation with
+// probability fire/1000; a disabled point never fires. Both decisions are pure functions of the
+// run's seed, the point's id and the evaluation's index at that point -- no clocks, no
+// host state -- so a run stays a pure function of its schedule.
+//
+// Off unless configured: $HYDO_BUGGIFY, or else the file $HYDO_BUGGIFY_FILE (default
+// /tmp/hydo-buggify), holds "<seed-hex>[,<enable-permille>[,<fire-permille>]]". It is read
+// once, at the first evaluation (so a long-running server picks up a seed written after it
+// started). Each point is declared as a Sometimes assertion "buggify.<id>", recorded when it
+// first fires; at the first evaluation the process also writes one line
+//
+//	HYDO-BUGGIFY {"seed":"...","enable_pm":250,"fire_pm":250,"enabled":["id",...]}
+//
+// listing the enabled points (declaration order).
+
+// Point is one declared fault point.
+type Point struct {
+	id   string
+	a    *Assertion
+	hits uint64
+}
+
+var (
+	points   []*Point
+	bgOnce   sync.Once
+	bgOn     bool
+	bgSeed   uint64
+	bgEnable uint64 = 250
+	bgFire   uint64 = 250
+)
+
+// Buggify declares a fault point.
+func Buggify(id, msg string) *Point {
+	p := &Point{id: id, a: declare(TSometimes, "buggify."+id, "fault point fired: "+msg)}
+	mu.Lock()
+	points = append(points, p)
+	mu.Unlock()
+	return p
+}
+
+func bgMix(z uint64) uint64 { // splitmix64 finalizer
+	z += 0x9e3779b97f4a7c15
+	z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9
+	z = (z ^ (z >> 27)) * 0x94d049bb133111eb
+	return z ^ (z >> 31)
+}
+
+func bgKey(id string) uint64 { // FNV-1a
+	h := uint64(14695981039346656037)
+	for i := 0; i < len(id); i++ {
+		h ^= uint64(id[i])
+		h *= 1099511628211
+	}
+	return h
+}
+
+func (p *Point) enabled() bool { return bgMix(bgSeed^bgKey(p.id))%1000 < bgEnable }
+
+type bgRec struct {
+	Seed    string   `json:"seed"`
+	Enable  uint64   `json:"enable_pm"`
+	Fire    uint64   `json:"fire_pm"`
+	Enabled []string `json:"enabled"`
+}
+
+// bgLoad reads the configuration "<seed-hex>[,<enable-permille>[,<fire-permille>]]".
+func bgLoad() {
+	cfg := os.Getenv("HYDO_BUGGIFY")
+	if cfg == "" {
+		f := os.Getenv("HYDO_BUGGIFY_FILE")
+		if f == "" {
+			f = "/tmp/hydo-buggify"
+		}
+		if b, err := os.ReadFile(f); err == nil {
+			cfg = string(b)
+		}
+	}
+	parts := strings.Split(strings.TrimSpace(cfg), ",")
+	seed, err := strconv.ParseUint(parts[0], 16, 64)
+	if err != nil {
+		return // no configuration: every point stays off
+	}
+	bgOn, bgSeed = true, seed
+	if len(parts) > 1 {
+		if v, err := strconv.ParseUint(parts[1], 10, 64); err == nil {
+			bgEnable = v
+		}
+	}
+	if len(parts) > 2 {
+		if v, err := strconv.ParseUint(parts[2], 10, 64); err == nil {
+			bgFire = v
+		}
+	}
+	rec := bgRec{Seed: strconv.FormatUint(bgSeed, 16), Enable: bgEnable, Fire: bgFire, Enabled: []string{}}
+	for _, p := range points {
+		if p.enabled() {
+			rec.Enabled = append(rec.Enabled, p.id)
+		}
+	}
+	emit("HYDO-BUGGIFY", rec)
+}
+
+// Fire reports whether the point misbehaves on this evaluation. Always false when BUGGIFY is
+// not configured; then it has no other effect either.
+func (p *Point) Fire(d D) bool {
+	mu.Lock()
+	bgOnce.Do(bgLoad)
+	if !bgOn || !p.enabled() {
+		mu.Unlock()
+		return false
+	}
+	p.hits++
+	k := p.hits
+	fire := bgMix(bgMix(bgSeed^bgKey(p.id))+k*0x9e3779b97f4a7c15)%1000 < bgFire
+	mu.Unlock()
+	if fire {
+		if d == nil {
+			d = D{}
+		}
+		d["hit"] = k
+		p.a.record(true, d)
+	}
+	return fire
 }

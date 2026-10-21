@@ -37,6 +37,10 @@
 #           O=<svc>@<from>-<to>:<req|resp>:<netem args, commas for spaces>
 #                                  ONE-WAY netem for orders [from,to): req = packets to
 #                                  <svc>'s port only, resp = packets from it only
+#           B=<seed-hex>[,<enable-pm>[,<fire-pm>]]
+#                                  BUGGIFY (M56): the front door's code-level fault points
+#                                  use this seed (hydoassert.Buggify; written to
+#                                  /tmp/hydo-buggify, read at the first Place)
 #       Without a cut the guest then prints "hydo-explore-workload-done" and waits for "go"
 #       (the host first switches disk faults off), restarts any store that died, and runs
 #       the oracle in the same boot.
@@ -128,12 +132,13 @@ pause_timer() {   # $1 svc $2 off-ms $3 dur-ms (runs in the background)
 }
 
 explore_run() {   # $CMD = "run <tokens>"
-  K=""; N=""; C=""; M=1; R=always; P=""; T=""; O=""; Q=""; X=""
+  K=""; N=""; C=""; M=1; R=always; P=""; T=""; O=""; Q=""; X=""; B=""
   for t in ${CMD#run}; do
     case "$t" in
       K=*) K="${t#K=}";; N=*) N="${t#N=}";; C=*) C="${t#C=}";;
       M=*) M="${t#M=}";; R=*) R="${t#R=}";;
       P=*) P="${t#P=}";; T=*) T="${t#T=}";; O=*) O="${t#O=}";; Q=*) Q="${t#Q=}";; X=*) X="${t#X=}";;
+      B=*) B="${t#B=}";;
     esac
   done
   for d in "reachable fault.paused a service was paused (SIGSTOP)" \
@@ -151,6 +156,7 @@ explore_run() {   # $CMD = "run <tokens>"
     case "$Q" in *d) export HYDO_DUP=1;; esac
     echo "hydo-explore: client sends $HYDO_CONC requests at a time${HYDO_DUP:+, every order twice}"
   fi
+  if [ -n "$B" ]; then echo "$B" > /tmp/hydo-buggify; echo "hydo-explore: BUGGIFY $B"; else rm -f /tmp/hydo-buggify; fi
   if [ "$M" != 1 ]; then SQL -e "SET GLOBAL innodb_flush_log_at_trx_commit=$M"; echo "hydo-explore: mysql innodb_flush_log_at_trx_commit=$M"; fi
   if [ "$R" != always ]; then /bin/redis-cli -p 6379 CONFIG SET appendfsync "$R" > /dev/null; echo "hydo-explore: redis appendfsync=$R"; fi
   ksvc=""; kat=-1; kup=-1; nsvc=""; nfrom=-1; nto=-1; nargs=""; cat_=-1

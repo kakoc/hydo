@@ -50,6 +50,8 @@ NF_SALT = 0x4E46A17C0FFEE046
 PREEMPT = False         # --preempt (M49): shorter tick period pp= or inserted ticks xt= on half the schedules
 PP_VALUES = [1 << 16, 1 << 14]
 XT_RATES = [4, 16]
+BUGGIFY = False         # --buggify (M56): every schedule carries a seed for the front door's fault points (B=)
+BG_SALT = 0xB0661F7ED5EED0B6
 CONCURRENCY = False     # --concurrency: several clients place orders at the same time (Q= token)
 CC_SALT = 0x51C0C0C0C0C0C051
 BACKEND = "hvx"         # --backend hvm: the Mac VMM (hvm_backend.py); HVM_KERNEL = its --hvm-kernel
@@ -179,6 +181,15 @@ def add_new_faults(s, seed, swarm=False):
         kinds = [("loss", t.rng(30, 100))] if t.below(2) else [("delay", t.rng(100, 3000))]
         if "N" not in s:                            # one netem root qdisc at a time
             s["O"] = (svc, a, b, d, kinds)
+    return s
+
+
+def add_buggify(s, seed):
+    """--buggify (M56): every schedule gets a BUGGIFY seed (guest token B=), from a separate
+    random stream, so every other field matches the same seed without --buggify. The front
+    door's fault points (hvx/stack/buggify.go) then misbehave at seeded places."""
+    if BUGGIFY:
+        s["B"] = "%x" % SplitMix(seed ^ BG_SALT).next()
     return s
 
 
@@ -409,6 +420,8 @@ def render(s):
         g.append("Q=%d%s" % (s["Q"][0], "d" if s["Q"][1] else ""))
     if "X" in s:
         g.append("X=%s@%d~%d" % s["X"])
+    if "B" in s:
+        g.append("B=%s" % s["B"])
     return "disk=%s dseed=%x%s%s%s | %s" % (s["disk"], s["dseed"], render_tj(s["tj"]) if "tj" in s else "",
                                             render_preempt(s), " rb=%d" % s["rb"] if "rb" in s else "", " ".join(g))
 
@@ -466,6 +479,8 @@ def parse(text):
             s["Q"] = (int(v.rstrip("d")), v.endswith("d"))
         elif k == "X":
             svc, rest = v.split("@"); at, off = rest.split("~"); s["X"] = (svc, int(at), int(off))
+        elif k == "B":
+            s["B"] = v
         elif k in KNOB_TOKENS:
             s[k] = v
     return s
@@ -716,6 +731,8 @@ def candidates(s, tjk=None):
             var(Q=(n, False))
         if n > 2:
             var(Q=(n // 2, dup))
+    if "B" in s:                                    # BUGGIFY (M56): drop the fault points
+        var(B=None)
     if "pp" in s:                                   # finer preemption (M49): drop it, then milder
         var(pp=None)
     if "xt" in s:
@@ -810,7 +827,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
 
 # ---------------------------------------------------------------- main
 def main():
-    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT
+    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT, BUGGIFY
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-200")
     ap.add_argument("--workers", type=int, default=3)   # the box has 4 cores: 3 is fastest (M38)
@@ -836,6 +853,8 @@ def main():
                     help="several clients place orders at once (Q= token; separate random stream)")
     ap.add_argument("--preempt", action="store_true",
                     help="M49: shorter tick period (pp=) or inserted ticks (xt=) on half the schedules")
+    ap.add_argument("--buggify", action="store_true",
+                    help="M56: give every schedule a BUGGIFY seed (B=) for the front door's code-level fault points")
     ap.add_argument("--backend", choices=["hvx", "hvm"], default="hvx",
                     help="hvm: the Mac VMM (hvx-mac/explore/hvmx); --image is then an arm64 manifest initramfs")
     ap.add_argument("--hvm-kernel", help="arm64 kernel for --backend hvm (default hvx-mac/explore/out/Image-explore)")
@@ -857,6 +876,7 @@ def main():
     NEW_FAULTS = a.new_faults
     CONCURRENCY = a.concurrency
     PREEMPT = a.preempt
+    BUGGIFY = a.buggify
     IMAGE = a.image
     TIMING = a.timing
     TJ_PM = [int(x) for x in a.tj_pm.split(",")]
@@ -876,7 +896,7 @@ def main():
             SPACE.check_sweep(a.sweep)
         points = sweep(a.sweep)
         seeds = list(range(1, len(points) + 1))            # sweep point index stands in for the seed
-        items = [("seed-%d" % i, render(add_preempt(add_concurrency(add_timing(sch, i), i), i))) for i, (_, sch) in zip(seeds, points)]
+        items = [("seed-%d" % i, render(add_buggify(add_preempt(add_concurrency(add_timing(sch, i), i), i), i))) for i, (_, sch) in zip(seeds, points)]
         open(os.path.join(a.out, "sweep-points.jsonl"), "w").write(
             "".join(json.dumps({"seed": i, "point": lab}) + "\n" for i, (lab, _) in zip(seeds, points)))
     else:
@@ -884,8 +904,8 @@ def main():
         seeds = list(range(lo, hi + 1))
         gen = generate_swarm if a.strategy == "swarm" else generate
         dur = durable_only if a.durable_only else (lambda s: s)
-        items = [("seed-%d" % sd, render(add_preempt(add_concurrency(add_timing(add_new_faults(dur(gen(sd)), sd,
-                                                                                   a.strategy == "swarm"), sd), sd), sd)))
+        items = [("seed-%d" % sd, render(add_buggify(add_preempt(add_concurrency(add_timing(add_new_faults(dur(gen(sd)), sd,
+                                                                                   a.strategy == "swarm"), sd), sd), sd), sd)))
                  for sd in seeds]
     t_sweep = time.time()
     res = pool.run_all(items)

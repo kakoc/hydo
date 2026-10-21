@@ -170,3 +170,60 @@ hit at run 207 is one of the 30% that do not trigger (an earlier `K=mysql@4+4`);
 **Verdict:** d7 is a placement blind spot, not just short exploration: plain random/swarm never
 reach it, and with the new faults the expected wait is ~2,800 runs (~4.3 h of box time) for
 random and ~5,900 (~9 h) for swarm. The tail sweep finds it in 9 minutes.
+
+## BUGGIFY fault points (Milestone 56)
+
+Code-level fault points in the front door, FoundationDB style (recommendation 3 of
+`hvx/explore/RESEARCH-search.md`). `hydoassert.Buggify(id, msg)` declares a point; for a run each
+point is enabled with probability 0.25 and an enabled point fires on each evaluation with
+probability 0.25 (FoundationDB's defaults, `flow/include/flow/Buggify.h`:
+`P_..._BUGGIFIED_SECTION_ACTIVATED{ 0.25 }`, `P_..._BUGGIFIED_SECTION_FIRES{ 0.25 }`), both a
+pure function of the run's seed, the point and the hit index. The seed comes from the guest
+token `B=<seed-hex>[,<enable-pm>[,<fire-pm>]]` (written to `/tmp/hydo-buggify`, read at the first
+`Place`); `explore.py --buggify` gives every schedule one from a separate random stream, so all
+other fields are unchanged. Without `B=` every point is off. A `HYDO-BUGGIFY` console line lists
+the enabled points; each point is a `sometimes` property `buggify.<id>` recorded when it fires.
+
+The 14 points (`hvx/stack/buggify.go`) wrap every store call of `Place` and take the code's own
+error path for that call: MySQL slow (2 s), each statement (insert / mark-sending / publish flag)
+failing before it is sent or committing with its reply lost; Kafka slow (6 s), failing before the
+record is sent, or written with the produce reporting a timeout; the Kafka lookup failing; the
+Redis write failing; the ACK late (3 s) or lost. `addbuggify.py` routes a front door's calls
+through the wrappers; `build-bench-bg.sh` builds `explore-bench-bg-<name>-disk.img` for d0..d7
+and `control` (base front doors in `base/`: d1..d7 and the control patch `main-0112b48.go`, d0 is
+`main-7e32c4a.go`; all in the current guest, so one control serves all eight).
+
+**Without `B=`** (`confirm.py --bg-images`): all 10 triggers still fail twice identically with the
+same verdicts as before, and all pass on the control (fingerprints moved: new binaries and
+catalog lines): d0 `80fb3138c43b1350`, d1 `5548f222e4ee1381`, d2 `e45437152fdaa5c0`,
+d3 `886965f79516e715` / `df28d56d30c88d37`, d4 `21c6259650708ced` / `e0e6a1fab1e57ed9`,
+d5 `7965496592b4bd1c`, d6 `928f9c0f03289352`, d7 `52d633f175ecc3a4`. Same seed twice gives a
+byte-identical console.
+
+**Evaluation** (`run.py --buggify --bg-images`, 3 reps × ≤60 runs, 1 worker, module srcversion
+`7CA13762C89AF3BF16F2CCF`; every detection reproduced its fingerprint and passed the control check;
+results `/var/tmp/m56-bg/{random-bg,swarm-bg}` on the box; plain columns are Milestone 54's):
+
+| defect | random | random+bg | swarm | swarm+bg |
+|---|---|---|---|---|
+| d0 | 2/3 (-, 6, 8) | 3/3 (3, 6, 3) | 3/3 (17, 19, 38) | 3/3 (2, 8, 12) |
+| d1 | 3/3 (2, 7, 6) | 3/3 (1, 4, 2) | 3/3 (9, 8, 1) | 3/3 (6, 4, 1) |
+| d2 | 3/3 (2, 6, 5) | 3/3 (2, 4, 3) | 3/3 (2, 4, 4) | 3/3 (6, 19, 4) |
+| d3 | 3/3 (2, 58, 14) | 3/3 (2, 7, 2) | 3/3 (23, 54, 1) | 3/3 (6, 45, 1) |
+| d4 | 2/3 (-, 6, 32) | 3/3 (8, 6, 26) | 3/3 (39, 19, 38) | 3/3 (2, 19, 12) |
+| d5 | 3/3 (3, 4, 5) | 3/3 (3, 4, 5) | 3/3 (2, 4, 4) | 3/3 (2, 4, 4) |
+| d6 | 3/3 (2, 6, 14) | 3/3 (2, 6, 14) | 3/3 (23, 19, 1) | 3/3 (23, 19, 1) |
+| d7 | 0/3 | **3/3 (4, 7, 2)** | 0/3 | **3/3 (9, 45, 6)** |
+| detections of 24 | 19 | **24** | 21 | **24** |
+
+The research prediction holds under random (d7 3/3 within 30 runs; d3/d4/d6 medians 2/8/6) and
+nearly under swarm (d7 rep 2 at run 45). d7 is now found without a fault at the end of the
+workload: a lost produce reply or failed lookup makes an order's outcome uncertain at any order,
+and the defect's lookup misses its record. d5 and d6 are unchanged (their external faults find
+them first). One d2 detection (random+bg rep 3) is a Kafka duplicate rather than d2's signature;
+it passed the control, so it is still the patch's. With `B=` d0 is also caught through its old
+oracle, which calls any un-ACKed order found in Kafka a violation (a lost ACK is enough).
+
+**Fixed front door (current `hvx/stack/main.go`, with the M50 fixes) under BUGGIFY**
+(`explore-bench-bg-fixed-disk.img`, swarm, `--buggify --durable-only`, seeds 1–100): 100 runs,
+**0 failures**; all 14 points fired (in 7–27 runs each). No new bug.
