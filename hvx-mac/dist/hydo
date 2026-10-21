@@ -178,7 +178,9 @@ def cmd_run(argv):
     sched = args[0]
     outdir = os.path.join(OUT, "runs", "run-%d" % os.getpid())
     os.makedirs(outdir, exist_ok=True)
-    p = subprocess.run([HVMX, "one", KERNEL, image, outdir, sched], env=disk_env(image),
+    sys.path.insert(0, EXPLORE)
+    import hvm_backend          # the image's guest.ram_mib, as explore.py passes it
+    p = subprocess.run([HVMX] + hvm_backend.image_ram_args(image) + ["one", KERNEL, image, outdir, sched], env=disk_env(image),
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     text = p.stdout.decode(errors="replace")
     for line in text.splitlines():

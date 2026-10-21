@@ -32,9 +32,29 @@ HYDO-SETUP-COMPLETE
 | `sometimes` | the condition is true at least once | NOT EXERCISED if no `ok:true` anywhere |
 | `reachable` | the code location is reached at least once | NOT EXERCISED if never emitted |
 | `unreachable` | the code location is never reached | FAIL if emitted (it is emitted with `ok:false`) |
+| `eventually` | after an anchor, the condition becomes true within a deadline (bounded liveness) | FAIL on any `ok:false` (an episode missed its deadline); NOT EVALUATED if no episode was resolved |
 
 Numeric comparisons are `always` / `sometimes` evaluations whose `details` carry
 `{"left":L,"op":"<=","right":R}` (Go SDK: `Cmp`).
+
+**Bounded liveness: `eventually`.** The other types are safety properties ("never X",
+"always Y"). An `eventually` property says "after an anchor point, X becomes true within a
+deadline": "after the faults are healed, every pending order is resolved within 10 s", "after a
+killed service restarts, it serves a request within 5 s". An unbounded "eventually" can never
+be refuted by a finite run; a bounded one can, and because hvx makes guest time deterministic
+(the virtual TSC is a function of the instruction clock), a deadline measured on the guest's
+clock is deterministic too: the same schedule gives the same verdict and the same elapsed
+time on every run. One **episode** = one anchor and one deadline. The episode is resolved by
+ONE evaluation record:
+
+- `ok:true` — the condition became true by the deadline;
+- `ok:false` — the deadline passed first, or the condition became true only after it.
+
+`details` carry the measured time: `elapsed_s` (string, seconds, shell + manifests) or
+`elapsed_ms` (number, Go SDK), and the deadline `within_s` / `within_ms`; manifest
+invariants also carry the anchor (`after`) and the check's last output (`out`). An
+`eventually` property says that the system recovers after the faults stop, with an explicit
+deadline, so "recovers" becomes a checkable claim.
 
 **Why `sometimes` and `reachable` matter.** An `always` that never fails proves nothing if the
 interesting case never happened. `sometimes` / `reachable` are coverage claims: "a retried order
@@ -67,6 +87,12 @@ dedupHit.Check(found, nil)
 restart.Hit(nil)
 appliedNoAck.Hit(hydoassert.D{"order": id})
 hydoassert.SetupComplete()
+
+// bounded liveness
+var drained = hydoassert.Eventually("orders.drained", "pending orders resolve within 10 s after the heal", 10*time.Second)
+drained.Await(func() bool { return pending() == 0 }, time.Second, nil)   // blocks; one record
+w := drained.Begin()      // or: anchor now ...
+w.Done(nil)               // ... condition true now (ok if in time)  /  w.Expire(nil): gave up
 ```
 
 Records go to `/dev/ttyS0` (override with `HYDO_ASSERT_OUT=<path>|stderr|off`), so they reach the
@@ -80,7 +106,11 @@ hydo_decl always data.mounted "the data disk mounts after recovery"
 hydo_always data.mounted "the data disk mounts after recovery" $BB mount -t ext4 /dev/vda2 /data
 hydo_sometimes oracle.retried "some order needed a retry" $BB grep -q retry /tmp/client.log
 hydo_setup_complete
+hydo_eventually svc.back "redis serves again within 5 s" 5 1 sh -c '/bin/redis-cli ping | grep -q PONG'
 ```
+
+`hydo_eventually <id> <msg> <within-s> <poll-s> <cmd...>` anchors at the call, polls `cmd`
+every `poll-s` seconds of guest time and emits one record (`elapsed_s`, `within_s`).
 
 The shell helper does not deduplicate; call it where an event happens once.
 
@@ -90,6 +120,13 @@ The shell helper does not deduplicate; call it where an event happens once.
   `ha_print`, `ha_violations`), for harnesses and the explorer.
 - `hvx/hydo_assert_report`: `hydo_assert_report <console>...` prints the property table over the
   given saved consoles (e.g. `HVX_CONSOLE_OUT` dumps) and exits 1 if any property is violated.
+  For `eventually` properties it also shows the slowest in-time episode and prints a
+  `liveness: <n> eventually properties, <k> missed a deadline` line.
+- `explore.py` counts an `eventually` with `ok:false` as a failed assertion of the run (like a
+  failed `always`), and `report.md` gets a "Liveness" table: per property, schedules where it
+  held in time / missed its deadline, the slowest in-time episode and the first miss.
+- Manifest invariants (`hvx/onboard/MANIFEST.md`) can be `type: eventually` with a deadline
+  after the heal or the workload start; the generic init polls and emits the records.
 
 ## The four-service stack's properties
 

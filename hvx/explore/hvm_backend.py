@@ -16,6 +16,9 @@ before tc was added) no N=/O= network faults. Whether the image has tc is read f
 manifest (etc/hydo/manifest.sh, HYDO_TC), not assumed. Tick jitter works, but its delays are
 counted in VM exits instead of guest branches (hvx-mac/hvm.c), so a seeded jitter's maximum
 delay is capped at HVM_TJ_MAX exits.
+
+Guest RAM: explore.py passes ["--ram-mib", N] (its ram_args(), from the manifest's
+guest.ram_mib or --ram-mib) to engine_cmd/repro_line; hvmx accepts 256..4096 MiB.
 """
 import os
 
@@ -56,9 +59,10 @@ def image_has_tc(image):
     return False
 
 
-def engine_cmd(image, consoles, kernel=None):
+def engine_cmd(image, consoles, kernel=None, ram=()):
+    """ram: ["--ram-mib", N] for a non-default guest RAM size (explore.py's ram_args())."""
     env = ["env", "HVM_DISK=" + disk_for(image)] if disk_for(image) else []
-    return env + [os.path.join(MAC, "hvmx"), "serve", kernel or KERNEL, resolve_image(image), consoles]
+    return env + [os.path.join(MAC, "hvmx")] + list(ram) + ["serve", kernel or KERNEL, resolve_image(image), consoles]
 
 
 def hvm_supported(s):
@@ -75,9 +79,22 @@ def hvm_supported(s):
     return s
 
 
-def repro_line(image, schedule, kernel=None):
+def repro_line(image, schedule, kernel=None, ram=()):
     env = "HVM_DISK=%s " % disk_for(image) if disk_for(image) else ""
-    return "%s%s one %s %s <outdir> \"%s\"" % (env, os.path.join(MAC, "hvmx"), kernel or KERNEL, resolve_image(image), schedule)
+    return "%s%s %sone %s %s <outdir> \"%s\"" % (env, os.path.join(MAC, "hvmx"), "".join(x + " " for x in ram),
+                                               kernel or KERNEL, resolve_image(image), schedule)
+
+
+def image_ram_args(image):
+    """["--ram-mib", N] for an image whose embedded manifest sets guest.ram_mib != 1024, else []
+    (for callers that start hvmx on an image directly, e.g. `hydo run`)."""
+    import manifest_space
+    try:
+        m = manifest_space.Space(embedded_manifest(image), "hydo.yaml").m
+    except SystemExit:
+        return []
+    r = (m.get("guest") or {}).get("ram_mib", 1024)
+    return [] if r == 1024 else ["--ram-mib", str(r)]
 
 
 def embedded_manifest(image):

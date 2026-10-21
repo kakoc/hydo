@@ -14,8 +14,8 @@
  * vCPU, types the schedule's guest part on the serial console, runs to
  * "hydo-explore-workload-done", types "go", and runs to the final verdict.
  *
- *   hvmx serve <Image> <initramfs> <outdir>         "RUN <tag> <schedule>" on stdin -> RESULT lines
- *   hvmx one   <Image> <initramfs> <outdir> "<schedule>"
+ *   hvmx [--ram-mib N] serve <Image> <initramfs> <outdir>         "RUN <tag> <schedule>" on stdin -> RESULT lines
+ *   hvmx [--ram-mib N] one <Image> <initramfs> <outdir> "<schedule>"
  *        one schedule from a fresh boot, no snapshot restore: its fingerprint must equal serve's
  *
  * With the data disk attached (HVM_DISK=<NAME>-arm64-disk.img, the virtio-blk device of
@@ -44,7 +44,8 @@
  * reported from its plain run. The RESULT line keeps explore.py's format; stderr says when the
  * reported run used rewind mode.
  *
- * Env: HVM_MEM_MB (default 1024, the manifest v1 size), HVM_SNAP_DIR (default /tmp/hvm-snap),
+ * Guest RAM: "--ram-mib N" before the mode, else HVM_MEM_MB, else 1024 MiB; 256..4096.
+ * Env: HVM_MEM_MB, HVM_SNAP_DIR (default /tmp/hvm-snap),
  *      HVM_RUN_EXITS (per-phase exit budget, default 50,000,000), HVM_DISK, plus ../hvm.c's knobs
  *      (HVM_SPIN_MS, HVM_SPIN_SECS, HVM_SPIN_OBSERVE, HVM_SPLOG).
  */
@@ -448,10 +449,35 @@ static int boot_to_s1(struct xsnap *s0, struct xsnap *s1)
 	return 0;
 }
 
+/* Guest RAM in MiB: "--ram-mib N" before the mode (explore.py passes it from the manifest's
+ * guest.ram_mib), else HVM_MEM_MB, else 1024. Bounds: the initramfs is loaded at 130 MiB, so
+ * below 256 MiB a real image does not fit; 4096 is the largest size run on this backend (M48). */
+#define HVMX_RAM_MIN_MIB 256
+#define HVMX_RAM_MAX_MIB 4096
+static int ram_mib_parse(const char *v, const char *what, uint64_t *out)
+{
+	char *end;
+	unsigned long long n = strtoull(v, &end, 10);
+	if (!*v || *end || n < HVMX_RAM_MIN_MIB || n > HVMX_RAM_MAX_MIB) {
+		fprintf(stderr, "hvmx: %s=%s: guest RAM must be a whole number of MiB in [%d, %d]\n",
+			what, v, HVMX_RAM_MIN_MIB, HVMX_RAM_MAX_MIB);
+		return -1;
+	}
+	*out = n;
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
+	uint64_t ram_mib = 1024;
+	if (getenv("HVM_MEM_MB") && ram_mib_parse(getenv("HVM_MEM_MB"), "HVM_MEM_MB", &ram_mib)) return 2;
+	while (argc > 2 && !strcmp(argv[1], "--ram-mib")) {
+		if (ram_mib_parse(argv[2], "--ram-mib", &ram_mib)) return 2;
+		argv[2] = argv[0];
+		argv += 2; argc -= 2;
+	}
 	if (argc < 5 || (strcmp(argv[1], "serve") && strcmp(argv[1], "one")) || (!strcmp(argv[1], "one") && argc < 6)) {
-		fprintf(stderr, "usage: hvmx serve <Image> <initramfs> <outdir>\n       hvmx one <Image> <initramfs> <outdir> \"<schedule>\"\n");
+		fprintf(stderr, "usage: hvmx [--ram-mib N] serve <Image> <initramfs> <outdir>\n       hvmx [--ram-mib N] one <Image> <initramfs> <outdir> \"<schedule>\"\n");
 		return 2;
 	}
 	const char *mode = argv[1];
@@ -460,7 +486,8 @@ int main(int argc, char **argv)
 	initrd_has_tc = scan_has_tc(initrd_img, initrd_len);
 	outdir = argv[4];
 	mkdir(outdir, 0755);
-	ram_size = (uint64_t)(getenv("HVM_MEM_MB") ? atoi(getenv("HVM_MEM_MB")) : 1024) << 20;
+	ram_size = ram_mib << 20;
+	if (ram_mib != 1024) fprintf(stderr, "hvmx: guest RAM %llu MiB\n", (unsigned long long)ram_mib);
 	if (getenv("HVM_STEP")) STEP = strtoull(getenv("HVM_STEP"), 0, 0);
 	if (getenv("HVM_RUN_EXITS")) run_exits = strtoull(getenv("HVM_RUN_EXITS"), 0, 0);
 	spin_env();

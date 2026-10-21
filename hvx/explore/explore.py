@@ -64,6 +64,9 @@ CONCURRENCY = False     # --concurrency: several clients place orders at the sam
 CC_SALT = 0x51C0C0C0C0C0C051
 BACKEND = "hvx"         # --backend hvm: the Mac VMM (hvm_backend.py); HVM_KERNEL = its --hvm-kernel
 HVM_KERNEL = None
+RAM_MIB = 1024          # guest RAM: the manifest's guest.ram_mib, or --ram-mib; the engines get
+                        # "--ram-mib N" only when it is not 1024, so default commands are unchanged
+RAM_MIB_BOUNDS = {"hvx": (256, 3072), "hvm": (256, 4096)}  # hvx_explore.c / hvmx (serve.c) check the same
 CLOCK_DELTAS = [-30 * 86400, -86400, -3600, -300, -30, 30, 300, 3600, 86400, 365 * 86400]
 
 
@@ -670,7 +673,8 @@ ASSERT_RE = re.compile(r"HYDO-ASSERT (\{.*\})")
 
 def assert_failures(outdir, tag):
     """Failed property evaluations in one run's console(s): an always / always_or_unreachable
-    with ok=false, or any unreachable that was emitted. Returns sorted assertion ids."""
+    with ok=false, an eventually that missed its deadline (ok=false), or any unreachable that
+    was emitted. Returns sorted assertion ids."""
     bad = set()
     for suffix in ("", ".recovery"):
         path = os.path.join(outdir, "consoles", "%s%s.log" % (tag, suffix))
@@ -685,7 +689,7 @@ def assert_failures(outdir, tag):
             except ValueError:
                 continue
             t, ok = rec.get("t"), rec.get("ok")
-            if (t in ("always", "always_or_unreachable") and ok is False) or t == "unreachable":
+            if (t in ("always", "always_or_unreachable", "eventually") and ok is False) or t == "unreachable":
                 bad.add(rec.get("id", "?"))
     return sorted(bad)
 
@@ -716,12 +720,73 @@ def property_table(outdir, tags):
     return r.stdout
 
 
+def liveness_summary(outdir):
+    """Per bounded-liveness (eventually) property, over the merged per-schedule consoles that
+    property_table wrote: schedules where it held in time / missed its deadline, and the
+    slowest in-time and the first missed episode. Lines for report.md, or [] if none."""
+    d = os.path.join(outdir, "consoles-merged")
+    props = {}
+    for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        seen = {}
+        for line in open(os.path.join(d, f), errors="replace"):
+            m = ASSERT_RE.search(line)
+            if not m:
+                continue
+            try:
+                rec = json.loads(m.group(1))
+            except ValueError:
+                continue
+            if rec.get("t") != "eventually":
+                continue
+            det = rec.get("details") or {}
+            el = det.get("elapsed_s")
+            el = float(el) if el not in (None, "?") else det.get("elapsed_ms", 0) / 1000.0
+            seen.setdefault(rec.get("id", "?"), []).append((rec.get("ok") is True, el, det))
+        for pid, eps in seen.items():
+            p = props.setdefault(pid, {"held": 0, "missed": 0, "slowest": None, "first_miss": None})
+            if all(ok for ok, _, _ in eps):
+                p["held"] += 1
+                worst = max(el for _, el, _ in eps)
+                if p["slowest"] is None or worst > p["slowest"][0]:
+                    p["slowest"] = (worst, f[:-4])
+            else:
+                p["missed"] += 1
+                if p["first_miss"] is None:
+                    p["first_miss"] = (f[:-4], next(det for ok, _, det in eps if not ok))
+    if not props:
+        return []
+    L = ["## Liveness (eventually properties, hvx/ASSERTIONS.md)", "",
+         "| property | held in time | missed deadline | slowest in time | first miss |", "|---|---|---|---|---|"]
+    for pid in sorted(props):
+        p = props[pid]
+        slow = "%.2f s (%s)" % p["slowest"] if p["slowest"] else "-"
+        miss = "%s: `%s`" % (p["first_miss"][0], p["first_miss"][1].get("out", "")) if p["first_miss"] else "-"
+        L.append("| `%s` | %d | %d | %s | %s |" % (pid, p["held"], p["missed"], slow, miss))
+    return L + [""]
+
+
 def verdict_kind(v):
     if "HYDO-ORACLE: OK" in v:
         return "ok"
     if "VIOLATION" in v:
         return "violation"
     return "error"            # harness / guest setup problems, timeouts
+
+
+def ram_args():
+    """The engine option for a non-default guest RAM size (none at 1024 MiB)."""
+    return [] if RAM_MIB == 1024 else ["--ram-mib", str(RAM_MIB)]
+
+
+def pick_ram_mib(cli, manifest):
+    """--ram-mib, else the manifest's guest.ram_mib, else 1024; checked against the backend's bounds."""
+    src, v = ("--ram-mib", cli) if cli is not None else \
+        ("guest.ram_mib", (manifest.get("guest") or {}).get("ram_mib", 1024)) if manifest else ("default", 1024)
+    lo, hi = RAM_MIB_BOUNDS[BACKEND]
+    if not isinstance(v, int) or isinstance(v, bool) or not lo <= v <= hi:
+        raise SystemExit("explore.py: %s=%r: guest RAM must be a whole number of MiB in [%d, %d] on --backend %s"
+                         % (src, v, lo, hi, BACKEND))
+    return v
 
 
 def signature(v):
@@ -739,11 +804,11 @@ class Worker(threading.Thread):
 
     def run(self):
         cmd = [os.path.expanduser("~/bin/hvx-run"), "sudo", "env", "HVX_SNAP_DIR=/var/tmp/hvx-snap"] + EXTRA_ENV + [
-               os.path.join(HVX, "hvx_explore"), "serve", os.path.join(BUILD, "bzImage"),
+               os.path.join(HVX, "hvx_explore")] + ram_args() + ["serve", os.path.join(BUILD, "bzImage"),
                os.path.join(BUILD, "initramfs-kafka.cpio.gz"), os.path.join(BUILD, IMAGE),
                os.path.join(self.outdir, "consoles")]
         if BACKEND == "hvm":
-            cmd = hvm_backend.engine_cmd(IMAGE, os.path.join(self.outdir, "consoles"), HVM_KERNEL)
+            cmd = hvm_backend.engine_cmd(IMAGE, os.path.join(self.outdir, "consoles"), HVM_KERNEL, ram_args())
         err = open(os.path.join(self.outdir, "worker-%d.err" % self.idx), "w")
         p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err, text=True, bufsize=1)
         line = p.stdout.readline()
@@ -1000,7 +1065,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
 
 # ---------------------------------------------------------------- main
 def main():
-    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT, BUGGIFY, KNOB_RULE
+    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT, BUGGIFY, KNOB_RULE, RAM_MIB
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-200")
     ap.add_argument("--workers", type=int, default=3)   # the box has 4 cores: 3 is fastest (M38)
@@ -1041,6 +1106,8 @@ def main():
     ap.add_argument("--manifest", help="an onboarded project's hydo.yaml: draw faults from its services, ports, "
                                        "steps and knobs (manifest_space.py); default for explore-ob-* images: "
                                        "the manifest inside the image")
+    ap.add_argument("--ram-mib", type=int, help="guest RAM in MiB (default: the manifest's guest.ram_mib, else 1024; "
+                                                "256..3072 on hvx, 256..4096 on hvm)")
     a = ap.parse_args()
     BACKEND, HVM_KERNEL = a.backend, a.hvm_kernel
     if BACKEND == "hvm":
@@ -1053,6 +1120,9 @@ def main():
             sp = manifest_space.load(a.manifest, os.path.join(BUILD, a.image))
         sp.apply(globals())
         print("fault space: %s" % json.dumps(SPACE.describe()), file=sys.stderr)
+    RAM_MIB = pick_ram_mib(a.ram_mib, SPACE.m if SPACE else None)
+    if RAM_MIB != 1024:
+        print("guest RAM: %d MiB" % RAM_MIB, file=sys.stderr)
     NEW_FAULTS = a.new_faults
     KNOB_RULE = a.knob_rule
     CONCURRENCY = a.concurrency
@@ -1142,6 +1212,8 @@ def main():
                "runs_per_hour": round(len(seeds) / t_sweep * 3600, 1), "mean_run_s": round(sum(secs) / len(secs), 1),
                "worker_boot_s": round(sum(boot) / max(1, len(boot)), 1), "total_wall_s": round(total, 1),
                "failures": len(fails), "reproduced": sum(1 for f in fails if f["reproduced"])}
+    if RAM_MIB != 1024:
+        summary["ram_mib"] = RAM_MIB
     json.dump({"summary": summary, "failures": fails,
                "shrunk": [{"class": k[0], "signature": k[1], **v} for k, v in shrunk.items()]},
               open(os.path.join(a.out, "report.json"), "w"), indent=1)
@@ -1198,6 +1270,8 @@ def branch_main(a, pool, t0):
                "reproduced_standalone": sum(1 for f in fails if f["reproduced"]),
                "timing_only_failures": sum(1 for f in fails if f["timing_only"]),
                "total_wall_s": round(time.time() - t0, 1)}
+    if RAM_MIB != 1024:
+        summary["ram_mib"] = RAM_MIB
     json.dump({"summary": summary, "failures": fails}, open(os.path.join(a.out, "report.json"), "w"), indent=1)
     L = ["# Branch report (marker `%s`)" % a.branch, "", "| | |", "|---|---|"]
     L += ["| %s | %s |" % kv for kv in summary.items()]
@@ -1232,13 +1306,14 @@ def write_report(out, summary, fails, shrunk, table=None):
               "- needs a tick-timing change: %s" % ("yes" if " tj" in v["minimal"] else "no"),
               "- verdict: `%s`" % v["min_verdict"],
               "- fingerprint, two runs: `%s` / `%s` (%s)" % (v["fp_a"], v["fp_b"], "identical" if v["fp_a"] == v["fp_b"] else "DIFFERENT"),
-              "- by hand: `~/bin/hvx-run sudo ./hvx_explore one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/%s <outdir> \"%s\"`" % (IMAGE, v["minimal"])
-              if BACKEND != "hvm" else "- by hand: `%s`" % hvm_backend.repro_line(IMAGE, v["minimal"], HVM_KERNEL), ""]
+              "- by hand: `~/bin/hvx-run sudo ./hvx_explore %sone ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/%s <outdir> \"%s\"`" % ("".join(x + " " for x in ram_args()), IMAGE, v["minimal"])
+              if BACKEND != "hvm" else "- by hand: `%s`" % hvm_backend.repro_line(IMAGE, v["minimal"], HVM_KERNEL, ram_args()), ""]
     L += ["## Property table over every schedule (hvx/ASSERTIONS.md)", ""]
     if table is None:
         L += ["The guest emitted no HYDO-ASSERT records (an image built without the assertion SDK).", ""]
     else:
         L += ["```", table.rstrip(), "```", ""]
+        L += liveness_summary(out)
     open(os.path.join(out, "report.md"), "w").write("\n".join(L) + "\n")
 
 
