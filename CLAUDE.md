@@ -840,7 +840,7 @@ PCT forces thread switches at d-1 random points among the k steps of a run, and 
 - a race needing two such windows: 0 for every strategy in 200; then over 1,000 seeds, **40 points 7** and jitter 0;
 - windows of plain work: 0 everywhere.
 
-All 24 hits repeated exactly. Few points (PCT's own setting) did no better than jitter, because a forced point also moves the clock and the guest picks the next thread, so PCT's guarantee does not carry over. Many points did better, and only many points found the two-ordering bug. Not in `explore.py` yet: the tokens work in hand-written schedules. Details: `hvx-mac/explore/README.md` "Forced preemption points".
+All 24 hits repeated exactly. Few points (PCT's own setting) did no better than jitter, because a forced point also moves the clock and the guest picks the next thread, so PCT's guarantee does not carry over. Many points did better, and only many points found the two-ordering bug. In the explorer: `explore.py --backend hvm --preempt` gives half the schedules `pct=`/`pctn=`/`pctk=` (ranges `--pct-exits`, default 3,000 and 10,000 exits; RESULT `pctw=` gives the workload length) and drops the Linux-only `pp=`/`xt=` there. On Linux, generated schedules are identical to before. On Redis, 100 swarm seeds: 39 failures, all reproduced, none with durable settings. Details: `hvx-mac/explore/README.md` "Forced preemption points".
 
 ### Milestone 58 — DONE (a real bug found by the flush cut; a harness stop-point bug fixed; 2026-10-21)
 

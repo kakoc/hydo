@@ -67,7 +67,7 @@ def hvm_supported(s):
     if not HAS_DISK:
         s["disk"] = "none"
         s.pop("C", None)
-    for k in ("rb",) if HAS_TC else ("N", "O", "rb"):
+    for k in ("rb", "pp", "xt") if HAS_TC else ("N", "O", "rb", "pp", "xt"):   # pp/xt need the PMU clock; the Mac's lever is pct
         s.pop(k, None)
     tj = s.get("tj")
     if tj and tj[0] == "seed" and tj[3] > HVM_TJ_MAX:

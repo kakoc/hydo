@@ -26,7 +26,7 @@
  * probability 0, so the guest negotiates FLUSH (write-back caching) like hvx's guests.
  * Forced preemption points (pct=<hex seed> pctn=<points> [pctk=<exits>, default 20000]): pctn
  * seeded exits among the first pctk exits of the workload make the timer due at once (../hvm.c
- * PCT); the RESULT gains pctf=<points that fired>.
+ * PCT); the RESULT gains pctf=<points that fired> pctw=<exits the workload took>.
  * Tick jitter (tj=, tjx=) delays timer interrupts by a seeded number of EXITS (../hvm.c TJ);
  * the RESULT gains tjk=<first>-<last> tjn=<n> as on hvx. Not supported (the RESULT says UNSUPPORTED):
  * disk faults or cuts without a disk, and network faults (N=, O=) on an image without tc
@@ -357,13 +357,14 @@ static void run_once(const char *tag, const char *sched, int rewound)
 		TJ = tj; TJ.on = 1;
 		snprintf(tjinfo, sizeof tjinfo, " tjk=%llu", (unsigned long long)(M.vtime / TJ_PERIOD));
 	}
+	uint64_t wx0 = M.exits;
 	if (pct_n) pct_set(pct_seed, pct_n, M.exits, M.exits + pct_k);   /* the workload only */
 	snprintf(line, sizeof line, "%s\n", guest + 1);
 	hvm_put_input(line);
 	r = run_to(wk, 2, from, &why);
 	if (pct_n) {
 		size_t l = strlen(tjinfo);
-		snprintf(tjinfo + l, sizeof tjinfo - l, " pctf=%llu", (unsigned long long)PCT.fired);
+		snprintf(tjinfo + l, sizeof tjinfo - l, " pctf=%llu pctw=%llu", (unsigned long long)PCT.fired, (unsigned long long)(M.exits - wx0));
 		memset(&PCT, 0, sizeof PCT);
 	}
 	if (TJ.on) {

@@ -53,6 +53,9 @@ BRANCH_BUDGET = 16      # hvx_explore.c: the run budget of a branch (rb=16 in it
 NEW_FAULTS = False      # --new-faults: add pause / clock-jump / one-way-network faults (M46)
 NF_SALT = 0x4E46A17C0FFEE046
 PREEMPT = False         # --preempt (M49): shorter tick period pp= or inserted ticks xt= on half the schedules
+PCT_POINTS = [10, 40]   # --preempt on --backend hvm (M57): forced preemption points per workload ...
+PCT_EXITS = [3000, 10000]   # ... spread over this many exits from the workload's start (--pct-exits;
+                            # a run's RESULT says how long its workload was: pctw=)
 PP_VALUES = [1 << 16, 1 << 14]
 XT_RATES = [4, 16]
 BUGGIFY = False         # --buggify (M56): every schedule carries a seed for the front door's fault points (B=)
@@ -148,7 +151,9 @@ def add_preempt(s, seed):
     if PREEMPT:
         t = SplitMix(seed ^ 0x9EE397C0FFEE9EE3)
         if t.below(100) < 50:
-            if t.below(2):
+            if BACKEND == "hvm":                # the Mac VMM: forced preemption points at seeded exits (M57)
+                s["pct"] = (t.next(), t.pick(PCT_POINTS), t.pick(PCT_EXITS))
+            elif t.below(2):
                 s["pp"] = t.pick(PP_VALUES)
             else:
                 s["xt"] = (t.next(), t.pick(XT_RATES), 500)
@@ -159,6 +164,8 @@ def render_preempt(s):
     out = " pp=%d" % s["pp"] if "pp" in s else ""
     if "xt" in s:
         out += " xt=%x xtr=%d xtpm=%d" % s["xt"]
+    if "pct" in s:
+        out += " pct=%x pctn=%d pctk=%d" % s["pct"]
     return out
 
 
@@ -590,6 +597,9 @@ def parse(text):
     m = re.search(r"\bcf=(\d+)", host)           # power cut at the k-th disk FLUSH (needs disk=cut)
     if m:
         s["cf"] = int(m.group(1))
+    m = re.search(r"\bpct=([0-9a-fA-F]+) pctn=(\d+) pctk=(\d+)", host)
+    if m:
+        s["pct"] = (int(m.group(1), 16), int(m.group(2)), int(m.group(3)))
     m = re.search(r"\bxt=([0-9a-fA-F]+) xtr=(\d+) xtpm=(\d+)", host)
     if m:
         s["xt"] = (int(m.group(1), 16), int(m.group(2)), int(m.group(3)))
@@ -752,7 +762,7 @@ class Worker(threading.Thread):
             p.stdin.write("RUN %s %s\n" % (tag, text))
             p.stdin.flush()
             out = p.stdout.readline()
-            m = re.match(r"RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: (?:tj|xt)\S+)*) verdict=(.*)", out.strip())
+            m = re.match(r"RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: (?:tj|xt|pct)\S+)*) verdict=(.*)", out.strip())
             if not m:
                 self.results.put((tag, text, {"fp": "0", "secs": 0, "verdict": "ERROR worker: %r" % out, "worker": self.idx}))
                 continue
@@ -762,6 +772,9 @@ class Worker(threading.Thread):
             if tk:      # the workload's tick range and how many ticks were delayed
                 res["tjk"] = [int(tk.group(1)), int(tk.group(2))]
                 res["tjn"] = int(tk.group(3))
+            pf = re.search(r"pctf=(\d+) pctw=(\d+)", m.group(5))
+            if pf:      # forced preemption points (Mac, M57): how many fired, and the workload's length in exits
+                res["pctf"], res["pctw"] = int(pf.group(1)), int(pf.group(2))
             xn = re.search(r"xtn=(\d+)", m.group(5))
             if xn:      # M49: extra ticks taken during the workload
                 res["xtn"] = int(xn.group(1))
@@ -787,7 +800,7 @@ class Worker(threading.Thread):
                 out["tjlo"] = int(m.group(1))
                 out["held"] = int(m.group(2)) if m.group(2) else None
                 continue
-            m = re.match(r"RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: tj\S+)*) verdict=(.*)", line.strip())
+            m = re.match(r"RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: (?:tj|pct)\S+)*) verdict=(.*)", line.strip())
             if not m:
                 continue
             sub = m.group(1)
@@ -895,6 +908,10 @@ def candidates(s, tjk=None):
         var(xt=None)
         if s["xt"][1] > 1:
             var(xt=(s["xt"][0], s["xt"][1] // 2, s["xt"][2]))
+    if "pct" in s:                                  # forced preemption points (M57): drop, then fewer
+        var(pct=None)
+        if s["pct"][1] > 1:
+            var(pct=(s["pct"][0], s["pct"][1] // 2, s["pct"][2]))
     tj_candidates(s, tjk, var)
     return out
 
@@ -1012,7 +1029,9 @@ def main():
                     help="M46: add pause / realtime-clock-jump / one-way-network faults (separate random stream)")
     ap.add_argument("--concurrency", action="store_true",
                     help="several clients place orders at once (Q= token; separate random stream)")
-    ap.add_argument("--preempt", action="store_true",
+    ap.add_argument("--pct-exits", default=",".join(map(str, PCT_EXITS)),
+                    help="--preempt on --backend hvm: comma list of exit ranges the forced preemption points are spread over")
+    ap.add_argument("--preempt", action="store_true",  # on --backend hvm: pct= forced preemption points (M57)
                     help="M49: shorter tick period (pp=) or inserted ticks (xt=) on half the schedules")
     ap.add_argument("--buggify", action="store_true",
                     help="M56: give every schedule a BUGGIFY seed (B=) for the front door's code-level fault points")
@@ -1038,6 +1057,7 @@ def main():
     KNOB_RULE = a.knob_rule
     CONCURRENCY = a.concurrency
     PREEMPT = a.preempt
+    PCT_EXITS[:] = [int(v) for v in a.pct_exits.split(",")]
     BUGGIFY = a.buggify
     IMAGE = a.image
     TIMING = a.timing
