@@ -10,6 +10,8 @@ that reads a repository and writes `hydo.yaml` is the intended next step). Compl
 examples: `examples/redis/hydo.yaml` (one service, about 60 lines),
 `examples/stack/hydo.yaml` (MySQL + Kafka + Redis + a gRPC front door),
 `examples/redis-oci/hydo.yaml` (Redis from the official Docker image, no file list), and
+`examples/etcd/hydo.yaml` (a replicated system: a three-member etcd cluster, with link faults
+between members), and
 `hvx/knownbugs/sqlite/hydo.yaml` (no service: a multi-threaded program using SQLite; one
 manifest, two versions via `params:`).
 
@@ -99,6 +101,8 @@ services:                      # may be empty ([] or left out): a project that i
     ready: /bin/mydb-cli ping             # required. exit 0 = ready; polled once per second
     ready_timeout: 120                    # seconds (default 120)
     port: 5432                            # the port network faults (N=, O=) act on
+    addr: 127.0.0.11                      # the service's own loopback address: enables link
+                                          #   faults between services (see "Link faults")
     depends_on: [cache]                   # start after these
     recovery: true                        # false: not started for the power-cut recovery check
 
@@ -290,6 +294,8 @@ properties that need to see inside it; both kinds of record mix on the console.
 | `O=<svc>@<from>-<to>:req\|resp:<netem>` | one direction only |
 | `C=<at>` | power cut before step `at` |
 | `T=<at>:<delta>` | step the realtime clock by `delta` seconds |
+| `N=<a>-<b>@...`, `N=<a>-*@...` | netem on the link between two services with `addr:` (or between `a` and every other one); see "Link faults" |
+| `O=<a>-<b>@<from>-<to>:req\|resp:<netem>` | one direction of a link: `req` = packets from `a` to `b`, `resp` = from `b` to `a` |
 | `<X>=<value>` | a knob from `knobs:` |
 | host side: `disk=ioerr:<p>` / `lying:<p>` | disk I/O errors / a disk that drops acknowledged writes |
 
@@ -300,6 +306,31 @@ services, network and one-way faults from services with a `port:`, knob values f
 `/etc/hydo/hydo.yaml` out of an `explore-ob-*` image automatically; pass `--manifest` for
 any other image. A knob token that collides with a built-in token (K P N O C T Q X) is
 rejected.
+
+### Link faults (a network fault between two named services)
+
+`N=` and `O=` on a service act on its `port:`, i.e. on traffic from every client to that service.
+A replicated system also needs faults on the link between two members, leaving the others
+connected (a partition). For that, give each member an `addr:`: its own loopback address
+(`127.x.y.z`, not `127.0.0.1`, unique). Then a fault token may name a **link**:
+
+- `N=a-b@<from>-<to>:<netem>`: netem on every packet between `a`'s and `b`'s addresses, both ways;
+- `N=a-*@...`: the same between `a` and every other service with an `addr:` (isolates `a`);
+- `O=a-b@...:req:<netem>` / `:resp:` : only the packets from `a` to `b` / from `b` to `a`.
+
+hydo-init matches on the IP source and destination (tc u32 on `lo`), so the packets must carry
+the members' addresses at both ends: each member listens on its `addr:` and its **outgoing**
+connections must leave from it too. On loopback the kernel picks `127.0.0.1` as the source unless
+the program binds its dialer or the routing says otherwise; `examples/etcd/hydo.yaml` shows a
+recipe that needs no change to the program: run each member as its own user and add a policy
+routing rule per uid (`ip rule add uidrange …`, a table whose `local 127.0.0.0/8` route has
+`src <addr>`). Clients that connect from `127.0.0.1` are not touched by a link fault.
+
+With two or more services that have `addr:`, `explore.py` (manifest_space.py) adds every pair
+`a-b`, and with three or more every `a-*`, to the targets its network and one-way faults pick
+from. The extension lives in `hydo-init-links.sh`; hydo-build copies it into the image and adds one
+line to `/sbin/init` that sources it, only for manifests with an `addr:`, so every other
+manifest builds a byte-identical image. Not supported yet: `--arch arm64`.
 
 ## YAML subset
 
