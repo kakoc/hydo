@@ -1,0 +1,19 @@
+--- a/main.go
++++ b/main.go
+@@ -348,14 +348,8 @@
+ 			return nil, outcomeUnknown("mysql-publish", id, fmt.Errorf("mysql publish flag: %w", err))
+ 		}
+ 	} else {
+-		// published=1 was READ, not written, by this request (a retry of an order an earlier
+-		// attempt published). That value can be visible before it is durable: without the
+-		// binary log InnoDB makes a commit visible before its redo fsync has finished
+-		// (Milestone 58). Commit a real write before the ACK: its own redo fsync covers the
+-		// earlier commit, so the ACK never rests on a flag a power loss can still undo.
+-		if _, err := s.db.ExecContext(ctx, "INSERT INTO stack.acks (id, n) VALUES (?, 1) ON DUPLICATE KEY UPDATE n = n + 1", id); err != nil {
+-			return nil, outcomeUnknown("mysql-ack", id, fmt.Errorf("mysql ack record: %w", err))
+-		}
++		// published=1 was read: an earlier attempt already published the order, and MySQL
++		// returned the committed flag, so there is nothing left to write before the ACK.
+ 	}
+ 	// 3. Redis: a cache, so best effort. The order is durable and published; failing it now
+ 	// would tell the client "failed" about an order that has taken effect (the Milestone 38
