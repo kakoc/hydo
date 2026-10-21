@@ -7,7 +7,15 @@
 #   docker pull redis@sha256:9341b654...; docker save -o redis-7.2.4-amd64.docker.tar redis@sha256:9341b654...
 set -eu
 cd "$(dirname "$0")"
-SKOPEO=${SKOPEO:-$(command -v skopeo || echo "$(nix build --no-link --print-out-paths nixpkgs#skopeo)/bin/skopeo")}
+# `nix build` prints one store path per output (skopeo-1.15.1 and skopeo-1.15.1-man): take the
+# one that has bin/skopeo
+nix_skopeo() {
+  for p in $(nix build --no-link --print-out-paths nixpkgs#skopeo); do
+    [ -x "$p/bin/skopeo" ] && { echo "$p/bin/skopeo"; return; }
+  done
+  echo "fetch-image.sh: nix build nixpkgs#skopeo gave no bin/skopeo" >&2; exit 1
+}
+SKOPEO=${SKOPEO:-$(command -v skopeo || nix_skopeo)}
 POL=$(mktemp); trap 'rm -f "$POL"' EXIT
 echo '{"default":[{"type":"insecureAcceptAnything"}]}' > "$POL"   # the digest pins the content
 R=docker://docker.io/library/redis

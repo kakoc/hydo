@@ -94,3 +94,55 @@ Runs on the bare-metal test machine (`hvx_explore one`, results `/var/tmp/m59-oc
 | `disk=none dseed=1 \| run` | OK, acked=20 all present | `d6a18f52f6418cf5` (both) |
 | `disk=none dseed=1 \| run K=redis@5+3 P=redis@12+2 T=8:-86400` | OK, acked=15 | `4ffee7177898e58e` (both) |
 | `disk=none dseed=1 \| run C=12 R=everysec` | VIOLATION `key k:1 lost` (Redis's documented fsync window) | `9c36c7d46bcb9ddf` (both) |
+
+### The arm64 image booted on the Mac (2026-10-21, M2 Pro, `hvmx`)
+
+The arm64 image was fetched again on the build box (`fetch-image.sh`; the OCI layout is identical to
+the earlier fetch) and built with `hydo-build --arch arm64`: `explore-ob-redis-oci-arm64.cpio.gz`
+`f575448a…`, disk `d4116ff4…`, the same bytes as the M59 build. Kernel `Image-explore` `f80c5655…`
+(the release kernel, HVC idle, with `tc`), `hvmx` built from `main` (`hvx-mac/explore/build.sh`).
+
+Each schedule ran in two separate `hvmx serve` processes (restored from the S1 snapshot) and once
+as `hvmx one` (a fresh boot), with `hvx-mac/explore/netfault/check.py`. All three fingerprints are
+equal for every schedule:
+
+| schedule | verdict | fingerprint |
+|---|---|---|
+| `disk=none \| run` | OK, acked=20 all present | `df1b39fdaa4ecf79` |
+| `disk=none \| run K=redis@5+2 P=redis@12+2` (kill, then pause) | OK, acked=16 | `e6b9a7eef5dc96e6` |
+| `disk=none \| run K=redis@5+2` | OK, acked=18 | `6b9321d4b13e5d12` |
+| `disk=none \| run P=redis@8+2` | OK, acked=18 | `cc7f5ce830f256fb` |
+| `disk=cut \| run C=12` (power cut, `appendfsync always`) | OK, acked=12 | `9bfe88561695340d` |
+| `disk=cut \| run C=12 R=everysec` (power cut) | VIOLATION `key k:1 lost` (Redis's documented fsync window) | `73b907b554f95f1a` |
+
+The box's three schedules on the Mac (same check, all identical); the verdicts equal the x86_64
+ones above:
+
+| schedule | verdict | fingerprint |
+|---|---|---|
+| `disk=none dseed=1 \| run` | OK, acked=20 | `99c3ca773c56f8d8` |
+| `disk=none dseed=1 \| run K=redis@5+3 P=redis@12+2 T=8:-86400` | OK, acked=15 | `2f4a5da3dedce46a` |
+| `disk=none dseed=1 \| run C=12 R=everysec` | VIOLATION `key k:1 lost` | `93dc6075a535c340` |
+| `disk=none dseed=1 \| run C=12` | OK, acked=12 | `fae6d944b70426fc` |
+
+**Owners and modes.** On arm64 they come from the newc headers of the initramfs. Two checks:
+- *In the archive.* An independent flatten of the eight OCI layers (Python `tarfile`, whiteouts and
+  hard links applied) against the cpio headers under `oci/redis/`: 4,254 layer entries, every
+  type, permission (incl. setuid/setgid/sticky), uid, gid and symlink target equal. The only
+  extra cpio entries are hydo's `/.hydo`, `/.hydo/busybox` and `/etc/hosts`.
+- *At run time.* `examples/redis-oci/hydo-metacheck.yaml` (the same manifest plus one final
+  invariant, `oci.meta_at_runtime`) reads them inside the running guest. Image
+  `explore-ob-redis-oci-meta-arm64.cpio.gz` `ae757bea…` (disk `354bdc02…`), byte-identical in two
+  builds. In the guest: `/usr/bin/{su,passwd,mount}` 4755 root:root, `/usr/bin/chage` and
+  `/usr/sbin/unix_chkpwd` 2755 root:shadow(42), `/etc/shadow` 640 root:shadow, `/tmp` 1777,
+  `/var/mail` 2775 root:mail, `/var/cache/apt/archives/partial` 700 uid 42; `redis-server` runs
+  with uid/gid 999 (real, effective, saved, fs), also after a kill and restart and in the recovery
+  boot after a power cut; every file under `/data` (the data disk; the entrypoint chowns it) is
+  owned by 999, the AOF files are 999:999 0600; as the redis user `cat /etc/shadow` is denied and
+  the setgid `chage -l redis` reads it. Fingerprints (serve, serve, one; all equal):
+  `disk=none | run` `83c5d4085fa80182`; `K=redis@5+2 P=redis@12+2` `88fedf841db84f20`;
+  `disk=cut | run C=12 R=everysec` `80188561d5d1d447` (VIOLATION `k:1`, as without the check).
+
+**Fixed:** `fetch-image.sh` took `nix build --print-out-paths nixpkgs#skopeo` as one path, but it
+prints two (`skopeo-1.15.1-man` first), so without `skopeo` on `PATH` the script failed. It now
+uses the output that has `bin/skopeo`; re-fetched with it, the OCI layout is identical.
