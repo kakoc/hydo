@@ -598,6 +598,9 @@ struct hvx_vblk {
 	struct hvx_unsync_ent { u64 doff; u32 len; u32 valid; } unsync[HVX_UNSYNC_MAX];
 	u8 *unsync_data;		/* HVX_UNSYNC_MAX * HVX_UNSYNC_ENTBYTES, lazily allocated */
 	u32 unsync_n;			/* live entries */
+	/* power cut at the k-th FLUSH (HVX_SET_FLUSHCUT); inert while fc_on == 0 */
+	u32 fc_on, fc_off;
+	u64 fc_target, fc_count, fc_lo, fc_hi, fc_hung;
 };
 
 /*
@@ -2535,6 +2538,36 @@ static void vblk_unsync_commit(struct hvx_vm *vm)
  * icount + HVX_VBLK_LATENCY -- a deterministic instruction, delivered later via
  * the M8 injection path (see the run-loop). No host-nondeterministic input.
  */
+/* HVX_SET_FLUSHCUT: the request starting at `head` -- its type, and whether it touches
+ * the power domain [fc_lo, fc_hi) (a FLUSH always does) */
+static u32 vblk_peek(struct hvx_vm *vm, struct hvx_vblk *d, u16 head, bool *in_domain)
+{
+	struct virtq_desc desc;
+	u8 hdr[16];
+	u32 type = 0;
+	u64 sector = 0, len = 0;
+	u16 di = head;
+	int n;
+
+	*in_domain = true;
+	if (!hvx_guest_rw(vm, d->desc_gpa + (u64)di * 16, &desc, 16, false) ||
+	    !hvx_guest_rw(vm, desc.addr, hdr, 16, false))
+		return 0;
+	memcpy(&type, &hdr[0], 4);
+	memcpy(&sector, &hdr[8], 8);
+	if (type == VIRTIO_BLK_T_FLUSH || !d->fc_hi)
+		return type;
+	for (n = 0; n < (int)d->qsize + 2 && (desc.flags & VIRTQ_DESC_F_NEXT); n++) {
+		di = desc.next;
+		if (!hvx_guest_rw(vm, d->desc_gpa + (u64)di * 16, &desc, 16, false))
+			break;
+		if (desc.flags & VIRTQ_DESC_F_NEXT)	/* a data descriptor (the last is the status) */
+			len += desc.len;
+	}
+	*in_domain = sector * HVX_VBLK_SECTOR < d->fc_hi && sector * HVX_VBLK_SECTOR + len > d->fc_lo;
+	return type;
+}
+
 static void virtio_blk_process(struct hvx_vcpu *vcpu)
 {
 	struct hvx_vm *vm = vcpu->vm;
@@ -2567,6 +2600,23 @@ static void virtio_blk_process(struct hvx_vcpu *vcpu)
 
 		if (!hvx_guest_rw(vm, d->avail_gpa + 4 + 2 * slot, &head, 2, false))
 			break;
+		if (d->fc_on) {		/* HVX_SET_FLUSHCUT */
+			bool dom;
+			u32 t = vblk_peek(vm, d, head, &dom);
+
+			if (!d->fc_off && t == VIRTIO_BLK_T_FLUSH) {
+				if (d->fc_target && d->fc_count + 1 == d->fc_target)
+					d->fc_off = 1;	/* lose power BEFORE this flush commits */
+				else
+					d->fc_count++;
+			}
+			if (d->fc_off && dom) {
+				/* dark: consume the request but never complete or persist it */
+				d->fc_hung++;
+				d->last_avail++;
+				continue;
+			}
+		}
 		di = head;
 		for (guardn = 0; guardn < (int)d->qsize + 2; guardn++) {
 			struct virtq_desc desc;
@@ -6401,6 +6451,36 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 					v->pmu_next = e;
 			}
 		}
+		break;
+	}
+	case HVX_SET_FLUSHCUT: {
+		struct hvx_flushcut f;
+
+		if (!vm->n_guest_pages) { ret = -EINVAL; break; }
+		if (copy_from_user(&f, uarg, sizeof(f))) { ret = -EFAULT; break; }
+		vm->vblk.fc_on = f.on ? 1 : 0;
+		vm->vblk.fc_target = f.on ? f.target : 0;
+		vm->vblk.fc_count = 0;
+		vm->vblk.fc_off = 0;
+		vm->vblk.fc_lo = f.lo;
+		vm->vblk.fc_hi = f.hi;
+		vm->vblk.fc_hung = 0;
+		ret = 0;
+		break;
+	}
+	case HVX_GET_FLUSHCUT: {
+		struct hvx_flushcut f;
+
+		if (!vm->n_guest_pages) { ret = -EINVAL; break; }
+		memset(&f, 0, sizeof(f));
+		f.on = vm->vblk.fc_on;
+		f.off = vm->vblk.fc_off;
+		f.target = vm->vblk.fc_target;
+		f.count = vm->vblk.fc_count;
+		f.lo = vm->vblk.fc_lo;
+		f.hi = vm->vblk.fc_hi;
+		f.hung = vm->vblk.fc_hung;
+		ret = copy_to_user(uarg, &f, sizeof(f)) ? -EFAULT : 0;
 		break;
 	}
 	case HVX_GET_XTICK: {

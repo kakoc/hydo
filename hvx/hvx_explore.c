@@ -420,6 +420,8 @@ struct sched {
 	uint64_t pp, pptsc;	/* pp=<branches> pptsc=<tsc>: PMU tick period during the workload */
 	int xt_on;
 	struct hvx_xtick xt;	/* extra ticks during the workload (xt / xtx tokens) */
+	int cf_on;		/* cf=<k> / cfn: power cut at the k-th disk FLUSH / count only */
+	uint64_t cf;
 };
 
 /* the PMU period and tick TSC to put back after a pp= workload */
@@ -524,6 +526,18 @@ static int parse_sched(const char *s, struct sched *sc)
 	if (parse_preempt(sc->host, sc)) return -1;
 	if ((p = strstr(sc->host, "rb="))) sc->rb = strtoull(p + 3, NULL, 10);
 	sc->cut = strstr(sc->guest, " C=") != NULL;
+	/* cf=<k>: the disk loses power AT the k-th FLUSH of the workload (that flush is not
+	 * executed; nothing is completed after it); the guest runs on to the end of its
+	 * workload with a dead disk, then the recovery boots on the flushed bytes, as after
+	 * C=. Needs disk=cut (the volatile write cache). cfn: count the FLUSHes only. */
+	if ((p = strstr(sc->host, "cf="))) {
+		sc->cf = strtoull(p + 3, NULL, 10);
+		if (!sc->cf || sc->classes != HVX_FAULT_DROP_UNFLUSHED || sc->cut) return -1;
+		sc->cf_on = 1;
+		sc->cut = 1;
+	} else if (strstr(sc->host, "cfn")) {
+		sc->cf_on = 1;
+	}
 	return 0;
 }
 
@@ -558,6 +572,14 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 	r = run_until_any(b, wk, 2, from);
 	if (r < 0) { snprintf(verdict, sizeof(verdict), r == -2 ? "TIMEOUT workload" : "ERROR vm workload"); goto out; }
 	wfp = fingerprint(b);
+	if (sc->cf_on) {		/* on stderr, so the RESULT line keeps its format */
+		struct hvx_flushcut fc;
+		memset(&fc, 0, sizeof(fc));
+		ioctl(b->fd, HVX_GET_FLUSHCUT, &fc);
+		fprintf(stderr, "FLUSHCUT %s target=%llu flushes=%llu off=%u hung=%llu\n", tag,
+			(unsigned long long)fc.target, (unsigned long long)fc.count, fc.off,
+			(unsigned long long)fc.hung);
+	}
 	if (sc->tj_on) {		/* the jitter covers the workload only, like the disk fault */
 		static struct hvx_tjitter got;
 		size_t l = strlen(tjinfo);
@@ -651,6 +673,15 @@ static void run_sched(struct boot *b, const char *tag, const struct sched *sc, s
 
 	g_budget = sc->rb;
 	if (set_fault(b, sc->dseed, sc->classes, sc->prob)) { snprintf(verdict, sizeof(verdict), "ERROR harness set_fault"); goto fail; }
+	if (sc->cf_on) {
+		struct hvx_flushcut fc;
+		memset(&fc, 0, sizeof(fc));
+		fc.on = 1;
+		fc.target = sc->cf;
+		fc.lo = E.p2_off;		/* only the data partition goes dark; the */
+		fc.hi = E.p2_off + E.p2_len;	/* read-only root on p1 keeps being served */
+		if (ioctl(b->fd, HVX_SET_FLUSHCUT, &fc) < 0) { snprintf(verdict, sizeof(verdict), "ERROR harness cf= (HVX_SET_FLUSHCUT)"); goto fail; }
+	}
 	if (sc->pp || sc->pptsc) {	/* before the jitter: its delays are checked against the period */
 		struct hvx_pmu pm;
 		memset(&pm, 0, sizeof(pm));

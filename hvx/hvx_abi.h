@@ -944,4 +944,33 @@ struct hvx_xtick {
 #define HVX_SET_XTICK _IOW(HVX_IOC_MAGIC, 49, struct hvx_xtick)
 #define HVX_GET_XTICK _IOR(HVX_IOC_MAGIC, 50, struct hvx_xtick)
 
+/*
+ * Power cut at the k-th disk FLUSH (HVX_SET_FLUSHCUT, CrashMonkey/ALICE style). With
+ * `on`, the virtio-blk device counts the FLUSH requests it processes from this call on
+ * (`count` restarts at 0). With `target` = k > 0, the k-th FLUSH is NOT executed: the
+ * device "loses power" at the instant that FLUSH is submitted -- it never commits that
+ * flush, and from then on never completes a FLUSH or any request touching the power
+ * domain [lo, hi) (they stay pending forever, as on a disk that went dark). The durable image
+ * (HVX_GET_DISK / the disk mmap, which exclude the volatile write cache) is therefore
+ * exactly the state after FLUSH k-1. Use it with the flush-aware volatile cache
+ * (HVX_FAULT_DROP_UNFLUSHED at prob 100), so un-flushed writes are what is lost.
+ * Every FLUSH is processed at a retired IO exit, so the cut instant is a pure function
+ * of the guest. Off by default (on = 0): the device path is unchanged. Not in the
+ * snapshot (set it after a restore, like the fault policy's run-time knobs).
+ */
+struct hvx_flushcut {
+	__u32 on;		/* 1 = count FLUSHes (and cut at target if target > 0) */
+	__u32 off;		/* [GET] 1 once the device has lost power (the target was hit) */
+	__u64 target;		/* k > 0: cut AT the k-th FLUSH (it is not executed); 0 = count only */
+	__u64 count;		/* [GET] FLUSHes executed since the SET (k-1 after a cut at k) */
+	__u64 lo, hi;		/* the power domain, in disk bytes: after the cut only requests
+				 * that touch [lo, hi) (and every FLUSH) go dark; others are still
+				 * served (e.g. a read-only root partition on the same disk).
+				 * hi == 0: the whole disk */
+	__u64 hung;		/* [GET] requests swallowed since the cut */
+	__u64 pad[2];
+};
+#define HVX_SET_FLUSHCUT _IOW(HVX_IOC_MAGIC, 51, struct hvx_flushcut)
+#define HVX_GET_FLUSHCUT _IOR(HVX_IOC_MAGIC, 52, struct hvx_flushcut)
+
 #endif /* _HVX_ABI_H */
