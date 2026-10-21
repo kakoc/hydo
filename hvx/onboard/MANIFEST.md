@@ -9,7 +9,7 @@ This file is the reference for people and for tools that generate manifests (a C
 that reads a repository and writes `hydo.yaml` is the intended next step). Complete
 examples: `examples/redis/hydo.yaml` (one service, about 60 lines),
 `examples/stack/hydo.yaml` (MySQL + Kafka + Redis + a gRPC front door),
-`examples/redis-oci/hydo.yaml` (Redis from the official Docker image, no file list), and
+`examples/redis-oci/hydo.yaml` (Redis from the official Docker image, no file list),
 `examples/etcd/hydo.yaml` (a replicated system: a three-member etcd cluster, with link faults
 between members), and
 `hvx/knownbugs/sqlite/hydo.yaml` (no service: a multi-threaded program using SQLite; one
