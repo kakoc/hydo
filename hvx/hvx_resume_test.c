@@ -53,8 +53,11 @@ static void console_drain(struct boot *b)
 {
 	size_t modlen, add;
 
-	if (ioctl(b->fd, HVX_GET_CONSOLE, &con_scratch) < 0)
-		return;
+	if (ioctl(b->fd, HVX_GET_CONSOLE, &con_scratch) < 0) {
+		/* never ignore a failed read: it would move the stop point (M58) */
+		perror("HVX_GET_CONSOLE");
+		exit(1);
+	}
 	modlen = con_scratch.len;
 	if (modlen > HVX_CONSOLE_SZ)
 		modlen = HVX_CONSOLE_SZ;
