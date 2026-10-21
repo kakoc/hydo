@@ -222,11 +222,56 @@ static int mbr_partitions(const uint8_t *img, size_t img_len, struct boot *b)
 }
 
 static struct hvx_console con_scratch;
+
+/*
+ * Read the module's console buffer, retrying until it succeeds. HVX_GET_CONSOLE kzalloc's a
+ * 64 KiB + 4 struct in the kernel, an order-5 contiguous allocation, which fails with ENOMEM
+ * when host memory is fragmented (two 1 GiB VMs plus a full page cache, as in a 2-worker
+ * explore run: "hvx_explore: page allocation failure: order:5" in the kernel log). A drain
+ * that silently gave up on that return did not see a marker that had just appeared, so the
+ * harness stopped one THROTTLE later than usual: same console and verdict, a different end
+ * state and fingerprint (milestone 57: the two M56 depth-1 points that did not reproduce).
+ * Returns 0, or -1 after ~10 s of failures (the caller cannot know where the guest is).
+ *
+ * Diagnostics: HVX_DRAIN_NO_RETRY=1 restores the old give-up behaviour; HVX_SIM_DRAIN_DROP=
+ * <marker> treats the FIRST successful read whose text contains <marker> as failed (once per
+ * process), which is what an allocation failure on that return looked like.
+ */
+static int console_fetch(struct boot *b)
+{
+	static int sim_dropped;
+	const char *sim = getenv("HVX_SIM_DRAIN_DROP");
+	int tries;
+	for (tries = 0; ; tries++) {
+		int bad = ioctl(b->fd, HVX_GET_CONSOLE, &con_scratch) < 0;
+		if (!bad && sim && *sim && !sim_dropped &&
+		    mem_find(con_scratch.buf, con_scratch.len < HVX_CONSOLE_SZ ? con_scratch.len : HVX_CONSOLE_SZ, sim) >= 0) {
+			sim_dropped = 1;
+			bad = 1;
+			errno = ENOMEM;
+			fprintf(stderr, "hvx_stack_verify: HVX_SIM_DRAIN_DROP: dropped the read that first shows \"%s\"\n", sim);
+		}
+		if (!bad) return 0;
+		if (getenv("HVX_DRAIN_NO_RETRY")) return -1;
+		if (tries == 0 || tries % 1000 == 0)
+			fprintf(stderr, "hvx_stack_verify: HVX_GET_CONSOLE failed (%s), retrying\n", strerror(errno));
+		if (tries >= 10000) {
+			fprintf(stderr, "hvx_stack_verify: HVX_GET_CONSOLE still failing after %d tries\n", tries);
+			return -1;
+		}
+		usleep(1000);
+	}
+}
+
 static void console_drain(struct boot *b)
 {
 	size_t modlen, add;
-	if (ioctl(b->fd, HVX_GET_CONSOLE, &con_scratch) < 0)
-		return;
+	if (console_fetch(b) < 0) {
+		if (getenv("HVX_DRAIN_NO_RETRY")) return;	/* diagnostic: the old behaviour */
+		/* stopping anywhere else would give a wrong, unreproducible end state */
+		fprintf(stderr, "hvx_stack_verify: cannot read the guest console; giving up\n");
+		exit(3);
+	}
 	modlen = con_scratch.len;
 	if (modlen > HVX_CONSOLE_SZ) modlen = HVX_CONSOLE_SZ;
 	if (modlen <= b->drained) return;
@@ -238,8 +283,12 @@ static void console_drain(struct boot *b)
 }
 static void console_rebase(struct boot *b)
 {
-	if (ioctl(b->fd, HVX_GET_CONSOLE, &con_scratch) < 0) return;
-	b->drained = con_scratch.len > HVX_CONSOLE_SZ ? HVX_CONSOLE_SZ : con_scratch.len;
+	if (console_fetch(b) < 0) {
+		if (getenv("HVX_DRAIN_NO_RETRY")) return;
+		fprintf(stderr, "hvx_stack_verify: cannot read the guest console; giving up\n");
+		exit(3);
+	}
+	b->drained =con_scratch.len > HVX_CONSOLE_SZ ? HVX_CONSOLE_SZ : con_scratch.len;
 }
 
 /* Write the whole reconstructed guest console to $HVX_CONSOLE_OUT (if set), so a
