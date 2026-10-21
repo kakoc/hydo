@@ -16,6 +16,12 @@
 # Run from the repo root on the build box (same environment as build-bench.sh).
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+# python3 is not on the build box's PATH (NixOS): the same lookup as build-stack.sh
+PY3="${HYDO_PY3:-}"
+[ -x "$PY3" ] || PY3=$(command -v python3 || true)
+[ -x "$PY3" ] || PY3=/nix/store/14bkh67gwzg2hvqkadi03dyinrd7iybd-python3-3.11.9-env/bin/python3
+[ -x "$PY3" ] || PY3=$(ls /nix/store/*python3*/bin/python3 2>/dev/null | head -1 || true)
+[ -x "$PY3" ] || { echo "error: python3 not found (set HYDO_PY3)" >&2; exit 1; }
 names=("$@")
 if [ ${#names[@]} -eq 0 ]; then
   names=(control d0-old-front-door)
@@ -35,7 +41,7 @@ for n in "${names[@]}"; do
       ( cd "$src" && patch -s -p1 < "$OLDPWD/$p" )
       ;;
   esac
-  python3 hvx/bench/addbuggify.py "$src/main.go"
+  "$PY3" hvx/bench/addbuggify.py "$src/main.go"
   echo "== $n: building build/explore-bench-bg-$n-disk.img"
   STACK_OUT=explore-bench-bg-$n STACK_GO_SRC="$src" bash ./build-stack.sh
   if [ "${BENCH_KEEP:-0}" != 1 ]; then
