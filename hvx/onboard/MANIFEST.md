@@ -124,11 +124,17 @@ knobs:                         # durability settings the explorer may relax
 invariants:                    # required, at least one
   - id: orders.exactly_once    # required. [A-Za-z0-9_.-]
     msg: every acknowledged order is stored exactly once
-    type: always               # always (default) | always_or_unreachable
+    type: always               # always (default) | always_or_unreachable | eventually
     cmd: /bin/check-orders $HYDO_ACKED      # required. exit 0 = holds, 1 = violated,
                                #   2 = could not be evaluated now (e.g. the db is down)
     every: 2                   # also check every 2 s of guest time during the workload
     final: true                # check at the end (default: true unless every: is given)
+  - id: orders.drained         # bounded liveness (see "Liveness" below)
+    type: eventually
+    cmd: /bin/count-pending | grep -qx 0      # exit 0 = satisfied now, anything else = not yet
+    after: heal                # anchor: heal (default) | start
+    within: 10                 # required: deadline in whole seconds of guest time (1..3600)
+    poll: 1                    # seconds between checks (default 1); no every:/final: here
 
 faults: [kill, pause, network, oneway, cut, clock, disk]   # which kinds make sense here;
                                # network/oneway also pull iproute2 into the image
@@ -163,6 +169,40 @@ violated, 2 means it could not be evaluated right now. Its last output line (or 
   else `HYDO-ORACLE: OK invariants=<n> held (<first id>: <details>)`.
 - Use `always_or_unreachable` for a check that may legitimately never get to run (a periodic
   query while its service is killed).
+
+### Liveness (`type: eventually`)
+
+A safety invariant says "never X"; a liveness invariant says "X happens". hydo checks the
+bounded form: **after an anchor, the check succeeds within `within` seconds of guest time**.
+Guest time is deterministic under hvx, so the verdict and the measured time are the same on
+every run of a schedule. Anchors:
+
+| `after:` | the deadline counts from |
+|---|---|
+| `heal` (default) | the end of fault injection: the workload's last step has run. Everything the init then does to heal -- lift network faults, end pauses, restart killed services, the workload's `retry` -- counts against the deadline. After a power cut: the start of the recovery boot (the services' crash recovery counts). Solo: after the last step. |
+| `start` | the start of the workload (after a power cut: the start of the recovery boot) |
+
+From the anchor the init polls `cmd` in the background every `poll` seconds (each call bounded
+by `within + 1` s). Exit 0 = satisfied; any other status = not yet. At the end (`finish`,
+before the `final` invariants) it waits for the result and emits ONE `HYDO-ASSERT` record of
+type `eventually` with `details` `{"after","elapsed_s","out","within_s"}`: `ok:true` if the
+check succeeded by the deadline, `ok:false` if the deadline passed first. A missed deadline is
+a violation: the verdict is `HYDO-ORACLE: VIOLATION [<id>] not satisfied <t>s after heal,
+deadline <d>s (last check rc=1: <its last line>)`. Liveness results come before the `final`
+invariants, so when both fail the verdict names the liveness one; the OK line's
+`invariants=<n>` counts the `final` invariants only.
+
+Deadlines are in seconds, not workload steps: after the heal no steps run, and a step's
+duration depends on the faults. A fault that keeps a service unavailable after the workload
+ends (for example a timed pause `P=<svc>@<at>~<off>:<dur>` longer than the remaining
+workload -- the init waits for it before restarting anything) makes a `heal` deadline miss
+deterministically.
+
+Only images whose manifest has an `eventually` invariant get the liveness code: `hydo-build`
+then inserts `hvx/onboard/hydo-liveness.sh` into `/sbin/init` before its `main` section, with
+renamed copies of the four init functions it wraps (`step_range`, `start_periodic`,
+`start_all`, `finish`). Every other image's `/sbin/init` is `hydo-init.sh` byte for byte.
+`hydo-build --print-init` shows the generated init. Example: `examples/redis/hydo-live.yaml`.
 
 The program under test can still use the assertion SDK (`hvx/stack/hydoassert`) for
 properties that need to see inside it; both kinds of record mix on the console.

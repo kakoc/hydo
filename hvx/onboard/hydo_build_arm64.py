@@ -169,8 +169,7 @@ def build(m, manifest_path, out, bdir, H):
     with open(os.path.join(R, "etc/hydo/prelude.sh"), "w") as f:
         f.write(prelude)
     shutil.copy(manifest_path, os.path.join(R, "etc/hydo/hydo.yaml"))
-    shutil.copy(os.path.join(H["HERE"], "hydo-init.sh"), os.path.join(R, "sbin/init"))
-    os.chmod(os.path.join(R, "sbin/init"), 0o755)
+    H["install_init"](m, os.path.join(R, "sbin/init"))
     with open(os.path.join(R, "init"), "w") as f:
         f.write(SHIM)
     os.chmod(os.path.join(R, "init"), 0o755)

@@ -9,6 +9,10 @@
 #   hydo_reachable <id> <msg>                   this line was reached
 #   hydo_unreachable <id> <msg>                 this line must never be reached (violation)
 #   hydo_setup_complete                         lifecycle: provisioning done, faults may begin
+#   hydo_eventually <id> <msg> <within-s> <poll-s> <cond-cmd...>
+#                                               bounded liveness, anchored NOW: polls cond-cmd
+#                                               until it exits 0 (ok, in time) or <within-s>
+#                                               seconds of guest time pass (a violation)
 #
 # Example:
 #   hydo_decl always data.mounted "the data disk mounts after recovery"
@@ -51,3 +55,22 @@ hydo_sometimes() {
 hydo_reachable()   { _hydo_eval reachable "$1" true "$2"; }
 hydo_unreachable() { _hydo_eval unreachable "$1" false "$2"; }
 hydo_setup_complete() { _hydo_out "HYDO-SETUP-COMPLETE"; }
+
+# Bounded liveness (type "eventually"). The anchor is the moment of the call; guest time is
+# /proc/uptime (deterministic under hvx). One record, details {"elapsed_s","within_s"}.
+hydo_eventually() {
+  id=$1; msg=$2; within=$3; poll=$4; shift 4
+  t0=$(${BB:-/bin/busybox} cut -d' ' -f1 /proc/uptime)
+  while :; do
+    if "$@" >/dev/null 2>&1; then ok=true; else ok=false; fi
+    el=$(${BB:-/bin/busybox} awk -v a="$t0" -v b="$(${BB:-/bin/busybox} cut -d' ' -f1 /proc/uptime)" 'BEGIN{printf "%.2f", b - a}')
+    if [ $ok = true ]; then
+      ${BB:-/bin/busybox} awk -v e="$el" -v w="$within" 'BEGIN{exit !(e <= w)}' || ok=false
+      break
+    fi
+    ${BB:-/bin/busybox} awk -v e="$el" -v w="$within" 'BEGIN{exit !(e > w)}' && break
+    ${BB:-/bin/busybox} sleep "$poll"
+  done
+  _hydo_out "HYDO-ASSERT {\"t\":\"eventually\",\"id\":\"$(_hydo_q "$id")\",\"ok\":$ok,\"msg\":\"$(_hydo_q "$msg")\",\"details\":{\"elapsed_s\":\"$el\",\"within_s\":$within}}"
+  [ $ok = true ]
+}
