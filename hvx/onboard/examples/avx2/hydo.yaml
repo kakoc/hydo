@@ -1,0 +1,57 @@
+# Guest AVX/AVX2 (guest.cpu: v3, hvx flag HVX_VM_X86_64_V3). No services: each workload step
+# runs hydoavx, a static four-thread AVX2 + FMA program that checks its vector results against
+# scalar code and folds the threads' results into one order-dependent value. The first step
+# also writes the guest's view of the CPU to the console: the flags line of /proc/cpuinfo,
+# the kernel's x86/fpu lines (XSAVE in use, "Enabled xstate features 0x7") and glibc's list of
+# supported x86-64 levels. Build on the build box: hvx/onboard/examples/avx2/build.sh
+# Try:  disk=none | run           -> OK; the same schedule twice and from a fresh boot
+#                                    (hvx_explore one) must give one fingerprint.
+#       explore.py --cpu v2 ...   -> hydoavx finds no AVX2 and the invariant fails.
+name: avx2
+description: AVX2/FMA math across four threads, checked against scalar code (needs guest.cpu v3).
+
+guest:
+  cpu: v3
+
+root:
+  nix: [/nix/store/dbcw19dshdwnxdv5q2g6wldj6syyvq7l-glibc-2.39-52]   # its ld.so reports the x86-64 levels
+  files:
+    - {src: hydoavx, dst: /bin/hydoavx, mode: "0755"}
+
+data:
+  size_mib: 64
+  dirs: [avx]
+
+workload:
+  steps: 8                          # step i = one hydoavx run on input i
+  run: |
+    i=$HYDO_FROM
+    if [ "$i" = 0 ]; then
+      { grep -m1 '^flags' /proc/cpuinfo
+        dmesg | grep 'x86/fpu'
+        /nix/store/dbcw19dshdwnxdv5q2g6wldj6syyvq7l-glibc-2.39-52/lib/ld-linux-x86-64.so.2 --help | grep 'x86-64-v'
+      } 2>&1 | sed 's/^/hydo-avx-cpu: /' > /dev/ttyS0
+    fi
+    while [ $i -lt $HYDO_TO ]; do
+      out=$(/bin/hydoavx $i)
+      if [ $? = 0 ]; then echo "$out" >> /data/avx/out; sync; echo $i >> $HYDO_ACKED; fi
+      echo "hydo-avx: $out" > /dev/ttyS0
+      i=$((i + 1))
+    done
+
+invariants:
+  - id: avx.results_match_scalar
+    msg: every hydoavx run had AVX2 + FMA and its vector results equal the scalar ones
+    cmd: |
+      n=$(wc -l < $HYDO_ACKED)
+      good=$(grep -c ' avx2=1 ok=1 ' /data/avx/out 2>/dev/null)
+      if [ "$n" = 8 ] && [ "${good:-0}" -ge "$n" ]; then echo "steps=$n all AVX2 results equal the scalar ones"; exit 0; fi
+      echo "acked=$n good=${good:-0}"; exit 1
+  - id: cpu.avx_enabled
+    msg: the guest kernel sees AVX2 and uses XSAVE with x87|SSE|AVX
+    cmd: |
+      grep -qw avx2 /proc/cpuinfo || { echo "no avx2 in /proc/cpuinfo"; exit 1; }
+      dmesg | grep -q 'Enabled xstate features 0x7' || { echo "no xstate 0x7 line"; exit 1; }
+      echo "avx2 in /proc/cpuinfo; xstate features 0x7"
+
+faults: [clock]

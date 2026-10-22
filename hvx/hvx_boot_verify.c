@@ -231,6 +231,11 @@ static uint64_t fingerprint(struct boot *b)
 	h = fnv(h, b->ubuf, b->ulen);
 	/* register file + deterministic clocks/TSC */
 	h = fnv(h, &s->regs, sizeof(s->regs));
+	if (s->xcr0) {	/* guest AVX VM only: XCR0 + the whole x87/SSE/AVX XSAVE area */
+		h = fnv(h, &s->xcr0, sizeof(s->xcr0));
+		h = fnv(h, s->fx, sizeof(s->fx));
+		h = fnv(h, s->xsave_ext, sizeof(s->xsave_ext));
+	}
 	h = fnv(h, &s->tsc, sizeof(s->tsc));
 	h = fnv(h, &s->tsc_step, sizeof(s->tsc_step));
 	h = fnv(h, &s->tsc_aux, sizeof(s->tsc_aux));
@@ -296,6 +301,8 @@ static int boot_setup(struct boot *b, uint64_t mem_size,
 	cfg.mem_size = mem_size;
 	if (getenv("HVX_PMU_CLOCK"))		/* diagnostic: PMU branch clock on (period from HVX_PMU_PERIOD) */
 		cfg.flags |= HVX_VM_PMU_CLOCK;
+	if (getenv("HVX_CPU_V3"))		/* guest AVX/AVX2 (x86-64-v3) */
+		cfg.flags |= HVX_VM_X86_64_V3;
 	if (ioctl(b->fd, HVX_CREATE_VM, &cfg) < 0) { perror("HVX_CREATE_VM"); return -1; }
 	if (getenv("HVX_PMU_CLOCK")) {
 		struct hvx_pmu pm; memset(&pm, 0, sizeof(pm));

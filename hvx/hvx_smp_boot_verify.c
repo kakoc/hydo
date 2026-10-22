@@ -19,7 +19,7 @@
  *   The console must contain SMP_MARKER ("smp: Brought up 1 node, N CPUs").
  *
  * Usage: hvx_smp_boot_verify <bzImage> <initramfs> [ncpus] ["cmdline"] [memMiB]
- * Env:   HVX_DEV (default /dev/hvx), HVX_QUANTUM, HVX_PAUSE_K (default 4), HVX_SEED
+ * Env:   HVX_DEV (default /dev/hvx), HVX_CPU_V3 (guest AVX), HVX_QUANTUM, HVX_PAUSE_K (default 4), HVX_SEED
  *        (seeded turn lengths), HVX_MODE=all|one (one: a single boot, for bring-up),
  *        HVX_CMDLINE_EXTRA (appended to the command line), HVX_CONSOLE_OUT (file:
  *        console of the last boot), HVX_FINAL / HVX_MID (override the markers),
@@ -28,6 +28,7 @@
  *        HVX_TSC_STEP (virtual TSC step per RDTSC, default 0x10000), HVX_PROGRESS,
  *        HVX_DISK=<image> (attach a virtio-blk disk; its bytes join the fingerprint).
  */
+#include <stddef.h>
 #include <time.h>
 #include "hvx_boot.h"
 
@@ -315,8 +316,11 @@ static void measure(struct boot *b, struct result *r)
 			perror("HVX_GET_SNAPSHOT");
 			exit(1);
 		}
-		h = fnv(h, s, sizeof(*s));	/* zero-filled by the kernel: padding is stable */
-		r->h_vcpu[i] = fnv(0xcbf29ce484222325ULL, s, sizeof(*s));
+		/* zero-filled by the kernel: padding is stable. The guest-AVX fields at the end
+		 * count only for an AVX VM (xcr0 != 0), so other VMs hash the bytes they did before. */
+		size_t sl = s->xcr0 ? sizeof(*s) : offsetof(struct hvx_snapshot, xcr0);
+		h = fnv(h, s, sl);
+		r->h_vcpu[i] = fnv(0xcbf29ce484222325ULL, s, sl);
 	}
 	set_vcpu(b, 0);
 	get_sched(b, &r->sched);
@@ -410,6 +414,8 @@ static int boot_setup(struct boot *b, uint64_t mem_size, const uint8_t *image, s
 	cfg.mem_size = mem_size;
 	cfg.n_vcpus = g_ncpus;
 	cfg.flags = HVX_VM_PMU_CLOCK | HVX_VM_SMP_SCHED | HVX_VM_SMP_BOOT | HVX_VM_PAUSE_EXIT;
+	if (getenv("HVX_CPU_V3") && strcmp(getenv("HVX_CPU_V3"), "0"))
+		cfg.flags |= HVX_VM_X86_64_V3;	/* guest AVX/AVX2 on every vCPU */
 	if (ioctl(b->fd, HVX_CREATE_VM, &cfg) < 0) {
 		perror("HVX_CREATE_VM");
 		return -1;

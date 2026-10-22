@@ -93,9 +93,9 @@ class Space:
 
     def apply(self, ex):
         """Rebind explore.py's generator globals (ex = the explore module's globals())."""
-        ex["SVCS"] = list(self.svcs)
-        ex["NET_SVCS"] = list(self.ported) + list(self.links) or list(self.svcs)   # placeholder; restrict() drops them
-        ex["PAUSE_SVCS"] = list(self.svcs)
+        ex["SVCS"] = list(self.svcs) or ["-"]     # "-": a project without services; restrict() drops it
+        ex["NET_SVCS"] = list(self.ported) + list(self.links) or list(self.svcs) or ["-"]   # placeholder; restrict() drops them
+        ex["PAUSE_SVCS"] = list(self.svcs) or ["-"]
         ex["NORDERS"] = self.steps
         pairs = [(t, v) for t, _, vals in self.knobs for v in vals]
         ex["KNOBS"] = pairs or [("-", "")]                        # placeholder; restrict() drops it
@@ -111,6 +111,9 @@ class Space:
                 s.pop(key, None)
         for key in ("N", "O"):
             if key in s and s[key][0] not in self.ported and s[key][0] not in self.links:
+                s.pop(key)
+        for key in ("K", "P", "X"):
+            if key in s and s[key][0] == "-":    # placeholder of a project without services
                 s.pop(key)
         if s["disk"].startswith(("lying", "ioerr")) and "disk" not in f:
             s["disk"] = "cut" if (s["disk"].startswith("lying") and "cut" in f) else "none"

@@ -115,6 +115,7 @@
 #include <asm/io.h>
 #include <linux/random.h>
 #include <asm/fpu/api.h>	/* kernel_fpu_begin/end: protect host FPU/XMM (M14) */
+#include <asm/fpu/xcr.h>	/* xgetbv/xsetbv: guest XCR0 (HVX_VM_X86_64_V3) */
 #include <linux/timekeeping.h>	/* ktime_get_ns: exit-histogram wall-time (diagnostic) */
 
 #include "hvx_abi.h"
@@ -779,6 +780,9 @@ struct hvx_vcpu {
 	 * every run: without it the guest's live XMM/x87 registers were replaced
 	 * by host leftovers each time HVX_RUN returned to userspace. */
 	unsigned long fx_page;
+	/* guest XCR0 (HVX_VM_X86_64_V3 only; 0 otherwise). With it, fx_page holds the
+	 * standard-format XSAVE area (x87|SSE|AVX, 832 bytes) instead of an FXSAVE image. */
+	u64 xcr0;
 	/* retired-exit cadence / step count carried across an internal preempt
 	 * re-entry (HVX_EXIT_PREEMPT); zero at the start of every ioctl */
 	unsigned int carry_guard;
@@ -886,6 +890,7 @@ struct hvx_vm {
 	 * is byte-identical. When set, hvx_cpuid ORs in MMX + the v2 SSE/POPCNT/CX16/LAHF
 	 * bits so a real glibc userland (a distro OpenJDK JRE) loads. Set at HVX_CREATE_VM. */
 	unsigned int cpu_v2;
+	unsigned int cpu_v3;		/* HVX_VM_X86_64_V3: guest AVX/XSAVE (implies cpu_v2) */
 	unsigned int pmu_clock;		/* HVX_VM_PMU_CLOCK */
 	/* In-kernel vCPU scheduler (HVX_VM_SMP_SCHED with n_vcpus > 1). `sched` holds the
 	 * policy, the scheduler state and the VM-wide clock (its v[] array is unused here:
@@ -1976,6 +1981,99 @@ static int setup_vmcs(struct hvx_vcpu *vcpu, bool mtf)
 }
 
 /*
+ * ---- Guest AVX / XSAVE (HVX_VM_X86_64_V3) ----
+ * fx_page holds the vCPU's standard-format XSAVE area for x87|SSE|AVX (832 bytes;
+ * bytes 0..511 are the FXSAVE-compatible legacy region, 512..575 the header, 576..831
+ * the upper halves of YMM0-15). The run loads it with XRSTOR after kernel_fpu_begin and
+ * saves it with plain XSAVE (never XSAVEOPT: its "modified" optimisation depends on VMX
+ * transitions). XSAVE may skip a component in its init state (XSTATE_BV bit 0, data not
+ * written): hvx_xs_save writes the init values into such a component so the bytes are a
+ * pure function of the guest, and keeps XSTATE_BV, so the next XRSTOR re-creates the
+ * same init tracking the guest's own XSAVE would observe. Every XRSTOR runs in the
+ * HOST, where a #GP is fatal, so the area is sanitised before each one.
+ */
+#define EXIT_REASON_XSETBV	55
+#define HVX_XS_MASK		0x7ULL	/* x87 | SSE | AVX: the only components offered */
+#define HVX_XS_SIZE		832	/* standard-format area for HVX_XS_MASK */
+#define HVX_XS_HDR		512
+#define HVX_XS_YMMH		576
+
+static inline void hvx_xsave(void *a, u64 m)
+{
+	asm volatile("xsave64 (%0)" :: "r" (a), "a" ((u32)m), "d" ((u32)(m >> 32)) : "memory");
+}
+
+static inline void hvx_xrstor(void *a, u64 m)
+{
+	asm volatile("xrstor64 (%0)" :: "r" (a), "a" ((u32)m), "d" ((u32)(m >> 32)) : "memory");
+}
+
+/* a valid guest XCR0 for the offered components (the hardware XSETBV rules) */
+static bool hvx_xcr0_ok(u64 v)
+{
+	return (v & 1) && !(v & ~HVX_XS_MASK) && (!(v & 4) || (v & 2));
+}
+
+/* clear every header/MXCSR bit that would make XRSTOR #GP in the host */
+static void hvx_xs_sanitize(u8 *a)
+{
+	*(u64 *)(a + HVX_XS_HDR) &= HVX_XS_MASK;	/* XSTATE_BV */
+	memset(a + HVX_XS_HDR + 8, 0, 56);		/* XCOMP_BV (standard form) + reserved */
+	*(u32 *)(a + 24) &= 0xffffU;			/* MXCSR reserved bits */
+}
+
+static void hvx_xs_load(struct hvx_vcpu *vc)
+{
+	hvx_xs_sanitize((u8 *)vc->fx_page);
+	hvx_xrstor((void *)vc->fx_page, HVX_XS_MASK);	/* XSTATE_BV 0 => init */
+}
+
+static void hvx_xs_save(struct hvx_vcpu *vc)
+{
+	u8 *a = (u8 *)vc->fx_page;
+	/* x87 and SSE registers exist whatever XCR0 says; AVX only when enabled */
+	u64 rfbm = (vc->xcr0 | 3) & HVX_XS_MASK, bv;
+
+	hvx_xsave(a, rfbm);
+	bv = *(u64 *)(a + HVX_XS_HDR) & rfbm;
+	if (!(bv & 1)) {				/* x87 init: FCW 0x37f, rest 0 */
+		memset(a, 0, 24);
+		*(u16 *)a = 0x037f;
+		memset(a + 32, 0, 128);
+	}
+	if (!(bv & 2))
+		memset(a + 160, 0, 256);		/* XMM0-15 */
+	if (!(bv & 4))
+		memset(a + HVX_XS_YMMH, 0, 256);	/* YMM0-15 upper halves */
+	*(u64 *)(a + HVX_XS_HDR) = bv;
+}
+
+/*
+ * XSETBV always VM-exits. Emulate it with the hardware checks (#UD for CR4.OSXSAVE=0
+ * is raised by the CPU before the exit): #GP(0) at CPL > 0, ECX != 0, bit 0 clear,
+ * AVX without SSE, or a bit outside the offered mask. When AVX becomes enabled its
+ * register state is initialised (VZEROUPPER, run in the host where XCR0 includes AVX)
+ * so it never carries leftovers. Returns false if a #GP was queued (RIP not advanced).
+ */
+static bool hvx_xsetbv(struct hvx_vcpu *vc)
+{
+	u64 v = (u32)vc->regs.rax | ((u64)(u32)vc->regs.rdx << 32);
+	u32 cpl = ((u32)vmread(GUEST_SS_AR) >> 5) & 3;
+
+	if (cpl || (u32)vc->regs.rcx || !hvx_xcr0_ok(v)) {
+		vc->reinj_info = 0x80000000U | (3U << 8) | 0x800U | 13;	/* #GP, error code */
+		vc->reinj_ec = 0;
+		vc->reinj_len = 0;
+		vc->reinj_valid = true;
+		return false;
+	}
+	if ((v & 4) && !(vc->xcr0 & 4))
+		asm volatile("vzeroupper" ::: "memory");
+	vc->xcr0 = v;
+	return true;
+}
+
+/*
  * Deterministic in-kernel CPUID (milestone 12). The guest's CPUID is configured
  * to VM-exit; rather than let the answer depend on the real host CPU (which would
  * diverge two runs and could even advertise features -- XSAVE/AVX/OSXSAVE -- that
@@ -2037,9 +2135,34 @@ static void hvx_cpuid(struct hvx_vcpu *vcpu)
 			     (1U << 23);	/* POPCNT  */
 			d |= (1U << 23);	/* MMX     */
 		}
+		if (vcpu->vm->cpu_v3) {
+			c |= (1U << 12) |	/* FMA     */
+			     (1U << 22) |	/* MOVBE   */
+			     (1U << 26) |	/* XSAVE   */
+			     (1U << 28) |	/* AVX     */
+			     (1U << 29);	/* F16C    */
+			if (vmread(GUEST_CR4) & X86_CR4_OSXSAVE)
+				c |= (1U << 27);	/* OSXSAVE mirrors guest CR4 */
+		}
 		break;
 	case 0x7:		/* structured extended features: none advertised */
 		a = b = c = d = 0;
+		if (vcpu->vm->cpu_v3 && subleaf == 0)
+			b = (1U << 3) |	/* BMI1 */
+			    (1U << 5) |	/* AVX2 */
+			    (1U << 8);	/* BMI2 */
+		break;
+	case 0xd:		/* XSAVE features + sizes (HVX_VM_X86_64_V3 only) */
+		if (!vcpu->vm->cpu_v3)
+			break;
+		if (subleaf == 0) {
+			a = HVX_XS_MASK;	/* XCR0 bits supported */
+			b = (vcpu->xcr0 & 4) ? HVX_XS_SIZE : HVX_XS_YMMH;	/* for current XCR0 */
+			c = HVX_XS_SIZE;	/* for all supported */
+		} else if (subleaf == 2) {
+			a = 256;		/* AVX: size */
+			b = HVX_XS_YMMH;	/* AVX: offset */
+		}			/* subleaf 1: no XSAVEOPT/XSAVEC/XGETBV1/XSAVES */
 		break;
 	case 0xb:		/* x2APIC topology (SMP boot only; else all zero as before) */
 		if (vcpu->vm->smp_boot) {
@@ -2097,6 +2220,8 @@ static void hvx_cpuid(struct hvx_vcpu *vcpu)
 		    (1U << 29);		/* LM (long mode) */
 		if (vcpu->vm->cpu_v2)
 			c |= (1U << 0);	/* LAHF/SAHF in 64-bit (x86-64-v2, M31) */
+		if (vcpu->vm->cpu_v3)
+			c |= (1U << 5);	/* LZCNT (ABM) */
 		break;
 	default:		/* every other leaf/subleaf: all zero */
 		break;
@@ -2275,6 +2400,8 @@ static void hvx_ap_sipi(struct hvx_vcpu *t, u32 vector)
 	s->idt_limit = 0xffff;
 	memset(t->sw_msr, 0, sizeof(t->sw_msr));
 	hvx_fx_init((u8 *)t->fx_page);
+	if (t->vm->cpu_v3)	/* guest AVX: XSAVE header + YMM upper halves to init (XSTATE_BV 0); XCR0 kept, as INIT keeps it */
+		memset((u8 *)t->fx_page + 512, 0, 320);
 	t->cr2 = 0;
 	t->halted = HVX_HALT_RUN;
 }
@@ -4825,6 +4952,9 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 	u64 pt_h[9];			/* host RTIT state, restored at the end of the run */
 	bool pt_live = false;
 	u64 t0 = ktime_get_ns();	/* DIAGNOSTIC: wall-time accounting (fingerprint-neutral) */
+	/* guest AVX (HVX_VM_X86_64_V3): host XCR0, swapped with the guest's around entries */
+	const bool xs = vm->cpu_v3;
+	u64 host_xcr0 = 0;
 
 	*(u32 *)vcpu->vmxon_page = hvx_rev;
 	*(u32 *)vcpu->vmcs_page = hvx_rev;
@@ -4842,6 +4972,13 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 	kernel_fpu_begin();
 	preempt_disable();
 	local_irq_save(flags);
+	if (xs) {
+		host_xcr0 = xgetbv(XCR_XFEATURE_ENABLED_MASK);
+		if ((host_xcr0 & HVX_XS_MASK) != HVX_XS_MASK || !hvx_xcr0_ok(vcpu->xcr0)) {
+			ret = -EIO;	/* never XRSTOR/XSETBV what the host cannot take */
+			goto out_cr4;
+		}
+	}
 
 	hvx_set_cr4(hvx_cr4() | CR4_VMXE);
 	if (vmxon(vmxon_pa)) {
@@ -4915,7 +5052,10 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 	msrs_loaded = true;
 	/* load the guest's x87/SSE registers (the host's were saved by
 	 * kernel_fpu_begin above); saved back at out_clear */
-	asm volatile("fxrstor64 (%0)" :: "r" ((void *)vcpu->fx_page) : "memory");
+	if (xs)
+		hvx_xs_load(vcpu);	/* x87/SSE/AVX (XSAVE area) */
+	else
+		asm volatile("fxrstor64 (%0)" :: "r" ((void *)vcpu->fx_page) : "memory");
 
 	for (;;) {
 		u32 reason, basic;
@@ -5167,8 +5307,12 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 		if (chaos_ptimer)
 			VMW(VMX_PREEMPT_TIMER, 1 + get_random_u32() % chaos_ptimer);
 		asm volatile("mov %0, %%cr2" :: "r" (vcpu->cr2));
+		if (xs && vcpu->xcr0 != host_xcr0)
+			xsetbv(XCR_XFEATURE_ENABLED_MASK, vcpu->xcr0);	/* validated */
 		ok = pt_live ? hvx_vmx_run_pt(&vcpu->regs, resume, vm->pt_ctl)
 			     : hvx_vmx_run(&vcpu->regs, resume);
+		if (xs && vcpu->xcr0 != host_xcr0)
+			xsetbv(XCR_XFEATURE_ENABLED_MASK, host_xcr0);
 		asm volatile("mov %%cr2, %0" : "=r" (vcpu->cr2));
 		if (ok) {
 			u32 iv = (u32)vmread(IDT_VECTORING_INFO);
@@ -5409,6 +5553,13 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 				hvx_cpuid(vcpu);
 				vcpu->regs.rip += (u32)vmread(VM_EXIT_INSN_LEN);
 				VMW(GUEST_RIP, vcpu->regs.rip);
+				retired = true;
+			} else if (basic == EXIT_REASON_XSETBV && xs) {
+				/* guest AVX: emulated XSETBV (or a queued #GP) */
+				if (hvx_xsetbv(vcpu)) {
+					vcpu->regs.rip += (u32)vmread(VM_EXIT_INSN_LEN);
+					VMW(GUEST_RIP, vcpu->regs.rip);
+				}
 				retired = true;
 			} else if (basic == EXIT_REASON_RDMSR) {
 				hvx_rdmsr(vcpu);
@@ -5663,7 +5814,10 @@ out_clear:
 		 * already updated sw_msr -- re-capturing them would clobber a stored
 		 * (possibly non-canonical, un-loadable) value. Then restore the host. */
 		vcpu->sw_msr[SWMSR_KERNEL_GS_BASE] = rd(GMSR_KERNEL_GS_BASE);
-		asm volatile("fxsave64 (%0)" :: "r" ((void *)vcpu->fx_page) : "memory");
+		if (xs)
+			hvx_xs_save(vcpu);
+		else
+			asm volatile("fxsave64 (%0)" :: "r" ((void *)vcpu->fx_page) : "memory");
 		wrmsrl(GMSR_STAR,   host_star);
 		wrmsrl(GMSR_LSTAR,  host_lstar);
 		wrmsrl(GMSR_CSTAR,  host_cstar);
@@ -6205,6 +6359,11 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 	if ((cfg->flags & HVX_VM_SMP_BOOT) && nv > 1 &&
 	    !((rd(MSR_VMX_PROCBASED2) >> 32) & SEC_UNRESTRICTED_GUEST))
 		return -ENODEV;			/* APs start in real mode */
+	if ((cfg->flags & HVX_VM_X86_64_V3) &&
+	    (!boot_cpu_has(X86_FEATURE_AVX2) || !boot_cpu_has(X86_FEATURE_OSXSAVE) ||
+	     (xgetbv(XCR_XFEATURE_ENABLED_MASK) & HVX_XS_MASK) != HVX_XS_MASK))
+		return -ENODEV;			/* guest AVX needs host AVX2 + XCR0 >= x87|SSE|AVX */
+	BUILD_BUG_ON(HVX_XS_SIZE > PAGE_SIZE);
 
 	n = cfg->mem_size ? DIV_ROUND_UP(cfg->mem_size, PAGE_SIZE) : 64;
 	if (n < MIN_GPAGES)
@@ -6245,6 +6404,9 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 	vm->cur_vcpu = 0;
 	vm->idle_hb = (cfg->flags & HVX_VM_IDLE_HEARTBEAT) ? 1 : 0;
 	vm->cpu_v2 = (cfg->flags & HVX_VM_X86_64_V2) ? 1 : 0;
+	vm->cpu_v3 = (cfg->flags & HVX_VM_X86_64_V3) ? 1 : 0;
+	if (vm->cpu_v3)
+		vm->cpu_v2 = 1;		/* v3 includes v2 */
 	vm->pmu_clock = (cfg->flags & HVX_VM_PMU_CLOCK) ? 1 : 0;
 	vm->pause_exit = (cfg->flags & HVX_VM_PAUSE_EXIT) ? 1 : 0;
 	vm->pt_allowed = !!(cfg->flags & HVX_VM_PT_TRACE);
@@ -6288,6 +6450,7 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 			ok = 0;
 		else
 			hvx_fx_init((u8 *)vm->vcpu[i].fx_page);
+		vm->vcpu[i].xcr0 = vm->cpu_v3 ? 1 : 0;	/* XCR0 reset value (guest AVX) */
 	}
 	if (!ok) {
 		hvx_vm_free_pages(vm);
@@ -6652,6 +6815,10 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			s->nfault_count = vm->vnet.nfault_count;
 		}
 		memcpy(s->fx, (void *)vc->fx_page, sizeof(s->fx));
+		if (vm->cpu_v3) {	/* guest AVX: XCR0 + XSAVE header + YMM upper halves */
+			s->xcr0 = vc->xcr0;
+			memcpy(s->xsave_ext, (u8 *)vc->fx_page + HVX_XS_HDR, sizeof(s->xsave_ext));
+		}
 		s->pmu_total = vc->pmu_total;
 		memcpy(s->irr, vc->irr, sizeof(s->irr));
 		s->pmu_next = vc->pmu_next;
@@ -6793,6 +6960,11 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		vc->pmu_next = s->pmu_next;
 		/* FXRSTOR #GPs in the HOST on a reserved MXCSR bit: never trust it */
 		*(u32 *)((u8 *)vc->fx_page + 24) &= 0xffffU;
+		if (vm->cpu_v3) {	/* guest AVX: XCR0 + XSAVE header + YMM upper halves */
+			vc->xcr0 = hvx_xcr0_ok(s->xcr0) ? s->xcr0 : 1;
+			memcpy((u8 *)vc->fx_page + HVX_XS_HDR, s->xsave_ext, sizeof(s->xsave_ext));
+			hvx_xs_sanitize((u8 *)vc->fx_page);	/* XRSTOR runs in the host */
+		}
 		if (vm->sched_on)
 			hvx_clk_take(vm, vc);	/* HVX_SET_SCHED, which follows, sets it too */
 		kfree(s);

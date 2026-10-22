@@ -543,6 +543,11 @@ static uint64_t fnv_snapshot(uint64_t h, const struct hvx_snapshot *s)
 		h = fnv(h, &s->pmu_total, sizeof(s->pmu_total));
 		h = fnv(h, &s->pmu_next, sizeof(s->pmu_next));
 	}
+	if (s->xcr0) {	/* guest AVX VM only: XCR0 + the whole x87/SSE/AVX XSAVE area */
+		h = fnv(h, &s->xcr0, sizeof(s->xcr0));
+		h = fnv(h, s->fx, sizeof(s->fx));
+		h = fnv(h, s->xsave_ext, sizeof(s->xsave_ext));
+	}
 	return h;
 }
 
@@ -612,6 +617,8 @@ static int boot_setup(struct boot *b, uint64_t mem_size,
 	 * PMU (nested / hybrid) refuses it with ENODEV and we fall back to the exit clock. */
 	if (!(getenv("HVX_PMU_CLOCK") && !strcmp(getenv("HVX_PMU_CLOCK"), "0")))
 		cfg.flags |= HVX_VM_PMU_CLOCK;
+	if (getenv("HVX_CPU_V3") && strcmp(getenv("HVX_CPU_V3"), "0"))
+		cfg.flags |= HVX_VM_X86_64_V3;	/* guest AVX/AVX2 (hvx_explore --cpu v3) */
 	/* Milestone 41: allow Intel PT tracing of this VM (the explorer's coverage feedback).
 	 * The flag alone traces nothing; HVX_SET_PT switches it on. Off unless asked for. */
 	if (getenv("HVX_PT_TRACE_VM"))

@@ -307,6 +307,9 @@ int main(int argc, char **argv)
 	 * byte-identical). */
 	if (getenv("HVX_CPU_V2"))
 		cfg.flags |= HVX_VM_X86_64_V2;
+	/* guest AVX/AVX2 (x86-64-v3): opt in when HVX_CPU_V3 is set; off by default */
+	if (getenv("HVX_CPU_V3"))
+		cfg.flags |= HVX_VM_X86_64_V3;
 	if (ioctl(fd, HVX_CREATE_VM, &cfg) < 0) {
 		fprintf(stderr, "hvx_linux: HVX_CREATE_VM(%#" PRIx64 "): %s\n",
 			mem_size, strerror(errno));

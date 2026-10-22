@@ -80,6 +80,8 @@ CF_RANGE = None         # (lo, hi) FLUSH indices for cf=: --cf-range lo-hi, or m
                         # as 1 .. the FLUSH count of one fault-free workload (cfn) on the image
 BACKEND = "hvx"         # --backend hvm: the Mac VMM (hvm_backend.py); HVM_KERNEL = its --hvm-kernel
 HVM_KERNEL = None
+CPU = "v2"              # guest CPU level: the manifest's guest.cpu, or --cpu; "v3" adds "--cpu v3"
+                        # (guest AVX/AVX2) to hvx_explore, "v2" adds nothing
 RAM_MIB = 1024          # guest RAM: the manifest's guest.ram_mib, or --ram-mib; the engines get
                         # "--ram-mib N" only when it is not 1024, so default commands are unchanged
 RAM_MIB_BOUNDS = {"hvx": (256, 3072), "hvm": (256, 4096)}  # hvx_explore.c / hvmx (serve.c) check the same
@@ -874,9 +876,20 @@ def ram_args():
 
 
 def engine_args():
-    """Engine options: guest RAM, and the vCPU count only when it is not 1 (so the default
-    command line is unchanged)."""
-    return ram_args() + ([] if VCPUS == 1 else ["--vcpus", str(VCPUS)])
+    """Engine options: guest RAM, the vCPU count only when it is not 1, and the guest CPU level
+    only for v3 (so the default command line is unchanged)."""
+    return ram_args() + ([] if VCPUS == 1 else ["--vcpus", str(VCPUS)]) + \
+        (["--cpu", "v3"] if CPU == "v3" and BACKEND == "hvx" else [])
+
+
+def pick_cpu(cli, manifest):
+    """--cpu, else the manifest's guest.cpu, else v2 (the default level, no engine option)."""
+    v = cli if cli is not None else ((manifest.get("guest") or {}).get("cpu", "v2") if manifest else "v2")
+    if v not in ("v2", "v3"):
+        raise SystemExit("explore.py: guest CPU %r: expected v2 or v3" % (v,))
+    if v == "v3" and BACKEND != "hvx":
+        raise SystemExit("explore.py: guest CPU v3 (AVX) is an x86_64 option; --backend %s cannot run it" % BACKEND)
+    return v
 
 
 def pick_ram_mib(cli, manifest):
@@ -1180,7 +1193,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
 
 # ---------------------------------------------------------------- main
 def main():
-    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT, BUGGIFY, KNOB_RULE, RAM_MIB, MORE_FAULTS, CF_RANGE, VCPUS, TURNS
+    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT, BUGGIFY, KNOB_RULE, RAM_MIB, MORE_FAULTS, CF_RANGE, VCPUS, TURNS, CPU
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-200")
     ap.add_argument("--workers", type=int, default=3)   # the box has 4 cores: 3 is fastest (M38)
@@ -1227,6 +1240,8 @@ def main():
     ap.add_argument("--manifest", help="an onboarded project's hydo.yaml: draw faults from its services, ports, "
                                        "steps and knobs (manifest_space.py); default for explore-ob-* images: "
                                        "the manifest inside the image")
+    ap.add_argument("--cpu", choices=["v2", "v3"], help="guest CPU level (default: the manifest's guest.cpu, "
+                    "else v2); v3 = AVX/AVX2 (hvx_explore --cpu v3, x86_64 only)")
     ap.add_argument("--vcpus", type=int, default=1,
                     help="SMP Stage 3: give the guest this many vCPUs, run in exact turns inside hvx (needs the PMU "
                          "clock; 1..8, default 1 = the engine's command line unchanged)")
@@ -1248,6 +1263,9 @@ def main():
         sp.apply(globals())
         print("fault space: %s" % json.dumps(SPACE.describe()), file=sys.stderr)
     RAM_MIB = pick_ram_mib(a.ram_mib, SPACE.m if SPACE else None)
+    CPU = pick_cpu(a.cpu, SPACE.m if SPACE else None)
+    if CPU != "v2":
+        print("guest CPU: %s" % CPU, file=sys.stderr)
     if RAM_MIB != 1024:
         print("guest RAM: %d MiB" % RAM_MIB, file=sys.stderr)
     VCPUS, TURNS = a.vcpus, a.turns
@@ -1359,6 +1377,8 @@ def main():
         summary["ram_mib"] = RAM_MIB
     if VCPUS != 1:
         summary["vcpus"] = VCPUS
+    if CPU != "v2":
+        summary["cpu"] = CPU
     json.dump({"summary": summary, "failures": fails,
                "shrunk": [{"class": k[0], "signature": k[1], **v} for k, v in shrunk.items()]},
               open(os.path.join(a.out, "report.json"), "w"), indent=1)
@@ -1419,6 +1439,8 @@ def branch_main(a, pool, t0):
         summary["ram_mib"] = RAM_MIB
     if VCPUS != 1:
         summary["vcpus"] = VCPUS
+    if CPU != "v2":
+        summary["cpu"] = CPU
     json.dump({"summary": summary, "failures": fails}, open(os.path.join(a.out, "report.json"), "w"), indent=1)
     L = ["# Branch report (marker `%s`)" % a.branch, "", "| | |", "|---|---|"]
     L += ["| %s | %s |" % kv for kv in summary.items()]
