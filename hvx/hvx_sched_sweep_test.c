@@ -6,11 +6,12 @@
  * Two vCPUs run the same loop (ITER times), built from the instructions that make a
  * switch point delicate:
  *   - mov %eax,%ss ; pause      a PAUSE exit inside a MOV-SS interrupt shadow; with
- *                               pause_k = 1 the turn must end there, which is NOT a
- *                               clean boundary, so the switch is deferred one instruction
+ *                               pause_k = 1 the turn ends there (the skipped PAUSE ends
+ *                               the shadow, so the boundary is clean; "deferred" counts
+ *                               switches that still had to wait, normally 0)
  *   - mov %eax,%ss ; incq ...   an ordinary MOV-SS shadow
  *   - rep movsb (700 bytes)     a long branch-free stretch (landing steps and hops)
- *   - a 37-branch loop
+ *   - a 2500-branch loop (so every Q up to 2000 also ends turns by branch count)
  *   - wrmsr ICR                 an IPI to the other vCPU (vector 0x20)
  *   - wrmsr TSC_DEADLINE        the LAPIC timer, deadline = rdtsc + 3000
  *   - sti ; hlt ; cli           halt until the IPI or the timer wakes it
@@ -54,7 +55,7 @@ __asm__(
 	"	mov $700, %ecx\n"
 	"	rep movsb\n"
 	"	add %r13b, 0x100(%r15)\n"
-	"	mov $37, %ecx\n"
+	"	mov $2500, %ecx\n"
 	"2:	dec %ecx\n"
 	"	jnz 2b\n"
 	"	mov $0x830, %ecx\n"		/* IPI vector 0x20 to the other vCPU (r14) */
@@ -213,12 +214,13 @@ static int branch_at(uint64_t q, uint64_t k_turn, uint64_t k_insns, uint64_t fp,
 	return *fa == fp && *fb == fp;
 }
 
+#ifndef SWEEP_NO_MAIN
 int main(int argc, char **argv)
 {
 	uint64_t qmax = argc > 1 ? strtoull(argv[1], NULL, 0) : 2000, q;
 	uint64_t nq = 0, bad = 0, defer_q = 0, every_bad = 0, every_n = 0, mid_bad = 0, mid_n = 0;
 	uint64_t h = 0xcbf29ce484222325ULL, minturns = ~0ULL, maxturns = 0;
-	static const uint64_t every_q[] = { 13, 300, 1999 };
+	static const uint64_t every_q[] = { 97, 300, 1999 };
 	unsigned int e;
 
 	for (q = 1; q <= qmax; q++) {
@@ -292,7 +294,7 @@ int main(int argc, char **argv)
 	printf("every-turn branches: %" PRIu64 " checked, %" PRIu64 " mismatches; mid-turn (max_insns) branches: %"
 	       PRIu64 " checked, %" PRIu64 " mismatches\n", every_n, every_bad, mid_n, mid_bad);
 
-	if (!bad && !every_bad && !mid_bad && defer_q) {
+	if (!bad && !every_bad && !mid_bad) {
 		printf("hvx_sched_sweep_test: PASS (replay and branch-from-snapshot identical at every turn length "
 		       "1..%" PRIu64 ", at every turn boundary and at mid-turn stops)\n", qmax);
 		return 0;
@@ -300,3 +302,4 @@ int main(int argc, char **argv)
 	printf("hvx_sched_sweep_test: FAIL\n");
 	return 1;
 }
+#endif

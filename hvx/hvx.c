@@ -2050,6 +2050,19 @@ static bool hvx_lapic_rdmsr(struct hvx_vcpu *vcpu, u32 idx, u64 *out)
  * already holds this vector -- a second edge of a pending vector coalesces, as in
  * a real IRR), otherwise into the overflow IRR, from which the slot is refilled,
  * highest vector first, once it has been delivered. */
+/*
+ * "Now" on the instruction clock for an interrupt posted to t. With the in-kernel
+ * scheduler the VM has one clock and only the running vCPU (sched.cur) has the live
+ * copy -- the target's copy is stale by an amount that depends on where the last
+ * ioctl returned, so it must not be used.
+ */
+static inline u64 hvx_post_icount(const struct hvx_vcpu *t)
+{
+	const struct hvx_vm *vm = t->vm;
+
+	return vm->sched_on ? vm->vcpu[vm->sched.cur].icount : t->icount;
+}
+
 static void hvx_oneshot_post(struct hvx_vcpu *t, u32 vector)
 {
 	vector &= 0xff;
@@ -2058,7 +2071,7 @@ static void hvx_oneshot_post(struct hvx_vcpu *t, u32 vector)
 		return;
 	}
 	t->inject_vector = vector;
-	t->inject_at_icount = t->icount;
+	t->inject_at_icount = hvx_post_icount(t);
 	t->inject_valid = 1;
 }
 static void hvx_oneshot_refill(struct hvx_vcpu *t)
@@ -2071,7 +2084,7 @@ static void hvx_oneshot_refill(struct hvx_vcpu *t)
 		if (test_bit(v, t->irr)) {
 			__clear_bit(v, t->irr);
 			t->inject_vector = v;
-			t->inject_at_icount = t->icount;
+			t->inject_at_icount = hvx_post_icount(t);
 			t->inject_valid = 1;
 			return;
 		}
@@ -5284,6 +5297,15 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 				streak = 0;
 
 				if (sched) {
+					u32 is = (u32)vmread(GUEST_INTERRUPTIBILITY);
+
+					/* The instruction was emulated and skipped, so any STI /
+					 * MOV-SS shadow it sat in is over, as on hardware (KVM does
+					 * the same). Left set, it shifted the next interrupt: after
+					 * a stepped-over `sti; hlt` it covered the `cli` and the
+					 * pending interrupt waited for the next sti. */
+					if (is & 3)
+						VMW(GUEST_INTERRUPTIBILITY, is & ~3U);
 					/* stops wait for a clean boundary (loop top) */
 					if (basic != EXIT_REASON_PAUSE)
 						vm->sched.pause_run = 0;
