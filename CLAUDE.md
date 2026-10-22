@@ -990,7 +990,7 @@ Branch `guest-avx` (worktree `../hydo-avx`; box tree `~/hydo-avx`, results `/var
 - Not done: NMIs between CPUs; logical-destination interrupt routing (falls back to vCPU 0); virtio-net routing looks only at the first deliverable queue; no paravirtual lock help; nothing beyond 4 vCPUs.
 - Module wishes in TURNS.md: a per-turn length list, a per-turn short/long mix, a starve mode.
 - The several-vCPU tests are not in `deploy-metal.sh`.
-- The main module needs a reload to carry stage 2; it is planned after the guest AVX branch merges on top, so there is one reload.
+- **Loaded into the main `hvx.ko`** together with the guest AVX work (M68), by the other session, 2026-10-22: srcversion `CA5BF8BF2A0D66B312A68EF`, "freeze in SMM yes", `deploy-metal.sh load` ALL PASS (31 checks), which now include the several-vCPU tests (sched_pmu, sched_race `8cb7c61a2393f44e`, sipi, sched_sweep `39971eed9c2f35fe`) and the 2-vCPU Linux boot `6584c954c2839491`. Userspace binaries built against the older `hvx_abi.h` must be rebuilt (the snapshot ioctl numbers changed with M68).
 
 ### Roadmap — booting Linux as L2 (phased; from a planning pass over hydo's KVM boot path)
 
