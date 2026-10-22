@@ -26,6 +26,12 @@ TRIGGERS = {
     "d5-myisam": ["disk=cut dseed=0 | run C=15"],
     "d6-client-deadline-definite": ["disk=none dseed=0 | run P=kafka@5+2"],
     "d7-skip-last-record": ["disk=none dseed=0 | run P=kafka@28+2"],
+    # Milestone 59 (build-bench-m59.sh; control explore-bench-m59-control-disk.img)
+    "d8-no-order-lock": ["disk=none dseed=0 | run Q=2d"],
+    "d9-redis-unlocked": ["disk=none dseed=0 | run Q=4"],
+    "d10-outcome-in-memory": ["disk=none dseed=0 | run X=front@12~20"],
+    "d11-ack-unflushed-flag": ["disk=cut dseed=0 cf=238 | run"],
+    "d12-shared-key-buffer": ["disk=none dseed=0 | run Q=2"],
 }
 
 # Schedules that fail on the CONTROL itself (bugs of the fixed front door, README "A bug in
@@ -43,8 +49,8 @@ def main():
     ap.add_argument("--bg-images", action="store_true", help="M56: the explore-bench-bg-* images and their control")
     a = ap.parse_args()
     bench.BG_IMAGES = a.bg_images
-    control = bench.control_of("d1-kafka-first")
-    names = list(TRIGGERS) if a.defects == "all" else a.defects.split(",")
+    names = ([n for n in TRIGGERS if n not in bench.M59] if a.defects == "all" else
+             list(bench.M59) if a.defects == "m59" else a.defects.split(","))
     os.makedirs(a.out, exist_ok=True)
     log = open(os.path.join(a.out, "confirm.jsonl"), "a")
     for name in names:
@@ -57,7 +63,9 @@ def main():
         res = pool.run_all(items)
         pool.close()
         for i, s in enumerate(TRIGGERS[name]):
-            ra, rb = res["t%d-a" % i][1], res["t%d-b" % i][1]
+            ra, rb = dict(res["t%d-a" % i][1]), dict(res["t%d-b" % i][1])
+            for tg, rr in (("t%d-a" % i, ra), ("t%d-b" % i, rb)):
+                rr["verdict"] = bench.crash_verdict(os.path.join(a.out, name), tg, rr["verdict"], name)
             rec = {"defect": name, "image": image, "schedule": s, "verdict": ra["verdict"],
                    "fp_a": ra["fp"], "fp_b": rb["fp"], "same": ra["fp"] == rb["fp"],
                    "violation": ex.verdict_kind(ra["verdict"]) == "violation",
@@ -65,18 +73,24 @@ def main():
                    "signature_match": bool(bench.re.search(sig, ra["verdict"]))}
             print(json.dumps(rec), flush=True)
             log.write(json.dumps(rec) + "\n"); log.flush()
-    if not a.no_control:
+    controls = {}
+    for n in names:
+        controls.setdefault(bench.control_of(n), []).append(n)
+    for control, cnames in ([] if a.no_control else sorted(controls.items())):
         ex.IMAGE = control
-        pool = ex.Pool(a.workers, os.path.join(a.out, "control"))
-        items = [("%s-t%d" % (n, i), s) for n in names if n != "d0-old-front-door" for i, s in enumerate(TRIGGERS[n])]
-        if "d0-old-front-door" in names:
+        cdir = os.path.join(a.out, "control" if control == bench.control_of("d1-kafka-first") else control.replace("-disk.img", ""))
+        pool = ex.Pool(a.workers, cdir)
+        items = [("%s-t%d" % (n, i), s) for n in cnames if n != "d0-old-front-door" for i, s in enumerate(TRIGGERS[n])]
+        if "d0-old-front-door" in cnames:
             items.append(("d0-old-front-door-t0", TRIGGERS["d0-old-front-door"][0]))
-        if a.base:
+        if a.base and control == bench.control_of("d1-kafka-first"):
             for i, s in enumerate(BASE):
                 items += [("base%d-a" % i, s), ("base%d-b" % i, s)]
         res = pool.run_all(items)
         pool.close()
         for tag, (s, r) in sorted(res.items()):
+            dn = tag.rsplit("-t", 1)[0]
+            r = dict(r, verdict=bench.crash_verdict(cdir, tag, r["verdict"], dn))
             rec = {"control": control, "for": tag, "schedule": s, "verdict": r["verdict"], "fp": r["fp"],
                    "ok": ex.verdict_kind(r["verdict"]) == "ok"}
             print(json.dumps(rec), flush=True)
