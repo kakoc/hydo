@@ -15,7 +15,7 @@
 #       command  run <tokens>               -> run workload steps 0..steps-1 under the faults:
 #           K=<svc>@<at>+<down>   SIGKILL <svc> before step <at>, restart before <at>+<down>
 #           P=<svc>@<at>+<n>      SIGSTOP <svc> before step <at>, SIGCONT before <at>+<n>
-#           P=<svc>@<at>~<off>:<dur>  pause after <off> ms of guest time, for <dur> ms
+#           P=<svc>@<at>~<off>:<dur>  pause after <off> ms of guest time (fractions allowed), for <dur> ms
 #           N=<svc>@<from>-<to>:<netem>   netem on traffic to <svc>'s port, steps [from,to)
 #           O=<svc>@<from>-<to>:<req|resp>:<netem>   one direction only
 #           C=<at>                power cut before step <at>
@@ -244,7 +244,7 @@ net_on() {   # <svc> <match: dport|sport> <netem args with commas>
 net_off() { $HYDO_TC qdisc del dev lo root 2>/dev/null; }
 xassert() { echo "HYDO-ASSERT {\"t\":\"$1\",\"id\":\"$2\",\"ok\":$3,\"msg\":\"$4\"}"; }
 pause_timer() {   # <svc> <off-ms> <dur-ms>, in the background
-  $BB sleep $($BB awk "BEGIN{printf \"%.3f\", $2/1000}")
+  $BB sleep $($BB awk "BEGIN{printf \"%.6f\", $2/1000}")
   pp=$1
   if $BB pgrep -f "$HYDO_WORKLOAD_PGREP" > /dev/null 2>&1; then mid=true; else mid=false; fi
   svc_sig $pp STOP
