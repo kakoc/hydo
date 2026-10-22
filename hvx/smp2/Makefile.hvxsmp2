@@ -1,0 +1,15 @@
+# Build a second copy of the hvx module as hvxsmp2.ko with the device /dev/hvxsmp2, so the
+# in-kernel vCPU scheduler (HVX_VM_SMP_SCHED) can be developed next to hvx.ko without
+# disturbing runs on /dev/hvx. hvxsmp2.c is a copy of ../hvx.c made by build-hvxsmp2.sh.
+obj-m := hvxsmp2.o
+ccflags-y := -DHVX_DEVNAME='"hvxsmp2"'
+OBJECT_FILES_NON_STANDARD_hvxsmp2.o := y
+
+KDIR ?= /lib/modules/$(shell uname -r)/build
+PWD  := $(shell pwd)
+
+all:
+	$(MAKE) -C $(KDIR) M=$(PWD) modules
+
+clean:
+	$(MAKE) -C $(KDIR) M=$(PWD) clean

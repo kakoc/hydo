@@ -10,7 +10,7 @@ The data disk (<NAME>-arm64-disk.img next to the initramfs, from hydo-build --ar
 attached as the virtio-blk device when it exists; then disk faults and power cuts work as on
 the box (same seeded fault classes, same two-boot recovery). What the Mac backend cannot do
 is removed from every schedule BEFORE it is rendered (hvm_supported), so a run never claims
-a fault it did not apply: no PMU clock (no run budget), without the disk no disk faults or
+a fault it did not apply: no PMU clock (no run budget, no vCPU turn tokens q=/qs=), without the disk no disk faults or
 power cuts, and without tc in the image (an arm64 image built with HYDO_TC_ARM64= , or one built
 before tc was added) no N=/O= network faults. Whether the image has tc is read from its compiled
 manifest (etc/hydo/manifest.sh, HYDO_TC), not assumed. Tick jitter works, but its delays are
@@ -71,7 +71,7 @@ def hvm_supported(s):
     if not HAS_DISK:
         s["disk"] = "none"
         s.pop("C", None)
-    for k in ("rb", "pp", "xt") if HAS_TC else ("N", "O", "rb", "pp", "xt"):   # pp/xt need the PMU clock; the Mac's lever is pct
+    for k in ("rb", "pp", "xt", "q") if HAS_TC else ("N", "O", "rb", "pp", "xt", "q"):   # pp/xt/q need the PMU clock; the Mac's lever is pct
         s.pop(k, None)
     tj = s.get("tj")
     if tj and tj[0] == "seed" and tj[3] > HVM_TJ_MAX:

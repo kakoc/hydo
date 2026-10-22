@@ -78,6 +78,143 @@ static const char *g_fault = "";
  * endpoint of a branch vs a separate straight run differs by that jitter. */
 static uint64_t g_durable_fp;
 
+/* SMP Stage 3 (hvx/explore/TURNS.md): the number of vCPUs of every VM this harness creates
+ * ($HVX_VCPUS here; hvx_explore's --vcpus / $HVX_EXPLORE_VCPUS). 1 (the default) is
+ * byte-identical to before: the same VM, the same ioctls, the same fingerprints. With N > 1
+ * the VM gets HVX_VM_SMP_SCHED (in-kernel turns, needs the PMU clock), every snapshot and
+ * restore covers all vCPUs plus the scheduler state, and fingerprints hash vCPUs 1..N-1 and
+ * the scheduler state too. Linux starts the other vCPUs with INIT/SIPI (HVX_VM_SMP_BOOT,
+ * SMP Stage 2: the MP table lists N CPUs, and 4 consecutive PAUSEs end a turn, $HVX_PAUSE_K
+ * overrides). $HVX_VCPU_PARK=1 parks them instead: halted with interrupts off, never run. */
+static unsigned int g_vcpus = 1;
+static int g_vcpu_park = 0;   /* 1: park vCPUs 1.. (HVX_VCPU_PARK=1); 0: Linux starts them (HVX_VM_SMP_BOOT) */
+static uint64_t fnv(uint64_t h, const void *p, size_t n);
+
+static int set_vcpu(int fd, uint32_t i)
+{
+	if (ioctl(fd, HVX_SET_VCPU, &i) < 0) { perror("HVX_SET_VCPU"); return -1; }
+	return 0;
+}
+
+/* The state of vCPUs 1..N-1 and of the scheduler (g_vcpus > 1 only; vCPU 0's snapshot is
+ * taken by the caller as before). The ABI's order: GET -- every vCPU, then HVX_GET_SCHED;
+ * SET -- every vCPU's snapshot first, then HVX_SET_SCHED (it carries the VM-wide clock and
+ * the per-vCPU cr2 / halted / re-injection state the snapshot struct lacks). */
+struct smpstate {
+	struct hvx_snapshot *v[HVX_SCHED_MAX_VCPUS];
+	struct hvx_sched *sch;
+};
+
+static void smp_free(struct smpstate *st)
+{
+	unsigned int i;
+	for (i = 0; i < HVX_SCHED_MAX_VCPUS; i++) { free(st->v[i]); st->v[i] = NULL; }
+	free(st->sch);
+	st->sch = NULL;
+}
+
+static int smp_get(int fd, struct smpstate *st)
+{
+	unsigned int i;
+	memset(st, 0, sizeof(*st));
+	if (g_vcpus <= 1) return 0;
+	for (i = 1; i < g_vcpus; i++) {
+		if (!(st->v[i] = calloc(1, sizeof(*st->v[i])))) return -1;
+		if (set_vcpu(fd, i)) return -1;
+		if (ioctl(fd, HVX_GET_SNAPSHOT, st->v[i]) < 0) { perror("HVX_GET_SNAPSHOT (vCPU)"); set_vcpu(fd, 0); return -1; }
+	}
+	if (set_vcpu(fd, 0)) return -1;
+	if (!(st->sch = calloc(1, sizeof(*st->sch)))) return -1;
+	if (ioctl(fd, HVX_GET_SCHED, st->sch) < 0) { perror("HVX_GET_SCHED"); return -1; }
+	return 0;
+}
+
+/* After vCPU 0's HVX_SET_SNAPSHOT (done by the caller, as before). */
+static int smp_set(int fd, const struct smpstate *st)
+{
+	unsigned int i;
+	if (g_vcpus <= 1) return 0;
+	if (!st->sch) { fprintf(stderr, "smp_set: no scheduler state\n"); return -1; }
+	for (i = 1; i < g_vcpus; i++) {
+		if (set_vcpu(fd, i)) return -1;
+		if (ioctl(fd, HVX_SET_SNAPSHOT, st->v[i]) < 0) { perror("HVX_SET_SNAPSHOT (vCPU)"); set_vcpu(fd, 0); return -1; }
+	}
+	if (set_vcpu(fd, 0)) return -1;
+	if (ioctl(fd, HVX_SET_SCHED, st->sch) < 0) { perror("HVX_SET_SCHED"); return -1; }
+	return 0;
+}
+
+static uint64_t fnv_snapshot(uint64_t h, const struct hvx_snapshot *s);
+
+/* Fingerprint part for N > 1: vCPUs 1..N-1 (the same canonical fields as vCPU 0) and the
+ * scheduler STATE -- not its policy (quantum / seed / pause_k / stop_turn: a schedule's
+ * turn tokens set them for the workload only, like tick jitter, which is not hashed
+ * either) and not its statistics. Returns 0 on an ioctl error. */
+static uint64_t fnv_smp(uint64_t h, int fd)
+{
+	struct hvx_snapshot *s;
+	struct hvx_sched *c;
+	unsigned int i;
+	if (g_vcpus <= 1) return h;
+	s = calloc(1, sizeof(*s));
+	c = calloc(1, sizeof(*c));
+	if (!s || !c) { free(s); free(c); return 0; }
+	h = fnv(h, "hvx-smp-v1", 10);
+	for (i = 1; i < g_vcpus; i++) {
+		memset(s, 0, sizeof(*s));
+		if (set_vcpu(fd, i) || ioctl(fd, HVX_GET_SNAPSHOT, s) < 0) { set_vcpu(fd, 0); h = 0; goto out; }
+		h = fnv_snapshot(h, s);
+	}
+	if (set_vcpu(fd, 0) || ioctl(fd, HVX_GET_SCHED, c) < 0) { h = 0; goto out; }
+	h = fnv(h, &c->cur, sizeof(c->cur));
+	h = fnv(h, &c->in_turn, sizeof(c->in_turn));
+	h = fnv(h, &c->turn_over, sizeof(c->turn_over));
+	h = fnv(h, &c->pause_run, sizeof(c->pause_run));
+	h = fnv(h, &c->turn_end, sizeof(c->turn_end));
+	h = fnv(h, &c->turns, sizeof(c->turns));
+	h = fnv(h, &c->guard, sizeof(c->guard));
+	h = fnv(h, &c->turn_hash, sizeof(c->turn_hash));
+	h = fnv(h, &c->tsc, sizeof(c->tsc));
+	h = fnv(h, &c->tsc_step, sizeof(c->tsc_step));
+	h = fnv(h, &c->tsc_mode, sizeof(c->tsc_mode));
+	h = fnv(h, &c->icount, sizeof(c->icount));
+	h = fnv(h, &c->pmu_total, sizeof(c->pmu_total));
+	h = fnv(h, &c->pmu_next, sizeof(c->pmu_next));
+	for (i = 0; i < g_vcpus; i++)
+		h = fnv(h, &c->v[i], sizeof(c->v[i]));	/* all-integer struct: no padding */
+out:
+	free(s);
+	free(c);
+	return h;
+}
+
+/* Park vCPUs 1..N-1 of a fresh VM (see g_vcpu_park): IF=0 and halted, so the scheduler
+ * never picks them (it wakes a halted vCPU only for a deliverable interrupt, which needs
+ * IF=1). Real Linux does not know they exist until SMP Stage 2 (MP table, INIT/SIPI). */
+static int park_aps(int fd)
+{
+	struct hvx_regs r;
+	struct hvx_sched *c;
+	unsigned int i;
+	int rc = -1;
+	if (!(c = calloc(1, sizeof(*c)))) return -1;
+	for (i = 1; i < g_vcpus; i++) {
+		memset(&r, 0, sizeof(r));
+		r.rflags = 0x2;		/* IF=0 */
+		if (set_vcpu(fd, i) || ioctl(fd, HVX_SET_REGS, &r) < 0) { perror("park: HVX_SET_REGS"); goto out; }
+	}
+	if (set_vcpu(fd, 0) || ioctl(fd, HVX_GET_SCHED, c) < 0) { perror("park: HVX_GET_SCHED"); goto out; }
+	for (i = 1; i < g_vcpus; i++) {
+		c->v[i].halted = 1;
+		c->v[i].halt_len = 1;
+	}
+	if (ioctl(fd, HVX_SET_SCHED, c) < 0) { perror("park: HVX_SET_SCHED"); goto out; }
+	rc = 0;
+out:
+	free(c);
+	return rc;
+}
+
 /* ---- canonical fingerprint (FNV-1a) ---- */
 static uint64_t fnv(uint64_t h, const void *p, size_t n)
 {
@@ -430,6 +567,8 @@ static uint64_t fingerprint(struct boot *b)
 	h = fnv(h, &clen, sizeof(clen));
 	h = fnv(h, b->ubuf, b->ulen);
 	h = fnv_snapshot(h, s);
+	if (g_vcpus > 1)					/* the other vCPUs + scheduler */
+		h = fnv_smp(h, b->fd);
 	dfp = fnv(0xcbf29ce484222325ULL, b->ubuf, b->ulen);	/* durable = console ... */
 	h = fnv(h, &rlen, sizeof(rlen));
 	h = fnv(h, b->mem, b->mem_size);			/* all guest RAM (zero-copy mmap) */
@@ -484,8 +623,22 @@ static int boot_setup(struct boot *b, uint64_t mem_size,
 	 * The flag alone traces nothing; HVX_SET_PT switches it on. Off unless asked for. */
 	if (getenv("HVX_PT_TRACE_VM"))
 		cfg.flags |= HVX_VM_PT_TRACE;
+	if (g_vcpus > 1) {		/* SMP Stage 3: several vCPUs in in-kernel turns */
+		cfg.n_vcpus = g_vcpus;
+		cfg.flags |= HVX_VM_SMP_SCHED;
+		if (!g_vcpu_park)	/* SMP Stage 2: the guest starts vCPUs 1.. with INIT/SIPI */
+			cfg.flags |= HVX_VM_SMP_BOOT;
+		if (!(cfg.flags & HVX_VM_PMU_CLOCK)) {
+			fprintf(stderr, "hvx_stack_verify: %u vCPUs need the PMU clock (HVX_PMU_CLOCK=0 given)\n", g_vcpus);
+			return -1;
+		}
+	}
 	if (ioctl(b->fd, HVX_CREATE_VM, &cfg) < 0) {
 		static int noted;
+		if (g_vcpus > 1 && errno == ENODEV) {
+			fprintf(stderr, "hvx_stack_verify: %u vCPUs need the PMU clock; this host has no usable PMU\n", g_vcpus);
+			return -1;
+		}
 		if (errno != ENODEV || !(cfg.flags & HVX_VM_PMU_CLOCK)) { perror("HVX_CREATE_VM"); return -1; }
 		if (!noted++) fprintf(stderr, "hvx_stack_verify: no usable PMU on this host; using the exit-count clock\n");
 		cfg.flags &= ~HVX_VM_PMU_CLOCK;
@@ -512,7 +665,8 @@ static int boot_setup(struct boot *b, uint64_t mem_size,
 	}
 
 	build_page_tables_and_gdt(b->mem, mem_size);
-	if (load_bzimage(b->mem, mem_size, image, image_len, initrd, initrd_len, cmdline) < 0) return -1;
+	if (load_bzimage_n(b->mem, mem_size, image, image_len, initrd, initrd_len, cmdline,
+			   g_vcpus > 1 && !g_vcpu_park ? g_vcpus : 1) < 0) return -1;
 	fill_sregs(&sregs);
 	if (ioctl(b->fd, HVX_SET_SREGS, &sregs) < 0) { perror("HVX_SET_SREGS"); return -1; }
 	memset(&regs, 0, sizeof(regs));
@@ -521,6 +675,15 @@ static int boot_setup(struct boot *b, uint64_t mem_size,
 	regs.rsp = STACK_TOP;
 	regs.rflags = 0x2;
 	if (ioctl(b->fd, HVX_SET_REGS, &regs) < 0) { perror("HVX_SET_REGS"); return -1; }
+	if (g_vcpus > 1 && g_vcpu_park && park_aps(b->fd)) return -1;
+	if (g_vcpus > 1 && !g_vcpu_park) {	/* lock spinning ends a turn (SMP_STAGE2.md: 4) */
+		struct hvx_sched *c = calloc(1, sizeof(*c));
+		const char *pk = getenv("HVX_PAUSE_K");
+		if (!c || set_vcpu(b->fd, 0) || ioctl(b->fd, HVX_GET_SCHED, c) < 0) { perror("HVX_GET_SCHED"); free(c); return -1; }
+		c->pause_k = pk ? (uint32_t)strtoul(pk, NULL, 0) : 4;
+		if (ioctl(b->fd, HVX_SET_SCHED, c) < 0) { perror("HVX_SET_SCHED"); free(c); return -1; }
+		free(c);
+	}
 	return 0;
 }
 static void boot_teardown(struct boot *b)
@@ -656,12 +819,14 @@ static int run_oracle_branch(const struct env *e, const char *flush, struct save
 {
 	struct boot b;
 	struct hvx_snapshot *mid = calloc(1, sizeof(*mid));
+	struct smpstate mst;		/* vCPUs 1..N-1 + scheduler (N > 1 only) */
 	struct savebuf sb_ram, sb_rw;
 	int have_ram = 0, have_rw = 0;
 	size_t branch_ulen = 0;
 	char cmd[512];
 	int rc = -1;
 	memset(ra, 0, sizeof(*ra)); memset(rb, 0, sizeof(*rb));
+	memset(&mst, 0, sizeof(mst));
 	if (!mid) { perror("alloc"); goto done; }
 	if (savebuf_open(&sb_ram, e->mem_size, "br-ram") != 0) goto done;
 	have_ram = 1;
@@ -678,6 +843,7 @@ static int run_oracle_branch(const struct env *e, const char *flush, struct save
 	fprintf(stderr, "hvx_stack_verify: reached mid marker at %zu bytes; snapshotting (RAM + rw log)\n", b.ulen);
 	branch_ulen = b.ulen;
 	if (ioctl(b.fd, HVX_GET_SNAPSHOT, mid) < 0) { perror("HVX_GET_SNAPSHOT"); goto teardown; }
+	if (smp_get(b.fd, &mst)) goto teardown;
 	savebuf_store(&sb_ram, b.mem, e->mem_size);
 	savebuf_store(&sb_rw, b.disk_mm + e->p2_off, e->p2_len);
 
@@ -687,6 +853,7 @@ static int run_oracle_branch(const struct env *e, const char *flush, struct save
 		ra->ok = (ra->fp != 0);
 	}
 	if (ioctl(b.fd, HVX_SET_SNAPSHOT, mid) < 0) { perror("HVX_SET_SNAPSHOT"); goto teardown; }
+	if (smp_set(b.fd, &mst)) goto teardown;
 	savebuf_load(&sb_ram, b.mem, e->mem_size);
 	savebuf_load(&sb_rw, b.disk_mm + e->p2_off, e->p2_len);
 	b.ulen = branch_ulen;
@@ -701,6 +868,7 @@ teardown:
 	boot_teardown(&b);
 done:
 	free(mid);
+	smp_free(&mst);
 	if (have_ram) savebuf_close(&sb_ram);
 	if (have_rw) savebuf_close(&sb_rw);
 	return rc;
@@ -713,12 +881,14 @@ static int run_solo_branch(const struct env *e, const char *flush, struct result
 {
 	struct boot b;
 	struct hvx_snapshot *mid = calloc(1, sizeof(*mid));
+	struct smpstate mst;		/* vCPUs 1..N-1 + scheduler (N > 1 only) */
 	struct savebuf sb_ram, sb_rw;
 	int have_ram = 0, have_rw = 0;
 	size_t branch_ulen = 0;
 	char cmd[512];
 	int rc = -1;
 	memset(ra, 0, sizeof(*ra)); memset(rb, 0, sizeof(*rb));
+	memset(&mst, 0, sizeof(mst));
 	if (!mid) { perror("alloc"); goto done; }
 	if (savebuf_open(&sb_ram, e->mem_size, "sb-ram") != 0) goto done;
 	have_ram = 1;
@@ -732,6 +902,7 @@ static int run_solo_branch(const struct env *e, const char *flush, struct result
 	fprintf(stderr, "hvx_stack_verify: reached solo mid marker at %zu bytes; snapshotting (RAM + rw disk)\n", b.ulen);
 	branch_ulen = b.ulen;
 	if (ioctl(b.fd, HVX_GET_SNAPSHOT, mid) < 0) { perror("HVX_GET_SNAPSHOT"); goto teardown; }
+	if (smp_get(b.fd, &mst)) goto teardown;
 	savebuf_store(&sb_ram, b.mem, e->mem_size);
 	savebuf_store(&sb_rw, b.disk_mm + e->p2_off, e->p2_len);
 	if (run_until_marker(&b, FINAL_MARKER) == 0) {
@@ -741,6 +912,7 @@ static int run_solo_branch(const struct env *e, const char *flush, struct result
 		ra->ok = (ra->fp != 0);
 	}
 	if (ioctl(b.fd, HVX_SET_SNAPSHOT, mid) < 0) { perror("HVX_SET_SNAPSHOT"); goto teardown; }
+	if (smp_set(b.fd, &mst)) goto teardown;
 	savebuf_load(&sb_ram, b.mem, e->mem_size);
 	savebuf_load(&sb_rw, b.disk_mm + e->p2_off, e->p2_len);
 	b.ulen = branch_ulen;
@@ -756,6 +928,7 @@ teardown:
 	boot_teardown(&b);
 done:
 	free(mid);
+	smp_free(&mst);
 	if (have_ram) savebuf_close(&sb_ram);
 	if (have_rw) savebuf_close(&sb_rw);
 	return rc;
@@ -797,6 +970,11 @@ int main(int argc, char **argv)
 	if (argc >= 7 && argv[6][0]) mode = argv[6];
 	if ((ev = getenv("HVX_JIT")) && ev[0]) g_jit = ev;
 	if ((ev = getenv("HVX_STACK_FAULT")) && ev[0]) g_fault = ev;
+	if ((ev = getenv("HVX_VCPUS")) && ev[0]) {	/* SMP Stage 3: several vCPUs (default 1) */
+		g_vcpus = (unsigned int)strtoul(ev, NULL, 10);
+		if (g_vcpus < 1 || g_vcpus > HVX_SCHED_MAX_VCPUS) { fprintf(stderr, "HVX_VCPUS must be 1..%d\n", HVX_SCHED_MAX_VCPUS); return 2; }
+	}
+	if ((ev = getenv("HVX_VCPU_PARK"))) g_vcpu_park = strcmp(ev, "0") != 0;
 
 	if      (strcmp(mode, "all") == 0)    { do_sanity = do_f1 = do_f2 = do_f3 = 1; }
 	else if (strcmp(mode, "sanity") == 0) do_sanity = 1;

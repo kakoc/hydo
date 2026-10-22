@@ -9,6 +9,7 @@
 #ifndef HVX_SCHED_UTIL_H
 #define HVX_SCHED_UTIL_H
 
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -235,7 +236,9 @@ static inline uint64_t su_fingerprint(struct su_vm *vm)
 		memset(&sn, 0, sizeof(sn));
 		if (ioctl(vm->fd, HVX_GET_SNAPSHOT, &sn) < 0)
 			su_die("HVX_GET_SNAPSHOT");
-		h = su_fnv(h, &sn, sizeof(sn));
+		/* the guest-AVX fields at the end only for an AVX VM (xcr0 != 0), so other
+		 * VMs hash exactly the bytes they hashed before those fields were appended */
+		h = su_fnv(h, &sn, sn.xcr0 ? sizeof(sn) : offsetof(struct hvx_snapshot, xcr0));
 	}
 	su_get_sched(vm, &s);
 	h = su_fnv(h, &s.quantum, sizeof(s.quantum));
