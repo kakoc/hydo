@@ -40,11 +40,48 @@ DEFECTS = {
     "d6-client-deadline-definite": ("explore-bench-d6-client-deadline-definite-disk.img", r"told it failed|told_failed"),
     "d7-skip-last-record":        ("explore-bench-d7-skip-last-record-disk.img", r"present \d+ times|kafka_exactly_once"),
 }
+# Milestone 59: harder defects, patched into hvx/bench/base/main-m59-control.go (the current
+# order service with the M50 fixes, the BUGGIFY wrappers and a fix for the M58 flush-cut bug),
+# built by build-bench-m59.sh. Their control is that file unpatched. d9's signature is the
+# crash oracle below (the guest's "front door log: panic" line). Images: build-bench-m59.sh with
+# BENCH_SUFFIX=-pin (built from the pinned toolchain, hvx/BUILD-PINS.md); HYDO_M59_SUFFIX=""
+# selects the first build, which used the stand-in hvx_seedrng (superseded).
+M59 = {
+    "d8-no-order-lock":       r"present \d+ times|kafka_exactly_once",
+    "d9-redis-unlocked":      r"front door crashed",
+    "d10-outcome-in-memory":  r"present \d+ times|kafka_exactly_once",
+    "d11-ack-unflushed-flag": r"not marked published|acked_marked_published",
+    "d12-shared-key-buffer":  r"kafka order=\d+ (expected|present)|in_kafka|kafka_exactly_once",
+}
+M59_SUFFIX = os.environ.get("HYDO_M59_SUFFIX", "-pin")   # images rebuilt with the pinned tools
+for _n, _sig in M59.items():
+    DEFECTS[_n] = ("explore-bench-m59-%s%s-disk.img" % (_n, M59_SUFFIX), _sig)
+M59_CONTROL = "explore-bench-m59-control%s-disk.img" % M59_SUFFIX
 CONTROL = "explore-nf-disk.img"
+CRASH_RE = re.compile(r"hydo-explore: front door log: ((?:panic|fatal error).*)")
+
+
+def crash_verdict(outdir, tag, verdict, defect):
+    """M59 crash oracle (the property "no process crashes", for the order
+    service only): stack-explore.sh restarts a dead front door before the retry pass and prints
+    its first panic/fatal-error lines. A SIGKILL (X=, K=) leaves no such line. Applied to the
+    M59 defects and their control only, so earlier results keep their meaning."""
+    if defect not in M59 or ex.verdict_kind(verdict) != "ok":
+        return verdict
+    for suffix in ("", ".recovery"):
+        path = os.path.join(outdir, "consoles", "%s%s.log" % (tag, suffix))
+        if os.path.exists(path):
+            for line in open(path, errors="replace"):
+                m = CRASH_RE.search(line)
+                if m:
+                    return "HYDO-ORACLE: VIOLATION front door crashed: " + m.group(1).strip()[:160]
+    return verdict
 BG_IMAGES = False   # --bg-images (M56): the images rebuilt with BUGGIFY fault points (build-bench-bg.sh)
 
 
 def image_of(defect):
+    if defect in M59:
+        return DEFECTS[defect][0]
     return "explore-bench-bg-%s-disk.img" % defect if BG_IMAGES else DEFECTS[defect][0]
 
 
@@ -52,6 +89,8 @@ def control_of(defect):
     """The unpatched image in the same guest: d0 runs the pre-M46 guest, so its control is the
     fixed front door in that guest (explore-fix-disk.img). With --bg-images every defect,
     d0 included, is built in the current guest, so its control is the BUGGIFY control image."""
+    if defect in M59:
+        return M59_CONTROL
     if BG_IMAGES:
         return "explore-bench-bg-control-disk.img"
     return "explore-fix-disk.img" if defect.startswith("d0-") else CONTROL
@@ -62,7 +101,7 @@ class Control:
     control image. (The fixed front door has a bug of its own -- see README -- so a failure in
     class durable-defaults is not automatically the planted defect's.)"""
     def __init__(self, a, defect):
-        self.image, self.cache = control_of(defect), {}
+        self.image, self.cache, self.defect = control_of(defect), {}, defect
         self.dout = os.path.join(a.out, defect, "control")
         os.makedirs(self.dout, exist_ok=True)
         saved = ex.IMAGE
@@ -78,7 +117,8 @@ class Control:
     def passes(self, text):
         if text not in self.cache:
             tag = "c%d" % len(self.cache)
-            r = self.pool.run_all([(tag, text)])[tag][1]
+            r = dict(self.pool.run_all([(tag, text)])[tag][1])
+            r["verdict"] = crash_verdict(self.dout, tag, r["verdict"], self.defect)
             self.cache[text] = r
         return ex.verdict_kind(self.cache[text]["verdict"]) == "ok", self.cache[text]
 
@@ -90,21 +130,24 @@ def detects(rec):
     return rec["class"] == "durable-defaults" and ex.verdict_kind(rec["verdict"]) == "violation"
 
 
-def make_rec(outdir, sd, text, r):
+def make_rec(outdir, sd, text, r, defect=None):
     s = ex.parse(text)
     rec = {"seed": sd, "schedule": text, "class": ex.finding_class(s), **r}
+    rec["verdict"] = crash_verdict(outdir, "seed-%d" % sd, rec["verdict"], defect)
     rec["assert_failures"] = ex.assert_failures(outdir, "seed-%d" % sd)
     if rec["assert_failures"] and ex.verdict_kind(r["verdict"]) == "ok":
         rec["verdict"] = "VIOLATION assertion " + ",".join(rec["assert_failures"])
     return rec
 
 
-def schedules(strategy, seeds, new_faults, buggify=False):
+def schedules(strategy, seeds, new_faults, buggify=False, concurrency=False):
     gen = ex.GENERATORS[strategy]
-    ex.NEW_FAULTS, ex.BUGGIFY = new_faults, buggify
+    ex.NEW_FAULTS, ex.BUGGIFY, ex.CONCURRENCY = new_faults, buggify, concurrency
+    # the same composition order as explore.py: buggify(concurrency(new_faults(gen)))
     if strategy in ("swarm-pos", "process"):      # M56 generators draw every fault kind themselves
-        return [(sd, ex.render(ex.add_buggify(gen(sd), sd))) for sd in seeds]
-    return [(sd, ex.render(ex.add_buggify(ex.add_new_faults(gen(sd), sd, strategy == "swarm"), sd))) for sd in seeds]
+        return [(sd, ex.render(ex.add_buggify(ex.add_concurrency(gen(sd), sd), sd))) for sd in seeds]
+    return [(sd, ex.render(ex.add_buggify(ex.add_concurrency(ex.add_new_faults(gen(sd), sd, strategy == "swarm"), sd), sd)))
+            for sd in seeds]
 
 
 def run_seeded(a, defect, image, sig):
@@ -117,18 +160,18 @@ def run_seeded(a, defect, image, sig):
     results = []
     for rep in a.reps:
         seeds = list(range(rep * 1000 + 1, rep * 1000 + a.budget + 1))
-        items = schedules(a.strategy, seeds, a.new_faults, a.buggify)
+        items = schedules(a.strategy, seeds, a.new_faults, a.buggify, a.concurrency)
         done, nxt, outstanding, found, base = {}, 0, 0, None, []
         t0 = time.time()
         while True:
-            while nxt < len(items) and outstanding < 2 * a.workers and found is None:
+            while nxt < len(items) and outstanding < (a.window or 2 * a.workers) and found is None:
                 sd, text = items[nxt]
                 pool.jobs.put(("seed-%d" % sd, text)); nxt += 1; outstanding += 1
             if outstanding == 0:
                 break
             tag, text, r = pool.results.get(); outstanding -= 1
             sd = int(tag.split("-")[1])
-            done[sd] = make_rec(dout, sd, text, r)
+            done[sd] = make_rec(dout, sd, text, r, defect)
             if found is None:       # first detection = lowest detecting seed with all lower seeds done
                 for i, (s2, _) in enumerate(items):
                     if s2 not in done:
@@ -284,6 +327,10 @@ def main():
     ap.add_argument("--new-faults", action="store_true")
     ap.add_argument("--buggify", action="store_true", help="M56: every schedule carries a BUGGIFY seed (B=)")
     ap.add_argument("--bg-images", action="store_true", help="M56: use the explore-bench-bg-* images")
+    ap.add_argument("--concurrency", action="store_true",
+                    help="M59: explore.py --concurrency (Q= token on 60%% of schedules, from its own stream)")
+    ap.add_argument("--window", type=int, default=0,
+                    help="schedules in flight (default 2*workers); 1 = no run overlaps a control check")
     ap.add_argument("--defects", default="all")
     ap.add_argument("--reps", default="1-3")
     ap.add_argument("--budget", type=int, default=60)
@@ -303,8 +350,9 @@ def main():
     global BG_IMAGES
     BG_IMAGES = a.bg_images
     a.label = (a.strategy + ("+nf" if a.new_faults and a.strategy in ("random", "swarm") else "")
-               + ("+bg" if a.buggify else ""))
-    names = list(DEFECTS) if a.defects == "all" else a.defects.split(",")
+               + ("+bg" if a.buggify else "") + ("+cc" if a.concurrency else ""))
+    names = ([n for n in DEFECTS if n not in M59] if a.defects == "all" else
+             list(M59) if a.defects == "m59" else a.defects.split(","))
     os.makedirs(a.out, exist_ok=True)
     out = open(os.path.join(a.out, "results.jsonl"), "a")
     for name in names:
