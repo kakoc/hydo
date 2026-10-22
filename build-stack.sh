@@ -233,7 +233,9 @@ bind-address=127.0.0.1
 port=3306
 mysqlx=OFF
 skip-name-resolve
-skip-log-bin
+log-bin=binlog
+sync_binlog=1
+server-id=1
 performance_schema=OFF
 auto_generate_certs=OFF
 caching_sha2_password_auto_generate_rsa_keys=OFF
@@ -280,7 +282,13 @@ log.index.size.max.bytes=1048576
 log.segment.bytes=16777216
 metadata.log.segment.bytes=8388608
 group.initial.rebalance.delay.ms=0
+log.retention.ms=-1
 EOF
+# log.retention.ms=-1: the orders topic is a record of every order and the oracle checks
+# every ACKed order is in it, so nothing may expire. With the default (7 days, judged by
+# record timestamps against the wall clock) a forward clock step of more than 7 days makes
+# Kafka roll the segment and delete every older order at its next retention check
+# (hvx/cutflush/KAFKA-CLOCK.md).
 cat > "$R/etc/kafka/log4j.properties" <<'EOF'
 log4j.rootLogger=WARN, stdout
 log4j.appender.stdout=org.apache.log4j.ConsoleAppender
@@ -288,6 +296,24 @@ log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
 log4j.appender.stdout.layout.ConversionPattern=%p %c %m%n
 log4j.logger.kafka.server.KafkaRaftServer=INFO
 EOF
+# Diagnostic images only (STACK_KAFKA_DIAG=1; default images are byte-unchanged): Kafka's
+# log layer at INFO (segment rolls, deletions, log-start-offset moves), LogManager at DEBUG
+# (every retention check), wall-clock timestamps on every line. hvx/cutflush/KAFKA-CLOCK.md.
+if [ "${STACK_KAFKA_DIAG:-0}" = 1 ]; then
+  cat > "$R/etc/kafka/log4j.properties" <<'EOF'
+log4j.rootLogger=WARN, stdout
+log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+log4j.appender.stdout.layout.ConversionPattern=%d{ISO8601} %p %c %m%n
+log4j.logger.kafka.server.KafkaRaftServer=INFO
+log4j.logger.kafka.log=INFO
+log4j.logger.kafka.log.LogManager=DEBUG
+log4j.logger.org.apache.kafka.storage=INFO
+EOF
+fi
+# Extra broker settings (STACK_KAFKA_EXTRA, "key=value" lines; empty by default, so the
+# default images are byte-unchanged).
+if [ -n "${STACK_KAFKA_EXTRA:-}" ]; then printf '%s\n' "$STACK_KAFKA_EXTRA" >> "$R/etc/kafka/server.properties"; fi
 
 cat > "$R/sbin/init" <<'SINIT'
 #!/bin/busybox sh
@@ -373,6 +399,7 @@ start_redis() {
 # ---- MySQL ----
 $BB cp /etc/my.cnf /tmp/my.cnf
 echo "innodb_flush_log_at_trx_commit=$TRX" >> /tmp/my.cnf
+[ "$TRX" = 1 ] || echo "sync_binlog=0" >> /tmp/my.cnf   # relaxed: both logs, MySQL's documented fast setting
 SQL() { "$MYSQL/bin/mysql" --no-defaults --protocol=TCP -h127.0.0.1 -P3306 -uhydo --ssl-mode=DISABLED -N -B "$@"; }
 start_mysql() {
   if [ ! -d /data/mysql/mysql ]; then
@@ -565,6 +592,30 @@ chmod +x "$R/sbin/init"
 case "$STACK_OUT" in explore*|richcov-*) EXPLORE_IMAGE=1;; *) EXPLORE_IMAGE=0;; esac
 if [ "$EXPLORE_IMAGE" = 1 ]; then
   cp hvx/explore/stack-explore.sh "$R/etc/stack-explore.sh"
+  if [ "${STACK_KAFKA_DIAG:-0}" = 1 ]; then   # diagnostic: dump Kafka's log decisions after the verdict
+    "$PY3" - "$R/etc/stack-explore.sh" <<'PYEOF'
+import sys
+p = sys.argv[1]; s = open(p).read()
+a = '  echo "hydo-stack-marker: workload complete"\n  echo "hydo-boot-marker: launching shell on ttyS0"\n  exec $BB sh\n}\n'
+assert s.count(a) == 1
+d = r'''  echo "hydo-kdiag: uptime=$(UP) realtime=$($BB date +%s)"
+  $BB ls -l /data/kafka-logs/orders-0 2>&1 | $BB sed 's/^/hydo-kdiag: ls: /'
+  $BB grep -a "kafka\.log\|storage" /tmp/broker.log | $BB grep -a -v "Checking for dirty logs\|Checking if flush is needed\|__cluster_metadata" | $BB sed 's/^/hydo-kdiag: /'
+'''
+s = s.replace(a, d + a)
+open(p, "w").write(s)
+PYEOF
+  fi
+  if [ -n "${STACK_ORACLE_WAIT:-}" ]; then   # diagnostic: let N s of guest time pass before the oracle reads
+    "$PY3" - "$R/etc/stack-explore.sh" "$STACK_ORACLE_WAIT" <<'PYEOF'
+import sys
+p, n = sys.argv[1], int(sys.argv[2]); s = open(p).read()
+a = '  /bin/hydostack oracle $NORDERS /tmp/acked /tmp/failed > /tmp/oracle.log 2>&1\n'
+assert s.count(a) == 1
+s = s.replace(a, '  echo "hydo-kdiag: waiting %ds before the oracle (uptime=$(UP))"; $BB sleep %d\n' % (n, n) + a)
+open(p, "w").write(s)
+PYEOF
+  fi
   "$PY3" - "$R/sbin/init" <<'PYEOF'
 import sys
 p = sys.argv[1]; s = open(p).read()

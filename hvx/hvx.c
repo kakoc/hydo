@@ -113,6 +113,7 @@
 #include <linux/uaccess.h>
 #include <asm/msr.h>
 #include <asm/io.h>
+#include <linux/random.h>
 #include <asm/fpu/api.h>	/* kernel_fpu_begin/end: protect host FPU/XMM (M14) */
 #include <linux/timekeeping.h>	/* ktime_get_ns: exit-histogram wall-time (diagnostic) */
 
@@ -141,6 +142,31 @@ module_param(pt_force_hi0, ulong, 0644);
 module_param(pt_force_lo1, ulong, 0644);
 module_param(pt_force_hi1, ulong, 0644);
 module_param(pt_force_noretc, int, 0644);
+
+/*
+ * Determinism self-test knobs ("host chaos"), all 0 = off (the default; nothing below runs
+ * then). They make the HOST side of a run deliberately irregular so that any guest-visible
+ * dependence on where host-timed exits land shows up quickly:
+ *   chaos_ptimer=N   arm the VMX-preemption timer with a random value in [1, N] before every
+ *                    entry, so the guest takes extra exits at random instructions;
+ *   chaos_preempt=P  at a host-timed (non-retired) exit, leave VMX-root with
+ *                    HVX_EXIT_PREEMPT with probability P/1000 (as if the host scheduler
+ *                    wanted the CPU) -- exercises the save/re-enter path.
+ * A correct hvx gives the same fingerprints with or without them.
+ */
+static unsigned int chaos_ptimer;
+static unsigned int chaos_preempt;
+module_param(chaos_ptimer, uint, 0644);
+module_param(chaos_preempt, uint, 0644);
+/* probe_rand=1: make RDRAND/RDSEED VM-exit (they are not advertised in CPUID, so a
+ * guest that runs them anyway would read real hardware randomness). Each one is logged
+ * (first 20) and answered with a deterministic value, CF=1. Diagnostic only. */
+static unsigned int probe_rand;
+module_param(probe_rand, uint, 0644);
+static inline bool hvx_chaos_preempt(void)
+{
+	return chaos_preempt && (get_random_u32() % 1000) < chaos_preempt;
+}
 MODULE_AUTHOR("hydo");
 MODULE_DESCRIPTION("hydo VT-x milestone 27: FLAGSHIP on UNMODIFIED Redis (redis-server + redis-cli co-located over the in-kernel 127.0.0.1 loopback) reproducing Redis's documented AOF durability window -- appendfsync=always SURVIVES a faithful volatile-cache power loss while everysec LOSES the last acked writes -- bit-for-bit (replay + branch-from-snapshot). Builds on the M26 UNMODIFIED-SQLite committed-row-loss flagship (seeded virtio-blk DROP fault) and the flush-aware DROP power-loss model (HVX_FAULT_DROP_UNFLUSHED, VIRTIO_BLK_F_FLUSH advertised only when armed); adds a deterministic idle heartbeat + CRNG seed for co-located loopback services. Inert when unused, so every prior fingerprint is preserved");
 
@@ -221,6 +247,7 @@ MODULE_DESCRIPTION("hydo VT-x milestone 27: FLAGSHIP on UNMODIFIED Redis (redis-
 /* ---- Control-bit selections ---- */
 #define PINBASED_EXTINT_EXITING (1U << 0)   /* physical interrupts -> VM-exit */
 #define PINBASED_NMI_EXITING    (1U << 3)   /* physical NMIs -> VM-exit */
+#define PINBASED_PREEMPT_TIMER  (1U << 6)   /* VMX-preemption timer (chaos_ptimer only) */
 #define PROCBASED_INTR_WINDOW   (1U << 2)   /* interrupt-window exiting (M15 inject gate) */
 #define PROCBASED_RDTSC_EXITING (1U << 12)
 #define PROCBASED_IO_EXITING    (1U << 24)  /* all IN/OUT -> VM-exit (no bitmap) */
@@ -229,7 +256,9 @@ MODULE_DESCRIPTION("hydo VT-x milestone 27: FLAGSHIP on UNMODIFIED Redis (redis-
 #define PROCBASED_MONITOR_TRAP  (1U << 27)   /* Monitor Trap Flag (single-step) */
 #define PROCBASED_SECONDARY     (1U << 31)
 #define SEC_ENABLE_EPT          (1U << 1)
-#define SEC_CONCEAL_VMX_PT      (1U << 19)  /* no PIP/VMCS packets for VMX transitions */
+#define SEC_CONCEAL_VMX_PT      (1U << 19)
+#define SEC_RDRAND_EXITING      (1U << 11)
+#define SEC_RDSEED_EXITING      (1U << 16)  /* no PIP/VMCS packets for VMX transitions */
 #define EXIT_CONCEAL_VMX_PT     (1U << 24)
 #define ENTRY_CONCEAL_VMX_PT    (1U << 17)
 /* Intel PT MSRs (SDM vol 3, chapter "Intel Processor Trace") */
@@ -257,6 +286,8 @@ MODULE_DESCRIPTION("hydo VT-x milestone 27: FLAGSHIP on UNMODIFIED Redis (redis-
 #define EXIT_LOAD_IA32_EFER     (1U << 21)
 #define EXIT_LOAD_PERF_GLOBAL   (1U << 12)  /* load host IA32_PERF_GLOBAL_CTRL on exit */
 #define ENTRY_LOAD_PERF_GLOBAL  (1U << 13)  /* load guest IA32_PERF_GLOBAL_CTRL on entry */
+#define ENTRY_LOAD_DEBUG_CTLS   (1U << 2)   /* load guest DR7 + IA32_DEBUGCTL on entry */
+#define DEBUGCTL_FREEZE_WHILE_SMM (1ULL << 14)	/* perf counters stop while in SMM */
 #define ENTRY_IA32E_MODE        (1U << 9)
 #define ENTRY_LOAD_IA32_EFER    (1U << 15)
 
@@ -288,6 +319,7 @@ enum {
 	/* 64-bit control */
 	EPT_POINTER = 0x201a,
 	VMCS_LINK_PTR = 0x2800,
+	GUEST_IA32_DEBUGCTL = 0x2802,
 	GUEST_IA32_EFER = 0x2806,
 	HOST_IA32_EFER = 0x2c02,
 	GUEST_IA32_PERF_GLOBAL = 0x2808, HOST_IA32_PERF_GLOBAL = 0x2c04,
@@ -303,7 +335,7 @@ enum {
 	SEC_EXEC_CTL = 0x401e,
 	/* 32-bit read-only */
 	VM_INSTRUCTION_ERROR = 0x4400, VM_EXIT_REASON = 0x4402,
-	VM_EXIT_INTR_INFO = 0x4404, VM_EXIT_INSN_LEN = 0x440c,
+	VM_EXIT_INTR_INFO = 0x4404, VM_EXIT_INSN_LEN = 0x440c, VMX_INSN_INFO = 0x440e,
 	IDT_VECTORING_INFO = 0x4408, IDT_VECTORING_EC = 0x440a,
 	/* 32-bit guest */
 	GUEST_ES_LIM = 0x4800, GUEST_CS_LIM = 0x4802, GUEST_SS_LIM = 0x4804,
@@ -314,6 +346,7 @@ enum {
 	GUEST_DS_AR = 0x481a, GUEST_FS_AR = 0x481c, GUEST_GS_AR = 0x481e,
 	GUEST_LDTR_AR = 0x4820, GUEST_TR_AR = 0x4822,
 	GUEST_INTERRUPTIBILITY = 0x4824, GUEST_ACTIVITY_STATE = 0x4826,
+	VMX_PREEMPT_TIMER = 0x482e,
 	GUEST_SYSENTER_CS_F = 0x482a,
 	/* 32-bit host */
 	HOST_SYSENTER_CS_F = 0x4c00,
@@ -355,6 +388,9 @@ enum {
 #define EXIT_REASON_EPT_VIOLATION 48
 #define EXIT_REASON_EPT_MISCONFIG 49
 #define EXIT_REASON_RDTSCP       51
+#define EXIT_REASON_PREEMPT_TIMER 52
+#define EXIT_REASON_RDRAND       57
+#define EXIT_REASON_RDSEED       61
 
 /*
  * THROTTLE cadence (milestone 16 — deterministic stop point). HVX_RUN returns to
@@ -1554,6 +1590,19 @@ static inline u32 seg_ar(u16 ar)
 #define HVX_PMU_LVT_VECTOR	0xf2		/* host POSTED_INTR_VECTOR: handler only EOIs */
 #define APIC_LVTPC_OFF		0x340
 static bool hvx_pmu_ok;			/* CPU + VMX controls can run the branch clock */
+/*
+ * The branch clock must count ONLY guest branches. A System Management Interrupt taken
+ * while the guest runs executes the firmware's SMM handler with the guest's
+ * IA32_PERF_GLOBAL_CTRL still loaded, and without IA32_DEBUGCTL.FREEZE_WHILE_SMM the
+ * counter keeps counting the handler's branches (SMM code runs at CPL 0, which the event
+ * select counts). The guest then sees its next tick land early, at a host-timed point.
+ * hvx does not use "load debug controls" otherwise, so DEBUGCTL inside the guest is
+ * whatever the last VM exit left there: 0. With hvx_smm_freeze the branch-clock entry
+ * loads DEBUGCTL = FREEZE_WHILE_SMM (and DR7 from the register file, as on any VMCS that
+ * loads debug controls; guest DR7 writes were never persistent, an exit resets DR7 to
+ * 0x400, and the seeded value is 0x400).
+ */
+static bool hvx_smm_freeze;		/* PERF_CAPABILITIES.SMM_FREEZE + "load debug controls" */
 static bool hvx_pt_ok;			/* Intel PT usable in VMX non-root, ToPA output, 2 IP ranges */
 
 /* The last traced VM's buffer, kept after the VM is freed so that a harness that
@@ -1763,7 +1812,8 @@ static int setup_vmcs(struct hvx_vcpu *vcpu, bool mtf)
 		pr_err("hvx: Monitor Trap Flag not supported by this CPU\n");
 		return -1;
 	}
-	proc2 = adjust_ctl(SEC_ENABLE_EPT | (vcpu->vm->pt_on ? SEC_CONCEAL_VMX_PT : 0),
+	proc2 = adjust_ctl(SEC_ENABLE_EPT | (vcpu->vm->pt_on ? SEC_CONCEAL_VMX_PT : 0) |
+			   (probe_rand ? SEC_RDRAND_EXITING | SEC_RDSEED_EXITING : 0),
 			   MSR_VMX_PROCBASED2);
 	if (!(proc2 & SEC_ENABLE_EPT)) {
 		pr_err("hvx: EPT not supported by this CPU\n");
@@ -1773,7 +1823,8 @@ static int setup_vmcs(struct hvx_vcpu *vcpu, bool mtf)
 	/* external-interrupt exiting: physical interrupts must VM-exit to us, not
 	 * be delivered into the guest's IDT (which happens in non-root operation
 	 * whenever guest RFLAGS.IF=1, regardless of the host's masked IF) */
-	VMW(PIN_EXEC_CTL,  adjust_ctl(PINBASED_EXTINT_EXITING | PINBASED_NMI_EXITING, pin_msr));
+	VMW(PIN_EXEC_CTL,  adjust_ctl(PINBASED_EXTINT_EXITING | PINBASED_NMI_EXITING |
+				      (chaos_ptimer ? PINBASED_PREEMPT_TIMER : 0), pin_msr));
 	VMW(PROC_EXEC_CTL, proc);
 	VMW(SEC_EXEC_CTL,  proc2);
 	VMW(EPT_POINTER,   vm->eptp);
@@ -1783,10 +1834,13 @@ static int setup_vmcs(struct hvx_vcpu *vcpu, bool mtf)
 				      (vm->pt_on ? EXIT_CONCEAL_VMX_PT : 0), exit_msr));
 	VMW(VM_ENTRY_CTL,  adjust_ctl(ENTRY_IA32E_MODE | ENTRY_LOAD_IA32_EFER |
 				      (vcpu->pmu_live ? ENTRY_LOAD_PERF_GLOBAL : 0) |
+				      (vcpu->pmu_live && hvx_smm_freeze ? ENTRY_LOAD_DEBUG_CTLS : 0) |
 				      (vm->pt_on ? ENTRY_CONCEAL_VMX_PT : 0), entry_msr));
 	if (vcpu->pmu_live) {
 		VMW(GUEST_IA32_PERF_GLOBAL, 1);		/* PMC0 counts in the guest ... */
 		VMW(HOST_IA32_PERF_GLOBAL, 0);		/* ... and nothing counts in the host */
+		if (hvx_smm_freeze)			/* ... nor in SMM (see hvx_smm_freeze) */
+			VMW(GUEST_IA32_DEBUGCTL, DEBUGCTL_FREEZE_WHILE_SMM);
 	}
 
 	VMW(EXCEPTION_BITMAP, 0);
@@ -4899,6 +4953,8 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 			VMW(VM_ENTRY_INSN_LEN, vcpu->reinj_len);
 			vcpu->reinj_valid = false;
 		}
+		if (chaos_ptimer)
+			VMW(VMX_PREEMPT_TIMER, 1 + get_random_u32() % chaos_ptimer);
 		asm volatile("mov %0, %%cr2" :: "r" (vcpu->cr2));
 		ok = pt_live ? hvx_vmx_run_pt(&vcpu->regs, resume, vm->pt_ctl)
 			     : hvx_vmx_run(&vcpu->regs, resume);
@@ -4975,7 +5031,7 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 					ex->guest_phys = 0;
 					goto out_clear;
 				}
-				if ((++streak >= HVX_PREEMPT_STREAK || need_resched() ||
+				if ((++streak >= HVX_PREEMPT_STREAK || need_resched() || hvx_chaos_preempt() ||
 				     (sched && safety >= HVX_SAFETY_CAP)) &&
 				    (u32)vmread(GUEST_INTERRUPTIBILITY) == 0) {
 					vcpu->carry_guard = guard;
@@ -5009,7 +5065,7 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 				ex->guest_phys = 0;
 				goto out_clear;
 			}
-			if ((++streak >= HVX_PREEMPT_STREAK || need_resched() ||
+			if ((++streak >= HVX_PREEMPT_STREAK || need_resched() || hvx_chaos_preempt() ||
 			     (sched && safety >= HVX_SAFETY_CAP)) &&
 			    (u32)vmread(GUEST_INTERRUPTIBILITY) == 0) {
 				/* let the host schedule; the ioctl re-enters (see
@@ -5054,6 +5110,22 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 		 * the arming block above re-checks and delivers it. Not a guest
 		 * instruction, so the instruction clock is untouched.
 		 */
+		/* chaos_ptimer: a host-timed exit at a random instruction. Not a guest event:
+		 * resume transparently (no `safety` count, so it never ends a run call). */
+		if (basic == EXIT_REASON_PREEMPT_TIMER && !(reason & 0x80000000U)) {
+			if ((++streak >= HVX_PREEMPT_STREAK || need_resched() || hvx_chaos_preempt()) &&
+			    (u32)vmread(GUEST_INTERRUPTIBILITY) == 0) {
+				vcpu->carry_guard = guard;
+				vcpu->carry_stepped = stepped;
+				ex->reason = HVX_EXIT_PREEMPT;
+				ex->insn_len = 0;
+				ex->qualification = 0;
+				ex->guest_phys = 0;
+				goto out_clear;
+			}
+			continue;
+		}
+
 		if (basic == EXIT_REASON_INTERRUPT_WINDOW) {
 			/* Not counted toward the deterministic `guard` cadence; does not
 			 * creep the virtual TSC (M16). */
@@ -5064,7 +5136,7 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 				ex->guest_phys = 0;
 				goto out_clear;
 			}
-			if ((++streak >= HVX_PREEMPT_STREAK || need_resched() ||
+			if ((++streak >= HVX_PREEMPT_STREAK || need_resched() || hvx_chaos_preempt() ||
 			     (sched && safety >= HVX_SAFETY_CAP)) &&
 			    (u32)vmread(GUEST_INTERRUPTIBILITY) == 0) {
 				/* let the host schedule; the ioctl re-enters (see
@@ -5152,6 +5224,29 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 					vm->sched.turn_over = 1;
 			} else if (basic == EXIT_REASON_MONITOR_TRAP) {
 				/* one instruction retired; MTF stays armed for the next */
+				retired = true;
+			} else if (basic == EXIT_REASON_RDRAND || basic == EXIT_REASON_RDSEED) {
+				/* probe_rand only: deterministic value, CF=1 */
+				static atomic_t logged;
+				static const u8 map[16] = { 0, 2, 3, 1, 15, 6, 4, 5,
+							    7, 8, 9, 10, 11, 12, 13, 14 };
+				u32 info = (u32)vmread(VMX_INSN_INFO);
+				u32 r = (info >> 3) & 0xf, sz = (info >> 11) & 3;
+				u64 *gpr = (u64 *)&vcpu->regs;
+				u64 v = fault_mix(0x52444e44ULL + vcpu->rdtsc_count + vcpu->icount);
+
+				if (atomic_inc_return(&logged) <= 20)
+					pr_info("hvx: probe_rand: %s rip=%#llx reg=%u size=%u icount=%llu\n",
+						basic == EXIT_REASON_RDRAND ? "RDRAND" : "RDSEED",
+						vcpu->regs.rip, r, sz, vcpu->icount);
+				if (sz == 0) v &= 0xffff; else if (sz == 1) v &= 0xffffffffULL;
+				if (map[r] == 15) VMW(GUEST_RSP, v);
+				else if (sz == 0) gpr[map[r]] = (gpr[map[r]] & ~0xffffULL) | v;
+				else gpr[map[r]] = v;
+				vcpu->regs.rflags = (vcpu->regs.rflags & ~0x8d5ULL) | 1;	/* CF=1 */
+				VMW(GUEST_RFLAGS, vcpu->regs.rflags);
+				vcpu->regs.rip += (u32)vmread(VM_EXIT_INSN_LEN);
+				VMW(GUEST_RIP, vcpu->regs.rip);
 				retired = true;
 			} else if (basic == EXIT_REASON_EPT_VIOLATION) {
 				/* IOAPIC MMIO (0xfec00000): decode + emulate the MOV in
@@ -7273,9 +7368,19 @@ static int __init hvx_init(void)
 			     ((entry_cap >> 32) & ENTRY_LOAD_PERF_GLOBAL) &&
 			     (hvx_host_x2apic || hvx_lapic) &&
 			     !boot_cpu_has(X86_FEATURE_HYBRID_CPU);
-		pr_info("hvx: PMU branch clock %s (CPUID.0AH eax=0x%x, host %s)\n",
+		{
+			u32 c1a, c1b, c1c, c1d;
+			u64 perf_cap = 0;
+
+			cpuid(0x01, &c1a, &c1b, &c1c, &c1d);
+			if ((c1c & (1U << 15)) && rdmsrl_safe(0x345, &perf_cap))	/* PDCM */
+				perf_cap = 0;
+			hvx_smm_freeze = hvx_pmu_ok && (perf_cap & (1ULL << 12)) &&
+					 ((entry_cap >> 32) & ENTRY_LOAD_DEBUG_CTLS);
+		}
+		pr_info("hvx: PMU branch clock %s (CPUID.0AH eax=0x%x, host %s, freeze in SMM %s)\n",
 			hvx_pmu_ok ? "available" : "NOT available", a,
-			hvx_host_x2apic ? "x2APIC" : "xAPIC");
+			hvx_host_x2apic ? "x2APIC" : "xAPIC", hvx_smm_freeze ? "yes" : "no");
 
 		/* Intel PT guest tracing: PT itself, usable in VMX operation (VMX_MISC
 		 * bit 14), ToPA output with multiple entries, 2 IP filter ranges, and the

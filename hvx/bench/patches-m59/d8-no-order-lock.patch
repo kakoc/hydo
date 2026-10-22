@@ -1,0 +1,19 @@
+--- a/main.go
++++ b/main.go
+@@ -297,14 +297,8 @@
+ 	amt := amount(id)
+ 	// Every call below runs under ctx, which carries the client's deadline (gRPC propagates
+ 	// it) -- except a Kafka produce already sent, which runs to the broker's answer, so a
+-	// Place can outlive its client. acquire keeps a later request for the same order from
+-	// running next to it. If this request gives up waiting, the earlier one may still
+-	// publish, so the outcome is unknown, never "not applied".
+-	release, err := s.acquire(ctx, id)
+-	if err != nil {
+-		return nil, outcomeUnknown("in-flight", id, fmt.Errorf("an earlier request for the order is still running: %w", err))
+-	}
+-	defer release()
++	// Place can outlive its client. No per-order lock: the published column in MySQL is the
++	// state machine, so two requests for one order coordinate through it.
+ 	//
+ 	// 1. MySQL: upsert -- a retry of an order that is already stored is a no-op. A failure
+ 	// here is not reported as "not applied": an earlier attempt -- possibly made by an earlier

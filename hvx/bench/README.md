@@ -305,3 +305,135 @@ staggered fault process beats every earlier strategy on all eight defects, inclu
 two-fault defects d0 and d4, at under half the box time; per-category positions alone
 (swarm-pos) do not. The depth-1 sweep is the ground truth for single-fault defects but cannot
 reach two-fault ones (d0, d4).
+
+## Harder defects d8–d12 (Milestone 59)
+
+d0–d7 are all single-client defects that every strategy since M56 finds. d8–d12 add bug classes
+the set lacked: concurrent requests (d8, d9, d12), a crash of the order service (d10) and a
+disk that stops completing writes (d11). They share a NEW control, so they are kept apart from
+d0–d7.
+
+**Control** (`base/main-m59-control.go`): the current order service (`base/main-3773607.go`, a
+copy of `hvx/stack/main.go` at commit 3773607: the M50 fixes and the M56 BUGGIFY wrappers) plus a
+fix for the Milestone 58 flush-cut bug: when a request READS `published = 1` (it did not write
+it), it commits a real write (`INSERT INTO stack.acks ... ON DUPLICATE KEY UPDATE n = n + 1`)
+before the ACK. That commit's redo fsync covers the earlier commit, so the ACK never rests on a
+visible-but-not-durable flag. A build of the unpatched `main-3773607.go` with the same tools was
+byte-identical to `explore-bench-bg-fixed-disk.img` (`7974498b…`). Defect patches:
+`patches-m59/<name>.patch` against the control; `build-bench-m59.sh` builds
+`explore-bench-m59-<name>-pin-disk.img` (`BENCH_SUFFIX=-pin`). The images were built from the
+pinned toolchain (`hvx/BUILD-PINS.md`; `HYDO_GCC_MUSL`, `HYDO_MUSL_ROOT`, `HYDO_REDIS_OUT` and
+`HYDO_SEEDRNG` unset). I extracted `/bin/hvx_seedrng` from each image's root partition: in
+all of them it is `c2a440c5…`. Image sha256: control `bd9aa2a1…`, d8 `9a539633…`,
+d9 `86b61cd0…`, d10 `878f6bae…`, d11 `0f82ca02…`, d12 `e55ea1b6…`.
+
+**Crash oracle.** d9 makes the order service panic. Since M50 the order state lives in MySQL,
+so a restarted service loses nothing and the stack's oracle passes. run.py and confirm.py
+therefore count a run on an m59 image as a VIOLATION when the guest prints
+`hydo-explore: front door log: panic|fatal error`. This is the property "no
+process crashes", applied to the order service only. A SIGKILL leaves no such line. The rule
+applies only to the m59 defects and their control, so earlier results keep their meaning.
+
+| defect | kind | what the patch does (why it is realistic) | needs | trigger (guest part) | fingerprint | oracle line |
+|---|---|---|---|---|---|---|
+| d8-no-order-lock | concurrency, M50 bug 1 | removes the per-order lock ("the `published` column is the state machine"); two requests for one order both read `published=0`, the second's `UPDATE ... WHERE published = 0` changes no row but is not an error, and both produce | two requests for one order at once | `Q=2d` | `912820268124e937` | `present 2 times` |
+| d9-redis-unlocked | concurrency, M50 bug 2 | removes the lock around the shared Redis connection ("a net.Conn is safe for concurrent use") | concurrent requests | `Q=4` | `ad597234f2d4897f` | `front door crashed: panic: runtime error: slice bounds out of range [15:10]` (the M50 message) |
+| d10-outcome-in-memory | lost state on restart, M50 bug 3 | keeps "a send was started" in an in-memory map instead of `published = 2` in MySQL | the order service killed while a produce is in flight, then a retry | `X=front@12~20` | `6641177e3fa41dfc` | `present 2 times` |
+| d11-ack-unflushed-flag | durability, the M58 bug | drops the control's extra write: ACKs on a `published = 1` it only read | the data disk stops completing FLUSHes (power cut at the k-th FLUSH) while the services keep running past the client deadline | `cf=238` (host token; `disk=cut dseed=0`) | `594a0dd4e8a6f192` | `acked but not marked published` |
+| d12-shared-key-buffer | concurrency, data race | formats the Kafka record key into one reused per-server buffer ("no allocation per order"); a concurrent request rewrites the key before the record is serialized | two produces in flight at once (concurrent clients, or a stuck produce plus the next order) | `Q=2` | `843f83fcf2fab9bd` | `present N times` / `kafka order=N ... MISSING` |
+
+Each trigger failed twice on its image with the same fingerprint, and passed on the control.
+Control fingerprints (verdict OK): d8 trigger `909faca647bf1e4a`, d9 `b530be611c79196f`,
+d10 `98ccdb150d322993`, d11 `5036d0ec822239b8` (acked 23 of 30, no violation), d12
+`9a0b90a1febea0be`. Records: `/var/tmp/m59-bench/confirm.out` and `confirm2.out` on the box.
+
+**Stand-in images (superseded).** A first build used the stand-in `hvx_seedrng` (`01adf1bd…`,
+image names without `-pin`, still on the box). On those images the triggers were
+`Q=2d`/`Q=2`/`X=front@9~20`/`cf=254`/`Q=2`, with fingerprints d8 `1ea2367350c96f6c`,
+d9 `b79e932f269c77f0`, d10 `184af14cf3e7345a`, d11 `894c669947627042` and d12 `e2b254736e39ec3b`.
+The seeder's bytes change guest timing. On the -pin images, d8 and d12 fail on the same
+triggers with the same verdicts. d9 (`Q=2`), d10 (`X=front@9~20`) and d11 (`cf=254`) no longer
+fail there, so new points were searched for. The verdict kinds are the same, but d10 now
+reports order 13 instead of 10 and d11 order 22 instead of 23. On the -pin images d9 crashes
+with Q=3, 4, 6, 8, 4d and 8d, but not with Q=2 or 2d. d10 fails on 26 of the 40 `frontkill`
+points (M50's explore-cc1 failed 25 of 40).
+
+### Strategies on d8–d12 (-pin images)
+
+Each cell is 3 repetitions of up to 60 runs, with an early stop. Repetition r uses seeds
+r*1000+1.., as in M54. Settings: `--concurrency` (60% of schedules get `Q=<n>[d]` from its own
+random stream), 1 worker, and `--window 1`, so a control check never runs next to another VM.
+A cell gives the repetitions that detected the defect, the run of the first detection in each
+repetition, and the median. Every detection reproduced its fingerprint, matched its defect's
+oracle line and passed on the control (no candidate was rejected). Module srcversion
+`38E88060EEC5F955DFDFD03`. Results are in `/var/tmp/m59-bench/<strategy>/results.jsonl` on
+the box.
+
+| defect | random+cc | swarm+cc | process+cc | swarm+bg+cc | random (no cc) |
+|---|---|---|---|---|---|
+| d8-no-order-lock | 3/3 (4, 1, 7) med 4 | 3/3 (5, 2, 46) med 5 | 3/3 (4, 1, 4) med 4 | 3/3 (5, 2, 46) med 5 | 0/3 |
+| d9-redis-unlocked | 3/3 (1, 1, 2) med 1 | 3/3 (5, 31, 1) med 5 | 3/3 (3, 2, 7) med 3 | 3/3 (30, 31, 1) med 30 | 0/3 |
+| d10-outcome-in-memory | 0/3 † | 0/3 † | 0/3 † | 0/3 † | – |
+| d11-ack-unflushed-flag | 0/3 † | 0/3 † | 0/3 † | 0/3 † | – |
+| d12-shared-key-buffer | 3/3 (1, 1, 2) med 1 | 3/3 (5, 2, 1) med 2 | 3/3 (1, 1, 2) med 1 | 3/3 (5, 2, 1) med 2 | 3/3 (2, 6, 14) med 6 |
+| detections of 15 | 9 | 9 | 9 | 9 | 3 of 9 |
+
+† **d10 and d11 are unreachable by every generator. The 0/3 comes from the generators, not
+from runs.** Every trigger found for d10 kills the order service with a timer (`X=front@...`).
+Every trigger found for d11 cuts power at the k-th disk FLUSH (`cf=<k>`). I rendered all 180
+schedules per strategy (the same seeds and options as the cells above). Not one of them
+contains `X=` or `cf=`; `X=` appears only in `--sweep frontkill`, and `cf=` only in the
+`hvx/cutflush` sweeps. The nearest things the generators do emit cannot trigger these
+defects:
+- `P=front@...` (in 39 of the 180 `process` schedules) pauses the order service with SIGSTOP.
+  Its memory survives, so d10's lost state never happens.
+- `C=` is a power cut that freezes every server at once, so no ACK can follow it. d11 needs the
+  services to keep running after the disk stops completing FLUSHes.
+
+This is a gap in the explorer: none of its generators can express a crash of the service under
+test, or a disk that stops completing FLUSHes while the services keep running. The two
+sweeps do contain the triggers: d10 fails on 26 of the 40 `frontkill` points and d11 fails on
+the flush-cut points below. As a spot check, `random+cc` ran 23 schedules of repetition 1 on
+d10 before the run was stopped, with no detection.
+
+What the concurrency defects show:
+- With `--concurrency` every strategy finds d8, d9 and d12 in every repetition.
+- Without it, d8 and d9 are never found in 180 runs. The client sends one request at a time,
+  and in these schedules no fault makes a stuck request overlap a retry of the same order.
+- d12 is found without concurrency (medians: 6 runs without, 1 with). A killed Kafka leaves a
+  produce stuck in the producer while the next order rewrites the shared key buffer, so the
+  stuck record goes out with a wrong key (`kafka order=1 expected=100001 got=100009`).
+- BUGGIFY slowed swarm on d9 (repetition 1: run 5 became run 30). The fault points change
+  request timing, and the shared-connection panic needs two Redis calls at the same moment.
+- `process` gives the most even results (medians 1–4).
+- On the stand-in images (superseded), random+cc and swarm+cc found d8, d9 and d12 at exactly
+  the same runs as in the table.
+
+### Control sweeps (-pin images)
+
+`/var/tmp/m59-bench/ctl-sweep.table` and `d11-sweep.table` on the box:
+- **Control, all 40 `frontkill` points: 40 OK.** On d10 the same points give 26 duplicates.
+  So the `published = 2` state in MySQL (M50 fix 3) is what makes a service crash safe.
+- **Control, 20 flush-cut points: 20 OK.** The points are k = 204–283, the M58 failure points
+  first and then every 4th k up to 283.
+- **d11, the same 20 points: 2 VIOLATIONs.** cf=238 fails on order 22 (`594a0dd4e8a6f192`) and
+  cf=279 on order 26 (`b29d83e1680d…`). A partial run before them covered k = 200–203 on d11, and
+  all 4 points were OK.
+- So the control's extra write closes the M58 window at the points where the defect is open.
+  This was tested at 20 cut points, not at all 118.
+
+### Files and commands (M59)
+
+- `base/main-3773607.go`: the order service at 3773607.
+- `base/main-m59-control.go`: the control (3773607 plus the M58 fix).
+- `patches-m59/*.patch` and `build-bench-m59.sh`: the defects and how to build them. Builds go on
+  the build box with the pinned tools:
+  `BENCH_SUFFIX=-pin bash hvx/bench/build-bench-m59.sh`, about 15 s per image.
+- `run.py` options: `--defects m59` (only d8–d12), `--concurrency`, and `--window N`
+  (schedules in flight). `HYDO_M59_SUFFIX` picks the image set; the default is `-pin`, and `""`
+  picks the stand-in set.
+
+      python3 confirm.py --defects m59 --workers 1 --out /var/tmp/m59-bench/confirm
+      python3 run.py --strategy random|swarm|process [--buggify] --concurrency --defects m59 \
+          --reps 1-3 --budget 60 --workers 1 --window 1 --out /var/tmp/m59-bench/<label>
+      python3 run.py --table /var/tmp/m59-bench/{random,swarm,process,swarm-bg}-cc /var/tmp/m59-bench/random-nocc

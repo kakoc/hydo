@@ -157,7 +157,9 @@ explore_run() {   # $CMD = "run <tokens>"
     echo "hydo-explore: client sends $HYDO_CONC requests at a time${HYDO_DUP:+, every order twice}"
   fi
   if [ -n "$B" ]; then echo "$B" > /tmp/hydo-buggify; echo "hydo-explore: BUGGIFY $B"; else rm -f /tmp/hydo-buggify; fi
-  if [ "$M" != 1 ]; then SQL -e "SET GLOBAL innodb_flush_log_at_trx_commit=$M"; echo "hydo-explore: mysql innodb_flush_log_at_trx_commit=$M"; fi
+  if [ "$M" != 1 ]; then   # relaxed: the redo log and the binary log together (MySQL's documented fast setting)
+    SQL -e "SET GLOBAL innodb_flush_log_at_trx_commit=$M; SET GLOBAL sync_binlog=0"; echo "hydo-explore: mysql innodb_flush_log_at_trx_commit=$M sync_binlog=0"
+  fi
   if [ "$R" != always ]; then /bin/redis-cli -p 6379 CONFIG SET appendfsync "$R" > /dev/null; echo "hydo-explore: redis appendfsync=$R"; fi
   ksvc=""; kat=-1; kup=-1; nsvc=""; nfrom=-1; nto=-1; nargs=""; cat_=-1
   if [ -n "$K" ]; then ksvc=${K%@*}; r=${K#*@}; kat=${r%+*}; kup=$((kat + ${r#*+})); fi

@@ -1,5 +1,7 @@
 # Finding: "acked but not marked published" at a power cut on the k-th FLUSH
 
+> **Re-baselined 2026-10-22 (hvx/REBASELINE.md).** The images below were rebuilt with the pinned toolchain (`*-pin-disk.img`); only `/bin/hvx_seedrng` changed, which shifts guest timing a few FLUSHes. The bug is still there. On `explore-nf-pin-disk.img` the minimal reproducer is now `disk=cut dseed=0 cf=209 | run` (fingerprint `8666c33298537074`; cf=209, 210 fail on order 22, cf=218 on order 23); the cf=204–264 points below pass on the -pin image. On `explore-bench-bg-fixed-pin-disk.img`, `cf=242` still fails but names order 23 (`368731d6ef0e33d6`); cf=253, 262, 271, 303 fail. The values below remain valid for the original (stand-in) images.
+
 Checked 2026-10-21 on the bare-metal test machine (main `hvx.ko` with `HVX_SET_FLUSHCUT`, one
 worker, results under `/var/tmp/m57-cfcheck`). This note answers the open item of
 Milestone 56: on the fixed front door with durable settings and an honest disk, 12 of 282
@@ -144,3 +146,14 @@ In the current front door the durable row keeps `published = 2`, so a later retr
 Kafka first and does not send a duplicate. In the old front door the durable row has
 `published = 0` and the restarted service has forgotten that a send was started, so a
 retry would send the order to Kafka a second time.
+
+## Fix (Milestone 63): the binary log on, `sync_binlog=1`
+
+The stack's MySQL now runs with the binary log and `sync_binlog=1` (`build-stack.sh`). A commit
+then becomes visible only after both logs are on disk, and crash recovery commits everything
+in the binary log, so a retry can no longer read a `published = 1` that is not durable. With
+cuts at every FLUSH from 200 to the end of the workload, the current front door passed 386 of
+386 cuts (before: 13 of 118 failed) and the old front door passed 292 of 292 (before: 12 of 282
+failed). The workload now makes 585 and 491 FLUSHes (was 317 and 281), because every commit
+also syncs the binary log. Results: `/var/tmp/m59-binlog` on the box; details in CLAUDE.md
+Milestone 63.

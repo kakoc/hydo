@@ -1,0 +1,13 @@
+--- a/main.go
++++ b/main.go
+@@ -270,9 +270,8 @@
+ }
+ 
+ // redisSet sets one key, re-dialing once if the connection broke (Redis restarted).
++// No lock: a net.Conn is safe for concurrent use, and each command is a single Write.
+ func (s *orderServer) redisSet(k, v string) error {
+-	s.rmu.Lock()
+-	defer s.rmu.Unlock()
+ 	if s.rc != nil {
+ 		s.rc.c.SetDeadline(time.Now().Add(redisTimeout))
+ 		if _, _, err := s.rc.cmd("SET", k, v); err == nil {
