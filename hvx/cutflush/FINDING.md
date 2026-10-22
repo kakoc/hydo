@@ -1,5 +1,7 @@
 # Finding: "acked but not marked published" at a power cut on the k-th FLUSH
 
+> **Re-baselined 2026-10-22 (hvx/REBASELINE.md).** The images below were rebuilt with the pinned toolchain (`*-pin-disk.img`); only `/bin/hvx_seedrng` changed, which shifts guest timing a few FLUSHes. The bug is still there. On `explore-nf-pin-disk.img` the minimal reproducer is now `disk=cut dseed=0 cf=209 | run` (fingerprint `8666c33298537074`; cf=209, 210 fail on order 22, cf=218 on order 23); the cf=204–264 points below pass on the -pin image. On `explore-bench-bg-fixed-pin-disk.img`, `cf=242` still fails but names order 23 (`368731d6ef0e33d6`); cf=253, 262, 271, 303 fail. The values below remain valid for the original (stand-in) images.
+
 Checked 2026-10-21 on the bare-metal test machine (main `hvx.ko` with `HVX_SET_FLUSHCUT`, one
 worker, results under `/var/tmp/m57-cfcheck`). This note answers the open item of
 Milestone 56: on the fixed front door with durable settings and an honest disk, 12 of 282
