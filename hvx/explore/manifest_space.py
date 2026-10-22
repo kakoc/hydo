@@ -7,6 +7,8 @@ the shrinker draw from:
 
     SVCS        services that kill (K=) faults pick from        stack: mysql kafka redis
     NET_SVCS    services with a port, for N= / O=               stack: mysql kafka redis
+                (plus, when two or more services have an addr:, the links "a-b" and "a-*"
+                between them -- hydo-init-links.sh; no manifest without addr: changes)
     PAUSE_SVCS  services that pause (P=) faults pick from       stack: mysql kafka redis front
     NORDERS     the workload's step count                       stack: 30
     KNOBS       (token, relaxed value) pairs a knob draw picks  stack: M=2 M=0 R=everysec R=no
@@ -66,6 +68,11 @@ class Space:
         self.name = m.get("name", "?")
         svcs = [s["name"] for s in m["services"]]
         self.ported = [s["name"] for s in m["services"] if s.get("port")]
+        addr = [s["name"] for s in m["services"] if s.get("addr")]
+        # link faults (MANIFEST.md "Link faults"): every pair, then each service against the rest
+        self.links = ([] if len(addr) < 2 else
+                      ["%s-%s" % (a, b) for i, a in enumerate(addr) for b in addr[i + 1:]] +
+                      (["%s-*" % a for a in addr] if len(addr) > 2 else []))
         self.svcs = svcs
         self.steps = int(m["workload"]["steps"])
         if self.steps < 4:
@@ -81,13 +88,13 @@ class Space:
             self.knobs.append((k["token"], safe, vals))
 
     def describe(self):
-        return {"project": self.name, "services": self.svcs, "network": self.ported, "steps": self.steps,
+        return {"project": self.name, "services": self.svcs, "network": self.ported + self.links, "steps": self.steps,
                 "faults": self.faults, "knobs": {t: {"safe": s, "relaxed": v} for t, s, v in self.knobs}}
 
     def apply(self, ex):
         """Rebind explore.py's generator globals (ex = the explore module's globals())."""
         ex["SVCS"] = list(self.svcs)
-        ex["NET_SVCS"] = list(self.ported) or list(self.svcs)     # placeholder; restrict() drops them
+        ex["NET_SVCS"] = list(self.ported) + list(self.links) or list(self.svcs)   # placeholder; restrict() drops them
         ex["PAUSE_SVCS"] = list(self.svcs)
         ex["NORDERS"] = self.steps
         pairs = [(t, v) for t, _, vals in self.knobs for v in vals]
@@ -103,7 +110,7 @@ class Space:
             if kind not in f:
                 s.pop(key, None)
         for key in ("N", "O"):
-            if key in s and s[key][0] not in self.ported:
+            if key in s and s[key][0] not in self.ported and s[key][0] not in self.links:
                 s.pop(key)
         if s["disk"].startswith(("lying", "ioerr")) and "disk" not in f:
             s["disk"] = "cut" if (s["disk"].startswith("lying") and "cut" in f) else "none"
@@ -123,7 +130,7 @@ class Space:
 
     def check_sweep(self, name):
         need = [k for k in self.SWEEP_KINDS.get(name, []) if k not in self.faults]
-        if need or (name in ("net", "oneway") and not self.ported):
+        if need or (name in ("net", "oneway") and not (self.ported or self.links)):
             raise SystemExit("manifest_space: sweep %r needs fault kinds %s and a service with a port; "
                              "%s allows %s" % (name, self.SWEEP_KINDS.get(name), self.name, self.faults))
 
