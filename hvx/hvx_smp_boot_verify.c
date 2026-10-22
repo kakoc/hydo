@@ -790,8 +790,10 @@ int main(int argc, char **argv)
 	}
 	if (argc >= 4)
 		g_ncpus = (unsigned int)strtoul(argv[3], NULL, 0);
-	if (g_ncpus < 2 || g_ncpus > HVX_SCHED_MAX_VCPUS) {
-		fprintf(stderr, "ncpus must be 2..%d\n", HVX_SCHED_MAX_VCPUS);
+	/* ncpus 1: the same boot without the scheduler (the module ignores SMP_SCHED and
+	 * SMP_BOOT with one vCPU), for a time comparison; its "smp:" line says "1 CPU" */
+	if (g_ncpus < 1 || g_ncpus > HVX_SCHED_MAX_VCPUS) {
+		fprintf(stderr, "ncpus must be 1..%d\n", HVX_SCHED_MAX_VCPUS);
 		return 2;
 	}
 	snprintf(cmdline, sizeof(cmdline), "%s%s%s", (argc >= 5 && argv[4][0]) ? argv[4] : DEFAULT_CMDLINE,
