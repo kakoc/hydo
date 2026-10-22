@@ -107,6 +107,18 @@ struct hvx_config {
  * default 0 = byte-identical to before.
  */
 #define HVX_VM_SMP_SCHED	(1u << 5)
+/*
+ * HVX_VM_X86_64_V3: guest AVX/AVX2 (the x86-64-v3 level). CPUID adds XSAVE, OSXSAVE
+ * (mirrors the guest's CR4.OSXSAVE), AVX, AVX2, FMA, F16C, BMI1, BMI2, LZCNT, MOVBE on
+ * top of x86-64-v2, and leaf 0xD for x87|SSE|AVX only (XCR0 mask 0x7, standard 832-byte
+ * XSAVE area; no XSAVEOPT/XSAVEC/XSAVES, no AVX-512/MPX/PKRU). XSETBV is emulated per
+ * vCPU and the guest XCR0 is loaded around every entry; the guest's x87/SSE/AVX state
+ * is kept with plain XSAVE/XRSTOR and normalised so it is a pure function of the guest
+ * (snapshot fields xcr0 + xsave_ext). Needs host AVX2 with XCR0 >= 0x7 (HVX_CREATE_VM
+ * fails with ENODEV otherwise). Bit 6 is reserved for HVX_VM_SMP_BOOT. Default 0 =
+ * byte-identical to before.
+ */
+#define HVX_VM_X86_64_V3	(1u << 7)
 
 /*
  * Guest register file. The first 15 fields (rax..r15) are the general-purpose
@@ -397,6 +409,11 @@ struct hvx_snapshot {
 	__u64 pmu_next;
 	/* --- pending one-shot interrupt vectors beyond inject_vector (bit n = vector n). */
 	__u64 irr[4];
+	/* --- guest AVX (HVX_VM_X86_64_V3): the guest XCR0 (0 = not an AVX VM) and bytes
+	 * 512..831 of the vCPU's standard-format XSAVE area (the 64-byte header, then the
+	 * upper halves of YMM0-15); bytes 0..511 are `fx` above. Zero for other VMs. */
+	__u64 xcr0;
+	__u8 xsave_ext[320];
 };
 
 /* PMU branch clock policy + statistics (HVX_SET_PMU / HVX_GET_PMU). SET takes `period`

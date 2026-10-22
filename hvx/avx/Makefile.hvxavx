@@ -1,0 +1,15 @@
+# Build a second copy of the hvx module as hvxavx.ko with the device /dev/hvxavx, so it can be
+# loaded next to hvx.ko while guest AVX (HVX_VM_X86_64_V3) is developed. hvxavx.c is a copy of
+# ../hvx.c made by build-hvxavx.sh.
+obj-m := hvxavx.o
+ccflags-y := -DHVX_DEVNAME='"hvxavx"'
+OBJECT_FILES_NON_STANDARD_hvxavx.o := y
+
+KDIR ?= /lib/modules/$(shell uname -r)/build
+PWD  := $(shell pwd)
+
+all:
+	$(MAKE) -C $(KDIR) M=$(PWD) modules
+
+clean:
+	$(MAKE) -C $(KDIR) M=$(PWD) clean
