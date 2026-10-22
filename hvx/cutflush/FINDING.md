@@ -146,3 +146,14 @@ In the current front door the durable row keeps `published = 2`, so a later retr
 Kafka first and does not send a duplicate. In the old front door the durable row has
 `published = 0` and the restarted service has forgotten that a send was started, so a
 retry would send the order to Kafka a second time.
+
+## Fix (Milestone 63): the binary log on, `sync_binlog=1`
+
+The stack's MySQL now runs with the binary log and `sync_binlog=1` (`build-stack.sh`). A commit
+then becomes visible only after both logs are on disk, and crash recovery commits everything
+in the binary log, so a retry can no longer read a `published = 1` that is not durable. With
+cuts at every FLUSH from 200 to the end of the workload, the current front door passed 386 of
+386 cuts (before: 13 of 118 failed) and the old front door passed 292 of 292 (before: 12 of 282
+failed). The workload now makes 585 and 491 FLUSHes (was 317 and 281), because every commit
+also syncs the binary log. Results: `/var/tmp/m59-binlog` on the box; details in CLAUDE.md
+Milestone 63.

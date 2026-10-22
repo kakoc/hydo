@@ -868,6 +868,44 @@ From 2026-10-17 the build machine lacked the pinned static musl gcc, so images c
 
 `hvx/bench/` (README "M59" sections, `build-bench-m59.sh`, `patches-m59/`, `base/main-m59-control.go`). New control = the current order service plus a front-door fix for the M58 bug (a request that only read `published = 1` commits a real write before ACKing); note this is the bench control only — the stack itself gets the MySQL-config fix (binlog on, `sync_binlog=1`, the other session). Images `explore-bench-m59-*-pin-disk.img` (pinned toolchain). Defects: d8 no per-order lock (`Q=2d`), d9 Redis connection unlocked (`Q=4`, front door panics; `run.py`/`confirm.py` now count a front-door `panic`/`fatal error` as a violation for d8–d12 and their control), d10 "send started" kept in memory (`X=front@12~20`), d11 the M58 bug (`disk=cut dseed=0 cf=238`), d12 shared Kafka key buffer (`Q=2`). Each trigger fails twice identically; the control passes all. **Results** (3 reps × ≤60 runs, `--concurrency`): random, swarm, process and swarm+BUGGIFY find d8, d9, d12 in 3/3 (median 1–5 runs; swarm+bg 30 on d9); without `--concurrency` d8 and d9 are never found in 180 runs, d12 still is. **d10 and d11: 0/3 for every strategy, by construction — no generator emits `X=` or `cf=`** (they exist only in `--sweep frontkill` and the cutflush sweeps; `P=front` keeps memory, and `C=` freezes all servers so no ACK follows the cut). Being closed by the `draw-x-cf` work. Control sweeps: 40/40 frontkill points OK (d10 fails 26/40); 20 of 118 flush-cut points OK (d11 fails at cf=238, 279).
 
+### Milestone 63 — DONE (MySQL binary log on closes the flush-cut finding; Kafka retention deleted acked orders after a clock jump, fixed; 2026-10-22)
+
+Fixes the Milestone 58 finding (`hvx/cutflush/FINDING.md`) in MySQL's configuration, not in the order service. Branch `stack-binlog`. No module change.
+
+**The fix (`build-stack.sh`, `hvx/explore/stack-explore.sh`).** The stack's MySQL ran with `skip-log-bin`. With the binary log off, InnoDB shows a commit to other connections before its redo fsync finishes, so a retry could ACK an order whose `published = 1` was not yet durable. Now `log-bin=binlog`, `sync_binlog=1` (MySQL's default), `server-id=1`, and `innodb_flush_log_at_trx_commit=1` stays for the durable setting. With the binary log on, a commit becomes visible only after the prepare (redo fsync) and the binary-log fsync, and crash recovery commits every transaction in the binary log, so anything visible is durable. The relaxed knob (`hydo_flush=off`, explorer `M=0`/`M=2`) now relaxes both logs: `sync_binlog=0` together with `trx_commit=2`/`0`, MySQL's documented fast setting. `build-mysql.sh` (M34) and `hvx/onboard/examples/stack/hydo.yaml` still use `skip-log-bin`; changing them would move unrelated baselines.
+
+**Images** (pinned tools, no M46 stand-ins; a second build is byte-identical): `explore-binlog-pin-disk.img` `ece9a45c…` (the current order service; its `hydostack` is byte-identical to `explore-bench-bg-fixed`'s, `792aab37…`), `explore-binlog-old-pin-disk.img` `3194162a…` (the M39–M46 order service, `hvx/bench/base/main-0112b48.go`), `stack-binlog-pin-disk.img` `2d908c19…` (default stack).
+
+**Proof:**
+- **Flush counts.** Each commit now also syncs the binary log. A 30-order workload makes 585 flushes on the current service (was 317) and 491 on the old one (was 281).
+- **Flush cuts** (`cf=k`, every k from 200 to the end, results `/var/tmp/m59-binlog` on the bare-metal machine): the current service passed **386 of 386** (before the fix 13 of 118 failed), and the old service passed **292 of 292** (before 12 of 282 failed). Every cut fired. So the configuration alone closes the gap. These runs used the first build of the images, made with the M46 stand-ins; that build has the identical MySQL configuration and differs only in the `hvx_seedrng` binary.
+- **Stack checks** on `stack-binlog-pin`, `hvx_stack_verify mode=all`, twice identical, MILESTONE 35 PASS:
+  - SANITY `affcc50d0d504a17`;
+  - F1 `4e25670bca3d3fd7`;
+  - F2 `07ff052d1e8fcd8b` (`VIOLATION mysql order=9`, Kafka has it: the relaxed window, expected; durable `971dedc7b4745fa6`);
+  - F3 `35d12da760ad7e12` / `86c31c3bc468cc25`.
+  These supersede the M39 stack baselines.
+- **Kill list** (`--sweep frontkill`, 40 schedules) on `explore-binlog-pin`: 0 failures.
+- **Pinned reproducers** unchanged: `2403499c9a3f8419`, `f87130453609a5d6`.
+- **Broad check** on `explore-binlog-pin` (200 swarm schedules with `--concurrency --new-faults --timing`, 2 workers): 125 failures, all reproduced. 124 are in expected classes (lying disk, I/O errors, relaxed settings). One is not, below.
+
+**Second finding, fixed: Kafka deleted acked orders after a large forward clock jump** (`hvx/cutflush/KAFKA-CLOCK.md`). The broad check found one durable-settings failure on `explore-binlog-pin`: Kafka's log started at the first order placed after the guest's realtime clock was stepped forward, and every earlier, ACKed order was gone. Minimal schedule: `disk=none dseed=e80bd3fbb759c1c1 | run K=redis@3+3 N=kafka@21-25:delay,20ms,reorder,11% P=kafka@16+1 T=21:15768000 Q=2d` (`770096791c66765f`, twice).
+- **Cause, confirmed with Kafka's log at INFO.** The producer stamps records with the guest's wall clock. Two default settings then act together:
+  - after a step of more than 7 days, the next record is over `log.roll.ms` (7 days) past the open segment's first record, so Kafka rolls the segment;
+  - the next retention check (first after about 30 s, then every 5 minutes) deletes the closed segment, because its newest record is older than `retention.ms` (7 days). The broker logs "Deleting segment LogSegment(baseOffset=0 …) due to retention time 604800000ms breach" and "Incremented log start offset to 21".
+- **The odd threshold.** 6.99 days passes and 7.002 days fails. Above that it is a race between the first retention check and the oracle's read. That is why 90 days passed and 120 failed on one image, while on another image 8 days failed. With a 10-second wait before the oracle, every jump of 7.002 days or more fails.
+- **A real deployment would hit it:** any broker whose clock steps forward by more than the retention, such as a machine that boots with its clock far behind and is then corrected by its time service, or a VM restored from an old snapshot. Kafka works as designed; keeping orders in a topic with 7-day retention was the stack's mistake.
+- **Fix (`build-stack.sh`):** `log.retention.ms=-1`. On the fixed image, all nine jump sizes up to 365 days pass, twice each. The broad check (seeds 1–60) gave 37 failures, all reproduced, all in expected kinds, and all 22 durable-settings runs passed. New diagnostic switches `STACK_KAFKA_DIAG`, `STACK_ORACLE_WAIT` and `STACK_KAFKA_EXTRA` change nothing when unset.
+- **Same exposure elsewhere, left unchanged** because fixing it moves unrelated baselines: the single-Kafka image (`build-linux.sh` §2l) and `hvx/onboard/examples/stack/hydo.yaml`.
+
+**Current stack baselines** (both fixes; pinned tools). Images: `explore-binlog-ret-disk.img` `2d748bd1…` (byte-identical to the investigation's fixed image) and `stack-binlog-ret-disk.img` `b7eb93ee…`. `hvx_stack_verify mode=all`, twice identical, MILESTONE 35 PASS:
+- SANITY `ceee1ce465e5424b`;
+- F1 `3ddc9bd9aa95cf99`;
+- F2 `00af090e634fefb5` (VIOLATION mysql order=9, the relaxed window; durable `df945fb47a53e280`);
+- F3 `88fa2915c90b452f` / `e9f60d6301f75013`.
+
+The kill list (40 schedules) gives 0 failures. These supersede the `*-binlog-pin` values above and the M39 stack values. The pinned explorer reproducers (`2403499c9a3f8419`, `f87130453609a5d6`) use older images and are unchanged.
+
 ### Roadmap — booting Linux as L2 (phased; from a planning pass over hydo's KVM boot path)
 
 The KVM monitor already boots Linux; hvx must replicate its recipe. Key facts to reuse (from `src/boot.rs`/`src/detlinux.rs`): 64-bit **bzImage** protocol — protected-mode kernel loaded at `0x100000`, **entry `0x100200` directly in 64-bit long mode** (so we DO NOT need real-mode entry or the unrestricted-guest control — a major de-risk), `boot_params`/zero-page @`0x10000` (`RSI`), e820 + cmdline @`0x20000` (`console=ttyS0 earlyprintk=ttyS0 loglevel=8 nokaslr acpi=off`), MP table @`0x9FC00`, initial long-mode GDT/paging (PML4→PDPT→PD with 512×2 MiB identity), CPUID/MSR **synthesized deterministically** (hvx owns CPUID now). Remaining phases, smallest-first:

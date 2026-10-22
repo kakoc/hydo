@@ -232,6 +232,17 @@ static void pt_collect(struct boot *b, const char *tag)
 /* > 0: every run call returns after at most this many deterministic events (HVX_RUNC), so
  * return points do not depend on where earlier calls stopped (rb=, branching). 0: HVX_RUN. */
 static uint64_t g_budget;
+/* Diagnostic: the host's SMI count (MSR_SMI_COUNT 0x34, read through /dev/cpu/0/msr; SMIs
+ * are broadcast, so CPU 0's count is everyone's). 0 when the msr driver is not there. */
+static unsigned long long smi_count(void)
+{
+	static int fd = -2;
+	unsigned long long v = 0;
+	if (fd == -2) fd = open("/dev/cpu/0/msr", O_RDONLY);
+	if (fd < 0 || pread(fd, &v, 8, 0x34) != 8) return 0;
+	return v;
+}
+
 #define BRANCH_BUDGET 16
 
 static int run_until_any(struct boot *b, const char *const *mk, int n, size_t from)
@@ -269,11 +280,12 @@ static int run_until_any(struct boot *b, const char *const *mk, int n, size_t fr
 			memset(&ts, 0, sizeof(ts));
 			ioctl(b->fd, HVX_GET_PMU, &pm);
 			ioctl(b->fd, HVX_GET_TSC, &ts);
-			fprintf(stderr, "RET reason=%u ulen=%zu total=%llu ticks=%llu over=%llu land=%016llx steps=%llu hops=%llu tsc=%llu rdtsc=%llu\n",
+			fprintf(stderr, "RET reason=%u ulen=%zu total=%llu ticks=%llu over=%llu land=%016llx steps=%llu hops=%llu tsc=%llu rdtsc=%llu smi=%llu\n",
 				ex.reason, b->ulen, (unsigned long long)pm.total, (unsigned long long)pm.ticks,
 				(unsigned long long)pm.overshoots, (unsigned long long)pm.land_hash,
 				(unsigned long long)pm.steps, (unsigned long long)pm.hops,
-				(unsigned long long)ts.tsc, (unsigned long long)ts.count);
+				(unsigned long long)ts.tsc, (unsigned long long)ts.count,
+				(unsigned long long)smi_count());
 		}
 		for (i = 0; i < n; i++)
 			if (b->ulen > from && mem_find(b->ubuf + from, b->ulen - from, mk[i]) >= 0)
