@@ -54,9 +54,9 @@
  * reproduce/shrink logic and the report live in hvx/explore/explore.py.
  *
  * Modes (as root, hvx loaded, through ~/bin/hvx-run):
- *   hvx_explore [--ram-mib N] serve <bzImage> <initramfs> <explore-disk.img> <outdir>
+ *   hvx_explore [--ram-mib N] [--cpu v2|v3] serve <bzImage> <initramfs> <explore-disk.img> <outdir>
  *       reads "RUN <tag> <schedule>" lines on stdin, answers "RESULT <tag> ..." lines
- *   hvx_explore [--ram-mib N] one <bzImage> <initramfs> <explore-disk.img> <outdir> "<schedule>"
+ *   hvx_explore [--ram-mib N] [--cpu v2|v3] one <bzImage> <initramfs> <explore-disk.img> <outdir> "<schedule>"
  *       one schedule from a fresh boot with no snapshot restore before the workload --
  *       its fingerprint must equal the serve path's (snapshot branching changes nothing)
  * Guest RAM: 1024 MiB unless "--ram-mib N" (or env HVX_EXPLORE_RAM_MIB) says otherwise,
@@ -989,13 +989,23 @@ int main(int argc, char **argv)
 
 	if (getenv("HVX_EXPLORE_RAM_MIB") && ram_mib_parse(getenv("HVX_EXPLORE_RAM_MIB"), "HVX_EXPLORE_RAM_MIB", &ram_mib))
 		return 2;
-	while (argc > 2 && !strcmp(argv[1], "--ram-mib")) {	/* explore.py: the manifest's guest.ram_mib */
-		if (ram_mib_parse(argv[2], "--ram-mib", &ram_mib)) return 2;
+	while (argc > 2 && (!strcmp(argv[1], "--ram-mib") || !strcmp(argv[1], "--cpu"))) {
+		if (!strcmp(argv[1], "--cpu")) {	/* explore.py: the manifest's guest.cpu */
+			if (!strcmp(argv[2], "v3"))
+				setenv("HVX_CPU_V3", "1", 1);	/* guest AVX/AVX2 (HVX_VM_X86_64_V3) */
+			else if (strcmp(argv[2], "v2")) {
+				fprintf(stderr, "hvx_explore: --cpu %s: expected v2 or v3\n", argv[2]);
+				return 2;
+			}
+		} else if (ram_mib_parse(argv[2], "--ram-mib", &ram_mib))	/* the manifest's guest.ram_mib */
+			return 2;
 		argv[2] = argv[0];
 		argv += 2; argc -= 2;
 	}
+	if (getenv("HVX_CPU_V3") && strcmp(getenv("HVX_CPU_V3"), "0"))
+		fprintf(stderr, "hvx_explore: guest CPU x86-64-v3 (AVX/AVX2)\n");
 	if (argc < 6) {
-		fprintf(stderr, "usage: %s [--ram-mib N] serve|one <bzImage> <initramfs> <explore-disk.img> <outdir> [\"<schedule>\"]\n", argv[0]);
+		fprintf(stderr, "usage: %s [--ram-mib N] [--cpu v2|v3] serve|one <bzImage> <initramfs> <explore-disk.img> <outdir> [\"<schedule>\"]\n", argv[0]);
 		return 2;
 	}
 	mode = argv[1];

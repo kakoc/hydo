@@ -77,6 +77,8 @@ CF_RANGE = None         # (lo, hi) FLUSH indices for cf=: --cf-range lo-hi, or m
                         # as 1 .. the FLUSH count of one fault-free workload (cfn) on the image
 BACKEND = "hvx"         # --backend hvm: the Mac VMM (hvm_backend.py); HVM_KERNEL = its --hvm-kernel
 HVM_KERNEL = None
+CPU = "v2"              # guest CPU level: the manifest's guest.cpu, or --cpu; "v3" adds "--cpu v3"
+                        # (guest AVX/AVX2) to hvx_explore, "v2" adds nothing
 RAM_MIB = 1024          # guest RAM: the manifest's guest.ram_mib, or --ram-mib; the engines get
                         # "--ram-mib N" only when it is not 1024, so default commands are unchanged
 RAM_MIB_BOUNDS = {"hvx": (256, 3072), "hvm": (256, 4096)}  # hvx_explore.c / hvmx (serve.c) check the same
@@ -840,6 +842,21 @@ def ram_args():
     return [] if RAM_MIB == 1024 else ["--ram-mib", str(RAM_MIB)]
 
 
+def engine_args():
+    """ram_args() plus the guest CPU level for hvx_explore (none unless guest.cpu is v3)."""
+    return ram_args() + (["--cpu", "v3"] if CPU == "v3" and BACKEND == "hvx" else [])
+
+
+def pick_cpu(cli, manifest):
+    """--cpu, else the manifest's guest.cpu, else v2 (the default level, no engine option)."""
+    v = cli if cli is not None else ((manifest.get("guest") or {}).get("cpu", "v2") if manifest else "v2")
+    if v not in ("v2", "v3"):
+        raise SystemExit("explore.py: guest CPU %r: expected v2 or v3" % (v,))
+    if v == "v3" and BACKEND != "hvx":
+        raise SystemExit("explore.py: guest CPU v3 (AVX) is an x86_64 option; --backend %s cannot run it" % BACKEND)
+    return v
+
+
 def pick_ram_mib(cli, manifest):
     """--ram-mib, else the manifest's guest.ram_mib, else 1024; checked against the backend's bounds."""
     src, v = ("--ram-mib", cli) if cli is not None else \
@@ -866,7 +883,7 @@ class Worker(threading.Thread):
 
     def run(self):
         cmd = [os.path.expanduser("~/bin/hvx-run"), "sudo", "env", "HVX_SNAP_DIR=/var/tmp/hvx-snap"] + EXTRA_ENV + [
-               os.path.join(HVX, "hvx_explore")] + ram_args() + ["serve", os.path.join(BUILD, "bzImage"),
+               os.path.join(HVX, "hvx_explore")] + engine_args() + ["serve", os.path.join(BUILD, "bzImage"),
                os.path.join(BUILD, "initramfs-kafka.cpio.gz"), os.path.join(BUILD, IMAGE),
                os.path.join(self.outdir, "consoles")]
         if BACKEND == "hvm":
@@ -1131,7 +1148,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
 
 # ---------------------------------------------------------------- main
 def main():
-    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT, BUGGIFY, KNOB_RULE, RAM_MIB, MORE_FAULTS, CF_RANGE
+    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT, BUGGIFY, KNOB_RULE, RAM_MIB, MORE_FAULTS, CF_RANGE, CPU
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-200")
     ap.add_argument("--workers", type=int, default=3)   # the box has 4 cores: 3 is fastest (M38)
@@ -1178,6 +1195,8 @@ def main():
     ap.add_argument("--manifest", help="an onboarded project's hydo.yaml: draw faults from its services, ports, "
                                        "steps and knobs (manifest_space.py); default for explore-ob-* images: "
                                        "the manifest inside the image")
+    ap.add_argument("--cpu", choices=["v2", "v3"], help="guest CPU level (default: the manifest's guest.cpu, "
+                    "else v2); v3 = AVX/AVX2 (hvx_explore --cpu v3, x86_64 only)")
     ap.add_argument("--ram-mib", type=int, help="guest RAM in MiB (default: the manifest's guest.ram_mib, else 1024; "
                                                 "256..3072 on hvx, 256..4096 on hvm)")
     a = ap.parse_args()
@@ -1193,6 +1212,9 @@ def main():
         sp.apply(globals())
         print("fault space: %s" % json.dumps(SPACE.describe()), file=sys.stderr)
     RAM_MIB = pick_ram_mib(a.ram_mib, SPACE.m if SPACE else None)
+    CPU = pick_cpu(a.cpu, SPACE.m if SPACE else None)
+    if CPU != "v2":
+        print("guest CPU: %s" % CPU, file=sys.stderr)
     if RAM_MIB != 1024:
         print("guest RAM: %d MiB" % RAM_MIB, file=sys.stderr)
     NEW_FAULTS = a.new_faults
@@ -1295,6 +1317,8 @@ def main():
                "failures": len(fails), "reproduced": sum(1 for f in fails if f["reproduced"])}
     if RAM_MIB != 1024:
         summary["ram_mib"] = RAM_MIB
+    if CPU != "v2":
+        summary["cpu"] = CPU
     json.dump({"summary": summary, "failures": fails,
                "shrunk": [{"class": k[0], "signature": k[1], **v} for k, v in shrunk.items()]},
               open(os.path.join(a.out, "report.json"), "w"), indent=1)
@@ -1353,6 +1377,8 @@ def branch_main(a, pool, t0):
                "total_wall_s": round(time.time() - t0, 1)}
     if RAM_MIB != 1024:
         summary["ram_mib"] = RAM_MIB
+    if CPU != "v2":
+        summary["cpu"] = CPU
     json.dump({"summary": summary, "failures": fails}, open(os.path.join(a.out, "report.json"), "w"), indent=1)
     L = ["# Branch report (marker `%s`)" % a.branch, "", "| | |", "|---|---|"]
     L += ["| %s | %s |" % kv for kv in summary.items()]
@@ -1387,7 +1413,7 @@ def write_report(out, summary, fails, shrunk, table=None):
               "- needs a tick-timing change: %s" % ("yes" if " tj" in v["minimal"] else "no"),
               "- verdict: `%s`" % v["min_verdict"],
               "- fingerprint, two runs: `%s` / `%s` (%s)" % (v["fp_a"], v["fp_b"], "identical" if v["fp_a"] == v["fp_b"] else "DIFFERENT"),
-              "- by hand: `~/bin/hvx-run sudo ./hvx_explore %sone ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/%s <outdir> \"%s\"`" % ("".join(x + " " for x in ram_args()), IMAGE, v["minimal"])
+              "- by hand: `~/bin/hvx-run sudo ./hvx_explore %sone ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/%s <outdir> \"%s\"`" % ("".join(x + " " for x in engine_args()), IMAGE, v["minimal"])
               if BACKEND != "hvm" else "- by hand: `%s`" % hvm_backend.repro_line(IMAGE, v["minimal"], HVM_KERNEL, ram_args()), ""]
     L += ["## Property table over every schedule (hvx/ASSERTIONS.md)", ""]
     if table is None:

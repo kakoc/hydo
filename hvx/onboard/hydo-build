@@ -403,7 +403,10 @@ def validate(m):
     root = m.get("root") or {}
     _unknown(root, {"size_mib", "nix", "files", "text", "dirs", "description"}, "root")
     guest = m.get("guest") or {}
-    _unknown(guest, {"ram_mib", "clock_start", "description"}, "guest")
+    _unknown(guest, {"ram_mib", "clock_start", "cpu", "description"}, "guest")
+    if "cpu" in guest and guest["cpu"] not in ("v2", "v3"):
+        raise ManifestError("guest.cpu: v2 (the default: x86-64-v2, no AVX) or v3 (adds AVX/AVX2, FMA, "
+                            "BMI1/2, F16C, LZCNT, MOVBE, XSAVE; x86_64 only) (got %r)" % (guest["cpu"],))
     if "ram_mib" in guest:
         r = guest["ram_mib"]
         if not isinstance(r, int) or isinstance(r, bool) or not RAM_MIB_MIN <= r <= max(RAM_MIB_MAX.values()):
@@ -422,6 +425,8 @@ def check_ram_arch(m, arch):
     r = (m.get("guest") or {}).get("ram_mib", 1024)
     if arch in RAM_MIB_MAX and r > RAM_MIB_MAX[arch]:
         raise ManifestError("guest.ram_mib: %d MiB is more than --arch %s runs (at most %d)" % (r, arch, RAM_MIB_MAX[arch]))
+    if (m.get("guest") or {}).get("cpu") == "v3" and arch != "x86_64":
+        raise ManifestError("guest.cpu: v3 (AVX/AVX2) is an x86_64 option; --arch %s cannot use it" % arch)
 
 
 ADDR_RE = re.compile(r"^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$")

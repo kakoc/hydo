@@ -60,6 +60,8 @@ description: one line          # free text, anywhere below too
 guest:
   ram_mib: 1024                # guest RAM in MiB (default 1024): 256..3072 on x86_64, 256..4096 on arm64
   clock_start: 1767225600      # unix seconds the realtime clock starts at (default 2026-01-01)
+  cpu: v3                      # guest CPU level (x86_64 only): v2 (default) = x86-64-v2, no AVX;
+                               # v3 = adds AVX/AVX2, FMA, BMI1/2, F16C, LZCNT, MOVBE, XSAVE
 
 root:                          # what goes on the read-only root filesystem
   size_mib: 1792               # default: 1.3 x the content, rounded up to 64 MiB
@@ -361,6 +363,12 @@ Guest RAM: `explore.py` reads `guest.ram_mib` from the manifest inside the image
 The size is not part of a schedule, so a hand run of a non-default image needs the same flag:
 `~/bin/hvx-run sudo ./hvx_explore --ram-mib 2048 one ...` (the report's repro line includes it).
 Out-of-range values are rejected by `hydo-build`, `explore.py` and both engines.
+
+Guest CPU: `guest.cpu: v3` makes `explore.py` start `hvx_explore --cpu v3` (hvx flag
+`HVX_VM_X86_64_V3`): the guest sees AVX/AVX2, FMA, BMI1/2, F16C, LZCNT, MOVBE and XSAVE (x87|SSE|AVX
+only, no AVX-512), which prebuilt x86-64-v3 binaries and images built for Haswell/Broadwell need.
+`explore.py --cpu v3|v2` overrides it. Like the RAM size it is not in the schedule, so a hand run
+needs `--cpu v3` too (the report's repro line includes it). Without the key nothing changes.
 
 Inside the image: `/etc/hydo/hydo.yaml` (the manifest as written), `/etc/hydo/manifest.sh`
 (compiled), `/etc/hydo/prelude.sh` (env + shell helpers), `/sbin/init` (`hydo-init.sh`).
