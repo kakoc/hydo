@@ -82,6 +82,16 @@ All on `/dev/hvxsmp`, bare-metal test machine, final module unless noted.
 - **Unchanged paths on hvxsmp** (before the fixes): `hvx_pmu_test` PASS with land hash
   `86c4afcd0a799450`; `hvx_smp_test` MILESTONE 19 PASS with fp `d042bb01201c269d`.
 
+## Follow-up (2026-10-22)
+
+- `hvx_open` now allocates the VM struct with `kvzalloc` (freed with `kvfree`): about
+  100 KiB, an order-5 block if contiguous, which failed on the fragmented host. No other
+  behaviour change; nothing takes the physical address of the struct.
+- On the final module (with both fixes and kvzalloc), test (a) PASS again, 6.6 s, same
+  numbers (snapshot fp `73a465516c4e0094`, landing hashes unchanged); test (c) PASS again,
+  3.3 s, same table and grid hash `8cb7c61a2393f44e`.
+- Still NOT done: the long-loop sweep 1..2000 and the side-metal regression gate.
+
 ## NOT done / not verified
 
 - **The regression gate `hvx/race/side-metal.sh` (HVX_DEV=/dev/hvxsmp) was NOT run.** The

@@ -6009,7 +6009,11 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 
 static int hvx_open(struct inode *inode, struct file *filp)
 {
-	struct hvx_vm *vm = kzalloc(sizeof(*vm), GFP_KERNEL);
+	/* kvzalloc: the VM struct is about 100 KiB (64 KiB console, input, fuzz and
+	 * network buffers), an order-5 block if contiguous, which fails on a fragmented host
+	 * ("open: Cannot allocate memory"). Nothing needs it contiguous: every page whose
+	 * physical address is used (guest RAM, EPT, VMCS/VMXON) is allocated separately. */
+	struct hvx_vm *vm = kvzalloc(sizeof(*vm), GFP_KERNEL);
 
 	if (!vm)
 		return -ENOMEM;
@@ -6061,7 +6065,7 @@ static int hvx_release(struct inode *inode, struct file *filp)
 	if (vm) {
 		hvx_dump_exit_stats(vm);	/* DIAGNOSTIC (fingerprint-neutral) */
 		hvx_vm_free_pages(vm);
-		kfree(vm);
+		kvfree(vm);
 	}
 	return 0;
 }
