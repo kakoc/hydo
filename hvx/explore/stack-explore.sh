@@ -240,16 +240,23 @@ explore_run() {   # $CMD = "run <tokens>"
   [ $paused = 1 ] && { $BB kill -CONT $(pause_pid $psvc) 2>/dev/null; echo "hydo-explore: RESUMED $psvc at the end"; }
   [ -n "$xtimer" ] && wait $xtimer 2>/dev/null
   [ $down = 1 ] && { echo "hydo-explore: restarting $ksvc at the end"; restart_svc $ksvc; }
+  # M67: a front door that cannot come back. After a cf= power cut the data disk is dead, so
+  # MySQL's sessions hang and a restarted front door dies ("Too many connections"). The orders
+  # not ACKed by then stay un-ACKed (no retry; no guarantee, as for any un-ACKed order) and the
+  # workload ends normally, so the host's power-cut recovery boot and oracle give the verdict.
+  # Without a cut the host answers "go" and the run ends with the old ERROR verdict (below).
+  frontdead=0
   $BB kill -0 $FPID 2>/dev/null || { echo "hydo-explore: front door died; restarting it"
     $BB grep -a -m 3 "^fatal error\|^panic" /tmp/front.log | $BB sed "s/^/hydo-explore: front door log: /"
-    start_front || die_oracle "HYDO-ORACLE: ERROR front door restart"; }
-  retry_unacked
+    start_front || { frontdead=1; echo "hydo-explore: front door cannot restart; the un-ACKed orders stay un-ACKed"; }; }
+  if [ $frontdead = 0 ]; then retry_unacked; fi
   failed_ids
   $BB grep -a "HYDO-STACK" /tmp/client.log | $BB tail -4
   echo "hydo-explore-acked: $($BB tr '\n' ' ' < /tmp/acked)"
   echo "hydo-explore-failed: $($BB tr '\n' ' ' < /tmp/failed)"
   echo "hydo-explore-workload-done"
   explore_read     # "go": the host has switched disk faults off
+  if [ $frontdead = 1 ]; then die_oracle "HYDO-ORACLE: ERROR front door restart"; fi
   explore_oracle "HYDO-ORACLE: VIOLATION store cannot recover after the faults"
 }
 
