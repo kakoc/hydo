@@ -83,11 +83,11 @@ static uint64_t g_durable_fp;
  * byte-identical to before: the same VM, the same ioctls, the same fingerprints. With N > 1
  * the VM gets HVX_VM_SMP_SCHED (in-kernel turns, needs the PMU clock), every snapshot and
  * restore covers all vCPUs plus the scheduler state, and fingerprints hash vCPUs 1..N-1 and
- * the scheduler state too. Until real Linux can start the other CPUs (SMP Stage 2), the
- * other vCPUs are parked: halted with interrupts off, so they never run
- * ($HVX_VCPU_PARK=0 leaves them as the module created them). */
+ * the scheduler state too. Linux starts the other vCPUs with INIT/SIPI (HVX_VM_SMP_BOOT,
+ * SMP Stage 2: the MP table lists N CPUs, and 4 consecutive PAUSEs end a turn, $HVX_PAUSE_K
+ * overrides). $HVX_VCPU_PARK=1 parks them instead: halted with interrupts off, never run. */
 static unsigned int g_vcpus = 1;
-static int g_vcpu_park = 1;
+static int g_vcpu_park = 0;   /* 1: park vCPUs 1.. (HVX_VCPU_PARK=1); 0: Linux starts them (HVX_VM_SMP_BOOT) */
 static uint64_t fnv(uint64_t h, const void *p, size_t n);
 
 static int set_vcpu(int fd, uint32_t i)
@@ -619,6 +619,8 @@ static int boot_setup(struct boot *b, uint64_t mem_size,
 	if (g_vcpus > 1) {		/* SMP Stage 3: several vCPUs in in-kernel turns */
 		cfg.n_vcpus = g_vcpus;
 		cfg.flags |= HVX_VM_SMP_SCHED;
+		if (!g_vcpu_park)	/* SMP Stage 2: the guest starts vCPUs 1.. with INIT/SIPI */
+			cfg.flags |= HVX_VM_SMP_BOOT;
 		if (!(cfg.flags & HVX_VM_PMU_CLOCK)) {
 			fprintf(stderr, "hvx_stack_verify: %u vCPUs need the PMU clock (HVX_PMU_CLOCK=0 given)\n", g_vcpus);
 			return -1;
@@ -656,7 +658,8 @@ static int boot_setup(struct boot *b, uint64_t mem_size,
 	}
 
 	build_page_tables_and_gdt(b->mem, mem_size);
-	if (load_bzimage(b->mem, mem_size, image, image_len, initrd, initrd_len, cmdline) < 0) return -1;
+	if (load_bzimage_n(b->mem, mem_size, image, image_len, initrd, initrd_len, cmdline,
+			   g_vcpus > 1 && !g_vcpu_park ? g_vcpus : 1) < 0) return -1;
 	fill_sregs(&sregs);
 	if (ioctl(b->fd, HVX_SET_SREGS, &sregs) < 0) { perror("HVX_SET_SREGS"); return -1; }
 	memset(&regs, 0, sizeof(regs));
@@ -666,6 +669,14 @@ static int boot_setup(struct boot *b, uint64_t mem_size,
 	regs.rflags = 0x2;
 	if (ioctl(b->fd, HVX_SET_REGS, &regs) < 0) { perror("HVX_SET_REGS"); return -1; }
 	if (g_vcpus > 1 && g_vcpu_park && park_aps(b->fd)) return -1;
+	if (g_vcpus > 1 && !g_vcpu_park) {	/* lock spinning ends a turn (SMP_STAGE2.md: 4) */
+		struct hvx_sched *c = calloc(1, sizeof(*c));
+		const char *pk = getenv("HVX_PAUSE_K");
+		if (!c || set_vcpu(b->fd, 0) || ioctl(b->fd, HVX_GET_SCHED, c) < 0) { perror("HVX_GET_SCHED"); free(c); return -1; }
+		c->pause_k = pk ? (uint32_t)strtoul(pk, NULL, 0) : 4;
+		if (ioctl(b->fd, HVX_SET_SCHED, c) < 0) { perror("HVX_SET_SCHED"); free(c); return -1; }
+		free(c);
+	}
 	return 0;
 }
 static void boot_teardown(struct boot *b)
@@ -956,7 +967,7 @@ int main(int argc, char **argv)
 		g_vcpus = (unsigned int)strtoul(ev, NULL, 10);
 		if (g_vcpus < 1 || g_vcpus > HVX_SCHED_MAX_VCPUS) { fprintf(stderr, "HVX_VCPUS must be 1..%d\n", HVX_SCHED_MAX_VCPUS); return 2; }
 	}
-	if ((ev = getenv("HVX_VCPU_PARK")) && !strcmp(ev, "0")) g_vcpu_park = 0;
+	if ((ev = getenv("HVX_VCPU_PARK"))) g_vcpu_park = strcmp(ev, "0") != 0;
 
 	if      (strcmp(mode, "all") == 0)    { do_sanity = do_f1 = do_f2 = do_f3 = 1; }
 	else if (strcmp(mode, "sanity") == 0) do_sanity = 1;

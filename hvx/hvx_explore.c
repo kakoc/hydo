@@ -63,9 +63,10 @@
  * default 1. With N > 1 every VM is created with N vCPUs and HVX_VM_SMP_SCHED (the vCPUs run
  * in exact turns of guest branches inside the kernel), every snapshot (S0, S1, branch
  * points) and restore covers every vCPU and the scheduler state, and every fingerprint
- * also hashes vCPUs 1..N-1 and the scheduler state. With N = 1 nothing changes. Until real
- * Linux can start the other CPUs, vCPUs 1..N-1 are parked (halted, IF=0; HVX_VCPU_PARK=0
- * leaves them as created). Host tokens for the turns, applied during the workload only:
+ * also hashes vCPUs 1..N-1 and the scheduler state. With N = 1 nothing changes. Linux starts
+ * vCPUs 1..N-1 itself with INIT/SIPI (HVX_VM_SMP_BOOT, SMP Stage 2; the MP table lists N
+ * CPUs; 4 consecutive PAUSEs end a turn, HVX_PAUSE_K overrides); HVX_VCPU_PARK=1 parks them
+ * instead (halted, IF=0, never run). Host tokens for the turns, applied during the workload only:
  *   q=<branches>  every turn this many guest conditional branches (the module's default is 2^20)
  *   qs=<hex>      seeded turn lengths in [1, q] (hvx.c: 1 + splitmix64(seed + (t+1)*GOLDEN) % q,
  *                 t = the turn number), with q= or the VM's current turn length
@@ -1095,7 +1096,7 @@ int main(int argc, char **argv)
 		argv[2] = argv[0];
 		argv += 2; argc -= 2;
 	}
-	if (getenv("HVX_VCPU_PARK") && !strcmp(getenv("HVX_VCPU_PARK"), "0")) g_vcpu_park = 0;
+	if (getenv("HVX_VCPU_PARK")) g_vcpu_park = strcmp(getenv("HVX_VCPU_PARK"), "0") != 0;
 	if (argc < 6) {
 		fprintf(stderr, "usage: %s [--ram-mib N] [--vcpus N] serve|one <bzImage> <initramfs> <explore-disk.img> <outdir> [\"<schedule>\"]\n", argv[0]);
 		return 2;
