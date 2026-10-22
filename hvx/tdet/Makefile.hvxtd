@@ -1,0 +1,15 @@
+# Build a second copy of the hvx module as hvxtd.ko with the device /dev/hvxtd, so it
+# can be loaded next to hvx.ko (used for the determinism investigation (Milestone 65) without disturbing
+# runs on /dev/hvx). hvxtd.c is a copy of ../hvx.c made by build-hvxtd.sh.
+obj-m := hvxtd.o
+ccflags-y := -DHVX_DEVNAME='"hvxtd"'
+OBJECT_FILES_NON_STANDARD_hvxtd.o := y
+
+KDIR ?= /lib/modules/$(shell uname -r)/build
+PWD  := $(shell pwd)
+
+all:
+	$(MAKE) -C $(KDIR) M=$(PWD) modules
+
+clean:
+	$(MAKE) -C $(KDIR) M=$(PWD) clean
