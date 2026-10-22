@@ -13,15 +13,20 @@
  * Checks:
  *   1. two boots from scratch to FINAL_MARKER are identical in full state: console +
  *      every vCPU's HVX_GET_SNAPSHOT + scheduler state (HVX_GET_SCHED) + all guest RAM;
- *   2. branch: boot to MID_MARKER, save everything, continue to FINAL_MARKER (A);
- *      restore, continue (B): A == B. A is also compared with the fresh boots.
+ *   2. branch, twice: at the first return after MID_MARKER, and at the end of turn T/2
+ *      (T = turns of boot #1, HVX_SET_SCHED stop_turn): save everything, continue to
+ *      FINAL_MARKER (A); restore, continue (B). A == B == boot #1.
  *   The console must contain SMP_MARKER ("smp: Brought up 1 node, N CPUs").
  *
  * Usage: hvx_smp_boot_verify <bzImage> <initramfs> [ncpus] ["cmdline"] [memMiB]
  * Env:   HVX_DEV (default /dev/hvx), HVX_QUANTUM, HVX_PAUSE_K (default 4), HVX_SEED
  *        (seeded turn lengths), HVX_MODE=all|one (one: a single boot, for bring-up),
  *        HVX_CMDLINE_EXTRA (appended to the command line), HVX_CONSOLE_OUT (file:
- *        console of the last boot), HVX_FINAL / HVX_MID (override the markers).
+ *        console of the last boot), HVX_FINAL / HVX_MID (override the markers),
+ *        HVX_BRANCH_TURNS=t1,t2,.. (extra branch points), HVX_MODE=scan with
+ *        HVX_SCAN_FROM / HVX_SCAN_TO (print every vCPU's mode at each turn end),
+ *        HVX_TSC_STEP (virtual TSC step per RDTSC, default 0x10000), HVX_PROGRESS,
+ *        HVX_DISK=<image> (attach a virtio-blk disk; its bytes join the fingerprint).
  */
 #include <time.h>
 #include "hvx_boot.h"
@@ -37,6 +42,37 @@ static unsigned int g_ncpus = 2;
 static uint64_t g_quantum = 1ULL << 20, g_seed;
 static uint32_t g_pause_k = 4;
 static uint64_t g_tsc_step = BOOT_TSC_STEP;
+static uint8_t *g_disk;		/* HVX_DISK: virtio-blk image attached to every boot (read-only boots) */
+static size_t g_disk_len;
+
+static void disk_set(int fd, const uint8_t *img)
+{
+	struct hvx_disk dk = { .len = g_disk_len, .data = (uint64_t)(uintptr_t)img,
+			       .flags = HVX_DISK_NO_IDMAP };
+
+	if (img && ioctl(fd, HVX_SET_DISK, &dk) < 0) {
+		perror("HVX_SET_DISK");
+		exit(1);
+	}
+}
+
+static uint8_t *disk_get(int fd)
+{
+	uint8_t *buf;
+	struct hvx_disk dk;
+
+	if (!g_disk)
+		return NULL;
+	buf = malloc(g_disk_len);
+	dk.len = g_disk_len;
+	dk.data = (uint64_t)(uintptr_t)buf;
+	dk.flags = 0;
+	if (!buf || ioctl(fd, HVX_GET_DISK, &dk) < 0) {
+		perror("HVX_GET_DISK");
+		exit(1);
+	}
+	return buf;
+}
 
 static uint64_t fnv(uint64_t h, const void *p, size_t n)
 {
@@ -154,11 +190,20 @@ static void dump_vcpus(struct boot *b)
 	set_vcpu(b, 0);
 }
 
-static int run_until_marker(struct boot *b, const char *marker)
+/*
+ * HVX_RUN until a return (THROTTLE) at which the console contains `marker` -- the stop
+ * point of a fresh boot. check_first: the current position is such a return (a THROTTLE
+ * return that reached an earlier marker), so stop at once if the marker is already there;
+ * after a stop that a fresh boot does not make (a turn stop, a max_insns stop) run on to
+ * the next return instead.
+ */
+static int run_until_marker_ex(struct boot *b, const char *marker, int check_first)
 {
 	struct hvx_exit ex;
 	unsigned long long iters;
 
+	if (check_first && mem_find(b->ubuf, b->ulen, marker) >= 0)
+		return 0;
 	for (iters = 0; iters < MAX_RUN_ITERS; iters++) {
 		memset(&ex, 0, sizeof(ex));
 		if (ioctl(b->fd, HVX_RUN, &ex) < 0) {
@@ -212,6 +257,11 @@ static int run_until_marker(struct boot *b, const char *marker)
 	}
 	fprintf(stderr, "hvx_smp_boot_verify: iteration cap before \"%s\"\n", marker);
 	return -1;
+}
+
+static int run_until_marker(struct boot *b, const char *marker)
+{
+	return run_until_marker_ex(b, marker, 1);
 }
 
 /* the scheduler STATE (not statistics, not stop_turn) */
@@ -274,6 +324,12 @@ static void measure(struct boot *b, struct result *r)
 	r->h_sched = fnv_sched(0xcbf29ce484222325ULL, &r->sched);
 	h = fnv(h, &rlen, sizeof(rlen));
 	h = fnv(h, b->mem, b->mem_size);
+	if (g_disk) {
+		uint8_t *d = disk_get(b->fd);
+
+		h = fnv(h, d, g_disk_len);
+		free(d);
+	}
 	r->h_ram = fnv(0xcbf29ce484222325ULL, b->mem, b->mem_size);
 	r->fp = h;
 	r->ulen = b->ulen;
@@ -305,6 +361,25 @@ static void report_stats(const char *tag, struct boot *b, const struct result *r
 	       (unsigned long long)ticks, (unsigned long long)steps, (unsigned long long)over,
 	       (unsigned long long)s->overshoots, (unsigned long long)s->deferred,
 	       (unsigned long long)s->time_jumps, (unsigned long long)s->wakeups);
+	{
+		/* where the guest routed its device interrupts (IOAPIC entry 4 = COM1, the
+		 * virtio-blk MSI-X table): destination APIC ID and vector */
+		struct hvx_snapshot *sn = calloc(1, sizeof(*sn));
+
+		if (sn && ioctl(b->fd, HVX_GET_SNAPSHOT, sn) == 0) {
+			printf("hvx_smp_boot_verify: %s: COM1 IOAPIC entry: dest %u vector %#x%s", tag,
+			       sn->ioapic_redir[9] >> 24, sn->ioapic_redir[8] & 0xff,
+			       (sn->ioapic_redir[8] & (1U << 16)) ? " (masked)" : "");
+			if (g_disk)
+				for (i = 0; i < HVX_MSIX_ENTRIES; i++)
+					if (sn->vblk_msix_tbl[i * 4])
+						printf("; virtio-blk MSI-X %u: dest %u vector %#x", i,
+						       (sn->vblk_msix_tbl[i * 4] >> 12) & 0xff,
+						       sn->vblk_msix_tbl[i * 4 + 2] & 0xff);
+			printf("\n");
+		}
+		free(sn);
+	}
 	for (i = 0; i < g_ncpus; i++)
 		printf("hvx_smp_boot_verify: %s: vcpu%u branches=%llu turns=%llu halted=%u\n", tag, i,
 		       (unsigned long long)s->v[i].branches, (unsigned long long)s->v[i].turns,
@@ -371,6 +446,7 @@ static int boot_setup(struct boot *b, uint64_t mem_size, const uint8_t *image, s
 	s.quantum = g_quantum;
 	s.seed = g_seed;
 	s.pause_k = g_pause_k;
+	disk_set(b->fd, g_disk);
 	if (ioctl(b->fd, HVX_SET_SCHED, &s) < 0) {
 		perror("HVX_SET_SCHED");
 		return -1;
@@ -445,6 +521,259 @@ static int fresh_boot(const char *tag, uint64_t mem_size, const uint8_t *image, 
 	return rc;
 }
 
+/* HVX_RUN until `turn` turns are done (stop_turn); 0 on HVX_EXIT_TURN */
+static int run_until_turn(struct boot *b, uint64_t turn)
+{
+	struct hvx_sched s;
+	struct hvx_exit ex;
+
+	get_sched(b, &s);
+	s.stop_turn = turn;
+	if (ioctl(b->fd, HVX_SET_SCHED, &s) < 0) {
+		perror("HVX_SET_SCHED");
+		return -1;
+	}
+	for (;;) {
+		memset(&ex, 0, sizeof(ex));
+		if (ioctl(b->fd, HVX_RUN, &ex) < 0) {
+			if (errno == EINTR)
+				continue;
+			perror("HVX_RUN");
+			return -1;
+		}
+		console_drain(b);
+		if (ex.reason == HVX_EXIT_TURN)
+			break;
+		if (ex.reason != HVX_EXIT_THROTTLE) {
+			fprintf(stderr, "run_until_turn: reason %#x\n", ex.reason);
+			dump_vcpus(b);
+			return -1;
+		}
+		b->throttles++;
+	}
+	get_sched(b, &s);
+	s.stop_turn = 0;
+	return ioctl(b->fd, HVX_SET_SCHED, &s) < 0 ? -1 : 0;
+}
+
+/*
+ * Branch-from-snapshot: run to the branch point (the mid marker if turn == 0, else the end
+ * of turn `turn`), save every vCPU + the scheduler + RAM, continue to the final marker (A);
+ * restore, continue again (B). A must equal B and the fresh boot `fresh`.
+ */
+static int branch_check(const char *tag, uint64_t turn, uint64_t mem_size, const uint8_t *image,
+			size_t image_len, const uint8_t *initrd, size_t initrd_len, const char *cmdline,
+			const struct result *fresh)
+{
+	struct boot b;
+	struct hvx_snapshot *mid = calloc(g_ncpus, sizeof(*mid));
+	struct hvx_sched msch;
+	uint8_t *ram_save = malloc(mem_size);
+	struct result ra, rb;
+	size_t branch_ulen = 0;
+	unsigned int i;
+	int ok;
+	uint8_t *disk_save = NULL;
+
+	memset(&ra, 0, sizeof(ra));
+	memset(&rb, 0, sizeof(rb));
+	fprintf(stderr, "\n=== %s ===\n", tag);
+	if (!mid || !ram_save) {
+		perror("alloc");
+		exit(1);
+	}
+	if (boot_setup(&b, mem_size, image, image_len, initrd, initrd_len, cmdline) == 0 &&
+	    (turn ? run_until_turn(&b, turn) : run_until_marker(&b, g_mid)) == 0) {
+		branch_ulen = b.ulen;
+		for (i = 0; i < g_ncpus; i++) {
+			set_vcpu(&b, i);
+			if (ioctl(b.fd, HVX_GET_SNAPSHOT, &mid[i]) < 0) {
+				perror("HVX_GET_SNAPSHOT");
+				exit(1);
+			}
+		}
+		set_vcpu(&b, 0);
+		get_sched(&b, &msch);
+		memcpy(ram_save, b.mem, mem_size);
+		disk_save = disk_get(b.fd);
+		printf("hvx_smp_boot_verify: %s: branch point at turn %llu, %zu console bytes%s\n", tag,
+		       (unsigned long long)msch.turns, branch_ulen,
+		       mem_find(b.ubuf, b.ulen, g_final) >= 0 ? " (already past the final marker)" : "");
+		if (run_until_marker_ex(&b, g_final, turn == 0) == 0)
+			measure(&b, &ra);
+		memcpy(b.mem, ram_save, mem_size);
+		for (i = 0; i < g_ncpus; i++) {
+			set_vcpu(&b, i);
+			if (ioctl(b.fd, HVX_SET_SNAPSHOT, &mid[i]) < 0) {
+				perror("HVX_SET_SNAPSHOT");
+				exit(1);
+			}
+		}
+		set_vcpu(&b, 0);
+		if (ioctl(b.fd, HVX_SET_SCHED, &msch) < 0) {
+			perror("HVX_SET_SCHED");
+			exit(1);
+		}
+		disk_set(b.fd, disk_save);
+		b.ulen = branch_ulen;
+		console_rebase(&b);
+		if (run_until_marker_ex(&b, g_final, turn == 0) == 0)
+			measure(&b, &rb);
+	}
+	boot_teardown(&b);
+	free(mid);
+	free(ram_save);
+	free(disk_save);
+	ok = ra.ok && rb.ok && ra.fp == rb.fp && ra.fp == fresh->fp;
+	printf("hvx_smp_boot_verify: %s fp_a=%016llx fp_b=%016llx fresh=%016llx -> %s\n", tag,
+	       (unsigned long long)ra.fp, (unsigned long long)rb.fp, (unsigned long long)fresh->fp,
+	       ok ? "IDENTICAL" : "MISMATCH");
+	if (ra.ok && rb.ok && ra.fp != rb.fp)
+		localize("continued-vs-restored", &ra, &rb);
+	if (ra.ok && fresh->ok && ra.fp != fresh->fp)
+		localize("continued-vs-fresh", &ra, fresh);
+	return ok;
+}
+
+/* one HVX_RUNC with max_insns = 1: stop at the next clean boundary after one retired
+ * exit or tick of whichever vCPU runs */
+static int runc1(struct boot *b)
+{
+	struct hvx_run_ctl c;
+
+	memset(&c, 0, sizeof(c));
+	c.max_insns = 1;
+	if (ioctl(b->fd, HVX_RUNC, &c) < 0) {
+		perror("HVX_RUNC");
+		return -1;
+	}
+	console_drain(b);
+	if (c.reason != HVX_EXIT_STEP && c.reason != HVX_EXIT_THROTTLE) {
+		fprintf(stderr, "runc1: reason %#x\n", c.reason);
+		dump_vcpus(b);
+		return -1;
+	}
+	return 0;
+}
+
+/* the AP start-up point: end of turn `t`, then k single-event stops */
+static int to_ap_point(struct boot *b, uint64_t t, unsigned int k)
+{
+	unsigned int i;
+
+	if (run_until_turn(b, t))
+		return -1;
+	for (i = 0; i < k; i++)
+		if (runc1(b))
+			return -1;
+	return 0;
+}
+
+/*
+ * Branch inside vCPU 1's start-up (HVX_MODE=apbranch): find the turn after which the
+ * STARTUP IPI made vCPU 1 runnable, then step it one exit at a time (CPUID / RDMSR /
+ * WRMSR / port I/O of Linux's real-mode trampoline and verify_cpu) until it reaches long
+ * mode, and branch at each of those points: continue (A), restore + continue (B); both
+ * must equal the fresh boot. Covers snapshots taken while an AP is in real mode and in
+ * protected mode without paging.
+ */
+static int apbranch(uint64_t mem_size, const uint8_t *image, size_t image_len,
+		    const uint8_t *initrd, size_t initrd_len, const char *cmdline,
+		    const struct result *fresh)
+{
+	struct boot b;
+	struct hvx_sched s;
+	uint64_t t, T = 0;
+	unsigned int k, kmax = 0, bad = 0, n = 0;
+	char modes[512][48];
+
+	if (boot_setup(&b, mem_size, image, image_len, initrd, initrd_len, cmdline))
+		return 1;
+	for (t = 1; t < 100000 && !T; t++) {
+		if (run_until_turn(&b, t))
+			return 1;
+		get_sched(&b, &s);
+		if (s.v[1].halted == 0)
+			T = t;
+	}
+	if (!T) {
+		fprintf(stderr, "apbranch: vCPU 1 never started\n");
+		return 1;
+	}
+	for (k = 0; k < 512; k++) {
+		struct hvx_sregs sr;
+		struct hvx_regs r;
+
+		set_vcpu(&b, 1);
+		ioctl(b.fd, HVX_GET_SREGS, &sr);
+		ioctl(b.fd, HVX_GET_REGS, &r);
+		set_vcpu(&b, 0);
+		snprintf(modes[k], sizeof(modes[k]), "cr0=%llx efer=%llx cs=%x rip=%llx",
+			 (unsigned long long)sr.cr0, (unsigned long long)sr.efer, sr.cs.selector,
+			 (unsigned long long)r.rip);
+		if ((sr.efer & EFER_LMA) && sr.cs.selector == 0x10)	/* kernel long-mode CS */
+			break;
+		kmax = k;
+		if (runc1(&b))
+			return 1;
+	}
+	boot_teardown(&b);
+	printf("hvx_smp_boot_verify: apbranch: vCPU 1 runnable after turn %llu; %u stop points "
+	       "before it reaches the kernel's long-mode CS\n", (unsigned long long)T, kmax + 1);
+	for (k = 0; k <= kmax; k++) {
+		struct hvx_snapshot *mid = calloc(g_ncpus, sizeof(*mid));
+		uint8_t *ram_save = malloc(mem_size);
+		struct hvx_sched msch;
+		struct result ra, rb;
+		size_t ulen;
+		unsigned int i;
+		uint8_t *dsave;
+
+		memset(&ra, 0, sizeof(ra));
+		memset(&rb, 0, sizeof(rb));
+		if (!mid || !ram_save || boot_setup(&b, mem_size, image, image_len, initrd, initrd_len, cmdline) ||
+		    to_ap_point(&b, T, k))
+			return 1;
+		for (i = 0; i < g_ncpus; i++) {
+			set_vcpu(&b, i);
+			ioctl(b.fd, HVX_GET_SNAPSHOT, &mid[i]);
+		}
+		set_vcpu(&b, 0);
+		get_sched(&b, &msch);
+		memcpy(ram_save, b.mem, mem_size);
+		dsave = disk_get(b.fd);
+		ulen = b.ulen;
+		if (run_until_marker_ex(&b, g_final, 0) == 0)
+			measure(&b, &ra);
+		memcpy(b.mem, ram_save, mem_size);
+		for (i = 0; i < g_ncpus; i++) {
+			set_vcpu(&b, i);
+			if (ioctl(b.fd, HVX_SET_SNAPSHOT, &mid[i]) < 0)
+				return 1;
+		}
+		set_vcpu(&b, 0);
+		if (ioctl(b.fd, HVX_SET_SCHED, &msch) < 0)
+			return 1;
+		disk_set(b.fd, dsave);
+		free(dsave);
+		b.ulen = ulen;
+		console_rebase(&b);
+		if (run_until_marker_ex(&b, g_final, 0) == 0)
+			measure(&b, &rb);
+		boot_teardown(&b);
+		free(mid);
+		free(ram_save);
+		n++;
+		if (!(ra.ok && rb.ok && ra.fp == rb.fp && ra.fp == fresh->fp))
+			bad++;
+		printf("hvx_smp_boot_verify: apbranch point %u (vCPU 1 %s): A=%016llx B=%016llx -> %s\n", k,
+		       modes[k], (unsigned long long)ra.fp, (unsigned long long)rb.fp,
+		       ra.ok && rb.ok && ra.fp == rb.fp && ra.fp == fresh->fp ? "IDENTICAL" : "MISMATCH");
+	}
+	printf("hvx_smp_boot_verify: apbranch: %u points, %u mismatches -> %s\n", n, bad, bad ? "FAIL" : "PASS");
+	return bad ? 1 : 0;
+}
+
 int main(int argc, char **argv)
 {
 	const char *mode = getenv("HVX_MODE") ? getenv("HVX_MODE") : "all";
@@ -452,7 +781,7 @@ int main(int argc, char **argv)
 	uint64_t mem_size;
 	uint8_t *image, *initrd = NULL;
 	size_t image_len = 0, initrd_len = 0;
-	struct result r1, r2, ra, rb;
+	struct result r1, r2;
 	int ok_whole, ok_branch, ok_smp;
 
 	if (argc < 3) {
@@ -481,6 +810,11 @@ int main(int argc, char **argv)
 		g_final = getenv("HVX_FINAL");
 	if (getenv("HVX_MID"))
 		g_mid = getenv("HVX_MID");
+	if (getenv("HVX_DISK")) {
+		g_disk = read_file(getenv("HVX_DISK"), &g_disk_len);
+		if (!g_disk)
+			return 1;
+	}
 	image = read_file(argv[1], &image_len);
 	if (!image)
 		return 1;
@@ -496,14 +830,63 @@ int main(int argc, char **argv)
 
 	memset(&r1, 0, sizeof(r1));
 	memset(&r2, 0, sizeof(r2));
-	memset(&ra, 0, sizeof(ra));
-	memset(&rb, 0, sizeof(rb));
 	fresh_boot("boot #1", mem_size, image, image_len, initrd, initrd_len, cmdline, &r1,
 		   smp_line, sizeof(smp_line));
 	printf("hvx_smp_boot_verify: boot #1 %s, fp=%016llx, \"%s\"\n", r1.ok ? "reached the shell" : "FAILED",
 	       (unsigned long long)r1.fp, smp_line);
 	if (!strcmp(mode, "one"))
 		return r1.ok && strstr(smp_line, want) ? 0 : 1;
+	if (!strcmp(mode, "scan")) {
+		/* print each vCPU's mode at every turn in [HVX_SCAN_FROM, HVX_SCAN_TO] */
+		uint64_t t, from = strtoull(getenv("HVX_SCAN_FROM") ? getenv("HVX_SCAN_FROM") : "1", NULL, 0);
+		uint64_t to = strtoull(getenv("HVX_SCAN_TO") ? getenv("HVX_SCAN_TO") : "200", NULL, 0);
+		struct boot b;
+
+		if (boot_setup(&b, mem_size, image, image_len, initrd, initrd_len, cmdline))
+			return 1;
+		for (t = from; t <= to; t++) {
+			struct hvx_sched sc;
+			unsigned int i;
+
+			if (run_until_turn(&b, t))
+				return 1;
+			get_sched(&b, &sc);
+			printf("turn %llu cur=%u:", (unsigned long long)t, sc.cur);
+			for (i = 0; i < g_ncpus; i++) {
+				struct hvx_regs r;
+				struct hvx_sregs sr;
+
+				set_vcpu(&b, i);
+				ioctl(b.fd, HVX_GET_REGS, &r);
+				ioctl(b.fd, HVX_GET_SREGS, &sr);
+				printf(" v%u[h%u cr0=%llx efer=%llx cs=%x rip=%llx]", i, sc.v[i].halted,
+				       (unsigned long long)sr.cr0, (unsigned long long)sr.efer, sr.cs.selector,
+				       (unsigned long long)r.rip);
+			}
+			set_vcpu(&b, 0);
+			printf("\n");
+		}
+		return 0;
+	}
+	if (!strcmp(mode, "apbranch"))
+		return apbranch(mem_size, image, image_len, initrd, initrd_len, cmdline, &r1);
+	if (getenv("HVX_BRANCH_TURNS")) {
+		/* extra branch points (comma-separated turn numbers) */
+		char *list = strdup(getenv("HVX_BRANCH_TURNS")), *tok, *save = NULL;
+		int okx = 1;
+
+		for (tok = strtok_r(list, ",", &save); tok; tok = strtok_r(NULL, ",", &save)) {
+			char tag[64];
+
+			snprintf(tag, sizeof(tag), "branch@turn%s", tok);
+			okx &= branch_check(tag, strtoull(tok, NULL, 0), mem_size, image, image_len,
+					    initrd, initrd_len, cmdline, &r1);
+		}
+		free(list);
+		printf("hvx_smp_boot_verify: extra branches %s\n", okx ? "IDENTICAL" : "MISMATCH");
+		if (!okx)
+			return 1;
+	}
 
 	fresh_boot("boot #2", mem_size, image, image_len, initrd, initrd_len, cmdline, &r2,
 		   smp_line2, sizeof(smp_line2));
@@ -513,66 +896,12 @@ int main(int argc, char **argv)
 	if (r1.ok && r2.ok && !ok_whole)
 		localize("whole-boot", &r1, &r2);
 
-	fprintf(stderr, "\n=== branch-from-snapshot ===\n");
-	{
-		struct boot b;
-		struct hvx_snapshot *mid = calloc(g_ncpus, sizeof(*mid));
-		struct hvx_sched msch;
-		uint8_t *ram_save = malloc(mem_size);
-		size_t branch_ulen = 0;
-		unsigned int i;
-		double t0 = now_s();
-
-		if (!mid || !ram_save) {
-			perror("alloc");
-			return 1;
-		}
-		if (boot_setup(&b, mem_size, image, image_len, initrd, initrd_len, cmdline) == 0 &&
-		    run_until_marker(&b, g_mid) == 0) {
-			fprintf(stderr, "mid marker at %zu console bytes (%.2f s); saving\n", b.ulen, now_s() - t0);
-			branch_ulen = b.ulen;
-			for (i = 0; i < g_ncpus; i++) {
-				set_vcpu(&b, i);
-				if (ioctl(b.fd, HVX_GET_SNAPSHOT, &mid[i]) < 0) {
-					perror("HVX_GET_SNAPSHOT");
-					return 1;
-				}
-			}
-			set_vcpu(&b, 0);
-			get_sched(&b, &msch);
-			memcpy(ram_save, b.mem, mem_size);
-			if (run_until_marker(&b, g_final) == 0)
-				measure(&b, &ra);
-			memcpy(b.mem, ram_save, mem_size);
-			for (i = 0; i < g_ncpus; i++) {
-				set_vcpu(&b, i);
-				if (ioctl(b.fd, HVX_SET_SNAPSHOT, &mid[i]) < 0) {
-					perror("HVX_SET_SNAPSHOT");
-					return 1;
-				}
-			}
-			set_vcpu(&b, 0);
-			if (ioctl(b.fd, HVX_SET_SCHED, &msch) < 0) {
-				perror("HVX_SET_SCHED");
-				return 1;
-			}
-			b.ulen = branch_ulen;
-			console_rebase(&b);
-			if (run_until_marker(&b, g_final) == 0)
-				measure(&b, &rb);
-		}
-		boot_teardown(&b);
-		free(mid);
-		free(ram_save);
-	}
-	ok_branch = ra.ok && rb.ok && ra.fp == rb.fp;
-	printf("hvx_smp_boot_verify: branch fp_a=%016llx fp_b=%016llx -> %s (fresh boot %s)\n",
-	       (unsigned long long)ra.fp, (unsigned long long)rb.fp, ok_branch ? "IDENTICAL" : "MISMATCH",
-	       ra.fp == r1.fp ? "equal" : "differs");
-	if (ra.ok && rb.ok && !ok_branch)
-		localize("branch", &ra, &rb);
-	if (ra.ok && r1.ok && ra.fp != r1.fp)
-		localize("branch-vs-fresh", &ra, &r1);
+	/* branch at the mid marker, and at the middle turn of boot #1 */
+	ok_branch = branch_check("branch@marker", 0, mem_size, image, image_len, initrd, initrd_len,
+				 cmdline, &r1);
+	if (r1.ok && r1.sched.turns >= 2)
+		ok_branch &= branch_check("branch@turn", r1.sched.turns / 2, mem_size, image, image_len,
+					  initrd, initrd_len, cmdline, &r1);
 	ok_smp = strstr(smp_line, want) != NULL;
 	printf("hvx_smp_boot_verify: console \"%s\" -> %s\n", smp_line, ok_smp ? "ok" : "MISSING");
 	if (ok_whole && ok_branch && ok_smp) {
