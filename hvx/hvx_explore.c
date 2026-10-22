@@ -54,11 +54,24 @@
  * reproduce/shrink logic and the report live in hvx/explore/explore.py.
  *
  * Modes (as root, hvx loaded, through ~/bin/hvx-run):
- *   hvx_explore [--ram-mib N] serve <bzImage> <initramfs> <explore-disk.img> <outdir>
+ *   hvx_explore [--ram-mib N] [--vcpus N] serve <bzImage> <initramfs> <explore-disk.img> <outdir>
  *       reads "RUN <tag> <schedule>" lines on stdin, answers "RESULT <tag> ..." lines
- *   hvx_explore [--ram-mib N] one <bzImage> <initramfs> <explore-disk.img> <outdir> "<schedule>"
+ *   hvx_explore [--ram-mib N] [--vcpus N] one <bzImage> <initramfs> <explore-disk.img> <outdir> "<schedule>"
  *       one schedule from a fresh boot with no snapshot restore before the workload --
  *       its fingerprint must equal the serve path's (snapshot branching changes nothing)
+ * Several vCPUs (SMP Stage 3, hvx/explore/TURNS.md): "--vcpus N" (or env HVX_EXPLORE_VCPUS),
+ * default 1. With N > 1 every VM is created with N vCPUs and HVX_VM_SMP_SCHED (the vCPUs run
+ * in exact turns of guest branches inside the kernel), every snapshot (S0, S1, branch
+ * points) and restore covers every vCPU and the scheduler state, and every fingerprint
+ * also hashes vCPUs 1..N-1 and the scheduler state. With N = 1 nothing changes. Until real
+ * Linux can start the other CPUs, vCPUs 1..N-1 are parked (halted, IF=0; HVX_VCPU_PARK=0
+ * leaves them as created). Host tokens for the turns, applied during the workload only:
+ *   q=<branches>  every turn this many guest conditional branches (the module's default is 2^20)
+ *   qs=<hex>      seeded turn lengths in [1, q] (hvx.c: 1 + splitmix64(seed + (t+1)*GOLDEN) % q,
+ *                 t = the turn number), with q= or the VM's current turn length
+ * RESULT then also reports qn=<turns taken during the workload>. On a 1-vCPU VM these tokens
+ * give an ERROR verdict. The module has no explicit per-turn list (HVX_SET_SCHED takes one
+ * length and one seed), so there is no explicit form; see TURNS.md.
  * Guest RAM: 1024 MiB unless "--ram-mib N" (or env HVX_EXPLORE_RAM_MIB) says otherwise,
  * N in [256, 3072]; explore.py passes the manifest's guest.ram_mib. The size is not in the
  * schedule: a hand reproduction must pass the same --ram-mib (report.md's repro line does).
@@ -86,6 +99,7 @@ struct snap {
 	uint8_t *con;		/* console text up to the watermark (part of every fingerprint) */
 	uint8_t *unsync;	/* the disk's volatile write cache (HVX_GET_UNSYNC), unsync_n entries */
 	uint32_t unsync_n;
+	struct smpstate smp;	/* --vcpus N > 1: vCPUs 1..N-1 + the scheduler state */
 	int have;
 };
 
@@ -329,6 +343,7 @@ static int snap_take(struct boot *b, struct snap *sn, const char *tag)
 	sn->s = calloc(1, sizeof(*sn->s));
 	if (!sn->s) return -1;
 	if (ioctl(b->fd, HVX_GET_SNAPSHOT, sn->s) < 0) { perror("HVX_GET_SNAPSHOT"); return -1; }
+	if (smp_get(b->fd, &sn->smp)) return -1;	/* nothing with one vCPU */
 	if (savebuf_open(&sn->ram, E.mem_size, tag) || savebuf_open(&sn->rw, E.p2_len, tag)) return -1;
 	if (savebuf_store(&sn->ram, b->mem, E.mem_size) || savebuf_store(&sn->rw, b->disk_mm + E.p2_off, E.p2_len)) return -1;
 	sn->ulen = b->ulen;
@@ -369,6 +384,7 @@ static int vm_fresh(struct boot *b)
 static int snap_restore(struct boot *b, struct snap *sn, struct savebuf *rw)
 {
 	if (ioctl(b->fd, HVX_SET_SNAPSHOT, sn->s) < 0) { perror("HVX_SET_SNAPSHOT"); return -1; }
+	if (smp_set(b->fd, &sn->smp)) return -1;	/* nothing with one vCPU */
 	if (savebuf_load(&sn->ram, b->mem, E.mem_size)) return -1;
 	if (savebuf_load(rw ? rw : &sn->rw, b->disk_mm + E.p2_off, E.p2_len)) return -1;
 	memcpy(b->ubuf, sn->con, sn->ulen);	/* console as it was at the snapshot */
@@ -452,7 +468,43 @@ struct sched {
 	struct hvx_xtick xt;	/* extra ticks during the workload (xt / xtx tokens) */
 	int cf_on;		/* cf=<k> / cfn: power cut at the k-th disk FLUSH / count only */
 	uint64_t cf;
+	int q_on;		/* q=<branches> / qs=<hex>: vCPU turn lengths during the workload */
+	uint64_t q, qs;		/* q 0 = keep the VM's turn length; qs 0 = fixed turns */
 };
+
+/* the turn policy to put back after a q= / qs= workload, and the turn count at its start */
+static uint64_t g_q_old_quantum, g_q_old_seed, g_q_turns0;
+
+/* The value of host token <key> ("q=" ...) starting a word of `host`, or NULL. Exact word
+ * match, so "q=" never matches inside another token. */
+static const char *host_tok(const char *host, const char *key)
+{
+	const char *p = host;
+	size_t n = strlen(key);
+	while ((p = strstr(p, key))) {
+		if (p == host || p[-1] == ' ') return p + n;
+		p += n;
+	}
+	return NULL;
+}
+
+/* q=<branches> qs=<hex seed> (see the header). Returns -1 on a malformed token. */
+static int parse_turns(const char *host, struct sched *sc)
+{
+	const char *p;
+	char *end;
+	if ((p = host_tok(host, "q="))) {
+		sc->q = strtoull(p, &end, 10);
+		if (end == p || !sc->q || (*end && *end != ' ')) return -1;
+		sc->q_on = 1;
+	}
+	if ((p = host_tok(host, "qs="))) {
+		sc->qs = strtoull(p, &end, 16);
+		if (end == p || !sc->qs || (*end && *end != ' ')) return -1;
+		sc->q_on = 1;
+	}
+	return 0;
+}
 
 /* the PMU period and tick TSC to put back after a pp= workload */
 static uint64_t g_pp_old_period, g_pp_old_tsc;
@@ -554,6 +606,7 @@ static int parse_sched(const char *s, struct sched *sc)
 	else return -1;
 	if (parse_tj(sc->host, sc)) return -1;
 	if (parse_preempt(sc->host, sc)) return -1;
+	if (parse_turns(sc->host, sc)) return -1;
 	if ((p = strstr(sc->host, "rb="))) sc->rb = strtoull(p + 3, NULL, 10);
 	sc->cut = strstr(sc->guest, " C=") != NULL;
 	/* cf=<k>: the disk loses power AT the k-th FLUSH of the workload (that flush is not
@@ -633,7 +686,7 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 {
 	static const char *const wk[] = { DONE_MARKER, FINAL_MARKER };
 	static const char *const fin[] = { FINAL_MARKER };
-	char verdict[256] = "", orc[512], tjinfo[96];
+	char verdict[256] = "", orc[512], tjinfo[160];
 	uint64_t wfp = 0, ffp = 0;
 	int r;
 	const char *phase = "workload";
@@ -667,6 +720,19 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 		ioctl(b->fd, HVX_GET_XTICK, &got);
 		snprintf(tjinfo + l, sizeof(tjinfo) - l, " xtn=%llu", (unsigned long long)got.applied);
 		set_xt(b, NULL);
+	}
+	if (sc->q_on) {			/* the turn lengths too: report the turns, put the policy back */
+		struct hvx_sched c;
+		size_t l = strlen(tjinfo);
+		memset(&c, 0, sizeof(c));
+		if (ioctl(b->fd, HVX_GET_SCHED, &c) == 0) {
+			snprintf(tjinfo + l, sizeof(tjinfo) - l, " qn=%llu", (unsigned long long)(c.turns - g_q_turns0));
+			c.quantum = g_q_old_quantum;
+			c.seed = g_q_old_seed;
+			if (ioctl(b->fd, HVX_SET_SCHED, &c) < 0) perror("HVX_SET_SCHED (restore turns)");
+		} else {
+			perror("HVX_GET_SCHED");
+		}
 	}
 	if (sc->pp || sc->pptsc) {
 		struct hvx_pmu pm;
@@ -740,11 +806,14 @@ out_done:
 
 static void run_sched(struct boot *b, const char *tag, const struct sched *sc, struct snap *s0)
 {
-	char line[600], verdict[256] = "", tjinfo[96] = "";
+	char line[600], verdict[256] = "", tjinfo[160] = "";
 	size_t from = b->ulen;
 	double t0 = now_s();
 
 	g_budget = sc->rb;
+	if (sc->q_on && g_vcpus < 2) {	/* never silently ignored */
+		snprintf(verdict, sizeof(verdict), "ERROR harness q=/qs= need several vCPUs (--vcpus N > 1)"); goto fail;
+	}
 	if (set_fault(b, sc->dseed, sc->classes, sc->prob)) { snprintf(verdict, sizeof(verdict), "ERROR harness set_fault"); goto fail; }
 	if (sc->cf_on) {
 		struct hvx_flushcut fc;
@@ -778,6 +847,17 @@ static void run_sched(struct boot *b, const char *tag, const struct sched *sc, s
 		}
 		snprintf(tjinfo, sizeof(tjinfo), " tjk=%llu", (unsigned long long)(pm.next / pm.period));
 	}
+	if (sc->q_on) {			/* turn lengths for the workload only, like the jitter */
+		struct hvx_sched c;
+		memset(&c, 0, sizeof(c));
+		if (ioctl(b->fd, HVX_GET_SCHED, &c) < 0) { snprintf(verdict, sizeof(verdict), "ERROR harness q= (HVX_GET_SCHED)"); goto fail; }
+		g_q_old_quantum = c.quantum;
+		g_q_old_seed = c.seed;
+		g_q_turns0 = c.turns;
+		if (sc->q) c.quantum = sc->q;
+		c.seed = sc->qs;
+		if (ioctl(b->fd, HVX_SET_SCHED, &c) < 0) { snprintf(verdict, sizeof(verdict), "ERROR harness q= value (HVX_SET_SCHED)"); goto fail; }
+	}
 	pt_arm(b);
 	snprintf(line, sizeof(line), "%s\n", sc->guest);
 	if (put_input(b, line)) { snprintf(verdict, sizeof(verdict), "ERROR harness put_input"); goto fail; }
@@ -797,6 +877,7 @@ static void snap_free(struct snap *sn)
 	free(sn->s);
 	free(sn->con);
 	free(sn->unsync);
+	smp_free(&sn->smp);
 	sn->have = 0;
 }
 
@@ -859,7 +940,7 @@ static void run_branch(struct boot *b, const char *tag, const struct sched *sc, 
 	memset(&s2, 0, sizeof(s2));
 	snprintf(sub, sizeof(sub), "%s-base", tag);
 	g_budget = BRANCH_BUDGET;
-	if (sc->tj_on || sc->rb || sc->pp || sc->pptsc || sc->xt_on) {
+	if (sc->tj_on || sc->rb || sc->pp || sc->pptsc || sc->xt_on || sc->q_on) {
 		snprintf(verdict, sizeof(verdict), "ERROR branch: not for timed or rb= schedules");
 		goto fail;
 	}
@@ -978,6 +1059,20 @@ static int ram_mib_parse(const char *v, const char *what, unsigned long long *ou
 	return 0;
 }
 
+/* "--vcpus N" / HVX_EXPLORE_VCPUS: N in [1, HVX_SCHED_MAX_VCPUS] */
+static int vcpus_parse(const char *v, const char *what)
+{
+	char *end;
+	unsigned long n = strtoul(v, &end, 10);
+	if (!*v || *end || n < 1 || n > HVX_SCHED_MAX_VCPUS) {
+		fprintf(stderr, "hvx_explore: %s=%s: the vCPU count must be a whole number in [1, %d]\n",
+			what, v, HVX_SCHED_MAX_VCPUS);
+		return -1;
+	}
+	g_vcpus = (unsigned int)n;
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	const char *mode;
@@ -989,13 +1084,20 @@ int main(int argc, char **argv)
 
 	if (getenv("HVX_EXPLORE_RAM_MIB") && ram_mib_parse(getenv("HVX_EXPLORE_RAM_MIB"), "HVX_EXPLORE_RAM_MIB", &ram_mib))
 		return 2;
-	while (argc > 2 && !strcmp(argv[1], "--ram-mib")) {	/* explore.py: the manifest's guest.ram_mib */
-		if (ram_mib_parse(argv[2], "--ram-mib", &ram_mib)) return 2;
+	if (getenv("HVX_EXPLORE_VCPUS") && vcpus_parse(getenv("HVX_EXPLORE_VCPUS"), "HVX_EXPLORE_VCPUS"))
+		return 2;
+	while (argc > 2 && (!strcmp(argv[1], "--ram-mib") || !strcmp(argv[1], "--vcpus"))) {
+		if (!strcmp(argv[1], "--ram-mib")) {	/* explore.py: the manifest's guest.ram_mib */
+			if (ram_mib_parse(argv[2], "--ram-mib", &ram_mib)) return 2;
+		} else if (vcpus_parse(argv[2], "--vcpus")) {	/* explore.py --vcpus N (N > 1 only) */
+			return 2;
+		}
 		argv[2] = argv[0];
 		argv += 2; argc -= 2;
 	}
+	if (getenv("HVX_VCPU_PARK") && !strcmp(getenv("HVX_VCPU_PARK"), "0")) g_vcpu_park = 0;
 	if (argc < 6) {
-		fprintf(stderr, "usage: %s [--ram-mib N] serve|one <bzImage> <initramfs> <explore-disk.img> <outdir> [\"<schedule>\"]\n", argv[0]);
+		fprintf(stderr, "usage: %s [--ram-mib N] [--vcpus N] serve|one <bzImage> <initramfs> <explore-disk.img> <outdir> [\"<schedule>\"]\n", argv[0]);
 		return 2;
 	}
 	mode = argv[1];
@@ -1004,6 +1106,9 @@ int main(int argc, char **argv)
 	memset(&E, 0, sizeof(E));
 	E.mem_size = ram_mib << 20;
 	if (ram_mib != EXP_MEM_MIB) fprintf(stderr, "hvx_explore: guest RAM %llu MiB\n", ram_mib);
+	if (g_vcpus > 1)
+		fprintf(stderr, "hvx_explore: %u vCPUs in in-kernel turns (HVX_VM_SMP_SCHED)%s\n", g_vcpus,
+			g_vcpu_park ? "; vCPUs 1.. parked (halted, IF=0) until the guest can start them" : "");
 	E.cmdbase = ROOTFS_CMDLINE;
 	if (!(E.image = map_file(argv[2], &E.image_len)) || !(E.initrd = map_file(argv[3], &E.initrd_len)) ||
 	    !(E.base = map_file(argv[4], &dlen)))

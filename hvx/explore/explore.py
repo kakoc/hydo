@@ -29,6 +29,9 @@ Schedule format (see hvx_explore.c / stack-explore.sh):
   timing (only with --timing): tj=<hex> tjpm=<n> tjmax=<n> [tjlo=<k> tjhi=<k>]  delays a
   seeded share of the PMU-clock ticks, so threads interleave differently; the shrinker turns
   it into an explicit list tjx=<tick:delay,...> and removes entries.
+  vCPU turns (only with --vcpus N > 1 and --turns, SMP Stage 3, TURNS.md): host tokens
+  q=<branches> [qs=<hex>] set the length of the vCPUs' turns during the workload (fixed, or
+  seeded lengths in [1, q]); half of the schedules get them, from a separate random stream.
 Classes of findings:
   durable-defaults  every store configured durably, the disk honest -- the interesting ones
   unsafe-knob       needs a documented-unsafe setting (MySQL trx_commit != 1, Redis
@@ -80,6 +83,10 @@ HVM_KERNEL = None
 RAM_MIB = 1024          # guest RAM: the manifest's guest.ram_mib, or --ram-mib; the engines get
                         # "--ram-mib N" only when it is not 1024, so default commands are unchanged
 RAM_MIB_BOUNDS = {"hvx": (256, 3072), "hvm": (256, 4096)}  # hvx_explore.c / hvmx (serve.c) check the same
+VCPUS = 1               # --vcpus N (SMP Stage 3): the engine gets "--vcpus N" only when N > 1
+TURNS = False           # --turns: half of the schedules get vCPU turn tokens q= [qs=] (needs VCPUS > 1)
+TURNS_SALT = 0x7A4E5C0FFEE7A4E5
+Q_DEFAULT = 1 << 20     # hvx.c HVX_SCHED_QUANTUM: the module's turn length (guest conditional branches)
 CLOCK_DELTAS = [-30 * 86400, -86400, -3600, -300, -30, 30, 300, 3600, 86400, 365 * 86400]
 
 
@@ -174,6 +181,29 @@ def add_preempt(s, seed):
             else:
                 s["xt"] = (t.next(), t.pick(XT_RATES), 500)
     return s
+
+
+def add_turns(s, seed):
+    """--turns (SMP Stage 3): half of the schedules get a turn length for the vCPUs during the
+    workload, mixed as in rr's chaos mode: most long (2^19 .. 2^21 branches, around the
+    module's 2^20), about 10% at most 100, about 10% at most 10,000; half of them with seeded
+    lengths in [1, q] (qs=) instead of fixed ones. The mix is per schedule: the module takes
+    one length and one seed for all turns (TURNS.md). A separate random stream, so every
+    other field matches the same seed without --turns."""
+    if TURNS:
+        t = SplitMix(seed ^ TURNS_SALT)
+        on, x, seeded, qs = t.below(100) < 50, t.below(100), t.below(2), t.next() or 1
+        q = t.rng(1, 100) if x < 10 else t.rng(101, 10000) if x < 20 else t.rng(Q_DEFAULT // 2, 2 * Q_DEFAULT)
+        if on:
+            s["q"] = (q, qs if seeded else 0)
+    return s
+
+
+def render_turns(s):
+    if "q" not in s:
+        return ""
+    q, qs = s["q"]
+    return (" q=%d" % q if q else "") + (" qs=%x" % qs if qs else "")
 
 
 def render_preempt(s):
@@ -646,7 +676,7 @@ def render(s):
     if "B" in s:
         g.append("B=%s" % s["B"])
     return "disk=%s dseed=%x%s%s%s | %s" % (s["disk"], s["dseed"], render_tj(s["tj"]) if "tj" in s else "",
-                                            render_preempt(s) + (" cf=%d" % s["cf"] if "cf" in s else ""),
+                                            render_preempt(s) + (" cf=%d" % s["cf"] if "cf" in s else "") + render_turns(s),
                                             " rb=%d" % s["rb"] if "rb" in s else "", " ".join(g))
 
 
@@ -662,6 +692,9 @@ def parse(text):
     m = re.search(r"\bcf=(\d+)", host)           # power cut at the k-th disk FLUSH (needs disk=cut)
     if m:
         s["cf"] = int(m.group(1))
+    mq, mqs = re.search(r"(?:^|\s)q=(\d+)", host), re.search(r"(?:^|\s)qs=([0-9a-fA-F]+)", host)
+    if mq or mqs:                                # vCPU turn lengths (SMP Stage 3)
+        s["q"] = (int(mq.group(1)) if mq else 0, int(mqs.group(1), 16) if mqs else 0)
     m = re.search(r"\bpct=([0-9a-fA-F]+) pctn=(\d+) pctk=(\d+)", host)
     if m:
         s["pct"] = (int(m.group(1), 16), int(m.group(2)), int(m.group(3)))
@@ -840,6 +873,12 @@ def ram_args():
     return [] if RAM_MIB == 1024 else ["--ram-mib", str(RAM_MIB)]
 
 
+def engine_args():
+    """Engine options: guest RAM, and the vCPU count only when it is not 1 (so the default
+    command line is unchanged)."""
+    return ram_args() + ([] if VCPUS == 1 else ["--vcpus", str(VCPUS)])
+
+
 def pick_ram_mib(cli, manifest):
     """--ram-mib, else the manifest's guest.ram_mib, else 1024; checked against the backend's bounds."""
     src, v = ("--ram-mib", cli) if cli is not None else \
@@ -866,7 +905,7 @@ class Worker(threading.Thread):
 
     def run(self):
         cmd = [os.path.expanduser("~/bin/hvx-run"), "sudo", "env", "HVX_SNAP_DIR=/var/tmp/hvx-snap"] + EXTRA_ENV + [
-               os.path.join(HVX, "hvx_explore")] + ram_args() + ["serve", os.path.join(BUILD, "bzImage"),
+               os.path.join(HVX, "hvx_explore")] + engine_args() + ["serve", os.path.join(BUILD, "bzImage"),
                os.path.join(BUILD, "initramfs-kafka.cpio.gz"), os.path.join(BUILD, IMAGE),
                os.path.join(self.outdir, "consoles")]
         if BACKEND == "hvm":
@@ -889,7 +928,7 @@ class Worker(threading.Thread):
             p.stdin.write("RUN %s %s\n" % (tag, text))
             p.stdin.flush()
             out = p.stdout.readline()
-            m = re.match(r"RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: (?:tj|xt|pct)\S+)*) verdict=(.*)", out.strip())
+            m = re.match(r"RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: (?:tj|xt|pct|qn)\S+)*) verdict=(.*)", out.strip())
             if not m:
                 self.results.put((tag, text, {"fp": "0", "secs": 0, "verdict": "ERROR worker: %r" % out, "worker": self.idx}))
                 continue
@@ -905,6 +944,9 @@ class Worker(threading.Thread):
             xn = re.search(r"xtn=(\d+)", m.group(5))
             if xn:      # M49: extra ticks taken during the workload
                 res["xtn"] = int(xn.group(1))
+            qn = re.search(r"qn=(\d+)", m.group(5))
+            if qn:      # SMP Stage 3: vCPU turns taken during the workload
+                res["qn"] = int(qn.group(1))
             self.results.put((tag, text, res))
         p.stdin.write("QUIT\n")
         p.stdin.flush()
@@ -927,7 +969,7 @@ class Worker(threading.Thread):
                 out["tjlo"] = int(m.group(1))
                 out["held"] = int(m.group(2)) if m.group(2) else None
                 continue
-            m = re.match(r"RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: (?:tj|pct)\S+)*) verdict=(.*)", line.strip())
+            m = re.match(r"RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: (?:tj|pct|qn)\S+)*) verdict=(.*)", line.strip())
             if not m:
                 continue
             sub = m.group(1)
@@ -1043,6 +1085,13 @@ def candidates(s, tjk=None):
         var(pct=None)
         if s["pct"][1] > 1:
             var(pct=(s["pct"][0], s["pct"][1] // 2, s["pct"][2]))
+    if "q" in s:                                    # vCPU turns (SMP Stage 3): drop them, then fixed
+        var(q=None)                                 # lengths, then longer turns toward the default
+        q, qs = s["q"]
+        if qs:
+            var(q=(q, 0))
+        if q and q < Q_DEFAULT:
+            var(q=(min(Q_DEFAULT, q * 8), qs))
     tj_candidates(s, tjk, var)
     return out
 
@@ -1131,7 +1180,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
 
 # ---------------------------------------------------------------- main
 def main():
-    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT, BUGGIFY, KNOB_RULE, RAM_MIB, MORE_FAULTS, CF_RANGE
+    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT, BUGGIFY, KNOB_RULE, RAM_MIB, MORE_FAULTS, CF_RANGE, VCPUS, TURNS
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-200")
     ap.add_argument("--workers", type=int, default=3)   # the box has 4 cores: 3 is fastest (M38)
@@ -1178,6 +1227,12 @@ def main():
     ap.add_argument("--manifest", help="an onboarded project's hydo.yaml: draw faults from its services, ports, "
                                        "steps and knobs (manifest_space.py); default for explore-ob-* images: "
                                        "the manifest inside the image")
+    ap.add_argument("--vcpus", type=int, default=1,
+                    help="SMP Stage 3: give the guest this many vCPUs, run in exact turns inside hvx (needs the PMU "
+                         "clock; 1..8, default 1 = the engine's command line unchanged)")
+    ap.add_argument("--turns", action="store_true",
+                    help="with --vcpus N > 1: half of the schedules get vCPU turn lengths q= [qs=] for the workload "
+                         "(rr chaos-mode mix; separate random stream)")
     ap.add_argument("--ram-mib", type=int, help="guest RAM in MiB (default: the manifest's guest.ram_mib, else 1024; "
                                                 "256..3072 on hvx, 256..4096 on hvm)")
     a = ap.parse_args()
@@ -1195,6 +1250,13 @@ def main():
     RAM_MIB = pick_ram_mib(a.ram_mib, SPACE.m if SPACE else None)
     if RAM_MIB != 1024:
         print("guest RAM: %d MiB" % RAM_MIB, file=sys.stderr)
+    VCPUS, TURNS = a.vcpus, a.turns
+    if not 1 <= VCPUS <= 8:
+        raise SystemExit("explore.py: --vcpus must be 1..8 (hvx's HVX_MAX_VCPUS)")
+    if VCPUS > 1 and BACKEND == "hvm":
+        raise SystemExit("explore.py: --vcpus > 1 needs --backend hvx (the Mac VMM has one vCPU and no PMU clock)")
+    if TURNS and VCPUS < 2:
+        raise SystemExit("explore.py: --turns needs --vcpus N > 1 (turn tokens on a one-vCPU VM are an ERROR)")
     NEW_FAULTS = a.new_faults
     KNOB_RULE = a.knob_rule
     CONCURRENCY = a.concurrency
@@ -1225,7 +1287,7 @@ def main():
             SPACE.check_sweep(a.sweep)
         points = sweep(a.sweep)
         seeds = list(range(1, len(points) + 1))            # sweep point index stands in for the seed
-        items = [("seed-%d" % i, render(add_buggify(add_preempt(add_concurrency(add_timing(sch, i), i), i), i))) for i, (_, sch) in zip(seeds, points)]
+        items = [("seed-%d" % i, render(add_turns(add_buggify(add_preempt(add_concurrency(add_timing(sch, i), i), i), i), i))) for i, (_, sch) in zip(seeds, points)]
         open(os.path.join(a.out, "sweep-points.jsonl"), "w").write(
             "".join(json.dumps({"seed": i, "point": lab}) + "\n" for i, (lab, _) in zip(seeds, points)))
     else:
@@ -1239,7 +1301,7 @@ def main():
             CF_RANGE = measure_cf_range(pool, a.out)
             print("cf= range (measured with cfn): %d-%d" % CF_RANGE, file=sys.stderr)
         mf = lambda x, sd: add_more_faults(x, sd, a.strategy)
-        items = [("seed-%d" % sd, render(add_buggify(add_preempt(add_concurrency(add_timing(mf(nf(dur(gen(sd)), sd), sd), sd), sd), sd), sd)))
+        items = [("seed-%d" % sd, render(add_turns(add_buggify(add_preempt(add_concurrency(add_timing(mf(nf(dur(gen(sd)), sd), sd), sd), sd), sd), sd), sd)))
                  for sd in seeds]
     t_sweep = time.time()
     res = pool.run_all(items)
@@ -1295,6 +1357,8 @@ def main():
                "failures": len(fails), "reproduced": sum(1 for f in fails if f["reproduced"])}
     if RAM_MIB != 1024:
         summary["ram_mib"] = RAM_MIB
+    if VCPUS != 1:
+        summary["vcpus"] = VCPUS
     json.dump({"summary": summary, "failures": fails,
                "shrunk": [{"class": k[0], "signature": k[1], **v} for k, v in shrunk.items()]},
               open(os.path.join(a.out, "report.json"), "w"), indent=1)
@@ -1353,6 +1417,8 @@ def branch_main(a, pool, t0):
                "total_wall_s": round(time.time() - t0, 1)}
     if RAM_MIB != 1024:
         summary["ram_mib"] = RAM_MIB
+    if VCPUS != 1:
+        summary["vcpus"] = VCPUS
     json.dump({"summary": summary, "failures": fails}, open(os.path.join(a.out, "report.json"), "w"), indent=1)
     L = ["# Branch report (marker `%s`)" % a.branch, "", "| | |", "|---|---|"]
     L += ["| %s | %s |" % kv for kv in summary.items()]
@@ -1385,9 +1451,11 @@ def write_report(out, summary, fails, shrunk, table=None):
               "- from seed %d, %d shrink runs" % (v["from_seed"], v["tries"]),
               "- minimal schedule: `%s`" % v["minimal"],
               "- needs a tick-timing change: %s" % ("yes" if " tj" in v["minimal"] else "no"),
+              ] + (["- needs vCPU turn lengths: %s" % ("yes" if re.search(r"(?:^|\s)qs?=", v["minimal"].split("|")[0]) else "no")]
+                   if VCPUS > 1 else []) + [
               "- verdict: `%s`" % v["min_verdict"],
               "- fingerprint, two runs: `%s` / `%s` (%s)" % (v["fp_a"], v["fp_b"], "identical" if v["fp_a"] == v["fp_b"] else "DIFFERENT"),
-              "- by hand: `~/bin/hvx-run sudo ./hvx_explore %sone ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/%s <outdir> \"%s\"`" % ("".join(x + " " for x in ram_args()), IMAGE, v["minimal"])
+              "- by hand: `~/bin/hvx-run sudo ./hvx_explore %sone ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/%s <outdir> \"%s\"`" % ("".join(x + " " for x in engine_args()), IMAGE, v["minimal"])
               if BACKEND != "hvm" else "- by hand: `%s`" % hvm_backend.repro_line(IMAGE, v["minimal"], HVM_KERNEL, ram_args()), ""]
     L += ["## Property table over every schedule (hvx/ASSERTIONS.md)", ""]
     if table is None:
