@@ -868,7 +868,7 @@ From 2026-10-17 the build machine lacked the pinned static musl gcc, so images c
 
 `hvx/bench/` (README "M59" sections, `build-bench-m59.sh`, `patches-m59/`, `base/main-m59-control.go`). New control = the current order service plus a front-door fix for the M58 bug (a request that only read `published = 1` commits a real write before ACKing); note this is the bench control only — the stack itself gets the MySQL-config fix (binlog on, `sync_binlog=1`, the other session). Images `explore-bench-m59-*-pin-disk.img` (pinned toolchain). Defects: d8 no per-order lock (`Q=2d`), d9 Redis connection unlocked (`Q=4`, front door panics; `run.py`/`confirm.py` now count a front-door `panic`/`fatal error` as a violation for d8–d12 and their control), d10 "send started" kept in memory (`X=front@12~20`), d11 the M58 bug (`disk=cut dseed=0 cf=238`), d12 shared Kafka key buffer (`Q=2`). Each trigger fails twice identically; the control passes all. **Results** (3 reps × ≤60 runs, `--concurrency`): random, swarm, process and swarm+BUGGIFY find d8, d9, d12 in 3/3 (median 1–5 runs; swarm+bg 30 on d9); without `--concurrency` d8 and d9 are never found in 180 runs, d12 still is. **d10 and d11: 0/3 for every strategy, by construction — no generator emits `X=` or `cf=`** (they exist only in `--sweep frontkill` and the cutflush sweeps; `P=front` keeps memory, and `C=` freezes all servers so no ACK follows the cut). Being closed by the `draw-x-cf` work. Control sweeps: 40/40 frontkill points OK (d10 fails 26/40); 20 of 118 flush-cut points OK (d11 fails at cf=238, 279).
 
-### Milestone 63 — DONE (MySQL binary log on closes the flush-cut finding; a Kafka loss after a large clock jump stays open; 2026-10-22)
+### Milestone 63 — DONE (MySQL binary log on closes the flush-cut finding; Kafka retention deleted acked orders after a clock jump, fixed; 2026-10-22)
 
 Fixes the Milestone 58 finding (`hvx/cutflush/FINDING.md`) in MySQL's configuration, not in the order service. Branch `stack-binlog`. No module change.
 
@@ -889,11 +889,22 @@ Fixes the Milestone 58 finding (`hvx/cutflush/FINDING.md`) in MySQL's configurat
 - **Pinned reproducers** unchanged: `2403499c9a3f8419`, `f87130453609a5d6`.
 - **Broad check** on `explore-binlog-pin` (200 swarm schedules with `--concurrency --new-faults --timing`, 2 workers): 125 failures, all reproduced. 124 are in expected classes (lying disk, I/O errors, relaxed settings). One is not, below.
 
-**Open finding: Kafka loses acked orders after a large forward clock jump.** One run with every store durable and an honest disk failed, and it repeats. Kafka's log starts at the first order placed after the guest's realtime clock was stepped forward; everything before is gone, although the client was ACKed and MySQL has the orders. Minimal schedule: `disk=none dseed=e80bd3fbb759c1c1 | run K=redis@3+3 N=kafka@21-25:delay,20ms,reorder,11% P=kafka@16+1 T=21:15768000 Q=2d` (`770096791c66765f`, twice).
-- **What it needs.** Without the clock jump the same schedule passes. On this image, jumps of 1, 6, 8, 15, 30, 60 and 90 days pass, and jumps of 120, 150 and 182 days fail. The run must also last long: the kill, pause, network delay and doubled requests make it longer.
-- **The cause is not confirmed.** The likely suspect is Kafka's time-based deletion (retention 7 days by default, judged by record timestamps against the wall clock), but the 8-day pass does not fit it. A diagnostic copy of the image, identical except for one extra print at the end, passed at 120 days. So the outcome also depends on fine timing. The broker's log showed no deletion lines, probably because this configuration logs only warnings.
-- **Next.** A diagnostic image with Kafka logging at INFO; if retention is confirmed, the fix is `retention.ms=-1` on the orders topic.
-- **Scope.** It is not caused by the binary-log change: it is in Kafka. Earlier clock-jump checks (M46) never ran long enough to reach it.
+**Second finding, fixed: Kafka deleted acked orders after a large forward clock jump** (`hvx/cutflush/KAFKA-CLOCK.md`). The broad check found one durable-settings failure on `explore-binlog-pin`: Kafka's log started at the first order placed after the guest's realtime clock was stepped forward, and every earlier, ACKed order was gone. Minimal schedule: `disk=none dseed=e80bd3fbb759c1c1 | run K=redis@3+3 N=kafka@21-25:delay,20ms,reorder,11% P=kafka@16+1 T=21:15768000 Q=2d` (`770096791c66765f`, twice).
+- **Cause, confirmed with Kafka's log at INFO.** The producer stamps records with the guest's wall clock. Two default settings then act together:
+  - after a step of more than 7 days, the next record is over `log.roll.ms` (7 days) past the open segment's first record, so Kafka rolls the segment;
+  - the next retention check (first after about 30 s, then every 5 minutes) deletes the closed segment, because its newest record is older than `retention.ms` (7 days). The broker logs "Deleting segment LogSegment(baseOffset=0 …) due to retention time 604800000ms breach" and "Incremented log start offset to 21".
+- **The odd threshold.** 6.99 days passes and 7.002 days fails. Above that it is a race between the first retention check and the oracle's read. That is why 90 days passed and 120 failed on one image, while on another image 8 days failed. With a 10-second wait before the oracle, every jump of 7.002 days or more fails.
+- **A real deployment would hit it:** any broker whose clock steps forward by more than the retention, such as a machine that boots with its clock far behind and is then corrected by its time service, or a VM restored from an old snapshot. Kafka works as designed; keeping orders in a topic with 7-day retention was the stack's mistake.
+- **Fix (`build-stack.sh`):** `log.retention.ms=-1`. On the fixed image, all nine jump sizes up to 365 days pass, twice each. The broad check (seeds 1–60) gave 37 failures, all reproduced, all in expected kinds, and all 22 durable-settings runs passed. New diagnostic switches `STACK_KAFKA_DIAG`, `STACK_ORACLE_WAIT` and `STACK_KAFKA_EXTRA` change nothing when unset.
+- **Same exposure elsewhere, left unchanged** because fixing it moves unrelated baselines: the single-Kafka image (`build-linux.sh` §2l) and `hvx/onboard/examples/stack/hydo.yaml`.
+
+**Current stack baselines** (both fixes; pinned tools). Images: `explore-binlog-ret-disk.img` `2d748bd1…` (byte-identical to the investigation's fixed image) and `stack-binlog-ret-disk.img` `b7eb93ee…`. `hvx_stack_verify mode=all`, twice identical, MILESTONE 35 PASS:
+- SANITY `ceee1ce465e5424b`;
+- F1 `3ddc9bd9aa95cf99`;
+- F2 `00af090e634fefb5` (VIOLATION mysql order=9, the relaxed window; durable `df945fb47a53e280`);
+- F3 `88fa2915c90b452f` / `e9f60d6301f75013`.
+
+The kill list (40 schedules) gives 0 failures. These supersede the `*-binlog-pin` values above and the M39 stack values. The pinned explorer reproducers (`2403499c9a3f8419`, `f87130453609a5d6`) use older images and are unchanged.
 
 ### Roadmap — booting Linux as L2 (phased; from a planning pass over hydo's KVM boot path)
 
