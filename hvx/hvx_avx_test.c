@@ -18,9 +18,10 @@
  * the straight run; the whole thing twice gives the same fingerprint; and without the
  * flag CPUID shows no XSAVE/AVX and XSETBV still exits to userspace (reason 55).
  *
- * Build: cc -O2 -Wall -mavx2 -mfma -mf16c -mbmi -mbmi2 -mlzcnt -o hvx_avx_test hvx_avx_test.c
+ * Build: cc -O2 -Wall -o hvx_avx_test hvx_avx_test.c   (the host checks use target attributes)
  * Run:   sudo ./hvx_avx_test          (HVX_DEV=/dev/hvxavx for a side module)
  */
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -134,7 +135,13 @@ static int vm_new(uint32_t flags, unsigned char **mem)
 	int fd = open(dev(), O_RDWR);
 
 	if (fd < 0) { perror("open"); return -1; }
-	if (ioctl(fd, HVX_CREATE_VM, &cfg) < 0) { perror("HVX_CREATE_VM"); close(fd); return -1; }
+	if (ioctl(fd, HVX_CREATE_VM, &cfg) < 0) {
+		if (errno == ENODEV && (flags & HVX_VM_X86_64_V3)) {
+			printf("hvx_avx_test: SKIP (no host AVX2, or the module lacks guest AVX)\n");
+			exit(0);
+		}
+		perror("HVX_CREATE_VM"); close(fd); return -1;
+	}
 	*mem = mmap(NULL, MEMB, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (*mem == MAP_FAILED) { perror("mmap"); close(fd); return -1; }
 	memcpy(*mem + GPA_ISR, gp_isr, sizeof(gp_isr));
@@ -208,6 +215,34 @@ static uint64_t state_fp(int fd, unsigned char *m)
 static int fails;
 #define CHECK(c, ...) do { if (!(c)) { fails++; printf("  FAIL: " __VA_ARGS__); printf("\n"); } } while (0)
 
+/* the guest's part-2 results against the host's own AVX2/FMA/F16C/BMI computation */
+__attribute__((target("avx2,fma,f16c,bmi,bmi2,lzcnt")))
+static void check_part2(unsigned char *m)
+{
+	unsigned char *o = m + OUT, *t = m + TAB, *q = m + RES2;
+	__m256i a = _mm256_loadu_si256((void *)t), b = _mm256_loadu_si256((void *)(t + 32));
+	__m256 x = _mm256_loadu_ps((void *)(t + 128)), y = _mm256_loadu_ps((void *)(t + 160)),
+	       z = _mm256_loadu_ps((void *)(t + 192)), f = _mm256_fmadd_ps(x, y, z);
+	__m256i sum = _mm256_add_epi32(a, b);
+	__m128i h = _mm256_cvtps_ph(f, 0);
+	uint64_t ra = *(uint64_t *)t, rc = *(uint64_t *)(t + 8);
+	int i, ok = 1;
+	unsigned char zero[16] = {0};
+
+	for (i = 0; i < 15; i++)
+		ok &= !memcmp(o + 32 * i, t + 32 * i, 32);
+	CHECK(ok, "YMM0-14 did not survive the HVX_RUN boundary");
+	CHECK(!memcmp(o + 480, &sum, 32), "VPADDD result (YMM15) wrong");
+	CHECK(!memcmp(q, &f, 32), "FMA result wrong");
+	CHECK(!memcmp(q + 0x20, &h, 16), "F16C result wrong");
+	CHECK(*(uint64_t *)(q + 0x30) == _andn_u64(ra, rc), "ANDN wrong");
+	CHECK(*(uint64_t *)(q + 0x38) == _pdep_u64(ra, rc), "PDEP wrong");
+	CHECK(*(uint64_t *)(q + 0x40) == (uint64_t)_lzcnt_u64(rc), "LZCNT wrong");
+	CHECK(*(uint64_t *)(q + 0x48) == __builtin_bswap64(ra), "MOVBE wrong");
+	CHECK(!memcmp(q + 0x60, t, 16) && !memcmp(q + 0x70, zero, 16),
+	      "AVX off/on: lower half not kept or upper half not zero");
+}
+
 /* one full pass: straight run + snapshot/restore into a fresh VM; returns the fingerprint */
 static uint64_t pass(int verbose)
 {
@@ -257,30 +292,7 @@ static uint64_t pass(int verbose)
 
 	/* straight: finish part 2 */
 	if (to_hlt(fd, 0) < 0) exit(1);
-	{
-		unsigned char *o = m + OUT, *t = m + TAB, *q = m + RES2;
-		__m256i a = _mm256_loadu_si256((void *)t), b = _mm256_loadu_si256((void *)(t + 32));
-		__m256 x = _mm256_loadu_ps((void *)(t + 128)), y = _mm256_loadu_ps((void *)(t + 160)),
-		       z = _mm256_loadu_ps((void *)(t + 192)), f = _mm256_fmadd_ps(x, y, z);
-		__m256i sum = _mm256_add_epi32(a, b);
-		__m128i h = _mm256_cvtps_ph(f, 0);
-		uint64_t ra = *(uint64_t *)t, rc = *(uint64_t *)(t + 8);
-		int i, ok = 1;
-		unsigned char zero[16] = {0};
-
-		for (i = 0; i < 15; i++)
-			ok &= !memcmp(o + 32 * i, t + 32 * i, 32);
-		CHECK(ok, "YMM0-14 did not survive the HVX_RUN boundary");
-		CHECK(!memcmp(o + 480, &sum, 32), "VPADDD result (YMM15) wrong");
-		CHECK(!memcmp(q, &f, 32), "FMA result wrong");
-		CHECK(!memcmp(q + 0x20, &h, 16), "F16C result wrong");
-		CHECK(*(uint64_t *)(q + 0x30) == _andn_u64(ra, rc), "ANDN wrong");
-		CHECK(*(uint64_t *)(q + 0x38) == _pdep_u64(ra, rc), "PDEP wrong");
-		CHECK(*(uint64_t *)(q + 0x40) == (uint64_t)_lzcnt_u64(rc), "LZCNT wrong");
-		CHECK(*(uint64_t *)(q + 0x48) == __builtin_bswap64(ra), "MOVBE wrong");
-		CHECK(!memcmp(q + 0x60, t, 16) && !memcmp(q + 0x70, zero, 16),
-		      "AVX off/on: lower half not kept or upper half not zero");
-	}
+	check_part2(m);
 	{
 		struct hvx_snapshot *e = calloc(1, sizeof(*e));
 		unsigned char z[256] = {0};

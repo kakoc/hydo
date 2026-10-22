@@ -1,0 +1,54 @@
+# The OFFICIAL Restate Docker image (restatedev/restate:1.7.13, linux/amd64, pinned by digest,
+# unmodified) under hydo. Its restate-server is built with -Ctarget-cpu=broadwell, so it uses
+# AVX2 unconditionally and stopped at once with "trap invalid opcode" on hydo's x86-64-v2
+# guest CPU (Milestone 64); with guest.cpu: v3 (hvx flag HVX_VM_X86_64_V3) it starts.
+# Get the image file first (needs network, once):
+#   sh hvx/onboard/examples/restate-oci/fetch-image.sh     # -> restate-1.7.13-amd64.docker.tar
+# then build on the build box:
+#   HYDO_SEEDRNG=<pinned hvx_seedrng> hvx/onboard/hydo-build hvx/onboard/examples/restate-oci/hydo.yaml
+# Try:  disk=none | run   -> OK: the server answers its health endpoints and the admin API
+#       explore.py --cpu v2 / hvx_explore without --cpu -> the server never becomes ready
+name: restate-oci
+description: Restate 1.7.13 from the official Docker image (AVX2 build); the server must come up and answer.
+
+guest:
+  cpu: v3
+  ram_mib: 2048
+
+data:
+  size_mib: 1024
+  dirs: [restate]
+
+services:
+  - name: restate
+    image: restate-1.7.13-amd64.docker.tar
+    env:
+      RESTATE_BASE_DIR: /data/restate
+      RESTATE_NODE_NAME: hydo
+      RESTATE_LOG_FILTER: warn
+      RESTATE_ROCKSDB_TOTAL_MEMORY_SIZE: 256 MiB
+    port: 8080
+    ready: wget -q -T 2 -O /dev/null http://127.0.0.1:9070/health && wget -q -T 2 -O /dev/null http://127.0.0.1:8080/restate/health
+    ready_timeout: 300
+
+workload:
+  steps: 6                          # step i = health + admin API queries
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      if wget -q -T 5 -O /tmp/h$i http://127.0.0.1:9070/health && wget -q -T 5 -O /tmp/d$i http://127.0.0.1:9070/deployments; then
+        echo $i >> $HYDO_ACKED
+        echo "hydo-restate: step $i deployments=$(cat /tmp/d$i)" > /dev/ttyS0
+      fi
+      i=$((i + 1))
+    done
+
+invariants:
+  - id: restate.answers
+    msg: the Restate server answered every health and admin request
+    cmd: |
+      n=$(wc -l < $HYDO_ACKED)
+      [ "$n" = 6 ] && wget -q -T 5 -O /dev/null http://127.0.0.1:8080/restate/health && { echo "steps=$n answered"; exit 0; }
+      echo "answered=$n"; exit 1
+
+faults: [kill, pause, cut, clock]
