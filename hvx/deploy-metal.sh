@@ -33,18 +33,20 @@ TESTS="hvx_test hvx_rdtsc_test hvx_step_test hvx_tscclock_test hvx_snapshot_test
 hvx_verify hvx_console_test hvx_bigmem_test hvx_scale_test hvx_cpuid_test hvx_sregs_test
 hvx_input_test hvx_smp_test hvx_virtio_iso_test hvx_virtio_pci_test hvx_fault_test hvx_net_test
 hvx_net_fault_test hvx_bug_f0_test hvx_fuzzresume_test hvx_pmu_test hvx_bigram_test hvx_avx_test"
-HARNESSES="hvx_boot_verify hvx_disk_boot_verify hvx_bug_verify hvx_sqlite_verify hvx_redis_verify
+# several vCPUs (CLAUDE.md M66/M69): hand-written tests, run with a longer timeout below
+SMPTESTS="hvx_sched_pmu_test hvx_sched_race_test hvx_sipi_test hvx_sched_sweep_test"
+HARNESSES="hvx_boot_verify hvx_disk_boot_verify hvx_smp_boot_verify hvx_bug_verify hvx_sqlite_verify hvx_redis_verify
 hvx_rootfs_verify hvx_system_verify hvx_jvm_verify hvx_kafka_verify hvx_mysql_verify"
 
 # Explicit file list: userspace sources only. hvx.c/hvx_abi.h go over only with `load`,
 # so a plain run never overwrites a newer module source that is being worked on on the box.
-FILES="hvx_boot.h"
-for t in $TESTS $HARNESSES; do FILES="$FILES $t.c"; done
+FILES="hvx_boot.h hvx_sched_util.h"
+for t in $TESTS $SMPTESTS $HARNESSES; do FILES="$FILES $t.c"; done
 [ $LOAD = 1 ] && FILES="$FILES hvx.c hvx_abi.h Makefile"
 echo ">> syncing to $BOX:hydo/hvx/ ($([ $LOAD = 1 ] && echo 'with' || echo 'without') module sources)"
 (cd "$HERE" && rsync -az $FILES "$BOX:hydo/hvx/")
 
-ssh -o BatchMode=yes "$BOX" "LOAD=$LOAD FLAG=$FLAG TESTS='$TESTS' HARNESSES='$HARNESSES' bash -s" <<'REMOTE'
+ssh -o BatchMode=yes "$BOX" "LOAD=$LOAD FLAG=$FLAG TESTS='$TESTS' SMPTESTS='$SMPTESTS' HARNESSES='$HARNESSES' bash -s" <<'REMOTE'
 set -u
 cd ~/hydo/hvx
 B=~/hydo/build
@@ -60,7 +62,7 @@ lsmod | grep -q '^hvx' || { echo "FAIL: hvx module is not loaded (run with 'load
 
 echo ">> compiling userspace tests + harnesses"
 cfail=0
-for t in $TESTS $HARNESSES; do
+for t in $TESTS $SMPTESTS $HARNESSES; do
   # build to a temp name and rename: a harness that is running right now keeps its old
   # inode instead of failing the build with "Text file busy"
   if cc -O2 -Wall -o "$t.new" "$t.c" 2> "/tmp/cc-$t.log"; then mv -f "$t.new" "$t"
@@ -78,6 +80,10 @@ declare -A EXP=(
   [hvx_avx_test]="3bb428a134ce542a"
   [hvx_smp_test]="27ead8c880ef7820 88ee51bd9f8e40e0 d042bb01201c269d"
   [hvx_pmu_test]="86c4afcd0a799450"
+  [hvx_sched_pmu_test]="73a465516c4e0094 b544e114dc426e85"
+  [hvx_sched_race_test]="8cb7c61a2393f44e"
+  [hvx_sipi_test]="eef5c1ebd4df2e7d c8d015ab3b57252d"
+  [hvx_sched_sweep_test]="39971eed9c2f35fe"
 )
 pass=0; fail=0; failed=""
 check() {   # name rc output expected...
@@ -99,11 +105,20 @@ for t in $TESTS; do
   check "$t" "$rc" "$out" ${EXP[$t]:-}
 done
 
+echo ">> several-vCPU suite"
+for t in $SMPTESTS; do
+  a=""; [ "$t" = hvx_sched_sweep_test ] && a=2000
+  out=$($R sudo timeout 900 ./$t $a 2>&1); rc=$?
+  check "$t" "$rc" "$out" ${EXP[$t]:-}
+done
+
 echo ">> boot verifies"
 out=$($R sudo timeout 300 ./hvx_boot_verify $B/bzImage $B/initramfs.cpio.gz 2>&1); rc=$?
 check "boot (no disk)" "$rc" "$(grep -a 'fp1\|fp_a' <<< "$out")" 7a5559028ffbf52c
 out=$($R sudo timeout 300 ./hvx_disk_boot_verify $B/bzImage $B/initramfs-disk.cpio.gz $B/vblk-disk.img 2>&1); rc=$?
 check "boot (with disk)" "$rc" "$(grep -a 'fp1\|fp_a' <<< "$out")" 36583d533d7c989b
+out=$($R sudo timeout 600 ./hvx_smp_boot_verify $B/bzImage $B/initramfs.cpio.gz 2 2>&1); rc=$?
+check "boot (2 vCPUs)" "$rc" "$out" 6584c954c2839491
 
 if [ "$FLAG" = 1 ]; then
   echo ">> flagship verifies (PASS = the harness's own MILESTONE PASS line)"
