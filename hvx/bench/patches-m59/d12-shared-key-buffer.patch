@@ -1,0 +1,22 @@
+--- a/main.go
++++ b/main.go
+@@ -185,6 +185,7 @@
+ 	kp        *kgo.Client // idempotent producer
+ 	rmu       sync.Mutex  // guards rc: requests run concurrently and share one connection
+ 	rc        *redisConn
++	keybuf    []byte // scratch buffer for the Kafka record key
+ 	mu        sync.Mutex              // guards inflight
+ 	inflight  map[int64]chan struct{} // ids with a Place running; closed when it returns
+ }
+@@ -335,8 +336,10 @@
+ 			return nil, notApplied("mysql", id, fmt.Errorf("mysql: %w", err))
+ 		}
+ 		if !have {
++			// the key is formatted into one reused buffer: no allocation per order
++			s.keybuf = strconv.AppendInt(s.keybuf[:0], id, 10)
+ 			res := s.produceBG(ctx, &kgo.Record{
+-				Key:   []byte(strconv.FormatInt(id, 10)),
++				Key:   s.keybuf,
+ 				Value: []byte(strconv.FormatInt(amt, 10)),
+ 			})
+ 			if err := res.FirstErr(); err != nil {

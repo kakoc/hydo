@@ -35,7 +35,7 @@ determinism and the generator working on manifest images, not the bug.
 | schedule | verdict | fingerprint |
 |---|---|---|
 | `disk=none dseed=1 \| run` | OK, acked=20 all present | `712bcab7167a52fe` |
-| `disk=none dseed=1 \| run C=12 R=everysec` | VIOLATION `[redis.acked_writes_survive] key k:3 lost` (Redis's documented fsync window) | `e4f65d61d3320ada` |
+| `disk=none dseed=1 \| run C=12 R=everysec` | VIOLATION `[redis.acked_writes_survive] key k:3 lost` (Redis's documented fsync window) | `e4f65d61d3320ada` (on the re-baselined `explore-ob-redis-pin` image it loses `k:2`; see hvx/REBASELINE.md) |
 | `disk=none dseed=1 \| run K=redis@5+3 P=redis@12+2 T=8:-86400` | OK, acked=15 (kill window + two 2 s client timeouts) | `eb3cc8787ec1e261` |
 
 ## Liveness invariants (`type: eventually`) on Redis (2026-10-21, bare-metal test machine)

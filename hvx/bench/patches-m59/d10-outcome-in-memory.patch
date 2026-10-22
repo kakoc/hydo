@@ -1,0 +1,87 @@
+--- a/main.go
++++ b/main.go
+@@ -185,8 +185,9 @@
+ 	kp        *kgo.Client // idempotent producer
+ 	rmu       sync.Mutex  // guards rc: requests run concurrently and share one connection
+ 	rc        *redisConn
+-	mu        sync.Mutex              // guards inflight
++	mu        sync.Mutex              // guards inflight and sending
+ 	inflight  map[int64]chan struct{} // ids with a Place running; closed when it returns
++	sending   map[int64]bool          // ids for which a produce was started (outcome may be unknown)
+ }
+ 
+ // acquire makes Place calls for the same order run one at a time. A second request for an
+@@ -217,8 +218,20 @@
+ 			return nil, ctx.Err()
+ 		}
+ 	}
++}
++
++func (s *orderServer) wasSending(id int64) bool {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	return s.sending[id]
+ }
+ 
++func (s *orderServer) markSending(id int64) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	s.sending[id] = true
++}
++
+ // The two ways a Place can fail (Milestone 39). notApplied is a promise that nothing was
+ // published and nothing will be: it is returned only when this request read published=0
+ // and failed before marking a send as started. Anything else is outcome-unknown.
+@@ -312,29 +325,25 @@
+ 	if _, err := s.execBG(ctx, "INSERT INTO stack.orders (id, amount) VALUES (?, ?) ON DUPLICATE KEY UPDATE id = id", id, amt); err != nil {
+ 		return nil, outcomeUnknown("mysql", id, fmt.Errorf("mysql: %w", err))
+ 	}
+-	// 2. Kafka, exactly once. The row's `published` records how far sending got:
+-	// 0 = no send started, 2 = a send started (the order may be in Kafka), 1 = published.
+-	// It lives in MySQL, not in this process's memory, so a restarted service (after a
+-	// crash) still knows to look in Kafka before sending an order a second time.
++	// 2. Kafka, exactly once. The row's `published` says whether the order is published
++	// (0/1); the service remembers which orders it has started sending (s.sending), so a
++	// retry after an uncertain send looks in Kafka before sending again.
+ 	var published int
+ 	if err := s.db.QueryRowContext(ctx, "SELECT published FROM stack.orders WHERE id = ?", id).Scan(&published); err != nil {
+ 		return nil, outcomeUnknown("mysql", id, fmt.Errorf("mysql: %w", err))
+ 	}
+ 	if published != 1 {
+ 		have := false
+-		if published == 2 {
++		if s.wasSending(id) {
+ 			var err error
+ 			if have, err = s.kafkaHasKeyBG(ctx, id); err != nil {
+ 				return nil, outcomeUnknown("kafka-check", id, fmt.Errorf("kafka check: %w", err))
+ 			}
+ 			pKafkaRecheck.Check(true, hydoassert.D{"order": id})
+ 			pDedupHit.Check(have, hydoassert.D{"order": id})
+-		} else if _, err := s.execBG(ctx, "UPDATE stack.orders SET published = 2 WHERE id = ? AND published = 0", id); err != nil {
+-			// Nothing has been sent, and no other request for this order is running
+-			// (acquire): a definite failure.
+-			return nil, notApplied("mysql", id, fmt.Errorf("mysql: %w", err))
+ 		}
+ 		if !have {
++			s.markSending(id)
+ 			res := s.produceBG(ctx, &kgo.Record{
+ 				Key:   []byte(strconv.FormatInt(id, 10)),
+ 				Value: []byte(strconv.FormatInt(amt, 10)),
+@@ -344,7 +353,7 @@
+ 			}
+ 		}
+ 		if _, err := s.execBG(ctx, "UPDATE stack.orders SET published = 1 WHERE id = ?", id); err != nil {
+-			// Kafka has it; the row stays at 2, so the retry looks in Kafka first.
++			// Kafka has it; s.sending still lists the order, so the retry looks in Kafka first.
+ 			return nil, outcomeUnknown("mysql-publish", id, fmt.Errorf("mysql publish flag: %w", err))
+ 		}
+ 	} else {
+@@ -448,7 +457,7 @@
+ 		fail("hydostack: listen: %v", err)
+ 	}
+ 	gs := grpc.NewServer()
+-	gs.RegisterService(&serviceDesc, &orderServer{db: db, kp: kp, rc: rc, inflight: map[int64]chan struct{}{}})
++	gs.RegisterService(&serviceDesc, &orderServer{db: db, kp: kp, rc: rc, inflight: map[int64]chan struct{}{}, sending: map[int64]bool{}})
+ 	fmt.Println("hydostack: server listening on " + grpcAddr)
+ 	if err := gs.Serve(lis); err != nil {
+ 		fail("hydostack: serve: %v", err)
