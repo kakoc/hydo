@@ -70,7 +70,8 @@ CONCURRENCY = False     # --concurrency: several clients place orders at the sam
 CC_SALT = 0x51C0C0C0C0C0C051
 MORE_FAULTS = False     # --more-faults (M62): the timed kill X= and the power cut at the k-th FLUSH cf=
 MF_SALT = 0x3F7A11C0FFEE3F7A
-MF_P = {"random": 30, "swarm": 50, "swarm-pos": 50, "process": 40}  # % of schedules per fault kind
+MF_PX = {"random": 30, "swarm": 50, "swarm-pos": 50, "process": 40}  # % of schedules drawing X=
+MF_PCF = {"random": 40, "swarm": 50, "swarm-pos": 50, "process": 60} # % drawing cf= (used only without K=)
 X_OFF_MAX = 250         # timed kill: ms of guest time after the order starts (30 orders ~ 0.5 s)
 CF_RANGE = None         # (lo, hi) FLUSH indices for cf=: --cf-range lo-hi, or measured (--cf-range auto)
                         # as 1 .. the FLUSH count of one fault-free workload (cfn) on the image
@@ -235,21 +236,27 @@ def add_concurrency(s, seed):
 
 def add_more_faults(s, seed, strategy="random"):
     """--more-faults (M62): a timed SIGKILL X=<svc>@<order>~<ms> (can land mid-request, M50) and a
-    power cut at the k-th disk FLUSH cf=<k> (host token, M56/M58), each on MF_P[strategy] % of
+    power cut at the k-th disk FLUSH cf=<k> (host token, M56/M58), on MF_PX / MF_PCF[strategy] % of
     schedules. A separate random stream, and every value is drawn whether or not it is used, so
     every other field stays what it was for this seed. X never targets the service K= kills.
     cf= needs the volatile write cache (disk=cut) and no C=: it turns disk=none into cut and
-    replaces a cut before an order; it is not drawn with a lying or failing disk."""
+    replaces a cut before an order; it is not drawn with a lying or failing disk, nor with K=."""
     if not MORE_FAULTS:
         return s
     t = SplitMix(seed ^ MF_SALT)
-    p = MF_P.get(strategy, 30)
-    x_on, x_svc, x_at, x_off = t.below(100) < p, t.next(), t.rng(0, NORDERS - 1), t.rng(0, X_OFF_MAX)
-    c_on, c_k = t.below(100) < p, t.next()
+    x_on, x_svc, x_at, x_off = t.below(100) < MF_PX.get(strategy, 30), t.next(), t.rng(0, NORDERS - 1), t.rng(0, X_OFF_MAX)
+    c_on, c_k = t.below(100) < MF_PCF.get(strategy, 40), t.next()
+    # After a cf= cut the data disk stays dead while the guest runs on, so a store restarted
+    # after it (K=, or X= on a store, restarted at the end) waits on the dead disk until the
+    # 900 s harness timeout: no verdict. So cf= is not drawn with K=, and with cf= an X= kills
+    # only the order service (stateless; its restart does not touch the data disk).
+    c_ok = bool(c_on and CF_RANGE and "K" not in s and s["disk"] in ("none", "cut") and
+                (SPACE is None or "cut" in SPACE.faults))
     if x_on and SPACE is None:                      # X= is a stack-explore.sh token
-        svcs = [v for v in PAUSE_SVCS if "K" not in s or v != s["K"][0]]
-        s["X"] = (svcs[x_svc % len(svcs)], x_at, x_off)
-    if c_on and CF_RANGE and s["disk"] in ("none", "cut") and (SPACE is None or "cut" in SPACE.faults):
+        svcs = [v for v in PAUSE_SVCS if ("K" not in s or v != s["K"][0]) and (not c_ok or v == "front")]
+        if svcs:
+            s["X"] = (svcs[x_svc % len(svcs)], x_at, x_off)
+    if c_ok:
         lo, hi = CF_RANGE
         s["disk"] = "cut"
         s.pop("C", None)
