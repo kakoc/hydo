@@ -107,6 +107,18 @@ struct hvx_config {
  * default 0 = byte-identical to before.
  */
 #define HVX_VM_SMP_SCHED	(1u << 5)
+/*
+ * HVX_VM_SMP_BOOT (SMP Stage 2): boot a real multi-CPU guest (Linux) on the in-kernel
+ * scheduler. Needs HVX_VM_SMP_SCHED (CREATE_VM returns EINVAL otherwise) and n_vcpus > 1
+ * (ignored with one vCPU). vCPUs 1..n-1 start in wait-for-SIPI (struct hvx_sched_vcpu
+ * .halted == 2): they do not run until vCPU 0 sends INIT then STARTUP through its x2APIC
+ * ICR, as Linux does; the STARTUP vector V starts the vCPU in real mode at V<<8 : 0
+ * ("unrestricted guest" VMX control, so CREATE_VM returns ENODEV on a CPU without it).
+ * CPUID reports the vCPUs as cores of one package (leaf 1 EBX/HTT, leaf 0xB), and device
+ * interrupts (IOAPIC entries, MSI-X messages) go to the vCPU named by their physical
+ * destination APIC ID instead of always vCPU 0. Default 0 = byte-identical to before.
+ */
+#define HVX_VM_SMP_BOOT		(1u << 6)
 
 /*
  * Guest register file. The first 15 fields (rax..r15) are the general-purpose
@@ -1012,7 +1024,8 @@ struct hvx_sched_vcpu {
 	__u64 branches;		/* guest conditional branches this vCPU retired */
 	__u64 turns;		/* turns it has run */
 	__u64 cr2;		/* guest CR2 (not a VMCS field) */
-	__u32 halted;		/* 1 = stopped at a HLT (RIP still at it), waiting for an interrupt */
+	__u32 halted;		/* 1 = stopped at a HLT (RIP still at it), waiting for an interrupt;
+				 * 2 = waiting for a STARTUP IPI (HVX_VM_SMP_BOOT) */
 	__u32 halt_len;		/* length of that HLT */
 	__u32 reinj_valid, reinj_info, reinj_ec, reinj_len;	/* event delivery cut short by an exit */
 };

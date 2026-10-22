@@ -256,6 +256,7 @@ MODULE_DESCRIPTION("hydo VT-x milestone 27: FLAGSHIP on UNMODIFIED Redis (redis-
 #define PROCBASED_MONITOR_TRAP  (1U << 27)   /* Monitor Trap Flag (single-step) */
 #define PROCBASED_SECONDARY     (1U << 31)
 #define SEC_ENABLE_EPT          (1U << 1)
+#define SEC_UNRESTRICTED_GUEST  (1U << 7)   /* real mode / paging off in VMX non-root (SMP boot) */
 #define SEC_CONCEAL_VMX_PT      (1U << 19)
 #define SEC_RDRAND_EXITING      (1U << 11)
 #define SEC_RDSEED_EXITING      (1U << 16)  /* no PIP/VMCS packets for VMX transitions */
@@ -748,6 +749,11 @@ struct hvx_vnet {
 
 struct hvx_vm;			/* forward: hvx_vcpu carries a back-pointer to its VM */
 
+/* struct hvx_vcpu.halted (and struct hvx_sched_vcpu.halted) */
+#define HVX_HALT_RUN	0	/* runnable */
+#define HVX_HALT_HLT	1	/* at a HLT, until an interrupt can be delivered */
+#define HVX_HALT_SIPI	2	/* after INIT / at power-on of an AP: until a STARTUP IPI */
+
 /*
  * Per-vCPU state (milestone 19). Split out of struct hvx_vm so one VM can hold
  * N >= 1 vCPUs. Everything here is PRIVATE to a single vCPU: its VMCS/VMXON
@@ -808,7 +814,8 @@ struct hvx_vcpu {
 	/* in-kernel scheduler (HVX_VM_SMP_SCHED); see struct hvx_sched in hvx_abi.h */
 	u64 br_own;			/* guest conditional branches this vCPU retired */
 	u64 sched_turns;		/* turns this vCPU has run */
-	bool halted;			/* stopped at a HLT (RIP still at it) until an interrupt */
+	u8 halted;			/* HVX_HALT_*: 1 = stopped at a HLT (RIP still at it) until an
+					 * interrupt; 2 = waiting for a STARTUP IPI (HVX_VM_SMP_BOOT) */
 	u32 halt_len;
 
 	struct hvx_regs regs;			/* software guest register file */
@@ -885,6 +892,9 @@ struct hvx_vm {
 	 * the per-vCPU parts live in struct hvx_vcpu). sched_stop is a THROTTLE / max_insns
 	 * stop waiting for a clean boundary (always 0 between ioctls). */
 	unsigned int sched_on;
+	/* HVX_VM_SMP_BOOT (with sched_on): INIT/SIPI start-up of vCPUs 1..n-1, unrestricted
+	 * guest (real mode), CPUID topology, device interrupts routed by destination. */
+	unsigned int smp_boot;
 	struct hvx_sched sched;
 	u32 sched_stop;
 	unsigned int pause_exit;	/* HVX_VM_PAUSE_EXIT */
@@ -1778,6 +1788,17 @@ static int setup_vmcs(struct hvx_vcpu *vcpu, bool mtf)
 	 * CR4 that omits them cannot fault VM-entry. */
 	u64 guest_cr0 = fixed_cr(MSR_VMX_CR0_FIXED0, MSR_VMX_CR0_FIXED1, vcpu->sregs.cr0);
 	u64 guest_cr4 = fixed_cr(MSR_VMX_CR4_FIXED0, MSR_VMX_CR4_FIXED1, vcpu->sregs.cr4);
+	/* SMP boot: an AP starts in real mode, so with the "unrestricted guest" control
+	 * CR0.PE and CR0.PG are not forced to 1, and the IA-32e-mode entry control follows
+	 * the guest's EFER.LMA instead of being always on. */
+	const bool ug = vm->smp_boot;
+	bool ia32e = true;
+
+	if (ug) {
+		guest_cr0 = (vcpu->sregs.cr0 | (rd(MSR_VMX_CR0_FIXED0) & ~(u64)(CR0_PE_ | CR0_PG_))) &
+			    rd(MSR_VMX_CR0_FIXED1);
+		ia32e = !!(vcpu->sregs.efer & EFER_LMA_);
+	}
 
 	asm volatile("mov %%cs,%0" : "=r"(cs));
 	asm volatile("mov %%ss,%0" : "=r"(ss));
@@ -1813,10 +1834,15 @@ static int setup_vmcs(struct hvx_vcpu *vcpu, bool mtf)
 		return -1;
 	}
 	proc2 = adjust_ctl(SEC_ENABLE_EPT | (vcpu->vm->pt_on ? SEC_CONCEAL_VMX_PT : 0) |
-			   (probe_rand ? SEC_RDRAND_EXITING | SEC_RDSEED_EXITING : 0),
+			   (probe_rand ? SEC_RDRAND_EXITING | SEC_RDSEED_EXITING : 0) |
+			   (ug ? SEC_UNRESTRICTED_GUEST : 0),
 			   MSR_VMX_PROCBASED2);
 	if (!(proc2 & SEC_ENABLE_EPT)) {
 		pr_err("hvx: EPT not supported by this CPU\n");
+		return -1;
+	}
+	if (ug && !(proc2 & SEC_UNRESTRICTED_GUEST)) {
+		pr_err("hvx: unrestricted guest not supported by this CPU\n");
 		return -1;
 	}
 
@@ -1832,7 +1858,7 @@ static int setup_vmcs(struct hvx_vcpu *vcpu, bool mtf)
 				      EXIT_SAVE_IA32_EFER | EXIT_LOAD_IA32_EFER |
 				      (vcpu->pmu_live ? EXIT_LOAD_PERF_GLOBAL : 0) |
 				      (vm->pt_on ? EXIT_CONCEAL_VMX_PT : 0), exit_msr));
-	VMW(VM_ENTRY_CTL,  adjust_ctl(ENTRY_IA32E_MODE | ENTRY_LOAD_IA32_EFER |
+	VMW(VM_ENTRY_CTL,  adjust_ctl((ia32e ? ENTRY_IA32E_MODE : 0) | ENTRY_LOAD_IA32_EFER |
 				      (vcpu->pmu_live ? ENTRY_LOAD_PERF_GLOBAL : 0) |
 				      (vcpu->pmu_live && hvx_smm_freeze ? ENTRY_LOAD_DEBUG_CTLS : 0) |
 				      (vm->pt_on ? ENTRY_CONCEAL_VMX_PT : 0), entry_msr));
@@ -1976,6 +2002,9 @@ static void hvx_cpuid(struct hvx_vcpu *vcpu)
 		 * (bits 24..31) = this vCPU's index, so an SMP guest can tell its
 		 * CPUs apart (milestone 19; index 0 keeps the pre-M19 value). */
 		b = 0x00000800 | ((u32)vcpu->index << 24);
+		/* SMP boot: n logical processors per package (EBX[23:16]) + HTT */
+		if (vcpu->vm->smp_boot)
+			b |= (u32)vcpu->vm->n_vcpus << 16;
 		c = (1U << 21) |	/* x2APIC       (M15: force MSR-mapped LAPIC) */
 		    (1U << 24) |	/* TSC-Deadline (M15: LAPIC deadline timer) */
 		    (1U << 31);		/* HYPERVISOR present (M15: see 0x40000000 below) */
@@ -1993,6 +2022,8 @@ static void hvx_cpuid(struct hvx_vcpu *vcpu)
 		    (1U << 24) |	/* FXSR    */
 		    (1U << 25) |	/* SSE     */
 		    (1U << 26);		/* SSE2    */
+		if (vcpu->vm->smp_boot)
+			d |= (1U << 28);	/* HTT: EBX[23:16] is valid */
 		if (vcpu->vm->cpu_v2) {
 			/* x86-64-v2 (M31, HVX_VM_X86_64_V2): add MMX (baseline requires it)
 			 * + the v2 SSE3/SSSE3/CX16/SSE4.1/SSE4.2/POPCNT features so a real
@@ -2009,6 +2040,24 @@ static void hvx_cpuid(struct hvx_vcpu *vcpu)
 		break;
 	case 0x7:		/* structured extended features: none advertised */
 		a = b = c = d = 0;
+		break;
+	case 0xb:		/* x2APIC topology (SMP boot only; else all zero as before) */
+		if (vcpu->vm->smp_boot) {
+			u32 nv = vcpu->vm->n_vcpus;
+
+			d = vcpu->index;		/* x2APIC ID */
+			if (subleaf == 0) {		/* SMT level: one thread per core */
+				a = 0;
+				b = 1;
+				c = (1U << 8) | 0;
+			} else if (subleaf == 1) {	/* core level: n cores in the package */
+				a = (u32)order_base_2(nv);
+				b = nv;
+				c = (2U << 8) | 1;
+			} else {
+				c = subleaf & 0xff;	/* invalid level ends the list */
+			}
+		}
 		break;
 	case 0x15:		/* TSC / core-crystal clock ratio: TSC = crystal*EBX/EAX */
 		a = 1;		/* denominator */
@@ -2052,7 +2101,6 @@ static void hvx_cpuid(struct hvx_vcpu *vcpu)
 	default:		/* every other leaf/subleaf: all zero */
 		break;
 	}
-	(void)subleaf;		/* leaf 7's only defined subleaf is 0 (all-zero) */
 	vcpu->regs.rax = a;
 	vcpu->regs.rbx = b;
 	vcpu->regs.rcx = c;
@@ -2176,6 +2224,88 @@ static void hvx_lapic_send_ipi(struct hvx_vcpu *src, u32 dsh, u32 dest, u32 vect
 	}
 }
 
+/*
+ * AP start-up (HVX_VM_SMP_BOOT), as on hardware and in KVM. INIT puts the target in
+ * wait-for-SIPI: it does not run, its local APIC is reset (ID and IA32_APIC_BASE kept)
+ * and pending interrupts are dropped. A STARTUP IPI with vector V, to a vCPU in
+ * wait-for-SIPI, starts it in real mode at CS = V<<8, IP = 0 (base V<<12); a STARTUP to
+ * a vCPU that is already running is ignored, so Linux's second SIPI is harmless. Both
+ * only change the target's state; it runs at its next turn (the scheduler's round-robin
+ * is the only thing that decides when). A vCPU never INITs itself.
+ */
+static void hvx_fx_init(u8 *fx);
+
+static void hvx_ap_init(struct hvx_vcpu *t)
+{
+	t->halted = HVX_HALT_SIPI;
+	t->halt_len = 0;
+	memset(t->lapic.reg, 0, sizeof(t->lapic.reg));
+	t->lapic.tsc_deadline = 0;
+	t->lapic.in_service = 0;
+	t->inject_valid = 0;
+	t->inject_vector = 0;
+	t->inject_at_icount = 0;
+	memset(t->irr, 0, sizeof(t->irr));
+	t->reinj_valid = false;
+}
+
+static void hvx_ap_sipi(struct hvx_vcpu *t, u32 vector)
+{
+	struct hvx_sregs *s = &t->sregs;
+
+	if (t->halted != HVX_HALT_SIPI)
+		return;
+	memset(&t->regs, 0, sizeof(t->regs));
+	t->regs.rip = 0;
+	t->regs.rflags = 0x2;
+	t->regs.rdx = 0x000006f1;		/* processor signature, as after INIT (CPUID 1 EAX) */
+	memset(s, 0, sizeof(*s));
+	s->cr0 = 0x10;				/* ET; CD/NW clear (as KVM); NE is added by fixed_cr */
+	s->dr7 = 0x400;
+	s->cs.selector = (u16)(vector << 8);
+	s->cs.base = (u64)vector << 12;
+	s->cs.limit = 0xffff;
+	s->cs.ar = 0x9b;			/* present code, read, accessed */
+	s->ss.limit = 0xffff;
+	s->ss.ar = 0x93;			/* present data, write, accessed */
+	s->ds = s->ss; s->es = s->ss; s->fs = s->ss; s->gs = s->ss;
+	s->tr.limit = 0xffff;
+	s->tr.ar = 0x8b;			/* busy 32-bit TSS (VM entry needs a busy TSS type) */
+	s->gdt_limit = 0xffff;
+	s->idt_limit = 0xffff;
+	memset(t->sw_msr, 0, sizeof(t->sw_msr));
+	hvx_fx_init((u8 *)t->fx_page);
+	t->cr2 = 0;
+	t->halted = HVX_HALT_RUN;
+}
+
+static void hvx_lapic_init_sipi(struct hvx_vcpu *src, u64 val)
+{
+	struct hvx_vm *vm = src->vm;
+	u32 dm = (u32)(val >> 8) & 7, dsh = (u32)(val >> 18) & 3, dest = (u32)(val >> 32);
+	unsigned int i;
+
+	if (dm == 5 && !(val & (1U << 14)))
+		return;				/* INIT level de-assert: no effect */
+	for (i = 0; i < vm->n_vcpus; i++) {
+		struct hvx_vcpu *t = &vm->vcpu[i];
+		bool hit;
+
+		switch (dsh) {
+		case 1:  hit = false;              break;	/* self: never */
+		case 2:
+		case 3:  hit = (t != src);         break;	/* all (a CPU does not INIT/SIPI itself) */
+		default: hit = (t->index == dest && t != src); break;
+		}
+		if (!hit)
+			continue;
+		if (dm == 5)
+			hvx_ap_init(t);
+		else
+			hvx_ap_sipi(t, (u32)val & 0xff);
+	}
+}
+
 static bool hvx_lapic_wrmsr(struct hvx_vcpu *vcpu, u32 idx, u64 val)
 {
 	if (idx == HVX_MSR_APICBASE) {
@@ -2216,8 +2346,9 @@ static bool hvx_lapic_wrmsr(struct hvx_vcpu *vcpu, u32 idx, u64 val)
 
 				hvx_lapic_send_ipi(vcpu, dsh, dest, (u32)val & 0xff);
 			}
-		}
-		/* dm 4/5/6 = NMI/INIT/SIPI: AP startup not modeled (see note) */
+		} else if ((dm == 5 || dm == 6) && vcpu->vm->smp_boot)
+			hvx_lapic_init_sipi(vcpu, val);	/* AP start-up (SMP boot) */
+		/* otherwise dm 4/5/6 = NMI/INIT/SIPI are dropped */
 		break;
 	}
 	case X2APIC_SELF_IPI:
@@ -4310,6 +4441,76 @@ static bool uart_irq(struct hvx_vm *vm, u32 *vec)
 }
 
 /*
+ * The vCPU a device interrupt is delivered to. vCPU 0 (the boot CPU) always, except in
+ * an SMP boot (HVX_VM_SMP_BOOT), where the physical destination APIC ID chosen by the
+ * guest selects it: bits 63:56 of an IOAPIC redirection entry, bits 19:12 of an MSI
+ * message address. A logical destination or an ID with no vCPU falls back to vCPU 0.
+ */
+static u32 hvx_ioapic_dest(const struct hvx_vm *vm, u32 gsi)
+{
+	u32 lo = vm->ioapic.redir[gsi * 2], id = vm->ioapic.redir[gsi * 2 + 1] >> 24;
+
+	if (!vm->smp_boot || (lo & (1U << 11)) || id >= vm->n_vcpus)
+		return 0;
+	return id;
+}
+
+static u32 hvx_msi_dest(const struct hvx_vm *vm, u32 addr_lo)
+{
+	u32 id = (addr_lo >> 12) & 0xff;
+
+	if (!vm->smp_boot || (addr_lo & (1U << 2)) || id >= vm->n_vcpus)
+		return 0;
+	return id;
+}
+
+/*
+ * The asserted device interrupt for vCPU v, in the fixed priority order the one-vCPU
+ * code always used: COM1 (IOAPIC 4), virtio-blk INTx (IOAPIC HVX_VBLK_GSI), virtio-blk
+ * MSI-X, virtio-net MSI-X. A source counts only if it is routed to v. *msix / *vclear
+ * say whether delivering it consumes an MSI edge (see the arming block).
+ */
+static bool hvx_dev_irq(struct hvx_vcpu *v, u32 *vec, bool *msix, u32 **vclear)
+{
+	struct hvx_vm *vm = v->vm;
+	u32 idx;
+
+	*msix = false;
+	*vclear = NULL;
+	if (!vm->smp_boot) {
+		if (v->index != 0)
+			return false;
+		if (uart_irq(vm, vec) || vblk_irq(vm, vec))
+			return true;
+		if (vblk_msix_irq(vm, vec)) {
+			*msix = true;
+			return true;
+		}
+		return vnet_msix_irq(vm, vec, vclear);
+	}
+	if (uart_irq(vm, vec) && hvx_ioapic_dest(vm, 4) == v->index)
+		return true;
+	if (vblk_irq(vm, vec) && hvx_ioapic_dest(vm, HVX_VBLK_GSI) == v->index)
+		return true;
+	if (vblk_msix_irq(vm, vec)) {
+		idx = vm->vblk.queue_msix_vector;
+		if (hvx_msi_dest(vm, vm->vblk.msix_tbl[idx * 4]) == v->index) {
+			*msix = true;
+			return true;
+		}
+	}
+	if (vnet_msix_irq(vm, vec, vclear)) {
+		/* vnet_msix_irq picked the first deliverable queue; route by its entry */
+		struct hvx_vnet_queue *q = container_of(*vclear, struct hvx_vnet_queue, irq_pending);
+
+		if (hvx_msi_dest(vm, vm->vnet.msix_tbl[q->msix_vector * 4]) == v->index)
+			return true;
+		*vclear = NULL;
+	}
+	return false;
+}
+
+/*
  * Run the guest. Self-contained VMX-root critical section: VMXON, load the
  * VMCS, then a small run-loop that VMLAUNCHes and VMRESUMEs the guest, handling
  * exits IN-KERNEL where it can and returning the rest to userspace. VMXOFF on
@@ -4498,6 +4699,9 @@ static void hvx_lapic_timer_due(struct hvx_vcpu *vcpu)
 static void hvx_dev_due(struct hvx_vcpu *vcpu)
 {
 	struct hvx_vm *vm = vcpu->vm;
+	/* SMP boot: the VM has one clock, so device events come due on whichever vCPU
+	 * runs (vCPU 0's copy of the clock is stale while another vCPU runs) */
+	const bool here = vcpu->index == 0 || vm->smp_boot;
 
 	/*
 	 * virtio-blk deterministic completion (milestone 20). A kick scheduled
@@ -4510,7 +4714,7 @@ static void hvx_dev_due(struct hvx_vcpu *vcpu)
 	 * one-shot M8 injection; Phase B leaves irq_pending set for the IOAPIC-
 	 * routed level source (vblk_irq) to deliver.
 	 */
-	if (vcpu->index == 0 && vm->vblk.completion_armed &&
+	if (here && vm->vblk.completion_armed &&
 	    vcpu->icount >= vm->vblk.completion_due) {
 		vm->vblk.completion_armed = 0;
 		vm->vblk.irq_pending = 1;
@@ -4518,11 +4722,14 @@ static void hvx_dev_due(struct hvx_vcpu *vcpu)
 			/* Phase A: a fire-and-forget one-shot delivered directly (the
 			 * test's ISR does not EOI), so -- exactly like HVX_INJECT -- it
 			 * is NOT gated on a prior EOI. Clear in_service so a completion
-			 * from a previous run/replay cannot block this one. */
-			vcpu->inject_vector = vm->vblk.irq_vec & 0xff;
-			vcpu->inject_at_icount = vcpu->icount;
-			vcpu->inject_valid = 1;
-			vcpu->lapic.in_service = 0;
+			 * from a previous run/replay cannot block this one. Always to
+			 * vCPU 0 (the running one, except in an SMP boot). */
+			struct hvx_vcpu *t = &vm->vcpu[0];
+
+			t->inject_vector = vm->vblk.irq_vec & 0xff;
+			t->inject_at_icount = vcpu->icount;
+			t->inject_valid = 1;
+			t->lapic.in_service = 0;
 			vm->vblk.irq_pending = 0;	/* consumed by the one-shot */
 		}
 	}
@@ -4535,7 +4742,7 @@ static void hvx_dev_due(struct hvx_vcpu *vcpu)
 	 * runs deliver at the identical instruction). This lets a later frame arrive
 	 * after the interface is fully up. OFF by default (kick-triggered only).
 	 */
-	if (vcpu->index == 0 && vm->vnet.present && vm->vnet.rx_paced &&
+	if (here && vm->vnet.present && vm->vnet.rx_paced &&
 	    vm->vnet.rx_tail != vm->vnet.rx_head && vm->vnet.q[0].qready &&
 	    vcpu->icount >= vm->vnet.rx_next_deliver) {
 		virtio_net_rx_deliver(vcpu, 1);	/* one FIFO frame per paced interval */
@@ -4550,7 +4757,7 @@ static void hvx_dev_due(struct hvx_vcpu *vcpu)
 	 * to deliver. Same loop-top / retired-mutation split as virtio-blk (M16
 	 * creep discipline). Device IRQs on the BSP (vCPU 0).
 	 */
-	if (vcpu->index == 0 && vm->vnet.present) {
+	if (here && vm->vnet.present) {
 		int qi;
 
 		for (qi = 0; qi < HVX_VNET_NQUEUES; qi++)
@@ -4577,16 +4784,14 @@ static void hvx_dev_due(struct hvx_vcpu *vcpu)
  */
 static bool hvx_vcpu_irq_ready(struct hvx_vcpu *v)
 {
-	struct hvx_vm *vm = v->vm;
 	u32 vec, *clr;
+	bool msix;
 
 	if (!(v->regs.rflags & 0x200) || v->lapic.in_service)
 		return false;
 	if (v->inject_valid && v->icount >= v->inject_at_icount)
 		return true;
-	return v->index == 0 &&
-	       (uart_irq(vm, &vec) || vblk_irq(vm, &vec) || vblk_msix_irq(vm, &vec) ||
-		vnet_msix_irq(vm, &vec, &clr));
+	return hvx_dev_irq(v, &vec, &msix, &clr);
 }
 
 static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
@@ -4860,15 +5065,11 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 				if (oneshot) {
 					vec = vcpu->inject_vector;
 					pend = true;
-				} else if (vcpu->index == 0 && uart_irq(vm, &vec)) {
+				} else if (hvx_dev_irq(vcpu, &vec, &via_msix, &vnet_clear)) {
+					/* COM1 / virtio-blk INTx via the IOAPIC (M15/M20), virtio-blk
+					 * MSI-X (M21), virtio-net MSI-X (M23): vCPU 0, or in an SMP
+					 * boot the vCPU the guest routed it to */
 					pend = true;
-				} else if (vcpu->index == 0 && vblk_irq(vm, &vec)) {
-					pend = true;	/* virtio-blk INTx via IOAPIC (M20) */
-				} else if (vcpu->index == 0 && vblk_msix_irq(vm, &vec)) {
-					pend = true;	/* virtio-blk MSI-X, direct to the LAPIC (M21) */
-					via_msix = true;
-				} else if (vcpu->index == 0 && vnet_msix_irq(vm, &vec, &vnet_clear)) {
-					pend = true;	/* virtio-net MSI-X, direct to the LAPIC (M23) */
 				}
 			}
 
@@ -4945,6 +5146,16 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 							: (pc & ~PROCBASED_MONITOR_TRAP));
 		}
 
+		if (vm->smp_boot) {
+			/* An AP switches from real mode to long mode without VM exits (CR0 is
+			 * guest-owned), so keep the IA-32e-mode entry control equal to the
+			 * guest's EFER.LMA, which VM entry checks. */
+			u32 ec = (u32)vmread(VM_ENTRY_CTL);
+			bool lma = !!(vmread(GUEST_IA32_EFER) & EFER_LMA_);
+
+			if (!!(ec & ENTRY_IA32E_MODE) != lma)
+				VMW(VM_ENTRY_CTL, lma ? (ec | ENTRY_IA32E_MODE) : (ec & ~ENTRY_IA32E_MODE));
+		}
 		if (vcpu->reinj_valid) {
 			/* finish the interrupted event delivery first */
 			VMW(VM_ENTRY_INTR_INFO, vcpu->reinj_info);
@@ -5281,7 +5492,7 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 					VMW(GUEST_RIP, vcpu->regs.rip);
 					retired = true;
 				} else {
-					vcpu->halted = true;
+					vcpu->halted = HVX_HALT_HLT;
 					vcpu->halt_len = (u32)vmread(VM_EXIT_INSN_LEN);
 					ex->reason = HVX_EXIT_TURN;
 					ex->insn_len = 0;
@@ -5620,10 +5831,12 @@ static int hvx_sched_pick(struct hvx_vm *vm)
 	for (k = 1; k <= n; k++) {
 		struct hvx_vcpu *v = &vm->vcpu[(vm->sched.cur + k) % n];
 
+		if (v->halted == HVX_HALT_SIPI)
+			continue;		/* only a STARTUP IPI makes it runnable */
 		if (v->halted) {
 			if (!hvx_vcpu_irq_ready(v))
 				continue;
-			v->halted = false;
+			v->halted = HVX_HALT_RUN;
 			v->regs.rip += v->halt_len;
 			vm->sched.wakeups++;
 		}
@@ -5967,7 +6180,7 @@ static void seed_vcpu(struct hvx_vcpu *vc, struct hvx_vm *vm, u32 index)
 	vc->lapic.apic_base = index ? (APICBASE_DEFAULT & ~APICBASE_BSP) : APICBASE_DEFAULT;
 	vc->br_own = 0;
 	vc->sched_turns = 0;
-	vc->halted = false;
+	vc->halted = HVX_HALT_RUN;
 	vc->halt_len = 0;
 }
 
@@ -5987,6 +6200,11 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 		return -ENODEV;			/* no usable PMU (nested / hybrid host) */
 	if ((cfg->flags & HVX_VM_SMP_SCHED) && !(cfg->flags & HVX_VM_PMU_CLOCK))
 		return -EINVAL;			/* turns are counted on the PMU branch clock */
+	if ((cfg->flags & HVX_VM_SMP_BOOT) && !(cfg->flags & HVX_VM_SMP_SCHED))
+		return -EINVAL;			/* APs are started and run by the scheduler */
+	if ((cfg->flags & HVX_VM_SMP_BOOT) && nv > 1 &&
+	    !((rd(MSR_VMX_PROCBASED2) >> 32) & SEC_UNRESTRICTED_GUEST))
+		return -ENODEV;			/* APs start in real mode */
 
 	n = cfg->mem_size ? DIV_ROUND_UP(cfg->mem_size, PAGE_SIZE) : 64;
 	if (n < MIN_GPAGES)
@@ -6031,6 +6249,7 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 	vm->pause_exit = (cfg->flags & HVX_VM_PAUSE_EXIT) ? 1 : 0;
 	vm->pt_allowed = !!(cfg->flags & HVX_VM_PT_TRACE);
 	vm->sched_on = (cfg->flags & HVX_VM_SMP_SCHED) && nv > 1;
+	vm->smp_boot = vm->sched_on && (cfg->flags & HVX_VM_SMP_BOOT);
 	memset(&vm->sched, 0, sizeof(vm->sched));
 	vm->sched.quantum = HVX_SCHED_QUANTUM;
 	vm->sched.cur = nv - 1;			/* the first pick is vCPU 0 */
@@ -6083,6 +6302,10 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 	 * via HVX_SET_VCPU + HVX_SET_REGS / HVX_SET_TSC / HVX_SET_SREGS) */
 	for (i = 0; i < nv; i++)
 		seed_vcpu(&vm->vcpu[i], vm, i);
+	/* SMP boot: only the boot CPU runs; the others wait for INIT + STARTUP */
+	if (vm->smp_boot)
+		for (i = 1; i < nv; i++)
+			vm->vcpu[i].halted = HVX_HALT_SIPI;
 
 	/* SHARED device model (milestone 15). x2APIC per-vCPU is seeded above; the
 	 * console, IOAPIC, both PIC masks, the 16550 UART, and the input ring are one
@@ -7068,7 +7291,8 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				     (sc->tsc_mode != HVX_TSC_COUNTER && sc->tsc_mode != HVX_TSC_ICOUNT)))
 			ret = -EINVAL;
 		for (i = 0; i < vm->n_vcpus; i++)
-			if (sc->v[i].halt_len > 15 ||
+			if (sc->v[i].halt_len > 15 || sc->v[i].halted > HVX_HALT_SIPI ||
+			    (sc->v[i].halted == HVX_HALT_SIPI && !vm->smp_boot) ||
 			    (sc->v[i].reinj_valid && !(sc->v[i].reinj_info & 0x80000000U)))
 				ret = -EINVAL;
 		if (ret) { kfree(sc); break; }
@@ -7089,7 +7313,7 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			v->reinj_ec = sc->v[i].reinj_ec;
 			v->reinj_len = sc->v[i].reinj_len;
 			if (vm->sched_on) {
-				v->halted = !!sc->v[i].halted;
+				v->halted = (u8)sc->v[i].halted;
 				v->halt_len = sc->v[i].halt_len;
 			}
 		}

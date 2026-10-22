@@ -275,8 +275,10 @@ static inline void build_page_tables_and_gdt(uint8_t *mem, uint64_t mem_size)
 	guest_wr64(mem, mem_size, GDT_ADDR + 16, 0x00CF92000000FFFFULL); /* data   */
 }
 
-/* Intel MP Floating Pointer + MP Configuration Table (boot.rs:186-276). */
-static inline void build_mptable(uint8_t *mem, uint64_t mem_size)
+/* Intel MP Floating Pointer + MP Configuration Table (boot.rs:186-276). With ncpus > 1
+ * (SMP Stage 2) it lists one processor entry per vCPU, APIC ID = vCPU index, CPU 0 the
+ * boot CPU; with ncpus == 1 the bytes are exactly the one-CPU table of every earlier boot. */
+static inline void build_mptable_n(uint8_t *mem, uint64_t mem_size, unsigned int ncpus)
 {
 	const uint32_t APIC_DEFAULT_PHYS_BASE   = 0xfee00000u;
 	const uint32_t IOAPIC_DEFAULT_PHYS_BASE = 0xfec00000u;
@@ -285,7 +287,8 @@ static inline void build_mptable(uint8_t *mem, uint64_t mem_size)
 	const uint32_t CPU_FEATURE_APIC         = 0x200;
 	const uint32_t CPU_FEATURE_FPU          = 0x001;
 
-	uint8_t mpc[256];
+	uint8_t mpc[512];
+	unsigned int cpu;
 	size_t p = 0;
 	uint16_t entry_count = 0;
 	uint16_t len;
@@ -309,14 +312,16 @@ static inline void build_mptable(uint8_t *mem, uint64_t mem_size)
 	mpc[p++] = 0;                            /* reserved */
 	/* p == 44 (0x2c) here. */
 
-	mpc[p++] = 0;                            /* entry type: processor */
-	mpc[p++] = 0;                            /* local APIC id */
-	mpc[p++] = APIC_VERSION;                 /* local APIC version */
-	mpc[p++] = 0x03;                         /* flags: enabled | bootstrap */
-	wr32(mpc, p, CPU_STEPPING); p += 4;      /* cpu signature */
-	wr32(mpc, p, CPU_FEATURE_APIC | CPU_FEATURE_FPU); p += 4; /* features */
-	memset(mpc + p, 0, 8); p += 8;           /* reserved */
-	entry_count++;
+	for (cpu = 0; cpu < (ncpus ? ncpus : 1); cpu++) {
+		mpc[p++] = 0;                    /* entry type: processor */
+		mpc[p++] = (uint8_t)cpu;         /* local APIC id */
+		mpc[p++] = APIC_VERSION;         /* local APIC version */
+		mpc[p++] = cpu ? 0x01 : 0x03;    /* flags: enabled (| bootstrap for CPU 0) */
+		wr32(mpc, p, CPU_STEPPING); p += 4; /* cpu signature */
+		wr32(mpc, p, CPU_FEATURE_APIC | CPU_FEATURE_FPU); p += 4; /* features */
+		memset(mpc + p, 0, 8); p += 8;   /* reserved */
+		entry_count++;
+	}
 
 	mpc[p++] = 1;
 	mpc[p++] = 0;                            /* bus id */
@@ -361,12 +366,17 @@ static inline void build_mptable(uint8_t *mem, uint64_t mem_size)
 		exit(1);
 }
 
+static inline void build_mptable(uint8_t *mem, uint64_t mem_size)
+{
+	build_mptable_n(mem, mem_size, 1);
+}
+
 /* Load the bzImage + initramfs into guest RAM and build the zero page / e820 /
  * cmdline / MP table. Ported from boot.rs:80-180 (load_linux). */
-static inline int load_bzimage(uint8_t *mem, uint64_t mem_size,
-			       const uint8_t *image, size_t image_len,
-			       const uint8_t *initrd, size_t initrd_len,
-			       const char *cmdline)
+static inline int load_bzimage_n(uint8_t *mem, uint64_t mem_size,
+				 const uint8_t *image, size_t image_len,
+				 const uint8_t *initrd, size_t initrd_len,
+				 const char *cmdline, unsigned int ncpus)
 {
 	uint16_t boot_flag, xloadflags, version;
 	size_t setup_sects, setup_size, kernel_len;
@@ -463,13 +473,21 @@ static inline int load_bzimage(uint8_t *mem, uint64_t mem_size,
 	if (guest_write(mem, mem_size, BOOT_PARAMS_ADDR, bp, sizeof(bp)) < 0)
 		return -1;
 
-	build_mptable(mem, mem_size);
+	build_mptable_n(mem, mem_size, ncpus);
 
 	fprintf(stderr, "hvx_boot: bzImage v%u.%u  setup=%zuB  kernel=%zuB @ %#llx"
 		"  initramfs=%zuB  cmdline=\"%s\"\n",
 		version >> 8, version & 0xff, setup_size, kernel_len,
 		(unsigned long long)KERNEL_LOAD_ADDR, initrd_len, cmdline);
 	return 0;
+}
+
+static inline int load_bzimage(uint8_t *mem, uint64_t mem_size,
+			       const uint8_t *image, size_t image_len,
+			       const uint8_t *initrd, size_t initrd_len,
+			       const char *cmdline)
+{
+	return load_bzimage_n(mem, mem_size, image, image_len, initrd, initrd_len, cmdline, 1);
 }
 
 /* ==========================================================================
