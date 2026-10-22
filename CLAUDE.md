@@ -944,6 +944,39 @@ Closes the M62 gap. Branch `draw-x-cf` (commits `397cef1`, `219dda9`), merged as
 - **Current order service** (`explore-binlog-ret-disk.img`, process `--more-faults --durable-only`, seeds 1–100): 0 violations; 5 runs ended `HYDO-ORACLE: ERROR front door restart` — `cf=` with `X=front` after the cut, the order service cannot restart on the dead disk (harness limit; about 40% of such combined runs). The one candidate found during the runs was the M63 Kafka retention bug (fails on the bench control and `explore-binlog-pin`, OK on `explore-binlog-ret`). Results `/var/tmp/m62-xcf/` on the bare-metal machine.
 - **Open:** the harness fix for the ERROR runs (go to the recovery boot when the order service cannot restart after the cut) — in progress on branch `cut-kill-recovery`.
 
+### Milestone 69 — DONE (several virtual CPUs, stages 2 and 3: real Linux on 2–4 vCPUs, the four-service stack and the explorer on 2 vCPUs; 2026-10-22)
+
+(Numbered 69: 67 is `--more-faults`, 68 is the other session's guest AVX work.) Built by two agents in parallel, joined on branch `smp-join`. Write-ups `hvx/SMP_STAGE2.md` and `hvx/explore/TURNS.md`. Not yet in the main `hvx.ko`: all box work used the side module `/dev/hvxsmp2` (`hvx/smp2/build-hvxsmp2.sh`, box tree `~/hydo-smp2`).
+
+**Stage 2, module and Linux (`hvx.c`, `hvx_abi.h`, `hvx_boot.h`).** Opt-in flag `HVX_VM_SMP_BOOT` (bit 6), which needs `HVX_VM_SMP_SCHED` and more than one vCPU.
+- vCPUs 1.. start waiting for a startup signal (`halted == 2`, no ABI struct changed size). INIT resets the target's LAPIC and makes it wait again; STARTUP with vector V starts a waiting vCPU in real mode at V<<8:0, and a second STARTUP is ignored. This needs the unrestricted-guest control, CR0.PE/PG no longer forced, and the 64-bit entry control following the guest's EFER.LMA.
+- MP table with one entry per CPU (`build_mptable_n`, `load_bzimage_n`); one-CPU callers write the same bytes. CPUID leaf 1 and 0xB report the vCPUs as cores of one package.
+- Device interrupts routed by the IOAPIC entry or MSI-X address destination; seen: COM1 on vCPU 1, the virtio-blk queue on vCPU 3.
+- Real Linux 6.6.35 boots with 2, 3 and 4 vCPUs ("smp: Brought up 1 node, N CPUs"), and two boots plus every branch-from-snapshot are identical (`hvx/hvx_smp_boot_verify.c`): 2 vCPUs `6584c954c2839491`, 3 `e1a2bb0dd744a9ab`, 4 `1dfafae6887e3a01`, 0.85–0.87 s per boot against 0.75 s for one vCPU. Also identical with `tsc=reliable`, quantum 65,536, seeded turns, disk boots, branches at 10 points inside the second CPU's start-up, and 12 boots under host load. `hvx_sipi_test` (hand-written): turn lengths 1..300, replay plus 44 branches identical.
+- Gate on the side module: `side-metal.sh` ALL PASS (25 checks), every fingerprint unchanged; the three stage-1 tests give their recorded numbers.
+
+**Stage 3, explorer (`hvx_explore.c`, `hvx_stack_verify.c`, `explore.py`, `hvm_backend.py`).**
+- `hvx_explore --vcpus N` / `HVX_EXPLORE_VCPUS`, and `HVX_VCPUS` for `hvx_stack_verify`: the VM gets N vCPUs, `SMP_SCHED` and `SMP_BOOT`. Linux starts the others, the MP table lists N CPUs, and 4 consecutive PAUSEs end a turn (`HVX_PAUSE_K`). Every snapshot and restore covers every vCPU plus the scheduler state; fingerprints add vCPUs 1.. and the scheduler state only when N > 1. `HVX_VCPU_PARK=1` keeps vCPUs 1.. halted instead.
+- Host tokens `q=<branches>` (turn length) and `qs=<hex>` (seeded lengths in [1, q]), workload only, RESULT `qn=<turns>`; refused on a one-vCPU VM.
+- `explore.py --vcpus N`, and `--turns`: half the schedules get turn tokens from their own random stream, mixed as in rr's chaos mode (about 80% long, 10% at most 100, 10% at most 10,000). The shrinker drops them, then makes seeded turns fixed, then lengthens them. `hvm_backend.py` drops them.
+- One-vCPU path unchanged: 179,616 generated schedule strings identical to main, serve-mode fingerprints identical to main's binary, pinned reproducers `2403499c9a3f8419` / `f87130453609a5d6` through the joined binary on the main module.
+
+**The four-service stack on 2 vCPUs** (`stack-binlog-ret-disk.img`, joined side module): `hvx_stack_verify mode=all` twice identical, MILESTONE 35 PASS, about 22 s for the sanity run:
+- SANITY `05915e49a5506c58` (30/30 consistent, "Brought up 1 node, 2 CPUs");
+- F1 `1e4fedf03f81f941`;
+- F2 `c5e01886e97b32b8` (VIOLATION mysql order=2, the relaxed window; replay and branch identical; durable `c9b1cfeb274d4e3d`);
+- F3 `2c522171088a9da5` / `2a01253d0d5a4eb8`.
+
+**Explorer on 2 vCPUs:** `explore.py --vcpus 2 --turns --concurrency --strategy swarm`, seeds 1–40 on `explore-binlog-ret-disk.img`. 21 schedules had turn tokens. 26 failures, all reproduced, all with a lying disk, I/O errors or a relaxed setting; 0 of 14 durable-settings runs failed; no harness errors.
+
+**Open:**
+- Linux marks the TSC unstable with 2 vCPUs, as it already does with one vCPU on the PMU clock; `tsc=reliable` removes the message.
+- Each PAUSE exit moves the virtual clock, so guest time depends on the PAUSE setting (4 keeps it small).
+- Not done: NMIs between CPUs; logical-destination interrupt routing (falls back to vCPU 0); virtio-net routing looks only at the first deliverable queue; no paravirtual lock help; nothing beyond 4 vCPUs.
+- Module wishes in TURNS.md: a per-turn length list, a per-turn short/long mix, a starve mode.
+- The several-vCPU tests are not in `deploy-metal.sh`.
+- The main module needs a reload to carry stage 2; it is planned after the guest AVX branch merges on top, so there is one reload.
+
 ### Roadmap — booting Linux as L2 (phased; from a planning pass over hydo's KVM boot path)
 
 The KVM monitor already boots Linux; hvx must replicate its recipe. Key facts to reuse (from `src/boot.rs`/`src/detlinux.rs`): 64-bit **bzImage** protocol — protected-mode kernel loaded at `0x100000`, **entry `0x100200` directly in 64-bit long mode** (so we DO NOT need real-mode entry or the unrestricted-guest control — a major de-risk), `boot_params`/zero-page @`0x10000` (`RSI`), e820 + cmdline @`0x20000` (`console=ttyS0 earlyprintk=ttyS0 loglevel=8 nokaslr acpi=off`), MP table @`0x9FC00`, initial long-mode GDT/paging (PML4→PDPT→PD with 512×2 MiB identity), CPUID/MSR **synthesized deterministically** (hvx owns CPUID now). Remaining phases, smallest-first:
