@@ -920,6 +920,7 @@ The kill list (40 schedules) gives 0 failures. These supersede the `*-binlog-pin
   - `hvx_sched_sweep_test`: turn lengths 1..2000 replay and branch-from-snapshot identical at all 894 turn boundaries and at 189 mid-turn stops.
   - `hvx_sched_race_test`: a race in plain computation, with the tick period made huge so no tick falls in the window. 21 of 40 (turn length, seed) cells lose sales; every cell is identical when run twice; grid hash `8cb7c61a2393f44e`. Turns alone hit a window that timer jitter cannot reach.
 - **Gate:** `race/side-metal.sh` against the side module: ALL PASS (25 checks), every existing fingerprint unchanged. The same three tests and the same 25 checks passed again on the module merged with main (with the M65 SMM clock freeze), with identical numbers.
+- **Loaded into the main `hvx.ko`** on 2026-10-22 (with the M65 SMM clock freeze; srcversion `C907B1D09F5370F6CC93B45`, dmesg "freeze in SMM yes"): `deploy-metal.sh load` ALL PASS (25 checks), every fingerprint unchanged; pinned reproducers `2403499c9a3f8419` / `f87130453609a5d6` unchanged.
 - **Not yet:** stage 2 (real Linux with several CPUs: AP start-up by INIT/SIPI, MP table and CPUID topology, device interrupts routed by destination) and stage 3 (explorer tokens for turn lengths). The several-CPU tests are not in `deploy-metal.sh`.
 
 ### Roadmap — booting Linux as L2 (phased; from a planning pass over hydo's KVM boot path)
