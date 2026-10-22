@@ -28,9 +28,9 @@ TRIGGERS = {
     "d7-skip-last-record": ["disk=none dseed=0 | run P=kafka@28+2"],
     # Milestone 59 (build-bench-m59.sh; control explore-bench-m59-control-disk.img)
     "d8-no-order-lock": ["disk=none dseed=0 | run Q=2d"],
-    "d9-redis-unlocked": ["disk=none dseed=0 | run Q=2"],
-    "d10-outcome-in-memory": ["disk=none dseed=0 | run X=front@9~20"],
-    "d11-ack-unflushed-flag": ["disk=cut dseed=0 cf=254 | run"],
+    "d9-redis-unlocked": ["disk=none dseed=0 | run Q=4"],
+    "d10-outcome-in-memory": ["disk=none dseed=0 | run X=front@12~20"],
+    "d11-ack-unflushed-flag": ["disk=cut dseed=0 cf=238 | run"],
     "d12-shared-key-buffer": ["disk=none dseed=0 | run Q=2"],
 }
 
