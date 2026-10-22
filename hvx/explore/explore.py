@@ -20,6 +20,12 @@ Schedule format (see hvx_explore.c / stack-explore.sh):
   guest's realtime clock by delta seconds before order at; O is one-way netem (req = packets
   to the service's port, resp = packets from it). Drawn from a separate random stream, so
   every other field equals the schedule of the same seed without --new-faults.
+  more faults (only with --more-faults, M62): X=svc@at~ms SIGKILLs svc (may be "front") ms of
+  guest time after order at starts, so it can land mid-request; host token cf=<k> cuts the
+  data disk's power at the k-th FLUSH of the workload (needs disk=cut, no C=; k from
+  --cf-range, by default 1 .. the FLUSH count of a fault-free workload, measured with cfn).
+  Drawn from a separate random stream, so every other field equals the schedule without it,
+  except that cf= makes the disk "cut" and replaces a C= cut.
   timing (only with --timing): tj=<hex> tjpm=<n> tjmax=<n> [tjlo=<k> tjhi=<k>]  delays a
   seeded share of the PMU-clock ticks, so threads interleave differently; the shrinker turns
   it into an explicit list tjx=<tick:delay,...> and removes entries.
@@ -62,6 +68,12 @@ BUGGIFY = False         # --buggify (M56): every schedule carries a seed for the
 BG_SALT = 0xB0661F7ED5EED0B6
 CONCURRENCY = False     # --concurrency: several clients place orders at the same time (Q= token)
 CC_SALT = 0x51C0C0C0C0C0C051
+MORE_FAULTS = False     # --more-faults (M62): the timed kill X= and the power cut at the k-th FLUSH cf=
+MF_SALT = 0x3F7A11C0FFEE3F7A
+MF_P = {"random": 30, "swarm": 50, "swarm-pos": 50, "process": 40}  # % of schedules per fault kind
+X_OFF_MAX = 250         # timed kill: ms of guest time after the order starts (30 orders ~ 0.5 s)
+CF_RANGE = None         # (lo, hi) FLUSH indices for cf=: --cf-range lo-hi, or measured (--cf-range auto)
+                        # as 1 .. the FLUSH count of one fault-free workload (cfn) on the image
 BACKEND = "hvx"         # --backend hvm: the Mac VMM (hvm_backend.py); HVM_KERNEL = its --hvm-kernel
 HVM_KERNEL = None
 RAM_MIB = 1024          # guest RAM: the manifest's guest.ram_mib, or --ram-mib; the engines get
@@ -219,6 +231,43 @@ def add_concurrency(s, seed):
         if t.below(100) < 60:
             s["Q"] = (t.pick([2, 4, 8]), t.below(100) < 30)
     return s
+
+
+def add_more_faults(s, seed, strategy="random"):
+    """--more-faults (M62): a timed SIGKILL X=<svc>@<order>~<ms> (can land mid-request, M50) and a
+    power cut at the k-th disk FLUSH cf=<k> (host token, M56/M58), each on MF_P[strategy] % of
+    schedules. A separate random stream, and every value is drawn whether or not it is used, so
+    every other field stays what it was for this seed. X never targets the service K= kills.
+    cf= needs the volatile write cache (disk=cut) and no C=: it turns disk=none into cut and
+    replaces a cut before an order; it is not drawn with a lying or failing disk."""
+    if not MORE_FAULTS:
+        return s
+    t = SplitMix(seed ^ MF_SALT)
+    p = MF_P.get(strategy, 30)
+    x_on, x_svc, x_at, x_off = t.below(100) < p, t.next(), t.rng(0, NORDERS - 1), t.rng(0, X_OFF_MAX)
+    c_on, c_k = t.below(100) < p, t.next()
+    if x_on and SPACE is None:                      # X= is a stack-explore.sh token
+        svcs = [v for v in PAUSE_SVCS if "K" not in s or v != s["K"][0]]
+        s["X"] = (svcs[x_svc % len(svcs)], x_at, x_off)
+    if c_on and CF_RANGE and s["disk"] in ("none", "cut") and (SPACE is None or "cut" in SPACE.faults):
+        lo, hi = CF_RANGE
+        s["disk"] = "cut"
+        s.pop("C", None)
+        s["cf"] = lo + c_k % (hi - lo + 1)
+    return s
+
+
+def measure_cf_range(pool, outdir, tag="cfn-probe"):
+    """The cf= range for this image: 1 .. the FLUSHes of one fault-free workload. hvx_explore
+    prints "FLUSHCUT <tag> target=0 flushes=<n>" on its stderr (worker-<i>.err) for a cfn run."""
+    pool.run_all([(tag, "disk=cut dseed=0 cfn | run")])
+    for i in range(len(pool.workers)):
+        f = os.path.join(outdir, "worker-%d.err" % i)
+        for line in open(f, errors="replace") if os.path.exists(f) else []:
+            m = re.match(r"FLUSHCUT %s target=\d+ flushes=(\d+)" % re.escape(tag), line)
+            if m and int(m.group(1)) > 1:
+                return (1, int(m.group(1)))
+    raise SystemExit("explore.py: --cf-range auto: no FLUSH count from the cfn probe (see worker-*.err)")
 
 
 def durable_only(s):
@@ -552,6 +601,12 @@ def netem_args(kinds):
 def render(s):
     if SPACE:
         s = SPACE.restrict(s)
+    if "cf" in s and (s["disk"] != "cut" or "C" in s):   # cf= needs disk=cut and no C= (hvx_explore.c)
+        s = dict(s)
+        if s["disk"] != "cut":
+            s.pop("cf")
+        else:
+            s.pop("C")
     if BACKEND == "hvm":
         s = hvm_backend.hvm_supported(s)
     g = ["run"]
@@ -965,6 +1020,10 @@ def candidates(s, tjk=None):
             var(Q=(n, False))
         if n > 2:
             var(Q=(n // 2, dup))
+    if "cf" in s:                                   # cut at the k-th FLUSH (M62): drop it, then cut earlier
+        var(cf=None)
+        if s["cf"] > 1:
+            var(cf=s["cf"] // 2)
     if "B" in s:                                    # BUGGIFY (M56): drop the fault points
         var(B=None)
     if "pp" in s:                                   # finer preemption (M49): drop it, then milder
@@ -1065,7 +1124,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
 
 # ---------------------------------------------------------------- main
 def main():
-    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT, BUGGIFY, KNOB_RULE, RAM_MIB
+    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT, BUGGIFY, KNOB_RULE, RAM_MIB, MORE_FAULTS, CF_RANGE
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-200")
     ap.add_argument("--workers", type=int, default=3)   # the box has 4 cores: 3 is fastest (M38)
@@ -1094,6 +1153,12 @@ def main():
                     help="M46: add pause / realtime-clock-jump / one-way-network faults (separate random stream)")
     ap.add_argument("--concurrency", action="store_true",
                     help="several clients place orders at once (Q= token; separate random stream)")
+    ap.add_argument("--more-faults", action="store_true",
+                    help="M62: add a timed kill (X=svc@order~ms) and a power cut at the k-th disk FLUSH (cf=k) "
+                         "to generated schedules (separate random stream; any --strategy)")
+    ap.add_argument("--cf-range", default="auto",
+                    help="--more-faults: FLUSH indices cf= draws from, lo-hi, or auto (default) = 1 .. the FLUSH "
+                         "count of one fault-free workload on --image, measured with a cfn run before generating")
     ap.add_argument("--pct-exits", default=",".join(map(str, PCT_EXITS)),
                     help="--preempt on --backend hvm: comma list of exit ranges the forced preemption points are spread over")
     ap.add_argument("--preempt", action="store_true",  # on --backend hvm: pct= forced preemption points (M57)
@@ -1126,6 +1191,11 @@ def main():
     NEW_FAULTS = a.new_faults
     KNOB_RULE = a.knob_rule
     CONCURRENCY = a.concurrency
+    MORE_FAULTS = a.more_faults
+    if MORE_FAULTS and BACKEND == "hvm":
+        raise SystemExit("explore.py: --more-faults needs --backend hvx (X= and cf= are stack/hvx_explore tokens)")
+    if MORE_FAULTS and a.cf_range != "auto":
+        CF_RANGE = tuple(int(v) for v in a.cf_range.split("-"))
     PREEMPT = a.preempt
     PCT_EXITS[:] = [int(v) for v in a.pct_exits.split(",")]
     BUGGIFY = a.buggify
@@ -1158,7 +1228,11 @@ def main():
         dur = durable_only if a.durable_only else (lambda s: s)
         nf = (lambda x, sd: x) if a.strategy in ("swarm-pos", "process") else \
             (lambda x, sd: add_new_faults(x, sd, a.strategy == "swarm"))      # M56 generators draw them already
-        items = [("seed-%d" % sd, render(add_buggify(add_preempt(add_concurrency(add_timing(nf(dur(gen(sd)), sd), sd), sd), sd), sd)))
+        if MORE_FAULTS and CF_RANGE is None:
+            CF_RANGE = measure_cf_range(pool, a.out)
+            print("cf= range (measured with cfn): %d-%d" % CF_RANGE, file=sys.stderr)
+        mf = lambda x, sd: add_more_faults(x, sd, a.strategy)
+        items = [("seed-%d" % sd, render(add_buggify(add_preempt(add_concurrency(add_timing(mf(nf(dur(gen(sd)), sd), sd), sd), sd), sd), sd)))
                  for sd in seeds]
     t_sweep = time.time()
     res = pool.run_all(items)
