@@ -906,6 +906,22 @@ Fixes the Milestone 58 finding (`hvx/cutflush/FINDING.md`) in MySQL's configurat
 
 The kill list (40 schedules) gives 0 failures. These supersede the `*-binlog-pin` values above and the M39 stack values. The pinned explorer reproducers (`2403499c9a3f8419`, `f87130453609a5d6`) use older images and are unchanged.
 
+### Milestone 66 — DONE (several virtual CPUs, stage 1: exact branch-counted turns on hand-written guests; 2026-10-22)
+
+(Numbered 66 because the System Management Mode clock work on main is "M65".) Stage 1 of `hvx/SMP_PLAN.md`; full write-up `hvx/SMP_STAGE1.md`. Built by an agent on a side-by-side module (`hvx/smp/build-hvxsmp.sh`, `/dev/hvxsmp`, box tree `~/hydo-smp`); the main `hvx.ko` was not touched during development.
+- **Opt-in:** `HVX_VM_SMP_SCHED` (flags bit 5) with `n_vcpus > 1`. It needs the PMU clock: CREATE_VM returns EINVAL without it.
+- **In-kernel round-robin:** one `HVX_RUN`/`HVX_RUNC` runs every vCPU in turns of exactly Q guest conditional branches, or seeded lengths in [1, Q]. The PMU landing target is min(next tick, turn end). A turn ends only where there is no STI/MOV-SS shadow and no half-delivered event. THROTTLE and max_insns stops also wait for such a point, and the THROTTLE count is scheduler state, so stops never depend on where an ioctl returned.
+- **One VM clock:** TSC, instruction clock and the tick grid are shared; each vCPU's own branches are counted separately.
+- **Halted and spinning vCPUs:** HLT ends the turn, and the vCPU is skipped until an interrupt can be delivered to it. The clock jumps only when every vCPU is halted. K consecutive PAUSE exits end a turn; hardware pause-loop exiting is not used.
+- **State:** `HVX_GET_SCHED`/`HVX_SET_SCHED` (ioctls 53/54) carry the scheduler state, the shared clock and per-vCPU cr2, halted and re-injection state; `struct hvx_snapshot` is unchanged. Only vCPU 0 claims the boot-CPU bit. The vCPU index enters the tick-jitter and inserted-tick hashes as 0 for vCPU 0.
+- **Fixes along the way (scheduler mode only):** an IPI to a vCPU that was not running was stamped with that vCPU's stale clock; and a stale STI shadow after a stepped-over instruction blocked interrupts. The one-vCPU path keeps the stale-shadow behaviour, because fixing it there would move existing fingerprints. The VM structure is now allocated with `kvzalloc`, because opening the device failed with ENOMEM on a fragmented host.
+- **Tests:**
+  - `hvx_sched_pmu_test`: per-vCPU branch counts exact (150,000,000 + 50,000,017), 0 overshoots, identical in 3 runs; one tick grid; a snapshot at turn 2,693 of 5,386 gives `73a465516c4e0094` for the straight, continued and restored runs.
+  - `hvx_sched_sweep_test`: turn lengths 1..2000 replay and branch-from-snapshot identical at all 894 turn boundaries and at 189 mid-turn stops.
+  - `hvx_sched_race_test`: a race in plain computation, with the tick period made huge so no tick falls in the window. 21 of 40 (turn length, seed) cells lose sales; every cell is identical when run twice; grid hash `8cb7c61a2393f44e`. Turns alone hit a window that timer jitter cannot reach.
+- **Gate:** `race/side-metal.sh` against the side module: ALL PASS (25 checks), every existing fingerprint unchanged. The same three tests and the same 25 checks passed again on the module merged with main (with the M65 SMM clock freeze), with identical numbers.
+- **Not yet:** stage 2 (real Linux with several CPUs: AP start-up by INIT/SIPI, MP table and CPUID topology, device interrupts routed by destination) and stage 3 (explorer tokens for turn lengths). The several-CPU tests are not in `deploy-metal.sh`.
+
 ### Roadmap — booting Linux as L2 (phased; from a planning pass over hydo's KVM boot path)
 
 The KVM monitor already boots Linux; hvx must replicate its recipe. Key facts to reuse (from `src/boot.rs`/`src/detlinux.rs`): 64-bit **bzImage** protocol — protected-mode kernel loaded at `0x100000`, **entry `0x100200` directly in 64-bit long mode** (so we DO NOT need real-mode entry or the unrestricted-guest control — a major de-risk), `boot_params`/zero-page @`0x10000` (`RSI`), e820 + cmdline @`0x20000` (`console=ttyS0 earlyprintk=ttyS0 loglevel=8 nokaslr acpi=off`), MP table @`0x9FC00`, initial long-mode GDT/paging (PML4→PDPT→PD with 512×2 MiB identity), CPUID/MSR **synthesized deterministically** (hvx owns CPUID now). Remaining phases, smallest-first:
