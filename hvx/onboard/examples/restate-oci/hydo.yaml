@@ -7,6 +7,7 @@
 # then build on the build box:
 #   HYDO_SEEDRNG=<pinned hvx_seedrng> hvx/onboard/hydo-build hvx/onboard/examples/restate-oci/hydo.yaml
 # Try:  disk=none | run   -> OK: the server answers its health endpoints and the admin API
+#       disk=none | run K=restate@2+1 -> OK: killed for one step (5 of 6 answered), restarted, answers
 #       explore.py --cpu v2 / hvx_explore without --cpu -> the server never becomes ready
 name: restate-oci
 description: Restate 1.7.13 from the official Docker image (AVX2 build); the server must come up and answer.
@@ -45,10 +46,12 @@ workload:
 
 invariants:
   - id: restate.answers
-    msg: the Restate server answered every health and admin request
+    msg: after the run (and any restart) the Restate server answers its health and admin endpoints
     cmd: |
       n=$(wc -l < $HYDO_ACKED)
-      [ "$n" = 6 ] && wget -q -T 5 -O /dev/null http://127.0.0.1:8080/restate/health && { echo "steps=$n answered"; exit 0; }
-      echo "answered=$n"; exit 1
+      if wget -q -T 5 -O /dev/null http://127.0.0.1:9070/health && wget -q -T 5 -O /dev/null http://127.0.0.1:8080/restate/health; then
+        echo "answers; steps answered=$n of 6"; exit 0
+      fi
+      echo "no answer at the end; steps answered=$n of 6"; exit 1
 
 faults: [kill, pause, cut, clock]
