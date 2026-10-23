@@ -60,6 +60,7 @@ description: one line          # free text, anywhere below too
 guest:
   ram_mib: 1024                # guest RAM in MiB (default 1024): 256..3072 on x86_64, 256..4096 on arm64
   clock_start: 1767225600      # unix seconds the realtime clock starts at (default 2026-01-01)
+  clock_after_cut: 86400       # optional: the recovery boot after a power cut starts this much later
   cpu: v3                      # guest CPU level (x86_64 only): v2 (default) = x86-64-v2, no AVX;
                                # v3 = adds AVX/AVX2, FMA, BMI1/2, F16C, LZCNT, MOVBE, XSAVE
 
@@ -331,6 +332,21 @@ schedule) can use `F=<svc><dir><peer>@<step>[#<n>][:<match>]:<dur>`:
   (`hydo-fc-trace:` lines) so you can read off the `<n>` of an event;
 - at that packet the whole process tree of `<svc>` is SIGSTOPped -- held before it runs past the
   packet, which is then let through -- and SIGCONTed after `<dur>` ms of guest time.
+
+It is deterministic under hydo, so the freeze lands on the same instruction every run. A packet
+is held in a netfilter queue (`nfnetlink_queue` + the static helper `hydo_fc`, pinned
+`iptables-legacy`); nothing of this is staged unless `freeze` is in `faults:`, so every other
+image builds byte-identically. `freeze_match:` at the top level lists payload strings the
+explorer may draw as `<match>` (so a known event has a small `<n>`): either a plain list, or a
+mapping `replies: [...]` (strings that occur in packets the frozen service receives) and
+`requests: [...]` (in packets it sends); a drawn string then gets its own direction. Which
+`(svc, peer)` pairs the explorer freezes: a peer with a `port:` that `<svc>` reaches through its
+`depends_on`; without such pairs, every ordered pair with a listening peer; and when no service
+calls another (a single server), the peer `workload`: the workload's own client connections from
+`127.0.0.1` to `<svc>`'s port (`F=redis<workload@3#2:500`; `examples/redis/hydo-freeze.yaml`).
+Not supported yet: `--arch arm64`.
+
+### Clock after a power cut (`guest.clock_after_cut`)
 
 ### Link faults (a network fault between two named services)
 
