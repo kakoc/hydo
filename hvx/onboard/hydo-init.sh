@@ -239,9 +239,43 @@ net_on() {   # <svc> <match: dport|sport> <netem args with commas>
   $HYDO_TC qdisc add dev lo parent 1:4 handle 40: netem $args && \
   $HYDO_TC filter add dev lo parent 1:0 protocol ip prio 1 u32 match ip $2 $port 0xffff flowid 1:4 || \
     die_oracle "HYDO-ORACLE: ERROR tc setup failed"
+  NET_ARGS=$args
   log "NET FAULT on $1 (ip $2 $port): netem $args"
 }
-net_off() { $HYDO_TC qdisc del dev lo root 2>/dev/null; }
+# net_heal <tc> <netem args in force>: lift the netem fault on lo WITHOUT dropping the packets
+# still waiting in its delay queue. A plain `tc qdisc del` frees them (kernel 6.6:
+# qdisc_destroy -> netem_reset -> tfifo_reset), so TCP had to retransmit them after a timeout
+# (about 1 s) the schedule never asked for. Instead:
+#  1. `tc qdisc change` the netem to no delay/loss/duplicate/corruption and a 100 Gbit rate.
+#     netem_change keeps the queue; queued packets keep their send times, and in rate mode a
+#     new packet is sent right after the last queued one, so the order is kept.
+#  2. wait (guest time, deterministic) until the netem queue is empty, at most the largest
+#     delay in force (delay + 4 x jitter) + 500 ms;
+#  3. remove the filters (new packets bypass netem), wait until a packet still in its few-us
+#     rate window has left (at most 50 ms), then delete the root qdisc.
+# Prints one line: "queued=<packets at the heal> drained_ms=<ms> left=<packets dropped>".
+# Keep in sync with the copy in build-stack.sh (the four-service stack's /sbin/init).
+net_qlen() {   # <tc>: packets in the netem queue (handle 40:), empty if there is none
+  $1 -s qdisc show dev lo | $BB awk '/^qdisc netem 40:/ { f = 1 } f && $1 == "backlog" { sub(/p$/, "", $3); print $3 + 0; exit }'
+}
+net_heal() {
+  local tc=$1 bound q0 n t w
+  bound=$(echo "$2" | $BB tr ',' ' ' | $BB awk '
+    function ms(v,  x) { x = v + 0; if (v ~ /us/) return x / 1000; if (v ~ /ms/) return x
+                         if (v ~ /s/) return x * 1000; return x / 1000 }
+    { m = 0; for (i = 1; i <= NF; i++) if ($i == "delay") { m = ms($(i + 1))
+        if ($(i + 2) ~ /^[0-9.]+(us|usec|usecs|ms|msec|msecs|s|sec|secs)?$/) m += 4 * ms($(i + 2)) }
+      printf "%d\n", m + 500 }')
+  q0=$(net_qlen $tc); n=${q0:-0}; t=0
+  $tc qdisc change dev lo parent 1:4 handle 40: netem rate 100gbit corrupt 0% 2>/dev/null || n=0
+  while [ "${n:-0}" -gt 0 ] && [ $t -lt $bound ]; do $BB sleep 0.01; t=$((t + 10)); n=$(net_qlen $tc); done
+  $tc filter del dev lo parent 1:0 2>/dev/null
+  n=$(net_qlen $tc); w=0
+  while [ "${n:-0}" -gt 0 ] && [ $w -lt 50 ]; do $BB sleep 0.01; w=$((w + 10)); n=$(net_qlen $tc); done
+  $tc qdisc del dev lo root 2>/dev/null
+  echo "queued=${q0:-0} drained_ms=$t left=${n:-0}"
+}
+net_off() { log "network fault lifted: $(net_heal "$HYDO_TC" "$NET_ARGS")"; }
 xassert() { echo "HYDO-ASSERT {\"t\":\"$1\",\"id\":\"$2\",\"ok\":$3,\"msg\":\"$4\"}"; }
 pause_timer() {   # <svc> <off-ms> <dur-ms>, in the background
   $BB sleep $($BB awk "BEGIN{printf \"%.6f\", $2/1000}")

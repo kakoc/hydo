@@ -45,6 +45,7 @@ net_on_port() {   # hydo-init.sh's net_on (one service, match on its port), unch
   $HYDO_TC qdisc add dev lo parent 1:4 handle 40: netem $args && \
   $HYDO_TC filter add dev lo parent 1:0 protocol ip prio 1 u32 match ip $2 $port 0xffff flowid 1:4 || \
     die_oracle "HYDO-ORACLE: ERROR tc setup failed"
+  NET_ARGS=$args
   log "NET FAULT on $1 (ip $2 $port): netem $args"
 }
 net_on() {
@@ -70,5 +71,6 @@ net_on() {
         die_oracle "HYDO-ORACLE: ERROR tc setup failed"
     fi
   done
+  NET_ARGS=$args
   log "LINK FAULT $a <-> $* ($dir): netem $args"
 }

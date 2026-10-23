@@ -185,7 +185,7 @@ explore_run() {   # $CMD = "run <tokens>"
   for p in $pts; do
     if [ -n "$prev" ] && [ "$prev" -lt "$p" ]; then client $prev $p; fi
     [ "$p" = "$cat_" ] && { cut=1; break; }
-    if [ "$p" = "$nto" ] && [ $netup = 1 ]; then $TC qdisc del dev lo root 2>/dev/null; netup=0; echo "hydo-explore: network healed before order $p"; fi
+    if [ "$p" = "$nto" ] && [ $netup = 1 ]; then echo "hydo-explore: network healed before order $p: $(net_heal "$TC" "$nargs")"; netup=0; fi
     if [ "$p" = "$kup" ] && [ $down = 1 ]; then echo "hydo-explore: restarting $ksvc before order $p"; restart_svc $ksvc; down=0; fi
     if [ "$p" = "$xat" ]; then
       kill_timer $xsvc $xoff & xtimer=$!
@@ -194,7 +194,7 @@ explore_run() {   # $CMD = "run <tokens>"
     fi
     if [ "$p" = "$kat" ]; then $BB kill -9 $(svc_pid $ksvc) 2>/dev/null; down=1; echo "hydo-explore: KILLED $ksvc before order $p"; fi
     if [ "$p" = "$nfrom" ] && [ "$nfrom" -lt "$nto" ]; then net_fault_on "$nsvc:$nargs"; netup=1; fi
-    if [ "$p" = "$oto" ] && [ $oneup = 1 ]; then $TC qdisc del dev lo root 2>/dev/null; oneup=0; echo "hydo-explore: one-way fault healed before order $p"; fi
+    if [ "$p" = "$oto" ] && [ $oneup = 1 ]; then echo "hydo-explore: one-way fault healed before order $p: $(net_heal "$TC" "$oargs")"; oneup=0; fi
     if [ "$p" = "$ofrom" ] && [ "$ofrom" -lt "$oto" ]; then oneway_on "$ospec"; oneup=1; fi
     if [ "$p" = "$pup" ] && [ $paused = 1 ]; then $BB kill -CONT $(pause_pid $psvc) 2>/dev/null; paused=0; echo "hydo-explore: RESUMED $psvc before order $p"; fi
     if [ "$p" = "$pat" ]; then
@@ -234,8 +234,8 @@ explore_run() {   # $CMD = "run <tokens>"
     while true; do $BB sleep 100; done
   fi
   # no cut: faults are transient -- heal, bring everything back, let the client retry
-  [ $netup = 1 ] && { $TC qdisc del dev lo root 2>/dev/null; echo "hydo-explore: network healed at the end"; }
-  [ $oneup = 1 ] && { $TC qdisc del dev lo root 2>/dev/null; echo "hydo-explore: one-way fault healed at the end"; }
+  [ $netup = 1 ] && echo "hydo-explore: network healed at the end: $(net_heal "$TC" "$nargs")"
+  [ $oneup = 1 ] && echo "hydo-explore: one-way fault healed at the end: $(net_heal "$TC" "$oargs")"
   [ -n "$ptimer" ] && { wait $ptimer 2>/dev/null; $BB kill -CONT $(pause_pid $psvc) 2>/dev/null; }
   [ $paused = 1 ] && { $BB kill -CONT $(pause_pid $psvc) 2>/dev/null; echo "hydo-explore: RESUMED $psvc at the end"; }
   [ -n "$xtimer" ] && wait $xtimer 2>/dev/null
