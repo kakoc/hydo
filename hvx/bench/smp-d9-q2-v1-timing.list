@@ -1,0 +1,12 @@
+# d9 Q=2 on 1 vCPU with the explorer's 1-vCPU timing levers (seeded tick jitter tj=, shorter tick
+# period pp=, inserted ticks xt=): does 1 vCPU reach the crash that Q=2 gives on 2 vCPUs?
+disk=none dseed=0 tj=1 tjpm=200 tjmax=500000 | run Q=2
+disk=none dseed=0 tj=2 tjpm=200 tjmax=500000 | run Q=2
+disk=none dseed=0 tj=3 tjpm=200 tjmax=500000 | run Q=2
+disk=none dseed=0 tj=4 tjpm=1000 tjmax=500000 | run Q=2
+disk=none dseed=0 tj=5 tjpm=1000 tjmax=500000 | run Q=2
+disk=none dseed=0 tj=6 tjpm=1000 tjmax=500000 | run Q=2
+disk=none dseed=0 pp=16384 | run Q=2
+disk=none dseed=0 pp=65536 | run Q=2
+disk=none dseed=0 xt=1 xtr=16 xtpm=500 | run Q=2
+disk=none dseed=0 xt=2 xtr=4 xtpm=500 | run Q=2
