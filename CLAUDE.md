@@ -210,6 +210,7 @@ Milestones 1–32 ran inside the nested L1 VM on the build machine, before 2026-
 - M69 — several vCPUs, stages 2 and 3: Linux on 2–4 vCPUs, the stack and the explorer on 2 vCPUs (2026-10-22)
 - M70 — freeze a service at an exact packet of its traffic (`F=`) (2026-10-23)
 - M71 — lifting a network fault drains the netem queue instead of dropping it (2026-10-23)
+- M72 — M70 follow-up: the recovery boot continues the first boot's clock; freeze measurement (2026-10-23)
 
 ## Where to look
 
