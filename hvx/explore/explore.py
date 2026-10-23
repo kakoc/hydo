@@ -51,7 +51,9 @@ M64 = (1 << 64) - 1
 NORDERS = 30
 HERE = os.path.dirname(os.path.abspath(__file__))
 HVX = os.path.dirname(HERE)
-BUILD = os.path.expanduser("~/hydo/build")
+BUILD = os.environ.get("HYDO_BUILD") or os.path.expanduser("~/hydo/build")   # the release's `hydo` sets it
+HVX_RUN = os.environ.get("HYDO_HVX_RUN") or os.path.expanduser("~/bin/hvx-run")  # shared module lock (flock -s)
+SNAP_DIR = os.environ.get("HYDO_SNAP_DIR") or "/var/tmp/hvx-snap"
 IMAGE = "explore-disk.img"
 EXTRA_ENV = []          # extra env for the workers, e.g. coverage: ["HVX_EXPLORE_PT_ELF=..."] (guided.py)
 TIMING = False          # --timing: add seeded tick-timing jitter to generated schedules
@@ -978,7 +980,7 @@ class Worker(threading.Thread):
         self.boot_secs = None
 
     def run(self):
-        cmd = [os.path.expanduser("~/bin/hvx-run"), "sudo", "env", "HVX_SNAP_DIR=/var/tmp/hvx-snap"] + EXTRA_ENV + [
+        cmd = [HVX_RUN, "sudo", "env", "HVX_SNAP_DIR=" + SNAP_DIR] + EXTRA_ENV + [
                os.path.join(HVX, "hvx_explore")] + engine_args() + ["serve", os.path.join(BUILD, "bzImage"),
                os.path.join(BUILD, "initramfs-kafka.cpio.gz"), os.path.join(BUILD, IMAGE),
                os.path.join(self.outdir, "consoles")]
@@ -1556,7 +1558,8 @@ def write_report(out, summary, fails, shrunk, table=None):
               "- verdict: `%s`" % v["min_verdict"],
               "- fingerprint, two runs: `%s` / `%s` (%s)" % (v["fp_a"], v["fp_b"], "identical" if v["fp_a"] == v["fp_b"] else "DIFFERENT"),
               "- by hand: `~/bin/hvx-run sudo ./hvx_explore %sone ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/%s <outdir> \"%s\"`" % ("".join(x + " " for x in engine_args()), IMAGE, v["minimal"])
-              if BACKEND != "hvm" else "- by hand: `%s`" % hvm_backend.repro_line(IMAGE, v["minimal"], HVM_KERNEL, ram_args()), ""]
+              if BACKEND != "hvm" and not os.environ.get("HYDO_CLI") else
+              "- by hand: `hydo run --image %s \"%s\"`" % (os.path.join(BUILD, IMAGE), v["minimal"]) if BACKEND != "hvm" else "- by hand: `%s`" % hvm_backend.repro_line(IMAGE, v["minimal"], HVM_KERNEL, ram_args()), ""]
     L += ["## Property table over every schedule (hvx/ASSERTIONS.md)", ""]
     if table is None:
         L += ["The guest emitted no HYDO-ASSERT records (an image built without the assertion SDK).", ""]
