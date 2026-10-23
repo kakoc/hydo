@@ -759,18 +759,29 @@ def freeze_sweep(pool, a):
     if not streams:
         raise SystemExit("explore.py: --sweep freeze: no streams (check --fc-pairs, --fc-dirs, --fc-match)")
     tsteps = sorted(set(steps) | {s + 1 for s in steps if s + 1 < NORDERS})
-    items, keys = [], {}
+    known = {}                      # --fc-traces: counts of an earlier run's traces, by trace schedule
+    for path in (a.fc_traces.split(",") if a.fc_traces else []):
+        for line in open(path):
+            rec = json.loads(line)
+            if rec.get("count") is not None:
+                known[rec["schedule"]] = rec
+    items, keys, trec = [], {}, []
     for i, (svc, peer, d, m) in enumerate(streams):
         for st in tsteps:
             t = dict(base)
             t["F"] = (svc, d, peer, st, 0, m, 1)
             tag = "fctrace-%d-%d" % (i, st)
             keys[tag] = (svc, peer, d, m, st)
-            items.append((tag, render(t)))
-    print("freeze sweep: %d streams x %d steps = %d trace runs" % (len(streams), len(tsteps), len(items)), file=sys.stderr)
+            text = render(t)
+            if text in known:
+                trec.append(dict(known[text], tag=tag, reused=True))
+            else:
+                items.append((tag, text))
+    print("freeze sweep: %d streams x %d steps = %d trace runs (%d reused from --fc-traces)"
+          % (len(streams), len(tsteps), len(items) + len(trec), len(trec)), file=sys.stderr)
     t0 = time.time()
-    res = pool.run_all(items)
-    count, trec = {}, []
+    res = pool.run_all(items) if items else {}
+    count = {keys[r["tag"]]: r["count"] for r in trec}
     for tag, (text, r) in sorted(res.items()):
         svc, peer, d, m, st = keys[tag]
         n = None
@@ -1423,6 +1434,8 @@ def main():
     ap.add_argument("--fc-margin", type=int, default=FC_SWEEP_MARGIN,
                     help="--sweep freeze: extra packets of the last swept step before an unswept one, beyond "
                          "N(s) - N(s+1) (default %(default)s)")
+    ap.add_argument("--fc-traces", help="--sweep freeze: reuse the trace counts of earlier runs (comma list of their "
+                                        "fc-traces.jsonl); only traces with the same schedule are reused")
     ap.add_argument("--sweep-every", type=int, default=1, help="--sweep freeze: keep every k-th packet (n = 1, 1+k, ...)")
     ap.add_argument("--sweep-with", help="--sweep freeze: one fixed fault every point carries, guest tokens "
                                          "(\"K=kafka@9+1\") or a whole schedule (\"disk=cut dseed=0 | run C=10\")")
