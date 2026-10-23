@@ -45,10 +45,12 @@ def main():
     ap.add_argument("--defects", default="all")
     ap.add_argument("--workers", type=int, default=3)
     ap.add_argument("--no-control", action="store_true")
+    ap.add_argument("--vcpus", type=int, default=1, help="SMP stage 3: every VM with N vCPUs (explore.py --vcpus)")
     ap.add_argument("--base", action="store_true", help="also re-run the BASE schedules on the control")
     ap.add_argument("--bg-images", action="store_true", help="M56: the explore-bench-bg-* images and their control")
     a = ap.parse_args()
     bench.BG_IMAGES = a.bg_images
+    ex.VCPUS = a.vcpus
     names = ([n for n in TRIGGERS if n not in bench.M59] if a.defects == "all" else
              list(bench.M59) if a.defects == "m59" else a.defects.split(","))
     os.makedirs(a.out, exist_ok=True)

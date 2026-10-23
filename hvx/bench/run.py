@@ -140,13 +140,14 @@ def make_rec(outdir, sd, text, r, defect=None):
     return rec
 
 
-def schedules(strategy, seeds, new_faults, buggify=False, concurrency=False):
+def schedules(strategy, seeds, new_faults, buggify=False, concurrency=False, turns=False):
     gen = ex.GENERATORS[strategy]
-    ex.NEW_FAULTS, ex.BUGGIFY, ex.CONCURRENCY = new_faults, buggify, concurrency
-    # the same composition order as explore.py: buggify(concurrency(new_faults(gen)))
+    ex.NEW_FAULTS, ex.BUGGIFY, ex.CONCURRENCY, ex.TURNS = new_faults, buggify, concurrency, turns
+    # the same composition order as explore.py: turns(buggify(concurrency(new_faults(gen)))).
+    # add_turns returns the schedule unchanged without --turns, so the strings are unchanged.
     if strategy in ("swarm-pos", "process"):      # M56 generators draw every fault kind themselves
-        return [(sd, ex.render(ex.add_buggify(ex.add_concurrency(gen(sd), sd), sd))) for sd in seeds]
-    return [(sd, ex.render(ex.add_buggify(ex.add_concurrency(ex.add_new_faults(gen(sd), sd, strategy == "swarm"), sd), sd)))
+        return [(sd, ex.render(ex.add_turns(ex.add_buggify(ex.add_concurrency(gen(sd), sd), sd), sd))) for sd in seeds]
+    return [(sd, ex.render(ex.add_turns(ex.add_buggify(ex.add_concurrency(ex.add_new_faults(gen(sd), sd, strategy == "swarm"), sd), sd), sd)))
             for sd in seeds]
 
 
@@ -160,7 +161,7 @@ def run_seeded(a, defect, image, sig):
     results = []
     for rep in a.reps:
         seeds = list(range(rep * 1000 + 1, rep * 1000 + a.budget + 1))
-        items = schedules(a.strategy, seeds, a.new_faults, a.buggify, a.concurrency)
+        items = schedules(a.strategy, seeds, a.new_faults, a.buggify, a.concurrency, a.turns)
         done, nxt, outstanding, found, base = {}, 0, 0, None, []
         t0 = time.time()
         while True:
@@ -191,6 +192,8 @@ def run_seeded(a, defect, image, sig):
         runs.close()
         res = {"defect": defect, "strategy": a.label, "rep": rep, "budget": a.budget, "image": image,
                "runs_done": len(done), "wall_s": round(time.time() - t0, 1), "base_bug_hits": base}
+        if a.vcpus != 1:
+            res["vcpus"] = a.vcpus
         if found:
             n, rec = found
             rr = pool.run_all([("repro-%d" % rec["seed"], rec["schedule"])])["repro-%d" % rec["seed"]][1]
@@ -329,6 +332,11 @@ def main():
     ap.add_argument("--bg-images", action="store_true", help="M56: use the explore-bench-bg-* images")
     ap.add_argument("--concurrency", action="store_true",
                     help="M59: explore.py --concurrency (Q= token on 60%% of schedules, from its own stream)")
+    ap.add_argument("--vcpus", type=int, default=1,
+                    help="SMP stage 3: the engine runs every VM (defect and control) with N vCPUs "
+                         "(explore.py --vcpus; the engine gets --vcpus only when N > 1)")
+    ap.add_argument("--turns", action="store_true",
+                    help="with --vcpus N > 1: explore.py --turns (q= [qs=] on half of the schedules, own stream)")
     ap.add_argument("--window", type=int, default=0,
                     help="schedules in flight (default 2*workers); 1 = no run overlaps a control check")
     ap.add_argument("--defects", default="all")
@@ -339,6 +347,13 @@ def main():
     ap.add_argument("--table", nargs="*")
     a = ap.parse_args()
     ex.KNOB_RULE = a.knob_rule
+    if not 1 <= a.vcpus <= 8:
+        raise SystemExit("run.py: --vcpus must be 1..8")
+    if a.turns and a.vcpus < 2:
+        raise SystemExit("run.py: --turns needs --vcpus N > 1")
+    if a.vcpus > 1 and a.strategy == "portfolio":
+        raise SystemExit("run.py: --vcpus is not passed to portfolio.py")
+    ex.VCPUS = a.vcpus
     if a.table is not None:
         table(a.table)
         return
@@ -350,7 +365,8 @@ def main():
     global BG_IMAGES
     BG_IMAGES = a.bg_images
     a.label = (a.strategy + ("+nf" if a.new_faults and a.strategy in ("random", "swarm") else "")
-               + ("+bg" if a.buggify else "") + ("+cc" if a.concurrency else ""))
+               + ("+bg" if a.buggify else "") + ("+cc" if a.concurrency else "")
+               + ("+v%d" % a.vcpus if a.vcpus != 1 else "") + ("+turns" if a.turns else ""))
     names = ([n for n in DEFECTS if n not in M59] if a.defects == "all" else
              list(M59) if a.defects == "m59" else a.defects.split(","))
     os.makedirs(a.out, exist_ok=True)
