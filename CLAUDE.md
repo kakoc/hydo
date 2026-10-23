@@ -211,6 +211,7 @@ Milestones 1–32 ran inside the nested L1 VM on the build machine, before 2026-
 - M70 — freeze a service at an exact packet of its traffic (`F=`) (2026-10-23)
 - M71 — lifting a network fault drains the netem queue instead of dropping it (2026-10-23)
 - M72 — benchmark images with the Kafka retention fix (`-pin-kr`), now the default m59 set (2026-10-23)
+- M73 — M70 follow-up: the recovery boot continues the first boot's clock; freeze measurement (2026-10-23)
 
 ## Where to look
 

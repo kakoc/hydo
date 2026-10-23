@@ -22,6 +22,8 @@
 
 FC=""; fc_on=0; fc_pid=""
 fc_known() { local s; for s in $HYDO_SERVICES; do [ "$s" = "$1" ] && return 0; done; return 1; }
+# peer "workload": the workload's own client connections (from 127.0.0.1) to <svc>'s port, for a
+# project whose services do not call each other (a single server): F=redis<workload@3#2:500
 fc_bad() { die_oracle "HYDO-ORACLE: ERROR bad freeze token F=$FC ($1)"; }
 fc_parse() {   # <value of F=>
   local head rest
@@ -41,7 +43,7 @@ fc_parse() {   # <value of F=>
   for v in "$fc_step" "$fc_n" "$fc_dur"; do
     case "$v" in ""|*[!0-9]*) fc_bad "step, n and dur must be numbers";; esac
   done
-  if ! fc_known "$fc_svc" || ! fc_known "$fc_tgt" || [ "$fc_svc" = "$fc_tgt" ]; then
+  if ! fc_known "$fc_svc" || { [ "$fc_tgt" != workload ] && ! fc_known "$fc_tgt"; } || [ "$fc_svc" = "$fc_tgt" ]; then
     log "F: no services $fc_svc and $fc_tgt, ignored"; FC=""; return 0
   fi
   log "freeze at a call: $fc_svc ($fc_dir with $fc_tgt) from step $fc_step, event #$fc_n, match '$fc_match', for ${fc_dur}ms"
@@ -50,7 +52,11 @@ fc_parse() {   # <value of F=>
 fc_rules() {   # <-A|-D>: the netfilter rules that queue the pair's packets
   local sa ta tp
   sa=$(sv $fc_svc addr); ta=$(sv $fc_tgt addr); tp=$(sv $fc_tgt port)
-  if [ -n "$sa" ] && [ -n "$ta" ]; then
+  if [ "$fc_tgt" = workload ]; then          # the client connects from 127.0.0.1 to the service's port
+    tp=$(sv $fc_svc port); [ -n "$tp" ] || return 3
+    $HYDO_IPT $1 OUTPUT -s 127.0.0.1 ${sa:+-d $sa} -p tcp --dport $tp -j NFQUEUE --queue-num 7 --queue-bypass &&
+    $HYDO_IPT $1 OUTPUT -d 127.0.0.1 ${sa:+-s $sa} -p tcp --sport $tp -j NFQUEUE --queue-num 7 --queue-bypass
+  elif [ -n "$sa" ] && [ -n "$ta" ]; then
     $HYDO_IPT $1 OUTPUT -s $sa -d $ta -j NFQUEUE --queue-num 7 --queue-bypass &&
     $HYDO_IPT $1 OUTPUT -s $ta -d $sa -j NFQUEUE --queue-num 7 --queue-bypass
   elif [ -n "$tp" ]; then
@@ -66,6 +72,7 @@ fc_rules() {   # <-A|-D>: the netfilter rules that queue the pair's packets
 fc_arm() {   # before step $fc_step
   local sa tp m n=0 rc
   sa=$(sv $fc_svc addr); tp=$(sv $fc_tgt port)
+  [ "$fc_tgt" = workload ] && { tp=s$(sv $fc_svc port); [ -n "$sa" ] && sa=""; }   # classify by the own port
   fc_on=1
   export XTABLES_LOCKFILE=$H/xtables.lock
   for m in x_tables ip_tables iptable_filter xt_tcpudp xt_NFQUEUE nfnetlink nfnetlink_queue; do
