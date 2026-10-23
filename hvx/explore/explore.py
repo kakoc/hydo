@@ -29,7 +29,7 @@ Schedule format (see hvx_explore.c / stack-explore.sh):
   timing (only with --timing): tj=<hex> tjpm=<n> tjmax=<n> [tjlo=<k> tjhi=<k>]  delays a
   seeded share of the PMU-clock ticks, so threads interleave differently; the shrinker turns
   it into an explicit list tjx=<tick:delay,...> and removes entries.
-  freeze sweep (--sweep freeze, M74): traces the packet counts of each (pair, direction, match)
+  freeze sweep (--sweep freeze, M75): traces the packet counts of each (pair, direction, match)
   stream per step with F=...#0 runs, then runs one F=<svc><dir><peer>@<step>#<n>[:<match>]:<dur>
   schedule per packet (options --fc-pairs/--fc-dirs/--fc-steps/--fc-match/--fc-durs,
   --sweep-every, --sweep-with, --sweep-dry); every failure is re-run twice.
