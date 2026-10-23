@@ -585,7 +585,7 @@ def _fn_defs(text, fn):
     return [mo.group(0) for mo in re.finditer(r"^%s\(\) \{(?:[^\n]*\}\n|.*?^\}\n)" % fn, text, re.S | re.M)]
 
 
-CLK_WRAP = ("mount_data",)
+CLK_WRAP = ("failed_ids", "mount_data")
 CLK_INIT = "hydo-init-clock.sh"         # inserted into /sbin/init only for manifests with guest.clock_after_cut
 
 
