@@ -1,0 +1,8 @@
+# The six smp-d9-q2.list schedules that crash d9 on 2 vCPUs; run on the M59 control (2 vCPUs),
+# which must pass them (the crash must come from the planted defect).
+disk=none dseed=0 | run Q=2
+disk=none dseed=0 q=10000 | run Q=2
+disk=none dseed=0 q=100000 | run Q=2
+disk=none dseed=0 q=10000 qs=2 | run Q=2
+disk=none dseed=0 q=1000000 qs=5 | run Q=2
+disk=none dseed=0 q=200 | run Q=2
