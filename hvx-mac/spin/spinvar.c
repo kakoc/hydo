@@ -7,7 +7,10 @@
  *   4 samestore while (fired) sink = 1;               stores the same value every iteration
  *   5 count     while (fired) n++;                    an iteration counter in a register (NOT a cycle)
  *   6 ldxr      while (ldaxr(&fired)) ;               exclusive load (stepping would break it)
- *   aarch64-unknown-linux-gnu-gcc -static -nostdlib -fno-pie -no-pie -mgeneral-regs-only -O2 -DMODE=1 -o spin_load spinvar.c */
+ * NAME is the label the program prints; the release's two programs (hashes in hvx-mac/dist/assets.sha256) are:
+ *   aarch64-unknown-linux-gnu-gcc -static -nostdlib -fno-pie -no-pie -mgeneral-regs-only -O2 -DMODE=1 -DNAME='"load"' -o spin_load spinvar.c
+ *   aarch64-unknown-linux-gnu-gcc -static -nostdlib -fno-pie -no-pie -mgeneral-regs-only -O2 -DMODE=5 -DNAME='"count"' -o spin_count spinvar.c
+ * (cross gcc 13.2.0 from the build machine's nix store, e.g. /nix/store/0g57abz7…-aarch64-unknown-linux-gnu-gcc-wrapper-13.2.0) */
 static long sys(long n, long a, long b, long c, long d)
 {
 	register long x8 asm("x8") = n, x0 asm("x0") = a, x1 asm("x1") = b, x2 asm("x2") = c, x3 asm("x3") = d;
