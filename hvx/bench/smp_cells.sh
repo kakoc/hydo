@@ -3,7 +3,7 @@
 # (one run.py at a time: 1 worker + its control VM = 2 VMs). Default: every cell in the order below.
 #   a  swarm, 1 vCPU, --concurrency          b  swarm, 2 vCPUs --turns, --concurrency
 #   d  swarm, 2 vCPUs --turns, no concurrency c  swarm, 1 vCPU, no concurrency
-#   rb / rd  as b / d with strategy random
+#   rb / rd  as b / d with strategy random;  ra / rc  as a / c with strategy random
 # Results: $OUT/<cell>/results.jsonl (default OUT=/var/tmp/bench2).
 cd "$(dirname "$0")" || exit 1
 OUT=${OUT:-/var/tmp/bench2}
@@ -19,6 +19,8 @@ for c in "${cells[@]}"; do
         d)  args=(--strategy swarm --vcpus 2 --turns) ;;
         rb) args=(--strategy random --concurrency --vcpus 2 --turns) ;;
         rd) args=(--strategy random --vcpus 2 --turns) ;;
+        ra) args=(--strategy random --concurrency) ;;
+        rc) args=(--strategy random) ;;
         *)  echo "unknown cell $c" >&2; exit 2 ;;
     esac
     echo "=== cell $c: ${args[*]} $(date -u +%FT%TZ)"
