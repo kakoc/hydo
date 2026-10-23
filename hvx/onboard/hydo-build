@@ -29,6 +29,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 FIXED_MTIME = 1600000000
 FAKE_TS = "2020-09-13 16:26:40"
 NETMODS = ["sch_prio", "sch_netem", "cls_u32"]
+# the freeze-at-a-call fault (F=, hydo-init-freeze.sh): netfilter queue + iptables-legacy
+FCMODS = ["x_tables", "ip_tables", "iptable_filter", "xt_tcpudp", "xt_NFQUEUE", "nfnetlink", "nfnetlink_queue"]
 
 # ------------------------------------------------------------------ YAML subset parser
 class YamlError(Exception):
@@ -284,7 +286,10 @@ KNOWN_SVC = {"name", "cmd", "setup", "ready", "ready_timeout", "port", "depends_
 KNOWN_INV = {"id", "type", "msg", "cmd", "every", "final", "description", "within", "after", "poll"}
 LIVE_ANCHORS = ("heal", "start")
 KNOWN_KNOB = {"token", "name", "default", "set", "values", "safe", "description"}
-FAULT_KINDS = {"kill", "pause", "network", "oneway", "cut", "clock", "disk"}
+FAULT_KINDS = {"kill", "pause", "network", "oneway", "cut", "clock", "disk", "freeze"}
+# faults: omitted = these. `freeze` is opt-in (it stages iptables and a helper into the root),
+# so a manifest that does not list it builds exactly as before.
+DEFAULT_FAULT_KINDS = FAULT_KINDS - {"freeze"}
 
 
 def _need(d, k, where, typ=str):
@@ -389,8 +394,8 @@ def validate(m):
         where = "knobs[%d]" % i
         _unknown(k, KNOWN_KNOB, where)
         t = _need(k, "token", where)
-        if not re.fullmatch(r"[A-Z]", t) or t in "KNCPTO":
-            raise ManifestError("%s: token must be one capital letter other than K N C P T O (fault tokens)" % where)
+        if not re.fullmatch(r"[A-Z]", t) or t in "KNCPTOF":
+            raise ManifestError("%s: token must be one capital letter other than K N C P T O F (fault tokens)" % where)
         if t in toks:
             raise ManifestError("%s: duplicate token %s" % (where, t))
         toks.add(t)
@@ -450,6 +455,10 @@ def has_links(m):
     return any("addr" in s for s in m["services"])
 
 
+def has_freeze(m):
+    return "freeze" in (m.get("faults") or [])
+
+
 
 
 def service_order(svcs):
@@ -478,7 +487,7 @@ def shq(s):
     return "'" + str(s).replace("'", "'\\''") + "'"
 
 
-def compile_shell(m, tc_path):
+def compile_shell(m, tc_path, fc=None):
     svcs = {s["name"]: s for s in m["services"]}
     order = service_order(m["services"])
     wl = m["workload"]
@@ -495,6 +504,8 @@ def compile_shell(m, tc_path):
          "HYDO_DATA_DIRS=%s" % shq(" ".join((m.get("data") or {}).get("dirs") or [])),
          "HYDO_CLOCK_START=%d" % int((m.get("guest") or {}).get("clock_start", 1767225600)),
          "HYDO_TC=%s" % shq(tc_path or "")]
+    if fc:      # only then (faults: lists freeze): other manifests compile byte-identically
+        L += ["HYDO_FC=%s" % shq(fc[0]), "HYDO_IPT=%s" % shq(fc[1])]
     for n in order:
         s = svcs[n]
         L += ["HYDO_SVC_%s_cmd=%s" % (n, shq(s["cmd"])),
@@ -546,32 +557,54 @@ LIVE_WRAP = ("step_range", "start_periodic", "start_all", "finish")
 LIVE_MARK = "# ---------------------------------------------------------------- main\n"
 
 
+FC_WRAP = ("set_knob", "step_range", "restart_dead", "stop_periodic")
+FC_INIT = "hydo-init-freeze.sh"        # inserted into /sbin/init only for manifests whose faults: list freeze
+
+
+def _fn_defs(text, fn):
+    """Every definition of shell function fn in text: one-line `fn() { ...; }` or a block
+    that ends with a `}` at the start of a line."""
+    return [mo.group(0) for mo in re.finditer(r"^%s\(\) \{(?:[^\n]*\}\n|.*?^\}\n)" % fn, text, re.S | re.M)]
+
+
 def init_text(m):
     """/sbin/init for manifest m: hydo-init.sh unchanged, or -- only when an invariant is of
     type eventually -- with hydo-liveness.sh and renamed copies of the functions it wraps
-    inserted before the "main" section."""
+    inserted before the "main" section; likewise hydo-init-freeze.sh for faults: [.., freeze]."""
     base = open(os.path.join(HERE, "hydo-init.sh")).read()
     if has_links(m):    # services with addr: source the link-fault extension (hydo-init-links.sh)
         if base.count(LIVE_MARK) != 1:
             raise ManifestError("hydo-init.sh: the '# ---- main' section marker is missing (needed for addr:)")
         base = base.replace(LIVE_MARK, ". /etc/hydo/init-links.sh   # added by hydo-build: services with addr:\n" + LIVE_MARK)
-    if not any(v.get("type") == "eventually" for v in m["invariants"]):
-        return base
-    i = base.find(LIVE_MARK)
-    if i < 0:
-        raise ManifestError("hydo-init.sh: the '# ---- main' section marker is missing (needed for eventually invariants)")
-    copies = []
-    for fn in LIVE_WRAP:
-        mo = re.search(r"^%s\(\) \{.*?^\}\n" % fn, base, re.S | re.M)
-        if not mo:
-            raise ManifestError("hydo-init.sh: function %s() not found (needed for eventually invariants)" % fn)
-        copies.append("_live_orig_" + mo.group(0))
-    live = open(os.path.join(HERE, "hydo-liveness.sh")).read()
-    return base[:i] + "# copies of the init functions hydo-liveness.sh wraps\n" + "".join(copies) + "\n" + live + base[i:]
+    if any(v.get("type") == "eventually" for v in m["invariants"]):
+        i = base.find(LIVE_MARK)
+        if i < 0:
+            raise ManifestError("hydo-init.sh: the '# ---- main' section marker is missing (needed for eventually invariants)")
+        copies = []
+        for fn in LIVE_WRAP:
+            mo = re.search(r"^%s\(\) \{.*?^\}\n" % fn, base, re.S | re.M)
+            if not mo:
+                raise ManifestError("hydo-init.sh: function %s() not found (needed for eventually invariants)" % fn)
+            copies.append("_live_orig_" + mo.group(0))
+        live = open(os.path.join(HERE, "hydo-liveness.sh")).read()
+        base = base[:i] + "# copies of the init functions hydo-liveness.sh wraps\n" + "".join(copies) + "\n" + live + base[i:]
+    if has_freeze(m):
+        i = base.find(LIVE_MARK)
+        if i < 0:
+            raise ManifestError("hydo-init.sh: the '# ---- main' section marker is missing (needed for faults: freeze)")
+        copies = []
+        for fn in FC_WRAP:      # the definition in force at this point (liveness may wrap step_range)
+            defs = _fn_defs(base[:i], fn)
+            if not defs:
+                raise ManifestError("hydo-init.sh: function %s() not found (needed for faults: freeze)" % fn)
+            copies.append("_fc_orig_" + defs[-1])
+        fz = open(os.path.join(HERE, FC_INIT)).read()
+        base = base[:i] + "# copies of the init functions hydo-init-freeze.sh wraps\n" + "".join(copies) + "\n" + fz + base[i:]
+    return base
 
 
 def install_init(m, dst):
-    if any(v.get("type") == "eventually" for v in m["invariants"]) or has_links(m):
+    if any(v.get("type") == "eventually" for v in m["invariants"]) or has_links(m) or has_freeze(m):
         with open(dst, "w") as f:
             f.write(init_text(m))
     else:
@@ -697,17 +730,24 @@ def build(m, manifest_path, out, bdir, params=None, oci=None):
         "mke2fs": tool("HYDO_MKE2FS", "/nix/store/24s0phlx9kly7x7qb8gal3mmn51ndmlx-e2fsprogs-1.47.0-bin/bin/mke2fs", os.path.isfile),
         "faketime": tool("HYDO_FAKETIME", "/nix/store/fs0gp7zyfjnbvaq82yvwbcsvqh7876d1-libfaketime-0.9.10/bin/faketime", os.path.isfile),
     }
-    faults = set(m.get("faults") or FAULT_KINDS)
+    faults = set(m.get("faults") or DEFAULT_FAULT_KINDS)
     want_tc = bool(faults & {"network", "oneway"})
     iproute2 = None
     if want_tc:
         iproute2 = tool("HYDO_IPROUTE2", "/nix/store/dx4fsbxs5v82l9lzmjkpkhx5ygqcwm69-iproute2-6.8.0", lambda p: os.path.isfile(p + "/bin/tc"))
         modroot = tool("HYDO_MODROOT", "/run/current-system/kernel-modules/lib/modules/6.6.35", os.path.isdir)
+    iptables = None
+    if "freeze" in faults:      # F= (hydo-init-freeze.sh): iptables-legacy + the static helper hydo_fc
+        iptables = tool("HYDO_IPTABLES", "/nix/store/xnrrq638db6170pg7dvz84f8nr1q2wvi-iptables-1.8.10",
+                        lambda p: os.path.isfile(p + "/bin/xtables-legacy-multi"))
+        T["fc"] = tool("HYDO_FCBIN", os.path.join(bdir, "hydo_fc"), os.path.isfile)
+        modroot = tool("HYDO_MODROOT", "/run/current-system/kernel-modules/lib/modules/6.6.35", os.path.isdir)
     mdir = os.path.dirname(os.path.abspath(manifest_path))
     root = m.get("root") or {}
     R = os.path.join(bdir, "%s-root" % out)
     # the store closures are big and immutable: stage once, reuse; everything else fresh
-    store = sorted(set(p for n in (root.get("nix") or []) + ([iproute2] if iproute2 else []) for p in closure(n)))
+    store = sorted(set(p for n in (root.get("nix") or []) + ([iproute2] if iproute2 else []) + ([iptables] if iptables else [])
+                       for p in closure(n)))
     stamp = os.path.join(bdir, "%s-root.closures" % out)
     if os.path.isdir(R) and os.path.exists(stamp) and open(stamp).read() == "\n".join(store):
         print("hydo-build: reusing the staged closures in %s" % R)
@@ -738,13 +778,15 @@ def build(m, manifest_path, out, bdir, params=None, oci=None):
         p = os.path.join(R, "bin", a)
         if not os.path.lexists(p):
             os.symlink("busybox", p)
-    if want_tc:
-        for mod in NETMODS:
-            src = subprocess.run(["find", modroot, "-name", mod + ".ko.xz"], stdout=subprocess.PIPE, text=True).stdout.split()
-            if not src:
-                raise SystemExit("hydo-build: kernel module %s.ko.xz not under %s" % (mod, modroot))
-            with open(os.path.join(R, "lib/modules", mod + ".ko"), "wb") as f:
-                subprocess.run(["xz", "-dc", sorted(src)[0]], stdout=f, check=True)
+    if iptables:
+        shutil.copy(T["fc"], os.path.join(R, "bin/hydo_fc"))
+        os.chmod(os.path.join(R, "bin/hydo_fc"), 0o755)
+    for mod in (NETMODS if want_tc else []) + (FCMODS if iptables else []):
+        src = subprocess.run(["find", modroot, "-name", mod + ".ko.xz"], stdout=subprocess.PIPE, text=True).stdout.split()
+        if not src:
+            raise SystemExit("hydo-build: kernel module %s.ko.xz not under %s" % (mod, modroot))
+        with open(os.path.join(R, "lib/modules", mod + ".ko"), "wb") as f:
+            subprocess.run(["xz", "-dc", sorted(src)[0]], stdout=f, check=True)
     for e in root.get("files") or []:
         if not isinstance(e, dict) or "src" not in e or "dst" not in e:
             raise ManifestError("root.files: each entry needs src and dst")
@@ -768,7 +810,8 @@ def build(m, manifest_path, out, bdir, params=None, oci=None):
         if not os.path.exists(p):
             with open(p, "w") as f:
                 f.write(content)
-    manifest_sh, prelude = compile_shell(m, (iproute2 + "/bin/tc") if iproute2 else "")
+    manifest_sh, prelude = compile_shell(m, (iproute2 + "/bin/tc") if iproute2 else "",
+                                         ("/bin/hydo_fc", iptables + "/bin/iptables-legacy") if iptables else None)
     with open(os.path.join(R, "etc/hydo/manifest.sh"), "w") as f:
         f.write(manifest_sh)
     with open(os.path.join(R, "etc/hydo/prelude.sh"), "w") as f:
@@ -859,7 +902,8 @@ def main():
     except (YamlError, ManifestError) as e:
         print("hydo-build: %s" % e, file=sys.stderr); return 1
     if "--print-shell" in flags:
-        ms, pre = compile_shell(m, "/nix/store/...-iproute2/bin/tc")
+        ms, pre = compile_shell(m, "/nix/store/...-iproute2/bin/tc",
+                                ("/bin/hydo_fc", "/nix/store/...-iptables/bin/iptables-legacy") if has_freeze(m) else None)
         print(ms); print("# ---- prelude.sh"); print(pre); return 0
     if "--print-init" in flags:
         sys.stdout.write(init_text(m)); return 0
@@ -874,6 +918,8 @@ def main():
                 print("hydo-build: --arch arm64 does not record params: yet", file=sys.stderr); return 2
             if has_links(m):
                 print("hydo-build: --arch arm64 does not support addr: (link faults) yet", file=sys.stderr); return 2
+            if has_freeze(m):
+                print("hydo-build: --arch arm64 does not support faults: freeze yet", file=sys.stderr); return 2
             sys.path.insert(0, HERE)
             import hydo_build_arm64
             hydo_build_arm64.build(m, path, out, opt["--build-dir"], globals(), oci=oci)
