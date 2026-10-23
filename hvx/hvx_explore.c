@@ -476,6 +476,31 @@ struct sched {
 /* the turn policy to put back after a q= / qs= workload, and the turn count at its start */
 static uint64_t g_q_old_quantum, g_q_old_seed, g_q_turns0;
 
+/* Diagnostic (HVX_EXPLORE_VCPUSTAT=1, several vCPUs only): on stderr, the guest's "smp: Brought
+ * up" line at S0, and per run the conditional branches and turns each vCPU took during the
+ * workload ("VCPUSTAT <tag> v0 br=.. t=.. v1 br=.. t=.."). Reads HVX_GET_SCHED only, so the
+ * guest, the RESULT line and every fingerprint are unchanged. */
+static uint64_t g_vs_br0[HVX_SCHED_MAX_VCPUS], g_vs_t0[HVX_SCHED_MAX_VCPUS];
+static int vcpustat_on(void) { return g_vcpus > 1 && getenv("HVX_EXPLORE_VCPUSTAT"); }
+static void vcpustat(struct boot *b, const char *tag)
+{
+	struct hvx_sched c;
+	unsigned i;
+	char out[512];
+	size_t l = 0;
+	memset(&c, 0, sizeof(c));
+	if (ioctl(b->fd, HVX_GET_SCHED, &c) < 0) { perror("HVX_GET_SCHED (vcpustat)"); return; }
+	if (!tag) {
+		for (i = 0; i < g_vcpus; i++) { g_vs_br0[i] = c.v[i].branches; g_vs_t0[i] = c.v[i].turns; }
+		return;
+	}
+	for (i = 0; i < g_vcpus && l < sizeof(out) - 64; i++)
+		l += snprintf(out + l, sizeof(out) - l, " v%u br=%llu t=%llu", i,
+			      (unsigned long long)(c.v[i].branches - g_vs_br0[i]),
+			      (unsigned long long)(c.v[i].turns - g_vs_t0[i]));
+	fprintf(stderr, "VCPUSTAT %s%s\n", tag, out);
+}
+
 /* The value of host token <key> ("q=" ...) starting a word of `host`, or NULL. Exact word
  * match, so "q=" never matches inside another token. */
 static const char *host_tok(const char *host, const char *key)
@@ -722,6 +747,8 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 		snprintf(tjinfo + l, sizeof(tjinfo) - l, " xtn=%llu", (unsigned long long)got.applied);
 		set_xt(b, NULL);
 	}
+	if (vcpustat_on())
+		vcpustat(b, tag);
 	if (sc->q_on) {			/* the turn lengths too: report the turns, put the policy back */
 		struct hvx_sched c;
 		size_t l = strlen(tjinfo);
@@ -859,6 +886,8 @@ static void run_sched(struct boot *b, const char *tag, const struct sched *sc, s
 		c.seed = sc->qs;
 		if (ioctl(b->fd, HVX_SET_SCHED, &c) < 0) { snprintf(verdict, sizeof(verdict), "ERROR harness q= value (HVX_SET_SCHED)"); goto fail; }
 	}
+	if (vcpustat_on())
+		vcpustat(b, NULL);
 	pt_arm(b);
 	snprintf(line, sizeof(line), "%s\n", sc->guest);
 	if (put_input(b, line)) { snprintf(verdict, sizeof(verdict), "ERROR harness put_input"); goto fail; }
@@ -1024,6 +1053,17 @@ static int boot_to_s1(struct boot *b, struct snap *s0, struct snap *s1)
 	if (run_until_any(b, m0, 2, 0) != 0) { fprintf(stderr, "hvx_explore: no S0 marker\n"); console_dump(b); return -1; }
 	if (snap_take(b, s0, "s0")) return -1;
 	fprintf(stderr, "hvx_explore: S0 at %zu console bytes, state %016llx\n", b->ulen, (unsigned long long)fingerprint(b));
+	if (vcpustat_on()) {
+		long at = mem_find(b->ubuf, b->ulen, "smp: Brought up");
+		size_t i = 0;
+		char ln[160];
+		while (at >= 0 && (size_t)at + i < b->ulen && b->ubuf[at + i] != '\n' && i + 1 < sizeof(ln)) {
+			ln[i] = (char)b->ubuf[at + i];
+			i++;
+		}
+		ln[i] = 0;
+		fprintf(stderr, "VCPUSTAT boot: %s\n", at >= 0 ? ln : "no \"smp: Brought up\" line in the console");
+	}
 	if (put_input(b, "provision\n")) return -1;
 	if (run_until_any(b, m1, 2, s0->ulen) != 0) { fprintf(stderr, "hvx_explore: no S1 marker\n"); console_dump(b); return -1; }
 	fprintf(stderr, "hvx_explore: S1 at %zu console bytes, state %016llx\n", b->ulen, (unsigned long long)fingerprint(b));

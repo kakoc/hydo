@@ -2,6 +2,7 @@
 """Run a fixed list of schedules on one or more images through explore.py's serve pool.
 
     python3 listrun.py --images IMG[,IMG...] --list FILE --workers 3 --out DIR [--vcpus N] [--repeat 2]
+                       [--env KEY=VAL ...]
 
 FILE: one schedule per line ("disk=none dseed=0 | run P=kafka@28+2"); blank lines and # comments
 are skipped. Writes DIR/<image>.jsonl (one record per schedule: schedule, verdict, fp) and
@@ -37,8 +38,11 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--vcpus", type=int, default=1)
     ap.add_argument("--repeat", type=int, choices=[1, 2], default=1)
+    ap.add_argument("--env", action="append", default=[], metavar="KEY=VAL",
+                    help="extra environment for the engine (e.g. HVX_EXPLORE_VCPUSTAT=1)")
     a = ap.parse_args()
     ex.VCPUS = a.vcpus
+    ex.EXTRA_ENV = ex.EXTRA_ENV + a.env
     items = [l.strip() for l in open(a.list) if l.strip() and not l.lstrip().startswith("#")]
     os.makedirs(a.out, exist_ok=True)
     table = {}
