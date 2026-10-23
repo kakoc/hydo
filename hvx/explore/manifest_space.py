@@ -108,14 +108,25 @@ class Space:
             return seen
         names = [s["name"] for s in services]
         pairs = [(a, b) for a in names for b in closure(a) if ok(a, b)]
-        return pairs or [(a, b) for a in names for b in names if ok(a, b)]
+        pairs = pairs or [(a, b) for a in names for b in names if ok(a, b)]
+        # no service calls another (a single server): freeze a server in its conversation with
+        # the workload's client ("workload" peer, hydo-init-freeze.sh)
+        return pairs or [(a, "workload") for a in names if by[a].get("port")]
+
+    def fc_match(self):
+        """freeze_match: as (string, direction) pairs: "<" = in packets the frozen service
+        receives (replies:), ">" = in packets it sends (requests:), None = a plain list (either)."""
+        fm = self.m.get("freeze_match") or []
+        if isinstance(fm, dict):
+            return [(x, "<") for x in fm.get("replies") or []] + [(x, ">") for x in fm.get("requests") or []]
+        return [(x, None) for x in fm]
 
     def describe(self):
         d = {"project": self.name, "services": self.svcs, "network": self.ported + self.links, "steps": self.steps,
              "faults": self.faults, "knobs": {t: {"safe": s, "relaxed": v} for t, s, v in self.knobs}}
         if "freeze" in self.faults:
             d["freeze_pairs"] = ["%s>%s" % p for p in self.fc_pairs]
-            d["freeze_match"] = list(self.m.get("freeze_match") or [])
+            d["freeze_match"] = ["%s%s" % ({"<": "reply:", ">": "request:"}.get(dr, ""), x) for x, dr in self.fc_match()]
         return d
 
     def apply(self, ex):
@@ -129,7 +140,7 @@ class Space:
         ex["KNOB_TOKENS"] = [t for t, _, _ in self.knobs]
         if "freeze" in self.faults:     # only then: the explorer of every other manifest is unchanged
             ex["FC_PAIRS"] = list(self.fc_pairs)
-            ex["FC_MATCH"] = list(self.m.get("freeze_match") or [])
+            ex["FC_MATCH"] = self.fc_match()
         ex["SPACE"] = self
 
     def restrict(self, s):
@@ -142,7 +153,7 @@ class Space:
         for key in ("N", "O"):
             if key in s and s[key][0] not in self.ported and s[key][0] not in self.links:
                 s.pop(key)
-        if "F" in s and ("freeze" not in f or s["F"][0] not in self.svcs or s["F"][2] not in self.svcs):
+        if "F" in s and ("freeze" not in f or s["F"][0] not in self.svcs or s["F"][2] not in self.svcs + ["workload"]):
             s.pop("F")
         for key in ("K", "P", "X"):
             if key in s and s[key][0] == "-":    # placeholder of a project without services

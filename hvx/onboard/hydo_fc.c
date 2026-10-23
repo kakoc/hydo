@@ -20,10 +20,11 @@
  * same processes, then keeps accepting packets until the init removes the rules and kills it.
  * n = 0 never fires: a trace of the traffic (the log), for finding the n of an event.
  *
- * usage: hydo_fc <queue> <pidfile> <svc-ip|-> <target-port|-> <req|resp> <n> <match|-> <dur-ms>
+ * usage: hydo_fc <queue> <pidfile> <svc-ip|-> <target-port|s<own-port>|-> <req|resp> <n> <match|-> <dur-ms>
  *                <logfile> <markerdir>
- *   direction of a packet: if svc-ip is given, req = source address is svc-ip; otherwise
- *   req = destination port is target-port. match: bytes, with %xx escapes for any byte.
+ *   direction of a packet: if svc-ip is given, req = source address is svc-ip; else with
+ *   s<own-port> (the peer is the workload client) req = source port is the service's own port;
+ *   otherwise req = destination port is target-port. match: bytes, %xx escapes any byte.
  * Console lines (stdout): "hydo-fc: FROZE ...", "hydo-fc: RESUMED ...", one HYDO-ASSERT
  * reachable record. Marker files <markerdir>/fc.fired and fc.resumed.
  *
@@ -253,7 +254,8 @@ int main(int argc, char **argv)
 	queue = atoi(argv[1]);
 	const char *pidfile = argv[2];
 	uint32_t sip = 0;
-	int have_sip = strcmp(argv[3], "-") != 0, tport = strcmp(argv[4], "-") ? atoi(argv[4]) : -1;
+	int have_sip = strcmp(argv[3], "-") != 0, own = argv[4][0] == 's';
+	int tport = strcmp(argv[4], "-") ? atoi(argv[4] + own) : -1;
 	if (have_sip) inet_pton(AF_INET, argv[3], &sip);
 	int want_req = strcmp(argv[5], "req") == 0;
 	long target = atol(argv[6]);
@@ -339,7 +341,7 @@ int main(int argc, char **argv)
 				}
 			}
 			if (paylen <= 0 || fired) { verdict(id); continue; }
-			int is_req = have_sip ? saddr == sip : dport == tport;
+			int is_req = have_sip ? saddr == sip : own ? sport == tport : dport == tport;
 			long k = is_req ? ++nreq : ++nresp;
 			int hit = is_req == want_req && (!mlen || memmem(pay, paylen, match, mlen));
 			if (hit) counted++;

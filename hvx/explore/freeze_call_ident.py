@@ -69,7 +69,8 @@ def run(label, strats=("random", "swarm", "swarm-pos", "process"), seeds=range(1
                     if "F" in q:
                         nfc += 1
                         assert (q["F"][0], q["F"][2]) in B.FC_PAIRS and 1 <= q["F"][4] <= B.FC_NMAX, y
-                        assert q["F"][5] is None or q["F"][5] in B.FC_MATCH, y
+                        mt = dict((x, dr) for x, dr in B.FC_MATCH)
+                        assert q["F"][5] is None or (q["F"][5] in mt and mt[q["F"][5]] in (None, q["F"][1])), y
                     [B.render(cand) for cand in B.candidates(q)]
                 assert 0 < nfc < len(c), (label, strat, nfc)
                 B.FREEZE_CALL = False

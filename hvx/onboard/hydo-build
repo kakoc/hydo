@@ -405,16 +405,26 @@ def validate(m):
             raise ManifestError("faults: unknown kind %r (known: %s)" % (f, ", ".join(sorted(FAULT_KINDS))))
     fm = m.get("freeze_match")
     if fm is not None:
-        if not isinstance(fm, list) or any(not isinstance(x, str) or not x for x in fm):
-            raise ManifestError("freeze_match: a list of non-empty payload-match strings")
-        if fm and "freeze" not in (m.get("faults") or []):
+        # a list (strings that may occur in either direction), or a mapping with the lists
+        # replies: (packets the frozen service receives) and requests: (packets it sends)
+        lists = [fm] if isinstance(fm, list) else (list(fm.values()) if isinstance(fm, dict) else None)
+        if lists is None or (isinstance(fm, dict) and set(fm) - {"replies", "requests"}) or \
+           any(not isinstance(l, list) or any(not isinstance(x, str) or not x or ":" in x or " " in x for x in l)
+               for l in lists):
+            raise ManifestError("freeze_match: a list of payload strings, or a mapping with lists replies: and "
+                                "requests:; each string non-empty, without spaces or colons (%xx escapes a byte)")
+        if any(lists) and "freeze" not in (m.get("faults") or []):
             raise ManifestError("freeze_match: only with `freeze` in faults:")
     data = m.get("data") or {}
     _unknown(data, {"size_mib", "mount", "dirs", "description"}, "data")
     root = m.get("root") or {}
     _unknown(root, {"size_mib", "nix", "files", "text", "dirs", "description"}, "root")
     guest = m.get("guest") or {}
-    _unknown(guest, {"ram_mib", "clock_start", "cpu", "description"}, "guest")
+    _unknown(guest, {"ram_mib", "clock_start", "clock_after_cut", "cpu", "description"}, "guest")
+    if "clock_after_cut" in guest:
+        c = guest["clock_after_cut"]
+        if not isinstance(c, int) or isinstance(c, bool) or not 1 <= c <= 10 * 365 * 86400:
+            raise ManifestError("guest.clock_after_cut: whole seconds in [1, 315360000] (got %r)" % (c,))
     if "cpu" in guest and guest["cpu"] not in ("v2", "v3"):
         raise ManifestError("guest.cpu: v2 (the default: x86-64-v2, no AVX) or v3 (adds AVX/AVX2, FMA, "
                             "BMI1/2, F16C, LZCNT, MOVBE, XSAVE; x86_64 only) (got %r)" % (guest["cpu"],))
@@ -510,6 +520,8 @@ def compile_shell(m, tc_path, fc=None):
          "HYDO_DATA_DIRS=%s" % shq(" ".join((m.get("data") or {}).get("dirs") or [])),
          "HYDO_CLOCK_START=%d" % int((m.get("guest") or {}).get("clock_start", 1767225600)),
          "HYDO_TC=%s" % shq(tc_path or "")]
+    if "clock_after_cut" in (m.get("guest") or {}):     # only then: other manifests compile byte-identically
+        L.append("HYDO_CLOCK_AFTER_CUT=%d" % int(m["guest"]["clock_after_cut"]))
     if fc:      # only then (faults: lists freeze): other manifests compile byte-identically
         L += ["HYDO_FC=%s" % shq(fc[0]), "HYDO_IPT=%s" % shq(fc[1])]
     for n in order:
@@ -573,6 +585,26 @@ def _fn_defs(text, fn):
     return [mo.group(0) for mo in re.finditer(r"^%s\(\) \{(?:[^\n]*\}\n|.*?^\}\n)" % fn, text, re.S | re.M)]
 
 
+CLK_WRAP = ("mount_data",)
+CLK_INIT = "hydo-init-clock.sh"         # inserted into /sbin/init only for manifests with guest.clock_after_cut
+
+
+def _splice(base, fns, prefix, ext, why):
+    """Insert renamed copies <prefix><fn> of the definitions of fns now in force, then the
+    extension file ext, just before the "main" marker."""
+    i = base.find(LIVE_MARK)
+    if i < 0:
+        raise ManifestError("hydo-init.sh: the '# ---- main' section marker is missing (needed for %s)" % why)
+    copies = []
+    for fn in fns:
+        defs = _fn_defs(base[:i], fn)
+        if not defs:
+            raise ManifestError("hydo-init.sh: function %s() not found (needed for %s)" % (fn, why))
+        copies.append(prefix + defs[-1])
+    txt = open(os.path.join(HERE, ext)).read()
+    return base[:i] + "# copies of the init functions %s wraps\n" % ext + "".join(copies) + "\n" + txt + base[i:]
+
+
 def init_text(m):
     """/sbin/init for manifest m: hydo-init.sh unchanged, or -- only when an invariant is of
     type eventually -- with hydo-liveness.sh and renamed copies of the functions it wraps
@@ -594,6 +626,8 @@ def init_text(m):
             copies.append("_live_orig_" + mo.group(0))
         live = open(os.path.join(HERE, "hydo-liveness.sh")).read()
         base = base[:i] + "# copies of the init functions hydo-liveness.sh wraps\n" + "".join(copies) + "\n" + live + base[i:]
+    if "clock_after_cut" in (m.get("guest") or {}):
+        base = _splice(base, CLK_WRAP, "_clk_orig_", CLK_INIT, "guest.clock_after_cut")
     if has_freeze(m):
         i = base.find(LIVE_MARK)
         if i < 0:
@@ -610,7 +644,8 @@ def init_text(m):
 
 
 def install_init(m, dst):
-    if any(v.get("type") == "eventually" for v in m["invariants"]) or has_links(m) or has_freeze(m):
+    if any(v.get("type") == "eventually" for v in m["invariants"]) or has_links(m) or has_freeze(m) or \
+       "clock_after_cut" in (m.get("guest") or {}):
         with open(dst, "w") as f:
             f.write(init_text(m))
     else:

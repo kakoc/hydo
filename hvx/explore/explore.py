@@ -96,8 +96,9 @@ FC_P = 50               # % of schedules that draw F=
 FC_NMAX = 64            # --fc-nmax: n is drawn log-uniformly from 1 .. FC_NMAX
 FC_DURS = [100, 300, 1000, 3000, 10000, 30000, 60000, 90000, 150000]   # freeze length, ms of guest time
 FC_PAIRS = []           # (service, peer) pairs that talk; manifest_space.py sets them (faults: [.., freeze])
-FC_MATCH = []           # optional payload-match strings (manifest freeze_match:); the freeze may count only
-                        # packets whose payload contains one, so a known event has a small n
+FC_MATCH = []           # optional (payload string, direction) pairs (manifest freeze_match:): the freeze may
+                        # count only packets that contain the string, so a known event has a small n; a
+                        # direction "<" / ">" (replies: / requests:) is the one the string occurs in
 FC_MATCH_NMAX = 32      # with a match, n is drawn 1 .. this (matched events are far fewer than all packets)
 
 
@@ -279,8 +280,11 @@ def add_freeze_call(s, seed):
     want_match, mi, n_all, n_match = t.below(2), t.below(max(1, len(FC_MATCH))), fc_n(t), fc_n(t, FC_MATCH_NMAX)
     use_match = bool(FC_MATCH) and want_match        # half the time, when the manifest gives a vocabulary
     if on:
-        s["F"] = (pair[0], d, pair[1], step, n_match if use_match else n_all,
-                  FC_MATCH[mi] if use_match else None, dur)
+        if use_match:
+            match, md = FC_MATCH[mi]
+            s["F"] = (pair[0], md or d, pair[1], step, n_match, match, dur)   # the string's own direction
+        else:
+            s["F"] = (pair[0], d, pair[1], step, n_all, None, dur)
     return s
 
 
