@@ -96,6 +96,9 @@ FC_P = 50               # % of schedules that draw F=
 FC_NMAX = 64            # --fc-nmax: n is drawn log-uniformly from 1 .. FC_NMAX
 FC_DURS = [100, 300, 1000, 3000, 10000, 30000, 60000, 90000, 150000]   # freeze length, ms of guest time
 FC_PAIRS = []           # (service, peer) pairs that talk; manifest_space.py sets them (faults: [.., freeze])
+FC_MATCH = []           # optional payload-match strings (manifest freeze_match:); the freeze may count only
+                        # packets whose payload contains one, so a known event has a small n
+FC_MATCH_NMAX = 32      # with a match, n is drawn 1 .. this (matched events are far fewer than all packets)
 
 
 class SplitMix:
@@ -252,12 +255,13 @@ def add_new_faults(s, seed, swarm=False):
     return s
 
 
-def fc_n(t):
-    """n of an F= token: log-uniform over 1 .. FC_NMAX (the first events after a step begins are
-    as likely as a whole range of later ones)."""
+def fc_n(t, nmax=None):
+    """n of an F= token: log-uniform over 1 .. nmax (default FC_NMAX). The first events after a
+    step begins are as likely as a whole later range."""
     import math
-    e = t.below(1000) / 1000.0 * math.log(FC_NMAX)
-    return max(1, min(FC_NMAX, int(math.exp(e))))
+    nmax = nmax or FC_NMAX
+    e = t.below(1000) / 1000.0 * math.log(nmax)
+    return max(1, min(nmax, int(math.exp(e))))
 
 
 def add_freeze_call(s, seed):
@@ -268,16 +272,21 @@ def add_freeze_call(s, seed):
     if not FREEZE_CALL or not FC_PAIRS:
         return s
     t = SplitMix(seed ^ FC_SALT)
-    on, pair, d, step, n, dur = (t.below(100) < FC_P, t.pick(FC_PAIRS), t.pick([">", "<"]),
-                                 t.rng(0, NORDERS - 1), fc_n(t), t.pick(FC_DURS))
+    # draw every value unconditionally and in a fixed order, so a manifest with a freeze_match
+    # vocabulary and one without draw from the same stream for every field but the match.
+    on = t.below(100) < FC_P
+    pair, d, step, dur = t.pick(FC_PAIRS), t.pick([">", "<"]), t.rng(0, NORDERS - 1), t.pick(FC_DURS)
+    want_match, mi, n_all, n_match = t.below(2), t.below(max(1, len(FC_MATCH))), fc_n(t), fc_n(t, FC_MATCH_NMAX)
+    use_match = bool(FC_MATCH) and want_match        # half the time, when the manifest gives a vocabulary
     if on:
-        s["F"] = (pair[0], d, pair[1], step, n, None, dur)
+        s["F"] = (pair[0], d, pair[1], step, n_match if use_match else n_all,
+                  FC_MATCH[mi] if use_match else None, dur)
     return s
 
 
 def render_fc(f):
     svc, d, peer, step, n, match, dur = f
-    return "F=%s%s%s@%d#%d%s:%d" % (svc, d, peer, step, n, ":" + match if match else "", dur)
+    return "F=%s%s%s@%d#%d%s:%d" % (svc, d, peer, step, n, ":" + match if match else "", dur)  # noqa
 
 
 FC_RE = re.compile(r"^([a-z0-9_]+)([<>])([a-z0-9_]+)@(\d+)(?:#(\d+))?(?::([^:]*))?:(\d+)$")
@@ -1249,7 +1258,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
 # ---------------------------------------------------------------- main
 def main():
     global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT, BUGGIFY, KNOB_RULE, RAM_MIB, MORE_FAULTS, CF_RANGE, VCPUS, TURNS, CPU
-    global FREEZE_CALL, FC_NMAX
+    global FREEZE_CALL, FC_NMAX, FC_MATCH
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-200")
     ap.add_argument("--workers", type=int, default=3)   # the box has 4 cores: 3 is fastest (M38)

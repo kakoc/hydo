@@ -115,6 +115,7 @@ class Space:
              "faults": self.faults, "knobs": {t: {"safe": s, "relaxed": v} for t, s, v in self.knobs}}
         if "freeze" in self.faults:
             d["freeze_pairs"] = ["%s>%s" % p for p in self.fc_pairs]
+            d["freeze_match"] = list(self.m.get("freeze_match") or [])
         return d
 
     def apply(self, ex):
@@ -128,6 +129,7 @@ class Space:
         ex["KNOB_TOKENS"] = [t for t, _, _ in self.knobs]
         if "freeze" in self.faults:     # only then: the explorer of every other manifest is unchanged
             ex["FC_PAIRS"] = list(self.fc_pairs)
+            ex["FC_MATCH"] = list(self.m.get("freeze_match") or [])
         ex["SPACE"] = self
 
     def restrict(self, s):

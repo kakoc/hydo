@@ -21,7 +21,7 @@ def load(path, name):
 A = load(sys.argv[1], "ex_ref"); B = load(sys.argv[2], "ex_new")
 MS_A = load(sys.argv[1].rsplit("/", 1)[0] + "/manifest_space.py", "ms_ref")
 MS_B = load(sys.argv[2].rsplit("/", 1)[0] + "/manifest_space.py", "ms_new")
-GLOBALS = ("SVCS", "NET_SVCS", "PAUSE_SVCS", "NORDERS", "KNOBS", "KNOB_TOKENS", "SPACE", "FC_PAIRS")
+GLOBALS = ("SVCS", "NET_SVCS", "PAUSE_SVCS", "NORDERS", "KNOBS", "KNOB_TOKENS", "SPACE", "FC_PAIRS", "FC_MATCH")
 SAVED = {M: {k: getattr(M, k) for k in GLOBALS if hasattr(M, k)} for M in (A, B)}
 
 
@@ -69,6 +69,7 @@ def run(label, strats=("random", "swarm", "swarm-pos", "process"), seeds=range(1
                     if "F" in q:
                         nfc += 1
                         assert (q["F"][0], q["F"][2]) in B.FC_PAIRS and 1 <= q["F"][4] <= B.FC_NMAX, y
+                        assert q["F"][5] is None or q["F"][5] in B.FC_MATCH, y
                     [B.render(cand) for cand in B.candidates(q)]
                 assert 0 < nfc < len(c), (label, strat, nfc)
                 B.FREEZE_CALL = False

@@ -279,7 +279,7 @@ class ManifestError(Exception):
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 KNOWN_TOP = {"name", "description", "guest", "root", "data", "env", "shell", "services",
-             "provision", "workload", "knobs", "invariants", "faults", "image", "params"}
+             "provision", "workload", "knobs", "invariants", "faults", "freeze_match", "image", "params"}
 KNOWN_SVC = {"name", "cmd", "setup", "ready", "ready_timeout", "port", "depends_on",
              "recovery", "description", "addr",
              "image", "image_ref", "entrypoint", "workdir", "user", "env"}   # the last six: hydo_oci.py
@@ -403,6 +403,12 @@ def validate(m):
     for f in m.get("faults") or []:
         if f not in FAULT_KINDS:
             raise ManifestError("faults: unknown kind %r (known: %s)" % (f, ", ".join(sorted(FAULT_KINDS))))
+    fm = m.get("freeze_match")
+    if fm is not None:
+        if not isinstance(fm, list) or any(not isinstance(x, str) or not x for x in fm):
+            raise ManifestError("freeze_match: a list of non-empty payload-match strings")
+        if fm and "freeze" not in (m.get("faults") or []):
+            raise ManifestError("freeze_match: only with `freeze` in faults:")
     data = m.get("data") or {}
     _unknown(data, {"size_mib", "mount", "dirs", "description"}, "data")
     root = m.get("root") or {}
