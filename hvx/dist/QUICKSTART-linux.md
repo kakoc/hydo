@@ -63,7 +63,7 @@ hydo build hydo.yaml
 
 This writes `hydo-out/explore-ob-redis-disk.img` (a read-only root partition with Redis and the
 generic hydo init, plus a data partition). Building the same `hydo.yaml` again, on this or
-another machine, gives the same bytes (sha256 `05db0de2ef5b3cab…`).
+another machine, gives the same bytes (sha256 `8c828d3ed9206506…`).
 
 Run one schedule with no faults, then one with a power cut before write 12 while Redis is set
 to sync its log only once a second:
@@ -76,8 +76,8 @@ hydo run "disk=cut | run C=12 R=everysec"
 Each prints the engine's `RESULT` line:
 
 ```
-RESULT one fp=7b0bb3529e0d395b wfp=b774d8652639080b secs=2.6 verdict=HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)
-RESULT one fp=ffe3c3772d4d4646 wfp=793621d1b36d0e27 secs=17.7 verdict=HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:2 lost
+RESULT one fp=c513f10aee733aae wfp=178a4694a94a082b secs=2.6 verdict=HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)
+RESULT one fp=ecef6f8fe6c39ec0 wfp=6913b248b3ac2d47 secs=18.3 verdict=HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:2 lost
 ```
 
 - `verdict=` is the outcome. `HYDO-ORACLE: OK` means every invariant held; `VIOLATION` names the
@@ -96,7 +96,7 @@ Run either command again: the fingerprint is the same. Each run leaves a directo
 
 ```
 $ hydo repro hydo-out/runs/run-…
-REPRODUCED   run  fp=ffe3c3772d4d4646 (recorded ffe3c3772d4d4646)  disk=cut | run C=12 R=everysec
+REPRODUCED   run  fp=ecef6f8fe6c39ec0 (recorded ecef6f8fe6c39ec0)  disk=cut | run C=12 R=everysec
 ```
 
 These fingerprints were recorded on a Xeon E3-1270 v6 with the PMU clock, from the image with

@@ -96,6 +96,11 @@ Each flagship boots an unmodified service, runs a workload and an oracle, and pa
 - A project is described by one `hydo.yaml` (`hvx/onboard/MANIFEST.md`). `hvx/onboard/hydo-build` compiles it into a guest image with one generic init (`hydo-init.sh`) that starts the services, applies fault tokens by service name and runs the invariants (M47). The `hydo-onboard` skill writes a manifest for a new project.
 - Features: services with readiness checks and crash recovery; faults that reach a service's whole process tree (M52); `params:` (M52); `eventually` liveness invariants (M59); Docker/OCI images by digest with `image:` (M59); `guest.ram_mib`, 256–3072 MiB on Linux and 256–4096 MiB on the Mac (M59); per-service `addr:` with link faults between services (M60, x86_64 only); `guest.cpu: v3` (M68, x86_64 only); and `hydo-build --arch arm64` for the Mac (M51).
 
+### The Linux release
+
+- `hvx/dist/` packages the bare-metal backend like the Mac release: `build-release.sh` (assets pinned in `assets.sha256`, fetched once from the build machine) gives `hydo-linux-0.1.0.tar.gz` (45 MB); `install.sh` compiles `hvx_explore` and the module on the user's machine; `hydo doctor|module|build|run|repro|explore|report` drive the existing tools, and runs/reloads share the box's `~/.hvx-module.lock` (M75).
+- `hydo build` needs no Nix: bundled busybox, static helpers, guest tc/iptables closures and modules, and e2fsprogs + libfaketime run with their own glibc loader. Images are the same bytes on any machine: frozen build clock in UTC+4 (hydo-build's `FAKE_TS` is 1600000000 only there), no host `/etc/mke2fs.conf`, umask 022, root inodes owned by 0:0. Release quickstart on the box: Redis image `8c828d3e…`, clean OK `c513f10aee733aae`, `disk=cut | run C=12 R=everysec` VIOLATION k:2 `ecef6f8fe6c39ec0` (M75).
+
 ### Several virtual CPUs
 
 - With `HVX_VM_SMP_SCHED` and the PMU clock, one `HVX_RUN` runs every vCPU in turns of exactly Q guest branches (or seeded lengths), on one shared clock, and stops only at clean points. `HVX_GET/SET_SCHED` carry the scheduler state (M66).
@@ -134,6 +139,7 @@ Items marked **[user decision]** need the user before anyone acts on them.
 13. Mac backend: a pure memory-flag spin in user space with no exits cannot be interrupted deterministically, and windows of plain work with no exits are out of reach of jitter and PCT points (M48, M53, M57).
 14. Older limits that still hold: the PMU clock is a tick source on top of the exit-count clock, not an instruction-exact clock, so instruction-exact bisection of a Linux boot is future work (M33); host performance counters are off while a PMU-clock guest runs (M34); RAM above about 3.9 GiB needs a PCI-hole split (M28); a read-write ext4 root is not done (M29); and in the module-built default guest page tables, the page that maps 512 MiB–1 GiB shares a page with the built-in interrupt handler, which only hand-written test guests use, left as is because fixing it moves every hand-written fingerprint (M36).
 15. Images listed but not rebuilt with the pinned tools: `explore-cc0/1/cc` (M50; rebuild from `029e4b3`/`b9233d5`) and `explore-dx`, an undocumented diagnostic (M61). The build machine copy of `richcov-disk.img` was built with a substitute gcc and must be rebuilt before use (M44).
+16. Linux release (M75): runs need `sudo` (no udev rule for `/dev/hvx`); the Mac release copies only `hydo-init.sh` of the init extensions, so an arm64 build of a manifest with `eventually` invariants or `guest.clock_after_cut` probably fails; plain `hydo-build` on the Nix build box gives different image bytes when run in a time zone other than UTC+4 (its `FAKE_TS` is local time).
 
 ## Milestone index (details in `hvx/HISTORY.md`)
 
@@ -213,6 +219,7 @@ Milestones 1–32 ran inside the nested L1 VM on the build machine, before 2026-
 - M72 — benchmark images with the Kafka retention fix (`-pin-kr`), now the default m59 set (2026-10-23)
 - M73 — M70 follow-up: the recovery boot continues the first boot's clock; freeze measurement (2026-10-23)
 - M74 — negative: several vCPUs found no race that one vCPU misses (benchmark d8/d9/d12; SQLite WAL bug not found on 2 or 4 vCPUs) (2026-10-23)
+- M75 — the Linux release: one `hydo` command (doctor, module, build, run, repro, explore, report) and a self-contained tarball for x86_64 + VT-x, no Nix needed (2026-10-23)
 
 ## Where to look
 
