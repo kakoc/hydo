@@ -298,6 +298,7 @@ properties that need to see inside it; both kinds of record mix on the console.
 | `T=<at>:<delta>` | step the realtime clock by `delta` seconds |
 | `N=<a>-<b>@...`, `N=<a>-*@...` | netem on the link between two services with `addr:` (or between `a` and every other one); see "Link faults" |
 | `O=<a>-<b>@<from>-<to>:req\|resp:<netem>` | one direction of a link: `req` = packets from `a` to `b`, `resp` = from `b` to `a` |
+| `F=<svc>><peer>@<step>[#<n>][:<match>]:<dur>` | freeze `<svc>` at the n-th packet it **sends** to `<peer>` (`<` = **receives** from) at/after step `<step>`, for `<dur>` ms; only with `freeze` in `faults:` (see "Freeze at a call") |
 | `<X>=<value>` | a knob from `knobs:` |
 | host side: `disk=ioerr:<p>` / `lying:<p>` | disk I/O errors / a disk that drops acknowledged writes |
 
@@ -306,8 +307,22 @@ faults from the manifest (`hvx/explore/manifest_space.py`): kills and pauses fro
 services, network and one-way faults from services with a `port:`, knob values from
 `knobs:`, fault placement from `workload.steps`, fault kinds from `faults:`. It reads
 `/etc/hydo/hydo.yaml` out of an `explore-ob-*` image automatically; pass `--manifest` for
-any other image. A knob token that collides with a built-in token (K P N O C T Q X) is
-rejected.
+any other image. A knob token that collides with a built-in token (K P N O C T Q X F) is
+rejected. `explore.py --freeze-call` draws `F=` for a manifest whose `faults:` lists `freeze`.
+
+### Freeze at a call (stop a service at an exact point of its traffic)
+
+Some bugs need a service stopped at one precise moment of a conversation -- between two
+messages, not at a step boundary. List `freeze` in `faults:` and the explorer (and a hand
+schedule) can use `F=<svc><dir><peer>@<step>[#<n>][:<match>]:<dur>`:
+
+- `<dir>` is `>` (packets `<svc>` sends to `<peer>`) or `<` (packets it receives from `<peer>`);
+- counting starts when workload step `<step>` begins; `<n>` (default 1) selects the n-th packet
+  that carries payload in that direction (and, with `<match>`, contains those bytes; `%xx`
+  escapes a byte). `#0` fires nothing and dumps a compact trace of the pair's traffic
+  (`hydo-fc-trace:` lines) so you can read off the `<n>` of an event;
+- at that packet the whole process tree of `<svc>` is SIGSTOPped -- held before it runs past the
+  packet, which is then let through -- and SIGCONTed after `<dur>` ms of guest time.
 
 ### Link faults (a network fault between two named services)
 

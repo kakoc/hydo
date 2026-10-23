@@ -90,6 +90,15 @@ TURNS = False           # --turns: half of the schedules get vCPU turn tokens q=
 TURNS_SALT = 0x7A4E5C0FFEE7A4E5
 Q_DEFAULT = 1 << 20     # hvx.c HVX_SCHED_QUANTUM: the module's turn length (guest conditional branches)
 CLOCK_DELTAS = [-30 * 86400, -86400, -3600, -300, -30, 30, 300, 3600, 86400, 365 * 86400]
+FREEZE_CALL = False     # --freeze-call (M70): freeze a service at the n-th packet of one of its conversations (F=)
+FC_SALT = 0xF2EE2EC0FFEEF2EE
+FC_P = 50               # % of schedules that draw F=
+FC_NMAX = 64            # --fc-nmax: n is drawn log-uniformly from 1 .. FC_NMAX
+FC_DURS = [100, 300, 1000, 3000, 10000, 30000, 60000, 90000, 150000]   # freeze length, ms of guest time
+FC_PAIRS = []           # (service, peer) pairs that talk; manifest_space.py sets them (faults: [.., freeze])
+FC_MATCH = []           # optional payload-match strings (manifest freeze_match:); the freeze may count only
+                        # packets whose payload contains one, so a known event has a small n
+FC_MATCH_NMAX = 32      # with a match, n is drawn 1 .. this (matched events are far fewer than all packets)
 
 
 class SplitMix:
@@ -244,6 +253,50 @@ def add_new_faults(s, seed, swarm=False):
         if "N" not in s:                            # one netem root qdisc at a time
             s["O"] = (svc, a, b, d, kinds)
     return s
+
+
+def fc_n(t, nmax=None):
+    """n of an F= token: log-uniform over 1 .. nmax (default FC_NMAX). The first events after a
+    step begins are as likely as a whole later range."""
+    import math
+    nmax = nmax or FC_NMAX
+    e = t.below(1000) / 1000.0 * math.log(nmax)
+    return max(1, min(nmax, int(math.exp(e))))
+
+
+def add_freeze_call(s, seed):
+    """--freeze-call (M70): F=<svc><dir><peer>@<step>#<n>:<dur> on FC_P % of schedules -- freeze
+    <svc> exactly at the n-th packet it sends to (">") or receives from ("<") <peer> after step
+    <step> starts, for <dur> ms (hydo-init-freeze.sh). A separate random stream, and every value is
+    drawn whether or not it is used, so every other field stays what it was for this seed."""
+    if not FREEZE_CALL or not FC_PAIRS:
+        return s
+    t = SplitMix(seed ^ FC_SALT)
+    # draw every value unconditionally and in a fixed order, so a manifest with a freeze_match
+    # vocabulary and one without draw from the same stream for every field but the match.
+    on = t.below(100) < FC_P
+    pair, d, step, dur = t.pick(FC_PAIRS), t.pick([">", "<"]), t.rng(0, NORDERS - 1), t.pick(FC_DURS)
+    want_match, mi, n_all, n_match = t.below(2), t.below(max(1, len(FC_MATCH))), fc_n(t), fc_n(t, FC_MATCH_NMAX)
+    use_match = bool(FC_MATCH) and want_match        # half the time, when the manifest gives a vocabulary
+    if on:
+        s["F"] = (pair[0], d, pair[1], step, n_match if use_match else n_all,
+                  FC_MATCH[mi] if use_match else None, dur)
+    return s
+
+
+def render_fc(f):
+    svc, d, peer, step, n, match, dur = f
+    return "F=%s%s%s@%d#%d%s:%d" % (svc, d, peer, step, n, ":" + match if match else "", dur)  # noqa
+
+
+FC_RE = re.compile(r"^([a-z0-9_]+)([<>])([a-z0-9_]+)@(\d+)(?:#(\d+))?(?::([^:]*))?:(\d+)$")
+
+
+def parse_fc(v):
+    m = FC_RE.match(v)
+    if not m:
+        raise ValueError("bad F= token %r" % v)
+    return (m.group(1), m.group(2), m.group(3), int(m.group(4)), int(m.group(5) or 1), m.group(6) or None, int(m.group(7)))
 
 
 def add_buggify(s, seed):
@@ -677,6 +730,8 @@ def render(s):
         g.append("X=%s@%d~%d" % s["X"])
     if "B" in s:
         g.append("B=%s" % s["B"])
+    if "F" in s:
+        g.append(render_fc(s["F"]))
     return "disk=%s dseed=%x%s%s%s | %s" % (s["disk"], s["dseed"], render_tj(s["tj"]) if "tj" in s else "",
                                             render_preempt(s) + (" cf=%d" % s["cf"] if "cf" in s else "") + render_turns(s),
                                             " rb=%d" % s["rb"] if "rb" in s else "", " ".join(g))
@@ -746,6 +801,8 @@ def parse(text):
             svc, rest = v.split("@"); at, off = rest.split("~"); s["X"] = (svc, int(at), int(off))
         elif k == "B":
             s["B"] = v
+        elif k == "F":
+            s["F"] = parse_fc(v)
         elif k in KNOB_TOKENS:
             s[k] = v
     return s
@@ -1088,6 +1145,13 @@ def candidates(s, tjk=None):
             var(cf=s["cf"] // 2)
     if "B" in s:                                    # BUGGIFY (M56): drop the fault points
         var(B=None)
+    if "F" in s:                                    # freeze at a call (M70): drop it, shorter, an earlier event
+        var(F=None)
+        f = s["F"]
+        if f[6] > 100:
+            var(F=f[:6] + (max(100, f[6] // 2),))
+        if f[4] > 1:
+            var(F=f[:4] + (f[4] // 2,) + f[5:])
     if "pp" in s:                                   # finer preemption (M49): drop it, then milder
         var(pp=None)
     if "xt" in s:
@@ -1194,6 +1258,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
 # ---------------------------------------------------------------- main
 def main():
     global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT, BUGGIFY, KNOB_RULE, RAM_MIB, MORE_FAULTS, CF_RANGE, VCPUS, TURNS, CPU
+    global FREEZE_CALL, FC_NMAX, FC_MATCH
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-200")
     ap.add_argument("--workers", type=int, default=3)   # the box has 4 cores: 3 is fastest (M38)
@@ -1225,6 +1290,11 @@ def main():
     ap.add_argument("--more-faults", action="store_true",
                     help="M62: add a timed kill (X=svc@order~ms) and a power cut at the k-th disk FLUSH (cf=k) "
                          "to generated schedules (separate random stream; any --strategy)")
+    ap.add_argument("--freeze-call", action="store_true",
+                    help="M70: freeze a service at the n-th packet of one of its conversations (F=svc>peer@step#n:ms; "
+                         "manifests whose faults: list freeze; separate random stream)")
+    ap.add_argument("--fc-nmax", type=int, default=FC_NMAX,
+                    help="--freeze-call: n is drawn log-uniformly from 1 .. this (default %(default)s)")
     ap.add_argument("--cf-range", default="auto",
                     help="--more-faults: FLUSH indices cf= draws from, lo-hi, or auto (default) = 1 .. the FLUSH "
                          "count of one fault-free workload on --image, measured with a cfn run before generating")
@@ -1279,6 +1349,10 @@ def main():
     KNOB_RULE = a.knob_rule
     CONCURRENCY = a.concurrency
     MORE_FAULTS = a.more_faults
+    FREEZE_CALL, FC_NMAX = a.freeze_call, a.fc_nmax
+    if FREEZE_CALL and not FC_PAIRS:
+        raise SystemExit("explore.py: --freeze-call needs an image whose manifest lists `freeze` in faults: and has "
+                         "two services that talk (manifest_space.py)")
     if MORE_FAULTS and BACKEND == "hvm":
         raise SystemExit("explore.py: --more-faults needs --backend hvx (X= and cf= are stack/hvx_explore tokens)")
     if MORE_FAULTS and a.cf_range != "auto":
@@ -1318,7 +1392,7 @@ def main():
         if MORE_FAULTS and CF_RANGE is None:
             CF_RANGE = measure_cf_range(pool, a.out)
             print("cf= range (measured with cfn): %d-%d" % CF_RANGE, file=sys.stderr)
-        mf = lambda x, sd: add_more_faults(x, sd, a.strategy)
+        mf = lambda x, sd: add_freeze_call(add_more_faults(x, sd, a.strategy), sd)
         items = [("seed-%d" % sd, render(add_turns(add_buggify(add_preempt(add_concurrency(add_timing(mf(nf(dur(gen(sd)), sd), sd), sd), sd), sd), sd), sd)))
                  for sd in seeds]
     t_sweep = time.time()

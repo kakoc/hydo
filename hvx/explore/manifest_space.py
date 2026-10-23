@@ -13,6 +13,8 @@ the shrinker draw from:
     NORDERS     the workload's step count                       stack: 30
     KNOBS       (token, relaxed value) pairs a knob draw picks  stack: M=2 M=0 R=everysec R=no
     KNOB_TOKENS knob tokens render / parse / shrink handle      stack: M R
+    FC_PAIRS    (service, peer) pairs a freeze-at-a-call (F=,    stack: none
+                --freeze-call) picks from: only when faults: lists freeze
 
 and installs SPACE, whose restrict() render() applies last: it drops the fault kinds the
 manifest's `faults:` list leaves out (a lying disk falls back to a plain power cut when only
@@ -34,7 +36,7 @@ ROOT_OFFSET = 2048 * 512            # hydo-build puts the root filesystem at LBA
 FAULT_KINDS = ["kill", "pause", "network", "oneway", "cut", "clock", "disk"]
 # guest schedule tokens with a fixed meaning (faults; Q/X = concurrency and timed kill, hydo-c7's branch);
 # a manifest knob may not reuse one, or parse() would read the knob as that fault. M/R stay knob names.
-RESERVED_TOKENS = {"K", "P", "N", "O", "C", "T", "Q", "X", "B"}
+RESERVED_TOKENS = {"K", "P", "N", "O", "C", "T", "Q", "X", "B", "F"}
 
 
 def _parser():
@@ -74,6 +76,7 @@ class Space:
                       ["%s-%s" % (a, b) for i, a in enumerate(addr) for b in addr[i + 1:]] +
                       (["%s-*" % a for a in addr] if len(addr) > 2 else []))
         self.svcs = svcs
+        self.fc_pairs = self._fc_pairs(m["services"])
         self.steps = int(m["workload"]["steps"])
         if self.steps < 4:
             raise SystemExit("manifest_space: workload.steps=%d; the generators need at least 4 steps" % self.steps)
@@ -87,9 +90,33 @@ class Space:
                                  "(reserved: %s); rename the knob" % (k["token"], " ".join(sorted(RESERVED_TOKENS))))
             self.knobs.append((k["token"], safe, vals))
 
+    @staticmethod
+    def _fc_pairs(services):
+        """(svc, peer) pairs for F=: peer listens (has a port:) and is in svc's depends_on closure,
+        i.e. svc calls it, directly or through the services it depends on. A manifest whose
+        depends_on names no such peer for any service: every ordered pair with a listening peer.
+        (The init tells the pair's packets apart by both addr:, else by the peer's port.)"""
+        by = {s["name"]: s for s in services}
+        ok = lambda a, b: a != b and bool(by[b].get("port"))
+        def closure(a):
+            seen, todo = [], list(by[a].get("depends_on") or [])
+            while todo:
+                d = todo.pop(0)
+                if d in by and d not in seen:
+                    seen.append(d)
+                    todo += list(by[d].get("depends_on") or [])
+            return seen
+        names = [s["name"] for s in services]
+        pairs = [(a, b) for a in names for b in closure(a) if ok(a, b)]
+        return pairs or [(a, b) for a in names for b in names if ok(a, b)]
+
     def describe(self):
-        return {"project": self.name, "services": self.svcs, "network": self.ported + self.links, "steps": self.steps,
-                "faults": self.faults, "knobs": {t: {"safe": s, "relaxed": v} for t, s, v in self.knobs}}
+        d = {"project": self.name, "services": self.svcs, "network": self.ported + self.links, "steps": self.steps,
+             "faults": self.faults, "knobs": {t: {"safe": s, "relaxed": v} for t, s, v in self.knobs}}
+        if "freeze" in self.faults:
+            d["freeze_pairs"] = ["%s>%s" % p for p in self.fc_pairs]
+            d["freeze_match"] = list(self.m.get("freeze_match") or [])
+        return d
 
     def apply(self, ex):
         """Rebind explore.py's generator globals (ex = the explore module's globals())."""
@@ -100,6 +127,9 @@ class Space:
         pairs = [(t, v) for t, _, vals in self.knobs for v in vals]
         ex["KNOBS"] = pairs or [("-", "")]                        # placeholder; restrict() drops it
         ex["KNOB_TOKENS"] = [t for t, _, _ in self.knobs]
+        if "freeze" in self.faults:     # only then: the explorer of every other manifest is unchanged
+            ex["FC_PAIRS"] = list(self.fc_pairs)
+            ex["FC_MATCH"] = list(self.m.get("freeze_match") or [])
         ex["SPACE"] = self
 
     def restrict(self, s):
@@ -112,6 +142,8 @@ class Space:
         for key in ("N", "O"):
             if key in s and s[key][0] not in self.ported and s[key][0] not in self.links:
                 s.pop(key)
+        if "F" in s and ("freeze" not in f or s["F"][0] not in self.svcs or s["F"][2] not in self.svcs):
+            s.pop("F")
         for key in ("K", "P", "X"):
             if key in s and s[key][0] == "-":    # placeholder of a project without services
                 s.pop(key)
@@ -123,7 +155,7 @@ class Space:
             s.pop("C", None)
         tokens = {t for t, _, _ in self.knobs}
         for key in list(s):
-            if len(key) == 1 and key.isupper() and key not in "KNCPTO" and key not in tokens:
+            if len(key) == 1 and key.isupper() and key not in "KNCPTOF" and key not in tokens:
                 s.pop(key)
         s.pop("-", None)
         return s
