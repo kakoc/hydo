@@ -101,7 +101,7 @@ Each flagship boots an unmodified service, runs a workload and an oracle, and pa
 - With `HVX_VM_SMP_SCHED` and the PMU clock, one `HVX_RUN` runs every vCPU in turns of exactly Q guest branches (or seeded lengths), on one shared clock, and stops only at clean points. `HVX_GET/SET_SCHED` carry the scheduler state (M66).
 - With `HVX_VM_SMP_BOOT`, real Linux starts the other CPUs with INIT and STARTUP IPIs and boots on 2, 3 and 4 vCPUs, identically across boots and branches: 2 vCPUs `6584c954c2839491`, 3 `e1a2bb0dd744a9ab`, 4 `1dfafae6887e3a01` (`hvx/hvx_smp_boot_verify.c`, M69). Device interrupts are routed by destination.
 - Tests in `deploy-metal.sh`: `hvx_sched_pmu_test` (snapshot `73a465516c4e0094`), `hvx_sched_race_test` (grid `8cb7c61a2393f44e`), `hvx_sipi_test` (`eef5c1ebd4df2e7d` / `c8d015ab3b57252d`), `hvx_sched_sweep_test 2000` (`39971eed9c2f35fe`) and the 2-vCPU boot.
-- The explorer takes `--vcpus N` and `--turns`, and `hvx_stack_verify` takes `HVX_VCPUS`. Write-ups: `hvx/SMP_PLAN.md`, `hvx/SMP_STAGE1.md`, `hvx/SMP_STAGE2.md`, `hvx/explore/TURNS.md`.
+- The explorer takes `--vcpus N` and `--turns`, and `hvx_stack_verify` takes `HVX_VCPUS`; so do `hvx/bench/run.py` and `hvx/knownbugs/sqlite/hunt.py`. Measured value so far (M74): on the benchmark's race defects and the SQLite WAL bug, several vCPUs found nothing that one vCPU with concurrent clients or tick jitter misses, at about 3× the cost per run; each turn end costs about 0.8 ms of host time. Write-ups: `hvx/SMP_PLAN.md`, `hvx/SMP_STAGE1.md`, `hvx/SMP_STAGE2.md`, `hvx/explore/TURNS.md`.
 
 ### The Mac backend
 
@@ -212,6 +212,7 @@ Milestones 1–32 ran inside the nested L1 VM on the build machine, before 2026-
 - M71 — lifting a network fault drains the netem queue instead of dropping it (2026-10-23)
 - M72 — benchmark images with the Kafka retention fix (`-pin-kr`), now the default m59 set (2026-10-23)
 - M73 — M70 follow-up: the recovery boot continues the first boot's clock; freeze measurement (2026-10-23)
+- M74 — negative: several vCPUs found no race that one vCPU misses (benchmark d8/d9/d12; SQLite WAL bug not found on 2 or 4 vCPUs) (2026-10-23)
 
 ## Where to look
 

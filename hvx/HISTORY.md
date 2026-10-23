@@ -1044,3 +1044,39 @@ The m59 benchmark images (control, d8–d12) rebuilt from `57864c6` with only `l
 Branch `freeze-call-2` (from `3762613`). Userspace, build and docs only; no module change.
 - **The 7 blind hits of M70 are not the bug M70 reproduced.** All have a power cut after the last step (`C=10`); the acknowledgement was processed only in the recovery boot, whose clock restarted at `guest.clock_start`, so it looked earlier than events the first boot had written. Only the check that compares those times failed; the other checks passed. `disk=cut dseed=0 | run C=10` alone reproduces it (twice `b4b7098cc190070b`); the shrinker reduced seed 12 to `C=10` and seed 20 to `C=10 P=kafka@3+1`. The process strategy still does not find that bug blind.
 - **Freeze changes:** `freeze_match:` may be `replies:` / `requests:` lists, and a drawn string uses its own direction; peer `workload` (the workload's client) for a project whose services do not call each other (`examples/redis/hydo-freeze.yaml`). Identity checks (`freeze_call_ident.py`, `manifest_space_ident.py`, `more_faults_ident.py`) pass against main.
+
+### Milestone 74 — DONE, NEGATIVE RESULT (do several vCPUs find races that one vCPU misses? 2026-10-23)
+
+Two experiments on the main `hvx.ko` with several vCPUs (M66, M69), by two agents. Write-ups `hvx/bench/SMP-RESULTS.md` and `hvx/knownbugs/sqlite/README.md` (new section). Tools: `hvx/bench/run.py` and `confirm.py` take `--vcpus N --turns`, and `hvx/knownbugs/sqlite/hunt.py` takes `--vcpus N --turns`, weighted toward short turns. Without the new flags the schedule strings are unchanged (5,760 and 36,000 strings checked). `hvx_explore` gained two read-only per-vCPU statistics prints on stderr: the scheduler counters (`schedstat`) and `HVX_EXPLORE_VCPUSTAT`. Results on the bare-metal machine: `/var/tmp/bench2`, `/var/tmp/sqlsmp`.
+
+**Benchmark race defects** (images `explore-bench-m59-*-pin`; swarm, 3 repetitions of up to 60 runs; run of first detection per repetition):
+
+| defect | 1 vCPU, concurrent clients | 2 vCPUs + turns, concurrent clients | 1 vCPU, no concurrent clients | 2 vCPUs + turns, no concurrent clients |
+|---|---|---|---|---|
+| d8 (no per-order lock) | 5, 2, 46 | 5, 2, 46 | 0/3 | 0/3 |
+| d9 (Redis connection unlocked) | 5, 31, 1 | 5, 31, 8 | 0/3 | 0/3 |
+| d12 (shared Kafka key buffer) | 5, 2, 1 | 5, 2, 1 | 23, 19, 1 | 18, 13, 1 |
+
+- **Checks:**
+  - All 33 detections re-ran with the same fingerprint, matched their signature, and passed on the control.
+  - The second CPU was really used: every 2-vCPU boot printed "Brought up 1 node, 2 CPUs", and vCPU 1 retired 13–733 M branches per run.
+  - The identical run numbers have one cause: in those schedules the concurrent clients trigger the defect whatever the vCPU count.
+  - d9's run 8 on 2 vCPUs: the run-1 crash did happen, but its restart could not reach Kafka, so it counted as a harness error.
+- **Random strategy, 2 vCPUs, concurrent clients:** d8 4, 1, 7; d9 1, 1, 2; d12 1, 1, 2. Random with 2 vCPUs and no concurrent clients was stopped early (d8 not found in 79 runs).
+- **Details:**
+  - d9 with `Q=2` crashes on 2 vCPUs in 6 of 9 turn settings, but 1 vCPU with tick jitter or inserted ticks crashes it too, in 5 of 10.
+  - Some d12 schedules fail only on 2 vCPUs: seed 2013, the same string, fails on 2 and passes on 1. That gives slightly earlier detections, too few repetitions to call it a speed-up.
+  - A 2-vCPU run cost about 3× a 1-vCPU run (about 43 s against 15 s, box load varied).
+- **Verdict:** d8 and d9 need two requests for the same order at once; extra CPUs cannot create that. d12 is found both ways at similar speed.
+
+**SQLite 3.51.2 WAL-reset bug, blind** (`hvx/knownbugs/sqlite/`):
+- **Turn mix.** Each turn end costs about 0.8 ms of host time. On the heaviest workload a run takes 13 s with default turns, 32 s at q=10,000, 216 s at q=1,000, and over 900 s at q≤300. So the mix per schedule is 5% default turns, 15% long, 70% q=1,000–10,000 (half seeded), and 10% q=300–999.
+- **Runs:**
+  - 2 vCPUs: 144 runs in 3.5 hours, 19.1 M turn switches, 80 M checkpoints, 0 violations.
+  - 4 vCPUs with the short mix: 32 runs in 1.8 hours, 0 violations.
+  - 4 vCPUs with default turns: 912 runs in 46 minutes, 0 violations.
+- **Sanity checks:** "Brought up 2/4 CPUs"; walrace threads seen on every CPU (vCPU 0 retired 19.5 G branches, vCPU 1 28.1 G); runs identical from a fresh boot and from the snapshot (`3173108c39ad8004`, `958429cf955867e6`, `6cac0c27871d3ad9`).
+- **Verdict:** not found. Short turns are too expensive for this window at an affordable budget, and the workload rarely produces the trigger; native runs on 4 real cores also missed it in about 5,800 seeds.
+- **Possible next steps (not started):** make the workload reset the WAL far more often; make turn ends cheaper, or use short turns only around WAL activity.
+
+**Overall:** on these targets, several vCPUs found nothing that one vCPU with concurrent clients, tick jitter or inserted ticks does not find. They work and are deterministic, but buy no new reach here. Lesson about cost: the benchmark experiment ran 13.5 hours because cells whose outcome was already clear kept running; set a time limit and check halfway.
