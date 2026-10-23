@@ -194,7 +194,7 @@ static long pte_decode(const uint8_t *trace, size_t len, const char *outpath, ui
  * coverage feedback (HVX_EXPLORE_PT_ELF, guided.py) is unavailable; every other mode works. */
 static long pte_decode(const uint8_t *trace, size_t len, const char *outpath, uint64_t *errs)
 {
-	(void)trace; (void)len; (void)outpath;
+	(void)trace; (void)len; (void)outpath; (void)pte_add; (void)pte_cmp;
 	*errs = 0;
 	fprintf(stderr, "hvx_explore: built without libipt (HYDO_NO_LIBIPT): no coverage decoding\n");
 	return -1;
