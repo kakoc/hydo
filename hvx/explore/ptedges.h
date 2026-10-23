@@ -23,7 +23,9 @@
  *
  * Output file: one line per edge, "<from-hex> <to-hex> <count>", sorted.
  */
+#ifndef HYDO_NO_LIBIPT
 #include <intel-pt.h>
+#endif
 #include <elf.h>
 
 struct pte_region { uint64_t va, size; const uint8_t *bytes; };
@@ -31,6 +33,7 @@ static struct pte_region pte_regs[8];
 static int pte_nregs;
 static uint8_t *pte_elf;
 
+#ifndef HYDO_NO_LIBIPT
 static int pte_read_mem(uint8_t *buf, size_t size, const struct pt_asid *asid, uint64_t ip, void *ctx)
 {
 	int i;
@@ -47,6 +50,7 @@ static int pte_read_mem(uint8_t *buf, size_t size, const struct pt_asid *asid, u
 		}
 	return -pte_nomap;
 }
+#endif
 
 /* Load the executable segments of the traced program. Returns 0 and the text range. */
 static int pte_load_elf(const char *path, uint64_t *lo, uint64_t *hi)
@@ -113,6 +117,7 @@ static int pte_cmp(const void *a, const void *b)
 
 /* Decode trace[0..len) and write the edge file. Returns the number of edges (or -1);
  * *errs gets the number of decode errors (each resyncs at the next PSB). */
+#ifndef HYDO_NO_LIBIPT
 static long pte_decode(const uint8_t *trace, size_t len, const char *outpath, uint64_t *errs)
 {
 	struct pt_config cfg;
@@ -184,3 +189,14 @@ static long pte_decode(const uint8_t *trace, size_t len, const char *outpath, ui
 	free(m.e);
 	return (long)n;
 }
+#else
+/* Built without libipt (cc -DHYDO_NO_LIBIPT, the Linux release when libipt-dev is missing):
+ * coverage feedback (HVX_EXPLORE_PT_ELF, guided.py) is unavailable; every other mode works. */
+static long pte_decode(const uint8_t *trace, size_t len, const char *outpath, uint64_t *errs)
+{
+	(void)trace; (void)len; (void)outpath; (void)pte_add; (void)pte_cmp;
+	*errs = 0;
+	fprintf(stderr, "hvx_explore: built without libipt (HYDO_NO_LIBIPT): no coverage decoding\n");
+	return -1;
+}
+#endif

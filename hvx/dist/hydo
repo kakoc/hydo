@@ -1,0 +1,604 @@
+#!/usr/bin/env python3
+"""hydo -- deterministic fault testing on an x86_64 Linux machine with VT-x (the hvx backend).
+
+    hydo doctor                                    check this machine and the installation
+    hydo module build|load|unload|status [--name NAME] [--dry-run]
+                                                   build and (un)load the hvx kernel module
+    hydo build   <hydo.yaml> [--out DIR] [--set KEY=VALUE ...]
+                                                   compile the manifest into a guest disk image
+    hydo run     [IMG] "<schedule>" [--image IMG]  run one schedule from a fresh boot
+    hydo repro   <run dir | explore dir | "<schedule>"> [--image IMG]
+                                                   run again and compare the fingerprints
+    hydo explore [IMG] [--seeds 1-20] [--strategy random|swarm|process|...] [--workers N]
+                 [--out DIR] [any other explore.py option]
+                                                   generate, run, re-run and shrink schedules
+    hydo report  [DIR]                             print the report of the last (or a given) exploration
+
+IMG defaults to the one *-disk.img in ./hydo-out (what `hydo build` wrote there). Runs open
+/dev/hvx through sudo while holding the shared module lock; `hydo module load/unload` take it
+exclusively, so a reload never pulls the module from under a running VM. The lock file is
+$HYDO_LOCK (default ~/.hvx-module.lock). Plain Python 3.9+, no packages.
+"""
+import glob, hashlib, importlib.machinery, importlib.util, json, os, platform, re, shutil, subprocess, sys, time, types
+
+R = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))     # the release root
+HVX = os.path.join(R, "hvx")
+ONBOARD = os.path.join(HVX, "onboard")
+EXPLORE = os.path.join(HVX, "explore")
+ENGINE = os.path.join(HVX, "hvx_explore")
+GUEST = os.path.join(R, "guest")
+TOOLS = os.path.join(R, "tools")
+LIBEXEC = os.path.join(R, "libexec")
+MODSRC = os.path.join(R, "module")
+BZIMAGE = os.path.join(GUEST, "bzImage")
+INITRD = os.path.join(GUEST, "initramfs-kafka.cpio.gz")
+STORE = os.path.join(GUEST, "store")               # nix/store/<path>: the guest-side closures (tc, iptables),
+CLOSURES = os.path.join(GUEST, "store-closures.txt")  # unpacked from guest/store.tar by install.sh
+OUT = "hydo-out"
+LOCK = os.environ.get("HYDO_LOCK") or os.path.expanduser("~/.hvx-module.lock")
+SNAP_DIR = os.environ.get("HYDO_SNAP_DIR") or "/var/tmp/hvx-snap"
+
+
+def die(msg, rc=1):
+    print("hydo: " + msg, file=sys.stderr)
+    sys.exit(rc)
+
+
+def take(args, flag, default=None):
+    """Remove `flag VALUE` from args and return VALUE (or default)."""
+    if flag in args:
+        i = args.index(flag)
+        if i + 1 >= len(args):
+            die("%s needs a value" % flag)
+        v = args[i + 1]
+        del args[i:i + 2]
+        return v
+    return default
+
+
+def tool_env():
+    """The environment every hydo subprocess gets: the bundled debugfs first on PATH (explore.py
+    and manifest_space.py read the manifest out of an image with it), and the release paths for
+    explore.py (HYDO_BUILD: kernel + initramfs; HYDO_HVX_RUN: the shared-lock wrapper)."""
+    env = dict(os.environ)
+    env["PATH"] = os.path.join(LIBEXEC, "bin") + os.pathsep + env.get("PATH", "")
+    env["HYDO_BUILD"] = GUEST
+    env["HYDO_HVX_RUN"] = os.path.join(LIBEXEC, "hvx-run")
+    env["HYDO_LOCK"] = LOCK
+    env["HYDO_SNAP_DIR"] = SNAP_DIR
+    env["HYDO_CLI"] = "1"
+    return env
+
+
+# ---------------------------------------------------------------- build
+def load_hydo_build():
+    loader = importlib.machinery.SourceFileLoader("hydo_build", os.path.join(ONBOARD, "hydo-build"))
+    spec = importlib.util.spec_from_loader("hydo_build", loader)
+    m = importlib.util.module_from_spec(spec)
+    loader.exec_module(m)
+    return m
+
+
+def use_bundled_store(hb):
+    """hydo-build copies the guest-side Nix closures (tc from iproute2, iptables-legacy for the
+    freeze fault) from the host's /nix/store with `nix-store -qR`. The release ships exactly those
+    closures under guest/store/nix/store/ (guest/store-closures.txt lists them). Point
+    hydo-build's own view of os.path (only for /nix/store paths the host does not have) and its
+    closure() at that tree: the image gets the same paths, bytes and modes as a build on the Nix
+    build box. A path that is not bundled (a manifest's root.nix:) still needs nix-store here."""
+    closures = {}
+    for line in open(CLOSURES):
+        if line.strip():
+            root, member = line.split()
+            closures.setdefault(root, []).append(member)
+    here = lambda p: os.path.join(STORE, p.lstrip("/"))
+    bundled = lambda p: str(p).startswith("/nix/store/") and not os.path.lexists(p) and os.path.lexists(here(p))
+    path = types.ModuleType("os.path")
+    path.__dict__.update(os.path.__dict__)
+    for fn in ("isfile", "isdir", "exists", "lexists"):
+        real = getattr(os.path, fn)
+        setattr(path, fn, (lambda real: lambda p: real(here(p)) if bundled(p) else real(p))(real))
+    shim = types.ModuleType("os")
+    shim.__dict__.update(os.__dict__)
+    shim.path = path
+    hb.os = shim                                    # only hydo-build's own view of os
+    real_closure = hb.closure
+
+    def closure(p):
+        if p in closures and not os.path.exists(p):
+            return sorted(here(x) for x in closures[p])     # `cp -a <bundle>/nix/store/X R/nix/store/`
+        if shutil.which("nix-store"):
+            return real_closure(p)
+        raise hb.ManifestError("%s: not in the release's bundled closures, and this machine has no "
+                               "nix-store (root.nix: needs Nix; list the files under root.files: instead)" % p)
+    hb.closure = closure
+
+
+def own_by_root(hb):
+    """mke2fs -d records each source file's owner, i.e. the uid/gid of whoever ran the build, so
+    two people building one manifest would get different images (and different fingerprints).
+    After hydo-build's mkfs of the root, set every inode's owner to 0:0 with the bundled debugfs,
+    under the same frozen clock (the hydo_oci.fix_ext4 pattern). HYDO_KEEP_OWNERS=1 skips it
+    (then the image matches a plain hydo-build run by the same user on the Nix build box)."""
+    orig = hb.mkfs
+
+    def mkfs(T, out, mib, uuid, seed, src=None, journal=False):
+        orig(T, out, mib, uuid, seed, src=src, journal=journal)
+        if not src or os.environ.get("HYDO_KEEP_OWNERS"):
+            return
+        paths = [src]
+        for d, dirs, files in os.walk(src):
+            dirs.sort()
+            paths += [os.path.join(d, n) for n in sorted(dirs + files)]
+        lines = []
+        for p in paths:
+            st = os.lstat(p)
+            if st.st_uid == 0 and st.st_gid == 0:
+                continue
+            g = "/" + os.path.relpath(p, src) if p != src else "/"
+            if '"' in g or "\n" in g:
+                raise hb.ManifestError("root: a file name with a quote or newline (%r) cannot be re-owned" % g)
+            lines += ['sif "%s" uid 0' % g, 'sif "%s" gid 0' % g]
+        if not lines:
+            return
+        dbg = os.path.join(os.path.dirname(T["mke2fs"]), "debugfs")
+        cmdf = out + ".owners"
+        with open(cmdf, "w") as f:
+            f.write("\n".join(lines) + "\n")
+        r = subprocess.run([T["faketime"], hb.FAKE_TS, dbg, "-w", "-f", cmdf, out],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        errs = [x for x in r.stderr.splitlines() if x.strip() and not x.startswith("debugfs ")]
+        os.unlink(cmdf)
+        if r.returncode != 0 or errs:
+            die("setting the root image's owners to root failed:\n  " + "\n  ".join(errs[:10]))
+    hb.mkfs = mkfs
+
+
+def cmd_build(argv):
+    if not argv or argv[0].startswith("-"):
+        die("usage: hydo build <hydo.yaml> [--out DIR] [--set KEY=VALUE ...]")
+    manifest, rest = argv[0], list(argv[1:])
+    out = take(rest, "--out", OUT)
+    if "--arch" in rest:
+        die("this is the x86_64 Linux release; arm64 images are built with the Mac release")
+    T = {   # the bundled host tools (hydo-build's own defaults are /nix/store paths)
+        "HYDO_BUSYBOX": os.path.join(GUEST, "busybox"),
+        "HYDO_SEEDRNG": os.path.join(GUEST, "hvx_seedrng"),
+        "HYDO_FCBIN": os.path.join(GUEST, "hydo_fc"),
+        "HYDO_MKE2FS": os.path.join(TOOLS, "bin", "mke2fs"),     # run by libexec/faketime with the bundled loader
+        "HYDO_FAKETIME": os.path.join(LIBEXEC, "faketime"),
+        "HYDO_MODROOT": os.path.join(GUEST, "modules"),
+    }
+    for k, v in T.items():
+        os.environ.setdefault(k, v)
+    os.umask(0o022)     # the staged root's new directories and text files get the same modes for everyone
+    os.environ["PATH"] = tool_env()["PATH"]
+    sys.path.insert(0, ONBOARD)
+    hb = load_hydo_build()
+    use_bundled_store(hb)
+    own_by_root(hb)
+    sys.argv = ["hydo-build", manifest, "--build-dir", out] + rest
+    rc = hb.main()
+    if rc == 0 and not any(f in rest for f in ("--check", "--print-shell", "--print-init")):
+        print("hydo: next:  hydo run \"disk=none | run\"     or     hydo explore --seeds 1-20")
+    return rc
+
+
+# ---------------------------------------------------------------- run / repro
+def find_image(args):
+    """--image IMG, or a leading positional *.img, or the one *-disk.img in ./hydo-out."""
+    img = take(args, "--image")
+    if img is None and args and args[0].endswith(".img"):
+        img = args.pop(0)
+    if img is None:
+        imgs = sorted(glob.glob(os.path.join(OUT, "*-disk.img")))
+        if len(imgs) != 1:
+            die("no image given and %d *-disk.img in ./%s (run `hydo build hydo.yaml` here, or pass --image)" % (len(imgs), OUT))
+        img = imgs[0]
+    if not os.path.isfile(img):
+        die("no such image: %s" % img)
+    return os.path.abspath(img)
+
+
+def engine_args_for(image, ram=None, cpu=None, vcpus=None):
+    """The engine options explore.py would pass for this image: guest RAM and CPU level from the
+    manifest embedded in the image (only when not the defaults), so a hand run matches."""
+    if ram is None or cpu is None:
+        sys.path.insert(0, EXPLORE)
+        os.environ["PATH"] = tool_env()["PATH"]
+        import manifest_space
+        try:
+            g = manifest_space.load(image_path=image).m.get("guest") or {}
+        except SystemExit:
+            g = {}
+        ram = g.get("ram_mib", 1024) if ram is None else ram
+        cpu = g.get("cpu", "v2") if cpu is None else cpu
+    a = [] if int(ram) == 1024 else ["--ram-mib", str(ram)]
+    if vcpus and int(vcpus) > 1:
+        a += ["--vcpus", str(vcpus)]
+    if cpu == "v3":
+        a += ["--cpu", "v3"]
+    return a
+
+
+RESULT_RE = re.compile(r"RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: \S+?=\S+)*?) verdict=(.*)")
+
+
+def run_one(image, sched, outdir, eargs, quiet=False):
+    """One schedule from a fresh boot (hvx_explore one). Returns the parsed RESULT dict."""
+    os.makedirs(outdir, exist_ok=True)
+    if not os.access(ENGINE, os.X_OK):
+        die("%s is not built (run install.sh again)" % ENGINE)
+    cmd = [os.path.join(LIBEXEC, "hvx-run"), "sudo", "env", "HVX_SNAP_DIR=" + SNAP_DIR, ENGINE] + eargs + \
+          ["one", BZIMAGE, INITRD, image, os.path.abspath(outdir), sched]
+    p = subprocess.run(cmd, env=tool_env(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    text = p.stdout.decode(errors="replace")
+    with open(os.path.join(outdir, "engine.log"), "w") as f:
+        f.write(text)
+    for line in text.splitlines():
+        m = RESULT_RE.match(line.strip())
+        if m:
+            if not quiet:
+                print(line.strip())
+            return {"fp": m.group(2), "wfp": m.group(3), "secs": float(m.group(4)), "verdict": m.group(6),
+                    "line": line.strip()}
+    sys.stderr.write(text[-3000:])
+    die("the run produced no RESULT line (output above; full log in %s)" % os.path.join(outdir, "engine.log"))
+
+
+def sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for b in iter(lambda: f.read(1 << 20), b""):
+            h.update(b)
+    return h.hexdigest()
+
+
+def new_run_dir():
+    d = os.path.join(OUT, "runs", "run-%s-%d" % (time.strftime("%Y%m%d-%H%M%S"), os.getpid()))
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def cmd_run(argv):
+    args = list(argv)
+    outdir = take(args, "--out")
+    image = find_image(args)
+    if len(args) != 1:
+        die("usage: hydo run [IMG] \"<schedule>\" [--image IMG] [--out DIR]   e.g. hydo run \"disk=cut | run C=12 R=everysec\"")
+    sched = args[0]
+    outdir = outdir or new_run_dir()
+    eargs = engine_args_for(image)
+    res = run_one(image, sched, outdir, eargs)
+    rec = {"image": image, "image_sha256": sha256(image), "schedule": sched, "engine_args": eargs, **res}
+    with open(os.path.join(outdir, "run.json"), "w") as f:
+        json.dump(rec, f, indent=1)
+    print("hydo: run directory %s   (hydo repro %s  runs it again and compares fp=)" % (outdir, outdir))
+    return 0
+
+
+def repro_list(d):
+    """[(label, image, schedule, recorded fp, engine args)] from a run dir or an explore dir."""
+    if os.path.isfile(os.path.join(d, "run.json")):
+        r = json.load(open(os.path.join(d, "run.json")))
+        if r.get("image_sha256") and os.path.isfile(r["image"]) and sha256(r["image"]) != r["image_sha256"]:
+            print("hydo: warning: %s changed since the run (sha256 differs); fingerprints will differ" % r["image"])
+        return [("run", r["image"], r["schedule"], r["fp"], r["engine_args"])]
+    rep = os.path.join(d, "report.json")
+    if not os.path.isfile(rep):
+        die("%s has neither run.json (hydo run) nor report.json (hydo explore)" % d)
+    j = json.load(open(rep))
+    s = j["summary"]
+    image = s["image"]
+    if not os.path.isabs(image):
+        image = os.path.join(GUEST, image)
+    eargs = engine_args_for(image, ram=s.get("ram_mib", 1024), cpu=s.get("cpu", "v2"), vcpus=s.get("vcpus", 1))
+    out = [("seed %s" % f["seed"], image, f["schedule"], f["fp"], eargs) for f in j["failures"]]
+    out += [("minimal %s" % x["signature"][:40], image, x["minimal"], x["fp_a"], eargs) for x in j.get("shrunk", [])]
+    return out
+
+
+def cmd_repro(argv):
+    args = list(argv)
+    if args and os.path.isdir(args[0]):
+        d = args.pop(0)
+        items = repro_list(d)
+        if not items:
+            print("hydo: %s recorded no failures; nothing to reproduce" % d)
+            return 0
+        base = os.path.join(d, "repro-%s" % time.strftime("%Y%m%d-%H%M%S"))
+        same = 0
+        for k, (label, image, sched, fp, eargs) in enumerate(items):
+            res = run_one(image, sched, os.path.join(base, "%03d" % k), eargs, quiet=True)
+            ok = res["fp"] == fp
+            same += ok
+            print("%-12s %s  fp=%s (recorded %s)  %s\n             %s" % (
+                "REPRODUCED" if ok else "DIFFERENT", label, res["fp"], fp, sched, res["verdict"][:160]))
+        print("hydo: %d of %d reproduced with the recorded fingerprint (consoles under %s)" % (same, len(items), base))
+        return 0 if same == len(items) else 1
+    return cmd_run(argv)
+
+
+# ---------------------------------------------------------------- explore / report
+def cmd_explore(argv):
+    args = list(argv)
+    image = find_image(args)
+    if "--out" not in args:
+        args += ["--out", os.path.join(OUT, "explore")]
+    if not any(f in args for f in ("--seeds", "--schedule", "--sweep")):
+        args += ["--seeds", "1-20"]
+    if "--workers" not in args:
+        args += ["--workers", "2"]
+    if not os.access(ENGINE, os.X_OK):
+        die("%s is not built (run install.sh again)" % ENGINE)
+    cmd = [sys.executable, os.path.join(EXPLORE, "explore.py"), "--image", image] + args
+    rc = subprocess.call(cmd, env=tool_env())
+    out = args[args.index("--out") + 1]
+    if rc == 0 and os.path.exists(os.path.join(out, "report.md")):
+        print("hydo: report: %s   (hydo report %s; hydo repro %s re-runs every failure)" % (
+            os.path.join(out, "report.md"), out, out))
+    return rc
+
+
+def cmd_report(argv):
+    d = argv[0] if argv else os.path.join(OUT, "explore")
+    p = os.path.join(d, "report.md")
+    if not os.path.exists(p):
+        die("no report at %s" % p)
+    sys.stdout.write(open(p).read())
+    return 0
+
+
+# ---------------------------------------------------------------- module
+def sh(cmd, check=False):
+    return subprocess.run(cmd, shell=isinstance(cmd, str), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+
+def loaded_modules():
+    try:
+        return {l.split()[0] for l in open("/proc/modules")}
+    except OSError:
+        return set()
+
+
+def module_ko(name):
+    return os.path.join(MODSRC, "build", name, name + ".ko")
+
+
+def srcversion_loaded(name):
+    try:
+        return open("/sys/module/%s/srcversion" % name).read().strip()
+    except OSError:
+        return None
+
+
+def srcversion_file(ko):
+    if not os.path.isfile(ko):
+        return None
+    r = sh(["modinfo", "-F", "srcversion", ko])
+    return r.stdout.strip() or None
+
+
+def lock_holders(path):
+    """How many processes hold a flock on the lock file (from /proc/locks; takes no lock)."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return 0
+    n = 0
+    for l in open("/proc/locks"):
+        m = re.search(r"\bFLOCK\b.*?\s([0-9a-f]+):([0-9a-f]+):(\d+)\s", l)
+        if m and (int(m.group(1), 16), int(m.group(2), 16), int(m.group(3))) == \
+                (os.major(st.st_dev), os.minor(st.st_dev), st.st_ino):
+            n += 1
+    return n
+
+
+def module_build(name):
+    if not re.fullmatch(r"[a-z][a-z0-9_]*", name):
+        die("--name: lowercase letters, digits and '_' (it becomes the module and device name)")
+    kdir = os.environ.get("KDIR") or "/lib/modules/%s/build" % platform.release()
+    if not os.path.isdir(kdir):
+        die("no kernel headers at %s (install them, e.g. `sudo apt install linux-headers-$(uname -r)`)" % kdir)
+    bd = os.path.dirname(module_ko(name))
+    os.makedirs(bd, exist_ok=True)
+    shutil.copy(os.path.join(MODSRC, "hvx.c"), os.path.join(bd, name + ".c"))
+    shutil.copy(os.path.join(MODSRC, "hvx_abi.h"), os.path.join(bd, "hvx_abi.h"))
+    with open(os.path.join(bd, "Makefile"), "w") as f:
+        f.write("# generated by hydo module build (from hvx/Makefile)\nobj-m := %s.o\n" % name +
+                ("ccflags-y := -DHVX_DEVNAME='\"%s\"'\n" % name if name != "hvx" else "") +
+                "OBJECT_FILES_NON_STANDARD_%s.o := y\n" % name)
+    r = subprocess.run(["make", "-C", kdir, "M=" + bd, "modules"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    if r.returncode != 0 or not os.path.isfile(module_ko(name)):
+        sys.stderr.write(r.stdout[-4000:])
+        die("building %s.ko failed (output above)" % name)
+    print("hydo: built %s (srcversion %s)" % (module_ko(name), srcversion_file(module_ko(name))))
+    return 0
+
+
+def module_lock(name):
+    """The main module shares the run lock; a side module (--name) gets its own lock file."""
+    return LOCK if name == "hvx" else "%s.%s" % (LOCK, name)
+
+
+def module_load(name, dry, params):
+    ko = module_ko(name)
+    if not os.path.isfile(ko) and not dry:
+        module_build(name)
+    mods = loaded_modules()
+    steps = []
+    if name == "hvx":
+        if "hvx" in mods:
+            steps.append("sudo rmmod hvx")
+        if "kvm_intel" in mods:      # VMX can have one owner: KVM must go (its VMs must be stopped first)
+            steps.append("sudo rmmod kvm_intel")
+        if "kvm" in mods:
+            steps.append("sudo rmmod kvm")
+    else:
+        if "kvm_intel" in mods:
+            die("kvm_intel is loaded; a side module cannot run VMs while KVM owns VT-x (load the main module first)")
+        if name in mods:
+            steps.append("sudo rmmod %s" % name)
+    steps.append("sudo insmod %s%s" % (ko, "".join(" " + p for p in params)))
+    steps.append("test -c /dev/%s" % name)
+    lk = module_lock(name)
+    script = " && ".join(steps)
+    print("hydo: %s lock %s exclusively (waits for running VMs), then: %s" % ("would take" if dry else "taking", lk, script))
+    if dry:
+        return 0
+    r = subprocess.run(["flock", "-x", lk, "sh", "-c", script])
+    if r.returncode != 0:
+        die("loading %s failed (rc %d)" % (name, r.returncode))
+    print("hydo: %s loaded, /dev/%s ready (srcversion %s)" % (name, name, srcversion_loaded(name)))
+    return 0
+
+
+def module_unload(name, dry):
+    lk = module_lock(name)
+    if name not in loaded_modules():
+        print("hydo: %s is not loaded" % name)
+        return 0
+    script = "sudo rmmod %s" % name
+    print("hydo: %s lock %s exclusively (waits for running VMs), then: %s" % ("would take" if dry else "taking", lk, script))
+    if dry:
+        return 0
+    r = subprocess.run(["flock", "-x", lk, "sh", "-c", script])
+    if r.returncode != 0:
+        die("unloading %s failed" % name)
+    if name == "hvx":
+        print("hydo: hvx unloaded (`sudo modprobe kvm_intel` gives VT-x back to KVM)")
+    return 0
+
+
+def module_status(name):
+    mods = loaded_modules()
+    ko = module_ko(name)
+    built, live = srcversion_file(ko), srcversion_loaded(name)
+    print("module %s: %s" % (name, "loaded (srcversion %s)" % live if name in mods else "not loaded"))
+    print("  release build: %s" % ("%s (srcversion %s)" % (ko, built) if built else "not built (hydo module build)"))
+    if built and live:
+        print("  %s" % ("same source as this release" if built == live else
+                        "DIFFERENT source from this release (the engine and the module may disagree on the ioctl ABI)"))
+    dev = "/dev/%s" % name
+    if os.path.exists(dev):
+        st = os.stat(dev)
+        print("  %s: mode %o, owner uid %d (runs use sudo)" % (dev, st.st_mode & 0o777, st.st_uid))
+    print("  kvm_intel: %s" % ("LOADED (must be unloaded for hvx; `hydo module load` does it)" if "kvm_intel" in mods else "not loaded"))
+    lk = module_lock(name)
+    print("  lock %s: %d holder(s) now" % (lk, lock_holders(lk)))
+    return 0
+
+
+def cmd_module(argv):
+    args = list(argv)
+    if not args or args[0] not in ("build", "load", "unload", "status"):
+        die("usage: hydo module build|load|unload|status [--name NAME] [--dry-run] [--param KEY=VALUE ...]")
+    verb = args.pop(0)
+    name = take(args, "--name", "hvx")
+    dry = "--dry-run" in args
+    params = []
+    while "--param" in args:
+        params.append(take(args, "--param"))
+    args = [a for a in args if a != "--dry-run"]
+    if args:
+        die("unexpected arguments: %s" % " ".join(args))
+    if verb == "build":
+        return module_build(name)
+    if verb == "load":
+        return module_load(name, dry, params)
+    if verb == "unload":
+        return module_unload(name, dry)
+    return module_status(name)
+
+
+# ---------------------------------------------------------------- doctor
+def cmd_doctor(argv):
+    fails, warns = [], []
+
+    def check(cond, what, fix="", warn=False):
+        tag = "ok  " if cond else ("WARN" if warn else "FAIL")
+        print("%s %s%s" % (tag, what, "" if cond else "  -> " + fix))
+        if not cond:
+            (warns if warn else fails).append(what)
+
+    check(platform.system() == "Linux" and platform.machine() == "x86_64", "x86_64 Linux (found %s %s)" % (
+        platform.system(), platform.machine()), "hydo's Linux backend needs x86_64 Linux (Apple Silicon: the Mac release)")
+    cpu = open("/proc/cpuinfo").read() if os.path.exists("/proc/cpuinfo") else ""
+    flags = set()
+    for l in cpu.splitlines():
+        if l.startswith("flags"):
+            flags = set(l.split(":", 1)[1].split())
+            break
+    model = next((l.split(":", 1)[1].strip() for l in cpu.splitlines() if l.startswith("model name")), "?")
+    print("     CPU: %s" % model)
+    check("GenuineIntel" in cpu, "an Intel CPU (hvx is a VT-x hypervisor)", "AMD (SVM) is not supported")
+    check("vmx" in flags, "VT-x present and enabled in firmware (vmx in /proc/cpuinfo)",
+          "enable Intel VT-x in the BIOS/UEFI settings (the kernel hides vmx when firmware disables it)")
+    check("hypervisor" not in flags, "bare metal (not inside a VM)",
+          "inside a VM hvx needs nested VT-x, runs much slower and has no PMU: the exit-count clock is used", warn=True)
+    hybrid = os.path.isdir("/sys/devices/cpu_atom") or "hybrid_cpu" in flags
+    pmu = "arch_perfmon" in flags and not hybrid and "hypervisor" not in flags
+    check(pmu, "a usable PMU (non-hybrid CPU with arch_perfmon): the PMU branch clock is used",
+          "%s: hvx falls back to the exit-count clock -- runs stay deterministic, but fingerprints differ "
+          "from ones recorded with the PMU clock and a guest that computes without exits can stall" %
+          ("hybrid P-core/E-core CPU" if hybrid else "no architectural PMU"), warn=True)
+    check(sys.version_info >= (3, 9), "Python 3.9+ (found %s)" % platform.python_version(), "install python3 >= 3.9")
+    for t, why in (("cc", "builds the run engine and the report tool"), ("make", "builds the kernel module"),
+                   ("flock", "the module lock, util-linux"), ("xz", "unpacks guest kernel modules for network faults"),
+                   ("sudo", "runs open /dev/hvx as root"), ("modinfo", "module checks, kmod")):
+        check(shutil.which(t) is not None, "%s (%s)" % (t, why), "install %s" % t)
+    sudo_ok = shutil.which("sudo") and subprocess.run(["sudo", "-n", "true"], stdout=subprocess.DEVNULL,
+                                                      stderr=subprocess.DEVNULL).returncode == 0
+    check(bool(sudo_ok), "sudo without a password prompt", "runs call `sudo`; they will ask for a password "
+          "(or give /dev/hvx to your group and drop sudo -- see README)", warn=True)
+    kdir = "/lib/modules/%s/build" % platform.release()
+    check(os.path.isdir(kdir), "kernel headers for %s" % platform.release(),
+          "install them (Debian/Ubuntu: sudo apt install linux-headers-$(uname -r))")
+    lockdown = ""
+    try:
+        lockdown = open("/sys/kernel/security/lockdown").read()
+    except OSError:
+        pass
+    check(not lockdown or "[none]" in lockdown, "kernel lockdown off (an unsigned module can be loaded)",
+          "Secure Boot lockdown (%s): sign hvx.ko with an enrolled key or disable Secure Boot" % lockdown.strip(), warn=True)
+    mods = loaded_modules()
+    built, live = srcversion_file(module_ko("hvx")), srcversion_loaded("hvx")
+    check(built is not None, "hvx.ko built by this release", "hydo module build", warn=True)
+    check("hvx" in mods and os.path.exists("/dev/hvx"), "hvx module loaded, /dev/hvx present", "hydo module load")
+    if built and live:
+        check(built == live, "the loaded hvx is this release's source (srcversion %s)" % live,
+              "the loaded module (srcversion %s) is not this release's (%s): run `hydo module load` "
+              "when no one else is using it" % (live, built))
+    check("kvm_intel" not in mods, "kvm_intel not loaded (KVM and hvx cannot both own VT-x)",
+          "`hydo module load` unloads kvm and kvm_intel (stop KVM virtual machines first)")
+    print("     module lock: %s (%d holder(s) now)" % (LOCK, lock_holders(LOCK)))
+    for p in (BZIMAGE, INITRD, os.path.join(GUEST, "busybox"), os.path.join(GUEST, "hvx_seedrng"),
+              os.path.join(TOOLS, "bin", "mke2fs"), CLOSURES, os.path.join(STORE, "nix", "store")):
+        check(os.path.exists(p), "present: " + os.path.relpath(p, R), "reinstall")
+    check(os.access(ENGINE, os.X_OK), "run engine built (hvx/hvx_explore)", "run install.sh again")
+    r = subprocess.run([os.path.join(LIBEXEC, "faketime"), "2020-09-13 16:26:40", os.path.join(TOOLS, "bin", "mke2fs"), "-V"],
+                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    check("1.47.0" in r.stdout, "bundled mke2fs runs (under the frozen clock)", "output: %s" % r.stdout.strip()[:200])
+    for d, need in ((os.getcwd(), 2), (os.path.dirname(SNAP_DIR.rstrip("/")) or "/", 4)):
+        try:
+            free = shutil.disk_usage(d).free / 2 ** 30
+        except OSError:
+            continue
+        check(free >= need, "%.0f GiB free in %s (%d GiB wanted: %s)" % (free, d, need,
+              "images" if d == os.getcwd() else "run snapshots, $HYDO_SNAP_DIR"), "free some space", warn=True)
+    print("doctor: %s" % ("all checks passed" if not fails and not warns else
+                          "%d failed, %d warnings" % (len(fails), len(warns))))
+    return 1 if fails else 0
+
+
+def main():
+    cmds = {"build": cmd_build, "run": cmd_run, "repro": cmd_repro, "explore": cmd_explore,
+            "report": cmd_report, "doctor": cmd_doctor, "module": cmd_module}
+    if len(sys.argv) < 2 or sys.argv[1] not in cmds:
+        print(__doc__)
+        return 0 if len(sys.argv) >= 2 and sys.argv[1] in ("-h", "--help", "help") else 2
+    return cmds[sys.argv[1]](sys.argv[2:]) or 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

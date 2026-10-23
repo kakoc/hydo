@@ -1,0 +1,5 @@
+#!/bin/sh
+# The release's bundled debugfs (e2fsprogs 1.47.0), run with its own loader and libraries.
+# hydo puts this directory first on PATH: explore.py reads a built image's manifest with debugfs.
+T=$(cd "$(dirname "$0")/../../tools" && pwd)
+exec "$T/lib/ld-linux-x86-64.so.2" --library-path "$T/lib" --argv0 debugfs "$T/bin/debugfs" "$@"

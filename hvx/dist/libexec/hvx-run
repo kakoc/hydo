@@ -1,0 +1,5 @@
+#!/bin/sh
+# Run a command that uses /dev/hvx while holding the SHARED module lock, so a module reload
+# (`hydo module load|unload`, exclusive lock) waits until no VM is running. The same convention
+# as ~/bin/hvx-run on the hydo build boxes: lock file $HYDO_LOCK, default ~/.hvx-module.lock.
+exec flock -s "${HYDO_LOCK:-$HOME/.hvx-module.lock}" "$@"
