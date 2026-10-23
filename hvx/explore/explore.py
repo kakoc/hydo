@@ -29,6 +29,10 @@ Schedule format (see hvx_explore.c / stack-explore.sh):
   timing (only with --timing): tj=<hex> tjpm=<n> tjmax=<n> [tjlo=<k> tjhi=<k>]  delays a
   seeded share of the PMU-clock ticks, so threads interleave differently; the shrinker turns
   it into an explicit list tjx=<tick:delay,...> and removes entries.
+  freeze sweep (--sweep freeze, M74): traces the packet counts of each (pair, direction, match)
+  stream per step with F=...#0 runs, then runs one F=<svc><dir><peer>@<step>#<n>[:<match>]:<dur>
+  schedule per packet (options --fc-pairs/--fc-dirs/--fc-steps/--fc-match/--fc-durs,
+  --sweep-every, --sweep-with, --sweep-dry); every failure is re-run twice.
   vCPU turns (only with --vcpus N > 1 and --turns, SMP Stage 3, TURNS.md): host tokens
   q=<branches> [qs=<hex>] set the length of the vCPUs' turns during the workload (fixed, or
   seeded lengths in [1, q]); half of the schedules get them, from a separate random stream.
@@ -688,7 +692,7 @@ def sweep(name):
 # after step <s>" -- N = the stream's packets from step s to the end of fault injection (hydo-init-
 # freeze.sh counts them in the helper's full log, so the console's 600-line trace limit does not
 # matter). Step s then holds N(s) - N(s+1) packets (+ FC_SWEEP_MARGIN, since the two trace runs differ
-# after step s begins); the last workload step holds N(s).
+# after step s begins; only where step s+1 is not swept itself); the last workload step holds N(s).
 FC_SWEEP_MARGIN = 2
 FC_TRACE_RE = re.compile(r"freeze never fired: (\d+) of 0 matching events after step (\d+)")
 
@@ -792,8 +796,8 @@ def freeze_sweep(pool, a):
     for svc, peer, d, m in streams:
         for st in steps:
             n_here = count[(svc, peer, d, m, st)]
-            if st + 1 < NORDERS:
-                n_here = max(0, n_here - count[(svc, peer, d, m, st + 1)]) + a.fc_margin
+            if st + 1 < NORDERS:           # the margin only where the next step is not swept itself
+                n_here = max(0, n_here - count[(svc, peer, d, m, st + 1)]) + (0 if st + 1 in steps else a.fc_margin)
                 n_here = min(n_here, count[(svc, peer, d, m, st)])
             for n in range(1, n_here + 1, a.sweep_every):
                 for dur in durs:
@@ -1417,7 +1421,8 @@ def main():
     ap.add_argument("--fc-durs", default="150000", help="--sweep freeze: freeze lengths, ms of guest time, comma list "
                                                         "(default %(default)s, the longest --freeze-call draws)")
     ap.add_argument("--fc-margin", type=int, default=FC_SWEEP_MARGIN,
-                    help="--sweep freeze: extra packets per step beyond N(s) - N(s+1) (default %(default)s)")
+                    help="--sweep freeze: extra packets of the last swept step before an unswept one, beyond "
+                         "N(s) - N(s+1) (default %(default)s)")
     ap.add_argument("--sweep-every", type=int, default=1, help="--sweep freeze: keep every k-th packet (n = 1, 1+k, ...)")
     ap.add_argument("--sweep-with", help="--sweep freeze: one fixed fault every point carries, guest tokens "
                                          "(\"K=kafka@9+1\") or a whole schedule (\"disk=cut dseed=0 | run C=10\")")
