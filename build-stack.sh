@@ -472,6 +472,39 @@ net_fault_on() {   # $1 = <svc>:<netem args with commas>
     die_oracle "HYDO-ORACLE: ERROR tc setup failed"
   echo "hydo-stack: NET FAULT on traffic to $svc (port $port): netem $args"
 }
+# net_heal <tc> <netem args in force>: lift the netem fault on lo WITHOUT dropping the packets
+# still waiting in its delay queue. A plain `tc qdisc del` frees them (kernel 6.6:
+# qdisc_destroy -> netem_reset -> tfifo_reset), so TCP had to retransmit them after a timeout
+# (about 1 s) the schedule never asked for. Instead:
+#  1. `tc qdisc change` the netem to no delay/loss/duplicate/corruption and a 100 Gbit rate.
+#     netem_change keeps the queue; queued packets keep their send times, and in rate mode a
+#     new packet is sent right after the last queued one, so the order is kept.
+#  2. wait (guest time, deterministic) until the netem queue is empty, at most the largest
+#     delay in force (delay + 4 x jitter) + 500 ms;
+#  3. remove the filters (new packets bypass netem), wait until a packet still in its few-us
+#     rate window has left (at most 50 ms), then delete the root qdisc.
+# Prints one line: "queued=<packets at the heal> drained_ms=<ms> left=<packets dropped>".
+# A copy of the function in hvx/onboard/hydo-init.sh; keep the two in sync.
+net_qlen() {   # <tc>: packets in the netem queue (handle 40:), empty if there is none
+  $1 -s qdisc show dev lo | $BB awk '/^qdisc netem 40:/ { f = 1 } f && $1 == "backlog" { sub(/p$/, "", $3); print $3 + 0; exit }'
+}
+net_heal() {
+  local tc=$1 bound q0 n t w
+  bound=$(echo "$2" | $BB tr ',' ' ' | $BB awk '
+    function ms(v,  x) { x = v + 0; if (v ~ /us/) return x / 1000; if (v ~ /ms/) return x
+                         if (v ~ /s/) return x * 1000; return x / 1000 }
+    { m = 0; for (i = 1; i <= NF; i++) if ($i == "delay") { m = ms($(i + 1))
+        if ($(i + 2) ~ /^[0-9.]+(us|usec|usecs|ms|msec|msecs|s|sec|secs)?$/) m += 4 * ms($(i + 2)) }
+      printf "%d\n", m + 500 }')
+  q0=$(net_qlen $tc); n=${q0:-0}; t=0
+  $tc qdisc change dev lo parent 1:4 handle 40: netem rate 100gbit corrupt 0% 2>/dev/null || n=0
+  while [ "${n:-0}" -gt 0 ] && [ $t -lt $bound ]; do $BB sleep 0.01; t=$((t + 10)); n=$(net_qlen $tc); done
+  $tc filter del dev lo parent 1:0 2>/dev/null
+  n=$(net_qlen $tc); w=0
+  while [ "${n:-0}" -gt 0 ] && [ $w -lt 50 ]; do $BB sleep 0.01; w=$((w + 10)); n=$(net_qlen $tc); done
+  $tc qdisc del dev lo root 2>/dev/null
+  echo "queued=${q0:-0} drained_ms=$t left=${n:-0}"
+}
 
 restart_svc() {
   case "$1" in
@@ -527,8 +560,7 @@ place_orders() {
     retry_unacked
     # Network faults are transient: heal the network, then the client retries whatever is
     # still un-ACKed (with the same ids) -- every order must end up ACKed exactly once.
-    $TC qdisc del dev lo root 2>/dev/null
-    echo "hydo-stack: network healed (uptime=$(UP)s)"
+    echo "hydo-stack: network healed: $(net_heal "$TC" "${NET#*:}") (uptime=$(UP)s)"
     retry_unacked
     $BB grep -a "HYDO-STACK\|failed" /tmp/client.log
   else

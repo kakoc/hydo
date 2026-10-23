@@ -146,3 +146,69 @@ ones above:
 **Fixed:** `fetch-image.sh` took `nix build --print-out-paths nixpkgs#skopeo` as one path, but it
 prints two (`skopeo-1.15.1-man` first), so without `skopeo` on `PATH` the script failed. It now
 uses the output that has `bin/skopeo`; re-fetched with it, the OCI layout is identical.
+
+## Lifting a network fault no longer drops netem's queued packets (2026-10-23, bare-metal test machine)
+
+**Cause.** Every network fault (`N=`, `O=`, link faults) is a netem qdisc on `lo`, and lifting it
+ran `tc qdisc del dev lo root`. In the guest kernel (6.6.35) deleting the qdisc runs
+`netem_reset` -> `tfifo_reset`, which frees every packet still waiting in netem's delay queue.
+TCP then retransmitted those packets after a timeout the schedule never asked for.
+
+**Fix** (`net_heal`, in `hvx/onboard/hydo-init.sh` and, as a copy, in the stack's `/sbin/init`
+in `build-stack.sh`; used by `hydo-init.sh`'s `net_off`, the link faults of
+`hydo-init-links.sh`, `hvx/explore/stack-explore.sh` and the stack's `hydo_net=` mode):
+`tc qdisc change` the netem to rate 100gbit and no delay/loss/duplication/corruption
+(`netem_change` keeps the queue and every queued packet's send time; in rate mode a new packet
+is scheduled after the last queued one, so the order is kept), wait in guest time until the
+queue is empty (at most delay + 4 x jitter + 500 ms), remove the filters, wait until the queue
+is empty again (at most 50 ms), then delete the root qdisc. The console line
+`network fault lifted: queued=<n> drained_ms=<ms> left=<n>` records it. Schedules without a
+network fault never call it.
+
+**Demonstration** (`examples/redis/hydo-netem.yaml`: the Redis example plus the invariant
+`net.no_retransmission`, Tcp RetransSegs from `/proc/net/snmp` must be 0). Old init = main's
+`hydo-init.sh` (`explore-ob-redis-netem-main`, `74c45491…`); new init (`explore-ob-redis-netem-nq`,
+`c7bc532a…`, two builds identical). New-image runs were each run twice with identical
+fingerprints. Results `/var/tmp/nq/b1` on the box.
+
+| schedule | old init | new init |
+|---|---|---|
+| `disk=none dseed=1 \| run` | OK retrans=0 | OK retrans=0 (`33acb90ead2afd38`) |
+| `... run N=redis@3-6:delay,300ms` | VIOLATION retrans=2 (`c568d85e8e4f70ba`, twice) | OK retrans=0, queued=2 at the heal (`5b226954f8df4479`) |
+| `... run O=redis@3-6:resp:delay,300ms` | VIOLATION retrans=2 | OK retrans=0 (`dd440bce5c239ea2`) |
+| `... run N=redis@5-20:delay,300ms` (heal at the end) | VIOLATION retrans=2 | OK retrans=0 (`3ed5964ccdd8e5f4`) |
+| `... run N=redis@3-6:delay,1s` | OK retrans=0 | OK retrans=0, queued=2 drained in 720 ms (`157b4a39899d5a90`) |
+| `... run O=redis@3-6:req:delay,2000ms` | VIOLATION retrans=5 | VIOLATION retrans=3 (`acb2046ab94d0227`): a 2 s delay exceeds the 1 s SYN timeout, so 3 retransmissions are caused by the delay itself |
+| `... run N=redis@3-6:delay,100ms,loss,30%` | VIOLATION retrans=5 | VIOLATION retrans=5 (`c16d8d18e625a0b1`): the loss asks for them |
+
+Link faults on etcd 3.6.15 (`explore-ob-etcd-3.6.15-nq`, `021d350a…`, two builds identical;
+old `explore-ob-etcd-3.6.15-main`, `a3842320…`): at the heal 34 (`N=etcd1-etcd2@5-10:delay,300ms`),
+37 (`N=etcd1-*@10-20:delay,200ms`) and 6 (`O=etcd2-etcd3@5-12:resp:delay,500ms`) packets were in
+the queue, all delivered (`left=0`); the old init freed them. All verdicts OK on both images;
+new-image runs twice identical (`309c17a298f4cc14`, `46c0a710bf71e0fc`, `6ffff35b4266fd7f`).
+
+**Schedules without a network fault keep their verdicts** (fingerprints move: the init's bytes
+changed). Plain Redis example (`explore-ob-redis-nq`, `03beff6c…`, vs main's init `192f1f0a…`;
+this manifest has no `network` fault kind, so no tc in the image): `run` OK acked=20;
+`K=redis@5+3 P=redis@12+2 T=8:-86400` OK acked=15; `N=...` skipped (no tc) OK. `C=12 R=everysec`
+is VIOLATION on both but loses `k:4` with main's init (twice `209c0bf7129cf00e`) and `k:2` with the
+new one (twice `68da556788406ec3`): which key falls in Redis's 1 s fsync window depends on guest
+timing, which the longer init script shifts (the same key moved at M52 and M61).
+
+Stack explorer image `explore-binlog-ret-xr-nq-disk.img` (`4a6a8493…`, two builds identical; only
+`/sbin/init` and `/etc/stack-explore.sh` differ from `explore-binlog-ret-xr`, checked with a
+read-only mount and `diff -r`). Results `/var/tmp/nq/b2`, `/var/tmp/nq/swarm-*`.
+- Without network faults, old vs new: `run`, `K=kafka@10+3`, `disk=cut C=20`,
+  `P=mysql@15~100:400 T=5:86400` all OK 30/30 (20/30 with the cut) on both;
+  `disk=cut C=20 M=2` VIOLATION on both (the relaxed-MySQL window), naming order 0 ("acked but
+  not marked published") on the old image and order 9 ("MISSING, kafka has it") on the new one.
+- With network faults (new image twice, identical; all OK 30/30 on both images):
+  `N=kafka@5-10:delay,300ms` `84a353b7ebc93fdf`, `O=mysql@5-10:resp:delay,1000ms`
+  `e6a879d3570488dc`, `N=redis@10-30:delay,200ms` `5e75794a7d1b3b5a`,
+  `N=mysql@3-8:delay,50ms,loss,20%` `4dc5f28c0b68f608` (queued=1), 
+  `O=kafka@12-18:req:delay,2000ms Q=4` `78c36fd2efabf063` (queued=5, drained in 1650 ms).
+- `explore.py --strategy swarm --new-faults --durable-only --seeds 1-40`: 0 failures on the new
+  image and 0 on the old one, same 40 schedule strings; 39 of 40 verdict lines identical, the
+  40th (seed 8, a cut schedule) OK on both with one more un-ACKed order applied on the new image.
+  30 schedules had a network fault; 21 heals ran, 9 with packets in the queue (12 packets),
+  `left=0` in every one.

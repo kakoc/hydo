@@ -302,6 +302,14 @@ properties that need to see inside it; both kinds of record mix on the console.
 | `<X>=<value>` | a knob from `knobs:` |
 | host side: `disk=ioerr:<p>` / `lying:<p>` | disk I/O errors / a disk that drops acknowledged writes |
 
+Lifting a network fault (`N=`/`O=`, at `to` or at the end of the workload) does not drop
+the packets still waiting in netem's delay queue: the init first changes the netem to no
+delay/loss/duplication/corruption (queued packets keep their send times, new packets follow
+them in order), waits until the queue is empty (at most the largest delay in force plus
+500 ms of guest time), then removes the qdisc. The console shows
+`network fault lifted: queued=<n> drained_ms=<ms> left=<n>`. Before 2026-10-23 the qdisc was
+deleted at once and every queued packet was lost, so TCP retransmitted after a timeout.
+
 A token naming a service the manifest does not have is ignored. `explore.py` draws its
 faults from the manifest (`hvx/explore/manifest_space.py`): kills and pauses from all
 services, network and one-way faults from services with a `port:`, knob values from
