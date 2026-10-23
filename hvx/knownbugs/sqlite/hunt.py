@@ -14,6 +14,23 @@ So this driver reuses explore.py's worker pool and tick-jitter formulas, and gen
 
 Run i uses arm i % 3 and a pure function of (i, --salt), so a run is reproducible from its
 schedule string alone. Nothing is aimed at the bug: the pm/max ranges are the generic ones.
+
+Several vCPUs (hvx Milestones 66/69): --vcpus N gives the engine N vCPUs that take turns of an
+exact number of guest conditional branches, so walrace's threads really run in parallel and
+switch at branch counts chosen by the schedule. --turns then gives schedules turn tokens
+q=<branches> [qs=<hex>] from their own random stream (TURN_SALT), so every other field is the
+same as without --turns. The mix (TURN_MIX, per schedule) leans on short turns, where a window
+of a few hundred instructions can be hit, and is bounded by cost (each turn end costs about
+0.8 ms of host time, README "Several vCPUs"):
+    5%  default turns (2^20, no token)
+    15% long:  q log-uniform in 10,001..2^20, half of them seeded
+    70% mid:   q log-uniform in 1,000..10,000, half of them seeded
+    10% low:   q log-uniform in 300..999, fixed only (q=1000 costs ~220 s; q=300 ~1,000 s;
+               q=100 ~3,000 s, so below 300 only seeded turns reach)
+A seeded q draws every turn uniformly from [1, q], so seeded mid schedules also take many turns
+far below 100 branches. Without --vcpus/--turns every schedule string and command line is
+unchanged.
+
 Every failure is re-run (fingerprints must match), then shrunk: drop the jitter; drop S;
 narrow the delayed-tick window (tjlo/tjhi, same seed); once <= 32 delays remain, turn it into
 an explicit list and remove delays one at a time. The shrunk schedule is then run on --fixed.
@@ -21,7 +38,7 @@ an explicit list and remove delays one at a time. The shrunk schedule is then ru
     python3 hunt.py --image explore-ob-kb-sqlite-3510200-disk.img \\
         --fixed explore-ob-kb-sqlite-3510300-disk.img --runs 300 --workers 1 --out DIR
 """
-import argparse, glob, json, os, re, sys, time
+import argparse, glob, json, math, os, re, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "explore"))
@@ -34,6 +51,10 @@ MAXS = [2000, 50000, 500000]                    # max delay in guest branches (<
 ARMS = ["timing", "workload", "both"]
 PPS = [1 << 14, 1 << 12]                        # M49 arm "pp": PMU tick period during the workload
 XTRS = [8, 32]                                  # M49 arm "xt": extra-tick slots per period
+TURNS = False                                   # --turns: vCPU turn tokens q= [qs=] (needs --vcpus > 1)
+TURN_SALT = 0x51D7E2A5C0FFEE11
+Q_DEFAULT = 1 << 20                             # the module's turn length
+TURN_MIX = (("default", 5), ("long", 15), ("mid", 70), ("low", 10))   # percent per schedule (docstring)
 
 
 def gen(i, salt):
@@ -51,12 +72,43 @@ def gen(i, salt):
         s["tj"] = ("seed", r.next(), r.pick(PMS), min(r.pick(MAXS), s["pp"] - 1), 0, 0)
     if arm == "xt":
         s["xt"] = (r.next(), r.pick(XTRS), 500)
+    if TURNS:
+        add_turns(s, i, salt)
+    return s
+
+
+def loguni(r, lo, hi):
+    """An integer in [lo, hi], log-uniform (from the SplitMix r)."""
+    u = (r.next() >> 11) / float(1 << 53)
+    return max(lo, min(hi, int(round(math.exp(math.log(lo) + u * (math.log(hi) - math.log(lo)))))))
+
+
+def add_turns(s, i, salt):
+    """--turns: turn length for the workload, from its own stream (TURN_MIX, see the docstring)."""
+    t = explore.SplitMix((i * 0x9E3779B97F4A7C15 ^ salt ^ TURN_SALT) & explore.M64)
+    x, acc, kind = t.below(100), 0, "default"
+    for k, w in TURN_MIX:
+        acc += w
+        if x < acc:
+            kind = k
+            break
+    seeded, qs = t.below(2), t.next() or 1
+    if kind == "low":
+        q, seeded = loguni(t, 300, 999), 0
+    elif kind == "mid":
+        q = loguni(t, 1000, 10000)
+    elif kind == "long":
+        q = loguni(t, 10001, Q_DEFAULT)
+    else:
+        return s
+    s["q"] = (q, qs if seeded else 0)
     return s
 
 
 def render(s):
     tj = explore.render_tj(s["tj"]) if s.get("tj") else ""
     tj += explore.render_preempt({k: v for k, v in s.items() if k in ("pp", "xt") and v})
+    tj += explore.render_turns(s) if s.get("q") else ""
     g = "run" + (" S=%x" % s["S"] if s.get("S") else "")
     return "disk=none dseed=0%s | %s" % (tj, g)
 
@@ -96,6 +148,22 @@ def shrink(pool, s, verdict, tjk, log, budget=60):
         return failed(res["verdict"]), res
 
     cur = dict(s)
+    if cur.get("q"):                            # vCPU turns: are the short turns needed?
+        c = dict(cur, q=None)
+        ok, _ = attempt(c, "drop turns")
+        if ok:
+            cur = c
+        elif cur["q"][1]:
+            c = dict(cur, q=(cur["q"][0], 0))
+            ok, _ = attempt(c, "fixed turns")
+            if ok:
+                cur = c
+        while cur.get("q") and cur["q"][0] < Q_DEFAULT and tries < budget:
+            c = dict(cur, q=(min(Q_DEFAULT, cur["q"][0] * 4), cur["q"][1]))
+            ok, _ = attempt(c, "longer turns q=%d" % c["q"][0])
+            if not ok:
+                break
+            cur = c
     for k in ("xt", "pp"):                      # M49 levers first: is the finer preemption needed?
         if cur.get(k):
             c = dict(cur, **{k: None})
@@ -156,7 +224,28 @@ def main():
     ap.add_argument("--arms", default="timing,workload,both", help="arms to cycle through")
     ap.add_argument("--dev", help="hvx device, e.g. /dev/hvxpre for a side-by-side module")
     ap.add_argument("--stop-after", type=int, default=3, help="stop after this many distinct failures")
+    ap.add_argument("--vcpus", type=int, default=1, help="vCPUs for the engine (> 1: in-kernel branch-counted turns)")
+    ap.add_argument("--turns", action="store_true", help="with --vcpus > 1: turn tokens q= [qs=] (TURN_MIX)")
+    ap.add_argument("--build", help="directory with bzImage, initramfs-kafka.cpio.gz and the images "
+                    "(default: explore.py's ~/hydo/build)")
+    ap.add_argument("--snap-dir", help="HVX_SNAP_DIR for the engines (default: explore.py's /var/tmp/hvx-snap)")
+    ap.add_argument("--batch", type=int, help="runs handed to the workers at once (default: --workers); "
+                    "larger batches keep workers busy when run times differ a lot")
+    ap.add_argument("--max-wall", type=int, help="start no new batch after this many seconds")
+    ap.add_argument("--wall-secs", type=int, help="HVX_EXPLORE_WALL_SECS: the engine's per-run wall-clock cap "
+                    "(default 900 s; short turns can need more)")
     a = ap.parse_args()
+    global TURNS
+    if a.turns and a.vcpus < 2:
+        raise SystemExit("hunt.py: --turns needs --vcpus N > 1")
+    TURNS = a.turns
+    explore.VCPUS = a.vcpus
+    if a.build:
+        explore.BUILD = os.path.abspath(a.build)
+    if a.snap_dir:
+        explore.EXTRA_ENV.append("HVX_SNAP_DIR=" + a.snap_dir)
+    if a.wall_secs:
+        explore.EXTRA_ENV.append("HVX_EXPLORE_WALL_SECS=%d" % a.wall_secs)
     os.makedirs(a.out, exist_ok=True)
     ARMS[:] = a.arms.split(",")
     explore.IMAGE = a.image
@@ -167,9 +256,9 @@ def main():
     runs = open(os.path.join(a.out, "runs.jsonl"), "a")
     shr = open(os.path.join(a.out, "shrink.jsonl"), "a")
     found = []
-    batch = max(1, a.workers)
+    batch = max(1, a.batch or a.workers)
     i = a.first
-    while i < a.first + a.runs and len(found) < a.stop_after:
+    while i < a.first + a.runs and len(found) < a.stop_after and not (a.max_wall and time.time() - t0 > a.max_wall):
         items, specs = [], {}
         for j in range(i, min(i + batch, a.first + a.runs)):
             s = gen(j, a.salt)
@@ -182,6 +271,7 @@ def main():
             r = res[tag][1]
             rec = {"run": j, "arm": s["arm"], "schedule": text, "fp": r["fp"], "secs": r["secs"],
                    "verdict": r["verdict"], "tjk": r.get("tjk"), "tjn": r.get("tjn"), "xtn": r.get("xtn"),
+                   "qn": r.get("qn"),
                    "wall": round(time.time() - t0, 1)}
             rec.update(stats(a.out, tag))
             runs.write(json.dumps(rec) + "\n")
