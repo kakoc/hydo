@@ -91,7 +91,14 @@
 #define DONE_MARKER	"hydo-explore-workload-done"
 #define ACKED_PREFIX	"hydo-explore-acked:"
 #define FAILED_PREFIX	"hydo-explore-failed:"
-#define RUN_WALL_SECS	900	/* safety net only; a run that hits it is reported as TIMEOUT */
+/* Safety net only; a run that hits it is reported as TIMEOUT. HVX_EXPLORE_WALL_SECS overrides the
+ * default 900 s (very short vCPU turns, q= of a few hundred branches, can need longer). */
+static double run_wall_secs(void)
+{
+	const char *e = getenv("HVX_EXPLORE_WALL_SECS");
+	return e && atof(e) > 0 ? atof(e) : 900;
+}
+#define RUN_WALL_SECS	run_wall_secs()
 
 struct snap {
 	struct hvx_snapshot *s;
@@ -475,6 +482,29 @@ struct sched {
 
 /* the turn policy to put back after a q= / qs= workload, and the turn count at its start */
 static uint64_t g_q_old_quantum, g_q_old_seed, g_q_turns0;
+/* Diagnostic, several vCPUs only: each vCPU's retired branches and turns during the workload,
+ * printed on stderr as a SCHEDSTAT line (reads only; the RESULT line is unchanged). */
+static uint64_t g_ss_br0[HVX_SCHED_MAX_VCPUS], g_ss_turns0[HVX_SCHED_MAX_VCPUS];
+
+static void schedstat(struct boot *b, const char *tag, int start)
+{
+	struct hvx_sched c;
+	if (g_vcpus < 2) return;
+	memset(&c, 0, sizeof(c));
+	if (ioctl(b->fd, HVX_GET_SCHED, &c) < 0) return;
+	if (start) {
+		for (unsigned i = 0; i < g_vcpus && i < HVX_SCHED_MAX_VCPUS; i++) {
+			g_ss_br0[i] = c.v[i].branches;
+			g_ss_turns0[i] = c.v[i].turns;
+		}
+		return;
+	}
+	fprintf(stderr, "SCHEDSTAT %s", tag);
+	for (unsigned i = 0; i < g_vcpus && i < HVX_SCHED_MAX_VCPUS; i++)
+		fprintf(stderr, " v%u_br=%llu v%u_turns=%llu", i, (unsigned long long)(c.v[i].branches - g_ss_br0[i]),
+			i, (unsigned long long)(c.v[i].turns - g_ss_turns0[i]));
+	fprintf(stderr, "\n");
+}
 
 /* The value of host token <key> ("q=" ...) starting a word of `host`, or NULL. Exact word
  * match, so "q=" never matches inside another token. */
@@ -696,6 +726,7 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 	r = run_until_any(b, wk, 2, from);
 	if (r < 0) { snprintf(verdict, sizeof(verdict), r == -2 ? "TIMEOUT workload" : "ERROR vm workload"); goto out; }
 	wfp = fingerprint(b);
+	schedstat(b, tag, 0);
 	dump_state(b, tag, "workload");
 	if (sc->cf_on) {		/* on stderr, so the RESULT line keeps its format */
 		struct hvx_flushcut fc;
@@ -859,6 +890,7 @@ static void run_sched(struct boot *b, const char *tag, const struct sched *sc, s
 		c.seed = sc->qs;
 		if (ioctl(b->fd, HVX_SET_SCHED, &c) < 0) { snprintf(verdict, sizeof(verdict), "ERROR harness q= value (HVX_SET_SCHED)"); goto fail; }
 	}
+	schedstat(b, tag, 1);
 	pt_arm(b);
 	snprintf(line, sizeof(line), "%s\n", sc->guest);
 	if (put_input(b, line)) { snprintf(verdict, sizeof(verdict), "ERROR harness put_input"); goto fail; }
@@ -1167,6 +1199,7 @@ int main(int argc, char **argv)
 		struct sched sc;
 		if (argc < 7 || parse_sched(argv[6], &sc)) { fprintf(stderr, "hvx_explore: bad schedule\n"); return 2; }
 		if (boot_to_s1(&b, &s0, NULL)) return 1;
+		if (getenv("HVX_EXPLORE_BOOTCON")) save_console(&b, 0, "boot", "");	/* diagnostic: the boot console */
 		fprintf(stderr, "hvx_explore: provisioned in %.1f s (fresh boot, no snapshot restore)\n", now_s() - t0);
 		run_sched(&b, "one", &sc, &s0);
 		return 0;
