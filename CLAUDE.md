@@ -125,7 +125,7 @@ Items marked **[user decision]** need the user before anyone acts on them.
 3. **[user decision]** The build machine disk keeps filling up; cleaning other sessions' build outputs needs the user's approval.
 4. Several vCPUs (M69): Linux marks the TSC unstable with 2 vCPUs (`tsc=reliable` removes the message). Each PAUSE exit moves the virtual clock, so guest time depends on the PAUSE setting. NMIs between CPUs, logical-destination interrupt routing, virtio-net routing beyond the first deliverable queue, paravirtual lock help and more than 4 vCPUs are not done. `hvx/explore/TURNS.md` lists module wishes: a per-turn length list, a short/long mix and a starve mode.
 5. Guest AVX (M68): there is no AVX-512, XSAVEOPT, XSAVEC, XSAVES or PKRU; the pending #GP of an invalid XSETBV is not in the snapshot; and with the flag off, a guest that sets CR4.OSXSAVE anyway reads the host's XCR0.
-6. The d11 defect is sensitive to small timing shifts and is rarely found. The m59 bench images still carry the M63 Kafka retention bug, which stopped one repetition. Do not merge branch `cut-kill-recovery-bench`, because it is built on the pre-binlog commit `57864c6` (M67).
+6. The d11 defect (an ACK on an unflushed flag) has a window of about 3 of ~310 flush-cut points and is rarely found by strategies (M67, M72: 3/6 then 0/6 over 3-repetition cells); measuring its detection rate needs many more repetitions or a cell that always draws `cf=`. The m59 bench set now defaults to `-pin-kr` (Kafka retention fixed, M72).
 7. fwupd still runs on the bare-metal machine; it is harmless to the fixed module. Older single outliers (M34 MySQL, M39 I/O error) were not checked against fwupd times (M65).
 8. The stack's per-fault scenario baselines (kills, netem) were last measured on the M39 image and were not re-measured after the M50 and M63 changes.
 9. Explorer and tools: the oracle reads Kafka before it restarts when Kafka is killed at the last order (M55); `pp=`/`xt=` are refused in branch mode, and the `xt` shrinker does not turn a seeded policy into a list (M49); the guest RAM size is not part of the schedule string, so a hand-run `hvx_explore one` on a non-default image needs `--ram-mib` (M59); the OK verdict shows only the first invariant's details (M47).
@@ -210,6 +210,7 @@ Milestones 1–32 ran inside the nested L1 VM on the build machine, before 2026-
 - M69 — several vCPUs, stages 2 and 3: Linux on 2–4 vCPUs, the stack and the explorer on 2 vCPUs (2026-10-22)
 - M70 — freeze a service at an exact packet of its traffic (`F=`) (2026-10-23)
 - M71 — lifting a network fault drains the netem queue instead of dropping it (2026-10-23)
+- M72 — benchmark images with the Kafka retention fix (`-pin-kr`), now the default m59 set (2026-10-23)
 
 ## Where to look
 

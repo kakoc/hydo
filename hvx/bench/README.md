@@ -437,3 +437,32 @@ What the concurrency defects show:
       python3 run.py --strategy random|swarm|process [--buggify] --concurrency --defects m59 \
           --reps 1-3 --budget 60 --workers 1 --window 1 --out /var/tmp/m59-bench/<label>
       python3 run.py --table /var/tmp/m59-bench/{random,swarm,process,swarm-bg}-cc /var/tmp/m59-bench/random-nocc
+
+## m59 images with the Kafka retention fix and the M67 harness fix (`-pin-kr`, 2026-10-23)
+
+The `-pin` m59 images carry two unrelated problems: the Milestone 63 Kafka retention bug (a
+forward clock step of more than 7 days deletes acked orders; it made control runs fail and cut
+d11 repetitions short), and the pre-M67 harness (an order service that cannot restart after a
+`cf=` cut ends the run with `ERROR front door restart`). Branch `bench-m59-kr` (from `57864c6`)
+applies exactly two changes and nothing else: `log.retention.ms=-1` in the stack's Kafka
+`server.properties` (`build-stack.sh`, the M63 line) and the M67 change to
+`hvx/explore/stack-explore.sh` (commit `941f9f3`, cherry-picked from a benchmark branch commit). MySQL's binary
+log (the other M63 change) is deliberately NOT applied, because it closes d11 by itself.
+
+    BENCH_SUFFIX=-pin-kr bash hvx/bench/build-bench-m59.sh   # build box, pinned tools
+
+Images `explore-bench-m59-<name>-pin-kr-disk.img` (each built twice, byte-identical; seeder
+`c2a440c5…`): control `61e843f0…`, d8 `76d77289…`, d9 `ac4ee872…`, d10 `a13fbfee…`, d11
+`be42df1c…`, d12 `b710296a…`. Against each `-pin` image: the MBR and the data partition are
+byte-identical, the root partition has the same 14,026 files with the same modes and owners, and
+only `/etc/kafka/server.properties` (one added line) and `/etc/stack-explore.sh` (the M67 change)
+differ; `/bin/hydostack` is byte-identical per defect. They are the default m59 set in `run.py` since 2026-10-23 (`HYDO_M59_SUFFIX=-pin` selects the earlier set).
+
+Checks (bare-metal test machine, results `/var/tmp/kr`): `confirm.py --defects m59` — d8 `Q=2d` `6a56326d6de88bba`, d9 `Q=4` `6a5f06b675687ac4`, d11 `cf=238` `adadedf9698291bd` (order 22), d12 `Q=2` `d89a283a66ac19a9`, each twice identical; d10's old trigger `X=front@12~20` passes on the new image (timing moved), so its trigger here is `X=front@9~20` (`5d03c640c24f667d`, `kafka order=10 present 2 times`, three times identical; the control passes it, `20a1bc5f8906233b`); `frontkill` 24 of 40 fail on d10, 40 of 40 pass on the control. The control passes every trigger and the M63 clock-jump candidate (`496ca3033e335c4c`, twice; the `-pin` control still fails it, `9577ae9341ea86c2`). A workload makes 365 flushes (309 on `-pin`); every flush after 311 comes after the last order, so the cells keep `--cf-range 1-309` and their schedule strings equal M67's. d11 cut sweep k=200..364 step 4: k=248 (order 23) and k=280 (order 26) fail, twice each; the control passes both.
+
+| defect | process, M67 (`-pin`) | process, `-pin-kr` | swarm, M67 | swarm, `-pin-kr` |
+|---|---|---|---|---|
+| d10 | 3/3 (14, 1, 10); 2/3 by signature | 3/3 (7, 35, 10); 2/3 by signature | 1/3 (5) | 2/3 (20, 17); 1/3 by signature |
+| d11 | 1/3 (3) | 0/3 | 2/3 (13, 4) | 0/3 |
+
+All detections reproduced. Off-signature hits: `mysql table unreadable` after a MySQL kill near the end (harness artefact, like M55's Kafka one) and `M=0` + a MySQL kill (the relaxed setting's documented window). The four schedules that found d11 in M67 give OK on the new image (the cut lands elsewhere). d11's window is about 3 of ~310 cut points and `cf=` is drawn in 40–60% of schedules, so three repetitions cannot separate a per-repetition rate between about 0 and 30%; 0/6 here and 3/6 in M67 are consistent. Branch `bench-m59-kr` (from pre-binlog `57864c6`) is a build recipe only — do not merge it.

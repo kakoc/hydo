@@ -45,7 +45,9 @@ DEFECTS = {
 # built by build-bench-m59.sh. Their control is that file unpatched. d9's signature is the
 # crash oracle below (the guest's "front door log: panic" line). Images: build-bench-m59.sh with
 # BENCH_SUFFIX=-pin (built from the pinned toolchain, hvx/BUILD-PINS.md); HYDO_M59_SUFFIX=""
-# selects the first build, which used the stand-in hvx_seedrng (superseded).
+# selects the first build, which used the stand-in hvx_seedrng (superseded). The default is
+# -pin-kr (2026-10-23): -pin plus the M63 Kafka retention fix and the M67 harness fix, no binary
+# log (README "-pin-kr"); HYDO_M59_SUFFIX=-pin selects the earlier set.
 M59 = {
     "d8-no-order-lock":       r"present \d+ times|kafka_exactly_once",
     "d9-redis-unlocked":      r"front door crashed",
@@ -53,7 +55,7 @@ M59 = {
     "d11-ack-unflushed-flag": r"not marked published|acked_marked_published",
     "d12-shared-key-buffer":  r"kafka order=\d+ (expected|present)|in_kafka|kafka_exactly_once",
 }
-M59_SUFFIX = os.environ.get("HYDO_M59_SUFFIX", "-pin")   # images rebuilt with the pinned tools
+M59_SUFFIX = os.environ.get("HYDO_M59_SUFFIX", "-pin-kr")   # see the comment above
 for _n, _sig in M59.items():
     DEFECTS[_n] = ("explore-bench-m59-%s%s-disk.img" % (_n, M59_SUFFIX), _sig)
 M59_CONTROL = "explore-bench-m59-control%s-disk.img" % M59_SUFFIX

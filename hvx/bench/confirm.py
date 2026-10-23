@@ -29,7 +29,8 @@ TRIGGERS = {
     # Milestone 59 (build-bench-m59.sh; control explore-bench-m59-control-disk.img)
     "d8-no-order-lock": ["disk=none dseed=0 | run Q=2d"],
     "d9-redis-unlocked": ["disk=none dseed=0 | run Q=4"],
-    "d10-outcome-in-memory": ["disk=none dseed=0 | run X=front@12~20"],
+    # the -pin-kr image's timing moved d10's window: X=front@12~20 passes there, @9~20 fails
+    "d10-outcome-in-memory": ["disk=none dseed=0 | run X=front@%d~20" % (9 if bench.M59_SUFFIX == "-pin-kr" else 12)],
     "d11-ack-unflushed-flag": ["disk=cut dseed=0 cf=238 | run"],
     "d12-shared-key-buffer": ["disk=none dseed=0 | run Q=2"],
 }
