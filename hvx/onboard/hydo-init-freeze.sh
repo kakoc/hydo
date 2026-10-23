@@ -99,7 +99,14 @@ fc_heal() {   # end of fault injection (no cut): let a running freeze end, remov
   if [ -f $H/fc.fired ]; then log "freeze healed"
   else
     log "freeze never fired: $($BB grep -c ' #' $H/fc.log 2>/dev/null) of $fc_n matching events after step $fc_step"
-    [ "$fc_n" = 0 ] && $BB sed 's/^/hydo-fc-trace: /' $H/fc.log
+    # n = 0: the trace, compact (the console holds 64 KiB): packet, length, [#count,] uptime ms,
+    # and the first two words (4+ of A-Z a-z 0-9 _ : -, not "def") of the payload
+    [ "$fc_n" = 0 ] && $BB awk -v max=${HYDO_FC_TRACE_MAX:-600} 'NR <= max {
+        h = ($4 ~ /^#/); w = ""; c = 0
+        for (i = (h ? 6 : 5); i <= NF && c < 2; i++) { s = $i; gsub(/[^A-Za-z0-9_:-]/, " ", s); n = split(s, a, " ")
+          for (j = 1; j <= n && c < 2; j++) if (length(a[j]) >= 4 && a[j] != "def") { w = w " " substr(a[j], 1, 32); c++ } }
+        print "hydo-fc-trace: " $1 " " $3 (h ? " " $4 : "") " " $(h ? 5 : 4) w }
+      END { if (NR > max) print "hydo-fc-trace: ... " NR - max " more packets not shown" }' $H/fc.log
   fi
 }
 
