@@ -115,6 +115,12 @@ class Simple(Base):
         lock = os.path.join(d, "lock.json"); json.dump({"images": LOCK}, open(lock, "w"))
         self.assertEqual(hydo_compose.main([p, "--lock", lock, "--out", os.path.join(d, "hydo.yaml")]), 0)
 
+    def test_no_addr(self):
+        m = self.run_import("simple", "--no-addr")
+        self.assertNotIn("addr", self.svc["cache"])
+        self.assertEqual(self.svc["cache"]["ready"], "nc -z -w 2 127.0.0.1 6379")
+        self.assertIn("127.0.0.1 cache\n", m["root"]["text"]["/etc/hosts"])
+
     def test_no_resolve(self):
         self.run_import("simple", "--no-resolve", "--lock", "/nonexistent/lock.json")
         self.assertIn("NOT pinned", self.fetch)

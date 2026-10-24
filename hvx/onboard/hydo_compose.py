@@ -4,6 +4,7 @@ Compose").
 
     hydo-compose <docker-compose.yaml> [--out hydo.yaml] [--name NAME] [--images-dir DIR]
                  [--env-file FILE ...] [--profile P ...] [--use-env] [--no-resolve] [--lock FILE]
+                 [--no-addr]
 
 What it does, per Compose service (the table in MANIFEST.md lists every key):
   * image: resolved to digests with skopeo (the index digest and the linux/amd64 + linux/arm64
@@ -23,7 +24,8 @@ What it does, per Compose service (the table in MANIFEST.md lists every key):
   * ports / expose (else the image's EXPOSE) -> port: (the first container port).
   * every service gets its own loopback addr: (127.0.0.11, .12, ...) and the Compose service names
     (plus container_name, hostname, network aliases, links aliases, extra_hosts) resolve through
-    /etc/hosts, in the hydo root and inside every image root.
+    /etc/hosts, in the hydo root and inside every image root. --no-addr: every name resolves to
+    127.0.0.1 and no addr: is written (the arm64 build, `hydo compose` on a Mac, has no addr: yet).
   * volumes: named and anonymous volumes (and the image's VOLUMEs) -> directories on the data disk
     (/data/vol/<name>, the fault target) mounted into the image with a copy of the image's content
     on first use, as Docker does; bind mounts of existing files/directories -> copied into the
@@ -597,7 +599,10 @@ class Importer:
         if len(order) > 250 - ADDR_BASE:
             raise ComposeError("too many services for one loopback /24")
         self.names = names
-        self.addr = {n: "127.0.0.%d" % (ADDR_BASE + i) for i, n in enumerate(order)}
+        if self.o.get("no_addr"):      # --no-addr (the arm64 build has no addr: yet): every name -> 127.0.0.1
+            self.addr = {n: "127.0.0.1" for n in order}
+        else:
+            self.addr = {n: "127.0.0.%d" % (ADDR_BASE + i) for i, n in enumerate(order)}
         self.hosts = []
         self.bind_files = []           # (src abs, guest path)
         self.data_dirs = []
@@ -732,6 +737,8 @@ class Importer:
             out["_comments"].append("port from the image's EXPOSE %s" % exposed)
         out["_listen"] = sorted(set(ports) | set(exposed))
         out["addr"] = self.addr[n]
+        if self.o.get("no_addr"):
+            out["_noaddr"] = True
         # names
         aliases = [n]
         for k in ("container_name", "hostname"):
@@ -1110,7 +1117,8 @@ class Importer:
                     L.append("    %s: %s\n" % (k, json.dumps(s[k])))
             if "port" in s:
                 L.append("    port: %d\n" % s["port"])
-            L.append("    addr: %s\n" % s["addr"])
+            if not s.get("_noaddr"):
+                L.append("    addr: %s\n" % s["addr"])
             if s.get("depends_on"):
                 L.append("    depends_on: %s\n" % flow_list(s["depends_on"]))
             if s.get("setup"):
@@ -1221,6 +1229,8 @@ def main(argv=None):
             opts["use_env"] = True; i += 1
         elif x == "--no-resolve":
             opts["no_resolve"] = True; i += 1
+        elif x == "--no-addr":
+            opts["no_addr"] = True; i += 1
         elif x.startswith("-"):
             print("hydo-compose: unknown option %s" % x, file=sys.stderr); return 2
         elif path is None:
