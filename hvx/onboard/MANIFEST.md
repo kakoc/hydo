@@ -419,6 +419,30 @@ packet), `--sweep-with "<tokens>"` (one more fixed fault on every point and trac
 write `points.txt`, stop). Every failure is re-run twice. Trace counts are in `fc-traces.jsonl`,
 point labels in `sweep-points.jsonl` (`compare.py sweep <out>` tabulates them).
 
+Sweeping every packet is expensive (M76: 1,125 runs, 2 h 26 min for two links over two steps).
+`--sweep freeze --fc-adaptive` spends the runs where failures are, in two stages:
+
+- **Stage 1**, a cheap sweep over every allowed pair and every `--fc-steps` step: every packet of
+  the manifest's `freeze_match:` streams, or, for a manifest without `freeze_match:`, every k-th
+  packet (`--fc-stride k`, default 8) of the every-packet streams (`--fc-stage1 manifest|stride`,
+  default `auto` = whichever the manifest allows; `manifest,stride` runs both).
+- **Stage 2**, around every stage-1 failure: every packet in a window of +-W packets
+  (`--fc-window W`, default 16) on the every-packet streams of the failing point's step -- its own
+  pair in both directions and, with `--fc-links svc` (default; `pair` = only its own pair), both
+  directions of every other freeze pair of the frozen service. Each window then widens until W
+  packets beyond its outermost failure pass on both sides, so a failing band is mapped whole.
+  The centre on the point's own stream is exact: the helper's `hydo-fc: FROZE ... (resp308, ...)`
+  line gives the frozen packet's number among all packets of that direction. The opposite
+  direction's centre is the last packet before it in the step's `#0` trace, another link's the
+  packet nearest in guest time (extrapolated beyond the trace's 600 visible lines); the window
+  absorbs the error. `--fc-centres fail,props,state` also centres windows on passing points whose
+  sometimes / reachable / eventually outcomes (`props`) or verdict line (`state`) differ from the
+  stream's trace run.
+
+Every point is an ordinary schedule and every failure is re-run twice, as in the full sweep;
+`fc-adaptive.json` lists the centres, windows and rounds. Without `--fc-adaptive` the sweep is
+unchanged.
+
 ### Clock after a power cut (`guest.clock_after_cut`)
 
 Every serve boot sets the realtime clock to `guest.clock_start`, the recovery boot after a power

@@ -32,7 +32,9 @@ Schedule format (see hvx_explore.c / stack-explore.sh):
   freeze sweep (--sweep freeze, M76): traces the packet counts of each (pair, direction, match)
   stream per step with F=...#0 runs, then runs one F=<svc><dir><peer>@<step>#<n>[:<match>]:<dur>
   schedule per packet (options --fc-pairs/--fc-dirs/--fc-steps/--fc-match/--fc-durs,
-  --sweep-every, --sweep-with, --sweep-dry); every failure is re-run twice.
+  --sweep-every, --sweep-with, --sweep-dry); every failure is re-run twice. With --fc-adaptive
+  (fc_adaptive.py) stage 1 sweeps only the manifest's freeze_match: streams (or every --fc-stride-th
+  packet) and stage 2 every packet in a widening +-W window (--fc-window) around each failure.
   vCPU turns (only with --vcpus N > 1 and --turns, SMP Stage 3, TURNS.md): host tokens
   q=<branches> [qs=<hex>] set the length of the vCPUs' turns during the workload (fixed, or
   seeded lengths in [1, q]); half of the schedules get them, from a separate random stream.
@@ -1292,6 +1294,25 @@ def host_checks(outdir, tag, res):
 
 
 # ---------------------------------------------------------------- the worker pool
+QUIET_FILE = os.environ.get("HYDO_QUIET_FILE")      # a shared box's "quiet window" flag (unset: no wait)
+QUIET_MAX_S = 7200
+QUIET_LOCK = threading.Lock()
+QUIET_WAITED = [0.0]                                # seconds the pool spent waiting (the summary's quiet_wait_s)
+
+
+def quiet_wait():
+    """While $HYDO_QUIET_FILE exists start no new VM: wait, checking every 30 s, at most 2 hours."""
+    if not QUIET_FILE or not os.path.exists(QUIET_FILE):
+        return
+    with QUIET_LOCK:
+        t0 = time.time()
+        if os.path.exists(QUIET_FILE):
+            print("quiet window (%s): waiting" % QUIET_FILE, file=sys.stderr)
+        while os.path.exists(QUIET_FILE) and time.time() - t0 < QUIET_MAX_S:
+            time.sleep(30)
+        QUIET_WAITED[0] += time.time() - t0
+
+
 class Worker(threading.Thread):
     def __init__(self, idx, jobs, results, outdir):
         super().__init__(daemon=True)
@@ -1299,54 +1320,92 @@ class Worker(threading.Thread):
         self.boot_secs = None
 
     def run(self):
+        p = self.start_engine()
+        if p is None:
+            return
+        while True:
+            job = self.jobs.get()
+            if job is None:
+                break
+            tag, text = job
+            quiet_wait()
+            if text.startswith("BRANCH "):
+                self.results.put((tag, text, self.branch(p, tag, text)))
+                continue
+            for attempt in (0, 1):
+                try:
+                    p.stdin.write("RUN %s %s\n" % (tag, text))
+                    p.stdin.flush()
+                    out = p.stdout.readline()
+                except (BrokenPipeError, OSError):
+                    out = ""
+                if out or attempt:
+                    break
+                # the engine died under us (killed, or the host ran out of something): start a new
+                # one and run the same schedule again -- runs are deterministic, so this loses nothing
+                print("worker %d: engine exited during %s (rc %s); restarting it" % (self.idx, tag, p.poll()),
+                      file=sys.stderr)
+                p = self.start_engine()
+                if p is None:
+                    out = ""
+                    break
+            res = self.parse_result(out)
+            if not res["verdict"].startswith("ERROR worker"):
+                host_checks(self.outdir, tag, res)
+            self.results.put((tag, text, res))
+            if p is None:           # could not restart: answer the remaining jobs with an error
+                while True:
+                    job = self.jobs.get()
+                    if job is None:
+                        return
+                    self.results.put((job[0], job[1], self.parse_result("")))
+        try:
+            p.stdin.write("QUIT\n")
+            p.stdin.flush()
+            p.wait()
+        except (BrokenPipeError, OSError):
+            pass
+
+    def start_engine(self):
+        """Boot this worker's engine (serve mode). Returns the process, or None if it did not start."""
         cmd = [HVX_RUN, "sudo", "env", "HVX_SNAP_DIR=" + SNAP_DIR] + EXTRA_ENV + [
                os.path.join(HVX, "hvx_explore")] + engine_args() + ["serve", os.path.join(BUILD, "bzImage"),
                os.path.join(BUILD, "initramfs-kafka.cpio.gz"), os.path.join(BUILD, IMAGE),
                os.path.join(self.outdir, "consoles")]
         if BACKEND == "hvm":
             cmd = hvm_backend.engine_cmd(IMAGE, os.path.join(self.outdir, "consoles"), HVM_KERNEL, ram_args())
-        err = open(os.path.join(self.outdir, "worker-%d.err" % self.idx), "w")
+        err = open(os.path.join(self.outdir, "worker-%d.err" % self.idx), "a")
+        quiet_wait()
         p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err, text=True, bufsize=1)
         line = p.stdout.readline()
         if not line.startswith("READY"):
             print("worker %d failed to start: %r" % (self.idx, line), file=sys.stderr)
-            return
-        self.boot_secs = float(line.split("boot_secs=")[1])
-        while True:
-            job = self.jobs.get()
-            if job is None:
-                break
-            tag, text = job
-            if text.startswith("BRANCH "):
-                self.results.put((tag, text, self.branch(p, tag, text)))
-                continue
-            p.stdin.write("RUN %s %s\n" % (tag, text))
-            p.stdin.flush()
-            out = p.stdout.readline()
-            m = re.match(r"RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: (?:tj|xt|pct|qn)\S+)*) verdict=(.*)", out.strip())
-            if not m:
-                self.results.put((tag, text, {"fp": "0", "secs": 0, "verdict": "ERROR worker: %r" % out, "worker": self.idx}))
-                continue
-            res = {"fp": m.group(2), "wfp": m.group(3), "secs": float(m.group(4)),
-                   "verdict": m.group(6), "worker": self.idx}
-            tk = re.search(r"tjk=(\d+)-(\d+) tjn=(\d+)", m.group(5))
-            if tk:      # the workload's tick range and how many ticks were delayed
-                res["tjk"] = [int(tk.group(1)), int(tk.group(2))]
-                res["tjn"] = int(tk.group(3))
-            pf = re.search(r"pctf=(\d+) pctw=(\d+)", m.group(5))
-            if pf:      # forced preemption points (Mac, M57): how many fired, and the workload's length in exits
-                res["pctf"], res["pctw"] = int(pf.group(1)), int(pf.group(2))
-            xn = re.search(r"xtn=(\d+)", m.group(5))
-            if xn:      # M49: extra ticks taken during the workload
-                res["xtn"] = int(xn.group(1))
-            qn = re.search(r"qn=(\d+)", m.group(5))
-            if qn:      # SMP Stage 3: vCPU turns taken during the workload
-                res["qn"] = int(qn.group(1))
-            host_checks(self.outdir, tag, res)
-            self.results.put((tag, text, res))
-        p.stdin.write("QUIT\n")
-        p.stdin.flush()
-        p.wait()
+            return None
+        if self.boot_secs is None:
+            self.boot_secs = float(line.split("boot_secs=")[1])
+        return p
+
+    def parse_result(self, out):
+        """A RESULT line -> the result dict (an ERROR verdict when the line is missing or malformed)."""
+        m = re.match(r"RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: (?:tj|xt|pct|qn)\S+)*) verdict=(.*)", out.strip())
+        if not m:
+            return {"fp": "0", "secs": 0, "verdict": "ERROR worker: %r" % out, "worker": self.idx}
+        res = {"fp": m.group(2), "wfp": m.group(3), "secs": float(m.group(4)),
+               "verdict": m.group(6), "worker": self.idx}
+        tk = re.search(r"tjk=(\d+)-(\d+) tjn=(\d+)", m.group(5))
+        if tk:      # the workload's tick range and how many ticks were delayed
+            res["tjk"] = [int(tk.group(1)), int(tk.group(2))]
+            res["tjn"] = int(tk.group(3))
+        pf = re.search(r"pctf=(\d+) pctw=(\d+)", m.group(5))
+        if pf:      # forced preemption points (Mac, M57): how many fired, and the workload's length in exits
+            res["pctf"], res["pctw"] = int(pf.group(1)), int(pf.group(2))
+        xn = re.search(r"xtn=(\d+)", m.group(5))
+        if xn:      # M49: extra ticks taken during the workload
+            res["xtn"] = int(xn.group(1))
+        qn = re.search(r"qn=(\d+)", m.group(5))
+        if qn:      # SMP Stage 3: vCPU turns taken during the workload
+            res["qn"] = int(qn.group(1))
+        return res
 
     def branch(self, p, tag, text):
         """One BRANCH request: 'BRANCH <n> <pm> <max> <marker> <schedule>'. Returns
@@ -1386,23 +1445,80 @@ class Worker(threading.Thread):
         return out
 
 
+# A result cache for long deterministic sweeps on a shared box ($HYDO_EXPLORE_CACHE = a jsonl file;
+# unset: no cache). Every finished run of a "seed-" or "fctrace-" tag is appended with a copy of its
+# console(s); a later run of the SAME schedule text and image is answered from the cache (its console
+# copied back), so an interrupted sweep resumes where it stopped. Re-runs (repro-, min- tags) never
+# use it: they exist to run the schedule again.
+CACHE_FILE = os.environ.get("HYDO_EXPLORE_CACHE")
+CACHED_TAGS = ("seed-", "fctrace-")
+
+
 class Pool:
     def __init__(self, n, outdir):
         self.jobs, self.results = queue.Queue(), queue.Queue()
+        self.outdir = outdir
         os.makedirs(os.path.join(outdir, "consoles"), exist_ok=True)
+        self.cache, self.cache_hits, self.cache_pos = {}, 0, 0
+        self.cache_load()
         self.workers = [Worker(i, self.jobs, self.results, outdir) for i in range(n)]
         for w in self.workers:
             w.start()
 
+    def cache_load(self):
+        """Read the cache lines appended since the last read (another sweep may share the file)."""
+        if not CACHE_FILE or not os.path.exists(CACHE_FILE):
+            return
+        with open(CACHE_FILE) as f:
+            f.seek(self.cache_pos)
+            for line in f:
+                if not line.endswith("\n"):
+                    break                   # a line still being written
+                self.cache_pos += len(line.encode())
+                rec = json.loads(line)
+                self.cache[(rec["image"], rec["engine"], rec["text"])] = rec
+
+    def cache_key(self, text):
+        return (IMAGE, " ".join(engine_args()), text)
+
     def run_all(self, items):
         """items: list of (tag, schedule text) -> dict tag -> (text, result)"""
-        for it in items:
+        import shutil
+        out, todo = {}, []
+        self.cache_load()
+        for tag, text in items:
+            rec = self.cache.get(self.cache_key(text)) if CACHE_FILE and tag.startswith(CACHED_TAGS) else None
+            if rec and all(os.path.exists(c) for c in rec["consoles"].values()):
+                for suffix, c in rec["consoles"].items():
+                    shutil.copyfile(c, os.path.join(self.outdir, "consoles", tag + suffix + ".log"))
+                out[tag] = (text, dict(rec["result"], cached=True))
+                self.cache_hits += 1
+            else:
+                todo.append((tag, text))
+        for it in todo:
             self.jobs.put(it)
-        out = {}
         while len(out) < len(items):
             tag, text, res = self.results.get()
             out[tag] = (text, res)
+            if CACHE_FILE and tag.startswith(CACHED_TAGS) and not res["verdict"].startswith("ERROR worker"):
+                self.cache_put(tag, text, res)
         return out
+
+    def cache_put(self, tag, text, res):
+        import hashlib, shutil
+        d = CACHE_FILE + ".d"
+        os.makedirs(d, exist_ok=True)
+        h = hashlib.sha1(("%s|%s" % (self.cache_key(text), time.time())).encode()).hexdigest()[:16]
+        cons = {}
+        for suffix in ("", ".recovery", ".checks"):        # .checks.log: host_checks' records
+            src = os.path.join(self.outdir, "consoles", tag + suffix + ".log")
+            if os.path.exists(src):
+                cons[suffix] = os.path.join(d, h + suffix + ".log")
+                shutil.copyfile(src, cons[suffix])
+        image, engine, _ = self.cache_key(text)
+        rec = {"image": image, "engine": engine, "text": text, "result": res, "consoles": cons}
+        with open(CACHE_FILE, "a") as f:
+            f.write(json.dumps(rec) + "\n")
 
     def close(self):
         for _ in self.workers:
@@ -1638,6 +1754,25 @@ def main():
                                          "(\"K=kafka@9+1\") or a whole schedule (\"disk=cut dseed=0 | run C=10\")")
     ap.add_argument("--sweep-dry", action="store_true", help="--sweep freeze: run the traces, write the points, stop")
     ap.add_argument("--repro", type=int, help="re-runs of every failure (default 1; 2 for --sweep freeze)")
+    ap.add_argument("--fc-adaptive", action="store_true",
+                    help="--sweep freeze: adaptive (fc_adaptive.py): stage 1 = the manifest's freeze_match: streams "
+                         "(or, without freeze_match:, every --fc-stride-th packet), stage 2 = every packet in a "
+                         "window around each stage-1 failure, widened until the failing band is mapped")
+    ap.add_argument("--fc-stage1", default="auto",
+                    help="--fc-adaptive: stage-1 streams, comma list of manifest (freeze_match: strings, every packet) "
+                         "and stride (every packet stream, every --fc-stride-th packet); auto (default) = manifest "
+                         "when the manifest has freeze_match:, else stride")
+    ap.add_argument("--fc-stride", type=int, default=8, help="--fc-adaptive: stage-1 stride (default %(default)s)")
+    ap.add_argument("--fc-window", type=int, default=16,
+                    help="--fc-adaptive: stage-2 half window in packets; a window widens until this many packets "
+                         "beyond its outermost failure pass (default %(default)s)")
+    ap.add_argument("--fc-links", choices=["pair", "svc"], default="svc",
+                    help="--fc-adaptive: stage-2 streams around a failure: pair = both directions of its own pair; "
+                         "svc (default) = also both directions of the frozen service's other freeze pairs")
+    ap.add_argument("--fc-centres", default="fail",
+                    help="--fc-adaptive: stage-1 points that get a window, comma list: fail (default; a failure), "
+                         "props (a passing point whose sometimes/reachable/eventually outcomes differ from its "
+                         "stream's trace run), state (a passing point whose verdict line differs from it)")
     ap.add_argument("--knob-rule", choices=["cut", "any"], default="cut",
                     help="finding class of a relaxed durability knob: cut (default, M56) = unsafe-knob only with a "
                          "power cut or lying disk; any = the pre-M56 rule")
@@ -1702,6 +1837,8 @@ def main():
     ap.add_argument("--ram-mib", type=int, help="guest RAM in MiB (default: the manifest's guest.ram_mib, else 1024; "
                                                 "256..3072 on hvx, 256..4096 on hvm)")
     a = ap.parse_args()
+    if a.fc_adaptive and a.sweep != "freeze":
+        raise SystemExit("explore.py: --fc-adaptive goes with --sweep freeze")
     BACKEND, HVM_KERNEL = a.backend, a.hvm_kernel
     if BACKEND == "hvm":
         hvm_backend.configure(a.image)
@@ -1775,12 +1912,18 @@ def main():
     if a.branch:
         branch_main(a, pool, t0)
         return
+    pre_res, fc_info = None, None
     if a.sweep:
         if SPACE:
             SPACE.check_sweep(a.sweep)
-        points = freeze_sweep(pool, a) if a.sweep == "freeze" else sweep(a.sweep)
+        if a.sweep == "freeze" and a.fc_adaptive:       # runs its points itself, stage by stage
+            import fc_adaptive
+            points, items, pre_res, fc_info = fc_adaptive.run(sys.modules[__name__], pool, a)
+        else:
+            points = freeze_sweep(pool, a) if a.sweep == "freeze" else sweep(a.sweep)
         seeds = list(range(1, len(points) + 1))            # sweep point index stands in for the seed
-        items = [("seed-%d" % i, render(add_compose(add_turns(add_buggify(add_preempt(add_concurrency(add_timing(sch, i), i), i), i), i), i))) for i, (_, sch) in zip(seeds, points)]
+        if pre_res is None:
+            items = [("seed-%d" % i, render(add_compose(add_turns(add_buggify(add_preempt(add_concurrency(add_timing(sch, i), i), i), i), i), i))) for i, (_, sch) in zip(seeds, points)]
         open(os.path.join(a.out, "sweep-points.jsonl"), "w").write(
             "".join(json.dumps({"seed": i, "point": lab}) + "\n" for i, (lab, _) in zip(seeds, points)))
         if a.sweep == "freeze" and a.sweep_dry:
@@ -1801,9 +1944,12 @@ def main():
         mf = lambda x, sd: add_grpc_faults(add_protocol_faults(add_freeze_call(add_more_faults(x, sd, a.strategy), sd), sd), sd)
         items = [("seed-%d" % sd, render(add_compose(add_turns(add_buggify(add_preempt(add_concurrency(add_timing(mf(nf(dur(gen(sd)), sd), sd), sd), sd), sd), sd), sd), sd)))
                  for sd in seeds]
-    t_sweep = time.time()
-    res = pool.run_all(items)
-    t_sweep = time.time() - t_sweep
+    if pre_res is None:
+        t_sweep = time.time()
+        res = pool.run_all(items)
+        t_sweep = time.time() - t_sweep
+    else:                       # --fc-adaptive ran its points (and traces) already
+        res, t_sweep = pre_res, fc_info["stage1_wall_s"] + fc_info["stage2_wall_s"]
     runs = open(os.path.join(a.out, "runs.jsonl"), "w")
     fails = []
     for sd in seeds:
@@ -1865,6 +2011,12 @@ def main():
                "failures": len(fails), "reproduced": sum(1 for f in fails if f["reproduced"])}
     if nrep != 1:
         summary["repro_runs"] = nrep
+    if fc_info:
+        summary.update(fc_info)
+    if QUIET_WAITED[0]:
+        summary["quiet_wait_s"] = round(QUIET_WAITED[0], 1)
+    if pool.cache_hits:
+        summary["cache_hits"] = pool.cache_hits
     if RAM_MIB != 1024:
         summary["ram_mib"] = RAM_MIB
     if VCPUS != 1:
