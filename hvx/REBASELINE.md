@@ -814,3 +814,59 @@ reproducer for that symptom on the new image is not known.
 - Raw results: `/var/tmp/rb-nq/results.txt` (one line per run; job list `/var/tmp/rb-nq/queue.txt`),
   `hvx_explore` output under `/var/tmp/rb-nq/runs/<id>/`, `hvx_stack_verify` logs and consoles under
   `/var/tmp/rb-nq/sv/`, explorer runs under `/var/tmp/rb-nq/ex/`. Harnesses compiled in `~/hydo-rb/hvx`.
+
+### 7.6 The default stack on 2 vCPUs (`stack-nq`), superseding the M69 2-vCPU baselines (M78, 2026-10-24)
+
+The 2-vCPU stack baselines of M69 were measured on `stack-binlog-ret`. This subsection re-measures
+them on `stack-nq` (`161996bb…`, section 7: only `/sbin/init` differs). Command, as in M69 and 7.2
+plus the vCPU count: `HVX_VCPUS=2 hvx_stack_verify <bzImage> <initramfs-kafka> <image> "<cmdline>" 1024 <mode>`,
+the 7.2 command line (no `tsc=reliable`), default PAUSE setting (4 consecutive PAUSEs end a turn),
+`HVX_VCPU_PARK` unset (Linux starts vCPU 1; every boot logs "smp: Brought up 1 node, 2 CPUs").
+Harness compiled from main `19fb8f6` in `~/hydo-smpb/hvx`; module srcversion
+`CA5BF8BF2A0D66B312A68EF` (the main `hvx.ko`, not reloaded; M69 ran on the side module
+`/dev/hvxsmp2` before it was merged). Bare-metal test machine, 2026-10-24 07:47–08:20 UTC, at most two of
+these VMs at a time, beside another session's explorer (one or two VMs).
+
+**Old image first.** `mode=all` on `stack-binlog-ret` with 2 vCPUs, once, gave exactly the M69
+values (SANITY `05915e49a5506c58`, F1 `1e4fedf03f81f941`, F2 `c5e01886e97b32b8` order 2, durable
+`c9b1cfeb274d4e3d`, F3 `2c522171088a9da5` / `2a01253d0d5a4eb8`, MILESTONE 35 PASS). So the module
+merge and the harness changes since M69 did not move them, and every change below comes from the
+new image.
+
+`mode=all` on `stack-nq` with 2 vCPUs, run twice, both runs identical in every value, "MILESTONE 35
+PASS" both times (430 s and 532 s; the second shared the bare-metal machine with two explorer VMs):
+
+| check | M69 (`stack-binlog-ret`, 2 vCPUs) | new (`stack-nq`, 2 vCPUs) | verdict |
+|---|---|---|---|
+| SANITY | `05915e49a5506c58` | `d1a5ee3ccea87dac` | OK, 30 orders consistent (MySQL, Kafka and Redis 30 each) |
+| F1 (all durable + power cut) | `1e4fedf03f81f941` | `7fb7b85c69257f2b` | OK, replay identical |
+| F2 (MySQL relaxed + power cut) | `c5e01886e97b32b8`, order 2, durable `c9b1cfeb274d4e3d` | `809c8292d95b638a`, durable `233e0afedb35fe4e` | VIOLATION `mysql order=8 expected=100008 got=MISSING (kafka has it: true)` (was order 2; MySQL's documented relaxed window, expected); replay and branch identical |
+| F3 seed A / seed B | `2c522171088a9da5` / `2a01253d0d5a4eb8` | `3a074084d6fbeaa5` / `c008a3f9a3d961e3` | VIOLATION, MySQL cannot recover (both seeds, as in M69) |
+
+The durable-disk hashes printed by `produce_durable` (the flushed data partition after each workload
+boot) also changed and were identical within each run and across the two runs: flush on
+`888d632b69733e2b` → `d471b222baf70917`, flush off `7477a4d55bdf6d0b` → `dc77182c93caa2cf`, lying-disk
+seed A `ca4cb4235e9d8fd9` → `5bf79d4d529bb8d9`, seed B `577b077177234f87` → `6186c52bb8d402e9`.
+
+**One fault scenario on 2 vCPUs.** M69's only 2-vCPU fault check (`HVX_STACK_FAULT=hydo_kill=kafka@10`,
+`mode=fault`, `hvx/explore/TURNS.md`, `15be998ebba5667e`) ran with vCPU 1 parked on the explorer image
+`explore-binlog-ret`, so it is not comparable. It was run here with Linux using both vCPUs:
+
+| scenario | old `stack-binlog-ret`, 2 vCPUs (once) | new `stack-nq`, 2 vCPUs (twice) | verdict (both images) |
+|---|---|---|---|
+| `hydo_kill=kafka@10` | `29501fbc69f0b5f6` | `33611b4de52bd93d` (both runs) | OK acked=30/30 exactly-once (told-failed 0, unknown-but-applied 0, 30 cached in Redis); two runs + branch identical |
+
+The other seven scenarios of 7.2 were not run on 2 vCPUs (M69 did not run them either).
+
+**Verdict changes.** None in kind. F2 names order 8 instead of order 2, the same kind of shift as the
+one-vCPU F2 (order 9 → 8 in 7.2): the longer `/sbin/init` changes guest timing, and with it which
+not-yet-flushed MySQL commit the power cut catches. With the new image, F2 names order 8 on both one and
+two vCPUs. Nothing in these checks lifts a network fault, so the netem drain itself never runs here.
+
+**Not re-measured.** M69's explorer cell on 2 vCPUs (`explore.py --vcpus 2 --turns --concurrency
+--strategy swarm`, seeds 1–40) ran on the explorer image `explore-binlog-ret`, which section 7 did
+not rebuild, so its values still stand. M69 did not run the stack on 3 or 4 vCPUs.
+
+Raw results: `/var/tmp/smpb-nq/<tag>.log` (tags `old-all`, `new-all-1`, `new-all-2`, `old-fault-kafka10`,
+`new-fault-kafka10-1`, `new-fault-kafka10-2`), `<tag>.console` (consoles), `<tag>.done` (exit code, seconds);
+runner `~/hydo-smpb/smpb-run.sh`.
