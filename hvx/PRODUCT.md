@@ -39,7 +39,7 @@ The explorer (`hvx/explore/explore.py`) generates schedules with several strateg
 | 6b | **Docker Compose import** (a starting `hydo.yaml` from `docker-compose.yaml`). | **Approved; in progress** (branch `compose-import`). |
 | 6c | **CI mode** (below). | Document only; to be discussed later. |
 | 7 | **Scale and where it runs** (below). | Document only; not now. |
-| 8 | **Generated gRPC drivers:** no hand-written client per RPC for a gRPC system. | **Approved; done** (branch `grpc-drivers`, `hvx/grpcgen/`; HISTORY Milestone 80). Feeds the composer (its commands are generated) once that is on main. |
+| 8 | **Generated gRPC drivers:** no hand-written client per RPC for a gRPC system. | **Approved; done** (branch `grpc-drivers`, `hvx/grpcgen/`; HISTORY Milestone NN). The generated drivers are test-composer commands (one `parallel_driver` per RPC); records are `HYDO-HIST` lines. |
 
 ## How a team uses hydo (agreed direction, 2026-10-24)
 

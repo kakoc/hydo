@@ -130,7 +130,10 @@ Do not write a client per RPC. Generate the drivers (`MANIFEST.md`, "gRPC servic
    created entity); `retry` with `attempts` for RPCs real clients retry, and `outcome_id` for
    the field that identifies an operation in `$HYDO_ACKED`.
 3. Run `hvx/onboard/hydo-grpc-gen <proto dir> --hints hints.yaml --out <dir next to
-   hydo.yaml>` and merge `<dir>/hydo.grpc.yaml` into the manifest (files, `env:`, `workload:`).
+   hydo.yaml>` and merge `<dir>/hydo.grpc.yaml` into the manifest: files, `env:`, a `test:`
+   section with one `parallel_driver` per RPC (the test composer) and `workload.retry`; or copy
+   `<dir>/workload/` into `hydo/workload/`. Use the commented numbered-steps `workload:` only
+   when the invariants need one operation per step.
    Check the plan with `hydo-grpc gen <rpc> 5` (requests look valid?) and `hydo-grpc list`.
 4. Invariants stay hand-written; use `hydo-grpc call <rpc> '<json>'` (exit 0 / 1 / 2) for
    read-backs, and `$HYDO_ACKED` / `$HYDO_OUTCOMES` for what the client was told. Example:

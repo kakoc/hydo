@@ -921,27 +921,30 @@ request may have taken effect: a deadline passed while the server worked on, a c
 reset, a crash half-way). A non-status error is unknown. `classify:` overrides a code per RPC
 for an API that documents a stronger promise.
 
-**Records.** Every attempt is two lines in `/tmp/hydo/grpc/calls` (`$HYDO_GRPC_CALLS`), with the
-bodies, and on the guest console without the bodies (`record.console: brief`, the default; `full`
-or `off`), so a few hundred calls fit in the 64 KiB console:
+**Records.** Every attempt is two lines in the history recorder's format (`HYDO-HIST`,
+`hvx/HISTORIES.md`), history `grpc` (`record.history:`), in `/tmp/hydo/grpc/calls`
+(`$HYDO_GRPC_CALLS`) with the bodies, and on the guest console without them (`record.console:
+brief`, the default; `full` or `off`), so a few hundred calls fit in the 64 KiB console:
 
 ```
-HYDO-CALL <process> <op> invoke <time> <rpc> <request JSON>
-HYDO-CALL <process> <op> ok|fail|info <time> <rpc> <CODE> <response JSON or status message>
-HYDO-CALL 0 11 invoke 13472685048 orders.v1.Orders/Create {"request_id":"r11","customer":"bob",...}
-HYDO-CALL 0 11 info 14474532744 orders.v1.Orders/Create DEADLINE_EXCEEDED context%20deadline%20exceeded
+HYDO-HIST grpc <process> invoke <time> <rpc> <op> <request JSON>
+HYDO-HIST grpc <process> ok|fail|info <time> <rpc> <op> <CODE> <response JSON or status message>
+HYDO-HIST grpc 0 invoke 13472685048 orders.v1.Orders/Create 11 {"request_id":"r11","customer":"bob",...}
+HYDO-HIST grpc 0 info 14474532744 orders.v1.Orders/Create 11 DEADLINE_EXCEEDED context%20deadline%20exceeded
 ```
 
-`<process>` is the worker (steps mode) or the OS pid (drive mode), with one operation in flight;
-`<op>` the operation id, repeated by its retries; `<time>` guest nanoseconds since boot
+`<process>` is the worker (steps mode) or the OS pid (a composer command), with one operation in
+flight; the operation `<f>` is the RPC; `<op>` the operation id, the same for its retries (each
+retry is a new invocation with the same request); `<time>` guest nanoseconds since boot
 (CLOCK_BOOTTIME, deterministic under hydo); bodies are compact protobuf JSON (proto field names);
-every token is percent-encoded (`%20`; `%` alone is empty). The history recorder of branch
-`history-checkers` (`HYDO-HIST`, `hvx/HISTORIES.md` there) is not on main yet: `HYDO-CALL` uses its
-types (invoke / ok / fail / info), its encoding and its rule of one operation per process, so a
-converter to `HYDO-HIST` is a renaming per model. An RPC with `outcome_id:` also writes the value
-of that request field to `$HYDO_ACKED` (ok) and `<id> ack|failed|unknown` to `$HYDO_OUTCOMES`, the
-files main's invariants read. The first ok / definite failure / unknown outcome of each RPC in a
-run is also a `HYDO-ASSERT` record of type `reachable` (`grpc.<rpc>.ok`, `.failed`, `.unknown`).
+every token is percent-encoded (`%20`, `%40` for `@`; `%` alone is empty). `hvx/history`'s parser
+reads them; no ready-made checker has a model for arbitrary RPCs, so a `checks:` entry that names
+history `grpc` needs RPCs that are reads and writes of a register (a future converter), and
+otherwise the records are for reading a failing run. An RPC with `outcome_id:` also writes the
+value of that request field to `$HYDO_ACKED` (ok) and `<id> ack|failed|unknown` to
+`$HYDO_OUTCOMES`, the files invariants read. The first ok / definite failure / unknown outcome of
+each RPC in a run is also a `HYDO-ASSERT` record of type `reachable` (`grpc.<rpc>.ok`, `.failed`,
+`.unknown`).
 
 **Determinism.** A request is a pure function of the seed and of where it runs -- under the
 test composer the entry's `HYDO_SEED` (so the schedule token `W=`, which the explorer draws and
@@ -962,7 +965,7 @@ seed: 1
 services: [orders.v1.Orders]                 # only these services (default: every one)
 steps: {calls: 2, concurrency: 1}            # per step: operations per worker, workers in parallel
 drive: {calls: 4}
-record: {console: brief}                     # off | brief | full
+record: {console: brief, history: grpc}      # console: off | brief | full
 defaults:                                    # where a field has no hint
   string_len: [1, 10]   bytes_len: [0, 16]   repeated_len: [0, 3]   map_len: [0, 2]
   depth: 4              message_prob: 0.85   optional_prob: 0.7     oneof_none: 0
@@ -1023,7 +1026,7 @@ with one planted bug, driven only by generated drivers under the test composer: 
 (`params: mode: buggy|fixed`), `build.sh`. The stack's front door has a `.proto` too
 (`hvx/stack/proto/hydo/order.proto`, `hvx/stack/grpc-hints.yaml`), and
 `examples/stack/hydo-grpcgen.yaml` is the stack manifest with the generated driver in place of
-`hydostack place/retry` (numbered steps). Results: `hvx/HISTORY.md`, Milestone 80.
+`hydostack place/retry` (numbered steps). Results: `hvx/HISTORY.md`, Milestone NN.
 
 Limits: a server that needs TLS, auth metadata or custom headers is not supported (plain-text
 HTTP/2 only); `from` carries scalar and enum values, not whole messages; values a request needs
