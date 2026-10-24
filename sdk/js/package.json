@@ -1,0 +1,36 @@
+{
+  "name": "hydo-assert",
+  "version": "0.1.0",
+  "private": true,
+  "description": "hydo's assertion SDK for Node.js: always/sometimes/reachable/unreachable/eventually properties and BUGGIFY fault points, written to the guest console in the Go SDK's exact wire format.",
+  "license": "UNLICENSED",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./index.d.mts",
+        "default": "./index.mjs"
+      },
+      "require": {
+        "types": "./index.d.ts",
+        "default": "./index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "index.mjs",
+    "index.d.ts",
+    "index.d.mts",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "scripts": {
+    "test": "node --test test/unit.test.js",
+    "conformance": "bash test/conformance.sh"
+  }
+}

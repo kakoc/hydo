@@ -162,6 +162,15 @@ faults: [kill, pause, network, oneway, cut, clock, disk]   # which kinds make se
                                # network/oneway also pull iproute2 into the image
 ```
 
+`buggify: true` (top level, optional) says the project's programs carry BUGGIFY fault points
+from an assertion SDK (Go `hydoassert.Buggify`, Rust `hydo_assert::hydo_buggify!`, JavaScript `buggify`; see
+`hvx/ASSERTIONS.md`). The init then turns the schedule token `B=<seed-hex>[,<enable-pm>[,<fire-pm>]]`
+(drawn by `explore.py --buggify`, which keeps `B=` for such a manifest and drops it for others)
+into `/tmp/hydo-buggify`, the file the SDKs read at a
+program's first fault-point evaluation; without `B=` the file is absent and every point stays
+off. The token `B` is then reserved (no knob may use it). Opt-in: `hydo-init-buggify.sh` is
+spliced into the init only for a manifest that sets it, so other images build as before.
+
 ### Services from a Docker/OCI image
 
 A service with `image:` takes its files from an image instead of `root.nix`/`root.files`.
