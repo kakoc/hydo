@@ -95,6 +95,7 @@ Each flagship boots an unmodified service, runs a workload and an oracle, and pa
 
 - A project is described by one `hydo.yaml` (`hvx/onboard/MANIFEST.md`). `hvx/onboard/hydo-build` compiles it into a guest image with one generic init (`hydo-init.sh`) that starts the services, applies fault tokens by service name and runs the invariants (M47). The `hydo-onboard` skill writes a manifest for a new project.
 - Features: services with readiness checks and crash recovery; faults that reach a service's whole process tree (M52); `params:` (M52); `eventually` liveness invariants (M59); Docker/OCI images by digest with `image:` (M59); `guest.ram_mib`, 256–3072 MiB on Linux and 256–4096 MiB on the Mac (M59); per-service `addr:` with link faults between services (M60, x86_64 only); `guest.cpu: v3` (M68, x86_64 only); and `hydo-build --arch arm64` for the Mac (M51).
+- History checks (M86): a manifest's `checks:` (`type: linearizable` with `model: register|cas`, or `type: list-append` with a `consistency:` level) make the workload record operations with `hydo_hist` (Go: `hvx/stack/hydohist`) and the host check them after the run (`hvx/history/hydohist.py`, called by explore.py, `hydo run` and `hvx/history/hydo-check`); the verdict names a minimal witness. Examples `examples/redis/hydo-hist.yaml` and `examples/etcd/hydo-hist.yaml` (images `explore-ob-redis-hc`, `explore-ob-etcd-hc-3.5.5/3.5.6`, results in `hvx/history/RESULTS.md`).
 - Current images of the examples with network or link faults (the M71 netem drain, pinned tools; M77): `explore-ob-stack-{fix,old}-nq`, `explore-ob-miniflux-nq`, `explore-ob-etcd-{3.5.5,3.5.6,3.6.8,3.6.9,3.6.15}-nq`; their fingerprints are in `hvx/REBASELINE.md` §7 and the examples' `RESULTS.md`. On etcd 3.5.5-nq the 14685 bug is still found (17 of 100 explorer schedules); M60's second reproducer no longer fires, but `disk=none dseed=1 | run K=etcd1@10+1 P=etcd3@26+1` shows the second symptom (a client's revision going back, `0470512bb297c87f`) and passes on 3.5.6-nq (`63e112769072c0c1`) (M78).
 
 ### The Linux release
@@ -142,6 +143,7 @@ Items marked **[user decision]** need the user before anyone acts on them.
 14. Older limits that still hold: the PMU clock is a tick source on top of the exit-count clock, not an instruction-exact clock, so instruction-exact bisection of a Linux boot is future work (M33); host performance counters are off while a PMU-clock guest runs (M34); RAM above about 3.9 GiB needs a PCI-hole split (M28); a read-write ext4 root is not done (M29); and in the module-built default guest page tables, the page that maps 512 MiB–1 GiB shares a page with the built-in interrupt handler, which only hand-written test guests use, left as is because fixing it moves every hand-written fingerprint (M36).
 15. Images listed but not rebuilt with the pinned tools: `explore-cc0/1/cc` (M50; rebuild from `029e4b3`/`b9233d5`) and `explore-dx`, an undocumented diagnostic (M61). The build machine copy of `richcov-disk.img` was built with a substitute gcc and must be rebuilt before use (M44).
 16. Linux release (M75): runs need `sudo` (no udev rule for `/dev/hvx`); the Mac release copies only `hydo-init.sh` of the init extensions, so an arm64 build of a manifest with `eventually` invariants or `guest.clock_after_cut` probably fails; plain `hydo-build` on the Nix build box gives different image bytes when run in a time zone other than UTC+4 (its `FAKE_TS` is local time).
+17. History checkers (M86): M78's etcd schedule does not trigger 14685 on the `-hc` images (the recording shifts timing; 10 other schedules do); the list-append checker is proven on real Redis only with single-key operations; G-nonadjacent snapshot-isolation cycles are not detected; the branch `history-checkers` conflicts with main in `hydo-build` (`KNOWN_TOP`, `install_init`) and `ASSERTIONS.md` (keep both sides).
 
 ## Milestone index (details in `hvx/HISTORY.md`)
 
@@ -226,6 +228,7 @@ Milestones 1–32 ran inside the nested L1 VM on the build machine, before 2026-
 - M77 — onboarding and default stack images rebuilt with the netem drain (`-nq`); stack baselines and the eight fault scenarios re-measured (2026-10-23)
 - M78 — etcd 14685's second symptom (a client's revision going back) reproduced again on the 3.5.5-nq image; passes on 3.5.6-nq (2026-10-24)
 - M79 — the 2-vCPU stack baselines re-measured on `stack-nq` (2026-10-24)
+- M86 — ready-made history checkers run on the host (`checks:`; `hvx/HISTORIES.md`): linearizability of registers/CAS per key with store versions, Elle-style list-append; Redis `everysec` + cut flagged as lost writes; etcd 3.5.5 14685 flagged in 10 of 36 schedules, all pass on 3.5.6 (2026-10-24)
 
 ## Where to look
 
