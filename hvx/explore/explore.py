@@ -1275,14 +1275,24 @@ class Pool:
         self.jobs, self.results = queue.Queue(), queue.Queue()
         self.outdir = outdir
         os.makedirs(os.path.join(outdir, "consoles"), exist_ok=True)
-        self.cache, self.cache_hits = {}, 0
-        if CACHE_FILE and os.path.exists(CACHE_FILE):
-            for line in open(CACHE_FILE):
-                rec = json.loads(line)
-                self.cache[(rec["image"], rec["engine"], rec["text"])] = rec
+        self.cache, self.cache_hits, self.cache_pos = {}, 0, 0
+        self.cache_load()
         self.workers = [Worker(i, self.jobs, self.results, outdir) for i in range(n)]
         for w in self.workers:
             w.start()
+
+    def cache_load(self):
+        """Read the cache lines appended since the last read (another sweep may share the file)."""
+        if not CACHE_FILE or not os.path.exists(CACHE_FILE):
+            return
+        with open(CACHE_FILE) as f:
+            f.seek(self.cache_pos)
+            for line in f:
+                if not line.endswith("\n"):
+                    break                   # a line still being written
+                self.cache_pos += len(line.encode())
+                rec = json.loads(line)
+                self.cache[(rec["image"], rec["engine"], rec["text"])] = rec
 
     def cache_key(self, text):
         return (IMAGE, " ".join(engine_args()), text)
@@ -1291,6 +1301,7 @@ class Pool:
         """items: list of (tag, schedule text) -> dict tag -> (text, result)"""
         import shutil
         out, todo = {}, []
+        self.cache_load()
         for tag, text in items:
             rec = self.cache.get(self.cache_key(text)) if CACHE_FILE and tag.startswith(CACHED_TAGS) else None
             if rec and all(os.path.exists(c) for c in rec["consoles"].values()):
@@ -1324,7 +1335,6 @@ class Pool:
         rec = {"image": image, "engine": engine, "text": text, "result": res, "consoles": cons}
         with open(CACHE_FILE, "a") as f:
             f.write(json.dumps(rec) + "\n")
-        self.cache[self.cache_key(text)] = rec
 
     def close(self):
         for _ in self.workers:
