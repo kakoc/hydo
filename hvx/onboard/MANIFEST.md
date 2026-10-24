@@ -564,6 +564,11 @@ replays exactly what the image was built with, from fresh boots, and exits 1 if 
 expected. `hydo save <explore dir>` writes an exploration's minimal schedules there (with
 `expect: violation`; change it to `ok` once fixed).
 
+A `W=` names commands by their index in the plan's sorted command list, so adding or renaming a
+command changes what an old `W=` composes. `hydo save` therefore also writes `# commands: <ids>`
+(the list when the schedule was found; `commands:` in `test.regressions`), and the replay warns
+when the plan's list is different: explore again and save the new minimal schedule.
+
 ## YAML subset
 
 The build machine has no YAML library, so `hydo-build` parses a subset: block mappings and

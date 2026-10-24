@@ -40,7 +40,7 @@ BOUNDS = {"parallel": (1, 16), "per_round": (1, 8), "round_ms": (10, 60000), "co
 KNOWN_TEST = set(DEFAULTS) | {"commands", "checks", "regressions", "description"}
 KNOWN_CMD = {"name", "kind", "run", "timeout", "description"}
 KNOWN_CHECK = {"name", "kind", "run", "msg", "every", "within", "after", "poll", "description"}
-KNOWN_REG = {"name", "schedule", "expect", "description"}
+KNOWN_REG = {"name", "schedule", "expect", "commands", "description"}
 DEFAULT_STEPS = 20              # workload.steps when the plan composes the workload and gives none
 COMPOSE_SH = "/etc/hydo/compose.sh"
 SH = "/bin/busybox sh " + COMPOSE_SH
@@ -123,7 +123,7 @@ def scan_folder(mdir, E):
 def read_regression(path, E):
     """A saved schedule: comment lines (`# expect: ok|violation|fp=<hex>`, free text) and one
     schedule line `<host tokens> | run <guest tokens>`."""
-    sched, expect = None, "ok"
+    sched, expect, cmds = None, "ok", None
     for line in open(path):
         s = line.strip()
         if not s:
@@ -132,12 +132,17 @@ def read_regression(path, E):
             m = re.match(r"#\s*expect:\s*(\S+)", s)
             if m:
                 expect = m.group(1)
+            m = re.match(r"#\s*commands:\s*(.*)$", s)
+            if m:
+                cmds = m.group(1).split()
             continue
         if sched is not None:
             raise E("%s: more than one schedule line" % path)
         sched = s
     name = os.path.basename(path)[:-len(".schedule")]
     r = {"name": name, "schedule": sched, "expect": expect}
+    if cmds is not None:        # the command ids W= referred to when the schedule was saved
+        r["commands"] = cmds
     _check_regression(r, path, E)
     return r
 
@@ -276,6 +281,8 @@ def expand(m, E, folder=None):
             raise E("%s: a mapping with name, schedule, expect" % where)
         _check_regression(r, where, E)
         regs.append({"name": str(r.get("name") or "r%d" % i), "schedule": r["schedule"], "expect": str(r.get("expect", "ok"))})
+        if r.get("commands") is not None:
+            regs[-1]["commands"] = [str(c) for c in r["commands"]]
     if not cmds and not checks:
         if regs:
             return {"params": par, "commands": [], "checks": [], "regressions": regs, "composed": False}
@@ -383,12 +390,26 @@ def stage(meta, R, here, folder=None):
             p = os.path.join(d, r["name"] + ".schedule")
             if not os.path.exists(p):           # a plan's own regressions (SDK): written out
                 with open(p, "w") as f:
+                    if r.get("commands") is not None:
+                        f.write("# commands: %s\n" % " ".join(r["commands"]))
                     f.write("# expect: %s\n%s\n" % (r["expect"], r["schedule"]))
     shutil.copy(os.path.join(here, "hydo-compose.sh"), os.path.join(R, COMPOSE_SH.lstrip("/")))
     os.chmod(os.path.join(R, COMPOSE_SH.lstrip("/")), 0o755)
 
 
 # ------------------------------------------------------------------ version pin
+def regression_warning(r, meta):
+    """W= names commands by their index in the plan's command list; a regression saved with
+    another list composes something else. The warning to print, or None."""
+    if "W=" not in r["schedule"].split("|", 1)[-1] or r.get("commands") is None:
+        return None
+    now = [c["id"] for c in meta.get("commands") or []]
+    if r["commands"] == now:
+        return None
+    return ("the plan's commands changed since %s was saved (then: %s; now: %s), so its W= composes different "
+            "commands; re-explore and save it again" % (r["name"], " ".join(r["commands"]) or "-", " ".join(now) or "-"))
+
+
 def engine_version(here):
     for p in (os.path.join(here, "..", "VERSION"), os.path.join(here, "..", "..", "VERSION")):
         if os.path.isfile(p):

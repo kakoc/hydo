@@ -390,16 +390,15 @@ def plan_regressions(image):
     sys.path.insert(0, EXPLORE)
     os.environ["PATH"] = tool_env()["PATH"]
     import manifest_space
-    meta = manifest_space.embedded_compose(image)
-    return (meta or {}).get("regressions") or []
+    return manifest_space.embedded_compose(image) or {}
 
 
 def regression_ok(expect, res):
-    v = res["verdict"]
+    v = res["verdict"]           # explore.py's verdict_kind: an OK verdict, else a VIOLATION, else an error
     if expect == "ok":
-        return v.startswith("OK")
+        return "HYDO-ORACLE: OK" in v
     if expect == "violation":
-        return v.startswith("VIOLATION")
+        return "HYDO-ORACLE: OK" not in v and "VIOLATION" in v
     return expect == "fp=" + res["fp"]
 
 
@@ -408,7 +407,10 @@ def cmd_regressions(args):
     fixed bug stays fixed: the run passes), `violation` (a known open bug still fails), or
     `fp=<hex>` (bit for bit the recorded run)."""
     image = find_image(args)
-    regs = plan_regressions(image)
+    meta = plan_regressions(image)
+    regs = meta.get("regressions") or []
+    sys.path.insert(0, ONBOARD)
+    import hydo_composer
     if not regs:
         print("hydo: %s carries no regressions (hydo/regressions/*.schedule or test.regressions in the plan)" % image)
         return 0
@@ -416,6 +418,9 @@ def cmd_regressions(args):
     eargs = engine_args_for(image)
     bad = 0
     for k, r in enumerate(regs):
+        w = hydo_composer.regression_warning(r, meta)
+        if w:
+            print("hydo: warning: " + w)
         res = run_one(image, r["schedule"], os.path.join(base, "%03d-%s" % (k, r["name"])), eargs, quiet=True)
         ok = regression_ok(r["expect"], res)
         bad += not ok
@@ -445,6 +450,8 @@ def cmd_save(argv):
             f.write("# found by `hydo explore` (seed %s): %s\n# verdict: %s\n" % (x["from_seed"], x["class"], x["min_verdict"][:200]))
             if x.get("composition"):
                 f.write("# composition: %s\n" % x["composition"][:400])
+            if x.get("commands") is not None:      # what W= refers to (hydo_composer.regression_warning)
+                f.write("# commands: %s\n" % " ".join(x["commands"]))
             f.write("# expect: violation      (change to ok when the bug is fixed)\n%s\n" % x["minimal"])
         n += 1
         print("hydo: wrote %s" % p)

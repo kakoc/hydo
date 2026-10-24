@@ -1652,6 +1652,7 @@ def main():
                            "min_verdict": conf["min-a"][1]["verdict"]}
             if "W" in m and SPACE is not None and SPACE.compose:     # the minimal composition, round by round
                 shrunk[key]["composition"] = _hc().describe(m["W"], SPACE.compose)
+                shrunk[key]["commands"] = [c["id"] for c in SPACE.compose["commands"]]
     slog.close()
     boot = [w.boot_secs for w in pool.workers if w.boot_secs]
     pool.close()
