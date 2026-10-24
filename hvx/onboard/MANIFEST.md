@@ -11,7 +11,8 @@ examples: `examples/redis/hydo.yaml` (one service, about 60 lines),
 `examples/stack/hydo.yaml` (MySQL + Kafka + Redis + a gRPC front door),
 `examples/redis-oci/hydo.yaml` (Redis from the official Docker image, no file list),
 `examples/etcd/hydo.yaml` (a replicated system: a three-member etcd cluster, with link faults
-between members), and
+between members), `examples/stack/hydo-read.yaml` (the stack's invariants written with the
+ready-made store readers, see "Reading the stores"), and
 `hvx/knownbugs/sqlite/hydo.yaml` (no service: a multi-threaded program using SQLite; one
 manifest, two versions via `params:`).
 
@@ -397,6 +398,89 @@ With two or more services that have `addr:`, `explore.py` (manifest_space.py) ad
 from. The extension lives in `hydo-init-links.sh`; hydo-build copies it into the image and adds one
 line to `/sbin/init` that sources it, only for manifests with an `addr:`, so every other
 manifest builds a byte-identical image. Not supported yet: `--arch arm64`.
+
+## Reading the stores (`hydo-read`, `hydo-check`)
+
+Cross-service invariants need "what is in this table / on this topic / under this key". Instead
+of writing that reading code in shell for every manifest, a check can call two ready-made
+commands (source: `hvx/readers`; one static Go binary, `hydo-check` is a symlink to it):
+
+- `hydo-read <store> <args>` prints what a store holds as JSON Lines, one record per line,
+  keys sorted, lines sorted bytewise (Kafka, Redis lists and sorted sets keep the store's
+  order). Exit 0 = read, 2 = could not read (the store is down, the table or topic does not
+  exist, a timeout; also a wrong command line). Every read has a deadline (`--timeout <s>`,
+  default 30).
+- `hydo-check <check> <sources>` compares readings and prints ONE explanation line (the last
+  line of its output, which the init puts into the invariant's `HYDO-ASSERT` details and the
+  `HYDO-ORACLE` verdict). Exit 0 = holds, 1 = violated, 2 = could not be evaluated: exactly the
+  invariant contract above, so a check is one command.
+
+| store | command | records |
+|---|---|---|
+| MySQL | `mysql <dsn> "<query>"` | one per row, `{"<column>": "<text>" \| null}` |
+| PostgreSQL | `postgres <dsn> "<query>"` | the same (booleans `"true"`/`"false"`, times RFC 3339 UTC) |
+| Kafka | `kafka <bootstrap> <topic>` | every record of every partition from the log start to the high watermark: `partition, offset, key, value, timestamp_ms`; never creates the topic; a missing topic is "could not read" |
+| Redis | `redis <addr> get <key>...` / `scan <pattern>` / `hgetall\|smembers\|lrange\|zrange <key>` / `cmd <word>...` | `{key, value}` (null = missing) / `{key, type, value}` of every matching key of any type / one per field or member |
+| etcd | `etcd <endpoint> get <key> [--prefix] [--serializable]` / `status` | `{key, value, create_revision, mod_revision, version}` / `{endpoint, revision, raft_index, raft_term}` (the v3 JSON gateway on the client port) |
+| hydo | `hydo acked\|failed\|told-failed\|unknown` | `{id}` from `$HYDO_ACKED`, `$HYDO_FAILED`, failed minus acked, last outcome `unknown` |
+| files | `file <path>` / `jsonl <path>` / `range <from> <to>` | `{line}` / saved `hydo-read` output / `{n}` |
+
+DSNs: MySQL `user:pw@tcp(host:port)/db` (the Go driver's form) or `mysql://user@host:port/db`;
+PostgreSQL `postgres://user@host:port/db?sslmode=disable`; Redis `host:port` or
+`redis://:pw@host:port/db`; `--base64` prints Kafka and etcd keys and values in base64.
+
+Checks (A is `--left` or `--in`, B is `--right`; items are compared as strings):
+
+| check | holds when | typical use |
+|---|---|---|
+| `subset` | every item of A is in B | every acknowledged order is in the database |
+| `equal` | A and B hold the same items | two replicas agree |
+| `exactly-once` | every item of A occurs exactly once in B (B as a multiset) | every acknowledged order is on the topic once |
+| `disjoint` | no item of A is in B | nothing the client was told failed was applied |
+| `no-duplicates` | no item occurs twice in `--in A` | a topic without duplicates |
+| `count` | the number of records of `--in A` is `--eq N` / `--min N` / `--max N` | no rows with a wrong amount |
+| `never-wrong-value` | every key `--cache C` holds has the value `--truth T` has for it; a key missing from C is fine, a key T does not have is wrong (`--allow-orphans`: fine) | a cache versus the source of truth |
+
+A **source** is one argument: an optional `name=` (used in the explanation), the `hydo-read`
+words, and a projection: `--field F` (the item; default the only field, else `key` for
+Kafka/Redis/etcd, `line`, `id`, `n`, else a field named `key`), `--key F --value F` (for
+`never-wrong-value`; default `key`/`value`), `--strip-prefix P` and `--add-prefix P` (to make
+`order:5` and `5`, or `c5` and `5`, compare equal). Quote the source for the shell and the
+query inside it with the other kind of quotes:
+
+```yaml
+invariants:
+  - id: order.in_kafka_once
+    msg: every ACKed order is in the Kafka topic exactly once
+    cmd: >-
+      hydo-check exactly-once --unreadable violation --left 'acked=hydo acked'
+      --right 'kafka=kafka 127.0.0.1:9092 orders'
+  - id: redis.cache_never_wrong
+    type: always_or_unreachable
+    cmd: >-
+      hydo-check never-wrong-value
+      --cache 'redis=redis 127.0.0.1:6379 scan "order:*" --strip-prefix order:'
+      --truth 'mysql=mysql hydo:@tcp(127.0.0.1:3306)/ "SELECT id, amount FROM stack.orders" --key id --value amount'
+```
+
+The explanation names the first offending item in a fixed order (numbers numerically, then
+strings bytewise) and the count, e.g. `disjoint violated: 1 item of told_failed is also in kafka: 11`
+or `exactly-once violated: acked c4 is in categories 0 times (of 20 in acked); missing 1: c4`.
+Options: `--unreadable violation` turns "could not read a source" into a violation (exit 1) --
+for a final check after recovery, where an unreadable store is itself lost data; `--oracle` ends
+with a `HYDO-ORACLE: OK|VIOLATION|ERROR <explanation>` line (for a program or script that is not
+run by the init); `--id <id> [--type <t>] [--msg <m>]` also prints a `HYDO-ASSERT-DECL` and a
+`HYDO-ASSERT` record (`details`: `check`, `first`, `explanation`), on stdout or `--console
+/dev/ttyS0`; `--show N` lists up to N offending items (default 5).
+
+**Staging.** `hydo-build` copies the binary to `/bin/hydo-read` and adds the `/bin/hydo-check`
+symlink only when some command of the manifest calls `hydo-read` or `hydo-check` (descriptions
+and `msg:` do not count); every other manifest builds a byte-identical image. Build the binary
+first with `hvx/readers/build.sh` (byte-reproducible; it lands in `build/hydo-read`, or point
+`HYDO_READ_BIN` at it). Not staged for `--arch arm64` yet. From a program under test (an SDK, not
+an invariant), run the same binary with `--id`/`--console` so the record reaches the console.
+Examples: `examples/stack/hydo-read.yaml`, `examples/miniflux/hydo-read.yaml`; tests against real
+stores: `hvx/readers/native-test.sh`.
 
 ## YAML subset
 
