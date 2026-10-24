@@ -203,6 +203,9 @@ func checkMain(args []string) int {
 		}
 		return say(0, "%s: no effect after %s (%d refs had it)", target, opt["--after"], len(first))
 	}
+	if rc, ok := checkExt(kind, target, recs); ok { // check calls (grpc.go)
+		return rc
+	}
 	return say(2, "check: unknown kind %s", kind)
 }
 
