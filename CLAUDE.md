@@ -78,7 +78,7 @@ Each flagship boots an unmodified service, runs a workload and an oracle, and pa
 - One guest runs unmodified MySQL 8.4.10, Kafka 3.5.0 and Redis 7.2.4 plus our gRPC order service (`hvx/stack/main.go`; older notes call it the "front door"). Each `Place(id)` writes MySQL, publishes to Kafka with an idempotent franz-go producer, writes Redis as a best-effort cache, and only then acknowledges. Only one `Place` per order id runs at a time, and the "send started" state lives in MySQL (`published` 0 / 2 / 1) (M35, M37, M39, M50). Built by `build-stack.sh`; verified by `hvx/hvx_stack_verify.c` (`mode=all`, `mode=fault`).
 - MySQL runs with the binary log on and `sync_binlog=1`, and Kafka with `log.retention.ms=-1` (M63). These two settings fix the bugs found in M58 and M63.
 - Current baselines (M77, image `stack-nq-disk.img` `161996bb…` = the M63 recipe plus the M71 netem drain, one vCPU): SANITY `2235f9d76a592a07`, F1 `815cc64346e728fc`, F2 `32024d0b245aff3c` (the expected VIOLATION from MySQL's relaxed window, order 8; durable `7323951e90d21b4f`), F3 `96e2e7ddb963ee66` / `e8c16382540eba2e`. The eight per-fault scenarios (`mode=fault`; kills and netem, all OK 30/30) are in `hvx/REBASELINE.md` §7.2.
-- On 2 vCPUs (M69, measured on the previous image `stack-binlog-ret`, not re-measured on `stack-nq`): SANITY `05915e49a5506c58`, F1 `1e4fedf03f81f941`, F2 `c5e01886e97b32b8` (durable `c9b1cfeb274d4e3d`), F3 `2c522171088a9da5` / `2a01253d0d5a4eb8`.
+- On 2 vCPUs (M78, same image `stack-nq`, `HVX_VCPUS=2`; supersedes the M69 values of `stack-binlog-ret`, which that image still reproduces): SANITY `d1a5ee3ccea87dac`, F1 `7fb7b85c69257f2b`, F2 `809c8292d95b638a` (order 8; durable `233e0afedb35fe4e`), F3 `3a074084d6fbeaa5` / `c008a3f9a3d961e3`; Kafka kill at order 10 (`mode=fault`) `33611b4de52bd93d`, OK 30/30. Details in `hvx/REBASELINE.md` §7.6.
 
 ### The explorer
 
@@ -224,6 +224,7 @@ Milestones 1–32 ran inside the nested L1 VM on the build machine, before 2026-
 - M75 — the Linux release: one `hydo` command (doctor, module, build, run, repro, explore, report) and a self-contained tarball for x86_64 + VT-x, no Nix needed (2026-10-23)
 - M76 — the freeze sweep: every packet point of a run as one `F=` schedule (2026-10-24)
 - M77 — onboarding and default stack images rebuilt with the netem drain (`-nq`); stack baselines and the eight fault scenarios re-measured (2026-10-23)
+- M78 — the 2-vCPU stack baselines re-measured on `stack-nq` (2026-10-24)
 
 ## Where to look
 
