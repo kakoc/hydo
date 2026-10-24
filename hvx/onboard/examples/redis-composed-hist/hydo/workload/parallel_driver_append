@@ -1,0 +1,6 @@
+#!/bin/sh
+# RPUSH l<seed mod 3> <id>, recorded in history log (elements are unique: the entry number)
+. /hydo/workload/helper_lib.sh
+id=$HYDO_CMD_ID; l=l$((HYDO_SEED % 3))
+hydo_hist log $id invoke append $l $id
+case "$(R RPUSH $l $id)" in [0-9]*) hydo_hist log $id ok append $l $id;; *) hydo_hist log $id info append $l $id; exit 1;; esac

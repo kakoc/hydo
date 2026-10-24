@@ -221,6 +221,15 @@ order; a NaN, an infinity or a cycle drops the record, as `json.Marshal` fails o
 writes invalid UTF-8 as a raw U+FFFD; the SDK writes Go 1.26's `\ufffd` escape.
 `hvx/onboard/examples/node-kv` is a complete example (Mac backend).
 
+## Recorded histories (host-side checkers)
+
+Assertions are evaluated inside the program. For linearizability and transactional isolation the
+evidence is the whole history of operations, so it is checked on the host after the run instead:
+the workload prints `HYDO-HIST` records (one per invocation and completion), and the checkers in
+`hvx/history/hydohist.py` (linearizable register / CAS per key, Elle-style list-append) turn the
+history into ordinary `HYDO-ASSERT` records of type `always` plus the HYDO-ORACLE verdict. Format,
+models and recorders (shell, Go): `hvx/HISTORIES.md`; manifests use `checks:`.
+
 ## Host side
 
 - `hvx/hydo_assert_table.h`: header-only parser and aggregator (`ha_feed_console` once per run,
