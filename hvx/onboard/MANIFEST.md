@@ -614,7 +614,9 @@ Checks (A is `--left` or `--in`, B is `--right`; items are compared as strings):
 
 A **source** is one argument: an optional `name=` (used in the explanation), the `hydo-read`
 words, and a projection: `--field F` (the item; default the only field, else `key` for
-Kafka/Redis/etcd, `line`, `id`, `n`, else a field named `key`), `--key F --value F` (for
+Kafka/Redis/etcd, `line`, `id`, `n`, else a field named `key`), `--item 'T'` (the item is the
+template T with `{F}` replaced by field F: `--item 'k:{id}=v{id}'` against `--item '{key}={value}'`
+compares keys and values at once), `--key F --value F` (for
 `never-wrong-value`; default `key`/`value`), `--strip-prefix P` and `--add-prefix P` (to make
 `order:5` and `5`, or `c5` and `5`, compare equal). Quote the source for the shell and the
 query inside it with the other kind of quotes:
@@ -644,9 +646,17 @@ run by the init); `--id <id> [--type <t>] [--msg <m>]` also prints a `HYDO-ASSER
 `HYDO-ASSERT` record (`details`: `check`, `first`, `explanation`), on stdout or `--console
 /dev/ttyS0`; `--show N` lists up to N offending items (default 5).
 
+**In the test composer.** A check of a composed plan is the same command: a `test.checks` entry
+`run: [hydo-check, count, --eq, "5", --in, 'accounts=redis 127.0.0.1:6379 scan "acct:*"']` (argv,
+exec'd) or a string, or an executable `hydo/checks/<kind>_<name>` that ends with
+`exec hydo-check ...`; exit status and last line mean the same there.
+Example: `examples/redis-composed-read/hydo/`.
+
 **Staging.** `hydo-build` copies the binary to `/bin/hydo-read` and adds the `/bin/hydo-check`
 symlink only when some command of the manifest calls `hydo-read` or `hydo-check` (descriptions
-and `msg:` do not count); every other manifest builds a byte-identical image. Build the binary
+and `msg:` do not count; `test:` entries count, and so does any file in the plan's `hydo/`
+folder that contains the name, a script or a compiled program); every other manifest builds a
+byte-identical image. Build the binary
 first with `hvx/readers/build.sh` (byte-reproducible; it lands in `build/hydo-read`, or point
 `HYDO_READ_BIN` at it). Not staged for `--arch arm64` yet. From a program under test (an SDK, not
 an invariant), run the same binary with `--id`/`--console` so the record reaches the console.
