@@ -1,0 +1,15 @@
+services:
+  app:
+    image: "example/app:${APP_TAG:-1.2}"
+    env_file:
+      - common.env
+      - path: optional.env
+        required: false
+    environment:
+      DB_URL: "postgres://${DB_USER}:${DB_PASS:?set DB_PASS}@db/app"
+      OVERRIDE: from-environment
+      PRICE: "$$5"
+      HOSTNAME_ONLY:
+    command: ["sh", "-c", "echo $$HOME; exec app"]
+  db:
+    image: postgres:${PG_VERSION}

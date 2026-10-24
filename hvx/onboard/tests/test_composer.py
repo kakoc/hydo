@@ -4,7 +4,7 @@
     python3 hvx/onboard/tests/test_composer.py [--awk "/path/to/busybox awk"] [--n 3000]
 
 hydo_composer.plan()/kept() (host: explorer, shrinker, reports) and the awk program in
-hydo-compose.sh (guest) must produce the same entries for every W. Run it with the guest's
+hydo-composer.sh (guest) must produce the same entries for every W. Run it with the guest's
 busybox awk (`--awk "<busybox> awk"`) on a machine that has it; the default is the local awk.
 """
 import argparse, os, random, re, subprocess, sys, tempfile
@@ -19,7 +19,7 @@ class E(Exception):
 
 
 def awk_program():
-    t = open(os.path.join(os.path.dirname(HERE), "hydo-compose.sh")).read()
+    t = open(os.path.join(os.path.dirname(HERE), "hydo-composer.sh")).read()
     return re.search(r"PLAN_AWK='(.*?)'\n", t, re.S).group(1)
 
 

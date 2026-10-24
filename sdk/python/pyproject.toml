@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hydo-assert"
+version = "0.1.0"
+description = "Assertion SDK for programs tested under hydo, a deterministic hypervisor (always/sometimes properties, BUGGIFY fault points, bounded liveness)"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = []
+classifiers = [
+    "Private :: Do Not Upload",   # not published; PyPI refuses this classifier
+    "Programming Language :: Python :: 3",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Software Development :: Testing",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+hydo_assert = ["py.typed"]

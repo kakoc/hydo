@@ -1,5 +1,5 @@
 #!/bin/sh
-# Dry run of the guest composer (hydo-compose.sh) on a Linux host with busybox, no VM: the
+# Dry run of the guest composer (hydo-composer.sh) on a Linux host with busybox, no VM: the
 # daemon's rounds, gates, overlap, drain and console lines, driven the way hydo-init.sh drives
 # it (provision -> step ranges with a "fault point" between them -> final invariants).
 #   BB=/path/to/busybox sh hvx/onboard/tests/compose-dryrun.sh [W]
@@ -9,7 +9,7 @@ BB=${BB:-busybox}
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d)
 E=$T/etc; mkdir -p $E $T/tmp/hydo
-cp $HERE/hydo-compose.sh $E/compose.sh
+cp $HERE/hydo-composer.sh $E/compose.sh
 cat > $E/manifest.sh <<'EOF'
 HYDO_STEPS=6
 HYDO_COMPOSE=1

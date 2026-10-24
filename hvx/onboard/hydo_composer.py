@@ -20,7 +20,7 @@ directly (sdk/rust: hydo-test).
 This module is used by hydo-build (expand + stage, before validate), by manifest_space.py (the
 explorer reads the expanded plan back from /etc/hydo/compose.json in an image) and by
 explore.py (draw / render / shrink the composer token W=). plan() is mirrored exactly by the awk
-in hydo-compose.sh; test_composer.py checks the two agree.
+in hydo-composer.sh; test_composer.py checks the two agree.
 """
 import json
 import os
@@ -365,7 +365,7 @@ def shell_lines(meta):
 def stage(meta, R, here, folder=None):
     """Copy the plan into the root: the hydo/ folder (whole, helpers included) under /hydo/,
     the command and check lists the guest composer reads, the plan for the explorer, and
-    hydo-compose.sh."""
+    hydo-composer.sh."""
     if folder:
         for sub, src in sorted(folder["_dirs"].items()):
             dst = os.path.join(R, "hydo", sub)
@@ -393,7 +393,7 @@ def stage(meta, R, here, folder=None):
                     if r.get("commands") is not None:
                         f.write("# commands: %s\n" % " ".join(r["commands"]))
                     f.write("# expect: %s\n%s\n" % (r["expect"], r["schedule"]))
-    shutil.copy(os.path.join(here, "hydo-compose.sh"), os.path.join(R, COMPOSE_SH.lstrip("/")))
+    shutil.copy(os.path.join(here, "hydo-composer.sh"), os.path.join(R, COMPOSE_SH.lstrip("/")))
     os.chmod(os.path.join(R, COMPOSE_SH.lstrip("/")), 0o755)
 
 
@@ -444,7 +444,7 @@ def check_version(want, have, E, warn):
             raise E(msg + " (install that hydo, or set HYDO_VERSION_CHECK=warn)")
 
 
-# ------------------------------------------------------------------ the plan (mirrored in hydo-compose.sh)
+# ------------------------------------------------------------------ the plan (mirrored in hydo-composer.sh)
 M31 = 2147483647
 
 

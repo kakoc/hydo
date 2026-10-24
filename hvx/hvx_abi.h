@@ -1076,4 +1076,90 @@ struct hvx_sched {
 /* HVX_RUN / HVX_RUNC exit reason: turn `stop_turn` completed (HVX_VM_SMP_SCHED). */
 #define HVX_EXIT_TURN		0xfffffffbU
 
+/*
+ * Turn-end cost diagnostics (hvx/FASTTURN.md). Host-side counters only: never read into
+ * guest state, never in a snapshot or fingerprint. Cycles are host TSC cycles (`tsc_khz`
+ * per millisecond). HVX_GET_FTSTAT reads them, HVX_RESET_FTSTAT zeroes them.
+ */
+#define HVX_FTSTAT_SKID_BUCKETS	10	/* skid 0, 1, 2-3, 4-7, ..., 128-255, >= 256 */
+struct hvx_ftstat_vcpu {
+	__u64 calls;		/* hvx_run_vcpu calls (one VMXON..VMXOFF section each) */
+	__u64 total_cyc;	/* cycles inside those calls */
+	__u64 fpu_cyc;		/* kernel_fpu_begin + IRQs off + host MSR reads */
+	__u64 vmxon_cyc;	/* VMXON + VMCLEAR + VMPTRLD */
+	__u64 pmu_cyc;		/* PMU (and PT) take-over */
+	__u64 vmcs_cyc;		/* setup_vmcs + INVEPT */
+	__u64 load_cyc;		/* guest SYSCALL MSRs + FXRSTOR/XRSTOR */
+	__u64 save_cyc;		/* guest MSR/FPU save + host MSR restore + save_sregs */
+	__u64 pmuoff_cyc;	/* PMU (and PT) give-back */
+	__u64 vmxoff_cyc;	/* VMCLEAR + VMXOFF + IRQs on + kernel_fpu_end */
+	__u64 step_entries;	/* MTF landing entries */
+	__u64 step_cyc;		/* cycles from the exit before a landing entry to its exit */
+	__u64 free_entries;	/* other entries (free-running guest) */
+	__u64 free_cyc;
+	__u64 ovf;		/* PMU-overflow exits after a free-running entry */
+	__u64 skid_max, skid_sum;	/* branches retired past the programmed overflow */
+	__u64 skid_hist[HVX_FTSTAT_SKID_BUCKETS];
+	__u64 steps_turn;	/* landing steps whose target was a turn end (scheduler) */
+	__u64 steps_tick;	/* landing steps whose target was a tick */
+	__u64 rearms;		/* landing re-arms (counter re-programmed inside the margin) */
+	__u64 resident;		/* turns entered with the VMCS kept from the previous turn */
+	__u64 step_hw_cyc;	/* of step_cyc: from just before VMRESUME to just after the exit */
+	__u64 pad[5];
+};
+struct hvx_ftstat {
+	__u32 n_vcpus;
+	__u32 pad0;
+	__u64 tsc_khz;		/* host TSC frequency */
+	__u64 sched_cyc;	/* cycles inside hvx_sched_run (all turns + switching) */
+	__u64 sched_turns;	/* turn ends seen by hvx_sched_run */
+	__u64 pad[4];
+	struct hvx_ftstat_vcpu v[8];
+};
+#define HVX_GET_FTSTAT   _IOR(HVX_IOC_MAGIC, 60, struct hvx_ftstat)
+#define HVX_RESET_FTSTAT _IO(HVX_IOC_MAGIC, 61)
+
+/*
+ * Turn control for the in-kernel scheduler (HVX_VM_SMP_SCHED; EINVAL on other VMs),
+ * kept out of struct hvx_sched so that struct and its ioctls keep their layout
+ * (hvx/FASTTURN.md). Everything here is POLICY, like quantum and seed: nothing is state,
+ * so a snapshot needs nothing from it; set it again after restoring into a fresh VM.
+ *
+ *  margin   landing margin of TURN ENDS, in guest branches (0 = 256, the tick margin,
+ *           and the default). The PMU is programmed to overflow `margin` branches before
+ *           the turn end and the rest is single-stepped, so the cost of a turn end grows
+ *           with the margin. It must exceed the overflow skid, or a turn end overshoots
+ *           (counted in hvx_sched.overshoots) and the run is no longer reproducible.
+ *           Largest skid measured on the Xeon E3-1270 v6: 107 branches (FASTTURN.md).
+ *
+ *  bursts   seeded bursts of short turns, so that dense switching costs little on
+ *           average. The VM-wide branch clock is cut into windows of
+ *               W = max(burst_window, quantum, burst_len)
+ *           branches. Window w holds one burst iff h % 1000 < burst_permille, where
+ *               h = splitmix64(burst_seed + (w+1) * GOLDEN),
+ *           and the burst covers [w*W + o, w*W + o + burst_len) with
+ *               o = (h >> 16) % (W - burst_len + 1).
+ *           A turn that starts inside a burst is burst_q branches long (cut at the burst's
+ *           end); any other turn has its usual length (quantum, or the seeded length) but
+ *           ends where the next burst starts if that comes first. So the turn lengths are a
+ *           pure function of the policy and the VM branch count at each turn's start,
+ *           which is scheduler state (hvx_sched.pmu_total): replay and branch-from-
+ *           snapshot reproduce them. burst_seed = 0 (or permille 0) turns bursts off.
+ */
+struct hvx_turnctl {
+	__u64 margin;		/* 0 = 256 */
+	__u64 burst_seed;	/* 0 = no bursts */
+	__u64 burst_len;	/* B: guest branches per burst (>= 1 when bursts are on) */
+	__u64 burst_q;		/* s: turn length inside a burst (>= 1 when bursts are on) */
+	__u32 burst_permille;	/* 0..1000: chance that a window holds a burst */
+	__u32 pad0;
+	__u64 burst_window;	/* 0: W = max(quantum, burst_len) */
+	/* [GET] statistics (not state; zeroed by every SET) */
+	__u64 burst_turns;	/* turns that started inside a burst */
+	__u64 clipped;		/* other turns cut short where a burst starts */
+	__u64 pad[4];
+};
+#define HVX_SET_TURNCTL _IOW(HVX_IOC_MAGIC, 62, struct hvx_turnctl)
+#define HVX_GET_TURNCTL _IOR(HVX_IOC_MAGIC, 63, struct hvx_turnctl)
+
 #endif /* _HVX_ABI_H */
