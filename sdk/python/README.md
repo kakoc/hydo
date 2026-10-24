@@ -55,7 +55,7 @@ to the console under one process-wide lock that is never held across a blocking 
 | `Catalog()`, `SetupComplete()` | `catalog()`, `setup_complete()` |
 | `D{...}` | any mapping (a `dict`); `hydo_assert.D` is `dict` |
 
-The naming follows the other SDKs (`sdk/js` on main, `sdk/rust` on branch `rust-sdk`): the Go
+The naming follows the other SDKs (`sdk/js`, `sdk/rust`): the Go
 names in Python's snake case, the named comparison helpers, `await_cond` /
 `await_async` for Go's `Await`, and `emit_line(tag, value)` as the extension point for other
 record kinds.

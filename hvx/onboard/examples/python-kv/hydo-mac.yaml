@@ -5,7 +5,7 @@
 # happen at least once (a non-empty log replayed, a torn log tail, a PUT without a reply); two
 # BUGGIFY fault points in the server (a lost reply, a slow PUT) fire when the schedule carries
 # B=<seed>. Python is the pinned aarch64-linux CPython 3.11.9 from the nixpkgs binary cache.
-# arm64 (the Mac backend). Stage the files, then build with the Mac release's `hydo`:
+# For the Mac backend (arm64 guest). Stage the files, then build with the Mac release's `hydo`:
 #   hvx/onboard/examples/python-kv/fetch-python-arm64.sh        # files/: python + its libraries + the SDK
 #   cd hvx/onboard/examples/python-kv && hydo build hydo-mac.yaml
 # Try:  disk=none | run                    -> OK, every acknowledged PUT survives
@@ -13,8 +13,7 @@
 #       disk=cut | run C=12                -> OK: the server fsyncs before it acknowledges
 #       disk=cut | run C=12 S=never        -> VIOLATION: without fsync a power cut loses acked PUTs
 #       disk=none | run B=5abc,1000,500    -> OK; the fault points fire and are reported
-# (`buggify: true` is the hydo-build key from the rust-sdk branch, bff5c01, cherry-picked here:
-# it turns the schedule token B= into /tmp/hydo-buggify, the file every SDK reads.)
+# (`buggify: true` turns the schedule token B= into /tmp/hydo-buggify, the file the SDKs read.)
 name: python-kv
 description: pykv (Python, hydo-assert SDK); every acknowledged PUT must survive kills and power cuts.
 buggify: true
