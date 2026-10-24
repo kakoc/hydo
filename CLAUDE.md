@@ -95,7 +95,7 @@ Each flagship boots an unmodified service, runs a workload and an oracle, and pa
 
 - A project is described by one `hydo.yaml` (`hvx/onboard/MANIFEST.md`). `hvx/onboard/hydo-build` compiles it into a guest image with one generic init (`hydo-init.sh`) that starts the services, applies fault tokens by service name and runs the invariants (M47). The `hydo-onboard` skill writes a manifest for a new project.
 - Features: services with readiness checks and crash recovery; faults that reach a service's whole process tree (M52); `params:` (M52); `eventually` liveness invariants (M59); Docker/OCI images by digest with `image:` (M59); `guest.ram_mib`, 256–3072 MiB on Linux and 256–4096 MiB on the Mac (M59); per-service `addr:` with link faults between services (M60, x86_64 only); `guest.cpu: v3` (M68, x86_64 only); and `hydo-build --arch arm64` for the Mac (M51).
-- Current images of the examples with network or link faults (the M71 netem drain, pinned tools; M77): `explore-ob-stack-{fix,old}-nq`, `explore-ob-miniflux-nq`, `explore-ob-etcd-{3.5.5,3.5.6,3.6.8,3.6.9,3.6.15}-nq`; their fingerprints are in `hvx/REBASELINE.md` §7 and the examples' `RESULTS.md`. On etcd 3.5.5-nq the 14685 bug is still found (17 of 100 explorer schedules), but M60's second reproducer (a client's revision going back) no longer fires.
+- Current images of the examples with network or link faults (the M71 netem drain, pinned tools; M77): `explore-ob-stack-{fix,old}-nq`, `explore-ob-miniflux-nq`, `explore-ob-etcd-{3.5.5,3.5.6,3.6.8,3.6.9,3.6.15}-nq`; their fingerprints are in `hvx/REBASELINE.md` §7 and the examples' `RESULTS.md`. On etcd 3.5.5-nq the 14685 bug is still found (17 of 100 explorer schedules); M60's second reproducer no longer fires, but `disk=none dseed=1 | run K=etcd1@10+1 P=etcd3@26+1` shows the second symptom (a client's revision going back, `0470512bb297c87f`) and passes on 3.5.6-nq (`63e112769072c0c1`) (M78).
 
 ### The Linux release
 
@@ -120,7 +120,7 @@ Each flagship boots an unmodified service, runs a workload and an oracle, and pa
 
 - In our own order service: a failed cache write failed an order that was already published (M38, fixed in M39); and a duplicate under overlapping retries, a panic on the shared Redis connection, and a crash that forgot which sends had an unknown outcome (M50, all fixed).
 - In the stack configuration: with the MySQL binary log off, a commit was visible before its redo fsync finished, found only by the k-th-flush cut (M58, fixed by the binary log in M63); and Kafka's default 7-day retention deleted acknowledged orders after a large forward clock jump (M63, fixed with `log.retention.ms=-1`).
-- Upstream: etcd 3.5.5 issue 14685 (member revisions diverge after an online defrag and a crash), found without being told and absent in 3.5.6 (M60).
+- Upstream: etcd 3.5.5 issue 14685 (member revisions diverge after an online defrag and a crash), found without being told and absent in 3.5.6 (M60); both symptoms reproduce on the `-nq` image (M77, M78).
 - Not reproduced: the SQLite 3.51.2 WAL-reset corruption (M52, M49).
 
 ## Open items
@@ -133,7 +133,7 @@ Items marked **[user decision]** need the user before anyone acts on them.
 5. Guest AVX (M68): there is no AVX-512, XSAVEOPT, XSAVEC, XSAVES or PKRU; the pending #GP of an invalid XSETBV is not in the snapshot; and with the flag off, a guest that sets CR4.OSXSAVE anyway reads the host's XCR0.
 6. The d11 defect (an ACK on an unflushed flag) has a window of about 3 of ~310 flush-cut points and is rarely found by strategies (M67, M72: 3/6 then 0/6 over 3-repetition cells); measuring its detection rate needs many more repetitions or a cell that always draws `cf=`. The m59 bench set now defaults to `-pin-kr` (Kafka retention fixed, M72).
 7. fwupd still runs on the bare-metal machine; it is harmless to the fixed module. Older single outliers (M34 MySQL, M39 I/O error) were not checked against fwupd times (M65).
-8. etcd 3.5.5: on the `-nq` image no schedule is known that shows 14685's second symptom (a client's revision going back); the first symptom (members disagree) reproduces (M77).
+8. etcd 3.5.5: 14685's second symptom (a client's revision going back) is reproduced again on the `-nq` image by `K=etcd1@10+1 P=etcd3@26+1` (M78), found by a hand sweep, not by the explorer. Why etcd1's one-revision lead appears only together with the later pause of another member was not investigated.
 9. Explorer and tools: the oracle reads Kafka before it restarts when Kafka is killed at the last order (M55); `pp=`/`xt=` are refused in branch mode, and the `xt` shrinker does not turn a seeded policy into a list (M49); the guest RAM size is not part of the schedule string, so a hand-run `hvx_explore one` on a non-default image needs `--ram-mib` (M59); the OK verdict shows only the first invariant's details (M47).
 10. etcd 3.6.8 against 3.6.9 (stale reads with a paused leader) showed no difference; it needs timed pauses aimed at the leader. `addr:` is refused on arm64 (M60).
 11. Images built before M71 drop the packets queued in netem when a delay fault is lifted. The onboarding examples and the default stack were rebuilt as `-nq` images in M77; any other image with network faults that predates M71 keeps the old behaviour.
@@ -224,6 +224,7 @@ Milestones 1–32 ran inside the nested L1 VM on the build machine, before 2026-
 - M75 — the Linux release: one `hydo` command (doctor, module, build, run, repro, explore, report) and a self-contained tarball for x86_64 + VT-x, no Nix needed (2026-10-23)
 - M76 — the freeze sweep: every packet point of a run as one `F=` schedule (2026-10-24)
 - M77 — onboarding and default stack images rebuilt with the netem drain (`-nq`); stack baselines and the eight fault scenarios re-measured (2026-10-23)
+- M78 — etcd 14685's second symptom (a client's revision going back) reproduced again on the 3.5.5-nq image; passes on 3.5.6-nq (2026-10-24)
 
 ## Where to look
 
