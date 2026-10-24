@@ -95,6 +95,8 @@ RAM_MIB_BOUNDS = {"hvx": (256, 3072), "hvm": (256, 4096)}  # hvx_explore.c / hvm
 VCPUS = 1               # --vcpus N (SMP Stage 3): the engine gets "--vcpus N" only when N > 1
 TURNS = False           # --turns: half of the schedules get vCPU turn tokens q= [qs=] (needs VCPUS > 1)
 TURNS_SALT = 0x7A4E5C0FFEE7A4E5
+BURSTS = False          # --bursts: with --turns, half of the schedules also get seeded bursts of short turns qb= qbs=
+BURSTS_SALT = 0xB0B5EED5C0FFEE77
 Q_DEFAULT = 1 << 20     # hvx.c HVX_SCHED_QUANTUM: the module's turn length (guest conditional branches)
 CLOCK_DELTAS = [-30 * 86400, -86400, -3600, -300, -30, 30, 300, 3600, 86400, 365 * 86400]
 FREEZE_CALL = False     # --freeze-call (M70): freeze a service at the n-th packet of one of its conversations (F=)
@@ -224,14 +226,23 @@ def add_turns(s, seed):
         q = t.rng(1, 100) if x < 10 else t.rng(101, 10000) if x < 20 else t.rng(Q_DEFAULT // 2, 2 * Q_DEFAULT)
         if on:
             s["q"] = (q, qs if seeded else 0)
+    if BURSTS:                                       # FASTTURN.md: own stream, so the rest is unchanged
+        t = SplitMix(seed ^ BURSTS_SALT)
+        on, blen, bq, pm, bs = t.below(100) < 50, t.rng(2000, 200000), t.rng(20, 1000), \
+            t.pick([50, 100, 250, 500, 1000]), t.next() or 1
+        if on:
+            s["qb"] = (blen, bq, pm, bs)
     return s
 
 
 def render_turns(s):
-    if "q" not in s:
-        return ""
-    q, qs = s["q"]
-    return (" q=%d" % q if q else "") + (" qs=%x" % qs if qs else "")
+    out = ""
+    if "q" in s:
+        q, qs = s["q"]
+        out = (" q=%d" % q if q else "") + (" qs=%x" % qs if qs else "")
+    if "qb" in s:
+        out += " qb=%d:%d:%d qbs=%x" % s["qb"]
+    return out
 
 
 def render_preempt(s):
@@ -1007,6 +1018,9 @@ def parse(text):
     mq, mqs = re.search(r"(?:^|\s)q=(\d+)", host), re.search(r"(?:^|\s)qs=([0-9a-fA-F]+)", host)
     if mq or mqs:                                # vCPU turn lengths (SMP Stage 3)
         s["q"] = (int(mq.group(1)) if mq else 0, int(mqs.group(1), 16) if mqs else 0)
+    m = re.search(r"(?:^|\s)qb=(\d+):(\d+):(\d+)(?: qbs=([0-9a-fA-F]+))?", host)
+    if m:                                        # seeded bursts of short turns (FASTTURN.md)
+        s["qb"] = (int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4) or "1", 16))
     m = re.search(r"\bpct=([0-9a-fA-F]+) pctn=(\d+) pctk=(\d+)", host)
     if m:
         s["pct"] = (int(m.group(1), 16), int(m.group(2)), int(m.group(3)))
@@ -1429,6 +1443,13 @@ def candidates(s, tjk=None):
             var(q=(q, 0))
         if q and q < Q_DEFAULT:
             var(q=(min(Q_DEFAULT, q * 8), qs))
+    if "qb" in s:                                   # bursts: drop, then rarer, then shorter
+        var(qb=None)
+        blen, bq, pm, bs = s["qb"]
+        if pm > 1:
+            var(qb=(blen, bq, max(1, pm // 2), bs))
+        if blen > 2 * bq:
+            var(qb=(blen // 2, bq, pm, bs))
     tj_candidates(s, tjk, var)
     return out
 
@@ -1517,7 +1538,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
 
 # ---------------------------------------------------------------- main
 def main():
-    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT, BUGGIFY, KNOB_RULE, RAM_MIB, MORE_FAULTS, CF_RANGE, VCPUS, TURNS, CPU
+    global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT, BUGGIFY, KNOB_RULE, RAM_MIB, MORE_FAULTS, CF_RANGE, VCPUS, TURNS, CPU, BURSTS
     global FREEZE_CALL, FC_NMAX, FC_MATCH, PROTOCOL_FAULTS
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-200")
@@ -1609,6 +1630,12 @@ def main():
     ap.add_argument("--turns", action="store_true",
                     help="with --vcpus N > 1: half of the schedules get vCPU turn lengths q= [qs=] for the workload "
                          "(rr chaos-mode mix; separate random stream)")
+    ap.add_argument("--bursts", action="store_true",
+                    help="with --turns: half of the schedules also get seeded bursts of short turns qb=B:s:permille "
+                         "qbs=<hex> (FASTTURN.md; separate random stream; needs a module with HVX_SET_TURNCTL)")
+    ap.add_argument("--turn-margin", type=int,
+                    help="landing margin of turn ends in branches (HVX_TURN_MARGIN for the engine; default 256; "
+                         "faster when smaller, must exceed the PMU overflow skid, FASTTURN.md)")
     ap.add_argument("--ram-mib", type=int, help="guest RAM in MiB (default: the manifest's guest.ram_mib, else 1024; "
                                                 "256..3072 on hvx, 256..4096 on hvm)")
     a = ap.parse_args()
@@ -1636,6 +1663,13 @@ def main():
         raise SystemExit("explore.py: --vcpus > 1 needs --backend hvx (the Mac VMM has one vCPU and no PMU clock)")
     if TURNS and VCPUS < 2:
         raise SystemExit("explore.py: --turns needs --vcpus N > 1 (turn tokens on a one-vCPU VM are an ERROR)")
+    BURSTS = a.bursts
+    if BURSTS and not TURNS:
+        raise SystemExit("explore.py: --bursts needs --turns (and --vcpus N > 1)")
+    if a.turn_margin is not None:
+        if VCPUS < 2 or not 8 <= a.turn_margin <= (1 << 20):
+            raise SystemExit("explore.py: --turn-margin needs --vcpus N > 1 and a value in [8, 2^20]")
+        EXTRA_ENV.append("HVX_TURN_MARGIN=%d" % a.turn_margin)
     NEW_FAULTS = a.new_faults
     KNOB_RULE = a.knob_rule
     CONCURRENCY = a.concurrency
@@ -1863,7 +1897,7 @@ def write_report(out, summary, fails, shrunk, table=None):
               "- from seed %d, %d shrink runs" % (v["from_seed"], v["tries"]),
               "- minimal schedule: `%s`" % v["minimal"],
               "- needs a tick-timing change: %s" % ("yes" if " tj" in v["minimal"] else "no"),
-              ] + (["- needs vCPU turn lengths: %s" % ("yes" if re.search(r"(?:^|\s)qs?=", v["minimal"].split("|")[0]) else "no")]
+              ] + (["- needs vCPU turn lengths: %s" % ("yes" if re.search(r"(?:^|\s)(?:qs?|qb)=", v["minimal"].split("|")[0]) else "no")]
                    if VCPUS > 1 else []) + [
               "- verdict: `%s`" % v["min_verdict"],
               "- fingerprint, two runs: `%s` / `%s` (%s)" % (v["fp_a"], v["fp_b"], "identical" if v["fp_a"] == v["fp_b"] else "DIFFERENT"),

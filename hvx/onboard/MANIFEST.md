@@ -713,3 +713,101 @@ Inside the image: `/etc/hydo/hydo.yaml` (the manifest as written), `/etc/hydo/ma
 - The guest console is 64 KiB: a workload that prints every acknowledged id should print
   short ids, or the done marker can be lost.
 - One data disk, ext4. The workload's step count is the unit of fault placement.
+
+## From Docker Compose
+
+A business stack usually ships a `docker-compose.yaml`. `hvx/onboard/hydo-compose` (or
+`hydo compose` in a release) turns it into a starting `hydo.yaml`, so onboarding begins from
+what the team already runs:
+
+```sh
+hvx/onboard/hydo-compose docker-compose.yml [--out hydo.yaml] [--images-dir images]
+        [--env-file F ...] [--profile P ...] [--use-env] [--no-resolve] [--lock FILE] [--no-addr]
+sh fetch-images.sh            # written next to hydo.yaml: copies every image by digest (network, once)
+# write the workload and the invariants (the generated file marks them TODO), then hydo-build
+```
+
+The importer needs network only to resolve image tags (with skopeo: `SKOPEO`, `PATH`, the nix
+store or `nix build nixpkgs#skopeo`). Everything it resolves is written to
+`hydo-compose.lock.json`, so a second run needs no network and writes the same file; an image
+that `fetch-images.sh` already copied is read from the file instead. It parses the Compose file
+with PyYAML when installed and with hydo-build's YAML subset otherwise, extended with the anchors
+Compose files use (`x-common: &a` on a block mapping, `<<: *a` merge keys, `*a` aliases); for
+anchors on scalars or lists without PyYAML, import the output of `docker compose config --format json`.
+A bare `environment:` entry (`- POSTGRES_USER`) takes its value from `.env`, as in Compose. The generated manifest is checked with hydo-build's own
+validator before it is written. Example: `examples/compose-voting/` (Docker's example voting app;
+`hydo.generated.yaml` is the raw import, `hydo.yaml` the version with a workload and invariants).
+
+| Compose | hydo.yaml |
+|---|---|
+| `services.<name>` | `services[]`, in Compose order. The name becomes `[a-z][a-z0-9_]*` (`my-api.v2` -> `my_api_v2`, used by fault tokens); the Compose name still resolves. |
+| `image:` | `image: {x86_64: images/<name>-<tag>-amd64.docker.tar, arm64: images/<name>-<tag>-arm64-oci}` + `image_ref: <name>:<tag>`. The tag is resolved to the index digest and the linux/amd64 and linux/arm64 manifest digests (recorded as comments and in the lock file); `fetch-images.sh` copies by those digests. An image given by digest (`name@sha256:...`) is checked against it. |
+| `command:`, `entrypoint:` | `cmd:`, `entrypoint:` as lists. A string is split into words as Compose does (no shell); `$$` is `$`. `entrypoint:` drops the image's CMD, as in Docker. |
+| `environment:`, `env_file:` | `env:`. env files first (KEY=VALUE, `export`, quotes, comments; `required: false`), then `environment:`. A variable without a value (taken from the shell by Compose) is left out with a warning. |
+| `${VAR}` interpolation | done with `.env` next to the Compose file (or `--env-file`): `${VAR:-d}`, `${VAR-d}`, `${VAR:?e}`, `${VAR:+r}`. The shell environment is NOT used (the manifest must not depend on who imports it); a variable found only there is reported. `--use-env` follows Compose. |
+| `working_dir:`, `user:` | `workdir:`, `user:` |
+| `ports:`, `expose:` | `port:` = the first CONTAINER port (`"8080:80"` -> 80); else the image's `EXPOSE`. Network faults (`N=`/`O=`) act on that port. |
+| (each service) | its own loopback `addr:` (127.0.0.11, .12, ...), and `/etc/hosts` (`root.text`, mounted into every image root) maps the Compose service names, `container_name`, `hostname`, network `aliases`, `links` aliases and `extra_hosts` to them (`host-gateway` -> 127.0.0.1). `--no-addr`: every name -> 127.0.0.1 (the arm64 build has no `addr:`; `hydo compose` on a Mac passes it). |
+| `depends_on:` (list or map) | `depends_on:`. hydo starts a service only after its dependencies passed their `ready:`, so `service_healthy` and `service_started` both hold. |
+| `depends_on.<job>.condition: service_completed_successfully` | the job service idles (`/.hydo/busybox sleep`) and its command runs once per boot in the `setup:` of every service that waits for it (also before a restart and in crash recovery). |
+| `healthcheck:` (else the image's `HEALTHCHECK`) | `ready: timeout <t> hydo-oci <svc> <test>`: `CMD` as argv, `CMD-SHELL`/a string through `/bin/sh -c`, as the service's `user:` (busybox `chpst`), polled every second; `ready_timeout` = `start_period + interval x retries + 60` s (120..600). Without one: `nc -z -w 2 <addr> <port>`, or `true` (with a TODO) when there is no port. |
+| `volumes:` named / anonymous, the image's `VOLUME`s | a directory `/data/vol/<name>` on the data disk (the fault target; listed in `data.dirs`), mounted on the target with `copy_up` (on first use it gets the image's content, owner and mode, as a Docker named volume). Several services naming one volume share it. `external: true` starts empty (warning). A volume on `/data` is the data disk's root already. |
+| `volumes:` bind mount of an existing file or directory | copied into the read-only root (`root.files`, `/etc/hydo/compose/bind/<n>-<name>`) and mounted on the target; read-only in effect (a warning for a directory not marked `:ro`: if the program writes there, make it a named volume). A source that does not exist becomes an empty data-disk directory (Docker creates it). Host paths `/etc/localtime`, `/etc/timezone`, `/var/run/docker.sock`, `/proc`, `/sys`, `/dev`, ... are skipped with a warning. |
+| `tmpfs:`, `type: tmpfs` | a tmpfs mount (mode 1777, `size=` kept) |
+| `secrets:` with `file:` | the file, copied into the root, mounted on `/run/secrets/<name>` (or `target:`) |
+| (every image service) | `mounts:` also gives it a writable `/run` (a tmpfs with a copy of the image's `/run`) and a 64 MiB `/dev/shm`: a container has a writable layer and its own `/dev/shm`, the hydo image root is read-only. |
+| `restart:` | `restart: "no"` -> `recovery: false` (not started again after a power cut, as Docker does not restart it after a reboot); every other policy -> started in crash recovery. hydo restarts every service after a kill fault whatever the policy. |
+| `profiles:` | services in a profile are left out unless `--profile <p>` (as `docker compose up`) |
+| `mem_limit:`, `deploy.resources.limits.memory` | counted in the `guest.ram_mib` guess |
+| (images) | `guest.ram_mib`: 256 MiB + a per-image guess (PostgreSQL 384, MySQL/MongoDB 640, Redis 96, JVM services 1024, others 256), at least 1024, at most 3072. `guest.cpu: v3` when an image's linux/amd64 manifest has variant v3/v4 or the image is known to need AVX2 (restatedev/restate); otherwise a commented line to uncomment if a service stops with "invalid opcode". `data.size_mib` from the volumes. |
+| (workload, invariants) | a TODO skeleton that fails loudly (`exit 1` / `exit 2`), so nobody mistakes it for a passing test. The hydo-onboard skill (`.claude/skills/hydo-onboard`) writes the real ones. |
+| `faults:` | all kinds except `freeze` |
+
+Reported as warnings, with what to do (the file's header repeats them): `build:` (with an image:
+the image is used; without one the import stops: build it, `docker save` it, set `image:`),
+non-default `networks:` (one loopback network in the guest: isolation between Compose networks is
+not modelled), `network_mode`, `privileged`, `cap_add`/`cap_drop`, `devices`, `security_opt`,
+`pid`/`ipc`/`uts`/`userns_mode`, `sysctls`, `ulimits`, `dns*`, `init`, `volumes_from`, `extends`,
+`configs`, `scale`, `deploy.replicas` > 1 and other `deploy:` (Swarm) keys, `shm_size`, GPU
+reservations, `platform:` other than linux/amd64 or linux/arm64, an `include:`. Ignored silently:
+`labels`, `logging`, `stdin_open`, `tty`, `stop_signal`, `stop_grace_period`, CPU shares and quotas,
+`x-*` extension fields. A **port collision** -- two services listening on the same container
+port, which Compose keeps apart with one network namespace per container -- is reported with each
+service's `addr:`: in the guest only the first one that binds `0.0.0.0:<port>` starts, so make
+each listen on its own address or move one (`examples/compose-voting` moves `result` to 81).
+
+### `services[].mounts` (image services)
+
+The importer writes these; they can be written by hand too. Each entry is made by the image
+service's launcher before every start and every `hydo-oci` call (once per boot, under a lock):
+
+```yaml
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}                              # a file or dir of the guest
+      - {src: /data/vol/pgdata, dst: /var/lib/postgresql/data, copy_up: true}   # a volume
+      - {tmpfs: true, dst: /run, copy_up: true}                          # a writable copy of /run
+      - {tmpfs: true, dst: /dev/shm, size: 64m}                          # an empty tmpfs, mode 1777
+```
+
+`src:` is a path of the guest (the hydo root, or under `/data`); `copy_up: true` on a `src:` fills
+an EMPTY directory from the image's `dst` (content, owner, mode) before mounting it; on a tmpfs it
+copies the image's directory in. A `dst` the image lacks is created in the image root at build time
+(below `/proc`, `/sys`, `/dev`, `/tmp`, `/data` at run time); a `dst` that is a symlink in the image
+is resolved inside the image root, never through to the guest's own directory. Paths use
+`[A-Za-z0-9._@+=,:/-]` only. An image service without `mounts:` gets exactly the launcher it had
+before.
+
+### What a Compose stack does not get
+
+- **Link faults between Compose services act on nothing.** Every service has an `addr:`, but its
+  outgoing connections leave from 127.0.0.1 (see "Link faults"), so `N=a-b` matches no packet of
+  the app's own traffic; and explore.py still draws such link targets for manifests with `addr:`.
+  Use the port faults (`N=<svc>@...`, `O=<svc>@...`), which act on every client's traffic to that
+  service.
+- One network, one hostname, no per-service namespaces: `hostname` inside a service is the
+  guest's; services see each other's processes.
+- The image roots are read-only except for the `mounts:`: a program that writes elsewhere fails
+  with "Read-only file system"; add a `mounts:` entry (a volume or a tmpfs) for that path.
+- Healthchecks run through `hydo-oci`, as root unless the service has a `user:`; the image's own
+  user for a healthcheck (Docker runs it as the container's user) is not looked up.
+- No `build:`, no registry pulls at build time, no Swarm (`deploy:`), no GPUs or host devices.

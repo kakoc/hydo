@@ -1,0 +1,27 @@
+version: "3.8"
+services:
+  app:
+    image: example/app:1
+    build: ./app
+    privileged: true
+    cap_add: [NET_ADMIN]
+    devices: ["/dev/fuse:/dev/fuse"]
+    networks: [front, back]
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          memory: 1g
+    sysctls:
+      net.core.somaxconn: 1024
+    labels: {a: b}
+  seed:
+    image: example/seed:1
+    profiles: [seed]
+  my-worker.v2:
+    image: example/worker:1
+    network_mode: host
+    init: true
+networks:
+  front:
+  back:
