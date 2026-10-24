@@ -44,9 +44,9 @@ func TestParseSource(t *testing.T) {
 }
 
 func TestItemOrder(t *testing.T) {
-	x := []string{"10", "9", "b", "a", "100", "-1"}
+	x := []string{"10", "9", "b", "a", "100", "-1", "c10", "c4", "c04", "order:2", "c1x", "c1"}
 	sortItems(x)
-	if strings.Join(x, " ") != "-1 9 10 100 a b" {
+	if strings.Join(x, " ") != "-1 9 10 100 a b c1 c1x c04 c4 c10 order:2" {
 		t.Fatal(x)
 	}
 }
@@ -125,6 +125,7 @@ func TestChecks(t *testing.T) {
 		{[]string{"subset", "--unreadable", "violation", "--left", "file " + f("nope"), "--right", kafka}, 1, "subset violated: could not read file (file): open " + f("nope") + ": no such file or directory"},
 		{[]string{"subset", "--oracle", "--left", "range 0 6", "--right", kafka}, 1, "HYDO-ORACLE: VIOLATION subset violated: 1 item of 6 in range not in kafka: 4"},
 		{[]string{"subset", "--left", "range 0 2"}, 2, ""},
+		{[]string{"exactly-once", "--left", "range 0 12 --add-prefix c", "--right", "range 0 4 --add-prefix c"}, 1, "exactly-once violated: range c4 is in range 0 times (of 12 in range); missing 8: c4, c5, c6, c7, c8 (+3 more)"},
 		{[]string{"frobnicate", "--left", acked, "--right", kafka}, 2, "frobnicate could not be evaluated: usage: unknown check \"frobnicate\""},
 	}
 	for _, c := range cases {

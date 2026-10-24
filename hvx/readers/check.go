@@ -217,21 +217,43 @@ func (s *source) pairs() ([]kv, error) {
 	return out, nil
 }
 
-// itemLess: numeric order when both are integers, else bytewise; deterministic.
+// itemLess: natural order -- runs of digits compare as numbers, everything else bytewise --
+// so 2 < 10 and c4 < c10 < order:2; ties (e.g. 007 and 7) are broken bytewise. Deterministic.
 func itemLess(a, b string) bool {
-	x, e1 := strconv.ParseInt(a, 10, 64)
-	y, e2 := strconv.ParseInt(b, 10, 64)
-	if e1 == nil && e2 == nil {
-		if x != y {
-			return x < y
+	i, j := 0, 0
+	for i < len(a) && j < len(b) {
+		da, db := isDigit(a[i]), isDigit(b[j])
+		if da && db {
+			si, sj := i, j
+			for i < len(a) && isDigit(a[i]) {
+				i++
+			}
+			for j < len(b) && isDigit(b[j]) {
+				j++
+			}
+			x := strings.TrimLeft(a[si:i], "0")
+			y := strings.TrimLeft(b[sj:j], "0")
+			if len(x) != len(y) {
+				return len(x) < len(y)
+			}
+			if x != y {
+				return x < y
+			}
+			continue
 		}
-		return a < b
+		if a[i] != b[j] {
+			return a[i] < b[j]
+		}
+		i++
+		j++
 	}
-	if (e1 == nil) != (e2 == nil) {
-		return e1 == nil // numbers first
+	if len(a)-i != len(b)-j {
+		return len(a)-i < len(b)-j
 	}
 	return a < b
 }
+
+func isDigit(c byte) bool { return c >= '0' && c <= '9' }
 
 func sortItems(s []string) { sort.SliceStable(s, func(i, j int) bool { return itemLess(s[i], s[j]) }) }
 
