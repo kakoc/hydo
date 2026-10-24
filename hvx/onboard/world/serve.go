@@ -53,6 +53,10 @@ func serveMain(args []string) int {
 			go w.serveTCP(e, ln)
 			continue
 		}
+		if e.Kind == "proxy" && e.Protocol == "grpc" { // the streaming gRPC proxy (grpc.go)
+			go w.serveGRPCProxy(e, ln)
+			continue
+		}
 		var p http.Protocols
 		p.SetHTTP1(true)
 		p.SetUnencryptedHTTP2(true) // cleartext HTTP/2 with prior knowledge: gRPC clients

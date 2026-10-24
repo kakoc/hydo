@@ -375,7 +375,8 @@ services, network and one-way faults from services with a `port:`, knob values f
 `knobs:`, fault placement from `workload.steps`, fault kinds from `faults:`. It reads
 `/etc/hydo/hydo.yaml` out of an `explore-ob-*` image automatically; pass `--manifest` for
 any other image. A knob token that collides with a built-in token (K P N O C T Q X F) is
-rejected. `explore.py --freeze-call` draws `F=` for a manifest whose `faults:` lists `freeze`.
+rejected. `explore.py --freeze-call` draws `F=` for a manifest whose `faults:` lists `freeze`;
+`explore.py --grpc-faults` draws gRPC-level `H=` tokens for a manifest with a gRPC proxy (see "gRPC faults").
 
 ### Freeze at a call (stop a service at an exact point of its traffic)
 
@@ -885,6 +886,91 @@ first with `hvx/readers/build.sh` (byte-reproducible; it lands in `build/hydo-re
 an invariant), run the same binary with `--id`/`--console` so the record reaches the console.
 Examples: `examples/stack/hydo-read.yaml`, `examples/miniflux/hydo-read.yaml`; tests against real
 stores: `hvx/readers/native-test.sh`.
+
+### gRPC faults (a fault proxy in front of a gRPC service)
+
+A proxy with `protocol: grpc` (`proxies:`, above) sits between a gRPC client and a gRPC service. It is a streaming HTTP/2
+proxy (cleartext HTTP/2 with prior knowledge, what gRPC clients speak without TLS): every call is
+forwarded to the service as it arrives, message by message in both directions, so unary,
+client-streaming, server-streaming and bidirectional calls all pass, and a fault can act after the
+service has answered or in the middle of a stream. The client must dial the proxy's `port:`
+(usually an environment variable or flag of the client); the service keeps its own port.
+
+```yaml
+proxies:
+  - name: orders
+    protocol: grpc
+    port: 50052                 # the client dials this
+    to: 127.0.0.1:50051         # or service: <name> (a service with a port:)
+    ref: pb:1                   # the business reference: field 1 of the request message
+    routes:                     # optional: name methods, so a fault can target <proxy>.<route>
+      - {name: place, path: /hydo.OrderService/Place}
+```
+
+Faults are `H=` tokens (`H=<proxy>[.<route>]@<from>-<to>:<rule>[,<rule>...]`, on while workload
+steps `[from,to)` run, off when fault injection ends), with these rules on a gRPC proxy:
+
+| rule | what the client sees | did the server act? |
+|---|---|---|
+| `drop` | no answer; it waits until its deadline (or the fault ends, then its stream is reset) | yes: forwarded, the answer is discarded |
+| `status=<code>` | that gRPC status, at once | no (not forwarded) |
+| `status=<code>,effect=yes` | that status, after the server has finished | yes |
+| `delay=<ms>` | the server's answer, ms of guest time late (past its deadline when ms exceeds it) | yes |
+| `reset` (`reset=stream`) | its HTTP/2 stream reset (`INTERNAL`, RST_STREAM) when the server answers | yes |
+| `reset=conn` | its TCP connection reset when the server answers: every call on it fails (`UNAVAILABLE`), the client reconnects | yes |
+| `cut=<n>` | n response messages, then its stream reset (`dir=req`: n request messages reach the server, then both halves are cut) | partly |
+| `hold=<n>` | n messages, then nothing more in that direction until the fault ends (then the stream continues) or the client gives up | partly |
+
+`<code>` is a name (`UNAVAILABLE`, `DEADLINE_EXCEEDED`, `RESOURCE_EXHAUSTED`, `INTERNAL`,
+`ABORTED`, or any other gRPC code name) or a number. `effect=no` on drop, reset or delay means the
+call is not forwarded at all. `delay=` combines with any other rule (the delay comes first).
+Which calls a rule acts on:
+
+- `<proxy>.<route>`, or `rpc=<name>` on the proxy (`Method`, `Service/Method` or `/pkg.Service/Method`): one method;
+- `call=<a>` or `call=<a>-<b>`: the a-th (to b-th) call of a method through this proxy, counted from 1
+  since the guest booted (every call counts, faulted or not; the recovery boot after a power cut counts again from 1);
+- `p=<1..100>` with an optional `seed=<n>`: that share of the matching calls; which ones is a hash of
+  the token text and the call's index under the rule, so `seed=` picks another set.
+
+Every decision is a pure function of the token and the order in which calls arrive, which hvx
+makes deterministic: a schedule gives the same faults on every run. `rpc=`, `call=`, `cut=`,
+`hold=`, `dir=` and `reset=conn` act on gRPC proxies only (hydo-world refuses them elsewhere);
+on a gRPC fake (`fakes:` with `protocol: grpc`) select calls by route, with `status=`, `delay=`,
+`drop` and `reset`.
+
+**Records.** Each call gives two records in `/tmp/hydo/world.log`: at arrival `kind=req` (as for
+every proxy, with `call=<k>`; `fx=1` = forwarded), and at its end
+
+```
+kind=call ep=orders route=place path=/hydo.OrderService/Place ref=7 call=8 req=<seq of the req record>
+          status=<what the client got> server=<1|0|?> upstream=<the server's status> msgs=<in>/<out> out=fwd+drop
+```
+
+`status` is the gRPC status the client received (a number), `rst` (stream reset), `conn`
+(connection reset) or `none` (the client gave up before any answer). `server=1`: the server
+answered, so it acted; `0`: the call never reached it; `?`: forwarded, no answer from the server.
+"The server acted, the client saw a failure" is `status` other than 0 with `server=1`; a history
+or side-effect check can join these records with the client's own outcomes by `ref`.
+`hydo-world check calls <proxy>[.<route>]` prints the four counts (answered OK; failed after the
+server acted; failed before reaching it; failed, server's part unknown) as a HYDO-ORACLE OK line
+(it always holds, so it can be an invariant that only reports). The console summary before the
+verdict shows each `call` record.
+
+**Explorer.** `explore.py --grpc-faults` draws up to two such tokens per schedule on the
+manifest's gRPC proxies (`hvx/explore/grpc_faults.py`), from its own random stream: without the
+flag every schedule string is byte-identical (`grpc_faults_ident.py`). The shrinker drops a
+token, narrows its window, and removes `call=`, `rpc=`, `p=`/`seed=`, `dir=req`, turns
+`reset=conn` into `reset` and halves `cut=`/`hold=`. Example: `examples/stack-grpc/`.
+
+**Code.** gRPC proxies are served by `world/grpc.go` (`serveGRPCProxy`, `grpcHandler`), not by
+`handler()`; it parses the gRPC-only rule keys (`parseRuleExt`, called from `parseRule`), picks the
+rule with the extra filters (`grpcRule`), and implements `check calls`. gRPC fakes still use
+`handler()`.
+
+Limits: cleartext HTTP/2 only (no TLS); the client must be pointed at the proxy; a `ref:`/
+`idempotency:` taken from the message (`pb:`) reads the call's first message before the decision
+(a protobuf field holding its default value, such as an id of 0, is absent, so the ref is empty);
+messages up to 64 MiB; compressed messages are passed through and counted, not decoded.
 
 ## YAML subset
 

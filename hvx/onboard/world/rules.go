@@ -84,6 +84,7 @@ func parseRule(id int, token string) (*Rule, error) {
 			r.Drop = true
 		case "reset":
 			r.Reset = true
+			err = parseRuleExt(r, k, v) // reset=stream|conn (grpc.go)
 		case "dup":
 			r.Dup = true
 		case "reorder":
@@ -101,7 +102,7 @@ func parseRule(id int, token string) (*Rule, error) {
 			}
 		case "":
 		default:
-			err = fmt.Errorf("unknown rule %q", k)
+			err = parseRuleExt(r, k, v) // the gRPC-only keys (grpc.go); unknown keys are errors there
 		}
 		if err != nil {
 			return nil, err

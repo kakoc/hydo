@@ -228,6 +228,9 @@ func (w *World) command(f []string) string {
 		if w.cfg.endpoint(r.Target) == nil {
 			return "error: no fake or proxy " + r.Target + "\n"
 		}
+		if err := w.checkRuleExt(r); err != nil { // gRPC-only keys (grpc.go)
+			return "error: " + err.Error() + "\n"
+		}
 		w.rules = append(w.rules, r)
 		return "ok\n"
 	case "off":
@@ -409,6 +412,8 @@ func (w *World) summary() string {
 			s = fmt.Sprintf("%s webhook %s.%s ref=%s src=%s n=%s %s", r["seq"], r["ep"], r["route"], esc(r["ref"]), r["src"], r["n"], r["out"])
 		case "event":
 			s = fmt.Sprintf("%s event %s ref=%s", r["seq"], r["route"], esc(r["ref"]))
+		case "call": // the end of a call through a gRPC proxy (grpc.go)
+			s = callSummary(r)
 		}
 		out = append(out, s)
 	}
