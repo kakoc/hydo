@@ -1526,7 +1526,8 @@ def main():
     if a.manifest or a.image.startswith("explore-ob-") or os.path.basename(a.image).startswith("explore-ob-"):
         import manifest_space
         if BACKEND == "hvm" and not a.manifest:      # the manifest inside an arm64 initramfs
-            sp = manifest_space.Space(hvm_backend.embedded_manifest(a.image), "hydo.yaml")
+            sp = manifest_space.Space(hvm_backend.embedded_manifest(a.image), "hydo.yaml",
+                                      compose=hvm_backend.embedded_compose(a.image))
         else:
             sp = manifest_space.load(a.manifest, os.path.join(BUILD, a.image))
         sp.apply(globals())

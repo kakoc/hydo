@@ -398,6 +398,163 @@ from. The extension lives in `hydo-init-links.sh`; hydo-build copies it into the
 line to `/sbin/init` that sources it, only for manifests with an `addr:`, so every other
 manifest builds a byte-identical image. Not supported yet: `--arch arm64`.
 
+## The test composer (`test:` and the `hydo/` folder)
+
+Instead of a fixed `workload.run` split into numbered steps, a project can write its test as
+**small commands and properties** and let hydo compose the commands into seeded sequences and
+concurrent mixes. The composition is part of the schedule (token `W=`), so a schedule replays
+the same commands in the same order and overlap, bit for bit, and the explorer varies and
+shrinks it like a fault. Implementation: `hydo_composer.py` (build side, explorer side),
+`hydo-compose.sh` (the guest side; staged only for such a plan). Example:
+`examples/redis-composed/` (the repository layout below, with SETs, transfers, AOF rewrites).
+
+### The plan format (what SDKs generate; versioned)
+
+The engine-facing plan is the manifest itself, in YAML or JSON (`hydo build plan.json` works
+the same). It is language-neutral: commands and checks are executables given as an **argv
+list** (exec'd, no shell); a string is accepted as a shell command for hand-written plans. An
+SDK (`sdk/rust`, the `hydo-test` crate) writes this file on the host from the team's own
+program; nothing of the SDK's setup code runs in the guest.
+
+```yaml
+format: 1                      # the plan format; this hydo reads 1 (anything else is refused)
+hydo_version: "0.1"            # the hydo the plan was written for: "0.1" (same major.minor; a
+                               #   different patch only warns), "0.1.0", or ">=0.1". A mismatch
+                               #   is an error unless HYDO_VERSION_CHECK=warn. hvx/VERSION (or the
+                               #   release's VERSION) is the engine's version.
+workload:
+  steps: 20                    # rounds of the composition (default 20); faults are placed at
+                               #   round numbers exactly as at step numbers. No run:/process:
+  timeout: 300                 # as before: bound of one step-range call (the composer's wait)
+test:
+  parallel: 4                  # at most this many commands at once (W= draws p in 1..parallel)
+  per_round: 2                 # parallel drivers started per round (W= draws q in 1..per_round)
+  round_ms: 200                # a round every round_ms of guest time (W= draws round_ms/2, x1, x2)
+  command_timeout: 60          # seconds per command (a command's own timeout: overrides it)
+  drain_timeout: 60            # after the last round, running commands get this long, then are killed
+  max_commands: 0              # 0 = no limit (W='s n caps the number of commands too)
+  budget_ms: 0                 # 0 = none; else no command starts later than this after round 0
+  check_every: 2               # default period of `always` checks (seconds of guest time)
+  check_within: 30             # default deadline of `eventually` checks
+  commands:
+    - {name: place_order, kind: parallel_driver, run: [/bin/shoptest, driver, place_order]}
+    - {name: audit, kind: serial_driver, run: [/bin/shoptest, driver, audit], timeout: 120}
+    - {name: seed_catalog, kind: first, run: [/bin/shoptest, first, seed_catalog]}
+  checks:
+    - {name: never_charged_twice, kind: final, run: [/bin/shoptest, check, never_charged_twice]}
+    - {name: orders_settle, kind: eventually, within: 20, run: [/bin/shoptest, check, orders_settle]}
+  regressions:
+    - {name: double-charge, schedule: "disk=none dseed=1 | run K=pay@4+1 W=0000002a,p4,q2,r200", expect: ok}
+```
+
+A command's id is `<kind>_<name>` (`parallel_driver_place_order`); a check's name is its
+property id. Everything the composer adds to the manifest (the workload, a `first` step in
+provisioning, invariants for checks and for `eventually`/`finally` commands) is a rewrite the
+generic init already understands, so `hydo-init.sh` is unchanged; a manifest without `test:`
+and without a `hydo/` folder builds byte-identically to before.
+
+### The `hydo/` folder (the repository layout)
+
+```
+hydo/
+  hydo.yaml          services, data, knobs, allowed faults, guest settings (and test: options)
+  workload/          commands: <kind>_<name> executables; helper_* files and dot files are ignored
+  checks/            properties: final_<name>, always_<name>, eventually_<name>
+  regressions/       <name>.schedule: saved minimal schedules, replayed by `hydo repro --regressions`
+.hydo/               build cache, git-ignored (`hydo build` writes here for a manifest in hydo/)
+```
+
+`hydo-build` reads the three directories when they exist next to the manifest and adds their
+entries to `test:` (a name in both is an error; an unknown prefix or a non-executable file is
+an error, so typos do not silently do nothing). Each file becomes `run: [/hydo/<dir>/<file>]`;
+the whole directory, helpers included, is copied to `/hydo/<dir>/` on the read-only root. A
+text file may carry a header in its first 4 KiB: `# hydo: timeout=30` (commands), `# hydo:
+every=1` / `# hydo: within=10 after=start poll=1` (checks), `# hydo-msg: <description>`.
+
+### Command kinds (when they run)
+
+| kind | runs | faults | alongside |
+|---|---|---|---|
+| `first` | every `first` command once, in name order, during provisioning (before S1: in the snapshot every schedule starts from; `HYDO-SETUP-COMPLETE` comes after provisioning, so after the first commands) | none | nothing |
+| `parallel_driver` | repeatedly, in rounds, several at once (also copies of one command) | yes, also mid-command | other parallel drivers, anytime |
+| `serial_driver` | repeatedly, never two at once; waits until no other driver runs | yes | anytime only |
+| `singleton_driver` | once per run, in a run that has no other drivers: when a plan has one, 1 run in 4 (or every run, without other drivers) is such a run | yes | anytime only |
+| `anytime` | in rounds, any time | yes | anything |
+| `eventually` | after the faults stop (after the heal, the host's "go", and in the recovery boot after a power cut), once each, in name order | none | nothing |
+| `finally` | at the end, after the `eventually` commands, only when every command started in this boot ran to completion (no timeout, no drain kill, no power cut), so never in a recovery boot | none | nothing |
+
+**Exit status.** A driver or anytime command: 0 = ok, **100 = the command saw a violation**
+(the run fails: the `compose.commands` invariant and an `always_or_unreachable` property
+`compose.<id>.no_violation`), anything else = the operation failed (recorded, not fatal:
+under faults, operations fail). A `first` command that fails fails provisioning (`HYDO-ORACLE:
+ERROR provision failed`). An `eventually` or `finally` command is an invariant: 0 holds,
+anything else is a violation. A check: 0 holds, 1 violated, 2 could not be evaluated now (as
+any invariant); a check that times out counts as 2.
+
+**Check kinds.** `final`: once at the end (an `always` invariant with `final: true`).
+`always`: also every `every` seconds while the workload runs (`check_every` by default).
+`eventually`: bounded liveness, polled after `after` (`heal` default, or `start`) until it
+holds or `within` seconds pass (MANIFEST "Liveness").
+
+**Environment of a command.** Everything an invariant sees (`HYDO_ACKED`, `HYDO_OUTCOMES`,
+the manifest's `env:`), plus `HYDO_CMD` (its id), `HYDO_CMD_ID` (its entry number, unique in
+a run: a good key for the operation), `HYDO_ROUND`, and `HYDO_SEED` (a number from the
+composition's random stream, for the command's own choices: which account, how much). Its
+output goes to `/tmp/hydo/compose/log.<entry>`; `HYDO-ASSERT` lines it prints are forwarded to
+the console (the SDKs write to the console directly).
+
+### How a composition runs
+
+The plan of a run is a pure function of `W=` and the command list (hydo_composer.plan; the
+same code in awk in the guest, checked by `tests/test_composer.py`): for each of `steps`
+rounds, either a serial driver (1 round in 4 when there are parallel drivers), or 1..q
+parallel drivers drawn with repetition, plus an anytime command in 1 round of 3; or, in a
+singleton run, the singleton in round 0. Each entry gets its own `HYDO_SEED`. Round r starts
+`r x round_ms` of guest time after round 0 (later when a fault point held it); a command keeps
+running across later rounds and fault points until it ends, so faults land mid-command.
+Rules while running: at most `p` commands at once; parallel drivers wait while a serial or
+singleton driver runs; serial and singleton drivers wait until no other driver runs. At a
+fault point before round t the composer stops starting rounds, the init applies the fault,
+then round t starts. After the last round the composer waits for the running commands
+(`drain_timeout`), kills what is left, and the run continues as before (heal, restart,
+`eventually` commands, checks, verdict). At a power cut everything freezes as before.
+
+**`W=` (guest token, the explorer draws it; hand schedules may use it):**
+`W=<seed, hex>[,p<concurrency>][,q<per round>][,r<round ms>][,n<max commands>][,t<budget ms>][,x<entries>][,o<commands>]`,
+where `x` lists plan entries not to run and `o` command indices (in id order) never to run,
+as `3.5-9.12`. Without `W=` the guest runs seed 0 with the manifest's defaults. `explore.py`
+puts a `W=` on every schedule of such a plan, from its own random stream, so every other
+field equals the schedule without it (`--no-compose`: no `W=`); manifests without a test plan
+get exactly the old schedules (`hvx/explore/compose_ident.py`). The shrinker tries, in order:
+one command never run (`o`), half the commands (`n`), no concurrency (`p1`, then `p-1`), the
+first half of the entries dropped (`x`), single entries (when 8 or fewer are left); the report
+prints the minimal composition round by round.
+
+**Console lines** (one write each; the explorer and reports read them):
+
+```
+HYDO-COMPOSE plan W=0000002a,p4,q2,r100 seed=42 p=4 q=2 r=100 n=0 rounds=20 entries=34
+HYDO-CMD start i=3 r=2 kind=parallel_driver cmd=parallel_driver_transfer
+HYDO-CMD end i=3 cmd=parallel_driver_transfer rc=0 ms=30 status=ok      (ok|failed|timeout|violation|killed)
+HYDO-CMD skip i=30 r=17 cmd=... budget_ms=2000
+HYDO-COMPOSE done started=34 ok=34 failed=0 timeout=0 violation=0 killed=0 skipped=0
+```
+
+plus `HYDO-ASSERT-DECL`/`HYDO-ASSERT` records: `compose.<id>.succeeded` (sometimes: the
+command exited 0 at least once; NOT EXERCISED says the test never got that operation through)
+and `compose.<id>.no_violation` (always_or_unreachable). The invariant `compose.commands`
+(first in the verdict order) fails on an exit 100 and otherwise reports the counts.
+
+### Regressions
+
+`hydo/regressions/<name>.schedule` (or `test.regressions`): comment lines, `# expect: ok`
+(default: the bug stays fixed), `# expect: violation` (a known open bug still fails) or
+`# expect: fp=<16 hex>` (bit for bit), and one schedule line. They are staged into the image
+(`/hydo/regressions/`, and `/etc/hydo/compose.json`), so `hydo repro --regressions [IMG]`
+replays exactly what the image was built with, from fresh boots, and exits 1 if one is not as
+expected. `hydo save <explore dir>` writes an exploration's minimal schedules there (with
+`expect: violation`; change it to `ok` once fixed).
+
 ## YAML subset
 
 The build machine has no YAML library, so `hydo-build` parses a subset: block mappings and

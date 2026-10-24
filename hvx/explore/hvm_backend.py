@@ -90,7 +90,7 @@ def image_ram_args(image):
     (for callers that start hvmx on an image directly, e.g. `hydo run`)."""
     import manifest_space
     try:
-        m = manifest_space.Space(embedded_manifest(image), "hydo.yaml").m
+        m = manifest_space.Space(embedded_manifest(image), "hydo.yaml", compose=embedded_compose(image)).m
     except SystemExit:
         return []
     r = (m.get("guest") or {}).get("ram_mib", 1024)
@@ -100,6 +100,15 @@ def image_ram_args(image):
 def embedded_manifest(image):
     """etc/hydo/hydo.yaml from an arm64 manifest initramfs (gzip'd newc cpio)."""
     return embedded_file(image, "etc/hydo/hydo.yaml")
+
+
+def embedded_compose(image):
+    """The test composer's plan in an arm64 initramfs (etc/hydo/compose.json), or None."""
+    import json
+    try:
+        return json.loads(embedded_file(image, "etc/hydo/compose.json"))
+    except SystemExit:
+        return None
 
 
 def embedded_file(image, path):
