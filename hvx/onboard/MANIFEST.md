@@ -346,6 +346,20 @@ calls another (a single server), the peer `workload`: the workload's own client 
 `127.0.0.1` to `<svc>`'s port (`F=redis<workload@3#2:500`; `examples/redis/hydo-freeze.yaml`).
 Not supported yet: `--arch arm64`.
 
+A random draw rarely lands on the one packet a narrow-window bug needs. `explore.py --sweep freeze`
+tries every packet instead: for each packet stream (a pair, a direction, and either every packet
+or one `freeze_match:` string) and each swept step `s` it first runs the schedule once with `#0`
+and reads the guest's "freeze never fired: <N> of 0 matching events after step <s>" line, so N(s)
+is the stream's packet count from step `s` to the end of fault injection. Step `s` then holds
+N(s) - N(s+1) packets (the last step N(s)), and the sweep runs one schedule
+`F=<svc><dir><peer>@<s>#<n>[:<match>]:<dur>` per packet n. Options: `--fc-pairs a>b,...`,
+`--fc-dirs '<>'`, `--fc-steps 8-9`, `--fc-match all,manifest` (default: every packet plus each
+`freeze_match:` string in its own direction), `--fc-durs 150000`, `--sweep-every k` (every k-th
+packet), `--sweep-with "<tokens>"` (one more fixed fault on every point and trace run, e.g.
+`K=kafka@9+1`; not a power cut, whose trace run never reaches the count), `--sweep-dry` (trace,
+write `points.txt`, stop). Every failure is re-run twice. Trace counts are in `fc-traces.jsonl`,
+point labels in `sweep-points.jsonl` (`compare.py sweep <out>` tabulates them).
+
 ### Clock after a power cut (`guest.clock_after_cut`)
 
 Every serve boot sets the realtime clock to `guest.clock_start`, the recovery boot after a power

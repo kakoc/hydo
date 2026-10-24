@@ -29,6 +29,10 @@ Schedule format (see hvx_explore.c / stack-explore.sh):
   timing (only with --timing): tj=<hex> tjpm=<n> tjmax=<n> [tjlo=<k> tjhi=<k>]  delays a
   seeded share of the PMU-clock ticks, so threads interleave differently; the shrinker turns
   it into an explicit list tjx=<tick:delay,...> and removes entries.
+  freeze sweep (--sweep freeze, M76): traces the packet counts of each (pair, direction, match)
+  stream per step with F=...#0 runs, then runs one F=<svc><dir><peer>@<step>#<n>[:<match>]:<dur>
+  schedule per packet (options --fc-pairs/--fc-dirs/--fc-steps/--fc-match/--fc-durs,
+  --sweep-every, --sweep-with, --sweep-dry); every failure is re-run twice.
   vCPU turns (only with --vcpus N > 1 and --turns, SMP Stage 3, TURNS.md): host tokens
   q=<branches> [qs=<hex>] set the length of the vCPUs' turns during the workload (fixed, or
   seeded lengths in [1, q]); half of the schedules get them, from a separate random stream.
@@ -681,6 +685,141 @@ def sweep(name):
     return out
 
 
+# ---------------------------------------------------------------- the freeze sweep (--sweep freeze)
+# Every packet point of a run's traffic, one schedule each: F=<svc><dir><peer>@<step>#<n>[:<match>]:<dur>.
+# The points come from the run itself: for each (pair, direction, match) stream and each step s, one
+# `#0` trace run (F=...@s#0...) makes the guest print "freeze never fired: <N> of 0 matching events
+# after step <s>" -- N = the stream's packets from step s to the end of fault injection (hydo-init-
+# freeze.sh counts them in the helper's full log, so the console's 600-line trace limit does not
+# matter). Step s then holds N(s) - N(s+1) packets (+ FC_SWEEP_MARGIN, since the two trace runs differ
+# after step s begins; only where step s+1 is not swept itself); the last workload step holds N(s).
+FC_SWEEP_MARGIN = 2
+FC_TRACE_RE = re.compile(r"freeze never fired: (\d+) of 0 matching events after step (\d+)")
+
+
+def fc_sweep_streams(a):
+    """[(svc, peer, dir, match)] the sweep traces: pairs x (unmatched, each freeze_match string)."""
+    pairs = list(FC_PAIRS)
+    if a.fc_pairs:
+        want = [tuple(re.split(r"[>:]", p.strip(), 1)) for p in a.fc_pairs.split(",") if p.strip()]
+        bad = [p for p in want if p not in pairs]
+        if bad:
+            raise SystemExit("explore.py: --fc-pairs %s: not freeze pairs of this manifest (%s)"
+                             % (", ".join(">".join(p) for p in bad), ", ".join(">".join(p) for p in pairs)))
+        pairs = want
+    dirs = [d for d in "<>" if d in a.fc_dirs.replace("resp", "<").replace("req", ">")]
+    streams = []
+    for item in a.fc_match.split(","):
+        item = item.strip()
+        if item == "all":
+            streams += [(d, None) for d in dirs]
+        elif item == "manifest":
+            for m, md in FC_MATCH:
+                streams += [(d, m) for d in ([md] if md else dirs) if d in dirs]
+        elif item:
+            if ":" in item or " " in item:
+                raise SystemExit("explore.py: --fc-match %r: a match string may not contain ':' or a space" % item)
+            md = dict((m, d) for m, d in FC_MATCH).get(item)
+            streams += [(d, item) for d in ([md] if md else dirs) if d in dirs]
+    seen, out = set(), []
+    for svc, peer in pairs:
+        for d, m in streams:
+            if (svc, peer, d, m) not in seen:
+                seen.add((svc, peer, d, m))
+                out.append((svc, peer, d, m))
+    return out
+
+
+def fc_sweep_with(text):
+    """--sweep-with: one other fixed fault every point (and every trace run) carries. Either a whole
+    schedule ("disk=cut dseed=0 | run C=10") or guest tokens only ("K=kafka@9+1")."""
+    if not text:
+        return {"disk": "none", "dseed": 0}
+    if "|" not in text:
+        text = "disk=none dseed=0 | run " + text
+    s = parse(text)
+    if "F" in s:
+        raise SystemExit("explore.py: --sweep-with may not carry F= (the sweep places it)")
+    return s
+
+
+def freeze_sweep(pool, a):
+    """--sweep freeze: trace, then one point per packet. Returns [(label, schedule dict)]."""
+    if not FC_PAIRS:
+        raise SystemExit("explore.py: --sweep freeze needs an image whose manifest lists `freeze` in faults: "
+                         "(manifest_space.py gives the pairs)")
+    steps = sorted({v for part in a.fc_steps.split(",") for v in
+                    (range(int(part.split("-")[0]), int(part.split("-")[1]) + 1) if "-" in part else [int(part)])}) \
+        if a.fc_steps else list(range(NORDERS))
+    if not steps or steps[0] < 0 or steps[-1] >= NORDERS:
+        raise SystemExit("explore.py: --fc-steps must lie in 0..%d" % (NORDERS - 1))
+    durs = [int(v) for v in a.fc_durs.split(",")]
+    base = fc_sweep_with(a.sweep_with)
+    streams = fc_sweep_streams(a)
+    if not streams:
+        raise SystemExit("explore.py: --sweep freeze: no streams (check --fc-pairs, --fc-dirs, --fc-match)")
+    tsteps = sorted(set(steps) | {s + 1 for s in steps if s + 1 < NORDERS})
+    known = {}                      # --fc-traces: counts of an earlier run's traces, by trace schedule
+    for path in (a.fc_traces.split(",") if a.fc_traces else []):
+        for line in open(path):
+            rec = json.loads(line)
+            if rec.get("count") is not None:
+                known[rec["schedule"]] = rec
+    items, keys, trec = [], {}, []
+    for i, (svc, peer, d, m) in enumerate(streams):
+        for st in tsteps:
+            t = dict(base)
+            t["F"] = (svc, d, peer, st, 0, m, 1)
+            tag = "fctrace-%d-%d" % (i, st)
+            keys[tag] = (svc, peer, d, m, st)
+            text = render(t)
+            if text in known:
+                trec.append(dict(known[text], tag=tag, reused=True))
+            else:
+                items.append((tag, text))
+    print("freeze sweep: %d streams x %d steps = %d trace runs (%d reused from --fc-traces)"
+          % (len(streams), len(tsteps), len(items) + len(trec), len(trec)), file=sys.stderr)
+    t0 = time.time()
+    res = pool.run_all(items) if items else {}
+    count = {keys[r["tag"]]: r["count"] for r in trec}
+    for tag, (text, r) in sorted(res.items()):
+        svc, peer, d, m, st = keys[tag]
+        n = None
+        try:
+            for line in open(os.path.join(a.out, "consoles", tag + ".log"), errors="replace"):
+                mm = FC_TRACE_RE.search(line)
+                if mm and int(mm.group(2)) == st:
+                    n = int(mm.group(1))
+        except OSError:
+            pass
+        count[(svc, peer, d, m, st)] = n
+        trec.append({"tag": tag, "schedule": text, "pair": "%s>%s" % (svc, peer), "dir": d, "match": m, "step": st,
+                     "count": n, "verdict": r["verdict"], "fp": r["fp"]})
+    with open(os.path.join(a.out, "fc-traces.jsonl"), "w") as f:
+        for rec in trec:
+            f.write(json.dumps(rec) + "\n")
+    missing = [rec["tag"] for rec in trec if rec["count"] is None]
+    if missing:
+        raise SystemExit("explore.py: --sweep freeze: no packet count in the console of %s (a trace run that "
+                         "never reached the end of fault injection -- e.g. a power cut in --sweep-with -- or an "
+                         "image without the freeze fault)" % ", ".join(missing[:6]))
+    out = []
+    for svc, peer, d, m in streams:
+        for st in steps:
+            n_here = count[(svc, peer, d, m, st)]
+            if st + 1 < NORDERS:           # the margin only where the next step is not swept itself
+                n_here = max(0, n_here - count[(svc, peer, d, m, st + 1)]) + (0 if st + 1 in steps else a.fc_margin)
+                n_here = min(n_here, count[(svc, peer, d, m, st)])
+            for n in range(1, n_here + 1, a.sweep_every):
+                for dur in durs:
+                    s = dict(base)
+                    s["F"] = (svc, d, peer, st, n, m, dur)
+                    out.append((render_fc(s["F"])[2:], s))
+    print("freeze sweep: traces took %.0f s; %d points (every %d-th packet, %d duration(s))"
+          % (time.time() - t0, len(out), a.sweep_every, len(durs)), file=sys.stderr)
+    return out
+
+
 def netem_args(kinds):
     out = []
     has_delay = any(k == "delay" for k, _ in kinds)
@@ -1279,7 +1418,29 @@ def main():
                     help="schedule generator for --seeds: random, swarm (M42), swarm-pos (swarm + a per-run "
                          "fault position, M56), process (a Jepsen-style staggered fault process, M56)")
     ap.add_argument("--sweep", help="enumerate a small fault space instead of seeds: kill, cut, net, killcut, pause, "
-                                    "clock, oneway, frontkill, tail, depth1 (every single fault, M56), depth1-old")
+                                    "clock, oneway, frontkill, tail, depth1 (every single fault, M56), depth1-old, "
+                                    "freeze (every packet point of a traced run, F=; see --fc-*)")
+    ap.add_argument("--fc-pairs", help="--sweep freeze: only these freeze pairs, comma list of svc>peer (default: every "
+                                       "pair the manifest allows, as --freeze-call draws them)")
+    ap.add_argument("--fc-dirs", default="<>", help="--sweep freeze: directions, any of < (packets the frozen service "
+                                                    "receives) and > (packets it sends); default both")
+    ap.add_argument("--fc-steps", help="--sweep freeze: workload steps whose packets are swept, e.g. 8-9 or 3,7 "
+                                       "(default every step)")
+    ap.add_argument("--fc-match", default="all,manifest",
+                    help="--sweep freeze: packet streams, comma list: all = every packet with payload, manifest = "
+                         "each freeze_match: string in its own direction, or a payload string (default %(default)s)")
+    ap.add_argument("--fc-durs", default="150000", help="--sweep freeze: freeze lengths, ms of guest time, comma list "
+                                                        "(default %(default)s, the longest --freeze-call draws)")
+    ap.add_argument("--fc-margin", type=int, default=FC_SWEEP_MARGIN,
+                    help="--sweep freeze: extra packets of the last swept step before an unswept one, beyond "
+                         "N(s) - N(s+1) (default %(default)s)")
+    ap.add_argument("--fc-traces", help="--sweep freeze: reuse the trace counts of earlier runs (comma list of their "
+                                        "fc-traces.jsonl); only traces with the same schedule are reused")
+    ap.add_argument("--sweep-every", type=int, default=1, help="--sweep freeze: keep every k-th packet (n = 1, 1+k, ...)")
+    ap.add_argument("--sweep-with", help="--sweep freeze: one fixed fault every point carries, guest tokens "
+                                         "(\"K=kafka@9+1\") or a whole schedule (\"disk=cut dseed=0 | run C=10\")")
+    ap.add_argument("--sweep-dry", action="store_true", help="--sweep freeze: run the traces, write the points, stop")
+    ap.add_argument("--repro", type=int, help="re-runs of every failure (default 1; 2 for --sweep freeze)")
     ap.add_argument("--knob-rule", choices=["cut", "any"], default="cut",
                     help="finding class of a relaxed durability knob: cut (default, M56) = unsafe-knob only with a "
                          "power cut or lying disk; any = the pre-M56 rule")
@@ -1383,11 +1544,16 @@ def main():
     if a.sweep:
         if SPACE:
             SPACE.check_sweep(a.sweep)
-        points = sweep(a.sweep)
+        points = freeze_sweep(pool, a) if a.sweep == "freeze" else sweep(a.sweep)
         seeds = list(range(1, len(points) + 1))            # sweep point index stands in for the seed
         items = [("seed-%d" % i, render(add_turns(add_buggify(add_preempt(add_concurrency(add_timing(sch, i), i), i), i), i))) for i, (_, sch) in zip(seeds, points)]
         open(os.path.join(a.out, "sweep-points.jsonl"), "w").write(
             "".join(json.dumps({"seed": i, "point": lab}) + "\n" for i, (lab, _) in zip(seeds, points)))
+        if a.sweep == "freeze" and a.sweep_dry:
+            open(os.path.join(a.out, "points.txt"), "w").write("".join("seed-%d %s\n" % it for it in zip(seeds, [t for _, t in items])))
+            pool.close()
+            print(json.dumps({"points": len(points)}))
+            return
     else:
         lo, hi = [int(x) for x in a.seeds.split("-")]
         seeds = list(range(lo, hi + 1))
@@ -1419,12 +1585,19 @@ def main():
         if verdict_kind(r["verdict"]) != "ok":
             fails.append(rec)
     runs.close()
-    # reproduce every failure once (on whichever worker is free -- usually a different one)
-    rep = pool.run_all([("repro-%d" % f["seed"], f["schedule"]) for f in fails])
+    # reproduce every failure once (on whichever worker is free -- usually a different one);
+    # --sweep freeze (or --repro 2) twice: the second run is "repro2-<seed>"
+    nrep = a.repro if a.repro is not None else (2 if a.sweep == "freeze" else 1)
+    rep = pool.run_all([("%s-%d" % ("repro" if k == 0 else "repro%d" % (k + 1), f["seed"]), f["schedule"])
+                        for k in range(nrep) for f in fails])
     for f in fails:
         rr = rep["repro-%d" % f["seed"]][1]
         f["repro_fp"], f["repro_verdict"] = rr["fp"], rr["verdict"]
         f["reproduced"] = (rr["fp"] == f["fp"])
+        for k in range(1, nrep):
+            rk = rep["repro%d-%d" % (k + 1, f["seed"])][1]
+            f["repro%d_fp" % (k + 1)] = rk["fp"]
+            f["reproduced"] = f["reproduced"] and rk["fp"] == f["fp"]
     # shrink one representative per (class, signature)
     reps = {}
     for f in fails:
@@ -1453,6 +1626,8 @@ def main():
                "runs_per_hour": round(len(seeds) / t_sweep * 3600, 1), "mean_run_s": round(sum(secs) / len(secs), 1),
                "worker_boot_s": round(sum(boot) / max(1, len(boot)), 1), "total_wall_s": round(total, 1),
                "failures": len(fails), "reproduced": sum(1 for f in fails if f["reproduced"])}
+    if nrep != 1:
+        summary["repro_runs"] = nrep
     if RAM_MIB != 1024:
         summary["ram_mib"] = RAM_MIB
     if VCPUS != 1:

@@ -172,7 +172,7 @@ class Space:
         return s
 
     SWEEP_KINDS = {"kill": ["kill"], "cut": ["cut"], "net": ["network"], "killcut": ["kill", "cut"],
-                   "pause": ["pause"], "clock": ["clock"], "oneway": ["oneway"]}
+                   "pause": ["pause"], "clock": ["clock"], "oneway": ["oneway"], "freeze": ["freeze"]}
 
     def check_sweep(self, name):
         need = [k for k in self.SWEEP_KINDS.get(name, []) if k not in self.faults]
