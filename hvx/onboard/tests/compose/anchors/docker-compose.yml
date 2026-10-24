@@ -1,0 +1,22 @@
+x-common: &common
+  image: example/app:1
+  restart: always
+  environment:
+    - MODE=shared
+    - QUEUE=q
+
+x-hc: &hc
+  test: ["CMD", "pg_isready"]
+  interval: 2s
+
+services:
+  api:
+    <<: *common
+    environment:
+      - MODE=api
+      - TOKEN
+  worker:
+    <<: *common
+  db:
+    image: postgres:16.4
+    healthcheck: *hc

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """hydo -- deterministic fault testing on an Apple Silicon Mac (the hvx-mac backend).
 
+    hydo compose <docker-compose.yaml> [--out hydo.yaml]
+                                                  start a hydo.yaml from a Compose file (MANIFEST.md)
     hydo build   <hydo.yaml> [--out DIR]          compile the manifest into an arm64 guest image
     hydo run     "<schedule>" [--image IMG]       run one schedule from a fresh boot
     hydo repro   "<schedule>" [--image IMG]       the same as run (reproduce a reported failure)
@@ -133,6 +135,19 @@ def use_bundled_tc():
     a64._copy_elf_closure = copy_closure
 
 
+def cmd_compose(argv):
+    """hydo compose: hvx/onboard/hydo_compose.py (the Compose importer), unchanged."""
+    if not argv or argv[0] in ("-h", "--help"):
+        die("usage: hydo compose <docker-compose.yaml> [--out hydo.yaml] [--images-dir DIR] [--env-file F] "
+            "[--profile P] [--use-env] [--no-resolve] [--lock FILE]")
+    sys.path.insert(0, ONBOARD)
+    import hydo_compose
+    a = list(argv)
+    if "--no-addr" not in a:        # the arm64 build does not support addr: (link faults) yet
+        a.append("--no-addr")
+    return hydo_compose.main(a)
+
+
 def cmd_build(argv):
     if not argv or argv[0].startswith("-"):
         die("usage: hydo build <hydo.yaml> [--out DIR] [--set KEY=VALUE ...]")
@@ -246,7 +261,7 @@ def cmd_doctor(argv):
 
 
 def main():
-    cmds = {"build": cmd_build, "run": cmd_run, "repro": cmd_run, "explore": cmd_explore,
+    cmds = {"compose": cmd_compose, "build": cmd_build, "run": cmd_run, "repro": cmd_run, "explore": cmd_explore,
             "report": cmd_report, "doctor": cmd_doctor}
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         print(__doc__)

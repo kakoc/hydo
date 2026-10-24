@@ -90,7 +90,7 @@ cp "$D/hydo" "$REL/bin/hydo"; chmod 755 "$REL/bin/hydo"
 cp "$D/libexec/hvx-run" "$D/libexec/faketime" "$REL/libexec/"
 cp "$D/libexec/bin/debugfs" "$REL/libexec/bin/"
 chmod 755 "$REL/libexec/hvx-run" "$REL/libexec/faketime" "$REL/libexec/bin/debugfs"
-cp "$TOP/hvx/onboard/hydo-build" "$TOP/hvx/onboard/hydo_oci.py" "$TOP/hvx/onboard/hydo_build_arm64.py" \
+cp "$TOP/hvx/onboard/hydo-build" "$TOP/hvx/onboard/hydo-compose" "$TOP/hvx/onboard/hydo_compose.py" "$TOP/hvx/onboard/hydo_oci.py" "$TOP/hvx/onboard/hydo_build_arm64.py" \
    "$TOP/hvx/onboard/hydo-init.sh" "$TOP/hvx/onboard/hydo-init-clock.sh" "$TOP/hvx/onboard/hydo-init-freeze.sh" \
    "$TOP/hvx/onboard/hydo-init-links.sh" "$TOP/hvx/onboard/hydo-liveness.sh" "$TOP/hvx/onboard/hydo_fc.c" \
    "$TOP/hvx/onboard/MANIFEST.md" "$REL/hvx/onboard/"
