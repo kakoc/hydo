@@ -769,8 +769,20 @@ def sweep(name):
             for at in range(NORDERS):
                 for delta in (-86400, 365 * 86400):
                     out.append(("T=%d:%d" % (at, delta), {"disk": "none", "dseed": 0, "T": (at, delta)}))
+    elif name == "protocol":            # every protocol fault kind on every fake/proxy target, one
+        if not PF_TARGETS:              # workload step at a time (fakes:/proxies:, H=)
+            raise SystemExit("--sweep protocol needs a manifest with fakes: or proxies:")
+        for tg, rk, hk, proto in PF_TARGETS:
+            code = PF_STATUS["grpc" if proto == "grpc" else "http"][0]
+            variants = {"status": [(("status", code),), (("status", code), ("effect", "yes"))],
+                        "delay": [(("delay", 3000),)], "late": [(("late", 5000),)]}
+            for kind in rk + hk:
+                for rules in variants.get(kind, [((kind, None),)]):
+                    for at in range(NORDERS):
+                        h = (tg, at, at + 1, rules)
+                        out.append((render_h(h)[2:], {"disk": "none", "dseed": 0, "H": [h]}))
     else:
-        raise SystemExit("unknown sweep %r (kill, cut, net, killcut, pause, clock, oneway, frontkill, tail, depth1, depth1-old)" % name)
+        raise SystemExit("unknown sweep %r (kill, cut, net, killcut, pause, clock, oneway, frontkill, tail, depth1, depth1-old, protocol)" % name)
     return out
 
 

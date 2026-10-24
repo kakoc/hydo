@@ -546,7 +546,9 @@ false verdict.
 **Explorer.** `explore.py --protocol-faults` draws `H=` (one token on 60% of the schedules, a
 second on 25%) on its own random stream, from the targets `manifest_space.py` lists: every fake
 route (with the webhook rules when it has a webhook), every proxy and proxy route. Without the flag
-every schedule string is byte-identical (`hvx/explore/protocol_faults_ident.py`). The shrinker drops
+every schedule string is byte-identical (`hvx/explore/protocol_faults_ident.py`).
+`--sweep protocol` runs every rule kind (status, status with effect=yes, delay=3000, drop, reset,
+and on webhook routes dup, reorder, late=5000, lost) on every target, one workload step at a time. The shrinker drops
 `H=` tokens, narrows their window, and removes `p=`, `retry-after=` and `effect=`, then halves
 delays. A manifest with a `faults:` list draws `H=` only if it lists `protocol`.
 
