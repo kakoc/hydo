@@ -1280,7 +1280,7 @@ with one planted bug, driven only by generated drivers under the test composer: 
 (`params: mode: buggy|fixed`), `build.sh`. The stack's front door has a `.proto` too
 (`hvx/stack/proto/hydo/order.proto`, `hvx/stack/grpc-hints.yaml`), and
 `examples/stack/hydo-grpcgen.yaml` is the stack manifest with the generated driver in place of
-`hydostack place/retry` (numbered steps). Results: `hvx/HISTORY.md`, Milestone NN.
+`hydostack place/retry` (numbered steps). Results: `hvx/HISTORY.md`, Milestone 91.
 
 Limits: a server that needs TLS, auth metadata or custom headers is not supported (plain-text
 HTTP/2 only); `from` carries scalar and enum values, not whole messages; values a request needs
