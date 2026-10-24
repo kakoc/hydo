@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include <time.h>
 
 /* Printed by the real root's /sbin/init right after the oracle -- the stop point. */
 #define FINAL_MARKER    "hydo-stack-marker: workload complete"
@@ -440,11 +441,88 @@ static void console_dump(struct boot *b)
 	fclose(f);
 }
 
+/*
+ * Turn-cost measurement knobs (hvx/FASTTURN.md), several vCPUs only, all off by default:
+ *   HVX_QUANTUM=<n>        turn length in guest branches
+ *   HVX_TURN_MARGIN=<n>    landing margin of turn ends (HVX_SET_TURNCTL; needs a module with it)
+ *   HVX_BURST=<B>:<s>:<permille>[:<hex seed>]   seeded bursts of short turns (HVX_SET_TURNCTL)
+ *   HVX_QUANTUM_AFTER=<console string>  apply the three only once the console holds it
+ *   HVX_FTSTAT=1           print the turn-end cost statistics (HVX_GET_FTSTAT) on stderr at
+ *                          every stop marker
+ * The turn policy is not part of any fingerprint.
+ */
+static int g_turnknobs_done;
+static double g_turnknobs_t;	/* wall time when the knobs were applied (FTSTAT counts from there) */
+static int turn_knobs(struct boot *b)
+{
+	const char *q = getenv("HVX_QUANTUM"), *m = getenv("HVX_TURN_MARGIN"), *bu = getenv("HVX_BURST");
+
+	g_turnknobs_done = 1;
+	if (g_vcpus < 2 || (!q && !m && !bu)) return 0;
+	if (getenv("HVX_FTSTAT")) {
+		struct timespec ts;
+		ioctl(b->fd, HVX_RESET_FTSTAT);	/* count only the part under the knobs */
+		clock_gettime(CLOCK_MONOTONIC, &ts);
+		g_turnknobs_t = ts.tv_sec + ts.tv_nsec * 1e-9;
+	}
+	if (q) {
+		struct hvx_sched *c = calloc(1, sizeof(*c));
+		if (!c || ioctl(b->fd, HVX_GET_SCHED, c) < 0) { perror("HVX_GET_SCHED (HVX_QUANTUM)"); free(c); return -1; }
+		c->quantum = strtoull(q, NULL, 0);
+		if (ioctl(b->fd, HVX_SET_SCHED, c) < 0) { perror("HVX_SET_SCHED (HVX_QUANTUM)"); free(c); return -1; }
+		free(c);
+	}
+	if (m || bu) {
+		struct hvx_turnctl t;
+		unsigned long long bl = 0, bq = 0, sd = 1;
+		unsigned int pm = 0;
+		memset(&t, 0, sizeof(t));
+		if (m) t.margin = strtoull(m, NULL, 0);
+		if (bu) {
+			if (sscanf(bu, "%llu:%llu:%u:%llx", &bl, &bq, &pm, &sd) < 3) { fprintf(stderr, "bad HVX_BURST\n"); return -1; }
+			t.burst_len = bl; t.burst_q = bq; t.burst_permille = pm; t.burst_seed = sd;
+		}
+		if (ioctl(b->fd, HVX_SET_TURNCTL, &t) < 0) { perror("HVX_SET_TURNCTL"); return -1; }
+	}
+	fprintf(stderr, "hvx_stack_verify: turn knobs applied:%s%s%s%s%s%s\n", q ? " quantum=" : "", q ? q : "",
+		m ? " margin=" : "", m ? m : "", bu ? " burst=" : "", bu ? bu : "");
+	return 0;
+}
+static void ftstat_print(struct boot *b, const char *marker)
+{
+	struct hvx_ftstat *f;
+	struct hvx_sched *c;
+	unsigned i;
+	if (!getenv("HVX_FTSTAT") || g_vcpus < 2) return;
+	f = calloc(1, sizeof(*f));
+	c = calloc(1, sizeof(*c));
+	if (f && c && ioctl(b->fd, HVX_GET_FTSTAT, f) == 0 && ioctl(b->fd, HVX_GET_SCHED, c) == 0) {
+		unsigned long long steps = 0, scyc = 0, calls = 0, tot = 0;
+		for (i = 0; i < g_vcpus && i < 8; i++) {
+			steps += f->v[i].step_entries; scyc += f->v[i].step_cyc;
+			calls += f->v[i].calls; tot += f->v[i].total_cyc;
+		}
+		struct timespec ts;
+		clock_gettime(CLOCK_MONOTONIC, &ts);
+		if (g_turnknobs_t)
+			fprintf(stderr, "FTSTAT wall since the knobs: %.2f s\n", ts.tv_sec + ts.tv_nsec * 1e-9 - g_turnknobs_t);
+		fprintf(stderr, "FTSTAT at \"%s\": turns=%llu branches=%llu sched_cyc=%llu (%.2f s) run_cyc=%llu calls=%llu "
+			"steps=%llu step_cyc=%llu (%.2f s, %.0f cyc/step) overshoots=%llu\n", marker,
+			(unsigned long long)c->turns, (unsigned long long)c->pmu_total,
+			(unsigned long long)f->sched_cyc, f->tsc_khz ? (double)f->sched_cyc / f->tsc_khz / 1000 : 0.0,
+			tot, calls, steps, scyc, f->tsc_khz ? (double)scyc / f->tsc_khz / 1000 : 0.0,
+			steps ? (double)scyc / steps : 0.0, (unsigned long long)c->overshoots);
+	}
+	free(f);
+	free(c);
+}
+
 static int run_until_marker_inner(struct boot *b, const char *marker);
 static int run_until_marker(struct boot *b, const char *marker)
 {
 	int r = run_until_marker_inner(b, marker);
 	console_dump(b);
+	ftstat_print(b, marker);
 	return r;
 }
 static int run_until_marker_inner(struct boot *b, const char *marker)
@@ -459,6 +537,9 @@ static int run_until_marker_inner(struct boot *b, const char *marker)
 			return -1;
 		}
 		console_drain(b);
+		if (!g_turnknobs_done && getenv("HVX_QUANTUM_AFTER") &&
+		    mem_find(b->ubuf, b->ulen, getenv("HVX_QUANTUM_AFTER")) >= 0 && turn_knobs(b))
+			return -1;
 		if (mem_find(b->ubuf, b->ulen, marker) >= 0)
 			return 0;
 		if (getenv("HVX_PROGRESS") && (iters % 4) == 0) {	/* diagnostic: live console + clock stats */
@@ -684,6 +765,8 @@ static int boot_setup(struct boot *b, uint64_t mem_size,
 		if (ioctl(b->fd, HVX_SET_SCHED, c) < 0) { perror("HVX_SET_SCHED"); free(c); return -1; }
 		free(c);
 	}
+	g_turnknobs_done = 0;
+	if (g_vcpus > 1 && !getenv("HVX_QUANTUM_AFTER") && turn_knobs(b)) return -1;
 	return 0;
 }
 static void boot_teardown(struct boot *b)
