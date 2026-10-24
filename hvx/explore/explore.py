@@ -1140,20 +1140,9 @@ class Worker(threading.Thread):
         self.boot_secs = None
 
     def run(self):
-        cmd = [HVX_RUN, "sudo", "env", "HVX_SNAP_DIR=" + SNAP_DIR] + EXTRA_ENV + [
-               os.path.join(HVX, "hvx_explore")] + engine_args() + ["serve", os.path.join(BUILD, "bzImage"),
-               os.path.join(BUILD, "initramfs-kafka.cpio.gz"), os.path.join(BUILD, IMAGE),
-               os.path.join(self.outdir, "consoles")]
-        if BACKEND == "hvm":
-            cmd = hvm_backend.engine_cmd(IMAGE, os.path.join(self.outdir, "consoles"), HVM_KERNEL, ram_args())
-        err = open(os.path.join(self.outdir, "worker-%d.err" % self.idx), "w")
-        quiet_wait()
-        p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err, text=True, bufsize=1)
-        line = p.stdout.readline()
-        if not line.startswith("READY"):
-            print("worker %d failed to start: %r" % (self.idx, line), file=sys.stderr)
+        p = self.start_engine()
+        if p is None:
             return
-        self.boot_secs = float(line.split("boot_secs=")[1])
         while True:
             job = self.jobs.get()
             if job is None:
@@ -1163,32 +1152,77 @@ class Worker(threading.Thread):
             if text.startswith("BRANCH "):
                 self.results.put((tag, text, self.branch(p, tag, text)))
                 continue
-            p.stdin.write("RUN %s %s\n" % (tag, text))
+            for attempt in (0, 1):
+                try:
+                    p.stdin.write("RUN %s %s\n" % (tag, text))
+                    p.stdin.flush()
+                    out = p.stdout.readline()
+                except (BrokenPipeError, OSError):
+                    out = ""
+                if out or attempt:
+                    break
+                # the engine died under us (killed, or the host ran out of something): start a new
+                # one and run the same schedule again -- runs are deterministic, so this loses nothing
+                print("worker %d: engine exited during %s (rc %s); restarting it" % (self.idx, tag, p.poll()),
+                      file=sys.stderr)
+                p = self.start_engine()
+                if p is None:
+                    out = ""
+                    break
+            self.results.put((tag, text, self.parse_result(out)))
+            if p is None:           # could not restart: answer the remaining jobs with an error
+                while True:
+                    job = self.jobs.get()
+                    if job is None:
+                        return
+                    self.results.put((job[0], job[1], self.parse_result("")))
+        try:
+            p.stdin.write("QUIT\n")
             p.stdin.flush()
-            out = p.stdout.readline()
-            m = re.match(r"RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: (?:tj|xt|pct|qn)\S+)*) verdict=(.*)", out.strip())
-            if not m:
-                self.results.put((tag, text, {"fp": "0", "secs": 0, "verdict": "ERROR worker: %r" % out, "worker": self.idx}))
-                continue
-            res = {"fp": m.group(2), "wfp": m.group(3), "secs": float(m.group(4)),
-                   "verdict": m.group(6), "worker": self.idx}
-            tk = re.search(r"tjk=(\d+)-(\d+) tjn=(\d+)", m.group(5))
-            if tk:      # the workload's tick range and how many ticks were delayed
-                res["tjk"] = [int(tk.group(1)), int(tk.group(2))]
-                res["tjn"] = int(tk.group(3))
-            pf = re.search(r"pctf=(\d+) pctw=(\d+)", m.group(5))
-            if pf:      # forced preemption points (Mac, M57): how many fired, and the workload's length in exits
-                res["pctf"], res["pctw"] = int(pf.group(1)), int(pf.group(2))
-            xn = re.search(r"xtn=(\d+)", m.group(5))
-            if xn:      # M49: extra ticks taken during the workload
-                res["xtn"] = int(xn.group(1))
-            qn = re.search(r"qn=(\d+)", m.group(5))
-            if qn:      # SMP Stage 3: vCPU turns taken during the workload
-                res["qn"] = int(qn.group(1))
-            self.results.put((tag, text, res))
-        p.stdin.write("QUIT\n")
-        p.stdin.flush()
-        p.wait()
+            p.wait()
+        except (BrokenPipeError, OSError):
+            pass
+
+    def start_engine(self):
+        """Boot this worker's engine (serve mode). Returns the process, or None if it did not start."""
+        cmd = [HVX_RUN, "sudo", "env", "HVX_SNAP_DIR=" + SNAP_DIR] + EXTRA_ENV + [
+               os.path.join(HVX, "hvx_explore")] + engine_args() + ["serve", os.path.join(BUILD, "bzImage"),
+               os.path.join(BUILD, "initramfs-kafka.cpio.gz"), os.path.join(BUILD, IMAGE),
+               os.path.join(self.outdir, "consoles")]
+        if BACKEND == "hvm":
+            cmd = hvm_backend.engine_cmd(IMAGE, os.path.join(self.outdir, "consoles"), HVM_KERNEL, ram_args())
+        err = open(os.path.join(self.outdir, "worker-%d.err" % self.idx), "a")
+        quiet_wait()
+        p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err, text=True, bufsize=1)
+        line = p.stdout.readline()
+        if not line.startswith("READY"):
+            print("worker %d failed to start: %r" % (self.idx, line), file=sys.stderr)
+            return None
+        if self.boot_secs is None:
+            self.boot_secs = float(line.split("boot_secs=")[1])
+        return p
+
+    def parse_result(self, out):
+        """A RESULT line -> the result dict (an ERROR verdict when the line is missing or malformed)."""
+        m = re.match(r"RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: (?:tj|xt|pct|qn)\S+)*) verdict=(.*)", out.strip())
+        if not m:
+            return {"fp": "0", "secs": 0, "verdict": "ERROR worker: %r" % out, "worker": self.idx}
+        res = {"fp": m.group(2), "wfp": m.group(3), "secs": float(m.group(4)),
+               "verdict": m.group(6), "worker": self.idx}
+        tk = re.search(r"tjk=(\d+)-(\d+) tjn=(\d+)", m.group(5))
+        if tk:      # the workload's tick range and how many ticks were delayed
+            res["tjk"] = [int(tk.group(1)), int(tk.group(2))]
+            res["tjn"] = int(tk.group(3))
+        pf = re.search(r"pctf=(\d+) pctw=(\d+)", m.group(5))
+        if pf:      # forced preemption points (Mac, M57): how many fired, and the workload's length in exits
+            res["pctf"], res["pctw"] = int(pf.group(1)), int(pf.group(2))
+        xn = re.search(r"xtn=(\d+)", m.group(5))
+        if xn:      # M49: extra ticks taken during the workload
+            res["xtn"] = int(xn.group(1))
+        qn = re.search(r"qn=(\d+)", m.group(5))
+        if qn:      # SMP Stage 3: vCPU turns taken during the workload
+            res["qn"] = int(qn.group(1))
+        return res
 
     def branch(self, p, tag, text):
         """One BRANCH request: 'BRANCH <n> <pm> <max> <marker> <schedule>'. Returns
@@ -1227,23 +1261,70 @@ class Worker(threading.Thread):
         return out
 
 
+# A result cache for long deterministic sweeps on a shared box ($HYDO_EXPLORE_CACHE = a jsonl file;
+# unset: no cache). Every finished run of a "seed-" or "fctrace-" tag is appended with a copy of its
+# console(s); a later run of the SAME schedule text and image is answered from the cache (its console
+# copied back), so an interrupted sweep resumes where it stopped. Re-runs (repro-, min- tags) never
+# use it: they exist to run the schedule again.
+CACHE_FILE = os.environ.get("HYDO_EXPLORE_CACHE")
+CACHED_TAGS = ("seed-", "fctrace-")
+
+
 class Pool:
     def __init__(self, n, outdir):
         self.jobs, self.results = queue.Queue(), queue.Queue()
+        self.outdir = outdir
         os.makedirs(os.path.join(outdir, "consoles"), exist_ok=True)
+        self.cache, self.cache_hits = {}, 0
+        if CACHE_FILE and os.path.exists(CACHE_FILE):
+            for line in open(CACHE_FILE):
+                rec = json.loads(line)
+                self.cache[(rec["image"], rec["engine"], rec["text"])] = rec
         self.workers = [Worker(i, self.jobs, self.results, outdir) for i in range(n)]
         for w in self.workers:
             w.start()
 
+    def cache_key(self, text):
+        return (IMAGE, " ".join(engine_args()), text)
+
     def run_all(self, items):
         """items: list of (tag, schedule text) -> dict tag -> (text, result)"""
-        for it in items:
+        import shutil
+        out, todo = {}, []
+        for tag, text in items:
+            rec = self.cache.get(self.cache_key(text)) if CACHE_FILE and tag.startswith(CACHED_TAGS) else None
+            if rec and all(os.path.exists(c) for c in rec["consoles"].values()):
+                for suffix, c in rec["consoles"].items():
+                    shutil.copyfile(c, os.path.join(self.outdir, "consoles", tag + suffix + ".log"))
+                out[tag] = (text, dict(rec["result"], cached=True))
+                self.cache_hits += 1
+            else:
+                todo.append((tag, text))
+        for it in todo:
             self.jobs.put(it)
-        out = {}
         while len(out) < len(items):
             tag, text, res = self.results.get()
             out[tag] = (text, res)
+            if CACHE_FILE and tag.startswith(CACHED_TAGS) and not res["verdict"].startswith("ERROR worker"):
+                self.cache_put(tag, text, res)
         return out
+
+    def cache_put(self, tag, text, res):
+        import hashlib, shutil
+        d = CACHE_FILE + ".d"
+        os.makedirs(d, exist_ok=True)
+        h = hashlib.sha1(("%s|%s" % (self.cache_key(text), time.time())).encode()).hexdigest()[:16]
+        cons = {}
+        for suffix in ("", ".recovery"):
+            src = os.path.join(self.outdir, "consoles", tag + suffix + ".log")
+            if os.path.exists(src):
+                cons[suffix] = os.path.join(d, h + suffix + ".log")
+                shutil.copyfile(src, cons[suffix])
+        image, engine, _ = self.cache_key(text)
+        rec = {"image": image, "engine": engine, "text": text, "result": res, "consoles": cons}
+        with open(CACHE_FILE, "a") as f:
+            f.write(json.dumps(rec) + "\n")
+        self.cache[self.cache_key(text)] = rec
 
     def close(self):
         for _ in self.workers:
@@ -1685,6 +1766,8 @@ def main():
         summary.update(fc_info)
     if QUIET_WAITED[0]:
         summary["quiet_wait_s"] = round(QUIET_WAITED[0], 1)
+    if pool.cache_hits:
+        summary["cache_hits"] = pool.cache_hits
     if RAM_MIB != 1024:
         summary["ram_mib"] = RAM_MIB
     if VCPUS != 1:
