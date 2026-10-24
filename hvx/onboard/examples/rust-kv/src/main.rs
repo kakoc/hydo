@@ -66,7 +66,6 @@ fn fsync_on() -> bool {
 }
 
 fn serve(dir: &str, port: &str) {
-    hydo_assert::catalog(); // the server carries the catalog of the whole binary
     let path = std::path::Path::new(dir).join("log");
     let (map, size) = replay(&path);
     if !map.is_empty() {
@@ -160,6 +159,11 @@ fn put(port: &str, k: &str, v: &str) -> i32 {
 }
 
 fn check(port: &str, acked: &str) -> i32 {
+    // The oracle carries the catalog of the whole binary (every declared property and every
+    // macro site of serve, put and check): it runs in every schedule, after the workload and
+    // after a power cut's recovery, so its console always holds the DECL lines. (The server
+    // starts before the explorer's S1 snapshot, so what it wrote then is not in a run's console.)
+    hydo_assert::catalog();
     let up = SERVES.await_cond(|| request(port, "PING", Duration::from_millis(500)).is_ok(), Duration::from_millis(100), ());
     if !up {
         println!("rkv check: the server does not answer");
