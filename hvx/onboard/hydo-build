@@ -22,6 +22,8 @@ Host tools (same defaults as build-stack.sh; override with the environment varia
     HYDO_BUSYBOX  static busybox          HYDO_SEEDRNG   prebuilt static hvx_seedrng
     HYDO_MKE2FS   e2fsprogs mke2fs        HYDO_FAKETIME  libfaketime's faketime
     HYDO_IPROUTE2 iproute2 store path     HYDO_MODROOT   guest kernel module tree
+    HYDO_READ_BIN hydo-read (hvx/readers/build.sh), staged only when a command calls
+                  hydo-read or hydo-check
 Stdlib only (the build box has no PyYAML): the YAML subset is parsed by parse_yaml() below.
 """
 import hashlib, json, mmap, os, re, shutil, stat, struct, subprocess, sys
@@ -503,6 +505,34 @@ def has_buggify(m):
     return m.get("buggify") is True
 
 
+# hydo-read / hydo-check (hvx/readers, MANIFEST.md "Reading the stores"): the static helper is
+# staged into /bin only for manifests whose commands call it, so every other image is unchanged.
+READERS_RE = re.compile(r"(?<![A-Za-z0-9_./-])hydo-(read|check)(?![A-Za-z0-9_-])")
+
+def uses_readers(m):
+    def walk(x, key=None):
+        if isinstance(x, dict):
+            return any(walk(v, k) for k, v in x.items() if k not in ("description", "msg", "name"))
+        if isinstance(x, list):
+            return any(walk(v, key) for v in x)
+        return isinstance(x, str) and bool(READERS_RE.search(x))
+    if walk(m):         # incl. test: commands/checks (the composer's plan, kept in m["_compose"])
+        return True
+    # the test composer's hydo/ folder: executables that call the helpers (scripts, or compiled
+    # programs that exec them, whose bytes then contain the name)
+    folder = (m.get("_compose") or {}).get("_folder") or {}
+    for d in sorted((folder.get("_dirs") or {}).values()):
+        for dp, dns, fns in os.walk(d):
+            dns.sort()
+            for fn in sorted(fns):
+                p = os.path.join(dp, fn)
+                if os.path.isfile(p) and os.path.getsize(p) <= (64 << 20):
+                    with open(p, "rb") as f:
+                        if READERS_RE.search(f.read().decode("latin-1")):
+                            return True
+    return False
+
+
 
 
 def service_order(svcs):
@@ -938,6 +968,12 @@ def build(m, manifest_path, out, bdir, params=None, oci=None):
         p = os.path.join(R, "bin", a)
         if not os.path.lexists(p):
             os.symlink("busybox", p)
+    if uses_readers(m):     # hydo-read + the hydo-check name for it (hvx/readers/build.sh)
+        rb = tool("HYDO_READ_BIN", os.path.join(bdir, "hydo-read"), os.path.isfile)
+        shutil.copy(rb, os.path.join(R, "bin/hydo-read"))
+        os.chmod(os.path.join(R, "bin/hydo-read"), 0o755)
+        os.symlink("hydo-read", os.path.join(R, "bin/hydo-check"))
+        print("hydo-build: staged /bin/hydo-read and /bin/hydo-check (sha256 %s)" % sha(rb)[:16])
     if iptables:
         shutil.copy(T["fc"], os.path.join(R, "bin/hydo_fc"))
         os.chmod(os.path.join(R, "bin/hydo_fc"), 0o755)
@@ -1118,6 +1154,8 @@ def main():
                 print("hydo-build: --arch arm64 does not support addr: (link faults) yet", file=sys.stderr); return 2
             if has_freeze(m):
                 print("hydo-build: --arch arm64 does not support faults: freeze yet", file=sys.stderr); return 2
+            if uses_readers(m):
+                print("hydo-build: --arch arm64 does not stage hydo-read/hydo-check yet", file=sys.stderr); return 2
             sys.path.insert(0, HERE)
             import hydo_build_arm64
             hydo_build_arm64.build(m, path, out, opt["--build-dir"], globals(), oci=oci)
