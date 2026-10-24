@@ -3,9 +3,14 @@
 version = 4
 
 [[package]]
+name = "hydo-assert"
+version = "0.1.0"
+
+[[package]]
 name = "hydo-test"
 version = "0.1.0"
 dependencies = [
+ "hydo-assert",
  "hydo-test-macros",
  "inventory",
 ]

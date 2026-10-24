@@ -43,6 +43,9 @@ pub use plan::{Expect, Fault, Knob, Service, System, TestParams};
 pub use hydo_test_macros::{check, driver};
 #[doc(hidden)]
 pub use inventory;
+/// The assertion SDK (sdk/rust): drivers and checks, and the services under test, can state
+/// properties directly (`hydo_test::assert::always(..)`, `hydo_buggify!`, ...).
+pub use hydo_assert as assert;
 
 pub mod prelude {
     pub use crate::{check, driver, fail, violation, Ctx, Error, Expect, Fault, Knob, Result, Service, System, TestParams};

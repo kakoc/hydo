@@ -75,6 +75,8 @@ Example: `hvx/onboard/examples/redis-composed-rs/` (the Rust version of
 `examples/redis-composed`, with the same command and check ids, so a schedule composes the same
 commands in the same rounds in both).
 
+The assertion SDK (`sdk/rust`, crate `hydo-assert`) is re-exported as `hydo_test::assert`, so
+a driver or check can also state properties as assertions (they go straight to the console).
+
 Not yet: `System::from_compose` (the Docker Compose importer is another branch), fakes, log
-rules and known errors (PRODUCT.md "Code first"), and re-exporting the assertion SDK
-(`hydo-assert`, branch `rust-sdk`) once it is on main.
+rules and known errors (PRODUCT.md "Code first").
