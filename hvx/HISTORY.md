@@ -1197,3 +1197,30 @@ Branch `compose-import` (worktree `../hydo-compose`; box tree `~/hydo-compose` o
   - Bind-mounted directories are read-only.
   - An arm64 (Mac) build of an import was not run. The Mac release now also ships `hydo_oci.py`, which it lacked.
   - No explorer campaign was run on the example.
+
+### Milestone 85 — DONE (cheaper vCPU switches and burst turns; the SQLite WAL-reset bug reproduced under hydo, aimed; 2026-10-24)
+
+Two agents in parallel, after the negative M74. Write-ups `hvx/FASTTURN.md` and `hvx/knownbugs/sqlite/README.md` ("A workload that restarts the WAL often"). Results on the bare-metal machine: `/var/tmp/fastturn`, `/var/tmp/walreset`.
+
+**Cheaper turn ends and burst turns (`hvx/hvx.c`, `hvx/hvx_abi.h`, side module `hvxft`; not yet in the main `hvx.ko`).**
+- **Cost breakdown** (new host-side counters, ioctls 60/61, tool `hvx/fastturn/ft_cost.c`): about 98% of a turn end is the landing. The counter overflows 256 branches early and the rest is single-stepped: about 1,780 steps of 1,600–1,900 host cycles each, about 1,000 of them the hardware exit and entry. VMXON/VMXOFF, the VMCS switch and rebuild, and the PMU and register reprogramming together cost about 3 µs per turn end.
+- **Always-on cuts**, none of which moves a turn end: a landing step no longer rewrites the counter or reads the overflow status; one control-field read per entry is cached; VMX capability registers are read once at load. A step drops from about 1,840 to about 1,560 cycles on a tight loop, 5–15% on the stack.
+- **Opt-in turn-end margin** per VM (ioctls 62/63; default 256, ticks keep 256). The largest counter overshoot measured was 107 branches (a deliberately bad loop), 49 on real Linux. Every stage-1 test lands exactly with margin 128; margin 160 is offered opt-in, not the default.
+- **Not done on purpose:** keeping each vCPU's VMCS loaded between turns. It would save at most 1.5–3%, and it would hold the CPU with preemption off and skip the rebuild that M34 relies on.
+- **Burst mode** (`struct hvx_turnctl`, a new struct; `struct hvx_sched` keeps its layout). The VM's branch clock is cut into windows; a seeded chance gives some windows a burst of short turns, and outside bursts turns stay normal. The rule depends on the VM's branch count at each turn start, which is already in the snapshot. Tokens `qb=B:s:permille`, `qbs=<seed>`, `qm=<margin>` in `hvx_explore` (refused on one vCPU); `explore.py --bursts --turn-margin`.
+- **Tests on the side module:** stage-1 tests and `hvx_sipi_test` give their recorded numbers with margin 256 and 128; new `hvx_sched_burst_test` passes (module equals a userspace model of the rule; replay, branch inside and outside a burst, and mid-turn stops identical, `0b93f018cff50590`); 2-vCPU Linux boot `6584c954c2839491`; `side-metal.sh` ALL PASS (26), every fingerprint unchanged; pinned reproducers unchanged; 179,616 explorer strings identical without the new flags (also re-checked after merging with main).
+- **2-vCPU stack, q=1000, the part after "provisioning synced":** about 46 s on the old code; 45–51 s new code with margin 256; about 28.5 s with margin 160; 0.7–0.9 s with default turns plus bursts. The fingerprint was the same in every q=1000 run. Measured under load (load average 10–29, one quiet window), so ±10–15%.
+- **Not verified:** bursts in the explorer's serve mode after a snapshot restore (the attempt failed for box reasons: one worker died at start-up and the other was stuck on a saturated disk); whether bursts find races; any margin below 256 proven safe (skid measured on one CPU only).
+
+**The SQLite 3.51.2 WAL-reset corruption: found natively and reproduced under hydo, with an aimed workload** (`walrace.c` mode `reset`, manifest `hydo-reset.yaml`, `native.sh`, `hunt.py --fix-s`).
+- **Workload:** writers commit many small transactions (300–2,000 per step instead of 40–120), checkpoints run back to back, readers reconnect often; busy handling and checkpoint modes come from the workload seed. A counter tracks WAL restarts through changes of the WAL header salt. This uses knowledge of the bug's area (the public description; the 3.51.3 diff had been read in M52), but forces no checkpoint/commit ordering. The default workload is unchanged.
+- **WAL restarts:** about 1,350 per run (670–920 per second) against about 243 for the old workload; the old workload on 3 cores restarted 1–16 times per second.
+- **Native, blind seeds:**
+  - 3.51.2: 13 of 2,260 runs "database disk image is malformed" (0.58%) with one CPU per process, and 3 of 389 on 3 cores;
+  - 3.51.3: 0 of 1,255;
+  - the failing seeds again: 28 of 300 on 3.51.2, 0 of 300 on 3.51.3;
+  - the old workload: 0 of 600.
+  All 13 blind failures had PASSIVE checkpoints from checkpointers that never yield. Native runs used `synchronous=OFF` (spinning disks).
+- **Under hydo, blind:** 87 runs on one vCPU (tick jitter, inserted ticks, shorter tick period) and 10 on 2 vCPUs with turns, 0 violations. Under hydo the same workload restarts the WAL 10–70 times less often than natively (76 per run against about 1,350); not explained.
+- **Under hydo, aimed:** with the workload seed fixed to `32efe18d` (13% natively) and only timing varied, run 3 corrupted 3.51.2: `disk=none dseed=0 tj=25ff9e5a67bfdc67 tjpm=200 tjmax=16383 pp=16384 | run S=32efe18d`, fingerprint `179351360961d91b` in the hunt's re-run and from a fresh boot (same unreadable transaction 8389540); on 3.51.3 the same schedule passes twice (`2f07b796991449b5`). Shrunk: the shorter tick period and the seed are both needed, and the delayed ticks narrow to ticks 14,976–74,352; the minimal schedule fails twice (`bb9f40d0c84d3e63`) and passes twice on 3.51.3 (`d3d452ff456a86cd`).
+- **Next:** find why WAL restarts are rarer under hydo, since that keeps a blind hunt far less likely than native; run the shorter-tick-period arm much more (it was the lever).

@@ -119,7 +119,7 @@ Each flagship boots an unmodified service, runs a workload and an oracle, and pa
 - With `HVX_VM_SMP_SCHED` and the PMU clock, one `HVX_RUN` runs every vCPU in turns of exactly Q guest branches (or seeded lengths), on one shared clock, and stops only at clean points. `HVX_GET/SET_SCHED` carry the scheduler state (M66).
 - With `HVX_VM_SMP_BOOT`, real Linux starts the other CPUs with INIT and STARTUP IPIs and boots on 2, 3 and 4 vCPUs, identically across boots and branches: 2 vCPUs `6584c954c2839491`, 3 `e1a2bb0dd744a9ab`, 4 `1dfafae6887e3a01` (`hvx/hvx_smp_boot_verify.c`, M69). Device interrupts are routed by destination.
 - Tests in `deploy-metal.sh`: `hvx_sched_pmu_test` (snapshot `73a465516c4e0094`), `hvx_sched_race_test` (grid `8cb7c61a2393f44e`), `hvx_sipi_test` (`eef5c1ebd4df2e7d` / `c8d015ab3b57252d`), `hvx_sched_sweep_test 2000` (`39971eed9c2f35fe`) and the 2-vCPU boot.
-- The explorer takes `--vcpus N` and `--turns`, and `hvx_stack_verify` takes `HVX_VCPUS`; so do `hvx/bench/run.py` and `hvx/knownbugs/sqlite/hunt.py`. Measured value so far (M74): on the benchmark's race defects and the SQLite WAL bug, several vCPUs found nothing that one vCPU with concurrent clients or tick jitter misses, at about 3× the cost per run; each turn end costs about 0.8 ms of host time. Write-ups: `hvx/SMP_PLAN.md`, `hvx/SMP_STAGE1.md`, `hvx/SMP_STAGE2.md`, `hvx/explore/TURNS.md`.
+- The explorer takes `--vcpus N` and `--turns`, and `hvx_stack_verify` takes `HVX_VCPUS`; so do `hvx/bench/run.py` and `hvx/knownbugs/sqlite/hunt.py`. Measured value so far (M74): on the benchmark's race defects and the SQLite WAL bug, several vCPUs found nothing that one vCPU with concurrent clients or tick jitter misses, at about 3× the cost per run; each turn end costs about 0.8 ms of host time, about 0.49 ms with the opt-in margin 160, and burst turns (M85, side module only so far) make dense switching affordable on average. Write-ups: `hvx/SMP_PLAN.md`, `hvx/SMP_STAGE1.md`, `hvx/SMP_STAGE2.md`, `hvx/explore/TURNS.md`.
 
 ### The Mac backend
 
@@ -133,7 +133,7 @@ Each flagship boots an unmodified service, runs a workload and an oracle, and pa
 - In our own order service: a failed cache write failed an order that was already published (M38, fixed in M39); and a duplicate under overlapping retries, a panic on the shared Redis connection, and a crash that forgot which sends had an unknown outcome (M50, all fixed).
 - In the stack configuration: with the MySQL binary log off, a commit was visible before its redo fsync finished, found only by the k-th-flush cut (M58, fixed by the binary log in M63); and Kafka's default 7-day retention deleted acknowledged orders after a large forward clock jump (M63, fixed with `log.retention.ms=-1`).
 - Upstream: etcd 3.5.5 issue 14685 (member revisions diverge after an online defrag and a crash), found without being told and absent in 3.5.6 (M60); both symptoms reproduce on the `-nq` image (M77, M78).
-- Not reproduced: the SQLite 3.51.2 WAL-reset corruption (M52, M49).
+- Upstream, aimed: the SQLite 3.51.2 WAL-reset corruption, reproduced under hydo once a workload restarted the WAL often and its seed was fixed (only timing varied); it passes on 3.51.3 (M85). A blind hunt has not found it: under hydo the workload restarts the WAL 10–70 times less often than natively (M52, M49, M74, M85).
 
 ## Open items
 
@@ -246,6 +246,7 @@ Milestones 1–32 ran inside the nested L1 VM on the build machine, before 2026-
 - M82 — the Rust assertion SDK (`sdk/rust`, byte-identical to the Go SDK; macros with file:line, `declare!`, async eventually) and the rust-kv example on the Mac and bare-metal backends (2026-10-24)
 - M83 — the Python assertion SDK (`sdk/python`, byte-identical to the Go SDK; asyncio `eventually`) and the python-kv example on the Mac backend (2026-10-24)
 - M84 — `hydo-compose`: a docker-compose.yaml becomes a starting hydo.yaml (images by digest, healthchecks, volumes, per-service addresses); `mounts:` for image services; Docker's voting app runs clean, kill and power-cut schedules twice identically (2026-10-24)
+- M85 — cheaper vCPU turn ends (opt-in margin) and seeded burst turns; the SQLite 3.51.2 WAL-reset corruption found natively with a WAL-restart-heavy workload and reproduced under hydo with that workload's seed fixed (2026-10-24)
 
 ## Where to look
 
