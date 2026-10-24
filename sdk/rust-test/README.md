@@ -55,6 +55,14 @@ evaluated now). The error's message is printed and becomes the property's detail
 `outcome(id, "unknown")` / `acked()` (the acknowledgement log the checks read; carried across a
 power cut), `exec(argv, deadline)`.
 
+History checks (`hvx/HISTORIES.md`): drivers record their operations with
+`hydo_test::assert::history::History` (process = `ctx.id()`, unique per command), and the plan
+declares a ready-made checker the host runs after the run:
+`System::history_check(HistoryCheck::linearizable("db.kv", "kv").model("cas").readback(&argv))` or
+`HistoryCheck::list_append("db.log", "log").consistency("serializable")` (a `test.checks` entry
+of kind `linearizable` / `list_append`; the optional read-back argv runs at the end of the same
+boot or of the recovery boot).
+
 ## cargo hydo
 
 `cargo install --path sdk/rust-test` installs `cargo-hydo`. In the test crate:

@@ -158,6 +158,19 @@ invariants:                    # required, at least one
     within: 10                 # required: deadline in whole seconds of guest time (1..3600)
     poll: 1                    # seconds between checks (default 1); no every:/final: here
 
+checks:                        # ready-made checkers for recorded histories (see "History
+  - id: kv.linearizable        #   checks" below; hvx/HISTORIES.md). With checks:, invariants:
+    type: linearizable         #   may be empty. linearizable | list-append
+    history: kv                # required: the history the workload records (hydo_hist kv ...)
+    model: register            # linearizable: register (default) | cas
+    initial: nil               # linearizable: nil (default: keys start absent) | any
+    final: /bin/read-all-keys  # optional: at the end (same boot / recovery boot), read the state
+                               #   back into the history; exit != 0 = history incomplete (ERROR)
+  - id: log.append
+    type: list-append
+    history: log
+    consistency: strict-serializable   # list-append: the level the system claims (HISTORIES.md)
+
 faults: [kill, pause, network, oneway, cut, clock, disk]   # which kinds make sense here;
                                # network/oneway also pull iproute2 into the image
 ```
@@ -295,6 +308,39 @@ renamed copies of the four init functions it wraps (`step_range`, `start_periodi
 
 The program under test can still use the assertion SDK (`hvx/stack/hydoassert`) for
 properties that need to see inside it; both kinds of record mix on the console.
+
+### History checks (`checks:`)
+
+An invariant is a shell command the project writes itself. For the properties every data
+system must keep, a check is stronger and needs no checking code: the workload **records** each
+operation (invocation before the request, completion after the reply, `ok` / `fail` / `info` for
+an unknown outcome) and the host checks the whole history after the run with a ready-made
+checker: `linearizable` (a key-value register or compare-and-set object, per key, Porcupine /
+Knossos style, with optional store-assigned versions) or `list-append` (Elle style: lost
+acknowledged appends, duplicates, incompatible orders, reads going back in time, G0 / G1c /
+G-single / G2 cycles at the chosen `consistency:`). The record format, the models and the
+verdict rules are in `hvx/HISTORIES.md`.
+
+- The workload, `retry`, `final:` and invariant commands get the recorder in their prelude
+  (an executable sources `/etc/hydo/prelude.sh` to get it):
+  `hydo_hist <history> <process> <invoke|ok|fail|info> <f> <args>...` (and `hydo_hist_enc` for
+  free-form values). Give every concurrent client its own process number. Go programs use
+  `hvx/stack/hydohist`.
+- `final:` runs after the workload, `retry` and healing (no cut), or in the recovery boot after a
+  power cut, before the invariants: read every key or list back and record the reads, so that a
+  write lost in the crash shows up as a read that contradicts an acknowledged write. Its exit
+  status is reported (`HYDO-CHECK-FINAL`); non-zero turns a passing check into an ERROR.
+- The guest prints one `HYDO-CHECK <spec>` line per check when the workload starts. The checks run
+  on the host: `explore.py` (and the shrinker, `run_list.py`), `hydo run` and
+  `hvx/history/hydo-check` combine the guest's verdict with the checks' (the guest's own invariant
+  violations come first) and write the explanation, e.g. the minimal set of operations that cannot
+  be ordered, next to the console (`<tag>.checks.txt`).
+- Only manifests with `checks:` get the recorder and `hydo-init-history.sh` (spliced into
+  `/sbin/init` like the liveness code); every other image builds byte-identically.
+- Examples: `examples/redis/hydo-hist.yaml` (SET/GET as registers and RPUSH/LRANGE as
+  list-append: `R=everysec` + a power cut loses an acknowledged write, both checks see it) and
+  `examples/etcd/hydo-hist.yaml` (puts and gets with etcd's mod_revision, read back through every
+  member: etcd issue 14685 shows as a version no order explains).
 
 ### Fault tokens (what the explorer types at S1)
 
@@ -505,6 +551,15 @@ any invariant); a check that times out counts as 2.
 `always`: also every `every` seconds while the workload runs (`check_every` by default).
 `eventually`: bounded liveness, polled after `after` (`heal` default, or `start`) until it
 holds or `within` seconds pass (MANIFEST "Liveness").
+`linearizable` / `list_append` (alias `list-append`): a ready-made **history check**
+(`hvx/HISTORIES.md`, "History checks" above): the commands record their operations with
+`hydo_hist` (source `/etc/hydo/prelude.sh`; process = `$HYDO_CMD_ID`, unique per entry), and the
+host checks the history after the run. Fields: `history` (required), `model`/`initial`
+(linearizable), `consistency` (list_append), `msg`; `run` is optional and is the final read-back
+(run at the end of the same boot or of the recovery boot). In the `hydo/` folder the file
+`checks/linearizable_<name>` or `checks/list_append_<name>` is the read-back, with
+`# hydo: history=kv model=register` (or `consistency=...`) in its header. They become top-level
+`checks:` entries, not invariants. Example: `examples/redis-composed-hist/`.
 
 **Environment of a command.** Everything an invariant sees (`HYDO_ACKED`, `HYDO_OUTCOMES`,
 the manifest's `env:`), plus `HYDO_CMD` (its id), `HYDO_CMD_ID` (its entry number, unique in

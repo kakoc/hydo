@@ -35,3 +35,19 @@ fn plan_lists_every_function_in_a_fixed_order() {
     }
     assert_eq!(j, sys.plan_json("/tmp/g", "/bin/t", &regs), "the plan is a pure function");
 }
+
+#[test]
+fn history_checks_become_test_checks() {
+    let regs = hydo_test::registrations();
+    let sys = System::new("t").service(Service::new("db", "/bin/db").ready("true")).steps(8)
+        .history_check(HistoryCheck::linearizable("db.kv_linearizable", "kv").model("cas").readback(&["/bin/t", "readback"]))
+        .history_check(HistoryCheck::list_append("db.log", "log").consistency("serializable"));
+    let j = sys.plan_json("/tmp/g", "/bin/t", &regs);
+    for want in ["\"kind\": \"linearizable\"", "\"history\": \"kv\"", "\"model\": \"cas\"", "\"readback\"",
+                 "\"kind\": \"list_append\"", "\"consistency\": \"serializable\""] {
+        assert!(j.contains(want), "missing {:?} in\n{}", want, j);
+    }
+    if let Ok(p) = std::env::var("HYDO_PLAN_OUT") {      // for a hydo-build --check by hand
+        std::fs::write(p, &j).unwrap();
+    }
+}
