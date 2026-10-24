@@ -225,6 +225,23 @@ daemon() {
   drain
 }
 
+stop_all() {   # the step range ran into workload.timeout: stop the composition, record what ran
+  $BB kill -9 $(tree $_dp) 2>/dev/null
+  for _p in $C/pid.*; do
+    [ -f "$_p" ] || continue
+    _i=${_p##*.}
+    [ -f $C/rc.$_i ] && continue
+    read _pp _id < $_p
+    con "HYDO-CMD end i=$_i cmd=$_id rc=137 status=killed (workload.timeout)"
+    echo killed > $C/rc.$_i
+  done
+  _n() { $BB cat $C/rc.* 2>/dev/null | $BB grep -c "^$1\$"; }
+  _sum="started=$($BB ls $C | $BB grep -c '^pid\.') ok=$(_n ok) failed=$(_n failed) timeout=$(_n timeout) violation=$(_n violation) killed=$(_n killed) skipped=0"
+  echo "$_sum" > $C/summary; : > $C/incomplete
+  con "HYDO-COMPOSE done $_sum (stopped: steps $1..$(($2 - 1)) ran into workload.timeout=${HYDO_WORKLOAD_TIMEOUT}s)"
+  : > $C/done
+}
+
 step() {   # FROM TO
   $BB mkdir -p $C
   echo $2 > $C/gate.tmp && $BB mv $C/gate.tmp $C/gate
@@ -234,6 +251,9 @@ step() {   # FROM TO
     echo $! > $C/daemon.pid
   fi
   read _dp < $C/daemon.pid
+  # the init kills this call after workload.timeout; stop the composition a little earlier,
+  # so no command keeps running into the heal and the final checks
+  tnow; _end=$((T + (HYDO_WORKLOAD_TIMEOUT > 10 ? HYDO_WORKLOAD_TIMEOUT - 5 : HYDO_WORKLOAD_TIMEOUT / 2 + 1) * 100))
   while :; do
     if [ $2 -ge $HYDO_STEPS ]; then
       [ -f $C/done ] && return 0
@@ -245,6 +265,8 @@ step() {   # FROM TO
       [ -f $C/done ] && return 0
       echo "compose.sh: the composer daemon died"; $BB tail -5 $C/daemon.log; return 1
     fi
+    tnow
+    if [ $T -ge $_end ]; then [ -f $C/done ] || stop_all $1 $2; return 1; fi
     $BB sleep 0.01
   done
 }

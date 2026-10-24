@@ -77,8 +77,9 @@ fn plan(bin: &str, arch: &str) -> PathBuf {
     let dst = guest.join(bin);
     std::fs::copy(&built, &dst).unwrap_or_else(|e| die(&format!("{}: {}", built.display(), e)));
     let host = Path::new("target/release").join(bin);
+    // HYDO_ARCH: system() may pick per-architecture files (a Redis for x86_64 or for aarch64)
     run(Command::new(&host).args(["plan", "--guest-binary", dst.to_str().unwrap(), "--guest-path", &format!("/bin/{}", bin),
-                                  "--out", ".hydo/plan.json"]));
+                                  "--out", ".hydo/plan.json"]).env("HYDO_ARCH", arch));
     eprintln!("cargo hydo: wrote .hydo/plan.json (guest binary .hydo/guest/{}, {})", bin, triple);
     PathBuf::from(".hydo/plan.json")
 }

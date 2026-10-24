@@ -48,6 +48,19 @@ $CS verdict >> $T/console || echo "verdict rc=$?" >> $T/console
 echo "== plan:"; $CS plan
 echo "== console:"; cat $T/console
 grep -q "HYDO-COMPOSE done" $T/console
-grep -q "parallel_driver_v reported a violation" $T/console
+grep -q "parallel_driver_v (entry 1) reported a violation" $T/console
+# 2. a composition longer than workload.timeout: step stops it (every command killed, recorded)
+: > $T/console; rm -rf $T/tmp/hydo/compose
+echo HYDO_WORKLOAD_TIMEOUT=3 >> $E/manifest.sh
+cat > $E/compose.list <<EOF2
+0 parallel_driver 60 parallel_driver_long exec $BB sleep 30
+EOF2
+echo 00000001,p2,q2,r100 > $T/tmp/hydo/compose.W
+t0=$(cut -d. -f1 /proc/uptime)
+$CS step 0 6 || echo "step rc=$?" >> $T/console
+$CS verdict >> $T/console
+echo "== stopped after $(( $(cut -d. -f1 /proc/uptime) - t0 )) s:"; grep -v DECL $T/console
+grep -q "status=killed (workload.timeout)" $T/console
+[ -z "$(ps -o args | grep -v grep | grep 'compose.sh run1')" ] || { echo "a command is still running"; exit 1; }
 rm -rf $T
 echo "compose-dryrun: OK"

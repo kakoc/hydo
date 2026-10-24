@@ -68,7 +68,8 @@ cargo hydo run "disk=none | run"           # plan + build, then `hydo run ...` (
 The guest binary is linked with Rust's self-contained musl and rust-lld (no C toolchain) and
 host paths are remapped, so a pinned toolchain (`rust-toolchain.toml`) gives the same bytes
 on every build. `--arch` defaults to aarch64 on macOS (the Mac backend) and x86_64 elsewhere;
-`HYDO` names the engine command. The plan's file paths are relative to `.hydo/`, so `.hydo/`
+`HYDO` names the engine command; the plan step sees `HYDO_ARCH` (x86_64 or aarch64), so
+`system()` can pick per-architecture files. The plan's file paths are relative to `.hydo/`, so `.hydo/`
 can be copied to a build machine as a whole.
 
 Example: `hvx/onboard/examples/redis-composed-rs/` (the Rust version of
