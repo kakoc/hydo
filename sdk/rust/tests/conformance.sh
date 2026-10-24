@@ -4,7 +4,10 @@
 # hvx/stack/hydoassert) and examples/conformance.rs, run both under three BUGGIFY
 # configurations (env seed, config file, none), and diff their consoles and stdouts.
 # Usage: sdk/rust/tests/conformance.sh   (needs go and cargo; exit 0 = identical)
+# GOTOOLCHAIN picks the Go version (default go1.26.5, the stack's go.mod; Go 1.27.3 gives the
+# same bytes for these calls -- Rust strings are always valid UTF-8, the one input where 1.27 differs).
 set -euo pipefail
+export GOTOOLCHAIN=${GOTOOLCHAIN:-go1.26.5}
 HERE=$(cd "$(dirname "$0")" && pwd)
 CRATE=$(dirname "$HERE")
 REPO=$(cd "$CRATE/../.." && pwd)
