@@ -129,11 +129,88 @@ def load_yaml_text(text, name):
         pass
     hb = _hydo_build()
     try:
-        return hb.parse_yaml(text, os.path.basename(name))
+        return resolve_anchors(hb.parse_yaml(anchors_to_keys(text, name), os.path.basename(name)), name)
     except hb.YamlError as e:
         raise ComposeError("%s (the stdlib parser supports the hydo.yaml subset only: no anchors, aliases "
                            "or merge keys. Install PyYAML, or convert the file first: "
                            "`docker compose -f %s config --format json > compose.json`)" % (e, name))
+
+
+ANCHOR_KEY = "__hydo_anchor__"
+ALIAS_PFX = "__hydo_alias__ "
+_ANCH = re.compile(r"^(\s*(?:- )?[^#'\"]*?:)\s+&([A-Za-z0-9_.-]+)\s*(#.*)?$")
+_ALIAS = re.compile(r"(:\s+|^\s*-\s+|[\[,]\s*)\*([A-Za-z0-9_.-]+)(?=\s*(?:$|#|,|\]))")
+
+
+def anchors_to_keys(text, name):
+    """Without PyYAML: rewrite the common Compose uses of anchors into the hydo-build subset.
+    `key: &a` (a block mapping follows) -> `key:` + a first child `__hydo_anchor__: a`;
+    `*a` as a value, list item or flow item -> the string "__hydo_alias__ a" (resolved after
+    parsing by resolve_anchors, `<<:` merge keys included). Anchors on scalars or sequences are
+    refused (use PyYAML or `docker compose config --format json`)."""
+    if "&" not in text and "*" not in text:
+        return text
+    lines = text.split("\n")
+    out = []
+    for i, ln in enumerate(lines):
+        mo = _ANCH.match(ln)
+        if mo:
+            nxt = next((x for x in lines[i + 1:] if x.strip() and not x.strip().startswith("#")), "")
+            ind = len(nxt) - len(nxt.lstrip())
+            base = len(mo.group(1)) - len(mo.group(1).lstrip())
+            if ind <= base or nxt.lstrip().startswith("- "):
+                raise ComposeError("%s:%d: anchor &%s is not on a block mapping; the stdlib parser handles only "
+                                   "those (install PyYAML or import `docker compose config --format json`)"
+                                   % (name, i + 1, mo.group(2)))
+            out.append(mo.group(1))
+            out.append(" " * ind + "%s: %s" % (ANCHOR_KEY, mo.group(2)))
+            continue
+        if re.search(r"(^|[\s:])&[A-Za-z0-9_.-]+", ln.split("#", 1)[0]) and ":" in ln and "&" in ln.split(":", 1)[1].split("#")[0][:3]:
+            raise ComposeError("%s:%d: anchors on scalars or flow values need PyYAML (or import `docker compose "
+                               "config --format json`)" % (name, i + 1))
+        out.append(_ALIAS.sub(lambda m: '%s"%s%s"' % (m.group(1), ALIAS_PFX, m.group(2)), ln))
+    return "\n".join(out)
+
+
+def resolve_anchors(doc, name):
+    anchors = {}
+
+    def collect(x):
+        if isinstance(x, dict):
+            if ANCHOR_KEY in x:
+                anchors[str(x.pop(ANCHOR_KEY))] = x
+            for v in x.values():
+                collect(v)
+        elif isinstance(x, list):
+            for v in x:
+                collect(v)
+    collect(doc)
+    if not anchors and ALIAS_PFX not in json.dumps(doc):
+        return doc
+
+    def res(x, depth=0):
+        if depth > 50:
+            raise ComposeError("%s: anchors nest too deep (a cycle?)" % name)
+        if isinstance(x, str) and x.startswith(ALIAS_PFX):
+            k = x[len(ALIAS_PFX):]
+            if k not in anchors:
+                raise ComposeError("%s: alias *%s has no anchor &%s (only block-mapping anchors are read "
+                                   "without PyYAML)" % (name, k, k))
+            return res(json.loads(json.dumps(anchors[k])), depth + 1)
+        if isinstance(x, list):
+            return [res(v, depth) for v in x]
+        if isinstance(x, dict):
+            out = {}
+            if "<<" in x:
+                for m in as_list(res(x["<<"], depth)):
+                    if isinstance(m, dict):
+                        out.update(m)
+            for k, v in x.items():
+                if k != "<<":
+                    out[k] = res(v, depth)
+            return out
+        return x
+    return res(doc)
 
 
 def parse_env_file(path, required=True):
@@ -415,12 +492,13 @@ def env_of(v, where, warn, interp_env, use_env):
         raise ComposeError("%s: environment must be a list or a mapping" % where)
     for k, val in items:
         k = str(k)
-        if val is None:
-            if use_env and k in os.environ:
-                out[k] = os.environ[k]
+        if val is None:     # Compose: from the project environment (.env, the shell)
+            v = interp_env.get(k) if interp_env else None
+            if v is not None:
+                out[k] = v
             else:
-                warn("environment", "%s: %s has no value (Compose takes it from the shell); it was left out -- "
-                     "give it a value in the Compose file or .env, or pass --use-env" % (where, k))
+                warn("environment", "%s: %s has no value and is not in .env (Compose would take it from the "
+                     "shell); it was left out -- give it a value in .env, or pass --use-env" % (where, k))
             continue
         out[k] = "" if val is None else (str(val).lower() if isinstance(val, bool) else str(val))
     return out
@@ -716,7 +794,7 @@ class Importer:
                 env[k] = unesc(v)
             for k in bare:
                 self.warn("env_file", "%s: %s in %s has no value; left out" % (where, k, path))
-        for k, v in env_of(s.get("environment"), where, self.warn, None, self.o.get("use_env")).items():
+        for k, v in env_of(s.get("environment"), where, self.warn, self.interp, self.o.get("use_env")).items():
             env[k] = unesc(v)
         if env:
             out["env"] = env

@@ -210,6 +210,26 @@ class EnvFiles(Base):
         self.assertIn("required variable DB_PASS", err.getvalue())
 
 
+class Anchors(Base):
+    def test_anchors_without_pyyaml(self):
+        """the common x-*: &a / <<: *a pattern, read by the stdlib fallback"""
+        text = open(os.path.join(FIX, "anchors", "docker-compose.yml")).read()
+        doc = hydo_compose.resolve_anchors(
+            hydo_compose._hydo_build().parse_yaml(hydo_compose.anchors_to_keys(text, "c.yml")), "c.yml")
+        a, b = doc["services"]["api"], doc["services"]["worker"]
+        self.assertEqual(a["image"], "example/app:1")
+        self.assertEqual(a["environment"], ["MODE=api", "TOKEN"])            # explicit keys win over the merge
+        self.assertEqual(b["environment"], ["MODE=shared", "QUEUE=q"])
+        self.assertEqual(b["restart"], "always")
+        self.assertEqual(doc["services"]["db"]["healthcheck"], doc["x-hc"])   # a plain alias
+        self.assertNotIn(hydo_compose.ANCHOR_KEY, json.dumps(doc))
+
+    def test_anchors_import(self):
+        self.run_import("anchors")
+        self.assertEqual(self.svc["api"]["env"], {"MODE": "api", "TOKEN": "from-dotenv"})   # bare TOKEN from .env
+        self.assertTrue(self.svc["db"]["ready"].startswith("timeout 30 hydo-oci db pg_isready"))
+
+
 class Unsupported(Base):
     def test_warnings(self):
         m = self.run_import("unsupported")
