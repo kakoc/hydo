@@ -2,7 +2,7 @@
 """hydo-build -- compile a project manifest (hydo.yaml, see MANIFEST.md) into a hydo guest image.
 
     hydo-build <hydo.yaml> [--set KEY=VALUE ...] [--out NAME] [--build-dir DIR] [--arch x86_64|arm64]
-               [--check] [--print-shell] [--print-init]
+               [--check] [--print-shell] [--print-init] [--print-world]
 
 Produces, in --build-dir (default ./build):
     <NAME>-ext4.img   read-only ext4 root (p1): the project's files + closures, busybox, the
@@ -294,6 +294,7 @@ class ManifestError(Exception):
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 KNOWN_TOP = {"name", "description", "guest", "root", "data", "env", "shell", "services",
              "provision", "workload", "knobs", "invariants", "faults", "freeze_match", "image", "params",
+             "fakes", "proxies",
              "buggify",
              "test", "format", "hydo_version",      # these three: the test composer (hydo_composer.py)
              "checks"}                                # history checks (hvx/HISTORIES.md)
@@ -303,10 +304,11 @@ KNOWN_SVC = {"name", "cmd", "setup", "ready", "ready_timeout", "port", "depends_
 KNOWN_INV = {"id", "type", "msg", "cmd", "every", "final", "description", "within", "after", "poll"}
 LIVE_ANCHORS = ("heal", "start")
 KNOWN_KNOB = {"token", "name", "default", "set", "values", "safe", "description"}
-FAULT_KINDS = {"kill", "pause", "network", "oneway", "cut", "clock", "disk", "freeze"}
+FAULT_KINDS = {"kill", "pause", "network", "oneway", "cut", "clock", "disk", "freeze", "protocol"}
 # faults: omitted = these. `freeze` is opt-in (it stages iptables and a helper into the root),
-# so a manifest that does not list it builds exactly as before.
-DEFAULT_FAULT_KINDS = FAULT_KINDS - {"freeze"}
+# so a manifest that does not list it builds exactly as before. `protocol` (H=, fakes:/proxies:)
+# stages nothing by itself.
+DEFAULT_FAULT_KINDS = FAULT_KINDS - {"freeze", "protocol"}
 
 
 def _need(d, k, where, typ=str):
@@ -417,8 +419,8 @@ def validate(m):
         where = "knobs[%d]" % i
         _unknown(k, KNOWN_KNOB, where)
         t = _need(k, "token", where)
-        if not re.fullmatch(r"[A-Z]", t) or t in "KNCPTOF":
-            raise ManifestError("%s: token must be one capital letter other than K N C P T O F (fault tokens)" % where)
+        if not re.fullmatch(r"[A-Z]", t) or t in "KNCPTOFH":
+            raise ManifestError("%s: token must be one capital letter other than K N C P T O F H (fault tokens)" % where)
         if t in toks:
             raise ManifestError("%s: duplicate token %s" % (where, t))
         toks.add(t)
@@ -457,6 +459,7 @@ def validate(m):
             raise ManifestError("guest.ram_mib: a whole number of MiB in [%d, %d] (got %r; x86_64 allows up "
                                 "to %d)" % (RAM_MIB_MIN, max(RAM_MIB_MAX.values()), r, RAM_MIB_MAX["x86_64"]))
     validate_checks(m, ids)
+    validate_world(m)
     return m
 
 
@@ -499,6 +502,156 @@ def has_freeze(m):
     return "freeze" in (m.get("faults") or [])
 
 
+# ------------------------------------------------------------------ fake outside services
+# fakes: (fake HTTP/gRPC services that record what the outside world saw) and proxies: (fault
+# proxies in front of a real service), both served by one in-guest program, hydo-world
+# (hvx/onboard/world/), and faulted by H= tokens (hydo-init-fakes.sh). MANIFEST.md, "Fake outside
+# services". A manifest without either key builds exactly as before.
+WORLD_INIT = "hydo-init-fakes.sh"      # inserted into /sbin/init only for manifests with fakes:/proxies:
+PF_WRAP = ("start_all", "set_knob", "step_range", "restart_dead", "failed_ids", "final_verdict")
+KNOWN_FAKE = {"name", "port", "addr", "protocol", "idempotency", "ref", "routes", "description"}
+KNOWN_PROXY = {"name", "port", "addr", "protocol", "idempotency", "ref", "routes", "to", "service", "description"}
+KNOWN_ROUTE = {"name", "method", "path", "status", "code", "headers", "body", "message", "ref", "effect",
+               "idempotent", "webhook", "description"}
+KNOWN_HOOK = {"url", "method", "body", "headers", "delay_ms", "retries", "description"}
+EXTRACT_RE = re.compile(r"^(header:[A-Za-z0-9-]+|json:[A-Za-z0-9_.]+|query:[A-Za-z0-9_-]+|form:[A-Za-z0-9_-]+|"
+                        r"path:[A-Za-z0-9_]+|pb:[1-9][0-9]*|body)$")
+HOOK_VARS = {"seq", "ref", "idem", "fake", "route"}
+
+
+def has_world(m):
+    return bool(m.get("fakes") or m.get("proxies"))
+
+
+def _world_addr(x, where):
+    a = str(x.get("addr", "127.0.0.1"))
+    mo = ADDR_RE.match(a)
+    if not mo or any(int(v) > 255 for v in mo.groups()):
+        raise ManifestError("%s: addr %r must be a loopback address 127.x.y.z" % (where, a))
+    return a
+
+
+def validate_world(m):
+    fakes, proxies = m.get("fakes") or [], m.get("proxies") or []
+    if not isinstance(fakes, list) or not isinstance(proxies, list):
+        raise ManifestError("fakes: and proxies: are lists")
+    svcs = {s["name"]: s for s in m["services"]}
+    used = {}          # (addr, port) -> who
+    for s in m["services"]:
+        if s.get("port"):
+            used[(str(s.get("addr", "127.0.0.1")), int(s["port"]))] = "service " + s["name"]
+    names = set()
+    for kind, lst, known in (("fakes", fakes, KNOWN_FAKE), ("proxies", proxies, KNOWN_PROXY)):
+        for i, e in enumerate(lst):
+            where = "%s[%d]" % (kind, i)
+            if not isinstance(e, dict):
+                raise ManifestError("%s: must be a mapping" % where)
+            _unknown(e, known, where)
+            n = _need(e, "name", where)
+            if not NAME_RE.match(n):
+                raise ManifestError("%s: name %r must match [a-z][a-z0-9_]* (fault tokens name it: H=%s@...)" % (where, n, n))
+            if n in names or n in svcs or n == "workload":
+                raise ManifestError("%s: name %r is already a service, fake or proxy" % (where, n))
+            names.add(n)
+            port = e.get("port")
+            if not isinstance(port, int) or isinstance(port, bool) or not 1 <= port <= 65535:
+                raise ManifestError("%s: port: required, a TCP port number" % where)
+            ap = (_world_addr(e, where), port)
+            if ap in used:
+                raise ManifestError("%s: %s:%d is already used by %s" % (where, ap[0], port, used[ap]))
+            used[ap] = "%s %s" % (kind[:-1] if kind == "fakes" else "proxy", n)
+            proto = e.get("protocol", "http")
+            if proto not in (("http", "grpc") if kind == "fakes" else ("http", "grpc", "tcp")):
+                raise ManifestError("%s: protocol must be %s" % (where, "http or grpc" if kind == "fakes" else "http, grpc or tcp"))
+            for k in ("idempotency", "ref"):
+                if k in e and not EXTRACT_RE.match(str(e[k])):
+                    raise ManifestError("%s: %s %r: one of header:<Name>, json:<field>, query:<name>, form:<name>, "
+                                        "path:<name|n>, pb:<field number>, body" % (where, k, e[k]))
+            if kind == "proxies":
+                if ("to" in e) == ("service" in e):
+                    raise ManifestError("%s: give exactly one of to: <host:port> or service: <name>" % where)
+                if "service" in e:
+                    t = svcs.get(e["service"])
+                    if not t or not t.get("port"):
+                        raise ManifestError("%s: service %r is not a service with a port:" % (where, e["service"]))
+                elif not re.fullmatch(r"127\.\d+\.\d+\.\d+:\d+", str(e["to"])):
+                    raise ManifestError("%s: to %r must be <loopback address>:<port>" % (where, e["to"]))
+                if proto == "tcp" and e.get("routes"):
+                    raise ManifestError("%s: a tcp proxy has no routes (one connection = one request, route conn)" % where)
+            routes = e.get("routes") or []
+            if kind == "fakes" and not routes:
+                raise ManifestError("%s: routes: at least one" % where)
+            rn = set()
+            for j, r in enumerate(routes):
+                rw = "%s.routes[%d]" % (where, j)
+                if not isinstance(r, dict):
+                    raise ManifestError("%s: must be a mapping" % rw)
+                _unknown(r, KNOWN_ROUTE if kind == "fakes" else {"name", "method", "path", "ref", "effect", "description"}, rw)
+                x = _need(r, "name", rw)
+                if not NAME_RE.match(x) or x in rn or x in ("any", "conn"):
+                    raise ManifestError("%s: name %r: [a-z][a-z0-9_]*, unique, not 'any' or 'conn'" % (rw, x))
+                rn.add(x)
+                if "ref" in r and not EXTRACT_RE.match(str(r["ref"])):
+                    raise ManifestError("%s: ref %r is not an extractor (see MANIFEST.md)" % (rw, r["ref"]))
+                for k in ("status", "code"):
+                    if k in r and (not isinstance(r[k], int) or isinstance(r[k], bool)):
+                        raise ManifestError("%s: %s must be a number" % (rw, k))
+                if "message" in r and not re.fullmatch(r"(?:[0-9a-fA-F]{2})*", str(r["message"])):
+                    raise ManifestError("%s: message is the protobuf bytes in hex" % rw)
+                for k in ("effect", "idempotent"):
+                    if k in r and not isinstance(r[k], bool):
+                        raise ManifestError("%s: %s is true or false" % (rw, k))
+                if r.get("idempotent") and not e.get("idempotency"):
+                    raise ManifestError("%s: idempotent: true needs the fake's idempotency: (where the key is)" % rw)
+                wh = r.get("webhook")
+                if wh is not None:
+                    if not isinstance(wh, dict):
+                        raise ManifestError("%s.webhook: must be a mapping" % rw)
+                    _unknown(wh, KNOWN_HOOK, rw + ".webhook")
+                    if not re.fullmatch(r"http://127\.\d+\.\d+\.\d+:\d+/\S*", str(_need(wh, "url", rw + ".webhook"))):
+                        raise ManifestError("%s.webhook: url must be http://<loopback address>:<port>/<path>" % rw)
+                    for t in [wh.get("body") or "", wh["url"]] + list((wh.get("headers") or {}).values()):
+                        bad = set(re.findall(r"\{(seq|ref|idem|fake|route|json|header|query|path|form|pb)(?::[^{}\"]*)?\}", str(t))) - HOOK_VARS
+                        if bad:
+                            raise ManifestError("%s.webhook: {%s:...}: a webhook may use only {%s} (it can be re-sent "
+                                                "after a power cut, without the request)" % (rw, sorted(bad)[0], "} {".join(sorted(HOOK_VARS))))
+                    for k in ("delay_ms", "retries"):
+                        if k in wh and (not isinstance(wh[k], int) or wh[k] < 0):
+                            raise ManifestError("%s.webhook: %s is a whole number >= 0" % (rw, k))
+
+
+def world_targets(m):
+    """Every name an H= token may name: each fake/proxy, and each of its routes as <name>.<route>."""
+    out = []
+    for e in (m.get("fakes") or []) + (m.get("proxies") or []):
+        out.append(e["name"])
+        out += ["%s.%s" % (e["name"], r["name"]) for r in e.get("routes") or []]
+    return out
+
+
+def world_config(m):
+    """/etc/hydo/world.json: what hydo-world serves (hvx/onboard/world/config.go)."""
+    svcs = {s["name"]: s for s in m["services"]}
+    cfg = {"log": "/tmp/hydo/world.log", "sock": "/tmp/hydo/world.sock", "fakes": [], "proxies": []}
+    for kind in ("fakes", "proxies"):
+        for e in m.get(kind) or []:
+            c = {k: e[k] for k in ("name", "port", "protocol", "idempotency", "ref") if k in e}
+            c["addr"] = str(e.get("addr", "127.0.0.1"))
+            if kind == "proxies":
+                if "service" in e:
+                    t = svcs[e["service"]]
+                    c["to"] = "%s:%d" % (t.get("addr", "127.0.0.1"), t["port"])
+                else:
+                    c["to"] = str(e["to"])
+            c["routes"] = []
+            for r in e.get("routes") or []:
+                d = {k: r[k] for k in ("name", "method", "path", "status", "code", "headers", "body", "message",
+                                       "ref", "effect", "idempotent") if k in r}
+                if r.get("webhook") is not None:
+                    d["webhook"] = {k: r["webhook"][k] for k in KNOWN_HOOK - {"description"} if k in r["webhook"]}
+                c["routes"].append(d)
+            cfg[kind].append(c)
+    return json.dumps(cfg, indent=1, sort_keys=True) + "\n"
 def has_buggify(m):
     """buggify: true -- the project's programs carry SDK fault points; the init turns the
     schedule token B= into /tmp/hydo-buggify (hydo-init-buggify.sh)."""
@@ -582,6 +735,8 @@ def compile_shell(m, tc_path, fc=None):
         L.append("HYDO_CLOCK_AFTER_CUT=%d" % int(m["guest"]["clock_after_cut"]))
     if fc:      # only then (faults: lists freeze): other manifests compile byte-identically
         L += ["HYDO_FC=%s" % shq(fc[0]), "HYDO_IPT=%s" % shq(fc[1])]
+    if has_world(m):    # only then (fakes:/proxies:): other manifests compile byte-identically
+        L += ["HYDO_WORLD=/bin/hydo-world", "HYDO_WORLD_TARGETS=%s" % shq(" ".join(world_targets(m)))]
     for n in order:
         s = svcs[n]
         L += ["HYDO_SVC_%s_cmd=%s" % (n, shq(s["cmd"])),
@@ -789,12 +944,14 @@ def init_text(m):
         base = base[:i] + "# copies of the init functions hydo-init-freeze.sh wraps\n" + "".join(copies) + "\n" + fz + base[i:]
     if has_buggify(m):
         base = _splice(base, BG_WRAP, "_bg_orig_", BG_INIT, "buggify: true")
+    if has_world(m):    # fakes:/proxies: (hydo-init-fakes.sh), after every other extension
+        base = _splice(base, PF_WRAP, "_pf_orig_", WORLD_INIT, "fakes:/proxies:")
     return base
 
 
 def install_init(m, dst):
     if any(v.get("type") == "eventually" for v in m["invariants"]) or has_links(m) or has_freeze(m) or \
-       "clock_after_cut" in (m.get("guest") or {}) or has_buggify(m) or m.get("checks"):
+       "clock_after_cut" in (m.get("guest") or {}) or has_buggify(m) or m.get("checks") or has_world(m):
         with open(dst, "w") as f:
             f.write(init_text(m))
     else:
@@ -932,6 +1089,8 @@ def build(m, manifest_path, out, bdir, params=None, oci=None):
                         lambda p: os.path.isfile(p + "/bin/xtables-legacy-multi"))
         T["fc"] = tool("HYDO_FCBIN", os.path.join(bdir, "hydo_fc"), os.path.isfile)
         modroot = tool("HYDO_MODROOT", "/run/current-system/kernel-modules/lib/modules/6.6.35", os.path.isdir)
+    if has_world(m):    # fakes:/proxies: -> the prebuilt static hydo-world (hvx/onboard/world/build.sh)
+        T["world"] = tool("HYDO_WORLDBIN", os.path.join(bdir, "hydo-world"), os.path.isfile)
     mdir = os.path.dirname(os.path.abspath(manifest_path))
     root = m.get("root") or {}
     R = os.path.join(bdir, "%s-root" % out)
@@ -977,6 +1136,11 @@ def build(m, manifest_path, out, bdir, params=None, oci=None):
     if iptables:
         shutil.copy(T["fc"], os.path.join(R, "bin/hydo_fc"))
         os.chmod(os.path.join(R, "bin/hydo_fc"), 0o755)
+    if "world" in T:
+        shutil.copy(T["world"], os.path.join(R, "bin/hydo-world"))
+        os.chmod(os.path.join(R, "bin/hydo-world"), 0o755)
+        with open(os.path.join(R, "etc/hydo/world.json"), "w") as f:
+            f.write(world_config(m))
     for mod in (NETMODS if want_tc else []) + (FCMODS if iptables else []):
         src = subprocess.run(["find", modroot, "-name", mod + ".ko.xz"], stdout=subprocess.PIPE, text=True).stdout.split()
         if not src:
@@ -1110,7 +1274,7 @@ def main():
             sets.append(tuple(a[i + 1].split("=", 1))); i += 2
         elif a[i] in opt:
             opt[a[i]] = a[i + 1]; i += 2
-        elif a[i] in ("--check", "--print-shell", "--print-init"):
+        elif a[i] in ("--check", "--print-shell", "--print-init", "--print-world"):
             flags.add(a[i]); i += 1
         else:
             print("hydo-build: unknown argument %s" % a[i], file=sys.stderr); return 2
@@ -1135,6 +1299,8 @@ def main():
         print(ms); print("# ---- prelude.sh"); print(pre); return 0
     if "--print-init" in flags:
         sys.stdout.write(init_text(m)); return 0
+    if "--print-world" in flags:
+        sys.stdout.write(world_config(m) if has_world(m) else "{}\n"); return 0
     if "--check" in flags:
         print("hydo-build: %s OK (%d services, %d invariants, %d workload steps)" % (
             path, len(m["services"]), len(m["invariants"]), m["workload"]["steps"]) +
@@ -1154,6 +1320,8 @@ def main():
                 print("hydo-build: --arch arm64 does not support addr: (link faults) yet", file=sys.stderr); return 2
             if has_freeze(m):
                 print("hydo-build: --arch arm64 does not support faults: freeze yet", file=sys.stderr); return 2
+            if has_world(m):
+                print("hydo-build: --arch arm64 does not support fakes:/proxies: yet", file=sys.stderr); return 2
             if uses_readers(m):
                 print("hydo-build: --arch arm64 does not stage hydo-read/hydo-check yet", file=sys.stderr); return 2
             sys.path.insert(0, HERE)

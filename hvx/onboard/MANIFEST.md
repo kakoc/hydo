@@ -171,7 +171,8 @@ checks:                        # ready-made checkers for recorded histories (see
     history: log
     consistency: strict-serializable   # list-append: the level the system claims (HISTORIES.md)
 
-faults: [kill, pause, network, oneway, cut, clock, disk]   # which kinds make sense here;
+faults: [kill, pause, network, oneway, cut, clock, disk]   # which kinds make sense here (also
+                               # freeze, protocol; see their sections);
                                # network/oneway also pull iproute2 into the image
 ```
 
@@ -356,6 +357,7 @@ verdict rules are in `hvx/HISTORIES.md`.
 | `N=<a>-<b>@...`, `N=<a>-*@...` | netem on the link between two services with `addr:` (or between `a` and every other one); see "Link faults" |
 | `O=<a>-<b>@<from>-<to>:req\|resp:<netem>` | one direction of a link: `req` = packets from `a` to `b`, `resp` = from `b` to `a` |
 | `F=<svc>><peer>@<step>[#<n>][:<match>]:<dur>` | freeze `<svc>` at the n-th packet it **sends** to `<peer>` (`<` = **receives** from) at/after step `<step>`, for `<dur>` ms; only with `freeze` in `faults:` (see "Freeze at a call") |
+| `H=<target>@<from>-<to>:<rule>[,<rule>...]` | a protocol fault on a fake or proxy for steps `[from,to)`: an error, slow, missing or reset answer, or a duplicated / reordered / late / lost webhook; see "Fake outside services" |
 | `<X>=<value>` | a knob from `knobs:` |
 | host side: `disk=ioerr:<p>` / `lying:<p>` | disk I/O errors / a disk that drops acknowledged writes |
 
@@ -373,7 +375,8 @@ services, network and one-way faults from services with a `port:`, knob values f
 `knobs:`, fault placement from `workload.steps`, fault kinds from `faults:`. It reads
 `/etc/hydo/hydo.yaml` out of an `explore-ob-*` image automatically; pass `--manifest` for
 any other image. A knob token that collides with a built-in token (K P N O C T Q X F) is
-rejected. `explore.py --freeze-call` draws `F=` for a manifest whose `faults:` lists `freeze`.
+rejected. `explore.py --freeze-call` draws `F=` for a manifest whose `faults:` lists `freeze`;
+`explore.py --grpc-faults` draws gRPC-level `H=` tokens for a manifest with a gRPC proxy (see "gRPC faults").
 
 ### Freeze at a call (stop a service at an exact point of its traffic)
 
@@ -454,6 +457,172 @@ from. The extension lives in `hydo-init-links.sh`; hydo-build copies it into the
 line to `/sbin/init` that sources it, only for manifests with an `addr:`, so every other
 manifest builds a byte-identical image. Not supported yet: `--arch arm64`.
 
+## Fake outside services and protocol faults (`fakes:`, `proxies:`, `H=`)
+
+Business software mostly fails at its edges: a payment provider answers 500 or 429, answers too
+late, takes the money and never answers, sends a webhook twice or out of order. `fakes:` declares
+the outside services the system talks to; hydo serves them **inside the guest** (one static
+program, `/bin/hydo-world`, source `hvx/onboard/world/`), so they are as deterministic as
+everything else. Every request a fake (or proxy) receives is **recorded**, so invariants can ask
+what the outside world saw: "the customer was charged at most once per order". `proxies:` puts
+the same faults and records in front of a real service of the manifest.
+
+```yaml
+fakes:
+  - name: payments             # [a-z][a-z0-9_]*, not a service name; H= tokens and checks name it
+    port: 9001                 # required; listens on addr:port
+    addr: 127.0.0.1            # default 127.0.0.1 (any 127.x.y.z)
+    protocol: http             # http (default: HTTP/1.1 and cleartext HTTP/2) | grpc (see below)
+    idempotency: header:Idempotency-Key   # where a request's idempotency key is (extractor)
+    ref: json:order            # the business reference a request is about (extractor); per route too
+    routes:                    # required for a fake; the first match wins
+      - name: charge           # [a-z][a-z0-9_]*; the target <fake>.<route> of H= and of checks
+        method: POST           # default: any
+        path: /v1/charges      # exact, a prefix /v1/*, or with segments /v1/orders/{id}
+        status: 200            # the answer (default 200), with headers: and a templated body:
+        headers: {Content-Type: application/json}
+        body: '{"id":"ch_{seq}","order":"{ref}","amount":{json:amount}}'
+        idempotent: true       # a repeat with the same key gets the first answer, no new effect
+        effect: true           # does a request here act in the world (default: not GET/HEAD/OPTIONS)
+        webhook:               # after an effect, call the system back (asynchronously)
+          url: http://127.0.0.1:8080/webhooks/payments
+          body: '{"type":"charge.succeeded","id":"ch_{seq}","order":"{ref}"}'
+          delay_ms: 20         # after the effect
+          retries: 5           # a failed (non-2xx) delivery is retried after 0.5, 1, 2, ... s
+proxies:
+  - name: redisp               # a fault proxy in front of a real service
+    port: 6380                 # the system talks to this port instead of the service's
+    service: redis             # forward to that service's addr:port (or to: 127.0.0.1:6379)
+    protocol: tcp              # tcp (any protocol; one connection = one request) | http | grpc
+    # http/grpc proxies may have ref:, idempotency: and routes: (name/method/path/ref/effect only),
+    # which name the requests in the records and as H= targets
+```
+
+**Extractors** (`idempotency:`, `ref:`): `header:<Name>`, `json:<field>` (dotted path into a JSON
+body), `query:<name>`, `form:<name>`, `path:<name or 1-based segment>`, `pb:<field number>` (a
+top-level field of the first gRPC message: a string or a varint), `body` (a hash of the body).
+
+**Templates** (answer bodies, header values, webhook url/body/headers): `{seq}` (the record number
+of the request; replays use the original's), `{ref}`, `{idem}`, `{fake}`, `{route}`; in answers
+also `{json:a.b}`, `{header:X}`, `{query:x}`, `{path:x}`, `{form:x}`, `{pb:n}` from the request.
+Single braces: `{{name}}` is a build parameter (`params:`). A webhook may use only the first five
+(it can be re-sent after a power cut, without its request).
+
+**gRPC** (`protocol: grpc`): cleartext HTTP/2 with prior knowledge. A route's `path` is the method
+(`/pkg.Service/Method`), its answer `message:` (hex protobuf bytes, default empty) and `code:`
+(gRPC status, default 0); an error rule answers trailers-only with `grpc-status`. Status codes in
+`H=` rules may be numbers or names (`status=UNAVAILABLE`).
+
+### The record (what the outside world saw)
+
+`/tmp/hydo/world.log` in the guest, one line per event, in arrival order, fields `k=v` (values
+%-escaped):
+
+```
+seq=7 t=<unix ms> kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges
+      ref=o2 idem=charge-o2 body=<hash> fx=1 out=ok+delay3000 rule=1
+seq=8 ... kind=req ... fx=0 out=replay+delay3000 orig=7 rule=1      (an idempotent repeat)
+seq=11 ... kind=hook ep=payments route=charge ref=o2 src=7 n=1 dup=0 out=200   (webhook delivery)
+seq=13 ... kind=event ep=- route=cancelled ref=o2 fx=1               (hydo-world event)
+```
+
+`fx=1` marks a request that took effect in the world (an effectful route, answered or not, not an
+idempotent replay; for a proxy: forwarded to the service). `out` is how it was answered: `ok`,
+`replay`, `fwd` (proxy), `-` (the world never acted: an error rule without `effect=yes`), plus
+`+delay<ms>`, `+drop`, `+reset`, `+status<code>`. A webhook delivery `out` is the HTTP status the
+system answered, `err`, `lost` or `gave-up`. Just before the verdict the console gets a compact
+copy (`hydo-world: <seq> payments.charge ref=o2 idem=charge-o2 fx=1 ok+delay3000`, at most 150
+lines).
+
+The workload (or the system) can add its own events to the same ordered record:
+`hydo-world event <name> <ref>` (for example `hydo-world event cancelled o2` once a cancellation
+is acknowledged), which "no side effect after <event>" checks compare against.
+
+### Side-effect checks
+
+`hydo-world check <kind> <target> [options]` reads the record; use it as an invariant's `cmd:`
+(exit 0 holds, 1 violated, 2 cannot decide; its `HYDO-ORACLE:` line becomes the details, so
+`HYDO-ASSERT` records, the verdict, the explorer and the shrinker work unchanged):
+
+| kind | holds when |
+|---|---|
+| `at-most-once <ep>.<route> [--by ref\|idem]` | no ref (or idempotency key) took effect twice |
+| `effect-for-acked <ep>.<route> [--ref 'o{id}'] [--acked FILE] [--unless event:<name>\|<ep>.<route>]` | every acknowledged id (`$HYDO_ACKED`; `--ref` turns an id into the ref the effect carries) has an effect, except refs with an `--unless` record (an order whose cancellation was requested owes no receipt). As a `type: eventually` invariant: "every acknowledged request produced its side effect within N s" |
+| `exactly-once <ep>.<route> [--ref ...]` | both of the above |
+| `none-after <ep>.<route> --after event:<name>\|<ep>.<route>` | no ref took effect after that ref's first `<after>` record (no payment after its cancellation) |
+| `count <ep>.<route>` | always; prints the number of effects |
+
+`examples/shop/hydo.yaml` uses each of them.
+
+### Protocol faults (`H=`)
+
+```
+H=<target>@<from>-<to>:<rule>[,<rule>...]
+  target   <fake|proxy> (every route) or <fake|proxy>.<route>
+  window   on while workload steps [from, to) run (switched at step boundaries, like N=), off when
+           fault injection ends (and frozen with everything else at a power cut)
+  request rules (what the answer to a matching request becomes):
+    status=<code>       an error answer: an HTTP status, or for grpc a gRPC code (number or name)
+    retry-after=<s>     with status=: a Retry-After header (429, 503)
+    delay=<ms>          the answer comes <ms> of guest time late (combines with status= / drop / reset)
+    drop                no answer: the request is held until the client gives up or the rule ends
+    reset               the connection is reset instead of answered
+  webhook rules (on the webhooks of effects made while the rule is on):
+    dup                 delivered twice
+    reorder             delivered after the next webhook of the same route (pairs swap)
+    late=<ms>           delivered <ms> later
+    lost                never delivered
+  modifiers:
+    p=<1..100>          share of the matching requests (or webhooks) the rule acts on (default 100)
+    effect=yes|no       does the world still perform the side effect? Default: no for status=
+                        (rejected before acting), yes for delay/drop/reset (the request arrived and
+                        acted; only the answer is slow or lost). status=500,effect=yes = "charged,
+                        then failed to say so"
+```
+
+On a `tcp` proxy a request is a connection: `delay` holds every chunk the service sends back,
+`drop` lets the client's bytes through and never returns the answer, `reset` resets the connection
+when the answer arrives (`effect=no`: nothing reaches the service); `status=` has no meaning there.
+
+Determinism: which matching request a rule acts on is a pure function of the token text and the
+request's index among those the rule has seen (`mix64(fnv64(token) + k) % 100 < p`); the order of
+requests is the guest's, which hvx makes deterministic. Several `H=` tokens may be given; the first
+firing request rule (in token order) decides a request, and every webhook rule that fires applies.
+A target the manifest does not have is ignored (as for every fault token). `H` is reserved: no knob
+may use it.
+
+**Power cut.** A cut stops the system under test, not the outside world. At the cut the world is
+frozen (a request that arrives later is never recorded) and its effects, events, idempotency memory
+and undelivered webhooks are appended to the acknowledged ids as `w:` tokens (at most 3000 bytes;
+`hvx_explore` carries that line into the recovery boot's `oracle` command, which has room for it
+since this feature). The recovery boot's world starts from them: the checks see both boots, a repeat
+of an old idempotency key is still a replay, and undelivered webhooks are re-sent. If the carried
+record does not fit, it is replaced by `w:trunc` and every check answers 2 (cannot decide), never a
+false verdict.
+
+**Explorer.** `explore.py --protocol-faults` draws `H=` (one token on 60% of the schedules, a
+second on 25%) on its own random stream, from the targets `manifest_space.py` lists: every fake
+route (with the webhook rules when it has a webhook), every proxy and proxy route. Without the flag
+every schedule string is byte-identical (`hvx/explore/protocol_faults_ident.py`).
+`--sweep protocol` runs every rule kind (status, status with effect=yes, delay=3000, drop, reset,
+and on webhook routes dup, reorder, late=5000, lost) on every target, one workload step at a time. The shrinker drops
+`H=` tokens, narrows their window, and removes `p=`, `retry-after=` and `effect=`, then halves
+delays. A manifest with a `faults:` list draws `H=` only if it lists `protocol`.
+
+**Build.** `hvx/onboard/world/build.sh` builds `build/hydo-world` (pinned Go, standard library
+only); `hydo-build` stages it (`HYDO_WORLDBIN` overrides), writes `/etc/hydo/world.json`
+(`--print-world` shows it) and splices `hvx/onboard/hydo-init-fakes.sh` into the init. A manifest
+without `fakes:`/`proxies:` builds a byte-identical image. Not supported yet: `--arch arm64`.
+
+**Extending it (the code layout).** `world/rules.go`: the `H=` grammar (`parseRule`, one `Rule`
+per token, `fires`, `applied`); a new rule is a field there plus its action. `world/serve.go`: one
+handler per endpoint protocol -- HTTP and gRPC share `handler()` (decide under the world lock,
+record, then act: delay / drop / reset / status / answer), `serveTCP` is the byte-stream proxy;
+a new protocol is a new serve function that calls `lockGate`, `requestRule`, `record` in that order.
+`world/world.go`: records, webhooks, the control socket (`on`/`off`/`heal`/`event`/`dump`/`summary`)
+and the power-cut carry. `world/check.go`: the checks. `world/config.go`: `world.json`, extractors,
+templates. The explorer's draws are `add_protocol_faults` (rule kinds per target come from
+`manifest_space.Space._pf_targets`).
 ## The test composer (`test:` and the `hydo/` folder)
 
 Instead of a fixed `workload.run` split into numbered steps, a project can write its test as
@@ -717,6 +886,91 @@ first with `hvx/readers/build.sh` (byte-reproducible; it lands in `build/hydo-re
 an invariant), run the same binary with `--id`/`--console` so the record reaches the console.
 Examples: `examples/stack/hydo-read.yaml`, `examples/miniflux/hydo-read.yaml`; tests against real
 stores: `hvx/readers/native-test.sh`.
+
+### gRPC faults (a fault proxy in front of a gRPC service)
+
+A proxy with `protocol: grpc` (`proxies:`, above) sits between a gRPC client and a gRPC service. It is a streaming HTTP/2
+proxy (cleartext HTTP/2 with prior knowledge, what gRPC clients speak without TLS): every call is
+forwarded to the service as it arrives, message by message in both directions, so unary,
+client-streaming, server-streaming and bidirectional calls all pass, and a fault can act after the
+service has answered or in the middle of a stream. The client must dial the proxy's `port:`
+(usually an environment variable or flag of the client); the service keeps its own port.
+
+```yaml
+proxies:
+  - name: orders
+    protocol: grpc
+    port: 50052                 # the client dials this
+    to: 127.0.0.1:50051         # or service: <name> (a service with a port:)
+    ref: pb:1                   # the business reference: field 1 of the request message
+    routes:                     # optional: name methods, so a fault can target <proxy>.<route>
+      - {name: place, path: /hydo.OrderService/Place}
+```
+
+Faults are `H=` tokens (`H=<proxy>[.<route>]@<from>-<to>:<rule>[,<rule>...]`, on while workload
+steps `[from,to)` run, off when fault injection ends), with these rules on a gRPC proxy:
+
+| rule | what the client sees | did the server act? |
+|---|---|---|
+| `drop` | no answer; it waits until its deadline (or the fault ends, then its stream is reset) | yes: forwarded, the answer is discarded |
+| `status=<code>` | that gRPC status, at once | no (not forwarded) |
+| `status=<code>,effect=yes` | that status, after the server has finished | yes |
+| `delay=<ms>` | the server's answer, ms of guest time late (past its deadline when ms exceeds it) | yes |
+| `reset` (`reset=stream`) | its HTTP/2 stream reset (`INTERNAL`, RST_STREAM) when the server answers | yes |
+| `reset=conn` | its TCP connection reset when the server answers: every call on it fails (`UNAVAILABLE`), the client reconnects | yes |
+| `cut=<n>` | n response messages, then its stream reset (`dir=req`: n request messages reach the server, then both halves are cut) | partly |
+| `hold=<n>` | n messages, then nothing more in that direction until the fault ends (then the stream continues) or the client gives up | partly |
+
+`<code>` is a name (`UNAVAILABLE`, `DEADLINE_EXCEEDED`, `RESOURCE_EXHAUSTED`, `INTERNAL`,
+`ABORTED`, or any other gRPC code name) or a number. `effect=no` on drop, reset or delay means the
+call is not forwarded at all. `delay=` combines with any other rule (the delay comes first).
+Which calls a rule acts on:
+
+- `<proxy>.<route>`, or `rpc=<name>` on the proxy (`Method`, `Service/Method` or `/pkg.Service/Method`): one method;
+- `call=<a>` or `call=<a>-<b>`: the a-th (to b-th) call of a method through this proxy, counted from 1
+  since the guest booted (every call counts, faulted or not; the recovery boot after a power cut counts again from 1);
+- `p=<1..100>` with an optional `seed=<n>`: that share of the matching calls; which ones is a hash of
+  the token text and the call's index under the rule, so `seed=` picks another set.
+
+Every decision is a pure function of the token and the order in which calls arrive, which hvx
+makes deterministic: a schedule gives the same faults on every run. `rpc=`, `call=`, `cut=`,
+`hold=`, `dir=` and `reset=conn` act on gRPC proxies only (hydo-world refuses them elsewhere);
+on a gRPC fake (`fakes:` with `protocol: grpc`) select calls by route, with `status=`, `delay=`,
+`drop` and `reset`.
+
+**Records.** Each call gives two records in `/tmp/hydo/world.log`: at arrival `kind=req` (as for
+every proxy, with `call=<k>`; `fx=1` = forwarded), and at its end
+
+```
+kind=call ep=orders route=place path=/hydo.OrderService/Place ref=7 call=8 req=<seq of the req record>
+          status=<what the client got> server=<1|0|?> upstream=<the server's status> msgs=<in>/<out> out=fwd+drop
+```
+
+`status` is the gRPC status the client received (a number), `rst` (stream reset), `conn`
+(connection reset) or `none` (the client gave up before any answer). `server=1`: the server
+answered, so it acted; `0`: the call never reached it; `?`: forwarded, no answer from the server.
+"The server acted, the client saw a failure" is `status` other than 0 with `server=1`; a history
+or side-effect check can join these records with the client's own outcomes by `ref`.
+`hydo-world check calls <proxy>[.<route>]` prints the four counts (answered OK; failed after the
+server acted; failed before reaching it; failed, server's part unknown) as a HYDO-ORACLE OK line
+(it always holds, so it can be an invariant that only reports). The console summary before the
+verdict shows each `call` record.
+
+**Explorer.** `explore.py --grpc-faults` draws up to two such tokens per schedule on the
+manifest's gRPC proxies (`hvx/explore/grpc_faults.py`), from its own random stream: without the
+flag every schedule string is byte-identical (`grpc_faults_ident.py`). The shrinker drops a
+token, narrows its window, and removes `call=`, `rpc=`, `p=`/`seed=`, `dir=req`, turns
+`reset=conn` into `reset` and halves `cut=`/`hold=`. Example: `examples/stack-grpc/`.
+
+**Code.** gRPC proxies are served by `world/grpc.go` (`serveGRPCProxy`, `grpcHandler`), not by
+`handler()`; it parses the gRPC-only rule keys (`parseRuleExt`, called from `parseRule`), picks the
+rule with the extra filters (`grpcRule`), and implements `check calls`. gRPC fakes still use
+`handler()`.
+
+Limits: cleartext HTTP/2 only (no TLS); the client must be pointed at the proxy; a `ref:`/
+`idempotency:` taken from the message (`pb:`) reads the call's first message before the decision
+(a protobuf field holding its default value, such as an id of 0, is absent, so the ref is empty);
+messages up to 64 MiB; compressed messages are passed through and counted, not decoded.
 
 ## YAML subset
 
