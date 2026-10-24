@@ -295,7 +295,7 @@ KNOWN_TOP = {"name", "description", "guest", "root", "data", "env", "shell", "se
              "buggify"}
 KNOWN_SVC = {"name", "cmd", "setup", "ready", "ready_timeout", "port", "depends_on",
              "recovery", "description", "addr",
-             "image", "image_ref", "entrypoint", "workdir", "user", "env"}   # the last six: hydo_oci.py
+             "image", "image_ref", "entrypoint", "workdir", "user", "env", "mounts"}   # the last seven: hydo_oci.py
 KNOWN_INV = {"id", "type", "msg", "cmd", "every", "final", "description", "within", "after", "poll"}
 LIVE_ANCHORS = ("heal", "start")
 KNOWN_KNOB = {"token", "name", "default", "set", "values", "safe", "description"}
