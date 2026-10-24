@@ -229,6 +229,7 @@ Milestones 1–32 ran inside the nested L1 VM on the build machine, before 2026-
 
 ## Where to look
 
+- `hvx/PRODUCT.md`: hydo from a user's point of view — what it offers, the known gaps, and the user's decision on each (2026-10-24): approved and in progress (history checkers, protocol faults and fake outside services, a Rust SDK, Docker Compose import), to document only (CI mode, running locally and in CI, scale, blind spots), not decided (test composer, fast-forwarded time).
 - `hvx/hvx.c` (the module), `hvx/hvx_abi.h` (the ioctl ABI shared with userspace), `hvx/hvx_boot.h` (the bzImage loader recipe), and the `hvx/hvx_*_test.c` and `hvx/hvx_*_verify.c` tests and harnesses.
 - `hvx/explore/` (the explorer), `hvx/stack/` (the order service and the assertion SDK), `hvx/bench/` (the bug benchmark), `hvx/onboard/` (manifests), `hvx/pt/` (Processor Trace tools), `hvx/race/` (race calibration and side-module scripts), `hvx/cutflush/` (flush-cut findings), `hvx/tdet/` (SMI tools).
 - `build-linux.sh`, `build-stack.sh`, `build-kafka.sh`, `build-mysql.sh` (guest images), `hvx/BUILD-PINS.md`, `hvx/REBASELINE.md`.
