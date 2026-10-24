@@ -640,8 +640,9 @@ def module_udev(verb, name, group, mode, dry, adduser):
         elif not adduser and not member:
             print("hydo: %s is not in group %s (sudo usermod -aG %s %s)" % (user, group, group, user))
     elif not dry:
-        print("hydo: rule removed; %s is root's again (mode 0600). The group and its members were left as\n"
-              "      they are (`sudo gpasswd -d USER %s`, `sudo groupdel %s` remove them)." % (dev, group, group))
+        print("hydo: rule removed; %s is root's again (mode 0600). Group %s and its members were not changed%s." % (
+            dev, group, " (`sudo groupdel hydo` removes the group that `install` created, if nothing else uses it)"
+            if group == "hydo" else ""))
     return 0
 
 
