@@ -1,0 +1,10 @@
+// proto2: required fields must always be set.
+syntax = "proto2";
+package legacy;
+
+message Old {
+  required string must = 1;
+  optional int32 maybe = 2;
+  required Inner inner = 3;
+  message Inner { required int32 x = 1; }
+}
