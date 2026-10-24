@@ -83,6 +83,10 @@ if [ -z "$FAKETIME_BIN" ]; then
 fi
 [ -x "$FAKETIME_BIN" ] || { echo "error: faketime not found (set HYDO_FAKETIME)" >&2; exit 1; }
 FAKE_TS="2020-09-13 16:26:40"
+# libfaketime reads FAKE_TS in the local time zone; it is 1600000000 only in UTC+4, the zone of the
+# Nix build box (UTC+4) that made every recorded image. FAKE_TZ (POSIX notation for UTC+4)
+# is set on every faketime call, so a build in another zone gets the same bytes.
+FAKE_TZ=UTC-4
 
 PY3="${HYDO_PY3:-}"
 if [ -z "$PY3" ]; then
@@ -96,7 +100,7 @@ mkext2_reproducible() {
   local out="$1" uuid="$2" seed="$3"
   : > "$out"
   truncate -s 16777216 "$out"
-  SOURCE_DATE_EPOCH=1600000000 "$FAKETIME_BIN" "$FAKE_TS" "$MKE2FS" -q -F -t ext2 -b 1024 \
+  TZ="$FAKE_TZ" SOURCE_DATE_EPOCH=1600000000 "$FAKETIME_BIN" "$FAKE_TS" "$MKE2FS" -q -F -t ext2 -b 1024 \
     -U "$uuid" \
     -E hash_seed="$seed",lazy_itable_init=0,lazy_journal_init=0 \
     "$out"
@@ -104,7 +108,7 @@ mkext2_reproducible() {
 mkext4_rootfs_reproducible() {   # $1=out $2=srcdir $3=size_MiB $4=uuid $5=hash_seed
   local out="$1" src="$2" mib="$3" uuid="$4" seed="$5"
   : > "$out"; truncate -s $(( mib * 1024 * 1024 )) "$out"
-  SOURCE_DATE_EPOCH=1600000000 "$FAKETIME_BIN" "$FAKE_TS" "$MKE2FS" -q -F -t ext4 -b 4096 \
+  TZ="$FAKE_TZ" SOURCE_DATE_EPOCH=1600000000 "$FAKETIME_BIN" "$FAKE_TS" "$MKE2FS" -q -F -t ext4 -b 4096 \
     -O ^metadata_csum,^64bit,^flex_bg,^resize_inode \
     -U "$uuid" \
     -E hash_seed="$seed",lazy_itable_init=0,lazy_journal_init=0 \
@@ -669,7 +673,7 @@ mkext4_rootfs_reproducible build/${STACK_OUT}-ext4.img "$R" $STACK_EXT4_MIB \
 echo "built build/${STACK_OUT}-ext4.img ($(stat -c%s build/${STACK_OUT}-ext4.img) bytes)"
 
 : > build/${STACK_OUT}-data.img; truncate -s $(( STACK_DATA_MIB * 1024 * 1024 )) build/${STACK_OUT}-data.img
-SOURCE_DATE_EPOCH=1600000000 "$FAKETIME_BIN" "$FAKE_TS" "$MKE2FS" -q -F -t ext4 -b 4096 \
+TZ="$FAKE_TZ" SOURCE_DATE_EPOCH=1600000000 "$FAKETIME_BIN" "$FAKE_TS" "$MKE2FS" -q -F -t ext4 -b 4096 \
   -O ^metadata_csum,^64bit,^flex_bg,^resize_inode,has_journal -J size=16 \
   -U 35350000-2222-3333-4444-5555eeee0035 \
   -E hash_seed=35355555-4444-3333-2222-1111dddd0035,lazy_itable_init=0,lazy_journal_init=0 \

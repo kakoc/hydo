@@ -145,7 +145,7 @@ def own_by_root(hb):
         cmdf = out + ".owners"
         with open(cmdf, "w") as f:
             f.write("\n".join(lines) + "\n")
-        r = subprocess.run([T["faketime"], hb.FAKE_TS, dbg, "-w", "-f", cmdf, out],
+        r = subprocess.run([T["faketime"], hb.FAKE_TS, dbg, "-w", "-f", cmdf, out], env=hb.faketime_env(),
                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         errs = [x for x in r.stderr.splitlines() if x.strip() and not x.startswith("debugfs ")]
         os.unlink(cmdf)

@@ -15,7 +15,8 @@ NAME defaults to explore-ob-<project name> (the "explore" prefix: hvx_explore se
 
 Byte-reproducible like the hand-written image scripts (build-stack.sh): pinned mke2fs run
 under a pinned libfaketime, fixed UUIDs and hash seeds derived from the project name,
-non-lazy init, every superblock and inode time zeroed afterwards, all source mtimes fixed.
+non-lazy init, every superblock and inode time zeroed afterwards, all source mtimes fixed, and
+the frozen clock read in a fixed time zone (FAKE_TZ), so the machine's zone does not matter.
 
 Host tools (same defaults as build-stack.sh; override with the environment variables):
     HYDO_BUSYBOX  static busybox          HYDO_SEEDRNG   prebuilt static hvx_seedrng
@@ -28,6 +29,17 @@ import hashlib, json, mmap, os, re, shutil, stat, struct, subprocess, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 FIXED_MTIME = 1600000000
 FAKE_TS = "2020-09-13 16:26:40"
+# libfaketime reads FAKE_TS in the local time zone. Every recorded image was built on the Nix
+# build box, whose zone is UTC+4 (all year since 2005), where FAKE_TS is exactly
+# FIXED_MTIME. FAKE_TZ sets that zone explicitly for every faketime'd call (TZ=UTC-4 is POSIX
+# notation for UTC+4), so a build in any other zone gets the same instant and the same bytes,
+# and a build on the build box is unchanged.
+FAKE_TZ = "UTC-4"
+
+
+def faketime_env(**extra):
+    """The environment of a command run under faketime FAKE_TS: the caller's, with TZ=FAKE_TZ."""
+    return dict(os.environ, TZ=FAKE_TZ, **extra)
 NETMODS = ["sch_prio", "sch_netem", "cls_u32"]
 # the freeze-at-a-call fault (F=, hydo-init-freeze.sh): netfilter queue + iptables-legacy
 FCMODS = ["x_tables", "ip_tables", "iptable_filter", "xt_tcpudp", "xt_NFQUEUE", "nfnetlink", "nfnetlink_queue"]
@@ -730,7 +742,7 @@ def mkfs(T, out, mib, uuid, seed, src=None, journal=False):
     if src:
         cmd += ["-d", src]
     cmd.append(out)
-    subprocess.run(cmd, check=True, env=dict(os.environ, SOURCE_DATE_EPOCH=str(FIXED_MTIME)))
+    subprocess.run(cmd, check=True, env=faketime_env(SOURCE_DATE_EPOCH=str(FIXED_MTIME)))
 
 
 def write_mbr(img, parts):
@@ -873,7 +885,7 @@ def build(m, manifest_path, out, bdir, params=None, oci=None):
     mkfs(T, ext4, rmib, uuid_from(m["name"], "root"), uuid_from(m["name"], "root-hash"), src=R)
     if oci_meta:
         import hydo_oci
-        hydo_oci.fix_ext4(oci_meta, T, ext4, FAKE_TS)
+        hydo_oci.fix_ext4(oci_meta, T, ext4, FAKE_TS, env=faketime_env())
     zero_times(ext4, all_inode_times=False)
     dmib = int((m.get("data") or {}).get("size_mib", 512))
     mkfs(T, data, dmib, uuid_from(m["name"], "data"), uuid_from(m["name"], "data-hash"), journal=True)

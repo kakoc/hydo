@@ -45,7 +45,8 @@ ships all of them (`guest/`, `tools/`), and `hydo build` points `hydo-build` at 
   (`ld-linux-x86-64.so.2 --library-path tools/lib --preload libfaketime.so.1`), so no
   `/nix/store` is needed. The clock is frozen at 1600000000 (`FAKETIME` without `@`, and
   `TZ=UTC-4`: hydo-build's `FAKE_TS` string is that instant only in the build machine's zone,
-  UTC+4), and `MKE2FS_CONFIG` names no file, so `mke2fs` uses its built-in defaults as on
+  UTC+4; hydo-build itself also sets this zone, its `FAKE_TZ`, on every faketime call,
+  so a plain `hydo-build` no longer depends on the machine's zone either), and `MKE2FS_CONFIG` names no file, so `mke2fs` uses its built-in defaults as on
   the build machine instead of the machine's `/etc/mke2fs.conf`;
 - the guest-side closures are `guest/store.tar` (a GNU tar with the store's read-only modes,
   unpacked by `install.sh`) and `guest/store-closures.txt` (`nix-store -qR` of each root). A
