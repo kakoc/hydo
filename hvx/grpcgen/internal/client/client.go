@@ -629,7 +629,11 @@ func (c *Client) Retry(calls string) error {
 			fmt.Fprintf(c.stderr, "hydo-grpc: retry op %d: %v\n", id, err)
 			continue
 		}
-		c.Op(o.process, id, r, reqs, nil)
+		rr := *r
+		if r.Retry.EndTries > 0 {
+			rr.Retry.Attempts = r.Retry.EndTries - 1
+		}
+		c.Op(o.process, id, &rr, reqs, nil)
 	}
 	return nil
 }

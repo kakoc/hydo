@@ -84,7 +84,8 @@ type RPC struct {
 type Retry struct {
 	Attempts  int  `json:"attempts"`   // extra attempts right away, with the SAME request (0 = none)
 	BackoffMs int  `json:"backoff_ms"` // pause before each extra attempt
-	AtEnd     bool `json:"at_end"`     // `hydo-grpc retry` re-sends it after the faults heal
+	AtEnd     bool `json:"at_end"`     // `hydo-grpc retry` re-sends it after the faults heal ...
+	EndTries  int  `json:"end_tries"`  // ... with up to this many attempts (default: 1 + Attempts)
 }
 
 // FieldHint constrains one request field. Values are kept as strings and parsed per field type.

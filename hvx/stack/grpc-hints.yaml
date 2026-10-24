@@ -1,0 +1,14 @@
+# hydo-grpc-gen hints for the stack's front door (proto/hydo/order.proto): the generated driver
+# places orders 0..29 like `hydostack place` does, so the stack's invariants
+# (hvx/onboard/examples/stack/hydo.yaml) apply unchanged.
+#   hvx/onboard/hydo-grpc-gen hvx/stack/proto --hints hvx/stack/grpc-hints.yaml --out <dir>
+target: 127.0.0.1:50051
+deadline_ms: 20000                 # hydostack place's per-order deadline
+steps: {calls: 1, concurrency: 1}  # one step = one order
+record: {console: brief}
+rpcs:
+  Place:
+    outcome_id: value              # the order id -> $HYDO_ACKED / $HYDO_OUTCOMES
+    retry: {attempts: 0, at_end: true, end_tries: 8}   # like `hydostack retry`: re-place unknown outcomes, same id, <= 8 tries
+    fields:
+      value: {unique: true, range: [0, 29]}   # orders 0, 1, 2, ... in placement order

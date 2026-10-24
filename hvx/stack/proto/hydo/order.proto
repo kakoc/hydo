@@ -1,0 +1,15 @@
+// The service hvx/stack/main.go serves, written down as a .proto (main.go has a hand-written
+// grpc.ServiceDesc over the well-known wrapper types, Metadata "hydo/order.proto"). Used by
+// hydo-grpc-gen (MANIFEST.md "gRPC services") to generate the stack's driver.
+syntax = "proto3";
+
+package hydo;
+
+import "google/protobuf/wrappers.proto";
+
+service OrderService {
+  // Place stores order `value` in MySQL, publishes it to Kafka exactly once and caches it in
+  // Redis; the reply is "ok". Retry-safe: placing an id again is a no-op. FAILED_PRECONDITION
+  // ("not-applied: ...") promises nothing was published; UNKNOWN ("outcome-unknown: ...") does not.
+  rpc Place(google.protobuf.Int64Value) returns (google.protobuf.StringValue);
+}

@@ -320,10 +320,11 @@ func (g *Gen) unique(fd protoreflect.FieldDescriptor, h spec.FieldHint) (protore
 	if err != nil {
 		return protoreflect.Value{}, fmt.Errorf("unique: range %q: %v", base, err)
 	}
-	v := strconv.FormatInt(lo+int64(n), 10)
+	// the first unique value is the range's lower bound (default 1), then lo+1, ...
+	v := strconv.FormatInt(lo+int64(n)-1, 10)
 	if len(h.Range) == 2 {
 		hi, _ := strconv.ParseInt(h.Range[1], 10, 64)
-		if lo+int64(n) > hi {
+		if lo+int64(n)-1 > hi {
 			return protoreflect.Value{}, fmt.Errorf("unique: more values than the range [%s, %s] holds", h.Range[0], h.Range[1])
 		}
 	}

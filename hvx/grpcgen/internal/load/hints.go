@@ -63,6 +63,7 @@ type RetryHint struct {
 	Attempts  int   `yaml:"attempts"`
 	BackoffMs int   `yaml:"backoff_ms"`
 	AtEnd     *bool `yaml:"at_end"`
+	EndTries  int   `yaml:"end_tries"`
 }
 
 // FieldHint is the YAML form of spec.FieldHint (values may be numbers, strings or booleans).
@@ -317,10 +318,10 @@ func applyRPC(p *spec.Plan, r *spec.RPC, md protoreflect.MethodDescriptor, h RPC
 	}
 	r.Target = h.Target
 	if h.Retry != nil {
-		if h.Retry.Attempts < 0 || h.Retry.Attempts > 100 || h.Retry.BackoffMs < 0 {
-			return fmt.Errorf("retry: attempts 0..100, backoff_ms >= 0")
+		if h.Retry.Attempts < 0 || h.Retry.Attempts > 100 || h.Retry.BackoffMs < 0 || h.Retry.EndTries < 0 || h.Retry.EndTries > 100 {
+			return fmt.Errorf("retry: attempts 0..100, end_tries 0..100, backoff_ms >= 0")
 		}
-		r.Retry = spec.Retry{Attempts: h.Retry.Attempts, BackoffMs: h.Retry.BackoffMs, AtEnd: true}
+		r.Retry = spec.Retry{Attempts: h.Retry.Attempts, BackoffMs: h.Retry.BackoffMs, AtEnd: true, EndTries: h.Retry.EndTries}
 		if h.Retry.AtEnd != nil {
 			r.Retry.AtEnd = *h.Retry.AtEnd
 		}
