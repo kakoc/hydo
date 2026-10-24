@@ -1,0 +1,86 @@
+// The demo order service of hvx/grpcgen (MANIFEST.md "gRPC services"): four RPCs over a
+// small store, used to check that generated drivers find a bug blind.
+syntax = "proto3";
+
+package orders.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "hydogrpc/demo/ordersv1";
+
+service Orders {
+  // Create places an order. request_id is an idempotency key: a client that did not get an
+  // answer may send the same request again, and that must not create a second order.
+  rpc Create(CreateRequest) returns (Order);
+  rpc Get(GetRequest) returns (Order);
+  // Cancel is idempotent: cancelling a cancelled order returns it unchanged.
+  rpc Cancel(CancelRequest) returns (Order);
+  rpc List(ListRequest) returns (ListResponse);
+}
+
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  OPEN = 1;
+  CANCELLED = 2;
+}
+
+enum Channel {
+  CHANNEL_UNSPECIFIED = 0;
+  WEB = 1;
+  MOBILE = 2;
+  PARTNER = 3;
+}
+
+message Item {
+  string sku = 1;
+  int32 qty = 2;
+}
+
+message Card {
+  string last4 = 1;
+  int32 exp_month = 2;
+}
+
+message CreateRequest {
+  string request_id = 1;
+  string customer = 2;
+  int64 amount_cents = 3;
+  repeated Item items = 4;
+  Channel channel = 5;
+  map<string, string> labels = 6;
+  oneof payment {
+    Card card = 7;
+    string voucher = 8;
+  }
+  optional string note = 9;
+}
+
+message Order {
+  string id = 1;
+  string request_id = 2;
+  string customer = 3;
+  int64 amount_cents = 4;
+  Status status = 5;
+  repeated Item items = 6;
+  google.protobuf.Timestamp created = 7;
+}
+
+message GetRequest {
+  string id = 1;
+}
+
+message CancelRequest {
+  string id = 1;
+  string reason = 2;
+}
+
+message ListRequest {
+  string customer = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListResponse {
+  repeated Order orders = 1;
+  string next_page_token = 2;
+}
