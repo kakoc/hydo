@@ -1,21 +1,31 @@
 #!/bin/sh
 # Install hydo for x86_64 Linux (Intel VT-x) from an unpacked release directory:
-#     ./install.sh [--prefix DIR] [--add-to-path] [--no-module]
+#     ./install.sh [--prefix DIR] [--add-to-path] [--no-module] [--udev [--udev-group G] [--udev-name N]]
 # Checks the release's SHA256SUMS, copies it into DIR (default ~/.hydo), compiles the run engine
 # (hvx/hvx_explore) and the hvx kernel module for the running kernel, and runs `hydo doctor`.
 # It needs no root and installs nothing outside DIR; it does NOT load the module (that needs
 # sudo: `hydo module load`). Your shell startup file is changed only with --add-to-path.
+# --udev (optional, asks for sudo once): installs a udev rule that gives /dev/hvx to group G
+# (default hydo, created if missing; you are added to it), mode 0660, so runs need no sudo.
+# Anyone in that group can run guests through the kernel module: give it only to people you
+# would give sudo. --udev-name N does the same for a side module's device /dev/N.
 set -e
 SRC=$(cd "$(dirname "$0")" && pwd)
 PREFIX="$HOME/.hydo"
 ADD_PATH=0
 MODULE=1
+UDEV=0
+UDEV_GROUP=hydo
+UDEV_NAME=hvx
 while [ $# -gt 0 ]; do
   case "$1" in
     --prefix) PREFIX=$2; shift 2 ;;
     --add-to-path) ADD_PATH=1; shift ;;
     --no-module) MODULE=0; shift ;;
-    -h|--help) sed -n '2,7p' "$0"; exit 0 ;;
+    --udev) UDEV=1; shift ;;
+    --udev-group) UDEV_GROUP=$2; shift 2 ;;
+    --udev-name) UDEV_NAME=$2; shift 2 ;;
+    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
     *) echo "install.sh: unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -58,6 +68,12 @@ if [ $MODULE = 1 ]; then
   else
     echo "no kernel headers for $(uname -r): the module is not built (install them, then: hydo module build)"
   fi
+fi
+
+if [ $UDEV = 1 ]; then
+  echo
+  echo "installing the udev rule for /dev/$UDEV_NAME (group $UDEV_GROUP, mode 0660); this asks for sudo once"
+  bin/hydo module udev install --name "$UDEV_NAME" --group "$UDEV_GROUP" || echo "the udev rule was not installed (see above); runs keep using sudo"
 fi
 
 if [ $ADD_PATH = 1 ]; then
