@@ -623,7 +623,7 @@ def stage(oci, R, busybox, tmpdir):
     return meta
 
 
-def fix_ext4(meta, T, img, fake_ts):
+def fix_ext4(meta, T, img, fake_ts, env=None):
     """Write the image files' real owners and modes into the ext4 root with debugfs (the build
     user cannot chown). Paths are guest paths; run under the same frozen clock as mkfs."""
     if not meta:
@@ -642,7 +642,7 @@ def fix_ext4(meta, T, img, fake_ts):
     cmdf = img + ".debugfs"
     with open(cmdf, "w") as f:
         f.write("\n".join(lines) + "\n")
-    r = subprocess.run([T["faketime"], fake_ts, dbg, "-w", "-f", cmdf, img],
+    r = subprocess.run([T["faketime"], fake_ts, dbg, "-w", "-f", cmdf, img], env=env,
                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     errs = [x for x in r.stderr.splitlines() if x.strip() and not x.startswith("debugfs ")]
     os.unlink(cmdf)

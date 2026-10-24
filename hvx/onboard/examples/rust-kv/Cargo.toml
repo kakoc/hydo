@@ -1,0 +1,15 @@
+[package]
+name = "rkv"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# its own workspace (not part of the repository root's hydo crate)
+[workspace]
+
+[dependencies]
+hydo-assert = { path = "../../../../sdk/rust" }
+
+[profile.release]
+codegen-units = 1
+panic = "abort"

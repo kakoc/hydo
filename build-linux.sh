@@ -376,13 +376,17 @@ if [ -z "$FAKETIME_BIN" ] || [ ! -x "$FAKETIME_BIN" ]; then
   echo "error: faketime (libfaketime) not found (set HYDO_FAKETIME)" >&2; exit 1
 fi
 FAKE_TS="2020-09-13 16:26:40"   # == SOURCE_DATE_EPOCH 1600000000, frozen for every mke2fs time field
+# libfaketime reads FAKE_TS in the local time zone; it is 1600000000 only in UTC+4, the zone of the
+# Nix build box (UTC+4) that made every recorded image. FAKE_TZ (POSIX notation for UTC+4)
+# is set on every faketime call, so a build in another zone gets the same bytes.
+FAKE_TZ=UTC-4
 
 # Build ONE byte-reproducible empty ext2 image.  $1=output  $2=UUID  $3=hash_seed
 mkext2_reproducible() {
   local out="$1" uuid="$2" seed="$3"
   : > "$out"
   truncate -s 16777216 "$out"
-  SOURCE_DATE_EPOCH=1600000000 "$FAKETIME_BIN" "$FAKE_TS" "$MKE2FS" -q -F -t ext2 -b 1024 \
+  TZ="$FAKE_TZ" SOURCE_DATE_EPOCH=1600000000 "$FAKETIME_BIN" "$FAKE_TS" "$MKE2FS" -q -F -t ext2 -b 1024 \
     -U "$uuid" \
     -E hash_seed="$seed",lazy_itable_init=0,lazy_journal_init=0 \
     "$out"
@@ -863,7 +867,7 @@ ROOTFS_DATA_MIB=16
 mkext4_rootfs_reproducible() {   # $1=out  $2=srcdir  $3=size_MiB  $4=uuid  $5=hash_seed
   local out="$1" src="$2" mib="$3" uuid="$4" seed="$5"
   : > "$out"; truncate -s $(( mib * 1024 * 1024 )) "$out"
-  SOURCE_DATE_EPOCH=1600000000 "$FAKETIME_BIN" "$FAKE_TS" "$MKE2FS" -q -F -t ext4 -b 4096 \
+  TZ="$FAKE_TZ" SOURCE_DATE_EPOCH=1600000000 "$FAKETIME_BIN" "$FAKE_TS" "$MKE2FS" -q -F -t ext4 -b 4096 \
     -O ^metadata_csum,^64bit,^flex_bg,^resize_inode \
     -U "$uuid" \
     -E hash_seed="$seed",lazy_itable_init=0,lazy_journal_init=0 \
@@ -1896,7 +1900,7 @@ echo "built build/kafka-ext4.img ($(stat -c%s build/kafka-ext4.img) bytes, repro
 # ext4 in the SIMPLE layout (no metadata_csum/64bit/flex_bg/resize_inode, so the flat
 # 32-byte group descriptors + un-checksummed inodes below stay parseable) WITH an 8 MiB
 # internal journal, fully zeroed at mkfs time (lazy_journal_init=0).
-SOURCE_DATE_EPOCH=1600000000 "$FAKETIME_BIN" "$FAKE_TS" "$MKE2FS" -q -F -t ext4 -b 1024 \
+TZ="$FAKE_TZ" SOURCE_DATE_EPOCH=1600000000 "$FAKETIME_BIN" "$FAKE_TS" "$MKE2FS" -q -F -t ext4 -b 1024 \
   -O ^metadata_csum,^64bit,^flex_bg,^resize_inode,has_journal -J size=8 \
   -U dddd1111-2222-3333-4444-5555eeee6666 \
   -E hash_seed=eeee5555-4444-3333-2222-1111dddd6666,lazy_itable_init=0,lazy_journal_init=0 \
