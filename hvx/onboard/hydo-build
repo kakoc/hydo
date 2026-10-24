@@ -22,6 +22,8 @@ Host tools (same defaults as build-stack.sh; override with the environment varia
     HYDO_BUSYBOX  static busybox          HYDO_SEEDRNG   prebuilt static hvx_seedrng
     HYDO_MKE2FS   e2fsprogs mke2fs        HYDO_FAKETIME  libfaketime's faketime
     HYDO_IPROUTE2 iproute2 store path     HYDO_MODROOT   guest kernel module tree
+    HYDO_READ_BIN hydo-read (hvx/readers/build.sh), staged only when a command calls
+                  hydo-read or hydo-check
 Stdlib only (the build box has no PyYAML): the YAML subset is parsed by parse_yaml() below.
 """
 import hashlib, json, mmap, os, re, shutil, stat, struct, subprocess, sys
@@ -293,7 +295,8 @@ NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 KNOWN_TOP = {"name", "description", "guest", "root", "data", "env", "shell", "services",
              "provision", "workload", "knobs", "invariants", "faults", "freeze_match", "image", "params",
              "buggify",
-             "test", "format", "hydo_version"}      # the last three: the test composer (hydo_composer.py)
+             "test", "format", "hydo_version",      # these three: the test composer (hydo_composer.py)
+             "checks"}                                # history checks (hvx/HISTORIES.md)
 KNOWN_SVC = {"name", "cmd", "setup", "ready", "ready_timeout", "port", "depends_on",
              "recovery", "description", "addr",
              "image", "image_ref", "entrypoint", "workdir", "user", "env", "mounts"}   # the last seven: hydo_oci.py
@@ -370,8 +373,10 @@ def validate(m):
         raise ManifestError("workload.steps: between 1 and 1000")
     _need(wl, "run", "workload")
     invs = m.get("invariants") or []
-    if not invs:
-        raise ManifestError("invariants: at least one invariant is required (otherwise nothing is checked)")
+    m["invariants"] = invs
+    if not invs and not m.get("checks"):
+        raise ManifestError("invariants: at least one invariant (or one entry in checks:) is required "
+                            "(otherwise nothing is checked)")
     ids = set()
     for i, v in enumerate(invs):
         where = "invariants[%d]" % i
@@ -451,6 +456,7 @@ def validate(m):
         if not isinstance(r, int) or isinstance(r, bool) or not RAM_MIB_MIN <= r <= max(RAM_MIB_MAX.values()):
             raise ManifestError("guest.ram_mib: a whole number of MiB in [%d, %d] (got %r; x86_64 allows up "
                                 "to %d)" % (RAM_MIB_MIN, max(RAM_MIB_MAX.values()), r, RAM_MIB_MAX["x86_64"]))
+    validate_checks(m, ids)
     return m
 
 
@@ -497,6 +503,34 @@ def has_buggify(m):
     """buggify: true -- the project's programs carry SDK fault points; the init turns the
     schedule token B= into /tmp/hydo-buggify (hydo-init-buggify.sh)."""
     return m.get("buggify") is True
+
+
+# hydo-read / hydo-check (hvx/readers, MANIFEST.md "Reading the stores"): the static helper is
+# staged into /bin only for manifests whose commands call it, so every other image is unchanged.
+READERS_RE = re.compile(r"(?<![A-Za-z0-9_./-])hydo-(read|check)(?![A-Za-z0-9_-])")
+
+def uses_readers(m):
+    def walk(x, key=None):
+        if isinstance(x, dict):
+            return any(walk(v, k) for k, v in x.items() if k not in ("description", "msg", "name"))
+        if isinstance(x, list):
+            return any(walk(v, key) for v in x)
+        return isinstance(x, str) and bool(READERS_RE.search(x))
+    if walk(m):         # incl. test: commands/checks (the composer's plan, kept in m["_compose"])
+        return True
+    # the test composer's hydo/ folder: executables that call the helpers (scripts, or compiled
+    # programs that exec them, whose bytes then contain the name)
+    folder = (m.get("_compose") or {}).get("_folder") or {}
+    for d in sorted((folder.get("_dirs") or {}).values()):
+        for dp, dns, fns in os.walk(d):
+            dns.sort()
+            for fn in sorted(fns):
+                p = os.path.join(dp, fn)
+                if os.path.isfile(p) and os.path.getsize(p) <= (64 << 20):
+                    with open(p, "rb") as f:
+                        if READERS_RE.search(f.read().decode("latin-1")):
+                            return True
+    return False
 
 
 
@@ -576,6 +610,8 @@ def compile_shell(m, tc_path, fc=None):
                   "HYDO_INV_%s_after=%s" % (k, shq(v.get("after", "heal"))),
                   "HYDO_INV_%s_poll=%d" % (k, v.get("poll", 1))]
     L.append("HYDO_INVARIANTS=%s" % shq(" ".join(inv_names)))
+    if m.get("checks"):     # only then: other manifests compile byte-identically
+        L += compile_checks(m)
     for k in m.get("knobs") or []:
         t = k["token"]
         L += ["HYDO_KNOB_%s_default=%s" % (t, shq(k["default"])),
@@ -592,8 +628,89 @@ def compile_shell(m, tc_path, fc=None):
         P.append("export %s=%s" % (k, shq(v)))
     if m.get("shell"):
         P.append(m["shell"].rstrip("\n"))
+    if m.get("checks"):     # the history recorder (hydo_hist), only for manifests with checks:
+        P.append(open(HIST_SH).read().rstrip("\n"))
     prelude = "\n".join(P) + "\n"
     return manifest_sh, prelude
+
+
+# ------------------------------------------------------------------ history checks (checks:)
+# Ready-made checkers for recorded operation histories, run on the HOST after the run
+# (hvx/HISTORIES.md, hvx/history/hydohist.py). A manifest with checks: gets the recorder
+# hydo_hist in its prelude, one HYDO-CHECK line per check printed at the workload's start, and
+# each check's final: command run at the end (hydo-init-history.sh). Manifests without checks:
+# compile and build byte-identically.
+HIST_SH = os.path.join(HERE, "..", "history", "hydo_hist.sh")
+HIST_INIT = "hydo-init-history.sh"
+HIST_WRAP = ("start_periodic", "finish")
+KNOWN_CHECK = {"id", "type", "history", "model", "initial", "consistency", "msg", "final", "description"}
+CHECK_TYPES = ("linearizable", "list-append")
+CHECK_LEVELS = ("strict-serializable", "strong-session-serializable", "serializable",
+                "strong-snapshot-isolation", "strong-session-snapshot-isolation", "snapshot-isolation")
+
+
+def validate_checks(m, inv_ids):
+    cs = m.get("checks")
+    if cs is None:
+        return
+    if not isinstance(cs, list) or not cs:
+        raise ManifestError("checks: a non-empty list of history checks (hvx/HISTORIES.md)")
+    ids = set(inv_ids)
+    for i, c in enumerate(cs):
+        where = "checks[%d]" % i
+        if not isinstance(c, dict):
+            raise ManifestError("%s: must be a mapping" % where)
+        _unknown(c, KNOWN_CHECK, where)
+        cid = _need(c, "id", where)
+        if not re.fullmatch(r"[A-Za-z0-9_.\-]+", cid):
+            raise ManifestError("%s: id %r: letters, digits, '.', '_' and '-' only" % (where, cid))
+        if cid in ids:
+            raise ManifestError("%s: id %r is already used by an invariant or another check" % (where, cid))
+        ids.add(cid)
+        t = _need(c, "type", where)
+        if t not in CHECK_TYPES:
+            raise ManifestError("%s: type must be one of %s" % (where, ", ".join(CHECK_TYPES)))
+        h = _need(c, "history", where)
+        if not re.fullmatch(r"[A-Za-z0-9_.\-]+", h):
+            raise ManifestError("%s: history %r: letters, digits, '.', '_' and '-' only" % (where, h))
+        if t == "linearizable":
+            if c.get("model", "register") not in ("register", "cas"):
+                raise ManifestError("%s: model must be register or cas" % where)
+            if c.get("initial", "nil") not in ("nil", "any"):
+                raise ManifestError("%s: initial must be nil (keys start absent) or any (unknown)" % where)
+            if "consistency" in c:
+                raise ManifestError("%s: consistency: is for type: list-append" % where)
+        else:
+            if c.get("consistency", "strict-serializable") not in CHECK_LEVELS:
+                raise ManifestError("%s: consistency must be one of %s" % (where, ", ".join(CHECK_LEVELS)))
+            for k in ("model", "initial"):
+                if k in c:
+                    raise ManifestError("%s: %s: is for type: linearizable" % (where, k))
+        if "final" in c and not isinstance(c["final"], str):
+            raise ManifestError("%s: final: is a shell command" % where)
+
+
+def check_spec(c):
+    """The spec the guest prints as its HYDO-CHECK line (the host checkers read it back)."""
+    sp = {"id": c["id"], "type": c["type"], "history": c["history"], "msg": c.get("msg", c["id"])}
+    if c["type"] == "linearizable":
+        sp["model"] = c.get("model", "register")
+        sp["initial"] = c.get("initial", "nil")
+    else:
+        sp["consistency"] = c.get("consistency", "strict-serializable")
+    return json.dumps(sp, sort_keys=True, separators=(",", ":"))
+
+
+def compile_checks(m):
+    L, names = [], []
+    for i, c in enumerate(m["checks"]):
+        k = "c%d" % i
+        names.append(k)
+        L += ["HYDO_CHECK_%s_id=%s" % (k, shq(c["id"])),
+              "HYDO_CHECK_%s_json=%s" % (k, shq(check_spec(c))),
+              "HYDO_CHECK_%s_final=%s" % (k, shq(c.get("final") or ""))]
+    L.append("HYDO_CHECKS=%s" % shq(" ".join(names)))
+    return L
 
 
 # ------------------------------------------------------------------ image building
@@ -656,6 +773,8 @@ def init_text(m):
         base = base[:i] + "# copies of the init functions hydo-liveness.sh wraps\n" + "".join(copies) + "\n" + live + base[i:]
     if "clock_after_cut" in (m.get("guest") or {}):
         base = _splice(base, CLK_WRAP, "_clk_orig_", CLK_INIT, "guest.clock_after_cut")
+    if m.get("checks"):
+        base = _splice(base, HIST_WRAP, "_hist_orig_", HIST_INIT, "checks:")
     if has_freeze(m):
         i = base.find(LIVE_MARK)
         if i < 0:
@@ -675,7 +794,7 @@ def init_text(m):
 
 def install_init(m, dst):
     if any(v.get("type") == "eventually" for v in m["invariants"]) or has_links(m) or has_freeze(m) or \
-       "clock_after_cut" in (m.get("guest") or {}) or has_buggify(m):
+       "clock_after_cut" in (m.get("guest") or {}) or has_buggify(m) or m.get("checks"):
         with open(dst, "w") as f:
             f.write(init_text(m))
     else:
@@ -849,6 +968,12 @@ def build(m, manifest_path, out, bdir, params=None, oci=None):
         p = os.path.join(R, "bin", a)
         if not os.path.lexists(p):
             os.symlink("busybox", p)
+    if uses_readers(m):     # hydo-read + the hydo-check name for it (hvx/readers/build.sh)
+        rb = tool("HYDO_READ_BIN", os.path.join(bdir, "hydo-read"), os.path.isfile)
+        shutil.copy(rb, os.path.join(R, "bin/hydo-read"))
+        os.chmod(os.path.join(R, "bin/hydo-read"), 0o755)
+        os.symlink("hydo-read", os.path.join(R, "bin/hydo-check"))
+        print("hydo-build: staged /bin/hydo-read and /bin/hydo-check (sha256 %s)" % sha(rb)[:16])
     if iptables:
         shutil.copy(T["fc"], os.path.join(R, "bin/hydo_fc"))
         os.chmod(os.path.join(R, "bin/hydo_fc"), 0o755)
@@ -1012,7 +1137,8 @@ def main():
         sys.stdout.write(init_text(m)); return 0
     if "--check" in flags:
         print("hydo-build: %s OK (%d services, %d invariants, %d workload steps)" % (
-            path, len(m["services"]), len(m["invariants"]), m["workload"]["steps"]))
+            path, len(m["services"]), len(m["invariants"]), m["workload"]["steps"]) +
+            (" + %d history checks" % len(m["checks"]) if m.get("checks") else ""))
         if m.get("_compose"):
             c = m["_compose"]
             print("hydo-build: test composer: %d commands (%s), %d checks, %d regressions" % (
@@ -1028,6 +1154,8 @@ def main():
                 print("hydo-build: --arch arm64 does not support addr: (link faults) yet", file=sys.stderr); return 2
             if has_freeze(m):
                 print("hydo-build: --arch arm64 does not support faults: freeze yet", file=sys.stderr); return 2
+            if uses_readers(m):
+                print("hydo-build: --arch arm64 does not stage hydo-read/hydo-check yet", file=sys.stderr); return 2
             sys.path.insert(0, HERE)
             import hydo_build_arm64
             hydo_build_arm64.build(m, path, out, opt["--build-dir"], globals(), oci=oci)

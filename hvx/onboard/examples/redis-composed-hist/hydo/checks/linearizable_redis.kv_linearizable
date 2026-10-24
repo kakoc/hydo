@@ -1,0 +1,10 @@
+#!/bin/sh
+# hydo: history=kv model=register
+# hydo-msg: every SET and GET of the composed commands is linearizable per key
+# The final read-back (process 900): every acknowledged key ($HYDO_ACKED is carried across a
+# power cut into the recovery boot).
+. /hydo/workload/helper_lib.sh
+for n in $(sort -n $HYDO_ACKED); do
+  hydo_hist kv 900 invoke read k:$n
+  if v=$(R GET k:$n); then hydo_hist kv 900 ok read k:$n ${v:-nil}; else hydo_hist kv 900 info read k:$n; exit 2; fi
+done

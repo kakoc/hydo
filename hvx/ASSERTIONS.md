@@ -221,6 +221,27 @@ order; a NaN, an infinity or a cycle drops the record, as `json.Marshal` fails o
 writes invalid UTF-8 as a raw U+FFFD; the SDK writes Go 1.26's `\ufffd` escape.
 `hvx/onboard/examples/node-kv` is a complete example (Mac backend).
 
+**Reading the stores** (`hydo-read` / `hydo-check`, `hvx/readers`; full reference in
+`hvx/onboard/MANIFEST.md`, "Reading the stores"). A cross-service property often needs what
+is in a MySQL/PostgreSQL table, on a Kafka topic, under Redis or etcd keys. Any SDK or script
+can run the static helper instead of linking a client for every store:
+`hydo-read kafka 127.0.0.1:9092 orders` prints the records as sorted JSON Lines (exit 2 = could
+not read), and `hydo-check exactly-once --left 'acked=file /tmp/acked' --right 'kafka 127.0.0.1:9092 orders'
+--id order.in_kafka_once --console /dev/ttyS0` evaluates a set-style property and writes the
+`HYDO-ASSERT-DECL` + `HYDO-ASSERT` records (details: `check`, `first`, `explanation`) to the
+console itself; its exit status (0 holds, 1 violated, 2 could not evaluate) and last output line
+are the result. In a manifest invariant, leave out `--id`: the init already turns the exit
+status and the last line into the record.
+
+## Recorded histories (host-side checkers)
+
+Assertions are evaluated inside the program. For linearizability and transactional isolation the
+evidence is the whole history of operations, so it is checked on the host after the run instead:
+the workload prints `HYDO-HIST` records (one per invocation and completion), and the checkers in
+`hvx/history/hydohist.py` (linearizable register / CAS per key, Elle-style list-append) turn the
+history into ordinary `HYDO-ASSERT` records of type `always` plus the HYDO-ORACLE verdict. Format,
+models and recorders (shell, Go): `hvx/HISTORIES.md`; manifests use `checks:`.
+
 ## Host side
 
 - `hvx/hydo_assert_table.h`: header-only parser and aggregator (`ha_feed_console` once per run,

@@ -11,7 +11,8 @@ examples: `examples/redis/hydo.yaml` (one service, about 60 lines),
 `examples/stack/hydo.yaml` (MySQL + Kafka + Redis + a gRPC front door),
 `examples/redis-oci/hydo.yaml` (Redis from the official Docker image, no file list),
 `examples/etcd/hydo.yaml` (a replicated system: a three-member etcd cluster, with link faults
-between members), and
+between members), `examples/stack/hydo-read.yaml` (the stack's invariants written with the
+ready-made store readers, see "Reading the stores"), and
 `hvx/knownbugs/sqlite/hydo.yaml` (no service: a multi-threaded program using SQLite; one
 manifest, two versions via `params:`).
 
@@ -157,6 +158,19 @@ invariants:                    # required, at least one
     within: 10                 # required: deadline in whole seconds of guest time (1..3600)
     poll: 1                    # seconds between checks (default 1); no every:/final: here
 
+checks:                        # ready-made checkers for recorded histories (see "History
+  - id: kv.linearizable        #   checks" below; hvx/HISTORIES.md). With checks:, invariants:
+    type: linearizable         #   may be empty. linearizable | list-append
+    history: kv                # required: the history the workload records (hydo_hist kv ...)
+    model: register            # linearizable: register (default) | cas
+    initial: nil               # linearizable: nil (default: keys start absent) | any
+    final: /bin/read-all-keys  # optional: at the end (same boot / recovery boot), read the state
+                               #   back into the history; exit != 0 = history incomplete (ERROR)
+  - id: log.append
+    type: list-append
+    history: log
+    consistency: strict-serializable   # list-append: the level the system claims (HISTORIES.md)
+
 faults: [kill, pause, network, oneway, cut, clock, disk]   # which kinds make sense here;
                                # network/oneway also pull iproute2 into the image
 ```
@@ -294,6 +308,39 @@ renamed copies of the four init functions it wraps (`step_range`, `start_periodi
 
 The program under test can still use the assertion SDK (`hvx/stack/hydoassert`) for
 properties that need to see inside it; both kinds of record mix on the console.
+
+### History checks (`checks:`)
+
+An invariant is a shell command the project writes itself. For the properties every data
+system must keep, a check is stronger and needs no checking code: the workload **records** each
+operation (invocation before the request, completion after the reply, `ok` / `fail` / `info` for
+an unknown outcome) and the host checks the whole history after the run with a ready-made
+checker: `linearizable` (a key-value register or compare-and-set object, per key, Porcupine /
+Knossos style, with optional store-assigned versions) or `list-append` (Elle style: lost
+acknowledged appends, duplicates, incompatible orders, reads going back in time, G0 / G1c /
+G-single / G2 cycles at the chosen `consistency:`). The record format, the models and the
+verdict rules are in `hvx/HISTORIES.md`.
+
+- The workload, `retry`, `final:` and invariant commands get the recorder in their prelude
+  (an executable sources `/etc/hydo/prelude.sh` to get it):
+  `hydo_hist <history> <process> <invoke|ok|fail|info> <f> <args>...` (and `hydo_hist_enc` for
+  free-form values). Give every concurrent client its own process number. Go programs use
+  `hvx/stack/hydohist`.
+- `final:` runs after the workload, `retry` and healing (no cut), or in the recovery boot after a
+  power cut, before the invariants: read every key or list back and record the reads, so that a
+  write lost in the crash shows up as a read that contradicts an acknowledged write. Its exit
+  status is reported (`HYDO-CHECK-FINAL`); non-zero turns a passing check into an ERROR.
+- The guest prints one `HYDO-CHECK <spec>` line per check when the workload starts. The checks run
+  on the host: `explore.py` (and the shrinker, `run_list.py`), `hydo run` and
+  `hvx/history/hydo-check` combine the guest's verdict with the checks' (the guest's own invariant
+  violations come first) and write the explanation, e.g. the minimal set of operations that cannot
+  be ordered, next to the console (`<tag>.checks.txt`).
+- Only manifests with `checks:` get the recorder and `hydo-init-history.sh` (spliced into
+  `/sbin/init` like the liveness code); every other image builds byte-identically.
+- Examples: `examples/redis/hydo-hist.yaml` (SET/GET as registers and RPUSH/LRANGE as
+  list-append: `R=everysec` + a power cut loses an acknowledged write, both checks see it) and
+  `examples/etcd/hydo-hist.yaml` (puts and gets with etcd's mod_revision, read back through every
+  member: etcd issue 14685 shows as a version no order explains).
 
 ### Fault tokens (what the explorer types at S1)
 
@@ -504,6 +551,15 @@ any invariant); a check that times out counts as 2.
 `always`: also every `every` seconds while the workload runs (`check_every` by default).
 `eventually`: bounded liveness, polled after `after` (`heal` default, or `start`) until it
 holds or `within` seconds pass (MANIFEST "Liveness").
+`linearizable` / `list_append` (alias `list-append`): a ready-made **history check**
+(`hvx/HISTORIES.md`, "History checks" above): the commands record their operations with
+`hydo_hist` (source `/etc/hydo/prelude.sh`; process = `$HYDO_CMD_ID`, unique per entry), and the
+host checks the history after the run. Fields: `history` (required), `model`/`initial`
+(linearizable), `consistency` (list_append), `msg`; `run` is optional and is the final read-back
+(run at the end of the same boot or of the recovery boot). In the `hydo/` folder the file
+`checks/linearizable_<name>` or `checks/list_append_<name>` is the read-back, with
+`# hydo: history=kv model=register` (or `consistency=...`) in its header. They become top-level
+`checks:` entries, not invariants. Example: `examples/redis-composed-hist/`.
 
 **Environment of a command.** Everything an invariant sees (`HYDO_ACKED`, `HYDO_OUTCOMES`,
 the manifest's `env:`), plus `HYDO_CMD` (its id), `HYDO_CMD_ID` (its entry number, unique in
@@ -568,6 +624,99 @@ A `W=` names commands by their index in the plan's sorted command list, so addin
 command changes what an old `W=` composes. `hydo save` therefore also writes `# commands: <ids>`
 (the list when the schedule was found; `commands:` in `test.regressions`), and the replay warns
 when the plan's list is different: explore again and save the new minimal schedule.
+
+## Reading the stores (`hydo-read`, `hydo-check`)
+
+Cross-service invariants need "what is in this table / on this topic / under this key". Instead
+of writing that reading code in shell for every manifest, a check can call two ready-made
+commands (source: `hvx/readers`; one static Go binary, `hydo-check` is a symlink to it):
+
+- `hydo-read <store> <args>` prints what a store holds as JSON Lines, one record per line,
+  keys sorted, lines sorted bytewise (Kafka, Redis lists and sorted sets keep the store's
+  order). Exit 0 = read, 2 = could not read (the store is down, the table or topic does not
+  exist, a timeout; also a wrong command line). Every read has a deadline (`--timeout <s>`,
+  default 30).
+- `hydo-check <check> <sources>` compares readings and prints ONE explanation line (the last
+  line of its output, which the init puts into the invariant's `HYDO-ASSERT` details and the
+  `HYDO-ORACLE` verdict). Exit 0 = holds, 1 = violated, 2 = could not be evaluated: exactly the
+  invariant contract above, so a check is one command.
+
+| store | command | records |
+|---|---|---|
+| MySQL | `mysql <dsn> "<query>"` | one per row, `{"<column>": "<text>" \| null}` |
+| PostgreSQL | `postgres <dsn> "<query>"` | the same (booleans `"true"`/`"false"`, times RFC 3339 UTC) |
+| Kafka | `kafka <bootstrap> <topic>` | every record of every partition from the log start to the high watermark: `partition, offset, key, value, timestamp_ms`; never creates the topic; a missing topic is "could not read" |
+| Redis | `redis <addr> get <key>...` / `scan <pattern>` / `hgetall\|smembers\|lrange\|zrange <key>` / `cmd <word>...` | `{key, value}` (null = missing) / `{key, type, value}` of every matching key of any type / one per field or member |
+| etcd | `etcd <endpoint> get <key> [--prefix] [--serializable]` / `status` | `{key, value, create_revision, mod_revision, version}` / `{endpoint, revision, raft_index, raft_term}` (the v3 JSON gateway on the client port) |
+| hydo | `hydo acked\|failed\|told-failed\|unknown` | `{id}` from `$HYDO_ACKED`, `$HYDO_FAILED`, failed minus acked, last outcome `unknown` |
+| files | `file <path>` / `jsonl <path>` / `range <from> <to>` | `{line}` / saved `hydo-read` output / `{n}` |
+
+DSNs: MySQL `user:pw@tcp(host:port)/db` (the Go driver's form) or `mysql://user@host:port/db`;
+PostgreSQL `postgres://user@host:port/db?sslmode=disable`; Redis `host:port` or
+`redis://:pw@host:port/db`; `--base64` prints Kafka and etcd keys and values in base64.
+
+Checks (A is `--left` or `--in`, B is `--right`; items are compared as strings):
+
+| check | holds when | typical use |
+|---|---|---|
+| `subset` | every item of A is in B | every acknowledged order is in the database |
+| `equal` | A and B hold the same items | two replicas agree |
+| `exactly-once` | every item of A occurs exactly once in B (B as a multiset) | every acknowledged order is on the topic once |
+| `disjoint` | no item of A is in B | nothing the client was told failed was applied |
+| `no-duplicates` | no item occurs twice in `--in A` | a topic without duplicates |
+| `count` | the number of records of `--in A` is `--eq N` / `--min N` / `--max N` | no rows with a wrong amount |
+| `never-wrong-value` | every key `--cache C` holds has the value `--truth T` has for it; a key missing from C is fine, a key T does not have is wrong (`--allow-orphans`: fine) | a cache versus the source of truth |
+
+A **source** is one argument: an optional `name=` (used in the explanation), the `hydo-read`
+words, and a projection: `--field F` (the item; default the only field, else `key` for
+Kafka/Redis/etcd, `line`, `id`, `n`, else a field named `key`), `--item 'T'` (the item is the
+template T with `{F}` replaced by field F: `--item 'k:{id}=v{id}'` against `--item '{key}={value}'`
+compares keys and values at once), `--key F --value F` (for
+`never-wrong-value`; default `key`/`value`), `--strip-prefix P` and `--add-prefix P` (to make
+`order:5` and `5`, or `c5` and `5`, compare equal). Quote the source for the shell and the
+query inside it with the other kind of quotes:
+
+```yaml
+invariants:
+  - id: order.in_kafka_once
+    msg: every ACKed order is in the Kafka topic exactly once
+    cmd: >-
+      hydo-check exactly-once --unreadable violation --left 'acked=hydo acked'
+      --right 'kafka=kafka 127.0.0.1:9092 orders'
+  - id: redis.cache_never_wrong
+    type: always_or_unreachable
+    cmd: >-
+      hydo-check never-wrong-value
+      --cache 'redis=redis 127.0.0.1:6379 scan "order:*" --strip-prefix order:'
+      --truth 'mysql=mysql hydo:@tcp(127.0.0.1:3306)/ "SELECT id, amount FROM stack.orders" --key id --value amount'
+```
+
+The explanation names the first offending item in a fixed order (numbers numerically, then
+strings bytewise) and the count, e.g. `disjoint violated: 1 item of told_failed is also in kafka: 11`
+or `exactly-once violated: acked c4 is in categories 0 times (of 20 in acked); missing 1: c4`.
+Options: `--unreadable violation` turns "could not read a source" into a violation (exit 1) --
+for a final check after recovery, where an unreadable store is itself lost data; `--oracle` ends
+with a `HYDO-ORACLE: OK|VIOLATION|ERROR <explanation>` line (for a program or script that is not
+run by the init); `--id <id> [--type <t>] [--msg <m>]` also prints a `HYDO-ASSERT-DECL` and a
+`HYDO-ASSERT` record (`details`: `check`, `first`, `explanation`), on stdout or `--console
+/dev/ttyS0`; `--show N` lists up to N offending items (default 5).
+
+**In the test composer.** A check of a composed plan is the same command: a `test.checks` entry
+`run: [hydo-check, count, --eq, "5", --in, 'accounts=redis 127.0.0.1:6379 scan "acct:*"']` (argv,
+exec'd) or a string, or an executable `hydo/checks/<kind>_<name>` that ends with
+`exec hydo-check ...`; exit status and last line mean the same there.
+Example: `examples/redis-composed-read/hydo/`.
+
+**Staging.** `hydo-build` copies the binary to `/bin/hydo-read` and adds the `/bin/hydo-check`
+symlink only when some command of the manifest calls `hydo-read` or `hydo-check` (descriptions
+and `msg:` do not count; `test:` entries count, and so does any file in the plan's `hydo/`
+folder that contains the name, a script or a compiled program); every other manifest builds a
+byte-identical image. Build the binary
+first with `hvx/readers/build.sh` (byte-reproducible; it lands in `build/hydo-read`, or point
+`HYDO_READ_BIN` at it). Not staged for `--arch arm64` yet. From a program under test (an SDK, not
+an invariant), run the same binary with `--id`/`--console` so the record reaches the console.
+Examples: `examples/stack/hydo-read.yaml`, `examples/miniflux/hydo-read.yaml`; tests against real
+stores: `hvx/readers/native-test.sh`.
 
 ## YAML subset
 

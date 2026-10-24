@@ -31,6 +31,11 @@ FORMAT = 1                      # the plan format this engine reads (top-level `
 WORKLOAD_KINDS = ("first", "parallel_driver", "serial_driver", "singleton_driver", "anytime", "eventually", "finally")
 PLAN_KINDS = ("parallel_driver", "serial_driver", "singleton_driver", "anytime")   # composed into rounds
 CHECK_KINDS = ("final", "always", "eventually")
+# history checks (hvx/HISTORIES.md): the check runs on the HOST over the recorded history; its
+# `run` (optional in a plan, the file itself in the hydo/ folder) is the final read-back. They
+# become top-level `checks:` entries of the manifest (hydo-build's history-check support).
+HISTORY_KINDS = ("linearizable", "list_append")
+HISTORY_KEYS = ("history", "model", "initial", "consistency")
 NAME_RE = re.compile(r"^[A-Za-z0-9_.\-]+$")
 DEFAULTS = {"parallel": 4, "per_round": 2, "round_ms": 200, "command_timeout": 60, "drain_timeout": 60,
             "check_every": 2, "check_within": 30, "max_commands": 0, "budget_ms": 0}
@@ -39,7 +44,7 @@ BOUNDS = {"parallel": (1, 16), "per_round": (1, 8), "round_ms": (10, 60000), "co
           "budget_ms": (0, 3600000)}
 KNOWN_TEST = set(DEFAULTS) | {"commands", "checks", "regressions", "description"}
 KNOWN_CMD = {"name", "kind", "run", "timeout", "description"}
-KNOWN_CHECK = {"name", "kind", "run", "msg", "every", "within", "after", "poll", "description"}
+KNOWN_CHECK = {"name", "kind", "run", "msg", "every", "within", "after", "poll", "description"} | set(HISTORY_KEYS)
 KNOWN_REG = {"name", "schedule", "expect", "commands", "description"}
 DEFAULT_STEPS = 20              # workload.steps when the plan composes the workload and gives none
 COMPOSE_SH = "/etc/hydo/compose.sh"
@@ -90,7 +95,7 @@ def scan_folder(mdir, E):
     if not dirs:
         return None
     out = {"commands": [], "checks": [], "regressions": [], "_dirs": dirs}
-    for sub, kinds, key in (("workload", WORKLOAD_KINDS, "commands"), ("checks", CHECK_KINDS, "checks")):
+    for sub, kinds, key in (("workload", WORKLOAD_KINDS, "commands"), ("checks", CHECK_KINDS + HISTORY_KINDS, "checks")):
         if sub not in dirs:
             continue
         for fname in sorted(os.listdir(dirs[sub])):
@@ -104,7 +109,8 @@ def scan_folder(mdir, E):
                 raise E("%s/%s: not executable (chmod +x; a script needs a #! line)" % (sub, fname))
             kv, msg = _header(p)
             e = {"name": name, "kind": k, "run": ["/hydo/%s/%s" % (sub, fname)]}
-            allowed = ("timeout",) if key == "commands" else ("every", "within", "after", "poll")
+            allowed = ("timeout",) if key == "commands" else (HISTORY_KEYS if k in HISTORY_KINDS else
+                                                              ("every", "within", "after", "poll"))
             for a in kv:
                 if a not in allowed:
                     raise E("%s/%s: header key %r (allowed here: %s)" % (sub, fname, a, ", ".join(allowed)))
@@ -184,6 +190,25 @@ def shell_of(run):
     return "exec " + " ".join(shq(a) for a in run) if isinstance(run, list) else run
 
 
+def history_check(c, where, E):
+    """A test.checks entry of kind linearizable / list_append (alias list-append) -> a manifest
+    `checks:` entry: the host checks history <history> after the run; `run`, if given, is the
+    final read-back (run at the end of the same boot or of the recovery boot)."""
+    kind = "list-append" if c.get("kind") in ("list_append", "list-append") else "linearizable"
+    if not c.get("history"):
+        raise E("%s: a %s check needs history: (the name the workload records under)" % (where, c.get("kind")))
+    for k in ("every", "within", "after", "poll"):
+        if k in c:
+            raise E("%s: %s: is not for a history check (it is evaluated once, on the host)" % (where, k))
+    e = {"id": str(c["name"]), "type": kind, "history": str(c["history"]), "msg": str(c.get("msg") or c["name"])}
+    for k in ("model", "initial", "consistency"):
+        if k in c:
+            e[k] = str(c[k])
+    if c.get("run") is not None:
+        e["final"] = shell_of(_argv(c["run"], where, E))
+    return e
+
+
 def merge_folder(m, folder, E):
     """Add the folder's commands/checks/regressions to m["test"] (a name defined in both is an error)."""
     t = m.get("test")
@@ -244,7 +269,7 @@ def expand(m, E, folder=None):
             raise E("%s: timeout is whole seconds in [1, 3600]" % where)
         cmds.append({"id": cid, "kind": kind, "name": name, "run": _argv(c.get("run"), where, E), "timeout": to})
     cmds.sort(key=lambda c: c["id"])
-    checks, cseen = [], set()
+    checks, cseen, hist = [], set(), []
     for i, c in enumerate(t.get("checks") or []):
         where = "test.checks[%d]" % i
         if not isinstance(c, dict):
@@ -255,6 +280,14 @@ def expand(m, E, folder=None):
         name, kind = str(c.get("name", "")), c.get("kind")
         if not NAME_RE.match(name):
             raise E("%s: name %r: letters, digits, '.', '_', '-'" % (where, name))
+        if kind in HISTORY_KINDS + ("list-append",):
+            if name in cseen:
+                raise E("%s: duplicate check name %r (the name is the property id)" % (where, name))
+            cseen.add(name)
+            hist.append(history_check(c, where, E))
+            continue
+        if any(k in c for k in HISTORY_KEYS):
+            raise E("%s: %s: are for kind linearizable or list_append" % (where, "/".join(HISTORY_KEYS)))
         if kind not in CHECK_KINDS:
             raise E("%s: kind must be one of %s (got %r)" % (where, ", ".join(CHECK_KINDS), kind))
         if name in cseen:
@@ -274,6 +307,10 @@ def expand(m, E, folder=None):
             raise E("%s: every is for kind always" % where)
         checks.append(e)
     checks.sort(key=lambda c: c["name"])
+    if hist:        # history checks -> top-level checks: (hydo-build: validate_checks, hydo-init-history.sh)
+        if m.get("checks") is not None and not isinstance(m["checks"], list):
+            raise E("checks: must be a list")
+        m["checks"] = list(m.get("checks") or []) + sorted(hist, key=lambda c: c["id"])
     regs = []
     for i, r in enumerate(t.get("regressions") or []):
         where = "test.regressions[%d]" % i

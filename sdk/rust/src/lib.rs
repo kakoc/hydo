@@ -35,6 +35,7 @@
 mod assertion;
 mod buggify;
 mod eventually;
+pub mod history;
 mod json;
 mod macros;
 mod sink;
