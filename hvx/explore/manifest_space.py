@@ -209,10 +209,13 @@ class Space:
         return s
 
     SWEEP_KINDS = {"kill": ["kill"], "cut": ["cut"], "net": ["network"], "killcut": ["kill", "cut"],
-                   "pause": ["pause"], "clock": ["clock"], "oneway": ["oneway"], "freeze": ["freeze"]}
+                   "pause": ["pause"], "clock": ["clock"], "oneway": ["oneway"], "freeze": ["freeze"],
+                   "protocol": []}
 
     def check_sweep(self, name):
         need = [k for k in self.SWEEP_KINDS.get(name, []) if k not in self.faults]
+        if name == "protocol" and not self.pf_targets:
+            raise SystemExit("manifest_space: sweep protocol needs fakes: or proxies: (and `protocol` in faults:, if listed)")
         if need or (name in ("net", "oneway") and not (self.ported or self.links)):
             raise SystemExit("manifest_space: sweep %r needs fault kinds %s and a service with a port; "
                              "%s allows %s" % (name, self.SWEEP_KINDS.get(name), self.name, self.faults))
