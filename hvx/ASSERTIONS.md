@@ -64,7 +64,7 @@ exploration should keep going (or the scenario is wrong).
 
 ## Determinism and volume
 
-hvx keeps at most 64 KiB of console per VM, so SDKs must not flood it. The Go and JavaScript SDKs emit each
+hvx keeps at most 64 KiB of console per VM, so SDKs must not flood it. The Go, Rust and JavaScript SDKs emit each
 (assertion, outcome) pair once per process (the first pass and the first failure, with the
 details of that first one) and never emit a `sometimes` that evaluated false. The output is a
 pure function of the program's evaluation sequence: no clocks, no host state, catalog in
@@ -113,6 +113,46 @@ hydo_eventually svc.back "redis serves again within 5 s" 5 1 sh -c '/bin/redis-c
 every `poll-s` seconds of guest time and emits one record (`elapsed_s`, `within_s`).
 
 The shell helper does not deduplicate; call it where an event happens once.
+
+**Rust** (`sdk/rust`, crate `hydo-assert`; std only; README in the crate):
+
+```rust
+use hydo_assert::{declare, details, hydo_always, hydo_buggify, hydo_reachable};
+
+declare! {                                  // named statics, in the catalog before main
+    static ACKED: always("kv.acked_durable", "every acknowledged write reads back");
+    static BACK: eventually("kv.back", "the server answers within 5 s", Duration::from_secs(5));
+    static LOST_REPLY: buggify("kv.put.lost_reply", "the write lands but the reply is lost");
+}
+hydo_assert::catalog();                     // once, early: the DECL lines
+ACKED.check(got == want, details!{"key": k, "got": got});
+hydo_always!(n <= cap, "kv.log_size" => "the log stays under its cap", {"n": n});   // file:line captured
+hydo_reachable!("kv.torn_tail" => "the log ended in a partial line");
+if LOST_REPLY.fire(()) { return; }          // or inline: hydo_buggify!("id" => "message")
+BACK.await_cond(|| ping().is_ok(), Duration::from_millis(100), ());   // await_async for async code
+hydo_assert::setup_complete();
+```
+
+The run-time API (`hydo_assert::always(id, msg)`, `.check`, `.hit`, `.cmp`, `eventually`,
+`buggify`, `catalog`, `setup_complete`) is the Go SDK's, and for the same sequence of calls it
+writes the same bytes: `sdk/rust/tests/conformance.sh` builds a Go program against
+`hvx/stack/hydoassert`'s own sources and a Rust program making the same calls, and diffs their
+consoles and stdouts under three BUGGIFY configurations. Same output switch
+(`HYDO_ASSERT_OUT`), same deduplication, same BUGGIFY configuration (`$HYDO_BUGGIFY`, else
+`/tmp/hydo-buggify`) and decisions. Rust additions: call-site macros (`hydo_always!`,
+`hydo_sometimes!`, `hydo_reachable!`, `hydo_unreachable!`, `hydo_always_or_unreachable!`, the
+comparison macros, `hydo_buggify!`, `hydo_eventually!`) whose records carry one more field,
+`"loc":"<file>:<line>"`, last; `declare!`; both register before `main` with a std-only
+constructor, so a property in code that never runs is still in the catalog. Catalog order:
+`declare!` entries and macro sites sorted by file, line and column (a `declare!` block in the
+order written), then run-time declarations in declaration order. Feature `noop` compiles
+everything to nothing (BUGGIFY always false); feature `serde_json` accepts `serde_json::Value`
+details. `hydo_assert::emit_line(tag, &value)` writes any other one-line record kind (the
+extension point for a history recorder).
+
+For an onboarded project, `buggify: true` in `hydo.yaml` makes the guest init write the
+schedule's `B=` token to `/tmp/hydo-buggify` (`hvx/onboard/MANIFEST.md`), as `stack-explore.sh`
+does for the stack. `hvx/onboard/examples/rust-kv` is a complete example.
 
 **JavaScript** (`sdk/js`, package `hydo-assert`, Node.js; no dependencies; CommonJS and ESM;
 TypeScript types; README in the package):
