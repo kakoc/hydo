@@ -1,0 +1,57 @@
+# The node-kv example (see hydo-mac.yaml for what it shows) for the Linux backend (x86_64 guest,
+# VT-x): the same programs, workload, knob and invariant, with the x86_64 nodejs-slim 22.2.0 of
+# the pinned nixpkgs copied as a nix closure. The guest CPU is the default x86-64-v2.
+# Build (from the repository root, on the build box; HYDO_SEEDRNG = a static hvx_seedrng built
+# with the pinned musl gcc, hvx/BUILD-PINS.md):
+#   HYDO_SEEDRNG=<path> hvx/onboard/hydo-build hvx/onboard/examples/node-kv/hydo.yaml
+# Try the same schedules as in hydo-mac.yaml.
+name: node-kv
+description: nkv (Node.js, hydo-assert SDK); every acknowledged PUT must survive kills and power cuts.
+buggify: true
+
+root:
+  nix: [/nix/store/f6c0sf4fdm31ly01f8i9ca6xf5ixkjdj-nodejs-slim-22.2.0]   # pinned nixpkgs 24.05 (89c4987), x86_64
+  files:
+    - {src: nkv-server.mjs, dst: /app/nkv-server.mjs}
+    - {src: nkv.cjs, dst: /app/nkv.cjs}
+    - {src: props.cjs, dst: /app/props.cjs}
+    - {src: ../../../../sdk/js/package.json, dst: /app/node_modules/hydo-assert/package.json}
+    - {src: ../../../../sdk/js/index.js, dst: /app/node_modules/hydo-assert/index.js}
+    - {src: ../../../../sdk/js/index.mjs, dst: /app/node_modules/hydo-assert/index.mjs}
+
+env:
+  NODE: /nix/store/f6c0sf4fdm31ly01f8i9ca6xf5ixkjdj-nodejs-slim-22.2.0/bin/node
+
+data:
+  size_mib: 64
+  dirs: [nkv]
+
+services:
+  - name: nkv
+    cmd: $NODE /app/nkv-server.mjs /data/nkv 7070
+    ready: $NODE /app/nkv.cjs ping 7070
+    port: 7070
+
+workload:
+  steps: 20                         # step i = PUT k:i v<i>, with the client's 2 s deadline
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      if $NODE /app/nkv.cjs put 7070 k:$i v$i > /dev/null; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      i=$((i + 1))
+    done
+
+knobs:
+  - token: S
+    name: nkv fdatasync before acknowledging
+    default: always
+    values: [always, never]
+    set: echo $HYDO_VALUE > /tmp/nkv-fsync
+
+invariants:
+  - id: nkv.oracle
+    msg: every PUT the client saw acknowledged reads back with its value (nkv.cjs check)
+    cmd: $NODE /app/nkv.cjs check 7070 $HYDO_ACKED
+
+faults: [kill, pause, cut, clock, disk]
