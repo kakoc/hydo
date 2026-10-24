@@ -742,7 +742,11 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 {
 	static const char *const wk[] = { DONE_MARKER, FINAL_MARKER };
 	static const char *const fin[] = { FINAL_MARKER };
-	char verdict[256] = "", orc[512], tjinfo[160];
+	/* orc: the recovery boot's "oracle" command. 3584 bytes (was 512) so that the fake outside
+	 * world of a manifest with fakes:/proxies: (hydo-init-fakes.sh appends its records to the
+	 * acknowledged ids at a power cut, at most 3000 bytes) fits; the serial input ring is 4096.
+	 * A command that fitted before is unchanged. */
+	char verdict[256] = "", orc[3584], tjinfo[160];
 	uint64_t wfp = 0, ffp = 0;
 	int r;
 	const char *phase = "workload";
