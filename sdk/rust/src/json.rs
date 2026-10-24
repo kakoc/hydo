@@ -373,4 +373,19 @@ mod tests {
         let d = Details::new().with("b", 1).with("a", vec![1u8, 2]).with("A", Details::new());
         assert_eq!(d.to_json().unwrap(), r#"{"A":{},"a":[1,2],"b":1}"#);
     }
+
+    #[cfg(feature = "serde_json")]
+    #[test]
+    fn from_serde_json() {
+        let d: Details = serde_json::json!({"b": [1, -2, 1.5, null], "a": {"x": true}}).into();
+        assert_eq!(d.to_json().unwrap(), r#"{"a":{"x":true},"b":[1,-2,1.5,null]}"#);
+        let u: Value = serde_json::json!(u64::MAX).into();
+        assert_eq!(u.to_json().unwrap(), "18446744073709551615");
+    }
+
+    #[test]
+    fn none_and_unit_are_empty() {
+        assert!(Details::from(()).is_empty());
+        assert!(Details::from(None::<Details>).is_empty());
+    }
 }
