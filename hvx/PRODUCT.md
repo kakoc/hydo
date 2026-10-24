@@ -50,7 +50,7 @@ hydo is used from the team's own repository. Nobody checks out hydo's repository
 |---|---|---|---|
 | Go | `hvx/stack/hydoassert` (import `hydostack/hydoassert`) | on main (M38, M56, M59) | the reference |
 | shell (busybox sh) | `hvx/stack/hydoassert/hydo_assert.sh` | on main; no deduplication, no BUGGIFY | |
-| Rust | `sdk/rust` (crate `hydo-assert`) | branch `rust-sdk`, not merged yet | `sdk/rust/tests/conformance.sh` against the Go sources |
+| Rust | `sdk/rust` (crate `hydo-assert`, not published) | branch `rust-sdk` (M82), not merged yet; std only, call-site macros with file:line, `declare!`, sync and runtime-agnostic async `eventually`, features `noop` and `serde_json` | `sdk/rust/tests/conformance.sh` against the Go sources (Go 1.26.5 and 1.27.3), three BUGGIFY configurations |
 | Python | `sdk/python` | branch `python-sdk`, in progress | |
 | JavaScript / TypeScript (Node.js) | `sdk/js` (package `hydo-assert`, not published) | branch `js-sdk`, not merged yet; CommonJS and ESM, types, no dependencies | `sdk/js/test/conformance.sh` against the Go sources (Go 1.26.5), both entries, five BUGGIFY configurations |
 
