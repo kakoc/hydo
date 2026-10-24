@@ -15,6 +15,8 @@ the shrinker draw from:
     KNOB_TOKENS knob tokens render / parse / shrink handle      stack: M R
     FC_PAIRS    (service, peer) pairs a freeze-at-a-call (F=,    stack: none
                 --freeze-call) picks from: only when faults: lists freeze
+    PF_TARGETS  fakes' routes and proxies a protocol fault (H=,  stack: none
+                --protocol-faults) picks from: only for a manifest with fakes:/proxies:
 
 and installs SPACE, whose restrict() render() applies last: it drops the fault kinds the
 manifest's `faults:` list leaves out (a lying disk falls back to a plain power cut when only
@@ -36,7 +38,11 @@ ROOT_OFFSET = 2048 * 512            # hydo-build puts the root filesystem at LBA
 FAULT_KINDS = ["kill", "pause", "network", "oneway", "cut", "clock", "disk"]
 # guest schedule tokens with a fixed meaning (faults; Q/X = concurrency and timed kill, hydo-c7's branch);
 # a manifest knob may not reuse one, or parse() would read the knob as that fault. M/R stay knob names.
-RESERVED_TOKENS = {"K", "P", "N", "O", "C", "T", "Q", "X", "B", "F", "W"}   # W: the test composer
+RESERVED_TOKENS = {"K", "P", "N", "O", "C", "T", "Q", "X", "B", "F", "H", "W"}   # W: the test composer; H: protocol faults
+# protocol faults (H=, hvx/onboard/hydo-init-fakes.sh): rule kinds on requests and on webhooks
+PF_REQ_KINDS = ["status", "delay", "drop", "reset"]
+PF_HOOK_KINDS = ["dup", "reorder", "late", "lost"]
+PF_TCP_KINDS = ["delay", "drop", "reset"]
 
 
 def _parser():
@@ -109,6 +115,7 @@ class Space:
                       (["%s-*" % a for a in addr] if len(addr) > 2 else []))
         self.svcs = svcs
         self.fc_pairs = self._fc_pairs(m["services"])
+        self.pf_targets = self._pf_targets(m)
         self.steps = int(m["workload"]["steps"])
         if self.steps < 4:
             raise SystemExit("manifest_space: workload.steps=%d; the generators need at least 4 steps" % self.steps)
@@ -145,6 +152,27 @@ class Space:
         # the workload's client ("workload" peer, hydo-init-freeze.sh)
         return pairs or [(a, "workload") for a in names if by[a].get("port")]
 
+    @staticmethod
+    def _pf_targets(m):
+        """H= targets: (name, request rule kinds, webhook rule kinds, protocol) for every fake route
+        (<fake>.<route>), every proxy route and every proxy (a tcp proxy: its connections). Empty
+        unless the manifest has fakes:/proxies: and allows `protocol` (faults: omitted = allowed)."""
+        if "faults" in m and "protocol" not in (m.get("faults") or []):
+            return []
+        out = []
+        for e in m.get("fakes") or []:
+            for r in e.get("routes") or []:
+                out.append(("%s.%s" % (e["name"], r["name"]), list(PF_REQ_KINDS),
+                            list(PF_HOOK_KINDS) if r.get("webhook") else [], e.get("protocol", "http")))
+        for e in m.get("proxies") or []:
+            proto = e.get("protocol", "http")
+            if proto == "tcp":
+                out.append((e["name"], list(PF_TCP_KINDS), [], "tcp"))
+                continue
+            out.append((e["name"], list(PF_REQ_KINDS), [], proto))
+            out += [("%s.%s" % (e["name"], r["name"]), list(PF_REQ_KINDS), [], proto) for r in e.get("routes") or []]
+        return out
+
     def fc_match(self):
         """freeze_match: as (string, direction) pairs: "<" = in packets the frozen service
         receives (replies:), ">" = in packets it sends (requests:), None = a plain list (either)."""
@@ -156,6 +184,8 @@ class Space:
     def describe(self):
         d = {"project": self.name, "services": self.svcs, "network": self.ported + self.links, "steps": self.steps,
              "faults": self.faults, "knobs": {t: {"safe": s, "relaxed": v} for t, s, v in self.knobs}}
+        if self.pf_targets:
+            d["protocol_targets"] = ["%s:%s" % (t, "/".join(rk + hk)) for t, rk, hk, _ in self.pf_targets]
         if self.composed():
             d["composer"] = {"commands": [c["id"] for c in self.compose["commands"]],
                              "checks": [c["name"] for c in self.compose["checks"]], "params": self.compose["params"]}
@@ -180,6 +210,8 @@ class Space:
         if "freeze" in self.faults:     # only then: the explorer of every other manifest is unchanged
             ex["FC_PAIRS"] = list(self.fc_pairs)
             ex["FC_MATCH"] = self.fc_match()
+        if self.pf_targets:             # only then (fakes:/proxies:): every other manifest is unchanged
+            ex["PF_TARGETS"] = list(self.pf_targets)
         ex["SPACE"] = self
 
     def restrict(self, s):
@@ -194,6 +226,11 @@ class Space:
                 s.pop(key)
         if "F" in s and ("freeze" not in f or s["F"][0] not in self.svcs or s["F"][2] not in self.svcs + ["workload"]):
             s.pop("F")
+        if "H" in s:                    # protocol faults: only on this manifest's fakes / proxies
+            names = {t for t, _, _, _ in self.pf_targets}
+            s["H"] = [h for h in s["H"] if h[0] in names]
+            if not s["H"]:
+                s.pop("H")
         for key in ("K", "P", "X"):
             if key in s and s[key][0] == "-":    # placeholder of a project without services
                 s.pop(key)
@@ -205,7 +242,7 @@ class Space:
             s.pop("C", None)
         tokens = {t for t, _, _ in self.knobs}
         for key in list(s):
-            if len(key) == 1 and key.isupper() and key not in "KNCPTOF" and key not in tokens and \
+            if len(key) == 1 and key.isupper() and key not in "KNCPTOFH" and key not in tokens and \
                     not (key == "B" and self.m.get("buggify") is True) and \
                     not (key == "W" and self.composed()):   # buggify: true keeps B= (the BUGGIFY seed); W: the composer
                 s.pop(key)
@@ -213,10 +250,13 @@ class Space:
         return s
 
     SWEEP_KINDS = {"kill": ["kill"], "cut": ["cut"], "net": ["network"], "killcut": ["kill", "cut"],
-                   "pause": ["pause"], "clock": ["clock"], "oneway": ["oneway"], "freeze": ["freeze"]}
+                   "pause": ["pause"], "clock": ["clock"], "oneway": ["oneway"], "freeze": ["freeze"],
+                   "protocol": []}
 
     def check_sweep(self, name):
         need = [k for k in self.SWEEP_KINDS.get(name, []) if k not in self.faults]
+        if name == "protocol" and not self.pf_targets:
+            raise SystemExit("manifest_space: sweep protocol needs fakes: or proxies: (and `protocol` in faults:, if listed)")
         if need or (name in ("net", "oneway") and not (self.ported or self.links)):
             raise SystemExit("manifest_space: sweep %r needs fault kinds %s and a service with a port; "
                              "%s allows %s" % (name, self.SWEEP_KINDS.get(name), self.name, self.faults))
