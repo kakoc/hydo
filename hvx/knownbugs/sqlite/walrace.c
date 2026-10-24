@@ -310,7 +310,9 @@ static int run(int from, int to)
 			RD_HOLD = hold[rbelow(&rs, 4)];
 			MAXROWS = 1 + (int)rbelow(&rs, 8);
 		}
-		g_count = 1;
+		/* counting is on in reset mode; WALRACE_COUNT=0 turns it off (to show that the
+		 * counter's own reads of the -wal file do not change the outcome) */
+		{ const char *c = getenv("WALRACE_COUNT"); g_count = !(c && *c == '0'); }
 	}
 	char hdr[320];
 	if (g_reset)
