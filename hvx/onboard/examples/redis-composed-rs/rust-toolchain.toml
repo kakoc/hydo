@@ -1,0 +1,3 @@
+[toolchain]
+channel = "1.90.0"   # pinned: the guest binary must be byte-reproducible (as examples/rust-kv)
+targets = ["x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl"]

@@ -13,13 +13,17 @@
     hydo run     [IMG] "<schedule>" [--image IMG]  run one schedule from a fresh boot
     hydo repro   <run dir | explore dir | "<schedule>"> [--image IMG]
                                                    run again and compare the fingerprints
+    hydo repro   --regressions [IMG]               replay the plan's saved regressions (hydo/regressions/)
+    hydo save    <explore dir> [--to hydo/regressions]
+                                                   save the minimal schedules of an exploration as regressions
     hydo explore [IMG] [--seeds 1-20] [--strategy random|swarm|process|...] [--workers N]
                  [--out DIR] [any other explore.py option]
                                                    generate, run, re-run and shrink schedules
     hydo report  [DIR]                             print the report of the last (or a given) exploration
 
-IMG defaults to the one *-disk.img in ./hydo-out (what `hydo build` wrote there). Runs open
-/dev/hvx ($HVX_DEV) while holding the shared module lock; `hydo module load/unload` take it
+IMG defaults to the one *-disk.img in ./hydo-out, or in ./.hydo for a project whose manifest is
+hydo/hydo.yaml (the agreed repository layout; `hydo build` with no manifest uses ./hydo/hydo.yaml).
+Runs open /dev/hvx ($HVX_DEV) while holding the shared module lock; `hydo module load/unload` take it
 exclusively, so a reload never pulls the module from under a running VM. The lock file is
 $HYDO_LOCK (default ~/.hvx-module.lock). A run uses sudo only when you cannot open the device
 yourself (see `hydo module udev`; HYDO_SUDO=1 forces sudo). Plain Python 3.9+, no packages.
@@ -41,6 +45,7 @@ INITRD = os.path.join(GUEST, "initramfs-kafka.cpio.gz")
 STORE = os.path.join(GUEST, "store")               # nix/store/<path>: the guest-side closures (tc, iptables),
 CLOSURES = os.path.join(GUEST, "store-closures.txt")  # unpacked from guest/store.tar by install.sh
 OUT = "hydo-out"
+PROJECT_OUT = ".hydo"                               # the build cache of a project in the hydo/ folder layout
 BASE_LOCK = os.environ.get("HYDO_LOCK") or os.path.expanduser("~/.hvx-module.lock")
 DEV = os.environ.get("HVX_DEV") or "/dev/hvx"     # the device runs open (another name: a side module)
 DEVNAME = os.path.basename(DEV)
@@ -200,6 +205,12 @@ def own_by_root(hb):
     hb.mkfs = mkfs
 
 
+def project_out(manifest):
+    """Where `hydo build` writes: ./.hydo for a manifest in a hydo/ folder (the repository
+    layout: hydo/ holds the plan, .hydo/ the git-ignored build cache), else ./hydo-out."""
+    return PROJECT_OUT if os.path.basename(os.path.dirname(os.path.abspath(manifest))) == "hydo" else OUT
+
+
 def cmd_compose(argv):
     """hydo compose: hvx/onboard/hydo_compose.py (the Compose importer), unchanged."""
     if not argv or argv[0] in ("-h", "--help"):
@@ -211,10 +222,12 @@ def cmd_compose(argv):
 
 
 def cmd_build(argv):
+    if (not argv or argv[0].startswith("-")) and os.path.isfile(os.path.join("hydo", "hydo.yaml")):
+        argv = [os.path.join("hydo", "hydo.yaml")] + list(argv)
     if not argv or argv[0].startswith("-"):
-        die("usage: hydo build <hydo.yaml> [--out DIR] [--set KEY=VALUE ...]")
+        die("usage: hydo build <hydo.yaml> [--out DIR] [--set KEY=VALUE ...]   (no manifest: ./hydo/hydo.yaml)")
     manifest, rest = argv[0], list(argv[1:])
-    out = take(rest, "--out", OUT)
+    out = take(rest, "--out", project_out(manifest))
     if "--arch" in rest:
         die("this is the x86_64 Linux release; arm64 images are built with the Mac release")
     T = {   # the bundled host tools (hydo-build's own defaults are /nix/store paths)
@@ -248,8 +261,11 @@ def find_image(args):
         img = args.pop(0)
     if img is None:
         imgs = sorted(glob.glob(os.path.join(OUT, "*-disk.img")))
+        if not imgs:
+            imgs = sorted(glob.glob(os.path.join(PROJECT_OUT, "*-disk.img")))
         if len(imgs) != 1:
-            die("no image given and %d *-disk.img in ./%s (run `hydo build hydo.yaml` here, or pass --image)" % (len(imgs), OUT))
+            die("no image given and %d *-disk.img in ./%s or ./%s (run `hydo build hydo.yaml` here, or pass --image)" % (
+                len(imgs), OUT, PROJECT_OUT))
         img = imgs[0]
     if not os.path.isfile(img):
         die("no such image: %s" % img)
@@ -357,6 +373,9 @@ def repro_list(d):
 
 def cmd_repro(argv):
     args = list(argv)
+    if "--regressions" in args:
+        args.remove("--regressions")
+        return cmd_regressions(args)
     if args and os.path.isdir(args[0]):
         d = args.pop(0)
         items = repro_list(d)
@@ -374,6 +393,82 @@ def cmd_repro(argv):
         print("hydo: %d of %d reproduced with the recorded fingerprint (consoles under %s)" % (same, len(items), base))
         return 0 if same == len(items) else 1
     return cmd_run(argv)
+
+
+# ---------------------------------------------------------------- regressions (the test composer's plan)
+def plan_regressions(image):
+    """The regressions the image was built with: test.regressions of its plan plus
+    hydo/regressions/*.schedule (both end up in /etc/hydo/compose.json, hydo_composer.py)."""
+    sys.path.insert(0, EXPLORE)
+    os.environ["PATH"] = tool_env()["PATH"]
+    import manifest_space
+    return manifest_space.embedded_compose(image) or {}
+
+
+def regression_ok(expect, res):
+    v = res["verdict"]           # explore.py's verdict_kind: an OK verdict, else a VIOLATION, else an error
+    if expect == "ok":
+        return "HYDO-ORACLE: OK" in v
+    if expect == "violation":
+        return "HYDO-ORACLE: OK" not in v and "VIOLATION" in v
+    return expect == "fp=" + res["fp"]
+
+
+def cmd_regressions(args):
+    """Replay every saved regression from a fresh boot and check its expectation: `ok` (the
+    fixed bug stays fixed: the run passes), `violation` (a known open bug still fails), or
+    `fp=<hex>` (bit for bit the recorded run)."""
+    image = find_image(args)
+    meta = plan_regressions(image)
+    regs = meta.get("regressions") or []
+    sys.path.insert(0, ONBOARD)
+    import hydo_composer
+    if not regs:
+        print("hydo: %s carries no regressions (hydo/regressions/*.schedule or test.regressions in the plan)" % image)
+        return 0
+    base = os.path.join(os.path.dirname(image), "regressions-%s" % time.strftime("%Y%m%d-%H%M%S"))
+    eargs = engine_args_for(image)
+    bad = 0
+    for k, r in enumerate(regs):
+        w = hydo_composer.regression_warning(r, meta)
+        if w:
+            print("hydo: warning: " + w)
+        res = run_one(image, r["schedule"], os.path.join(base, "%03d-%s" % (k, r["name"])), eargs, quiet=True)
+        ok = regression_ok(r["expect"], res)
+        bad += not ok
+        print("%-5s %s  expect %s  fp=%s  %s\n      %s" % ("PASS" if ok else "FAIL", r["name"], r["expect"], res["fp"],
+                                                          r["schedule"], res["verdict"][:160]))
+    print("hydo: %d of %d regressions as expected (consoles under %s)" % (len(regs) - bad, len(regs), base))
+    return 1 if bad else 0
+
+
+def cmd_save(argv):
+    """Write each minimal schedule of an exploration as hydo/regressions/<name>.schedule with
+    `expect: violation` (edit it to `ok` once the bug is fixed)."""
+    args = list(argv)
+    to = take(args, "--to", os.path.join("hydo", "regressions"))
+    if len(args) != 1 or not os.path.isfile(os.path.join(args[0], "report.json")):
+        die("usage: hydo save <explore dir> [--to hydo/regressions]")
+    j = json.load(open(os.path.join(args[0], "report.json")))
+    os.makedirs(to, exist_ok=True)
+    n = 0
+    for x in j.get("shrunk", []):
+        name = re.sub(r"[^A-Za-z0-9_.-]+", "-", "%s-%s" % (x["class"], x["signature"]))[:60].strip("-")
+        p = os.path.join(to, name + ".schedule")
+        if os.path.exists(p):
+            print("hydo: %s exists, kept" % p)
+            continue
+        with open(p, "w") as f:
+            f.write("# found by `hydo explore` (seed %s): %s\n# verdict: %s\n" % (x["from_seed"], x["class"], x["min_verdict"][:200]))
+            if x.get("composition"):
+                f.write("# composition: %s\n" % x["composition"][:400])
+            if x.get("commands") is not None:      # what W= refers to (hydo_composer.regression_warning)
+                f.write("# commands: %s\n" % " ".join(x["commands"]))
+            f.write("# expect: violation      (change to ok when the bug is fixed)\n%s\n" % x["minimal"])
+        n += 1
+        print("hydo: wrote %s" % p)
+    print("hydo: %d regressions saved; `hydo build` stages them, `hydo repro --regressions` replays them" % n)
+    return 0
 
 
 # ---------------------------------------------------------------- explore / report
@@ -794,7 +889,7 @@ def cmd_doctor(argv):
 
 def main():
     cmds = {"compose": cmd_compose, "build": cmd_build, "run": cmd_run, "repro": cmd_repro, "explore": cmd_explore,
-            "report": cmd_report, "doctor": cmd_doctor, "module": cmd_module}
+            "report": cmd_report, "doctor": cmd_doctor, "module": cmd_module, "save": cmd_save}
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         print(__doc__)
         return 0 if len(sys.argv) >= 2 and sys.argv[1] in ("-h", "--help", "help") else 2
