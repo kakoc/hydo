@@ -1,0 +1,95 @@
+# shop: results (fake outside services and protocol faults, 2026-10-24)
+
+The demo project for `fakes:` / `H=` (hvx/onboard/MANIFEST.md, "Fake outside services and protocol
+faults"). `shop` charges each order through a fake payment provider (`payments`, with idempotency
+keys and a `charge.succeeded` webhook back to the shop) and sends a receipt through a fake email
+service (`email`). One planted bug: `src/charge_buggy.go` gives every retry of a charge a new
+idempotency key, so a charge that took effect but whose answer was lost is taken again.
+`src/charge_fixed.go` keys the charge by the order.
+
+All runs on the bare-metal test machine, one VM at a time, with `hvx_explore` built from this branch
+(commit `ec099a3`, which includes the 3584-byte recovery command). Results under
+`/var/tmp/m80-fakes/` on the box.
+
+## Images
+
+Built on the build box with `build.sh` (pinned Go 1.26.5, standard library only; pinned
+`hvx_seedrng` `c2a440c5…`):
+
+| image | sha256 | notes |
+|---|---|---|
+| `explore-ob-shop2-buggy-disk.img` | `f331c6be7bade742…` | the planted bug |
+| `explore-ob-shop2-fixed-disk.img` | `6c6693200f80880e…` | the fix |
+| `explore-ob-redis-proxy-disk.img` | `892810258f1e7c83…` | control: `examples/redis/hydo-proxy.yaml` |
+
+A second build under other names gave the same bytes. (`explore-ob-shop-{buggy,fixed}` are the first
+build, before the receipt check was corrected; see below.) Binaries: `hydo-world` `2da400f3…`,
+`shop-buggy` `96019e2e…`, `shop-fixed` `4fa42299…`.
+
+## The bug found blind, shrunk, reproduced
+
+`explore.py --protocol-faults --strategy process --seeds 1-100` on the buggy image
+(`explore-ob-shop-buggy`, first build): 6 failures, every one re-run with the same fingerprint.
+
+- Four are the planted bug (`payments.charged_at_most_once`): seeds 46 (first found), 78, 84, 85.
+  Each schedule carries a protocol fault on `payments.charge` that lets the charge happen while its
+  answer is lost: a reset connection, a dropped answer, a 3000 ms delay (the shop waits 1 s).
+- The shrinker reduced them to schedules that name only the protocol fault:
+  - `disk=none dseed=efb4cfbc49052179 | run H=payments.charge@0-1:drop` -- order 0 charged 3 times
+  - `disk=none dseed=fbb60485ae17b0ba | run H=payments.charge@6-9:reset,p=50` -- order 7 charged twice
+- On the shop2 images, each of the two minimal schedules twice:
+
+| schedule | buggy | fixed |
+|---|---|---|
+| `H=payments.charge@0-1:drop` | VIOLATION, o0 charged 3 times, `56657683c9287f08` ×2 | OK `b7417498e0a9ad72` ×2 |
+| `H=payments.charge@6-9:reset,p=50` | VIOLATION, o7 charged twice, `3a4622ba213124e9` ×2 | OK `54b2cc1e822a7e53` ×2 |
+| no fault (`disk=none dseed=1 \| run`) | OK `fc08af8dda7ff5e6` ×2 | OK `6eeb85c5f19ec59c` ×2 |
+
+The bug needs a protocol fault: the probability that a generated schedule carries one that lets a
+charge happen without its answer is about 9% (counted over seeds 1-200; seeds 1-40 hold none, which is
+why the run covers 100 seeds).
+
+## Both shop2 images on the same schedules
+
+The same 100 process seeds with `--protocol-faults`, one worker:
+
+- `explore-ob-shop2-buggy`: 4 failures, exactly the planted-bug seeds 46, 78, 84, 85 (fingerprints
+  `bdfec48c0a261020`, `92995d9b771d8acd`, `10ff11872c2b94bf`, `250d55df657e11fe`), all re-run
+  identically; the shrinker reached the same two minimal schedules and fingerprints as above.
+- `explore-ob-shop2-fixed`: 0 failures (726 schedules per hour).
+
+## The protocol sweep (every rule kind, every target, every step)
+
+`--sweep protocol`: 228 one-fault schedules (19 rule variants on `payments.charge`,
+`payments.refund` and `email.send`, one workload step at a time, 12 steps).
+
+| image | failures | which |
+|---|---|---|
+| buggy | 48, all reproduced | exactly `payments.charge` with `delay=3000`, `drop`, `reset` and `status=500,effect=yes`, at each of the 12 steps: the four ways a charge takes effect while its answer is lost |
+| fixed | 0 | |
+
+A plain error answer (`status=500` without the effect), every webhook rule (duplicated, reordered,
+late, lost) and every fault on refunds and emails pass on both images.
+
+## A check that was too strong (found by the explorer)
+
+Seeds 20 and 54 of the first run failed `email.receipt_eventually` ("acknowledged o2 has no
+receipt"); shrunk to `H=email.send@2-4:status=500`. Order 2's receipt failed (500), then the
+workload cancelled order 2 at step 3, and the shop correctly sends no receipt for a cancelled order.
+The invariant was wrong, not the shop: the workload now records `hydo-world event cancel-requested
+o<id>` before each cancellation and the check is `effect-for-acked email.send --ref 'o{id}' --unless
+event:cancel-requested`. The shop2 images carry the corrected check; both seeds pass there.
+
+## Control: Redis behind a fault proxy
+
+`examples/redis/hydo-proxy.yaml` puts a `tcp` proxy (`redisp`, port 6380) in front of Redis; the
+workload talks to the proxy. `--protocol-faults --strategy process --durable-only --seeds 1-40`:
+40 of 40 OK. 26 schedules carried an `H=redisp@...` fault (reset, drop, delay with and without `p=`),
+44 connections were actually faulted; the client saw unknown outcomes there, which the invariant
+allows. No false violation.
+
+## Power cut
+
+`disk=cut dseed=1 | run H=payments.charge@2-5:drop C=8` (fixed, first build): at the cut the world
+carried 18 records (599 bytes) into the recovery boot's command; the recovery world started from
+them and the checks saw both boots (OK).
