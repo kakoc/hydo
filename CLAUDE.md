@@ -77,8 +77,8 @@ Each flagship boots an unmodified service, runs a workload and an oracle, and pa
 
 - One guest runs unmodified MySQL 8.4.10, Kafka 3.5.0 and Redis 7.2.4 plus our gRPC order service (`hvx/stack/main.go`; older notes call it the "front door"). Each `Place(id)` writes MySQL, publishes to Kafka with an idempotent franz-go producer, writes Redis as a best-effort cache, and only then acknowledges. Only one `Place` per order id runs at a time, and the "send started" state lives in MySQL (`published` 0 / 2 / 1) (M35, M37, M39, M50). Built by `build-stack.sh`; verified by `hvx/hvx_stack_verify.c` (`mode=all`, `mode=fault`).
 - MySQL runs with the binary log on and `sync_binlog=1`, and Kafka with `log.retention.ms=-1` (M63). These two settings fix the bugs found in M58 and M63.
-- Current baselines (M63, image `stack-binlog-ret-disk.img` `b7eb93ee…`, one vCPU): SANITY `ceee1ce465e5424b`, F1 `3ddc9bd9aa95cf99`, F2 `00af090e634fefb5` (the expected VIOLATION from MySQL's relaxed window; durable `df945fb47a53e280`), F3 `88fa2915c90b452f` / `e9f60d6301f75013`.
-- On 2 vCPUs (M69, same image): SANITY `05915e49a5506c58`, F1 `1e4fedf03f81f941`, F2 `c5e01886e97b32b8` (durable `c9b1cfeb274d4e3d`), F3 `2c522171088a9da5` / `2a01253d0d5a4eb8`.
+- Current baselines (M77, image `stack-nq-disk.img` `161996bb…` = the M63 recipe plus the M71 netem drain, one vCPU): SANITY `2235f9d76a592a07`, F1 `815cc64346e728fc`, F2 `32024d0b245aff3c` (the expected VIOLATION from MySQL's relaxed window, order 8; durable `7323951e90d21b4f`), F3 `96e2e7ddb963ee66` / `e8c16382540eba2e`. The eight per-fault scenarios (`mode=fault`; kills and netem, all OK 30/30) are in `hvx/REBASELINE.md` §7.2.
+- On 2 vCPUs (M69, measured on the previous image `stack-binlog-ret`, not re-measured on `stack-nq`): SANITY `05915e49a5506c58`, F1 `1e4fedf03f81f941`, F2 `c5e01886e97b32b8` (durable `c9b1cfeb274d4e3d`), F3 `2c522171088a9da5` / `2a01253d0d5a4eb8`.
 
 ### The explorer
 
@@ -95,6 +95,7 @@ Each flagship boots an unmodified service, runs a workload and an oracle, and pa
 
 - A project is described by one `hydo.yaml` (`hvx/onboard/MANIFEST.md`). `hvx/onboard/hydo-build` compiles it into a guest image with one generic init (`hydo-init.sh`) that starts the services, applies fault tokens by service name and runs the invariants (M47). The `hydo-onboard` skill writes a manifest for a new project.
 - Features: services with readiness checks and crash recovery; faults that reach a service's whole process tree (M52); `params:` (M52); `eventually` liveness invariants (M59); Docker/OCI images by digest with `image:` (M59); `guest.ram_mib`, 256–3072 MiB on Linux and 256–4096 MiB on the Mac (M59); per-service `addr:` with link faults between services (M60, x86_64 only); `guest.cpu: v3` (M68, x86_64 only); and `hydo-build --arch arm64` for the Mac (M51).
+- Current images of the examples with network or link faults (the M71 netem drain, pinned tools; M77): `explore-ob-stack-{fix,old}-nq`, `explore-ob-miniflux-nq`, `explore-ob-etcd-{3.5.5,3.5.6,3.6.8,3.6.9,3.6.15}-nq`; their fingerprints are in `hvx/REBASELINE.md` §7 and the examples' `RESULTS.md`. On etcd 3.5.5-nq the 14685 bug is still found (17 of 100 explorer schedules), but M60's second reproducer (a client's revision going back) no longer fires.
 
 ### The Linux release
 
@@ -132,9 +133,10 @@ Items marked **[user decision]** need the user before anyone acts on them.
 5. Guest AVX (M68): there is no AVX-512, XSAVEOPT, XSAVEC, XSAVES or PKRU; the pending #GP of an invalid XSETBV is not in the snapshot; and with the flag off, a guest that sets CR4.OSXSAVE anyway reads the host's XCR0.
 6. The d11 defect (an ACK on an unflushed flag) has a window of about 3 of ~310 flush-cut points and is rarely found by strategies (M67, M72: 3/6 then 0/6 over 3-repetition cells); measuring its detection rate needs many more repetitions or a cell that always draws `cf=`. The m59 bench set now defaults to `-pin-kr` (Kafka retention fixed, M72).
 7. fwupd still runs on the bare-metal machine; it is harmless to the fixed module. Older single outliers (M34 MySQL, M39 I/O error) were not checked against fwupd times (M65).
-8. The stack's per-fault scenario baselines (kills, netem) were last measured on the M39 image and were not re-measured after the M50 and M63 changes.
+8. etcd 3.5.5: on the `-nq` image no schedule is known that shows 14685's second symptom (a client's revision going back); the first symptom (members disagree) reproduces (M77).
 9. Explorer and tools: the oracle reads Kafka before it restarts when Kafka is killed at the last order (M55); `pp=`/`xt=` are refused in branch mode, and the `xt` shrinker does not turn a seeded policy into a list (M49); the guest RAM size is not part of the schedule string, so a hand-run `hvx_explore one` on a non-default image needs `--ram-mib` (M59); the OK verdict shows only the first invariant's details (M47).
 10. etcd 3.6.8 against 3.6.9 (stale reads with a paused leader) showed no difference; it needs timed pauses aimed at the leader. `addr:` is refused on arm64 (M60).
+11. Images built before M71 drop the packets queued in netem when a delay fault is lifted. The onboarding examples and the default stack were rebuilt as `-nq` images in M77; any other image with network faults that predates M71 keeps the old behaviour.
 12. Processor Trace limits: guest kernel modules are not traced, very early boot needs tracing started after the kernel's self-patching, JIT-compiled Java is out of scope, buffers of about 1 GiB can fail to allocate, and host PT use is suspended during traced runs (M40). Whole-system coverage runs often filled the 256 MiB buffer (M44).
 13. Mac backend: a pure memory-flag spin in user space with no exits cannot be interrupted deterministically, and windows of plain work with no exits are out of reach of jitter and PCT points (M48, M53, M57).
 14. Older limits that still hold: the PMU clock is a tick source on top of the exit-count clock, not an instruction-exact clock, so instruction-exact bisection of a Linux boot is future work (M33); host performance counters are off while a PMU-clock guest runs (M34); RAM above about 3.9 GiB needs a PCI-hole split (M28); a read-write ext4 root is not done (M29); and in the module-built default guest page tables, the page that maps 512 MiB–1 GiB shares a page with the built-in interrupt handler, which only hand-written test guests use, left as is because fixing it moves every hand-written fingerprint (M36).
@@ -221,6 +223,7 @@ Milestones 1–32 ran inside the nested L1 VM on the build machine, before 2026-
 - M74 — negative: several vCPUs found no race that one vCPU misses (benchmark d8/d9/d12; SQLite WAL bug not found on 2 or 4 vCPUs) (2026-10-23)
 - M75 — the Linux release: one `hydo` command (doctor, module, build, run, repro, explore, report) and a self-contained tarball for x86_64 + VT-x, no Nix needed (2026-10-23)
 - M76 — the freeze sweep: every packet point of a run as one `F=` schedule (2026-10-24)
+- M77 — onboarding and default stack images rebuilt with the netem drain (`-nq`); stack baselines and the eight fault scenarios re-measured (2026-10-23)
 
 ## Where to look
 

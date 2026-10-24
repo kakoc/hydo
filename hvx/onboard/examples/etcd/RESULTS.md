@@ -66,3 +66,28 @@ member (the leader) to stall while requests are in flight. Timed pauses (`P=svc@
 drawn by `--new-faults` under the random/swarm strategies) are the next thing to try.
 
 Cost: 20–37 s per schedule (the box was shared with other sessions), 0.7–2.2 h per 100 seeds.
+
+## Rebuilt with the netem drain (2026-10-23, M77)
+
+The images above were built before Milestone 71, so lifting a link or network fault dropped the
+packets waiting in netem's delay queue. They were rebuilt from `2e0e3fe` with the pinned tools as
+`explore-ob-etcd-<v>-nq-disk.img` (3.5.5 `2d4d9301…`, 3.5.6 `1df90f16…`, 3.6.8 `bf213ea5…`,
+3.6.9 `fd2e9c58…`; 3.6.15-nq `021d350a…` is from M71); only `/sbin/init` and
+`/etc/hydo/init-links.sh` differ. Use the `-nq` images for new runs. Full tables (every schedule
+above plus link-heal schedules, old image vs new image): `hvx/REBASELINE.md` section 7.
+
+| version | clean run (`disk=none dseed=1 \| run`), new image | M60 explorer campaign, new image |
+|---|---|---|
+| 3.6.15 | `b252dd1dac5b1449` (M71) | not re-run |
+| 3.5.5 | `4baa570bd70d0ae7`, OK | 17 failures, 17 reproduced, all `etcd.members_agree` (was 19) |
+| 3.5.6 | `abface2f2b610673`, OK | 0 failures |
+| 3.6.8 | `875de1a790776cff`, OK | not re-run |
+| 3.6.9 | `ec25ed73287912f2`, OK | not re-run |
+
+On 3.5.5 the bug is still found, but which schedules hit its window moved (guest timing shifted
+with the longer init script): the first minimal reproducer `disk=cut dseed=4127cc1347fae6ba | run C=30`
+still fails (`2bd06b8446559fe9`, members disagree 99 98 98), the second one
+(`K=etcd1@10+1 P=etcd3@26+1 T=2:-30`, client revision going back) now passes (`73546ff456569eba`),
+and the hand-written check fails in 3 of 15 schedules (`K=etcd<n>@25+2` for each member) instead of
+5 of 15. 3.5.6 passes everything on both images. Every heal on the new images delivered the queued
+packets (4–41 on the link-delay schedules, `left=0`).
