@@ -78,7 +78,7 @@ Each flagship boots an unmodified service, runs a workload and an oracle, and pa
 - One guest runs unmodified MySQL 8.4.10, Kafka 3.5.0 and Redis 7.2.4 plus our gRPC order service (`hvx/stack/main.go`; older notes call it the "front door"). Each `Place(id)` writes MySQL, publishes to Kafka with an idempotent franz-go producer, writes Redis as a best-effort cache, and only then acknowledges. Only one `Place` per order id runs at a time, and the "send started" state lives in MySQL (`published` 0 / 2 / 1) (M35, M37, M39, M50). Built by `build-stack.sh`; verified by `hvx/hvx_stack_verify.c` (`mode=all`, `mode=fault`).
 - MySQL runs with the binary log on and `sync_binlog=1`, and Kafka with `log.retention.ms=-1` (M63). These two settings fix the bugs found in M58 and M63.
 - Current baselines (M77, image `stack-nq-disk.img` `161996bb…` = the M63 recipe plus the M71 netem drain, one vCPU): SANITY `2235f9d76a592a07`, F1 `815cc64346e728fc`, F2 `32024d0b245aff3c` (the expected VIOLATION from MySQL's relaxed window, order 8; durable `7323951e90d21b4f`), F3 `96e2e7ddb963ee66` / `e8c16382540eba2e`. The eight per-fault scenarios (`mode=fault`; kills and netem, all OK 30/30) are in `hvx/REBASELINE.md` §7.2.
-- On 2 vCPUs (M79, same image `stack-nq`, `HVX_VCPUS=2`; supersedes the M69 values of `stack-binlog-ret`, which that image still reproduces): SANITY `d1a5ee3ccea87dac`, F1 `7fb7b85c69257f2b`, F2 `809c8292d95b638a` (order 8; durable `233e0afedb35fe4e`), F3 `3a074084d6fbeaa5` / `c008a3f9a3d961e3`; Kafka kill at order 10 (`mode=fault`) `33611b4de52bd93d`, OK 30/30. Details in `hvx/REBASELINE.md` §7.6.
+- On 2 vCPUs (M79, same image `stack-nq`, `HVX_VCPUS=2`; supersedes the M69 values of `stack-binlog-ret`, which that image still reproduces): SANITY `d1a5ee3ccea87dac`, F1 `7fb7b85c69257f2b`, F2 `809c8292d95b638a` (order 8; durable `233e0afedb35fe4e`), F3 `3a074084d6fbeaa5` / `c008a3f9a3d961e3`. The eight per-fault scenarios, all OK 30/30: kill mysql@10 `5787e8c2ab91c8dd`, kafka@10 `33611b4de52bd93d`, kafka@20 `70f2262407cef26e`, redis@10 `124cc3dad8b93dfb`, net mysql `c07c4bbbcde6d0d9`, net redis `962604a54396c17c`, net kafka `cbdbd77370547093`, net kafka MySQL relaxed `51d0cedb269b4693` (M79, M80). Details in `hvx/REBASELINE.md` §7.6.
 
 ### The explorer
 
@@ -100,7 +100,8 @@ Each flagship boots an unmodified service, runs a workload and an oracle, and pa
 ### The Linux release
 
 - `hvx/dist/` packages the bare-metal backend like the Mac release: `build-release.sh` (assets pinned in `assets.sha256`, fetched once from the build machine) gives `hydo-linux-0.1.0.tar.gz` (45 MB); `install.sh` compiles `hvx_explore` and the module on the user's machine; `hydo doctor|module|build|run|repro|explore|report` drive the existing tools, and runs/reloads share the box's `~/.hvx-module.lock` (M75).
-- `hydo build` needs no Nix: bundled busybox, static helpers, guest tc/iptables closures and modules, and e2fsprogs + libfaketime run with their own glibc loader. Images are the same bytes on any machine: frozen build clock in UTC+4 (hydo-build's `FAKE_TS` is 1600000000 only there), no host `/etc/mke2fs.conf`, umask 022, root inodes owned by 0:0. Release quickstart on the box: Redis image `8c828d3e…`, clean OK `c513f10aee733aae`, `disk=cut | run C=12 R=everysec` VIOLATION k:2 `ecef6f8fe6c39ec0` (M75).
+- `hydo build` needs no Nix: bundled busybox, static helpers, guest tc/iptables closures and modules, and e2fsprogs + libfaketime run with their own glibc loader. Images are the same bytes on any machine: frozen build clock read in UTC+4 (`TZ=UTC-4` on every faketime call; since M80 hydo-build and the hand-written build scripts set it themselves, so a plain build in any zone matches the build box), no host `/etc/mke2fs.conf`, umask 022, root inodes owned by 0:0.
+- Runs need no sudo when the user can open the device: `hydo module udev install` (or `install.sh --udev`) installs an optional udev rule giving `/dev/hvx` to group `hydo`, mode 0660; `libexec/hvx-run` then drops sudo. Anyone in that group can run guests through the kernel module, so it is for people one would give sudo. Not installed on the bare-metal test machine (M80). Release quickstart on the box: Redis image `8c828d3e…`, clean OK `c513f10aee733aae`, `disk=cut | run C=12 R=everysec` VIOLATION k:2 `ecef6f8fe6c39ec0` (M75).
 
 ### Several virtual CPUs
 
@@ -141,7 +142,7 @@ Items marked **[user decision]** need the user before anyone acts on them.
 13. Mac backend: a pure memory-flag spin in user space with no exits cannot be interrupted deterministically, and windows of plain work with no exits are out of reach of jitter and PCT points (M48, M53, M57).
 14. Older limits that still hold: the PMU clock is a tick source on top of the exit-count clock, not an instruction-exact clock, so instruction-exact bisection of a Linux boot is future work (M33); host performance counters are off while a PMU-clock guest runs (M34); RAM above about 3.9 GiB needs a PCI-hole split (M28); a read-write ext4 root is not done (M29); and in the module-built default guest page tables, the page that maps 512 MiB–1 GiB shares a page with the built-in interrupt handler, which only hand-written test guests use, left as is because fixing it moves every hand-written fingerprint (M36).
 15. Images listed but not rebuilt with the pinned tools: `explore-cc0/1/cc` (M50; rebuild from `029e4b3`/`b9233d5`) and `explore-dx`, an undocumented diagnostic (M61). The build machine copy of `richcov-disk.img` was built with a substitute gcc and must be rebuilt before use (M44).
-16. Linux release (M75): runs need `sudo` (no udev rule for `/dev/hvx`); the Mac release copies only `hydo-init.sh` of the init extensions, so an arm64 build of a manifest with `eventually` invariants or `guest.clock_after_cut` probably fails; plain `hydo-build` on the Nix build box gives different image bytes when run in a time zone other than UTC+4 (its `FAKE_TS` is local time).
+16. Linux release (M75, M80): the udev rule was checked only with a side device and the user's own group, so creating the `hydo` group and adding a user ran nowhere yet; `build-stack.sh`, `build-kafka.sh`, `build-mysql.sh` and `build-spread*.sh` were not rebuilt after the M80 time-zone change (the same change was proven byte-neutral on `build-linux.sh`'s ext2 helper and on hydo-build).
 
 ## Milestone index (details in `hvx/HISTORY.md`)
 
@@ -226,6 +227,7 @@ Milestones 1–32 ran inside the nested L1 VM on the build machine, before 2026-
 - M77 — onboarding and default stack images rebuilt with the netem drain (`-nq`); stack baselines and the eight fault scenarios re-measured (2026-10-23)
 - M78 — etcd 14685's second symptom (a client's revision going back) reproduced again on the 3.5.5-nq image; passes on 3.5.6-nq (2026-10-24)
 - M79 — the 2-vCPU stack baselines re-measured on `stack-nq` (2026-10-24)
+- M80 — Linux release runs without sudo through an optional udev rule; image builds no longer depend on the time zone; the other seven stack fault scenarios on 2 vCPUs (2026-10-24)
 
 ## Where to look
 
