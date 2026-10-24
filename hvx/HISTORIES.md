@@ -130,13 +130,18 @@ Wing–Gong–Lowe search with Lowe's memoization, as in Porcupine and Knossos. 
 - A search that exceeds 2,000,000 steps on a key (`--budget`) leaves the key undecided; the check
   is then an ERROR, not a pass.
 
-**Explanation:** for the failing key whose witness begins earliest, the **minimal witness**: a set
-of that key's operations that cannot be ordered, where removing any one operation makes it
-linearizable. It is found by removing operations one at a time while the set stays
-non-linearizable and every value a read or CAS observes is still produced by a write in the set
-(otherwise dropping a write would "explain" nothing). Common shapes get a sentence: "an
-acknowledged write is lost or a read is stale: a read that began after the write of v5 completed
-returned nil", "the write was acknowledged with version 83, a later read returned version 82".
+**Explanation:** for the failing key whose witness begins earliest, a small **witness**: a set
+of that key's operations that alone cannot be ordered. It is found in two steps: first the
+earliest point of the history at which what was known so far is already not linearizable
+(binary search; operations still open at that point count as unknown outcomes), then delta
+debugging over that prefix, removing chunks of operations while the rest stays non-linearizable.
+Only reads and writes whose value no remaining operation observes are removed, so the witness is
+sound: any order of the whole history would also order the witness. With unique values (as the
+recorders' users should write) the witness is usually 1–3 operations; when a value is written
+several times, every write of a value the witness observes stays in it. Common shapes get a
+sentence: "an acknowledged write is lost or a read is stale: a read that began after the write
+of v5 completed returned nil", "the write was acknowledged with version 83, a later read
+returned version 82".
 
 ### `list-append`
 

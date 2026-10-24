@@ -379,6 +379,13 @@ class Randomized(unittest.TestCase):
             found += lin(lines)["status"] == "violation"
         self.assertEqual(found, 20)
 
+    def test_witness_for_unwritten_value(self):
+        lines = gen_linearizable(7, nproc=10, nops=400)
+        i = [k for k, x in enumerate(lines) if " ok read " in x][150]
+        lines[i] = lines[i].rsplit(" ", 1)[0] + " 9"
+        r = lin(lines)
+        self.assertEqual(r["details"]["witness_ops"], 1, r["explanation"])
+
     def test_random_list_append(self):
         for seed in range(20):
             r = la(gen_linearizable(seed, keys=("x", "y", "z"), lists=True))

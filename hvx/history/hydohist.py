@@ -361,40 +361,75 @@ def wgl(rops, init, budget=DEFAULT_BUDGET):
     return True
 
 
-def _wellformed(rops, init):
-    """A sub-history is a fair witness only if every value its reads and CAS compares observe is
-    produced by one of its writes/CAS (or is the initial nil): otherwise removing the write
-    alone would 'explain' nothing."""
-    if init is ANY:
-        return True
-    made = set(o.val for o in rops if o.kind in ("w", "c"))
-    made.add(None)
+def _truncate(rops, t):
+    """The history as it was known at position t: operations invoked before t; those still open
+    at t have an unknown outcome (reads dropped, writes/CAS may take effect later or never)."""
+    out = []
     for o in rops:
-        if o.kind == "r" and o.val not in made:
-            return False
-        if o.kind == "c" and not o.info and o.old not in made:
-            return False
-    return True
+        if o.call >= t:
+            continue
+        if o.ret != INF and o.ret < t:
+            out.append(o)
+        elif o.kind != "r":
+            c = ROp(o.op, o.kind, o.val, None, o.old, o.call, INF)
+            c.info = True
+            out.append(c)
+    return out
+
+
+def earliest_violation(rops, init, budget):
+    """Binary search for the first position at which the history known so far is already not
+    linearizable (monotone: a later truncation contains every constraint of an earlier one).
+    Returns that truncation, or the full history if a search runs out of budget."""
+    pts = sorted(set(o.ret for o in rops if o.ret != INF))
+    lo, hi = 0, len(pts) - 1
+    best = None
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        tr = _truncate(rops, pts[mid] + 1)
+        r = wgl(tr, init, budget)
+        if r is None:
+            return rops
+        if r is False:
+            best, hi = tr, mid - 1
+        else:
+            lo = mid + 1
+    return best if best is not None else rops
+
+
+def _observers(ops, vals):
+    return set(id(o) for o in ops if (o.kind == "r" and o.val in vals) or
+               (o.kind == "c" and not o.info and o.old in vals))
 
 
 def minimize(rops, init, budget):
-    """Greedy one-at-a-time removal while the history stays well-formed and not linearizable:
-    the result is a set where removing any single operation makes it explainable."""
-    cur = list(rops)
-    changed = True
+    """A small witness: first the earliest truncation that is already not linearizable, then
+    delta debugging over it -- remove chunks of operations (earliest first; halves, quarters,
+    ... single ones) together with the reads that observe the values the chunk's writes
+    produced, while the rest is still not linearizable. Removing reads, and writes no remaining
+    operation observes, keeps a WITNESS: any linearization of the full history restricted to the
+    rest is a linearization of the rest (every remaining read still follows the write it saw), so
+    'the rest cannot be ordered' implies 'the history cannot be ordered'."""
+    cur = sorted(earliest_violation(rops, init, budget), key=lambda x: x.call)
     tries = 0
-    while changed and tries < 4000:
-        changed = False
-        for o in sorted(cur, key=lambda x: (-x.call, x.kind)):
-            cand = [x for x in cur if x is not o]
-            if not cand or not _wellformed(cand, init):
-                continue
+    size = max(1, len(cur) // 2)
+    while tries < 3000:
+        i, changed = 0, False
+        while i < len(cur) and tries < 3000:
+            chunk = cur[i:i + size]
+            vals = set(o.val for o in chunk if o.kind in ("w", "c"))
+            drop = set(id(o) for o in chunk) | _observers(cur, vals)
+            cand = [o for o in cur if id(o) not in drop]
             tries += 1
-            if wgl(cand, init, budget) is False:
-                cur = cand
-                changed = True
-                break
-    return sorted(cur, key=lambda x: x.call)
+            if cand and wgl(cand, init, budget) is False:
+                cur, changed = cand, True
+                continue
+            i += size
+        if size == 1 and not changed:
+            break
+        if not changed:
+            size = max(1, size // 2)
+    return cur
 
 
 def _vs(val, ver):
@@ -462,7 +497,7 @@ def check_linearizable(ops, spec, budget=DEFAULT_BUDGET):
                 "summary": explain_register(key, mins) + ("" if len(bad) == 1 else " (%d keys not linearizable)" % len(bad)),
                 "explanation": "\n".join(["not linearizable: %d of %d keys" % (len(bad), len(per)),
                                           "keys: " + " ".join(bad[:50]),
-                                          "minimal witness (removing any one operation makes it linearizable):"] +
+                                          "witness (these operations alone cannot be ordered; operations are removed while that stays true):"] +
                                          ["  " + describe_rop(key, o) for o in mins])}
     if undecided:
         det["undecided_keys"] = len(undecided)
