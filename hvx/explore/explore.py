@@ -106,6 +106,15 @@ FC_MATCH = []           # optional (payload string, direction) pairs (manifest f
                         # count only packets that contain the string, so a known event has a small n; a
                         # direction "<" / ">" (replies: / requests:) is the one the string occurs in
 FC_MATCH_NMAX = 32      # with a match, n is drawn 1 .. this (matched events are far fewer than all packets)
+PROTOCOL_FAULTS = False # --protocol-faults: faults at the edge of the system, on the manifest's fakes and
+                        # proxies (H=<target>@<from>-<to>:<rules>, hvx/onboard/hydo-init-fakes.sh)
+PF_SALT = 0x4854505F46414B45
+PF_P = [60, 25]         # % of schedules that draw a first / a second H= token
+PF_TARGETS = []         # (target, request kinds, webhook kinds, protocol); manifest_space.py sets them
+PF_STATUS = {"http": [500, 502, 503, 429], "grpc": [14, 4, 8, 13]}   # grpc: UNAVAILABLE DEADLINE_EXCEEDED ...
+PF_DELAYS = [300, 1000, 3000, 10000]   # ms of guest time before the answer
+PF_LATES = [1000, 5000, 20000]         # ms a webhook comes late
+PF_LENS = [1, 1, 2, 3, 0]              # window length in steps (0 = to the end of the workload)
 
 
 class SplitMix:
@@ -307,6 +316,86 @@ def parse_fc(v):
     if not m:
         raise ValueError("bad F= token %r" % v)
     return (m.group(1), m.group(2), m.group(3), int(m.group(4)), int(m.group(5) or 1), m.group(6) or None, int(m.group(7)))
+
+
+def add_protocol_faults(s, seed):
+    """--protocol-faults: H=<target>@<from>-<to>:<rules> on PF_P[0] % of schedules, a second one on
+    PF_P[1] % -- an error answer (status=, with retry-after= for 429/503, effect=yes = the outside
+    world acted all the same), a slow answer (delay=), no answer (drop), a reset connection (reset),
+    or, on a route with a webhook, a duplicated / reordered / late / lost webhook; p= a share of the
+    requests. A separate random stream, and every value is drawn whether or not it is used, so every
+    other field stays what it was for this seed."""
+    if not PROTOCOL_FAULTS or not PF_TARGETS:
+        return s
+    t = SplitMix(seed ^ PF_SALT)
+    hs = []
+    for k in range(2):
+        on = t.below(100) < PF_P[k]
+        tg, kix = t.pick(PF_TARGETS), t.below(1 << 30)
+        a, ln = t.below(NORDERS), t.pick(PF_LENS)
+        st, ra, dl, late, p, eff = t.below(1 << 30), t.pick([None, 1, 2]), t.pick(PF_DELAYS), t.pick(PF_LATES), \
+            t.pick([100, 100, 50, 25]), t.below(100) < 30
+        if not on:
+            continue
+        kinds = tg[1] + tg[2]
+        kind = kinds[kix % len(kinds)]
+        b = NORDERS if ln == 0 else min(NORDERS, a + ln)
+        if kind == "status":
+            codes = PF_STATUS["grpc" if tg[3] == "grpc" else "http"]
+            code = codes[st % len(codes)]
+            rules = [("status", code)] + ([("retry-after", ra)] if ra and code in (429, 503) else []) + \
+                    ([("effect", "yes")] if eff else [])
+        elif kind == "delay":
+            rules = [("delay", dl)]
+        elif kind == "late":
+            rules = [("late", late)]
+        else:
+            rules = [(kind, None)]
+        if p < 100:
+            rules.append(("p", p))
+        hs.append((tg[0], a, b, tuple(rules)))
+    if hs:
+        s["H"] = hs
+    return s
+
+
+def render_h(h):
+    tg, a, b, rules = h
+    return "H=%s@%d-%d:%s" % (tg, a, b, ",".join(k if v is None else "%s=%s" % (k, v) for k, v in rules))
+
+
+H_RE = re.compile(r"^([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)?)@(\d+)-(\d+):(\S+)$")
+
+
+def parse_h(v):
+    m = H_RE.match(v)
+    if not m:
+        raise ValueError("bad H= token %r" % v)
+    rules = []
+    for kv in m.group(4).split(","):
+        k, eq, x = kv.partition("=")
+        rules.append((k, (int(x) if x.isdigit() else x) if eq else None))
+    return (m.group(1), int(m.group(2)), int(m.group(3)), tuple(rules))
+
+
+def pf_candidates(s, var):
+    """H=: drop one token, a one-step window, half the window, the rule without p= (every request)
+    and without its modifiers (retry-after=, effect=), a shorter delay / later-by-less webhook."""
+    hs = s.get("H") or []
+    for i, (tg, a, b, rules) in enumerate(hs):
+        rest = hs[:i] + hs[i + 1:]
+        put = lambda h: var(H=rest[:i] + [h] + rest[i:])
+        var(H=rest or None)
+        if b - a > 1:
+            put((tg, a, a + 1, rules))
+            if b - a > 2:
+                put((tg, a, a + (b - a) // 2, rules))
+        for mod in ("p", "retry-after", "effect"):
+            if any(k == mod for k, _ in rules):
+                put((tg, a, b, tuple(r for r in rules if r[0] != mod)))
+        for k, v in rules:
+            if k in ("delay", "late") and isinstance(v, int) and v > 100:
+                put((tg, a, b, tuple((x, max(100, v // 2) if x == k else y) for x, y in rules)))
 
 
 def add_buggify(s, seed):
@@ -877,6 +966,8 @@ def render(s):
         g.append("B=%s" % s["B"])
     if "F" in s:
         g.append(render_fc(s["F"]))
+    for h in s.get("H") or []:
+        g.append(render_h(h))
     return "disk=%s dseed=%x%s%s%s | %s" % (s["disk"], s["dseed"], render_tj(s["tj"]) if "tj" in s else "",
                                             render_preempt(s) + (" cf=%d" % s["cf"] if "cf" in s else "") + render_turns(s),
                                             " rb=%d" % s["rb"] if "rb" in s else "", " ".join(g))
@@ -948,6 +1039,8 @@ def parse(text):
             s["B"] = v
         elif k == "F":
             s["F"] = parse_fc(v)
+        elif k == "H":
+            s.setdefault("H", []).append(parse_h(v))
         elif k in KNOB_TOKENS:
             s[k] = v
     return s
@@ -1297,6 +1390,8 @@ def candidates(s, tjk=None):
             var(F=f[:6] + (max(100, f[6] // 2),))
         if f[4] > 1:
             var(F=f[:4] + (f[4] // 2,) + f[5:])
+    if "H" in s:                                    # protocol faults: drop, narrow, simplify
+        pf_candidates(s, var)
     if "pp" in s:                                   # finer preemption (M49): drop it, then milder
         var(pp=None)
     if "xt" in s:
@@ -1403,7 +1498,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
 # ---------------------------------------------------------------- main
 def main():
     global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT, BUGGIFY, KNOB_RULE, RAM_MIB, MORE_FAULTS, CF_RANGE, VCPUS, TURNS, CPU
-    global FREEZE_CALL, FC_NMAX, FC_MATCH
+    global FREEZE_CALL, FC_NMAX, FC_MATCH, PROTOCOL_FAULTS
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-200")
     ap.add_argument("--workers", type=int, default=3)   # the box has 4 cores: 3 is fastest (M38)
@@ -1460,6 +1555,10 @@ def main():
     ap.add_argument("--freeze-call", action="store_true",
                     help="M70: freeze a service at the n-th packet of one of its conversations (F=svc>peer@step#n:ms; "
                          "manifests whose faults: list freeze; separate random stream)")
+    ap.add_argument("--protocol-faults", action="store_true",
+                    help="faults at the edge of the system: error / slow / missing / reset answers and duplicated, "
+                         "reordered, late or lost webhooks on the manifest's fakes: and proxies: (H=; separate "
+                         "random stream)")
     ap.add_argument("--fc-nmax", type=int, default=FC_NMAX,
                     help="--freeze-call: n is drawn log-uniformly from 1 .. this (default %(default)s)")
     ap.add_argument("--cf-range", default="auto",
@@ -1517,6 +1616,12 @@ def main():
     CONCURRENCY = a.concurrency
     MORE_FAULTS = a.more_faults
     FREEZE_CALL, FC_NMAX = a.freeze_call, a.fc_nmax
+    PROTOCOL_FAULTS = a.protocol_faults
+    if PROTOCOL_FAULTS and not PF_TARGETS:
+        raise SystemExit("explore.py: --protocol-faults needs an image whose manifest has fakes: or proxies: "
+                         "(and allows `protocol` in faults:, or has no faults: list)")
+    if PROTOCOL_FAULTS and BACKEND == "hvm":
+        raise SystemExit("explore.py: --protocol-faults needs --backend hvx (fakes: are x86_64 only)")
     if FREEZE_CALL and not FC_PAIRS:
         raise SystemExit("explore.py: --freeze-call needs an image whose manifest lists `freeze` in faults: and has "
                          "two services that talk (manifest_space.py)")
@@ -1564,7 +1669,7 @@ def main():
         if MORE_FAULTS and CF_RANGE is None:
             CF_RANGE = measure_cf_range(pool, a.out)
             print("cf= range (measured with cfn): %d-%d" % CF_RANGE, file=sys.stderr)
-        mf = lambda x, sd: add_freeze_call(add_more_faults(x, sd, a.strategy), sd)
+        mf = lambda x, sd: add_protocol_faults(add_freeze_call(add_more_faults(x, sd, a.strategy), sd), sd)
         items = [("seed-%d" % sd, render(add_turns(add_buggify(add_preempt(add_concurrency(add_timing(mf(nf(dur(gen(sd)), sd), sd), sd), sd), sd), sd), sd)))
                  for sd in seeds]
     t_sweep = time.time()
