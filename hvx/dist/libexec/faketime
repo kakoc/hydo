@@ -13,6 +13,8 @@ prog=$1; shift
 # TZ=UTC-4 (POSIX notation for UTC+4): libfaketime reads the given time in the local time zone.
 # hydo-build's FAKE_TS "2020-09-13 16:26:40" is its FIXED_MTIME 1600000000 only in UTC+4, the
 # zone of the Nix build box that made every recorded image; without this a machine in another
-# zone stamps the root image's lost+found and root-directory mtimes hours apart.
+# zone stamps the root image's lost+found and root-directory mtimes hours apart. hydo-build now
+# sets the same TZ (its FAKE_TZ) on every faketime call itself; this line keeps the wrapper
+# correct for any other caller.
 exec env FAKETIME="$ts" TZ=UTC-4 MKE2FS_CONFIG="$T/no-mke2fs.conf" "$T/lib/ld-linux-x86-64.so.2" --library-path "$T/lib" \
      --preload "$T/lib/libfaketime.so.1" --argv0 "$(basename "$prog")" "$prog" "$@"

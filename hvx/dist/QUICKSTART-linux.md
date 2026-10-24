@@ -12,7 +12,8 @@ installing to your first exploration and a reproduced failure.
   best. A CPU with a performance-monitoring unit that is not a hybrid (P-core/E-core) design
   gives hydo its fast "PMU clock"; without one hydo uses the slower exit-count clock (runs are
   still deterministic, but their fingerprints differ from the ones printed below).
-- Root through `sudo`: loading the kernel module and opening `/dev/hvx` need it.
+- Root through `sudo`: loading the kernel module needs it, and so does opening `/dev/hvx`
+  unless you install the optional udev rule (see "Runs without sudo" below).
 - The headers of the running kernel (Debian/Ubuntu: `sudo apt install linux-headers-$(uname -r)`),
   a C compiler and `make` (`sudo apt install build-essential`), Python 3.9 or later, `xz`,
   `flock`. `libipt-dev` is optional (coverage decoding for the coverage-guided tools).
@@ -43,6 +44,28 @@ hydo doctor
 module and its device, Python, sudo and disk space; every line says what to do when a check
 fails. `hydo module status` shows whether the module is loaded, whether it was built from this
 release's source (the same `srcversion`), and how many runs hold the module lock right now.
+
+**Runs without sudo (optional).** `/dev/hvx` belongs to root with mode 0600, so by default every
+run calls `sudo`, and a password prompt can block the explorer's workers. To let your user run
+guests without sudo, install the udev rule once:
+
+```sh
+hydo module udev install          # or, at install time: ./install.sh --udev
+```
+
+It creates the group `hydo` if it is missing (`--group NAME` picks another), adds you to it,
+and installs `/etc/udev/rules.d/70-hydo-hvx.rules`, which gives `/dev/hvx` to that group with
+mode 0660. Log out and in again (or run `newgrp hydo`) so your shell is in the group; then
+`hydo doctor` says "/dev/hvx can be opened by you: runs do not use sudo", and `hydo run` and
+`hydo explore` no longer call sudo (`HYDO_SUDO=1` forces it). Loading and unloading the module
+still need sudo. `hydo module udev status` shows the rule and the device;
+`hydo module udev remove` deletes the rule and gives the device back to root.
+
+What this means for security: **anyone in the group can run guests through the hvx kernel
+module.** The module runs in the kernel; each guest takes a CPU and up to 3 GiB of memory, and
+the module is a test tool that was not hardened against hostile users, so a bug in it could let
+a group member crash the machine or worse. Give the group only to people you would also give
+sudo on that machine.
 
 **The module lock.** Every run holds a shared lock on `~/.hvx-module.lock` (`$HYDO_LOCK`) for as
 long as its virtual machine exists; `hydo module load` and `hydo module unload` take the same
@@ -161,7 +184,8 @@ builds without Nix. Then: `hydo build hydo.yaml`, `hydo run "disk=none | run"`, 
   image to owner root, uses a fixed umask, ignores the machine's `/etc/mke2fs.conf`, and
   freezes the build clock. `HYDO_KEEP_OWNERS=1` keeps the building user's owner IDs instead
   (the image then matches a plain `hydo-build` run by the same user on the Nix build box).
-- `/dev/hvx` is mode 0600, so runs use `sudo`. Snapshots go to `/var/tmp/hvx-snap`
-  (`$HYDO_SNAP_DIR`).
+- `/dev/hvx` is mode 0600, so runs use `sudo` unless you installed the udev rule (section 1).
+  Snapshots go to `/var/tmp/hvx-snap` (`$HYDO_SNAP_DIR`); a run without sudo that cannot write
+  there (the directory was made by earlier sudo runs) uses `/var/tmp/hvx-snap-<your uid>`.
 - To remove hydo: `hydo module unload`, then `chmod -R u+w ~/.hydo && rm -rf ~/.hydo` (the guest
   tool tree is read-only).

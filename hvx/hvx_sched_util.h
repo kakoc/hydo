@@ -70,6 +70,19 @@ static inline int su_create(struct su_vm *vm, uint64_t mem_size, unsigned int nv
 		errno = e;
 		return -1;
 	}
+#ifdef HVX_SET_TURNCTL
+	/* FT_MARGIN=<n>: turn-end landing margin (hvx/FASTTURN.md; a module that has
+	 * HVX_SET_TURNCTL). Turn ends must land on the same branch counts with any margin
+	 * above the overflow skid, so every test result must stay the same. */
+	if (getenv("FT_MARGIN") && (flags & HVX_VM_SMP_SCHED) && nv > 1) {
+		struct hvx_turnctl tc;
+
+		memset(&tc, 0, sizeof(tc));
+		tc.margin = strtoull(getenv("FT_MARGIN"), NULL, 0);
+		if (ioctl(vm->fd, HVX_SET_TURNCTL, &tc) < 0)
+			su_die("HVX_SET_TURNCTL (FT_MARGIN)");
+	}
+#endif
 	vm->mem = mmap(NULL, mem_size, PROT_READ | PROT_WRITE, MAP_SHARED, vm->fd, 0);
 	if (vm->mem == MAP_FAILED)
 		su_die("mmap");

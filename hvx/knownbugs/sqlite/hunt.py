@@ -232,6 +232,9 @@ def main():
     ap.add_argument("--batch", type=int, help="runs handed to the workers at once (default: --workers); "
                     "larger batches keep workers busy when run times differ a lot")
     ap.add_argument("--max-wall", type=int, help="start no new batch after this many seconds")
+    ap.add_argument("--fix-s", type=lambda x: int(x, 16),
+                    help="hex workload seed for every schedule (an AIMED experiment, e.g. a shape that "
+                    "failed natively; not part of the blind search). The timing fields are unchanged.")
     ap.add_argument("--wall-secs", type=int, help="HVX_EXPLORE_WALL_SECS: the engine's per-run wall-clock cap "
                     "(default 900 s; short turns can need more)")
     a = ap.parse_args()
@@ -262,6 +265,8 @@ def main():
         items, specs = [], {}
         for j in range(i, min(i + batch, a.first + a.runs)):
             s = gen(j, a.salt)
+            if a.fix_s is not None:
+                s["S"] = a.fix_s
             tag = "r%05d" % j
             items.append((tag, render(s)))
             specs[tag] = (j, s)

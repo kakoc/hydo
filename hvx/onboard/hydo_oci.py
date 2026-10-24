@@ -30,7 +30,7 @@ Design (load-bearing):
 """
 import gzip, hashlib, json, os, posixpath, re, shutil, stat, subprocess, sys, tarfile
 
-OCI_KEYS = ("image", "image_ref", "entrypoint", "workdir", "user", "env")
+OCI_KEYS = ("image", "image_ref", "entrypoint", "workdir", "user", "env", "mounts")
 ARCH = {"x86_64": "amd64", "arm64": "arm64"}
 DEFAULT_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 BINDS = ("proc", "sys", "dev", "tmp", "data")
@@ -523,14 +523,110 @@ def prepare(m, manifest_path, arch, ManifestError):
         user = str(cfg.get("User") or "") if user is None else str(user)
         if user in ("root", "0", "0:0", "root:root"):
             user = ""
+        mounts = _mounts(s.pop("mounts", None), where, ManifestError)
         name = s["name"]
         s["cmd"] = "/etc/hydo/oci/%s/run" % name
-        out.append({"svc": name, "path": path, "img": img, "final": final, "env": env,
-                    "workdir": workdir, "user": user})
+        o = {"svc": name, "path": path, "img": img, "final": final, "env": env,
+             "workdir": workdir, "user": user}
+        if mounts:          # only then: images without mounts: get the same launcher as before
+            o["mounts"] = mounts
+        out.append(o)
         print("hydo-build: service %s from image %s (%s, config %s%s)" % (
             name, path, ",".join(img.ref_names) or "untagged", img.config_digest[:19],
             ", manifest %s" % img.manifest_digest[:19] if img.manifest_digest else ""), file=sys.stderr)
     return out
+
+
+MOUNT_PATH_RE = re.compile(r"^/[A-Za-z0-9._@+=,:/-]*$")
+
+
+def _mounts(v, where, ManifestError):
+    """services[].mounts (image services only): extra mounts inside the service's root, made by
+    the launcher before every start and every hydo-oci call, like Docker's volumes. Each entry:
+      {src: /data/vol/x, dst: /var/lib/x, copy_up: true}   a guest directory or file (the data
+          disk, or a file of the hydo root such as /etc/hosts) bind-mounted on dst; copy_up: an
+          empty src directory first gets the image's content of dst, its owner and its mode (a
+          Docker named volume on first use)
+      {tmpfs: true, dst: /run, copy_up: true, size: 64m}   a fresh tmpfs on dst; copy_up: with
+          the image's content of dst (a writable copy of an image directory)
+    A dst missing from the image is created in the image root (empty directory, or empty file
+    when src is a file of the hydo root); below /proc /sys /dev /tmp /data at run time."""
+    if v is None:
+        return []
+    if not isinstance(v, list):
+        raise ManifestError("%s: mounts: must be a list" % where)
+    out = []
+    for i, e in enumerate(v):
+        w = "%s: mounts[%d]" % (where, i)
+        if not isinstance(e, dict):
+            raise ManifestError("%s: must be a mapping {src|tmpfs, dst, copy_up, size}" % w)
+        bad = sorted(set(e) - {"src", "dst", "tmpfs", "copy_up", "size"})
+        if bad:
+            raise ManifestError("%s: unknown field(s) %s (known: copy_up, dst, size, src, tmpfs)" % (w, ", ".join(bad)))
+        dst = e.get("dst")
+        if not isinstance(dst, str) or not MOUNT_PATH_RE.match(dst) or "/../" in dst + "/" or \
+           posixpath.normpath(dst) in ("/", "/proc", "/sys", "/dev", "/tmp", "/data", "/.hydo"):
+            raise ManifestError("%s: dst %r: an absolute path other than / /proc /sys /dev /tmp /data (letters, "
+                                "digits and ._@+=,:/- only)" % (w, dst))
+        tm = bool(e.get("tmpfs"))
+        src = e.get("src")
+        if tm == (src is not None):
+            raise ManifestError("%s: give exactly one of src: (a guest path) and tmpfs: true" % w)
+        if src is not None and (not isinstance(src, str) or not MOUNT_PATH_RE.match(src) or "/../" in src + "/"):
+            raise ManifestError("%s: src %r: an absolute guest path (letters, digits and ._@+=,:/- only)" % (w, src))
+        size = e.get("size")
+        if size is not None and (not tm or not re.fullmatch(r"\d+[kmg]?", str(size))):
+            raise ManifestError("%s: size: only with tmpfs: true, e.g. 64m" % w)
+        out.append({"dst": posixpath.normpath(dst), "src": src, "tmpfs": tm,
+                    "copy_up": bool(e.get("copy_up")), "size": None if size is None else str(size)})
+    return out
+
+
+def _under_binds(dst):
+    return dst.lstrip("/").split("/")[0] in BINDS
+
+
+def _mount_lines(o):
+    """Shell for the launcher head: o["mounts"] in order, once per boot (a done marker), under a
+    flock so the service start and a concurrent hydo-oci call (the readiness poll) do not race."""
+    svc = o["svc"]
+    L = ["if [ ! -f /tmp/hydo/oci-mnt.%s.done ]; then" % svc,
+         "  $BB mkdir -p /tmp/hydo; exec 9> /tmp/hydo/oci-mnt.%s.lock; $BB flock 9" % svc,
+         "  hmnt() { $BB grep -q \" $1 \" /proc/mounts; }",
+         "  if [ ! -f /tmp/hydo/oci-mnt.%s.done ]; then" % svc,
+         # the links Docker puts in a container's /dev (bash process substitution needs /dev/fd)
+         "    for l in fd:/proc/self/fd stdin:/proc/self/fd/0 stdout:/proc/self/fd/1 stderr:/proc/self/fd/2; do",
+         "      [ -e /dev/${l%%:*} ] || $BB ln -s ${l#*:} /dev/${l%%:*}",
+         "    done"]
+    for k, mt in enumerate(o["mounts"]):
+        d = "$R" + mt["dst"]
+        if _under_binds(mt["dst"]):
+            L.append("    [ -e %s ] || $BB mkdir -p %s" % (d, d))
+        if mt["tmpfs"]:
+            t = "/tmp/hydo/oci-tmpfs/%s/%d" % (svc, k)
+            opt = "-o size=%s " % mt["size"] if mt["size"] else ""
+            L.append("    if ! hmnt %s; then" % d)
+            L.append("      $BB mkdir -p %s && $BB mount -t tmpfs %snone %s || exit 125" % (t, opt, t))
+            if mt["copy_up"]:
+                L.append("      [ -d %s ] && $BB cp -a %s/. %s/ 2>/dev/null" % (d, d, t))
+            if mt["copy_up"]:       # a writable copy of the image's directory: its owner and mode
+                L.append("      [ -d %s ] && $BB chown $($BB stat -c %%u:%%g %s) %s && $BB chmod $($BB stat -c %%a %s) %s" % (d, d, t, d, t))
+            else:                   # an empty tmpfs: mode 1777, as Docker's tmpfs mounts and /dev/shm
+                L.append("      $BB chmod 1777 %s" % t)
+            L.append("      $BB mount --bind %s %s || exit 125" % (t, d))
+            L.append("    fi")
+        else:
+            s = mt["src"]
+            L.append("    if ! hmnt %s; then" % d)
+            if mt["copy_up"]:
+                L.append("      $BB mkdir -p %s" % s)
+                L.append("      if [ -d %s ] && [ -z \"$($BB ls -A %s)\" ]; then $BB cp -a %s/. %s/ 2>/dev/null; "
+                         "$BB chown $($BB stat -c %%u:%%g %s) %s; $BB chmod $($BB stat -c %%a %s) %s; fi"
+                         % (d, s, d, s, d, s, d, s))
+            L.append("      $BB mount --bind %s %s || exit 125" % (s, d))
+            L.append("    fi")
+    L += ["    : > /tmp/hydo/oci-mnt.%s.done" % svc, "  fi", "  exec 9>&-", "fi"]
+    return "\n".join(L) + "\n"
 
 
 # ------------------------------------------------------------------ staging into the root
@@ -545,6 +641,8 @@ def _scripts(o, home):
             "BB=/bin/busybox R=%s\n"
             "for d in %s; do $BB mountpoint -q $R/$d || $BB mount --bind /$d $R/$d || exit 125; done\n"
             % (svc, o["img"].config_digest, R, " ".join(BINDS)))
+    if o.get("mounts"):
+        head += _mount_lines(o)
     chroot = "exec $BB chroot $R /.hydo/busybox env -i %s /.hydo/busybox sh -c" % " ".join(env)
     user = ("/.hydo/busybox chpst -u %s " % shq(o["user"])) if o["user"] else ""
     run = head + "%s %s\n" % (chroot, shq("cd %s || exit 127; exec %s%s" % (shq(o["workdir"]), user, o["final"])))
@@ -589,6 +687,25 @@ def stage(oci, R, busybox, tmpdir):
             with open(busybox, "rb") as f:
                 T.put_file(".hydo/busybox", f.read(), 0o755)
             T.put_file("etc/hosts", HOSTS)          # like Docker: the runtime owns /etc/hosts
+            for mt in o.get("mounts") or []:        # mount targets the image lacks (the root is read-only)
+                if _under_binds(mt["dst"]):
+                    continue
+                comps = T.parts(mt["dst"])
+                d = T.resolve_dir(comps[:-1])
+                rel = "/".join(d + [comps[-1]])
+                is_file = bool(mt["src"]) and os.path.isfile(os.path.join(R, mt["src"].lstrip("/")))
+                if os.path.islink(T._abs(rel)):
+                    # resolved inside the image root: the launcher must never mount through an
+                    # absolute symlink onto the guest's own directory (/var/run -> /run)
+                    if is_file:
+                        raise OciError("mounts: dst %s is a symlink in the image; give the path it points to" % mt["dst"])
+                    rel = "/".join(T.resolve_dir(d + [comps[-1]]))
+                elif not os.path.lexists(T._abs(rel)):
+                    if is_file:
+                        T.put_file(rel, b"")
+                    else:
+                        T.ensure_dir(rel)
+                mt["dst"] = "/" + rel
             home = T.home_of(o["user"])
         except OciError as e:
             raise OciError("service %s, image %s: %s" % (o["svc"], o["path"], e))
@@ -607,8 +724,8 @@ def stage(oci, R, busybox, tmpdir):
                "config_digest": img.config_digest, "architecture": img.config.get("architecture"),
                "layers": img.diff_ids, "image_config": {k: cfg.get(k) for k in
                                                         ("Entrypoint", "Cmd", "Env", "WorkingDir", "User")},
-               "effective": {"command": o["final"], "env": o["env"], "workdir": o["workdir"],
-                             "user": o["user"]},
+               "effective": dict({"command": o["final"], "env": o["env"], "workdir": o["workdir"],
+                                  "user": o["user"]}, **({"mounts": o["mounts"]} if o.get("mounts") else {})),
                "skipped_special_files": T.skipped}
         with open(os.path.join(d, "image.json"), "w") as f:
             json.dump(rec, f, indent=1, sort_keys=True)
@@ -623,7 +740,7 @@ def stage(oci, R, busybox, tmpdir):
     return meta
 
 
-def fix_ext4(meta, T, img, fake_ts):
+def fix_ext4(meta, T, img, fake_ts, env=None):
     """Write the image files' real owners and modes into the ext4 root with debugfs (the build
     user cannot chown). Paths are guest paths; run under the same frozen clock as mkfs."""
     if not meta:
@@ -642,7 +759,7 @@ def fix_ext4(meta, T, img, fake_ts):
     cmdf = img + ".debugfs"
     with open(cmdf, "w") as f:
         f.write("\n".join(lines) + "\n")
-    r = subprocess.run([T["faketime"], fake_ts, dbg, "-w", "-f", cmdf, img],
+    r = subprocess.run([T["faketime"], fake_ts, dbg, "-w", "-f", cmdf, img], env=env,
                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     errs = [x for x in r.stderr.splitlines() if x.strip() and not x.startswith("debugfs ")]
     os.unlink(cmdf)
