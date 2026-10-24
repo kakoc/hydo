@@ -93,3 +93,20 @@ A history line is 40–60 bytes; the etcd run records about 370 events and its w
 including the three ~1.1 KB range-read lines), the Redis run about 120. The host check takes
 under a second per run (Python, the box's 3.12). The recording itself moves guest timing, which
 is why the M78 schedule stopped hitting 14685's window on the new image.
+
+## The test composer with history checks (`explore-ob-redis-composed-hc`)
+
+`examples/redis-composed-hist/` (image `cd399d0b…`, two builds identical): three composed
+commands (`parallel_driver_set` = SET as a register history, `parallel_driver_append` = RPUSH,
+`anytime_read` = GET and LRANGE, each recorded with process `$HYDO_CMD_ID`) and two history checks
+given as `hydo/checks/linearizable_redis.kv_linearizable` and
+`hydo/checks/list_append_redis.lists_append` (each file is its read-back). Fresh boots, engine
+compiled from main at `b2eea37`:
+
+| schedule | verdict | fingerprint |
+|---|---|---|
+| `disk=cut dseed=1 \| run C=12 W=0000002a,p4,q2,r100` | OK (kv: 19 operations on 10 keys; log: no anomaly) | `df3918851b213951` twice |
+| `disk=cut dseed=1 \| run C=12 R=everysec W=0000002a,p4,q2,r100` | VIOLATION `[redis.kv_linearizable] key k:16`: acknowledged write lost (witness: p16's write, the recovery boot's read of nil); `redis.lists_append`: lost-append (l0 lost the acknowledged 14) | `ea9aa4a58a3517c7` twice |
+
+With the same engine binary, `explore-ob-redis-hc` `disk=cut dseed=1 | run C=12` still gives
+`9c80ba97a7fc299b`, and that image rebuilt from the merged tree is byte-identical (`343d20ba…`).
