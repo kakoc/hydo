@@ -59,6 +59,41 @@ hydo/
 
 **Missing for this to work:** building Compose `build:` services from source and importing the images; `hydo.yaml` reading `workload/`, `checks/` and `regressions/` from the folder and pinning a hydo version; the SDK's test definitions (role 2) and runner (role 3); the skill as a plugin. CI is skipped for now (see "CI mode").
 
+### Code first (decided, 2026-10-24)
+
+The primary way a team uses hydo is **one program in the team's language, written with the SDK** (Rust first). Hand-written `hydo.yaml` stays supported for simple cases, such as the file the Docker Compose importer emits.
+
+```rust
+use hydo::prelude::*;
+
+fn system() -> System {
+    System::from_compose("docker-compose.yaml")
+        .service("payments", |s| s.fault_freeze().logs(errors_as_findings()))
+        .fake_http("stripe", |f| f.route("POST /charges", ok_json(/* ... */)))
+        .faults(&[Kill, Pause, Network, PowerCut, Clock])
+        .known_errors("hydo/known-errors.yaml")
+}
+
+#[hydo::driver(parallel)]
+fn place_order(ctx: &Ctx) -> Result<()> { /* call the API, record the outcome */ }
+
+#[hydo::check(always)]
+fn never_charged_twice(ctx: &Ctx) -> Result<()> { /* read the fake's records */ }
+
+#[hydo::check(eventually)]
+fn every_order_settles(ctx: &Ctx) -> Result<()> { /* ... */ }
+```
+
+`cargo hydo explore` runs `system()` **on the host, at build time**, to produce a plain **plan file**, builds the guest from that plan, and runs the same binary **inside the guest** for the drivers and checks as hydo's composer schedules them. Rules that follow:
+
+- The plan file (today's manifest and `hydo/` folder format) is the engine's only input: complete, documented, versioned, language-neutral. Every SDK (Rust, Go, later others) produces the same plan, so the engine is never rewritten per language.
+- Setup code never runs inside the guest. Only drivers and checks do, so nothing on the host (its time, files, randomness) can leak into a deterministic run.
+- A hand-written plan is still valid input; the SDK is the recommended way, not the only one.
+
+### Error logs as findings (proposed, 2026-10-24)
+
+A team can declare which log lines count as a finding (a level, a field such as `actionable=true`, or a pattern). Each service's log is collected with its name; each matching line is reduced to a signature (timestamps, ids, numbers removed) so one root cause is one finding; every new signature gets a reproducer shrunk to the smallest schedule that still produces that line. Triage: "expected" entries go to `hydo/known-errors.yaml` with a reason and who decided, optionally scoped to faults or time windows ("connection refused to mysql is expected only while mysql is down"); "bug" entries become reproducers in `hydo/regressions/`. An AI skill proposes the triage; the user decides. Not built yet; it is also the core of the CI mode's "new findings only".
+
 ### CI mode (to be discussed)
 
 What a CI integration needs: run hydo on every merge request or nightly; compare against a recorded baseline; deduplicate findings across runs (one finding per root cause, not per schedule); report only new findings, with the minimal schedule and the command that reproduces it; and check that a fixed bug stays fixed by re-running its saved reproducer on every build. Open questions: how much exploration budget a CI run gets, where images are cached, and how findings are tracked over time.
