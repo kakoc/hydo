@@ -5,6 +5,7 @@
 # Run from the repository root on the build box; needs build/hvx_seedrng built with the pinned
 # musl gcc (hvx/BUILD-PINS.md) or HYDO_SEEDRNG. Pinned Go toolchain, standard library only.
 #   hvx/onboard/examples/shop/build.sh [binaries]     (binaries: stop after the three programs)
+#   SHOP_IMG=<prefix> (default explore-ob-shop) names the images <prefix>-buggy / <prefix>-fixed
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 TOP="$(cd "$HERE/../../../.." && pwd)"
@@ -24,5 +25,5 @@ done
 PY3="${HYDO_PY3:-$(command -v python3 || ls /nix/store/*python3-3.11*/bin/python3 | head -1)}"
 cd "$TOP"
 for v in buggy fixed; do
-  "$PY3" hvx/onboard/hydo-build "$HERE/hydo.yaml" --set variant=$v --out "explore-ob-shop-$v"
+  "$PY3" hvx/onboard/hydo-build "$HERE/hydo.yaml" --set variant=$v --out "${SHOP_IMG:-explore-ob-shop}-$v"
 done

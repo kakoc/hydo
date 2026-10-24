@@ -146,6 +146,8 @@ func TestChecks(t *testing.T) {
 		{[]string{"at-most-once", "payments.charge", "--by", "idem"}, 0},                         // keys a, b, c
 		{[]string{"effect-for-acked", "payments.charge", "--ref", "o{id}", "--acked", acked}, 1}, // o3 missing
 		{[]string{"none-after", "payments.charge", "--after", "event:cancelled"}, 1},             // seq 5 after 3
+		{[]string{"effect-for-acked", "payments.charge", "--ref", "o{id}", "--acked", acked, "--unless", "event:cancelled"}, 1},
+		{[]string{"exactly-once", "payments.charge", "--by", "idem", "--ref", "o{id}", "--acked", acked}, 1},
 		{[]string{"none-after", "payments.charge"}, 2},
 		{[]string{"count", "payments.charge"}, 0},
 	} {

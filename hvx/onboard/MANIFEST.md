@@ -490,7 +490,7 @@ is acknowledged), which "no side effect after <event>" checks compare against.
 | kind | holds when |
 |---|---|
 | `at-most-once <ep>.<route> [--by ref\|idem]` | no ref (or idempotency key) took effect twice |
-| `effect-for-acked <ep>.<route> [--ref 'o{id}'] [--acked FILE]` | every acknowledged id (`$HYDO_ACKED`; `--ref` turns an id into the ref the effect carries) has an effect. As a `type: eventually` invariant: "every acknowledged request produced its side effect within N s" |
+| `effect-for-acked <ep>.<route> [--ref 'o{id}'] [--acked FILE] [--unless event:<name>\|<ep>.<route>]` | every acknowledged id (`$HYDO_ACKED`; `--ref` turns an id into the ref the effect carries) has an effect, except refs with an `--unless` record (an order whose cancellation was requested owes no receipt). As a `type: eventually` invariant: "every acknowledged request produced its side effect within N s" |
 | `exactly-once <ep>.<route> [--ref ...]` | both of the above |
 | `none-after <ep>.<route> --after event:<name>\|<ep>.<route>` | no ref took effect after that ref's first `<after>` record (no payment after its cancellation) |
 | `count <ep>.<route>` | always; prints the number of effects |
