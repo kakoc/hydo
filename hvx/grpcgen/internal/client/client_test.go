@@ -332,3 +332,42 @@ func TestExtract(t *testing.T) {
 		t.Fatalf("unset optional extracted: %v", got)
 	}
 }
+
+// A composer command: N operations of one RPC under the OS process id; two invocations of
+// one run draw from different streams (the run's drive counter); a scenario passes the id
+// its own Create returned to its Cancel.
+func TestDriveAndScenario(t *testing.T) {
+	f := newFake()
+	addr := serve(t, f)
+	dir := setup(t, addr, "scenarios:\n  - {name: create_cancel, calls: [Create, Cancel]}\n")
+	c, st := newClient(t, dir, 5)
+	if err := c.Drive("create", 3); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Drive("Create", 3); err != nil {
+		t.Fatal(err)
+	}
+	cl := calls(t, st)
+	if len(cl) != 12 || !strings.HasPrefix(cl[0], "HYDO-CALL "+strconv.Itoa(os.Getpid())+" 1 invoke") {
+		t.Fatalf("drive records:\n%s", strings.Join(cl, "\n"))
+	}
+	if len(f.byReq) != 6 {
+		t.Fatalf("%d orders, want 6 (unique request ids)", len(f.byReq))
+	}
+	if err := c.Drive("create_cancel", 2); err != nil {
+		t.Fatal(err)
+	}
+	cl = calls(t, st)[12:]
+	for i := 0; i < len(cl); i += 4 { // invoke Create, ok, invoke Cancel, ok
+		var created string
+		if m := regexp.MustCompile(`"id":"(o[0-9]+)"`).FindStringSubmatch(cl[i+1]); m != nil {
+			created = m[1]
+		}
+		if created == "" || !strings.Contains(cl[i+2], `{"id":"`+created+`"`) {
+			t.Fatalf("scenario did not cancel the order it created:\n%s", strings.Join(cl, "\n"))
+		}
+	}
+	if err := c.Drive("nope", 1); err == nil {
+		t.Fatal("unknown rpc accepted")
+	}
+}
