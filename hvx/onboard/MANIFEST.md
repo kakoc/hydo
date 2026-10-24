@@ -162,6 +162,15 @@ faults: [kill, pause, network, oneway, cut, clock, disk]   # which kinds make se
                                # network/oneway also pull iproute2 into the image
 ```
 
+`buggify: true` (top level, optional) says the project's programs carry BUGGIFY fault points
+from an assertion SDK (Go `hydoassert.Buggify`, Rust `hydo_assert::hydo_buggify!`, JavaScript `buggify`; see
+`hvx/ASSERTIONS.md`). The init then turns the schedule token `B=<seed-hex>[,<enable-pm>[,<fire-pm>]]`
+(drawn by `explore.py --buggify`, which keeps `B=` for such a manifest and drops it for others)
+into `/tmp/hydo-buggify`, the file the SDKs read at a
+program's first fault-point evaluation; without `B=` the file is absent and every point stays
+off. The token `B` is then reserved (no knob may use it). Opt-in: `hydo-init-buggify.sh` is
+spliced into the init only for a manifest that sets it, so other images build as before.
+
 ### Services from a Docker/OCI image
 
 A service with `image:` takes its files from an image instead of `root.nix`/`root.files`.
@@ -566,6 +575,167 @@ a new protocol is a new serve function that calls `lockGate`, `requestRule`, `re
 and the power-cut carry. `world/check.go`: the checks. `world/config.go`: `world.json`, extractors,
 templates. The explorer's draws are `add_protocol_faults` (rule kinds per target come from
 `manifest_space.Space._pf_targets`).
+## The test composer (`test:` and the `hydo/` folder)
+
+Instead of a fixed `workload.run` split into numbered steps, a project can write its test as
+**small commands and properties** and let hydo compose the commands into seeded sequences and
+concurrent mixes. The composition is part of the schedule (token `W=`), so a schedule replays
+the same commands in the same order and overlap, bit for bit, and the explorer varies and
+shrinks it like a fault. Implementation: `hydo_composer.py` (build side, explorer side),
+`hydo-composer.sh` (the guest side; staged only for such a plan). Example:
+`examples/redis-composed/` (the repository layout below, with SETs, transfers, AOF rewrites).
+
+### The plan format (what SDKs generate; versioned)
+
+The engine-facing plan is the manifest itself, in YAML or JSON (`hydo build plan.json` works
+the same). It is language-neutral: commands and checks are executables given as an **argv
+list** (exec'd, no shell); a string is accepted as a shell command for hand-written plans. An
+SDK (`sdk/rust`, the `hydo-test` crate) writes this file on the host from the team's own
+program; nothing of the SDK's setup code runs in the guest.
+
+```yaml
+format: 1                      # the plan format; this hydo reads 1 (anything else is refused)
+hydo_version: "0.1"            # the hydo the plan was written for: "0.1" (same major.minor; a
+                               #   different patch only warns), "0.1.0", or ">=0.1". A mismatch
+                               #   is an error unless HYDO_VERSION_CHECK=warn. hvx/VERSION (or the
+                               #   release's VERSION) is the engine's version.
+workload:
+  steps: 20                    # rounds of the composition (default 20); faults are placed at
+                               #   round numbers exactly as at step numbers. No run:/process:
+  timeout: 300                 # as before: bound of one step-range call (the composer's wait)
+test:
+  parallel: 4                  # at most this many commands at once (W= draws p in 1..parallel)
+  per_round: 2                 # parallel drivers started per round (W= draws q in 1..per_round)
+  round_ms: 200                # a round every round_ms of guest time (W= draws round_ms/2, x1, x2)
+  command_timeout: 60          # seconds per command (a command's own timeout: overrides it)
+  drain_timeout: 60            # after the last round, running commands get this long, then are killed
+  max_commands: 0              # 0 = no limit (W='s n caps the number of commands too)
+  budget_ms: 0                 # 0 = none; else no command starts later than this after round 0
+  check_every: 2               # default period of `always` checks (seconds of guest time)
+  check_within: 30             # default deadline of `eventually` checks
+  commands:
+    - {name: place_order, kind: parallel_driver, run: [/bin/shoptest, driver, place_order]}
+    - {name: audit, kind: serial_driver, run: [/bin/shoptest, driver, audit], timeout: 120}
+    - {name: seed_catalog, kind: first, run: [/bin/shoptest, first, seed_catalog]}
+  checks:
+    - {name: never_charged_twice, kind: final, run: [/bin/shoptest, check, never_charged_twice]}
+    - {name: orders_settle, kind: eventually, within: 20, run: [/bin/shoptest, check, orders_settle]}
+  regressions:
+    - {name: double-charge, schedule: "disk=none dseed=1 | run K=pay@4+1 W=0000002a,p4,q2,r200", expect: ok}
+```
+
+A command's id is `<kind>_<name>` (`parallel_driver_place_order`); a check's name is its
+property id. Everything the composer adds to the manifest (the workload, a `first` step in
+provisioning, invariants for checks and for `eventually`/`finally` commands) is a rewrite the
+generic init already understands, so `hydo-init.sh` is unchanged; a manifest without `test:`
+and without a `hydo/` folder builds byte-identically to before.
+
+### The `hydo/` folder (the repository layout)
+
+```
+hydo/
+  hydo.yaml          services, data, knobs, allowed faults, guest settings (and test: options)
+  workload/          commands: <kind>_<name> executables; helper_* files and dot files are ignored
+  checks/            properties: final_<name>, always_<name>, eventually_<name>
+  regressions/       <name>.schedule: saved minimal schedules, replayed by `hydo repro --regressions`
+.hydo/               build cache, git-ignored (`hydo build` writes here for a manifest in hydo/)
+```
+
+`hydo-build` reads the three directories when they exist next to the manifest and adds their
+entries to `test:` (a name in both is an error; an unknown prefix or a non-executable file is
+an error, so typos do not silently do nothing). Each file becomes `run: [/hydo/<dir>/<file>]`;
+the whole directory, helpers included, is copied to `/hydo/<dir>/` on the read-only root. A
+text file may carry a header in its first 4 KiB: `# hydo: timeout=30` (commands), `# hydo:
+every=1` / `# hydo: within=10 after=start poll=1` (checks), `# hydo-msg: <description>`.
+
+### Command kinds (when they run)
+
+| kind | runs | faults | alongside |
+|---|---|---|---|
+| `first` | every `first` command once, in name order, during provisioning (before S1: in the snapshot every schedule starts from; `HYDO-SETUP-COMPLETE` comes after provisioning, so after the first commands) | none | nothing |
+| `parallel_driver` | repeatedly, in rounds, several at once (also copies of one command) | yes, also mid-command | other parallel drivers, anytime |
+| `serial_driver` | repeatedly, never two at once; waits until no other driver runs | yes | anytime only |
+| `singleton_driver` | once per run, in a run that has no other drivers: when a plan has one, 1 run in 4 (or every run, without other drivers) is such a run | yes | anytime only |
+| `anytime` | in rounds, any time | yes | anything |
+| `eventually` | after the faults stop (after the heal, the host's "go", and in the recovery boot after a power cut), once each, in name order | none | nothing |
+| `finally` | at the end, after the `eventually` commands, only when every command started in this boot ran to completion (no timeout, no drain kill, no power cut), so never in a recovery boot | none | nothing |
+
+**Exit status.** A driver or anytime command: 0 = ok, **100 = the command saw a violation**
+(the run fails: the `compose.commands` invariant and an `always_or_unreachable` property
+`compose.<id>.no_violation`), anything else = the operation failed (recorded, not fatal:
+under faults, operations fail). A `first` command that fails fails provisioning (`HYDO-ORACLE:
+ERROR provision failed`). An `eventually` or `finally` command is an invariant: 0 holds,
+anything else is a violation. A check: 0 holds, 1 violated, 2 could not be evaluated now (as
+any invariant); a check that times out counts as 2.
+
+**Check kinds.** `final`: once at the end (an `always` invariant with `final: true`).
+`always`: also every `every` seconds while the workload runs (`check_every` by default).
+`eventually`: bounded liveness, polled after `after` (`heal` default, or `start`) until it
+holds or `within` seconds pass (MANIFEST "Liveness").
+
+**Environment of a command.** Everything an invariant sees (`HYDO_ACKED`, `HYDO_OUTCOMES`,
+the manifest's `env:`), plus `HYDO_CMD` (its id), `HYDO_CMD_ID` (its entry number, unique in
+a run: a good key for the operation), `HYDO_ROUND`, and `HYDO_SEED` (a number from the
+composition's random stream, for the command's own choices: which account, how much). Its
+output goes to `/tmp/hydo/compose/log.<entry>`; `HYDO-ASSERT` lines it prints are forwarded to
+the console (the SDKs write to the console directly).
+
+### How a composition runs
+
+The plan of a run is a pure function of `W=` and the command list (hydo_composer.plan; the
+same code in awk in the guest, checked by `tests/test_composer.py`): for each of `steps`
+rounds, either a serial driver (1 round in 4 when there are parallel drivers), or 1..q
+parallel drivers drawn with repetition, plus an anytime command in 1 round of 3; or, in a
+singleton run, the singleton in round 0. Each entry gets its own `HYDO_SEED`. Round r starts
+`r x round_ms` of guest time after round 0 (later when a fault point held it); a command keeps
+running across later rounds and fault points until it ends, so faults land mid-command.
+Rules while running: at most `p` commands at once; parallel drivers wait while a serial or
+singleton driver runs; serial and singleton drivers wait until no other driver runs. At a
+fault point before round t the composer stops starting rounds, the init applies the fault,
+then round t starts. After the last round the composer waits for the running commands
+(`drain_timeout`), kills what is left, and the run continues as before (heal, restart,
+`eventually` commands, checks, verdict). At a power cut everything freezes as before.
+
+**`W=` (guest token, the explorer draws it; hand schedules may use it):**
+`W=<seed, hex>[,p<concurrency>][,q<per round>][,r<round ms>][,n<max commands>][,t<budget ms>][,x<entries>][,o<commands>]`,
+where `x` lists plan entries not to run and `o` command indices (in id order) never to run,
+as `3.5-9.12`. Without `W=` the guest runs seed 0 with the manifest's defaults. `explore.py`
+puts a `W=` on every schedule of such a plan, from its own random stream, so every other
+field equals the schedule without it (`--no-compose`: no `W=`); manifests without a test plan
+get exactly the old schedules (`hvx/explore/compose_ident.py`). The shrinker tries, in order:
+one command never run (`o`), half the commands (`n`), no concurrency (`p1`, then `p-1`), the
+first half of the entries dropped (`x`), single entries (when 8 or fewer are left); the report
+prints the minimal composition round by round.
+
+**Console lines** (one write each; the explorer and reports read them):
+
+```
+HYDO-COMPOSE plan W=0000002a,p4,q2,r100 seed=42 p=4 q=2 r=100 n=0 rounds=20 entries=34
+HYDO-CMD start i=3 r=2 kind=parallel_driver cmd=parallel_driver_transfer
+HYDO-CMD end i=3 cmd=parallel_driver_transfer rc=0 ms=30 status=ok      (ok|failed|timeout|violation|killed)
+HYDO-CMD skip i=30 r=17 cmd=... budget_ms=2000
+HYDO-COMPOSE done started=34 ok=34 failed=0 timeout=0 violation=0 killed=0 skipped=0
+```
+
+plus `HYDO-ASSERT-DECL`/`HYDO-ASSERT` records: `compose.<id>.succeeded` (sometimes: the
+command exited 0 at least once; NOT EXERCISED says the test never got that operation through)
+and `compose.<id>.no_violation` (always_or_unreachable). The invariant `compose.commands`
+(first in the verdict order) fails on an exit 100 and otherwise reports the counts.
+
+### Regressions
+
+`hydo/regressions/<name>.schedule` (or `test.regressions`): comment lines, `# expect: ok`
+(default: the bug stays fixed), `# expect: violation` (a known open bug still fails) or
+`# expect: fp=<16 hex>` (bit for bit), and one schedule line. They are staged into the image
+(`/hydo/regressions/`, and `/etc/hydo/compose.json`), so `hydo repro --regressions [IMG]`
+replays exactly what the image was built with, from fresh boots, and exits 1 if one is not as
+expected. `hydo save <explore dir>` writes an exploration's minimal schedules there (with
+`expect: violation`; change it to `ok` once fixed).
+
+A `W=` names commands by their index in the plan's sorted command list, so adding or renaming a
+command changes what an old `W=` composes. `hydo save` therefore also writes `# commands: <ids>`
+(the list when the schedule was found; `commands:` in `test.regressions`), and the replay warns
+when the plan's list is different: explore again and save the new minimal schedule.
 
 ## YAML subset
 
@@ -618,3 +788,101 @@ Inside the image: `/etc/hydo/hydo.yaml` (the manifest as written), `/etc/hydo/ma
 - The guest console is 64 KiB: a workload that prints every acknowledged id should print
   short ids, or the done marker can be lost.
 - One data disk, ext4. The workload's step count is the unit of fault placement.
+
+## From Docker Compose
+
+A business stack usually ships a `docker-compose.yaml`. `hvx/onboard/hydo-compose` (or
+`hydo compose` in a release) turns it into a starting `hydo.yaml`, so onboarding begins from
+what the team already runs:
+
+```sh
+hvx/onboard/hydo-compose docker-compose.yml [--out hydo.yaml] [--images-dir images]
+        [--env-file F ...] [--profile P ...] [--use-env] [--no-resolve] [--lock FILE] [--no-addr]
+sh fetch-images.sh            # written next to hydo.yaml: copies every image by digest (network, once)
+# write the workload and the invariants (the generated file marks them TODO), then hydo-build
+```
+
+The importer needs network only to resolve image tags (with skopeo: `SKOPEO`, `PATH`, the nix
+store or `nix build nixpkgs#skopeo`). Everything it resolves is written to
+`hydo-compose.lock.json`, so a second run needs no network and writes the same file; an image
+that `fetch-images.sh` already copied is read from the file instead. It parses the Compose file
+with PyYAML when installed and with hydo-build's YAML subset otherwise, extended with the anchors
+Compose files use (`x-common: &a` on a block mapping, `<<: *a` merge keys, `*a` aliases); for
+anchors on scalars or lists without PyYAML, import the output of `docker compose config --format json`.
+A bare `environment:` entry (`- POSTGRES_USER`) takes its value from `.env`, as in Compose. The generated manifest is checked with hydo-build's own
+validator before it is written. Example: `examples/compose-voting/` (Docker's example voting app;
+`hydo.generated.yaml` is the raw import, `hydo.yaml` the version with a workload and invariants).
+
+| Compose | hydo.yaml |
+|---|---|
+| `services.<name>` | `services[]`, in Compose order. The name becomes `[a-z][a-z0-9_]*` (`my-api.v2` -> `my_api_v2`, used by fault tokens); the Compose name still resolves. |
+| `image:` | `image: {x86_64: images/<name>-<tag>-amd64.docker.tar, arm64: images/<name>-<tag>-arm64-oci}` + `image_ref: <name>:<tag>`. The tag is resolved to the index digest and the linux/amd64 and linux/arm64 manifest digests (recorded as comments and in the lock file); `fetch-images.sh` copies by those digests. An image given by digest (`name@sha256:...`) is checked against it. |
+| `command:`, `entrypoint:` | `cmd:`, `entrypoint:` as lists. A string is split into words as Compose does (no shell); `$$` is `$`. `entrypoint:` drops the image's CMD, as in Docker. |
+| `environment:`, `env_file:` | `env:`. env files first (KEY=VALUE, `export`, quotes, comments; `required: false`), then `environment:`. A variable without a value (taken from the shell by Compose) is left out with a warning. |
+| `${VAR}` interpolation | done with `.env` next to the Compose file (or `--env-file`): `${VAR:-d}`, `${VAR-d}`, `${VAR:?e}`, `${VAR:+r}`. The shell environment is NOT used (the manifest must not depend on who imports it); a variable found only there is reported. `--use-env` follows Compose. |
+| `working_dir:`, `user:` | `workdir:`, `user:` |
+| `ports:`, `expose:` | `port:` = the first CONTAINER port (`"8080:80"` -> 80); else the image's `EXPOSE`. Network faults (`N=`/`O=`) act on that port. |
+| (each service) | its own loopback `addr:` (127.0.0.11, .12, ...), and `/etc/hosts` (`root.text`, mounted into every image root) maps the Compose service names, `container_name`, `hostname`, network `aliases`, `links` aliases and `extra_hosts` to them (`host-gateway` -> 127.0.0.1). `--no-addr`: every name -> 127.0.0.1 (the arm64 build has no `addr:`; `hydo compose` on a Mac passes it). |
+| `depends_on:` (list or map) | `depends_on:`. hydo starts a service only after its dependencies passed their `ready:`, so `service_healthy` and `service_started` both hold. |
+| `depends_on.<job>.condition: service_completed_successfully` | the job service idles (`/.hydo/busybox sleep`) and its command runs once per boot in the `setup:` of every service that waits for it (also before a restart and in crash recovery). |
+| `healthcheck:` (else the image's `HEALTHCHECK`) | `ready: timeout <t> hydo-oci <svc> <test>`: `CMD` as argv, `CMD-SHELL`/a string through `/bin/sh -c`, as the service's `user:` (busybox `chpst`), polled every second; `ready_timeout` = `start_period + interval x retries + 60` s (120..600). Without one: `nc -z -w 2 <addr> <port>`, or `true` (with a TODO) when there is no port. |
+| `volumes:` named / anonymous, the image's `VOLUME`s | a directory `/data/vol/<name>` on the data disk (the fault target; listed in `data.dirs`), mounted on the target with `copy_up` (on first use it gets the image's content, owner and mode, as a Docker named volume). Several services naming one volume share it. `external: true` starts empty (warning). A volume on `/data` is the data disk's root already. |
+| `volumes:` bind mount of an existing file or directory | copied into the read-only root (`root.files`, `/etc/hydo/compose/bind/<n>-<name>`) and mounted on the target; read-only in effect (a warning for a directory not marked `:ro`: if the program writes there, make it a named volume). A source that does not exist becomes an empty data-disk directory (Docker creates it). Host paths `/etc/localtime`, `/etc/timezone`, `/var/run/docker.sock`, `/proc`, `/sys`, `/dev`, ... are skipped with a warning. |
+| `tmpfs:`, `type: tmpfs` | a tmpfs mount (mode 1777, `size=` kept) |
+| `secrets:` with `file:` | the file, copied into the root, mounted on `/run/secrets/<name>` (or `target:`) |
+| (every image service) | `mounts:` also gives it a writable `/run` (a tmpfs with a copy of the image's `/run`) and a 64 MiB `/dev/shm`: a container has a writable layer and its own `/dev/shm`, the hydo image root is read-only. |
+| `restart:` | `restart: "no"` -> `recovery: false` (not started again after a power cut, as Docker does not restart it after a reboot); every other policy -> started in crash recovery. hydo restarts every service after a kill fault whatever the policy. |
+| `profiles:` | services in a profile are left out unless `--profile <p>` (as `docker compose up`) |
+| `mem_limit:`, `deploy.resources.limits.memory` | counted in the `guest.ram_mib` guess |
+| (images) | `guest.ram_mib`: 256 MiB + a per-image guess (PostgreSQL 384, MySQL/MongoDB 640, Redis 96, JVM services 1024, others 256), at least 1024, at most 3072. `guest.cpu: v3` when an image's linux/amd64 manifest has variant v3/v4 or the image is known to need AVX2 (restatedev/restate); otherwise a commented line to uncomment if a service stops with "invalid opcode". `data.size_mib` from the volumes. |
+| (workload, invariants) | a TODO skeleton that fails loudly (`exit 1` / `exit 2`), so nobody mistakes it for a passing test. The hydo-onboard skill (`.claude/skills/hydo-onboard`) writes the real ones. |
+| `faults:` | all kinds except `freeze` |
+
+Reported as warnings, with what to do (the file's header repeats them): `build:` (with an image:
+the image is used; without one the import stops: build it, `docker save` it, set `image:`),
+non-default `networks:` (one loopback network in the guest: isolation between Compose networks is
+not modelled), `network_mode`, `privileged`, `cap_add`/`cap_drop`, `devices`, `security_opt`,
+`pid`/`ipc`/`uts`/`userns_mode`, `sysctls`, `ulimits`, `dns*`, `init`, `volumes_from`, `extends`,
+`configs`, `scale`, `deploy.replicas` > 1 and other `deploy:` (Swarm) keys, `shm_size`, GPU
+reservations, `platform:` other than linux/amd64 or linux/arm64, an `include:`. Ignored silently:
+`labels`, `logging`, `stdin_open`, `tty`, `stop_signal`, `stop_grace_period`, CPU shares and quotas,
+`x-*` extension fields. A **port collision** -- two services listening on the same container
+port, which Compose keeps apart with one network namespace per container -- is reported with each
+service's `addr:`: in the guest only the first one that binds `0.0.0.0:<port>` starts, so make
+each listen on its own address or move one (`examples/compose-voting` moves `result` to 81).
+
+### `services[].mounts` (image services)
+
+The importer writes these; they can be written by hand too. Each entry is made by the image
+service's launcher before every start and every `hydo-oci` call (once per boot, under a lock):
+
+```yaml
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}                              # a file or dir of the guest
+      - {src: /data/vol/pgdata, dst: /var/lib/postgresql/data, copy_up: true}   # a volume
+      - {tmpfs: true, dst: /run, copy_up: true}                          # a writable copy of /run
+      - {tmpfs: true, dst: /dev/shm, size: 64m}                          # an empty tmpfs, mode 1777
+```
+
+`src:` is a path of the guest (the hydo root, or under `/data`); `copy_up: true` on a `src:` fills
+an EMPTY directory from the image's `dst` (content, owner, mode) before mounting it; on a tmpfs it
+copies the image's directory in. A `dst` the image lacks is created in the image root at build time
+(below `/proc`, `/sys`, `/dev`, `/tmp`, `/data` at run time); a `dst` that is a symlink in the image
+is resolved inside the image root, never through to the guest's own directory. Paths use
+`[A-Za-z0-9._@+=,:/-]` only. An image service without `mounts:` gets exactly the launcher it had
+before.
+
+### What a Compose stack does not get
+
+- **Link faults between Compose services act on nothing.** Every service has an `addr:`, but its
+  outgoing connections leave from 127.0.0.1 (see "Link faults"), so `N=a-b` matches no packet of
+  the app's own traffic; and explore.py still draws such link targets for manifests with `addr:`.
+  Use the port faults (`N=<svc>@...`, `O=<svc>@...`), which act on every client's traffic to that
+  service.
+- One network, one hostname, no per-service namespaces: `hostname` inside a service is the
+  guest's; services see each other's processes.
+- The image roots are read-only except for the `mounts:`: a program that writes elsewhere fails
+  with "Read-only file system"; add a `mounts:` entry (a volume or a tmpfs) for that path.
+- Healthchecks run through `hydo-oci`, as root unless the service has a `user:`; the image's own
+  user for a healthcheck (Docker runs it as the container's user) is not looked up.
+- No `build:`, no registry pulls at build time, no Swarm (`deploy:`), no GPUs or host devices.

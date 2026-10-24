@@ -31,6 +31,8 @@ characters; the full paths are in the scripts).
 | `dx4fsbxs…-iproute2-6.8.0` | stack, hydo-build (`tc`) | present | gc-rooted |
 | `qmhi9c99…-iproute2-6.8.0` (aarch64) | hydo_build_arm64.py | present | gc-rooted |
 | `zbc5fx2y…-busybox-static-aarch64-unknown-linux-musl-1.36.1` | hydo_build_arm64.py | present | gc-rooted |
+| `f6c0sf4f…-nodejs-slim-22.2.0` (x86_64) | `hvx/onboard/examples/node-kv/hydo.yaml` (`root.nix`) | substituted from cache.nixos.org on 2026-10-24 | gc-rooted (`~/hydo-gcroots/nodejs-slim-22.2.0`) |
+| `vh315js3…-nodejs-slim-22.2.0` (aarch64) | `hvx/onboard/examples/node-kv/fetch-node-arm64.sh` (Mac example) | substituted from cache.nixos.org on 2026-10-24 | gc-rooted (`~/hydo-gcroots/nodejs-slim-22.2.0-aarch64`) |
 
 ## How the two missing derivations were found and rebuilt
 

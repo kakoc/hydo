@@ -164,6 +164,12 @@ module_param(chaos_preempt, uint, 0644);
  * (first 20) and answered with a deterministic value, CF=1. Diagnostic only. */
 static unsigned int probe_rand;
 module_param(probe_rand, uint, 0644);
+/* ft_opt: the cost cuts of hvx/FASTTURN.md, as bits, for A/B timing on one module
+ * (none changes any guest-visible result): bit 0 = a landing step keeps PMC0 running
+ * instead of re-programming it, bit 1 = no PERF_GLOBAL_STATUS read after a landing step,
+ * bit 2 = VMX capability MSRs served from a cache. Default: all on. */
+static unsigned int ft_opt = 7;
+module_param(ft_opt, uint, 0644);
 static inline bool hvx_chaos_preempt(void)
 {
 	return chaos_preempt && (get_random_u32() % 1000) < chaos_preempt;
@@ -809,6 +815,10 @@ struct hvx_vcpu {
 	bool pmu_live;			/* armed for the current run */
 	bool pmu_step;			/* last entry was an MTF landing step */
 	u64 pmu_n;			/* branches until overflow, as programmed for the last entry */
+	u64 pmu_base;			/* PMC0 value at the last entry (48 bits) */
+	u64 pmu_cur;			/* PMC0 value read at the last exit */
+	bool pmu_carry;			/* PMC0 still counts from a landing step: the next step
+					 * can keep it instead of re-programming it (FASTTURN.md) */
 	u64 pmu_total, pmu_next;	/* guest branches retired / next tick target (in the snapshot) */
 	u64 pmu_ticks, pmu_over, pmu_steps, pmu_land;	/* statistics */
 	u32 pmu_flat;			/* consecutive landing steps that retired no branch */
@@ -868,6 +878,9 @@ struct hvx_vcpu {
 	u64 exit_hist[64];
 	u64 exit_total;
 	u64 run_ns;
+	/* turn-end cost diagnostics (HVX_GET_FTSTAT; host-side only, fingerprint-neutral) */
+	struct hvx_ftstat_vcpu fts;
+	bool fts_tgt_turn;		/* the current landing aims at a turn end, not a tick */
 };
 
 struct hvx_vm {
@@ -915,6 +928,10 @@ struct hvx_vm {
 	struct page *pt_topa;		/* the ToPA table */
 	u64 pt_mask, pt_status;		/* RTIT_OUTPUT_MASK_PTRS / RTIT_STATUS between runs */
 	u64 pmu_period, pmu_tick_tsc;
+	/* turn control (HVX_SET_TURNCTL, hvx/FASTTURN.md): the turn-end landing margin and
+	 * the seeded burst policy. Policy, not state: not in any snapshot. */
+	u64 turn_margin;
+	struct hvx_turnctl tc;
 	/* seeded tick-timing jitter (HVX_SET_TJITTER); off when tj_on == 0. Not in the
 	 * snapshot (see hvx_abi.h): a restored run takes whatever policy is set. */
 	bool tj_on;
@@ -966,6 +983,9 @@ struct hvx_vm {
 
 	/* SHARED virtio-net device (milestone 23). Inert until HVX_NET_ATTACH. */
 	struct hvx_vnet vnet;
+
+	/* turn-end cost diagnostics (HVX_GET_FTSTAT; fingerprint-neutral) */
+	u64 fts_sched_cyc, fts_sched_turns;
 };
 
 #define UART_BASE 0x3f8			/* 16550 COM1 base I/O port */
@@ -1219,7 +1239,25 @@ static int wr_err;
 /* ---- helpers ---- */
 struct dtr { u16 limit; u64 base; } __packed;
 
-static inline u64 rd(u32 msr) { u64 v; rdmsrl(msr, v); return v; }
+/*
+ * The VMX capability MSRs (0x480..0x490) are constant, but setup_vmcs read about a dozen
+ * of them on every run call -- a few thousand cycles per vCPU turn (hvx/FASTTURN.md).
+ * hvx_init fills this cache once; rd() serves them from it afterwards.
+ */
+#define HVX_VMXCAP_LO	0x480
+#define HVX_VMXCAP_N	0x11
+static u64 hvx_vmxcap[HVX_VMXCAP_N];
+static bool hvx_vmxcap_ok;
+
+static inline u64 rd(u32 msr)
+{
+	u64 v;
+
+	if (hvx_vmxcap_ok && msr - HVX_VMXCAP_LO < HVX_VMXCAP_N && (ft_opt & 4))
+		return hvx_vmxcap[msr - HVX_VMXCAP_LO];
+	rdmsrl(msr, v);
+	return v;
+}
 
 static inline u32 adjust_ctl(u32 want, u32 msr)
 {
@@ -4947,11 +4985,14 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 	u64 host_cstar = rd(GMSR_CSTAR), host_sfmask = rd(GMSR_SFMASK);
 	u64 host_kgs = rd(GMSR_KERNEL_GS_BASE);
 	bool msrs_loaded = false;
+	u32 pcc = 0;			/* PROC_EXEC_CTL as last written (saves two VMREADs per entry) */
 	u64 pmu_h_gctl = 0, pmu_h_sel = 0, pmu_h_pmc = 0;	/* host PMU state, restored at exit */
 	u32 pmu_h_lvtpc = 0;
 	u64 pt_h[9];			/* host RTIT state, restored at the end of the run */
 	bool pt_live = false;
 	u64 t0 = ktime_get_ns();	/* DIAGNOSTIC: wall-time accounting (fingerprint-neutral) */
+	struct hvx_ftstat_vcpu *fts = &vcpu->fts;	/* DIAGNOSTIC: turn-end cost (FASTTURN.md) */
+	u64 ft_c0 = rdtsc(), ft_c = ft_c0, ft_n, ft_hw = 0;
 	/* guest AVX (HVX_VM_X86_64_V3): host XCR0, swapped with the guest's around entries */
 	const bool xs = vm->cpu_v3;
 	u64 host_xcr0 = 0;
@@ -4972,6 +5013,7 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 	kernel_fpu_begin();
 	preempt_disable();
 	local_irq_save(flags);
+	ft_n = rdtsc(); fts->fpu_cyc += ft_n - ft_c; ft_c = ft_n;
 	if (xs) {
 		host_xcr0 = xgetbv(XCR_XFEATURE_ENABLED_MASK);
 		if ((host_xcr0 & HVX_XS_MASK) != HVX_XS_MASK || !hvx_xcr0_ok(vcpu->xcr0)) {
@@ -4988,6 +5030,7 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 	}
 	if (vmclear(vmcs_pa)) { pr_err("hvx: VMCLEAR failed\n"); ret = -EIO; goto out_vmxoff; }
 	if (vmptrld(vmcs_pa)) { pr_err("hvx: VMPTRLD failed\n"); ret = -EIO; goto out_vmxoff; }
+	ft_n = rdtsc(); fts->vmxon_cyc += ft_n - ft_c; ft_c = ft_n;
 
 	wr_err = 0;
 	/* PMU branch clock: take over GP counter 0 for the run (host counters off --
@@ -5006,6 +5049,7 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 		wrmsrl(MSR_PERFEVTSEL0, HVX_PMU_EVTSEL);
 		if (!vcpu->pmu_next)
 			vcpu->pmu_next = vm->pmu_period;
+		vcpu->pmu_carry = false;	/* the first entry programs PMC0 */
 	}
 	/* Intel PT: take the trace MSRs for this run. Every RTIT MSR except RTIT_CTL can
 	 * only be written with TraceEn clear, which it is (the host's is cleared first;
@@ -5033,10 +5077,13 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 			wrmsrl(MSR_RTIT_ADDR0_A + 2 * k + 1, vm->pt_hi[k] ? vm->pt_hi[k] - 1 : 0);
 		}
 	}
+	ft_n = rdtsc(); fts->pmu_cyc += ft_n - ft_c; ft_c = ft_n;
 	if (setup_vmcs(vcpu, single_step)) { ret = -EIO; goto out_clear; }
 	if (wr_err) { ret = -EIO; goto out_clear; }
 
 	invept_flush(vm->eptp);
+	pcc = (u32)vmread(PROC_EXEC_CTL);
+	ft_n = rdtsc(); fts->vmcs_cyc += ft_n - ft_c; ft_c = ft_n;
 
 	/* Load the guest's SYSCALL / KERNEL_GS_BASE MSRs into the physical MSRs so
 	 * guest SYSCALL and swapgs use guest values. The host does not execute
@@ -5056,6 +5103,7 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 		hvx_xs_load(vcpu);	/* x87/SSE/AVX (XSAVE area) */
 	else
 		asm volatile("fxrstor64 (%0)" :: "r" ((void *)vcpu->fx_page) : "memory");
+	ft_n = rdtsc(); fts->load_cyc += ft_n - ft_c; ft_c = ft_n;
 
 	for (;;) {
 		u32 reason, basic;
@@ -5225,7 +5273,7 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 			if (pend && !vcpu->reinj_valid) {
 				u64 rflags = vmread(GUEST_RFLAGS);
 				u32 istate = (u32)vmread(GUEST_INTERRUPTIBILITY);
-				u32 pc = (u32)vmread(PROC_EXEC_CTL);
+				u32 pc = pcc;
 
 				if ((rflags & (1ULL << 9)) && !(istate & 0x3)) {
 					VMW(VM_ENTRY_INTR_INFO,
@@ -5239,24 +5287,26 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 						vm->vblk.irq_pending = 0;	/* MSI edge consumed (M21) */
 					if (vnet_clear)
 						*vnet_clear = 0;		/* virtio-net MSI edge consumed (M23) */
-					if (pc & PROCBASED_INTR_WINDOW)
-						VMW(PROC_EXEC_CTL, pc & ~PROCBASED_INTR_WINDOW);
+					if (pc & PROCBASED_INTR_WINDOW) {
+						pcc = pc & ~PROCBASED_INTR_WINDOW;
+						VMW(PROC_EXEC_CTL, pcc);
+					}
 				} else {
 					VMW(VM_ENTRY_INTR_INFO, 0);
-					VMW(PROC_EXEC_CTL, pc | PROCBASED_INTR_WINDOW);
+					pcc = pc | PROCBASED_INTR_WINDOW;
+					VMW(PROC_EXEC_CTL, pcc);
 				}
 			} else {
-				u32 pc = (u32)vmread(PROC_EXEC_CTL);
-
 				VMW(VM_ENTRY_INTR_INFO, 0);
-				if (pc & PROCBASED_INTR_WINDOW)
-					VMW(PROC_EXEC_CTL, pc & ~PROCBASED_INTR_WINDOW);
+				if (pcc & PROCBASED_INTR_WINDOW) {
+					pcc &= ~PROCBASED_INTR_WINDOW;
+					VMW(PROC_EXEC_CTL, pcc);
+				}
 			}
 		}
 
 		if (vcpu->pmu_live) {
-			u64 rem, n, tgt = vcpu->pmu_next;
-			u32 pc = (u32)vmread(PROC_EXEC_CTL);
+			u64 rem, n, tgt = vcpu->pmu_next, margin = HVX_PMU_MARGIN;
 			bool step, force = false;
 
 			if (sched) {
@@ -5264,12 +5314,15 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 				 * end; once the end (or a stop) is due, step to a clean boundary */
 				if (vm->sched.turn_over || vm->sched_stop)
 					force = true;
-				else if (vm->sched.turn_end < tgt)
+				else if (vm->sched.turn_end < tgt) {
 					tgt = vm->sched.turn_end;
+					margin = vm->turn_margin;	/* see HVX_SET_TURNCTL */
+				}
 			}
 			rem = tgt - vcpu->pmu_total;
-			step = force || rem <= HVX_PMU_MARGIN;
-			n = step ? 0x40000000ULL : rem - HVX_PMU_MARGIN;
+			vcpu->fts_tgt_turn = force || tgt != vcpu->pmu_next;	/* DIAGNOSTIC */
+			step = force || rem <= margin;
+			n = step ? 0x40000000ULL : rem - margin;
 			if (n > 0x40000000ULL)
 				n = 0x40000000ULL;
 			if (!force && step && vcpu->pmu_flat >= HVX_PMU_HOP_STEPS && rem >= HVX_PMU_HOP_MIN) {
@@ -5280,10 +5333,26 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 			}
 			vcpu->pmu_n = n;
 			vcpu->pmu_step = step;
-			wrmsrl(MSR_PMC0, (u64)(u32)(0U - (u32)n));	/* sign-extended: -n */
-			if (step != !!(pc & PROCBASED_MONITOR_TRAP))
-				VMW(PROC_EXEC_CTL, step ? (pc | PROCBASED_MONITOR_TRAP)
-							: (pc & ~PROCBASED_MONITOR_TRAP));
+			/*
+			 * PMC0 = -n (a legacy PMC write sign-extends bit 31 to bit 47). A
+			 * landing step after a landing step keeps the counter running from
+			 * where the previous step left it -- far from overflow -- instead
+			 * of re-programming it: WRMSR is serializing and was a large part
+			 * of a step's cost. The branch count read at the exit is the same
+			 * either way: got = PMC0(exit) - PMC0(entry).
+			 */
+			if (step && vcpu->pmu_carry && (ft_opt & 1) &&
+			    ((vcpu->pmu_cur - ((0ULL - 0x40000000ULL) & HVX_PMU_MASK)) & HVX_PMU_MASK)
+			    < 0x20000000ULL) {
+				vcpu->pmu_base = vcpu->pmu_cur;
+			} else {
+				wrmsrl(MSR_PMC0, (u64)(u32)(0U - (u32)n));	/* sign-extended: -n */
+				vcpu->pmu_base = (0ULL - n) & HVX_PMU_MASK;
+			}
+			if (step != !!(pcc & PROCBASED_MONITOR_TRAP)) {
+				pcc = step ? (pcc | PROCBASED_MONITOR_TRAP) : (pcc & ~PROCBASED_MONITOR_TRAP);
+				VMW(PROC_EXEC_CTL, pcc);
+			}
 		}
 
 		if (vm->smp_boot) {
@@ -5309,8 +5378,10 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 		asm volatile("mov %0, %%cr2" :: "r" (vcpu->cr2));
 		if (xs && vcpu->xcr0 != host_xcr0)
 			xsetbv(XCR_XFEATURE_ENABLED_MASK, vcpu->xcr0);	/* validated */
+		ft_hw = rdtsc();	/* DIAGNOSTIC */
 		ok = pt_live ? hvx_vmx_run_pt(&vcpu->regs, resume, vm->pt_ctl)
 			     : hvx_vmx_run(&vcpu->regs, resume);
+		ft_hw = rdtsc() - ft_hw;
 		if (xs && vcpu->xcr0 != host_xcr0)
 			xsetbv(XCR_XFEATURE_ENABLED_MASK, host_xcr0);
 		asm volatile("mov %%cr2, %0" : "=r" (vcpu->cr2));
@@ -5328,8 +5399,38 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 
 		if (vcpu->pmu_live) {
 			/* branches the guest retired during this entry */
-			u64 got = (rd(MSR_PMC0) + vcpu->pmu_n) & HVX_PMU_MASK;
+			u64 got;
 
+			vcpu->pmu_cur = rd(MSR_PMC0) & HVX_PMU_MASK;
+			got = (vcpu->pmu_cur - vcpu->pmu_base) & HVX_PMU_MASK;
+			vcpu->pmu_carry = vcpu->pmu_step;	/* a step's counter can run on */
+
+			/* DIAGNOSTIC: per-entry cost and the overflow skid */
+			ft_n = rdtsc();
+			if (vcpu->pmu_step) {
+				fts->step_entries++;
+				fts->step_cyc += ft_n - ft_c;
+				fts->step_hw_cyc += ft_hw;
+				if (vcpu->fts_tgt_turn)
+					fts->steps_turn++;
+				else
+					fts->steps_tick++;
+			} else {
+				fts->free_entries++;
+				fts->free_cyc += ft_n - ft_c;
+				if (got >= vcpu->pmu_n) {
+					u64 sk = got - vcpu->pmu_n;
+					unsigned int b = sk ? min_t(unsigned int, fls64(sk),
+								    HVX_FTSTAT_SKID_BUCKETS - 1) : 0;
+
+					fts->ovf++;
+					fts->skid_sum += sk;
+					if (sk > fts->skid_max)
+						fts->skid_max = sk;
+					fts->skid_hist[b]++;
+				}
+			}
+			ft_c = ft_n;
 			vcpu->pmu_total += got;
 			vcpu->br_own += got;
 			vcpu->pmu_n = 0;
@@ -5367,7 +5468,9 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 		vcpu->regs.rflags = vmread(GUEST_RFLAGS);
 
 		if (vcpu->pmu_live) {
-			if (rd(MSR_PERF_GLOBAL_STATUS) & 1) {
+			/* a landing step's counter is ~2^30 branches from overflow: only an
+			 * exit after a free-running entry can carry our overflow (FASTTURN.md) */
+			if ((!vcpu->pmu_step || !(ft_opt & 2)) && (rd(MSR_PERF_GLOBAL_STATUS) & 1)) {
 				/* our overflow: ack it and unmask LVTPC (a PMI masks it) */
 				wrmsrl(MSR_PERF_GLOBAL_OVF, 1);
 				hvx_lvtpc_write(HVX_PMU_LVT_VECTOR);
@@ -5800,6 +5903,7 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 	}
 
 out_clear:
+	ft_c = rdtsc();			/* DIAGNOSTIC */
 	if (sched) {
 		/* the scheduler carries the cadence and step count across turns */
 		vcpu->carry_guard = guard;
@@ -5830,6 +5934,7 @@ out_clear:
 	 * (ret != 0), where no guest state ran. */
 	if (ret == 0)
 		save_sregs(vcpu);
+	ft_n = rdtsc(); fts->save_cyc += ft_n - ft_c; ft_c = ft_n;
 	if (vcpu->pmu_live) {
 		/* give the PMU back to the host exactly as we found it */
 		wrmsrl(MSR_PERFEVTSEL0, 0);
@@ -5855,6 +5960,7 @@ out_clear:
 			wrmsrl(MSR_RTIT_ADDR0_A + k, pt_h[5 + k]);
 		wrmsrl(MSR_RTIT_CTL, pt_h[0]);
 	}
+	ft_n = rdtsc(); fts->pmuoff_cyc += ft_n - ft_c; ft_c = ft_n;
 	vmclear(vmcs_pa);
 out_vmxoff:
 	if (vmxoff())
@@ -5865,6 +5971,10 @@ out_cr4:
 	preempt_enable();
 	kernel_fpu_end();		/* restore the host FPU/XMM state (M14) */
 	vcpu->run_ns += ktime_get_ns() - t0;	/* DIAGNOSTIC (fingerprint-neutral) */
+	ft_n = rdtsc();
+	fts->vmxoff_cyc += ft_n - ft_c;
+	fts->total_cyc += ft_n - ft_c0;
+	fts->calls++;
 	return ret;
 }
 
@@ -5954,12 +6064,65 @@ static void hvx_clk_take(struct hvx_vm *vm, const struct hvx_vcpu *v)
 	hvx_clk_sync(vm);
 }
 
-/* length of the turn that starts now (turn number c->turns) */
-static u64 hvx_sched_len(const struct hvx_sched *c)
+/* the base length of the turn that starts now (turn number c->turns) */
+static u64 hvx_sched_len0(const struct hvx_sched *c)
 {
 	if (!c->seed)
 		return c->quantum;
 	return 1 + fault_mix(c->seed + (c->turns + 1) * 0x9e3779b97f4a7c15ULL) % c->quantum;
+}
+
+/* burst window: W = max(burst_window, quantum, burst_len) (see struct hvx_turnctl) */
+static u64 hvx_burst_w(const struct hvx_vm *vm)
+{
+	const struct hvx_turnctl *t = &vm->tc;
+
+	return max3(t->burst_window, vm->sched.quantum, t->burst_len);
+}
+
+/* does window w hold a burst? *zs = its first branch */
+static bool hvx_burst_zone(const struct hvx_vm *vm, u64 w, u64 W, u64 *zs)
+{
+	const struct hvx_turnctl *t = &vm->tc;
+	u64 h = fault_mix(t->burst_seed + (w + 1) * 0x9e3779b97f4a7c15ULL);
+
+	if (h % 1000 >= t->burst_permille)
+		return false;
+	*zs = w * W + (h >> 16) % (W - t->burst_len + 1);
+	return true;
+}
+
+/*
+ * Length of the turn that starts now. Without bursts: hvx_sched_len0. With bursts
+ * (struct hvx_turnctl): a pure function of the policy and the VM branch count at the
+ * turn's start -- burst_q inside a burst (cut at its end), else the base length cut
+ * where the next burst starts. The base length is at most quantum <= W, so the next
+ * burst can only be in this window or the next one.
+ */
+static u64 hvx_sched_len(struct hvx_vm *vm)
+{
+	const struct hvx_sched *c = &vm->sched;
+	struct hvx_turnctl *t = &vm->tc;
+	u64 len = hvx_sched_len0(c), x = c->pmu_total, W, w, k, zs;
+
+	if (!t->burst_seed || !t->burst_permille)
+		return len;
+	W = hvx_burst_w(vm);
+	w = x / W;
+	if (hvx_burst_zone(vm, w, W, &zs) && x >= zs && x < zs + t->burst_len) {
+		t->burst_turns++;
+		return min(t->burst_q, zs + t->burst_len - x);
+	}
+	for (k = w; k <= w + 1; k++) {
+		if (hvx_burst_zone(vm, k, W, &zs) && zs > x) {
+			if (zs - x < len) {
+				len = zs - x;
+				t->clipped++;
+			}
+			break;
+		}
+	}
+	return len;
 }
 
 /* due timers on every vCPU, due device events (vCPU 0) */
@@ -6053,6 +6216,7 @@ static int hvx_sched_run(struct hvx_vm *vm, struct hvx_exit *ex, u64 max_insns)
 	u64 last_total = c->pmu_total, last_turns = c->turns, last_guard = c->guard;
 	u64 last_rcx = vm->vcpu[c->cur].regs.rcx;
 	u64 stepped = 0;
+	u64 ft_c0 = rdtsc();		/* DIAGNOSTIC (FASTTURN.md) */
 	int ret = 0;
 
 	vm->sched_stop = 0;
@@ -6077,7 +6241,7 @@ static int hvx_sched_run(struct hvx_vm *vm, struct hvx_exit *ex, u64 max_insns)
 			c->in_turn = 1;
 			c->turn_over = 0;
 			c->pause_run = 0;
-			c->turn_end = c->pmu_total + hvx_sched_len(c);
+			c->turn_end = c->pmu_total + hvx_sched_len(vm);
 			v->pmu_flat = 0;
 			v->sched_turns++;
 		}
@@ -6105,6 +6269,7 @@ static int hvx_sched_run(struct hvx_vm *vm, struct hvx_exit *ex, u64 max_insns)
 			c->in_turn = 0;
 			c->turn_over = 0;
 			c->turns++;
+			vm->fts_sched_turns++;		/* DIAGNOSTIC */
 			/* a turn switch counts on the THROTTLE cadence, so a guest that runs
 			 * only in tiny turns still returns to userspace */
 			if (++c->guard >= HVX_MAX_INKERNEL_EXITS)
@@ -6147,6 +6312,7 @@ static int hvx_sched_run(struct hvx_vm *vm, struct hvx_exit *ex, u64 max_insns)
 	if (vm->sched_stop & HVX_SCHED_STOP_THROTTLE)
 		c->guard = 0;
 	vm->sched_stop = 0;
+	vm->fts_sched_cyc += rdtsc() - ft_c0;	/* DIAGNOSTIC */
 	return ret;
 }
 
@@ -6414,6 +6580,8 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 	vm->smp_boot = vm->sched_on && (cfg->flags & HVX_VM_SMP_BOOT);
 	memset(&vm->sched, 0, sizeof(vm->sched));
 	vm->sched.quantum = HVX_SCHED_QUANTUM;
+	vm->turn_margin = HVX_PMU_MARGIN;
+	memset(&vm->tc, 0, sizeof(vm->tc));
 	vm->sched.cur = nv - 1;			/* the first pick is vCPU 0 */
 	vm->sched.tsc_step = 1;			/* the VM clock starts as every vCPU's (seed_vcpu) */
 	vm->sched.tsc_mode = HVX_TSC_COUNTER;
@@ -6526,6 +6694,16 @@ static void hvx_dump_exit_stats(struct hvx_vm *vm)
 		pr_info("hvx: EXIT-HISTOGRAM vcpu=%u total=%llu run_ns=%llu (%llu.%03llu ms) exits/s=%llu icount=%llu rdtsc=%llu reinjected=%llu\n",
 			i, total, ns, ns / 1000000ULL, (ns / 1000ULL) % 1000ULL,
 			eps, vc->icount, vc->rdtsc_count, vc->reinj_count);
+		if (vc->fts.ovf || vc->fts.step_entries) {
+			const struct hvx_ftstat_vcpu *f = &vc->fts;
+
+			pr_info("hvx: TURNSTAT vcpu=%u calls=%llu steps=%llu (turn %llu tick %llu) step_cyc=%llu ovf=%llu skid_max=%llu skid_sum=%llu hist=%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu rearms=%llu\n",
+				i, f->calls, f->step_entries, f->steps_turn, f->steps_tick,
+				f->step_cyc, f->ovf, f->skid_max, f->skid_sum,
+				f->skid_hist[0], f->skid_hist[1], f->skid_hist[2], f->skid_hist[3],
+				f->skid_hist[4], f->skid_hist[5], f->skid_hist[6], f->skid_hist[7],
+				f->skid_hist[8], f->skid_hist[9], f->rearms);
+		}
 		for (b = 0; b < 64; b++) {
 			u64 c = vc->exit_hist[b];
 			u64 pct10;			/* percent * 10 (one decimal) */
@@ -7545,6 +7723,67 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		ret = copy_to_user(uarg, &t, sizeof(t)) ? -EFAULT : 0;
 		break;
 	}
+	case HVX_SET_TURNCTL: {
+		struct hvx_turnctl t;
+
+		if (!vm->n_guest_pages) { ret = -EINVAL; break; }
+		if (copy_from_user(&t, uarg, sizeof(t))) { ret = -EFAULT; break; }
+		ret = 0;
+		if (!vm->sched_on || (t.margin && (t.margin < 8 || t.margin > (1ULL << 20))) ||
+		    t.burst_permille > 1000)
+			ret = -EINVAL;
+		if (t.burst_seed && t.burst_permille &&
+		    (!t.burst_len || !t.burst_q || t.burst_len > (1ULL << 40) ||
+		     t.burst_window > (1ULL << 40)))
+			ret = -EINVAL;
+		if (ret)
+			break;
+		t.burst_turns = 0;
+		t.clipped = 0;
+		t.pad0 = 0;
+		memset(t.pad, 0, sizeof(t.pad));
+		vm->tc = t;
+		vm->turn_margin = t.margin ? t.margin : HVX_PMU_MARGIN;
+		break;
+	}
+	case HVX_GET_TURNCTL: {
+		struct hvx_turnctl t;
+
+		if (!vm->n_guest_pages) { ret = -EINVAL; break; }
+		if (!vm->sched_on) { ret = -EINVAL; break; }
+		t = vm->tc;
+		t.margin = vm->turn_margin;
+		ret = copy_to_user(uarg, &t, sizeof(t)) ? -EFAULT : 0;
+		break;
+	}
+	case HVX_GET_FTSTAT: {
+		struct hvx_ftstat *f;	/* heap: keep the ioctl frame small */
+		unsigned int i;
+
+		if (!vm->n_guest_pages) { ret = -EINVAL; break; }
+		f = kzalloc(sizeof(*f), GFP_KERNEL);
+		if (!f) { ret = -ENOMEM; break; }
+		f->n_vcpus = vm->n_vcpus;
+		f->tsc_khz = tsc_khz;
+		f->sched_cyc = vm->fts_sched_cyc;
+		f->sched_turns = vm->fts_sched_turns;
+		for (i = 0; i < vm->n_vcpus && i < 8; i++)
+			f->v[i] = vm->vcpu[i].fts;
+		ret = copy_to_user(uarg, f, sizeof(*f)) ? -EFAULT : 0;
+		kfree(f);
+		break;
+	}
+	case HVX_RESET_FTSTAT: {
+		unsigned int i;
+
+		if (!vm->n_guest_pages) { ret = -EINVAL; break; }
+		vm->fts_sched_cyc = 0;
+		vm->fts_sched_turns = 0;
+		for (i = 0; i < vm->n_vcpus; i++)
+			memset(&vm->vcpu[i].fts, 0, sizeof(vm->vcpu[i].fts));
+		ret = 0;
+		break;
+	}
 	case HVX_GET_PMU: {
 		struct hvx_pmu pm = {
 			.period = vm->pmu_period, .tick_tsc = vm->pmu_tick_tsc,
@@ -7735,6 +7974,14 @@ static int __init hvx_init(void)
 		return -ENODEV;
 	}
 
+	{
+		unsigned int k;
+
+		for (k = 0; k < HVX_VMXCAP_N; k++)
+			if (rdmsrl_safe(HVX_VMXCAP_LO + k, &hvx_vmxcap[k]))
+				hvx_vmxcap[k] = 0;	/* absent (e.g. no secondary controls) */
+		hvx_vmxcap_ok = true;
+	}
 	basic = rd(MSR_VMX_BASIC);
 	hvx_rev = (u32)basic & 0x7fffffff;
 	ept_cap = rd(MSR_VMX_EPT_VPID_CAP);
