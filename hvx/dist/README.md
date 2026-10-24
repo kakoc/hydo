@@ -14,12 +14,24 @@ user guide; it is shipped as the release's `README.md`. The Mac counterpart is
 | `hydo doctor` | checks: Intel CPU, `vmx` flag (VT-x on in firmware), bare metal, a usable PMU (non-hybrid, `arch_perfmon`; otherwise it says the exit-count clock is used), Python 3.9+, `cc`/`make`/`flock`/`xz`/`sudo`/`modinfo`, password-less sudo, kernel headers, lockdown, the module (built, loaded, same `srcversion` as this release), `kvm_intel` not loaded, release files, the run engine, the bundled `mke2fs`, disk space |
 | `hydo module build [--name N]` | `make -C /lib/modules/$(uname -r)/build` on `module/hvx.c`; with `--name` a side copy `N.ko` with device `/dev/N` (`-DHVX_DEVNAME`, the `hvx/tdet/build-hvxtd.sh` pattern) |
 | `hydo module load\|unload [--name N] [--dry-run] [--param K=V]` | under `flock -x` on the module lock: `rmmod hvx`, `rmmod kvm_intel kvm` if loaded, `insmod`. A side module gets its own lock file (`<lock>.N`) and never touches `hvx` or KVM |
+| `hydo module udev install\|remove\|status [--name N] [--group G] [--dry-run]` | optional: with sudo, writes `/etc/udev/rules.d/70-hydo-N.rules` (`KERNEL=="N", SUBSYSTEM=="misc", GROUP="G", MODE="0660"`), creates the group if missing, adds the user, reloads udev and applies the rule to a loaded device; `remove` deletes the rule and sets the device back to root:root 0600. `install.sh --udev [--udev-group G] [--udev-name N]` runs `install` |
 | `hydo module status [--name N]` | loaded or not, `srcversion` of the loaded and the release-built module, device mode, KVM, how many processes hold the lock (read from `/proc/locks`, no lock taken) |
 | `hydo build <hydo.yaml>` | `hvx/onboard/hydo-build` (imported, not rewritten) with the bundled tools, into `./hydo-out` |
 | `hydo run [IMG] "<schedule>"` | `libexec/hvx-run sudo env HVX_SNAP_DIR=… hvx/hvx_explore [--ram-mib/--cpu from the image's manifest] one guest/bzImage guest/initramfs-kafka.cpio.gz IMG <dir> "<schedule>"`; writes `run.json` |
 | `hydo repro <run dir \| explore dir \| "<schedule>">` | re-runs a `run.json`, or every failure and minimal schedule of an exploration's `report.json`, from a fresh boot, and compares fingerprints |
 | `hydo explore [IMG] [explore.py options]` | `hvx/explore/explore.py --image IMG` (default `--seeds 1-20 --workers 2 --out hydo-out/explore`) |
 | `hydo report [DIR]` | prints `report.md` |
+
+**sudo only when needed.** `hydo run` and `explore.py` call `libexec/hvx-run sudo env …`;
+`hvx-run` drops the `sudo` when the user can read and write the device (`$HVX_DEV`, default
+`/dev/hvx`), which the optional udev rule above allows, and passes `HVX_DEV` through `sudo`
+when it keeps it. `HYDO_SUDO=1` keeps sudo. `hydo doctor` reports which case applies. A run
+without sudo uses `/var/tmp/hvx-snap-<uid>` when `/var/tmp/hvx-snap` exists but is not
+writable (earlier sudo runs made it root's). The rule's meaning: anyone in the group can run
+guests through the kernel module, which was not hardened against hostile users.
+
+**Side modules.** With `HVX_DEV=/dev/N`, runs use the side module `N` (built and loaded with
+`--name N`) and hold its lock file (`<lock>.N`) instead of the main one.
 
 **The module lock** is the bare-metal machine's convention: `~/bin/hvx-run` = `flock -s ~/.hvx-module.lock`,
 `~/bin/hvx-reload` = `flock -x` on the same file. The release's `libexec/hvx-run` takes
@@ -88,7 +100,5 @@ must match the running kernel and the release's `hvx_abi.h`).
 ## Not done
 
 - One release covers x86_64 + Intel only; AMD (SVM) is not supported by hvx.
-- Runs need `sudo` (`/dev/hvx` is 0600). A udev rule giving the device to a group would remove
-  that; it is not shipped.
 - The guest kernel is the one 6.6.35 bzImage the bare-metal machine uses; a different guest kernel needs its
   own modules in `guest/modules/`.
