@@ -1,0 +1,24 @@
+[package]
+name = "hydo-assert"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+description = "hydo's assertion SDK for Rust guest programs: always / sometimes / reachable / unreachable / eventually and BUGGIFY fault points, wire-compatible with the Go SDK (hvx/ASSERTIONS.md)"
+publish = false
+
+# Its own workspace: the repository root's Cargo.toml is the (unrelated) hydo KVM crate.
+[workspace]
+
+[features]
+default = []
+# Compile every assertion, catalog and lifecycle call to nothing and make every BUGGIFY point
+# return false (conditions are still evaluated). For builds that must not touch the console.
+noop = []
+# `From<serde_json::Value>` for `Value` and `From<serde_json::Map>` for `Details`.
+serde_json = ["dep:serde_json"]
+
+[dependencies]
+serde_json = { version = "1", optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros", "time"] }
