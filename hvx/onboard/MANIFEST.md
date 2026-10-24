@@ -476,9 +476,10 @@ The importer needs network only to resolve image tags (with skopeo: `SKOPEO`, `P
 store or `nix build nixpkgs#skopeo`). Everything it resolves is written to
 `hydo-compose.lock.json`, so a second run needs no network and writes the same file; an image
 that `fetch-images.sh` already copied is read from the file instead. It parses the Compose file
-with PyYAML when installed (anchors, merge keys) and with hydo-build's YAML subset otherwise; for
-a file using anchors on a machine without PyYAML, import the output of
-`docker compose config --format json`. The generated manifest is checked with hydo-build's own
+with PyYAML when installed and with hydo-build's YAML subset otherwise, extended with the anchors
+Compose files use (`x-common: &a` on a block mapping, `<<: *a` merge keys, `*a` aliases); for
+anchors on scalars or lists without PyYAML, import the output of `docker compose config --format json`.
+A bare `environment:` entry (`- POSTGRES_USER`) takes its value from `.env`, as in Compose. The generated manifest is checked with hydo-build's own
 validator before it is written. Example: `examples/compose-voting/` (Docker's example voting app;
 `hydo.generated.yaml` is the raw import, `hydo.yaml` the version with a workload and invariants).
 
