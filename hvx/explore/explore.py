@@ -1119,7 +1119,7 @@ def assert_failures(outdir, tag):
     with ok=false, an eventually that missed its deadline (ok=false), or any unreachable that
     was emitted. Returns sorted assertion ids."""
     bad = set()
-    for suffix in ("", ".recovery"):
+    for suffix in ("", ".recovery", ".checks"):
         path = os.path.join(outdir, "consoles", "%s%s.log" % (tag, suffix))
         if not os.path.exists(path):
             continue
@@ -1147,7 +1147,7 @@ def property_table(outdir, tags):
     os.makedirs(merged_dir, exist_ok=True)
     for t in tags:
         text = ""
-        for suffix in ("", ".recovery"):
+        for suffix in ("", ".recovery", ".checks"):
             p = os.path.join(outdir, "consoles", "%s%s.log" % (t, suffix))
             if os.path.exists(p):
                 text += open(p, errors="replace").read()
@@ -1255,6 +1255,35 @@ def signature(v):
     return v
 
 
+# ---------------------------------------------------------------- host-side history checks (hvx/HISTORIES.md)
+def host_checks(outdir, tag, res):
+    """A run whose console declares history checks (HYDO-CHECK lines, from a manifest's
+    checks:) is checked HERE, after the run: the consoles <tag>.log (+ .recovery.log) are read,
+    the checkers in hvx/history/hydohist.py run, their HYDO-ASSERT records go to
+    consoles/<tag>.checks.log (read with the consoles by assert_failures / property_table), the
+    full explanation to consoles/<tag>.checks.txt, and res["verdict"] becomes the combined
+    verdict (the guest's own verdict is kept in res["guest_verdict"]). A pure function of the
+    consoles, so a reproduced run gets the same verdict. Runs without checks are untouched."""
+    d = os.path.join(outdir, "consoles")
+    srcs = []
+    for suffix in ("", ".recovery"):
+        p = os.path.join(d, "%s%s.log" % (tag, suffix))
+        if os.path.exists(p):
+            srcs.append((tag + suffix, open(p, errors="replace").read()))
+    if not any("HYDO-CHECK " in t for _, t in srcs):
+        return res
+    sys.path.insert(0, os.path.join(HVX, "history"))
+    import hydohist
+    r = hydohist.run_checks(srcs, res.get("verdict"))
+    with open(os.path.join(d, "%s.checks.log" % tag), "w") as f:
+        f.write("".join(x + "\n" for x in r["records"]))
+    with open(os.path.join(d, "%s.checks.txt" % tag), "w") as f:
+        f.write(r["report"] + "\n" + r["verdict"] + "\n")
+    res["guest_verdict"] = res.get("verdict")
+    res["verdict"] = r["verdict"]
+    return res
+
+
 # ---------------------------------------------------------------- the worker pool
 class Worker(threading.Thread):
     def __init__(self, idx, jobs, results, outdir):
@@ -1306,6 +1335,7 @@ class Worker(threading.Thread):
             qn = re.search(r"qn=(\d+)", m.group(5))
             if qn:      # SMP Stage 3: vCPU turns taken during the workload
                 res["qn"] = int(qn.group(1))
+            host_checks(self.outdir, tag, res)
             self.results.put((tag, text, res))
         p.stdin.write("QUIT\n")
         p.stdin.flush()
@@ -1344,6 +1374,7 @@ class Worker(threading.Thread):
             if tk:
                 res["tjk"] = [int(tk.group(1)), int(tk.group(2))]
                 res["tjn"] = int(tk.group(3))
+            host_checks(self.outdir, sub, res)
             out["runs"].append((sub, st, res))
         return out
 

@@ -1,0 +1,7 @@
+#!/bin/sh
+# SET k:<id> v<id>, recorded in history kv (id = this command's entry number)
+. /hydo/workload/helper_lib.sh
+id=$HYDO_CMD_ID
+hydo_hist kv $id invoke write k:$id v$id
+if [ "$(R SET k:$id v$id)" = OK ]; then hydo_hist kv $id ok write k:$id v$id; echo $id >> $HYDO_ACKED
+else hydo_hist kv $id info write k:$id v$id; exit 1; fi

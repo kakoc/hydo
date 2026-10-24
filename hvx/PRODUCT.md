@@ -12,7 +12,7 @@ A team describes its system in one `hydo.yaml` (`hvx/onboard/MANIFEST.md`): the 
 - clock jumps; changes of thread timing (tick jitter, extra preemption points, several virtual CPUs);
 - FoundationDB-style fault points inside the code (BUGGIFY).
 
-The explorer (`hvx/explore/explore.py`) generates schedules with several strategies and sweeps, re-runs every failure to prove it reproduces, and shrinks it to a minimal schedule. Assertions are properties of five kinds (always, sometimes, reachable, unreachable, eventually; `hvx/ASSERTIONS.md`). It runs on x86_64 Linux with VT-x (`hvx/dist/`, the Linux release) and on Apple Silicon Macs (`hvx-mac/dist/`).
+The explorer (`hvx/explore/explore.py`) generates schedules with several strategies and sweeps, re-runs every failure to prove it reproduces, and shrinks it to a minimal schedule. Cross-service checks can read the stores with ready-made commands instead of hand-written shell (`hydo-read` prints a MySQL/PostgreSQL query, a Kafka topic, Redis or etcd keys as sorted JSON Lines; `hydo-check` compares two readings: subset, exactly-once, disjoint, count, a cache never holding a wrong value; MANIFEST.md "Reading the stores"). Assertions are properties of five kinds (always, sometimes, reachable, unreachable, eventually; `hvx/ASSERTIONS.md`). It runs on x86_64 Linux with VT-x (`hvx/dist/`, the Linux release) and on Apple Silicon Macs (`hvx-mac/dist/`).
 
 ## Two kinds of projects
 
@@ -26,7 +26,7 @@ The explorer (`hvx/explore/explore.py`) generates schedules with several strateg
 |---|---|---|
 | 1 | **Test composer.** Users write small commands ("place order", "refund", "webhook arrives"); hydo composes them into random sequences and concurrent mixes, instead of a fixed list of steps. | **Approved; built** (branch `test-composer`, M86, not merged): a plan's `test:` section or the `hydo/` folder, composed in the guest from the schedule token `W=`, shrunk by the explorer; the Rust SDK `hydo-test` writes the plan (see below). |
 | 2 | **Interactive debugging of a failing run** (a shell inside the VM at any moment, a merged timeline of all services' logs). | Not needed now: an AI agent does the analysis of a failing run. |
-| 3 | **Ready-made checkers:** a history recorder plus linearizability and isolation checkers (Jepsen Knossos/Porcupine/Elle style) for infrastructure; "exactly once / no side effect after X" checkers for business software. | **Approved; in progress** (branch `history-checkers`; the business checkers with item 4). |
+| 3 | **Ready-made checkers:** a history recorder plus linearizability and isolation checkers (Jepsen Knossos/Porcupine/Elle style) for infrastructure; "exactly once / no side effect after X" checkers for business software. | **Approved; in progress** (branch `history-checkers`; the business checkers with item 4). Store readers for set-style cross-service checks (`hydo-read`, `hydo-check`: subset, exactly-once, disjoint, count, cache never wrong; MySQL, PostgreSQL, Kafka, Redis, etcd) done (M88, branch `store-readers`). |
 | 4 | **Faults at the protocol level and fake outside services:** HTTP 500/429, slow answers, dropped answers, duplicated or reordered webhooks, gRPC deadlines; fakes that record every side effect. | **Approved; in progress** (branch `fakes-protocol-faults`). |
 | 5 | **Fast-forwarding virtual time** (run 30 days of business time in minutes). | Not decided yet. |
 | 6a | **Assertion SDKs in more languages.** | **Approved.** Rust (M82) and JavaScript (M80) merged; Python done on branch `python-sdk` (M86), not merged yet. |

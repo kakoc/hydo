@@ -112,9 +112,17 @@ async tasks and threads (one global lock, held only while a record is formatted 
 ## Extension point for other record kinds
 
 `hydo_assert::emit_line(tag, &value)` writes one line `<tag> <json>` through the same sink with
-one write. A history recorder (another SDK feature being added in parallel; not on main when
-this crate was written) should use it, and typed helpers can be added here once its line
-format is on main.
+one write, for other JSON record kinds.
+
+## Operation histories (`hydo_assert::history`)
+
+The typed recorder for hydo's host-side history checkers (`hvx/HISTORIES.md`): `History::new("kv")`,
+`.invoke(proc, f, &args) -> Op`, then `op.ok(&results)` / `op.ok_same()` / `op.fail()` /
+`op.info()`; value helpers `enc`, `ver(v, version)`, `value_or_nil`, `list`, and the txn
+micro-ops `append_mop`, `read_mop`, `read_result_mop`. Its lines are not JSON
+(`HYDO-HIST <history> <process> <type> <time-ns> <f> <args>`), so it has its own sink: one write
+per record to `/dev/console`, `HYDO_HIST_OUT=<path>|stderr|off`; `noop` turns it off.
+`tests/history.rs` checks the exact lines (the same as the Go recorder's test).
 
 ## Building a static binary for a hydo guest
 

@@ -211,6 +211,67 @@ pub struct TestParams {
     pub check_within: Option<u32>,
 }
 
+/// A ready-made history check (hvx/HISTORIES.md): the host checks the history the drivers record
+/// with `hydo_test::assert::history` after the run. Becomes a `test.checks` entry of kind
+/// `linearizable` or `list_append`.
+#[derive(Clone, Debug, Default)]
+pub struct HistoryCheck {
+    name: String,
+    kind: &'static str,
+    history: String,
+    model: Option<String>,
+    initial: Option<String>,
+    consistency: Option<String>,
+    msg: Option<String>,
+    readback: Option<Vec<String>>,
+}
+
+impl HistoryCheck {
+    /// Linearizability of a key-value register per key (`model("cas")` adds compare-and-set).
+    pub fn linearizable(name: &str, history: &str) -> HistoryCheck {
+        HistoryCheck { name: name.into(), kind: "linearizable", history: history.into(), ..Default::default() }
+    }
+    /// Elle-style list-append checks at `consistency` (default strict-serializable).
+    pub fn list_append(name: &str, history: &str) -> HistoryCheck {
+        HistoryCheck { name: name.into(), kind: "list_append", history: history.into(), ..Default::default() }
+    }
+    pub fn model(mut self, m: &str) -> Self {
+        self.model = Some(m.into());
+        self
+    }
+    /// `nil` (keys start absent, the default) or `any` (keys written before the history began).
+    pub fn initial(mut self, i: &str) -> Self {
+        self.initial = Some(i.into());
+        self
+    }
+    pub fn consistency(mut self, c: &str) -> Self {
+        self.consistency = Some(c.into());
+        self
+    }
+    pub fn msg(mut self, m: &str) -> Self {
+        self.msg = Some(m.into());
+        self
+    }
+    /// The final read-back (an argv run at the end of the same boot or of the recovery boot after
+    /// a power cut): read every key or list back and record the reads in the history.
+    pub fn readback(mut self, argv: &[&str]) -> Self {
+        self.readback = Some(argv.iter().map(|a| a.to_string()).collect());
+        self
+    }
+    fn json(&self) -> J {
+        let mut v = vec![("name", s(&self.name)), ("kind", s(self.kind)), ("history", s(&self.history))];
+        for (k, x) in [("model", &self.model), ("initial", &self.initial), ("consistency", &self.consistency), ("msg", &self.msg)] {
+            if let Some(x) = x {
+                v.push((k, s(x)));
+            }
+        }
+        if let Some(r) = &self.readback {
+            v.push(("run", J::A(r.iter().map(|a| s(a)).collect())));
+        }
+        obj(v)
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct System {
     name: String,
@@ -234,6 +295,7 @@ pub struct System {
     regressions: Vec<(String, String, Expect)>,
     ram_mib: Option<u32>,
     cpu: Option<String>,
+    history_checks: Vec<HistoryCheck>,
 }
 
 fn host_path(src: &str) -> String {
@@ -354,6 +416,11 @@ impl System {
         self.cpu = Some(level.into());
         self
     }
+    /// A ready-made history check (hvx/HISTORIES.md), checked on the host after the run.
+    pub fn history_check(mut self, c: HistoryCheck) -> Self {
+        self.history_checks.push(c);
+        self
+    }
 
     /// hydo's plan as JSON: this system plus the registered drivers and checks, which run as
     /// `<guest_path> driver|check <name>` from the guest binary `guest_binary` (copied to
@@ -455,7 +522,7 @@ impl System {
             }
             obj(v)
         }).collect();
-        let checks: Vec<J> = regs.iter().filter(|r| r.role == "check").map(|r| {
+        let mut checks: Vec<J> = regs.iter().filter(|r| r.role == "check").map(|r| {
             let mut v = vec![("name", s(r.name)), ("kind", s(r.kind)), ("run", run("check", r.name))];
             if !r.msg.is_empty() {
                 v.push(("msg", s(r.msg)));
@@ -470,6 +537,7 @@ impl System {
             }
             obj(v)
         }).collect();
+        checks.extend(self.history_checks.iter().map(|c| c.json()));
         t.push(("commands", J::A(cmds)));
         t.push(("checks", J::A(checks)));
         if !self.regressions.is_empty() {

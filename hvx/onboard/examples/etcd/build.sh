@@ -8,6 +8,8 @@
 # directory (or HYDO_SEEDRNG); build it with the pinned static gcc + musl (hvx/BUILD-PINS.md,
 # build-linux.sh), sha256 c2a440c5..., not with a stand-in.
 # Output: build/explore-ob-etcd-<VERSION>-disk.img
+# HYDO_ETCD_MANIFEST=hydo-hist.yaml builds that manifest instead (pass --out for a new name):
+#   HYDO_ETCD_MANIFEST=hydo-hist.yaml hvx/onboard/examples/etcd/build.sh 3.5.5 --out explore-ob-etcd-hist-3.5.5
 set -euo pipefail
 V="${1:-3.6.15}"
 declare -A SHA=(
@@ -29,4 +31,4 @@ tar -xzf "$DL/$T" -C "$X"
 mkdir -p "$HERE/etcd-v$V"
 install -m 0755 "$X/etcd-v$V-linux-amd64/etcd" "$X/etcd-v$V-linux-amd64/etcdctl" "$HERE/etcd-v$V/"
 PY3="${HYDO_PY3:-$(command -v python3 || ls /nix/store/*python3-3.11*/bin/python3 | head -1)}"
-"$PY3" "$HERE/../../hydo-build" "$HERE/hydo.yaml" --set "version=$V" --out "explore-ob-etcd-$V" "${@:2}"
+"$PY3" "$HERE/../../hydo-build" "$HERE/${HYDO_ETCD_MANIFEST:-hydo.yaml}" --set "version=$V" --out "explore-ob-etcd-$V" "${@:2}"
