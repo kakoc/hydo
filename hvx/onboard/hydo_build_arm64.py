@@ -182,6 +182,8 @@ def build(m, manifest_path, out, bdir, H, oci=None):
         f.write(prelude)
     shutil.copy(manifest_path, os.path.join(R, "etc/hydo/hydo.yaml"))
     H["install_init"](m, os.path.join(R, "sbin/init"))
+    if "_compose_stage" in H:
+        H["_compose_stage"](m, R)      # the test composer (hydo_composer.py); a no-op without a test plan
     oci_meta = H["_oci_stage"](oci, R, T["busybox"], bdir, out + "-arm64")   # services[].image
     with open(os.path.join(R, "init"), "w") as f:
         f.write(SHIM)

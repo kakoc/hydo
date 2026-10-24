@@ -1,0 +1,33 @@
+# Hints for the demo order service (hvx/grpcgen/demo): what the generated requests must look
+# like to be valid for this API, and how the client behaves.
+target: 127.0.0.1:7070
+deadline_ms: 1000
+seed: 1
+steps: {calls: 2, concurrency: 1}
+rpcs:
+  Create:
+    weight: 3
+    retry: {attempts: 4, backoff_ms: 100}     # retry an unknown outcome with the same request_id
+    outcome_id: request_id                    # acked request_ids -> $HYDO_ACKED
+    fields:
+      request_id: {unique: true, prefix: r}
+      customer: {choice: [alice, bob, carol]}
+      amount_cents: {range: [1, 50000]}
+      items: {len: [1, 3]}
+      items.sku: {format: digits, len: [3, 3], prefix: sku-}
+      items.qty: {range: [1, 5]}
+      labels: {len: [0, 2]}
+  Get:
+    fields:
+      id: {from: Create.id}                   # an order id an earlier Create returned
+  Cancel:
+    retry: {attempts: 1, backoff_ms: 100}
+    outcome_id: id
+    fields:
+      id: {from: Create.id}
+      reason: {choice: [changed-mind, duplicate, fraud]}
+  List:
+    fields:
+      customer: {choice: [alice, bob, carol, ""]}
+      page_size: {range: [1, 20]}
+      page_token: {omit: true}

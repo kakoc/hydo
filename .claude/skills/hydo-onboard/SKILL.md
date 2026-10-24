@@ -16,6 +16,19 @@ examples: `hvx/onboard/examples/redis/hydo.yaml` (one service) and
 Work in this order. Write the manifest to `hvx/onboard/projects/<name>/hydo.yaml` unless the
 user names another place, with any helper scripts next to it.
 
+**If the project has a `docker-compose.yaml`, start from it:** run
+`hvx/onboard/hydo-compose <docker-compose.yaml> --out hvx/onboard/projects/<name>/hydo.yaml`
+(or `hydo compose ...` from a release). It writes the services (images pinned by digest,
+commands, env, readiness from the healthchecks, ports, volumes on the data disk, each service on
+its own loopback `addr:` with the Compose names in `/etc/hosts`), a `fetch-images.sh` that copies
+the images by digest, and a lock file; it prints warnings for what it could not map. Then do
+steps 1 and 4-9 below on top of it: read every warning (port collisions and bind mounts the
+program writes to need a hand fix), replace the `TODO` workload and invariant, check
+`guest.ram_mib` / `guest.cpu`, and keep the generated comments that say where each value came
+from. MANIFEST.md, "From Docker Compose", is the reference for the mapping;
+`hvx/onboard/examples/compose-voting/` is a worked example (`hydo.generated.yaml` = the raw
+import, `hydo.yaml` = after the hand edits).
+
 ## 1. Inventory how the project runs
 
 Read, in roughly this order, and note what each says about processes, ports, data and
@@ -101,6 +114,30 @@ request).
 - An existing integration test is usable only if it is deterministic and can run a step
   range (`$HYDO_FROM`..`$HYDO_TO`).
 - 20–50 steps is a good size. Set `workload.timeout`.
+
+### If the system's inputs are gRPC endpoints
+
+Do not write a client per RPC. Generate the drivers (`MANIFEST.md`, "gRPC services"):
+
+1. Find the `.proto` files (or a compiled descriptor set; or, if the server enables gRPC
+   server reflection, its address). If the service has no `.proto` (a hand-written
+   `grpc.ServiceDesc`), write one that matches it exactly: package, service and method names,
+   request and response types.
+2. Write a hints file from the API's documentation and validation code: `target`; a
+   `deadline_ms` like the real clients'; per RPC a `weight`; ranges, choices and lengths for
+   fields the server validates; `unique: true` for idempotency keys and ids the client
+   chooses; `from: <Rpc>.<field>` for ids an earlier response returns (Get/Cancel/Delete of a
+   created entity); `retry` with `attempts` for RPCs real clients retry, and `outcome_id` for
+   the field that identifies an operation in `$HYDO_ACKED`.
+3. Run `hvx/onboard/hydo-grpc-gen <proto dir> --hints hints.yaml --out <dir next to
+   hydo.yaml>` and merge `<dir>/hydo.grpc.yaml` into the manifest: files, `env:`, a `test:`
+   section with one `parallel_driver` per RPC (the test composer) and `workload.retry`; or copy
+   `<dir>/workload/` into `hydo/workload/`. Use the commented numbered-steps `workload:` only
+   when the invariants need one operation per step.
+   Check the plan with `hydo-grpc gen <rpc> 5` (requests look valid?) and `hydo-grpc list`.
+4. Invariants stay hand-written; use `hydo-grpc call <rpc> '<json>'` (exit 0 / 1 / 2) for
+   read-backs, and `$HYDO_ACKED` / `$HYDO_OUTCOMES` for what the client was told. Example:
+   `hvx/grpcgen/demo/hydo.yaml`.
 
 ## 5. Propose invariants
 

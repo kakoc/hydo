@@ -1,0 +1,9 @@
+#!/bin/sh
+# a GET of an earlier key and an LRANGE of a list, any time (also during faults), recorded
+. /hydo/workload/helper_lib.sh
+id=$HYDO_CMD_ID; k=k:$((HYDO_SEED % (id + 1))); l=l$((HYDO_SEED % 3))
+hydo_hist kv $id invoke read $k
+if v=$(R GET $k); then hydo_hist kv $id ok read $k ${v:-nil}; else hydo_hist kv $id info read $k; fi
+hydo_hist log $id invoke read $l
+if out=$(R LRANGE $l 0 -1); then hydo_hist log $id ok read $l $(printf '%s' "$out" | list_tok)
+else hydo_hist log $id info read $l; exit 1; fi

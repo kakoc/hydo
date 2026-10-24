@@ -148,7 +148,7 @@ class Adaptive:
         self.points.append((ex.render_fc(s["F"])[2:], s))
         self.by_key[key] = i
         self.stage[i] = stage
-        text = ex.render(ex.add_turns(ex.add_buggify(ex.add_preempt(ex.add_concurrency(ex.add_timing(s, i), i), i), i), i))
+        text = ex.render(ex.add_compose(ex.add_turns(ex.add_buggify(ex.add_preempt(ex.add_concurrency(ex.add_timing(s, i), i), i), i), i), i))
         self.items.append(("seed-%d" % i, text))
         return ("seed-%d" % i, text)
 

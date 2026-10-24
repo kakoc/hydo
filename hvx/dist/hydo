@@ -4,22 +4,32 @@
     hydo doctor                                    check this machine and the installation
     hydo module build|load|unload|status [--name NAME] [--dry-run]
                                                    build and (un)load the hvx kernel module
+    hydo module udev install|remove|status [--name NAME] [--group GROUP] [--dry-run]
+                                                   optional: give /dev/hvx to a group, so runs need no sudo
+    hydo compose <docker-compose.yaml> [--out hydo.yaml] [hydo-compose options]
+                                                   start a hydo.yaml from a Compose file (MANIFEST.md)
     hydo build   <hydo.yaml> [--out DIR] [--set KEY=VALUE ...]
                                                    compile the manifest into a guest disk image
     hydo run     [IMG] "<schedule>" [--image IMG]  run one schedule from a fresh boot
     hydo repro   <run dir | explore dir | "<schedule>"> [--image IMG]
                                                    run again and compare the fingerprints
+    hydo repro   --regressions [IMG]               replay the plan's saved regressions (hydo/regressions/)
+    hydo save    <explore dir> [--to hydo/regressions]
+                                                   save the minimal schedules of an exploration as regressions
     hydo explore [IMG] [--seeds 1-20] [--strategy random|swarm|process|...] [--workers N]
                  [--out DIR] [any other explore.py option]
                                                    generate, run, re-run and shrink schedules
     hydo report  [DIR]                             print the report of the last (or a given) exploration
 
-IMG defaults to the one *-disk.img in ./hydo-out (what `hydo build` wrote there). Runs open
-/dev/hvx through sudo while holding the shared module lock; `hydo module load/unload` take it
+IMG defaults to the one *-disk.img in ./hydo-out, or in ./.hydo for a project whose manifest is
+hydo/hydo.yaml (the agreed repository layout; `hydo build` with no manifest uses ./hydo/hydo.yaml).
+Runs open /dev/hvx ($HVX_DEV) while holding the shared module lock; `hydo module load/unload` take it
 exclusively, so a reload never pulls the module from under a running VM. The lock file is
-$HYDO_LOCK (default ~/.hvx-module.lock). Plain Python 3.9+, no packages.
+$HYDO_LOCK (default ~/.hvx-module.lock). A run uses sudo only when you cannot open the device
+yourself (see `hydo module udev`; HYDO_SUDO=1 forces sudo). Plain Python 3.9+, no packages.
 """
-import glob, hashlib, importlib.machinery, importlib.util, json, os, platform, re, shutil, subprocess, sys, time, types
+import getpass, glob, grp, hashlib, importlib.machinery, importlib.util, json, os, platform, pwd, re, shutil, \
+    subprocess, sys, tempfile, time, types
 
 R = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))     # the release root
 HVX = os.path.join(R, "hvx")
@@ -35,8 +45,47 @@ INITRD = os.path.join(GUEST, "initramfs-kafka.cpio.gz")
 STORE = os.path.join(GUEST, "store")               # nix/store/<path>: the guest-side closures (tc, iptables),
 CLOSURES = os.path.join(GUEST, "store-closures.txt")  # unpacked from guest/store.tar by install.sh
 OUT = "hydo-out"
-LOCK = os.environ.get("HYDO_LOCK") or os.path.expanduser("~/.hvx-module.lock")
-SNAP_DIR = os.environ.get("HYDO_SNAP_DIR") or "/var/tmp/hvx-snap"
+PROJECT_OUT = ".hydo"                               # the build cache of a project in the hydo/ folder layout
+BASE_LOCK = os.environ.get("HYDO_LOCK") or os.path.expanduser("~/.hvx-module.lock")
+DEV = os.environ.get("HVX_DEV") or "/dev/hvx"     # the device runs open (another name: a side module)
+DEVNAME = os.path.basename(DEV)
+UDEV_DIR = "/etc/udev/rules.d"
+
+
+def module_lock(name):
+    """The main module shares the run lock; a side module (--name) gets its own lock file."""
+    return BASE_LOCK if name == "hvx" else "%s.%s" % (BASE_LOCK, name)
+
+
+LOCK = module_lock(DEVNAME)                       # the lock a run on DEV holds (shared)
+
+
+def dev_usable(dev=DEV):
+    """True when this user can read and write the device without sudo (what libexec/hvx-run
+    tests before it drops sudo), False when not, None when the device does not exist."""
+    if not os.path.exists(dev):
+        return None
+    return os.access(dev, os.R_OK | os.W_OK)
+
+
+def uses_sudo():
+    return os.environ.get("HYDO_SUDO") == "1" or not dev_usable()
+
+
+def snap_dir():
+    """Where runs keep their snapshots. A run without sudo cannot write into a /var/tmp/hvx-snap
+    that earlier sudo runs created (root, mode 0700); it then uses /var/tmp/hvx-snap-<uid>.
+    The directory does not affect any result."""
+    d = os.environ.get("HYDO_SNAP_DIR")
+    if d:
+        return d
+    d = "/var/tmp/hvx-snap"
+    if not uses_sudo() and os.path.isdir(d) and not os.access(d, os.W_OK | os.X_OK):
+        d = "/var/tmp/hvx-snap-%d" % os.getuid()
+    return d
+
+
+SNAP_DIR = snap_dir()
 
 
 def die(msg, rc=1):
@@ -66,6 +115,8 @@ def tool_env():
     env["HYDO_HVX_RUN"] = os.path.join(LIBEXEC, "hvx-run")
     env["HYDO_LOCK"] = LOCK
     env["HYDO_SNAP_DIR"] = SNAP_DIR
+    if DEV != "/dev/hvx":
+        env["HVX_DEV"] = DEV           # hvx_explore opens $HVX_DEV; hvx-run passes it through sudo
     env["HYDO_CLI"] = "1"
     return env
 
@@ -145,7 +196,7 @@ def own_by_root(hb):
         cmdf = out + ".owners"
         with open(cmdf, "w") as f:
             f.write("\n".join(lines) + "\n")
-        r = subprocess.run([T["faketime"], hb.FAKE_TS, dbg, "-w", "-f", cmdf, out],
+        r = subprocess.run([T["faketime"], hb.FAKE_TS, dbg, "-w", "-f", cmdf, out], env=hb.faketime_env(),
                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         errs = [x for x in r.stderr.splitlines() if x.strip() and not x.startswith("debugfs ")]
         os.unlink(cmdf)
@@ -154,11 +205,29 @@ def own_by_root(hb):
     hb.mkfs = mkfs
 
 
+def project_out(manifest):
+    """Where `hydo build` writes: ./.hydo for a manifest in a hydo/ folder (the repository
+    layout: hydo/ holds the plan, .hydo/ the git-ignored build cache), else ./hydo-out."""
+    return PROJECT_OUT if os.path.basename(os.path.dirname(os.path.abspath(manifest))) == "hydo" else OUT
+
+
+def cmd_compose(argv):
+    """hydo compose: hvx/onboard/hydo_compose.py (the Compose importer), unchanged."""
+    if not argv or argv[0] in ("-h", "--help"):
+        die("usage: hydo compose <docker-compose.yaml> [--out hydo.yaml] [--images-dir DIR] [--env-file F] "
+            "[--profile P] [--use-env] [--no-resolve] [--lock FILE]")
+    sys.path.insert(0, ONBOARD)
+    import hydo_compose
+    return hydo_compose.main(list(argv))
+
+
 def cmd_build(argv):
+    if (not argv or argv[0].startswith("-")) and os.path.isfile(os.path.join("hydo", "hydo.yaml")):
+        argv = [os.path.join("hydo", "hydo.yaml")] + list(argv)
     if not argv or argv[0].startswith("-"):
-        die("usage: hydo build <hydo.yaml> [--out DIR] [--set KEY=VALUE ...]")
+        die("usage: hydo build <hydo.yaml> [--out DIR] [--set KEY=VALUE ...]   (no manifest: ./hydo/hydo.yaml)")
     manifest, rest = argv[0], list(argv[1:])
-    out = take(rest, "--out", OUT)
+    out = take(rest, "--out", project_out(manifest))
     if "--arch" in rest:
         die("this is the x86_64 Linux release; arm64 images are built with the Mac release")
     T = {   # the bundled host tools (hydo-build's own defaults are /nix/store paths)
@@ -192,8 +261,11 @@ def find_image(args):
         img = args.pop(0)
     if img is None:
         imgs = sorted(glob.glob(os.path.join(OUT, "*-disk.img")))
+        if not imgs:
+            imgs = sorted(glob.glob(os.path.join(PROJECT_OUT, "*-disk.img")))
         if len(imgs) != 1:
-            die("no image given and %d *-disk.img in ./%s (run `hydo build hydo.yaml` here, or pass --image)" % (len(imgs), OUT))
+            die("no image given and %d *-disk.img in ./%s or ./%s (run `hydo build hydo.yaml` here, or pass --image)" % (
+                len(imgs), OUT, PROJECT_OUT))
         img = imgs[0]
     if not os.path.isfile(img):
         die("no such image: %s" % img)
@@ -229,6 +301,7 @@ def run_one(image, sched, outdir, eargs, quiet=False):
     os.makedirs(outdir, exist_ok=True)
     if not os.access(ENGINE, os.X_OK):
         die("%s is not built (run install.sh again)" % ENGINE)
+    # libexec/hvx-run drops the "sudo" when this user can open the device (hydo module udev)
     cmd = [os.path.join(LIBEXEC, "hvx-run"), "sudo", "env", "HVX_SNAP_DIR=" + SNAP_DIR, ENGINE] + eargs + \
           ["one", BZIMAGE, INITRD, image, os.path.abspath(outdir), sched]
     p = subprocess.run(cmd, env=tool_env(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -244,6 +317,29 @@ def run_one(image, sched, outdir, eargs, quiet=False):
                     "line": line.strip()}
     sys.stderr.write(text[-3000:])
     die("the run produced no RESULT line (output above; full log in %s)" % os.path.join(outdir, "engine.log"))
+
+
+def host_checks_one(outdir, res):
+    """hvx/HISTORIES.md: a run whose console declares history checks (HYDO-CHECK lines) is
+    checked here on the host: one.log (+ one.recovery.log) -> one.checks.log (HYDO-ASSERT
+    records), one.checks.txt (explanations), and the combined verdict in res["verdict"]."""
+    srcs = []
+    for suffix in ("", ".recovery"):
+        p = os.path.join(outdir, "one%s.log" % suffix)
+        if os.path.exists(p):
+            srcs.append(("one" + suffix, open(p, errors="replace").read()))
+    if not any("HYDO-CHECK " in t for _, t in srcs):
+        return res
+    sys.path.insert(0, os.path.join(HVX, "history"))
+    import hydohist
+    r = hydohist.run_checks(srcs, res.get("verdict"))
+    with open(os.path.join(outdir, "one.checks.log"), "w") as f:
+        f.write("".join(x + "\n" for x in r["records"]))
+    with open(os.path.join(outdir, "one.checks.txt"), "w") as f:
+        f.write(r["report"] + "\n" + r["verdict"] + "\n")
+    res["guest_verdict"], res["verdict"] = res.get("verdict"), r["verdict"]
+    print("hydo: history checks: %s   (explanations in %s)" % (r["verdict"], os.path.join(outdir, "one.checks.txt")))
+    return res
 
 
 def sha256(path):
@@ -269,7 +365,7 @@ def cmd_run(argv):
     sched = args[0]
     outdir = outdir or new_run_dir()
     eargs = engine_args_for(image)
-    res = run_one(image, sched, outdir, eargs)
+    res = host_checks_one(outdir, run_one(image, sched, outdir, eargs))
     rec = {"image": image, "image_sha256": sha256(image), "schedule": sched, "engine_args": eargs, **res}
     with open(os.path.join(outdir, "run.json"), "w") as f:
         json.dump(rec, f, indent=1)
@@ -300,6 +396,9 @@ def repro_list(d):
 
 def cmd_repro(argv):
     args = list(argv)
+    if "--regressions" in args:
+        args.remove("--regressions")
+        return cmd_regressions(args)
     if args and os.path.isdir(args[0]):
         d = args.pop(0)
         items = repro_list(d)
@@ -309,7 +408,8 @@ def cmd_repro(argv):
         base = os.path.join(d, "repro-%s" % time.strftime("%Y%m%d-%H%M%S"))
         same = 0
         for k, (label, image, sched, fp, eargs) in enumerate(items):
-            res = run_one(image, sched, os.path.join(base, "%03d" % k), eargs, quiet=True)
+            res = host_checks_one(os.path.join(base, "%03d" % k),
+                                  run_one(image, sched, os.path.join(base, "%03d" % k), eargs, quiet=True))
             ok = res["fp"] == fp
             same += ok
             print("%-12s %s  fp=%s (recorded %s)  %s\n             %s" % (
@@ -317,6 +417,82 @@ def cmd_repro(argv):
         print("hydo: %d of %d reproduced with the recorded fingerprint (consoles under %s)" % (same, len(items), base))
         return 0 if same == len(items) else 1
     return cmd_run(argv)
+
+
+# ---------------------------------------------------------------- regressions (the test composer's plan)
+def plan_regressions(image):
+    """The regressions the image was built with: test.regressions of its plan plus
+    hydo/regressions/*.schedule (both end up in /etc/hydo/compose.json, hydo_composer.py)."""
+    sys.path.insert(0, EXPLORE)
+    os.environ["PATH"] = tool_env()["PATH"]
+    import manifest_space
+    return manifest_space.embedded_compose(image) or {}
+
+
+def regression_ok(expect, res):
+    v = res["verdict"]           # explore.py's verdict_kind: an OK verdict, else a VIOLATION, else an error
+    if expect == "ok":
+        return "HYDO-ORACLE: OK" in v
+    if expect == "violation":
+        return "HYDO-ORACLE: OK" not in v and "VIOLATION" in v
+    return expect == "fp=" + res["fp"]
+
+
+def cmd_regressions(args):
+    """Replay every saved regression from a fresh boot and check its expectation: `ok` (the
+    fixed bug stays fixed: the run passes), `violation` (a known open bug still fails), or
+    `fp=<hex>` (bit for bit the recorded run)."""
+    image = find_image(args)
+    meta = plan_regressions(image)
+    regs = meta.get("regressions") or []
+    sys.path.insert(0, ONBOARD)
+    import hydo_composer
+    if not regs:
+        print("hydo: %s carries no regressions (hydo/regressions/*.schedule or test.regressions in the plan)" % image)
+        return 0
+    base = os.path.join(os.path.dirname(image), "regressions-%s" % time.strftime("%Y%m%d-%H%M%S"))
+    eargs = engine_args_for(image)
+    bad = 0
+    for k, r in enumerate(regs):
+        w = hydo_composer.regression_warning(r, meta)
+        if w:
+            print("hydo: warning: " + w)
+        res = run_one(image, r["schedule"], os.path.join(base, "%03d-%s" % (k, r["name"])), eargs, quiet=True)
+        ok = regression_ok(r["expect"], res)
+        bad += not ok
+        print("%-5s %s  expect %s  fp=%s  %s\n      %s" % ("PASS" if ok else "FAIL", r["name"], r["expect"], res["fp"],
+                                                          r["schedule"], res["verdict"][:160]))
+    print("hydo: %d of %d regressions as expected (consoles under %s)" % (len(regs) - bad, len(regs), base))
+    return 1 if bad else 0
+
+
+def cmd_save(argv):
+    """Write each minimal schedule of an exploration as hydo/regressions/<name>.schedule with
+    `expect: violation` (edit it to `ok` once the bug is fixed)."""
+    args = list(argv)
+    to = take(args, "--to", os.path.join("hydo", "regressions"))
+    if len(args) != 1 or not os.path.isfile(os.path.join(args[0], "report.json")):
+        die("usage: hydo save <explore dir> [--to hydo/regressions]")
+    j = json.load(open(os.path.join(args[0], "report.json")))
+    os.makedirs(to, exist_ok=True)
+    n = 0
+    for x in j.get("shrunk", []):
+        name = re.sub(r"[^A-Za-z0-9_.-]+", "-", "%s-%s" % (x["class"], x["signature"]))[:60].strip("-")
+        p = os.path.join(to, name + ".schedule")
+        if os.path.exists(p):
+            print("hydo: %s exists, kept" % p)
+            continue
+        with open(p, "w") as f:
+            f.write("# found by `hydo explore` (seed %s): %s\n# verdict: %s\n" % (x["from_seed"], x["class"], x["min_verdict"][:200]))
+            if x.get("composition"):
+                f.write("# composition: %s\n" % x["composition"][:400])
+            if x.get("commands") is not None:      # what W= refers to (hydo_composer.regression_warning)
+                f.write("# commands: %s\n" % " ".join(x["commands"]))
+            f.write("# expect: violation      (change to ok when the bug is fixed)\n%s\n" % x["minimal"])
+        n += 1
+        print("hydo: wrote %s" % p)
+    print("hydo: %d regressions saved; `hydo build` stages them, `hydo repro --regressions` replays them" % n)
+    return 0
 
 
 # ---------------------------------------------------------------- explore / report
@@ -416,11 +592,6 @@ def module_build(name):
     return 0
 
 
-def module_lock(name):
-    """The main module shares the run lock; a side module (--name) gets its own lock file."""
-    return LOCK if name == "hvx" else "%s.%s" % (LOCK, name)
-
-
 def module_load(name, dry, params):
     ko = module_ko(name)
     if not os.path.isfile(ko) and not dry:
@@ -441,6 +612,8 @@ def module_load(name, dry, params):
             steps.append("sudo rmmod %s" % name)
     steps.append("sudo insmod %s%s" % (ko, "".join(" " + p for p in params)))
     steps.append("test -c /dev/%s" % name)
+    if os.path.exists(udev_rule_path(name)):    # let udev give the new node its group before runs start
+        steps.append("sudo udevadm settle")
     lk = module_lock(name)
     script = " && ".join(steps)
     print("hydo: %s lock %s exclusively (waits for running VMs), then: %s" % ("would take" if dry else "taking", lk, script))
@@ -481,19 +654,150 @@ def module_status(name):
                         "DIFFERENT source from this release (the engine and the module may disagree on the ioctl ABI)"))
     dev = "/dev/%s" % name
     if os.path.exists(dev):
-        st = os.stat(dev)
-        print("  %s: mode %o, owner uid %d (runs use sudo)" % (dev, st.st_mode & 0o777, st.st_uid))
+        print("  %s" % dev_line(dev))
     print("  kvm_intel: %s" % ("LOADED (must be unloaded for hvx; `hydo module load` does it)" if "kvm_intel" in mods else "not loaded"))
     lk = module_lock(name)
     print("  lock %s: %d holder(s) now" % (lk, lock_holders(lk)))
     return 0
 
 
+def group_name(gid):
+    try:
+        return grp.getgrgid(gid).gr_name
+    except KeyError:
+        return str(gid)
+
+
+def in_group(gid):
+    return gid == os.getgid() or gid in os.getgroups()
+
+
+def dev_line(dev):
+    """One line about who can open the device: mode, group, and whether runs need sudo."""
+    st = os.stat(dev)
+    g = group_name(st.st_gid)
+    who = ("you can open it: runs need no sudo" if dev_usable(dev) else
+           "you are not in group %s: log out and in again (or `newgrp %s`) after being added" % (g, g)
+           if st.st_mode & 0o060 == 0o060 and not in_group(st.st_gid) else
+           "only root can open it: runs use sudo (`hydo module udev install` changes that)")
+    return "%s: mode %o, owner %s, group %s; %s" % (dev, st.st_mode & 0o777, pwd.getpwuid(st.st_uid).pw_name
+                                                    if st.st_uid == 0 else st.st_uid, g, who)
+
+
+def udev_rule_path(name):
+    return os.path.join(UDEV_DIR, "70-hydo-%s.rules" % name)
+
+
+def udev_rule_text(name, group, mode):
+    return ("# Installed by `hydo module udev install`; `hydo module udev remove` deletes it.\n"
+            "# /dev/%s (the hvx kernel module) belongs to group %s with mode %s, so members of the group\n"
+            "# run hydo guests without sudo. Anyone in the group can run guests through the module: it\n"
+            "# runs in the kernel, takes a CPU and up to 3 GiB of memory per guest, and is a test tool that\n"
+            "# was not hardened against hostile users. Give the group only to people you would give sudo.\n"
+            'KERNEL=="%s", SUBSYSTEM=="misc", GROUP="%s", MODE="%s"\n' % (name, group, mode, name, group, mode))
+
+
+def invoking_user():
+    return os.environ.get("SUDO_USER") or getpass.getuser()
+
+
+def module_udev(verb, name, group, mode, dry, adduser):
+    """Install or remove the optional udev rule that gives /dev/<name> to a group."""
+    if not re.fullmatch(r"[a-z][a-z0-9_]*", name):
+        die("--name: lowercase letters, digits and '_'")
+    if not re.fullmatch(r"[a-z_][a-z0-9_-]*", group):
+        die("--group: a group name (lowercase letters, digits, '_' and '-')")
+    if not re.fullmatch(r"0?6[0-7]0", mode):
+        die("--mode: 0660 (group read/write) or similar; the owner stays root")
+    mode = mode if mode.startswith("0") else "0" + mode
+    rule, dev = udev_rule_path(name), "/dev/%s" % name
+    if verb == "status":
+        if os.path.exists(rule):
+            line = [l for l in open(rule) if l.startswith("KERNEL==")]
+            print("udev rule %s: %s" % (rule, line[0].strip() if line else "present"))
+        else:
+            print("udev rule %s: not installed (runs on %s use sudo unless you can open it)" % (rule, dev))
+        print("  %s" % (dev_line(dev) if os.path.exists(dev) else "%s: not present (module %s not loaded)" % (dev, name)))
+        return 0
+    steps = []                      # (description, argv)
+    if verb == "install":
+        try:
+            g = grp.getgrnam(group)
+        except KeyError:
+            g = None
+            steps.append(("create the group", ["sudo", "groupadd", "--system", group]))
+        tmp = tempfile.NamedTemporaryFile("w", prefix="hydo-udev-", suffix=".rules", delete=False)
+        tmp.write(udev_rule_text(name, group, mode))
+        tmp.close()
+        os.chmod(tmp.name, 0o644)
+        steps.append(("install the rule", ["sudo", "install", "-m", "0644", "-o", "root", "-g", "root", tmp.name, rule]))
+        steps.append(("reload the udev rules", ["sudo", "udevadm", "control", "--reload-rules"]))
+        if os.path.exists(dev):     # already loaded: apply now (a later load applies it by itself)
+            steps.append(("apply it to %s" % dev, ["sudo", "udevadm", "trigger", "--action=change",
+                                                   "--subsystem-match=misc", "--sysname-match=%s" % name]))
+            steps.append(("wait for udev", ["sudo", "udevadm", "settle"]))
+        user = invoking_user()
+        member = g is not None and (user in g.gr_mem or pwd.getpwnam(user).pw_gid == g.gr_gid)
+        if adduser and not member:
+            steps.append(("add %s to the group" % user, ["sudo", "usermod", "-aG", group, user]))
+    else:
+        if not os.path.exists(rule):
+            print("hydo: no udev rule %s; nothing to remove" % rule)
+            return 0
+        steps.append(("remove the rule", ["sudo", "rm", "-f", rule]))
+        steps.append(("reload the udev rules", ["sudo", "udevadm", "control", "--reload-rules"]))
+        if os.path.exists(dev):     # back to the module's own default (root, 0600)
+            steps.append(("give %s back to root" % dev, ["sudo", "chown", "root:root", dev]))
+            steps.append(("mode 0600", ["sudo", "chmod", "0600", dev]))
+    for what, argv in steps:
+        print("hydo: %s%s: %s" % ("would " if dry else "", what, " ".join(argv)))
+        if not dry and subprocess.run(argv).returncode != 0:
+            die("%s failed" % what)
+    if verb == "install":
+        os.unlink(tmp.name)
+        if dry:
+            return 0
+        if os.path.exists(dev):
+            print("hydo: %s" % dev_line(dev))
+        else:
+            print("hydo: %s will belong to group %s (mode %s) from the next `hydo module load%s`." % (
+                dev, group, mode, "" if name == "hvx" else " --name %s" % name))
+        print("hydo: anyone in group %s can run guests through the hvx module without sudo. The module runs\n"
+              "      in the kernel and is a test tool not hardened against hostile users: give the group only\n"
+              "      to people you would give sudo. Loading and unloading the module still need sudo." % group)
+        if adduser and not member:
+            print("hydo: %s was added to group %s; log out and in again (or run `newgrp %s`) before runs "
+                  "can use it." % (user, group, group))
+        elif not adduser and not member:
+            print("hydo: %s is not in group %s (sudo usermod -aG %s %s)" % (user, group, group, user))
+    elif not dry:
+        print("hydo: rule removed; %s is root's again (mode 0600). Group %s and its members were not changed%s." % (
+            dev, group, " (`sudo groupdel hydo` removes the group that `install` created, if nothing else uses it)"
+            if group == "hydo" else ""))
+    return 0
+
+
 def cmd_module(argv):
     args = list(argv)
-    if not args or args[0] not in ("build", "load", "unload", "status"):
-        die("usage: hydo module build|load|unload|status [--name NAME] [--dry-run] [--param KEY=VALUE ...]")
+    if not args or args[0] not in ("build", "load", "unload", "status", "udev"):
+        die("usage: hydo module build|load|unload|status [--name NAME] [--dry-run] [--param KEY=VALUE ...]\n"
+            "       hydo module udev install|remove|status [--name NAME] [--group GROUP] [--mode 0660] "
+            "[--no-adduser] [--dry-run]")
     verb = args.pop(0)
+    if verb == "udev":
+        if not args or args[0] not in ("install", "remove", "status"):
+            die("usage: hydo module udev install|remove|status [--name NAME] [--group GROUP] [--mode 0660] "
+                "[--no-adduser] [--dry-run]")
+        uverb = args.pop(0)
+        name = take(args, "--name", "hvx")
+        group = take(args, "--group", "hydo")
+        mode = take(args, "--mode", "0660")
+        dry = "--dry-run" in args
+        adduser = "--no-adduser" not in args
+        args = [a for a in args if a not in ("--dry-run", "--no-adduser")]
+        if args:
+            die("unexpected arguments: %s" % " ".join(args))
+        return module_udev(uverb, name, group, mode, dry, adduser)
     name = take(args, "--name", "hvx")
     dry = "--dry-run" in args
     params = []
@@ -545,12 +849,25 @@ def cmd_doctor(argv):
     check(sys.version_info >= (3, 9), "Python 3.9+ (found %s)" % platform.python_version(), "install python3 >= 3.9")
     for t, why in (("cc", "builds the run engine and the report tool"), ("make", "builds the kernel module"),
                    ("flock", "the module lock, util-linux"), ("xz", "unpacks guest kernel modules for network faults"),
-                   ("sudo", "runs open /dev/hvx as root"), ("modinfo", "module checks, kmod")):
+                   ("sudo", "loads the module; runs use it only if you cannot open the device"), ("modinfo", "module checks, kmod")):
         check(shutil.which(t) is not None, "%s (%s)" % (t, why), "install %s" % t)
     sudo_ok = shutil.which("sudo") and subprocess.run(["sudo", "-n", "true"], stdout=subprocess.DEVNULL,
                                                       stderr=subprocess.DEVNULL).returncode == 0
-    check(bool(sudo_ok), "sudo without a password prompt", "runs call `sudo`; they will ask for a password "
-          "(or give /dev/hvx to your group and drop sudo -- see README)", warn=True)
+    usable = dev_usable() and os.environ.get("HYDO_SUDO") != "1"
+    if usable is not None and os.path.exists(DEV):
+        print("     %s" % dev_line(DEV))
+    if usable:
+        check(True, "%s can be opened by you: runs do not use sudo" % DEV)
+        check(bool(sudo_ok), "sudo without a password prompt (only module load/unload need it)",
+              "`hydo module load/unload` will ask for a password", warn=True)
+    else:
+        check(bool(sudo_ok), "runs use sudo (you cannot open %s yourself), and sudo asks no password" % DEV,
+              "a password prompt can block the explorer's workers: `hydo module udev install` (once, with "
+              "sudo) gives %s to a group, after which runs need no sudo -- see README" % DEV, warn=True)
+    if not uses_sudo():
+        sd = SNAP_DIR if os.path.isdir(SNAP_DIR) else os.path.dirname(SNAP_DIR.rstrip("/")) or "/"
+        check(os.access(sd, os.W_OK | os.X_OK), "snapshot directory %s writable by you" % SNAP_DIR,
+              "set HYDO_SNAP_DIR to a directory you can write (on a real disk, not tmpfs)")
     kdir = "/lib/modules/%s/build" % platform.release()
     check(os.path.isdir(kdir), "kernel headers for %s" % platform.release(),
           "install them (Debian/Ubuntu: sudo apt install linux-headers-$(uname -r))")
@@ -565,6 +882,9 @@ def cmd_doctor(argv):
     built, live = srcversion_file(module_ko("hvx")), srcversion_loaded("hvx")
     check(built is not None, "hvx.ko built by this release", "hydo module build", warn=True)
     check("hvx" in mods and os.path.exists("/dev/hvx"), "hvx module loaded, /dev/hvx present", "hydo module load")
+    if DEV != "/dev/hvx":
+        check(os.path.exists(DEV), "%s present (HVX_DEV: runs use this side module)" % DEV,
+              "hydo module load --name %s" % DEVNAME)
     if built and live:
         check(built == live, "the loaded hvx is this release's source (srcversion %s)" % live,
               "the loaded module (srcversion %s) is not this release's (%s): run `hydo module load` "
@@ -592,8 +912,8 @@ def cmd_doctor(argv):
 
 
 def main():
-    cmds = {"build": cmd_build, "run": cmd_run, "repro": cmd_repro, "explore": cmd_explore,
-            "report": cmd_report, "doctor": cmd_doctor, "module": cmd_module}
+    cmds = {"compose": cmd_compose, "build": cmd_build, "run": cmd_run, "repro": cmd_repro, "explore": cmd_explore,
+            "report": cmd_report, "doctor": cmd_doctor, "module": cmd_module, "save": cmd_save}
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         print(__doc__)
         return 0 if len(sys.argv) >= 2 and sys.argv[1] in ("-h", "--help", "help") else 2

@@ -1,0 +1,39 @@
+name: shop
+services:
+  web:
+    image: example/web:1.0
+    depends_on:
+      api:
+        condition: service_healthy
+    ports: ["8080:80"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost/health | grep -q ok"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 1m
+  api:
+    image: example/api:2.3
+    user: "1000:1000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    expose: ["9000"]
+    healthcheck:
+      test: ["CMD", "/app/healthcheck", "--port", "9000"]
+  migrate:
+    image: example/api:2.3
+    command: ["/app/migrate", "up"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+  db:
+    image: postgres:16.4
+    environment:
+      POSTGRES_PASSWORD: example
+    healthcheck:
+      test: pg_isready -U postgres
+      interval: 2s

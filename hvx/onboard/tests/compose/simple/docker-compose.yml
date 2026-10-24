@@ -1,0 +1,11 @@
+# one service, Compose's common short forms
+services:
+  cache:
+    image: redis:7.2.4
+    command: redis-server --appendonly yes --save ""
+    environment:
+      - TZ=UTC
+      - EMPTY=
+    ports:
+      - "6380:6379"
+    restart: unless-stopped

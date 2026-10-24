@@ -1,0 +1,76 @@
+# hydo-proxy.yaml: hydo.yaml with a fault proxy in front of Redis -- the control project for the
+# protocol faults (H=, MANIFEST.md "Fake outside services"). The workload talks to the proxy
+# (port 6380), which forwards every connection to Redis (6379); H=redisp@..:reset|drop|delay make
+# answers slow, missing or reset. A client then sees an unknown outcome, which the invariant
+# allows: these faults must never produce a violation by themselves.
+# Build: hydo-build hvx/onboard/examples/redis/hydo-proxy.yaml --out explore-ob-redis-proxy
+#
+# The smallest useful manifest: one service (unmodified Redis 7.2), a 10-line shell
+# workload, one invariant. Build on the build box:
+#   HYDO_SEEDRNG=~/hydo/build/hvx_seedrng hvx/onboard/hydo-build hvx/onboard/examples/redis/hydo.yaml
+# Try:  disk=none | run              -> OK (every acknowledged write survives)
+#       disk=none | run C=12 R=everysec   -> Redis's documented fsync window after a power cut
+name: redis
+description: Redis with an append-only file; every acknowledged SET must survive.
+
+root:
+  files:
+    - {src: ~/hydo/build/redis-server, dst: /bin/redis-server, mode: "0755"}
+    - {src: ~/hydo/build/redis-cli, dst: /bin/redis-cli, mode: "0755"}
+  text:
+    /etc/redis.conf: |
+      port 6379
+      bind 127.0.0.1
+      dir /data/redis
+      save ""
+      appendonly yes
+      appendfsync always
+      hz 1
+      dynamic-hz no
+
+data:
+  size_mib: 64
+  dirs: [redis]
+
+services:
+  - name: redis
+    cmd: /bin/redis-server /etc/redis.conf
+    ready: /bin/redis-cli ping | grep -q PONG
+    port: 6379
+
+proxies:
+  - name: redisp
+    port: 6380
+    service: redis
+    protocol: tcp
+
+workload:
+  steps: 20                         # step i = SET k:i v<i>
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      r=$(timeout 2 /bin/redis-cli -p 6380 SET k:$i v$i 2>/dev/null)   # a 2 s client deadline
+      if [ "$r" = OK ]; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      i=$((i + 1))
+    done
+
+knobs:
+  - token: R
+    name: Redis appendfsync
+    default: always
+    values: [always, everysec, "no"]
+    set: /bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE
+
+invariants:
+  - id: redis.acked_writes_survive
+    msg: every SET the client saw acknowledged reads back with its value
+    cmd: |
+      lost=0
+      for i in $(cat $HYDO_ACKED); do
+        [ "$(/bin/redis-cli GET k:$i)" = "v$i" ] || { echo "key k:$i lost"; lost=1; break; }
+      done
+      [ $lost = 0 ] && echo "acked=$(wc -l < $HYDO_ACKED) all present"
+      [ $lost = 0 ]
+
+faults: [kill, pause, cut, clock, disk, protocol]

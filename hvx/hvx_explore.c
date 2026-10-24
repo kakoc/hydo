@@ -70,7 +70,13 @@
  *   q=<branches>  every turn this many guest conditional branches (the module's default is 2^20)
  *   qs=<hex>      seeded turn lengths in [1, q] (hvx.c: 1 + splitmix64(seed + (t+1)*GOLDEN) % q,
  *                 t = the turn number), with q= or the VM's current turn length
- * RESULT then also reports qn=<turns taken during the workload>. On a 1-vCPU VM these tokens
+ *   qb=<B>:<s>:<permille>  seeded bursts of short turns (hvx/FASTTURN.md, HVX_SET_TURNCTL): the
+ *                 branch clock is cut into windows of max(q, B) branches, a window holds a
+ *                 burst of B branches with chance permille/1000, and inside a burst every
+ *                 turn is s branches; seed qbs=<hex> (default 1)
+ *   qm=<n>        landing margin of turn ends in branches (default 256; see FASTTURN.md)
+ * RESULT then also reports qn=<turns taken during the workload> (and qbn=<turns that started
+ * in a burst> with qb=). On a 1-vCPU VM these tokens
  * give an ERROR verdict. The module has no explicit per-turn list (HVX_SET_SCHED takes one
  * length and one seed), so there is no explicit form; see TURNS.md.
  * Guest RAM: 1024 MiB unless "--ram-mib N" (or env HVX_EXPLORE_RAM_MIB) says otherwise,
@@ -478,6 +484,8 @@ struct sched {
 	uint64_t cf;
 	int q_on;		/* q=<branches> / qs=<hex>: vCPU turn lengths during the workload */
 	uint64_t q, qs;		/* q 0 = keep the VM's turn length; qs 0 = fixed turns */
+	int tc_on;		/* qb= / qbs= / qm=: HVX_SET_TURNCTL during the workload */
+	struct hvx_turnctl tc;
 };
 
 /* the turn policy to put back after a q= / qs= workload, and the turn count at its start */
@@ -558,6 +566,32 @@ static int parse_turns(const char *host, struct sched *sc)
 		sc->qs = strtoull(p, &end, 16);
 		if (end == p || !sc->qs || (*end && *end != ' ')) return -1;
 		sc->q_on = 1;
+	}
+	if ((p = host_tok(host, "qb="))) {	/* <B>:<s>:<permille> */
+		unsigned long long bl, bq, pm;
+		bl = strtoull(p, &end, 10);
+		if (end == p || *end != ':' || !bl) return -1;
+		p = end + 1;
+		bq = strtoull(p, &end, 10);
+		if (end == p || *end != ':' || !bq) return -1;
+		p = end + 1;
+		pm = strtoull(p, &end, 10);
+		if (end == p || pm > 1000 || (*end && *end != ' ')) return -1;
+		sc->tc.burst_len = bl;
+		sc->tc.burst_q = bq;
+		sc->tc.burst_permille = (uint32_t)pm;
+		if (!sc->tc.burst_seed) sc->tc.burst_seed = 1;
+		sc->tc_on = sc->q_on = 1;
+	}
+	if ((p = host_tok(host, "qbs="))) {
+		sc->tc.burst_seed = strtoull(p, &end, 16);
+		if (end == p || !sc->tc.burst_seed || (*end && *end != ' ')) return -1;
+		if (!sc->tc.burst_len) return -1;	/* qbs= without qb= */
+	}
+	if ((p = host_tok(host, "qm="))) {
+		sc->tc.margin = strtoull(p, &end, 10);
+		if (end == p || sc->tc.margin < 8 || (*end && *end != ' ')) return -1;
+		sc->tc_on = sc->q_on = 1;
 	}
 	return 0;
 }
@@ -742,7 +776,11 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 {
 	static const char *const wk[] = { DONE_MARKER, FINAL_MARKER };
 	static const char *const fin[] = { FINAL_MARKER };
-	char verdict[256] = "", orc[512], tjinfo[160];
+	/* orc: the recovery boot's "oracle" command. 3584 bytes (was 512) so that the fake outside
+	 * world of a manifest with fakes:/proxies: (hydo-init-fakes.sh appends its records to the
+	 * acknowledged ids at a power cut, at most 3000 bytes) fits; the serial input ring is 4096.
+	 * A command that fitted before is unchanged. */
+	char verdict[256] = "", orc[3584], tjinfo[160];
 	uint64_t wfp = 0, ffp = 0;
 	int r;
 	const char *phase = "workload";
@@ -786,6 +824,17 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 		memset(&c, 0, sizeof(c));
 		if (ioctl(b->fd, HVX_GET_SCHED, &c) == 0) {
 			snprintf(tjinfo + l, sizeof(tjinfo) - l, " qn=%llu", (unsigned long long)(c.turns - g_q_turns0));
+			if (sc->tc_on) {	/* burst statistics, then bursts and margin back to the default */
+				struct hvx_turnctl t;
+				memset(&t, 0, sizeof(t));
+				if (sc->tc.burst_len && ioctl(b->fd, HVX_GET_TURNCTL, &t) == 0) {
+					l = strlen(tjinfo);
+					snprintf(tjinfo + l, sizeof(tjinfo) - l, " qbn=%llu", (unsigned long long)t.burst_turns);
+				}
+				memset(&t, 0, sizeof(t));	/* back to the engine's margin (HVX_TURN_MARGIN) */
+				if (getenv("HVX_TURN_MARGIN")) t.margin = strtoull(getenv("HVX_TURN_MARGIN"), NULL, 0);
+				if (ioctl(b->fd, HVX_SET_TURNCTL, &t) < 0) perror("HVX_SET_TURNCTL (restore)");
+			}
 			c.quantum = g_q_old_quantum;
 			c.seed = g_q_old_seed;
 			if (ioctl(b->fd, HVX_SET_SCHED, &c) < 0) perror("HVX_SET_SCHED (restore turns)");
@@ -871,7 +920,7 @@ static void run_sched(struct boot *b, const char *tag, const struct sched *sc, s
 
 	g_budget = sc->rb;
 	if (sc->q_on && g_vcpus < 2) {	/* never silently ignored */
-		snprintf(verdict, sizeof(verdict), "ERROR harness q=/qs= need several vCPUs (--vcpus N > 1)"); goto fail;
+		snprintf(verdict, sizeof(verdict), "ERROR harness q=/qs=/qb=/qm= need several vCPUs (--vcpus N > 1)"); goto fail;
 	}
 	if (set_fault(b, sc->dseed, sc->classes, sc->prob)) { snprintf(verdict, sizeof(verdict), "ERROR harness set_fault"); goto fail; }
 	if (sc->cf_on) {
@@ -916,6 +965,11 @@ static void run_sched(struct boot *b, const char *tag, const struct sched *sc, s
 		if (sc->q) c.quantum = sc->q;
 		c.seed = sc->qs;
 		if (ioctl(b->fd, HVX_SET_SCHED, &c) < 0) { snprintf(verdict, sizeof(verdict), "ERROR harness q= value (HVX_SET_SCHED)"); goto fail; }
+		struct hvx_turnctl tc = sc->tc;
+		if (!tc.margin && getenv("HVX_TURN_MARGIN")) tc.margin = strtoull(getenv("HVX_TURN_MARGIN"), NULL, 0);
+		if (sc->tc_on && ioctl(b->fd, HVX_SET_TURNCTL, &tc) < 0) {
+			snprintf(verdict, sizeof(verdict), "ERROR harness qb=/qm= (HVX_SET_TURNCTL; needs a module with it)"); goto fail;
+		}
 	}
 	schedstat(b, tag, 1);
 	if (vcpustat_on())

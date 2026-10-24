@@ -11,7 +11,8 @@ examples: `examples/redis/hydo.yaml` (one service, about 60 lines),
 `examples/stack/hydo.yaml` (MySQL + Kafka + Redis + a gRPC front door),
 `examples/redis-oci/hydo.yaml` (Redis from the official Docker image, no file list),
 `examples/etcd/hydo.yaml` (a replicated system: a three-member etcd cluster, with link faults
-between members), and
+between members), `examples/stack/hydo-read.yaml` (the stack's invariants written with the
+ready-made store readers, see "Reading the stores"), and
 `hvx/knownbugs/sqlite/hydo.yaml` (no service: a multi-threaded program using SQLite; one
 manifest, two versions via `params:`).
 
@@ -157,9 +158,32 @@ invariants:                    # required, at least one
     within: 10                 # required: deadline in whole seconds of guest time (1..3600)
     poll: 1                    # seconds between checks (default 1); no every:/final: here
 
-faults: [kill, pause, network, oneway, cut, clock, disk]   # which kinds make sense here;
+checks:                        # ready-made checkers for recorded histories (see "History
+  - id: kv.linearizable        #   checks" below; hvx/HISTORIES.md). With checks:, invariants:
+    type: linearizable         #   may be empty. linearizable | list-append
+    history: kv                # required: the history the workload records (hydo_hist kv ...)
+    model: register            # linearizable: register (default) | cas
+    initial: nil               # linearizable: nil (default: keys start absent) | any
+    final: /bin/read-all-keys  # optional: at the end (same boot / recovery boot), read the state
+                               #   back into the history; exit != 0 = history incomplete (ERROR)
+  - id: log.append
+    type: list-append
+    history: log
+    consistency: strict-serializable   # list-append: the level the system claims (HISTORIES.md)
+
+faults: [kill, pause, network, oneway, cut, clock, disk]   # which kinds make sense here (also
+                               # freeze, protocol; see their sections);
                                # network/oneway also pull iproute2 into the image
 ```
+
+`buggify: true` (top level, optional) says the project's programs carry BUGGIFY fault points
+from an assertion SDK (Go `hydoassert.Buggify`, Rust `hydo_assert::hydo_buggify!`, JavaScript `buggify`; see
+`hvx/ASSERTIONS.md`). The init then turns the schedule token `B=<seed-hex>[,<enable-pm>[,<fire-pm>]]`
+(drawn by `explore.py --buggify`, which keeps `B=` for such a manifest and drops it for others)
+into `/tmp/hydo-buggify`, the file the SDKs read at a
+program's first fault-point evaluation; without `B=` the file is absent and every point stays
+off. The token `B` is then reserved (no knob may use it). Opt-in: `hydo-init-buggify.sh` is
+spliced into the init only for a manifest that sets it, so other images build as before.
 
 ### Services from a Docker/OCI image
 
@@ -286,6 +310,39 @@ renamed copies of the four init functions it wraps (`step_range`, `start_periodi
 The program under test can still use the assertion SDK (`hvx/stack/hydoassert`) for
 properties that need to see inside it; both kinds of record mix on the console.
 
+### History checks (`checks:`)
+
+An invariant is a shell command the project writes itself. For the properties every data
+system must keep, a check is stronger and needs no checking code: the workload **records** each
+operation (invocation before the request, completion after the reply, `ok` / `fail` / `info` for
+an unknown outcome) and the host checks the whole history after the run with a ready-made
+checker: `linearizable` (a key-value register or compare-and-set object, per key, Porcupine /
+Knossos style, with optional store-assigned versions) or `list-append` (Elle style: lost
+acknowledged appends, duplicates, incompatible orders, reads going back in time, G0 / G1c /
+G-single / G2 cycles at the chosen `consistency:`). The record format, the models and the
+verdict rules are in `hvx/HISTORIES.md`.
+
+- The workload, `retry`, `final:` and invariant commands get the recorder in their prelude
+  (an executable sources `/etc/hydo/prelude.sh` to get it):
+  `hydo_hist <history> <process> <invoke|ok|fail|info> <f> <args>...` (and `hydo_hist_enc` for
+  free-form values). Give every concurrent client its own process number. Go programs use
+  `hvx/stack/hydohist`.
+- `final:` runs after the workload, `retry` and healing (no cut), or in the recovery boot after a
+  power cut, before the invariants: read every key or list back and record the reads, so that a
+  write lost in the crash shows up as a read that contradicts an acknowledged write. Its exit
+  status is reported (`HYDO-CHECK-FINAL`); non-zero turns a passing check into an ERROR.
+- The guest prints one `HYDO-CHECK <spec>` line per check when the workload starts. The checks run
+  on the host: `explore.py` (and the shrinker, `run_list.py`), `hydo run` and
+  `hvx/history/hydo-check` combine the guest's verdict with the checks' (the guest's own invariant
+  violations come first) and write the explanation, e.g. the minimal set of operations that cannot
+  be ordered, next to the console (`<tag>.checks.txt`).
+- Only manifests with `checks:` get the recorder and `hydo-init-history.sh` (spliced into
+  `/sbin/init` like the liveness code); every other image builds byte-identically.
+- Examples: `examples/redis/hydo-hist.yaml` (SET/GET as registers and RPUSH/LRANGE as
+  list-append: `R=everysec` + a power cut loses an acknowledged write, both checks see it) and
+  `examples/etcd/hydo-hist.yaml` (puts and gets with etcd's mod_revision, read back through every
+  member: etcd issue 14685 shows as a version no order explains).
+
 ### Fault tokens (what the explorer types at S1)
 
 | token | effect |
@@ -300,6 +357,7 @@ properties that need to see inside it; both kinds of record mix on the console.
 | `N=<a>-<b>@...`, `N=<a>-*@...` | netem on the link between two services with `addr:` (or between `a` and every other one); see "Link faults" |
 | `O=<a>-<b>@<from>-<to>:req\|resp:<netem>` | one direction of a link: `req` = packets from `a` to `b`, `resp` = from `b` to `a` |
 | `F=<svc>><peer>@<step>[#<n>][:<match>]:<dur>` | freeze `<svc>` at the n-th packet it **sends** to `<peer>` (`<` = **receives** from) at/after step `<step>`, for `<dur>` ms; only with `freeze` in `faults:` (see "Freeze at a call") |
+| `H=<target>@<from>-<to>:<rule>[,<rule>...]` | a protocol fault on a fake or proxy for steps `[from,to)`: an error, slow, missing or reset answer, or a duplicated / reordered / late / lost webhook; see "Fake outside services" |
 | `<X>=<value>` | a knob from `knobs:` |
 | host side: `disk=ioerr:<p>` / `lying:<p>` | disk I/O errors / a disk that drops acknowledged writes |
 
@@ -317,7 +375,8 @@ services, network and one-way faults from services with a `port:`, knob values f
 `knobs:`, fault placement from `workload.steps`, fault kinds from `faults:`. It reads
 `/etc/hydo/hydo.yaml` out of an `explore-ob-*` image automatically; pass `--manifest` for
 any other image. A knob token that collides with a built-in token (K P N O C T Q X F) is
-rejected. `explore.py --freeze-call` draws `F=` for a manifest whose `faults:` lists `freeze`.
+rejected. `explore.py --freeze-call` draws `F=` for a manifest whose `faults:` lists `freeze`;
+`explore.py --grpc-faults` draws gRPC-level `H=` tokens for a manifest with a gRPC proxy (see "gRPC faults").
 
 ### Freeze at a call (stop a service at an exact point of its traffic)
 
@@ -422,6 +481,521 @@ from. The extension lives in `hydo-init-links.sh`; hydo-build copies it into the
 line to `/sbin/init` that sources it, only for manifests with an `addr:`, so every other
 manifest builds a byte-identical image. Not supported yet: `--arch arm64`.
 
+## Fake outside services and protocol faults (`fakes:`, `proxies:`, `H=`)
+
+Business software mostly fails at its edges: a payment provider answers 500 or 429, answers too
+late, takes the money and never answers, sends a webhook twice or out of order. `fakes:` declares
+the outside services the system talks to; hydo serves them **inside the guest** (one static
+program, `/bin/hydo-world`, source `hvx/onboard/world/`), so they are as deterministic as
+everything else. Every request a fake (or proxy) receives is **recorded**, so invariants can ask
+what the outside world saw: "the customer was charged at most once per order". `proxies:` puts
+the same faults and records in front of a real service of the manifest.
+
+```yaml
+fakes:
+  - name: payments             # [a-z][a-z0-9_]*, not a service name; H= tokens and checks name it
+    port: 9001                 # required; listens on addr:port
+    addr: 127.0.0.1            # default 127.0.0.1 (any 127.x.y.z)
+    protocol: http             # http (default: HTTP/1.1 and cleartext HTTP/2) | grpc (see below)
+    idempotency: header:Idempotency-Key   # where a request's idempotency key is (extractor)
+    ref: json:order            # the business reference a request is about (extractor); per route too
+    routes:                    # required for a fake; the first match wins
+      - name: charge           # [a-z][a-z0-9_]*; the target <fake>.<route> of H= and of checks
+        method: POST           # default: any
+        path: /v1/charges      # exact, a prefix /v1/*, or with segments /v1/orders/{id}
+        status: 200            # the answer (default 200), with headers: and a templated body:
+        headers: {Content-Type: application/json}
+        body: '{"id":"ch_{seq}","order":"{ref}","amount":{json:amount}}'
+        idempotent: true       # a repeat with the same key gets the first answer, no new effect
+        effect: true           # does a request here act in the world (default: not GET/HEAD/OPTIONS)
+        webhook:               # after an effect, call the system back (asynchronously)
+          url: http://127.0.0.1:8080/webhooks/payments
+          body: '{"type":"charge.succeeded","id":"ch_{seq}","order":"{ref}"}'
+          delay_ms: 20         # after the effect
+          retries: 5           # a failed (non-2xx) delivery is retried after 0.5, 1, 2, ... s
+proxies:
+  - name: redisp               # a fault proxy in front of a real service
+    port: 6380                 # the system talks to this port instead of the service's
+    service: redis             # forward to that service's addr:port (or to: 127.0.0.1:6379)
+    protocol: tcp              # tcp (any protocol; one connection = one request) | http | grpc
+    # http/grpc proxies may have ref:, idempotency: and routes: (name/method/path/ref/effect only),
+    # which name the requests in the records and as H= targets
+```
+
+**Extractors** (`idempotency:`, `ref:`): `header:<Name>`, `json:<field>` (dotted path into a JSON
+body), `query:<name>`, `form:<name>`, `path:<name or 1-based segment>`, `pb:<field number>` (a
+top-level field of the first gRPC message: a string or a varint), `body` (a hash of the body).
+
+**Templates** (answer bodies, header values, webhook url/body/headers): `{seq}` (the record number
+of the request; replays use the original's), `{ref}`, `{idem}`, `{fake}`, `{route}`; in answers
+also `{json:a.b}`, `{header:X}`, `{query:x}`, `{path:x}`, `{form:x}`, `{pb:n}` from the request.
+Single braces: `{{name}}` is a build parameter (`params:`). A webhook may use only the first five
+(it can be re-sent after a power cut, without its request).
+
+**gRPC** (`protocol: grpc`): cleartext HTTP/2 with prior knowledge. A route's `path` is the method
+(`/pkg.Service/Method`), its answer `message:` (hex protobuf bytes, default empty) and `code:`
+(gRPC status, default 0); an error rule answers trailers-only with `grpc-status`. Status codes in
+`H=` rules may be numbers or names (`status=UNAVAILABLE`).
+
+### The record (what the outside world saw)
+
+`/tmp/hydo/world.log` in the guest, one line per event, in arrival order, fields `k=v` (values
+%-escaped):
+
+```
+seq=7 t=<unix ms> kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges
+      ref=o2 idem=charge-o2 body=<hash> fx=1 out=ok+delay3000 rule=1
+seq=8 ... kind=req ... fx=0 out=replay+delay3000 orig=7 rule=1      (an idempotent repeat)
+seq=11 ... kind=hook ep=payments route=charge ref=o2 src=7 n=1 dup=0 out=200   (webhook delivery)
+seq=13 ... kind=event ep=- route=cancelled ref=o2 fx=1               (hydo-world event)
+```
+
+`fx=1` marks a request that took effect in the world (an effectful route, answered or not, not an
+idempotent replay; for a proxy: forwarded to the service). `out` is how it was answered: `ok`,
+`replay`, `fwd` (proxy), `-` (the world never acted: an error rule without `effect=yes`), plus
+`+delay<ms>`, `+drop`, `+reset`, `+status<code>`. A webhook delivery `out` is the HTTP status the
+system answered, `err`, `lost` or `gave-up`. Just before the verdict the console gets a compact
+copy (`hydo-world: <seq> payments.charge ref=o2 idem=charge-o2 fx=1 ok+delay3000`, at most 150
+lines).
+
+The workload (or the system) can add its own events to the same ordered record:
+`hydo-world event <name> <ref>` (for example `hydo-world event cancelled o2` once a cancellation
+is acknowledged), which "no side effect after <event>" checks compare against.
+
+### Side-effect checks
+
+`hydo-world check <kind> <target> [options]` reads the record; use it as an invariant's `cmd:`
+(exit 0 holds, 1 violated, 2 cannot decide; its `HYDO-ORACLE:` line becomes the details, so
+`HYDO-ASSERT` records, the verdict, the explorer and the shrinker work unchanged):
+
+| kind | holds when |
+|---|---|
+| `at-most-once <ep>.<route> [--by ref\|idem]` | no ref (or idempotency key) took effect twice |
+| `effect-for-acked <ep>.<route> [--ref 'o{id}'] [--acked FILE] [--unless event:<name>\|<ep>.<route>]` | every acknowledged id (`$HYDO_ACKED`; `--ref` turns an id into the ref the effect carries) has an effect, except refs with an `--unless` record (an order whose cancellation was requested owes no receipt). As a `type: eventually` invariant: "every acknowledged request produced its side effect within N s" |
+| `exactly-once <ep>.<route> [--ref ...]` | both of the above |
+| `none-after <ep>.<route> --after event:<name>\|<ep>.<route>` | no ref took effect after that ref's first `<after>` record (no payment after its cancellation) |
+| `count <ep>.<route>` | always; prints the number of effects |
+
+`examples/shop/hydo.yaml` uses each of them.
+
+### Protocol faults (`H=`)
+
+```
+H=<target>@<from>-<to>:<rule>[,<rule>...]
+  target   <fake|proxy> (every route) or <fake|proxy>.<route>
+  window   on while workload steps [from, to) run (switched at step boundaries, like N=), off when
+           fault injection ends (and frozen with everything else at a power cut)
+  request rules (what the answer to a matching request becomes):
+    status=<code>       an error answer: an HTTP status, or for grpc a gRPC code (number or name)
+    retry-after=<s>     with status=: a Retry-After header (429, 503)
+    delay=<ms>          the answer comes <ms> of guest time late (combines with status= / drop / reset)
+    drop                no answer: the request is held until the client gives up or the rule ends
+    reset               the connection is reset instead of answered
+  webhook rules (on the webhooks of effects made while the rule is on):
+    dup                 delivered twice
+    reorder             delivered after the next webhook of the same route (pairs swap)
+    late=<ms>           delivered <ms> later
+    lost                never delivered
+  modifiers:
+    p=<1..100>          share of the matching requests (or webhooks) the rule acts on (default 100)
+    effect=yes|no       does the world still perform the side effect? Default: no for status=
+                        (rejected before acting), yes for delay/drop/reset (the request arrived and
+                        acted; only the answer is slow or lost). status=500,effect=yes = "charged,
+                        then failed to say so"
+```
+
+On a `tcp` proxy a request is a connection: `delay` holds every chunk the service sends back,
+`drop` lets the client's bytes through and never returns the answer, `reset` resets the connection
+when the answer arrives (`effect=no`: nothing reaches the service); `status=` has no meaning there.
+
+Determinism: which matching request a rule acts on is a pure function of the token text and the
+request's index among those the rule has seen (`mix64(fnv64(token) + k) % 100 < p`); the order of
+requests is the guest's, which hvx makes deterministic. Several `H=` tokens may be given; the first
+firing request rule (in token order) decides a request, and every webhook rule that fires applies.
+A target the manifest does not have is ignored (as for every fault token). `H` is reserved: no knob
+may use it.
+
+**Power cut.** A cut stops the system under test, not the outside world. At the cut the world is
+frozen (a request that arrives later is never recorded) and its effects, events, idempotency memory
+and undelivered webhooks are appended to the acknowledged ids as `w:` tokens (at most 3000 bytes;
+`hvx_explore` carries that line into the recovery boot's `oracle` command, which has room for it
+since this feature). The recovery boot's world starts from them: the checks see both boots, a repeat
+of an old idempotency key is still a replay, and undelivered webhooks are re-sent. If the carried
+record does not fit, it is replaced by `w:trunc` and every check answers 2 (cannot decide), never a
+false verdict.
+
+**Explorer.** `explore.py --protocol-faults` draws `H=` (one token on 60% of the schedules, a
+second on 25%) on its own random stream, from the targets `manifest_space.py` lists: every fake
+route (with the webhook rules when it has a webhook), every proxy and proxy route. Without the flag
+every schedule string is byte-identical (`hvx/explore/protocol_faults_ident.py`).
+`--sweep protocol` runs every rule kind (status, status with effect=yes, delay=3000, drop, reset,
+and on webhook routes dup, reorder, late=5000, lost) on every target, one workload step at a time. The shrinker drops
+`H=` tokens, narrows their window, and removes `p=`, `retry-after=` and `effect=`, then halves
+delays. A manifest with a `faults:` list draws `H=` only if it lists `protocol`.
+
+**Build.** `hvx/onboard/world/build.sh` builds `build/hydo-world` (pinned Go, standard library
+only); `hydo-build` stages it (`HYDO_WORLDBIN` overrides), writes `/etc/hydo/world.json`
+(`--print-world` shows it) and splices `hvx/onboard/hydo-init-fakes.sh` into the init. A manifest
+without `fakes:`/`proxies:` builds a byte-identical image. Not supported yet: `--arch arm64`.
+
+**Extending it (the code layout).** `world/rules.go`: the `H=` grammar (`parseRule`, one `Rule`
+per token, `fires`, `applied`); a new rule is a field there plus its action. `world/serve.go`: one
+handler per endpoint protocol -- HTTP and gRPC share `handler()` (decide under the world lock,
+record, then act: delay / drop / reset / status / answer), `serveTCP` is the byte-stream proxy;
+a new protocol is a new serve function that calls `lockGate`, `requestRule`, `record` in that order.
+`world/world.go`: records, webhooks, the control socket (`on`/`off`/`heal`/`event`/`dump`/`summary`)
+and the power-cut carry. `world/check.go`: the checks. `world/config.go`: `world.json`, extractors,
+templates. The explorer's draws are `add_protocol_faults` (rule kinds per target come from
+`manifest_space.Space._pf_targets`).
+## The test composer (`test:` and the `hydo/` folder)
+
+Instead of a fixed `workload.run` split into numbered steps, a project can write its test as
+**small commands and properties** and let hydo compose the commands into seeded sequences and
+concurrent mixes. The composition is part of the schedule (token `W=`), so a schedule replays
+the same commands in the same order and overlap, bit for bit, and the explorer varies and
+shrinks it like a fault. Implementation: `hydo_composer.py` (build side, explorer side),
+`hydo-composer.sh` (the guest side; staged only for such a plan). Example:
+`examples/redis-composed/` (the repository layout below, with SETs, transfers, AOF rewrites).
+
+### The plan format (what SDKs generate; versioned)
+
+The engine-facing plan is the manifest itself, in YAML or JSON (`hydo build plan.json` works
+the same). It is language-neutral: commands and checks are executables given as an **argv
+list** (exec'd, no shell); a string is accepted as a shell command for hand-written plans. An
+SDK (`sdk/rust`, the `hydo-test` crate) writes this file on the host from the team's own
+program; nothing of the SDK's setup code runs in the guest.
+
+```yaml
+format: 1                      # the plan format; this hydo reads 1 (anything else is refused)
+hydo_version: "0.1"            # the hydo the plan was written for: "0.1" (same major.minor; a
+                               #   different patch only warns), "0.1.0", or ">=0.1". A mismatch
+                               #   is an error unless HYDO_VERSION_CHECK=warn. hvx/VERSION (or the
+                               #   release's VERSION) is the engine's version.
+workload:
+  steps: 20                    # rounds of the composition (default 20); faults are placed at
+                               #   round numbers exactly as at step numbers. No run:/process:
+  timeout: 300                 # as before: bound of one step-range call (the composer's wait)
+test:
+  parallel: 4                  # at most this many commands at once (W= draws p in 1..parallel)
+  per_round: 2                 # parallel drivers started per round (W= draws q in 1..per_round)
+  round_ms: 200                # a round every round_ms of guest time (W= draws round_ms/2, x1, x2)
+  command_timeout: 60          # seconds per command (a command's own timeout: overrides it)
+  drain_timeout: 60            # after the last round, running commands get this long, then are killed
+  max_commands: 0              # 0 = no limit (W='s n caps the number of commands too)
+  budget_ms: 0                 # 0 = none; else no command starts later than this after round 0
+  check_every: 2               # default period of `always` checks (seconds of guest time)
+  check_within: 30             # default deadline of `eventually` checks
+  commands:
+    - {name: place_order, kind: parallel_driver, run: [/bin/shoptest, driver, place_order]}
+    - {name: audit, kind: serial_driver, run: [/bin/shoptest, driver, audit], timeout: 120}
+    - {name: seed_catalog, kind: first, run: [/bin/shoptest, first, seed_catalog]}
+  checks:
+    - {name: never_charged_twice, kind: final, run: [/bin/shoptest, check, never_charged_twice]}
+    - {name: orders_settle, kind: eventually, within: 20, run: [/bin/shoptest, check, orders_settle]}
+  regressions:
+    - {name: double-charge, schedule: "disk=none dseed=1 | run K=pay@4+1 W=0000002a,p4,q2,r200", expect: ok}
+```
+
+A command's id is `<kind>_<name>` (`parallel_driver_place_order`); a check's name is its
+property id. Everything the composer adds to the manifest (the workload, a `first` step in
+provisioning, invariants for checks and for `eventually`/`finally` commands) is a rewrite the
+generic init already understands, so `hydo-init.sh` is unchanged; a manifest without `test:`
+and without a `hydo/` folder builds byte-identically to before.
+
+### The `hydo/` folder (the repository layout)
+
+```
+hydo/
+  hydo.yaml          services, data, knobs, allowed faults, guest settings (and test: options)
+  workload/          commands: <kind>_<name> executables; helper_* files and dot files are ignored
+  checks/            properties: final_<name>, always_<name>, eventually_<name>
+  regressions/       <name>.schedule: saved minimal schedules, replayed by `hydo repro --regressions`
+.hydo/               build cache, git-ignored (`hydo build` writes here for a manifest in hydo/)
+```
+
+`hydo-build` reads the three directories when they exist next to the manifest and adds their
+entries to `test:` (a name in both is an error; an unknown prefix or a non-executable file is
+an error, so typos do not silently do nothing). Each file becomes `run: [/hydo/<dir>/<file>]`;
+the whole directory, helpers included, is copied to `/hydo/<dir>/` on the read-only root. A
+text file may carry a header in its first 4 KiB: `# hydo: timeout=30` (commands), `# hydo:
+every=1` / `# hydo: within=10 after=start poll=1` (checks), `# hydo-msg: <description>`.
+
+### Command kinds (when they run)
+
+| kind | runs | faults | alongside |
+|---|---|---|---|
+| `first` | every `first` command once, in name order, during provisioning (before S1: in the snapshot every schedule starts from; `HYDO-SETUP-COMPLETE` comes after provisioning, so after the first commands) | none | nothing |
+| `parallel_driver` | repeatedly, in rounds, several at once (also copies of one command) | yes, also mid-command | other parallel drivers, anytime |
+| `serial_driver` | repeatedly, never two at once; waits until no other driver runs | yes | anytime only |
+| `singleton_driver` | once per run, in a run that has no other drivers: when a plan has one, 1 run in 4 (or every run, without other drivers) is such a run | yes | anytime only |
+| `anytime` | in rounds, any time | yes | anything |
+| `eventually` | after the faults stop (after the heal, the host's "go", and in the recovery boot after a power cut), once each, in name order | none | nothing |
+| `finally` | at the end, after the `eventually` commands, only when every command started in this boot ran to completion (no timeout, no drain kill, no power cut), so never in a recovery boot | none | nothing |
+
+**Exit status.** A driver or anytime command: 0 = ok, **100 = the command saw a violation**
+(the run fails: the `compose.commands` invariant and an `always_or_unreachable` property
+`compose.<id>.no_violation`), anything else = the operation failed (recorded, not fatal:
+under faults, operations fail). A `first` command that fails fails provisioning (`HYDO-ORACLE:
+ERROR provision failed`). An `eventually` or `finally` command is an invariant: 0 holds,
+anything else is a violation. A check: 0 holds, 1 violated, 2 could not be evaluated now (as
+any invariant); a check that times out counts as 2.
+
+**Check kinds.** `final`: once at the end (an `always` invariant with `final: true`).
+`always`: also every `every` seconds while the workload runs (`check_every` by default).
+`eventually`: bounded liveness, polled after `after` (`heal` default, or `start`) until it
+holds or `within` seconds pass (MANIFEST "Liveness").
+`linearizable` / `list_append` (alias `list-append`): a ready-made **history check**
+(`hvx/HISTORIES.md`, "History checks" above): the commands record their operations with
+`hydo_hist` (source `/etc/hydo/prelude.sh`; process = `$HYDO_CMD_ID`, unique per entry), and the
+host checks the history after the run. Fields: `history` (required), `model`/`initial`
+(linearizable), `consistency` (list_append), `msg`; `run` is optional and is the final read-back
+(run at the end of the same boot or of the recovery boot). In the `hydo/` folder the file
+`checks/linearizable_<name>` or `checks/list_append_<name>` is the read-back, with
+`# hydo: history=kv model=register` (or `consistency=...`) in its header. They become top-level
+`checks:` entries, not invariants. Example: `examples/redis-composed-hist/`.
+
+**Environment of a command.** Everything an invariant sees (`HYDO_ACKED`, `HYDO_OUTCOMES`,
+the manifest's `env:`), plus `HYDO_CMD` (its id), `HYDO_CMD_ID` (its entry number, unique in
+a run: a good key for the operation), `HYDO_ROUND`, and `HYDO_SEED` (a number from the
+composition's random stream, for the command's own choices: which account, how much). Its
+output goes to `/tmp/hydo/compose/log.<entry>`; `HYDO-ASSERT` lines it prints are forwarded to
+the console (the SDKs write to the console directly).
+
+### How a composition runs
+
+The plan of a run is a pure function of `W=` and the command list (hydo_composer.plan; the
+same code in awk in the guest, checked by `tests/test_composer.py`): for each of `steps`
+rounds, either a serial driver (1 round in 4 when there are parallel drivers), or 1..q
+parallel drivers drawn with repetition, plus an anytime command in 1 round of 3; or, in a
+singleton run, the singleton in round 0. Each entry gets its own `HYDO_SEED`. Round r starts
+`r x round_ms` of guest time after round 0 (later when a fault point held it); a command keeps
+running across later rounds and fault points until it ends, so faults land mid-command.
+Rules while running: at most `p` commands at once; parallel drivers wait while a serial or
+singleton driver runs; serial and singleton drivers wait until no other driver runs. At a
+fault point before round t the composer stops starting rounds, the init applies the fault,
+then round t starts. After the last round the composer waits for the running commands
+(`drain_timeout`), kills what is left, and the run continues as before (heal, restart,
+`eventually` commands, checks, verdict). At a power cut everything freezes as before.
+
+**`W=` (guest token, the explorer draws it; hand schedules may use it):**
+`W=<seed, hex>[,p<concurrency>][,q<per round>][,r<round ms>][,n<max commands>][,t<budget ms>][,x<entries>][,o<commands>]`,
+where `x` lists plan entries not to run and `o` command indices (in id order) never to run,
+as `3.5-9.12`. Without `W=` the guest runs seed 0 with the manifest's defaults. `explore.py`
+puts a `W=` on every schedule of such a plan, from its own random stream, so every other
+field equals the schedule without it (`--no-compose`: no `W=`); manifests without a test plan
+get exactly the old schedules (`hvx/explore/compose_ident.py`). The shrinker tries, in order:
+one command never run (`o`), half the commands (`n`), no concurrency (`p1`, then `p-1`), the
+first half of the entries dropped (`x`), single entries (when 8 or fewer are left); the report
+prints the minimal composition round by round.
+
+**Console lines** (one write each; the explorer and reports read them):
+
+```
+HYDO-COMPOSE plan W=0000002a,p4,q2,r100 seed=42 p=4 q=2 r=100 n=0 rounds=20 entries=34
+HYDO-CMD start i=3 r=2 kind=parallel_driver cmd=parallel_driver_transfer
+HYDO-CMD end i=3 cmd=parallel_driver_transfer rc=0 ms=30 status=ok      (ok|failed|timeout|violation|killed)
+HYDO-CMD skip i=30 r=17 cmd=... budget_ms=2000
+HYDO-COMPOSE done started=34 ok=34 failed=0 timeout=0 violation=0 killed=0 skipped=0
+```
+
+plus `HYDO-ASSERT-DECL`/`HYDO-ASSERT` records: `compose.<id>.succeeded` (sometimes: the
+command exited 0 at least once; NOT EXERCISED says the test never got that operation through)
+and `compose.<id>.no_violation` (always_or_unreachable). The invariant `compose.commands`
+(first in the verdict order) fails on an exit 100 and otherwise reports the counts.
+
+### Regressions
+
+`hydo/regressions/<name>.schedule` (or `test.regressions`): comment lines, `# expect: ok`
+(default: the bug stays fixed), `# expect: violation` (a known open bug still fails) or
+`# expect: fp=<16 hex>` (bit for bit), and one schedule line. They are staged into the image
+(`/hydo/regressions/`, and `/etc/hydo/compose.json`), so `hydo repro --regressions [IMG]`
+replays exactly what the image was built with, from fresh boots, and exits 1 if one is not as
+expected. `hydo save <explore dir>` writes an exploration's minimal schedules there (with
+`expect: violation`; change it to `ok` once fixed).
+
+A `W=` names commands by their index in the plan's sorted command list, so adding or renaming a
+command changes what an old `W=` composes. `hydo save` therefore also writes `# commands: <ids>`
+(the list when the schedule was found; `commands:` in `test.regressions`), and the replay warns
+when the plan's list is different: explore again and save the new minimal schedule.
+
+## Reading the stores (`hydo-read`, `hydo-check`)
+
+Cross-service invariants need "what is in this table / on this topic / under this key". Instead
+of writing that reading code in shell for every manifest, a check can call two ready-made
+commands (source: `hvx/readers`; one static Go binary, `hydo-check` is a symlink to it):
+
+- `hydo-read <store> <args>` prints what a store holds as JSON Lines, one record per line,
+  keys sorted, lines sorted bytewise (Kafka, Redis lists and sorted sets keep the store's
+  order). Exit 0 = read, 2 = could not read (the store is down, the table or topic does not
+  exist, a timeout; also a wrong command line). Every read has a deadline (`--timeout <s>`,
+  default 30).
+- `hydo-check <check> <sources>` compares readings and prints ONE explanation line (the last
+  line of its output, which the init puts into the invariant's `HYDO-ASSERT` details and the
+  `HYDO-ORACLE` verdict). Exit 0 = holds, 1 = violated, 2 = could not be evaluated: exactly the
+  invariant contract above, so a check is one command.
+
+| store | command | records |
+|---|---|---|
+| MySQL | `mysql <dsn> "<query>"` | one per row, `{"<column>": "<text>" \| null}` |
+| PostgreSQL | `postgres <dsn> "<query>"` | the same (booleans `"true"`/`"false"`, times RFC 3339 UTC) |
+| Kafka | `kafka <bootstrap> <topic>` | every record of every partition from the log start to the high watermark: `partition, offset, key, value, timestamp_ms`; never creates the topic; a missing topic is "could not read" |
+| Redis | `redis <addr> get <key>...` / `scan <pattern>` / `hgetall\|smembers\|lrange\|zrange <key>` / `cmd <word>...` | `{key, value}` (null = missing) / `{key, type, value}` of every matching key of any type / one per field or member |
+| etcd | `etcd <endpoint> get <key> [--prefix] [--serializable]` / `status` | `{key, value, create_revision, mod_revision, version}` / `{endpoint, revision, raft_index, raft_term}` (the v3 JSON gateway on the client port) |
+| hydo | `hydo acked\|failed\|told-failed\|unknown` | `{id}` from `$HYDO_ACKED`, `$HYDO_FAILED`, failed minus acked, last outcome `unknown` |
+| files | `file <path>` / `jsonl <path>` / `range <from> <to>` | `{line}` / saved `hydo-read` output / `{n}` |
+
+DSNs: MySQL `user:pw@tcp(host:port)/db` (the Go driver's form) or `mysql://user@host:port/db`;
+PostgreSQL `postgres://user@host:port/db?sslmode=disable`; Redis `host:port` or
+`redis://:pw@host:port/db`; `--base64` prints Kafka and etcd keys and values in base64.
+
+Checks (A is `--left` or `--in`, B is `--right`; items are compared as strings):
+
+| check | holds when | typical use |
+|---|---|---|
+| `subset` | every item of A is in B | every acknowledged order is in the database |
+| `equal` | A and B hold the same items | two replicas agree |
+| `exactly-once` | every item of A occurs exactly once in B (B as a multiset) | every acknowledged order is on the topic once |
+| `disjoint` | no item of A is in B | nothing the client was told failed was applied |
+| `no-duplicates` | no item occurs twice in `--in A` | a topic without duplicates |
+| `count` | the number of records of `--in A` is `--eq N` / `--min N` / `--max N` | no rows with a wrong amount |
+| `never-wrong-value` | every key `--cache C` holds has the value `--truth T` has for it; a key missing from C is fine, a key T does not have is wrong (`--allow-orphans`: fine) | a cache versus the source of truth |
+
+A **source** is one argument: an optional `name=` (used in the explanation), the `hydo-read`
+words, and a projection: `--field F` (the item; default the only field, else `key` for
+Kafka/Redis/etcd, `line`, `id`, `n`, else a field named `key`), `--item 'T'` (the item is the
+template T with `{F}` replaced by field F: `--item 'k:{id}=v{id}'` against `--item '{key}={value}'`
+compares keys and values at once), `--key F --value F` (for
+`never-wrong-value`; default `key`/`value`), `--strip-prefix P` and `--add-prefix P` (to make
+`order:5` and `5`, or `c5` and `5`, compare equal). Quote the source for the shell and the
+query inside it with the other kind of quotes:
+
+```yaml
+invariants:
+  - id: order.in_kafka_once
+    msg: every ACKed order is in the Kafka topic exactly once
+    cmd: >-
+      hydo-check exactly-once --unreadable violation --left 'acked=hydo acked'
+      --right 'kafka=kafka 127.0.0.1:9092 orders'
+  - id: redis.cache_never_wrong
+    type: always_or_unreachable
+    cmd: >-
+      hydo-check never-wrong-value
+      --cache 'redis=redis 127.0.0.1:6379 scan "order:*" --strip-prefix order:'
+      --truth 'mysql=mysql hydo:@tcp(127.0.0.1:3306)/ "SELECT id, amount FROM stack.orders" --key id --value amount'
+```
+
+The explanation names the first offending item in a fixed order (numbers numerically, then
+strings bytewise) and the count, e.g. `disjoint violated: 1 item of told_failed is also in kafka: 11`
+or `exactly-once violated: acked c4 is in categories 0 times (of 20 in acked); missing 1: c4`.
+Options: `--unreadable violation` turns "could not read a source" into a violation (exit 1) --
+for a final check after recovery, where an unreadable store is itself lost data; `--oracle` ends
+with a `HYDO-ORACLE: OK|VIOLATION|ERROR <explanation>` line (for a program or script that is not
+run by the init); `--id <id> [--type <t>] [--msg <m>]` also prints a `HYDO-ASSERT-DECL` and a
+`HYDO-ASSERT` record (`details`: `check`, `first`, `explanation`), on stdout or `--console
+/dev/ttyS0`; `--show N` lists up to N offending items (default 5).
+
+**In the test composer.** A check of a composed plan is the same command: a `test.checks` entry
+`run: [hydo-check, count, --eq, "5", --in, 'accounts=redis 127.0.0.1:6379 scan "acct:*"']` (argv,
+exec'd) or a string, or an executable `hydo/checks/<kind>_<name>` that ends with
+`exec hydo-check ...`; exit status and last line mean the same there.
+Example: `examples/redis-composed-read/hydo/`.
+
+**Staging.** `hydo-build` copies the binary to `/bin/hydo-read` and adds the `/bin/hydo-check`
+symlink only when some command of the manifest calls `hydo-read` or `hydo-check` (descriptions
+and `msg:` do not count; `test:` entries count, and so does any file in the plan's `hydo/`
+folder that contains the name, a script or a compiled program); every other manifest builds a
+byte-identical image. Build the binary
+first with `hvx/readers/build.sh` (byte-reproducible; it lands in `build/hydo-read`, or point
+`HYDO_READ_BIN` at it). Not staged for `--arch arm64` yet. From a program under test (an SDK, not
+an invariant), run the same binary with `--id`/`--console` so the record reaches the console.
+Examples: `examples/stack/hydo-read.yaml`, `examples/miniflux/hydo-read.yaml`; tests against real
+stores: `hvx/readers/native-test.sh`.
+
+### gRPC faults (a fault proxy in front of a gRPC service)
+
+A proxy with `protocol: grpc` (`proxies:`, above) sits between a gRPC client and a gRPC service. It is a streaming HTTP/2
+proxy (cleartext HTTP/2 with prior knowledge, what gRPC clients speak without TLS): every call is
+forwarded to the service as it arrives, message by message in both directions, so unary,
+client-streaming, server-streaming and bidirectional calls all pass, and a fault can act after the
+service has answered or in the middle of a stream. The client must dial the proxy's `port:`
+(usually an environment variable or flag of the client); the service keeps its own port.
+
+```yaml
+proxies:
+  - name: orders
+    protocol: grpc
+    port: 50052                 # the client dials this
+    to: 127.0.0.1:50051         # or service: <name> (a service with a port:)
+    ref: pb:1                   # the business reference: field 1 of the request message
+    routes:                     # optional: name methods, so a fault can target <proxy>.<route>
+      - {name: place, path: /hydo.OrderService/Place}
+```
+
+Faults are `H=` tokens (`H=<proxy>[.<route>]@<from>-<to>:<rule>[,<rule>...]`, on while workload
+steps `[from,to)` run, off when fault injection ends), with these rules on a gRPC proxy:
+
+| rule | what the client sees | did the server act? |
+|---|---|---|
+| `drop` | no answer; it waits until its deadline (or the fault ends, then its stream is reset) | yes: forwarded, the answer is discarded |
+| `status=<code>` | that gRPC status, at once | no (not forwarded) |
+| `status=<code>,effect=yes` | that status, after the server has finished | yes |
+| `delay=<ms>` | the server's answer, ms of guest time late (past its deadline when ms exceeds it) | yes |
+| `reset` (`reset=stream`) | its HTTP/2 stream reset (`INTERNAL`, RST_STREAM) when the server answers | yes |
+| `reset=conn` | its TCP connection reset when the server answers: every call on it fails (`UNAVAILABLE`), the client reconnects | yes |
+| `cut=<n>` | n response messages, then its stream reset (`dir=req`: n request messages reach the server, then both halves are cut) | partly |
+| `hold=<n>` | n messages, then nothing more in that direction until the fault ends (then the stream continues) or the client gives up | partly |
+
+`<code>` is a name (`UNAVAILABLE`, `DEADLINE_EXCEEDED`, `RESOURCE_EXHAUSTED`, `INTERNAL`,
+`ABORTED`, or any other gRPC code name) or a number. `effect=no` on drop, reset or delay means the
+call is not forwarded at all. `delay=` combines with any other rule (the delay comes first).
+Which calls a rule acts on:
+
+- `<proxy>.<route>`, or `rpc=<name>` on the proxy (`Method`, `Service/Method` or `/pkg.Service/Method`): one method;
+- `call=<a>` or `call=<a>-<b>`: the a-th (to b-th) call of a method through this proxy, counted from 1
+  since the guest booted (every call counts, faulted or not; the recovery boot after a power cut counts again from 1);
+- `p=<1..100>` with an optional `seed=<n>`: that share of the matching calls; which ones is a hash of
+  the token text and the call's index under the rule, so `seed=` picks another set.
+
+Every decision is a pure function of the token and the order in which calls arrive, which hvx
+makes deterministic: a schedule gives the same faults on every run. `rpc=`, `call=`, `cut=`,
+`hold=`, `dir=` and `reset=conn` act on gRPC proxies only (hydo-world refuses them elsewhere);
+on a gRPC fake (`fakes:` with `protocol: grpc`) select calls by route, with `status=`, `delay=`,
+`drop` and `reset`.
+
+**Records.** Each call gives two records in `/tmp/hydo/world.log`: at arrival `kind=req` (as for
+every proxy, with `call=<k>`; `fx=1` = forwarded), and at its end
+
+```
+kind=call ep=orders route=place path=/hydo.OrderService/Place ref=7 call=8 req=<seq of the req record>
+          status=<what the client got> server=<1|0|?> upstream=<the server's status> msgs=<in>/<out> out=fwd+drop
+```
+
+`status` is the gRPC status the client received (a number), `rst` (stream reset), `conn`
+(connection reset) or `none` (the client gave up before any answer). `server=1`: the server
+answered, so it acted; `0`: the call never reached it; `?`: forwarded, no answer from the server.
+"The server acted, the client saw a failure" is `status` other than 0 with `server=1`; a history
+or side-effect check can join these records with the client's own outcomes by `ref`.
+`hydo-world check calls <proxy>[.<route>]` prints the four counts (answered OK; failed after the
+server acted; failed before reaching it; failed, server's part unknown) as a HYDO-ORACLE OK line
+(it always holds, so it can be an invariant that only reports). The console summary before the
+verdict shows each `call` record.
+
+**Explorer.** `explore.py --grpc-faults` draws up to two such tokens per schedule on the
+manifest's gRPC proxies (`hvx/explore/grpc_faults.py`), from its own random stream: without the
+flag every schedule string is byte-identical (`grpc_faults_ident.py`). The shrinker drops a
+token, narrows its window, and removes `call=`, `rpc=`, `p=`/`seed=`, `dir=req`, turns
+`reset=conn` into `reset` and halves `cut=`/`hold=`. Example: `examples/stack-grpc/`.
+
+**Code.** gRPC proxies are served by `world/grpc.go` (`serveGRPCProxy`, `grpcHandler`), not by
+`handler()`; it parses the gRPC-only rule keys (`parseRuleExt`, called from `parseRule`), picks the
+rule with the extra filters (`grpcRule`), and implements `check calls`. gRPC fakes still use
+`handler()`.
+
+Limits: cleartext HTTP/2 only (no TLS); the client must be pointed at the proxy; a `ref:`/
+`idempotency:` taken from the message (`pb:`) reads the call's first message before the decision
+(a protobuf field holding its default value, such as an id of 0, is absent, so the ref is empty);
+messages up to 64 MiB; compressed messages are passed through and counted, not decoded.
+
 ## YAML subset
 
 The build machine has no YAML library, so `hydo-build` parses a subset: block mappings and
@@ -473,3 +1047,265 @@ Inside the image: `/etc/hydo/hydo.yaml` (the manifest as written), `/etc/hydo/ma
 - The guest console is 64 KiB: a workload that prints every acknowledged id should print
   short ids, or the done marker can be lost.
 - One data disk, ext4. The workload's step count is the unit of fault placement.
+
+## From Docker Compose
+
+A business stack usually ships a `docker-compose.yaml`. `hvx/onboard/hydo-compose` (or
+`hydo compose` in a release) turns it into a starting `hydo.yaml`, so onboarding begins from
+what the team already runs:
+
+```sh
+hvx/onboard/hydo-compose docker-compose.yml [--out hydo.yaml] [--images-dir images]
+        [--env-file F ...] [--profile P ...] [--use-env] [--no-resolve] [--lock FILE] [--no-addr]
+sh fetch-images.sh            # written next to hydo.yaml: copies every image by digest (network, once)
+# write the workload and the invariants (the generated file marks them TODO), then hydo-build
+```
+
+The importer needs network only to resolve image tags (with skopeo: `SKOPEO`, `PATH`, the nix
+store or `nix build nixpkgs#skopeo`). Everything it resolves is written to
+`hydo-compose.lock.json`, so a second run needs no network and writes the same file; an image
+that `fetch-images.sh` already copied is read from the file instead. It parses the Compose file
+with PyYAML when installed and with hydo-build's YAML subset otherwise, extended with the anchors
+Compose files use (`x-common: &a` on a block mapping, `<<: *a` merge keys, `*a` aliases); for
+anchors on scalars or lists without PyYAML, import the output of `docker compose config --format json`.
+A bare `environment:` entry (`- POSTGRES_USER`) takes its value from `.env`, as in Compose. The generated manifest is checked with hydo-build's own
+validator before it is written. Example: `examples/compose-voting/` (Docker's example voting app;
+`hydo.generated.yaml` is the raw import, `hydo.yaml` the version with a workload and invariants).
+
+| Compose | hydo.yaml |
+|---|---|
+| `services.<name>` | `services[]`, in Compose order. The name becomes `[a-z][a-z0-9_]*` (`my-api.v2` -> `my_api_v2`, used by fault tokens); the Compose name still resolves. |
+| `image:` | `image: {x86_64: images/<name>-<tag>-amd64.docker.tar, arm64: images/<name>-<tag>-arm64-oci}` + `image_ref: <name>:<tag>`. The tag is resolved to the index digest and the linux/amd64 and linux/arm64 manifest digests (recorded as comments and in the lock file); `fetch-images.sh` copies by those digests. An image given by digest (`name@sha256:...`) is checked against it. |
+| `command:`, `entrypoint:` | `cmd:`, `entrypoint:` as lists. A string is split into words as Compose does (no shell); `$$` is `$`. `entrypoint:` drops the image's CMD, as in Docker. |
+| `environment:`, `env_file:` | `env:`. env files first (KEY=VALUE, `export`, quotes, comments; `required: false`), then `environment:`. A variable without a value (taken from the shell by Compose) is left out with a warning. |
+| `${VAR}` interpolation | done with `.env` next to the Compose file (or `--env-file`): `${VAR:-d}`, `${VAR-d}`, `${VAR:?e}`, `${VAR:+r}`. The shell environment is NOT used (the manifest must not depend on who imports it); a variable found only there is reported. `--use-env` follows Compose. |
+| `working_dir:`, `user:` | `workdir:`, `user:` |
+| `ports:`, `expose:` | `port:` = the first CONTAINER port (`"8080:80"` -> 80); else the image's `EXPOSE`. Network faults (`N=`/`O=`) act on that port. |
+| (each service) | its own loopback `addr:` (127.0.0.11, .12, ...), and `/etc/hosts` (`root.text`, mounted into every image root) maps the Compose service names, `container_name`, `hostname`, network `aliases`, `links` aliases and `extra_hosts` to them (`host-gateway` -> 127.0.0.1). `--no-addr`: every name -> 127.0.0.1 (the arm64 build has no `addr:`; `hydo compose` on a Mac passes it). |
+| `depends_on:` (list or map) | `depends_on:`. hydo starts a service only after its dependencies passed their `ready:`, so `service_healthy` and `service_started` both hold. |
+| `depends_on.<job>.condition: service_completed_successfully` | the job service idles (`/.hydo/busybox sleep`) and its command runs once per boot in the `setup:` of every service that waits for it (also before a restart and in crash recovery). |
+| `healthcheck:` (else the image's `HEALTHCHECK`) | `ready: timeout <t> hydo-oci <svc> <test>`: `CMD` as argv, `CMD-SHELL`/a string through `/bin/sh -c`, as the service's `user:` (busybox `chpst`), polled every second; `ready_timeout` = `start_period + interval x retries + 60` s (120..600). Without one: `nc -z -w 2 <addr> <port>`, or `true` (with a TODO) when there is no port. |
+| `volumes:` named / anonymous, the image's `VOLUME`s | a directory `/data/vol/<name>` on the data disk (the fault target; listed in `data.dirs`), mounted on the target with `copy_up` (on first use it gets the image's content, owner and mode, as a Docker named volume). Several services naming one volume share it. `external: true` starts empty (warning). A volume on `/data` is the data disk's root already. |
+| `volumes:` bind mount of an existing file or directory | copied into the read-only root (`root.files`, `/etc/hydo/compose/bind/<n>-<name>`) and mounted on the target; read-only in effect (a warning for a directory not marked `:ro`: if the program writes there, make it a named volume). A source that does not exist becomes an empty data-disk directory (Docker creates it). Host paths `/etc/localtime`, `/etc/timezone`, `/var/run/docker.sock`, `/proc`, `/sys`, `/dev`, ... are skipped with a warning. |
+| `tmpfs:`, `type: tmpfs` | a tmpfs mount (mode 1777, `size=` kept) |
+| `secrets:` with `file:` | the file, copied into the root, mounted on `/run/secrets/<name>` (or `target:`) |
+| (every image service) | `mounts:` also gives it a writable `/run` (a tmpfs with a copy of the image's `/run`) and a 64 MiB `/dev/shm`: a container has a writable layer and its own `/dev/shm`, the hydo image root is read-only. |
+| `restart:` | `restart: "no"` -> `recovery: false` (not started again after a power cut, as Docker does not restart it after a reboot); every other policy -> started in crash recovery. hydo restarts every service after a kill fault whatever the policy. |
+| `profiles:` | services in a profile are left out unless `--profile <p>` (as `docker compose up`) |
+| `mem_limit:`, `deploy.resources.limits.memory` | counted in the `guest.ram_mib` guess |
+| (images) | `guest.ram_mib`: 256 MiB + a per-image guess (PostgreSQL 384, MySQL/MongoDB 640, Redis 96, JVM services 1024, others 256), at least 1024, at most 3072. `guest.cpu: v3` when an image's linux/amd64 manifest has variant v3/v4 or the image is known to need AVX2 (restatedev/restate); otherwise a commented line to uncomment if a service stops with "invalid opcode". `data.size_mib` from the volumes. |
+| (workload, invariants) | a TODO skeleton that fails loudly (`exit 1` / `exit 2`), so nobody mistakes it for a passing test. The hydo-onboard skill (`.claude/skills/hydo-onboard`) writes the real ones. |
+| `faults:` | all kinds except `freeze` |
+
+Reported as warnings, with what to do (the file's header repeats them): `build:` (with an image:
+the image is used; without one the import stops: build it, `docker save` it, set `image:`),
+non-default `networks:` (one loopback network in the guest: isolation between Compose networks is
+not modelled), `network_mode`, `privileged`, `cap_add`/`cap_drop`, `devices`, `security_opt`,
+`pid`/`ipc`/`uts`/`userns_mode`, `sysctls`, `ulimits`, `dns*`, `init`, `volumes_from`, `extends`,
+`configs`, `scale`, `deploy.replicas` > 1 and other `deploy:` (Swarm) keys, `shm_size`, GPU
+reservations, `platform:` other than linux/amd64 or linux/arm64, an `include:`. Ignored silently:
+`labels`, `logging`, `stdin_open`, `tty`, `stop_signal`, `stop_grace_period`, CPU shares and quotas,
+`x-*` extension fields. A **port collision** -- two services listening on the same container
+port, which Compose keeps apart with one network namespace per container -- is reported with each
+service's `addr:`: in the guest only the first one that binds `0.0.0.0:<port>` starts, so make
+each listen on its own address or move one (`examples/compose-voting` moves `result` to 81).
+
+### `services[].mounts` (image services)
+
+The importer writes these; they can be written by hand too. Each entry is made by the image
+service's launcher before every start and every `hydo-oci` call (once per boot, under a lock):
+
+```yaml
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}                              # a file or dir of the guest
+      - {src: /data/vol/pgdata, dst: /var/lib/postgresql/data, copy_up: true}   # a volume
+      - {tmpfs: true, dst: /run, copy_up: true}                          # a writable copy of /run
+      - {tmpfs: true, dst: /dev/shm, size: 64m}                          # an empty tmpfs, mode 1777
+```
+
+`src:` is a path of the guest (the hydo root, or under `/data`); `copy_up: true` on a `src:` fills
+an EMPTY directory from the image's `dst` (content, owner, mode) before mounting it; on a tmpfs it
+copies the image's directory in. A `dst` the image lacks is created in the image root at build time
+(below `/proc`, `/sys`, `/dev`, `/tmp`, `/data` at run time); a `dst` that is a symlink in the image
+is resolved inside the image root, never through to the guest's own directory. Paths use
+`[A-Za-z0-9._@+=,:/-]` only. An image service without `mounts:` gets exactly the launcher it had
+before.
+
+### What a Compose stack does not get
+
+- **Link faults between Compose services act on nothing.** Every service has an `addr:`, but its
+  outgoing connections leave from 127.0.0.1 (see "Link faults"), so `N=a-b` matches no packet of
+  the app's own traffic; and explore.py still draws such link targets for manifests with `addr:`.
+  Use the port faults (`N=<svc>@...`, `O=<svc>@...`), which act on every client's traffic to that
+  service.
+- One network, one hostname, no per-service namespaces: `hostname` inside a service is the
+  guest's; services see each other's processes.
+- The image roots are read-only except for the `mounts:`: a program that writes elsewhere fails
+  with "Read-only file system"; add a `mounts:` entry (a volume or a tmpfs) for that path.
+- Healthchecks run through `hydo-oci`, as root unless the service has a `user:`; the image's own
+  user for a healthcheck (Docker runs it as the container's user) is not looked up.
+- No `build:`, no registry pulls at build time, no Swarm (`deploy:`), no GPUs or host devices.
+
+## gRPC services: generated drivers (`hydo-grpc-gen`)
+
+A system whose inputs are gRPC endpoints needs no hand-written workload client.
+`hydo-grpc-gen` reads the service definitions and writes a driver for every RPC: one static
+client binary, `hydo-grpc`, with one subcommand per job, plus the project's schema and a plan.
+The client sends valid random requests from a seeded stream, records every call's outcome, and
+retries the way a careful client does. Source: `hvx/grpcgen/` (Go, the pinned toolchain).
+
+```sh
+hvx/onboard/hydo-grpc-gen <proto dir> [--hints hints.yaml] --out <dir>   # every .proto under the dir
+hvx/onboard/hydo-grpc-gen --descriptor-set set.pb [--hints ...] --out <dir>   # protoc -o / buf build -o
+hvx/onboard/hydo-grpc-gen --reflect 127.0.0.1:7070 [--hints ...] --out <dir> # a running server's reflection
+#   -I <dir>      extra .proto import path (repeatable)    --target host:port   the address in the guest
+#   --arch amd64,arm64   also build hydo-grpc.arm64        --no-build           only the schema and plan
+#   --steps N     workload.steps in the starter section     --rel <dir>          base of its relative paths
+```
+
+It writes, under `<dir>`:
+
+| file | what |
+|---|---|
+| `grpc/desc.pb` | the schema: a `FileDescriptorSet`, dependencies first, no source info, deterministic bytes |
+| `grpc/plan.json` | every RPC with its hints, checked against the schema (unknown fields, wrong types and bad paths are errors) |
+| `hydo-grpc` | the static guest client for linux/amd64 (`-trimpath`, no build id: byte-identical from the same sources and Go) |
+| `workload/parallel_driver_<rpc>` | one test-composer command per RPC with a weight (and per scenario), in the `hydo/workload/` layout, with a `# hydo: timeout=` header |
+| `hydo.grpc.yaml` | a starter section to merge into `hydo.yaml`: files, `env:`, a `test:` section with the commands, `workload.retry`, and the numbered-steps `workload:` as a commented alternative |
+
+`hvx/onboard/hydo-grpc-gen` builds the generator for the host and the client with `$HYDO_GO`, else
+the pinned `go-1.26.5` of `build-stack.sh` if present, else `go` on PATH. Put `grpc/` at
+`/etc/hydo/grpc` and the client at `/bin/hydo-grpc` (the starter section does).
+
+### What the client does
+
+| command | use |
+|---|---|
+| `hydo-grpc steps $HYDO_FROM $HYDO_TO` | `workload.run`: each step runs `steps.calls` operations on each of `steps.concurrency` workers, the RPC (or scenario) drawn by weight |
+| `hydo-grpc retry` | `workload.retry`: re-sends, with the identical request, every operation whose last outcome was unknown and whose RPC has `retry` |
+| `hydo-grpc drive <rpc\|scenario> [N]` | one composer command: `drive.calls` (default 2, or N) operations; exit 0 if all ended ok, 1 if one ended failed or unknown (the composer records a failed operation; it never exits 100) |
+| `hydo-grpc call <rpc> ['<json>'\|-]` | one call; prints the response as JSON; exit 0 ok, 1 definite failure, 2 unknown -- the invariant convention, for read-backs |
+| `hydo-grpc gen <rpc> [N]` / `list` | print generated requests / the plan's RPCs |
+
+Unary, server-streaming, client-streaming (`stream_len` messages) and bidirectional RPCs are
+supported. Every attempt has a deadline (`deadline_ms`). An operation whose outcome is unknown is
+retried at once with the same request up to `retry.attempts` times; a definite failure never is.
+
+**Outcomes.** The gRPC status decides: OK is ok; INVALID_ARGUMENT, NOT_FOUND, ALREADY_EXISTS,
+PERMISSION_DENIED, UNAUTHENTICATED, FAILED_PRECONDITION, OUT_OF_RANGE, ABORTED, UNIMPLEMENTED are
+definite failures (the server rejected the request before acting); DEADLINE_EXCEEDED,
+UNAVAILABLE, CANCELLED, UNKNOWN, INTERNAL, DATA_LOSS and RESOURCE_EXHAUSTED are unknown (the
+request may have taken effect: a deadline passed while the server worked on, a connection
+reset, a crash half-way). A non-status error is unknown. `classify:` overrides a code per RPC
+for an API that documents a stronger promise.
+
+**Records.** Every attempt is two lines in the history recorder's format (`HYDO-HIST`,
+`hvx/HISTORIES.md`), history `grpc` (`record.history:`), in `/tmp/hydo/grpc/calls`
+(`$HYDO_GRPC_CALLS`) with the bodies, and on the guest console without them (`record.console:
+brief`, the default; `full` or `off`), so a few hundred calls fit in the 64 KiB console:
+
+```
+HYDO-HIST grpc <process> invoke <time> <rpc> <op> <request JSON>
+HYDO-HIST grpc <process> ok|fail|info <time> <rpc> <op> <CODE> <response JSON or status message>
+HYDO-HIST grpc 0 invoke 13472685048 orders.v1.Orders/Create 11 {"request_id":"r11","customer":"bob",...}
+HYDO-HIST grpc 0 info 14474532744 orders.v1.Orders/Create 11 DEADLINE_EXCEEDED context%20deadline%20exceeded
+```
+
+`<process>` is the worker (steps mode) or the OS pid (a composer command), with one operation in
+flight; the operation `<f>` is the RPC; `<op>` the operation id, the same for its retries (each
+retry is a new invocation with the same request); `<time>` guest nanoseconds since boot
+(CLOCK_BOOTTIME, deterministic under hydo); bodies are compact protobuf JSON (proto field names);
+every token is percent-encoded (`%20`, `%40` for `@`; `%` alone is empty). `hvx/history`'s parser
+reads them; no ready-made checker has a model for arbitrary RPCs, so a `checks:` entry that names
+history `grpc` needs RPCs that are reads and writes of a register (a future converter), and
+otherwise the records are for reading a failing run. An RPC with `outcome_id:` also writes the
+value of that request field to `$HYDO_ACKED` (ok) and `<id> ack|failed|unknown` to
+`$HYDO_OUTCOMES`, the files invariants read. The first ok / definite failure / unknown outcome of
+each RPC in a run is also a `HYDO-ASSERT` record of type `reachable` (`grpc.<rpc>.ok`, `.failed`,
+`.unknown`).
+
+**Determinism.** A request is a pure function of the seed and of where it runs -- under the
+test composer the entry's `HYDO_SEED` (so the schedule token `W=`, which the explorer draws and
+shrinks, decides the requests as well as the mix); in steps mode the step and the worker
+(stream `splitmix64(seed, step, worker)`) -- plus values taken from earlier responses and a
+run-wide counter for unique values; never host time. The seed is `--seed`, else
+`$HYDO_GRPC_SEED` (the starter section sets it in `env:`), else the file `/tmp/hydo/grpc/seed`,
+else `hydo_grpc_seed=` on the kernel command line, else the hints' `seed`.
+
+### The hints file
+
+Everything is optional; unknown keys are errors.
+
+```yaml
+target: 127.0.0.1:7070      # the server (default 127.0.0.1:50051); per RPC: target:
+deadline_ms: 1000           # per-attempt deadline (default 2000); per RPC: deadline_ms:
+seed: 1
+services: [orders.v1.Orders]                 # only these services (default: every one)
+steps: {calls: 2, concurrency: 1}            # per step: operations per worker, workers in parallel
+drive: {calls: 4}
+record: {console: brief, history: grpc}      # console: off | brief | full
+defaults:                                    # where a field has no hint
+  string_len: [1, 10]   bytes_len: [0, 16]   repeated_len: [0, 3]   map_len: [0, 2]
+  depth: 4              message_prob: 0.85   optional_prob: 0.7     oneof_none: 0
+rpcs:                       # key: Method, Service/Method or the full name
+  Create:
+    weight: 3               # relative frequency (default 1; 0 = never drawn)
+    retry: {attempts: 4, backoff_ms: 100, at_end: true, end_tries: 8}
+    outcome_id: request_id  # a single scalar request field
+    classify: {ABORTED: info}                # code -> ok | fail | info
+    oneofs: {payment: [card]}                # allowed members of a oneof
+    stream_len: [1, 3]                       # client-streaming: messages per call
+    fields:                 # request field paths; a repeated field's hint applies to each element;
+                            # maps: <field>.key / <field>.value
+      request_id: {unique: true, prefix: r}  # r1, r2, ... (an integer: range lo, lo+1, ...)
+      customer: {choice: [alice, bob]}       # also enum value names, numbers, true/false
+      amount_cents: {range: [1, 50000]}      # numbers, inclusive
+      items: {len: [1, 3]}                   # strings/bytes: length; repeated/map: entries
+      items.sku: {format: digits, len: [3, 3], prefix: sku-}   # alnum lower digits hex uuid
+      note: {prob: 0.5}                      # presence of an optional / message field
+      page_token: {omit: true}
+      region: {value: eu-1}                  # a constant
+  Cancel:
+    fields:
+      id: {from: Create.id}  # a value an earlier call returned: <rpc>.<path> (response),
+                             # <rpc>.request.<path>; or {rpc:, path:, side:, pick: random|latest,
+                             # fallback: skip|generate}. skip: the call waits until one exists.
+scenarios:                   # optional fixed sequences, drawn like an RPC
+  - {name: create_cancel, weight: 1, calls: [Create, Get, Cancel]}   # `from` takes this worker's latest
+```
+
+Without hints every value is still valid for its type: integers mostly small and non-negative,
+with the edges (0, 1, the maximum) and a few negatives; finite floats; lowercase alphanumeric
+strings; declared enum values without `*_UNSPECIFIED`; one member of each oneof; distinct map
+keys; proto2 `required` fields always set; nesting bounded by `depth`; Timestamp in the 30 days
+after 2026-01-01, Duration up to an hour, empty Any/Struct. What a server rejects for business
+reasons (an amount of 0, an unknown id) needs a hint: those calls are recorded as definite
+failures, which is valid input but rarely the interesting part.
+
+Values for `from` are kept in pools under `/tmp/hydo/grpc/pool/` (request fields after an ok or
+unknown outcome, response fields after an ok), shared by the processes of one run.
+
+### With the test composer, or numbered steps
+
+The starter section uses the test composer (MANIFEST "The test composer"): one
+`parallel_driver` per RPC with a weight (`run: [/bin/hydo-grpc, drive, <rpc>]`, a `timeout:`
+that bounds `drive.calls` operations whose every attempt runs into its deadline) and per
+scenario, the same commands as files in `<out>/workload/` for a `hydo/` folder, and
+`workload.retry: /bin/hydo-grpc retry` (the generic init runs it after the faults heal; the
+composer leaves `workload.retry` alone). The composer draws commands uniformly, so `weight:` only
+matters in steps mode; give an RPC weight 0 to leave out its command. Without the composer, the
+commented `workload:` in the starter section runs `hydo-grpc steps` per step range; a plan
+whose invariants need one operation per step (the stack's ids 0..29) uses that mode.
+
+### Example and evidence
+
+`hvx/grpcgen/demo/`: an order service (`orders.v1.Orders`: Create, Get, Cancel, List) on Redis
+with one planted bug, driven only by generated drivers under the test composer: `proto/`, `hints.yaml`, `hydo.yaml`
+(`params: mode: buggy|fixed`), `build.sh`. The stack's front door has a `.proto` too
+(`hvx/stack/proto/hydo/order.proto`, `hvx/stack/grpc-hints.yaml`), and
+`examples/stack/hydo-grpcgen.yaml` is the stack manifest with the generated driver in place of
+`hydostack place/retry` (numbered steps). Results: `hvx/HISTORY.md`, Milestone 91.
+
+Limits: a server that needs TLS, auth metadata or custom headers is not supported (plain-text
+HTTP/2 only); `from` carries scalar and enum values, not whole messages; values a request needs
+from another system (a payment token) must come from hints.

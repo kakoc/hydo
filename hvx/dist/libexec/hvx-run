@@ -2,4 +2,20 @@
 # Run a command that uses /dev/hvx while holding the SHARED module lock, so a module reload
 # (`hydo module load|unload`, exclusive lock) waits until no VM is running. The same convention
 # as ~/bin/hvx-run on the hydo build boxes: lock file $HYDO_LOCK, default ~/.hvx-module.lock.
-exec flock -s "${HYDO_LOCK:-$HOME/.hvx-module.lock}" "$@"
+#
+# sudo only when needed: callers (hydo, explore.py) pass "sudo ..." as the command. When the
+# device ($HVX_DEV, default /dev/hvx) can be read and written by this user (the udev rule of
+# `hydo module udev install` gives it to a group), the leading "sudo" is dropped, so the run
+# needs no root and no password prompt. HYDO_SUDO=1 keeps sudo anyway. When sudo is kept and
+# HVX_DEV names another device, HVX_DEV is passed through sudo (sudo resets the environment).
+dev=${HVX_DEV:-/dev/hvx}
+lock=${HYDO_LOCK:-$HOME/.hvx-module.lock}
+if [ "$1" = sudo ]; then
+  if [ "${HYDO_SUDO:-0}" != 1 ] && [ -r "$dev" ] && [ -w "$dev" ]; then
+    shift
+  elif [ -n "${HVX_DEV:-}" ]; then
+    shift
+    exec flock -s "$lock" sudo env HVX_DEV="$HVX_DEV" "$@"
+  fi
+fi
+exec flock -s "$lock" "$@"
