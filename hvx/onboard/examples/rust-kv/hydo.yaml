@@ -4,8 +4,10 @@
 # hold -- every acknowledged PUT reads back, every log line parses -- and what should happen at
 # least once (a non-empty log replayed, a PUT without a reply), and two BUGGIFY fault points in
 # the server (a lost reply, a slow fdatasync) fire when the schedule carries B=<seed>.
-# Build (from the repository root, on the build box; rkv built by build-rkv.sh):
+# Build: ./build-rkv.sh puts the static x86_64 rkv in bin/rkv (./build-rkv.sh aarch64: the arm64
+# one, for the Mac backend); then, on the build box from the repository root,
 #   HYDO_SEEDRNG=~/hydo/build/hvx_seedrng hvx/onboard/hydo-build hvx/onboard/examples/rust-kv/hydo.yaml
+# or on a Mac with the Mac release: hydo build hydo.yaml
 # Try:  disk=none | run                 -> OK, every acknowledged PUT survives
 #       disk=cut | run C=12             -> OK: the server fdatasyncs before it acknowledges
 #       disk=cut | run C=12 S=never     -> VIOLATION: without fdatasync a power cut loses acked PUTs
@@ -14,12 +16,9 @@ name: rust-kv
 description: rkv (Rust, hydo-assert SDK); every acknowledged PUT must survive kills and power cuts.
 buggify: true
 
-params:
-  bin: "target/x86_64-unknown-linux-musl/release"   # directory holding the static rkv (build-rkv.sh)
-
 root:
   files:
-    - {src: "{{bin}}/rkv", dst: /bin/rkv, mode: "0755"}
+    - {src: bin/rkv, dst: /bin/rkv, mode: "0755"}   # build-rkv.sh [aarch64]
 
 data:
   size_mib: 64

@@ -165,6 +165,8 @@ class Space:
         if s["disk"] == "none" or s["disk"].startswith("ioerr"):
             s.pop("C", None)
         tokens = {t for t, _, _ in self.knobs}
+        if self.m.get("buggify") is True:   # the programs carry SDK fault points: keep B= (MANIFEST.md)
+            tokens.add("B")
         for key in list(s):
             if len(key) == 1 and key.isupper() and key not in "KNCPTOF" and key not in tokens:
                 s.pop(key)

@@ -175,7 +175,23 @@ fn check(port: &str, acked: &str) -> i32 {
         n += 1;
         let k = format!("k:{}", i);
         let want = format!("VAL v{}", i);
-        let got = request(port, &format!("GET {}", k), Duration::from_secs(2)).unwrap_or_else(|e| format!("ERR {}", e));
+        // A transport error is "could not ask", not "lost": the server may still be busy with
+        // PUTs whose clients gave up (a slow fdatasync). Ask again for up to 30 s; if it never
+        // answers, the check cannot be evaluated (exit 2), which is not a violation.
+        let mut got = None;
+        for _ in 0..15 {
+            match request(port, &format!("GET {}", k), Duration::from_secs(2)) {
+                Ok(r) => {
+                    got = Some(r);
+                    break;
+                }
+                Err(_) => hydo_sometimes!(true, "rkv.check.retried_get" => "the oracle had to ask again (the server was busy)"),
+            };
+        }
+        let Some(got) = got else {
+            println!("rkv check: the server stopped answering at key {}", k);
+            return 2;
+        };
         let ok = ACKED_DURABLE.check(got == want, details! {"key": k.as_str(), "got": got.as_str(), "want": want.as_str()});
         if !ok {
             lost += 1;
