@@ -24,6 +24,7 @@
 # memory, the webhooks not delivered yet -- is appended to the acknowledged ids as w: tokens. The
 # harness carries that line into the recovery boot's "oracle" command (hvx_explore.c, oracle_cmd),
 # where start_all takes the w: tokens out again and starts the world from them.
+# Just before the verdict (final_verdict) the console gets what the outside world saw: "hydo-world: <seq> ..." lines.
 
 pf_world_start() {   # [carry file]: start the world once per boot, wait until it answers
   local n=0
@@ -110,4 +111,9 @@ failed_ids() {   # a power cut: freeze the world, carry its records with the ack
   $BB cat $H/world.dump >> $HYDO_ACKED
   log "fake world frozen at the power cut: $($BB wc -l < $H/world.dump) records carried ($($BB wc -c < $H/world.dump) bytes)"
   return 0
+}
+
+final_verdict() {   # just before the verdict (after any liveness wait): what the outside world saw
+  $HYDO_WORLD ctl summary 2> /dev/null | $BB sed 's/^/hydo-world: /'
+  _pf_orig_final_verdict "$@"
 }

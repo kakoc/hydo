@@ -26,7 +26,7 @@ func ctlMain(args []string) int {
 	fmt.Fprintln(c, strings.Join(args, " "))
 	b, _ := io.ReadAll(bufio.NewReader(c))
 	s := string(b)
-	if args[0] == "dump" { // the carry tokens, one per line, without the END line
+	if args[0] == "dump" || args[0] == "summary" { // one per line, without the END line
 		s = strings.TrimSuffix(strings.TrimSuffix(s, "\n"), "END")
 	}
 	fmt.Print(s)

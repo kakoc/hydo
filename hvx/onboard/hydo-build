@@ -484,7 +484,7 @@ def has_freeze(m):
 # (hvx/onboard/world/), and faulted by H= tokens (hydo-init-fakes.sh). MANIFEST.md, "Fake outside
 # services". A manifest without either key builds exactly as before.
 WORLD_INIT = "hydo-init-fakes.sh"      # inserted into /sbin/init only for manifests with fakes:/proxies:
-PF_WRAP = ("start_all", "set_knob", "step_range", "restart_dead", "failed_ids")
+PF_WRAP = ("start_all", "set_knob", "step_range", "restart_dead", "failed_ids", "final_verdict")
 KNOWN_FAKE = {"name", "port", "addr", "protocol", "idempotency", "ref", "routes", "description"}
 KNOWN_PROXY = {"name", "port", "addr", "protocol", "idempotency", "ref", "routes", "to", "service", "description"}
 KNOWN_ROUTE = {"name", "method", "path", "status", "code", "headers", "body", "message", "ref", "effect",

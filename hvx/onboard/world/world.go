@@ -269,6 +269,8 @@ func (w *World) command(f []string) string {
 	case "dump":
 		w.frozen = true
 		return w.carry()
+	case "summary":
+		return w.summary()
 	}
 	return "error: unknown command " + f[0] + "\n"
 }
@@ -377,4 +379,41 @@ func parseRecord(ln string) map[string]string {
 		m[k] = unesc(v)
 	}
 	return m
+}
+
+// summary: what the outside world saw, one short line per request, webhook and event (at most
+// summaryMax lines; the guest console is 64 KiB), for the console at the end of a run.
+const summaryMax = 150
+
+func (w *World) summary() string {
+	b, err := os.ReadFile(w.logf.Name())
+	if err != nil {
+		return "END\n"
+	}
+	var out []string
+	n := 0
+	for _, ln := range strings.Split(string(b), "\n") {
+		r := parseRecord(ln)
+		if r == nil || r["kind"] == "meta" {
+			continue
+		}
+		n++
+		if len(out) == summaryMax {
+			continue
+		}
+		var s string
+		switch r["kind"] {
+		case "req":
+			s = fmt.Sprintf("%s %s.%s ref=%s idem=%s fx=%s %s", r["seq"], r["ep"], r["route"], esc(r["ref"]), esc(r["idem"]), r["fx"], r["out"])
+		case "hook":
+			s = fmt.Sprintf("%s webhook %s.%s ref=%s src=%s n=%s %s", r["seq"], r["ep"], r["route"], esc(r["ref"]), r["src"], r["n"], r["out"])
+		case "event":
+			s = fmt.Sprintf("%s event %s ref=%s", r["seq"], r["route"], esc(r["ref"]))
+		}
+		out = append(out, s)
+	}
+	if n > len(out) {
+		out = append(out, fmt.Sprintf("... %d more records", n-len(out)))
+	}
+	return strings.Join(append(out, "END"), "\n") + "\n"
 }
