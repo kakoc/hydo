@@ -24,6 +24,11 @@ def main():
     rep = json.load(open(os.path.join(ad, "report.json")))
     s = rep["summary"]
     fa = failing(ad)
+    secs = sum(json.loads(l).get("secs") or 0 for l in open(os.path.join(ad, "runs.jsonl")))
+    tp = os.path.join(ad, "fc-traces.jsonl")
+    tsecs = sum(json.loads(l).get("secs") or 0 for l in open(tp)) if os.path.exists(tp) else 0
+    print("run seconds: points %.0f s, traces %.0f s (with %d workers: %.0f s of wall time; quiet-window waits %s s)"
+          % (secs, tsecs, s["workers"], (secs + tsecs) / s["workers"], s.get("quiet_wait_s", 0)))
     print("adaptive %s: %d trace runs + %d stage-1 + %d stage-2 points = %d runs; sweep %.0f s, whole run %.0f s; "
           "%d failing points, %d of %d failures reproduced"
           % (ad, s.get("trace_runs", 0), s.get("stage1_points", 0), s.get("stage2_points", 0),
