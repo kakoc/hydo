@@ -593,7 +593,11 @@ def _mount_lines(o):
     L = ["if [ ! -f /tmp/hydo/oci-mnt.%s.done ]; then" % svc,
          "  $BB mkdir -p /tmp/hydo; exec 9> /tmp/hydo/oci-mnt.%s.lock; $BB flock 9" % svc,
          "  hmnt() { $BB grep -q \" $1 \" /proc/mounts; }",
-         "  if [ ! -f /tmp/hydo/oci-mnt.%s.done ]; then" % svc]
+         "  if [ ! -f /tmp/hydo/oci-mnt.%s.done ]; then" % svc,
+         # the links Docker puts in a container's /dev (bash process substitution needs /dev/fd)
+         "    for l in fd:/proc/self/fd stdin:/proc/self/fd/0 stdout:/proc/self/fd/1 stderr:/proc/self/fd/2; do",
+         "      [ -e /dev/${l%%:*} ] || $BB ln -s ${l#*:} /dev/${l%%:*}",
+         "    done"]
     for k, mt in enumerate(o["mounts"]):
         d = "$R" + mt["dst"]
         if _under_binds(mt["dst"]):

@@ -330,6 +330,7 @@ class Mounts(unittest.TestCase):
             self.assertIn("$BB chmod 1777 /tmp/hydo/oci-tmpfs/svc/2", s)
             self.assertIn("$BB cp -a $R/srv/data/. /data/vol/v/", s)
             self.assertIn("$BB flock 9", s)
+            self.assertIn("[ -e /dev/${l%%:*} ] || $BB ln -s ${l#*:} /dev/${l%%:*}", s)   # /dev/fd as in Docker
         self.assertLess(run.index("mount --bind /etc/hosts"), run.index("exec $BB chroot"))
         info = json.load(open(os.path.join(R, "etc/hydo/oci/svc/image.json")))
         self.assertEqual(len(info["effective"]["mounts"]), 5)
