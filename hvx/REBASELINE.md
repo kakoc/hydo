@@ -11,6 +11,7 @@ record. CLAUDE.md is not changed here.
 
 Contents: 1. Inventory. 2. How the images were rebuilt and verified. 3. Old → new image
 hashes. 4. Old → new fingerprints, one table per image. 5. Verdict changes. 6. Paths.
+7. Rebuild after the netem drain fix (M77, 2026-10-23): the `-nq` images.
 
 ## 1. Inventory
 
@@ -528,3 +529,288 @@ schedules give the recorded verdicts.
   consoles under `/var/tmp/m60-rebase/res/<image>/consoles/`, schedule lists in
   `/var/tmp/m60-rebase/lists/`, queue log `/var/tmp/m60-rebase/queue.log`.
 - The build directory on the build machine was deleted after the images were copied.
+
+## 7. Rebuild after the netem drain fix (M77, 2026-10-23)
+
+Milestone 71 changed how a network fault is lifted: the netem qdisc is first switched to pass-through
+and drained, then deleted (`net_heal`), so the packets waiting in its delay queue are delivered instead
+of dropped. Images built before M71 still drop them. This section records the rebuild of the
+onboarding examples that allow `network`/`oneway` faults or use `addr:` link faults, and of the
+default stack image (whose `/sbin/init` `hydo_net=` mode got the same change), with new image
+hashes and fingerprints. The `-pin` values in sections 3–4 stay valid for the `-pin` images.
+
+**Build.** Commit `2e0e3fe` (main), on the build machine in a private tree (`~/hydo-rb`, deleted
+afterwards) with the pinned tools only: `hvx_seedrng` compiled by the pinned gcc (`c2a440c5…`; the
+copy in `~/hydo/build/hvx_seedrng` is the stand-in `01adf1bd…` and was not used), miniflux 2.3.3
+rebuilt from `~/mf-src/v2` (`dd8e2456…`, as recorded), the stack example's prebuilt order services
+`~/hydo/build/explore-fix-hydostack` (`1f18f855…`) and `explore-hydostack` (`3ddaf8ba…`), and the
+etcd release tarballs checked against the sha256s pinned in `examples/etcd/build.sh`. Commands:
+`hydo-build <manifest> --out <name>` (etcd with `--set version=<v>`) and
+`STACK_OUT=stack-nq bash ./build-stack.sh`. Every image was built twice; both builds were
+byte-identical. New names end in `-nq`; no existing image was changed.
+
+| new image | sha256 | previous image (sha256) | files that differ (read-only mount, `diff -r`) |
+|---|---|---|---|
+| `explore-ob-stack-fix-nq` | `ecdcb4fab04253c4d28d32bd55ab6a7ff06bf6242e532a2c858df45706693e77` | `explore-ob-stack-fix-pt-pin` (`ac5553ea…`) | `/sbin/init` |
+| `explore-ob-stack-old-nq` | `58de1559bbb52787684ff268b3a9f5dde89ec4cae4ca0acd0366f0a8147339a7` | `explore-ob-stack-old-pt-pin` (`0920ec72…`) | `/sbin/init` |
+| `explore-ob-miniflux-nq` | `7b694c9fe1061aa73dc5b94fe7c2b3b9a4acb974ea5a569554a3f2e51b1f10fb` | `explore-ob-miniflux-pt-pin` (`cc3e6534…`) | `/sbin/init` |
+| `explore-ob-etcd-3.5.5-nq` | `2d4d9301342a4199f061f107037ed368f1110cd545b8d63c57caf17ade05c144` | `explore-ob-etcd-3.5.5` (`bb5f8b79…`) | `/sbin/init`, `/etc/hydo/init-links.sh` |
+| `explore-ob-etcd-3.5.6-nq` | `1df90f1696cc3a8a4c6ddcce47ab5896c9ca21b1e273af84f39a13562097e9ce` | `explore-ob-etcd-3.5.6` (`7f63c284…`) | the same two |
+| `explore-ob-etcd-3.6.8-nq` | `bf213ea507eecf8d90d2ff56824c9ab8834c1615453a57715a3297a98f8b7da4` | `explore-ob-etcd-3.6.8` (`5b32d9e3…`) | the same two |
+| `explore-ob-etcd-3.6.9-nq` | `fd2e9c585e5e8c124b5eb777b742049bdb17f93b0a274c3ef0a8982959ac2f47` | `explore-ob-etcd-3.6.9` (`a4a5c641…`) | the same two |
+| `stack-nq` (default stack) | `161996bbf9f511ac58115b2386407175cde560289a53bce33fc114597cb54eed` | `stack-binlog-ret` (`b7eb93ee…`, M63) | `/sbin/init` |
+
+The data partitions are identical in every pair. `explore-ob-etcd-3.6.15-nq` (`021d350a…`) was
+built in M71 and was not rebuilt. The other
+onboarding examples (redis, redis-ram, redis-oci, avx2, restate-oci) allow no network fault.
+
+**Runs.** Bare-metal machine, `hvx_explore one` (a fresh boot per run) and `hvx_stack_verify`, both
+compiled from `2e0e3fe` in `~/hydo-rb`, module srcversion `CA5BF8BF2A0D66B312A68EF` (not
+reloaded), at most two VMs at a time, 2026-10-23 18:53–21:37 UTC. Each schedule ran twice on the
+new image and once on the old image the same day. Every new-image pair gave the same fingerprint
+and verdict (95 schedule/image pairs, 190 runs, no exception). Every old-image run whose
+fingerprint was recorded earlier (sections 4 and `examples/etcd/RESULTS.md`, 32 values) gave the
+recorded value, so the module and harness changes since then did not move them and every change
+below comes from the new images. Schedules: the ones already recorded for each image in sections 4
+and `examples/*/RESULTS.md`, plus network-heal schedules (the three M71 link-fault schedules and
+the three 3.6.15 link-fault schedules on every etcd version, three network faults on stack-fix)
+and, on etcd 3.5.5/3.5.6, the hand-written check of M60 (`K=etcd<n>@<5..25>+2`, 15 schedules).
+Raw results: `/var/tmp/rb-nq/results.txt` on the bare-metal machine, consoles under `/var/tmp/rb-nq/runs/<id>/`.
+
+**Packets delivered at the heal.** Every network or link fault lifted on a new image ended with
+`left=0` (nothing dropped). In 14 of the 20 schedules whose fault was lifted before the end of the
+workload, packets were waiting in the queue and were delivered (both runs gave the same counts):
+4–41 packets on the twelve etcd link-delay schedules, 1 on stack-fix `O=mysql@5-10:resp:delay,1000ms`
+and 3 on stack-fix `N=mysql@3-8:delay,50ms,loss,20%`; also 2 on the default stack's
+`hydo_net=mysql` scenario (7.2). The old images dropped such packets.
+
+### 7.1 Onboarding examples, old image vs new image
+
+#### `explore-ob-stack-fix-nq` (old image `explore-ob-stack-fix-pt-pin`)
+
+| schedule | old image, run today | new image, run 1 / run 2 | new verdict | verdict vs old |
+|---|---|---|---|---|
+| `disk=none dseed=1 \| run` | 1e143793fbd1178a OK | 8ad89b9f2565f88b / 8ad89b9f2565f88b | OK (3 held) | same |
+| `disk=none dseed=4d5cb825dfaab05b \| run K=redis@11+1 C=24` | b1710b70113809cd OK | 96229e59c4d498ec / 96229e59c4d498ec | OK (3 held) | same |
+| `disk=none dseed=1 \| run K=kafka@10+3 P=mysql@15~100:400` | 5e443166ef59747b OK | 76b4917b3761288e / 76b4917b3761288e | OK (3 held) | same |
+| `disk=cut dseed=45e6d4ac0682d6a9 \| run K=redis@6+4 N=mysql@20-26:delay,48ms C=13` | f34ad5b6d7485755 OK | 1840ff6a385e0466 / 1840ff6a385e0466 | OK (3 held) | same |
+| `disk=cut dseed=676bcff7dd7d00ca \| run K=kafka@1+2 C=23` | 195747446cfe1976 OK | 478afac2dbde8e89 / 478afac2dbde8e89 | OK (3 held) | same |
+| `disk=cut dseed=cf949e8cc47e94d2 \| run K=kafka@5+3 N=redis@19-30:delay,80ms C=28` | 6d21b656d9edbb20 OK | b65235b9260d8875 / b65235b9260d8875 | OK (3 held) | same |
+| `disk=cut dseed=787cfeea930dd7c3 \| run K=redis@8+1 N=kafka@25-30:delay,20ms,reorder,45% C=24` | ba4fcd16652818c1 OK | 7e38aa35149cc8c0 / 7e38aa35149cc8c0 | OK (3 held) | same |
+| `disk=cut dseed=3e46da0b0d53091a \| run K=kafka@12+1 N=mysql@0-13:delay,20ms,reorder,39%,corrupt,3% C=18` | 00691d330beb913a OK | dad9ea70a2c5c9b1 / dad9ea70a2c5c9b1 | OK (3 held) | same |
+| `disk=cut dseed=4631de84f54a4a77 \| run K=kafka@17+2 N=kafka@27-29:corrupt,4% C=21` | 74fea7e8b174048e OK | 5509af1f4f73a6d8 / 5509af1f4f73a6d8 | OK (3 held) | same |
+| `disk=cut dseed=31aad0ceab8015ae \| run K=redis@1+3 N=mysql@20-29:delay,20ms,reorder,43%,duplicate,46% C=11` | 0949615d3aee5d10 OK | 88a345f565f777c9 / 88a345f565f777c9 | OK (3 held) | same |
+| `disk=none dseed=1 \| run N=kafka@5-10:delay,300ms` | 29eb2fbacf618373 OK | 17037311b8e11b73 / 17037311b8e11b73 | OK (3 held) | same |
+| `disk=none dseed=1 \| run O=mysql@5-10:resp:delay,1000ms` | 2c419971f737b5c4 OK | 4523171f2e23e589 / 4523171f2e23e589 | OK (3 held) | same |
+| `disk=none dseed=1 \| run N=mysql@3-8:delay,50ms,loss,20%` | 2e0c7f43af1e0eb4 OK | 1a06e2d8a0b97acd / 1a06e2d8a0b97acd | OK (3 held) | same |
+
+#### `explore-ob-stack-old-nq` (old image `explore-ob-stack-old-pt-pin`)
+
+| schedule | old image, run today | new image, run 1 / run 2 | new verdict | verdict vs old |
+|---|---|---|---|---|
+| `disk=none dseed=1 \| run` | 99daf546e5d66fc2 OK | 3eb4fc3d8f986ffa / 3eb4fc3d8f986ffa | OK (3 held) | same |
+| `disk=none dseed=4d5cb825dfaab05b \| run K=redis@11+1 C=24` | a9314b08247ff193 VIOLATION | 402736c78bbf9a6d / 402736c78bbf9a6d | VIOLATION exactly_once order=11 in Kafka, never ACKed | same |
+| `disk=none dseed=1 \| run K=kafka@10+3 P=mysql@15~100:400` | 9e6dfbb3698fa9ef OK | 3a35b21568b5832b / 3a35b21568b5832b | OK (3 held) | same |
+| `disk=cut dseed=45e6d4ac0682d6a9 \| run K=redis@6+4 N=mysql@20-26:delay,48ms C=13` | a428601b64a74455 VIOLATION | 2a682dbf4ccfb074 / 2a682dbf4ccfb074 | VIOLATION exactly_once order=6 in Kafka, never ACKed | same |
+| `disk=cut dseed=676bcff7dd7d00ca \| run K=kafka@1+2 C=23` | d25ccf1387445bc0 VIOLATION | 24c92e0c9238a2e1 / 24c92e0c9238a2e1 | VIOLATION exactly_once order=1 in Kafka, never ACKed | same |
+| `disk=cut dseed=cf949e8cc47e94d2 \| run K=kafka@5+3 N=redis@19-30:delay,80ms C=28` | ff2130f956ec89c6 VIOLATION | c5d0b0d0ded187f6 / c5d0b0d0ded187f6 | VIOLATION exactly_once order=5 in Kafka, never ACKed | same |
+| `disk=cut dseed=787cfeea930dd7c3 \| run K=redis@8+1 N=kafka@25-30:delay,20ms,reorder,45% C=24` | a9a1857e2794eebb VIOLATION | 92b720e1cc111ba3 / 92b720e1cc111ba3 | VIOLATION exactly_once order=8 in Kafka, never ACKed | same |
+| `disk=cut dseed=3e46da0b0d53091a \| run K=kafka@12+1 N=mysql@0-13:delay,20ms,reorder,39%,corrupt,3% C=18` | 2a832da7c211a517 VIOLATION | 2285a081ad33e198 / 2285a081ad33e198 | VIOLATION exactly_once order=12 in Kafka, never ACKed | same |
+| `disk=cut dseed=4631de84f54a4a77 \| run K=kafka@17+2 N=kafka@27-29:corrupt,4% C=21` | a98f44d8e8ea7db4 VIOLATION | 5a49cdd6c0ec7a3b / 5a49cdd6c0ec7a3b | VIOLATION exactly_once order=17 in Kafka, never ACKed | same |
+| `disk=cut dseed=31aad0ceab8015ae \| run K=redis@1+3 N=mysql@20-29:delay,20ms,reorder,43%,duplicate,46% C=11` | 80d9f550aba6c54e VIOLATION | 96849badad99db66 / 96849badad99db66 | VIOLATION exactly_once order=1 in Kafka, never ACKed | same |
+
+#### `explore-ob-miniflux-nq` (old image `explore-ob-miniflux-pt-pin`)
+
+| schedule | old image, run today | new image, run 1 / run 2 | new verdict | verdict vs old |
+|---|---|---|---|---|
+| `disk=none dseed=1 \| run` | bf87f3ce800d26d1 OK | 092d1ebdf7cfd714 / 092d1ebdf7cfd714 | OK (acked=30 exactly once) | same |
+| `disk=none dseed=1 \| run K=postgres@10+3` | fdf37ca6d00e1cce OK | 3b562f2f1bd2ff85 / 3b562f2f1bd2ff85 | OK (acked=30 exactly once) | same |
+| `disk=none dseed=1 \| run K=front@10+3` | 650e9ab225ae8b95 OK | 9eef5de1f30c56c7 / 9eef5de1f30c56c7 | OK (acked=30 exactly once) | same |
+| `disk=none dseed=1 \| run P=postgres@10+3` | ecc0e1d1df2081a0 OK | 208623b82f6e8a5f / 208623b82f6e8a5f | OK (acked=30 exactly once) | same |
+| `disk=none dseed=1 \| run P=postgres@10~50:4000` | 03c17b73a10c407c OK | 5955a8a7ff603dc6 / 5955a8a7ff603dc6 | OK (acked=30 exactly once) | same |
+| `disk=none dseed=1 \| run O=postgres@10-15:resp:loss,100%` | 1d98911ae0470028 OK | 9523c079a75e578b / 9523c079a75e578b | OK (acked=30 exactly once) | same |
+| `disk=none dseed=1 \| run O=front@10-15:resp:loss,100%` | 678539bc6bcf3447 OK | 18f0a36e175cb607 / 18f0a36e175cb607 | OK (acked=30 exactly once) | same |
+| `disk=none dseed=1 \| run O=front@10-15:req:loss,100%` | f92a2195a7093a94 OK | c93698afd51f8531 / c93698afd51f8531 | OK (acked=30 exactly once) | same |
+| `disk=none dseed=1 \| run C=20` | edcfe5f2eaebcf2c OK | 58a3b9ff6e46d29f / 58a3b9ff6e46d29f | OK (acked=20 exactly once) | same |
+| `disk=none dseed=1 \| run C=20 S=off` | 46c0b42d001f9068 VIOLATION | b883bfaac88baf61 / b883bfaac88baf61 | VIOLATION category c4 stored 0 times | same |
+
+#### `explore-ob-etcd-3.5.5-nq` (old image `explore-ob-etcd-3.5.5`)
+
+| schedule | old image, run today | new image, run 1 / run 2 | new verdict | verdict vs old |
+|---|---|---|---|---|
+| `disk=none dseed=1 \| run` | 56f01a9f4404c4b5 OK | 4baa570bd70d0ae7 / 4baa570bd70d0ae7 | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run N=etcd1-etcd2@5-10:delay,300ms` | ed9ff0665ca936b4 OK | defd0cba5a705cf8 / defd0cba5a705cf8 | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run N=etcd1-*@10-20:delay,200ms` | cbc8b97a46cda7f3 OK | dd365613ab7b7e0a / dd365613ab7b7e0a | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run O=etcd2-etcd3@5-12:resp:delay,500ms` | 1b80ecebf8550e0b OK | 0a0bddda0eb17ab7 / 0a0bddda0eb17ab7 | OK (acked=90 all readable) | same |
+| `disk=cut dseed=1 \| run C=30` | 5fb1c4c3aa64efb7 VIOLATION members_agree, revisions 99 99 98 | debadb6e1a4d46b8 / debadb6e1a4d46b8 | VIOLATION members_agree, revisions 99 98 98 | same kind, details differ |
+| `disk=cut dseed=1 \| run N=etcd1-*@0-30:loss,100% C=30` | 949421928ad26017 VIOLATION members_agree, revisions 65 66 66 | 1e2946920c51737c / 1e2946920c51737c | OK (acked=58 all readable) | **CHANGED** |
+| `disk=cut dseed=1 \| run N=etcd1-etcd2@0-30:loss,100% C=30` | 088fecfac3bd619a VIOLATION members_agree, revisions 69 68 69 | 7d2553e55364fad5 / 7d2553e55364fad5 | VIOLATION members_agree, revisions 67 66 67 | same kind, details differ |
+| `disk=cut dseed=4127cc1347fae6ba \| run C=30` | b802065d149ebda2 VIOLATION members_agree, revisions 99 99 98 | 2bd06b8446559fe9 / 2bd06b8446559fe9 | VIOLATION members_agree, revisions 99 98 98 | same kind, details differ |
+| `disk=none dseed=890abaea1c4d92d3 \| run K=etcd1@10+1 P=etcd3@26+1 T=2:-30` | 20ec47337eaf03f8 VIOLATION revisions_monotonic (client revision went back) | 73546ff456569eba / 73546ff456569eba | OK (acked=90 all readable) | **CHANGED** |
+| `disk=none dseed=1 \| run K=etcd1@5+2` | c26a912a430b1612 OK | 21d281f9332eecf0 / 21d281f9332eecf0 | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd1@10+2` | b5f21c2168f171fc OK | 90ec7193f3f66764 / 90ec7193f3f66764 | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd1@15+2` | 06ab626d2e73c15e VIOLATION members_agree, revisions 99 98 98 | 68a4292b8e72e30b / 68a4292b8e72e30b | OK (acked=90 all readable) | **CHANGED** |
+| `disk=none dseed=1 \| run K=etcd1@20+2` | 8558f8ed07255f97 OK | afe0410e80b5a21c / afe0410e80b5a21c | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd1@25+2` | 9fe1f5fd1acb3158 VIOLATION | 2c591d5d1fb5c3ea / 2c591d5d1fb5c3ea | VIOLATION members_agree, revisions 99 98 98 | same |
+| `disk=none dseed=1 \| run K=etcd2@5+2` | 275efecc599c70b8 OK | a9318707c8213185 / a9318707c8213185 | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd2@10+2` | d13a4b2d7236b8a9 OK | f7cb239260dec1fd / f7cb239260dec1fd | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd2@15+2` | 5f6bba205443f476 OK | 4f5f89b4d45e0c0e / 4f5f89b4d45e0c0e | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd2@20+2` | d760adcc6e185431 VIOLATION members_agree, revisions 98 99 98 | b9e41e70c21ebe84 / b9e41e70c21ebe84 | OK (acked=90 all readable) | **CHANGED** |
+| `disk=none dseed=1 \| run K=etcd2@25+2` | 242320f8fb1810e5 OK (acked=90 all readable) | 971d74bcb0433c81 / 971d74bcb0433c81 | VIOLATION members_agree, revisions 98 99 98 | **CHANGED** |
+| `disk=none dseed=1 \| run K=etcd3@5+2` | c6fb175d0fde5688 OK | 62aa978444d1887f / 62aa978444d1887f | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd3@10+2` | 52388ce96c5a8633 OK | ab123877d6e99a6c / ab123877d6e99a6c | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd3@15+2` | f44f9c538d8bc1d3 VIOLATION members_agree, revisions 98 98 99 | 3f7eae9042c7ce81 / 3f7eae9042c7ce81 | OK (acked=90 all readable) | **CHANGED** |
+| `disk=none dseed=1 \| run K=etcd3@20+2` | 27b1d91d212d6e0e OK | 154b332a2055ff11 / 154b332a2055ff11 | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd3@25+2` | 2da0f55484a21122 VIOLATION | be4081c525b935df / be4081c525b935df | VIOLATION members_agree, revisions 98 98 99 | same |
+
+#### `explore-ob-etcd-3.5.6-nq` (old image `explore-ob-etcd-3.5.6`)
+
+| schedule | old image, run today | new image, run 1 / run 2 | new verdict | verdict vs old |
+|---|---|---|---|---|
+| `disk=none dseed=1 \| run` | 86970013d37351c1 OK | abface2f2b610673 / abface2f2b610673 | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run N=etcd1-etcd2@5-10:delay,300ms` | 0cb718bb2e346318 OK | ebfe884fb6284035 / ebfe884fb6284035 | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run N=etcd1-*@10-20:delay,200ms` | d435b300e16634e2 OK | 5e1babe260a2f01d / 5e1babe260a2f01d | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run O=etcd2-etcd3@5-12:resp:delay,500ms` | 686fa6e356207f11 OK | ff1195f0ac35aa4c / ff1195f0ac35aa4c | OK (acked=90 all readable) | same |
+| `disk=cut dseed=1 \| run C=30` | a5784f4674e22485 OK | e44f529fcb8ce746 / e44f529fcb8ce746 | OK (acked=90 all readable) | same |
+| `disk=cut dseed=1 \| run N=etcd1-*@0-30:loss,100% C=30` | 93f72c58083f1a87 OK | 1693d9693b17750e / 1693d9693b17750e | OK (acked=58 all readable) | same |
+| `disk=cut dseed=1 \| run N=etcd1-etcd2@0-30:loss,100% C=30` | 130b5b420c74963c OK | 88efbdc5baefe220 / 88efbdc5baefe220 | OK (acked=60 all readable) | same |
+| `disk=cut dseed=4127cc1347fae6ba \| run C=30` | b3ae9098c0c3da18 OK | 5c5ff264b8046e6b / 5c5ff264b8046e6b | OK (acked=90 all readable) | same |
+| `disk=none dseed=890abaea1c4d92d3 \| run K=etcd1@10+1 P=etcd3@26+1 T=2:-30` | 2b4952671683ea70 OK | 12c8375b4ba5b955 / 12c8375b4ba5b955 | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd1@5+2` | b09ba87e80770f3e OK | 051736ab9a2592c3 / 051736ab9a2592c3 | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd1@10+2` | aefa2bf3e56fba7b OK | a99cc97375a076d0 / a99cc97375a076d0 | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd1@15+2` | d45de0e447034852 OK | 3b80002570382241 / 3b80002570382241 | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd1@20+2` | 7fb40a3fceaf0552 OK | 6d658f9d67fbb33a / 6d658f9d67fbb33a | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd1@25+2` | 6b33bd3bfaedc6ce OK | 6abe9d82470d9df7 / 6abe9d82470d9df7 | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd2@5+2` | 369420f4b718bdf5 OK | bd6e94a0b7892147 / bd6e94a0b7892147 | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd2@10+2` | 8e3cf143afd1f1df OK | fa140681bb24349a / fa140681bb24349a | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd2@15+2` | a5830713d01dc365 OK | ec67109c3c4dca6d / ec67109c3c4dca6d | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd2@20+2` | 199279032efb92e9 OK | 7bd74a5b473a367d / 7bd74a5b473a367d | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd2@25+2` | 7d42440b4346578c OK | a184a8224a13a572 / a184a8224a13a572 | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd3@5+2` | 6afe7a0d59541be8 OK | ead71eb78395945f / ead71eb78395945f | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd3@10+2` | d888ec98bd504889 OK | fdf70451066078f0 / fdf70451066078f0 | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd3@15+2` | 892b27ebfc3c9528 OK | 02701a4f5f71e8d4 / 02701a4f5f71e8d4 | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd3@20+2` | 7d8ca8060df95fdf OK | 9311ecf133817d97 / 9311ecf133817d97 | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run K=etcd3@25+2` | a28938bbd069c900 OK | f3cb832cd0cc0f3b / f3cb832cd0cc0f3b | OK (acked=90 all readable) | same |
+
+#### `explore-ob-etcd-3.6.8-nq` (old image `explore-ob-etcd-3.6.8`)
+
+| schedule | old image, run today | new image, run 1 / run 2 | new verdict | verdict vs old |
+|---|---|---|---|---|
+| `disk=none dseed=1 \| run` | e6409067a40cc2d5 OK | 875de1a790776cff / 875de1a790776cff | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run N=etcd1-etcd2@5-10:delay,300ms` | 58f5670a04ccc89e OK | e471ab31445a1b28 / e471ab31445a1b28 | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run N=etcd1-*@10-20:delay,200ms` | a26242cf01dc0084 OK | 476bb0bc2995096e / 476bb0bc2995096e | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run O=etcd2-etcd3@5-12:resp:delay,500ms` | 44c7154a6fb1c15a OK | 2f4dbb6e5da80e11 / 2f4dbb6e5da80e11 | OK (acked=90 all readable) | same |
+| `disk=cut dseed=1 \| run C=30` | 58d815a2231170a5 OK | 4f4eca318b655aeb / 4f4eca318b655aeb | OK (acked=90 all readable) | same |
+| `disk=cut dseed=1 \| run N=etcd1-*@0-30:loss,100% C=30` | ce82a58a2a1cf70c OK | c45fda05552f97b5 / c45fda05552f97b5 | OK (acked=58 all readable) | same |
+| `disk=cut dseed=1 \| run N=etcd1-etcd2@0-30:loss,100% C=30` | a6cf5defd0d0e5f8 OK | 18126372e8346143 / 18126372e8346143 | OK (acked=60 all readable) | same |
+
+#### `explore-ob-etcd-3.6.9-nq` (old image `explore-ob-etcd-3.6.9`)
+
+| schedule | old image, run today | new image, run 1 / run 2 | new verdict | verdict vs old |
+|---|---|---|---|---|
+| `disk=none dseed=1 \| run` | 084054bfa1889a31 OK | ec25ed73287912f2 / ec25ed73287912f2 | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run N=etcd1-etcd2@5-10:delay,300ms` | 6025dfd1fdd6e89d OK | e88e74bde3b8f915 / e88e74bde3b8f915 | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run N=etcd1-*@10-20:delay,200ms` | bf973c623fcf8e8b OK | d52f5a1bce0e07ed / d52f5a1bce0e07ed | OK (acked=90 all readable) | same |
+| `disk=none dseed=1 \| run O=etcd2-etcd3@5-12:resp:delay,500ms` | 18f2f317a6950e4b OK | 23a6b8acb5ac2768 / 23a6b8acb5ac2768 | OK (acked=90 all readable) | same |
+| `disk=cut dseed=1 \| run C=30` | 642746a482fbb046 OK | 9b113e89611a4571 / 9b113e89611a4571 | OK (acked=90 all readable) | same |
+| `disk=cut dseed=1 \| run N=etcd1-*@0-30:loss,100% C=30` | 0b9912014730194b OK | 101b2754b5163dcb / 101b2754b5163dcb | OK (acked=58 all readable) | same |
+| `disk=cut dseed=1 \| run N=etcd1-etcd2@0-30:loss,100% C=30` | 32af834004aacca8 OK | 098c379001ca8add / 098c379001ca8add | OK (acked=60 all readable) | same |
+
+### 7.2 The default stack (`stack-nq`), superseding the M63 baselines
+
+`hvx_stack_verify <bzImage> <initramfs-kafka> <image> "<cmdline>" 1024 <mode>`, cmdline
+`root=/dev/vda1 ro rootfstype=ext4 console=ttyS0 earlyprintk=ttyS0 loglevel=8 nokaslr acpi=off x2apic_phys`
+(the M39 invocation). The old image `stack-binlog-ret` ran once the same day: `mode=all` gave
+exactly the M63 values (SANITY `ceee1ce465e5424b`, F1 `3ddc9bd9aa95cf99`, F2 `00af090e634fefb5`,
+durable `df945fb47a53e280`, F3 `88fa2915c90b452f` / `e9f60d6301f75013`).
+
+`mode=all` on `stack-nq`, run twice, both runs identical, "MILESTONE 35 PASS" both times:
+
+| check | M63 (`stack-binlog-ret`) | new (`stack-nq`) | verdict |
+|---|---|---|---|
+| SANITY | `ceee1ce465e5424b` | `2235f9d76a592a07` | OK, 30 orders consistent |
+| F1 (all durable + power cut) | `3ddc9bd9aa95cf99` | `815cc64346e728fc` | OK, replay identical |
+| F2 (MySQL relaxed + power cut) | `00af090e634fefb5`, order 9, durable `df945fb47a53e280` | `32024d0b245aff3c`, durable `7323951e90d21b4f` | VIOLATION `mysql order=8 expected=100008 got=MISSING (kafka has it: true)` (was order 9; MySQL's documented relaxed window, expected); replay and branch identical |
+| F3 seed A / seed B | `88fa2915c90b452f` / `e9f60d6301f75013` | `96e2e7ddb963ee66` / `e8c16382540eba2e` | VIOLATION, Redis / MySQL cannot recover (same as M63) |
+
+The eight per-fault scenarios of M36/M39 (`HVX_STACK_FAULT`). The first seven are `mode=fault`
+(two fresh runs plus a branch from the pre-fault snapshot, all four fingerprints identical); the
+eighth is `mode=sanity` (MySQL relaxed) run twice, identical. The old image ran each once the same
+day (these old values were never recorded before; the M39 values belong to the M39 image).
+
+| scenario (`HVX_STACK_FAULT`) | old `stack-binlog-ret`: fp, verdict | new `stack-nq`: fp | new verdict |
+|---|---|---|---|
+| `hydo_kill=mysql@10` | `31cbbb6682dd163d`, OK 30/30 | `959e90dd32e720f4` | OK acked=30/30 exactly-once |
+| `hydo_kill=kafka@10` | `dff8953006949951`, OK 30/30 | `e00b67e3c5fb1898` | OK 30/30 |
+| `hydo_kill=kafka@20` | `5abf5c66b75c4d1e`, OK 30/30 | `1ba55098f467b928` | OK 30/30 |
+| `hydo_kill=redis@10` | `ea79982dd62c9b1c`, OK 30/30, 27 cached | `f235adac001ad733` | OK 30/30, 27 cached in Redis |
+| `hydo_net=mysql:delay,100ms,loss,40%` | `87da43e4d3a6bcbb`, OK 30/30 (first pass 30/30) | `6a944fa762d93cc7` | OK 30/30 (first pass 29/30, 2 queued packets delivered at the heal) |
+| `hydo_net=redis:duplicate,50%,reorder,50%,delay,20ms` | `42f89dc4c7c8146d`, OK 30/30 | `e92c9e6b38852983` | OK 30/30 |
+| `hydo_net=kafka:delay,1s,loss,60%` (all durable) | `cd2c976727758c05`, OK 30/30 (first pass 28/30) | `b6c82b0ca917e0f2` | OK 30/30 (first pass 28/30) |
+| same, MySQL relaxed (`mode=sanity`, twice) | `ed6470789675816b`, OK 30/30 (first pass 24/30) | `349b826362a275ec` | OK 30/30 (first pass 24/30) |
+
+Every verdict is the same kind as on the old image. Two details moved: F2 names order 8 instead of
+9, and the `hydo_net=mysql` scenario ACKs 29 of 30 orders on the first pass instead of 30 (the
+retry then ACKs the last one; told-failed 0, unknown-but-applied 0).
+
+### 7.3 Verdict changes
+
+Stack example (fix and old order service), miniflux, etcd 3.5.6, 3.6.8 and 3.6.9: **no verdict
+changed** (every schedule has the same verdict text on the old and the new image). The
+default stack: same verdict kinds; F2 names order 8 instead of 9 (7.2).
+
+**etcd 3.5.5 (etcd issue 14685) — six verdicts changed.** The bug is still there, but which
+schedules hit its window moved:
+
+| schedule | old image | new image |
+|---|---|---|
+| `disk=cut dseed=1 \| run N=etcd1-*@0-30:loss,100% C=30` | VIOLATION members disagree (65 66 66) | OK (acked=58) |
+| `disk=none dseed=890abaea1c4d92d3 \| run K=etcd1@10+1 P=etcd3@26+1 T=2:-30` (M60's second minimal reproducer) | VIOLATION client revision went back | OK |
+| `K=etcd1@15+2` | VIOLATION | OK |
+| `K=etcd2@20+2` | VIOLATION | OK |
+| `K=etcd3@15+2` | VIOLATION | OK |
+| `K=etcd2@25+2` | OK | VIOLATION members disagree (98 99 98) |
+
+The hand-written check of M60 (each member killed right after each defrag, `K=etcd<n>@<5,10,15,20,25>+2`,
+`disk=none dseed=1`) now finds the bug in 3 of 15 schedules (all at step 25: etcd1, etcd2, etcd3)
+instead of 5 of 15; on 3.5.6 it is 0 of 15 on both images. M60's first minimal reproducer
+(`disk=cut dseed=4127cc1347fae6ba | run C=30`) still fails: members disagree 99 98 98 (was 99 99 98),
+`2bd06b8446559fe9` on the new image.
+
+**Why they changed.** None of the changed kill schedules has a network fault, so the new heal code
+never runs in them; the one changed schedule with a link fault (`N=etcd1-*@0-30:loss,100% C=30`)
+keeps its fault until the power cut and logs no heal either. The only file differences are `/sbin/init` (20,525 → 22,854 bytes: the heal
+function, a `NET_ARGS` assignment, and six-digit instead of three-digit precision in the timed-pause
+sleep) and `/etc/hydo/init-links.sh` (two `NET_ARGS` assignments), and the old image still gives its
+recorded fingerprints today. The longer init script shifts guest timing (busybox reads and parses
+more script before the services start), and 14685 needs a member to crash inside a short window
+after an online defrag, so whether a kill at a fixed step lands in that window depends on that
+timing. The same kind of shift moved the Redis lost key and the stack's F2 order in M52, M61 and M71.
+3.5.6 (the fixed release) passes every schedule on both images.
+
+### 7.4 etcd explorer re-run (the M60 campaign on the new 3.5.5 and 3.5.6 images)
+
+`explore.py --strategy process --new-faults --timing --seeds 1-100 --workers 1` (the M60
+command), on `explore-ob-etcd-3.5.5-nq` and `explore-ob-etcd-3.5.6-nq`, one worker each. The 100
+schedule strings are identical to M60's (checked seed by seed). Results
+`/var/tmp/rb-nq/ex/etcd-<v>-nq/report.md` on the bare-metal machine.
+
+| version | M60 (old image) | new image |
+|---|---|---|
+| 3.5.5 | 19 failures, 19 reproduced: 18 × `etcd.members_agree`, 1 × `client.revisions_monotonic` | 17 failures, 17 reproduced, all `etcd.members_agree` |
+| 3.5.6 | 0 failures | 0 failures |
+
+On 3.5.5, 10 failing seeds are common to both runs (1 3 8 17 37 40 47 62 63 99), 9 failed only on the
+old image (6 12 19 20 49 52 78 83 94) and 7 only on the new one (5 9 26 32 57 81 96): the same timing
+shift as in 7.3. The shrinker reduced the new failures to the same minimal schedule as M60,
+`disk=cut dseed=4127cc1347fae6ba | run C=30` (members disagree 99 98 98, `2bd06b8446559fe9` twice).
+The second symptom of 14685 (a client sees its revision go back after switching members) was not
+found in these 100 schedules on the new image, and M60's reproducer for it now passes (7.3); a new
+reproducer for that symptom on the new image is not known.
+
+### 7.5 Paths
+
+- New images: bare-metal machine `~/hydo/build/*-nq-disk.img` (names in the table at the top of this section).
+- Raw results: `/var/tmp/rb-nq/results.txt` (one line per run; job list `/var/tmp/rb-nq/queue.txt`),
+  `hvx_explore` output under `/var/tmp/rb-nq/runs/<id>/`, `hvx_stack_verify` logs and consoles under
+  `/var/tmp/rb-nq/sv/`, explorer runs under `/var/tmp/rb-nq/ex/`. Harnesses compiled in `~/hydo-rb/hvx`.

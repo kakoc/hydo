@@ -30,6 +30,13 @@ each naming the same order as in M42; 7/7 OK on the manifest fixed image.
 schedule of the bug's shape (M42's runs used seeds 1001-3060), so this sample shows
 determinism and the generator working on manifest images, not the bug.
 
+**Current stack example images (2026-10-23, M77):** `explore-ob-stack-fix-nq-disk.img`
+(`ecdcb4fa…`) and `explore-ob-stack-old-nq-disk.img` (`58de1559…`), built with the pinned tools and
+the M71 netem drain; only `/sbin/init` differs from the `-pt-pin` images. Every recorded schedule
+gives the same verdict: (a) sanity OK `8ad89b9f2565f88b`, (b) OK `76b4917b3761288e`, (c) on old
+VIOLATION order 11 `402736c78bbf9a6d`, (d) OK `96229e59c4d498ec`; the 7 M42 schedules fail on old
+naming the same orders and pass on fix. Tables: `hvx/REBASELINE.md` section 7.1.
+
 **Redis (one service)**
 
 | schedule | verdict | fingerprint |

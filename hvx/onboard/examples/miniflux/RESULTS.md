@@ -87,3 +87,13 @@ failure with durable settings and an honest disk. Report:
 **Classification:** no miniflux or PostgreSQL bug. The one durable-config-relaxed violation is
 the documented `synchronous_commit=off` window; the rest are lying-disk / I/O-error classes;
 the first-PID signal gap was a harness bug, now fixed.
+
+## Rebuilt with the netem drain (2026-10-23, M77)
+
+`explore-ob-miniflux-nq-disk.img` (`7b694c9f…`, two builds identical; from `2e0e3fe` with the
+pinned tools and the same miniflux binary `dd8e2456…`): the `-pt` image with the M71 init, so a
+lifted network fault delivers netem's queued packets. Only `/sbin/init` differs from
+`explore-ob-miniflux-pt-pin`. All ten hand-written schedules above (both tables) give the same
+verdict as on the old image, each twice with the same fingerprint, for example `run` OK
+`092d1ebdf7cfd714`, `C=20 S=off` VIOLATION `category c4 stored 0 times` `b883bfaac88baf61`. Full
+table: `hvx/REBASELINE.md` section 7.1.
