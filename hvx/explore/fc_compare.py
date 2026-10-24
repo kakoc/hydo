@@ -41,7 +41,8 @@ def main():
               " ".join(p for p in sorted(ff) if p not in fa) or "none"))
         extra = [p for p in sorted(fa) if p not in ff and "@" in p and ":" not in p.split("#", 1)[1]]
         if extra:
-            print("  failing in the adaptive run only (every-packet points): %s" % " ".join(extra))
+            print("  every-packet points failing in the adaptive run but absent or passing in this sweep: %s"
+                  % " ".join(extra))
 
 
 if __name__ == "__main__":
