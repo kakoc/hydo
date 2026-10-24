@@ -824,7 +824,7 @@ the 7.2 command line (no `tsc=reliable`), default PAUSE setting (4 consecutive P
 `HVX_VCPU_PARK` unset (Linux starts vCPU 1; every boot logs "smp: Brought up 1 node, 2 CPUs").
 Harness compiled from main `19fb8f6` in `~/hydo-smpb/hvx`; module srcversion
 `CA5BF8BF2A0D66B312A68EF` (the main `hvx.ko`, not reloaded; M69 ran on the side module
-`/dev/hvxsmp2` before it was merged). Bare-metal test machine, 2026-10-24 07:47–08:20 UTC, at most two of
+`/dev/hvxsmp2` before it was merged). Bare-metal machine, 2026-10-24 07:48–08:08 UTC, at most two of
 these VMs at a time, beside another session's explorer (one or two VMs).
 
 **Old image first.** `mode=all` on `stack-binlog-ret` with 2 vCPUs, once, gave exactly the M69
