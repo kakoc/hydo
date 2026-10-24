@@ -1,0 +1,15 @@
+# Build a second copy of the hvx module as hvxft.ko with the device /dev/hvxft, so the
+# cheaper vCPU turn ends can be developed next to hvx.ko without
+# disturbing runs on /dev/hvx. hvxft.c is a copy of ../hvx.c made by build-hvxft.sh.
+obj-m := hvxft.o
+ccflags-y := -DHVX_DEVNAME='"hvxft"'
+OBJECT_FILES_NON_STANDARD_hvxft.o := y
+
+KDIR ?= /lib/modules/$(shell uname -r)/build
+PWD  := $(shell pwd)
+
+all:
+	$(MAKE) -C $(KDIR) M=$(PWD) modules
+
+clean:
+	$(MAKE) -C $(KDIR) M=$(PWD) clean
