@@ -114,6 +114,15 @@ every `poll-s` seconds of guest time and emits one record (`elapsed_s`, `within_
 
 The shell helper does not deduplicate; call it where an event happens once.
 
+## Recorded histories (host-side checkers)
+
+Assertions are evaluated inside the program. For linearizability and transactional isolation the
+evidence is the whole history of operations, so it is checked on the host after the run instead:
+the workload prints `HYDO-HIST` records (one per invocation and completion), and the checkers in
+`hvx/history/hydohist.py` (linearizable register / CAS per key, Elle-style list-append) turn the
+history into ordinary `HYDO-ASSERT` records of type `always` plus the HYDO-ORACLE verdict. Format,
+models and recorders (shell, Go): `hvx/HISTORIES.md`; manifests use `checks:`.
+
 ## Host side
 
 - `hvx/hydo_assert_table.h`: header-only parser and aggregator (`ha_feed_console` once per run,

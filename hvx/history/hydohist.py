@@ -60,6 +60,8 @@ def penc(s, extra=""):
     The empty string becomes "%"."""
     if str(s) == "":
         return "%"
+    if str(s) == "nil":
+        return "%6Eil"           # the token nil means "absent"
     out = []
     for ch in str(s):
         if ch == "%" or ch == "@" or ch.isspace() or ord(ch) < 0x20 or ch in extra:

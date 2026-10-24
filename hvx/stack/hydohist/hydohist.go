@@ -80,10 +80,14 @@ func (h *History) Record(proc int, typ, f string, args ...string) {
 }
 
 // Enc makes a value one token: '%', whitespace, control characters, '@' and the list / txn
-// separators ',[]:' become %xx; the empty string is the token "%".
+// separators ',[]:' become %xx; the empty string is the token "%" and the string "nil" is
+// "%6Eil" (the token nil means absent).
 func Enc(s string) string {
 	if s == "" {
 		return "%"
+	}
+	if s == Nil {
+		return "%6Eil" // the token nil means "absent"
 	}
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {

@@ -289,6 +289,8 @@ class Driver(unittest.TestCase):
     def test_empty_token(self):
         self.assertEqual(H.pdec("%"), "")
         self.assertEqual(H.penc(""), "%")
+        self.assertEqual(H.parse_val(H.penc("nil")), ("nil", None))
+        self.assertEqual(H.parse_val("nil"), (None, None))
         r = lin(["0 invoke write x %", "0 ok write x %", "1 invoke read x", "1 ok read x %"])
         self.assertEqual(r["status"], "ok", r)
 

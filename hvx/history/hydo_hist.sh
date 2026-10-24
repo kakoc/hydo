@@ -32,6 +32,7 @@ hydo_hist() {   # no subshell, one echo = one write()
 
 hydo_hist_enc() {   # the empty string is the token %
   [ -n "$1" ] || { printf '%%'; return 0; }
+  [ "$1" != nil ] || { printf '%%6Eil'; return 0; }     # the token nil means "absent"
   printf '%s' "$1" | ${BB:-/bin/busybox} sed -e 's/%/%25/g' -e 's/ /%20/g' -e 's/@/%40/g' \
     -e 's/,/%2C/g' -e 's/\[/%5B/g' -e 's/\]/%5D/g' -e 's/:/%3A/g' -e 's/	/%09/g'
 }
