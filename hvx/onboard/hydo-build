@@ -279,7 +279,8 @@ class ManifestError(Exception):
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 KNOWN_TOP = {"name", "description", "guest", "root", "data", "env", "shell", "services",
-             "provision", "workload", "knobs", "invariants", "faults", "freeze_match", "image", "params"}
+             "provision", "workload", "knobs", "invariants", "faults", "freeze_match", "image", "params",
+             "buggify"}
 KNOWN_SVC = {"name", "cmd", "setup", "ready", "ready_timeout", "port", "depends_on",
              "recovery", "description", "addr",
              "image", "image_ref", "entrypoint", "workdir", "user", "env"}   # the last six: hydo_oci.py
@@ -312,6 +313,10 @@ def validate(m):
     if not isinstance(m, dict):
         raise ManifestError("the manifest must be a mapping")
     _unknown(m, KNOWN_TOP, "top level")
+    if "buggify" in m and not isinstance(m["buggify"], bool):
+        raise ManifestError("buggify: must be true or false")
+    if m.get("buggify") is True and any(str(k.get("token")) == "B" for k in (m.get("knobs") or []) if isinstance(k, dict)):
+        raise ManifestError("buggify: true reserves the schedule token B (the BUGGIFY seed); rename the knob B")
     if "image" in m:
         raise ManifestError("top level: 'image:' belongs to a service (services[].image: a Docker/OCI "
                             "image file; MANIFEST.md)")
@@ -475,6 +480,12 @@ def has_freeze(m):
     return "freeze" in (m.get("faults") or [])
 
 
+def has_buggify(m):
+    """buggify: true -- the project's programs carry SDK fault points; the init turns the
+    schedule token B= into /tmp/hydo-buggify (hydo-init-buggify.sh)."""
+    return m.get("buggify") is True
+
+
 
 
 def service_order(svcs):
@@ -587,6 +598,8 @@ def _fn_defs(text, fn):
 
 CLK_WRAP = ("failed_ids", "mount_data")
 CLK_INIT = "hydo-init-clock.sh"         # inserted into /sbin/init only for manifests with guest.clock_after_cut
+BG_WRAP = ("set_knob",)
+BG_INIT = "hydo-init-buggify.sh"        # inserted only for manifests with buggify: true (schedule token B=)
 
 
 def _splice(base, fns, prefix, ext, why):
@@ -640,12 +653,14 @@ def init_text(m):
             copies.append("_fc_orig_" + defs[-1])
         fz = open(os.path.join(HERE, FC_INIT)).read()
         base = base[:i] + "# copies of the init functions hydo-init-freeze.sh wraps\n" + "".join(copies) + "\n" + fz + base[i:]
+    if has_buggify(m):
+        base = _splice(base, BG_WRAP, "_bg_orig_", BG_INIT, "buggify: true")
     return base
 
 
 def install_init(m, dst):
     if any(v.get("type") == "eventually" for v in m["invariants"]) or has_links(m) or has_freeze(m) or \
-       "clock_after_cut" in (m.get("guest") or {}):
+       "clock_after_cut" in (m.get("guest") or {}) or has_buggify(m):
         with open(dst, "w") as f:
             f.write(init_text(m))
     else:
