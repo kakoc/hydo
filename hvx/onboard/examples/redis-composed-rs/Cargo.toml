@@ -1,0 +1,14 @@
+[package]
+name = "redis-composed-rs"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "examples/redis-composed written with hydo-test: the same commands and checks as the shell version, in one Rust binary"
+
+[workspace]
+
+[dependencies]
+hydo-test = { path = "../../../../sdk/rust-test" }
+
+[profile.release]
+codegen-units = 1

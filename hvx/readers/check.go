@@ -25,6 +25,8 @@ a source is ONE argument: "[name=]<hydo-read store and args> [projection]", e.g.
 projection (inside the source string):
   --field F           the item is field F (default: the only field; kafka/redis/etcd: key;
                       file: line; hydo: id; range: n; else a field named key)
+  --item 'T'          the item is the template T with {F} replaced by field F, e.g.
+                      --item 'k:{id}=v{id}' or --item '{key}={value}' (compares keys and values)
   --key F --value F   for never-wrong-value (default key / value)
   --strip-prefix P    remove P from the start of items and keys that have it
   --add-prefix P      then put P in front
@@ -42,6 +44,7 @@ type source struct {
 	name    string
 	args    []string // hydo-read arguments
 	field   string
+	item    string // template: {field} replaced by the record's field
 	key     string
 	value   string
 	strip   string
@@ -83,6 +86,8 @@ func parseSource(spec string) (*source, error) {
 		switch w[i] {
 		case "--field":
 			dst = &s.field
+		case "--item":
+			dst = &s.item
 		case "--key":
 			dst = &s.key
 		case "--value":
@@ -113,7 +118,13 @@ func parseSource(spec string) (*source, error) {
 
 func (s *source) load(timeout time.Duration) error {
 	args := append([]string{}, s.args...)
-	args = append(args, "--timeout", strconv.FormatFloat(timeout.Seconds(), 'g', -1, 64))
+	own := false
+	for _, a := range args {
+		own = own || a == "--timeout"
+	}
+	if !own { // a --timeout inside the source wins over hydo-check's --timeout
+		args = append(args, "--timeout", strconv.FormatFloat(timeout.Seconds(), 'g', -1, 64))
+	}
 	recs, _, err := readStore(args)
 	s.records = recs
 	return err
@@ -160,6 +171,14 @@ func (s *source) items() ([]string, int, error) {
 	var out []string
 	skipped := 0
 	for _, r := range s.records {
+		if s.item != "" {
+			v, err := s.render(r)
+			if err != nil {
+				return nil, 0, err
+			}
+			out = append(out, s.fix(v))
+			continue
+		}
 		f := s.field
 		if f == "" {
 			if len(r) == 1 {
@@ -186,6 +205,38 @@ func (s *source) items() ([]string, int, error) {
 		out = append(out, s.fix(v))
 	}
 	return out, skipped, nil
+}
+
+// render fills the --item template: {name} becomes the record's field (a missing field or
+// null is an error / empty), {{ and }} are literal braces.
+func (s *source) render(r Record) (string, error) {
+	var b strings.Builder
+	t := s.item
+	for i := 0; i < len(t); i++ {
+		switch {
+		case strings.HasPrefix(t[i:], "{{"):
+			b.WriteByte('{')
+			i++
+		case strings.HasPrefix(t[i:], "}}"):
+			b.WriteByte('}')
+			i++
+		case t[i] == '{':
+			j := strings.IndexByte(t[i:], '}')
+			if j < 0 {
+				return "", usagef("source %s: --item %q: unclosed {", s.name, t)
+			}
+			name := t[i+1 : i+j]
+			if _, has := r[name]; !has {
+				return "", usagef("source %s: --item %q: no field %q in %s", s.name, t, name, encode(r))
+			}
+			v, _ := field(r, name)
+			b.WriteString(v)
+			i += j
+		default:
+			b.WriteByte(t[i])
+		}
+	}
+	return b.String(), nil
 }
 
 type kv struct{ k, v string }

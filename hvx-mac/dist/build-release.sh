@@ -76,7 +76,9 @@ mkdir -p "$REL/bin" "$REL/hvx/onboard" "$REL/hvx/explore" "$REL/hvx-mac/explore/
 cp "$D/hydo" "$REL/bin/hydo"; chmod 755 "$REL/bin/hydo"
 # hydo-build splices the init extensions (liveness, recovery clock, links, freeze) in by manifest
 cp "$TOP/hvx/onboard/hydo-build" "$TOP/hvx/onboard/hydo-compose" "$TOP/hvx/onboard/hydo_compose.py" "$TOP/hvx/onboard/hydo_oci.py" "$TOP/hvx/onboard/hydo_build_arm64.py" "$TOP"/hvx/onboard/hydo-init*.sh \
-   "$TOP/hvx/onboard/hydo-liveness.sh" "$TOP/hvx/onboard/MANIFEST.md" "$REL/hvx/onboard/"
+   "$TOP/hvx/onboard/hydo-liveness.sh" "$TOP/hvx/onboard/MANIFEST.md" "$TOP/hvx/onboard/hydo_composer.py" \
+   "$TOP/hvx/onboard/hydo-composer.sh" "$REL/hvx/onboard/"
+echo "$VERSION" > "$REL/hvx/VERSION"     # hydo_composer.engine_version: what a plan's hydo_version is checked against
 cp "$TOP/hvx/explore/explore.py" "$TOP/hvx/explore/hvm_backend.py" "$TOP/hvx/explore/manifest_space.py" "$REL/hvx/explore/"
 cp "$TOP/hvx/hydo_assert_report.c" "$TOP/hvx/hydo_assert_table.h" "$REL/hvx/"   # explore.py compiles the property table tool
 cp "$TOP/hvx-mac/hvm" "$REL/hvx-mac/hvm"

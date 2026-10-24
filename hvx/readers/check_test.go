@@ -126,6 +126,10 @@ func TestChecks(t *testing.T) {
 		{[]string{"subset", "--oracle", "--left", "range 0 6", "--right", kafka}, 1, "HYDO-ORACLE: VIOLATION subset violated: 1 item of 6 in range not in kafka: 4"},
 		{[]string{"subset", "--left", "range 0 2"}, 2, ""},
 		{[]string{"exactly-once", "--left", "range 0 12 --add-prefix c", "--right", "range 0 4 --add-prefix c"}, 1, "exactly-once violated: range c4 is in range 0 times (of 12 in range); missing 8: c4, c5, c6, c7, c8 (+3 more)"},
+		{[]string{"subset", "--left", "acked=file " + f("acked") + " --item 'k{line}={line}'", "--right", "jsonl " + f("mysql.jsonl") + " --item 'k{id}={id}'"}, 0, "subset holds: all 4 items of acked are in jsonl (jsonl has 5 items)"},
+		{[]string{"subset", "--left", "acked=file " + f("acked") + " --item '{line}=10000{line}'", "--right", "jsonl " + f("mysql.jsonl") + " --item '{id}={amount}'"}, 0, "subset holds"},
+		{[]string{"subset", "--left", "range 0 6 --item '{n}=10000{n}'", "--right", "kafka=jsonl " + f("kafka.jsonl") + " --item '{key}={value}'"}, 1, "subset violated: 1 item of 6 in range not in kafka: 4=100004"},
+		{[]string{"subset", "--left", "range 0 1 --item '{nope}'", "--right", "range 0 1"}, 2, ""},
 		{[]string{"frobnicate", "--left", acked, "--right", kafka}, 2, "frobnicate could not be evaluated: usage: unknown check \"frobnicate\""},
 	}
 	for _, c := range cases {

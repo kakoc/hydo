@@ -6,6 +6,8 @@
     hydo build   <hydo.yaml> [--out DIR]          compile the manifest into an arm64 guest image
     hydo run     "<schedule>" [--image IMG]       run one schedule from a fresh boot
     hydo repro   "<schedule>" [--image IMG]       the same as run (reproduce a reported failure)
+    hydo repro   --regressions [--image IMG]      replay the plan's saved regressions (hydo/regressions/)
+    hydo save    <explore dir> [--to hydo/regressions]   save an exploration's minimal schedules as regressions
     hydo explore [--seeds 1-50] [--image IMG] [--workers N] [--strategy swarm] [--out DIR]
                                                   generate, run, re-run and shrink schedules
     hydo report  [DIR]                            print the report of the last (or a given) exploration
@@ -185,13 +187,7 @@ def disk_env(image):
     return dict(os.environ, HVM_DISK=d) if os.path.exists(d) else dict(os.environ)
 
 
-def cmd_run(argv):
-    args = list(argv)
-    image = default_image(args)
-    if len(args) != 1:
-        die("usage: hydo run \"<schedule>\" [--image IMG]   e.g. hydo run \"disk=cut | run C=12\"")
-    sched = args[0]
-    outdir = os.path.join(OUT, "runs", "run-%d" % os.getpid())
+def run_once(image, sched, outdir, quiet=False):
     os.makedirs(outdir, exist_ok=True)
     sys.path.insert(0, EXPLORE)
     import hvm_backend          # the image's guest.ram_mib, as explore.py passes it
@@ -199,8 +195,96 @@ def cmd_run(argv):
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     text = p.stdout.decode(errors="replace")
     for line in text.splitlines():
-        if line.startswith("RESULT") or line.startswith("hvmx: one"):   # the verdict, and any rewind escalation
+        if not quiet and (line.startswith("RESULT") or line.startswith("hvmx: one")):   # the verdict, and any rewind escalation
             print(line)
+    return text
+
+
+def cmd_regressions(args):
+    """Replay the regressions the image was built with (/etc/hydo/compose.json: hydo/regressions/
+    and test.regressions, hvx/onboard/hydo_composer.py) and check each expectation (ok,
+    violation, fp=<hex>); exit 1 if one is not as expected."""
+    import json, re, time
+    image = default_image(args)
+    sys.path.insert(0, EXPLORE)
+    import hvm_backend
+    try:
+        meta = json.loads(hvm_backend.embedded_file(image, "etc/hydo/compose.json"))
+    except Exception:
+        meta = {}
+    regs = meta.get("regressions") or []
+    sys.path.insert(0, ONBOARD)
+    import hydo_composer
+    if not regs:
+        print("hydo: %s carries no regressions (hydo/regressions/*.schedule or test.regressions in the plan)" % image)
+        return 0
+    base = os.path.join(OUT, "regressions-%s" % time.strftime("%Y%m%d-%H%M%S"))
+    bad = 0
+    for k, r in enumerate(regs):
+        w = hydo_composer.regression_warning(r, meta)
+        if w:
+            print("hydo: warning: " + w)
+        text = run_once(image, r["schedule"], os.path.join(base, "%03d-%s" % (k, r["name"])), quiet=True)
+        m = [re.match(r"RESULT \S+ fp=(\S+) .*?verdict=(.*)", l) for l in text.splitlines()]
+        m = [x for x in m if x]
+        fp, v = (m[0].group(1), m[0].group(2)) if m else ("-", "ERROR no RESULT line")
+        ex = r["expect"]
+        kind = "ok" if "HYDO-ORACLE: OK" in v else "violation" if "VIOLATION" in v else "error"   # explore.py's verdict_kind
+        ok = kind == ex if ex in ("ok", "violation") else ex == "fp=" + fp
+        bad += not ok
+        print("%-5s %s  expect %s  fp=%s  %s\n      %s" % ("PASS" if ok else "FAIL", r["name"], ex, fp, r["schedule"], v[:160]))
+    print("hydo: %d of %d regressions as expected (consoles under %s)" % (len(regs) - bad, len(regs), base))
+    return 1 if bad else 0
+
+
+def cmd_repro(argv):
+    args = list(argv)
+    if "--regressions" in args:
+        args.remove("--regressions")
+        return cmd_regressions(args)
+    return cmd_run(args)
+
+
+def cmd_save(argv):
+    """Write each minimal schedule of an exploration as hydo/regressions/<name>.schedule with
+    `expect: violation` (edit it to `ok` once the bug is fixed)."""
+    args = list(argv)
+    import json, re
+    to = os.path.join("hydo", "regressions")
+    if "--to" in args:
+        k = args.index("--to"); to = args[k + 1]; del args[k:k + 2]
+    if len(args) != 1 or not os.path.isfile(os.path.join(args[0], "report.json")):
+        die("usage: hydo save <explore dir> [--to hydo/regressions]")
+    j = json.load(open(os.path.join(args[0], "report.json")))
+    os.makedirs(to, exist_ok=True)
+    n = 0
+    for x in j.get("shrunk", []):
+        name = re.sub(r"[^A-Za-z0-9_.-]+", "-", "%s-%s" % (x["class"], x["signature"]))[:60].strip("-")
+        p = os.path.join(to, name + ".schedule")
+        if os.path.exists(p):
+            print("hydo: %s exists, kept" % p)
+            continue
+        with open(p, "w") as f:
+            f.write("# found by `hydo explore` (seed %s): %s\n# verdict: %s\n" % (x["from_seed"], x["class"], x["min_verdict"][:200]))
+            if x.get("composition"):
+                f.write("# composition: %s\n" % x["composition"][:400])
+            if x.get("commands") is not None:      # what W= refers to (hydo_composer.regression_warning)
+                f.write("# commands: %s\n" % " ".join(x["commands"]))
+            f.write("# expect: violation      (change to ok when the bug is fixed)\n%s\n" % x["minimal"])
+        n += 1
+        print("hydo: wrote %s" % p)
+    print("hydo: %d regressions saved; `hydo build` stages them, `hydo repro --regressions` replays them" % n)
+    return 0
+
+
+def cmd_run(argv):
+    args = list(argv)
+    image = default_image(args)
+    if len(args) != 1:
+        die("usage: hydo run \"<schedule>\" [--image IMG]   e.g. hydo run \"disk=cut | run C=12\"")
+    sched = args[0]
+    outdir = os.path.join(OUT, "runs", "run-%d" % os.getpid())
+    text = run_once(image, sched, outdir)
     cons = sorted(glob.glob(os.path.join(outdir, "*")))
     if cons:
         print("hydo: console(s): " + " ".join(cons))
@@ -261,7 +345,8 @@ def cmd_doctor(argv):
 
 
 def main():
-    cmds = {"compose": cmd_compose, "build": cmd_build, "run": cmd_run, "repro": cmd_run, "explore": cmd_explore,
+    cmds = {"compose": cmd_compose, "build": cmd_build, "run": cmd_run, "repro": cmd_repro, "explore": cmd_explore,
+            "save": cmd_save,
             "report": cmd_report, "doctor": cmd_doctor}
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         print(__doc__)
