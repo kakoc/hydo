@@ -85,7 +85,9 @@ class Space:
         a hydo.yaml given by path, whose hydo/ folder (workload/, checks/) is read the way
         hydo-build reads it. Either way the test composer's rewrite runs before validate."""
         hb = _parser()
-        m = json.loads(text) if name.endswith(".json") else hb.parse_yaml(text, name)
+        # an image keeps its manifest as /etc/hydo/hydo.yaml whatever its format: a JSON plan (what
+        # the SDKs write) is recognised by its content
+        m = json.loads(text) if name.endswith(".json") or text.lstrip().startswith("{") else hb.parse_yaml(text, name)
         self.compose = None
         if compose is not None or folder_dir is not None or "test" in m:
             hc = _composer()
