@@ -11,9 +11,9 @@ import (
 
 func TestEncDec(t *testing.T) {
 	r := rng.New(5)
-	for _, s := range []string{"", "%", "a b", "{\"k\":\"v w\"}", "naïve\n\t", "100%"} {
+	for _, s := range []string{"", "%", "a@b", "a b", "{\"k\":\"v w\"}", "naïve\n\t", "100%"} {
 		e := Enc(s)
-		if strings.ContainsAny(e, " \n\t") || (s != "" && e == "%") {
+		if strings.ContainsAny(e, " \n\t@") || (s != "" && e == "%") {
 			t.Fatalf("Enc(%q) = %q", s, e)
 		}
 		if d, err := Dec(e); err != nil || d != s {
@@ -39,6 +39,9 @@ func TestRecorder(t *testing.T) {
 	p := filepath.Join(dir, "calls")
 	os.Setenv("HYDO_GRPC_CONSOLE", "off")
 	rec := Open(p, "brief")
+	if _, ok := Parse("HYDO-HIST kv 1 invoke 5 write k1 v1", "grpc"); ok {
+		t.Fatal("another history parsed")
+	}
 	rec.Invoke(3, 17, "pkg.S/M", `{"a":"b c"}`)
 	rec.Complete(3, 17, "info", "pkg.S/M", "DEADLINE_EXCEEDED", "context deadline exceeded")
 	rec.Complete(3, 18, "ok", "pkg.S/M", "OK", "")
@@ -47,15 +50,15 @@ func TestRecorder(t *testing.T) {
 	if len(lines) != 3 {
 		t.Fatalf("%d lines", len(lines))
 	}
-	e, ok := Parse("console junk " + lines[0])
+	e, ok := Parse("console junk "+lines[0], "grpc")
 	if !ok || e.Process != "3" || e.Op != "17" || e.Type != "invoke" || e.RPC != "pkg.S/M" || e.Body != `{"a":"b c"}` {
 		t.Fatalf("invoke parsed as %+v", e)
 	}
-	e, ok = Parse(lines[1])
+	e, ok = Parse(lines[1], "grpc")
 	if !ok || e.Type != "info" || e.Code != "DEADLINE_EXCEEDED" || e.Body != "context deadline exceeded" {
 		t.Fatalf("completion parsed as %+v", e)
 	}
-	e, ok = Parse(lines[2])
+	e, ok = Parse(lines[2], "grpc")
 	if !ok || e.Type != "ok" || e.Body != "" {
 		t.Fatalf("empty body parsed as %+v", e)
 	}

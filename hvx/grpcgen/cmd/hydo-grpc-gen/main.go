@@ -276,7 +276,7 @@ func starter(p *spec.Plan, rel string, steps int, retryCmd string) string {
 	w("#   timeout: %d", timeout)
 	w("#   process: hydo-grpc")
 	w("")
-	w("# Invariants stay yours. Call records: /tmp/hydo/grpc/calls (HYDO-CALL lines).")
+	w("# Invariants stay yours. Call records: /tmp/hydo/grpc/calls (HYDO-HIST lines, history grpc).")
 	w("# hydo-grpc call <rpc> '<json>' prints a response and exits 0 ok / 1 failed / 2 unknown,")
 	w("# for read-backs in invariants. Outcomes of RPCs with outcome_id: also go to $HYDO_ACKED and $HYDO_OUTCOMES.")
 	return b.String()

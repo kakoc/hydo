@@ -162,7 +162,7 @@ func newClient(t *testing.T, dir string, seed uint64) (*Client, string) {
 	return c, st
 }
 
-var timeRe = regexp.MustCompile(`^(HYDO-CALL \S+ \S+ \S+) \S+ `)
+var timeRe = regexp.MustCompile(`^(HYDO-HIST \S+ \S+ \S+) \S+ `)
 
 func calls(t *testing.T, st string) []string {
 	b, _ := os.ReadFile(filepath.Join(st, "calls"))
@@ -190,7 +190,7 @@ func TestStepsDeterministic(t *testing.T) {
 		t.Fatal("different seeds, same calls")
 	}
 	all := strings.Join(runs[0], "\n")
-	for _, want := range []string{"invoke T orders.v1.Orders/Create", "ok T orders.v1.Orders/Create OK", "invoke T orders.v1.Orders/Cancel"} {
+	for _, want := range []string{"invoke T orders.v1.Orders/Create", "ok T orders.v1.Orders/Create 1 OK", "invoke T orders.v1.Orders/Cancel"} {
 		if !strings.Contains(all, want) {
 			t.Errorf("no %q in\n%s", want, all)
 		}
@@ -222,8 +222,8 @@ func TestRetryAndOutcomes(t *testing.T) {
 		t.Fatalf("Create ended %s", res.Kind)
 	}
 	cl := calls(t, st)
-	if len(cl) != 6 || !strings.HasPrefix(cl[1], "HYDO-CALL 0 1 info T orders.v1.Orders/Create DEADLINE_EXCEEDED") ||
-		!strings.HasPrefix(cl[5], "HYDO-CALL 0 1 ok T") || cl[0] != cl[2] || cl[2] != cl[4] {
+	if len(cl) != 6 || !strings.HasPrefix(cl[1], "HYDO-HIST grpc 0 info T orders.v1.Orders/Create 1 DEADLINE_EXCEEDED") ||
+		!strings.HasPrefix(cl[5], "HYDO-HIST grpc 0 ok T orders.v1.Orders/Create 1 OK") || cl[0] != cl[2] || cl[2] != cl[4] {
 		t.Fatalf("attempts:\n%s", strings.Join(cl, "\n"))
 	}
 	out, _ := os.ReadFile(filepath.Join(st, "outcomes"))
@@ -349,7 +349,7 @@ func TestDriveAndScenario(t *testing.T) {
 		t.Fatal(ok, err)
 	}
 	cl := calls(t, st)
-	if len(cl) != 12 || !strings.HasPrefix(cl[0], "HYDO-CALL "+strconv.Itoa(os.Getpid())+" 1 invoke") {
+	if len(cl) != 12 || !strings.HasPrefix(cl[0], "HYDO-HIST grpc "+strconv.Itoa(os.Getpid())+" invoke T orders.v1.Orders/Create 1 ") {
 		t.Fatalf("drive records:\n%s", strings.Join(cl, "\n"))
 	}
 	if len(f.byReq) != 6 {

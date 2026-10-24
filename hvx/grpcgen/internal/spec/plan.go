@@ -40,11 +40,12 @@ type Drive struct {
 	Calls int `json:"calls"`
 }
 
-// Record says where call records go (package record): a file in the guest (full bodies) and
+// Record says where call records go (package record, HYDO-HIST lines): a file in the guest (full bodies) and
 // the console: off, brief (no bodies; the default, so many calls fit in the 64 KiB console)
 // or full.
 type Record struct {
 	Console string `json:"console"`
+	History string `json:"history"` // the HYDO-HIST history name (default "grpc")
 }
 
 // Defaults are the generator's value ranges where a field has no hint.

@@ -86,6 +86,9 @@ func New(o Options) (*Client, error) {
 		calls = o.StateDir + "/calls"
 	}
 	c.Rec = record.Open(calls, p.Record.Console)
+	if p.Record.History != "" {
+		c.Rec.History = p.Record.History
+	}
 	if v := os.Getenv("HYDO_OUTCOMES"); v != "" {
 		c.outcomes, _ = os.OpenFile(v, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	}
@@ -605,7 +608,7 @@ func (c *Client) Retry(calls string) error {
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 64*1024), 16<<20)
 	for sc.Scan() {
-		ev, ok := record.Parse(sc.Text())
+		ev, ok := record.Parse(sc.Text(), c.Rec.History)
 		if !ok {
 			continue
 		}

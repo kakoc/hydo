@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -87,6 +88,8 @@ type ScenarioHint struct {
 	Calls  []string `yaml:"calls"`
 }
 
+var historyRE = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
+
 // ReadHints parses a hints file ("" = no hints).
 func ReadHints(path string) (*Hints, error) {
 	h := &Hints{}
@@ -110,7 +113,7 @@ func Build(files *protoregistry.Files, h *Hints, sources []string) (*spec.Plan, 
 	p := &spec.Plan{
 		Format: spec.Format, Target: "127.0.0.1:50051", DeadlineMs: 2000, Seed: 1,
 		Steps: spec.Steps{Calls: 2, Concurrency: 1}, Drive: spec.Drive{Calls: 2},
-		Defaults: spec.DefaultDefaults(), Record: spec.Record{Console: "brief"}, Sources: sources,
+		Defaults: spec.DefaultDefaults(), Record: spec.Record{Console: "brief", History: "grpc"}, Sources: sources,
 	}
 	if h.Target != "" {
 		p.Target = h.Target
@@ -134,11 +137,19 @@ func Build(files *protoregistry.Files, h *Hints, sources []string) (*spec.Plan, 
 		p.Drive = *h.Drive
 	}
 	if h.Record != nil {
-		switch h.Record.Console {
-		case "off", "brief", "full":
-			p.Record = *h.Record
-		default:
-			return nil, fmt.Errorf("record.console: %q (off, brief, full)", h.Record.Console)
+		if h.Record.Console != "" {
+			switch h.Record.Console {
+			case "off", "brief", "full":
+				p.Record.Console = h.Record.Console
+			default:
+				return nil, fmt.Errorf("record.console: %q (off, brief, full)", h.Record.Console)
+			}
+		}
+		if h.Record.History != "" {
+			if !historyRE.MatchString(h.Record.History) {
+				return nil, fmt.Errorf("record.history: %q ([A-Za-z0-9_.-]+)", h.Record.History)
+			}
+			p.Record.History = h.Record.History
 		}
 	}
 	if err := applyDefaults(&p.Defaults, h.Defaults); err != nil {

@@ -743,8 +743,8 @@ It writes, under `<dir>`:
 | `grpc/desc.pb` | the schema: a `FileDescriptorSet`, dependencies first, no source info, deterministic bytes |
 | `grpc/plan.json` | every RPC with its hints, checked against the schema (unknown fields, wrong types and bad paths are errors) |
 | `hydo-grpc` | the static guest client for linux/amd64 (`-trimpath`, no build id: byte-identical from the same sources and Go) |
-| `workload/parallel_driver_<rpc>` | one test-composer command per RPC (and scenario), `finally_retry`; see below |
-| `hydo.grpc.yaml` | a starter section to merge into `hydo.yaml` (files, env, `workload:`, a commented `test:` section) |
+| `workload/parallel_driver_<rpc>` | one test-composer command per RPC with a weight (and per scenario), in the `hydo/workload/` layout, with a `# hydo: timeout=` header |
+| `hydo.grpc.yaml` | a starter section to merge into `hydo.yaml`: files, `env:`, a `test:` section with the commands, `workload.retry`, and the numbered-steps `workload:` as a commented alternative |
 
 `hvx/onboard/hydo-grpc-gen` builds the generator for the host and the client with `$HYDO_GO`, else
 the pinned `go-1.26.5` of `build-stack.sh` if present, else `go` on PATH. Put `grpc/` at
@@ -756,7 +756,7 @@ the pinned `go-1.26.5` of `build-stack.sh` if present, else `go` on PATH. Put `g
 |---|---|
 | `hydo-grpc steps $HYDO_FROM $HYDO_TO` | `workload.run`: each step runs `steps.calls` operations on each of `steps.concurrency` workers, the RPC (or scenario) drawn by weight |
 | `hydo-grpc retry` | `workload.retry`: re-sends, with the identical request, every operation whose last outcome was unknown and whose RPC has `retry` |
-| `hydo-grpc drive <rpc\|scenario> [N]` | one composer command: `drive.calls` (or N) operations |
+| `hydo-grpc drive <rpc\|scenario> [N]` | one composer command: `drive.calls` (default 2, or N) operations; exit 0 if all ended ok, 1 if one ended failed or unknown (the composer records a failed operation; it never exits 100) |
 | `hydo-grpc call <rpc> ['<json>'\|-]` | one call; prints the response as JSON; exit 0 ok, 1 definite failure, 2 unknown -- the invariant convention, for read-backs |
 | `hydo-grpc gen <rpc> [N]` / `list` | print generated requests / the plan's RPCs |
 
@@ -794,13 +794,13 @@ of that request field to `$HYDO_ACKED` (ok) and `<id> ack|failed|unknown` to `$H
 files main's invariants read. The first ok / definite failure / unknown outcome of each RPC in a
 run is also a `HYDO-ASSERT` record of type `reachable` (`grpc.<rpc>.ok`, `.failed`, `.unknown`).
 
-**Determinism.** A request is a pure function of the seed, the step and the worker (stream
-`splitmix64(seed, step, worker)`; drive mode: the run's n-th drive invocation), of values taken
-from earlier responses, and of a run-wide counter for unique values -- never of host time. The
-seed is `--seed`, else `$HYDO_GRPC_SEED` (the starter section sets it in `env:`), else the file
-`/tmp/hydo/grpc/seed` (a knob's `set:` can write it), else `hydo_grpc_seed=` on the kernel command
-line, else the hints' `seed`. On main nothing draws the seed per schedule: the explorer varies
-the faults around one request sequence. The composer's seed will drive it once that is on main.
+**Determinism.** A request is a pure function of the seed and of where it runs -- under the
+test composer the entry's `HYDO_SEED` (so the schedule token `W=`, which the explorer draws and
+shrinks, decides the requests as well as the mix); in steps mode the step and the worker
+(stream `splitmix64(seed, step, worker)`) -- plus values taken from earlier responses and a
+run-wide counter for unique values; never host time. The seed is `--seed`, else
+`$HYDO_GRPC_SEED` (the starter section sets it in `env:`), else the file `/tmp/hydo/grpc/seed`,
+else `hydo_grpc_seed=` on the kernel command line, else the hints' `seed`.
 
 ### The hints file
 
@@ -855,22 +855,26 @@ failures, which is valid input but rarely the interesting part.
 Values for `from` are kept in pools under `/tmp/hydo/grpc/pool/` (request fields after an ok or
 unknown outcome, response fields after an ok), shared by the processes of one run.
 
-### The test composer
+### With the test composer, or numbered steps
 
-The composer (branch `test-composer`) is not on main. For it the generator writes one command
-per RPC, `workload/parallel_driver_<rpc>` (`exec /bin/hydo-grpc drive <rpc>`), and
-`workload/finally_retry`, the layout of a `hydo/workload/` folder, and the starter section has the
-same commands as a commented `test: commands:` list (argv form). Until it lands, use the numbered
-`workload:` the starter section also contains.
+The starter section uses the test composer (MANIFEST "The test composer"): one
+`parallel_driver` per RPC with a weight (`run: [/bin/hydo-grpc, drive, <rpc>]`, a `timeout:`
+that bounds `drive.calls` operations whose every attempt runs into its deadline) and per
+scenario, the same commands as files in `<out>/workload/` for a `hydo/` folder, and
+`workload.retry: /bin/hydo-grpc retry` (the generic init runs it after the faults heal; the
+composer leaves `workload.retry` alone). The composer draws commands uniformly, so `weight:` only
+matters in steps mode; give an RPC weight 0 to leave out its command. Without the composer, the
+commented `workload:` in the starter section runs `hydo-grpc steps` per step range; a plan
+whose invariants need one operation per step (the stack's ids 0..29) uses that mode.
 
 ### Example and evidence
 
 `hvx/grpcgen/demo/`: an order service (`orders.v1.Orders`: Create, Get, Cancel, List) on Redis
-with one planted bug, driven only by generated drivers: `proto/`, `hints.yaml`, `hydo.yaml`
+with one planted bug, driven only by generated drivers under the test composer: `proto/`, `hints.yaml`, `hydo.yaml`
 (`params: mode: buggy|fixed`), `build.sh`. The stack's front door has a `.proto` too
 (`hvx/stack/proto/hydo/order.proto`, `hvx/stack/grpc-hints.yaml`), and
 `examples/stack/hydo-grpcgen.yaml` is the stack manifest with the generated driver in place of
-`hydostack place/retry`. Results: `hvx/HISTORY.md`, Milestone 80.
+`hydostack place/retry` (numbered steps). Results: `hvx/HISTORY.md`, Milestone 80.
 
 Limits: a server that needs TLS, auth metadata or custom headers is not supported (plain-text
 HTTP/2 only); `from` carries scalar and enum values, not whole messages; values a request needs

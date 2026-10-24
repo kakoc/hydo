@@ -1,19 +1,17 @@
-// Package record writes one line per call event, in a fixed text format (MANIFEST.md,
-// "gRPC services"):
+// Package record writes one line per call event in the history recorder's format (HYDO-HIST,
+// hvx/HISTORIES.md), under one history name (default "grpc"):
 //
-//	HYDO-CALL <process> <op> invoke <time> <rpc> <request>
-//	HYDO-CALL <process> <op> ok|fail|info <time> <rpc> <CODE> <response-or-message>
+//	HYDO-HIST <history> <process> invoke <time> <rpc> <op> <request>
+//	HYDO-HIST <history> <process> ok|fail|info <time> <rpc> <op> <CODE> <response-or-message>
 //
-// <process> is the worker (one operation in flight per process), <op> the operation id (a
-// retry repeats the invoke under the same op), <time> guest nanoseconds since boot
-// (CLOCK_BOOTTIME; deterministic under hydo), <rpc> "pkg.Service/Method", <CODE> the gRPC status
-// name. Bodies are compact protobuf JSON. Every token is percent-encoded: bytes outside
-// '!'..'~' and '%' become %XX; the token "%" alone is the empty string. The types and the
-// encoding are those of the history recorder's HYDO-HIST records (branch history-checkers), so
-// a converter is one line per record.
+// <process> is the worker (one operation in flight per process), <time> guest nanoseconds since
+// boot (CLOCK_BOOTTIME; deterministic under hydo), <rpc> "pkg.Service/Method" (the operation
+// <f>), <op> the operation id (a retry is a new invocation with the same op and request),
+// <CODE> the gRPC status name. Bodies are compact protobuf JSON. Every token is percent-encoded:
+// bytes outside '!'..'~', '%' and '@' become %XX; the token "%" alone is the empty string.
 //
 // Lines go to a file (full bodies) and optionally to the guest console (full, or brief:
-// without bodies, so many calls fit in the 64 KiB console).
+// without the request and response, so many calls fit in the 64 KiB console).
 package record
 
 import (
@@ -32,7 +30,7 @@ func Enc(s string) string {
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-		if c <= ' ' || c > '~' || c == '%' {
+		if c <= ' ' || c > '~' || c == '%' || c == '@' {
 			fmt.Fprintf(&b, "%%%02X", c)
 		} else {
 			b.WriteByte(c)
@@ -76,18 +74,21 @@ type Event struct {
 	Body    string // decoded request (invoke) or response/message
 }
 
-// Parse reads one line ("" ok=false if it is not a HYDO-CALL record).
-func Parse(line string) (Event, bool) {
-	i := strings.Index(line, "HYDO-CALL ")
+// Tag starts every record.
+const Tag = "HYDO-HIST "
+
+// Parse reads one line of history h (ok=false if it is not such a record).
+func Parse(line, h string) (Event, bool) {
+	i := strings.Index(line, Tag)
 	if i < 0 {
 		return Event{}, false
 	}
-	f := strings.Fields(line[i+len("HYDO-CALL "):])
-	if len(f) < 5 {
+	f := strings.Fields(line[i+len(Tag):])
+	if len(f) < 6 || f[0] != h {
 		return Event{}, false
 	}
-	e := Event{Process: f[0], Op: f[1], Type: f[2], Time: f[3], RPC: f[4]}
-	rest := f[5:]
+	e := Event{Process: f[1], Type: f[2], Time: f[3], RPC: f[4], Op: f[5]}
+	rest := f[6:]
 	if e.Type != "invoke" {
 		if len(rest) == 0 {
 			return Event{}, false
@@ -113,6 +114,7 @@ const (
 
 // Recorder appends events.
 type Recorder struct {
+	History string // the history name (default "grpc")
 	mu      sync.Mutex
 	file    *os.File
 	console *os.File
@@ -122,7 +124,7 @@ type Recorder struct {
 // Open opens the calls file (path "" = none) and the console per mode (HYDO_GRPC_CONSOLE
 // overrides; the device is HYDO_GRPC_CONSOLE_DEV, default /dev/ttyS0, falling back to stderr).
 func Open(path, mode string) *Recorder {
-	r := &Recorder{mode: mode}
+	r := &Recorder{mode: mode, History: "grpc"}
 	if v := os.Getenv("HYDO_GRPC_CONSOLE"); v != "" {
 		r.mode = v
 	}
@@ -151,13 +153,13 @@ func Open(path, mode string) *Recorder {
 
 // Invoke records the start of an attempt.
 func (r *Recorder) Invoke(process, op int64, rpc, request string) {
-	head := fmt.Sprintf("HYDO-CALL %d %d invoke %d %s", process, op, Now(), rpc)
+	head := fmt.Sprintf("%s%s %d invoke %d %s %d", Tag, r.History, process, Now(), rpc, op)
 	r.write(head, Enc(request))
 }
 
 // Complete records the outcome of an attempt.
 func (r *Recorder) Complete(process, op int64, kind, rpc, code, body string) {
-	head := fmt.Sprintf("HYDO-CALL %d %d %s %d %s %s", process, op, kind, Now(), rpc, code)
+	head := fmt.Sprintf("%s%s %d %s %d %s %d %s", Tag, r.History, process, kind, Now(), rpc, op, code)
 	r.write(head, Enc(body))
 }
 
