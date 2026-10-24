@@ -449,3 +449,160 @@ Inside the image: `/etc/hydo/hydo.yaml` (the manifest as written), `/etc/hydo/ma
 - The guest console is 64 KiB: a workload that prints every acknowledged id should print
   short ids, or the done marker can be lost.
 - One data disk, ext4. The workload's step count is the unit of fault placement.
+
+## gRPC services: generated drivers (`hydo-grpc-gen`)
+
+A system whose inputs are gRPC endpoints needs no hand-written workload client.
+`hydo-grpc-gen` reads the service definitions and writes a driver for every RPC: one static
+client binary, `hydo-grpc`, with one subcommand per job, plus the project's schema and a plan.
+The client sends valid random requests from a seeded stream, records every call's outcome, and
+retries the way a careful client does. Source: `hvx/grpcgen/` (Go, the pinned toolchain).
+
+```sh
+hvx/onboard/hydo-grpc-gen <proto dir> [--hints hints.yaml] --out <dir>   # every .proto under the dir
+hvx/onboard/hydo-grpc-gen --descriptor-set set.pb [--hints ...] --out <dir>   # protoc -o / buf build -o
+hvx/onboard/hydo-grpc-gen --reflect 127.0.0.1:7070 [--hints ...] --out <dir> # a running server's reflection
+#   -I <dir>      extra .proto import path (repeatable)    --target host:port   the address in the guest
+#   --arch amd64,arm64   also build hydo-grpc.arm64        --no-build           only the schema and plan
+#   --steps N     workload.steps in the starter section     --rel <dir>          base of its relative paths
+```
+
+It writes, under `<dir>`:
+
+| file | what |
+|---|---|
+| `grpc/desc.pb` | the schema: a `FileDescriptorSet`, dependencies first, no source info, deterministic bytes |
+| `grpc/plan.json` | every RPC with its hints, checked against the schema (unknown fields, wrong types and bad paths are errors) |
+| `hydo-grpc` | the static guest client for linux/amd64 (`-trimpath`, no build id: byte-identical from the same sources and Go) |
+| `workload/parallel_driver_<rpc>` | one test-composer command per RPC (and scenario), `finally_retry`; see below |
+| `hydo.grpc.yaml` | a starter section to merge into `hydo.yaml` (files, env, `workload:`, a commented `test:` section) |
+
+`hvx/onboard/hydo-grpc-gen` builds the generator for the host and the client with `$HYDO_GO`, else
+the pinned `go-1.26.5` of `build-stack.sh` if present, else `go` on PATH. Put `grpc/` at
+`/etc/hydo/grpc` and the client at `/bin/hydo-grpc` (the starter section does).
+
+### What the client does
+
+| command | use |
+|---|---|
+| `hydo-grpc steps $HYDO_FROM $HYDO_TO` | `workload.run`: each step runs `steps.calls` operations on each of `steps.concurrency` workers, the RPC (or scenario) drawn by weight |
+| `hydo-grpc retry` | `workload.retry`: re-sends, with the identical request, every operation whose last outcome was unknown and whose RPC has `retry` |
+| `hydo-grpc drive <rpc\|scenario> [N]` | one composer command: `drive.calls` (or N) operations |
+| `hydo-grpc call <rpc> ['<json>'\|-]` | one call; prints the response as JSON; exit 0 ok, 1 definite failure, 2 unknown -- the invariant convention, for read-backs |
+| `hydo-grpc gen <rpc> [N]` / `list` | print generated requests / the plan's RPCs |
+
+Unary, server-streaming, client-streaming (`stream_len` messages) and bidirectional RPCs are
+supported. Every attempt has a deadline (`deadline_ms`). An operation whose outcome is unknown is
+retried at once with the same request up to `retry.attempts` times; a definite failure never is.
+
+**Outcomes.** The gRPC status decides: OK is ok; INVALID_ARGUMENT, NOT_FOUND, ALREADY_EXISTS,
+PERMISSION_DENIED, UNAUTHENTICATED, FAILED_PRECONDITION, OUT_OF_RANGE, ABORTED, UNIMPLEMENTED are
+definite failures (the server rejected the request before acting); DEADLINE_EXCEEDED,
+UNAVAILABLE, CANCELLED, UNKNOWN, INTERNAL, DATA_LOSS and RESOURCE_EXHAUSTED are unknown (the
+request may have taken effect: a deadline passed while the server worked on, a connection
+reset, a crash half-way). A non-status error is unknown. `classify:` overrides a code per RPC
+for an API that documents a stronger promise.
+
+**Records.** Every attempt is two lines in `/tmp/hydo/grpc/calls` (`$HYDO_GRPC_CALLS`), with the
+bodies, and on the guest console without the bodies (`record.console: brief`, the default; `full`
+or `off`), so a few hundred calls fit in the 64 KiB console:
+
+```
+HYDO-CALL <process> <op> invoke <time> <rpc> <request JSON>
+HYDO-CALL <process> <op> ok|fail|info <time> <rpc> <CODE> <response JSON or status message>
+HYDO-CALL 0 11 invoke 13472685048 orders.v1.Orders/Create {"request_id":"r11","customer":"bob",...}
+HYDO-CALL 0 11 info 14474532744 orders.v1.Orders/Create DEADLINE_EXCEEDED context%20deadline%20exceeded
+```
+
+`<process>` is the worker (steps mode) or the OS pid (drive mode), with one operation in flight;
+`<op>` the operation id, repeated by its retries; `<time>` guest nanoseconds since boot
+(CLOCK_BOOTTIME, deterministic under hydo); bodies are compact protobuf JSON (proto field names);
+every token is percent-encoded (`%20`; `%` alone is empty). The history recorder of branch
+`history-checkers` (`HYDO-HIST`, `hvx/HISTORIES.md` there) is not on main yet: `HYDO-CALL` uses its
+types (invoke / ok / fail / info), its encoding and its rule of one operation per process, so a
+converter to `HYDO-HIST` is a renaming per model. An RPC with `outcome_id:` also writes the value
+of that request field to `$HYDO_ACKED` (ok) and `<id> ack|failed|unknown` to `$HYDO_OUTCOMES`, the
+files main's invariants read. The first ok / definite failure / unknown outcome of each RPC in a
+run is also a `HYDO-ASSERT` record of type `reachable` (`grpc.<rpc>.ok`, `.failed`, `.unknown`).
+
+**Determinism.** A request is a pure function of the seed, the step and the worker (stream
+`splitmix64(seed, step, worker)`; drive mode: the run's n-th drive invocation), of values taken
+from earlier responses, and of a run-wide counter for unique values -- never of host time. The
+seed is `--seed`, else `$HYDO_GRPC_SEED` (the starter section sets it in `env:`), else the file
+`/tmp/hydo/grpc/seed` (a knob's `set:` can write it), else `hydo_grpc_seed=` on the kernel command
+line, else the hints' `seed`. On main nothing draws the seed per schedule: the explorer varies
+the faults around one request sequence. The composer's seed will drive it once that is on main.
+
+### The hints file
+
+Everything is optional; unknown keys are errors.
+
+```yaml
+target: 127.0.0.1:7070      # the server (default 127.0.0.1:50051); per RPC: target:
+deadline_ms: 1000           # per-attempt deadline (default 2000); per RPC: deadline_ms:
+seed: 1
+services: [orders.v1.Orders]                 # only these services (default: every one)
+steps: {calls: 2, concurrency: 1}            # per step: operations per worker, workers in parallel
+drive: {calls: 4}
+record: {console: brief}                     # off | brief | full
+defaults:                                    # where a field has no hint
+  string_len: [1, 10]   bytes_len: [0, 16]   repeated_len: [0, 3]   map_len: [0, 2]
+  depth: 4              message_prob: 0.85   optional_prob: 0.7     oneof_none: 0
+rpcs:                       # key: Method, Service/Method or the full name
+  Create:
+    weight: 3               # relative frequency (default 1; 0 = never drawn)
+    retry: {attempts: 4, backoff_ms: 100, at_end: true, end_tries: 8}
+    outcome_id: request_id  # a single scalar request field
+    classify: {ABORTED: info}                # code -> ok | fail | info
+    oneofs: {payment: [card]}                # allowed members of a oneof
+    stream_len: [1, 3]                       # client-streaming: messages per call
+    fields:                 # request field paths; a repeated field's hint applies to each element;
+                            # maps: <field>.key / <field>.value
+      request_id: {unique: true, prefix: r}  # r1, r2, ... (an integer: range lo, lo+1, ...)
+      customer: {choice: [alice, bob]}       # also enum value names, numbers, true/false
+      amount_cents: {range: [1, 50000]}      # numbers, inclusive
+      items: {len: [1, 3]}                   # strings/bytes: length; repeated/map: entries
+      items.sku: {format: digits, len: [3, 3], prefix: sku-}   # alnum lower digits hex uuid
+      note: {prob: 0.5}                      # presence of an optional / message field
+      page_token: {omit: true}
+      region: {value: eu-1}                  # a constant
+  Cancel:
+    fields:
+      id: {from: Create.id}  # a value an earlier call returned: <rpc>.<path> (response),
+                             # <rpc>.request.<path>; or {rpc:, path:, side:, pick: random|latest,
+                             # fallback: skip|generate}. skip: the call waits until one exists.
+scenarios:                   # optional fixed sequences, drawn like an RPC
+  - {name: create_cancel, weight: 1, calls: [Create, Get, Cancel]}   # `from` takes this worker's latest
+```
+
+Without hints every value is still valid for its type: integers mostly small and non-negative,
+with the edges (0, 1, the maximum) and a few negatives; finite floats; lowercase alphanumeric
+strings; declared enum values without `*_UNSPECIFIED`; one member of each oneof; distinct map
+keys; proto2 `required` fields always set; nesting bounded by `depth`; Timestamp in the 30 days
+after 2026-01-01, Duration up to an hour, empty Any/Struct. What a server rejects for business
+reasons (an amount of 0, an unknown id) needs a hint: those calls are recorded as definite
+failures, which is valid input but rarely the interesting part.
+
+Values for `from` are kept in pools under `/tmp/hydo/grpc/pool/` (request fields after an ok or
+unknown outcome, response fields after an ok), shared by the processes of one run.
+
+### The test composer
+
+The composer (branch `test-composer`) is not on main. For it the generator writes one command
+per RPC, `workload/parallel_driver_<rpc>` (`exec /bin/hydo-grpc drive <rpc>`), and
+`workload/finally_retry`, the layout of a `hydo/workload/` folder, and the starter section has the
+same commands as a commented `test: commands:` list (argv form). Until it lands, use the numbered
+`workload:` the starter section also contains.
+
+### Example and evidence
+
+`hvx/grpcgen/demo/`: an order service (`orders.v1.Orders`: Create, Get, Cancel, List) on Redis
+with one planted bug, driven only by generated drivers: `proto/`, `hints.yaml`, `hydo.yaml`
+(`params: mode: buggy|fixed`), `build.sh`. The stack's front door has a `.proto` too
+(`hvx/stack/proto/hydo/order.proto`, `hvx/stack/grpc-hints.yaml`), and
+`examples/stack/hydo-grpcgen.yaml` is the stack manifest with the generated driver in place of
+`hydostack place/retry`. Results: `hvx/HISTORY.md`, Milestone 80.
+
+Limits: a server that needs TLS, auth metadata or custom headers is not supported (plain-text
+HTTP/2 only); `from` carries scalar and enum values, not whole messages; values a request needs
+from another system (a payment token) must come from hints.
