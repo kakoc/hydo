@@ -50,6 +50,7 @@ Classes of findings:
 """
 import argparse, json, os, queue, re, subprocess, sys, threading, time
 import hvm_backend
+import grpc_faults        # --grpc-faults (gRPC-level faults on gRPC proxies; grpc_faults.py)
 
 M64 = (1 << 64) - 1
 NORDERS = 30
@@ -376,6 +377,12 @@ def parse_h(v):
         k, eq, x = kv.partition("=")
         rules.append((k, (int(x) if x.isdigit() else x) if eq else None))
     return (m.group(1), int(m.group(2)), int(m.group(3)), tuple(rules))
+
+
+def add_grpc_faults(s, seed):
+    """--grpc-faults: up to two H= tokens with gRPC rules on the manifest's gRPC proxies, from
+    their own random stream (grpc_faults.py); inert without the flag."""
+    return grpc_faults.add(s, seed, SplitMix, NORDERS)
 
 
 def pf_candidates(s, var):
@@ -1392,6 +1399,7 @@ def candidates(s, tjk=None):
             var(F=f[:4] + (f[4] // 2,) + f[5:])
     if "H" in s:                                    # protocol faults: drop, narrow, simplify
         pf_candidates(s, var)
+        grpc_faults.candidates(s, var)              # the gRPC-only keys (grpc_faults.py)
     if "pp" in s:                                   # finer preemption (M49): drop it, then milder
         var(pp=None)
     if "xt" in s:
@@ -1559,6 +1567,11 @@ def main():
                     help="faults at the edge of the system: error / slow / missing / reset answers and duplicated, "
                          "reordered, late or lost webhooks on the manifest's fakes: and proxies: (H=; separate "
                          "random stream)")
+    ap.add_argument("--grpc-faults", action="store_true",
+                    help="gRPC-level faults on the manifest's gRPC proxies: forward then drop the answer, an injected "
+                         "status (with or without the server having acted), a delay past the deadline, a stream or "
+                         "connection reset, a stream cut or held after n messages (H= with rpc=/call=/cut=/hold=; "
+                         "separate random stream)")
     ap.add_argument("--fc-nmax", type=int, default=FC_NMAX,
                     help="--freeze-call: n is drawn log-uniformly from 1 .. this (default %(default)s)")
     ap.add_argument("--cf-range", default="auto",
@@ -1620,6 +1633,11 @@ def main():
     if PROTOCOL_FAULTS and not PF_TARGETS:
         raise SystemExit("explore.py: --protocol-faults needs an image whose manifest has fakes: or proxies: "
                          "(and allows `protocol` in faults:, or has no faults: list)")
+    grpc_faults.ON = a.grpc_faults
+    grpc_faults.TARGETS = grpc_faults.targets_of(SPACE.m if SPACE else None) if a.grpc_faults else []
+    if a.grpc_faults and (not grpc_faults.TARGETS or BACKEND == "hvm"):
+        raise SystemExit("explore.py: --grpc-faults needs --backend hvx and an image whose manifest has a proxy with "
+                         "protocol: grpc (and allows `protocol` in faults:, or has no faults: list)")
     if PROTOCOL_FAULTS and BACKEND == "hvm":
         raise SystemExit("explore.py: --protocol-faults needs --backend hvx (fakes: are x86_64 only)")
     if FREEZE_CALL and not FC_PAIRS:
@@ -1669,7 +1687,7 @@ def main():
         if MORE_FAULTS and CF_RANGE is None:
             CF_RANGE = measure_cf_range(pool, a.out)
             print("cf= range (measured with cfn): %d-%d" % CF_RANGE, file=sys.stderr)
-        mf = lambda x, sd: add_protocol_faults(add_freeze_call(add_more_faults(x, sd, a.strategy), sd), sd)
+        mf = lambda x, sd: add_grpc_faults(add_protocol_faults(add_freeze_call(add_more_faults(x, sd, a.strategy), sd), sd), sd)
         items = [("seed-%d" % sd, render(add_turns(add_buggify(add_preempt(add_concurrency(add_timing(mf(nf(dur(gen(sd)), sd), sd), sd), sd), sd), sd), sd)))
                  for sd in seeds]
     t_sweep = time.time()
