@@ -1,0 +1,179 @@
+# examples/etcd/hydo.yaml with a recorded history and the host's linearizability checker instead
+# of the three hand-written invariants (hvx/HISTORIES.md). The workload is the same (30 steps,
+# three concurrent clients doing put + read-back through a rotating member, an online defrag
+# every 5th step); every put and get is recorded with hydo_hist, the put with the revision etcd
+# acknowledged and the get with the value and mod_revision it returned. At the end (same boot,
+# or the recovery boot after a power cut) the final: command reads every key through EACH member
+# (one linearizable range read per member). The host checks the history as a register per key
+# whose values carry etcd's mod_revision: a member whose revisions are off by one (etcd issue
+# 14685, fixed in 3.5.6) returns a version for a key that differs from the one the put was
+# acknowledged with, which no order of the operations explains.
+# Build on the build box (from the repository root):
+#   HYDO_ETCD_MANIFEST=hydo-hist.yaml hvx/onboard/examples/etcd/build.sh 3.5.5 --out explore-ob-etcd-hist-3.5.5
+# Try:  disk=none dseed=1 | run                          -> OK (linearizable)
+#       disk=none dseed=1 | run K=etcd1@10+1 P=etcd3@26+1 -> on 3.5.5: VIOLATION (M78's schedule)
+name: etcd-hist
+description: three-member etcd cluster; the history of puts and gets (with revisions) is linearizable.
+
+params:
+  version: "3.6.15"
+
+root:
+  files:
+    - {src: "etcd-v{{version}}/etcd", dst: /bin/etcd, mode: "0755"}
+    - {src: "etcd-v{{version}}/etcdctl", dst: /bin/etcdctl, mode: "0755"}
+  text:
+    /etc/etcd-member: |
+      # etcd-member <n> <addr> <client-port> <peer-port>: member n as user etcd<n>. exec all the
+      # way down, so the service's PID is etcd itself (kills and pauses hit etcd).
+      exec su etcd$1 -s /bin/sh -c "exec /bin/etcd --name etcd$1 --data-dir /data/etcd$1 \
+        --listen-client-urls http://$2:$3 --advertise-client-urls http://$2:$3 \
+        --listen-peer-urls http://$2:$4 --initial-advertise-peer-urls http://$2:$4 \
+        --initial-cluster $ETCD_CLUSTER --initial-cluster-token hydo --initial-cluster-state new \
+        --log-level warn"
+    /etc/passwd: |
+      root:x:0:0:root:/tmp:/bin/sh
+      etcd1:x:1001:1001:etcd1:/tmp:/bin/sh
+      etcd2:x:1002:1002:etcd2:/tmp:/bin/sh
+      etcd3:x:1003:1003:etcd3:/tmp:/bin/sh
+    /etc/group: |
+      root:x:0:
+      etcd1:x:1001:
+      etcd2:x:1002:
+      etcd3:x:1003:
+
+data:
+  size_mib: 512                     # each member preallocates a 64 MiB WAL segment
+
+env:
+  IPR: /nix/store/dx4fsbxs5v82l9lzmjkpkhx5ygqcwm69-iproute2-6.8.0/bin/ip   # in the image with tc
+  EPS: 127.0.0.11:2379,127.0.0.12:12379,127.0.0.13:22379
+  ETCD_CLUSTER: etcd1=http://127.0.0.11:2380,etcd2=http://127.0.0.12:12380,etcd3=http://127.0.0.13:22380
+
+shell: |
+  ectl() { /bin/etcdctl --dial-timeout=1s --command-timeout=2s "$@"; }
+  ep_of() { case $1 in 0) echo 127.0.0.11:2379;; 1) echo 127.0.0.12:12379;; *) echo 127.0.0.13:22379;; esac; }
+  rev_of() { printf '%s' "$1" | sed -n 's/.*"header":{[^}]*"revision":\([0-9]*\).*/\1/p'; }
+  member_setup() {   # <n> <addr>: data dir owned by etcd<n>; uid 100<n> sends from <addr>
+    mkdir -p /data/etcd$1 && chown etcd$1:etcd$1 /data/etcd$1 && chmod 700 /data/etcd$1 || return 1
+    # the local table moves from rule 0 to rule 100, so the per-uid rules (pref 10) come first
+    $IPR rule show | grep -q '^100:.*lookup local' || { $IPR rule add pref 100 lookup local && $IPR rule del pref 0; } || return 1
+    $IPR route show table 10$1 | grep -q "src $2" || $IPR route add local 127.0.0.0/8 dev lo src $2 table 10$1 || return 1
+    $IPR rule show | grep -q "uidrange 100$1-100$1" || $IPR rule add pref 10 uidrange 100$1-100$1 lookup 10$1
+  }
+  wait_quorum() {   # up to 60 s for a linearizable read through any member
+    local n=0
+    until ectl --endpoints=$EPS get hydo-probe > /dev/null 2>&1; do
+      n=$((n + 1)); [ $n -lt 60 ] || return 1; sleep 1
+    done
+  }
+  fields_kv() {   # stdin: `etcdctl -w fields get` output -> "<key> <value>@<mod_revision>" per kv
+    awk -F' : ' '$1 == "\"Key\"" { k = $2; gsub(/^"|"$/, "", k) }
+                 $1 == "\"ModRevision\"" { m = $2 }
+                 $1 == "\"Value\"" { v = $2; gsub(/^"|"$/, "", v); print k, v "@" m }'
+  }
+  client_op() {   # <client> <step>: put k<id>=v<id>, then read it back, through one member;
+                  # both recorded in history kv (process = client)
+    local c=$1 id ep out r kv
+    id=$(($2 * 3 + $1)); ep=$(ep_of $((($1 + $2) % 3)))
+    hydo_hist kv $c invoke write k$id v$id
+    if out=$(ectl --endpoints=$ep -w json put k$id v$id 2>/dev/null) && r=$(rev_of "$out") && [ -n "$r" ]; then
+      echo $id >> $HYDO_ACKED; echo "$id ack" >> $HYDO_OUTCOMES; hydo_hist kv $c ok write k$id v$id@$r
+    else
+      echo "$id unknown" >> $HYDO_OUTCOMES; hydo_hist kv $c info write k$id v$id
+    fi
+    hydo_hist kv $c invoke read k$id
+    if out=$(ectl --endpoints=$ep -w fields get k$id 2>/dev/null); then
+      kv=$(printf '%s\n' "$out" | fields_kv)
+      hydo_hist kv $c ok read ${kv:-k$id nil}
+    else
+      hydo_hist kv $c info read k$id
+    fi
+    return 0
+  }
+
+services:
+  - name: etcd1
+    addr: 127.0.0.11
+    port: 2379                       # client port: N=etcd1 / O=etcd1 act on client traffic
+    setup: member_setup 1 127.0.0.11
+    cmd: sh /etc/etcd-member 1 127.0.0.11 2379 2380
+    ready: wget -q -T 2 -O /dev/null http://127.0.0.11:2380/version   # peer port up (no quorum needed)
+  - name: etcd2
+    addr: 127.0.0.12
+    port: 12379
+    setup: member_setup 2 127.0.0.12
+    cmd: sh /etc/etcd-member 2 127.0.0.12 12379 12380
+    ready: wget -q -T 2 -O /dev/null http://127.0.0.12:12380/version
+  - name: etcd3
+    addr: 127.0.0.13
+    port: 22379
+    setup: member_setup 3 127.0.0.13
+    cmd: sh /etc/etcd-member 3 127.0.0.13 22379 22380
+    ready: wget -q -T 2 -O /dev/null http://127.0.0.13:22380/version
+
+provision: |
+  wait_quorum && ectl --endpoints=$EPS put hydo-probe up
+
+workload:
+  steps: 30                          # step i: clients 0,1,2 at once each put k<3i+c> and read it
+                                     #   back, through members (c+i) mod 3; every 5th step ends
+                                     #   with one more put and at once an online defrag of every
+                                     #   member (a kill at the next step boundary then lands
+                                     #   right after a defrag)
+  timeout: 600
+  process: etcdctl
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      client_op 0 $i & client_op 1 $i & client_op 2 $i &
+      wait
+      if [ $((i % 5)) = 4 ]; then     # a write, then at once an online defrag of every member
+        ectl --endpoints=$EPS put hydo-defrag $i > /dev/null 2>&1
+        /bin/etcdctl --dial-timeout=1s --command-timeout=5s --endpoints=$EPS defrag > /dev/null 2>&1
+      fi
+      i=$((i + 1))
+    done
+  retry: |
+    wait_quorum || exit 0
+    i=0
+    while [ $i -lt $((HYDO_STEPS * 3)) ]; do
+      if ! grep -qx $i $HYDO_ACKED; then
+        for a in 1 2 3; do       # a fresh leader may still refuse the first attempt
+          hydo_hist kv 10 invoke write k$i v$i
+          if out=$(ectl --endpoints=$EPS -w json put k$i v$i 2>/dev/null) && r=$(rev_of "$out") && [ -n "$r" ]; then
+            echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES; hydo_hist kv 10 ok write k$i v$i@$r; break
+          fi
+          hydo_hist kv 10 info write k$i v$i
+          sleep 1
+        done
+      fi
+      i=$((i + 1))
+    done
+
+checks:
+  - id: etcd.kv_linearizable
+    type: linearizable
+    model: register
+    history: kv
+    msg: every put and get, with the mod_revisions etcd returned, is linearizable per key
+    final: |
+      # one linearizable range read through each member (process 20 + member): every key k0..k89,
+      # nil for an absent one. Exit status 2 if a member does not answer: the host reports ERROR
+      wait_quorum || { echo "no quorum within 60 s"; exit 2; }
+      rc=0
+      n=$((HYDO_STEPS * 3))
+      for m in 0 1 2; do
+        p=$((20 + m))
+        hydo_hist kv $p invoke read 'k*'
+        if out=$(ectl --endpoints=$(ep_of $m) -w fields get --prefix k 2>/dev/null); then
+          pairs=$(printf '%s\n' "$out" | fields_kv | awk -v n=$n '{ v[$1] = $2 }
+            END { for (i = 0; i < n; i++) { k = "k" i; printf "%s %s ", k, (k in v) ? v[k] : "nil" } }')
+          hydo_hist kv $p ok read $pairs
+        else
+          hydo_hist kv $p info read 'k*'; rc=2
+        fi
+      done
+      exit $rc
+
+faults: [kill, pause, network, oneway, cut, clock, disk]

@@ -33,6 +33,7 @@ import sys
 
 TAG = "HYDO-HIST "
 CHECK_TAG = "HYDO-CHECK "
+FINAL_TAG = "HYDO-CHECK-FINAL "
 INF = float("inf")
 NAME_RE = re.compile(r"^[A-Za-z0-9_.\-]+$")
 TYPES = ("invoke", "ok", "fail", "info")
@@ -80,12 +81,21 @@ class Event(object):
 def parse_sources(sources):
     """sources: [(label, text)] in run order (workload console first, recovery console second).
     Returns (events, specs, warnings): events in order, check specs (HYDO-CHECK lines, first
-    occurrence of each id wins), and a list of malformed-line warnings."""
+    occurrence of each id wins; "_final_rc" = the exit status its final: command reported in a
+    HYDO-CHECK-FINAL line), and a list of malformed-line warnings."""
     events, specs, warn = [], {}, []
-    order = []
+    order, finals = [], {}
     idx = 0
     for label, text in sources:
         for ln, line in enumerate(text.splitlines(), 1):
+            k = line.find(FINAL_TAG)
+            if k >= 0:
+                try:
+                    fr = json.loads(line[k + len(FINAL_TAG):].strip())
+                    finals[fr["id"]] = int(fr.get("rc", 0))
+                except (ValueError, KeyError, TypeError):
+                    warn.append("%s:%d: bad HYDO-CHECK-FINAL line" % (label, ln))
+                continue
             k = line.find(CHECK_TAG)
             if k >= 0:
                 try:
@@ -110,6 +120,9 @@ def parse_sources(sources):
                 continue
             events.append(Event(idx, tok[0], tok[1], tok[2], t, tok[4], tok[5:], label, ln))
             idx += 1
+    for i, rc in finals.items():          # the exit status of the check's final: (last one)
+        if i in specs:
+            specs[i]["_final_rc"] = rc
     return events, [specs[i] for i in order], warn
 
 
@@ -878,6 +891,7 @@ def run_checks(sources, guest_verdict=None, budget=DEFAULT_BUDGET, specs=None):
     order) makes it a VIOLATION, an undecided check an ERROR, and an OK verdict gets the
     checks' summary appended."""
     events, found, warn = parse_sources(sources)
+    finals = dict((sp["id"], sp.get("_final_rc", 0)) for sp in found)
     specs = found if specs is None else specs
     if not specs:
         return {"records": [], "verdict": None, "results": {}, "report": "", "warnings": warn}
@@ -886,6 +900,12 @@ def run_checks(sources, guest_verdict=None, budget=DEFAULT_BUDGET, specs=None):
     oks = []
     for sp in specs:
         r = run_check(events, sp, budget)
+        frc = finals.get(sp["id"], 0)
+        if frc and r["status"] == "ok":
+            # the read-back did not complete: the history may miss the reads that matter
+            r = {"status": "error", "details": r["details"], "warnings": r.get("warnings", []),
+                 "summary": "its final: read-back exited with status %d, so the history is incomplete (%s)" % (frc, r["summary"]),
+                 "explanation": ""}
         results[sp["id"]] = r
         msg = sp.get("msg") or "%s history %s is %s" % (sp.get("type"), sp.get("history"), sp.get("model", sp.get("consistency", "")))
         recs.append("HYDO-ASSERT-DECL " + _j({"t": "always", "id": sp["id"], "msg": msg}))
@@ -914,8 +934,11 @@ def run_checks(sources, guest_verdict=None, budget=DEFAULT_BUDGET, specs=None):
     elif first_bad:
         verdict = "HYDO-ORACLE: VIOLATION [%s] %s" % (first_bad[0]["id"], first_bad[1]["summary"][:600])
     elif first_err:
-        verdict = "HYDO-ORACLE: ERROR check %s could not be decided: %s" % (first_err[0]["id"], first_err[1]["summary"][:300])
+        verdict = "HYDO-ORACLE: ERROR check %s could not be evaluated: %s" % (first_err[0]["id"], first_err[1]["summary"][:300])
     else:
         tail = "checks=%d held (%s: %s)" % (len(oks), oks[0][0]["id"], oks[0][1]["summary"])
-        verdict = (gv + " | " + tail) if gv else "HYDO-ORACLE: OK " + tail
+        if not gv or gv.strip() == "HYDO-ORACLE: OK invariants=0 held ()":
+            verdict = "HYDO-ORACLE: OK " + tail       # a manifest whose only properties are checks
+        else:
+            verdict = gv + " | " + tail
     return {"records": recs, "verdict": verdict, "results": results, "report": "\n".join(rep), "warnings": warn}

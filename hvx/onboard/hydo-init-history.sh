@@ -10,7 +10,9 @@
 #     check's spec from the console, so a saved console is self-describing), and
 #   - at the end -- in the same boot, or in the recovery boot after a power cut -- runs each
 #     check's `final:` command (typically: read every key back and record the reads in the
-#     history), then the original finish (invariants, verdict line).
+#     history) and prints its exit status (HYDO-CHECK-FINAL; non-zero = the history is
+#     incomplete, the host's verdict is then ERROR unless it found a violation anyway), then
+#     the original finish (invariants, verdict line).
 # The workload records operations with hydo_hist (hvx/history/hydo_hist.sh, in the prelude).
 
 cv() { eval "printf '%s' \"\${HYDO_CHECK_${1}_$2}\""; }      # cv <check> <field>
@@ -30,6 +32,7 @@ hist_final() {     # each check's final: read-back, bounded by workload.timeout
     $BB timeout $HYDO_WORKLOAD_TIMEOUT $BB sh -c ". /etc/hydo/prelude.sh; $f" >> $H/workload.log 2>&1
     rc=$?
     log "check $(cv $c id): final read rc=$rc (uptime=$(UP)s)"
+    echo "HYDO-CHECK-FINAL {\"id\":\"$(cv $c id)\",\"rc\":$rc}"   # rc != 0: the host reports ERROR
   done
 }
 

@@ -271,6 +271,14 @@ class Driver(unittest.TestCase):
         self.assertEqual(r["verdict"], "HYDO-ORACLE: VIOLATION [g] guest first")
         self.assertIsNone(H.run_checks([("w", "nothing\n")], "HYDO-ORACLE: OK x")["verdict"])
 
+    def test_final_status(self):
+        decl = 'HYDO-CHECK {"id":"kv.lin","type":"linearizable","history":"kv"}\n'
+        good = decl + hist(["0 invoke write x 1", "0 ok write x 1"])
+        r = H.run_checks([("w", good + 'HYDO-CHECK-FINAL {"id":"kv.lin","rc":0}\n')], "HYDO-ORACLE: OK invariants=0 held ()")
+        self.assertTrue(r["verdict"].startswith("HYDO-ORACLE: OK checks=1 held (kv.lin: "), r["verdict"])
+        r = H.run_checks([("w", good + 'HYDO-CHECK-FINAL {"id":"kv.lin","rc":2}\n')], "HYDO-ORACLE: OK invariants=0 held ()")
+        self.assertTrue(r["verdict"].startswith("HYDO-ORACLE: ERROR check kv.lin could not be evaluated"), r["verdict"])
+
     def test_encoding_roundtrip(self):
         s = "a b%c@d,e"
         self.assertEqual(H.pdec(H.penc(s, ",")), s)
