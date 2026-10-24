@@ -123,7 +123,7 @@ class Adaptive:
             if n is None:
                 raise SystemExit("explore.py: --fc-adaptive: no packet count in the console of %s (%s)" % (tag, text))
             rec = {"tag": tag, "schedule": text, "pair": "%s>%s" % (svc, peer), "dir": d, "match": m, "step": st,
-                   "count": n, "verdict": r["verdict"], "fp": r["fp"], "console": path}
+                   "count": n, "verdict": r["verdict"], "fp": r["fp"], "secs": r.get("secs"), "console": path}
             self.traces[key] = rec
             self.trecs.append(rec)
 

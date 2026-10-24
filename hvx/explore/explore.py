@@ -1117,6 +1117,7 @@ def signature(v):
 QUIET_FILE = os.environ.get("HYDO_QUIET_FILE")      # a shared box's "quiet window" flag (unset: no wait)
 QUIET_MAX_S = 7200
 QUIET_LOCK = threading.Lock()
+QUIET_WAITED = [0.0]                                # seconds the pool spent waiting (the summary's quiet_wait_s)
 
 
 def quiet_wait():
@@ -1129,6 +1130,7 @@ def quiet_wait():
             print("quiet window (%s): waiting" % QUIET_FILE, file=sys.stderr)
         while os.path.exists(QUIET_FILE) and time.time() - t0 < QUIET_MAX_S:
             time.sleep(30)
+        QUIET_WAITED[0] += time.time() - t0
 
 
 class Worker(threading.Thread):
@@ -1681,6 +1683,8 @@ def main():
         summary["repro_runs"] = nrep
     if fc_info:
         summary.update(fc_info)
+    if QUIET_WAITED[0]:
+        summary["quiet_wait_s"] = round(QUIET_WAITED[0], 1)
     if RAM_MIB != 1024:
         summary["ram_mib"] = RAM_MIB
     if VCPUS != 1:
