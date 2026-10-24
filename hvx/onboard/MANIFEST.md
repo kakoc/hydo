@@ -162,7 +162,7 @@ faults: [kill, pause, network, oneway, cut, clock, disk]   # which kinds make se
 ```
 
 `buggify: true` (top level, optional) says the project's programs carry BUGGIFY fault points
-from an assertion SDK (Go `hydoassert.Buggify`, Rust `hydo_assert::hydo_buggify!`; see
+from an assertion SDK (Go `hydoassert.Buggify`, Rust `hydo_assert::hydo_buggify!`, JavaScript `buggify`; see
 `hvx/ASSERTIONS.md`). The init then turns the schedule token `B=<seed-hex>[,<enable-pm>[,<fire-pm>]]`
 (drawn by `explore.py --buggify`, which keeps `B=` for such a manifest and drops it for others)
 into `/tmp/hydo-buggify`, the file the SDKs read at a

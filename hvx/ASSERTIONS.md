@@ -64,7 +64,7 @@ exploration should keep going (or the scenario is wrong).
 
 ## Determinism and volume
 
-hvx keeps at most 64 KiB of console per VM, so SDKs must not flood it. The Go and Rust SDKs emit each
+hvx keeps at most 64 KiB of console per VM, so SDKs must not flood it. The Go, Rust and JavaScript SDKs emit each
 (assertion, outcome) pair once per process (the first pass and the first failure, with the
 details of that first one) and never emit a `sometimes` that evaluated false. The output is a
 pure function of the program's evaluation sequence: no clocks, no host state, catalog in
@@ -153,6 +153,40 @@ extension point for a history recorder).
 For an onboarded project, `buggify: true` in `hydo.yaml` makes the guest init write the
 schedule's `B=` token to `/tmp/hydo-buggify` (`hvx/onboard/MANIFEST.md`), as `stack-explore.sh`
 does for the stack. `hvx/onboard/examples/rust-kv` is a complete example.
+
+**JavaScript** (`sdk/js`, package `hydo-assert`, Node.js; no dependencies; CommonJS and ESM;
+TypeScript types; README in the package):
+
+```js
+const ha = require('hydo-assert');               // or: import * as ha from 'hydo-assert'
+const ACKED = ha.always('kv.acked_durable', 'every acknowledged write reads back');   // module top level
+const LOG_SIZE = ha.always('kv.log_size', 'the log stays under its cap');
+const BACK = ha.eventually('kv.back', 'the server answers within 5 s', 5000);
+const LOST_REPLY = ha.buggify('kv.put.lost_reply', 'the write lands but the reply is lost');
+ha.catalog();                                     // once, early: the DECL lines
+ACKED.check(got === want, { key: k, got });
+ha.reachable('kv.torn_tail', 'the log ended in a partial line').hit({ bytes });
+LOG_SIZE.lessThanOrEqualTo(size, cap);            // = LOG_SIZE.cmp(size, '<=', cap)
+if (LOST_REPLY.fire({ key })) { socket.destroy(); return; }
+await BACK.awaitCond(async () => (await ping()) === 'pong', 100);   // awaitCondSync blocks
+ha.setupComplete();
+```
+
+The API is the Go SDK's in camelCase (`alwaysOrUnreachable`, `check`, `hit`, `cmp`,
+`eventually(id, msg, withinMs)` with `begin`/`done`/`expire`, `buggify`/`fire`, `catalog`,
+`setupComplete`), plus the named comparison helpers (`greaterThan`,
+`greaterThanOrEqualTo`, `lessThan`, `lessThanOrEqualTo`) and `emitLine(tag, value)` for other
+one-line record kinds. For the same sequence of calls it writes the same bytes as the Go SDK:
+`sdk/js/test/conformance.sh` builds a Go program against `hvx/stack/hydoassert`'s own sources
+(Go 1.26.5) and runs a Node program making the same calls through both entries, under five
+BUGGIFY configurations, and diffs consoles and stdouts. Records are written synchronously
+(`fs.writeSync`, one write per record) to `/dev/ttyS0`; same output switch (`HYDO_ASSERT_OUT`,
+`off` makes it a no-op), same deduplication, same BUGGIFY configuration and decisions. Details
+are plain objects or `Map`s; numbers, bigints (Go's 64-bit integers), `Uint8Array` (base64,
+Go's `[]byte`) and strings are encoded as Go encodes the matching Go values, keys in UTF-8 byte
+order; a NaN, an infinity or a cycle drops the record, as `json.Marshal` fails on them. Go 1.27
+writes invalid UTF-8 as a raw U+FFFD; the SDK writes Go 1.26's `\ufffd` escape.
+`hvx/onboard/examples/node-kv` is a complete example (Mac backend).
 
 ## Host side
 
