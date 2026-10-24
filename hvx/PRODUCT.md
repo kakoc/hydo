@@ -12,6 +12,12 @@ A team describes its system in one `hydo.yaml` (`hvx/onboard/MANIFEST.md`): the 
 - clock jumps; changes of thread timing (tick jitter, extra preemption points, several virtual CPUs);
 - FoundationDB-style fault points inside the code (BUGGIFY).
 
+For a system whose inputs are gRPC endpoints, `hydo-grpc-gen` writes the workload: from the
+`.proto` files (or server reflection) and a small hints file it builds one static client that
+sends valid random requests to every RPC from a seeded stream, passes ids from earlier
+responses to later calls, retries unknown outcomes like a careful client, and records each
+call as ok, failed or unknown (`MANIFEST.md`, "gRPC services").
+
 The explorer (`hvx/explore/explore.py`) generates schedules with several strategies and sweeps, re-runs every failure to prove it reproduces, and shrinks it to a minimal schedule. Assertions are properties of five kinds (always, sometimes, reachable, unreachable, eventually; `hvx/ASSERTIONS.md`). It runs on x86_64 Linux with VT-x (`hvx/dist/`, the Linux release) and on Apple Silicon Macs (`hvx-mac/dist/`).
 
 ## Two kinds of projects
@@ -33,6 +39,7 @@ The explorer (`hvx/explore/explore.py`) generates schedules with several strateg
 | 6b | **Docker Compose import** (a starting `hydo.yaml` from `docker-compose.yaml`). | **Approved; in progress** (branch `compose-import`). |
 | 6c | **CI mode** (below). | Document only; to be discussed later. |
 | 7 | **Scale and where it runs** (below). | Document only; not now. |
+| 8 | **Generated gRPC drivers:** no hand-written client per RPC for a gRPC system. | **Approved; done** (branch `grpc-drivers`, `hvx/grpcgen/`; HISTORY Milestone 80). Feeds the composer (its commands are generated) once that is on main. |
 
 ## How a team uses hydo (agreed direction, 2026-10-24)
 
