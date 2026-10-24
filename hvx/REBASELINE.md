@@ -856,7 +856,29 @@ seed A `ca4cb4235e9d8fd9` → `5bf79d4d529bb8d9`, seed B `577b077177234f87` → 
 |---|---|---|---|
 | `hydo_kill=kafka@10` | `29501fbc69f0b5f6` | `33611b4de52bd93d` (both runs) | OK acked=30/30 exactly-once (told-failed 0, unknown-but-applied 0, 30 cached in Redis); two runs + branch identical |
 
-The other seven scenarios of 7.2 were not run on 2 vCPUs (M69 did not run them either).
+**The other seven scenarios on 2 vCPUs** (M81, 2026-10-24 08:17–08:41 UTC). The same command
+with `HVX_STACK_FAULT=<scenario>`: the six `mode=fault` runs once each (two fresh runs plus a branch
+from the pre-fault snapshot, all four fingerprints identical), the MySQL-relaxed case `mode=sanity`
+twice (identical). Harness compiled from main `230ad15` in `~/hydo-pf/hvx` (byte-identical to the
+`~/hydo-smpb` binary above), main `hvx.ko` srcversion `CA5BF8BF2A0D66B312A68EF` (not reloaded), at
+most two of these VMs at a time beside other sessions' explorers; every console logs "smp: Brought
+up 1 node, 2 CPUs". New values only (the old image was not run on 2 vCPUs for these):
+
+| scenario (`HVX_STACK_FAULT`) | 1 vCPU, `stack-nq` (7.2) | 2 vCPUs, `stack-nq` | verdict on 2 vCPUs |
+|---|---|---|---|
+| `hydo_kill=mysql@10` | `959e90dd32e720f4` | `5787e8c2ab91c8dd` | OK acked=30/30 exactly-once (told-failed 0, unknown-but-applied 0, 30 cached in Redis) |
+| `hydo_kill=kafka@20` | `1ba55098f467b928` | `70f2262407cef26e` | OK 30/30, 30 cached |
+| `hydo_kill=redis@10` | `f235adac001ad733` | `124cc3dad8b93dfb` | OK 30/30, 27 cached in Redis (as on 1 vCPU) |
+| `hydo_net=mysql:delay,100ms,loss,40%` | `6a944fa762d93cc7` | `c07c4bbbcde6d0d9` | OK 30/30 (first pass 29/30, as on 1 vCPU; the heal delivered 1 queued packet, 0 left) |
+| `hydo_net=redis:duplicate,50%,reorder,50%,delay,20ms` | `e92c9e6b38852983` | `962604a54396c17c` | OK 30/30 (first pass 30/30; the heal delivered 1 queued packet, 0 left) |
+| `hydo_net=kafka:delay,1s,loss,60%` (all durable) | `b6c82b0ca917e0f2` | `cbdbd77370547093` | OK 30/30 (first pass 28/30, as on 1 vCPU; nothing queued at the heal) |
+| same, MySQL relaxed (`mode=sanity`, twice) | `349b826362a275ec` | `51d0cedb269b4693` (both runs) | OK 30/30 (first pass 22/30; 24/30 on 1 vCPU) |
+
+With the Kafka kill at order 10 above, all eight scenarios of 7.2 now have 2-vCPU values. No verdict
+differs in kind from 1 vCPU; the only detail that moved is the MySQL-relaxed first pass (22 instead of
+24 orders acknowledged before the retry). Raw results: `/var/tmp/pf-smp/<tag>.{log,console,done}` on the
+box (tags `k-mysql10`, `k-kafka20`, `k-redis10`, `n-mysql`, `n-redis`, `n-kafka`, `relaxed1`, `relaxed2`),
+runner `~/hydo-pf/pf-smp.sh`.
 
 **Verdict changes.** None in kind. F2 names order 8 instead of order 2, the same kind of shift as the
 one-vCPU F2 (order 9 → 8 in 7.2): the longer `/sbin/init` changes guest timing, and with it which
