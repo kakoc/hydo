@@ -32,7 +32,9 @@ Schedule format (see hvx_explore.c / stack-explore.sh):
   freeze sweep (--sweep freeze, M76): traces the packet counts of each (pair, direction, match)
   stream per step with F=...#0 runs, then runs one F=<svc><dir><peer>@<step>#<n>[:<match>]:<dur>
   schedule per packet (options --fc-pairs/--fc-dirs/--fc-steps/--fc-match/--fc-durs,
-  --sweep-every, --sweep-with, --sweep-dry); every failure is re-run twice.
+  --sweep-every, --sweep-with, --sweep-dry); every failure is re-run twice. With --fc-adaptive
+  (fc_adaptive.py) stage 1 sweeps only the manifest's freeze_match: streams (or every --fc-stride-th
+  packet) and stage 2 every packet in a widening +-W window (--fc-window) around each failure.
   vCPU turns (only with --vcpus N > 1 and --turns, SMP Stage 3, TURNS.md): host tokens
   q=<branches> [qs=<hex>] set the length of the vCPUs' turns during the workload (fixed, or
   seeded lengths in [1, q]); half of the schedules get them, from a separate random stream.
