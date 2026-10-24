@@ -95,6 +95,8 @@ Each flagship boots an unmodified service, runs a workload and an oracle, and pa
 
 - A project is described by one `hydo.yaml` (`hvx/onboard/MANIFEST.md`). `hvx/onboard/hydo-build` compiles it into a guest image with one generic init (`hydo-init.sh`) that starts the services, applies fault tokens by service name and runs the invariants (M47). The `hydo-onboard` skill writes a manifest for a new project.
 - Features: services with readiness checks and crash recovery; faults that reach a service's whole process tree (M52); `params:` (M52); `eventually` liveness invariants (M59); Docker/OCI images by digest with `image:` (M59); `guest.ram_mib`, 256–3072 MiB on Linux and 256–4096 MiB on the Mac (M59); per-service `addr:` with link faults between services (M60, x86_64 only); `guest.cpu: v3` (M68, x86_64 only); and `hydo-build --arch arm64` for the Mac (M51).
+- Examples in `hvx/onboard/examples/`: redis, redis-ram, redis-oci, stack, miniflux (M52), etcd (M60), avx2 and restate-oci (M68), and node-kv (M80, Node.js with the JavaScript SDK; Mac image `explore-ob-node-kv-arm64`, `disk=none | run` `82b15f75dbeac422`, `disk=cut | run C=12 S=never` VIOLATION `df57c744f7e40b68`).
+- Assertion SDKs: Go (`hvx/stack/hydoassert`), shell (`hydo_assert.sh`) and JavaScript/TypeScript for Node.js (`sdk/js`, M80; `sdk/js/test/conformance.sh` proves byte-identical output to the Go SDK with Go 1.26.5). A manifest with `buggify: true` turns the schedule token `B=` into the SDKs' BUGGIFY seed, and `explore.py --buggify` keeps `B=` for it (M80).
 - Current images of the examples with network or link faults (the M71 netem drain, pinned tools; M77): `explore-ob-stack-{fix,old}-nq`, `explore-ob-miniflux-nq`, `explore-ob-etcd-{3.5.5,3.5.6,3.6.8,3.6.9,3.6.15}-nq`; their fingerprints are in `hvx/REBASELINE.md` §7 and the examples' `RESULTS.md`. On etcd 3.5.5-nq the 14685 bug is still found (17 of 100 explorer schedules); M60's second reproducer no longer fires, but `disk=none dseed=1 | run K=etcd1@10+1 P=etcd3@26+1` shows the second symptom (a client's revision going back, `0470512bb297c87f`) and passes on 3.5.6-nq (`63e112769072c0c1`) (M78).
 
 ### The Linux release
@@ -142,6 +144,7 @@ Items marked **[user decision]** need the user before anyone acts on them.
 14. Older limits that still hold: the PMU clock is a tick source on top of the exit-count clock, not an instruction-exact clock, so instruction-exact bisection of a Linux boot is future work (M33); host performance counters are off while a PMU-clock guest runs (M34); RAM above about 3.9 GiB needs a PCI-hole split (M28); a read-write ext4 root is not done (M29); and in the module-built default guest page tables, the page that maps 512 MiB–1 GiB shares a page with the built-in interrupt handler, which only hand-written test guests use, left as is because fixing it moves every hand-written fingerprint (M36).
 15. Images listed but not rebuilt with the pinned tools: `explore-cc0/1/cc` (M50; rebuild from `029e4b3`/`b9233d5`) and `explore-dx`, an undocumented diagnostic (M61). The build machine copy of `richcov-disk.img` was built with a substitute gcc and must be rebuilt before use (M44).
 16. Linux release (M75): runs need `sudo` (no udev rule for `/dev/hvx`); the Mac release copies only `hydo-init.sh` of the init extensions, so an arm64 build of a manifest with `eventually` invariants or `guest.clock_after_cut` probably fails; plain `hydo-build` on the Nix build box gives different image bytes when run in a time zone other than UTC+4 (its `FAKE_TS` is local time).
+17. JavaScript SDK (M80): the Mac release 0.1.0 tarball predates `buggify: true` and the `manifest_space.py` fix that keeps `B=`, so it needs a rebuild after `js-sdk` (or `rust-sdk`) is merged before a user can use BUGGIFY on the Mac. Go 1.27 writes invalid UTF-8 in JSON as a raw U+FFFD, so a Go SDK program built with Go 1.27 or later differs from the JavaScript SDK (and from Go 1.26) in that one case.
 
 ## Milestone index (details in `hvx/HISTORY.md`)
 
@@ -226,6 +229,7 @@ Milestones 1–32 ran inside the nested L1 VM on the build machine, before 2026-
 - M77 — onboarding and default stack images rebuilt with the netem drain (`-nq`); stack baselines and the eight fault scenarios re-measured (2026-10-23)
 - M78 — etcd 14685's second symptom (a client's revision going back) reproduced again on the 3.5.5-nq image; passes on 3.5.6-nq (2026-10-24)
 - M79 — the 2-vCPU stack baselines re-measured on `stack-nq` (2026-10-24)
+- M80 — the JavaScript/TypeScript assertion SDK for Node.js (`sdk/js`, byte-identical to the Go SDK) and the node-kv example on the Mac backend (2026-10-24)
 
 ## Where to look
 
