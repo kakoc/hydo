@@ -34,6 +34,31 @@ The explorer (`hvx/explore/explore.py`) generates schedules with several strateg
 | 6c | **CI mode** (below). | Document only; to be discussed later. |
 | 7 | **Scale and where it runs** (below). | Document only; not now. |
 
+## How a team uses hydo (agreed direction, 2026-10-24)
+
+hydo is used from the team's own repository. Nobody checks out hydo's repository to test their system.
+
+**Two parts.** The *engine* is installed once per machine, like Docker, because it needs a kernel module (Linux) or Hypervisor.framework (Mac) and its own guest kernel; no package manager can deliver that. The *SDK* is an ordinary library dependency of the team's code (Go now; Rust in progress), and it is the part teams work with. Its intended roles:
+
+1. **Assertions inside the services** (always, sometimes, reachable, unreachable, eventually, BUGGIFY fault points). Exists for Go; Rust in progress.
+2. **The test written in the team's language:** operations (`place_order`, `refund`, `webhook_arrives`) and properties ("never charged twice", "an order acknowledged is never lost") as ordinary functions, which hydo composes into random sequences and concurrent mixes. This is gap 1 (the test composer) expressed as an SDK; it replaces shell scripts for workloads and checks. Not built yet.
+3. **A runner command** in the language's tooling (for example `cargo hydo`, `go run .../hydo`) that builds the services, builds the guest and runs or explores by calling the installed engine, the way `cargo fuzz` relies on the compiler's fuzzing support. Not built yet; today the `hydo` command does this.
+
+**The `hydo/` folder** (agreed) holds everything hydo needs in the team's repository, next to `docker-compose.yaml`:
+
+```
+hydo/
+  hydo.yaml          services (imported from Docker Compose), allowed faults, guest settings
+  workload/          operations to drive (until the SDK's test definitions replace them)
+  checks/            properties that must hold
+  regressions/       saved minimal schedules of fixed bugs; replayed on every build
+.hydo/               build cache (git-ignored)
+```
+
+**Onboarding** is a skill run from the repository root: it reads `docker-compose.yaml` (the importer, `compose-import`), asks which services to test and what must never happen, writes `hydo/`, builds, runs a first exploration, and explains the failures it finds. The skill must ship as an installable Claude Code plugin (today it lives only in hydo's repository).
+
+**Missing for this to work:** building Compose `build:` services from source and importing the images; `hydo.yaml` reading `workload/`, `checks/` and `regressions/` from the folder and pinning a hydo version; the SDK's test definitions (role 2) and runner (role 3); the skill as a plugin. CI is skipped for now (see "CI mode").
+
 ### CI mode (to be discussed)
 
 What a CI integration needs: run hydo on every merge request or nightly; compare against a recorded baseline; deduplicate findings across runs (one finding per root cause, not per schedule); report only new findings, with the minimal schedule and the command that reproduces it; and check that a fixed bug stays fixed by re-running its saved reproducer on every build. Open questions: how much exploration budget a CI run gets, where images are cached, and how findings are tracked over time.
