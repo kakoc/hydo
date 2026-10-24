@@ -47,6 +47,14 @@ The nested-VM (L1) tooling was removed on 2026-10-20: `hvx/run-l1.sh`, `hvx/depl
 - **Delete only your own files.** The boxes are shared by several sessions. For anything else, ask the user and name the candidates. Safe-to-regenerate leftovers are `~/hydo/build/rootfs-*-root` trees and `*-ext4.img` / `*-data.img` intermediates.
 - **Keep existing fingerprints stable.** A new module feature must be opt-in and inert when off, so that every recorded baseline is unchanged; check this with `deploy-metal.sh` and the pinned reproducers before and after.
 
+## Language policy (decided by the user, 2026-10-24)
+
+- **The kernel module stays in C** (`hvx/hvx.c`). Reasons: most of its bugs were about hardware semantics and determinism, which Rust does not prevent; its core is VMX instructions and inline assembly that would be `unsafe` Rust anyway; and a Rust module needs a kernel built with Rust support and the matching compiler, which most distribution kernels lack, so users could not install it. Its safety net is testing: a KASAN + kmemleak test kernel and fuzzing of the ioctl interface (not built yet).
+- **User-space tools move to Rust.** Every NEW compiled user-space program is written in Rust, not C. An EXISTING C user-space program is rewritten in Rust when it next needs a substantial change, not as a separate project. Candidates, largest first: `hvx/hvx_explore.c` (the explorer engine, 1,289 lines), `hvx-mac/hvm.c` and `hvx-mac/explore/serve.c` (the Mac VMM and explorer server), `hvx/onboard/hydo_fc.c` (the freeze helper), `hvx/pt/*.c` (Processor Trace tools), `hvx/hydo_assert_report.c`.
+- **A rewrite must be byte-for-byte neutral:** the same fingerprints for the pinned reproducers (`2403499c9a3f8419`, `f87130453609a5d6`) and every recorded baseline the program produces, the same console and schedule formats, proven before the C version is removed. Guest-side programs whose bytes are inside recorded images (for example `hvx_seedrng`, pinned `c2a440c5…`) are NOT rewritten: a new binary would change every image and fingerprint.
+- **Memory-safe languages already in use stay** (Go for the stack and helpers, Python for the explorer and build scripts, shell in the guest); the policy is about replacing C, not about converting them.
+- **Unchanged C:** the hand-written module tests (`hvx/hvx_*_test.c`) and the verify harnesses stay in C while they only exercise the module's C ABI; rewrite one only when it needs a substantial change.
+
 ## Current state
 
 ### Linux determinism, clocks and the module
