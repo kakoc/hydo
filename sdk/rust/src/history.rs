@@ -92,16 +92,16 @@ impl History {
         History { name: name.to_string() }
     }
 
-    /// Records the invocation of `f(args...)` by process `proc_`; args are tokens (encode
-    /// free-form values with [`enc`]).
-    pub fn invoke(&self, proc_: u64, f: &str, args: &[&str]) -> Op {
+    /// Records the invocation of `f(args...)` by process `proc_` (a number or a token without
+    /// spaces, e.g. the test SDK's `ctx.id()`); args are tokens (encode free-form values with [`enc`]).
+    pub fn invoke(&self, proc_: impl std::fmt::Display, f: &str, args: &[&str]) -> Op {
         let o = Op { h: self.clone(), proc_: proc_.to_string(), f: f.to_string(), args: args.iter().map(|a| a.to_string()).collect() };
         self.record(&o.proc_, "invoke", f, &o.args);
         o
     }
 
     /// Writes one raw record (for programs that keep their own bookkeeping).
-    pub fn record_raw(&self, proc_: u64, typ: &str, f: &str, args: &[&str]) {
+    pub fn record_raw(&self, proc_: impl std::fmt::Display, typ: &str, f: &str, args: &[&str]) {
         let a: Vec<String> = args.iter().map(|a| a.to_string()).collect();
         self.record(&proc_.to_string(), typ, f, &a);
     }

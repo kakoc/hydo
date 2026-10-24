@@ -320,7 +320,8 @@ acknowledged appends, duplicates, incompatible orders, reads going back in time,
 G-single / G2 cycles at the chosen `consistency:`). The record format, the models and the
 verdict rules are in `hvx/HISTORIES.md`.
 
-- The workload, `retry`, `final:` and invariant commands get the recorder in their prelude:
+- The workload, `retry`, `final:` and invariant commands get the recorder in their prelude
+  (an executable sources `/etc/hydo/prelude.sh` to get it):
   `hydo_hist <history> <process> <invoke|ok|fail|info> <f> <args>...` (and `hydo_hist_enc` for
   free-form values). Give every concurrent client its own process number. Go programs use
   `hvx/stack/hydohist`.
@@ -549,6 +550,15 @@ any invariant); a check that times out counts as 2.
 `always`: also every `every` seconds while the workload runs (`check_every` by default).
 `eventually`: bounded liveness, polled after `after` (`heal` default, or `start`) until it
 holds or `within` seconds pass (MANIFEST "Liveness").
+`linearizable` / `list_append` (alias `list-append`): a ready-made **history check**
+(`hvx/HISTORIES.md`, "History checks" above): the commands record their operations with
+`hydo_hist` (source `/etc/hydo/prelude.sh`; process = `$HYDO_CMD_ID`, unique per entry), and the
+host checks the history after the run. Fields: `history` (required), `model`/`initial`
+(linearizable), `consistency` (list_append), `msg`; `run` is optional and is the final read-back
+(run at the end of the same boot or of the recovery boot). In the `hydo/` folder the file
+`checks/linearizable_<name>` or `checks/list_append_<name>` is the read-back, with
+`# hydo: history=kv model=register` (or `consistency=...`) in its header. They become top-level
+`checks:` entries, not invariants. Example: `examples/redis-composed-hist/`.
 
 **Environment of a command.** Everything an invariant sees (`HYDO_ACKED`, `HYDO_OUTCOMES`,
 the manifest's `env:`), plus `HYDO_CMD` (its id), `HYDO_CMD_ID` (its entry number, unique in

@@ -238,12 +238,31 @@ tx.Ok(hydohist.Append("x", "1"), hydohist.ReadResult("y", "1", "2"))
 Writes to `/dev/console` (`HYDO_HIST_OUT=<path>|stderr|off`), one `write()` per record, time from
 `CLOCK_MONOTONIC`.
 
-**Other languages** (the Rust SDK and any client): print the lines above, one `write()` each,
-with the invocation before sending the request and the completion after the reply.
+**Rust** (`sdk/rust`, module `hydo_assert::history`; also `hydo_test::assert::history`):
+
+```rust
+use hydo_assert::history::{enc, ver, value_or_nil, History};
+let kv = History::new("kv");
+let op = kv.invoke(3, "write", &["k1", &enc(v)]);
+match put("k1", v) { Ok(rev) => op.ok(&["k1", &ver(v, rev)]), Err(e) if e.rejected() => op.fail(), Err(_) => op.info() }
+kv.invoke(3, "read", &["k1"]).ok(&["k1", &value_or_nil(got.as_deref())]);
+```
+
+Same lines as the Go recorder (`sdk/rust/tests/history.rs` checks the exact bytes), to
+`/dev/console` (`HYDO_HIST_OUT`), time from `/proc/uptime`. The test SDK's plan builder declares
+the checks: `System::history_check(HistoryCheck::linearizable("db.kv", "kv").model("cas")
+.readback(&["/bin/mytest", "readback"]))`, `HistoryCheck::list_append(..).consistency(..)`.
+
+**Other languages** (the JS and Python SDKs have no helper yet, and any client): print the lines
+above, one `write()` each, with the invocation before sending the request and the completion
+after the reply.
 
 ## Manifests
 
 `checks:` in `hydo.yaml` (MANIFEST.md, "History checks"); a manifest may have only checks and no
-invariants. Examples: `examples/redis/hydo-hist.yaml` (a register history and a list-append
+invariants. In a test-composer plan, a `test.checks` entry of kind `linearizable` or
+`list_append` (or a `hydo/checks/linearizable_<name>` / `list_append_<name>` file, which is then
+the read-back) becomes such a check (MANIFEST.md, "Check kinds"); the composed commands record
+with process `$HYDO_CMD_ID`. Example: `examples/redis-composed-hist/`. Examples: `examples/redis/hydo-hist.yaml` (a register history and a list-append
 history on Redis) and `examples/etcd/hydo-hist.yaml` (etcd puts and gets with mod_revisions, read
 back through every member).
