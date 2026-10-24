@@ -166,7 +166,8 @@ class Space:
             s.pop("C", None)
         tokens = {t for t, _, _ in self.knobs}
         for key in list(s):
-            if len(key) == 1 and key.isupper() and key not in "KNCPTOF" and key not in tokens:
+            if len(key) == 1 and key.isupper() and key not in "KNCPTOF" and key not in tokens and \
+                    not (key == "B" and self.m.get("buggify") is True):   # buggify: true keeps B= (the BUGGIFY seed)
                 s.pop(key)
         s.pop("-", None)
         return s
