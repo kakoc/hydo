@@ -94,6 +94,10 @@ cp "$TOP/hvx/onboard/hydo-build" "$TOP/hvx/onboard/hydo_oci.py" "$TOP/hvx/onboar
    "$TOP/hvx/onboard/hydo-init.sh" "$TOP/hvx/onboard/hydo-init-clock.sh" "$TOP/hvx/onboard/hydo-init-freeze.sh" \
    "$TOP/hvx/onboard/hydo-init-links.sh" "$TOP/hvx/onboard/hydo-liveness.sh" "$TOP/hvx/onboard/hydo_fc.c" \
    "$TOP/hvx/onboard/MANIFEST.md" "$REL/hvx/onboard/"
+# the host-side history checkers and the guest recorder (hvx/HISTORIES.md)
+mkdir -p "$REL/hvx/history"
+cp "$TOP/hvx/history/hydohist.py" "$TOP/hvx/history/hydo-check" "$TOP/hvx/history/hydo_hist.sh" "$REL/hvx/history/"
+cp "$TOP/hvx/onboard/hydo-init-history.sh" "$REL/hvx/onboard/"
 cp "$TOP/hvx/explore/explore.py" "$TOP/hvx/explore/hvm_backend.py" "$TOP/hvx/explore/manifest_space.py" \
    "$TOP/hvx/explore/ptedges.h" "$REL/hvx/explore/"
 # the run engine's sources (install.sh compiles hvx/hvx_explore on the user's machine) and the

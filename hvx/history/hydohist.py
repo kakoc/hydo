@@ -43,16 +43,22 @@ DEFAULT_BUDGET = 2000000          # WGL search steps per key before a key counts
 
 # ------------------------------------------------------------------ encoding
 def pdec(tok):
-    """Percent-decode one token (%xx = the byte xx; the result is read as UTF-8)."""
+    """Percent-decode one token (%xx = the byte xx; the result is read as UTF-8). The token "%"
+    alone is the empty string."""
     if "%" not in tok:
         return tok
+    if tok == "%":
+        return ""
     raw = re.sub(rb"%([0-9A-Fa-f]{2})", lambda m: bytes([int(m.group(1), 16)]), tok.encode("utf-8"))
     return raw.decode("utf-8", "replace")
 
 
 def penc(s, extra=""):
     """Percent-encode the bytes that would break a token: '%', whitespace, control characters,
-    '@' (the version separator) and any character in `extra` (',[]' inside lists, ':' in txns)."""
+    '@' (the version separator) and any character in `extra` (',[]' inside lists, ':' in txns).
+    The empty string becomes "%"."""
+    if str(s) == "":
+        return "%"
     out = []
     for ch in str(s):
         if ch == "%" or ch == "@" or ch.isspace() or ord(ch) < 0x20 or ch in extra:

@@ -246,6 +246,29 @@ def run_one(image, sched, outdir, eargs, quiet=False):
     die("the run produced no RESULT line (output above; full log in %s)" % os.path.join(outdir, "engine.log"))
 
 
+def host_checks_one(outdir, res):
+    """hvx/HISTORIES.md: a run whose console declares history checks (HYDO-CHECK lines) is
+    checked here on the host: one.log (+ one.recovery.log) -> one.checks.log (HYDO-ASSERT
+    records), one.checks.txt (explanations), and the combined verdict in res["verdict"]."""
+    srcs = []
+    for suffix in ("", ".recovery"):
+        p = os.path.join(outdir, "one%s.log" % suffix)
+        if os.path.exists(p):
+            srcs.append(("one" + suffix, open(p, errors="replace").read()))
+    if not any("HYDO-CHECK " in t for _, t in srcs):
+        return res
+    sys.path.insert(0, os.path.join(HVX, "history"))
+    import hydohist
+    r = hydohist.run_checks(srcs, res.get("verdict"))
+    with open(os.path.join(outdir, "one.checks.log"), "w") as f:
+        f.write("".join(x + "\n" for x in r["records"]))
+    with open(os.path.join(outdir, "one.checks.txt"), "w") as f:
+        f.write(r["report"] + "\n" + r["verdict"] + "\n")
+    res["guest_verdict"], res["verdict"] = res.get("verdict"), r["verdict"]
+    print("hydo: history checks: %s   (explanations in %s)" % (r["verdict"], os.path.join(outdir, "one.checks.txt")))
+    return res
+
+
 def sha256(path):
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -269,7 +292,7 @@ def cmd_run(argv):
     sched = args[0]
     outdir = outdir or new_run_dir()
     eargs = engine_args_for(image)
-    res = run_one(image, sched, outdir, eargs)
+    res = host_checks_one(outdir, run_one(image, sched, outdir, eargs))
     rec = {"image": image, "image_sha256": sha256(image), "schedule": sched, "engine_args": eargs, **res}
     with open(os.path.join(outdir, "run.json"), "w") as f:
         json.dump(rec, f, indent=1)
@@ -309,7 +332,8 @@ def cmd_repro(argv):
         base = os.path.join(d, "repro-%s" % time.strftime("%Y%m%d-%H%M%S"))
         same = 0
         for k, (label, image, sched, fp, eargs) in enumerate(items):
-            res = run_one(image, sched, os.path.join(base, "%03d" % k), eargs, quiet=True)
+            res = host_checks_one(os.path.join(base, "%03d" % k),
+                                  run_one(image, sched, os.path.join(base, "%03d" % k), eargs, quiet=True))
             ok = res["fp"] == fp
             same += ok
             print("%-12s %s  fp=%s (recorded %s)  %s\n             %s" % (

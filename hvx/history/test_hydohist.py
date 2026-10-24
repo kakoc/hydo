@@ -278,6 +278,20 @@ class Driver(unittest.TestCase):
                  "1 invoke read x", "1 ok read x v%201"])
         self.assertEqual(r["status"], "ok", r)
 
+    def test_empty_token(self):
+        self.assertEqual(H.pdec("%"), "")
+        self.assertEqual(H.penc(""), "%")
+        r = lin(["0 invoke write x %", "0 ok write x %", "1 invoke read x", "1 ok read x %"])
+        self.assertEqual(r["status"], "ok", r)
+
+    def test_go_and_shell_records(self):
+        # the exact lines hvx/stack/hydohist (Go) and hydo_hist.sh write
+        txt = ("HYDO-HIST kv 3 invoke 1000 write k1 a%20b\nHYDO-HIST kv 3 ok 2000 write k1 a%20b@83\n"
+               "HYDO-HIST kv 4 invoke 3000 read k1\nHYDO-HIST kv 4 ok 4000 read k1 a%20b@83\n")
+        ev, _, _ = H.parse_sources([("w", txt)])
+        r = H.run_check(ev, {"id": "t", "type": "linearizable", "history": "kv"})
+        self.assertEqual(r["status"], "ok", r)
+
     def test_prefix_text_and_malformed(self):
         txt = "[  12.3] junk HYDO-HIST kv 0 invoke 1 write x 1\nHYDO-HIST kv 0 bogus 2 write x 1\n"
         ev, _, warn = H.parse_sources([("w", txt)])
