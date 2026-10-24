@@ -41,8 +41,10 @@ func ctlMain(args []string) int {
 //	check at-most-once     <ep>.<route> [--by ref|idem]       no group has two effects
 //	check exactly-once     <ep>.<route> [--ref FMT] [--acked FILE]   at most once, and every
 //	                                                           acknowledged id has its effect
-//	check effect-for-acked <ep>.<route> [--ref FMT] [--acked FILE]   every acknowledged id has
-//	                                                           its effect (use as `eventually`)
+//	check effect-for-acked <ep>.<route> [--ref FMT] [--acked FILE] [--unless event:<name>|<ep>.<route>]
+//	                                                           every acknowledged id has its effect
+//	                                                           (use as `eventually`), except the refs
+//	                                                           that have an --unless record
 //	check none-after       <ep>.<route> --after event:<name>|<ep>.<route>   no effect on a ref
 //	                                                           after that ref's first <after> record
 //	check count            <ep>.<route>                        print how many effects (always 0)
@@ -116,7 +118,7 @@ func checkMain(args []string) int {
 		usage()
 	}
 	kind, target := args[0], args[1]
-	opt := map[string]string{"--by": "ref", "--ref": "{id}", "--acked": os.Getenv("HYDO_ACKED"), "--after": ""}
+	opt := map[string]string{"--by": "ref", "--ref": "{id}", "--acked": os.Getenv("HYDO_ACKED"), "--after": "", "--unless": ""}
 	for i := 2; i+1 < len(args); i += 2 {
 		if _, ok := opt[args[i]]; !ok {
 			return say(2, "check: unknown option %s", args[i])
@@ -160,8 +162,16 @@ func checkMain(args []string) int {
 		if err != nil {
 			return say(2, "%s: acknowledged ids: %v", target, err)
 		}
+		exempt := map[string]bool{} // --unless: refs with such a record owe no effect (a cancelled order)
+		if opt["--unless"] != "" {
+			for _, r := range recs {
+				if isEffect(r, opt["--unless"]) {
+					exempt[r["ref"]] = true
+				}
+			}
+		}
 		for _, ref := range refs {
-			if len(effects[ref]) == 0 {
+			if len(effects[ref]) == 0 && !exempt[ref] {
 				return say(1, "%s: acknowledged %s has no effect", target, ref)
 			}
 		}
