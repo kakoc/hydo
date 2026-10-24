@@ -114,6 +114,39 @@ every `poll-s` seconds of guest time and emits one record (`elapsed_s`, `within_
 
 The shell helper does not deduplicate; call it where an event happens once.
 
+**Python** (`sdk/python`, distribution `hydo-assert`, import `hydo_assert`; standard library
+only, Python 3.8+, thread- and asyncio-safe):
+
+```python
+import hydo_assert as ha
+
+ACKED = ha.always("kv.acked_durable", "every acknowledged PUT reads back with its value")
+REPLAYED = ha.sometimes("kv.recovered", "the server replayed a non-empty log at start")
+TORN = ha.reachable("kv.torn_tail", "the log ended in a partial line")
+BAD = ha.unreachable("kv.bad_command", "the server got a command it does not know")
+SIZE = ha.always("kv.log_size", "the log holds at most 10000 entries")
+BACK = ha.eventually("kv.back", "the server answers within 5 s", 5.0)
+LOST = ha.buggify("kv.put.lost_reply", "the PUT is logged but its reply is lost")
+
+ha.catalog()                                     # once, early: the DECL lines
+ACKED.check(got == want, {"key": k, "got": got})
+TORN.hit()
+SIZE.less_than_or_equal_to(n, 10000)            # = SIZE.cmp(n, "<=", 10000)
+if LOST.fire({"key": k}): ...
+BACK.await_cond(ping_ok, poll=0.2)              # asyncio: await BACK.await_async(aping, 0.2)
+ha.setup_complete()
+```
+
+The records, the deduplication (each (assertion, outcome) once per process; a false
+`sometimes` never written; a record with a NaN dropped), the BUGGIFY decisions and the
+`HYDO-BUGGIFY` line are the Go SDK's, byte for byte: `sdk/python/tests/conformance.sh` runs one
+call sequence through both SDKs under eight BUGGIFY configurations and diffs the consoles
+(identical with Go 1.26.5 and 1.27.3, and Python 3.8, 3.11 and 3.15). Details are any mapping,
+encoded as Go's `encoding/json` encodes the same Go value. `HYDO_ASSERT_OUT` works as in Go, plus
+`logging` (each line goes to the Python logger `hydo_assert`). The catalog lists assertions in
+the order their declarations ran, so declare them at module level. `sdk/python/README.md` has
+the whole API, and `hvx/onboard/examples/python-kv` is a Python service that uses it under hydo.
+
 **Rust** (`sdk/rust`, crate `hydo-assert`; std only; README in the crate):
 
 ```rust
