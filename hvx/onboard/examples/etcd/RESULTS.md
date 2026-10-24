@@ -91,3 +91,36 @@ still fails (`2bd06b8446559fe9`, members disagree 99 98 98), the second one
 and the hand-written check fails in 3 of 15 schedules (`K=etcd<n>@25+2` for each member) instead of
 5 of 15. 3.5.6 passes everything on both images. Every heal on the new images delivered the queued
 packets (4–41 on the link-delay schedules, `left=0`).
+
+## The second symptom of 14685 on the `-nq` image (2026-10-24, M78)
+
+On `explore-ob-etcd-3.5.5-nq` M60's second reproducer (`K=etcd1@10+1 P=etcd3@26+1 T=2:-30`) no
+longer fails. A hand sweep of its variants found it again; the clock step is not needed:
+
+    disk=none dseed=1 | run K=etcd1@10+1 P=etcd3@26+1
+
+| image | run | verdict | fingerprint |
+|---|---|---|---|
+| 3.5.5-nq | fresh boot (`hvx_explore one`), twice | VIOLATION `client.revisions_monotonic`: client 2 read revision 83 through etcd1 (get k77, step 25), then 82 through etcd2 (get k80, step 26); the final check also reports `members disagree: revisions 101 100 100` | `0470512bb297c87f` both times |
+| 3.5.5-nq | from the S1 snapshot (`run_list.py`) | the same | `0470512bb297c87f` |
+| 3.5.6-nq | fresh boot, twice | OK, acked=90, every invariant holds | `63e112769072c0c1` both times |
+| 3.5.6-nq | from the S1 snapshot | OK | `63e112769072c0c1` |
+
+The details are the same as M60's (83 through etcd1, then 82 through etcd2). With `dseed=890abaea1c4d92d3`
+the same two faults give the same violation with fingerprint `a9be9129d8cc0957` (two runs).
+
+The sweep (68 schedules on 3.5.5-nq, from the S1 snapshot, 2 workers, about 15 minutes):
+- kill step 7–13 × pause step 23–29, with `T=2:-30`: 1 of 49 fails, `K=etcd1@10+1 P=etcd3@29+1 T=2:-30`
+  (client 2, 92 then 91);
+- the clock step moved to step 0, 1, 3, 4, 5, 6, 10, 15, 20 or 25 (kill at 10, pause at 26): 3 of 10
+  fail (T at step 3, 4 and 6, all with M60's details);
+- the clock step dropped: fails (above).
+
+Each part alone passes: `K=etcd1@10+1` alone (members agree, 98 98 98) and `P=etcd3@26+1` alone. With
+the kill at step 10 and a pause of another member late in the run, etcd1 ends one revision ahead:
+pausing etcd2 at step 26 or etcd3 at step 25 gives `members disagree` only, pausing etcd3 at step 26
+(for one or two steps) or 27 also makes a client's revision go back (at step 27 it is client 1,
+86 then 85), and pausing etcd1 itself gives no failure. Why the one-revision lead appears only
+together with the later pause was not investigated. On 3.5.6-nq all six failing schedules of the
+sweep pass. Results: `/var/tmp/m78-etcd` on the box (`A`, `B`, `D`, `E` = run_list outputs,
+`runs/one5*` = the fresh-boot runs, `results.txt`).
