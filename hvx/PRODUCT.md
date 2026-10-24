@@ -35,7 +35,7 @@ The explorer (`hvx/explore/explore.py`) generates schedules with several strateg
 | 3 | **Ready-made checkers:** a history recorder plus linearizability and isolation checkers (Jepsen Knossos/Porcupine/Elle style) for infrastructure; "exactly once / no side effect after X" checkers for business software. | **Approved; in progress** (branch `history-checkers`; the business checkers with item 4). |
 | 4 | **Faults at the protocol level and fake outside services:** HTTP 500/429, slow answers, dropped answers, duplicated or reordered webhooks, gRPC deadlines; fakes that record every side effect. | **Approved; in progress** (branch `fakes-protocol-faults`). |
 | 5 | **Fast-forwarding virtual time** (run 30 days of business time in minutes). | Not decided yet. |
-| 6a | **Assertion SDKs in more languages.** | **Rust approved; in progress** (branch `rust-sdk`). Others later. |
+| 6a | **Assertion SDKs in more languages.** | **Approved.** Rust (M82) and JavaScript (M80) merged; Python done on branch `python-sdk` (M83), not merged yet. |
 | 6b | **Docker Compose import** (a starting `hydo.yaml` from `docker-compose.yaml`). | **Approved; in progress** (branch `compose-import`). |
 | 6c | **CI mode** (below). | Document only; to be discussed later. |
 | 7 | **Scale and where it runs** (below). | Document only; not now. |
@@ -50,6 +50,16 @@ hydo is used from the team's own repository. Nobody checks out hydo's repository
 1. **Assertions inside the services** (always, sometimes, reachable, unreachable, eventually, BUGGIFY fault points). Exists for Go; Rust in progress.
 2. **The test written in the team's language:** operations (`place_order`, `refund`, `webhook_arrives`) and properties ("never charged twice", "an order acknowledged is never lost") as ordinary functions, which hydo composes into random sequences and concurrent mixes. This is gap 1 (the test composer) expressed as an SDK; it replaces shell scripts for workloads and checks. Not built yet.
 3. **A runner command** in the language's tooling (for example `cargo hydo`, `go run .../hydo`) that builds the services, builds the guest and runs or explores by calling the installed engine, the way `cargo fuzz` relies on the compiler's fuzzing support. Not built yet; today the `hydo` command does this.
+
+**Assertion SDKs (role 1).** Every SDK writes the same console records as the Go SDK, byte for byte, with the same deduplication and BUGGIFY decisions (`hvx/ASSERTIONS.md`):
+
+| Language | Where | State | Proof of the same output |
+|---|---|---|---|
+| Go | `hvx/stack/hydoassert` (import `hydostack/hydoassert`) | on main (M38, M56, M59) | the reference |
+| shell (busybox sh) | `hvx/stack/hydoassert/hydo_assert.sh` | on main; no deduplication, no BUGGIFY | |
+| Rust | `sdk/rust` (crate `hydo-assert`, not published) | branch `rust-sdk` (M82), not merged yet; std only, call-site macros with file:line, `declare!`, sync and runtime-agnostic async `eventually`, features `noop` and `serde_json` | `sdk/rust/tests/conformance.sh` against the Go sources (Go 1.26.5 and 1.27.3), three BUGGIFY configurations |
+| Python (3.8+) | `sdk/python` (distribution `hydo-assert`, import `hydo_assert`, not published) | branch `python-sdk`, not merged yet (M83); standard library only, thread- and asyncio-safe; example `hvx/onboard/examples/python-kv` on the Mac backend | `sdk/python/tests/conformance.sh` against the Go sources (Go 1.26.5 and 1.27.3), eight BUGGIFY configurations, Python 3.8, 3.11 and 3.15 |
+| JavaScript / TypeScript (Node.js) | `sdk/js` (package `hydo-assert`, not published) | branch `js-sdk`, not merged yet; CommonJS and ESM, types, no dependencies | `sdk/js/test/conformance.sh` against the Go sources (Go 1.26.5), both entries, five BUGGIFY configurations |
 
 **The `hydo/` folder** (agreed) holds everything hydo needs in the team's repository, next to `docker-compose.yaml`:
 
