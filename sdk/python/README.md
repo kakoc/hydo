@@ -55,9 +55,10 @@ to the console under one process-wide lock that is never held across a blocking 
 | `Catalog()`, `SetupComplete()` | `catalog()`, `setup_complete()` |
 | `D{...}` | any mapping (a `dict`); `hydo_assert.D` is `dict` |
 
-The naming follows the Rust SDK (`sdk/rust`, branch `rust-sdk`): the same lower-case names,
-`await_cond`/`await_async` for Go's `Await`, `emit_line(tag, value)` as the extension point for
-other record kinds.
+The naming follows the other SDKs (`sdk/js` on main, `sdk/rust` on branch `rust-sdk`): the Go
+names in Python's snake case, the named comparison helpers, `await_cond` /
+`await_async` for Go's `Await`, and `emit_line(tag, value)` as the extension point for other
+record kinds.
 
 ## Records, deduplication, catalog
 
@@ -126,8 +127,9 @@ writing `.pyc` files on the guest's read-only root.
   the Go SDK's own source files and runs it and `tests/conformance.py` (the same calls) under
   eight BUGGIFY configurations: seed in the environment, seed in the file, none, and malformed
   ones (`  BEEF,07,+5\t`, `0xbeef`, a 65-bit seed, `ab, 300,1_0`, all points always firing).
-  Consoles and stdouts must be byte-identical. `GO=<go binary>` selects the Go toolchain; with
-  Go 1.26 or older the run also compares invalid UTF-8.
+  Consoles and stdouts must be byte-identical. It pins `GOTOOLCHAIN=go1.26.5` (the guest Go, as
+  `sdk/js` does); `GOTOOLCHAIN=local` uses the installed Go, and with Go 1.27 or later the
+  invalid-UTF-8 case is skipped (Go 1.27 writes a raw U+FFFD there).
 
 ## Limits
 

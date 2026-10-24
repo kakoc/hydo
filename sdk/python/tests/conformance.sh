@@ -5,7 +5,8 @@
 # (seed in the environment, seed in the file, none, and malformed ones that Go's strconv
 # rejects), and diff their consoles and stdouts.
 # Usage: sdk/python/tests/conformance.sh [python...]   (needs go; default python: python3;
-#        give several interpreters to check each, e.g. "uv run -p 3.8 python")
+#        give several interpreters to check each, e.g. "uv run -p 3.8 python").
+#        GOTOOLCHAIN picks the Go version (default go1.26.5); KEEP=<dir> keeps the outputs.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 PKG=$(dirname "$HERE")
@@ -20,6 +21,9 @@ cp "$REPO/hvx/stack/hydoassert/hydoassert.go" "$REPO/hvx/stack/hydoassert/eventu
 cp "$HERE/go-conformance/main.go" "$T/go/"
 printf 'module conf\n\ngo 1.21\n' > "$T/go/go.mod"
 GO=${GO:-go}
+# The guest images are built with Go 1.26.5 (hvx/BUILD-PINS.md); pin it as sdk/js does. Set
+# GOTOOLCHAIN=local to use whatever `go` is installed.
+export GOTOOLCHAIN=${GOTOOLCHAIN:-go1.26.5}
 (cd "$T/go" && GOFLAGS=-mod=mod "$GO" build -o "$T/conf-go" .)
 gov=$("$GO" version | cut -d' ' -f3)
 # Invalid UTF-8 in a string: Go <= 1.26 (the pinned guest Go is 1.26.5) writes \ufffd per bad

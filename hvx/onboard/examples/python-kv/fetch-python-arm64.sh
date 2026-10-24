@@ -8,7 +8,8 @@
 # Needs ssh to a Linux machine with nix that has (or can substitute) the store path:
 #     nix build --max-jobs 0 --system aarch64-linux nixpkgs#python3   (prints the path below)
 # Also copies the SDK (sdk/python/src/hydo_assert, without __pycache__) to files/opt/pykv/.
-# Usage: stage.sh   [HYDO_BUILD_HOST=build-machine]
+# Usage: fetch-python-arm64.sh   (checks the python files against files.sha256; FETCH_WRITE_SUMS=1 rewrites it)
+#   [HYDO_BUILD_HOST=build-machine]
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../../../.." && pwd)
@@ -33,4 +34,10 @@ mkdir -p "$HERE/files/opt/pykv"
 (cd "$REPO/sdk/python/src" && find hydo_assert -name '*.py' -o -name py.typed | LC_ALL=C sort | tar cf - -T -) | (cd "$HERE/files/opt/pykv" && tar xf -)
 # store files are read-only; let a later fetch replace them
 find "$HERE/files" -type d -exec chmod u+w {} +
-echo "stage: $(find "$HERE/files" -type f | wc -l | tr -d ' ') files, $(du -sh "$HERE/files" | cut -f1)"
+cd "$HERE"
+if [ "${FETCH_WRITE_SUMS:-}" ]; then
+  find files/nix -type f | LC_ALL=C sort | xargs shasum -a 256 > files.sha256
+else
+  shasum -a 256 -c --quiet files.sha256
+fi
+echo "fetch-python-arm64: $(find "$HERE/files" -type f | wc -l | tr -d ' ') files, $(du -sh "$HERE/files" | cut -f1)"
