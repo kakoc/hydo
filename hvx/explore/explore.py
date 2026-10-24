@@ -1112,6 +1112,23 @@ def signature(v):
 
 
 # ---------------------------------------------------------------- the worker pool
+QUIET_FILE = os.environ.get("HYDO_QUIET_FILE")      # a shared box's "quiet window" flag (unset: no wait)
+QUIET_MAX_S = 7200
+QUIET_LOCK = threading.Lock()
+
+
+def quiet_wait():
+    """While $HYDO_QUIET_FILE exists start no new VM: wait, checking every 30 s, at most 2 hours."""
+    if not QUIET_FILE or not os.path.exists(QUIET_FILE):
+        return
+    with QUIET_LOCK:
+        t0 = time.time()
+        if os.path.exists(QUIET_FILE):
+            print("quiet window (%s): waiting" % QUIET_FILE, file=sys.stderr)
+        while os.path.exists(QUIET_FILE) and time.time() - t0 < QUIET_MAX_S:
+            time.sleep(30)
+
+
 class Worker(threading.Thread):
     def __init__(self, idx, jobs, results, outdir):
         super().__init__(daemon=True)
@@ -1126,6 +1143,7 @@ class Worker(threading.Thread):
         if BACKEND == "hvm":
             cmd = hvm_backend.engine_cmd(IMAGE, os.path.join(self.outdir, "consoles"), HVM_KERNEL, ram_args())
         err = open(os.path.join(self.outdir, "worker-%d.err" % self.idx), "w")
+        quiet_wait()
         p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err, text=True, bufsize=1)
         line = p.stdout.readline()
         if not line.startswith("READY"):
@@ -1137,6 +1155,7 @@ class Worker(threading.Thread):
             if job is None:
                 break
             tag, text = job
+            quiet_wait()
             if text.startswith("BRANCH "):
                 self.results.put((tag, text, self.branch(p, tag, text)))
                 continue
@@ -1441,6 +1460,25 @@ def main():
                                          "(\"K=kafka@9+1\") or a whole schedule (\"disk=cut dseed=0 | run C=10\")")
     ap.add_argument("--sweep-dry", action="store_true", help="--sweep freeze: run the traces, write the points, stop")
     ap.add_argument("--repro", type=int, help="re-runs of every failure (default 1; 2 for --sweep freeze)")
+    ap.add_argument("--fc-adaptive", action="store_true",
+                    help="--sweep freeze: adaptive (fc_adaptive.py): stage 1 = the manifest's freeze_match: streams "
+                         "(or, without freeze_match:, every --fc-stride-th packet), stage 2 = every packet in a "
+                         "window around each stage-1 failure, widened until the failing band is mapped")
+    ap.add_argument("--fc-stage1", default="auto",
+                    help="--fc-adaptive: stage-1 streams, comma list of manifest (freeze_match: strings, every packet) "
+                         "and stride (every packet stream, every --fc-stride-th packet); auto (default) = manifest "
+                         "when the manifest has freeze_match:, else stride")
+    ap.add_argument("--fc-stride", type=int, default=8, help="--fc-adaptive: stage-1 stride (default %(default)s)")
+    ap.add_argument("--fc-window", type=int, default=16,
+                    help="--fc-adaptive: stage-2 half window in packets; a window widens until this many packets "
+                         "beyond its outermost failure pass (default %(default)s)")
+    ap.add_argument("--fc-links", choices=["pair", "svc"], default="svc",
+                    help="--fc-adaptive: stage-2 streams around a failure: pair = both directions of its own pair; "
+                         "svc (default) = also both directions of the frozen service's other freeze pairs")
+    ap.add_argument("--fc-centres", default="fail",
+                    help="--fc-adaptive: stage-1 points that get a window, comma list: fail (default; a failure), "
+                         "props (a passing point whose sometimes/reachable/eventually outcomes differ from its "
+                         "stream's trace run), state (a passing point whose verdict line differs from it)")
     ap.add_argument("--knob-rule", choices=["cut", "any"], default="cut",
                     help="finding class of a relaxed durability knob: cut (default, M56) = unsafe-knob only with a "
                          "power cut or lying disk; any = the pre-M56 rule")
@@ -1488,6 +1526,8 @@ def main():
     ap.add_argument("--ram-mib", type=int, help="guest RAM in MiB (default: the manifest's guest.ram_mib, else 1024; "
                                                 "256..3072 on hvx, 256..4096 on hvm)")
     a = ap.parse_args()
+    if a.fc_adaptive and a.sweep != "freeze":
+        raise SystemExit("explore.py: --fc-adaptive goes with --sweep freeze")
     BACKEND, HVM_KERNEL = a.backend, a.hvm_kernel
     if BACKEND == "hvm":
         hvm_backend.configure(a.image)
@@ -1541,12 +1581,18 @@ def main():
     if a.branch:
         branch_main(a, pool, t0)
         return
+    pre_res, fc_info = None, None
     if a.sweep:
         if SPACE:
             SPACE.check_sweep(a.sweep)
-        points = freeze_sweep(pool, a) if a.sweep == "freeze" else sweep(a.sweep)
+        if a.sweep == "freeze" and a.fc_adaptive:       # runs its points itself, stage by stage
+            import fc_adaptive
+            points, items, pre_res, fc_info = fc_adaptive.run(sys.modules[__name__], pool, a)
+        else:
+            points = freeze_sweep(pool, a) if a.sweep == "freeze" else sweep(a.sweep)
         seeds = list(range(1, len(points) + 1))            # sweep point index stands in for the seed
-        items = [("seed-%d" % i, render(add_turns(add_buggify(add_preempt(add_concurrency(add_timing(sch, i), i), i), i), i))) for i, (_, sch) in zip(seeds, points)]
+        if pre_res is None:
+            items = [("seed-%d" % i, render(add_turns(add_buggify(add_preempt(add_concurrency(add_timing(sch, i), i), i), i), i))) for i, (_, sch) in zip(seeds, points)]
         open(os.path.join(a.out, "sweep-points.jsonl"), "w").write(
             "".join(json.dumps({"seed": i, "point": lab}) + "\n" for i, (lab, _) in zip(seeds, points)))
         if a.sweep == "freeze" and a.sweep_dry:
@@ -1567,9 +1613,12 @@ def main():
         mf = lambda x, sd: add_freeze_call(add_more_faults(x, sd, a.strategy), sd)
         items = [("seed-%d" % sd, render(add_turns(add_buggify(add_preempt(add_concurrency(add_timing(mf(nf(dur(gen(sd)), sd), sd), sd), sd), sd), sd), sd)))
                  for sd in seeds]
-    t_sweep = time.time()
-    res = pool.run_all(items)
-    t_sweep = time.time() - t_sweep
+    if pre_res is None:
+        t_sweep = time.time()
+        res = pool.run_all(items)
+        t_sweep = time.time() - t_sweep
+    else:                       # --fc-adaptive ran its points (and traces) already
+        res, t_sweep = pre_res, fc_info["stage1_wall_s"] + fc_info["stage2_wall_s"]
     runs = open(os.path.join(a.out, "runs.jsonl"), "w")
     fails = []
     for sd in seeds:
@@ -1628,6 +1677,8 @@ def main():
                "failures": len(fails), "reproduced": sum(1 for f in fails if f["reproduced"])}
     if nrep != 1:
         summary["repro_runs"] = nrep
+    if fc_info:
+        summary.update(fc_info)
     if RAM_MIB != 1024:
         summary["ram_mib"] = RAM_MIB
     if VCPUS != 1:
