@@ -180,7 +180,11 @@ All on `/dev/hvxft` with the final module.
   identical without `--turns` (and the `--turns` checks unchanged); new
   `hvx/explore/bursts_ident.py`: with `--turns --bursts` every field but `qb` equals the
   `--turns` schedule (2,000 schedules, 48.9% get `qb`), strings round-trip, shrink
-  candidates as documented. @@EXPLORE@@
+  candidates as documented. A small `explore.py --vcpus 2 --turns --bursts --turn-margin 160`
+  run through the serve workers (`hvx/fastturn/explore_dev.py`) was started but stopped by
+  hand: one worker died at start-up without a message and the other was still writing its
+  S0/S1 snapshots after 15 minutes while the box's disk was saturated by seven other
+  explorers. So **serve mode (restore from S1, then `qb=`) was not checked**; only `one`.
 
 ## 5. Before and after
 
@@ -190,13 +194,28 @@ session's agents (`~/hydo-asw`, `~/hydo-pf`) held back (`/var/tmp/hydo-QUIET`,
 running (load average about 8 on the 4-core, 8-thread box), so even the quiet numbers vary
 by about 10–15%. Everything else was measured under heavier load (load 10–29).
 
-**Per turn end, hand-written loop, Q = 1,000** (`ft_cost`, µs per turn end):
+**Per turn end, hand-written loop, Q = 1,000** (`ft_cost`, µs per turn end, two vCPUs,
+5 M branches each, no ticks). Every row of every table gave the same turn hash.
 
-| loop | before | cuts only | cuts + margin 160 | cuts + margin 128 |
+Under load, one window (08:09–08:12): the cuts as an interleaved A/B, three times each
+(`ab.sh`), then a margin sweep with the cuts on:
+
+| loop | cuts off | cuts on, margin 256 | margin 160 | margin 128 |
 |---|---|---|---|---|
-| `dec; jnz` (load, interleaved A/B) | 214 | 181 | 103 | 75 |
-| 10 instructions per branch (load) | 1,203 (2 calls/turn) | 1,004 | 623 | 493 |
-| load/store loop (load) | 737 | 609 | 374 | 295 |
+| `dec; jnz` | 214.1 / 214.2 / 213.9 (1,840 cyc/step) | 182.0 / 182.1 / 180.2 (1,560 cyc/step) | 102.8 | 75.2 |
+| 10 instructions per branch | — | 1,004.5 | 623.2 | 492.6 |
+| load/store loop | — | 608.9 | 373.5 | 294.9 |
+| 16 never-taken branches per loop | — | 181.9 | 104.4 | 78.4 |
+| cache-miss + 150-branch burst | — | 163.2 | 84.1 | 62.3 |
+
+*Quiet* window (08:42), interleaved A/B, two times each; noisier (a third session's
+3-thread native workload shared the cores):
+
+| loop | cuts off | cuts on, margin 256 | margin 160 | margin 128 |
+|---|---|---|---|---|
+| `dec; jnz` | 285.2 / 282.1 | 293.3 / 252.0 | 131.6 | 131.7 |
+| 10 instructions per branch | 1,483.0 / 1,714.2 | 1,389.8 / 1,374.5 | 689.9 | 640.1 |
+| load/store loop | 760.4 / 1,101.2 | 711.7 / 721.3 | 376.5 | 341.0 |
 
 **2-vCPU stack, q = 1,000 from "provisioning synced" to the end** (about 58,500 turn
 ends; the boot before it runs with default turns and takes ~23–30 s; *quiet*):
@@ -232,8 +251,11 @@ side 1.24 / 0.86 s (default turns: most turns end at HLT; the landings are ticks
 - **Not merged into the main `hvx.ko`**: only the side module ran this code.
   `deploy-metal.sh` was not run; the side-metal gate stands in for it.
 - The per-step A/B was taken under load; the gains vary from 5 to 15% between runs.
-- Bursts were tested on hand-written guests and with one stack run per margin; they were
-  not measured for finding races (that is what they are for).
+- Bursts were tested on hand-written guests, with one stack run per margin and with two
+  explorer `one` runs; they were not measured for finding races (that is what they are for),
+  and the explorer's serve path with `qb=` was not run (see Tests).
+- Not recorded in `hvx/HISTORY.md` / `CLAUDE.md` (other sessions edit those now); the
+  milestone entry is left to the merge.
 - The `ft_opt` parameter and the diagnostic counters stay in the module (they cost about
   three RDTSCs per entry).
 
