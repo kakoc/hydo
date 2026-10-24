@@ -1,0 +1,66 @@
+# A Python program under hydo with the Python assertion SDK (sdk/python, package hydo-assert):
+# pykv, a tiny asyncio key/value server over TCP on loopback with an append-only log on /data.
+# Its own assertions (HYDO-ASSERT records written by the program, not by this manifest) say
+# what must hold -- every acknowledged PUT reads back, every log line parses -- and what should
+# happen at least once (a non-empty log replayed, a torn log tail, a PUT without a reply); two
+# BUGGIFY fault points in the server (a lost reply, a slow PUT) fire when the schedule carries
+# B=<seed>. Python is the pinned aarch64-linux CPython 3.11.9 from the nixpkgs binary cache.
+# arm64 (the Mac backend). Stage the files, then build with the Mac release's `hydo`:
+#   hvx/onboard/examples/python-kv/stage.sh        # files/: python + its libraries + the SDK
+#   cd hvx/onboard/examples/python-kv && hydo build hydo.yaml
+# Try:  disk=none | run                    -> OK, every acknowledged PUT survives
+#       disk=none | run K=pykv@8+2         -> OK; the restarted server replays its log
+#       disk=cut | run C=12                -> OK: the server fsyncs before it acknowledges
+#       disk=cut | run C=12 S=never        -> VIOLATION: without fsync a power cut loses acked PUTs
+#       disk=none | run B=5abc,1000,500    -> OK; the fault points fire and are reported
+# (`buggify: true` is the hydo-build key from the rust-sdk branch, bff5c01, cherry-picked here:
+# it turns the schedule token B= into /tmp/hydo-buggify, the file every SDK reads.)
+name: python-kv
+description: pykv (Python, hydo-assert SDK); every acknowledged PUT must survive kills and power cuts.
+buggify: true
+
+root:
+  files:
+    - {src: files/nix, dst: /nix}
+    - {src: files/opt/pykv/hydo_assert, dst: /opt/pykv/hydo_assert}
+    - {src: pykv.py, dst: /opt/pykv/pykv.py}
+
+data:
+  size_mib: 64
+  dirs: [pykv]
+
+env:
+  PY: /nix/store/ic0l2ykss28lr7r4by14inb3pqw87yza-python3-3.11.9/bin/python3.11
+  PYTHONPATH: /opt/pykv
+  PYTHONDONTWRITEBYTECODE: "1"
+  PYTHONHASHSEED: "0"
+
+services:
+  - name: pykv
+    cmd: $PY /opt/pykv/pykv.py serve /data/pykv 7070
+    ready: $PY /opt/pykv/pykv.py ping 7070
+    port: 7070
+
+workload:
+  steps: 20                         # step i = PUT k:i v<i>, with the client's 2 s deadline
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      if $PY /opt/pykv/pykv.py put 7070 k:$i v$i; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      i=$((i + 1))
+    done
+
+knobs:
+  - token: S
+    name: pykv fsync before acknowledging
+    default: always
+    values: [always, never]
+    set: echo $HYDO_VALUE > /tmp/pykv-fsync
+
+invariants:
+  - id: pykv.oracle
+    msg: every PUT the client saw acknowledged reads back with its value (pykv check)
+    cmd: $PY /opt/pykv/pykv.py check 7070 $HYDO_ACKED
+
+faults: [kill, pause, cut, clock, disk]
