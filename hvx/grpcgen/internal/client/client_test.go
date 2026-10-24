@@ -341,11 +341,12 @@ func TestDriveAndScenario(t *testing.T) {
 	addr := serve(t, f)
 	dir := setup(t, addr, "scenarios:\n  - {name: create_cancel, calls: [Create, Cancel]}\n")
 	c, st := newClient(t, dir, 5)
-	if err := c.Drive("create", 3); err != nil {
-		t.Fatal(err)
+	if ok, err := c.Drive("create", 3); err != nil || !ok {
+		t.Fatal(ok, err)
 	}
-	if err := c.Drive("Create", 3); err != nil {
-		t.Fatal(err)
+	t.Setenv("HYDO_SEED", "77") // under the composer: the entry's seed picks the stream
+	if ok, err := c.Drive("Create", 3); err != nil || !ok {
+		t.Fatal(ok, err)
 	}
 	cl := calls(t, st)
 	if len(cl) != 12 || !strings.HasPrefix(cl[0], "HYDO-CALL "+strconv.Itoa(os.Getpid())+" 1 invoke") {
@@ -354,7 +355,7 @@ func TestDriveAndScenario(t *testing.T) {
 	if len(f.byReq) != 6 {
 		t.Fatalf("%d orders, want 6 (unique request ids)", len(f.byReq))
 	}
-	if err := c.Drive("create_cancel", 2); err != nil {
+	if _, err := c.Drive("create_cancel", 2); err != nil {
 		t.Fatal(err)
 	}
 	cl = calls(t, st)[12:]
@@ -367,7 +368,41 @@ func TestDriveAndScenario(t *testing.T) {
 			t.Fatalf("scenario did not cancel the order it created:\n%s", strings.Join(cl, "\n"))
 		}
 	}
-	if err := c.Drive("nope", 1); err == nil {
+	if _, err := c.Drive("nope", 1); err == nil {
 		t.Fatal("unknown rpc accepted")
 	}
+	// the same HYDO_SEED gives the same requests (the composition decides them)
+	a := genDrive(t, dir, "41")
+	b := genDrive(t, dir, "41")
+	d := genDrive(t, dir, "42")
+	if a != b || a == d {
+		t.Fatalf("HYDO_SEED does not decide the requests:\n%s\n%s\n%s", a, b, d)
+	}
+}
+
+func genDrive(t *testing.T, dir, seed string) string {
+	addr := serve(t, newFake())
+	t.Setenv("HYDO_SEED", seed)
+	c, st := newClient(t, setupAt(t, dir, addr), 9)
+	if _, err := c.Drive("Create", 2); err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, l := range calls(t, st) {
+		if strings.Contains(l, " invoke ") {
+			out = append(out, l[strings.Index(l, "orders.v1"):])
+		}
+	}
+	return strings.Join(out, "\n")
+}
+
+// setupAt rewrites a plan dir's target to addr (a copy).
+func setupAt(t *testing.T, dir, addr string) string {
+	nd := t.TempDir()
+	b, _ := os.ReadFile(filepath.Join(dir, "plan.json"))
+	re := regexp.MustCompile(`"target": "[^"]*"`)
+	os.WriteFile(filepath.Join(nd, "plan.json"), re.ReplaceAll(b, []byte(`"target": "`+addr+`"`)), 0644)
+	d, _ := os.ReadFile(filepath.Join(dir, "desc.pb"))
+	os.WriteFile(filepath.Join(nd, "desc.pb"), d, 0644)
+	return nd
 }

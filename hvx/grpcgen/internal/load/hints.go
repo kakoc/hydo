@@ -109,7 +109,7 @@ func ReadHints(path string) (*Hints, error) {
 func Build(files *protoregistry.Files, h *Hints, sources []string) (*spec.Plan, error) {
 	p := &spec.Plan{
 		Format: spec.Format, Target: "127.0.0.1:50051", DeadlineMs: 2000, Seed: 1,
-		Steps: spec.Steps{Calls: 2, Concurrency: 1}, Drive: spec.Drive{Calls: 4},
+		Steps: spec.Steps{Calls: 2, Concurrency: 1}, Drive: spec.Drive{Calls: 2},
 		Defaults: spec.DefaultDefaults(), Record: spec.Record{Console: "brief"}, Sources: sources,
 	}
 	if h.Target != "" {

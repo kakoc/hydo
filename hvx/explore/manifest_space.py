@@ -36,7 +36,7 @@ ROOT_OFFSET = 2048 * 512            # hydo-build puts the root filesystem at LBA
 FAULT_KINDS = ["kill", "pause", "network", "oneway", "cut", "clock", "disk"]
 # guest schedule tokens with a fixed meaning (faults; Q/X = concurrency and timed kill, hydo-c7's branch);
 # a manifest knob may not reuse one, or parse() would read the knob as that fault. M/R stay knob names.
-RESERVED_TOKENS = {"K", "P", "N", "O", "C", "T", "Q", "X", "B", "F"}
+RESERVED_TOKENS = {"K", "P", "N", "O", "C", "T", "Q", "X", "B", "F", "W"}   # W: the test composer
 
 
 def _parser():
@@ -52,6 +52,24 @@ def read_text(path):
     return open(path).read()
 
 
+def _composer():
+    import sys
+    d = os.path.join(os.path.dirname(HERE), "onboard")
+    if d not in sys.path:
+        sys.path.insert(0, d)
+    import hydo_composer
+    return hydo_composer
+
+
+def embedded_compose(image_path):
+    """The test composer's plan an image carries (/etc/hydo/compose.json), or None."""
+    p = subprocess.run(["debugfs", "-R", "cat /etc/hydo/compose.json", "%s?offset=%d" % (image_path, ROOT_OFFSET)],
+                       stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    if p.returncode != 0 or not p.stdout.strip().startswith("{"):
+        return None
+    return json.loads(p.stdout)
+
+
 def embedded_text(image_path):
     """The hydo.yaml an explore-ob-* image carries in /etc/hydo/ (debugfs, no mount, no root)."""
     p = subprocess.run(["debugfs", "-R", "cat /etc/hydo/hydo.yaml", "%s?offset=%d" % (image_path, ROOT_OFFSET)],
@@ -62,9 +80,23 @@ def embedded_text(image_path):
 
 
 class Space:
-    def __init__(self, text, name="hydo.yaml"):
+    def __init__(self, text, name="hydo.yaml", compose=None, folder_dir=None):
+        """compose: the plan meta an image carries (embedded_compose); folder_dir: the directory of
+        a hydo.yaml given by path, whose hydo/ folder (workload/, checks/) is read the way
+        hydo-build reads it. Either way the test composer's rewrite runs before validate."""
         hb = _parser()
-        m = json.loads(text) if name.endswith(".json") else hb.parse_yaml(text, name)
+        # an image keeps its manifest as /etc/hydo/hydo.yaml whatever its format: a JSON plan (what
+        # the SDKs write) is recognised by its content
+        m = json.loads(text) if name.endswith(".json") or text.lstrip().startswith("{") else hb.parse_yaml(text, name)
+        self.compose = None
+        if compose is not None or folder_dir is not None or "test" in m:
+            hc = _composer()
+            if compose is not None:
+                m["test"] = hc.test_from_meta(compose)
+                folder = None
+            else:
+                folder = hc.scan_folder(folder_dir, hb.ManifestError) if folder_dir else None
+            self.compose = hc.expand(m, hb.ManifestError, folder)
         hb.validate(m)
         self.m = m
         self.name = m.get("name", "?")
@@ -124,10 +156,17 @@ class Space:
     def describe(self):
         d = {"project": self.name, "services": self.svcs, "network": self.ported + self.links, "steps": self.steps,
              "faults": self.faults, "knobs": {t: {"safe": s, "relaxed": v} for t, s, v in self.knobs}}
+        if self.composed():
+            d["composer"] = {"commands": [c["id"] for c in self.compose["commands"]],
+                             "checks": [c["name"] for c in self.compose["checks"]], "params": self.compose["params"]}
         if "freeze" in self.faults:
             d["freeze_pairs"] = ["%s>%s" % p for p in self.fc_pairs]
             d["freeze_match"] = ["%s%s" % ({"<": "reply:", ">": "request:"}.get(dr, ""), x) for x, dr in self.fc_match()]
         return d
+
+    def composed(self):
+        """True when the workload is the test composer's (the explorer then draws W=)."""
+        return bool(self.compose and self.compose.get("composed"))
 
     def apply(self, ex):
         """Rebind explore.py's generator globals (ex = the explore module's globals())."""
@@ -167,7 +206,8 @@ class Space:
         tokens = {t for t, _, _ in self.knobs}
         for key in list(s):
             if len(key) == 1 and key.isupper() and key not in "KNCPTOF" and key not in tokens and \
-                    not (key == "B" and self.m.get("buggify") is True):   # buggify: true keeps B= (the BUGGIFY seed)
+                    not (key == "B" and self.m.get("buggify") is True) and \
+                    not (key == "W" and self.composed()):   # buggify: true keeps B= (the BUGGIFY seed); W: the composer
                 s.pop(key)
         s.pop("-", None)
         return s
@@ -187,8 +227,9 @@ class Space:
 
 def load(manifest=None, image_path=None):
     if manifest:
-        return Space(read_text(manifest), os.path.basename(manifest))
-    return Space(embedded_text(image_path), "hydo.yaml")
+        return Space(read_text(manifest), os.path.basename(manifest),
+                     folder_dir=os.path.dirname(os.path.abspath(manifest)))
+    return Space(embedded_text(image_path), "hydo.yaml", compose=embedded_compose(image_path))
 
 
 if __name__ == "__main__":          # python3 manifest_space.py <hydo.yaml | image>

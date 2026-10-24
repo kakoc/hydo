@@ -16,6 +16,19 @@ examples: `hvx/onboard/examples/redis/hydo.yaml` (one service) and
 Work in this order. Write the manifest to `hvx/onboard/projects/<name>/hydo.yaml` unless the
 user names another place, with any helper scripts next to it.
 
+**If the project has a `docker-compose.yaml`, start from it:** run
+`hvx/onboard/hydo-compose <docker-compose.yaml> --out hvx/onboard/projects/<name>/hydo.yaml`
+(or `hydo compose ...` from a release). It writes the services (images pinned by digest,
+commands, env, readiness from the healthchecks, ports, volumes on the data disk, each service on
+its own loopback `addr:` with the Compose names in `/etc/hosts`), a `fetch-images.sh` that copies
+the images by digest, and a lock file; it prints warnings for what it could not map. Then do
+steps 1 and 4-9 below on top of it: read every warning (port collisions and bind mounts the
+program writes to need a hand fix), replace the `TODO` workload and invariant, check
+`guest.ram_mib` / `guest.cpu`, and keep the generated comments that say where each value came
+from. MANIFEST.md, "From Docker Compose", is the reference for the mapping;
+`hvx/onboard/examples/compose-voting/` is a worked example (`hydo.generated.yaml` = the raw
+import, `hydo.yaml` = after the hand edits).
+
 ## 1. Inventory how the project runs
 
 Read, in roughly this order, and note what each says about processes, ports, data and

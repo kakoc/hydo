@@ -71,7 +71,7 @@ def hvm_supported(s):
     if not HAS_DISK:
         s["disk"] = "none"
         s.pop("C", None)
-    for k in ("rb", "pp", "xt", "q") if HAS_TC else ("N", "O", "rb", "pp", "xt", "q"):   # pp/xt/q need the PMU clock; the Mac's lever is pct
+    for k in ("rb", "pp", "xt", "q", "qb") if HAS_TC else ("N", "O", "rb", "pp", "xt", "q", "qb"):   # pp/xt/q need the PMU clock; the Mac's lever is pct
         s.pop(k, None)
     tj = s.get("tj")
     if tj and tj[0] == "seed" and tj[3] > HVM_TJ_MAX:
@@ -90,7 +90,7 @@ def image_ram_args(image):
     (for callers that start hvmx on an image directly, e.g. `hydo run`)."""
     import manifest_space
     try:
-        m = manifest_space.Space(embedded_manifest(image), "hydo.yaml").m
+        m = manifest_space.Space(embedded_manifest(image), "hydo.yaml", compose=embedded_compose(image)).m
     except SystemExit:
         return []
     r = (m.get("guest") or {}).get("ram_mib", 1024)
@@ -100,6 +100,15 @@ def image_ram_args(image):
 def embedded_manifest(image):
     """etc/hydo/hydo.yaml from an arm64 manifest initramfs (gzip'd newc cpio)."""
     return embedded_file(image, "etc/hydo/hydo.yaml")
+
+
+def embedded_compose(image):
+    """The test composer's plan in an arm64 initramfs (etc/hydo/compose.json), or None."""
+    import json
+    try:
+        return json.loads(embedded_file(image, "etc/hydo/compose.json"))
+    except SystemExit:
+        return None
 
 
 def embedded_file(image, path):

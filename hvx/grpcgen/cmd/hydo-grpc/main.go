@@ -3,7 +3,8 @@
 //
 //	hydo-grpc steps FROM TO        workload steps [FROM, TO) (manifest workload.run)
 //	hydo-grpc retry                re-send operations whose outcome is unknown (workload.retry)
-//	hydo-grpc drive <rpc> [N]      N operations of one RPC or scenario (a composer command)
+//	hydo-grpc drive <rpc> [N]      N operations of one RPC or scenario (a composer command;
+//	                               exit 0 all ok, 1 one ended failed or unknown)
 //	hydo-grpc call <rpc> [JSON]    one call with the given request (JSON, or "-" = stdin;
 //	                               none = generated); prints the response; exit 0 ok,
 //	                               1 definite failure, 2 unknown outcome (as invariants use)
@@ -137,8 +138,13 @@ func main() {
 		if len(args) > 2 {
 			n = num(2, "N")
 		}
-		if err := c.Drive(args[1], n); err != nil {
+		ok, err := c.Drive(args[1], n)
+		if err != nil {
 			die("drive: %v", err)
+		}
+		if !ok {
+			c.Close()
+			os.Exit(1) // a failed or unknown operation (the composer records it; not a violation)
 		}
 	case "call":
 		if len(args) < 2 {

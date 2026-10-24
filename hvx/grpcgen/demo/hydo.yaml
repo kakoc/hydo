@@ -35,7 +35,7 @@ data:
   dirs: [redis]
 
 env:
-  HYDO_GRPC_SEED: "1"             # request values are a function of this seed and the step
+  HYDO_GRPC_SEED: "1"             # requests: a function of this seed and each composer entry's HYDO_SEED
 
 services:
   - name: redis
@@ -48,12 +48,19 @@ services:
     port: 7070
     depends_on: [redis]
 
-workload:                         # from build/gen/hydo.grpc.yaml
-  steps: 30
-  run: /bin/hydo-grpc steps $HYDO_FROM $HYDO_TO
-  retry: /bin/hydo-grpc retry
+# from build/gen/hydo.grpc.yaml: the test composer runs one generated driver per RPC; the
+# schedule's W= token decides which run when and with which requests
+test:
+  commands:
+    - {name: create, kind: parallel_driver, run: [/bin/hydo-grpc, drive, orders.v1.Orders/Create], timeout: 21}
+    - {name: get, kind: parallel_driver, run: [/bin/hydo-grpc, drive, orders.v1.Orders/Get], timeout: 12}
+    - {name: cancel, kind: parallel_driver, run: [/bin/hydo-grpc, drive, orders.v1.Orders/Cancel], timeout: 14}
+    - {name: list, kind: parallel_driver, run: [/bin/hydo-grpc, drive, orders.v1.Orders/List], timeout: 12}
+
+workload:
+  steps: 30                       # composer rounds; faults are placed at round numbers
+  retry: /bin/hydo-grpc retry     # unknown outcomes, re-sent with the same request after the faults heal
   timeout: 400
-  process: hydo-grpc
 
 invariants:
   - id: orders.consistent

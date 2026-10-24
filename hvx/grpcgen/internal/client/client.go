@@ -471,39 +471,40 @@ func pick(r *rng.R, ws []int) int {
 // maxSkips bounds how often a worker redraws because a `from` field has no value yet.
 const maxSkips = 16
 
-// one runs a single RPC operation with generated values; false if it had to be skipped.
-func (c *Client) one(process int64, r *spec.RPC, rnd *rng.R, e *env) bool {
+// one runs a single RPC operation with generated values; ran is false if it had to be
+// skipped, ok whether it ended ok.
+func (c *Client) one(process int64, r *spec.RPC, rnd *rng.R, e *env) (ran, ok bool) {
 	reqs, err := c.Generate(r, rnd, e)
 	if errors.Is(err, valuegen.ErrSkip) {
-		return false
+		return false, true
 	}
 	if err != nil {
 		fmt.Fprintf(c.stderr, "hydo-grpc: %s: %v\n", r.Name, err)
-		return false
+		return false, true
 	}
-	c.Op(process, c.State.Next("op"), r, reqs, e)
-	return true
+	return true, c.Op(process, c.State.Next("op"), r, reqs, e).Kind == outcome.OK
 }
 
-func (c *Client) runItem(process int64, it item, rnd *rng.R, e *env) bool {
+func (c *Client) runItem(process int64, it item, rnd *rng.R, e *env) (ran, ok bool) {
 	if it.rpc != nil {
 		return c.one(process, it.rpc, rnd, e)
 	}
 	e.scen = true
 	defer func() { e.scen = false }()
-	ran := false
+	ok = true
 	for _, name := range it.scen.Calls {
 		r, err := c.Plan.Find(name)
 		if err != nil {
 			fmt.Fprintf(c.stderr, "hydo-grpc: scenario %s: %v\n", it.scen.Name, err)
-			return ran
+			return ran, ok
 		}
-		if !c.one(process, r, rnd, e) {
-			return ran // a later call needs a value an earlier one did not produce
+		did, good := c.one(process, r, rnd, e)
+		if !did {
+			return ran, ok // a later call needs a value an earlier one did not produce
 		}
-		ran = true
+		ran, ok = true, ok && good
 	}
-	return ran
+	return ran, ok
 }
 
 // Steps runs workload steps [from, to): every step, Concurrency workers in parallel each
@@ -526,7 +527,7 @@ func (c *Client) Steps(from, to int) {
 				e := &env{c: c, local: map[string][]string{}}
 				for k := 0; k < c.Plan.Steps.Calls; k++ {
 					for tries := 0; tries < maxSkips; tries++ {
-						if c.runItem(int64(w), its[pick(rnd, ws)], rnd, e) {
+						if ran, _ := c.runItem(int64(w), its[pick(rnd, ws)], rnd, e); ran {
 							break
 						}
 					}
@@ -537,10 +538,13 @@ func (c *Client) Steps(from, to int) {
 	}
 }
 
-// Drive is one composer command: Calls operations of one RPC (or of a scenario). The stream
-// is Derive(seed, 2, n) for the run's n-th drive invocation (a shared counter), the process id
-// is the OS process id.
-func (c *Client) Drive(name string, calls int) error {
+// Drive is one composer command: Calls operations of one RPC (or of a scenario). Under the
+// test composer the stream is Derive(seed, 2, $HYDO_SEED) -- the composition (schedule token
+// W=) gives every command entry its own HYDO_SEED, so the explorer varies the requests too;
+// without it, Derive(seed, 3, n) for the run's n-th drive invocation (a shared counter). The
+// process id is the OS process id. ok is whether every operation ended ok (the composer counts
+// a command that exits non-zero as a failed operation).
+func (c *Client) Drive(name string, calls int) (ok bool, err error) {
 	var it item
 	if r, err := c.Plan.Find(name); err == nil {
 		it.rpc = r
@@ -551,24 +555,32 @@ func (c *Client) Drive(name string, calls int) error {
 			}
 		}
 		if it.scen == nil {
-			return err
+			return false, err
 		}
 	}
 	if calls <= 0 {
 		calls = c.Plan.Drive.Calls
 	}
-	n := c.State.Next("drive")
-	rnd := rng.New(rng.Derive(c.Seed, 2, n))
+	var stream uint64
+	if v, perr := strconv.ParseUint(os.Getenv("HYDO_SEED"), 10, 64); perr == nil && os.Getenv("HYDO_SEED") != "" {
+		stream = rng.Derive(c.Seed, 2, v)
+	} else {
+		stream = rng.Derive(c.Seed, 3, c.State.Next("drive"))
+	}
+	rnd := rng.New(stream)
 	e := &env{c: c, local: map[string][]string{}}
 	pid := int64(os.Getpid())
+	ok = true
 	for k := 0; k < calls; k++ {
 		for tries := 0; tries < maxSkips; tries++ {
-			if c.runItem(pid, it, rnd, e) {
+			ran, good := c.runItem(pid, it, rnd, e)
+			if ran {
+				ok = ok && good
 				break
 			}
 		}
 	}
-	return nil
+	return ok, nil
 }
 
 // Retry re-sends, with the same request, every operation whose last outcome was unknown and

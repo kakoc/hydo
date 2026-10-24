@@ -125,25 +125,20 @@ func main() {
 	must(err)
 	must(os.WriteFile(filepath.Join(*out, "grpc", "plan.json"), pj, 0644))
 
-	// composer commands: one per RPC (weight > 0) and scenario, plus the final retry
+	// composer commands (MANIFEST.md "The test composer"): one parallel driver per RPC with a
+	// weight and per scenario, in the hydo/workload/ layout
 	old, _ := filepath.Glob(filepath.Join(*out, "workload", "*"))
 	for _, f := range old {
 		os.Remove(f)
 	}
-	for _, r := range plan.RPCs {
-		if r.Weight == 0 {
-			continue
-		}
-		writeDriver(*out, "parallel_driver_"+r.Short, r.Name, r.Name+": generated requests")
-	}
-	for _, s := range plan.Scenarios {
-		writeDriver(*out, "parallel_driver_"+s.Name, s.Name, "scenario "+strings.Join(s.Calls, " -> "))
+	for _, c := range commands(plan) {
+		body := fmt.Sprintf("#!/bin/busybox sh\n# hydo: timeout=%d\n# hydo-msg: %s (hydo-grpc-gen)\nexec /bin/hydo-grpc drive %s\n", c.timeout, c.msg, c.target)
+		must(os.WriteFile(filepath.Join(*out, "workload", "parallel_driver_"+c.name), []byte(body), 0755))
 	}
 	retryCmd := ""
 	for _, r := range plan.RPCs {
 		if r.Retry.AtEnd {
-			retryCmd = writeScript(*out, "finally_retry", "re-send operations whose outcome is unknown", "retry")
-			break
+			retryCmd = "/bin/hydo-grpc retry"
 		}
 	}
 
@@ -187,16 +182,39 @@ func envOr(k, d string) string {
 	return d
 }
 
-func writeDriver(out, file, rpc, msg string) string {
-	return writeScript(out, file, msg, "drive "+rpc)
+type command struct {
+	name, target, msg string
+	timeout           int
 }
 
-func writeScript(out, file, msg, args string) string {
-	body := "#!/bin/busybox sh\n# hydo-msg: " + msg + " (hydo-grpc-gen)\nexec /bin/hydo-grpc " + args + "\n"
-	if err := os.WriteFile(filepath.Join(out, "workload", file), []byte(body), 0755); err != nil {
-		die("%v", err)
+// commands: one per RPC with a weight and per scenario. The timeout bounds Drive.Calls
+// operations whose every attempt runs into its deadline.
+func commands(p *spec.Plan) []command {
+	worst := func(r *spec.RPC) int { return (r.DeadlineMs + r.Retry.BackoffMs) * (r.Retry.Attempts + 1) }
+	bound := func(ms int) int {
+		t := p.Drive.Calls*ms/1000 + 10
+		if t > 3600 {
+			t = 3600
+		}
+		return t
 	}
-	return file
+	var out []command
+	for i := range p.RPCs {
+		r := &p.RPCs[i]
+		if r.Weight > 0 {
+			out = append(out, command{r.Short, r.Name, r.Name + ": generated requests", bound(worst(r))})
+		}
+	}
+	for _, sc := range p.Scenarios {
+		ms := 0
+		for _, n := range sc.Calls {
+			if r, err := p.Find(n); err == nil {
+				ms += worst(r)
+			}
+		}
+		out = append(out, command{sc.Name, sc.Name, "scenario " + strings.Join(sc.Calls, " -> "), bound(ms)})
+	}
+	return out
 }
 
 func starter(p *spec.Plan, rel string, steps int, retryCmd string) string {
@@ -214,16 +232,30 @@ func starter(p *spec.Plan, rel string, steps int, retryCmd string) string {
 	w("    - {src: %s/grpc, dst: /etc/hydo/grpc}", rel)
 	w("")
 	w("env:")
-	w("  HYDO_GRPC_SEED: \"%d\"           # request values are a function of this seed and the step", p.Seed)
+	w("  HYDO_GRPC_SEED: \"%d\"           # requests: a function of this seed and the composer entry (HYDO_SEED) or the step", p.Seed)
 	w("")
-	// a step makes Calls operations per worker; bound it by the slowest possible attempt chain
+	w("# The test composer (MANIFEST.md \"The test composer\") composes these commands; the schedule")
+	w("# token W= decides which run when, and each entry's HYDO_SEED decides its requests.")
+	w("# The same commands are files in %s/workload/ (the hydo/workload/ layout).", rel)
+	w("test:")
+	w("  commands:")
+	for _, c := range commands(p) {
+		w("    - {name: %s, kind: parallel_driver, run: [/bin/hydo-grpc, drive, %s], timeout: %d}", c.name, c.target, c.timeout)
+	}
+	w("")
+	w("workload:")
+	w("  steps: %d                       # composer rounds; faults are placed at round numbers", steps)
+	if retryCmd != "" {
+		w("  retry: %s      # unknown outcomes, re-sent with the same request after the faults heal", retryCmd)
+	}
+	w("")
+	// without the composer: numbered steps
 	worst := 0
 	for _, r := range p.RPCs {
 		if r.Weight == 0 {
 			continue
 		}
-		t := (r.DeadlineMs + r.Retry.BackoffMs) * (r.Retry.Attempts + 1)
-		if t > worst {
+		if t := (r.DeadlineMs + r.Retry.BackoffMs) * (r.Retry.Attempts + 1); t > worst {
 			worst = t
 		}
 	}
@@ -231,30 +263,18 @@ func starter(p *spec.Plan, rel string, steps int, retryCmd string) string {
 	if timeout < 120 {
 		timeout = 120
 	}
-	w("workload:")
-	w("  steps: %d", steps)
-	w("  run: /bin/hydo-grpc steps $HYDO_FROM $HYDO_TO   # %d call(s) x %d worker(s) per step", p.Steps.Calls, p.Steps.Concurrency)
+	if timeout > 3600 {
+		timeout = 3600
+	}
+	w("# Without the composer (numbered steps), drop test: and use instead:")
+	w("# workload:")
+	w("#   steps: %d", steps)
+	w("#   run: /bin/hydo-grpc steps $HYDO_FROM $HYDO_TO   # %d call(s) x %d worker(s) per step", p.Steps.Calls, p.Steps.Concurrency)
 	if retryCmd != "" {
-		w("  retry: /bin/hydo-grpc retry                  # unknown outcomes, re-sent after the faults heal")
+		w("#   retry: %s", retryCmd)
 	}
-	w("  timeout: %d", timeout)
-	w("  process: hydo-grpc")
-	w("")
-	w("# The test composer (branch test-composer; not on main yet) runs commands instead of steps.")
-	w("# Either copy %s/workload/ to hydo/workload/, or use this section instead of workload: above:", rel)
-	w("# test:")
-	w("#   commands:")
-	for _, r := range p.RPCs {
-		if r.Weight > 0 {
-			w("#     - {name: %s, kind: parallel_driver, run: [/bin/hydo-grpc, drive, %s]}", r.Short, r.Name)
-		}
-	}
-	for _, s := range p.Scenarios {
-		w("#     - {name: %s, kind: parallel_driver, run: [/bin/hydo-grpc, drive, %s]}", s.Name, s.Name)
-	}
-	if retryCmd != "" {
-		w("#     - {name: retry, kind: finally, run: [/bin/hydo-grpc, retry]}")
-	}
+	w("#   timeout: %d", timeout)
+	w("#   process: hydo-grpc")
 	w("")
 	w("# Invariants stay yours. Call records: /tmp/hydo/grpc/calls (HYDO-CALL lines).")
 	w("# hydo-grpc call <rpc> '<json>' prints a response and exits 0 ok / 1 failed / 2 unknown,")
