@@ -106,6 +106,9 @@ FC_MATCH = []           # optional (payload string, direction) pairs (manifest f
                         # count only packets that contain the string, so a known event has a small n; a
                         # direction "<" / ">" (replies: / requests:) is the one the string occurs in
 FC_MATCH_NMAX = 32      # with a match, n is drawn 1 .. this (matched events are far fewer than all packets)
+COMPOSE = True          # the test composer (hydo_composer.py): a plan with test commands gets W= on every
+                        # schedule (--no-compose: the guest's default composition); other images never do
+CW_SALT = 0xC0390538C0FFEE57
 
 
 class SplitMix:
@@ -307,6 +310,24 @@ def parse_fc(v):
     if not m:
         raise ValueError("bad F= token %r" % v)
     return (m.group(1), m.group(2), m.group(3), int(m.group(4)), int(m.group(5) or 1), m.group(6) or None, int(m.group(7)))
+
+
+def _hc():
+    d = os.path.join(HVX, "onboard")
+    if d not in sys.path:
+        sys.path.insert(0, d)
+    import hydo_composer
+    return hydo_composer
+
+
+def add_compose(s, seed):
+    """The test composer's token W=<seed>,p<concurrency>,q<per round>,r<round ms>: which
+    commands run, how many at once and how often (hydo_composer.draw), from a separate random
+    stream, so every other field equals the schedule of the same seed without it. Only for a
+    plan whose workload the composer runs (SPACE.composed()); every other schedule is unchanged."""
+    if COMPOSE and SPACE is not None and SPACE.composed():
+        s["W"] = _hc().draw(SplitMix(seed ^ CW_SALT).next, SPACE.compose)
+    return s
 
 
 def add_buggify(s, seed):
@@ -877,6 +898,8 @@ def render(s):
         g.append("B=%s" % s["B"])
     if "F" in s:
         g.append(render_fc(s["F"]))
+    if "W" in s:
+        g.append("W=%s" % s["W"])
     return "disk=%s dseed=%x%s%s%s | %s" % (s["disk"], s["dseed"], render_tj(s["tj"]) if "tj" in s else "",
                                             render_preempt(s) + (" cf=%d" % s["cf"] if "cf" in s else "") + render_turns(s),
                                             " rb=%d" % s["rb"] if "rb" in s else "", " ".join(g))
@@ -948,6 +971,8 @@ def parse(text):
             s["B"] = v
         elif k == "F":
             s["F"] = parse_fc(v)
+        elif k == "W":                           # the test composer (hydo_composer.py)
+            s["W"] = v
         elif k in KNOB_TOKENS:
             s[k] = v
     return s
@@ -1315,6 +1340,9 @@ def candidates(s, tjk=None):
         if q and q < Q_DEFAULT:
             var(q=(min(Q_DEFAULT, q * 8), qs))
     tj_candidates(s, tjk, var)
+    if "W" in s and SPACE is not None and SPACE.compose:   # the composition: fewer commands, less overlap
+        for w in _hc().candidates(s["W"], SPACE.compose):
+            var(W=w)
     return out
 
 
@@ -1378,6 +1406,8 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
     cur, cur_v, tries, rnd = s, verdict, 0, 0
     if "tj" in s:
         budget *= 3             # explicit tick lists shrink one entry at a time
+    if "W" in s:
+        budget *= 2             # a composition shrinks by commands and entries too
     while tries < budget:
         cands = candidates(cur, tjk)
         if not cands:
@@ -1403,7 +1433,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
 # ---------------------------------------------------------------- main
 def main():
     global IMAGE, TIMING, TJ_PM, NEW_FAULTS, SPACE, CONCURRENCY, BACKEND, HVM_KERNEL, PREEMPT, BUGGIFY, KNOB_RULE, RAM_MIB, MORE_FAULTS, CF_RANGE, VCPUS, TURNS, CPU
-    global FREEZE_CALL, FC_NMAX, FC_MATCH
+    global FREEZE_CALL, FC_NMAX, FC_MATCH, COMPOSE
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-200")
     ap.add_argument("--workers", type=int, default=3)   # the box has 4 cores: 3 is fastest (M38)
@@ -1485,6 +1515,8 @@ def main():
     ap.add_argument("--turns", action="store_true",
                     help="with --vcpus N > 1: half of the schedules get vCPU turn lengths q= [qs=] for the workload "
                          "(rr chaos-mode mix; separate random stream)")
+    ap.add_argument("--no-compose", action="store_true",
+                    help="a plan with test commands: do not draw W= (every schedule runs the default composition)")
     ap.add_argument("--ram-mib", type=int, help="guest RAM in MiB (default: the manifest's guest.ram_mib, else 1024; "
                                                 "256..3072 on hvx, 256..4096 on hvm)")
     a = ap.parse_args()
@@ -1513,6 +1545,7 @@ def main():
     if TURNS and VCPUS < 2:
         raise SystemExit("explore.py: --turns needs --vcpus N > 1 (turn tokens on a one-vCPU VM are an ERROR)")
     NEW_FAULTS = a.new_faults
+    COMPOSE = not a.no_compose
     KNOB_RULE = a.knob_rule
     CONCURRENCY = a.concurrency
     MORE_FAULTS = a.more_faults
@@ -1546,7 +1579,7 @@ def main():
             SPACE.check_sweep(a.sweep)
         points = freeze_sweep(pool, a) if a.sweep == "freeze" else sweep(a.sweep)
         seeds = list(range(1, len(points) + 1))            # sweep point index stands in for the seed
-        items = [("seed-%d" % i, render(add_turns(add_buggify(add_preempt(add_concurrency(add_timing(sch, i), i), i), i), i))) for i, (_, sch) in zip(seeds, points)]
+        items = [("seed-%d" % i, render(add_compose(add_turns(add_buggify(add_preempt(add_concurrency(add_timing(sch, i), i), i), i), i), i))) for i, (_, sch) in zip(seeds, points)]
         open(os.path.join(a.out, "sweep-points.jsonl"), "w").write(
             "".join(json.dumps({"seed": i, "point": lab}) + "\n" for i, (lab, _) in zip(seeds, points)))
         if a.sweep == "freeze" and a.sweep_dry:
@@ -1565,7 +1598,7 @@ def main():
             CF_RANGE = measure_cf_range(pool, a.out)
             print("cf= range (measured with cfn): %d-%d" % CF_RANGE, file=sys.stderr)
         mf = lambda x, sd: add_freeze_call(add_more_faults(x, sd, a.strategy), sd)
-        items = [("seed-%d" % sd, render(add_turns(add_buggify(add_preempt(add_concurrency(add_timing(mf(nf(dur(gen(sd)), sd), sd), sd), sd), sd), sd), sd)))
+        items = [("seed-%d" % sd, render(add_compose(add_turns(add_buggify(add_preempt(add_concurrency(add_timing(mf(nf(dur(gen(sd)), sd), sd), sd), sd), sd), sd), sd), sd)))
                  for sd in seeds]
     t_sweep = time.time()
     res = pool.run_all(items)
@@ -1616,6 +1649,8 @@ def main():
                            "min_class": finding_class(m),
                            "fp_a": conf["min-a"][1]["fp"], "fp_b": conf["min-b"][1]["fp"],
                            "min_verdict": conf["min-a"][1]["verdict"]}
+            if "W" in m and SPACE is not None and SPACE.compose:     # the minimal composition, round by round
+                shrunk[key]["composition"] = _hc().describe(m["W"], SPACE.compose)
     slog.close()
     boot = [w.boot_secs for w in pool.workers if w.boot_secs]
     pool.close()
@@ -1728,7 +1763,7 @@ def write_report(out, summary, fails, shrunk, table=None):
               "- from seed %d, %d shrink runs" % (v["from_seed"], v["tries"]),
               "- minimal schedule: `%s`" % v["minimal"],
               "- needs a tick-timing change: %s" % ("yes" if " tj" in v["minimal"] else "no"),
-              ] + (["- needs vCPU turn lengths: %s" % ("yes" if re.search(r"(?:^|\s)qs?=", v["minimal"].split("|")[0]) else "no")]
+              ] + (["- composition (test composer, W=): %s" % v["composition"]] if v.get("composition") else []) + (["- needs vCPU turn lengths: %s" % ("yes" if re.search(r"(?:^|\s)qs?=", v["minimal"].split("|")[0]) else "no")]
                    if VCPUS > 1 else []) + [
               "- verdict: `%s`" % v["min_verdict"],
               "- fingerprint, two runs: `%s` / `%s` (%s)" % (v["fp_a"], v["fp_b"], "identical" if v["fp_a"] == v["fp_b"] else "DIFFERENT"),
