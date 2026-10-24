@@ -38,7 +38,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 mod plan;
-pub use plan::{Expect, Fault, Knob, Service, System, TestParams};
+pub use plan::{Expect, Fault, HistoryCheck, Knob, Service, System, TestParams};
 
 pub use hydo_test_macros::{check, driver};
 #[doc(hidden)]
@@ -48,7 +48,7 @@ pub use inventory;
 pub use hydo_assert as assert;
 
 pub mod prelude {
-    pub use crate::{check, driver, fail, violation, Ctx, Error, Expect, Fault, Knob, Result, Service, System, TestParams};
+    pub use crate::{check, driver, fail, violation, Ctx, Error, Expect, Fault, HistoryCheck, Knob, Result, Service, System, TestParams};
 }
 
 /// The engine version this SDK writes into the plan (`hydo_version`), and the plan format.
