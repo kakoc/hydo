@@ -36,7 +36,7 @@ func hints(t *testing.T, y string) *Hints {
 }
 
 func TestBuildDemo(t *testing.T) {
-	h, err := ReadHints("../../demo/hydo/hints.yaml")
+	h, err := ReadHints("../../demo/hints.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,0 +1,63 @@
+# The gRPC demo of hvx/grpcgen (MANIFEST.md "gRPC services"): an order service with four RPCs
+# (Create / Get / Cancel / List) on Redis, driven ONLY by drivers generated from its .proto
+# (proto/orders/v1/orders.proto + hints.yaml -> build/gen by hydo-grpc-gen). It carries one
+# planted bug (orderd/main.go, --mode buggy): Create's idempotency check and its writes are
+# separate Redis commands, so a retried Create that overlaps the first attempt creates a second
+# order. Build both versions on the build box:   hvx/grpcgen/demo/build.sh
+#   -> build/explore-ob-grpcorders-{buggy,fixed}-disk.img
+name: grpcorders
+description: a gRPC order service on Redis, driven by generated gRPC drivers
+
+params:
+  mode: buggy                     # buggy | fixed (build.sh builds both)
+
+root:
+  files:
+    - {src: ~/hydo/build/redis-server, dst: /bin/redis-server, mode: "0755"}
+    - {src: ~/hydo/build/redis-cli, dst: /bin/redis-cli, mode: "0755"}
+    - {src: build/orderd, dst: /bin/orderd, mode: "0755"}
+    # the generated drivers (build/gen/hydo.grpc.yaml lists these two lines)
+    - {src: build/gen/hydo-grpc, dst: /bin/hydo-grpc, mode: "0755"}
+    - {src: build/gen/grpc, dst: /etc/hydo/grpc}
+  text:
+    /etc/redis.conf: |
+      port 6379
+      bind 127.0.0.1
+      dir /data/redis
+      save ""
+      appendonly yes
+      appendfsync always
+      hz 1
+      dynamic-hz no
+
+data:
+  size_mib: 64
+  dirs: [redis]
+
+env:
+  HYDO_GRPC_SEED: "1"             # request values are a function of this seed and the step
+
+services:
+  - name: redis
+    cmd: /bin/redis-server /etc/redis.conf
+    ready: /bin/redis-cli ping | grep -q PONG
+    port: 6379
+  - name: orderd
+    cmd: /bin/orderd serve --mode {{mode}}
+    ready: /bin/hydo-grpc call List '{"page_size":1}' > /dev/null
+    port: 7070
+    depends_on: [redis]
+
+workload:                         # from build/gen/hydo.grpc.yaml
+  steps: 30
+  run: /bin/hydo-grpc steps $HYDO_FROM $HYDO_TO
+  retry: /bin/hydo-grpc retry
+  timeout: 400
+  process: hydo-grpc
+
+invariants:
+  - id: orders.consistent
+    msg: no request_id creates two orders; every acknowledged Create and Cancel is stored
+    cmd: /bin/orderd check
+
+faults: [kill, pause, network, oneway, cut, clock, disk]

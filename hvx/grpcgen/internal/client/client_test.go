@@ -123,7 +123,7 @@ func setup(t *testing.T, addr, extra string) (dir string) {
 		t.Fatal(err)
 	}
 	files, _ := protodesc.NewFiles(set)
-	hb, _ := os.ReadFile("../../demo/hydo/hints.yaml")
+	hb, _ := os.ReadFile("../../demo/hints.yaml")
 	hp := filepath.Join(dir, "hints.yaml")
 	os.WriteFile(hp, append(hb, []byte(extra)...), 0644)
 	h, err := load.ReadHints(hp)
