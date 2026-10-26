@@ -5,8 +5,10 @@ into a guest image, and one generic guest init (`hvx/onboard/hydo-init.sh`) runs
 it starts the services, runs the workload under the explorer's faults and checks the
 invariants. No per-project build script or boot script is written by hand.
 
-This file is the reference for people and for tools that generate manifests (a Claude skill
-that reads a repository and writes `hydo.yaml` is the intended next step). Complete
+This file is the reference for people and for tools that generate manifests: the onboarding
+skill (`skills/hydo-onboard/`, an Agent Skills folder that any AI tool can follow; `hydo guide`
+prints it, `hydo guide manifest` prints this file) reads a repository and writes its `hydo/`
+folder. Complete
 examples: `examples/redis/hydo.yaml` (one service, about 60 lines),
 `examples/stack/hydo.yaml` (MySQL + Kafka + Redis + a gRPC front door),
 `examples/redis-oci/hydo.yaml` (Redis from the official Docker image, no file list),
@@ -1037,13 +1039,10 @@ Inside the image: `/etc/hydo/hydo.yaml` (the manifest as written), `/etc/hydo/ma
 
 ## Limits of v1
 
-- No OCI/Docker import yet (`image:` is reserved); files come from store paths or the host.
 - The kernel command line is the explorer's. Guest RAM is per image (`guest.ram_mib`), at most
   3072 MiB on x86_64 (hvx keeps RAM below the 4th-GiB MMIO hole) and 4096 MiB on arm64.
-
 - Images are files on the build machine (no registry pulls); one root per image service, not
   a merged root; no xattrs/capabilities, devices or FIFOs from layers; no zstd layers.
-- Guest RAM is fixed at 1024 MiB and the kernel command line is the explorer's.
 - The guest console is 64 KiB: a workload that prints every acknowledged id should print
   short ids, or the done marker can be lost.
 - One data disk, ext4. The workload's step count is the unit of fault placement.
@@ -1094,7 +1093,7 @@ validator before it is written. Example: `examples/compose-voting/` (Docker's ex
 | `profiles:` | services in a profile are left out unless `--profile <p>` (as `docker compose up`) |
 | `mem_limit:`, `deploy.resources.limits.memory` | counted in the `guest.ram_mib` guess |
 | (images) | `guest.ram_mib`: 256 MiB + a per-image guess (PostgreSQL 384, MySQL/MongoDB 640, Redis 96, JVM services 1024, others 256), at least 1024, at most 3072. `guest.cpu: v3` when an image's linux/amd64 manifest has variant v3/v4 or the image is known to need AVX2 (restatedev/restate); otherwise a commented line to uncomment if a service stops with "invalid opcode". `data.size_mib` from the volumes. |
-| (workload, invariants) | a TODO skeleton that fails loudly (`exit 1` / `exit 2`), so nobody mistakes it for a passing test. The hydo-onboard skill (`.claude/skills/hydo-onboard`) writes the real ones. |
+| (workload, invariants) | a TODO skeleton that fails loudly (`exit 1` / `exit 2`), so nobody mistakes it for a passing test. The hydo-onboard skill (`hydo guide`, `skills/hydo-onboard`) writes the real ones. |
 | `faults:` | all kinds except `freeze` |
 
 Reported as warnings, with what to do (the file's header repeats them): `build:` (with an image:

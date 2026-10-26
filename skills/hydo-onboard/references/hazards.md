@@ -1,0 +1,61 @@
+# Determinism and environment hazards
+
+The guest is one Linux virtual machine: one virtual CPU by default, `guest.ram_mib` of RAM
+(default 1024 MiB), loopback networking only, a read-only root, one data disk on `/data`, and a
+clock and a random generator that hydo makes deterministic. Check each item and report what you
+found.
+
+## Handled by hydo (nothing to do)
+
+- The random generator is seeded deterministically, so `getrandom()` and `/dev/urandom` do not
+  block.
+- Loopback is up; the realtime clock starts at `guest.clock_start` (default 2026-01-01).
+- Services start in dependency order with readiness waits; killed services are restarted; the
+  recovery boot after a power cut is automatic.
+- Faults (kill, pause, the freeze of a power cut) reach a service's whole process tree.
+
+## Must be checked per project
+
+- **Network access.** Anything that downloads, resolves external names, sends telemetry, checks
+  for updates or contacts a license server at start fails. Disable it in the configuration, or
+  report it as a blocker. Outside services the system really calls become fakes
+  (outside-services.md).
+- **Listening address.** Bind every service to 127.0.0.1 (or to its `addr:`); external
+  addresses do not exist.
+- **Writable paths.** Only `/data` (persistent, the fault target) and `/tmp` (lost at a power
+  cut) are writable. Point data, logs, sockets and PID files there. An image service also gets
+  the writable paths of its `mounts:`.
+- **CPU features.** The guest CPU is x86-64-v2 by default (SSE4.2, POPCNT), without AVX or AVX2.
+  Binaries built for x86-64-v3, or that need AVX at start, stop with "illegal instruction",
+  "invalid opcode" or "CPU ISA level is lower than required". Set `guest.cpu: v3` (x86_64 only;
+  AVX/AVX2, FMA, BMI1/2; no AVX-512), or use a build for the baseline. On the Mac the guest is
+  arm64: images and binaries must be built for linux/arm64.
+- **Memory.** Every service together must fit in `guest.ram_mib` (at most 3072 MiB on x86_64,
+  4096 on arm64). Cap heaps and caches explicitly (JVM `-Xmx`, database buffer pools, Redis
+  `maxmemory`).
+- **One CPU.** Set worker and thread counts to 1 or 2 where the program sizes them from the CPU
+  count (Go: `GOMAXPROCS=1`; JVM: `-XX:ActiveProcessorCount=1`; database I/O threads).
+- **JVM services.** Use deterministic-friendly flags: one synchronous C1 compiler
+  (`-XX:TieredStopAtLevel=1 -XX:CICompilerCount=1 -XX:-BackgroundCompilation`), Serial GC
+  (`-XX:+UseSerialGC`), a fixed heap (`-Xms` = `-Xmx`), `-XX:-UsePerfData`,
+  `-XX:-UseContainerSupport`, `-Xshare:off`, a fixed time zone and locale
+  (`-Duser.timezone=UTC`).
+- **Wall clock in data.** Timestamps in payloads or keys make runs differ when the clock is
+  stepped; derive values from `$HYDO_CMD_ID` or `$HYDO_SEED` instead. Expiry, TTL or lease
+  logic is affected by clock-jump faults on purpose: note it as a target, not as a hazard. If a
+  check compares times from before and after a power cut, set `guest.clock_after_cut`.
+- **Background timers.** Very short periodic timers (a server `hz` of 10 or more) cost guest
+  time; lower them where the project allows (`hz 1` for Redis).
+- **Services that refuse to run as root** (PostgreSQL and others). Everything in the guest runs
+  as root. Add the user to `/etc/passwd` and `/etc/group` under `root.text`, `chown` its data
+  directory in `setup`, and start it with `su <user> -s /bin/sh -c "exec ..."` so that the
+  service keeps the process id that kills and pauses target. Image services take `user:`.
+- **Processes that leave the tree.** A process that double-forks or calls `setsid` into a new
+  parent is not reached by kills and pauses. Check `ps` in the guest for such services.
+- **Daemonizing and PID files.** Services must stay in the foreground.
+- **Containers inside the guest.** Docker, cgroup sandboxes and overlay filesystems are not
+  available; run the binary directly or as an image service.
+- **Kernel modules.** The guest kernel is a fixed Linux 6.6 build; a program that needs a module
+  the image does not load (FUSE, special filesystems) is a blocker to report.
+- **Console size.** The guest console holds 64 KiB. Print short lines; do not print every
+  acknowledged id.

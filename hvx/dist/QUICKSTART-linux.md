@@ -168,9 +168,12 @@ It ends `OK` with `retrans=0`: the delayed packets were delivered when the fault
 hydo learns your project from one file, `hydo.yaml`: which programs to start, how to tell they
 are ready, the workload, the invariants that must always hold, and which faults are allowed.
 `~/.hydo/hvx/onboard/MANIFEST.md` describes every field; `~/.hydo/examples/redis/hydo.yaml` is a
-complete example. If you use Claude Code, `~/.hydo/skill/hydo-onboard` is a skill that reads your
-repository and writes the manifest; copy it into `your-project/.claude/skills/` and ask Claude
-to onboard the project, then review the invariants it proposes.
+complete example. The release includes an onboarding guide for AI coding tools of any vendor (an
+Agent Skills folder, https://agentskills.io) that reads your repository and writes the project's
+`hydo/` folder: run `hydo init` in your project, then tell your AI tool "run `hydo guide` and
+follow it". `hydo skill install --agent claude|codex|cursor|copilot|gemini|all` copies the skill
+where that tool reads skills (`.claude/skills/` for Claude Code, `.agents/skills/` for the others).
+Review the checks it proposes: that is the one step that needs your judgement.
 
 Your programs must be **x86_64 Linux binaries**: a static build, the files of a package with the
 shared libraries the program loads, or a Docker/OCI image saved with `docker save`

@@ -132,14 +132,20 @@ are ready, the workload, the invariants that must always hold, and which faults 
 `~/.hydo/hvx/onboard/MANIFEST.md` describes every field, and `~/.hydo/examples/redis/hydo.yaml` is
 a complete example.
 
-If you use Claude Code, the release includes a skill that reads your repository and writes the
-manifest for you. Copy it into your project and ask Claude to onboard the project:
+The release includes an onboarding guide for AI coding tools of any vendor (an Agent Skills
+folder, https://agentskills.io): it reads your repository and writes the project's `hydo/`
+folder. Start the folder, then give your tool one instruction:
 
 ```sh
-mkdir -p your-project/.claude/skills && cp -R ~/.hydo/skill/hydo-onboard your-project/.claude/skills/
+cd your-project
+hydo init                    # hydo/ skeleton, .gitignore lines, a hydo section in AGENTS.md
+# then tell your AI tool: "run `hydo guide` and follow it"
 ```
 
-Then review the invariants it proposes: that is the one step that needs your judgement.
+`hydo skill install --agent claude|codex|cursor|copilot|gemini|all` also copies the skill into the
+directory that tool reads skills from (`.claude/skills/` for Claude Code, `.agents/skills/` for
+the others), so the tool finds it by itself. Then review the checks it proposes: that is the one
+step that needs your judgement.
 
 **Your programs must be arm64 Linux binaries**, because the guest is arm64 Linux. Three ways to
 get them:

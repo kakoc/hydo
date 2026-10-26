@@ -1,0 +1,4 @@
+#!/bin/sh
+# at the end of a run in which every started command completed
+. /hydo/workload/helper_lib.sh
+echo "acked=$(wc -l < $HYDO_ACKED) keys=$(R DBSIZE)"

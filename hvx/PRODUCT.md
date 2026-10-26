@@ -75,9 +75,13 @@ hydo/
 
 Built (M86, branch `test-composer`): `hydo-build` reads the three directories next to the manifest; a code-first SDK writes the same content as a plan file (`.hydo/plan.json`) instead. The format and the kinds are in `hvx/onboard/MANIFEST.md` "The test composer".
 
-**Onboarding** is a skill run from the repository root: it reads `docker-compose.yaml` (the importer, `compose-import`), asks which services to test and what must never happen, writes `hydo/`, builds, runs a first exploration, and explains the failures it finds. The skill must ship as an installable Claude Code plugin (today it lives only in hydo's repository).
+**Onboarding** is a skill run from the repository root: it reads `docker-compose.yaml` (the importer, `compose-import`), asks which services to test and what must never happen, writes `hydo/`, builds, runs a first exploration, and explains the failures it finds. Teams use AI tools from different vendors, so the skill follows the open Agent Skills format (https://agentskills.io/specification) instead of one vendor's plugin format (decided 2026-10-26; HISTORY Milestone 93). It ships in both releases (`skill/hydo-onboard/`) and reaches every tool in one of three ways:
 
-**Missing for this to work:** building Compose `build:` services from source and importing the images; the SDK's test definitions and runner in languages other than Rust, and `System::from_compose` in the Rust one; the skill as a plugin. CI is skipped for now (see "CI mode"). (Done in M86: the folder, the version pin `hydo_version:`, regressions, the Rust test definitions and `cargo hydo`.)
+- `hydo init` writes the `hydo/` skeleton and a short section in the repository's `AGENTS.md` (the instruction file most tools read): "this repository is tested with hydo; before changing `hydo/`, run `hydo guide`".
+- `hydo guide` prints the skill's instructions, so any tool can be told "run `hydo guide` and follow it"; `hydo guide <topic>` prints one reference page and `hydo guide manifest` the schema.
+- `hydo skill install --agent claude|codex|cursor|copilot|gemini|all` copies the skill where the tool discovers skills by itself: `.claude/skills/` for Claude Code, `.agents/skills/` for Codex, Cursor, GitHub Copilot and Gemini CLI (or `--user` for the home directory, `--to DIR` for any other place). Vercel's `skills` CLI (`npx skills add`) is a widely used alternative that installs into the same directories.
+
+**Missing for this to work:** building Compose `build:` services from source and importing the images; the SDK's test definitions and runner in languages other than Rust, and `System::from_compose` in the Rust one; release builds that ship every feature the skill describes (HISTORY Milestone 93, "Not done"). CI is skipped for now (see "CI mode"). (Done in M86: the folder, the version pin `hydo_version:`, regressions, the Rust test definitions and `cargo hydo`. Done in M93: the skill in a vendor-neutral format, `hydo init`, `hydo guide`, `hydo skill install`.)
 
 ### Code first (decided, 2026-10-24)
 
