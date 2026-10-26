@@ -18,7 +18,7 @@ the user guide; it is shipped inside the release.
 | `hvx/onboard/`, `hvx/explore/`, `hvx/hydo_assert_*` | `hydo-build`, the guest init, the manifest format, `explore.py` and the modules it imports |
 | `examples/redis/` | the Redis example, with its arm64 binaries under `files/` (works offline) |
 | `examples/ledger-spin/` | the busy-wait example (`hvx-mac/explore/examples/ledger-spin`), with `bin/spin_load` and `bin/spin_count` (static arm64, `hvx-mac/spin/spinvar.c`; `$HYDO_SPIN_BIN` when filling `assets/`) |
-| `skill/hydo-onboard/` | the Claude Code skill that writes a project's `hydo.yaml` |
+| `skill/hydo-onboard/` | the onboarding skill (Agent Skills format, any AI tool) that writes a project's `hydo/` folder; `hydo guide`, `hydo skill install` and `hydo init` read it (`hvx/onboard/hydo_agents.py`) |
 | `install.sh`, `QUICKSTART-mac.md`, `VERSION`, `SHA256SUMS` | |
 
 ## How `hydo build` works without Linux
