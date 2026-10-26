@@ -4,6 +4,11 @@ hydo has two backends and two ways to build. Check this table before using a fea
 build --check` validates the schema only, and the full `hydo build` refuses a feature the
 backend lacks. State of hydo 0.1 (2026-10-26).
 
+The `hydo/` folder (the test composer) needs a release that contains
+`hvx/onboard/hydo_composer.py`; release tarballs built before 2026-10-24 lack it and fail with
+"No module named 'hydo_composer'". `hydo guide`, `hydo skill` and `hydo init` need a release
+that contains `hvx/onboard/hydo_agents.py`.
+
 - **Linux release** (`hydo` from `hydo-linux-0.1.0`): x86_64 guests on an Intel VT-x machine.
 - **Mac release** (`hydo` from `hydo-mac-0.1.0`): arm64 guests on an Apple Silicon Mac.
 - **hydo's repository on x86_64 Linux**: `hvx/onboard/hydo-build` with the helper programs built
