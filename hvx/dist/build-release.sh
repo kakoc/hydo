@@ -120,7 +120,10 @@ for y in hydo.yaml hydo-netem.yaml; do
       -e "s#^\\#   HYDO_SEEDRNG=.*#\\#   hydo build $y#" \
       "$TOP/hvx/onboard/examples/redis/$y" > "$REL/examples/redis/$y"
 done
-cp -R "$TOP/.claude/skills/hydo-onboard" "$REL/skill/"
+# the onboarding skill (an Agent Skills folder, agentskills.io): `hydo guide`, `hydo skill install`
+# and `hydo init` read it from skill/hydo-onboard (hvx/onboard/hydo_agents.py)
+cp -R "$TOP/skills/hydo-onboard" "$REL/skill/"
+cp "$TOP/hvx/onboard/hydo_agents.py" "$REL/hvx/onboard/"
 cp "$D/install.sh" "$REL/install.sh"; chmod 755 "$REL/install.sh"
 cp "$D/QUICKSTART-linux.md" "$REL/README.md"
 echo "$VERSION" > "$REL/VERSION"

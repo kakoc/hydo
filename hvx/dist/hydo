@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """hydo -- deterministic fault testing on an x86_64 Linux machine with VT-x (the hvx backend).
 
+    hydo init    [--dir DIR] [--name NAME]         start a repository's hydo/ folder and its AGENTS.md section
+    hydo guide   [TOPIC | --list]                  print the onboarding guide for any AI tool (the skill's SKILL.md)
+    hydo skill   install --agent claude|codex|cursor|copilot|gemini|all [--user] | --to DIR
+                                                   copy the onboarding skill where an AI tool reads skills
     hydo doctor                                    check this machine and the installation
     hydo module build|load|unload|status [--name NAME] [--dry-run]
                                                    build and (un)load the hvx kernel module
@@ -914,6 +918,10 @@ def cmd_doctor(argv):
 def main():
     cmds = {"compose": cmd_compose, "build": cmd_build, "run": cmd_run, "repro": cmd_repro, "explore": cmd_explore,
             "report": cmd_report, "doctor": cmd_doctor, "module": cmd_module, "save": cmd_save}
+    if len(sys.argv) >= 2 and sys.argv[1] in ("guide", "skill", "init"):
+        sys.path.insert(0, ONBOARD)
+        import hydo_agents      # shared by both releases: hvx/onboard/hydo_agents.py
+        return hydo_agents.run(sys.argv[1], sys.argv[2:], R)
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         print(__doc__)
         return 0 if len(sys.argv) >= 2 and sys.argv[1] in ("-h", "--help", "help") else 2
