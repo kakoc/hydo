@@ -1,0 +1,286 @@
+# hydo — project context & handoff
+
+This file is the instruction file for any coding agent working in this repository (the AGENTS.md convention, https://agents.md). `CLAUDE.md` only imports it, so every tool reads the same text. Update this file, never `CLAUDE.md`.
+
+`hydo` is a **deterministic hypervisor**. It runs software so that, given the same inputs, execution is bit-for-bit identical every time, which makes record/replay, snapshots and branch-from-snapshot possible. The project has two engines: the original Rust KVM monitor (`src/`), which hit a hard KVM wall at `RDTSC`, and **hvx**, our own VT-x hypervisor kernel module (`hvx/`), which owns the VMCS and is where all current work happens. There is also an Apple Silicon backend (`hvx-mac/`) built on Hypervisor.framework.
+
+- `README.md` describes the architecture, the paravirtual ABI, the clock strategies and the verification model.
+- `hvx/HISTORY.md` holds the full history: every milestone section (1–69 and later), the old roadmap for booting Linux as L2, and the old long "Key files" list. Look up a milestone there by its number for details, evidence and older fingerprints.
+
+## How to record new work (follow this)
+
+New milestone sections go to the END of `hvx/HISTORY.md`. Each new milestone also gets a one-line entry in the "Milestone index" below and an update of "Current state" (and "Open items" if anything stays open) in this file. Keep this file short: details, evidence and superseded numbers belong in `hvx/HISTORY.md`, and this file lists only current values.
+
+## Machines and how to run
+
+### The bare-metal machine (where hvx runs)
+
+- A Xeon E3-1270 v6 (not hybrid, working PMU), 32 GB, Ubuntu with kernel 6.8, passwordless sudo, main tree at `~/hydo`. hvx is loaded on the host itself; there is no nesting (M33). `AGENTS.local.md` says how to reach it; scripts use `on_bare_metal` from `machines.local.sh`.
+- If the bare-metal machine wedges, only the user can restart it. Ask the user.
+- Module locking: every VM run goes through `~/bin/hvx-run` (a shared flock on `~/.hvx-module.lock`), and every module reload goes through `~/bin/hvx-reload` (exclusive). Use them so that a reload never pulls the module out from under another session's run (M35).
+- Regression runner: `hvx/deploy-metal.sh [load] [flagships]` runs from the Mac. It syncs the userspace sources (never `hvx.c`/`hvx_abi.h` unless `load` is given), compiles on the box against the box's `hvx_abi.h`, runs the tests through `hvx-run`, and checks each result against its baseline. Today it reports "ALL PASS (31 checks)". `load` also rebuilds and reloads the main module; `flagships` also runs every real-service verify.
+- The main module loaded now is the M68+M69 build: srcversion `CA5BF8BF2A0D66B312A68EF`; its load message ends "freeze in SMM yes".
+- Guest images built on the build machine are copied with rsync into the bare-metal machine's `~/hydo/build/` (`AGENTS.local.md` says how). Results of past runs live under `/var/tmp/m<NN>-*` on the bare-metal machine.
+- Other sessions use their own trees on the bare-metal machine (for example `~/hydo-tj`, `~/hydo-smp2`, `~/hydo-avx`) so that they do not overwrite each other's binaries. Use your own tree when another session is active.
+
+### The build machine (guest images only)
+
+- The build machine, NixOS, kernel 6.6.35, 24 cores, 31 GB. We have no root there. It is the only machine with nix, so every guest image (`build-linux.sh`, `build-stack.sh`, `build-kafka.sh`, `build-mysql.sh`, `hvx/bench/build-bench*.sh`, `hydo-build`, the Mac guests) is built there and then copied to the bare-metal test machine.
+- The pinned toolchain (static musl gcc, busybox, static Redis, `mke2fs`, `libfaketime` and others) is documented in `hvx/BUILD-PINS.md`; GC roots are in `~/hydo-gcroots`. Images built without these pins are not reproducible (M61).
+- The disk fills up (340 GB, 99% full on 2026-10-21). Run `df -h ~` before building. One stack image needs about 6 GB at its peak.
+- `./dev.sh "<cmd>"` rsyncs the tree to `~/hydo/` on the build machine and runs the command there; it is used for the Rust KVM monitor (Linux only, Rust 1.86; `kvm-ioctls = "0.17"` must pair with `kvm-bindings = "0.8"`).
+
+### The Mac backend
+
+`hvx-mac/` runs deterministic arm64 Linux on an Apple Silicon Mac (an M2 Pro, macOS 26.4.1, no root needed) through Hypervisor.framework: the VMM `hvm.c`, the explorer server `hvmx`, and guest kernels built with `build-guest.sh`. See `hvx-mac/PROBE.md`, `BOOT.md`, `VIRTIO.md` and `hvx-mac/explore/README.md` (M48, M51, M53, M57).
+
+### Removed tooling
+
+The nested-VM (L1) tooling was removed on 2026-10-20: `hvx/run-l1.sh`, `hvx/deploy-hvx.sh`, `hvx/deploy-resume.sh`, `hvx/cloud-init/`, `hvx/kafka-once.sh`, and the `hvx/run-*-demo.sh`/`run-fuzz*`/`run-spread*` runners. Milestones 1–32 in `hvx/HISTORY.md` describe that era. The tooling can be restored from git (`git show 2c04001:hvx/run-l1.sh`) if a nested VM is ever needed again, for example when no bare-metal test machine is available or to test a host without a usable PMU.
+
+## Safety and coordination rules (still in force)
+
+- **Never load a kernel module on the build machine,** and never attempt `sudo`, `insmod` or `rmmod` there. We have no root there, and the host is shared with other people's workloads. If something there needs root, stop and ask the user.
+- **The main `hvx.ko` on the bare-metal test machine is shared by several sessions.** Reload it only through `~/bin/hvx-reload` (or `deploy-metal.sh load`), and coordinate with other sessions before doing so. Develop module changes on a side-by-side module with its own device name (for example `hvx/avx/build-hvxavx.sh` gives `/dev/hvxavx`; `race/side-metal.sh` runs the regression suite against a side module). Two modules can be loaded together because each run's VMXON…VMXOFF section is non-preemptible (M40). Merge into the main module only after the side module passes the full suite and the pinned reproducers.
+- **After any change to `hvx_abi.h`, rebuild every userspace binary** against the new header. The snapshot struct grew in M68, so binaries built against an older header are wrong.
+- **Never run `pkill -f <pattern>` or `pgrep -f <pattern>` through a remote shell when the pattern also matches the remote command line itself.** `pkill` then kills your own session, and a wait loop such as `until ! on_bare_metal 'pgrep -f "<pat>"'; do sleep; done` never finishes. Match with `pgrep -x`, a pid file or a done-marker file instead, or put the `pkill` into a script whose path does not match.
+- **Every wait loop needs a timeout,** including the wait loops of agents you start.
+- **Build guest images one at a time on the build machine,** and copy each to the bare-metal machine before building the next, because the disk fills up.
+- **Delete only your own files.** The boxes are shared by several sessions. For anything else, ask the user and name the candidates. Safe-to-regenerate leftovers are `~/hydo/build/rootfs-*-root` trees and `*-ext4.img` / `*-data.img` intermediates.
+- **Stop your own background jobs by pid file, never by name.** On the shared box `pgrep -x <script>` matched another session's script with the same name and killed it (2026-10-24). Write each job's pid to a file in your own directory and kill that pid only.
+- **Keep existing fingerprints stable.** A new module feature must be opt-in and inert when off, so that every recorded baseline is unchanged; check this with `deploy-metal.sh` and the pinned reproducers before and after.
+
+## Language policy (decided by the user, 2026-10-24)
+
+- **The kernel module stays in C** (`hvx/hvx.c`). Reasons: most of its bugs were about hardware semantics and determinism, which Rust does not prevent; its core is VMX instructions and inline assembly that would be `unsafe` Rust anyway; and a Rust module needs a kernel built with Rust support and the matching compiler, which most distribution kernels lack, so users could not install it. Its safety net is testing: a KASAN + kmemleak test kernel and fuzzing of the ioctl interface (not built yet).
+- **User-space tools move to Rust.** Every NEW compiled user-space program is written in Rust, not C. An EXISTING C user-space program is rewritten in Rust when it next needs a substantial change, not as a separate project. Candidates, largest first: `hvx/hvx_explore.c` (the explorer engine, 1,289 lines), `hvx-mac/hvm.c` and `hvx-mac/explore/serve.c` (the Mac VMM and explorer server), `hvx/onboard/hydo_fc.c` (the freeze helper), `hvx/pt/*.c` (Processor Trace tools), `hvx/hydo_assert_report.c`.
+- **A rewrite must be byte-for-byte neutral:** the same fingerprints for the pinned reproducers (`2403499c9a3f8419`, `f87130453609a5d6`) and every recorded baseline the program produces, the same console and schedule formats, proven before the C version is removed. Guest-side programs whose bytes are inside recorded images (for example `hvx_seedrng`, pinned `c2a440c5…`) are NOT rewritten: a new binary would change every image and fingerprint.
+- **Memory-safe languages already in use stay** (Go for the stack and helpers, Python for the explorer and build scripts, shell in the guest); the policy is about replacing C, not about converting them.
+- **Unchanged C:** the hand-written module tests (`hvx/hvx_*_test.c`) and the verify harnesses stay in C while they only exercise the module's C ABI; rewrite one only when it needs a substantial change.
+
+## Current state
+
+### Linux determinism, clocks and the module
+
+- hvx boots real Linux 6.6.35 deterministically: two boots from scratch and every branch-from-snapshot reach a bit-identical full state (console, snapshot, guest RAM, disk). Current boot baselines: no-disk `7a5559028ffbf52c`, with-disk `36583d533d7c989b` (M34). Guest RAM can be up to 3 GiB, below the MMIO hole, and 3 GiB boots are identical; `hvx_bigram_test` checks every page of a 3 GiB guest (M28, M36).
+- The default clock counts VM exits: the virtual TSC advances by a fixed step per exit. The **PMU branch clock** (`HVX_VM_PMU_CLOCK`) counts the guest's retired conditional branches in hardware and gives a tick every period (default 2^20 branches, 2 ms of guest time) at an exact instruction (M33). Since M65 the branch counter is frozen while the firmware handles a System Management Interrupt; before that fix, SMIs (which fwupd causes) shifted ticks and caused rare fingerprint differences. Without `tsc=reliable` on the guest command line or the PMU clock, a heavy guest can livelock.
+- VM flags (`struct hvx_config.flags`), all off by default: bit 0 `IDLE_HEARTBEAT` (a synthetic tick when the guest idles with nothing armed, M27), bit 1 `X86_64_V2` (M31), bit 2 `PMU_CLOCK` (M33), bit 3 `PAUSE_EXIT` (every `PAUSE` exits and moves the clock, M34), bit 4 `PT_TRACE` (M40), bit 5 `SMP_SCHED` (M66), bit 6 `SMP_BOOT` (M69), bit 7 `X86_64_V3` (AVX/AVX2/FMA/BMI and XSAVE for x87, SSE and AVX only, M68).
+- Timing controls for exploring thread interleavings: seeded tick jitter `HVX_SET_TJITTER` (M43), a shorter tick period and inserted extra ticks `HVX_SET_XTICK` (M49), a power cut at the k-th disk FLUSH `HVX_SET_FLUSHCUT` (M56), and the disk's volatile write cache saved and restored through `HVX_GET/SET_UNSYNC` (M43 addendum).
+- Code coverage: Intel Processor Trace of the guest (`HVX_SET_PT`, tools in `hvx/pt/`, libipt) gives exact per-instruction coverage; tracing on or off gives identical fingerprints (M40).
+- The Rust KVM monitor (`src/`) has its own baselines, `det64` = `ed882eafa4643e09` and `timer64 --timer 200 --insn-clock` = `0b3b7c95eadbcfae`. It cannot get past the `RDTSC` calibration in a Linux boot, because stock KVM does not expose RDTSC exiting to userspace; that is why hvx exists.
+
+### Devices and fault injection
+
+- Devices: a 16550 serial port with input (`HVX_PUT_INPUT`), an emulated x2APIC and IOAPIC, a virtio-blk PCI disk (device 3, MSI-X, a page-array image of up to 4 GiB mapped zero-copy into userspace) and a virtio-net PCI device (device 4, scripted receive with `HVX_PUT_RX`, captured transmit with `HVX_GET_TX`). Every device is inert unless attached (M18–M24, M28).
+- Disk faults (`HVX_SET_FAULT`) are a pure function of a seed and the request index: delay, I/O error, lying-disk drop, reorder, torn write, and `DROP_UNFLUSHED`, a faithful power loss in which writes held in a volatile cache are lost unless flushed (M22, M26). Network faults (`HVX_SET_NET_FAULT`) are drop, delay, corrupt, duplicate and reorder (M24).
+- Current hand-written test fingerprints (all in `deploy-metal.sh`): iso `7e586473f6e494d7`, pci `3f95ef833747f3ec`, fault `91170d4dbf101c5b` / `88f680fc22cc9bb0` / `9090286f3fc59682`, net `0e2b7acf2f4f94ee`, net-fault `883a00eb6a14a6f0` / `37490fb78da33064` / `40659aabb208aaa0`, bug_f0 `1083e400458728ff`, avx `3bb428a134ce542a`.
+
+### Real-service flagships
+
+Each flagship boots an unmodified service, runs a workload and an oracle, and passes four checks: without faults the result is correct; with the durable setting the data survives a power cut; with the relaxed setting a power cut loses an acknowledged write, and replay and branch reproduce the loss exactly; and different fault seeds give different, reproducible results. The values below are for the original images. The images rebuilt with the pinned toolchain (`*-pin-disk.img`) have their values in `hvx/REBASELINE.md` (M61), and new comparisons should use those.
+- hydokv (M25): `62ae248b01bf3f70` / `7ade5f37d16a347c` / `832cc63372b1458d`. SQLite (M26): `1c072036545a7e87` / `7a4ab31fddabe4cc` / `dc04dbe3b49624df`, contrast `2d96a0c788c1fbba`.
+- Redis (M27, values from M34): SANITY `634c64b7c583b6df`, F1 `40e98d280d28a492`, F2 `789580e15b179115`, F3 `2ec726ec7c0e50a7` / `c95cb2090b8db26c`. Two services (M30, values from M34): SANITY `e95beaac20a0f91e`, F1 `bd0308f054ca0122`, F2 `fc7d9925ff0997db`, F3 `aed9728c9633817f` / `5c8ec447620131cd`.
+- ext4 read-only root (M29, value from M34): `77909a097a8eee08`. JVM with the `c1sync` JIT (M31, M32, value from M34): `025b276a0215a7a6`. The JIT is deterministic under hvx (M32).
+- Kafka 3.5.0 (M35, `kafka-disk.img` `ba27661b84dd1e8c…`, PMU clock): SANITY `baae8a071a878505`, F1 `ab40506e09bd7d9b`, F2 `19a591dfde5f04cb`, F3 `d9211628c9dc354f` / `d005d3e6403f454a`. The two `tsc=reliable` configurations also pass; their values are in M35.
+- MySQL 8.4.10 (M36, `mysql-disk.img` `404bf87d10ec5422…`, PMU clock): SANITY `e73f52739a634165`, F1 `8be5987266ccb7aa`, F2 `c2ef1c3a1bfd1b86`, F3 `5b5905ac30da7da9` / `8749bd93d306cb05`. The harness sets `HVX_VM_PAUSE_EXIT`.
+
+### The four-service stack
+
+- One guest runs unmodified MySQL 8.4.10, Kafka 3.5.0 and Redis 7.2.4 plus our gRPC order service (`hvx/stack/main.go`; older notes call it the "front door"). Each `Place(id)` writes MySQL, publishes to Kafka with an idempotent franz-go producer, writes Redis as a best-effort cache, and only then acknowledges. Only one `Place` per order id runs at a time, and the "send started" state lives in MySQL (`published` 0 / 2 / 1) (M35, M37, M39, M50). Built by `build-stack.sh`; verified by `hvx/hvx_stack_verify.c` (`mode=all`, `mode=fault`).
+- MySQL runs with the binary log on and `sync_binlog=1`, and Kafka with `log.retention.ms=-1` (M63). These two settings fix the bugs found in M58 and M63.
+- Current baselines (M77, image `stack-nq-disk.img` `161996bb…` = the M63 recipe plus the M71 netem drain, one vCPU): SANITY `2235f9d76a592a07`, F1 `815cc64346e728fc`, F2 `32024d0b245aff3c` (the expected VIOLATION from MySQL's relaxed window, order 8; durable `7323951e90d21b4f`), F3 `96e2e7ddb963ee66` / `e8c16382540eba2e`. The eight per-fault scenarios (`mode=fault`; kills and netem, all OK 30/30) are in `hvx/REBASELINE.md` §7.2.
+- On 2 vCPUs (M79, same image `stack-nq`, `HVX_VCPUS=2`; supersedes the M69 values of `stack-binlog-ret`, which that image still reproduces): SANITY `d1a5ee3ccea87dac`, F1 `7fb7b85c69257f2b`, F2 `809c8292d95b638a` (order 8; durable `233e0afedb35fe4e`), F3 `3a074084d6fbeaa5` / `c008a3f9a3d961e3`. The eight per-fault scenarios, all OK 30/30: kill mysql@10 `5787e8c2ab91c8dd`, kafka@10 `33611b4de52bd93d`, kafka@20 `70f2262407cef26e`, redis@10 `124cc3dad8b93dfb`, net mysql `c07c4bbbcde6d0d9`, net redis `962604a54396c17c`, net kafka `cbdbd77370547093`, net kafka MySQL relaxed `51d0cedb269b4693` (M79, M81). Details in `hvx/REBASELINE.md` §7.6.
+
+### The explorer
+
+- `hvx/hvx_explore.c` boots a guest once, snapshots it at "root mounted" (S0) and "provisioned" (S1), and starts each schedule in a fresh VM restored from S1; after a power cut, only the flushed data disk goes into a recovery VM restored from S0. `hvx/explore/explore.py` generates schedules from seeds, runs them on a worker pool, re-runs every failure (the fingerprints must match), shrinks one failure per signature, and writes `report.md`, `runs.jsonl` and `shrink.jsonl` (M38). Run it on the box as `cd ~/hydo/hvx/explore && python3 explore.py --seeds 1-200 --out /var/tmp/explore/run1`. Reproduce one schedule as `~/bin/hvx-run sudo ./hvx_explore one <bzImage> <initramfs-kafka> ~/hydo/build/<image> <outdir> "<schedule>"`.
+- **Current explorer image:** `explore-binlog-ret-xr-nq-disk.img` (`4a6a8493…`, in `~/hydo/build` on the box, M71: the M67 image plus the netem drain). On it, 40 swarm schedules with `--new-faults --durable-only` give 0 failures. Its predecessor `explore-binlog-ret-xr-disk.img` (`b7975f6b…`, M67) gave 100 OK for `--strategy process --more-faults --durable-only`, seeds 1–100.
+- **Pinned reproducers** (check them after every module change): `disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24` gives `2403499c9a3f8419` (a VIOLATION) on `explore-disk.img` (the old order service) and `f87130453609a5d6` (OK) on `explore-fix-disk.img` (M38, M39).
+- Strategies: `random` (the default), `swarm` (M42), `swarm-pos` and `process` (a Jepsen-style fault process, the best so far, M56), `portfolio.py` (M44), `guided.py` and `richguided.py` (coverage-guided, negative results, M41, M44), `abranch.py` (negative, M45), and `--sweep kill|cut|net|killcut|pause|clock|oneway|frontkill|tail|depth1|freeze|protocol` (`protocol`: every `H=` rule kind on every fake/proxy target, one step at a time, M89; `freeze`: every packet point of a traced run as one `F=` schedule, options `--fc-*`, `--sweep-every`, `--sweep-with`, M76). Options: `--timing` (tick jitter, M43), `--new-faults` (pause, clock jump and one-way loss, M46), `--durable-only`, `--concurrency` (concurrent and duplicate clients, M50), `--more-faults` (timed kills `X=` and k-th-flush cuts `cf=`, M67), `--preempt` (M49; on the Mac it gives PCT points, M57), `--buggify` (M56), `--vcpus N --turns` (M69), `--cpu v3` (M68), `--ram-mib` (M59), `--manifest` (M52), `--backend hvm` (the Mac, M51), `--knob-rule` (M56), `--protocol-faults` (`H=` on fakes and proxies, M89) and `--branch` (M43).
+- Schedule tokens. Guest side (after `|`): `K=` kill, `P=` pause, `N=` netem, `O=` one-way loss, `C=` power cut, `T=` clock jump, `Q=` concurrency, `X=` timed kill, `B=` BUGGIFY, `H=` protocol fault on a fake or proxy (M89), and `M=` / `R=` durability knobs. Host side (before `|`): `disk=` and `dseed=`, `tj*` tick jitter, `pp=` / `xt*` preemption, `cf=` flush cut, `rb=` run budget, `q=` / `qs=` turn lengths, and `pct*` (Mac only).
+- The main lesson of M41–M57: where and in what combination faults land matters more than how the next schedule is chosen. The fault process, BUGGIFY, and timed kills with flush cuts find what the guided strategies did not.
+- Assertions with `always`, `sometimes`, `reachable` and `unreachable` properties (`hvx/ASSERTIONS.md`, the Go SDK in `hvx/stack/hydoassert`, `hydo_assert.sh` for shell, and the report tool `hydo_assert_report`) include `eventually` liveness properties (M38, M59).
+- The bug benchmark `hvx/bench/` (M54, M56, M62, M67) has defects d0–d12, each patched into a copy of the order service and each with a confirmed trigger. The process strategy with `--more-faults` finds every defect except d11 in most repetitions; d11 (the M58 window) is found rarely.
+
+### Onboarding projects
+
+- A project is described by one `hydo.yaml` (`hvx/onboard/MANIFEST.md`). `hvx/onboard/hydo-build` compiles it into a guest image with one generic init (`hydo-init.sh`) that starts the services, applies fault tokens by service name and runs the invariants (M47). The `hydo-onboard` skill writes a manifest for a new project.
+- Features: services with readiness checks and crash recovery; faults that reach a service's whole process tree (M52); `params:` (M52); `eventually` liveness invariants (M59); Docker/OCI images by digest with `image:` (M59); `guest.ram_mib`, 256–3072 MiB on Linux and 256–4096 MiB on the Mac (M59); per-service `addr:` with link faults between services (M60, x86_64 only); `guest.cpu: v3` (M68, x86_64 only); and `hydo-build --arch arm64` for the Mac (M51).
+- **gRPC faults (M90, merged 2026-10-24 on top of M89):** a proxy with `protocol: grpc` is a streaming HTTP/2 proxy (`hvx/onboard/world/grpc.go`); `H=` rules `drop`, `status=<NAME>[,effect=yes]`, `delay=`, `reset[=conn]`, `cut=`/`hold=` with `dir=`, selected by route, `rpc=`, `call=` or `p=`/`seed=`; `kind=call` records say what the client got and whether the server acted (`hydo-world check calls`); `explore.py --grpc-faults`. Example `examples/stack-grpc` (images `explore-ob-stack-grpc-{cur,old,planted}`): `H=orders.place@10-13:drop` passes on cur (`c1bef5ef80a9b9d7`) and old (`4b0df43be2cb984b`) and duplicates order 10 on planted (`65c85e83b3421ba0`).
+- **Generated gRPC drivers (M91, branch `grpc-drivers`, `hvx/onboard/MANIFEST.md` "gRPC services"):** `hvx/onboard/hydo-grpc-gen <proto dir> [--hints hints.yaml] --out <dir>` (or `--descriptor-set`, `--reflect host:port`) writes the schema and plan, one static client `hydo-grpc` (`hvx/grpcgen/`, Go 1.26.5), one test-composer `parallel_driver` per RPC (`drive`, requests from the entry's `HYDO_SEED`) and a starter `test:` section; `steps`/`retry`/`call` for numbered steps, end-of-run retries and invariants. Valid random requests from a seeded stream (hints: ranges, choices, lengths, unique ids, `from: <Rpc>.<field>`), per-attempt deadlines, retries of unknown outcomes with the same request, outcomes ok/failed/unknown from the gRPC status, `HYDO-HIST grpc` records. Demo `hvx/grpcgen/demo` (orders on Redis, planted idempotency race): composer exploration 9 of 40 fail, shrunk to `disk=none dseed=d7071eb1f9d436b9 | run P=redis@16+11 W=5764a73c,p1,q2,r200,n3,x0.2.6.13.26-27.34.46-47,o0.2-3` (`8617208fb61b2a96`, also from a fresh boot); fixed 0 of 40. The stack's front door has a `.proto` (`hvx/stack/proto/hydo/order.proto`); `examples/stack/hydo-grpcgen.yaml` replaces `hydostack place/retry` with the generated driver (OK 30/30 `2c500db081389fdc`; `K=front@10+2` `58e95bf8114ad6dc`). Images in `~/hydo-grpcgen/build` on the box.
+- **Docker Compose import (M84):** `hvx/onboard/hydo-compose <docker-compose.yaml>` (or `hydo compose`, Linux and Mac releases) writes a starting `hydo.yaml`. Images are pinned by digest through skopeo, recorded in `hydo-compose.lock.json` and fetched by `fetch-images.sh`. Each service gets its own `addr:`, and the Compose names resolve through `/etc/hosts`. The importer maps healthchecks to readiness and volumes to the data disk, and it writes a TODO workload and TODO invariants for the `hydo-onboard` skill to fill in. Image services gained `mounts:` (bind, volume with copy-up, tmpfs). Example `examples/compose-voting` (Docker's voting app, 5 services, image `5d49ad99…`, 2048 MiB): `disk=none dseed=1 | run` OK `bf06c27f2ef25df6`, `K=worker@5+5` OK `ccb3d9b71cb43d7f`, `C=12` VIOLATION `afaddce3a39c713e` (the app acknowledges votes held in a Redis list that has no persistence), each twice identical.
+- **Store readers (M88):** `hydo-read <store> <args>` prints MySQL/PostgreSQL rows, a Kafka topic, Redis keys or etcd keys as sorted JSON Lines (exit 2 = could not read), and `hydo-check <check>` compares two readings (subset, equal, exactly-once, disjoint, no-duplicates, count, never-wrong-value) with one explanation line and the invariant exit codes. One static Go binary (`hvx/readers/build.sh`), staged by `hydo-build` only when a command (also `test:` entries and `hydo/` folder files) calls it. Examples `stack/hydo-read.yaml`, `miniflux/hydo-read.yaml`, `redis-composed-read/`; images `explore-ob-stack-read-{old,fix}`, `explore-ob-miniflux-read`, `explore-ob-redis-composed-read` in `~/hydo-read/build` on the box; the stack's pinned reproducer is `3c15d7ff5d519483` (VIOLATION order 11) / `d94e97cb016a49ca` (OK). Native tests: `hvx/readers/native-test.sh` (build machine).
+- Examples in `hvx/onboard/examples/`: redis, redis-ram, redis-oci, stack, miniflux (M52), etcd (M60), avx2 and restate-oci (M68), node-kv (M80, Node.js with the JavaScript SDK; Mac image `explore-ob-node-kv-arm64`, `disk=none | run` `82b15f75dbeac422`, `disk=cut | run C=12 S=never` VIOLATION `df57c744f7e40b68`), and rust-kv (M82, Rust with the Rust SDK, static musl via rust-lld; Mac image `explore-ob-rust-kv-arm64`, `disk=none | run` `64de839903b96e45`, `disk=cut | run C=12 S=never` VIOLATION `6f29e36a1cd516be`; x86_64 image `explore-ob-rust-kv-v2` on the box from an earlier commit), and python-kv (M83, Python with the Python SDK; Mac image `explore-ob-python-kv-arm64`, `disk=none | run` `bfe5a4e04ca43a71`, `disk=cut | run C=12 S=never` VIOLATION `74debdd69ee7af08`).
+- Assertion SDKs: Go (`hvx/stack/hydoassert`), shell (`hydo_assert.sh`), JavaScript/TypeScript for Node.js (`sdk/js`, M80; `sdk/js/test/conformance.sh` proves byte-identical output to the Go SDK with Go 1.26.5) and Rust (`sdk/rust`, crate `hydo-assert`, std only, M82; call-site macros with file:line and `declare!`, registered before `main`; `sdk/rust/tests/conformance.sh` proves byte-identical output to the Go SDK with Go 1.26.5 and 1.27.3). A manifest with `buggify: true` turns the schedule token `B=` into the SDKs' BUGGIFY seed, and `explore.py --buggify` keeps `B=` for it (M80). Python (`sdk/python`, distribution `hydo-assert`, import `hydo_assert`, standard library only, Python 3.8+, thread- and asyncio-safe; M83, branch `python-sdk`, not merged) is byte-identical too: `sdk/python/tests/conformance.sh` (Go 1.26.5, eight BUGGIFY configurations).
+- **The test composer** (M86, branch `test-composer`, `hvx/onboard/MANIFEST.md` "The test composer"): a plan's `test:` (or the `hydo/` folder next to `hydo/hydo.yaml`) lists commands by kind prefixes (`first`, `parallel_driver`, `serial_driver`, `singleton_driver`, `anytime`, `eventually`, `finally`) and checks (`final`, `always`, `eventually`) as argv lists; `hydo_composer.py` expands them into the generic init's workload, provisioning and invariants (`hydo-init.sh` unchanged), the guest's `/etc/hydo/compose.sh` (repository file `hydo-composer.sh`) runs rounds of commands from `W=<seed>,p<at once>,q<per round>,r<ms>[,n,t,x,o]`, and `explore.py` draws and shrinks `W=` for such plans only (manifests without one: identical schedules and images). Driver exit status 100 = violation. `hydo repro --regressions` / `hydo save` on both CLIs; `hydo_version:` and `format: 1` in the plan; `hvx/VERSION` is the engine version. Rust test SDK `sdk/rust-test` (crate `hydo-test`: `system()` builder, `#[driver(..)]`, `#[check(..)]`, `<bin> plan` on the host, `cargo hydo`). Example `examples/redis-composed/` (and `-rs`, and the Mac copy under `hvx-mac/explore/examples/`): images in `~/hydo-ctest/build` on the box (not `~/hydo/build`); Mac `W=0000002a,p4,q2,r100` on the racy build `1d0896ac2f10e3d8` (VIOLATION), on the atomic build `c87537f26336393e` (OK); x86_64 racy `f6ee27e92e44cb8b`, atomic `bfb2bc7383654479`.
+- **History checks (M87):** a manifest's `checks:` (`type: linearizable` with `model: register|cas`, or `type: list-append` with a `consistency:` level), or a composer plan's `test.checks` of kind `linearizable` / `list_append` (`hydo/checks/linearizable_<name>` = its read-back), make the workload record operations with `hydo_hist` (Go `hvx/stack/hydohist`, Rust `hydo_assert::history`) and the host check them after the run (`hvx/history/hydohist.py`, called by explore.py's workers, `hydo run` and `hvx/history/hydo-check`); the verdict names a sound witness. Examples `examples/redis/hydo-hist.yaml`, `examples/etcd/hydo-hist.yaml`, `examples/redis-composed-hist/` (images `explore-ob-redis-hc`, `explore-ob-etcd-hc-3.5.5/3.5.6`, `explore-ob-redis-composed-hc`; results `hvx/history/RESULTS.md`).
+- **Fake outside services and protocol faults** (M89, branch `fakes-protocol-faults`, `hvx/onboard/MANIFEST.md` "Fake outside services and protocol faults"): `fakes:` declares fake HTTP (and cleartext-HTTP/2 gRPC) services with routes, templated answers, idempotency keys and webhooks back to the system; `proxies:` puts a fault proxy (`tcp`, `http`, `grpc`) in front of a real service. One static in-guest program, `hydo-world` (`hvx/onboard/world/`, Go standard library only, `world/build.sh`, unit tests `go test`), serves them and records every request (`/tmp/hydo/world.log`; a summary goes to the console before the verdict). Schedule token `H=<target>@<from>-<to>:<rule>,...` (`status=`, `retry-after=`, `delay=`, `drop`, `reset`; webhooks `dup`, `reorder`, `late=`, `lost`; `p=`, `effect=yes|no`), decided by a hash of the token and the request's index. `hydo-world check at-most-once|exactly-once|effect-for-acked|none-after` reads the record as an invariant; `hydo-world event <name> <ref>` adds the system's own events. At a power cut the world is frozen and carried into the recovery boot on the acknowledged-ids line (`hvx_explore.c`'s recovery command grew from 512 to 3584 bytes). Spliced in only for manifests with the new keys (`hydo-init-fakes.sh`); every other image builds byte-identically. Example `examples/shop` (planted bug: a new idempotency key per charge retry): found blind at process seed 46 of 100, shrunk to `H=payments.charge@0-1:drop` (buggy `56657683c9287f08`, fixed OK `b7417498e0a9ad72`) and `H=payments.charge@6-9:reset,p=50`; the fixed image passes the same 100 schedules and all 228 points of `--sweep protocol` (the buggy one fails exactly the 48 "effect without answer" points); control `examples/redis/hydo-proxy.yaml` 40 of 40 OK. Images in `~/hydo-fakes/build` on the box (`explore-ob-shop2-{buggy,fixed}`, `explore-ob-redis-proxy`). x86_64 only. gRPC-level faults are extended on branch `grpc-faults`.
+- Current images of the examples with network or link faults (the M71 netem drain, pinned tools; M77): `explore-ob-stack-{fix,old}-nq`, `explore-ob-miniflux-nq`, `explore-ob-etcd-{3.5.5,3.5.6,3.6.8,3.6.9,3.6.15}-nq`; their fingerprints are in `hvx/REBASELINE.md` §7 and the examples' `RESULTS.md`. On etcd 3.5.5-nq the 14685 bug is still found (17 of 100 explorer schedules); M60's second reproducer no longer fires, but `disk=none dseed=1 | run K=etcd1@10+1 P=etcd3@26+1` shows the second symptom (a client's revision going back, `0470512bb297c87f`) and passes on 3.5.6-nq (`63e112769072c0c1`) (M78).
+
+### The Linux release
+
+- `hvx/dist/` packages the bare-metal backend like the Mac release: `build-release.sh` (assets pinned in `assets.sha256`, fetched once from the build machine) gives `hydo-linux-0.1.0.tar.gz` (45 MB); `install.sh` compiles `hvx_explore` and the module on the user's machine; `hydo doctor|module|build|run|repro|explore|report` drive the existing tools, and runs/reloads share the box's `~/.hvx-module.lock` (M75).
+- `hydo build` needs no Nix: bundled busybox, static helpers, guest tc/iptables closures and modules, and e2fsprogs + libfaketime run with their own glibc loader. Images are the same bytes on any machine: frozen build clock read in UTC+4 (`TZ=UTC-4` on every faketime call; since M81 hydo-build and the hand-written build scripts set it themselves, so a plain build in any zone matches the build machine), no host `/etc/mke2fs.conf`, umask 022, root inodes owned by 0:0.
+- Runs need no sudo when the user can open the device: `hydo module udev install` (or `install.sh --udev`) installs an optional udev rule giving `/dev/hvx` to group `hydo`, mode 0660; `libexec/hvx-run` then drops sudo. Anyone in that group can run guests through the kernel module, so it is for people one would give sudo. Not installed on the bare-metal test machine (M81). Release quickstart on the box: Redis image `8c828d3e…`, clean OK `c513f10aee733aae`, `disk=cut | run C=12 R=everysec` VIOLATION k:2 `ecef6f8fe6c39ec0` (M75).
+
+### Several virtual CPUs
+
+- With `HVX_VM_SMP_SCHED` and the PMU clock, one `HVX_RUN` runs every vCPU in turns of exactly Q guest branches (or seeded lengths), on one shared clock, and stops only at clean points. `HVX_GET/SET_SCHED` carry the scheduler state (M66).
+- With `HVX_VM_SMP_BOOT`, real Linux starts the other CPUs with INIT and STARTUP IPIs and boots on 2, 3 and 4 vCPUs, identically across boots and branches: 2 vCPUs `6584c954c2839491`, 3 `e1a2bb0dd744a9ab`, 4 `1dfafae6887e3a01` (`hvx/hvx_smp_boot_verify.c`, M69). Device interrupts are routed by destination.
+- Tests in `deploy-metal.sh`: `hvx_sched_pmu_test` (snapshot `73a465516c4e0094`), `hvx_sched_race_test` (grid `8cb7c61a2393f44e`), `hvx_sipi_test` (`eef5c1ebd4df2e7d` / `c8d015ab3b57252d`), `hvx_sched_sweep_test 2000` (`39971eed9c2f35fe`) and the 2-vCPU boot.
+- The explorer takes `--vcpus N` and `--turns`, and `hvx_stack_verify` takes `HVX_VCPUS`; so do `hvx/bench/run.py` and `hvx/knownbugs/sqlite/hunt.py`. Measured value so far (M74): on the benchmark's race defects and the SQLite WAL bug, several vCPUs found nothing that one vCPU with concurrent clients or tick jitter misses, at about 3× the cost per run; each turn end costs about 0.8 ms of host time, about 0.49 ms with the opt-in margin 160, and burst turns (M85, side module only so far) make dense switching affordable on average. Write-ups: `hvx/SMP_PLAN.md`, `hvx/SMP_STAGE1.md`, `hvx/SMP_STAGE2.md`, `hvx/explore/TURNS.md`.
+
+### The Mac backend
+
+- Real arm64 Linux 6.6.35 boots bit-identically on the M2 (boot `81711ada76a4a236`), also under full host load and from branches (M48). The guest kernel needs `CONFIG_ARM_ARCH_TIMER_FORCE_CNTPCT` (`hvx-mac/linux/force-cntpct.patch`), LSE atomics and `CONFIG_ARM64_HVM_IDLE_HVC` (M48, M51).
+- It has virtio-mmio disk and network devices with the same fault model as hvx (with delays counted in exits), runs Redis and miniflux with PostgreSQL, and serves the explorer (`hvmx`, `explore.py --backend hvm`). The Redis `disk=none | run` baseline is `ca13bcd1d77e2b4b` (M51, M53).
+- Tick jitter and PCT-style forced preemption points are counted in VM exits (M53, M57), because the M2 has no exact guest instruction counter.
+- The three M51 follow-ups are merged (git history): network faults `N=`/`O=` via tc + netem in the arm64 guest (`5fa2f06`), the spin observer in `hvm`/`hvmx` with automatic escalation to rewind (`3b2a0bb`), and the self-contained release (`hvx-mac/dist/`, `feffce6`). The release was rebuilt on 2026-10-23: `hvx-mac/dist/out/hydo-mac-0.1.0.tar.gz`, sha256 `aeb8ba48104a9df8…` (rebuilt on 2026-10-24 after M80/M82 so it ships `hydo-init-buggify.sh` and the `manifest_space.py` fix that keeps `B=`; before that, rebuilt on 2026-10-23 to ship all init extensions — `hydo-liveness.sh`, `hydo-init-clock.sh`, `hydo-init-links.sh`, `hydo-init-freeze.sh` — without which an arm64 build of a manifest with `eventually` invariants or `guest.clock_after_cut` failed; checked by building and running such a manifest from an installed release); every asset matched `assets.sha256`; its quickstart verdicts held, each schedule twice identical (fingerprints differ from `hvx-mac/explore/README.md`, which was measured on Linux-built images). Its cached inputs are in `hvx-mac/dist/assets/` (git-ignored), so a rebuild works offline.
+
+### Bugs found so far
+
+- In our own order service: a failed cache write failed an order that was already published (M38, fixed in M39); and a duplicate under overlapping retries, a panic on the shared Redis connection, and a crash that forgot which sends had an unknown outcome (M50, all fixed).
+- In the stack configuration: with the MySQL binary log off, a commit was visible before its redo fsync finished, found only by the k-th-flush cut (M58, fixed by the binary log in M63); and Kafka's default 7-day retention deleted acknowledged orders after a large forward clock jump (M63, fixed with `log.retention.ms=-1`).
+- Upstream: etcd 3.5.5 issue 14685 (member revisions diverge after an online defrag and a crash), found without being told and absent in 3.5.6 (M60); both symptoms reproduce on the `-nq` image (M77, M78).
+- Upstream, aimed: the SQLite 3.51.2 WAL-reset corruption, reproduced under hydo once a workload restarted the WAL often and its seed was fixed (only timing varied); it passes on 3.51.3 (M85). A blind hunt has not found it: under hydo the workload restarts the WAL 10–70 times less often than natively (M52, M49, M74, M85).
+
+## Open items
+
+Items marked **[user decision]** need the user before anyone acts on them.
+
+2. **[user decision]** The single-Kafka image (`build-linux.sh` §2l) and `hvx/onboard/examples/stack/hydo.yaml` still use Kafka's default retention, and `build-mysql.sh` and the onboarding stack example still use `skip-log-bin`. Fixing them moves unrelated baselines, so they were left unchanged (M63).
+3. **[user decision]** The build machine disk keeps filling up; cleaning other sessions' build outputs needs the user's approval.
+4. Several vCPUs (M69): Linux marks the TSC unstable with 2 vCPUs (`tsc=reliable` removes the message). Each PAUSE exit moves the virtual clock, so guest time depends on the PAUSE setting. NMIs between CPUs, logical-destination interrupt routing, virtio-net routing beyond the first deliverable queue, paravirtual lock help and more than 4 vCPUs are not done. `hvx/explore/TURNS.md` lists module wishes: a per-turn length list, a short/long mix and a starve mode.
+5. Guest AVX (M68): there is no AVX-512, XSAVEOPT, XSAVEC, XSAVES or PKRU; the pending #GP of an invalid XSETBV is not in the snapshot; and with the flag off, a guest that sets CR4.OSXSAVE anyway reads the host's XCR0.
+6. The d11 defect (an ACK on an unflushed flag) has a window of about 3 of ~310 flush-cut points and is rarely found by strategies (M67, M72: 3/6 then 0/6 over 3-repetition cells); measuring its detection rate needs many more repetitions or a cell that always draws `cf=`. The m59 bench set now defaults to `-pin-kr` (Kafka retention fixed, M72).
+7. fwupd still runs on the bare-metal machine; it is harmless to the fixed module. Older single outliers (M34 MySQL, M39 I/O error) were not checked against fwupd times (M65).
+8. etcd 3.5.5: 14685's second symptom (a client's revision going back) is reproduced again on the `-nq` image by `K=etcd1@10+1 P=etcd3@26+1` (M78), found by a hand sweep, not by the explorer. Why etcd1's one-revision lead appears only together with the later pause of another member was not investigated.
+9. Explorer and tools: the oracle reads Kafka before it restarts when Kafka is killed at the last order (M55); `pp=`/`xt=` are refused in branch mode, and the `xt` shrinker does not turn a seeded policy into a list (M49); the guest RAM size is not part of the schedule string, so a hand-run `hvx_explore one` on a non-default image needs `--ram-mib` (M59); the OK verdict shows only the first invariant's details (M47).
+10. etcd 3.6.8 against 3.6.9 (stale reads with a paused leader) showed no difference; it needs timed pauses aimed at the leader. `addr:` is refused on arm64 (M60).
+11. Images built before M71 drop the packets queued in netem when a delay fault is lifted. The onboarding examples and the default stack were rebuilt as `-nq` images in M77; any other image with network faults that predates M71 keeps the old behaviour.
+12. Processor Trace limits: guest kernel modules are not traced, very early boot needs tracing started after the kernel's self-patching, JIT-compiled Java is out of scope, buffers of about 1 GiB can fail to allocate, and host PT use is suspended during traced runs (M40). Whole-system coverage runs often filled the 256 MiB buffer (M44).
+13. Mac backend: a pure memory-flag spin in user space with no exits cannot be interrupted deterministically, and windows of plain work with no exits are out of reach of jitter and PCT points (M48, M53, M57).
+14. Older limits that still hold: the PMU clock is a tick source on top of the exit-count clock, not an instruction-exact clock, so instruction-exact bisection of a Linux boot is future work (M33); host performance counters are off while a PMU-clock guest runs (M34); RAM above about 3.9 GiB needs a PCI-hole split (M28); a read-write ext4 root is not done (M29); and in the module-built default guest page tables, the page that maps 512 MiB–1 GiB shares a page with the built-in interrupt handler, which only hand-written test guests use, left as is because fixing it moves every hand-written fingerprint (M36).
+15. Images listed but not rebuilt with the pinned tools: `explore-cc0/1/cc` (M50; rebuild from `029e4b3`/`b9233d5`) and `explore-dx`, an undocumented diagnostic (M61). The build machine copy of `richcov-disk.img` was built with a substitute gcc and must be rebuilt before use (M44).
+16. Linux release (M75, M81): the udev rule was checked only with a side device and the user's own group, so creating the `hydo` group and adding a user ran nowhere yet; `build-stack.sh`, `build-kafka.sh`, `build-mysql.sh` and `build-spread*.sh` were not rebuilt after the M80 time-zone change (the same change was proven byte-neutral on `build-linux.sh`'s ext2 helper and on hydo-build).
+17. Done 2026-10-24: the Mac release was rebuilt after M80/M82 and now ships `buggify: true` support (`hydo-init-buggify.sh`) and the `manifest_space.py` fix that keeps `B=` (checked by the tarball's file list and a byte comparison of `manifest_space.py`; the SDK agents ran the same files overlaid on an installed release).
+
+18. Compose import (M84): every imported service has an `addr:`, but its outgoing connections leave from 127.0.0.1, so link faults (`N=a-b`) between Compose services act on none of their traffic, and explore.py still draws them for such manifests. Port faults work. The importer has no `--arch arm64` end-to-end run yet (`hydo compose` on a Mac passes `--no-addr`). Healthchecks run as root unless the service has `user:`.
+19. gRPC faults (M90, merged after M89): gRPC fakes select calls only by route (`rpc=`, `call=`, `cut=`, `hold=`, `reset=conn` work on gRPC proxies only); there is no TLS, no injected trailing metadata (such as `grpc-retry-pushback-ms`) and no request-side delay; a request whose ref field holds its default value (order 0) records an empty ref; arm64 is not supported.
+
+19. Test composer (M86): the Rust example lists the x86_64 Redis only, so the Rust version ran on the box but not on the Mac; `cargo hydo build|run` through an installed release was not run end to end (the plan step was); `System::from_compose`, fakes and log rules are not in the Rust SDK yet; other SDKs have no test definitions yet; a saved `W=` names commands by index, so adding a command changes old compositions (`hydo save` records the list and the replay warns).
+20. History checkers (M87): M78's etcd schedule does not trigger 14685 on the `-hc` images (the recording shifts guest timing; 10 other schedules do); the list-append checker is proven on real Redis with single-key operations only (multi-key `txn` only in unit tests); G-nonadjacent snapshot-isolation cycles are not detected; the JavaScript and Python SDKs have no recorder helper; arm64 builds with `checks:` are untested.
+21. Fake outside services (M89): not on `--arch arm64` or the Mac backend; the carried world is limited to 3000 bytes (more gives `w:trunc`, and every check then answers "cannot decide"); an idempotent replay after a power cut re-renders the answer from the request (only the record number is kept); the Rust test SDK has no fakes yet (open item 19). The two first-build images `explore-ob-shop-{buggy,fixed}-disk.img` sit in `~/hydo/build` on the box (agents may not delete files there; the user may).
+22. Generated gRPC drivers (M91): plaintext HTTP/2 only (no TLS or auth metadata); `from` carries scalars and enums, not messages; hint weights matter only in steps mode (the composer draws commands uniformly); the stack example runs in numbered steps (its checks expect ids 0..29); no converter turns `HYDO-HIST grpc` records into a register history for the M87 checkers; arm64 images were not tried; the generator is Go, which the language policy allows for helpers but which a reader may want in Rust **[user decision]**.
+
+## Milestone index (details in `hvx/HISTORY.md`)
+
+Milestones 1–32 ran inside the nested L1 VM on the build machine, before 2026-10-13 (M17 is dated 2026-08-12).
+
+- M1 — VMXON and VMLAUNCH of a trivial guest in our own module
+- M2 — EPT: the guest in its own physical address space
+- M3 — `/dev/hvx`, a userspace mini-KVM interface
+- M4 — deterministic RDTSC interception
+- M5 — the MTF single-step instruction clock
+- M6 — RDTSC tied to the instruction clock
+- M7 — snapshot and branch-from-snapshot
+- M8 — instruction-timed interrupt injection
+- M9 — canonical fingerprint and verify harness
+- M10 — I/O-port trap and serial console
+- M11 — guest RAM beyond 2 MiB
+- M12 — deterministic CPUID and MSR emulation
+- M13 — privileged-state persistence and `HVX_SET_SREGS`
+- M14 — first real Linux serial output as L2
+- M15 — real Linux boots to the initramfs shell
+- M16 — whole-boot determinism and branch on real Linux
+- M17 — PMU clock blocked on the hybrid build machine CPU (2026-08-12; resolved in M33)
+- M18 — serial input and an interactive shell
+- M19 — deterministic multi-vCPU foundation on hand-written guests
+- M20 — deterministic virtio-PCI block device
+- M21 — real Linux uses the disk over MSI-X
+- M22 — deterministic disk fault injection
+- M23 — deterministic virtio-net device
+- M24 — deterministic network fault injection
+- M25 — flagship: a durability bug in hydokv found by a seeded fault
+- M26 — flagship on unmodified SQLite
+- M27 — flagship on Redis: the AOF durability window
+- (no number) — fs-image byte-reproducibility hardening
+- M28 — page-array disk, disk mmap, RAM to 3 GiB
+- M29 — ext4 read-only root via switch_root, snapshot at scale
+- M30 — a two-service system over loopback
+- M31 — deterministic OpenJDK; Kafka hit a wall
+- M32 — the JIT is deterministic; file-backed snapshot
+- M33 — bare metal, Kafka flagship, PMU branch clock (2026-10-13)
+- M34 — MySQL flagship, pinned Kafka image, seven hvx fixes (2026-10-13)
+- M35 — the four-service stack with one cross-service oracle; `deploy-metal.sh` (2026-10-14)
+- M36 — service crashes and network faults on the stack; RAM to 3 GiB verified (2026-10-14)
+- M37 — the order service made retry-safe and exactly-once (2026-10-14)
+- M38 — automatic fault explorer and assertions; first bug found without a hand-picked scenario (2026-10-14)
+- M39 — the explorer's bug fixed and the fix proven by the explorer (2026-10-15)
+- M40 — exact guest code coverage with Intel Processor Trace (2026-10-15)
+- M41 — coverage-guided exploration, negative (2026-10-16)
+- M42 — swarm testing and exhaustive sweeps (2026-10-16)
+- M43 — timing exploration: tick jitter and mid-run branching (2026-10-16)
+- M44 — coverage growth, richer signal, portfolio scheduler, mostly negative (2026-10-17)
+- M45 — branch points from assertions, negative (2026-10-17)
+- M46 — pause, clock-jump and one-way-loss faults, no new bug (2026-10-17)
+- M47 — onboarding v1: one `hydo.yaml` per project (2026-10-18)
+- M48 — deterministic arm64 Linux on the Mac (2026-10-18)
+- M49 — finer preemption: shorter tick period and inserted ticks (2026-10-18)
+- M50 — concurrent clients find three bugs in the order service (2026-10-18)
+- M51 — the Mac backend explores real projects (2026-10-18)
+- M52 — onboarding follow-ups; the SQLite known bug not reproduced (2026-10-18)
+- M53 — tick jitter on the Mac, counted in VM exits (2026-10-18)
+- M54 — an 8-defect bug benchmark; five strategies compared (2026-10-19)
+- M55 — why d7 was missed; end-of-workload sweep; fault-search literature (2026-10-20)
+- M56 — fault process, BUGGIFY, depth-1 sweep, cut at the k-th flush (2026-10-21)
+- M57 — PCT-style forced preemption points on the Mac (2026-10-21)
+- M58 — a real bug found by the flush cut; a harness stop-point bug fixed (2026-10-21)
+- M59 — onboarding: guest RAM, liveness properties, Docker/OCI images (2026-10-21)
+- M60 — three-node etcd; a known upstream bug found without being told (2026-10-22)
+- M61 — re-baseline on the pinned toolchain (2026-10-22)
+- M62 — benchmark defects d8–d12; an explorer gap (2026-10-22)
+- M63 — MySQL binary log on; Kafka retention after a clock jump fixed (2026-10-22)
+- M65 — a rare fingerprint gap (a clean schedule of one example gave a different fingerprint in 1 of 5–10 runs) was SMIs counted on the branch clock; fixed (2026-10-22)
+- M66 — several vCPUs, stage 1: exact branch-counted turns (2026-10-22)
+- M67 — strategies draw timed kills and k-th-flush cuts; d10 and d11 found (2026-10-22)
+- M68 — opt-in guest AVX/AVX2, x86-64-v3 (2026-10-22)
+- M69 — several vCPUs, stages 2 and 3: Linux on 2–4 vCPUs, the stack and the explorer on 2 vCPUs (2026-10-22)
+- M70 — freeze a service at an exact packet of its traffic (`F=`) (2026-10-23)
+- M71 — lifting a network fault drains the netem queue instead of dropping it (2026-10-23)
+- M72 — benchmark images with the Kafka retention fix (`-pin-kr`), now the default m59 set (2026-10-23)
+- M73 — M70 follow-up: the recovery boot continues the first boot's clock; freeze measurement (2026-10-23)
+- M74 — negative: several vCPUs found no race that one vCPU misses (benchmark d8/d9/d12; SQLite WAL bug not found on 2 or 4 vCPUs) (2026-10-23)
+- M75 — the Linux release: one `hydo` command (doctor, module, build, run, repro, explore, report) and a self-contained tarball for x86_64 + VT-x, no Nix needed (2026-10-23)
+- M76 — the freeze sweep: every packet point of a run as one `F=` schedule (2026-10-24)
+- M77 — onboarding and default stack images rebuilt with the netem drain (`-nq`); stack baselines and the eight fault scenarios re-measured (2026-10-23)
+- M78 — etcd 14685's second symptom (a client's revision going back) reproduced again on the 3.5.5-nq image; passes on 3.5.6-nq (2026-10-24)
+- M79 — the 2-vCPU stack baselines re-measured on `stack-nq` (2026-10-24)
+- M80 — the JavaScript/TypeScript assertion SDK for Node.js (`sdk/js`, byte-identical to the Go SDK) and the node-kv example on the Mac backend (2026-10-24)
+- M81 — Linux release runs without sudo through an optional udev rule; image builds no longer depend on the time zone; the other seven stack fault scenarios on 2 vCPUs (2026-10-24)
+- M82 — the Rust assertion SDK (`sdk/rust`, byte-identical to the Go SDK; macros with file:line, `declare!`, async eventually) and the rust-kv example on the Mac and bare-metal backends (2026-10-24)
+- M83 — the Python assertion SDK (`sdk/python`, byte-identical to the Go SDK; asyncio `eventually`) and the python-kv example on the Mac backend (2026-10-24)
+- M84 — `hydo-compose`: a docker-compose.yaml becomes a starting hydo.yaml (images by digest, healthchecks, volumes, per-service addresses); `mounts:` for image services; Docker's voting app runs clean, kill and power-cut schedules twice identically (2026-10-24)
+- M85 — cheaper vCPU turn ends (opt-in margin) and seeded burst turns; the SQLite 3.51.2 WAL-reset corruption found natively with a WAL-restart-heavy workload and reproduced under hydo with that workload's seed fixed (2026-10-24)
+- M86 — the test composer: a project's test as commands and checks (`test:` in the plan, or `hydo/workload/`, `hydo/checks/`, `hydo/regressions/`), composed in the guest from the schedule token `W=` and shrunk by the explorer; `hydo repro --regressions`, `hydo save`, the `hydo_version:` pin; the Rust test SDK `hydo-test` with `cargo hydo`; a planted lost update found and shrunk to two overlapping transfers (2026-10-24)
+- M87 — ready-made history checkers run on the host (`checks:`, or `test.checks` kinds `linearizable` / `list_append`; `hvx/HISTORIES.md`): linearizability of registers/CAS per key with store versions, Elle-style list-append; recorders for shell, Go and Rust (`hydo_assert::history`, `hydo_test::HistoryCheck`); Redis `everysec` + cut flagged as lost writes; etcd 3.5.5 14685 flagged in 10 of 36 schedules, all 10 pass on 3.5.6 (2026-10-24)
+- M88 — ready-made store readers `hydo-read` (MySQL, PostgreSQL, Kafka, Redis, etcd as sorted JSON Lines) and set-style `hydo-check` (subset, equal, exactly-once, disjoint, no-duplicates, count, never-wrong-value); staged only for manifests that call them; the stack, miniflux and a composed Redis plan checked with them give the hand-written verdicts, each twice identical (2026-10-24)
+- M89 — fake outside services and protocol faults: `fakes:`/`proxies:` served and recorded in the guest by `hydo-world`, the `H=` token (error, slow, missing and reset answers; duplicated, reordered, late and lost webhooks), side-effect checks, the world carried across a power cut, `explore.py --protocol-faults` and `--sweep protocol`; a planted double charge found blind and shrunk to one protocol fault (2026-10-24)
+- M90 — gRPC-level faults through a streaming HTTP/2 proxy (drop the answer, status with or without the server having acted, delay, stream/connection reset, cut/hold a stream; by method, call index or seeded share; call records; `--grpc-faults`); a lost answer duplicates an order on a planted defect, the current and the M39 order services pass (branch `grpc-faults`, on top of `fakes-protocol-faults`) (2026-10-24)
+- M91 — generated gRPC drivers (`hydo-grpc-gen`: .proto / descriptor set / reflection → a static client, one composer command per RPC, seeded valid requests with hints, ok/failed/unknown outcomes, HYDO-HIST records); a planted idempotency race found blind and shrunk to two Create commands while Redis is paused, the fixed service passes; the stack driven by a generated driver (2026-10-24)
+- M92 — the adaptive freeze sweep (`--fc-adaptive`: matched streams first, then a widening window of every packet around each failure): M76's 17 failing points with 305 runs instead of 1,145; engine restart and result cache in the worker pool (2026-10-24)
+
+## Where to look
+
+- `hvx/PRODUCT.md`: hydo from a user's point of view — what it offers, the known gaps, and the user's decision on each (2026-10-24): approved and in progress (history checkers, protocol faults and fake outside services, a Rust SDK, Docker Compose import), to document only (CI mode, running locally and in CI, scale, blind spots), not decided (test composer, fast-forwarded time).
+- `hvx/hvx.c` (the module), `hvx/hvx_abi.h` (the ioctl ABI shared with userspace), `hvx/hvx_boot.h` (the bzImage loader recipe), and the `hvx/hvx_*_test.c` and `hvx/hvx_*_verify.c` tests and harnesses.
+- `hvx/explore/` (the explorer), `hvx/stack/` (the order service and the assertion SDK), `hvx/bench/` (the bug benchmark), `hvx/onboard/` (manifests), `hvx/pt/` (Processor Trace tools), `hvx/race/` (race calibration and side-module scripts), `hvx/cutflush/` (flush-cut findings), `hvx/tdet/` (SMI tools).
+- `build-linux.sh`, `build-stack.sh`, `build-kafka.sh`, `build-mysql.sh` (guest images), `hvx/BUILD-PINS.md`, `hvx/REBASELINE.md`.
+- `src/` (the Rust KVM monitor: `vmm.rs`, `state.rs`, `pmu.rs`, `detlinux.rs`, `boot.rs`).
+
+## Useful tools and references
+
+- Check a change on the real system, not only by reading code: `hvx/deploy-metal.sh` on the bare-metal test machine, or the Mac backend's `hydo` (`hvx-mac/dist/`).
+- Review changes to the determinism engine with special care, and keep the baseline fingerprints above passing.
+- To onboard a project, follow the hydo onboarding skill (`.claude/skills/hydo-onboard/SKILL.md`, an Agent Skills folder that any agent can read).
+- For kernel and VMX work there is no ready-made helper: use the Intel SDM Vol. 3C (VMX chapters), the KVM source, and "Hypervisor From Scratch".

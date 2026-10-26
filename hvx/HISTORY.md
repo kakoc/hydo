@@ -1,8 +1,8 @@
 # hydo milestone history
 
-New milestone sections go to the END of this file. Each new milestone also gets a one-line entry in the milestone index of `CLAUDE.md` and an update of the "Current state" (and, if needed, "Open items") section there.
+New milestone sections go to the END of this file. Each new milestone also gets a one-line entry in the milestone index of `AGENTS.md` and an update of the "Current state" (and, if needed, "Open items") section there.
 
-Everything below was moved verbatim from `CLAUDE.md` on 2026-10-23 (the old handoff text, Milestones 1–69, the roadmap for booting Linux as L2, and the old "Key files" list). Old notes mention the nested-VM (L1) tooling, which was removed on 2026-10-20; later milestones supersede many older baselines, and `CLAUDE.md` lists only the current ones.
+Everything below was moved verbatim from `CLAUDE.md` (now `AGENTS.md`) on 2026-10-23 (the old handoff text, Milestones 1–69, the roadmap for booting Linux as L2, and the old "Key files" list). Old notes mention the nested-VM (L1) tooling, which was removed on 2026-10-20; later milestones supersede many older baselines, and `CLAUDE.md` lists only the current ones.
 
 `hydo` is a **deterministic hypervisor**: it runs software so that, given the same inputs, execution is bit-for-bit identical every time — enabling record/replay, snapshot, and branch-from-snapshot. See `README.md` for the full architecture, the paravirtual ABI, the three clock strategies, and the verification model. This file is the operational context + current-frontier handoff; it does not duplicate the README.
 

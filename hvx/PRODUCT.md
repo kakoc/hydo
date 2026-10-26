@@ -1,6 +1,6 @@
 # hydo as a product: what it offers, what is missing, and what is decided
 
-This page describes hydo from a user's point of view: what a team gets today, the gaps we know of, and what the user decided about each gap (2026-10-24). The engineering history is in `hvx/HISTORY.md`; the current state is in `CLAUDE.md`.
+This page describes hydo from a user's point of view: what a team gets today, the gaps we know of, and what the user decided about each gap (2026-10-24). The engineering history is in `hvx/HISTORY.md`; the current state is in `AGENTS.md`.
 
 ## What a user gets today
 
