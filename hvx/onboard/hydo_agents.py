@@ -50,7 +50,11 @@ BEGIN = "<!-- hydo:begin (written by `hydo init`; edits between these markers ar
 END = "<!-- hydo:end -->"
 BEGIN_RE = re.compile(r"^<!-- hydo:begin\b.*-->[ \t]*$", re.M)
 END_RE = re.compile(r"^<!-- hydo:end -->[ \t]*$", re.M)
-SKIP = {"__pycache__", ".DS_Store"}
+SKIP = {"__pycache__", ".DS_Store"}         # and AppleDouble "._*" files (skipped())
+
+
+def skipped(n):
+    return n in SKIP or n.startswith("._")
 
 
 class Fail(Exception):
@@ -58,7 +62,7 @@ class Fail(Exception):
 
 
 def _read(p, n=-1):
-    with open(p) as f:
+    with open(p, encoding="utf-8") as f:
         return f.read(n)
 
 
@@ -82,8 +86,8 @@ def topics(sd):
     t = {}
     ref = os.path.join(sd, "references")
     for f in sorted(os.listdir(ref)) if os.path.isdir(ref) else []:
-        if f.endswith(".md"):
-            with open(os.path.join(ref, f)) as fh:
+        if f.endswith(".md") and not skipped(f):
+            with open(os.path.join(ref, f), encoding="utf-8") as fh:
                 first = next((l.strip("# \n") for l in fh if l.strip()), "")
             t[f[:-3]] = first
     return t
@@ -106,10 +110,10 @@ def guide(argv, root, out=sys.stdout):
         return 0
     t = topics(sd)
     if a == "--list":
-        out.write("hydo guide            the onboarding skill (SKILL.md)\n")
+        out.write("%-29s %s\n" % ("hydo guide", "the onboarding skill (SKILL.md)"))
         for k, v in sorted(dict(t, **GUIDE_TOPICS).items()):
-            out.write("hydo guide %-11s %s\n" % (k, v))
-        out.write("hydo guide <file>     any file of the skill folder (%s)\n" % sd)
+            out.write("%-29s %s\n" % ("hydo guide " + k, v))
+        out.write("%-29s %s\n" % ("hydo guide <file>", "any file of the skill folder (%s)" % sd))
         return 0
     if a == "manifest":
         out.write(_read(manifest_md(root)))
@@ -161,7 +165,7 @@ def copy_skill(src, dst, force, out):
     else:
         verb = "installed"
     os.makedirs(os.path.dirname(dst), exist_ok=True)
-    shutil.copytree(src, dst, ignore=lambda d, names: [n for n in names if n in SKIP])
+    shutil.copytree(src, dst, ignore=lambda d, names: [n for n in names if skipped(n)])
     out.write("hydo: %s %s\n" % (verb, dst))
 
 
@@ -251,7 +255,7 @@ def update_agents_md(path, block):
     """Insert or replace the hydo section between the markers; never touch other content.
     Returns 'created', 'added', 'updated' or 'unchanged'."""
     if not os.path.exists(path):
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write("# Instructions for coding agents\n\n" + block)
         return "created"
     old = _read(path)
@@ -262,13 +266,13 @@ def update_agents_md(path, block):
             new += "\n"
         if new == old:
             return "unchanged"
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(new)
         return "updated"
     if b or e:
         raise Fail("%s has only one of the hydo markers; fix it by hand (both or neither)" % path)
     sep = "" if old.endswith("\n\n") else ("\n" if old.endswith("\n") else "\n\n")
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write(old + sep + block)
     return "added"
 
@@ -280,7 +284,7 @@ def update_gitignore(path, lines):
     if not add:
         return []
     old = _read(path) if os.path.exists(path) else ""
-    with open(path, "a") as f:
+    with open(path, "a", encoding="utf-8") as f:
         if old and not old.endswith("\n"):
             f.write("\n")
         f.write("# hydo (hydo init): the build cache and fetched images\n" + "".join(l + "\n" for l in add))
@@ -323,7 +327,7 @@ def init(argv, root, out=sys.stdout):
         dst_dir = os.path.normpath(os.path.join(d, "hydo", rel))
         os.makedirs(dst_dir, exist_ok=True)
         for f in sorted(files):
-            if f in SKIP:
+            if skipped(f):
                 continue
             src, dst = os.path.join(top, f), os.path.join(dst_dir, f)
             relp = os.path.relpath(dst, d)
@@ -335,7 +339,7 @@ def init(argv, root, out=sys.stdout):
                 kept.append(relp + " (not added: the folder already has files)")
                 continue
             text = _read(src)
-            with open(dst, "w") as fh:
+            with open(dst, "w", encoding="utf-8") as fh:
                 fh.write(text.replace("@NAME@", name))
             shutil.copymode(src, dst)
             made.append(relp)
@@ -367,9 +371,12 @@ def init(argv, root, out=sys.stdout):
 def run(cmd, argv, root):
     """Entry point for the CLIs: returns an exit status, prints `hydo: <message>` on a failure."""
     try:
-        return {"guide": guide, "skill": skill, "init": init}[cmd](argv, root)
+        rc = {"guide": guide, "skill": skill, "init": init}[cmd](argv, root)
+        sys.stdout.flush()
+        return rc
     except Fail as e:
         print("hydo: %s" % e, file=sys.stderr)
         return 1
-    except BrokenPipeError:
+    except BrokenPipeError:            # `hydo guide | head`: the reader stopped early
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
         return 0

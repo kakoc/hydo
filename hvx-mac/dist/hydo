@@ -171,7 +171,7 @@ def cmd_build(argv):
     use_bundled_tc()
     sys.argv = ["hydo-build", manifest, "--arch", "arm64", "--build-dir", out] + rest
     rc = hb.main()
-    if rc == 0:
+    if rc == 0 and not any(f in rest for f in ("--check", "--print-shell", "--print-init")):
         print("hydo: next:  hydo run \"disk=none | run\"     or     hydo explore --seeds 1-20")
     return rc
 
