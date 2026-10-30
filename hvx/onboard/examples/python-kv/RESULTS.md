@@ -56,3 +56,23 @@ report's property table shows the program's own properties: `kv.acked_durable` 1
   explorer's snapshot point and its own catalog lines are not in the per-run consoles.
 - No x86_64 (bare-metal) manifest: the bare-metal test machine was crowded, and the coordinator asked
   for the Mac path. A Linux manifest would list the x86_64 python3 store path under `root.nix`.
+
+## The Python history recorder (Milestone 96, 2026-10-30)
+
+`hydo-mac-hist.yaml`: the workload's client is `pykv_hist.py`, which records every PUT in
+history `kv` with `hydo_assert.history` (invoke before the request, `ok` after `OK`, `info` when
+no answer came), and the `final:` read-back GETs every key into the same history; the host checks
+`kv` for linearizability (one register per key) instead of the hand-written oracle. Files staged
+with `fetch-python-arm64.sh` (it now also copies `hydo_assert/history.py`); image
+`explore-ob-python-kv-hist-arm64.cpio.gz` `78b57526…`, disk `03d395df…`, two builds identical.
+With the Mac `hydo run` (which now runs the host checkers), each twice, identical:
+
+| schedule | verdict | fingerprint |
+|---|---|---|
+| `disk=cut \| run C=12` | OK, `kv.linearizable: 32 operations on 20 keys linearizable` | `c4391968a41ff960` |
+| `disk=cut \| run C=12 S=never` | VIOLATION `[kv.linearizable] key k:0: an acknowledged write is lost or a read is stale` (12 keys) | `1f36ed5eb33c8652` |
+
+The original `hydo-mac.yaml` image, rebuilt from the M83 sources with the M96 tools, is still
+`d96a0feb…` / `93c5d2ca…` and gives `bfe5a4e04ca43a71` and `74debdd69ee7af08` as above. A fetch
+made after M96 copies `history.py` into `files/opt/pykv/hydo_assert/` too, so that image then
+differs by that one file.
