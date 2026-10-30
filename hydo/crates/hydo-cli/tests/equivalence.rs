@@ -1,15 +1,31 @@
-//! The Rust `hydo` against the two Python CLIs it replaces (hydo/dist/linux/hydo and
-//! hydo/dist/mac/hydo, kept as the reference until every port is done): the same exit code, the
-//! same stdout and stderr, and the same files written, for every case below that needs no VM.
-//! Both run from one release-like root (bin/, a symlinked hydo/, hv/ and skill/hydo-onboard) in the
-//! same working directory, one after the other. The Linux behaviour is exercised on any host with
-//! HYDO_CLI_PLATFORM=linux. Runs that boot a guest are compared on the machines themselves
-//! (docs/HISTORY.md, M101: the quickstarts and the explorer).
+//! The Rust `hydo` against recorded answers: for every case below that needs no VM, the exit
+//! code, stdout, stderr and every file written must equal `tests/golden/cli.jsonl`.
+//!
+//! How the answers were recorded: until M107 this test ran the two Python CLIs it replaced
+//! (hydo/dist/linux/hydo and hydo/dist/mac/hydo) next to the Rust one and compared them. In M107
+//! the Python CLIs' answers were recorded once (commit 2a58c4b, Python 3.15.0 on the Mac; restore
+//! the reference with `git show 2a58c4b:hydo/dist/linux/hydo` and `.../mac/hydo`), then the
+//! deliberate unifications of M107 (one behaviour on both platforms, docs/HISTORY.md, Milestone
+//! 107) were applied to the answers they change, and nothing else. From now on the Rust CLI is
+//! the reference: `HYDO_BLESS=1 cargo test -p hydo-cli --test equivalence` rewrites the golden
+//! from the Rust output; review its diff like code.
+//!
+//! Each case runs from one release-like root (bin/hydo, a symlinked hydo/, hv/ and
+//! skill/hydo-onboard) in a fresh working directory with HOME inside it. Paths in the output are
+//! written as <ROOT>, <CWD> and <REPO>. Outputs longer than 4 KiB and files longer than 256 bytes are kept as
+//! the first 16 hex digits of their SHA-256 and their length. The
+//! Linux behaviour is exercised on any host with HYDO_CLI_PLATFORM=linux. Runs that boot a guest
+//! are compared on the machines themselves (docs/HISTORY.md: the release proofs). Where the old
+//! Python CLI crashed with a traceback, the golden keeps that traceback's last line and the Rust
+//! CLI must print a `hydo:` message instead.
 
+use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Mutex;
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -18,8 +34,33 @@ fn repo() -> PathBuf {
         .unwrap()
 }
 
+fn golden_path() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/cli.jsonl")
+}
+
 static N: AtomicU32 = AtomicU32::new(0);
 static FIXED_CRASHES: AtomicU32 = AtomicU32::new(0);
+
+/// The golden state: the recorded answers by key, the answers produced now (for HYDO_BLESS), and
+/// the differences found.
+struct State {
+    golden: BTreeMap<String, Value>,
+    produced: Vec<(String, Value)>,
+    diffs: Vec<String>,
+    case: usize,
+}
+
+static STATE: Mutex<Option<State>> = Mutex::new(None);
+
+fn bless() -> bool {
+    std::env::var_os("HYDO_BLESS").is_some() || record_python()
+}
+
+/// M107 only, while the Python CLIs were still in the tree: HYDO_RECORD_PYTHON=1 wrote the golden
+/// from them (`python3 bin/hydo-py-<platform>`). Kept for the record; the files are gone now.
+fn record_python() -> bool {
+    std::env::var_os("HYDO_RECORD_PYTHON").is_some()
+}
 
 fn scratch(tag: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!(
@@ -33,20 +74,19 @@ fn scratch(tag: &str) -> PathBuf {
     d.canonicalize().unwrap()
 }
 
-/// A release-like root: bin/{hydo, hydo-py-linux, hydo-py-mac}, hydo -> repo/hydo, hv -> repo/hv,
-/// skill/hydo-onboard -> repo/skills/hydo-onboard, guest/ with the closure listings the build
-/// patches read.
+/// A release-like root: bin/hydo, hydo -> repo/hydo, hv -> repo/hv, skill/hydo-onboard ->
+/// repo/skills/hydo-onboard, guest/ with the closure listings the build patches read.
 fn release() -> PathBuf {
     let r = scratch("rel");
     let repo = repo();
     std::fs::create_dir_all(r.join("bin")).unwrap();
     std::fs::copy(env!("CARGO_BIN_EXE_hydo"), r.join("bin/hydo")).unwrap();
-    std::fs::copy(
-        repo.join("hydo/dist/linux/hydo"),
-        r.join("bin/hydo-py-linux"),
-    )
-    .unwrap();
-    std::fs::copy(repo.join("hydo/dist/mac/hydo"), r.join("bin/hydo-py-mac")).unwrap();
+    if record_python() {
+        for p in ["linux", "mac"] {
+            let src = repo.join(format!("hydo/dist/{p}/hydo"));
+            std::fs::copy(src, r.join(format!("bin/hydo-py-{p}"))).unwrap();
+        }
+    }
     std::os::unix::fs::symlink(repo.join("hydo"), r.join("hydo")).unwrap();
     std::os::unix::fs::symlink(repo.join("hv"), r.join("hv")).unwrap();
     std::fs::create_dir_all(r.join("skill")).unwrap();
@@ -60,14 +100,6 @@ fn release() -> PathBuf {
     std::fs::write(r.join("guest/tc-closure.txt"), "").unwrap();
     std::fs::create_dir_all(r.join("libexec/bin")).unwrap();
     r
-}
-
-#[derive(Debug, PartialEq)]
-struct Outcome {
-    rc: Option<i32>,
-    stdout: String,
-    stderr: String,
-    files: BTreeMap<String, Vec<u8>>,
 }
 
 fn snapshot(dir: &Path, base: &Path, out: &mut BTreeMap<String, Vec<u8>>) {
@@ -98,16 +130,44 @@ fn snapshot(dir: &Path, base: &Path, out: &mut BTreeMap<String, Vec<u8>>) {
     }
 }
 
-type Setup = fn(&Path);
+/// Paths as placeholders, longest first (a temporary directory's /private/var and /var forms).
+fn normalise(text: &str, root: &Path, cwd: &Path) -> String {
+    let mut pairs: Vec<(String, &str)> = Vec::new();
+    for (p, name) in [(root, "<ROOT>"), (cwd, "<CWD>")] {
+        let s = p.display().to_string();
+        if let Some(short) = s.strip_prefix("/private") {
+            pairs.push((short.to_string(), name));
+        }
+        pairs.push((s, name));
+    }
+    pairs.push((repo().display().to_string(), "<REPO>"));
+    pairs.sort_by_key(|(s, _)| std::cmp::Reverse(s.len()));
+    let mut t = text.to_string();
+    for (s, name) in pairs {
+        t = t.replace(&s, name);
+    }
+    t
+}
 
-fn run_one(root: &Path, cwd: &Path, rust: bool, platform: &str, args: &[&str]) -> Outcome {
-    let mut c = if rust {
-        let mut c = Command::new(root.join("bin/hydo"));
-        c.env("HYDO_CLI_PLATFORM", platform);
-        c
+/// A text kept verbatim up to `max` bytes, else as "sha256:<first 16 hex digits> len=<n>".
+fn keep(text: &str, max: usize) -> Value {
+    if text.len() <= max {
+        json!(text)
     } else {
+        let h = Sha256::digest(text.as_bytes());
+        let hex: String = h.iter().take(8).map(|b| format!("{b:02x}")).collect();
+        json!(format!("sha256:{hex} len={}", text.len()))
+    }
+}
+
+fn run_one(root: &Path, cwd: &Path, platform: &str, args: &[&str]) -> Value {
+    let mut c = if record_python() {
         let mut c = Command::new("python3");
         c.arg(root.join(format!("bin/hydo-py-{platform}")));
+        c
+    } else {
+        let mut c = Command::new(root.join("bin/hydo"));
+        c.env("HYDO_CLI_PLATFORM", platform);
         c
     };
     let o = c
@@ -120,16 +180,21 @@ fn run_one(root: &Path, cwd: &Path, rust: bool, platform: &str, args: &[&str]) -
         .unwrap();
     let mut files = BTreeMap::new();
     snapshot(cwd, cwd, &mut files);
-    Outcome {
-        rc: o.status.code(),
-        stdout: String::from_utf8_lossy(&o.stdout).into_owned(),
-        stderr: traceback_tail(&String::from_utf8_lossy(&o.stderr)),
-        files,
-    }
+    let n = |b: &[u8]| normalise(&String::from_utf8_lossy(b), root, cwd);
+    let files: serde_json::Map<String, Value> = files
+        .iter()
+        .map(|(k, v)| (k.clone(), keep(&n(v), 256)))
+        .collect();
+    json!({
+        "rc": o.status.code(),
+        "stdout": keep(&n(&o.stdout), 4096),
+        "stderr": keep(&traceback_tail(&n(&o.stderr)), 4096),
+        "files": files,
+    })
 }
 
-/// A Python crash prints a traceback whose frames name the calling file (the old CLI, or the
-/// bridge that now calls the same function): compare only the text before it and the exception.
+/// A Python crash printed a traceback whose frames named the calling file: keep only the text
+/// before it and the exception line.
 fn traceback_tail(s: &str) -> String {
     match s.find("Traceback (most recent call last):") {
         Some(i) => format!(
@@ -141,59 +206,54 @@ fn traceback_tail(s: &str) -> String {
     }
 }
 
-/// Run one case with the Python CLI and with the Rust CLI in the same fresh directory and
-/// compare. `steps`: several invocations in a row in the same directory (e.g. init twice).
-fn same(root: &Path, platform: &str, setup: Setup, steps: &[&[&str]]) -> usize {
-    let cwd = scratch("cwd");
-    let mut outs = [Vec::new(), Vec::new()];
-    for (k, rust) in [false, true].into_iter().enumerate() {
-        let _ = std::fs::remove_dir_all(&cwd);
-        std::fs::create_dir_all(cwd.join("home")).unwrap();
-        setup(&cwd);
-        for args in steps {
-            outs[k].push(run_one(root, &cwd, rust, platform, args));
+/// Compare one answer with the golden one (a recorded Python traceback may have become a
+/// `hydo:` message).
+fn compare(key: &str, want: &Value, got: &Value, diffs: &mut Vec<String>) {
+    for f in ["rc", "stdout", "files"] {
+        if want[f] != got[f] {
+            diffs.push(format!(
+                "{key}: {f} differs\n  golden: {}\n  now:    {}",
+                want[f], got[f]
+            ));
         }
     }
-    for (i, (py, rs)) in outs[0].iter().zip(outs[1].iter()).enumerate() {
-        assert_eq!(
-            py.rc, rs.rc,
-            "{platform} {:?}: exit code\npy stderr: {}\nrs stderr: {}",
-            steps[i], py.stderr, rs.stderr
-        );
-        assert_eq!(py.stdout, rs.stdout, "{platform} {:?}: stdout", steps[i]);
-        if py.stderr.starts_with("Traceback ...")
-            && rs.stderr.starts_with("hydo: ")
-            && !rs.stderr.contains("Traceback")
-        {
-            // the Python CLI crashed here (a missing flag value); the Rust CLI says what is wrong
-            eprintln!(
-                "{platform} {:?}: Python crashed ({}), Rust: {}",
-                steps[i],
-                py.stderr.trim(),
-                rs.stderr.trim()
-            );
-            FIXED_CRASHES.fetch_add(1, Ordering::SeqCst);
-        } else {
-            assert_eq!(py.stderr, rs.stderr, "{platform} {:?}: stderr", steps[i]);
+    let (ws, gs) = (
+        want["stderr"].as_str().unwrap_or(""),
+        got["stderr"].as_str().unwrap_or(""),
+    );
+    if ws.contains("Traceback ...") && gs.starts_with("hydo: ") && !gs.contains("Traceback") {
+        FIXED_CRASHES.fetch_add(1, Ordering::SeqCst);
+    } else if ws != gs {
+        diffs.push(format!(
+            "{key}: stderr differs\n  golden: {ws:?}\n  now:    {gs:?}"
+        ));
+    }
+}
+
+/// Run one case (several invocations in a row in the same fresh directory, e.g. init twice) and
+/// compare each with the golden.
+fn same(root: &Path, platform: &str, setup: Setup, steps: &[&[&str]]) -> usize {
+    let cwd = scratch("cwd");
+    std::fs::create_dir_all(cwd.join("home")).unwrap();
+    setup(&cwd);
+    let mut g = STATE.lock().unwrap();
+    let st = g.as_mut().unwrap();
+    st.case += 1;
+    for (i, args) in steps.iter().enumerate() {
+        let key = format!("{platform} c{:03} s{i} {}", st.case, args.join(" "));
+        let got = run_one(root, &cwd, platform, args);
+        match st.golden.get(&key) {
+            Some(want) if !bless() => compare(&key, want, &got, &mut st.diffs),
+            None if !bless() => st.diffs.push(format!("{key}: not in the golden")),
+            _ => {}
         }
-        let names = |o: &Outcome| o.files.keys().cloned().collect::<Vec<_>>();
-        assert_eq!(
-            names(py),
-            names(rs),
-            "{platform} {:?}: files written",
-            steps[i]
-        );
-        for (k, v) in &py.files {
-            assert!(
-                rs.files[k] == *v,
-                "{platform} {:?}: content of {k}",
-                steps[i]
-            );
-        }
+        st.produced.push((key, got));
     }
     let _ = std::fs::remove_dir_all(&cwd);
     steps.len()
 }
+
+type Setup = fn(&Path);
 
 fn nothing(_: &Path) {}
 
@@ -231,21 +291,39 @@ fn with_compose(cwd: &Path) {
     }
 }
 
-fn python_available() -> bool {
-    Command::new("python3")
-        .arg("-c")
-        .arg("import sys; sys.exit(sys.version_info < (3, 9))")
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+fn load_golden() -> BTreeMap<String, Value> {
+    let text = std::fs::read_to_string(golden_path()).unwrap_or_default();
+    text.lines()
+        .filter(|l| l.starts_with('{'))
+        .map(|l| {
+            let v: Value = serde_json::from_str(l).expect("golden line");
+            (v["key"].as_str().unwrap().to_string(), v["answer"].clone())
+        })
+        .collect()
+}
+
+fn write_golden(produced: &[(String, Value)]) {
+    let mut out = String::from(
+        "# The hydo CLI's answers (tests/equivalence.rs): one JSON object per invocation. Recorded from\n\
+         # the Python CLIs at 2a58c4b (Python 3.15.0) in M107, with M107's unifications applied; since\n\
+         # then written by HYDO_BLESS=1 from the Rust CLI.\n",
+    );
+    for (k, v) in produced {
+        out.push_str(&serde_json::to_string(&json!({"key": k, "answer": v})).unwrap());
+        out.push('\n');
+    }
+    std::fs::create_dir_all(golden_path().parent().unwrap()).unwrap();
+    std::fs::write(golden_path(), out).unwrap();
 }
 
 #[test]
-fn cli_matches_python() {
-    if !python_available() {
-        eprintln!("SKIPPED: python3 >= 3.9 is needed to run the Python CLIs");
-        return;
-    }
+fn cli_matches_golden() {
+    *STATE.lock().unwrap() = Some(State {
+        golden: load_golden(),
+        produced: Vec::new(),
+        diffs: Vec::new(),
+        case: 0,
+    });
     let root = release();
     let repo = repo();
     let m = |rel: &str| repo.join(rel).display().to_string();
@@ -525,16 +603,29 @@ fn cli_matches_python() {
             &["module", "load", "--name"],
         ],
     );
-    if cfg!(target_os = "macos") {
-        n += same(&root, "mac", nothing, &[&["doctor"]]);
-    }
-    // The Linux doctor runs the release's bundled mke2fs; in this partial root the Python CLI
-    // crashes there (FileNotFoundError), so the Linux doctor is compared on an installed release
-    // (docs/HISTORY.md, M101).
-    eprintln!(
-        "equivalence: {n} invocations gave the same exit code, stdout and files; the same stderr in all but {} \
-         where the Python CLI crashed with a traceback and the Rust CLI prints a `hydo:` message",
-        FIXED_CRASHES.load(Ordering::SeqCst)
-    );
     let _ = std::fs::remove_dir_all(&root);
+    let st = STATE.lock().unwrap().take().unwrap();
+    if bless() {
+        write_golden(&st.produced);
+        eprintln!("wrote {} answers to {}", st.produced.len(), golden_path().display());
+        return;
+    }
+    let extra: Vec<&String> = st
+        .golden
+        .keys()
+        .filter(|k| !st.produced.iter().any(|(p, _)| p == *k))
+        .collect();
+    assert!(extra.is_empty(), "golden answers no case asks for: {extra:?}");
+    eprintln!(
+        "cli: {n} invocations gave the golden exit code, stdout, stderr and files ({} where the old \
+         Python CLI crashed and the Rust CLI prints a `hydo:` message); {} differences",
+        FIXED_CRASHES.load(Ordering::SeqCst),
+        st.diffs.len()
+    );
+    assert!(
+        st.diffs.is_empty(),
+        "{} differences:\n{}",
+        st.diffs.len(),
+        st.diffs.join("\n")
+    );
 }
