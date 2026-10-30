@@ -94,3 +94,19 @@ matches every packet between their addresses. Which links carry traffic during t
 to the app: in this one the worker counts every vote about 3 s after the workload ends (each run
 reports 3.10 s), so faults on the worker's links during the 0.25 s workload act on no packet, while
 the vote app talks to Redis on every request and loses 7 acknowledgements to the same fault.
+
+## On the Mac backend (Milestone 99)
+
+`hydo-mac.yaml` = `hydo.yaml` with the arm64 images as `docker save` archives
+(`fetch-images-mac.sh`, `fetch_image.py`, the lock's arm64 digests) and `guest.ram_mib: 3072` (on
+the Mac the 1.1 GB root is the initramfs in guest RAM; 2048 MiB cannot unpack it). `network:
+bridge` builds it for the second Mac guest kernel `Image-explore-netns`. The Mac `hydo compose`
+now writes the same manifest as Linux. Image `f9038b23…`, disk `120e7088…` (two builds identical).
+Every schedule twice from a fresh boot (`hydo run` on the M2 Pro), identical:
+
+| schedule | verdict | fingerprint |
+|---|---|---|
+| `disk=none \| run` | OK: all 20 votes counted 3.0 s after the heal | `bd065a3e8dc7eebc` |
+| `disk=none \| run K=worker@5+5` | OK: worker killed before step 5, restarted before step 10, all 20 counted | `642d89607d21aa2e` |
+| `disk=cut \| run C=12` | VIOLATION `votes.counted_soon`: voter0 acknowledged but not counted (as on x86_64) | `1058b9d6fc1854f7` |
+| `disk=none \| run N=vote-redis@5-12:loss,100%` | OK with 13 of 20 acknowledged; `vh1:sent=0,dropped=35`, as on x86_64 | `88b7fe56b6025545` |
