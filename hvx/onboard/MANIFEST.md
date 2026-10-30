@@ -850,8 +850,11 @@ the schedule's guest part longer than 500 bytes (the engine's limit is 511).
 **Where each form appears.** The explorer draws the seed form. After shrinking, it turns the
 minimal composition into the resolved form and runs that twice; when it fails the same way, the
 resolved schedule is the reported minimal schedule (`report.json` `shrunk[].stable`,
-`stable_schedule`, `contents`). Otherwise the report keeps the seed form and says why
-(`stable_note`), and `hydo save` still writes the resolved form. `hydo save` writes:
+`stable_schedule`, `contents`). Otherwise (the resolved run is a different run: the guest starts
+round 0 at another time, so a timing-sensitive failure may not recur) the report keeps the seed
+form and says why (`stable_note`), and `hydo save` writes that seed form with its command list
+(`# commands:`, the old index form below): it replays the failing run exactly while the list is
+unchanged, and by id once the list changes. `hydo save` writes:
 
 ```
 # found by `hydo explore` (seed 6): violation total_conserved

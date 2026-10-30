@@ -620,7 +620,7 @@ def resolved_problems(d, meta, steps=None):
     bad = sorted({cid for _, _, cid, _ in d["entries"] if cid in kinds and kinds[cid] not in PLAN_KINDS})
     if bad:
         errs.append("command%s %s cannot be composed (not a driver or anytime command)" % ("s" if len(bad) > 1 else "", ", ".join(bad)))
-    late = max(r for _, r, _, _ in d["entries"])
+    late = max([r for _, r, _, _ in d["entries"]] or [0])
     if late >= steps:
         errs.append("the saved composition runs an entry in round %d, the plan has %d rounds (workload.steps); "
                     "set steps to at least %d" % (late, steps, late + 1))
@@ -669,10 +669,13 @@ def regression_status(r, meta, steps=None):
             out["warnings"].append("saved in the index form with another command list (then: %s); replayed as the "
                                    "composition it ran then, by command id" % " ".join(r["commands"]))
         else:
-            if r.get("commands") is None and meta.get("composed"):
-                out["warnings"].append("W=%s is in the seed form without the command list it was saved with, so it "
-                                       "composes from the current list; save it again for a stable composition" % w)
-            return out
+            if r.get("commands") is None or not meta.get("commands"):
+                if meta.get("composed"):
+                    out["warnings"].append("W=%s is in the seed form without the command list it was saved with, so "
+                                           "it composes from the current list; save it again for a stable composition" % w)
+                return out
+            # the same list: runs as saved; only the content check below
+            d = resolve_seed(w, meta["commands"], steps or meta.get("steps") or DEFAULT_STEPS, meta["params"])
     except ValueError as e:
         out["error"] = str(e)
         return out
@@ -700,7 +703,18 @@ def saved_regression_text(x):
     if x.get("composition"):
         L.append("# composition: %s" % x["composition"][:400])
     sched = x.get("stable_schedule") or x["minimal"]
-    if x.get("stable"):
+    seedform = w_of(x["minimal"]) or ""
+    if x.get("stable") and x.get("stable_note") and x.get("commands") is not None and \
+            not seedform.startswith((":", "@")):
+        # the resolved form did not fail the same way: keep the seed form that failed, with its
+        # command list (the index form), so it replays exactly while the list is unchanged and is
+        # resolved by id when it changes
+        sched = x["minimal"]
+        L.append("# commands: %s" % " ".join(x["commands"]))
+        for k, v in sorted((x.get("contents") or {}).items()):
+            L.append("# command-sha: %s %s" % (k, v))
+        L.append("# note: %s" % x["stable_note"])
+    elif x.get("stable"):
         w = w_of(sched)
         if w and w.startswith("@"):
             L.append("# compose: %s" % x["stable"])

@@ -78,6 +78,17 @@ def main():
         now = [(e, r_, ids2[c], s) for e, r_, c, s in hc.entries_of(hc.w_of(old["schedule"]), meta2,
                                                                     saved={hc.w_of(old["schedule"])[1:]: old["compose"]})]
         assert now == orig and len(orig) == 34
+        # a shrunk failure whose resolved form did not fail the same way: saved in the index form
+        xs = dict(x, minimal="disk=none dseed=1 | run W=" + w, stable_note="did not fail the same way",
+                  commands=ids)
+        p = os.path.join(td, "fallback.schedule")
+        open(p, "w").write(hc.saved_regression_text(xs))
+        rf = hc.read_regression(p, E)
+        assert rf["schedule"].endswith("W=" + w) and rf["commands"] == ids and rf["contents"], rf
+        st = hc.regression_status(rf, meta)
+        assert st["schedule"] == rf["schedule"] and st["error"] is None and not st["warnings"], st
+        st = hc.regression_status(rf, meta2)          # the list changed: resolved, same entries
+        assert hc.w_of(st["schedule"]) == res and st["error"] is None, st
         # staging: the saved form's file
         R = os.path.join(td, "root")
         hc.stage(meta2, R, ONB)
