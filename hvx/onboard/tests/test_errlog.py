@@ -279,9 +279,11 @@ def test_build(ref):
     if ref is None and not os.path.exists(os.path.join(top_dir, ".git")):
         print("skip  build identity: not a repository checkout and no reference hydo-build given")
         return
-    if ref is None:     # main's hvx/ (hydo-build reads its neighbours: the init, the composer, history)
+    if ref is None:     # hvx/ where this branch left main (hydo-build reads its neighbours: init, composer, history)
         top = tempfile.mkdtemp(prefix="hbref-")
-        arc = subprocess.run(["git", "archive", os.environ.get("HYDO_REF", "main"), "hvx/onboard", "hvx/history"],
+        base = os.environ.get("HYDO_REF") or subprocess.run(["git", "merge-base", "HEAD", "main"], cwd=top_dir,
+                                                            stdout=subprocess.PIPE, text=True).stdout.strip()
+        arc = subprocess.run(["git", "archive", base, "hvx/onboard", "hvx/history"],
                              cwd=os.path.dirname(os.path.dirname(ONB)), stdout=subprocess.PIPE).stdout
         subprocess.run(["tar", "-x", "-C", top], input=arc, check=True)
         ref = os.path.join(top, "hvx", "onboard", "hydo-build")

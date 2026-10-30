@@ -3,8 +3,11 @@
 # log-error file, Kafka's and Redis's stdout, the order service's -- and each error kind is printed
 # as a HYDO-ERRLOG record; the host compares the kinds with known-errors.yaml next to this file
 # (explore.py --known-errors, `hydo run --known-errors`). Everything else is hydo.yaml unchanged.
-# Build on the build box: FRONT=fix hvx/onboard/examples/stack/build-errors.sh
+# Build on the build box: FRONT=fix hvx/onboard/examples/stack/build-errors.sh [--set errlevel=warning]
 name: stack-errors
+
+params:
+  errlevel: error                 # hydo build --set errlevel=warning: also warning-level lines
 description: MySQL + Kafka + Redis behind a gRPC front door; orders must be exactly-once.
 
 guest:
@@ -203,6 +206,7 @@ invariants:
       grep -a "HYDO-ORACLE" /tmp/hydo/oracle.log | tail -1
       grep -a "HYDO-ORACLE" /tmp/hydo/oracle.log | tail -1 | grep -q "HYDO-ORACLE: OK"
 
-errors: true                        # every default (level error, at most 40 kinds per boot)
+errors:
+  level: "{{errlevel}}"            # error (default); --set errlevel=warning adds warning lines
 
 faults: [kill, pause, network, oneway, cut, clock, disk]
