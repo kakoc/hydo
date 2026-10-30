@@ -8,3 +8,5 @@ rust-version.workspace = true
 
 [dependencies]
 hydo-schedule = { workspace = true }
+flate2 = { workspace = true }
+sha2 = { workspace = true }
