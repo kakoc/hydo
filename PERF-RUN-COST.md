@@ -50,10 +50,43 @@ fingerprint it produced was checked against the unchanged engine (section 9).
    slowest run: 3 % of worker time in the Redis campaign, more when a batch is smaller than the
    number of workers.
 
-**Which redesign ideas pay, and how much** (stack numbers unless said otherwise; confidence in
-brackets).
+**Which redesign ideas pay, and how much.** Baseline: the stack campaign's mean run, 19.7 s
+(26 runs without and 15 with a power cut: 8.2 s in the guest, 4.3 s fingerprints, 4.1 s save files
+on the rotating disk, 3.0 s VM creation, restore copies and teardown), and the Redis campaign's
+2.5 s (no cut) and 5.7 s (cut). Confidence in brackets.
 
-{{IDEAS}}
+1. **Keep every snapshot and the carried data disk in memory, never in a file.** Saves 4.1 s of
+   the stack's 19.7 s mean run (21 %; 11.6 s of each power-cut run), 1.9 s of each Redis
+   power-cut run, and cuts the worker boot from 87–99 s to 19 s (stack) and from 42–70 s to 5 s
+   (Redis). Measured directly with the existing `HVX_SNAP_MALLOC=1` switch, same fingerprints:
+   a stack power-cut run went from 34.9 s to 14.1 s. Costs 2.1–3 GiB of memory per worker, which
+   sets the worker count (below). Needs no module change. [high]
+2. **Hash zero pages in one step (exact FNV-1a).** Saves about 3.1 s per stack run (16 %) and
+   about 2.1 s per Redis run (most of a Redis run), with every recorded fingerprint unchanged.
+   Measured: Redis RAM hash 1.07 s → 0.145 s, stack 1.05 s → 0.52 s, same values. [high]
+3. **Fork runs from one in-memory snapshot with copy-on-write, or keep one VM per worker and reset
+   only dirtied pages.** A run changes 0.4 % (Redis) to 11–29 % (stack) of guest RAM and under
+   1.5 % of the data partition, while today every run zeroes, copies and frees 1 GiB of RAM and the
+   whole disk image. Saves about 1.6 s per stack VM and 0.4 s per Redis VM, about 2.2 s per stack
+   run (11 %; a power-cut run builds two VMs) and 0.5 s per Redis run. Needs module work. A smaller
+   first step with the same order of saving for the stack: share the read-only root partition
+   between VMs instead of copying 1.75 GiB into each (0.9 s of the 1.2 s VM creation). [medium-high]
+4. **Workers sized to the machine.** {{WORKERS}}
+5. **Strategies that react to results as runs finish.** `explore.py` itself is not the cost
+   (0.1 s CPU per campaign); the batch barriers are (3 % of worker time in the Redis campaign, more
+   in small shrink rounds), plus shrink candidates that run after the round's first success and are
+   thrown away. Worth doing in the Rust explorer because it is simple there, not for a large
+   saving. [medium]
+6. **Cheap mid-run branching.** Only shrink candidates and timing variants can use it (about 9 %
+   of runs in a typical campaign, up to 36 % in swarm campaigns); confirmation re-runs must run
+   from S1 to prove determinism. The guest is 40 % of a stack run and 3–6 % of a Redis run, so
+   skipping a shared prefix saves at most a few percent of a typical campaign's time, more only in
+   targeted shrinking or timing exploration of long workloads. [medium]
+
+Together, 1 + 2 + 3 bring the stack's mean run from 19.7 s to about 10 s (the guest's 8.2 s plus
+about 1.2 s of fingerprints and a few tenths of a second of copying), and a Redis run from 2.5–5.7 s
+to about 0.6 s (0.15 s guest, 0.3 s fingerprints). After that the guest is the cost: see section 4
+for how much of the guest time is the deterministic tick landing.
 
 ## 2. How it was measured
 
@@ -165,7 +198,23 @@ without the measurement's own time):
 The 6-second recovery boot after a power cut is the same in every stack schedule (1,575–1,603
 ticks, 3.8 million exits): it boots MySQL, Kafka and Redis on the flushed disk and runs the oracle.
 
-{{STEP}}
+**Inside the guest phases** (`HVX_GET_FTSTAT`, the stack's 37 schedules of the 1-worker scaling
+point and Redis's 49 of the 2-worker point; one tick is 2 ms of guest time):
+
+| | exits per run | guest time per run | host time in the VMX section | host s per guest s | µs per exit | share of VMX time spent single-stepping onto exact tick points |
+|---|---|---|---|---|---|---|
+| stack workload | 3.9 million | 1.44 s (720 ticks) | 4.73 s | 3.3 | 1.22 | 11 % |
+| stack recovery boot | 3.8 million | 3.18 s (1,590 ticks) | 5.80 s | 1.8 | 1.53 | 18 % |
+| stack check | 110,000 | 0.05 s | 0.15 s | 3.1 | 1.40 | 11 % |
+| Redis workload | 137,000 | 0.03 s | 0.14 s | 4.4 | 1.02 | 9 % |
+
+The guest phases cost about 1.0–1.5 µs of host time per VM exit (exit handling, entry, and the
+guest code up to the next exit), and the stack's workload makes 2.7 million exits per guest
+second. One stack schedule with a timed kill made 35 million exits in 3.3 s of guest time and took
+33 s. The deterministic tick landing (single steps up to the exact branch) is only 9–18 % of it.
+So once the fixed costs are gone, the guest's exit rate is what to attack; which exit reasons
+dominate (`PAUSE` exits are on for the stack, `HVX_VM_PAUSE_EXIT`) is not visible through the
+existing ioctls (section 11).
 
 **Python and the protocol.** `explore.py`'s own CPU time over the whole Redis campaign (78 engine
 runs, re-runs and shrinking, report) was 0.13 s (`perf/pyrusage.py`). The engines never waited for
