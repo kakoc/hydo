@@ -1,5 +1,11 @@
 # Known bug #1: SQLite WAL-reset corruption (3.51.2 buggy, 3.51.3 fixed)
 
+> Note (M107): `explore.py` and the other Python files named below were the explorer and tools of
+> the time. The explorer is now the Rust crate `hydo/crates/hydo-explore` (`hydo explore`, or the
+> `hydo-explore` program, with the same options); the Python files were deleted in M107 and can
+> be restored from commit 2a58c4b (`git checkout 2a58c4b -- hydo/explore hydo/onboard hydo/history` in a scratch checkout).
+> The commands below are records of how things were run and measured.
+
 Can hydo find a real concurrency bug in unmodified software without being told the trigger?
 Background and sources: `../CANDIDATES.md` section 1 (sqlite.org/wal.html section 11, the
 Antithesis write-up). The bug: two connections in WAL mode; a checkpoint completes, a second

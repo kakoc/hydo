@@ -1,5 +1,11 @@
 # Exit-free spins on the M2: resolving them deterministically
 
+> Note (M107): `explore.py` and the other Python files named below were the explorer and tools of
+> the time. The explorer is now the Rust crate `hydo/crates/hydo-explore` (`hydo explore`, or the
+> `hydo-explore` program, with the same options); the Python files were deleted in M107 and can
+> be restored from commit 2a58c4b (`git checkout 2a58c4b -- hydo/explore hydo/onboard hydo/history` in a scratch checkout).
+> The commands below are records of how things were run and measured.
+
 ## The problem
 
 The Mac VMM (`hv/hvm/hvm.c`, CLAUDE.md M48) keeps a guest deterministic by acting only at

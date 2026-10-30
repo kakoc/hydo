@@ -1,5 +1,11 @@
 # Cheaper vCPU turn ends, and seeded burst turns (2026-10-24)
 
+> Note (M107): `explore.py` and the other Python files named below were the explorer and tools of
+> the time. The explorer is now the Rust crate `hydo/crates/hydo-explore` (`hydo explore`, or the
+> `hydo-explore` program, with the same options); the Python files were deleted in M107 and can
+> be restored from commit 2a58c4b (`git checkout 2a58c4b -- hydo/explore hydo/onboard hydo/history` in a scratch checkout).
+> The commands below are records of how things were run and measured.
+
 M74 found that a vCPU turn end costs about 0.8 ms of host time, so short turns (100 to
 1,000 branches), which are needed to hit narrow race windows, make a run 10–50 times
 slower. This work measured where that time goes, cut what could be cut without losing
@@ -127,9 +133,9 @@ reproducibility with no new state.) `GET_TURNCTL` also reports `burst_turns` and
 `qb=<B>:<s>:<permille>` with optional `qbs=<hex seed>` (default 1), and `qm=<margin>`.
 RESULT adds `qbn=<turns started in a burst>`. On a 1-vCPU engine they give
 `ERROR harness q=/qs=/qb=/qm= need several vCPUs`; `BRANCH` refuses them like `q=`.
-`explore.py --bursts` (needs `--turns`) gives half of the schedules a `qb=` token from its
+`hydo explore --bursts` (needs `--turns`) gives half of the schedules a `qb=` token from its
 own random stream (B in 2,000..200,000, s in 20..1,000, permille 50/100/250/500/1000);
-the shrinker drops it, halves permille, halves B. `explore.py --turn-margin N` passes
+the shrinker drops it, halves permille, halves B. `hydo explore --turn-margin N` passes
 `HVX_TURN_MARGIN=N` to the engine (the margin is not part of the schedule, since it must not
 change results). `hvx_stack_verify` takes `HVX_QUANTUM`, `HVX_TURN_MARGIN`,
 `HVX_BURST=B:s:permille[:seed]`, `HVX_QUANTUM_AFTER=<console string>` (apply them only from

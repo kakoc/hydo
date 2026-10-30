@@ -1,6 +1,6 @@
 # hydo.yaml — the project manifest
 
-A project is onboarded by writing ONE file, `hydo.yaml`. `hydo/onboard/hydo-build` compiles it
+A project is onboarded by writing ONE file, `hydo.yaml`. `hydo build` (or the `hydo-build` program) compiles it
 into a guest image, and one generic guest init (`hydo/onboard/hydo-init.sh`) runs any manifest:
 it starts the services, runs the workload under the explorer's faults and checks the
 invariants. No per-project build script or boot script is written by hand.
@@ -198,7 +198,7 @@ errors: true                   # error logs as findings (see "Error logs as find
 `buggify: true` (top level, optional) says the project's programs carry BUGGIFY fault points
 from an assertion SDK (Go `hydoassert.Buggify`, Rust `hydo_assert::hydo_buggify!`, JavaScript `buggify`; see
 `hydo/ASSERTIONS.md`). The init then turns the schedule token `B=<seed-hex>[,<enable-pm>[,<fire-pm>]]`
-(drawn by `explore.py --buggify`, which keeps `B=` for such a manifest and drops it for others)
+(drawn by `hydo explore --buggify`, which keeps `B=` for such a manifest and drops it for others)
 into `/tmp/hydo-buggify`, the file the SDKs read at a
 program's first fault-point evaluation; without `B=` the file is absent and every point stays
 off. The token `B` is then reserved (no knob may use it). Opt-in: `hydo-init-buggify.sh` is
@@ -211,6 +211,8 @@ hydo-build never pulls: the image is a file on the build machine. Make one with 
 
 ```sh
 docker save -o redis.tar redis:7.2.4                       # Docker (classic or >= 25 format)
+hydo-fetch-image docker.io/library/redis sha256:<linux/amd64 manifest digest> redis:7.2.4 redis.tar
+                                                           # comes with hydo, a docker-save style tar
 skopeo copy docker://docker.io/library/redis@sha256:<manifest digest> \
        docker-archive:redis.tar:redis:7.2.4                # skopeo, a docker-save style tar
 skopeo copy docker://docker.io/library/redis@sha256:<digest> oci:redis-oci:redis:7.2.4
@@ -218,7 +220,7 @@ skopeo copy docker://docker.io/library/redis@sha256:<digest> oci:redis-oci:redis
 ```
 
 (gzip-compressed tars and OCI layouts holding a multi-platform index work too; the build picks
-the `linux/<arch>` manifest. zstd layers are not supported by the build box's Python: re-export
+the `linux/<arch>` manifest. zstd layers are not supported by hydo-build: re-export
 with `skopeo copy --dest-compress-format gzip`.) Pin by digest: `skopeo copy ...@sha256:...`,
 and/or `image_ref: sha256:<manifest digest>` (OCI layout) or `sha256:<image id>` (docker save).
 Every blob is checked against its digest and every layer against the config's `diff_ids`.
@@ -353,8 +355,8 @@ verdict rules are in `hydo/HISTORIES.md`.
   write lost in the crash shows up as a read that contradicts an acknowledged write. Its exit
   status is reported (`HYDO-CHECK-FINAL`); non-zero turns a passing check into an ERROR.
 - The guest prints one `HYDO-CHECK <spec>` line per check when the workload starts. The checks run
-  on the host: `explore.py` (and the shrinker, `run_list.py`), `hydo run` and
-  `hydo/history/hydo-check` combine the guest's verdict with the checks' (the guest's own invariant
+  on the host: the explorer (`hydo explore`, and its shrinker), `hydo run` and
+  `hydo check-history` combine the guest's verdict with the checks' (the guest's own invariant
   violations come first) and write the explanation, e.g. the minimal set of operations that cannot
   be ordered, next to the console (`<tag>.checks.txt`).
 - Only manifests with `checks:` get the recorder and `hydo-init-history.sh` (spliced into
@@ -363,9 +365,8 @@ verdict rules are in `hydo/HISTORIES.md`.
   list-append: `R=everysec` + a power cut loses an acknowledged write, both checks see it) and
   `examples/etcd/hydo-hist.yaml` (puts and gets with etcd's mod_revision, read back through every
   member: etcd issue 14685 shows as a version no order explains).
-- On arm64 (the Mac backend) the same: `explore.py --backend hvm` and the Mac release's
-  `hydo run` / `hydo repro --regressions` run the host checkers (the release ships
-  `hydo/history/`). Examples: `hydo/onboard/examples-mac/redis/hydo-hist.yaml` and
+- On arm64 (the Mac backend) the same: the Mac release's `hydo explore`, `hydo run` and
+  `hydo repro --regressions` run the host checkers (the hydo-history crate). Examples: `hydo/onboard/examples-mac/redis/hydo-hist.yaml` and
   `examples/python-kv/hydo-mac-hist.yaml` (the Python recorder).
 
 ### Fault tokens (what the explorer types at S1)
@@ -394,14 +395,14 @@ them in order), waits until the queue is empty (at most the largest delay in for
 `network fault lifted: queued=<n> drained_ms=<ms> left=<n>`. Before 2026-10-23 the qdisc was
 deleted at once and every queued packet was lost, so TCP retransmitted after a timeout.
 
-A token naming a service the manifest does not have is ignored. `explore.py` draws its
-faults from the manifest (`hydo/explore/manifest_space.py`): kills and pauses from all
+A token naming a service the manifest does not have is ignored. `hydo explore` draws its
+faults from the manifest (the hydo-explore crate's `space.rs`): kills and pauses from all
 services, network and one-way faults from services with a `port:`, knob values from
 `knobs:`, fault placement from `workload.steps`, fault kinds from `faults:`. It reads
 `/etc/hydo/hydo.yaml` out of an `explore-ob-*` image automatically; pass `--manifest` for
 any other image. A knob token that collides with a built-in token (K P N O C T Q X F) is
-rejected. `explore.py --freeze-call` draws `F=` for a manifest whose `faults:` lists `freeze`;
-`explore.py --grpc-faults` draws gRPC-level `H=` tokens for a manifest with a gRPC proxy (see "gRPC faults").
+rejected. `hydo explore --freeze-call` draws `F=` for a manifest whose `faults:` lists `freeze`;
+`hydo explore --grpc-faults` draws gRPC-level `H=` tokens for a manifest with a gRPC proxy (see "gRPC faults").
 
 ### Freeze at a call (stop a service at an exact point of its traffic)
 
@@ -432,7 +433,7 @@ calls another (a single server), the peer `workload`: the workload's own client 
 and NFQUEUE, and stages the aarch64 `iptables-legacy` and `hydo_fc` (see "On the Mac: the second
 guest kernel" below).
 
-A random draw rarely lands on the one packet a narrow-window bug needs. `explore.py --sweep freeze`
+A random draw rarely lands on the one packet a narrow-window bug needs. `hydo explore --sweep freeze`
 tries every packet instead: for each packet stream (a pair, a direction, and either every packet
 or one `freeze_match:` string) and each swept step `s` it first runs the schedule once with `#0`
 and reads the guest's "freeze never fired: <N> of 0 matching events after step <s>" line, so N(s)
@@ -502,7 +503,7 @@ recipe that needs no change to the program: run each member as its own user and 
 routing rule per uid (`ip rule add uidrange …`, a table whose `local 127.0.0.0/8` route has
 `src <addr>`). Clients that connect from `127.0.0.1` are not touched by a link fault.
 
-With two or more services that have `addr:`, `explore.py` (manifest_space.py) adds every pair
+With two or more services that have `addr:`, `hydo explore` adds every pair
 `a-b`, and with three or more every `a-*`, to the targets its network and one-way faults pick
 from. The extension lives in `hydo-init-links.sh`; hydo-build copies it into the image and adds one
 line to `/sbin/init` that sources it, only for manifests with an `addr:`, so every other
@@ -571,14 +572,14 @@ receives; the workload peer is `10.89.0.1`); `fakes:` and `proxies:` default to 
 another address in `10.89.0.0/16` is added to the bridge, and a proxy's `to:` and a webhook's URL
 use bridge addresses.
 
-`explore.py` draws link faults only where there is traffic: the pairs in which one service lists
+`hydo explore` draws link faults only where there is traffic: the pairs in which one service lists
 the other in `depends_on` (a Compose import keeps Compose's `depends_on`), and `a-*` for a service
 with two or more such peers. Services without any `depends_on` between them (peers that find each
 other, such as a cluster) get every pair, as on loopback.
 
 hydo-build stages iproute2's `ip` and the guest kernel's `llc`, `stp`, `bridge` and `veth` modules
 and splices `hydo-init-netns.sh` into `/sbin/init`, only for `network: bridge`; every other
-manifest builds byte-identically (`hydo/explore/netns_ident.py`). On arm64 the default Mac guest
+manifest builds byte-identically. On arm64 the default Mac guest
 kernel (`hv/hvm/explore/build-guest.sh`) has no network namespaces, so such a manifest is built
 for the second guest kernel (next section); the four modules are built into it. One bridge
 models every Compose network: services on different Compose networks can still reach each other.
@@ -595,7 +596,7 @@ policy routing, and iptables (legacy, filter table) with NFQUEUE, all built in. 
 arm64` builds a manifest for the second kernel when it has `network: bridge`, an `addr:` or
 `freeze` in `faults:`; every other manifest builds exactly as before and boots the default kernel.
 Such an image says so in its own root: `/etc/hydo/kernel` holds `Image-explore-netns <sha256>`, and
-the build prints it. `explore.py --backend hvm`, the Mac `hydo run`/`repro`/`explore` and the
+the build prints it. The Mac `hydo run`/`repro`/`explore` and the
 report's reproduction lines read that record and boot exactly that kernel (it must sit next to
 `Image-explore`, and a file with another sha256 is refused), so a reproduction uses the same
 kernel as the run it reproduces; the report's summary shows `guest_kernel`. What the build stages
@@ -751,10 +752,10 @@ of an old idempotency key is still a replay, and undelivered webhooks are re-sen
 record does not fit, it is replaced by `w:trunc` and every check answers 2 (cannot decide), never a
 false verdict.
 
-**Explorer.** `explore.py --protocol-faults` draws `H=` (one token on 60% of the schedules, a
-second on 25%) on its own random stream, from the targets `manifest_space.py` lists: every fake
+**Explorer.** `hydo explore --protocol-faults` draws `H=` (one token on 60% of the schedules, a
+second on 25%) on its own random stream, from the targets the manifest gives: every fake
 route (with the webhook rules when it has a webhook), every proxy and proxy route. Without the flag
-every schedule string is byte-identical (`hydo/explore/protocol_faults_ident.py`).
+every schedule string is byte-identical.
 `--sweep protocol` runs every rule kind (status, status with effect=yes, delay=3000, drop, reset,
 and on webhook routes dup, reorder, late=5000, lost) on every target, one workload step at a time. The shrinker drops
 `H=` tokens, narrows their window, and removes `p=`, `retry-after=` and `effect=`, then halves
@@ -767,7 +768,7 @@ without `fakes:`/`proxies:` builds a byte-identical image. `--arch arm64` (the M
 the arm64 build of the same program: `HYDO_WORLD_GOARCH=arm64 hydo/onboard/world/build.sh
 build/hydo-world-arm64` (`HYDO_WORLDBIN_ARM64` overrides; the Mac release ships it as
 `guest/hydo-world`), and the Mac engine `hvmx` carries the world across a power cut in the same
-3584-byte recovery command as `hvx_explore`; `explore.py --backend hvm` takes `--protocol-faults`
+3584-byte recovery command as `hvx_explore`; `hydo explore` on the Mac takes `--protocol-faults`
 and `--grpc-faults` (Milestone 96).
 
 **Extending it (the code layout).** `world/rules.go`: the `H=` grammar (`parseRule`, one `Rule`
@@ -777,15 +778,15 @@ record, then act: delay / drop / reset / status / answer), `serveTCP` is the byt
 a new protocol is a new serve function that calls `lockGate`, `requestRule`, `record` in that order.
 `world/world.go`: records, webhooks, the control socket (`on`/`off`/`heal`/`event`/`dump`/`summary`)
 and the power-cut carry. `world/check.go`: the checks. `world/config.go`: `world.json`, extractors,
-templates. The explorer's draws are `add_protocol_faults` (rule kinds per target come from
-`manifest_space.Space._pf_targets`).
+templates. The explorer's draws are `add_protocol_faults` in the hydo-explore crate (rule kinds
+per target come from its `space.rs`).
 ## The test composer (`test:` and the `hydo/` folder)
 
 Instead of a fixed `workload.run` split into numbered steps, a project can write its test as
 **small commands and properties** and let hydo compose the commands into seeded sequences and
 concurrent mixes. The composition is part of the schedule (token `W=`), so a schedule replays
 the same commands in the same order and overlap, bit for bit, and the explorer varies and
-shrinks it like a fault. Implementation: `hydo_composer.py` (build side, explorer side),
+shrinks it like a fault. Implementation: the hydo-composer crate (build side, explorer side),
 `hydo-composer.sh` (the guest side; staged only for such a plan). Example:
 `examples/redis-composed/` (the repository layout below, with SETs, transfers, AOF rewrites).
 
@@ -897,8 +898,8 @@ the console (the SDKs write to the console directly).
 
 ### How a composition runs
 
-The plan of a run is a pure function of `W=` and the command list (hydo_composer.plan; the
-same code in awk in the guest, checked by `tests/test_composer.py`): for each of `steps`
+The plan of a run is a pure function of `W=` and the command list (the hydo-composer crate's
+plan; the same code in awk in the guest, checked by that crate's `tests/awk.rs`): for each of `steps`
 rounds, either a serial driver (1 round in 4 when there are parallel drivers), or 1..q
 parallel drivers drawn with repetition, plus an anytime command in 1 round of 3; or, in a
 singleton run, the singleton in round 0. Each entry gets its own `HYDO_SEED`. Round r starts
@@ -917,10 +918,10 @@ where `x` lists plan entries not to run and `o` commands never to run, by id joi
 (`oparallel_driver_set+serial_driver_rewrite`; the shrinker writes ids) or, in schedules from
 before M98, by index in id order as `3.5-9.12`. Without `W=` the guest runs seed 0 with the
 manifest's defaults. This seed form is what the explorer draws; the shrinker's output and saved
-regressions use the resolved form (below, "Stable compositions"). `explore.py`
+regressions use the resolved form (below, "Stable compositions"). `hydo explore`
 puts a `W=` on every schedule of such a plan, from its own random stream, so every other
 field equals the schedule without it (`--no-compose`: no `W=`); manifests without a test plan
-get exactly the old schedules (`hydo/explore/compose_ident.py`). The shrinker tries, in order:
+get exactly the old schedules. The shrinker tries, in order:
 one command never run (`o`), half the commands (`n`), no concurrency (`p1`, then `p-1`), the
 first half of the entries dropped (`x`), single entries (when 8 or fewer are left); the report
 prints the minimal composition round by round.
@@ -1181,9 +1182,9 @@ server acted; failed before reaching it; failed, server's part unknown) as a HYD
 (it always holds, so it can be an invariant that only reports). The console summary before the
 verdict shows each `call` record.
 
-**Explorer.** `explore.py --grpc-faults` draws up to two such tokens per schedule on the
-manifest's gRPC proxies (`hydo/explore/grpc_faults.py`), from its own random stream: without the
-flag every schedule string is byte-identical (`grpc_faults_ident.py`). The shrinker drops a
+**Explorer.** `hydo explore --grpc-faults` draws up to two such tokens per schedule on the
+manifest's gRPC proxies, from its own random stream: without the
+flag every schedule string is byte-identical. The shrinker drops a
 token, narrows its window, and removes `call=`, `rpc=`, `p=`/`seed=`, `dir=req`, turns
 `reset=conn` into `reset` and halves `cut=`/`hold=`. Example: `examples/stack-grpc/`.
 
@@ -1242,10 +1243,10 @@ HYDO-ERRLOG-SUM {"boot":"first","steps":30,"lines":3,"kinds":2,"shown":2}
   marker. At most `errors.max` (default 40) kinds per boot are printed; the summary says how many
   there were.
 
-**On the host** (`hydo/onboard/hydo_errors.py`, used by `explore.py`, `hydo run`, `hydo repro`
+**On the host** (the hydo-errors crate, used by `hydo explore`, `hydo run`, `hydo repro`
 and `hydo errors`). A kind's **signature** is the first 12 hex digits of
 `sha256("<service>\n<template>")`. The known list is `hydo/known-errors.yaml` (or
-`./known-errors.yaml`; `explore.py --known-errors FILE`, `hydo run --known-errors FILE`). It is
+`./known-errors.yaml`; `hydo explore --known-errors FILE`, `hydo run --known-errors FILE`). It is
 NOT part of the image: accepting a kind changes no image and no fingerprint, and a run's findings
 are a pure function of its consoles, its schedule and the list.
 
@@ -1271,7 +1272,7 @@ a restart or a resume, where the service recovers, is part of it. A power cut or
 lasts to the end of the run, including the recovery boot; a disk fault covers the workload. A kind
 is known when one entry covers every one of its occurrences in that run.
 
-**The explorer** (`explore.py`) adds, only for images with `errors:`, `errors_new` (signatures)
+**The explorer** (`hydo explore`) adds, only for images with `errors:`, `errors_new` (signatures)
 and `errors_known` to each run in `runs.jsonl`, `consoles/<tag>.errors.json`, an `errors.json` and
 a section "Error logs" in `report.md`: each new kind with the number of runs, the first seed and
 schedule that produced it, an example line, and -- unless `--no-shrink` -- the smallest schedule
@@ -1313,27 +1314,30 @@ Quote values YAML would otherwise turn into numbers or booleans when you mean a 
 ## Building and running
 
 ```sh
-# on the build machine; tool paths default to build-stack.sh's pins
-HYDO_SEEDRNG=~/hydo/build/hvx_seedrng hydo/onboard/hydo-build path/to/hydo.yaml
-hydo/onboard/hydo-build path/to/hydo.yaml --set version=3.51.3   # a build parameter
-hydo/onboard/hydo-build path/to/hydo.yaml --check         # validate only
-hydo/onboard/hydo-build path/to/hydo.yaml --print-shell   # show the compiled manifest
+# with a release: hydo build path/to/hydo.yaml, hydo run, hydo explore (the quickstarts).
+# In the repository: the hydo-build program (cargo build --release -p hydo-build; it takes the
+# command line of the Python tool it replaced); on the build machine tool paths default
+# to build-stack.sh's pins
+HYDO_SEEDRNG=~/hydo/build/hvx_seedrng hydo-build path/to/hydo.yaml
+hydo-build path/to/hydo.yaml --set version=3.51.3   # a build parameter
+hydo-build path/to/hydo.yaml --check         # validate only
+hydo-build path/to/hydo.yaml --print-shell   # show the compiled manifest
 # -> build/explore-ob-<name>-disk.img; copy it to ~/hydo/build on the bare-metal machine, then:
 ~/bin/hvx-run sudo ./hvx_explore one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz \
     ~/hydo/build/explore-ob-<name>-disk.img <outdir> "disk=none dseed=1 | run C=12"
-python3 hydo/explore/explore.py --image explore-ob-<name>-disk.img --seeds 1-50 --out <dir>
+hydo-explore --image explore-ob-<name>-disk.img --seeds 1-50 --out <dir>   # cargo build --release -p hydo-explore
 ```
 
-Guest RAM: `explore.py` reads `guest.ram_mib` from the manifest inside the image (or from
-`--manifest`) and starts the engine with `--ram-mib N`; `explore.py --ram-mib N` overrides it.
+Guest RAM: the explorer reads `guest.ram_mib` from the manifest inside the image (or from
+`--manifest`) and starts the engine with `--ram-mib N`; `hydo explore --ram-mib N` overrides it.
 The size is not part of a schedule, so a hand run of a non-default image needs the same flag:
 `~/bin/hvx-run sudo ./hvx_explore --ram-mib 2048 one ...` (the report's repro line includes it).
-Out-of-range values are rejected by `hydo-build`, `explore.py` and both engines.
+Out-of-range values are rejected by `hydo-build`, the explorer and both engines.
 
-Guest CPU: `guest.cpu: v3` makes `explore.py` start `hvx_explore --cpu v3` (hvx flag
+Guest CPU: `guest.cpu: v3` makes the explorer start `hvx_explore --cpu v3` (hvx flag
 `HVX_VM_X86_64_V3`): the guest sees AVX/AVX2, FMA, BMI1/2, F16C, LZCNT, MOVBE and XSAVE (x87|SSE|AVX
 only, no AVX-512), which prebuilt x86-64-v3 binaries and images built for Haswell/Broadwell need.
-`explore.py --cpu v3|v2` overrides it. Like the RAM size it is not in the schedule, so a hand run
+`hydo explore --cpu v3|v2` overrides it. Like the RAM size it is not in the schedule, so a hand run
 needs `--cpu v3` too (the report's repro line includes it). Without the key nothing changes.
 
 Inside the image: `/etc/hydo/hydo.yaml` (the manifest as written), `/etc/hydo/manifest.sh`
@@ -1351,25 +1355,24 @@ Inside the image: `/etc/hydo/hydo.yaml` (the manifest as written), `/etc/hydo/ma
 
 ## From Docker Compose
 
-A business stack usually ships a `docker-compose.yaml`. `hydo/onboard/hydo-compose` (or
-`hydo compose` in a release) turns it into a starting `hydo.yaml`, so onboarding begins from
+A business stack usually ships a `docker-compose.yaml`. `hydo compose` (or the `hydo-compose`
+program, the same options) turns it into a starting `hydo.yaml`, so onboarding begins from
 what the team already runs:
 
 ```sh
-hydo/onboard/hydo-compose docker-compose.yml [--out hydo.yaml] [--images-dir images]
+hydo compose docker-compose.yml [--out hydo.yaml] [--images-dir images]
         [--env-file F ...] [--profile P ...] [--use-env] [--no-resolve] [--lock FILE]
         [--network bridge|loopback] [--no-addr]
-sh fetch-images.sh            # written next to hydo.yaml: copies every image by digest (network, once)
-# write the workload and the invariants (the generated file marks them TODO), then hydo-build
+sh fetch-images.sh            # written next to hydo.yaml: copies every image by digest with hydo-fetch-image (network, once)
+# write the workload and the invariants (the generated file marks them TODO), then hydo build
 ```
 
-The importer needs network only to resolve image tags (with skopeo: `SKOPEO`, `PATH`, the nix
-store or `nix build nixpkgs#skopeo`). Everything it resolves is written to
+The importer needs network only to resolve image tags (it asks the registry directly; anonymous
+pulls only, no skopeo). Everything it resolves is written to
 `hydo-compose.lock.json`, so a second run needs no network and writes the same file; an image
-that `fetch-images.sh` already copied is read from the file instead. It parses the Compose file
-with PyYAML when installed and with hydo-build's YAML subset otherwise, extended with the anchors
-Compose files use (`x-common: &a` on a block mapping, `<<: *a` merge keys, `*a` aliases); for
-anchors on scalars or lists without PyYAML, import the output of `docker compose config --format json`.
+that `fetch-images.sh` already copied is read from the file instead. It reads the Compose file
+as YAML 1.1, as PyYAML's `safe_load` does (anchors, aliases and `<<` merge keys included); the
+output of `docker compose config --format json` works as well.
 A bare `environment:` entry (`- POSTGRES_USER`) takes its value from `.env`, as in Compose. The generated manifest is checked with hydo-build's own
 validator before it is written. Example: `examples/compose-voting/` (Docker's example voting app;
 `hydo.generated.yaml` is the raw import, `hydo.yaml` the version with a workload and invariants).

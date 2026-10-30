@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# M107: a research/measurement tool. It needs the Python explorer and builder, deleted in M107
+# (replaced by the hydo-explore and hydo-build crates): restore them from commit 2a58c4b with
+# git checkout 2a58c4b -- hydo/explore hydo/onboard hydo/history in a scratch checkout, and run it there.
 """M95 identity proof for a release build on a non-Nix machine: a plain hydo-build on the Nix build
 box keeps the build user's file owners (1000:100) in the root image, while the Linux release
 sets them to 0:0 (hvx/dist/hydo, own_by_root). This replays own_by_root on a copy of an image

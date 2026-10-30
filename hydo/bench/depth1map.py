@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# M107: a research/measurement tool. It needs the Python explorer and builder, deleted in M107
+# (replaced by the hydo-explore and hydo-build crates): restore them from commit 2a58c4b with
+# git checkout 2a58c4b -- hydo/explore hydo/onboard hydo/history in a scratch checkout, and run it there.
 """depth1map.py -- trigger map of a defect from two `explore.py --sweep depth1` runs (M56).
 
     python3 depth1map.py <defect sweep dir> <control sweep dir> [--sig REGEX]
