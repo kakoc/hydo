@@ -46,6 +46,10 @@ boot under hvx (`hvx_linux`, `hvx_boot_verify`, `hvx_disk_boot_verify`) and the 
 (`hvx_repro_*`), unloads the module, scans kmemleak, and attributes each splat to the test that
 was running. Exit status 0 means no failure and no splat. With `DEBUG_OUT=debug-orig` it boots
 the unfixed module instead, which is how each reproducer was shown to fail before its fix.
+`hvx_repro_pageleak` checks that 200 VM lifecycles give their pages back (kmemleak does not
+see pages from `__get_free_page`). `hvx_repro_bigalloc` (a 3 GiB VM and a 4 GiB disk) is not in
+the default list because it needs a VM smaller than 3 GiB:
+`VM_MEM=2048 run-debug.sh hvx_repro_bigalloc`.
 
 What the nested VM cannot cover: the build machine CPU is hybrid and KVM gives a nested guest no PMU
 (M17), so `HVX_VM_PMU_CLOCK` and everything on it (the several-vCPU scheduler, tick jitter,
@@ -71,6 +75,14 @@ safety.sh smoke [MIN]        # bounded smoke run, 2 VMs (default 20 min); after 
 safety.sh campaign HOURS [N] # long run in the background, N VMs (default 4), pid file
 safety.sh status | stop      # crash titles, corpus and coverage; stop by pid file
 ```
+
+Each fuzzing VM has 2 vCPUs and 3 GiB (`VM_MEM`; KASAN reserves about 430 MiB of it), and the
+fuzzer keeps guest RAM at 8 MiB or less, because a program may hold many VMs at once; with
+2 GiB VMs and 32 MiB guests the VMs ran out of memory every few minutes. `BUNDLE=debug-orig`
+fuzzes the unfixed module of `main` instead (it finds the `HVX_GET_PMU` crash within a minute,
+which is a quick check that the fuzzer works). Before a campaign starts, `campaign.sh` waits
+for `VM count × (VM_MEM + 512) + MEM_RESERVE` MiB to be available, and its guard stops the
+campaign when less than `MEM_FLOOR` MiB remain.
 
 Results are in `~/hydo-safety/campaign/` on the build machine (`long/` or `smoke-*/`, each with
 `manager.log`, `crashes/<id>/{description,log*,report*,repro.*}`); the web UI listens on
