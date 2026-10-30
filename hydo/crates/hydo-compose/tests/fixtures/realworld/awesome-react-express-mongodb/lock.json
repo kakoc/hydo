@@ -1,0 +1,131 @@
+{
+ "images": {
+  "example/backend:dev": {
+   "index_digest": "sha256:94b46dd9f80a1b591d173e1221c61a6edbabdce50b709de52628b89549d6d0ad",
+   "name": "example/backend",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "backend"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:d0f08862b40be7999645322401cacb113ea622705e155273d33404d52c2f6bc4",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "example/backend:dev",
+   "registry": "docker.io",
+   "repo": "example/backend",
+   "tag": "dev"
+  },
+  "example/frontend:dev": {
+   "index_digest": "sha256:244ded81b28f22b4937b8cb16c65ca072580cd4c755c5eafae1f35f3f76aa5d8",
+   "name": "example/frontend",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "frontend"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:99a74cfbfbc7d7560bb8e4efae551150a35e8c76ab500a7730ac7972517c4f9b",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "frontend"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:d169df687f2a58fc6d2b5a130b856488fd1b433dfb29e4021c7c3312dca41cf8",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "example/frontend:dev",
+   "registry": "docker.io",
+   "repo": "example/frontend",
+   "tag": "dev"
+  },
+  "mongo:4.2.0": {
+   "index_digest": "sha256:959ee05f40b6d559efdcd19f2a78acba301b0a98e260b1611fbe91031fc9e1e5",
+   "name": "mongo",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "mongo"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "27017/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/data/configdb": {},
+       "/data/db": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:e89306556f22346225397c425e781943ba7fb0bbf9136940ddf2769bf1e8ce07",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "mongo:4.2.0",
+   "registry": "docker.io",
+   "repo": "library/mongo",
+   "tag": "4.2.0"
+  }
+ }
+}

@@ -1,0 +1,200 @@
+{
+ "images": {
+  "docker.n8n.io/n8nio/n8n:": {
+   "index_digest": "sha256:057b6451e51fb8343a8c5462631f0511b496b4d82134687bfbd25af222177b0b",
+   "name": "docker.n8n.io/n8nio/n8n",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "n8n"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:fac6ad6ce16ed034261cdfb4f574b22b70ecf0c1304b50d782968205d6f87df9",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "docker.n8n.io/n8nio/n8n:",
+   "registry": "docker.n8n.io",
+   "repo": "n8nio/n8n",
+   "tag": ""
+  },
+  "docker.n8n.io/n8nio/n8n:1.110.1": {
+   "index_digest": "sha256:a82ffe886347a96606e270a40ba379bbfb475417eb6883aa478b98b35162f591",
+   "name": "docker.n8n.io/n8nio/n8n",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "n8n"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:1ea50c8b13cbf5d921f86923f56e37c803a59b4891dd57cf95cd6af67651f4d8",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "docker.n8n.io/n8nio/n8n:1.110.1",
+   "registry": "docker.n8n.io",
+   "repo": "n8nio/n8n",
+   "tag": "1.110.1"
+  },
+  "n8nio/runners:": {
+   "index_digest": "sha256:fef3588bf100735720835125ba72aaa8dc82760225dc91585e30ea2936953a78",
+   "name": "n8nio/runners",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "runners"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:2f61270e009621cf55b194f5098c74cbd4e4d146db8755e74ea4e4e2972de396",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "n8nio/runners:",
+   "registry": "docker.io",
+   "repo": "n8nio/runners",
+   "tag": ""
+  },
+  "n8nio/runners:1.110.1": {
+   "index_digest": "sha256:351c5cceabf58d380dfe6e28671336220e81c8266bfaebc357de77e4e8160e3f",
+   "name": "n8nio/runners",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "runners"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:3074051d31197451f1e28484d4ef192ceeeeaceccd1c626732d207b95aab5216",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "n8nio/runners:1.110.1",
+   "registry": "docker.io",
+   "repo": "n8nio/runners",
+   "tag": "1.110.1"
+  },
+  "postgres:18": {
+   "index_digest": "sha256:573af1d2d5ee6247f01a6af4de0601b82e32aeae9c24cea6a5a4a09529d9e4f2",
+   "name": "postgres",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:1275586ada0153970657016662761e2135f52836fd961b912306a2914df4a4d4",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:21ff683cfd9fc6f68c25cc84097015e423b0f13452d410794cd632cce2f98625",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "postgres:18",
+   "registry": "docker.io",
+   "repo": "library/postgres",
+   "tag": "18"
+  }
+ }
+}

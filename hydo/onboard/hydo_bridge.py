@@ -12,8 +12,6 @@ module is ported to Rust (one crate per module), the Rust CLI stops calling it a
 deleted. The code below is what the two Python release CLIs (hydo/dist/{linux,mac}/hydo before
 M101) did in-process, moved here unchanged.
 
-    agents                 hydo_agents.run(cmd, argv, root)               hydo guide | skill | init
-    compose                hydo_compose.main(argv)                        hydo compose
     errors_cli             hydo_errors.cli(argv, default_dir)             hydo errors
     errors_for_run_dir     hydo_errors.for_run_dir(...) -> res            hydo run / repro
     hist_run_checks        hydohist.run_checks(srcs, verdict) -> dict     hydo run / repro / regressions
@@ -50,18 +48,6 @@ def _onboard():
 
 
 # ---------------------------------------------------------------- small seams
-def agents(a):
-    _onboard()
-    import hydo_agents
-    return hydo_agents.run(a["cmd"], a["argv"], a["root"])
-
-
-def compose(a):
-    _onboard()
-    import hydo_compose
-    return hydo_compose.main(list(a["argv"]))
-
-
 def errors_cli(a):
     _onboard()
     import hydo_errors
@@ -308,7 +294,7 @@ def build_mac(a):
     return hb.main()
 
 
-FUNCS = {f.__name__: f for f in (agents, compose, errors_cli, errors_for_run_dir, hist_run_checks, regression_status,
+FUNCS = {f.__name__: f for f in (errors_cli, errors_for_run_dir, hist_run_checks, regression_status,
                                  regression_warning, saved_regression_text, build_linux, build_mac)}
 
 

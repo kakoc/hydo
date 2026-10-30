@@ -1,0 +1,124 @@
+{
+ "images": {
+  "dpage/pgadmin4:latest": {
+   "index_digest": "sha256:5a4c9ef7062da89b435b1fb35f256a678147ef05e7177942677df39767039661",
+   "name": "dpage/pgadmin4",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "pgadmin4"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:2710d1276405921c3973bdde7b45b0821488504641d911f7ebf792de96148828",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "pgadmin4"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:481c78ea2d846ccb4acdd7b9f2b53f35081d33dff3455d11678abfdb6803f8f9",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "dpage/pgadmin4:latest",
+   "registry": "docker.io",
+   "repo": "dpage/pgadmin4",
+   "tag": "latest"
+  },
+  "postgres:latest": {
+   "index_digest": "sha256:4ccc823cfedcb158a319c0fca2ad1121133ea7257fb752194def0ff201f35ac3",
+   "name": "postgres",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:a5adbdd16776387d6ff7a4c1a2edd81d2ab7f45f64ac014a06ff9ab7744dc8df",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:afab6c9348877fa2e02b983dfffdfe1b350ee60b2c79dc8e128d4e900367c56b",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "postgres:latest",
+   "registry": "docker.io",
+   "repo": "library/postgres",
+   "tag": "latest"
+  }
+ }
+}

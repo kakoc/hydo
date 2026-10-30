@@ -1,0 +1,136 @@
+{
+ "images": {
+  "example/backend:dev": {
+   "index_digest": "sha256:94b46dd9f80a1b591d173e1221c61a6edbabdce50b709de52628b89549d6d0ad",
+   "name": "example/backend",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "backend"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:d0f08862b40be7999645322401cacb113ea622705e155273d33404d52c2f6bc4",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "example/backend:dev",
+   "registry": "docker.io",
+   "repo": "example/backend",
+   "tag": "dev"
+  },
+  "nginx": {
+   "index_digest": "sha256:5be1ecc7935f1dd85635d4feedaf660594030253cc97c9e9ca3819ffeac36b65",
+   "name": "nginx",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "nginx"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "80/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:01c7e9025dca0ab666276686a154b88c0b275504d62291694d6e99ba3d618f4d",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "nginx",
+   "registry": "docker.io",
+   "repo": "library/nginx",
+   "tag": "latest"
+  },
+  "postgres": {
+   "index_digest": "sha256:a942b37ccfaf5a813b1432caa209a43b9d144e47ad0de1549c289c253e556cd5",
+   "name": "postgres",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:28694533d3ed5f00aea835b8c4327acd88acba571c6d8fdca1854a4b5615216c",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:d118ccf534615beeacadb905af541f21b31de6692cb58629c75dd618da0c3bef",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "postgres",
+   "registry": "docker.io",
+   "repo": "library/postgres",
+   "tag": "latest"
+  }
+ }
+}

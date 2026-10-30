@@ -1,0 +1,44 @@
+hydo-compose -- turn a docker-compose.yaml into a starting hydo.yaml (MANIFEST.md, "From Docker
+Compose").
+
+    hydo-compose <docker-compose.yaml> [--out hydo.yaml] [--name NAME] [--images-dir DIR]
+                 [--env-file FILE ...] [--profile P ...] [--use-env] [--no-resolve] [--lock FILE]
+                 [--network bridge|loopback] [--no-addr]
+
+What it does, per Compose service (the table in MANIFEST.md lists every key):
+  * image: resolved to digests with skopeo (the index digest and the linux/amd64 + linux/arm64
+    manifest digests; tags are never trusted at build time). The image config (ports, healthcheck,
+    volumes, user, CPU variant) is read with `skopeo inspect --config`. Everything resolved is
+    recorded in a lock file (default hydo-compose.lock.json next to the output), so a second run
+    needs no network and gives the same manifest. A script fetch-images.sh (next to the output)
+    copies the images by digest into --images-dir (default images/) -- hydo-build never pulls.
+  * command / entrypoint / environment / env_file / working_dir / user -> the service's cmd /
+    entrypoint / env / workdir / user (Compose semantics: strings are split into words, $$ is $).
+  * depends_on (incl. condition: service_healthy) -> depends_on (hydo starts a service only after
+    its dependencies are ready, so service_healthy and service_started both hold);
+    condition: service_completed_successfully (a one-shot job) -> the job runs in the setup of the
+    services that depend on it.
+  * healthcheck (or the image's HEALTHCHECK) -> ready: (run inside the image with hydo-oci);
+    without one, a TCP check of the service's port.
+  * ports / expose (else the image's EXPOSE) -> port: (the first container port).
+  * networks: the manifest gets `network: bridge` (MANIFEST.md "Service networks"): like Docker's
+    bridge network, every service runs in its own network namespace with its own address
+    (addr: 10.89.0.11, .12, ...) and a private localhost, so two services may use the same port and
+    network faults between services act on their real traffic. The Compose service names (plus
+    container_name, hostname, network aliases, links aliases, extra_hosts; host-gateway is the
+    bridge's 10.89.0.1) resolve through /etc/hosts, in the hydo root and inside every image root.
+    --network loopback: the Milestone 84 layout instead -- one shared loopback network, addr:
+    127.0.0.11, .12, ... (link faults then act on nothing: outgoing connections leave from
+    127.0.0.1). --no-addr: one shared loopback network, every name resolves to 127.0.0.1 and no
+    addr: is written (what `hydo compose` on a Mac passed before Milestone 99, when the arm64
+    guest kernel had no network namespaces; the Mac now builds network: bridge too).
+  * volumes: named and anonymous volumes (and the image's VOLUMEs) -> directories on the data disk
+    (/data/vol/<name>, the fault target) mounted into the image with a copy of the image's content
+    on first use, as Docker does; bind mounts of existing files/directories -> copied into the
+    read-only root and mounted; tmpfs -> tmpfs. Every image service also gets a writable /run and
+    a /dev/shm (a container has them; the hydo image root is read-only).
+  * restart -> recovery (restart: "no" = not started again after a power cut).
+It cannot know the workload or the invariants: it writes a TODO skeleton for both, which the
+hydo-onboard skill (`hydo guide`; skills/hydo-onboard in hydo's repository) fills in. Unsupported keys are reported as warnings
+with what to do. Stdlib only; PyYAML is used when installed (anchors, merge keys), otherwise the
+hydo-build YAML subset parser (or give a .json file, e.g. `docker compose config --format json`).

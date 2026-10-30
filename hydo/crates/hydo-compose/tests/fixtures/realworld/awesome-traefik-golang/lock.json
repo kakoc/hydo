@@ -1,0 +1,72 @@
+{
+ "images": {
+  "example/backend:dev": {
+   "index_digest": "sha256:94b46dd9f80a1b591d173e1221c61a6edbabdce50b709de52628b89549d6d0ad",
+   "name": "example/backend",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "backend"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:d0f08862b40be7999645322401cacb113ea622705e155273d33404d52c2f6bc4",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "example/backend:dev",
+   "registry": "docker.io",
+   "repo": "example/backend",
+   "tag": "dev"
+  },
+  "traefik:2.6": {
+   "index_digest": "sha256:6f8a186e8aecd46e67cfd1507fd14327c291bd9c75916d66626e20c271a106ac",
+   "name": "traefik",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "traefik"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "80/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:0aa5b307fffa36fd4a7cc4cd4dbfd5078885f9f8df47b32f15fed838d700a823",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "traefik:2.6",
+   "registry": "docker.io",
+   "repo": "library/traefik",
+   "tag": "2.6"
+  }
+ }
+}
