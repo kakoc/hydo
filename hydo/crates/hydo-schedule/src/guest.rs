@@ -30,7 +30,7 @@ pub enum Netem {
 impl Netem {
     fn parse_list(s: &str, what: &str) -> Result<Vec<Netem>, ParseError> {
         let t: Vec<&str> = s.split(',').collect();
-        if t.len() % 2 != 0 || t.is_empty() {
+        if !t.len().is_multiple_of(2) || t.is_empty() {
             return Err(err(format!(
                 "{what}: netem arguments come in pairs <kind>,<value> (got {s:?})"
             )));
