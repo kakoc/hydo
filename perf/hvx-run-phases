@@ -1,0 +1,10 @@
+#!/bin/bash
+# HYDO_HVX_RUN for explore.py during the cost measurement (PERF-RUN-COST.md): the same as
+# ~/bin/hvx-run, but the engine also gets HVX_EXPLORE_PHASES=1 (and $PERF_EXTRA_ENV), so every
+# worker's stderr (worker-N.err) carries the PHBOOT/PHASES lines. explore.py is unchanged; it
+# calls "$HYDO_HVX_RUN sudo env HVX_SNAP_DIR=... <engine> ...".
+if [ "$1" = sudo ] && [ "$2" = env ]; then
+  shift 2
+  exec ~/bin/hvx-run sudo env HVX_EXPLORE_PHASES=1 ${PERF_EXTRA_ENV:-} "$@"
+fi
+exec ~/bin/hvx-run "$@"
