@@ -20,7 +20,7 @@ New milestone sections go to the END of `docs/HISTORY.md`. Each new milestone al
 - If the bare-metal machine wedges, only the user can restart it. Ask the user.
 - Module locking: every VM run goes through `~/bin/hvx-run` (a shared flock on `~/.hvx-module.lock`), and every module reload goes through `~/bin/hvx-reload` (exclusive). Use them so that a reload never pulls the module out from under another session's run (M35).
 - Regression runner: `hv/hvx/deploy-metal.sh [load] [flagships]` runs from the Mac. It syncs the userspace sources (never `hvx.c`/`hvx_abi.h` unless `load` is given), compiles on the box against the box's `hvx_abi.h`, runs the tests through `hvx-run`, and checks each result against its baseline. Today it reports "ALL PASS (31 checks)". `load` also rebuilds and reloads the main module; `flagships` also runs every real-service verify.
-- The main module loaded now is main at M97 (M68+M69, M85's cheaper turns and M97's nine fixes): srcversion `0799F1B8EE2A35600D94EB4`, loaded 2026-10-30 with `deploy-metal.sh load` (ALL PASS, 31 checks) and both pinned reproducers (`2403499c9a3f8419`, `f87130453609a5d6`). The main tree's own `~/hydo/hv/hvx/hvx_explore` and `hvx_explore.c` on the box are stale (2026-10-16, before M68) and fail with "HVX_GET_SNAPSHOT: Inappropriate ioctl for device"; build a current one from main (`cc -O2 -Wall -o hvx_explore hvx_explore.c -lipt`), as `~/hydo-lead/hvx/hvx_explore` is.
+- The main module loaded now is main at M97 (M68+M69, M85's cheaper turns and M97's nine fixes): srcversion `0799F1B8EE2A35600D94EB4`, loaded 2026-10-30 with `deploy-metal.sh load` (ALL PASS, 31 checks) and both pinned reproducers (`2403499c9a3f8419`, `f87130453609a5d6`). The main tree's own `~/hydo/hvx/hvx_explore` and `hvx_explore.c` on the box (old layout, before M100) are stale (2026-10-16, before M68) and fail with "HVX_GET_SNAPSHOT: Inappropriate ioctl for device"; build a current one from main (`cc -O2 -Wall -o hvx_explore hvx_explore.c -lipt`), as `~/hydo-lead/hvx/hvx_explore` is.
 - Guest images built on the build machine are copied with rsync into the bare-metal machine's `~/hydo/build/` (`AGENTS.local.md` says how). Results of past runs live under `/var/tmp/m<NN>-*` on the bare-metal machine.
 - Other sessions use their own trees on the bare-metal machine (for example `~/hydo-tj`, `~/hydo-smp2`, `~/hydo-avx`) so that they do not overwrite each other's binaries. Use your own tree when another session is active.
 
@@ -37,7 +37,7 @@ New milestone sections go to the END of `docs/HISTORY.md`. Each new milestone al
 
 ### Removed tooling
 
-The nested-VM (L1) tooling was removed on 2026-10-20: `hv/hvx/run-l1.sh`, `hv/hvx/deploy-hvx.sh`, `hv/hvx/deploy-resume.sh`, `hv/hvx/cloud-init/`, `hv/hvx/kafka-once.sh`, and the `hv/hvx/run-*-demo.sh`/`run-fuzz*`/`run-spread*` runners. Milestones 1–32 in `docs/HISTORY.md` describe that era. The tooling can be restored from git (`git show 2c04001:hv/hvx/run-l1.sh`) if a nested VM is ever needed again, for example when no bare-metal test machine is available or to test a host without a usable PMU.
+The nested-VM (L1) tooling was removed on 2026-10-20 (paths before M100): `hvx/run-l1.sh`, `hvx/deploy-hvx.sh`, `hvx/deploy-resume.sh`, `hvx/cloud-init/`, `hvx/kafka-once.sh`, and the `hvx/run-*-demo.sh`/`run-fuzz*`/`run-spread*` runners. Milestones 1–32 in `docs/HISTORY.md` describe that era. The tooling can be restored from git (`git show 2c04001:hvx/run-l1.sh`) if a nested VM is ever needed again, for example when no bare-metal machine is available or to test a host without a usable PMU.
 
 ## Safety and coordination rules (still in force)
 
@@ -294,7 +294,7 @@ Milestones 1–32 ran inside the nested L1 VM on the build machine, before 2026-
 - `hydo/PRODUCT.md`: hydo from a user's point of view — what it offers, the known gaps, and the user's decision on each (2026-10-24): approved and in progress (history checkers, protocol faults and fake outside services, a Rust SDK, Docker Compose import), to document only (CI mode, running locally and in CI, scale, blind spots), not decided (test composer, fast-forwarded time).
 - `hv/hvx/hvx.c` (the module), `hv/hvx/hvx_abi.h` (the ioctl ABI shared with userspace), `hv/hvx/hvx_boot.h` (the bzImage loader recipe), and the `hv/hvx/hvx_*_test.c` and `hv/hvx/hvx_*_verify.c` tests and harnesses.
 - `hydo/explore/` (the explorer), `hydo/stack/` (the order service and the assertion SDK), `hydo/bench/` (the bug benchmark), `hydo/onboard/` (manifests), `hv/hvx/pt/` (Processor Trace tools), `hv/hvx/race/` (race calibration and side-module scripts), `hydo/cutflush/` (flush-cut findings), `hv/hvx/tdet/` (SMI tools).
-- `build-linux.sh`, `build-stack.sh`, `build-kafka.sh`, `build-mysql.sh` (guest images), `docs/BUILD-PINS.md`, `docs/REBASELINE.md`.
+- `hv/hvx/images/` (`build-linux.sh`, `build-stack.sh`, `build-kafka.sh`, `build-mysql.sh`: the x86_64 guest kernel and the hand-written guest images, with the guest programs they compile), `docs/BUILD-PINS.md`, `docs/REBASELINE.md`.
 - `src/` (the Rust KVM monitor: `vmm.rs`, `state.rs`, `pmu.rs`, `detlinux.rs`, `boot.rs`).
 
 ## Useful tools and references
