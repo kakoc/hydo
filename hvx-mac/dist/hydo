@@ -15,6 +15,9 @@
     hydo explore [--seeds 1-50] [--image IMG] [--workers N] [--strategy swarm] [--out DIR]
                                                   generate, run, re-run and shrink schedules
     hydo report  [DIR]                            print the report of the last (or a given) exploration
+    hydo errors  list [DIR] | accept SIG... --reason TEXT [--with F] [--during F] | check
+                                                  error logs as findings: list new error kinds, accept
+                                                  expected ones into hydo/known-errors.yaml (MANIFEST.md)
     hydo doctor                                   check this Mac and the installation
 
 IMG defaults to the one image in ./hydo-out (what `hydo build` wrote there). Everything runs on
@@ -295,6 +298,14 @@ def cmd_run(argv):
     if not any(l.startswith("RESULT") for l in text.splitlines()):
         sys.stderr.write(text[-3000:])
         die("the run produced no RESULT line (output above)")
+    import re
+    m = [re.match(r"RESULT \S+ fp=(\S+) .*?verdict=(.*)", l) for l in text.splitlines()]
+    m = [x for x in m if x]
+    sys.path.insert(0, ONBOARD)
+    import hydo_errors          # error logs as findings (an image whose manifest has errors:)
+    res = hydo_errors.for_run_dir(outdir, sched, {"fp": m[0].group(1), "verdict": m[0].group(2)} if m else {"verdict": ""})
+    if res.get("pre_errlog_verdict"):
+        print("hydo: verdict with the known-errors list (unknown: fail): %s" % res["verdict"])
     return 0
 
 
@@ -307,6 +318,11 @@ def cmd_explore(argv):
         args += ["--seeds", "1-20"]
     if "--workers" not in args:
         args += ["--workers", "4"]
+    if "--known-errors" not in args:        # error logs as findings: the project's reviewed list
+        sys.path.insert(0, ONBOARD)
+        import hydo_errors
+        if hydo_errors.default_file():
+            args += ["--known-errors", os.path.abspath(hydo_errors.default_file())]
     cmd = [sys.executable, os.path.join(EXPLORE, "explore.py"), "--backend", "hvm",
            "--hvm-kernel", KERNEL, "--image", image] + args
     rc = subprocess.call(cmd)
@@ -314,6 +330,13 @@ def cmd_explore(argv):
     if rc == 0:
         print("hydo: report: %s   (hydo report %s)" % (os.path.join(out, "report.md"), out))
     return rc
+
+
+def cmd_errors(argv):
+    """hydo errors list|accept|check (hvx/onboard/hydo_errors.py, shared with the Linux release)."""
+    sys.path.insert(0, ONBOARD)
+    import hydo_errors
+    return hydo_errors.cli(argv, os.path.join(OUT, "explore"))
 
 
 def cmd_report(argv):
@@ -350,7 +373,7 @@ def cmd_doctor(argv):
 
 def main():
     cmds = {"compose": cmd_compose, "build": cmd_build, "run": cmd_run, "repro": cmd_repro, "explore": cmd_explore,
-            "save": cmd_save,
+            "save": cmd_save, "errors": cmd_errors,
             "report": cmd_report, "doctor": cmd_doctor}
     if len(sys.argv) >= 2 and sys.argv[1] in ("guide", "skill", "init"):
         sys.path.insert(0, ONBOARD)
