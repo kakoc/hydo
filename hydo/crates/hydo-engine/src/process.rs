@@ -13,7 +13,9 @@ use std::time::Instant;
 pub(crate) fn run_one(mut cmd: Command) -> Result<OneRun, EngineError> {
     let t0 = Instant::now();
     let (mut reader, writer) = std::io::pipe()?;
-    cmd.stdin(Stdio::null()).stdout(writer.try_clone()?).stderr(writer);
+    cmd.stdin(Stdio::null())
+        .stdout(writer.try_clone()?)
+        .stderr(writer);
     let mut child = cmd.spawn()?;
     drop(cmd); // the parent's copies of the write end must be closed, or the read never ends
     let mut bytes = Vec::new();
@@ -40,8 +42,15 @@ pub(crate) struct ProcessWorker {
 
 impl ProcessWorker {
     /// Start `cmd` with stdin/stdout piped and stderr appended to `stderr_log`, and wait for READY.
-    pub(crate) fn start(mut cmd: Command, stderr_log: &Path, branch: bool) -> Result<ProcessWorker, EngineError> {
-        let err = std::fs::OpenOptions::new().create(true).append(true).open(stderr_log)?;
+    pub(crate) fn start(
+        mut cmd: Command,
+        stderr_log: &Path,
+        branch: bool,
+    ) -> Result<ProcessWorker, EngineError> {
+        let err = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(stderr_log)?;
         cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(err);
         let mut child = cmd.spawn()?;
         let stdin = child.stdin.take().expect("piped stdin");
@@ -86,7 +95,9 @@ impl Worker for ProcessWorker {
 
     fn run(&mut self, tag: &str, schedule: &Schedule) -> Result<RunResult, EngineError> {
         if tag.is_empty() || tag.contains(char::is_whitespace) || tag.len() > 63 {
-            return Err(EngineError::Protocol(format!("bad tag {tag:?} (one word, at most 63 bytes)")));
+            return Err(EngineError::Protocol(format!(
+                "bad tag {tag:?} (one word, at most 63 bytes)"
+            )));
         }
         self.send(&format!("RUN {tag} {schedule}"))?;
         let line = self.read_line()?;
@@ -95,7 +106,9 @@ impl Worker for ProcessWorker {
 
     fn branch(&mut self, req: &BranchRequest) -> Result<BranchOutcome, EngineError> {
         if !self.branch {
-            return Err(EngineError::Unsupported("BRANCH is not supported on hvm".into()));
+            return Err(EngineError::Unsupported(
+                "BRANCH is not supported on hvm".into(),
+            ));
         }
         self.send(&req.line())?;
         let mut out = BranchOutcome::default();
@@ -104,7 +117,10 @@ impl Worker for ProcessWorker {
             let l = line.trim();
             if let Some(rest) = l.strip_prefix("BRANCHEND") {
                 let rest = rest.trim();
-                out.end_note = rest.split_once(' ').map(|(_, n)| n.to_string()).unwrap_or_default();
+                out.end_note = rest
+                    .split_once(' ')
+                    .map(|(_, n)| n.to_string())
+                    .unwrap_or_default();
                 return Ok(out);
             }
             if let Some(rest) = l.strip_prefix("BRANCHPOINT ") {

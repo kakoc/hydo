@@ -37,7 +37,11 @@ pub fn call(ctx: &Ctx, func: &str, args: Value, env: &[(String, String)]) -> (i3
         Ok(s) => s,
         Err(e) => {
             let _ = std::fs::remove_file(&res);
-            die(&format!("cannot run {} {}: {e} (set HYDO_PYTHON to a Python 3.9+)", python(), script.display()))
+            die(&format!(
+                "cannot run {} {}: {e} (set HYDO_PYTHON to a Python 3.9+)",
+                python(),
+                script.display()
+            ))
         }
     };
     let data = std::fs::read_to_string(&res)
@@ -55,12 +59,22 @@ pub fn rc(ctx: &Ctx, func: &str, args: Value, env: &[(String, String)]) -> i32 {
 
 /// hydo_agents.run(cmd, argv, root): `hydo guide | skill | init`.
 pub fn agents(ctx: &Ctx, cmd: &str, argv: &[String]) -> i32 {
-    rc(ctx, "agents", json!({"cmd": cmd, "argv": argv, "root": ctx.root.display().to_string()}), &[])
+    rc(
+        ctx,
+        "agents",
+        json!({"cmd": cmd, "argv": argv, "root": ctx.root.display().to_string()}),
+        &[],
+    )
 }
 
 /// hydohist.run_checks(srcs, verdict) -> {records, report, verdict}.
 pub fn run_checks(ctx: &Ctx, srcs: &[(String, String)], verdict: Option<&str>) -> Value {
-    let (code, v) = call(ctx, "hist_run_checks", json!({"srcs": srcs, "verdict": verdict}), &[]);
+    let (code, v) = call(
+        ctx,
+        "hist_run_checks",
+        json!({"srcs": srcs, "verdict": verdict}),
+        &[],
+    );
     if code != 0 {
         std::process::exit(code);
     }
@@ -68,7 +82,13 @@ pub fn run_checks(ctx: &Ctx, srcs: &[(String, String)], verdict: Option<&str>) -
 }
 
 /// hydo_errors.for_run_dir(outdir, schedule, res, known) -> res.
-pub fn errors_for_run_dir(ctx: &Ctx, outdir: &Path, schedule: &str, res: &Value, known: Option<&str>) -> Value {
+pub fn errors_for_run_dir(
+    ctx: &Ctx,
+    outdir: &Path,
+    schedule: &str,
+    res: &Value,
+    known: Option<&str>,
+) -> Value {
     let (code, v) = call(
         ctx,
         "errors_for_run_dir",
@@ -92,7 +112,12 @@ pub fn regression_status(ctx: &Ctx, r: &Value, meta: &Value) -> Value {
 
 /// hydo_composer.regression_warning(r, meta).
 pub fn regression_warning(ctx: &Ctx, r: &Value, meta: &Value) -> Option<String> {
-    let (code, v) = call(ctx, "regression_warning", json!({"r": r, "meta": meta}), &[]);
+    let (code, v) = call(
+        ctx,
+        "regression_warning",
+        json!({"r": r, "meta": meta}),
+        &[],
+    );
     if code != 0 {
         std::process::exit(code);
     }

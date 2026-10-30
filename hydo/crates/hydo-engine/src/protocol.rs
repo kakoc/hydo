@@ -72,7 +72,10 @@ impl RunResult {
     }
 
     pub fn extra(&self, key: &str) -> Option<&str> {
-        self.extras.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str())
+        self.extras
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
     }
 
     /// explore.py's verdict_kind: "ok", "violation" or "error".
@@ -111,7 +114,11 @@ pub struct Ready {
 
 impl Ready {
     pub fn parse(line: &str) -> Option<Ready> {
-        let v = line.trim().strip_prefix("READY")?.split("boot_secs=").nth(1)?;
+        let v = line
+            .trim()
+            .strip_prefix("READY")?
+            .split("boot_secs=")
+            .nth(1)?;
         Some(Ready {
             boot_secs: v.split_whitespace().next()?.parse().ok()?,
         })
@@ -178,7 +185,10 @@ mod tests {
 
     #[test]
     fn ready_line() {
-        assert_eq!(Ready::parse("READY boot_secs=41.7\n").unwrap().boot_secs, 41.7);
+        assert_eq!(
+            Ready::parse("READY boot_secs=41.7\n").unwrap().boot_secs,
+            41.7
+        );
         assert!(Ready::parse("hvx_explore: guest RAM").is_none());
     }
 }

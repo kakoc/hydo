@@ -59,7 +59,10 @@ pub fn debugfs_cat(image: &Path, path: &str) -> Result<String, ImageError> {
         .output()?;
     let text = String::from_utf8_lossy(&out.stdout).into_owned();
     if !out.status.success() || text.trim().is_empty() {
-        return Err(ImageError::Missing(format!("no /{path} in {}", image.display())));
+        return Err(ImageError::Missing(format!(
+            "no /{path} in {}",
+            image.display()
+        )));
     }
     Ok(text)
 }
@@ -68,11 +71,15 @@ pub fn debugfs_cat(image: &Path, path: &str) -> Result<String, ImageError> {
 pub fn cpio_file(image: &Path, path: &str) -> Result<String, ImageError> {
     let mut data = Vec::new();
     GzDecoder::new(std::fs::File::open(image)?).read_to_end(&mut data)?;
-    let hex = |b: &[u8]| -> Option<usize> { usize::from_str_radix(std::str::from_utf8(b).ok()?, 16).ok() };
+    let hex = |b: &[u8]| -> Option<usize> {
+        usize::from_str_radix(std::str::from_utf8(b).ok()?, 16).ok()
+    };
     let mut i = 0usize;
     while data.len() >= i + 110 && &data[i..i + 6] == b"070701" {
         let field = |k: usize| hex(&data[i + 6 + 8 * k..i + 14 + 8 * k]);
-        let (Some(fsz), Some(nsz)) = (field(6), field(11)) else { break };
+        let (Some(fsz), Some(nsz)) = (field(6), field(11)) else {
+            break;
+        };
         if nsz == 0 || data.len() < i + 110 + nsz {
             break;
         }
@@ -87,7 +94,10 @@ pub fn cpio_file(image: &Path, path: &str) -> Result<String, ImageError> {
         }
         i = (o + fsz + 3) & !3;
     }
-    Err(ImageError::Missing(format!("no {path} in {}", image.display())))
+    Err(ImageError::Missing(format!(
+        "no {path} in {}",
+        image.display()
+    )))
 }
 
 /// The test composer's plan an image carries (`/etc/hydo/compose.json`), or None.

@@ -3,8 +3,8 @@
 use crate::ctx::{access, python, which, Ctx};
 use crate::hvxenv::{dev, dev_usable, devname, lock, snap_dir, uses_sudo};
 use crate::module::{
-    dev_line, loaded_modules, lock_holders, module_ko, srcversion_file, srcversion_loaded, uname_release,
-    uname_sys_machine,
+    dev_line, loaded_modules, lock_holders, module_ko, srcversion_file, srcversion_loaded,
+    uname_release, uname_sys_machine,
 };
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -76,7 +76,12 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         .map(|(_, m)| m.trim().to_string())
         .unwrap_or_else(|| "?".into());
     println!("     CPU: {model}");
-    c.check(cpu.contains("GenuineIntel"), "an Intel CPU (hvx is a VT-x hypervisor)", "AMD (SVM) is not supported", false);
+    c.check(
+        cpu.contains("GenuineIntel"),
+        "an Intel CPU (hvx is a VT-x hypervisor)",
+        "AMD (SVM) is not supported",
+        false,
+    );
     c.check(
         has("vmx"),
         "VT-x present and enabled in firmware (vmx in /proc/cpuinfo)",
@@ -102,16 +107,29 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         true,
     );
     let (pv, pok) = python_version().unwrap_or_else(|| ("none".into(), false));
-    c.check(pok, &format!("Python 3.9+ (found {pv})"), "install python3 >= 3.9", false);
+    c.check(
+        pok,
+        &format!("Python 3.9+ (found {pv})"),
+        "install python3 >= 3.9",
+        false,
+    );
     for (t, why) in [
         ("cc", "builds the run engine and the report tool"),
         ("make", "builds the kernel module"),
         ("flock", "the module lock, util-linux"),
         ("xz", "unpacks guest kernel modules for network faults"),
-        ("sudo", "loads the module; runs use it only if you cannot open the device"),
+        (
+            "sudo",
+            "loads the module; runs use it only if you cannot open the device",
+        ),
         ("modinfo", "module checks, kmod"),
     ] {
-        c.check(which(t).is_some(), &format!("{t} ({why})"), &format!("install {t}"), false);
+        c.check(
+            which(t).is_some(),
+            &format!("{t} ({why})"),
+            &format!("install {t}"),
+            false,
+        );
     }
     let sudo_ok = which("sudo").is_some()
         && Command::new("sudo")
@@ -127,7 +145,12 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         println!("     {}", dev_line(&d));
     }
     if usable == Some(true) {
-        c.check(true, &format!("{d} can be opened by you: runs do not use sudo"), "", false);
+        c.check(
+            true,
+            &format!("{d} can be opened by you: runs do not use sudo"),
+            "",
+            false,
+        );
         c.check(
             sudo_ok,
             "sudo without a password prompt (only module load/unload need it)",
@@ -148,11 +171,15 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
     let sd = snap_dir();
     if !uses_sudo() {
         let p = Path::new(&sd);
-        let parent = Path::new(sd.trim_end_matches('/')).parent().map(Path::to_path_buf);
+        let parent = Path::new(sd.trim_end_matches('/'))
+            .parent()
+            .map(Path::to_path_buf);
         let target = if p.is_dir() {
             p.to_path_buf()
         } else {
-            parent.filter(|x| !x.as_os_str().is_empty()).unwrap_or_else(|| "/".into())
+            parent
+                .filter(|x| !x.as_os_str().is_empty())
+                .unwrap_or_else(|| "/".into())
         };
         c.check(
             access(&target, libc::W_OK | libc::X_OK),
@@ -180,8 +207,16 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         true,
     );
     let mods = loaded_modules();
-    let (built, live) = (srcversion_file(&module_ko(ctx, "hvx")), srcversion_loaded("hvx"));
-    c.check(built.is_some(), "hvx.ko built by this release", "hydo module build", true);
+    let (built, live) = (
+        srcversion_file(&module_ko(ctx, "hvx")),
+        srcversion_loaded("hvx"),
+    );
+    c.check(
+        built.is_some(),
+        "hvx.ko built by this release",
+        "hydo module build",
+        true,
+    );
     c.check(
         mods.iter().any(|m| m == "hvx") && Path::new("/dev/hvx").exists(),
         "hvx module loaded, /dev/hvx present",
@@ -214,7 +249,11 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         false,
     );
     let lk = lock();
-    println!("     module lock: {} ({} holder(s) now)", lk, lock_holders(&lk));
+    println!(
+        "     module lock: {} ({} holder(s) now)",
+        lk,
+        lock_holders(&lk)
+    );
     let g = ctx.guest();
     for p in [
         g.join("bzImage"),
@@ -225,7 +264,12 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         g.join("store-closures.txt"),
         g.join("store").join("nix").join("store"),
     ] {
-        c.check(p.exists(), &format!("present: {}", rel(ctx, &p)), "reinstall", false);
+        c.check(
+            p.exists(),
+            &format!("present: {}", rel(ctx, &p)),
+            "reinstall",
+            false,
+        );
     }
     c.check(
         access(&ctx.p("hv/hvx/hvx_explore"), libc::X_OK),
@@ -266,7 +310,11 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
                 free,
                 dd.display(),
                 need,
-                if dd == cwd { "images" } else { "run snapshots, $HYDO_SNAP_DIR" }
+                if dd == cwd {
+                    "images"
+                } else {
+                    "run snapshots, $HYDO_SNAP_DIR"
+                }
             ),
             "free some space",
             true,
@@ -301,7 +349,11 @@ fn free_gib(p: &Path) -> Option<f64> {
 }
 
 fn cmd_out(cmd: &str, args: &[&str]) -> Option<(bool, String)> {
-    let o = Command::new(cmd).args(args).stderr(Stdio::piped()).output().ok()?;
+    let o = Command::new(cmd)
+        .args(args)
+        .stderr(Stdio::piped())
+        .output()
+        .ok()?;
     let mut t = String::from_utf8_lossy(&o.stdout).into_owned();
     t.push_str(&String::from_utf8_lossy(&o.stderr));
     Some((o.status.success(), t))
@@ -318,16 +370,32 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         ok = ok && cond;
     };
     let (sys, mach) = uname_sys_machine();
-    check(sys == "Darwin" && mach == "arm64", "Apple Silicon Mac", "hydo needs an M1 or later Mac");
+    check(
+        sys == "Darwin" && mach == "arm64",
+        "Apple Silicon Mac",
+        "hydo needs an M1 or later Mac",
+    );
     let ver = Command::new("sw_vers")
         .arg("-productVersion")
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .unwrap_or_default();
-    let v: Vec<u32> = ver.split('.').take(2).filter_map(|x| x.parse().ok()).collect();
-    check(v.first().copied().unwrap_or(0) >= 13, &format!("macOS 13 or later (found {ver})"), "update macOS");
+    let v: Vec<u32> = ver
+        .split('.')
+        .take(2)
+        .filter_map(|x| x.parse().ok())
+        .collect();
+    check(
+        v.first().copied().unwrap_or(0) >= 13,
+        &format!("macOS 13 or later (found {ver})"),
+        "update macOS",
+    );
     let (pv, pok) = python_version().unwrap_or_else(|| ("none".into(), false));
-    check(pok, &format!("Python 3.9+ (found {pv})"), "use /usr/bin/python3 or newer");
+    check(
+        pok,
+        &format!("Python 3.9+ (found {pv})"),
+        "use /usr/bin/python3 or newer",
+    );
     let cc = Command::new("xcrun")
         .args(["--find", "cc"])
         .stdout(Stdio::piped())
@@ -335,7 +403,11 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         .status()
         .map(|s| s.success())
         .unwrap_or(false);
-    check(cc, "a C compiler (the explorer compiles its property-table tool)", "xcode-select --install");
+    check(
+        cc,
+        "a C compiler (the explorer compiles its property-table tool)",
+        "xcode-select --install",
+    );
     let hvmx = ctx.p("hv/hvm/explore/hvmx");
     for p in [
         hvmx.clone(),
@@ -345,12 +417,22 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         ctx.guest().join("mke2fs"),
         ctx.guest().join("tc-closure.txt"),
     ] {
-        check(p.exists(), &format!("present: {}", rel(ctx, &p)), "reinstall");
-    }
-    for p in [ctx.p("hv/hvm/explore/out/Image-explore-netns"), ctx.guest().join("hydo_fc")] {
         check(
             p.exists(),
-            &format!("present: {} (service networks and the freeze)", rel(ctx, &p)),
+            &format!("present: {}", rel(ctx, &p)),
+            "reinstall",
+        );
+    }
+    for p in [
+        ctx.p("hv/hvm/explore/out/Image-explore-netns"),
+        ctx.guest().join("hydo_fc"),
+    ] {
+        check(
+            p.exists(),
+            &format!(
+                "present: {} (service networks and the freeze)",
+                rel(ctx, &p)
+            ),
             "reinstall",
         );
     }
@@ -359,10 +441,17 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .unwrap_or_default();
-    check(hv == "1", &format!("Hypervisor.framework available (kern.hv_support={hv})"), "not supported on this machine");
-    let sig = cmd_out("codesign", &["-d", "--entitlements", "-", &hvmx.display().to_string()])
-        .map(|(_, t)| t)
-        .unwrap_or_default();
+    check(
+        hv == "1",
+        &format!("Hypervisor.framework available (kern.hv_support={hv})"),
+        "not supported on this machine",
+    );
+    let sig = cmd_out(
+        "codesign",
+        &["-d", "--entitlements", "-", &hvmx.display().to_string()],
+    )
+    .map(|(_, t)| t)
+    .unwrap_or_default();
     check(
         sig.contains("com.apple.security.hypervisor"),
         "hvmx signed with the hypervisor entitlement",

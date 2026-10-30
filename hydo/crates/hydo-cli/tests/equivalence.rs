@@ -12,7 +12,10 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").canonicalize().unwrap()
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .canonicalize()
+        .unwrap()
 }
 
 static N: AtomicU32 = AtomicU32::new(0);
@@ -38,12 +41,20 @@ fn release() -> PathBuf {
     let repo = repo();
     std::fs::create_dir_all(r.join("bin")).unwrap();
     std::fs::copy(env!("CARGO_BIN_EXE_hydo"), r.join("bin/hydo")).unwrap();
-    std::fs::copy(repo.join("hydo/dist/linux/hydo"), r.join("bin/hydo-py-linux")).unwrap();
+    std::fs::copy(
+        repo.join("hydo/dist/linux/hydo"),
+        r.join("bin/hydo-py-linux"),
+    )
+    .unwrap();
     std::fs::copy(repo.join("hydo/dist/mac/hydo"), r.join("bin/hydo-py-mac")).unwrap();
     std::os::unix::fs::symlink(repo.join("hydo"), r.join("hydo")).unwrap();
     std::os::unix::fs::symlink(repo.join("hv"), r.join("hv")).unwrap();
     std::fs::create_dir_all(r.join("skill")).unwrap();
-    std::os::unix::fs::symlink(repo.join("skills/hydo-onboard"), r.join("skill/hydo-onboard")).unwrap();
+    std::os::unix::fs::symlink(
+        repo.join("skills/hydo-onboard"),
+        r.join("skill/hydo-onboard"),
+    )
+    .unwrap();
     std::fs::create_dir_all(r.join("guest")).unwrap();
     std::fs::write(r.join("guest/store-closures.txt"), "").unwrap();
     std::fs::write(r.join("guest/tc-closure.txt"), "").unwrap();
@@ -60,7 +71,10 @@ struct Outcome {
 }
 
 fn snapshot(dir: &Path, base: &Path, out: &mut BTreeMap<String, Vec<u8>>) {
-    let mut v: Vec<_> = std::fs::read_dir(dir).unwrap().filter_map(Result::ok).collect();
+    let mut v: Vec<_> = std::fs::read_dir(dir)
+        .unwrap()
+        .filter_map(Result::ok)
+        .collect();
     v.sort_by_key(|e| e.file_name());
     for e in v {
         let p = e.path();
@@ -70,7 +84,14 @@ fn snapshot(dir: &Path, base: &Path, out: &mut BTreeMap<String, Vec<u8>>) {
             out.insert(format!("{rel}/"), Vec::new());
             snapshot(&p, base, out);
         } else if ft.is_symlink() {
-            out.insert(rel, std::fs::read_link(&p).unwrap().display().to_string().into_bytes());
+            out.insert(
+                rel,
+                std::fs::read_link(&p)
+                    .unwrap()
+                    .display()
+                    .to_string()
+                    .into_bytes(),
+            );
         } else {
             out.insert(rel, std::fs::read(&p).unwrap());
         }
@@ -111,7 +132,11 @@ fn run_one(root: &Path, cwd: &Path, rust: bool, platform: &str, args: &[&str]) -
 /// bridge that now calls the same function): compare only the text before it and the exception.
 fn traceback_tail(s: &str) -> String {
     match s.find("Traceback (most recent call last):") {
-        Some(i) => format!("{}Traceback ... {}", &s[..i], s.trim_end().lines().last().unwrap_or("")),
+        Some(i) => format!(
+            "{}Traceback ... {}",
+            &s[..i],
+            s.trim_end().lines().last().unwrap_or("")
+        ),
         None => s.to_string(),
     }
 }
@@ -130,19 +155,40 @@ fn same(root: &Path, platform: &str, setup: Setup, steps: &[&[&str]]) -> usize {
         }
     }
     for (i, (py, rs)) in outs[0].iter().zip(outs[1].iter()).enumerate() {
-        assert_eq!(py.rc, rs.rc, "{platform} {:?}: exit code\npy stderr: {}\nrs stderr: {}", steps[i], py.stderr, rs.stderr);
+        assert_eq!(
+            py.rc, rs.rc,
+            "{platform} {:?}: exit code\npy stderr: {}\nrs stderr: {}",
+            steps[i], py.stderr, rs.stderr
+        );
         assert_eq!(py.stdout, rs.stdout, "{platform} {:?}: stdout", steps[i]);
-        if py.stderr.starts_with("Traceback ...") && rs.stderr.starts_with("hydo: ") && !rs.stderr.contains("Traceback") {
+        if py.stderr.starts_with("Traceback ...")
+            && rs.stderr.starts_with("hydo: ")
+            && !rs.stderr.contains("Traceback")
+        {
             // the Python CLI crashed here (a missing flag value); the Rust CLI says what is wrong
-            eprintln!("{platform} {:?}: Python crashed ({}), Rust: {}", steps[i], py.stderr.trim(), rs.stderr.trim());
+            eprintln!(
+                "{platform} {:?}: Python crashed ({}), Rust: {}",
+                steps[i],
+                py.stderr.trim(),
+                rs.stderr.trim()
+            );
             FIXED_CRASHES.fetch_add(1, Ordering::SeqCst);
         } else {
             assert_eq!(py.stderr, rs.stderr, "{platform} {:?}: stderr", steps[i]);
         }
         let names = |o: &Outcome| o.files.keys().cloned().collect::<Vec<_>>();
-        assert_eq!(names(py), names(rs), "{platform} {:?}: files written", steps[i]);
+        assert_eq!(
+            names(py),
+            names(rs),
+            "{platform} {:?}: files written",
+            steps[i]
+        );
         for (k, v) in &py.files {
-            assert!(rs.files[k] == *v, "{platform} {:?}: content of {k}", steps[i]);
+            assert!(
+                rs.files[k] == *v,
+                "{platform} {:?}: content of {k}",
+                steps[i]
+            );
         }
     }
     let _ = std::fs::remove_dir_all(&cwd);
@@ -180,7 +226,12 @@ fn with_compose(cwd: &Path) {
 }
 
 fn python_available() -> bool {
-    Command::new("python3").arg("-c").arg("import sys; sys.exit(sys.version_info < (3, 9))").status().map(|s| s.success()).unwrap_or(false)
+    Command::new("python3")
+        .arg("-c")
+        .arg("import sys; sys.exit(sys.version_info < (3, 9))")
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
 }
 
 #[test]
@@ -201,61 +252,230 @@ fn cli_matches_python() {
     let mut n = 0;
     for plat in ["linux", "mac"] {
         // help and dispatch
-        for a in [&[][..], &["--help"], &["help"], &["-h"], &["bogus"], &["module"]] {
+        for a in [
+            &[][..],
+            &["--help"],
+            &["help"],
+            &["-h"],
+            &["bogus"],
+            &["module"],
+        ] {
             n += same(&root, plat, nothing, &[a]);
         }
         // guide / skill / init (hydo_agents.py through the bridge)
-        n += same(&root, plat, nothing, &[&["guide"], &["guide", "--list"], &["guide", "composer"], &["guide", "manifest"]]);
-        n += same(&root, plat, nothing, &[&["guide", "no-such-topic"], &["guide", "../../etc/passwd"]]);
-        n += same(&root, plat, nothing, &[&["skill"], &["skill", "agents"], &["skill", "install", "--to", "out"], &["skill", "install", "--to", "out"]]);
-        n += same(&root, plat, nothing, &[&["skill", "install", "--agent", "codex"], &["skill", "install", "--agent", "nope"]]);
-        n += same(&root, plat, nothing, &[&["init", "--dir", "proj", "--name", "demo"], &["init", "--dir", "proj", "--name", "demo"]]);
+        n += same(
+            &root,
+            plat,
+            nothing,
+            &[
+                &["guide"],
+                &["guide", "--list"],
+                &["guide", "composer"],
+                &["guide", "manifest"],
+            ],
+        );
+        n += same(
+            &root,
+            plat,
+            nothing,
+            &[&["guide", "no-such-topic"], &["guide", "../../etc/passwd"]],
+        );
+        n += same(
+            &root,
+            plat,
+            nothing,
+            &[
+                &["skill"],
+                &["skill", "agents"],
+                &["skill", "install", "--to", "out"],
+                &["skill", "install", "--to", "out"],
+            ],
+        );
+        n += same(
+            &root,
+            plat,
+            nothing,
+            &[
+                &["skill", "install", "--agent", "codex"],
+                &["skill", "install", "--agent", "nope"],
+            ],
+        );
+        n += same(
+            &root,
+            plat,
+            nothing,
+            &[
+                &["init", "--dir", "proj", "--name", "demo"],
+                &["init", "--dir", "proj", "--name", "demo"],
+            ],
+        );
         // report, save, errors
-        n += same(&root, plat, nothing, &[&["report"], &["report", "elsewhere"]]);
-        n += same(&root, plat, with_explore, &[&["report"], &["report", "hydo-out/explore"]]);
-        n += same(&root, plat, with_explore, &[&["save"], &["save", "hydo-out/explore", "--to", "regs"], &["save", "hydo-out/explore", "--to", "regs"], &["save", "hydo-out/explore"]]);
-        n += same(&root, plat, with_explore, &[&["errors"], &["errors", "help"], &["errors", "bogus"], &["errors", "list"], &["errors", "list", "errs"], &["errors", "check"]]);
-        n += same(&root, plat, with_explore, &[
-            &["errors", "accept", "f0c7", "--by", "t", "--from", "errs", "--file", "k.yaml"],
-            &["errors", "accept", "f0c7", "--reason", "expected at boot", "--by", "t", "--from", "errs", "--file", "k.yaml"],
-            &["errors", "check", "--file", "k.yaml"],
-            &["errors", "accept", "zzz", "--reason", "x", "--by", "t", "--from", "errs", "--file", "k.yaml"],
-        ]);
+        n += same(
+            &root,
+            plat,
+            nothing,
+            &[&["report"], &["report", "elsewhere"]],
+        );
+        n += same(
+            &root,
+            plat,
+            with_explore,
+            &[&["report"], &["report", "hydo-out/explore"]],
+        );
+        n += same(
+            &root,
+            plat,
+            with_explore,
+            &[
+                &["save"],
+                &["save", "hydo-out/explore", "--to", "regs"],
+                &["save", "hydo-out/explore", "--to", "regs"],
+                &["save", "hydo-out/explore"],
+            ],
+        );
+        n += same(
+            &root,
+            plat,
+            with_explore,
+            &[
+                &["errors"],
+                &["errors", "help"],
+                &["errors", "bogus"],
+                &["errors", "list"],
+                &["errors", "list", "errs"],
+                &["errors", "check"],
+            ],
+        );
+        n += same(
+            &root,
+            plat,
+            with_explore,
+            &[
+                &[
+                    "errors", "accept", "f0c7", "--by", "t", "--from", "errs", "--file", "k.yaml",
+                ],
+                &[
+                    "errors",
+                    "accept",
+                    "f0c7",
+                    "--reason",
+                    "expected at boot",
+                    "--by",
+                    "t",
+                    "--from",
+                    "errs",
+                    "--file",
+                    "k.yaml",
+                ],
+                &["errors", "check", "--file", "k.yaml"],
+                &[
+                    "errors", "accept", "zzz", "--reason", "x", "--by", "t", "--from", "errs",
+                    "--file", "k.yaml",
+                ],
+            ],
+        );
         // compose (hydo_compose.py through the bridge)
-        n += same(&root, plat, with_compose, &[&["compose"], &["compose", "--help"], &["compose", "docker-compose.yaml", "--out", "h.yaml", "--no-resolve"]]);
+        n += same(
+            &root,
+            plat,
+            with_compose,
+            &[
+                &["compose"],
+                &["compose", "--help"],
+                &[
+                    "compose",
+                    "docker-compose.yaml",
+                    "--out",
+                    "h.yaml",
+                    "--no-resolve",
+                ],
+            ],
+        );
         // build: argument handling and hydo-build's checks (no image is built here)
-        n += same(&root, plat, nothing, &[&["build"], &["build", "--check"], &["build", &bad, "--check"]]);
+        n += same(
+            &root,
+            plat,
+            nothing,
+            &[
+                &["build"],
+                &["build", "--check"],
+                &["build", &bad, "--check"],
+            ],
+        );
         let manifests: Vec<&str> = if plat == "linux" {
             vec![&redis, &composed, &shop, &stack]
         } else {
             vec![&mac_redis, &composed]
         };
         for mf in manifests {
-            n += same(&root, plat, nothing, &[&["build", mf, "--check"], &["build", mf, "--print-shell"], &["build", mf, "--print-init"], &["build", mf, "--set", "x=1", "--check"]]);
+            n += same(
+                &root,
+                plat,
+                nothing,
+                &[
+                    &["build", mf, "--check"],
+                    &["build", mf, "--print-shell"],
+                    &["build", mf, "--print-init"],
+                    &["build", mf, "--set", "x=1", "--check"],
+                ],
+            );
         }
         // runs: everything up to the engine
-        n += same(&root, plat, with_explore, &[&["run"], &["run", "--image"], &["run", "--image", "bogus.img"], &["run", "missing.img", "disk=none | run"]]);
-        n += same(&root, plat, with_explore, &[&["repro"], &["repro", "--regressions"], &["explore"], &["repro", "rundir"]]);
-        n += same(&root, plat, with_explore, &[&["run", "--image", "bogus.img", "a", "b"], &["explore", "--image", "bogus.img"]]);
+        n += same(
+            &root,
+            plat,
+            with_explore,
+            &[
+                &["run"],
+                &["run", "--image"],
+                &["run", "--image", "bogus.img"],
+                &["run", "missing.img", "disk=none | run"],
+            ],
+        );
+        n += same(
+            &root,
+            plat,
+            with_explore,
+            &[
+                &["repro"],
+                &["repro", "--regressions"],
+                &["explore"],
+                &["repro", "rundir"],
+            ],
+        );
+        n += same(
+            &root,
+            plat,
+            with_explore,
+            &[
+                &["run", "--image", "bogus.img", "a", "b"],
+                &["explore", "--image", "bogus.img"],
+            ],
+        );
     }
     // Linux only: the module verbs that need no root (dry runs and status)
-    n += same(&root, "linux", nothing, &[
-        &["module", "status"],
-        &["module", "status", "--name", "side"],
-        &["module", "udev"],
-        &["module", "udev", "status"],
-        &["module", "load", "--dry-run", "--name", "side"],
-        &["module", "load", "--dry-run"],
-        &["module", "unload", "--dry-run"],
-        &["module", "bogus"],
-        &["module", "build", "--name", "Bad"],
-        &["module", "udev", "install", "--dry-run", "--name", "Bad"],
-        &["module", "udev", "install", "--dry-run", "--group", "B@d"],
-        &["module", "udev", "install", "--dry-run", "--mode", "0777"],
-        &["module", "udev", "remove", "--dry-run"],
-        &["module", "status", "extra"],
-        &["module", "load", "--name"],
-    ]);
+    n += same(
+        &root,
+        "linux",
+        nothing,
+        &[
+            &["module", "status"],
+            &["module", "status", "--name", "side"],
+            &["module", "udev"],
+            &["module", "udev", "status"],
+            &["module", "load", "--dry-run", "--name", "side"],
+            &["module", "load", "--dry-run"],
+            &["module", "unload", "--dry-run"],
+            &["module", "bogus"],
+            &["module", "build", "--name", "Bad"],
+            &["module", "udev", "install", "--dry-run", "--name", "Bad"],
+            &["module", "udev", "install", "--dry-run", "--group", "B@d"],
+            &["module", "udev", "install", "--dry-run", "--mode", "0777"],
+            &["module", "udev", "remove", "--dry-run"],
+            &["module", "status", "extra"],
+            &["module", "load", "--name"],
+        ],
+    );
     if cfg!(target_os = "macos") {
         n += same(&root, "mac", nothing, &[&["doctor"]]);
     }

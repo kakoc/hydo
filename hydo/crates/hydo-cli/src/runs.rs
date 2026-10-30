@@ -3,7 +3,9 @@
 //! Python, through the bridge), and the files the Python CLIs wrote (run.json, consoles).
 
 use crate::bridge;
-use crate::ctx::{abspath, die, glob_simple, pjoin, read_text, strftime, take, Ctx, Platform, OUT, PROJECT_OUT};
+use crate::ctx::{
+    abspath, die, glob_simple, pjoin, read_text, strftime, take, Ctx, Platform, OUT, PROJECT_OUT,
+};
 use crate::hvxenv;
 use crate::pyjson::{dumps, head, py_str, tail};
 use hydo_engine::hvm::{kernel_for, Hvm};
@@ -71,14 +73,22 @@ pub fn image_guest(image: &Path) -> Guest {
     let Ok(text) = embedded_manifest(image) else {
         return Guest::from_value(&Value::Null);
     };
-    match hydo_manifest::parse_text(&text, "hydo.yaml", true) {
-        Ok(m) => Guest::from_value(&m),
+    // manifest_space.load(image_path=...): the manifest with the plan meta the image carries,
+    // expanded and validated as hydo-build did when it built the image
+    let meta: Option<Value> = embedded_compose(image).and_then(|t| serde_json::from_str(&t).ok());
+    match hydo_manifest::from_embedded(&text, meta.as_ref()) {
+        Ok(m) => Guest::from_value(&m.data),
         Err(_) => Guest::from_value(&Value::Null),
     }
 }
 
 /// The engine options explore.py would pass for this image (engine_args_for).
-pub fn linux_engine_args(image: &Path, ram: Option<u64>, cpu: Option<String>, vcpus: u64) -> Vec<String> {
+pub fn linux_engine_args(
+    image: &Path,
+    ram: Option<u64>,
+    cpu: Option<String>,
+    vcpus: u64,
+) -> Vec<String> {
     let (ram, cpu) = match (ram, cpu) {
         (Some(r), Some(c)) => (r, c),
         (r, c) => {
@@ -103,7 +113,13 @@ pub fn linux_engine_args(image: &Path, ram: Option<u64>, cpu: Option<String>, vc
 }
 
 /// Engine options (as argv words) -> a BootSpec.
-fn spec_from_args(eargs: &[String], image: &Path, kernel: PathBuf, initrd: Option<PathBuf>, outdir: &Path) -> BootSpec {
+fn spec_from_args(
+    eargs: &[String],
+    image: &Path,
+    kernel: PathBuf,
+    initrd: Option<PathBuf>,
+    outdir: &Path,
+) -> BootSpec {
     let mut spec = BootSpec {
         image: image.to_path_buf(),
         ram_mib: 1024,
@@ -134,11 +150,21 @@ fn schedule(text: &str) -> Schedule {
 // ---------------------------------------------------------------- Linux: one run
 
 /// One schedule from a fresh boot (hvx_explore one). Writes engine.log; dies without a RESULT.
-pub fn run_one_linux(ctx: &Ctx, image: &Path, sched: &str, outdir: &Path, eargs: &[String], quiet: bool) -> Map<String, Value> {
+pub fn run_one_linux(
+    ctx: &Ctx,
+    image: &Path,
+    sched: &str,
+    outdir: &Path,
+    eargs: &[String],
+    quiet: bool,
+) -> Map<String, Value> {
     let _ = std::fs::create_dir_all(outdir);
     let engine = hvxenv::engine(ctx);
     if !crate::ctx::access(&engine, libc::X_OK) {
-        die(&format!("{} is not built (run install.sh again)", engine.display()));
+        die(&format!(
+            "{} is not built (run install.sh again)",
+            engine.display()
+        ));
     }
     let hvx = Hvx {
         engine,
@@ -147,7 +173,13 @@ pub fn run_one_linux(ctx: &Ctx, image: &Path, sched: &str, outdir: &Path, eargs:
         extra_env: Vec::new(),
         env: hvxenv::tool_env(ctx),
     };
-    let spec = spec_from_args(eargs, image, hvxenv::bzimage(ctx), Some(hvxenv::initrd(ctx)), &abspath(outdir));
+    let spec = spec_from_args(
+        eargs,
+        image,
+        hvxenv::bzimage(ctx),
+        Some(hvxenv::initrd(ctx)),
+        &abspath(outdir),
+    );
     let run = hvx
         .one(&spec, &schedule(sched))
         .unwrap_or_else(|e| die(&format!("cannot start the engine: {e}")));
@@ -210,7 +242,10 @@ fn host_checks_linux(ctx: &Ctx, outdir: &Path, mut res: Map<String, Value>) -> M
     if !srcs.iter().any(|(_, t)| t.contains("HYDO-CHECK ")) {
         return res;
     }
-    let verdict = res.get("verdict").and_then(Value::as_str).map(str::to_string);
+    let verdict = res
+        .get("verdict")
+        .and_then(Value::as_str)
+        .map(str::to_string);
     let r = bridge::run_checks(ctx, &srcs, verdict.as_deref());
     write_checks(outdir, &r);
     let gv = res.get("verdict").cloned().unwrap_or(Value::Null);
@@ -224,7 +259,13 @@ fn host_checks_linux(ctx: &Ctx, outdir: &Path, mut res: Map<String, Value>) -> M
     res
 }
 
-fn errors_one(ctx: &Ctx, outdir: &Path, sched: &str, res: Map<String, Value>, known: Option<&str>) -> Map<String, Value> {
+fn errors_one(
+    ctx: &Ctx,
+    outdir: &Path,
+    sched: &str,
+    res: Map<String, Value>,
+    known: Option<&str>,
+) -> Map<String, Value> {
     match bridge::errors_for_run_dir(ctx, outdir, sched, &Value::Object(res.clone()), known) {
         Value::Object(m) => m,
         _ => res,
@@ -232,9 +273,11 @@ fn errors_one(ctx: &Ctx, outdir: &Path, sched: &str, res: Map<String, Value>, kn
 }
 
 fn new_run_dir() -> PathBuf {
-    let d = Path::new(OUT)
-        .join("runs")
-        .join(format!("run-{}-{}", strftime("%Y%m%d-%H%M%S"), std::process::id()));
+    let d = Path::new(OUT).join("runs").join(format!(
+        "run-{}-{}",
+        strftime("%Y%m%d-%H%M%S"),
+        std::process::id()
+    ));
     let _ = std::fs::create_dir_all(&d);
     d
 }
@@ -292,7 +335,9 @@ fn repro_list(ctx: &Ctx, d: &Path) -> Vec<ReproItem> {
         let r = load_json(&rj);
         let image = py_str(&r["image"]);
         if let Some(sha) = r["image_sha256"].as_str().filter(|s| !s.is_empty()) {
-            if Path::new(&image).is_file() && sha256_file(Path::new(&image)).ok().as_deref() != Some(sha) {
+            if Path::new(&image).is_file()
+                && sha256_file(Path::new(&image)).ok().as_deref() != Some(sha)
+            {
                 println!("hydo: warning: {image} changed since the run (sha256 differs); fingerprints will differ");
             }
         }
@@ -322,7 +367,11 @@ fn repro_list(ctx: &Ctx, d: &Path) -> Vec<ReproItem> {
         image = ctx.guest().join(image);
     }
     let ram = s.get("ram_mib").and_then(Value::as_u64).unwrap_or(1024);
-    let cpu = s.get("cpu").and_then(Value::as_str).unwrap_or("v2").to_string();
+    let cpu = s
+        .get("cpu")
+        .and_then(Value::as_str)
+        .unwrap_or("v2")
+        .to_string();
     let vcpus = s.get("vcpus").and_then(Value::as_u64).unwrap_or(1);
     let eargs = linux_engine_args(&image, Some(ram), Some(cpu), vcpus);
     let mut out = Vec::new();
@@ -335,7 +384,12 @@ fn repro_list(ctx: &Ctx, d: &Path) -> Vec<ReproItem> {
             eargs: eargs.clone(),
         });
     }
-    for x in j.get("shrunk").and_then(Value::as_array).into_iter().flatten() {
+    for x in j
+        .get("shrunk")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
         out.push(ReproItem {
             label: format!("minimal {}", head(&py_str(&x["signature"]), 40)),
             image: image.clone(),
@@ -357,7 +411,10 @@ pub fn cmd_repro_linux(ctx: &Ctx, argv: &[String]) -> i32 {
         let d = PathBuf::from(args.remove(0));
         let items = repro_list(ctx, &d);
         if items.is_empty() {
-            println!("hydo: {} recorded no failures; nothing to reproduce", d.display());
+            println!(
+                "hydo: {} recorded no failures; nothing to reproduce",
+                d.display()
+            );
             return 0;
         }
         let base = d.join(format!("repro-{}", strftime("%Y%m%d-%H%M%S")));
@@ -447,7 +504,11 @@ pub fn truthy(v: &Value) -> bool {
 fn cmd_regressions_linux(ctx: &Ctx, mut args: Vec<String>) -> i32 {
     let image = find_image_linux(&mut args);
     let meta = compose_meta(&image);
-    let regs: Vec<Value> = meta.get("regressions").and_then(Value::as_array).cloned().unwrap_or_default();
+    let regs: Vec<Value> = meta
+        .get("regressions")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     if regs.is_empty() {
         println!(
             "hydo: {} carries no regressions (hydo/regressions/*.schedule or test.regressions in the plan)",
@@ -467,7 +528,14 @@ fn cmd_regressions_linux(ctx: &Ctx, mut args: Vec<String>) -> i32 {
         }
         let name = py_str(&r["name"]);
         let sched = py_str(&r["schedule"]);
-        let res = run_one_linux(ctx, &image, &sched, &base.join(format!("{k:03}-{name}")), &eargs, true);
+        let res = run_one_linux(
+            ctx,
+            &image,
+            &sched,
+            &base.join(format!("{k:03}-{name}")),
+            &eargs,
+            true,
+        );
         let (fp, v) = (py_str(&res["fp"]), py_str(&res["verdict"]));
         let ok = regression_ok(&py_str(&r["expect"]), &v, &fp);
         bad += !ok as usize;
@@ -508,7 +576,10 @@ pub fn mac_kernel_for(ctx: &Ctx, image: &Path, quiet: bool) -> PathBuf {
     });
     if !quiet && k != mac_kernel(ctx) {
         let rel = k.strip_prefix(&ctx.root).unwrap_or(&k);
-        println!("hydo: guest kernel {} (recorded in the image)", rel.display());
+        println!(
+            "hydo: guest kernel {} (recorded in the image)",
+            rel.display()
+        );
     }
     k
 }
@@ -573,7 +644,9 @@ pub fn cmd_run_mac(ctx: &Ctx, argv: &[String]) -> i32 {
         die("usage: hydo run \"<schedule>\" [--image IMG]   e.g. hydo run \"disk=cut | run C=12\"");
     }
     let sched = args[0].clone();
-    let outdir = Path::new(OUT).join("runs").join(format!("run-{}", std::process::id()));
+    let outdir = Path::new(OUT)
+        .join("runs")
+        .join(format!("run-{}", std::process::id()));
     let text = run_once_mac(ctx, &image, &sched, &outdir, false);
     host_checks_mac(ctx, &outdir, &text, false);
     let mut cons: Vec<String> = std::fs::read_dir(&outdir)
@@ -616,7 +689,11 @@ fn cmd_regressions_mac(ctx: &Ctx, mut args: Vec<String>) -> i32 {
         .ok()
         .and_then(|t| serde_json::from_str(&t).ok())
         .unwrap_or_else(|| json!({}));
-    let regs: Vec<Value> = meta.get("regressions").and_then(Value::as_array).cloned().unwrap_or_default();
+    let regs: Vec<Value> = meta
+        .get("regressions")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     if regs.is_empty() {
         println!(
             "hydo: {} carries no regressions (hydo/regressions/*.schedule or test.regressions in the plan)",
@@ -634,7 +711,8 @@ fn cmd_regressions_mac(ctx: &Ctx, mut args: Vec<String>) -> i32 {
         let sched = py_str(&r["schedule"]);
         let dir = base.join(format!("{k:03}-{name}"));
         let text = run_once_mac(ctx, &image, &sched, &dir, true);
-        let (fp, v) = mac_result(&text).unwrap_or_else(|| ("-".into(), "ERROR no RESULT line".into()));
+        let (fp, v) =
+            mac_result(&text).unwrap_or_else(|| ("-".into(), "ERROR no RESULT line".into()));
         let v = host_checks_mac(ctx, &dir, &text, true).unwrap_or(v);
         let ex = py_str(&r["expect"]);
         let ok = regression_ok(&ex, &v, &fp);
@@ -691,8 +769,20 @@ pub fn cmd_save(ctx: &Ctx, argv: &[String]) -> i32 {
         die(&format!("{to}: {e}"));
     }
     let mut n = 0;
-    for x in j.get("shrunk").and_then(Value::as_array).into_iter().flatten() {
-        let name = head(&slug(&format!("{}-{}", py_str(&x["class"]), py_str(&x["signature"]))), 60);
+    for x in j
+        .get("shrunk")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let name = head(
+            &slug(&format!(
+                "{}-{}",
+                py_str(&x["class"]),
+                py_str(&x["signature"])
+            )),
+            60,
+        );
         let name = name.trim_matches('-');
         let p = pjoin(&to, &format!("{name}.schedule"));
         if Path::new(&p).exists() {

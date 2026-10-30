@@ -191,7 +191,12 @@ pub fn glob_simple(dir: &Path, prefix: &str, suffix: &str) -> Vec<PathBuf> {
         .map(|rd| {
             rd.filter_map(Result::ok)
                 .map(|e| e.file_name().to_string_lossy().into_owned())
-                .filter(|n| !n.starts_with('.') && n.starts_with(prefix) && n.ends_with(suffix) && n.len() >= prefix.len() + suffix.len())
+                .filter(|n| {
+                    !n.starts_with('.')
+                        && n.starts_with(prefix)
+                        && n.ends_with(suffix)
+                        && n.len() >= prefix.len() + suffix.len()
+                })
                 .map(|n| dir.join(n))
                 .collect()
         })

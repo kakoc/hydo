@@ -211,7 +211,11 @@ pub trait Engine {
 
     /// Create a worker: boot the image, take S0 and S1, and return when the engine is READY.
     /// `stderr_log`: where the engine's diagnostics go (explore.py: `worker-<n>.err`).
-    fn start(&self, spec: &BootSpec, stderr_log: &std::path::Path) -> Result<Box<dyn Worker>, EngineError>;
+    fn start(
+        &self,
+        spec: &BootSpec,
+        stderr_log: &std::path::Path,
+    ) -> Result<Box<dyn Worker>, EngineError>;
 
     /// The shell line that reproduces one schedule by hand (report.md's repro line).
     fn repro_line(&self, spec: &BootSpec, schedule: &Schedule) -> String;

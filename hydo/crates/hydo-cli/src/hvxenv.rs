@@ -76,9 +76,15 @@ pub fn snap_dir() -> String {
 pub fn tool_env(ctx: &Ctx) -> Vec<(String, String)> {
     let path = std::env::var("PATH").unwrap_or_default();
     let mut e = vec![
-        ("PATH".to_string(), format!("{}:{}", ctx.libexec().join("bin").display(), path)),
+        (
+            "PATH".to_string(),
+            format!("{}:{}", ctx.libexec().join("bin").display(), path),
+        ),
         ("HYDO_BUILD".to_string(), ctx.guest().display().to_string()),
-        ("HYDO_HVX_RUN".to_string(), ctx.libexec().join("hvx-run").display().to_string()),
+        (
+            "HYDO_HVX_RUN".to_string(),
+            ctx.libexec().join("hvx-run").display().to_string(),
+        ),
         ("HYDO_LOCK".to_string(), lock()),
         ("HYDO_SNAP_DIR".to_string(), snap_dir()),
     ];

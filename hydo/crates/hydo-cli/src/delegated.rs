@@ -36,7 +36,10 @@ pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
         args.push("--out".into());
         args.push(pjoin(OUT, "explore"));
     }
-    if !args.iter().any(|a| a == "--seeds" || a == "--schedule" || a == "--sweep") {
+    if !args
+        .iter()
+        .any(|a| a == "--seeds" || a == "--schedule" || a == "--sweep")
+    {
         args.push("--seeds".into());
         args.push("1-20".into());
     }
@@ -56,19 +59,28 @@ pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
     if linux {
         let engine = hvxenv::engine(ctx);
         if !crate::ctx::access(&engine, libc::X_OK) {
-            die(&format!("{} is not built (run install.sh again)", engine.display()));
+            die(&format!(
+                "{} is not built (run install.sh again)",
+                engine.display()
+            ));
         }
         for (k, v) in hvxenv::tool_env(ctx) {
             c.env(k, v);
         }
     } else {
         let kernel = mac_kernel_for(ctx, &image, true);
-        c.arg("--backend").arg("hvm").arg("--hvm-kernel").arg(kernel);
+        c.arg("--backend")
+            .arg("hvm")
+            .arg("--hvm-kernel")
+            .arg(kernel);
     }
     c.arg("--image").arg(&image).args(&args);
-    let rc = c.status().map(|s| s.code().unwrap_or(1)).unwrap_or_else(|e| {
-        die(&format!("cannot run {}: {e}", python()));
-    });
+    let rc = c
+        .status()
+        .map(|s| s.code().unwrap_or(1))
+        .unwrap_or_else(|e| {
+            die(&format!("cannot run {}: {e}", python()));
+        });
     let i = args.iter().position(|a| a == "--out").unwrap_or(0);
     let out = args.get(i + 1).cloned().unwrap_or_default();
     let report = pjoin(&out, "report.md");
@@ -85,7 +97,10 @@ pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
 // ---------------------------------------------------------------- report (Rust)
 
 pub fn cmd_report(_ctx: &Ctx, argv: &[String]) -> i32 {
-    let d = argv.first().cloned().unwrap_or_else(|| pjoin(OUT, "explore"));
+    let d = argv
+        .first()
+        .cloned()
+        .unwrap_or_else(|| pjoin(OUT, "explore"));
     let p = pjoin(&d, "report.md");
     if !Path::new(&p).exists() {
         die(&format!("no report at {p}"));
@@ -99,7 +114,12 @@ pub fn cmd_report(_ctx: &Ctx, argv: &[String]) -> i32 {
 // ---------------------------------------------------------------- errors (hydo_errors.py)
 
 pub fn cmd_errors(ctx: &Ctx, argv: &[String]) -> i32 {
-    bridge::rc(ctx, "errors_cli", json!({"argv": argv, "default_dir": pjoin(OUT, "explore")}), &[])
+    bridge::rc(
+        ctx,
+        "errors_cli",
+        json!({"argv": argv, "default_dir": pjoin(OUT, "explore")}),
+        &[],
+    )
 }
 
 // ---------------------------------------------------------------- compose (hydo_compose.py)
@@ -123,7 +143,10 @@ pub fn cmd_agents(ctx: &Ctx, cmd: &str, argv: &[String]) -> i32 {
 /// Where `hydo build` writes: ./.hydo for a manifest in a hydo/ folder, else ./hydo-out (Linux).
 fn project_out(manifest: &str) -> &'static str {
     let abs = abspath(Path::new(manifest));
-    let parent = abs.parent().and_then(Path::file_name).map(|s| s.to_string_lossy().into_owned());
+    let parent = abs
+        .parent()
+        .and_then(Path::file_name)
+        .map(|s| s.to_string_lossy().into_owned());
     if parent.as_deref() == Some("hydo") {
         PROJECT_OUT
     } else {
@@ -144,8 +167,48 @@ pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
     }
 }
 
+/// `hydo build <manifest> --check [--set K=V ...]` answered in Rust (hydo-manifest) when the
+/// manifest is accepted: the same warnings and summary lines hydo-build prints. Everything else
+/// (another flag, or a manifest that is refused, whose message order hydo-build owns) still goes
+/// to hydo-build. Returns None when hydo-build must answer.
+fn check_in_rust(ctx: &Ctx, manifest: &str, rest: &[String], arch: &str) -> Option<i32> {
+    let mut sets = Vec::new();
+    let mut check = false;
+    let mut i = 0;
+    while i < rest.len() {
+        match rest[i].as_str() {
+            "--check" => check = true,
+            "--set" if i + 1 < rest.len() && rest[i + 1].contains('=') => {
+                let (k, v) = rest[i + 1].split_once('=').unwrap_or_default();
+                sets.push((k.to_string(), v.to_string()));
+                i += 1;
+            }
+            _ => return None,
+        }
+        i += 1;
+    }
+    if !check || manifest == "-h" || manifest == "--help" {
+        return None;
+    }
+    let opts = hydo_manifest::LoadOptions {
+        arch: arch.to_string(),
+        sets,
+        onboard_dir: ctx.onboard(),
+    };
+    let loaded = hydo_manifest::load(Path::new(manifest), &opts).ok()?;
+    for w in &loaded.warnings {
+        eprintln!("hydo-build: warning: {w}");
+    }
+    for line in hydo_manifest::check_summary(manifest, &loaded) {
+        println!("{line}");
+    }
+    Some(0)
+}
+
 fn no_print_flag(rest: &[String]) -> bool {
-    !rest.iter().any(|f| f == "--check" || f == "--print-shell" || f == "--print-init")
+    !rest
+        .iter()
+        .any(|f| f == "--check" || f == "--print-shell" || f == "--print-init")
 }
 
 fn build_linux(ctx: &Ctx, argv: &[String]) -> i32 {
@@ -161,6 +224,9 @@ fn build_linux(ctx: &Ctx, argv: &[String]) -> i32 {
     let out = take(&mut rest, "--out").unwrap_or_else(|| project_out(&manifest).to_string());
     if rest.iter().any(|a| a == "--arch") {
         die("this is the x86_64 Linux release; arm64 images are built with the Mac release");
+    }
+    if let Some(rc) = check_in_rust(ctx, &manifest, &rest, "x86_64") {
+        return rc;
     }
     let guest = ctx.guest();
     let mut env = Vec::new();
@@ -193,6 +259,9 @@ fn build_mac(ctx: &Ctx, argv: &[String]) -> i32 {
     let manifest = argv[0].clone();
     let mut rest = argv[1..].to_vec();
     let out = take_mac(&mut rest, "--out").unwrap_or_else(|| OUT.to_string());
+    if let Some(rc) = check_in_rust(ctx, &manifest, &rest, "arm64") {
+        return rc;
+    }
     let guest = ctx.guest();
     let mut env = Vec::new();
     setdefault(&mut env, "HYDO_BUSYBOX_ARM64", &guest.join("busybox"));

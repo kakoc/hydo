@@ -77,7 +77,11 @@ pub fn float_repr(f: f64) -> String {
         return "NaN".into();
     }
     if f.is_infinite() {
-        return if f > 0.0 { "Infinity".into() } else { "-Infinity".into() };
+        return if f > 0.0 {
+            "Infinity".into()
+        } else {
+            "-Infinity".into()
+        };
     }
     if f.fract() == 0.0 && f.abs() < 1e16 {
         return format!("{f:.1}");

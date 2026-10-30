@@ -143,7 +143,11 @@ impl Engine for Hvm {
     fn start(&self, spec: &BootSpec, stderr_log: &Path) -> Result<Box<dyn Worker>, EngineError> {
         self.check_built()?;
         let argv = self.argv(spec, "serve");
-        Ok(Box::new(ProcessWorker::start(self.command(spec, &argv), stderr_log, false)?))
+        Ok(Box::new(ProcessWorker::start(
+            self.command(spec, &argv),
+            stderr_log,
+            false,
+        )?))
     }
 
     fn repro_line(&self, spec: &BootSpec, schedule: &Schedule) -> String {
