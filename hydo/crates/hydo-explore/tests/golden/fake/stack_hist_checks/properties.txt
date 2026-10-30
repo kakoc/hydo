@@ -1,0 +1,7 @@
+type                   id                                    ok    fail  verdict                  first failure / description
+eventually             orders.drained                        29       1  FAIL (deadline missed)   {"elapsed_s":"3.36","out":"pending=225"}  [not in catalog]
+sometimes              retry.taken                           15      15  PASS                     -  [not in catalog]
+always                 kv.lin                                26       4  FAIL                     {"check":"linearizable","key":"x","keys":1,"nonlinearizable_keys":1,"ops":2,"out":"key x: an acknowledged write is lost or a read is stale: a read that began a
+always                 clock.monotonic                        0       5  FAIL                     {}  [not in catalog]
+liveness: 1 eventually properties, 1 missed a deadline
+runs=30 (setup-complete seen in 0); properties=4; violations=3

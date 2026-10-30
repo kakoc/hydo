@@ -1,0 +1,89 @@
+{
+ "known_file": null,
+ "known_sha256": null,
+ "unknown": "report",
+ "kinds": [
+  {
+   "sig": "07df7023b937",
+   "svc": "redis",
+   "src": "log",
+   "tpl": "connection to redis lost <n>",
+   "ex": "connection to redis lost 3",
+   "runs": 19,
+   "new_runs": 19,
+   "seeds": [
+    1,
+    2,
+    9,
+    11,
+    12,
+    13,
+    15,
+    16,
+    17,
+    18,
+    23,
+    24
+   ],
+   "first_seed": 1,
+   "first_schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=redis@12+2 C=20",
+   "first_at": [
+    "12"
+   ],
+   "lines": 38,
+   "first_new_seed": 1,
+   "first_new_schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=redis@12+2 C=20",
+   "first_new_at": [
+    "12"
+   ],
+   "first_new_ex": "connection to redis lost 3",
+   "new": true,
+   "shrunk": {
+    "minimal": "disk=none dseed=eac0b527c5ac67d9 | run K=redis@12+1",
+    "tries": 10,
+    "fp_a": "6b450cd54a2e0485",
+    "fp_b": "6b450cd54a2e0485",
+    "verdict": "HYDO-ORACLE: OK acked=30",
+    "present_a": true,
+    "present_b": true
+   }
+  },
+  {
+   "sig": "4c53c64297e2",
+   "svc": "app",
+   "src": "log",
+   "tpl": "config reloaded",
+   "ex": "config reloaded",
+   "runs": 40,
+   "new_runs": 40,
+   "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12
+   ],
+   "first_seed": 1,
+   "first_schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=redis@12+2 C=20",
+   "first_at": [
+    "s"
+   ],
+   "lines": 40,
+   "first_new_seed": 1,
+   "first_new_schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=redis@12+2 C=20",
+   "first_new_at": [
+    "s"
+   ],
+   "first_new_ex": "config reloaded",
+   "new": true,
+   "shrunk": null
+  }
+ ]
+}

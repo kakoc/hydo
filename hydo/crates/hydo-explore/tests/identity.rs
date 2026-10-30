@@ -1,6 +1,9 @@
-//! hydo-explore against explore.py itself: `tests/ident.py` (the reference, explore.py and the
-//! modules it imports) prints a deterministic stream of questions with explore.py's answers; this
-//! test answers each with hydo-explore and compares byte for byte:
+//! hydo-explore against explore.py itself, frozen. Until M107 `tests/ident.py` (explore.py and the
+//! modules it imported) printed a deterministic stream of questions with explore.py's answers and
+//! this test answered each with hydo-explore. The Python is gone: its stream was recorded once into
+//! `tests/golden/identity-quick.txt` and `identity-full.txt` (chunked SHA-256, see
+//! `tests/support/mod.rs`), and this test now produces the same stream itself, questions and
+//! answers, with ident.py's driver ported below, and compares it chunk by chunk:
 //!
 //! - every schedule string main() composes, for every generator (random, swarm, swarm-pos,
 //!   process), with the option streams switched per seed (timing, new faults, more faults,
@@ -15,27 +18,32 @@
 //!   resolved candidates;
 //! - the F= n table (it depends on the last bit of exp/log, see `gen::fc_value`).
 //!
-//! The one deliberate difference (hvm never gets cf=) is applied in ident.py, see its docstring.
-//! Needs python3; without it the test says so and passes. HYDO_IDENT_FULL=1 runs the full stream
-//! (about ten times the default).
+//! The stream's lines (ident.py's format): `N <nmax>\t<table>`, `G <group json>`, `E\t<refusal>`,
+//! `F <flags json>`, `S <strategy> <seed> <durable>\t<schedule>`,
+//! `P <tjk>\t<schedule>\t<render>\t<class cut>\t<class any>\t<candidates>`,
+//! `W <sweep> <timing>\t<points or !refusal>`, `Z\t<schedule>\t<composer forms>` and
+//! `X <freeze point>\t<schedule>`.
+//!
+//! The reference was explore.py at commit 2a58c4b with one deliberate difference, applied in
+//! ident.py: hvm never gets cf= (restore the script with
+//! `git show 2a58c4b:hydo/crates/hydo-explore/tests/ident.py`). The example manifests (and their
+//! `hydo/` folders) are pinned in the golden; if one changes or a new one appears, the test says so,
+//! and after the new answers are checked, `HYDO_BLESS=1 cargo test -p hydo-explore --test identity`
+//! (once more with HYDO_IDENT_FULL=1) re-records the goldens from the Rust output, which is the
+//! reference from now on. By default the quick stream runs (ident.py --quick: the first four
+//! groups and every fifth after them, 40 seeds); HYDO_IDENT_FULL=1 runs the full one (300 seeds,
+//! every group).
+
+mod support;
 
 use hydo_explore::compose;
 use hydo_explore::gen::{fc_value, Backend, Ex};
 use hydo_explore::sched::{Fc, S};
 use hydo_explore::space::{grpc_targets, Space};
 use serde_json::Value;
-use std::io::{BufRead, BufReader};
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use support::{crc32, manifest_inputs, manifests, mix, salt_of, top, Stream};
 
 const US: &str = "\u{1f}";
-
-fn top() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../..")
-        .canonicalize()
-        .expect("repository root")
-}
 
 struct State {
     ex: Ex,
@@ -168,121 +176,310 @@ fn z_answer(ex: &Ex, text: &str) -> Option<String> {
     ))
 }
 
-#[test]
-fn explorer_identity() {
-    let mut cmd = Command::new("python3");
-    cmd.arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/ident.py"));
-    if std::env::var_os("HYDO_IDENT_FULL").is_none() {
-        cmd.arg("--quick");
+const FLAGS: [&str; 14] = [
+    "TIMING",
+    "NEW_FAULTS",
+    "DURABLE",
+    "MORE_FAULTS",
+    "PREEMPT",
+    "TURNS",
+    "BURSTS",
+    "BUGGIFY",
+    "CONCURRENCY",
+    "FREEZE_CALL",
+    "PROTOCOL_FAULTS",
+    "GRPC",
+    "COMPOSE",
+    "KNOB_ANY",
+];
+
+const SWEEPS: [&str; 13] = [
+    "kill",
+    "cut",
+    "net",
+    "killcut",
+    "pause",
+    "clock",
+    "oneway",
+    "frontkill",
+    "tail",
+    "depth1",
+    "depth1-old",
+    "protocol",
+    "bogus",
+];
+
+/// ident.py `flags_for`: all off, all on, then a hash of the seed.
+fn flags_for(sd: u64, salt: u64) -> Vec<(&'static str, bool)> {
+    let h = mix(sd.wrapping_mul(0x1000193) ^ salt);
+    FLAGS
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            let on = match sd {
+                1 => false,
+                2 => true,
+                _ => (h >> i) & 1 == 1,
+            };
+            (*f, on)
+        })
+        .collect()
+}
+
+/// `json.dumps(flags, sort_keys=True)`.
+fn flags_json(fl: &[(&str, bool)]) -> Value {
+    let mut v: Vec<(&str, bool)> = fl.to_vec();
+    v.sort();
+    let mut m = serde_json::Map::new();
+    for (k, b) in v {
+        m.insert(k.to_string(), Value::Bool(b));
     }
-    let mut child = match cmd.stdout(Stdio::piped()).stderr(Stdio::inherit()).spawn() {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("SKIPPED: python3 is not available ({e}); the reference is explore.py");
-            return;
-        }
+    Value::Object(m)
+}
+
+fn flag(fl: &[(&str, bool)], k: &str) -> bool {
+    fl.iter().any(|(f, b)| *f == k && *b)
+}
+
+/// ident.py `setflags`: the F line and the flags on the explorer.
+fn setflags(out: &mut Stream, ex: &mut Ex, fl: &[(&str, bool)]) {
+    let v = flags_json(fl);
+    set_flags(ex, &v);
+    out.line(format!("F {}", hydo_explore::py::dumps_line(&v)));
+}
+
+/// ident.py `p_line`: the line and the candidates it printed.
+fn p_line(out: &mut Stream, ex: &mut Ex, text: &str, tjk: Option<(i64, i64)>) -> Vec<String> {
+    let tk = match tjk {
+        None => "-".to_string(),
+        Some((a, b)) => format!("{a}-{b}"),
     };
-    let rd = BufReader::new(child.stdout.take().unwrap());
-    let mut st: Option<State> = None;
-    let (mut n, mut bad) = (
-        std::collections::BTreeMap::<char, usize>::new(),
-        Vec::<String>::new(),
-    );
-    let mut check = |what: &str, want: &str, got: String| {
-        if want != got && bad.len() < 20 {
-            bad.push(format!(
-                "{what}\n  explore.py:   {want}\n  hydo-explore: {got}"
-            ));
-        }
-    };
-    for line in rd.lines() {
-        let line = line.unwrap();
-        let op = line.chars().next().unwrap();
-        *n.entry(op).or_default() += 1;
-        let (q, want) = line.split_once('\t').unwrap_or((&line, ""));
-        match op {
-            'G' => st = Some(group(&serde_json::from_str(&q[2..]).unwrap())),
-            'E' => {
-                let s = st.as_ref().unwrap();
-                check(
-                    &format!("refused group: {q}"),
-                    want,
-                    s.broken.clone().unwrap_or_default(),
-                );
+    let ans = p_answer(ex, &tk, text);
+    let cands: Vec<String> = ans
+        .splitn(4, '\t')
+        .nth(3)
+        .unwrap_or("")
+        .split(US)
+        .filter(|c| !c.is_empty())
+        .map(str::to_string)
+        .collect();
+    out.line(format!("P {tk}\t{text}\t{ans}"));
+    cands
+}
+
+fn group_json(label: &str, manifest: Option<&str>, backend: &str, disk: bool, tc: bool) -> Value {
+    serde_json::json!({
+        "backend": backend,
+        "disk": disk,
+        "label": label,
+        "manifest": manifest,
+        "tc": tc,
+    })
+}
+
+const CAND_EVERY: u64 = 10;
+
+/// ident.py `group`.
+fn run_group(out: &mut Stream, cfg: &Value, strats: &[&str], seeds: u64) {
+    let label = cfg["label"].as_str().unwrap().to_string();
+    out.group(&label);
+    out.line(format!("G {}", hydo_explore::py::dumps_line(cfg)));
+    let mut st = group(cfg);
+    assert!(st.broken.is_none());
+    let ex = &mut st.ex;
+    let salt = salt_of(&label);
+    for strat in strats {
+        for sd in 1..=seeds {
+            let fl = flags_for(sd, salt ^ u64::from(crc32(strat.as_bytes())));
+            setflags(out, ex, &fl);
+            let durable = flag(&fl, "DURABLE");
+            let text = ex.render(&ex.compose_seed(strat, sd, durable));
+            out.line(format!("S {strat} {sd} {}\t{text}", u8::from(durable)));
+            if sd % CAND_EVERY == 0 || sd <= 3 {
+                let tjk = (2 + (sd % 7) as i64, 40 + ((sd * 13) % 300) as i64);
+                for tk in [None, Some(tjk)] {
+                    for c in p_line(out, ex, &text, tk) {
+                        if c.contains("tjx=") {
+                            p_line(out, ex, &c, tk);
+                            break;
+                        }
+                    }
+                }
             }
-            'F' => set_flags(
-                &mut st.as_mut().unwrap().ex,
-                &serde_json::from_str(&q[2..]).unwrap(),
-            ),
-            'N' => {
-                let nmax: i64 = q[2..].parse().unwrap();
-                let got: Vec<String> = (0..1000).map(|k| fc_value(k, nmax).to_string()).collect();
-                check(&format!("fc_n table nmax={nmax}"), want, got.join(" "));
-            }
-            _ => {
-                let s = st.as_mut().unwrap();
-                assert!(s.broken.is_none(), "a refused group got questions");
-                let ex = &mut s.ex;
-                match op {
-                    'S' => {
-                        let w: Vec<&str> = q[2..].split(' ').collect();
-                        let got =
-                            ex.render(&ex.compose_seed(w[0], w[1].parse().unwrap(), w[2] == "1"));
-                        check(&format!("schedule {q}"), want, got);
-                    }
-                    'P' => {
-                        let (text, rest) = want.split_once('\t').unwrap();
-                        let got = p_answer(ex, &q[2..], text);
-                        check(
-                            &format!("parse/class/candidates of {text} (tjk {})", &q[2..]),
-                            rest,
-                            got,
-                        );
-                    }
-                    'W' => {
-                        let sw = q[2..].split(' ').next().unwrap().to_string();
-                        ex.timing = q.ends_with(" 1");
-                        ex.compose = true;
-                        check(&format!("sweep {}", &q[2..]), want, w_answer(ex, &sw));
-                    }
-                    'Z' => {
-                        let (text, rest) = want.split_once('\t').unwrap();
-                        check(
-                            &format!("composer forms of {text}"),
-                            rest,
-                            z_answer(ex, text).unwrap_or_default(),
-                        );
-                    }
-                    'X' => {
-                        let w: Vec<&str> = q[2..].split(' ').collect();
-                        let mut s = S::new("none", 0);
-                        s.f = Some(Fc {
-                            svc: w[0].into(),
-                            dir: w[1].chars().next().unwrap(),
-                            peer: w[2].into(),
-                            step: w[3].parse().unwrap(),
-                            n: w[4].parse().unwrap(),
-                            matched: (w[5] != "-").then(|| w[5].to_string()),
-                            dur: w[6].parse().unwrap(),
-                        });
-                        check(&format!("freeze point {q}"), want, ex.render(&s));
-                    }
-                    _ => panic!("unknown question {line}"),
+            let composed = ex.space.as_ref().is_some_and(|s| s.composed());
+            if composed && (sd % 5 == 0 || sd <= 3) {
+                if let Some(z) = z_answer(ex, &text) {
+                    out.line(format!("Z\t{text}\t{z}"));
                 }
             }
         }
     }
-    let status = child.wait().unwrap();
-    assert!(status.success(), "ident.py failed");
-    eprintln!("identity: {n:?}");
-    assert!(
-        bad.is_empty(),
-        "{} differences:\n{}",
-        bad.len(),
-        bad.join("\n")
+    for timing in [false, true] {
+        let fl: Vec<(&str, bool)> = FLAGS
+            .iter()
+            .map(|f| (*f, (*f == "TIMING" && timing) || *f == "COMPOSE"))
+            .collect();
+        setflags(out, ex, &fl);
+        for sw in SWEEPS {
+            out.line(format!("W {sw} {}\t{}", u8::from(timing), w_answer(ex, sw)));
+        }
+    }
+    let matches: Vec<Option<String>> = std::iter::once(None)
+        .chain(ex.fc_match.iter().map(|(m, _)| Some(m.clone())))
+        .collect();
+    for (svc, peer) in ex.fc_pairs.clone() {
+        for d in ['<', '>'] {
+            for m in &matches {
+                for step in (0..ex.norders).step_by(7) {
+                    for n in [0i64, 1, 5, 64] {
+                        let mut s = S::new("none", 0);
+                        s.f = Some(Fc {
+                            svc: svc.clone(),
+                            dir: d,
+                            peer: peer.clone(),
+                            step,
+                            n,
+                            matched: m.clone(),
+                            dur: 1000,
+                        });
+                        out.line(format!(
+                            "X {svc} {d} {peer} {step} {n} {} 1000\t{}",
+                            m.as_deref().unwrap_or("-"),
+                            ex.render(&s)
+                        ));
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// ident.py `main`: the whole stream.
+fn produce(quick: bool) -> Stream {
+    let seeds = if quick { 40 } else { 300 };
+    let mut out = Stream::default();
+    out.group("fc_table");
+    for nmax in [64i64, 32, 16, 100, 7] {
+        let v: Vec<String> = (0..1000).map(|k| fc_value(k, nmax).to_string()).collect();
+        out.line(format!("N {nmax}\t{}", v.join(" ")));
+    }
+    let mut plan: Vec<(Option<String>, &str)> = vec![(None, "hvx"), (None, "hvm")];
+    for m in manifests() {
+        plan.push((Some(m.clone()), "hvx"));
+        plan.push((Some(m), "hvm"));
+    }
+    if quick {
+        let mut q: Vec<_> = plan.iter().take(4).cloned().collect();
+        q.extend(plan.iter().skip(4).step_by(5).cloned());
+        plan = q;
+    }
+    let all = ["random", "swarm", "swarm-pos", "process"];
+    let three = ["random", "swarm", "process"];
+    for (manifest, backend) in plan {
+        let mname = manifest.clone().unwrap_or_else(|| "None".into());
+        let mut ex = Ex::default();
+        if let Some(m) = &manifest {
+            match Space::from_path(&top().join(m)) {
+                Ok(sp) => sp.apply(&mut ex),
+                Err(e) => {
+                    let cfg = group_json(m, Some(m), backend, false, false);
+                    out.group(m);
+                    out.line(format!("G {}", hydo_explore::py::dumps_line(&cfg)));
+                    out.line(format!("E\t{e}"));
+                    continue;
+                }
+            }
+        }
+        let strats: &[&str] = if ex.norders >= 15 { &all } else { &three };
+        if backend == "hvm" {
+            for (disk, tc) in [(true, true), (false, false)] {
+                let label = format!(
+                    "{mname}/hvm/{}{}",
+                    if disk { "True" } else { "False" },
+                    if tc { "True" } else { "False" }
+                );
+                let cfg = group_json(&label, manifest.as_deref(), backend, disk, tc);
+                run_group(&mut out, &cfg, strats, seeds);
+            }
+        } else {
+            let cfg = group_json(
+                &format!("{mname}/hvx"),
+                manifest.as_deref(),
+                backend,
+                false,
+                false,
+            );
+            run_group(&mut out, &cfg, strats, seeds);
+        }
+    }
+    out
+}
+
+/// A flat stream (as ident.py printed it) cut into the same groups: one per `G` line.
+fn regroup(lines: Vec<String>) -> Stream {
+    let mut out = Stream::default();
+    out.group("fc_table");
+    for l in lines {
+        if let Some(j) = l.strip_prefix("G ") {
+            let v: Value = serde_json::from_str(j).unwrap();
+            out.group(v["label"].as_str().unwrap());
+        }
+        out.line(l);
+    }
+    out
+}
+
+#[test]
+fn explorer_identity() {
+    let quick = std::env::var_os("HYDO_IDENT_FULL").is_none();
+    let name = if quick {
+        "identity-quick.txt"
+    } else {
+        "identity-full.txt"
+    };
+    let t0 = std::time::Instant::now();
+    let stream = match support::recorded_from() {
+        Some(lines) => regroup(lines),
+        None => produce(quick),
+    };
+    let mut inputs = Vec::new();
+    for m in manifests() {
+        inputs.extend(manifest_inputs(&m));
+    }
+    let mut counts = std::collections::BTreeMap::<char, usize>::new();
+    for (_, ls) in &stream.groups {
+        for l in ls {
+            *counts.entry(l.chars().next().unwrap()).or_default() += 1;
+        }
+    }
+    eprintln!(
+        "identity ({}): {counts:?} in {:.1} s",
+        if quick { "quick" } else { "full" },
+        t0.elapsed().as_secs_f64()
     );
     assert!(
-        n.get(&'S').copied().unwrap_or(0) > 1000,
-        "too few schedules: {n:?}"
+        counts.get(&'S').copied().unwrap_or(0) > 1000,
+        "too few schedules: {counts:?}"
+    );
+    let mode = if quick { "--quick" } else { "full" };
+    let comments = if std::env::var_os("HYDO_GOLDEN_FROM").is_some() {
+        vec![
+            "# The answer stream of hydo/crates/hydo-explore/tests/ident.py (explore.py and the modules it".to_string(),
+            format!("# imported, at commit 2a58c4b; Python 3.15.0 on the Mac), {mode} mode, recorded in M107 as"),
+            "# chunked SHA-256 (tests/support/mod.rs). Restore the script: git show 2a58c4b:hydo/crates/hydo-explore/tests/ident.py".to_string(),
+            "# Re-record from the Rust output (the reference since M107): HYDO_BLESS=1 cargo test -p hydo-explore --test identity".to_string(),
+        ]
+    } else {
+        vec![
+            format!("# The identity stream ({mode} mode) as hydo-explore produced it (HYDO_BLESS=1), chunked SHA-256"),
+            "# (tests/support/mod.rs). Until M107 it was explore.py's own (git show 2a58c4b:hydo/crates/hydo-explore/tests/ident.py).".to_string(),
+        ]
+    };
+    support::verify(
+        &support::golden_dir().join(name),
+        &comments,
+        &inputs,
+        &stream,
+        256,
     );
 }

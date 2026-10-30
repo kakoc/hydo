@@ -10,7 +10,7 @@
 //!
 //! There is no prose specification: this parser, its printer and the example schedules in the
 //! tests are the definition. `Schedule::parse(s)?.to_string() == s` holds for every schedule the
-//! explorer (`hydo/explore/explore.py`) prints; `tests/corpus.rs` checks it on several hundred
+//! explorer (hydo-explore) prints; hydo-explore's `tests/corpus.rs` checks it on several hundred
 //! thousand of them.
 //!
 //! Canonical text: the host tokens joined by one space, ` | run`, then ` <token>` for each guest

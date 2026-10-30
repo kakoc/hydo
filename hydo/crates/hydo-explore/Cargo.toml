@@ -26,3 +26,10 @@ sha2 = { workspace = true }
 flate2 = { workspace = true }
 regex = "1"
 libc = "0.2"
+
+# The scripted engine is this test binary itself (run with HYDO_FAKE_ENGINE=1), so the test has its
+# own main().
+[[test]]
+name = "fake_engine"
+path = "tests/fake_engine.rs"
+harness = false

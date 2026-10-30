@@ -1,0 +1,1 @@
+{"fp": "cd5408a115878a93", "wfp": "b5c967d0aba0a2a5", "secs": 3.0, "verdict": "HYDO-ORACLE: VIOLATION lost acknowledged write order=4", "worker": N, "errors_new": ["4c53c64297e2"], "errors_known": 0}

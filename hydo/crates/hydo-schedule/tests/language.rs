@@ -1,6 +1,6 @@
 //! The schedule language by example: what is accepted (and prints back byte for byte), what the
 //! host side normalises, what is refused, and the hand-written schedules of the documentation.
-//! These examples, with the explorer corpus (tests/corpus.rs), are the language's specification.
+//! These examples, with the explorer corpus (hydo-explore's tests/corpus.rs), are the language's specification.
 
 use hydo_schedule::*;
 use std::path::Path;
@@ -23,7 +23,7 @@ fn refused(s: &str, why: &str) {
 }
 
 /// The committed sample: about 1,700 strings from the explorer corpus, chosen so that every token
-/// kind and every rule appears (tests/corpus.py; picked by pattern, then every 900th line).
+/// kind and every rule appears (picked from corpus.py's output before M107, by pattern, then every 900th line).
 #[test]
 fn sample_round_trips() {
     let text = include_str!("sample.txt");
