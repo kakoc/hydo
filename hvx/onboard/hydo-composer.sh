@@ -15,9 +15,16 @@
 #   compose.sh end IDX          an eventually/finally command, as a final invariant
 #   compose.sh check IDX        a final/always check, as an invariant (a timeout -> exit 2)
 #   compose.sh verdict          the compose.commands invariant: no command exited 100
+#   compose.sh setw VALUE       the knob path's W= (the init's set_knob): kept in /tmp/hydo/compose.W
+#                               and checked; a command id or a saved composition this image lacks
+#                               is a console line and exit 1 (the init: HYDO-ORACLE: ERROR knob W)
 #
 # The composition is a pure function of W= (schedule token, written to /tmp/hydo/compose.W by
 # the init's knob path) and the plan: hydo_composer.plan() in Python, the awk below here.
+# W= has three forms (hydo_composer.py): the seed form W=<seed hex>,p,q,r[,n,t,x,o] drawn by the
+# explorer (o: command indices, or ids joined by +); the resolved form W=:p,r[,t],c<id>+<id>,
+# <entry>.<round>.<k>.<seed>,... that names every entry's command by id (stable when the command
+# list changes); and W=@<key>, a resolved form staged at /etc/hydo/compose.saved/<key>.
 # Round r starts r * round_ms of guest time after round 0 (later if a fault point held it);
 # a command keeps running across later rounds and fault points until it ends. At most p commands
 # run at once; a parallel driver waits while a serial or singleton driver runs; a serial or
@@ -41,6 +48,12 @@ PLAN_AWK='
 function nxt() { s = (s * 48271) % M; return s }
 function below(n) { return nxt() % n }
 function add(r, c) { er[ne] = r; ec[ne] = c; es[ne] = nxt(); ne++ }
+function omitted(c,   n, a, i) {
+  if (O !~ /[A-Za-z]/) return inlist(O, c)
+  n = split(O, a, "+")
+  for (i = 1; i <= n; i++) if (a[i] == cid[c]) return 1
+  return 0
+}
 function inlist(lst, v,   n, a, i, b) {
   n = split(lst, a, ".")
   for (i = 1; i <= n; i++) {
@@ -50,7 +63,7 @@ function inlist(lst, v,   n, a, i, b) {
   }
   return 0
 }
-{ kind[$1 + 0] = $2; if ($1 + 1 > nc) nc = $1 + 1 }
+{ kind[$1 + 0] = $2; cid[$1 + 0] = $4; if ($1 + 1 > nc) nc = $1 + 1 }
 END {
   M = 2147483647; np = ns = ng = na = 0; ne = 0
   for (i = 0; i < nc; i++) {
@@ -74,19 +87,67 @@ END {
   }
   out = 0
   for (i = 0; i < ne; i++) {
-    if (inlist(X, i) || inlist(O, ec[i])) continue
+    if (inlist(X, i) || omitted(ec[i])) continue
     if (N > 0 && out >= N) break
     printf "%d %d %d %s %d\n", i, er[i], ec[i], kind[ec[i]], es[i]
     out++
   }
 }'
 
-parse_w() {
+# a resolved composition (":p..,r..[,t..],c<id>+<id>,<entry>.<round>.<k>.<seed>,..."; V) -> the
+# plan lines; ids are looked up in the list, so it does not depend on the list order. Mirrors
+# hydo_composer.parse_resolved/resolved_problems; an error is one line on stdout and exit 1.
+RES_AWK='
+{ ix[$4] = $1 + 0; kd[$1 + 0] = $2; all = all " " $4 }
+END {
+  n = split(substr(V, 2), f, ","); nc = -1; no = 0
+  for (i = 1; i <= n; i++) {
+    x = f[i]
+    if (x ~ /^[prt][0-9]+$/) continue
+    if (x ~ /^c/ && nc < 0) {
+      nc = split(substr(x, 2), cs, "+")
+      for (j = 1; j <= nc; j++) {
+        if (!(cs[j] in ix)) { print "the composition uses command " cs[j] ", which this image does not have (commands:" all ")"; exit 1 }
+        k = kd[ix[cs[j]]]
+        if (k != "parallel_driver" && k != "serial_driver" && k != "singleton_driver" && k != "anytime") {
+          print "command " cs[j] " is not a driver or anytime command"; exit 1
+        }
+        ci[j - 1] = ix[cs[j]]
+      }
+      continue
+    }
+    if (x ~ /^[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+$/) {
+      split(x, e, ".")
+      if (e[3] + 0 >= nc) { print "entry " x " names command " e[3] " of a table of " (nc < 0 ? 0 : nc); exit 1 }
+      if (e[2] + 0 >= S) { print "entry " x " is in round " e[2] ", the plan has " S " rounds"; exit 1 }
+      out[no++] = sprintf("%d %d %d %s %d", e[1], e[2], ci[e[3] + 0], kd[ci[e[3] + 0]], e[4])
+      continue
+    }
+    print "field " x " is not understood"; exit 1
+  }
+  if (no == 0) { print "no entry"; exit 1 }
+  for (i = 0; i < no; i++) print out[i]
+}'
+
+parse_w() {   # W, and its fields; WV = the resolved composition (resolved and saved forms)
   WS=0 WP=$HYDO_COMPOSE_PARALLEL WQ=$HYDO_COMPOSE_PER_ROUND WR=$HYDO_COMPOSE_ROUND_MS
-  WN=$HYDO_COMPOSE_MAX_COMMANDS WT=${HYDO_COMPOSE_BUDGET_MS:-0} WX= WO=
+  WN=$HYDO_COMPOSE_MAX_COMMANDS WT=${HYDO_COMPOSE_BUDGET_MS:-0} WX= WO= WV= WERR=
   W=$($BB cat $H/compose.W 2>/dev/null)
   [ "$W" = - ] && W=
   [ -n "$W" ] || return 0
+  case "$W" in
+    @*) _k=${W#@}
+        case "$_k" in ''|*[!0-9a-f]*) WERR="W=$W: @ takes the key of a saved composition (hex)"; return 1;; esac
+        WV=$($BB cat $E/compose.saved/$_k 2>/dev/null)
+        [ -n "$WV" ] || { WERR="W=$W: this image carries no saved composition $_k (build it with the regression that has it)"; return 1; };;
+    :*) WV=$W;;
+  esac
+  if [ -n "$WV" ]; then
+    WN=0 WT=0 WQ=-
+    _ifs=$IFS; IFS=,; set -- ${WV#:}; IFS=$_ifs
+    for f; do case "$f" in p[0-9]*) WP=${f#p};; r[0-9]*) WR=${f#r};; t[0-9]*) WT=${f#t};; esac; done
+    return 0
+  fi
   _ifs=$IFS; IFS=,; set -- $W; IFS=$_ifs
   WS=$((0x$1)); shift
   for f; do
@@ -96,6 +157,22 @@ parse_w() {
       *) con "HYDO-COMPOSE: W=$W: unknown field '$f' ignored";;
     esac
   done
+}
+
+wplan() {   # the plan lines of W on stdout; 1 and WERR when W cannot run on this image
+  parse_w || return 1
+  if [ -n "$WV" ]; then
+    _wo=$($BB awk -v V="$WV" -v S=$HYDO_STEPS "$RES_AWK" $L) || { WERR="W=$W: $_wo"; return 1; }
+    echo "$_wo"
+  else
+    $BB awk -v seed=$WS -v q=$WQ -v S=$HYDO_STEPS -v X="$WX" -v O="$WO" -v N=$WN "$PLAN_AWK" $L
+  fi
+}
+
+setw() {   # VALUE: the knob path's W=
+  echo "$1" > $H/compose.W
+  wplan > /dev/null && return 0
+  con "HYDO-COMPOSE error: $WERR"; echo "$WERR"; return 1
 }
 
 line_of() {   # <list file> <index>: ci ck cto cid ccmd
@@ -205,9 +282,14 @@ drain() {
   : > $C/done
 }
 daemon() {
-  parse_w
-  $BB awk -v seed=$WS -v q=$WQ -v S=$HYDO_STEPS -v X="$WX" -v O="$WO" -v N=$WN "$PLAN_AWK" $L > $C/plan
-  con "HYDO-COMPOSE plan W=${W:--} seed=$WS p=$WP q=$WQ r=$WR n=$WN rounds=$HYDO_STEPS entries=$($BB wc -l < $C/plan)"
+  if ! wplan > $C/plan; then
+    con "HYDO-COMPOSE error: $WERR"; echo "$WERR" >&2; exit 1      # step: "the composer daemon died"
+  fi
+  if [ -n "$WV" ]; then
+    con "HYDO-COMPOSE plan W=$W resolved p=$WP r=$WR t=$WT rounds=$HYDO_STEPS entries=$($BB wc -l < $C/plan)"
+  else
+    con "HYDO-COMPOSE plan W=${W:--} seed=$WS p=$WP q=$WQ r=$WR n=$WN rounds=$HYDO_STEPS entries=$($BB wc -l < $C/plan)"
+  fi
   while read -r _ci _ck _cto _cid _cc; do
     case $_ck in parallel_driver|serial_driver|singleton_driver|anytime)
       echo "HYDO-ASSERT-DECL {\"t\":\"sometimes\",\"id\":\"compose.$_cid.succeeded\",\"msg\":\"$_cid exited 0 at least once\"}" >> $CON
@@ -320,6 +402,7 @@ verdict() {
 case "$1" in
   first) first;; step) step "$2" "$3";; daemon) daemon;; run1) shift; run1 "$@";;
   end) endc "$2";; check) check "$2";; verdict) verdict;;
-  plan) parse_w; $BB awk -v seed=$WS -v q=$WQ -v S=$HYDO_STEPS -v X="$WX" -v O="$WO" -v N=$WN "$PLAN_AWK" $L;;
-  *) echo "usage: compose.sh first|step FROM TO|daemon|end IDX|check IDX|verdict|plan" >&2; exit 2;;
+  plan) wplan || { echo "$WERR" >&2; exit 1; };;
+  setw) setw "$2";;
+  *) echo "usage: compose.sh first|step FROM TO|daemon|end IDX|check IDX|verdict|plan|setw W" >&2; exit 2;;
 esac

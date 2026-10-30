@@ -102,6 +102,15 @@ fn fn_name(item: &TokenStream) -> Option<String> {
     None
 }
 
+fn fnv64(s: &str) -> u64 {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in s.bytes() {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    h
+}
+
 fn register(role: &str, kinds: &[(&str, &str)], attr: TokenStream, item: TokenStream) -> TokenStream {
     let a = match parse_args(attr, role, kinds) {
         Ok(a) => a,
@@ -115,11 +124,15 @@ fn register(role: &str, kinds: &[(&str, &str)], attr: TokenStream, item: TokenSt
     if !name.chars().all(|c| c.is_ascii_alphanumeric() || "_.-".contains(c)) {
         return err("hydo_test: a command or check name uses letters, digits, '.', '_' and '-'");
     }
+    // the command's content (hydo warns when a saved regression's command changed since the
+    // save): FNV-1a 64 over the attribute and the function's tokens, so formatting and comments
+    // do not count; code the function calls is not covered
+    let content = fnv64(&format!("{} {} {} {}", role, a.kind, name, item));
     let reg = format!(
         "::hydo_test::inventory::submit! {{ ::hydo_test::Registration {{ role: {:?}, kind: {:?}, name: {:?}, \
          func: {} as fn(&::hydo_test::Ctx) -> ::hydo_test::Result<()>, timeout: {}, every: {}, within: {}, poll: {}, \
-         after: {:?}, msg: {:?} }} }}",
-        role, a.kind, name, f, a.timeout, a.every, a.within, a.poll, a.after, a.msg
+         after: {:?}, msg: {:?}, content: \"{:016x}\" }} }}",
+        role, a.kind, name, f, a.timeout, a.every, a.within, a.poll, a.after, a.msg, content
     );
     let mut out = item;
     out.extend(TokenStream::from_str(&reg).unwrap());

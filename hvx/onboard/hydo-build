@@ -1229,7 +1229,8 @@ def _compose_expand(m, path):
         hc.check_version(m["hydo_version"], hc.engine_version(HERE), ManifestError,
                          lambda msg: print("hydo-build: warning: %s" % msg, file=sys.stderr))
     folder = hc.scan_folder(os.path.dirname(os.path.abspath(path)), ManifestError)
-    meta = hc.expand(m, ManifestError, folder)
+    meta = hc.expand(m, ManifestError, folder,
+                     warn=lambda msg: print("hydo-build: warning: %s" % msg, file=sys.stderr))
     if meta is not None:
         meta["_folder"] = folder
     return meta

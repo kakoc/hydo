@@ -113,6 +113,24 @@ pub struct Registration {
     pub poll: u32,
     pub after: &'static str,
     pub msg: &'static str,
+    /// A hash of the function's code (16 hex digits, written by the attribute macro): the plan's
+    /// `content`, so hydo warns when a saved regression's command changed since it was saved.
+    pub content: &'static str,
+}
+
+/// Registrations that would share a command id or a guest dispatch name: two drivers (or two
+/// checks) with the same name. hydo names a command `<kind>_<name>` and the guest runs it as
+/// `<bin> driver <name>`, so names are unique per role. Empty when the set is valid.
+pub fn duplicate_names(regs: &[&Registration]) -> Vec<String> {
+    let mut out = vec![];
+    for (i, a) in regs.iter().enumerate() {
+        for b in &regs[i + 1..] {
+            if a.role == b.role && a.name == b.name {
+                out.push(format!("two {}s named {} ({} and {}): give one #[{}(.., name = \"...\")]", a.role, a.name, a.kind, b.kind, a.role));
+            }
+        }
+    }
+    out
 }
 
 inventory::collect!(Registration);
@@ -260,7 +278,15 @@ pub fn run_main(system: fn() -> System) -> i32 {
             let out = opt.get("--out").map(std::path::PathBuf::from);
             let base = out.as_ref().map(|o| o.parent().map(|d| if d.as_os_str().is_empty() { std::path::Path::new(".") } else { d })
                 .unwrap_or(std::path::Path::new(".")).to_path_buf());
-            let text = system().plan_json_at(&guest, &gpath, &registrations(), base.as_deref());
+            let regs = registrations();
+            let dup = duplicate_names(&regs);
+            if !dup.is_empty() {
+                for d in dup {
+                    eprintln!("{}: {}", prog, d);
+                }
+                return 1;
+            }
+            let text = system().plan_json_at(&guest, &gpath, &regs, base.as_deref());
             match opt.get("--out") {
                 Some(p) => {
                     if let Err(e) = std::fs::write(p, &text) {

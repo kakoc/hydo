@@ -225,9 +225,20 @@ def cmd_regressions(args):
     base = os.path.join(OUT, "regressions-%s" % time.strftime("%Y%m%d-%H%M%S"))
     bad = 0
     for k, r in enumerate(regs):
-        w = hydo_composer.regression_warning(r, meta)
-        if w:
-            print("hydo: warning: " + w)
+        # M98: a saved composition names its commands by id; one the plan lost cannot replay, a
+        # changed one warns (images from before M98 keep the old check: their guest knows one form)
+        if meta.get("stable_compose"):
+            st = hydo_composer.regression_status(r, meta)
+            for w in st["warnings"]:
+                print("hydo: warning: %s: %s" % (r["name"], w))
+            if st["error"]:
+                bad += 1
+                print("FAIL  %s  expect %s  not run: %s\n      %s" % (r["name"], r["expect"], st["error"], r["schedule"]))
+                continue
+        else:
+            w = hydo_composer.regression_warning(r, meta)
+            if w:
+                print("hydo: warning: " + w)
         text = run_once(image, r["schedule"], os.path.join(base, "%03d-%s" % (k, r["name"])), quiet=True)
         m = [re.match(r"RESULT \S+ fp=(\S+) .*?verdict=(.*)", l) for l in text.splitlines()]
         m = [x for x in m if x]
@@ -261,6 +272,8 @@ def cmd_save(argv):
         die("usage: hydo save <explore dir> [--to hydo/regressions]")
     j = json.load(open(os.path.join(args[0], "report.json")))
     os.makedirs(to, exist_ok=True)
+    sys.path.insert(0, ONBOARD)
+    import hydo_composer
     n = 0
     for x in j.get("shrunk", []):
         name = re.sub(r"[^A-Za-z0-9_.-]+", "-", "%s-%s" % (x["class"], x["signature"]))[:60].strip("-")
@@ -268,15 +281,12 @@ def cmd_save(argv):
         if os.path.exists(p):
             print("hydo: %s exists, kept" % p)
             continue
-        with open(p, "w") as f:
-            f.write("# found by `hydo explore` (seed %s): %s\n# verdict: %s\n" % (x["from_seed"], x["class"], x["min_verdict"][:200]))
-            if x.get("composition"):
-                f.write("# composition: %s\n" % x["composition"][:400])
-            if x.get("commands") is not None:      # what W= refers to (hydo_composer.regression_warning)
-                f.write("# commands: %s\n" % " ".join(x["commands"]))
-            f.write("# expect: violation      (change to ok when the bug is fixed)\n%s\n" % x["minimal"])
+        with open(p, "w") as f:     # a composition in its stable form: commands by id (hydo_composer, M98)
+            f.write(hydo_composer.saved_regression_text(x))
         n += 1
         print("hydo: wrote %s" % p)
+        if x.get("stable_note"):
+            print("hydo: note: %s" % x["stable_note"])
     print("hydo: %d regressions saved; `hydo build` stages them, `hydo repro --regressions` replays them" % n)
     return 0
 

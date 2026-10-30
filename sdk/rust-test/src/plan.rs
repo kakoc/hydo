@@ -520,6 +520,9 @@ impl System {
             if r.timeout > 0 {
                 v.push(("timeout", J::N(r.timeout as i64)));
             }
+            if !r.content.is_empty() {
+                v.push(("content", s(r.content)));     // the function's code hash (M98)
+            }
             obj(v)
         }).collect();
         let mut checks: Vec<J> = regs.iter().filter(|r| r.role == "check").map(|r| {

@@ -36,6 +36,31 @@ fn plan_lists_every_function_in_a_fixed_order() {
     assert_eq!(j, sys.plan_json("/tmp/g", "/bin/t", &regs), "the plan is a pure function");
 }
 
+fn noop(_ctx: &Ctx) -> Result<()> {
+    Ok(())
+}
+
+#[test]
+fn commands_carry_a_content_hash_and_names_are_unique() {
+    let regs = hydo_test::registrations();
+    for r in &regs {
+        assert_eq!(r.content.len(), 16, "{}: content {:?}", r.name, r.content);
+        assert!(r.content.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+    let place = regs.iter().find(|r| r.name == "place").unwrap();
+    let j = System::new("t").service(Service::new("db", "/bin/db")).plan_json("/tmp/g", "/bin/t", &regs);
+    assert!(j.contains(&format!("\"content\": \"{}\"", place.content)), "{}", j);
+    assert!(hydo_test::duplicate_names(&regs).is_empty());
+    let a = hydo_test::Registration { role: "driver", kind: "parallel_driver", name: "x", func: noop, timeout: 0, every: 0, within: 0,
+                           poll: 0, after: "", msg: "", content: "" };
+    let b = hydo_test::Registration { kind: "serial_driver", ..a };
+    let c = hydo_test::Registration { role: "driver", kind: "parallel_driver", name: "x", func: noop, timeout: 0, every: 0, within: 0,
+                           poll: 0, after: "", msg: "", content: "" };
+    let d = hydo_test::duplicate_names(&[&c, &b]);
+    assert_eq!(d.len(), 1, "{:?}", d);
+    assert!(d[0].contains("two drivers named x"), "{:?}", d);
+}
+
 #[test]
 fn history_checks_become_test_checks() {
     let regs = hydo_test::registrations();

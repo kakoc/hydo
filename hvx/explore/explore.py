@@ -1991,14 +1991,44 @@ def main():
                 continue
             m, mv, n = shrink(pool, parse(f["schedule"]), f["verdict"], slog, tjk=f.get("tjk"))
             mt = render(m)
-            conf = pool.run_all([("min-a", mt), ("min-b", mt)])
+            stable = None
+            if "W" in m and SPACE is not None and SPACE.compose:
+                # the stable form (M98): the minimal composition resolved to its entries, commands by
+                # id, so a saved regression replays it when the plan's command list changes; it is
+                # the minimal schedule when it fails the same way (its guest part fits the engine)
+                hc = _hc()
+                stable = {"stable": hc.stable_w(m["W"], SPACE.compose)}
+                st = render(dict(m, W=stable["stable"]))
+                if hc.fits(st):
+                    conf = pool.run_all([("min-a", st), ("min-b", st)])
+                    ca, cb = conf["min-a"][1], conf["min-b"][1]
+                    slog.write(json.dumps({"stable": st, "verdict": ca["verdict"]}) + "\n")
+                    if same_failure(mv, ca["verdict"]) and ca["fp"] == cb["fp"]:
+                        m, mt = dict(m, W=stable["stable"]), st
+                        stable["stable_schedule"] = st
+                    else:
+                        stable["stable_note"] = ("the resolved composition did not fail the same way (%s); the minimal "
+                                                 "schedule keeps the seed form" % ca["verdict"][:120])
+                        stable["stable_schedule"] = st
+                        conf = None
+                else:
+                    stable["stable_schedule"] = render(dict(m, W="@" + hc.key_of(stable["stable"])))
+                    stable["stable_note"] = ("the resolved composition is too long for a schedule line; a saved regression "
+                                             "carries it as W=@%s (unconfirmed)" % hc.key_of(stable["stable"]))
+                    conf = None
+                if conf is None:
+                    conf = pool.run_all([("min-a", mt), ("min-b", mt)])
+            else:
+                conf = pool.run_all([("min-a", mt), ("min-b", mt)])
             shrunk[key] = {"from_seed": f["seed"], "minimal": mt, "verdict": mv, "tries": n,
                            "min_class": finding_class(m),
                            "fp_a": conf["min-a"][1]["fp"], "fp_b": conf["min-b"][1]["fp"],
                            "min_verdict": conf["min-a"][1]["verdict"]}
-            if "W" in m and SPACE is not None and SPACE.compose:     # the minimal composition, round by round
+            if stable is not None:     # the minimal composition, round by round; the commands it uses, by content
                 shrunk[key]["composition"] = _hc().describe(m["W"], SPACE.compose)
                 shrunk[key]["commands"] = [c["id"] for c in SPACE.compose["commands"]]
+                shrunk[key]["contents"] = _hc().contents_of(stable["stable"], SPACE.compose)
+                shrunk[key].update(stable)
     slog.close()
     boot = [w.boot_secs for w in pool.workers if w.boot_secs]
     pool.close()
@@ -2117,7 +2147,10 @@ def write_report(out, summary, fails, shrunk, table=None):
               "- from seed %d, %d shrink runs" % (v["from_seed"], v["tries"]),
               "- minimal schedule: `%s`" % v["minimal"],
               "- needs a tick-timing change: %s" % ("yes" if " tj" in v["minimal"] else "no"),
-              ] + (["- composition (test composer, W=): %s" % v["composition"]] if v.get("composition") else []) + (["- needs vCPU turn lengths: %s" % ("yes" if re.search(r"(?:^|\s)(?:qs?|qb)=", v["minimal"].split("|")[0]) else "no")]
+              ] + (["- composition (test composer, W=): %s" % v["composition"]] if v.get("composition") else []) + (
+                  ["- stable form (commands by id; `hydo save` writes it): %s" % (
+                      "the minimal schedule" if v.get("stable_schedule") == v["minimal"] else
+                      "`%s` (%s)" % (v["stable_schedule"], v.get("stable_note", "")))] if v.get("stable") else []) + (["- needs vCPU turn lengths: %s" % ("yes" if re.search(r"(?:^|\s)(?:qs?|qb)=", v["minimal"].split("|")[0]) else "no")]
                    if VCPUS > 1 else []) + [
               "- verdict: `%s`" % v["min_verdict"],
               "- fingerprint, two runs: `%s` / `%s` (%s)" % (v["fp_a"], v["fp_b"], "identical" if v["fp_a"] == v["fp_b"] else "DIFFERENT"),
