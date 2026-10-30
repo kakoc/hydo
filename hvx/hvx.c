@@ -4129,7 +4129,8 @@ static void virtio_net_tx_process(struct hvx_vcpu *vcpu)
 
 					skip -= s; off += s; len -= s;
 				}
-				if (len && v->tx_len + len <= HVX_VNET_TX_CAP) {
+				/* written so that a guest descriptor length near 2^32 cannot wrap the sum (M97) */
+				if (len && v->tx_len <= HVX_VNET_TX_CAP && len <= HVX_VNET_TX_CAP - v->tx_len) {
 					hvx_guest_rw(vm, desc.addr + off, v->tx_buf + v->tx_len, len, false);
 					v->tx_len += len;
 					cap_len += len;
@@ -7011,7 +7012,11 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		s = kzalloc(sizeof(*s), GFP_KERNEL);
 		if (!s) { ret = -ENOMEM; break; }
 		if (copy_from_user(s, uarg, sizeof(*s))) { kfree(s); ret = -EFAULT; break; }
-		if (s->tsc_mode != HVX_TSC_COUNTER && s->tsc_mode != HVX_TSC_ICOUNT) {
+		/* M97: vnet_tx_len is an offset into the fixed tx_buf (GET_TX copies that
+		 * many bytes out of it, the next TX capture appends at it); a larger value
+		 * read and wrote past the buffer. Only a forged snapshot can hold one. */
+		if ((s->tsc_mode != HVX_TSC_COUNTER && s->tsc_mode != HVX_TSC_ICOUNT) ||
+		    s->vnet_tx_len > HVX_VNET_TX_CAP) {
 			kfree(s);
 			ret = -EINVAL;
 			break;
