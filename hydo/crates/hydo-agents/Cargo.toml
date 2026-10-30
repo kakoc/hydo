@@ -1,0 +1,12 @@
+[package]
+name = "hydo-agents"
+description = "hydo's AI-facing commands: hydo guide, hydo skill install, hydo init (the onboarding skill is built in)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+build = "build.rs"
+
+[dependencies]
+hydo-manifest = { workspace = true }
+regex = "1"

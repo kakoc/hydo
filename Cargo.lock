@@ -109,14 +109,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
+name = "hydo-agents"
+version = "0.1.0"
+dependencies = [
+ "hydo-manifest",
+ "regex",
+]
+
+[[package]]
 name = "hydo-cli"
 version = "0.1.0"
 dependencies = [
+ "hydo-agents",
+ "hydo-compose",
  "hydo-engine",
  "hydo-manifest",
  "hydo-schedule",
  "libc",
  "serde_json",
+]
+
+[[package]]
+name = "hydo-compose"
+version = "0.1.0"
+dependencies = [
+ "hydo-manifest",
 ]
 
 [[package]]

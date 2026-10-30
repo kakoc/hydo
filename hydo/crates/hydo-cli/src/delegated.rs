@@ -132,10 +132,10 @@ pub fn cmd_compose(ctx: &Ctx, argv: &[String]) -> i32 {
     bridge::rc(ctx, "compose", json!({"argv": argv}), &[])
 }
 
-// ---------------------------------------------------------------- guide, skill, init (hydo_agents.py)
+// ---------------------------------------------------------------- guide, skill, init (the hydo-agents crate)
 
 pub fn cmd_agents(ctx: &Ctx, cmd: &str, argv: &[String]) -> i32 {
-    bridge::agents(ctx, cmd, argv)
+    hydo_agents::run(cmd, argv, &ctx.root)
 }
 
 // ---------------------------------------------------------------- build (hydo-build)
