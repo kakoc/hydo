@@ -1,7 +1,8 @@
 //! `hydo run`, `hydo repro`, `hydo repro --regressions`, `hydo save`: runs from a fresh boot
-//! through the engine interface (hydo-engine), the history checks (hydo-history), the error logs
-//! of a run (hydo-errors), saved regressions (hydo-composer), and the files the Python CLIs wrote
-//! (run.json, consoles).
+//! through the engine interface (hydo-engine: hvx on Linux, hvm on the Mac), the history checks
+//! (hydo-history), the error logs of a run (hydo-errors), saved regressions (hydo-composer), and
+//! the files a run leaves (run.json, engine.log, the consoles). One behaviour on both platforms
+//! since M107; only the engine and the image's file name differ.
 
 use crate::ctx::{
     abspath, die, glob_simple, pjoin, read_text, strftime, take, Ctx, Platform, OUT, PROJECT_OUT,
@@ -20,24 +21,34 @@ use std::path::{Path, PathBuf};
 
 // ---------------------------------------------------------------- images and engine options
 
-/// Linux: `--image IMG`, or a leading positional `*.img`, or the one `*-disk.img` in ./hydo-out
-/// (then ./.hydo).
-pub fn find_image_linux(args: &mut Vec<String>) -> PathBuf {
+/// The image file names of this platform: (what `hydo build` writes, a positional image's suffix).
+fn image_pattern(ctx: &Ctx) -> (&'static str, &'static str) {
+    match ctx.platform {
+        Platform::Linux => ("-disk.img", ".img"),
+        Platform::Mac => ("-arm64.cpio.gz", ".cpio.gz"),
+    }
+}
+
+/// `--image IMG`, or a leading positional image, or the one image `hydo build` wrote in ./hydo-out
+/// (then ./.hydo, where a project's hydo/hydo.yaml builds).
+pub fn find_image(ctx: &Ctx, args: &mut Vec<String>) -> PathBuf {
+    let (built, suffix) = image_pattern(ctx);
     let mut img = take(args, "--image");
-    if img.is_none() && args.first().is_some_and(|a| a.ends_with(".img")) {
+    if img.is_none() && args.first().is_some_and(|a| a.ends_with(suffix)) {
         img = Some(args.remove(0));
     }
     let img = match img {
         Some(i) => i,
         None => {
-            let mut imgs = glob_simple(Path::new(OUT), "", "-disk.img");
+            let mut imgs = glob_simple(Path::new(OUT), "", built);
             if imgs.is_empty() {
-                imgs = glob_simple(Path::new(PROJECT_OUT), "", "-disk.img");
+                imgs = glob_simple(Path::new(PROJECT_OUT), "", built);
             }
             if imgs.len() != 1 {
                 die(&format!(
-                    "no image given and {} *-disk.img in ./{} or ./{} (run `hydo build hydo.yaml` here, or pass --image)",
+                    "no image given and {} *{} in ./{} or ./{} (run `hydo build hydo.yaml` here, or pass --image)",
                     imgs.len(),
+                    built,
                     OUT,
                     PROJECT_OUT
                 ));
@@ -49,22 +60,6 @@ pub fn find_image_linux(args: &mut Vec<String>) -> PathBuf {
         die(&format!("no such image: {img}"));
     }
     abspath(Path::new(&img))
-}
-
-/// Mac: `--image IMG`, or the one `*-arm64.cpio.gz` in ./hydo-out.
-pub fn default_image_mac(args: &mut Vec<String>) -> PathBuf {
-    if let Some(img) = take(args, "--image") {
-        return abspath(Path::new(&img));
-    }
-    let imgs = glob_simple(Path::new(OUT), "", "-arm64.cpio.gz");
-    if imgs.len() != 1 {
-        die(&format!(
-            "no image given and {} images in ./{} (run `hydo build hydo.yaml` here, or pass --image)",
-            imgs.len(),
-            OUT
-        ));
-    }
-    abspath(&imgs[0])
 }
 
 /// The `guest:` section of the manifest an image carries (defaults when it cannot be read: the
@@ -82,13 +77,8 @@ pub fn image_guest(image: &Path) -> Guest {
     }
 }
 
-/// The engine options explore.py would pass for this image (engine_args_for).
-pub fn linux_engine_args(
-    image: &Path,
-    ram: Option<u64>,
-    cpu: Option<String>,
-    vcpus: u64,
-) -> Vec<String> {
+/// The engine options the explorer passes for this image (explore.py's engine_args_for).
+pub fn engine_args(image: &Path, ram: Option<u64>, cpu: Option<String>, vcpus: u64) -> Vec<String> {
     let (ram, cpu) = match (ram, cpu) {
         (Some(r), Some(c)) => (r, c),
         (r, c) => {
@@ -148,10 +138,85 @@ fn schedule(text: &str) -> Schedule {
     Schedule::parse(text).unwrap_or_else(|e| die(&format!("bad schedule {text:?}: {e}")))
 }
 
-// ---------------------------------------------------------------- Linux: one run
+// ---------------------------------------------------------------- one run
 
-/// One schedule from a fresh boot (hvx_explore one). Writes engine.log; dies without a RESULT.
-pub fn run_one_linux(
+/// The Mac's default guest kernel.
+pub fn mac_kernel(ctx: &Ctx) -> PathBuf {
+    ctx.p("hv/hvm/explore/out/Image-explore")
+}
+
+/// The kernel for an image (hvm_backend.kernel_for); a refusal ends the command with `hydo: `.
+pub fn mac_kernel_for(ctx: &Ctx, image: &Path, quiet: bool) -> PathBuf {
+    let k = kernel_for(image, None, &mac_kernel(ctx)).unwrap_or_else(|msg| die(&msg));
+    if !quiet && k != mac_kernel(ctx) {
+        let rel = k.strip_prefix(&ctx.root).unwrap_or(&k);
+        println!(
+            "hydo: guest kernel {} (recorded in the image)",
+            rel.display()
+        );
+    }
+    k
+}
+
+/// One schedule from a fresh boot on this platform's engine. Writes `engine.log` (everything the
+/// engine printed) into outdir. Returns the RESULT, or None (the engine's output is returned too).
+fn run_engine(
+    ctx: &Ctx,
+    image: &Path,
+    sched: &str,
+    outdir: &Path,
+    eargs: &[String],
+    quiet: bool,
+) -> (Option<RunResult>, String) {
+    let _ = std::fs::create_dir_all(outdir);
+    let s = schedule(sched);
+    let run = match ctx.platform {
+        Platform::Linux => {
+            let engine = hvxenv::engine(ctx);
+            if !crate::ctx::access(&engine, libc::X_OK) {
+                die(&format!(
+                    "{} is not built (run install.sh again)",
+                    engine.display()
+                ));
+            }
+            let hvx = Hvx {
+                engine,
+                hvx_run: Some(ctx.libexec().join("hvx-run")),
+                snap_dir: hvxenv::snap_dir(),
+                extra_env: Vec::new(),
+                env: hvxenv::tool_env(ctx),
+            };
+            let spec = spec_from_args(
+                eargs,
+                image,
+                hvxenv::bzimage(ctx),
+                Some(hvxenv::initrd(ctx)),
+                &abspath(outdir),
+            );
+            hvx.one(&spec, &s)
+        }
+        Platform::Mac => {
+            let kernel = mac_kernel_for(ctx, image, quiet);
+            let spec = spec_from_args(eargs, image, kernel, None, outdir);
+            Hvm::for_release(&ctx.root).one(&spec, &s)
+        }
+    }
+    .unwrap_or_else(|e| die(&format!("cannot start the engine: {e}")));
+    let _ = std::fs::write(outdir.join("engine.log"), &run.output);
+    if !quiet {
+        // the spin observer's notes (hvm: a run ended at a counter loop and ran again)
+        for line in run.output.lines().filter(|l| l.starts_with("hvmx: one")) {
+            println!("{line}");
+        }
+        if let Some(r) = &run.result {
+            println!("{}", r.line);
+        }
+    }
+    (run.result, run.output)
+}
+
+/// One schedule from a fresh boot; dies without a RESULT (the engine's output tail on stderr).
+pub fn run_one(
     ctx: &Ctx,
     image: &Path,
     sched: &str,
@@ -159,41 +224,10 @@ pub fn run_one_linux(
     eargs: &[String],
     quiet: bool,
 ) -> Map<String, Value> {
-    let _ = std::fs::create_dir_all(outdir);
-    let engine = hvxenv::engine(ctx);
-    if !crate::ctx::access(&engine, libc::X_OK) {
-        die(&format!(
-            "{} is not built (run install.sh again)",
-            engine.display()
-        ));
-    }
-    let hvx = Hvx {
-        engine,
-        hvx_run: Some(ctx.libexec().join("hvx-run")),
-        snap_dir: hvxenv::snap_dir(),
-        extra_env: Vec::new(),
-        env: hvxenv::tool_env(ctx),
-    };
-    let spec = spec_from_args(
-        eargs,
-        image,
-        hvxenv::bzimage(ctx),
-        Some(hvxenv::initrd(ctx)),
-        &abspath(outdir),
-    );
-    let run = hvx
-        .one(&spec, &schedule(sched))
-        .unwrap_or_else(|e| die(&format!("cannot start the engine: {e}")));
-    let _ = std::fs::write(outdir.join("engine.log"), &run.output);
-    match run.result {
-        Some(r) => {
-            if !quiet {
-                println!("{}", r.line);
-            }
-            result_map(&r)
-        }
-        None => {
-            eprint!("{}", tail(&run.output, 3000));
+    match run_engine(ctx, image, sched, outdir, eargs, quiet) {
+        (Some(r), _) => result_map(&r),
+        (None, output) => {
+            eprint!("{}", tail(&output, 3000));
             die(&format!(
                 "the run produced no RESULT line (output above; full log in {})",
                 outdir.join("engine.log").display()
@@ -236,18 +270,14 @@ fn history_checks(srcs: &[(String, String)], verdict: Option<&str>) -> hydo_hist
     }
 }
 
-/// Write one.checks.log and one.checks.txt from the checks' answer.
-fn write_checks(outdir: &Path, r: &hydo_history::Checks) {
-    let _ = hydo_history::write_checks_files(outdir, "one", r);
-}
-
 /// The combined verdict as the Python CLI printed it ("None" without checks).
 fn verdict_text(r: &hydo_history::Checks) -> String {
     r.verdict.clone().unwrap_or_else(|| "None".into())
 }
 
-/// History checks on the host (hydo/HISTORIES.md), Linux: folds the verdict into res.
-fn host_checks_linux(outdir: &Path, mut res: Map<String, Value>) -> Map<String, Value> {
+/// History checks on the host (hydo/HISTORIES.md): writes one.checks.log and one.checks.txt and
+/// folds the combined verdict into res (the guest's own as guest_verdict).
+fn host_checks(outdir: &Path, mut res: Map<String, Value>, quiet: bool) -> Map<String, Value> {
     let srcs = console_sources(outdir);
     if !srcs.iter().any(|(_, t)| t.contains("HYDO-CHECK ")) {
         return res;
@@ -257,15 +287,17 @@ fn host_checks_linux(outdir: &Path, mut res: Map<String, Value>) -> Map<String, 
         .and_then(Value::as_str)
         .map(str::to_string);
     let r = history_checks(&srcs, verdict.as_deref());
-    write_checks(outdir, &r);
+    let _ = hydo_history::write_checks_files(outdir, "one", &r);
     let gv = res.get("verdict").cloned().unwrap_or(Value::Null);
     res.insert("guest_verdict".into(), gv);
     res.insert("verdict".into(), json!(r.verdict));
-    println!(
-        "hydo: history checks: {}   (explanations in {})",
-        verdict_text(&r),
-        outdir.join("one.checks.txt").display()
-    );
+    if !quiet {
+        println!(
+            "hydo: history checks: {}   (explanations in {})",
+            verdict_text(&r),
+            outdir.join("one.checks.txt").display()
+        );
+    }
     res
 }
 
@@ -290,19 +322,19 @@ fn new_run_dir() -> PathBuf {
     d
 }
 
-pub fn cmd_run_linux(ctx: &Ctx, argv: &[String]) -> i32 {
+pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
     let mut args = argv.to_vec();
     let outdir = take(&mut args, "--out");
     let known = take(&mut args, "--known-errors");
-    let image = find_image_linux(&mut args);
+    let image = find_image(ctx, &mut args);
     if args.len() != 1 {
-        die("usage: hydo run [IMG] \"<schedule>\" [--image IMG] [--out DIR]   e.g. hydo run \"disk=cut | run C=12 R=everysec\"");
+        die("usage: hydo run [IMG] \"<schedule>\" [--image IMG] [--out DIR] [--known-errors FILE]   e.g. hydo run \"disk=cut | run C=12 R=everysec\"");
     }
     let sched = args[0].clone();
     let outdir = outdir.map(PathBuf::from).unwrap_or_else(new_run_dir);
-    let eargs = linux_engine_args(&image, None, None, 1);
-    let res = run_one_linux(ctx, &image, &sched, &outdir, &eargs, false);
-    let res = host_checks_linux(&outdir, res);
+    let eargs = engine_args(&image, None, None, 1);
+    let res = run_one(ctx, &image, &sched, &outdir, &eargs, false);
+    let res = host_checks(&outdir, res, false);
     let res = errors_one(&outdir, &sched, res, known.as_deref());
     let mut rec = Map::new();
     rec.insert("image".into(), json!(image.display().to_string()));
@@ -381,7 +413,7 @@ fn repro_list(ctx: &Ctx, d: &Path) -> Vec<ReproItem> {
         .unwrap_or("v2")
         .to_string();
     let vcpus = s.get("vcpus").and_then(Value::as_u64).unwrap_or(1);
-    let eargs = linux_engine_args(&image, Some(ram), Some(cpu), vcpus);
+    let eargs = engine_args(&image, Some(ram), Some(cpu), vcpus);
     let mut out = Vec::new();
     for f in j["failures"].as_array().into_iter().flatten() {
         out.push(ReproItem {
@@ -409,11 +441,11 @@ fn repro_list(ctx: &Ctx, d: &Path) -> Vec<ReproItem> {
     out
 }
 
-pub fn cmd_repro_linux(ctx: &Ctx, argv: &[String]) -> i32 {
+pub fn cmd_repro(ctx: &Ctx, argv: &[String]) -> i32 {
     let mut args = argv.to_vec();
     if let Some(i) = args.iter().position(|a| a == "--regressions") {
         args.remove(i);
-        return cmd_regressions_linux(ctx, args);
+        return cmd_regressions(ctx, args);
     }
     if args.first().is_some_and(|a| Path::new(a).is_dir()) {
         let d = PathBuf::from(args.remove(0));
@@ -429,8 +461,8 @@ pub fn cmd_repro_linux(ctx: &Ctx, argv: &[String]) -> i32 {
         let mut same = 0;
         for (k, it) in items.iter().enumerate() {
             let dir = base.join(format!("{k:03}"));
-            let res = run_one_linux(ctx, &it.image, &it.sched, &dir, &it.eargs, true);
-            let res = host_checks_linux(&dir, res);
+            let res = run_one(ctx, &it.image, &it.sched, &dir, &it.eargs, true);
+            let res = host_checks(&dir, res, false);
             let res = errors_one(&dir, &it.sched, res, None);
             let fp = py_str(&res["fp"]);
             let ok = fp == it.fp;
@@ -453,7 +485,7 @@ pub fn cmd_repro_linux(ctx: &Ctx, argv: &[String]) -> i32 {
         );
         return if same == items.len() { 0 } else { 1 };
     }
-    cmd_run_linux(ctx, argv)
+    cmd_run(ctx, argv)
 }
 
 // ---------------------------------------------------------------- regressions (the test composer's plan)
@@ -512,8 +544,11 @@ pub fn truthy(v: &Value) -> bool {
     }
 }
 
-fn cmd_regressions_linux(ctx: &Ctx, mut args: Vec<String>) -> i32 {
-    let image = find_image_linux(&mut args);
+/// `hydo repro --regressions [IMG]`: every regression the image carries, with the host's history
+/// checks applied; consoles next to the image. A run without a RESULT line fails its regression
+/// and the others still run.
+fn cmd_regressions(ctx: &Ctx, mut args: Vec<String>) -> i32 {
+    let image = find_image(ctx, &mut args);
     let meta = compose_meta(&image);
     let regs: Vec<Value> = meta
         .get("regressions")
@@ -531,189 +566,7 @@ fn cmd_regressions_linux(ctx: &Ctx, mut args: Vec<String>) -> i32 {
         .parent()
         .unwrap_or(Path::new(""))
         .join(format!("regressions-{}", strftime("%Y%m%d-%H%M%S")));
-    let eargs = linux_engine_args(&image, None, None, 1);
-    let mut bad = 0usize;
-    for (k, r) in regs.iter().enumerate() {
-        if !regression_precheck(r, &meta, &mut bad) {
-            continue;
-        }
-        let name = py_str(&r["name"]);
-        let sched = py_str(&r["schedule"]);
-        let res = run_one_linux(
-            ctx,
-            &image,
-            &sched,
-            &base.join(format!("{k:03}-{name}")),
-            &eargs,
-            true,
-        );
-        let (fp, v) = (py_str(&res["fp"]), py_str(&res["verdict"]));
-        let ok = regression_ok(&py_str(&r["expect"]), &v, &fp);
-        bad += !ok as usize;
-        println!(
-            "{:<5} {}  expect {}  fp={}  {}\n      {}",
-            if ok { "PASS" } else { "FAIL" },
-            name,
-            py_str(&r["expect"]),
-            fp,
-            sched,
-            head(&v, 160)
-        );
-    }
-    println!(
-        "hydo: {} of {} regressions as expected (consoles under {})",
-        regs.len() - bad,
-        regs.len(),
-        base.display()
-    );
-    if bad > 0 {
-        1
-    } else {
-        0
-    }
-}
-
-// ---------------------------------------------------------------- Mac: one run
-
-pub fn mac_kernel(ctx: &Ctx) -> PathBuf {
-    ctx.p("hv/hvm/explore/out/Image-explore")
-}
-
-/// The kernel for an image (hvm_backend.kernel_for); exits like its SystemExit when refused.
-pub fn mac_kernel_for(ctx: &Ctx, image: &Path, quiet: bool) -> PathBuf {
-    let k = kernel_for(image, None, &mac_kernel(ctx)).unwrap_or_else(|msg| {
-        eprintln!("{msg}");
-        std::process::exit(1)
-    });
-    if !quiet && k != mac_kernel(ctx) {
-        let rel = k.strip_prefix(&ctx.root).unwrap_or(&k);
-        println!(
-            "hydo: guest kernel {} (recorded in the image)",
-            rel.display()
-        );
-    }
-    k
-}
-
-/// One schedule from a fresh boot on hvmx; returns the engine's output text (the Mac CLI's run_once).
-pub fn run_once_mac(ctx: &Ctx, image: &Path, sched: &str, outdir: &Path, quiet: bool) -> String {
-    let _ = std::fs::create_dir_all(outdir);
-    let ram = image_guest(image).ram_mib;
-    let kernel = mac_kernel_for(ctx, image, quiet);
-    let hvm = Hvm::for_release(&ctx.root);
-    let mut spec = spec_from_args(&[], image, kernel, None, outdir);
-    spec.ram_mib = ram;
-    let run = hvm
-        .one(&spec, &schedule(sched))
-        .unwrap_or_else(|e| die(&format!("cannot start the engine: {e}")));
-    for line in run.output.lines() {
-        if !quiet && (line.starts_with("RESULT") || line.starts_with("hvmx: one")) {
-            println!("{line}");
-        }
-    }
-    run.output
-}
-
-/// The first RESULT line's (fp, verdict) by the Mac CLI's regex `RESULT \S+ fp=(\S+) .*?verdict=(.*)`.
-fn mac_result(text: &str) -> Option<(String, String)> {
-    text.lines().find_map(|l| {
-        let rest = l.strip_prefix("RESULT ")?;
-        let (_, rest) = rest.split_once(' ')?;
-        let rest = rest.strip_prefix("fp=")?;
-        let (fp, rest) = rest.split_once(' ')?;
-        if fp.is_empty() || fp.contains(char::is_whitespace) {
-            return None;
-        }
-        let i = rest.find("verdict=")?;
-        Some((fp.to_string(), rest[i + 8..].to_string()))
-    })
-}
-
-/// History checks on the host, Mac: returns the combined verdict, or None without checks.
-fn host_checks_mac(outdir: &Path, text: &str, quiet: bool) -> Option<String> {
-    let (_, verdict) = mac_result(text)?;
-    let srcs = console_sources(outdir);
-    if !srcs.iter().any(|(_, t)| t.contains("HYDO-CHECK ")) {
-        return None;
-    }
-    let r = history_checks(&srcs, Some(&verdict));
-    write_checks(outdir, &r);
-    if !quiet {
-        println!(
-            "hydo: history checks: {}   (explanations in {})",
-            verdict_text(&r),
-            outdir.join("one.checks.txt").display()
-        );
-    }
-    Some(verdict_text(&r)).filter(|v| !v.is_empty() && v != "None")
-}
-
-pub fn cmd_run_mac(ctx: &Ctx, argv: &[String]) -> i32 {
-    let mut args = argv.to_vec();
-    let image = default_image_mac(&mut args);
-    if args.len() != 1 {
-        die("usage: hydo run \"<schedule>\" [--image IMG]   e.g. hydo run \"disk=cut | run C=12\"");
-    }
-    let sched = args[0].clone();
-    let outdir = Path::new(OUT)
-        .join("runs")
-        .join(format!("run-{}", std::process::id()));
-    let text = run_once_mac(ctx, &image, &sched, &outdir, false);
-    host_checks_mac(&outdir, &text, false);
-    let mut cons: Vec<String> = std::fs::read_dir(&outdir)
-        .map(|rd| {
-            rd.filter_map(Result::ok)
-                .map(|e| e.file_name().to_string_lossy().into_owned())
-                .filter(|n| !n.starts_with('.'))
-                .map(|n| pjoin(&outdir.display().to_string(), &n))
-                .collect()
-        })
-        .unwrap_or_default();
-    cons.sort();
-    if !cons.is_empty() {
-        println!("hydo: console(s): {}", cons.join(" "));
-    }
-    if !text.lines().any(|l| l.starts_with("RESULT")) {
-        eprint!("{}", tail(&text, 3000));
-        die("the run produced no RESULT line (output above)");
-    }
-    let res = match mac_result(&text) {
-        Some((fp, v)) => json!({"fp": fp, "verdict": v}),
-        None => json!({"verdict": ""}),
-    };
-    let res = res.as_object().cloned().unwrap_or_default();
-    hydo_errors::for_run_dir(&outdir, &sched, res, None, &mut |l| println!("{l}"));
-    0
-}
-
-pub fn cmd_repro_mac(ctx: &Ctx, argv: &[String]) -> i32 {
-    let mut args = argv.to_vec();
-    if let Some(i) = args.iter().position(|a| a == "--regressions") {
-        args.remove(i);
-        return cmd_regressions_mac(ctx, args);
-    }
-    cmd_run_mac(ctx, &args)
-}
-
-fn cmd_regressions_mac(ctx: &Ctx, mut args: Vec<String>) -> i32 {
-    let image = default_image_mac(&mut args);
-    let meta: Value = hydo_engine::image::embedded_file(&image, "etc/hydo/compose.json")
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_else(|| json!({}));
-    let regs: Vec<Value> = meta
-        .get("regressions")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    if regs.is_empty() {
-        println!(
-            "hydo: {} carries no regressions (hydo/regressions/*.schedule or test.regressions in the plan)",
-            image.display()
-        );
-        return 0;
-    }
-    let base = Path::new(OUT).join(format!("regressions-{}", strftime("%Y%m%d-%H%M%S")));
+    let eargs = engine_args(&image, None, None, 1);
     let mut bad = 0usize;
     for (k, r) in regs.iter().enumerate() {
         if !regression_precheck(r, &meta, &mut bad) {
@@ -722,10 +575,13 @@ fn cmd_regressions_mac(ctx: &Ctx, mut args: Vec<String>) -> i32 {
         let name = py_str(&r["name"]);
         let sched = py_str(&r["schedule"]);
         let dir = base.join(format!("{k:03}-{name}"));
-        let text = run_once_mac(ctx, &image, &sched, &dir, true);
-        let (fp, v) =
-            mac_result(&text).unwrap_or_else(|| ("-".into(), "ERROR no RESULT line".into()));
-        let v = host_checks_mac(&dir, &text, true).unwrap_or(v);
+        let (fp, v) = match run_engine(ctx, &image, &sched, &dir, &eargs, true).0 {
+            Some(res) => {
+                let res = host_checks(&dir, result_map(&res), true);
+                (py_str(&res["fp"]), py_str(&res["verdict"]))
+            }
+            None => ("-".into(), "ERROR no RESULT line".into()),
+        };
         let ex = py_str(&r["expect"]);
         let ok = regression_ok(&ex, &v, &fp);
         bad += !ok as usize;
@@ -814,19 +670,4 @@ pub fn cmd_save(_ctx: &Ctx, argv: &[String]) -> i32 {
     }
     println!("hydo: {n} regressions saved; `hydo build` stages them, `hydo repro --regressions` replays them");
     0
-}
-
-/// Platform dispatch for run/repro.
-pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
-    match ctx.platform {
-        Platform::Linux => cmd_run_linux(ctx, argv),
-        Platform::Mac => cmd_run_mac(ctx, argv),
-    }
-}
-
-pub fn cmd_repro(ctx: &Ctx, argv: &[String]) -> i32 {
-    match ctx.platform {
-        Platform::Linux => cmd_repro_linux(ctx, argv),
-        Platform::Mac => cmd_repro_mac(ctx, argv),
-    }
 }

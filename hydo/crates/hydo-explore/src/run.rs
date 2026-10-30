@@ -134,16 +134,17 @@ impl Cx {
     }
 
     /// explore.py `by_hand`: the command line that runs one schedule.
+    /// Started by the `hydo` command, on either platform, it names `hydo run` (M107).
     fn by_hand(&self, sched: &str) -> String {
-        if self.ex.backend == Backend::Hvm {
-            return format!("`{}`", self.hvm_repro_line(sched));
-        }
         if self.env.cli {
             return format!(
                 "`hydo run --image {} \"{}\"`",
                 self.build.join(&self.image).display(),
                 sched
             );
+        }
+        if self.ex.backend == Backend::Hvm {
+            return format!("`{}`", self.hvm_repro_line(sched));
         }
         format!(
             "`~/bin/hvx-run sudo ./hvx_explore {}one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/{} <outdir> \"{}\"`",

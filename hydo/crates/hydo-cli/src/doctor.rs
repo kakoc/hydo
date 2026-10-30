@@ -1,6 +1,8 @@
-//! `hydo doctor`: check this machine and the installation (both platforms).
+//! `hydo doctor`: check this machine and the installation (both platforms). Each line is `ok`,
+//! `WARN` (works, with a limit the fix explains) or `FAIL` (does not work until fixed); the last
+//! line sums them up, and the exit status is 1 when a check failed. Nothing needs Python (M107).
 
-use crate::ctx::{access, python, which, Ctx};
+use crate::ctx::{access, which, Ctx};
 use crate::hvxenv::{dev, dev_usable, devname, lock, snap_dir, uses_sudo};
 use crate::module::{
     dev_line, loaded_modules, lock_holders, module_ko, srcversion_file, srcversion_loaded,
@@ -9,24 +11,25 @@ use crate::module::{
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-/// The Python the product's remaining Python parts run with, as "3.12.3" (None: not found).
-fn python_version() -> Option<(String, bool)> {
-    let out = Command::new(python())
-        .args(["-c", "import sys, platform; print(platform.python_version()); print(int(sys.version_info >= (3, 9)))"])
-        .stderr(Stdio::null())
-        .output()
-        .ok()?;
-    let t = String::from_utf8_lossy(&out.stdout).into_owned();
-    let mut l = t.lines();
-    Some((l.next()?.to_string(), l.next()? == "1"))
-}
-
 struct Checks {
     fails: usize,
     warns: usize,
 }
 
 impl Checks {
+    /// The summary line and the exit status.
+    fn summary(&self) -> i32 {
+        println!(
+            "doctor: {}",
+            if self.fails == 0 && self.warns == 0 {
+                "all checks passed".to_string()
+            } else {
+                format!("{} failed, {} warnings", self.fails, self.warns)
+            }
+        );
+        i32::from(self.fails > 0)
+    }
+
     fn check(&mut self, cond: bool, what: &str, fix: &str, warn: bool) {
         let tag = if cond {
             "ok  "
@@ -105,13 +108,6 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
             if hybrid { "hybrid P-core/E-core CPU" } else { "no architectural PMU" }
         ),
         true,
-    );
-    let (pv, pok) = python_version().unwrap_or_else(|| ("none".into(), false));
-    c.check(
-        pok,
-        &format!("Python 3.9+ (found {pv})"),
-        "install python3 >= 3.9",
-        false,
     );
     for (t, why) in [
         ("cc", "builds the run engine and the report tool"),
@@ -282,17 +278,26 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         .arg(ctx.p("tools/bin/mke2fs"))
         .arg("-V")
         .output();
-    let text = out
-        .map(|o| {
+    // a release without its libexec/faketime (or mke2fs) is reported here, not a crash (M107)
+    let (text, fix) = match out {
+        Ok(o) => {
             let mut t = String::from_utf8_lossy(&o.stdout).into_owned();
             t.push_str(&String::from_utf8_lossy(&o.stderr));
-            t
-        })
-        .unwrap_or_default();
+            let fix = format!("output: {}", crate::pyjson::head(t.trim(), 200));
+            (t, fix)
+        }
+        Err(e) => (
+            String::new(),
+            format!(
+                "cannot run {}: {e} (reinstall)",
+                rel(ctx, &ctx.libexec().join("faketime"))
+            ),
+        ),
+    };
     c.check(
         text.contains("1.47.0"),
         "bundled mke2fs runs (under the frozen clock)",
-        &format!("output: {}", crate::pyjson::head(text.trim(), 200)),
+        &fix,
         false,
     );
     let cwd = std::env::current_dir().unwrap_or_default();
@@ -320,19 +325,7 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
             true,
         );
     }
-    println!(
-        "doctor: {}",
-        if c.fails == 0 && c.warns == 0 {
-            "all checks passed".to_string()
-        } else {
-            format!("{} failed, {} warnings", c.fails, c.warns)
-        }
-    );
-    if c.fails > 0 {
-        1
-    } else {
-        0
-    }
+    c.summary()
 }
 
 fn free_gib(p: &Path) -> Option<f64> {
@@ -360,20 +353,13 @@ fn cmd_out(cmd: &str, args: &[&str]) -> Option<(bool, String)> {
 }
 
 pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
-    let mut ok = true;
-    let mut check = |cond: bool, what: &str, fix: &str| {
-        if cond {
-            println!("ok   {what}");
-        } else {
-            println!("FAIL {what}  -> {fix}");
-        }
-        ok = ok && cond;
-    };
+    let mut c = Checks { fails: 0, warns: 0 };
     let (sys, mach) = uname_sys_machine();
-    check(
+    c.check(
         sys == "Darwin" && mach == "arm64",
         "Apple Silicon Mac",
         "hydo needs an M1 or later Mac",
+        false,
     );
     let ver = Command::new("sw_vers")
         .arg("-productVersion")
@@ -385,16 +371,11 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         .take(2)
         .filter_map(|x| x.parse().ok())
         .collect();
-    check(
+    c.check(
         v.first().copied().unwrap_or(0) >= 13,
         &format!("macOS 13 or later (found {ver})"),
         "update macOS",
-    );
-    let (pv, pok) = python_version().unwrap_or_else(|| ("none".into(), false));
-    check(
-        pok,
-        &format!("Python 3.9+ (found {pv})"),
-        "use /usr/bin/python3 or newer",
+        false,
     );
     let cc = Command::new("xcrun")
         .args(["--find", "cc"])
@@ -403,10 +384,11 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         .status()
         .map(|s| s.success())
         .unwrap_or(false);
-    check(
+    c.check(
         cc,
         "a C compiler (the explorer compiles its property-table tool)",
         "xcode-select --install",
+        false,
     );
     let hvmx = ctx.p("hv/hvm/explore/hvmx");
     for p in [
@@ -417,23 +399,26 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         ctx.guest().join("mke2fs"),
         ctx.guest().join("tc-closure.txt"),
     ] {
-        check(
+        c.check(
             p.exists(),
             &format!("present: {}", rel(ctx, &p)),
             "reinstall",
+            false,
         );
     }
     for p in [
         ctx.p("hv/hvm/explore/out/Image-explore-netns"),
         ctx.guest().join("hydo_fc"),
     ] {
-        check(
+        c.check(
             p.exists(),
             &format!(
                 "present: {} (service networks and the freeze)",
                 rel(ctx, &p)
             ),
-            "reinstall",
+            "not in this installation: manifests with `network: bridge`, `addr:` or `faults: [freeze]` \
+             cannot be built or run; everything else works",
+            true,
         );
     }
     let hv = Command::new("sysctl")
@@ -441,10 +426,11 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .unwrap_or_default();
-    check(
+    c.check(
         hv == "1",
         &format!("Hypervisor.framework available (kern.hv_support={hv})"),
         "not supported on this machine",
+        false,
     );
     let sig = cmd_out(
         "codesign",
@@ -452,14 +438,24 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
     )
     .map(|(_, t)| t)
     .unwrap_or_default();
-    check(
+    c.check(
         sig.contains("com.apple.security.hypervisor"),
         "hvmx signed with the hypervisor entitlement",
         "run install.sh again",
+        false,
     );
-    if ok {
-        0
-    } else {
-        1
+    let cwd = std::env::current_dir().unwrap_or_default();
+    if let Some(free) = free_gib(&cwd) {
+        c.check(
+            free >= 2.0,
+            &format!(
+                "{:.0} GiB free in {} (2 GiB wanted: images)",
+                free,
+                cwd.display()
+            ),
+            "free some space",
+            true,
+        );
     }
+    c.summary()
 }

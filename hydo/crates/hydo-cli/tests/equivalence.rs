@@ -15,9 +15,10 @@
 //! written as <ROOT>, <CWD> and <REPO>. Outputs longer than 4 KiB and files longer than 256 bytes are kept as
 //! the first 16 hex digits of their SHA-256 and their length. The
 //! Linux behaviour is exercised on any host with HYDO_CLI_PLATFORM=linux. Runs that boot a guest
-//! are compared on the machines themselves (docs/HISTORY.md: the release proofs). Where the old
-//! Python CLI crashed with a traceback, the golden keeps that traceback's last line and the Rust
-//! CLI must print a `hydo:` message instead.
+//! are compared on the machines themselves (docs/HISTORY.md: the release proofs). In six cases
+//! the old Python CLIs crashed with a traceback (a missing flag value, a missing known-errors
+//! file); the golden holds the Rust CLI's `hydo:` message there (M101, M104). A golden answer
+//! that still holds a traceback accepts any `hydo:` message.
 
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -289,6 +290,59 @@ fn with_compose(cwd: &Path) {
             std::fs::copy(e.path(), cwd.join(e.file_name())).unwrap();
         }
     }
+}
+
+/// A project with a hydo/ folder (the test composer's example).
+fn with_project(cwd: &Path) {
+    let src = repo().join("hydo/onboard/examples/redis-composed/hydo");
+    let st = Command::new("cp")
+        .arg("-R")
+        .arg(&src)
+        .arg(cwd.join("hydo"))
+        .status()
+        .unwrap();
+    assert!(st.success());
+}
+
+/// `hydo doctor` needs no Python on either platform, says what is missing instead of crashing
+/// (a release without libexec/faketime), and ends with its summary line (M107).
+#[test]
+fn doctor_needs_no_python() {
+    let root = release();
+    for plat in ["linux", "mac"] {
+        let o = Command::new(root.join("bin/hydo"))
+            .env("HYDO_CLI_PLATFORM", plat)
+            .env("PATH", "/usr/bin:/bin")
+            .arg("doctor")
+            .output()
+            .unwrap();
+        let out = String::from_utf8_lossy(&o.stdout);
+        assert_eq!(o.status.code(), Some(1), "{plat}: {out}");
+        assert!(!out.to_lowercase().contains("python"), "{plat}: {out}");
+        assert!(
+            out.trim_end()
+                .lines()
+                .last()
+                .is_some_and(|l| l.starts_with("doctor: ") && l.contains(" failed, ")),
+            "{plat}: {out}"
+        );
+        assert!(
+            o.stderr.is_empty(),
+            "{plat}: {}",
+            String::from_utf8_lossy(&o.stderr)
+        );
+        if plat == "linux" {
+            assert!(
+                out.contains(
+                    "FAIL bundled mke2fs runs (under the frozen clock)  -> cannot run libexec/faketime"
+                ),
+                "{out}"
+            );
+        } else {
+            assert!(out.contains("WARN present: guest/hydo_fc"), "{out}");
+        }
+    }
+    let _ = std::fs::remove_dir_all(&root);
 }
 
 fn load_golden() -> BTreeMap<String, Value> {
@@ -603,11 +657,43 @@ fn cli_matches_golden() {
             &["module", "load", "--name"],
         ],
     );
+    // M107: one behaviour on both platforms (no Python reference: the Rust CLI's answers)
+    for plat in ["linux", "mac"] {
+        // `hydo build` with no manifest uses ./hydo/hydo.yaml on both, and an image of a hydo/
+        // folder goes to ./.hydo
+        n += same(
+            &root,
+            plat,
+            with_project,
+            &[
+                &["build", "--check"],
+                &["build", "--out", "o", "--check"],
+                &["build", "hydo/hydo.yaml", "--check"],
+            ],
+        );
+        // a positional image on both (Linux *.img, Mac *.cpio.gz), checked to exist
+        n += same(
+            &root,
+            plat,
+            with_explore,
+            &[
+                &["run", "bogus.cpio.gz"],
+                &["run", "missing.cpio.gz", "disk=none | run"],
+                &["run", "--out", "o", "--known-errors", "k.yaml"],
+                &["repro", "missing.cpio.gz", "--regressions"],
+                &["explore", "missing.cpio.gz"],
+            ],
+        );
+    }
     let _ = std::fs::remove_dir_all(&root);
     let st = STATE.lock().unwrap().take().unwrap();
     if bless() {
         write_golden(&st.produced);
-        eprintln!("wrote {} answers to {}", st.produced.len(), golden_path().display());
+        eprintln!(
+            "wrote {} answers to {}",
+            st.produced.len(),
+            golden_path().display()
+        );
         return;
     }
     let extra: Vec<&String> = st
@@ -615,7 +701,10 @@ fn cli_matches_golden() {
         .keys()
         .filter(|k| !st.produced.iter().any(|(p, _)| p == *k))
         .collect();
-    assert!(extra.is_empty(), "golden answers no case asks for: {extra:?}");
+    assert!(
+        extra.is_empty(),
+        "golden answers no case asks for: {extra:?}"
+    );
     eprintln!(
         "cli: {n} invocations gave the golden exit code, stdout, stderr and files ({} where the old \
          Python CLI crashed and the Rust CLI prints a `hydo:` message); {} differences",

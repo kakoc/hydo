@@ -7,7 +7,7 @@
 
 use crate::ctx::{abspath, die, pjoin, Ctx, Platform, OUT};
 use crate::hvxenv;
-use crate::runs::{default_image_mac, find_image_linux, mac_kernel_for};
+use crate::runs::{find_image, mac_kernel_for};
 use std::io::Write;
 use std::path::Path;
 
@@ -27,11 +27,7 @@ pub fn known_errors_default() -> Option<String> {
 pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
     let mut args = argv.to_vec();
     let linux = ctx.platform == Platform::Linux;
-    let image = if linux {
-        find_image_linux(&mut args)
-    } else {
-        default_image_mac(&mut args)
-    };
+    let image = find_image(ctx, &mut args);
     if !args.iter().any(|a| a == "--out") {
         args.push("--out".into());
         args.push(pjoin(OUT, "explore"));
@@ -76,18 +72,16 @@ pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
     full.extend(args.iter().cloned());
     let env = hydo_explore::Env {
         root: ctx.root.clone(),
-        cli: linux,
+        cli: true,
     };
     let rc = hydo_explore::main_with(&full, &env);
     let i = args.iter().position(|a| a == "--out").unwrap_or(0);
     let out = args.get(i + 1).cloned().unwrap_or_default();
     let report = pjoin(&out, "report.md");
-    if linux {
-        if rc == 0 && Path::new(&report).exists() {
-            println!("hydo: report: {report}   (hydo report {out}; hydo repro {out} re-runs every failure)");
-        }
-    } else if rc == 0 {
-        println!("hydo: report: {report}   (hydo report {out})");
+    if rc == 0 && Path::new(&report).exists() {
+        println!(
+            "hydo: report: {report}   (hydo report {out}; hydo repro {out} re-runs every failure)"
+        );
     }
     rc
 }
