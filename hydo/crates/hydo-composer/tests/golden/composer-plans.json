@@ -3,7 +3,7 @@
   "plans": [
     {
       "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/bad-expect/hydo",
-      "pin": "6e5a169f4fd86dce108162adda1cb5c5fc600f66e24b1801e570ce152c79510f",
+      "pin": "703ccdf5c6bc1a35837d649b6fcd7fa50b1c69ed716224fbfa0ded63656b4c9c",
       "m": {
         "name": "t",
         "workload": {
@@ -19,7 +19,7 @@
     },
     {
       "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/bad-header/hydo",
-      "pin": "18755148d0b4d7d0e0871cce5abd47339aebb2551a5a11aae74f93d1ea7f94f9",
+      "pin": "14905db78143a3cfcada714341f0718ead87fb77d147ae526cf5cfa1aae6cd9d",
       "m": {
         "name": "t",
         "workload": {
@@ -35,7 +35,7 @@
     },
     {
       "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/bad-name/hydo",
-      "pin": "517bf4ce0eeeea82a1bd2241e739036ec20adcb1ebea73a34e7fa06cb586818e",
+      "pin": "36248dbaa26f05bf5f6499353e863afb7716df00811225fecfe0d18c66f8c764",
       "m": {
         "name": "t",
         "workload": {
@@ -51,7 +51,7 @@
     },
     {
       "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/bad-prefix/hydo",
-      "pin": "9e1a6f43548ea49e831718af5929d6cd9bfe9fefa63e8d900b2b9f748a6d5219",
+      "pin": "f41ec18a8606b3c1cc4a2d86905c0115d08ab33c40fbbbec2538510747cbf188",
       "m": {
         "name": "t",
         "workload": {
@@ -67,7 +67,7 @@
     },
     {
       "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/bad-schedule/hydo",
-      "pin": "c0a05d3b564f892fc9089ef0a1d816f89da1a822bf23d11e2499b98c544ec83b",
+      "pin": "8655fd75e061fcca691cfda43cecf5666be45785823ad7ead0255c4938b5eac6",
       "m": {
         "name": "t",
         "workload": {
@@ -83,7 +83,7 @@
     },
     {
       "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/binary-header/hydo",
-      "pin": "0b1c225fa61478dfaafa298c7885f6338bef314ed968407a7a5f50841a03e3b5",
+      "pin": "a505b1ff50292d170c47b07da144e719874325beb85ec397cd8e8b590bad4bb3",
       "m": {
         "name": "t",
         "workload": {
@@ -99,7 +99,7 @@
     },
     {
       "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/check-bad-header/hydo",
-      "pin": "0448f1428f9d8463c787d80fc71db42b194584bc69134a26102069631b03b848",
+      "pin": "2ac62b11a33cdeac0fe3fb3ef6d70f2efd128891d5aa881874439e9a7411a109",
       "m": {
         "name": "t",
         "workload": {
@@ -115,7 +115,7 @@
     },
     {
       "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/crlf-reg/hydo",
-      "pin": "23e8792ac7d946f998c213fd5584adfb020fa783b7c83e4f5b2baba471ede1d9",
+      "pin": "516af21c216fc03bff4897a585437193761ca9f9831099b23007686e2cc99e95",
       "m": {
         "name": "t",
         "workload": {
@@ -131,7 +131,7 @@
     },
     {
       "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/dir-in-workload/hydo",
-      "pin": "0c601bbf0ff4bbda612b8485cb2c437b1cf607a5bdc173e23cb4a889d7779834",
+      "pin": "b3a07ef52cf9d4f9dfef537ae89022ac9ab05a08fc94daa45ea548e28c0f7920",
       "m": {
         "name": "t",
         "workload": {
@@ -147,7 +147,7 @@
     },
     {
       "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/dup-yaml/hydo",
-      "pin": "239a0cabae442d0e3c890473f4f459b8bef7d7a8a585a0800f6621b5267da729",
+      "pin": "f7a15b81387799feed9138519f4dbf191620b1de655220ebfa3ec9357436a354",
       "m": {
         "name": "t",
         "workload": {
@@ -174,7 +174,7 @@
     },
     {
       "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/empty-schedule/hydo",
-      "pin": "5fd4b3013f60b3aaa450280c5a8840985a911942b75f92028faf460595be285f",
+      "pin": "51da2945ae5ac9446c58e1aa06993bd7dcab46820cd58b18321b6080dd462469",
       "m": {
         "name": "t",
         "workload": {
@@ -190,7 +190,7 @@
     },
     {
       "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/first-only/hydo",
-      "pin": "bda62260412d157f05b3e2e1b7948c14c20670a6196c4b848fa90f3530260757",
+      "pin": "01ad8ac06cfc4f9cd2adb363d687c235c3fd314d48723fde3ac5b0d49a3bc2f0",
       "m": {
         "name": "t",
         "workload": {
@@ -206,7 +206,7 @@
     },
     {
       "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/merge-yaml/hydo",
-      "pin": "239a0cabae442d0e3c890473f4f459b8bef7d7a8a585a0800f6621b5267da729",
+      "pin": "f7a15b81387799feed9138519f4dbf191620b1de655220ebfa3ec9357436a354",
       "m": {
         "name": "t",
         "workload": {
@@ -234,7 +234,7 @@
     },
     {
       "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/not-exec/hydo",
-      "pin": "d3f89b1362150bb618b1b2ee15c5ddc3caef0cec203c279d25b44d356fcecd1b",
+      "pin": "b53e8a26e6a5ba919d672276e713572947081b47899c2ffa1c32a3d618889166",
       "m": {
         "name": "t",
         "workload": {
@@ -250,7 +250,7 @@
     },
     {
       "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/ok/hydo",
-      "pin": "d44eadae31d6df7e9a399204ce666376d2ae9118d8237beb3ed135726914a8d5",
+      "pin": "0fd2c7a174090cf3f6ba3dd6be57dad3defe71b93c5678b0aef720977662e5d9",
       "m": {
         "name": "t",
         "workload": {
@@ -266,7 +266,7 @@
     },
     {
       "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/regressions-only/hydo",
-      "pin": "2fadb2d0a2d1c2917feccb55cb84405169ceb7c99709433ed2033d2196e248d3",
+      "pin": "39c508387942a9cf02bc9fc50d679b108fc16409871913d3cf96779cebadd27c",
       "m": {
         "name": "t",
         "workload": {
@@ -282,7 +282,7 @@
     },
     {
       "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/saved-key/hydo",
-      "pin": "86311fb60a72687ab3310b8f6182e67c2ed9c471ed165c68720fa34d486f3525",
+      "pin": "c8f0f1e60082f2d459c2847e588640b7a8d6c7d22c701dd0a33d65cf156772a3",
       "m": {
         "name": "t",
         "workload": {
@@ -298,7 +298,7 @@
     },
     {
       "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/two-schedules/hydo",
-      "pin": "40c8d6d065cb9868f6c7e25e10f4183a21d228f097f7743b084033430e609d80",
+      "pin": "43f5f70a22e737154a499485dd9372cebdd551c7d25900b70676e8605db44c09",
       "m": {
         "name": "t",
         "workload": {
@@ -680,7 +680,7 @@
     },
     {
       "dir": "<TOP>/hydo/onboard/examples-mac/redis-composed/hydo",
-      "pin": "1ad284bbd1e57e9d49634bc0abcb66ba70dd66d80bddf31ea80c94627f518714",
+      "pin": "31b04d4f564d2f4ab4159dafadd9396a426188ea37262726498751555597f1c1",
       "m": {
         "name": "redis-composed",
         "description": "Redis with an append-only file, driven by composed commands (SETs, transfers, AOF rewrites).",
@@ -863,7 +863,7 @@
     },
     {
       "dir": "<TOP>/hydo/onboard/examples/redis-composed-hist/hydo",
-      "pin": "2f2ecb7cd6de00b1aa7ce4293aa130561a3666fd69c781b5f97c3aeee94933dc",
+      "pin": "ae03f91dd34d1b6577288716ba08083f211e915c71fb12d0a1c6b7f3a4824991",
       "m": {
         "name": "redis-composed-hist",
         "description": "Redis driven by composed commands; the recorded histories are checked on the host.",
@@ -935,7 +935,7 @@
     },
     {
       "dir": "<TOP>/hydo/onboard/examples/redis-composed-read/hydo",
-      "pin": "a7aa895e70d8ca784e118561604ee8ce192b28e1cacf5248b10127f3b36601b5",
+      "pin": "6d11501ea0fc3b0e9cfbd3ee5621a21457fba52cca5f60ab4ab83bab09204d53",
       "m": {
         "name": "redis-composed-read",
         "description": "Redis with an append-only file, driven by composed commands (SETs, transfers, AOF rewrites).",
@@ -1027,7 +1027,7 @@
     },
     {
       "dir": "<TOP>/hydo/onboard/examples/redis-composed/hydo",
-      "pin": "1ad284bbd1e57e9d49634bc0abcb66ba70dd66d80bddf31ea80c94627f518714",
+      "pin": "31b04d4f564d2f4ab4159dafadd9396a426188ea37262726498751555597f1c1",
       "m": {
         "name": "redis-composed",
         "description": "Redis with an append-only file, driven by composed commands (SETs, transfers, AOF rewrites).",
@@ -1104,7 +1104,7 @@
     },
     {
       "dir": "<TOP>/hydo/onboard/examples/redis-errors/hydo",
-      "pin": "d42cea4b3c9401d5ac9a4984600f514ee7d7a9c51496aa83bcadb55e31deabcf",
+      "pin": "21c0bf8e9925fa520c8d8b7eaa428e0b1efdceea1209229ffe8a062bc89e6e54",
       "m": {
         "name": "redis-errors",
         "description": "The composed Redis example with error logs as findings (known kinds in hydo/known-errors.yaml).",
@@ -1185,7 +1185,7 @@
     },
     {
       "dir": "<TOP>/hydo/onboard/examples/redis-errors/hydo",
-      "pin": "d42cea4b3c9401d5ac9a4984600f514ee7d7a9c51496aa83bcadb55e31deabcf",
+      "pin": "21c0bf8e9925fa520c8d8b7eaa428e0b1efdceea1209229ffe8a062bc89e6e54",
       "m": {
         "format": 1,
         "unknown": "report",
@@ -1252,7 +1252,7 @@
     },
     {
       "dir": "<TOP>/skills/hydo-onboard/assets/example-redis-composed/hydo",
-      "pin": "1ad284bbd1e57e9d49634bc0abcb66ba70dd66d80bddf31ea80c94627f518714",
+      "pin": "31b04d4f564d2f4ab4159dafadd9396a426188ea37262726498751555597f1c1",
       "m": {
         "name": "redis-composed",
         "description": "Redis with an append-only file, driven by composed commands (SETs, transfers, AOF rewrites).",
@@ -1329,7 +1329,7 @@
     },
     {
       "dir": "<TOP>/skills/hydo-onboard/assets/hydo-init/hydo",
-      "pin": "5a29cf9f39cc5ba2a73a54a900bb4d2b5b36eeda639830fe9c347735f4efa8b1",
+      "pin": "ed8303f992565d06d3bb873e8144f28b106ea81a26b8c87171f2b3b7d942acae",
       "m": {
         "name": "@NAME@",
         "description": "TODO one line about the system under test",
@@ -1368,7 +1368,7 @@
     },
     {
       "dir": "<WORK>/variants/v1/hydo",
-      "pin": "1ad284bbd1e57e9d49634bc0abcb66ba70dd66d80bddf31ea80c94627f518714",
+      "pin": "31b04d4f564d2f4ab4159dafadd9396a426188ea37262726498751555597f1c1",
       "m": {
         "name": "t",
         "workload": {
@@ -1383,7 +1383,7 @@
     },
     {
       "dir": "<WORK>/variants/v2/hydo",
-      "pin": "ed44b7b7e060fa10061580112b43e14d3738eb361db22d02711b9aa45be17534",
+      "pin": "2b9f7d22f34f724fcddd5a36af9e8c81d356ad77b390169506a5e34815b3fe10",
       "m": {
         "name": "t",
         "workload": {
@@ -1398,7 +1398,7 @@
     },
     {
       "dir": "<WORK>/variants/v3/hydo",
-      "pin": "a6e39e8d176c31f984ff50c86c8ea22d22974c69bd7ee48aa72407a276efa526",
+      "pin": "74e010f95660bc6f620813a039ed31c0062248dd74e40ca92da0bfe16d469225",
       "m": {
         "name": "t",
         "workload": {
@@ -1413,7 +1413,7 @@
     },
     {
       "dir": "<WORK>/variants/v4/hydo",
-      "pin": "d62319b151dab6f5cd246a5b53a9e561a8c9d6106bb661b4da71901c1157e9f8",
+      "pin": "f26943db79ae6c3107dba33e2cae12f8f5cf39b6382d5313b4ca50fc04e7dc4a",
       "m": {
         "name": "t",
         "workload": {

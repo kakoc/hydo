@@ -714,6 +714,8 @@ fn plan_cases(dr: &mut Driver, mdir: &str, m: &Value, rnd: &mut PyRandom) -> usi
     1
 }
 
+/// Copy a tree with the modes a checkout made with umask 022 has (directories 0755, files 0755
+/// with an execute bit, else 0644): the recording's modes on any machine and checkout.
 fn copytree(src: &Path, dst: &Path) {
     use std::os::unix::fs::PermissionsExt;
     std::fs::create_dir_all(dst).unwrap();
@@ -729,15 +731,37 @@ fn copytree(src: &Path, dst: &Path) {
             copytree(&p, &to);
         } else {
             std::fs::copy(&p, &to).unwrap();
+            let x = std::fs::metadata(&p).unwrap().permissions().mode() & 0o111 != 0;
+            let mode = if x { 0o755 } else { 0o644 };
+            std::fs::set_permissions(&to, std::fs::Permissions::from_mode(mode)).unwrap();
         }
     }
-    let mode = std::fs::metadata(src).unwrap().permissions().mode();
-    std::fs::set_permissions(dst, std::fs::Permissions::from_mode(mode)).unwrap();
+    std::fs::set_permissions(dst, std::fs::Permissions::from_mode(0o755)).unwrap();
 }
 
-/// test_composer_ids.py's redis-composed variants (py_ref.py's `folder_variants`).
-fn folder_variants(work: &Path) {
+/// The inputs under the work directory: each repository plan folder's workload/, checks/ and
+/// regressions/ under `<work>/plans/<path>` (named `<TOP>/<path>` in the stream), and
+/// test_composer_ids.py's redis-composed variants (py_ref.py's `folder_variants`) under
+/// `<work>/variants`. Files are created with umask 022, as when the goldens were recorded.
+fn prepare(work: &Path, plans: &[(String, Value)]) {
     use std::os::unix::fs::PermissionsExt;
+    // SAFETY: umask only sets the process's file creation mask.
+    unsafe {
+        libc::umask(0o022);
+    }
+    for (dir, _) in plans {
+        let Some(rel) = dir.strip_prefix("<TOP>/") else {
+            continue;
+        };
+        let dst = work.join("plans").join(rel);
+        std::fs::create_dir_all(&dst).unwrap();
+        for sub in ["workload", "checks", "regressions"] {
+            let src = top().join(rel).join(sub);
+            if src.is_dir() {
+                copytree(&src, &dst.join(sub));
+            }
+        }
+    }
     let src = top().join("hydo/onboard/examples/redis-composed/hydo");
     for v in ["v1", "v2", "v3", "v4"] {
         let d = work.join("variants").join(v).join("hydo");
@@ -764,19 +788,19 @@ fn folder_variants(work: &Path) {
 }
 
 /// SHA-256 over what scan_folder reads under a plan directory: workload/, checks/ and
-/// regressions/ (relative path, mode, bytes of every file, sorted).
+/// regressions/ (relative path, execute bit, bytes of every file, sorted).
 fn folder_pin(dir: &Path) -> String {
     use std::os::unix::fs::PermissionsExt;
-    fn walk(d: &Path, root: &Path, out: &mut Vec<(String, u32, Vec<u8>)>) {
+    fn walk(d: &Path, root: &Path, out: &mut Vec<(String, bool, Vec<u8>)>) {
         let Ok(rd) = std::fs::read_dir(d) else { return };
         for e in rd.filter_map(Result::ok) {
             let p = e.path();
             if p.is_dir() {
                 walk(&p, root, out);
             } else {
-                let mode = std::fs::metadata(&p).unwrap().permissions().mode() & 0o7777;
+                let x = std::fs::metadata(&p).unwrap().permissions().mode() & 0o111 != 0;
                 let rel = p.strip_prefix(root).unwrap().display().to_string();
-                out.push((rel, mode, std::fs::read(&p).unwrap()));
+                out.push((rel, x, std::fs::read(&p).unwrap()));
             }
         }
     }
@@ -786,16 +810,18 @@ fn folder_pin(dir: &Path) -> String {
     }
     files.sort();
     let mut all = Vec::new();
-    for (rel, mode, b) in files {
-        all.extend_from_slice(format!("{rel}\0{mode:o}\0{}\0", b.len()).as_bytes());
+    for (rel, x, b) in files {
+        all.extend_from_slice(format!("{rel}\0{}\0{}\0", u8::from(x), b.len()).as_bytes());
         all.extend_from_slice(&b);
     }
     golden::sha256_hex(&all)
 }
 
+/// The names of the paths in the stream: the copied plan folders first (`<TOP>`), then the work
+/// directory, then the repository itself (the guest files staged from hydo/onboard).
 fn paths(top: &Path, work: &Path) -> Vec<(String, &'static str)> {
-    // the work directory first: it may lie under the top directory
     vec![
+        (work.join("plans").display().to_string(), "<TOP>"),
         (work.display().to_string(), "<WORK>"),
         (top.display().to_string(), "<TOP>"),
     ]
@@ -803,7 +829,7 @@ fn paths(top: &Path, work: &Path) -> Vec<(String, &'static str)> {
 
 fn resolve(dir: &str, work: &Path) -> String {
     dir.replace("<WORK>", &work.display().to_string())
-        .replace("<TOP>", &top().display().to_string())
+        .replace("<TOP>", &work.join("plans").display().to_string())
 }
 
 fn header() -> Vec<String> {
@@ -817,7 +843,7 @@ fn header() -> Vec<String> {
 
 /// The whole stream, answered by hydo-composer; the plans from `plans` (dir, data).
 fn rust_stream(work: &Path, plans: &[(String, Value)]) -> (golden::Sections, Value) {
-    folder_variants(work);
+    prepare(work, plans);
     let mut dr = Driver {
         work: work.to_path_buf(),
         paths: paths(&top(), work),
@@ -841,7 +867,11 @@ fn rust_stream(work: &Path, plans: &[(String, Value)]) -> (golden::Sections, Val
 
 /// The recording: a saved py_ref.py stream (HYDO_RECORD_PY, its --work dir in HYDO_RECORD_WORK).
 fn record_from_python(path: &str, pywork: &str) {
-    let ps = paths(&top(), Path::new(pywork));
+    // the Python read the repository's folders in place
+    let ps = vec![
+        (pywork.to_string(), "<WORK>"),
+        (top().display().to_string(), "<TOP>"),
+    ];
     let mut st = Stream::new();
     let mut plans = Vec::new();
     for line in std::fs::read_to_string(path).unwrap().lines() {
@@ -867,7 +897,7 @@ fn record_from_python(path: &str, pywork: &str) {
 
 fn write_plans(plans: &[(String, Value)]) {
     let work = scratch("pins");
-    folder_variants(&work);
+    prepare(&work, plans);
     let list: Vec<Value> = plans
         .iter()
         .map(|(d, m)| json!({"dir": d, "pin": folder_pin(Path::new(&resolve(d, &work))), "m": m}))

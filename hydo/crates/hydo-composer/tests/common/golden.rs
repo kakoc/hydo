@@ -93,6 +93,16 @@ pub fn check(
     want: &dyn Fn(&str) -> bool,
 ) {
     let got = digest(sections, chunk);
+    if let Some(dump) = std::env::var_os("HYDO_GOLDEN_DUMP") {
+        // every produced line, "<section>\t<line>", to compare two machines' streams
+        let mut s = String::new();
+        for (label, lines) in sections.iter().filter(|s| want(&s.0)) {
+            for l in lines {
+                s.push_str(&format!("{label}\t{l}\n"));
+            }
+        }
+        std::fs::write(&dump, s).unwrap();
+    }
     if bless() {
         let (mut header, old) = if path.exists() {
             read(path)
