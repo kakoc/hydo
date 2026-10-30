@@ -20,7 +20,7 @@ if [ "$N" -gt 2 ]; then
 fi
 vmstat -t 2 > "$OUT/vmstat.txt" & echo $! > "$OUT/vmstat.pid"
 free -m > "$OUT/free-before.txt"
-cd "$HERE/../hvx/explore"
+cd "$HERE/../../../hydo/explore"
 HYDO_HVX_RUN="$HERE/hvx-run-phases" timeout "$LIMIT" /usr/bin/time -v -o "$OUT/time.txt" \
   python3 "$HERE/pyrusage.py" explore.py --workers "$N" --seeds "$SEEDS" --no-shrink --out "$OUT" "$@" > "$OUT/explore.out" 2>&1 &
 echo $! > "$OUT/explore.pid"

@@ -15,7 +15,7 @@
  * Run it as root through ~/bin/hvx-run (it opens /dev/hvx). It creates one VM at a time.
  */
 #define HVX_STACK_NO_MAIN
-#include "../hvx/hvx_stack_verify.c"
+#include "../hvx_stack_verify.c"
 #undef main
 #include <time.h>
 
