@@ -248,7 +248,9 @@ fn same(root: &Path, platform: &str, setup: Setup, steps: &[&[&str]]) -> usize {
     let st = g.as_mut().unwrap();
     st.case += 1;
     for (i, args) in steps.iter().enumerate() {
-        let key = format!("{platform} c{:03} s{i} {}", st.case, args.join(" "));
+        // the repository's own path is <REPO> in the key, so any checkout finds its answers
+        let key = format!("{platform} c{:03} s{i} {}", st.case, args.join(" "))
+            .replace(&repo().display().to_string(), "<REPO>");
         let got = run_one(root, &cwd, platform, args);
         match st.golden.get(&key) {
             Some(want) if !bless() => compare(&key, want, &got, &mut st.diffs),
