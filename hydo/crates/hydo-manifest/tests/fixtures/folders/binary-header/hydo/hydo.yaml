@@ -1,0 +1,6 @@
+name: t
+workload:
+  steps: 4
+invariants:
+  - id: i
+    cmd: "true"

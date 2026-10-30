@@ -1,0 +1,3 @@
+# expect: violation
+# free text
+disk=none | run W=0000002a,p4,q2,r100

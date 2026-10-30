@@ -1,0 +1,9 @@
+name: t
+workload:
+  steps: 4
+invariants:
+  - id: i
+    cmd: "true"
+test:
+  commands:
+    - {name: x, kind: parallel_driver, run: [/x]}

@@ -1,0 +1,4 @@
+# commands: parallel_driver_set serial_driver_rewrite
+# command-sha: parallel_driver_set 0000000000000000
+# expect: fp=0123456789abcdef
+disk=none | run W=0000002a,p4,q2,r100
