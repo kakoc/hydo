@@ -105,6 +105,7 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/mutex.h>
+#include <linux/spinlock.h>
 #include <linux/mm.h>
 #include <linux/gfp.h>
 #include <linux/string.h>
@@ -885,6 +886,12 @@ struct hvx_vcpu {
 
 struct hvx_vm {
 	struct mutex lock;
+	/* M97: the mmap fault handlers run without `lock` (taking it there would invert
+	 * the lock order of an ioctl that faults on user memory while holding it). This
+	 * leaf lock guards what they read: ram_ready + guest_pages[], and the disk page
+	 * array, which HVX_SET_DISK replaces. */
+	spinlock_t map_lock;
+	bool ram_ready;
 
 	/* vCPUs (milestone 19). n_vcpus >= 1; cur_vcpu is selected by HVX_SET_VCPU
 	 * and is the target of every per-vCPU ioctl (default 0 -> the single-vCPU
@@ -6356,28 +6363,33 @@ static int hvx_sched_run(struct hvx_vm *vm, struct hvx_exit *ex, u64 max_insns)
 
 /* Free the page-array backing disk image (milestone 28): each order-0 page, then the
  * pointer array. Mirrors the guest-RAM free loop below. */
-static void vblk_disk_free(struct hvx_vblk *d)
+static void vblk_disk_free(struct hvx_vblk *d, spinlock_t *map_lock)
 {
-	unsigned int i;
+	unsigned long *pages, n, i;
 
-	if (d->disk_pages) {
-		for (i = 0; i < d->n_disk_pages; i++)
-			if (d->disk_pages[i]) free_page(d->disk_pages[i]);
-		kvfree(d->disk_pages);
-		d->disk_pages = NULL;
-	}
+	spin_lock(map_lock);		/* unpublish first (M97: see hvx_disk_fault) */
+	pages = d->disk_pages;
+	n = d->n_disk_pages;
+	d->disk_pages = NULL;
 	d->n_disk_pages = 0;
 	d->disk_size = 0;
+	spin_unlock(map_lock);
+	if (pages) {
+		for (i = 0; i < n; i++)
+			if (pages[i]) free_page(pages[i]);
+		kvfree(pages);
+	}
 }
 
 /* Allocate a page-array backing disk image of `len` bytes (milestone 28): a
  * kvmalloc_array of individually-allocated order-0 pages (the M11 recipe), so a
  * GB-scale image is a robust per-page allocation with correct per-page refcounts for
  * the disk-mmap fault handler. Any prior image is freed first. Returns 0 or -ENOMEM. */
-static int vblk_disk_alloc(struct hvx_vblk *d, u64 len)
+static int vblk_disk_alloc(struct hvx_vblk *d, u64 len, spinlock_t *map_lock)
 {
 	unsigned long np = DIV_ROUND_UP(len, PAGE_SIZE), i;
-	unsigned long *pages;
+	unsigned long *pages, *old_pages;
+	unsigned long old_n;
 
 	pages = kvmalloc_array(np, sizeof(*pages), GFP_KERNEL | __GFP_ZERO);
 	if (!pages)
@@ -6391,10 +6403,20 @@ static int vblk_disk_alloc(struct hvx_vblk *d, u64 len)
 			return -ENOMEM;
 		}
 	}
-	vblk_disk_free(d);		/* drop any prior image */
+	/* publish the new image, then drop any prior one; a concurrent disk-mmap fault
+	 * sees either the old array or the new one, never a freed one (M97) */
+	spin_lock(map_lock);
+	old_pages = d->disk_pages;
+	old_n = d->n_disk_pages;
 	d->disk_pages = pages;
 	d->n_disk_pages = np;
 	d->disk_size = len;
+	spin_unlock(map_lock);
+	if (old_pages) {
+		for (i = 0; i < old_n; i++)
+			if (old_pages[i]) free_page(old_pages[i]);
+		kvfree(old_pages);
+	}
 	return 0;
 }
 
@@ -6447,8 +6469,12 @@ static void hvx_vm_free_pages(struct hvx_vm *vm)
 
 	hvx_pt_release(vm);		/* Intel PT: keep the buffer as the last trace */
 
+	/* no mmap fault may use guest_pages[] from here on (M97) */
+	spin_lock(&vm->map_lock);
+	vm->ram_ready = false;
+	spin_unlock(&vm->map_lock);
 	/* virtio-blk backing image (milestone 20; page array as of M28) */
-	vblk_disk_free(&vm->vblk);
+	vblk_disk_free(&vm->vblk, &vm->map_lock);
 	/* flush-aware DROP volatile write cache (milestone 26) */
 	if (vm->vblk.unsync_data) {
 		kvfree(vm->vblk.unsync_data);
@@ -6685,6 +6711,10 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 	vm->input_head = vm->input_tail = 0;	/* empty serial input ring (M18) */
 	vm->fuzz_len = vm->fuzz_off = 0;		/* no staged fuzz program (Phase 3 port inert) */
 
+	spin_lock(&vm->map_lock);	/* guest RAM may now be mmap-faulted (M97) */
+	vm->ram_ready = true;
+	spin_unlock(&vm->map_lock);
+
 	pr_info("hvx: VM created: %lu guest pages (%lu MiB, %u EPT PT / %u EPT PD), %u vCPU(s), eptp=0x%llx\n",
 		n, n * PAGE_SIZE / (1024 * 1024), vm->n_ept_pt, vm->n_ept_pd, nv, vm->eptp);
 	return 0;
@@ -6703,6 +6733,7 @@ static int hvx_open(struct inode *inode, struct file *filp)
 	if (!vm)
 		return -ENOMEM;
 	mutex_init(&vm->lock);
+	spin_lock_init(&vm->map_lock);
 	filp->private_data = vm;
 	return 0;
 }
@@ -6770,13 +6801,19 @@ static vm_fault_t hvx_vm_fault(struct vm_fault *vmf)
 {
 	struct hvx_vm *vm = vmf->vma->vm_private_data;
 	pgoff_t idx = vmf->pgoff;
-	struct page *page;
+	struct page *page = NULL;
 
-	if (!vm || idx >= vm->n_guest_pages || !vm->guest_pages[idx])
+	if (!vm)
 		return VM_FAULT_SIGBUS;
-
-	page = virt_to_page(vm->guest_pages[idx]);
-	get_page(page);
+	/* M97: a failing HVX_CREATE_VM in another thread may be freeing guest_pages[] */
+	spin_lock(&vm->map_lock);
+	if (vm->ram_ready && idx < vm->n_guest_pages && vm->guest_pages[idx]) {
+		page = virt_to_page(vm->guest_pages[idx]);
+		get_page(page);
+	}
+	spin_unlock(&vm->map_lock);
+	if (!page)
+		return VM_FAULT_SIGBUS;
 	vmf->page = page;
 	return 0;
 }
@@ -6793,14 +6830,21 @@ static vm_fault_t hvx_disk_fault(struct vm_fault *vmf)
 {
 	struct hvx_vm *vm = vmf->vma->vm_private_data;
 	unsigned long idx = vmf->pgoff - HVX_DISK_MMAP_PGOFF;
-	struct page *page;
+	struct page *page = NULL;
 
-	if (!vm || !vm->vblk.disk_pages ||
-	    idx >= vm->vblk.n_disk_pages || !vm->vblk.disk_pages[idx])
+	if (!vm)
 		return VM_FAULT_SIGBUS;
-
-	page = virt_to_page(vm->vblk.disk_pages[idx]);
-	get_page(page);
+	/* M97: HVX_SET_DISK in another thread may be replacing the page array; it
+	 * swaps it under map_lock and frees the old one after, and the get_page()
+	 * below keeps this page alive for the mapping */
+	spin_lock(&vm->map_lock);
+	if (vm->vblk.disk_pages && idx < vm->vblk.n_disk_pages && vm->vblk.disk_pages[idx]) {
+		page = virt_to_page(vm->vblk.disk_pages[idx]);
+		get_page(page);
+	}
+	spin_unlock(&vm->map_lock);
+	if (!page)
+		return VM_FAULT_SIGBUS;
 	vmf->page = page;
 	return 0;
 }
@@ -7348,7 +7392,7 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		} else {
 			/* (re)allocate the page-array backing image (M28, the M11 recipe);
 			 * any prior image is freed inside vblk_disk_alloc. */
-			if (vblk_disk_alloc(&vm->vblk, dk.len) < 0) { ret = -ENOMEM; break; }
+			if (vblk_disk_alloc(&vm->vblk, dk.len, &vm->map_lock) < 0) { ret = -ENOMEM; break; }
 			/* first attach: default the transport-visible PCI registers */
 			vm->vblk.pci_bar0 = (u32)HVX_VBLK_BAR;
 			vm->vblk.pci_intline = HVX_VBLK_GSI;
