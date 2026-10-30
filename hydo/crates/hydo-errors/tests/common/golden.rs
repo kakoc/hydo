@@ -102,9 +102,18 @@ pub fn check(
         if header.is_empty() {
             header = default_header.to_vec();
         }
-        let mut rows: Vec<_> = old.into_iter().filter(|r| !want(&r.0)).collect();
-        rows.extend(got.into_iter().filter(|r| want(&r.0)));
-        // keep the stream's own order for the new rows, the old ones first
+        // the new rows of a section take the place of its old ones; new sections go at the end
+        let new: Vec<Row> = got.into_iter().filter(|r| want(&r.0)).collect();
+        let mut rows: Vec<Row> = Vec::new();
+        let mut done = std::collections::BTreeSet::new();
+        for r in old {
+            if !want(&r.0) {
+                rows.push(r);
+            } else if done.insert(r.0.clone()) {
+                rows.extend(new.iter().filter(|x| x.0 == r.0).cloned());
+            }
+        }
+        rows.extend(new.iter().filter(|x| !done.contains(&x.0)).cloned());
         write(path, &header, &rows);
         eprintln!("BLESSED {}", path.display());
         return;
