@@ -33,6 +33,7 @@ equal. All verdicts are OK; the replica caught up within the 30 s deadline in ev
 | `O=primary@5-8:resp:delay,300ms` | `e4b55b516a4bf88f` | the delay sits on the primary's `eth0` inside its namespace: `eth0@primary:sent=36`; 1 packet queued at the heal, drained in 210 ms, 0 lost |
 | `K=replica@5+3` | `98ecf8aa3094f306` | the replica is killed before step 5, restarted in its namespace before step 8, ready after 1 poll, resynced |
 | `F=replica<primary@5#3:2000` | `0d3e5df9c9bcfff9` | `hydo-fc: FROZE pid 179 ... at resp #3 (6379>57900 len=30) ... SET k:7 v7`: the helper and its netfilter rules ran in the replica's namespace; resumed after 2000 ms |
+| `F=primary<workload@5#2:1000` | `ce449ef5ad9ac3ca` | the freeze's workload peer: the rules match the client's packets from the bridge address 10.89.0.1 in the primary's namespace; frozen at the client's `INFO replication` request |
 | `H=redisp@3-6:drop` | `8273569939085966` | `hydo-world` on 10.89.0.1 dropped the answers of steps 3..5 (13 of 16 acknowledged, no violation) |
 | `disk=cut dseed=1 \| run C=8` | `a5fbc70c219f6d51` | the recovery boot (restored from S0, so the namespaces are there) starts both servers, the replica resyncs 2.12 s after the start; 8 of 8 acknowledged writes on the primary |
 
@@ -41,3 +42,13 @@ connection would leave from 127.0.0.1 and a link fault between the two addresses
 nothing (compare `examples/compose-voting`, where the same fault on the Milestone 84 image changed
 nothing). Here every packet between the two servers carries their own addresses, so the fault
 acts, and the console shows the replication stall and the catch-up.
+
+## Explorer campaign
+
+`explore.py --manifest hvx/onboard/examples/redis-bridge/hydo.yaml --image explore-ob-redis-bridge-disk.img
+--strategy process --new-faults --freeze-call --protocol-faults --seeds 1-30 --workers 2` (`HYDO_BUILD`
+= the image's directory): 30 schedules, 0 failures, 260 s. The fault space's network targets are
+`primary`, `replica` and the one link `primary-replica`; 8 schedules drew a link fault (`N=` or
+`O=` on `primary-replica`), and their heal lines show the faults acting on the replication traffic
+(for example `acted on: vh1:sent=37,dropped=14`). Other draws: 20 kills, 27 pauses, 23 clock
+jumps, 12 freezes, 24 protocol faults, 9 power cuts.
