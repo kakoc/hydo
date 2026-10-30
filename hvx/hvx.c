@@ -105,6 +105,7 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/mutex.h>
+#include <linux/spinlock.h>
 #include <linux/mm.h>
 #include <linux/gfp.h>
 #include <linux/string.h>
@@ -885,6 +886,12 @@ struct hvx_vcpu {
 
 struct hvx_vm {
 	struct mutex lock;
+	/* M97: the mmap fault handlers run without `lock` (taking it there would invert
+	 * the lock order of an ioctl that faults on user memory while holding it). This
+	 * leaf lock guards what they read: ram_ready + guest_pages[], and the disk page
+	 * array, which HVX_SET_DISK replaces. */
+	spinlock_t map_lock;
+	bool ram_ready;
 
 	/* vCPUs (milestone 19). n_vcpus >= 1; cur_vcpu is selected by HVX_SET_VCPU
 	 * and is the target of every per-vCPU ioctl (default 0 -> the single-vCPU
@@ -1714,6 +1721,11 @@ static void hvx_pt_release(struct hvx_vm *vm)
 /* Allocate the output (mib MiB in 2 MiB regions, one ToPA table, STOP at the end) and
  * compute the guest RTIT_CTL. Kernel tracing needs at least one IP range: the host
  * also runs at CPL0, and the ranges are what keep host code out of the trace. */
+static inline bool hvx_canonical(u64 a)	/* 48-bit virtual addresses */
+{
+	return (u64)((s64)(a << 16) >> 16) == a;
+}
+
 static int hvx_pt_setup(struct hvx_vm *vm, u64 mib, u32 flags, const u64 *lo,
 			const u64 *hi, u64 cr3)
 {
@@ -1725,6 +1737,14 @@ static int hvx_pt_setup(struct hvx_vm *vm, u64 mib, u32 flags, const u64 *lo,
 	if (vm->pt_chunk || !(flags & (HVX_PT_KERNEL | HVX_PT_USER)))
 		return -EINVAL;
 	if ((flags & HVX_PT_KERNEL) && !hi[0] && !hi[1])
+		return -EINVAL;
+	/* M97: the run loop writes these into IA32_RTIT_ADDRn_A/B and IA32_RTIT_CR3_MATCH
+	 * with wrmsrl; a non-canonical address or a CR3 with bits 4:0 set #GPs there
+	 * ("unchecked MSR access error") and leaves the filter unprogrammed */
+	for (i = 0; i < 2; i++)
+		if (hi[i] && (!hvx_canonical(lo[i]) || !hvx_canonical(hi[i] - 1)))
+			return -EINVAL;
+	if ((flags & HVX_PT_CR3) && (cr3 & 0x1f))
 		return -EINVAL;
 	n = (unsigned int)DIV_ROUND_UP(mib ? mib : 256, 2);
 	if (n < 1 || n > 511)
@@ -2897,7 +2917,9 @@ static void vblk_unsync_commit(struct hvx_vm *vm)
 	for (i = 0; i < d->unsync_n; i++) {
 		if (!d->unsync[i].valid || !d->disk_pages)
 			continue;
-		if (d->unsync[i].doff + d->unsync[i].len <= d->disk_size)
+		/* overflow-safe: doff comes from HVX_SET_UNSYNC and may be near 2^64 (M97) */
+		if (d->unsync[i].doff <= d->disk_size &&
+		    d->unsync[i].len <= d->disk_size - d->unsync[i].doff)
 			disk_write_bytes(d, d->unsync[i].doff,
 			       d->unsync_data + (size_t)i * HVX_UNSYNC_ENTBYTES,
 			       d->unsync[i].len);
@@ -2916,7 +2938,23 @@ static void vblk_unsync_commit(struct hvx_vm *vm)
  */
 /* HVX_SET_FLUSHCUT: the request starting at `head` -- its type, and whether it touches
  * the power domain [fc_lo, fc_hi) (a FLUSH always does) */
-static u32 vblk_peek(struct hvx_vm *vm, struct hvx_vblk *d, u16 head, bool *in_domain)
+/*
+ * Work bounds for a virtqueue kick (M97). The device code runs with IRQs off in VMX
+ * root, and the guest controls queue_size (any u32), the avail index and the
+ * descriptor `next` links, so a looping chain could hold the host CPU for minutes.
+ * A virtio queue has at most 32768 entries, so a chain is at most that long, and a
+ * driver can have at most queue_size descriptors outstanding, so a kick of a valid
+ * driver reads at most 32768 descriptors. Valid guests never reach these bounds.
+ */
+#define HVX_VQ_MAX_SIZE		32768U
+#define HVX_VQ_KICK_BUDGET	(4U * HVX_VQ_MAX_SIZE)	/* descriptor reads per kick */
+static inline int hvx_vq_chain_max(u32 qsize)
+{
+	return (int)(qsize < HVX_VQ_MAX_SIZE ? qsize : HVX_VQ_MAX_SIZE) + 2;
+}
+
+static u32 vblk_peek(struct hvx_vm *vm, struct hvx_vblk *d, u16 head, bool *in_domain,
+		     u32 *walked)
 {
 	struct virtq_desc desc;
 	u8 hdr[16];
@@ -2926,6 +2964,7 @@ static u32 vblk_peek(struct hvx_vm *vm, struct hvx_vblk *d, u16 head, bool *in_d
 	int n;
 
 	*in_domain = true;
+	(*walked)++;
 	if (!hvx_guest_rw(vm, d->desc_gpa + (u64)di * 16, &desc, 16, false) ||
 	    !hvx_guest_rw(vm, desc.addr, hdr, 16, false))
 		return 0;
@@ -2933,8 +2972,9 @@ static u32 vblk_peek(struct hvx_vm *vm, struct hvx_vblk *d, u16 head, bool *in_d
 	memcpy(&sector, &hdr[8], 8);
 	if (type == VIRTIO_BLK_T_FLUSH || !d->fc_hi)
 		return type;
-	for (n = 0; n < (int)d->qsize + 2 && (desc.flags & VIRTQ_DESC_F_NEXT); n++) {
+	for (n = 0; n < hvx_vq_chain_max(d->qsize) && (desc.flags & VIRTQ_DESC_F_NEXT); n++) {
 		di = desc.next;
+		(*walked)++;
 		if (!hvx_guest_rw(vm, d->desc_gpa + (u64)di * 16, &desc, 16, false))
 			break;
 		if (desc.flags & VIRTQ_DESC_F_NEXT)	/* a data descriptor (the last is the status) */
@@ -2954,13 +2994,16 @@ static void virtio_blk_process(struct hvx_vcpu *vcpu)
 	bool do_reorder = (d->fault_classes & HVX_FAULT_REORDER) != 0;	/* M22 */
 	struct { u16 head; u32 used_len; } pend[HVX_FAULT_REORDER_MAX];	/* M22 reorder buffer */
 	int n_pend = 0;
+	u32 walked = 0;			/* descriptors read this kick (M97 bound) */
 
 	if (!d->disk_pages || !d->qready || d->qsize == 0)
 		return;
 	if (!hvx_guest_rw(vm, d->avail_gpa + 2, &avail_idx, 2, false))
 		return;
 
-	while ((u16)d->last_avail != avail_idx) {
+	/* a kick that would read more than HVX_VQ_KICK_BUDGET descriptors (no valid
+	 * driver does) leaves the rest of the avail ring for the next kick */
+	while ((u16)d->last_avail != avail_idx && walked < HVX_VQ_KICK_BUDGET) {
 		u16 slot = (u16)((u32)d->last_avail % d->qsize);
 		u16 head, di;
 		u32 type = 0;
@@ -2978,7 +3021,7 @@ static void virtio_blk_process(struct hvx_vcpu *vcpu)
 			break;
 		if (d->fc_on) {		/* HVX_SET_FLUSHCUT */
 			bool dom;
-			u32 t = vblk_peek(vm, d, head, &dom);
+			u32 t = vblk_peek(vm, d, head, &dom, &walked);
 
 			if (!d->fc_off && t == VIRTIO_BLK_T_FLUSH) {
 				if (d->fc_target && d->fc_count + 1 == d->fc_target)
@@ -2994,10 +3037,11 @@ static void virtio_blk_process(struct hvx_vcpu *vcpu)
 			}
 		}
 		di = head;
-		for (guardn = 0; guardn < (int)d->qsize + 2; guardn++) {
+		for (guardn = 0; guardn < hvx_vq_chain_max(d->qsize); guardn++) {
 			struct virtq_desc desc;
 			bool has_next;
 
+			walked++;
 			if (!hvx_guest_rw(vm, d->desc_gpa + (u64)di * 16, &desc, 16, false))
 				break;
 			has_next = desc.flags & VIRTQ_DESC_F_NEXT;
@@ -3303,7 +3347,10 @@ static bool hvx_pci_cfg_pio(struct hvx_vcpu *vcpu, u32 port, bool is_in, u32 siz
 			vcpu->regs.rax = (vcpu->regs.rax & ~0xffffULL) | (v & 0xffff);
 		else
 			vcpu->regs.rax = (vcpu->regs.rax & ~0xffffffffULL) | v;
-	} else if (which) {
+	} else if (which && byteoff < 4) {
+		/* byteoff >= 4 (address bits 1:0 set plus a data port past 0xcfc) lies
+		 * outside the dword: drop the write, as a read of it returns 0. Shifting
+		 * by byteoff*8 >= 32 was undefined behaviour (UBSAN, M97). */
 		u32 nv = (u32)vcpu->regs.rax, merged;
 
 		if (size == 1) {
@@ -3405,9 +3452,15 @@ static void hvx_pio(struct hvx_vcpu *vcpu)
 		u64 addr = vmread(GUEST_LINEAR_ADDR);	/* GVA == GPA (identity map) */
 		u64 i, b;
 
-		for (i = 0; i < count; i++, addr += size) {
-			if (is_in || port != UART_BASE)
-				continue;
+		/*
+		 * Only OUTS to the UART has an effect (bytes into the console). The guest
+		 * chooses RCX, so this loop must not run `count` times: it ran with IRQs off
+		 * in VMX root, and a REP INS/OUTS with RCX near 2^64 held the host CPU for
+		 * good (M97). Stop once the console is full or the source leaves guest RAM;
+		 * a source address can only come back into RAM by wrapping past 2^64.
+		 */
+		for (i = 0; i < count && !is_in && port == UART_BASE &&
+			    vm->console_len < HVX_CONSOLE_SZ && addr < limit; i++, addr += size) {
 			for (b = 0; b < size; b++)
 				if (addr + b < limit && vm->console_len < HVX_CONSOLE_SZ)
 					vm->console[vm->console_len++] =
@@ -4094,13 +4147,14 @@ static void virtio_net_tx_process(struct hvx_vcpu *vcpu)
 	bool do_reorder = (v->nfault_classes & HVX_NFAULT_REORDER) != 0;
 	struct { u32 id; u32 len; } used[HVX_VNET_FAULT_BATCH];
 	int n_used = 0;
+	u32 walked = 0;			/* descriptors read this kick (M97 bound) */
 
 	if (!v->present || !q->qready || q->qsize == 0)
 		return;
 	if (!hvx_guest_rw(vm, q->avail_gpa + 2, &avail_idx, 2, false))
 		return;
 
-	while ((u16)q->last_avail != avail_idx) {
+	while ((u16)q->last_avail != avail_idx && walked < HVX_VQ_KICK_BUDGET) {
 		u16 slot = (u16)((u32)q->last_avail % q->qsize);
 		u16 head, di;
 		u32 skip = HVX_VNET_HDR_LEN;	/* bytes of virtio_net_hdr to drop */
@@ -4114,10 +4168,11 @@ static void virtio_net_tx_process(struct hvx_vcpu *vcpu)
 		if (!hvx_guest_rw(vm, q->avail_gpa + 4 + 2 * slot, &head, 2, false))
 			break;
 		di = head;
-		for (guardn = 0; guardn < (int)q->qsize + 2; guardn++) {
+		for (guardn = 0; guardn < hvx_vq_chain_max(q->qsize); guardn++) {
 			struct virtq_desc desc;
 			bool has_next;
 
+			walked++;
 			if (!hvx_guest_rw(vm, q->desc_gpa + (u64)di * 16, &desc, 16, false))
 				break;
 			has_next = desc.flags & VIRTQ_DESC_F_NEXT;
@@ -4129,7 +4184,8 @@ static void virtio_net_tx_process(struct hvx_vcpu *vcpu)
 
 					skip -= s; off += s; len -= s;
 				}
-				if (len && v->tx_len + len <= HVX_VNET_TX_CAP) {
+				/* written so that a guest descriptor length near 2^32 cannot wrap the sum (M97) */
+				if (len && v->tx_len <= HVX_VNET_TX_CAP && len <= HVX_VNET_TX_CAP - v->tx_len) {
 					hvx_guest_rw(vm, desc.addr + off, v->tx_buf + v->tx_len, len, false);
 					v->tx_len += len;
 					cap_len += len;
@@ -6320,45 +6376,76 @@ static int hvx_sched_run(struct hvx_vm *vm, struct hvx_exit *ex, u64 max_insns)
 
 /* Free the page-array backing disk image (milestone 28): each order-0 page, then the
  * pointer array. Mirrors the guest-RAM free loop below. */
-static void vblk_disk_free(struct hvx_vblk *d)
+static void vblk_disk_free(struct hvx_vblk *d, spinlock_t *map_lock)
 {
-	unsigned int i;
+	unsigned long *pages, n, i;
 
-	if (d->disk_pages) {
-		for (i = 0; i < d->n_disk_pages; i++)
-			if (d->disk_pages[i]) free_page(d->disk_pages[i]);
-		kvfree(d->disk_pages);
-		d->disk_pages = NULL;
-	}
+	spin_lock(map_lock);		/* unpublish first (M97: see hvx_disk_fault) */
+	pages = d->disk_pages;
+	n = d->n_disk_pages;
+	d->disk_pages = NULL;
 	d->n_disk_pages = 0;
 	d->disk_size = 0;
+	spin_unlock(map_lock);
+	if (pages) {
+		for (i = 0; i < n; i++)
+			if (pages[i]) free_page(pages[i]);
+		kvfree(pages);
+	}
 }
 
 /* Allocate a page-array backing disk image of `len` bytes (milestone 28): a
  * kvmalloc_array of individually-allocated order-0 pages (the M11 recipe), so a
  * GB-scale image is a robust per-page allocation with correct per-page refcounts for
  * the disk-mmap fault handler. Any prior image is freed first. Returns 0 or -ENOMEM. */
-static int vblk_disk_alloc(struct hvx_vblk *d, u64 len)
+/*
+ * Guest RAM and disk images are sized by userspace (up to 3 GiB and 4 GiB) out of
+ * order-0 pages (M97). With plain GFP_KERNEL a request larger than the free memory
+ * never failed: the page allocator called the OOM killer, which cannot see these
+ * pages (they are not in any process's RSS), killed other processes and then
+ * panicked "System is deadlocked on memory". __GFP_RETRY_MAYFAIL reclaims as hard as
+ * before but fails instead of OOM-killing, so the ioctl returns ENOMEM; the pages are
+ * charged to the caller's memory cgroup like KVM's (__GFP_ACCOUNT), and a pending
+ * fatal signal stops the loop. Same zeroed pages as before when memory suffices.
+ */
+#define HVX_GFP_BULK (GFP_KERNEL_ACCOUNT | __GFP_RETRY_MAYFAIL | __GFP_NOWARN | __GFP_ZERO)
+
+static int vblk_disk_alloc(struct hvx_vblk *d, u64 len, spinlock_t *map_lock)
 {
 	unsigned long np = DIV_ROUND_UP(len, PAGE_SIZE), i;
-	unsigned long *pages;
+	unsigned long *pages, *old_pages;
+	unsigned long old_n;
 
 	pages = kvmalloc_array(np, sizeof(*pages), GFP_KERNEL | __GFP_ZERO);
 	if (!pages)
 		return -ENOMEM;
 	for (i = 0; i < np; i++) {
-		pages[i] = __get_free_page(GFP_KERNEL | __GFP_ZERO);
-		if (!pages[i]) {
+		pages[i] = __get_free_page(HVX_GFP_BULK);
+		if (!(i & 511))
+			cond_resched();
+		if (!pages[i] || fatal_signal_pending(current)) {
+			if (pages[i])
+				free_page(pages[i]);
 			while (i--)
 				free_page(pages[i]);
 			kvfree(pages);
 			return -ENOMEM;
 		}
 	}
-	vblk_disk_free(d);		/* drop any prior image */
+	/* publish the new image, then drop any prior one; a concurrent disk-mmap fault
+	 * sees either the old array or the new one, never a freed one (M97) */
+	spin_lock(map_lock);
+	old_pages = d->disk_pages;
+	old_n = d->n_disk_pages;
 	d->disk_pages = pages;
 	d->n_disk_pages = np;
 	d->disk_size = len;
+	spin_unlock(map_lock);
+	if (old_pages) {
+		for (i = 0; i < old_n; i++)
+			if (old_pages[i]) free_page(old_pages[i]);
+		kvfree(old_pages);
+	}
 	return 0;
 }
 
@@ -6411,8 +6498,12 @@ static void hvx_vm_free_pages(struct hvx_vm *vm)
 
 	hvx_pt_release(vm);		/* Intel PT: keep the buffer as the last trace */
 
+	/* no mmap fault may use guest_pages[] from here on (M97) */
+	spin_lock(&vm->map_lock);
+	vm->ram_ready = false;
+	spin_unlock(&vm->map_lock);
 	/* virtio-blk backing image (milestone 20; page array as of M28) */
-	vblk_disk_free(&vm->vblk);
+	vblk_disk_free(&vm->vblk, &vm->map_lock);
 	/* flush-aware DROP volatile write cache (milestone 26) */
 	if (vm->vblk.unsync_data) {
 		kvfree(vm->vblk.unsync_data);
@@ -6596,21 +6687,26 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 	vm->pmu_period = HVX_PMU_PERIOD;
 	vm->pmu_tick_tsc = HVX_PMU_TICK_TSC;
 
-	for (i = 0; i < n; i++)
-		if (!(vm->guest_pages[i] = __get_free_page(GFP_KERNEL | __GFP_ZERO)))
+	for (i = 0; i < n && ok; i++) {
+		if (!(vm->guest_pages[i] = __get_free_page(HVX_GFP_BULK)) || fatal_signal_pending(current))
 			ok = 0;
-	for (i = 0; i < npt; i++)
+		if (!(i & 511))
+			cond_resched();
+	}
+	/* after a failed guest-RAM allocation nothing more is allocated (M97): RAM is
+	 * then nearly exhausted, and these GFP_KERNEL pages would call the OOM killer */
+	for (i = 0; i < npt && ok; i++)
 		if (!(vm->ept_pt[i] = __get_free_page(GFP_KERNEL | __GFP_ZERO)))
 			ok = 0;
-	for (i = 0; i < npd; i++)
+	for (i = 0; i < npd && ok; i++)
 		if (!(vm->ept_pd[i] = __get_free_page(GFP_KERNEL | __GFP_ZERO)))
 			ok = 0;
-	for (i = 0; i < 2; i++)
+	for (i = 0; i < 2 && ok; i++)
 		if (!(vm->ept_pg[i] = __get_free_page(GFP_KERNEL | __GFP_ZERO)))
 			ok = 0;
 	/* one VMXON + one VMCS page PER vCPU (each is loaded only while that vCPU
 	 * runs; the vCPUs are serialized, so a single host CPU touches one at a time) */
-	for (i = 0; i < nv; i++) {
+	for (i = 0; i < nv && ok; i++) {
 		vm->vcpu[i].vmxon_page = __get_free_page(GFP_KERNEL | __GFP_ZERO);
 		vm->vcpu[i].vmcs_page  = __get_free_page(GFP_KERNEL | __GFP_ZERO);
 		vm->vcpu[i].fx_page    = __get_free_page(GFP_KERNEL | __GFP_ZERO);
@@ -6649,6 +6745,10 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 	vm->input_head = vm->input_tail = 0;	/* empty serial input ring (M18) */
 	vm->fuzz_len = vm->fuzz_off = 0;		/* no staged fuzz program (Phase 3 port inert) */
 
+	spin_lock(&vm->map_lock);	/* guest RAM may now be mmap-faulted (M97) */
+	vm->ram_ready = true;
+	spin_unlock(&vm->map_lock);
+
 	pr_info("hvx: VM created: %lu guest pages (%lu MiB, %u EPT PT / %u EPT PD), %u vCPU(s), eptp=0x%llx\n",
 		n, n * PAGE_SIZE / (1024 * 1024), vm->n_ept_pt, vm->n_ept_pd, nv, vm->eptp);
 	return 0;
@@ -6667,6 +6767,7 @@ static int hvx_open(struct inode *inode, struct file *filp)
 	if (!vm)
 		return -ENOMEM;
 	mutex_init(&vm->lock);
+	spin_lock_init(&vm->map_lock);
 	filp->private_data = vm;
 	return 0;
 }
@@ -6734,13 +6835,19 @@ static vm_fault_t hvx_vm_fault(struct vm_fault *vmf)
 {
 	struct hvx_vm *vm = vmf->vma->vm_private_data;
 	pgoff_t idx = vmf->pgoff;
-	struct page *page;
+	struct page *page = NULL;
 
-	if (!vm || idx >= vm->n_guest_pages || !vm->guest_pages[idx])
+	if (!vm)
 		return VM_FAULT_SIGBUS;
-
-	page = virt_to_page(vm->guest_pages[idx]);
-	get_page(page);
+	/* M97: a failing HVX_CREATE_VM in another thread may be freeing guest_pages[] */
+	spin_lock(&vm->map_lock);
+	if (vm->ram_ready && idx < vm->n_guest_pages && vm->guest_pages[idx]) {
+		page = virt_to_page(vm->guest_pages[idx]);
+		get_page(page);
+	}
+	spin_unlock(&vm->map_lock);
+	if (!page)
+		return VM_FAULT_SIGBUS;
 	vmf->page = page;
 	return 0;
 }
@@ -6757,14 +6864,21 @@ static vm_fault_t hvx_disk_fault(struct vm_fault *vmf)
 {
 	struct hvx_vm *vm = vmf->vma->vm_private_data;
 	unsigned long idx = vmf->pgoff - HVX_DISK_MMAP_PGOFF;
-	struct page *page;
+	struct page *page = NULL;
 
-	if (!vm || !vm->vblk.disk_pages ||
-	    idx >= vm->vblk.n_disk_pages || !vm->vblk.disk_pages[idx])
+	if (!vm)
 		return VM_FAULT_SIGBUS;
-
-	page = virt_to_page(vm->vblk.disk_pages[idx]);
-	get_page(page);
+	/* M97: HVX_SET_DISK in another thread may be replacing the page array; it
+	 * swaps it under map_lock and frees the old one after, and the get_page()
+	 * below keeps this page alive for the mapping */
+	spin_lock(&vm->map_lock);
+	if (vm->vblk.disk_pages && idx < vm->vblk.n_disk_pages && vm->vblk.disk_pages[idx]) {
+		page = virt_to_page(vm->vblk.disk_pages[idx]);
+		get_page(page);
+	}
+	spin_unlock(&vm->map_lock);
+	if (!page)
+		return VM_FAULT_SIGBUS;
 	vmf->page = page;
 	return 0;
 }
@@ -7011,7 +7125,11 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		s = kzalloc(sizeof(*s), GFP_KERNEL);
 		if (!s) { ret = -ENOMEM; break; }
 		if (copy_from_user(s, uarg, sizeof(*s))) { kfree(s); ret = -EFAULT; break; }
-		if (s->tsc_mode != HVX_TSC_COUNTER && s->tsc_mode != HVX_TSC_ICOUNT) {
+		/* M97: vnet_tx_len is an offset into the fixed tx_buf (GET_TX copies that
+		 * many bytes out of it, the next TX capture appends at it); a larger value
+		 * read and wrote past the buffer. Only a forged snapshot can hold one. */
+		if ((s->tsc_mode != HVX_TSC_COUNTER && s->tsc_mode != HVX_TSC_ICOUNT) ||
+		    s->vnet_tx_len > HVX_VNET_TX_CAP) {
 			kfree(s);
 			ret = -EINVAL;
 			break;
@@ -7308,7 +7426,7 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		} else {
 			/* (re)allocate the page-array backing image (M28, the M11 recipe);
 			 * any prior image is freed inside vblk_disk_alloc. */
-			if (vblk_disk_alloc(&vm->vblk, dk.len) < 0) { ret = -ENOMEM; break; }
+			if (vblk_disk_alloc(&vm->vblk, dk.len, &vm->map_lock) < 0) { ret = -ENOMEM; break; }
 			/* first attach: default the transport-visible PCI registers */
 			vm->vblk.pci_bar0 = (u32)HVX_VBLK_BAR;
 			vm->vblk.pci_intline = HVX_VBLK_GSI;
@@ -7785,14 +7903,17 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		break;
 	}
 	case HVX_GET_PMU: {
-		struct hvx_pmu pm = {
+		struct hvx_pmu pm;
+
+		/* M97: before HVX_CREATE_VM there is no vCPU (vc is NULL) */
+		if (!vm->n_guest_pages) { ret = -EINVAL; break; }
+		pm = (struct hvx_pmu){
 			.period = vm->pmu_period, .tick_tsc = vm->pmu_tick_tsc,
 			.total = vc->pmu_total, .next = vc->pmu_next, .ticks = vc->pmu_ticks,
 			.overshoots = vc->pmu_over, .steps = vc->pmu_steps,
 			.land_hash = vc->pmu_land,
 			.hops = vc->pmu_hops,
 		};
-
 		ret = copy_to_user(uarg, &pm, sizeof(pm)) ? -EFAULT : 0;
 		break;
 	}
