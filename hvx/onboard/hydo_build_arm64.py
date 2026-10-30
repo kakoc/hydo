@@ -20,6 +20,16 @@ differences:
     hvm-explore.config). HYDO_TC_ARM64= (empty) builds an image without tc, as before.
 root.nix and root.files must name arm64 binaries (e.g. aarch64 store paths); nothing checks
 their architecture (services[].image is checked: the image must be linux/arm64). Byte-reproducible: sorted newc cpio, fixed mtimes and owners, gzip -n.
+
+The prebuilt static helpers are staged exactly as the x86 build stages them, and only for the
+manifests that use them (Milestone 96), so every other image keeps its bytes:
+  * hydo-world (fakes:/proxies:, hvx/onboard/world/build.sh with HYDO_WORLD_GOARCH=arm64):
+    $HYDO_WORLDBIN_ARM64, default <build dir>/hydo-world-arm64, as /bin/hydo-world, plus
+    /etc/hydo/world.json;
+  * hydo-read (+ the hydo-check name; hvx/readers/build.sh with HYDO_READ_GOARCH=arm64):
+    $HYDO_READ_BIN_ARM64, default <build dir>/hydo-read-arm64, when a command calls either name;
+  * params: the values the image was built with, in /etc/hydo/params (as on x86_64).
+Each helper must be an aarch64 ELF file (checked), so an x86_64 build cannot slip in.
 """
 import gzip, io, os, shutil, stat, subprocess, sys
 
@@ -110,12 +120,28 @@ def _copy_elf_closure(binary, R):
             os.chmod(dst, 0o755 if os.access(p, os.X_OK) else 0o644)
 
 
-def build(m, manifest_path, out, bdir, H, oci=None):
+def _aarch64_tool(env, default):
+    """$env, else default: an existing aarch64 ELF executable (e_machine 0xb7)."""
+    p = os.environ.get(env) or default
+    if not os.path.isfile(p):
+        raise SystemExit("hydo-build: %s not found at %s (set %s)" % (env, p, env))
+    with open(p, "rb") as f:
+        hdr = f.read(20)
+    if hdr[:4] != b"\x7fELF" or hdr[18:20] != b"\xb7\x00":
+        raise SystemExit("hydo-build: %s=%s is not an aarch64 Linux binary (build it with GOARCH=arm64)" % (env, p))
+    return p
+
+
+def build(m, manifest_path, out, bdir, H, oci=None, params=None):
     T = {
         "busybox": H["tool"]("HYDO_BUSYBOX_ARM64", BUSYBOX_ARM64, os.path.isfile),
         "mke2fs": H["tool"]("HYDO_MKE2FS", "/nix/store/24s0phlx9kly7x7qb8gal3mmn51ndmlx-e2fsprogs-1.47.0-bin/bin/mke2fs", os.path.isfile),
         "faketime": H["tool"]("HYDO_FAKETIME", "/nix/store/fs0gp7zyfjnbvaq82yvwbcsvqh7876d1-libfaketime-0.9.10/bin/faketime", os.path.isfile),
     }
+    if H["has_world"](m):    # fakes:/proxies: -> the prebuilt static hydo-world for arm64
+        T["world"] = _aarch64_tool("HYDO_WORLDBIN_ARM64", os.path.join(bdir, "hydo-world-arm64"))
+    if H["uses_readers"](m):  # hydo-read / hydo-check, only when a command calls them
+        T["read"] = _aarch64_tool("HYDO_READ_BIN_ARM64", os.path.join(bdir, "hydo-read-arm64"))
     seedrng = os.environ.get("HYDO_SEEDRNG_ARM64")      # optional: the device tree's rng-seed seeds the CRNG
     mdir = os.path.dirname(os.path.abspath(manifest_path))
     root = m.get("root") or {}
@@ -146,6 +172,17 @@ def build(m, manifest_path, out, bdir, H, oci=None):
         p = os.path.join(R, "bin", a)
         if not os.path.lexists(p):
             os.symlink("busybox", p)
+    if "read" in T:          # as the x86 build: /bin/hydo-read + the hydo-check name for it
+        shutil.copy(T["read"], os.path.join(R, "bin/hydo-read"))
+        os.chmod(os.path.join(R, "bin/hydo-read"), 0o755)
+        os.symlink("hydo-read", os.path.join(R, "bin/hydo-check"))
+        print("hydo-build: staged /bin/hydo-read and /bin/hydo-check (arm64, sha256 %s)" % H["sha"](T["read"])[:16])
+    if "world" in T:
+        shutil.copy(T["world"], os.path.join(R, "bin/hydo-world"))
+        os.chmod(os.path.join(R, "bin/hydo-world"), 0o755)
+        with open(os.path.join(R, "etc/hydo/world.json"), "w") as f:
+            f.write(H["world_config"](m))
+        print("hydo-build: staged /bin/hydo-world (arm64, sha256 %s)" % H["sha"](T["world"])[:16])
     for e in root.get("files") or []:
         if not isinstance(e, dict) or "src" not in e or "dst" not in e:
             raise H["ManifestError"]("root.files: each entry needs src and dst")
@@ -181,6 +218,9 @@ def build(m, manifest_path, out, bdir, H, oci=None):
     with open(os.path.join(R, "etc/hydo/prelude.sh"), "w") as f:
         f.write(prelude)
     shutil.copy(manifest_path, os.path.join(R, "etc/hydo/hydo.yaml"))
+    if params:      # the parameter values this image was built with (only when declared)
+        with open(os.path.join(R, "etc/hydo/params"), "w") as f:
+            f.write("".join("%s=%s\n" % kv for kv in sorted(params.items())))
     H["install_init"](m, os.path.join(R, "sbin/init"))
     if "_compose_stage" in H:
         H["_compose_stage"](m, R)      # the test composer (hydo_composer.py); a no-op without a test plan

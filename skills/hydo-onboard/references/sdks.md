@@ -14,8 +14,8 @@ fault points.
 |---|---|---|
 | Go | `hvx/stack/hydoassert` (import `hydostack/hydoassert`); history recorder `hvx/stack/hydohist` | copy or `replace` the module by path |
 | Rust | `sdk/rust` (crate `hydo-assert`, standard library only; macros `hydo_always!`, `hydo_buggify!`, `declare!`; `hydo_assert::history`) | `hydo-assert = { path = ".../sdk/rust" }` |
-| Python 3.8+ | `sdk/python` (distribution `hydo-assert`, import `hydo_assert`, standard library only, thread- and asyncio-safe) | `pip install ./sdk/python`, or copy `src/hydo_assert/` into the image |
-| JavaScript / TypeScript (Node.js) | `sdk/js` (package `hydo-assert`, CommonJS and ESM, types, no dependencies) | `"hydo-assert": "file:.../sdk/js"`; in the image copy `package.json`, `index.js`, `index.mjs` to `node_modules/hydo-assert/` |
+| Python 3.8+ | `sdk/python` (distribution `hydo-assert`, import `hydo_assert`, standard library only, thread- and asyncio-safe); history recorder `hydo_assert.history` | `pip install ./sdk/python`, or copy `src/hydo_assert/` into the image |
+| JavaScript / TypeScript (Node.js) | `sdk/js` (package `hydo-assert`, CommonJS and ESM, types, no dependencies); history recorder `hydo-assert/history` | `"hydo-assert": "file:.../sdk/js"`; in the image copy `package.json`, `index.js`, `index.mjs` (and `history.js`, `history.mjs` for the recorder) to `node_modules/hydo-assert/` |
 | shell (busybox sh) | `hvx/stack/hydoassert/hydo_assert.sh` | source it; no deduplication, no BUGGIFY |
 
 Use assertions for properties only the program can see (a code path that must never run, a

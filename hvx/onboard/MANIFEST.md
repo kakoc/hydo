@@ -327,8 +327,10 @@ verdict rules are in `hvx/HISTORIES.md`.
 - The workload, `retry`, `final:` and invariant commands get the recorder in their prelude
   (an executable sources `/etc/hydo/prelude.sh` to get it):
   `hydo_hist <history> <process> <invoke|ok|fail|info> <f> <args>...` (and `hydo_hist_enc` for
-  free-form values). Give every concurrent client its own process number. Go programs use
-  `hvx/stack/hydohist`.
+  free-form values). Give every concurrent client its own process number. Programs use the
+  recorder of their SDK, all writing the same lines: Go `hvx/stack/hydohist`, Rust
+  `hydo_assert::history`, JavaScript `hydo-assert/history` (`sdk/js/history.js`) and Python
+  `hydo_assert.history` (Milestone 96).
 - `final:` runs after the workload, `retry` and healing (no cut), or in the recovery boot after a
   power cut, before the invariants: read every key or list back and record the reads, so that a
   write lost in the crash shows up as a read that contradicts an acknowledged write. Its exit
@@ -344,6 +346,10 @@ verdict rules are in `hvx/HISTORIES.md`.
   list-append: `R=everysec` + a power cut loses an acknowledged write, both checks see it) and
   `examples/etcd/hydo-hist.yaml` (puts and gets with etcd's mod_revision, read back through every
   member: etcd issue 14685 shows as a version no order explains).
+- On arm64 (the Mac backend) the same: `explore.py --backend hvm` and the Mac release's
+  `hydo run` / `hydo repro --regressions` run the host checkers (the release ships
+  `hvx/history/`). Examples: `hvx-mac/explore/examples/redis/hydo-hist.yaml` and
+  `examples/python-kv/hydo-mac-hist.yaml` (the Python recorder).
 
 ### Fault tokens (what the explorer types at S1)
 
@@ -638,7 +644,12 @@ delays. A manifest with a `faults:` list draws `H=` only if it lists `protocol`.
 **Build.** `hvx/onboard/world/build.sh` builds `build/hydo-world` (pinned Go, standard library
 only); `hydo-build` stages it (`HYDO_WORLDBIN` overrides), writes `/etc/hydo/world.json`
 (`--print-world` shows it) and splices `hvx/onboard/hydo-init-fakes.sh` into the init. A manifest
-without `fakes:`/`proxies:` builds a byte-identical image. Not supported yet: `--arch arm64`.
+without `fakes:`/`proxies:` builds a byte-identical image. `--arch arm64` (the Mac backend) stages
+the arm64 build of the same program: `HYDO_WORLD_GOARCH=arm64 hvx/onboard/world/build.sh
+build/hydo-world-arm64` (`HYDO_WORLDBIN_ARM64` overrides; the Mac release ships it as
+`guest/hydo-world`), and the Mac engine `hvmx` carries the world across a power cut in the same
+3584-byte recovery command as `hvx_explore`; `explore.py --backend hvm` takes `--protocol-faults`
+and `--grpc-faults` (Milestone 96).
 
 **Extending it (the code layout).** `world/rules.go`: the `H=` grammar (`parseRule`, one `Rule`
 per token, `fires`, `applied`); a new rule is a field there plus its action. `world/serve.go`: one
@@ -908,7 +919,9 @@ and `msg:` do not count; `test:` entries count, and so does any file in the plan
 folder that contains the name, a script or a compiled program); every other manifest builds a
 byte-identical image. Build the binary
 first with `hvx/readers/build.sh` (byte-reproducible; it lands in `build/hydo-read`, or point
-`HYDO_READ_BIN` at it). Not staged for `--arch arm64` yet. From a program under test (an SDK, not
+`HYDO_READ_BIN` at it). For `--arch arm64`, build it with `HYDO_READ_GOARCH=arm64
+hvx/readers/build.sh build/hydo-read-arm64` (`HYDO_READ_BIN_ARM64` overrides; the Mac release ships
+it as `guest/hydo-read`); example `hvx-mac/explore/examples/redis/hydo-read.yaml`. From a program under test (an SDK, not
 an invariant), run the same binary with `--id`/`--console` so the record reaches the console.
 Examples: `examples/stack/hydo-read.yaml`, `examples/miniflux/hydo-read.yaml`; tests against real
 stores: `hvx/readers/native-test.sh`.
@@ -1168,7 +1181,7 @@ It writes, under `<dir>`:
 |---|---|
 | `grpc/desc.pb` | the schema: a `FileDescriptorSet`, dependencies first, no source info, deterministic bytes |
 | `grpc/plan.json` | every RPC with its hints, checked against the schema (unknown fields, wrong types and bad paths are errors) |
-| `hydo-grpc` | the static guest client for linux/amd64 (`-trimpath`, no build id: byte-identical from the same sources and Go) |
+| `hydo-grpc` | the static guest client for linux/amd64 (`-trimpath`, no build id: byte-identical from the same sources and Go); with `--arch amd64,arm64` also `hydo-grpc.arm64` for the Mac backend (example `hvx/grpcgen/demo/hydo-mac.yaml`) |
 | `workload/parallel_driver_<rpc>` | one test-composer command per RPC with a weight (and per scenario), in the `hydo/workload/` layout, with a `# hydo: timeout=` header |
 | `hydo.grpc.yaml` | a starter section to merge into `hydo.yaml`: files, `env:`, a `test:` section with the commands, `workload.retry`, and the numbered-steps `workload:` as a commented alternative |
 

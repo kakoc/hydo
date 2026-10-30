@@ -108,6 +108,66 @@ no other effect. Under hydo the schedule token `B=<seed>` (`explore.py --buggify
 file through the guest init: an onboarded project gets it with `buggify: true` in its
 `hydo.yaml` (`hvx/onboard/MANIFEST.md`).
 
+## History recorder
+
+The module `hydo_assert.history` records operation histories for hydo's host-side checkers
+(linearizability of a register or compare-and-set object per key, and Elle-style list-append;
+the format and the checkers are in `hvx/HISTORIES.md`). It writes the same `HYDO-HIST` lines as
+the Go recorder (`hvx/stack/hydohist`), byte for byte except the time field. It is a separate
+module: `import hydo_assert` does not load it, so the assertion records are unchanged.
+
+```python
+from hydo_assert import history as hh
+
+kv = hh.History("kv")
+op = kv.invoke(3, "write", "k1", hh.enc(v))      # process 3, before the request
+try:
+    rev = put("k1", v)
+    op.ok("k1", hh.ver(v, rev))                  # the version the store assigned, if any
+except Rejected:
+    op.fail()                                    # it definitely had no effect
+except Exception:
+    op.info()                                    # a timeout: the outcome is unknown
+kv.invoke(3, "read", "k1").ok("k1", hh.value_or_nil(get("k1")))   # None means absent
+
+la = hh.History("la")
+tx = la.invoke(4, "txn", hh.append_mop("x", "1"), hh.read_mop("y"))
+tx.ok(hh.append_mop("x", "1"), hh.read_result_mop("y", "1", "2"))
+```
+
+| Go (`hydohist`) | Python (`hydo_assert.history`) |
+|---|---|
+| `New(name)` | `History(name)` |
+| `h.Invoke(proc, f, args...)`, `h.Record(proc, typ, f, args...)` | `h.invoke(proc, f, *args)`, `h.record(proc, typ, f, *args)` |
+| `op.Ok(args...)`, `op.Fail()`, `op.Info()` | `op.ok(*args)` (no args repeats the invocation's), `op.fail()`, `op.info()` |
+| `Enc`, `Ver`, `ValOrNil(v, ok)`, `List` | `enc`, `ver`, `value_or_nil(v)` (None means absent), `list_value` |
+| `Append`, `Read`, `ReadResult`, `Nil` | `append_mop`, `read_mop`, `read_result_mop`, `NIL` |
+
+- `list_value` has a longer name than Go's `List` so that it does not hide the builtin `list`
+  for a program that uses `from hydo_assert.history import *`. The micro-op helpers have the
+  Rust SDK's names.
+- A process is an int or a token without spaces. Arguments are tokens: a `str` is written as
+  it is (encode free-form values with `enc`), an `int` is written in decimal, and `bytes` are
+  written as they are. Versions are int64 values; a value outside that range raises
+  `ValueError`, and a value that is not an int (including `bool`) raises `TypeError`.
+- Records go to `/dev/console`. `HYDO_HIST_OUT=<path>` appends to that file and creates it if
+  it is missing (mode 0644), `stderr` writes to standard error, and `off` writes nothing. If the
+  file cannot be opened, standard error is used. The setting is read once, at the first record,
+  and is separate from `HYDO_ASSERT_OUT`.
+- Each record is one `os.write` call made under a lock, so threads never interleave lines. The
+  time field is `time.monotonic_ns()` (CLOCK_MONOTONIC on Linux, deterministic under hydo). It
+  is read under the lock, so the times of successive lines never decrease; Go reads it just
+  before its lock, and the line format is the same. A forked child gets a new lock and keeps the
+  descriptor.
+- Text is written as UTF-8. A `str` is encoded with the `surrogateescape` rule, so a string
+  that came from bytes that way (`os.fsdecode`, `sys.argv`, `os.environ`, or `enc` of bytes)
+  gives back its original bytes. Any other lone surrogate is written as U+FFFD. `enc` of
+  `bytes` keeps invalid UTF-8 bytes as they are, as Go's `Enc` does, and returns them as
+  surrogateescape characters.
+- A process has at most one operation in flight: give each concurrent client (thread or task)
+  its own process number. Record the invocation before sending the request and the completion
+  after the reply, because the checkers order operations by the position of their records.
+
 ## Determinism
 
 The records are a pure function of the program's evaluation sequence: no clocks (except the
@@ -130,6 +190,17 @@ writing `.pyc` files on the guest's read-only root.
   Consoles and stdouts must be byte-identical. It pins `GOTOOLCHAIN=go1.26.5` (the guest Go, as
   `sdk/js` does); `GOTOOLCHAIN=local` uses the installed Go, and with Go 1.27 or later the
   invalid-UTF-8 case is skipped (Go 1.27 writes a raw U+FFFD there).
+- `tests/test_history.py` (run by the same `unittest` command): the exact lines of the Go
+  recorder's own unit test, the encoding of every byte class, the argument checks, the sink
+  settings, one `os.write` per record, 8 threads writing 400 records each without an
+  interleaved line, and fork.
+- `sdk/python/tests/history_conformance.sh [python...]`: builds `tests/history-go/main.go`
+  against the Go recorder's own source files and runs it and `tests/history_conformance.py`
+  (the same calls, 179 records, including invalid UTF-8 given as `bytes`) with five sink
+  settings: an existing file, a missing file, `stderr`, a path that cannot be opened, and `off`.
+  The records must be byte-identical with the time field masked, the time fields must be
+  decimal integers that never decrease, and the stdouts (the helpers' results) must be
+  byte-identical. It passes with Go 1.26.5 and 1.27.3 and with Python 3.8.20, 3.9.6 and 3.15.0.
 
 ## Limits
 

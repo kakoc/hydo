@@ -134,11 +134,77 @@ configuration every point returns false and has no other effect. Under hydo the 
 `B=<seed>` (`explore.py --buggify`) reaches the file through the guest init: an onboarded
 project gets it with `buggify: true` in its `hydo.yaml` (`hvx/onboard/MANIFEST.md`).
 
+## History recorder
+
+The entry `hydo-assert/history` records operation histories for hydo's host-side checkers
+(linearizability of a register or compare-and-set object per key, and Elle-style list-append;
+the format and the checkers are in `hvx/HISTORIES.md`). It writes the same `HYDO-HIST` lines as
+the Go recorder (`hvx/stack/hydohist`), byte for byte except the time field. It is separate from
+the assertion SDK, so loading it changes nothing the assertion records contain. In a guest
+image, also copy `history.js` and `history.mjs`.
+
+```js
+const hh = require('hydo-assert/history');   // or: import * as hh from 'hydo-assert/history'
+
+const kv = new hh.History('kv');              // or hh.history('kv')
+let op = kv.invoke(3, 'write', 'k1', hh.enc(v));   // process 3, before the request
+try {
+  const rev = await put('k1', v);
+  op.ok('k1', hh.ver(v, rev));                // the version the store assigned, if any
+} catch (e) {
+  if (rejected(e)) op.fail();                 // it definitely had no effect
+  else op.info();                             // a timeout: the outcome is unknown
+}
+kv.invoke(3, 'read', 'k1').ok('k1', hh.valueOrNil(await get('k1')));   // null means absent
+
+const la = hh.history('la');
+const tx = la.invoke(4, 'txn', hh.append('x', '1'), hh.read('y'));
+tx.ok(hh.append('x', '1'), hh.readResult('y', '1', '2'));
+```
+
+| Go (`hydohist`) | JavaScript (`hydo-assert/history`) |
+|---|---|
+| `New(name)` | `new History(name)` or `history(name)` |
+| `h.Invoke(proc, f, args...)`, `h.Record(proc, typ, f, args...)` | `h.invoke(proc, f, ...args)`, `h.record(proc, type, f, ...args)` |
+| `op.Ok(args...)`, `op.Fail()`, `op.Info()` | `op.ok(...args)` (no args repeats the invocation's), `op.fail()`, `op.info()` |
+| `Enc`, `Ver`, `ValOrNil(v, ok)`, `List` | `enc`, `ver`, `valueOrNil`, `list` |
+| `Append`, `Read`, `ReadResult`, `Nil` | `append`, `read`, `readResult`, `NIL` |
+
+- `valueOrNil(v)` treats `null` and `undefined` as absent. `valueOrNil(v, ok)` follows Go: the
+  second argument says whether the value is present.
+- A process is an integer or a token without spaces. Arguments are tokens: a string is written
+  as it is (encode free-form values with `enc`), and an integer (a number that is an integer,
+  or a bigint) is written in decimal. Versions are int64 values; pass a bigint beyond 2^53.
+  A value outside int64 throws a `RangeError`, and a value that is not an integer throws a
+  `TypeError`.
+- Records go to `/dev/console`. `HYDO_HIST_OUT=<path>` appends to that file and creates it if
+  it is missing (mode 0644), `stderr` writes to standard error, and `off` writes nothing. If the
+  file cannot be opened, standard error is used. The setting is read once, at the first record,
+  and is separate from `HYDO_ASSERT_OUT`.
+- Each record is one `fs.writeSync` call. The time field is `process.hrtime.bigint()`
+  (CLOCK_MONOTONIC on Linux, deterministic under hydo). The ESM entry re-exports the CommonJS
+  module, so a program that uses both has one sink; a worker thread opens its own.
+- Text is written as UTF-8, and `enc` works on the UTF-8 bytes exactly as Go's `Enc` does. A
+  JavaScript string cannot hold invalid UTF-8; a lone surrogate is written (and encoded) as
+  U+FFFD, as `Buffer.from` and `TextEncoder` convert it.
+- A process has at most one operation in flight: give each concurrent client its own process
+  number. Record the invocation before sending the request and the completion after the reply,
+  because the checkers order operations by the position of their records.
+
 ## Tests
 
-- `npm test` (`node --test test/unit.test.js`): what the Go program cannot express (cycles,
-  `undefined`, `Map`/`Set`, `Date`, async liveness, the sink switches) and the BUGGIFY rates
-  over 400 seeds.
+- `npm test` (`node --test test/unit.test.js test/history.test.js`): what the Go program cannot
+  express (cycles, `undefined`, `Map`/`Set`, `Date`, async liveness, the sink switches) and the
+  BUGGIFY rates over 400 seeds; for the history recorder, the exact lines of the Go recorder's
+  own unit test, the encoding of every byte class, the argument checks, the sink settings and
+  one `fs.writeSync` per record.
+- `test/history-conformance.sh`: builds `test/history-go/main.go` against the Go recorder's own
+  source files and runs it and `test/history-conformance.js` (the same calls, 150 records;
+  through the CommonJS and through the ESM entry) with five sink settings: an existing file, a
+  missing file, `stderr`, a path that cannot be opened, and `off`. The records must be
+  byte-identical with the time field masked, the time fields must be decimal integers that never
+  decrease, and the stdouts (the helpers' results) must be byte-identical. It passes with Go
+  1.26.5 (the default) and 1.27.3.
 - `test/conformance.sh`: builds `test/go-conformance/main.go` against the Go SDK's own source
   files (Go 1.26.5 by default, through `GOTOOLCHAIN`) and runs it and `test/conformance.js`
   (once through the CommonJS entry, once through the ESM entry) under five BUGGIFY

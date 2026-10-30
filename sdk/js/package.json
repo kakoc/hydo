@@ -17,6 +17,16 @@
         "default": "./index.js"
       }
     },
+    "./history": {
+      "import": {
+        "types": "./history.d.mts",
+        "default": "./history.mjs"
+      },
+      "require": {
+        "types": "./history.d.ts",
+        "default": "./history.js"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -24,13 +34,17 @@
     "index.mjs",
     "index.d.ts",
     "index.d.mts",
+    "history.js",
+    "history.mjs",
+    "history.d.ts",
+    "history.d.mts",
     "README.md"
   ],
   "engines": {
     "node": ">=16"
   },
   "scripts": {
-    "test": "node --test test/unit.test.js",
-    "conformance": "bash test/conformance.sh"
+    "test": "node --test test/unit.test.js test/history.test.js",
+    "conformance": "bash test/conformance.sh && bash test/history-conformance.sh"
   }
 }

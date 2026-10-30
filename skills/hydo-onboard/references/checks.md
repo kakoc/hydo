@@ -53,7 +53,8 @@ plus a projection (`--field F`, `--item 'k:{id}'`, `--key F --value F`, `--strip
 final check after recovery where an unreadable store is itself lost data.
 
 hydo stages `/bin/hydo-read` and `/bin/hydo-check` only when a command or check file mentions
-them. They are x86_64 only, and the releases do not bundle them yet (capabilities.md).
+them. The arm64 build stages the arm64 binary; whether a release bundles them is in
+capabilities.md.
 
 ## History checks (linearizability, list-append)
 
@@ -66,7 +67,9 @@ hydo_hist kv $HYDO_CMD_ID ok write k1 5          # after an acknowledged reply
 hydo_hist kv $HYDO_CMD_ID info write k1 5        # no reply: the outcome is unknown
 ```
 
-Go programs use `hvx/stack/hydohist`, Rust `hydo_assert::history` or `hydo_test::HistoryCheck`.
+Go programs use `hvx/stack/hydohist`, Rust `hydo_assert::history` or `hydo_test::HistoryCheck`,
+JavaScript `require("hydo-assert/history")` and Python `from hydo_assert import history`; all write the
+same lines.
 The check file `checks/linearizable_<name>` reads every key back at the end and records the reads,
 so a write lost in a crash shows up. The host checks the history after the run (`linearizable`
 for registers and compare-and-set objects per key, Knossos/Porcupine style; `list_append`, Elle

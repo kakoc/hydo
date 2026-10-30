@@ -93,3 +93,31 @@ allows. No false violation.
 `disk=cut dseed=1 | run H=payments.charge@2-5:drop C=8` (fixed, first build): at the cut the world
 carried 18 records (599 bytes) into the recovery boot's command; the recovery world started from
 them and the checks saw both boots (OK).
+
+## On the Mac backend (arm64, Milestone 96, 2026-10-30)
+
+The same `hydo.yaml`, built for arm64 with a Mac release made from branch `arm64-parity` (plus
+`guest/hydo-world`), on the M2 Pro. Programs cross-built with the pinned Go 1.26.5 of the build
+box (`SHOP_GOARCH=arm64 build.sh`): `hydo-world-arm64` `7bc58006…`, `shop-buggy` `5d0411e8…`,
+`shop-fixed` `1163302d…`, each twice byte-identical. Images (`hydo build hydo.yaml --set
+variant=<v> --set bin=<dir>`, two builds each identical): buggy `explore-ob-shop-arm64.cpio.gz`
+`219efa57…`, fixed `665eeb8b…`, data disk `359c73c4…` (both).
+
+Each schedule twice from a fresh boot (`hvmx one`), both runs identical:
+
+| schedule | buggy | fixed |
+|---|---|---|
+| `disk=none \| run` | OK `b761926ded3e9718` | OK `5b33fba9fd0e82bc` |
+| `disk=none dseed=efb4cfbc49052179 \| run H=payments.charge@0-1:drop` | VIOLATION `ref o0 took effect 3 times` `683360fa139cd823` | OK `416ab87f752ed4eb` |
+| `disk=cut dseed=1 \| run H=payments.charge@0-1:drop C=6` | VIOLATION `ref o0 took effect 3 times (records 1,2,3)`, seen in the recovery boot `46b752e737c4e1c8` | OK `dbff293a9e68486c` |
+
+The power cut: the first boot froze the world and carried 20 records (794 bytes; fixed: 19
+records, 636 bytes) on the acknowledged-ids line; `hvmx`'s recovery command (now 3584 bytes, as
+`hvx_explore`'s) typed them into the recovery boot, whose world started from them ("recovery
+boot: the fake world starts from 20 carried records"), and the checks there counted the three
+first-boot charges of order 0.
+
+`hydo explore --protocol-faults --strategy process --seeds 41-50 --workers 2`: buggy 1 failure
+(seed 46, as on x86_64), reproduced, shrunk to `disk=none dseed=fbb60485ae17b0ba | run
+H=payments.charge@6-9:reset,p=50` (`30208696ee189cba`, the same minimal schedule as on x86_64);
+fixed 0 of 10.
