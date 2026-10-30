@@ -128,6 +128,7 @@ fn spec_from_args(
         kernel,
         initrd,
         outdir: outdir.to_path_buf(),
+        snapshots: hydo_engine::SnapshotStore::Files,
     };
     let mut i = 0;
     while i + 1 < eargs.len() {

@@ -53,6 +53,9 @@ impl Hvx {
             a.push("sudo".into());
             a.push("env".into());
             a.push(format!("HVX_SNAP_DIR={}", self.snap_dir));
+            if spec.snapshots == crate::SnapshotStore::Memory {
+                a.push("HVX_SNAP_MALLOC=1".into());
+            }
             a.extend(self.extra_env.iter().cloned());
         }
         a.push(self.engine.display().to_string());
@@ -70,11 +73,14 @@ impl Hvx {
         a
     }
 
-    fn command(&self, argv: &[String]) -> Command {
+    fn command(&self, spec: &BootSpec, argv: &[String]) -> Command {
         let mut c = Command::new(&argv[0]);
         c.args(&argv[1..]);
         if self.hvx_run.is_none() {
             c.env("HVX_SNAP_DIR", &self.snap_dir);
+            if spec.snapshots == crate::SnapshotStore::Memory {
+                c.env("HVX_SNAP_MALLOC", "1");
+            }
         }
         for (k, v) in &self.env {
             c.env(k, v);
@@ -106,14 +112,14 @@ impl Engine for Hvx {
         self.check_built()?;
         let mut argv = self.argv(spec, "one");
         argv.push(schedule.to_string());
-        run_one(self.command(&argv))
+        run_one(self.command(spec, &argv))
     }
 
     fn start(&self, spec: &BootSpec, stderr_log: &Path) -> Result<Box<dyn Worker>, EngineError> {
         self.check_built()?;
         let argv = self.argv(spec, "serve");
         Ok(Box::new(ProcessWorker::start(
-            self.command(&argv),
+            self.command(spec, &argv),
             stderr_log,
             true,
         )?))

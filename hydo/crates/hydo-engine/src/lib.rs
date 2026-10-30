@@ -30,6 +30,30 @@
 //! [`Engine::one`] stays the fresh-boot path that proves a snapshot run equals a boot run. The
 //! fingerprints must stay the C engine's (`fnv` over console, snapshot, RAM and disk) so every
 //! recorded baseline still holds.
+//!
+//! # Where the time of a run goes, and how the trait leaves room for it (docs/PERF-RUN-COST.md)
+//!
+//! A stack run of about 20 s is 41% guest, 22% fingerprint hashing, 21% snapshot files on disk and
+//! 15% VM create/fill/teardown; Python is negligible. The trait keeps each of those inside the
+//! engine, so a faster implementation changes no caller:
+//!
+//! - **The worker owns its base snapshot.** [`Engine::start`] returns a [`Worker`] that holds S0
+//!   and S1 for its whole life; where they live is the engine's choice, asked for with
+//!   [`BootSpec::snapshots`]: [`SnapshotStore::Files`] (today's default, unchanged) or
+//!   [`SnapshotStore::Memory`] (hvx: the existing `HVX_SNAP_MALLOC=1`; an in-process engine:
+//!   plain memory). Callers never see snapshot files.
+//! - **Reset to a snapshot is a worker operation.** [`Worker::reset`] puts the worker's VM back at
+//!   S0 or S1. The process engines do it inside every RUN (the default method says so); an
+//!   in-process engine may do it by copying back only the pages and disk blocks the last run
+//!   dirtied (0.4% to 11% of RAM, under 1.5% of the data disk), and may share the read-only root
+//!   between VMs instead of copying it.
+//! - **Fingerprinting is engine-side.** A run's `fp`/`wfp` come back in [`RunResult`]; callers
+//!   only compare them. [`Engine::fingerprint_scheme`] names the function; a faster exact
+//!   implementation (for example one that skips all-zero pages while computing the same value)
+//!   lives in the engine and keeps the name, so every recorded baseline still compares.
+//! - **The pool size comes from the machine.** [`Engine::max_workers`] answers how many workers
+//!   this machine can run for a spec: min(hardware threads, free memory / memory per worker),
+//!   not a fixed number ([`machine_workers`]).
 
 pub mod hvm;
 pub mod hvx;
@@ -127,6 +151,20 @@ pub struct BootSpec {
     pub initrd: Option<PathBuf>,
     /// Where the engine writes the consoles (`<tag>.log`, `<tag>.recovery.log`).
     pub outdir: PathBuf,
+    /// Where a worker keeps its S0/S1 snapshots (no effect on any result).
+    pub snapshots: SnapshotStore,
+}
+
+/// Where a worker keeps its base snapshots. The choice never changes a result or a fingerprint.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum SnapshotStore {
+    /// Snapshot files (hvx: `$HVX_SNAP_DIR`, hvm: `$HVM_SNAP_DIR`): today's default.
+    #[default]
+    Files,
+    /// In memory: hvx passes `HVX_SNAP_MALLOC=1` (about 5x faster worker boots and ~21% less per
+    /// run on a spinning disk, docs/PERF-RUN-COST.md); hvm keeps its files (no such switch yet); an
+    /// in-process engine keeps them in its own memory.
+    Memory,
 }
 
 impl BootSpec {
@@ -219,6 +257,69 @@ pub trait Engine {
 
     /// The shell line that reproduces one schedule by hand (report.md's repro line).
     fn repro_line(&self, spec: &BootSpec, schedule: &Schedule) -> String;
+
+    /// The name of the function behind `fp`/`wfp`. Two engines (or two implementations of one)
+    /// with the same name give the same value for the same run, whatever they skip internally
+    /// (an exact hash may skip all-zero pages). hvx and hvm both hash with 64-bit FNV-1a.
+    fn fingerprint_scheme(&self) -> &'static str {
+        "fnv1a64-v1"
+    }
+
+    /// How many workers this machine can run at once for `spec`: min(hardware threads, available
+    /// memory / memory per worker). Callers size their pool with it instead of a fixed number.
+    fn max_workers(&self, spec: &BootSpec) -> usize {
+        machine_workers(spec.ram_mib as u64 * 2 + 256)
+    }
+}
+
+/// min(hardware threads, available memory / `per_worker_mib`), at least 1. A worker needs its
+/// guest RAM, a copy of it for an in-memory snapshot, and the engine's own memory (the default
+/// estimate in [`Engine::max_workers`]: twice the guest RAM plus 256 MiB).
+pub fn machine_workers(per_worker_mib: u64) -> usize {
+    let threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
+    let by_mem = available_mib()
+        .map(|m| (m / per_worker_mib.max(1)) as usize)
+        .unwrap_or(threads);
+    threads.min(by_mem).max(1)
+}
+
+/// Memory available for new work, in MiB: `MemAvailable` on Linux; on macOS the free, inactive
+/// and purgeable pages (`vm_stat`). None when it cannot be read.
+pub fn available_mib() -> Option<u64> {
+    if let Ok(t) = std::fs::read_to_string("/proc/meminfo") {
+        let kb: u64 = t
+            .lines()
+            .find(|l| l.starts_with("MemAvailable:"))?
+            .split_whitespace()
+            .nth(1)?
+            .parse()
+            .ok()?;
+        return Some(kb / 1024);
+    }
+    let out = std::process::Command::new("vm_stat").output().ok()?;
+    let t = String::from_utf8_lossy(&out.stdout);
+    let page: u64 = t
+        .lines()
+        .next()?
+        .split("page size of ")
+        .nth(1)?
+        .split_whitespace()
+        .next()?
+        .parse()
+        .ok()?;
+    let pages = |k: &str| -> u64 {
+        t.lines()
+            .find(|l| l.starts_with(k))
+            .and_then(|l| l.split(':').nth(1))
+            .and_then(|v| v.trim().trim_end_matches('.').parse().ok())
+            .unwrap_or(0)
+    };
+    Some(
+        (pages("Pages free") + pages("Pages inactive") + pages("Pages purgeable")) * page
+            / (1 << 20),
+    )
 }
 
 /// A booted engine that runs schedules from S1, one at a time, each in a fresh VM.
@@ -226,8 +327,17 @@ pub trait Worker {
     /// How long the boot to S1 took (the READY line).
     fn boot_secs(&self) -> f64;
 
-    /// Run one schedule from S1 (and, after a power cut, its recovery boot from S0).
+    /// Run one schedule from S1 (and, after a power cut, its recovery boot from S0). The engine
+    /// resets its VM to S1 first and computes the fingerprints itself.
     fn run(&mut self, tag: &str, schedule: &Schedule) -> Result<RunResult, EngineError>;
+
+    /// Put the worker's VM back at a snapshot point it owns. The process engines (hvx_explore,
+    /// hvmx) do this inside every RUN, in a fresh VM, so for them it is a no-op; an in-process
+    /// engine may restore only the pages and disk blocks the last run dirtied.
+    fn reset(&mut self, point: SnapshotPoint) -> Result<(), EngineError> {
+        let _ = point;
+        Ok(())
+    }
 
     /// Snapshot mid-run and run timing variants from there (hvx's BRANCH; hvm answers Unsupported).
     fn branch(&mut self, req: &BranchRequest) -> Result<BranchOutcome, EngineError>;
