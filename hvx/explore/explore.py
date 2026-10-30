@@ -2121,7 +2121,9 @@ def errlog_shrink(pool, a, agg, slog):
     out = {}
     if a.no_shrink or a.errors_shrink <= 0:
         return agg, out
-    new = sorted((x for x in agg.values() if x["new_runs"]), key=lambda x: (x["first_new_seed"], x["sig"]))
+    # a kind written before the workload (at "s": boot, provisioning) is in every schedule: nothing to shrink
+    new = sorted((x for x in agg.values() if x["new_runs"] and "s" not in x["first_new_at"]),
+                 key=lambda x: (x["first_new_seed"], x["sig"]))
     for x in new[:a.errors_shrink]:
         sig = x["sig"]
         keep = lambda v, r, sig=sig: sig in (r.get("errors_new") or [])

@@ -181,7 +181,7 @@ def _yaml():
 
 def default_file(start="."):
     for f in DEFAULT_FILES:
-        p = os.path.join(start, f)
+        p = f if start == "." else os.path.join(start, f)
         if os.path.isfile(p):
             return p
     return None
@@ -372,6 +372,9 @@ def report_md(agg, known, shrunk, by_hand):
                   "- example: `%s`" % a["first_new_ex"][:200],
                   "- first schedule (seed %s): `%s`" % (a["first_new_seed"], a["first_new_schedule"])]
             s = shrunk.get(a["sig"])
+            if "s" in a["first_new_at"]:
+                L.append("- written before the workload (boot, provisioning), so it is in every schedule: "
+                         "not shrunk; triage it first")
             if s:
                 L += ["- minimal schedule (%d shrink runs): `%s`" % (s["tries"], s["minimal"]),
                       "- run twice: fingerprints `%s` / `%s` (%s), the kind %s" % (
