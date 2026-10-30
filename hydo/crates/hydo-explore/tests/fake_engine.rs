@@ -102,7 +102,10 @@ fn scenario(name: &str, args: &[&str]) {
     let rs_out = run(&mut r, &dir, &rs);
     let mut diffs = Vec::new();
     for f in FILES {
-        let (a, b) = (std::fs::read_to_string(py.join(f)), std::fs::read_to_string(rs.join(f)));
+        let (a, b) = (
+            std::fs::read_to_string(py.join(f)),
+            std::fs::read_to_string(rs.join(f)),
+        );
         match (a, b) {
             (Err(_), Err(_)) => {}
             (Ok(a), Ok(b)) => {
@@ -111,8 +114,13 @@ fn scenario(name: &str, args: &[&str]) {
                     norm(&b.replace(&rs.display().to_string(), "<out>")),
                 );
                 if a != b {
-                    let (la, lb): (Vec<&str>, Vec<&str>) = (a.lines().collect(), b.lines().collect());
-                    let i = la.iter().zip(&lb).position(|(x, y)| x != y).unwrap_or(la.len().min(lb.len()));
+                    let (la, lb): (Vec<&str>, Vec<&str>) =
+                        (a.lines().collect(), b.lines().collect());
+                    let i = la
+                        .iter()
+                        .zip(&lb)
+                        .position(|(x, y)| x != y)
+                        .unwrap_or(la.len().min(lb.len()));
                     diffs.push(format!(
                         "{f}: first difference at line {} ({} vs {} lines)\n  explore.py:   {}\n  hydo-explore: {}",
                         i + 1,
@@ -123,19 +131,36 @@ fn scenario(name: &str, args: &[&str]) {
                     ));
                 }
             }
-            (a, b) => diffs.push(format!("{f}: explore.py {} it, hydo-explore {}", if a.is_ok() { "wrote" } else { "did not write" }, if b.is_ok() { "wrote it" } else { "did not" })),
+            (a, b) => diffs.push(format!(
+                "{f}: explore.py {} it, hydo-explore {}",
+                if a.is_ok() { "wrote" } else { "did not write" },
+                if b.is_ok() { "wrote it" } else { "did not" }
+            )),
         }
     }
     let last = |s: &str| norm(s.lines().last().unwrap_or(""));
     if last(&py_out) != last(&rs_out) {
-        diffs.push(format!("summary line:\n  {}\n  {}", last(&py_out), last(&rs_out)));
+        diffs.push(format!(
+            "summary line:\n  {}\n  {}",
+            last(&py_out),
+            last(&rs_out)
+        ));
     }
-    assert!(diffs.is_empty(), "scenario {name} ({}):\n{}", dir.display(), diffs.join("\n"));
+    assert!(
+        diffs.is_empty(),
+        "scenario {name} ({}):\n{}",
+        dir.display(),
+        diffs.join("\n")
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 fn have_python() -> bool {
-    Command::new("python3").arg("-c").arg("pass").status().is_ok_and(|s| s.success())
+    Command::new("python3")
+        .arg("-c")
+        .arg("pass")
+        .status()
+        .is_ok_and(|s| s.success())
 }
 
 macro_rules! scenarios {

@@ -1,18 +1,18 @@
-//! The commands whose logic is still Python: `hydo explore` (explore.py), `hydo build`
+//! The commands whose logic is still Python: `hydo build`
 //! (hydo-build), `hydo compose` (hydo_compose.py), `hydo errors` (hydo_errors.py), and `hydo
-//! guide | skill | init` (hydo_agents.py), plus `hydo report`, which is Rust.
+//! guide | skill | init` (hydo_agents.py), plus `hydo report` and `hydo explore` (the hydo-explore
+//! crate), which are Rust.
 //!
 //! Each `cmd_*` here is the seam its port replaces: the argument handling, defaults and the
 //! lines printed around the Python call are already the Rust CLI's, so a port swaps only the call.
 
 use crate::bridge;
-use crate::ctx::{abspath, die, pjoin, python, take, take_mac, Ctx, Platform, OUT, PROJECT_OUT};
+use crate::ctx::{abspath, die, pjoin, take, take_mac, Ctx, Platform, OUT, PROJECT_OUT};
 use crate::hvxenv;
 use crate::runs::{default_image_mac, find_image_linux, mac_kernel_for};
 use serde_json::json;
 use std::io::Write;
 use std::path::Path;
-use std::process::Command;
 
 /// hydo_errors.DEFAULT_FILES / default_file(): the project's reviewed list of expected error kinds.
 pub fn known_errors_default() -> Option<String> {
@@ -22,8 +22,11 @@ pub fn known_errors_default() -> Option<String> {
         .map(str::to_string)
 }
 
-// ---------------------------------------------------------------- explore (explore.py)
+// ---------------------------------------------------------------- explore (hydo-explore)
 
+/// `hydo explore`: the explorer (the hydo-explore crate) in this process. Without `--workers` the
+/// pool is sized from the machine and the image (hydo-explore), no longer a fixed 2 (Linux) or 4
+/// (Mac).
 pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
     let mut args = argv.to_vec();
     let linux = ctx.platform == Platform::Linux;
@@ -43,19 +46,13 @@ pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
         args.push("--seeds".into());
         args.push("1-20".into());
     }
-    if !args.iter().any(|a| a == "--workers") {
-        args.push("--workers".into());
-        args.push(if linux { "2" } else { "4" }.into());
-    }
     if !args.iter().any(|a| a == "--known-errors") {
         if let Some(kf) = known_errors_default() {
             args.push("--known-errors".into());
             args.push(abspath(Path::new(&kf)).display().to_string());
         }
     }
-    let explore_py = ctx.explore_dir().join("explore.py");
-    let mut c = Command::new(python());
-    c.arg(&explore_py);
+    let mut full: Vec<String> = Vec::new();
     if linux {
         let engine = hvxenv::engine(ctx);
         if !crate::ctx::access(&engine, libc::X_OK) {
@@ -64,23 +61,27 @@ pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
                 engine.display()
             ));
         }
+        // the release's run environment (the lock, the snapshot directory, the bundled tools on
+        // PATH): the explorer reads it, and the engine wrapper it starts inherits it
         for (k, v) in hvxenv::tool_env(ctx) {
-            c.env(k, v);
+            std::env::set_var(k, v);
         }
+        std::env::set_var("HYDO_HVX_EXPLORE", &engine);
     } else {
         let kernel = mac_kernel_for(ctx, &image, true);
-        c.arg("--backend")
-            .arg("hvm")
-            .arg("--hvm-kernel")
-            .arg(kernel);
+        full.push("--backend".into());
+        full.push("hvm".into());
+        full.push("--hvm-kernel".into());
+        full.push(kernel.display().to_string());
     }
-    c.arg("--image").arg(&image).args(&args);
-    let rc = c
-        .status()
-        .map(|s| s.code().unwrap_or(1))
-        .unwrap_or_else(|e| {
-            die(&format!("cannot run {}: {e}", python()));
-        });
+    full.push("--image".into());
+    full.push(image.display().to_string());
+    full.extend(args.iter().cloned());
+    let env = hydo_explore::Env {
+        root: ctx.root.clone(),
+        cli: linux,
+    };
+    let rc = hydo_explore::main_with(&full, &env);
     let i = args.iter().position(|a| a == "--out").unwrap_or(0);
     let out = args.get(i + 1).cloned().unwrap_or_default();
     let report = pjoin(&out, "report.md");

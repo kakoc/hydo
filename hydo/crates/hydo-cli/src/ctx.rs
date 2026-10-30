@@ -64,10 +64,6 @@ impl Ctx {
         self.p("hydo/onboard")
     }
 
-    pub fn explore_dir(&self) -> PathBuf {
-        self.p("hydo/explore")
-    }
-
     pub fn guest(&self) -> PathBuf {
         self.p("guest")
     }

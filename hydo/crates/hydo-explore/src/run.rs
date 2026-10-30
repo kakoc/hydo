@@ -246,8 +246,13 @@ fn setup(a: Args, env: &Env) -> Cx {
     if cx.ex.backend == Backend::Hvm {
         let img = cx.hvm_image();
         cx.ex.hvm_disk = hvm::disk_for(&img).is_some();
-        cx.ex.hvm_tc = hvm::image_has_tc(&img)
-            .unwrap_or_else(|_| die(&format!("no etc/hydo/manifest.sh in {}", cx.image)));
+        // explore.py stopped here with a traceback for a file that is not an arm64 initramfs
+        cx.ex.hvm_tc = hvm::image_has_tc(&img).unwrap_or_else(|e| {
+            die(&format!(
+                "hydo: {}: not a hydo arm64 image ({e}; no etc/hydo/manifest.sh)",
+                img.display()
+            ))
+        });
         if hvm::image_kernel(&img).is_some() {
             let k = hvm::kernel_for(&img, cx.hvm_kernel.as_deref(), &cx.hvm_default_kernel())
                 .unwrap_or_else(|e| die(&e));

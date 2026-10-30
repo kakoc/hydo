@@ -113,6 +113,7 @@ name = "hydo-cli"
 version = "0.1.0"
 dependencies = [
  "hydo-engine",
+ "hydo-explore",
  "hydo-manifest",
  "hydo-schedule",
  "libc",
