@@ -2897,7 +2897,9 @@ static void vblk_unsync_commit(struct hvx_vm *vm)
 	for (i = 0; i < d->unsync_n; i++) {
 		if (!d->unsync[i].valid || !d->disk_pages)
 			continue;
-		if (d->unsync[i].doff + d->unsync[i].len <= d->disk_size)
+		/* overflow-safe: doff comes from HVX_SET_UNSYNC and may be near 2^64 (M97) */
+		if (d->unsync[i].doff <= d->disk_size &&
+		    d->unsync[i].len <= d->disk_size - d->unsync[i].doff)
 			disk_write_bytes(d, d->unsync[i].doff,
 			       d->unsync_data + (size_t)i * HVX_UNSYNC_ENTBYTES,
 			       d->unsync[i].len);
