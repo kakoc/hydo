@@ -148,7 +148,7 @@ static const char *const ph_name[PH_N] = {
 static int g_ph_on = -1, g_dirty_on;
 static double g_ph[PH_N], g_ph_t0;
 static uint64_t g_ph_calls;
-static char g_ph_extra[1024];
+static char g_ph_extra[4096];
 static size_t g_ph_extra_n;
 static struct snap *g_ph_s1;		/* the S1 snapshot (serve mode), for the dirty-page scan */
 static int ph_on(void)
@@ -181,7 +181,7 @@ static void ph_kv(const char *fmt, ...)
 	va_end(ap);
 	if (g_ph_extra_n >= sizeof(g_ph_extra)) g_ph_extra_n = sizeof(g_ph_extra) - 1;
 }
-struct ph_ctr { uint64_t exits, branches, ticks, vtsc, cyc, entries, steps, calls; };
+struct ph_ctr { uint64_t exits, branches, ticks, vtsc, cyc, entries, steps, calls, stepcyc, freecyc, stephw; };
 static void ph_read(struct boot *b, struct ph_ctr *c)
 {
 	struct hvx_snapshot *s = calloc(1, sizeof(*s));
@@ -198,8 +198,16 @@ static void ph_read(struct boot *b, struct ph_ctr *c)
 			c->entries += f->v[i].free_entries + f->v[i].step_entries;
 			c->steps += f->v[i].step_entries;
 			c->calls += f->v[i].calls;
+			c->stepcyc += f->v[i].step_cyc;
+			c->freecyc += f->v[i].free_cyc;
+			c->stephw += f->v[i].step_hw_cyc;
 		}
-		if (f->tsc_khz) c->cyc = c->cyc * 1000 / f->tsc_khz;	/* -> microseconds */
+		if (f->tsc_khz) {	/* -> microseconds */
+			c->cyc = c->cyc * 1000 / f->tsc_khz;
+			c->stepcyc = c->stepcyc * 1000 / f->tsc_khz;
+			c->freecyc = c->freecyc * 1000 / f->tsc_khz;
+			c->stephw = c->stephw * 1000 / f->tsc_khz;
+		}
 	}
 	free(s);
 	free(f);
@@ -211,6 +219,10 @@ static void ph_delta(const char *pre, const struct ph_ctr *a, const struct ph_ct
 	      pre, (unsigned long long)(z->ticks - a->ticks), pre, (unsigned long long)(z->vtsc - a->vtsc),
 	      pre, (z->cyc - a->cyc) / 1e6, pre, (unsigned long long)(z->entries - a->entries),
 	      pre, (unsigned long long)(z->steps - a->steps), pre, (unsigned long long)(z->calls - a->calls));
+	/* where the time inside the VMX section went: single-step tick/turn landings (exit handling
+	 * + entry + one instruction), of that the hardware VMRESUME->exit part, and free-running entries */
+	ph_kv("%s_step_s=%.3f %s_step_hw_s=%.3f %s_free_s=%.3f", pre, (z->stepcyc - a->stepcyc) / 1e6,
+	      pre, (z->stephw - a->stephw) / 1e6, pre, (z->freecyc - a->freecyc) / 1e6);
 }
 static long ph_rss_kb(const char *key)
 {
