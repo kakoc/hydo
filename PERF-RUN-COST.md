@@ -24,9 +24,9 @@ fingerprint it produced was checked against the unchanged engine (section 10).
    0.15 s in the guest (3–6 % of its run).
 3. **Fingerprints.** Every run hashes all of guest RAM and the data partition two times (end of
    workload, end of check or recovery) with a byte-wise FNV-1a: 1.07–1.41 s per GiB, so 2.4 s per
-   Redis run (60–78 % of a run without a power cut) and 4.3 s per stack run (37 % of a stack run
+   Redis run (70–78 % of a run without a power cut) and 4.3 s per stack run (37 % of a stack run
    without a power cut). FNV-1a skips all-zero pages exactly (a zero page multiplies the state by
-   P^4096); with that trick the RAM hash of a Redis guest drops from 1.07 s to 0.145 s with the
+   P^4096); with that trick the RAM hash of a Redis guest drops from about 1.07 s to 0.145 s with the
    same value, so the fingerprints stay byte-for-byte the same (section 5).
 4. **Creating a fresh VM for every run and copying everything back.** `vm_fresh` + restore +
    teardown cost 0.5 s per Redis run and 1.7 s per stack run (twice for a power-cut run). Most of
@@ -59,8 +59,10 @@ on the rotating disk, 3.0 s VM creation, restore copies and teardown), and the R
    the stack's 19.7 s mean run (21 %; 11.6 s of each power-cut run), 1.9 s of each Redis
    power-cut run, and cuts the worker boot from 87–99 s to 19 s (stack) and from 42–70 s to 5 s
    (Redis). Measured directly with the existing `HVX_SNAP_MALLOC=1` switch, same fingerprints:
-   a stack power-cut run went from 34.9 s to 14.1 s. Costs 2.1–3 GiB of memory per worker, which
-   sets the worker count (below). Needs no module change. [high]
+   a stack power-cut run went from 34.9 s to 14.1 s, and the same 36-schedule stack campaign with
+   2 workers ran 8.67 instead of 6.20 runs per minute (mean run 13.9 s instead of 19.8 s). Costs
+   2.1–3.5 GiB of memory per worker, which sets the worker count (below). Needs no module change.
+   [high]
 2. **Hash zero pages in one step (exact FNV-1a).** Saves about 3.1 s per stack run (16 %) and
    about 2.1 s per Redis run (most of a Redis run), with every recorded fingerprint unchanged.
    Measured: Redis RAM hash 1.07 s → 0.145 s, stack 1.05 s → 0.52 s, same values. [high]
@@ -251,7 +253,7 @@ run: always the same value, and
 
 | guest RAM at the end of the workload | byte-wise FNV | zero-page skipping | non-zero pages |
 |---|---|---|---|
-| Redis (78 runs of the swarm campaign) | 1.07–1.10 s | 0.143–0.146 s | about 9 % |
+| Redis (78 runs of the swarm campaign) | 1.04–1.10 s | 0.140–0.166 s | about 9 % |
 | stack (5 schedules) | 1.04–1.05 s | 0.52 s | about 45 % |
 
 The data partition is 0.2–1 % (Redis) and 10 % (stack) non-zero, so its hash would drop from
@@ -307,7 +309,7 @@ data partition, while the engine copies 100 % of both, plus the whole disk image
 Copy-on-write forking from one in-memory S1 (or resetting only the pages a run dirtied in a VM that
 is kept) would copy about 5 MiB per Redis run and 120–300 MiB per stack run instead of
 1.1 GiB + 129 MiB and 1.5 GiB + 2.3 GiB. At 1–2 µs per copy-on-write fault that is a few
-milliseconds for Redis and 0.05–0.15 s for the stack, against 0.5 s and 1.7 s today (2.9 s for a
+milliseconds for Redis and 0.05–0.15 s for the stack, against 0.5 s and 1.7 s today (about 3.4 s for a
 stack power-cut run, which builds two VMs). It needs module support (write-protected EPT entries
 or a dirty log); none of the existing ioctls can tell which pages a run wrote, which is why the
 counts above come from comparing against the saved copy.
@@ -345,7 +347,10 @@ seconds):
 | 4 | 10.42 | 2.84 | 135 s | 22.9 | 1.29 | 1.52 | 0.53 | 2.78 | 4.21 | 5.14 | 7 / 15 / 48 / 30 % |
 | 6 | 7.91 | 2.16 | 221 s | 44.2 | 2.10 | 8.64 | 4.15 | 7.60 | 8.93 | 5.11 | 5 / 12 / 27 / 56 % |
 
-{{SCALE_SM}}
+The same 36 schedules with 2 workers and the save buffers in memory (`HVX_SNAP_MALLOC=1`, which
+needs about 6.8 GiB per stack worker, so only 2 were run): **8.67 runs/min** (2.36× the 1-worker
+file-backed point, 1.40× the 2-worker file-backed point), mean run 13.9 s, worker boot 20.5 s,
+flushed-disk save 0.08 s and recovery restore 0.14 s, I/O wait 2 %.
 
 Here the rotating disk is the limit. The guest phases do not slow down (workload 4.7–5.1 s at
 every worker count), but every phase that touches the save files does: the flushed-disk save and
@@ -362,12 +367,12 @@ than that noise.
 
 | campaign | first runs | confirmation re-runs | shrink candidates | runs of the minimal schedule (2 each) | worker boot | first sweep (incl. boot) | total wall |
 |---|---|---|---|---|---|---|---|
-| stack, `process --more-faults`, seeds 1–40, 2 workers | 40 (+1 FLUSH-count probe) | 0 | 0 | 0 | 99 s | 414 s | 535 s |
+| stack, `process --more-faults`, seeds 1–40, 2 workers | 40 (+1 FLUSH-count probe) | 0 | 0 | 0 | 99 s | 414 s (boot not included) | 535 s |
 | Redis, `swarm`, seeds 1–40, 2 workers | 40 | 17 | 10 | 8 | 46 s | 171 s | 286 s |
 
 The stack campaign found nothing (as M67 and M71 report for this image), so every run was a first
-run, and the rest of the wall time (121 s) is the worker boot's share that falls outside the
-sweep timer plus report writing. In the Redis campaign 17 of 40 schedules failed (the documented
+run; the rest of the wall time (121 s) is the worker boot and the one FLUSH-count probe run,
+which happen before `explore.py` starts its sweep timer. In the Redis campaign 17 of 40 schedules failed (the documented
 relaxed-`appendfsync` loss): the first runs are 53 % of the 75 runs, and 40 % of the wall time
 comes after the first sweep.
 
