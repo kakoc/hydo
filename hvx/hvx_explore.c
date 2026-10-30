@@ -253,6 +253,39 @@ static void ph_diff(const char *pre, struct savebuf *sb, const uint8_t *cur, uin
 	      (unsigned long long)nz, pre, (unsigned long long)curnz);
 	g_ph[PH_DIRTY] += now_s() - t;
 }
+/* FNV-1a over a buffer that skips all-zero 4 KiB pages exactly: for a zero byte the step is
+ * h = (h ^ 0) * P = h * P, so a zero page is h * P^4096 (mod 2^64). Same value as fnv(). */
+static uint64_t fnv_zskip(uint64_t h, const uint8_t *p, size_t n)
+{
+	static const uint8_t zero[4096];
+	static uint64_t p4096;
+	size_t off;
+	if (!p4096) {
+		int i;
+		p4096 = 1;
+		for (i = 0; i < 4096; i++) p4096 *= 0x100000001b3ULL;
+	}
+	for (off = 0; off + 4096 <= n; off += 4096) {
+		if (!memcmp(p + off, zero, 4096)) h *= p4096;
+		else h = fnv(h, p + off, 4096);
+	}
+	return fnv(h, p + off, n - off);
+}
+/* HVX_EXPLORE_ZSKIP=1 (with HVX_EXPLORE_PHASES): at the end of the workload, hash guest RAM both
+ * ways, check that the values agree and report both times. Reads only. */
+static void ph_zskip(struct boot *b)
+{
+	double t1, t2, t3;
+	uint64_t h1, h2;
+	if (!getenv("HVX_EXPLORE_ZSKIP")) return;
+	t1 = now_s();
+	h1 = fnv(0xcbf29ce484222325ULL, b->mem, b->mem_size);
+	t2 = now_s();
+	h2 = fnv_zskip(0xcbf29ce484222325ULL, b->mem, b->mem_size);
+	t3 = now_s();
+	ph_kv("zskip_same=%d fnv_ram_s=%.3f fnv_zskip_ram_s=%.3f", h1 == h2, t2 - t1, t3 - t2);
+	g_ph[PH_DIRTY] += t3 - t1;
+}
 static void ph_print(const char *tag)
 {
 	int i;
@@ -951,6 +984,7 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 			ph_diff("w_ram", &g_ph_s1->ram, b->mem, E.mem_size);
 			ph_diff("w_disk", &g_ph_s1->rw, b->disk_mm + E.p2_off, E.p2_len);
 		}
+		ph_zskip(b);
 	}
 	pht = PH_T();
 	wfp = fingerprint(b);
