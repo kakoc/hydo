@@ -7785,14 +7785,17 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		break;
 	}
 	case HVX_GET_PMU: {
-		struct hvx_pmu pm = {
+		struct hvx_pmu pm;
+
+		/* M97: before HVX_CREATE_VM there is no vCPU (vc is NULL) */
+		if (!vm->n_guest_pages) { ret = -EINVAL; break; }
+		pm = (struct hvx_pmu){
 			.period = vm->pmu_period, .tick_tsc = vm->pmu_tick_tsc,
 			.total = vc->pmu_total, .next = vc->pmu_next, .ticks = vc->pmu_ticks,
 			.overshoots = vc->pmu_over, .steps = vc->pmu_steps,
 			.land_hash = vc->pmu_land,
 			.hops = vc->pmu_hops,
 		};
-
 		ret = copy_to_user(uarg, &pm, sizeof(pm)) ? -EFAULT : 0;
 		break;
 	}
