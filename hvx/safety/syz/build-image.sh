@@ -4,7 +4,7 @@
 # hvx.ko built for the debug kernel (loaded at boot), and root's authorized key. Runs on the
 # bare-metal test machine (Ubuntu: OpenSSH, fakeroot, mke2fs) after build-debug.sh. No root needed:
 # fakeroot makes every file owned by root inside the image. It only builds; the image boots
-# on the build machine (campaign.sh). Output: $SAFETY/syz/{image.ext4,id_syz,id_syz.pub}.
+# on the build machine (campaign.sh). Output: $SAFETY/syz/{image-$BUNDLE.ext4,id_syz,id_syz.pub}.
 set -euo pipefail
 SAFETY=${SAFETY:-$HOME/hydo-safety}
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -12,7 +12,8 @@ O="$SAFETY/syz"
 R="$O/root"
 BB="$SAFETY/bin/busybox"
 [ -x "$BB" ] || BB=/nix/store/ahw5fkq085k5ppdsylyd475xlxb18pz1-busybox-static-x86_64-unknown-linux-musl-1.37.0/bin/busybox
-KO="$SAFETY/debug/hvx.ko"
+BUNDLE=${BUNDLE:-debug}	# debug = this tree's hvx.c, debug-orig = main's (to see the fuzzer find the fixed bugs)
+KO="$SAFETY/$BUNDLE/hvx.ko"
 [ -f "$KO" ] || { echo "build-image: build-debug.sh first ($KO)" >&2; exit 1; }
 mkdir -p "$O"
 [ -f "$O/id_syz" ] || ssh-keygen -q -t ed25519 -N '' -C hvx-syz -f "$O/id_syz"
@@ -76,6 +77,7 @@ ifconfig eth0 10.0.2.15 netmask 255.255.255.0 up && route add default gw 10.0.2.
 insmod /hvx.ko && echo "hvx-syz: hvx.ko loaded" > /dev/kmsg
 EOF
 chmod 755 "$R/etc/init.d/rcS"
-rm -f "$O/image.ext4"
-fakeroot -- sh -c "chown -R 0:0 '$R' && mke2fs -q -t ext4 -L hvxsyz -d '$R' '$O/image.ext4' 1G"
-echo "build-image: OK ($O/image.ext4, $(du -h "$O/image.ext4" | cut -f1) used)"
+IMG="$O/image-$BUNDLE.ext4"
+rm -f "$IMG"
+fakeroot -- sh -c "chown -R 0:0 '$R' && mke2fs -q -t ext4 -L hvxsyz -d '$R' '$IMG' 1G"
+echo "build-image: OK ($IMG, $(du -h "$IMG" | cut -f1) used)"

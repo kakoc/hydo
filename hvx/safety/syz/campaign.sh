@@ -21,6 +21,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 C="$SAFETY/campaign"
 PIDF="$C/manager.pid"
 VM_MEM=${VM_MEM:-2048}
+BUNDLE=${BUNDLE:-debug}	# debug-orig fuzzes the unfixed module of main
 mkdir -p "$C" "$SAFETY/gcroots"
 
 qemu_path() {
@@ -37,8 +38,8 @@ config() {	# workdir nvms procs
 	"http": "127.0.0.1:${HTTP_PORT:-56741}",
 	"workdir": "$1",
 	"kernel_obj": "$SAFETY/kbuild",
-	"module_obj": ["$SAFETY/debug/mod"],
-	"image": "$SAFETY/syz/image.ext4",
+	"module_obj": ["$SAFETY/$BUNDLE/mod"],
+	"image": "$SAFETY/syz/image-$BUNDLE.ext4",
 	"sshkey": "$SAFETY/syz/id_syz",
 	"syzkaller": "$SAFETY/syzkaller",
 	"procs": $3,
@@ -49,7 +50,7 @@ config() {	# workdir nvms procs
 	"enable_syscalls": ["openat\$hvx", "mmap\$hvx", "syz_ext_hvx_guest", "ioctl\$HVX_*", "close", "munmap", "dup"],
 	"vm": {
 		"count": $2,
-		"kernel": "$SAFETY/debug/bzImage",
+		"kernel": "$SAFETY/$BUNDLE/bzImage",
 		"cpu": 2,
 		"mem": $VM_MEM,
 		"qemu": "$(qemu_path)",
@@ -100,7 +101,7 @@ summary() {	# workdir
 
 case "${1:-status}" in
 smoke)
-  w="$C/smoke-$(date +%Y%m%d-%H%M%S)"
+  w="$C/smoke-$BUNDLE-$(date +%Y%m%d-%H%M%S)"
   launch "$w" 2 $(( ${2:-20} * 60 )) || exit 3
   wait "$(cat "$PIDF")" 2>/dev/null
   while kill -0 "$(cat "$PIDF")" 2>/dev/null; do sleep 10; done
