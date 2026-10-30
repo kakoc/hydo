@@ -9,6 +9,14 @@ user guide; it is shipped as the release's `README.md`. The Mac counterpart is
 
 ## The `hydo` command
 
+Since Milestone 101 `bin/hydo` is the Rust CLI (`hydo/crates/hydo-cli`), a static
+`x86_64-unknown-linux-musl` binary that `build-release.sh` builds with the workspace's pinned
+toolchain (or takes from `$HYDO_RUST_BIN`). It has the same verbs, flags, output and exit codes
+as the Python CLI it replaced (`hydo/dist/linux/hydo`, kept in the repository as the reference
+of `hydo/crates/hydo-cli/tests/equivalence.rs` until every port is done, and no longer shipped).
+The parts still in Python are called through `hydo/onboard/hydo_bridge.py`, so a release still
+needs Python 3.9+.
+
 | verb | what it runs underneath |
 |---|---|
 | `hydo doctor` | checks: Intel CPU, `vmx` flag (VT-x on in firmware), bare metal, a usable PMU (non-hybrid, `arch_perfmon`; otherwise it says the exit-count clock is used), Python 3.9+, `cc`/`make`/`flock`/`xz`/`sudo`/`modinfo`, password-less sudo, kernel headers, lockdown, the module (built, loaded, same `srcversion` as this release), `kvm_intel` not loaded, release files, the run engine, the bundled `mke2fs`, disk space |
