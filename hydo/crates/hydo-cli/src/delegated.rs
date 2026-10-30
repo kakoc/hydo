@@ -138,4 +138,3 @@ pub fn cmd_compose(ctx: &Ctx, argv: &[String]) -> i32 {
 pub fn cmd_agents(ctx: &Ctx, cmd: &str, argv: &[String]) -> i32 {
     bridge::agents(ctx, cmd, argv)
 }
-

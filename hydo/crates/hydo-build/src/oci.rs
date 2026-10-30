@@ -801,7 +801,7 @@ impl Tree {
         let rel = rjoin(&rv);
         let dst = self.abs(&rel);
         if mi.isdir() {
-            if !(dst.is_dir() && !is_link(&dst)) {
+            if !dst.is_dir() || is_link(&dst) {
                 if lexists(&dst) {
                     self.remove(&rel)?;
                 }

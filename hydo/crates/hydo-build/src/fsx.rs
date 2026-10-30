@@ -68,11 +68,11 @@ fn set_times_nofollow(p: &Path, at: (i64, i64), mt: (i64, i64)) -> Result<(), Fa
         CString::new(p.as_os_str().as_bytes()).map_err(|_| Fail::Crash("NUL in a path".into()))?;
     let ts = [
         libc::timespec {
-            tv_sec: at.0 as libc::time_t,
+            tv_sec: at.0 as _,
             tv_nsec: at.1 as _,
         },
         libc::timespec {
-            tv_sec: mt.0 as libc::time_t,
+            tv_sec: mt.0 as _,
             tv_nsec: mt.1 as _,
         },
     ];
