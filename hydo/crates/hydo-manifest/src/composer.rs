@@ -33,7 +33,7 @@ pub const PLAN_KINDS: &[&str] = &[
 pub const CHECK_KINDS: &[&str] = &["final", "always", "eventually"];
 pub const HISTORY_KINDS: &[&str] = &["linearizable", "list_append"];
 pub const HISTORY_KEYS: &[&str] = &["history", "model", "initial", "consistency"];
-const NAME_RE: &str = r"[A-Za-z0-9_.\-]+";
+pub const NAME_RE: &str = r"[A-Za-z0-9_.\-]+";
 /// (name, default, lo, hi) in hydo_composer's DEFAULTS order.
 pub const PARAMS: &[(&str, i128, i128, i128)] = &[
     ("parallel", 4, 1, 16),
@@ -74,7 +74,7 @@ const KNOWN_REG: &[&str] = &[
 ];
 pub const DEFAULT_STEPS: i128 = 20;
 pub const SH: &str = "/bin/busybox sh /etc/hydo/compose.sh";
-const GUEST_MAX: usize = 500;
+pub const GUEST_MAX: usize = 500;
 
 fn known_test() -> Vec<&'static str> {
     let mut v: Vec<&str> = PARAMS.iter().map(|p| p.0).collect();
@@ -94,12 +94,12 @@ fn n(x: i128) -> Value {
     }
 }
 
-fn sha_hex(b: &[u8]) -> String {
+pub fn sha_hex(b: &[u8]) -> String {
     let d = Sha256::digest(b);
     d.iter().map(|x| format!("{x:02x}")).collect()
 }
 
-fn match_name(x: &str) -> bool {
+pub fn match_name(x: &str) -> bool {
     pyre::match_dollar(NAME_RE, x).is_some()
 }
 
@@ -116,7 +116,7 @@ fn sorted_keys_minus(o: &Map<String, Value>, known: &[&str]) -> Vec<String> {
 // ------------------------------------------------------------------ the hydo/ folder
 
 /// Python's `str.splitlines()`.
-fn splitlines(t: &str) -> Vec<String> {
+pub fn splitlines(t: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut cur = String::new();
     let mut it = t.chars().peekable();
@@ -1190,7 +1190,7 @@ pub fn py_int(text: &str, base: u32) -> Result<i128, String> {
     Ok(if neg { -v } else { v })
 }
 
-fn py_mod(a: i128, m: i128) -> R<i128> {
+pub fn py_mod(a: i128, m: i128) -> R<i128> {
     if m == 0 {
         return Err(crash("ZeroDivisionError: integer modulo by zero"));
     }
@@ -1201,14 +1201,14 @@ fn py_mod(a: i128, m: i128) -> R<i128> {
     Ok(r)
 }
 
-const M31: i128 = 2147483647;
+pub const M31: i128 = 2147483647;
 
-struct Minstd {
-    s: i128,
+pub struct Minstd {
+    pub s: i128,
 }
 
 impl Minstd {
-    fn new(seed: i128) -> R<Minstd> {
+    pub fn new(seed: i128) -> R<Minstd> {
         let mut m = Minstd {
             s: py_mod(seed, M31 - 1)? + 1,
         };
@@ -1217,19 +1217,19 @@ impl Minstd {
         }
         Ok(m)
     }
-    fn next(&mut self) -> i128 {
+    pub fn next(&mut self) -> i128 {
         self.s = (self.s * 48271) % M31;
         self.s
     }
-    fn below(&mut self, n: i128) -> R<i128> {
+    pub fn below(&mut self, n: i128) -> R<i128> {
         let x = self.next();
         py_mod(x, n)
     }
 }
 
-type Entry = (i128, i128, usize, i128);
+pub type Entry = (i128, i128, usize, i128);
 
-fn plan(seed: i128, q: i128, steps: i128, kinds: &[String]) -> R<Vec<Entry>> {
+pub fn plan(seed: i128, q: i128, steps: i128, kinds: &[String]) -> R<Vec<Entry>> {
     let idx = |k: &str| -> Vec<usize> {
         kinds
             .iter()
@@ -1283,27 +1283,29 @@ fn plan(seed: i128, q: i128, steps: i128, kinds: &[String]) -> R<Vec<Entry>> {
     Ok(out)
 }
 
-#[derive(Clone)]
-enum OItem {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OItem {
     I(i128),
     S(String),
 }
 
-struct WSeed {
-    seed: i128,
-    p: i128,
-    q: i128,
-    r: i128,
-    n: i128,
-    t: i128,
-    x: Vec<i128>,
-    o: Vec<OItem>,
+/// A seed-form W= value (`parse_w`): x and o keep their first-seen order; Python keeps sets.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WSeed {
+    pub seed: i128,
+    pub p: i128,
+    pub q: i128,
+    pub r: i128,
+    pub n: i128,
+    pub t: i128,
+    pub x: Vec<i128>,
+    pub o: Vec<OItem>,
 }
 
 /// A ValueError: caught by regression_status, its text becomes the regression's error.
-type VE = String;
+pub type VE = String;
 
-fn ilist(st: &str) -> Result<Vec<i128>, VE> {
+pub fn ilist(st: &str) -> Result<Vec<i128>, VE> {
     let mut out: Vec<i128> = Vec::new();
     if st.is_empty() {
         return Ok(out);
@@ -1336,7 +1338,7 @@ fn ilist(st: &str) -> Result<Vec<i128>, VE> {
     Ok(out)
 }
 
-fn parse_w(w: &str, params: &Value) -> Result<WSeed, VE> {
+pub fn parse_w(w: &str, params: &Value) -> Result<WSeed, VE> {
     let pi = |k: &str| py::int_of(&params[k]).unwrap_or(0);
     let mut d = WSeed {
         seed: 0,
@@ -1376,7 +1378,7 @@ fn parse_w(w: &str, params: &Value) -> Result<WSeed, VE> {
     Ok(d)
 }
 
-fn kept(d: &WSeed, steps: i128, ids: &[String], kinds: &[String]) -> R<Vec<Entry>> {
+pub fn kept(d: &WSeed, steps: i128, ids: &[String], kinds: &[String]) -> R<Vec<Entry>> {
     let es = plan(d.seed, d.q, steps, kinds)?;
     let out: Vec<Entry> = es
         .into_iter()
@@ -1400,14 +1402,16 @@ fn kept(d: &WSeed, steps: i128, ids: &[String], kinds: &[String]) -> R<Vec<Entry
     })
 }
 
-struct Resolved {
-    p: i128,
-    r: i128,
-    t: i128,
-    entries: Vec<(i128, i128, String, i128)>,
+/// A resolved composition (`parse_resolved`): entries are (entry, round, command id, seed).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Resolved {
+    pub p: i128,
+    pub r: i128,
+    pub t: i128,
+    pub entries: Vec<(i128, i128, String, i128)>,
 }
 
-fn kind_of(cid: &str) -> Option<&'static str> {
+pub fn kind_of(cid: &str) -> Option<&'static str> {
     let mut ks: Vec<&'static str> = WORKLOAD_KINDS.to_vec();
     ks.sort_by_key(|k| std::cmp::Reverse(k.len()));
     ks.into_iter().find(|k| cid.starts_with(&format!("{k}_")))
@@ -1417,7 +1421,7 @@ fn head40(v: &str) -> String {
     v.chars().take(40).collect()
 }
 
-fn parse_resolved(v: &str) -> Result<Resolved, VE> {
+pub fn parse_resolved(v: &str) -> Result<Resolved, VE> {
     if !v.starts_with(':') {
         return Err(format!(
             "a resolved composition starts with ':' (got {})",
@@ -1499,7 +1503,7 @@ fn parse_resolved(v: &str) -> Result<Resolved, VE> {
     Ok(d)
 }
 
-fn render_resolved(d: &Resolved) -> String {
+pub fn render_resolved(d: &Resolved) -> String {
     let mut ids: Vec<String> = Vec::new();
     for e in &d.entries {
         if !ids.contains(&e.2) {
@@ -1518,14 +1522,14 @@ fn render_resolved(d: &Resolved) -> String {
     out
 }
 
-fn w_of(schedule: &str) -> Option<String> {
+pub fn w_of(schedule: &str) -> Option<String> {
     let g = schedule.split_once('|').map(|x| x.1).unwrap_or(schedule);
     py::split_ws(g)
         .into_iter()
         .find_map(|t| t.strip_prefix("W=").map(|x| x.to_string()))
 }
 
-fn with_w(schedule: &str, w: &str) -> String {
+pub fn with_w(schedule: &str, w: &str) -> String {
     let (host, guest) = schedule.split_once('|').unwrap_or((schedule, ""));
     let mut toks: Vec<String> = py::split_ws(guest).iter().map(|x| x.to_string()).collect();
     let mut done = false;
@@ -1541,7 +1545,7 @@ fn with_w(schedule: &str, w: &str) -> String {
     format!("{}| {}", host, toks.join(" "))
 }
 
-fn fits(schedule: &str) -> bool {
+pub fn fits(schedule: &str) -> bool {
     let g = schedule.split_once('|').map(|x| x.1).unwrap_or(schedule);
     py::strip(g).chars().count() <= GUEST_MAX
 }
@@ -1551,7 +1555,7 @@ pub fn key_of(resolved: &str) -> String {
     sha_hex(resolved.as_bytes())[..12].to_string()
 }
 
-fn resolve_seed(
+pub fn resolve_seed(
     w: &str,
     ids: &[String],
     kinds: &[String],
@@ -1574,7 +1578,7 @@ fn resolve_seed(
     }))
 }
 
-fn resolved_problems(d: &Resolved, meta: &Value, steps: Option<i128>) -> Vec<String> {
+pub fn resolved_problems(d: &Resolved, meta: &Value, steps: Option<i128>) -> Vec<String> {
     let msteps = meta.get("steps").and_then(py::int_of).unwrap_or(0);
     let steps = match steps {
         Some(x) if x != 0 => x,

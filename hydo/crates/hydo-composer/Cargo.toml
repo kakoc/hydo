@@ -1,0 +1,14 @@
+[package]
+name = "hydo-composer"
+description = "The test composer, host side: the plan's W= token in its seed, resolved and saved forms, the shrinker's candidates, saved regressions, and the files a plan stages into an image"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+hydo-manifest = { workspace = true }
+serde_json = { workspace = true }
+libc = "0.2"
+
+[dev-dependencies]

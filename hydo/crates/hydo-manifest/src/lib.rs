@@ -21,7 +21,7 @@ pub mod composer;
 mod oci;
 pub mod py;
 mod pyre;
-mod rx;
+pub mod rx;
 mod types;
 mod validate;
 pub mod yaml;
