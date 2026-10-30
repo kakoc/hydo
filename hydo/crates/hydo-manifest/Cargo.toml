@@ -1,0 +1,13 @@
+[package]
+name = "hydo-manifest"
+description = "hydo's project format as types: hydo.yaml, a plan's test: section and the hydo/ folder"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]

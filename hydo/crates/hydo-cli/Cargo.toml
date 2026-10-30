@@ -1,0 +1,18 @@
+[package]
+name = "hydo-cli"
+description = "The hydo command: one CLI over both engines (hvx on Linux, hvm on the Mac)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "hydo"
+path = "src/main.rs"
+
+[dependencies]
+hydo-schedule = { workspace = true }
+hydo-manifest = { workspace = true }
+hydo-engine = { workspace = true }
+serde_json = { workspace = true }
+flate2 = { workspace = true }
