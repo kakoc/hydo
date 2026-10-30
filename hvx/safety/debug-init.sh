@@ -38,6 +38,7 @@ for t in ${T:-$(cat /hvx/tests)}; do
 	hvx_disk_boot_verify) run $t "$TO" /hvx/$t /guest/bzImage /guest/initramfs-disk.cpio.gz /guest/vblk-disk.img ;;
 	hvx_linux)            run $t "$TO" env HVX_INPUT='echo hydo-interactive\n' /hvx/hvx_linux /guest/bzImage /guest/initramfs.cpio.gz ;;
 	hvx_sched_sweep_test) run $t "$TO" /hvx/$t 2000 ;;
+	hvx_repro_*)          run $t "$TO" /hvx/hvx_repro "${t#hvx_repro_}" ;;
 	*)                    run $t "$TO" /hvx/$t ;;
 	esac
 	# a splat during this test is attributed to it by run-debug.sh through this marker

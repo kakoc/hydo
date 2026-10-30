@@ -11,7 +11,7 @@
 set -uo pipefail
 SAFETY=${SAFETY:-$HOME/hydo-safety}
 NIXPKGS=/nix/store/f0ddmw6s86y567yg06h5019z72szbzch-source
-D="$SAFETY/debug"
+D="$SAFETY/${DEBUG_OUT:-debug}"
 OUT=${OUT:-$SAFETY/runs/debug-$(date +%Y%m%d-%H%M%S)}
 mkdir -p "$OUT" "$SAFETY/gcroots"
 ONLY=${1:-}
@@ -27,7 +27,7 @@ echo "run-debug: log $LOG"
 # memory and CPUs and runs at low priority, because the host is shared.
 nice -n 10 timeout "${VM_TIMEOUT:-14400}" "$QEMU" -name hvx-safety-debug \
   -enable-kvm -cpu host -smp "${VM_CPUS:-2}" -m "${VM_MEM:-6144}" \
-  -kernel "$SAFETY/kbuild/bzImage" -initrd "$D/initramfs.cpio.gz" -append "$APPEND" \
+  -kernel "$D/bzImage" -initrd "$D/initramfs.cpio.gz" -append "$APPEND" \
   -display none -serial "file:$LOG" -no-reboot -nic none \
   -pidfile "$OUT/qemu.pid"
 qrc=$?
