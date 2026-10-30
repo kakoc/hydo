@@ -1,0 +1,63 @@
+# hydo-mac.yaml with an operation history recorded by the Python SDK's recorder (Milestone 96):
+# the workload's client is pykv_hist.py, which records each PUT (history kv: invoke before the
+# request, ok after the answer, info when no answer came) with hydo_assert.history, and the
+# final: command reads every key back into the same history -- in the same boot, or in the
+# recovery boot after a power cut. The host checks kv for linearizability, one register per key
+# (hvx/history/hydohist.py, run by `hydo run` and `hydo explore` on the Mac), instead of the
+# hand-written oracle. Stage the files with fetch-python-arm64.sh (it copies the SDK, including
+# hydo_assert/history.py), then:  hydo build hydo-mac-hist.yaml
+# Try:  disk=cut | run C=12            -> OK: every acknowledged PUT survives (fsync before the reply)
+#       disk=cut | run C=12 S=never    -> VIOLATION [kv.linearizable]: an acknowledged write is lost
+name: python-kv-hist
+description: pykv (Python, hydo-assert SDK); every acknowledged PUT must survive kills and power cuts.
+buggify: true
+
+root:
+  files:
+    - {src: files/nix, dst: /nix}
+    - {src: files/opt/pykv/hydo_assert, dst: /opt/pykv/hydo_assert}
+    - {src: pykv.py, dst: /opt/pykv/pykv.py}
+    - {src: pykv_hist.py, dst: /opt/pykv/pykv_hist.py}
+
+data:
+  size_mib: 64
+  dirs: [pykv]
+
+env:
+  PY: /nix/store/ic0l2ykss28lr7r4by14inb3pqw87yza-python3-3.11.9/bin/python3.11
+  PYTHONPATH: /opt/pykv
+  PYTHONDONTWRITEBYTECODE: "1"
+  PYTHONHASHSEED: "0"
+
+services:
+  - name: pykv
+    cmd: $PY /opt/pykv/pykv.py serve /data/pykv 7070
+    ready: $PY /opt/pykv/pykv.py ping 7070
+    port: 7070
+
+workload:
+  steps: 20                         # step i = PUT k:i v<i> by process 0, recorded in history kv
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      if $PY /opt/pykv/pykv_hist.py put 7070 0 k:$i v$i; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      i=$((i + 1))
+    done
+
+knobs:
+  - token: S
+    name: pykv fsync before acknowledging
+    default: always
+    values: [always, never]
+    set: echo $HYDO_VALUE > /tmp/pykv-fsync
+
+checks:
+  - id: kv.linearizable
+    type: linearizable
+    model: register
+    history: kv
+    msg: every PUT and GET is linearizable per key (an acknowledged PUT is never lost)
+    final: $PY /opt/pykv/pykv_hist.py readall 7070 9 $HYDO_STEPS
+
+faults: [kill, pause, cut, clock, disk]
