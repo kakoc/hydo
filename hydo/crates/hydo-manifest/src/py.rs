@@ -366,6 +366,55 @@ pub fn json_dumps(v: &Value) -> String {
     out
 }
 
+/// `json.dumps(v, indent=indent, sort_keys=sort_keys)` (what `json.dump(v, f, indent=1)` writes):
+/// `","` between items, `": "` after keys, ASCII only.
+pub fn json_dumps_indent(v: &Value, indent: usize, sort_keys: bool) -> String {
+    let mut out = String::new();
+    dump_indent(v, indent, sort_keys, 0, &mut out);
+    out
+}
+
+fn newline_at(out: &mut String, indent: usize, level: usize) {
+    out.push('\n');
+    out.extend(std::iter::repeat_n(' ', indent * level));
+}
+
+fn dump_indent(v: &Value, indent: usize, sort_keys: bool, level: usize, out: &mut String) {
+    match v {
+        Value::Array(a) if !a.is_empty() => {
+            out.push('[');
+            for (i, x) in a.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                newline_at(out, indent, level + 1);
+                dump_indent(x, indent, sort_keys, level + 1, out);
+            }
+            newline_at(out, indent, level);
+            out.push(']');
+        }
+        Value::Object(o) if !o.is_empty() => {
+            let mut items: Vec<(&String, &Value)> = o.iter().collect();
+            if sort_keys {
+                items.sort_by(|a, b| cmp_str(a.0, b.0));
+            }
+            out.push('{');
+            for (i, (k, x)) in items.into_iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                newline_at(out, indent, level + 1);
+                dump_str(k, out);
+                out.push_str(": ");
+                dump_indent(x, indent, sort_keys, level + 1, out);
+            }
+            newline_at(out, indent, level);
+            out.push('}');
+        }
+        other => dump(other, out),
+    }
+}
+
 fn dump(v: &Value, out: &mut String) {
     match v {
         Value::Null => out.push_str("null"),

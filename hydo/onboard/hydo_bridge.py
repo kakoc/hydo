@@ -12,13 +12,11 @@ module is ported to Rust (one crate per module), the Rust CLI stops calling it a
 deleted. The code below is what the two Python release CLIs (hydo/dist/{linux,mac}/hydo before
 M101) did in-process, moved here unchanged.
 
-    errors_cli             hydo_errors.cli(argv, default_dir)             hydo errors
-    errors_for_run_dir     hydo_errors.for_run_dir(...) -> res            hydo run / repro
-    regression_status      hydo_composer.regression_status(r, meta)       hydo repro --regressions
-    regression_warning     hydo_composer.regression_warning(r, meta)      hydo repro --regressions
-    saved_regression_text  hydo_composer.saved_regression_text(x)         hydo save
     build_linux            hydo-build with the Linux release's tools      hydo build (Linux)
     build_mac              hydo-build --arch arm64 with the Mac's tools   hydo build (Mac)
+
+Ported and removed here (M104): errors_cli and errors_for_run_dir (the hydo-errors crate), and
+regression_status, regression_warning and saved_regression_text (the hydo-composer crate).
 """
 import importlib.machinery
 import importlib.util
@@ -43,37 +41,6 @@ def die(msg, rc=1):
 def _onboard():
     if ONBOARD not in sys.path:
         sys.path.insert(0, ONBOARD)
-
-
-# ---------------------------------------------------------------- small seams
-def errors_cli(a):
-    _onboard()
-    import hydo_errors
-    return hydo_errors.cli(a["argv"], a["default_dir"])
-
-
-def errors_for_run_dir(a):
-    _onboard()
-    import hydo_errors
-    return 0, hydo_errors.for_run_dir(a["outdir"], a["schedule"], a["res"], a.get("known"))
-
-
-def regression_status(a):
-    _onboard()
-    import hydo_composer
-    return 0, hydo_composer.regression_status(a["r"], a["meta"])
-
-
-def regression_warning(a):
-    _onboard()
-    import hydo_composer
-    return 0, hydo_composer.regression_warning(a["r"], a["meta"])
-
-
-def saved_regression_text(a):
-    _onboard()
-    import hydo_composer
-    return 0, hydo_composer.saved_regression_text(a["x"])
 
 
 # ---------------------------------------------------------------- hydo build
@@ -287,8 +254,7 @@ def build_mac(a):
     return hb.main()
 
 
-FUNCS = {f.__name__: f for f in (errors_cli, errors_for_run_dir, regression_status,
-                                 regression_warning, saved_regression_text, build_linux, build_mac)}
+FUNCS = {f.__name__: f for f in (build_linux, build_mac)}
 
 
 def main():

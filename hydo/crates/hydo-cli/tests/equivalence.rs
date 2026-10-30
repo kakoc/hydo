@@ -213,6 +213,12 @@ fn with_explore(cwd: &Path) {
         std::fs::copy(fixtures().join("explore-errors").join(f), e.join(f)).unwrap();
     }
     std::fs::create_dir_all(cwd.join("rundir")).unwrap();
+    std::fs::create_dir_all(cwd.join("run1")).unwrap();
+    std::fs::copy(
+        fixtures().join("run-errors/one.errors.json"),
+        cwd.join("run1/one.errors.json"),
+    )
+    .unwrap();
     std::fs::write(cwd.join("bogus.img"), b"not an image").unwrap();
 }
 
@@ -372,6 +378,49 @@ fn cli_matches_python() {
                     "errors", "accept", "zzz", "--reason", "x", "--by", "t", "--from", "errs",
                     "--file", "k.yaml",
                 ],
+            ],
+        );
+        // errors (the hydo-errors crate): a list written with --with/--during, found by
+        // default, accepting again, a run directory's kinds, refusals
+        n += same(
+            &root,
+            plat,
+            with_explore,
+            &[
+                &[
+                    "errors",
+                    "accept",
+                    "f0c7",
+                    "--reason",
+                    "boot banner",
+                    "--by",
+                    "t",
+                    "--from",
+                    "errs",
+                    "--file",
+                    "hydo/known-errors.yaml",
+                    "--with",
+                    "C",
+                    "--with",
+                    "disk=ioerr",
+                    "--during",
+                    "K=redis",
+                ],
+                &["errors", "check"],
+                &[
+                    "errors", "accept", "f0c7", "--reason", "again", "--from", "errs",
+                ],
+                &[
+                    "errors", "accept", "0c3b", "84dc", "--reason", "io", "--by", "t", "--from",
+                    "run1",
+                ],
+                &["errors", "list", "run1"],
+                &["errors", "check", "--file", "hydo/known-errors.yaml"],
+                &["errors", "accept", "", "--reason", "r", "--from", "run1"],
+                &["errors", "accept", "f0c7", "--reason"],
+                &["errors", "accept", "f0c7", "--reason", "r", "--from"],
+                &["errors", "list", "nowhere"],
+                &["errors", "check", "--file", "missing.yaml"],
             ],
         );
         // compose (hydo_compose.py through the bridge)
