@@ -13,8 +13,8 @@ cd "$(dirname "$0")/../../.."   # M100: this script lives in hv/hvx/images; ever
 # Output name prefix: images go to build/${STACK_OUT}-{ext4,data,disk}.img (default "stack").
 # Lets two lines of work build their own guest image without overwriting each other's.
 STACK_OUT="${STACK_OUT:-stack}"
-# Source directory of the Go front door (default hvx/stack). The explorer builds from a
-# pinned copy (hvx/explore/stack-src) so its image does not change while hvx/stack is edited.
+# Source directory of the Go front door (default hydo/stack). The explorer builds from a
+# pinned copy (hydo/explore/stack-src) so its image does not change while hydo/stack is edited.
 STACK_GO_SRC="${STACK_GO_SRC:-hydo/stack}"
 # Go linker flags for the front door. The default strips symbols. A coverage image
 # (Milestone 41) keeps symbols and links the text at a fixed unique address so an Intel PT
