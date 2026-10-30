@@ -7,10 +7,10 @@
 //!   Rust:                 run, repro (incl. --regressions: hydo-composer), save (hydo-composer),
 //!                         report, doctor, module (Linux), errors and run/repro's error kinds
 //!                         (hydo-errors), history checks (hydo-history), compose (hydo-compose),
-//!                         guide/skill/init (hydo-agents)
-//!   delegated (Python):   build (hydo-build, src/bridge.rs), explore (explore.py)
+//!                         guide/skill/init (hydo-agents), build (hydo-build, src/build.rs)
+//!   delegated (Python):   explore (explore.py)
 
-mod bridge;
+mod build;
 mod ctx;
 mod delegated;
 mod doctor;
@@ -106,7 +106,7 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
     let linux = ctx.platform == Platform::Linux;
     match cmd {
         "compose" => delegated::cmd_compose(ctx, rest),
-        "build" => delegated::cmd_build(ctx, rest),
+        "build" => build::cmd_build(ctx, rest),
         "run" => runs::cmd_run(ctx, rest),
         "repro" => runs::cmd_repro(ctx, rest),
         "explore" => delegated::cmd_explore(ctx, rest),

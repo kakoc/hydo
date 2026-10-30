@@ -11,6 +11,7 @@ members = [
     "hydo/crates/hydo-schedule",
     "hydo/crates/hydo-manifest",
     "hydo/crates/hydo-engine",
+    "hydo/crates/hydo-build",
     "hydo/crates/hydo-cli",
     "hydo/crates/hydo-composer",
     "hydo/crates/hydo-errors",
@@ -39,6 +40,7 @@ hydo-errors = { path = "hydo/crates/hydo-errors" }
 hydo-agents = { path = "hydo/crates/hydo-agents" }
 hydo-compose = { path = "hydo/crates/hydo-compose" }
 hydo-history = { path = "hydo/crates/hydo-history" }
+hydo-build = { path = "hydo/crates/hydo-build" }
 
 [profile.release]
 opt-level = 3

@@ -44,6 +44,8 @@ def _onboard():
 
 
 # ---------------------------------------------------------------- hydo build
+# Replaced by hydo-build (Milestone 103): the Rust `hydo build` calls the hydo-build crate, which
+# carries these two release patches itself (hydo_build::Release). Kept until the lead deletes them.
 def load_hydo_build():
     loader = importlib.machinery.SourceFileLoader("hydo_build", os.path.join(ONBOARD, "hydo-build"))
     spec = importlib.util.spec_from_loader("hydo_build", loader)
