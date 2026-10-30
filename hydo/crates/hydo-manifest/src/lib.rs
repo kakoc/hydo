@@ -124,6 +124,38 @@ pub struct Loaded {
 /// hydo-build's `main()` up to the build: read, `--set`, the composer's plan, validate, the
 /// architecture checks, the service order and the image checks.
 pub fn load(path: &Path, opts: &LoadOptions) -> Result<Loaded, ManifestError> {
+    let mut l = load_until_images(path, opts).0?;
+    let p = path.to_string_lossy().into_owned();
+    let arch = if opts.arch == "x86_64" || opts.arch == "arm64" {
+        opts.arch.as_str()
+    } else {
+        "x86_64"
+    };
+    l.oci_unchecked = oci::prepare(&l.manifest.data, &p, arch)?;
+    Ok(l)
+}
+
+/// [`load`] without the image checks (hydo-build crate reads the images itself, in hydo_oci's
+/// order), with the warnings printed so far also when the manifest is refused: hydo-build prints
+/// each `hydo-build: warning:` line before a refusal's message. `oci_unchecked` is empty.
+pub fn load_until_images(
+    path: &Path,
+    opts: &LoadOptions,
+) -> (Result<Loaded, ManifestError>, Vec<String>) {
+    let mut warnings = Vec::new();
+    let r = load_inner(path, opts, &mut warnings);
+    let r = r.map(|mut l| {
+        l.warnings = warnings.clone();
+        l
+    });
+    (r, warnings)
+}
+
+fn load_inner(
+    path: &Path,
+    opts: &LoadOptions,
+    warnings: &mut Vec<String>,
+) -> Result<Loaded, ManifestError> {
     let p = path.to_string_lossy().into_owned();
     let text = read_text(&p)?;
     let mut m = if p.ends_with(".json") {
@@ -137,16 +169,11 @@ pub fn load(path: &Path, opts: &LoadOptions) -> Result<Loaded, ManifestError> {
         });
     }
     let params = validate::apply_params(&mut m, &opts.sets)?;
-    let mut warnings = Vec::new();
     if let Some(v) = m.get("hydo_version").cloned() {
-        composer::check_version(
-            &v,
-            &composer::engine_version(&opts.onboard_dir),
-            &mut warnings,
-        )?;
+        composer::check_version(&v, &composer::engine_version(&opts.onboard_dir), warnings)?;
     }
     let folder = composer::scan_folder(&py::dirname(&py::abspath(&p)))?;
-    let mut comp = composer::expand(&mut m, folder.as_ref(), &mut warnings)?;
+    let mut comp = composer::expand(&mut m, folder.as_ref(), warnings)?;
     if let Some(c) = comp.as_mut() {
         c["_folder"] = folder.unwrap_or(Value::Null);
     }
@@ -156,19 +183,13 @@ pub fn load(path: &Path, opts: &LoadOptions) -> Result<Loaded, ManifestError> {
     }
     validate::check_ram_arch(&m, &opts.arch)?;
     let order = validate::service_order(&m["services"])?;
-    let arch = if opts.arch == "x86_64" || opts.arch == "arm64" {
-        opts.arch.as_str()
-    } else {
-        "x86_64"
-    };
-    let oci_unchecked = oci::prepare(&m, &p, arch)?;
     Ok(Loaded {
         manifest: Manifest::from_validated(m),
-        warnings,
+        warnings: Vec::new(),
         compose: comp,
         params,
         service_order: order,
-        oci_unchecked,
+        oci_unchecked: Vec::new(),
     })
 }
 

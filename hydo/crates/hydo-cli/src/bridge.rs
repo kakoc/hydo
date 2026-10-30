@@ -3,8 +3,9 @@
 //! Each function here is one seam a port replaces: when the module behind it is a Rust crate, the
 //! function's body becomes a call into that crate and the bridge function in Python is deleted.
 //! Owners of the next ports (one crate each): hydo_errors.py (errors, for_run_dir), hydo_composer.py
-//! (regression_status, saved_regression_text), hydo-build (build_linux, build_mac). Ported:
-//! hydo_agents.py and hydo_compose.py (M106), hydohist.py (run_checks) as hydo-history (M105).
+//! (regression_status, saved_regression_text). Ported: hydo_agents.py and hydo_compose.py (M106),
+//! hydohist.py (run_checks) as hydo-history (M105), hydo-build (build_linux, build_mac) as the
+//! hydo-build crate (M103, src/build.rs).
 
 use crate::ctx::{die, python, Ctx};
 use serde_json::{json, Value};

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Replaced by hydo-build: the Rust crate hydo/crates/hydo-build (Milestone 103) gives the same output
+# and images; this file stays only as the equivalence tests' reference until the lead deletes it.
 """hydo-build -- compile a project manifest (hydo.yaml, see MANIFEST.md) into a hydo guest image.
 
     hydo-build <hydo.yaml> [--set KEY=VALUE ...] [--out NAME] [--build-dir DIR] [--arch x86_64|arm64]

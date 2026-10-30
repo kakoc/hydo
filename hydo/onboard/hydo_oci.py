@@ -1,3 +1,5 @@
+# Replaced by hydo-build: the Rust crate hydo/crates/hydo-build (Milestone 103) gives the same output
+# and images; this file stays only as the equivalence tests' reference until the lead deletes it.
 """hydo_oci -- a hydo.yaml service whose files come from a Docker/OCI image (services[].image).
 
 Used by hydo-build (x86_64) and hydo_build_arm64.py (--arch arm64). See MANIFEST.md, "Services
