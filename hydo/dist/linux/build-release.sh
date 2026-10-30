@@ -2,7 +2,7 @@
 # Build the self-contained x86_64 Linux release of hydo (see hydo/dist/linux/README.md):
 #     hydo/dist/linux/build-release.sh [OUTDIR]        -> OUTDIR/hydo-linux-<version>/ and its .tar.gz
 #
-# Runs on any machine with sh, ssh, tar, python3 and sha256sum/shasum (the Mac works). The
+# Runs on any machine with sh, ssh, tar, python3, sha256sum/shasum and cargo (the Mac works). The
 # guest and host-tool pieces are fetched once into hydo/dist/linux/assets/ (pinned by sha256 in
 # assets.sha256) from $HYDO_BUILD_HOST, a Linux machine with the pinned nixpkgs store paths
 # below (docs/BUILD-PINS.md; default the build machine):
@@ -87,14 +87,27 @@ REL=$OUTDIR/hydo-linux-$VERSION
 # the release tree mirrors the repository: hydo/ (the product) and hv/hvx/ (the run engine's sources)
 mkdir -p "$REL/bin" "$REL/libexec/bin" "$REL/hydo/onboard" "$REL/hydo/explore" "$REL/hydo/assert" "$REL/hv/hvx" \
          "$REL/module" "$REL/examples/redis/files" "$REL/skill"
-cp "$D/hydo" "$REL/bin/hydo"; chmod 755 "$REL/bin/hydo"
+# the hydo command: the Rust CLI (hydo/crates/hydo-cli), a static x86_64 musl binary (M101). Built
+# here with the workspace's pinned toolchain (rust-toolchain.toml; rustup adds the musl target),
+# or taken from $HYDO_RUST_BIN when it was built elsewhere (e.g. cross-built on a Mac: the
+# workspace links that target with rust-lld, .cargo/config.toml).
+if [ -n "$HYDO_RUST_BIN" ]; then
+  HB=$HYDO_RUST_BIN
+else
+  ( cd "$TOP" && { rustup target add x86_64-unknown-linux-musl >/dev/null 2>&1 || true; } &&
+    cargo build --release --locked -p hydo-cli --target x86_64-unknown-linux-musl ) >&2
+  HB=$TOP/target/x86_64-unknown-linux-musl/release/hydo
+fi
+file -L "$HB" 2>/dev/null | grep -q 'x86-64.*static' || { echo "$HB is not a static x86_64 binary" >&2; exit 1; }
+cp "$HB" "$REL/bin/hydo"; chmod 755 "$REL/bin/hydo"
 cp "$D/libexec/hvx-run" "$D/libexec/faketime" "$REL/libexec/"
 cp "$D/libexec/bin/debugfs" "$REL/libexec/bin/"
 chmod 755 "$REL/libexec/hvx-run" "$REL/libexec/faketime" "$REL/libexec/bin/debugfs"
 cp "$TOP/hydo/onboard/hydo-build" "$TOP/hydo/onboard/hydo-compose" "$TOP/hydo/onboard/hydo_compose.py" "$TOP/hydo/onboard/hydo_oci.py" "$TOP/hydo/onboard/hydo_build_arm64.py" \
    "$TOP/hydo/onboard/hydo-init.sh" "$TOP/hydo/onboard/hydo-init-clock.sh" "$TOP/hydo/onboard/hydo-init-freeze.sh" \
    "$TOP/hydo/onboard/hydo-init-links.sh" "$TOP/hydo/onboard/hydo-init-netns.sh" "$TOP/hydo/onboard/hydo-liveness.sh" "$TOP/hydo/onboard/hydo_fc.c" \
-   "$TOP/hydo/onboard/MANIFEST.md" "$TOP/hydo/onboard/hydo_composer.py" "$TOP/hydo/onboard/hydo-composer.sh" "$REL/hydo/onboard/"
+   "$TOP/hydo/onboard/MANIFEST.md" "$TOP/hydo/onboard/hydo_composer.py" "$TOP/hydo/onboard/hydo-composer.sh" \
+   "$TOP/hydo/onboard/hydo_bridge.py" "$REL/hydo/onboard/"
 echo "$VERSION" > "$REL/hydo/VERSION"     # hydo_composer.engine_version: what a plan's hydo_version is checked against
 # the host-side history checkers and the guest recorder (hydo/HISTORIES.md)
 mkdir -p "$REL/hydo/history"

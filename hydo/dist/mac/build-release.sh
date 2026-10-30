@@ -74,11 +74,20 @@ rm -rf "$REL"
 # the release tree mirrors the repository: hydo/ (the product) and hv/hvm/ (the Mac engine)
 mkdir -p "$REL/bin" "$REL/hydo/onboard" "$REL/hydo/explore" "$REL/hydo/assert" "$REL/hv/hvm/explore/out" "$REL/guest" \
          "$REL/examples" "$REL/skill"
-cp "$D/hydo" "$REL/bin/hydo"; chmod 755 "$REL/bin/hydo"
+# the hydo command: the Rust CLI (hydo/crates/hydo-cli) for aarch64-apple-darwin (M101), built with
+# the workspace's pinned toolchain (rust-toolchain.toml), or taken from $HYDO_RUST_BIN
+if [ -n "$HYDO_RUST_BIN" ]; then
+  HB=$HYDO_RUST_BIN
+else
+  ( cd "$TOP" && cargo build --release --locked -p hydo-cli --target aarch64-apple-darwin ) >&2
+  HB=$TOP/target/aarch64-apple-darwin/release/hydo
+fi
+file "$HB" | grep -q 'Mach-O 64-bit executable arm64' || { echo "$HB is not an arm64 Mac binary" >&2; exit 1; }
+cp "$HB" "$REL/bin/hydo"; chmod 755 "$REL/bin/hydo"
 # hydo-build splices the init extensions (liveness, recovery clock, links, freeze) in by manifest
 cp "$TOP/hydo/onboard/hydo-build" "$TOP/hydo/onboard/hydo-compose" "$TOP/hydo/onboard/hydo_compose.py" "$TOP/hydo/onboard/hydo_oci.py" "$TOP/hydo/onboard/hydo_build_arm64.py" "$TOP"/hydo/onboard/hydo-init*.sh \
    "$TOP/hydo/onboard/hydo-liveness.sh" "$TOP/hydo/onboard/MANIFEST.md" "$TOP/hydo/onboard/hydo_composer.py" \
-   "$TOP/hydo/onboard/hydo-composer.sh" "$REL/hydo/onboard/"
+   "$TOP/hydo/onboard/hydo-composer.sh" "$TOP/hydo/onboard/hydo_bridge.py" "$REL/hydo/onboard/"
 echo "$VERSION" > "$REL/hydo/VERSION"     # hydo_composer.engine_version: what a plan's hydo_version is checked against
 # explore.py imports grpc_faults and fc_adaptive at its top (M90, M92): without them `hydo explore` stops
 cp "$TOP/hydo/explore/explore.py" "$TOP/hydo/explore/hvm_backend.py" "$TOP/hydo/explore/manifest_space.py" \
