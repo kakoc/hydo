@@ -1,0 +1,1430 @@
+{
+  "about": "The plans and hydo/ folders py_ref.py read (2a58c4b): the directory, the manifest data before expansion, and a SHA-256 of the folder's workload/, checks/ and regressions/ files (tests/equivalence.rs, folder_pin).",
+  "plans": [
+    {
+      "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/bad-expect/hydo",
+      "pin": "703ccdf5c6bc1a35837d649b6fcd7fa50b1c69ed716224fbfa0ded63656b4c9c",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 4
+        },
+        "invariants": [
+          {
+            "id": "i",
+            "cmd": "true"
+          }
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/bad-header/hydo",
+      "pin": "14905db78143a3cfcada714341f0718ead87fb77d147ae526cf5cfa1aae6cd9d",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 4
+        },
+        "invariants": [
+          {
+            "id": "i",
+            "cmd": "true"
+          }
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/bad-name/hydo",
+      "pin": "36248dbaa26f05bf5f6499353e863afb7716df00811225fecfe0d18c66f8c764",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 4
+        },
+        "invariants": [
+          {
+            "id": "i",
+            "cmd": "true"
+          }
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/bad-prefix/hydo",
+      "pin": "f41ec18a8606b3c1cc4a2d86905c0115d08ab33c40fbbbec2538510747cbf188",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 4
+        },
+        "invariants": [
+          {
+            "id": "i",
+            "cmd": "true"
+          }
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/bad-schedule/hydo",
+      "pin": "8655fd75e061fcca691cfda43cecf5666be45785823ad7ead0255c4938b5eac6",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 4
+        },
+        "invariants": [
+          {
+            "id": "i",
+            "cmd": "true"
+          }
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/binary-header/hydo",
+      "pin": "a505b1ff50292d170c47b07da144e719874325beb85ec397cd8e8b590bad4bb3",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 4
+        },
+        "invariants": [
+          {
+            "id": "i",
+            "cmd": "true"
+          }
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/check-bad-header/hydo",
+      "pin": "2ac62b11a33cdeac0fe3fb3ef6d70f2efd128891d5aa881874439e9a7411a109",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 4
+        },
+        "invariants": [
+          {
+            "id": "i",
+            "cmd": "true"
+          }
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/crlf-reg/hydo",
+      "pin": "516af21c216fc03bff4897a585437193761ca9f9831099b23007686e2cc99e95",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 4
+        },
+        "invariants": [
+          {
+            "id": "i",
+            "cmd": "true"
+          }
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/dir-in-workload/hydo",
+      "pin": "b3a07ef52cf9d4f9dfef537ae89022ac9ab05a08fc94daa45ea548e28c0f7920",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 4
+        },
+        "invariants": [
+          {
+            "id": "i",
+            "cmd": "true"
+          }
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/dup-yaml/hydo",
+      "pin": "f7a15b81387799feed9138519f4dbf191620b1de655220ebfa3ec9357436a354",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 4
+        },
+        "invariants": [
+          {
+            "id": "i",
+            "cmd": "true"
+          }
+        ],
+        "test": {
+          "commands": [
+            {
+              "name": "x",
+              "kind": "parallel_driver",
+              "run": [
+                "/x"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/empty-schedule/hydo",
+      "pin": "51da2945ae5ac9446c58e1aa06993bd7dcab46820cd58b18321b6080dd462469",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 4
+        },
+        "invariants": [
+          {
+            "id": "i",
+            "cmd": "true"
+          }
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/first-only/hydo",
+      "pin": "01ad8ac06cfc4f9cd2adb363d687c235c3fd314d48723fde3ac5b0d49a3bc2f0",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 4
+        },
+        "invariants": [
+          {
+            "id": "i",
+            "cmd": "true"
+          }
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/merge-yaml/hydo",
+      "pin": "f7a15b81387799feed9138519f4dbf191620b1de655220ebfa3ec9357436a354",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 4
+        },
+        "invariants": [
+          {
+            "id": "i",
+            "cmd": "true"
+          }
+        ],
+        "test": {
+          "commands": [
+            {
+              "name": "y",
+              "kind": "anytime",
+              "run": [
+                "/y"
+              ]
+            }
+          ],
+          "parallel": 2
+        }
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/not-exec/hydo",
+      "pin": "b53e8a26e6a5ba919d672276e713572947081b47899c2ffa1c32a3d618889166",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 4
+        },
+        "invariants": [
+          {
+            "id": "i",
+            "cmd": "true"
+          }
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/ok/hydo",
+      "pin": "0fd2c7a174090cf3f6ba3dd6be57dad3defe71b93c5678b0aef720977662e5d9",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 4
+        },
+        "invariants": [
+          {
+            "id": "i",
+            "cmd": "true"
+          }
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/regressions-only/hydo",
+      "pin": "39c508387942a9cf02bc9fc50d679b108fc16409871913d3cf96779cebadd27c",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 4
+        },
+        "invariants": [
+          {
+            "id": "i",
+            "cmd": "true"
+          }
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/saved-key/hydo",
+      "pin": "c8f0f1e60082f2d459c2847e588640b7a8d6c7d22c701dd0a33d65cf156772a3",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 4
+        },
+        "invariants": [
+          {
+            "id": "i",
+            "cmd": "true"
+          }
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/crates/hydo-manifest/tests/fixtures/folders/two-schedules/hydo",
+      "pin": "43f5f70a22e737154a499485dd9372cebdd551c7d25900b70676e8605db44c09",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 4
+        },
+        "invariants": [
+          {
+            "id": "i",
+            "cmd": "true"
+          }
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/grpcgen/demo",
+      "pin": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "m": {
+        "name": "grpcorders",
+        "description": "a gRPC order service on Redis, driven by generated gRPC drivers",
+        "root": {
+          "files": [
+            {
+              "src": "/nix/store/svzgg47md9362vjrq5x9k1djln2pkihj-redis-7.2.4/bin/redis-server",
+              "dst": "/bin/redis-server"
+            },
+            {
+              "src": "/nix/store/svzgg47md9362vjrq5x9k1djln2pkihj-redis-7.2.4/bin/redis-cli",
+              "dst": "/bin/redis-cli"
+            },
+            {
+              "src": "/nix/store/3z92sygrppbacsj05x9gwhpaxkivrzc8-systemd-255.6/lib/libsystemd.so.0",
+              "dst": "/nix/store/3z92sygrppbacsj05x9gwhpaxkivrzc8-systemd-255.6/lib/libsystemd.so.0"
+            },
+            {
+              "src": "/nix/store/3z92sygrppbacsj05x9gwhpaxkivrzc8-systemd-255.6/lib/libsystemd.so.0.38.0",
+              "dst": "/nix/store/3z92sygrppbacsj05x9gwhpaxkivrzc8-systemd-255.6/lib/libsystemd.so.0.38.0"
+            },
+            {
+              "src": "/nix/store/7lf9ba7lb8418ihzzy8gm985rk16bmbk-xz-5.4.7/lib/liblzma.so.5",
+              "dst": "/nix/store/7lf9ba7lb8418ihzzy8gm985rk16bmbk-xz-5.4.7/lib/liblzma.so.5"
+            },
+            {
+              "src": "/nix/store/7lf9ba7lb8418ihzzy8gm985rk16bmbk-xz-5.4.7/lib/liblzma.so.5.4.7",
+              "dst": "/nix/store/7lf9ba7lb8418ihzzy8gm985rk16bmbk-xz-5.4.7/lib/liblzma.so.5.4.7"
+            },
+            {
+              "src": "/nix/store/8klck62rcrjgck547m0rmwljivlxcssi-libcap-2.69-lib/lib/libcap.so.2",
+              "dst": "/nix/store/8klck62rcrjgck547m0rmwljivlxcssi-libcap-2.69-lib/lib/libcap.so.2"
+            },
+            {
+              "src": "/nix/store/8klck62rcrjgck547m0rmwljivlxcssi-libcap-2.69-lib/lib/libcap.so.2.69",
+              "dst": "/nix/store/8klck62rcrjgck547m0rmwljivlxcssi-libcap-2.69-lib/lib/libcap.so.2.69"
+            },
+            {
+              "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/ld-linux-aarch64.so.1",
+              "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/ld-linux-aarch64.so.1"
+            },
+            {
+              "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libc.so.6",
+              "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libc.so.6"
+            },
+            {
+              "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libdl.so.2",
+              "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libdl.so.2"
+            },
+            {
+              "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libm.so.6",
+              "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libm.so.6"
+            },
+            {
+              "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libpthread.so.0",
+              "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libpthread.so.0"
+            },
+            {
+              "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/librt.so.1",
+              "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/librt.so.1"
+            },
+            {
+              "src": "/nix/store/kablphmmlimsvz4qmf9xbgqpwa8b71nh-lz4-1.9.4/lib/liblz4.so.1",
+              "dst": "/nix/store/kablphmmlimsvz4qmf9xbgqpwa8b71nh-lz4-1.9.4/lib/liblz4.so.1"
+            },
+            {
+              "src": "/nix/store/kablphmmlimsvz4qmf9xbgqpwa8b71nh-lz4-1.9.4/lib/liblz4.so.1.9.4",
+              "dst": "/nix/store/kablphmmlimsvz4qmf9xbgqpwa8b71nh-lz4-1.9.4/lib/liblz4.so.1.9.4"
+            },
+            {
+              "src": "/nix/store/ma8n17lsrb9pgycvwyr3dhnalhkbqrdf-jemalloc-5.3.0/lib/libjemalloc.so.2",
+              "dst": "/nix/store/ma8n17lsrb9pgycvwyr3dhnalhkbqrdf-jemalloc-5.3.0/lib/libjemalloc.so.2"
+            },
+            {
+              "src": "/nix/store/p27dxq20hdvm8xjsgj4n103cl02x4jr4-openssl-3.0.14/lib/libcrypto.so.3",
+              "dst": "/nix/store/p27dxq20hdvm8xjsgj4n103cl02x4jr4-openssl-3.0.14/lib/libcrypto.so.3"
+            },
+            {
+              "src": "/nix/store/p27dxq20hdvm8xjsgj4n103cl02x4jr4-openssl-3.0.14/lib/libssl.so.3",
+              "dst": "/nix/store/p27dxq20hdvm8xjsgj4n103cl02x4jr4-openssl-3.0.14/lib/libssl.so.3"
+            },
+            {
+              "src": "/nix/store/piw1xfc6p66qf0malcfixz822q2b1wg1-libgpg-error-1.48/lib/libgpg-error.so.0",
+              "dst": "/nix/store/piw1xfc6p66qf0malcfixz822q2b1wg1-libgpg-error-1.48/lib/libgpg-error.so.0"
+            },
+            {
+              "src": "/nix/store/piw1xfc6p66qf0malcfixz822q2b1wg1-libgpg-error-1.48/lib/libgpg-error.so.0.35.0",
+              "dst": "/nix/store/piw1xfc6p66qf0malcfixz822q2b1wg1-libgpg-error-1.48/lib/libgpg-error.so.0.35.0"
+            },
+            {
+              "src": "/nix/store/pp8jrab5a9qfpn3la57r37x8kw2hrcil-gcc-13.2.0-libgcc/lib/libgcc_s.so.1",
+              "dst": "/nix/store/pp8jrab5a9qfpn3la57r37x8kw2hrcil-gcc-13.2.0-libgcc/lib/libgcc_s.so.1"
+            },
+            {
+              "src": "/nix/store/wmcyf2wn9wh491wi55j18kz6gsdz99cr-libgcrypt-1.10.3/lib/libgcrypt.so.20",
+              "dst": "/nix/store/wmcyf2wn9wh491wi55j18kz6gsdz99cr-libgcrypt-1.10.3/lib/libgcrypt.so.20"
+            },
+            {
+              "src": "/nix/store/wmcyf2wn9wh491wi55j18kz6gsdz99cr-libgcrypt-1.10.3/lib/libgcrypt.so.20.4.3",
+              "dst": "/nix/store/wmcyf2wn9wh491wi55j18kz6gsdz99cr-libgcrypt-1.10.3/lib/libgcrypt.so.20.4.3"
+            },
+            {
+              "src": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libgcc_s.so.1",
+              "dst": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libgcc_s.so.1"
+            },
+            {
+              "src": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libstdc++.so.6",
+              "dst": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libstdc++.so.6"
+            },
+            {
+              "src": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libstdc++.so.6.0.32",
+              "dst": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libstdc++.so.6.0.32"
+            },
+            {
+              "src": "/nix/store/ywz8lg1h600a888z67hpj632b8gri6wx-zstd-1.5.6/lib/libzstd.so.1",
+              "dst": "/nix/store/ywz8lg1h600a888z67hpj632b8gri6wx-zstd-1.5.6/lib/libzstd.so.1"
+            },
+            {
+              "src": "/nix/store/ywz8lg1h600a888z67hpj632b8gri6wx-zstd-1.5.6/lib/libzstd.so.1.5.6",
+              "dst": "/nix/store/ywz8lg1h600a888z67hpj632b8gri6wx-zstd-1.5.6/lib/libzstd.so.1.5.6"
+            },
+            {
+              "src": "build/orderd-arm64",
+              "dst": "/bin/orderd",
+              "mode": "0755"
+            },
+            {
+              "src": "build/gen/hydo-grpc.arm64",
+              "dst": "/bin/hydo-grpc",
+              "mode": "0755"
+            },
+            {
+              "src": "build/gen/grpc",
+              "dst": "/etc/hydo/grpc"
+            }
+          ],
+          "text": {
+            "/etc/redis.conf": "port 6379\nbind 127.0.0.1\ndir /data/redis\nsave \"\"\nappendonly yes\nappendfsync always\nhz 1\ndynamic-hz no\n"
+          }
+        },
+        "data": {
+          "size_mib": 64,
+          "dirs": [
+            "redis"
+          ]
+        },
+        "env": {
+          "HYDO_GRPC_SEED": "1"
+        },
+        "services": [
+          {
+            "name": "redis",
+            "cmd": "/bin/redis-server /etc/redis.conf",
+            "ready": "/bin/redis-cli ping | grep -q PONG",
+            "port": 6379
+          },
+          {
+            "name": "orderd",
+            "cmd": "/bin/orderd serve --mode buggy",
+            "ready": "/bin/hydo-grpc call List '{\"page_size\":1}' > /dev/null",
+            "port": 7070,
+            "depends_on": [
+              "redis"
+            ]
+          }
+        ],
+        "test": {
+          "commands": [
+            {
+              "name": "create",
+              "kind": "parallel_driver",
+              "run": [
+                "/bin/hydo-grpc",
+                "drive",
+                "orders.v1.Orders/Create"
+              ],
+              "timeout": 21
+            },
+            {
+              "name": "get",
+              "kind": "parallel_driver",
+              "run": [
+                "/bin/hydo-grpc",
+                "drive",
+                "orders.v1.Orders/Get"
+              ],
+              "timeout": 12
+            },
+            {
+              "name": "cancel",
+              "kind": "parallel_driver",
+              "run": [
+                "/bin/hydo-grpc",
+                "drive",
+                "orders.v1.Orders/Cancel"
+              ],
+              "timeout": 14
+            },
+            {
+              "name": "list",
+              "kind": "parallel_driver",
+              "run": [
+                "/bin/hydo-grpc",
+                "drive",
+                "orders.v1.Orders/List"
+              ],
+              "timeout": 12
+            }
+          ]
+        },
+        "workload": {
+          "steps": 30,
+          "retry": "/bin/hydo-grpc retry",
+          "timeout": 400
+        },
+        "invariants": [
+          {
+            "id": "orders.consistent",
+            "msg": "no request_id creates two orders; every acknowledged Create and Cancel is stored",
+            "cmd": "/bin/orderd check"
+          }
+        ],
+        "faults": [
+          "kill",
+          "pause",
+          "network",
+          "oneway",
+          "cut",
+          "clock",
+          "disk"
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/grpcgen/demo",
+      "pin": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "m": {
+        "name": "grpcorders",
+        "description": "a gRPC order service on Redis, driven by generated gRPC drivers",
+        "root": {
+          "files": [
+            {
+              "src": "~/hydo/build/redis-server",
+              "dst": "/bin/redis-server",
+              "mode": "0755"
+            },
+            {
+              "src": "~/hydo/build/redis-cli",
+              "dst": "/bin/redis-cli",
+              "mode": "0755"
+            },
+            {
+              "src": "build/orderd",
+              "dst": "/bin/orderd",
+              "mode": "0755"
+            },
+            {
+              "src": "build/gen/hydo-grpc",
+              "dst": "/bin/hydo-grpc",
+              "mode": "0755"
+            },
+            {
+              "src": "build/gen/grpc",
+              "dst": "/etc/hydo/grpc"
+            }
+          ],
+          "text": {
+            "/etc/redis.conf": "port 6379\nbind 127.0.0.1\ndir /data/redis\nsave \"\"\nappendonly yes\nappendfsync always\nhz 1\ndynamic-hz no\n"
+          }
+        },
+        "data": {
+          "size_mib": 64,
+          "dirs": [
+            "redis"
+          ]
+        },
+        "env": {
+          "HYDO_GRPC_SEED": "1"
+        },
+        "services": [
+          {
+            "name": "redis",
+            "cmd": "/bin/redis-server /etc/redis.conf",
+            "ready": "/bin/redis-cli ping | grep -q PONG",
+            "port": 6379
+          },
+          {
+            "name": "orderd",
+            "cmd": "/bin/orderd serve --mode buggy",
+            "ready": "/bin/hydo-grpc call List '{\"page_size\":1}' > /dev/null",
+            "port": 7070,
+            "depends_on": [
+              "redis"
+            ]
+          }
+        ],
+        "test": {
+          "commands": [
+            {
+              "name": "create",
+              "kind": "parallel_driver",
+              "run": [
+                "/bin/hydo-grpc",
+                "drive",
+                "orders.v1.Orders/Create"
+              ],
+              "timeout": 21
+            },
+            {
+              "name": "get",
+              "kind": "parallel_driver",
+              "run": [
+                "/bin/hydo-grpc",
+                "drive",
+                "orders.v1.Orders/Get"
+              ],
+              "timeout": 12
+            },
+            {
+              "name": "cancel",
+              "kind": "parallel_driver",
+              "run": [
+                "/bin/hydo-grpc",
+                "drive",
+                "orders.v1.Orders/Cancel"
+              ],
+              "timeout": 14
+            },
+            {
+              "name": "list",
+              "kind": "parallel_driver",
+              "run": [
+                "/bin/hydo-grpc",
+                "drive",
+                "orders.v1.Orders/List"
+              ],
+              "timeout": 12
+            }
+          ]
+        },
+        "workload": {
+          "steps": 30,
+          "retry": "/bin/hydo-grpc retry",
+          "timeout": 400
+        },
+        "invariants": [
+          {
+            "id": "orders.consistent",
+            "msg": "no request_id creates two orders; every acknowledged Create and Cancel is stored",
+            "cmd": "/bin/orderd check"
+          }
+        ],
+        "faults": [
+          "kill",
+          "pause",
+          "network",
+          "oneway",
+          "cut",
+          "clock",
+          "disk"
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/onboard/examples-mac/redis-composed/hydo",
+      "pin": "31b04d4f564d2f4ab4159dafadd9396a426188ea37262726498751555597f1c1",
+      "m": {
+        "name": "redis-composed",
+        "description": "Redis with an append-only file, driven by composed commands (SETs, transfers, AOF rewrites).",
+        "hydo_version": "0.1",
+        "format": 1,
+        "root": {
+          "files": [
+            {
+              "src": "/nix/store/svzgg47md9362vjrq5x9k1djln2pkihj-redis-7.2.4/bin/redis-server",
+              "dst": "/bin/redis-server"
+            },
+            {
+              "src": "/nix/store/svzgg47md9362vjrq5x9k1djln2pkihj-redis-7.2.4/bin/redis-cli",
+              "dst": "/bin/redis-cli"
+            },
+            {
+              "src": "/nix/store/3z92sygrppbacsj05x9gwhpaxkivrzc8-systemd-255.6/lib/libsystemd.so.0",
+              "dst": "/nix/store/3z92sygrppbacsj05x9gwhpaxkivrzc8-systemd-255.6/lib/libsystemd.so.0"
+            },
+            {
+              "src": "/nix/store/3z92sygrppbacsj05x9gwhpaxkivrzc8-systemd-255.6/lib/libsystemd.so.0.38.0",
+              "dst": "/nix/store/3z92sygrppbacsj05x9gwhpaxkivrzc8-systemd-255.6/lib/libsystemd.so.0.38.0"
+            },
+            {
+              "src": "/nix/store/7lf9ba7lb8418ihzzy8gm985rk16bmbk-xz-5.4.7/lib/liblzma.so.5",
+              "dst": "/nix/store/7lf9ba7lb8418ihzzy8gm985rk16bmbk-xz-5.4.7/lib/liblzma.so.5"
+            },
+            {
+              "src": "/nix/store/7lf9ba7lb8418ihzzy8gm985rk16bmbk-xz-5.4.7/lib/liblzma.so.5.4.7",
+              "dst": "/nix/store/7lf9ba7lb8418ihzzy8gm985rk16bmbk-xz-5.4.7/lib/liblzma.so.5.4.7"
+            },
+            {
+              "src": "/nix/store/8klck62rcrjgck547m0rmwljivlxcssi-libcap-2.69-lib/lib/libcap.so.2",
+              "dst": "/nix/store/8klck62rcrjgck547m0rmwljivlxcssi-libcap-2.69-lib/lib/libcap.so.2"
+            },
+            {
+              "src": "/nix/store/8klck62rcrjgck547m0rmwljivlxcssi-libcap-2.69-lib/lib/libcap.so.2.69",
+              "dst": "/nix/store/8klck62rcrjgck547m0rmwljivlxcssi-libcap-2.69-lib/lib/libcap.so.2.69"
+            },
+            {
+              "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/ld-linux-aarch64.so.1",
+              "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/ld-linux-aarch64.so.1"
+            },
+            {
+              "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libc.so.6",
+              "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libc.so.6"
+            },
+            {
+              "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libdl.so.2",
+              "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libdl.so.2"
+            },
+            {
+              "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libm.so.6",
+              "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libm.so.6"
+            },
+            {
+              "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libpthread.so.0",
+              "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libpthread.so.0"
+            },
+            {
+              "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/librt.so.1",
+              "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/librt.so.1"
+            },
+            {
+              "src": "/nix/store/kablphmmlimsvz4qmf9xbgqpwa8b71nh-lz4-1.9.4/lib/liblz4.so.1",
+              "dst": "/nix/store/kablphmmlimsvz4qmf9xbgqpwa8b71nh-lz4-1.9.4/lib/liblz4.so.1"
+            },
+            {
+              "src": "/nix/store/kablphmmlimsvz4qmf9xbgqpwa8b71nh-lz4-1.9.4/lib/liblz4.so.1.9.4",
+              "dst": "/nix/store/kablphmmlimsvz4qmf9xbgqpwa8b71nh-lz4-1.9.4/lib/liblz4.so.1.9.4"
+            },
+            {
+              "src": "/nix/store/ma8n17lsrb9pgycvwyr3dhnalhkbqrdf-jemalloc-5.3.0/lib/libjemalloc.so.2",
+              "dst": "/nix/store/ma8n17lsrb9pgycvwyr3dhnalhkbqrdf-jemalloc-5.3.0/lib/libjemalloc.so.2"
+            },
+            {
+              "src": "/nix/store/p27dxq20hdvm8xjsgj4n103cl02x4jr4-openssl-3.0.14/lib/libcrypto.so.3",
+              "dst": "/nix/store/p27dxq20hdvm8xjsgj4n103cl02x4jr4-openssl-3.0.14/lib/libcrypto.so.3"
+            },
+            {
+              "src": "/nix/store/p27dxq20hdvm8xjsgj4n103cl02x4jr4-openssl-3.0.14/lib/libssl.so.3",
+              "dst": "/nix/store/p27dxq20hdvm8xjsgj4n103cl02x4jr4-openssl-3.0.14/lib/libssl.so.3"
+            },
+            {
+              "src": "/nix/store/piw1xfc6p66qf0malcfixz822q2b1wg1-libgpg-error-1.48/lib/libgpg-error.so.0",
+              "dst": "/nix/store/piw1xfc6p66qf0malcfixz822q2b1wg1-libgpg-error-1.48/lib/libgpg-error.so.0"
+            },
+            {
+              "src": "/nix/store/piw1xfc6p66qf0malcfixz822q2b1wg1-libgpg-error-1.48/lib/libgpg-error.so.0.35.0",
+              "dst": "/nix/store/piw1xfc6p66qf0malcfixz822q2b1wg1-libgpg-error-1.48/lib/libgpg-error.so.0.35.0"
+            },
+            {
+              "src": "/nix/store/pp8jrab5a9qfpn3la57r37x8kw2hrcil-gcc-13.2.0-libgcc/lib/libgcc_s.so.1",
+              "dst": "/nix/store/pp8jrab5a9qfpn3la57r37x8kw2hrcil-gcc-13.2.0-libgcc/lib/libgcc_s.so.1"
+            },
+            {
+              "src": "/nix/store/wmcyf2wn9wh491wi55j18kz6gsdz99cr-libgcrypt-1.10.3/lib/libgcrypt.so.20",
+              "dst": "/nix/store/wmcyf2wn9wh491wi55j18kz6gsdz99cr-libgcrypt-1.10.3/lib/libgcrypt.so.20"
+            },
+            {
+              "src": "/nix/store/wmcyf2wn9wh491wi55j18kz6gsdz99cr-libgcrypt-1.10.3/lib/libgcrypt.so.20.4.3",
+              "dst": "/nix/store/wmcyf2wn9wh491wi55j18kz6gsdz99cr-libgcrypt-1.10.3/lib/libgcrypt.so.20.4.3"
+            },
+            {
+              "src": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libgcc_s.so.1",
+              "dst": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libgcc_s.so.1"
+            },
+            {
+              "src": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libstdc++.so.6",
+              "dst": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libstdc++.so.6"
+            },
+            {
+              "src": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libstdc++.so.6.0.32",
+              "dst": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libstdc++.so.6.0.32"
+            },
+            {
+              "src": "/nix/store/ywz8lg1h600a888z67hpj632b8gri6wx-zstd-1.5.6/lib/libzstd.so.1",
+              "dst": "/nix/store/ywz8lg1h600a888z67hpj632b8gri6wx-zstd-1.5.6/lib/libzstd.so.1"
+            },
+            {
+              "src": "/nix/store/ywz8lg1h600a888z67hpj632b8gri6wx-zstd-1.5.6/lib/libzstd.so.1.5.6",
+              "dst": "/nix/store/ywz8lg1h600a888z67hpj632b8gri6wx-zstd-1.5.6/lib/libzstd.so.1.5.6"
+            }
+          ],
+          "text": {
+            "/etc/redis.conf": "port 6379\nbind 127.0.0.1\ndir /data/redis\nsave \"\"\nappendonly yes\nappendfsync always\nhz 1\ndynamic-hz no\n"
+          }
+        },
+        "data": {
+          "size_mib": 64,
+          "dirs": [
+            "redis"
+          ]
+        },
+        "env": {
+          "TRANSFER": "atomic",
+          "ACCOUNTS": "5",
+          "TOTAL": "500"
+        },
+        "services": [
+          {
+            "name": "redis",
+            "cmd": "/bin/redis-server /etc/redis.conf",
+            "ready": "/bin/redis-cli ping | grep -q PONG",
+            "port": 6379
+          }
+        ],
+        "workload": {
+          "steps": 20,
+          "timeout": 120
+        },
+        "test": {
+          "parallel": 4,
+          "per_round": 2,
+          "round_ms": 100,
+          "command_timeout": 20,
+          "drain_timeout": 30
+        },
+        "knobs": [
+          {
+            "token": "R",
+            "name": "Redis appendfsync",
+            "default": "always",
+            "values": [
+              "always",
+              "everysec",
+              "no"
+            ],
+            "set": "/bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE"
+          }
+        ],
+        "faults": [
+          "kill",
+          "pause",
+          "cut",
+          "clock",
+          "disk"
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/onboard/examples/redis-composed-hist/hydo",
+      "pin": "ae03f91dd34d1b6577288716ba08083f211e915c71fb12d0a1c6b7f3a4824991",
+      "m": {
+        "name": "redis-composed-hist",
+        "description": "Redis driven by composed commands; the recorded histories are checked on the host.",
+        "hydo_version": "0.1",
+        "format": 1,
+        "root": {
+          "files": [
+            {
+              "src": "~/hydo/build/redis-server",
+              "dst": "/bin/redis-server",
+              "mode": "0755"
+            },
+            {
+              "src": "~/hydo/build/redis-cli",
+              "dst": "/bin/redis-cli",
+              "mode": "0755"
+            }
+          ],
+          "text": {
+            "/etc/redis.conf": "port 6379\nbind 127.0.0.1\ndir /data/redis\nsave \"\"\nappendonly yes\nappendfsync always\nhz 1\ndynamic-hz no\n"
+          }
+        },
+        "data": {
+          "size_mib": 64,
+          "dirs": [
+            "redis"
+          ]
+        },
+        "services": [
+          {
+            "name": "redis",
+            "cmd": "/bin/redis-server /etc/redis.conf",
+            "ready": "/bin/redis-cli ping | grep -q PONG",
+            "port": 6379
+          }
+        ],
+        "workload": {
+          "steps": 20,
+          "timeout": 120
+        },
+        "test": {
+          "parallel": 4,
+          "per_round": 2,
+          "round_ms": 100,
+          "command_timeout": 20,
+          "drain_timeout": 30
+        },
+        "knobs": [
+          {
+            "token": "R",
+            "name": "Redis appendfsync",
+            "default": "always",
+            "values": [
+              "always",
+              "everysec",
+              "no"
+            ],
+            "set": "/bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE"
+          }
+        ],
+        "faults": [
+          "kill",
+          "pause",
+          "cut",
+          "clock",
+          "disk"
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/onboard/examples/redis-composed-read/hydo",
+      "pin": "6d11501ea0fc3b0e9cfbd3ee5621a21457fba52cca5f60ab4ab83bab09204d53",
+      "m": {
+        "name": "redis-composed-read",
+        "description": "Redis with an append-only file, driven by composed commands (SETs, transfers, AOF rewrites).",
+        "hydo_version": "0.1",
+        "format": 1,
+        "root": {
+          "files": [
+            {
+              "src": "~/hydo/build/redis-server",
+              "dst": "/bin/redis-server",
+              "mode": "0755"
+            },
+            {
+              "src": "~/hydo/build/redis-cli",
+              "dst": "/bin/redis-cli",
+              "mode": "0755"
+            }
+          ],
+          "text": {
+            "/etc/redis.conf": "port 6379\nbind 127.0.0.1\ndir /data/redis\nsave \"\"\nappendonly yes\nappendfsync always\nhz 1\ndynamic-hz no\n"
+          }
+        },
+        "data": {
+          "size_mib": 64,
+          "dirs": [
+            "redis"
+          ]
+        },
+        "env": {
+          "TRANSFER": "atomic",
+          "ACCOUNTS": "5",
+          "TOTAL": "500"
+        },
+        "services": [
+          {
+            "name": "redis",
+            "cmd": "/bin/redis-server /etc/redis.conf",
+            "ready": "/bin/redis-cli ping | grep -q PONG",
+            "port": 6379
+          }
+        ],
+        "workload": {
+          "steps": 20,
+          "timeout": 120
+        },
+        "test": {
+          "parallel": 4,
+          "per_round": 2,
+          "round_ms": 100,
+          "command_timeout": 20,
+          "drain_timeout": 30,
+          "checks": [
+            {
+              "name": "accounts_present",
+              "kind": "final",
+              "msg": "all ACCOUNTS balances exist after the run",
+              "run": [
+                "hydo-check",
+                "count",
+                "--eq",
+                "5",
+                "--in",
+                "accounts=redis 127.0.0.1:6379 scan \"acct:*\""
+              ]
+            }
+          ]
+        },
+        "knobs": [
+          {
+            "token": "R",
+            "name": "Redis appendfsync",
+            "default": "always",
+            "values": [
+              "always",
+              "everysec",
+              "no"
+            ],
+            "set": "/bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE"
+          }
+        ],
+        "faults": [
+          "kill",
+          "pause",
+          "cut",
+          "clock",
+          "disk"
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/onboard/examples/redis-composed/hydo",
+      "pin": "31b04d4f564d2f4ab4159dafadd9396a426188ea37262726498751555597f1c1",
+      "m": {
+        "name": "redis-composed",
+        "description": "Redis with an append-only file, driven by composed commands (SETs, transfers, AOF rewrites).",
+        "hydo_version": "0.1",
+        "format": 1,
+        "root": {
+          "files": [
+            {
+              "src": "~/hydo/build/redis-server",
+              "dst": "/bin/redis-server",
+              "mode": "0755"
+            },
+            {
+              "src": "~/hydo/build/redis-cli",
+              "dst": "/bin/redis-cli",
+              "mode": "0755"
+            }
+          ],
+          "text": {
+            "/etc/redis.conf": "port 6379\nbind 127.0.0.1\ndir /data/redis\nsave \"\"\nappendonly yes\nappendfsync always\nhz 1\ndynamic-hz no\n"
+          }
+        },
+        "data": {
+          "size_mib": 64,
+          "dirs": [
+            "redis"
+          ]
+        },
+        "env": {
+          "TRANSFER": "atomic",
+          "ACCOUNTS": "5",
+          "TOTAL": "500"
+        },
+        "services": [
+          {
+            "name": "redis",
+            "cmd": "/bin/redis-server /etc/redis.conf",
+            "ready": "/bin/redis-cli ping | grep -q PONG",
+            "port": 6379
+          }
+        ],
+        "workload": {
+          "steps": 20,
+          "timeout": 120
+        },
+        "test": {
+          "parallel": 4,
+          "per_round": 2,
+          "round_ms": 100,
+          "command_timeout": 20,
+          "drain_timeout": 30
+        },
+        "knobs": [
+          {
+            "token": "R",
+            "name": "Redis appendfsync",
+            "default": "always",
+            "values": [
+              "always",
+              "everysec",
+              "no"
+            ],
+            "set": "/bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE"
+          }
+        ],
+        "faults": [
+          "kill",
+          "pause",
+          "cut",
+          "clock",
+          "disk"
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/onboard/examples/redis-errors/hydo",
+      "pin": "21c0bf8e9925fa520c8d8b7eaa428e0b1efdceea1209229ffe8a062bc89e6e54",
+      "m": {
+        "name": "redis-errors",
+        "description": "The composed Redis example with error logs as findings (known kinds in hydo/known-errors.yaml).",
+        "hydo_version": "0.1",
+        "format": 1,
+        "root": {
+          "files": [
+            {
+              "src": "~/hydo/build/redis-server",
+              "dst": "/bin/redis-server",
+              "mode": "0755"
+            },
+            {
+              "src": "~/hydo/build/redis-cli",
+              "dst": "/bin/redis-cli",
+              "mode": "0755"
+            }
+          ],
+          "text": {
+            "/etc/redis.conf": "port 6379\nbind 127.0.0.1\ndir /data/redis\nsave \"\"\nappendonly yes\nappendfsync always\nhz 1\ndynamic-hz no\n"
+          }
+        },
+        "data": {
+          "size_mib": 64,
+          "dirs": [
+            "redis"
+          ]
+        },
+        "env": {
+          "TRANSFER": "atomic",
+          "ACCOUNTS": "5",
+          "TOTAL": "500"
+        },
+        "services": [
+          {
+            "name": "redis",
+            "cmd": "/bin/redis-server /etc/redis.conf",
+            "ready": "/bin/redis-cli ping | grep -q PONG",
+            "port": 6379,
+            "errors": {
+              "format": "redis"
+            }
+          }
+        ],
+        "errors": true,
+        "workload": {
+          "steps": 20,
+          "timeout": 120
+        },
+        "test": {
+          "parallel": 4,
+          "per_round": 2,
+          "round_ms": 100,
+          "command_timeout": 20,
+          "drain_timeout": 30
+        },
+        "knobs": [
+          {
+            "token": "R",
+            "name": "Redis appendfsync",
+            "default": "always",
+            "values": [
+              "always",
+              "everysec",
+              "no"
+            ],
+            "set": "/bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE"
+          }
+        ],
+        "faults": [
+          "kill",
+          "pause",
+          "cut",
+          "clock",
+          "disk"
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/hydo/onboard/examples/redis-errors/hydo",
+      "pin": "21c0bf8e9925fa520c8d8b7eaa428e0b1efdceea1209229ffe8a062bc89e6e54",
+      "m": {
+        "format": 1,
+        "unknown": "report",
+        "known": [
+          {
+            "sig": "f0c792251150",
+            "service": "redis",
+            "tpl": "#:C <date> <time> # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low ",
+            "example": "133:C 01 Jan 2026 00:00:00.072 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures",
+            "reason": "Redis 7.2 warns at every start that vm.overcommit_memory is 0 (the guest kernel default); it affects only background saves under memory pressure, which this test does not exercise",
+            "by": "user",
+            "date": "2026-10-30"
+          },
+          {
+            "sig": "0c3b6d2b3888",
+            "service": "redis",
+            "tpl": "#:C <date> <time> # Write error writing append only file on disk: I/O error",
+            "example": "394:C 01 Jan 2026 00:00:06.068 # Write error writing append only file on disk: I/O error",
+            "with": [
+              "disk=ioerr"
+            ],
+            "reason": "the disk returned I/O errors (disk=ioerr): Redis reports the failed AOF write and, with appendfsync always, exits as documented",
+            "by": "user",
+            "date": "2026-10-30"
+          },
+          {
+            "sig": "84dcbcb26957",
+            "service": "redis",
+            "tpl": "#:M <date> <time> # Background AOF rewrite terminated with error",
+            "example": "133:M 01 Jan 2026 00:00:06.120 # Background AOF rewrite terminated with error",
+            "with": [
+              "disk=ioerr"
+            ],
+            "reason": "the disk returned I/O errors (disk=ioerr): Redis reports the failed AOF write and, with appendfsync always, exits as documented",
+            "by": "user",
+            "date": "2026-10-30"
+          },
+          {
+            "sig": "c0cc01ac5c71",
+            "service": "redis",
+            "tpl": "#:M <date> <time> # Error writing to the AOF file: I/O error",
+            "example": "133:M 01 Jan 2026 00:00:06.206 # Error writing to the AOF file: I/O error",
+            "with": [
+              "disk=ioerr"
+            ],
+            "reason": "the disk returned I/O errors (disk=ioerr): Redis reports the failed AOF write and, with appendfsync always, exits as documented",
+            "by": "user",
+            "date": "2026-10-30"
+          },
+          {
+            "sig": "56b2cc15b135",
+            "service": "redis",
+            "tpl": "#:M <date> <time> # Can't recover from AOF write error when the AOF fsync policy is 'always'. Exiting...",
+            "example": "133:M 01 Jan 2026 00:00:06.206 # Can't recover from AOF write error when the AOF fsync policy is 'always'. Exiting...",
+            "with": [
+              "disk=ioerr"
+            ],
+            "reason": "the disk returned I/O errors (disk=ioerr): Redis reports the failed AOF write and, with appendfsync always, exits as documented",
+            "by": "user",
+            "date": "2026-10-30"
+          }
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/skills/hydo-onboard/assets/example-redis-composed/hydo",
+      "pin": "31b04d4f564d2f4ab4159dafadd9396a426188ea37262726498751555597f1c1",
+      "m": {
+        "name": "redis-composed",
+        "description": "Redis with an append-only file, driven by composed commands (SETs, transfers, AOF rewrites).",
+        "hydo_version": "0.1",
+        "format": 1,
+        "root": {
+          "files": [
+            {
+              "src": "~/hydo/build/redis-server",
+              "dst": "/bin/redis-server",
+              "mode": "0755"
+            },
+            {
+              "src": "~/hydo/build/redis-cli",
+              "dst": "/bin/redis-cli",
+              "mode": "0755"
+            }
+          ],
+          "text": {
+            "/etc/redis.conf": "port 6379\nbind 127.0.0.1\ndir /data/redis\nsave \"\"\nappendonly yes\nappendfsync always\nhz 1\ndynamic-hz no\n"
+          }
+        },
+        "data": {
+          "size_mib": 64,
+          "dirs": [
+            "redis"
+          ]
+        },
+        "env": {
+          "TRANSFER": "atomic",
+          "ACCOUNTS": "5",
+          "TOTAL": "500"
+        },
+        "services": [
+          {
+            "name": "redis",
+            "cmd": "/bin/redis-server /etc/redis.conf",
+            "ready": "/bin/redis-cli ping | grep -q PONG",
+            "port": 6379
+          }
+        ],
+        "workload": {
+          "steps": 20,
+          "timeout": 120
+        },
+        "test": {
+          "parallel": 4,
+          "per_round": 2,
+          "round_ms": 100,
+          "command_timeout": 20,
+          "drain_timeout": 30
+        },
+        "knobs": [
+          {
+            "token": "R",
+            "name": "Redis appendfsync",
+            "default": "always",
+            "values": [
+              "always",
+              "everysec",
+              "no"
+            ],
+            "set": "/bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE"
+          }
+        ],
+        "faults": [
+          "kill",
+          "pause",
+          "cut",
+          "clock",
+          "disk"
+        ]
+      }
+    },
+    {
+      "dir": "<TOP>/skills/hydo-onboard/assets/hydo-init/hydo",
+      "pin": "ed8303f992565d06d3bb873e8144f28b106ea81a26b8c87171f2b3b7d942acae",
+      "m": {
+        "name": "@NAME@",
+        "description": "TODO one line about the system under test",
+        "format": 1,
+        "hydo_version": "0.1",
+        "guest": {
+          "ram_mib": 1024
+        },
+        "root": {
+          "files": []
+        },
+        "data": {
+          "size_mib": 512,
+          "dirs": []
+        },
+        "services": [],
+        "workload": {
+          "steps": 20,
+          "timeout": 300
+        },
+        "test": {
+          "parallel": 4,
+          "per_round": 2,
+          "round_ms": 200
+        },
+        "faults": [
+          "kill",
+          "pause",
+          "network",
+          "oneway",
+          "cut",
+          "clock",
+          "disk"
+        ]
+      }
+    },
+    {
+      "dir": "<WORK>/variants/v1/hydo",
+      "pin": "31b04d4f564d2f4ab4159dafadd9396a426188ea37262726498751555597f1c1",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 20
+        },
+        "test": {
+          "parallel": 4,
+          "per_round": 2,
+          "round_ms": 100
+        }
+      }
+    },
+    {
+      "dir": "<WORK>/variants/v2/hydo",
+      "pin": "2b9f7d22f34f724fcddd5a36af9e8c81d356ad77b390169506a5e34815b3fe10",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 20
+        },
+        "test": {
+          "parallel": 4,
+          "per_round": 2,
+          "round_ms": 100
+        }
+      }
+    },
+    {
+      "dir": "<WORK>/variants/v3/hydo",
+      "pin": "74e010f95660bc6f620813a039ed31c0062248dd74e40ca92da0bfe16d469225",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 20
+        },
+        "test": {
+          "parallel": 4,
+          "per_round": 2,
+          "round_ms": 100
+        }
+      }
+    },
+    {
+      "dir": "<WORK>/variants/v4/hydo",
+      "pin": "f26943db79ae6c3107dba33e2cae12f8f5cf39b6382d5313b4ca50fc04e7dc4a",
+      "m": {
+        "name": "t",
+        "workload": {
+          "steps": 20
+        },
+        "test": {
+          "parallel": 4,
+          "per_round": 2,
+          "round_ms": 100
+        }
+      }
+    }
+  ]
+}
