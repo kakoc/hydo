@@ -10,8 +10,9 @@
 //! `report.json`, `runs.jsonl` and `shrink.jsonl` (and `errors.json` for images with error logs).
 //!
 //! The schedule strings, finding classes, shrink candidates and shrink paths are explore.py's,
-//! byte for byte (`tests/identity.rs` against explore.py itself, `tests/fake_engine.rs` end to end
-//! against explore.py on a scripted engine; docs/HISTORY.md M102). What changed is how runs are
+//! byte for byte (`tests/identity.rs` against explore.py's answers, `tests/fake_engine.rs` end to
+//! end against explore.py's outputs on a scripted engine, both recorded in `tests/golden/` before
+//! the Python was removed; docs/HISTORY.md M102, M107). What changed is how runs are
 //! scheduled ([`pool`], [`run`]): no batch barriers between the first runs, the re-runs and the
 //! shrinks, shrink rounds that stop at their first kept candidate, snapshots in memory when the
 //! machine has the room, and the pool sized from the machine.

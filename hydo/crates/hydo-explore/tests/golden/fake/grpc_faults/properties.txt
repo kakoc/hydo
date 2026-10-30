@@ -1,0 +1,5 @@
+type                   id                                    ok    fail  verdict                  first failure / description
+eventually             orders.drained                        40       0  PASS                       [slowest in time: 3.47 s]  [not in catalog]
+sometimes              retry.taken                           18      22  PASS                     -  [not in catalog]
+liveness: 1 eventually properties, 0 missed a deadline
+runs=40 (setup-complete seen in 0); properties=2; violations=0

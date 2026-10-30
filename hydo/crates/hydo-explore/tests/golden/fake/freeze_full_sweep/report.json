@@ -1,0 +1,64 @@
+{
+ "summary": {
+  "schedules": 16,
+  "strategy": "sweep:freeze",
+  "image": "explore-disk.img",
+  "workers": N,
+  "sweep_wall_s": N,
+  "runs_per_hour": N,
+  "mean_run_s": 6.1,
+  "worker_boot_s": 2.5,
+  "total_wall_s": N,
+  "failures": 0,
+  "reproduced": 0,
+  "repro_runs": 2,
+  "error_kinds_new": 1,
+  "runs_with_new_error_kinds": 16
+ },
+ "failures": [],
+ "shrunk": [],
+ "errors": {
+  "known_file": null,
+  "known_sha256": null,
+  "unknown": "report",
+  "kinds": [
+   {
+    "sig": "4c53c64297e2",
+    "svc": "app",
+    "src": "log",
+    "tpl": "config reloaded",
+    "ex": "config reloaded",
+    "runs": 16,
+    "new_runs": 16,
+    "seeds": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12
+    ],
+    "first_seed": 1,
+    "first_schedule": "disk=none dseed=0 | run F=redis<workload@8#1:1000",
+    "first_at": [
+     "s"
+    ],
+    "lines": 16,
+    "first_new_seed": 1,
+    "first_new_schedule": "disk=none dseed=0 | run F=redis<workload@8#1:1000",
+    "first_new_at": [
+     "s"
+    ],
+    "first_new_ex": "config reloaded",
+    "new": true,
+    "shrunk": null
+   }
+  ]
+ }
+}

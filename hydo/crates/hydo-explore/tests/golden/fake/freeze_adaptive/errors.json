@@ -1,0 +1,38 @@
+{
+ "known_file": null,
+ "known_sha256": null,
+ "unknown": "report",
+ "kinds": [
+  {
+   "sig": "4c53c64297e2",
+   "svc": "app",
+   "src": "log",
+   "tpl": "config reloaded",
+   "ex": "config reloaded",
+   "runs": 6,
+   "new_runs": 6,
+   "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "first_seed": 1,
+   "first_schedule": "disk=none dseed=0 | run F=redis<workload@7#1:150000",
+   "first_at": [
+    "s"
+   ],
+   "lines": 6,
+   "first_new_seed": 1,
+   "first_new_schedule": "disk=none dseed=0 | run F=redis<workload@7#1:150000",
+   "first_new_at": [
+    "s"
+   ],
+   "first_new_ex": "config reloaded",
+   "new": true,
+   "shrunk": null
+  }
+ ]
+}
