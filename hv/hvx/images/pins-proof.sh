@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Rebuild the inputs of the Redis example image with the REAL pinned tools (no HYDO_GCC_MUSL /
 # HYDO_REDIS_OUT overrides) in a private directory, then build the example images and print
-# their sha256. See hv/hvx/BUILD-PINS.md.
+# their sha256. See docs/BUILD-PINS.md.
 #
 # Usage on the build box:  PROOF=~/hydo-pins-proof hv/hvx/images/pins-proof.sh   (run from the tree root)
 # The tree is expected at $PROOF/hydo; HOME is set to $PROOF so the manifests' ~/hydo/build/...

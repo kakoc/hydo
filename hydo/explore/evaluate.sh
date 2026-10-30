@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # evaluate.sh -- does coverage-guided exploration beat random at the same budget? (M41)
-# Run on the box from ~/hydo/hv/hvx/explore. Writes everything under $OUT (default /var/tmp/g).
+# Run on the box from ~/hydo/hydo/explore. Writes everything under $OUT (default /var/tmp/g).
 #   (a) time-to-bug: the OLD buggy front door (explore-ptold); random vs guided; REPS starts
 #       each; runs until the first durable-defaults failure (capped at CAP).
 #   (b) coverage growth: the FIXED front door (explore-ptfix); guided vs random, GROW runs,

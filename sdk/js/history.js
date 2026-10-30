@@ -5,7 +5,7 @@
 // the completion after the reply -- and the host checks the history after the run
 // (linearizability of a register / CAS object per key, Elle-style list-append checks). The
 // lines are byte for byte those of the Go recorder (hydo/stack/hydohist); the wire format and
-// the checkers are in hv/hvx/HISTORIES.md.
+// the checkers are in hydo/HISTORIES.md.
 //
 //   const { History, enc, ver, valueOrNil } = require('hydo-assert/history');
 //   const kv = new History('kv');

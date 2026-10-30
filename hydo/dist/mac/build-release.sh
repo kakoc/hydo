@@ -80,7 +80,13 @@ cp "$TOP/hydo/onboard/hydo-build" "$TOP/hydo/onboard/hydo-compose" "$TOP/hydo/on
    "$TOP/hydo/onboard/hydo-liveness.sh" "$TOP/hydo/onboard/MANIFEST.md" "$TOP/hydo/onboard/hydo_composer.py" \
    "$TOP/hydo/onboard/hydo-composer.sh" "$REL/hydo/onboard/"
 echo "$VERSION" > "$REL/hydo/VERSION"     # hydo_composer.engine_version: what a plan's hydo_version is checked against
-cp "$TOP/hydo/explore/explore.py" "$TOP/hydo/explore/hvm_backend.py" "$TOP/hydo/explore/manifest_space.py" "$REL/hydo/explore/"
+# explore.py imports grpc_faults and fc_adaptive at its top (M90, M92): without them `hydo explore` stops
+cp "$TOP/hydo/explore/explore.py" "$TOP/hydo/explore/hvm_backend.py" "$TOP/hydo/explore/manifest_space.py" \
+   "$TOP/hydo/explore/grpc_faults.py" "$TOP/hydo/explore/fc_adaptive.py" "$REL/hydo/explore/"
+# the host-side history checkers and the guest recorder (hydo/HISTORIES.md): `hydo run`/`hydo explore`
+# check a run's history with hydohist.py; hydo-build stages hydo_hist.sh for a manifest with checks:
+mkdir -p "$REL/hydo/history"
+cp "$TOP/hydo/history/hydohist.py" "$TOP/hydo/history/hydo-check" "$TOP/hydo/history/hydo_hist.sh" "$REL/hydo/history/"
 cp "$TOP/hydo/assert/hydo_assert_report.c" "$TOP/hydo/assert/hydo_assert_table.h" "$REL/hydo/assert/"   # explore.py compiles the property table tool
 cp "$TOP/hv/hvm/hvm" "$REL/hv/hvm/hvm"
 cp "$TOP/hv/hvm/explore/hvmx" "$REL/hv/hvm/explore/hvmx"

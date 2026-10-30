@@ -25,8 +25,8 @@ export LC_ALL=C
 
 export GOTOOLCHAIN=${GOTOOLCHAIN:-go1.26.5}
 mkdir -p "$T/go/hydohist"
-cp "$REPO"/hvx/stack/hydohist/hydohist.go "$REPO"/hvx/stack/hydohist/mono_linux.go \
-   "$REPO"/hvx/stack/hydohist/mono_other.go "$T/go/hydohist/"
+cp "$REPO"/hydo/stack/hydohist/hydohist.go "$REPO"/hydo/stack/hydohist/mono_linux.go \
+   "$REPO"/hydo/stack/hydohist/mono_other.go "$T/go/hydohist/"
 cp "$HERE/history-go/main.go" "$T/go/"
 printf 'module conf\n\ngo 1.21\n' > "$T/go/go.mod"
 (cd "$T/go" && GOFLAGS=-mod=mod go build -o "$T/hist-go" .)

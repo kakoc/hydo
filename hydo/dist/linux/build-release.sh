@@ -102,8 +102,9 @@ cp "$TOP/hydo/history/hydohist.py" "$TOP/hydo/history/hydo-check" "$TOP/hydo/his
 cp "$TOP/hydo/onboard/hydo-init-history.sh" "$REL/hydo/onboard/"
 # error logs as findings (errors: in a manifest): the guest scan and the host side (hydo errors)
 cp "$TOP/hydo/onboard/hydo-init-errlog.sh" "$TOP/hydo/onboard/hydo_errors.py" "$REL/hydo/onboard/"
+# explore.py imports grpc_faults at its top (M90) and fc_adaptive for --fc-adaptive (M92)
 cp "$TOP/hydo/explore/explore.py" "$TOP/hydo/explore/hvm_backend.py" "$TOP/hydo/explore/manifest_space.py" \
-   "$REL/hydo/explore/"
+   "$TOP/hydo/explore/grpc_faults.py" "$TOP/hydo/explore/fc_adaptive.py" "$REL/hydo/explore/"
 # the run engine's sources (install.sh compiles hv/hvx/hvx_explore on the user's machine)
 cp "$TOP/hv/hvx/hvx_explore.c" "$TOP/hv/hvx/hvx_stack_verify.c" "$TOP/hv/hvx/hvx_boot.h" "$TOP/hv/hvx/hvx_abi.h" \
    "$TOP/hv/hvx/ptedges.h" "$REL/hv/hvx/"
