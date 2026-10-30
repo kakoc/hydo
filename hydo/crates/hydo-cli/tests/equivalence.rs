@@ -259,9 +259,9 @@ fn cli_matches_python() {
     if cfg!(target_os = "macos") {
         n += same(&root, "mac", nothing, &[&["doctor"]]);
     }
-    if cfg!(target_os = "linux") {
-        n += same(&root, "linux", nothing, &[&["doctor"]]);
-    }
+    // The Linux doctor runs the release's bundled mke2fs; in this partial root the Python CLI
+    // crashes there (FileNotFoundError), so the Linux doctor is compared on an installed release
+    // (docs/HISTORY.md, M101).
     eprintln!(
         "equivalence: {n} invocations gave the same exit code, stdout and files; the same stderr in all but {} \
          where the Python CLI crashed with a traceback and the Rust CLI prints a `hydo:` message",
