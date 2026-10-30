@@ -1,3 +1,5 @@
+# Replaced by hydo-build: the Rust crate hydo/crates/hydo-build (Milestone 103) gives the same output
+# and images; this file stays only as the equivalence tests' reference until the lead deletes it.
 """hydo-build --arch arm64: the manifest compiled for the Mac VMM (hv/hvm/, Milestone 48).
 
 Called by hydo-build's main() with its module namespace H (compile_shell, copy_into, mkfs,

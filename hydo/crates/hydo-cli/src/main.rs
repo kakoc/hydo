@@ -8,9 +8,11 @@
 //!                         compose (hydo-compose), guide/skill/init (hydo-agents)
 //!   Rust + Python seams:  run/repro call hydo-history (Rust) and hydo_errors.for_run_dir,
 //!                         --regressions and save call hydo_composer (src/bridge.rs)
-//!   delegated (Python):   build (hydo-build), explore (explore.py), errors (hydo_errors.py)
+//!   Rust crates:          build (hydo-build, src/build.rs)
+//!   delegated (Python):   explore (explore.py), errors (hydo_errors.py)
 
 mod bridge;
+mod build;
 mod ctx;
 mod delegated;
 mod doctor;
@@ -106,7 +108,7 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
     let linux = ctx.platform == Platform::Linux;
     match cmd {
         "compose" => delegated::cmd_compose(ctx, rest),
-        "build" => delegated::cmd_build(ctx, rest),
+        "build" => build::cmd_build(ctx, rest),
         "run" => runs::cmd_run(ctx, rest),
         "repro" => runs::cmd_repro(ctx, rest),
         "explore" => delegated::cmd_explore(ctx, rest),

@@ -1,12 +1,13 @@
-//! The commands whose logic is still Python: `hydo explore` (explore.py), `hydo build`
-//! (hydo-build), `hydo compose` (hydo_compose.py), `hydo errors` (hydo_errors.py), and `hydo
-//! guide | skill | init` (hydo_agents.py), plus `hydo report`, which is Rust.
+//! The commands whose logic is still Python: `hydo explore` (explore.py), `hydo compose`
+//! (hydo_compose.py), `hydo errors` (hydo_errors.py), and `hydo guide | skill | init`
+//! (hydo_agents.py), plus `hydo report`, which is Rust. (`hydo build` is Rust since M103:
+//! src/build.rs.)
 //!
 //! Each `cmd_*` here is the seam its port replaces: the argument handling, defaults and the
 //! lines printed around the Python call are already the Rust CLI's, so a port swaps only the call.
 
 use crate::bridge;
-use crate::ctx::{abspath, die, pjoin, python, take, take_mac, Ctx, Platform, OUT, PROJECT_OUT};
+use crate::ctx::{abspath, die, pjoin, python, Ctx, Platform, OUT};
 use crate::hvxenv;
 use crate::runs::{default_image_mac, find_image_linux, mac_kernel_for};
 use serde_json::json;
@@ -136,158 +137,4 @@ pub fn cmd_compose(_ctx: &Ctx, argv: &[String]) -> i32 {
 
 pub fn cmd_agents(ctx: &Ctx, cmd: &str, argv: &[String]) -> i32 {
     hydo_agents::run(cmd, argv, &ctx.root)
-}
-
-// ---------------------------------------------------------------- build (hydo-build)
-
-/// Where `hydo build` writes: ./.hydo for a manifest in a hydo/ folder, else ./hydo-out (Linux).
-fn project_out(manifest: &str) -> &'static str {
-    let abs = abspath(Path::new(manifest));
-    let parent = abs
-        .parent()
-        .and_then(Path::file_name)
-        .map(|s| s.to_string_lossy().into_owned());
-    if parent.as_deref() == Some("hydo") {
-        PROJECT_OUT
-    } else {
-        OUT
-    }
-}
-
-fn setdefault(env: &mut Vec<(String, String)>, k: &str, v: &Path) {
-    if std::env::var_os(k).is_none() {
-        env.push((k.to_string(), v.display().to_string()));
-    }
-}
-
-pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
-    match ctx.platform {
-        Platform::Linux => build_linux(ctx, argv),
-        Platform::Mac => build_mac(ctx, argv),
-    }
-}
-
-/// `hydo build <manifest> --check [--set K=V ...]` answered in Rust (hydo-manifest) when the
-/// manifest is accepted: the same warnings and summary lines hydo-build prints. Everything else
-/// (another flag, or a manifest that is refused, whose message order hydo-build owns) still goes
-/// to hydo-build. Returns None when hydo-build must answer.
-fn check_in_rust(ctx: &Ctx, manifest: &str, rest: &[String], arch: &str) -> Option<i32> {
-    let mut sets = Vec::new();
-    let mut check = false;
-    let mut i = 0;
-    while i < rest.len() {
-        match rest[i].as_str() {
-            "--check" => check = true,
-            "--set" if i + 1 < rest.len() && rest[i + 1].contains('=') => {
-                let (k, v) = rest[i + 1].split_once('=').unwrap_or_default();
-                sets.push((k.to_string(), v.to_string()));
-                i += 1;
-            }
-            _ => return None,
-        }
-        i += 1;
-    }
-    if !check || manifest == "-h" || manifest == "--help" {
-        return None;
-    }
-    let opts = hydo_manifest::LoadOptions {
-        arch: arch.to_string(),
-        sets,
-        onboard_dir: ctx.onboard(),
-    };
-    let loaded = hydo_manifest::load(Path::new(manifest), &opts).ok()?;
-    for w in &loaded.warnings {
-        eprintln!("hydo-build: warning: {w}");
-    }
-    for line in hydo_manifest::check_summary(manifest, &loaded) {
-        println!("{line}");
-    }
-    Some(0)
-}
-
-fn no_print_flag(rest: &[String]) -> bool {
-    !rest
-        .iter()
-        .any(|f| f == "--check" || f == "--print-shell" || f == "--print-init")
-}
-
-fn build_linux(ctx: &Ctx, argv: &[String]) -> i32 {
-    let mut argv = argv.to_vec();
-    if argv.first().is_none_or(|a| a.starts_with('-')) && Path::new("hydo/hydo.yaml").is_file() {
-        argv.insert(0, "hydo/hydo.yaml".into());
-    }
-    if argv.first().is_none_or(|a| a.starts_with('-')) {
-        die("usage: hydo build <hydo.yaml> [--out DIR] [--set KEY=VALUE ...]   (no manifest: ./hydo/hydo.yaml)");
-    }
-    let manifest = argv[0].clone();
-    let mut rest = argv[1..].to_vec();
-    let out = take(&mut rest, "--out").unwrap_or_else(|| project_out(&manifest).to_string());
-    if rest.iter().any(|a| a == "--arch") {
-        die("this is the x86_64 Linux release; arm64 images are built with the Mac release");
-    }
-    if let Some(rc) = check_in_rust(ctx, &manifest, &rest, "x86_64") {
-        return rc;
-    }
-    let guest = ctx.guest();
-    let mut env = Vec::new();
-    setdefault(&mut env, "HYDO_BUSYBOX", &guest.join("busybox"));
-    setdefault(&mut env, "HYDO_SEEDRNG", &guest.join("hvx_seedrng"));
-    setdefault(&mut env, "HYDO_FCBIN", &guest.join("hydo_fc"));
-    setdefault(&mut env, "HYDO_MKE2FS", &ctx.p("tools/bin/mke2fs"));
-    setdefault(&mut env, "HYDO_FAKETIME", &ctx.libexec().join("faketime"));
-    setdefault(&mut env, "HYDO_MODROOT", &guest.join("modules"));
-    let path = hvxenv::tool_env(ctx).into_iter().find(|(k, _)| k == "PATH");
-    env.extend(path);
-    let mut hb_argv = vec![manifest, "--build-dir".to_string(), out];
-    hb_argv.extend(rest.iter().cloned());
-    let rc = bridge::rc(
-        ctx,
-        "build_linux",
-        json!({"root": ctx.root.display().to_string(), "argv": hb_argv}),
-        &env,
-    );
-    if rc == 0 && no_print_flag(&rest) {
-        println!("hydo: next:  hydo run \"disk=none | run\"     or     hydo explore --seeds 1-20");
-    }
-    rc
-}
-
-fn build_mac(ctx: &Ctx, argv: &[String]) -> i32 {
-    if argv.first().is_none_or(|a| a.starts_with('-')) {
-        die("usage: hydo build <hydo.yaml> [--out DIR] [--set KEY=VALUE ...]");
-    }
-    let manifest = argv[0].clone();
-    let mut rest = argv[1..].to_vec();
-    let out = take_mac(&mut rest, "--out").unwrap_or_else(|| OUT.to_string());
-    if let Some(rc) = check_in_rust(ctx, &manifest, &rest, "arm64") {
-        return rc;
-    }
-    let guest = ctx.guest();
-    let mut env = Vec::new();
-    setdefault(&mut env, "HYDO_BUSYBOX_ARM64", &guest.join("busybox"));
-    setdefault(&mut env, "HYDO_BUSYBOX", &guest.join("busybox-applets"));
-    setdefault(&mut env, "HYDO_MKE2FS", &guest.join("mke2fs"));
-    setdefault(&mut env, "HYDO_FAKETIME", &guest.join("mke2fs"));
-    setdefault(&mut env, "HYDO_WORLDBIN_ARM64", &guest.join("hydo-world"));
-    setdefault(&mut env, "HYDO_READ_BIN_ARM64", &guest.join("hydo-read"));
-    setdefault(&mut env, "HYDO_ARM64_STORE", &guest.join("tc"));
-    setdefault(&mut env, "HYDO_FCBIN_ARM64", &guest.join("hydo_fc"));
-    let mut hb_argv = vec![
-        manifest,
-        "--arch".to_string(),
-        "arm64".to_string(),
-        "--build-dir".to_string(),
-        out,
-    ];
-    hb_argv.extend(rest.iter().cloned());
-    let rc = bridge::rc(
-        ctx,
-        "build_mac",
-        json!({"root": ctx.root.display().to_string(), "argv": hb_argv}),
-        &env,
-    );
-    if rc == 0 && no_print_flag(&rest) {
-        println!("hydo: next:  hydo run \"disk=none | run\"     or     hydo explore --seeds 1-20");
-    }
-    rc
 }
