@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Replaced by hydo-history (hydo/crates/hydo-history, M105): `hydo run`/`hydo repro` call the crate,
+# `hydo check-history` is this script's command line. Kept as the reference until all ports merge.
 """hydo-check -- run the host-side history checks of one run (hydo/HISTORIES.md).
 
     hydo-check <console> [<recovery console>]         saved consoles, in run order

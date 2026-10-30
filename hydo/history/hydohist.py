@@ -1,3 +1,5 @@
+# Replaced by hydo-history (hydo/crates/hydo-history, M105): `hydo run`/`hydo repro` call the crate,
+# `hydo check-history` is this script's command line. Kept as the reference until all ports merge.
 """hydohist -- operation histories recorded by guest programs, and the host-side checkers.
 
 A workload client records every operation it performs as HYDO-HIST lines on the guest console

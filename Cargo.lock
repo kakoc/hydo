@@ -188,6 +188,7 @@ dependencies = [
  "hydo-agents",
  "hydo-compose",
  "hydo-engine",
+ "hydo-history",
  "hydo-manifest",
  "hydo-schedule",
  "libc",
@@ -216,6 +217,10 @@ dependencies = [
  "hydo-schedule",
  "sha2",
 ]
+
+[[package]]
+name = "hydo-history"
+version = "0.1.0"
 
 [[package]]
 name = "hydo-manifest"
