@@ -1,0 +1,122 @@
+[
+ {
+  "name": "y-basic",
+  "text": "name: t\nservices:\n  - name: a\n    cmd: x\n    ready: x\nworkload:\n  steps: 2\n  run: x\ninvariants:\n  - id: i\n    cmd: \"true\"\n"
+ },
+ {
+  "name": "y-comments",
+  "text": "# top\nname: t   # trailing\nservices: []\nworkload: {steps: 2, run: 'x # not a comment'}\ninvariants: [{id: i, cmd: \"echo #1\"}]\n"
+ },
+ {
+  "name": "y-blocks",
+  "text": "name: t\nworkload:\n  steps: 2\n  run: |\n    set -e\n      indented\n\n    done\ninvariants:\n  - id: i\n    cmd: >\n      folded\n      text\n  - id: j\n    cmd: |-\n      keep\n"
+ },
+ {
+  "name": "y-seq-same-indent",
+  "text": "name: t\nservices:\n- name: a\n  cmd: x\n  ready: x\nworkload:\n  steps: 3\n  run: x\ninvariants:\n- id: i\n  cmd: x\n"
+ },
+ {
+  "name": "y-tab",
+  "text": "name: t\n\tworkload: x\n"
+ },
+ {
+  "name": "y-dup",
+  "text": "name: t\nname: u\n"
+ },
+ {
+  "name": "y-dup-in-item",
+  "text": "invariants:\n  - id: i\n    id: j\n"
+ },
+ {
+  "name": "y-unterminated",
+  "text": "name: 'abc\n"
+ },
+ {
+  "name": "y-flow-unterminated",
+  "text": "faults: [kill, cut\n"
+ },
+ {
+  "name": "y-flow-noncolon",
+  "text": "guest: {ram_mib}\n"
+ },
+ {
+  "name": "y-junk",
+  "text": "faults: [kill] extra\n"
+ },
+ {
+  "name": "y-indent",
+  "text": "name: t\n  x: 1\n"
+ },
+ {
+  "name": "y-list-in-map",
+  "text": "name: t\n- a\n"
+ },
+ {
+  "name": "y-not-pair",
+  "text": "just words\n"
+ },
+ {
+  "name": "y-bad-start",
+  "text": "  name: t\nworkload: x\n"
+ },
+ {
+  "name": "y-scalars",
+  "text": "name: t\nservices: []\nworkload: {steps: 2, run: x}\ninvariants: [{id: i, cmd: x}]\nknobs:\n  - {token: Z, default: yes, set: no, values: [~, null, True, -3, 1.5, 'q''s', \"tab\\tq\"]}\n"
+ },
+ {
+  "name": "y-empty",
+  "text": ""
+ },
+ {
+  "name": "y-comment-only",
+  "text": "# nothing\n\n"
+ },
+ {
+  "name": "y-list-top",
+  "text": "- a\n- b\n"
+ },
+ {
+  "name": "y-quoted-key",
+  "text": "\"name\": t\n'workload': {steps: 2, run: x}\ninvariants: [{id: i, cmd: x}]\n"
+ },
+ {
+  "name": "y-crlf",
+  "text": "name: t\r\nworkload: {steps: 2, run: x}\r\ninvariants: [{id: i, cmd: x}]\r\n"
+ },
+ {
+  "name": "y-dash-empty",
+  "text": "invariants:\n  -\n    id: i\n    cmd: x\nname: t\nworkload: {steps: 1, run: x}\n"
+ },
+ {
+  "name": "y-json-escape",
+  "text": "name: \"a\\qb\"\n"
+ },
+ {
+  "name": "y-nested-flow",
+  "text": "name: t\nworkload: {steps: 2, run: x}\ninvariants: [{id: i, cmd: x}]\nroot: {files: [{src: a, dst: b}, {src: 'c,d', dst: \"e]f\"}]}\n"
+ },
+ {
+  "name": "y-hash-in-word",
+  "text": "name: t#x\nworkload: {steps: 2, run: x}\ninvariants: [{id: i, cmd: x}]\n"
+ },
+ {
+  "name": "y-key-only",
+  "text": "name: t\nworkload:\ninvariants: [{id: i, cmd: x}]\n"
+ },
+ {
+  "name": "y-unicode",
+  "text": "name: t\ndescription: \"caf\u00e9 \u2028\"\nworkload: {steps: 2, run: x}\ninvariants: [{id: i, cmd: x}]\n"
+ },
+ {
+  "name": "y-bigint",
+  "text": "name: t\nworkload: {steps: 9223372036854775807, run: x}\ninvariants: [{id: i, cmd: x}]\n"
+ },
+ {
+  "name": "y-colon-in-value",
+  "text": "name: t\nworkload: {steps: 2, run: \"a: b\"}\ninvariants:\n  - id: i\n    cmd: echo a:b\n"
+ },
+ {
+  "name": "y-seq-key-colon",
+  "text": "invariants:\n  - \"a:b\": 1\n"
+ }
+]

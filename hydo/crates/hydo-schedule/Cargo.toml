@@ -1,0 +1,11 @@
+[package]
+name = "hydo-schedule"
+description = "hydo's schedule language as types: parse and print a schedule string byte for byte"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[dev-dependencies]

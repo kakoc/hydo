@@ -1,0 +1,10 @@
+name: t
+workload:
+  steps: 4
+invariants:
+  - id: i
+    cmd: "true"
+test:
+  commands:
+    - {name: y, kind: anytime, run: [/y]}
+  parallel: 2

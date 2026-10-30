@@ -1,0 +1,37 @@
+# The hydo workspace: the product's Rust crates (hydo/crates/). The language policy is in AGENTS.md.
+#
+# Not members, on purpose: the SDK crates (sdk/rust = hydo-assert, sdk/rust-test = hydo-test) and the
+# Rust examples under hydo/onboard/examples/ keep their own workspaces and lock files. They are compiled
+# into guest programs whose bytes are inside recorded images, they must build with the user's own
+# toolchain and with no dependency of this workspace, and Cargo derives symbol hashes from a package's
+# path and lock file, so making them members would change those binaries (docs/HISTORY.md, M100).
+[workspace]
+resolver = "2"
+members = [
+    "hydo/crates/hydo-schedule",
+    "hydo/crates/hydo-manifest",
+    "hydo/crates/hydo-engine",
+    "hydo/crates/hydo-cli",
+]
+exclude = ["sdk", "hydo/onboard/examples"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+rust-version = "1.90"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+sha2 = "0.10"
+hydo-schedule = { path = "hydo/crates/hydo-schedule" }
+hydo-manifest = { path = "hydo/crates/hydo-manifest" }
+hydo-engine = { path = "hydo/crates/hydo-engine" }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Not shipped since Milestone 101: the releases ship the Rust hydo (hydo/crates/hydo-cli). This file stays as
+# the reference that hydo/crates/hydo-cli/tests/equivalence.rs compares the Rust CLI with, until every port is done.
 """hydo -- deterministic fault testing on an Apple Silicon Mac (the hvm backend).
 
     hydo init    [--dir DIR] [--name NAME]        start a repository's hydo/ folder and its AGENTS.md section

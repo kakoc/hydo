@@ -9,7 +9,7 @@ the user guide; it is shipped inside the release.
 
 | Path | What |
 |---|---|
-| `bin/hydo` | the CLI (`hydo-mac` wrapper around the pieces below): `build`, `run`, `repro`, `explore`, `report`, `doctor` |
+| `bin/hydo` | the CLI around the pieces below: since Milestone 101 the Rust `hydo` (`hydo/crates/hydo-cli`, an `aarch64-apple-darwin` binary built by `build-release.sh` or taken from `$HYDO_RUST_BIN`), with the verbs, output and exit codes of the Python CLI it replaced (`hydo/dist/mac/hydo`, kept as the equivalence test's reference, no longer shipped); the parts still in Python run through `hydo/onboard/hydo_bridge.py` |
 | `hv/hvm/hvm`, `hv/hvm/explore/hvmx` | the VMM and the explorer engine, re-signed by `install.sh` on the user's Mac |
 | `hv/hvm/explore/out/Image-explore` | the arm64 kernel (`hv/hvm/explore/build-guest.sh`, HVC idle) |
 | `guest/busybox`, `guest/mke2fs` | static arm64 busybox 1.36.1 and e2fsprogs 1.47.0 (aarch64 nixpkgs) |

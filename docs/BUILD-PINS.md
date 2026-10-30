@@ -172,3 +172,27 @@ are read but not written, none of them used):
 
 The files each image gets are exactly those `hv/hvm/services/elfdeps.py --root <dir>` lists for
 the binaries above (glibc 2.39-52, libmnl, zlib, xz, bzip2, zstd, elfutils from the same closure).
+
+## Rust: the workspace toolchain and the release binaries (Milestone 101)
+
+The Cargo workspace at the repository root (`Cargo.toml`, crates under `hydo/crates/`) builds
+the `hydo` command of both releases. The pins:
+
+- **Compiler:** `rust-toolchain.toml` pins `channel = "1.90.0"` (rustc 1.90.0, commit
+  `1159e78c4747b02ef996e55082b704c09b970588`, 2025-09-14) with `clippy` and `rustfmt`. rustup
+  installs it on first use. The same version already builds `sdk/rust-test` and the Rust
+  examples (`hydo/onboard/examples/redis-composed-rs/rust-toolchain.toml`).
+- **Targets:** `x86_64-unknown-linux-musl` for the Linux release (static; `.cargo/config.toml`
+  links it with `rust-lld` and `+crt-static`, so a Mac can cross-build it as well as Linux) and
+  `aarch64-apple-darwin` for the Mac release.
+- **Crates:** `Cargo.lock` is committed and the release scripts build with `--locked`
+  (serde 1.0.229, serde_json 1.0.154 with `preserve_order`, flate2 1.1.10 with the pure-Rust
+  backend, sha2 0.10.9, regex 1.13.1, libc 0.2.191).
+- **Where it was installed:** this Mac (rustup, the user's own toolchains); the bare-metal test
+  machine in a private directory (`~/hydo-rust`, `RUSTUP_HOME` and `CARGO_HOME` there, nothing
+  system-wide; `~/hydo-rust/env.sh` sets them), from `rustup-init` of static.rust-lang.org.
+- **Results:** the Linux `hydo` is an `ELF 64-bit LSB pie executable, x86-64, static-pie linked`
+  of about 1.2 MB; the Mac `hydo` a `Mach-O 64-bit executable arm64` that the linker signs ad hoc.
+
+The SDK crates (`sdk/rust`, `sdk/rust-test`) and the Rust examples are not workspace members:
+they keep their own workspaces and lock files, because their bytes are inside recorded images.

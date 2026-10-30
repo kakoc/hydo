@@ -1,0 +1,12 @@
+[package]
+name = "hydo-engine"
+description = "One interface to hydo's run engines: hvx (hv/hvx/hvx_explore) and hvm (hv/hvm/explore/hvmx)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+hydo-schedule = { workspace = true }
+flate2 = { workspace = true }
+sha2 = { workspace = true }
