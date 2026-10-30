@@ -6398,6 +6398,18 @@ static void vblk_disk_free(struct hvx_vblk *d, spinlock_t *map_lock)
  * kvmalloc_array of individually-allocated order-0 pages (the M11 recipe), so a
  * GB-scale image is a robust per-page allocation with correct per-page refcounts for
  * the disk-mmap fault handler. Any prior image is freed first. Returns 0 or -ENOMEM. */
+/*
+ * Guest RAM and disk images are sized by userspace (up to 3 GiB and 4 GiB) out of
+ * order-0 pages (M97). With plain GFP_KERNEL a request larger than the free memory
+ * never failed: the page allocator called the OOM killer, which cannot see these
+ * pages (they are not in any process's RSS), killed other processes and then
+ * panicked "System is deadlocked on memory". __GFP_RETRY_MAYFAIL reclaims as hard as
+ * before but fails instead of OOM-killing, so the ioctl returns ENOMEM; the pages are
+ * charged to the caller's memory cgroup like KVM's (__GFP_ACCOUNT), and a pending
+ * fatal signal stops the loop. Same zeroed pages as before when memory suffices.
+ */
+#define HVX_GFP_BULK (GFP_KERNEL_ACCOUNT | __GFP_RETRY_MAYFAIL | __GFP_NOWARN | __GFP_ZERO)
+
 static int vblk_disk_alloc(struct hvx_vblk *d, u64 len, spinlock_t *map_lock)
 {
 	unsigned long np = DIV_ROUND_UP(len, PAGE_SIZE), i;
@@ -6408,8 +6420,12 @@ static int vblk_disk_alloc(struct hvx_vblk *d, u64 len, spinlock_t *map_lock)
 	if (!pages)
 		return -ENOMEM;
 	for (i = 0; i < np; i++) {
-		pages[i] = __get_free_page(GFP_KERNEL | __GFP_ZERO);
-		if (!pages[i]) {
+		pages[i] = __get_free_page(HVX_GFP_BULK);
+		if (!(i & 511))
+			cond_resched();
+		if (!pages[i] || fatal_signal_pending(current)) {
+			if (pages[i])
+				free_page(pages[i]);
 			while (i--)
 				free_page(pages[i]);
 			kvfree(pages);
@@ -6671,21 +6687,26 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 	vm->pmu_period = HVX_PMU_PERIOD;
 	vm->pmu_tick_tsc = HVX_PMU_TICK_TSC;
 
-	for (i = 0; i < n; i++)
-		if (!(vm->guest_pages[i] = __get_free_page(GFP_KERNEL | __GFP_ZERO)))
+	for (i = 0; i < n && ok; i++) {
+		if (!(vm->guest_pages[i] = __get_free_page(HVX_GFP_BULK)) || fatal_signal_pending(current))
 			ok = 0;
-	for (i = 0; i < npt; i++)
+		if (!(i & 511))
+			cond_resched();
+	}
+	/* after a failed guest-RAM allocation nothing more is allocated (M97): RAM is
+	 * then nearly exhausted, and these GFP_KERNEL pages would call the OOM killer */
+	for (i = 0; i < npt && ok; i++)
 		if (!(vm->ept_pt[i] = __get_free_page(GFP_KERNEL | __GFP_ZERO)))
 			ok = 0;
-	for (i = 0; i < npd; i++)
+	for (i = 0; i < npd && ok; i++)
 		if (!(vm->ept_pd[i] = __get_free_page(GFP_KERNEL | __GFP_ZERO)))
 			ok = 0;
-	for (i = 0; i < 2; i++)
+	for (i = 0; i < 2 && ok; i++)
 		if (!(vm->ept_pg[i] = __get_free_page(GFP_KERNEL | __GFP_ZERO)))
 			ok = 0;
 	/* one VMXON + one VMCS page PER vCPU (each is loaded only while that vCPU
 	 * runs; the vCPUs are serialized, so a single host CPU touches one at a time) */
-	for (i = 0; i < nv; i++) {
+	for (i = 0; i < nv && ok; i++) {
 		vm->vcpu[i].vmxon_page = __get_free_page(GFP_KERNEL | __GFP_ZERO);
 		vm->vcpu[i].vmcs_page  = __get_free_page(GFP_KERNEL | __GFP_ZERO);
 		vm->vcpu[i].fx_page    = __get_free_page(GFP_KERNEL | __GFP_ZERO);

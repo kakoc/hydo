@@ -2,7 +2,7 @@
 /*
  * hvx_repro - minimal reproducers of the hvx.c bugs found by the M97 safety net.
  *
- *   hvx_repro <case>      case = pmu | txlen | unsync | repins | vqloop | pcishift | diskrace | all
+ *   hvx_repro <case>      case = pmu | txlen | unsync | repins | vqloop | pcishift | diskrace | all | bigalloc
  *
  * RUN ONLY INSIDE THE DEBUG TEST VM (hvx/safety/run-debug.sh), never against a shared module
  * on the bare-metal test machine: on an unfixed module several of them oops the kernel or hold a CPU
@@ -264,6 +264,33 @@ static int c_diskrace(void)
 	return 0;
 }
 
+/* 8. guest RAM (up to 3 GiB) and disk images (up to 4 GiB) larger than the free memory were
+ *    allocated with plain GFP_KERNEL: instead of failing, the allocator OOM-killed other
+ *    processes and then panicked "System is deadlocked on memory". Run in a VM with less
+ *    memory than 3 GiB (run-debug.sh with VM_MEM=2048). */
+static int c_bigalloc(void)
+{
+	struct hvx_config cfg = { .mem_size = 3ULL << 30 };
+	int fd = open(dev(), O_RDWR), fd2;
+	struct hvx_disk dk = { .len = HVX_DISK_MAX };
+
+	if (fd < 0) { perror("open"); return 2; }
+	if (ioctl(fd, HVX_CREATE_VM, &cfg) < 0)
+		printf("bigalloc: 3 GiB VM -> %s\n", strerror(errno));
+	else
+		puts("bigalloc: 3 GiB VM created (enough memory here)");
+	close(fd);
+	fd2 = open(dev(), O_RDWR);
+	cfg.mem_size = 1 << 20;
+	if (ioctl(fd2, HVX_CREATE_VM, &cfg) < 0) { perror("CREATE_VM"); return 2; }
+	if (ioctl(fd2, HVX_SET_DISK, &dk) < 0)
+		printf("bigalloc: 4 GiB disk -> %s (fixed)\n", strerror(errno));
+	else
+		puts("bigalloc: 4 GiB disk allocated (enough memory here)");
+	close(fd2);
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	const char *c = argc > 1 ? argv[1] : "all";
@@ -277,5 +304,6 @@ int main(int argc, char **argv)
 	if (!strcmp(c, "vqloop") || !strcmp(c, "all")) rc |= c_vqloop();
 	if (!strcmp(c, "pcishift") || !strcmp(c, "all")) rc |= c_pcishift();
 	if (!strcmp(c, "diskrace") || !strcmp(c, "all")) rc |= c_diskrace();
+	if (!strcmp(c, "bigalloc")) rc |= c_bigalloc();	/* not in "all": needs a small VM */
 	return rc;
 }
