@@ -3327,7 +3327,10 @@ static bool hvx_pci_cfg_pio(struct hvx_vcpu *vcpu, u32 port, bool is_in, u32 siz
 			vcpu->regs.rax = (vcpu->regs.rax & ~0xffffULL) | (v & 0xffff);
 		else
 			vcpu->regs.rax = (vcpu->regs.rax & ~0xffffffffULL) | v;
-	} else if (which) {
+	} else if (which && byteoff < 4) {
+		/* byteoff >= 4 (address bits 1:0 set plus a data port past 0xcfc) lies
+		 * outside the dword: drop the write, as a read of it returns 0. Shifting
+		 * by byteoff*8 >= 32 was undefined behaviour (UBSAN, M97). */
 		u32 nv = (u32)vcpu->regs.rax, merged;
 
 		if (size == 1) {
