@@ -21,7 +21,6 @@ done
 major=$(sw_vers -productVersion | cut -d. -f1)
 [ "$major" -ge 13 ] || { echo "hydo needs macOS 13 or later (found $(sw_vers -productVersion))." >&2; exit 1; }
 [ "$(sysctl -n kern.hv_support 2>/dev/null)" = 1 ] || { echo "This Mac does not offer Hypervisor.framework (kern.hv_support is not 1)." >&2; exit 1; }
-command -v python3 >/dev/null || { echo "hydo needs python3 (macOS offers it with the Command Line Tools: xcode-select --install)." >&2; exit 1; }
 
 if [ "$SRC" != "$(cd "$PREFIX" 2>/dev/null && pwd)" ]; then
   mkdir -p "$PREFIX"
@@ -33,7 +32,7 @@ xattr -dr com.apple.quarantine "$PREFIX" 2>/dev/null || true
 for b in "$PREFIX/hv/hvm/hvm" "$PREFIX/hv/hvm/explore/hvmx"; do
   codesign --force --entitlements "$PREFIX/hv/hvm/hv.entitlements" -s - "$b" 2>/dev/null
 done
-chmod 755 "$PREFIX/bin/hydo"
+chmod 755 "$PREFIX/bin/hydo" "$PREFIX/bin/hydo-build" "$PREFIX/bin/hydo-fetch-image"
 
 if [ $ADD_PATH = 1 ]; then
   rc="$HOME/.zshrc"; [ -n "$BASH_VERSION" ] && rc="$HOME/.bash_profile"

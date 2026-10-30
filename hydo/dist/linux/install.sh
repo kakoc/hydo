@@ -31,8 +31,6 @@ while [ $# -gt 0 ]; do
 done
 
 [ "$(uname -s)" = Linux ] && [ "$(uname -m)" = x86_64 ] || { echo "hydo's Linux release needs x86_64 Linux (on an Apple Silicon Mac use the Mac release)." >&2; exit 1; }
-command -v python3 >/dev/null || { echo "hydo needs python3 (3.9 or later)." >&2; exit 1; }
-python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' || { echo "hydo needs Python 3.9 or later (found $(python3 --version))." >&2; exit 1; }
 command -v cc >/dev/null || { echo "hydo needs a C compiler (cc) to build its run engine (Debian/Ubuntu: sudo apt install build-essential)." >&2; exit 1; }
 
 ( cd "$SRC" && sha256sum -c --quiet SHA256SUMS ) || { echo "the release does not match its SHA256SUMS (a damaged download?)" >&2; exit 1; }
@@ -60,7 +58,7 @@ else
   echo "built hv/hvx/hvx_explore (without libipt: coverage decoding off; install libipt-dev to get it)"
 fi
 cd "$P"
-chmod 755 bin/hydo
+chmod 755 bin/hydo bin/hydo-build bin/hydo-fetch-image
 
 if [ $MODULE = 1 ]; then
   if [ -d "/lib/modules/$(uname -r)/build" ]; then

@@ -2,7 +2,8 @@
 # Build the self-contained x86_64 Linux release of hydo (see hydo/dist/linux/README.md):
 #     hydo/dist/linux/build-release.sh [OUTDIR]        -> OUTDIR/hydo-linux-<version>/ and its .tar.gz
 #
-# Runs on any machine with sh, ssh, tar, python3, sha256sum/shasum and cargo (the Mac works). The
+# Runs on any machine with sh, ssh, tar, sha256sum/shasum and cargo (the Mac works, with
+# HYDO_RUST_BIN_DIR or a C cross compiler for the musl target). The
 # guest and host-tool pieces are fetched once into hydo/dist/linux/assets/ (pinned by sha256 in
 # assets.sha256) from $HYDO_BUILD_HOST, a Linux machine with the pinned nixpkgs store paths
 # below (docs/BUILD-PINS.md; default the build machine):
@@ -87,35 +88,41 @@ REL=$OUTDIR/hydo-linux-$VERSION
 # the release tree mirrors the repository: hydo/ (the product) and hv/hvx/ (the run engine's sources)
 mkdir -p "$REL/bin" "$REL/libexec/bin" "$REL/hydo/onboard" "$REL/hydo/assert" "$REL/hv/hvx" \
          "$REL/module" "$REL/examples/redis/files" "$REL/skill"
-# the hydo command: the Rust CLI (hydo/crates/hydo-cli), a static x86_64 musl binary (M101). Built
-# here with the workspace's pinned toolchain (rust-toolchain.toml; rustup adds the musl target),
-# or taken from $HYDO_RUST_BIN when it was built elsewhere (e.g. cross-built on a Mac: the
-# workspace links that target with rust-lld, .cargo/config.toml).
-if [ -n "$HYDO_RUST_BIN" ]; then
-  HB=$HYDO_RUST_BIN
+# the programs, all Rust (M107: no Python anywhere in the release): bin/hydo (the one CLI,
+# hydo/crates/hydo-cli), bin/hydo-build (the image builder with its own command line, for
+# scripts; `hydo build` is the same builder with the release's tools) and bin/hydo-fetch-image
+# (what fetch-images.sh of `hydo compose` calls), static x86_64 musl binaries. Built here with the
+# workspace's pinned toolchain (rust-toolchain.toml; rustup adds the musl target; the TLS code of
+# hydo-fetch-image compiles some C, with musl-gcc when present, else the host's cc), or taken
+# from $HYDO_RUST_BIN_DIR (a directory with the three) when they were built elsewhere.
+BINS="hydo hydo-build hydo-fetch-image"
+if [ -n "$HYDO_RUST_BIN_DIR" ]; then
+  BD=$HYDO_RUST_BIN_DIR
 else
+  if [ -z "$CC_x86_64_unknown_linux_musl" ] && [ "$(uname -s)" = Linux ]; then
+    CC_x86_64_unknown_linux_musl=$(command -v musl-gcc || command -v cc); export CC_x86_64_unknown_linux_musl
+  fi
   ( cd "$TOP" && { rustup target add x86_64-unknown-linux-musl >/dev/null 2>&1 || true; } &&
-    cargo build --release --locked -p hydo-cli --target x86_64-unknown-linux-musl ) >&2
-  HB=$TOP/target/x86_64-unknown-linux-musl/release/hydo
+    cargo build --release --locked -p hydo-cli -p hydo-build -p hydo-compose --target x86_64-unknown-linux-musl ) >&2
+  BD=$TOP/target/x86_64-unknown-linux-musl/release
 fi
-file -L "$HB" 2>/dev/null | grep -q 'x86-64.*static' || { echo "$HB is not a static x86_64 binary" >&2; exit 1; }
-cp "$HB" "$REL/bin/hydo"; chmod 755 "$REL/bin/hydo"
+for b in $BINS; do
+  file -L "$BD/$b" 2>/dev/null | grep -q 'x86-64.*static' || { echo "$BD/$b is not a static x86_64 binary" >&2; exit 1; }
+  cp "$BD/$b" "$REL/bin/$b"; chmod 755 "$REL/bin/$b"
+done
 cp "$D/libexec/hvx-run" "$D/libexec/faketime" "$REL/libexec/"
 cp "$D/libexec/bin/debugfs" "$REL/libexec/bin/"
 chmod 755 "$REL/libexec/hvx-run" "$REL/libexec/faketime" "$REL/libexec/bin/debugfs"
-cp "$TOP/hydo/onboard/hydo-build" "$TOP/hydo/onboard/hydo-compose" "$TOP/hydo/onboard/hydo_compose.py" "$TOP/hydo/onboard/hydo_oci.py" "$TOP/hydo/onboard/hydo_build_arm64.py" \
-   "$TOP/hydo/onboard/hydo-init.sh" "$TOP/hydo/onboard/hydo-init-clock.sh" "$TOP/hydo/onboard/hydo-init-freeze.sh" \
-   "$TOP/hydo/onboard/hydo-init-links.sh" "$TOP/hydo/onboard/hydo-init-netns.sh" "$TOP/hydo/onboard/hydo-liveness.sh" "$TOP/hydo/onboard/hydo_fc.c" \
-   "$TOP/hydo/onboard/MANIFEST.md" "$TOP/hydo/onboard/hydo_composer.py" "$TOP/hydo/onboard/hydo-composer.sh" \
-   "$TOP/hydo/onboard/hydo_bridge.py" "$REL/hydo/onboard/"
-echo "$VERSION" > "$REL/hydo/VERSION"     # hydo_composer.engine_version: what a plan's hydo_version is checked against
-# the host-side history checkers and the guest recorder (hydo/HISTORIES.md)
+# the guest-side files hydo-build puts into images: the generic init and every extension it
+# splices in by manifest (liveness, recovery clock, links, network namespaces, freeze, fakes,
+# BUGGIFY, history recording, error-log scan), the test composer's guest runner, the history
+# recorder, and the format reference (`hydo guide manifest`); hydo_fc.c is the source of
+# guest/hydo_fc
+cp "$TOP"/hydo/onboard/hydo-init*.sh "$TOP/hydo/onboard/hydo-liveness.sh" "$TOP/hydo/onboard/hydo-composer.sh" \
+   "$TOP/hydo/onboard/hydo_fc.c" "$TOP/hydo/onboard/MANIFEST.md" "$REL/hydo/onboard/"
+echo "$VERSION" > "$REL/hydo/VERSION"     # what a plan's hydo_version: is checked against
 mkdir -p "$REL/hydo/history"
-cp "$TOP/hydo/history/hydohist.py" "$TOP/hydo/history/hydo-check" "$TOP/hydo/history/hydo_hist.sh" "$REL/hydo/history/"
-cp "$TOP/hydo/onboard/hydo-init-history.sh" "$REL/hydo/onboard/"
-# error logs as findings (errors: in a manifest): the guest scan and the host side (hydo errors)
-cp "$TOP/hydo/onboard/hydo-init-errlog.sh" "$TOP/hydo/onboard/hydo_errors.py" "$REL/hydo/onboard/"
-# the explorer is part of bin/hydo since M102 (the hydo-explore crate): no explore.py
+cp "$TOP/hydo/history/hydo_hist.sh" "$REL/hydo/history/"
 # the run engine's sources (install.sh compiles hv/hvx/hvx_explore on the user's machine)
 cp "$TOP/hv/hvx/hvx_explore.c" "$TOP/hv/hvx/hvx_stack_verify.c" "$TOP/hv/hvx/hvx_boot.h" "$TOP/hv/hvx/hvx_abi.h" \
    "$TOP/hv/hvx/ptedges.h" "$REL/hv/hvx/"
@@ -138,9 +145,8 @@ for y in hydo.yaml hydo-netem.yaml; do
       "$TOP/hydo/onboard/examples/redis/$y" > "$REL/examples/redis/$y"
 done
 # the onboarding skill (an Agent Skills folder, agentskills.io): `hydo guide`, `hydo skill install`
-# and `hydo init` read it from skill/hydo-onboard (hydo/onboard/hydo_agents.py)
+# and `hydo init` read it from skill/hydo-onboard (bin/hydo also carries a built-in copy)
 cp -R "$TOP/skills/hydo-onboard" "$REL/skill/"
-cp "$TOP/hydo/onboard/hydo_agents.py" "$REL/hydo/onboard/"
 cp "$D/install.sh" "$REL/install.sh"; chmod 755 "$REL/install.sh"
 cp "$D/QUICKSTART-linux.md" "$REL/README.md"
 echo "$VERSION" > "$REL/VERSION"
