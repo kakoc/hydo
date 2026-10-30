@@ -18,6 +18,7 @@ pub struct SplitMix {
     s: u64,
 }
 
+#[allow(clippy::should_implement_trait)]
 impl SplitMix {
     pub fn new(seed: u64) -> SplitMix {
         SplitMix { s: seed }

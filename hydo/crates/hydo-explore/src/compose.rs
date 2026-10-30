@@ -30,8 +30,14 @@ pub fn commands(meta: &Value) -> Vec<(String, String)> {
             a.iter()
                 .map(|c| {
                     (
-                        c.get("id").and_then(Value::as_str).unwrap_or("").to_string(),
-                        c.get("kind").and_then(Value::as_str).unwrap_or("").to_string(),
+                        c.get("id")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string(),
+                        c.get("kind")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string(),
                     )
                 })
                 .collect()
@@ -119,7 +125,8 @@ pub fn plan(seed: i64, q: i64, steps: i64, cmds: &[(String, String)]) -> Vec<Ent
                 out.push((out.len() as i64, r, c, sd));
             }
         }
-        if !a.is_empty() && ((p.is_empty() && se.is_empty() && sg.is_empty()) || rng.below(3) == 0) {
+        if !a.is_empty() && ((p.is_empty() && se.is_empty() && sg.is_empty()) || rng.below(3) == 0)
+        {
             let c = a[rng.below(a.len() as i64) as usize];
             let sd = rng.next();
             out.push((out.len() as i64, r, c, sd));
@@ -239,24 +246,22 @@ pub fn render_w(d: &WSeed) -> String {
     }
     if !d.o.is_empty() {
         if d.o.iter().all(|c| matches!(c, OItem::I(_))) {
-            let ints: BTreeSet<i64> = d
-                .o
-                .iter()
-                .map(|c| match c {
-                    OItem::I(i) => *i,
-                    OItem::S(_) => 0,
-                })
-                .collect();
+            let ints: BTreeSet<i64> =
+                d.o.iter()
+                    .map(|c| match c {
+                        OItem::I(i) => *i,
+                        OItem::S(_) => 0,
+                    })
+                    .collect();
             s.push_str(&format!(",o{}", rlist(&ints)));
         } else {
-            let mut ids: Vec<String> = d
-                .o
-                .iter()
-                .map(|c| match c {
-                    OItem::I(i) => i.to_string(),
-                    OItem::S(x) => x.clone(),
-                })
-                .collect();
+            let mut ids: Vec<String> =
+                d.o.iter()
+                    .map(|c| match c {
+                        OItem::I(i) => i.to_string(),
+                        OItem::S(x) => x.clone(),
+                    })
+                    .collect();
             ids.sort();
             s.push_str(&format!(",o{}", ids.join("+")));
         }
@@ -542,17 +547,16 @@ pub fn candidates(w: &str, meta: &Value) -> Vec<String> {
     };
     let cmds = commands(meta);
     let ks = kept(&d, steps_of(meta), &cmds);
-    let o_ids: BTreeSet<OItem> = d
-        .o
-        .iter()
-        .filter_map(|c| match c {
-            OItem::I(i) => cmds
-                .get(*i as usize)
-                .filter(|_| *i >= 0)
-                .map(|c| OItem::S(c.0.clone())),
-            OItem::S(s) => Some(OItem::S(s.clone())),
-        })
-        .collect();
+    let o_ids: BTreeSet<OItem> =
+        d.o.iter()
+            .filter_map(|c| match c {
+                OItem::I(i) => cmds
+                    .get(*i as usize)
+                    .filter(|_| *i >= 0)
+                    .map(|c| OItem::S(c.0.clone())),
+                OItem::S(s) => Some(OItem::S(s.clone())),
+            })
+            .collect();
     let mut out: Vec<String> = Vec::new();
     let base = WSeed {
         o: o_ids.clone(),

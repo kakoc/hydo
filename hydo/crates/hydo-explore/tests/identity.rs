@@ -83,13 +83,19 @@ fn set_flags(ex: &mut Ex, f: &Value) {
 }
 
 fn p_answer(ex: &mut Ex, tjk: &str, text: &str) -> String {
-    let tjk = (tjk != "-").then(|| tjk.split_once('-').unwrap()).map(|(a, b)| (a.parse().unwrap(), b.parse().unwrap()));
+    let tjk = (tjk != "-")
+        .then(|| tjk.split_once('-').unwrap())
+        .map(|(a, b)| (a.parse().unwrap(), b.parse().unwrap()));
     let s = ex.parse(text).expect("explore.py parsed it");
     ex.knob_rule_any = false;
     let cc = ex.finding_class(&s);
     ex.knob_rule_any = true;
     let ca = ex.finding_class(&s);
-    let cands: Vec<String> = ex.candidates(&s, tjk).iter().map(|c| ex.render(c)).collect();
+    let cands: Vec<String> = ex
+        .candidates(&s, tjk)
+        .iter()
+        .map(|c| ex.render(c))
+        .collect();
     format!("{}\t{}\t{}\t{}", ex.render(&s), cc, ca, cands.join(US))
 }
 
@@ -104,7 +110,12 @@ fn w_answer(ex: &Ex, sw: &str) -> String {
         Ok(points) => points
             .into_iter()
             .enumerate()
-            .map(|(i, (lab, s))| format!("{lab}{US}{}", ex.render(&ex.add_point_streams(s, i as u64 + 1))))
+            .map(|(i, (lab, s))| {
+                format!(
+                    "{lab}{US}{}",
+                    ex.render(&ex.add_point_streams(s, i as u64 + 1))
+                )
+            })
             .collect::<Vec<_>>()
             .join("\t"),
     }
@@ -122,15 +133,29 @@ fn z_answer(ex: &Ex, text: &str) -> Option<String> {
         "{{{}}}",
         sorted
             .iter()
-            .map(|(k, v)| format!("{}: {}", hydo_explore::py::dumps_line(&Value::String((*k).clone())), hydo_explore::py::dumps_line(v)))
+            .map(|(k, v)| format!(
+                "{}: {}",
+                hydo_explore::py::dumps_line(&Value::String((*k).clone())),
+                hydo_explore::py::dumps_line(v)
+            ))
             .collect::<Vec<_>>()
             .join(", ")
     );
     let rc: Vec<String> = compose::candidates(&r, meta).into_iter().take(8).collect();
     let (host, _) = text.split_once('|').unwrap();
-    let guest: Vec<String> = text.split_once('|').unwrap().1.split_whitespace().map(|t| {
-        if t.starts_with("W=") { format!("W={r}") } else { t.to_string() }
-    }).collect();
+    let guest: Vec<String> = text
+        .split_once('|')
+        .unwrap()
+        .1
+        .split_whitespace()
+        .map(|t| {
+            if t.starts_with("W=") {
+                format!("W={r}")
+            } else {
+                t.to_string()
+            }
+        })
+        .collect();
     let st = format!("{host}| {}", guest.join(" "));
     Some(format!(
         "{}\t{}\t{}\t{}\t{}\t{}",
@@ -159,10 +184,15 @@ fn explorer_identity() {
     };
     let rd = BufReader::new(child.stdout.take().unwrap());
     let mut st: Option<State> = None;
-    let (mut n, mut bad) = (std::collections::BTreeMap::<char, usize>::new(), Vec::<String>::new());
+    let (mut n, mut bad) = (
+        std::collections::BTreeMap::<char, usize>::new(),
+        Vec::<String>::new(),
+    );
     let mut check = |what: &str, want: &str, got: String| {
         if want != got && bad.len() < 20 {
-            bad.push(format!("{what}\n  explore.py:   {want}\n  hydo-explore: {got}"));
+            bad.push(format!(
+                "{what}\n  explore.py:   {want}\n  hydo-explore: {got}"
+            ));
         }
     };
     for line in rd.lines() {
@@ -174,9 +204,16 @@ fn explorer_identity() {
             'G' => st = Some(group(&serde_json::from_str(&q[2..]).unwrap())),
             'E' => {
                 let s = st.as_ref().unwrap();
-                check(&format!("refused group: {q}"), want, s.broken.clone().unwrap_or_default());
+                check(
+                    &format!("refused group: {q}"),
+                    want,
+                    s.broken.clone().unwrap_or_default(),
+                );
             }
-            'F' => set_flags(&mut st.as_mut().unwrap().ex, &serde_json::from_str(&q[2..]).unwrap()),
+            'F' => set_flags(
+                &mut st.as_mut().unwrap().ex,
+                &serde_json::from_str(&q[2..]).unwrap(),
+            ),
             'N' => {
                 let nmax: i64 = q[2..].parse().unwrap();
                 let got: Vec<String> = (0..1000).map(|k| fc_value(k, nmax).to_string()).collect();
@@ -189,13 +226,18 @@ fn explorer_identity() {
                 match op {
                     'S' => {
                         let w: Vec<&str> = q[2..].split(' ').collect();
-                        let got = ex.render(&ex.compose_seed(w[0], w[1].parse().unwrap(), w[2] == "1"));
+                        let got =
+                            ex.render(&ex.compose_seed(w[0], w[1].parse().unwrap(), w[2] == "1"));
                         check(&format!("schedule {q}"), want, got);
                     }
                     'P' => {
                         let (text, rest) = want.split_once('\t').unwrap();
                         let got = p_answer(ex, &q[2..], text);
-                        check(&format!("parse/class/candidates of {text} (tjk {})", &q[2..]), rest, got);
+                        check(
+                            &format!("parse/class/candidates of {text} (tjk {})", &q[2..]),
+                            rest,
+                            got,
+                        );
                     }
                     'W' => {
                         let sw = q[2..].split(' ').next().unwrap().to_string();
@@ -205,7 +247,11 @@ fn explorer_identity() {
                     }
                     'Z' => {
                         let (text, rest) = want.split_once('\t').unwrap();
-                        check(&format!("composer forms of {text}"), rest, z_answer(ex, text).unwrap_or_default());
+                        check(
+                            &format!("composer forms of {text}"),
+                            rest,
+                            z_answer(ex, text).unwrap_or_default(),
+                        );
                     }
                     'X' => {
                         let w: Vec<&str> = q[2..].split(' ').collect();
@@ -229,6 +275,14 @@ fn explorer_identity() {
     let status = child.wait().unwrap();
     assert!(status.success(), "ident.py failed");
     eprintln!("identity: {n:?}");
-    assert!(bad.is_empty(), "{} differences:\n{}", bad.len(), bad.join("\n"));
-    assert!(n.get(&'S').copied().unwrap_or(0) > 1000, "too few schedules: {n:?}");
+    assert!(
+        bad.is_empty(),
+        "{} differences:\n{}",
+        bad.len(),
+        bad.join("\n")
+    );
+    assert!(
+        n.get(&'S').copied().unwrap_or(0) > 1000,
+        "too few schedules: {n:?}"
+    );
 }

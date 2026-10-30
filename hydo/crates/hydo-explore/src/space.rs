@@ -16,7 +16,8 @@ use std::path::Path;
 
 pub const FAULT_KINDS: [&str; 7] = ["kill", "pause", "network", "oneway", "cut", "clock", "disk"];
 /// Guest tokens with a fixed meaning; a manifest knob may not reuse one.
-pub const RESERVED_TOKENS: [&str; 12] = ["K", "P", "N", "O", "C", "T", "Q", "X", "B", "F", "H", "W"];
+pub const RESERVED_TOKENS: [&str; 12] =
+    ["K", "P", "N", "O", "C", "T", "Q", "X", "B", "F", "H", "W"];
 pub const PF_REQ_KINDS: [&str; 4] = ["status", "delay", "drop", "reset"];
 pub const PF_HOOK_KINDS: [&str; 4] = ["dup", "reorder", "late", "lost"];
 pub const PF_TCP_KINDS: [&str; 3] = ["delay", "drop", "reset"];
@@ -140,10 +141,7 @@ impl Space {
             }
             knobs.push((tok, safe, vals));
         }
-        let name = m
-            .get("name")
-            .map(str_of)
-            .unwrap_or_else(|| "?".to_string());
+        let name = m.get("name").map(str_of).unwrap_or_else(|| "?".to_string());
         Ok(Space {
             m,
             name,
@@ -184,7 +182,11 @@ impl Space {
                     .iter()
                     .map(|x| (str_of(x), Some('<')))
                     .collect();
-                out.extend(arr(o.get("requests")).iter().map(|x| (str_of(x), Some('>'))));
+                out.extend(
+                    arr(o.get("requests"))
+                        .iter()
+                        .map(|x| (str_of(x), Some('>'))),
+                );
                 out
             }
             Some(v) if truthy(v) => arr(Some(v)).iter().map(|x| (str_of(x), None)).collect(),
@@ -330,7 +332,8 @@ impl Space {
         if !self.has_fault("clock") {
             s.t = None;
         }
-        let net_ok = |x: &str| self.ported.iter().any(|p| p == x) || self.links.iter().any(|p| p == x);
+        let net_ok =
+            |x: &str| self.ported.iter().any(|p| p == x) || self.links.iter().any(|p| p == x);
         if s.n.as_ref().is_some_and(|n| !net_ok(&n.0)) {
             s.n = None;
         }
@@ -402,7 +405,9 @@ impl Space {
             return Err("manifest_space: sweep protocol needs fakes: or proxies: (and `protocol` in faults:, if listed)".into());
         }
         if !need.is_empty()
-            || ((name == "net" || name == "oneway") && self.ported.is_empty() && self.links.is_empty())
+            || ((name == "net" || name == "oneway")
+                && self.ported.is_empty()
+                && self.links.is_empty())
         {
             let listed = match name {
                 "kill" | "cut" | "net" | "killcut" | "pause" | "clock" | "oneway" | "freeze"
@@ -495,7 +500,11 @@ fn fc_pairs(services: &[Value]) -> Vec<(String, String)> {
         .iter()
         .map(|s| str_of(s.get("name").unwrap_or(&Value::Null)))
         .collect();
-    let by = |n: &str| services.iter().find(|s| s.get("name").map(str_of).as_deref() == Some(n));
+    let by = |n: &str| {
+        services
+            .iter()
+            .find(|s| s.get("name").map(str_of).as_deref() == Some(n))
+    };
     let ported = |n: &str| by(n).is_some_and(|s| get(s, "port").is_some_and(truthy));
     let ok = |a: &str, b: &str| a != b && ported(b);
     let closure = |a: &str| -> Vec<String> {
@@ -596,11 +605,7 @@ fn pf_targets(m: &Value) -> Vec<PfTarget> {
         });
         for r in arr(e.get("routes")) {
             out.push(PfTarget {
-                name: format!(
-                    "{}.{}",
-                    name,
-                    str_of(r.get("name").unwrap_or(&Value::Null))
-                ),
+                name: format!("{}.{}", name, str_of(r.get("name").unwrap_or(&Value::Null))),
                 req: svec(&PF_REQ_KINDS),
                 hook: Vec::new(),
                 proto: proto.clone(),

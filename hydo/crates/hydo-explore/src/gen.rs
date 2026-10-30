@@ -81,6 +81,9 @@ const GF_LENS: [i64; 5] = [1, 1, 2, 3, 0];
 const GF_SEL: [&str; 4] = ["all", "all", "call", "share"];
 const GRPC_KEYS: [&str; 6] = ["rpc", "call", "seed", "cut", "hold", "dir"];
 
+/// The shrinker's "add this variant" callback: it applies a change to a copy of the schedule.
+type Var<'a> = &'a mut dyn FnMut(&dyn Fn(&mut S));
+
 /// The engine the schedules are for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Backend {
@@ -248,7 +251,11 @@ impl Ex {
 
     pub fn swarm_categories(seed: u64) -> (Vec<&'static str>, SplitMix) {
         let mut r = SplitMix::new(seed ^ SWARM_SALT);
-        let mut on: Vec<&'static str> = CATEGORIES.iter().copied().filter(|_| r.below(2) != 0).collect();
+        let mut on: Vec<&'static str> = CATEGORIES
+            .iter()
+            .copied()
+            .filter(|_| r.below(2) != 0)
+            .collect();
         if on.is_empty() {
             on = vec![r.pick(&CATEGORIES)];
         }
@@ -271,7 +278,10 @@ impl Ex {
             s.n = Some((r.pick(&self.net_svcs), a, b, kinds));
         }
         if on.contains(&"disk") {
-            let opts = [format!("ioerr:{}", r.rng(1, 3)), format!("lying:{}", r.rng(2, 12))];
+            let opts = [
+                format!("ioerr:{}", r.rng(1, 3)),
+                format!("lying:{}", r.rng(2, 12)),
+            ];
             s.disk = r.pick(&opts);
             if s.disk_is("lying") {
                 s.c = Some(r.rng(1, n_));
@@ -312,7 +322,11 @@ impl Ex {
     pub fn generate_swarm_pos(&self, seed: u64) -> S {
         let n_ = self.norders;
         let mut r = SplitMix::new(seed ^ POS_SALT);
-        let mut on: Vec<&str> = POS_CATEGORIES.iter().copied().filter(|_| r.below(2) != 0).collect();
+        let mut on: Vec<&str> = POS_CATEGORIES
+            .iter()
+            .copied()
+            .filter(|_| r.below(2) != 0)
+            .collect();
         if on.is_empty() {
             on = vec![r.pick(&POS_CATEGORIES)];
         }
@@ -333,7 +347,11 @@ impl Ex {
             let at = self.pos_start(&mut r, p("pause"));
             if p("pause") == "end" || r.below(2) != 0 {
                 let svc = r.pick(&self.pause_svcs);
-                let n = if p("pause") == "end" { n_ - at } else { r.rng(1, 3) };
+                let n = if p("pause") == "end" {
+                    n_ - at
+                } else {
+                    r.rng(1, 3)
+                };
                 s.p = Some(Pause::Plus(svc, at, n));
             } else {
                 let svc = r.pick(&self.pause_svcs);
@@ -362,7 +380,10 @@ impl Ex {
             s.t = Some((at, r.pick(&CLOCK_DELTAS)));
         }
         if on.contains(&"disk") {
-            let opts = [format!("ioerr:{}", r.rng(1, 3)), format!("lying:{}", r.rng(2, 12))];
+            let opts = [
+                format!("ioerr:{}", r.rng(1, 3)),
+                format!("lying:{}", r.rng(2, 12)),
+            ];
             s.disk = r.pick(&opts);
             if s.disk_is("lying") {
                 s.c = Some(self.pos_start(&mut r, p("disk")) + 1);
@@ -977,10 +998,7 @@ impl Ex {
         let (host, guest) = text
             .split_once('|')
             .ok_or_else(|| format!("a schedule needs a '|': {text}"))?;
-        let disk = re(&R[0], r"disk=(\S+)")
-            .captures(host)
-            .ok_or("no disk=")?[1]
-            .to_string();
+        let disk = re(&R[0], r"disk=(\S+)").captures(host).ok_or("no disk=")?[1].to_string();
         let dseed = re(&R[1], r"dseed=([0-9a-fA-F]+)")
             .captures(host)
             .and_then(|c| py_hex(&c[1]))
@@ -1011,7 +1029,12 @@ impl Ex {
                 },
             ));
         }
-        if let Some(c) = re(&R[7], r"(?:^|\s)qb=(\d+):(\d+):(\d+)(?: qbs=([0-9a-fA-F]+))?").captures(host) {
+        if let Some(c) = re(
+            &R[7],
+            r"(?:^|\s)qb=(\d+):(\d+):(\d+)(?: qbs=([0-9a-fA-F]+))?",
+        )
+        .captures(host)
+        {
             s.qb = Some((
                 int(&c[1])?,
                 int(&c[2])?,
@@ -1323,10 +1346,9 @@ impl Ex {
             }
         }
         tj_candidates(s, tjk, &mut var);
-        if let (Some(w), Some(meta)) = (
-            &s.w,
-            self.space.as_ref().and_then(|sp| sp.compose.as_ref()),
-        ) {
+        if let (Some(w), Some(meta)) =
+            (&s.w, self.space.as_ref().and_then(|sp| sp.compose.as_ref()))
+        {
             if hydo_manifest::py::truthy(meta) {
                 for w2 in compose::candidates(w, meta) {
                     var(&|t| t.w = Some(w2.clone()));
@@ -1336,7 +1358,7 @@ impl Ex {
         out
     }
 
-    fn nf_candidates(&self, s: &S, var: &mut dyn FnMut(&dyn Fn(&mut S))) {
+    fn nf_candidates(&self, s: &S, var: Var<'_>) {
         match &s.p {
             Some(Pause::Plus(svc, at, n)) if *n > 1 => {
                 let p = Pause::Plus(svc.clone(), *at, 1);
@@ -1362,7 +1384,13 @@ impl Ex {
         }
         if let Some((svc, a, b, d, kinds)) = &s.o {
             if b - a > 1 {
-                let o = (svc.clone(), *a, a + 1.max(fdiv(b - a, 2)), d.clone(), kinds.clone());
+                let o = (
+                    svc.clone(),
+                    *a,
+                    a + 1.max(fdiv(b - a, 2)),
+                    d.clone(),
+                    kinds.clone(),
+                );
                 var(&|t| t.o = Some(o.clone()));
             }
             let (k, v) = &kinds[0];
@@ -1651,7 +1679,11 @@ fn split2(v: &str, sep: char) -> Result<(&str, &str), String> {
     if parts.len() != 2 {
         return Err(format!(
             "{} values to unpack in {v:?}",
-            if parts.len() < 2 { "not enough" } else { "too many" }
+            if parts.len() < 2 {
+                "not enough"
+            } else {
+                "too many"
+            }
         ));
     }
     Ok((parts[0], parts[1]))
@@ -1717,7 +1749,15 @@ pub fn parse_h(v: &str) -> Result<H, String> {
 }
 
 /// explore.py `tj_delays`: the (tick, delay) pairs a seeded jitter applies (hvx.c hvx_tj_delay).
-pub fn tj_delays(seed: u64, pm: i64, mx: i64, lo: i64, hi: i64, k_first: i64, k_last: i64) -> Vec<(i64, i64)> {
+pub fn tj_delays(
+    seed: u64,
+    pm: i64,
+    mx: i64,
+    lo: i64,
+    hi: i64,
+    k_first: i64,
+    k_last: i64,
+) -> Vec<(i64, i64)> {
     let mut out = Vec::new();
     let start = 2.max(k_first).max(lo);
     let mut k = start;
@@ -1734,7 +1774,7 @@ pub fn tj_delays(seed: u64, pm: i64, mx: i64, lo: i64, hi: i64, k_first: i64, k_
     out
 }
 
-fn tj_candidates(s: &S, tjk: Option<(i64, i64)>, var: &mut dyn FnMut(&dyn Fn(&mut S))) {
+fn tj_candidates(s: &S, tjk: Option<(i64, i64)>, var: Var<'_>) {
     let Some(tj) = &s.tj else { return };
     var(&|t| t.tj = None);
     match tj {
@@ -1787,21 +1827,33 @@ fn tj_candidates(s: &S, tjk: Option<(i64, i64)>, var: &mut dyn FnMut(&dyn Fn(&mu
 }
 
 /// explore.py `pf_candidates`: drop a token, narrow its window, drop a modifier, halve a delay.
-fn pf_candidates(s: &S, var: &mut dyn FnMut(&dyn Fn(&mut S))) {
+fn pf_candidates(s: &S, var: Var<'_>) {
     let hs = &s.h;
     for (i, h) in hs.iter().enumerate() {
         let mut rest = hs.clone();
         rest.remove(i);
-        let put = |var: &mut dyn FnMut(&dyn Fn(&mut S)), h2: H| {
+        let put = |var: Var<'_>, h2: H| {
             let mut l = rest.clone();
             l.insert(i, h2);
             var(&|t| t.h = l.clone());
         };
         var(&|t| t.h = rest.clone());
         if h.b - h.a > 1 {
-            put(var, H { b: h.a + 1, ..h.clone() });
+            put(
+                var,
+                H {
+                    b: h.a + 1,
+                    ..h.clone()
+                },
+            );
             if h.b - h.a > 2 {
-                put(var, H { b: h.a + fdiv(h.b - h.a, 2), ..h.clone() });
+                put(
+                    var,
+                    H {
+                        b: h.a + fdiv(h.b - h.a, 2),
+                        ..h.clone()
+                    },
+                );
             }
         }
         for m in ["p", "retry-after", "effect"] {
@@ -1831,7 +1883,7 @@ fn pf_candidates(s: &S, var: &mut dyn FnMut(&dyn Fn(&mut S))) {
 }
 
 /// grpc_faults.candidates: shrink steps for the gRPC-only keys of every H= token.
-fn grpc_candidates(s: &S, var: &mut dyn FnMut(&dyn Fn(&mut S))) {
+fn grpc_candidates(s: &S, var: Var<'_>) {
     let hs = &s.h;
     for (i, h) in hs.iter().enumerate() {
         let rules = &h.rules;
@@ -1840,7 +1892,7 @@ fn grpc_candidates(s: &S, var: &mut dyn FnMut(&dyn Fn(&mut S))) {
         }) {
             continue;
         }
-        let put = |var: &mut dyn FnMut(&dyn Fn(&mut S)), r: Vec<(String, RV)>| {
+        let put = |var: Var<'_>, r: Vec<(String, RV)>| {
             let mut l = hs.clone();
             l[i] = H {
                 rules: r,
