@@ -117,7 +117,7 @@ ns_qsum() {   # packets in the netem queues of every device in NET_DEVS
   echo $n
 }
 ns_heal() {   # net_heal of hydo-init.sh (keep in sync) for every device of the faults in force
-  local bound q0 n t=0 w=0 x
+  local bound q0 n t=0 w=0 x st
   bound=$(echo "$NET_ARGS" | $BB tr ',' ' ' | $BB awk '
     function ms(v,  x) { x = v + 0; if (v ~ /us/) return x / 1000; if (v ~ /ms/) return x
                          if (v ~ /s/) return x * 1000; return x / 1000 }
@@ -130,9 +130,18 @@ ns_heal() {   # net_heal of hydo-init.sh (keep in sync) for every device of the 
   for x in $NET_DEVS; do ns_tc ${x%:*} filter del dev ${x##*:} parent 1:0 2>/dev/null; done
   n=$(ns_qsum)
   while [ "$n" -gt 0 ] && [ $w -lt 50 ]; do $BB sleep 0.01; w=$((w + 10)); n=$(ns_qsum); done
+  st=$(ns_stats)
   for x in $NET_DEVS; do ns_tc ${x%:*} qdisc del dev ${x##*:} root 2>/dev/null; done
   NET_DEVS=""
-  echo "queued=$q0 drained_ms=$t left=$n"
+  echo "queued=$q0 drained_ms=$t left=$n acted on:$st"
+}
+ns_stats() {   # what each netem of the fault saw: <dev>[@<svc namespace>]:sent=<packets>,dropped=<packets>
+  local x
+  for x in $NET_DEVS; do
+    printf ' %s%s:' ${x##*:} "$([ "${x%:*}" = - ] || echo "@${x%:*}" | $BB sed 's#.*/#@#')"
+    ns_tc ${x%:*} -s qdisc show dev ${x##*:} | $BB awk '/^qdisc netem 40:/ { f = 1; next } f && $1 == "Sent" {
+      d = $7; sub(/,$/, "", d); printf "sent=%s,dropped=%s", $4, d; exit }'
+  done
 }
 net_off() { log "network fault lifted: $(ns_heal)"; }
 
