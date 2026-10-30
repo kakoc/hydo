@@ -5,7 +5,7 @@
 # service's own. The workload writes through a fault proxy (hydo-world, on the bridge's address
 # 10.89.0.1:6380) and prints the replica's lag after every step, so a fault on the link between
 # the two servers shows on the console.
-# Build on the build box (static Redis from build-linux.sh, hvx/BUILD-PINS.md):
+# Build (files/: the pinned static Redis 7.2.4 of build-linux.sh, hvx/BUILD-PINS.md, e.g. a release's examples/redis/files):
 #   HYDO_SEEDRNG=<pinned hvx_seedrng> hvx/onboard/hydo-build hvx/onboard/examples/redis-bridge/hydo.yaml
 # Try:  disk=none | run                                -> OK, lag 0 after every step
 #       disk=none | run N=primary-replica@5-10:loss,100%  -> OK; the replica falls behind during
@@ -20,8 +20,8 @@ network: bridge
 
 root:
   files:
-    - {src: ~/hydo/build/redis-server, dst: /bin/redis-server, mode: "0755"}
-    - {src: ~/hydo/build/redis-cli, dst: /bin/redis-cli, mode: "0755"}
+    - {src: files/redis-server, dst: /bin/redis-server, mode: "0755"}
+    - {src: files/redis-cli, dst: /bin/redis-cli, mode: "0755"}
   text:
     /etc/redis-primary.conf: |
       port 6379

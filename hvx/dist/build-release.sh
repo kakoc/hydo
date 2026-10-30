@@ -35,7 +35,7 @@ KMODS=/nix/store/rp8637p734k6rshqjqlnfdm97b4jn8w9-linux-6.6.35/lib/modules/6.6.3
 REDIS=/nix/store/ky1xq6xa88qhwwagnh4anm4sjl3c7vyk-redis-static-x86_64-unknown-linux-musl-7.2.4
 GCC_MUSL=/nix/store/aa1jsl19ywwfpqp0438vqbncc7sndnyw-gcc-static-x86_64-unknown-linux-musl-13.2.0/bin/gcc
 MUSL_ROOT=/nix/store/0nlqfwsn4qpx1453gb4zvx6dvn3121l4-musl-static-x86_64-unknown-linux-musl-1.2.6
-MODS="sch_prio sch_netem cls_u32 x_tables ip_tables iptable_filter xt_tcpudp xt_NFQUEUE nfnetlink nfnetlink_queue"
+MODS="sch_prio sch_netem cls_u32 x_tables ip_tables iptable_filter xt_tcpudp xt_NFQUEUE nfnetlink nfnetlink_queue llc stp bridge veth"
 if command -v sha256sum >/dev/null; then SHA="sha256sum"; else SHA="shasum -a 256"; fi
 
 # --- 1. assets (fetched once, in one ssh session; the build host keeps nothing afterwards) ---
