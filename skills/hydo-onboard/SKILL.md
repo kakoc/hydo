@@ -76,9 +76,10 @@ sh hydo/fetch-images.sh        # copies every image by digest into hydo/images/ 
 ```
 
 The importer writes the services (images pinned by digest, commands, environment, readiness
-from the healthchecks, ports, volumes on the data disk, one loopback address per service) and
-prints warnings for what it could not map. Read every warning: port collisions and bind mounts
-that the program writes to need a hand fix. It also writes a numbered-steps `workload.run` and a
+from the healthchecks, ports, volumes on the data disk, and `network: bridge`: each service in
+its own network namespace at its own address, as in Compose) and prints warnings for what it
+could not map. Read every warning: bind mounts that the program writes to need a hand fix (and,
+with `--network loopback` or `--no-addr`, port collisions). It also writes a numbered-steps `workload.run` and a
 `TODO` invariant. **Delete `workload.run` and the `TODO` invariant** (keep `workload.steps` and
 `workload.timeout`), then add a `test:` section as in step 5. Keep the generated comments that
 say where each value came from. The reference is the section "From Docker Compose" of
@@ -125,8 +126,12 @@ rules that matter most:
   start (also after a kill and in the recovery boot after a power cut).
 - `ready`: a cheap command that exits 0 when the service answers (a CLI ping, `SELECT 1`, an
   HTTP health URL, or `grep -qa "<started line>" $HYDO_LOG`).
-- `port`: the port that clients use (network faults act on it). `addr:` gives a service its own
-  loopback address, for faults on the link between two services (x86_64 only).
+- `port`: the port that clients use (network faults act on it). For a system of several
+  services that call each other, prefer `network: bridge` with an `addr:` (10.89.0.x) per service:
+  each service gets its own network namespace and private localhost, and faults on the link
+  between two services act on their real traffic (x86_64 only; MANIFEST.md "Service networks").
+  Without it, `addr:` is a loopback address (127.x.y.z) that a link fault only sees if the
+  program's outgoing connections leave from it.
 - `depends_on`; `recovery: false` for a stateless tier that the final checks do not need after a
   power cut.
 - `provision`: schemas, topics, users: what must exist before the window under test. Seed data

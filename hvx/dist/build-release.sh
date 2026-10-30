@@ -92,7 +92,7 @@ cp "$D/libexec/bin/debugfs" "$REL/libexec/bin/"
 chmod 755 "$REL/libexec/hvx-run" "$REL/libexec/faketime" "$REL/libexec/bin/debugfs"
 cp "$TOP/hvx/onboard/hydo-build" "$TOP/hvx/onboard/hydo-compose" "$TOP/hvx/onboard/hydo_compose.py" "$TOP/hvx/onboard/hydo_oci.py" "$TOP/hvx/onboard/hydo_build_arm64.py" \
    "$TOP/hvx/onboard/hydo-init.sh" "$TOP/hvx/onboard/hydo-init-clock.sh" "$TOP/hvx/onboard/hydo-init-freeze.sh" \
-   "$TOP/hvx/onboard/hydo-init-links.sh" "$TOP/hvx/onboard/hydo-liveness.sh" "$TOP/hvx/onboard/hydo_fc.c" \
+   "$TOP/hvx/onboard/hydo-init-links.sh" "$TOP/hvx/onboard/hydo-init-netns.sh" "$TOP/hvx/onboard/hydo-liveness.sh" "$TOP/hvx/onboard/hydo_fc.c" \
    "$TOP/hvx/onboard/MANIFEST.md" "$TOP/hvx/onboard/hydo_composer.py" "$TOP/hvx/onboard/hydo-composer.sh" "$REL/hvx/onboard/"
 echo "$VERSION" > "$REL/hvx/VERSION"     # hydo_composer.engine_version: what a plan's hydo_version is checked against
 # the host-side history checkers and the guest recorder (hvx/HISTORIES.md)

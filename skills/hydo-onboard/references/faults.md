@@ -11,7 +11,7 @@ in `hydo guide manifest`.
 |---|---|---|
 | `kill` | SIGKILL a service's whole process tree, restart it later (setup + cmd + ready) | `K=<svc>@<round>+<down>`, timed `X=` |
 | `pause` | SIGSTOP / SIGCONT, also in the middle of a request | `P=<svc>@<round>+<n>`, `P=<svc>@<round>~<ms>:<ms>` |
-| `network` | netem delay, loss, duplication, reordering on traffic to a service's `port:` (or on a link between two services with `addr:`) | `N=<svc>@<from>-<to>:<netem>`, `N=a-b@...` |
+| `network` | netem delay, loss, duplication, reordering on traffic to a service's `port:` (or on a link between two services with `addr:`; with `network: bridge` the link carries their real traffic and the explorer draws only links between services that list each other in `depends_on`) | `N=<svc>@<from>-<to>:<netem>`, `N=a-b@...` |
 | `oneway` | the same in one direction only | `O=<svc>@<from>-<to>:req\|resp:<netem>` |
 | `cut` | power cut: only data that reached the disk survives; a fresh boot recovers and runs the final checks | `C=<round>`, host `cf=<k>` (at the k-th disk flush) |
 | `clock` | step the realtime clock (like an NTP step) | `T=<round>:<seconds>` |

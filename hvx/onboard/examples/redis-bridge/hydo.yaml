@@ -1,0 +1,109 @@
+# redis-bridge: the control project for network: bridge (MANIFEST.md "Service networks"). Two
+# unmodified Redis 7.2 servers, each in its own network namespace and BOTH on port 6379 (as two
+# Compose containers would be): the primary, and a replica that replicates from it over the bridge.
+# Their readiness checks ask `redis-cli ping` on localhost, which inside a namespace is the
+# service's own. The workload writes through a fault proxy (hydo-world, on the bridge's address
+# 10.89.0.1:6380) and prints the replica's lag after every step, so a fault on the link between
+# the two servers shows on the console.
+# Build on the build box (static Redis from build-linux.sh, hvx/BUILD-PINS.md):
+#   HYDO_SEEDRNG=<pinned hvx_seedrng> hvx/onboard/hydo-build hvx/onboard/examples/redis-bridge/hydo.yaml
+# Try:  disk=none | run                                -> OK, lag 0 after every step
+#       disk=none | run N=primary-replica@5-10:loss,100%  -> OK; the replica falls behind during
+#                                                           steps 5..9 and catches up after the heal
+#       disk=none | run K=replica@5+3                  -> OK; the replica resyncs after its restart
+#       disk=none | run F=replica<primary@5#3:2000     -> OK; the replica is frozen at the third
+#                                                           replication packet of step 5
+name: redis-bridge
+description: A Redis primary and replica in their own network namespaces; every acknowledged SET survives on the primary and reaches the replica.
+
+network: bridge
+
+root:
+  files:
+    - {src: ~/hydo/build/redis-server, dst: /bin/redis-server, mode: "0755"}
+    - {src: ~/hydo/build/redis-cli, dst: /bin/redis-cli, mode: "0755"}
+  text:
+    /etc/redis-primary.conf: |
+      port 6379
+      bind 0.0.0.0
+      protected-mode no
+      dir /data/primary
+      save ""
+      appendonly yes
+      appendfsync always
+      repl-diskless-sync-delay 0
+      hz 1
+      dynamic-hz no
+    /etc/redis-replica.conf: |
+      port 6379
+      bind 0.0.0.0
+      protected-mode no
+      dir /data/replica
+      save ""
+      replicaof primary 6379
+      repl-diskless-sync-delay 0
+      hz 1
+      dynamic-hz no
+
+data:
+  size_mib: 64
+  dirs: [primary, replica]
+
+services:
+  - name: primary
+    cmd: /bin/redis-server /etc/redis-primary.conf
+    ready: /bin/redis-cli ping | grep -q PONG       # localhost: the primary's own namespace
+    port: 6379
+    addr: 10.89.0.11
+  - name: replica
+    cmd: /bin/redis-server /etc/redis-replica.conf
+    ready: /bin/redis-cli INFO replication | grep -q master_link_status:up
+    port: 6379
+    addr: 10.89.0.12
+    depends_on: [primary]
+
+proxies:
+  - name: redisp
+    port: 6380
+    service: primary
+    protocol: tcp
+
+shell: |
+  lag() {   # the primary's replication offset minus the replica's acknowledged one
+    /bin/redis-cli -h primary INFO replication 2>/dev/null | tr -d '\r' | awk -F'[:=,]' '
+      $1 == "master_repl_offset" { m = $2 } $1 == "slave0" { for (i = 2; i < NF; i += 2) if ($i == "offset") o = $(i + 1) }
+      END { if (o == "") print "none"; else print m - o }'
+  }
+
+workload:
+  steps: 16                         # step i = SET k:i v<i> through the proxy
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      r=$(timeout 2 /bin/redis-cli -h redisp -p 6380 SET k:$i v$i 2>/dev/null)
+      if [ "$r" = OK ]; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      sleep 0.5
+      echo "redis-bridge: step $i ${r:-no answer}, replica lag $(lag)" > /dev/console
+      i=$((i + 1))
+    done
+
+invariants:
+  - id: primary.acked_writes_survive
+    msg: every SET the client saw acknowledged reads back from the primary
+    cmd: |
+      for i in $(cat $HYDO_ACKED); do
+        [ "$(/bin/redis-cli -h primary GET k:$i)" = "v$i" ] || { echo "key k:$i lost on the primary"; exit 1; }
+      done
+      echo "acked=$(wc -l < $HYDO_ACKED) all on the primary"
+  - id: replica.catches_up
+    msg: every acknowledged SET reaches the replica within 30 s after the faults end
+    type: eventually
+    within: 30
+    cmd: |
+      for i in $(cat $HYDO_ACKED); do
+        [ "$(/bin/redis-cli -h replica GET k:$i)" = "v$i" ] || { echo "k:$i not on the replica yet (lag $(lag))"; exit 1; }
+      done
+      echo "acked=$(wc -l < $HYDO_ACKED) all on the replica"
+
+faults: [kill, pause, network, oneway, cut, clock, freeze, protocol]

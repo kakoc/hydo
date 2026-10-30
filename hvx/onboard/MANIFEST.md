@@ -67,6 +67,10 @@ guest:
   cpu: v3                      # guest CPU level (x86_64 only): v2 (default) = x86-64-v2, no AVX;
                                # v3 = adds AVX/AVX2, FMA, BMI1/2, F16C, LZCNT, MOVBE, XSAVE
 
+network: bridge                # loopback (default): one network for everything in the guest;
+                               # bridge: each service in its own network namespace at its addr:
+                               # (x86_64 only; see "Service networks")
+
 root:                          # what goes on the read-only root filesystem
   size_mib: 1792               # default: 1.3 x the content, rounded up to 64 MiB
   nix: [/nix/store/...-mysql-8.4.10]   # store paths; each FULL closure is copied to the
@@ -108,7 +112,9 @@ services:                      # may be empty ([] or left out): a project that i
     ready_timeout: 120                    # seconds (default 120)
     port: 5432                            # the port network faults (N=, O=) act on
     addr: 127.0.0.11                      # the service's own loopback address: enables link
-                                          #   faults between services (see "Link faults")
+                                          #   faults between services (see "Link faults"); with
+                                          #   network: bridge its address on the bridge, 10.89.x.y
+                                          #   (see "Service networks")
     depends_on: [cache]                   # start after these
     recovery: true                        # false: not started for the power-cut recovery check
 
@@ -482,6 +488,82 @@ With two or more services that have `addr:`, `explore.py` (manifest_space.py) ad
 from. The extension lives in `hydo-init-links.sh`; hydo-build copies it into the image and adds one
 line to `/sbin/init` that sources it, only for manifests with an `addr:`, so every other
 manifest builds a byte-identical image. Not supported yet: `--arch arm64`.
+
+On one shared loopback network a program's outgoing connections leave from `127.0.0.1` unless it
+is made to do otherwise, so most programs need the uid recipe above before a link fault touches
+them. `network: bridge` (next section) removes that condition: every service's packets carry its
+own address because the service has nothing else.
+
+### Service networks (`network: bridge`)
+
+```yaml
+network: bridge          # default: loopback (one network shared by everything in the guest)
+services:
+  - name: api
+    addr: 10.89.0.12     # required for every service: its address on the bridge
+    port: 80
+  - name: web
+    addr: 10.89.0.13
+    port: 80             # the same port as api: each service has its own network
+```
+
+Like Docker's bridge network, every service runs in its own network namespace:
+
+- `lo` with `127.0.0.1` and `::1`, private to the service: `localhost` inside a service is that
+  service, as inside a container. Two services may listen on the same port.
+- `eth0` with the service's `addr:` (an address in `10.89.0.0/16` other than `10.89.0.1`, unique)
+  and the MAC address `02:42:<addr in hex>`; the other end of its veth pair, `vh<i>`, is a port of
+  the bridge `hydo0` in the guest's own namespace. IPv6 is off on the bridge and the veths (no
+  router solicitations or duplicate-address checks on the wire); `lo` keeps `::1`.
+- The bridge has `10.89.0.1/16`: the address of the guest's own namespace, where the workload,
+  provisioning, the invariants and the fake outside world run. Their connections to a service
+  come from `10.89.0.1`. There is no route anywhere else, so a connection to an outside address
+  fails at once.
+- `/etc/hosts`, when the manifest gives none, maps every service's name (and every fake's and
+  proxy's) to its address, as Docker resolves service names.
+
+The network is set up when `/sbin/init` starts, before the first snapshot, so every boot has it,
+including the recovery boot after a power cut. What runs where:
+
+| | where |
+|---|---|
+| a service's `setup:`, `cmd:` and `ready:` | in its namespace (a `ready:` that asks `localhost` asks the service itself, like a Compose healthcheck) |
+| `hydo-oci <svc> ...` | in that service's namespace, like `docker exec` |
+| `workload:`, `provision:`, invariants, knobs, `hydo-world` | in the guest's own namespace, on `10.89.0.1` |
+
+Faults by name are unchanged: kills, pauses and the process-tree reach act on processes (one PID
+namespace), a power cut freezes every service, and a killed service restarts in the same
+namespace with the same address. Network faults are netem qdiscs on the veth where the packets
+leave, so they act on the services' real traffic:
+
+| token | packets | where |
+|---|---|---|
+| `N=<svc>@...`, `O=<svc>@...:req:...` | to `<svc>`'s `port:`, from every other service and the workload | its bridge port `vh<i>`, towards the service |
+| `O=<svc>@...:resp:...` | from `<svc>`'s `port:` | `eth0` inside its namespace |
+| `N=a-b@...` | between `a` and `b`, both ways (u32 on source and destination address) | `a -> b` on b's `vh`, `b -> a` on a's `vh` |
+| `O=a-b@...:req|resp:...` | `a -> b` / `b -> a` only | as above |
+| `N=a-*@...` | between `a` and every other service | the `vh` of every service involved |
+
+A heal drains every netem queue of the fault before removing it (as `net_heal`, Milestone 71), and
+the console line says how many packets were queued. `F=` (freeze at a call) holds the pair's
+packets in the frozen service's namespace (`OUTPUT` for what it sends, `INPUT` for what it
+receives; the workload peer is `10.89.0.1`); `fakes:` and `proxies:` default to `addr: 10.89.0.1`,
+another address in `10.89.0.0/16` is added to the bridge, and a proxy's `to:` and a webhook's URL
+use bridge addresses.
+
+`explore.py` draws link faults only where there is traffic: the pairs in which one service lists
+the other in `depends_on` (a Compose import keeps Compose's `depends_on`), and `a-*` for a service
+with two or more such peers. Services without any `depends_on` between them (peers that find each
+other, such as a cluster) get every pair, as on loopback.
+
+hydo-build stages iproute2's `ip` and the guest kernel's `llc`, `stp`, `bridge` and `veth` modules
+and splices `hydo-init-netns.sh` into `/sbin/init`, only for `network: bridge`; every other
+manifest builds byte-identically (`hvx/explore/netns_ident.py`). x86_64 only: the arm64 guest kernel
+(`hvx-mac/explore/build-guest.sh`, built from `allnoconfig`) has no `CONFIG_NAMESPACES`,
+`CONFIG_NET_NS`, `CONFIG_VETH` or `CONFIG_BRIDGE`, and `--arch arm64` refuses the key. One bridge
+models every Compose network: services on different Compose networks can still reach each other.
+Examples: `examples/redis-bridge/` (two Redis servers on the same port, a replica link, a fault
+proxy, freeze) and `examples/compose-voting/`.
 
 ## Fake outside services and protocol faults (`fakes:`, `proxies:`, `H=`)
 
@@ -1055,7 +1137,8 @@ what the team already runs:
 
 ```sh
 hvx/onboard/hydo-compose docker-compose.yml [--out hydo.yaml] [--images-dir images]
-        [--env-file F ...] [--profile P ...] [--use-env] [--no-resolve] [--lock FILE] [--no-addr]
+        [--env-file F ...] [--profile P ...] [--use-env] [--no-resolve] [--lock FILE]
+        [--network bridge|loopback] [--no-addr]
 sh fetch-images.sh            # written next to hydo.yaml: copies every image by digest (network, once)
 # write the workload and the invariants (the generated file marks them TODO), then hydo-build
 ```
@@ -1080,7 +1163,7 @@ validator before it is written. Example: `examples/compose-voting/` (Docker's ex
 | `${VAR}` interpolation | done with `.env` next to the Compose file (or `--env-file`): `${VAR:-d}`, `${VAR-d}`, `${VAR:?e}`, `${VAR:+r}`. The shell environment is NOT used (the manifest must not depend on who imports it); a variable found only there is reported. `--use-env` follows Compose. |
 | `working_dir:`, `user:` | `workdir:`, `user:` |
 | `ports:`, `expose:` | `port:` = the first CONTAINER port (`"8080:80"` -> 80); else the image's `EXPOSE`. Network faults (`N=`/`O=`) act on that port. |
-| (each service) | its own loopback `addr:` (127.0.0.11, .12, ...), and `/etc/hosts` (`root.text`, mounted into every image root) maps the Compose service names, `container_name`, `hostname`, network `aliases`, `links` aliases and `extra_hosts` to them (`host-gateway` -> 127.0.0.1). `--no-addr`: every name -> 127.0.0.1 (the arm64 build has no `addr:`; `hydo compose` on a Mac passes it). |
+| (each service) | `network: bridge` and its own network namespace with `addr:` 10.89.0.11, .12, ... (see "Service networks"), and `/etc/hosts` (`root.text`, mounted into every image root) maps the Compose service names, `container_name`, `hostname`, network `aliases`, `links` aliases and `extra_hosts` to them (`host-gateway` -> 10.89.0.1). `--network loopback`: the Milestone 84 layout, one shared loopback network with `addr:` 127.0.0.11, .12, ... (link faults then act on nothing, see "Link faults"). `--no-addr`: one shared loopback network, every name -> 127.0.0.1 (the arm64 build, whose kernel has no network namespaces; `hydo compose` on a Mac passes it). |
 | `depends_on:` (list or map) | `depends_on:`. hydo starts a service only after its dependencies passed their `ready:`, so `service_healthy` and `service_started` both hold. |
 | `depends_on.<job>.condition: service_completed_successfully` | the job service idles (`/.hydo/busybox sleep`) and its command runs once per boot in the `setup:` of every service that waits for it (also before a restart and in crash recovery). |
 | `healthcheck:` (else the image's `HEALTHCHECK`) | `ready: timeout <t> hydo-oci <svc> <test>`: `CMD` as argv, `CMD-SHELL`/a string through `/bin/sh -c`, as the service's `user:` (busybox `chpst`), polled every second; `ready_timeout` = `start_period + interval x retries + 60` s (120..600). Without one: `nc -z -w 2 <addr> <port>`, or `true` (with a TODO) when there is no port. |
@@ -1098,16 +1181,18 @@ validator before it is written. Example: `examples/compose-voting/` (Docker's ex
 
 Reported as warnings, with what to do (the file's header repeats them): `build:` (with an image:
 the image is used; without one the import stops: build it, `docker save` it, set `image:`),
-non-default `networks:` (one loopback network in the guest: isolation between Compose networks is
-not modelled), `network_mode`, `privileged`, `cap_add`/`cap_drop`, `devices`, `security_opt`,
+non-default `networks:` (one bridge in the guest: isolation between Compose networks is not
+modelled), `network_mode`, `privileged`, `cap_add`/`cap_drop`, `devices`, `security_opt`,
 `pid`/`ipc`/`uts`/`userns_mode`, `sysctls`, `ulimits`, `dns*`, `init`, `volumes_from`, `extends`,
 `configs`, `scale`, `deploy.replicas` > 1 and other `deploy:` (Swarm) keys, `shm_size`, GPU
 reservations, `platform:` other than linux/amd64 or linux/arm64, an `include:`. Ignored silently:
 `labels`, `logging`, `stdin_open`, `tty`, `stop_signal`, `stop_grace_period`, CPU shares and quotas,
-`x-*` extension fields. A **port collision** -- two services listening on the same container
-port, which Compose keeps apart with one network namespace per container -- is reported with each
-service's `addr:`: in the guest only the first one that binds `0.0.0.0:<port>` starts, so make
-each listen on its own address or move one (`examples/compose-voting` moves `result` to 81).
+`x-*` extension fields. With `--network loopback` or `--no-addr`, a **port collision** -- two
+services listening on the same container port, which Compose keeps apart with one network namespace
+per container -- is reported with each service's `addr:`: on one shared network only the first one
+that binds `0.0.0.0:<port>` starts, so make each listen on its own address or move one
+(`examples/compose-voting/hydo-loopback.yaml` moves `result` to 81). With `network: bridge` (the
+default) there is no collision: each service has its own namespace.
 
 ### `services[].mounts` (image services)
 
@@ -1132,13 +1217,10 @@ before.
 
 ### What a Compose stack does not get
 
-- **Link faults between Compose services act on nothing.** Every service has an `addr:`, but its
-  outgoing connections leave from 127.0.0.1 (see "Link faults"), so `N=a-b` matches no packet of
-  the app's own traffic; and explore.py still draws such link targets for manifests with `addr:`.
-  Use the port faults (`N=<svc>@...`, `O=<svc>@...`), which act on every client's traffic to that
-  service.
-- One network, one hostname, no per-service namespaces: `hostname` inside a service is the
-  guest's; services see each other's processes.
+- One bridge for every Compose network (no isolation between networks), one hostname (`hostname`
+  inside a service is the guest's) and one PID namespace (services see each other's processes).
+  Each service has its own network namespace only with `network: bridge`, the importer's default
+  on x86_64; with `--network loopback` or `--no-addr` link faults between services act on nothing.
 - The image roots are read-only except for the `mounts:`: a program that writes elsewhere fails
   with "Read-only file system"; add a `mounts:` entry (a volume or a tmpfs) for that path.
 - Healthchecks run through `hydo-oci`, as root unless the service has a `user:`; the image's own

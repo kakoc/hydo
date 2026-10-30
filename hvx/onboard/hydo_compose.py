@@ -4,7 +4,7 @@ Compose").
 
     hydo-compose <docker-compose.yaml> [--out hydo.yaml] [--name NAME] [--images-dir DIR]
                  [--env-file FILE ...] [--profile P ...] [--use-env] [--no-resolve] [--lock FILE]
-                 [--no-addr]
+                 [--network bridge|loopback] [--no-addr]
 
 What it does, per Compose service (the table in MANIFEST.md lists every key):
   * image: resolved to digests with skopeo (the index digest and the linux/amd64 + linux/arm64
@@ -22,10 +22,17 @@ What it does, per Compose service (the table in MANIFEST.md lists every key):
   * healthcheck (or the image's HEALTHCHECK) -> ready: (run inside the image with hydo-oci);
     without one, a TCP check of the service's port.
   * ports / expose (else the image's EXPOSE) -> port: (the first container port).
-  * every service gets its own loopback addr: (127.0.0.11, .12, ...) and the Compose service names
-    (plus container_name, hostname, network aliases, links aliases, extra_hosts) resolve through
-    /etc/hosts, in the hydo root and inside every image root. --no-addr: every name resolves to
-    127.0.0.1 and no addr: is written (the arm64 build, `hydo compose` on a Mac, has no addr: yet).
+  * networks: the manifest gets `network: bridge` (MANIFEST.md "Service networks"): like Docker's
+    bridge network, every service runs in its own network namespace with its own address
+    (addr: 10.89.0.11, .12, ...) and a private localhost, so two services may use the same port and
+    network faults between services act on their real traffic. The Compose service names (plus
+    container_name, hostname, network aliases, links aliases, extra_hosts; host-gateway is the
+    bridge's 10.89.0.1) resolve through /etc/hosts, in the hydo root and inside every image root.
+    --network loopback: the Milestone 84 layout instead -- one shared loopback network, addr:
+    127.0.0.11, .12, ... (link faults then act on nothing: outgoing connections leave from
+    127.0.0.1). --no-addr: one shared loopback network, every name resolves to 127.0.0.1 and no
+    addr: is written (the arm64 build, `hydo compose` on a Mac: its guest kernel has no network
+    namespaces).
   * volumes: named and anonymous volumes (and the image's VOLUMEs) -> directories on the data disk
     (/data/vol/<name>, the fault target) mounted into the image with a copy of the image's content
     on first use, as Docker does; bind mounts of existing files/directories -> copied into the
@@ -40,7 +47,8 @@ hydo-build YAML subset parser (or give a .json file, e.g. `docker compose config
 import hashlib, importlib.machinery, importlib.util, json, os, posixpath, re, shlex, shutil, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ADDR_BASE = 11                      # 127.0.0.11, .12, ... (as examples/etcd)
+ADDR_BASE = 11                      # 127.0.0.11, .12, ... (as examples/etcd); 10.89.0.11, .12, ... (network: bridge)
+BRIDGE_GW = "10.89.0.1"             # hydo-build's NET_GW: the bridge's own address (the guest's namespace)
 SVC_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 PATH_OK = re.compile(r"^/[A-Za-z0-9._@+=,:/-]*$")
 
@@ -73,7 +81,8 @@ UNSUPPORTED = {
     "devices": "host devices are not available in the guest; drop the service or replace the device",
     "device_cgroup_rules": "host devices are not available in the guest",
     "security_opt": "seccomp/AppArmor profiles are not applied",
-    "network_mode": "all services share one loopback network in the guest; network_mode is ignored",
+    "network_mode": "every service has its own network namespace on one bridge (or, with --network loopback, all "
+                    "share one loopback network); network_mode is ignored",
     "pid": "pid namespaces are not modelled; services see each other's processes",
     "ipc": "ipc namespaces are not modelled",
     "uts": "uts namespaces are not modelled (the guest has one hostname)",
@@ -576,6 +585,8 @@ class Importer:
         self.out = os.path.abspath(out_path)
         self.odir = os.path.dirname(self.out)
         self.o = opts
+        # network: bridge unless --network loopback or --no-addr (one shared loopback network)
+        self.bridge = opts.get("network", "bridge") == "bridge" and not opts.get("no_addr")
         self.warnings = []          # (key, text)
         self.notes = []
 
@@ -675,10 +686,12 @@ class Importer:
                 self.notes.append("Compose service %r is hydo service %r (fault tokens use %s; the name %s still "
                                   "resolves through /etc/hosts)" % (n, hn, hn, n))
         if len(order) > 250 - ADDR_BASE:
-            raise ComposeError("too many services for one loopback /24")
+            raise ComposeError("too many services for one /24")
         self.names = names
         if self.o.get("no_addr"):      # --no-addr (the arm64 build has no addr: yet): every name -> 127.0.0.1
             self.addr = {n: "127.0.0.1" for n in order}
+        elif self.bridge:
+            self.addr = {n: "10.89.0.%d" % (ADDR_BASE + i) for i, n in enumerate(order)}
         else:
             self.addr = {n: "127.0.0.%d" % (ADDR_BASE + i) for i, n in enumerate(order)}
         self.hosts = []
@@ -700,10 +713,11 @@ class Importer:
         nets = self.doc.get("networks") or {}
         custom = [k for k in nets if k != "default"]
         if custom:
-            self.warn("networks", "networks %s: all services share one loopback network in the guest, so the "
+            self.warn("networks", "networks %s: all services share one %s network in the guest, so the "
                       "isolation between Compose networks is not modelled (every service can reach every other)"
-                      % ", ".join(map(str, custom)))
-        self.port_collisions()
+                      % (", ".join(map(str, custom)), "bridge" if self.bridge else "loopback"))
+        if not self.bridge:     # with network: bridge every service has its own ports, as in Compose
+            self.port_collisions()
         return self.emit()
 
     def find_jobs(self, order, raw):
@@ -838,7 +852,7 @@ class Importer:
         eh = s.get("extra_hosts")
         for e in (eh.items() if isinstance(eh, dict) else [re.split(r"[:=]", str(x), 1) for x in as_list(eh)]):
             h, ip = e[0], (e[1] if len(e) > 1 else "")
-            ip = "127.0.0.1" if ip in ("host-gateway", "") else ip
+            ip = (BRIDGE_GW if self.bridge else "127.0.0.1") if ip in ("host-gateway", "") else ip
             self.hosts.append((ip, [str(h)]))
         # depends_on
         dep = s.get("depends_on")
@@ -1148,6 +1162,8 @@ class Importer:
         L.append("name: %s\n" % name)
         L.append("description: %s\n" % q("imported from %s (%d services); TODO: what is tested" %
                                          (os.path.basename(self.cpath), len(self.svcs))))
+        if self.bridge:
+            L.append("\nnetwork: bridge   # each service in its own network namespace at its addr: (MANIFEST.md \"Service networks\")\n")
         L.append("\nguest:\n")
         L.append("  ram_mib: %d   # a guess: %d MiB for the services and the kernel; raise it if a service runs out\n"
                  % (ram, self.ram))
@@ -1290,7 +1306,7 @@ def main(argv=None):
     i = 0
     while i < len(a):
         x = a[i]
-        if x in ("--out", "-o", "--name", "--images-dir", "--lock", "--env-file", "--profile"):
+        if x in ("--out", "-o", "--name", "--images-dir", "--lock", "--env-file", "--profile", "--network"):
             if i + 1 >= len(a):
                 print("hydo-compose: %s needs a value" % x, file=sys.stderr); return 2
             v = a[i + 1]
@@ -1317,6 +1333,8 @@ def main(argv=None):
             print("hydo-compose: one Compose file only", file=sys.stderr); return 2
     if path is None:
         print(__doc__); return 2
+    if opts.get("network", "bridge") not in ("bridge", "loopback"):
+        print("hydo-compose: --network bridge or loopback", file=sys.stderr); return 2
     out = out or os.path.join(os.path.dirname(os.path.abspath(path)), "hydo.yaml")
     try:
         imp = Importer(path, out, opts)
