@@ -3,8 +3,12 @@
 c2a440c5e1c3888f4a8655b3f9c5fd4977a06b228d3b51df80615ec0d71cb4ad  guest/hvx_seedrng
 9c619c3e6494b8f8963dbf9ccfe9f08ffe252f266d20bb9c4aaa7ff6bb0e4d62  guest/hydo_fc
 d074d764c76ce11932d5ff445cd468de38fdca8dd0db02f85fde3817ff997230  guest/initramfs-kafka.cpio.gz
+8c52a9cae325437116ae8b58026632ff31ef3300a7f623898e959631e0c1625c  guest/modules/6.6.35/kernel/drivers/net/veth.ko.xz
+2b26ddadeb2fe2f8693a26977001c6c218625d08a6d06caa111b0541ddee79bc  guest/modules/6.6.35/kernel/net/802/stp.ko.xz
+d2075c59c4a7d34acf423d54b0ab366d6dba2d6c9331f52d1efe5510236671f7  guest/modules/6.6.35/kernel/net/bridge/bridge.ko.xz
 6181e00dbf54ec5e8d4596968fda9b306ae630e43d56a1460790a92e598e61c5  guest/modules/6.6.35/kernel/net/ipv4/netfilter/ip_tables.ko.xz
 4917792295ff1eac9258184a0ddc1a14fc8b26d818e803109baff7a894a71805  guest/modules/6.6.35/kernel/net/ipv4/netfilter/iptable_filter.ko.xz
+6025328e923a248accbb34b96e104a352d5b223d2c262623c9bb91f28edc425a  guest/modules/6.6.35/kernel/net/llc/llc.ko.xz
 d53bbfcaa265cd4d5f2ff5b27c0df291313e59e0534974f57ac81fef8a3b8d5f  guest/modules/6.6.35/kernel/net/netfilter/nfnetlink.ko.xz
 a1f8ec0555fe701e68976ba2135c62d3307a001770516540c2586557e384e955  guest/modules/6.6.35/kernel/net/netfilter/nfnetlink_queue.ko.xz
 028d81eee132c78e3af529385b6805d17ddede59891b17dfab0c95907885b353  guest/modules/6.6.35/kernel/net/netfilter/x_tables.ko.xz

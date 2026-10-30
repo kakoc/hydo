@@ -35,7 +35,7 @@ KMODS=/nix/store/rp8637p734k6rshqjqlnfdm97b4jn8w9-linux-6.6.35/lib/modules/6.6.3
 REDIS=/nix/store/ky1xq6xa88qhwwagnh4anm4sjl3c7vyk-redis-static-x86_64-unknown-linux-musl-7.2.4
 GCC_MUSL=/nix/store/aa1jsl19ywwfpqp0438vqbncc7sndnyw-gcc-static-x86_64-unknown-linux-musl-13.2.0/bin/gcc
 MUSL_ROOT=/nix/store/0nlqfwsn4qpx1453gb4zvx6dvn3121l4-musl-static-x86_64-unknown-linux-musl-1.2.6
-MODS="sch_prio sch_netem cls_u32 x_tables ip_tables iptable_filter xt_tcpudp xt_NFQUEUE nfnetlink nfnetlink_queue"
+MODS="sch_prio sch_netem cls_u32 x_tables ip_tables iptable_filter xt_tcpudp xt_NFQUEUE nfnetlink nfnetlink_queue llc stp bridge veth"
 if command -v sha256sum >/dev/null; then SHA="sha256sum"; else SHA="shasum -a 256"; fi
 
 # --- 1. assets (fetched once, in one ssh session; the build host keeps nothing afterwards) ---
@@ -92,7 +92,7 @@ cp "$D/libexec/bin/debugfs" "$REL/libexec/bin/"
 chmod 755 "$REL/libexec/hvx-run" "$REL/libexec/faketime" "$REL/libexec/bin/debugfs"
 cp "$TOP/hvx/onboard/hydo-build" "$TOP/hvx/onboard/hydo-compose" "$TOP/hvx/onboard/hydo_compose.py" "$TOP/hvx/onboard/hydo_oci.py" "$TOP/hvx/onboard/hydo_build_arm64.py" \
    "$TOP/hvx/onboard/hydo-init.sh" "$TOP/hvx/onboard/hydo-init-clock.sh" "$TOP/hvx/onboard/hydo-init-freeze.sh" \
-   "$TOP/hvx/onboard/hydo-init-links.sh" "$TOP/hvx/onboard/hydo-liveness.sh" "$TOP/hvx/onboard/hydo_fc.c" \
+   "$TOP/hvx/onboard/hydo-init-links.sh" "$TOP/hvx/onboard/hydo-init-netns.sh" "$TOP/hvx/onboard/hydo-liveness.sh" "$TOP/hvx/onboard/hydo_fc.c" \
    "$TOP/hvx/onboard/MANIFEST.md" "$TOP/hvx/onboard/hydo_composer.py" "$TOP/hvx/onboard/hydo-composer.sh" "$REL/hvx/onboard/"
 echo "$VERSION" > "$REL/hvx/VERSION"     # hydo_composer.engine_version: what a plan's hydo_version is checked against
 # the host-side history checkers and the guest recorder (hvx/HISTORIES.md)

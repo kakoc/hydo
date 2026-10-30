@@ -11,6 +11,8 @@ Design (load-bearing):
   * Each image service gets its OWN root in the guest, /oci/<service>, and runs chrooted there
     (the Docker model). Its files are not merged into the hydo root, so images with different
     C libraries or /etc contents can sit side by side and busybox + /sbin/init stay intact.
+  * With network: bridge (hydo-init-netns.sh) the service also has its own network namespace;
+    `hydo-oci <svc> ...` then enters it first, like `docker exec`.
   * /proc /sys /dev /tmp /data of the guest are bind-mounted into that root before every start
     and every hydo-oci call. /data is the data disk (the fault target); /tmp is shared, so
     $HYDO_ACKED and friends are the same files inside and outside.
@@ -659,11 +661,17 @@ s=$1
 shift
 exec /etc/hydo/oci/$s/exec "$@"
 """
+# network: bridge (hydo-init-netns.sh): like `docker exec`, the command runs in the service's own
+# network namespace, so its localhost is the service's
+HYDO_OCI_NETNS = HYDO_OCI.replace('exec /etc/hydo/oci/$s/exec "$@"\n',
+                                  '[ -e /tmp/hydo/ns/$s ] || { echo "hydo-oci: no network namespace for $s" >&2; exit 125; }\n'
+                                  'exec /bin/busybox nsenter -n/tmp/hydo/ns/$s /etc/hydo/oci/$s/exec "$@"\n')
 
 
-def stage(oci, R, busybox, tmpdir):
+def stage(oci, R, busybox, tmpdir, netns=False):
     """Flatten every image service's image into R/oci/<svc>, add the launchers. Returns meta:
-    path relative to R -> (S_IFMT, mode, uid, gid) for everything under R/oci."""
+    path relative to R -> (S_IFMT, mode, uid, gid) for everything under R/oci. netns: the manifest
+    has network: bridge (hydo-oci then enters the service's network namespace)."""
     meta = {"oci": (stat.S_IFDIR, 0o755, 0, 0)}
     if not oci:
         return {}
@@ -734,7 +742,7 @@ def stage(oci, R, busybox, tmpdir):
             img.config_digest[:19], o["svc"], len(img.layers), len(T.meta),
             ", %d device/FIFO entries skipped" % T.skipped if T.skipped else ""))
     with open(os.path.join(R, "bin/hydo-oci"), "w") as f:
-        f.write(HYDO_OCI)
+        f.write(HYDO_OCI_NETNS if netns else HYDO_OCI)
     os.chmod(os.path.join(R, "bin/hydo-oci"), 0o755)
     shutil.rmtree(tmpdir)
     return meta

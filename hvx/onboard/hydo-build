@@ -48,6 +48,8 @@ def faketime_env(**extra):
 NETMODS = ["sch_prio", "sch_netem", "cls_u32"]
 # the freeze-at-a-call fault (F=, hydo-init-freeze.sh): netfilter queue + iptables-legacy
 FCMODS = ["x_tables", "ip_tables", "iptable_filter", "xt_tcpudp", "xt_NFQUEUE", "nfnetlink", "nfnetlink_queue"]
+# network: bridge (hydo-init-netns.sh): a network namespace per service, joined by veth pairs to one bridge
+NSMODS = ["llc", "stp", "bridge", "veth"]
 
 # ------------------------------------------------------------------ YAML subset parser
 class YamlError(Exception):
@@ -300,7 +302,8 @@ KNOWN_TOP = {"name", "description", "guest", "root", "data", "env", "shell", "se
              "fakes", "proxies",
              "buggify",
              "test", "format", "hydo_version",      # these three: the test composer (hydo_composer.py)
-             "checks"}                                # history checks (hvx/HISTORIES.md)
+             "checks",                                # history checks (hvx/HISTORIES.md)
+             "network"}                               # service networks (hydo-init-netns.sh)
 KNOWN_SVC = {"name", "cmd", "setup", "ready", "ready_timeout", "port", "depends_on",
              "recovery", "description", "addr",
              "image", "image_ref", "entrypoint", "workdir", "user", "env", "mounts"}   # the last seven: hydo_oci.py
@@ -349,6 +352,8 @@ def validate(m):
         raise ManifestError("services: must be a list (it may be empty: a project that is only a workload)")
     m["services"] = svcs
     seen = {}
+    if m.get("network") not in (None,) + NET_MODES:
+        raise ManifestError("network: %s (got %r)" % (" or ".join(NET_MODES), m.get("network")))
     for i, s in enumerate(svcs):
         where = "services[%d]" % i
         if not isinstance(s, dict):
@@ -365,7 +370,7 @@ def validate(m):
         _need(s, "ready", where)
         if "port" in s and not isinstance(s["port"], int):
             raise ManifestError("%s: port must be a number" % where)
-        validate_addr(s, svcs, where)
+        validate_addr(s, svcs, where, has_netns(m))
         for d in s.get("depends_on") or []:
             if d not in [x.get("name") for x in svcs]:
                 raise ManifestError("%s: depends_on names unknown service %r" % (where, d))
@@ -461,9 +466,48 @@ def validate(m):
         if not isinstance(r, int) or isinstance(r, bool) or not RAM_MIB_MIN <= r <= max(RAM_MIB_MAX.values()):
             raise ManifestError("guest.ram_mib: a whole number of MiB in [%d, %d] (got %r; x86_64 allows up "
                                 "to %d)" % (RAM_MIB_MIN, max(RAM_MIB_MAX.values()), r, RAM_MIB_MAX["x86_64"]))
+    validate_network(m)
     validate_checks(m, ids)
     validate_world(m)
     return m
+
+
+# ------------------------------------------------------------------ service networks (network:)
+# network: loopback (the default) -- every service shares the guest's one network; an addr: is a
+#   127.x.y.z loopback address (link faults act only on traffic that leaves from it).
+# network: bridge -- like Docker's bridge network: every service runs in its own network
+#   namespace with its own lo (localhost is private to it) and eth0 = its addr:, an address in
+#   NET_BRIDGE, one end of a veth pair whose other end is a port of the bridge hydo0 in the guest's
+#   own namespace (NET_GW: the workload, the invariants and hydo-world). hydo-init-netns.sh sets it
+#   up at boot and moves network faults onto the veths. x86_64 only (the arm64 guest kernel has no
+#   network namespaces). A manifest without network: (or with loopback) builds exactly as before.
+NET_MODES = ("loopback", "bridge")
+NET_BRIDGE = "10.89.0.0/16"
+NET_GW = "10.89.0.1"
+BRIDGE_ADDR_RE = re.compile(r"^10\.89\.(\d{1,3})\.(\d{1,3})$")
+NETNS_INIT = "hydo-init-netns.sh"      # inserted into /sbin/init only for manifests with network: bridge
+
+
+def has_netns(m):
+    return m.get("network") == "bridge"
+
+
+def bridge_addr_ok(a):
+    mo = BRIDGE_ADDR_RE.match(str(a))
+    return bool(mo) and all(int(x) <= 255 for x in mo.groups()) and str(a) not in (
+        "10.89.0.0", NET_GW, "10.89.255.255")
+
+
+def validate_network(m):
+    if "network" not in m:
+        return
+    if m["network"] not in NET_MODES:
+        raise ManifestError("network: %s (got %r)" % (" or ".join(NET_MODES), m["network"]))
+    if has_netns(m):
+        for i, s in enumerate(m["services"]):
+            if "addr" not in s:
+                raise ManifestError("services[%d]: network: bridge gives every service its own network namespace "
+                                    "and address: addr: required (an address in %s other than %s)" % (i, NET_BRIDGE, NET_GW))
 
 
 # guest RAM the explorer engines accept (hvx_explore / hvmx check the same bounds): x86_64 stays
@@ -484,11 +528,19 @@ ADDR_RE = re.compile(r"^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$")
 LINKS_INIT = "hydo-init-links.sh"      # spliced into /sbin/init only for manifests with addr:
 
 
-def validate_addr(s, svcs, where):
-    """addr: the service's own loopback address (link faults, MANIFEST.md). Optional."""
+def validate_addr(s, svcs, where, bridge=False):
+    """addr: the service's own loopback address (link faults, MANIFEST.md). Optional. With
+    network: bridge, the service's address on the bridge (required, checked in validate_network)."""
     if "addr" not in s:
         return
     a = str(s["addr"])
+    if bridge:
+        if not bridge_addr_ok(a):
+            raise ManifestError("%s: addr %r: with network: bridge, an address in %s other than %s (the "
+                                "bridge's own address) and the network/broadcast addresses" % (where, a, NET_BRIDGE, NET_GW))
+        if [str(x.get("addr")) for x in svcs].count(a) > 1:
+            raise ManifestError("%s: addr %s is used by two services" % (where, a))
+        return
     mo = ADDR_RE.match(a)
     if not mo or any(int(x) > 255 for x in mo.groups()) or a == "127.0.0.1":
         raise ManifestError("%s: addr %r must be a loopback address 127.x.y.z other than 127.0.0.1 "
@@ -503,6 +555,17 @@ def has_links(m):
 
 def has_freeze(m):
     return "freeze" in (m.get("faults") or [])
+
+
+def default_hosts(m):
+    """/etc/hosts when the manifest gives none: localhost; with network: bridge also every service's
+    and every fake's/proxy's name at its address (as Docker resolves service names)."""
+    h = "127.0.0.1 localhost\n"
+    if has_netns(m):
+        h += "::1 localhost ip6-localhost ip6-loopback\n"
+        h += "".join("%s %s\n" % (s["addr"], s["name"]) for s in m["services"])
+        h += "".join("%s %s\n" % (e.get("addr", NET_GW), e["name"]) for e in (m.get("fakes") or []) + (m.get("proxies") or []))
+    return h
 
 
 # ------------------------------------------------------------------ fake outside services
@@ -526,7 +589,13 @@ def has_world(m):
     return bool(m.get("fakes") or m.get("proxies"))
 
 
-def _world_addr(x, where):
+def _world_addr(x, where, bridge=False):
+    if bridge:      # network: bridge: the world lives on the bridge (default: its own address NET_GW)
+        a = str(x.get("addr", NET_GW))
+        if a != NET_GW and not bridge_addr_ok(a):
+            raise ManifestError("%s: addr %r: with network: bridge, an address in %s (default %s, the "
+                                "bridge's own address)" % (where, a, NET_BRIDGE, NET_GW))
+        return a
     a = str(x.get("addr", "127.0.0.1"))
     mo = ADDR_RE.match(a)
     if not mo or any(int(v) > 255 for v in mo.groups()):
@@ -534,11 +603,25 @@ def _world_addr(x, where):
     return a
 
 
+def world_addrs(m):
+    """network: bridge: the addresses hydo-world listens on besides NET_GW (the init adds them to
+    the bridge, so the services' namespaces reach them)."""
+    out = []
+    for e in (m.get("fakes") or []) + (m.get("proxies") or []):
+        a = str(e.get("addr", NET_GW))
+        if a != NET_GW and a not in out:
+            out.append(a)
+    return out
+
+
 def validate_world(m):
     fakes, proxies = m.get("fakes") or [], m.get("proxies") or []
     if not isinstance(fakes, list) or not isinstance(proxies, list):
         raise ManifestError("fakes: and proxies: are lists")
     svcs = {s["name"]: s for s in m["services"]}
+    bridge = has_netns(m)
+    host_re = r"10\.89\.\d+\.\d+" if bridge else r"127\.\d+\.\d+\.\d+"
+    where_kind = "bridge address 10.89.x.y" if bridge else "loopback address"
     used = {}          # (addr, port) -> who
     for s in m["services"]:
         if s.get("port"):
@@ -559,7 +642,10 @@ def validate_world(m):
             port = e.get("port")
             if not isinstance(port, int) or isinstance(port, bool) or not 1 <= port <= 65535:
                 raise ManifestError("%s: port: required, a TCP port number" % where)
-            ap = (_world_addr(e, where), port)
+            ap = (_world_addr(e, where, bridge), port)
+            if bridge and ap[0] in [str(s.get("addr")) for s in m["services"]]:
+                raise ManifestError("%s: addr %s is a service's address (that service has its own network "
+                                    "namespace); give the %s its own address on the bridge" % (where, ap[0], kind[:-1] if kind == "fakes" else "proxy"))
             if ap in used:
                 raise ManifestError("%s: %s:%d is already used by %s" % (where, ap[0], port, used[ap]))
             used[ap] = "%s %s" % (kind[:-1] if kind == "fakes" else "proxy", n)
@@ -577,8 +663,8 @@ def validate_world(m):
                     t = svcs.get(e["service"])
                     if not t or not t.get("port"):
                         raise ManifestError("%s: service %r is not a service with a port:" % (where, e["service"]))
-                elif not re.fullmatch(r"127\.\d+\.\d+\.\d+:\d+", str(e["to"])):
-                    raise ManifestError("%s: to %r must be <loopback address>:<port>" % (where, e["to"]))
+                elif not re.fullmatch(host_re + r":\d+", str(e["to"])):
+                    raise ManifestError("%s: to %r must be <%s>:<port>" % (where, e["to"], where_kind))
                 if proto == "tcp" and e.get("routes"):
                     raise ManifestError("%s: a tcp proxy has no routes (one connection = one request, route conn)" % where)
             routes = e.get("routes") or []
@@ -611,8 +697,8 @@ def validate_world(m):
                     if not isinstance(wh, dict):
                         raise ManifestError("%s.webhook: must be a mapping" % rw)
                     _unknown(wh, KNOWN_HOOK, rw + ".webhook")
-                    if not re.fullmatch(r"http://127\.\d+\.\d+\.\d+:\d+/\S*", str(_need(wh, "url", rw + ".webhook"))):
-                        raise ManifestError("%s.webhook: url must be http://<loopback address>:<port>/<path>" % rw)
+                    if not re.fullmatch(r"http://" + host_re + r":\d+/\S*", str(_need(wh, "url", rw + ".webhook"))):
+                        raise ManifestError("%s.webhook: url must be http://<%s>:<port>/<path>" % (rw, where_kind))
                     for t in [wh.get("body") or "", wh["url"]] + list((wh.get("headers") or {}).values()):
                         bad = set(re.findall(r"\{(seq|ref|idem|fake|route|json|header|query|path|form|pb)(?::[^{}\"]*)?\}", str(t))) - HOOK_VARS
                         if bad:
@@ -639,7 +725,7 @@ def world_config(m):
     for kind in ("fakes", "proxies"):
         for e in m.get(kind) or []:
             c = {k: e[k] for k in ("name", "port", "protocol", "idempotency", "ref") if k in e}
-            c["addr"] = str(e.get("addr", "127.0.0.1"))
+            c["addr"] = str(e.get("addr", NET_GW if has_netns(m) else "127.0.0.1"))
             if kind == "proxies":
                 if "service" in e:
                     t = svcs[e["service"]]
@@ -717,7 +803,7 @@ def shq(s):
     return "'" + str(s).replace("'", "'\\''") + "'"
 
 
-def compile_shell(m, tc_path, fc=None):
+def compile_shell(m, tc_path, fc=None, ip_path=None):
     svcs = {s["name"]: s for s in m["services"]}
     order = service_order(m["services"])
     wl = m["workload"]
@@ -740,6 +826,9 @@ def compile_shell(m, tc_path, fc=None):
         L += ["HYDO_FC=%s" % shq(fc[0]), "HYDO_IPT=%s" % shq(fc[1])]
     if has_world(m):    # only then (fakes:/proxies:): other manifests compile byte-identically
         L += ["HYDO_WORLD=/bin/hydo-world", "HYDO_WORLD_TARGETS=%s" % shq(" ".join(world_targets(m)))]
+    if has_netns(m):    # only then (network: bridge): other manifests compile byte-identically
+        L += ["HYDO_NET=bridge", "HYDO_IP=%s" % shq(ip_path or ""), "HYDO_NET_GW=%s" % NET_GW,
+              "HYDO_NET_EXTRA=%s" % shq(" ".join(world_addrs(m)))]
     for n in order:
         s = svcs[n]
         L += ["HYDO_SVC_%s_cmd=%s" % (n, shq(s["cmd"])),
@@ -890,6 +979,7 @@ CLK_WRAP = ("failed_ids", "mount_data")
 CLK_INIT = "hydo-init-clock.sh"         # inserted into /sbin/init only for manifests with guest.clock_after_cut
 BG_WRAP = ("set_knob",)
 BG_INIT = "hydo-init-buggify.sh"        # inserted only for manifests with buggify: true (schedule token B=)
+NS_WRAP = ("start_svc",)                 # network: bridge (hydo-init-netns.sh); plus fc_arm with faults: freeze
 
 
 def _splice(base, fns, prefix, ext, why):
@@ -947,14 +1037,18 @@ def init_text(m):
         base = base[:i] + "# copies of the init functions hydo-init-freeze.sh wraps\n" + "".join(copies) + "\n" + fz + base[i:]
     if has_buggify(m):
         base = _splice(base, BG_WRAP, "_bg_orig_", BG_INIT, "buggify: true")
-    if has_world(m):    # fakes:/proxies: (hydo-init-fakes.sh), after every other extension
+    if has_world(m):    # fakes:/proxies: (hydo-init-fakes.sh), after every other extension but one
         base = _splice(base, PF_WRAP, "_pf_orig_", WORLD_INIT, "fakes:/proxies:")
+    if has_netns(m):    # network: bridge (hydo-init-netns.sh), last: it overrides the links, freeze and
+        # network-fault functions, and sets the network up when /sbin/init reaches it (before S0)
+        base = _splice(base, NS_WRAP + (("fc_arm",) if has_freeze(m) else ()), "_ns_orig_", NETNS_INIT, "network: bridge")
     return base
 
 
 def install_init(m, dst):
     if any(v.get("type") == "eventually" for v in m["invariants"]) or has_links(m) or has_freeze(m) or \
-       "clock_after_cut" in (m.get("guest") or {}) or has_buggify(m) or m.get("checks") or has_world(m):
+       "clock_after_cut" in (m.get("guest") or {}) or has_buggify(m) or m.get("checks") or has_world(m) or \
+       has_netns(m):
         with open(dst, "w") as f:
             f.write(init_text(m))
     else:
@@ -1083,7 +1177,7 @@ def build(m, manifest_path, out, bdir, params=None, oci=None):
     faults = set(m.get("faults") or DEFAULT_FAULT_KINDS)
     want_tc = bool(faults & {"network", "oneway"})
     iproute2 = None
-    if want_tc:
+    if want_tc or has_netns(m):     # tc for network faults; ip for network: bridge
         iproute2 = tool("HYDO_IPROUTE2", "/nix/store/dx4fsbxs5v82l9lzmjkpkhx5ygqcwm69-iproute2-6.8.0", lambda p: os.path.isfile(p + "/bin/tc"))
         modroot = tool("HYDO_MODROOT", "/run/current-system/kernel-modules/lib/modules/6.6.35", os.path.isdir)
     iptables = None
@@ -1144,7 +1238,7 @@ def build(m, manifest_path, out, bdir, params=None, oci=None):
         os.chmod(os.path.join(R, "bin/hydo-world"), 0o755)
         with open(os.path.join(R, "etc/hydo/world.json"), "w") as f:
             f.write(world_config(m))
-    for mod in (NETMODS if want_tc else []) + (FCMODS if iptables else []):
+    for mod in (NETMODS if want_tc else []) + (FCMODS if iptables else []) + (NSMODS if has_netns(m) else []):
         src = subprocess.run(["find", modroot, "-name", mod + ".ko.xz"], stdout=subprocess.PIPE, text=True).stdout.split()
         if not src:
             raise SystemExit("hydo-build: kernel module %s.ko.xz not under %s" % (mod, modroot))
@@ -1167,14 +1261,15 @@ def build(m, manifest_path, out, bdir, params=None, oci=None):
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "w") as f:
             f.write(content)
-    for name, content in (("etc/hosts", "127.0.0.1 localhost\n"), ("etc/passwd", "root:x:0:0:root:/tmp:/bin/sh\n"),
+    for name, content in (("etc/hosts", default_hosts(m)), ("etc/passwd", "root:x:0:0:root:/tmp:/bin/sh\n"),
                           ("etc/group", "root:x:0:\n")):
         p = os.path.join(R, name)
         if not os.path.exists(p):
             with open(p, "w") as f:
                 f.write(content)
-    manifest_sh, prelude = compile_shell(m, (iproute2 + "/bin/tc") if iproute2 else "",
-                                         ("/bin/hydo_fc", iptables + "/bin/iptables-legacy") if iptables else None)
+    manifest_sh, prelude = compile_shell(m, (iproute2 + "/bin/tc") if want_tc else "",
+                                         ("/bin/hydo_fc", iptables + "/bin/iptables-legacy") if iptables else None,
+                                         (iproute2 + "/bin/ip") if has_netns(m) else None)
     with open(os.path.join(R, "etc/hydo/manifest.sh"), "w") as f:
         f.write(manifest_sh)
     with open(os.path.join(R, "etc/hydo/prelude.sh"), "w") as f:
@@ -1185,7 +1280,7 @@ def build(m, manifest_path, out, bdir, params=None, oci=None):
             f.write("".join("%s=%s\n" % kv for kv in sorted(params.items())))
     install_init(m, os.path.join(R, "sbin/init"))
     _compose_stage(m, R)
-    oci_meta = _oci_stage(oci, R, T["busybox"], bdir, out)
+    oci_meta = _oci_stage(oci, R, T["busybox"], bdir, out, has_netns(m))
     fix_mtimes(R)
 
     ext4, data, disk = (os.path.join(bdir, "%s-%s.img" % (out, k)) for k in ("ext4", "data", "disk"))
@@ -1254,12 +1349,12 @@ def _oci_prepare(m, path, arch):
     return hydo_oci.prepare(m, path, arch, ManifestError)
 
 
-def _oci_stage(oci, R, busybox, bdir, out):
+def _oci_stage(oci, R, busybox, bdir, out, netns=False):
     if not oci:
         return {}
     import hydo_oci
     try:
-        return hydo_oci.stage(oci, R, busybox, os.path.join(bdir, "%s-oci-tmp" % out))
+        return hydo_oci.stage(oci, R, busybox, os.path.join(bdir, "%s-oci-tmp" % out), netns=netns)
     except hydo_oci.OciError as e:
         raise ManifestError(str(e))
 
@@ -1299,7 +1394,8 @@ def main():
         print("hydo-build: %s" % e, file=sys.stderr); return 1
     if "--print-shell" in flags:
         ms, pre = compile_shell(m, "/nix/store/...-iproute2/bin/tc",
-                                ("/bin/hydo_fc", "/nix/store/...-iptables/bin/iptables-legacy") if has_freeze(m) else None)
+                                ("/bin/hydo_fc", "/nix/store/...-iptables/bin/iptables-legacy") if has_freeze(m) else None,
+                                "/nix/store/...-iproute2/bin/ip" if has_netns(m) else None)
         print(ms); print("# ---- prelude.sh"); print(pre); return 0
     if "--print-init" in flags:
         sys.stdout.write(init_text(m)); return 0
@@ -1318,6 +1414,10 @@ def main():
     os.makedirs(opt["--build-dir"], exist_ok=True)
     try:
         if opt["--arch"] == "arm64":
+            if has_netns(m):
+                print("hydo-build: --arch arm64 does not support network: bridge: the arm64 guest kernel "
+                      "(hvx-mac/explore/build-guest.sh) has no network namespaces, veth or bridge "
+                      "(CONFIG_NAMESPACES, CONFIG_NET_NS, CONFIG_VETH, CONFIG_BRIDGE)", file=sys.stderr); return 2
             if has_links(m):
                 print("hydo-build: --arch arm64 does not support addr: (link faults) yet", file=sys.stderr); return 2
             if has_freeze(m):

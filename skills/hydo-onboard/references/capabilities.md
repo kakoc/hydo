@@ -30,6 +30,7 @@ that contains `hvx/onboard/hydo_agents.py`.
 | `guest.cpu: v3` (AVX/AVX2) | yes | no (arm64) | yes |
 | `params:` (build variants, `hydo build --set k=v`) | yes | after M96 | yes |
 | `addr:` and link faults between services | yes | no | yes |
+| `network: bridge` (a network namespace per service) | not shipped yet (needs `hydo-init-netns.sh` and the `llc`/`stp`/`bridge`/`veth` modules in the release) | no (the arm64 guest kernel has no network namespaces) | yes |
 | network and one-way faults on a port | yes | yes | yes |
 | `faults: [freeze]` (`F=`, freeze sweeps) | yes | no | yes |
 | `checks:` / `linearizable_` / `list_append_` history checks | yes | after M96 (ships `hvx/history/`) | yes |
@@ -40,4 +41,5 @@ that contains `hvx/onboard/hydo_agents.py`.
 
 Where a feature is missing, say so in the report and offer the closest substitute: a shell
 read-back loop instead of `hydo-check` (invariant-patterns.md), a hand-written driver instead of
-a generated one, a port fault instead of a link fault.
+a generated one, a port fault instead of a link fault, `--no-addr` (one shared loopback
+network) instead of `network: bridge`.

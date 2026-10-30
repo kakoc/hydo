@@ -8,7 +8,8 @@ the shrinker draw from:
     SVCS        services that kill (K=) faults pick from        stack: mysql kafka redis
     NET_SVCS    services with a port, for N= / O=               stack: mysql kafka redis
                 (plus, when two or more services have an addr:, the links "a-b" and "a-*"
-                between them -- hydo-init-links.sh; no manifest without addr: changes)
+                between them -- hydo-init-links.sh; no manifest without addr: changes;
+                with network: bridge only the links of services that talk, see _links)
     PAUSE_SVCS  services that pause (P=) faults pick from       stack: mysql kafka redis front
     NORDERS     the workload's step count                       stack: 30
     KNOBS       (token, relaxed value) pairs a knob draw picks  stack: M=2 M=0 R=everysec R=no
@@ -113,6 +114,8 @@ class Space:
         self.links = ([] if len(addr) < 2 else
                       ["%s-%s" % (a, b) for i, a in enumerate(addr) for b in addr[i + 1:]] +
                       (["%s-*" % a for a in addr] if len(addr) > 2 else []))
+        if m.get("network") == "bridge":    # only then: every other manifest keeps its links
+            self.links = self._links(m["services"])
         self.svcs = svcs
         self.fc_pairs = self._fc_pairs(m["services"])
         self.pf_targets = self._pf_targets(m)
@@ -128,6 +131,25 @@ class Space:
                 raise SystemExit("manifest_space: knob token %r collides with a built-in schedule token "
                                  "(reserved: %s); rename the knob" % (k["token"], " ".join(sorted(RESERVED_TOKENS))))
             self.knobs.append((k["token"], safe, vals))
+
+    @staticmethod
+    def _links(services):
+        """network: bridge (hydo-init-netns.sh): a link fault acts on the packets between two
+        services' own addresses, so only links that carry traffic are worth a draw. Two services
+        talk when one lists the other in depends_on (a Compose import keeps Compose's depends_on).
+        The pairs a-b in manifest order, then a-* for each service with two or more such peers
+        (with one peer a-* is a-b again). Without any depends_on between them (peers that find
+        each other, e.g. a cluster): every pair and every a-*, as with network: loopback."""
+        names = [s["name"] for s in services if s.get("addr")]
+        deps = {s["name"]: set(s.get("depends_on") or []) for s in services}
+        talk = lambda a, b: b in deps[a] or a in deps[b]
+        pairs = [(a, b) for i, a in enumerate(names) for b in names[i + 1:] if talk(a, b)]
+        if not pairs:
+            pairs = [(a, b) for i, a in enumerate(names) for b in names[i + 1:]]
+            iso = names if len(names) > 2 else []
+        else:
+            iso = [a for a in names if sum(a in p for p in pairs) >= 2]
+        return ["%s-%s" % p for p in pairs] + ["%s-*" % a for a in iso]
 
     @staticmethod
     def _fc_pairs(services):

@@ -87,13 +87,14 @@ class Simple(Base):
         self.assertEqual(s["cmd"], ["redis-server", "--appendonly", "yes", "--save", ""])   # Compose splits words
         self.assertEqual(s["env"], {"TZ": "UTC", "EMPTY": ""})
         self.assertEqual(s["port"], 6379)                     # the container port, not the published one
-        self.assertEqual(s["addr"], "127.0.0.11")
-        self.assertEqual(s["ready"], "nc -z -w 2 127.0.0.11 6379")
+        self.assertEqual(m["network"], "bridge")                # own network namespace per service
+        self.assertEqual(s["addr"], "10.89.0.11")
+        self.assertEqual(s["ready"], "nc -z -w 2 10.89.0.11 6379")
         self.assertNotIn("recovery", s)
         self.assertEqual(s["image"]["x86_64"], "images/redis-7.2.4-amd64.docker.tar")
         self.assertEqual(s["image"]["arm64"], "images/redis-7.2.4-arm64-oci")
         self.assertEqual(s["image_ref"], "redis:7.2.4")
-        self.assertIn("127.0.0.11 cache\n", m["root"]["text"]["/etc/hosts"])
+        self.assertIn("10.89.0.11 cache\n", m["root"]["text"]["/etc/hosts"])
         dsts = [x["dst"] for x in s["mounts"]]
         self.assertEqual(dsts, ["/etc/hosts", "/run", "/dev/shm"])      # image VOLUME /data = the data disk
         self.assertIn(LOCK["redis:7.2.4"]["platforms"]["amd64"]["digest"], self.fetch)  # fetched by digest
@@ -115,8 +116,18 @@ class Simple(Base):
         lock = os.path.join(d, "lock.json"); json.dump({"images": LOCK}, open(lock, "w"))
         self.assertEqual(hydo_compose.main([p, "--lock", lock, "--out", os.path.join(d, "hydo.yaml")]), 0)
 
+    def test_network_loopback(self):
+        # --network loopback: the Milestone 84 layout (one shared loopback network, 127.0.0.x)
+        m = self.run_import("simple", "--network", "loopback")
+        self.assertNotIn("network", m)
+        self.assertEqual(self.svc["cache"]["addr"], "127.0.0.11")
+        self.assertEqual(self.svc["cache"]["ready"], "nc -z -w 2 127.0.0.11 6379")
+        self.assertIn("127.0.0.11 cache\n", m["root"]["text"]["/etc/hosts"])
+        self.run_import("simple", "--network", "host", expect_rc=2)
+
     def test_no_addr(self):
         m = self.run_import("simple", "--no-addr")
+        self.assertNotIn("network", m)
         self.assertNotIn("addr", self.svc["cache"])
         self.assertEqual(self.svc["cache"]["ready"], "nc -z -w 2 127.0.0.1 6379")
         self.assertIn("127.0.0.1 cache\n", m["root"]["text"]["/etc/hosts"])
@@ -149,7 +160,7 @@ class Health(Base):
         self.assertEqual(mg["ready"], "true")
         self.assertIn("hydo-oci migrate /.hydo/busybox chpst -u app /app/api /app/migrate up", a["setup"])
         self.assertIn("/tmp/hydo/job.migrate.done", a["setup"])
-        self.assertEqual([s["addr"] for s in m["services"]], ["127.0.0.11", "127.0.0.12", "127.0.0.13", "127.0.0.14"])
+        self.assertEqual([s["addr"] for s in m["services"]], ["10.89.0.11", "10.89.0.12", "10.89.0.13", "10.89.0.14"])
         self.assertNotIn("arm64", json.dumps(w["image"]))                       # amd64-only image
 
 
@@ -238,7 +249,7 @@ class Unsupported(Base):
             self.assertIn(k, self.err)
         self.assertNotIn("seed", self.svc)                                       # profile not active
         self.assertIn("my_worker_v2", self.svc)                                  # a valid hydo name ...
-        self.assertIn("127.0.0.12 my-worker.v2", m["root"]["text"]["/etc/hosts"])   # ... the Compose name resolves
+        self.assertIn("10.89.0.12 my-worker.v2", m["root"]["text"]["/etc/hosts"])   # ... the Compose name resolves
         self.assertEqual(m["guest"]["cpu"], "v3")                                # amd64 variant v3
         self.assertGreaterEqual(m["guest"]["ram_mib"], 1024 + 256)               # deploy memory limit 1g counted
         w = self.svc["my_worker_v2"]

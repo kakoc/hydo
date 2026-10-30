@@ -1,7 +1,8 @@
 # Determinism and environment hazards
 
 The guest is one Linux virtual machine: one virtual CPU by default, `guest.ram_mib` of RAM
-(default 1024 MiB), loopback networking only, a read-only root, one data disk on `/data`, and a
+(default 1024 MiB), no network outside the guest (loopback, or with `network: bridge` one
+bridge between the services' own namespaces), a read-only root, one data disk on `/data`, and a
 clock and a random generator that hydo makes deterministic. Check each item and report what you
 found.
 
@@ -20,8 +21,11 @@ found.
   for updates or contacts a license server at start fails. Disable it in the configuration, or
   report it as a blocker. Outside services the system really calls become fakes
   (outside-services.md).
-- **Listening address.** Bind every service to 127.0.0.1 (or to its `addr:`); external
-  addresses do not exist.
+- **Listening address.** On one shared loopback network, bind every service to 127.0.0.1 (or to
+  its `addr:`). With `network: bridge`, a service that others call must listen on `0.0.0.0` or on
+  its `addr:`: inside its namespace, 127.0.0.1 is reachable only from the service itself (as in a
+  container), and its peers, the workload and the checks connect from outside it (the workload and
+  the checks from 10.89.0.1). External addresses do not exist.
 - **Writable paths.** Only `/data` (persistent, the fault target) and `/tmp` (lost at a power
   cut) are writable. Point data, logs, sockets and PID files there. An image service also gets
   the writable paths of its `mounts:`.
