@@ -259,6 +259,7 @@ dependencies = [
  "hydo-manifest",
  "libc",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
