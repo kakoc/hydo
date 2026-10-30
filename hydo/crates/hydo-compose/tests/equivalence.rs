@@ -208,6 +208,19 @@ fn compose_equals_python() {
                     s(g, "crash")
                 ));
             }
+        } else if let Some(h) = g.get("stderr_sha256").and_then(|x| x.as_str()) {
+            // a long stderr is recorded by its hash and its first 1500 characters
+            let got: String = Sha256::digest(err.as_bytes())
+                .iter()
+                .map(|x| format!("{x:02x}"))
+                .collect();
+            if got != h {
+                why.push(format!(
+                    "stderr (sha256 {got} != {h}):\n{}\n--- python (start):\n{}",
+                    err.chars().take(1500).collect::<String>(),
+                    s(g, "stderr")
+                ));
+            }
         } else if err != s(g, "stderr") {
             why.push(format!("stderr:\n{err}\n--- python:\n{}", s(g, "stderr")));
         }

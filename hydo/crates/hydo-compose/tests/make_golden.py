@@ -227,7 +227,11 @@ def run(py, case):
         for k in files:
             if k.endswith(("hydo.yaml", "fetch-images.sh", ".json")):
                 texts[k] = open(os.path.join(d, k), encoding="utf-8").read()
-        return {"rc": r.returncode, "stdout": norm(r.stdout), "stderr": norm(r.stderr), "files": files}, texts
+        g = {"rc": r.returncode, "stdout": norm(r.stdout), "stderr": norm(r.stderr), "files": files}
+        if len(g["stderr"]) > 4000:     # long warning lists: keep the start and the hash
+            g["stderr_sha256"] = hashlib.sha256(g["stderr"].encode()).hexdigest()
+            g["stderr"] = g["stderr"][:1500]
+        return g, texts
     finally:
         shutil.rmtree(d)
 
