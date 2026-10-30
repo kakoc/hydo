@@ -74,10 +74,20 @@ def fetch(reg, digest, dst=None, accept=None):
     buf.close()
 
 
+def full_tag(tag):
+    """The tag as skopeo's docker-archive records it in RepoTags: normalised, with the registry
+    (docker.io/library/redis:alpine for redis:alpine). hydo_oci copies RepoTags into image.json."""
+    first = tag.split("/")[0]
+    if "/" not in tag or not ("." in first or ":" in first or first == "localhost"):
+        tag = "docker.io/" + ("library/" + tag if "/" not in tag else tag)
+    return tag
+
+
 def main():
     if len(sys.argv) != 5:
         raise SystemExit(__doc__)
     ref, digest, tag, out = sys.argv[1:]
+    tag = full_tag(tag)
     reg = Reg(*split(ref))
     man = json.loads(fetch(reg, digest, accept=ACCEPT))
     if "manifests" in man:
