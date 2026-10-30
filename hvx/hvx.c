@@ -1721,6 +1721,11 @@ static void hvx_pt_release(struct hvx_vm *vm)
 /* Allocate the output (mib MiB in 2 MiB regions, one ToPA table, STOP at the end) and
  * compute the guest RTIT_CTL. Kernel tracing needs at least one IP range: the host
  * also runs at CPL0, and the ranges are what keep host code out of the trace. */
+static inline bool hvx_canonical(u64 a)	/* 48-bit virtual addresses */
+{
+	return (u64)((s64)(a << 16) >> 16) == a;
+}
+
 static int hvx_pt_setup(struct hvx_vm *vm, u64 mib, u32 flags, const u64 *lo,
 			const u64 *hi, u64 cr3)
 {
@@ -1732,6 +1737,14 @@ static int hvx_pt_setup(struct hvx_vm *vm, u64 mib, u32 flags, const u64 *lo,
 	if (vm->pt_chunk || !(flags & (HVX_PT_KERNEL | HVX_PT_USER)))
 		return -EINVAL;
 	if ((flags & HVX_PT_KERNEL) && !hi[0] && !hi[1])
+		return -EINVAL;
+	/* M97: the run loop writes these into IA32_RTIT_ADDRn_A/B and IA32_RTIT_CR3_MATCH
+	 * with wrmsrl; a non-canonical address or a CR3 with bits 4:0 set #GPs there
+	 * ("unchecked MSR access error") and leaves the filter unprogrammed */
+	for (i = 0; i < 2; i++)
+		if (hi[i] && (!hvx_canonical(lo[i]) || !hvx_canonical(hi[i] - 1)))
+			return -EINVAL;
+	if ((flags & HVX_PT_CR3) && (cr3 & 0x1f))
 		return -EINVAL;
 	n = (unsigned int)DIV_ROUND_UP(mib ? mib : 256, 2);
 	if (n < 1 || n > 511)
