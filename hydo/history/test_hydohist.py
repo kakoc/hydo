@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Replaced by hydo-history (hydo/crates/hydo-history, M105): `hydo run`/`hydo repro` call the crate,
+# `hydo check-history` is this script's command line. Kept as the reference until all ports merge.
 """Unit tests of the history checkers (hydo/history/hydohist.py) on synthetic histories.
 
     python3 hydo/history/test_hydohist.py        (or: python3 -m unittest -v test_hydohist)

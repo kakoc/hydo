@@ -1,0 +1,154 @@
+{
+ "images": {
+  "elasticsearch:7.16.1": {
+   "index_digest": "sha256:aac94740dcecec5e8806c5b7fdb0e39cccc846219f2bcb949f2a7a02bfe85436",
+   "name": "elasticsearch",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "elasticsearch"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "9200/tcp": {},
+       "9300/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/usr/share/elasticsearch/data": {}
+      },
+      "WorkingDir": "/usr/share/elasticsearch"
+     },
+     "digest": "sha256:d49ac891c7ac4a02951cbf9e6623bc78dd19d13c5ca60ee94fbea35564aef027",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "elasticsearch:7.16.1",
+   "registry": "docker.io",
+   "repo": "library/elasticsearch",
+   "tag": "7.16.1"
+  },
+  "kibana:7.16.1": {
+   "index_digest": "sha256:e1ebf9c0bd04cea13f13090fc137e239a3a74067ba8db05cad05db7ac8fbdc3c",
+   "name": "kibana",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "kibana"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:32f07689b8890e11b870326c8d6e0531e99b3a0c142cad8e90ad62e0a6cd01c9",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "kibana"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:af0c11d0cd980fbbe1708aa787f7a67f841167bd10094cd19511c42cde531958",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "kibana:7.16.1",
+   "registry": "docker.io",
+   "repo": "library/kibana",
+   "tag": "7.16.1"
+  },
+  "logstash:7.16.1": {
+   "index_digest": "sha256:e3e7dfd10f2ab5bbe3788c17caa39939a74a5060b4810e8ade8b758f0b8e0632",
+   "name": "logstash",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "logstash"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:fb088c3379309bddcef453d1d479c69907274b239d3586fa380c1acb943043b2",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "logstash"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:0e071271de62a5af9eb2ea168eef7ac3c835b7bb2eb3a7f01f311cbbae46cc8a",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "logstash:7.16.1",
+   "registry": "docker.io",
+   "repo": "library/logstash",
+   "tag": "7.16.1"
+  }
+ }
+}

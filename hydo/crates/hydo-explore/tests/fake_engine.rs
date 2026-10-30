@@ -50,6 +50,14 @@ fn run(prog: &mut Command, dir: &Path, out: &Path) -> String {
         .env_remove("HYDO_QUIET_FILE")
         .env_remove("HYDO_CLI")
         .env_remove("HYDO_SNAPSHOTS")
+        .env(
+            "HYDO_FAKE_HIST",
+            if out.to_string_lossy().contains("hist") {
+                "1"
+            } else {
+                ""
+            },
+        )
         .current_dir(top())
         .output()
         .expect("run");
@@ -195,5 +203,6 @@ scenarios! {
     protocol_faults: ["--seeds", "1-40", "--manifest", "hydo/onboard/examples/shop/hydo.yaml", "--protocol-faults", "--strategy", "process"];
     protocol_sweep: ["--sweep", "protocol", "--manifest", "hydo/onboard/examples/shop/hydo.yaml"];
     grpc_faults: ["--seeds", "1-40", "--manifest", "hydo/onboard/examples/stack-grpc/hydo.yaml", "--grpc-faults", "--protocol-faults"];
+    stack_hist_checks: ["--seeds", "1-30", "--strategy", "swarm", "--new-faults"];
     errors_manifest: ["--seeds", "1-30", "--manifest", "hydo/onboard/examples/redis-errors/hydo/hydo.yaml", "--new-faults", "--errors-shrink", "2"];
 }

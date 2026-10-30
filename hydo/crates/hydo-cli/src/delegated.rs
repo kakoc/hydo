@@ -123,20 +123,20 @@ pub fn cmd_errors(ctx: &Ctx, argv: &[String]) -> i32 {
     )
 }
 
-// ---------------------------------------------------------------- compose (hydo_compose.py)
+// ---------------------------------------------------------------- compose (the hydo-compose crate)
 
-pub fn cmd_compose(ctx: &Ctx, argv: &[String]) -> i32 {
+pub fn cmd_compose(_ctx: &Ctx, argv: &[String]) -> i32 {
     if argv.is_empty() || argv[0] == "-h" || argv[0] == "--help" {
         die("usage: hydo compose <docker-compose.yaml> [--out hydo.yaml] [--images-dir DIR] [--env-file F] \
              [--profile P] [--use-env] [--no-resolve] [--lock FILE]");
     }
-    bridge::rc(ctx, "compose", json!({"argv": argv}), &[])
+    hydo_compose::main(argv)
 }
 
-// ---------------------------------------------------------------- guide, skill, init (hydo_agents.py)
+// ---------------------------------------------------------------- guide, skill, init (the hydo-agents crate)
 
 pub fn cmd_agents(ctx: &Ctx, cmd: &str, argv: &[String]) -> i32 {
-    bridge::agents(ctx, cmd, argv)
+    hydo_agents::run(cmd, argv, &ctx.root)
 }
 
 // ---------------------------------------------------------------- build (hydo-build)

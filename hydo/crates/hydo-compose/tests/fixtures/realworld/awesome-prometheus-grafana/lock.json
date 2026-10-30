@@ -1,0 +1,104 @@
+{
+ "images": {
+  "grafana/grafana": {
+   "index_digest": "sha256:df4f9b9c456b407422696a92ef732c17d90fc87c57283af000feb8c1796298e3",
+   "name": "grafana/grafana",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "grafana"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "3000/tcp": {}
+      },
+      "Healthcheck": {
+       "Interval": 10000000000,
+       "Retries": 5,
+       "Test": [
+        "CMD-SHELL",
+        "wget -q -O- localhost:3000/api/health"
+       ]
+      },
+      "User": "",
+      "Volumes": {
+       "/var/lib/grafana": {}
+      },
+      "WorkingDir": "/usr/share/grafana"
+     },
+     "digest": "sha256:b046bdfabe9f7b9e48bf4a02d86614b34e01efe6e052bdcbf936da1eb6460a98",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "grafana/grafana",
+   "registry": "docker.io",
+   "repo": "grafana/grafana",
+   "tag": "latest"
+  },
+  "prom/prometheus": {
+   "index_digest": "sha256:c2ab7904a2585a20810e7a8b28d95126bba878334f52ca46955ee696085c188d",
+   "name": "prom/prometheus",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "prometheus"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:ec77e4f6c750d2054550116029b1b14c59767d0f74c1f11479237dd99f56e406",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "prometheus"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:4502ac1fbaef6150381d0ef15f6813a302b2e873508171c147e76da52ceac257",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "prom/prometheus",
+   "registry": "docker.io",
+   "repo": "prom/prometheus",
+   "tag": "latest"
+  }
+ }
+}

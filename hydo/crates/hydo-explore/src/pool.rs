@@ -13,7 +13,6 @@
 //! shrink candidates go to the front of the queue, first runs to the back, so the shrinking of a
 //! failure found early overlaps the rest of the sweep instead of waiting for it.
 
-use crate::bridge;
 use crate::errlog::{self, Known};
 use crate::py::{dumps_line, fl, obj, py_str, repr};
 use hydo_engine::{BootSpec, Engine, EngineError, Worker};
@@ -213,41 +212,29 @@ pub fn console(outdir: &Path, tag: &str, suffix: &str) -> PathBuf {
     outdir.join("consoles").join(format!("{tag}{suffix}.log"))
 }
 
-/// explore.py `host_checks`: history checks of a run whose console declares them (HYDO-CHECK).
+/// explore.py `host_checks`: the history checks (hydo-history) of a run whose console declares
+/// them (HYDO-CHECK); their records and report go next to the console, and the combined verdict
+/// replaces the guest's (kept as `guest_verdict`).
 pub fn host_checks(h: &Host, tag: &str, res: &mut Res) {
-    let mut srcs: Vec<(String, String)> = Vec::new();
-    for suffix in ["", ".recovery"] {
-        if let Some(t) = read_text(&console(&h.outdir, tag, suffix)) {
-            srcs.push((format!("{tag}{suffix}"), t));
-        }
-    }
-    if !srcs.iter().any(|(_, t)| t.contains("HYDO-CHECK ")) {
+    let d = h.outdir.join("consoles");
+    let srcs = hydo_history::console_sources(&d, tag);
+    if !hydo_history::has_checks(&srcs) {
         return;
     }
     let verdict = res.get("verdict").cloned().unwrap_or(Value::Null);
-    let r = match bridge::call(
-        &h.onboard,
-        "hist_run_checks",
-        json!({"srcs": srcs, "verdict": verdict}),
-    ) {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("hydo-explore: history checks of {tag}: {e}");
-            return;
-        }
-    };
-    let d = h.outdir.join("consoles");
-    let recs: String = r["records"]
-        .as_array()
-        .map(|a| a.iter().map(|x| py_str(x) + "\n").collect())
-        .unwrap_or_default();
-    let _ = std::fs::write(d.join(format!("{tag}.checks.log")), recs);
-    let _ = std::fs::write(
-        d.join(format!("{tag}.checks.txt")),
-        format!("{}\n{}\n", py_str(&r["report"]), py_str(&r["verdict"])),
-    );
+    let r =
+        match hydo_history::run_checks(&srcs, verdict.as_str(), hydo_history::DEFAULT_BUDGET, None)
+        {
+            Ok(r) => r,
+            Err(e) => {
+                // where hydohist.py raised: explore.py stopped with a traceback
+                eprintln!("hydo-explore: history checks of {tag}: {e}");
+                std::process::exit(1);
+            }
+        };
+    let _ = hydo_history::write_checks_files(&d, tag, &r);
     res.insert("guest_verdict".into(), verdict);
-    res.insert("verdict".into(), r["verdict"].clone());
+    res.insert("verdict".into(), json!(r.verdict));
 }
 
 /// explore.py `host_errlog`: the error-log analysis of a run whose console carries records.

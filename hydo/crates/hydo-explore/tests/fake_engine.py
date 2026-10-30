@@ -138,13 +138,21 @@ def answer(tag, sched):
         el_recs.append('HYDO-ERRLOG {"svc":"app","src":"log","n":1,"at":"end","tpl":"slow request <n> ms","ex":"slow request 900 ms"}')
     el_recs.append('HYDO-ERRLOG {"svc":"app","src":"log","n":1,"at":"s","tpl":"config reloaded","ex":"config reloaded"}')
     lines += el_recs
+    if os.environ.get("HYDO_FAKE_HIST"):    # a history check (hydo-history / hydohist.py on the host)
+        lines.append('HYDO-CHECK {"id":"kv.lin","type":"linearizable","model":"register","history":"kv"}')
+        seen = "nil" if K and "redis" in K else "1"
+        for i, l in enumerate(["0 invoke write x 1", "0 ok write x 1", "1 invoke read x", "1 ok read x %s" % seen]):
+            p_, ty, rest = l.split(" ", 2)
+            lines.append("HYDO-HIST kv %s %s %d %s" % (p_, ty, (i + 1) * 1000000, rest))
     lines.append('HYDO-ERRLOG-SUM {"boot":"first","steps":30,"lines":%d,"kinds":%d,"shown":%d}' % (len(el_recs), len(el_recs), len(el_recs)))
     if cut:
         rec_lines = ["hydo-fake: recovery of %s" % tag, 'HYDO-ERRLOG-SUM {"boot":"recovery","steps":30,"lines":0,"kinds":0,"shown":0}',
                      verdict]
     else:
         lines.append(verdict)
-    with open(os.path.join(consoles, tag + ".log"), "a") as f:
+    # the real engines append to a reused tag's console; with a history check the scripted one starts
+    # it afresh (explore.py reused shrink tags across representatives, see docs/HISTORY.md M102)
+    with open(os.path.join(consoles, tag + ".log"), "w" if os.environ.get("HYDO_FAKE_HIST") else "a") as f:
         f.write("\r\n".join(lines) + "\r\n")
     if rec_lines:
         with open(os.path.join(consoles, tag + ".recovery.log"), "a") as f:

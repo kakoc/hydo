@@ -1,0 +1,198 @@
+{
+ "images": {
+  "docker.io/valkey/valkey:9@sha256:418652cfb58ef879d4978c33553735d7147016032d5aefaa14c828e611eb9dfd": {
+   "index_digest": "sha256:c70b7f5bc59759533ada929039bd6914e707511a4c3b712886e9156184ef3cef",
+   "name": "valkey/valkey",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "valkey"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "6379/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/data": {}
+      },
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:0f2912e7a6d39d9bf8491358aca0ebd26c27b37420575afd363c92ba44bc34d7",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "valkey"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "6379/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/data": {}
+      },
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:3c1c7f32dcff5804d1dc8679bf7dc99447c2a26b52012224d761ffb851b4f3fc",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "docker.io/valkey/valkey:9@sha256:418652cfb58ef879d4978c33553735d7147016032d5aefaa14c828e611eb9dfd",
+   "registry": "docker.io",
+   "repo": "valkey/valkey",
+   "tag": "9"
+  },
+  "ghcr.io/immich-app/immich-machine-learning:release": {
+   "index_digest": "sha256:dec420af4ffab3e1a008a50ce9f2ff30274bc983ab9d9b5f02a622e3d823f965",
+   "name": "ghcr.io/immich-app/immich-machine-learning",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "immich-machine-learning"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:c2c02720951e68765e49071da5ef16ff30cffa6f790167fc8f3f38b2978096dc",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "ghcr.io/immich-app/immich-machine-learning:release",
+   "registry": "ghcr.io",
+   "repo": "immich-app/immich-machine-learning",
+   "tag": "release"
+  },
+  "ghcr.io/immich-app/immich-server:release": {
+   "index_digest": "sha256:87101326f5d4f510bce32b4ad6e85220f215b23fffd2837162765c846a3cdacc",
+   "name": "ghcr.io/immich-app/immich-server",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "immich-server"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:af25575941b62ea30a20a6d15adcb2b8b45848d704a79a2efd16fcef3976df97",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "ghcr.io/immich-app/immich-server:release",
+   "registry": "ghcr.io",
+   "repo": "immich-app/immich-server",
+   "tag": "release"
+  },
+  "ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23": {
+   "index_digest": "sha256:0b5ea520f9acd83f8876a2539302a5757609bf675afbc90ea928a6cf6273c655",
+   "name": "ghcr.io/immich-app/postgres",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:99fc6fe3cf0de92439f9b5164d86de371f53ed97bfe1906a1d8fd49e07ee807e",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:048d148162652dc2a7ad21305416ced95f2c5a10e99a139450438ed47e16c311",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23",
+   "registry": "ghcr.io",
+   "repo": "immich-app/postgres",
+   "tag": "14-vectorchord0.4.3-pgvectors0.2.0"
+  }
+ }
+}

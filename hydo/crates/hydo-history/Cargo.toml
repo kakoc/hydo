@@ -1,0 +1,13 @@
+[package]
+name = "hydo-history"
+description = "hydo's history checkers: HYDO-HIST records, linearizability per key, Elle-style list-append, the combined verdict"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "hydo-hist-check"
+path = "src/bin/hydo-hist-check.rs"
+
+[dependencies]

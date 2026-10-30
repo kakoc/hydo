@@ -1,9 +1,9 @@
-//! The seams to product code that is still Python while other ports land
-//! (hydo/onboard/hydo_bridge.py): the history checkers (`hist_run_checks`, hydohist.py) and the
-//! error-log analysis (`errors_load_known`, `errors_analyse`, hydo_errors.py). Each is called only
-//! for a run whose console asks for it (`HYDO-CHECK` / `HYDO-ERRLOG-SUM` lines), so explorations
-//! of images without history checks or error logs never start Python. When hydo-history and
-//! hydo-errors are crates, these functions call them instead.
+//! TEMPORARY SEAM (until the hydo-errors crate lands): the one place the explorer still calls
+//! Python, hydo/onboard/hydo_bridge.py's error-log analysis (`errors_load_known`, `errors_analyse`,
+//! hydo_errors.py), used only by [`crate::errlog::Known`]. It runs only with `--known-errors` or
+//! for a run whose console has a `HYDO-ERRLOG-SUM` record (an image whose manifest has
+//! `errors:`), so other explorations never start Python. The history checks are the hydo-history
+//! crate ([`crate::pool::host_checks`]).
 
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};

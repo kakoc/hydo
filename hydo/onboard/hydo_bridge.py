@@ -12,13 +12,10 @@ module is ported to Rust (one crate per module), the Rust CLI stops calling it a
 deleted. The code below is what the two Python release CLIs (hydo/dist/{linux,mac}/hydo before
 M101) did in-process, moved here unchanged.
 
-    agents                 hydo_agents.run(cmd, argv, root)               hydo guide | skill | init
-    compose                hydo_compose.main(argv)                        hydo compose
     errors_cli             hydo_errors.cli(argv, default_dir)             hydo errors
     errors_for_run_dir     hydo_errors.for_run_dir(...) -> res            hydo run / repro
     errors_load_known      hydo_errors.load_known(path) -> list            hydo explore (hydo-explore)
     errors_analyse         hydo_errors.analyse(run_files(prefix), ...)    hydo explore (hydo-explore)
-    hist_run_checks        hydohist.run_checks(srcs, verdict) -> dict     hydo run / repro / regressions
     regression_status      hydo_composer.regression_status(r, meta)       hydo repro --regressions
     regression_warning     hydo_composer.regression_warning(r, meta)      hydo repro --regressions
     saved_regression_text  hydo_composer.saved_regression_text(x)         hydo save
@@ -38,7 +35,6 @@ import types
 ONBOARD = os.path.dirname(os.path.realpath(__file__))
 HYDO = os.path.dirname(ONBOARD)
 EXPLORE = os.path.join(HYDO, "explore")
-HISTORY = os.path.join(HYDO, "history")
 
 
 def die(msg, rc=1):
@@ -52,18 +48,6 @@ def _onboard():
 
 
 # ---------------------------------------------------------------- small seams
-def agents(a):
-    _onboard()
-    import hydo_agents
-    return hydo_agents.run(a["cmd"], a["argv"], a["root"])
-
-
-def compose(a):
-    _onboard()
-    import hydo_compose
-    return hydo_compose.main(list(a["argv"]))
-
-
 def errors_cli(a):
     _onboard()
     import hydo_errors
@@ -96,13 +80,6 @@ def errors_analyse(a):
     if a.get("unknown"):
         known["unknown"] = a["unknown"]
     return 0, hydo_errors.analyse(hydo_errors.run_files(a["prefix"]), a["schedule"], known)
-
-
-def hist_run_checks(a):
-    sys.path.insert(0, HISTORY)
-    import hydohist
-    r = hydohist.run_checks([tuple(s) for s in a["srcs"]], a.get("verdict"))
-    return 0, {"records": r["records"], "report": r["report"], "verdict": r["verdict"]}
 
 
 def regression_status(a):
@@ -332,8 +309,7 @@ def build_mac(a):
     return hb.main()
 
 
-FUNCS = {f.__name__: f for f in (agents, compose, errors_cli, errors_for_run_dir, errors_load_known, errors_analyse,
-                                 hist_run_checks, regression_status,
+FUNCS = {f.__name__: f for f in (errors_cli, errors_for_run_dir, errors_load_known, errors_analyse, regression_status,
                                  regression_warning, saved_regression_text, build_linux, build_mac)}
 
 

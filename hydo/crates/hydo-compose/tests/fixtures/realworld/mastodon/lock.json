@@ -1,0 +1,217 @@
+{
+ "images": {
+  "ghcr.io/mastodon/mastodon-streaming:v4.7.4": {
+   "index_digest": "sha256:7330450071dd7c8144760059b4e61ea5cbbf60526c9718be507fd341617741a2",
+   "name": "ghcr.io/mastodon/mastodon-streaming",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "mastodon-streaming"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:d3b228d97ad373437b14f4abc21cc3c7999c3c003221ec5ca83a2765afcdfd96",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "mastodon-streaming"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:9f0f963c7a48fc99e37d44e1b5e070dd3b5031ee68d15af377b42d6159aca907",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "ghcr.io/mastodon/mastodon-streaming:v4.7.4",
+   "registry": "ghcr.io",
+   "repo": "mastodon/mastodon-streaming",
+   "tag": "v4.7.4"
+  },
+  "ghcr.io/mastodon/mastodon:v4.7.4": {
+   "index_digest": "sha256:4fc8c512faa60c11f5f832a23d59ac777d313b87c19b8fac03981f9ad06a9516",
+   "name": "ghcr.io/mastodon/mastodon",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "mastodon"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:dba2212894771fc3234a4802a79a6f09aa57ac02320c41f2d5a240562be7ab35",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "mastodon"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:fc41ac150408dc29ed90c7443a3ce2130c27cb510dcf9317a064c0d699897c37",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "ghcr.io/mastodon/mastodon:v4.7.4",
+   "registry": "ghcr.io",
+   "repo": "mastodon/mastodon",
+   "tag": "v4.7.4"
+  },
+  "postgres:14-alpine": {
+   "index_digest": "sha256:beec1f8cb851b4beca0184a709a64277cbda3e354622bfef87d013c470fbdf9c",
+   "name": "postgres",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:1f95329885a41a5fbb4584eb075e30cf19042e412e93947f3b26826dd7385c62",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:4d841f4132998695c42911d6547a5fb5f4f46c802b824c9e6781f132ab0e43d8",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "postgres:14-alpine",
+   "registry": "docker.io",
+   "repo": "library/postgres",
+   "tag": "14-alpine"
+  },
+  "redis:7-alpine": {
+   "index_digest": "sha256:65b8118ded1f9a62a4e7682a6176a874a59f241d0223ee7f6b0c25f1da77fc92",
+   "name": "redis",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "redis"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "6379/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/data": {}
+      },
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:ba7e7af7fc213d54eff24fa2a264fcd4f96292dfbcc2748dbf4dbb71ca7eb601",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "redis:7-alpine",
+   "registry": "docker.io",
+   "repo": "library/redis",
+   "tag": "7-alpine"
+  }
+ }
+}

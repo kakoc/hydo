@@ -19,6 +19,7 @@ path = "src/bin/hydo-explore.rs"
 hydo-schedule = { workspace = true }
 hydo-manifest = { workspace = true }
 hydo-engine = { workspace = true }
+hydo-history = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 flate2 = { workspace = true }

@@ -15,6 +15,9 @@ hydo-schedule = { workspace = true }
 hydo-manifest = { workspace = true }
 hydo-engine = { workspace = true }
 hydo-explore = { workspace = true }
+hydo-agents = { workspace = true }
+hydo-compose = { workspace = true }
+hydo-history = { workspace = true }
 serde_json = { workspace = true }
 
 libc = "0.2"

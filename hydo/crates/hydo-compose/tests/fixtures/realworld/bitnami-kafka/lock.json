@@ -1,0 +1,41 @@
+{
+ "images": {
+  "docker.io/bitnami/kafka:4.3": {
+   "index_digest": "sha256:06e0ab2f2f605289ba86d6ba5f9d6ede46a1978cfbe42eef48c01fbcc2bae496",
+   "name": "bitnami/kafka",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "kafka"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "9092/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/bitnami/kafka": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:f5fcf79a97d2ed0eb4904ccd7f40a7268168cfcd70bd4b41e60e2c37f61cff9e",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "docker.io/bitnami/kafka:4.3",
+   "registry": "docker.io",
+   "repo": "bitnami/kafka",
+   "tag": "4.3"
+  }
+ }
+}
