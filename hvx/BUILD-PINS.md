@@ -137,3 +137,38 @@ pinned tools and re-record their sha256 and fingerprints (the Redis example beco
 stand-in binary itself (commit it, or point `HYDO_SEEDRNG` / the scripts at a saved copy).
 (a) restores "built from pinned tools"; (b) keeps the existing baselines but leaves one
 binary whose build cannot be reproduced.
+
+## Mac guest kernel for service networks (Milestone 99, no Nix)
+
+The second arm64 guest kernel, `Image-explore-netns` (`hvx-mac/explore/build-guest-netns.sh`), is
+built without Nix, on any x86_64 Linux machine (built on the bare-metal machine in `~/hydo-macns`;
+nothing was installed system-wide: the bare-metal machine already had make, flex, bison, bc, perl, python3 and
+gcc 13.2.0). The script downloads its two inputs into `$DL` and checks them by sha256:
+
+| input | where from | sha256 |
+|---|---|---|
+| `linux-6.6.35.tar.xz` | `https://cdn.kernel.org/pub/linux/kernel/v6.x/` (matches kernel.org's `sha256sums.asc`) | `fce3ee728712ed063aa8c14a8756c8ff8c7a46ba3827f61d2b04a73c7cf5dd9e` |
+| `arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-linux-gnu.tar.xz` (GCC 13.3.1 20240614, Arm build arm-13.24) | `https://developer.arm.com/-/media/Files/downloads/gnu/13.3.rel1/binrel/` (matches Arm's `.sha256asc`) | `322f0b4482fc0d9fa0bb468134841f08d8c554c54ff5aa29a13a7a24bf7e1eb5` |
+
+Outputs (two builds in different directories, byte-identical): `Image-explore-netns`
+`806807e7be5f55dae342f796ccc6e20c35514b3684a8c0d4633901a8ac0aa609` (recorded in
+`hydo_build_arm64.NETNS_KERNEL_SHA256`), its `.config` `0aff83371194fdcf41108b6e2c4666bf827fbc735e8102906d047c65631e9b16`.
+The default kernel `Image-explore` (`f80c5655…`, Nix cross gcc) is not rebuilt and not changed.
+
+The same toolchain builds the freeze helper for aarch64:
+`aarch64-none-linux-gnu-gcc -static -O2 -Wall hvx/onboard/hydo_fc.c -o hydo_fc-arm64` gives
+`499f654e05b712601601c9286fa4c4836e28f31fd7e03e3443228f2fc5060c4e` (twice, in different
+directories; glibc static, the toolchain's own sysroot).
+
+The aarch64 user-space tools of these images come from the public Nix binary cache, taken with
+`hvx/dist/nix_cache_fetch.py --closure <dir> <path>` (checks each archive's FileHash and NarHash;
+on a case-insensitive Mac file system nine iptables extensions whose names differ only in case
+are read but not written, none of them used):
+
+| store path (aarch64-linux) | NarHash | staged |
+|---|---|---|
+| `qmhi9c99dpgxyfg6cipf8xbmcvsr1vx2-iproute2-6.8.0` | `sha256:11gbr98yllcv8cwxdmkn2iwgrrzyd4c01az9hyhicf5jfxjhs472` | `bin/ip` (its libraries are a subset of `tc`'s) |
+| `y6j6xf1bfshzhdw7hip3swpgd6fqfs3b-iptables-1.8.10` | `sha256:177d4lvj73k9r9xj5hjwfkc1z40yknnzh1dva8q8p9w42nxc38zw` | `bin/xtables-legacy-multi`, `lib/xtables/libxt_{NFQUEUE,tcp,standard}.so`, `lib/lib{ip4tc,ip6tc,xtables}.so*` |
+
+The files each image gets are exactly those `hvx-mac/services/elfdeps.py --root <dir>` lists for
+the binaries above (glibc 2.39-52, libmnl, zlib, xz, bzip2, zstd, elfutils from the same closure).

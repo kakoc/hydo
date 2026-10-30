@@ -8,6 +8,7 @@
 |---|---|
 | `serve.c` (`hvmx`) | the run engine. It includes `../hvm.c` and speaks `hvx_explore`'s protocol: `READY`, `RUN <tag> <schedule>`, `RESULT ...`, `QUIT`. `hvmx one ...` runs one schedule from a fresh boot |
 | `build.sh` | builds and signs `hvmx` (with `../virtio*.c`) |
+| `build-guest-netns.sh`, `hvm-netns.config`, `netnsboot/` | the second arm64 kernel `Image-explore-netns` (Milestone 99): `Image-explore` plus network namespaces, veth, bridge, IPv6, policy routing, iptables + NFQUEUE; only for manifests with `network: bridge`, `addr:` or `faults: [freeze]` (see "The second kernel" below) |
 | `build-guest.sh`, `hvm-explore.config` | the arm64 kernel `Image-explore`, built on the Linux box: the M48 kernel with `../linux/hvm-virtio.config`, `../services/svc.config`, MBR partitions and loop, and (by default) the HVC idle below. `HVM_IDLE_HVC=0` rebuilds the earlier WFI-idle kernel |
 | `apply-hvcidle.py` | adds `CONFIG_ARM64_HVM_IDLE_HVC`: `cpu_do_idle()` idles through HVC function `0xC6000020` instead of `WFI` (see "Fixed" below) |
 | `build-idle-m48.sh` | the M48 kernel configuration plus the HVC idle (`Image-idle`), for `../spin/hvm-spin.c` and M48-style boots |
@@ -223,6 +224,47 @@ exploration (`explore.py --backend hvm --image explore-ob-ledger-spin-arm64.cpio
 --new-faults --seeds 1-30 --workers 3`, 5 ms kicks): 14 failures, 14 reproduced, all the planted
 non-idempotent retry (`entry N stored twice`, e.g. seed 6 `P=front@26+2 T=10:-30`, seed 7
 `P=front@10+2`); 929 runs/hour with every schedule re-run in rewind mode.
+
+## The second kernel: service networks, link faults and the freeze (Milestone 99)
+
+**Two kernels.** `Image-explore` (above) is unchanged and stays the default, so every recorded
+Mac fingerprint is unchanged. `Image-explore-netns` is the same Linux 6.6.35, the same two patches
+(`../linux/apply-cntpct.py`, `apply-hvcidle.py`) and the same configuration, plus
+`hvm-netns.config`: `NAMESPACES`, `NET_NS`, `VETH`, `BRIDGE` (with `LLC`, `STP`), `IPV6`,
+`IP_ADVANCED_ROUTER` + `IP_MULTIPLE_TABLES`, and `NETFILTER` + `NETFILTER_NETLINK_QUEUE` +
+`NETFILTER_XTABLES` + `NETFILTER_XT_TARGET_NFQUEUE` + `IP_NF_IPTABLES` + `IP_NF_FILTER`; kept off:
+`BRIDGE_NETFILTER`, `BRIDGE_IGMP_SNOOPING`, `NF_CONNTRACK`, modules. That is what
+`hvx/onboard/hydo-init-netns.sh` (`network: bridge`), `hydo-init-links.sh` (`addr:`, and the
+etcd example's per-user `ip rule`) and `hydo-init-freeze.sh` (`F=`) need; on x86_64 the NixOS
+guest kernel has all of it.
+
+**Build** (`build-guest-netns.sh`, no Nix; any x86_64 Linux machine; built on the bare-metal machine):
+the kernel.org tarball and the Arm GNU Toolchain 13.3.Rel1, both checked by sha256
+(`hvx/BUILD-PINS.md`). Two builds in different directories give the same bytes:
+`Image-explore-netns` `806807e7…`, `.config` `0aff8337…`.
+
+**Which images use it.** `hydo-build --arch arm64` builds a manifest with `network: bridge`, an
+`addr:` or `freeze` in `faults:` for it and writes `/etc/hydo/kernel` (`Image-explore-netns
+<sha256>`) into the image; it prints the choice. `hvm_backend.kernel_for()` reads the record:
+`explore.py --backend hvm` boots that kernel (the report's summary gains `guest_kernel`, and its
+reproduction lines name the kernel file), and so do the Mac `hydo run`, `repro` and `explore`. The
+kernel must sit next to `Image-explore` and have the recorded sha256; another file is refused. An
+image without the record boots `Image-explore` exactly as before. These images also get iproute2's
+`ip` (`network: bridge`), and for `freeze` the aarch64 `iptables-legacy` with the three extensions
+the rules load plus `hydo_fc` built for aarch64 (`hvx/onboard/hydo_build_arm64.py`).
+
+**Deterministic, like M48** (`netnsboot/`: an initramfs whose `/init` makes two namespaces on a
+bridge, runs a web server on port 80 in each, fetches across the bridge and inside a namespace,
+pings, puts netem on a veth, adds an iptables NFQUEUE rule and checks `::1`; `mkinit.py` builds it,
+`5b634950…` twice): `../hvm print` 20 of 20 fresh boots `33ab6e219a6afd5c` (21,013 exits, 3.25 s of
+virtual time), 15 of 15 the same with 12 busy loops on the host (and the Mac swapping), branches at
+three points (kernel start, after the namespaces, after the netem and NFQUEUE steps) IDENTICAL to
+the continued run, 1 GiB twice `85464ddcc0a84e19`.
+
+**Examples.** `examples/redis-bridge` (two Redis servers in their own namespaces, both on port
+6379, a replica, a fault proxy): every schedule twice from a fresh boot, identical, and every fault
+visible on the console; an explorer campaign of 30 schedules; and Docker's voting app
+(`hvx/onboard/examples/compose-voting/hydo-mac.yaml`). Values in `hvx/HISTORY.md`, Milestone 99.
 
 ## Commands
 
