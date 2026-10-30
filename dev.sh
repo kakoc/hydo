@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Local helper: sync the source tree to the remote KVM box and run a command there.
+# Local helper: sync the source tree to the build machine and run a command there.
 # Usage: ./dev.sh "<remote shell command>"
-#   e.g. ./dev.sh "./build-guests.sh && cargo build --release && ./target/release/hydo run --guest build/hello.bin"
+#   e.g. ./dev.sh "bash hv/hvx/images/build-stack.sh"     (guest images; outputs stay in build/ there)
 set -euo pipefail
 
 REMOTE="${HYDO_REMOTE:?}"

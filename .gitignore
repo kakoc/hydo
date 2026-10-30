@@ -5,7 +5,7 @@
 *.o
 *.ko
 # kernel-module build artefacts only (go.mod files must be tracked)
-hvx/*.mod
+hv/hvx/*.mod
 *.mod.c
 .*.cmd
 modules.order

@@ -4,8 +4,8 @@
 // A workload client records every operation it performs -- the invocation before the request,
 // the completion after the reply -- and the host checks the history after the run
 // (linearizability of a register / CAS object per key, Elle-style list-append checks). The
-// lines are byte for byte those of the Go recorder (hvx/stack/hydohist); the wire format and
-// the checkers are in hvx/HISTORIES.md.
+// lines are byte for byte those of the Go recorder (hydo/stack/hydohist); the wire format and
+// the checkers are in hydo/HISTORIES.md.
 //
 //   const { History, enc, ver, valueOrNil } = require('hydo-assert/history');
 //   const kv = new History('kv');

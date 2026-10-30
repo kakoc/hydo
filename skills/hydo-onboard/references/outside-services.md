@@ -81,7 +81,7 @@ For a system whose inputs are gRPC endpoints, do not write one client per RPC:
 3. Run, from hydo's repository (it needs Go):
 
    ```sh
-   hvx/onboard/hydo-grpc-gen <proto dir> --hints hints.yaml --out <dir>
+   hydo/onboard/hydo-grpc-gen <proto dir> --hints hints.yaml --out <dir>
    ```
 
    It writes `<dir>/hydo-grpc` (one static client), `<dir>/grpc/` (the schema and plan),
@@ -96,4 +96,4 @@ For a system whose inputs are gRPC endpoints, do not write one client per RPC:
 Outcomes come from the gRPC status: OK is ok; INVALID_ARGUMENT, NOT_FOUND, ALREADY_EXISTS,
 FAILED_PRECONDITION and similar are definite failures; DEADLINE_EXCEEDED, UNAVAILABLE, INTERNAL
 and similar are unknown (`classify:` in the hints overrides a code per RPC). Limits: cleartext
-HTTP/2 only (no TLS or auth metadata). Example in hydo's repository: `hvx/grpcgen/demo/`.
+HTTP/2 only (no TLS or auth metadata). Example in hydo's repository: `hydo/grpcgen/demo/`.

@@ -3,9 +3,9 @@
 A Node.js program running under hydo (the deterministic hypervisor in this repository) uses this
 package to say what must be true, what should happen at least once, what must happen within a
 deadline, and where a dependency may misbehave. It writes the same console records as the Go
-SDK (`hvx/stack/hydoassert`), byte for byte, with the same deduplication rules, so
+SDK (`hydo/stack/hydoassert`), byte for byte, with the same deduplication rules, so
 `hydo_assert_report`, the harnesses and `explore.py` read them unchanged. The wire format and
-the verdict rules are in `hvx/ASSERTIONS.md`.
+the verdict rules are in `hydo/ASSERTIONS.md`.
 
 The package has no dependencies, works from CommonJS and ESM, and ships TypeScript types. It
 is not published (`"private": true`); depend on it by path:
@@ -15,7 +15,7 @@ is not published (`"private": true`); depend on it by path:
 ```
 
 In a guest image, copy `package.json`, `index.js` and `index.mjs` to
-`/<app>/node_modules/hydo-assert/` (see `hvx/onboard/examples/node-kv/hydo-mac.yaml`).
+`/<app>/node_modules/hydo-assert/` (see `hydo/onboard/examples/node-kv/hydo-mac.yaml`).
 
 ## Use
 
@@ -132,14 +132,14 @@ arithmetic with `BigInt`). Each point is also a `sometimes` property `buggify.<i
 ("fault point fired: <msg>"), recorded at its first firing with `{"hit": k}`. Without a
 configuration every point returns false and has no other effect. Under hydo the schedule token
 `B=<seed>` (`explore.py --buggify`) reaches the file through the guest init: an onboarded
-project gets it with `buggify: true` in its `hydo.yaml` (`hvx/onboard/MANIFEST.md`).
+project gets it with `buggify: true` in its `hydo.yaml` (`hydo/onboard/MANIFEST.md`).
 
 ## History recorder
 
 The entry `hydo-assert/history` records operation histories for hydo's host-side checkers
 (linearizability of a register or compare-and-set object per key, and Elle-style list-append;
-the format and the checkers are in `hvx/HISTORIES.md`). It writes the same `HYDO-HIST` lines as
-the Go recorder (`hvx/stack/hydohist`), byte for byte except the time field. It is separate from
+the format and the checkers are in `hydo/HISTORIES.md`). It writes the same `HYDO-HIST` lines as
+the Go recorder (`hydo/stack/hydohist`), byte for byte except the time field. It is separate from
 the assertion SDK, so loading it changes nothing the assertion records contain. In a guest
 image, also copy `history.js` and `history.mjs`.
 
@@ -217,7 +217,7 @@ tx.ok(hh.append('x', '1'), hh.readResult('y', '1', '2'));
 
 ## Example
 
-`hvx/onboard/examples/node-kv/` is a complete example for the Mac backend: a key/value server
+`hydo/onboard/examples/node-kv/` is a complete example for the Mac backend: a key/value server
 (ESM) and its client and oracle (CommonJS) using this package, the pinned aarch64 Node.js and a
 `hydo-mac.yaml`.
 

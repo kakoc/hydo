@@ -1,6 +1,6 @@
 # Example: a hydo/ folder with composed commands
 
-A copy of `hvx/onboard/examples/redis-composed/hydo/` from hydo's repository: Redis with an
+A copy of `hydo/onboard/examples/redis-composed/hydo/` from hydo's repository: Redis with an
 append-only file, driven by composed commands (SETs, transfers between accounts, an AOF rewrite
 as a serial driver, a read as an anytime command, seed accounts as a `first_` command) and three
 checks, plus one saved regression. Its `root.files` point at Redis binaries on hydo's build

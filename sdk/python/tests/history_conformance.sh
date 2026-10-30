@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Byte-for-byte conformance of hydo_assert.history (Python) with hydohist (Go): build
 # tests/history-go/main.go against the Go recorder's own sources (copied from
-# hvx/stack/hydohist), run it and tests/history_conformance.py with every sink setting, and
+# hydo/stack/hydohist), run it and tests/history_conformance.py with every sink setting, and
 # compare their records and stdouts.
 #
 # The time field (field 5 of a HYDO-HIST line) differs between runs and implementations: the
@@ -29,8 +29,8 @@ sha() { if command -v sha256sum > /dev/null; then sha256sum; else shasum -a 256;
 export GOTOOLCHAIN=${GOTOOLCHAIN:-go1.26.5}
 GO=${GO:-go}
 mkdir -p "$T/go/hydohist"
-cp "$REPO"/hvx/stack/hydohist/hydohist.go "$REPO"/hvx/stack/hydohist/mono_linux.go \
-   "$REPO"/hvx/stack/hydohist/mono_other.go "$T/go/hydohist/"
+cp "$REPO"/hydo/stack/hydohist/hydohist.go "$REPO"/hydo/stack/hydohist/mono_linux.go \
+   "$REPO"/hydo/stack/hydohist/mono_other.go "$T/go/hydohist/"
 cp "$HERE/history-go/main.go" "$T/go/"
 printf 'module conf\n\ngo 1.21\n' > "$T/go/go.mod"
 (cd "$T/go" && GOFLAGS=-mod=mod "$GO" build -o "$T/hist-go" .)

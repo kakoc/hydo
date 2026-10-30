@@ -1,4 +1,4 @@
-// The history recorder writes the documented lines (hvx/HISTORIES.md), the same as the Go recorder.
+// The history recorder writes the documented lines (hydo/HISTORIES.md), the same as the Go recorder.
 use hydo_assert::history::{append_mop, enc, list, read_mop, read_result_mop, ver, value_or_nil, History};
 
 #[test]

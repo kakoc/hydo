@@ -12,7 +12,7 @@
    allowed frontmatter keys; SKILL.md under 500 lines; every relative file it links exists and
    is one level deep (references/x.md, assets/x, scripts/x).
 3. Copies stay in sync: assets/example-redis-composed/hydo/ equals
-   hvx/onboard/examples/redis-composed/hydo/ (bytes and executable bits), and the tool
+   hydo/onboard/examples/redis-composed/hydo/ (bytes and executable bits), and the tool
    directories .claude/skills/<name> and .agents/skills/<name> are symlinks to skills/<name>.
 Exit status 0 = everything holds.
 """
@@ -109,13 +109,13 @@ def main():
             if not (os.path.islink(p) and os.path.realpath(p) == os.path.realpath(d)):
                 bad.append("%s/%s is not a symlink to skills/%s" % (tool, n, n))
     ex = os.path.join(HERE, "hydo-onboard", "assets", "example-redis-composed", "hydo")
-    src = os.path.join(TOP, "hvx", "onboard", "examples", "redis-composed", "hydo")
+    src = os.path.join(TOP, "hydo", "onboard", "examples", "redis-composed", "hydo")
     d = same_tree(src, ex)
     if d:
-        bad.append("assets/example-redis-composed/hydo differs from hvx/onboard/examples/redis-composed/hydo: %s "
+        bad.append("assets/example-redis-composed/hydo differs from hydo/onboard/examples/redis-composed/hydo: %s "
                    "(copy it again: rm -r %s && cp -Rp %s %s)" % (", ".join(d), ex, src, os.path.dirname(ex)))
     else:
-        print("sync: assets/example-redis-composed/hydo equals hvx/onboard/examples/redis-composed/hydo")
+        print("sync: assets/example-redis-composed/hydo equals hydo/onboard/examples/redis-composed/hydo")
     for b in bad:
         print("FAIL " + b)
     print("skills/check.py: %s" % ("OK" if not bad else "%d problems" % len(bad)))

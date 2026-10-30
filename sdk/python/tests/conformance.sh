@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Byte-for-byte conformance of hydo_assert (Python) with hydoassert (Go): build
 # tests/go-conformance/main.go against the Go SDK's own sources (copied from
-# hvx/stack/hydoassert), run it and tests/conformance.py under several BUGGIFY configurations
+# hydo/stack/hydoassert), run it and tests/conformance.py under several BUGGIFY configurations
 # (seed in the environment, seed in the file, none, and malformed ones that Go's strconv
 # rejects), and diff their consoles and stdouts.
 # Usage: sdk/python/tests/conformance.sh [python...]   (needs go; default python: python3;
@@ -17,11 +17,11 @@ trap 'rm -rf "$T"' EXIT
 sha() { if command -v sha256sum > /dev/null; then sha256sum; else shasum -a 256; fi; }
 
 mkdir -p "$T/go/hydoassert"
-cp "$REPO/hvx/stack/hydoassert/hydoassert.go" "$REPO/hvx/stack/hydoassert/eventually.go" "$T/go/hydoassert/"
+cp "$REPO/hydo/stack/hydoassert/hydoassert.go" "$REPO/hydo/stack/hydoassert/eventually.go" "$T/go/hydoassert/"
 cp "$HERE/go-conformance/main.go" "$T/go/"
 printf 'module conf\n\ngo 1.21\n' > "$T/go/go.mod"
 GO=${GO:-go}
-# The guest images are built with Go 1.26.5 (hvx/BUILD-PINS.md); pin it as sdk/js does. Set
+# The guest images are built with Go 1.26.5 (docs/BUILD-PINS.md); pin it as sdk/js does. Set
 # GOTOOLCHAIN=local to use whatever `go` is installed.
 export GOTOOLCHAIN=${GOTOOLCHAIN:-go1.26.5}
 (cd "$T/go" && GOFLAGS=-mod=mod "$GO" build -o "$T/conf-go" .)

@@ -2,9 +2,9 @@
 
 A Rust program running under hydo (the deterministic hypervisor in this repository) uses this
 crate to say what must be true and what should happen at least once. It writes the same console
-records as the Go SDK (`hvx/stack/hydoassert`), byte for byte, with the same deduplication
+records as the Go SDK (`hydo/stack/hydoassert`), byte for byte, with the same deduplication
 rules, so `hydo_assert_report`, the harnesses and `explore.py` read them unchanged. The wire
-format and the verdict rules are in `hvx/ASSERTIONS.md`.
+format and the verdict rules are in `hydo/ASSERTIONS.md`.
 
 The crate uses only the standard library. It is not published; depend on it by path or git:
 
@@ -84,7 +84,7 @@ point is also a `sometimes` property `buggify.<id>` ("fault point fired: <msg>")
 its first firing with `{"hit": k}`. Without a configuration every point returns false and has
 no other effect. Under hydo the schedule token `B=<seed>` (`explore.py --buggify`) reaches the
 file through the guest init: the stack's `stack-explore.sh` writes it, and an onboarded
-project gets it with `buggify: true` in its `hydo.yaml` (`hvx/onboard/MANIFEST.md`).
+project gets it with `buggify: true` in its `hydo.yaml` (`hydo/onboard/MANIFEST.md`).
 
 ## Eventually, async code
 
@@ -116,7 +116,7 @@ one write, for other JSON record kinds.
 
 ## Operation histories (`hydo_assert::history`)
 
-The typed recorder for hydo's host-side history checkers (`hvx/HISTORIES.md`): `History::new("kv")`,
+The typed recorder for hydo's host-side history checkers (`hydo/HISTORIES.md`): `History::new("kv")`,
 `.invoke(proc, f, &args) -> Op`, then `op.ok(&results)` / `op.ok_same()` / `op.fail()` /
 `op.info()`; value helpers `enc`, `ver(v, version)`, `value_or_nil`, `list`, and the txn
 micro-ops `append_mop`, `read_mop`, `read_result_mop`. Its lines are not JSON
@@ -135,7 +135,7 @@ RUSTFLAGS="-C linker=rust-lld -C link-self-contained=yes -C target-feature=+crt-
   cargo +1.90.0 build --release --target x86_64-unknown-linux-musl
 ```
 
-`hvx/onboard/examples/rust-kv/` is a complete example: a key/value server using this crate,
+`hydo/onboard/examples/rust-kv/` is a complete example: a key/value server using this crate,
 its `build-rkv.sh` (two clean builds give the same sha256), and a `hydo.yaml`.
 
 ## Tests

@@ -2,15 +2,15 @@
 
 A Python program running under hydo (the deterministic hypervisor in this repository) uses this
 package to say what must be true and what should happen at least once. It writes the same
-console records as the Go SDK (`hvx/stack/hydoassert`), byte for byte, with the same
+console records as the Go SDK (`hydo/stack/hydoassert`), byte for byte, with the same
 deduplication rules, so `hydo_assert_report`, the harnesses and `explore.py` read them
-unchanged. The wire format and the verdict rules are in `hvx/ASSERTIONS.md`.
+unchanged. The wire format and the verdict rules are in `hydo/ASSERTIONS.md`.
 
 - Distribution name `hydo-assert`, import name `hydo_assert`.
 - Standard library only; Python 3.8 or later; thread-safe and safe to call from asyncio code.
 - Not published. Install it from this directory (`pip install ./sdk/python`), or put
   `sdk/python/src` on `PYTHONPATH`, or copy `src/hydo_assert/` into the guest image (the
-  `hvx/onboard/examples/python-kv` example does that).
+  `hydo/onboard/examples/python-kv` example does that).
 
 ## Use
 
@@ -106,14 +106,14 @@ point is also a `sometimes` property `buggify.<id>` ("fault point fired: <msg>")
 its first firing with `{"hit": k}`. Without a configuration every point returns False and has
 no other effect. Under hydo the schedule token `B=<seed>` (`explore.py --buggify`) reaches the
 file through the guest init: an onboarded project gets it with `buggify: true` in its
-`hydo.yaml` (`hvx/onboard/MANIFEST.md`).
+`hydo.yaml` (`hydo/onboard/MANIFEST.md`).
 
 ## History recorder
 
 The module `hydo_assert.history` records operation histories for hydo's host-side checkers
 (linearizability of a register or compare-and-set object per key, and Elle-style list-append;
-the format and the checkers are in `hvx/HISTORIES.md`). It writes the same `HYDO-HIST` lines as
-the Go recorder (`hvx/stack/hydohist`), byte for byte except the time field. It is a separate
+the format and the checkers are in `hydo/HISTORIES.md`). It writes the same `HYDO-HIST` lines as
+the Go recorder (`hydo/stack/hydohist`), byte for byte except the time field. It is a separate
 module: `import hydo_assert` does not load it, so the assertion records are unchanged.
 
 ```python
