@@ -84,14 +84,23 @@ pub struct LoadOptions {
 }
 
 impl Default for LoadOptions {
+    /// x86_64, no `--set`, and the onboard/ directory of a release laid out around the running
+    /// program (`<root>/bin/hydo` next to `<root>/hydo/onboard`), else of this source tree.
     fn default() -> Self {
+        let release = std::env::current_exe()
+            .ok()
+            .and_then(|e| e.canonicalize().ok())
+            .and_then(|e| e.parent()?.parent().map(|r| r.join("hydo").join("onboard")))
+            .filter(|d| d.is_dir());
         LoadOptions {
             arch: "x86_64".into(),
             sets: Vec::new(),
-            onboard_dir: Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("..")
-                .join("..")
-                .join("onboard"),
+            onboard_dir: release.unwrap_or_else(|| {
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("..")
+                    .join("..")
+                    .join("onboard")
+            }),
         }
     }
 }
