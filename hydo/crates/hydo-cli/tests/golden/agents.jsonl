@@ -2,7 +2,7 @@
 # from commit 2a58c4b with Python 3.15.0; `git show 2a58c4b:hydo/onboard/hydo_agents.py`), one
 # command per line (tests/agents_equivalence.rs explains the form). Re-recorded from the Rust with
 # HYDO_BLESS=1 after a deliberate change.
-# skill sha256: 49e57de8c4951131793b4b435d2f39da96e8b423a362260951579cabd9d04c7d
+# skill sha256: db0b118b52440e36d8c5f5fe292760972e84753d97499950fb9c8e663b21b7dd
 {"cmd":["guide"],"rc":0,"stdout":{"skill":"skills/hydo-onboard/SKILL.md"},"stderr":{"text":""},"files":[["home/","0",{"text":""}]],"setup":"nothing","id":"0.0"}
 {"cmd":["guide","--help"],"rc":0,"stdout":{"text":"usage: hydo guide [TOPIC | FILE | --list | --path]\n  no argument: the onboarding skill's SKILL.md (give it to any AI tool: \"run `hydo guide` and follow it\")\n  TOPIC: one of `hydo guide --list`;  FILE: a path inside the skill folder, e.g. assets/example-miniflux.yaml\n"},"stderr":{"text":""},"files":[["home/","0",{"text":""}]],"setup":"nothing","id":"0.1"}
 {"cmd":["guide","-h"],"rc":0,"stdout":{"text":"usage: hydo guide [TOPIC | FILE | --list | --path]\n  no argument: the onboarding skill's SKILL.md (give it to any AI tool: \"run `hydo guide` and follow it\")\n  TOPIC: one of `hydo guide --list`;  FILE: a path inside the skill folder, e.g. assets/example-miniflux.yaml\n"},"stderr":{"text":""},"files":[["home/","0",{"text":""}]],"setup":"nothing","id":"0.2"}

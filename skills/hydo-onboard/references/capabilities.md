@@ -33,14 +33,14 @@ the commands). Since Milestone 107 a release is Rust programs only and needs no 
 | `guest.cpu: v3` (AVX/AVX2) | yes | no (arm64) | yes |
 | `params:` (build variants, `hydo build --set k=v`) | yes | after M96 | yes |
 | `addr:` and link faults between services | yes | after M99 (second guest kernel) | yes |
-| `network: bridge` (a network namespace per service) | not shipped yet (needs `hydo-init-netns.sh` and the `llc`/`stp`/`bridge`/`veth` modules in the release) | after M99 (second guest kernel `Image-explore-netns`) | yes |
+| `network: bridge` (a network namespace per service) | shipped since M107 (`hydo-init-netns.sh` and the `llc`/`stp`/`bridge`/`veth` modules; not yet run from a release) | after M99 (second guest kernel `Image-explore-netns`) | yes |
 | network and one-way faults on a port | yes | yes | yes |
 | `faults: [freeze]` (`F=`, freeze sweeps) | yes | after M99 (`F=` and `--freeze-call`; freeze sweeps not yet run on the Mac) | yes |
 | `checks:` / `linearizable_` / `list_append_` history checks | yes | after M96 (ships `hydo/history/`) | yes |
-| `buggify: true` | not shipped (the init extension is missing from the release) | yes | yes |
+| `buggify: true` | since M107 (the release ships every init extension) | yes | yes |
 | `hydo-read`, `hydo-check` | not bundled (build `hydo-read` in the repository and set `HYDO_READ_BIN`) | after M96 (ships `guest/hydo-read`; else `HYDO_READ_BIN_ARM64`) | yes |
 | `fakes:`, `proxies:`, `H=` protocol faults, `hydo-world` checks | not shipped | after M96 (ships `guest/hydo-world`; else `HYDO_WORLDBIN_ARM64`) | yes |
-| `errors:` error logs as findings, `hydo errors`, `hydo/known-errors.yaml` | not shipped yet (needs a release that ships `hydo/onboard/hydo-init-errlog.sh`) | not shipped yet (same; the arm64 build with `errors:` was not run) | yes |
+| `errors:` error logs as findings, `hydo errors`, `hydo/known-errors.yaml` | yes (ships `hydo-init-errlog.sh`) | shipped (the arm64 build with `errors:` was not run) | yes |
 | `hydo-grpc-gen` generated drivers | not shipped (generate in the repository, then copy the output) | not shipped (generate with `--arch amd64,arm64` in the repository, copy `hydo-grpc.arm64`) | yes |
 
 Where a feature is missing, say so in the report and offer the closest substitute: a shell
