@@ -1,0 +1,4 @@
+# The planted lost update (transfer=racy): two transfers overlap and one SET overwrites the
+# other's. Fixed by the atomic Lua transfer (the default build); this file checks it stays fixed.
+# expect: ok
+disk=none dseed=1 | run W=0000002a,p4,q2,r100

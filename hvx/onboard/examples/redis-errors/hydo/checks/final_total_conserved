@@ -1,0 +1,8 @@
+#!/bin/sh
+# hydo-msg: transfers never create or destroy money: the balances sum to TOTAL
+. /hydo/workload/helper_lib.sh
+[ "$(R PING)" = PONG ] || { echo "redis does not answer"; exit 2; }
+s=0; i=0
+while [ $i -lt $ACCOUNTS ]; do v=$(R GET acct:$i); s=$((s + ${v:-0})); i=$((i + 1)); done
+[ $s = $TOTAL ] || { echo "balances sum to $s, not $TOTAL"; exit 1; }
+echo "balances sum to $TOTAL"

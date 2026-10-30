@@ -1,0 +1,71 @@
+# Error logs as findings (MANIFEST.md "Error logs as findings") on the composed Redis example
+# (examples/redis-composed): the same plan and hydo/ folder, plus `errors:`. Every boot's Redis log
+# is scanned in the guest; each "#" line (Redis's most severe level) becomes an error kind, and the
+# host compares the kinds with hydo/known-errors.yaml (not part of the image: accepting a kind
+# changes no image and no fingerprint). Build on the build box:
+#   HYDO_SEEDRNG=~/hydo/build/hvx_seedrng hvx/onboard/hydo-build \
+#       hvx/onboard/examples/redis-errors/hydo/hydo.yaml --out explore-ob-redis-errors
+# Try:  disk=none | run                          only the startup banner (known: hydo/known-errors.yaml)
+#       disk=cut | run C=12 R=everysec           the recovery boot loads a truncated AOF (known while C)
+#       disk=ioerr dseed=3 | run                 write errors: new kinds, reported by explore.py / hydo run
+name: redis-errors
+description: The composed Redis example with error logs as findings (known kinds in hydo/known-errors.yaml).
+hydo_version: "0.1"
+format: 1
+
+params:
+  transfer: atomic                  # atomic | racy
+
+root:
+  files:
+    - {src: ~/hydo/build/redis-server, dst: /bin/redis-server, mode: "0755"}
+    - {src: ~/hydo/build/redis-cli, dst: /bin/redis-cli, mode: "0755"}
+  text:
+    /etc/redis.conf: |
+      port 6379
+      bind 127.0.0.1
+      dir /data/redis
+      save ""
+      appendonly yes
+      appendfsync always
+      hz 1
+      dynamic-hz no
+
+data:
+  size_mib: 64
+  dirs: [redis]
+
+env:
+  TRANSFER: "{{transfer}}"
+  ACCOUNTS: "5"
+  TOTAL: "500"
+
+services:
+  - name: redis
+    cmd: /bin/redis-server /etc/redis.conf
+    ready: /bin/redis-cli ping | grep -q PONG
+    port: 6379
+    errors:
+      format: redis                 # "#" lines are Redis's most severe level
+
+errors: true                        # error logs as findings, every default (MANIFEST.md)
+
+workload:
+  steps: 20                         # rounds of the composition; faults are placed at round numbers
+  timeout: 120
+
+test:
+  parallel: 4                       # at most 4 commands at once (W= draws p in 1..4)
+  per_round: 2                      # parallel drivers started per round (W= draws q in 1..2)
+  round_ms: 100                     # a round every 100 ms of guest time (W= draws r: 50, 100 or 200)
+  command_timeout: 20
+  drain_timeout: 30
+
+knobs:
+  - token: R
+    name: Redis appendfsync
+    default: always
+    values: [always, everysec, "no"]
+    set: /bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE
+
+faults: [kill, pause, cut, clock, disk]
