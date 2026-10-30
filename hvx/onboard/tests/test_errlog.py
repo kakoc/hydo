@@ -231,6 +231,9 @@ def test_host():
     check(k["sig"] == he.signature("kafka", "ERROR Connection to node # refused") and re.fullmatch(r"[0-9a-f]{12}", k["sig"]),
           "signature = sha256(svc, template)[:12]")
     check(he.parse_consoles([("a", "no records")]) is None, "no summary record: errors: is off, nothing changes")
+    again = he.parse_consoles([("a", con + "\n" + con.replace('"n":3', '"n":1').replace("redis is starting", "x"))])
+    check(sum(k["n"] for k in again["kinds"]) == 2 and len(again["boots"]) == 1,
+          "a console file the engine appended a second run to: only the last boot's records count")
     d = tempfile.mkdtemp(prefix="known-")
     f = os.path.join(d, "known-errors.yaml")
     ban = [x for x in p["kinds"] if x["svc"] == "redis" and "starting" in x["tpl"]][0]

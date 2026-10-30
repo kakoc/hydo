@@ -63,11 +63,13 @@ def parse_consoles(srcs):
     {"sig", "svc", "src", "tpl", "ex", "n", "at": [labels in run order]}."""
     boots, kinds, order = [], {}, []
     for _, text in srcs:
-        for line in text.splitlines():
-            i = line.find("HYDO-ERRLOG")
-            if i < 0:
-                continue
-            line = line[i:]
+        # the engine appends a re-run of the same tag to the same console file: only the last
+        # boot's block counts (the records before the last summary, after the one before it)
+        lines = [l[l.find("HYDO-ERRLOG"):] for l in text.splitlines() if "HYDO-ERRLOG" in l]
+        ends = [k for k, l in enumerate(lines) if SUM_RE.match(l)]
+        if len(ends) > 1:
+            lines = lines[ends[-2] + 1:]
+        for line in lines:
             m = SUM_RE.match(line)
             if m:
                 try:
