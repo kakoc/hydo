@@ -849,9 +849,12 @@ impl Tree {
         } else {
             tarf.seek(SeekFrom::Start(mi.offset_data))
                 .map_err(|e| e.to_string())?;
-            let mut fo = File::create(&dst).map_err(|e| e.to_string())?;
-            std::io::copy(&mut (&mut *tarf).take(mi.size), &mut fo).map_err(|e| e.to_string())?;
-            drop(fo);
+            let fo = File::create(&dst).map_err(|e| e.to_string())?;
+            let mut w = std::io::BufWriter::with_capacity(1 << 20, fo);
+            let mut r = std::io::BufReader::with_capacity(1 << 20, (&mut *tarf).take(mi.size));
+            std::io::copy(&mut r, &mut w).map_err(|e| e.to_string())?;
+            w.flush().map_err(|e| e.to_string())?;
+            drop(w);
             let mode = 0o644 | if mi.mode & 0o111 != 0 { 0o111 } else { 0 };
             fsx::chmod(&dst, mode).map_err(|e| e.message())?;
             self.meta

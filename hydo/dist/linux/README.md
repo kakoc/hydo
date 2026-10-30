@@ -24,7 +24,7 @@ needs Python 3.9+.
 | `hydo module load\|unload [--name N] [--dry-run] [--param K=V]` | under `flock -x` on the module lock: `rmmod hvx`, `rmmod kvm_intel kvm` if loaded, `insmod`. A side module gets its own lock file (`<lock>.N`) and never touches `hvx` or KVM |
 | `hydo module udev install\|remove\|status [--name N] [--group G] [--dry-run]` | optional: with sudo, writes `/etc/udev/rules.d/70-hydo-N.rules` (`KERNEL=="N", SUBSYSTEM=="misc", GROUP="G", MODE="0660"`), creates the group if missing, adds the user, reloads udev and applies the rule to a loaded device; `remove` deletes the rule and sets the device back to root:root 0600. `install.sh --udev [--udev-group G] [--udev-name N]` runs `install` |
 | `hydo module status [--name N]` | loaded or not, `srcversion` of the loaded and the release-built module, device mode, KVM, how many processes hold the lock (read from `/proc/locks`, no lock taken) |
-| `hydo build <hydo.yaml>` | `hydo/onboard/hydo-build` (imported, not rewritten) with the bundled tools, into `./hydo-out` |
+| `hydo build <hydo.yaml>` | the Rust image builder (`hydo/crates/hydo-build`, since Milestone 103; before that `hydo/onboard/hydo-build` through the bridge) with the bundled tools, into `./hydo-out` |
 | `hydo run [IMG] "<schedule>"` | `libexec/hvx-run sudo env HVX_SNAP_DIR=… hv/hvx/hvx_explore [--ram-mib/--cpu from the image's manifest] one guest/bzImage guest/initramfs-kafka.cpio.gz IMG <dir> "<schedule>"`; writes `run.json` |
 | `hydo repro <run dir \| explore dir \| "<schedule>">` | re-runs a `run.json`, or every failure and minimal schedule of an exploration's `report.json`, from a fresh boot, and compares fingerprints |
 | `hydo explore [IMG] [explore.py options]` | `hydo/explore/explore.py --image IMG` (default `--seeds 1-20 --workers 2 --out hydo-out/explore`) |
@@ -69,9 +69,10 @@ ships all of them (`guest/`, `tools/`), and `hydo build` points `hydo-build` at 
   so a plain `hydo-build` no longer depends on the machine's zone either), and `MKE2FS_CONFIG` names no file, so `mke2fs` uses its built-in defaults as on
   the build machine instead of the machine's `/etc/mke2fs.conf`;
 - the guest-side closures are `guest/store.tar` (a GNU tar with the store's read-only modes,
-  unpacked by `install.sh`) and `guest/store-closures.txt` (`nix-store -qR` of each root). A
-  module-local `os` view in `hydo-build` and a replacement `closure()` resolve the pinned
-  `/nix/store` paths into that tree, only when the machine does not have them;
+  unpacked by `install.sh`) and `guest/store-closures.txt` (`nix-store -qR` of each root). The
+  builder's Linux release mode (`hydo_build::Release::Linux`; before Milestone 103 a module-local
+  `os` view and a replacement `closure()` in `hydo_bridge.py`) resolves the pinned `/nix/store`
+  paths into that tree, only when the machine does not have them;
 - the umask is 022, and after the root image is made every inode's owner is set to 0:0 with the
   bundled `debugfs` (same frozen clock), so the image does not depend on the building user's
   uid/gid (`HYDO_KEEP_OWNERS=1` skips this).

@@ -98,6 +98,16 @@ fn tracked(root: &Path) -> Vec<String> {
     v
 }
 
+/// Python's own message that changed between versions: before 3.13, "too many values to unpack
+/// (expected 2)" had no ", got N" (the box has 3.12, this Mac 3.15). Both sides are compared
+/// without that part, as hydo-manifest's equivalence test does.
+fn version_neutral(s: &str) -> String {
+    regex::Regex::new(r"\(expected (\d+), got \d+\)")
+        .unwrap()
+        .replace_all(s, "(expected $1)")
+        .into_owned()
+}
+
 const FLAGS: &[&str] = &["--check", "--print-shell", "--print-init", "--print-world"];
 
 #[test]
@@ -209,7 +219,8 @@ fn print_and_check_outputs_match_hydo_build() {
                 continue;
             }
             let prc = p["rc"].as_i64().unwrap_or(-1) as i32;
-            if prc == rc && p["out"].as_str() == Some(&out) && p["err"].as_str() == Some(&err) {
+            let perr = version_neutral(p["err"].as_str().unwrap_or(""));
+            if prc == rc && p["out"].as_str() == Some(&out) && perr == version_neutral(&err) {
                 g_same += 1;
             } else {
                 mismatches.push(format!(

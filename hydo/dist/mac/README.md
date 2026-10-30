@@ -26,7 +26,8 @@ the user guide; it is shipped inside the release.
 `hydo-build --arch arm64` needs three things from a Linux build box today: an arm64 busybox,
 its applet list (asked from an x86 busybox, which cannot run on a Mac), and a pinned `mke2fs`
 run under `libfaketime` for the data disk. The release provides the first two as files, and
-`hydo build` replaces `hydo-build`'s `mkfs()` for this one call (no change to `hydo-build`):
+`hydo build` makes the data disk differently (since Milestone 103 the Rust builder's Mac release
+mode, `hydo_build::Release::Mac`; before that a replacement `mkfs()` in `hydo_bridge.py`):
 - it starts a helper VM with `hvm`: the release kernel plus a two-file initramfs (busybox and
   the static arm64 `mke2fs`), with the empty data-disk file attached as the virtio disk;
 - the guest runs `mke2fs` with exactly `hydo-build`'s options on `/dev/vda`, and `hvm` writes
@@ -39,10 +40,10 @@ field afterwards.
 
 For network faults `hydo_build_arm64.py` copies the pinned aarch64 `tc` and the files its loader
 opens (found with `hv/hvm/services/elfdeps.py`) from the host's `/nix/store`. The release ships
-those files under `guest/tc/`, and `hydo build` points that one module's existence check and its
-copy at that tree (a module-local `os` view and a replacement `_copy_elf_closure` with the same
-rules), so the image gets the same paths, bytes and modes as a Linux build. A cleaner long-term
-form would be an `HYDO_TC_ROOT` prefix in `hydo_build_arm64.py` itself.
+those files under `guest/tc/`, and `hydo build` points the existence check and the copy at that
+tree (the Rust builder's Mac release mode; before Milestone 103 a module-local `os` view and a
+replacement `_copy_elf_closure` in `hydo_bridge.py`, with the same rules), so the image gets the
+same paths, bytes and modes as a Linux build.
 
 **Checked:** for the Redis example the Mac-built data disk is byte-identical to the Linux-built
 one (`9ddfc929…`), and every file of the root image, including the 23 files of the `tc`

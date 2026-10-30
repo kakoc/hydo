@@ -23,3 +23,8 @@ libc = "0.2"
 # build arm64 images (hydo-build says so).
 [target.'cfg(not(target_env = "musl"))'.dependencies]
 flate2 = { workspace = true, features = ["zlib"] }
+
+# SHA-256 with the ARMv8 instructions on the Mac (a build hashes gigabytes: the layer checks and
+# the printed digests); the portable code elsewhere (the musl cross-build cannot assemble sha2-asm).
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
+sha2 = { workspace = true, features = ["asm"] }
