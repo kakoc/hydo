@@ -77,7 +77,11 @@ fn printable(c: char) -> bool {
 
 /// `repr()` of a Python str.
 pub fn repr_str(s: &str) -> String {
-    let q = if s.contains('\'') && !s.contains('"') { '"' } else { '\'' };
+    let q = if s.contains('\'') && !s.contains('"') {
+        '"'
+    } else {
+        '\''
+    };
     let mut out = String::with_capacity(s.len() + 2);
     out.push(q);
     for c in s.chars() {
@@ -116,7 +120,11 @@ pub fn repr_float(f: f64) -> String {
         return if f > 0.0 { "inf".into() } else { "-inf".into() };
     }
     if f == 0.0 {
-        return if f.is_sign_negative() { "-0.0".into() } else { "0.0".into() };
+        return if f.is_sign_negative() {
+            "-0.0".into()
+        } else {
+            "0.0".into()
+        };
     }
     let exp = f.abs().log10().floor() as i32;
     // Python's repr switches to exponent notation outside [1e-4, 1e16)
@@ -219,7 +227,9 @@ pub fn eq(a: &Value, b: &Value) -> bool {
     match (a, b) {
         (Value::Null, Value::Null) => true,
         (Value::String(x), Value::String(y)) => x == y,
-        (Value::Array(x), Value::Array(y)) => x.len() == y.len() && x.iter().zip(y).all(|(p, q)| eq(p, q)),
+        (Value::Array(x), Value::Array(y)) => {
+            x.len() == y.len() && x.iter().zip(y).all(|(p, q)| eq(p, q))
+        }
         (Value::Object(x), Value::Object(y)) => {
             x.len() == y.len() && x.iter().all(|(k, v)| y.get(k).is_some_and(|w| eq(v, w)))
         }
@@ -262,7 +272,9 @@ pub fn keys_of(v: &Value) -> Result<Vec<Value>, ManifestError> {
         Value::Object(o) => Ok(o.keys().map(|k| Value::String(k.clone())).collect()),
         Value::String(s) => Ok(s.chars().map(|c| Value::String(c.to_string())).collect()),
         Value::Array(a) => {
-            if a.iter().any(|x| matches!(x, Value::Array(_) | Value::Object(_))) {
+            if a.iter()
+                .any(|x| matches!(x, Value::Array(_) | Value::Object(_)))
+            {
                 Err(crash("unhashable type in a set"))
             } else {
                 Ok(a.clone())
@@ -278,7 +290,10 @@ pub fn has(v: &Value, k: &str) -> Result<bool, ManifestError> {
         Value::Object(o) => Ok(o.contains_key(k)),
         Value::String(s) => Ok(s.contains(k)),
         Value::Array(a) => Ok(a.iter().any(|x| matches!(x, Value::String(s) if s == k))),
-        _ => Err(crash(format!("argument of type {} is not iterable", repr_str(type_name(v))))),
+        _ => Err(crash(format!(
+            "argument of type {} is not iterable",
+            repr_str(type_name(v))
+        ))),
     }
 }
 
@@ -286,15 +301,23 @@ pub fn has(v: &Value, k: &str) -> Result<bool, ManifestError> {
 pub fn get<'a>(v: &'a Value, k: &str) -> Result<Option<&'a Value>, ManifestError> {
     match v {
         Value::Object(o) => Ok(o.get(k)),
-        _ => Err(crash(format!("{} object has no attribute 'get'", repr_str(type_name(v))))),
+        _ => Err(crash(format!(
+            "{} object has no attribute 'get'",
+            repr_str(type_name(v))
+        ))),
     }
 }
 
 /// `v[k]` on a mapping (KeyError / TypeError otherwise).
 pub fn index<'a>(v: &'a Value, k: &str) -> Result<&'a Value, ManifestError> {
     match v {
-        Value::Object(o) => o.get(k).ok_or_else(|| crash(format!("KeyError: {}", repr_str(k)))),
-        _ => Err(crash(format!("{} object is not subscriptable by a string", type_name(v)))),
+        Value::Object(o) => o
+            .get(k)
+            .ok_or_else(|| crash(format!("KeyError: {}", repr_str(k)))),
+        _ => Err(crash(format!(
+            "{} object is not subscriptable by a string",
+            type_name(v)
+        ))),
     }
 }
 
@@ -318,7 +341,11 @@ pub fn sorted_names(mut xs: Vec<Value>) -> Result<Vec<Value>, ManifestError> {
         xs.sort_by(|a, b| cmp_str(a.as_str().unwrap_or(""), b.as_str().unwrap_or("")));
         Ok(xs)
     } else if all_num {
-        xs.sort_by(|a, b| num_of(a).partial_cmp(&num_of(b)).unwrap_or(std::cmp::Ordering::Equal));
+        xs.sort_by(|a, b| {
+            num_of(a)
+                .partial_cmp(&num_of(b))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         Ok(xs)
     } else if xs.len() <= 1 {
         Ok(xs)
@@ -345,7 +372,11 @@ fn dump(v: &Value, out: &mut String) {
         Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
         Value::Number(n) => {
             if n.is_f64() {
-                out.push_str(&repr_float(n.as_f64().unwrap_or(f64::NAN)).replace("inf", "Infinity").replace("nan", "NaN"))
+                out.push_str(
+                    &repr_float(n.as_f64().unwrap_or(f64::NAN))
+                        .replace("inf", "Infinity")
+                        .replace("nan", "NaN"),
+                )
             } else {
                 out.push_str(&repr_number(n))
             }
@@ -450,7 +481,9 @@ pub fn abspath(p: &str) -> String {
     if p.starts_with('/') {
         normpath(p)
     } else {
-        let cwd = std::env::current_dir().map(|d| d.to_string_lossy().into_owned()).unwrap_or_default();
+        let cwd = std::env::current_dir()
+            .map(|d| d.to_string_lossy().into_owned())
+            .unwrap_or_default();
         normpath(&format!("{cwd}/{p}"))
     }
 }
@@ -490,7 +523,10 @@ mod tests {
 
     #[test]
     fn dumps() {
-        assert_eq!(json_dumps(&json!([["a", "é"], 5])), "[[\"a\", \"\\u00e9\"], 5]");
+        assert_eq!(
+            json_dumps(&json!([["a", "é"], 5])),
+            "[[\"a\", \"\\u00e9\"], 5]"
+        );
     }
 
     #[test]

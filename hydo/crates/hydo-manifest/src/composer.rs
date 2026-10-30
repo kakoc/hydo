@@ -7,7 +7,9 @@ use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 
-use crate::py::{self, crash, eq, has, in_strs, is_int, json_dumps, repr, repr_str, str_of, truthy};
+use crate::py::{
+    self, crash, eq, has, in_strs, is_int, json_dumps, repr, repr_str, str_of, truthy,
+};
 use crate::pyre;
 use crate::validate::{err, iter_of, or_iter, R};
 use crate::ManifestError;
@@ -22,7 +24,12 @@ pub const WORKLOAD_KINDS: &[&str] = &[
     "eventually",
     "finally",
 ];
-pub const PLAN_KINDS: &[&str] = &["parallel_driver", "serial_driver", "singleton_driver", "anytime"];
+pub const PLAN_KINDS: &[&str] = &[
+    "parallel_driver",
+    "serial_driver",
+    "singleton_driver",
+    "anytime",
+];
 pub const CHECK_KINDS: &[&str] = &["final", "always", "eventually"];
 pub const HISTORY_KINDS: &[&str] = &["linearizable", "list_append"];
 pub const HISTORY_KEYS: &[&str] = &["history", "model", "initial", "consistency"];
@@ -41,10 +48,30 @@ pub const PARAMS: &[(&str, i128, i128, i128)] = &[
 ];
 const KNOWN_CMD: &[&str] = &["name", "kind", "run", "timeout", "description", "content"];
 const KNOWN_CHECK: &[&str] = &[
-    "name", "kind", "run", "msg", "every", "within", "after", "poll", "description", "history", "model", "initial",
+    "name",
+    "kind",
+    "run",
+    "msg",
+    "every",
+    "within",
+    "after",
+    "poll",
+    "description",
+    "history",
+    "model",
+    "initial",
     "consistency",
 ];
-const KNOWN_REG: &[&str] = &["name", "schedule", "expect", "commands", "description", "compose", "contents", "saved_schedule"];
+const KNOWN_REG: &[&str] = &[
+    "name",
+    "schedule",
+    "expect",
+    "commands",
+    "description",
+    "compose",
+    "contents",
+    "saved_schedule",
+];
 pub const DEFAULT_STEPS: i128 = 20;
 pub const SH: &str = "/bin/busybox sh /etc/hydo/compose.sh";
 const GUEST_MAX: usize = 500;
@@ -77,7 +104,11 @@ fn match_name(x: &str) -> bool {
 }
 
 fn sorted_keys_minus(o: &Map<String, Value>, known: &[&str]) -> Vec<String> {
-    let mut bad: Vec<String> = o.keys().filter(|k| !known.contains(&k.as_str())).cloned().collect();
+    let mut bad: Vec<String> = o
+        .keys()
+        .filter(|k| !known.contains(&k.as_str()))
+        .cloned()
+        .collect();
     bad.sort();
     bad
 }
@@ -97,9 +128,8 @@ fn splitlines(t: &str) -> Vec<String> {
                 }
                 out.push(std::mem::take(&mut cur));
             }
-            '\n' | '\x0b' | '\x0c' | '\x1c' | '\x1d' | '\x1e' | '\u{85}' | '\u{2028}' | '\u{2029}' => {
-                out.push(std::mem::take(&mut cur))
-            }
+            '\n' | '\x0b' | '\x0c' | '\x1c' | '\x1d' | '\x1e' | '\u{85}' | '\u{2028}'
+            | '\u{2029}' => out.push(std::mem::take(&mut cur)),
             c => cur.push(c),
         }
     }
@@ -134,8 +164,11 @@ fn header(path: &Path) -> (Vec<(String, Value)>, Option<String>) {
         if let Some(g) = pyre::match_start(r"\s*(?:#|//)\s*hydo:\s*(.*)$", &line) {
             for tok in py::split_ws(g[0].as_deref().unwrap_or("")) {
                 if let Some((k, v)) = tok.split_once('=') {
-                    let val = if pyre::fullmatch(r"\d+", v) && v.chars().all(|c| c.is_ascii_digit()) {
-                        v.parse::<i64>().map(|i| Value::Number(i.into())).unwrap_or_else(|_| s(v))
+                    let val = if pyre::fullmatch(r"\d+", v) && v.chars().all(|c| c.is_ascii_digit())
+                    {
+                        v.parse::<i64>()
+                            .map(|i| Value::Number(i.into()))
+                            .unwrap_or_else(|_| s(v))
                     } else {
                         s(v)
                     };
@@ -183,7 +216,9 @@ fn sorted_listdir(d: &Path) -> R<Vec<String>> {
 
 fn executable(p: &Path) -> bool {
     use std::os::unix::ffi::OsStrExt;
-    let Ok(c) = std::ffi::CString::new(p.as_os_str().as_bytes()) else { return false };
+    let Ok(c) = std::ffi::CString::new(p.as_os_str().as_bytes()) else {
+        return false;
+    };
     // SAFETY: access(2) reads a NUL-terminated path and writes nothing.
     unsafe { libc::access(c.as_ptr(), libc::X_OK) == 0 }
 }
@@ -208,8 +243,13 @@ pub fn scan_folder(mdir: &str) -> R<Option<Value>> {
         ("regressions".into(), Vec::new()),
     ];
     let check_kinds: Vec<&str> = CHECK_KINDS.iter().chain(HISTORY_KINDS).copied().collect();
-    for (sub, kinds, key) in [("workload", WORKLOAD_KINDS, "commands"), ("checks", &check_kinds[..], "checks")] {
-        let Some(dp) = dirs.get(sub).and_then(|v| v.as_str()) else { continue };
+    for (sub, kinds, key) in [
+        ("workload", WORKLOAD_KINDS, "commands"),
+        ("checks", &check_kinds[..], "checks"),
+    ] {
+        let Some(dp) = dirs.get(sub).and_then(|v| v.as_str()) else {
+            continue;
+        };
         for fname in sorted_listdir(Path::new(dp))? {
             let p = format!("{dp}/{fname}");
             if fname.starts_with('.') || fname.starts_with("helper_") {
@@ -230,7 +270,10 @@ pub fn scan_folder(mdir: &str) -> R<Option<Value>> {
             let mut e = Map::new();
             e.insert("name".into(), s(&name));
             e.insert("kind".into(), s(k));
-            e.insert("run".into(), Value::Array(vec![s(&format!("/hydo/{sub}/{fname}"))]));
+            e.insert(
+                "run".into(),
+                Value::Array(vec![s(&format!("/hydo/{sub}/{fname}"))]),
+            );
             if key == "commands" {
                 let bytes = std::fs::read(&p).map_err(|x| crash(format!("{p}: {x}")))?;
                 e.insert("content".into(), s(&sha_hex(&bytes)[..16]));
@@ -259,7 +302,9 @@ pub fn scan_folder(mdir: &str) -> R<Option<Value>> {
                     e.insert("msg".into(), s(&m));
                 }
             }
-            lists.iter_mut().find(|(k, _)| k == key).map(|l| l.1.push(Value::Object(e)));
+            if let Some(l) = lists.iter_mut().find(|(k, _)| k == key) {
+                l.1.push(Value::Object(e));
+            }
         }
     }
     if let Some(rp) = dirs.get("regressions").and_then(|v| v.as_str()) {
@@ -281,7 +326,8 @@ pub fn scan_folder(mdir: &str) -> R<Option<Value>> {
 /// `read_regression(path)`.
 pub fn read_regression(path: &str) -> R<Value> {
     let bytes = std::fs::read(path).map_err(|e| crash(format!("{path}: {e}")))?;
-    let text = String::from_utf8(bytes).map_err(|_| crash(format!("{path}: UnicodeDecodeError")))?;
+    let text =
+        String::from_utf8(bytes).map_err(|_| crash(format!("{path}: UnicodeDecodeError")))?;
     // universal newlines: \r\n and \r end a line, as Python's text mode reads them
     let text = text.replace("\r\n", "\n").replace('\r', "\n");
     let mut sched: Option<String> = None;
@@ -299,7 +345,12 @@ pub fn read_regression(path: &str) -> R<Value> {
                 expect = g[0].clone().unwrap_or_default();
             }
             if let Some(g) = pyre::match_dollar(r"#\s*commands:\s*(.*)", st) {
-                cmds = Some(py::split_ws(g[0].as_deref().unwrap_or("")).iter().map(|x| x.to_string()).collect());
+                cmds = Some(
+                    py::split_ws(g[0].as_deref().unwrap_or(""))
+                        .iter()
+                        .map(|x| x.to_string())
+                        .collect(),
+                );
             }
             if let Some(g) = pyre::match_dollar(r"#\s*compose:\s*(\S+)\s*", st) {
                 compose = g[0].clone();
@@ -323,10 +374,16 @@ pub fn read_regression(path: &str) -> R<Value> {
     let name = base.strip_suffix(".schedule").unwrap_or(&base).to_string();
     let mut r = Map::new();
     r.insert("name".into(), s(&name));
-    r.insert("schedule".into(), sched.map(Value::String).unwrap_or(Value::Null));
+    r.insert(
+        "schedule".into(),
+        sched.map(Value::String).unwrap_or(Value::Null),
+    );
     r.insert("expect".into(), s(&expect));
     if let Some(c) = cmds {
-        r.insert("commands".into(), Value::Array(c.into_iter().map(Value::String).collect()));
+        r.insert(
+            "commands".into(),
+            Value::Array(c.into_iter().map(Value::String).collect()),
+        );
     }
     if let Some(c) = compose {
         r.insert("compose".into(), s(&c));
@@ -391,12 +448,12 @@ fn check_regression(r: &Value, wh: &str) -> R<()> {
 fn argv(run: Option<&Value>, wh: &str) -> R<Value> {
     match run {
         Some(Value::String(st)) if !py::strip(st).is_empty() => Ok(Value::String(st.clone())),
-        Some(Value::Array(a))
-            if !a.is_empty() && a.iter().all(|x| x.is_string() || is_int(x)) =>
-        {
+        Some(Value::Array(a)) if !a.is_empty() && a.iter().all(|x| x.is_string() || is_int(x)) => {
             let v: Vec<String> = a.iter().map(str_of).collect();
             if v.iter().any(|x| x.contains('\n') || x.contains('\0')) {
-                return Err(err(format!("{wh}.run: an argument contains a newline or NUL")));
+                return Err(err(format!(
+                    "{wh}.run: an argument contains a newline or NUL"
+                )));
             }
             Ok(Value::Array(v.into_iter().map(Value::String).collect()))
         }
@@ -413,14 +470,24 @@ pub fn shq(x: &str) -> String {
 /// `shell_of(run)`: argv quoted and exec'd, or the shell string as it is.
 pub fn shell_of(run: &Value) -> String {
     match run {
-        Value::Array(a) => format!("exec {}", a.iter().map(|x| shq(&str_of(x))).collect::<Vec<_>>().join(" ")),
+        Value::Array(a) => format!(
+            "exec {}",
+            a.iter()
+                .map(|x| shq(&str_of(x)))
+                .collect::<Vec<_>>()
+                .join(" ")
+        ),
         other => str_of(other),
     }
 }
 
 fn history_check(c: &Map<String, Value>, wh: &str) -> R<Value> {
     let kind_v = c.get("kind").cloned().unwrap_or(Value::Null);
-    let kind = if in_strs(&kind_v, &["list_append", "list-append"]) { "list-append" } else { "linearizable" };
+    let kind = if in_strs(&kind_v, &["list_append", "list-append"]) {
+        "list-append"
+    } else {
+        "linearizable"
+    };
     if !c.get("history").is_some_and(truthy) {
         return Err(err(format!(
             "{}: a {} check needs history: (the name the workload records under)",
@@ -502,14 +569,16 @@ fn merge_folder(m: &mut Map<String, Value>, folder: &Value) -> R<()> {
 
 /// The plan meta `expand` returns (staged as /etc/hydo/compose.json), with the warnings it gave.
 pub fn expand(m: &mut Value, folder: Option<&Value>, warn: &mut Vec<String>) -> R<Option<Value>> {
-    let mo = m.as_object_mut().ok_or_else(|| err("the manifest must be a mapping"))?;
+    let mo = m
+        .as_object_mut()
+        .ok_or_else(|| err("the manifest must be a mapping"))?;
     if let Some(f) = folder.filter(|f| truthy(f)) {
         merge_folder(mo, f)?;
     }
     if let Some(fv) = mo.get("format") {
         if !eq(fv, &n(FORMAT)) {
             return Err(err(format!(
-                "format: this hydo reads plan format {} (got {})",
+                "format: this hydo reads plan format {} (got {}); update hydo or regenerate the plan",
                 FORMAT,
                 repr(fv)
             )));
@@ -584,7 +653,10 @@ pub fn expand(m: &mut Value, folder: Option<&Value>, warn: &mut Vec<String>) -> 
             return Err(err(format!("{wh}: duplicate command {cid}")));
         }
         seen.push(cid.clone());
-        let to = c.get("timeout").cloned().unwrap_or_else(|| par["command_timeout"].clone());
+        let to = c
+            .get("timeout")
+            .cloned()
+            .unwrap_or_else(|| par["command_timeout"].clone());
         if !(py::is_plain_int(&to) && py::int_of(&to).is_some_and(|i| (1..=3600).contains(&i))) {
             return Err(err(format!("{wh}: timeout is whole seconds in [1, 3600]")));
         }
@@ -679,7 +751,8 @@ pub fn expand(m: &mut Value, folder: Option<&Value>, warn: &mut Vec<String>) -> 
         e.insert("msg".into(), s(&msg));
         for k in ["every", "within", "poll"] {
             if let Some(v) = c.get(k) {
-                if !(py::is_plain_int(v) && py::int_of(v).is_some_and(|i| (1..=3600).contains(&i))) {
+                if !(py::is_plain_int(v) && py::int_of(v).is_some_and(|i| (1..=3600).contains(&i)))
+                {
                     return Err(err(format!("{wh}: {k} is whole seconds in [1, 3600]")));
                 }
                 e.insert(k.into(), v.clone());
@@ -688,8 +761,14 @@ pub fn expand(m: &mut Value, folder: Option<&Value>, warn: &mut Vec<String>) -> 
         if let Some(a) = c.get("after") {
             e.insert("after".into(), a.clone());
         }
-        if kind != "eventually" && ["within", "poll", "after"].iter().any(|k| e.contains_key(*k)) {
-            return Err(err(format!("{wh}: within/poll/after are for kind eventually")));
+        if kind != "eventually"
+            && ["within", "poll", "after"]
+                .iter()
+                .any(|k| e.contains_key(*k))
+        {
+            return Err(err(format!(
+                "{wh}: within/poll/after are for kind eventually"
+            )));
         }
         if kind != "always" && e.contains_key("every") {
             return Err(err(format!("{wh}: every is for kind always")));
@@ -725,7 +804,10 @@ pub fn expand(m: &mut Value, folder: Option<&Value>, warn: &mut Vec<String>) -> 
         };
         e.insert("name".into(), s(&name));
         e.insert("schedule".into(), ro["schedule"].clone());
-        e.insert("expect".into(), s(&str_of(ro.get("expect").unwrap_or(&s("ok")))));
+        e.insert(
+            "expect".into(),
+            s(&str_of(ro.get("expect").unwrap_or(&s("ok")))),
+        );
         if let Some(c) = ro.get("commands").filter(|c| !c.is_null()) {
             e.insert(
                 "commands".into(),
@@ -743,7 +825,8 @@ pub fn expand(m: &mut Value, folder: Option<&Value>, warn: &mut Vec<String>) -> 
                     "{wh}: contents is a mapping command id -> content hash"
                 )));
             };
-            let mut items: Vec<(String, String)> = co.iter().map(|(k, v)| (k.clone(), str_of(v))).collect();
+            let mut items: Vec<(String, String)> =
+                co.iter().map(|(k, v)| (k.clone(), str_of(v))).collect();
             items.sort();
             let mut cm = Map::new();
             for (k, v) in items {
@@ -753,7 +836,8 @@ pub fn expand(m: &mut Value, folder: Option<&Value>, warn: &mut Vec<String>) -> 
         }
         regs.push(e);
     }
-    let to_arr = |v: &Vec<Map<String, Value>>| Value::Array(v.iter().cloned().map(Value::Object).collect());
+    let to_arr =
+        |v: &Vec<Map<String, Value>>| Value::Array(v.iter().cloned().map(Value::Object).collect());
     if cmds.is_empty() && checks.is_empty() {
         if !regs.is_empty() {
             return Ok(Some(py::obj(vec![
@@ -766,7 +850,10 @@ pub fn expand(m: &mut Value, folder: Option<&Value>, warn: &mut Vec<String>) -> 
         }
         return Ok(None);
     }
-    let planned: Vec<&Map<String, Value>> = cmds.iter().filter(|c| in_strs(&c["kind"], PLAN_KINDS)).collect();
+    let planned: Vec<&Map<String, Value>> = cmds
+        .iter()
+        .filter(|c| in_strs(&c["kind"], PLAN_KINDS))
+        .collect();
     let has_planned = !planned.is_empty();
     if !cmds.is_empty() && !has_planned {
         return Err(err("test.commands: at least one parallel_driver, serial_driver, singleton_driver or anytime command is needed (the composer has nothing to run otherwise)"));
@@ -811,7 +898,10 @@ pub fn expand(m: &mut Value, folder: Option<&Value>, warn: &mut Vec<String>) -> 
             ("id", s("compose.commands")),
             ("type", s("always")),
             ("cmd", s(&format!("{SH} verdict"))),
-            ("msg", s("no composed command reported a violation (exit status 100)")),
+            (
+                "msg",
+                s("no composed command reported a violation (exit status 100)"),
+            ),
         ]));
     }
     for (i, c) in cmds.iter().enumerate() {
@@ -821,7 +911,9 @@ pub fn expand(m: &mut Value, folder: Option<&Value>, warn: &mut Vec<String>) -> 
             let msg = if k == "eventually" {
                 format!("after the faults stop, {id} succeeds")
             } else {
-                format!("at the end, {id} succeeds (skipped unless every started command completed)")
+                format!(
+                    "at the end, {id} succeeds (skipped unless every started command completed)"
+                )
             };
             invs.push(py::obj(vec![
                 ("id", s(&id)),
@@ -838,8 +930,16 @@ pub fn expand(m: &mut Value, folder: Option<&Value>, warn: &mut Vec<String>) -> 
                 ("type", s("eventually")),
                 ("cmd", s(&shell_of(&c["run"]))),
                 ("msg", c["msg"].clone()),
-                ("within", c.get("within").cloned().unwrap_or_else(|| par["check_within"].clone())),
-                ("after", c.get("after").cloned().unwrap_or_else(|| s("heal"))),
+                (
+                    "within",
+                    c.get("within")
+                        .cloned()
+                        .unwrap_or_else(|| par["check_within"].clone()),
+                ),
+                (
+                    "after",
+                    c.get("after").cloned().unwrap_or_else(|| s("heal")),
+                ),
                 ("poll", c.get("poll").cloned().unwrap_or_else(|| n(1))),
             ]));
         } else {
@@ -850,7 +950,12 @@ pub fn expand(m: &mut Value, folder: Option<&Value>, warn: &mut Vec<String>) -> 
                 ("msg", c["msg"].clone()),
             ];
             if c["kind"] == "always" {
-                v.push(("every", c.get("every").cloned().unwrap_or_else(|| par["check_every"].clone())));
+                v.push((
+                    "every",
+                    c.get("every")
+                        .cloned()
+                        .unwrap_or_else(|| par["check_every"].clone()),
+                ));
                 v.push(("final", Value::Bool(true)));
             }
             invs.push(py::obj(v));
@@ -860,7 +965,9 @@ pub fn expand(m: &mut Value, folder: Option<&Value>, warn: &mut Vec<String>) -> 
     for v in or_iter(mo.get("invariants"))? {
         if let Value::Object(vo) = &v {
             match vo.get("id") {
-                Some(Value::Array(_)) | Some(Value::Object(_)) => return Err(crash("unhashable id")),
+                Some(Value::Array(_)) | Some(Value::Object(_)) => {
+                    return Err(crash("unhashable id"))
+                }
                 Some(Value::String(x)) if ids.contains(x) => {
                     return Err(err(format!(
                         "invariants: id {} is also a test command or check",
@@ -879,7 +986,11 @@ pub fn expand(m: &mut Value, folder: Option<&Value>, warn: &mut Vec<String>) -> 
         Some(Value::Object(w)) => w.get("steps").cloned().unwrap_or(Value::Null),
         Some(_) => return Err(crash("workload has no attribute 'get'")),
     };
-    let steps = if truthy(&steps_v) { py_int_value(&steps_v)? } else { 0 };
+    let steps = if truthy(&steps_v) {
+        py_int_value(&steps_v)?
+    } else {
+        0
+    };
     let mut meta = py::obj(vec![
         ("format", n(FORMAT)),
         ("params", Value::Object(par.clone())),
@@ -912,16 +1023,25 @@ pub fn expand(m: &mut Value, folder: Option<&Value>, warn: &mut Vec<String>) -> 
 
 fn py_int_value(v: &Value) -> R<i128> {
     match v {
-        Value::Bool(_) | Value::Number(_) if py::int_of(v).is_some() => Ok(py::int_of(v).unwrap_or(0)),
+        Value::Bool(_) | Value::Number(_) if py::int_of(v).is_some() => {
+            Ok(py::int_of(v).unwrap_or(0))
+        }
         Value::Number(nn) => Ok(nn.as_f64().unwrap_or(0.0).trunc() as i128),
         Value::String(st) => py_int(st, 10).map_err(crash),
-        _ => Err(crash(format!("int() argument must be a string or a number, not {}", repr_str(py::type_name(v))))),
+        _ => Err(crash(format!(
+            "int() argument must be a string or a number, not {}",
+            repr_str(py::type_name(v))
+        ))),
     }
 }
 
 /// `test_from_meta(meta)`: the test: section that expands to meta again.
 pub fn test_from_meta(meta: &Value) -> Value {
-    let mut t = meta.get("params").and_then(|p| p.as_object()).cloned().unwrap_or_default();
+    let mut t = meta
+        .get("params")
+        .and_then(|p| p.as_object())
+        .cloned()
+        .unwrap_or_default();
     let cmds: Vec<Value> = meta
         .get("commands")
         .and_then(|c| c.as_array())
@@ -947,7 +1067,9 @@ pub fn test_from_meta(meta: &Value) -> Value {
         .iter()
         .map(|c| {
             let mut e = Map::new();
-            for k in ["name", "kind", "run", "msg", "every", "within", "after", "poll"] {
+            for k in [
+                "name", "kind", "run", "msg", "every", "within", "after", "poll",
+            ] {
                 if let Some(v) = c.get(k) {
                     e.insert(k.into(), v.clone());
                 }
@@ -959,7 +1081,9 @@ pub fn test_from_meta(meta: &Value) -> Value {
     t.insert("checks".into(), Value::Array(checks));
     t.insert(
         "regressions".into(),
-        meta.get("regressions").cloned().unwrap_or(Value::Array(Vec::new())),
+        meta.get("regressions")
+            .cloned()
+            .unwrap_or(Value::Array(Vec::new())),
     );
     Value::Object(t)
 }
@@ -968,7 +1092,10 @@ pub fn test_from_meta(meta: &Value) -> Value {
 
 /// `engine_version(here)` with `here` = the product's onboard/ directory.
 pub fn engine_version(onboard_dir: &Path) -> String {
-    for p in [onboard_dir.join("..").join("VERSION"), onboard_dir.join("..").join("..").join("VERSION")] {
+    for p in [
+        onboard_dir.join("..").join("VERSION"),
+        onboard_dir.join("..").join("..").join("VERSION"),
+    ] {
         if p.is_file() {
             if let Ok(t) = std::fs::read_to_string(&p) {
                 return py::strip(&t).to_string();
@@ -979,8 +1106,16 @@ pub fn engine_version(onboard_dir: &Path) -> String {
 }
 
 fn vt(x: &str) -> [i128; 3] {
-    let ns: Vec<i128> = pyre::digit_runs(x).iter().take(3).map(|d| d.parse().unwrap_or(0)).collect();
-    [ns.first().copied().unwrap_or(0), ns.get(1).copied().unwrap_or(0), ns.get(2).copied().unwrap_or(0)]
+    let ns: Vec<i128> = pyre::digit_runs(x)
+        .iter()
+        .take(3)
+        .map(|d| d.parse().unwrap_or(0))
+        .collect();
+    [
+        ns.first().copied().unwrap_or(0),
+        ns.get(1).copied().unwrap_or(0),
+        ns.get(2).copied().unwrap_or(0),
+    ]
 }
 
 /// `check_version(want, have, ...)`.
@@ -1003,14 +1138,16 @@ pub fn check_version(want: &Value, have: &str, warn: &mut Vec<String>) -> R<()> 
                 "hydo_version: the plan names {w}, this hydo is {have} (same major.minor: building)"
             ));
         }
-        (ok, format!("{}.{}", wv[0], wv[1]))
+        (ok, format!("{}.{}.x", wv[0], wv[1]))
     };
     if !ok {
         let msg = format!("hydo_version: the plan needs hydo {why}, this hydo is {have}");
         if std::env::var("HYDO_VERSION_CHECK").as_deref() == Ok("warn") {
             warn.push(format!("{msg} (HYDO_VERSION_CHECK=warn: building anyway)"));
         } else {
-            return Err(err(format!("{msg} (install that hydo, or set HYDO_VERSION_CHECK=warn)")));
+            return Err(err(format!(
+                "{msg} (install that hydo, or set HYDO_VERSION_CHECK=warn)"
+            )));
         }
     }
     Ok(())
@@ -1020,7 +1157,13 @@ pub fn check_version(want: &Value, have: &str, warn: &mut Vec<String>) -> R<()> 
 
 /// Python's `int(text, base)` for base 10 and 16 (whitespace, a sign, `0x`, single underscores).
 pub fn py_int(text: &str, base: u32) -> Result<i128, String> {
-    let bad = || format!("invalid literal for int() with base {}: {}", base, repr_str(text));
+    let bad = || {
+        format!(
+            "invalid literal for int() with base {}: {}",
+            base,
+            repr_str(text)
+        )
+    };
     let t = py::strip(text);
     let (neg, mut body) = match t.strip_prefix('-') {
         Some(r) => (true, r),
@@ -1066,7 +1209,9 @@ struct Minstd {
 
 impl Minstd {
     fn new(seed: i128) -> R<Minstd> {
-        let mut m = Minstd { s: py_mod(seed, M31 - 1)? + 1 };
+        let mut m = Minstd {
+            s: py_mod(seed, M31 - 1)? + 1,
+        };
         for _ in 0..8 {
             m.next();
         }
@@ -1085,12 +1230,28 @@ impl Minstd {
 type Entry = (i128, i128, usize, i128);
 
 fn plan(seed: i128, q: i128, steps: i128, kinds: &[String]) -> R<Vec<Entry>> {
-    let idx = |k: &str| -> Vec<usize> { kinds.iter().enumerate().filter(|(_, c)| *c == k).map(|(i, _)| i).collect() };
-    let (p, se, sg, a) = (idx("parallel_driver"), idx("serial_driver"), idx("singleton_driver"), idx("anytime"));
+    let idx = |k: &str| -> Vec<usize> {
+        kinds
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| *c == k)
+            .map(|(i, _)| i)
+            .collect()
+    };
+    let (p, se, sg, a) = (
+        idx("parallel_driver"),
+        idx("serial_driver"),
+        idx("singleton_driver"),
+        idx("anytime"),
+    );
     let mut rng = Minstd::new(seed)?;
     let mut out: Vec<Entry> = Vec::new();
     let single = !sg.is_empty() && ((p.is_empty() && se.is_empty()) || rng.below(4)? == 0);
-    let g = if single { sg[rng.below(sg.len() as i128)? as usize] } else { usize::MAX };
+    let g = if single {
+        sg[rng.below(sg.len() as i128)? as usize]
+    } else {
+        usize::MAX
+    };
     let pick = |v: &Vec<usize>, i: i128| -> usize { v[i.rem_euclid(v.len() as i128) as usize] };
     let mut r = 0i128;
     while r < steps {
@@ -1111,7 +1272,8 @@ fn plan(seed: i128, q: i128, steps: i128, kinds: &[String]) -> R<Vec<Entry>> {
                 out.push((out.len() as i128, r, c, sd));
             }
         }
-        if !a.is_empty() && ((p.is_empty() && se.is_empty() && sg.is_empty()) || rng.below(3)? == 0) {
+        if !a.is_empty() && ((p.is_empty() && se.is_empty() && sg.is_empty()) || rng.below(3)? == 0)
+        {
             let c = pick(&a, rng.below(a.len() as i128)?);
             let sd = rng.next();
             out.push((out.len() as i128, r, c, sd));
@@ -1150,7 +1312,10 @@ fn ilist(st: &str) -> Result<Vec<i128>, VE> {
         if it.contains('-') {
             let parts: Vec<&str> = it.split('-').collect();
             if parts.len() != 2 {
-                return Err(format!("too many values to unpack (expected 2, got {})", parts.len()));
+                return Err(format!(
+                    "too many values to unpack (expected 2, got {})",
+                    parts.len()
+                ));
             }
             let a = py_int(parts[0], 10)?;
             let b = py_int(parts[1], 10)?;
@@ -1224,7 +1389,11 @@ fn kept(d: &WSeed, steps: i128, ids: &[String], kinds: &[String]) -> R<Vec<Entry
         })
         .collect();
     Ok(if d.n != 0 {
-        let k = if d.n < 0 { (out.len() as i128 + d.n).max(0) as usize } else { (d.n as usize).min(out.len()) };
+        let k = if d.n < 0 {
+            (out.len() as i128 + d.n).max(0) as usize
+        } else {
+            (d.n as usize).min(out.len())
+        };
         out[..k].to_vec()
     } else {
         out
@@ -1255,7 +1424,12 @@ fn parse_resolved(v: &str) -> Result<Resolved, VE> {
             repr_str(&v.chars().take(20).collect::<String>())
         ));
     }
-    let mut d = Resolved { p: 0, r: 0, t: 0, entries: Vec::new() };
+    let mut d = Resolved {
+        p: 0,
+        r: 0,
+        t: 0,
+        entries: Vec::new(),
+    };
     let (mut p_set, mut r_set) = (false, false);
     let mut ids: Option<Vec<String>> = None;
     for f in v[1..].split(',') {
@@ -1275,15 +1449,22 @@ fn parse_resolved(v: &str) -> Result<Resolved, VE> {
         } else if f.starts_with('c') && ids.is_none() {
             let l: Vec<String> = f[1..].split('+').map(|x| x.to_string()).collect();
             if !l.iter().all(|x| match_name(x) && kind_of(x).is_some()) {
-                return Err(format!("W={}: c lists command ids <kind>_<name>", head40(v)));
+                return Err(format!(
+                    "W={}: c lists command ids <kind>_<name>",
+                    head40(v)
+                ));
             }
             ids = Some(l);
         } else if pyre::fullmatch(r"\d+\.\d+\.\d+\.\d+", f) {
-            let parts: Vec<i128> = f.split('.').map(|x| py_int(x, 10)).collect::<Result<_, _>>()?;
+            let parts: Vec<i128> = f
+                .split('.')
+                .map(|x| py_int(x, 10))
+                .collect::<Result<_, _>>()?;
             let k = parts[2];
             match &ids {
                 Some(l) if k >= 0 && (k as usize) < l.len() => {
-                    d.entries.push((parts[0], parts[1], l[k as usize].clone(), parts[3]))
+                    d.entries
+                        .push((parts[0], parts[1], l[k as usize].clone(), parts[3]))
                 }
                 _ => {
                     return Err(format!(
@@ -1339,7 +1520,9 @@ fn render_resolved(d: &Resolved) -> String {
 
 fn w_of(schedule: &str) -> Option<String> {
     let g = schedule.split_once('|').map(|x| x.1).unwrap_or(schedule);
-    py::split_ws(g).into_iter().find_map(|t| t.strip_prefix("W=").map(|x| x.to_string()))
+    py::split_ws(g)
+        .into_iter()
+        .find_map(|t| t.strip_prefix("W=").map(|x| x.to_string()))
 }
 
 fn with_w(schedule: &str, w: &str) -> String {
@@ -1368,7 +1551,13 @@ pub fn key_of(resolved: &str) -> String {
     sha_hex(resolved.as_bytes())[..12].to_string()
 }
 
-fn resolve_seed(w: &str, ids: &[String], kinds: &[String], steps: i128, params: &Value) -> R<Result<Resolved, VE>> {
+fn resolve_seed(
+    w: &str,
+    ids: &[String],
+    kinds: &[String],
+    steps: i128,
+    params: &Value,
+) -> R<Result<Resolved, VE>> {
     let d = match parse_w(w, params) {
         Ok(d) => d,
         Err(e) => return Ok(Err(e)),
@@ -1378,7 +1567,10 @@ fn resolve_seed(w: &str, ids: &[String], kinds: &[String], steps: i128, params: 
         p: d.p,
         r: d.r,
         t: d.t,
-        entries: es.into_iter().map(|(e, r, c, sd)| (e, r, ids[c].clone(), sd)).collect(),
+        entries: es
+            .into_iter()
+            .map(|(e, r, c, sd)| (e, r, ids[c].clone(), sd))
+            .collect(),
     }))
 }
 
@@ -1394,8 +1586,15 @@ fn resolved_problems(d: &Resolved, meta: &Value, steps: Option<i128>) -> Vec<Str
             }
         }
     };
-    let cmds = meta.get("commands").and_then(|c| c.as_array()).cloned().unwrap_or_default();
-    let kinds: Vec<(String, String)> = cmds.iter().map(|c| (str_of(&c["id"]), str_of(&c["kind"]))).collect();
+    let cmds = meta
+        .get("commands")
+        .and_then(|c| c.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let kinds: Vec<(String, String)> = cmds
+        .iter()
+        .map(|c| (str_of(&c["id"]), str_of(&c["kind"])))
+        .collect();
     let mut errs = Vec::new();
     let mut missing: Vec<String> = d
         .entries
@@ -1408,7 +1607,11 @@ fn resolved_problems(d: &Resolved, meta: &Value, steps: Option<i128>) -> Vec<Str
     if !missing.is_empty() {
         let mut now: Vec<String> = kinds.iter().map(|(k, _)| k.clone()).collect();
         now.sort();
-        let now_s = if now.is_empty() { "-".to_string() } else { now.join(" ") };
+        let now_s = if now.is_empty() {
+            "-".to_string()
+        } else {
+            now.join(" ")
+        };
         errs.push(format!(
             "the saved composition uses command{} {}, which the plan no longer has (commands now: {}); restore {}, or delete the regression and save a new one",
             if missing.len() > 1 { "s" } else { "" },
@@ -1420,7 +1623,13 @@ fn resolved_problems(d: &Resolved, meta: &Value, steps: Option<i128>) -> Vec<Str
     let mut bad: Vec<String> = d
         .entries
         .iter()
-        .filter_map(|e| kinds.iter().find(|(k, _)| *k == e.2).filter(|(_, kd)| !PLAN_KINDS.contains(&kd.as_str())).map(|(k, _)| k.clone()))
+        .filter_map(|e| {
+            kinds
+                .iter()
+                .find(|(k, _)| *k == e.2)
+                .filter(|(_, kd)| !PLAN_KINDS.contains(&kd.as_str()))
+                .map(|(k, _)| k.clone())
+        })
         .collect();
     bad.sort();
     bad.dedup();
@@ -1455,12 +1664,23 @@ pub struct Status {
 /// `regression_status(r, meta, steps)`.
 pub fn regression_status(r: &Value, meta: &Value, steps: Option<i128>) -> R<Status> {
     let sched = str_of(&r["schedule"]);
-    let mut out = Status { schedule: sched.clone(), compose: None, error: None, warnings: Vec::new() };
-    let Some(w) = w_of(&sched) else { return Ok(out) };
+    let mut out = Status {
+        schedule: sched.clone(),
+        compose: None,
+        error: None,
+        warnings: Vec::new(),
+    };
+    let Some(w) = w_of(&sched) else {
+        return Ok(out);
+    };
     if w == "-" {
         return Ok(out);
     }
-    let cmds = meta.get("commands").and_then(|c| c.as_array()).cloned().unwrap_or_default();
+    let cmds = meta
+        .get("commands")
+        .and_then(|c| c.as_array())
+        .cloned()
+        .unwrap_or_default();
     let now: Vec<String> = cmds.iter().map(|c| str_of(&c["id"])).collect();
     let now_kinds: Vec<String> = cmds.iter().map(|c| str_of(&c["kind"])).collect();
     let msteps = meta.get("steps").and_then(py::int_of).unwrap_or(0);
@@ -1476,7 +1696,9 @@ pub fn regression_status(r: &Value, meta: &Value, steps: Option<i128>) -> R<Stat
     };
     let compose = r.get("compose").filter(|c| truthy(c)).map(str_of);
     let saved_cmds: Option<Vec<String>> = r.get("commands").filter(|c| !c.is_null()).map(|c| {
-        c.as_array().map(|a| a.iter().map(str_of).collect()).unwrap_or_default()
+        c.as_array()
+            .map(|a| a.iter().map(str_of).collect())
+            .unwrap_or_default()
     });
     let params = meta.get("params").cloned().unwrap_or(Value::Null);
     let d: Resolved = if let Some(key) = w.strip_prefix('@') {
@@ -1520,7 +1742,10 @@ pub fn regression_status(r: &Value, meta: &Value, steps: Option<i128>) -> R<Stat
             ));
             return Ok(out);
         }
-        let kinds: Vec<String> = kinds.into_iter().map(|k| k.unwrap_or("").to_string()).collect();
+        let kinds: Vec<String> = kinds
+            .into_iter()
+            .map(|k| k.unwrap_or("").to_string())
+            .collect();
         let d = match resolve_seed(&w, &old, &kinds, eff_steps, &params)? {
             Ok(d) => d,
             Err(e) => {
@@ -1562,10 +1787,15 @@ pub fn regression_status(r: &Value, meta: &Value, steps: Option<i128>) -> R<Stat
         out.error = Some(errs.join("; "));
     }
     if let Some(Value::Object(cs)) = r.get("contents") {
-        let mut items: Vec<(String, String)> = cs.iter().map(|(k, v)| (k.clone(), str_of(v))).collect();
+        let mut items: Vec<(String, String)> =
+            cs.iter().map(|(k, v)| (k.clone(), str_of(v))).collect();
         items.sort();
         for (cid, sha) in items {
-            let have = cmds.iter().find(|c| str_of(&c["id"]) == cid).and_then(|c| c.get("content")).filter(|x| truthy(x));
+            let have = cmds
+                .iter()
+                .find(|c| str_of(&c["id"]) == cid)
+                .and_then(|c| c.get("content"))
+                .filter(|x| truthy(x));
             if let Some(h) = have {
                 if str_of(h) != sha {
                     out.warnings.push(format!(

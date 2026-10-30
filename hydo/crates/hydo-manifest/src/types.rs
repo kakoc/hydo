@@ -46,7 +46,9 @@ impl Run {
     /// The guest's command line (hydo_composer.shell_of).
     pub fn shell(&self) -> String {
         match self {
-            Run::Argv(a) => crate::composer::shell_of(&Value::Array(a.iter().cloned().map(Value::String).collect())),
+            Run::Argv(a) => crate::composer::shell_of(&Value::Array(
+                a.iter().cloned().map(Value::String).collect(),
+            )),
             Run::Shell(s) => s.clone(),
         }
     }
@@ -67,7 +69,10 @@ impl Guest {
         let get = |k: &str| g.and_then(|g| g.get(k));
         Guest {
             ram_mib: get("ram_mib").and_then(Value::as_u64).unwrap_or(1024) as u32,
-            cpu: get("cpu").and_then(Value::as_str).unwrap_or("v2").to_string(),
+            cpu: get("cpu")
+                .and_then(Value::as_str)
+                .unwrap_or("v2")
+                .to_string(),
             clock_start: get("clock_start").cloned(),
             clock_after_cut: i_of(get("clock_after_cut")),
         }
@@ -230,7 +235,11 @@ impl TestPlan {
         let params = meta
             .get("params")
             .and_then(Value::as_object)
-            .map(|o| o.iter().map(|(k, v)| (k.clone(), i_of(Some(v)).unwrap_or(0))).collect())
+            .map(|o| {
+                o.iter()
+                    .map(|(k, v)| (k.clone(), i_of(Some(v)).unwrap_or(0)))
+                    .collect()
+            })
             .unwrap_or_default();
         let commands = list(meta.get("commands"))
             .iter()
@@ -268,7 +277,10 @@ impl TestPlan {
                         "violation" => Expect::Violation,
                         other => Expect::Fp(other.trim_start_matches("fp=").to_string()),
                     },
-                    commands: r.get("commands").filter(|c| !c.is_null()).map(|c| strs(Some(c))),
+                    commands: r
+                        .get("commands")
+                        .filter(|c| !c.is_null())
+                        .map(|c| strs(Some(c))),
                     compose: s_of(r.get("compose")),
                     saved_schedule: s_of(r.get("saved_schedule")),
                     contents: r
@@ -443,7 +455,10 @@ impl Manifest {
             checks,
             errors,
             buggify: m.get("buggify") == Some(&Value::Bool(true)),
-            test: m.get("_compose").filter(|c| !c.is_null()).map(TestPlan::from_meta),
+            test: m
+                .get("_compose")
+                .filter(|c| !c.is_null())
+                .map(TestPlan::from_meta),
             data,
         }
     }

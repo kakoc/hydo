@@ -112,7 +112,9 @@ pub fn scalar(tok: &str, wh: &str) -> Result<Value, ManifestError> {
             }
             return Err(crash(format!("the integer {t} is larger than 64 bits")));
         }
-        return Err(crash(format!("non-ASCII digits in {t} (Python reads them as a number)")));
+        return Err(crash(format!(
+            "non-ASCII digits in {t} (Python reads them as a number)"
+        )));
     }
     Ok(Value::String(t.to_string()))
 }
@@ -250,7 +252,13 @@ impl<'a> Parser<'a> {
         body.join("\n") + "\n"
     }
 
-    fn value_after(&mut self, rest: &str, indent: usize, lineno: usize, raw_idx: usize) -> Result<Value, ManifestError> {
+    fn value_after(
+        &mut self,
+        rest: &str,
+        indent: usize,
+        lineno: usize,
+        raw_idx: usize,
+    ) -> Result<Value, ManifestError> {
         if rest == "|" || rest == "|-" || rest == "|+" {
             let v = self.block_literal(raw_idx, indent);
             return Ok(Value::String(if rest == "|-" {
@@ -291,11 +299,19 @@ impl<'a> Parser<'a> {
             let mut seq = Vec::new();
             while self.pos < self.lines.len()
                 && self.lines[self.pos].indent == indent
-                && (self.lines[self.pos].content.starts_with("- ") || self.lines[self.pos].content == "-")
+                && (self.lines[self.pos].content.starts_with("- ")
+                    || self.lines[self.pos].content == "-")
             {
                 let lineno = self.lines[self.pos].lineno;
                 let ridx = self.lines[self.pos].raw;
-                let item = strip(&self.lines[self.pos].content.chars().skip(1).collect::<String>()).to_string();
+                let item = strip(
+                    &self.lines[self.pos]
+                        .content
+                        .chars()
+                        .skip(1)
+                        .collect::<String>(),
+                )
+                .to_string();
                 self.pos += 1;
                 if item.is_empty() {
                     if self.pos < self.lines.len() && self.lines[self.pos].indent > indent {
@@ -444,14 +460,26 @@ mod tests {
 
     #[test]
     fn comments_and_quotes() {
-        assert_eq!(y("a: x # c\nb: 'y # z'\nc: x#y\n").unwrap(), json!({"a": "x", "b": "y # z", "c": "x#y"}));
-        assert_eq!(y("a: 'it''s'\nb: \"tab\\tx\"\n").unwrap(), json!({"a": "it's", "b": "tab\tx"}));
-        assert_eq!(y("a: ~\nb: null\nc: -12\nd: 1.5\n").unwrap(), json!({"a": null, "b": null, "c": -12, "d": "1.5"}));
+        assert_eq!(
+            y("a: x # c\nb: 'y # z'\nc: x#y\n").unwrap(),
+            json!({"a": "x", "b": "y # z", "c": "x#y"})
+        );
+        assert_eq!(
+            y("a: 'it''s'\nb: \"tab\\tx\"\n").unwrap(),
+            json!({"a": "it's", "b": "tab\tx"})
+        );
+        assert_eq!(
+            y("a: ~\nb: null\nc: -12\nd: 1.5\n").unwrap(),
+            json!({"a": null, "b": null, "c": -12, "d": "1.5"})
+        );
     }
 
     #[test]
     fn blocks() {
-        assert_eq!(y("a: |\n  x\n   y\n\nb: 1\n").unwrap(), json!({"a": "x\n y\n", "b": 1}));
+        assert_eq!(
+            y("a: |\n  x\n   y\n\nb: 1\n").unwrap(),
+            json!({"a": "x\n y\n", "b": 1})
+        );
         assert_eq!(y("a: |-\n  x\n  y\n").unwrap(), json!({"a": "x\ny"}));
         assert_eq!(y("a: >\n  x\n  y\n").unwrap(), json!({"a": "x y\n"}));
         assert_eq!(y("a: >-\n  x\n\n  y\n").unwrap(), json!({"a": "x y"}));
@@ -459,21 +487,45 @@ mod tests {
 
     #[test]
     fn flows() {
-        assert_eq!(y("a: {x: 1, y: [2, 3], 'z': \"w\"}\n").unwrap(), json!({"a": {"x": 1, "y": [2, 3], "z": "w"}}));
+        assert_eq!(
+            y("a: {x: 1, y: [2, 3], 'z': \"w\"}\n").unwrap(),
+            json!({"a": {"x": 1, "y": [2, 3], "z": "w"}})
+        );
         assert_eq!(y("a: []\nb: {}\n").unwrap(), json!({"a": [], "b": {}}));
     }
 
     #[test]
     fn refusals() {
         assert_eq!(y("a: 1\na: 2\n").unwrap_err(), "t.yaml:2: duplicate key a");
-        assert_eq!(y("a:\n\tb: 1\n").unwrap_err(), "t.yaml:2: tab in indentation");
-        assert_eq!(y("a: 'x\n").unwrap_err(), "t.yaml:1: unterminated string 'x");
+        assert_eq!(
+            y("a:\n\tb: 1\n").unwrap_err(),
+            "t.yaml:2: tab in indentation"
+        );
+        assert_eq!(
+            y("a: 'x\n").unwrap_err(),
+            "t.yaml:1: unterminated string 'x"
+        );
         assert_eq!(y("a: [1, 2\n").unwrap_err(), "t.yaml:1: unterminated [");
-        assert_eq!(y("a: {x}\n").unwrap_err(), "t.yaml:1: flow mapping entry without ':' (x)");
+        assert_eq!(
+            y("a: {x}\n").unwrap_err(),
+            "t.yaml:1: flow mapping entry without ':' (x)"
+        );
         assert_eq!(y("a: [1] x\n").unwrap_err(), "t.yaml:1: junk after [1] x");
-        assert_eq!(y("a: 1\n  b: 2\n").unwrap_err(), "t.yaml:2: unexpected indentation");
-        assert_eq!(y("a: 1\n- b\n").unwrap_err(), "t.yaml:2: a list item where a key was expected");
-        assert_eq!(y("just text\n").unwrap_err(), "t.yaml:1: expected 'key: value', got 'just text'");
-        assert_eq!(y("  a: 1\nb: 2\n").unwrap_err(), "t.yaml:2: could not parse from here (indentation?)");
+        assert_eq!(
+            y("a: 1\n  b: 2\n").unwrap_err(),
+            "t.yaml:2: unexpected indentation"
+        );
+        assert_eq!(
+            y("a: 1\n- b\n").unwrap_err(),
+            "t.yaml:2: a list item where a key was expected"
+        );
+        assert_eq!(
+            y("just text\n").unwrap_err(),
+            "t.yaml:1: expected 'key: value', got 'just text'"
+        );
+        assert_eq!(
+            y("  a: 1\nb: 2\n").unwrap_err(),
+            "t.yaml:2: could not parse from here (indentation?)"
+        );
     }
 }

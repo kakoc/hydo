@@ -22,15 +22,25 @@ pub fn fullmatch(pat: &str, s: &str) -> bool {
 /// `re.match("^<pat>$", s)`: Python's `$` also matches before a final newline.
 pub fn match_dollar(pat: &str, s: &str) -> Option<Vec<Option<String>>> {
     let re = compiled(&format!("^(?:{pat})$"));
-    let caps = re.captures(s).or_else(|| s.strip_suffix('\n').and_then(|t| re.captures(t)));
-    caps.map(|c| c.iter().skip(1).map(|m| m.map(|x| x.as_str().to_string())).collect())
+    let caps = re
+        .captures(s)
+        .or_else(|| s.strip_suffix('\n').and_then(|t| re.captures(t)));
+    caps.map(|c| {
+        c.iter()
+            .skip(1)
+            .map(|m| m.map(|x| x.as_str().to_string()))
+            .collect()
+    })
 }
 
 /// `re.match(pat, s)` (anchored at the start only).
 pub fn match_start(pat: &str, s: &str) -> Option<Vec<Option<String>>> {
-    compiled(&format!("^(?:{pat})"))
-        .captures(s)
-        .map(|c| c.iter().skip(1).map(|m| m.map(|x| x.as_str().to_string())).collect())
+    compiled(&format!("^(?:{pat})")).captures(s).map(|c| {
+        c.iter()
+            .skip(1)
+            .map(|m| m.map(|x| x.as_str().to_string()))
+            .collect()
+    })
 }
 
 /// `bool(re.search(pat, s))`.
@@ -48,5 +58,8 @@ pub fn findall1(pat: &str, s: &str) -> Vec<String> {
 
 /// `re.findall(r"\d+", s)`.
 pub fn digit_runs(s: &str) -> Vec<String> {
-    compiled(r"\d+").find_iter(s).map(|m| m.as_str().to_string()).collect()
+    compiled(r"\d+")
+        .find_iter(s)
+        .map(|m| m.as_str().to_string())
+        .collect()
 }

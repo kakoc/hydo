@@ -1,0 +1,11507 @@
+[
+ {
+  "name": "netns-ok",
+  "manifest": {
+   "name": "t",
+   "network": "bridge",
+   "services": [
+    {
+     "name": "db",
+     "cmd": "db",
+     "ready": "true",
+     "port": 5432,
+     "addr": "10.89.0.11"
+    },
+    {
+     "name": "api",
+     "cmd": "api",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.12",
+     "depends_on": [
+      "db"
+     ]
+    },
+    {
+     "name": "web",
+     "cmd": "web",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.13",
+     "depends_on": [
+      "api"
+     ]
+    }
+   ],
+   "workload": {
+    "steps": 10,
+    "run": "true"
+   },
+   "invariants": [
+    {
+     "id": "x",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "netns-loopback",
+  "manifest": {
+   "name": "t",
+   "network": "loopback",
+   "services": [
+    {
+     "name": "db",
+     "cmd": "db",
+     "ready": "true",
+     "port": 5432,
+     "addr": "127.0.0.11"
+    },
+    {
+     "name": "api",
+     "cmd": "api",
+     "ready": "true",
+     "port": 80,
+     "addr": "127.0.0.12",
+     "depends_on": [
+      "db"
+     ]
+    },
+    {
+     "name": "web",
+     "cmd": "web",
+     "ready": "true",
+     "port": 80,
+     "addr": "127.0.0.13",
+     "depends_on": [
+      "api"
+     ]
+    }
+   ],
+   "workload": {
+    "steps": 10,
+    "run": "true"
+   },
+   "invariants": [
+    {
+     "id": "x",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "netns-host",
+  "manifest": {
+   "name": "t",
+   "network": "host",
+   "services": [
+    {
+     "name": "db",
+     "cmd": "db",
+     "ready": "true",
+     "port": 5432,
+     "addr": "10.89.0.11"
+    },
+    {
+     "name": "api",
+     "cmd": "api",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.12",
+     "depends_on": [
+      "db"
+     ]
+    },
+    {
+     "name": "web",
+     "cmd": "web",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.13",
+     "depends_on": [
+      "api"
+     ]
+    }
+   ],
+   "workload": {
+    "steps": 10,
+    "run": "true"
+   },
+   "invariants": [
+    {
+     "id": "x",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "netns-addr-missing",
+  "manifest": {
+   "name": "t",
+   "network": "bridge",
+   "services": [
+    {
+     "name": "db",
+     "cmd": "db",
+     "ready": "true",
+     "port": 5432
+    },
+    {
+     "name": "api",
+     "cmd": "api",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.12",
+     "depends_on": [
+      "db"
+     ]
+    },
+    {
+     "name": "web",
+     "cmd": "web",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.13",
+     "depends_on": [
+      "api"
+     ]
+    }
+   ],
+   "workload": {
+    "steps": 10,
+    "run": "true"
+   },
+   "invariants": [
+    {
+     "id": "x",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "netns-addr-loopback",
+  "manifest": {
+   "name": "t",
+   "network": "bridge",
+   "services": [
+    {
+     "name": "db",
+     "cmd": "db",
+     "ready": "true",
+     "port": 5432,
+     "addr": "127.0.0.11"
+    },
+    {
+     "name": "api",
+     "cmd": "api",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.12",
+     "depends_on": [
+      "db"
+     ]
+    },
+    {
+     "name": "web",
+     "cmd": "web",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.13",
+     "depends_on": [
+      "api"
+     ]
+    }
+   ],
+   "workload": {
+    "steps": 10,
+    "run": "true"
+   },
+   "invariants": [
+    {
+     "id": "x",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "netns-addr-gw",
+  "manifest": {
+   "name": "t",
+   "network": "bridge",
+   "services": [
+    {
+     "name": "db",
+     "cmd": "db",
+     "ready": "true",
+     "port": 5432,
+     "addr": "10.89.0.1"
+    },
+    {
+     "name": "api",
+     "cmd": "api",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.12",
+     "depends_on": [
+      "db"
+     ]
+    },
+    {
+     "name": "web",
+     "cmd": "web",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.13",
+     "depends_on": [
+      "api"
+     ]
+    }
+   ],
+   "workload": {
+    "steps": 10,
+    "run": "true"
+   },
+   "invariants": [
+    {
+     "id": "x",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "netns-addr-twice",
+  "manifest": {
+   "name": "t",
+   "network": "bridge",
+   "services": [
+    {
+     "name": "db",
+     "cmd": "db",
+     "ready": "true",
+     "port": 5432,
+     "addr": "10.89.0.11"
+    },
+    {
+     "name": "api",
+     "cmd": "api",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.11",
+     "depends_on": [
+      "db"
+     ]
+    },
+    {
+     "name": "web",
+     "cmd": "web",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.13",
+     "depends_on": [
+      "api"
+     ]
+    }
+   ],
+   "workload": {
+    "steps": 10,
+    "run": "true"
+   },
+   "invariants": [
+    {
+     "id": "x",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "netns-no-network",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "db",
+     "cmd": "db",
+     "ready": "true",
+     "port": 5432,
+     "addr": "10.89.0.11"
+    },
+    {
+     "name": "api",
+     "cmd": "api",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.12",
+     "depends_on": [
+      "db"
+     ]
+    },
+    {
+     "name": "web",
+     "cmd": "web",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.13",
+     "depends_on": [
+      "api"
+     ]
+    }
+   ],
+   "workload": {
+    "steps": 10,
+    "run": "true"
+   },
+   "invariants": [
+    {
+     "id": "x",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "netns-proxy-tcp",
+  "manifest": {
+   "name": "t",
+   "network": "bridge",
+   "services": [
+    {
+     "name": "db",
+     "cmd": "db",
+     "ready": "true",
+     "port": 5432,
+     "addr": "10.89.0.11"
+    },
+    {
+     "name": "api",
+     "cmd": "api",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.12",
+     "depends_on": [
+      "db"
+     ]
+    },
+    {
+     "name": "web",
+     "cmd": "web",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.13",
+     "depends_on": [
+      "api"
+     ]
+    }
+   ],
+   "workload": {
+    "steps": 10,
+    "run": "true"
+   },
+   "invariants": [
+    {
+     "id": "x",
+     "cmd": "true"
+    }
+   ],
+   "proxies": [
+    {
+     "name": "dbp",
+     "port": 6000,
+     "service": "db",
+     "protocol": "tcp"
+    }
+   ]
+  }
+ },
+ {
+  "name": "netns-fake-bridge",
+  "manifest": {
+   "name": "t",
+   "network": "bridge",
+   "services": [
+    {
+     "name": "db",
+     "cmd": "db",
+     "ready": "true",
+     "port": 5432,
+     "addr": "10.89.0.11"
+    },
+    {
+     "name": "api",
+     "cmd": "api",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.12",
+     "depends_on": [
+      "db"
+     ]
+    },
+    {
+     "name": "web",
+     "cmd": "web",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.13",
+     "depends_on": [
+      "api"
+     ]
+    }
+   ],
+   "workload": {
+    "steps": 10,
+    "run": "true"
+   },
+   "invariants": [
+    {
+     "id": "x",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "addr": "10.89.0.50",
+     "routes": [
+      {
+       "name": "r",
+       "path": "/"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "netns-fake-loopback",
+  "manifest": {
+   "name": "t",
+   "network": "bridge",
+   "services": [
+    {
+     "name": "db",
+     "cmd": "db",
+     "ready": "true",
+     "port": 5432,
+     "addr": "10.89.0.11"
+    },
+    {
+     "name": "api",
+     "cmd": "api",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.12",
+     "depends_on": [
+      "db"
+     ]
+    },
+    {
+     "name": "web",
+     "cmd": "web",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.13",
+     "depends_on": [
+      "api"
+     ]
+    }
+   ],
+   "workload": {
+    "steps": 10,
+    "run": "true"
+   },
+   "invariants": [
+    {
+     "id": "x",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "addr": "127.0.0.1",
+     "routes": [
+      {
+       "name": "r",
+       "path": "/"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "netns-fake-svcaddr",
+  "manifest": {
+   "name": "t",
+   "network": "bridge",
+   "services": [
+    {
+     "name": "db",
+     "cmd": "db",
+     "ready": "true",
+     "port": 5432,
+     "addr": "10.89.0.11"
+    },
+    {
+     "name": "api",
+     "cmd": "api",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.12",
+     "depends_on": [
+      "db"
+     ]
+    },
+    {
+     "name": "web",
+     "cmd": "web",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.13",
+     "depends_on": [
+      "api"
+     ]
+    }
+   ],
+   "workload": {
+    "steps": 10,
+    "run": "true"
+   },
+   "invariants": [
+    {
+     "id": "x",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "addr": "10.89.0.11",
+     "routes": [
+      {
+       "name": "r",
+       "path": "/"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "netns-proxy-to-loopback",
+  "manifest": {
+   "name": "t",
+   "network": "bridge",
+   "services": [
+    {
+     "name": "db",
+     "cmd": "db",
+     "ready": "true",
+     "port": 5432,
+     "addr": "10.89.0.11"
+    },
+    {
+     "name": "api",
+     "cmd": "api",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.12",
+     "depends_on": [
+      "db"
+     ]
+    },
+    {
+     "name": "web",
+     "cmd": "web",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.13",
+     "depends_on": [
+      "api"
+     ]
+    }
+   ],
+   "workload": {
+    "steps": 10,
+    "run": "true"
+   },
+   "invariants": [
+    {
+     "id": "x",
+     "cmd": "true"
+    }
+   ],
+   "proxies": [
+    {
+     "name": "dbp",
+     "port": 6000,
+     "to": "127.0.0.1:5432",
+     "protocol": "tcp"
+    }
+   ]
+  }
+ },
+ {
+  "name": "netns-freeze",
+  "manifest": {
+   "name": "t",
+   "network": "bridge",
+   "services": [
+    {
+     "name": "db",
+     "cmd": "db",
+     "ready": "true",
+     "port": 5432,
+     "addr": "10.89.0.11"
+    },
+    {
+     "name": "api",
+     "cmd": "api",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.12",
+     "depends_on": [
+      "db"
+     ]
+    },
+    {
+     "name": "web",
+     "cmd": "web",
+     "ready": "true",
+     "port": 80,
+     "addr": "10.89.0.13",
+     "depends_on": [
+      "api"
+     ]
+    }
+   ],
+   "workload": {
+    "steps": 10,
+    "run": "true"
+   },
+   "invariants": [
+    {
+     "id": "x",
+     "cmd": "true"
+    }
+   ],
+   "faults": [
+    "kill",
+    "network",
+    "freeze"
+   ]
+  }
+ },
+ {
+  "name": "netns-plain",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "db",
+     "cmd": "db",
+     "ready": "true",
+     "port": 5432
+    },
+    {
+     "name": "api",
+     "cmd": "api",
+     "ready": "true",
+     "port": 80,
+     "depends_on": [
+      "db"
+     ]
+    },
+    {
+     "name": "web",
+     "cmd": "web",
+     "ready": "true",
+     "port": 80,
+     "depends_on": [
+      "api"
+     ]
+    }
+   ],
+   "workload": {
+    "steps": 10,
+    "run": "true"
+   },
+   "invariants": [
+    {
+     "id": "x",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "errlog-full",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "mysql",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "files": [
+       "/tmp/mysqld.err"
+      ]
+     }
+    },
+    {
+     "name": "kafka",
+     "cmd": "x",
+     "ready": "x"
+    },
+    {
+     "name": "front",
+     "cmd": "x",
+     "ready": "x"
+    },
+    {
+     "name": "redis",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "format": "redis"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 20,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": {
+    "level": "warning"
+   }
+  }
+ },
+ {
+  "name": "errlog-bad-0",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": {
+    "bogus": 1
+   }
+  }
+ },
+ {
+  "name": "errlog-bad-1",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": {
+    "max": 0
+   }
+  }
+ },
+ {
+  "name": "errlog-bad-2",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "format": "redis"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "errlog-bad-3",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "match": "("
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-bad-4",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "files": [
+       "relative.log"
+      ]
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-0",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "match": "a)"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-1",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "match": "*x"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-2",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "match": "a**"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-3",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "match": "[z-a]"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-4",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "match": "\\q"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-5",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "match": "(?<x>a)"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-6",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "match": "\\1"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-7",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "ignore": "a{3,2}"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-8",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "match": "(?P<n>a)(?P=n)"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-9",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "match": "x\ny"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-10",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "match": "x\ty"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-11",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "match": ""
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-12",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "match": 5
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-13",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "normalize": [
+       "[0-9]+",
+       {
+        "pattern": "id=\\w+",
+        "replace": "id=*"
+       }
+      ]
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-14",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "normalize": [
+       {
+        "pattern": "(",
+        "replace": "x"
+       }
+      ]
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-15",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "normalize": [
+       {
+        "replace": "x"
+       }
+      ]
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-16",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "normalize": [
+       {
+        "pattern": "a",
+        "replace": "x\ty"
+       }
+      ]
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-17",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "normalize": "ab"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-18",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "format": "none"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-19",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "format": "none",
+      "match": "boom"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-20",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "format": "json"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-21",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "level": "debug"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-22",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "level": "{{lvl}}"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-23",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "off": "yes"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-24",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "off": true
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-25",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "files": "/x"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-26",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "files": [
+       "/a b"
+      ]
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-27",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "files": [
+       "/ok.log",
+       "/var/$x"
+      ]
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-28",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-29",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": [
+      1
+     ]
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-30",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "match": "(?i)err(or)?"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-31",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "match": "a(?#c)b"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-32",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "match": "(?=x)y"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-svc-33",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "errors": {
+      "match": "(a|b"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-top-0",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": true
+  }
+ },
+ {
+  "name": "errlog-top-1",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": false
+  }
+ },
+ {
+  "name": "errlog-top-2",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": 0
+  }
+ },
+ {
+  "name": "errlog-top-3",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": {}
+  }
+ },
+ {
+  "name": "errlog-top-4",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": {
+    "level": "warning",
+    "max": 200
+   }
+  }
+ },
+ {
+  "name": "errlog-top-5",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": {
+    "max": 201
+   }
+  }
+ },
+ {
+  "name": "errlog-top-6",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": {
+    "max": true
+   }
+  }
+ },
+ {
+  "name": "errlog-top-7",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": {
+    "services": [
+     "a"
+    ]
+   }
+  }
+ },
+ {
+  "name": "errlog-top-8",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": {
+    "services": [
+     "b"
+    ]
+   }
+  }
+ },
+ {
+  "name": "errlog-top-9",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": {
+    "services": "a"
+   }
+  }
+ },
+ {
+  "name": "errlog-top-10",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": {
+    "level": "x{{p}}"
+   }
+  }
+ },
+ {
+  "name": "errlog-top-11",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": "on"
+  }
+ },
+ {
+  "name": "errlog-top-12",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": []
+  }
+ },
+ {
+  "name": "errlog-top-13",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "errors": {
+    "description": "d"
+   }
+  }
+ },
+ {
+  "name": "hist-plan",
+  "manifest": {
+   "name": "t",
+   "workload": {
+    "steps": 3
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "checks": [
+     {
+      "name": "kv.lin",
+      "kind": "linearizable",
+      "history": "kv",
+      "model": "cas",
+      "run": [
+       "/bin/readback"
+      ]
+     },
+     {
+      "name": "log.la",
+      "kind": "list-append",
+      "history": "log",
+      "consistency": "serializable"
+     },
+     {
+      "name": "ok",
+      "kind": "final",
+      "run": [
+       "/bin/ok"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "hist-bad-0",
+  "manifest": {
+   "name": "t",
+   "workload": {
+    "steps": 3
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "checks": [
+     {
+      "name": "x",
+      "kind": "linearizable"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "hist-bad-1",
+  "manifest": {
+   "name": "t",
+   "workload": {
+    "steps": 3
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "checks": [
+     {
+      "name": "x",
+      "kind": "linearizable",
+      "history": "h",
+      "within": 3
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "hist-bad-2",
+  "manifest": {
+   "name": "t",
+   "workload": {
+    "steps": 3
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "checks": [
+     {
+      "name": "x",
+      "kind": "final",
+      "run": [
+       "/bin/x"
+      ],
+      "history": "h"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-min",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-params",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "parallel": 8,
+    "per_round": 3,
+    "round_ms": 50,
+    "command_timeout": 10,
+    "drain_timeout": 5,
+    "check_every": 3,
+    "check_within": 9,
+    "max_commands": 7,
+    "budget_ms": 1000
+   }
+  }
+ },
+ {
+  "name": "plan-param-parallel-0",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "parallel": 0
+   }
+  }
+ },
+ {
+  "name": "plan-param-parallel-17",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "parallel": 17
+   }
+  }
+ },
+ {
+  "name": "plan-param-per_round-True",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "per_round": true
+   }
+  }
+ },
+ {
+  "name": "plan-param-round_ms-200",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "round_ms": "200"
+   }
+  }
+ },
+ {
+  "name": "plan-param-budget_ms--1",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "budget_ms": -1
+   }
+  }
+ },
+ {
+  "name": "plan-unknown",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "bogus": 1
+   }
+  }
+ },
+ {
+  "name": "plan-all-kinds",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "a",
+      "kind": "first",
+      "run": "echo a"
+     },
+     {
+      "name": "b",
+      "kind": "parallel_driver",
+      "run": [
+       "/b",
+       1,
+       true
+      ],
+      "timeout": 5
+     },
+     {
+      "name": "c",
+      "kind": "serial_driver",
+      "run": "c",
+      "content": "deadbeef"
+     },
+     {
+      "name": "d",
+      "kind": "singleton_driver",
+      "run": [
+       "/d"
+      ]
+     },
+     {
+      "name": "e",
+      "kind": "anytime",
+      "run": [
+       "/e"
+      ],
+      "description": "x"
+     },
+     {
+      "name": "f",
+      "kind": "eventually",
+      "run": [
+       "/f"
+      ]
+     },
+     {
+      "name": "g",
+      "kind": "finally",
+      "run": [
+       "/g it's"
+      ]
+     }
+    ],
+    "checks": [
+     {
+      "name": "c1",
+      "kind": "final",
+      "run": [
+       "/c1"
+      ],
+      "msg": "m"
+     },
+     {
+      "name": "c2",
+      "kind": "always",
+      "run": "c2",
+      "every": 5
+     },
+     {
+      "name": "c3",
+      "kind": "eventually",
+      "run": [
+       "/c3"
+      ],
+      "within": 7,
+      "after": "start",
+      "poll": 2
+     },
+     {
+      "name": "c4",
+      "kind": "eventually",
+      "run": [
+       "/c4"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-cmd-0",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "bogus",
+      "run": "x"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-cmd-1",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "",
+      "kind": "first",
+      "run": "x"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-cmd-2",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "a b",
+      "kind": "first",
+      "run": "x"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-cmd-3",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "kind": "first",
+      "run": "x"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-cmd-4",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": ""
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-cmd-5",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": []
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-cmd-6",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "a\nb"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-cmd-7",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       [
+        "x"
+       ]
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-cmd-8",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": "x",
+      "timeout": 0
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-cmd-9",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": "x",
+      "timeout": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-cmd-10",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": "x",
+      "content": "XYZ"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-cmd-11",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": "x",
+      "content": "abc"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-cmd-12",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": "x",
+      "extra": 1
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-cmd-13",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     "notamap"
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-dup-cmd",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": "x"
+     },
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": "y"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-only-first",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "first",
+      "run": "x"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-no-cmds-checks-only",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [],
+    "checks": [
+     {
+      "name": "c",
+      "kind": "final",
+      "run": "x"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-regressions-only",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "disk=none | run",
+      "expect": "ok"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-check-0",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "checks": [
+     {
+      "name": "c",
+      "kind": "bogus",
+      "run": "x"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-check-1",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "checks": [
+     {
+      "name": "c",
+      "kind": "final",
+      "run": "x",
+      "every": 3
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-check-2",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "checks": [
+     {
+      "name": "c",
+      "kind": "always",
+      "run": "x",
+      "within": 3
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-check-3",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "checks": [
+     {
+      "name": "c",
+      "kind": "final",
+      "run": "x",
+      "after": "heal"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-check-4",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "checks": [
+     {
+      "name": "c",
+      "kind": "eventually",
+      "run": "x",
+      "poll": 0
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-check-5",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "checks": [
+     {
+      "name": "c",
+      "kind": "eventually",
+      "run": "x",
+      "after": 5
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-check-6",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "checks": [
+     {
+      "name": "c",
+      "kind": "final",
+      "run": null
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-check-7",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "checks": [
+     {
+      "name": "c",
+      "kind": "final",
+      "run": "x",
+      "model": "cas"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-check-8",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "checks": [
+     {
+      "name": "c",
+      "kind": "list_append",
+      "history": "h",
+      "run": "x"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-check-9",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "checks": [
+     {
+      "name": "c",
+      "kind": "linearizable",
+      "history": "h",
+      "msg": ""
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-dup-check",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "checks": [
+     {
+      "name": "c",
+      "kind": "final",
+      "run": "x"
+     },
+     {
+      "name": "c",
+      "kind": "always",
+      "run": "y"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-knob-w",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ]
+   },
+   "knobs": [
+    {
+     "token": "W",
+     "default": "1",
+     "set": "x"
+    }
+   ]
+  }
+ },
+ {
+  "name": "plan-wl-run",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ]
+   },
+   "workload": {
+    "run": "x"
+   }
+  }
+ },
+ {
+  "name": "plan-wl-steps",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ]
+   },
+   "workload": {
+    "steps": 7
+   }
+  }
+ },
+ {
+  "name": "plan-wl-list",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ]
+   },
+   "workload": [
+    "steps"
+   ]
+  }
+ },
+ {
+  "name": "plan-provision",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "a",
+      "kind": "first",
+      "run": "x"
+     },
+     {
+      "name": "b",
+      "kind": "anytime",
+      "run": "y"
+     }
+    ]
+   },
+   "provision": "setup it"
+  }
+ },
+ {
+  "name": "plan-inv-clash",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "compose.commands",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-format-2",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ]
+   },
+   "format": 2
+  }
+ },
+ {
+  "name": "plan-format-1",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ]
+   },
+   "format": 1
+  }
+ },
+ {
+  "name": "plan-format-true",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ]
+   },
+   "format": true
+  }
+ },
+ {
+  "name": "plan-format-no-test",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "format": 1
+  }
+ },
+ {
+  "name": "plan-test-list",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": [
+    1
+   ]
+  }
+ },
+ {
+  "name": "plan-test-null",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": null
+  }
+ },
+ {
+  "name": "plan-checks-merge",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "checks": [
+     {
+      "name": "h",
+      "kind": "linearizable",
+      "history": "kv"
+     }
+    ]
+   },
+   "checks": [
+    {
+     "id": "x",
+     "type": "list-append",
+     "history": "q"
+    }
+   ]
+  }
+ },
+ {
+  "name": "plan-checks-notlist",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "checks": [
+     {
+      "name": "h",
+      "kind": "linearizable",
+      "history": "kv"
+     }
+    ]
+   },
+   "checks": {
+    "a": 1
+   }
+  }
+ },
+ {
+  "name": "plan-reg-0",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "disk=none | run",
+      "expect": "violation"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-1",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "schedule": "disk=none | run K=a@1+1"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-2",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "no bar"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-3",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | K=1"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-4",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run",
+      "expect": "fp=0123456789abcdef"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-5",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run",
+      "expect": "fp=12"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-6",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run",
+      "bogus": 1
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-7",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=0000002a,p4,q2,r100"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-8",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=0000002a,p4,q2,r100",
+      "commands": [
+       "parallel_driver_w"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-9",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=0000002a,p4,q2,r100",
+      "commands": [
+       "parallel_driver_w",
+       "anytime_z"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-10",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=0000002a,p4,q2,r100",
+      "commands": [
+       "bogus_x"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-11",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=zz,p4",
+      "commands": [
+       "parallel_driver_v"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-12",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=1,p4,k3",
+      "commands": [
+       "parallel_driver_v"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-13",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=1,x1-2-3",
+      "commands": [
+       "parallel_driver_v"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-14",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=:p2,r100,cparallel_driver_w,0.0.0.5"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-15",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=:p2,r100,cparallel_driver_gone,0.0.0.5"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-16",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=:p2,r100,cparallel_driver_w,0.30.0.5"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-17",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=:p2,cparallel_driver_w,0.0.0.5"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-18",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=:p2,r100,cbogus,0.0.0.5"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-19",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=:p2,r100,cparallel_driver_w,0.0.3.5"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-20",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=:p2,r100,cparallel_driver_w,0.1.0.5,0.0.0.6"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-21",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=@000000000000"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-22",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=@000000000000",
+      "compose": ":p2,r100,cparallel_driver_w,0.0.0.5"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-23",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=-"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-24",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=0000002a,p4,q2,r100",
+      "commands": [
+       "parallel_driver_w"
+      ],
+      "contents": {
+       "parallel_driver_w": "0000000000000000"
+      }
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-25",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=0000002a",
+      "contents": "x"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-26",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=0000002a,p4,q2,r100,o0",
+      "commands": [
+       "parallel_driver_v",
+       "parallel_driver_w"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-27",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=0000002a,p4,q2,r100,oparallel_driver_v",
+      "commands": [
+       "parallel_driver_v",
+       "parallel_driver_w"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-28",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=0000002a,p4,q2,r100,n3,x0-1",
+      "commands": [
+       "parallel_driver_v",
+       "serial_driver_s",
+       "anytime_a"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-29",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=0000002a,p4,q2,r100",
+      "commands": [
+       "singleton_driver_s",
+       "parallel_driver_v"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-30",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=ffffffff,p1,q8,r10,t5",
+      "commands": [
+       "anytime_a"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-31",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "x | run W=0000002a,p4,q0",
+      "commands": [
+       "parallel_driver_v"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-32",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     5
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-33",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": [
+       "a"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-reg-long",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": "x"
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "disk=none | run W=0000002a,p4,q8,r100",
+      "commands": [
+       "parallel_driver_v"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "plan-steps-big",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ],
+    "regressions": [
+     {
+      "name": "r",
+      "schedule": "disk=none | run W=0000002a,p4,q8,r100",
+      "commands": [
+       "parallel_driver_v"
+      ]
+     }
+    ]
+   },
+   "workload": {
+    "steps": 60
+   }
+  }
+ },
+ {
+  "name": "plan-version-ok",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ]
+   },
+   "hydo_version": "0.1"
+  }
+ },
+ {
+  "name": "plan-version-patch",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ]
+   },
+   "hydo_version": "0.1.7"
+  }
+ },
+ {
+  "name": "plan-version-ge",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ]
+   },
+   "hydo_version": ">=0.1"
+  }
+ },
+ {
+  "name": "plan-version-bad",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ]
+   },
+   "hydo_version": "v1"
+  }
+ },
+ {
+  "name": "plan-version-new",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ]
+   },
+   "hydo_version": "0.2"
+  }
+ },
+ {
+  "name": "plan-version-ge-new",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ]
+   },
+   "hydo_version": ">=1.0"
+  }
+ },
+ {
+  "name": "plan-version-int",
+  "manifest": {
+   "name": "t",
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "test": {
+    "commands": [
+     {
+      "name": "w",
+      "kind": "parallel_driver",
+      "run": [
+       "/bin/w"
+      ]
+     }
+    ]
+   },
+   "hydo_version": 0
+  }
+ },
+ {
+  "name": "v-minimal",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-not-map",
+  "manifest": [
+   1,
+   2
+  ]
+ },
+ {
+  "name": "v-unknown-top",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "bogus": 1,
+   "zzz": 2
+  }
+ },
+ {
+  "name": "v-buggify-str",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "buggify": "yes"
+  }
+ },
+ {
+  "name": "v-buggify-knob-b",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "buggify": true,
+   "knobs": [
+    {
+     "token": "B",
+     "default": "1",
+     "set": "x"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-buggify-ok",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "buggify": true
+  }
+ },
+ {
+  "name": "v-image-top",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "image": "x"
+  }
+ },
+ {
+  "name": "v-no-name",
+  "manifest": {
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-name-empty",
+  "manifest": {
+   "name": "",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-name-int",
+  "manifest": {
+   "name": 5,
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-name-bad",
+  "manifest": {
+   "name": "Bad_Name",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-name-bool",
+  "manifest": {
+   "name": true,
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-services-none",
+  "manifest": {
+   "name": "t",
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-services-map",
+  "manifest": {
+   "name": "t",
+   "services": {
+    "a": 1
+   },
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-services-str",
+  "manifest": {
+   "name": "t",
+   "services": "abc",
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-services-zero",
+  "manifest": {
+   "name": "t",
+   "services": 0,
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-network-null",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-network-bad",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "network": 5
+  }
+ },
+ {
+  "name": "v-svc-notmap",
+  "manifest": {
+   "name": "t",
+   "services": [
+    "x"
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-unknown",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "foo": 1,
+     "bar": 2
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-noname",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-badname",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "A",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-name-nl",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a\n",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-dup",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    },
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-nocmd",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-image-nocmd",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "ready": "x",
+     "image": "nope.tar"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-image-map",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "ready": "x",
+     "image": {
+      "x86_64": "a.tar",
+      "riscv": "b"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-image-map2",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "ready": "x",
+     "image": {
+      "arm64": "a.tar"
+     }
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-image-empty",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "ready": "x",
+     "image": ""
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-oci-noimage",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "workdir": "/"
+    },
+    {
+     "name": "b",
+     "ready": "x",
+     "image": "nope.tar"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-cmd-int",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": 5,
+     "ready": true
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-cmd-list",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": [
+      "x"
+     ],
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-ready-empty",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": ""
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-port-str",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "port": "80"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-port-bool",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "port": true
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-port-null",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "port": null
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-addr-0",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "addr": "127.0.0.2"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-addr-1",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "addr": "127.0.0.1"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-addr-2",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "addr": "127.0.0.256"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-addr-3",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "addr": "10.0.0.1"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-addr-4",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "addr": "127.0.0.2\n"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-addr-5",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "addr": 5
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-addr-6",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "addr": "127.1.2.3.4"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-addr-twice",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "addr": "127.0.0.2"
+    },
+    {
+     "name": "b",
+     "cmd": "x",
+     "ready": "x",
+     "addr": "127.0.0.2"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-deps",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "depends_on": [
+      "b"
+     ]
+    },
+    {
+     "name": "b",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-deps-unknown",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "depends_on": [
+      "zz"
+     ]
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-deps-str",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "depends_on": "a"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-deps-cycle",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "depends_on": [
+      "b"
+     ]
+    },
+    {
+     "name": "b",
+     "cmd": "x",
+     "ready": "x",
+     "depends_on": [
+      "a"
+     ]
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-deps-order",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "c",
+     "cmd": "x",
+     "ready": "x",
+     "depends_on": [
+      "b",
+      "a"
+     ]
+    },
+    {
+     "name": "b",
+     "cmd": "x",
+     "ready": "x",
+     "depends_on": [
+      "a"
+     ]
+    },
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-svc-deps-later-nonmap",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x",
+     "depends_on": [
+      "a"
+     ]
+    },
+    7
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-wl-missing",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-wl-list",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": [
+    1
+   ],
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-wl-unknown",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x",
+    "foo": 1
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-wl-steps-0",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 0,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-wl-steps-1",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 1001,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-wl-steps-2",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 1000,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-wl-steps-3",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": true,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-wl-steps-4",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": "5",
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-wl-steps-5",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": null,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-wl-steps-6",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2.5,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-wl-norun",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-wl-run-int",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": 7
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-none",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   }
+  }
+ },
+ {
+  "name": "v-inv-none-checks",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "checks": [
+    {
+     "id": "c",
+     "type": "linearizable",
+     "history": "h"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-str",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": "ab"
+  }
+ },
+ {
+  "name": "v-inv-map",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": {
+    "id": 1
+   }
+  }
+ },
+ {
+  "name": "v-inv-0",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "a b",
+     "cmd": "x"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-1",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "cmd": "x"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-2",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "x",
+     "type": "never"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-3",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "x",
+     "type": "eventually",
+     "within": 5
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-4",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "x",
+     "type": "eventually",
+     "within": 5,
+     "every": 1
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-5",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "x",
+     "type": "eventually",
+     "within": 0
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-6",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "x",
+     "type": "eventually",
+     "within": true
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-7",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "x",
+     "type": "eventually",
+     "within": "5"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-8",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "x",
+     "type": "eventually",
+     "within": 5,
+     "after": "boot"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-9",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "x",
+     "type": "eventually",
+     "within": 5,
+     "poll": 0
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-10",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "x",
+     "type": "eventually",
+     "within": 5,
+     "poll": 2,
+     "after": "start"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-11",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "x",
+     "within": 5
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-12",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "x",
+     "every": 0
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-13",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "x",
+     "every": true
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-14",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "x",
+     "final": false
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-15",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "x",
+     "final": false,
+     "every": 3
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-16",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "x",
+     "final": 0
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-17",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-18",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "x",
+     "bogus": 1
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-19",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": 5,
+     "cmd": "x"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-inv-20",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    "xyz"
+   ]
+  }
+ },
+ {
+  "name": "v-inv-21",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    [
+     1
+    ]
+   ]
+  }
+ },
+ {
+  "name": "v-inv-dup",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "x"
+    },
+    {
+     "id": "i",
+     "cmd": "y"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-knob-0",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "knobs": [
+    {
+     "token": "Z",
+     "default": "a",
+     "set": "x"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-knob-1",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "knobs": [
+    {
+     "token": "K",
+     "default": "a",
+     "set": "x"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-knob-2",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "knobs": [
+    {
+     "token": "ZZ",
+     "default": "a",
+     "set": "x"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-knob-3",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "knobs": [
+    {
+     "token": "z",
+     "default": "a",
+     "set": "x"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-knob-4",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "knobs": [
+    {
+     "token": "Z",
+     "set": "x"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-knob-5",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "knobs": [
+    {
+     "token": "Z",
+     "default": "a"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-knob-6",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "knobs": [
+    {
+     "token": 5,
+     "default": "a",
+     "set": "x"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-knob-7",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "knobs": [
+    {
+     "token": "Z",
+     "default": 0,
+     "set": "x",
+     "values": [
+      1,
+      2
+     ],
+     "safe": 0,
+     "name": "n"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-knob-8",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "knobs": [
+    {
+     "token": "Z",
+     "default": "a",
+     "set": "x",
+     "bogus": 1
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-knob-dup",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "knobs": [
+    {
+     "token": "Z",
+     "default": "a",
+     "set": "x"
+    },
+    {
+     "token": "Z",
+     "default": "b",
+     "set": "y"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-knob-str",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "knobs": "Q"
+  }
+ },
+ {
+  "name": "v-faults-ok",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "faults": [
+    "kill",
+    "cut",
+    "protocol"
+   ]
+  }
+ },
+ {
+  "name": "v-faults-bad",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "faults": [
+    "kill",
+    "zap"
+   ]
+  }
+ },
+ {
+  "name": "v-faults-int",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "faults": [
+    1
+   ]
+  }
+ },
+ {
+  "name": "v-faults-str",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "faults": "kill"
+  }
+ },
+ {
+  "name": "v-faults-list-item",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "faults": [
+    [
+     "kill"
+    ]
+   ]
+  }
+ },
+ {
+  "name": "v-fm-0",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": [
+    "abc"
+   ]
+  }
+ },
+ {
+  "name": "v-fm-freeze-0",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": [
+    "abc"
+   ],
+   "faults": [
+    "freeze"
+   ]
+  }
+ },
+ {
+  "name": "v-fm-1",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": [
+    "a b"
+   ]
+  }
+ },
+ {
+  "name": "v-fm-freeze-1",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": [
+    "a b"
+   ],
+   "faults": [
+    "freeze"
+   ]
+  }
+ },
+ {
+  "name": "v-fm-2",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": [
+    "a:b"
+   ]
+  }
+ },
+ {
+  "name": "v-fm-freeze-2",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": [
+    "a:b"
+   ],
+   "faults": [
+    "freeze"
+   ]
+  }
+ },
+ {
+  "name": "v-fm-3",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": [
+    ""
+   ]
+  }
+ },
+ {
+  "name": "v-fm-freeze-3",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": [
+    ""
+   ],
+   "faults": [
+    "freeze"
+   ]
+  }
+ },
+ {
+  "name": "v-fm-4",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": [
+    1
+   ]
+  }
+ },
+ {
+  "name": "v-fm-freeze-4",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": [
+    1
+   ],
+   "faults": [
+    "freeze"
+   ]
+  }
+ },
+ {
+  "name": "v-fm-5",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": {
+    "replies": [
+     "x"
+    ],
+    "requests": [
+     "y"
+    ]
+   }
+  }
+ },
+ {
+  "name": "v-fm-freeze-5",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": {
+    "replies": [
+     "x"
+    ],
+    "requests": [
+     "y"
+    ]
+   },
+   "faults": [
+    "freeze"
+   ]
+  }
+ },
+ {
+  "name": "v-fm-6",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": {
+    "other": []
+   }
+  }
+ },
+ {
+  "name": "v-fm-freeze-6",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": {
+    "other": []
+   },
+   "faults": [
+    "freeze"
+   ]
+  }
+ },
+ {
+  "name": "v-fm-7",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": {
+    "replies": "x"
+   }
+  }
+ },
+ {
+  "name": "v-fm-freeze-7",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": {
+    "replies": "x"
+   },
+   "faults": [
+    "freeze"
+   ]
+  }
+ },
+ {
+  "name": "v-fm-8",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": "x"
+  }
+ },
+ {
+  "name": "v-fm-freeze-8",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": "x",
+   "faults": [
+    "freeze"
+   ]
+  }
+ },
+ {
+  "name": "v-fm-9",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": []
+  }
+ },
+ {
+  "name": "v-fm-freeze-9",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": [],
+   "faults": [
+    "freeze"
+   ]
+  }
+ },
+ {
+  "name": "v-fm-10",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": {
+    "replies": []
+   }
+  }
+ },
+ {
+  "name": "v-fm-freeze-10",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "freeze_match": {
+    "replies": []
+   },
+   "faults": [
+    "freeze"
+   ]
+  }
+ },
+ {
+  "name": "v-data-unknown",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "data": {
+    "size_mib": 64,
+    "bogus": 1
+   }
+  }
+ },
+ {
+  "name": "v-data-str",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "data": "xy"
+  }
+ },
+ {
+  "name": "v-data-int",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "data": 5
+  }
+ },
+ {
+  "name": "v-root-unknown",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "root": {
+    "files": [],
+    "nope": 1
+   }
+  }
+ },
+ {
+  "name": "v-guest-unknown",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "guest": {
+    "ram": 1
+   }
+  }
+ },
+ {
+  "name": "v-guest-0",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "guest": {
+    "clock_after_cut": 0
+   }
+  }
+ },
+ {
+  "name": "v-guest-1",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "guest": {
+    "clock_after_cut": 60
+   }
+  }
+ },
+ {
+  "name": "v-guest-2",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "guest": {
+    "clock_after_cut": true
+   }
+  }
+ },
+ {
+  "name": "v-guest-3",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "guest": {
+    "clock_after_cut": 315360001
+   }
+  }
+ },
+ {
+  "name": "v-guest-4",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "guest": {
+    "cpu": "v4"
+   }
+  }
+ },
+ {
+  "name": "v-guest-5",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "guest": {
+    "cpu": "v3"
+   }
+  }
+ },
+ {
+  "name": "v-guest-6",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "guest": {
+    "cpu": null
+   }
+  }
+ },
+ {
+  "name": "v-guest-7",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "guest": {
+    "ram_mib": 255
+   }
+  }
+ },
+ {
+  "name": "v-guest-8",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "guest": {
+    "ram_mib": 4096
+   }
+  }
+ },
+ {
+  "name": "v-guest-9",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "guest": {
+    "ram_mib": 3072
+   }
+  }
+ },
+ {
+  "name": "v-guest-10",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "guest": {
+    "ram_mib": 2048
+   }
+  }
+ },
+ {
+  "name": "v-guest-11",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "guest": {
+    "ram_mib": "1024"
+   }
+  }
+ },
+ {
+  "name": "v-guest-12",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "guest": {
+    "ram_mib": true
+   }
+  }
+ },
+ {
+  "name": "v-guest-13",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "guest": {
+    "clock_start": "2024-01-01"
+   }
+  }
+ },
+ {
+  "name": "v-guest-14",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "guest": [
+    "cpu"
+   ]
+  }
+ },
+ {
+  "name": "v-guest-15",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "guest": "x"
+  }
+ },
+ {
+  "name": "v-checks-empty",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "checks": []
+  }
+ },
+ {
+  "name": "v-checks-map",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "checks": {
+    "a": 1
+   }
+  }
+ },
+ {
+  "name": "v-check-0",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "checks": [
+    {
+     "id": "c",
+     "type": "linearizable",
+     "history": "h"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-check-1",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "checks": [
+    {
+     "id": "c",
+     "type": "list-append",
+     "history": "h",
+     "consistency": "serializable"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-check-2",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "checks": [
+    {
+     "id": "c",
+     "type": "list-append",
+     "history": "h",
+     "consistency": "weird"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-check-3",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "checks": [
+    {
+     "id": "c",
+     "type": "list-append",
+     "history": "h",
+     "model": "cas"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-check-4",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "checks": [
+    {
+     "id": "c",
+     "type": "linearizable",
+     "history": "h",
+     "model": "set"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-check-5",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "checks": [
+    {
+     "id": "c",
+     "type": "linearizable",
+     "history": "h",
+     "initial": "zero"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-check-6",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "checks": [
+    {
+     "id": "c",
+     "type": "linearizable",
+     "history": "h",
+     "consistency": "serializable"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-check-7",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "checks": [
+    {
+     "id": "c",
+     "type": "graph",
+     "history": "h"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-check-8",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "checks": [
+    {
+     "id": "c c",
+     "type": "linearizable",
+     "history": "h"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-check-9",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "checks": [
+    {
+     "id": "c",
+     "type": "linearizable",
+     "history": "h h"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-check-10",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "checks": [
+    {
+     "id": "i",
+     "type": "linearizable",
+     "history": "h"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-check-11",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "checks": [
+    {
+     "id": "c",
+     "type": "linearizable",
+     "history": "h",
+     "final": 5
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-check-12",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "checks": [
+    {
+     "id": "c",
+     "type": "linearizable",
+     "history": "h",
+     "final": "echo"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-check-13",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "checks": [
+    {
+     "id": "c",
+     "type": "linearizable"
+    }
+   ]
+  }
+ },
+ {
+  "name": "v-check-14",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "checks": [
+    "c"
+   ]
+  }
+ },
+ {
+  "name": "v-check-15",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "checks": [
+    {
+     "id": "c",
+     "type": "linearizable",
+     "history": "h",
+     "x": 1
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-ok",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "charge",
+       "method": "POST",
+       "path": "/charge"
+      }
+     ]
+    }
+   ],
+   "proxies": [
+    {
+     "name": "dbp",
+     "port": 6000,
+     "service": "db"
+    },
+    {
+     "name": "tp",
+     "port": 6001,
+     "to": "127.0.0.5:5432",
+     "protocol": "tcp"
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-notlist",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": {
+    "a": 1
+   }
+  }
+ },
+ {
+  "name": "w-fake-0",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-1",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "Pay",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "charge",
+       "method": "POST",
+       "path": "/charge"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-2",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "api",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "charge",
+       "method": "POST",
+       "path": "/charge"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-3",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "workload",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "charge",
+       "method": "POST",
+       "path": "/charge"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-4",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 0,
+     "routes": [
+      {
+       "name": "charge",
+       "method": "POST",
+       "path": "/charge"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-5",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": true,
+     "routes": [
+      {
+       "name": "charge",
+       "method": "POST",
+       "path": "/charge"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-6",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "routes": [
+      {
+       "name": "charge",
+       "method": "POST",
+       "path": "/charge"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-7",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 8080,
+     "routes": [
+      {
+       "name": "charge",
+       "method": "POST",
+       "path": "/charge"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-8",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 5432,
+     "addr": "127.0.0.5",
+     "routes": [
+      {
+       "name": "charge",
+       "method": "POST",
+       "path": "/charge"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-9",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "addr": "10.0.0.1",
+     "routes": [
+      {
+       "name": "charge",
+       "method": "POST",
+       "path": "/charge"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-10",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "protocol": "tcp",
+     "routes": [
+      {
+       "name": "charge",
+       "method": "POST",
+       "path": "/charge"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-11",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "protocol": "grpc",
+     "routes": [
+      {
+       "name": "charge",
+       "method": "POST",
+       "path": "/charge"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-12",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "idempotency": "header:Idem-Key",
+     "ref": "json:order.id",
+     "routes": [
+      {
+       "name": "charge",
+       "method": "POST",
+       "path": "/charge"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-13",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "idempotency": "cookie:x",
+     "routes": [
+      {
+       "name": "charge",
+       "method": "POST",
+       "path": "/charge"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-14",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "ref": "body\n",
+     "routes": [
+      {
+       "name": "charge",
+       "method": "POST",
+       "path": "/charge"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-15",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "any"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-16",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "r"
+      },
+      {
+       "name": "r"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-17",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "r",
+       "ref": "x"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-18",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "r",
+       "status": "200"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-19",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "r",
+       "code": true
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-20",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "r",
+       "message": "abc"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-21",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "r",
+       "message": "0aff"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-22",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "r",
+       "effect": "yes"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-23",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "r",
+       "idempotent": true
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-24",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "r",
+       "webhook": "x"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-25",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "r",
+       "webhook": {
+        "url": "http://127.0.0.1:8080/hook/{seq}",
+        "body": "{\"id\": \"{ref}\"}",
+        "headers": {
+         "X": "{idem}"
+        },
+        "delay_ms": 10,
+        "retries": 2
+       }
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-26",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "r",
+       "webhook": {
+        "url": "https://x/"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-27",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "r",
+       "webhook": {
+        "url": "http://127.0.0.1:1/",
+        "body": "{json:a} {header:b}"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-28",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "r",
+       "webhook": {
+        "url": "http://127.0.0.1:1/",
+        "headers": [
+         "x"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-29",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "r",
+       "webhook": {
+        "url": "http://127.0.0.1:1/",
+        "retries": -1
+       }
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-30",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "r",
+       "webhook": {
+        "bogus": 1
+       }
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-31",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "r",
+       "bogus": 1
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-32",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    "x"
+   ]
+  }
+ },
+ {
+  "name": "w-fake-dup",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "charge",
+       "method": "POST",
+       "path": "/charge"
+      }
+     ]
+    },
+    {
+     "name": "pay",
+     "port": 9001,
+     "routes": [
+      {
+       "name": "charge",
+       "method": "POST",
+       "path": "/charge"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-fake-proxy-port",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "fakes": [
+    {
+     "name": "pay",
+     "port": 9000,
+     "routes": [
+      {
+       "name": "charge",
+       "method": "POST",
+       "path": "/charge"
+      }
+     ]
+    }
+   ],
+   "proxies": [
+    {
+     "name": "px",
+     "port": 9000,
+     "service": "db"
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-proxy-0",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "proxies": [
+    {
+     "name": "px",
+     "port": 6000
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-proxy-1",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "proxies": [
+    {
+     "name": "px",
+     "port": 6000,
+     "service": "db",
+     "to": "127.0.0.1:1"
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-proxy-2",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "proxies": [
+    {
+     "name": "px",
+     "port": 6000,
+     "service": "nope"
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-proxy-3",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "proxies": [
+    {
+     "name": "px",
+     "port": 6000,
+     "service": 5
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-proxy-4",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "proxies": [
+    {
+     "name": "px",
+     "port": 6000,
+     "to": "localhost:1"
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-proxy-5",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "proxies": [
+    {
+     "name": "px",
+     "port": 6000,
+     "service": "db",
+     "protocol": "tcp",
+     "routes": [
+      {
+       "name": "r"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-proxy-6",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "proxies": [
+    {
+     "name": "px",
+     "port": 6000,
+     "service": "db",
+     "protocol": "udp"
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-proxy-7",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "proxies": [
+    {
+     "name": "px",
+     "port": 6000,
+     "service": "db",
+     "routes": [
+      {
+       "name": "r",
+       "status": 200
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "w-proxy-8",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "api",
+     "cmd": "x",
+     "ready": "x",
+     "port": 8080
+    },
+    {
+     "name": "db",
+     "cmd": "x",
+     "ready": "x",
+     "port": 5432,
+     "addr": "127.0.0.5"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "proxies": [
+    {
+     "name": "px",
+     "port": 6000,
+     "service": "db",
+     "routes": [
+      {
+       "name": "r",
+       "path": "/x",
+       "effect": true
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "name": "p-ok",
+  "manifest": {
+   "name": "{{nm}}",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "params": {
+    "nm": "abc",
+    "n": 3,
+    "e": null
+   }
+  }
+ },
+ {
+  "name": "p-undeclared",
+  "manifest": {
+   "name": "{{zz}}",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "params": {
+    "nm": "abc"
+   }
+  }
+ },
+ {
+  "name": "p-badname",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "params": {
+    "a-b": 1
+   }
+  }
+ },
+ {
+  "name": "p-notmap",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "params": [
+    "a"
+   ]
+  }
+ },
+ {
+  "name": "p-null",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "x",
+     "ready": "x"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "params": null
+  }
+ },
+ {
+  "name": "p-deep",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "run {{x}} {{x}}",
+     "ready": "{{y}}"
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "params": {
+    "x": "1",
+    "y": true
+   }
+  }
+ },
+ {
+  "name": "p-deep-missing",
+  "manifest": {
+   "name": "t",
+   "services": [
+    {
+     "name": "a",
+     "cmd": "run {{x}}",
+     "ready": [
+      "ok",
+      "{{q}}"
+     ]
+    }
+   ],
+   "workload": {
+    "steps": 2,
+    "run": "x"
+   },
+   "invariants": [
+    {
+     "id": "i",
+     "cmd": "true"
+    }
+   ],
+   "params": {
+    "x": "1"
+   }
+  }
+ }
+]

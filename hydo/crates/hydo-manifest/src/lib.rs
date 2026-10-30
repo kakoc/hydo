@@ -32,8 +32,8 @@ use std::path::{Path, PathBuf};
 
 pub use composer::{regression_status, Status};
 pub use types::{
-    CheckCmd, Command, Expect, Guest, HistoryCheck, Invariant, InvariantType, Knob, Manifest, Regression, Route, Run,
-    Service, TestPlan, Workload, World,
+    CheckCmd, Command, Expect, Guest, HistoryCheck, Invariant, InvariantType, Knob, Manifest,
+    Regression, Route, Run, Service, TestPlan, Workload, World,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -52,7 +52,8 @@ impl std::error::Error for ManifestError {}
 /// Python's text-mode reading: UTF-8, `\r\n` and `\r` read as `\n`.
 fn read_text(path: &str) -> Result<String, ManifestError> {
     let bytes = std::fs::read(path).map_err(|e| py::crash(format!("{path}: {e}")))?;
-    let t = String::from_utf8(bytes).map_err(|_| py::crash(format!("{path}: UnicodeDecodeError")))?;
+    let t =
+        String::from_utf8(bytes).map_err(|_| py::crash(format!("{path}: UnicodeDecodeError")))?;
     Ok(t.replace("\r\n", "\n").replace('\r', "\n"))
 }
 
@@ -87,7 +88,10 @@ impl Default for LoadOptions {
         LoadOptions {
             arch: "x86_64".into(),
             sets: Vec::new(),
-            onboard_dir: Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("onboard"),
+            onboard_dir: Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("..")
+                .join("onboard"),
         }
     }
 }
@@ -113,14 +117,24 @@ pub struct Loaded {
 pub fn load(path: &Path, opts: &LoadOptions) -> Result<Loaded, ManifestError> {
     let p = path.to_string_lossy().into_owned();
     let text = read_text(&p)?;
-    let mut m = if p.ends_with(".json") { json_loads(&text)? } else { yaml::parse_yaml(&text, &py::basename(&p))? };
+    let mut m = if p.ends_with(".json") {
+        json_loads(&text)?
+    } else {
+        yaml::parse_yaml(&text, &py::basename(&p))?
+    };
     if !m.is_object() {
-        return Err(ManifestError { message: "the manifest must be a mapping".into() });
+        return Err(ManifestError {
+            message: "the manifest must be a mapping".into(),
+        });
     }
     let params = validate::apply_params(&mut m, &opts.sets)?;
     let mut warnings = Vec::new();
     if let Some(v) = m.get("hydo_version").cloned() {
-        composer::check_version(&v, &composer::engine_version(&opts.onboard_dir), &mut warnings)?;
+        composer::check_version(
+            &v,
+            &composer::engine_version(&opts.onboard_dir),
+            &mut warnings,
+        )?;
     }
     let folder = composer::scan_folder(&py::dirname(&py::abspath(&p)))?;
     let mut comp = composer::expand(&mut m, folder.as_ref(), &mut warnings)?;
@@ -133,7 +147,11 @@ pub fn load(path: &Path, opts: &LoadOptions) -> Result<Loaded, ManifestError> {
     }
     validate::check_ram_arch(&m, &opts.arch)?;
     let order = validate::service_order(&m["services"])?;
-    let arch = if opts.arch == "x86_64" || opts.arch == "arm64" { opts.arch.as_str() } else { "x86_64" };
+    let arch = if opts.arch == "x86_64" || opts.arch == "arm64" {
+        opts.arch.as_str()
+    } else {
+        "x86_64"
+    };
     let oci_unchecked = oci::prepare(&m, &p, arch)?;
     Ok(Loaded {
         manifest: Manifest::from_validated(m),
@@ -149,6 +167,15 @@ pub fn load(path: &Path, opts: &LoadOptions) -> Result<Loaded, ManifestError> {
 /// (/etc/hydo/compose.json): manifest_space.Space(text, "hydo.yaml", compose=meta) up to its
 /// validation. The plan is in `Manifest::test`; `data` is the validated manifest as Space holds it.
 pub fn from_embedded(text: &str, compose: Option<&Value>) -> Result<Manifest, ManifestError> {
+    from_embedded_meta(text, compose).map(|(m, _)| m)
+}
+
+/// [`from_embedded`], with the plan meta that the expansion gave (as manifest_space.Space keeps
+/// it in `Space.compose`).
+pub fn from_embedded_meta(
+    text: &str,
+    compose: Option<&Value>,
+) -> Result<(Manifest, Option<Value>), ManifestError> {
     let mut m = parse_text(text, "hydo.yaml", true)?;
     let mut meta = None;
     let has_test = match &m {
@@ -168,7 +195,7 @@ pub fn from_embedded(text: &str, compose: Option<&Value>) -> Result<Manifest, Ma
     validate::validate(&mut m)?;
     let mut man = Manifest::from_validated(m);
     man.test = meta.as_ref().map(TestPlan::from_meta);
-    Ok(man)
+    Ok((man, meta))
 }
 
 /// The lines `hydo-build <path> --check` prints for a loaded manifest.
@@ -180,7 +207,11 @@ pub fn check_summary(path_as_given: &str, l: &Loaded) -> Vec<String> {
         Some(Value::Object(o)) => o.len(),
         _ => 0,
     };
-    let steps = m.get("workload").and_then(|w| w.get("steps")).map(py::d).unwrap_or_default();
+    let steps = m
+        .get("workload")
+        .and_then(|w| w.get("steps"))
+        .map(py::d)
+        .unwrap_or_default();
     let mut line = format!(
         "hydo-build: {} OK ({} services, {} invariants, {} workload steps)",
         path_as_given,
@@ -193,12 +224,24 @@ pub fn check_summary(path_as_given: &str, l: &Loaded) -> Vec<String> {
     }
     let mut out = vec![line];
     if let Some(c) = m.get("_compose").filter(|c| py::truthy(c)) {
-        let cmds = c.get("commands").and_then(Value::as_array).cloned().unwrap_or_default();
-        let n = |k: &str| c.get(k).and_then(Value::as_array).map(|a| a.len()).unwrap_or(0);
+        let cmds = c
+            .get("commands")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let n = |k: &str| {
+            c.get(k)
+                .and_then(Value::as_array)
+                .map(|a| a.len())
+                .unwrap_or(0)
+        };
         out.push(format!(
             "hydo-build: test composer: {} commands ({}), {} checks, {} regressions",
             cmds.len(),
-            cmds.iter().map(|x| py::str_of(&x["id"])).collect::<Vec<_>>().join(", "),
+            cmds.iter()
+                .map(|x| py::str_of(&x["id"]))
+                .collect::<Vec<_>>()
+                .join(", "),
             n("checks"),
             n("regressions")
         ));

@@ -4,7 +4,10 @@
 
 use serde_json::{Map, Value};
 
-use crate::py::{self, crash, d, eq, get, has, in_strs, index, is_int, is_plain_int, repr, repr_str, str_of, truthy};
+use crate::py::{
+    self, crash, d, eq, get, has, in_strs, index, is_int, is_plain_int, repr, repr_str, str_of,
+    truthy,
+};
 use crate::pyre;
 use crate::rx;
 use crate::ManifestError;
@@ -12,23 +15,84 @@ use crate::ManifestError;
 pub type R<T> = Result<T, ManifestError>;
 
 pub fn err(msg: impl Into<String>) -> ManifestError {
-    ManifestError { message: msg.into() }
+    ManifestError {
+        message: msg.into(),
+    }
 }
 
 pub const NAME_RE: &str = r"[a-z][a-z0-9_]*";
 pub const KNOWN_TOP: &[&str] = &[
-    "name", "description", "guest", "root", "data", "env", "shell", "services", "provision", "workload", "knobs",
-    "invariants", "faults", "freeze_match", "image", "params", "fakes", "proxies", "buggify", "test", "format",
-    "hydo_version", "checks", "network", "errors",
+    "name",
+    "description",
+    "guest",
+    "root",
+    "data",
+    "env",
+    "shell",
+    "services",
+    "provision",
+    "workload",
+    "knobs",
+    "invariants",
+    "faults",
+    "freeze_match",
+    "image",
+    "params",
+    "fakes",
+    "proxies",
+    "buggify",
+    "test",
+    "format",
+    "hydo_version",
+    "checks",
+    "network",
+    "errors",
 ];
 pub const KNOWN_SVC: &[&str] = &[
-    "name", "cmd", "setup", "ready", "ready_timeout", "port", "depends_on", "recovery", "description", "addr",
-    "errors", "image", "image_ref", "entrypoint", "workdir", "user", "env", "mounts",
+    "name",
+    "cmd",
+    "setup",
+    "ready",
+    "ready_timeout",
+    "port",
+    "depends_on",
+    "recovery",
+    "description",
+    "addr",
+    "errors",
+    "image",
+    "image_ref",
+    "entrypoint",
+    "workdir",
+    "user",
+    "env",
+    "mounts",
 ];
-pub const KNOWN_INV: &[&str] = &["id", "type", "msg", "cmd", "every", "final", "description", "within", "after", "poll"];
+pub const KNOWN_INV: &[&str] = &[
+    "id",
+    "type",
+    "msg",
+    "cmd",
+    "every",
+    "final",
+    "description",
+    "within",
+    "after",
+    "poll",
+];
 pub const LIVE_ANCHORS: &[&str] = &["heal", "start"];
-pub const KNOWN_KNOB: &[&str] = &["token", "name", "default", "set", "values", "safe", "description"];
-pub const FAULT_KINDS: &[&str] = &["kill", "pause", "network", "oneway", "cut", "clock", "disk", "freeze", "protocol"];
+pub const KNOWN_KNOB: &[&str] = &[
+    "token",
+    "name",
+    "default",
+    "set",
+    "values",
+    "safe",
+    "description",
+];
+pub const FAULT_KINDS: &[&str] = &[
+    "kill", "pause", "network", "oneway", "cut", "clock", "disk", "freeze", "protocol",
+];
 pub const NET_MODES: &[&str] = &["loopback", "bridge"];
 pub const NET_BRIDGE: &str = "10.89.0.0/16";
 pub const NET_GW: &str = "10.89.0.1";
@@ -36,21 +100,77 @@ pub const RAM_MIB_MIN: i128 = 256;
 pub const RAM_MIB_MAX_X86: i128 = 3072;
 pub const RAM_MIB_MAX_ARM: i128 = 4096;
 const KNOWN_ERRORS_TOP: &[&str] = &["level", "max", "services", "description"];
-const KNOWN_ERRORS_SVC: &[&str] = &["format", "level", "match", "ignore", "files", "normalize", "off", "description"];
+const KNOWN_ERRORS_SVC: &[&str] = &[
+    "format",
+    "level",
+    "match",
+    "ignore",
+    "files",
+    "normalize",
+    "off",
+    "description",
+];
 const ERR_FORMATS: &[&str] = &["auto", "redis", "none"];
-const KNOWN_FAKE: &[&str] = &["name", "port", "addr", "protocol", "idempotency", "ref", "routes", "description"];
+const KNOWN_FAKE: &[&str] = &[
+    "name",
+    "port",
+    "addr",
+    "protocol",
+    "idempotency",
+    "ref",
+    "routes",
+    "description",
+];
 const KNOWN_PROXY: &[&str] = &[
-    "name", "port", "addr", "protocol", "idempotency", "ref", "routes", "to", "service", "description",
+    "name",
+    "port",
+    "addr",
+    "protocol",
+    "idempotency",
+    "ref",
+    "routes",
+    "to",
+    "service",
+    "description",
 ];
 const KNOWN_ROUTE: &[&str] = &[
-    "name", "method", "path", "status", "code", "headers", "body", "message", "ref", "effect", "idempotent",
-    "webhook", "description",
+    "name",
+    "method",
+    "path",
+    "status",
+    "code",
+    "headers",
+    "body",
+    "message",
+    "ref",
+    "effect",
+    "idempotent",
+    "webhook",
+    "description",
 ];
 const KNOWN_PROXY_ROUTE: &[&str] = &["name", "method", "path", "ref", "effect", "description"];
-const KNOWN_HOOK: &[&str] = &["url", "method", "body", "headers", "delay_ms", "retries", "description"];
+const KNOWN_HOOK: &[&str] = &[
+    "url",
+    "method",
+    "body",
+    "headers",
+    "delay_ms",
+    "retries",
+    "description",
+];
 const EXTRACT_RE: &str = r"(header:[A-Za-z0-9-]+|json:[A-Za-z0-9_.]+|query:[A-Za-z0-9_-]+|form:[A-Za-z0-9_-]+|path:[A-Za-z0-9_]+|pb:[1-9][0-9]*|body)";
 const HOOK_VARS: &[&str] = &["seq", "ref", "idem", "fake", "route"];
-const KNOWN_CHECK: &[&str] = &["id", "type", "history", "model", "initial", "consistency", "msg", "final", "description"];
+const KNOWN_CHECK: &[&str] = &[
+    "id",
+    "type",
+    "history",
+    "model",
+    "initial",
+    "consistency",
+    "msg",
+    "final",
+    "description",
+];
 const CHECK_TYPES: &[&str] = &["linearizable", "list-append"];
 const CHECK_LEVELS: &[&str] = &[
     "strict-serializable",
@@ -67,7 +187,10 @@ pub fn iter_of(v: &Value) -> R<Vec<Value>> {
         Value::Array(a) => Ok(a.clone()),
         Value::String(s) => Ok(s.chars().map(|c| Value::String(c.to_string())).collect()),
         Value::Object(o) => Ok(o.keys().map(|k| Value::String(k.clone())).collect()),
-        _ => Err(crash(format!("{} object is not iterable", repr_str(py::type_name(v))))),
+        _ => Err(crash(format!(
+            "{} object is not iterable",
+            repr_str(py::type_name(v))
+        ))),
     }
 }
 
@@ -154,7 +277,10 @@ pub fn need(dv: &Value, k: &str, wh: &str, typ: Typ) -> R<Value> {
 }
 
 fn need_str(dv: &Value, k: &str, wh: &str) -> R<String> {
-    Ok(need(dv, k, wh, Typ::Str)?.as_str().unwrap_or_default().to_string())
+    Ok(need(dv, k, wh, Typ::Str)?
+        .as_str()
+        .unwrap_or_default()
+        .to_string())
 }
 
 fn obj_get<'a>(m: &'a Value, k: &str) -> Option<&'a Value> {
@@ -168,8 +294,11 @@ fn has_netns(m: &Value) -> bool {
 fn bridge_addr_ok(a: &str) -> bool {
     match pyre::match_dollar(r"10\.89\.(\d{1,3})\.(\d{1,3})", a) {
         Some(g) => {
-            g.iter().all(|x| x.as_deref().and_then(|s| s.parse::<u32>().ok()).is_some_and(|n| n <= 255))
-                && !["10.89.0.0", NET_GW, "10.89.255.255"].contains(&a)
+            g.iter().all(|x| {
+                x.as_deref()
+                    .and_then(|s| s.parse::<u32>().ok())
+                    .is_some_and(|n| n <= 255)
+            }) && !["10.89.0.0", NET_GW, "10.89.255.255"].contains(&a)
         }
         None => false,
     }
@@ -184,7 +313,9 @@ fn addrs_of(svcs: &[Value]) -> R<Vec<String>> {
 }
 
 fn validate_addr(s: &Value, svcs: &[Value], wh: &str, bridge: bool) -> R<()> {
-    let Some(av) = obj_get(s, "addr") else { return Ok(()) };
+    let Some(av) = obj_get(s, "addr") else {
+        return Ok(());
+    };
     let a = str_of(av);
     if bridge {
         if !bridge_addr_ok(&a) {
@@ -202,7 +333,11 @@ fn validate_addr(s: &Value, svcs: &[Value], wh: &str, bridge: bool) -> R<()> {
         return Ok(());
     }
     let ok = match pyre::match_dollar(r"127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})", &a) {
-        Some(g) => g.iter().all(|x| x.as_deref().and_then(|s| s.parse::<u32>().ok()).is_some_and(|n| n <= 255)),
+        Some(g) => g.iter().all(|x| {
+            x.as_deref()
+                .and_then(|s| s.parse::<u32>().ok())
+                .is_some_and(|n| n <= 255)
+        }),
         None => false,
     };
     if !ok || a == "127.0.0.1" {
@@ -267,7 +402,10 @@ pub fn validate(m: &mut Value) -> R<()> {
     m["services"] = svcs_v;
     let net = obj_get(m, "network").cloned().unwrap_or(Value::Null);
     if !(net.is_null() || in_strs(&net, NET_MODES)) {
-        return Err(err(format!("network: loopback or bridge (got {})", repr(&net))));
+        return Err(err(format!(
+            "network: loopback or bridge (got {})",
+            repr(&net)
+        )));
     }
     let bridge = has_netns(m);
     let mut seen: Vec<String> = Vec::new();
@@ -286,7 +424,11 @@ pub fn validate(m: &mut Value) -> R<()> {
             )));
         }
         if seen.contains(&n) {
-            return Err(err(format!("{}: duplicate service name {}", wh, repr_str(&n))));
+            return Err(err(format!(
+                "{}: duplicate service name {}",
+                wh,
+                repr_str(&n)
+            )));
         }
         seen.push(n);
         if obj_get(s, "image").is_none() {
@@ -305,7 +447,11 @@ pub fn validate(m: &mut Value) -> R<()> {
                 names.push(get(x, "name")?.cloned().unwrap_or(Value::Null));
             }
             if !py::contains(&names, &dep) {
-                return Err(err(format!("{}: depends_on names unknown service {}", wh, repr(&dep))));
+                return Err(err(format!(
+                    "{}: depends_on names unknown service {}",
+                    wh,
+                    repr(&dep)
+                )));
             }
         }
     }
@@ -313,7 +459,11 @@ pub fn validate(m: &mut Value) -> R<()> {
     if !wl.is_object() {
         return Err(err("workload: required (steps + run)"));
     }
-    unknown(&wl, &["steps", "run", "retry", "process", "timeout", "description"], "workload")?;
+    unknown(
+        &wl,
+        &["steps", "run", "retry", "process", "timeout", "description"],
+        "workload",
+    )?;
     let st = need(&wl, "steps", "workload", Typ::Int)?;
     let sti = py::int_of(&st).unwrap_or(0);
     if !(1..=1000).contains(&sti) {
@@ -347,7 +497,9 @@ pub fn validate(m: &mut Value) -> R<()> {
         }
         ids.push(vid);
         need(v, "cmd", &wh, Typ::Str)?;
-        let t = get(v, "type")?.cloned().unwrap_or(Value::String("always".into()));
+        let t = get(v, "type")?
+            .cloned()
+            .unwrap_or(Value::String("always".into()));
         if !in_strs(&t, &["always", "always_or_unreachable", "eventually"]) {
             return Err(err(format!(
                 "{wh}: type must be always, always_or_unreachable or eventually"
@@ -367,9 +519,15 @@ pub fn validate(m: &mut Value) -> R<()> {
                     "{wh}: within is a whole number of seconds of guest time, 1..3600"
                 )));
             }
-            let after = get(v, "after")?.cloned().unwrap_or(Value::String("heal".into()));
+            let after = get(v, "after")?
+                .cloned()
+                .unwrap_or(Value::String("heal".into()));
             if !in_strs(&after, LIVE_ANCHORS) {
-                return Err(err(format!("{}: after must be one of {}", wh, LIVE_ANCHORS.join(", "))));
+                return Err(err(format!(
+                    "{}: after must be one of {}",
+                    wh,
+                    LIVE_ANCHORS.join(", ")
+                )));
             }
             if let Some(p) = obj_get(v, "poll") {
                 if !is_plain_int(p) || py::int_of(p).unwrap_or(0) < 1 {
@@ -387,7 +545,9 @@ pub fn validate(m: &mut Value) -> R<()> {
         if has_every {
             let e = index(v, "every")?;
             if !is_int(e) || py::int_of(e).unwrap_or(0) < 1 {
-                return Err(err(format!("{wh}: every is a whole number of seconds >= 1")));
+                return Err(err(format!(
+                    "{wh}: every is a whole number of seconds >= 1"
+                )));
             }
         }
         let fin = match get(v, "final")? {
@@ -395,7 +555,9 @@ pub fn validate(m: &mut Value) -> R<()> {
             None => !has_every,
         };
         if !fin && !has_every {
-            return Err(err(format!("{wh}: an invariant with final: false needs every:")));
+            return Err(err(format!(
+                "{wh}: an invariant with final: false needs every:"
+            )));
         }
     }
     let mut toks: Vec<String> = Vec::new();
@@ -457,9 +619,23 @@ pub fn validate(m: &mut Value) -> R<()> {
     let data = or_map(obj_get(m, "data"));
     unknown(&data, &["size_mib", "mount", "dirs", "description"], "data")?;
     let root = or_map(obj_get(m, "root"));
-    unknown(&root, &["size_mib", "nix", "files", "text", "dirs", "description"], "root")?;
+    unknown(
+        &root,
+        &["size_mib", "nix", "files", "text", "dirs", "description"],
+        "root",
+    )?;
     let guest = or_map(obj_get(m, "guest"));
-    unknown(&guest, &["ram_mib", "clock_start", "clock_after_cut", "cpu", "description"], "guest")?;
+    unknown(
+        &guest,
+        &[
+            "ram_mib",
+            "clock_start",
+            "clock_after_cut",
+            "cpu",
+            "description",
+        ],
+        "guest",
+    )?;
     if has(&guest, "clock_after_cut")? {
         let c = index(&guest, "clock_after_cut")?;
         if !int_in(c, 1, 10 * 365 * 86400) {
@@ -498,9 +674,14 @@ pub fn validate(m: &mut Value) -> R<()> {
 }
 
 fn validate_network(m: &Value) -> R<()> {
-    let Some(n) = obj_get(m, "network") else { return Ok(()) };
+    let Some(n) = obj_get(m, "network") else {
+        return Ok(());
+    };
     if !in_strs(n, NET_MODES) {
-        return Err(err(format!("network: loopback or bridge (got {})", repr(n))));
+        return Err(err(format!(
+            "network: loopback or bridge (got {})",
+            repr(n)
+        )));
     }
     if has_netns(m) {
         for (i, s) in iter_of(&m["services"])?.iter().enumerate() {
@@ -515,15 +696,21 @@ fn validate_network(m: &Value) -> R<()> {
 }
 
 fn validate_checks(m: &Value, inv_ids: &[String]) -> R<()> {
-    let Some(cs) = obj_get(m, "checks") else { return Ok(()) };
+    let Some(cs) = obj_get(m, "checks") else {
+        return Ok(());
+    };
     if cs.is_null() {
         return Ok(());
     }
     let Value::Array(list) = cs else {
-        return Err(err("checks: a non-empty list of history checks (hydo/HISTORIES.md)"));
+        return Err(err(
+            "checks: a non-empty list of history checks (hydo/HISTORIES.md)",
+        ));
     };
     if list.is_empty() {
-        return Err(err("checks: a non-empty list of history checks (hydo/HISTORIES.md)"));
+        return Err(err(
+            "checks: a non-empty list of history checks (hydo/HISTORIES.md)",
+        ));
     }
     let mut ids: Vec<String> = inv_ids.to_vec();
     for (i, c) in list.iter().enumerate() {
@@ -550,7 +737,11 @@ fn validate_checks(m: &Value, inv_ids: &[String]) -> R<()> {
         ids.push(cid);
         let t = need_str(c, "type", &wh)?;
         if !CHECK_TYPES.contains(&t.as_str()) {
-            return Err(err(format!("{}: type must be one of {}", wh, CHECK_TYPES.join(", "))));
+            return Err(err(format!(
+                "{}: type must be one of {}",
+                wh,
+                CHECK_TYPES.join(", ")
+            )));
         }
         let h = need_str(c, "history", &wh)?;
         if !pyre::fullmatch(r"[A-Za-z0-9_.\-]+", &h) {
@@ -561,11 +752,15 @@ fn validate_checks(m: &Value, inv_ids: &[String]) -> R<()> {
             )));
         }
         if t == "linearizable" {
-            let model = obj_get(c, "model").cloned().unwrap_or(Value::String("register".into()));
+            let model = obj_get(c, "model")
+                .cloned()
+                .unwrap_or(Value::String("register".into()));
             if !in_strs(&model, &["register", "cas"]) {
                 return Err(err(format!("{wh}: model must be register or cas")));
             }
-            let init = obj_get(c, "initial").cloned().unwrap_or(Value::String("nil".into()));
+            let init = obj_get(c, "initial")
+                .cloned()
+                .unwrap_or(Value::String("nil".into()));
             if !in_strs(&init, &["nil", "any"]) {
                 return Err(err(format!(
                     "{wh}: initial must be nil (keys start absent) or any (unknown)"
@@ -579,7 +774,11 @@ fn validate_checks(m: &Value, inv_ids: &[String]) -> R<()> {
                 .cloned()
                 .unwrap_or(Value::String("strict-serializable".into()));
             if !in_strs(&lv, CHECK_LEVELS) {
-                return Err(err(format!("{}: consistency must be one of {}", wh, CHECK_LEVELS.join(", "))));
+                return Err(err(format!(
+                    "{}: consistency must be one of {}",
+                    wh,
+                    CHECK_LEVELS.join(", ")
+                )));
             }
             for k in ["model", "initial"] {
                 if obj_get(c, k).is_some() {
@@ -612,7 +811,11 @@ fn world_addr(x: &Value, wh: &str, bridge: bool) -> R<String> {
     }
     let a = str_of(obj_get(x, "addr").unwrap_or(&Value::String("127.0.0.1".into())));
     let ok = match pyre::match_dollar(r"127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})", &a) {
-        Some(g) => g.iter().all(|x| x.as_deref().and_then(|s| s.parse::<u32>().ok()).is_some_and(|n| n <= 255)),
+        Some(g) => g.iter().all(|x| {
+            x.as_deref()
+                .and_then(|s| s.parse::<u32>().ok())
+                .is_some_and(|n| n <= 255)
+        }),
         None => false,
     };
     if !ok {
@@ -643,8 +846,16 @@ fn validate_world(m: &Value) -> R<()> {
         svcs.insert(str_of(index(s, "name")?), s.clone());
     }
     let bridge = has_netns(m);
-    let host_re = if bridge { r"10\.89\.\d+\.\d+" } else { r"127\.\d+\.\d+\.\d+" };
-    let where_kind = if bridge { "bridge address 10.89.x.y" } else { "loopback address" };
+    let host_re = if bridge {
+        r"10\.89\.\d+\.\d+"
+    } else {
+        r"127\.\d+\.\d+\.\d+"
+    };
+    let where_kind = if bridge {
+        "bridge address 10.89.x.y"
+    } else {
+        "loopback address"
+    };
     let mut used: Vec<((String, i128), String)> = Vec::new();
     for s in &services {
         if obj_get(s, "port").is_some_and(truthy) {
@@ -664,7 +875,10 @@ fn validate_world(m: &Value) -> R<()> {
         .map(|s| str_of(obj_get(s, "addr").unwrap_or(&Value::Null)))
         .collect();
     let mut names: Vec<String> = Vec::new();
-    for (kind, lst, known) in [("fakes", &fakes, KNOWN_FAKE), ("proxies", &proxies, KNOWN_PROXY)] {
+    for (kind, lst, known) in [
+        ("fakes", &fakes, KNOWN_FAKE),
+        ("proxies", &proxies, KNOWN_PROXY),
+    ] {
         let singular = if kind == "fakes" { "fake" } else { "proxy" };
         for (i, e) in lst.iter().enumerate() {
             let wh = format!("{kind}[{i}]");
@@ -702,16 +916,29 @@ fn validate_world(m: &Value) -> R<()> {
                 )));
             }
             if let Some((_, who)) = used.iter().find(|(k, _)| *k == ap) {
-                return Err(err(format!("{}: {}:{} is already used by {}", wh, ap.0, pnum, who)));
+                return Err(err(format!(
+                    "{}: {}:{} is already used by {}",
+                    wh, ap.0, pnum, who
+                )));
             }
             used.push((ap, format!("{singular} {n}")));
-            let proto = obj_get(e, "protocol").cloned().unwrap_or(Value::String("http".into()));
-            let protos: &[&str] = if kind == "fakes" { &["http", "grpc"] } else { &["http", "grpc", "tcp"] };
+            let proto = obj_get(e, "protocol")
+                .cloned()
+                .unwrap_or(Value::String("http".into()));
+            let protos: &[&str] = if kind == "fakes" {
+                &["http", "grpc"]
+            } else {
+                &["http", "grpc", "tcp"]
+            };
             if !in_strs(&proto, protos) {
                 return Err(err(format!(
                     "{}: protocol must be {}",
                     wh,
-                    if kind == "fakes" { "http or grpc" } else { "http, grpc or tcp" }
+                    if kind == "fakes" {
+                        "http or grpc"
+                    } else {
+                        "http, grpc or tcp"
+                    }
                 )));
             }
             for k in ["idempotency", "ref"] {
@@ -774,9 +1001,21 @@ fn validate_world(m: &Value) -> R<()> {
                 if !r.is_object() {
                     return Err(err(format!("{rw}: must be a mapping")));
                 }
-                unknown(r, if kind == "fakes" { KNOWN_ROUTE } else { KNOWN_PROXY_ROUTE }, &rw)?;
+                unknown(
+                    r,
+                    if kind == "fakes" {
+                        KNOWN_ROUTE
+                    } else {
+                        KNOWN_PROXY_ROUTE
+                    },
+                    &rw,
+                )?;
                 let x = need_str(r, "name", &rw)?;
-                if pyre::match_dollar(NAME_RE, &x).is_none() || rn.contains(&x) || x == "any" || x == "conn" {
+                if pyre::match_dollar(NAME_RE, &x).is_none()
+                    || rn.contains(&x)
+                    || x == "any"
+                    || x == "conn"
+                {
                     return Err(err(format!(
                         "{}: name {}: [a-z][a-z0-9_]*, unique, not 'any' or 'conn'",
                         rw,
@@ -812,7 +1051,9 @@ fn validate_world(m: &Value) -> R<()> {
                         }
                     }
                 }
-                if obj_get(r, "idempotent").is_some_and(truthy) && !obj_get(e, "idempotency").is_some_and(truthy) {
+                if obj_get(r, "idempotent").is_some_and(truthy)
+                    && !obj_get(e, "idempotency").is_some_and(truthy)
+                {
                     return Err(err(format!(
                         "{rw}: idempotent: true needs the fake's idempotency: (where the key is)"
                     )));
@@ -831,7 +1072,10 @@ fn validate_world(m: &Value) -> R<()> {
                         )));
                     }
                     let mut texts: Vec<Value> = vec![
-                        obj_get(&wh_, "body").filter(|b| truthy(b)).cloned().unwrap_or(Value::String(String::new())),
+                        obj_get(&wh_, "body")
+                            .filter(|b| truthy(b))
+                            .cloned()
+                            .unwrap_or(Value::String(String::new())),
                         wh_["url"].clone(),
                     ];
                     match obj_get(&wh_, "headers") {
@@ -846,7 +1090,10 @@ fn validate_world(m: &Value) -> R<()> {
                             r#"\{(seq|ref|idem|fake|route|json|header|query|path|form|pb)(?::[^{}"]*)?\}"#,
                             &str_of(t),
                         );
-                        let mut bad: Vec<String> = found.into_iter().filter(|x| !HOOK_VARS.contains(&x.as_str())).collect();
+                        let mut bad: Vec<String> = found
+                            .into_iter()
+                            .filter(|x| !HOOK_VARS.contains(&x.as_str()))
+                            .collect();
                         bad.sort();
                         if let Some(b) = bad.first() {
                             let mut hv: Vec<&str> = HOOK_VARS.to_vec();
@@ -915,13 +1162,19 @@ fn validate_errors(m: &mut Value) -> R<()> {
         return Err(err("errors: true, or a mapping (level, max, services)"));
     }
     unknown(&e, KNOWN_ERRORS_TOP, "errors")?;
-    let lvl = obj_get(&e, "level").cloned().unwrap_or(Value::String("error".into()));
-    if !in_strs(&lvl, &["error", "warning"]) && !str_of(obj_get(&e, "level").unwrap_or(&Value::Null)).contains("{{") {
+    let lvl = obj_get(&e, "level")
+        .cloned()
+        .unwrap_or(Value::String("error".into()));
+    if !in_strs(&lvl, &["error", "warning"])
+        && !str_of(obj_get(&e, "level").unwrap_or(&Value::Null)).contains("{{")
+    {
         return Err(err(
             "errors.level: error (the default) or warning (also warning-level lines)",
         ));
     }
-    let mx = obj_get(&e, "max").cloned().unwrap_or(Value::Number(40.into()));
+    let mx = obj_get(&e, "max")
+        .cloned()
+        .unwrap_or(Value::Number(40.into()));
     if !int_in(&mx, 1, 200) {
         return Err(err(
             "errors.max: the most error kinds one boot prints, 1..200 (default 40)",
@@ -938,7 +1191,9 @@ fn validate_errors(m: &mut Value) -> R<()> {
                 _ => false,
             };
             if !ok {
-                return Err(err("errors.services: a list of service names (default: every service)"));
+                return Err(err(
+                    "errors.services: a list of service names (default: every service)",
+                ));
             }
         }
     }
@@ -954,11 +1209,19 @@ fn validate_errors(m: &mut Value) -> R<()> {
             )));
         }
         unknown(&se, KNOWN_ERRORS_SVC, &wh)?;
-        let fmt = obj_get(&se, "format").cloned().unwrap_or(Value::String("auto".into()));
+        let fmt = obj_get(&se, "format")
+            .cloned()
+            .unwrap_or(Value::String("auto".into()));
         if !in_strs(&fmt, ERR_FORMATS) {
-            return Err(err(format!("{}: format must be one of {}", wh, ERR_FORMATS.join(", "))));
+            return Err(err(format!(
+                "{}: format must be one of {}",
+                wh,
+                ERR_FORMATS.join(", ")
+            )));
         }
-        let lv = obj_get(&se, "level").cloned().unwrap_or_else(|| lvl.clone());
+        let lv = obj_get(&se, "level")
+            .cloned()
+            .unwrap_or_else(|| lvl.clone());
         if !in_strs(&lv, &["error", "warning"]) && !str_of(&lv).contains("{{") {
             return Err(err(format!("{wh}: level: error or warning")));
         }
@@ -967,7 +1230,9 @@ fn validate_errors(m: &mut Value) -> R<()> {
                 ere(v, &format!("{wh}.{k}"))?;
             }
         }
-        if obj_get(&se, "format") == Some(&Value::String("none".into())) && obj_get(&se, "match").is_none() {
+        if obj_get(&se, "format") == Some(&Value::String("none".into()))
+            && obj_get(&se, "match").is_none()
+        {
             return Err(err(format!(
                 "{wh}: format: none needs match: (otherwise no line is an error)"
             )));
@@ -993,7 +1258,8 @@ fn validate_errors(m: &mut Value) -> R<()> {
             match r {
                 Value::String(_) => ere(r, &w)?,
                 Value::Object(o)
-                    if o.keys().all(|k| ["pattern", "replace", "description"].contains(&k.as_str()))
+                    if o.keys()
+                        .all(|k| ["pattern", "replace", "description"].contains(&k.as_str()))
                         && o.contains_key("pattern") =>
                 {
                     ere(&o["pattern"], &format!("{w}.pattern"))?;
@@ -1021,7 +1287,9 @@ fn validate_errors(m: &mut Value) -> R<()> {
 /// `check_ram_arch(m, arch)`.
 pub fn check_ram_arch(m: &Value, arch: &str) -> R<()> {
     let guest = or_map(obj_get(m, "guest"));
-    let r = get(&guest, "ram_mib")?.cloned().unwrap_or(Value::Number(1024.into()));
+    let r = get(&guest, "ram_mib")?
+        .cloned()
+        .unwrap_or(Value::Number(1024.into()));
     let max = match arch {
         "x86_64" => Some(RAM_MIB_MAX_X86),
         "arm64" => Some(RAM_MIB_MAX_ARM),
@@ -1053,18 +1321,29 @@ pub fn service_order(svcs: &Value) -> R<Vec<String>> {
     let mut deps: Vec<(String, Vec<String>)> = Vec::new();
     for s in &list {
         let n = str_of(index(s, "name")?);
-        let ds = or_iter(obj_get(s, "depends_on"))?.iter().map(str_of).collect();
+        let ds = or_iter(obj_get(s, "depends_on"))?
+            .iter()
+            .map(str_of)
+            .collect();
         names.push(n.clone());
         deps.push((n, ds));
     }
     let mut out: Vec<String> = Vec::new();
     let mut temp: Vec<String> = Vec::new();
-    fn visit(n: &str, deps: &[(String, Vec<String>)], out: &mut Vec<String>, temp: &mut Vec<String>) -> R<()> {
+    fn visit(
+        n: &str,
+        deps: &[(String, Vec<String>)],
+        out: &mut Vec<String>,
+        temp: &mut Vec<String>,
+    ) -> R<()> {
         if out.iter().any(|x| x == n) {
             return Ok(());
         }
         if temp.iter().any(|x| x == n) {
-            return Err(err(format!("services: depends_on has a cycle through {}", repr_str(n))));
+            return Err(err(format!(
+                "services: depends_on has a cycle through {}",
+                repr_str(n)
+            )));
         }
         temp.push(n.to_string());
         let ds = deps
@@ -1089,18 +1368,31 @@ pub fn service_order(svcs: &Value) -> R<Vec<String>> {
 /// `apply_params(m, overrides)`: removes `params:` from m, substitutes `{{name}}` in every string
 /// value, and returns the effective values in declaration order.
 pub fn apply_params(m: &mut Value, overrides: &[(String, String)]) -> R<Vec<(String, String)>> {
-    let obj = m.as_object_mut().ok_or_else(|| err("the manifest must be a mapping"))?;
+    let obj = m
+        .as_object_mut()
+        .ok_or_else(|| err("the manifest must be a mapping"))?;
     let params = obj.shift_remove("params").unwrap_or(Value::Null);
-    let params = if truthy(&params) { params } else { Value::Object(Map::new()) };
+    let params = if truthy(&params) {
+        params
+    } else {
+        Value::Object(Map::new())
+    };
     let Value::Object(pm) = params else {
         return Err(err("params: must be a mapping of name: default value"));
     };
     let mut vals: Vec<(String, String)> = Vec::new();
     for (k, v) in &pm {
         if !pyre::fullmatch("[A-Za-z_][A-Za-z0-9_]*", k) {
-            return Err(err(format!("params: name {}: letters, digits and '_' only", repr_str(k))));
+            return Err(err(format!(
+                "params: name {}: letters, digits and '_' only",
+                repr_str(k)
+            )));
         }
-        let s = if v.is_null() { String::new() } else { str_of(v) };
+        let s = if v.is_null() {
+            String::new()
+        } else {
+            str_of(v)
+        };
         match vals.iter_mut().find(|(n, _)| n == k) {
             Some(e) => e.1 = s,
             None => vals.push((k.clone(), s)),
@@ -1112,7 +1404,11 @@ pub fn apply_params(m: &mut Value, overrides: &[(String, String)]) -> R<Vec<(Str
             None => {
                 let mut ks: Vec<&str> = vals.iter().map(|(n, _)| n.as_str()).collect();
                 ks.sort();
-                let list = if ks.is_empty() { "none".to_string() } else { ks.join(", ") };
+                let list = if ks.is_empty() {
+                    "none".to_string()
+                } else {
+                    ks.join(", ")
+                };
                 return Err(err(format!(
                     "--set {}: the manifest declares no parameter {} (params: {})",
                     k,
@@ -1132,7 +1428,9 @@ pub fn apply_params(m: &mut Value, overrides: &[(String, String)]) -> R<Vec<(Str
                     let all = c.get(0).unwrap();
                     let name = c.get(1).unwrap().as_str();
                     let Some((_, v)) = vals.iter().find(|(n, _)| n == name) else {
-                        return Err(err(format!("{wh}: {{{{{name}}}}} is not a declared parameter")));
+                        return Err(err(format!(
+                            "{wh}: {{{{{name}}}}} is not a declared parameter"
+                        )));
                     };
                     out.push_str(&s[last..all.start()]);
                     out.push_str(v);

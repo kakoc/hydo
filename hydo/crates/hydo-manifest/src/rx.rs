@@ -34,7 +34,11 @@ fn at(msg: &str, pos: usize) -> E {
 
 impl Src {
     fn new(p: &str) -> Result<Src, E> {
-        let mut s = Src { s: p.chars().collect(), index: 0, next: None };
+        let mut s = Src {
+            s: p.chars().collect(),
+            index: 0,
+            next: None,
+        };
         s.advance()?;
         Ok(s)
     }
@@ -109,7 +113,10 @@ impl Src {
                     if r.is_empty() {
                         return Err(self.error(&format!("missing {name}"), 0));
                     }
-                    return Err(self.error(&format!("missing {term}, unterminated name"), r.chars().count()));
+                    return Err(self.error(
+                        &format!("missing {term}, unterminated name"),
+                        r.chars().count(),
+                    ));
                 }
                 Some(c) if c == term => {
                     if r.is_empty() {
@@ -233,12 +240,19 @@ fn escape(src: &mut Src, escape: &str, st: &State) -> Result<Esc, E> {
         return Ok(Esc::Lit(u32::from_str_radix(&esc[1..], 8).unwrap_or(0)));
     }
     if DIGITS.contains(c) {
-        if src.next.as_deref().is_some_and(|n| n.len() == 1 && DIGITS.contains(n)) {
+        if src
+            .next
+            .as_deref()
+            .is_some_and(|n| n.len() == 1 && DIGITS.contains(n))
+        {
             esc.push_str(&src.get()?.unwrap_or_default());
             let cs: Vec<char> = esc.chars().collect();
             if OCT.contains(cs[1])
                 && OCT.contains(cs[2])
-                && src.next.as_deref().is_some_and(|n| n.len() == 1 && OCT.contains(n))
+                && src
+                    .next
+                    .as_deref()
+                    .is_some_and(|n| n.len() == 1 && OCT.contains(n))
             {
                 esc.push_str(&src.get()?.unwrap_or_default());
                 let v = u32::from_str_radix(&esc[1..], 8).unwrap_or(0);
@@ -258,7 +272,10 @@ fn escape(src: &mut Src, escape: &str, st: &State) -> Result<Esc, E> {
             }
             return Ok(Esc::Ref);
         }
-        return Err(src.error(&format!("invalid group reference {group}"), esc.chars().count() - 1));
+        return Err(src.error(
+            &format!("invalid group reference {group}"),
+            esc.chars().count() - 1,
+        ));
     }
     if is_ascii_letter(c) {
         return Err(src.error(&format!("bad escape {esc}"), esc.chars().count()));
@@ -288,12 +305,21 @@ fn parse_flags(src: &mut Src, st: &mut State, first: char) -> Result<(bool, bool
     if ch != "-" {
         loop {
             if ch == "L" {
-                return Err(src.error("bad inline flags: cannot use 'L' flag with a str pattern", 0));
+                return Err(src.error(
+                    "bad inline flags: cannot use 'L' flag with a str pattern",
+                    0,
+                ));
             }
             add.push_str(&ch);
-            let types = add.chars().filter(|c| "auL".contains(*c)).collect::<std::collections::BTreeSet<_>>();
+            let types = add
+                .chars()
+                .filter(|c| "auL".contains(*c))
+                .collect::<std::collections::BTreeSet<_>>();
             if types.len() > 1 {
-                return Err(src.error("bad inline flags: flags 'a', 'u' and 'L' are incompatible", 0));
+                return Err(src.error(
+                    "bad inline flags: flags 'a', 'u' and 'L' are incompatible",
+                    0,
+                ));
             }
             let Some(c) = src.get()? else {
                 return Err(src.error("missing -, : or )", 0));
@@ -304,7 +330,14 @@ fn parse_flags(src: &mut Src, st: &mut State, first: char) -> Result<(bool, bool
             }
             if !(ch.chars().count() == 1 && FLAGS.contains(ch.as_str())) {
                 let alpha = ch.chars().all(|c| c.is_alphabetic());
-                return Err(src.error(if alpha { "unknown flag" } else { "missing -, : or )" }, ch.chars().count()));
+                return Err(src.error(
+                    if alpha {
+                        "unknown flag"
+                    } else {
+                        "missing -, : or )"
+                    },
+                    ch.chars().count(),
+                ));
             }
         }
     }
@@ -321,11 +354,21 @@ fn parse_flags(src: &mut Src, st: &mut State, first: char) -> Result<(bool, bool
         ch = c;
         if !(ch.chars().count() == 1 && FLAGS.contains(ch.as_str())) {
             let alpha = ch.chars().all(|c| c.is_alphabetic());
-            return Err(src.error(if alpha { "unknown flag" } else { "missing flag" }, ch.chars().count()));
+            return Err(src.error(
+                if alpha {
+                    "unknown flag"
+                } else {
+                    "missing flag"
+                },
+                ch.chars().count(),
+            ));
         }
         loop {
             if "auL".contains(ch.as_str()) {
-                return Err(src.error("bad inline flags: cannot turn off flags 'a', 'u' and 'L'", 0));
+                return Err(src.error(
+                    "bad inline flags: cannot turn off flags 'a', 'u' and 'L'",
+                    0,
+                ));
             }
             del.push_str(&ch);
             let Some(c) = src.get()? else {
@@ -337,7 +380,10 @@ fn parse_flags(src: &mut Src, st: &mut State, first: char) -> Result<(bool, bool
             }
             if !(ch.chars().count() == 1 && FLAGS.contains(ch.as_str())) {
                 let alpha = ch.chars().all(|c| c.is_alphabetic());
-                return Err(src.error(if alpha { "unknown flag" } else { "missing :" }, ch.chars().count()));
+                return Err(src.error(
+                    if alpha { "unknown flag" } else { "missing :" },
+                    ch.chars().count(),
+                ));
             }
         }
     }
@@ -440,11 +486,19 @@ fn parse(src: &mut Src, st: &mut State, nested: usize, first: bool) -> Result<()
                     }
                     let mut lo = String::new();
                     let mut hi = String::new();
-                    while src.next.as_deref().is_some_and(|n| n.len() == 1 && DIGITS.contains(n)) {
+                    while src
+                        .next
+                        .as_deref()
+                        .is_some_and(|n| n.len() == 1 && DIGITS.contains(n))
+                    {
                         lo.push_str(&src.get()?.unwrap_or_default());
                     }
                     if src.matches(",")? {
-                        while src.next.as_deref().is_some_and(|n| n.len() == 1 && DIGITS.contains(n)) {
+                        while src
+                            .next
+                            .as_deref()
+                            .is_some_and(|n| n.len() == 1 && DIGITS.contains(n))
+                        {
                             hi.push_str(&src.get()?.unwrap_or_default());
                         }
                     } else {
@@ -459,7 +513,9 @@ fn parse(src: &mut Src, st: &mut State, nested: usize, first: bool) -> Result<()
                     if !hi.is_empty() {
                         let max: u128 = hi.parse().unwrap_or(0);
                         if max < min {
-                            return Err(src.error("min repeat greater than max repeat", src.tell() - here));
+                            return Err(
+                                src.error("min repeat greater than max repeat", src.tell() - here)
+                            );
                         }
                     }
                 }
@@ -494,14 +550,19 @@ fn parse(src: &mut Src, st: &mut State, nested: usize, first: bool) -> Result<()
                             } else if src.matches("=")? {
                                 let n = src.getuntil(")", "group name")?;
                                 src.checkgroupname(&n, 1)?;
-                                let Some(gid) = st.names.iter().find(|(k, _)| *k == n).map(|(_, g)| *g) else {
+                                let Some(gid) =
+                                    st.names.iter().find(|(k, _)| *k == n).map(|(_, g)| *g)
+                                else {
                                     return Err(src.error(
                                         &format!("unknown group name {}", crate::py::repr_str(&n)),
                                         n.chars().count() + 1,
                                     ));
                                 };
                                 if st.open.contains(&gid) {
-                                    return Err(src.error("cannot refer to an open group", n.chars().count() + 1));
+                                    return Err(src.error(
+                                        "cannot refer to an open group",
+                                        n.chars().count() + 1,
+                                    ));
                                 }
                                 last = Some(Kind::Other);
                                 continue;
@@ -509,14 +570,20 @@ fn parse(src: &mut Src, st: &mut State, nested: usize, first: bool) -> Result<()
                                 let Some(ch2) = src.get()? else {
                                     return Err(src.error("unexpected end of pattern", 0));
                                 };
-                                return Err(src.error(&format!("unknown extension ?P{ch2}"), ch2.chars().count() + 2));
+                                return Err(src.error(
+                                    &format!("unknown extension ?P{ch2}"),
+                                    ch2.chars().count() + 2,
+                                ));
                             }
                         }
                         ":" => capture = false,
                         "#" => {
                             loop {
                                 if src.next.is_none() {
-                                    return Err(src.error("missing ), unterminated comment", src.tell() - start));
+                                    return Err(src.error(
+                                        "missing ), unterminated comment",
+                                        src.tell() - start,
+                                    ));
                                 }
                                 if src.get()?.as_deref() == Some(")") {
                                     break;
@@ -530,12 +597,18 @@ fn parse(src: &mut Src, st: &mut State, nested: usize, first: bool) -> Result<()
                                     return Err(src.error("unexpected end of pattern", 0));
                                 };
                                 if ch2 != "=" && ch2 != "!" {
-                                    return Err(src.error(&format!("unknown extension ?<{ch2}"), ch2.chars().count() + 2));
+                                    return Err(src.error(
+                                        &format!("unknown extension ?<{ch2}"),
+                                        ch2.chars().count() + 2,
+                                    ));
                                 }
                             }
                             parse_sub(src, st, nested + 1)?;
                             if !src.matches(")")? {
-                                return Err(src.error("missing ), unterminated subpattern", src.tell() - start));
+                                return Err(src.error(
+                                    "missing ), unterminated subpattern",
+                                    src.tell() - start,
+                                ));
                             }
                             last = Some(Kind::Other);
                             continue;
@@ -546,17 +619,25 @@ fn parse(src: &mut Src, st: &mut State, nested: usize, first: bool) -> Result<()
                                 src.checkgroupname(&cond, 1)?;
                                 if !st.names.iter().any(|(k, _)| *k == cond) {
                                     return Err(src.error(
-                                        &format!("unknown group name {}", crate::py::repr_str(&cond)),
+                                        &format!(
+                                            "unknown group name {}",
+                                            crate::py::repr_str(&cond)
+                                        ),
                                         cond.chars().count() + 1,
                                     ));
                                 }
                             } else {
                                 let g: u128 = cond.parse().unwrap_or(0);
                                 if g == 0 {
-                                    return Err(src.error("bad group number", cond.chars().count() + 1));
+                                    return Err(
+                                        src.error("bad group number", cond.chars().count() + 1)
+                                    );
                                 }
                                 if g >= 1 << 30 {
-                                    return Err(src.error(&format!("invalid group reference {g}"), cond.chars().count() + 1));
+                                    return Err(src.error(
+                                        &format!("invalid group reference {g}"),
+                                        cond.chars().count() + 1,
+                                    ));
                                 }
                                 let pos = src.tell() - cond.chars().count() - 1;
                                 if !st.grouprefpos.iter().any(|(k, _)| *k as u128 == g) {
@@ -567,18 +648,25 @@ fn parse(src: &mut Src, st: &mut State, nested: usize, first: bool) -> Result<()
                             if src.matches("|")? {
                                 parse(src, st, nested + 1, false)?;
                                 if src.next.as_deref() == Some("|") {
-                                    return Err(src.error("conditional backref with more than two branches", 0));
+                                    return Err(src.error(
+                                        "conditional backref with more than two branches",
+                                        0,
+                                    ));
                                 }
                             }
                             if !src.matches(")")? {
-                                return Err(src.error("missing ), unterminated subpattern", src.tell() - start));
+                                return Err(src.error(
+                                    "missing ), unterminated subpattern",
+                                    src.tell() - start,
+                                ));
                             }
                             last = Some(Kind::Other);
                             continue;
                         }
                         ">" => capture = false,
                         x if (x.chars().count() == 1 && FLAGS.contains(x)) || x == "-" => {
-                            let (global, verbose_on) = parse_flags(src, st, x.chars().next().unwrap_or('-'))?;
+                            let (global, verbose_on) =
+                                parse_flags(src, st, x.chars().next().unwrap_or('-'))?;
                             if global {
                                 if !first || any_before(&last) {
                                     return Err(src.error(
@@ -592,7 +680,10 @@ fn parse(src: &mut Src, st: &mut State, nested: usize, first: bool) -> Result<()
                             capture = false;
                         }
                         other => {
-                            return Err(src.error(&format!("unknown extension ?{other}"), other.chars().count() + 1));
+                            return Err(src.error(
+                                &format!("unknown extension ?{other}"),
+                                other.chars().count() + 1,
+                            ));
                         }
                     }
                 }
@@ -642,7 +733,13 @@ fn any_before(last: &Option<Kind>) -> bool {
 /// Ok when Python's `re.compile(p)` accepts p; else the text of its `re.error`.
 pub fn check(p: &str) -> Result<(), String> {
     let mut src = Src::new(p)?;
-    let mut st = State { groups: 1, open: Vec::new(), names: Vec::new(), grouprefpos: Vec::new(), verbose: false };
+    let mut st = State {
+        groups: 1,
+        open: Vec::new(),
+        names: Vec::new(),
+        grouprefpos: Vec::new(),
+        verbose: false,
+    };
     parse_sub(&mut src, &mut st, 0)?;
     if src.next.is_some() {
         return Err(src.error("unbalanced parenthesis", 0));
@@ -685,17 +782,41 @@ mod tests {
 
     #[test]
     fn refuses() {
-        assert_eq!(check("(a").unwrap_err(), "missing ), unterminated subpattern at position 0");
-        assert_eq!(check("a)").unwrap_err(), "unbalanced parenthesis at position 1");
+        assert_eq!(
+            check("(a").unwrap_err(),
+            "missing ), unterminated subpattern at position 0"
+        );
+        assert_eq!(
+            check("a)").unwrap_err(),
+            "unbalanced parenthesis at position 1"
+        );
         assert_eq!(check("*a").unwrap_err(), "nothing to repeat at position 0");
         assert_eq!(check("a**").unwrap_err(), "multiple repeat at position 2");
-        assert_eq!(check("[a").unwrap_err(), "unterminated character set at position 0");
+        assert_eq!(
+            check("[a").unwrap_err(),
+            "unterminated character set at position 0"
+        );
         assert_eq!(check(r"\q").unwrap_err(), r"bad escape \q at position 0");
-        assert_eq!(check("[z-a]").unwrap_err(), "bad character range z-a at position 1");
-        assert_eq!(check("(?<x>a)").unwrap_err(), "unknown extension ?<x at position 1");
-        assert_eq!(check(r"\1").unwrap_err(), "invalid group reference 1 at position 1");
-        assert_eq!(check("a\\").unwrap_err(), "bad escape (end of pattern) at position 1");
-        assert_eq!(check("a{3,2}").unwrap_err(), "min repeat greater than max repeat at position 2");
+        assert_eq!(
+            check("[z-a]").unwrap_err(),
+            "bad character range z-a at position 1"
+        );
+        assert_eq!(
+            check("(?<x>a)").unwrap_err(),
+            "unknown extension ?<x at position 1"
+        );
+        assert_eq!(
+            check(r"\1").unwrap_err(),
+            "invalid group reference 1 at position 1"
+        );
+        assert_eq!(
+            check("a\\").unwrap_err(),
+            "bad escape (end of pattern) at position 1"
+        );
+        assert_eq!(
+            check("a{3,2}").unwrap_err(),
+            "min repeat greater than max repeat at position 2"
+        );
         assert_eq!(check("^*").unwrap_err(), "nothing to repeat at position 1");
     }
 }
