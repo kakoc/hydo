@@ -197,6 +197,11 @@ version that a client saw never goes back; a cache never holds a value that the 
 Then tell the user plainly: **the checks are the part that needs human judgment; please review
 each one**, and say which ones you are unsure about and why.
 
+Also turn on error logs as findings: `errors: true` in `hydo/hydo.yaml`, plus `errors.files:` for
+every log file a service writes on its own and `format: redis` for Redis. Unexpected error lines
+then become findings even when every check passes; the user triages them into
+`hydo/known-errors.yaml` (`hydo errors accept`). See [references/error-logs.md](references/error-logs.md).
+
 ### 7. Outside services, faults and knobs
 
 - Services outside the system (a payment provider, an email API, webhooks) become **fakes** that
