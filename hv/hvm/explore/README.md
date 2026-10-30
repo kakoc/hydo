@@ -1,6 +1,6 @@
 # The explorer and `hydo.yaml` on the Mac VMM
 
-**Result:** `hydo/explore/explore.py --backend hvm` runs fault schedules against an arm64 guest on this Mac (M2 Pro, macOS 26.4.1) exactly as it does against `hvx_explore` on the Linux box. Projects are built from their `hydo.yaml` with `hydo-build --arch arm64`, and the generic guest init `hydo/onboard/hydo-init.sh` runs unchanged. On the Redis example, with the virtio disk attached, power cuts and seeded disk faults work: 100 swarm schedules gave 37 failures, all in expected classes (lying disk, I/O errors, relaxed `appendfsync`), and all 37 reproduced bit-for-bit. There were no failures with durable settings and an honest disk. Throughput is about 11,500 runs per hour with 4 workers.
+**Result:** the explorer with `--backend hvm` (since M102 the Rust `hydo-explore`; the Mac release's `hydo explore` passes it; until M107 `hydo/explore/explore.py`) runs fault schedules against an arm64 guest on this Mac (M2 Pro, macOS 26.4.1) exactly as it does against `hvx_explore` on the Linux box. Projects are built from their `hydo.yaml` with `hydo-build --arch arm64`, and the generic guest init `hydo/onboard/hydo-init.sh` runs unchanged. On the Redis example, with the virtio disk attached, power cuts and seeded disk faults work: 100 swarm schedules gave 37 failures, all in expected classes (lying disk, I/O errors, relaxed `appendfsync`), and all 37 reproduced bit-for-bit. There were no failures with durable settings and an honest disk. Throughput is about 11,500 runs per hour with 4 workers.
 
 ## Pieces
 
@@ -14,8 +14,8 @@
 | `build-idle-m48.sh` | the M48 kernel configuration plus the HVC idle (`Image-idle`), for `../spin/hvm-spin.c` and M48-style boots |
 | `examples/ledger/` | a busybox `httpd` with a CGI that appends ledger entries. The CGI is deliberately not idempotent |
 | `examples/redis/` | `hydo/onboard/examples/redis` with the aarch64 Redis 7.2.4 from the nixpkgs cache |
-| `../../../hydo/onboard/hydo_build_arm64.py` | `hydo-build --arch arm64` |
-| `../../../hydo/explore/hvm_backend.py` | `explore.py --backend hvm` |
+| `../../../hydo/crates/hydo-build` (`src/arm64.rs`) | `hydo-build --arch arm64` (before M103 `hydo_build_arm64.py`) |
+| `../../../hydo/crates/hydo-explore`, `../../../hydo/crates/hydo-engine` (`src/hvm.rs`) | `hydo-explore --backend hvm` (before M102 `hvm_backend.py` and `explore.py`) |
 
 **How a schedule runs.** `hvmx serve` boots once and stops at the guest's `hydo-explore-ready-S0` and `-S1` markers. At each it snapshots the vCPU registers, the machine and device state, the virtio device state with the disk image and its volatile write cache, the console text, and all guest RAM (in an unlinked file). For each schedule it restores S1 into a fresh VM and vCPU, arms the disk fault policy, and types the schedule's guest part on the serial console. Then it runs to `hydo-explore-workload-done`, and either:
 - turns faults off, types `go`, and runs to the verdict; or
@@ -26,7 +26,7 @@ The fingerprint covers the console, the registers, the machine state, the virtio
 **What the Mac backend supports:**
 - **Applied as on hvx (the bare-metal machine):** kills, pauses (both forms), realtime clock jumps, the manifest's durability knobs, and network faults (`N=` two-way, `O=` one-way): `hydo-init.sh` puts netem on `lo` with `tc`, exactly as on the bare-metal machine. With the data disk attached it also applies `disk=none|ioerr:P|cut|lying:P` with `dseed`, which use the same seeded fault classes as hvx (`../VIRTIO.md`), and power cuts.
 - **Applied differently:** tick-timing jitter (`tj=`, `tjx=`, `--timing`). Linux delays a tick by a number of guest branches, using the PMU clock. The M2 has no PMU clock, so `../hvm.c` delays the timer interrupt by a seeded number of VM exits instead (see "Tick jitter" below). `hvm_supported()` caps a generated `tjmax` at 1,000 exits.
-- **Not applied:** network faults on an image without `tc` (built with `HYDO_TC_ARM64=`, or before `tc` was added). Both `hvm_backend.py` (`image_has_tc`) and `hvmx` (`scan_has_tc`) read that from the image's compiled manifest (`etc/hydo/manifest.sh`, `HYDO_TC`).
+- **Not applied:** network faults on an image without `tc` (built with `HYDO_TC_ARM64=`, or before `tc` was added). Both the explorer (hydo-explore; before M102 `hvm_backend.py`'s `image_has_tc`) and `hvmx` (`scan_has_tc`) read that from the image's compiled manifest (`etc/hydo/manifest.sh`, `HYDO_TC`).
 
 ## Tick jitter (counted in exits)
 
@@ -69,7 +69,7 @@ The kernel was `Image-explore-idle` with `HVM_SOFT_IRQ=1`. Points were spread ov
 
 1,000 more seeds of the two-window race: **40 points found it 7 times** (window 1: 90, window 2: 89; 7 is what independent windows predict), and jitter found it 0 times (window 1: 2, window 2: 0). Every hit repeated exactly: 17 one-window hits and 7 two-window hits. Windows of plain work were never hit.
 
-**In the explorer.** `explore.py --backend hvm --preempt` gives half the schedules forced points. Each gets `pct=<seed> pctn=<10|40> pctk=<3000|10000>`, from `--preempt`'s own random stream, so every other field equals the same seed without it. Set the exit ranges with `--pct-exits`; a run's RESULT reports its workload length as `pctw=`, so the ranges can be matched to the project. The Linux levers `pp=`/`xt=` are dropped on this backend, because they need the PMU clock. The shrinker drops the points, then halves their number. On Linux, the 8,000 generated schedules (random/swarm × `--timing` × `--new-faults` × `--preempt`, seeds 1–500) are identical to `main`'s. On Redis, 100 swarm seeds: 49 schedules got points, and the median fired was 9 of 10 or 36 of 40. Redis workloads take 1,700–13,000 exits. There were 39 failures, all reproduced, none with durable settings, none needing the points.
+**In the explorer.** `hydo explore --preempt` on the Mac gives half the schedules forced points. Each gets `pct=<seed> pctn=<10|40> pctk=<3000|10000>`, from `--preempt`'s own random stream, so every other field equals the same seed without it. Set the exit ranges with `--pct-exits`; a run's RESULT reports its workload length as `pctw=`, so the ranges can be matched to the project. The Linux levers `pp=`/`xt=` are dropped on this backend, because they need the PMU clock. The shrinker drops the points, then halves their number. On Linux, the 8,000 generated schedules (random/swarm × `--timing` × `--new-faults` × `--preempt`, seeds 1–500) are identical to `main`'s. On Redis, 100 swarm seeds: 49 schedules got points, and the median fired was 9 of 10 or 36 of 40. Redis workloads take 1,700–13,000 exits. There were 39 failures, all reproduced, none with durable settings, none needing the points.
 
 **Reading.** Few points, PCT's own setting (1 or 2 points for a 1- or 2-ordering bug), did no better than jitter. A forced point does not only switch threads: it moves the guest's clock and every later tick. And the guest chooses the next thread, so PCT's guarantee does not carry over. Many points did better: more switches mean more chances to land in a window. Only the many-point setting found the two-ordering bug. It hits each window independently, so a bug that needs two windows costs the product of the two chances. Jitter reaches only a window that happens to sit near a tick: here it hit the second window 0 times in 1,200 runs.
 
@@ -80,7 +80,7 @@ The kernel was `Image-explore-idle` with `HVM_SOFT_IRQ=1`. Points were spread ov
   - `hvm_stop_hook`, checked at the top of the run loop;
   - `#ifndef HVM_NO_MAIN` around `main`;
   - `HVM_SOFT_IRQ=1`, which emulates the IRQ exception entry (VBAR + offset, SPSR/ELR, DAIF, PAN/SSBS) instead of raising the line. `hvmx` turns it on. The M48 boot gives the same fingerprint with it.
-- **`hydo/explore/explore.py`**, a small hook:
+- **`hydo/explore/explore.py`** (the Python explorer of that milestone, replaced by hydo-explore in M102 and deleted in M107), a small hook:
   - `--backend hvm` and `--hvm-kernel`;
   - `render()` applies `hvm_supported()` after the manifest's `SPACE.restrict()`;
   - the worker's command line;
@@ -88,7 +88,7 @@ The kernel was `Image-explore-idle` with `HVM_SOFT_IRQ=1`. Points were spread ov
   - the manifest read from an arm64 initramfs.
 
   The Linux path is byte-identical: 16,600 generated schedule strings (seeds 1–1000 × random/swarm × `--timing` × `--new-faults` × `--durable-only`, plus every sweep) equal main's. Through this `explore.py` on the bare-metal machine, the pinned reproducers still give `2403499c9a3f8419` (explore-disk.img) and `f87130453609a5d6` (explore-fix-disk.img).
-- **`hydo/onboard/hydo-build`**: `--arch arm64` calls `hydo_build_arm64.py`. The default path is unchanged.
+- **`hydo/onboard/hydo-build`** (the Python builder of that milestone, replaced by the `hydo-build` program in M103 and deleted in M107): `--arch arm64` called `hydo_build_arm64.py`. The default path was unchanged.
 
 ## Results
 
@@ -245,13 +245,13 @@ the kernel.org tarball and the Arm GNU Toolchain 13.3.Rel1, both checked by sha2
 
 **Which images use it.** `hydo-build --arch arm64` builds a manifest with `network: bridge`, an
 `addr:` or `freeze` in `faults:` for it and writes `/etc/hydo/kernel` (`Image-explore-netns
-<sha256>`) into the image; it prints the choice. `hvm_backend.kernel_for()` reads the record:
-`explore.py --backend hvm` boots that kernel (the report's summary gains `guest_kernel`, and its
+<sha256>`) into the image; it prints the choice. `hydo_engine::hvm::kernel_for` reads the record:
+the explorer on hvm boots that kernel (the report's summary gains `guest_kernel`, and its
 reproduction lines name the kernel file), and so do the Mac `hydo run`, `repro` and `explore`. The
 kernel must sit next to `Image-explore` and have the recorded sha256; another file is refused. An
 image without the record boots `Image-explore` exactly as before. These images also get iproute2's
 `ip` (`network: bridge`), and for `freeze` the aarch64 `iptables-legacy` with the three extensions
-the rules load plus `hydo_fc` built for aarch64 (`hydo/onboard/hydo_build_arm64.py`).
+the rules load plus `hydo_fc` built for aarch64 (`hydo/crates/hydo-build/src/arm64.rs`).
 
 **Deterministic, like M48** (`netnsboot/`: an initramfs whose `/init` makes two namespaces on a
 bridge, runs a web server on port 80 in each, fetches across the bridge and inside a namespace,
@@ -272,12 +272,12 @@ visible on the console; an explorer campaign of 30 schedules; and Docker's votin
 # the build machine (Linux with Nix), scratch dir: the kernel and the images (a tmpfs such as /dev/shm is fine)
 WORK=$PWD sh <repo>/hv/hvm/explore/build-guest.sh                               # out/Image-explore (HVC idle; HVM_IDLE_HVC=0: WFI idle)
 WORK=$PWD sh <repo>/hv/hvm/explore/build-idle-m48.sh                            # out/Image-idle (M48 config + HVC idle)
-nix shell nixpkgs#python3 --command python3 <repo>/hydo/onboard/hydo-build \
-    <repo>/hydo/onboard/examples-mac/redis/hydo.yaml --arch arm64 --build-dir ob  # ob/explore-ob-redis-arm64{.cpio.gz,-disk.img}
+hydo-build <repo>/hydo/onboard/examples-mac/redis/hydo.yaml --arch arm64 --build-dir ob  # ob/explore-ob-redis-arm64{.cpio.gz,-disk.img}
+    # (the hydo-build program: cargo build --release -p hydo-build; or `hydo build` of the Mac release, on the Mac)
 # Mac: copy Image-explore and the two images to hv/hvm/explore/out/, then
 sh hv/hvm/explore/build.sh
-cd hydo/explore && python3 explore.py --backend hvm --image explore-ob-redis-arm64.cpio.gz \
-    --strategy swarm --new-faults --seeds 1-100 --workers 4 --out /tmp/hvm-redis
+target/release/hydo-explore --backend hvm --image hv/hvm/explore/out/explore-ob-redis-arm64.cpio.gz \
+    --strategy swarm --new-faults --seeds 1-100 --workers 4 --out /tmp/hvm-redis   # cargo build --release -p hydo-explore
 # one schedule by hand (the report prints this line for each minimal reproducer)
 HVM_DISK=hv/hvm/explore/out/explore-ob-redis-arm64-disk.img hv/hvm/explore/hvmx one \
     hv/hvm/explore/out/Image-explore hv/hvm/explore/out/explore-ob-redis-arm64.cpio.gz /tmp/o "disk=cut dseed=0 | run C=12 R=everysec"

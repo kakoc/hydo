@@ -4,10 +4,9 @@ hydo has two backends and two ways to build. Check this table before using a fea
 build --check` validates the schema only, and the full `hydo build` refuses a feature the
 backend lacks. State of hydo 0.1 (2026-10-30).
 
-The `hydo/` folder (the test composer) needs a release that contains
-`hydo/onboard/hydo_composer.py`; release tarballs built before 2026-10-24 lack it and fail with
-"No module named 'hydo_composer'". `hydo guide`, `hydo skill` and `hydo init` need a release
-that contains `hydo/onboard/hydo_agents.py`.
+The `hydo/` folder (the test composer), `hydo guide`, `hydo skill` and `hydo init` need a release
+built on 2026-10-24 or later (older tarballs fail with "No module named 'hydo_composer'" or lack
+the commands). Since Milestone 107 a release is Rust programs only and needs no Python.
 
 - **Linux release** (`hydo` from `hydo-linux-0.1.0`): x86_64 guests on an Intel VT-x machine.
 - **Mac release** (`hydo` from `hydo-mac-0.1.0`): arm64 guests on an Apple Silicon Mac.
@@ -18,7 +17,8 @@ that contains `hydo/onboard/hydo_agents.py`.
   `guest/hydo_fc` and the aarch64 `ip`/`iptables-legacy` files. A Mac release built before M96 lacks
   `params:`, `hydo-world`, `hydo-read` and the host's history checkers; "after M96" below means a
   release rebuilt with them.
-- **hydo's repository on x86_64 Linux**: `hydo/onboard/hydo-build` with the helper programs built
+- **hydo's repository on x86_64 Linux**: the `hydo-build` program (`cargo build --release -p
+  hydo-build`) with the helper programs built
   from source (`hydo/onboard/world/build.sh` for `hydo-world`, `hydo/readers/build.sh` for
   `hydo-read`, Go for `hydo-grpc-gen`) and the pinned tools of `docs/BUILD-PINS.md`.
 
@@ -40,7 +40,7 @@ that contains `hydo/onboard/hydo_agents.py`.
 | `buggify: true` | not shipped (the init extension is missing from the release) | yes | yes |
 | `hydo-read`, `hydo-check` | not bundled (build `hydo-read` in the repository and set `HYDO_READ_BIN`) | after M96 (ships `guest/hydo-read`; else `HYDO_READ_BIN_ARM64`) | yes |
 | `fakes:`, `proxies:`, `H=` protocol faults, `hydo-world` checks | not shipped | after M96 (ships `guest/hydo-world`; else `HYDO_WORLDBIN_ARM64`) | yes |
-| `errors:` error logs as findings, `hydo errors`, `hydo/known-errors.yaml` | not shipped yet (needs a release with `hydo/onboard/hydo-init-errlog.sh` and `hydo_errors.py`) | not shipped yet (same; the arm64 build with `errors:` was not run) | yes |
+| `errors:` error logs as findings, `hydo errors`, `hydo/known-errors.yaml` | not shipped yet (needs a release that ships `hydo/onboard/hydo-init-errlog.sh`) | not shipped yet (same; the arm64 build with `errors:` was not run) | yes |
 | `hydo-grpc-gen` generated drivers | not shipped (generate in the repository, then copy the output) | not shipped (generate with `--arch amd64,arm64` in the repository, copy `hydo-grpc.arm64`) | yes |
 
 Where a feature is missing, say so in the report and offer the closest substitute: a shell

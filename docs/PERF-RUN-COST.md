@@ -1,5 +1,11 @@
 # Where the time goes when hydo explores (measured 2026-10-30)
 
+> Note (M107): `explore.py` and the other Python files named below were the explorer and tools of
+> the time. The explorer is now the Rust crate `hydo/crates/hydo-explore` (`hydo explore`, or the
+> `hydo-explore` program, with the same options); the Python files were deleted in M107 and can
+> be restored from commit 2a58c4b (`git checkout 2a58c4b -- hydo/explore hydo/onboard hydo/history` in a scratch checkout).
+> The commands below are records of how things were run and measured.
+
 This note measures the cost of one explorer run and of one campaign on the bare-metal machine
 (the bare-metal machine: Xeon E3-1270 v6, 4 cores with hyper-threading = 8 hardware threads, 32 GB, two
 rotating disks in RAID 1, the main `hvx.ko` built from `hvx/hvx.c` as on `main`), so that the Rust

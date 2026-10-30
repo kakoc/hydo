@@ -1,5 +1,11 @@
 # Several vCPUs in the explorer (SMP Stage 3, 2026-10-22)
 
+> Note (M107): `explore.py` and the other Python files named below were the explorer and tools of
+> the time. The explorer is now the Rust crate `hydo/crates/hydo-explore` (`hydo explore`, or the
+> `hydo-explore` program, with the same options); the Python files were deleted in M107 and can
+> be restored from commit 2a58c4b (`git checkout 2a58c4b -- hydo/explore hydo/onboard hydo/history` in a scratch checkout).
+> The commands below are records of how things were run and measured.
+
 Stage 3 of `hv/hvx/SMP_PLAN.md`: the harness and explorer side of the in-kernel vCPU
 scheduler that Stage 1 (`hv/hvx/SMP_STAGE1.md`, Milestone 66) added to `hvx.ko`. No module
 change: `hvx.c`, `hvx_abi.h` and `hvx_boot.h` are untouched (another agent owns them for

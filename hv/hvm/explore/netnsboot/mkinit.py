@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# M107: a research/measurement tool. It needs the Python explorer and builder, deleted in M107
+# (replaced by the hydo-explore and hydo-build crates): restore them from commit 2a58c4b with
+# git checkout 2a58c4b -- hydo/explore hydo/onboard hydo/history in a scratch checkout, and run it there.
 """Build the namespace-kernel boot test's initramfs (Milestone 99).
 
     mkinit.py <busybox> <store root> <out.cpio.gz>

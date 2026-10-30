@@ -1,5 +1,11 @@
 # Two vCPUs on the race defects d8, d9, d12 (2026-10-23)
 
+> Note (M107): `explore.py` and the other Python files named below were the explorer and tools of
+> the time. The explorer is now the Rust crate `hydo/crates/hydo-explore` (`hydo explore`, or the
+> `hydo-explore` program, with the same options); the Python files were deleted in M107 and can
+> be restored from commit 2a58c4b (`git checkout 2a58c4b -- hydo/explore hydo/onboard hydo/history` in a scratch checkout).
+> The commands below are records of how things were run and measured.
+
 Question: do two virtual CPUs with branch-counted turns (Milestones 66 and 69) find the
 benchmark's race defects faster, or find them where one vCPU does not?
 

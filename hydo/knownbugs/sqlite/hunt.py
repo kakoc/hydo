@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# M107: a research/measurement tool. It needs the Python explorer and builder, deleted in M107
+# (replaced by the hydo-explore and hydo-build crates): restore them from commit 2a58c4b with
+# git checkout 2a58c4b -- hydo/explore hydo/onboard hydo/history in a scratch checkout, and run it there.
 """hunt.py -- blind exploration of a no-service manifest image (the SQLite WAL-reset target).
 
 explore.py's generators place kills/cuts/disk faults by the stack's service names and know only
