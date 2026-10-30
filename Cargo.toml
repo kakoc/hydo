@@ -12,6 +12,7 @@ members = [
     "hydo/crates/hydo-manifest",
     "hydo/crates/hydo-engine",
     "hydo/crates/hydo-cli",
+    "hydo/crates/hydo-history",
 ]
 exclude = ["sdk", "hydo/onboard/examples"]
 
@@ -29,6 +30,7 @@ sha2 = "0.10"
 hydo-schedule = { path = "hydo/crates/hydo-schedule" }
 hydo-manifest = { path = "hydo/crates/hydo-manifest" }
 hydo-engine = { path = "hydo/crates/hydo-engine" }
+hydo-history = { path = "hydo/crates/hydo-history" }
 
 [profile.release]
 opt-level = 3
