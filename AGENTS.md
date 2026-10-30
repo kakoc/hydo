@@ -2,7 +2,7 @@
 
 This file is the instruction file for any coding agent working in this repository (the AGENTS.md convention, https://agents.md). `CLAUDE.md` only imports it, so every tool reads the same text. Update this file, never `CLAUDE.md`.
 
-`hydo` is a **deterministic hypervisor**. It runs software so that, given the same inputs, execution is bit-for-bit identical every time, which makes record/replay, snapshots and branch-from-snapshot possible. The project has two engines: the original Rust KVM monitor (`src/`), which hit a hard KVM wall at `RDTSC`, and **hvx**, our own VT-x hypervisor kernel module (`hv/hvx/`), which owns the VMCS and is where all current work happens. There is also an Apple Silicon backend (`hv/hvm/`) built on Hypervisor.framework.
+`hydo` is a **deterministic hypervisor**. It runs software so that, given the same inputs, execution is bit-for-bit identical every time, which makes record/replay, snapshots and branch-from-snapshot possible. The project has two engines that share no code: **hvx**, our own VT-x hypervisor kernel module (`hv/hvx/`), which owns the VMCS, and **hvm**, the Apple Silicon engine (`hv/hvm/`) built on Hypervisor.framework. The product both engines use (image builder, explorer, test composer, checkers, fake services, store readers, gRPC generator, examples and the two releases) is in `hydo/`; the SDKs are in `sdk/`, the onboarding skill in `skills/`, and project-wide documents in `docs/` (layout since M100). The original Rust KVM monitor (`src/`), which hit a hard KVM wall at `RDTSC`, was removed in M100; it is described in `docs/HISTORY.md`.
 
 - `README.md` describes the architecture, the paravirtual ABI, the clock strategies and the verification model.
 - `docs/HISTORY.md` holds the full history: every milestone section (1–69 and later), the old roadmap for booting Linux as L2, and the old long "Key files" list. Look up a milestone there by its number for details, evidence and older fingerprints.
@@ -29,7 +29,7 @@ New milestone sections go to the END of `docs/HISTORY.md`. Each new milestone al
 - NixOS, kernel 6.6.35, 24 cores, 31 GB. We have no root there. Until M140 it was the only machine with Nix, so every guest image (`build-linux.sh`, `build-stack.sh`, `build-kafka.sh`, `build-mysql.sh`, `hydo/bench/build-bench*.sh`, `hydo-build`, the Mac guests) was built there and then copied to the bare-metal machine; since M140 the bare-metal machine builds them too, so the build machine is optional (and off limits until the user says otherwise). Scripts reach it with `on_build_machine` from `machines.local.sh`; the release and example scripts that copy Nix store paths take it from the bare-metal machine instead with `HYDO_NIX_MACHINE=bare-metal`.
 - The pinned toolchain (static musl gcc, busybox, static Redis, `mke2fs`, `libfaketime` and others) is documented in `docs/BUILD-PINS.md`; GC roots are in `~/hydo-gcroots`. Images built without these pins are not reproducible (M61).
 - The disk fills up (340 GB, 99% full on 2026-10-21). Run `df -h ~` before building. One stack image needs about 6 GB at its peak.
-- `./dev.sh "<cmd>"` rsyncs the tree to `~/hydo/` on the build machine and runs the command there; it is used for the Rust KVM monitor (Linux only, Rust 1.86; `kvm-ioctls = "0.17"` must pair with `kvm-bindings = "0.8"`).
+- `./dev.sh "<cmd>"` rsyncs the tree to the build machine's `~/hydo/` and runs the command there (for example `./dev.sh "bash hv/hvx/images/build-stack.sh"`).
 
 ### The Mac backend
 
@@ -69,7 +69,7 @@ The nested-VM (L1) tooling was removed on 2026-10-20 (paths before M100): `hvx/r
 - Timing controls for exploring thread interleavings: seeded tick jitter `HVX_SET_TJITTER` (M43), a shorter tick period and inserted extra ticks `HVX_SET_XTICK` (M49), a power cut at the k-th disk FLUSH `HVX_SET_FLUSHCUT` (M56), and the disk's volatile write cache saved and restored through `HVX_GET/SET_UNSYNC` (M43 addendum).
 - Code coverage: Intel Processor Trace of the guest (`HVX_SET_PT`, tools in `hv/hvx/pt/`, libipt) gives exact per-instruction coverage; tracing on or off gives identical fingerprints (M40).
 - The module's safety net (M97, `hv/hvx/SAFETY.md`): the debug kernel (Linux 6.8.12 with KASAN, kmemleak, UBSAN, lockdep, KCOV) boots in a nested VM on the build machine and runs the deploy-metal suite, three Linux boots and the reproducers (33 pass, 6 PMU tests skip, 0 splats, 0 leaks). syzkaller (`b498adee`) fuzzes `/dev/hvx` with guest programs (`syz_ext_hvx_guest`). Nine module bugs were found and fixed on `main` (a NULL dereference, two heap overflows from snapshot or unsync state, two interrupts-off CPU hangs a guest can cause, a UBSAN shift, an mmap use-after-free, an OOM deadlock, unchecked PT filter MSRs); guest RAM and disk pages are now charged to the caller's memory cgroup and fail with ENOMEM instead of OOM-killing. The fixed module, built as a side module, gives all 33 recorded fingerprints on the bare-metal test machine. The main module on the box has had these fixes since 2026-10-30.
-- The Rust KVM monitor (`src/`) has its own baselines, `det64` = `ed882eafa4643e09` and `timer64 --timer 200 --insn-clock` = `0b3b7c95eadbcfae`. It cannot get past the `RDTSC` calibration in a Linux boot, because stock KVM does not expose RDTSC exiting to userspace; that is why hvx exists.
+- The Rust KVM monitor (`src/`, which could not get past Linux's `RDTSC` calibration under stock KVM and is why hvx exists) was removed in M100; its baselines and results are in `docs/HISTORY.md`.
 
 ### Devices and fault injection
 
@@ -295,7 +295,6 @@ Milestones 1–32 ran inside the nested L1 VM on the build machine, before 2026-
 - `hv/hvx/hvx.c` (the module), `hv/hvx/hvx_abi.h` (the ioctl ABI shared with userspace), `hv/hvx/hvx_boot.h` (the bzImage loader recipe), and the `hv/hvx/hvx_*_test.c` and `hv/hvx/hvx_*_verify.c` tests and harnesses.
 - `hydo/explore/` (the explorer), `hydo/stack/` (the order service and the assertion SDK), `hydo/bench/` (the bug benchmark), `hydo/onboard/` (manifests), `hv/hvx/pt/` (Processor Trace tools), `hv/hvx/race/` (race calibration and side-module scripts), `hydo/cutflush/` (flush-cut findings), `hv/hvx/tdet/` (SMI tools).
 - `hv/hvx/images/` (`build-linux.sh`, `build-stack.sh`, `build-kafka.sh`, `build-mysql.sh`: the x86_64 guest kernel and the hand-written guest images, with the guest programs they compile), `docs/BUILD-PINS.md`, `docs/REBASELINE.md`.
-- `src/` (the Rust KVM monitor: `vmm.rs`, `state.rs`, `pmu.rs`, `detlinux.rs`, `boot.rs`).
 
 ## Useful tools and references
 
