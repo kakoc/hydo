@@ -555,7 +555,7 @@ fn data_partition_mib(image: &Path) -> Option<u64> {
     }
     let e = 446 + 16;
     let sectors = u32::from_le_bytes([mbr[e + 12], mbr[e + 13], mbr[e + 14], mbr[e + 15]]) as u64;
-    (sectors > 0).then_some(sectors * 512 >> 20)
+    (sectors > 0).then_some((sectors * 512) >> 20)
 }
 
 /// The hardware threads this pool may use: the performance cores on Apple Silicon (an efficiency
