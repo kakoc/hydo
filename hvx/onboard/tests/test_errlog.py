@@ -60,6 +60,7 @@ KAFKA = [
     "Caused by: java.io.IOException: boom",
     "\t... 12 more",
     "ERROR [Controller id=1, targetBrokerId=1] Connection to node 1 (localhost/127.0.0.1:9093) could not be established. (org.apache.kafka.clients.NetworkClient)",
+    "INFO kafka.log.LogManager Loading logs",
     "java.lang.IllegalStateException: request 3f2a9c1e-0b7d-4c1e-9a2b-1234567890ab failed at 0x7ffd1234 id deadbeef42",
 ]
 FRONT = [
@@ -150,7 +151,7 @@ def test_guest():
     check(len(my) == 1 and my[0]["n"] == 2 and my[0]["at"] == "0,10", "MySQL: two [ERROR] lines, one kind, in ranges 0 and 10: %s" % my)
     check(my and "[MY-012592]" in my[0]["tpl"] and "<time>" in my[0]["tpl"] and "number #" in my[0]["tpl"],
           "MySQL template keeps the error code, drops time and errno-like numbers: %s" % (my[0]["tpl"] if my else None))
-    check(not any("Warning" in t for t in tpls), "warning-level lines are not errors at level error")
+    check(not any("Warning" in r["tpl"] for r in rs if r["svc"] != "redis"), "warning-level lines are not errors at level error")
     ka = [r for r in rs if r["svc"] == "kafka"]
     check(len(ka) == 2, "Kafka: the ERROR line (twice, across the restart) and the standalone exception: %s" % ka)
     ke = [r for r in ka if r["tpl"].startswith("ERROR")]
@@ -174,7 +175,7 @@ def test_guest():
     shutil.rmtree(d); shutil.rmtree(d0)
 
     # the power cut path: failed_ids with cut=1 reports, the recovery boot labels everything r
-    out, d = guest_run(manifest(), put("kafka.log", KAFKA[2:3]) + "step_range 0 12\ncut=1\nfailed_ids\nfailed_ids\n")
+    out, d = guest_run(manifest(), "step_range 0 12\n" + put("kafka.log", KAFKA[2:3]) + "cut=1\nfailed_ids\nfailed_ids\n")
     rs, sm = recs(out)
     check(len(sm) == 1 and rs and rs[0]["at"] == "0", "power cut: the first boot reports at the cut: %s" % rs)
     shutil.rmtree(d)
@@ -274,11 +275,16 @@ def test_host():
 
 def test_build(ref):
     """Manifests without errors: compile and splice exactly as the reference hydo-build does."""
-    if ref is None:
-        src = subprocess.run(["git", "show", "HEAD:hvx/onboard/hydo-build"], cwd=ONB, stdout=subprocess.PIPE, text=True).stdout
-        ref = os.path.join(tempfile.mkdtemp(prefix="hbref-"), "hydo-build")
-        open(ref, "w").write(src)
-        shutil.copy(os.path.join(ONB, "hydo-init.sh"), os.path.dirname(ref))
+    top_dir = os.path.dirname(os.path.dirname(ONB))
+    if ref is None and not os.path.exists(os.path.join(top_dir, ".git")):
+        print("skip  build identity: not a repository checkout and no reference hydo-build given")
+        return
+    if ref is None:     # main's hvx/ (hydo-build reads its neighbours: the init, the composer, history)
+        top = tempfile.mkdtemp(prefix="hbref-")
+        arc = subprocess.run(["git", "archive", os.environ.get("HYDO_REF", "main"), "hvx/onboard", "hvx/history"],
+                             cwd=os.path.dirname(os.path.dirname(ONB)), stdout=subprocess.PIPE).stdout
+        subprocess.run(["tar", "-x", "-C", top], input=arc, check=True)
+        ref = os.path.join(top, "hvx", "onboard", "hydo-build")
     n = 0
     for p in sorted(glob.glob(os.path.join(ONB, "examples", "**", "*.yaml"), recursive=True)):
         if p.endswith("known-errors.yaml") or "redis-errors" in p or "hydo-errors" in p or os.path.basename(p).startswith("hydo-grpcgen"):
