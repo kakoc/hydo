@@ -16,8 +16,9 @@ for running commands, kills the rest, heals the faults, runs the `eventually_` c
 recovery boot runs the `eventually_` commands and the checks again.
 
 The explorer draws `W=` for every schedule and shrinks it (one command never run, fewer commands,
-no concurrency, fewer entries), so a failure ends as a small composition. A schedule written by
-hand may leave `W=` out (seed 0 with the manifest's defaults).
+no concurrency, fewer entries), so a failure ends as a small composition, written in the
+resolved form that names commands by id (see Regressions). A schedule written by hand may
+leave `W=` out (seed 0 with the manifest's defaults).
 
 ## Command kinds
 
@@ -108,6 +109,20 @@ workload.
 `hydo/regressions/<name>.schedule`: comment lines, one of `# expect: ok` (the bug stays fixed,
 the default), `# expect: violation` (a known open bug still fails) or `# expect: fp=<16 hex>`, and
 one schedule line. `hydo save <explore dir>` writes them from an exploration; `hydo repro
---regressions` replays them from fresh boots and exits 1 if one is not as expected. A `W=` names
-commands by their index in the sorted command list, so adding or renaming a command changes what
-an old `W=` composes; the replay warns when the list changed.
+--regressions` replays them from fresh boots and exits 1 if one is not as expected.
+
+A saved regression keeps its composition when you add, remove or rename other commands. Every
+command has a stable id, `<kind>_<name>` (the file name in `hydo/workload/`), and `hydo save`
+writes the composition in its resolved form: `W=:p2,r200,cparallel_driver_transfer,7.4.0.721476632,...`
+lists each command run, by id, with its round, its entry number and its `HYDO_SEED`. A long one
+is written as `W=@<key>` plus a `# compose: <resolved form>` line, which `hydo build` puts into
+the image. The file also records `# command-sha: <id> <hash>` for each command used. So:
+
+- Do not rename a command that a saved regression uses: a missing id fails that regression
+  with a message that names the command (the image still builds). Restore the command, or
+  delete the regression and save a new one.
+- Changing a used command's file only warns ("changed since the regression was saved"); look
+  at whether the regression still tests what it was saved for.
+- Old regressions in the seed form (`W=<hex seed>,...`) with a `# commands: <ids>` line replay
+  the composition they had with that list. Without that line they compose from the current list,
+  and `hydo build` warns.

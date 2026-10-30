@@ -18,9 +18,9 @@ class E(Exception):
     pass
 
 
-def awk_program():
+def awk_program(name="PLAN_AWK"):
     t = open(os.path.join(os.path.dirname(HERE), "hydo-composer.sh")).read()
-    return re.search(r"PLAN_AWK='(.*?)'\n", t, re.S).group(1)
+    return re.search(r"\n%s='(.*?)'\n" % name, t, re.S).group(1)
 
 
 def cmd_sets():
@@ -64,6 +64,8 @@ def main():
                 d["x"] = set(rnd.sample(range(len(full)), min(len(full), rnd.randrange(1, 6))))
             if n % 4 == 0:
                 d["o"] = {rnd.randrange(len(cmds))}
+            elif n % 4 == 1:            # by id (what the shrinker writes since M98)
+                d["o"] = set(rnd.sample([c["id"] for c in cmds], min(len(cmds), rnd.randrange(1, 3))))
             w = hc.render_w(d)
             d2 = hc.parse_w(w, params)
             assert hc.render_w(d2) == w, (w, hc.render_w(d2))
@@ -93,7 +95,60 @@ def main():
         n0 = len(hc.kept(hc.parse_w(w, params), 20, meta["commands"]))
         for c in hc.candidates(w, meta):
             assert len(hc.kept(hc.parse_w(c, params), 20, meta["commands"])) <= n0
-    print("test_composer: %d W values, awk == python (%s); plan rules and shrink candidates OK" % (checked, a.awk))
+    # the resolved form (M98): the guest's RES_AWK gives the entries hydo_composer.entries_of gives,
+    # whatever the order of the image's command list; an id the list lacks is an error on both sides
+    res_prog = awk_program("RES_AWK")
+    nres = nerr = 0
+    with tempfile.TemporaryDirectory() as td:
+        lst = os.path.join(td, "compose.list")
+        for n in range(max(200, a.n // 5)):
+            cmds = sets[n % len(sets)]
+            steps = rnd.choice([4, 20, 57])
+            w = hc.render_w({"seed": rnd.getrandbits(32), "p": 1 + rnd.randrange(4), "q": 1 + rnd.randrange(3),
+                             "r": 100, "n": rnd.choice([0, 3]), "t": rnd.choice([0, 0, 500]), "x": set(), "o": set()})
+            meta = {"params": params, "commands": cmds, "steps": steps}
+            if not hc.kept(hc.parse_w(w, params), steps, cmds):
+                continue
+            res = hc.stable_w(w, meta)
+            # the image the composition replays on: the same commands in another order plus new ones
+            now = [dict(c) for c in cmds] + [{"kind": "parallel_driver", "id": "parallel_driver_new%d" % n},
+                                              {"kind": "anytime", "id": "anytime_0new"}]
+            drop = None
+            if n % 7 == 3:          # a command the composition uses is gone
+                drop = rnd.choice(sorted({cid for _, _, cid, _ in hc.parse_resolved(res)["entries"]}))
+                now = [c for c in now if c["id"] != drop]
+            now.sort(key=lambda c: c["id"])
+            if n % 2:
+                rnd.shuffle(now)    # the guest looks ids up: the list order does not matter
+            with open(lst, "w") as f:
+                for i, c in enumerate(now):
+                    f.write("%d %s 60 %s exec /bin/true\n" % (i, c["kind"], c["id"]))
+            meta2 = {"params": params, "commands": now, "steps": steps}
+            p = subprocess.run(a.awk.split() + ["-v", "V=%s" % res, "-v", "S=%d" % steps, res_prog, lst],
+                               stdout=subprocess.PIPE, text=True)
+            if drop:
+                assert p.returncode != 0 and drop in p.stdout, (res, p.stdout)
+                try:
+                    hc.entries_of(res, meta2)
+                    raise AssertionError("python accepted a missing command")
+                except ValueError as e:
+                    assert drop in str(e)
+                nerr += 1
+                continue
+            assert p.returncode == 0, (res, p.stdout)
+            want = ["%d %d %d %s %d" % (e, r, c, now[c]["kind"], s) for e, r, c, s in hc.entries_of(res, meta2)]
+            got = [x for x in p.stdout.split("\n") if x]
+            assert got == want, (res, got[:4], want[:4])
+            # the same commands, rounds, entry numbers and seeds as the seed form on the old list
+            old = [(e, r, cmds[c]["id"], s) for e, r, c, s in hc.kept(hc.parse_w(w, params), steps, cmds)]
+            assert [(e, r, now[c]["id"], s) for e, r, c, s in hc.entries_of(res, meta2)] == old
+            assert hc.render_resolved(hc.parse_resolved(res)) == res
+            for c in hc.candidates(res, meta2):
+                assert len(hc.parse_resolved(c)["entries"]) <= len(old)
+            nres += 1
+    print("test_composer: %d W values, awk == python (%s); plan rules and shrink candidates OK; %d resolved "
+          "compositions replay by id on a changed list (awk == python), %d with a removed command fail on both "
+          "sides" % (checked, a.awk, nres, nerr))
 
 
 if __name__ == "__main__":

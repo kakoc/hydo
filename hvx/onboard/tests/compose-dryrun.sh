@@ -62,5 +62,27 @@ $CS verdict >> $T/console
 echo "== stopped after $(( $(cut -d. -f1 /proc/uptime) - t0 )) s:"; grep -v DECL $T/console
 grep -q "status=killed (workload.timeout)" $T/console
 [ -z "$(ps -o args | grep -v grep | grep 'compose.sh run1')" ] || { echo "a command is still running"; exit 1; }
+# 3. the resolved form (M98): commands by id, whatever the list order; W=@<key> from compose.saved;
+#    an id the list lacks fails setw (the init's knob path) with a console line
+: > $T/console; rm -rf $T/tmp/hydo/compose
+cat > $E/compose.list <<EOF3
+0 anytime 5 anytime_0new exec $BB true
+1 parallel_driver 5 parallel_driver_b exec $BB sleep 0.05
+2 parallel_driver 5 parallel_driver_a exec $BB sleep 0.05
+EOF3
+R=":p2,r100,cparallel_driver_a+parallel_driver_b,3.0.0.11,4.0.1.12,9.2.0.13"
+$CS setw "$R"
+[ "$($CS plan | tr '\n' ' ')" = "3 0 2 parallel_driver 11 4 0 1 parallel_driver 12 9 2 2 parallel_driver 13 " ] || { echo "resolved plan: $($CS plan)"; exit 1; }
+mkdir -p $E/compose.saved; echo "$R" > $E/compose.saved/0123abcd
+$CS setw @0123abcd
+[ "$($CS plan | wc -l)" = 3 ]
+$CS step 0 6; $CS verdict >> $T/console
+grep -q "HYDO-COMPOSE plan W=@0123abcd resolved p=2 r=100 t=0 rounds=6 entries=3" $T/console
+grep -q "HYDO-CMD start i=9 r=2 kind=parallel_driver cmd=parallel_driver_a" $T/console
+if $CS setw ":p2,r100,cparallel_driver_gone,0.0.0.5" > /dev/null; then echo "a missing command was accepted"; exit 1; fi
+grep -q "HYDO-COMPOSE error: W=:p2,r100,cparallel_driver_gone,0.0.0.5: the composition uses command parallel_driver_gone, which this image does not have" $T/console
+if $CS setw @ffff > /dev/null; then echo "a missing saved composition was accepted"; exit 1; fi
+grep -q "this image carries no saved composition ffff" $T/console
+echo "== resolved form:"; grep -v DECL $T/console
 rm -rf $T
 echo "compose-dryrun: OK"

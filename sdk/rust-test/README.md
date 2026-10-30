@@ -84,6 +84,20 @@ Example: `hvx/onboard/examples/redis-composed-rs/` (the Rust version of
 `examples/redis-composed`, with the same command and check ids, so a schedule composes the same
 commands in the same rounds in both).
 
+**Command ids and saved regressions.** A driver's id is `<kind>_<name>` (`parallel_driver_transfer`
+for `#[driver(parallel)] fn transfer`). Saved compositions name commands by this id
+(`hvx/onboard/MANIFEST.md`, "Stable compositions"), so renaming a driver that a saved regression
+uses makes that regression fail with a message naming it; adding, removing or reordering other
+drivers does not change it. `<bin> plan` refuses two drivers (or two checks) with the same name,
+since the guest runs them as `<bin> driver <name>`. The attribute macro writes a `content` hash
+of each driver (FNV-1a 64 over its attribute and tokens; formatting and comments do not count,
+code it calls is not covered, and a different compiler version may print tokens differently),
+which goes into the plan, so a regression warns when the driver changed since it was saved.
+`cargo hydo save` writes regressions to `hydo/regressions/` of the crate; `cargo hydo plan`
+mirrors that folder into `.hydo/regressions/`, where `hydo build` reads it next to the plan.
+`System::regression(name, schedule, expect)` still takes a schedule string; use it for schedules
+in the resolved form (`W=:...`), and prefer files for anything `hydo save` wrote.
+
 The assertion SDK (`sdk/rust`, crate `hydo-assert`) is re-exported as `hydo_test::assert`, so
 a driver or check can also state properties as assertions (they go straight to the console).
 

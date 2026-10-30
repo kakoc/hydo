@@ -7,7 +7,7 @@ The engine-facing PLAN is the manifest's `test:` section (YAML or JSON, language
     test:
       parallel: 4  per_round: 2  round_ms: 200  command_timeout: 60  drain_timeout: 60
       check_every: 2  check_within: 30  max_commands: 0  budget_ms: 0
-      commands:   [{name, kind, run, timeout}]     kind: first | parallel_driver | serial_driver |
+      commands:   [{name, kind, run, timeout, content}]   kind: first | parallel_driver | serial_driver |
                                                    singleton_driver | anytime | eventually | finally
       checks:     [{name, kind, run, msg, every, within, after, poll}]   kind: final | always | eventually
       regressions: [{name, schedule, expect}]
@@ -21,7 +21,17 @@ This module is used by hydo-build (expand + stage, before validate), by manifest
 explorer reads the expanded plan back from /etc/hydo/compose.json in an image) and by
 explore.py (draw / render / shrink the composer token W=). plan() is mirrored exactly by the awk
 in hydo-composer.sh; test_composer.py checks the two agree.
+
+Three forms of W= (MANIFEST.md "Stable compositions", M98):
+  seed form      W=<seed hex>,p..,q..,r..[,n..][,t..][,x<entries>][,o<command ids>]   (exploration)
+  resolved form  W=:p<p>,r<ms>[,t<ms>],c<id>+<id>...,<entry>.<round>.<k>.<seed>,...   (stable)
+  saved form     W=@<key>   the resolved form staged in the image as /etc/hydo/compose.saved/<key>
+The resolved form names its commands by id (k indexes the c table) and lists every entry with
+its round and HYDO_SEED, so it does not depend on the plan's command list or on plan(); the
+shrinker outputs it and `hydo save` writes it. A regression saved in the old index form with
+its `# commands:` list is resolved against that list at build time.
 """
+import hashlib
 import json
 import os
 import re
@@ -43,13 +53,16 @@ BOUNDS = {"parallel": (1, 16), "per_round": (1, 8), "round_ms": (10, 60000), "co
           "drain_timeout": (1, 3600), "check_every": (1, 3600), "check_within": (1, 3600), "max_commands": (0, 100000),
           "budget_ms": (0, 3600000)}
 KNOWN_TEST = set(DEFAULTS) | {"commands", "checks", "regressions", "description"}
-KNOWN_CMD = {"name", "kind", "run", "timeout", "description"}
+KNOWN_CMD = {"name", "kind", "run", "timeout", "description", "content"}   # content: an SDK's hash of the command's code
 KNOWN_CHECK = {"name", "kind", "run", "msg", "every", "within", "after", "poll", "description"} | set(HISTORY_KEYS)
-KNOWN_REG = {"name", "schedule", "expect", "commands", "description"}
+KNOWN_REG = {"name", "schedule", "expect", "commands", "description", "compose", "contents", "saved_schedule"}
 DEFAULT_STEPS = 20              # workload.steps when the plan composes the workload and gives none
 COMPOSE_SH = "/etc/hydo/compose.sh"
 SH = "/bin/busybox sh " + COMPOSE_SH
 W_TOKEN = "W"                   # the composer's schedule token: W=<seed>[,p..][,q..][,r..][,n..][,x..][,o..]
+SAVED_DIR = "/etc/hydo/compose.saved"   # resolved compositions of saved regressions (W=@<key>)
+GUEST_MAX = 500                 # longest guest part of a schedule ("run ..."): hvx_explore keeps 511 bytes
+CONTENT_RE = re.compile(r"^[0-9a-f]{8,64}$")
 
 
 # ------------------------------------------------------------------ the hydo/ folder
@@ -109,6 +122,9 @@ def scan_folder(mdir, E):
                 raise E("%s/%s: not executable (chmod +x; a script needs a #! line)" % (sub, fname))
             kv, msg = _header(p)
             e = {"name": name, "kind": k, "run": ["/hydo/%s/%s" % (sub, fname)]}
+            if key == "commands":
+                with open(p, "rb") as f:
+                    e["content"] = hashlib.sha256(f.read()).hexdigest()[:16]
             allowed = ("timeout",) if key == "commands" else (HISTORY_KEYS if k in HISTORY_KINDS else
                                                               ("every", "within", "after", "poll"))
             for a in kv:
@@ -129,7 +145,7 @@ def scan_folder(mdir, E):
 def read_regression(path, E):
     """A saved schedule: comment lines (`# expect: ok|violation|fp=<hex>`, free text) and one
     schedule line `<host tokens> | run <guest tokens>`."""
-    sched, expect, cmds = None, "ok", None
+    sched, expect, cmds, compose, contents = None, "ok", None, None, {}
     for line in open(path):
         s = line.strip()
         if not s:
@@ -141,14 +157,24 @@ def read_regression(path, E):
             m = re.match(r"#\s*commands:\s*(.*)$", s)
             if m:
                 cmds = m.group(1).split()
+            m = re.match(r"#\s*compose:\s*(\S+)\s*$", s)       # the resolved composition behind W=@<key>
+            if m:
+                compose = m.group(1)
+            m = re.match(r"#\s*command-sha:\s*(\S+)\s+(\S+)\s*$", s)   # a used command's content when saved
+            if m:
+                contents[m.group(1)] = m.group(2)
             continue
         if sched is not None:
             raise E("%s: more than one schedule line" % path)
         sched = s
     name = os.path.basename(path)[:-len(".schedule")]
     r = {"name": name, "schedule": sched, "expect": expect}
-    if cmds is not None:        # the command ids W= referred to when the schedule was saved
+    if cmds is not None:        # the old index form: the command ids W= referred to when saved
         r["commands"] = cmds
+    if compose is not None:
+        r["compose"] = compose
+    if contents:
+        r["contents"] = contents
     _check_regression(r, path, E)
     return r
 
@@ -225,7 +251,7 @@ def merge_folder(m, folder, E):
             t[key] = list(t.get(key) or []) + folder[key]
 
 
-def expand(m, E, folder=None):
+def expand(m, E, folder=None, warn=None):
     """Validate m["test"] (plus the folder) and rewrite m so the generic init runs it: the
     workload becomes the composer, first commands join provisioning, eventually/finally
     commands and checks become invariants. Returns the plan meta (staged as
@@ -267,7 +293,13 @@ def expand(m, E, folder=None):
         to = c.get("timeout", par["command_timeout"])
         if not isinstance(to, int) or isinstance(to, bool) or not 1 <= to <= 3600:
             raise E("%s: timeout is whole seconds in [1, 3600]" % where)
-        cmds.append({"id": cid, "kind": kind, "name": name, "run": _argv(c.get("run"), where, E), "timeout": to})
+        run = _argv(c.get("run"), where, E)
+        content = c.get("content")
+        if content is not None and not (isinstance(content, str) and CONTENT_RE.match(content)):
+            raise E("%s: content is 8 to 64 lowercase hex digits (a hash of the command's code)" % where)
+        if content is None:     # what the command runs: its argv (or shell string) and its timeout
+            content = hashlib.sha256(json.dumps([run, to]).encode()).hexdigest()[:16]
+        cmds.append({"id": cid, "kind": kind, "name": name, "run": run, "timeout": to, "content": content})
     cmds.sort(key=lambda c: c["id"])
     checks, cseen, hist = [], set(), []
     for i, c in enumerate(t.get("checks") or []):
@@ -320,6 +352,13 @@ def expand(m, E, folder=None):
         regs.append({"name": str(r.get("name") or "r%d" % i), "schedule": r["schedule"], "expect": str(r.get("expect", "ok"))})
         if r.get("commands") is not None:
             regs[-1]["commands"] = [str(c) for c in r["commands"]]
+        for k in ("compose", "saved_schedule"):
+            if r.get(k) is not None:
+                regs[-1][k] = str(r[k])
+        if r.get("contents") is not None:
+            if not isinstance(r["contents"], dict):
+                raise E("%s: contents is a mapping command id -> content hash" % where)
+            regs[-1]["contents"] = {str(k): str(v) for k, v in sorted(r["contents"].items())}
     if not cmds and not checks:
         if regs:
             return {"params": par, "commands": [], "checks": [], "regressions": regs, "composed": False}
@@ -372,14 +411,26 @@ def expand(m, E, folder=None):
         if isinstance(v, dict) and v.get("id") in ids:
             raise E("invariants: id %r is also a test command or check" % v.get("id"))
     m["invariants"] = invs + list(m.get("invariants") or [])
-    return {"format": FORMAT, "params": par, "commands": cmds, "checks": checks, "regressions": regs,
-            "composed": bool(planned), "steps": int((m.get("workload") or {}).get("steps") or 0)}
+    meta = {"format": FORMAT, "params": par, "commands": cmds, "checks": checks, "regressions": regs,
+            "composed": bool(planned), "steps": int((m.get("workload") or {}).get("steps") or 0), "stable_compose": 1}
+    for r in regs:      # old index form -> resolved; ids and contents checked (MANIFEST "Stable compositions")
+        st = regression_status(r, meta)
+        if st["schedule"] != r["schedule"]:
+            r.setdefault("saved_schedule", r["schedule"])
+            r["schedule"] = st["schedule"]
+            if st.get("compose"):
+                r["compose"] = st["compose"]
+        if warn:
+            for w in ([st["error"]] if st["error"] else []) + st["warnings"]:
+                warn("regression %s: %s" % (r["name"], w))
+    return meta
 
 
 def test_from_meta(meta):
     """The test: section that expands to meta again (the explorer reads meta back from an image)."""
     t = dict(meta["params"])
-    t["commands"] = [{"name": c["name"], "kind": c["kind"], "run": c["run"], "timeout": c["timeout"]} for c in meta["commands"]]
+    t["commands"] = [dict({"name": c["name"], "kind": c["kind"], "run": c["run"], "timeout": c["timeout"]},
+                          **({"content": c["content"]} if c.get("content") else {})) for c in meta["commands"]]
     t["checks"] = [{k: c[k] for k in ("name", "kind", "run", "msg", "every", "within", "after", "poll") if k in c}
                    for c in meta["checks"]]
     t["regressions"] = [dict(r) for r in meta["regressions"]]
@@ -392,9 +443,11 @@ def shell_lines(meta):
     L = ["HYDO_COMPOSE=1"]
     for k in ("parallel", "per_round", "round_ms", "command_timeout", "drain_timeout", "max_commands", "budget_ms"):
         L.append("HYDO_COMPOSE_%s=%d" % (k.upper(), p[k]))
-    # W= reaches the guest through the init's knob path (set_knob): no change to hydo-init.sh
+    # W= reaches the guest through the init's knob path (set_knob): no change to hydo-init.sh.
+    # compose.sh setw keeps it and checks it (a command id this image lacks, a missing saved
+    # composition: a console line and a failed knob, i.e. HYDO-ORACLE: ERROR)
     L += ["HYDO_KNOB_W_default='-'",
-          "HYDO_KNOB_W_set=%s" % shq('echo "$HYDO_VALUE" > /tmp/hydo/compose.W'),
+          "HYDO_KNOB_W_set=%s" % shq('%s setw "$HYDO_VALUE"' % SH),
           "HYDO_KNOB_W_name='test composer (W=)'"]
     return L
 
@@ -420,6 +473,17 @@ def stage(meta, R, here, folder=None):
     with open(os.path.join(R, "etc/hydo/compose.json"), "w") as f:
         json.dump(meta, f, indent=1, sort_keys=True)
         f.write("\n")
+    saved = {}
+    for r in meta["regressions"]:              # W=@<key>: the resolved composition, by key
+        w = w_of(r["schedule"])
+        if w and w.startswith("@") and r.get("compose") and key_of(r["compose"]) == w[1:]:
+            saved[w[1:]] = r["compose"]
+    if saved:
+        d = os.path.join(R, SAVED_DIR.lstrip("/"))
+        os.makedirs(d, exist_ok=True)
+        for k in sorted(saved):
+            with open(os.path.join(d, k), "w") as f:
+                f.write(saved[k] + "\n")
     if meta["regressions"]:
         d = os.path.join(R, "hydo", "regressions")
         os.makedirs(d, exist_ok=True)
@@ -429,22 +493,240 @@ def stage(meta, R, here, folder=None):
                 with open(p, "w") as f:
                     if r.get("commands") is not None:
                         f.write("# commands: %s\n" % " ".join(r["commands"]))
-                    f.write("# expect: %s\n%s\n" % (r["expect"], r["schedule"]))
+                    if r.get("compose"):
+                        f.write("# compose: %s\n" % r["compose"])
+                    for k, v in sorted((r.get("contents") or {}).items()):
+                        f.write("# command-sha: %s %s\n" % (k, v))
+                    f.write("# expect: %s\n%s\n" % (r["expect"], r.get("saved_schedule") or r["schedule"]))
     shutil.copy(os.path.join(here, "hydo-composer.sh"), os.path.join(R, COMPOSE_SH.lstrip("/")))
     os.chmod(os.path.join(R, COMPOSE_SH.lstrip("/")), 0o755)
 
 
-# ------------------------------------------------------------------ version pin
-def regression_warning(r, meta):
-    """W= names commands by their index in the plan's command list; a regression saved with
-    another list composes something else. The warning to print, or None."""
-    if "W=" not in r["schedule"].split("|", 1)[-1] or r.get("commands") is None:
-        return None
+# ------------------------------------------------------------------ stable compositions (M98)
+def w_of(schedule):
+    """The W= value of a schedule's guest part, or None."""
+    for tok in schedule.split("|", 1)[-1].split():
+        if tok.startswith(W_TOKEN + "="):
+            return tok[len(W_TOKEN) + 1:]
+    return None
+
+
+def with_w(schedule, w):
+    """The schedule with its W= value replaced in place (appended when it had none)."""
+    host, guest = schedule.split("|", 1)
+    toks, done = guest.split(), False
+    for i, x in enumerate(toks):
+        if x.startswith(W_TOKEN + "="):
+            toks[i], done = "%s=%s" % (W_TOKEN, w), True
+    if not done:
+        toks.append("%s=%s" % (W_TOKEN, w))
+    return "%s| %s" % (host, " ".join(toks))
+
+
+def fits(schedule):
+    """The guest part fits the engines' schedule buffer (hvx_explore: 511 bytes)."""
+    return len(schedule.split("|", 1)[-1].strip()) <= GUEST_MAX
+
+
+def key_of(resolved):
+    """The key of a resolved composition (W=@<key>): a hash of its text, so the same composition
+    has the same key in every image and a changed command list does not change it."""
+    return hashlib.sha256(resolved.encode()).hexdigest()[:12]
+
+
+def kind_of(cid):
+    for k in sorted(WORKLOAD_KINDS, key=len, reverse=True):
+        if cid.startswith(k + "_"):
+            return k
+    return None
+
+
+def parse_resolved(v):
+    """':p2,r200[,t300],c<id>+<id>,<entry>.<round>.<k>.<seed>,...' -> {p, r, t, entries:
+    [(entry, round, id, seed)]}. ValueError on a malformed value."""
+    if not v.startswith(":"):
+        raise ValueError("a resolved composition starts with ':' (got %r)" % v[:20])
+    d = {"p": None, "r": None, "t": 0, "entries": []}
+    ids = None
+    for f in v[1:].split(","):
+        if re.fullmatch(r"[prt]\d+", f):
+            d[f[0]] = int(f[1:])
+        elif f.startswith("c") and ids is None:
+            ids = f[1:].split("+")
+            if not all(NAME_RE.match(x) and kind_of(x) for x in ids):
+                raise ValueError("W=%s: c lists command ids <kind>_<name>" % v[:40])
+        elif re.fullmatch(r"\d+\.\d+\.\d+\.\d+", f):
+            e, r, k, s = map(int, f.split("."))
+            if ids is None or k >= len(ids):
+                raise ValueError("W=%s: entry %s names command %d of a table of %d" % (v[:40], f, k, len(ids or [])))
+            d["entries"].append((e, r, ids[k], s))
+        else:
+            raise ValueError("W=%s: unknown field %r" % (v[:40], f))
+    if not d["p"] or not d["r"] or not d["entries"]:
+        raise ValueError("W=%s: a resolved composition has p, r and at least one entry" % v[:40])
+    es = d["entries"]
+    if len({e for e, _, _, _ in es}) != len(es) or any(es[i][1] > es[i + 1][1] for i in range(len(es) - 1)):
+        raise ValueError("W=%s: entry numbers are unique and rounds never go back" % v[:40])
+    return d
+
+
+def render_resolved(d):
+    ids = []
+    for _, _, cid, _ in d["entries"]:
+        if cid not in ids:
+            ids.append(cid)
+    s = ":p%d,r%d" % (d["p"], d["r"]) + (",t%d" % d["t"] if d.get("t") else "") + ",c" + "+".join(ids)
+    return s + "".join(",%d.%d.%d.%d" % (e, r, ids.index(cid), sd) for e, r, cid, sd in d["entries"])
+
+
+def resolve_seed(w, cmds, steps, params):
+    """A seed-form W over the command list cmds (dicts with id and kind, in index order) ->
+    the resolved composition {p, r, t, entries by id}."""
+    d = parse_w(w, params)
+    return {"p": d["p"], "r": d["r"], "t": d["t"],
+            "entries": [(e, r, cmds[c]["id"], s) for e, r, c, s in kept(d, steps, cmds)]}
+
+
+def stable_w(w, meta, steps=None, saved=None):
+    """W in the resolved form (':...'), from any form; saved: {key: resolved} for W=@<key>."""
+    if w.startswith(":"):
+        return w
+    if w.startswith("@"):
+        if not saved or w[1:] not in saved:
+            raise ValueError("W=%s: the saved composition is not known here" % w)
+        return saved[w[1:]]
+    return render_resolved(resolve_seed(w, meta["commands"], steps or meta["steps"], meta["params"]))
+
+
+def contents_of(w, meta, steps=None, saved=None):
+    """{id: content hash} of the commands a composition uses (for `# command-sha:` lines)."""
+    have = {c["id"]: c.get("content") for c in meta["commands"]}
+    used = sorted({cid for _, _, cid, _ in parse_resolved(stable_w(w, meta, steps, saved))["entries"]})
+    return {cid: have[cid] for cid in used if have.get(cid)}
+
+
+def resolved_problems(d, meta, steps=None):
+    """Errors of a resolved composition against this plan: a command it names that the plan does
+    not have (or that is not composed), an entry in a round the plan does not run."""
+    steps = steps or meta.get("steps") or DEFAULT_STEPS
+    kinds = {c["id"]: c["kind"] for c in meta.get("commands") or []}
+    errs = []
+    missing = sorted({cid for _, _, cid, _ in d["entries"] if cid not in kinds})
+    if missing:
+        errs.append("the saved composition uses command%s %s, which the plan no longer has (commands now: %s); "
+                    "restore %s, or delete the regression and save a new one" % (
+                        "s" if len(missing) > 1 else "", ", ".join(missing), " ".join(sorted(kinds)) or "-",
+                        "them" if len(missing) > 1 else "it"))
+    bad = sorted({cid for _, _, cid, _ in d["entries"] if cid in kinds and kinds[cid] not in PLAN_KINDS})
+    if bad:
+        errs.append("command%s %s cannot be composed (not a driver or anytime command)" % ("s" if len(bad) > 1 else "", ", ".join(bad)))
+    late = max([r for _, r, _, _ in d["entries"]] or [0])
+    if late >= steps:
+        errs.append("the saved composition runs an entry in round %d, the plan has %d rounds (workload.steps); "
+                    "set steps to at least %d" % (late, steps, late + 1))
+    return errs
+
+
+def regression_status(r, meta, steps=None):
+    """What replaying regression r on the plan meta does: {"schedule": what to run, "compose": the
+    resolved value staged for W=@<key> (or None), "error": why it cannot run as saved (or
+    None), "warnings": [...]}.
+      - resolved (W=:...) or saved (W=@<key> + compose): its commands are looked up by id;
+      - old index form (seed W= plus `commands`, the list when it was saved): when the list
+        changed, it is resolved against the saved list, so it composes what it composed then;
+      - seed W= without a saved list: runs as it is (it composes from the current list).
+    A command whose content hash changed since the save gives a warning."""
+    out = {"schedule": r["schedule"], "compose": None, "error": None, "warnings": []}
+    w = w_of(r["schedule"])
+    if w is None or w == "-":
+        return out
     now = [c["id"] for c in meta.get("commands") or []]
-    if r["commands"] == now:
-        return None
-    return ("the plan's commands changed since %s was saved (then: %s; now: %s), so its W= composes different "
-            "commands; re-explore and save it again" % (r["name"], " ".join(r["commands"]) or "-", " ".join(now) or "-"))
+    try:
+        if w.startswith("@"):
+            if not r.get("compose"):
+                out["error"] = "W=%s but the regression has no `# compose:` line (the resolved composition)" % w
+                return out
+            if key_of(r["compose"]) != w[1:]:
+                out["error"] = ("the `# compose:` line and W=%s disagree (one of them was edited): the line's key is @%s"
+                                % (w, key_of(r["compose"])))
+                return out
+            out["compose"] = r["compose"]
+            d = parse_resolved(r["compose"])
+        elif w.startswith(":"):
+            d = parse_resolved(w)
+        elif r.get("commands") is not None and r["commands"] != now:
+            old = [{"id": c, "kind": kind_of(c)} for c in r["commands"]]
+            if not all(c["kind"] for c in old):
+                out["error"] = "the saved command list has an id that is not <kind>_<name>: %s" % " ".join(r["commands"])
+                return out
+            d = resolve_seed(w, old, steps or meta.get("steps") or DEFAULT_STEPS, meta["params"])
+            res = render_resolved(d)
+            sched = with_w(r["schedule"], res)
+            if not fits(sched):
+                sched = with_w(r["schedule"], "@" + key_of(res))
+                out["compose"] = res
+            out["schedule"] = sched
+            out["warnings"].append("saved in the index form with another command list (then: %s); replayed as the "
+                                   "composition it ran then, by command id" % " ".join(r["commands"]))
+        else:
+            if r.get("commands") is None or not meta.get("commands"):
+                if meta.get("composed"):
+                    out["warnings"].append("W=%s is in the seed form without the command list it was saved with, so "
+                                           "it composes from the current list; save it again for a stable composition" % w)
+                return out
+            # the same list: runs as saved; only the content check below
+            d = resolve_seed(w, meta["commands"], steps or meta.get("steps") or DEFAULT_STEPS, meta["params"])
+    except ValueError as e:
+        out["error"] = str(e)
+        return out
+    errs = resolved_problems(d, meta, steps)
+    if errs:
+        out["error"] = "; ".join(errs)
+    have = {c["id"]: c.get("content") for c in meta.get("commands") or []}
+    for cid, sha in sorted((r.get("contents") or {}).items()):
+        if have.get(cid) and have[cid] != sha:
+            out["warnings"].append("command %s changed since the regression was saved (content %s, now %s)" % (cid, sha, have[cid]))
+    return out
+
+
+def regression_warning(r, meta):
+    """(Older callers) one line of warnings and errors for a regression, or None."""
+    st = regression_status(r, meta)
+    msgs = ([st["error"]] if st["error"] else []) + st["warnings"]
+    return "; ".join(msgs) if msgs else None
+
+
+def saved_regression_text(x):
+    """A `hydo save` file for one shrunk failure of a report (explore.py's report.json "shrunk")."""
+    L = ["# found by `hydo explore` (seed %s): %s" % (x["from_seed"], x["class"]),
+         "# verdict: %s" % x["min_verdict"][:200]]
+    if x.get("composition"):
+        L.append("# composition: %s" % x["composition"][:400])
+    sched = x.get("stable_schedule") or x["minimal"]
+    seedform = w_of(x["minimal"]) or ""
+    if x.get("stable") and x.get("stable_note") and x.get("commands") is not None and \
+            not seedform.startswith((":", "@")):
+        # the resolved form did not fail the same way: keep the seed form that failed, with its
+        # command list (the index form), so it replays exactly while the list is unchanged and is
+        # resolved by id when it changes
+        sched = x["minimal"]
+        L.append("# commands: %s" % " ".join(x["commands"]))
+        for k, v in sorted((x.get("contents") or {}).items()):
+            L.append("# command-sha: %s %s" % (k, v))
+        L.append("# note: %s" % x["stable_note"])
+    elif x.get("stable"):
+        w = w_of(sched)
+        if w and w.startswith("@"):
+            L.append("# compose: %s" % x["stable"])
+        for k, v in sorted((x.get("contents") or {}).items()):
+            L.append("# command-sha: %s %s" % (k, v))
+        if x.get("stable_note"):
+            L.append("# note: %s" % x["stable_note"])
+    elif x.get("commands") is not None:     # an older report: the index form and its command list
+        L.append("# commands: %s" % " ".join(x["commands"]))
+    L.append("# expect: violation      (change to ok when the bug is fixed)")
+    L.append(sched)
+    return "\n".join(L) + "\n"
 
 
 def engine_version(here):
@@ -550,7 +832,8 @@ def _rlist(xs):
 
 
 def parse_w(w, params):
-    """W value -> dict seed p q r n x o (defaults from the plan's params)."""
+    """A seed-form W value -> dict seed p q r n x o (defaults from the plan's params). o holds
+    command indices (old form, `o0.4-6`) or command ids (`oparallel_driver_set+serial_driver_x`)."""
     d = {"seed": 0, "p": params["parallel"], "q": params["per_round"], "r": params["round_ms"],
          "n": params["max_commands"], "t": params.get("budget_ms", 0), "x": set(), "o": set()}
     if not w or w == "-":
@@ -563,6 +846,8 @@ def parse_w(w, params):
         k, v = x[0], x[1:]
         if k in "pqrnt":
             d[k] = int(v)
+        elif k == "o" and re.search(r"[A-Za-z]", v):
+            d[k] = set(v.split("+"))
         elif k in "xo":
             d[k] = _ilist(v)
         else:
@@ -579,23 +864,40 @@ def render_w(d):
     if d.get("x"):
         s += ",x" + _rlist(d["x"])
     if d.get("o"):
-        s += ",o" + _rlist(d["o"])
+        if all(isinstance(c, int) for c in d["o"]):
+            s += ",o" + _rlist(d["o"])
+        else:
+            s += ",o" + "+".join(sorted(str(c) for c in d["o"]))
     return s
 
 
 def kept(d, steps, cmds):
     """The entries W runs: the plan minus x (entries) and o (commands), cut at n."""
-    es = [e for e in plan(d["seed"], d["q"], steps, cmds) if e[0] not in d["x"] and e[2] not in d["o"]]
+    es = [e for e in plan(d["seed"], d["q"], steps, cmds)
+          if e[0] not in d["x"] and e[2] not in d["o"] and cmds[e[2]]["id"] not in d["o"]]
     return es[:d["n"]] if d["n"] else es
+
+
+def entries_of(w, meta, steps=None, saved=None):
+    """The entries (entry, round, command index in meta's list, seed) any form of W runs here;
+    ValueError when it names a command this plan does not have."""
+    steps = steps or meta["steps"]
+    if w.startswith(":") or w.startswith("@"):
+        d = parse_resolved(stable_w(w, meta, steps, saved))
+        errs = resolved_problems(d, meta, steps)
+        if errs:
+            raise ValueError("; ".join(errs))
+        ix = {c["id"]: i for i, c in enumerate(meta["commands"])}
+        return [(e, r, ix[cid], s) for e, r, cid, s in d["entries"]]
+    return kept(parse_w(w, meta["params"]), steps, meta["commands"])
 
 
 def describe(w, meta, steps=None):
     """One line per round, e.g. 'r0: parallel_driver_set x2 | r1: serial_driver_audit' (reports)."""
     steps = steps or meta["steps"]
-    d = parse_w(w, meta["params"])
     cmds = meta["commands"]
     rounds = {}
-    for i, r, c, _ in kept(d, steps, cmds):
+    for i, r, c, _ in entries_of(w, meta, steps):
         rounds.setdefault(r, []).append(cmds[c]["id"])
     return " | ".join("r%d: %s" % (r, ", ".join(rounds[r])) for r in sorted(rounds))
 
@@ -617,19 +919,24 @@ def candidates(w, meta, steps=None):
     commands (n halves), no concurrency (p=1, then p-1), half of the remaining entries, then
     single entries (when few are left)."""
     steps = steps or meta["steps"]
+    if w.startswith(":"):
+        return _resolved_candidates(w)
+    if w.startswith("@"):
+        return []
     d = parse_w(w, meta["params"])
     cmds = meta["commands"]
     ks = kept(d, steps, cmds)
     out = []
+    o_ids = {cmds[c]["id"] if isinstance(c, int) else c for c in d["o"] if not isinstance(c, int) or c < len(cmds)}
 
     def var(**kw):
-        t = dict(d, x=set(d["x"]), o=set(d["o"]))
+        t = dict(d, x=set(d["x"]), o=set(o_ids))
         t.update(kw)
         out.append(render_w(t))
     used = sorted({e[2] for e in ks})
     if len(used) > 1:
         for c in used:
-            var(o=d["o"] | {c})
+            var(o=o_ids | {cmds[c]["id"]})     # by id: a stored candidate names the command, not its position
     if len(ks) > 1:
         var(n=max(1, len(ks) // 2))
     if d["p"] > 1:
@@ -642,6 +949,43 @@ def candidates(w, meta, steps=None):
     if 1 < len(ks) <= 8:
         for e in ks:
             var(x=d["x"] | {e[0]})
+    seen, res = set(), []
+    for c in out:
+        if c != w and c not in seen:
+            seen.add(c)
+            res.append(c)
+    return res
+
+
+def _resolved_candidates(w):
+    """Simpler resolved compositions: one command's entries dropped, the second half dropped,
+    no concurrency, the first half dropped, single entries (when 8 or fewer are left)."""
+    d = parse_resolved(w)
+    es, out = d["entries"], []
+
+    def var(entries=None, **kw):
+        t = dict(d, **kw)
+        t["entries"] = es if entries is None else entries
+        if t["entries"]:
+            out.append(render_resolved(t))
+    used = []
+    for _, _, cid, _ in es:
+        if cid not in used:
+            used.append(cid)
+    if len(used) > 1:
+        for cid in used:
+            var([e for e in es if e[2] != cid])
+    if len(es) > 1:
+        var(es[:max(1, len(es) // 2)])
+    if d["p"] > 1:
+        var(p=1)
+        if d["p"] > 2:
+            var(p=d["p"] - 1)
+    if len(es) > 3:
+        var(es[len(es) // 2:])
+    if 1 < len(es) <= 8:
+        for i in range(len(es)):
+            var(es[:i] + es[i + 1:])
     seen, res = set(), []
     for c in out:
         if c != w and c not in seen:

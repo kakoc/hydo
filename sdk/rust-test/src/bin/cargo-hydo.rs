@@ -81,7 +81,34 @@ fn plan(bin: &str, arch: &str) -> PathBuf {
     run(Command::new(&host).args(["plan", "--guest-binary", dst.to_str().unwrap(), "--guest-path", &format!("/bin/{}", bin),
                                   "--out", ".hydo/plan.json"]).env("HYDO_ARCH", arch));
     eprintln!("cargo hydo: wrote .hydo/plan.json (guest binary .hydo/guest/{}, {})", bin, triple);
+    sync_regressions();
     PathBuf::from(".hydo/plan.json")
+}
+
+/// `hydo save` writes saved regressions to hydo/regressions/ of the crate; hydo-build reads a
+/// regressions/ folder next to the plan, so mirror them into .hydo/regressions/ (exactly: a
+/// regression deleted from hydo/regressions/ is gone from the next image too).
+fn sync_regressions() {
+    let dst = Path::new(".hydo/regressions");
+    if dst.exists() {
+        std::fs::remove_dir_all(dst).unwrap_or_else(|e| die(&format!("{}: {}", dst.display(), e)));
+    }
+    let src = Path::new("hydo/regressions");
+    let mut names: Vec<PathBuf> = match std::fs::read_dir(src) {
+        Ok(rd) => rd.filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.extension().map(|x| x == "schedule").unwrap_or(false)).collect(),
+        Err(_) => return,
+    };
+    names.sort();
+    if names.is_empty() {
+        return;
+    }
+    std::fs::create_dir_all(dst).unwrap_or_else(|e| die(&format!("{}: {}", dst.display(), e)));
+    for p in &names {
+        let to = dst.join(p.file_name().unwrap());
+        std::fs::copy(p, &to).unwrap_or_else(|e| die(&format!("{}: {}", p.display(), e)));
+    }
+    eprintln!("cargo hydo: {} saved regression(s) from hydo/regressions/ go into the plan", names.len());
 }
 
 fn main() {

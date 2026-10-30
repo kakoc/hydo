@@ -709,8 +709,10 @@ test:
     - {name: double-charge, schedule: "disk=none dseed=1 | run K=pay@4+1 W=0000002a,p4,q2,r200", expect: ok}
 ```
 
-A command's id is `<kind>_<name>` (`parallel_driver_place_order`); a check's name is its
-property id. Everything the composer adds to the manifest (the workload, a `first` step in
+A command's id is `<kind>_<name>` (`parallel_driver_place_order`); ids are unique and are how
+saved compositions name commands ("Stable compositions" below). A command may carry `content:
+<hex>` (8 to 64 lowercase hex digits), a hash of its code that an SDK computes, so a saved
+regression warns when the command changed. A check's name is its property id. Everything the composer adds to the manifest (the workload, a `first` step in
 provisioning, invariants for checks and for `eventually`/`finally` commands) is a rewrite the
 generic init already understands, so `hydo-init.sh` is unchanged; a manifest without `test:`
 and without a `hydo/` folder builds byte-identically to before.
@@ -792,8 +794,11 @@ then round t starts. After the last round the composer waits for the running com
 
 **`W=` (guest token, the explorer draws it; hand schedules may use it):**
 `W=<seed, hex>[,p<concurrency>][,q<per round>][,r<round ms>][,n<max commands>][,t<budget ms>][,x<entries>][,o<commands>]`,
-where `x` lists plan entries not to run and `o` command indices (in id order) never to run,
-as `3.5-9.12`. Without `W=` the guest runs seed 0 with the manifest's defaults. `explore.py`
+where `x` lists plan entries not to run and `o` commands never to run, by id joined with `+`
+(`oparallel_driver_set+serial_driver_rewrite`; the shrinker writes ids) or, in schedules from
+before M98, by index in id order as `3.5-9.12`. Without `W=` the guest runs seed 0 with the
+manifest's defaults. This seed form is what the explorer draws; the shrinker's output and saved
+regressions use the resolved form (below, "Stable compositions"). `explore.py`
 puts a `W=` on every schedule of such a plan, from its own random stream, so every other
 field equals the schedule without it (`--no-compose`: no `W=`); manifests without a test plan
 get exactly the old schedules (`hvx/explore/compose_ident.py`). The shrinker tries, in order:
@@ -826,10 +831,72 @@ replays exactly what the image was built with, from fresh boots, and exits 1 if 
 expected. `hydo save <explore dir>` writes an exploration's minimal schedules there (with
 `expect: violation`; change it to `ok` once fixed).
 
-A `W=` names commands by their index in the plan's sorted command list, so adding or renaming a
-command changes what an old `W=` composes. `hydo save` therefore also writes `# commands: <ids>`
-(the list when the schedule was found; `commands:` in `test.regressions`), and the replay warns
-when the plan's list is different: explore again and save the new minimal schedule.
+### Stable compositions (command ids)
+
+A seed-form `W=` composes by drawing positions in the plan's sorted command list, so adding,
+removing or renaming a command changes what it composes. Saved regressions therefore do not use
+it. Every command has a stable **id**, `<kind>_<name>`: the file name in `hydo/workload/`, or
+`kind` and `name` in the plan (an SDK's attribute name). Ids are unique; `hydo-build` refuses a
+duplicate, and `hydo-test` refuses two drivers with the same name.
+
+**The resolved form** lists the composition itself, with commands by id:
+
+```
+W=:p2,r200[,t<budget ms>],c<id>+<id>...,<entry>.<round>.<k>.<seed>,...
+   e.g. W=:p2,r200,cparallel_driver_transfer,7.4.0.721476632,8.4.0.40276333
+```
+
+`p` and `r` are concurrency and round length, `c` is the table of the ids used, and each entry
+gives its entry number (`HYDO_CMD_ID`), its round, its command (an index into `c`) and its
+`HYDO_SEED`. The guest looks the ids up in the image's list, so the order of the list and the
+commands added to it do not matter, and nothing depends on how a seed maps to positions (a later
+hydo may draw differently and old regressions still replay). It runs exactly these entries,
+in this order, with the same timing rules as the seed form.
+
+**The saved form** `W=@<key>` names a resolved composition by a hash of its text (12 hex digits).
+A regression file carries the resolved form on a `# compose: <resolved form>` line, and `hydo
+build` stages it as `/etc/hydo/compose.saved/<key>`; it is used when the resolved form would make
+the schedule's guest part longer than 500 bytes (the engine's limit is 511).
+
+**Where each form appears.** The explorer draws the seed form. After shrinking, it turns the
+minimal composition into the resolved form and runs that twice; when it fails the same way, the
+resolved schedule is the reported minimal schedule (`report.json` `shrunk[].stable`,
+`stable_schedule`, `contents`). Otherwise (the resolved run is a different run: the guest starts
+round 0 at another time, so a timing-sensitive failure may not recur) the report keeps the seed
+form and says why (`stable_note`), and `hydo save` writes that seed form with its command list
+(`# commands:`, the old index form below): it replays the failing run exactly while the list is
+unchanged, and by id once the list changes. `hydo save` writes:
+
+```
+# found by `hydo explore` (seed 6): violation total_conserved
+# composition: r4: parallel_driver_transfer, parallel_driver_transfer
+# command-sha: parallel_driver_transfer 549e0b6d2561dc5b
+# expect: violation      (change to ok when the bug is fixed)
+disk=none dseed=1d0b14e4db018fed | run W=:p2,r200,cparallel_driver_transfer,7.4.0.721476632,8.4.0.40276333
+```
+
+(a long composition: `W=@<key>` and a `# compose:` line). In `test.regressions` the same fields
+are `compose:` and `contents: {<id>: <hash>}`.
+
+**What the replay checks** (`hydo build` warns, `hydo repro --regressions` acts):
+
+- a command the composition uses is not in the plan: that regression FAILS without running, with
+  a message naming the command and the plan's commands now; a `W=` naming a missing command in
+  any other run fails the knob step in the guest (`HYDO-COMPOSE error: ...`, verdict
+  `HYDO-ORACLE: ERROR knob W=... failed`);
+- an entry's round is not below `workload.steps`: the same failure;
+- a used command's content changed since the save: a warning. The content hash is the first 16
+  hex digits of SHA-256 of the file (`hydo/` folder), the plan's `content:` (an SDK's hash of the
+  function, `hydo-test`), or else of the command's `run` and `timeout`. Helpers the command
+  sources or calls are not covered.
+
+**Old regressions.** A regression in the seed form with `# commands: <ids>` (what `hydo save`
+wrote before M98: the list at save time; `commands:` in `test.regressions`) replays against that
+list: when the plan's list differs, `hydo build` resolves the composition with the saved list
+and stages the resolved form, so it runs the commands it ran when saved. A seed form without a
+saved list still composes from the current list, with a build warning. The plan format stays
+`format: 1`: old plans read the same, and a new plan's only new key (`content:`) is refused by
+an older hydo as an unknown field.
 
 ## Reading the stores (`hydo-read`, `hydo-check`)
 
