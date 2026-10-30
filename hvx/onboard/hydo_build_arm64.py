@@ -30,12 +30,37 @@ manifests that use them (Milestone 96), so every other image keeps its bytes:
     $HYDO_READ_BIN_ARM64, default <build dir>/hydo-read-arm64, when a command calls either name;
   * params: the values the image was built with, in /etc/hydo/params (as on x86_64).
 Each helper must be an aarch64 ELF file (checked), so an x86_64 build cannot slip in.
+
+Service networks, link faults and the freeze (Milestone 99). A manifest with network: bridge,
+an addr: or `freeze` in faults: needs a guest kernel with network namespaces, veth, a bridge,
+IPv6, policy routing and iptables + NFQUEUE, which Image-explore does not have. Such an image is
+built for the SECOND kernel, Image-explore-netns (hvx-mac/explore/build-guest-netns.sh, sha256
+NETNS_KERNEL_SHA256), and says so in its own root: /etc/hydo/kernel holds
+"Image-explore-netns <sha256>", which hvm_backend.kernel_for() (explore.py --backend hvm, the
+Mac hydo) reads to boot it with exactly that kernel. Every other image has no /etc/hydo/kernel,
+boots Image-explore and keeps its bytes. Staged only for those manifests, at their store paths:
+  * network: bridge -> iproute2's `ip` (the same aarch64 store path as tc);
+  * faults: [freeze] -> iptables-legacy (xtables-legacy-multi and the three extensions the
+    freeze's rules load, IPT_FILES) and the static helper hydo_fc built for aarch64
+    ($HYDO_FCBIN_ARM64, default <build dir>/hydo_fc-arm64; hvx/BUILD-PINS.md);
+each with exactly the files its loader opens. $HYDO_ARM64_STORE names a directory that holds
+nix/store/... for them (the Mac release's guest/tc tree, or a tree unpacked by
+hvx/dist/nix_cache_fetch.py); unset, the host's own /nix/store is read.
 """
 import gzip, io, os, shutil, stat, subprocess, sys
 
 BUSYBOX_ARM64 = "/nix/store/zbc5fx2yszji1a4aw2ff46m0p99c6yxb-busybox-static-aarch64-unknown-linux-musl-1.36.1/bin/busybox"
 # nix build --max-jobs 0 --system aarch64-linux nixpkgs#iproute2 (from the binary cache)
 TC_ARM64 = "/nix/store/qmhi9c99dpgxyfg6cipf8xbmcvsr1vx2-iproute2-6.8.0/bin/tc"
+# Milestone 99: the second kernel and what its manifests stage (see the docstring)
+NETNS_KERNEL = "Image-explore-netns"
+NETNS_KERNEL_SHA256 = "806807e7be5f55dae342f796ccc6e20c35514b3684a8c0d4633901a8ac0aa609"
+IP_ARM64 = os.path.dirname(TC_ARM64) + "/ip"
+# nix build --max-jobs 0 --system aarch64-linux nixpkgs#iptables (the libxtables in tc's closure)
+IPTABLES_ARM64 = "/nix/store/y6j6xf1bfshzhdw7hip3swpgd6fqfs3b-iptables-1.8.10"
+# what hydo-init-freeze.sh's rules load: -p tcp --dport/--sport (tcp), -j NFQUEUE, the standard target
+IPT_FILES = ["bin/xtables-legacy-multi", "lib/xtables/libxt_NFQUEUE.so", "lib/xtables/libxt_tcp.so",
+             "lib/xtables/libxt_standard.so"]
 ELFDEPS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
                        "hvx-mac", "services", "elfdeps.py")
 
@@ -120,6 +145,33 @@ def _copy_elf_closure(binary, R):
             os.chmod(dst, 0o755 if os.access(p, os.X_OK) else 0o644)
 
 
+def needs_netns_kernel(m, H):
+    """network: bridge, addr: or faults: [freeze] -> the image boots NETNS_KERNEL."""
+    return H["has_netns"](m) or H["has_links"](m) or H["has_freeze"](m)
+
+
+def _copy_store_files(paths, R):
+    """Store files (guest paths) and every file their loaders open, from $HYDO_ARM64_STORE (a
+    directory holding nix/store/...; unset = the host's /nix/store), each at its own path."""
+    root = os.path.abspath(os.environ["HYDO_ARM64_STORE"]) if os.environ.get("HYDO_ARM64_STORE") else ""
+    for p in paths:
+        if not os.path.lexists(root + p):
+            raise SystemExit("hydo-build: %s not found%s (the aarch64 store paths: hvx/dist/nix_cache_fetch.py "
+                             "--closure <dir> <path>, then HYDO_ARM64_STORE=<dir>)" % (p, " under " + root if root else ""))
+    deps = subprocess.run([sys.executable, ELFDEPS] + (["--root", root] if root else []) + list(paths),
+                          stdout=subprocess.PIPE, text=True, check=True).stdout.split()
+    for p in sorted(set(deps + list(paths))):
+        src, dst = root + p, os.path.join(R, p.lstrip("/"))
+        if os.path.lexists(dst):
+            continue
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        if os.path.islink(src):
+            os.symlink(os.readlink(src), dst)
+        else:
+            shutil.copy(src, dst)
+            os.chmod(dst, 0o755 if os.access(src, os.X_OK) else 0o644)
+
+
 def _aarch64_tool(env, default):
     """$env, else default: an existing aarch64 ELF executable (e_machine 0xb7)."""
     p = os.environ.get(env) or default
@@ -142,6 +194,12 @@ def build(m, manifest_path, out, bdir, H, oci=None, params=None):
         T["world"] = _aarch64_tool("HYDO_WORLDBIN_ARM64", os.path.join(bdir, "hydo-world-arm64"))
     if H["uses_readers"](m):  # hydo-read / hydo-check, only when a command calls them
         T["read"] = _aarch64_tool("HYDO_READ_BIN_ARM64", os.path.join(bdir, "hydo-read-arm64"))
+    netns_k = needs_netns_kernel(m, H)
+    fc = None
+    if H["has_freeze"](m):    # F=: iptables-legacy + the static helper, for the netns kernel
+        T["fc"] = _aarch64_tool("HYDO_FCBIN_ARM64", os.path.join(bdir, "hydo_fc-arm64"))
+        fc = ("/bin/hydo_fc", IPTABLES_ARM64 + "/bin/iptables-legacy")
+    ip = IP_ARM64 if H["has_netns"](m) else None
     seedrng = os.environ.get("HYDO_SEEDRNG_ARM64")      # optional: the device tree's rng-seed seeds the CRNG
     mdir = os.path.dirname(os.path.abspath(manifest_path))
     root = m.get("root") or {}
@@ -200,7 +258,8 @@ def build(m, manifest_path, out, bdir, H, oci=None, params=None):
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "w") as f:
             f.write(content)
-    for name, content in (("etc/hosts", "127.0.0.1 localhost\n"), ("etc/passwd", "root:x:0:0:root:/tmp:/bin/sh\n"),
+    hosts = H["default_hosts"](m) if H["has_netns"](m) else "127.0.0.1 localhost\n"   # bridge: the services' names
+    for name, content in (("etc/hosts", hosts), ("etc/passwd", "root:x:0:0:root:/tmp:/bin/sh\n"),
                           ("etc/group", "root:x:0:\n")):
         p = os.path.join(R, name)
         if not os.path.exists(p):
@@ -212,7 +271,17 @@ def build(m, manifest_path, out, bdir, H, oci=None, params=None):
             raise H["ManifestError"]("arm64 tc %s missing: nix build --max-jobs 0 --system aarch64-linux nixpkgs#iproute2 "
                                      "(or HYDO_TC_ARM64= for an image without network faults)" % tc)
         _copy_elf_closure(tc, R)
-    manifest_sh, prelude = H["compile_shell"](m, tc)
+    if ip or fc:     # only then: every other image keeps its bytes
+        _copy_store_files(([ip] if ip else []) + ([IPTABLES_ARM64 + "/" + f for f in IPT_FILES] if fc else []), R)
+    if fc:
+        os.symlink("xtables-legacy-multi", os.path.join(R, IPTABLES_ARM64.lstrip("/"), "bin/iptables-legacy"))
+        shutil.copy(T["fc"], os.path.join(R, "bin/hydo_fc"))
+        os.chmod(os.path.join(R, "bin/hydo_fc"), 0o755)
+        print("hydo-build: staged iptables-legacy and /bin/hydo_fc (arm64, sha256 %s)" % H["sha"](T["fc"])[:16])
+    if netns_k:      # the kernel this image needs, in the image itself (hvm_backend.kernel_for)
+        with open(os.path.join(R, "etc/hydo/kernel"), "w") as f:
+            f.write("%s %s\n" % (NETNS_KERNEL, NETNS_KERNEL_SHA256))
+    manifest_sh, prelude = (H["compile_shell"](m, tc, fc, ip) if (fc or ip) else H["compile_shell"](m, tc))
     with open(os.path.join(R, "etc/hydo/manifest.sh"), "w") as f:
         f.write(manifest_sh)
     with open(os.path.join(R, "etc/hydo/prelude.sh"), "w") as f:
@@ -224,7 +293,8 @@ def build(m, manifest_path, out, bdir, H, oci=None, params=None):
     H["install_init"](m, os.path.join(R, "sbin/init"))
     if "_compose_stage" in H:
         H["_compose_stage"](m, R)      # the test composer (hydo_composer.py); a no-op without a test plan
-    oci_meta = H["_oci_stage"](oci, R, T["busybox"], bdir, out + "-arm64")   # services[].image
+    oci_meta = (H["_oci_stage"](oci, R, T["busybox"], bdir, out + "-arm64", True) if H["has_netns"](m)   # hydo-oci enters the namespace
+                else H["_oci_stage"](oci, R, T["busybox"], bdir, out + "-arm64"))   # services[].image
     with open(os.path.join(R, "init"), "w") as f:
         f.write(SHIM)
     os.chmod(os.path.join(R, "init"), 0o755)
@@ -247,3 +317,8 @@ def build(m, manifest_path, out, bdir, H, oci=None, params=None):
     print("hydo-build: %s (arm64 initramfs) + %s (data %d MiB)" % (cpio, disk, dmib))
     for p in (cpio, disk):
         print("  sha256(%s)=%s" % (os.path.basename(p), H["sha"](p)))
+    if netns_k:
+        print("hydo-build: this image boots the guest kernel %s (sha256 %s), not Image-explore: it needs %s; "
+              "recorded in the image as /etc/hydo/kernel" % (NETNS_KERNEL, NETNS_KERNEL_SHA256[:16], ", ".join(
+                  w for w, f in (("network: bridge", "has_netns"), ("addr:", "has_links"), ("faults: [freeze]", "has_freeze"))
+                  if H[f](m))))

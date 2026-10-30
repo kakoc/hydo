@@ -1902,6 +1902,9 @@ def main():
     BACKEND, HVM_KERNEL = a.backend, a.hvm_kernel
     if BACKEND == "hvm":
         hvm_backend.configure(a.image)
+        if hvm_backend.image_kernel(a.image):    # built for the second kernel (M99): boot exactly that one
+            HVM_KERNEL = hvm_backend.kernel_for(a.image, a.hvm_kernel)
+            print("guest kernel: %s (recorded in the image)" % HVM_KERNEL, file=sys.stderr)
     if a.manifest or a.image.startswith("explore-ob-") or os.path.basename(a.image).startswith("explore-ob-"):
         import manifest_space
         if BACKEND == "hvm" and not a.manifest:      # the manifest inside an arm64 initramfs
@@ -2115,6 +2118,8 @@ def main():
         summary["vcpus"] = VCPUS
     if CPU != "v2":
         summary["cpu"] = CPU
+    if BACKEND == "hvm" and hvm_backend.image_kernel(IMAGE):     # only for images built for the second kernel
+        summary["guest_kernel"] = "%s (sha256 %s)" % (os.path.basename(HVM_KERNEL), hvm_backend.image_kernel(IMAGE)[1][:16])
     rep_j = {"summary": summary, "failures": fails,
              "shrunk": [{"class": k[0], "signature": k[1], **v} for k, v in shrunk.items()]}
     if errors is not None:      # only for images with errors: (other reports are unchanged)

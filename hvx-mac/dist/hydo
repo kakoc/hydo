@@ -32,6 +32,9 @@ EXPLORE = os.path.join(R, "hvx", "explore")
 HVMX = os.path.join(R, "hvx-mac", "explore", "hvmx")
 HVM = os.path.join(R, "hvx-mac", "hvm")
 KERNEL = os.path.join(R, "hvx-mac", "explore", "out", "Image-explore")
+# the second kernel (Milestone 99), for images built from a manifest with network: bridge, addr:
+# or faults: [freeze]; such an image names it in /etc/hydo/kernel (hvm_backend.kernel_for)
+NETNS_KERNEL = os.path.join(R, "hvx-mac", "explore", "out", "Image-explore-netns")
 GUEST = os.path.join(R, "guest")
 HISTORY = os.path.join(R, "hvx", "history")       # the host's history checkers (hydohist.py)
 OUT = "hydo-out"
@@ -152,10 +155,9 @@ def cmd_compose(argv):
             "[--profile P] [--use-env] [--no-resolve] [--lock FILE]")
     sys.path.insert(0, ONBOARD)
     import hydo_compose
-    a = list(argv)
-    if "--no-addr" not in a:        # the arm64 build does not support addr: (link faults) yet
-        a.append("--no-addr")
-    return hydo_compose.main(a)
+    # every service gets its own network namespace (network: bridge), as on Linux: the arm64
+    # build supports it with the second guest kernel (Milestone 99)
+    return hydo_compose.main(list(argv))
 
 
 def cmd_build(argv):
@@ -173,6 +175,10 @@ def cmd_build(argv):
     # commands that call hydo-read or hydo-check)
     os.environ.setdefault("HYDO_WORLDBIN_ARM64", os.path.join(GUEST, "hydo-world"))
     os.environ.setdefault("HYDO_READ_BIN_ARM64", os.path.join(GUEST, "hydo-read"))
+    # network: bridge, addr:, faults: [freeze] (Milestone 99): ip and iptables-legacy come from
+    # the same aarch64 store tree as tc, the freeze helper is guest/hydo_fc
+    os.environ.setdefault("HYDO_ARM64_STORE", os.path.join(GUEST, "tc"))
+    os.environ.setdefault("HYDO_FCBIN_ARM64", os.path.join(GUEST, "hydo_fc"))
     sys.path.insert(0, ONBOARD)
     hb = load_hydo_build()
     hb.mkfs = mac_mkfs(hb)
@@ -199,11 +205,22 @@ def disk_env(image):
     return dict(os.environ, HVM_DISK=d) if os.path.exists(d) else dict(os.environ)
 
 
+def kernel_for(image, quiet=True):
+    """The guest kernel the image was built for: KERNEL, or the second kernel an image with
+    service networks records (checked by sha256; hvm_backend.kernel_for)."""
+    sys.path.insert(0, EXPLORE)
+    import hvm_backend
+    k = hvm_backend.kernel_for(image, None, KERNEL)
+    if not quiet and k != KERNEL:
+        print("hydo: guest kernel %s (recorded in the image)" % os.path.relpath(k, R))
+    return k
+
+
 def run_once(image, sched, outdir, quiet=False):
     os.makedirs(outdir, exist_ok=True)
     sys.path.insert(0, EXPLORE)
     import hvm_backend          # the image's guest.ram_mib, as explore.py passes it
-    p = subprocess.run([HVMX] + hvm_backend.image_ram_args(image) + ["one", KERNEL, image, outdir, sched], env=disk_env(image),
+    p = subprocess.run([HVMX] + hvm_backend.image_ram_args(image) + ["one", kernel_for(image, quiet), image, outdir, sched], env=disk_env(image),
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     text = p.stdout.decode(errors="replace")
     for line in text.splitlines():
@@ -366,7 +383,7 @@ def cmd_explore(argv):
         if hydo_errors.default_file():
             args += ["--known-errors", os.path.abspath(hydo_errors.default_file())]
     cmd = [sys.executable, os.path.join(EXPLORE, "explore.py"), "--backend", "hvm",
-           "--hvm-kernel", KERNEL, "--image", image] + args
+           "--hvm-kernel", kernel_for(image), "--image", image] + args
     rc = subprocess.call(cmd)
     out = args[args.index("--out") + 1]
     if rc == 0:
@@ -405,6 +422,9 @@ def cmd_doctor(argv):
     for p in (HVMX, HVM, KERNEL, os.path.join(GUEST, "busybox"), os.path.join(GUEST, "mke2fs"),
               os.path.join(GUEST, "tc-closure.txt")):
         check(os.path.exists(p), "present: " + os.path.relpath(p, R), "reinstall")
+    # for manifests with network: bridge, addr: or faults: [freeze] only (Milestone 99)
+    for p in (NETNS_KERNEL, os.path.join(GUEST, "hydo_fc")):
+        check(os.path.exists(p), "present: %s (service networks and the freeze)" % os.path.relpath(p, R), "reinstall")
     hv = subprocess.run(["sysctl", "-n", "kern.hv_support"], stdout=subprocess.PIPE, text=True).stdout.strip()
     check(hv == "1", "Hypervisor.framework available (kern.hv_support=%s)" % hv, "not supported on this machine")
     sig = subprocess.run(["codesign", "-d", "--entitlements", "-", HVMX], stdout=subprocess.PIPE,

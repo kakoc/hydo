@@ -12,9 +12,12 @@ that contains `hvx/onboard/hydo_agents.py`.
 - **Linux release** (`hydo` from `hydo-linux-0.1.0`): x86_64 guests on an Intel VT-x machine.
 - **Mac release** (`hydo` from `hydo-mac-0.1.0`): arm64 guests on an Apple Silicon Mac.
 - The arm64 build (`hydo-build --arch arm64`, which the Mac release runs) supports every manifest
-  feature except `addr:` link faults, `faults: [freeze]` and `guest.cpu: v3` (Milestone 96). A
-  Mac release built before M96 lacks `params:`, `hydo-world`, `hydo-read` and the host's history
-  checkers; "after M96" below means a release rebuilt with them.
+  feature except `guest.cpu: v3` (Milestone 96). `network: bridge`, `addr:` and `faults: [freeze]`
+  build the image for a second Mac guest kernel, `Image-explore-netns`, which the image records and
+  hydo boots by itself (Milestone 99); "after M99" below means a Mac release that ships that kernel,
+  `guest/hydo_fc` and the aarch64 `ip`/`iptables-legacy` files. A Mac release built before M96 lacks
+  `params:`, `hydo-world`, `hydo-read` and the host's history checkers; "after M96" below means a
+  release rebuilt with them.
 - **hydo's repository on x86_64 Linux**: `hvx/onboard/hydo-build` with the helper programs built
   from source (`hvx/onboard/world/build.sh` for `hydo-world`, `hvx/readers/build.sh` for
   `hydo-read`, Go for `hydo-grpc-gen`) and the pinned tools of `hvx/BUILD-PINS.md`.
@@ -24,15 +27,15 @@ that contains `hvx/onboard/hydo_agents.py`.
 | services, `root.files`, data disk, `knobs:`, `provision:` | yes | yes | yes |
 | `hydo/` folder: commands, checks `final_`/`always_`/`eventually_`, regressions | yes | yes | yes |
 | `eventually` liveness checks | yes | yes | yes |
-| Docker/OCI images (`image:`), `hydo compose` | yes | yes (no `addr:`: `hydo compose` passes `--no-addr`) | yes |
+| Docker/OCI images (`image:`), `hydo compose` | yes | yes (before M99 `hydo compose` passed `--no-addr`; after M99 it writes `network: bridge` as on Linux; a big image root needs a bigger `guest.ram_mib`, since the root is in guest RAM) | yes |
 | `guest.ram_mib` | 256–3072 | 256–4096 | 256–3072 |
 | `guest.clock_after_cut` | yes | yes | yes |
 | `guest.cpu: v3` (AVX/AVX2) | yes | no (arm64) | yes |
 | `params:` (build variants, `hydo build --set k=v`) | yes | after M96 | yes |
-| `addr:` and link faults between services | yes | no | yes |
-| `network: bridge` (a network namespace per service) | not shipped yet (needs `hydo-init-netns.sh` and the `llc`/`stp`/`bridge`/`veth` modules in the release) | no (the arm64 guest kernel has no network namespaces) | yes |
+| `addr:` and link faults between services | yes | after M99 (second guest kernel) | yes |
+| `network: bridge` (a network namespace per service) | not shipped yet (needs `hydo-init-netns.sh` and the `llc`/`stp`/`bridge`/`veth` modules in the release) | after M99 (second guest kernel `Image-explore-netns`) | yes |
 | network and one-way faults on a port | yes | yes | yes |
-| `faults: [freeze]` (`F=`, freeze sweeps) | yes | no | yes |
+| `faults: [freeze]` (`F=`, freeze sweeps) | yes | after M99 (`F=` and `--freeze-call`; freeze sweeps not yet run on the Mac) | yes |
 | `checks:` / `linearizable_` / `list_append_` history checks | yes | after M96 (ships `hvx/history/`) | yes |
 | `buggify: true` | not shipped (the init extension is missing from the release) | yes | yes |
 | `hydo-read`, `hydo-check` | not bundled (build `hydo-read` in the repository and set `HYDO_READ_BIN`) | after M96 (ships `guest/hydo-read`; else `HYDO_READ_BIN_ARM64`) | yes |

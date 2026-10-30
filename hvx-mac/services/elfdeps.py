@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """Print the shared-library closure of some ELF files, as absolute paths.
 
-Usage: elfdeps.py FILE...   (files are dynamically linked nix-store binaries/libraries)
+Usage: elfdeps.py [--root DIR] FILE...   (files are dynamically linked nix-store binaries/libraries)
 
 Reads PT_INTERP, DT_NEEDED, DT_RUNPATH/DT_RPATH straight from the ELF (no readelf, so it
 works for foreign architectures), resolves each needed library through the RUNPATH of the
 object that needs it, and recurses. Prints every resolved file (and every symlink on the
 way to it) once, sorted, so the initramfs builder can copy exactly what the dynamic loader
 will open. A library that cannot be resolved is an error.
+
+--root DIR (Milestone 99): the files live under DIR (DIR/nix/store/..., e.g. a tree unpacked by
+hvx/dist/nix_cache_fetch.py on a Mac without /nix): FILE arguments and the printed paths are the
+guest's absolute paths, every read and symlink hop is made under DIR. Without it nothing changes.
 """
 import os
 import struct
@@ -17,8 +21,42 @@ PT_INTERP, PT_DYNAMIC, PT_LOAD = 3, 2, 1
 DT_NEEDED, DT_STRTAB, DT_RPATH, DT_RUNPATH = 1, 5, 15, 29
 
 
+ROOT = ""          # --root: prefix of every file system access
+
+
+def H(p):
+    """The host path of a guest path."""
+    return ROOT + p if ROOT else p
+
+
+def realpath(p):
+    """os.path.realpath of a guest path, every hop resolved under ROOT."""
+    if not ROOT:
+        return os.path.realpath(p)
+    parts, out, hops = [x for x in p.split("/") if x], "", 0
+    while parts:
+        x = parts.pop(0)
+        if x in ("", "."):
+            continue
+        if x == "..":
+            out = os.path.dirname(out) if out else ""
+            continue
+        nxt = out + "/" + x
+        if os.path.islink(H(nxt)):
+            hops += 1
+            if hops > 40:
+                sys.exit(f"elfdeps: symlink loop at {p}")
+            t = os.readlink(H(nxt))
+            parts = [y for y in t.split("/") if y] + parts
+            if t.startswith("/"):
+                out = ""
+            continue
+        out = nxt
+    return out or "/"
+
+
 def parse(path):
-    with open(path, "rb") as f:
+    with open(H(path), "rb") as f:
         b = f.read()
     if b[:4] != b"\x7fELF" or b[4] != 2:
         return None
@@ -72,9 +110,9 @@ def chain(p):
     while p not in seen:
         seen.add(p)
         out.append(p)
-        if not os.path.islink(p):
+        if not os.path.islink(H(p)):
             break
-        t = os.readlink(p)
+        t = os.readlink(H(p))
         p = os.path.normpath(os.path.join(os.path.dirname(p), t))
     return out
 
@@ -85,7 +123,7 @@ def main(files):
     fallback = []          # the loader's own directory: glibc's libraries carry no RUNPATH
     while todo:
         f = todo.pop()
-        real = os.path.realpath(f)
+        real = realpath(f)
         if real in done:
             continue
         done.add(real)
@@ -102,7 +140,7 @@ def main(files):
         for n in needed:
             for d in rp + fallback + [os.path.dirname(real)]:
                 c = os.path.join(d, n)
-                if os.path.exists(c):
+                if os.path.exists(H(c)):
                     outs.update(chain(c))
                     todo.append(c)
                     break
@@ -113,4 +151,8 @@ def main(files):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    a = sys.argv[1:]
+    if a[:1] == ["--root"]:
+        ROOT = os.path.abspath(a[1]).rstrip("/")
+        a = a[2:]
+    main(a)

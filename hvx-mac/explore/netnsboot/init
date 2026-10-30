@@ -1,0 +1,58 @@
+#!/bin/busybox sh
+# /init of the namespace-kernel boot test (Milestone 99, mkinit.py): the M48 test's steps, then
+# what network: bridge, link faults and the freeze use, all on the guest kernel itself: two
+# network namespaces on one bridge, a server on the same port in each, TCP and ICMP across the
+# bridge, localhost inside a namespace, netem on a veth, an iptables NFQUEUE rule, ::1 on lo.
+export PATH=/bin
+IP=@IP@
+TC=@TC@
+IPT=@IPT@
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mount -t devtmpfs dev /dev 2>/dev/null
+mount -t tmpfs tmp /tmp
+echo "hydo-netns: userspace alive"
+uname -a
+echo "hydo-netns: uptime $(cat /proc/uptime)"
+echo "hydo-netns: clocksource $(cat /sys/devices/system/clocksource/clocksource0/current_clocksource)"
+echo "hydo-netns: compute $(seq 1 3000 | md5sum)"
+v6off() { echo 1 > /proc/sys/net/ipv6/conf/$1/disable_ipv6; }
+$IP link set lo up
+$IP link add hydo0 address 02:42:0a:59:00:01 type bridge forward_delay 0 stp_state 0
+v6off hydo0
+$IP addr add 10.89.0.1/16 dev hydo0
+$IP link set hydo0 up
+for i in 1 2; do
+  : > /tmp/ns$i
+  unshare --net=/tmp/ns$i true
+  $IP link add vh$i address 02:43:0a:59:00:1$i type veth peer name eth0 address 02:42:0a:59:00:1$i netns /tmp/ns$i
+  v6off vh$i
+  $IP link set vh$i master hydo0 up
+  nsenter -n/tmp/ns$i sh -c "echo 1 > /proc/sys/net/ipv6/conf/eth0/disable_ipv6; $IP link set lo up &&
+    $IP addr add 10.89.0.1$i/16 dev eth0 && $IP link set eth0 up"
+  mkdir -p /www$i && echo "served by namespace $i" > /www$i/index.html
+  nsenter -n/tmp/ns$i httpd -p 80 -h /www$i
+done
+echo "hydo-netns: ns1 addresses: $(nsenter -n/tmp/ns1 $IP -br addr | tr '\n' ' ')"
+echo "hydo-netns: root to 10.89.0.11: $(wget -q -T 5 -O - http://10.89.0.11/)"
+echo "hydo-netns: root to 10.89.0.12: $(wget -q -T 5 -O - http://10.89.0.12/)"
+echo "hydo-netns: ns1 to 10.89.0.12: $(nsenter -n/tmp/ns1 wget -q -T 5 -O - http://10.89.0.12/)"
+echo "hydo-netns: ns2 to its localhost: $(nsenter -n/tmp/ns2 wget -q -T 5 -O - http://127.0.0.1/)"
+echo "hydo-netns: root to its localhost: $(wget -q -T 2 -O - http://127.0.0.1/ 2>&1 | head -1)"
+echo "hydo-netns: ping: $(nsenter -n/tmp/ns1 ping -c 3 -W 2 10.89.0.12 | tail -2 | tr '\n' ' ')"
+$TC qdisc add dev vh2 root netem delay 100ms
+t0=$(cut -d' ' -f1 /proc/uptime)
+r=$(wget -q -T 5 -O - http://10.89.0.12/)
+t1=$(cut -d' ' -f1 /proc/uptime)
+echo "hydo-netns: with netem delay 100ms on vh2: '$r' in $t0..$t1 s; $($TC -s qdisc show dev vh2 | grep Sent | head -1)"
+$TC qdisc del dev vh2 root
+export XTABLES_LOCKFILE=/tmp/xtables.lock
+nsenter -n/tmp/ns1 $IPT -A INPUT -s 10.89.0.1 -p tcp --dport 80 -j NFQUEUE --queue-num 7 --queue-bypass
+echo "hydo-netns: through an NFQUEUE rule with no reader (bypass): $(wget -q -T 5 -O - http://10.89.0.11/)"
+echo "hydo-netns: rule counters: $(nsenter -n/tmp/ns1 $IPT -L INPUT -v -n -x | tail -1 | tr -s ' ')"
+echo "hydo-netns: ::1 in ns1: $(nsenter -n/tmp/ns1 $IP -6 -br addr show dev lo | tr -s ' ')"
+for i in 1 2; do echo "hydo-netns: vh$i tx_packets $(cat /sys/class/net/vh$i/statistics/tx_packets) rx_packets $(cat /sys/class/net/vh$i/statistics/rx_packets)"; done
+sleep 1
+echo "hydo-netns: after sleep 1, uptime $(cat /proc/uptime)"
+echo "hydo-boot-marker: launching shell"
+exec sh

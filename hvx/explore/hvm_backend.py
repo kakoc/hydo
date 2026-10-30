@@ -17,6 +17,11 @@ manifest (etc/hydo/manifest.sh, HYDO_TC), not assumed. Tick jitter works, but it
 counted in VM exits instead of guest branches (hvx-mac/hvm.c), so a seeded jitter's maximum
 delay is capped at HVM_TJ_MAX exits.
 
+The guest kernel (Milestone 99): an image built for the second kernel (network: bridge, addr:,
+faults: [freeze]) records it in /etc/hydo/kernel ("Image-explore-netns <sha256>");
+kernel_for() returns that kernel file, next to the default one, after checking its sha256, so a
+run and its reproduction boot the same kernel. Every other image boots the default kernel.
+
 Guest RAM: explore.py passes ["--ram-mib", N] (its ram_args(), from the manifest's
 guest.ram_mib or --ram-mib) to engine_cmd/repro_line; hvmx accepts 256..4096 MiB.
 """
@@ -25,6 +30,45 @@ import os
 HERE = os.path.dirname(os.path.abspath(__file__))
 MAC = os.path.join(os.path.dirname(os.path.dirname(HERE)), "hvx-mac", "explore")
 KERNEL = os.path.join(MAC, "out", "Image-explore")
+
+
+def image_kernel(image):
+    """(file name, sha256) of the kernel the image was built for (/etc/hydo/kernel), or None for
+    an image without the record (it boots the default kernel, Image-explore)."""
+    try:
+        f = embedded_file(image, "etc/hydo/kernel").split()
+    except SystemExit:
+        return None
+    return f[0], f[1]
+
+
+def _sha256(path):
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for b in iter(lambda: f.read(1 << 20), b""):
+            h.update(b)
+    return h.hexdigest()
+
+
+def kernel_for(image, kernel=None, default=None):
+    """The kernel file to boot image with. kernel: an explicit choice (--hvm-kernel, hydo's
+    --kernel), else the image's recorded kernel next to default (default: KERNEL), else default.
+    A recorded kernel is checked by sha256: a different file is refused, so that a run never
+    boots a kernel the image was not built for."""
+    rec = image_kernel(image)
+    default = default or KERNEL
+    if rec is None:
+        return kernel or default
+    path = kernel or os.path.join(os.path.dirname(default), rec[0])
+    if not os.path.isfile(path):
+        raise SystemExit("%s was built for the guest kernel %s (sha256 %s...) and it is not at %s "
+                         "(hvx-mac/explore/build-guest-netns.sh builds it)" % (image, rec[0], rec[1][:16], path))
+    got = _sha256(path)
+    if got != rec[1]:
+        raise SystemExit("%s was built for the guest kernel %s (sha256 %s...), but %s has sha256 %s..."
+                         % (image, rec[0], rec[1][:16], path, got[:16]))
+    return path
 
 
 def resolve_image(image):

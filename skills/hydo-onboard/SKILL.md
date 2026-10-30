@@ -129,7 +129,8 @@ rules that matter most:
 - `port`: the port that clients use (network faults act on it). For a system of several
   services that call each other, prefer `network: bridge` with an `addr:` (10.89.0.x) per service:
   each service gets its own network namespace and private localhost, and faults on the link
-  between two services act on their real traffic (x86_64 only; MANIFEST.md "Service networks").
+  between two services act on their real traffic (MANIFEST.md "Service networks"; on a Mac it
+  needs a release with the second guest kernel, references/capabilities.md).
   Without it, `addr:` is a loopback address (127.x.y.z) that a link fault only sees if the
   program's outgoing connections leave from it.
 - `depends_on`; `recovery: false` for a stateless tier that the final checks do not need after a

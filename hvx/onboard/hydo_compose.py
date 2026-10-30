@@ -31,8 +31,8 @@ What it does, per Compose service (the table in MANIFEST.md lists every key):
     --network loopback: the Milestone 84 layout instead -- one shared loopback network, addr:
     127.0.0.11, .12, ... (link faults then act on nothing: outgoing connections leave from
     127.0.0.1). --no-addr: one shared loopback network, every name resolves to 127.0.0.1 and no
-    addr: is written (the arm64 build, `hydo compose` on a Mac: its guest kernel has no network
-    namespaces).
+    addr: is written (what `hydo compose` on a Mac passed before Milestone 99, when the arm64
+    guest kernel had no network namespaces; the Mac now builds network: bridge too).
   * volumes: named and anonymous volumes (and the image's VOLUMEs) -> directories on the data disk
     (/data/vol/<name>, the fault target) mounted into the image with a copy of the image's content
     on first use, as Docker does; bind mounts of existing files/directories -> copied into the
@@ -688,7 +688,7 @@ class Importer:
         if len(order) > 250 - ADDR_BASE:
             raise ComposeError("too many services for one /24")
         self.names = names
-        if self.o.get("no_addr"):      # --no-addr (the arm64 build has no addr: yet): every name -> 127.0.0.1
+        if self.o.get("no_addr"):      # --no-addr (one shared loopback network): every name -> 127.0.0.1
             self.addr = {n: "127.0.0.1" for n in order}
         elif self.bridge:
             self.addr = {n: "10.89.0.%d" % (ADDR_BASE + i) for i, n in enumerate(order)}
