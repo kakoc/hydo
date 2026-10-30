@@ -181,7 +181,7 @@ static void ph_kv(const char *fmt, ...)
 	va_end(ap);
 	if (g_ph_extra_n >= sizeof(g_ph_extra)) g_ph_extra_n = sizeof(g_ph_extra) - 1;
 }
-struct ph_ctr { uint64_t exits, branches, ticks, vtsc, cyc, entries, steps, calls, stepcyc, freecyc, stephw; };
+struct ph_ctr { uint64_t exits, branches, ticks, vtsc, cyc, entries, steps, calls, stepcyc, freecyc, stephw, rdtsc, dreq; };
 static void ph_read(struct boot *b, struct ph_ctr *c)
 {
 	struct hvx_snapshot *s = calloc(1, sizeof(*s));
@@ -189,7 +189,7 @@ static void ph_read(struct boot *b, struct ph_ctr *c)
 	struct hvx_ftstat *f = calloc(1, sizeof(*f));
 	memset(c, 0, sizeof(*c));
 	memset(&pm, 0, sizeof(pm));
-	if (s && ioctl(b->fd, HVX_GET_SNAPSHOT, s) == 0) { c->exits = s->icount; c->vtsc = s->tsc; }
+	if (s && ioctl(b->fd, HVX_GET_SNAPSHOT, s) == 0) { c->exits = s->icount; c->vtsc = s->tsc; c->rdtsc = s->rdtsc_count; c->dreq = s->fault_req_seq; }
 	if (ioctl(b->fd, HVX_GET_PMU, &pm) == 0) { c->branches = pm.total; c->ticks = pm.ticks; }
 	if (f && ioctl(b->fd, HVX_GET_FTSTAT, f) == 0) {
 		unsigned i;
@@ -221,8 +221,9 @@ static void ph_delta(const char *pre, const struct ph_ctr *a, const struct ph_ct
 	      pre, (unsigned long long)(z->steps - a->steps), pre, (unsigned long long)(z->calls - a->calls));
 	/* where the time inside the VMX section went: single-step tick/turn landings (exit handling
 	 * + entry + one instruction), of that the hardware VMRESUME->exit part, and free-running entries */
-	ph_kv("%s_step_s=%.3f %s_step_hw_s=%.3f %s_free_s=%.3f", pre, (z->stepcyc - a->stepcyc) / 1e6,
-	      pre, (z->stephw - a->stephw) / 1e6, pre, (z->freecyc - a->freecyc) / 1e6);
+	ph_kv("%s_step_s=%.3f %s_step_hw_s=%.3f %s_free_s=%.3f %s_rdtsc=%llu %s_diskreq=%llu", pre,
+	      (z->stepcyc - a->stepcyc) / 1e6, pre, (z->stephw - a->stephw) / 1e6, pre, (z->freecyc - a->freecyc) / 1e6,
+	      pre, (unsigned long long)(z->rdtsc - a->rdtsc), pre, (unsigned long long)(z->dreq - a->dreq));
 }
 static long ph_rss_kb(const char *key)
 {
