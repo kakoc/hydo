@@ -513,6 +513,32 @@ def cli(argv, default_dir):
         return 1
 
 
+def for_run_dir(outdir, schedule, res, known_path=None, out=print):
+    """`hydo run` / `hydo repro` (both CLIs): the error kinds of the run whose consoles are in
+    outdir (<tag>.log, <tag>.recovery.log), compared with the known list (known_path, else
+    hydo/known-errors.yaml or ./known-errors.yaml if present); writes one.errors.json, prints the
+    summary and folds the result into res. Nothing happens for an image without errors:."""
+    import glob
+    cons = [p for p in sorted(glob.glob(os.path.join(outdir, "*.log")))
+            if not p.endswith((".checks.log", "engine.log")) and not os.path.basename(p).startswith("worker")]
+    cons.sort(key=lambda p: (p.endswith(".recovery.log"), p))
+    srcs = [(os.path.basename(p), open(p, errors="replace").read()) for p in cons]
+    try:
+        known = load_known(known_path or default_file())
+    except ErrorsError as e:
+        out("hydo: known errors: %s (every kind counts as new)" % e)
+        known = load_known(None)
+    an = analyse(srcs, schedule, known)
+    if an is None:
+        return res
+    write_run_json(os.path.join(outdir, "one.errors.json"), an, known)
+    for line in summary_lines(an):
+        out("hydo: " + line)
+    if an["new"]:
+        out("hydo: expected? hydo errors accept <signature> --reason \"...\" --from %s" % outdir)
+    return apply(res, an, known)
+
+
 def write_run_json(path, an, known):
     """one.errors.json of `hydo run` (what `hydo errors list|accept --from <run dir>` read)."""
     kinds = [dict(k, new=True, runs=1) for k in an["new"]] + [dict(k, new=False, runs=1) for k in an["known"]]

@@ -24,6 +24,9 @@
                  [--out DIR] [any other explore.py option]
                                                    generate, run, re-run and shrink schedules
     hydo report  [DIR]                             print the report of the last (or a given) exploration
+    hydo errors  list [DIR] | accept SIG... --reason TEXT [--with F] [--during F] | check
+                                                   error logs as findings: list new error kinds, accept
+                                                   expected ones into hydo/known-errors.yaml (MANIFEST.md)
 
 IMG defaults to the one *-disk.img in ./hydo-out, or in ./.hydo for a project whose manifest is
 hydo/hydo.yaml (the agreed repository layout; `hydo build` with no manifest uses ./hydo/hydo.yaml).
@@ -346,6 +349,14 @@ def host_checks_one(outdir, res):
     return res
 
 
+def errors_one(outdir, sched, res, known=None):
+    """Error logs as findings (an image whose manifest has errors:): the run's error kinds against
+    the known list (--known-errors FILE, else hydo/known-errors.yaml); one.errors.json."""
+    sys.path.insert(0, ONBOARD)
+    import hydo_errors
+    return hydo_errors.for_run_dir(outdir, sched, res, known)
+
+
 def sha256(path):
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -363,13 +374,14 @@ def new_run_dir():
 def cmd_run(argv):
     args = list(argv)
     outdir = take(args, "--out")
+    known = take(args, "--known-errors")
     image = find_image(args)
     if len(args) != 1:
         die("usage: hydo run [IMG] \"<schedule>\" [--image IMG] [--out DIR]   e.g. hydo run \"disk=cut | run C=12 R=everysec\"")
     sched = args[0]
     outdir = outdir or new_run_dir()
     eargs = engine_args_for(image)
-    res = host_checks_one(outdir, run_one(image, sched, outdir, eargs))
+    res = errors_one(outdir, sched, host_checks_one(outdir, run_one(image, sched, outdir, eargs)), known)
     rec = {"image": image, "image_sha256": sha256(image), "schedule": sched, "engine_args": eargs, **res}
     with open(os.path.join(outdir, "run.json"), "w") as f:
         json.dump(rec, f, indent=1)
@@ -414,6 +426,7 @@ def cmd_repro(argv):
         for k, (label, image, sched, fp, eargs) in enumerate(items):
             res = host_checks_one(os.path.join(base, "%03d" % k),
                                   run_one(image, sched, os.path.join(base, "%03d" % k), eargs, quiet=True))
+            res = errors_one(os.path.join(base, "%03d" % k), sched, res)
             ok = res["fp"] == fp
             same += ok
             print("%-12s %s  fp=%s (recorded %s)  %s\n             %s" % (
@@ -509,6 +522,12 @@ def cmd_explore(argv):
         args += ["--seeds", "1-20"]
     if "--workers" not in args:
         args += ["--workers", "2"]
+    if "--known-errors" not in args:        # error logs as findings: the project's reviewed list
+        sys.path.insert(0, ONBOARD)
+        import hydo_errors
+        kf = hydo_errors.default_file()
+        if kf:
+            args += ["--known-errors", os.path.abspath(kf)]
     if not os.access(ENGINE, os.X_OK):
         die("%s is not built (run install.sh again)" % ENGINE)
     cmd = [sys.executable, os.path.join(EXPLORE, "explore.py"), "--image", image] + args
@@ -518,6 +537,13 @@ def cmd_explore(argv):
         print("hydo: report: %s   (hydo report %s; hydo repro %s re-runs every failure)" % (
             os.path.join(out, "report.md"), out, out))
     return rc
+
+
+def cmd_errors(argv):
+    """hydo errors list|accept|check (hvx/onboard/hydo_errors.py, shared with the Mac release)."""
+    sys.path.insert(0, ONBOARD)
+    import hydo_errors
+    return hydo_errors.cli(argv, os.path.join(OUT, "explore"))
 
 
 def cmd_report(argv):
@@ -917,7 +943,7 @@ def cmd_doctor(argv):
 
 def main():
     cmds = {"compose": cmd_compose, "build": cmd_build, "run": cmd_run, "repro": cmd_repro, "explore": cmd_explore,
-            "report": cmd_report, "doctor": cmd_doctor, "module": cmd_module, "save": cmd_save}
+            "report": cmd_report, "doctor": cmd_doctor, "module": cmd_module, "save": cmd_save, "errors": cmd_errors}
     if len(sys.argv) >= 2 and sys.argv[1] in ("guide", "skill", "init"):
         sys.path.insert(0, ONBOARD)
         import hydo_agents      # shared by both releases: hvx/onboard/hydo_agents.py
