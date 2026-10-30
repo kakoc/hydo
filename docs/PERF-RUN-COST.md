@@ -109,7 +109,7 @@ for how much of the guest time is the deterministic tick landing.
 
 ## 2. How it was measured
 
-- **The engine's own clock.** `hvx/hvx_explore.c` got measurement code that runs only with
+- **The engine's own clock.** `hv/hvx/hvx_explore.c` got measurement code that runs only with
   `HVX_EXPLORE_PHASES=1`. It prints one `PHASES <tag> ...` line per schedule on stderr (never on
   the `RESULT` line) with the host wall time of every phase, and `PHBOOT` lines for the worker's
   boot. Around the workload, the check and the recovery boot it reads the module's own counters:
@@ -122,19 +122,19 @@ for how much of the guest time is the deterministic tick landing.
   save buffers and the RAM mapping only. `HVX_EXPLORE_ZSKIP=1` hashes guest RAM a second way
   (section 5) and checks that the value is the same. The time these checks take is booked
   separately (`dirtyscan`) and left out of every per-phase number below.
-- **Separate probe.** `perf/vmcost.c` creates a VM exactly as `vm_fresh` does and times each step
+- **Separate probe.** `hv/hvx/perf/vmcost.c` creates a VM exactly as `vm_fresh` does and times each step
   (VM creation, disk page array, image copy, kernel load, snapshot ioctls, FNV over RAM, the save
   files written and read cold and warm, teardown) in a VM that never runs.
-- **Drivers.** `perf/serve.sh` feeds a fixed list of schedules to one engine in serve mode;
-  `perf/hvx-run-phases` is a drop-in `HYDO_HVX_RUN` that only adds the environment variables, so
-  `explore.py` ran unchanged; `perf/pyrusage.py` runs `explore.py` unchanged and prints its own
-  CPU time; `perf/scale.sh` runs one scaling point (and holds the quiet window for more than two
-  workers); `perf/phases.py` and `perf/campaign_mix.py` summarise the logs; `perf/drive.py` times
+- **Drivers.** `hv/hvx/perf/serve.sh` feeds a fixed list of schedules to one engine in serve mode;
+  `hv/hvx/perf/hvx-run-phases` is a drop-in `HYDO_HVX_RUN` that only adds the environment variables, so
+  `explore.py` ran unchanged; `hv/hvx/perf/pyrusage.py` runs `explore.py` unchanged and prints its own
+  CPU time; `hv/hvx/perf/scale.sh` runs one scaling point (and holds the quiet window for more than two
+  workers); `hv/hvx/perf/phases.py` and `hv/hvx/perf/campaign_mix.py` summarise the logs; `hv/hvx/perf/drive.py` times
   the Mac engine from outside.
 - **Images.** The stack: `explore-binlog-ret-xr-nq-disk.img` (2.3 GiB image, 512 MiB data
   partition, 1 GiB guest RAM). Redis: `explore-ob-redis-nq-disk.img` with
   `hvx/onboard/examples/redis/hydo.yaml` (129 MiB image, 64 MiB data partition, 1 GiB guest RAM).
-- **Schedules.** Fixed lists in `perf/sched/` (clean, one kill, one power cut, kill + power cut,
+- **Schedules.** Fixed lists in `hv/hvx/perf/sched/` (clean, one kill, one power cut, kill + power cut,
   a network delay), and full campaigns: the stack with `--strategy process --more-faults`, seeds
   1–40, 2 workers; Redis with `--strategy swarm`, seeds 1–40, 2 workers (it finds the documented
   relaxed-`appendfsync` loss, so it re-runs and shrinks).
@@ -202,7 +202,7 @@ The `secs=` value that the engine reports on its `RESULT` line, and that `explor
 `mean_run_s`, starts after the new VM and the restore, so it leaves out 0.5 s (Redis) to 1.8 s
 (stack) of every run.
 
-**The same stack schedules, one engine alone** (`perf/sched/stack.txt`, warm, file-backed; total
+**The same stack schedules, one engine alone** (`hv/hvx/perf/sched/stack.txt`, warm, file-backed; total
 without the measurement's own time):
 
 | schedule | new VM + restore | workload | fingerprints | check | save, new VM, restore for the recovery | recovery | teardowns | total |
@@ -236,7 +236,7 @@ dominate (`PAUSE` exits are on for the stack, `HVX_VM_PAUSE_EXIT`) is not visibl
 existing ioctls (section 11).
 
 **Python and the protocol.** `explore.py`'s own CPU time over the whole Redis campaign (78 engine
-runs, re-runs and shrinking, report) was 0.13 s (`perf/pyrusage.py`). The engines never waited for
+runs, re-runs and shrinking, report) was 0.13 s (`hv/hvx/perf/pyrusage.py`). The engines never waited for
 it between two runs of a batch: the next `RUN` line was already there when the engine finished
 tearing down the last VM (median idle gap 0.000 s). The waits that did happen were batch
 barriers: `Pool.run_all` hands out a batch (the first sweep, the re-runs, one shrink round) and
@@ -249,12 +249,12 @@ sweep, it was 0.
 `fingerprint()` (in `hvx/hvx_stack_verify.c`) hashes the console, the snapshot struct, all guest
 RAM and the data partition with FNV-1a one byte at a time. The multiply chain allows no
 parallelism, so it runs at 1.07–1.41 s per GiB on this CPU (about 4–5 cycles per byte; 1.38 s
-in `perf/vmcost`, 1.04–1.10 s inside the engine). One fingerprint costs 1.20 s for Redis (1 GiB
+in `hv/hvx/perf/vmcost`, 1.04–1.10 s inside the engine). One fingerprint costs 1.20 s for Redis (1 GiB
 RAM + 64 MiB) and 2.15 s for the stack (1 GiB + 512 MiB). A run takes two (after the workload,
 and after the check or the recovery), and every worker boot takes two more for its log lines.
 
 FNV-1a can skip a zero byte exactly: `h = (h ^ 0) * P = h * P`, so an all-zero 4 KiB page is
-`h * P^4096 (mod 2^64)`, one multiplication. `fnv_zskip()` in `hvx/hvx_explore.c` does that, and
+`h * P^4096 (mod 2^64)`, one multiplication. `fnv_zskip()` in `hv/hvx/hvx_explore.c` does that, and
 `HVX_EXPLORE_ZSKIP=1` compared it with the byte-wise hash on the real end-of-workload RAM of every
 run: always the same value, and
 
@@ -290,7 +290,7 @@ between workers).
 disk's volatile write cache. A worker therefore keeps 2.1 GiB (Redis) or 3 GiB (stack) of save
 buffers, today as files that are written once with `fdatasync` and dropped from the page cache
 (`POSIX_FADV_DONTNEED`), so the first restore of each reads them back from the rotating disk
-(10–22 s per GiB, `perf/vmcost`) and later restores find them in the page cache only because
+(10–22 s per GiB, `hv/hvx/perf/vmcost`) and later restores find them in the page cache only because
 nothing else needed the memory. A power-cut run writes its flushed data partition the same way
 and reads it back cold every time (that is the 5.4 + 6.1 s of section 4).
 
@@ -324,7 +324,7 @@ counts above come from comparing against the saved copy.
 ## 7. Throughput scaling with the number of workers
 
 `explore.py --strategy process --no-shrink` on a fixed seed range with 1, 2, 4 and 6 workers
-(`perf/scale.sh`; 4 and 6 inside the quiet window). "Runs/min" counts runs that finished after
+(`hv/hvx/perf/scale.sh`; 4 and 6 inside the quiet window). "Runs/min" counts runs that finished after
 every worker had started its first run, so the worker boot is not in it; "run" is the mean run
 time without the measurement's own time; CPU is from `vmstat` (8 hardware threads = 100 %).
 
@@ -370,7 +370,7 @@ than that noise.
 
 ## 8. Where a campaign spends its runs
 
-**The two campaigns measured here** (`perf/campaign_mix.py`):
+**The two campaigns measured here** (`hv/hvx/perf/campaign_mix.py`):
 
 | campaign | first runs | confirmation re-runs | shrink candidates | runs of the minimal schedule (2 each) | worker boot | first sweep (incl. boot) | total wall |
 |---|---|---|---|---|---|---|---|
@@ -406,7 +406,7 @@ mid-run branching could reuse (section 1, ideas).
 ## 9. The Mac backend (hvmx), for comparison
 
 On this Mac (M2 Pro), `hvmx serve` (built 2026-10-24) with the Redis OCI example
-(`explore-ob-redis-oci-arm64`, 1 GiB guest RAM), timed from outside with `perf/drive.py` (no
+(`explore-ob-redis-oci-arm64`, 1 GiB guest RAM), timed from outside with `hv/hvx/perf/drive.py` (no
 per-phase instrumentation; the engine's `secs=` starts after the restore, like on Linux):
 
 | | wall | engine `secs=` | difference (VM re-creation + RAM copy back) |
