@@ -1,0 +1,4 @@
+r-clean disk=none dseed=1 | run
+r-kill disk=none dseed=1 | run K=redis@4+3
+r-cut disk=cut dseed=1 | run C=12
+r-killcut disk=cut dseed=4127cc1347fae6ba | run K=redis@2+2 C=20 P=redis@5+4 T=13:30

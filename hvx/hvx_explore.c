@@ -87,6 +87,7 @@
 #include "hvx_stack_verify.c"
 #undef main
 #include <time.h>
+#include <stdarg.h>
 #include "explore/ptedges.h"
 
 #define EXP_MEM_MIB	1024ULL	/* default guest RAM; "--ram-mib N" / HVX_EXPLORE_RAM_MIB change it */
@@ -125,6 +126,141 @@ static double now_s(void)
 	struct timespec t;
 	clock_gettime(CLOCK_MONOTONIC, &t);
 	return t.tv_sec + t.tv_nsec / 1e9;
+}
+
+/* ---- Cost measurement (PERF-RUN-COST.md, perf/): HVX_EXPLORE_PHASES=1 prints, on stderr only,
+ * one "PHASES <tag> k=v ..." line per schedule with the host wall time of every phase and the
+ * guest counters of the workload and of the check/recovery (exits = the module's retired-exit
+ * clock, branches and ticks of the PMU clock, the virtual TSC, time inside the VMX section and
+ * VM entries from HVX_GET_FTSTAT), and "PHBOOT" lines for the worker's boot to S0 and S1.
+ * HVX_EXPLORE_DIRTY=1 also compares guest RAM and the data disk at the end of the workload (and
+ * at the end of the check or recovery) with the snapshot the run started from, 4 KiB page by
+ * page, and reports how many pages differ. Everything here only reads (GET ioctls, the RAM and
+ * disk mmaps, the save files); the guest, the RESULT line and every fingerprint are unchanged.
+ * Off (the default) nothing here runs. */
+enum { PH_FRESH, PH_RSNAP, PH_RRAM, PH_RDISK, PH_RCON, PH_SETUP, PH_WORK, PH_WFP, PH_SAVECON,
+       PH_CHECK, PH_FFP, PH_DURABLE, PH_RTEAR, PH_RFRESH, PH_RRESTORE, PH_RECOV, PH_RFP,
+       PH_TEAR, PH_RUNIOCTL, PH_DRAIN, PH_DIRTY, PH_N };
+static const char *const ph_name[PH_N] = {
+	"fresh", "r_snap", "r_ram", "r_disk", "r_con", "setup", "workload", "wfp", "savecon",
+	"check", "ffp", "durable", "rec_teardown", "rec_fresh", "rec_restore", "recovery", "rfp",
+	"teardown", "run_ioctl", "drain", "dirtyscan" };
+static int g_ph_on = -1, g_dirty_on;
+static double g_ph[PH_N], g_ph_t0;
+static uint64_t g_ph_calls;
+static char g_ph_extra[1024];
+static size_t g_ph_extra_n;
+static struct snap *g_ph_s1;		/* the S1 snapshot (serve mode), for the dirty-page scan */
+static int ph_on(void)
+{
+	if (g_ph_on < 0) {
+		g_ph_on = getenv("HVX_EXPLORE_PHASES") && strcmp(getenv("HVX_EXPLORE_PHASES"), "0");
+		g_dirty_on = getenv("HVX_EXPLORE_DIRTY") && strcmp(getenv("HVX_EXPLORE_DIRTY"), "0");
+		if (g_dirty_on) g_ph_on = 1;
+	}
+	return g_ph_on;
+}
+#define PH_T()		(ph_on() ? now_s() : 0.0)
+#define PH_ADD(i, t)	do { if (g_ph_on > 0) g_ph[i] += now_s() - (t); } while (0)
+static void ph_reset(void)
+{
+	memset(g_ph, 0, sizeof(g_ph));
+	g_ph_calls = 0;
+	g_ph_extra_n = 0;
+	g_ph_extra[0] = 0;
+	g_ph_t0 = now_s();
+}
+static void ph_kv(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static void ph_kv(const char *fmt, ...)
+{
+	va_list ap;
+	if (g_ph_extra_n + 2 >= sizeof(g_ph_extra)) return;
+	g_ph_extra[g_ph_extra_n++] = ' ';
+	va_start(ap, fmt);
+	g_ph_extra_n += (size_t)vsnprintf(g_ph_extra + g_ph_extra_n, sizeof(g_ph_extra) - g_ph_extra_n, fmt, ap);
+	va_end(ap);
+	if (g_ph_extra_n >= sizeof(g_ph_extra)) g_ph_extra_n = sizeof(g_ph_extra) - 1;
+}
+struct ph_ctr { uint64_t exits, branches, ticks, vtsc, cyc, entries, steps, calls; };
+static void ph_read(struct boot *b, struct ph_ctr *c)
+{
+	struct hvx_snapshot *s = calloc(1, sizeof(*s));
+	struct hvx_pmu pm;
+	struct hvx_ftstat *f = calloc(1, sizeof(*f));
+	memset(c, 0, sizeof(*c));
+	memset(&pm, 0, sizeof(pm));
+	if (s && ioctl(b->fd, HVX_GET_SNAPSHOT, s) == 0) { c->exits = s->icount; c->vtsc = s->tsc; }
+	if (ioctl(b->fd, HVX_GET_PMU, &pm) == 0) { c->branches = pm.total; c->ticks = pm.ticks; }
+	if (f && ioctl(b->fd, HVX_GET_FTSTAT, f) == 0) {
+		unsigned i;
+		for (i = 0; i < f->n_vcpus && i < 8; i++) {
+			c->cyc += f->v[i].total_cyc;
+			c->entries += f->v[i].free_entries + f->v[i].step_entries;
+			c->steps += f->v[i].step_entries;
+			c->calls += f->v[i].calls;
+		}
+		if (f->tsc_khz) c->cyc = c->cyc * 1000 / f->tsc_khz;	/* -> microseconds */
+	}
+	free(s);
+	free(f);
+}
+static void ph_delta(const char *pre, const struct ph_ctr *a, const struct ph_ctr *z)
+{
+	ph_kv("%s_exits=%llu %s_branches=%llu %s_ticks=%llu %s_vtsc=%llu %s_vmx_s=%.3f %s_entries=%llu %s_steps=%llu %s_runcalls=%llu",
+	      pre, (unsigned long long)(z->exits - a->exits), pre, (unsigned long long)(z->branches - a->branches),
+	      pre, (unsigned long long)(z->ticks - a->ticks), pre, (unsigned long long)(z->vtsc - a->vtsc),
+	      pre, (z->cyc - a->cyc) / 1e6, pre, (unsigned long long)(z->entries - a->entries),
+	      pre, (unsigned long long)(z->steps - a->steps), pre, (unsigned long long)(z->calls - a->calls));
+}
+static long ph_rss_kb(const char *key)
+{
+	char ln[256];
+	long v = -1;
+	size_t kl = strlen(key);
+	FILE *f = fopen("/proc/self/status", "r");
+	if (!f) return -1;
+	while (fgets(ln, sizeof(ln), f))
+		if (!strncmp(ln, key, kl)) { v = atol(ln + kl); break; }
+	fclose(f);
+	return v;
+}
+/* pages of `cur` that differ from the saved copy `sb` (4 KiB granularity); also counts how many
+ * of the saved pages are all zero (nz = the non-zero ones) */
+static void ph_diff(const char *pre, struct savebuf *sb, const uint8_t *cur, uint64_t size)
+{
+	static uint8_t chunk[1 << 20];
+	static const uint8_t zero[4096];
+	uint64_t off, diff = 0, nz = 0, curnz = 0;
+	double t = now_s();
+	for (off = 0; off < size; off += sizeof(chunk)) {
+		uint64_t n = size - off < sizeof(chunk) ? size - off : sizeof(chunk), p;
+		const uint8_t *src;
+		if (sb->use_file) {
+			if (pread(sb->fd, chunk, n, (off_t)off) != (ssize_t)n) { ph_kv("%s_dirty=ERR", pre); return; }
+			src = chunk;
+		} else {
+			src = sb->mem + off;
+		}
+		for (p = 0; p < n; p += 4096) {
+			size_t l = n - p < 4096 ? n - p : 4096;
+			if (memcmp(src + p, cur + off + p, l)) diff++;
+			if (memcmp(src + p, zero, l)) nz++;
+			if (memcmp(cur + off + p, zero, l)) curnz++;
+		}
+	}
+	ph_kv("%s_pages=%llu %s_dirty=%llu %s_nonzero_before=%llu %s_nonzero_after=%llu", pre,
+	      (unsigned long long)((size + 4095) / 4096), pre, (unsigned long long)diff, pre,
+	      (unsigned long long)nz, pre, (unsigned long long)curnz);
+	g_ph[PH_DIRTY] += now_s() - t;
+}
+static void ph_print(const char *tag)
+{
+	int i;
+	if (g_ph_on <= 0) return;
+	fprintf(stderr, "PHASES %s t0=%.3f total=%.3f", tag, g_ph_t0, now_s() - g_ph_t0);
+	for (i = 0; i < PH_N; i++) fprintf(stderr, " %s=%.3f", ph_name[i], g_ph[i]);
+	fprintf(stderr, " runcalls=%llu%s\n", (unsigned long long)g_ph_calls, g_ph_extra);
+	fflush(stderr);
 }
 
 /* ---- Milestone 41: coverage feedback (Intel PT of the front door only) ----
@@ -284,7 +420,9 @@ static int run_until_any(struct boot *b, const char *const *mk, int n, size_t fr
 		if (b->ulen > from && mem_find(b->ubuf + from, b->ulen - from, mk[i]) >= 0)
 			return i;
 	for (;;) {
+		double pht = PH_T();
 		memset(&ex, 0, sizeof(ex));
+		g_ph_calls++;
 		if (g_budget) {
 			struct hvx_run_ctl c;
 			memset(&c, 0, sizeof(c));
@@ -300,7 +438,10 @@ static int run_until_any(struct boot *b, const char *const *mk, int n, size_t fr
 			fprintf(stderr, "hvx_explore: HVX_RUN: %s\n", strerror(errno));
 			return -1;
 		}
+		PH_ADD(PH_RUNIOCTL, pht);
+		pht = PH_T();
 		console_drain(b);
+		PH_ADD(PH_DRAIN, pht);
 		if (getenv("HVX_EXPLORE_RETLOG")) {	/* diagnostic: where each run call returned */
 			struct hvx_pmu pm;
 			struct hvx_tsc ts;
@@ -395,12 +536,17 @@ static int vm_fresh(struct boot *b)
 }
 
 /* Restore a snapshot into VM b; `rw` (if not NULL) replaces the snapshot's data disk. */
+static int g_ph_rsplit;	/* cost measurement: split this restore's time into the r_* phases */
 static int snap_restore(struct boot *b, struct snap *sn, struct savebuf *rw)
 {
+	double pht = PH_T();
 	if (ioctl(b->fd, HVX_SET_SNAPSHOT, sn->s) < 0) { perror("HVX_SET_SNAPSHOT"); return -1; }
 	if (smp_set(b->fd, &sn->smp)) return -1;	/* nothing with one vCPU */
+	if (g_ph_rsplit) { PH_ADD(PH_RSNAP, pht); pht = PH_T(); }
 	if (savebuf_load(&sn->ram, b->mem, E.mem_size)) return -1;
+	if (g_ph_rsplit) { PH_ADD(PH_RRAM, pht); pht = PH_T(); }
 	if (savebuf_load(rw ? rw : &sn->rw, b->disk_mm + E.p2_off, E.p2_len)) return -1;
+	if (g_ph_rsplit) { PH_ADD(PH_RDISK, pht); pht = PH_T(); }
 	memcpy(b->ubuf, sn->con, sn->ulen);	/* console as it was at the snapshot */
 	b->ulen = sn->ulen;
 	console_rebase(b);			/* a fresh VM: drained = its (empty) console */
@@ -414,6 +560,7 @@ static int snap_restore(struct boot *b, struct snap *sn, struct savebuf *rw)
 			io.n = 0, io.len = 0;
 		if (ioctl(b->fd, HVX_SET_UNSYNC, &io) < 0) { perror("HVX_SET_UNSYNC"); return -1; }
 	}
+	if (g_ph_rsplit) PH_ADD(PH_RCON, pht);
 	return 0;
 }
 
@@ -785,10 +932,29 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 	int r;
 	const char *phase = "workload";
 
+	struct ph_ctr pc0, pc1, pc2;
+	double pht;
+	uint64_t phc0 = g_ph_calls;
+
 	snprintf(tjinfo, sizeof(tjinfo), "%s", tjinfo_in);
+	if (ph_on()) ph_read(b, &pc0);
+	pht = PH_T();
 	r = run_until_any(b, wk, 2, from);
+	PH_ADD(PH_WORK, pht);
 	if (r < 0) { snprintf(verdict, sizeof(verdict), r == -2 ? "TIMEOUT workload" : "ERROR vm workload"); goto out; }
+	if (ph_on()) {
+		ph_read(b, &pc1);
+		ph_delta("w", &pc0, &pc1);
+		ph_kv("w_runcalls_user=%llu rss_kb=%ld rss_shmem_kb=%ld con_bytes=%zu",
+		      (unsigned long long)(g_ph_calls - phc0), ph_rss_kb("VmRSS:"), ph_rss_kb("RssShmem:"), b->ulen - from);
+		if (g_dirty_on && g_ph_s1) {
+			ph_diff("w_ram", &g_ph_s1->ram, b->mem, E.mem_size);
+			ph_diff("w_disk", &g_ph_s1->rw, b->disk_mm + E.p2_off, E.p2_len);
+		}
+	}
+	pht = PH_T();
 	wfp = fingerprint(b);
+	PH_ADD(PH_WFP, pht);
 	schedstat(b, tag, 0);
 	dump_state(b, tag, "workload");
 	if (sc->cf_on) {		/* on stderr, so the RESULT line keeps its format */
@@ -855,14 +1021,29 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 		goto out;
 	}
 	oracle_cmd(b, from, orc, sizeof(orc));
+	pht = PH_T();
 	save_console(b, from, tag, "");
+	PH_ADD(PH_SAVECON, pht);
 	if (!sc->cut) {			/* same boot: faults off, heal, recover, check */
 		size_t f2 = b->ulen;
 		phase = "check";
 		if (set_fault(b, 0, 0, 0) || put_input(b, "go\n")) { snprintf(verdict, sizeof(verdict), "ERROR harness go"); goto out; }
+		if (ph_on()) ph_read(b, &pc1);
+		pht = PH_T();
 		r = run_until_any(b, fin, 1, f2);
+		PH_ADD(PH_CHECK, pht);
 		if (r < 0) { snprintf(verdict, sizeof(verdict), r == -2 ? "TIMEOUT check" : "ERROR vm check"); goto out_save; }
+		if (ph_on()) {
+			ph_read(b, &pc2);
+			ph_delta("c", &pc1, &pc2);
+			if (g_dirty_on && g_ph_s1) {
+				ph_diff("c_ram", &g_ph_s1->ram, b->mem, E.mem_size);
+				ph_diff("c_disk", &g_ph_s1->rw, b->disk_mm + E.p2_off, E.p2_len);
+			}
+		}
+		pht = PH_T();
 		ffp = fingerprint(b);
+		PH_ADD(PH_FFP, pht);
 		dump_state(b, tag, "check");
 		last_verdict(b, f2, verdict, sizeof(verdict));
 		save_console(b, f2, tag, "");
@@ -873,26 +1054,49 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 		struct savebuf durable;
 		struct boot ob;
 		phase = "recovery";
+		pht = PH_T();
 		if (savebuf_open(&durable, E.p2_len, "durable") || savebuf_store(&durable, b->disk_mm + E.p2_off, E.p2_len)) {
 			snprintf(verdict, sizeof(verdict), "ERROR harness durable"); goto out;
 		}
+		PH_ADD(PH_DURABLE, pht);
 		if (getenv("HVX_EXPLORE_DURABLE_OUT")) {	/* diagnostic: keep the post-cut data disk */
 			FILE *df = fopen(getenv("HVX_EXPLORE_DURABLE_OUT"), "w");
 			if (df) { fwrite(b->disk_mm + E.p2_off, 1, E.p2_len, df); fclose(df); }
 		}
 		pt_collect(b, tag);
+		pht = PH_T();
 		boot_teardown(b);
-		if (vm_fresh(&ob) || snap_restore(&ob, s0, &durable)) {
+		PH_ADD(PH_RTEAR, pht);
+		pht = PH_T();
+		if (vm_fresh(&ob)) {
 			savebuf_close(&durable);
 			snprintf(verdict, sizeof(verdict), "ERROR harness recovery vm"); goto out;
 		}
+		PH_ADD(PH_RFRESH, pht);
+		pht = PH_T();
+		if (snap_restore(&ob, s0, &durable)) {
+			savebuf_close(&durable);
+			snprintf(verdict, sizeof(verdict), "ERROR harness recovery vm"); goto out;
+		}
+		PH_ADD(PH_RRESTORE, pht);
 		savebuf_close(&durable);
 		*b = ob;
 		from = b->ulen;
 		if (set_fault(b, 0, 0, 0) || put_input(b, orc)) { snprintf(verdict, sizeof(verdict), "ERROR harness oracle cmd"); goto out; }
+		if (ph_on()) ph_read(b, &pc1);
+		pht = PH_T();
 		r = run_until_any(b, fin, 1, from);
+		PH_ADD(PH_RECOV, pht);
 		if (r < 0) { snprintf(verdict, sizeof(verdict), r == -2 ? "TIMEOUT recovery" : "ERROR vm recovery"); goto out_save; }
+		if (ph_on()) {
+			ph_read(b, &pc2);
+			ph_delta("rc", &pc1, &pc2);
+			if (g_dirty_on)
+				ph_diff("rc_ram", &s0->ram, b->mem, E.mem_size);
+		}
+		pht = PH_T();
 		ffp = fingerprint(b);
+		PH_ADD(PH_RFP, pht);
 		dump_state(b, tag, "recovery");
 		last_verdict(b, from, verdict, sizeof(verdict));
 		save_console(b, from, tag, ".recovery");
@@ -909,7 +1113,13 @@ out_done:
 	       (unsigned long long)fnv(wfp, &ffp, sizeof(ffp)), (unsigned long long)wfp, now_s() - t0,
 	       tjinfo, verdict);
 	fflush(stdout);
+	pht = PH_T();
 	boot_teardown(b);
+	PH_ADD(PH_TEAR, pht);
+	if (ph_on()) {
+		ph_kv("cut=%d secs=%.3f", sc->cut, now_s() - t0);
+		ph_print(tag);
+	}
 }
 
 static void run_sched(struct boot *b, const char *tag, const struct sched *sc, struct snap *s0)
@@ -977,6 +1187,7 @@ static void run_sched(struct boot *b, const char *tag, const struct sched *sc, s
 	pt_arm(b);
 	snprintf(line, sizeof(line), "%s\n", sc->guest);
 	if (put_input(b, line)) { snprintf(verdict, sizeof(verdict), "ERROR harness put_input"); goto fail; }
+	PH_ADD(PH_SETUP, t0);
 	finish_sched(b, tag, sc, s0, from, t0, tjinfo);
 	g_budget = 0;
 	return;
@@ -1134,10 +1345,17 @@ static int boot_to_s1(struct boot *b, struct snap *s0, struct snap *s1)
 	 * negotiates write-back caching and issues FLUSH on fsync -- like real hardware. A
 	 * schedule's power cut later raises the probability; without the cache bit negotiated
 	 * at boot the guest would never flush and every write since S1 would look lost. */
+	double pt0 = now_s(), pt1, pt2, pt3, pt4;
+	struct ph_ctr bc0, bc1, bc2;
 	if (boot_setup(b, E.mem_size, E.image, E.image_len, E.initrd, E.initrd_len,
 		       E.base, E.disk_len, cmd, 0, HVX_FAULT_DROP_UNFLUSHED, 0) != 0) return -1;
+	pt1 = now_s();
+	if (ph_on()) ph_read(b, &bc0);
 	if (run_until_any(b, m0, 2, 0) != 0) { fprintf(stderr, "hvx_explore: no S0 marker\n"); console_dump(b); return -1; }
+	pt2 = now_s();
+	if (ph_on()) ph_read(b, &bc1);
 	if (snap_take(b, s0, "s0")) return -1;
+	pt3 = now_s();
 	fprintf(stderr, "hvx_explore: S0 at %zu console bytes, state %016llx\n", b->ulen, (unsigned long long)fingerprint(b));
 	if (vcpustat_on()) {
 		long at = mem_find(b->ubuf, b->ulen, "smp: Brought up");
@@ -1151,10 +1369,38 @@ static int boot_to_s1(struct boot *b, struct snap *s0, struct snap *s1)
 		fprintf(stderr, "VCPUSTAT boot: %s\n", at >= 0 ? ln : "no \"smp: Brought up\" line in the console");
 	}
 	if (put_input(b, "provision\n")) return -1;
+	double pt3b = now_s();	/* pt3b - pt3: the S0 fingerprint printed above */
 	if (run_until_any(b, m1, 2, s0->ulen) != 0) { fprintf(stderr, "hvx_explore: no S1 marker\n"); console_dump(b); return -1; }
+	pt4 = now_s();
+	if (ph_on()) ph_read(b, &bc2);
 	fprintf(stderr, "hvx_explore: S1 at %zu console bytes, state %016llx\n", b->ulen, (unsigned long long)fingerprint(b));
 	if (s1) {
+		double t5 = now_s();
 		if (snap_take(b, s1, "s1")) return -1;
+		if (ph_on()) {
+			uint64_t off, nz1 = 0, dnz = 0;
+			static const uint8_t zero[4096];
+			double t6 = now_s();
+			for (off = 0; off + 4096 <= E.mem_size; off += 4096)
+				if (memcmp(b->mem + off, zero, 4096)) nz1++;
+			for (off = 0; off + 4096 <= E.p2_len; off += 4096)
+				if (memcmp(b->disk_mm + E.p2_off + off, zero, 4096)) dnz++;
+			g_ph_extra_n = 0; g_ph_extra[0] = 0;
+			ph_delta("s0", &bc0, &bc1);
+			ph_delta("s1", &bc1, &bc2);
+			fprintf(stderr, "PHBOOT setup=%.3f to_s0=%.3f snap_s0=%.3f fp_s0=%.3f to_s1=%.3f fp_s1=%.3f snap_s1=%.3f "
+				"mem=%llu disk=%llu p1=%llu p2=%llu snapstruct=%zu s1_ram_nonzero_pages=%llu s1_p2_nonzero_pages=%llu "
+				"con_s0=%zu con_s1=%zu rss_kb=%ld rss_shmem_kb=%ld%s\n",
+				pt1 - pt0, pt2 - pt1, pt3 - pt2, pt3b - pt3, pt4 - pt3b, t5 - pt4, t6 - t5,
+				(unsigned long long)E.mem_size, (unsigned long long)E.disk_len,
+				(unsigned long long)E.p1_len, (unsigned long long)E.p2_len, sizeof(struct hvx_snapshot),
+				(unsigned long long)nz1, (unsigned long long)dnz, s0->ulen, b->ulen,
+				ph_rss_kb("VmRSS:"), ph_rss_kb("RssShmem:"), g_ph_extra);
+			g_ph_extra_n = 0; g_ph_extra[0] = 0;
+		}
+	} else if (ph_on()) {
+		fprintf(stderr, "PHBOOT setup=%.3f to_s0=%.3f snap_s0=%.3f fp_s0=%.3f to_s1=%.3f\n",
+			pt1 - pt0, pt2 - pt1, pt3 - pt2, pt3b - pt3, pt4 - pt3b);
 	}
 	return 0;
 }
@@ -1295,12 +1541,19 @@ int main(int argc, char **argv)
 		if (boot_to_s1(&b, &s0, NULL)) return 1;
 		if (getenv("HVX_EXPLORE_BOOTCON")) save_console(&b, 0, "boot", "");	/* diagnostic: the boot console */
 		fprintf(stderr, "hvx_explore: provisioned in %.1f s (fresh boot, no snapshot restore)\n", now_s() - t0);
+		if (ph_on()) ph_reset();
 		run_sched(&b, "one", &sc, &s0);
 		return 0;
 	}
 	if (strcmp(mode, "serve")) { fprintf(stderr, "hvx_explore: unknown mode %s\n", mode); return 2; }
 	if (boot_to_s1(&b, &s0, &s1)) return 1;
-	boot_teardown(&b);
+	{
+		double pht = PH_T();
+		boot_teardown(&b);
+		if (ph_on())
+			fprintf(stderr, "PHBOOT teardown=%.3f total=%.3f\n", now_s() - pht, now_s() - t0);
+	}
+	g_ph_s1 = &s1;
 	printf("READY boot_secs=%.1f\n", now_s() - t0);
 	{
 		char in[4096];
@@ -1331,10 +1584,19 @@ int main(int argc, char **argv)
 				printf("RESULT ? fp=0 wfp=0 secs=0 verdict=ERROR bad request\n");
 				continue;
 			}
-			if (vm_fresh(&b) || snap_restore(&b, &s1, NULL)) {
-				printf("RESULT %s fp=0 wfp=0 secs=0 verdict=ERROR harness restore\n", tag);
-				boot_teardown(&b);
-				continue;
+			if (ph_on()) ph_reset();
+			{
+				double pht = PH_T();
+				int bad = vm_fresh(&b);
+				PH_ADD(PH_FRESH, pht);
+				g_ph_rsplit = 1;
+				bad = bad || snap_restore(&b, &s1, NULL);
+				g_ph_rsplit = 0;
+				if (bad) {
+					printf("RESULT %s fp=0 wfp=0 secs=0 verdict=ERROR harness restore\n", tag);
+					boot_teardown(&b);
+					continue;
+				}
 			}
 			run_sched(&b, tag, &sc, &s0);
 		}

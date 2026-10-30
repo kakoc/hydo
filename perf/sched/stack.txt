@@ -1,0 +1,5 @@
+s-clean disk=none dseed=1 | run
+s-kill disk=none dseed=1 | run K=mysql@10+2
+s-cut disk=cut dseed=1 | run C=20
+s-killcut disk=cut dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=redis@3~314:869
+s-netem disk=none dseed=3597be8efa1110c4 | run N=mysql@21-28:delay,177ms
