@@ -1,3 +1,5 @@
+# Replaced by hydo-explore (hydo/crates/hydo-explore, M102). Kept unchanged as the reference of its
+# identity tests (tests/identity.rs, tests/fake_engine.rs) until all ports are merged; do not extend it.
 """gRPC-level faults for the explorer (explore.py --grpc-faults; MANIFEST.md, "gRPC faults").
 
 On a manifest with a gRPC proxy (proxies: with protocol: grpc), --grpc-faults adds H= tokens with

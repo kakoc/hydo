@@ -85,7 +85,7 @@ nf=$(cd "$A" && find . -type f ! -name .complete | wc -l | tr -d ' ')
 REL=$OUTDIR/hydo-linux-$VERSION
 [ -d "$REL" ] && chmod -R u+w "$REL" && rm -rf "$REL"
 # the release tree mirrors the repository: hydo/ (the product) and hv/hvx/ (the run engine's sources)
-mkdir -p "$REL/bin" "$REL/libexec/bin" "$REL/hydo/onboard" "$REL/hydo/explore" "$REL/hydo/assert" "$REL/hv/hvx" \
+mkdir -p "$REL/bin" "$REL/libexec/bin" "$REL/hydo/onboard" "$REL/hydo/assert" "$REL/hv/hvx" \
          "$REL/module" "$REL/examples/redis/files" "$REL/skill"
 # the hydo command: the Rust CLI (hydo/crates/hydo-cli), a static x86_64 musl binary (M101). Built
 # here with the workspace's pinned toolchain (rust-toolchain.toml; rustup adds the musl target),
@@ -115,13 +115,11 @@ cp "$TOP/hydo/history/hydohist.py" "$TOP/hydo/history/hydo-check" "$TOP/hydo/his
 cp "$TOP/hydo/onboard/hydo-init-history.sh" "$REL/hydo/onboard/"
 # error logs as findings (errors: in a manifest): the guest scan and the host side (hydo errors)
 cp "$TOP/hydo/onboard/hydo-init-errlog.sh" "$TOP/hydo/onboard/hydo_errors.py" "$REL/hydo/onboard/"
-# explore.py imports grpc_faults at its top (M90) and fc_adaptive for --fc-adaptive (M92)
-cp "$TOP/hydo/explore/explore.py" "$TOP/hydo/explore/hvm_backend.py" "$TOP/hydo/explore/manifest_space.py" \
-   "$TOP/hydo/explore/grpc_faults.py" "$TOP/hydo/explore/fc_adaptive.py" "$REL/hydo/explore/"
+# the explorer is part of bin/hydo since M102 (the hydo-explore crate): no explore.py
 # the run engine's sources (install.sh compiles hv/hvx/hvx_explore on the user's machine)
 cp "$TOP/hv/hvx/hvx_explore.c" "$TOP/hv/hvx/hvx_stack_verify.c" "$TOP/hv/hvx/hvx_boot.h" "$TOP/hv/hvx/hvx_abi.h" \
    "$TOP/hv/hvx/ptedges.h" "$REL/hv/hvx/"
-# the property-table tool explore.py compiles on the fly, and the assertion protocol it reads
+# the property-table tool the explorer compiles on the fly, and the assertion protocol it reads
 cp "$TOP/hydo/assert/hydo_assert_report.c" "$TOP/hydo/assert/hydo_assert_table.h" "$REL/hydo/assert/"
 cp "$TOP/hydo/ASSERTIONS.md" "$REL/hydo/"
 # the kernel module's sources (hydo module build)

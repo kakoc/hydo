@@ -1,3 +1,5 @@
+# Replaced by hydo-explore (hydo/crates/hydo-explore, M102). Kept unchanged as the reference of its
+# identity tests (tests/identity.rs, tests/fake_engine.rs) until all ports are merged; do not extend it.
 """explore.py --backend hvm: run schedules on the Mac VMM (hv/hvm/explore/hvmx) instead of
 hvx_explore on the Linux box. The worker protocol (READY / RUN / RESULT / QUIT) is the same;
 only the engine's command line and the set of faults it can apply differ.

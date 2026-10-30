@@ -1,3 +1,5 @@
+# Replaced by hydo-explore (hydo/crates/hydo-explore, M102). Kept unchanged as the reference of its
+# identity tests (tests/identity.rs, tests/fake_engine.rs) until all ports are merged; do not extend it.
 """fc_adaptive.py -- the adaptive freeze sweep (explore.py --sweep freeze --fc-adaptive).
 
 M76's freeze sweep runs one schedule F=<svc><dir><peer>@<step>#<n>[:<match>]:<dur> per packet of

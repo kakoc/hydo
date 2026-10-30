@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Replaced by hydo-explore (hydo/crates/hydo-explore, M102). Kept unchanged as the reference of its
+# identity tests (tests/identity.rs, tests/fake_engine.rs) until all ports are merged; do not extend it.
 """explore.py -- the automatic fault explorer for the four-service stack (Milestone 38).
 
 Runs on the bare-metal test machine. Generates a fault schedule from every seed (a pure function of

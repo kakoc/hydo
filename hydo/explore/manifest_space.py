@@ -1,3 +1,5 @@
+# Replaced by hydo-explore (hydo/crates/hydo-explore, M102). Kept unchanged as the reference of its
+# identity tests (tests/identity.rs, tests/fake_engine.rs) until all ports are merged; do not extend it.
 """manifest_space -- the explorer's fault space for an onboarded project (hydo.yaml, see
 hydo/onboard/MANIFEST.md), instead of the four-service stack's fixed names.
 

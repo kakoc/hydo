@@ -1,0 +1,1 @@
+These research strategies and their helpers (guided.py, richguided.py, portfolio.py, abranch.py, compare.py, evaluate.sh, covgrowth.py; M41, M44, M45) are kept as history and are not shipped: they import ../explore.py, which hydo-explore (hydo/crates/hydo-explore) replaces (M102).
