@@ -15,4 +15,5 @@ hydo-schedule = { workspace = true }
 hydo-manifest = { workspace = true }
 hydo-engine = { workspace = true }
 serde_json = { workspace = true }
-flate2 = { workspace = true }
+
+libc = "0.2"
