@@ -1725,9 +1725,9 @@ def same_failure(v_ref, v):
     return signature(v).split(" order=")[0] == signature(v_ref).split(" order=")[0]
 
 
-def shrink(pool, s, verdict, log, budget=40, tjk=None, keep=None, tag="shrink"):
+def shrink(pool, s, verdict, log, budget=40, tjk=None, keep=None, prefix="shrink"):
     """keep(verdict, result) -> True while a candidate still fails the same way (default:
-    same_failure on the verdict; an error-log kind: the kind is still new in the run). tag:
+    same_failure on the verdict; an error-log kind: the kind is still new in the run). prefix:
     the run tags' prefix -- an error-log shrink reads each run's console, and the engine
     appends to a tag's console file, so it uses tags no other shrink uses."""
     keep = keep or (lambda v, r: same_failure(cur_v, v))
@@ -1741,7 +1741,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None, keep=None, tag="shrink"):
         if not cands:
             break
         rnd += 1
-        items = [("%s-%d-%d" % (tag, rnd, i), render(c)) for i, c in enumerate(cands)]
+        items = [("%s-%d-%d" % (prefix, rnd, i), render(c)) for i, c in enumerate(cands)]
         res = pool.run_all(items)
         tries += len(items)
         progressed = False
@@ -2130,7 +2130,7 @@ def errlog_shrink(pool, a, agg, slog):
         sig = x["sig"]
         keep = lambda v, r, sig=sig: sig in (r.get("errors_new") or [])
         s0 = parse(x["first_new_schedule"])
-        m, mv, n = shrink(pool, s0, "", slog, keep=keep, tag="errshrink-%s" % sig)
+        m, mv, n = shrink(pool, s0, "", slog, keep=keep, prefix="errshrink-%s" % sig)
         mt = render(m)
         conf = pool.run_all([("errmin-a-%s" % sig, mt), ("errmin-b-%s" % sig, mt)])
         ra, rb = conf["errmin-a-%s" % sig][1], conf["errmin-b-%s" % sig][1]

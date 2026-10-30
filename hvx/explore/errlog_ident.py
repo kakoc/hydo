@@ -7,7 +7,8 @@
 #      on each given manifest;
 #  (2) a run result goes through host_errlog unchanged when its console carries no HYDO-ERRLOG-SUM
 #      (with an empty known list and with one that has entries, report and fail policies);
-#  (3) shrink() with the default test (no keep=) takes the same path as the reference shrink();
+#  (3) shrink() with the default test (no keep=) takes the same path, with the same run tags, as the
+#      reference shrink();
 #  (4) write_report() without error kinds writes the same report.md as the reference.
 import importlib.util, itertools, json, os, sys, tempfile
 
@@ -87,10 +88,11 @@ assert B.errlog_of(d, "seed-1") is None
 # (3) shrink without keep= follows same_failure on the verdict, like the reference
 class FakePool:
     def __init__(self, M):
-        self.M = M
+        self.M, self.tags = M, []
     def run_all(self, items):
         out = {}
         for tag, text in items:
+            self.tags.append(tag)
             s = self.M.parse(text)
             # a toy oracle: it fails while the schedule kills redis
             v = "HYDO-ORACLE: VIOLATION lost key k:3" if s.get("K") and s["K"][0] == "redis" else "HYDO-ORACLE: OK"
@@ -111,9 +113,10 @@ for sd in range(1, 80):
     s = A.generate(sd)
     if not (s.get("K") and s["K"][0] == "redis"):
         continue
-    ra = A.shrink(FakePool(A), A.parse(A.render(s)), "HYDO-ORACLE: VIOLATION lost key k:3", Log())
-    rb = B.shrink(FakePool(B), B.parse(B.render(s)), "HYDO-ORACLE: VIOLATION lost key k:3", Log())
-    assert A.render(ra[0]) == B.render(rb[0]) and ra[1:] == rb[1:], (sd, ra, rb)
+    pa, pb = FakePool(A), FakePool(B)
+    ra = A.shrink(pa, A.parse(A.render(s)), "HYDO-ORACLE: VIOLATION lost key k:3", Log())
+    rb = B.shrink(pb, B.parse(B.render(s)), "HYDO-ORACLE: VIOLATION lost key k:3", Log())
+    assert A.render(ra[0]) == B.render(rb[0]) and ra[1:] == rb[1:] and pa.tags == pb.tags, (sd, ra, rb)
     cnt += 1
 assert cnt > 3, cnt
 
