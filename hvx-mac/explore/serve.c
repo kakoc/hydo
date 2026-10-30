@@ -351,7 +351,11 @@ static void run_once(const char *tag, const char *sched, int rewound)
 	int cut = strstr(guest, " C=") != NULL;
 	size_t from = M.console_len;
 	int why = 0, r;
-	char orc[2048];
+	/* the recovery boot's "oracle" command: 3584 bytes, as hvx_explore's, so that the fake outside
+	 * world of a manifest with fakes:/proxies: (hydo-init-fakes.sh appends its records to the
+	 * acknowledged ids at a power cut, at most 3000 bytes) fits; the UART input ring is 4096
+	 * (../hvm.c rxq). A command that fitted before is unchanged. */
+	char orc[3584];
 	if (trace_f) fprintf(trace_f, "RUN %s\n", tag);
 	set_fault(dseed, dcl, dpr);
 	if (tj_wanted(&tj)) {            /* the jitter covers the workload only, like the disk fault */

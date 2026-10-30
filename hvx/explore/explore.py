@@ -1883,11 +1883,9 @@ def main():
                          "(and allows `protocol` in faults:, or has no faults: list)")
     grpc_faults.ON = a.grpc_faults
     grpc_faults.TARGETS = grpc_faults.targets_of(SPACE.m if SPACE else None) if a.grpc_faults else []
-    if a.grpc_faults and (not grpc_faults.TARGETS or BACKEND == "hvm"):
-        raise SystemExit("explore.py: --grpc-faults needs --backend hvx and an image whose manifest has a proxy with "
+    if a.grpc_faults and not grpc_faults.TARGETS:
+        raise SystemExit("explore.py: --grpc-faults needs an image whose manifest has a proxy with "
                          "protocol: grpc (and allows `protocol` in faults:, or has no faults: list)")
-    if PROTOCOL_FAULTS and BACKEND == "hvm":
-        raise SystemExit("explore.py: --protocol-faults needs --backend hvx (fakes: are x86_64 only)")
     if FREEZE_CALL and not FC_PAIRS:
         raise SystemExit("explore.py: --freeze-call needs an image whose manifest lists `freeze` in faults: and has "
                          "two services that talk (manifest_space.py)")

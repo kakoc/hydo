@@ -253,7 +253,14 @@ Same lines as the Go recorder (`sdk/rust/tests/history.rs` checks the exact byte
 the checks: `System::history_check(HistoryCheck::linearizable("db.kv", "kv").model("cas")
 .readback(&["/bin/mytest", "readback"]))`, `HistoryCheck::list_append(..).consistency(..)`.
 
-**Other languages** (the JS and Python SDKs have no helper yet, and any client): print the lines
+**JavaScript and Python**: `require('hydo-assert/history')` (`sdk/js`: `History`, `op.ok/fail/info`,
+`enc`, `ver`, `valueOrNil`, `list`, `append`, `read`, `readResult`, `NIL`) and
+`from hydo_assert import history` (`sdk/python`: `History`, `enc`, `ver`, `value_or_nil`,
+`list_value`, `append_mop`, `read_mop`, `read_result_mop`, `NIL`). Both write the Go recorder's
+lines byte for byte (`test/history-conformance.sh`, `tests/history_conformance.sh`), to
+`/dev/console` (`HYDO_HIST_OUT`), with the time from `CLOCK_MONOTONIC`.
+
+**Other languages** (and any client): print the lines
 above, one `write()` each, with the invocation before sending the request and the completion
 after the reply.
 

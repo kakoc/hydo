@@ -24,6 +24,9 @@ Host tools (same defaults as build-stack.sh; override with the environment varia
     HYDO_IPROUTE2 iproute2 store path     HYDO_MODROOT   guest kernel module tree
     HYDO_READ_BIN hydo-read (hvx/readers/build.sh), staged only when a command calls
                   hydo-read or hydo-check
+    HYDO_WORLDBIN hydo-world (hvx/onboard/world/build.sh), staged only for fakes:/proxies:
+--arch arm64 takes the arm64 builds of the last two from HYDO_READ_BIN_ARM64 and
+HYDO_WORLDBIN_ARM64 (default <build dir>/hydo-read-arm64 and hydo-world-arm64).
 Stdlib only (the build box has no PyYAML): the YAML subset is parsed by parse_yaml() below.
 """
 import hashlib, json, mmap, os, re, shutil, stat, struct, subprocess, sys
@@ -1314,19 +1317,13 @@ def main():
     os.makedirs(opt["--build-dir"], exist_ok=True)
     try:
         if opt["--arch"] == "arm64":
-            if params:
-                print("hydo-build: --arch arm64 does not record params: yet", file=sys.stderr); return 2
             if has_links(m):
                 print("hydo-build: --arch arm64 does not support addr: (link faults) yet", file=sys.stderr); return 2
             if has_freeze(m):
                 print("hydo-build: --arch arm64 does not support faults: freeze yet", file=sys.stderr); return 2
-            if has_world(m):
-                print("hydo-build: --arch arm64 does not support fakes:/proxies: yet", file=sys.stderr); return 2
-            if uses_readers(m):
-                print("hydo-build: --arch arm64 does not stage hydo-read/hydo-check yet", file=sys.stderr); return 2
             sys.path.insert(0, HERE)
             import hydo_build_arm64
-            hydo_build_arm64.build(m, path, out, opt["--build-dir"], globals(), oci=oci)
+            hydo_build_arm64.build(m, path, out, opt["--build-dir"], globals(), oci=oci, params=params)
         elif opt["--arch"] != "x86_64":
             print("hydo-build: --arch is x86_64 or arm64", file=sys.stderr); return 2
         else:
