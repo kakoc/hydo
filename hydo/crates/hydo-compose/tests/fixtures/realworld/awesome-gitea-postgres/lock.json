@@ -1,0 +1,101 @@
+{
+ "images": {
+  "gitea/gitea:latest": {
+   "index_digest": "sha256:cf71f95333a32c1edb2ea8e6d04295d1791a648431a35649fa74449c7eed4eef",
+   "name": "gitea/gitea",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "gitea"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:d762953f86ee7d6e95899627b094d0d7a7594642fb08b8bcb492d04bb8605e0e",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "gitea/gitea:latest",
+   "registry": "docker.io",
+   "repo": "gitea/gitea",
+   "tag": "latest"
+  },
+  "postgres:alpine": {
+   "index_digest": "sha256:8ff8e84cd1dde79319b66cd4ff6203a411dbc4d0bf2ce1c34a590ef3b4b843bb",
+   "name": "postgres",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:88525a8844fa4f07ebb654a2be4ce8fd5a6207e9ac4d496d2cdc98a3b05877ae",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:0da109520d15f6a08ef45e5798e3d5d0d25bc5e3472205461c6389615333086c",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "postgres:alpine",
+   "registry": "docker.io",
+   "repo": "library/postgres",
+   "tag": "alpine"
+  }
+ }
+}

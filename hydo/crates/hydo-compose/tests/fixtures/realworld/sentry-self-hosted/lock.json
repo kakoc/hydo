@@ -1,0 +1,614 @@
+{
+ "images": {
+  "": {
+   "index_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "name": "",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       ""
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       ""
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "",
+   "registry": "docker.io",
+   "repo": "library/",
+   "tag": "latest"
+  },
+  "chrislusf/seaweedfs:4.51_large_disk@sha256:f44a1d38dd2da974a16ccb26f9f9447152fd1c101ca03032e88819c6318d7bf6": {
+   "index_digest": "sha256:4c5491df0da2f1fb58b51f02b0a49d9235d5355ce13488c7023a8d3ace8fe4dd",
+   "name": "chrislusf/seaweedfs",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "seaweedfs"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:14ba15b8aba8fd4c25dd1a14d6c7ce0a82f44e7ee970650521d98d0ade20a051",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "chrislusf/seaweedfs:4.51_large_disk@sha256:f44a1d38dd2da974a16ccb26f9f9447152fd1c101ca03032e88819c6318d7bf6",
+   "registry": "docker.io",
+   "repo": "chrislusf/seaweedfs",
+   "tag": "4.51_large_disk"
+  },
+  "clickhouse-self-hosted-local": {
+   "index_digest": "sha256:63d996f486ab1eb96e8608138e4dc0b45cdda8311713798a5671c069c1df6440",
+   "name": "clickhouse-self-hosted-local",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "clickhouse-self-hosted-local"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8123/tcp": {},
+       "9000/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/clickhouse": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:631005666da17ce67c921c86a5202281abce8333bede4274900a7ebba61045e3",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "clickhouse-self-hosted-local"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8123/tcp": {},
+       "9000/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/clickhouse": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:1d672a37134f51fe457a4a9c8e3574ba18e791591d00c0a7e29305946e055f7e",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "clickhouse-self-hosted-local",
+   "registry": "docker.io",
+   "repo": "library/clickhouse-self-hosted-local",
+   "tag": "latest"
+  },
+  "confluentinc/cp-kafka:7.6.14": {
+   "index_digest": "sha256:7ba60a24407534350011a22ac88229d77b1e4ab9a7cc870d00f96734a57ee563",
+   "name": "confluentinc/cp-kafka",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "cp-kafka"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:a83b6c12288498615bea05c4f99ef573ac73ec24128875613de38bdf4deffeae",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "cp-kafka"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:d885eda1b02591aa97324520b2ed8f8a6162644ffff548b6ec6cdeb7c86820f9",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "confluentinc/cp-kafka:7.6.14",
+   "registry": "docker.io",
+   "repo": "confluentinc/cp-kafka",
+   "tag": "7.6.14"
+  },
+  "edoburu/pgbouncer:v1.26.1-p0": {
+   "index_digest": "sha256:1f8cec5d38483e3f388fe1c9580fc84e051c56acc954fc9ac10191fca13b39b6",
+   "name": "edoburu/pgbouncer",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "pgbouncer"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:363317167be0c73a22f132d8e6848f030d41dd07720e0b885d284d7aa594ad73",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "edoburu/pgbouncer:v1.26.1-p0",
+   "registry": "docker.io",
+   "repo": "edoburu/pgbouncer",
+   "tag": "v1.26.1-p0"
+  },
+  "memcached:1.6.45-alpine": {
+   "index_digest": "sha256:2ee9e3d65c65221c2d2e1038706e28910f12d9cc8e9413679e2c9c82b02370c5",
+   "name": "memcached",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "memcached"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "11211/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:dc15ad34fe9c5cbaaaa75fbb36df36741829c2755f73b7d3c9ab6c9b494be6ca",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "memcached:1.6.45-alpine",
+   "registry": "docker.io",
+   "repo": "library/memcached",
+   "tag": "1.6.45-alpine"
+  },
+  "nginx:1.31.8-alpine": {
+   "index_digest": "sha256:d2da1b581d53095560fb836843221fd08528074be1554437c911dd3a981885ad",
+   "name": "nginx",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "nginx"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "80/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:685d555376451df100e47ef67544cd2861ba098a9e7f4c0c3465124260a40f1a",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "nginx:1.31.8-alpine",
+   "registry": "docker.io",
+   "repo": "library/nginx",
+   "tag": "1.31.8-alpine"
+  },
+  "postgres:18.6-trixie": {
+   "index_digest": "sha256:daaa5bbcba166275e3a075632780f7047ed7bea05a2bfefe516774e07b899e27",
+   "name": "postgres",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:4b1da6f78fe22cf875996d0d3884fe23d32ebe1a46863c0abb223d00503cc86b",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:6d5728545146692c63136ec7d548946d60c7c94acf9fb271f6b0f50362d4086a",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "postgres:18.6-trixie",
+   "registry": "docker.io",
+   "repo": "library/postgres",
+   "tag": "18.6-trixie"
+  },
+  "registry.gitlab.com/egos-tech/smtp": {
+   "index_digest": "sha256:59059ec4139a990f5e4ac78632a488bec10bae033448af6e0255e9c904cce1ee",
+   "name": "registry.gitlab.com/egos-tech/smtp",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "smtp"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:5ef33196380f590258085c1a14ab3177db417779c4ed089aaceea1da03966ee6",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "smtp"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:1ba81be49751fd31cc41982dd9df706aa6a1d7ffea8c22ae9d0acfd7889e8131",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "registry.gitlab.com/egos-tech/smtp",
+   "registry": "registry.gitlab.com",
+   "repo": "egos-tech/smtp",
+   "tag": "latest"
+  },
+  "sentry-cleanup-self-hosted-local": {
+   "index_digest": "sha256:010e2544fa53fe2a4e866dbabe0bd1ac2e27be8d9a411b8014bf9782d738563f",
+   "name": "sentry-cleanup-self-hosted-local",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "sentry-cleanup-self-hosted-local"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:9e1b0f43e52fbee59f43ca114014a86ec9d01363c7d59df2aba08885dd745fe2",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "sentry-cleanup-self-hosted-local"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:3209d25e8ed268ca7831754a6ec6fbb012eee296115ddb2ea4d389f34d44f3f4",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "sentry-cleanup-self-hosted-local",
+   "registry": "docker.io",
+   "repo": "library/sentry-cleanup-self-hosted-local",
+   "tag": "latest"
+  },
+  "sentry-self-hosted-local": {
+   "index_digest": "sha256:f02610d2a3812d59a59bc862635c830943c1c952be4bf8cc280fd2bcf62c4758",
+   "name": "sentry-self-hosted-local",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "sentry-self-hosted-local"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:945a6282ab5e3769d13dc845880fe8720c5c74d0ba5c806912c91966b9c136d5",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "sentry-self-hosted-local"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:fcfc85dfd05896d8a8a39d0b0204c5eafadd7fa98cca1a964982b406a681b801",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "sentry-self-hosted-local",
+   "registry": "docker.io",
+   "repo": "library/sentry-self-hosted-local",
+   "tag": "latest"
+  },
+  "valkey/valkey:8.1.11-alpine": {
+   "index_digest": "sha256:8660e5a2f2da4ed9c67d662927568957eed68e5bb684764e0680985471a1348f",
+   "name": "valkey/valkey",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "valkey"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "6379/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/data": {}
+      },
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:7fee36b3cc2fa59add602a7328883ddf2c45c987f44be9520e25d82ec66baeda",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "valkey"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "6379/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/data": {}
+      },
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:5035ce39ac405c5f20e25f33c0be86f9ffa5b1a8b7b61b8ec129f1d5c051d5f6",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "valkey/valkey:8.1.11-alpine",
+   "registry": "docker.io",
+   "repo": "valkey/valkey",
+   "tag": "8.1.11-alpine"
+  }
+ }
+}

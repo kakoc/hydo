@@ -1,0 +1,111 @@
+{
+ "images": {
+  "mariadb:10.5": {
+   "index_digest": "sha256:f0b45d7c3757d3fac5fa7adc62212d09f56a4f4f6d93280a9f1fe0d9a048d6ca",
+   "name": "mariadb",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "mariadb"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "3306/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/mysql": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:784dd051c3cf1e06fa1ee1317383465cbce1d0153018ed3ba2f8b782f419b7e4",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "mariadb:10.5",
+   "registry": "docker.io",
+   "repo": "library/mariadb",
+   "tag": "10.5"
+  },
+  "nextcloud:apache": {
+   "index_digest": "sha256:0a6efebddb9fa4b7e02ea684a036d320ea28dcea284eb80e44c50a49819a4fbb",
+   "name": "nextcloud",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "nextcloud"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:7aadf9643629394f8dfcbd942433c0dfcf4e691f2df5baf04488aca46c7f3f69",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "nextcloud:apache",
+   "registry": "docker.io",
+   "repo": "library/nextcloud",
+   "tag": "apache"
+  },
+  "redis:alpine": {
+   "index_digest": "sha256:60bf1752561c4ac1dbcd036a1e395409766a02d8d60e2e92aed14d458395241a",
+   "name": "redis",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "redis"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "6379/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/data": {}
+      },
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:b7014471b08e6696f7c80f2a42d2a79211e35cdc5b6196b6236f3dcc1e78548f",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "redis:alpine",
+   "registry": "docker.io",
+   "repo": "library/redis",
+   "tag": "alpine"
+  }
+ }
+}

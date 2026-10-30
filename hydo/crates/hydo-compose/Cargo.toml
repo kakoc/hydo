@@ -6,5 +6,20 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[[bin]]
+name = "hydo-compose"
+path = "src/bin/hydo-compose.rs"
+
+[[bin]]
+name = "hydo-fetch-image"
+path = "src/bin/hydo-fetch-image.rs"
+
 [dependencies]
 hydo-manifest = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+flate2 = { workspace = true }
+regex = "1"
+libyaml-safer = "0.3"
+tar = { version = "0.4", default-features = false }
+ureq = { version = "3", default-features = false, features = ["rustls"] }

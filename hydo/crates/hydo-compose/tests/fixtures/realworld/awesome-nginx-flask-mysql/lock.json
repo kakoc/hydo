@@ -1,0 +1,107 @@
+{
+ "images": {
+  "example/backend:dev": {
+   "index_digest": "sha256:94b46dd9f80a1b591d173e1221c61a6edbabdce50b709de52628b89549d6d0ad",
+   "name": "example/backend",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "backend"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:d0f08862b40be7999645322401cacb113ea622705e155273d33404d52c2f6bc4",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "example/backend:dev",
+   "registry": "docker.io",
+   "repo": "example/backend",
+   "tag": "dev"
+  },
+  "example/proxy:dev": {
+   "index_digest": "sha256:f71ba52e2635c5d9c1beaa0cc12b5aaad6e7eac96eee078aee46084093f6b953",
+   "name": "example/proxy",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "proxy"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:15107ac234a90e8f12c8626b9b01e822159e34b10ca2ec44395df5cdf907fdbc",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "example/proxy:dev",
+   "registry": "docker.io",
+   "repo": "example/proxy",
+   "tag": "dev"
+  },
+  "mariadb:10-focal": {
+   "index_digest": "sha256:f0c709c7ba17927c739d75c578997380273635876479737d720db367c94be576",
+   "name": "mariadb",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "mariadb"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "3306/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/mysql": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:8b4dc1d216c162162f607a5575a104c314aec06e16d0fc7dd0b1ad0912f538ef",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "mariadb:10-focal",
+   "registry": "docker.io",
+   "repo": "library/mariadb",
+   "tag": "10-focal"
+  }
+ }
+}

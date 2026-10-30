@@ -1,0 +1,74 @@
+{
+ "images": {
+  "mariadb:10.6.4-focal": {
+   "index_digest": "sha256:5e4ff562c02719d48c2199cd63c1af671f8ba1773e13483375746a0112d362d1",
+   "name": "mariadb",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "mariadb"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "3306/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/mysql": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:531aa14d2cdd452a63781328e32af47849d8f2248c5fdf8e164cf9f36e149cef",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "mariadb:10.6.4-focal",
+   "registry": "docker.io",
+   "repo": "library/mariadb",
+   "tag": "10.6.4-focal"
+  },
+  "wordpress:latest": {
+   "index_digest": "sha256:6bac38d69f53a4156a95402893bb0d50c1183db71874a98f1cc4d9b08716be01",
+   "name": "wordpress",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "wordpress"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:ecba424611675b2e70077733ca102af39da0b7d6d732bccce56861597dbc4a8b",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "wordpress:latest",
+   "registry": "docker.io",
+   "repo": "library/wordpress",
+   "tag": "latest"
+  }
+ }
+}
