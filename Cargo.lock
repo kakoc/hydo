@@ -141,6 +141,7 @@ dependencies = [
 name = "hydo-cli"
 version = "0.1.0"
 dependencies = [
+ "hydo-build",
  "hydo-engine",
  "hydo-manifest",
  "hydo-schedule",

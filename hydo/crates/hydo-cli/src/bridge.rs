@@ -4,7 +4,8 @@
 //! function's body becomes a call into that crate and the bridge function in Python is deleted.
 //! Owners of the next ports (one crate each): hydo_agents.py (guide/skill/init), hydo_compose.py
 //! (compose), hydo_errors.py (errors, for_run_dir), hydohist.py (run_checks), hydo_composer.py
-//! (regression_status, saved_regression_text), hydo-build (build_linux, build_mac).
+//! (regression_status, saved_regression_text). hydo-build (build_linux, build_mac) is the
+//! hydo-build crate since M103 (src/build.rs).
 
 use crate::ctx::{die, python, Ctx};
 use serde_json::{json, Value};
