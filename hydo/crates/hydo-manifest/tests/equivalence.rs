@@ -1,19 +1,38 @@
-//! hydo-manifest against hydo-build (the reference): for every manifest candidate in the
-//! repository (every tracked *.yaml, *.yml and *.json), on both architectures, for the cases the
-//! onboarding unit tests build plus the branches of the validator (tests/fixtures/cases.json),
-//! for YAML-subset texts (tests/fixtures/yaml_cases.json) and for hydo/ folders
-//! (tests/fixtures/folders/): the same acceptance, the same message, the same normalised data,
-//! the same warnings and the same `--check` lines. Then the image path (manifest_space.Space):
-//! every accepted manifest read back from its text and its plan meta, as an image carries them.
+//! hydo-manifest against the answers of hydo-build (the Python reference, frozen): for every
+//! manifest candidate in the repository (the pinned list of tracked *.yaml, *.yml and *.json), on
+//! both architectures, for the cases the onboarding unit tests built plus the branches of the
+//! validator (tests/fixtures/cases.json), for YAML-subset texts (tests/fixtures/yaml_cases.json),
+//! for hydo/ folders (tests/fixtures/folders/), with `--set`, and for seeded mutants of the
+//! repository manifests: the same acceptance, the same message, the same normalised data, the
+//! same warnings and the same `--check` lines. Then the image path (manifest_space.Space): every
+//! accepted manifest read back from its text and its plan meta, as an image carries them.
 //!
-//! The reference runs as `python3 tests/py_dump.py --batch` (needs python3; set HYDO_PYTHON to
-//! use another interpreter). Without an interpreter the test fails rather than passing silently.
+//! The reference answers are in `tests/golden/answers.txt`. They were recorded by running
+//! `tests/py_dump.py --batch` (hydo-build's own steps, Python 3.15.0 on the Mac) on exactly these
+//! requests at commit 2a58c4b, the last commit with the Python builder; `git show
+//! 2a58c4b:hydo/crates/hydo-manifest/tests/py_dump.py` and `git show 2a58c4b:hydo/onboard/hydo-build`
+//! restore them. One line per request: an error message is kept verbatim (a long one as its start
+//! and the digest of the whole), an accepted manifest as
+//! SHA-256 digests (32 bits each) of its normalised data, warnings, `--check` lines and plan meta (keys
+//! sorted, the repository root written `<root>` and the scratch directory `<tmp>`). Where
+//! hydo-build stopped with a traceback, the line says `crash` and Rust must refuse.
+//!
+//! The input set is pinned in the same file (`I` lines: each repository file with the SHA-256 of
+//! its bytes, or of its whole `hydo/` folder for a folder plan), so `git ls-files` does not decide
+//! it: when an input changed or vanished since the recording, the test fails and names it. Recorded
+//! answers of other tests (`*/tests/golden*`) and the Python unit tests' fixtures
+//! (`hydo/onboard/tests`) are not in the pinned set.
+//!
+//! From now on Rust is the reference: after a deliberate change, `HYDO_BLESS=1 cargo test -p
+//! hydo-manifest --test equivalence` rewrites the golden from the Rust answers (the pinned list
+//! from the tracked files as they are now); review the diff of `tests/golden/answers.txt` before
+//! committing.
 
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
-use std::io::Write;
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 
 use hydo_manifest::{check_summary, from_embedded_meta, load, py::CRASH_PREFIX, LoadOptions};
 
@@ -25,11 +44,15 @@ fn repo_root() -> PathBuf {
     crate_dir().join("../../..").canonicalize().unwrap()
 }
 
-fn python() -> String {
-    std::env::var("HYDO_PYTHON").unwrap_or_else(|_| "python3".into())
+fn golden_path() -> PathBuf {
+    crate_dir().join("tests/golden/answers.txt")
 }
 
-/// One request to both sides.
+fn bless() -> bool {
+    std::env::var_os("HYDO_BLESS").is_some_and(|v| v == "1")
+}
+
+/// One request.
 #[derive(Clone, Debug)]
 enum Req {
     Load {
@@ -44,53 +67,12 @@ enum Req {
 }
 
 impl Req {
-    fn to_json(&self) -> Value {
-        match self {
-            Req::Load { path, arch, sets } => json!({"path": path, "arch": arch, "sets": sets}),
-            Req::Embedded { text, compose } => json!({"embedded": text, "compose": compose}),
-        }
-    }
     fn label(&self) -> String {
         match self {
             Req::Load { path, arch, sets } => format!("{path} --arch {arch} {sets:?}"),
             Req::Embedded { text, compose } => format!("embedded {text} {compose:?}"),
         }
     }
-}
-
-fn run_python(reqs: &[Req]) -> Vec<Value> {
-    let script = crate_dir().join("tests/py_dump.py");
-    let mut child = Command::new(python())
-        .arg(&script)
-        .arg("--batch")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .expect("python3 is needed to run the reference (set HYDO_PYTHON)");
-    let mut input = String::new();
-    for r in reqs {
-        input.push_str(&r.to_json().to_string());
-        input.push('\n');
-    }
-    let mut stdin = child.stdin.take().unwrap();
-    let writer = std::thread::spawn(move || stdin.write_all(input.as_bytes()));
-    let out = child.wait_with_output().unwrap();
-    writer.join().unwrap().unwrap();
-    assert!(out.status.success(), "py_dump.py failed");
-    let lines: Vec<Value> = String::from_utf8(out.stdout)
-        .unwrap()
-        .lines()
-        .map(|l| serde_json::from_str(l).unwrap())
-        .collect();
-    assert_eq!(
-        lines.len(),
-        reqs.len(),
-        "py_dump.py answered {} of {} requests",
-        lines.len(),
-        reqs.len()
-    );
-    lines
 }
 
 fn rust_side(r: &Req) -> Value {
@@ -125,8 +107,9 @@ fn rust_side(r: &Req) -> Value {
     }
 }
 
-fn tracked_candidates(root: &Path) -> Vec<String> {
-    let out = Command::new("git")
+/// The repository's manifest candidates as they are tracked now (used only to record: HYDO_BLESS).
+fn tracked_now(root: &Path) -> Vec<String> {
+    let out = std::process::Command::new("git")
         .arg("-C")
         .arg(root)
         .arg("ls-files")
@@ -136,24 +119,63 @@ fn tracked_candidates(root: &Path) -> Vec<String> {
         .unwrap()
         .lines()
         .filter(|l| l.ends_with(".yaml") || l.ends_with(".yml") || l.ends_with(".json"))
-        .map(|l| root.join(l).to_string_lossy().into_owned())
+        .filter(|l| !l.starts_with("hydo/onboard/tests/") && !l.contains("/tests/golden"))
+        .map(str::to_string)
         .collect();
     v.sort();
     v
 }
 
-#[derive(Default)]
-struct Tally {
-    same_ok: usize,
-    same_err: usize,
-    crash: usize,
-    oci_skipped: usize,
-    mismatches: Vec<String>,
+fn sha256_hex(b: &[u8]) -> String {
+    Sha256::digest(b)
+        .iter()
+        .map(|x| format!("{x:02x}"))
+        .collect()
+}
+
+/// The digest that pins one repository input: its bytes, or for `<dir>/hydo/hydo.yaml` every
+/// file of that `hydo/` folder (relative names, the executable bit and bytes).
+fn input_digest(root: &Path, rel: &str) -> String {
+    use std::os::unix::fs::PermissionsExt;
+    let p = root.join(rel);
+    let folder = p
+        .parent()
+        .filter(|d| rel.ends_with("/hydo/hydo.yaml") && d.file_name().is_some_and(|n| n == "hydo"));
+    let Some(dir) = folder else {
+        return match std::fs::read(&p) {
+            Ok(b) => sha256_hex(&b),
+            Err(_) => "missing".into(),
+        };
+    };
+    let mut files = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).unwrap().flatten() {
+            let q = e.path();
+            if q.is_dir() {
+                stack.push(q);
+            } else {
+                files.push(q);
+            }
+        }
+    }
+    files.sort();
+    let mut h = Sha256::new();
+    for f in files {
+        let relf = f.strip_prefix(dir).unwrap().to_string_lossy().into_owned();
+        let exec = std::fs::metadata(&f)
+            .map(|m| m.permissions().mode() & 0o111 != 0)
+            .unwrap_or(false);
+        h.update(relf.as_bytes());
+        h.update([0, u8::from(exec)]);
+        h.update(std::fs::read(&f).unwrap_or_default());
+        h.update([0]);
+    }
+    h.finalize().iter().map(|x| format!("{x:02x}")).collect()
 }
 
 /// Python's own messages that changed between versions: before 3.13, "too many values to unpack
-/// (expected 2)" had no ", got N". hydo-build's text then depends on the Python that runs it (the
-/// box has 3.12, this Mac 3.15), so both sides are compared without that part.
+/// (expected 2)" had no ", got N". The recording and Rust are compared without that part.
 fn version_neutral(v: &Value) -> Value {
     match v {
         Value::String(s) => {
@@ -174,44 +196,144 @@ fn version_neutral(v: &Value) -> Value {
     }
 }
 
-fn compare(label: &str, py: &Value, rs: &Value, t: &mut Tally) {
-    let (py, rs) = (&version_neutral(py), &version_neutral(rs));
-    let pok = py["ok"].as_bool().unwrap_or(false);
+/// Paths written the same on every machine: the scratch directory and the repository root.
+struct Norm {
+    pairs: Vec<(String, &'static str)>,
+}
+
+impl Norm {
+    fn new(root: &Path, tmp: &Path) -> Norm {
+        let mut pairs = Vec::new();
+        for (p, name) in [(tmp, "<tmp>"), (root, "<root>")] {
+            let s = p.to_string_lossy().into_owned();
+            if let Ok(c) = p.canonicalize() {
+                let c = c.to_string_lossy().into_owned();
+                if c != s {
+                    pairs.push((c, name));
+                }
+            }
+            pairs.push((s, name));
+        }
+        Norm { pairs }
+    }
+    fn s(&self, x: &str) -> String {
+        let mut x = x.to_string();
+        for (from, to) in &self.pairs {
+            if x.contains(from.as_str()) {
+                x = x.replace(from.as_str(), to);
+            }
+        }
+        x
+    }
+    /// Keys sorted (an object compares as a map, as Value equality did), paths normalised.
+    fn v(&self, v: &Value) -> Value {
+        match v {
+            Value::String(s) => Value::String(self.s(s)),
+            Value::Array(a) => Value::Array(a.iter().map(|x| self.v(x)).collect()),
+            Value::Object(o) => {
+                let mut keys: Vec<&String> = o.keys().collect();
+                keys.sort();
+                let mut m = serde_json::Map::new();
+                for k in keys {
+                    m.insert(self.s(k), self.v(&o[k]));
+                }
+                Value::Object(m)
+            }
+            other => other.clone(),
+        }
+    }
+}
+
+fn h32(v: Option<&Value>, n: &Norm) -> String {
+    let t = n.v(&version_neutral(v.unwrap_or(&Value::Null))).to_string();
+    sha256_hex(t.as_bytes())[..8].to_string()
+}
+
+/// A message as a JSON string; a long one as its first 60 characters, `…` and the 64-bit digest of
+/// the whole text (the golden stays small, and a difference still shows where it starts).
+fn short_message(e: &str) -> String {
+    if e.chars().count() <= 80 {
+        return serde_json::to_string(e).unwrap();
+    }
+    let head: String = e.chars().take(60).collect();
+    let s = format!("{head}…#{}", &sha256_hex(e.as_bytes())[..16]);
+    serde_json::to_string(&s).unwrap()
+}
+
+/// One answer as a golden line's kind and payload.
+fn record_of(v: &Value, n: &Norm) -> (String, String) {
+    let ok = v["ok"].as_bool().unwrap_or(false);
+    if !ok {
+        let e = version_neutral(&v["error"]);
+        let e = n.s(e.as_str().unwrap_or(""));
+        // the reference's traceback, or Rust's refusal where hydo-build had one (HYDO_BLESS)
+        let kind = if v["crash"].as_bool().unwrap_or(false) || e.starts_with(CRASH_PREFIX) {
+            "crash"
+        } else {
+            "err"
+        };
+        return (kind.into(), short_message(&e));
+    }
+    if v.get("oci") == Some(&Value::Bool(true)) {
+        return ("oci".into(), String::new());
+    }
+    let mut p = String::new();
+    for (k, short) in [
+        ("data", 'd'),
+        ("warnings", 'w'),
+        ("check", 'c'),
+        ("meta", 'm'),
+    ] {
+        let _ = write!(p, "{short}:{} ", h32(v.get(k), n));
+    }
+    ("ok".into(), p.trim_end().to_string())
+}
+
+#[derive(Default)]
+struct Tally {
+    same_ok: usize,
+    same_err: usize,
+    crash: usize,
+    oci_skipped: usize,
+    mismatches: Vec<String>,
+}
+
+/// The comparison of the live test, against a recorded line: the reference's (kind, payload) and
+/// Rust's answer.
+fn compare(label: &str, gk: &str, gp: &str, rs: &Value, n: &Norm, t: &mut Tally) {
     let rok = rs["ok"].as_bool().unwrap_or(false);
-    if !pok && py["crash"].as_bool().unwrap_or(false) {
-        // hydo-build stops with a traceback: refused here too
+    let (rk, rp) = record_of(rs, n);
+    if gk == "crash" {
+        // hydo-build stopped with a traceback: refused here too
         if rok {
-            t.mismatches.push(format!(
-                "{label}: hydo-build crashes ({}), Rust accepts",
-                py["error"]
-            ));
+            t.mismatches
+                .push(format!("{label}: hydo-build crashed ({gp}), Rust accepts"));
         } else {
             t.crash += 1;
         }
         return;
     }
+    let pok = gk == "ok" || gk == "oci";
     if pok != rok {
         t.mismatches.push(format!(
             "{label}: hydo-build {} / Rust {}",
             if pok {
-                "accepts".to_string()
+                "accepted".to_string()
             } else {
-                format!("refuses: {}", py["error"])
+                format!("refused: {gp}")
             },
             if rok {
                 "accepts".to_string()
             } else {
-                format!("refuses: {}", rs["error"])
+                format!("refuses: {rp}")
             }
         ));
         return;
     }
     if !pok {
-        if py["error"] != rs["error"] {
-            t.mismatches.push(format!(
-                "{label}: messages differ\n  py: {}\n  rs: {}",
-                py["error"], rs["error"]
-            ));
+        if gp != rp {
+            t.mismatches
+                .push(format!("{label}: messages differ\n  py: {gp}\n  rs: {rp}"));
         } else if rs["error"]
             .as_str()
             .is_some_and(|e| e.starts_with(CRASH_PREFIX))
@@ -223,26 +345,16 @@ fn compare(label: &str, py: &Value, rs: &Value, t: &mut Tally) {
         }
         return;
     }
-    if py.get("oci") == Some(&Value::Bool(true)) || rs.get("oci") == Some(&Value::Bool(true)) {
+    if gk == "oci" || rk == "oci" {
         t.oci_skipped += 1;
         return;
     }
-    let mut diffs = Vec::new();
-    for k in ["data", "warnings", "check", "meta"] {
-        if py.get(k) != rs.get(k) {
-            diffs.push(format!(
-                "  {k}:\n    py: {}\n    rs: {}",
-                py.get(k).map(|v| v.to_string()).unwrap_or_default(),
-                rs.get(k).map(|v| v.to_string()).unwrap_or_default()
-            ));
-        }
-    }
-    if diffs.is_empty() {
+    if gp == rp {
         t.same_ok += 1;
     } else {
         t.mismatches.push(format!(
-            "{label}: accepted by both, but\n{}",
-            diffs.join("\n")
+            "{label}: accepted by both, but the digests differ\n  py: {gp}\n  rs: {rp}\n  Rust's answer: {}",
+            n.v(rs)
         ));
     }
 }
@@ -372,6 +484,74 @@ fn mutate(m: &mut Value, rng: &mut SplitMix) {
     }
 }
 
+/// Where the reference answers come from in this run.
+#[derive(Clone, Copy, PartialEq)]
+enum Mode {
+    Golden,
+    Bless,
+}
+
+fn mode() -> Mode {
+    if bless() {
+        Mode::Bless
+    } else {
+        Mode::Golden
+    }
+}
+
+struct Golden {
+    inputs: Vec<(String, String)>,
+    lines: Vec<(String, String, String, String)>,
+}
+
+fn read_golden() -> Golden {
+    let text = std::fs::read_to_string(golden_path()).unwrap_or_else(|e| {
+        panic!(
+            "{}: {e} (HYDO_BLESS=1 writes it from the Rust answers)",
+            golden_path().display()
+        )
+    });
+    let mut g = Golden {
+        inputs: Vec::new(),
+        lines: Vec::new(),
+    };
+    for l in text.lines() {
+        if l.starts_with('#') || l.is_empty() {
+            continue;
+        }
+        let f: Vec<&str> = l.splitn(5, '\t').collect();
+        match f[0] {
+            "I" => g.inputs.push((f[1].to_string(), f[2].to_string())),
+            "R" => {
+                // `^` repeats the group of the line before
+                let grp = match (f[1], g.lines.last()) {
+                    ("^", Some(prev)) => prev.0.clone(),
+                    (x, _) => x.to_string(),
+                };
+                g.lines.push((
+                    grp,
+                    f[2].to_string(),
+                    f[3].to_string(),
+                    f.get(4).unwrap_or(&"").to_string(),
+                ))
+            }
+            other => panic!("golden: unknown line kind {other:?}"),
+        }
+    }
+    g
+}
+
+const GOLDEN_HEADER: &str = "\
+# hydo-manifest's equivalence test: the answers of hydo-build (the Python reference).
+# Recorded by tests/py_dump.py --batch (hydo-build's own steps) with Python 3.15.0 on the Mac at
+# commit 2a58c4b (restore: git show 2a58c4b:hydo/crates/hydo-manifest/tests/py_dump.py and
+# git show 2a58c4b:hydo/onboard/hydo-build). Rewritten from Rust only by HYDO_BLESS=1.
+# I <tab> repository input <tab> sha256 of its bytes (of its whole hydo/ folder for a folder plan)
+# R <tab> group <tab> request <tab> ok|err|crash|oci <tab> 32-bit digests of data (d), warnings (w),
+#   --check lines (c) and meta (m) (keys sorted, paths as <root> and <tmp>) | the message (JSON string;
+#   over 80 characters: its first 60, … and the digest of the whole); a group ^ is the line before's
+";
+
 #[test]
 fn same_as_hydo_build() {
     let root = repo_root();
@@ -381,11 +561,41 @@ fn same_as_hydo_build() {
     std::fs::create_dir_all(tmp.join("cases")).unwrap();
     std::fs::create_dir_all(tmp.join("yaml")).unwrap();
     std::fs::create_dir_all(tmp.join("embedded")).unwrap();
+    let norm = Norm::new(&root, &tmp);
     let arches = ["x86_64", "arm64"];
+    let mode = mode();
+    let golden = if mode == Mode::Golden {
+        Some(read_golden())
+    } else {
+        None
+    };
+
+    // the pinned repository inputs
+    let pinned: Vec<String> = match &golden {
+        Some(g) => {
+            let changed: Vec<String> = g
+                .inputs
+                .iter()
+                .filter(|(rel, d)| &input_digest(&root, rel) != d)
+                .map(|(rel, _)| rel.clone())
+                .collect();
+            assert!(
+                changed.is_empty(),
+                "{} repository inputs changed (or vanished) since the answers were recorded: {changed:?}\n\
+                 If the change is deliberate, re-record from Rust with HYDO_BLESS=1 and review the diff.",
+                changed.len()
+            );
+            g.inputs.iter().map(|(r, _)| r.clone()).collect()
+        }
+        None => tracked_now(&root),
+    };
+    let tracked: Vec<String> = pinned
+        .iter()
+        .map(|r| root.join(r).to_string_lossy().into_owned())
+        .collect();
 
     let mut groups: BTreeMap<&str, Vec<Req>> = BTreeMap::new();
-    // 1. every tracked manifest candidate, both architectures
-    let tracked = tracked_candidates(&root);
+    // 1. every pinned manifest candidate, both architectures
     for p in &tracked {
         for a in arches {
             groups
@@ -411,16 +621,14 @@ fn same_as_hydo_build() {
         ("hydo/onboard/examples/redis/hydo.yaml", vec![("x", "1")]),
     ] {
         let p = root.join(rel);
-        if p.exists() {
-            groups.entry("--set").or_default().push(Req::Load {
-                path: p.to_string_lossy().into_owned(),
-                arch: "x86_64".into(),
-                sets: sets
-                    .iter()
-                    .map(|(k, v)| (k.to_string(), v.to_string()))
-                    .collect(),
-            });
-        }
+        groups.entry("--set").or_default().push(Req::Load {
+            path: p.to_string_lossy().into_owned(),
+            arch: "x86_64".into(),
+            sets: sets
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+        });
     }
     // 2. the unit tests' cases and the validator's branches
     let cases: Vec<Value> =
@@ -439,12 +647,11 @@ fn same_as_hydo_build() {
             });
         }
     }
-    let mut set_cases = vec![
+    for (name, sets) in [
         ("p-ok", vec![("nm", "xyz")]),
         ("p-ok", vec![("zz", "1")]),
         ("p-deep", vec![("y", "{{x}}")]),
-    ];
-    for (name, sets) in set_cases.drain(..) {
+    ] {
         let p = tmp.join("cases").join(format!("{name}.json"));
         groups.entry("--set").or_default().push(Req::Load {
             path: p.to_string_lossy().into_owned(),
@@ -519,53 +726,131 @@ fn same_as_hydo_build() {
         }
     }
 
-    let mut all: Vec<(&str, Req)> = Vec::new();
+    let mut all: Vec<(String, Req)> = Vec::new();
     for (g, rs) in &groups {
         for r in rs {
-            all.push((g, r.clone()));
+            all.push((g.to_string(), r.clone()));
         }
     }
-    let reqs: Vec<Req> = all.iter().map(|(_, r)| r.clone()).collect();
-    let py = run_python(&reqs);
-
-    let mut tallies: BTreeMap<&str, Tally> = BTreeMap::new();
-    let mut embedded: Vec<Req> = Vec::new();
-    for (i, ((g, r), p)) in all.iter().zip(&py).enumerate() {
-        let rs = rust_side(r);
-        compare(&r.label(), p, &rs, tallies.entry(g).or_default());
-        // the image's view of every accepted x86_64 load: its text and its plan meta
-        if let (Req::Load { path, arch, sets }, true) = (r, p["ok"] == Value::Bool(true)) {
-            if arch == "x86_64" && sets.is_empty() && p["oci"] != Value::Bool(true) {
-                let compose = p["data"].get("_compose").filter(|c| !c.is_null()).map(|c| {
-                    let mut c = c.clone();
-                    c.as_object_mut().unwrap().remove("_folder");
-                    let cp = tmp.join("embedded").join(format!("{i}.compose.json"));
-                    std::fs::write(&cp, c.to_string()).unwrap();
-                    cp.to_string_lossy().into_owned()
-                });
-                embedded.push(Req::Embedded {
-                    text: path.clone(),
-                    compose,
-                });
+    let rust: Vec<Value> = all.iter().map(|(_, r)| rust_side(r)).collect();
+    // the reference's answers to the loads, as (kind, payload)
+    let reference =
+        |i: usize, answers: &[Value]| -> (String, String) { record_of(&answers[i], &norm) };
+    let mut refs: Vec<(String, String)> = (0..all.len())
+        .map(|i| match mode {
+            Mode::Bless => reference(i, &rust),
+            Mode::Golden => (String::new(), String::new()),
+        })
+        .collect();
+    if let Some(g) = &golden {
+        for (i, (grp, r)) in all.iter().enumerate() {
+            let want = (grp.clone(), norm.s(&r.label()));
+            match g.lines.get(i) {
+                Some((gg, gl, k, p)) if (gg, gl) == (&want.0, &want.1) => {
+                    refs[i] = (k.clone(), p.clone())
+                }
+                other => panic!(
+                    "request {i} differs from the recording: now {want:?}, recorded {:?}",
+                    other.map(|(a, b, _, _)| (a, b))
+                ),
             }
         }
     }
-    let py2 = run_python(&embedded);
-    for (r, p) in embedded.iter().zip(&py2) {
-        let rs = rust_side(r);
-        compare(
-            &r.label(),
-            p,
-            &rs,
-            tallies.entry("image path (embedded)").or_default(),
+
+    // the image's view of every accepted x86_64 load: its text and its plan meta
+    let mut embedded: Vec<Req> = Vec::new();
+    for (i, (_, r)) in all.iter().enumerate() {
+        let Req::Load { path, arch, sets } = r else {
+            continue;
+        };
+        if refs[i].0 != "ok" || arch != "x86_64" || !sets.is_empty() {
+            continue;
+        }
+        let src = &rust[i];
+        let compose = src["data"]
+            .get("_compose")
+            .filter(|c| !c.is_null())
+            .map(|c| {
+                let mut c = c.clone();
+                c.as_object_mut().unwrap().remove("_folder");
+                let cp = tmp.join("embedded").join(format!("{i}.compose.json"));
+                std::fs::write(&cp, c.to_string()).unwrap();
+                cp.to_string_lossy().into_owned()
+            });
+        embedded.push(Req::Embedded {
+            text: path.clone(),
+            compose,
+        });
+    }
+    let n0 = all.len();
+    for r in &embedded {
+        all.push(("image path (embedded)".to_string(), r.clone()));
+    }
+    let rust2: Vec<Value> = embedded.iter().map(rust_side).collect();
+    for (j, r) in embedded.iter().enumerate() {
+        let i = n0 + j;
+        let rec = match mode {
+            Mode::Bless => record_of(&rust2[j], &norm),
+            Mode::Golden => {
+                let g = golden.as_ref().unwrap();
+                let want = ("image path (embedded)".to_string(), norm.s(&r.label()));
+                match g.lines.get(i) {
+                    Some((gg, gl, k, p)) if (gg, gl) == (&want.0, &want.1) => {
+                        (k.clone(), p.clone())
+                    }
+                    other => panic!(
+                        "request {i} differs from the recording: now {want:?}, recorded {:?}",
+                        other.map(|(a, b, _, _)| (a, b))
+                    ),
+                }
+            }
+        };
+        refs.push(rec);
+    }
+    if let Some(g) = &golden {
+        assert_eq!(
+            g.lines.len(),
+            all.len(),
+            "the recording has {} requests, this run {}",
+            g.lines.len(),
+            all.len()
         );
+    }
+
+    let mut tallies: BTreeMap<String, Tally> = BTreeMap::new();
+    for (i, ((grp, r), (k, p))) in all.iter().zip(&refs).enumerate() {
+        let rs = if i < n0 { &rust[i] } else { &rust2[i - n0] };
+        compare(
+            &norm.s(&r.label()),
+            k,
+            p,
+            rs,
+            &norm,
+            tallies.entry(grp.clone()).or_default(),
+        );
+    }
+
+    if mode != Mode::Golden {
+        let mut out = String::from(GOLDEN_HEADER);
+        for rel in &pinned {
+            let _ = writeln!(out, "I\t{rel}\t{}", input_digest(&root, rel));
+        }
+        let mut last: Option<&String> = None;
+        for ((grp, r), (k, p)) in all.iter().zip(&refs) {
+            let g = if Some(grp) == last { "^" } else { grp.as_str() };
+            let _ = writeln!(out, "R\t{g}\t{}\t{k}\t{p}", norm.s(&r.label()));
+            last = Some(grp);
+        }
+        std::fs::create_dir_all(golden_path().parent().unwrap()).unwrap();
+        std::fs::write(golden_path(), out).unwrap();
+        eprintln!("wrote {}", golden_path().display());
     }
 
     let mut report = String::new();
     let mut bad = Vec::new();
     for (g, t) in &tallies {
         report.push_str(&format!(
-            "{g}: {} accepted by both with the same data, {} refused by both with the same message, {} refused where hydo-build crashes, {} with an image not read, {} mismatches\n",
+            "{g}: {} accepted by both with the same data, {} refused by both with the same message, {} refused where hydo-build crashed, {} with an image not read, {} mismatches\n",
             t.same_ok,
             t.same_err,
             t.crash,
@@ -575,7 +860,7 @@ fn same_as_hydo_build() {
         bad.extend(t.mismatches.iter().cloned());
     }
     report.push_str(&format!(
-        "({} tracked files, {} fixture cases, {} yaml texts, {} folders)\n",
+        "({} pinned repository files, {} fixture cases, {} yaml texts, {} folders, {nmut} mutants)\n",
         tracked.len(),
         cases.len(),
         ycases.len(),
@@ -587,6 +872,6 @@ fn same_as_hydo_build() {
         bad.is_empty(),
         "{} mismatches:\n{}\n\n{report}",
         bad.len(),
-        bad.join("\n")
+        bad.iter().take(30).cloned().collect::<Vec<_>>().join("\n")
     );
 }
