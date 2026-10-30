@@ -349,7 +349,10 @@ class Mounts(unittest.TestCase):
     def test_without_mounts_unchanged(self):
         """an image service without mounts: gets byte-for-byte the launcher of the previous hydo_oci.py"""
         d = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, d)
-        old = subprocess.run(["git", "-C", ONB, "show", "main:hydo/onboard/hydo_oci.py"], stdout=subprocess.PIPE)
+        old = subprocess.run(["git", "-C", ONB, "show", "main:hydo/onboard/hydo_oci.py"], stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL)
+        if old.returncode != 0:     # main before the M100 layout
+            old = subprocess.run(["git", "-C", ONB, "show", "main:hvx/onboard/hydo_oci.py"], stdout=subprocess.PIPE)
         if old.returncode != 0:
             self.skipTest("no git main")
         open(os.path.join(d, "hydo_oci_old.py"), "wb").write(old.stdout)

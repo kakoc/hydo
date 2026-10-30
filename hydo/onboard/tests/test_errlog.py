@@ -282,14 +282,19 @@ def test_build(ref):
     if ref is None and not os.path.exists(os.path.join(top_dir, ".git")):
         print("skip  build identity: not a repository checkout and no reference hydo-build given")
         return
-    if ref is None:     # hv/hvx/ where this branch left main (hydo-build reads its neighbours: init, composer, history)
+    if ref is None:     # the product where this branch left main (hydo-build reads its neighbours: init, composer, history)
         top = tempfile.mkdtemp(prefix="hbref-")
         base = os.environ.get("HYDO_REF") or subprocess.run(["git", "merge-base", "HEAD", "main"], cwd=top_dir,
                                                             stdout=subprocess.PIPE, text=True).stdout.strip()
-        arc = subprocess.run(["git", "archive", base, "hydo/onboard", "hydo/history"],
+        prod = "hydo"
+        arc = subprocess.run(["git", "archive", base, "hydo/onboard", "hydo/history"], stderr=subprocess.DEVNULL,
                              cwd=os.path.dirname(os.path.dirname(ONB)), stdout=subprocess.PIPE).stdout
+        if not arc:     # a base before the M100 layout: the product was in hvx/
+            prod = "hvx"
+            arc = subprocess.run(["git", "archive", base, "hvx/onboard", "hvx/history"],
+                                 cwd=os.path.dirname(os.path.dirname(ONB)), stdout=subprocess.PIPE).stdout
         subprocess.run(["tar", "-x", "-C", top], input=arc, check=True)
-        ref = os.path.join(top, "hydo", "onboard", "hydo-build")
+        ref = os.path.join(top, prod, "onboard", "hydo-build")
     n = 0
     for p in sorted(glob.glob(os.path.join(ONB, "examples", "**", "*.yaml"), recursive=True)):
         if p.endswith("known-errors.yaml") or "redis-errors" in p or "hydo-errors" in p or os.path.basename(p).startswith("hydo-grpcgen"):
