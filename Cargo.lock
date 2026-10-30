@@ -129,6 +129,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "hydo-explore"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "hydo-engine",
+ "hydo-manifest",
+ "hydo-schedule",
+ "libc",
+ "regex",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "hydo-manifest"
 version = "0.1.0"
 dependencies = [

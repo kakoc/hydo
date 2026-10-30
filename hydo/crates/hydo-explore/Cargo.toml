@@ -1,0 +1,26 @@
+[package]
+name = "hydo-explore"
+description = "hydo's fault explorer: schedules from seeds, a worker pool over one engine, re-runs, shrinking and reports"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+# The explorer on its own (the repository's counterpart of explore.py; `hydo explore` is the
+# release's entry point and calls the same library).
+[[bin]]
+name = "hydo-explore"
+path = "src/bin/hydo-explore.rs"
+
+[dependencies]
+hydo-schedule = { workspace = true }
+hydo-manifest = { workspace = true }
+hydo-engine = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+flate2 = { workspace = true }
+regex = "1"
+libc = "0.2"

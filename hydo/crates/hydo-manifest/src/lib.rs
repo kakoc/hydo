@@ -207,6 +207,21 @@ pub fn from_embedded_meta(
     Ok((man, meta))
 }
 
+/// A manifest file as the explorer reads it (hydo/explore/manifest_space.py `load(manifest=path)`):
+/// JSON by name or content, else the YAML subset; no `params:`/`--set` and no version check; the
+/// test composer's expansion with the `hydo/` folder next to the file; then `validate`. Returns
+/// the validated data and the plan meta (None without a plan).
+pub fn for_explorer(path: &Path) -> Result<(Value, Option<Value>), ManifestError> {
+    let p = path.to_string_lossy().into_owned();
+    let text = read_text(&p)?;
+    let mut m = parse_text(&text, &py::basename(&p), true)?;
+    let folder = composer::scan_folder(&py::dirname(&py::abspath(&p)))?;
+    let mut warnings = Vec::new();
+    let meta = composer::expand(&mut m, folder.as_ref(), &mut warnings)?;
+    validate::validate(&mut m)?;
+    Ok((m, meta))
+}
+
 /// The lines `hydo-build <path> --check` prints for a loaded manifest.
 pub fn check_summary(path_as_given: &str, l: &Loaded) -> Vec<String> {
     let m = &l.manifest.data;
