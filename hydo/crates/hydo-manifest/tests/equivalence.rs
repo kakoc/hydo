@@ -151,7 +151,31 @@ struct Tally {
     mismatches: Vec<String>,
 }
 
+/// Python's own messages that changed between versions: before 3.13, "too many values to unpack
+/// (expected 2)" had no ", got N". hydo-build's text then depends on the Python that runs it (the
+/// box has 3.12, this Mac 3.15), so both sides are compared without that part.
+fn version_neutral(v: &Value) -> Value {
+    match v {
+        Value::String(s) => {
+            static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+            let re = RE.get_or_init(|| regex::Regex::new(r"\(expected (\d+), got \d+\)").unwrap());
+            if !s.contains(", got ") {
+                return v.clone();
+            }
+            Value::String(re.replace_all(s, "(expected $1)").into_owned())
+        }
+        Value::Array(a) => Value::Array(a.iter().map(version_neutral).collect()),
+        Value::Object(o) => Value::Object(
+            o.iter()
+                .map(|(k, x)| (k.clone(), version_neutral(x)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
 fn compare(label: &str, py: &Value, rs: &Value, t: &mut Tally) {
+    let (py, rs) = (&version_neutral(py), &version_neutral(rs));
     let pok = py["ok"].as_bool().unwrap_or(false);
     let rok = rs["ok"].as_bool().unwrap_or(false);
     if !pok && py["crash"].as_bool().unwrap_or(false) {
