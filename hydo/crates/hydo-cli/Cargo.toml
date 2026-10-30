@@ -15,6 +15,8 @@ hydo-schedule = { workspace = true }
 hydo-manifest = { workspace = true }
 hydo-engine = { workspace = true }
 hydo-explore = { workspace = true }
+hydo-composer = { workspace = true }
+hydo-errors = { workspace = true }
 hydo-agents = { workspace = true }
 hydo-compose = { workspace = true }
 hydo-history = { workspace = true }

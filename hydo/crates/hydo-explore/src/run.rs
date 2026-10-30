@@ -16,7 +16,7 @@ use crate::compose;
 use crate::errlog::{self, Known};
 use crate::fc;
 use crate::gen::{Backend, Ex, TJ_MAX};
-use crate::pool::{self, errlog_of, Host, Pool, Res};
+use crate::pool::{self, has_errlog, Host, Pool, Res};
 use crate::py::{dumps, dumps_line, fl, head, py_str, round1};
 use crate::report::{self, assert_failures, cell, same_failure, sig_key, verdict_kind};
 use crate::sched::S;
@@ -205,17 +205,10 @@ pub fn main_with(argv: &[String], env: &Env) -> i32 {
 }
 
 fn setup(a: Args, env: &Env) -> Cx {
-    let onboard = env.root.join("hydo").join("onboard");
-    let mut known = match &a.known_errors {
-        None => Known {
-            v: json!({"path": null, "sha256": null, "unknown": "report", "known": []}),
-            path: None,
-        },
-        Some(p) => Known::load(&onboard, Some(p))
-            .unwrap_or_else(|e| die(&format!("explore.py: --known-errors: {e}"))),
-    };
+    let mut known = errlog::load(a.known_errors.as_deref())
+        .unwrap_or_else(|e| die(&format!("explore.py: --known-errors: {e}")));
     if let Some(e) = &a.errors {
-        known.set_unknown(e);
+        known.unknown = e.clone();
     }
     if a.fc_adaptive && a.sweep.as_deref() != Some("freeze") {
         die("explore.py: --fc-adaptive goes with --sweep freeze");
@@ -771,7 +764,7 @@ struct Shrunk {
 /// A shrink's test of a candidate's (verdict, result): does it still fail the same way?
 type Keep<'a> = &'a dyn Fn(&str, &Res) -> bool;
 /// The error-log kinds and their shrink records (report.md's error section).
-type ErrorsReport = (Map<String, Value>, Map<String, Value>);
+type ErrorsReport = (Vec<errlog::Aggregate>, Map<String, Value>);
 
 /// explore.py `shrink`. Returns (minimal, its verdict, tries) and appends the log lines.
 #[allow(clippy::too_many_arguments)]
@@ -970,15 +963,20 @@ fn shrink_violation(cx: &Cx, pool: &Pool, k: usize, key: (String, String), f: &R
 }
 
 /// explore.py `errlog_shrink` for one kind.
-fn shrink_errkind(cx: &Cx, pool: &Pool, x: &Value) -> (String, Value, Vec<String>) {
-    let sig = py_str(&x["sig"]);
+fn shrink_errkind(cx: &Cx, pool: &Pool, x: &errlog::Aggregate) -> (String, Value, Vec<String>) {
+    let sig = x.sig.clone();
     let mut log = Vec::new();
     let keep = |_: &str, r: &Res| {
         r.get("errors_new")
             .and_then(Value::as_array)
             .is_some_and(|a| a.iter().any(|s| py_str(s) == sig))
     };
-    let s0 = cx.parse(&py_str(&x["first_new_schedule"]));
+    let s0 = cx.parse(
+        x.first_new
+            .as_ref()
+            .map(|f| f.1.as_str())
+            .unwrap_or_default(),
+    );
     let (m, _, n) = shrink(
         cx,
         pool,
@@ -1099,19 +1097,25 @@ fn explore(
             }
         }
         // error-log kinds: collected once every first run is in, shrunk side by side
-        let an_runs: Vec<(i64, String, Option<Value>)> = seeds
+        let an_runs: Vec<(Value, String, Option<errlog::Analysis>)> = seeds
             .iter()
             .map(|sd| {
                 let tag = format!("seed-{sd}");
-                (
-                    *sd,
-                    all.get(&tag).map(|x| x.0.clone()).unwrap_or_default(),
-                    errlog_of(&cx.out, &tag),
-                )
+                let text = all.get(&tag).map(|x| x.0.clone()).unwrap_or_default();
+                // explore.py read back consoles/<tag>.errors.json; the analysis is a pure function
+                // of the consoles, the schedule and the list, so it is made again here
+                let an = if has_errlog(&cx.out, &tag) {
+                    cx.known.as_ref().and_then(|k| {
+                        errlog::analyse(&cx.out.join("consoles").join(&tag), &text, k)
+                    })
+                } else {
+                    None
+                };
+                (json!(sd), text, an)
             })
             .collect();
         let errors = if an_runs.iter().any(|x| x.2.is_some()) {
-            let agg = errlog::collect(&an_runs);
+            let agg = hydo_errors::collect(&an_runs);
             let mut handles = Vec::new();
             if !a.no_shrink && a.errors_shrink > 0 {
                 for x in errlog::to_shrink(&agg)
@@ -1285,35 +1289,28 @@ fn explore(
     if let Some((agg, an_runs, _)) = &errors {
         summary.insert(
             "error_kinds_new".into(),
-            json!(agg
-                .values()
-                .filter(|x| x["new_runs"].as_i64().unwrap_or(0) > 0)
-                .count()),
+            json!(agg.iter().filter(|x| x.new_runs > 0).count()),
         );
         summary.insert(
             "runs_with_new_error_kinds".into(),
             json!(an_runs
                 .iter()
-                .filter(|x| x
-                    .2
-                    .as_ref()
-                    .is_some_and(|an| an["new"].as_array().is_some_and(|n| !n.is_empty())))
+                .filter(|x| x.2.as_ref().is_some_and(|an| !an.new.is_empty()))
                 .count()),
         );
         let kinds: Vec<Value> = agg
-            .values()
+            .iter()
             .map(|x| {
-                let mut o = x.as_object().cloned().unwrap_or_default();
-                o.insert("new".into(), json!(x["new_runs"].as_i64().unwrap_or(0) > 0));
+                let mut o = x.to_json();
+                o.insert("new".into(), json!(x.new_runs > 0));
                 o.insert(
                     "shrunk".into(),
-                    eshr.get(&py_str(&x["sig"])).cloned().unwrap_or(Value::Null),
+                    eshr.get(&x.sig).cloned().unwrap_or(Value::Null),
                 );
                 Value::Object(o)
             })
             .collect();
-        let kv = &known.v;
-        let doc = json!({"known_file": kv["path"], "known_sha256": kv["sha256"], "unknown": kv["unknown"], "kinds": kinds});
+        let doc = json!({"known_file": known.path, "known_sha256": known.sha256, "unknown": known.unknown, "kinds": kinds});
         let _ = std::fs::write(cx.out.join("errors.json"), dumps(&doc, 1));
         errs_report = Some((agg.clone(), eshr.clone()));
         rep_j.insert("summary".into(), Value::Object(summary.clone()));
@@ -1497,7 +1494,7 @@ fn write_report(
         }
     }
     if let Some((agg, eshr)) = errors {
-        l.extend(errlog::report_md(agg, known, eshr, &|s| cx.by_hand(s)));
+        l.extend(hydo_errors::report_md(agg, known, eshr, &|s| cx.by_hand(s)));
     }
     let _ = std::fs::write(cx.out.join("report.md"), l.join("\n") + "\n");
 }

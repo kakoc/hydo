@@ -1,3 +1,6 @@
+# Replaced by hydo-errors (hydo/crates/hydo-errors), M104. Kept as the reference of that crate's
+# equivalence test and for explore.py until the explorer is ported; the lead deletes it after
+# every port has merged.
 """Error logs as findings, the host side (hydo/onboard/MANIFEST.md, "Error logs as findings").
 
 A manifest with `errors:` makes the guest scan each service's log at the end of every boot and

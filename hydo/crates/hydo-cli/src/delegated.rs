@@ -1,16 +1,13 @@
-//! The commands whose logic is still Python: `hydo compose` (hydo_compose.py), `hydo errors`
-//! (hydo_errors.py), and `hydo guide | skill | init` (hydo_agents.py), plus `hydo report` and
-//! `hydo explore` (the hydo-explore crate, M102), which are Rust. (`hydo build` is Rust since M103:
-//! src/build.rs.)
+//! The commands that kept their place here after their ports: `hydo compose` (hydo-compose),
+//! `hydo errors` (hydo-errors), `hydo guide | skill | init` (hydo-agents), `hydo explore` (the
+//! hydo-explore crate, M102) and `hydo report`. (`hydo build` is Rust since M103: src/build.rs.)
 //!
 //! Each `cmd_*` here is the seam its port replaces: the argument handling, defaults and the
 //! lines printed around the Python call are already the Rust CLI's, so a port swaps only the call.
 
-use crate::bridge;
 use crate::ctx::{abspath, die, pjoin, Ctx, Platform, OUT};
 use crate::hvxenv;
 use crate::runs::{default_image_mac, find_image_linux, mac_kernel_for};
-use serde_json::json;
 use std::io::Write;
 use std::path::Path;
 
@@ -112,15 +109,10 @@ pub fn cmd_report(_ctx: &Ctx, argv: &[String]) -> i32 {
     0
 }
 
-// ---------------------------------------------------------------- errors (hydo_errors.py)
+// ---------------------------------------------------------------- errors (the hydo-errors crate)
 
-pub fn cmd_errors(ctx: &Ctx, argv: &[String]) -> i32 {
-    bridge::rc(
-        ctx,
-        "errors_cli",
-        json!({"argv": argv, "default_dir": pjoin(OUT, "explore")}),
-        &[],
-    )
+pub fn cmd_errors(_ctx: &Ctx, argv: &[String]) -> i32 {
+    hydo_errors::cli(argv, &pjoin(OUT, "explore"))
 }
 
 // ---------------------------------------------------------------- compose (the hydo-compose crate)

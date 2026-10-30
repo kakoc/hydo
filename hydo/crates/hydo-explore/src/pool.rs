@@ -237,7 +237,9 @@ pub fn host_checks(h: &Host, tag: &str, res: &mut Res) {
     res.insert("verdict".into(), json!(r.verdict));
 }
 
-/// explore.py `host_errlog`: the error-log analysis of a run whose console carries records.
+/// explore.py `host_errlog`: the error-log analysis (hydo-errors) of a run whose console carries
+/// records; it goes to `consoles/<tag>.errors.json` and into the result (errors_new, errors_known,
+/// and with `unknown: fail` an OK verdict becomes a VIOLATION).
 pub fn host_errlog(h: &Host, tag: &str, text: &str, res: &mut Res) {
     let Some(known) = &h.known else { return };
     if res
@@ -248,28 +250,22 @@ pub fn host_errlog(h: &Host, tag: &str, text: &str, res: &mut Res) {
     {
         return;
     }
-    let consoles: Vec<String> = ["", ".recovery"]
-        .iter()
-        .filter_map(|s| read_text(&console(&h.outdir, tag, s)))
-        .collect();
     let prefix = h.outdir.join("consoles").join(tag);
-    match known.analyse(&h.onboard, &prefix, text, &consoles) {
-        Ok(Some(an)) => {
-            let _ = std::fs::write(
-                h.outdir.join("consoles").join(format!("{tag}.errors.json")),
-                crate::py::dumps(&an, 1),
-            );
-            errlog::apply(res, &an, known);
-        }
-        Ok(None) => {}
-        Err(e) => eprintln!("hydo-explore: error logs of {tag}: {e}"),
+    if let Some(an) = errlog::analyse(&prefix, text, known) {
+        let _ = std::fs::write(
+            h.outdir.join("consoles").join(format!("{tag}.errors.json")),
+            crate::py::dumps(&an.to_json(), 1),
+        );
+        hydo_errors::apply(res, Some(&an), known);
     }
 }
 
-pub fn errlog_of(outdir: &Path, tag: &str) -> Option<Value> {
-    let t =
-        std::fs::read_to_string(outdir.join("consoles").join(format!("{tag}.errors.json"))).ok()?;
-    serde_json::from_str(&t).ok()
+/// Whether a run's error-log analysis was written (explore.py `errlog_of(...) is not None`).
+pub fn has_errlog(outdir: &Path, tag: &str) -> bool {
+    outdir
+        .join("consoles")
+        .join(format!("{tag}.errors.json"))
+        .exists()
 }
 
 // ---------------------------------------------------------------- the pool

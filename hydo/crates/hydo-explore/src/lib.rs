@@ -17,7 +17,6 @@
 //! machine has the room, and the pool sized from the machine.
 
 pub mod args;
-pub mod bridge;
 pub mod compose;
 pub mod errlog;
 pub mod fc;

@@ -12,15 +12,11 @@ module is ported to Rust (one crate per module), the Rust CLI stops calling it a
 deleted. The code below is what the two Python release CLIs (hydo/dist/{linux,mac}/hydo before
 M101) did in-process, moved here unchanged.
 
-    errors_cli             hydo_errors.cli(argv, default_dir)             hydo errors
-    errors_for_run_dir     hydo_errors.for_run_dir(...) -> res            hydo run / repro
-    errors_load_known      hydo_errors.load_known(path) -> list            hydo explore (hydo-explore)
-    errors_analyse         hydo_errors.analyse(run_files(prefix), ...)    hydo explore (hydo-explore)
-    regression_status      hydo_composer.regression_status(r, meta)       hydo repro --regressions
-    regression_warning     hydo_composer.regression_warning(r, meta)      hydo repro --regressions
-    saved_regression_text  hydo_composer.saved_regression_text(x)         hydo save
     build_linux            hydo-build with the Linux release's tools      hydo build (Linux)
     build_mac              hydo-build --arch arm64 with the Mac's tools   hydo build (Mac)
+
+Ported and removed here (M104): errors_cli and errors_for_run_dir (the hydo-errors crate), and
+regression_status, regression_warning and saved_regression_text (the hydo-composer crate).
 """
 import importlib.machinery
 import importlib.util
@@ -45,59 +41,6 @@ def die(msg, rc=1):
 def _onboard():
     if ONBOARD not in sys.path:
         sys.path.insert(0, ONBOARD)
-
-
-# ---------------------------------------------------------------- small seams
-def errors_cli(a):
-    _onboard()
-    import hydo_errors
-    return hydo_errors.cli(a["argv"], a["default_dir"])
-
-
-def errors_for_run_dir(a):
-    _onboard()
-    import hydo_errors
-    return 0, hydo_errors.for_run_dir(a["outdir"], a["schedule"], a["res"], a.get("known"))
-
-
-def errors_load_known(a):
-    """hydo_errors.load_known(path) for the Rust explorer: the list without its compiled regexes,
-    or {"error": message}."""
-    _onboard()
-    import hydo_errors
-    try:
-        k = hydo_errors.load_known(a.get("path"))
-    except hydo_errors.ErrorsError as e:
-        return 0, {"error": str(e)}
-    return 0, dict(k, known=[{x: v for x, v in e.items() if x != "_re"} for e in k["known"]])
-
-
-def errors_analyse(a):
-    """hydo_errors.analyse(run_files(prefix), schedule, known) for the Rust explorer (one run)."""
-    _onboard()
-    import hydo_errors
-    known = hydo_errors.load_known(a.get("path"))
-    if a.get("unknown"):
-        known["unknown"] = a["unknown"]
-    return 0, hydo_errors.analyse(hydo_errors.run_files(a["prefix"]), a["schedule"], known)
-
-
-def regression_status(a):
-    _onboard()
-    import hydo_composer
-    return 0, hydo_composer.regression_status(a["r"], a["meta"])
-
-
-def regression_warning(a):
-    _onboard()
-    import hydo_composer
-    return 0, hydo_composer.regression_warning(a["r"], a["meta"])
-
-
-def saved_regression_text(a):
-    _onboard()
-    import hydo_composer
-    return 0, hydo_composer.saved_regression_text(a["x"])
 
 
 # ---------------------------------------------------------------- hydo build
@@ -311,8 +254,7 @@ def build_mac(a):
     return hb.main()
 
 
-FUNCS = {f.__name__: f for f in (errors_cli, errors_for_run_dir, errors_load_known, errors_analyse, regression_status,
-                                 regression_warning, saved_regression_text, build_linux, build_mac)}
+FUNCS = {f.__name__: f for f in (build_linux, build_mac)}
 
 
 def main():

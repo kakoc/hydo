@@ -4,14 +4,12 @@
 //! the two differed, each platform keeps its own behaviour (docs/HISTORY.md, M101).
 //!
 //! How each command is implemented today:
-//!   Rust:                 run, repro (incl. --regressions), save, report, doctor, module (Linux),
-//!                         compose (hydo-compose), guide/skill/init (hydo-agents)
-//!   Rust + Python seams:  run/repro call hydo-history (Rust) and hydo_errors.for_run_dir,
-//!                         --regressions and save call hydo_composer (src/bridge.rs)
-//!   Rust crates:          build (hydo-build, src/build.rs)
-//!   delegated (Python):   explore (explore.py), errors (hydo_errors.py)
+//!   Rust:                 run, repro (incl. --regressions: hydo-composer), save (hydo-composer),
+//!                         report, doctor, module (Linux), errors and run/repro's error kinds
+//!                         (hydo-errors), history checks (hydo-history), compose (hydo-compose),
+//!                         guide/skill/init (hydo-agents), build (hydo-build, src/build.rs)
+//!   delegated (Python):   explore (explore.py)
 
-mod bridge;
 mod build;
 mod ctx;
 mod delegated;
