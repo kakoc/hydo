@@ -71,12 +71,13 @@ hvx_fault_classes = HVX_FAULT_DELAY, HVX_FAULT_ERROR, HVX_FAULT_DROP, HVX_FAULT_
 hvx_nfault_classes = HVX_NFAULT_DROP, HVX_NFAULT_DELAY, HVX_NFAULT_CORRUPT, HVX_NFAULT_DUPLICATE, HVX_NFAULT_REORDER
 hvx_pt_flags = HVX_PT_KERNEL, HVX_PT_USER, HVX_PT_CR3, HVX_PT_NORETCOMP
 
-# Guest RAM is bounded to 32 MiB so a fuzzing VM does not run out of memory; the _edge
+# Guest RAM is bounded to 8 MiB (four EPT page tables) so a fuzzing VM with many open VMs does
+# not run out of memory; the _edge
 # variant covers the size checks (0, just above the 3 GiB cap, huge). The cap itself (3 GiB)
 # is left out: in a 2 GiB fuzzing VM it exhausts memory and the OOM killer takes the run
 # (hvx_repro bigalloc covers that path in the debug VM).
 hvx_config {
-	mem_size	int64[0:0x2000000]
+	mem_size	int64[0:0x800000]
 	n_vcpus		int32[0:9]
 	flags		flags[hvx_vm_flags, int32]
 }

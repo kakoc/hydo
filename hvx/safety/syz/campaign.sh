@@ -10,7 +10,7 @@
 #   campaign.sh status          is it running, corpus/coverage/crash counts, crash titles
 #   campaign.sh stop            stop it (by pid file only)
 #
-# Every VM has 2 vCPUs and VM_MEM MiB (default 2048). The host is shared: a campaign starts only
+# Every VM has 2 vCPUs and VM_MEM MiB (default 3072; KASAN reserves about 430 MiB of it). The host is shared: a campaign starts only
 # when MemAvailable covers its VMs plus MEM_RESERVE (default 4096 MiB), waits up to WAIT_MIN
 # minutes for that (default 0), and a guard stops it if MemAvailable falls below MEM_FLOOR
 # (default 1536 MiB) while it runs, so someone else's job can have the memory back.
@@ -20,7 +20,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/../lib.sh"
 C="$SAFETY/campaign"
 PIDF="$C/manager.pid"
-VM_MEM=${VM_MEM:-2048}
+VM_MEM=${VM_MEM:-3072}
 BUNDLE=${BUNDLE:-debug}	# debug-orig fuzzes the unfixed module of main
 mkdir -p "$C" "$SAFETY/gcroots"
 

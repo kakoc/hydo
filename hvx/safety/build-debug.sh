@@ -30,7 +30,7 @@ hvx_input_test hvx_smp_test hvx_virtio_iso_test hvx_virtio_pci_test hvx_fault_te
 hvx_net_fault_test hvx_bug_f0_test hvx_fuzzresume_test hvx_pmu_test hvx_bigram_test hvx_avx_test
 hvx_sched_pmu_test hvx_sched_race_test hvx_sipi_test hvx_sched_sweep_test hvx_sched_burst_test
 hvx_linux hvx_boot_verify hvx_disk_boot_verify"
-REPROS="hvx_repro_pmu hvx_repro_txlen hvx_repro_unsync hvx_repro_pcishift hvx_repro_diskrace hvx_repro_repins hvx_repro_vqloop"
+REPROS="hvx_repro_pageleak hvx_repro_pmu hvx_repro_txlen hvx_repro_unsync hvx_repro_pcishift hvx_repro_diskrace hvx_repro_repins hvx_repro_vqloop"
 
 D="$SAFETY/${DEBUG_OUT:-debug}"	# DEBUG_OUT/HVX_C: build another hvx.c (e.g. the unfixed one) into its own bundle
 rm -rf "$D/root"; mkdir -p "$D/root"/{bin,hvx,guest,proc,sys,dev,tmp}

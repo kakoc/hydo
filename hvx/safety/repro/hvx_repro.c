@@ -291,6 +291,57 @@ static int c_bigalloc(void)
 	return 0;
 }
 
+/* 9. page accounting: kmemleak does not track pages from __get_free_page, so this checks
+ *    that 200 VM lifecycles (RAM, disk, volatile cache, both mmap windows faulted in, a run)
+ *    give their memory back. Fails if MemAvailable drops by more than 64 MiB. */
+static long mem_avail_kb(void)
+{
+	char line[128];
+	long v = -1;
+	FILE *f = fopen("/proc/meminfo", "r");
+
+	while (f && fgets(line, sizeof(line), f))
+		if (sscanf(line, "MemAvailable: %ld kB", &v) == 1)
+			break;
+	if (f)
+		fclose(f);
+	return v;
+}
+static int c_pageleak(void)
+{
+	long before, after;
+	int it;
+
+	before = mem_avail_kb();
+	for (it = 0; it < 200; it++) {
+		uint8_t *ram;
+		int fd = vm_open(&ram);
+		struct hvx_fault f = { .classes = HVX_FAULT_DROP_UNFLUSHED, .probability = 100, .max_delay = 1 };
+		struct as a = { ram + HVX_GUEST_CODE_BASE };
+		volatile uint8_t *dm;
+		int i;
+
+		disk(fd, 1 << 20);
+		ioctl(fd, HVX_SET_FAULT, &f);
+		dm = mmap(NULL, 1 << 20, PROT_READ | PROT_WRITE, MAP_SHARED, fd, (off_t)HVX_DISK_MMAP_PGOFF * 4096);
+		for (i = 0; dm != MAP_FAILED && i < 256; i++)
+			dm[i * 4096] = (uint8_t)i;
+		for (i = 0; i < (int)(RAM / 4096); i++)
+			ram[i * 4096] |= 0;
+		hlt(&a);
+		run(fd);
+		if (dm != MAP_FAILED)
+			munmap((void *)dm, 1 << 20);
+		munmap(ram, RAM);
+		close(fd);
+	}
+	sleep(2);
+	after = mem_avail_kb();
+	printf("pageleak: MemAvailable %ld kB before, %ld kB after 200 VMs (%+ld kB)\n",
+	       before, after, after - before);
+	return before - after > 64 * 1024;
+}
+
 int main(int argc, char **argv)
 {
 	const char *c = argc > 1 ? argv[1] : "all";
@@ -305,5 +356,6 @@ int main(int argc, char **argv)
 	if (!strcmp(c, "pcishift") || !strcmp(c, "all")) rc |= c_pcishift();
 	if (!strcmp(c, "diskrace") || !strcmp(c, "all")) rc |= c_diskrace();
 	if (!strcmp(c, "bigalloc")) rc |= c_bigalloc();	/* not in "all": needs a small VM */
+	if (!strcmp(c, "pageleak") || !strcmp(c, "all")) rc |= c_pageleak();
 	return rc;
 }
