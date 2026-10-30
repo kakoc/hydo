@@ -285,6 +285,7 @@ pub fn resolve_image(reg: &mut dyn Registry, r: &str) -> Result<Y, ComposeError>
     let doc: serde_json::Value =
         serde_json::from_slice(&raw).map_err(|x| e(format!("{reference}: {x}")))?;
     // platforms: arch (None for a single manifest) -> (digest, variant, variants)
+    #[allow(clippy::type_complexity)]
     let mut plats: Vec<(Option<String>, String, String, Option<Vec<String>>)> = Vec::new();
     let mt = jstr(&doc, "mediaType");
     if INDEX_TYPES.contains(&mt.as_str()) || doc.get("manifests").is_some() {

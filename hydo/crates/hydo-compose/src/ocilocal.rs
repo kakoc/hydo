@@ -10,12 +10,15 @@ use std::path::Path;
 
 type R<T> = Result<T, ComposeError>;
 
+/// A tar member: its normalised path, its bytes (small files only) and a symbolic link's target.
+type Member = (String, Vec<u8>, Option<String>);
+
 fn e<T>(m: String) -> R<T> {
     Err(ComposeError(m))
 }
 
 /// The files of a tar archive (plain or gzip), by normalised path; symbolic links followed.
-fn tar_files(path: &str) -> R<Vec<(String, Vec<u8>, Option<String>)>> {
+fn tar_files(path: &str) -> R<Vec<Member>> {
     let raw = std::fs::read(path).map_err(|x| ComposeError::os(x, path))?;
     let data = if raw.starts_with(&[0x1f, 0x8b]) {
         let mut d = Vec::new();
@@ -66,7 +69,7 @@ fn tar_files(path: &str) -> R<Vec<(String, Vec<u8>, Option<String>)>> {
 
 struct Src {
     path: String,
-    tar: Option<Vec<(String, Vec<u8>, Option<String>)>>,
+    tar: Option<Vec<Member>>,
 }
 
 impl Src {
