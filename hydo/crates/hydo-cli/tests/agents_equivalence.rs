@@ -1,11 +1,27 @@
-//! `hydo guide | skill | init` (the hydo-agents crate) against hydo/onboard/hydo_agents.py, which it
-//! replaces: the same exit code, stdout, stderr and files, for every guide topic, every `--agent`
-//! value, `--user`, `--to`, and `hydo init` fresh and repeated. Each case runs the Python and then
-//! the Rust in the same freshly made directory (absolute paths appear in the output). A second
-//! pass runs the Rust from a root without a skill folder (the skill built into the binary) and
-//! compares it with the Python reading the folder on disk, for every case whose output does not
-//! name the folder.
+//! `hydo guide | skill | init` (the hydo-agents crate) against the frozen behaviour of
+//! hydo/onboard/hydo_agents.py, which it replaced (deleted in M107;
+//! `git show 2a58c4b:hydo/onboard/hydo_agents.py`): the exit code, stdout, stderr and every file
+//! with its mode, for every guide topic, every `--agent` value, `--user`, `--to`, and `hydo init`
+//! fresh and repeated. tests/golden/agents.jsonl holds what the Python gave for each command (82,
+//! plus `--path`/`--list`/`skill path`), recorded on 2026-10-30 from commit 2a58c4b with Python
+//! 3.15.0, and it was the Rust's output byte for byte then.
+//!
+//! Each case runs in a freshly made directory with its own HOME. Paths are written as `<CWD>` (its name `<CWDNAME>`),
+//! `<ROOT>` (the release-like root with bin/hydo) and `<REPO>`; an output or a file whose bytes
+//! are exactly one file of the skill folder (`skills/hydo-onboard/`, or `hydo/onboard/MANIFEST.md`)
+//! is recorded as `{"skill": <path>}`, so most of the golden does not depend on the skill's text;
+//! other texts up to 2,000 bytes verbatim, longer ones by SHA-256. The golden pins the skill
+//! folder's hash: if a row differs and the skill changed since the recording, the failure says so.
+//!
+//! Two passes: the binary next to a skill folder, and the binary alone (the skill built into it),
+//! which must give the same rows (`--path`, `--list` and `skill path` name the folder and are
+//! checked with the folder only; without it `--path` says the skill is built in).
+//!
+//! `HYDO_BLESS=1` rewrites the golden from the Rust output (the Rust is the reference from M107 on;
+//! bless only a deliberate change, for example an edited skill, and say so in the commit).
 
+use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -16,6 +32,10 @@ fn repo() -> PathBuf {
         .join("../../..")
         .canonicalize()
         .unwrap()
+}
+
+fn golden() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/agents.jsonl")
 }
 
 static N: AtomicU32 = AtomicU32::new(0);
@@ -30,6 +50,13 @@ fn scratch(tag: &str) -> PathBuf {
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
     d.canonicalize().unwrap()
+}
+
+fn hex(b: &[u8]) -> String {
+    Sha256::digest(b)
+        .iter()
+        .map(|x| format!("{x:02x}"))
+        .collect()
 }
 
 fn snapshot(dir: &Path, base: &Path, out: &mut BTreeMap<String, (u32, Vec<u8>)>) {
@@ -59,61 +86,119 @@ fn snapshot(dir: &Path, base: &Path, out: &mut BTreeMap<String, (u32, Vec<u8>)>)
     }
 }
 
-#[derive(Debug, PartialEq)]
-struct Outcome {
-    rc: Option<i32>,
-    stdout: String,
-    stderr: String,
-    files: BTreeMap<String, (u32, Vec<u8>)>,
+/// The skill's files (and MANIFEST.md) by content, and the hash of the whole folder.
+struct Skill {
+    by_content: BTreeMap<Vec<u8>, String>,
+    hash: String,
 }
 
-/// One sequence of commands in a fresh directory `cwd` (with a git repository when `git`, and a
-/// HOME inside it); `setup` prepares the directory first.
+fn skill() -> Skill {
+    fn walk(d: &Path, base: &Path, out: &mut Vec<(String, Vec<u8>)>) {
+        let mut v: Vec<_> = std::fs::read_dir(d)
+            .unwrap()
+            .filter_map(Result::ok)
+            .collect();
+        v.sort_by_key(|e| e.file_name());
+        for e in v {
+            let name = e.file_name().to_string_lossy().into_owned();
+            if name == "__pycache__" || name == ".DS_Store" || name.starts_with("._") {
+                continue;
+            }
+            let p = e.path();
+            if p.is_dir() {
+                walk(&p, base, out);
+            } else {
+                let rel = p.strip_prefix(base).unwrap().display().to_string();
+                out.push((rel, std::fs::read(&p).unwrap()));
+            }
+        }
+    }
+    let r = repo();
+    let mut files = Vec::new();
+    walk(&r.join("skills/hydo-onboard"), &r, &mut files);
+    let man = "hydo/onboard/MANIFEST.md".to_string();
+    files.push((man.clone(), std::fs::read(r.join(&man)).unwrap()));
+    let mut h = Sha256::new();
+    let mut by_content = BTreeMap::new();
+    for (rel, b) in files {
+        h.update(rel.as_bytes());
+        h.update([0]);
+        h.update(hex(&b).as_bytes());
+        h.update([0]);
+        by_content.entry(b).or_insert(rel);
+    }
+    Skill {
+        by_content,
+        hash: h.finalize().iter().map(|x| format!("{x:02x}")).collect(),
+    }
+}
+
+/// One stream or file content as recorded.
+fn val(b: &[u8], sk: &Skill, paths: &[(String, &str)]) -> Value {
+    if let Some(rel) = sk.by_content.get(b) {
+        if !b.is_empty() {
+            return json!({ "skill": rel });
+        }
+    }
+    let mut t = String::from_utf8_lossy(b).into_owned();
+    for (p, ph) in paths {
+        t = t.replace(p.as_str(), ph);
+    }
+    if t.len() <= 2000 {
+        json!({ "text": t })
+    } else {
+        json!({ "sha256": hex(t.as_bytes()), "len": t.len() })
+    }
+}
+
+/// One sequence of commands in a fresh directory `cwd` (`setup` prepares it), each as its
+/// recorded row.
 fn run_seq(
-    rust: bool,
     root: &Path,
     cwd: &Path,
-    cmds: &[&[&str]],
+    cmds: &[Vec<String>],
     setup: fn(&Path),
-) -> Vec<Outcome> {
+    sk: &Skill,
+) -> Vec<Value> {
     let _ = std::fs::remove_dir_all(cwd);
     std::fs::create_dir_all(cwd.join("home")).unwrap();
     setup(cwd);
+    let paths = vec![
+        (cwd.display().to_string(), "<CWD>"),
+        (root.display().to_string(), "<ROOT>"),
+        (repo().display().to_string(), "<REPO>"),
+        (
+            cwd.file_name().unwrap().to_string_lossy().into_owned(),
+            "<CWDNAME>",
+        ),
+    ];
     let mut res = Vec::new();
     for c in cmds {
-        let mut cmd = if rust {
-            let mut x = Command::new(root.join("bin/hydo"));
-            x.args(*c);
-            x
-        } else {
-            let mut x = Command::new("python3");
-            x.arg("-c")
-                .arg("import sys; sys.path.insert(0, sys.argv[1]); import hydo_agents; sys.exit(hydo_agents.run(sys.argv[2], sys.argv[4:], sys.argv[3]))")
-                .arg(repo().join("hydo/onboard"))
-                .arg(c[0])
-                .arg(root)
-                .args(&c[1..]);
-            x
-        };
-        let o = cmd
+        let o = Command::new(root.join("bin/hydo"))
+            .args(c)
             .current_dir(cwd)
             .env("HOME", cwd.join("home"))
             .output()
             .unwrap();
         let mut files = BTreeMap::new();
         snapshot(cwd, cwd, &mut files);
-        res.push(Outcome {
-            rc: o.status.code(),
-            stdout: String::from_utf8_lossy(&o.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&o.stderr).into_owned(),
-            files,
-        });
+        let files: Vec<Value> = files
+            .iter()
+            .map(|(k, (m, b))| json!([k, format!("{m:o}"), val(b, sk, &paths)]))
+            .collect();
+        res.push(json!({
+            "cmd": c,
+            "rc": o.status.code(),
+            "stdout": val(&o.stdout, sk, &paths),
+            "stderr": val(&o.stderr, sk, &paths),
+            "files": files,
+        }));
     }
     res
 }
 
-/// A release-like root for the Rust binary: bin/hydo and, when `with_skill`, skill/hydo-onboard
-/// and hydo/onboard/MANIFEST.md (else the built-in copies are used).
+/// A release-like root for the binary: bin/hydo and, when `with_skill`, skill/hydo-onboard and
+/// hydo/onboard/MANIFEST.md (else the built-in copies are used).
 fn release(with_skill: bool) -> PathBuf {
     let r = scratch(if with_skill { "rel" } else { "bare" });
     std::fs::create_dir_all(r.join("bin")).unwrap();
@@ -175,9 +260,10 @@ fn foreign_skill(d: &Path) {
     std::os::unix::fs::symlink("/nonexistent", d.join(".claude/skills/hydo-onboard")).unwrap();
 }
 
-/// (setup, commands): each list runs in one directory, in order.
-#[allow(clippy::type_complexity)]
-fn cases(topics: &[String]) -> Vec<(fn(&Path), Vec<Vec<String>>)> {
+type Case = (&'static str, fn(&Path), Vec<Vec<String>>);
+
+/// (setup name, setup, commands): each list runs in one directory, in order.
+fn cases(topics: &[String]) -> Vec<Case> {
     let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
     let mut guide = vec![
         s(&["guide"]),
@@ -197,8 +283,9 @@ fn cases(topics: &[String]) -> Vec<(fn(&Path), Vec<Vec<String>>)> {
     for t in topics {
         guide.push(s(&["guide", t]));
     }
-    let mut v: Vec<(fn(&Path), Vec<Vec<String>>)> = vec![(nothing, guide)];
+    let mut v: Vec<Case> = vec![("nothing", nothing, guide)];
     v.push((
+        "nothing",
         nothing,
         vec![
             s(&["skill"]),
@@ -225,6 +312,7 @@ fn cases(topics: &[String]) -> Vec<(fn(&Path), Vec<Vec<String>>)> {
         "claude,codex",
     ] {
         v.push((
+            "git_repo",
             git_repo,
             vec![
                 s(&["skill", "install", "--agent", a]),
@@ -232,15 +320,21 @@ fn cases(topics: &[String]) -> Vec<(fn(&Path), Vec<Vec<String>>)> {
                 s(&["skill", "install", "--agent", a, "--user"]),
             ],
         ));
-        v.push((nothing, vec![s(&["skill", "install", "--agent", a])]));
+        v.push((
+            "nothing",
+            nothing,
+            vec![s(&["skill", "install", "--agent", a])],
+        ));
     }
     v.push((
+        "git_repo",
         git_repo,
         vec![s(&[
             "skill", "install", "--agent", "codex", "--agent", "claude", "--to", "t",
         ])],
     ));
     v.push((
+        "foreign_skill",
         foreign_skill,
         vec![
             s(&["skill", "install", "--to", "out"]),
@@ -249,6 +343,7 @@ fn cases(topics: &[String]) -> Vec<(fn(&Path), Vec<Vec<String>>)> {
         ],
     ));
     v.push((
+        "nothing",
         nothing,
         vec![
             s(&["init"]),
@@ -261,6 +356,7 @@ fn cases(topics: &[String]) -> Vec<(fn(&Path), Vec<Vec<String>>)> {
         ],
     ));
     v.push((
+        "nothing",
         nothing,
         vec![
             s(&["init", "--dir", "home", "--name", "demo", "--no-gitignore"]),
@@ -268,45 +364,18 @@ fn cases(topics: &[String]) -> Vec<(fn(&Path), Vec<Vec<String>>)> {
             s(&["init", "--dir", "home", "--name", "demo"]),
         ],
     ));
-    v.push((existing_project, vec![s(&["init"]), s(&["init"])]));
-    v.push((markers_one, vec![s(&["init"])]));
-    v.push((markers_both, vec![s(&["init"]), s(&["init"])]));
+    v.push((
+        "existing_project",
+        existing_project,
+        vec![s(&["init"]), s(&["init"])],
+    ));
+    v.push(("markers_one", markers_one, vec![s(&["init"])]));
+    v.push((
+        "markers_both",
+        markers_both,
+        vec![s(&["init"]), s(&["init"])],
+    ));
     v
-}
-
-/// assert_eq with a short report: the differing streams and file names only.
-fn same(a: &Outcome, b: &Outcome, what: &str) {
-    if a == b {
-        return;
-    }
-    let mut d = Vec::new();
-    if a.rc != b.rc {
-        d.push(format!("rc {:?} != {:?}", a.rc, b.rc));
-    }
-    if a.stdout != b.stdout {
-        d.push(format!(
-            "stdout:\n--- python\n{}\n--- rust\n{}",
-            a.stdout, b.stdout
-        ));
-    }
-    if a.stderr != b.stderr {
-        d.push(format!(
-            "stderr:\n--- python\n{}\n--- rust\n{}",
-            a.stderr, b.stderr
-        ));
-    }
-    for k in a.files.keys().chain(b.files.keys()) {
-        let (x, y) = (a.files.get(k), b.files.get(k));
-        if x != y {
-            d.push(format!(
-                "file {k}: python {:?} rust {:?}",
-                x.map(|v| (format!("{:o}", v.0), v.1.len())),
-                y.map(|v| (format!("{:o}", v.0), v.1.len()))
-            ));
-        }
-    }
-    d.dedup();
-    panic!("{what}:\n{}", d.join("\n"));
 }
 
 fn topics() -> Vec<String> {
@@ -321,71 +390,170 @@ fn topics() -> Vec<String> {
     t
 }
 
-fn compare(rust_root: &Path, py_root: &Path, path_free_only: bool) -> usize {
+/// Every row of one pass, keyed "<case>.<command>" (`paths`: also the folder-naming commands).
+fn rows(root: &Path, paths: bool, sk: &Skill) -> Vec<(String, Value)> {
     let topics = topics();
     assert!(topics.len() >= 5);
-    let mut n = 0;
-    for (i, (setup, cmds)) in cases(&topics).into_iter().enumerate() {
-        let cmds: Vec<Vec<String>> = cmds
-            .into_iter()
-            .filter(|c| {
-                // these name the skill folder itself
-                !(path_free_only
-                    && (c.iter().any(|x| x == "--path" || x == "--list")
-                        || c[..] == ["skill".to_string(), "path".to_string()]))
-            })
-            .collect();
-        let refs: Vec<Vec<&str>> = cmds
-            .iter()
-            .map(|c| c.iter().map(String::as_str).collect())
-            .collect();
-        let refs: Vec<&[&str]> = refs.iter().map(|c| &c[..]).collect();
+    let mut out = Vec::new();
+    for (i, (sname, setup, cmds)) in cases(&topics).into_iter().enumerate() {
         let cwd = scratch(&format!("case{i}"));
-        let py = run_seq(false, py_root, &cwd, &refs, setup);
-        let rs = run_seq(true, rust_root, &cwd, &refs, setup);
-        for (k, (a, b)) in py.iter().zip(&rs).enumerate() {
-            same(a, b, &format!("case {i}, command {:?}", cmds[k]));
-            n += 1;
+        for (k, r) in run_seq(root, &cwd, &cmds, setup, sk)
+            .into_iter()
+            .enumerate()
+        {
+            let mut r = r;
+            r["setup"] = json!(sname);
+            out.push((format!("{i}.{k}"), r));
         }
         let _ = std::fs::remove_dir_all(&cwd);
     }
-    n
-}
-
-#[test]
-fn agents_equal_python() {
-    let root = release(true);
-    // the same root for both: the Python reads skill/hydo-onboard and hydo/onboard/MANIFEST.md
-    let n = compare(&root, &root, false);
-    eprintln!("agents: {n} commands identical to hydo_agents.py");
-    // `--path`, `--list` and `skill path` name the folder; with the folder they are compared above
-}
-
-#[test]
-fn built_in_skill_equals_the_folder() {
-    let bare = release(false);
-    let full = release(true);
-    let n = compare(&bare, &full, true);
-    eprintln!("agents (built-in skill): {n} commands identical to hydo_agents.py on the folder");
-}
-
-#[test]
-fn path_and_list() {
-    let root = release(true);
-    let cwd = scratch("paths");
-    let cmds: &[&[&str]] = &[
-        &["guide", "--path"],
-        &["guide", "--list"],
-        &["skill", "path"],
-    ];
-    let py = run_seq(false, &root, &cwd, cmds, nothing);
-    let rs = run_seq(true, &root, &cwd, cmds, nothing);
-    for (a, b) in py.iter().zip(&rs) {
-        same(a, b, "paths");
+    if paths {
+        let cwd = scratch("paths");
+        let cmds: Vec<Vec<String>> = [["guide", "--path"], ["guide", "--list"], ["skill", "path"]]
+            .iter()
+            .map(|c| c.iter().map(|x| x.to_string()).collect())
+            .collect();
+        for (k, r) in run_seq(root, &cwd, &cmds, nothing, sk)
+            .into_iter()
+            .enumerate()
+        {
+            let mut r = r;
+            r["setup"] = json!("nothing");
+            out.push((format!("paths.{k}"), r));
+        }
+        let _ = std::fs::remove_dir_all(&cwd);
     }
-    // the built-in skill has no folder: --path says so instead
+    out
+}
+
+fn recorded() -> (String, BTreeMap<String, Value>) {
+    let text = std::fs::read_to_string(golden()).expect("tests/golden/agents.jsonl");
+    let mut hash = String::new();
+    let mut m = BTreeMap::new();
+    for l in text.lines() {
+        if let Some(h) = l.strip_prefix("# skill sha256: ") {
+            hash = h.to_string();
+        } else if !l.starts_with('#') && !l.is_empty() {
+            let v: Value = serde_json::from_str(l).unwrap();
+            m.insert(v["id"].as_str().unwrap().to_string(), v);
+        }
+    }
+    (hash, m)
+}
+
+fn compare(got: &[(String, Value)], what: &str, sk: &Skill) -> usize {
+    let (hash, want) = recorded();
+    let mut bad = Vec::new();
+    for (id, r) in got {
+        let mut r = r.clone();
+        r["id"] = json!(id);
+        match want.get(id) {
+            Some(w) if *w == r => {}
+            w => bad.push(format!(
+                "{id} {}:\n  recorded: {}\n  rust:     {r}",
+                r["cmd"],
+                w.map(|x| x.to_string()).unwrap_or_else(|| "(none)".into())
+            )),
+        }
+    }
+    if !bad.is_empty() {
+        let hint = if hash != sk.hash {
+            format!(
+                "\nthe skill folder changed since the recording (sha256 {hash} -> {}); if the \
+                 change is deliberate, re-record with HYDO_BLESS=1 and review the diff",
+                sk.hash
+            )
+        } else {
+            String::new()
+        };
+        panic!(
+            "{what}: {} of {} commands differ from hydo_agents.py's recorded behaviour:\n{}{hint}",
+            bad.len(),
+            got.len(),
+            bad.join("\n")
+        );
+    }
+    got.len()
+}
+
+fn bless(got: &[(String, Value)], sk: &Skill) {
+    let mut s = String::from(
+        "# hydo guide | skill | init as hydo/onboard/hydo_agents.py answered them (recorded on 2026-10-30, M107,\n\
+         # from commit 2a58c4b with Python 3.15.0; `git show 2a58c4b:hydo/onboard/hydo_agents.py`), one\n\
+         # command per line (tests/agents_equivalence.rs explains the form). Re-recorded from the Rust with\n\
+         # HYDO_BLESS=1 after a deliberate change.\n",
+    );
+    s.push_str(&format!("# skill sha256: {}\n", sk.hash));
+    for (id, r) in got {
+        let mut r = r.clone();
+        r["id"] = json!(id);
+        s.push_str(&r.to_string());
+        s.push('\n');
+    }
+    std::fs::write(golden(), s).unwrap();
+}
+
+#[test]
+fn agents_as_recorded() {
+    let sk = skill();
+    let root = release(true);
+    let got = rows(&root, true, &sk);
+    if std::env::var_os("HYDO_BLESS").is_some() {
+        bless(&got, &sk);
+        return;
+    }
+    let n = compare(&got, "with the skill folder", &sk);
+    let (_, want) = recorded();
+    assert_eq!(n, want.len(), "the golden has other commands");
+    eprintln!("agents: {n} commands identical to hydo_agents.py's recorded behaviour");
+}
+
+#[test]
+fn built_in_skill_as_recorded() {
+    let sk = skill();
     let bare = release(false);
-    let rs = run_seq(true, &bare, &cwd, &[&["guide", "--path"]], nothing);
-    assert_eq!(rs[0].rc, Some(1));
-    assert!(rs[0].stderr.contains("built into this hydo binary"));
+    let got = rows(&bare, false, &sk);
+    if std::env::var_os("HYDO_BLESS").is_some() {
+        return;
+    }
+    let n = compare(&got, "with the built-in skill", &sk);
+    eprintln!("agents (built-in skill): {n} commands identical to hydo_agents.py on the folder");
+    // the built-in skill has no folder: --path says so instead
+    let cwd = scratch("paths-bare");
+    let cmd = vec![vec!["guide".to_string(), "--path".to_string()]];
+    let r = run_seq(&bare, &cwd, &cmd, nothing, &sk);
+    assert_eq!(r[0]["rc"], json!(1));
+    assert!(r[0]["stderr"]["text"]
+        .as_str()
+        .unwrap()
+        .contains("built into this hydo binary"));
+    let _ = std::fs::remove_dir_all(&cwd);
+}
+
+/// test_hydo_agents.py's test_new_agents_md_and_check: the `hydo/` skeleton that `hydo init`
+/// writes is accepted by `hydo build --check`.
+#[test]
+fn init_skeleton_builds() {
+    let root = release(true);
+    let cwd = scratch("initcheck");
+    let run = |args: &[&str]| {
+        Command::new(root.join("bin/hydo"))
+            .args(args)
+            .current_dir(&cwd)
+            .env("HOME", &cwd)
+            .output()
+            .unwrap()
+    };
+    let o = run(&["init"]);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let agents = std::fs::read_to_string(cwd.join("AGENTS.md")).unwrap();
+    assert!(agents.starts_with("# Instructions for coding agents\n"));
+    let o = run(&["build", "hydo/hydo.yaml", "--check"]);
+    assert!(
+        o.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&o.stdout),
+        String::from_utf8_lossy(&o.stderr)
+    );
+    let _ = std::fs::remove_dir_all(&cwd);
 }
