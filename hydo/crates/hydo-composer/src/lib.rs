@@ -605,11 +605,11 @@ fn copy_times(src_meta: &std::fs::Metadata, dst: &Path, follow: bool) -> Result<
     let c = std::ffi::CString::new(dst.as_os_str().as_bytes()).map_err(|e| e.to_string())?;
     let ts = [
         libc::timespec {
-            tv_sec: src_meta.atime() as libc::time_t,
+            tv_sec: src_meta.atime() as _,
             tv_nsec: src_meta.atime_nsec() as _,
         },
         libc::timespec {
-            tv_sec: src_meta.mtime() as libc::time_t,
+            tv_sec: src_meta.mtime() as _,
             tv_nsec: src_meta.mtime_nsec() as _,
         },
     ];
