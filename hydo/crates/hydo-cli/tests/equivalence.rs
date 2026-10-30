@@ -147,7 +147,14 @@ fn normalise(text: &str, root: &Path, cwd: &Path) -> String {
     for (s, name) in pairs {
         t = t.replace(&s, name);
     }
-    t
+    // `hydo errors accept` writes today's date into the known list
+    t.replace(&today(), "<TODAY>")
+}
+
+/// Today's local date as `date +%F` prints it.
+fn today() -> String {
+    let o = Command::new("date").arg("+%F").output().unwrap();
+    String::from_utf8_lossy(&o.stdout).trim().to_string()
 }
 
 /// A text kept verbatim up to `max` bytes, else as "sha256:<first 16 hex digits> len=<n>".
