@@ -511,14 +511,15 @@ fn size_pool(cx: &Cx, engine: &dyn Engine, mut spec: BootSpec) -> (usize, BootSp
         .unwrap_or(0);
     let ram = cx.ram_mib as u64;
     let per_files = ram + img_mib + 256;
-    let per_mem = per_files + 2 * (ram + img_mib);
+    let per_mem = per_files + 2 * (ram + data_partition_mib(&spec.image).unwrap_or(img_mib));
     let avail = hydo_engine::available_mib();
     let want = std::env::var("HYDO_SNAPSHOTS").ok();
     let hvx = cx.ex.backend == Backend::Hvx;
+    let free = free_threads();
     let n = match cx.a.workers {
         Some(n) => n,
-        None if hvx => hydo_engine::machine_workers(per_mem).min(engine.max_workers(&spec).max(1)),
-        None => engine.max_workers(&spec),
+        None if hvx => hydo_engine::machine_workers(per_mem).min(free),
+        None => engine.max_workers(&spec).min(free),
     };
     let fits = avail.is_some_and(|m| m >= n as u64 * per_mem);
     let memory = hvx
@@ -541,6 +542,50 @@ fn size_pool(cx: &Cx, engine: &dyn Engine, mut spec: BootSpec) -> (usize, BootSp
         if memory { "in memory" } else { "in files" }
     );
     (n.max(1), spec)
+}
+
+/// The size of a hydo image's data partition (the second MBR entry; hydo-build puts the root at
+/// LBA 2048 and the data partition after it), which a worker keeps twice in memory (S0, S1).
+fn data_partition_mib(image: &Path) -> Option<u64> {
+    use std::io::Read;
+    let mut mbr = [0u8; 512];
+    std::fs::File::open(image).ok()?.read_exact(&mut mbr).ok()?;
+    if mbr[510] != 0x55 || mbr[511] != 0xAA {
+        return None;
+    }
+    let e = 446 + 16;
+    let sectors = u32::from_le_bytes([mbr[e + 12], mbr[e + 13], mbr[e + 14], mbr[e + 15]]) as u64;
+    (sectors > 0).then_some(sectors * 512 >> 20)
+}
+
+/// The hardware threads this pool may use: the performance cores on Apple Silicon (an efficiency
+/// core runs a guest at a fraction of the speed), else every hardware thread; minus what the
+/// machine is already running (the 1-minute load average: the test machines are shared by
+/// several sessions, and a pool sized past them slows every run down). At least 1.
+fn free_threads() -> usize {
+    let mut threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
+    if cfg!(target_os = "macos") {
+        if let Some(p) = std::process::Command::new("sysctl")
+            .args(["-n", "hw.perflevel0.logicalcpu"])
+            .output()
+            .ok()
+            .and_then(|o| {
+                String::from_utf8_lossy(&o.stdout)
+                    .trim()
+                    .parse::<usize>()
+                    .ok()
+            })
+        {
+            threads = threads.min(p.max(1));
+        }
+    }
+    let mut load = [0f64; 3];
+    // SAFETY: getloadavg writes at most 3 doubles into the array it is given.
+    let n = unsafe { libc::getloadavg(load.as_mut_ptr(), 3) };
+    let busy = if n >= 1 { load[0].round() as usize } else { 0 };
+    threads.saturating_sub(busy).max(1)
 }
 
 fn tag_items(cx: &Cx, seeds: &[i64], points: &[S]) -> Vec<(String, String)> {
