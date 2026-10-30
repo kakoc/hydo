@@ -15,7 +15,7 @@ installing to your first exploration and a reproduced failure.
 - Root through `sudo`: loading the kernel module needs it, and so does opening `/dev/hvx`
   unless you install the optional udev rule (see "Runs without sudo" below).
 - The headers of the running kernel (Debian/Ubuntu: `sudo apt install linux-headers-$(uname -r)`),
-  a C compiler and `make` (`sudo apt install build-essential`), Python 3.9 or later, `xz`,
+  a C compiler and `make` (`sudo apt install build-essential`), `xz`,
   `flock`. `libipt-dev` is optional (coverage decoding for the coverage-guided tools).
 - KVM must not be running virtual machines: hvx takes VT-x over from KVM.
 - No Nix and no internet access: the release carries the guest kernel, the guest tools and the
@@ -41,7 +41,7 @@ hydo doctor
 ```
 
 `hydo doctor` checks VT-x, the PMU, the kernel headers, whether `kvm_intel` is loaded, the
-module and its device, Python, sudo and disk space; every line says what to do when a check
+module and its device, sudo and disk space; every line says what to do when a check
 fails. `hydo module status` shows whether the module is loaded, whether it was built from this
 release's source (the same `srcversion`), and how many runs hold the module lock right now.
 
@@ -137,7 +137,7 @@ hydo report
 ```
 
 By default two virtual machines run at a time (`--workers N` changes it; each needs about
-1.5 GiB of RAM and some space in `/var/tmp/hvx-snap`). Every `explore.py` option works, for
+1.5 GiB of RAM and some space in `/var/tmp/hvx-snap`). Every explorer option works, for
 example `--strategy process`, `--timing`, `--new-faults` or `--sweep cut`. The report lists
 every failure with its class and signature, says whether it reproduced, and gives the minimal
 schedule of each failure kind with a `hydo run` command that replays it. For this example

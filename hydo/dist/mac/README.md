@@ -2,23 +2,23 @@
 
 `build-release.sh` turns the Mac backend into a self-contained tarball that a user installs with
 one command and runs with no Linux machine, no root and no other software beyond the macOS
-Command Line Tools (for `python3` and `cc`). `hydo/dist/mac/QUICKSTART-mac.md` at the top of the repository is
+Command Line Tools (for `cc`; since Milestone 107 nothing in the release uses Python). `hydo/dist/mac/QUICKSTART-mac.md` at the top of the repository is
 the user guide; it is shipped inside the release.
 
 ## What is in a release
 
 | Path | What |
 |---|---|
-| `bin/hydo` | the CLI around the pieces below: since Milestone 101 the Rust `hydo` (`hydo/crates/hydo-cli`, an `aarch64-apple-darwin` binary built by `build-release.sh` or taken from `$HYDO_RUST_BIN`), with the verbs, output and exit codes of the Python CLI it replaced (`hydo/dist/mac/hydo`, kept as the equivalence test's reference, no longer shipped); the parts still in Python run through `hydo/onboard/hydo_bridge.py` |
+| `bin/hydo`, `bin/hydo-build`, `bin/hydo-fetch-image` | the Rust programs (`aarch64-apple-darwin`, built by `build-release.sh` or taken from `$HYDO_RUST_BIN_DIR`): `hydo` is the one CLI (`hydo/crates/hydo-cli`; the same program as on Linux, with the same behaviour since Milestone 107), `hydo-build` the image builder with its own command line (for scripts), `hydo-fetch-image` what the `fetch-images.sh` of `hydo compose` calls. The Python CLI (`hydo/dist/mac/hydo`) and the Python behind it were deleted in Milestone 107 |
 | `hv/hvm/hvm`, `hv/hvm/explore/hvmx` | the VMM and the explorer engine, re-signed by `install.sh` on the user's Mac |
 | `hv/hvm/explore/out/Image-explore` | the arm64 kernel (`hv/hvm/explore/build-guest.sh`, HVC idle) |
 | `guest/busybox`, `guest/mke2fs` | static arm64 busybox 1.36.1 and e2fsprogs 1.47.0 (aarch64 nixpkgs) |
 | `guest/busybox-applets[.txt]` | the applet set to link, as the Linux build links it |
 | `guest/tc/`, `guest/tc-closure.txt` | the pinned aarch64 `tc` (iproute2 6.8.0) and every file its loader opens, at their `/nix/store` paths, for network faults |
-| `hydo/onboard/`, `hydo/explore/`, `hv/hvx/hydo_assert_*` | `hydo-build`, the guest init, the manifest format, `explore.py` and the modules it imports |
+| `hydo/onboard/`, `hydo/history/hydo_hist.sh`, `hydo/assert/` | the guest-side files `hydo build` puts into images (the generic init and every extension, the test composer's guest runner, the history recorder), the manifest format (`hydo guide manifest`), and the property-table tool the explorer compiles |
 | `examples/redis/` | the Redis example, with its arm64 binaries under `files/` (works offline) |
 | `examples/ledger-spin/` | the busy-wait example (`hydo/onboard/examples-mac/ledger-spin`), with `bin/spin_load` and `bin/spin_count` (static arm64, `hv/hvm/spin/spinvar.c`; `$HYDO_SPIN_BIN` when filling `assets/`) |
-| `skill/hydo-onboard/` | the onboarding skill (Agent Skills format, any AI tool) that writes a project's `hydo/` folder; `hydo guide`, `hydo skill install` and `hydo init` read it (`hydo/onboard/hydo_agents.py`) |
+| `skill/hydo-onboard/` | the onboarding skill (Agent Skills format, any AI tool) that writes a project's `hydo/` folder; `hydo guide`, `hydo skill install` and `hydo init` read it (`bin/hydo` also carries a built-in copy) |
 | `install.sh`, `hydo/dist/mac/QUICKSTART-mac.md`, `VERSION`, `SHA256SUMS` | |
 
 ## How `hydo build` works without Linux
@@ -27,7 +27,7 @@ the user guide; it is shipped inside the release.
 its applet list (asked from an x86 busybox, which cannot run on a Mac), and a pinned `mke2fs`
 run under `libfaketime` for the data disk. The release provides the first two as files, and
 `hydo build` makes the data disk differently (since Milestone 103 the Rust builder's Mac release
-mode, `hydo_build::Release::Mac`; before that a replacement `mkfs()` in `hydo_bridge.py`):
+mode, `hydo_build::Release::Mac`):
 - it starts a helper VM with `hvm`: the release kernel plus a two-file initramfs (busybox and
   the static arm64 `mke2fs`), with the empty data-disk file attached as the virtio disk;
 - the guest runs `mke2fs` with exactly `hydo-build`'s options on `/dev/vda`, and `hvm` writes
@@ -38,11 +38,10 @@ mode, `hydo_build::Release::Mac`; before that a replacement `mkfs()` in `hydo_br
 No `faketime` is needed: the guest clock is deterministic, and `hydo-build` zeroes every time
 field afterwards.
 
-For network faults `hydo_build_arm64.py` copies the pinned aarch64 `tc` and the files its loader
+For network faults the arm64 builder copies the pinned aarch64 `tc` and the files its loader
 opens (found with `hv/hvm/services/elfdeps.py`) from the host's `/nix/store`. The release ships
 those files under `guest/tc/`, and `hydo build` points the existence check and the copy at that
-tree (the Rust builder's Mac release mode; before Milestone 103 a module-local `os` view and a
-replacement `_copy_elf_closure` in `hydo_bridge.py`, with the same rules), so the image gets the
+tree (the Rust builder's Mac release mode), so the image gets the
 same paths, bytes and modes as a Linux build.
 
 **Checked:** for the Redis example the Mac-built data disk is byte-identical to the Linux-built

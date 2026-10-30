@@ -6,8 +6,8 @@ run is deterministic, each failure it finds comes back as a short schedule strin
 bit-for-bit. This guide takes you from installing to your first exploration and a reproduced
 failure. It needs an Apple Silicon Mac (M1 or later) with macOS 13 or later, and about ten
 minutes. You do not need a Linux machine, root, or any other software beyond Apple's Command
-Line Tools, which provide `python3` and `cc` (install them with `xcode-select --install` if
-`python3 --version` asks you to).
+Line Tools, which provide `cc` (install them with `xcode-select --install` if `cc --version`
+asks you to).
 
 ## 1. Install
 
