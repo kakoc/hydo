@@ -1,8 +1,0 @@
-#!/usr/bin/env python3
-# Replaced by hydo-compose (the Rust crate hydo/crates/hydo-compose: `hydo compose` and its hydo-compose
-# program, docs/HISTORY.md M106); kept until every port is merged, then deleted.
-"""hydo-compose <docker-compose.yaml> [--out hydo.yaml] ... -- see hydo_compose.py / MANIFEST.md."""
-import os, sys
-sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
-import hydo_compose
-sys.exit(hydo_compose.main())

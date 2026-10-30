@@ -23,3 +23,6 @@ regex = "1"
 libyaml-safer = "0.3"
 tar = { version = "0.4", default-features = false }
 ureq = { version = "3", default-features = false, features = ["rustls"] }
+
+[dev-dependencies]
+serde = { workspace = true }

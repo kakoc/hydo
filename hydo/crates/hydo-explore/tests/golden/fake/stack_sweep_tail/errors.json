@@ -1,0 +1,203 @@
+{
+ "known_file": null,
+ "known_sha256": null,
+ "unknown": "report",
+ "kinds": [
+  {
+   "sig": "1136d02b9619",
+   "svc": "mysql",
+   "src": "log",
+   "tpl": "connection to mysql lost <n>",
+   "ex": "connection to mysql lost 3",
+   "runs": 5,
+   "new_runs": 5,
+   "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "first_seed": 1,
+   "first_schedule": "disk=none dseed=0 | run K=mysql@27+1",
+   "first_at": [
+    "27"
+   ],
+   "lines": 10,
+   "first_new_seed": 1,
+   "first_new_schedule": "disk=none dseed=0 | run K=mysql@27+1",
+   "first_new_at": [
+    "27"
+   ],
+   "first_new_ex": "connection to mysql lost 3",
+   "new": true,
+   "shrunk": {
+    "minimal": "disk=none dseed=0 | run K=mysql@27+1",
+    "tries": 1,
+    "fp_a": "d9907846aeda9a52",
+    "fp_b": "d9907846aeda9a52",
+    "verdict": "HYDO-ORACLE: OK acked=30",
+    "present_a": true,
+    "present_b": true
+   }
+  },
+  {
+   "sig": "4c53c64297e2",
+   "svc": "app",
+   "src": "log",
+   "tpl": "config reloaded",
+   "ex": "config reloaded",
+   "runs": 165,
+   "new_runs": 165,
+   "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12
+   ],
+   "first_seed": 1,
+   "first_schedule": "disk=none dseed=0 | run K=mysql@27+1",
+   "first_at": [
+    "s"
+   ],
+   "lines": 165,
+   "first_new_seed": 1,
+   "first_new_schedule": "disk=none dseed=0 | run K=mysql@27+1",
+   "first_new_at": [
+    "s"
+   ],
+   "first_new_ex": "config reloaded",
+   "new": true,
+   "shrunk": null
+  },
+  {
+   "sig": "63f14344357a",
+   "svc": "kafka",
+   "src": "log",
+   "tpl": "connection to kafka lost <n>",
+   "ex": "connection to kafka lost 3",
+   "runs": 5,
+   "new_runs": 5,
+   "seeds": [
+    6,
+    7,
+    8,
+    9,
+    10
+   ],
+   "first_seed": 6,
+   "first_schedule": "disk=none dseed=0 | run K=kafka@27+1",
+   "first_at": [
+    "27"
+   ],
+   "lines": 10,
+   "first_new_seed": 6,
+   "first_new_schedule": "disk=none dseed=0 | run K=kafka@27+1",
+   "first_new_at": [
+    "27"
+   ],
+   "first_new_ex": "connection to kafka lost 3",
+   "new": true,
+   "shrunk": {
+    "minimal": "disk=none dseed=0 | run K=kafka@27+1",
+    "tries": 1,
+    "fp_a": "1a67261c1b3cb2c6",
+    "fp_b": "1a67261c1b3cb2c6",
+    "verdict": "HYDO-ORACLE: OK acked=30",
+    "present_a": true,
+    "present_b": true
+   }
+  },
+  {
+   "sig": "07df7023b937",
+   "svc": "redis",
+   "src": "log",
+   "tpl": "connection to redis lost <n>",
+   "ex": "connection to redis lost 3",
+   "runs": 5,
+   "new_runs": 5,
+   "seeds": [
+    11,
+    12,
+    13,
+    14,
+    15
+   ],
+   "first_seed": 11,
+   "first_schedule": "disk=none dseed=0 | run K=redis@27+1",
+   "first_at": [
+    "27"
+   ],
+   "lines": 10,
+   "first_new_seed": 11,
+   "first_new_schedule": "disk=none dseed=0 | run K=redis@27+1",
+   "first_new_at": [
+    "27"
+   ],
+   "first_new_ex": "connection to redis lost 3",
+   "new": true,
+   "shrunk": {
+    "minimal": "disk=none dseed=0 | run K=redis@27+1",
+    "tries": 1,
+    "fp_a": "1e7727a6f8a6a2fc",
+    "fp_b": "1e7727a6f8a6a2fc",
+    "verdict": "HYDO-ORACLE: OK acked=30",
+    "present_a": true,
+    "present_b": true
+   }
+  },
+  {
+   "sig": "76e4e616ec4d",
+   "svc": "app",
+   "src": "log",
+   "tpl": "slow request <n> ms",
+   "ex": "slow request 900 ms",
+   "runs": 48,
+   "new_runs": 48,
+   "seeds": [
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27
+   ],
+   "first_seed": 16,
+   "first_schedule": "disk=none dseed=0 | run P=mysql@27+1",
+   "first_at": [
+    "end"
+   ],
+   "lines": 48,
+   "first_new_seed": 16,
+   "first_new_schedule": "disk=none dseed=0 | run P=mysql@27+1",
+   "first_new_at": [
+    "end"
+   ],
+   "first_new_ex": "slow request 900 ms",
+   "new": true,
+   "shrunk": {
+    "minimal": "disk=none dseed=0 | run P=mysql@27+1",
+    "tries": 1,
+    "fp_a": "59ffbd6ff48e96db",
+    "fp_b": "59ffbd6ff48e96db",
+    "verdict": "HYDO-ORACLE: OK acked=30",
+    "present_a": true,
+    "present_b": true
+   }
+  }
+ ]
+}

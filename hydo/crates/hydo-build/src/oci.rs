@@ -1759,3 +1759,60 @@ pub fn fix_ext4(
     );
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// The refusals of hydo_oci._mounts that test_hydo_compose.py's test_validation checked
+    /// (deleted with the Python in M107): its eight cases with hydo_oci's messages.
+    #[test]
+    fn mounts_refusals() {
+        assert!(mounts_of(None, "s").unwrap().is_empty());
+        let w = "s: mounts[0]";
+        let rule = "(letters, digits and ._@+=,:/- only)";
+        let not = "an absolute path other than / /proc /sys /dev /tmp /data";
+        let cases = [
+            (
+                json!([{"dst": "/x"}]),
+                format!("{w}: give exactly one of src: (a guest path) and tmpfs: true"),
+            ),
+            (
+                json!([{"src": "/a", "tmpfs": true, "dst": "/x"}]),
+                format!("{w}: give exactly one of src: (a guest path) and tmpfs: true"),
+            ),
+            (
+                json!([{"src": "/a", "dst": "/"}]),
+                format!("{w}: dst '/': {not} {rule}"),
+            ),
+            (
+                json!([{"src": "/a", "dst": "/data"}]),
+                format!("{w}: dst '/data': {not} {rule}"),
+            ),
+            (
+                json!([{"src": "/a", "dst": "rel"}]),
+                format!("{w}: dst 'rel': {not} {rule}"),
+            ),
+            (
+                json!([{"src": "/a b", "dst": "/x"}]),
+                format!("{w}: src '/a b': an absolute guest path {rule}"),
+            ),
+            (
+                json!([{"src": "/a", "dst": "/x", "size": "1m"}]),
+                format!("{w}: size: only with tmpfs: true, e.g. 64m"),
+            ),
+            (
+                json!([{"src": "/a", "dst": "/x", "bogus": 1}]),
+                format!("{w}: unknown field(s) bogus (known: copy_up, dst, size, src, tmpfs)"),
+            ),
+        ];
+        for (v, want) in cases {
+            match mounts_of(Some(v.clone()), "s") {
+                Err(Fail::Manifest(got)) => assert_eq!(got, want, "{v}"),
+                Err(e) => panic!("{v}: not a manifest refusal: {}", e.message()),
+                Ok(_) => panic!("{v}: accepted"),
+            }
+        }
+    }
+}

@@ -1,4 +1,7 @@
 #!/bin/bash
+# M107: a research/measurement tool. It needs the Python explorer and builder, deleted in M107
+# (replaced by the hydo-explore and hydo-build crates): restore them from commit 2a58c4b with
+# git checkout 2a58c4b -- hydo/explore hydo/onboard hydo/history in a scratch checkout, and run it there.
 # One point of the throughput-scaling measurement (PERF-RUN-COST.md, item 3): explore.py with N
 # workers on a fixed seed range, no shrinking, the engines printing their PHASES lines, vmstat
 # sampled every 2 s. With N > 2 it holds the quiet window /var/tmp/hydo-QUIET (other sessions

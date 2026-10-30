@@ -1,0 +1,1 @@
+{"schedules": 228, "strategy": "sweep:protocol", "image": "explore-disk.img", "workers": N, "sweep_wall_s": N, "runs_per_hour": N, "mean_run_s": 5.2, "worker_boot_s": 2.5, "total_wall_s": N, "failures": 36, "reproduced": 36, "error_kinds_new": 1, "runs_with_new_error_kinds": 228}

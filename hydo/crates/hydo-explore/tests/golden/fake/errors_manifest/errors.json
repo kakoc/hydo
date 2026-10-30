@@ -1,0 +1,134 @@
+{
+ "known_file": null,
+ "known_sha256": null,
+ "unknown": "report",
+ "kinds": [
+  {
+   "sig": "07df7023b937",
+   "svc": "redis",
+   "src": "log",
+   "tpl": "connection to redis lost <n>",
+   "ex": "connection to redis lost 3",
+   "runs": 16,
+   "new_runs": 16,
+   "seeds": [
+    1,
+    2,
+    4,
+    6,
+    7,
+    8,
+    9,
+    10,
+    12,
+    13,
+    16,
+    17
+   ],
+   "first_seed": 1,
+   "first_schedule": "disk=ioerr:1 dseed=910a2dec89025cc1 | run K=redis@0+2 P=redis@1~314:869 W=3e71cf9e,p1,q2,r200",
+   "first_at": [
+    "0"
+   ],
+   "lines": 32,
+   "first_new_seed": 1,
+   "first_new_schedule": "disk=ioerr:1 dseed=910a2dec89025cc1 | run K=redis@0+2 P=redis@1~314:869 W=3e71cf9e,p1,q2,r200",
+   "first_new_at": [
+    "0"
+   ],
+   "first_new_ex": "connection to redis lost 3",
+   "new": true,
+   "shrunk": {
+    "minimal": "disk=none dseed=910a2dec89025cc1 | run K=redis@0+1 W=3e71cf9e,p1,q2,r200,n1,oanytime_read+parallel_driver_set+parallel_driver_transfer",
+    "tries": 60,
+    "fp_a": "dcaa564109e95a44",
+    "fp_b": "dcaa564109e95a44",
+    "verdict": "HYDO-ORACLE: OK acked=30",
+    "present_a": true,
+    "present_b": true
+   }
+  },
+  {
+   "sig": "76e4e616ec4d",
+   "svc": "app",
+   "src": "log",
+   "tpl": "slow request <n> ms",
+   "ex": "slow request 900 ms",
+   "runs": 14,
+   "new_runs": 14,
+   "seeds": [
+    1,
+    7,
+    8,
+    9,
+    11,
+    13,
+    14,
+    17,
+    18,
+    22,
+    23,
+    24
+   ],
+   "first_seed": 1,
+   "first_schedule": "disk=ioerr:1 dseed=910a2dec89025cc1 | run K=redis@0+2 P=redis@1~314:869 W=3e71cf9e,p1,q2,r200",
+   "first_at": [
+    "end"
+   ],
+   "lines": 14,
+   "first_new_seed": 1,
+   "first_new_schedule": "disk=ioerr:1 dseed=910a2dec89025cc1 | run K=redis@0+2 P=redis@1~314:869 W=3e71cf9e,p1,q2,r200",
+   "first_new_at": [
+    "end"
+   ],
+   "first_new_ex": "slow request 900 ms",
+   "new": true,
+   "shrunk": {
+    "minimal": "disk=none dseed=910a2dec89025cc1 | run P=redis@1~0:500 W=3e71cf9e,p1,q2,r200,n1,oanytime_read+parallel_driver_set+parallel_driver_transfer",
+    "tries": 70,
+    "fp_a": "620ad6af8497c05f",
+    "fp_b": "620ad6af8497c05f",
+    "verdict": "HYDO-ORACLE: OK acked=30",
+    "present_a": true,
+    "present_b": true
+   }
+  },
+  {
+   "sig": "4c53c64297e2",
+   "svc": "app",
+   "src": "log",
+   "tpl": "config reloaded",
+   "ex": "config reloaded",
+   "runs": 30,
+   "new_runs": 30,
+   "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12
+   ],
+   "first_seed": 1,
+   "first_schedule": "disk=ioerr:1 dseed=910a2dec89025cc1 | run K=redis@0+2 P=redis@1~314:869 W=3e71cf9e,p1,q2,r200",
+   "first_at": [
+    "s"
+   ],
+   "lines": 30,
+   "first_new_seed": 1,
+   "first_new_schedule": "disk=ioerr:1 dseed=910a2dec89025cc1 | run K=redis@0+2 P=redis@1~314:869 W=3e71cf9e,p1,q2,r200",
+   "first_new_at": [
+    "s"
+   ],
+   "first_new_ex": "config reloaded",
+   "new": true,
+   "shrunk": null
+  }
+ ]
+}

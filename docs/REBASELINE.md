@@ -1,5 +1,10 @@
 # Re-baseline after the hvx_seedrng stand-in (2026-10-21/22)
 
+> Note (M107): `explore.py` and `hydo_build_arm64.py` named below were the Python explorer and
+> arm64 builder of the time, replaced by the hydo-explore and hydo-build crates (`hydo explore`,
+> `hydo-build`, the same options) and deleted in M107; the commands below are records of how the
+> baselines were measured.
+
 From 2026-10-17 until 2026-10-21 the build machine had no pinned static musl gcc
 (`aa1jsl19…-gcc-static-x86_64-unknown-linux-musl-13.2.0`). Image builds then used a stand-in
 `hvx_seedrng` binary, sha256 `01adf1bd67cbc79f…` (36,280 bytes), copied from
@@ -64,7 +69,7 @@ other images and initramfs files contain no `hvx_seedrng` at all.
   `/var/tmp/dx1`). No document refers to it and its source was never committed.
 - `explore-ob-etcd-*`, the binlog images and the `explore-bench-m59-*` images belong to work
   in progress in other sessions, which rebuild them with the pinned tools themselves.
-- arm64 (Mac) images: not in either `~/hydo/build`; `hydo_build_arm64.py` adds
+- arm64 (Mac) images: not in either `~/hydo/build`; `hydo-build --arch arm64` (then `hydo_build_arm64.py`) adds
   `hvx_seedrng` only when `HYDO_SEEDRNG_ARM64` is set. Not inventoried.
 
 ## 2. How the images were rebuilt and verified

@@ -9,7 +9,8 @@ says what was restored and how, and records the proof that from-scratch builds w
 ## Inventory
 
 Pins referenced by `build-linux.sh`, `build-stack.sh`, `build-kafka.sh`, `build-mysql.sh`,
-`hydo/onboard/hydo-build` and `hydo/onboard/hydo_build_arm64.py` (store hash shortened to 8
+and the image builder `hydo/crates/hydo-build` (`src/x86.rs`, `src/arm64.rs`; until M103 the Python
+`hydo/onboard/hydo-build` and `hydo_build_arm64.py`) (store hash shortened to 8
 characters; the full paths are in the scripts).
 
 | store path | used by | state on 2026-10-21 | action |
@@ -29,8 +30,8 @@ characters; the full paths are in the scripts).
 | `prk07apd…-apache-kafka-2.13-3.5.0` | linux §2l, stack, onboard stack | present | gc-rooted |
 | `pwj3x44p…-go-1.26.5`, `xrgn6m0c…-go-1.26.5` | stack, linux §2m/§2n | present | gc-rooted |
 | `dx4fsbxs…-iproute2-6.8.0` | stack, hydo-build (`tc`) | present | gc-rooted |
-| `qmhi9c99…-iproute2-6.8.0` (aarch64) | hydo_build_arm64.py | present | gc-rooted |
-| `zbc5fx2y…-busybox-static-aarch64-unknown-linux-musl-1.36.1` | hydo_build_arm64.py | present | gc-rooted |
+| `qmhi9c99…-iproute2-6.8.0` (aarch64) | hydo-build (`--arch arm64`, `tc`) | present | gc-rooted |
+| `zbc5fx2y…-busybox-static-aarch64-unknown-linux-musl-1.36.1` | hydo-build (`--arch arm64`) | present | gc-rooted |
 | `f6c0sf4f…-nodejs-slim-22.2.0` (x86_64) | `hydo/onboard/examples/node-kv/hydo.yaml` (`root.nix`) | substituted from cache.nixos.org on 2026-10-24 | gc-rooted (`~/hydo-gcroots/nodejs-slim-22.2.0`) |
 | `vh315js3…-nodejs-slim-22.2.0` (aarch64) | `hydo/onboard/examples/node-kv/fetch-node-arm64.sh` (Mac example) | substituted from cache.nixos.org on 2026-10-24 | gc-rooted (`~/hydo-gcroots/nodejs-slim-22.2.0-aarch64`) |
 
@@ -152,7 +153,7 @@ gcc 13.2.0). The script downloads its two inputs into `$DL` and checks them by s
 
 Outputs (two builds in different directories, byte-identical): `Image-explore-netns`
 `806807e7be5f55dae342f796ccc6e20c35514b3684a8c0d4633901a8ac0aa609` (recorded in
-`hydo_build_arm64.NETNS_KERNEL_SHA256`), its `.config` `0aff83371194fdcf41108b6e2c4666bf827fbc735e8102906d047c65631e9b16`.
+`NETNS_KERNEL_SHA256` in `hydo/crates/hydo-build/src/arm64.rs`; before M103 in `hydo_build_arm64.py`), its `.config` `0aff83371194fdcf41108b6e2c4666bf827fbc735e8102906d047c65631e9b16`.
 The default kernel `Image-explore` (`f80c5655…`, Nix cross gcc) is not rebuilt and not changed.
 
 The same toolchain builds the freeze helper for aarch64:

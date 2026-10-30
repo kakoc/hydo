@@ -25,7 +25,8 @@ product drives either through the same schedule strings.
   guest kernels in `linux/` and `explore/`). See `PROBE.md`, `BOOT.md`, `VIRTIO.md`, `explore/README.md`.
 - **`hydo/` — the product both engines use.** `onboard/` turns a project's `hydo.yaml` (or `hydo/`
   folder) into a guest image (`hydo-build`, `MANIFEST.md`) and holds the examples; `explore/` is the
-  explorer (`explore.py`: schedules, fault strategies, shrinking, reports); `history/` checks
+  explorer's notes and research scripts (the explorer itself is the Rust crate
+  `crates/hydo-explore`: schedules, fault strategies, shrinking, reports; `hydo explore` runs it); `history/` checks
   recorded histories (linearizability, list-append); `readers/` reads stores after a run;
   `onboard/world/` serves fake outside services and fault proxies; `grpcgen/` generates gRPC
   drivers; `assert/` builds the assertion property table; `stack/` is the example four-service

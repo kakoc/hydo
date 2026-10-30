@@ -236,6 +236,7 @@ dependencies = [
  "hydo-schedule",
  "libc",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -246,6 +247,7 @@ dependencies = [
  "hydo-manifest",
  "libyaml-safer",
  "regex",
+ "serde",
  "serde_json",
  "sha2",
  "tar",
@@ -259,6 +261,7 @@ dependencies = [
  "hydo-manifest",
  "libc",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -300,6 +303,9 @@ dependencies = [
 [[package]]
 name = "hydo-history"
 version = "0.1.0"
+dependencies = [
+ "sha2",
+]
 
 [[package]]
 name = "hydo-manifest"

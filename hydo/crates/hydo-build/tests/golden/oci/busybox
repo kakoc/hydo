@@ -1,0 +1,2 @@
+#!/bin/sh
+# A stand-in for busybox in tests/oci.rs: staged as bin/busybox, never run.

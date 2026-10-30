@@ -1,5 +1,11 @@
 # Bug benchmark for the stack explorer (Milestone 46b)
 
+> Note (M107): `explore.py` and the other Python files named below were the explorer and tools of
+> the time. The explorer is now the Rust crate `hydo/crates/hydo-explore` (`hydo explore`, or the
+> `hydo-explore` program, with the same options); the Python files were deleted in M107 and can
+> be restored from commit 2a58c4b (`git checkout 2a58c4b -- hydo/explore hydo/onboard hydo/history` in a scratch checkout).
+> The commands below are records of how things were run and measured.
+
 Every explorer strategy comparison up to Milestone 45 rested on ONE bug: the pre-M39 front door
 (publish to Kafka, then fail the order because the Redis cache was down). This benchmark gives
 the comparisons several targets of different kinds and difficulty. Each defect is a small,

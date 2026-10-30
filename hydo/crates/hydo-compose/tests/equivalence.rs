@@ -7,6 +7,11 @@
 //!
 //! Where the Python stopped with a traceback (golden "crash"), the Rust must exit with the same
 //! status, write the same files (none) and print one `hydo-compose: ` line instead.
+//!
+//! Since M107 the Python is deleted (commit 2a58c4b has hydo/onboard/hydo_compose.py) and the
+//! Rust is the reference: `HYDO_BLESS=1` rewrites the files' hashes in golden.json from the Rust
+//! output (review the diff). M107 did that once, for its one deliberate change: the generated
+//! fetch-images.sh calls hydo-fetch-image instead of skopeo.
 
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -156,15 +161,17 @@ fn argv(case: &serde_json::Value) -> Vec<String> {
 fn compose_equals_python() {
     let cases: Vec<serde_json::Value> =
         serde_json::from_slice(&std::fs::read(here().join("cases.json")).unwrap()).unwrap();
-    let gold: serde_json::Value =
+    let mut gold: serde_json::Value =
         serde_json::from_slice(&std::fs::read(here().join("golden.json")).unwrap()).unwrap();
+    let bless = std::env::var_os("HYDO_BLESS").is_some();
     let base = std::env::temp_dir().join(format!("hydo-compose-eq-{}", std::process::id()));
     let mut bad = Vec::new();
     let (mut n, mut crashes) = (0, 0);
     for case in &cases {
-        let name = s(case, "name");
-        let g = &gold[name];
-        let d = base.join(name);
+        let name = s(case, "name").to_string();
+        let g = gold[&name].clone();
+        let g = &g;
+        let d = base.join(&name);
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         let d = d.canonicalize().unwrap();
@@ -230,7 +237,9 @@ fn compose_equals_python() {
             .iter()
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
-        if files != want {
+        if bless {
+            gold[&name]["files"] = serde_json::json!(files);
+        } else if files != want {
             why.push(format!("files: {files:?}\n--- python: {want:?}"));
         }
         if why.is_empty() {
@@ -246,6 +255,14 @@ fn compose_equals_python() {
     }
     if bad.is_empty() {
         let _ = std::fs::remove_dir_all(&base);
+    }
+    if bless {
+        // golden.json's own layout: one-space indent and sorted keys, as json.dump wrote it
+        let mut out = Vec::new();
+        let fmt = serde_json::ser::PrettyFormatter::with_indent(b" ");
+        let mut ser = serde_json::Serializer::with_formatter(&mut out, fmt);
+        serde::Serialize::serialize(&gold, &mut ser).unwrap();
+        std::fs::write(here().join("golden.json"), out).unwrap();
     }
     assert!(
         bad.is_empty(),

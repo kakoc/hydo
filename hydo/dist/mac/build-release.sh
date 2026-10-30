@@ -20,7 +20,7 @@ BUSYBOX=/nix/store/zbc5fx2yszji1a4aw2ff46m0p99c6yxb-busybox-static-aarch64-unkno
 MKE2FS=/nix/store/gnavnl9lh7lwi3kzvf0rzlw3zzplg32i-e2fsprogs-static-aarch64-unknown-linux-musl-1.47.0-bin/bin/mke2fs
 LISTER=/nix/store/ahw5fkq085k5ppdsylyd475xlxb18pz1-busybox-static-x86_64-unknown-linux-musl-1.37.0/bin/busybox
 REDIS_MANIFEST=$TOP/hydo/onboard/examples-mac/redis/hydo.yaml
-TC=$(sed -n 's/^TC_ARM64 = "\(.*\)"$/\1/p' "$TOP/hydo/onboard/hydo_build_arm64.py")   # the pinned aarch64 tc
+TC=$(sed -n 's/^pub const TC_ARM64: &str = "\(.*\)";$/\1/p' "$TOP/hydo/crates/hydo-build/src/arm64.rs")   # the pinned aarch64 tc
 
 mkdir -p "$A"
 fetch() {   # fetch <remote path> <local name>
@@ -74,26 +74,30 @@ rm -rf "$REL"
 # the release tree mirrors the repository: hydo/ (the product) and hv/hvm/ (the Mac engine)
 mkdir -p "$REL/bin" "$REL/hydo/onboard" "$REL/hydo/assert" "$REL/hv/hvm/explore/out" "$REL/guest" \
          "$REL/examples" "$REL/skill"
-# the hydo command: the Rust CLI (hydo/crates/hydo-cli) for aarch64-apple-darwin (M101), built with
-# the workspace's pinned toolchain (rust-toolchain.toml), or taken from $HYDO_RUST_BIN
-if [ -n "$HYDO_RUST_BIN" ]; then
-  HB=$HYDO_RUST_BIN
+# the programs, all Rust (M107: no Python anywhere in the release): bin/hydo (the one CLI,
+# hydo/crates/hydo-cli), bin/hydo-build (the image builder with its own command line, for
+# scripts; `hydo build` is the same builder with the release's tools) and bin/hydo-fetch-image
+# (what fetch-images.sh of `hydo compose` calls), for aarch64-apple-darwin, built with the
+# workspace's pinned toolchain (rust-toolchain.toml), or taken from $HYDO_RUST_BIN_DIR
+BINS="hydo hydo-build hydo-fetch-image"
+if [ -n "$HYDO_RUST_BIN_DIR" ]; then
+  BD=$HYDO_RUST_BIN_DIR
 else
-  ( cd "$TOP" && cargo build --release --locked -p hydo-cli --target aarch64-apple-darwin ) >&2
-  HB=$TOP/target/aarch64-apple-darwin/release/hydo
+  ( cd "$TOP" && cargo build --release --locked -p hydo-cli -p hydo-build -p hydo-compose --target aarch64-apple-darwin ) >&2
+  BD=$TOP/target/aarch64-apple-darwin/release
 fi
-file "$HB" | grep -q 'Mach-O 64-bit executable arm64' || { echo "$HB is not an arm64 Mac binary" >&2; exit 1; }
-cp "$HB" "$REL/bin/hydo"; chmod 755 "$REL/bin/hydo"
-# hydo-build splices the init extensions (liveness, recovery clock, links, freeze) in by manifest
-cp "$TOP/hydo/onboard/hydo-build" "$TOP/hydo/onboard/hydo-compose" "$TOP/hydo/onboard/hydo_compose.py" "$TOP/hydo/onboard/hydo_oci.py" "$TOP/hydo/onboard/hydo_build_arm64.py" "$TOP"/hydo/onboard/hydo-init*.sh \
-   "$TOP/hydo/onboard/hydo-liveness.sh" "$TOP/hydo/onboard/MANIFEST.md" "$TOP/hydo/onboard/hydo_composer.py" \
-   "$TOP/hydo/onboard/hydo-composer.sh" "$TOP/hydo/onboard/hydo_bridge.py" "$REL/hydo/onboard/"
-echo "$VERSION" > "$REL/hydo/VERSION"     # hydo_composer.engine_version: what a plan's hydo_version is checked against
-# the explorer is part of bin/hydo since M102 (the hydo-explore crate): no explore.py
-# the host-side history checkers and the guest recorder (hydo/HISTORIES.md): `hydo run`/`hydo explore`
-# check a run's history with hydohist.py; hydo-build stages hydo_hist.sh for a manifest with checks:
+for b in $BINS; do
+  file "$BD/$b" | grep -q 'Mach-O 64-bit executable arm64' || { echo "$BD/$b is not an arm64 Mac binary" >&2; exit 1; }
+  cp "$BD/$b" "$REL/bin/$b"; chmod 755 "$REL/bin/$b"
+done
+# the guest-side files hydo-build puts into images: the generic init and every extension it
+# splices in by manifest, the test composer's guest runner, the history recorder (for a
+# manifest with checks:), and the format reference (`hydo guide manifest`)
+cp "$TOP"/hydo/onboard/hydo-init*.sh "$TOP/hydo/onboard/hydo-liveness.sh" "$TOP/hydo/onboard/MANIFEST.md" \
+   "$TOP/hydo/onboard/hydo-composer.sh" "$REL/hydo/onboard/"
+echo "$VERSION" > "$REL/hydo/VERSION"     # what a plan's hydo_version: is checked against
 mkdir -p "$REL/hydo/history"
-cp "$TOP/hydo/history/hydohist.py" "$TOP/hydo/history/hydo-check" "$TOP/hydo/history/hydo_hist.sh" "$REL/hydo/history/"
+cp "$TOP/hydo/history/hydo_hist.sh" "$REL/hydo/history/"
 cp "$TOP/hydo/assert/hydo_assert_report.c" "$TOP/hydo/assert/hydo_assert_table.h" "$REL/hydo/assert/"   # the explorer compiles the property table tool
 cp "$TOP/hv/hvm/hvm" "$REL/hv/hvm/hvm"
 cp "$TOP/hv/hvm/explore/hvmx" "$REL/hv/hvm/explore/hvmx"
@@ -109,17 +113,19 @@ mkdir -p "$REL/examples/redis"
 cp -R "$A/redis" "$REL/examples/redis/files"
 # an absolute /nix/store symlink would dangle on the Mac (hydo-build checks each src exists):
 # point it at the same file inside files/, relatively, which resolves the same in the guest
-python3 - "$REL/examples/redis/files" <<'EOF'
-import os, sys
-top = sys.argv[1]
-for d, dirs, files in os.walk(top):
-    for n in dirs + files:
-        p = os.path.join(d, n)
-        t = os.readlink(p) if os.path.islink(p) else ""
-        if t.startswith("/nix/store/"):
-            os.unlink(p)
-            os.symlink(os.path.relpath(os.path.join(top, t.lstrip("/")), d), p)
-EOF
+# (the relative path is os.path.relpath's: up to the common directory, then down)
+relpath() {   # relpath <target> <from dir>: both absolute and normalised
+  t=$1; c=$2; up=
+  while [ "$c" != / ] && [ "${t#"$c"/}" = "$t" ]; do c=$(dirname "$c"); up="../$up"; done
+  echo "$up${t#"$c"/}"
+}
+top=$REL/examples/redis/files
+find "$top" -type l | while read -r p; do
+  t=$(readlink "$p")
+  case "$t" in
+    /nix/store/*) rm "$p"; ln -s "$(relpath "$top/${t#/}" "$(dirname "$p")")" "$p" ;;
+  esac
+done
 sed 's#{src: /nix/store/#{src: files/nix/store/#' "$REDIS_MANIFEST" \
   | sed 's#^\# Build on the Linux box:.*#\# Build:  hydo build hydo.yaml#' > "$REL/examples/redis/hydo.yaml"
 # the busy-wait example (the ledger with a user-space spin in every request)
@@ -129,12 +135,8 @@ chmod 755 "$REL/examples/ledger-spin/bin/"*
 sed 's#^\#   hvx/onboard/hydo-build .*#\#   hydo build hydo.yaml#' "$REL/examples/ledger-spin/hydo.yaml" > "$REL/examples/ledger-spin/hydo.yaml.new"
 mv "$REL/examples/ledger-spin/hydo.yaml.new" "$REL/examples/ledger-spin/hydo.yaml"
 # the onboarding skill (an Agent Skills folder, agentskills.io): `hydo guide`, `hydo skill install`
-# and `hydo init` read it from skill/hydo-onboard (hydo/onboard/hydo_agents.py)
+# and `hydo init` read it from skill/hydo-onboard (bin/hydo also carries a built-in copy)
 cp -R "$TOP/skills/hydo-onboard" "$REL/skill/"
-cp "$TOP/hydo/onboard/hydo_agents.py" "$REL/hydo/onboard/"
-# error logs as findings: the host side (`hydo errors`, explore.py); the guest scan
-# (hydo-init-errlog.sh) comes with the hydo-init*.sh above
-cp "$TOP/hydo/onboard/hydo_errors.py" "$REL/hydo/onboard/"
 cp "$D/install.sh" "$REL/install.sh"; chmod 755 "$REL/install.sh"
 cp "$D/QUICKSTART-mac.md" "$REL/QUICKSTART-mac.md"
 echo "$VERSION" > "$REL/VERSION"

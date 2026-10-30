@@ -1,7 +1,7 @@
 # The Linux release of hydo
 
-`build-release.sh` turns the bare-metal backend (the `hvx` kernel module, `hvx_explore`,
-`hydo-build`, `explore.py`) into a self-contained tarball for x86_64 Linux machines with Intel
+`build-release.sh` turns the bare-metal backend (the `hvx` kernel module, `hvx_explore`, and the
+Rust programs `hydo`, `hydo-build` and `hydo-fetch-image`) into a self-contained tarball for x86_64 Linux machines with Intel
 VT-x. A user installs it with one command and drives everything with one `hydo` command; no
 Nix, no `~/hydo` tree and no hand-written lock scripts are needed. `QUICKSTART-linux.md` is the
 user guide; it is shipped as the release's `README.md`. The Mac counterpart is
@@ -9,28 +9,30 @@ user guide; it is shipped as the release's `README.md`. The Mac counterpart is
 
 ## The `hydo` command
 
-Since Milestone 101 `bin/hydo` is the Rust CLI (`hydo/crates/hydo-cli`), a static
-`x86_64-unknown-linux-musl` binary that `build-release.sh` builds with the workspace's pinned
-toolchain (or takes from `$HYDO_RUST_BIN`). It has the same verbs, flags, output and exit codes
-as the Python CLI it replaced (`hydo/dist/linux/hydo`, kept in the repository as the reference
-of `hydo/crates/hydo-cli/tests/equivalence.rs` until every port is done, and no longer shipped).
-The parts still in Python are called through `hydo/onboard/hydo_bridge.py`, so a release still
-needs Python 3.9+.
+`bin/hydo` is the Rust CLI (`hydo/crates/hydo-cli`), a static `x86_64-unknown-linux-musl`
+binary; `bin/hydo-build` (the image builder with its own command line, for scripts) and
+`bin/hydo-fetch-image` (what the `fetch-images.sh` of `hydo compose` calls) come with it.
+`build-release.sh` builds the three with the workspace's pinned toolchain (the TLS code of
+`hydo-fetch-image` compiles some C: `musl-gcc` when present, else the host's `cc`), or takes
+them from `$HYDO_RUST_BIN_DIR`. Since Milestone 107 the release contains no Python and
+needs none; the Python CLI (`hydo/dist/linux/hydo`) and every Python module behind it are
+deleted (commit `2a58c4b` has them). The Mac release's `hydo` is the same program and behaves
+the same (Milestone 107); only `hydo module` is Linux-only.
 
 | verb | what it runs underneath |
 |---|---|
-| `hydo doctor` | checks: Intel CPU, `vmx` flag (VT-x on in firmware), bare metal, a usable PMU (non-hybrid, `arch_perfmon`; otherwise it says the exit-count clock is used), Python 3.9+, `cc`/`make`/`flock`/`xz`/`sudo`/`modinfo`, password-less sudo, kernel headers, lockdown, the module (built, loaded, same `srcversion` as this release), `kvm_intel` not loaded, release files, the run engine, the bundled `mke2fs`, disk space |
+| `hydo doctor` | checks: Intel CPU, `vmx` flag (VT-x on in firmware), bare metal, a usable PMU (non-hybrid, `arch_perfmon`; otherwise it says the exit-count clock is used), `cc`/`make`/`flock`/`xz`/`sudo`/`modinfo`, password-less sudo, kernel headers, lockdown, the module (built, loaded, same `srcversion` as this release), `kvm_intel` not loaded, release files, the run engine, the bundled `mke2fs`, disk space |
 | `hydo module build [--name N]` | `make -C /lib/modules/$(uname -r)/build` on `module/hvx.c`; with `--name` a side copy `N.ko` with device `/dev/N` (`-DHVX_DEVNAME`, the `hv/hvx/tdet/build-hvxtd.sh` pattern) |
 | `hydo module load\|unload [--name N] [--dry-run] [--param K=V]` | under `flock -x` on the module lock: `rmmod hvx`, `rmmod kvm_intel kvm` if loaded, `insmod`. A side module gets its own lock file (`<lock>.N`) and never touches `hvx` or KVM |
 | `hydo module udev install\|remove\|status [--name N] [--group G] [--dry-run]` | optional: with sudo, writes `/etc/udev/rules.d/70-hydo-N.rules` (`KERNEL=="N", SUBSYSTEM=="misc", GROUP="G", MODE="0660"`), creates the group if missing, adds the user, reloads udev and applies the rule to a loaded device; `remove` deletes the rule and sets the device back to root:root 0600. `install.sh --udev [--udev-group G] [--udev-name N]` runs `install` |
 | `hydo module status [--name N]` | loaded or not, `srcversion` of the loaded and the release-built module, device mode, KVM, how many processes hold the lock (read from `/proc/locks`, no lock taken) |
-| `hydo build <hydo.yaml>` | the Rust image builder (`hydo/crates/hydo-build`, since Milestone 103; before that `hydo/onboard/hydo-build` through the bridge) with the bundled tools, into `./hydo-out` |
+| `hydo build [hydo.yaml]` | the Rust image builder (`hydo/crates/hydo-build`, since Milestone 103) with the bundled tools, into `./hydo-out` (`./.hydo` for a project's `hydo/hydo.yaml`, the default manifest) |
 | `hydo run [IMG] "<schedule>"` | `libexec/hvx-run sudo env HVX_SNAP_DIR=… hv/hvx/hvx_explore [--ram-mib/--cpu from the image's manifest] one guest/bzImage guest/initramfs-kafka.cpio.gz IMG <dir> "<schedule>"`; writes `run.json` |
 | `hydo repro <run dir \| explore dir \| "<schedule>">` | re-runs a `run.json`, or every failure and minimal schedule of an exploration's `report.json`, from a fresh boot, and compares fingerprints |
-| `hydo explore [IMG] [explore.py options]` | `hydo/explore/explore.py --image IMG` (default `--seeds 1-20 --workers 2 --out hydo-out/explore`) |
+| `hydo explore [IMG] [explorer options]` | the explorer (`hydo/crates/hydo-explore`) in the same process (default `--seeds 1-20 --out hydo-out/explore`; workers sized from the machine) |
 | `hydo report [DIR]` | prints `report.md` |
 
-**sudo only when needed.** `hydo run` and `explore.py` call `libexec/hvx-run sudo env …`;
+**sudo only when needed.** `hydo run` and `hydo explore` call `libexec/hvx-run sudo env …`;
 `hvx-run` drops the `sudo` when the user can read and write the device (`$HVX_DEV`, default
 `/dev/hvx`), which the optional udev rule above allows, and passes `HVX_DEV` through `sudo`
 when it keeps it. `HYDO_SUDO=1` keeps sudo. `hydo doctor` reports which case applies. A run
@@ -47,7 +49,7 @@ guests through the kernel module, which was not hardened against hostile users.
 existing tools share one lock.
 
 **Changes to existing tools** (defaults unchanged, so other users of the tree see no difference):
-`explore.py` reads its build directory, lock wrapper and snapshot directory from `HYDO_BUILD`,
+the explorer reads its build directory, lock wrapper and snapshot directory from `HYDO_BUILD`,
 `HYDO_HVX_RUN`, `HYDO_SNAP_DIR` (defaults `~/hydo/build`, `~/bin/hvx-run`, `/var/tmp/hvx-snap`),
 and with `HYDO_CLI` set the report's hand-reproduction line is a `hydo run` command;
 `explore/ptedges.h` compiles without libipt under `-DHYDO_NO_LIBIPT` (coverage decoding off),
@@ -70,8 +72,7 @@ ships all of them (`guest/`, `tools/`), and `hydo build` points `hydo-build` at 
   the build machine instead of the machine's `/etc/mke2fs.conf`;
 - the guest-side closures are `guest/store.tar` (a GNU tar with the store's read-only modes,
   unpacked by `install.sh`) and `guest/store-closures.txt` (`nix-store -qR` of each root). The
-  builder's Linux release mode (`hydo_build::Release::Linux`; before Milestone 103 a module-local
-  `os` view and a replacement `closure()` in `hydo_bridge.py`) resolves the pinned `/nix/store`
+  builder's Linux release mode (`hydo_build::Release::Linux`) resolves the pinned `/nix/store`
   paths into that tree, only when the machine does not have them;
 - the umask is 022, and after the root image is made every inode's owner is set to 0:0 with the
   bundled `debugfs` (same frozen clock), so the image does not depend on the building user's

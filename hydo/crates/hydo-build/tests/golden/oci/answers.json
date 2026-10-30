@@ -1,0 +1,3474 @@
+{
+  "docker --arch x86_64": {
+    "meta": {
+      "oci": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/etc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/etc/passwd": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/a/usr": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/usr/bin": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/usr/bin/app": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/a/usr/bin/su": [
+        32768,
+        2541,
+        0,
+        0
+      ],
+      "oci/a/usr/bin/app2": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/a/bin": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/a/dev": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/var": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/var/lib": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/var/lib/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/var/run": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/a/run": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/old": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/keep": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/a/home": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/home/app": [
+        16384,
+        448,
+        1000,
+        1000
+      ],
+      "oci/a/srv": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/a/var/lib/data/new": [
+        32768,
+        420,
+        1000,
+        1000
+      ],
+      "oci/a/usr/bin/tool": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/a/etc/app.conf": [
+        32768,
+        384,
+        1000,
+        1000
+      ],
+      "oci/a/tmp": [
+        16384,
+        1023,
+        0,
+        0
+      ],
+      "oci/a/proc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/sys": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/.hydo": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/.hydo/busybox": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/a/etc/hosts": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/a/run/x": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/cache": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/etc/extra-hosts": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/run/b": [
+        16384,
+        493,
+        0,
+        0
+      ]
+    },
+    "services": [
+      {
+        "name": "a",
+        "ready": "true",
+        "cmd": "/etc/hydo/oci/a/run"
+      }
+    ],
+    "out": "hydo-build: image sha256:af29dc9c883a -> /oci/a (2 layers, 61 entries, 2 device/FIFO entries skipped)\n",
+    "err": "hydo-build: service a from image <tmp>/demo-amd64.docker.tar (demo:1.0, config sha256:af29dc9c883a)\n",
+    "tree": {
+      "bin": "dir 755",
+      "bin/hydo-oci": "file 755 348 bytes \"#!/bin/busybox sh\\n# hydo-oci <service> <command> [args...]: run \" same-inode-as bin/hydo-oci",
+      "etc": "dir 755",
+      "etc/hydo": "dir 755",
+      "etc/hydo/oci": "dir 755",
+      "etc/hydo/oci/a": "dir 755",
+      "etc/hydo/oci/a/exec": "file 755 2470 bytes \"#!/bin/busybox sh\\n# generated by hvx/onboard/hydo_oci.py -- serv\" same-inode-as etc/hydo/oci/a/exec",
+      "etc/hydo/oci/a/image.json": "file 644 1478 bytes \"{\\n \\\"architecture\\\": \\\"amd64\\\",\\n \\\"config_digest\\\": \\\"sha256:af29dc9c88\" same-inode-as etc/hydo/oci/a/image.json",
+      "etc/hydo/oci/a/run": "file 755 2484 bytes \"#!/bin/busybox sh\\n# generated by hvx/onboard/hydo_oci.py -- serv\" same-inode-as etc/hydo/oci/a/run",
+      "oci": "dir 755",
+      "oci/a": "dir 755",
+      "oci/a/.hydo": "dir 755",
+      "oci/a/.hydo/busybox": "file 755 86 bytes \"#!/bin/sh\\n# A stand-in for busybox in tests/oci.rs: staged as bi\" same-inode-as oci/a/.hydo/busybox",
+      "oci/a/bin": "link -> usr/bin",
+      "oci/a/cache": "dir 755",
+      "oci/a/data": "dir 755",
+      "oci/a/dev": "dir 755",
+      "oci/a/etc": "dir 755",
+      "oci/a/etc/app.conf": "file 644 4 bytes \"k=v\\n\" same-inode-as oci/a/etc/app.conf",
+      "oci/a/etc/extra-hosts": "dir 755",
+      "oci/a/etc/hosts": "file 644 61 bytes \"127.0.0.1\\tlocalhost\\n::1\\tlocalhost ip6-localhost ip6-loopback\\n\" same-inode-as oci/a/etc/hosts",
+      "oci/a/etc/passwd": "file 644 65 bytes \"root:x:0:0:root:/root:/bin/sh\\napp:x:1000:1000::/home/app:/bin/sh\" same-inode-as oci/a/etc/passwd",
+      "oci/a/home": "dir 755",
+      "oci/a/home/app": "dir 755",
+      "oci/a/opt": "dir 755",
+      "oci/a/opt/deep": "dir 755",
+      "oci/a/opt/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": "file 644 5 bytes \"long\\n\" same-inode-as oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt",
+      "oci/a/opt/keep": "file 644 5 bytes \"keep\\n\" same-inode-as oci/a/opt/keep",
+      "oci/a/opt/old": "dir 755",
+      "oci/a/proc": "dir 755",
+      "oci/a/run": "dir 755",
+      "oci/a/run/b": "dir 755",
+      "oci/a/run/x": "dir 755",
+      "oci/a/srv": "dir 755",
+      "oci/a/sys": "dir 755",
+      "oci/a/tmp": "dir 755",
+      "oci/a/usr": "dir 755",
+      "oci/a/usr/bin": "dir 755",
+      "oci/a/usr/bin/app": "file 755 19 bytes \"#!/bin/sh\\necho app\\n\" same-inode-as oci/a/usr/bin/app",
+      "oci/a/usr/bin/app2": "file 755 19 bytes \"#!/bin/sh\\necho app\\n\" same-inode-as oci/a/usr/bin/app",
+      "oci/a/usr/bin/su": "file 755 7 bytes \"setuid\\n\" same-inode-as oci/a/usr/bin/su",
+      "oci/a/usr/bin/tool": "file 755 5 bytes \"tool\\n\" same-inode-as oci/a/usr/bin/tool",
+      "oci/a/var": "dir 755",
+      "oci/a/var/lib": "dir 755",
+      "oci/a/var/lib/data": "dir 755",
+      "oci/a/var/lib/data/new": "file 644 4 bytes \"new\\n\" same-inode-as oci/a/var/lib/data/new",
+      "oci/a/var/run": "link -> /run"
+    }
+  },
+  "docker --arch arm64": {
+    "meta": {
+      "oci": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/etc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/etc/passwd": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/a/usr": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/usr/bin": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/usr/bin/app": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/a/usr/bin/su": [
+        32768,
+        2541,
+        0,
+        0
+      ],
+      "oci/a/usr/bin/app2": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/a/bin": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/a/dev": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/var": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/var/lib": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/var/lib/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/var/run": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/a/run": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/old": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/keep": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/a/home": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/home/app": [
+        16384,
+        448,
+        1000,
+        1000
+      ],
+      "oci/a/srv": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/a/var/lib/data/new": [
+        32768,
+        420,
+        1000,
+        1000
+      ],
+      "oci/a/usr/bin/tool": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/a/etc/app.conf": [
+        32768,
+        384,
+        1000,
+        1000
+      ],
+      "oci/a/tmp": [
+        16384,
+        1023,
+        0,
+        0
+      ],
+      "oci/a/proc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/sys": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/.hydo": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/.hydo/busybox": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/a/etc/hosts": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/a/run/x": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/cache": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/etc/extra-hosts": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/run/b": [
+        16384,
+        493,
+        0,
+        0
+      ]
+    },
+    "services": [
+      {
+        "name": "a",
+        "ready": "true",
+        "cmd": "/etc/hydo/oci/a/run"
+      }
+    ],
+    "out": "hydo-build: image sha256:00b5ce02161d -> /oci/a (2 layers, 61 entries, 2 device/FIFO entries skipped)\n",
+    "err": "hydo-build: service a from image <tmp>/demo-arm64.docker.tar (demo:1.0, config sha256:00b5ce02161d)\n",
+    "tree": {
+      "bin": "dir 755",
+      "bin/hydo-oci": "file 755 477 bytes \"#!/bin/busybox sh\\n# hydo-oci <service> <command> [args...]: run \" same-inode-as bin/hydo-oci",
+      "etc": "dir 755",
+      "etc/hydo": "dir 755",
+      "etc/hydo/oci": "dir 755",
+      "etc/hydo/oci/a": "dir 755",
+      "etc/hydo/oci/a/exec": "file 755 2470 bytes \"#!/bin/busybox sh\\n# generated by hvx/onboard/hydo_oci.py -- serv\" same-inode-as etc/hydo/oci/a/exec",
+      "etc/hydo/oci/a/image.json": "file 644 1478 bytes \"{\\n \\\"architecture\\\": \\\"arm64\\\",\\n \\\"config_digest\\\": \\\"sha256:00b5ce0216\" same-inode-as etc/hydo/oci/a/image.json",
+      "etc/hydo/oci/a/run": "file 755 2484 bytes \"#!/bin/busybox sh\\n# generated by hvx/onboard/hydo_oci.py -- serv\" same-inode-as etc/hydo/oci/a/run",
+      "oci": "dir 755",
+      "oci/a": "dir 755",
+      "oci/a/.hydo": "dir 755",
+      "oci/a/.hydo/busybox": "file 755 86 bytes \"#!/bin/sh\\n# A stand-in for busybox in tests/oci.rs: staged as bi\" same-inode-as oci/a/.hydo/busybox",
+      "oci/a/bin": "link -> usr/bin",
+      "oci/a/cache": "dir 755",
+      "oci/a/data": "dir 755",
+      "oci/a/dev": "dir 755",
+      "oci/a/etc": "dir 755",
+      "oci/a/etc/app.conf": "file 644 4 bytes \"k=v\\n\" same-inode-as oci/a/etc/app.conf",
+      "oci/a/etc/extra-hosts": "dir 755",
+      "oci/a/etc/hosts": "file 644 61 bytes \"127.0.0.1\\tlocalhost\\n::1\\tlocalhost ip6-localhost ip6-loopback\\n\" same-inode-as oci/a/etc/hosts",
+      "oci/a/etc/passwd": "file 644 65 bytes \"root:x:0:0:root:/root:/bin/sh\\napp:x:1000:1000::/home/app:/bin/sh\" same-inode-as oci/a/etc/passwd",
+      "oci/a/home": "dir 755",
+      "oci/a/home/app": "dir 755",
+      "oci/a/opt": "dir 755",
+      "oci/a/opt/deep": "dir 755",
+      "oci/a/opt/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": "file 644 5 bytes \"long\\n\" same-inode-as oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt",
+      "oci/a/opt/keep": "file 644 5 bytes \"keep\\n\" same-inode-as oci/a/opt/keep",
+      "oci/a/opt/old": "dir 755",
+      "oci/a/proc": "dir 755",
+      "oci/a/run": "dir 755",
+      "oci/a/run/b": "dir 755",
+      "oci/a/run/x": "dir 755",
+      "oci/a/srv": "dir 755",
+      "oci/a/sys": "dir 755",
+      "oci/a/tmp": "dir 755",
+      "oci/a/usr": "dir 755",
+      "oci/a/usr/bin": "dir 755",
+      "oci/a/usr/bin/app": "file 755 19 bytes \"#!/bin/sh\\necho app\\n\" same-inode-as oci/a/usr/bin/app",
+      "oci/a/usr/bin/app2": "file 755 19 bytes \"#!/bin/sh\\necho app\\n\" same-inode-as oci/a/usr/bin/app",
+      "oci/a/usr/bin/su": "file 755 7 bytes \"setuid\\n\" same-inode-as oci/a/usr/bin/su",
+      "oci/a/usr/bin/tool": "file 755 5 bytes \"tool\\n\" same-inode-as oci/a/usr/bin/tool",
+      "oci/a/var": "dir 755",
+      "oci/a/var/lib": "dir 755",
+      "oci/a/var/lib/data": "dir 755",
+      "oci/a/var/lib/data/new": "file 644 4 bytes \"new\\n\" same-inode-as oci/a/var/lib/data/new",
+      "oci/a/var/run": "link -> /run"
+    }
+  },
+  "dockergz --arch x86_64": {
+    "meta": {
+      "oci": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/etc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/etc/passwd": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/b/usr": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/usr/bin": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/usr/bin/app": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/b/usr/bin/su": [
+        32768,
+        2541,
+        0,
+        0
+      ],
+      "oci/b/usr/bin/app2": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/b/bin": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/b/dev": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/var": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/var/lib": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/var/lib/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/var/run": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/b/run": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/old": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/keep": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/b/home": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/home/app": [
+        16384,
+        448,
+        1000,
+        1000
+      ],
+      "oci/b/srv": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/b/var/lib/data/new": [
+        32768,
+        420,
+        1000,
+        1000
+      ],
+      "oci/b/usr/bin/tool": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/b/etc/app.conf": [
+        32768,
+        384,
+        1000,
+        1000
+      ],
+      "oci/b/tmp": [
+        16384,
+        1023,
+        0,
+        0
+      ],
+      "oci/b/proc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/sys": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/.hydo": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/.hydo/busybox": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/b/etc/hosts": [
+        32768,
+        420,
+        0,
+        0
+      ]
+    },
+    "services": [
+      {
+        "name": "b",
+        "ready": "true",
+        "cmd": "/etc/hydo/oci/b/run"
+      }
+    ],
+    "out": "hydo-build: image sha256:af29dc9c883a -> /oci/b (2 layers, 57 entries, 2 device/FIFO entries skipped)\n",
+    "err": "hydo-build: service b from image <tmp>/demo-amd64.docker.tar.gz (demo:1.0, config sha256:af29dc9c883a)\n",
+    "tree": {
+      "bin": "dir 755",
+      "bin/hydo-oci": "file 755 348 bytes \"#!/bin/busybox sh\\n# hydo-oci <service> <command> [args...]: run \" same-inode-as bin/hydo-oci",
+      "etc": "dir 755",
+      "etc/hydo": "dir 755",
+      "etc/hydo/oci": "dir 755",
+      "etc/hydo/oci/b": "dir 755",
+      "etc/hydo/oci/b/exec": "file 755 718 bytes \"#!/bin/busybox sh\\n# generated by hvx/onboard/hydo_oci.py -- serv\" same-inode-as etc/hydo/oci/b/exec",
+      "etc/hydo/oci/b/image.json": "file 644 804 bytes \"{\\n \\\"architecture\\\": \\\"amd64\\\",\\n \\\"config_digest\\\": \\\"sha256:af29dc9c88\" same-inode-as etc/hydo/oci/b/image.json",
+      "etc/hydo/oci/b/run": "file 755 664 bytes \"#!/bin/busybox sh\\n# generated by hvx/onboard/hydo_oci.py -- serv\" same-inode-as etc/hydo/oci/b/run",
+      "oci": "dir 755",
+      "oci/b": "dir 755",
+      "oci/b/.hydo": "dir 755",
+      "oci/b/.hydo/busybox": "file 755 86 bytes \"#!/bin/sh\\n# A stand-in for busybox in tests/oci.rs: staged as bi\" same-inode-as oci/b/.hydo/busybox",
+      "oci/b/bin": "link -> usr/bin",
+      "oci/b/data": "dir 755",
+      "oci/b/dev": "dir 755",
+      "oci/b/etc": "dir 755",
+      "oci/b/etc/app.conf": "file 644 4 bytes \"k=v\\n\" same-inode-as oci/b/etc/app.conf",
+      "oci/b/etc/hosts": "file 644 61 bytes \"127.0.0.1\\tlocalhost\\n::1\\tlocalhost ip6-localhost ip6-loopback\\n\" same-inode-as oci/b/etc/hosts",
+      "oci/b/etc/passwd": "file 644 65 bytes \"root:x:0:0:root:/root:/bin/sh\\napp:x:1000:1000::/home/app:/bin/sh\" same-inode-as oci/b/etc/passwd",
+      "oci/b/home": "dir 755",
+      "oci/b/home/app": "dir 755",
+      "oci/b/opt": "dir 755",
+      "oci/b/opt/deep": "dir 755",
+      "oci/b/opt/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": "file 644 5 bytes \"long\\n\" same-inode-as oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt",
+      "oci/b/opt/keep": "file 644 5 bytes \"keep\\n\" same-inode-as oci/b/opt/keep",
+      "oci/b/opt/old": "dir 755",
+      "oci/b/proc": "dir 755",
+      "oci/b/run": "dir 755",
+      "oci/b/srv": "dir 755",
+      "oci/b/sys": "dir 755",
+      "oci/b/tmp": "dir 755",
+      "oci/b/usr": "dir 755",
+      "oci/b/usr/bin": "dir 755",
+      "oci/b/usr/bin/app": "file 755 19 bytes \"#!/bin/sh\\necho app\\n\" same-inode-as oci/b/usr/bin/app",
+      "oci/b/usr/bin/app2": "file 755 19 bytes \"#!/bin/sh\\necho app\\n\" same-inode-as oci/b/usr/bin/app",
+      "oci/b/usr/bin/su": "file 755 7 bytes \"setuid\\n\" same-inode-as oci/b/usr/bin/su",
+      "oci/b/usr/bin/tool": "file 755 5 bytes \"tool\\n\" same-inode-as oci/b/usr/bin/tool",
+      "oci/b/var": "dir 755",
+      "oci/b/var/lib": "dir 755",
+      "oci/b/var/lib/data": "dir 755",
+      "oci/b/var/lib/data/new": "file 644 4 bytes \"new\\n\" same-inode-as oci/b/var/lib/data/new",
+      "oci/b/var/run": "link -> /run"
+    }
+  },
+  "dockergz --arch arm64": {
+    "meta": {
+      "oci": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/etc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/etc/passwd": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/b/usr": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/usr/bin": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/usr/bin/app": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/b/usr/bin/su": [
+        32768,
+        2541,
+        0,
+        0
+      ],
+      "oci/b/usr/bin/app2": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/b/bin": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/b/dev": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/var": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/var/lib": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/var/lib/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/var/run": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/b/run": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/old": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/keep": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/b/home": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/home/app": [
+        16384,
+        448,
+        1000,
+        1000
+      ],
+      "oci/b/srv": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/b/var/lib/data/new": [
+        32768,
+        420,
+        1000,
+        1000
+      ],
+      "oci/b/usr/bin/tool": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/b/etc/app.conf": [
+        32768,
+        384,
+        1000,
+        1000
+      ],
+      "oci/b/tmp": [
+        16384,
+        1023,
+        0,
+        0
+      ],
+      "oci/b/proc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/sys": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/.hydo": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/.hydo/busybox": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/b/etc/hosts": [
+        32768,
+        420,
+        0,
+        0
+      ]
+    },
+    "services": [
+      {
+        "name": "b",
+        "ready": "true",
+        "cmd": "/etc/hydo/oci/b/run"
+      }
+    ],
+    "out": "hydo-build: image sha256:00b5ce02161d -> /oci/b (2 layers, 57 entries, 2 device/FIFO entries skipped)\n",
+    "err": "hydo-build: service b from image <tmp>/demo-arm64.docker.tar.gz (demo:1.0, config sha256:00b5ce02161d)\n",
+    "tree": {
+      "bin": "dir 755",
+      "bin/hydo-oci": "file 755 477 bytes \"#!/bin/busybox sh\\n# hydo-oci <service> <command> [args...]: run \" same-inode-as bin/hydo-oci",
+      "etc": "dir 755",
+      "etc/hydo": "dir 755",
+      "etc/hydo/oci": "dir 755",
+      "etc/hydo/oci/b": "dir 755",
+      "etc/hydo/oci/b/exec": "file 755 718 bytes \"#!/bin/busybox sh\\n# generated by hvx/onboard/hydo_oci.py -- serv\" same-inode-as etc/hydo/oci/b/exec",
+      "etc/hydo/oci/b/image.json": "file 644 804 bytes \"{\\n \\\"architecture\\\": \\\"arm64\\\",\\n \\\"config_digest\\\": \\\"sha256:00b5ce0216\" same-inode-as etc/hydo/oci/b/image.json",
+      "etc/hydo/oci/b/run": "file 755 664 bytes \"#!/bin/busybox sh\\n# generated by hvx/onboard/hydo_oci.py -- serv\" same-inode-as etc/hydo/oci/b/run",
+      "oci": "dir 755",
+      "oci/b": "dir 755",
+      "oci/b/.hydo": "dir 755",
+      "oci/b/.hydo/busybox": "file 755 86 bytes \"#!/bin/sh\\n# A stand-in for busybox in tests/oci.rs: staged as bi\" same-inode-as oci/b/.hydo/busybox",
+      "oci/b/bin": "link -> usr/bin",
+      "oci/b/data": "dir 755",
+      "oci/b/dev": "dir 755",
+      "oci/b/etc": "dir 755",
+      "oci/b/etc/app.conf": "file 644 4 bytes \"k=v\\n\" same-inode-as oci/b/etc/app.conf",
+      "oci/b/etc/hosts": "file 644 61 bytes \"127.0.0.1\\tlocalhost\\n::1\\tlocalhost ip6-localhost ip6-loopback\\n\" same-inode-as oci/b/etc/hosts",
+      "oci/b/etc/passwd": "file 644 65 bytes \"root:x:0:0:root:/root:/bin/sh\\napp:x:1000:1000::/home/app:/bin/sh\" same-inode-as oci/b/etc/passwd",
+      "oci/b/home": "dir 755",
+      "oci/b/home/app": "dir 755",
+      "oci/b/opt": "dir 755",
+      "oci/b/opt/deep": "dir 755",
+      "oci/b/opt/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": "file 644 5 bytes \"long\\n\" same-inode-as oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt",
+      "oci/b/opt/keep": "file 644 5 bytes \"keep\\n\" same-inode-as oci/b/opt/keep",
+      "oci/b/opt/old": "dir 755",
+      "oci/b/proc": "dir 755",
+      "oci/b/run": "dir 755",
+      "oci/b/srv": "dir 755",
+      "oci/b/sys": "dir 755",
+      "oci/b/tmp": "dir 755",
+      "oci/b/usr": "dir 755",
+      "oci/b/usr/bin": "dir 755",
+      "oci/b/usr/bin/app": "file 755 19 bytes \"#!/bin/sh\\necho app\\n\" same-inode-as oci/b/usr/bin/app",
+      "oci/b/usr/bin/app2": "file 755 19 bytes \"#!/bin/sh\\necho app\\n\" same-inode-as oci/b/usr/bin/app",
+      "oci/b/usr/bin/su": "file 755 7 bytes \"setuid\\n\" same-inode-as oci/b/usr/bin/su",
+      "oci/b/usr/bin/tool": "file 755 5 bytes \"tool\\n\" same-inode-as oci/b/usr/bin/tool",
+      "oci/b/var": "dir 755",
+      "oci/b/var/lib": "dir 755",
+      "oci/b/var/lib/data": "dir 755",
+      "oci/b/var/lib/data/new": "file 644 4 bytes \"new\\n\" same-inode-as oci/b/var/lib/data/new",
+      "oci/b/var/run": "link -> /run"
+    }
+  },
+  "oci --arch x86_64": {
+    "meta": {
+      "oci": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/etc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/etc/passwd": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/c/usr": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/usr/bin": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/usr/bin/app": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/c/usr/bin/su": [
+        32768,
+        2541,
+        0,
+        0
+      ],
+      "oci/c/usr/bin/app2": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/c/bin": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/c/dev": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/var": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/var/lib": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/var/lib/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/var/run": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/c/run": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/old": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/keep": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/c/home": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/home/app": [
+        16384,
+        448,
+        1000,
+        1000
+      ],
+      "oci/c/srv": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/c/var/lib/data/new": [
+        32768,
+        420,
+        1000,
+        1000
+      ],
+      "oci/c/usr/bin/tool": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/c/etc/app.conf": [
+        32768,
+        384,
+        1000,
+        1000
+      ],
+      "oci/c/tmp": [
+        16384,
+        1023,
+        0,
+        0
+      ],
+      "oci/c/proc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/sys": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/.hydo": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/.hydo/busybox": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/c/etc/hosts": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/d": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/etc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/etc/passwd": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/d/usr": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/usr/bin": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/usr/bin/app": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/d/usr/bin/su": [
+        32768,
+        2541,
+        0,
+        0
+      ],
+      "oci/d/usr/bin/app2": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/d/bin": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/d/dev": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/var": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/var/lib": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/var/lib/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/var/run": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/d/run": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/old": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/keep": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/d/home": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/home/app": [
+        16384,
+        448,
+        1000,
+        1000
+      ],
+      "oci/d/srv": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/d/var/lib/data/new": [
+        32768,
+        420,
+        1000,
+        1000
+      ],
+      "oci/d/usr/bin/tool": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/d/etc/app.conf": [
+        32768,
+        384,
+        1000,
+        1000
+      ],
+      "oci/d/tmp": [
+        16384,
+        1023,
+        0,
+        0
+      ],
+      "oci/d/proc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/sys": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/.hydo": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/.hydo/busybox": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/d/etc/hosts": [
+        32768,
+        420,
+        0,
+        0
+      ]
+    },
+    "services": [
+      {
+        "name": "c",
+        "ready": "true",
+        "cmd": "/etc/hydo/oci/c/run"
+      },
+      {
+        "name": "d",
+        "ready": "true",
+        "cmd": "/etc/hydo/oci/d/run"
+      }
+    ],
+    "out": "hydo-build: image sha256:af29dc9c883a -> /oci/c (2 layers, 57 entries, 2 device/FIFO entries skipped)\nhydo-build: image sha256:af29dc9c883a -> /oci/d (2 layers, 57 entries, 2 device/FIFO entries skipped)\n",
+    "err": "hydo-build: service c from image <tmp>/demo-oci (demo:1.0, config sha256:af29dc9c883a, manifest sha256:3a4990225234)\nhydo-build: service d from image <tmp>/demo-oci (demo:1.0, config sha256:af29dc9c883a, manifest sha256:3a4990225234)\n",
+    "tree": {
+      "bin": "dir 755",
+      "bin/hydo-oci": "file 755 348 bytes \"#!/bin/busybox sh\\n# hydo-oci <service> <command> [args...]: run \" same-inode-as bin/hydo-oci",
+      "etc": "dir 755",
+      "etc/hydo": "dir 755",
+      "etc/hydo/oci": "dir 755",
+      "etc/hydo/oci/c": "dir 755",
+      "etc/hydo/oci/c/exec": "file 755 722 bytes \"#!/bin/busybox sh\\n# generated by hvx/onboard/hydo_oci.py -- serv\" same-inode-as etc/hydo/oci/c/exec",
+      "etc/hydo/oci/c/image.json": "file 644 871 bytes \"{\\n \\\"architecture\\\": \\\"amd64\\\",\\n \\\"config_digest\\\": \\\"sha256:af29dc9c88\" same-inode-as etc/hydo/oci/c/image.json",
+      "etc/hydo/oci/c/run": "file 755 709 bytes \"#!/bin/busybox sh\\n# generated by hvx/onboard/hydo_oci.py -- serv\" same-inode-as etc/hydo/oci/c/run",
+      "etc/hydo/oci/d": "dir 755",
+      "etc/hydo/oci/d/exec": "file 755 722 bytes \"#!/bin/busybox sh\\n# generated by hvx/onboard/hydo_oci.py -- serv\" same-inode-as etc/hydo/oci/d/exec",
+      "etc/hydo/oci/d/image.json": "file 644 854 bytes \"{\\n \\\"architecture\\\": \\\"amd64\\\",\\n \\\"config_digest\\\": \\\"sha256:af29dc9c88\" same-inode-as etc/hydo/oci/d/image.json",
+      "etc/hydo/oci/d/run": "file 755 698 bytes \"#!/bin/busybox sh\\n# generated by hvx/onboard/hydo_oci.py -- serv\" same-inode-as etc/hydo/oci/d/run",
+      "oci": "dir 755",
+      "oci/c": "dir 755",
+      "oci/c/.hydo": "dir 755",
+      "oci/c/.hydo/busybox": "file 755 86 bytes \"#!/bin/sh\\n# A stand-in for busybox in tests/oci.rs: staged as bi\" same-inode-as oci/c/.hydo/busybox",
+      "oci/c/bin": "link -> usr/bin",
+      "oci/c/data": "dir 755",
+      "oci/c/dev": "dir 755",
+      "oci/c/etc": "dir 755",
+      "oci/c/etc/app.conf": "file 644 4 bytes \"k=v\\n\" same-inode-as oci/c/etc/app.conf",
+      "oci/c/etc/hosts": "file 644 61 bytes \"127.0.0.1\\tlocalhost\\n::1\\tlocalhost ip6-localhost ip6-loopback\\n\" same-inode-as oci/c/etc/hosts",
+      "oci/c/etc/passwd": "file 644 65 bytes \"root:x:0:0:root:/root:/bin/sh\\napp:x:1000:1000::/home/app:/bin/sh\" same-inode-as oci/c/etc/passwd",
+      "oci/c/home": "dir 755",
+      "oci/c/home/app": "dir 755",
+      "oci/c/opt": "dir 755",
+      "oci/c/opt/deep": "dir 755",
+      "oci/c/opt/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": "file 644 5 bytes \"long\\n\" same-inode-as oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt",
+      "oci/c/opt/keep": "file 644 5 bytes \"keep\\n\" same-inode-as oci/c/opt/keep",
+      "oci/c/opt/old": "dir 755",
+      "oci/c/proc": "dir 755",
+      "oci/c/run": "dir 755",
+      "oci/c/srv": "dir 755",
+      "oci/c/sys": "dir 755",
+      "oci/c/tmp": "dir 755",
+      "oci/c/usr": "dir 755",
+      "oci/c/usr/bin": "dir 755",
+      "oci/c/usr/bin/app": "file 755 19 bytes \"#!/bin/sh\\necho app\\n\" same-inode-as oci/c/usr/bin/app",
+      "oci/c/usr/bin/app2": "file 755 19 bytes \"#!/bin/sh\\necho app\\n\" same-inode-as oci/c/usr/bin/app",
+      "oci/c/usr/bin/su": "file 755 7 bytes \"setuid\\n\" same-inode-as oci/c/usr/bin/su",
+      "oci/c/usr/bin/tool": "file 755 5 bytes \"tool\\n\" same-inode-as oci/c/usr/bin/tool",
+      "oci/c/var": "dir 755",
+      "oci/c/var/lib": "dir 755",
+      "oci/c/var/lib/data": "dir 755",
+      "oci/c/var/lib/data/new": "file 644 4 bytes \"new\\n\" same-inode-as oci/c/var/lib/data/new",
+      "oci/c/var/run": "link -> /run",
+      "oci/d": "dir 755",
+      "oci/d/.hydo": "dir 755",
+      "oci/d/.hydo/busybox": "file 755 86 bytes \"#!/bin/sh\\n# A stand-in for busybox in tests/oci.rs: staged as bi\" same-inode-as oci/d/.hydo/busybox",
+      "oci/d/bin": "link -> usr/bin",
+      "oci/d/data": "dir 755",
+      "oci/d/dev": "dir 755",
+      "oci/d/etc": "dir 755",
+      "oci/d/etc/app.conf": "file 644 4 bytes \"k=v\\n\" same-inode-as oci/d/etc/app.conf",
+      "oci/d/etc/hosts": "file 644 61 bytes \"127.0.0.1\\tlocalhost\\n::1\\tlocalhost ip6-localhost ip6-loopback\\n\" same-inode-as oci/d/etc/hosts",
+      "oci/d/etc/passwd": "file 644 65 bytes \"root:x:0:0:root:/root:/bin/sh\\napp:x:1000:1000::/home/app:/bin/sh\" same-inode-as oci/d/etc/passwd",
+      "oci/d/home": "dir 755",
+      "oci/d/home/app": "dir 755",
+      "oci/d/opt": "dir 755",
+      "oci/d/opt/deep": "dir 755",
+      "oci/d/opt/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": "file 644 5 bytes \"long\\n\" same-inode-as oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt",
+      "oci/d/opt/keep": "file 644 5 bytes \"keep\\n\" same-inode-as oci/d/opt/keep",
+      "oci/d/opt/old": "dir 755",
+      "oci/d/proc": "dir 755",
+      "oci/d/run": "dir 755",
+      "oci/d/srv": "dir 755",
+      "oci/d/sys": "dir 755",
+      "oci/d/tmp": "dir 755",
+      "oci/d/usr": "dir 755",
+      "oci/d/usr/bin": "dir 755",
+      "oci/d/usr/bin/app": "file 755 19 bytes \"#!/bin/sh\\necho app\\n\" same-inode-as oci/d/usr/bin/app",
+      "oci/d/usr/bin/app2": "file 755 19 bytes \"#!/bin/sh\\necho app\\n\" same-inode-as oci/d/usr/bin/app",
+      "oci/d/usr/bin/su": "file 755 7 bytes \"setuid\\n\" same-inode-as oci/d/usr/bin/su",
+      "oci/d/usr/bin/tool": "file 755 5 bytes \"tool\\n\" same-inode-as oci/d/usr/bin/tool",
+      "oci/d/var": "dir 755",
+      "oci/d/var/lib": "dir 755",
+      "oci/d/var/lib/data": "dir 755",
+      "oci/d/var/lib/data/new": "file 644 4 bytes \"new\\n\" same-inode-as oci/d/var/lib/data/new",
+      "oci/d/var/run": "link -> /run"
+    }
+  },
+  "oci --arch arm64": {
+    "meta": {
+      "oci": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/etc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/etc/passwd": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/c/usr": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/usr/bin": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/usr/bin/app": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/c/usr/bin/su": [
+        32768,
+        2541,
+        0,
+        0
+      ],
+      "oci/c/usr/bin/app2": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/c/bin": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/c/dev": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/var": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/var/lib": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/var/lib/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/var/run": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/c/run": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/old": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/keep": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/c/home": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/home/app": [
+        16384,
+        448,
+        1000,
+        1000
+      ],
+      "oci/c/srv": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/c/var/lib/data/new": [
+        32768,
+        420,
+        1000,
+        1000
+      ],
+      "oci/c/usr/bin/tool": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/c/etc/app.conf": [
+        32768,
+        384,
+        1000,
+        1000
+      ],
+      "oci/c/tmp": [
+        16384,
+        1023,
+        0,
+        0
+      ],
+      "oci/c/proc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/sys": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/.hydo": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/.hydo/busybox": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/c/etc/hosts": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/d": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/etc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/etc/passwd": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/d/usr": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/usr/bin": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/usr/bin/app": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/d/usr/bin/su": [
+        32768,
+        2541,
+        0,
+        0
+      ],
+      "oci/d/usr/bin/app2": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/d/bin": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/d/dev": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/var": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/var/lib": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/var/lib/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/var/run": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/d/run": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/old": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/keep": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/d/home": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/home/app": [
+        16384,
+        448,
+        1000,
+        1000
+      ],
+      "oci/d/srv": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/d/var/lib/data/new": [
+        32768,
+        420,
+        1000,
+        1000
+      ],
+      "oci/d/usr/bin/tool": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/d/etc/app.conf": [
+        32768,
+        384,
+        1000,
+        1000
+      ],
+      "oci/d/tmp": [
+        16384,
+        1023,
+        0,
+        0
+      ],
+      "oci/d/proc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/sys": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/.hydo": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/.hydo/busybox": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/d/etc/hosts": [
+        32768,
+        420,
+        0,
+        0
+      ]
+    },
+    "services": [
+      {
+        "name": "c",
+        "ready": "true",
+        "cmd": "/etc/hydo/oci/c/run"
+      },
+      {
+        "name": "d",
+        "ready": "true",
+        "cmd": "/etc/hydo/oci/d/run"
+      }
+    ],
+    "out": "hydo-build: image sha256:00b5ce02161d -> /oci/c (2 layers, 57 entries, 2 device/FIFO entries skipped)\nhydo-build: image sha256:00b5ce02161d -> /oci/d (2 layers, 57 entries, 2 device/FIFO entries skipped)\n",
+    "err": "hydo-build: service c from image <tmp>/demo-oci (demo:1.0, config sha256:00b5ce02161d, manifest sha256:5e4468581388)\nhydo-build: service d from image <tmp>/demo-oci (demo:1.0, config sha256:00b5ce02161d, manifest sha256:5e4468581388)\n",
+    "tree": {
+      "bin": "dir 755",
+      "bin/hydo-oci": "file 755 477 bytes \"#!/bin/busybox sh\\n# hydo-oci <service> <command> [args...]: run \" same-inode-as bin/hydo-oci",
+      "etc": "dir 755",
+      "etc/hydo": "dir 755",
+      "etc/hydo/oci": "dir 755",
+      "etc/hydo/oci/c": "dir 755",
+      "etc/hydo/oci/c/exec": "file 755 722 bytes \"#!/bin/busybox sh\\n# generated by hvx/onboard/hydo_oci.py -- serv\" same-inode-as etc/hydo/oci/c/exec",
+      "etc/hydo/oci/c/image.json": "file 644 871 bytes \"{\\n \\\"architecture\\\": \\\"arm64\\\",\\n \\\"config_digest\\\": \\\"sha256:00b5ce0216\" same-inode-as etc/hydo/oci/c/image.json",
+      "etc/hydo/oci/c/run": "file 755 709 bytes \"#!/bin/busybox sh\\n# generated by hvx/onboard/hydo_oci.py -- serv\" same-inode-as etc/hydo/oci/c/run",
+      "etc/hydo/oci/d": "dir 755",
+      "etc/hydo/oci/d/exec": "file 755 722 bytes \"#!/bin/busybox sh\\n# generated by hvx/onboard/hydo_oci.py -- serv\" same-inode-as etc/hydo/oci/d/exec",
+      "etc/hydo/oci/d/image.json": "file 644 854 bytes \"{\\n \\\"architecture\\\": \\\"arm64\\\",\\n \\\"config_digest\\\": \\\"sha256:00b5ce0216\" same-inode-as etc/hydo/oci/d/image.json",
+      "etc/hydo/oci/d/run": "file 755 698 bytes \"#!/bin/busybox sh\\n# generated by hvx/onboard/hydo_oci.py -- serv\" same-inode-as etc/hydo/oci/d/run",
+      "oci": "dir 755",
+      "oci/c": "dir 755",
+      "oci/c/.hydo": "dir 755",
+      "oci/c/.hydo/busybox": "file 755 86 bytes \"#!/bin/sh\\n# A stand-in for busybox in tests/oci.rs: staged as bi\" same-inode-as oci/c/.hydo/busybox",
+      "oci/c/bin": "link -> usr/bin",
+      "oci/c/data": "dir 755",
+      "oci/c/dev": "dir 755",
+      "oci/c/etc": "dir 755",
+      "oci/c/etc/app.conf": "file 644 4 bytes \"k=v\\n\" same-inode-as oci/c/etc/app.conf",
+      "oci/c/etc/hosts": "file 644 61 bytes \"127.0.0.1\\tlocalhost\\n::1\\tlocalhost ip6-localhost ip6-loopback\\n\" same-inode-as oci/c/etc/hosts",
+      "oci/c/etc/passwd": "file 644 65 bytes \"root:x:0:0:root:/root:/bin/sh\\napp:x:1000:1000::/home/app:/bin/sh\" same-inode-as oci/c/etc/passwd",
+      "oci/c/home": "dir 755",
+      "oci/c/home/app": "dir 755",
+      "oci/c/opt": "dir 755",
+      "oci/c/opt/deep": "dir 755",
+      "oci/c/opt/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": "file 644 5 bytes \"long\\n\" same-inode-as oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt",
+      "oci/c/opt/keep": "file 644 5 bytes \"keep\\n\" same-inode-as oci/c/opt/keep",
+      "oci/c/opt/old": "dir 755",
+      "oci/c/proc": "dir 755",
+      "oci/c/run": "dir 755",
+      "oci/c/srv": "dir 755",
+      "oci/c/sys": "dir 755",
+      "oci/c/tmp": "dir 755",
+      "oci/c/usr": "dir 755",
+      "oci/c/usr/bin": "dir 755",
+      "oci/c/usr/bin/app": "file 755 19 bytes \"#!/bin/sh\\necho app\\n\" same-inode-as oci/c/usr/bin/app",
+      "oci/c/usr/bin/app2": "file 755 19 bytes \"#!/bin/sh\\necho app\\n\" same-inode-as oci/c/usr/bin/app",
+      "oci/c/usr/bin/su": "file 755 7 bytes \"setuid\\n\" same-inode-as oci/c/usr/bin/su",
+      "oci/c/usr/bin/tool": "file 755 5 bytes \"tool\\n\" same-inode-as oci/c/usr/bin/tool",
+      "oci/c/var": "dir 755",
+      "oci/c/var/lib": "dir 755",
+      "oci/c/var/lib/data": "dir 755",
+      "oci/c/var/lib/data/new": "file 644 4 bytes \"new\\n\" same-inode-as oci/c/var/lib/data/new",
+      "oci/c/var/run": "link -> /run",
+      "oci/d": "dir 755",
+      "oci/d/.hydo": "dir 755",
+      "oci/d/.hydo/busybox": "file 755 86 bytes \"#!/bin/sh\\n# A stand-in for busybox in tests/oci.rs: staged as bi\" same-inode-as oci/d/.hydo/busybox",
+      "oci/d/bin": "link -> usr/bin",
+      "oci/d/data": "dir 755",
+      "oci/d/dev": "dir 755",
+      "oci/d/etc": "dir 755",
+      "oci/d/etc/app.conf": "file 644 4 bytes \"k=v\\n\" same-inode-as oci/d/etc/app.conf",
+      "oci/d/etc/hosts": "file 644 61 bytes \"127.0.0.1\\tlocalhost\\n::1\\tlocalhost ip6-localhost ip6-loopback\\n\" same-inode-as oci/d/etc/hosts",
+      "oci/d/etc/passwd": "file 644 65 bytes \"root:x:0:0:root:/root:/bin/sh\\napp:x:1000:1000::/home/app:/bin/sh\" same-inode-as oci/d/etc/passwd",
+      "oci/d/home": "dir 755",
+      "oci/d/home/app": "dir 755",
+      "oci/d/opt": "dir 755",
+      "oci/d/opt/deep": "dir 755",
+      "oci/d/opt/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": "dir 755",
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": "file 644 5 bytes \"long\\n\" same-inode-as oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt",
+      "oci/d/opt/keep": "file 644 5 bytes \"keep\\n\" same-inode-as oci/d/opt/keep",
+      "oci/d/opt/old": "dir 755",
+      "oci/d/proc": "dir 755",
+      "oci/d/run": "dir 755",
+      "oci/d/srv": "dir 755",
+      "oci/d/sys": "dir 755",
+      "oci/d/tmp": "dir 755",
+      "oci/d/usr": "dir 755",
+      "oci/d/usr/bin": "dir 755",
+      "oci/d/usr/bin/app": "file 755 19 bytes \"#!/bin/sh\\necho app\\n\" same-inode-as oci/d/usr/bin/app",
+      "oci/d/usr/bin/app2": "file 755 19 bytes \"#!/bin/sh\\necho app\\n\" same-inode-as oci/d/usr/bin/app",
+      "oci/d/usr/bin/su": "file 755 7 bytes \"setuid\\n\" same-inode-as oci/d/usr/bin/su",
+      "oci/d/usr/bin/tool": "file 755 5 bytes \"tool\\n\" same-inode-as oci/d/usr/bin/tool",
+      "oci/d/var": "dir 755",
+      "oci/d/var/lib": "dir 755",
+      "oci/d/var/lib/data": "dir 755",
+      "oci/d/var/lib/data/new": "file 644 4 bytes \"new\\n\" same-inode-as oci/d/var/lib/data/new",
+      "oci/d/var/run": "link -> /run"
+    }
+  },
+  "badref --arch x86_64": {
+    "error": "<tmp>/demo-oci: no manifest matches image_ref 'nope:2'; index.json has: demo:1.0 (set image_ref: to a tag or a digest)",
+    "out": "",
+    "err": ""
+  },
+  "badref --arch arm64": {
+    "error": "<tmp>/demo-oci: no manifest matches image_ref 'nope:2'; index.json has: demo:1.0 (set image_ref: to a tag or a digest)",
+    "out": "",
+    "err": ""
+  },
+  "badmount --arch x86_64": {
+    "error": "services[0] (f): mounts[0]: give exactly one of src: (a guest path) and tmpfs: true",
+    "out": "",
+    "err": ""
+  },
+  "badmount --arch arm64": {
+    "error": "services[0] (f): mounts[0]: give exactly one of src: (a guest path) and tmpfs: true",
+    "out": "",
+    "err": ""
+  }
+}

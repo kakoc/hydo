@@ -35,7 +35,8 @@ only in the cases listed in [references/numbered-steps.md](references/numbered-s
   you use before you write them.** `hydo guide --list` lists every topic.
 - Without the `hydo` command, inside hydo's own source repository, the same files are
   `skills/hydo-onboard/` and `hydo/onboard/MANIFEST.md`, and
-  `python3 hydo/onboard/hydo-build <manifest> --check` replaces `hydo build <manifest> --check`.
+  the `hydo-build` program (`cargo build --release -p hydo-build`, then
+  `target/release/hydo-build <manifest> --check`) replaces `hydo build <manifest> --check`.
 - `hydo doctor` shows which backend this machine has: the Linux release builds x86_64 guests,
   the Mac release builds arm64 guests. Some features exist on one backend only, or only when
   building from hydo's repository. Read [references/capabilities.md](references/capabilities.md)

@@ -1,0 +1,15 @@
+{"shrink": "disk=none dseed=0 | run Q=4", "verdict": "HYDO-ORACLE: OK acked=30"}
+{"shrink": "disk=none dseed=0 | run Q=4 X=front@0~10", "verdict": "HYDO-ORACLE: VIOLATION front lost an order order=0"}
+{"shrink": "disk=none dseed=0 | run Q=4", "verdict": "HYDO-ORACLE: OK acked=30"}
+{"shrink": "disk=none dseed=0 | run Q=4 X=front@0~5", "verdict": "HYDO-ORACLE: VIOLATION front lost an order order=0"}
+{"shrink": "disk=none dseed=0 | run Q=4", "verdict": "HYDO-ORACLE: OK acked=30"}
+{"shrink": "disk=none dseed=0 | run Q=4 X=front@0~2", "verdict": "HYDO-ORACLE: VIOLATION front lost an order order=0"}
+{"shrink": "disk=none dseed=0 | run Q=4", "verdict": "HYDO-ORACLE: OK acked=30"}
+{"shrink": "disk=none dseed=0 | run Q=4 X=front@0~1", "verdict": "HYDO-ORACLE: VIOLATION front lost an order order=0"}
+{"shrink": "disk=none dseed=0 | run Q=4", "verdict": "HYDO-ORACLE: OK acked=30"}
+{"shrink": "disk=none dseed=0 | run Q=4 X=front@0~0", "verdict": "HYDO-ORACLE: VIOLATION front lost an order order=0"}
+{"shrink": "disk=none dseed=0 | run Q=4", "verdict": "HYDO-ORACLE: OK acked=30"}
+{"shrink": "disk=none dseed=0 | run X=front@0~0", "verdict": "HYDO-ORACLE: OK acked=30"}
+{"shrink": "disk=none dseed=0 | run Q=2 X=front@0~0", "verdict": "HYDO-ORACLE: VIOLATION front lost an order order=0"}
+{"shrink": "disk=none dseed=0 | run Q=2", "verdict": "HYDO-ORACLE: OK acked=30"}
+{"shrink": "disk=none dseed=0 | run X=front@0~0", "verdict": "HYDO-ORACLE: OK acked=30"}

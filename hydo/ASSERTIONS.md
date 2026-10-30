@@ -237,8 +237,8 @@ status and the last line into the record.
 
 Assertions are evaluated inside the program. For linearizability and transactional isolation the
 evidence is the whole history of operations, so it is checked on the host after the run instead:
-the workload prints `HYDO-HIST` records (one per invocation and completion), and the checkers in
-`hydo/history/hydohist.py` (linearizable register / CAS per key, Elle-style list-append) turn the
+the workload prints `HYDO-HIST` records (one per invocation and completion), and the checkers of
+the hydo-history crate (`hydo/crates/hydo-history`; linearizable register / CAS per key, Elle-style list-append) turn the
 history into ordinary `HYDO-ASSERT` records of type `always` plus the HYDO-ORACLE verdict. Format,
 models and recorders (shell, Go): `hydo/HISTORIES.md`; manifests use `checks:`.
 
@@ -250,7 +250,7 @@ models and recorders (shell, Go): `hydo/HISTORIES.md`; manifests use `checks:`.
   given saved consoles (e.g. `HVX_CONSOLE_OUT` dumps) and exits 1 if any property is violated.
   For `eventually` properties it also shows the slowest in-time episode and prints a
   `liveness: <n> eventually properties, <k> missed a deadline` line.
-- `explore.py` counts an `eventually` with `ok:false` as a failed assertion of the run (like a
+- The explorer (`hydo explore`) counts an `eventually` with `ok:false` as a failed assertion of the run (like a
   failed `always`), and `report.md` gets a "Liveness" table: per property, schedules where it
   held in time / missed its deadline, the slowest in-time episode and the first miss.
 - Manifest invariants (`hydo/onboard/MANIFEST.md`) can be `type: eventually` with a deadline

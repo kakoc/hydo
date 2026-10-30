@@ -1,0 +1,21 @@
+The goldens of tests/fake_engine.rs, one folder per scenario.
+
+Recorded in M107 from explore.py at commit 2a58c4b (Python 3.15.0 on the Mac), with 2 workers, on the
+scripted engine tests/fake_engine.py of that commit (git show 2a58c4b:hydo/explore/explore.py,
+git show 2a58c4b:hydo/crates/hydo-explore/tests/fake_engine.py):
+
+  HYDO_BLESS=1 HYDO_FAKE_EXPLORER="python3 <repo>/hydo/explore/explore.py" \
+  HYDO_FAKE_ENGINE_BIN=<fake_engine.py> cargo test -p hydo-explore --test fake_engine
+
+The engine answered every request after a 30 ms sleep: without it, explore.py stops with a
+ZeroDivisionError in its summary when the adaptive freeze sweep's two stages take less than 0.05 s
+(runs_per_hour divides by their rounded wall time); the answers themselves do not depend on time.
+
+Checked the same day: hydo-explore on the Rust engine (the default run), explore.py on the Rust
+engine, and hydo-explore on fake_engine.py all give these files (18 of 18 scenarios each).
+
+Each file is the explorer's output after normalising wall times, worker numbers and the output and
+scratch paths; up to 4 KiB verbatim, longer ones as a digest (<file>.sha256: the SHA-256 and line
+count, then the first line, line count and a SHA-256 prefix of every 32 lines). summary.txt is the
+last line the explorer printed. Since M107 hydo-explore is the reference: HYDO_BLESS=1 cargo test -p
+hydo-explore --test fake_engine rewrites them from its output.

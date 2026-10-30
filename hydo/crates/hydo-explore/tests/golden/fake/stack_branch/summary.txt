@@ -1,0 +1,1 @@
+{"schedules": 12, "branch_points": 9, "runs": 36, "variants_per_point": 3, "tjpm": 100, "sweep_wall_s": N, "runs_per_hour": N, "mean_run_s": 5.5, "failures": 9, "reproduced_standalone": 9, "timing_only_failures": 1, "total_wall_s": N}

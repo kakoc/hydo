@@ -28,8 +28,9 @@ for v in buggy fixed; do
   echo "built $BIN/shop-$v (sha256 $(sha256sum "$BIN/shop-$v" | cut -c1-16))"
 done
 [ "${1:-}" = binaries ] || [ "$ARCH" != amd64 ] && exit 0
-PY3="${HYDO_PY3:-$(command -v python3 || ls /nix/store/*python3-3.11*/bin/python3 | head -1)}"
+HB="${HYDO_BUILD_BIN:-$(command -v hydo-build || echo "$TOP/target/release/hydo-build")}"   # the Rust image builder
+[ -x "$HB" ] || { echo "error: no hydo-build binary: cargo build --release -p hydo-build (or set HYDO_BUILD_BIN)" >&2; exit 1; }
 cd "$TOP"
 for v in buggy fixed; do
-  "$PY3" hydo/onboard/hydo-build "$HERE/hydo.yaml" --set variant=$v --out "${SHOP_IMG:-explore-ob-shop}-$v"
+  HYDO_ONBOARD="$TOP/hydo/onboard" "$HB" "$HERE/hydo.yaml" --set variant=$v --out "${SHOP_IMG:-explore-ob-shop}-$v"
 done

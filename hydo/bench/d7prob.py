@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# M107: a research/measurement tool. It needs the Python explorer and builder, deleted in M107
+# (replaced by the hydo-explore and hydo-build crates): restore them from commit 2a58c4b with
+# git checkout 2a58c4b -- hydo/explore hydo/onboard hydo/history in a scratch checkout, and run it there.
 """Per-run probability that a generated schedule triggers bench defect d7 (skip-last-record).
 
     python3 d7prob.py [--seeds N]

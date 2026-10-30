@@ -3,7 +3,7 @@
 A Python program running under hydo (the deterministic hypervisor in this repository) uses this
 package to say what must be true and what should happen at least once. It writes the same
 console records as the Go SDK (`hydo/stack/hydoassert`), byte for byte, with the same
-deduplication rules, so `hydo_assert_report`, the harnesses and `explore.py` read them
+deduplication rules, so `hydo_assert_report`, the harnesses and the explorer (`hydo explore`) read them
 unchanged. The wire format and the verdict rules are in `hydo/ASSERTIONS.md`.
 
 - Distribution name `hydo-assert`, import name `hydo_assert`.
@@ -104,7 +104,7 @@ for the run when `splitmix64(seed ^ fnv1a(id)) % 1000 < enable`; its k-th evalua
 when `splitmix64(splitmix64(seed ^ fnv1a(id)) + k·0x9e3779b97f4a7c15) % 1000 < fire`. Each
 point is also a `sometimes` property `buggify.<id>` ("fault point fired: <msg>"), recorded at
 its first firing with `{"hit": k}`. Without a configuration every point returns False and has
-no other effect. Under hydo the schedule token `B=<seed>` (`explore.py --buggify`) reaches the
+no other effect. Under hydo the schedule token `B=<seed>` (`hydo explore --buggify`) reaches the
 file through the guest init: an onboarded project gets it with `buggify: true` in its
 `hydo.yaml` (`hydo/onboard/MANIFEST.md`).
 

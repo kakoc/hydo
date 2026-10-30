@@ -60,7 +60,7 @@ requests), `effect=yes|no` (did the world still act: `status=500,effect=yes` = "
 failed to say so"). On a gRPC proxy also `status=<CODE NAME>`, `reset=conn`, `cut=<n>`,
 `hold=<n>`, `dir=req`, and call selection by `rpc=<Method>` or `call=<a>-<b>`.
 
-List `protocol` in `faults:`. `explore.py --protocol-faults` (and `--grpc-faults` for gRPC
+List `protocol` in `faults:`. `hydo explore --protocol-faults` (and `--grpc-faults` for gRPC
 proxies) draws these tokens; `--sweep protocol` tries every rule kind on every target, one round
 at a time. The record's checks are in checks.md ("Side effects at fake outside services");
 `hydo-world check calls <proxy>` reports what gRPC clients saw versus what the server did.

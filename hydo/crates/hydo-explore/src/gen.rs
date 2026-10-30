@@ -1668,7 +1668,7 @@ impl Ex {
 
 /// `max(1, min(nmax, int(exp(k / 1000.0 * log(nmax)))))`: n of an F= token from a draw k in
 /// 0..1000. The value depends on the last bit of libm's exp and log (k = 500, nmax = 64 gives
-/// exp = 7.999999999999998, so 7), so tests/identity.rs compares the whole table with Python's.
+/// exp = 7.999999999999998, so 7), so tests/identity.rs checks the table (Python's, recorded).
 pub fn fc_value(k: i64, nmax: i64) -> i64 {
     let e = k as f64 / 1000.0 * (nmax as f64).ln();
     1.max(nmax.min(e.exp() as i64))

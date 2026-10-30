@@ -4,7 +4,7 @@ A Node.js program running under hydo (the deterministic hypervisor in this repos
 package to say what must be true, what should happen at least once, what must happen within a
 deadline, and where a dependency may misbehave. It writes the same console records as the Go
 SDK (`hydo/stack/hydoassert`), byte for byte, with the same deduplication rules, so
-`hydo_assert_report`, the harnesses and `explore.py` read them unchanged. The wire format and
+`hydo_assert_report`, the harnesses and the explorer (`hydo explore`) read them unchanged. The wire format and
 the verdict rules are in `hydo/ASSERTIONS.md`.
 
 The package has no dependencies, works from CommonJS and ESM, and ships TypeScript types. It
@@ -131,7 +131,7 @@ for the run when `splitmix64(seed ^ fnv1a(id)) % 1000 < enable`; its k-th evalua
 arithmetic with `BigInt`). Each point is also a `sometimes` property `buggify.<id>`
 ("fault point fired: <msg>"), recorded at its first firing with `{"hit": k}`. Without a
 configuration every point returns false and has no other effect. Under hydo the schedule token
-`B=<seed>` (`explore.py --buggify`) reaches the file through the guest init: an onboarded
+`B=<seed>` (`hydo explore --buggify`) reaches the file through the guest init: an onboarded
 project gets it with `buggify: true` in its `hydo.yaml` (`hydo/onboard/MANIFEST.md`).
 
 ## History recorder

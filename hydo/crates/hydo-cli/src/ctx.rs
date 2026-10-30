@@ -3,8 +3,9 @@
 
 use std::path::{Path, PathBuf};
 
-/// The platform's behaviour. Each release keeps its own CLI's behaviour where the two Python CLIs
-/// differed (docs/HISTORY.md, M101 lists every difference).
+/// The platform: which engine runs guests and which images `hydo build` makes. Every command
+/// behaves the same on both (M107); only what a platform cannot do differs (`hydo module` and
+/// the udev rule exist on Linux only, arm64 images are built on the Mac only).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Platform {
     /// x86_64 Linux with VT-x: the hvx engine (the Linux release).
@@ -15,7 +16,7 @@ pub enum Platform {
 
 impl Platform {
     /// The platform this binary was built for. `HYDO_CLI_PLATFORM=linux|mac` overrides it; the
-    /// equivalence tests use that to compare the other release's commands that need no engine.
+    /// CLI test uses that to check the other platform's commands that need no engine.
     pub fn detect() -> Platform {
         match std::env::var("HYDO_CLI_PLATFORM").as_deref() {
             Ok("linux") => Platform::Linux,
@@ -73,7 +74,7 @@ impl Ctx {
     }
 }
 
-/// `hydo: <msg>` on stderr and exit (the Python CLIs' die()).
+/// `hydo: <msg>` on stderr and exit with status 1.
 pub fn die(msg: &str) -> ! {
     die_rc(msg, 1)
 }
@@ -83,7 +84,7 @@ pub fn die_rc(msg: &str, rc: i32) -> ! {
     std::process::exit(rc)
 }
 
-/// Remove `flag VALUE` from args and return VALUE (the Linux CLI's take(): dies without a value).
+/// Remove `flag VALUE` from args and return VALUE (dies without a value).
 pub fn take(args: &mut Vec<String>, flag: &str) -> Option<String> {
     let i = args.iter().position(|a| a == flag)?;
     if i + 1 >= args.len() {
@@ -92,17 +93,6 @@ pub fn take(args: &mut Vec<String>, flag: &str) -> Option<String> {
     let v = args.remove(i + 1);
     args.remove(i);
     Some(v)
-}
-
-/// The Mac CLI's `args.index(flag); v = args[i + 1]; del args[i:i + 2]` (a missing value was an
-/// IndexError there; here it is the Linux CLI's message).
-pub fn take_mac(args: &mut Vec<String>, flag: &str) -> Option<String> {
-    take(args, flag)
-}
-
-/// The Python interpreter the remaining Python parts run with (`HYDO_PYTHON`, default python3).
-pub fn python() -> String {
-    std::env::var("HYDO_PYTHON").unwrap_or_else(|_| "python3".into())
 }
 
 /// `os.path.abspath`: absolute and normalised, without resolving symlinks.

@@ -1,0 +1,6 @@
+type                   id                                    ok    fail  verdict                  first failure / description
+eventually             orders.drained                        36       4  FAIL (deadline missed)   {"elapsed_s":"3.36","out":"pending=225"}  [not in catalog]
+sometimes              retry.taken                           19      21  PASS                     -  [not in catalog]
+always                 clock.monotonic                        0       5  FAIL                     {}  [not in catalog]
+liveness: 1 eventually properties, 1 missed a deadline
+runs=40 (setup-complete seen in 0); properties=3; violations=2
