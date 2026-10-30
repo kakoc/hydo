@@ -1,8 +1,8 @@
 //! `hydo run`, `hydo repro`, `hydo repro --regressions`, `hydo save`: runs from a fresh boot
-//! through the engine interface (hydo-engine), the history checks and error logs of a run (still
-//! Python, through the bridge), and the files the Python CLIs wrote (run.json, consoles).
+//! through the engine interface (hydo-engine), the history checks (hydo-history), the error logs
+//! of a run (hydo-errors), saved regressions (hydo-composer), and the files the Python CLIs wrote
+//! (run.json, consoles).
 
-use crate::bridge;
 use crate::ctx::{
     abspath, die, glob_simple, pjoin, read_text, strftime, take, Ctx, Platform, OUT, PROJECT_OUT,
 };
@@ -224,21 +224,30 @@ fn console_sources(outdir: &Path) -> Vec<(String, String)> {
     srcs
 }
 
-/// Write one.checks.log and one.checks.txt from a run_checks answer.
-fn write_checks(outdir: &Path, r: &Value) {
-    let recs: String = r["records"]
-        .as_array()
-        .map(|a| a.iter().map(|x| format!("{}\n", py_str(x))).collect())
-        .unwrap_or_default();
-    let _ = std::fs::write(outdir.join("one.checks.log"), recs);
-    let _ = std::fs::write(
-        outdir.join("one.checks.txt"),
-        format!("{}\n{}\n", py_str(&r["report"]), py_str(&r["verdict"])),
-    );
+/// The history checks of a run's consoles (hydo-history). An input the checkers cannot survive
+/// stops the command with status 1, as the Python checker's exception did.
+fn history_checks(srcs: &[(String, String)], verdict: Option<&str>) -> hydo_history::Checks {
+    match hydo_history::run_checks(srcs, verdict, hydo_history::DEFAULT_BUDGET, None) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("hydo: the history checks stopped: {e}");
+            std::process::exit(1)
+        }
+    }
+}
+
+/// Write one.checks.log and one.checks.txt from the checks' answer.
+fn write_checks(outdir: &Path, r: &hydo_history::Checks) {
+    let _ = hydo_history::write_checks_files(outdir, "one", r);
+}
+
+/// The combined verdict as the Python CLI printed it ("None" without checks).
+fn verdict_text(r: &hydo_history::Checks) -> String {
+    r.verdict.clone().unwrap_or_else(|| "None".into())
 }
 
 /// History checks on the host (hydo/HISTORIES.md), Linux: folds the verdict into res.
-fn host_checks_linux(ctx: &Ctx, outdir: &Path, mut res: Map<String, Value>) -> Map<String, Value> {
+fn host_checks_linux(outdir: &Path, mut res: Map<String, Value>) -> Map<String, Value> {
     let srcs = console_sources(outdir);
     if !srcs.iter().any(|(_, t)| t.contains("HYDO-CHECK ")) {
         return res;
@@ -247,14 +256,14 @@ fn host_checks_linux(ctx: &Ctx, outdir: &Path, mut res: Map<String, Value>) -> M
         .get("verdict")
         .and_then(Value::as_str)
         .map(str::to_string);
-    let r = bridge::run_checks(ctx, &srcs, verdict.as_deref());
+    let r = history_checks(&srcs, verdict.as_deref());
     write_checks(outdir, &r);
     let gv = res.get("verdict").cloned().unwrap_or(Value::Null);
     res.insert("guest_verdict".into(), gv);
-    res.insert("verdict".into(), r["verdict"].clone());
+    res.insert("verdict".into(), json!(r.verdict));
     println!(
         "hydo: history checks: {}   (explanations in {})",
-        py_str(&r["verdict"]),
+        verdict_text(&r),
         outdir.join("one.checks.txt").display()
     );
     res
@@ -293,7 +302,7 @@ pub fn cmd_run_linux(ctx: &Ctx, argv: &[String]) -> i32 {
     let outdir = outdir.map(PathBuf::from).unwrap_or_else(new_run_dir);
     let eargs = linux_engine_args(&image, None, None, 1);
     let res = run_one_linux(ctx, &image, &sched, &outdir, &eargs, false);
-    let res = host_checks_linux(ctx, &outdir, res);
+    let res = host_checks_linux(&outdir, res);
     let res = errors_one(&outdir, &sched, res, known.as_deref());
     let mut rec = Map::new();
     rec.insert("image".into(), json!(image.display().to_string()));
@@ -421,7 +430,7 @@ pub fn cmd_repro_linux(ctx: &Ctx, argv: &[String]) -> i32 {
         for (k, it) in items.iter().enumerate() {
             let dir = base.join(format!("{k:03}"));
             let res = run_one_linux(ctx, &it.image, &it.sched, &dir, &it.eargs, true);
-            let res = host_checks_linux(ctx, &dir, res);
+            let res = host_checks_linux(&dir, res);
             let res = errors_one(&dir, &it.sched, res, None);
             let fp = py_str(&res["fp"]);
             let ok = fp == it.fp;
@@ -621,22 +630,22 @@ fn mac_result(text: &str) -> Option<(String, String)> {
 }
 
 /// History checks on the host, Mac: returns the combined verdict, or None without checks.
-fn host_checks_mac(ctx: &Ctx, outdir: &Path, text: &str, quiet: bool) -> Option<String> {
+fn host_checks_mac(outdir: &Path, text: &str, quiet: bool) -> Option<String> {
     let (_, verdict) = mac_result(text)?;
     let srcs = console_sources(outdir);
     if !srcs.iter().any(|(_, t)| t.contains("HYDO-CHECK ")) {
         return None;
     }
-    let r = bridge::run_checks(ctx, &srcs, Some(&verdict));
+    let r = history_checks(&srcs, Some(&verdict));
     write_checks(outdir, &r);
     if !quiet {
         println!(
             "hydo: history checks: {}   (explanations in {})",
-            py_str(&r["verdict"]),
+            verdict_text(&r),
             outdir.join("one.checks.txt").display()
         );
     }
-    Some(py_str(&r["verdict"])).filter(|v| !v.is_empty() && v != "None")
+    Some(verdict_text(&r)).filter(|v| !v.is_empty() && v != "None")
 }
 
 pub fn cmd_run_mac(ctx: &Ctx, argv: &[String]) -> i32 {
@@ -650,7 +659,7 @@ pub fn cmd_run_mac(ctx: &Ctx, argv: &[String]) -> i32 {
         .join("runs")
         .join(format!("run-{}", std::process::id()));
     let text = run_once_mac(ctx, &image, &sched, &outdir, false);
-    host_checks_mac(ctx, &outdir, &text, false);
+    host_checks_mac(&outdir, &text, false);
     let mut cons: Vec<String> = std::fs::read_dir(&outdir)
         .map(|rd| {
             rd.filter_map(Result::ok)
@@ -716,7 +725,7 @@ fn cmd_regressions_mac(ctx: &Ctx, mut args: Vec<String>) -> i32 {
         let text = run_once_mac(ctx, &image, &sched, &dir, true);
         let (fp, v) =
             mac_result(&text).unwrap_or_else(|| ("-".into(), "ERROR no RESULT line".into()));
-        let v = host_checks_mac(ctx, &dir, &text, true).unwrap_or(v);
+        let v = host_checks_mac(&dir, &text, true).unwrap_or(v);
         let ex = py_str(&r["expect"]);
         let ok = regression_ok(&ex, &v, &fp);
         bad += !ok as usize;

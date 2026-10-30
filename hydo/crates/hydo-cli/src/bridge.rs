@@ -2,9 +2,9 @@
 //!
 //! Each function here is one seam a port replaces: when the module behind it is a Rust crate, the
 //! function's body becomes a call into that crate and the bridge function in Python is deleted.
-//! Owners of the next ports (one crate each): hydo_agents.py (guide/skill/init), hydo_compose.py
-//! (compose), hydohist.py (run_checks), hydo-build (build_linux, build_mac). Ported: hydo_errors.py
-//! (the hydo-errors crate) and hydo_composer.py's regression seams (the hydo-composer crate).
+//! Owner of the next port: hydo-build (build_linux, build_mac). Ported: hydo_agents.py and
+//! hydo_compose.py (M106), hydohist.py (run_checks) as hydo-history (M105), hydo_errors.py as
+//! hydo-errors and hydo_composer.py's regression seams as hydo-composer (M104).
 
 use crate::ctx::{die, python, Ctx};
 use serde_json::{json, Value};
@@ -54,28 +54,4 @@ pub fn call(ctx: &Ctx, func: &str, args: Value, env: &[(String, String)]) -> (i3
 /// A bridge function that only returns an exit status (its output is the command's output).
 pub fn rc(ctx: &Ctx, func: &str, args: Value, env: &[(String, String)]) -> i32 {
     call(ctx, func, args, env).0
-}
-
-/// hydo_agents.run(cmd, argv, root): `hydo guide | skill | init`.
-pub fn agents(ctx: &Ctx, cmd: &str, argv: &[String]) -> i32 {
-    rc(
-        ctx,
-        "agents",
-        json!({"cmd": cmd, "argv": argv, "root": ctx.root.display().to_string()}),
-        &[],
-    )
-}
-
-/// hydohist.run_checks(srcs, verdict) -> {records, report, verdict}.
-pub fn run_checks(ctx: &Ctx, srcs: &[(String, String)], verdict: Option<&str>) -> Value {
-    let (code, v) = call(
-        ctx,
-        "hist_run_checks",
-        json!({"srcs": srcs, "verdict": verdict}),
-        &[],
-    );
-    if code != 0 {
-        std::process::exit(code);
-    }
-    v
 }

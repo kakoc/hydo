@@ -1,6 +1,6 @@
 //! The commands whose logic is still Python: `hydo explore` (explore.py), `hydo build`
-//! (hydo-build), `hydo compose` (hydo_compose.py), `hydo errors` (hydo_errors.py), and `hydo
-//! guide | skill | init` (hydo_agents.py), plus `hydo report`, which is Rust.
+//! (hydo-build), and the ported ones that kept their place here: `hydo compose` (hydo-compose),
+//! `hydo errors` (hydo-errors), `hydo guide | skill | init` (hydo-agents), and `hydo report`.
 //!
 //! Each `cmd_*` here is the seam its port replaces: the argument handling, defaults and the
 //! lines printed around the Python call are already the Rust CLI's, so a port swaps only the call.
@@ -117,20 +117,20 @@ pub fn cmd_errors(_ctx: &Ctx, argv: &[String]) -> i32 {
     hydo_errors::cli(argv, &pjoin(OUT, "explore"))
 }
 
-// ---------------------------------------------------------------- compose (hydo_compose.py)
+// ---------------------------------------------------------------- compose (the hydo-compose crate)
 
-pub fn cmd_compose(ctx: &Ctx, argv: &[String]) -> i32 {
+pub fn cmd_compose(_ctx: &Ctx, argv: &[String]) -> i32 {
     if argv.is_empty() || argv[0] == "-h" || argv[0] == "--help" {
         die("usage: hydo compose <docker-compose.yaml> [--out hydo.yaml] [--images-dir DIR] [--env-file F] \
              [--profile P] [--use-env] [--no-resolve] [--lock FILE]");
     }
-    bridge::rc(ctx, "compose", json!({"argv": argv}), &[])
+    hydo_compose::main(argv)
 }
 
-// ---------------------------------------------------------------- guide, skill, init (hydo_agents.py)
+// ---------------------------------------------------------------- guide, skill, init (the hydo-agents crate)
 
 pub fn cmd_agents(ctx: &Ctx, cmd: &str, argv: &[String]) -> i32 {
-    bridge::agents(ctx, cmd, argv)
+    hydo_agents::run(cmd, argv, &ctx.root)
 }
 
 // ---------------------------------------------------------------- build (hydo-build)

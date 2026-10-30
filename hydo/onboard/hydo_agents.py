@@ -1,3 +1,5 @@
+# Replaced by hydo-agents (the Rust crate hydo/crates/hydo-agents, docs/HISTORY.md M106); kept as the
+# reference until every port is merged, then deleted.
 """The AI-facing commands of both hydo command line tools (hydo/dist/linux/hydo, hydo/dist/mac/hydo):
 
     hydo guide [TOPIC | --list | --path]

@@ -1,0 +1,429 @@
+{
+ "images": {
+  "example/api:2.3": {
+   "index_digest": "sha256:dda6f85968d06ce838cb512a61245a2848199d63340d182bb914662c21a2bbcd",
+   "name": "example/api",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "serve"
+      ],
+      "Entrypoint": [
+       "/app/api"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "9000/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "app",
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:a870f2efc3fa2ac69a151b61626d6abb8d3c92344625c403d0d61ec83b1ad8a4",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "serve"
+      ],
+      "Entrypoint": [
+       "/app/api"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "9000/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "app",
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:03f1b48cbfc7f8052d890bb1995a262866fd96d62f79f4e02d9f6be9db7504c8",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "example/api:2.3",
+   "registry": "docker.io",
+   "repo": "example/api",
+   "tag": "2.3"
+  },
+  "example/app:1": {
+   "index_digest": "sha256:f327a9dfda9e838c2afb5a7163b7cb98a87141eb44223301bc3830cbac0e11df",
+   "name": "example/app",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:beaa6780aaec5e7b5030472f77c3c7f36778d7e91c1772617800f792a87e3390",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:b58d12c6f7d9bc3137f9565313511f69a5defb84e928d463bdf4c6dcea2a809d",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "example/app:1",
+   "registry": "docker.io",
+   "repo": "example/app",
+   "tag": "1"
+  },
+  "example/app:1.2": {
+   "index_digest": "sha256:4874ff9126cf2cd0c08d2ff69ec15b9b3fd9196c1ca751f0fb5e4d7c0bd07eea",
+   "name": "example/app",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:489b6ff48d1a80b46729afb30dff49a504cf9172920943b5497dfe5d98add574",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:d8cb99ab92a9e54e619ca9d8469712007cbbc716d77da1d9c59176baae99fa5b",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "example/app:1.2",
+   "registry": "docker.io",
+   "repo": "example/app",
+   "tag": "1.2"
+  },
+  "example/seed:1": {
+   "index_digest": "sha256:9d896f8de15976cc02de3ae9a81cb4fb73f41d4fa3d5138ff1e3d3da997f5fc9",
+   "name": "example/seed",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:00b6897314aa6067cf0906fd85551a1fddaf0e62b00ff1cd47ff724078b11a34",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:a3514edc2cb7040c15cc5b59e6e36bc1488c03d6a4ace4428d3d8ba8e22748c4",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "example/seed:1",
+   "registry": "docker.io",
+   "repo": "example/seed",
+   "tag": "1"
+  },
+  "example/web:1.0": {
+   "index_digest": "sha256:daf36bbabe6df53eb985ee7d21afc797f6814ab4f130b9ab22ede290a95e851b",
+   "name": "example/web",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "80/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:353d1316ca2c7459cba0441c2c7346f9219d6c28ab6d1b13512b524d03a6d5d4",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "example/web:1.0",
+   "registry": "docker.io",
+   "repo": "example/web",
+   "tag": "1.0"
+  },
+  "example/worker:1": {
+   "index_digest": "sha256:d81f169a9abf0b3a7de1fbc227fd72f59873f2000f67d54397812b422bc24c17",
+   "name": "example/worker",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": {
+       "Interval": 5000000000,
+       "Retries": 2,
+       "Test": [
+        "CMD-SHELL",
+        "worker --ping"
+       ]
+      },
+      "User": "",
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:9814b9f00d8da145ea48e7d9e2cec15049554efc6c8edf3fa32022c8173683ac",
+     "variant": "v3",
+     "variants": [
+      "v3"
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": {
+       "Interval": 5000000000,
+       "Retries": 2,
+       "Test": [
+        "CMD-SHELL",
+        "worker --ping"
+       ]
+      },
+      "User": "",
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:89a26e4814ae06fe658e024a3c4295924c4f8531ddfdc18150b200ca75ad7a06",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "example/worker:1",
+   "registry": "docker.io",
+   "repo": "example/worker",
+   "tag": "1"
+  },
+  "postgres:16.4": {
+   "index_digest": "sha256:96d71e7844cd87255fe8cd99e2f2fa95579cde47435ef6d970b3339093b661b2",
+   "name": "postgres",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:c33175b4c0b9ab417fc468dbea3a504a19fa60569fc895273139314486857100",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:951d220f5be5e07fde58e99d02162049fa88c0f9c8dbdcf429726f07151ce8be",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "postgres:16.4",
+   "registry": "docker.io",
+   "repo": "library/postgres",
+   "tag": "16.4"
+  },
+  "redis:7.2.4": {
+   "index_digest": "sha256:921a75e56fd72092a3e3492136327fecc79ba539de2f4f937c652b5f58121f08",
+   "name": "redis",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "redis-server"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "6379/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/data": {}
+      },
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:194f28e522560957584353df17a67d14bfef4b4ebb60d2996402444c878f0523",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "redis-server"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "6379/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/data": {}
+      },
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:238c20a114eb734a2bde83ac365f8db25e4d5f3a98f02d5d4c19247c6d7c7c4b",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "redis:7.2.4",
+   "registry": "docker.io",
+   "repo": "library/redis",
+   "tag": "7.2.4"
+  }
+ }
+}

@@ -1,0 +1,498 @@
+{
+ "images": {
+  "elasticsearch:": {
+   "index_digest": "sha256:4aa265e80ef66aede573bbfcef6942c669ca1ec88799985ade7825a871569410",
+   "name": "elasticsearch",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "elasticsearch"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "9200/tcp": {},
+       "9300/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/usr/share/elasticsearch/data": {}
+      },
+      "WorkingDir": "/usr/share/elasticsearch"
+     },
+     "digest": "sha256:58f9e59ac96233bab6efb66ff66b69f4ebe19474d19118e6f8650fbe872e1c8a",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "elasticsearch:",
+   "registry": "docker.io",
+   "repo": "library/elasticsearch",
+   "tag": ""
+  },
+  "elasticsearch:7.17.27": {
+   "index_digest": "sha256:1711c794b9047dad400673d7513699609ce33d80418b7e78aad005549a19d202",
+   "name": "elasticsearch",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "elasticsearch"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "9200/tcp": {},
+       "9300/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/usr/share/elasticsearch/data": {}
+      },
+      "WorkingDir": "/usr/share/elasticsearch"
+     },
+     "digest": "sha256:2c42ebd1d886995bf353808040c5fe1eff44b8f38c92bd6c983e99c1a12dae11",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "elasticsearch:7.17.27",
+   "registry": "docker.io",
+   "repo": "library/elasticsearch",
+   "tag": "7.17.27"
+  },
+  "postgres:": {
+   "index_digest": "sha256:c62b8fcf2fbff645b90d7b8842d4ae9ee42f7d671cffb01a54301d018b704f31",
+   "name": "postgres",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:cfa2ff3e8f2d3c3bff9ce4cb5b25e4a462a07cf829445d72b210848dccd8e0af",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:2d729940e94abc04ce4e77521c5b95523cd0bc157127f4c1ba233c466b316521",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "postgres:",
+   "registry": "docker.io",
+   "repo": "library/postgres",
+   "tag": ""
+  },
+  "postgres:16": {
+   "index_digest": "sha256:59ab5ab3c94d2f5bf4f2895b2c7d1ee62ccb27127ac7f9da36862593d17ed34e",
+   "name": "postgres",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:6ebfdebac0d356190a91ba8800501cd163317974df075def26c0a49d31f46a8e",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "",
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:6cddd9dca66f5aca5636d15a925f47499f769f8040dab57c8c873483f7e2377a",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "postgres:16",
+   "registry": "docker.io",
+   "repo": "library/postgres",
+   "tag": "16"
+  },
+  "temporalio/admin-tools:": {
+   "index_digest": "sha256:4d5a6ef3aaaa76b03cb4f53ef63b22755b76710404eb77cda1984784d5993eea",
+   "name": "temporalio/admin-tools",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "admin-tools"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:1943b01f8af3875053aed37541e2698ce52049170b77592c64c2002c1e1311cb",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "temporalio/admin-tools:",
+   "registry": "docker.io",
+   "repo": "temporalio/admin-tools",
+   "tag": ""
+  },
+  "temporalio/admin-tools:1.29.1-tctl-1.18.4-cli-1.5.0": {
+   "index_digest": "sha256:f59c4191b45e3d09b68aba642addd1ff211559fba666815069c89851b6253522",
+   "name": "temporalio/admin-tools",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "admin-tools"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:0db6ff001bacd7cd2f01111e914c0637059e2c74d9a05c19016c961391f79754",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "temporalio/admin-tools:1.29.1-tctl-1.18.4-cli-1.5.0",
+   "registry": "docker.io",
+   "repo": "temporalio/admin-tools",
+   "tag": "1.29.1-tctl-1.18.4-cli-1.5.0"
+  },
+  "temporalio/auto-setup:": {
+   "index_digest": "sha256:ba9edce4d1f123502990f5bbf8c1bed06ef32e6df8b6b02b5de9aee72d51a5a9",
+   "name": "temporalio/auto-setup",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "auto-setup"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:5e18ba77b6029087d93098395af77d521dcc03b1b6499e98714ec2fb708227fb",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "auto-setup"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:76be3e3609959db91df7a8fa1578d05b1d56beeb1f1664503a10616cb716918d",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "temporalio/auto-setup:",
+   "registry": "docker.io",
+   "repo": "temporalio/auto-setup",
+   "tag": ""
+  },
+  "temporalio/auto-setup:1.29.1": {
+   "index_digest": "sha256:de52fb91e76e0595acaa9e1bea49dee72f6df2ef6f115750a966394316f77915",
+   "name": "temporalio/auto-setup",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "auto-setup"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:59242bf3ef340671f59507e0eb5be1868cddcac972803d0f67dcbe6426a16379",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "auto-setup"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:a4e3e1d800bb0ac76ef36682df0269d8eb73b2072f0afa5d557256ededb11a90",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "temporalio/auto-setup:1.29.1",
+   "registry": "docker.io",
+   "repo": "temporalio/auto-setup",
+   "tag": "1.29.1"
+  },
+  "temporalio/ui:": {
+   "index_digest": "sha256:f8ddff02f32bf73069e6b2c3ff5f8875dd82884e21626a6f659aca7892914c4e",
+   "name": "temporalio/ui",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "ui"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:74b2f10d754fb2df44c79c0ed21c3113a0bb2617b0afd6538d853e14d1c281b8",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "ui"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:2b2207b2c0a994afd8b1d9a5597a409f7c204fd61324092d7a99b2c346b35645",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "temporalio/ui:",
+   "registry": "docker.io",
+   "repo": "temporalio/ui",
+   "tag": ""
+  },
+  "temporalio/ui:2.41.0": {
+   "index_digest": "sha256:9564bbbb71a26b8450168acde8f9bee6279b88bb4a2420adce18e6eded9f8372",
+   "name": "temporalio/ui",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "ui"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:1f77d7c59eb8f0388ec64715a5b5f0ad37bd713e12d27f3fc8fce7147ad844ff",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "ui"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:ad1a8ee8330be533ab97f45c44c7ca6355ca9ab8ae3916d10e061882f0658e90",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "temporalio/ui:2.41.0",
+   "registry": "docker.io",
+   "repo": "temporalio/ui",
+   "tag": "2.41.0"
+  }
+ }
+}

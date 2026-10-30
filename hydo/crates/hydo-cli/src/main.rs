@@ -4,11 +4,11 @@
 //! the two differed, each platform keeps its own behaviour (docs/HISTORY.md, M101).
 //!
 //! How each command is implemented today:
-//!   Rust:                 run, repro (incl. --regressions), save, report, doctor, module (Linux)
-//!   Rust + Python seams:  run/repro call hydohist.run_checks and hydo_errors.for_run_dir,
-//!                         --regressions and save call hydo_composer (src/bridge.rs)
-//!   delegated (Python):   build (hydo-build), explore (explore.py), compose (hydo_compose.py),
-//!                         errors (hydo_errors.py), guide/skill/init (hydo_agents.py)
+//!   Rust:                 run, repro (incl. --regressions: hydo-composer), save (hydo-composer),
+//!                         report, doctor, module (Linux), errors and run/repro's error kinds
+//!                         (hydo-errors), history checks (hydo-history), compose (hydo-compose),
+//!                         guide/skill/init (hydo-agents)
+//!   delegated (Python):   build (hydo-build, src/bridge.rs), explore (explore.py)
 
 mod bridge;
 mod ctx;
@@ -113,6 +113,7 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
         "report" => delegated::cmd_report(ctx, rest),
         "save" => runs::cmd_save(ctx, rest),
         "errors" => delegated::cmd_errors(ctx, rest),
+        "check-history" => hydo_history::cli::main(rest),
         "doctor" if linux => doctor::cmd_doctor_linux(ctx),
         "doctor" => doctor::cmd_doctor_mac(ctx),
         "module" if linux => module::cmd_module(ctx, rest),

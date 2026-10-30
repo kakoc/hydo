@@ -172,6 +172,17 @@ pub fn load(path: &Path, opts: &LoadOptions) -> Result<Loaded, ManifestError> {
     })
 }
 
+/// hydo-build's `validate(m)` on data already parsed (hydo-compose checks the manifest it writes:
+/// `parse_yaml`, then this, then [`service_order`]).
+pub fn validate_data(m: &mut Value) -> Result<(), ManifestError> {
+    validate::validate(m)
+}
+
+/// hydo-build's `service_order(m["services"])`: service names in start order (depends_on).
+pub fn service_order(services: &Value) -> Result<Vec<String>, ManifestError> {
+    validate::service_order(services)
+}
+
 /// The manifest an image carries (/etc/hydo/hydo.yaml, any format) with the plan meta it carries
 /// (/etc/hydo/compose.json): manifest_space.Space(text, "hydo.yaml", compose=meta) up to its
 /// validation. The plan is in `Manifest::test`; `data` is the validated manifest as Space holds it.

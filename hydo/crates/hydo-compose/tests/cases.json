@@ -1,0 +1,2106 @@
+[
+ {
+  "name": "unit-anchors-default",
+  "fixture": "hydo/onboard/tests/compose/anchors",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-anchors-loopback",
+  "fixture": "hydo/onboard/tests/compose/anchors",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-anchors-noaddr",
+  "fixture": "hydo/onboard/tests/compose/anchors",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-anchors-bridge",
+  "fixture": "hydo/onboard/tests/compose/anchors",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "bridge"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-anchors-noresolve",
+  "fixture": "hydo/onboard/tests/compose/anchors",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-envfiles-default",
+  "fixture": "hydo/onboard/tests/compose/envfiles",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-envfiles-loopback",
+  "fixture": "hydo/onboard/tests/compose/envfiles",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-envfiles-noaddr",
+  "fixture": "hydo/onboard/tests/compose/envfiles",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-envfiles-bridge",
+  "fixture": "hydo/onboard/tests/compose/envfiles",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "bridge"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-envfiles-noresolve",
+  "fixture": "hydo/onboard/tests/compose/envfiles",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-health-default",
+  "fixture": "hydo/onboard/tests/compose/health",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-health-loopback",
+  "fixture": "hydo/onboard/tests/compose/health",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-health-noaddr",
+  "fixture": "hydo/onboard/tests/compose/health",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-health-bridge",
+  "fixture": "hydo/onboard/tests/compose/health",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "bridge"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-health-noresolve",
+  "fixture": "hydo/onboard/tests/compose/health",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-simple-default",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-simple-loopback",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-simple-noaddr",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-simple-bridge",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "bridge"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-simple-noresolve",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-unsupported-default",
+  "fixture": "hydo/onboard/tests/compose/unsupported",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-unsupported-loopback",
+  "fixture": "hydo/onboard/tests/compose/unsupported",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-unsupported-noaddr",
+  "fixture": "hydo/onboard/tests/compose/unsupported",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-unsupported-bridge",
+  "fixture": "hydo/onboard/tests/compose/unsupported",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "bridge"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-unsupported-noresolve",
+  "fixture": "hydo/onboard/tests/compose/unsupported",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-volumes-default",
+  "fixture": "hydo/onboard/tests/compose/volumes",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-volumes-loopback",
+  "fixture": "hydo/onboard/tests/compose/volumes",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-volumes-noaddr",
+  "fixture": "hydo/onboard/tests/compose/volumes",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-volumes-bridge",
+  "fixture": "hydo/onboard/tests/compose/volumes",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "bridge"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-volumes-noresolve",
+  "fixture": "hydo/onboard/tests/compose/volumes",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-envfiles-shellenv",
+  "fixture": "hydo/onboard/tests/compose/envfiles",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "unit",
+  "env": {
+   "APP_TAG": "9.9",
+   "HOSTNAME_ONLY": "from-shell"
+  },
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-envfiles-useenv",
+  "fixture": "hydo/onboard/tests/compose/envfiles",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--use-env"
+  ],
+  "lock": "unit",
+  "env": {
+   "APP_TAG": "1",
+   "HOSTNAME_ONLY": "x"
+  },
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-envfiles-envfile",
+  "fixture": "hydo/onboard/tests/compose/envfiles",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--env-file",
+   "proj/common.env"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-envfiles-nodotenv",
+  "fixture": "hydo/onboard/tests/compose/envfiles",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": "rm .env",
+  "raw": false
+ },
+ {
+  "name": "unit-unsupported-profile",
+  "fixture": "hydo/onboard/tests/compose/unsupported",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--profile",
+   "seed"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-unsupported-profile-loopback",
+  "fixture": "hydo/onboard/tests/compose/unsupported",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--profile",
+   "seed",
+   "--network",
+   "loopback"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-health-named",
+  "fixture": "hydo/onboard/tests/compose/health",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--name",
+   "My Shop_2",
+   "--images-dir",
+   "imgs"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-health-name9",
+  "fixture": "hydo/onboard/tests/compose/health",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--name",
+   "9lives"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-simple-netbad",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "host"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-simple-netempty",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   ""
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-simple-outmissing",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--out"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-simple-unknownopt",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--bogus"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-simple-twofiles",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "docker-compose.yml",
+  "args": [
+   "proj/other.yml"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-simple-help",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "docker-compose.yml",
+  "args": [
+   "-h"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-raw-0",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": true
+ },
+ {
+  "name": "unit-raw-1",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "docker-compose.yml",
+  "args": [
+   "-h"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": true
+ },
+ {
+  "name": "unit-raw-2",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--help"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": true
+ },
+ {
+  "name": "unit-raw-3",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "docker-compose.yml",
+  "args": [
+   "proj/docker-compose.yml",
+   "--no-resolve",
+   "--lock",
+   "x.json"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": true
+ },
+ {
+  "name": "unit-simple-partlock",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "partial",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-simple-json",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "compose.json",
+  "args": [],
+  "lock": "unit",
+  "env": {},
+  "setup": "json:{\"services\": {\"cache\": {\"image\": \"redis:7.2.4\"}}}",
+  "raw": false
+ },
+ {
+  "name": "unit-build-only",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": "write:docker-compose.yml:services:\n  app:\n    build: .\n",
+  "raw": false
+ },
+ {
+  "name": "unit-not-compose",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "unit",
+  "env": {},
+  "setup": "write:docker-compose.yml:just: text\n",
+  "raw": false
+ },
+ {
+  "name": "unit-missing-file",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "nope.yml",
+  "args": [],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-dup-names",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "unit",
+  "env": {},
+  "setup": "write:docker-compose.yml:services:\n  my-app:\n    image: redis:7.2.4\n  my_app:\n    image: redis:7.2.4\n",
+  "raw": false
+ },
+ {
+  "name": "unit-unknown-dep",
+  "fixture": "hydo/onboard/tests/compose/simple",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "unit",
+  "env": {},
+  "setup": "write:docker-compose.yml:services:\n  a:\n    image: redis:7.2.4\n    depends_on: [b]\n",
+  "raw": false
+ },
+ {
+  "name": "voting-default",
+  "fixture": "hydo/onboard/examples/compose-voting",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "voting",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "voting-loopback",
+  "fixture": "hydo/onboard/examples/compose-voting",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "voting",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "voting-noaddr",
+  "fixture": "hydo/onboard/examples/compose-voting",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "voting",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "voting-bridge",
+  "fixture": "hydo/onboard/examples/compose-voting",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "bridge"
+  ],
+  "lock": "voting",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "voting-noresolve",
+  "fixture": "hydo/onboard/examples/compose-voting",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "voting-named",
+  "fixture": "hydo/onboard/examples/compose-voting",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--name",
+   "voting",
+   "--images-dir",
+   "images"
+  ],
+  "lock": "voting",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-elasticsearch-logstash-kibana-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-elasticsearch-logstash-kibana",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-elasticsearch-logstash-kibana-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-elasticsearch-logstash-kibana",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-elasticsearch-logstash-kibana-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-elasticsearch-logstash-kibana",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-elasticsearch-logstash-kibana-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-elasticsearch-logstash-kibana",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-gitea-postgres-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-gitea-postgres",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-gitea-postgres-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-gitea-postgres",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-gitea-postgres-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-gitea-postgres",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-gitea-postgres-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-gitea-postgres",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-nextcloud-redis-mariadb-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-nextcloud-redis-mariadb",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-nextcloud-redis-mariadb-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-nextcloud-redis-mariadb",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-nextcloud-redis-mariadb-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-nextcloud-redis-mariadb",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-nextcloud-redis-mariadb-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-nextcloud-redis-mariadb",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-nginx-flask-mysql-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-nginx-flask-mysql",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-nginx-flask-mysql-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-nginx-flask-mysql",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-nginx-flask-mysql-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-nginx-flask-mysql",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-nginx-flask-mysql-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-nginx-flask-mysql",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-nginx-flask-mysql-images-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-nginx-flask-mysql",
+  "compose": "docker-compose.images.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-nginx-flask-mysql-images-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-nginx-flask-mysql",
+  "compose": "docker-compose.images.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-nginx-flask-mysql-images-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-nginx-flask-mysql",
+  "compose": "docker-compose.images.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-nginx-flask-mysql-images-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-nginx-flask-mysql",
+  "compose": "docker-compose.images.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-nginx-golang-postgres-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-nginx-golang-postgres",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-nginx-golang-postgres-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-nginx-golang-postgres",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-nginx-golang-postgres-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-nginx-golang-postgres",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-nginx-golang-postgres-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-nginx-golang-postgres",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-nginx-golang-postgres-images-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-nginx-golang-postgres",
+  "compose": "docker-compose.images.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-nginx-golang-postgres-images-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-nginx-golang-postgres",
+  "compose": "docker-compose.images.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-nginx-golang-postgres-images-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-nginx-golang-postgres",
+  "compose": "docker-compose.images.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-nginx-golang-postgres-images-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-nginx-golang-postgres",
+  "compose": "docker-compose.images.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-pihole-cloudflared-doh-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-pihole-cloudflared-doh",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-pihole-cloudflared-doh-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-pihole-cloudflared-doh",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-pihole-cloudflared-doh-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-pihole-cloudflared-doh",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-pihole-cloudflared-doh-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-pihole-cloudflared-doh",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-postgresql-pgadmin-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-postgresql-pgadmin",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-postgresql-pgadmin-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-postgresql-pgadmin",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-postgresql-pgadmin-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-postgresql-pgadmin",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-postgresql-pgadmin-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-postgresql-pgadmin",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-prometheus-grafana-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-prometheus-grafana",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-prometheus-grafana-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-prometheus-grafana",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-prometheus-grafana-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-prometheus-grafana",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-prometheus-grafana-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-prometheus-grafana",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-react-express-mongodb-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-react-express-mongodb",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-react-express-mongodb-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-react-express-mongodb",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-react-express-mongodb-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-react-express-mongodb",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-react-express-mongodb-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-react-express-mongodb",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-react-express-mongodb-images-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-react-express-mongodb",
+  "compose": "docker-compose.images.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-react-express-mongodb-images-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-react-express-mongodb",
+  "compose": "docker-compose.images.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-react-express-mongodb-images-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-react-express-mongodb",
+  "compose": "docker-compose.images.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-react-express-mongodb-images-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-react-express-mongodb",
+  "compose": "docker-compose.images.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-spring-postgres-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-spring-postgres",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-spring-postgres-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-spring-postgres",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-spring-postgres-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-spring-postgres",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-spring-postgres-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-spring-postgres",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-spring-postgres-images-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-spring-postgres",
+  "compose": "docker-compose.images.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-spring-postgres-images-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-spring-postgres",
+  "compose": "docker-compose.images.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-spring-postgres-images-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-spring-postgres",
+  "compose": "docker-compose.images.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-spring-postgres-images-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-spring-postgres",
+  "compose": "docker-compose.images.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-traefik-golang-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-traefik-golang",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-traefik-golang-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-traefik-golang",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-traefik-golang-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-traefik-golang",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-traefik-golang-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-traefik-golang",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-traefik-golang-images-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-traefik-golang",
+  "compose": "docker-compose.images.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-traefik-golang-images-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-traefik-golang",
+  "compose": "docker-compose.images.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-traefik-golang-images-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-traefik-golang",
+  "compose": "docker-compose.images.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-traefik-golang-images-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-traefik-golang",
+  "compose": "docker-compose.images.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-wordpress-mysql-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-wordpress-mysql",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-wordpress-mysql-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-wordpress-mysql",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-wordpress-mysql-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-wordpress-mysql",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-awesome-wordpress-mysql-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-wordpress-mysql",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-bitnami-kafka-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/bitnami-kafka",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-bitnami-kafka-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/bitnami-kafka",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-bitnami-kafka-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/bitnami-kafka",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-bitnami-kafka-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/bitnami-kafka",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-example-voting-app-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/example-voting-app",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-example-voting-app-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/example-voting-app",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-example-voting-app-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/example-voting-app",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-example-voting-app-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/example-voting-app",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-example-voting-app-images-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/example-voting-app",
+  "compose": "docker-compose.images.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-example-voting-app-images-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/example-voting-app",
+  "compose": "docker-compose.images.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-example-voting-app-images-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/example-voting-app",
+  "compose": "docker-compose.images.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-example-voting-app-images-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/example-voting-app",
+  "compose": "docker-compose.images.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-immich-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/immich",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": "touch:.env",
+  "raw": false
+ },
+ {
+  "name": "rw-immich-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/immich",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": "touch:.env",
+  "raw": false
+ },
+ {
+  "name": "rw-immich-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/immich",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": "touch:.env",
+  "raw": false
+ },
+ {
+  "name": "rw-immich-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/immich",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": "touch:.env",
+  "raw": false
+ },
+ {
+  "name": "rw-immich-dotenv-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/immich",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": "dotenv",
+  "raw": false
+ },
+ {
+  "name": "rw-immich-dotenv-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/immich",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": "dotenv",
+  "raw": false
+ },
+ {
+  "name": "rw-immich-dotenv-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/immich",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": "dotenv",
+  "raw": false
+ },
+ {
+  "name": "rw-immich-dotenv-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/immich",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": "dotenv",
+  "raw": false
+ },
+ {
+  "name": "rw-mastodon-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/mastodon",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": "touch:.env.production",
+  "raw": false
+ },
+ {
+  "name": "rw-mastodon-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/mastodon",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": "touch:.env.production",
+  "raw": false
+ },
+ {
+  "name": "rw-mastodon-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/mastodon",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": "touch:.env.production",
+  "raw": false
+ },
+ {
+  "name": "rw-mastodon-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/mastodon",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": "touch:.env.production",
+  "raw": false
+ },
+ {
+  "name": "rw-n8n-postgres-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/n8n-postgres",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-n8n-postgres-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/n8n-postgres",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-n8n-postgres-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/n8n-postgres",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-n8n-postgres-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/n8n-postgres",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-n8n-postgres-dotenv-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/n8n-postgres",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": "dotenv",
+  "raw": false
+ },
+ {
+  "name": "rw-n8n-postgres-dotenv-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/n8n-postgres",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": "dotenv",
+  "raw": false
+ },
+ {
+  "name": "rw-n8n-postgres-dotenv-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/n8n-postgres",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": "dotenv",
+  "raw": false
+ },
+ {
+  "name": "rw-n8n-postgres-dotenv-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/n8n-postgres",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": "dotenv",
+  "raw": false
+ },
+ {
+  "name": "rw-sentry-self-hosted-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/sentry-self-hosted",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-sentry-self-hosted-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/sentry-self-hosted",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-sentry-self-hosted-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/sentry-self-hosted",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-sentry-self-hosted-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/sentry-self-hosted",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-sentry-self-hosted-images-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/sentry-self-hosted",
+  "compose": "docker-compose.images.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-sentry-self-hosted-images-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/sentry-self-hosted",
+  "compose": "docker-compose.images.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-sentry-self-hosted-images-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/sentry-self-hosted",
+  "compose": "docker-compose.images.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-sentry-self-hosted-images-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/sentry-self-hosted",
+  "compose": "docker-compose.images.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-temporal-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/temporal",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-temporal-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/temporal",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-temporal-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/temporal",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-temporal-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/temporal",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "rw-temporal-dotenv-default",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/temporal",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "fixture",
+  "env": {},
+  "setup": "dotenv",
+  "raw": false
+ },
+ {
+  "name": "rw-temporal-dotenv-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/temporal",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": "dotenv",
+  "raw": false
+ },
+ {
+  "name": "rw-temporal-dotenv-noaddr",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/temporal",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-addr"
+  ],
+  "lock": "fixture",
+  "env": {},
+  "setup": "dotenv",
+  "raw": false
+ },
+ {
+  "name": "rw-temporal-dotenv-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/realworld/temporal",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": "dotenv",
+  "raw": false
+ }
+]

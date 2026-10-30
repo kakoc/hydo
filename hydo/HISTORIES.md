@@ -16,9 +16,11 @@ go back in time, and anomalies that need two keys; it also tends to report false
 for operations whose outcome was unknown. The checkers handle unknown outcomes the way Jepsen
 does.
 
-Files: `hydo/history/hydohist.py` (parser + checkers, Python 3.6+, stdlib only),
-`hydo/history/hydo-check` (command line), `hydo/history/test_hydohist.py` (unit tests),
-`hydo/history/hydo_hist.sh` (shell recorder), `hydo/stack/hydohist` (Go recorder, package
+Files: `hydo/crates/hydo-history` (parser + checkers in Rust, M105; the command line is
+`hydo check-history`, also the crate's `hydo-hist-check` binary), `hydo/history/hydohist.py`,
+`hydo/history/hydo-check` and `hydo/history/test_hydohist.py` (the Python checkers it replaces, with
+the same answers; kept as the reference until every port is merged, and still what explore.py
+calls), `hydo/history/hydo_hist.sh` (shell recorder), `hydo/stack/hydohist` (Go recorder, package
 `hydostack/hydohist`), `hydo/onboard/hydo-init-history.sh` (guest init extension).
 
 ## Record format (fixed)
@@ -200,11 +202,13 @@ Where the checks run:
   and the failed-assertion list) and `consoles/<tag>.checks.txt` (the explanation), and replaces the
   run's verdict. Failure classes, shrinking and reports work unchanged; the guest's own verdict is
   kept as `guest_verdict`.
-- **`hydo run` / `hydo repro`** (`hydo/dist/linux/hydo`): `one.checks.log`, `one.checks.txt`, the
-  combined verdict in `run.json`.
-- **By hand:** `hydo/history/hydo-check <outdir>` (an `hvx_explore one` output directory),
-  `hydo-check <console> [<recovery console>]`, or `hydo-check --check '<json spec>' <console>` for a
-  console without declarations. Exit status 0 OK, 1 violation, 2 error, 3 no checks.
+- **`hydo run` / `hydo repro`** (the Rust `hydo`, through the crate `hydo-history`):
+  `one.checks.log`, `one.checks.txt`, the combined verdict in `run.json`.
+- **By hand:** `hydo check-history <outdir>` (an `hvx_explore one` or `hydo run` output directory),
+  `hydo check-history <console> [<recovery console>]`, `hydo check-history --tag <T> <consoles dir>`,
+  or `hydo check-history --check '<json spec>' <console>` for a console without declarations
+  (`hydo/history/hydo-check` takes the same arguments). Exit status 0 OK, 1 violation, 2 error,
+  3 no checks.
 
 ## Recorders
 

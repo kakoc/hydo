@@ -1,0 +1,93 @@
+{
+ "images": {
+  "pihole/pihole:latest": {
+   "index_digest": "sha256:6d9353268dd4402bffa20fbc90968cef58252bf1bdad0385b537766fa79cfbf4",
+   "name": "pihole/pihole",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "pihole"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:e3c44215684de47295d2d4db9f500fde3c3152678ca585fb4ee4daa3bd879b56",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "pihole"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:cbae25a79d864ff069a9620915357b4ba173a868619ad2c2158dd0e6debe22e5",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "pihole/pihole:latest",
+   "registry": "docker.io",
+   "repo": "pihole/pihole",
+   "tag": "latest"
+  },
+  "visibilityspots/cloudflared": {
+   "index_digest": "sha256:ff6483053398eebfe10849ad0a8e43d29b4882fe69d0fb5e3c235af3fef986c8",
+   "name": "visibilityspots/cloudflared",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "cloudflared"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/bin:/bin"
+      ],
+      "ExposedPorts": {
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:c619933375604f1759ced6fe550fd588656ce46e138a9876b9a3edb096c2ff18",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "visibilityspots/cloudflared",
+   "registry": "docker.io",
+   "repo": "visibilityspots/cloudflared",
+   "tag": "latest"
+  }
+ }
+}

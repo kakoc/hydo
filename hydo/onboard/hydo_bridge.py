@@ -12,9 +12,6 @@ module is ported to Rust (one crate per module), the Rust CLI stops calling it a
 deleted. The code below is what the two Python release CLIs (hydo/dist/{linux,mac}/hydo before
 M101) did in-process, moved here unchanged.
 
-    agents                 hydo_agents.run(cmd, argv, root)               hydo guide | skill | init
-    compose                hydo_compose.main(argv)                        hydo compose
-    hist_run_checks        hydohist.run_checks(srcs, verdict) -> dict     hydo run / repro / regressions
     build_linux            hydo-build with the Linux release's tools      hydo build (Linux)
     build_mac              hydo-build --arch arm64 with the Mac's tools   hydo build (Mac)
 
@@ -34,7 +31,6 @@ import types
 ONBOARD = os.path.dirname(os.path.realpath(__file__))
 HYDO = os.path.dirname(ONBOARD)
 EXPLORE = os.path.join(HYDO, "explore")
-HISTORY = os.path.join(HYDO, "history")
 
 
 def die(msg, rc=1):
@@ -45,26 +41,6 @@ def die(msg, rc=1):
 def _onboard():
     if ONBOARD not in sys.path:
         sys.path.insert(0, ONBOARD)
-
-
-# ---------------------------------------------------------------- small seams
-def agents(a):
-    _onboard()
-    import hydo_agents
-    return hydo_agents.run(a["cmd"], a["argv"], a["root"])
-
-
-def compose(a):
-    _onboard()
-    import hydo_compose
-    return hydo_compose.main(list(a["argv"]))
-
-
-def hist_run_checks(a):
-    sys.path.insert(0, HISTORY)
-    import hydohist
-    r = hydohist.run_checks([tuple(s) for s in a["srcs"]], a.get("verdict"))
-    return 0, {"records": r["records"], "report": r["report"], "verdict": r["verdict"]}
 
 
 # ---------------------------------------------------------------- hydo build
@@ -276,7 +252,7 @@ def build_mac(a):
     return hb.main()
 
 
-FUNCS = {f.__name__: f for f in (agents, compose, hist_run_checks, build_linux, build_mac)}
+FUNCS = {f.__name__: f for f in (build_linux, build_mac)}
 
 
 def main():
