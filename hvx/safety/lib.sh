@@ -21,6 +21,7 @@ safety_build() {
 		setsid nice -n 19 bash "$script" > "$log" 2>&1 < /dev/null &
 	fi
 	pid=$!
+	echo "$pid" > "$log.pid"	# stop the build: kill -- -$(cat LOG.pid) (its own process group)
 	while kill -0 "$pid" 2>/dev/null; do
 		if [ -e "$QUIET_FILE" ] && [ $stopped = 0 ]; then
 			kill -STOP -- "-$pid" 2>/dev/null && stopped=1 && echo "safety_build: paused ($QUIET_FILE exists)"

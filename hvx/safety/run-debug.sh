@@ -25,7 +25,8 @@ LOG="$OUT/serial.log"
 echo "run-debug: log $LOG"
 # -cpu host passes VMX through (kvm_intel nested=Y on this host); the VM is capped in
 # memory and CPUs and runs at low priority, because the host is shared.
-nice -n 10 timeout "${VM_TIMEOUT:-14400}" "$QEMU" -name hvx-safety-debug \
+echo $$ > "$OUT/run.pid"	# stop: kill "$(cat $OUT/qemu.pid)"
+nice -n 10 timeout --foreground "${VM_TIMEOUT:-14400}" "$QEMU" -name hvx-safety-debug \
   -enable-kvm -cpu host -smp "${VM_CPUS:-2}" -m "${VM_MEM:-6144}" \
   -kernel "$D/bzImage" -initrd "$D/initramfs.cpio.gz" -append "$APPEND" \
   -display none -serial "file:$LOG" -no-reboot -nic none \
@@ -51,7 +52,8 @@ grep -a 'SAFETY| ' "$LOG" | sed 's/^.*SAFETY| //' > "$OUT/tests.txt"
 pass=0; fail=0; skip=0; splats=$(grep -c '^SPLAT' "$OUT/report.txt")
 while read -r _ _ name rcf _; do
   rc=${rcf#rc=}
-  if [ "$rc" = 0 ]; then pass=$((pass+1)); st=PASS
+  if grep -q "^$name: .*SKIP" "$OUT/tests.txt"; then skip=$((skip+1)); st="SKIP ($(grep -m1 "^$name: .*SKIP" "$OUT/tests.txt" | sed 's/.*SKIP *//'))"
+  elif [ "$rc" = 0 ]; then pass=$((pass+1)); st=PASS
   elif grep -q "^$name: .*\(No such device\|ENODEV\|PMU\|pmu\)" "$OUT/tests.txt"; then skip=$((skip+1)); st="SKIP (needs the PMU branch clock; not available nested)"
   else fail=$((fail+1)); st="FAIL rc=$rc"; fi
   printf '  %-24s %s\n' "$name" "$st"

@@ -51,7 +51,7 @@ while IFS= read -r l; do
                  CONFIG_*) grep -qxF "\$l" .config || { echo "not set: \$l"; bad=1; } ;; esac
 done < kernel/configs/hvx-debug.config
 [ \$bad = 0 ] || { echo 'build-kernel: config fragment not applied' >&2; exit 1; }
-make -j$JOBS bzImage modules_prepare
+make -j$JOBS bzImage modules
 make -s headers_install INSTALL_HDR_PATH=usr >/dev/null
 EOF
 safety_build "$SAFETY/kbuild/build.sh" "$SAFETY/kbuild/make.log" gnumake flex bison bc elfutils openssl perl python3 cpio zstd xz

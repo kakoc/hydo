@@ -9,7 +9,9 @@ mount -t sysfs sys /sys
 mount -t devtmpfs dev /dev
 mount -t debugfs debugfs /sys/kernel/debug
 mount -t tmpfs tmp /tmp
-echo 8 > /proc/sys/kernel/printk
+# console: warnings and worse only (KASAN/UBSAN/lockdep/WARN); hvx logs every HVX_RUN at
+# info level, and a serial console that prints those slows the run by orders of magnitude
+echo 5 > /proc/sys/kernel/printk
 grep -o 'hvxtests=[^ ]*' /proc/cmdline | cut -d= -f2 | tr , ' ' > /tmp/only
 T=$(cat /tmp/only)
 TO=$(grep -o 'hvxto=[0-9]*' /proc/cmdline | cut -d= -f2); TO=${TO:-900}
