@@ -29,9 +29,11 @@
  * PCT); the RESULT gains pctf=<points that fired> pctw=<exits the workload took>.
  * Tick jitter (tj=, tjx=) delays timer interrupts by a seeded number of EXITS (../hvm.c TJ);
  * the RESULT gains tjk=<first>-<last> tjn=<n> as on hvx. Not supported (the RESULT says UNSUPPORTED):
- * disk faults or cuts without a disk, and network faults (N=, O=) on an image without tc
- * (initrd_has_tc: its compiled manifest, etc/hydo/manifest.sh, has an empty HYDO_TC).
- * explore.py --backend hvm strips those from generated schedules up front (hvm_supported()).
+ * disk faults or cuts without a disk, network faults (N=, O=) on an image without tc
+ * (initrd_has_tc: its compiled manifest, etc/hydo/manifest.sh, has an empty HYDO_TC), and the
+ * host tokens only hvx_explore applies (rb=, pp=, xt*, q*, cf=, cfn; host_token_problem). A host
+ * token no engine knows is "ERROR bad schedule". The explorer (hydo-explore, --backend hvm)
+ * strips the unsupported ones from generated schedules up front (Ex::hvm_supported, Ex::render).
  *
  * Exit-free spin loops (../spin_observer.c, ../spin/RESEARCH.md): exact-repeat loops are
  * resolved in every run. Counter loops need the rewind mode (a checkpoint at every exit, several
@@ -295,6 +297,32 @@ static int scan_has_tc(const uint8_t *gz, size_t len)
 	inflateEnd(&z);
 	return found;
 }
+/* The host tokens this engine applies: disk=, dseed=, the tick jitter (tj= tjpm= tjmax= tjlo= tjhi=,
+ * tjx=), the forced preemption points (pct= pctn= pctk=) and spin=rewind. Any other host token is
+ * refused instead of ignored: hvx's PMU-clock tokens (rb= pp= pptsc= xt*, the vCPU turns q= qs= qb=
+ * qbs= qm=) and the power cut at the k-th disk FLUSH (cf=, cfn) need hvx_explore; before M102 a
+ * cf= was silently dropped here and the explorer's report claimed a power cut that never happened.
+ * Returns why (in buf), or NULL; *unknown says whether the token is unknown to every engine. */
+static const char *host_token_problem(const char *host, char *buf, size_t n, int *unknown)
+{
+	static const char *const ok[] = { "disk=", "dseed=", "tj=", "tjpm=", "tjmax=", "tjlo=", "tjhi=", "tjx=",
+	                                   "pct=", "pctn=", "pctk=", NULL };
+	static const char *const hvx_only[] = { "rb=", "pp=", "pptsc=", "xt=", "xtr=", "xtpm=", "xtlo=", "xthi=",
+	                                        "xtsc=", "xtx=", "cf=", "q=", "qs=", "qb=", "qbs=", "qm=", NULL };
+	char words[1024], *save = NULL;
+	snprintf(words, sizeof words, "%s", host);
+	for (char *w = strtok_r(words, " \t\r\n", &save); w; w = strtok_r(NULL, " \t\r\n", &save)) {
+		int good = !strcmp(w, "spin=rewind"), hvx = !strcmp(w, "cfn");
+		for (int i = 0; !good && ok[i]; i++) good = !strncmp(w, ok[i], strlen(ok[i]));
+		if (good) continue;
+		for (int i = 0; !hvx && hvx_only[i]; i++) hvx = !strncmp(w, hvx_only[i], strlen(hvx_only[i]));
+		*unknown = !hvx;
+		snprintf(buf, n, hvx ? "host token %.60s needs hvx (the PMU clock, vCPU turns or a power cut at a disk FLUSH)"
+		                     : "unknown host token %.60s", w);
+		return buf;
+	}
+	return NULL;
+}
 /* why a schedule cannot run here, or NULL */
 static const char *unsupported(const char *host, const char *guest)
 {
@@ -336,6 +364,12 @@ static void run_once(const char *tag, const char *sched, int rewound)
 	snprintf(host, sizeof host, "%.*s", (int)(bar - sched), sched);
 	snprintf(guest, sizeof guest, " %s", bar + 1);
 	while (strlen(guest) && (guest[strlen(guest) - 1] == '\n' || guest[strlen(guest) - 1] == ' ')) guest[strlen(guest) - 1] = 0;
+	char hw[200]; int unknown = 0;
+	if (host_token_problem(host, hw, sizeof hw, &unknown)) {
+		printf("RESULT %s fp=0 wfp=0 secs=0 verdict=%s%s\n", tag, unknown ? "ERROR bad schedule: " : "UNSUPPORTED on hvm: ", hw);
+		fflush(stdout);
+		return;
+	}
 	const char *u = unsupported(host, guest);
 	if (u) { printf("RESULT %s fp=0 wfp=0 secs=0 verdict=UNSUPPORTED on hvm: %s\n", tag, u); fflush(stdout); return; }
 	uint64_t dseed; uint32_t dcl, dpr;
