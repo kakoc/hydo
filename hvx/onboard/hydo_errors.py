@@ -541,7 +541,10 @@ def for_run_dir(outdir, schedule, res, known_path=None, out=print):
         out("hydo: " + line)
     if an["new"]:
         out("hydo: expected? hydo errors accept <signature> --reason \"...\" --from %s" % outdir)
-    return apply(res, an, known)
+    res = apply(res, an, known)
+    if res.get("pre_errlog_verdict"):
+        out("hydo: verdict with the known-errors list (unknown: fail): %s" % res["verdict"])
+    return res
 
 
 def write_run_json(path, an, known):

@@ -303,9 +303,7 @@ def cmd_run(argv):
     m = [x for x in m if x]
     sys.path.insert(0, ONBOARD)
     import hydo_errors          # error logs as findings (an image whose manifest has errors:)
-    res = hydo_errors.for_run_dir(outdir, sched, {"fp": m[0].group(1), "verdict": m[0].group(2)} if m else {"verdict": ""})
-    if res.get("pre_errlog_verdict"):
-        print("hydo: verdict with the known-errors list (unknown: fail): %s" % res["verdict"])
+    hydo_errors.for_run_dir(outdir, sched, {"fp": m[0].group(1), "verdict": m[0].group(2)} if m else {"verdict": ""})
     return 0
 
 
