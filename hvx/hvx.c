@@ -2918,7 +2918,23 @@ static void vblk_unsync_commit(struct hvx_vm *vm)
  */
 /* HVX_SET_FLUSHCUT: the request starting at `head` -- its type, and whether it touches
  * the power domain [fc_lo, fc_hi) (a FLUSH always does) */
-static u32 vblk_peek(struct hvx_vm *vm, struct hvx_vblk *d, u16 head, bool *in_domain)
+/*
+ * Work bounds for a virtqueue kick (M97). The device code runs with IRQs off in VMX
+ * root, and the guest controls queue_size (any u32), the avail index and the
+ * descriptor `next` links, so a looping chain could hold the host CPU for minutes.
+ * A virtio queue has at most 32768 entries, so a chain is at most that long, and a
+ * driver can have at most queue_size descriptors outstanding, so a kick of a valid
+ * driver reads at most 32768 descriptors. Valid guests never reach these bounds.
+ */
+#define HVX_VQ_MAX_SIZE		32768U
+#define HVX_VQ_KICK_BUDGET	(4U * HVX_VQ_MAX_SIZE)	/* descriptor reads per kick */
+static inline int hvx_vq_chain_max(u32 qsize)
+{
+	return (int)(qsize < HVX_VQ_MAX_SIZE ? qsize : HVX_VQ_MAX_SIZE) + 2;
+}
+
+static u32 vblk_peek(struct hvx_vm *vm, struct hvx_vblk *d, u16 head, bool *in_domain,
+		     u32 *walked)
 {
 	struct virtq_desc desc;
 	u8 hdr[16];
@@ -2928,6 +2944,7 @@ static u32 vblk_peek(struct hvx_vm *vm, struct hvx_vblk *d, u16 head, bool *in_d
 	int n;
 
 	*in_domain = true;
+	(*walked)++;
 	if (!hvx_guest_rw(vm, d->desc_gpa + (u64)di * 16, &desc, 16, false) ||
 	    !hvx_guest_rw(vm, desc.addr, hdr, 16, false))
 		return 0;
@@ -2935,8 +2952,9 @@ static u32 vblk_peek(struct hvx_vm *vm, struct hvx_vblk *d, u16 head, bool *in_d
 	memcpy(&sector, &hdr[8], 8);
 	if (type == VIRTIO_BLK_T_FLUSH || !d->fc_hi)
 		return type;
-	for (n = 0; n < (int)d->qsize + 2 && (desc.flags & VIRTQ_DESC_F_NEXT); n++) {
+	for (n = 0; n < hvx_vq_chain_max(d->qsize) && (desc.flags & VIRTQ_DESC_F_NEXT); n++) {
 		di = desc.next;
+		(*walked)++;
 		if (!hvx_guest_rw(vm, d->desc_gpa + (u64)di * 16, &desc, 16, false))
 			break;
 		if (desc.flags & VIRTQ_DESC_F_NEXT)	/* a data descriptor (the last is the status) */
@@ -2956,13 +2974,16 @@ static void virtio_blk_process(struct hvx_vcpu *vcpu)
 	bool do_reorder = (d->fault_classes & HVX_FAULT_REORDER) != 0;	/* M22 */
 	struct { u16 head; u32 used_len; } pend[HVX_FAULT_REORDER_MAX];	/* M22 reorder buffer */
 	int n_pend = 0;
+	u32 walked = 0;			/* descriptors read this kick (M97 bound) */
 
 	if (!d->disk_pages || !d->qready || d->qsize == 0)
 		return;
 	if (!hvx_guest_rw(vm, d->avail_gpa + 2, &avail_idx, 2, false))
 		return;
 
-	while ((u16)d->last_avail != avail_idx) {
+	/* a kick that would read more than HVX_VQ_KICK_BUDGET descriptors (no valid
+	 * driver does) leaves the rest of the avail ring for the next kick */
+	while ((u16)d->last_avail != avail_idx && walked < HVX_VQ_KICK_BUDGET) {
 		u16 slot = (u16)((u32)d->last_avail % d->qsize);
 		u16 head, di;
 		u32 type = 0;
@@ -2980,7 +3001,7 @@ static void virtio_blk_process(struct hvx_vcpu *vcpu)
 			break;
 		if (d->fc_on) {		/* HVX_SET_FLUSHCUT */
 			bool dom;
-			u32 t = vblk_peek(vm, d, head, &dom);
+			u32 t = vblk_peek(vm, d, head, &dom, &walked);
 
 			if (!d->fc_off && t == VIRTIO_BLK_T_FLUSH) {
 				if (d->fc_target && d->fc_count + 1 == d->fc_target)
@@ -2996,10 +3017,11 @@ static void virtio_blk_process(struct hvx_vcpu *vcpu)
 			}
 		}
 		di = head;
-		for (guardn = 0; guardn < (int)d->qsize + 2; guardn++) {
+		for (guardn = 0; guardn < hvx_vq_chain_max(d->qsize); guardn++) {
 			struct virtq_desc desc;
 			bool has_next;
 
+			walked++;
 			if (!hvx_guest_rw(vm, d->desc_gpa + (u64)di * 16, &desc, 16, false))
 				break;
 			has_next = desc.flags & VIRTQ_DESC_F_NEXT;
@@ -4102,13 +4124,14 @@ static void virtio_net_tx_process(struct hvx_vcpu *vcpu)
 	bool do_reorder = (v->nfault_classes & HVX_NFAULT_REORDER) != 0;
 	struct { u32 id; u32 len; } used[HVX_VNET_FAULT_BATCH];
 	int n_used = 0;
+	u32 walked = 0;			/* descriptors read this kick (M97 bound) */
 
 	if (!v->present || !q->qready || q->qsize == 0)
 		return;
 	if (!hvx_guest_rw(vm, q->avail_gpa + 2, &avail_idx, 2, false))
 		return;
 
-	while ((u16)q->last_avail != avail_idx) {
+	while ((u16)q->last_avail != avail_idx && walked < HVX_VQ_KICK_BUDGET) {
 		u16 slot = (u16)((u32)q->last_avail % q->qsize);
 		u16 head, di;
 		u32 skip = HVX_VNET_HDR_LEN;	/* bytes of virtio_net_hdr to drop */
@@ -4122,10 +4145,11 @@ static void virtio_net_tx_process(struct hvx_vcpu *vcpu)
 		if (!hvx_guest_rw(vm, q->avail_gpa + 4 + 2 * slot, &head, 2, false))
 			break;
 		di = head;
-		for (guardn = 0; guardn < (int)q->qsize + 2; guardn++) {
+		for (guardn = 0; guardn < hvx_vq_chain_max(q->qsize); guardn++) {
 			struct virtq_desc desc;
 			bool has_next;
 
+			walked++;
 			if (!hvx_guest_rw(vm, q->desc_gpa + (u64)di * 16, &desc, 16, false))
 				break;
 			has_next = desc.flags & VIRTQ_DESC_F_NEXT;
