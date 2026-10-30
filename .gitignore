@@ -16,3 +16,5 @@ Module.symvers
 *.partA-bak
 .DS_Store
 __pycache__/
+# local machine details (addresses, logins); never commit
+/AGENTS.local.md
