@@ -4,8 +4,9 @@
 # (busybox, hvx_seedrng, the mke2fs+libfaketime+ctime-zero ext2/ext4 helpers, the virtio
 # module set), then runs the AUTHORITATIVE spread §2m block by extracting it verbatim from
 # build-linux.sh — so there is ONE source of truth for the spread target, and building it
-# does NOT rebuild the slow JVM/Kafka closures. Run on the box via ./dev.sh "./build-spread.sh".
+# does NOT rebuild the slow JVM/Kafka closures. Run on the box via ./dev.sh "hv/hvx/images/build-spread.sh".
 set -euo pipefail
+cd "$(dirname "$0")/../../.."   # M100: this script lives in hv/hvx/images; every path below is relative to the repository root
 mkdir -p build
 
 # --- reproducible cpio (verbatim from build-linux.sh §prelude) ---
@@ -47,7 +48,7 @@ if [ -z "$MUSL_ROOT" ]; then
   [ -f "$MUSL_ROOT/lib/crt1.o" ] || MUSL_ROOT=$(dirname "$(dirname "$(ls /nix/store/*musl-static*/lib/crt1.o 2>/dev/null | head -1)")")
 fi
 [ -x "$GCC_MUSL" ] && [ -f "$MUSL_ROOT/lib/crt1.o" ] || { echo "error: no static musl gcc (set HYDO_GCC_MUSL + HYDO_MUSL_ROOT)" >&2; exit 1; }
-"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hvx/hvx_seedrng.c -o build/hvx_seedrng
+"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hv/hvx/images/hvx_seedrng.c -o build/hvx_seedrng
 echo "built build/hvx_seedrng ($(stat -c%s build/hvx_seedrng) bytes, static musl)"
 
 # --- 5. pinned mke2fs + libfaketime + the reproducible ext2/ext4 helpers (verbatim) ---
@@ -124,5 +125,5 @@ PYEOF
 # --- 6. run the AUTHORITATIVE spread PHASE-2 §2n block, extracted verbatim from build-linux.sh
 #        (the marker line to EOF; §2n is the last block). Single source of truth. ---
 echo ">> running the spread §2o (phase-3 search) block from build-linux.sh"
-eval "$(sed -n '/^# ---- 2o\. the SPREAD PHASE-3 SEARCH/,$p' build-linux.sh)"
+eval "$(sed -n '/^# ---- 2o\. the SPREAD PHASE-3 SEARCH/,$p' hv/hvx/images/build-linux.sh)"
 echo ">> build-spread3.sh: DONE"

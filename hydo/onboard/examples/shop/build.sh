@@ -3,8 +3,8 @@
 # planted bug and the fix: src/charge_buggy.go / src/charge_fixed.go, chosen by the Go build tag
 # "fixed"), and the two images build/explore-ob-shop-buggy-disk.img and -fixed-disk.img.
 # Run from the repository root on the build box; needs build/hvx_seedrng built with the pinned
-# musl gcc (hvx/BUILD-PINS.md) or HYDO_SEEDRNG. Pinned Go toolchain, standard library only.
-#   hvx/onboard/examples/shop/build.sh [binaries]     (binaries: stop after the three programs)
+# musl gcc (docs/BUILD-PINS.md) or HYDO_SEEDRNG. Pinned Go toolchain, standard library only.
+#   hydo/onboard/examples/shop/build.sh [binaries]     (binaries: stop after the three programs)
 #   SHOP_IMG=<prefix> (default explore-ob-shop) names the images <prefix>-buggy / <prefix>-fixed
 #   SHOP_GOARCH=arm64 builds the arm64 programs instead -- build/arm64/shop-{buggy,fixed} and
 #   build/hydo-world-arm64 -- and stops there: the arm64 images are built with the Mac release
@@ -19,7 +19,7 @@ mkdir -p "$TOP/build"
 ARCH="${SHOP_GOARCH:-amd64}"
 if [ "$ARCH" = amd64 ]; then BIN="$TOP/build"; WORLD="$TOP/build/hydo-world"
 else BIN="$TOP/build/$ARCH"; WORLD="$TOP/build/hydo-world-$ARCH"; mkdir -p "$BIN"; fi
-HYDO_GO="$GO" HYDO_WORLD_GOARCH="$ARCH" "$TOP/hvx/onboard/world/build.sh" "$WORLD"
+HYDO_GO="$GO" HYDO_WORLD_GOARCH="$ARCH" "$TOP/hydo/onboard/world/build.sh" "$WORLD"
 for v in buggy fixed; do
   tags=""; [ $v = fixed ] && tags="-tags=fixed"
   ( cd "$HERE/src" && GOPATH="$TOP/build/world-gopath" GOMODCACHE="$TOP/build/world-gomod" GOCACHE="$TOP/build/world-gocache" \
@@ -31,5 +31,5 @@ done
 PY3="${HYDO_PY3:-$(command -v python3 || ls /nix/store/*python3-3.11*/bin/python3 | head -1)}"
 cd "$TOP"
 for v in buggy fixed; do
-  "$PY3" hvx/onboard/hydo-build "$HERE/hydo.yaml" --set variant=$v --out "${SHOP_IMG:-explore-ob-shop}-$v"
+  "$PY3" hydo/onboard/hydo-build "$HERE/hydo.yaml" --set variant=$v --out "${SHOP_IMG:-explore-ob-shop}-$v"
 done

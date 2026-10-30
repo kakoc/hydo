@@ -30,7 +30,7 @@ export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
 The installer checks the files against `SHA256SUMS`, copies the release into `~/.hydo`, compiles
-the run engine (`hvx/hvx_explore`) and the `hvx` kernel module for your kernel, and runs
+the run engine (`hv/hvx/hvx_explore`) and the `hvx` kernel module for your kernel, and runs
 `hydo doctor`. It changes nothing outside `~/.hydo` and does not load the module.
 
 Load the module (this unloads `kvm_intel` and `kvm` if they are loaded):
@@ -167,7 +167,7 @@ It ends `OK` with `retrans=0`: the delayed packets were delivered when the fault
 
 hydo learns your project from one file, `hydo.yaml`: which programs to start, how to tell they
 are ready, the workload, the invariants that must always hold, and which faults are allowed.
-`~/.hydo/hvx/onboard/MANIFEST.md` describes every field; `~/.hydo/examples/redis/hydo.yaml` is a
+`~/.hydo/hydo/onboard/MANIFEST.md` describes every field; `~/.hydo/examples/redis/hydo.yaml` is a
 complete example. The release includes an onboarding guide for AI coding tools of any vendor (an
 Agent Skills folder, https://agentskills.io) that reads your repository and writes the project's
 `hydo/` folder: run `hydo init` in your project, then tell your AI tool "run `hydo guide` and

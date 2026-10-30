@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """patch-src.py <front-door source dir> <dest dir> -- the richcov variant of a front door.
 
-Copies the Go source tree and adds the two signals of hvx/richcov/DESIGN.md section 2 that
+Copies the Go source tree and adds the two signals of hydo/richcov/DESIGN.md section 2 that
 need the guest's help: (1) the oracle prints one HYDO-STATE line per distinct per-order state
 tuple (state.go.in); (2) the assertion SDK re-emits an outcome when its bucketed details are
 new (distinct.go.in). Nothing else changes; works on the pre-fix explorer copy
-(hvx/explore/stack-src-sdk) and on the fixed front door (hvx/stack)."""
+(hydo/explore/stack-src-sdk) and on the fixed front door (hydo/stack)."""
 import os, shutil, sys
 src, dst = sys.argv[1], sys.argv[2]
 here = os.path.dirname(os.path.abspath(__file__))

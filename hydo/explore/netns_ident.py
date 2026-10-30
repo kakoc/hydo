@@ -1,6 +1,7 @@
 # Identity check for network: bridge (hydo-init-netns.sh, Milestone 95). usage:
 #   python3 netns_ident.py <reference tree> [<new tree>]       (trees = repository roots; new: this one)
-# For every manifest of the reference tree (hvx/onboard/examples/**, hvx-mac/explore/examples/**, the
+# For every manifest of the reference tree (hydo/onboard/examples/**, hydo/onboard/examples-mac/** or the
+# old layout's hvx/onboard/examples/**, hvx-mac/explore/examples/**, the
 # importer's test fixtures are Compose files and not manifests), none of which has network: bridge:
 # (1) hydo-build: the compiled /etc/hydo/manifest.sh and prelude.sh, /sbin/init, /etc/hydo/world.json
 #     and the default /etc/hosts of the new hydo-build equal the reference's byte for byte, and so do
@@ -31,11 +32,21 @@ def load(path, name):
     return m
 
 
+def prod(root):
+    """The product directory of a tree: hydo/ (Milestone 100 layout) or hvx/ (before it)."""
+    return os.path.join(root, "hydo") if os.path.isdir(os.path.join(root, "hydo", "onboard")) else os.path.join(root, "hvx")
+
+
+def mac_examples(root):
+    d = os.path.join(root, "hydo", "onboard", "examples-mac")
+    return d if os.path.isdir(d) else os.path.join(root, "hvx-mac", "explore", "examples")
+
+
 def tree(root, tag):
-    hb = load(os.path.join(root, "hvx/onboard/hydo-build"), "hb_" + tag)
-    oc = load(os.path.join(root, "hvx/onboard/hydo_oci.py"), "oci_" + tag)
-    ex = load(os.path.join(root, "hvx/explore/explore.py"), "ex_" + tag)
-    ms = load(os.path.join(root, "hvx/explore/manifest_space.py"), "ms_" + tag)
+    hb = load(os.path.join(prod(root), "onboard/hydo-build"), "hb_" + tag)
+    oc = load(os.path.join(prod(root), "onboard/hydo_oci.py"), "oci_" + tag)
+    ex = load(os.path.join(prod(root), "explore/explore.py"), "ex_" + tag)
+    ms = load(os.path.join(prod(root), "explore/manifest_space.py"), "ms_" + tag)
     return hb, oc, ex, ms
 
 
@@ -46,9 +57,9 @@ assert OCI_A.HYDO_OCI == OCI_B.HYDO_OCI, "hydo-oci wrapper changed"
 
 def manifests(root):
     out = []
-    for pat in ("hvx/onboard/examples/**/*.yaml", "hvx/onboard/examples/**/*.json",
-                "hvx-mac/explore/examples/**/*.yaml", "hvx-mac/explore/examples/**/*.json"):
-        out += glob.glob(os.path.join(root, pat), recursive=True)
+    for d in (os.path.join(prod(root), "onboard", "examples"), mac_examples(root)):
+        for pat in ("**/*.yaml", "**/*.json"):
+            out += glob.glob(os.path.join(d, pat), recursive=True)
     keep = []
     for p in sorted(set(out)):
         b = os.path.basename(p)

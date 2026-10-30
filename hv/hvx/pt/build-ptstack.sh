@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build a coverage-ready copy of the stack guest image: the same image as the
 # assertion-enabled stack (build/sdk-disk.img on the box), with /bin/hydostack replaced by
-# a build of the COMMITTED hvx/stack sources that keeps its symbols and DWARF and links its
+# a build of the COMMITTED hydo/stack sources that keeps its symbols and DWARF and links its
 # text at a unique address (0x2000001000), so an Intel PT trace filtered to that address
 # range contains this program only (busybox and other static binaries also live at 0x400000).
 #   output on the box: ~/hydo/build/pt-stack-disk.img and ~/hydo/hvxpt/pt/hydostack-pt
@@ -12,13 +12,13 @@ BUILD="${HYDO_REMOTE:?}"
 REV="${PT_STACK_REV:-HEAD}"
 TEXT="${PT_STACK_TEXT:-0x2000001000}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-TOP="$(cd "$HERE/../.." && pwd)"
+TOP="$(cd "$HERE/../../.." && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-git -C "$TOP" archive "$REV" hvx/stack | tar -x -C "$TMP"
+git -C "$TOP" archive "$REV" hydo/stack | tar -x -C "$TMP"
 ssh "$BUILD" 'rm -rf /tmp/ptstack-src && mkdir -p /tmp/ptstack-src'
-rsync -az "$TMP/hvx/stack/" "$BUILD:/tmp/ptstack-src/"
+rsync -az "$TMP/hydo/stack/" "$BUILD:/tmp/ptstack-src/"
 ssh "$BUILD" "cd /tmp/ptstack-src && GO=/nix/store/pwj3x44pp735yb038fnmqckyyra9k29x-go-1.26.5/bin/go; \
   [ -x \$GO ] || GO=/nix/store/xrgn6m0c5vbz06467q06zdwnk6qqdl7z-go-1.26.5/bin/go; \
   GOPATH=\$HOME/hydo/build/stack-gopath GOMODCACHE=\$HOME/hydo/build/stack-gomod \

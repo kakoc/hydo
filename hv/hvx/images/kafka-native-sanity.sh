@@ -46,7 +46,7 @@ group.initial.rebalance.delay.ms=0
 EOF
 
 echo ">> compile KafkaClient.java"
-cp ~/hydo/hvx/KafkaClient.java .
+cp ~/hydo/hv/hvx/images/KafkaClient.java .
 "$JAVAC" -cp "$KP/libs/*" -d . KafkaClient.java || { echo "COMPILE FAIL"; exit 1; }
 
 echo ">> format storage (fixed UUID)"

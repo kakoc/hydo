@@ -4,7 +4,7 @@
 # interpreter, its standard library without the parts a server never imports (test, idlelib,
 # tkinter, turtledemo, ensurepip, lib2to3, pydoc_data, the config dir, the -O/-OO .pyc files),
 # its extension modules, and exactly the shared libraries the loader opens for them
-# (hvx-mac/services/elfdeps.py), at their /nix/store paths.
+# (hv/hvm/services/elfdeps.py), at their /nix/store paths.
 # Needs ssh to a Linux machine with nix that has (or can substitute) the store path:
 #     nix build --max-jobs 0 --system aarch64-linux nixpkgs#python3   (prints the path below)
 # Also copies the SDK (sdk/python/src/hydo_assert, without __pycache__) to files/opt/pykv/.
@@ -17,7 +17,7 @@ HOST=${HYDO_BUILD_HOST:?}
 PY=/nix/store/ic0l2ykss28lr7r4by14inb3pqw87yza-python3-3.11.9     # aarch64-linux, nixpkgs#python3
 HOSTPY=/nix/store/4rf5qybw37b4lh1g0xczlv14sqdbmnpm-python3-3.11.9/bin/python3   # x86_64, runs elfdeps
 
-ssh "$HOST" "mkdir -p /tmp/hydo-pyfetch && cat > /tmp/hydo-pyfetch/elfdeps.py" < "$REPO/hvx-mac/services/elfdeps.py"
+ssh "$HOST" "mkdir -p /tmp/hydo-pyfetch && cat > /tmp/hydo-pyfetch/elfdeps.py" < "$REPO/hv/hvm/services/elfdeps.py"
 rm -rf "$HERE/files"; mkdir -p "$HERE/files"
 ssh "$HOST" "set -e; P=$PY; L=\$P/lib/python3.11
   [ -e \$P/bin/python3.11 ] || { echo 'missing \$P: nix build --max-jobs 0 --system aarch64-linux nixpkgs#python3' >&2; exit 1; }

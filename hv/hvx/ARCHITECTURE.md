@@ -1,7 +1,7 @@
 # hvx — Architecture Reference
 
 `hvx` is a from-scratch Intel VT-x hypervisor, implemented as a single Linux kernel
-module (`hvx/hvx.c`) plus a shared kernel↔userspace ABI (`hvx/hvx_abi.h`). It owns
+module (`hv/hvx/hvx.c`) plus a shared kernel↔userspace ABI (`hv/hvx/hvx_abi.h`). It owns
 the VMCS directly — no KVM underneath it — so it can control every source of
 nondeterminism a guest can observe. It is the second-generation core of the `hydo`
 project: a **deterministic hypervisor**, where the same
@@ -10,8 +10,8 @@ snapshot, and branch-from-snapshot.
 
 This document is a reference for a new engineer. It is written against the code and
 milestone history as of **Milestone 23 complete, Milestone 24 (network fault
-injection) in progress**. Every claim here is grounded in `hvx/hvx.c`,
-`hvx/hvx_abi.h`, `CLAUDE.md`, and `README.md`; where the code and the narrative
+injection) in progress**. Every claim here is grounded in `hv/hvx/hvx.c`,
+`hv/hvx/hvx_abi.h`, `CLAUDE.md`, and `README.md`; where the code and the narrative
 diverge, that is called out in the final section.
 
 > Scope note: the `src/*.rs` tree is the **original, KVM-based hydo** — the
@@ -81,7 +81,7 @@ Key operational facts (from `CLAUDE.md`):
 - A guest that runs with `RFLAGS.IF=1` can *steal L1's physical timer interrupts*
   and RCU-stall L1; `run-l1.sh` restarts it. The module's pin-control design (see
   §4) is what prevents this in normal operation.
-- Rebuild/reload from the build machine: `./dev.sh "~/hydo/hvx/deploy-hvx.sh load"` — syncs
+- Rebuild/reload from the build machine: `./dev.sh "~/hydo/hv/hvx/deploy-hvx.sh load"` — syncs
   the tree, copies into L1, builds the module and every `hvx_*_test`, `rmmod
   kvm_intel`, `insmod hvx`, runs the tests against `/dev/hvx`, prints dmesg,
   `rmmod`.
@@ -470,7 +470,7 @@ milestone as landing; do not rely on any half-written M24 code.
 ## 6. The real-Linux boot path
 
 `hvx` boots the same NixOS 6.6.35 bzImage the KVM path boots, reusing that recipe
-(`hvx/hvx_boot.h`, factored from the KVM path's `boot.rs`/`detlinux.rs`):
+(`hv/hvx/hvx_boot.h`, factored from the KVM path's `boot.rs`/`detlinux.rs`):
 
 - **64-bit bzImage protocol**: protected-mode kernel loaded at `0x100000`, **entry
   `0x100200` directly in 64-bit long mode** (so no real-mode entry and no
@@ -480,7 +480,7 @@ milestone as landing; do not rely on any half-written M24 code.
 - Cmdline: `console=ttyS0 earlyprintk=ttyS0 loglevel=8 nokaslr acpi=off
   x2apic_phys`.
 
-The loader (`hvx/hvx_linux.c`) free-runs `HVX_RUN`, re-running on `HVX_EXIT_THROTTLE`
+The loader (`hv/hvx/hvx_linux.c`) free-runs `HVX_RUN`, re-running on `HVX_EXIT_THROTTLE`
 (normal — the 65536-exit cap fires many times) and draining `HVX_GET_CONSOLE` each
 iteration. On any unexpected stop it dumps the exit reason/qualification/GPA/RIP and
 the faulting instruction bytes (translating a kernel-virtual RIP to guest-physical
@@ -503,7 +503,7 @@ order:
 
 **Result**: a real Linux kernel boots to the busybox `~ #` shell prompt (M15,
 interactive at M18), and — the headline result (**M16**) — the whole boot is a
-rigorous determinism result. `hvx/hvx_boot_verify.c` boots in FAST free-run, stops
+rigorous determinism result. `hv/hvx/hvx_boot_verify.c` boots in FAST free-run, stops
 at a well-defined console marker, and fingerprints the **full** end state (console +
 snapshot + all 256 MiB RAM). Two fresh boots and a mid-boot branch-from-snapshot all
 produce the **same** fingerprint, and the two consoles are byte-for-byte equal — past
@@ -695,12 +695,12 @@ page-table bit is an observable input that must be tamed.
 
 | File | Role |
 |---|---|
-| `hvx/hvx.c` | The module: VMX/EPT + `/dev/hvx` + deterministic RDTSC/MTF/TSC + CPUID/MSR + sregs + x2APIC/IOAPIC/UART + SMP + virtio-blk/net + fault injection. |
-| `hvx/hvx_abi.h` | Shared kernel↔userspace ioctl ABI, structs, and device constants. |
-| `hvx/hvx_boot.h` | Shared bzImage-loader setup (the byte-for-byte KVM-path boot recipe). |
-| `hvx/hvx_linux.c` | The bzImage loader / real-Linux runner (free-run loop, console drain, fault dump). |
-| `hvx/hvx_boot_verify.c`, `hvx_disk_boot_verify.c`, `hvx_net_boot_verify.c` | Whole-boot determinism harnesses (no-disk / with-disk / with-net). |
-| `hvx/hvx_*_test.c` | Per-milestone unit tests (M3–M23) proving each capability + fingerprint. |
-| `hvx/hvx_pmu_probe.c` | M17 capability probe (reports the vPMU is unavailable on this box). |
-| `hvx/deploy-hvx.sh`, `run-l1.sh`, `run-*-demo.sh`, `cloud-init/` | L1 sandbox bring-up, build+load+test, and demo runners. |
+| `hv/hvx/hvx.c` | The module: VMX/EPT + `/dev/hvx` + deterministic RDTSC/MTF/TSC + CPUID/MSR + sregs + x2APIC/IOAPIC/UART + SMP + virtio-blk/net + fault injection. |
+| `hv/hvx/hvx_abi.h` | Shared kernel↔userspace ioctl ABI, structs, and device constants. |
+| `hv/hvx/hvx_boot.h` | Shared bzImage-loader setup (the byte-for-byte KVM-path boot recipe). |
+| `hv/hvx/hvx_linux.c` | The bzImage loader / real-Linux runner (free-run loop, console drain, fault dump). |
+| `hv/hvx/hvx_boot_verify.c`, `hvx_disk_boot_verify.c`, `hvx_net_boot_verify.c` | Whole-boot determinism harnesses (no-disk / with-disk / with-net). |
+| `hv/hvx/hvx_*_test.c` | Per-milestone unit tests (M3–M23) proving each capability + fingerprint. |
+| `hv/hvx/hvx_pmu_probe.c` | M17 capability probe (reports the vPMU is unavailable on this box). |
+| `hv/hvx/deploy-hvx.sh`, `run-l1.sh`, `run-*-demo.sh`, `cloud-init/` | L1 sandbox bring-up, build+load+test, and demo runners. |
 | `src/*.rs` | The **predecessor** KVM-based hydo (design reference; see `README.md`). |

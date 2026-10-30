@@ -7,8 +7,9 @@
 # building it does NOT rebuild the slow spread/JVM/redis closures or clobber their images.
 # The heavy JDK closure + kafka jars staged onto build/rootfs-kafka-root are PRESERVED across
 # runs by §2l.2's own reuse logic (rm -rf build/rootfs-kafka-root to force a fresh copy).
-# Run on the box via ./dev.sh "./build-kafka.sh"  (or scp it over and run it directly).
+# Run on the box via ./dev.sh "hv/hvx/images/build-kafka.sh"  (or scp it over and run it directly).
 set -euo pipefail
+cd "$(dirname "$0")/../../.."   # M100: this script lives in hv/hvx/images; every path below is relative to the repository root
 mkdir -p build
 
 # --- reproducible cpio (verbatim from build-linux.sh §prelude) ---
@@ -50,7 +51,7 @@ if [ -z "$MUSL_ROOT" ]; then
   [ -f "$MUSL_ROOT/lib/crt1.o" ] || MUSL_ROOT=$(dirname "$(dirname "$(ls /nix/store/*musl-static*/lib/crt1.o 2>/dev/null | head -1)")")
 fi
 [ -x "$GCC_MUSL" ] && [ -f "$MUSL_ROOT/lib/crt1.o" ] || { echo "error: no static musl gcc (set HYDO_GCC_MUSL + HYDO_MUSL_ROOT)" >&2; exit 1; }
-"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hvx/hvx_seedrng.c -o build/hvx_seedrng
+"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hv/hvx/images/hvx_seedrng.c -o build/hvx_seedrng
 echo "built build/hvx_seedrng ($(stat -c%s build/hvx_seedrng) bytes, static musl)"
 
 # --- 5. pinned mke2fs + libfaketime + the reproducible ext2/ext4 helpers (verbatim) ---
@@ -128,5 +129,5 @@ PYEOF
 #        (bounded from the §2l marker up to — but NOT including — the §2m marker). Single
 #        source of truth: the Kafka recipe body lives only in build-linux.sh §2l. ---
 echo ">> running the Kafka §2l block from build-linux.sh"
-eval "$(awk '/^# ---- 2l\. the MILESTONE 33/{f=1} /^# ---- 2m\. the SPREAD assets/{f=0} f' build-linux.sh)"
+eval "$(awk '/^# ---- 2l\. the MILESTONE 33/{f=1} /^# ---- 2m\. the SPREAD assets/{f=0} f' hv/hvx/images/build-linux.sh)"
 echo ">> build-kafka.sh: DONE"

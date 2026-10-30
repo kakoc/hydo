@@ -718,14 +718,14 @@ enum { STOP_MARKER = 1, STOP_HALT, STOP_IDLE, STOP_LIMIT, STOP_SPIN };
 static uint64_t max_exits = 200000000ULL;
 FILE *trace_f;      /* HVM_TRACE=<file>: one line per exit (index, EC, PC, CPSR, IRQ line at entry) */
 
-static int (*hvm_stop_hook)(void);                  /* hvx-mac/explore/serve.c: extra stop conditions */
+static int (*hvm_stop_hook)(void);                  /* hv/hvm/explore/serve.c: extra stop conditions */
 
 /*
  * HVM_SOFT_IRQ=1: deliver an IRQ by emulating the exception entry in software (like KVM's
  * enter_exception64) instead of raising the vCPU's virtual IRQ line, so the IRQ is taken
  * exactly at the entry PC by construction rather than by the hardware's promptness. The
  * M48 boot gives the same fingerprint either way (81711ada76a4a236), i.e. the hardware
- * line was already taken at the entry there. Off by default; hvx-mac/explore/hvmx turns it on.
+ * line was already taken at the entry there. Off by default; hv/hvm/explore/hvmx turns it on.
  */
 static int soft_irq = -1;
 static int inject_irq_soft(void)

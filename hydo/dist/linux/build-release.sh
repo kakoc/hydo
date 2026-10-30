@@ -1,16 +1,16 @@
 #!/bin/sh
-# Build the self-contained x86_64 Linux release of hydo (see hvx/dist/README.md):
-#     hvx/dist/build-release.sh [OUTDIR]        -> OUTDIR/hydo-linux-<version>/ and its .tar.gz
+# Build the self-contained x86_64 Linux release of hydo (see hydo/dist/linux/README.md):
+#     hydo/dist/linux/build-release.sh [OUTDIR]        -> OUTDIR/hydo-linux-<version>/ and its .tar.gz
 #
 # Runs on any machine with sh, ssh, tar, python3 and sha256sum/shasum (the Mac works). The
-# guest and host-tool pieces are fetched once into hvx/dist/assets/ (pinned by sha256 in
+# guest and host-tool pieces are fetched once into hydo/dist/linux/assets/ (pinned by sha256 in
 # assets.sha256) from $HYDO_BUILD_HOST, a Linux machine with the pinned nixpkgs store paths
-# below (hvx/BUILD-PINS.md; default the build machine):
+# below (docs/BUILD-PINS.md; default the build machine):
 #   guest/bzImage, guest/initramfs-kafka.cpio.gz   the guest kernel + its switch_root initramfs
 #                                                  (~/hydo/build on the build box, build-linux.sh)
 #   guest/busybox                                  static busybox 1.37.0 (every image's /bin)
 #   guest/hvx_seedrng, guest/hydo_fc               static helpers, compiled there with the pinned
-#                                                  musl gcc from hvx/hvx_seedrng.c, hvx/onboard/hydo_fc.c
+#                                                  musl gcc from hv/hvx/images/hvx_seedrng.c, hydo/onboard/hydo_fc.c
 #   guest/modules/6.6.35/...                       the guest kernel's netem/u32/netfilter modules
 #   guest/store.tar, guest/store-closures.txt      the iproute2 + iptables closures (tc, iptables-legacy
 #                                                  inside the guest; "<root> <member>" lines, nix-store -qR)
@@ -21,7 +21,7 @@
 # Once assets/ is filled the release builds offline. Users of the release need no Nix.
 set -e
 D=$(cd "$(dirname "$0")" && pwd)
-TOP=$(cd "$D/../.." && pwd)
+TOP=$(cd "$D/../../.." && pwd)
 VERSION=${HYDO_VERSION:-0.1.0}
 OUTDIR=${1:-$D/out}
 A=$D/assets
@@ -42,15 +42,15 @@ if command -v sha256sum >/dev/null; then SHA="sha256sum"; else SHA="shasum -a 25
 if [ ! -f "$A/.complete" ]; then
   [ -d "$A" ] && chmod -R u+w "$A" && rm -rf "$A"; mkdir -p "$A"
   echo "fetching the release assets from $HOST"
-  ( cd "$TOP" && tar --no-xattrs -cf - hvx/hvx_seedrng.c hvx/onboard/hydo_fc.c ) | ssh "$HOST" "
+  ( cd "$TOP" && tar --no-xattrs -cf - hv/hvx/images/hvx_seedrng.c hydo/onboard/hydo_fc.c ) | ssh "$HOST" "
     set -e
     W=\$(mktemp -d /dev/shm/hydo-linux-release.XXXXXX); trap 'chmod -R u+w \$W; rm -rf \$W' EXIT
     cd \$W && tar xf - >&2
     mkdir -p out/guest/modules out/tools/bin out/tools/lib out/redis
     cp ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz out/guest/
     cp $BUSYBOX out/guest/busybox
-    $GCC_MUSL -static -O2 -Wall -B $MUSL_ROOT/lib hvx/hvx_seedrng.c -o out/guest/hvx_seedrng >&2
-    $GCC_MUSL -static -O2 -Wall -B $MUSL_ROOT/lib hvx/onboard/hydo_fc.c -o out/guest/hydo_fc >&2
+    $GCC_MUSL -static -O2 -Wall -B $MUSL_ROOT/lib hv/hvx/images/hvx_seedrng.c -o out/guest/hvx_seedrng >&2
+    $GCC_MUSL -static -O2 -Wall -B $MUSL_ROOT/lib hydo/onboard/hydo_fc.c -o out/guest/hydo_fc >&2
     ( cd $KMODS/.. && for m in $MODS; do find 6.6.35 -name \$m.ko.xz; done | sort | tar cf - -T - ) | ( cd out/guest/modules && tar xf - )
     # the guest-side closures as ONE GNU tar with their exact (read-only) modes: hydo-build copies
     # them with cp -a, so the image gets the store's modes; install.sh unpacks it (GNU tar sets a
@@ -78,54 +78,57 @@ fi
 nf=$(cd "$A" && find . -type f ! -name .complete | wc -l | tr -d ' ')
 [ "$nf" = "$(wc -l < "$D/assets.sha256" | tr -d ' ')" ] || { echo "assets/ has $nf files, assets.sha256 lists $(wc -l < "$D/assets.sha256")" >&2; exit 1; }
 ( cd "$A" && $SHA -c "$D/assets.sha256" >/dev/null ) || {
-  echo "assets do not match assets.sha256 (pinned); remove hvx/dist/assets and fetch again" >&2
+  echo "assets do not match assets.sha256 (pinned); remove hydo/dist/linux/assets and fetch again" >&2
   ( cd "$A" && $SHA -c "$D/assets.sha256" 2>/dev/null | grep -v ': OK$' | head ) >&2; exit 1; }
 
 # --- 2. the release tree ---
 REL=$OUTDIR/hydo-linux-$VERSION
 [ -d "$REL" ] && chmod -R u+w "$REL" && rm -rf "$REL"
-mkdir -p "$REL/bin" "$REL/libexec/bin" "$REL/hvx/onboard" "$REL/hvx/explore" "$REL/module" \
-         "$REL/examples/redis/files" "$REL/skill"
+# the release tree mirrors the repository: hydo/ (the product) and hv/hvx/ (the run engine's sources)
+mkdir -p "$REL/bin" "$REL/libexec/bin" "$REL/hydo/onboard" "$REL/hydo/explore" "$REL/hydo/assert" "$REL/hv/hvx" \
+         "$REL/module" "$REL/examples/redis/files" "$REL/skill"
 cp "$D/hydo" "$REL/bin/hydo"; chmod 755 "$REL/bin/hydo"
 cp "$D/libexec/hvx-run" "$D/libexec/faketime" "$REL/libexec/"
 cp "$D/libexec/bin/debugfs" "$REL/libexec/bin/"
 chmod 755 "$REL/libexec/hvx-run" "$REL/libexec/faketime" "$REL/libexec/bin/debugfs"
-cp "$TOP/hvx/onboard/hydo-build" "$TOP/hvx/onboard/hydo-compose" "$TOP/hvx/onboard/hydo_compose.py" "$TOP/hvx/onboard/hydo_oci.py" "$TOP/hvx/onboard/hydo_build_arm64.py" \
-   "$TOP/hvx/onboard/hydo-init.sh" "$TOP/hvx/onboard/hydo-init-clock.sh" "$TOP/hvx/onboard/hydo-init-freeze.sh" \
-   "$TOP/hvx/onboard/hydo-init-links.sh" "$TOP/hvx/onboard/hydo-init-netns.sh" "$TOP/hvx/onboard/hydo-liveness.sh" "$TOP/hvx/onboard/hydo_fc.c" \
-   "$TOP/hvx/onboard/MANIFEST.md" "$TOP/hvx/onboard/hydo_composer.py" "$TOP/hvx/onboard/hydo-composer.sh" "$REL/hvx/onboard/"
-echo "$VERSION" > "$REL/hvx/VERSION"     # hydo_composer.engine_version: what a plan's hydo_version is checked against
-# the host-side history checkers and the guest recorder (hvx/HISTORIES.md)
-mkdir -p "$REL/hvx/history"
-cp "$TOP/hvx/history/hydohist.py" "$TOP/hvx/history/hydo-check" "$TOP/hvx/history/hydo_hist.sh" "$REL/hvx/history/"
-cp "$TOP/hvx/onboard/hydo-init-history.sh" "$REL/hvx/onboard/"
+cp "$TOP/hydo/onboard/hydo-build" "$TOP/hydo/onboard/hydo-compose" "$TOP/hydo/onboard/hydo_compose.py" "$TOP/hydo/onboard/hydo_oci.py" "$TOP/hydo/onboard/hydo_build_arm64.py" \
+   "$TOP/hydo/onboard/hydo-init.sh" "$TOP/hydo/onboard/hydo-init-clock.sh" "$TOP/hydo/onboard/hydo-init-freeze.sh" \
+   "$TOP/hydo/onboard/hydo-init-links.sh" "$TOP/hydo/onboard/hydo-init-netns.sh" "$TOP/hydo/onboard/hydo-liveness.sh" "$TOP/hydo/onboard/hydo_fc.c" \
+   "$TOP/hydo/onboard/MANIFEST.md" "$TOP/hydo/onboard/hydo_composer.py" "$TOP/hydo/onboard/hydo-composer.sh" "$REL/hydo/onboard/"
+echo "$VERSION" > "$REL/hydo/VERSION"     # hydo_composer.engine_version: what a plan's hydo_version is checked against
+# the host-side history checkers and the guest recorder (hydo/HISTORIES.md)
+mkdir -p "$REL/hydo/history"
+cp "$TOP/hydo/history/hydohist.py" "$TOP/hydo/history/hydo-check" "$TOP/hydo/history/hydo_hist.sh" "$REL/hydo/history/"
+cp "$TOP/hydo/onboard/hydo-init-history.sh" "$REL/hydo/onboard/"
 # error logs as findings (errors: in a manifest): the guest scan and the host side (hydo errors)
-cp "$TOP/hvx/onboard/hydo-init-errlog.sh" "$TOP/hvx/onboard/hydo_errors.py" "$REL/hvx/onboard/"
-cp "$TOP/hvx/explore/explore.py" "$TOP/hvx/explore/hvm_backend.py" "$TOP/hvx/explore/manifest_space.py" \
-   "$TOP/hvx/explore/ptedges.h" "$REL/hvx/explore/"
-# the run engine's sources (install.sh compiles hvx/hvx_explore on the user's machine) and the
-# property-table tool explore.py compiles on the fly
-cp "$TOP/hvx/hvx_explore.c" "$TOP/hvx/hvx_stack_verify.c" "$TOP/hvx/hvx_boot.h" "$TOP/hvx/hvx_abi.h" \
-   "$TOP/hvx/hydo_assert_report.c" "$TOP/hvx/hydo_assert_table.h" "$TOP/hvx/ASSERTIONS.md" "$REL/hvx/"
+cp "$TOP/hydo/onboard/hydo-init-errlog.sh" "$TOP/hydo/onboard/hydo_errors.py" "$REL/hydo/onboard/"
+cp "$TOP/hydo/explore/explore.py" "$TOP/hydo/explore/hvm_backend.py" "$TOP/hydo/explore/manifest_space.py" \
+   "$REL/hydo/explore/"
+# the run engine's sources (install.sh compiles hv/hvx/hvx_explore on the user's machine)
+cp "$TOP/hv/hvx/hvx_explore.c" "$TOP/hv/hvx/hvx_stack_verify.c" "$TOP/hv/hvx/hvx_boot.h" "$TOP/hv/hvx/hvx_abi.h" \
+   "$TOP/hv/hvx/ptedges.h" "$REL/hv/hvx/"
+# the property-table tool explore.py compiles on the fly, and the assertion protocol it reads
+cp "$TOP/hydo/assert/hydo_assert_report.c" "$TOP/hydo/assert/hydo_assert_table.h" "$REL/hydo/assert/"
+cp "$TOP/hydo/ASSERTIONS.md" "$REL/hydo/"
 # the kernel module's sources (hydo module build)
-cp "$TOP/hvx/hvx.c" "$TOP/hvx/hvx_abi.h" "$TOP/hvx/Makefile" "$REL/module/"
+cp "$TOP/hv/hvx/hvx.c" "$TOP/hv/hvx/hvx_abi.h" "$TOP/hv/hvx/Makefile" "$REL/module/"
 mkdir -p "$REL/guest" "$REL/tools"
 ( cd "$A/guest" && tar cf - . ) | ( cd "$REL/guest" && tar xpf - )
 ( cd "$A/tools" && tar cf - . ) | ( cd "$REL/tools" && tar xpf - )
 chmod 755 "$REL/guest/busybox" "$REL/guest/hvx_seedrng" "$REL/guest/hydo_fc" "$REL/tools/bin/"*
-# the Redis example (hvx/onboard/examples/redis) with its binaries under files/
+# the Redis example (hydo/onboard/examples/redis) with its binaries under files/
 cp "$A/redis/redis-server" "$A/redis/redis-cli" "$REL/examples/redis/files/"
 chmod 755 "$REL/examples/redis/files/"*
 for y in hydo.yaml hydo-netem.yaml; do
   sed -e 's#{src: ~/hydo/build/redis-#{src: files/redis-#' \
       -e 's#Build on the build box:#Build (in this directory):#' \
       -e "s#^\\#   HYDO_SEEDRNG=.*#\\#   hydo build $y#" \
-      "$TOP/hvx/onboard/examples/redis/$y" > "$REL/examples/redis/$y"
+      "$TOP/hydo/onboard/examples/redis/$y" > "$REL/examples/redis/$y"
 done
 # the onboarding skill (an Agent Skills folder, agentskills.io): `hydo guide`, `hydo skill install`
-# and `hydo init` read it from skill/hydo-onboard (hvx/onboard/hydo_agents.py)
+# and `hydo init` read it from skill/hydo-onboard (hydo/onboard/hydo_agents.py)
 cp -R "$TOP/skills/hydo-onboard" "$REL/skill/"
-cp "$TOP/hvx/onboard/hydo_agents.py" "$REL/hvx/onboard/"
+cp "$TOP/hydo/onboard/hydo_agents.py" "$REL/hydo/onboard/"
 cp "$D/install.sh" "$REL/install.sh"; chmod 755 "$REL/install.sh"
 cp "$D/QUICKSTART-linux.md" "$REL/README.md"
 echo "$VERSION" > "$REL/VERSION"

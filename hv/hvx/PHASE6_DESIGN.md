@@ -1,7 +1,7 @@
 # Phase 6 (Milestone 15) design — deterministic LAPIC + IOAPIC for hvx
 
-Blueprint for the Phase 6 implementation agent. Grounded in `hvx/hvx.c`, `hvx/hvx_abi.h`,
-`hvx/hvx_linux.c`, `src/boot.rs`, `src/detlinux.rs`, `src/state.rs`.
+Blueprint for the Phase 6 implementation agent. Grounded in `hv/hvx/hvx.c`, `hv/hvx/hvx_abi.h`,
+`hv/hvx/hvx_linux.c`, `src/boot.rs`, `src/detlinux.rs`, `src/state.rs`.
 
 ## The load-bearing decision: force x2APIC — emulate the LAPIC via the MSR trap, not MMIO
 hvx already traps **every** RDMSR/WRMSR (no MSR bitmap; `setup_vmcs` sets only HLT/RDTSC/IO/SECONDARY

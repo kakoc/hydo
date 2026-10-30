@@ -1077,7 +1077,7 @@ struct hvx_sched {
 #define HVX_EXIT_TURN		0xfffffffbU
 
 /*
- * Turn-end cost diagnostics (hvx/FASTTURN.md). Host-side counters only: never read into
+ * Turn-end cost diagnostics (hv/hvx/FASTTURN.md). Host-side counters only: never read into
  * guest state, never in a snapshot or fingerprint. Cycles are host TSC cycles (`tsc_khz`
  * per millisecond). HVX_GET_FTSTAT reads them, HVX_RESET_FTSTAT zeroes them.
  */
@@ -1122,7 +1122,7 @@ struct hvx_ftstat {
 /*
  * Turn control for the in-kernel scheduler (HVX_VM_SMP_SCHED; EINVAL on other VMs),
  * kept out of struct hvx_sched so that struct and its ioctls keep their layout
- * (hvx/FASTTURN.md). Everything here is POLICY, like quantum and seed: nothing is state,
+ * (hv/hvx/FASTTURN.md). Everything here is POLICY, like quantum and seed: nothing is state,
  * so a snapshot needs nothing from it; set it again after restoring into a fresh VM.
  *
  *  margin   landing margin of TURN ENDS, in guest branches (0 = 256, the tick margin,

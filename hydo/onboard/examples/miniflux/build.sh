@@ -5,7 +5,7 @@
 #      CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS=-mod=readonly go build -trimpath -buildvcs=false \
 #        -ldflags "-s -w -buildid= -X miniflux.app/v2/internal/version.Version=2.3.3" -o miniflux .
 #    (go 1.26.5: /nix/store/pwj3x44pp735yb038fnmqckyyra9k29x-go-1.26.5)
-# 2. this script: HYDO_MINIFLUX_BIN=<that binary> hvx/onboard/examples/miniflux/build.sh
+# 2. this script: HYDO_MINIFLUX_BIN=<that binary> hydo/onboard/examples/miniflux/build.sh
 # Output: build/explore-ob-miniflux-disk.img
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"

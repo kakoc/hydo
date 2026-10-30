@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * hydo_fc -- the "freeze at a call" fault of manifest-built hydo images (F= token,
- * hvx/onboard/MANIFEST.md "Freeze at a call", hvx/onboard/hydo-init-freeze.sh).
+ * hydo/onboard/MANIFEST.md "Freeze at a call", hydo/onboard/hydo-init-freeze.sh).
  *
  * The init puts every TCP packet between a service and one of its peers into netfilter queue
  * <queue> (iptables -j NFQUEUE in OUTPUT, both directions) from workload step <step> on, and
@@ -28,7 +28,7 @@
  * Console lines (stdout): "hydo-fc: FROZE ...", "hydo-fc: RESUMED ...", one HYDO-ASSERT
  * reachable record. Marker files <markerdir>/fc.fired and fc.resumed.
  *
- * Raw netlink (no libnetfilter_queue): built static with the pinned musl gcc (hvx/BUILD-PINS.md).
+ * Raw netlink (no libnetfilter_queue): built static with the pinned musl gcc (docs/BUILD-PINS.md).
  */
 #define _GNU_SOURCE
 #include <arpa/inet.h>

@@ -5,9 +5,9 @@
 # iptables + NFQUEUE). hydo-build --arch arm64 picks it only for manifests with network: bridge,
 # addr: or faults: [freeze]; every other arm64 image keeps Image-explore and its fingerprints.
 #
-#   WORK=<scratch dir> [JOBS=6] sh hvx-mac/explore/build-guest-netns.sh     -> $OUT/Image-explore-netns
+#   WORK=<scratch dir> [JOBS=6] sh hv/hvm/explore/build-guest-netns.sh     -> $OUT/Image-explore-netns
 #
-# Pinned inputs (hvx/BUILD-PINS.md, "Mac guest kernel for service networks"), downloaded into
+# Pinned inputs (docs/BUILD-PINS.md, "Mac guest kernel for service networks"), downloaded into
 # $DL (default $WORK/dl) if missing and checked by sha256 before use:
 #   - linux-6.6.35.tar.xz from cdn.kernel.org (the same tarball as nixpkgs#linux_6_6.src);
 #   - the Arm GNU Toolchain 13.3.Rel1, x86_64 host, aarch64-none-linux-gnu target, from

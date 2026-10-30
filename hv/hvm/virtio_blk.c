@@ -1,6 +1,6 @@
 /*
  * virtio_blk.c -- the virtio-blk device and its seeded fault injection, ported from
- * hvx/hvx.c (virtio_blk_process, vblk_fault_decide, the M26 volatile write cache).
+ * hv/hvx/hvx.c (virtio_blk_process, vblk_fault_decide, the M26 volatile write cache).
  *
  * Same seed -> same schedule as hvx: a request's 64-bit roll is
  * fault_roll(seed, request index) over EVERY request (reads, writes, flushes), a fault

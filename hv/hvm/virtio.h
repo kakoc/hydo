@@ -1,6 +1,6 @@
 /*
  * virtio.h -- virtio-mmio block and network devices for hvm.c, with hvx's seeded
- * fault injection (CLAUDE.md M20-M26 semantics, ported from hvx/hvx.c).
+ * fault injection (CLAUDE.md M20-M26 semantics, ported from hv/hvx/hvx.c).
  *
  * Everything is driven only by guest MMIO exits and the virtual clock, so a run
  * stays a pure function of its inputs: a kick services the queue at once, and its

@@ -1,5 +1,5 @@
-"""Tests of hvx/onboard/hydo_agents.py (hydo guide / skill / init), on the repository's skill:
-    python3 -m unittest discover -s hvx/onboard/tests -v"""
+"""Tests of hydo/onboard/hydo_agents.py (hydo guide / skill / init), on the repository's skill:
+    python3 -m unittest discover -s hydo/onboard/tests -v"""
 import io, os, shutil, subprocess, sys, tempfile, unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -143,7 +143,7 @@ class Init(unittest.TestCase):
     def test_new_agents_md_and_check(self):
         run(ha.init, ["--dir", self.repo])
         self.assertTrue(read(os.path.join(self.repo, "AGENTS.md")).startswith("# Instructions for coding agents\n"))
-        r = subprocess.run([sys.executable, os.path.join(TOP, "hvx", "onboard", "hydo-build"),
+        r = subprocess.run([sys.executable, os.path.join(TOP, "hydo", "onboard", "hydo-build"),
                             os.path.join(self.repo, "hydo", "hydo.yaml"), "--check"], stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT, text=True)
         self.assertEqual(r.returncode, 0, r.stdout)

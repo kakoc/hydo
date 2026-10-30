@@ -1,7 +1,7 @@
 # History checkers on real systems — results (2026-10-24, bare-metal test machine)
 
 Images built on the build box from branch `history-checkers` with the pinned tools
-(`hvx_seedrng` `c2a440c5…`, hvx/BUILD-PINS.md); each built twice, byte-identical. In
+(`hvx_seedrng` `c2a440c5…`, docs/BUILD-PINS.md); each built twice, byte-identical. In
 `~/hydo/build` on the box:
 
 | image | manifest | sha256 |
@@ -10,7 +10,7 @@ Images built on the build box from branch `history-checkers` with the pinned too
 | `explore-ob-etcd-hc-3.5.5-disk.img` | `examples/etcd/hydo-hist.yaml`, `--set version=3.5.5` | `4f8aa317ec627344…` |
 | `explore-ob-etcd-hc-3.5.6-disk.img` | the same, `--set version=3.5.6` | `2a4a5d4dadb7d8eb…` |
 
-`hvx_explore` compiled from main (`hvx/hvx_explore.c` is unchanged on this branch). Runs one VM
+`hvx_explore` compiled from main (`hv/hvx/hvx_explore.c` is unchanged on this branch). Runs one VM
 at a time, through `~/bin/hvx-run`. "Fresh boot" = `hvx_explore one` then `hydo-check` on its
 output directory; "snapshot" = explore.py's worker pool (`serve`, every schedule from the S1
 snapshot), whose `host_checks()` hook produced the verdicts shown. Results:

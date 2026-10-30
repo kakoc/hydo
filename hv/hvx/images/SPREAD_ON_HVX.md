@@ -79,9 +79,9 @@ CRNG otherwise), an in-guest HTTP driver, loopback, the `fs` backend on a rw dis
 
 ## Build machine workflow (all on the build machine; hvx runs in a nested L1)
 - Sync build machine→box: `cd ~/mine/rust/my_projects/hydo && ./dev.sh "<cmd>"` (rsync, excludes target/build/.git; runs on box, CC=clang).
-- L1 (the nested dev VM) is UP (`~/hydo/hvx/run-l1.sh` on the box, idempotent = wedge recovery; template needed staging to `~/l1/cloud-init/`). ssh into L1: `ssh -p 2222 -i ~/l1/id_l1 dev@localhost`.
-- Build rootfs/kernel: `./dev.sh "./build-linux.sh"` → `~/hydo/build/{bzImage, initramfs-*.cpio.gz, *-disk.img}`.
-- Build + load hvx: `~/hydo/hvx/deploy-hvx.sh [load]` (on box → into L1).
+- L1 (the nested dev VM) is UP (`~/hydo/hv/hvx/run-l1.sh` on the build machine, idempotent = wedge recovery; template needed staging to `~/l1/cloud-init/`). L1 is reached through its forwarded port 2222 with the key `~/l1/id_l1`.
+- Build rootfs/kernel: `./dev.sh "hv/hvx/images/build-linux.sh"` → `~/hydo/build/{bzImage, initramfs-*.cpio.gz, *-disk.img}`.
+- Build + load hvx: `~/hydo/hv/hvx/deploy-hvx.sh [load]` (on box → into L1).
 - **Safety: scoped kills only — `pkill -f l1-hvx`, NEVER a broad `pkill qemu-system` (a sibling `repeat` TCG job shares this box). Never touch L0.**
 
 ## Status
@@ -95,14 +95,14 @@ CRNG otherwise), an in-guest HTTP driver, loopback, the `fs` backend on a rw dis
   pre-initramfs kernel marker, continue twice). ro-root hash `4530f4220ed0c473`, EXCLUDED from the
   snapshot + stable. Rootfs is byte-reproducible (sha256(spread-disk.img)=`32607b20…`,
   sha256(spread-ext4.img)=`a195dbb6…` identical across independent builds).
-  - Files added to the hydo tree: `hvx/spread-drv/{main.go,go.mod}` (the repeat driver + a new
+  - Files added to the hydo tree: `hv/hvx/images/spread-drv/{main.go,go.mod}` (the repeat driver + a new
     single-broker `smoke` oracle subcommand); the spread `§2m` block in `build-linux.sh`;
     `build-spread.sh` (fast isolated builder that evals `§2m` — single source of truth);
-    `hvx/hvx_spread_verify.c` (clone of `hvx_jvm_verify.c`, `FINAL_MARKER` retargeted);
-    `hvx/run-spread-demo.sh`; `hvx/native-spread-smoke.sh` (F0 native sanity); `hvx_spread_verify`
-    wired into `hvx/deploy-hvx.sh`.
-  - Reproduce (on the box): `cd ~/hydo && ./build-spread.sh` → `bash hvx/deploy-hvx.sh` →
-    `bash hvx/run-spread-demo.sh all` (serve + replay + roundtrip + branch; `seed` mode is skipped,
+    `hv/hvx/hvx_spread_verify.c` (clone of `hvx_jvm_verify.c`, `FINAL_MARKER` retargeted);
+    `hv/hvx/run-spread-demo.sh`; `hv/hvx/images/native-spread-smoke.sh` (F0 native sanity); `hvx_spread_verify`
+    wired into `hv/hvx/deploy-hvx.sh`.
+  - Reproduce (on the build machine): `cd ~/hydo && hv/hvx/images/build-spread.sh` → `bash hv/hvx/deploy-hvx.sh` →
+    `bash hv/hvx/run-spread-demo.sh all` (serve + replay + roundtrip + branch; `seed` mode is skipped,
     it is JVM-key-oracle-specific — Phase 2 adds a spread fault oracle).
   - Determinism keys that held: `hvx_seedrng` (else Rust `getrandom()` hangs), `HVX_VM_X86_64_V2`
     (glibc userland), `HVX_VM_IDLE_HEARTBEAT` (broker parks in accept/epoll), `TOKIO_WORKER_THREADS=1`,
@@ -117,10 +117,10 @@ CRNG otherwise), an in-guest HTTP driver, loopback, the `fs` backend on a rw dis
   across REPLAY + ROUND-TRIP + BRANCH; ro-root `81203333c65e3342` stable/excluded. Seeded hvx DISK
   DROP fault (30%) on the shared data disk REPRODUCES bit-for-bit (seedA `9b2b4ef8f30e2a66` twice)
   and is seed-SENSITIVE (seedB `3f966b6255c45996`), distinct from the clean baseline — deterministic
-  under fault. Details + the crash-op stall finding: `hvx/SPREAD_PHASE2_NOTES.md`. Files added:
-  `build-linux.sh` §2n, `build-spread2.sh`, `hvx/run-spread2-demo.sh`, `hvx/native-spread2-smoke.sh`,
-  `fault` mode in `hvx/hvx_spread_verify.c`. Reproduce: `./build-spread2.sh` -> `bash hvx/deploy-hvx.sh`
-  -> `bash hvx/run-spread2-demo.sh all`.
+  under fault. Details + the crash-op stall finding: `hv/hvx/images/SPREAD_PHASE2_NOTES.md`. Files added:
+  `build-linux.sh` §2n, `build-spread2.sh`, `hv/hvx/run-spread2-demo.sh`, `hv/hvx/images/native-spread2-smoke.sh`,
+  `fault` mode in `hv/hvx/hvx_spread_verify.c`. Reproduce: `hv/hvx/images/build-spread2.sh` -> `bash hv/hvx/deploy-hvx.sh`
+  -> `bash hv/hvx/run-spread2-demo.sh all`.
   - FINDING: the broker-crash op `X 2` stalls the fs-backend survivor (busy-spins waiting out the
     dead broker's shared-log lease -> the metric-gated drain never drains -> a ~4 s boot runs
     indefinitely at 100% vCPU). So the crash op is OFF by default (`spread_crash=0`), opt-in via the
@@ -135,13 +135,13 @@ CRNG otherwise), an in-guest HTTP driver, loopback, the `fs` backend on a rw dis
   -> IDENTICAL fp; distinct programs -> distinct fps; Phase-2 baseline still `7b576827407c0644`.
   First campaigns: no-fault 30 programs -> 30/30 consistent (avg 0.247 s/input); seeded DROP fault
   (0x51a0, 30%) 30 programs -> 30/30 consistent (avg 0.245 s), deterministic under fault. Per-input
-  ~0.25 s (~16x vs a ~4 s boot). Details: `hvx/SPREAD_PHASE3_NOTES.md` (top). NB: `hvx.c`/`hvx_abi.h`
+  ~0.25 s (~16x vs a ~4 s boot). Details: `hv/hvx/images/SPREAD_PHASE3_NOTES.md` (top). NB: `hvx.c`/`hvx_abi.h`
   are hydo-16's (the fuzz port + collision fix); my work is the harness/driver/rootfs (§2o,
   `hvx_spread_search.c`, `fuzz-read.c`, `run-spread3-search.sh`).
 - 2026-08-23: (superseded) **Phase 3 — machine BUILT, BLOCKED on a missing hvx primitive (the plan's noted gap).**
   Built the whole serial-fed snapshot-restore search loop: driver `looprun` (serial-fed op-program +
   `SPREAD-READY-FOR-INPUT`/`SPREAD-RUN-DONE` brackets), `/init spread_mode=search`, and the host harness
-  `hvx/hvx_spread_search.c` (boot-once-to-READY -> file-backed snapshot -> per-program restore + feed +
+  `hv/hvx/hvx_spread_search.c` (boot-once-to-READY -> file-backed snapshot -> per-program restore + feed +
   run + verdict-parse + fingerprint, with a seeded `propose_spread_seq` generator + a determinism proof
   + optional DROP fault). Native F0 PASSES. Under hvx the loop is **blocked**: with the idle heartbeat
   ON (which the workload's metric-gated drain REQUIRES — its 500 ms timer-sleeps only fire if the clock
@@ -152,4 +152,4 @@ CRNG otherwise), an in-guest HTTP driver, loopback, the `fs` backend on a rw dis
   clear it under hvx. Exactly the plan's gap ("hvx has no synchronous one-shot fuzz-input port; build a
   small one"). **Fix = a synchronous input port (fw_cfg-equivalent: ~1 ioctl + 1 port handler in hvx.c +
   a ~30-line guest reader); everything else built plugs straight in.** Diagnosis + port design:
-  `hvx/SPREAD_PHASE3_NOTES.md`.
+  `hv/hvx/images/SPREAD_PHASE3_NOTES.md`.

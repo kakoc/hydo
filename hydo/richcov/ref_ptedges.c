@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * ref_ptedges -- test helper: decode a single-program trace with the explorer's own M41
- * decoder (hvx/explore/ptedges.h, included unmodified) so ptmulti's output for that
+ * decoder (hv/hvx/ptedges.h, included unmodified) so ptmulti's output for that
  * program can be checked against it edge for edge.
  *   ref_ptedges <elf> <trace.bin> <out.edges>
- * Build: cc -O2 -I../explore -o ref_ptedges ref_ptedges.c -lipt
+ * Build: cc -O2 -I../../hv/hvx -o ref_ptedges ref_ptedges.c -lipt
  */
 #include <stdio.h>
 #include <stdlib.h>

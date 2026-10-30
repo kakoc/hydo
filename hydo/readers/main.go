@@ -1,5 +1,5 @@
 // hydo-read and hydo-check: ready-made store readers and set-style checks for hydo
-// invariants (hvx/onboard/MANIFEST.md, "Reading the stores").
+// invariants (hydo/onboard/MANIFEST.md, "Reading the stores").
 //
 //	hydo-read  <store> <args...>     print what is in a table / on a topic / under a key,
 //	                                 as JSON Lines, sorted, one record per line

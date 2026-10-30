@@ -15,7 +15,7 @@
 # It also collects the files the decoder needs into build/richcov-syms/:
 #   hydostack (ELF), redis-server (ELF), mysqld (ELF), System.map (guest kernel), layout.txt.
 #
-# Run on the build box:  ./dev.sh "bash hvx/richcov/build-richcov.sh"
+# Run on the build box:  ./dev.sh "bash hydo/richcov/build-richcov.sh"
 set -euo pipefail
 TOP="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$TOP"
@@ -24,10 +24,10 @@ MYSQL="${HYDO_MYSQL:-/nix/store/aw6ljbiwgds7yw8x2jc3340dm46s7i2k-mysql-8.4.10}"
 # RICHCOV_VARIANT selects what is built (M44):
 #   (unset)  build/richcov-disk.img -- the plain stack in the coverage layout (M43 prep)
 #   old      build/richcov-old-disk.img -- EXPLORER image (serve mode), pre-fix front door
-#            (hvx/explore/stack-src-sdk, the source of explore-sdk-disk.img: has the M38 bug)
-#   fix      build/richcov-fix-disk.img -- EXPLORER image, fixed front door (hvx/stack, M39)
+#            (hydo/explore/stack-src-sdk, the source of explore-sdk-disk.img: has the M38 bug)
+#   fix      build/richcov-fix-disk.img -- EXPLORER image, fixed front door (hydo/stack, M39)
 # The two explorer variants also carry the state/detail signals: the front door source is
-# run through hvx/richcov/patch-src.py (HYDO-STATE lines from the oracle, distinct-details
+# run through hydo/richcov/patch-src.py (HYDO-STATE lines from the oracle, distinct-details
 # assertion records). Symbols go to build/<out>-syms/.
 VARIANT="${RICHCOV_VARIANT:-}"
 PY3="${HYDO_PY3:-/nix/store/14bkh67gwzg2hvqkadi03dyinrd7iybd-python3-3.11.9-env/bin/python3}"
@@ -35,21 +35,21 @@ PY3="${HYDO_PY3:-/nix/store/14bkh67gwzg2hvqkadi03dyinrd7iybd-python3-3.11.9-env/
 [ -x "$PY3" ] || PY3=$(command -v python3)
 export HYDO_PY3="$PY3"
 case "$VARIANT" in
-  "")  OUT=richcov; GOSRC=hvx/stack ;;
+  "")  OUT=richcov; GOSRC=hydo/stack ;;
   old) OUT=richcov-old; GOSRC=build/richcov-old-src
-       "$PY3" hvx/richcov/patch-src.py hvx/explore/stack-src-sdk "$GOSRC" ;;
+       "$PY3" hydo/richcov/patch-src.py hydo/explore/stack-src-sdk "$GOSRC" ;;
   fix) OUT=richcov-fix; GOSRC=build/richcov-fix-src
-       "$PY3" hvx/richcov/patch-src.py hvx/stack "$GOSRC" ;;
+       "$PY3" hydo/richcov/patch-src.py hydo/stack "$GOSRC" ;;
   *) echo "RICHCOV_VARIANT must be empty, old or fix" >&2; exit 2 ;;
 esac
 
-[ -x build/richcov-redis/bin/redis-server ] || bash hvx/richcov/build-redis-debug.sh
+[ -x build/richcov-redis/bin/redis-server ] || bash hydo/richcov/build-redis-debug.sh
 
 STACK_OUT=$OUT \
 STACK_GO_SRC="$GOSRC" \
 STACK_GO_LDFLAGS="-T 0x2000001000 -buildid=" \
 HYDO_REDIS_OUT="$TOP/build/richcov-redis" \
-  bash ./build-stack.sh
+  bash hv/hvx/images/build-stack.sh
 
 S=build/$OUT-syms
 rm -rf "${S:?}"; mkdir -p "$S"

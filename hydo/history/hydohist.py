@@ -1,7 +1,7 @@
 """hydohist -- operation histories recorded by guest programs, and the host-side checkers.
 
 A workload client records every operation it performs as HYDO-HIST lines on the guest console
-(format: hvx/HISTORIES.md). After the run the HOST reads the saved consoles (the workload VM's
+(format: hydo/HISTORIES.md). After the run the HOST reads the saved consoles (the workload VM's
 and, after a power cut, the recovery VM's), rebuilds the history and checks it:
 
     linearizable   a key-value register / compare-and-set object, checked per key

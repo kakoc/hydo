@@ -1,4 +1,4 @@
-// hydo-world: the outside world of a hydo project (hvx/onboard/MANIFEST.md, "Fake outside
+// hydo-world: the outside world of a hydo project (hydo/onboard/MANIFEST.md, "Fake outside
 // services"). One process inside the guest serves every fake HTTP/gRPC service and every fault
 // proxy the manifest declares, records each request it receives (what the outside world saw),
 // sends webhooks back to the system under test, and applies protocol-level faults (H= tokens)

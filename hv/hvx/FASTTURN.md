@@ -7,7 +7,7 @@ exactness, and added an opt-in burst turn mode so that dense switching is afford
 average.
 
 Developed on a side-by-side module `hvxft.ko` (`/dev/hvxft`, built by
-`hvx/fastturn/build-hvxft.sh` in `~/hydo-ft` on the bare-metal test machine). The main `hvx.ko` was
+`hv/hvx/fastturn/build-hvxft.sh` in `~/hydo-ft` on the bare-metal test machine). The main `hvx.ko` was
 not touched or reloaded. The side module was unloaded at the end.
 
 ## 1. Where a turn end's time goes
@@ -16,7 +16,7 @@ New diagnostic counters (`HVX_GET_FTSTAT` / `HVX_RESET_FTSTAT`, ioctls 60/61, ho
 only, never in guest state, a snapshot or a fingerprint) split every `hvx_run_vcpu` call
 into its parts with the host TSC, count landing steps, and record the PMU overflow skid
 (branches retired past the programmed overflow before the VM exit). At VM release one
-`TURNSTAT` line per vCPU goes to dmesg. `hvx/fastturn/ft_cost.c` runs two vCPUs through a
+`TURNSTAT` line per vCPU goes to dmesg. `hv/hvx/fastturn/ft_cost.c` runs two vCPUs through a
 loop of N branches each in turns of Q branches and prints the breakdown.
 
 Breakdown per turn end, before any change, Q = 1,000, the tightest loop (`dec rcx; jnz`,
@@ -61,7 +61,7 @@ to 4 per cycle when retirement was stalled behind a cache miss, which gives the 
 value seen, 107, the same for bursts of 150, 200 and 300 branches. The 256-branch margin is
 2.4 times that; 160 is 1.5 times; 128 is 1.2 times.
 
-## 2. Changes (module `hvx/hvx.c`, ABI `hvx/hvx_abi.h`)
+## 2. Changes (module `hv/hvx/hvx.c`, ABI `hv/hvx/hvx_abi.h`)
 
 None of them changes where a turn ends or any guest-visible result.
 
@@ -80,7 +80,7 @@ None of them changes where a turn ends or any guest-visible result.
 
 Changes 1–3 cut a landing step from ~1,840 to ~1,560 cycles (15%) in an interleaved A/B on
 one loaded module (the `ft_opt` module parameter turns 1, 2 and 4 off for this; default on;
-`hvx/fastturn/ab.sh`). Change 4 cut `setup_vmcs` from ~3,400 to ~2,700 cycles.
+`hv/hvx/fastturn/ab.sh`). Change 4 cut `setup_vmcs` from ~3,400 to ~2,700 cycles.
 
 ### Not done: keeping each vCPU's VMCS loaded and launched between turns
 
@@ -139,7 +139,7 @@ that point) and `HVX_FTSTAT=1` (print the cost statistics); all off by default.
 
 All on `/dev/hvxft` with the final module.
 
-- **Stage-1/2 tests with their recorded numbers** (`hvx/fastturn/stage1.sh`):
+- **Stage-1/2 tests with their recorded numbers** (`hv/hvx/fastturn/stage1.sh`):
   `hvx_sched_pmu_test` (turn hash `97b3468c16d739fa`, landing hashes `f841184e6fdde8b5` /
   `19337dfb08c526f9`, fingerprints `95e6c9a02d5d584d`, `05521a9492a3ce9f`,
   `b544e114dc426e85`, snapshot `73a465516c4e0094`), `hvx_sched_race_test` (grid
@@ -160,12 +160,12 @@ All on `/dev/hvxft` with the final module.
   the marker and branch at turn T/2 all `6584c954c2839491`, PASS (also before the cuts, with
   the diagnostics only).
 - **Regression gate** `SIDE_TMP=/var/tmp/fastturn-side HVX_DEV=/dev/hvxft
-  hvx/race/side-metal.sh`: **ALL PASS (26 checks)**, every fingerprint unchanged, both
+  hv/hvx/race/side-metal.sh`: **ALL PASS (26 checks)**, every fingerprint unchanged, both
   boot verifies included (no disk `7a5559028ffbf52c`, with disk `36583d533d7c989b`).
 - **Pinned explorer reproducers** through the new `hvx_explore` on `/dev/hvxft`:
   `explore-disk.img` `2403499c9a3f8419` (VIOLATION, order 11), `explore-fix-disk.img`
   `f87130453609a5d6` (OK), both unchanged.
-- **hvx_explore with the new tokens** (`hvx/fastturn/explore_smoke.sh`, image
+- **hvx_explore with the new tokens** (`hv/hvx/fastturn/explore_smoke.sh`, image
   `explore-binlog-ret-xr-nq-disk.img`, `--vcpus 2`): `disk=none dseed=0 qb=20000:100:250
   qbs=5 | run` twice from a fresh boot: `7ab4cf9d8ed60bd7` both, OK 30/30, `qn=7976
   qbn=2825` (2,825 of 7,976 workload turns started in a burst; workload 6.2–6.9 s); the same
@@ -178,10 +178,10 @@ All on `/dev/hvxft` with the final module.
   bursts: `d8afbf8d9fce8a70` at margins 256 and 160.
 - **explore.py**: `turns_ident.py` against main's explore.py: 179,616 schedule strings
   identical without `--turns` (and the `--turns` checks unchanged); new
-  `hvx/explore/bursts_ident.py`: with `--turns --bursts` every field but `qb` equals the
+  `hydo/explore/bursts_ident.py`: with `--turns --bursts` every field but `qb` equals the
   `--turns` schedule (2,000 schedules, 48.9% get `qb`), strings round-trip, shrink
   candidates as documented. A small `explore.py --vcpus 2 --turns --bursts --turn-margin 160`
-  run through the serve workers (`hvx/fastturn/explore_dev.py`) was started but stopped by
+  run through the serve workers (`hv/hvx/fastturn/explore_dev.py`) was started but stopped by
   hand: one worker died at start-up without a message and the other was still writing its
   S0/S1 snapshots after 15 minutes while the box's disk was saturated by seven other
   explorers. So **serve mode (restore from S1, then `qb=`) was not checked**; only `one`.
@@ -190,7 +190,7 @@ All on `/dev/hvxft` with the final module.
 
 The box was shared throughout. The numbers marked *quiet* were taken while the other
 session's agents (`~/hydo-asw`, `~/hydo-pf`) held back (`/var/tmp/hydo-QUIET`,
-`hvx/fastturn/quiet.sh`), but two VMs of a third session and a native 3-thread workload kept
+`hv/hvx/fastturn/quiet.sh`), but two VMs of a third session and a native 3-thread workload kept
 running (load average about 8 on the 4-core, 8-thread box), so even the quiet numbers vary
 by about 10–15%. Everything else was measured under heavier load (load 10–29).
 
@@ -254,17 +254,17 @@ side 1.24 / 0.86 s (default turns: most turns end at HLT; the landings are ticks
 - Bursts were tested on hand-written guests, with one stack run per margin and with two
   explorer `one` runs; they were not measured for finding races (that is what they are for),
   and the explorer's serve path with `qb=` was not run (see Tests).
-- Not recorded in `hvx/HISTORY.md` / `CLAUDE.md` (other sessions edit those now); the
+- Not recorded in `docs/HISTORY.md` / `CLAUDE.md` (other sessions edit those now); the
   milestone entry is left to the merge.
 - The `ft_opt` parameter and the diagnostic counters stay in the module (they cost about
   three RDTSCs per entry).
 
 ## Files
 
-`hvx/hvx.c`, `hvx/hvx_abi.h` (ioctls 60–63, `struct hvx_ftstat`, `struct hvx_turnctl`),
-`hvx/hvx_sched_burst_test.c`, `hvx/hvx_sched_util.h` (`FT_MARGIN`),
-`hvx/hvx_stack_verify.c` (turn knobs, `HVX_FTSTAT`), `hvx/hvx_explore.c` (`qb=`, `qbs=`,
-`qm=`), `hvx/explore/explore.py` (`--bursts`, `--turn-margin`), `hvx/explore/hvm_backend.py`
-(drops `qb` on the Mac), `hvx/explore/bursts_ident.py`, and `hvx/fastturn/`:
+`hv/hvx/hvx.c`, `hv/hvx/hvx_abi.h` (ioctls 60–63, `struct hvx_ftstat`, `struct hvx_turnctl`),
+`hv/hvx/hvx_sched_burst_test.c`, `hv/hvx/hvx_sched_util.h` (`FT_MARGIN`),
+`hv/hvx/hvx_stack_verify.c` (turn knobs, `HVX_FTSTAT`), `hv/hvx/hvx_explore.c` (`qb=`, `qbs=`,
+`qm=`), `hydo/explore/explore.py` (`--bursts`, `--turn-margin`), `hydo/explore/hvm_backend.py`
+(drops `qb` on the Mac), `hydo/explore/bursts_ident.py`, and `hv/hvx/fastturn/`:
 `build-hvxft.sh`, `Makefile.hvxft`, `ft_cost.c`, `ab.sh`, `stage1.sh`, `meas.sh`, `meas2.sh`,
 `quiet.sh`, `waitdone.sh`. Box results: `/var/tmp/fastturn`.

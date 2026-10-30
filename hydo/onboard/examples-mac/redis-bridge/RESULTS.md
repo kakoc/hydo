@@ -1,12 +1,12 @@
 # redis-bridge on the Mac backend (Milestone 99)
 
-`hydo.yaml` here is `hvx/onboard/examples/redis-bridge/hydo.yaml` with the aarch64 Redis 7.2.4 of
+`hydo.yaml` here is `hydo/onboard/examples/redis-bridge/hydo.yaml` with the aarch64 Redis 7.2.4 of
 `../redis/hydo.yaml`. `network: bridge` makes `hydo-build --arch arm64` build it for the second
 guest kernel, `Image-explore-netns` (`806807e7…`), and record that in the image
 (`/etc/hydo/kernel`); `hydo run` and `explore.py --backend hvm` boot that kernel by themselves.
 
 Built on the M2 Pro through a release-like prefix (the M96 Mac release prefix with this branch's
-`hvx/`, `bin/hydo`, `hvm`, `hvmx`, both kernels, `guest/hydo_fc` and the aarch64 `ip` and
+`hv/hvx/`, `bin/hydo`, `hvm`, `hvmx`, both kernels, `guest/hydo_fc` and the aarch64 `ip` and
 `iptables-legacy` files in `guest/tc`), from a copy whose `src:` paths point at the release's
 `examples/redis/files`. Two builds, identical: image `e066eeee…`, disk `26f4a507…`.
 

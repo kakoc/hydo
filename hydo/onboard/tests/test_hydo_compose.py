@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Unit tests for hvx/onboard/hydo-compose (hydo_compose.py) and the services[].mounts launcher
+"""Unit tests for hydo/onboard/hydo-compose (hydo_compose.py) and the services[].mounts launcher
 extension in hydo_oci.py. No network: image metadata comes from a lock file written by the test.
 
-    python3 -m unittest discover -s hvx/onboard/tests -v
+    python3 -m unittest discover -s hydo/onboard/tests -v
 """
 import io, json, os, shutil, subprocess, sys, tarfile, tempfile, hashlib, unittest
 
@@ -349,7 +349,7 @@ class Mounts(unittest.TestCase):
     def test_without_mounts_unchanged(self):
         """an image service without mounts: gets byte-for-byte the launcher of the previous hydo_oci.py"""
         d = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, d)
-        old = subprocess.run(["git", "-C", ONB, "show", "main:hvx/onboard/hydo_oci.py"], stdout=subprocess.PIPE)
+        old = subprocess.run(["git", "-C", ONB, "show", "main:hydo/onboard/hydo_oci.py"], stdout=subprocess.PIPE)
         if old.returncode != 0:
             self.skipTest("no git main")
         open(os.path.join(d, "hydo_oci_old.py"), "wb").write(old.stdout)

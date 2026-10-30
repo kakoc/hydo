@@ -27,8 +27,8 @@ Pins: kernel source `/nix/store/czg3kwyz7v5i192myvg62i66n83s0940-linux-6.6.35.ta
 
 ```sh
 # on the build machine (Linux with Nix), in a scratch directory:
-WORK=$PWD sh <repo>/hvx-mac/linux/build-guest.sh        # -> out/Image, out/initramfs*.cpio.gz
-# on the Mac, in hvx-mac/ (copy out/* to guest/ first):
+WORK=$PWD sh <repo>/hv/hvm/linux/build-guest.sh        # -> out/Image, out/initramfs*.cpio.gz
+# on the Mac, in hv/hvm/ (copy out/* to guest/ first):
 sh build.sh
 ./hvm run    guest/Image guest/initramfs.cpio.gz "hydo-boot-marker: launching shell"   # console + fingerprint
 ./hvm print  guest/Image guest/initramfs.cpio.gz "hydo-boot-marker: launching shell"   # fingerprint only

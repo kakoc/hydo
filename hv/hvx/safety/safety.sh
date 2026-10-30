@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The hvx safety net from the Mac (Milestone 97; how-to in hvx/SAFETY.md).
+# The hvx safety net from the Mac (Milestone 97; how-to in hv/hvx/SAFETY.md).
 #
 #   safety.sh build       on the BUILD machine (default the bare-metal test machine): debug kernel,
 #                         hvx.ko for it + tests + reproducers (bundle "debug"), the unfixed
@@ -29,7 +29,7 @@ cmd=${1:-}; shift || true
 case "$cmd" in
 build)
   sync_src "$BUILD"
-  git -C "$ROOT" show main:hvx/hvx.c > "$STAGE.hvx-main.c"
+  git -C "$ROOT" show main:hv/hvx/hvx.c > "$STAGE.hvx-main.c"
   scp -q "$STAGE.hvx-main.c" "$BUILD:hydo-safety/src/hvx-main.c"
   ssh -o BatchMode=yes "$BUILD" 'set -e; cd ~/hydo-safety/src/hvx/safety
     bash build-kernel.sh

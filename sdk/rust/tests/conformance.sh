@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Byte-for-byte conformance of hydo-assert (Rust) with hydoassert (Go): build
 # tests/go-conformance/main.go against the Go SDK's own sources (copied from
-# hvx/stack/hydoassert) and examples/conformance.rs, run both under three BUGGIFY
+# hydo/stack/hydoassert) and examples/conformance.rs, run both under three BUGGIFY
 # configurations (env seed, config file, none), and diff their consoles and stdouts.
 # Usage: sdk/rust/tests/conformance.sh   (needs go and cargo; exit 0 = identical)
 # GOTOOLCHAIN picks the Go version (default go1.26.5, the stack's go.mod; Go 1.27.3 gives the
@@ -15,7 +15,7 @@ T=$(mktemp -d "${TMPDIR:-/tmp}/hydo-conf.XXXXXX")
 trap 'rm -rf "$T"' EXIT
 
 mkdir -p "$T/go/hydoassert"
-cp "$REPO/hvx/stack/hydoassert/hydoassert.go" "$REPO/hvx/stack/hydoassert/eventually.go" "$T/go/hydoassert/"
+cp "$REPO/hydo/stack/hydoassert/hydoassert.go" "$REPO/hydo/stack/hydoassert/eventually.go" "$T/go/hydoassert/"
 cp "$HERE/go-conformance/main.go" "$T/go/"
 printf 'module conf\n\ngo 1.21\n' > "$T/go/go.mod"
 (cd "$T/go" && GOFLAGS=-mod=mod go build -o "$T/conf-go" .)

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Byte-for-byte conformance of hydo_assert.history (Python) with hydohist (Go): build
 # tests/history-go/main.go against the Go recorder's own sources (copied from
-# hvx/stack/hydohist), run it and tests/history_conformance.py with every sink setting, and
+# hydo/stack/hydohist), run it and tests/history_conformance.py with every sink setting, and
 # compare their records and stdouts.
 #
 # The time field (field 5 of a HYDO-HIST line) differs between runs and implementations: the

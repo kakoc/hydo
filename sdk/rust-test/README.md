@@ -33,7 +33,7 @@ hydo_test::main!(system);
 The binary has two lives:
 
 - **Host:** `<bin> plan --guest-binary <path> --out .hydo/plan.json` calls `system()` and writes
-  hydo's plan: the manifest format of `hvx/onboard/MANIFEST.md` as JSON (format 1, with
+  hydo's plan: the manifest format of `hydo/onboard/MANIFEST.md` as JSON (format 1, with
   `hydo_version`), with one `test.commands` or `test.checks` entry per attributed function,
   run as `/bin/<bin> driver <name>` or `/bin/<bin> check <name>`. Functions are listed in a
   fixed order (role, kind, name), never in link order, so the plan is a pure function of the
@@ -55,7 +55,7 @@ evaluated now). The error's message is printed and becomes the property's detail
 `outcome(id, "unknown")` / `acked()` (the acknowledgement log the checks read; carried across a
 power cut), `exec(argv, deadline)`.
 
-History checks (`hvx/HISTORIES.md`): drivers record their operations with
+History checks (`hydo/HISTORIES.md`): drivers record their operations with
 `hydo_test::assert::history::History` (process = `ctx.id()`, unique per command), and the plan
 declares a ready-made checker the host runs after the run:
 `System::history_check(HistoryCheck::linearizable("db.kv", "kv").model("cas").readback(&argv))` or
@@ -80,13 +80,13 @@ on every build. `--arch` defaults to aarch64 on macOS (the Mac backend) and x86_
 `system()` can pick per-architecture files. The plan's file paths are relative to `.hydo/`, so `.hydo/`
 can be copied to a build machine as a whole.
 
-Example: `hvx/onboard/examples/redis-composed-rs/` (the Rust version of
+Example: `hydo/onboard/examples/redis-composed-rs/` (the Rust version of
 `examples/redis-composed`, with the same command and check ids, so a schedule composes the same
 commands in the same rounds in both).
 
 **Command ids and saved regressions.** A driver's id is `<kind>_<name>` (`parallel_driver_transfer`
 for `#[driver(parallel)] fn transfer`). Saved compositions name commands by this id
-(`hvx/onboard/MANIFEST.md`, "Stable compositions"), so renaming a driver that a saved regression
+(`hydo/onboard/MANIFEST.md`, "Stable compositions"), so renaming a driver that a saved regression
 uses makes that regression fail with a message naming it; adding, removing or reordering other
 drivers does not change it. `<bin> plan` refuses two drivers (or two checks) with the same name,
 since the guest runs them as `<bin> driver <name>`. The attribute macro writes a `content` hash

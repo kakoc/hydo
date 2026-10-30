@@ -7,12 +7,12 @@
  *
  * Each program is an ELF whose executable PT_LOAD segments are placed at p_vaddr + bias
  * (bias 0 for a non-PIE executable, the load base for a PIE). The programs must occupy
- * disjoint address ranges -- the richcov image arranges that (hvx/richcov/build-richcov.sh:
+ * disjoint address ranges -- the richcov image arranges that (hydo/richcov/build-richcov.sh:
  * Redis at 0x40001000, the front door at 0x2000001000, mysqld at the no-ASLR PIE base
  * 0x555555554000), so an address alone says which program it belongs to. The trace is
  * expected to be user-only and IP-filtered to those ranges, as the explorer configures it.
  *
- * Edges follow the M41 rule (hvx/explore/ptedges.h): an edge is recorded between two
+ * Edges follow the M41 rule (hv/hvx/ptedges.h): an edge is recorded between two
  * consecutively executed instructions when the first is a branch-class instruction; the
  * chain is kept across trace on/off points (VM exits, leaving the program's text for a
  * syscall or a library) so the edge set is a pure function of what the guest ran. What is

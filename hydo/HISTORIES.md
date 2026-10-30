@@ -16,10 +16,10 @@ go back in time, and anomalies that need two keys; it also tends to report false
 for operations whose outcome was unknown. The checkers handle unknown outcomes the way Jepsen
 does.
 
-Files: `hvx/history/hydohist.py` (parser + checkers, Python 3.6+, stdlib only),
-`hvx/history/hydo-check` (command line), `hvx/history/test_hydohist.py` (unit tests),
-`hvx/history/hydo_hist.sh` (shell recorder), `hvx/stack/hydohist` (Go recorder, package
-`hydostack/hydohist`), `hvx/onboard/hydo-init-history.sh` (guest init extension).
+Files: `hydo/history/hydohist.py` (parser + checkers, Python 3.6+, stdlib only),
+`hydo/history/hydo-check` (command line), `hydo/history/test_hydohist.py` (unit tests),
+`hydo/history/hydo_hist.sh` (shell recorder), `hydo/stack/hydohist` (Go recorder, package
+`hydostack/hydohist`), `hydo/onboard/hydo-init-history.sh` (guest init extension).
 
 ## Record format (fixed)
 
@@ -200,15 +200,15 @@ Where the checks run:
   and the failed-assertion list) and `consoles/<tag>.checks.txt` (the explanation), and replaces the
   run's verdict. Failure classes, shrinking and reports work unchanged; the guest's own verdict is
   kept as `guest_verdict`.
-- **`hydo run` / `hydo repro`** (`hvx/dist/hydo`): `one.checks.log`, `one.checks.txt`, the
+- **`hydo run` / `hydo repro`** (`hydo/dist/linux/hydo`): `one.checks.log`, `one.checks.txt`, the
   combined verdict in `run.json`.
-- **By hand:** `hvx/history/hydo-check <outdir>` (an `hvx_explore one` output directory),
+- **By hand:** `hydo/history/hydo-check <outdir>` (an `hvx_explore one` output directory),
   `hydo-check <console> [<recovery console>]`, or `hydo-check --check '<json spec>' <console>` for a
   console without declarations. Exit status 0 OK, 1 violation, 2 error, 3 no checks.
 
 ## Recorders
 
-**Shell** (`hvx/history/hydo_hist.sh`; in the prelude of every manifest with `checks:`, so the
+**Shell** (`hydo/history/hydo_hist.sh`; in the prelude of every manifest with `checks:`, so the
 workload, `retry`, `final:` and invariant commands can call it):
 
 ```sh
@@ -223,7 +223,7 @@ hydo_hist kv 0 ok write k1 "$(hydo_hist_enc "$value")@$rev"   # a free-form valu
 Records go to `/dev/console` (`HYDO_HIST_OUT=<file>|off` overrides). The time comes from
 `/proc/uptime` (10 ms resolution).
 
-**Go** (`hvx/stack/hydohist`, import `hydostack/hydohist`):
+**Go** (`hydo/stack/hydohist`, import `hydostack/hydohist`):
 
 ```go
 kv := hydohist.New("kv")

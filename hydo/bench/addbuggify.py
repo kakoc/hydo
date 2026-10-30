@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """addbuggify.py -- route a front door's store calls through the BUGGIFY wrappers.
 
-    python3 hvx/bench/addbuggify.py <main.go> [--check]
+    python3 hydo/bench/addbuggify.py <main.go> [--check]
 
-The wrappers live in hvx/stack/buggify.go (Milestone 56); this rewrites the call sites of one
+The wrappers live in hydo/stack/buggify.go (Milestone 56); this rewrites the call sites of one
 version of main.go -- the current one, or a benchmark defect's patched copy of an older one --
 in place:
 

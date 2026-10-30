@@ -10,7 +10,7 @@ way to it) once, sorted, so the initramfs builder can copy exactly what the dyna
 will open. A library that cannot be resolved is an error.
 
 --root DIR (Milestone 99): the files live under DIR (DIR/nix/store/..., e.g. a tree unpacked by
-hvx/dist/nix_cache_fetch.py on a Mac without /nix): FILE arguments and the printed paths are the
+hydo/dist/linux/nix_cache_fetch.py on a Mac without /nix): FILE arguments and the printed paths are the
 guest's absolute paths, every read and symlink hop is made under DIR. Without it nothing changes.
 """
 import os

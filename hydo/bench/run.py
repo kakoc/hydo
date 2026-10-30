@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""run.py -- run explorer strategies on the bug benchmark (hvx/bench/README.md).
+"""run.py -- run explorer strategies on the bug benchmark (hydo/bench/README.md).
 
 For every defect image and repetition, runs one strategy's schedules in seed order and stops at
 the first DETECTION: a run whose schedule has durable settings and an honest disk (explore.py
@@ -15,10 +15,10 @@ The detecting run is re-run once and its fingerprint compared.
   python3 run.py --table /var/tmp/m46-bench/*      # per defect x strategy summary
 
 Seeds: repetition r uses seeds r*1000+1 .. r*1000+budget (the M42/M44 repetitions). The
-portfolio strategy runs hvx/explore/portfolio.py for the full budget (it has no early stop) and
+portfolio strategy runs hydo/explore/portfolio.py for the full budget (it has no early stop) and
 reads its runs.jsonl in exploration order.
 
-Uses hvx/explore/explore.py as a library (read-only): run from a tree whose hvx/hvx_explore is
+Uses hydo/explore/explore.py as a library (read-only): run from a tree whose hv/hvx/hvx_explore is
 built; images are read from ~/hydo/build.
 """
 import argparse, glob, json, os, re, statistics, subprocess, sys, time
@@ -40,11 +40,11 @@ DEFECTS = {
     "d6-client-deadline-definite": ("explore-bench-d6-client-deadline-definite-disk.img", r"told it failed|told_failed"),
     "d7-skip-last-record":        ("explore-bench-d7-skip-last-record-disk.img", r"present \d+ times|kafka_exactly_once"),
 }
-# Milestone 59: harder defects, patched into hvx/bench/base/main-m59-control.go (the current
+# Milestone 59: harder defects, patched into hydo/bench/base/main-m59-control.go (the current
 # order service with the M50 fixes, the BUGGIFY wrappers and a fix for the M58 flush-cut bug),
 # built by build-bench-m59.sh. Their control is that file unpatched. d9's signature is the
 # crash oracle below (the guest's "front door log: panic" line). Images: build-bench-m59.sh with
-# BENCH_SUFFIX=-pin (built from the pinned toolchain, hvx/BUILD-PINS.md); HYDO_M59_SUFFIX=""
+# BENCH_SUFFIX=-pin (built from the pinned toolchain, docs/BUILD-PINS.md); HYDO_M59_SUFFIX=""
 # selects the first build, which used the stand-in hvx_seedrng (superseded). The default is
 # -pin-kr (2026-10-23): -pin plus the M63 Kafka retention fix and the M67 harness fix, no binary
 # log (README "-pin-kr"); HYDO_M59_SUFFIX=-pin selects the earlier set.

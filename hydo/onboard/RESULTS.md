@@ -35,14 +35,14 @@ determinism and the generator working on manifest images, not the bug.
 the M71 netem drain; only `/sbin/init` differs from the `-pt-pin` images. Every recorded schedule
 gives the same verdict: (a) sanity OK `8ad89b9f2565f88b`, (b) OK `76b4917b3761288e`, (c) on old
 VIOLATION order 11 `402736c78bbf9a6d`, (d) OK `96229e59c4d498ec`; the 7 M42 schedules fail on old
-naming the same orders and pass on fix. Tables: `hvx/REBASELINE.md` section 7.1.
+naming the same orders and pass on fix. Tables: `docs/REBASELINE.md` section 7.1.
 
 **Redis (one service)**
 
 | schedule | verdict | fingerprint |
 |---|---|---|
 | `disk=none dseed=1 \| run` | OK, acked=20 all present | `712bcab7167a52fe` |
-| `disk=none dseed=1 \| run C=12 R=everysec` | VIOLATION `[redis.acked_writes_survive] key k:3 lost` (Redis's documented fsync window) | `e4f65d61d3320ada` (on the re-baselined `explore-ob-redis-pin` image it loses `k:2`; see hvx/REBASELINE.md) |
+| `disk=none dseed=1 \| run C=12 R=everysec` | VIOLATION `[redis.acked_writes_survive] key k:3 lost` (Redis's documented fsync window) | `e4f65d61d3320ada` (on the re-baselined `explore-ob-redis-pin` image it loses `k:2`; see docs/REBASELINE.md) |
 | `disk=none dseed=1 \| run K=redis@5+3 P=redis@12+2 T=8:-86400` | OK, acked=15 (kill window + two 2 s client timeouts) | `eb3cc8787ec1e261` |
 
 ## Liveness invariants (`type: eventually`) on Redis (2026-10-21, bare-metal test machine)
@@ -91,8 +91,8 @@ Builds (build box, each built twice in separate build directories, byte-identica
 The same amd64 image as an OCI layout directory gives an identical `/oci/redis` tree (content,
 owners, modes; only `image.json` differs). Feeding the arm64 image to the x86_64 build, or the
 amd64 image to `--arch arm64`, is refused. Existing manifests build byte-identically with the new
-hydo-build: `examples/redis` `0dd509c2…` (same as main), arm64 `hvx-mac/explore/examples/redis`
-cpio `10f7858a…` / disk `9ddfc929…` (the values in `hvx-mac/explore/README.md`), and `examples/stack` (FRONT=fix) disk `37a2ff6a…` with both main's and the new hydo-build.
+hydo-build: `examples/redis` `0dd509c2…` (same as main), arm64 `hydo/onboard/examples-mac/redis`
+cpio `10f7858a…` / disk `9ddfc929…` (the values in `hv/hvm/explore/README.md`), and `examples/stack` (FRONT=fix) disk `37a2ff6a…` with both main's and the new hydo-build.
 
 Runs on the bare-metal test machine (`hvx_explore one`, results `/var/tmp/m59-oci`), each twice:
 
@@ -107,10 +107,10 @@ Runs on the bare-metal test machine (`hvx_explore one`, results `/var/tmp/m59-oc
 The arm64 image was fetched again on the build box (`fetch-image.sh`; the OCI layout is identical to
 the earlier fetch) and built with `hydo-build --arch arm64`: `explore-ob-redis-oci-arm64.cpio.gz`
 `f575448a…`, disk `d4116ff4…`, the same bytes as the M59 build. Kernel `Image-explore` `f80c5655…`
-(the release kernel, HVC idle, with `tc`), `hvmx` built from `main` (`hvx-mac/explore/build.sh`).
+(the release kernel, HVC idle, with `tc`), `hvmx` built from `main` (`hv/hvm/explore/build.sh`).
 
 Each schedule ran in two separate `hvmx serve` processes (restored from the S1 snapshot) and once
-as `hvmx one` (a fresh boot), with `hvx-mac/explore/netfault/check.py`. All three fingerprints are
+as `hvmx one` (a fresh boot), with `hv/hvm/explore/netfault/check.py`. All three fingerprints are
 equal for every schedule:
 
 | schedule | verdict | fingerprint |
@@ -161,9 +161,9 @@ ran `tc qdisc del dev lo root`. In the guest kernel (6.6.35) deleting the qdisc 
 `netem_reset` -> `tfifo_reset`, which frees every packet still waiting in netem's delay queue.
 TCP then retransmitted those packets after a timeout the schedule never asked for.
 
-**Fix** (`net_heal`, in `hvx/onboard/hydo-init.sh` and, as a copy, in the stack's `/sbin/init`
+**Fix** (`net_heal`, in `hydo/onboard/hydo-init.sh` and, as a copy, in the stack's `/sbin/init`
 in `build-stack.sh`; used by `hydo-init.sh`'s `net_off`, the link faults of
-`hydo-init-links.sh`, `hvx/explore/stack-explore.sh` and the stack's `hydo_net=` mode):
+`hydo-init-links.sh`, `hydo/explore/stack-explore.sh` and the stack's `hydo_net=` mode):
 `tc qdisc change` the netem to rate 100gbit and no delay/loss/duplication/corruption
 (`netem_change` keeps the queue and every queued packet's send time; in rate mode a new packet
 is scheduled after the last queued one, so the order is kept), wait in guest time until the

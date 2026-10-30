@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""hydo -- deterministic fault testing on an Apple Silicon Mac (the hvx-mac backend).
+"""hydo -- deterministic fault testing on an Apple Silicon Mac (the hvm backend).
 
     hydo init    [--dir DIR] [--name NAME]        start a repository's hydo/ folder and its AGENTS.md section
     hydo guide   [TOPIC | --list]                 print the onboarding guide for any AI tool (the skill's SKILL.md)
@@ -27,16 +27,16 @@ so no Linux machine is needed. Plain Python 3.9+ (macOS's /usr/bin/python3 works
 import glob, importlib.machinery, importlib.util, os, platform, shutil, subprocess, sys, tempfile
 
 R = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))     # the release root
-ONBOARD = os.path.join(R, "hvx", "onboard")
-EXPLORE = os.path.join(R, "hvx", "explore")
-HVMX = os.path.join(R, "hvx-mac", "explore", "hvmx")
-HVM = os.path.join(R, "hvx-mac", "hvm")
-KERNEL = os.path.join(R, "hvx-mac", "explore", "out", "Image-explore")
+ONBOARD = os.path.join(R, "hydo", "onboard")
+EXPLORE = os.path.join(R, "hydo", "explore")
+HVMX = os.path.join(R, "hv", "hvm", "explore", "hvmx")
+HVM = os.path.join(R, "hv", "hvm", "hvm")
+KERNEL = os.path.join(R, "hv", "hvm", "explore", "out", "Image-explore")
 # the second kernel (Milestone 99), for images built from a manifest with network: bridge, addr:
 # or faults: [freeze]; such an image names it in /etc/hydo/kernel (hvm_backend.kernel_for)
-NETNS_KERNEL = os.path.join(R, "hvx-mac", "explore", "out", "Image-explore-netns")
+NETNS_KERNEL = os.path.join(R, "hv", "hvm", "explore", "out", "Image-explore-netns")
 GUEST = os.path.join(R, "guest")
-HISTORY = os.path.join(R, "hvx", "history")       # the host's history checkers (hydohist.py)
+HISTORY = os.path.join(R, "hydo", "history")       # the host's history checkers (hydohist.py)
 OUT = "hydo-out"
 
 
@@ -149,7 +149,7 @@ def use_bundled_tc():
 
 
 def cmd_compose(argv):
-    """hydo compose: hvx/onboard/hydo_compose.py (the Compose importer), unchanged."""
+    """hydo compose: hydo/onboard/hydo_compose.py (the Compose importer), unchanged."""
     if not argv or argv[0] in ("-h", "--help"):
         die("usage: hydo compose <docker-compose.yaml> [--out hydo.yaml] [--images-dir DIR] [--env-file F] "
             "[--profile P] [--use-env] [--no-resolve] [--lock FILE]")
@@ -230,7 +230,7 @@ def run_once(image, sched, outdir, quiet=False):
 
 
 def host_checks_one(outdir, text, quiet=False):
-    """hvx/HISTORIES.md: a run whose console declares history checks (HYDO-CHECK lines, from a
+    """hydo/HISTORIES.md: a run whose console declares history checks (HYDO-CHECK lines, from a
     manifest's checks: or a plan's test.checks) is checked here on the host, as `hydo run` does on
     Linux: one.log (+ one.recovery.log) -> one.checks.log (HYDO-ASSERT records), one.checks.txt
     (explanations). Returns the combined verdict, or None for a run without history checks."""
@@ -258,7 +258,7 @@ def host_checks_one(outdir, text, quiet=False):
 
 def cmd_regressions(args):
     """Replay the regressions the image was built with (/etc/hydo/compose.json: hydo/regressions/
-    and test.regressions, hvx/onboard/hydo_composer.py) and check each expectation (ok,
+    and test.regressions, hydo/onboard/hydo_composer.py) and check each expectation (ok,
     violation, fp=<hex>); exit 1 if one is not as expected."""
     import json, re, time
     image = default_image(args)
@@ -392,7 +392,7 @@ def cmd_explore(argv):
 
 
 def cmd_errors(argv):
-    """hydo errors list|accept|check (hvx/onboard/hydo_errors.py, shared with the Linux release)."""
+    """hydo errors list|accept|check (hydo/onboard/hydo_errors.py, shared with the Linux release)."""
     sys.path.insert(0, ONBOARD)
     import hydo_errors
     return hydo_errors.cli(argv, os.path.join(OUT, "explore"))
@@ -439,7 +439,7 @@ def main():
             "report": cmd_report, "doctor": cmd_doctor}
     if len(sys.argv) >= 2 and sys.argv[1] in ("guide", "skill", "init"):
         sys.path.insert(0, ONBOARD)
-        import hydo_agents      # shared by both releases: hvx/onboard/hydo_agents.py
+        import hydo_agents      # shared by both releases: hydo/onboard/hydo_agents.py
         return hydo_agents.run(sys.argv[1], sys.argv[2:], R)
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         print(__doc__)

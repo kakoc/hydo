@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run hydo-read / hydo-check against REAL stores, natively (no VM), on the build box:
-#   hvx/readers/native-test.sh            # from the repository root
+#   hydo/readers/native-test.sh            # from the repository root
 # Starts MySQL 8.4.10, PostgreSQL 15.6, Kafka 3.5.0 (KRaft) and Redis 7.2.4 from the same
 # pinned store paths the examples stage into their guests, and etcd 3.5.6 from the pinned
 # release tarball (examples/etcd/build.sh), each on its own port in a fresh temp dir; runs the
@@ -102,7 +102,7 @@ export HYDO_TEST_KAFKA="127.0.0.1:$((B + 92))"
 export HYDO_TEST_REDIS="127.0.0.1:$((B + 379))"
 export HYDO_TEST_ETCD="http://127.0.0.1:$((B + 2379))"
 export HYDO_TEST_DEADPORT="127.0.0.1:$((B + 999))"
-cd "$TOP/hvx/readers"
+cd "$TOP/hydo/readers"
 GOMODCACHE="$TOP/build/readers-gomod" GOCACHE="$TOP/build/readers-gocache" GOPATH="$TOP/build/readers-gopath" \
   GOTOOLCHAIN=local GOFLAGS=-mod=readonly CGO_ENABLED=0 "$GO" test -count=1 -v . 2>&1 | grep -E '^(=== RUN|--- |PASS|FAIL|ok|\s+\S+_test.go)'
 echo "native-test: done"

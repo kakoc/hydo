@@ -3,7 +3,7 @@
  * hvx_explore - the run engine of the automatic fault explorer (milestone 38).
  *
  * Boots the four-service stack guest built with STACK_OUT=explore (build-stack.sh +
- * hvx/explore/stack-explore.sh) in its command-driven "serve" mode and snapshots it twice:
+ * hydo/explore/stack-explore.sh) in its command-driven "serve" mode and snapshots it twice:
  *
  *   S0  root mounted, data disk not mounted yet       -> start of every recovery boot
  *   S1  all services up, provisioned, synced, idle    -> start of every fault schedule
@@ -50,8 +50,8 @@
  * Output: BRANCHPOINT, then n+1 RESULT lines, then "BRANCHEND <tag>". A negative n runs |n|
  * variants and does not finish the base run (no "-base" RESULT): for a caller that already
  * ran the same schedule with rb=16, whose result the base run would only repeat.
- * (guest tokens: see hvx/explore/stack-explore.sh). The schedule generator, the
- * reproduce/shrink logic and the report live in hvx/explore/explore.py.
+ * (guest tokens: see hydo/explore/stack-explore.sh). The schedule generator, the
+ * reproduce/shrink logic and the report live in hydo/explore/explore.py.
  *
  * Modes (as root, hvx loaded, through ~/bin/hvx-run):
  *   hvx_explore [--ram-mib N] [--vcpus N] [--cpu v2|v3] serve <bzImage> <initramfs> <explore-disk.img> <outdir>
@@ -59,7 +59,7 @@
  *   hvx_explore [--ram-mib N] [--vcpus N] [--cpu v2|v3] one <bzImage> <initramfs> <explore-disk.img> <outdir> "<schedule>"
  *       one schedule from a fresh boot with no snapshot restore before the workload --
  *       its fingerprint must equal the serve path's (snapshot branching changes nothing)
- * Several vCPUs (SMP Stage 3, hvx/explore/TURNS.md): "--vcpus N" (or env HVX_EXPLORE_VCPUS),
+ * Several vCPUs (SMP Stage 3, hydo/explore/TURNS.md): "--vcpus N" (or env HVX_EXPLORE_VCPUS),
  * default 1. With N > 1 every VM is created with N vCPUs and HVX_VM_SMP_SCHED (the vCPUs run
  * in exact turns of guest branches inside the kernel), every snapshot (S0, S1, branch
  * points) and restore covers every vCPU and the scheduler state, and every fingerprint
@@ -70,7 +70,7 @@
  *   q=<branches>  every turn this many guest conditional branches (the module's default is 2^20)
  *   qs=<hex>      seeded turn lengths in [1, q] (hvx.c: 1 + splitmix64(seed + (t+1)*GOLDEN) % q,
  *                 t = the turn number), with q= or the VM's current turn length
- *   qb=<B>:<s>:<permille>  seeded bursts of short turns (hvx/FASTTURN.md, HVX_SET_TURNCTL): the
+ *   qb=<B>:<s>:<permille>  seeded bursts of short turns (hv/hvx/FASTTURN.md, HVX_SET_TURNCTL): the
  *                 branch clock is cut into windows of max(q, B) branches, a window holds a
  *                 burst of B branches with chance permille/1000, and inside a burst every
  *                 turn is s branches; seed qbs=<hex> (default 1)
@@ -87,7 +87,7 @@
 #include "hvx_stack_verify.c"
 #undef main
 #include <time.h>
-#include "explore/ptedges.h"
+#include "ptedges.h"
 
 #define EXP_MEM_MIB	1024ULL	/* default guest RAM; "--ram-mib N" / HVX_EXPLORE_RAM_MIB change it */
 #define EXP_MEM_MIN_MIB	256ULL	/* the smallest real-Linux guest the harnesses run (M27) */
@@ -136,7 +136,7 @@ static double now_s(void)
 static int g_pt;
 static uint64_t g_pt_lo, g_pt_hi, g_pt_mib = 256;
 
-/* ---- Milestone 44: whole-system coverage (hvx/richcov) ----
+/* ---- Milestone 44: whole-system coverage (hydo/richcov) ----
  * HVX_EXPLORE_PT_RANGES="<lo>-<hi>[,<lo>-<hi>]" (hex) programs up to two IP ranges instead of
  * one ELF's text, and HVX_EXPLORE_PTMULTI="<ptmulti binary> <name>=<elf>[@<bias>] ..." decodes
  * each workload trace into per-program edge files in <outdir>/../cov/<tag>/ (ptmulti's

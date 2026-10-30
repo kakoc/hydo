@@ -10,7 +10,7 @@ PostgreSQL 15.6. The manifest is the one the `hydo-onboard` skill produced in it
 `CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS=-mod=readonly go build -trimpath -buildvcs=false
 -ldflags "-s -w -buildid= -X miniflux.app/v2/internal/version.Version=2.3.3"` with go 1.26.5
 (`/nix/store/pwj3x44pp735yb038fnmqckyyra9k29x-go-1.26.5`): two builds byte-identical,
-sha256 `dd8e2456…`. `HYDO_MINIFLUX_BIN=<binary> hvx/onboard/examples/miniflux/build.sh`.
+sha256 `dd8e2456…`. `HYDO_MINIFLUX_BIN=<binary> hydo/onboard/examples/miniflux/build.sh`.
 
 | image | init | sha256 (disk) |
 |---|---|---|
@@ -96,4 +96,4 @@ lifted network fault delivers netem's queued packets. Only `/sbin/init` differs 
 `explore-ob-miniflux-pt-pin`. All ten hand-written schedules above (both tables) give the same
 verdict as on the old image, each twice with the same fingerprint, for example `run` OK
 `092d1ebdf7cfd714`, `C=20 S=off` VIOLATION `category c4 stored 0 times` `b883bfaac88baf61`. Full
-table: `hvx/REBASELINE.md` section 7.1.
+table: `docs/REBASELINE.md` section 7.1.

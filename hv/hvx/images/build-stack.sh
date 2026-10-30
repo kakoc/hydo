@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 # build-stack.sh — builder for the four-service stack guest (Milestone 35): UNMODIFIED
-# MySQL 8.4 + Kafka 3.5 (KRaft) + Redis 7.2 behind a small gRPC front door (hvx/stack/,
+# MySQL 8.4 + Kafka 3.5 (KRaft) + Redis 7.2 behind a small gRPC front door (hydo/stack/,
 # Go), all co-located over 127.0.0.1 in one guest. Same model as the Kafka and MySQL
 # guests: the binary closures live on an ext4 READ-ONLY root (p1, excluded from the
 # snapshot); MySQL's datadir, Kafka's log.dirs and Redis's AOF share one small
 # journaled-ext4 rw disk (p2 = the fault target). The switch_root initramfs is the
 # generic build/initramfs-kafka.cpio.gz. The prelude (sections 1-5) is build-kafka.sh's.
-# Run on the build box:  ./dev.sh "bash ./build-stack.sh"  (the first run downloads the
-# Go modules pinned by hvx/stack/go.sum into build/stack-gomod).
+# Run on the build box:  ./dev.sh "bash hv/hvx/images/build-stack.sh"  (the first run downloads the
+# Go modules pinned by hydo/stack/go.sum into build/stack-gomod).
 set -euo pipefail
+cd "$(dirname "$0")/../../.."   # M100: this script lives in hv/hvx/images; every path below is relative to the repository root
 # Output name prefix: images go to build/${STACK_OUT}-{ext4,data,disk}.img (default "stack").
 # Lets two lines of work build their own guest image without overwriting each other's.
 STACK_OUT="${STACK_OUT:-stack}"
 # Source directory of the Go front door (default hvx/stack). The explorer builds from a
 # pinned copy (hvx/explore/stack-src) so its image does not change while hvx/stack is edited.
-STACK_GO_SRC="${STACK_GO_SRC:-hvx/stack}"
+STACK_GO_SRC="${STACK_GO_SRC:-hydo/stack}"
 # Go linker flags for the front door. The default strips symbols. A coverage image
 # (Milestone 41) keeps symbols and links the text at a fixed unique address so an Intel PT
 # trace can be filtered to this one program, e.g. STACK_GO_LDFLAGS="-T 0x2000001000 -buildid=".
@@ -60,7 +61,7 @@ if [ -z "$MUSL_ROOT" ]; then
   [ -f "$MUSL_ROOT/lib/crt1.o" ] || MUSL_ROOT=$(dirname "$(dirname "$(ls /nix/store/*musl-static*/lib/crt1.o 2>/dev/null | head -1)")")
 fi
 [ -x "$GCC_MUSL" ] && [ -f "$MUSL_ROOT/lib/crt1.o" ] || { echo "error: no static musl gcc (set HYDO_GCC_MUSL + HYDO_MUSL_ROOT)" >&2; exit 1; }
-"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hvx/hvx_seedrng.c -o build/hvx_seedrng
+"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hv/hvx/images/hvx_seedrng.c -o build/hvx_seedrng
 echo "built build/hvx_seedrng ($(stat -c%s build/hvx_seedrng) bytes, static musl)"
 
 # --- 5. pinned mke2fs + libfaketime + the reproducible ext2/ext4 helpers (verbatim) ---
@@ -627,7 +628,7 @@ chmod +x "$R/sbin/init"
 # points. Every other image keeps the init above byte-for-byte.
 case "$STACK_OUT" in explore*|richcov-*) EXPLORE_IMAGE=1;; *) EXPLORE_IMAGE=0;; esac
 if [ "$EXPLORE_IMAGE" = 1 ]; then
-  cp hvx/explore/stack-explore.sh "$R/etc/stack-explore.sh"
+  cp hydo/explore/stack-explore.sh "$R/etc/stack-explore.sh"
   if [ "${STACK_KAFKA_DIAG:-0}" = 1 ]; then   # diagnostic: dump Kafka's log decisions after the verdict
     "$PY3" - "$R/etc/stack-explore.sh" <<'PYEOF'
 import sys

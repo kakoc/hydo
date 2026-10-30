@@ -2,7 +2,7 @@
 // client records every operation it performs -- the invocation before the request, the
 // completion after the reply -- and the host checks the history after the run
 // (linearizability of a register / CAS object per key, Elle-style list-append checks).
-// Wire format and checkers: hvx/HISTORIES.md; manifests enable them with `checks:`.
+// Wire format and checkers: hydo/HISTORIES.md; manifests enable them with `checks:`.
 //
 //	kv := hydohist.New("kv")
 //	op := kv.Invoke(3, "write", "k1", "v1")          // process 3, before the request

@@ -8,7 +8,7 @@
 #        boot 2: a fresh VM on that image, no faults: the service recovers, the acked list from
 #                boot 1 is checked
 #   setting: redis appendfsync (always|everysec|no); miniflux synchronous_commit (on|off)
-# Prints the fingerprints and the verdicts. Run from hvx-mac/ after `sh build.sh`; guests in services/guest/.
+# Prints the fingerprints and the verdicts. Run from hv/hvm/ after `sh build.sh`; guests in services/guest/.
 set -e
 cd "$(dirname "$0")/.."
 MODE=$1 SVC=$2 SET=$3 DIR=${4:-/tmp/hvm-svc}

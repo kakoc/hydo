@@ -1,6 +1,6 @@
 # SMP Stage 2: real Linux boots with 2-4 vCPUs, reproducibly (2026-10-22)
 
-Stage 2 of `hvx/SMP_PLAN.md`: real Linux 6.6.35 (`~/hydo/build/bzImage` +
+Stage 2 of `hv/hvx/SMP_PLAN.md`: real Linux 6.6.35 (`~/hydo/build/bzImage` +
 `initramfs.cpio.gz`, command line `acpi=off x2apic_phys`) boots with 2, 3 and 4 vCPUs on
 the Stage 1 scheduler, brings every CPU online ("smp: Brought up 1 node, N CPUs"),
 reaches the initramfs shell marker, and is bit-for-bit reproducible: two fresh boots and
@@ -8,7 +8,7 @@ branch-from-snapshot give identical full-state fingerprints. One-vCPU guests are
 unchanged (the 25-check regression gate passes with every fingerprint unchanged).
 
 Developed on a side-by-side module `hvxsmp2.ko` (`/dev/hvxsmp2`, built by
-`hvx/smp2/build-hvxsmp2.sh` in `~/hydo-smp2` on the bare-metal test machine). The main `hvx.ko`
+`hv/hvx/smp2/build-hvxsmp2.sh` in `~/hydo-smp2` on the bare-metal test machine). The main `hvx.ko`
 was not touched. `hvxsmp2` was unloaded at the end.
 
 ## What was built
@@ -54,7 +54,7 @@ the code it ran before.
   vCPU 3 in a 4-vCPU disk boot; both delivered and the disk read completes.
 - **Scheduler:** a vCPU in wait-for-SIPI is never picked and no interrupt wakes it.
   `HVX_SET_SCHED` accepts `halted` 0..2 (2 only with SMP_BOOT).
-- **Harness `hvx/hvx_smp_boot_verify.c`** (a copy of `hvx_boot_verify.c` for N vCPUs):
+- **Harness `hv/hvx/hvx_smp_boot_verify.c`** (a copy of `hvx_boot_verify.c` for N vCPUs):
   boots with `PMU_CLOCK | SMP_SCHED | SMP_BOOT | PAUSE_EXIT`; the fingerprint hashes the
   console, every vCPU's `HVX_GET_SNAPSHOT`, the scheduler state from `HVX_GET_SCHED`
   (not its statistics) and all guest RAM (and the disk with `HVX_DISK`). Checks: two
@@ -64,7 +64,7 @@ the code it ran before.
   turn end), `apbranch` (below), `HVX_BRANCH_TURNS` (extra branch points). It reports
   wall time and scheduler statistics (turns, landing steps, overshoots, time jumps,
   wake-ups, per-vCPU branches and turns, where COM1 / virtio-blk interrupts were routed).
-- **Hand-written test `hvx/hvx_sipi_test.c`:** vCPU 0 sends INIT, INIT de-assert and two
+- **Hand-written test `hv/hvx/hvx_sipi_test.c`:** vCPU 0 sends INIT, INIT de-assert and two
   STARTUPs to vCPU 1, which runs a stub at 0x8000 through real mode (writes via a segment,
   branch loop), loads a GDT, protected mode (branch loop), PAE + EFER.LME + paging, and
   64-bit code. Swept over turn lengths 1..300 so turn boundaries fall in all three modes.
@@ -145,7 +145,7 @@ turn T/2 (continued and restored) give the same fingerprint. Disk boots use
 
 ## Regression gate (on `/dev/hvxsmp2`, final module)
 
-- `SIDE_TMP=/var/tmp/smp2-side HVX_DEV=/dev/hvxsmp2 hvx/race/side-metal.sh`:
+- `SIDE_TMP=/var/tmp/smp2-side HVX_DEV=/dev/hvxsmp2 hv/hvx/race/side-metal.sh`:
   **ALL PASS (25 checks)**, every fingerprint unchanged, both boot verifies included
   (no disk `7a5559028ffbf52c`, with disk `36583d533d7c989b`).
 - `hvx_sched_pmu_test`: PASS with the Stage 1 numbers (turn hash `97b3468c16d739fa`,

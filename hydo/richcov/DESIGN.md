@@ -14,7 +14,7 @@ and is left out (see "Not covered").
 
 **Making a trace attributable.** A PT trace is only a stream of executed addresses; to say which
 program an address belongs to, the three programs must occupy disjoint, known address ranges in
-every run. The `richcov` image (`hvx/richcov/build-richcov.sh`) arranges that:
+every run. The `richcov` image (`hydo/richcov/build-richcov.sh`) arranges that:
 
 | program | how | executable text |
 |---|---|---|
@@ -34,24 +34,24 @@ text)` covers Redis and the front door (nothing else executes in that window: bu
 0x400000, mysqld and every shared library are far above). Range 2 = mysqld's executable segment at
 the no-ASLR base. User mode only, return compression off (as in M40/M41).
 
-**Decoding.** `hvx/richcov/ptmulti.c` decodes one trace into per-program edge files
+**Decoding.** `hydo/richcov/ptmulti.c` decodes one trace into per-program edge files
 (`<name>.edges`, `<name>.funcs`, `summary.txt`). Same edge rule as the M41 decoder
-(`hvx/explore/ptedges.h`), plus: the chain is cut when the next instruction belongs to another
+(`hv/hvx/ptedges.h`), plus: the chain is cut when the next instruction belongs to another
 program (a process switch) or lies outside every program. Verified off the box on the saved M40
 traces: on the front-door-only trace it produces exactly the same 41,618 edges as `ptedges.h`,
 reruns are byte-identical, decoding takes ~3 s for 127 MB, and the clean vs kill-kafka@10 diff
 shows the same 98 fault-only functions as M40 (`main.retry`, `main.kafkaHasKey`,
 `main.outcomeUnknown`, ...).
 
-**Feature for the scheduler.** As in `hvx/explore/guided.py`: `(program, from, to, bucket)` with
+**Feature for the scheduler.** As in `hydo/explore/guided.py`: `(program, from, to, bucket)` with
 AFL hit-count buckets (1, 2, 3, 4-7, 8-15, 16-31, 32-127, 128+). A new feature in *any* program
 counts as new coverage, but the scheduler also keeps per-program novelty counts (section 3) so the
 front door's fast saturation no longer dominates.
 
 ## 2. Assertion and state coverage (implemented in M44, see "Implementation" below)
 
-The stack already emits `HYDO-ASSERT` records (23 declared properties in `hvx/stack/main.go`,
-format in `hvx/ASSERTIONS.md`). Three feature kinds are derived from a run's console:
+The stack already emits `HYDO-ASSERT` records (23 declared properties in `hydo/stack/main.go`,
+format in `hydo/ASSERTIONS.md`). Three feature kinds are derived from a run's console:
 
 1. **Property firsts.** For every `sometimes`/`reachable` property, `(id, ok=true)` is a feature
    the first time any run in the exploration produces it. Today's never-exercised properties
@@ -102,9 +102,9 @@ front door at equal budget.
 
 ## Implementation (M44)
 
-- **Images.** `RICHCOV_VARIANT=old|fix bash hvx/richcov/build-richcov.sh` builds explorer
+- **Images.** `RICHCOV_VARIANT=old|fix bash hydo/richcov/build-richcov.sh` builds explorer
   (serve-mode) images in the coverage layout: `richcov-old-disk.img` (front door
-  `hvx/explore/stack-src-sdk`, which has the M38 bug) and `richcov-fix-disk.img` (`hvx/stack`).
+  `hydo/explore/stack-src-sdk`, which has the M38 bug) and `richcov-fix-disk.img` (`hydo/stack`).
   `build-stack.sh` treats `STACK_OUT=richcov-*` like `explore*`. The front door source is first
   run through `patch-src.py`, which adds `richstate.go` (from `state.go.in`: one
   `HYDO-STATE client=.. mysql=.. kafka=.. redis=.. n=..` line per distinct per-order tuple,
@@ -118,13 +118,13 @@ front door at equal budget.
   without them it is unchanged (the two pinned reproducers give `2403499c9a3f8419` and
   `f87130453609a5d6` with the new binary). Range 1 = Redis text start .. end of front-door text,
   range 2 = mysqld's executable segment at 0x555555554000.
-- **Scheduler.** `hvx/explore/richguided.py` (modes `rich`, `edges`, `random`), section 3 as
+- **Scheduler.** `hydo/explore/richguided.py` (modes `rich`, `edges`, `random`), section 3 as
   written, plus: a mutation that repeats an already-run schedule is redrawn.
-- **Report.** `hvx/richcov/richreport.py <dir>`.
+- **Report.** `hydo/richcov/richreport.py <dir>`.
 
 ## Results (M44, bare-metal test machine, 1 worker, shared with two other workstreams)
 
-Raw data under `/var/tmp/m44-rich` on the box; scripts in `hvx/richcov/eval/`; tables from
+Raw data under `/var/tmp/m44-rich` on the box; scripts in `hydo/richcov/eval/`; tables from
 `richreport.py`.
 
 - **Layout confirmed.** With `norandmaps`, mysqld runs at 0x555555554000 (36,780 edges, 0 decode

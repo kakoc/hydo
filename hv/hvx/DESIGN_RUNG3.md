@@ -1,13 +1,13 @@
 # DESIGN — Rung 3: RAM + disk + real-rootfs scale-up
 
-Design spec for **Rung 3 of `hvx/ROADMAP.md`** — raising the physical ceiling (guest RAM
+Design spec for **Rung 3 of `hv/hvx/ROADMAP.md`** — raising the physical ceiling (guest RAM
 past 256 MiB, backing disk past 64 MiB) and moving from an in-RAM initramfs to a real
 multi-GB ext4 root disk, so heavier services (a JVM, MySQL) and *multiple co-located*
-services fit on the loopback-first staircase. Read-only design pass; grounded in `hvx/hvx.c`,
-`hvx/hvx_abi.h`, `hvx/hvx_boot.h`, `hvx/hvx_disk_boot_verify.c`, `hvx/ARCHITECTURE.md`,
-`hvx/ROADMAP.md`, and `CLAUDE.md` (M1–M27, esp. **M11** — the guest-RAM page-array refactor,
+services fit on the loopback-first staircase. Read-only design pass; grounded in `hv/hvx/hvx.c`,
+`hv/hvx/hvx_abi.h`, `hv/hvx/hvx_boot.h`, `hv/hvx/hvx_disk_boot_verify.c`, `hv/hvx/ARCHITECTURE.md`,
+`hv/hvx/ROADMAP.md`, and `CLAUDE.md` (M1–M27, esp. **M11** — the guest-RAM page-array refactor,
 which is the template for the disk refactor here). Written in the style of
-`hvx/PHASE6_DESIGN.md` / `hvx/DESIGN_NEXT.md`.
+`hv/hvx/PHASE6_DESIGN.md` / `hv/hvx/DESIGN_NEXT.md`.
 
 Status anchor: treat the codebase as complete through **M27**. Two agents work concurrently:
 a harness-hardening agent editing `build-linux.sh` / `hvx.c` (the small-image mkfs-pinning

@@ -1,4 +1,4 @@
-"""hydo-build --arch arm64: the manifest compiled for the Mac VMM (hvx-mac/, Milestone 48).
+"""hydo-build --arch arm64: the manifest compiled for the Mac VMM (hv/hvm/, Milestone 48).
 
 Called by hydo-build's main() with its module namespace H (compile_shell, copy_into, mkfs,
 zero_times, uuid_from, fix_mtimes, sha, write_mbr, ManifestError, FIXED_MTIME, HERE). Output, in
@@ -7,7 +7,7 @@ the build dir:
     <NAME>-arm64-disk.img   the data disk for the virtio-blk device (HVM_DISK): an MBR with a
                             1 MiB placeholder p1 and the journaled ext4 data partition p2, so
                             hydo-init.sh mounts /dev/vda2 unchanged
-hvx-mac/explore/hvmx boots them with the arm64 kernel from hvx-mac/explore/build-guest.sh.
+hv/hvm/explore/hvmx boots them with the arm64 kernel from hv/hvm/explore/build-guest.sh.
 
 The root tree is the same as the x86 image's (busybox applets, the project's files and
 closures, /etc/hydo/{manifest.sh,prelude.sh,hydo.yaml}, hydo-init.sh as /sbin/init), with two
@@ -16,17 +16,17 @@ differences:
     /init waits for /dev/vda2 and then runs /sbin/init;
   * tc is the pinned aarch64 iproute2 (TC_ARM64, a dynamically linked nixpkgs build: no static
     one is in the binary cache), copied with exactly the shared libraries its loader opens
-    (hvx-mac/services/elfdeps.py); the kernel has the qdiscs built in (hvx-mac/explore/
+    (hv/hvm/services/elfdeps.py); the kernel has the qdiscs built in (hv/hvm/explore/
     hvm-explore.config). HYDO_TC_ARM64= (empty) builds an image without tc, as before.
 root.nix and root.files must name arm64 binaries (e.g. aarch64 store paths); nothing checks
 their architecture (services[].image is checked: the image must be linux/arm64). Byte-reproducible: sorted newc cpio, fixed mtimes and owners, gzip -n.
 
 The prebuilt static helpers are staged exactly as the x86 build stages them, and only for the
 manifests that use them (Milestone 96), so every other image keeps its bytes:
-  * hydo-world (fakes:/proxies:, hvx/onboard/world/build.sh with HYDO_WORLD_GOARCH=arm64):
+  * hydo-world (fakes:/proxies:, hydo/onboard/world/build.sh with HYDO_WORLD_GOARCH=arm64):
     $HYDO_WORLDBIN_ARM64, default <build dir>/hydo-world-arm64, as /bin/hydo-world, plus
     /etc/hydo/world.json;
-  * hydo-read (+ the hydo-check name; hvx/readers/build.sh with HYDO_READ_GOARCH=arm64):
+  * hydo-read (+ the hydo-check name; hydo/readers/build.sh with HYDO_READ_GOARCH=arm64):
     $HYDO_READ_BIN_ARM64, default <build dir>/hydo-read-arm64, when a command calls either name;
   * params: the values the image was built with, in /etc/hydo/params (as on x86_64).
 Each helper must be an aarch64 ELF file (checked), so an x86_64 build cannot slip in.
@@ -34,7 +34,7 @@ Each helper must be an aarch64 ELF file (checked), so an x86_64 build cannot sli
 Service networks, link faults and the freeze (Milestone 99). A manifest with network: bridge,
 an addr: or `freeze` in faults: needs a guest kernel with network namespaces, veth, a bridge,
 IPv6, policy routing and iptables + NFQUEUE, which Image-explore does not have. Such an image is
-built for the SECOND kernel, Image-explore-netns (hvx-mac/explore/build-guest-netns.sh, sha256
+built for the SECOND kernel, Image-explore-netns (hv/hvm/explore/build-guest-netns.sh, sha256
 NETNS_KERNEL_SHA256), and says so in its own root: /etc/hydo/kernel holds
 "Image-explore-netns <sha256>", which hvm_backend.kernel_for() (explore.py --backend hvm, the
 Mac hydo) reads to boot it with exactly that kernel. Every other image has no /etc/hydo/kernel,
@@ -42,10 +42,10 @@ boots Image-explore and keeps its bytes. Staged only for those manifests, at the
   * network: bridge -> iproute2's `ip` (the same aarch64 store path as tc);
   * faults: [freeze] -> iptables-legacy (xtables-legacy-multi and the three extensions the
     freeze's rules load, IPT_FILES) and the static helper hydo_fc built for aarch64
-    ($HYDO_FCBIN_ARM64, default <build dir>/hydo_fc-arm64; hvx/BUILD-PINS.md);
+    ($HYDO_FCBIN_ARM64, default <build dir>/hydo_fc-arm64; docs/BUILD-PINS.md);
 each with exactly the files its loader opens. $HYDO_ARM64_STORE names a directory that holds
 nix/store/... for them (the Mac release's guest/tc tree, or a tree unpacked by
-hvx/dist/nix_cache_fetch.py); unset, the host's own /nix/store is read.
+hydo/dist/linux/nix_cache_fetch.py); unset, the host's own /nix/store is read.
 """
 import gzip, io, os, shutil, stat, subprocess, sys
 
@@ -62,7 +62,7 @@ IPTABLES_ARM64 = "/nix/store/y6j6xf1bfshzhdw7hip3swpgd6fqfs3b-iptables-1.8.10"
 IPT_FILES = ["bin/xtables-legacy-multi", "lib/xtables/libxt_NFQUEUE.so", "lib/xtables/libxt_tcp.so",
              "lib/xtables/libxt_standard.so"]
 ELFDEPS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-                       "hvx-mac", "services", "elfdeps.py")
+                       "hv", "hvm", "services", "elfdeps.py")
 
 SHIM = """#!/bin/busybox sh
 # /init of an arm64 manifest image (hvx/onboard/hydo_build_arm64.py): wait for the data
@@ -156,7 +156,7 @@ def _copy_store_files(paths, R):
     root = os.path.abspath(os.environ["HYDO_ARM64_STORE"]) if os.environ.get("HYDO_ARM64_STORE") else ""
     for p in paths:
         if not os.path.lexists(root + p):
-            raise SystemExit("hydo-build: %s not found%s (the aarch64 store paths: hvx/dist/nix_cache_fetch.py "
+            raise SystemExit("hydo-build: %s not found%s (the aarch64 store paths: hydo/dist/linux/nix_cache_fetch.py "
                              "--closure <dir> <path>, then HYDO_ARM64_STORE=<dir>)" % (p, " under " + root if root else ""))
     deps = subprocess.run([sys.executable, ELFDEPS] + (["--root", root] if root else []) + list(paths),
                           stdout=subprocess.PIPE, text=True, check=True).stdout.split()

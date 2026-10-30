@@ -5,7 +5,7 @@
  *   hydo_assert_report <console> [<console>...]
  *
  * Each file is one run (e.g. the HVX_CONSOLE_OUT dump of a harness). The table aggregates
- * the HYDO-ASSERT records of all of them (hvx/ASSERTIONS.md, hvx/hydo_assert_table.h).
+ * the HYDO-ASSERT records of all of them (hydo/ASSERTIONS.md, hydo/assert/hydo_assert_table.h).
  * Exit status: 0 = no violation, 1 = at least one violated property, 2 = usage / I/O error.
  */
 #include <stdio.h>

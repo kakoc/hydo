@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Stage the aarch64-linux Node.js for hydo-mac.yaml into files/ (git-ignored): nodejs-slim 22.2.0
-# from the pinned nixpkgs (NixOS 24.05, revision 89c4987; hvx/BUILD-PINS.md), fetched from the
+# from the pinned nixpkgs (NixOS 24.05, revision 89c4987; docs/BUILD-PINS.md), fetched from the
 # nixpkgs binary cache on a Linux machine with nix ($HYDO_BUILD_HOST, default the build machine build
-# box), and only the shared libraries its loader opens (found with hvx-mac/services/elfdeps.py).
+# box), and only the shared libraries its loader opens (found with hv/hvm/services/elfdeps.py).
 # The one absolute symlink (libgcc_s.so.1 into another store path) is made relative, as the
 # Redis example of the Mac release does; in the guest it resolves to the same file.
-# Usage: hvx/onboard/examples/node-kv/fetch-node-arm64.sh     (checks files.sha256 at the end)
+# Usage: hydo/onboard/examples/node-kv/fetch-node-arm64.sh     (checks files.sha256 at the end)
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 HOST=${HYDO_BUILD_HOST:?}

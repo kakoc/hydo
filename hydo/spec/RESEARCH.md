@@ -217,7 +217,7 @@ That is the same validation loop the bug benchmark already provides.
 1. **A history checker for the published semantics.** It records each operation with its
    invoke and complete times on hydo's virtual clock, and its outcome (ok / fail / unknown). It
    accepts all allowed nondeterminism and rejects the rest. The prototype in
-   `hvx/spec/sqs_checker/` (§5) covers send, receive, delete, visibility, retention, FIFO
+   `hydo/spec/sqs_checker/` (§5) covers send, receive, delete, visibility, retention, FIFO
    order, group lock and deduplication. Run it per hydo run, and turn its result into the
    `HYDO-ORACLE` line, so the explorer, shrinker and reports work unchanged.
 2. **An executable reference model** (ShardStore style): an in-memory broker of about 150
@@ -271,7 +271,7 @@ That is the same validation loop the bug benchmark already provides.
   SQS itself, which documents no absolute guarantee. Keep the contract an explicit `Spec`
   choice.
 
-## 5. The prototype: `hvx/spec/sqs_checker/`
+## 5. The prototype: `hydo/spec/sqs_checker/`
 
 `checker.py` (about 200 lines, no dependencies) checks a JSON-able history against a `Spec`.
 
@@ -314,7 +314,7 @@ for every server moment inside the operations' windows.
 - a broken group lock;
 - broken dedup.
 
-Run: `python3 -m unittest hvx/spec/sqs_checker/test_checker.py` (all pass).
+Run: `python3 -m unittest hydo/spec/sqs_checker/test_checker.py` (all pass).
 
 **Not covered yet:**
 - `ChangeMessageVisibility`;

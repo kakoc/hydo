@@ -1,4 +1,4 @@
-# Burst-turn identity check for explore.py --bursts (hvx/FASTTURN.md).
+# Burst-turn identity check for explore.py --bursts (hv/hvx/FASTTURN.md).
 # usage: python3 bursts_ident.py <explore.py>
 # With --turns --bursts every field other than qb equals the schedule with --turns alone
 # (8,000 schedules: seeds 1-1000 x random/swarm x --timing x --new-faults), the strings

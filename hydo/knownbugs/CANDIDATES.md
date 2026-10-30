@@ -145,7 +145,7 @@ three JVM brokers in one guest and very old releases; PostgreSQL 12.3 serializab
   enough", so even etcd's harness does not reliably trigger it now — a stretch target that
   is interesting precisely because it is hard.
 
-## What the manifest (branch `onboard`, `hvx/onboard/MANIFEST.md`) needs for these
+## What the manifest (branch `onboard`, `hydo/onboard/MANIFEST.md`) needs for these
 
 Checked against the current schema:
 

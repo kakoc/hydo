@@ -120,5 +120,5 @@ concurrency, which is the same seed in both cells.
 
 `run.py` / `confirm.py` (`--vcpus`, `--turns`), `smp_ident.py`, `listrun.py` (`--vcpus`,
 `--repeat`, `--env`, crash line), `smp_cells.sh`, `smp_after.sh`, `smp_after2.sh`,
-`smp-d9-q2*.list`; `hvx/hvx_explore.c` (`HVX_EXPLORE_VCPUSTAT`). Box: `/var/tmp/bench2/<cell>`,
+`smp-d9-q2*.list`; `hv/hvx/hvx_explore.c` (`HVX_EXPLORE_VCPUSTAT`). Box: `/var/tmp/bench2/<cell>`,
 `confirm-v2`, `diag`, `probe-v1`, `probe-v2`, `probe-v1t`, `probe-ctl`, `cells.log`.

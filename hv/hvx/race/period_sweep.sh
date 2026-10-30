@@ -2,7 +2,7 @@
 # For one race window W: try 200 PMU tick periods (tick TSC scaled so the guest
 # clock rate stays the same); replay every setting that hits the bug once more.
 W=$1; OUT=50000; SEATS=5000
-cd ~/hydo/hvx/race; B=~/hydo/build
+cd ~/hydo/hv/hvx/race; B=~/hydo/build
 CL="console=ttyS0 earlyprintk=ttyS0 loglevel=8 nokaslr acpi=off x2apic_phys hydo_race=$W,$OUT,$SEATS"
 one() { ~/bin/hvx-run sudo env HVX_PMU_CLOCK=1 HVX_PMU_PERIOD=$1 HVX_PMU_TICK=$2 ./hvx_race_probe $B/bzImage $B/initramfs-race.cpio.gz "$CL" 2>/dev/null; }
 for k in $(seq 0 199); do

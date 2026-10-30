@@ -2,7 +2,7 @@
 # hydo-grpc-gen <proto dir> [--hints hints.yaml] --out <dir>
 #   (or --descriptor-set set.pb / --reflect host:port instead of <proto dir>)
 # Generates gRPC drivers for a hydo project (MANIFEST.md "gRPC services"). The generator and
-# the guest client are Go (hvx/grpcgen); this wrapper builds the generator for the host and
+# the guest client are Go (hydo/grpcgen); this wrapper builds the generator for the host and
 # lets it build the static guest client with the same toolchain: $HYDO_GO, else the pinned
 # go-1.26.5 store path of build-stack.sh if it exists, else `go` on PATH.
 set -euo pipefail

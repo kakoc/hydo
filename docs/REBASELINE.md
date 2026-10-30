@@ -3,8 +3,8 @@
 From 2026-10-17 until 2026-10-21 the build machine had no pinned static musl gcc
 (`aa1jsl19…-gcc-static-x86_64-unknown-linux-musl-13.2.0`). Image builds then used a stand-in
 `hvx_seedrng` binary, sha256 `01adf1bd67cbc79f…` (36,280 bytes), copied from
-`~/hydo/build/hvx_seedrng`. Nobody can rebuild that binary (`hvx/BUILD-PINS.md`). The pinned
-gcc is restored, and with it `hvx/hvx_seedrng.c` gives `c2a440c5e1c3888f…` (40,272 bytes).
+`~/hydo/build/hvx_seedrng`. Nobody can rebuild that binary (`docs/BUILD-PINS.md`). The pinned
+gcc is restored, and with it `hv/hvx/images/hvx_seedrng.c` gives `c2a440c5e1c3888f…` (40,272 bytes).
 The decision was to re-baseline: rebuild every image that contains the stand-in with the
 pinned tools only, and record the new image hashes and fingerprints. This file is that
 record. CLAUDE.md is not changed here.
@@ -24,18 +24,18 @@ initramfs (cpio walk), and hashed. No image was judged by its date.
 
 | image | rebuilt here? | where it is used in the docs |
 |---|---|---|
-| `explore-nf-disk.img` | yes | CLAUDE.md M46, M54, M56, M58; `hvx/bench/README.md` (control image, `e5d8d6fb…`, base bug `f1c39a88…`); `hvx/cutflush/FINDING.md` (cf=204 `e592e6c6…`, 12 cut points) |
-| `explore-bench-d1…d7-*-disk.img` (7) | yes | CLAUDE.md M54; `hvx/bench/README.md` defect table; `hvx/bench/run.py`, `confirm.py` |
-| `explore-bench-bg-control`, `-bg-d0…d7-*` (9) | yes | CLAUDE.md M56; `hvx/bench/README.md` BUGGIFY section; `confirm.py --bg-images` |
-| `explore-bench-bg-fixed-disk.img` (`7974498b…`) | yes | `hvx/bench/README.md` (BUGGIFY fixed front door); `hvx/cutflush/FINDING.md` (cf=242 `5c04f271…`, 13 cut points); CLAUDE.md M58 |
-| `explore-ob-redis`, `-stack-fix`, `-stack-old` | yes | CLAUDE.md M47; `hvx/onboard/RESULTS.md` (M47 tables) |
-| `explore-ob-redis-pt`, `-stack-fix-pt`, `-stack-old-pt` | yes | CLAUDE.md M52; `hvx/BUILD-PINS.md` (`0dd509c2…`, `37a2ff6a…`) |
-| `explore-ob-miniflux`, `-miniflux-pt` | yes | CLAUDE.md M52; `hvx/onboard/examples/miniflux/RESULTS.md` |
+| `explore-nf-disk.img` | yes | CLAUDE.md M46, M54, M56, M58; `hydo/bench/README.md` (control image, `e5d8d6fb…`, base bug `f1c39a88…`); `hydo/cutflush/FINDING.md` (cf=204 `e592e6c6…`, 12 cut points) |
+| `explore-bench-d1…d7-*-disk.img` (7) | yes | CLAUDE.md M54; `hydo/bench/README.md` defect table; `hydo/bench/run.py`, `confirm.py` |
+| `explore-bench-bg-control`, `-bg-d0…d7-*` (9) | yes | CLAUDE.md M56; `hydo/bench/README.md` BUGGIFY section; `confirm.py --bg-images` |
+| `explore-bench-bg-fixed-disk.img` (`7974498b…`) | yes | `hydo/bench/README.md` (BUGGIFY fixed front door); `hydo/cutflush/FINDING.md` (cf=242 `5c04f271…`, 13 cut points); CLAUDE.md M58 |
+| `explore-ob-redis`, `-stack-fix`, `-stack-old` | yes | CLAUDE.md M47; `hydo/onboard/RESULTS.md` (M47 tables) |
+| `explore-ob-redis-pt`, `-stack-fix-pt`, `-stack-old-pt` | yes | CLAUDE.md M52; `docs/BUILD-PINS.md` (`0dd509c2…`, `37a2ff6a…`) |
+| `explore-ob-miniflux`, `-miniflux-pt` | yes | CLAUDE.md M52; `hydo/onboard/examples/miniflux/RESULTS.md` |
 | `explore-ob-miniflux-tree` | yes (byte-identical to `-pt`, old and new) | not in the docs |
-| `explore-ob-kb-sqlite-3510200`, `-3510300` | yes | CLAUDE.md M49, M52; `hvx/knownbugs/sqlite/README.md` (`05d75b28…`, `2ff12b40…`); `hvx/race/PREEMPT.md` |
-| `explore-ob-redis-live` | yes | CLAUDE.md M59; `hvx/onboard/RESULTS.md` (liveness, `558a256b…`) |
-| `explore-ob-redis-oci` | yes | CLAUDE.md M59; `hvx/onboard/RESULTS.md` (OCI, `ca3ea2b0…`) |
-| `richcov-fix-disk.img`, `richcov-old-disk.img` | yes | CLAUDE.md M44, M45 (`cfc71a50…`, `059021d7…`); `hvx/richcov/DESIGN.md`; `hvx/explore/richguided.py`, `abranch.py` |
+| `explore-ob-kb-sqlite-3510200`, `-3510300` | yes | CLAUDE.md M49, M52; `hydo/knownbugs/sqlite/README.md` (`05d75b28…`, `2ff12b40…`); `hv/hvx/race/PREEMPT.md` |
+| `explore-ob-redis-live` | yes | CLAUDE.md M59; `hydo/onboard/RESULTS.md` (liveness, `558a256b…`) |
+| `explore-ob-redis-oci` | yes | CLAUDE.md M59; `hydo/onboard/RESULTS.md` (OCI, `ca3ea2b0…`) |
+| `richcov-fix-disk.img`, `richcov-old-disk.img` | yes | CLAUDE.md M44, M45 (`cfc71a50…`, `059021d7…`); `hydo/richcov/DESIGN.md`; `hydo/explore/richguided.py`, `abranch.py` |
 | `explore-dx-disk.img` | no | not in the docs (see below) |
 | `explore-cc0`, `explore-cc1`, `explore-cc` | no (other session) | CLAUDE.md M50 (see below) |
 | `explore-ob-etcd-3.5.5/3.5.6/3.6.8/3.6.9/3.6.15` | no (etcd work in progress) | not yet in the docs |
@@ -59,7 +59,7 @@ other images and initramfs files contain no `hvx_seedrng` at all.
   recorded results (frontkill 25/40 and 0/40, `hvx_stack_verify` passing) depend on the order
   service code, not on the bytes of `hvx_seedrng`. `explore-binlog-pin` replaces `explore-cc`
   for current measurements. If they are needed again, rebuild them from commit `029e4b3`
-  (cc0) and `b9233d5` (cc1) with `hvx/stack` at those commits.
+  (cc0) and `b9233d5` (cc1) with `hydo/stack` at those commits.
 - `explore-dx-disk.img`: a diagnostic image of M50 (built 2026-10-18 09:22 UTC, used once in
   `/var/tmp/dx1`). No document refers to it and its source was never committed.
 - `explore-ob-etcd-*`, the binlog images and the `explore-bench-m59-*` images belong to work
@@ -77,21 +77,21 @@ the pinned gcc (`c2a440c5…` in every build). Redis came from the pinned store 
 
 | images | source | build command |
 |---|---|---|
-| `explore-nf` | commit `15cc5a4` (identical to the tree `~/hydo-faults` it was built in) | `STACK_OUT=explore-nf bash ./build-stack.sh` |
-| `explore-bench-d1…d7` | commit `91312b2` (identical to `~/hydo-bench`, the M54 build tree, except for 3 abandoned patches) | `bash hvx/bench/build-bench.sh` |
-| `explore-bench-bg-*` (9) | commit `3773607` | `bash hvx/bench/build-bench-bg.sh <name>` |
-| `explore-bench-bg-fixed` | commit `3773607` (its `hvx/stack/main.go` already calls the BUGGIFY wrappers) | `STACK_OUT=explore-bench-bg-fixed bash ./build-stack.sh` |
-| `explore-ob-redis`, `-stack-fix`, `-stack-old` | commit `0360a16` | `hydo-build examples/redis/hydo.yaml --out explore-ob-redis`; `FRONT=fix|old bash hvx/onboard/examples/stack/build.sh` |
+| `explore-nf` | commit `15cc5a4` (identical to the tree `~/hydo-faults` it was built in) | `STACK_OUT=explore-nf bash hv/hvx/images/build-stack.sh` |
+| `explore-bench-d1…d7` | commit `91312b2` (identical to `~/hydo-bench`, the M54 build tree, except for 3 abandoned patches) | `bash hydo/bench/build-bench.sh` |
+| `explore-bench-bg-*` (9) | commit `3773607` | `bash hydo/bench/build-bench-bg.sh <name>` |
+| `explore-bench-bg-fixed` | commit `3773607` (its `hydo/stack/main.go` already calls the BUGGIFY wrappers) | `STACK_OUT=explore-bench-bg-fixed bash hv/hvx/images/build-stack.sh` |
+| `explore-ob-redis`, `-stack-fix`, `-stack-old` | commit `0360a16` | `hydo-build examples/redis/hydo.yaml --out explore-ob-redis`; `FRONT=fix|old bash hydo/onboard/examples/stack/build.sh` |
 | `explore-ob-*-pt` (redis, stack-fix, stack-old) | commit `78f2ed4` | the same with `--out explore-ob-<name>-pt` |
 | `explore-ob-miniflux` | commit `3063f23` | `hydo-build examples/miniflux/hydo.yaml` (miniflux 2.3.3 rebuilt from `~/mf-src/v2`: `dd8e2456…`, as recorded) |
 | `explore-ob-miniflux-tree`, `-pt` | commits `f9e9e6c` and `7d46a1b` | the same, `--out …-tree` / `…-pt` |
-| `explore-ob-kb-sqlite-3510200/3510300` | commit `fe97d2c`, walrace binaries from `~/hydo-sqlite/hvx/knownbugs/sqlite/bin` on the box | `hydo-build hvx/knownbugs/sqlite/hydo.yaml [--set v=3510300]` |
+| `explore-ob-kb-sqlite-3510200/3510300` | commit `fe97d2c`, walrace binaries from `~/hydo-sqlite/hvx/knownbugs/sqlite/bin` on the bare-metal machine | `hydo-build hydo/knownbugs/sqlite/hydo.yaml [--set v=3510300]` |
 | `explore-ob-redis-live` | commit `af1c873` | `hydo-build examples/redis/hydo-live.yaml --out explore-ob-redis-live` |
 | `explore-ob-redis-oci` | commit `130941f` | `fetch-image.sh` (with `SKOPEO=` set, because this commit has the skopeo-path bug fixed later in `b3e2f5a`), then `hydo-build examples/redis-oci/hydo.yaml` |
-| `richcov-old`, `richcov-fix` | commit `1986481` | `RICHCOV_VARIANT=old|fix bash hvx/richcov/build-richcov.sh` (also rebuilds the debug Redis with the pinned gcc; it came out byte-identical) |
+| `richcov-old`, `richcov-fix` | commit `1986481` | `RICHCOV_VARIANT=old|fix bash hydo/richcov/build-richcov.sh` (also rebuilds the debug Redis with the pinned gcc; it came out byte-identical) |
 
 The manifests' `~/hydo/build/…` inputs (Redis, prebuilt front doors) were read from a copy
-under a private `HOME`, as `hvx/pins-proof.sh` does. No build script was changed.
+under a private `HOME`, as `hv/hvx/images/pins-proof.sh` does. No build script was changed.
 
 **Verification that the source is right.** For every rebuilt image, the file tree of every
 partition (path, type, mode, size, sha256 of every file; ext4 via `debugfs rdump`) was
@@ -160,14 +160,14 @@ old fingerprint was recorded (richcov, kb-sqlite 3.51.3). Recorded fingerprints 
 come from:
 
 - `explore-nf` (control): `/var/tmp/m46-bench/confirm/confirm.jsonl` on the bare-metal machine (only the base
-  bug `f1c39a88…` is in `hvx/bench/README.md`); flush-cut points: `hvx/cutflush/FINDING.md`
+  bug `f1c39a88…` is in `hydo/bench/README.md`); flush-cut points: `hydo/cutflush/FINDING.md`
   (cf=204) and `/var/tmp/m57-cfcheck/nf-rerun/results.txt`.
-- `explore-bench-d*`: `hvx/bench/README.md` defect table. `explore-bench-bg-d*`:
-  `hvx/bench/README.md` BUGGIFY section; `-bg-control`: `/var/tmp/m56-bg/confirm/confirm.jsonl`.
+- `explore-bench-d*`: `hydo/bench/README.md` defect table. `explore-bench-bg-d*`:
+  `hydo/bench/README.md` BUGGIFY section; `-bg-control`: `/var/tmp/m56-bg/confirm/confirm.jsonl`.
 - `explore-bench-bg-fixed`: FINDING.md (cf=242) and `/var/tmp/m57-cfcheck/fixed-rerun/results.txt`.
-- `explore-ob-redis`, `-stack-fix`, `-stack-old`: `hvx/onboard/RESULTS.md` (M47); M42 schedules
+- `explore-ob-redis`, `-stack-fix`, `-stack-old`: `hydo/onboard/RESULTS.md` (M47); M42 schedules
   `/var/tmp/m47-onboard/m42.txt`. `-pt` images: CLAUDE.md M52 and `/var/tmp/m48-miniflux/batch3.txt`.
-- miniflux: `hvx/onboard/examples/miniflux/RESULTS.md`. Liveness and OCI: `hvx/onboard/RESULTS.md`.
+- miniflux: `hydo/onboard/examples/miniflux/RESULTS.md`. Liveness and OCI: `hydo/onboard/RESULTS.md`.
 - kb-sqlite 3.51.2: `/var/tmp/m48-sqlite/hunt4/runs.jsonl` (run 1 is the README's `e75e8480…`).
 
 The column "old image re-run today" shows `-` where it was not re-run.
@@ -490,7 +490,7 @@ new `hvx_seedrng` is a different program, so it runs a different number of instr
 branches early in the boot, and every later step of the run lands at a slightly different
 virtual time).
 
-1. **`explore-nf` flush-cut points (`hvx/cutflush/FINDING.md`, CLAUDE.md M58).** The 12
+1. **`explore-nf` flush-cut points (`hydo/cutflush/FINDING.md`, CLAUDE.md M58).** The 12
    recorded points (cf=204, 205, 213, 221, 229, 237, 238, 246, 254, 255, 263, 264) were all
    `VIOLATION mysql order=N acked but not marked published`. On the new image all 12 are
    `OK` (each twice, same fingerprint). The finding itself is still there, a few FLUSHes
@@ -508,7 +508,7 @@ virtual time).
    cf=234–263 finds one new failing point, cf=253 (order 24). Every point ran twice with the
    same fingerprint. The minimal reproducer `disk=cut dseed=0 cf=242 | run` from FINDING.md
    still reproduces the bug on the new image.
-3. **`explore-ob-redis` (M47, `hvx/onboard/RESULTS.md`).** `disk=none dseed=1 | run C=12
+3. **`explore-ob-redis` (M47, `hydo/onboard/RESULTS.md`).** `disk=none dseed=1 | run C=12
    R=everysec` loses key `k:2` instead of `k:3`. It is still a VIOLATION of the same kind
    (Redis's documented `everysec` window). The old image still gives `k:3`
    (`e4f65d61d3320ada`). The `-pt` image still loses `k:4`, as in M52.
@@ -546,7 +546,7 @@ rebuilt from `~/mf-src/v2` (`dd8e2456…`, as recorded), the stack example's pre
 `~/hydo/build/explore-fix-hydostack` (`1f18f855…`) and `explore-hydostack` (`3ddaf8ba…`), and the
 etcd release tarballs checked against the sha256s pinned in `examples/etcd/build.sh`. Commands:
 `hydo-build <manifest> --out <name>` (etcd with `--set version=<v>`) and
-`STACK_OUT=stack-nq bash ./build-stack.sh`. Every image was built twice; both builds were
+`STACK_OUT=stack-nq bash hv/hvx/images/build-stack.sh`. Every image was built twice; both builds were
 byte-identical. New names end in `-nq`; no existing image was changed.
 
 | new image | sha256 | previous image (sha256) | files that differ (read-only mount, `diff -r`) |
@@ -849,7 +849,7 @@ boot) also changed and were identical within each run and across the two runs: f
 seed A `ca4cb4235e9d8fd9` → `5bf79d4d529bb8d9`, seed B `577b077177234f87` → `6186c52bb8d402e9`.
 
 **One fault scenario on 2 vCPUs.** M69's only 2-vCPU fault check (`HVX_STACK_FAULT=hydo_kill=kafka@10`,
-`mode=fault`, `hvx/explore/TURNS.md`, `15be998ebba5667e`) ran with vCPU 1 parked on the explorer image
+`mode=fault`, `hydo/explore/TURNS.md`, `15be998ebba5667e`) ran with vCPU 1 parked on the explorer image
 `explore-binlog-ret`, so it is not comparable. It was run here with Linux using both vCPUs:
 
 | scenario | old `stack-binlog-ret`, 2 vCPUs (once) | new `stack-nq`, 2 vCPUs (twice) | verdict (both images) |

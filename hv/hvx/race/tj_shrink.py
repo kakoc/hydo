@@ -36,7 +36,7 @@ def run(extra):
     out = subprocess.run([os.path.expanduser("~/bin/hvx-run"), "sudo", "env"] + env +
                          ["./hvx_race_probe", f"{B}/bzImage", f"{B}/initramfs-race.cpio.gz", CL],
                          capture_output=True, text=True,
-                         cwd=os.path.expanduser("~/hydo/hvx/race")).stdout
+                         cwd=os.path.expanduser("~/hydo/hv/hvx/race")).stdout
     m = re.search(r"lost=(-?\d+).*fp=([0-9a-f]+) ticks=(\d+)", out)
     return (int(m.group(1)), m.group(2), int(m.group(3))) if m else (None, None, None)
 

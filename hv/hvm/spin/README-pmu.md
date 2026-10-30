@@ -15,7 +15,7 @@ count EL0 and EL1 ("monotonic compatibility"). Any macOS update may change all o
 ## Running it
 
 ```sh
-cd hvx-mac/spin
+cd hv/hvm/spin
 /usr/bin/clang -O1 -Wall -arch arm64 -o pmuprobe pmuprobe.c sguest.s -framework Hypervisor
 codesign --force --entitlements ../hv.entitlements -s - pmuprobe
 ./pmuprobe          # without root: checks the frameworks and the event database only

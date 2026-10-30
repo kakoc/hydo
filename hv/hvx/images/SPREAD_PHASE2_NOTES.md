@@ -57,25 +57,25 @@ build-time symlinks into the tmpfs so /init can write the broker pids on the rea
   untouched). `/init` starts both brokers on shared `/data`, writes pids, creates queue `q`, and
   runs the dynamically-built op-program (crash op selectable by `spread_crash`).
 - `build-spread2.sh` — fast isolated builder (evals §2n; single source of truth).
-- `hvx/hvx_spread_verify.c` — added `fault` mode: same seeded DROP twice must fingerprint
+- `hv/hvx/hvx_spread_verify.c` — added `fault` mode: same seeded DROP twice must fingerprint
   IDENTICAL (verdict OK or VIOLATION both accepted); seed-sensitivity reported (informational).
   Reuses the existing replay/roundtrip/branch machinery + the generic `HYDO-ORACLE:` verdict.
-- `hvx/run-spread2-demo.sh` — `serve|replay|roundtrip|branch|fault|all` (+ `SPREAD_CRASH`,
+- `hv/hvx/run-spread2-demo.sh` — `serve|replay|roundtrip|branch|fault|all` (+ `SPREAD_CRASH`,
   `SPREAD_FAULT_PROB`, `SPREAD_SEED_A/B`).
-- `hvx/spread-drv/main.go` — the reused driver (the `smoke` subcommand is Phase 1; Phase 2 uses
+- `hv/hvx/images/spread-drv/main.go` — the reused driver (the `smoke` subcommand is Phase 1; Phase 2 uses
   the no-arg op-program runner).
-- `hvx/native-spread2-smoke.sh` — F0 native (L0) sanity for 2-broker fs sharing.
+- `hv/hvx/images/native-spread2-smoke.sh` — F0 native (L0) sanity for 2-broker fs sharing.
 
 ## Reproduce (on the box)
 ```
-cd ~/hydo && ./build-spread2.sh && bash hvx/deploy-hvx.sh
-bash hvx/run-spread2-demo.sh all         # serve + replay + roundtrip + branch + fault (crash=0)
+cd ~/hydo && hv/hvx/images/build-spread2.sh && bash hv/hvx/deploy-hvx.sh
+bash hv/hvx/run-spread2-demo.sh all         # serve + replay + roundtrip + branch + fault (crash=0)
 # failover experiment (KNOWN to stall on fs — bound the drain/lease first):
-SPREAD_CRASH=1 bash hvx/run-spread2-demo.sh serve
+SPREAD_CRASH=1 bash hv/hvx/run-spread2-demo.sh serve
 ```
 
 ## L1 hygiene learned
-- Recover a wedged L1 with `kill -9 $(cat ~/l1/l1.pid)` then `bash ~/hydo/hvx/run-l1.sh`.
+- Recover a wedged L1 with `kill -9 $(cat ~/l1/l1.pid)` then `bash ~/hydo/hv/hvx/run-l1.sh`.
   Do NOT `pkill -f l1-hvx` from an ssh command — the pattern matches your own command string and
   self-kills the session (RC 255). Use the pidfile.
 - For a possibly-hanging boot, cap `hvx_linux` itself with `timeout <n>` so it self-terminates

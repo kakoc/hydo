@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Build hydo-world (the fake outside services and fault proxies, MANIFEST.md "Fake outside
-# services") as one static binary with the pinned Go toolchain (hvx/BUILD-PINS.md). Standard
+# services") as one static binary with the pinned Go toolchain (docs/BUILD-PINS.md). Standard
 # library only: no module downloads. Byte-reproducible: CGO off, -trimpath, no VCS stamp, empty
 # build id. hydo-build stages <build dir>/hydo-world (or $HYDO_WORLDBIN) for manifests with fakes:.
-#   hvx/onboard/world/build.sh [out]          (default: build/hydo-world, from the repository root)
+#   hydo/onboard/world/build.sh [out]          (default: build/hydo-world, from the repository root)
 # HYDO_WORLD_GOARCH=arm64 builds the arm64 binary for hydo-build --arch arm64, which stages
 # <build dir>/hydo-world-arm64 (or $HYDO_WORLDBIN_ARM64); default amd64.
 set -euo pipefail

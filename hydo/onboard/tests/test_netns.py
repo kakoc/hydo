@@ -1,6 +1,6 @@
 """network: bridge (hydo-init-netns.sh, MANIFEST.md "Service networks"): validation, compiled
 shell, init splice, default /etc/hosts, hydo-oci, fakes on the bridge and the explorer's links.
-Run: python3 -m unittest tests.test_netns (from hvx/onboard)."""
+Run: python3 -m unittest tests.test_netns (from hydo/onboard)."""
 import copy, importlib.machinery, importlib.util, os, shutil, subprocess, sys, unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))

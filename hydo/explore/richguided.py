@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""richguided.py -- exploration guided by a RICHER signal (Milestone 44; hvx/richcov/DESIGN.md).
+"""richguided.py -- exploration guided by a RICHER signal (Milestone 44; hydo/richcov/DESIGN.md).
 
 Milestone 41's guidance used one feature kind, the front door's control-flow edges, and did not
 beat random schedules: those edges saturate within a few runs and the bug that mattered is about
 the order of events, not about reaching new code. This loop uses four feature kinds per run:
 
   E  whole-system edges: (program, from, to, AFL hit-count bucket) for the front door, Redis
-     and MySQL, from one Intel PT trace with two IP ranges, decoded by hvx/richcov/ptmulti
+     and MySQL, from one Intel PT trace with two IP ranges, decoded by hydo/richcov/ptmulti
      (needs a richcov-old / richcov-fix image and `norandmaps` on the guest command line);
   P  property firsts: a sometimes/reachable assertion satisfied (ok=true) for the first time;
   D  detail buckets: (assertion, outcome, bucketed low-cardinality details), emitted by the
@@ -61,7 +61,7 @@ def coverage_env(image):
     r_lo, _ = exec_range(rs)
     _, h_hi = exec_range(hs)
     m_lo, m_hi = exec_range(ms, MYSQLD_BIAS)
-    ptm = os.path.join(E.HVX, "richcov", "ptmulti")
+    ptm = os.path.join(E.HYDO, "richcov", "ptmulti")
     if not os.path.exists(ptm):
         subprocess.run(["cc", "-O2", "-o", ptm, ptm + ".c", "-lipt"], check=True)
     return ["HVX_EXPLORE_CMDLINE_EXTRA=norandmaps",

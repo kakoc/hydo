@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * ft_cost - measure what one vCPU turn end costs (hvx/FASTTURN.md).
+ * ft_cost - measure what one vCPU turn end costs (hv/hvx/FASTTURN.md).
  *
  * Two vCPUs run a loop of N guest conditional branches each and HLT; one HVX_RUN drives
  * both in turns of Q branches. The run is timed, and HVX_GET_FTSTAT gives the host-cycle

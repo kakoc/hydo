@@ -10,7 +10,7 @@
  * deterministic simulation testing is for -- find a bug through seeded fault injection, then
  * reproduce it perfectly.
  *
- * The software-under-test is `hydokv` (hvx/hydokv.c): a small raw-block, O_DIRECT
+ * The software-under-test is `hydokv` (hv/hvx/images/hydokv.c): a small raw-block, O_DIRECT
  * key/value store with ONE honest, documented durability bug -- it ACKS a write as
  * committed before the write is durably barriered ("ack-before-fsync"). Its /init
  * (build/initramfs-kv.cpio.gz) runs a workload that records a set of *committed*

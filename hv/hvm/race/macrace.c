@@ -1,5 +1,5 @@
 /*
- * macrace - hvx/race/hydorace.c's seat-selling race (once-per-run mode) for the Mac VMM.
+ * macrace - hv/hvx/race/hydorace.c's seat-selling race (once-per-run mode) for the Mac VMM.
  *
  * Two processes (fork, a MAP_SHARED page: there is no libc here, so no threads) sell seats
  * from one shared counter. Every sale is check-then-act, but only the sale of seat number
@@ -112,7 +112,7 @@ void _start(void)
 	sys(94, 0, 0, 0, 0, 0, 0);
 }
 /*
- * Boot it (hvx-mac/race, after cross-compiling on the build machine): an overlay cpio with /bin/macrace and an /init
+ * Boot it (hv/hvm/race, after cross-compiling on the build machine): an overlay cpio with /bin/macrace and an /init
  * that runs it and prints "hydo-race-done", appended to ../guest/initramfs.cpio.gz (concatenated archives
  * overlay); seeds.sh boots one seed per run. Results: ../explore/README.md "Tick jitter".
  */

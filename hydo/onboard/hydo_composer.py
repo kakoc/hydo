@@ -41,7 +41,7 @@ FORMAT = 1                      # the plan format this engine reads (top-level `
 WORKLOAD_KINDS = ("first", "parallel_driver", "serial_driver", "singleton_driver", "anytime", "eventually", "finally")
 PLAN_KINDS = ("parallel_driver", "serial_driver", "singleton_driver", "anytime")   # composed into rounds
 CHECK_KINDS = ("final", "always", "eventually")
-# history checks (hvx/HISTORIES.md): the check runs on the HOST over the recorded history; its
+# history checks (hydo/HISTORIES.md): the check runs on the HOST over the recorded history; its
 # `run` (optional in a plan, the file itself in the hydo/ folder) is the final read-back. They
 # become top-level `checks:` entries of the manifest (hydo-build's history-check support).
 HISTORY_KINDS = ("linearizable", "list_append")

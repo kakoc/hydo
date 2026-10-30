@@ -6,8 +6,9 @@
 # directory on a small rw disk (p2 = the fault target). The switch_root initramfs is the
 # Kafka one (build/initramfs-kafka.cpio.gz, built by build-kafka.sh) -- it is generic.
 # The prelude (sections 1-5) is the same pinned, byte-reproducible one build-kafka.sh uses.
-# Run on the build box:  ./dev.sh "bash ./build-mysql.sh"
+# Run on the build box:  ./dev.sh "bash hv/hvx/images/build-mysql.sh"
 set -euo pipefail
+cd "$(dirname "$0")/../../.."   # M100: this script lives in hv/hvx/images; every path below is relative to the repository root
 mkdir -p build
 
 # --- reproducible cpio (verbatim from build-linux.sh §prelude) ---
@@ -49,7 +50,7 @@ if [ -z "$MUSL_ROOT" ]; then
   [ -f "$MUSL_ROOT/lib/crt1.o" ] || MUSL_ROOT=$(dirname "$(dirname "$(ls /nix/store/*musl-static*/lib/crt1.o 2>/dev/null | head -1)")")
 fi
 [ -x "$GCC_MUSL" ] && [ -f "$MUSL_ROOT/lib/crt1.o" ] || { echo "error: no static musl gcc (set HYDO_GCC_MUSL + HYDO_MUSL_ROOT)" >&2; exit 1; }
-"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hvx/hvx_seedrng.c -o build/hvx_seedrng
+"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hv/hvx/images/hvx_seedrng.c -o build/hvx_seedrng
 echo "built build/hvx_seedrng ($(stat -c%s build/hvx_seedrng) bytes, static musl)"
 
 # --- 5. pinned mke2fs + libfaketime + the reproducible ext2/ext4 helpers (verbatim) ---

@@ -18,7 +18,7 @@
 # Output: build/richcov-redis/bin/{redis-server,redis-cli}  (a drop-in HYDO_REDIS_OUT for
 # build-stack.sh). Byte-reproducible: fixed tarball, pinned toolchain, -ffile-prefix-map,
 # no build id, SOURCE_DATE_EPOCH.
-# Run on the build box:  ./dev.sh "bash hvx/richcov/build-redis-debug.sh"
+# Run on the build box:  ./dev.sh "bash hydo/richcov/build-redis-debug.sh"
 set -euo pipefail
 TOP="$(cd "$(dirname "$0")/../.." && pwd)"
 SRC_TGZ="${HYDO_REDIS_SRC:-/nix/store/lvkfs16yj6j49lmahzfyq435a3pxhxla-redis-7.2.4.tar.gz}"

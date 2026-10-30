@@ -1,8 +1,8 @@
 package main
 
-// richState -- per-order state coverage for the richer exploration signal (hvx/richcov/DESIGN.md
+// richState -- per-order state coverage for the richer exploration signal (hydo/richcov/DESIGN.md
 // section 2.3). Added to the front door only in the richcov explorer images, by
-// hvx/richcov/patch-src.py; the normal stack and explorer images do not contain it.
+// hydo/richcov/patch-src.py; the normal stack and explorer images do not contain it.
 //
 // For every order id 0..n-1 the oracle knows its end state in each place:
 //   client  acked | failed (told definitely failed) | other (not acked: unknown outcome or never tried)

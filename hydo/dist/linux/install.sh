@@ -2,7 +2,7 @@
 # Install hydo for x86_64 Linux (Intel VT-x) from an unpacked release directory:
 #     ./install.sh [--prefix DIR] [--add-to-path] [--no-module] [--udev [--udev-group G] [--udev-name N]]
 # Checks the release's SHA256SUMS, copies it into DIR (default ~/.hydo), compiles the run engine
-# (hvx/hvx_explore) and the hvx kernel module for the running kernel, and runs `hydo doctor`.
+# (hv/hvx/hvx_explore) and the hvx kernel module for the running kernel, and runs `hydo doctor`.
 # It needs no root and installs nothing outside DIR; it does NOT load the module (that needs
 # sudo: `hydo module load`). Your shell startup file is changed only with --add-to-path.
 # --udev (optional, asks for sudo once): installs a udev rule that gives /dev/hvx to group G
@@ -52,12 +52,12 @@ if [ -f "$P/guest/store.tar" ]; then
 fi
 
 # the run engine, against this release's hvx_abi.h; libipt (coverage decoding) is optional
-cd "$P/hvx"
+cd "$P/hv/hvx"
 if cc -O2 -Wall -o hvx_explore hvx_explore.c -lipt 2>/dev/null; then
-  echo "built hvx/hvx_explore (with libipt: coverage decoding available)"
+  echo "built hv/hvx/hvx_explore (with libipt: coverage decoding available)"
 else
   cc -O2 -Wall -DHYDO_NO_LIBIPT -o hvx_explore hvx_explore.c
-  echo "built hvx/hvx_explore (without libipt: coverage decoding off; install libipt-dev to get it)"
+  echo "built hv/hvx/hvx_explore (without libipt: coverage decoding off; install libipt-dev to get it)"
 fi
 cd "$P"
 chmod 755 bin/hydo

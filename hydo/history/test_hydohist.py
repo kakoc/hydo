@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Unit tests of the history checkers (hvx/history/hydohist.py) on synthetic histories.
+"""Unit tests of the history checkers (hydo/history/hydohist.py) on synthetic histories.
 
-    python3 hvx/history/test_hydohist.py        (or: python3 -m unittest -v test_hydohist)
+    python3 hydo/history/test_hydohist.py        (or: python3 -m unittest -v test_hydohist)
 """
 import os
 import sys
@@ -295,7 +295,7 @@ class Driver(unittest.TestCase):
         self.assertEqual(r["status"], "ok", r)
 
     def test_go_and_shell_records(self):
-        # the exact lines hvx/stack/hydohist (Go) and hydo_hist.sh write
+        # the exact lines hydo/stack/hydohist (Go) and hydo_hist.sh write
         txt = ("HYDO-HIST kv 3 invoke 1000 write k1 a%20b\nHYDO-HIST kv 3 ok 2000 write k1 a%20b@83\n"
                "HYDO-HIST kv 4 invoke 3000 read k1\nHYDO-HIST kv 4 ok 4000 read k1 a%20b@83\n")
         ev, _, _ = H.parse_sources([("w", txt)])

@@ -1,10 +1,10 @@
 # hydo as a product: what it offers, what is missing, and what is decided
 
-This page describes hydo from a user's point of view: what a team gets today, the gaps we know of, and what the user decided about each gap (2026-10-24). The engineering history is in `hvx/HISTORY.md`; the current state is in `AGENTS.md`.
+This page describes hydo from a user's point of view: what a team gets today, the gaps we know of, and what the user decided about each gap (2026-10-24). The engineering history is in `docs/HISTORY.md`; the current state is in `AGENTS.md`.
 
 ## What a user gets today
 
-A team describes its system in one `hydo.yaml` (`hvx/onboard/MANIFEST.md`): the services, a workload split into steps, and the invariants to check. hydo runs the whole system inside a deterministic virtual machine, so every run can be replayed bit for bit, and injects faults from a seeded schedule:
+A team describes its system in one `hydo.yaml` (`hydo/onboard/MANIFEST.md`): the services, a workload split into steps, and the invariants to check. hydo runs the whole system inside a deterministic virtual machine, so every run can be replayed bit for bit, and injects faults from a seeded schedule:
 
 - process kills, pauses and timed kills; a freeze at an exact packet of a service's traffic;
 - network delay, loss, duplication and reordering, one-way faults, and partitions between services;
@@ -18,7 +18,7 @@ sends valid random requests to every RPC from a seeded stream, passes ids from e
 responses to later calls, retries unknown outcomes like a careful client, and records each
 call as ok, failed or unknown (`MANIFEST.md`, "gRPC services").
 
-The explorer (`hvx/explore/explore.py`) generates schedules with several strategies and sweeps, re-runs every failure to prove it reproduces, and shrinks it to a minimal schedule. Cross-service checks can read the stores with ready-made commands instead of hand-written shell (`hydo-read` prints a MySQL/PostgreSQL query, a Kafka topic, Redis or etcd keys as sorted JSON Lines; `hydo-check` compares two readings: subset, exactly-once, disjoint, count, a cache never holding a wrong value; MANIFEST.md "Reading the stores"). Assertions are properties of five kinds (always, sometimes, reachable, unreachable, eventually; `hvx/ASSERTIONS.md`). It runs on x86_64 Linux with VT-x (`hvx/dist/`, the Linux release) and on Apple Silicon Macs (`hvx-mac/dist/`).
+The explorer (`hydo/explore/explore.py`) generates schedules with several strategies and sweeps, re-runs every failure to prove it reproduces, and shrinks it to a minimal schedule. Cross-service checks can read the stores with ready-made commands instead of hand-written shell (`hydo-read` prints a MySQL/PostgreSQL query, a Kafka topic, Redis or etcd keys as sorted JSON Lines; `hydo-check` compares two readings: subset, exactly-once, disjoint, count, a cache never holding a wrong value; MANIFEST.md "Reading the stores"). Assertions are properties of five kinds (always, sometimes, reachable, unreachable, eventually; `hydo/ASSERTIONS.md`). It runs on x86_64 Linux with VT-x (`hydo/dist/linux/`, the Linux release) and on Apple Silicon Macs (`hydo/dist/mac/`).
 
 ## Two kinds of projects
 
@@ -39,7 +39,7 @@ The explorer (`hvx/explore/explore.py`) generates schedules with several strateg
 | 6b | **Docker Compose import** (a starting `hydo.yaml` from `docker-compose.yaml`). | **Approved; in progress** (branch `compose-import`). |
 | 6c | **CI mode** (below). | Document only; to be discussed later. |
 | 7 | **Scale and where it runs** (below). | Document only; not now. |
-| 8 | **Generated gRPC drivers:** no hand-written client per RPC for a gRPC system. | **Approved; done** (branch `grpc-drivers`, `hvx/grpcgen/`; HISTORY Milestone 91). The generated drivers are test-composer commands (one `parallel_driver` per RPC); records are `HYDO-HIST` lines. |
+| 8 | **Generated gRPC drivers:** no hand-written client per RPC for a gRPC system. | **Approved; done** (branch `grpc-drivers`, `hydo/grpcgen/`; HISTORY Milestone 91). The generated drivers are test-composer commands (one `parallel_driver` per RPC); records are `HYDO-HIST` lines. |
 
 ## How a team uses hydo (agreed direction, 2026-10-24)
 
@@ -51,14 +51,14 @@ hydo is used from the team's own repository. Nobody checks out hydo's repository
 2. **The test written in the team's language:** operations (`place_order`, `refund`, `webhook_arrives`) and properties ("never charged twice", "an order acknowledged is never lost") as ordinary functions, which hydo composes into random sequences and concurrent mixes. This is gap 1 (the test composer) expressed as an SDK; it replaces shell scripts for workloads and checks. **Built for Rust** (`sdk/rust-test`, crate `hydo-test`, branch `test-composer`, M86): a `system()` builder plus `#[driver(parallel)]` / `#[check(eventually, within = 20)]` functions in one binary; `<bin> plan` writes the plan on the host, `<bin> driver|check <name>` runs in the guest. Other languages: not yet (the plan format is language-neutral, so each SDK only has to write the same JSON).
 3. **A runner command** in the language's tooling (for example `cargo hydo`, `go run .../hydo`) that builds the services, builds the guest and runs or explores by calling the installed engine, the way `cargo fuzz` relies on the compiler's fuzzing support. **`cargo hydo` built** (M86): it builds the test binary for the host and as a static musl guest binary, writes `.hydo/plan.json`, and calls the installed `hydo build|run|explore|repro|save`. Building the services from source (Compose `build:`) is not part of it yet.
 
-**Assertion SDKs (role 1).** Every SDK writes the same console records as the Go SDK, byte for byte, with the same deduplication and BUGGIFY decisions (`hvx/ASSERTIONS.md`):
+**Assertion SDKs (role 1).** Every SDK writes the same console records as the Go SDK, byte for byte, with the same deduplication and BUGGIFY decisions (`hydo/ASSERTIONS.md`):
 
 | Language | Where | State | Proof of the same output |
 |---|---|---|---|
-| Go | `hvx/stack/hydoassert` (import `hydostack/hydoassert`) | on main (M38, M56, M59) | the reference |
-| shell (busybox sh) | `hvx/stack/hydoassert/hydo_assert.sh` | on main; no deduplication, no BUGGIFY | |
+| Go | `hydo/stack/hydoassert` (import `hydostack/hydoassert`) | on main (M38, M56, M59) | the reference |
+| shell (busybox sh) | `hydo/stack/hydoassert/hydo_assert.sh` | on main; no deduplication, no BUGGIFY | |
 | Rust | `sdk/rust` (crate `hydo-assert`, not published) | branch `rust-sdk` (M82), not merged yet; std only, call-site macros with file:line, `declare!`, sync and runtime-agnostic async `eventually`, features `noop` and `serde_json` | `sdk/rust/tests/conformance.sh` against the Go sources (Go 1.26.5 and 1.27.3), three BUGGIFY configurations |
-| Python (3.8+) | `sdk/python` (distribution `hydo-assert`, import `hydo_assert`, not published) | branch `python-sdk`, not merged yet (M86); standard library only, thread- and asyncio-safe; example `hvx/onboard/examples/python-kv` on the Mac backend | `sdk/python/tests/conformance.sh` against the Go sources (Go 1.26.5 and 1.27.3), eight BUGGIFY configurations, Python 3.8, 3.11 and 3.15 |
+| Python (3.8+) | `sdk/python` (distribution `hydo-assert`, import `hydo_assert`, not published) | branch `python-sdk`, not merged yet (M86); standard library only, thread- and asyncio-safe; example `hydo/onboard/examples/python-kv` on the Mac backend | `sdk/python/tests/conformance.sh` against the Go sources (Go 1.26.5 and 1.27.3), eight BUGGIFY configurations, Python 3.8, 3.11 and 3.15 |
 | JavaScript / TypeScript (Node.js) | `sdk/js` (package `hydo-assert`, not published) | branch `js-sdk`, not merged yet; CommonJS and ESM, types, no dependencies | `sdk/js/test/conformance.sh` against the Go sources (Go 1.26.5), both entries, five BUGGIFY configurations |
 
 **The `hydo/` folder** (agreed) holds everything hydo needs in the team's repository, next to `docker-compose.yaml`:
@@ -73,7 +73,7 @@ hydo/
 .hydo/               build cache (git-ignored); `hydo build` writes here for hydo/hydo.yaml
 ```
 
-Built (M86, branch `test-composer`): `hydo-build` reads the three directories next to the manifest; a code-first SDK writes the same content as a plan file (`.hydo/plan.json`) instead. The format and the kinds are in `hvx/onboard/MANIFEST.md` "The test composer".
+Built (M86, branch `test-composer`): `hydo-build` reads the three directories next to the manifest; a code-first SDK writes the same content as a plan file (`.hydo/plan.json`) instead. The format and the kinds are in `hydo/onboard/MANIFEST.md` "The test composer".
 
 **Onboarding** is a skill run from the repository root: it reads `docker-compose.yaml` (the importer, `compose-import`), asks which services to test and what must never happen, writes `hydo/`, builds, runs a first exploration, and explains the failures it finds. Teams use AI tools from different vendors, so the skill follows the open Agent Skills format (https://agentskills.io/specification) instead of one vendor's plugin format (decided 2026-10-26; HISTORY Milestone 93). It ships in both releases (`skill/hydo-onboard/`) and reaches every tool in one of three ways:
 

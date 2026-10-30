@@ -2,7 +2,7 @@
 /*
  * hvx_stack_verify - milestone 35 (Rung 6): the FOUR-SERVICE STACK flagship.
  * UNMODIFIED MySQL 8.4 + Kafka 3.5 (KRaft) + Redis 7.2 behind a small gRPC front door
- * (hvx/stack/, Go), all co-located in one guest over the in-kernel 127.0.0.1 loopback,
+ * (hydo/stack/, Go), all co-located in one guest over the in-kernel 127.0.0.1 loopback,
  * a client placing orders through gRPC, and a CROSS-SERVICE oracle. Derived from
  * hvx_mysql_verify.c (same harness shape); the guest is built by build-stack.sh.
  *
@@ -79,7 +79,7 @@ static const char *g_fault = "";
  * endpoint of a branch vs a separate straight run differs by that jitter. */
 static uint64_t g_durable_fp;
 
-/* SMP Stage 3 (hvx/explore/TURNS.md): the number of vCPUs of every VM this harness creates
+/* SMP Stage 3 (hydo/explore/TURNS.md): the number of vCPUs of every VM this harness creates
  * ($HVX_VCPUS here; hvx_explore's --vcpus / $HVX_EXPLORE_VCPUS). 1 (the default) is
  * byte-identical to before: the same VM, the same ioctls, the same fingerprints. With N > 1
  * the VM gets HVX_VM_SMP_SCHED (in-kernel turns, needs the PMU clock), every snapshot and
@@ -442,7 +442,7 @@ static void console_dump(struct boot *b)
 }
 
 /*
- * Turn-cost measurement knobs (hvx/FASTTURN.md), several vCPUs only, all off by default:
+ * Turn-cost measurement knobs (hv/hvx/FASTTURN.md), several vCPUs only, all off by default:
  *   HVX_QUANTUM=<n>        turn length in guest branches
  *   HVX_TURN_MARGIN=<n>    landing margin of turn ends (HVX_SET_TURNCTL; needs a module with it)
  *   HVX_BURST=<B>:<s>:<permille>[:<hex seed>]   seeded bursts of short turns (HVX_SET_TURNCTL)

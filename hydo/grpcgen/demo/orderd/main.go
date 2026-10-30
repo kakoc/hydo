@@ -1,4 +1,4 @@
-// orderd is the demo order service of hvx/grpcgen: Create / Get / Cancel / List over gRPC,
+// orderd is the demo order service of hydo/grpcgen: Create / Get / Cancel / List over gRPC,
 // with the orders in Redis (a pool of RESP connections; every store command has its own 60 s
 // timeout and does NOT follow the gRPC request's deadline, as in many real services).
 //
@@ -332,7 +332,7 @@ func (s *server) List(ctx context.Context, in *pb.ListRequest) (*pb.ListResponse
 	return out, nil
 }
 
-// The service descriptor, written by hand (no protoc-gen-go-grpc), like hvx/stack/main.go.
+// The service descriptor, written by hand (no protoc-gen-go-grpc), like hydo/stack/main.go.
 type ordersServer interface {
 	Create(context.Context, *pb.CreateRequest) (*pb.Order, error)
 	Get(context.Context, *pb.GetRequest) (*pb.Order, error)

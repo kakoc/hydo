@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""bench_more_faults.py -- run hvx/bench/run.py with explore.py --more-faults (Milestone 62).
+"""bench_more_faults.py -- run hydo/bench/run.py with explore.py --more-faults (Milestone 62).
 
-run.py composes the generators itself and has no --more-faults option, and hvx/bench belongs to
+run.py composes the generators itself and has no --more-faults option, and hydo/bench belongs to
 the benchmark work, so this wrapper loads it unchanged, adds the timed kill X= and the k-th-FLUSH
 power cut cf= to every schedule run.py generates (explore.add_more_faults, its own random stream,
 so every other field is what run.py would have run), and labels the results "<strategy>+xcf".

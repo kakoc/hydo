@@ -1,5 +1,5 @@
 // Package hydoassert is hydo's assertion SDK for Go guest programs: the way a program running
-// under hvx DESCRIBES ITS INVARIANTS (the contract is hvx/ASSERTIONS.md).
+// under hvx DESCRIBES ITS INVARIANTS (the contract is hydo/ASSERTIONS.md).
 //
 // Each assertion has a stable id and a type:
 //

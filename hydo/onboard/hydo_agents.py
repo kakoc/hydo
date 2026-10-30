@@ -1,4 +1,4 @@
-"""The AI-facing commands of both hydo command line tools (hvx/dist/hydo, hvx-mac/dist/hydo):
+"""The AI-facing commands of both hydo command line tools (hydo/dist/linux/hydo, hydo/dist/mac/hydo):
 
     hydo guide [TOPIC | --list | --path]
     hydo skill install [--agent claude|codex|cursor|copilot|gemini|all ...] [--to DIR] [--user] [--force]
@@ -76,7 +76,7 @@ def skill_dir(root):
 
 
 def manifest_md(root):
-    p = os.path.join(root, "hvx", "onboard", "MANIFEST.md")
+    p = os.path.join(root, "hydo", "onboard", "MANIFEST.md")
     if not os.path.isfile(p):
         raise Fail("MANIFEST.md is missing (%s); reinstall hydo" % p)
     return p

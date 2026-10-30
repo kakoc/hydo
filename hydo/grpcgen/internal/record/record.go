@@ -1,5 +1,5 @@
 // Package record writes one line per call event in the history recorder's format (HYDO-HIST,
-// hvx/HISTORIES.md), under one history name (default "grpc"):
+// hydo/HISTORIES.md), under one history name (default "grpc"):
 //
 //	HYDO-HIST <history> <process> invoke <time> <rpc> <op> <request>
 //	HYDO-HIST <history> <process> ok|fail|info <time> <rpc> <op> <CODE> <response-or-message>

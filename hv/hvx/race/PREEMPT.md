@@ -26,7 +26,7 @@ boot + workload): default and jitter 1.5 s (~413 ticks), pp=2^16 6.2 s (~6650 ti
 inserted 4.0 s (~3720 ticks, 2.6x). Files: `pre_race1.sh` (one boot), `pre_campaign.sh`,
 `pre_table.py`; results on the box in `/var/tmp/m49-preempt/camp*.txt`.
 
-## SQLite 3.51.2 WAL-reset corruption (hvx/knownbugs/sqlite, hunt.py arms pp and xt)
+## SQLite 3.51.2 WAL-reset corruption (hydo/knownbugs/sqlite, hunt.py arms pp and xt)
 
 600 blind runs on `explore-ob-kb-sqlite-3510200-disk.img` through `/dev/hvxpre`, workload seed
 varied per run: **no violation**, so no minimal schedule and nothing to check on 3.51.3.

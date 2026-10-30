@@ -1,6 +1,6 @@
 """Tests: allowed nondeterminism must pass; planted-bug histories must be rejected.
 
-Run: python3 -m unittest hvx/spec/sqs_checker/test_checker.py  (from the repo root)
+Run: python3 -m unittest hydo/spec/sqs_checker/test_checker.py  (from the repo root)
 """
 
 import os

@@ -10,7 +10,7 @@ package main
 // (see hydoassert), so without one the service behaves exactly as before.
 //
 // The wrappers are written against only what every version of the service has (s.db, s.kp,
-// s.redisSet, kafkaHasKey), so hvx/bench/addbuggify.py can wire them into the benchmark's
+// s.redisSet, kafkaHasKey), so hydo/bench/addbuggify.py can wire them into the benchmark's
 // patched copies of older versions as well.
 
 import (

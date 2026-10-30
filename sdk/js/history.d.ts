@@ -1,4 +1,4 @@
-// Types of hydo-assert/history (CommonJS entry). The wire format and checkers: hvx/HISTORIES.md.
+// Types of hydo-assert/history (CommonJS entry). The wire format and checkers: hv/hvx/HISTORIES.md.
 
 /** A record argument: a string that is already one token (see enc), or an integer. */
 export type Token = string | number | bigint;

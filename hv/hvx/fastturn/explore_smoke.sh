@@ -1,5 +1,5 @@
 #!/bin/bash
-# hvx_explore with burst/margin tokens on the side module (hvx/FASTTURN.md). On the box.
+# hvx_explore with burst/margin tokens on the side module (hv/hvx/FASTTURN.md). On the box.
 # A 2-vCPU schedule with qb= run twice from a fresh boot (one) must give one fingerprint;
 # the same with qm=160 must give it too (the margin changes nothing); qb= on a 1-vCPU
 # engine must be an ERROR.

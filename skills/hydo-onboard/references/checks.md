@@ -67,15 +67,15 @@ hydo_hist kv $HYDO_CMD_ID ok write k1 5          # after an acknowledged reply
 hydo_hist kv $HYDO_CMD_ID info write k1 5        # no reply: the outcome is unknown
 ```
 
-Go programs use `hvx/stack/hydohist`, Rust `hydo_assert::history` or `hydo_test::HistoryCheck`,
+Go programs use `hydo/stack/hydohist`, Rust `hydo_assert::history` or `hydo_test::HistoryCheck`,
 JavaScript `require("hydo-assert/history")` and Python `from hydo_assert import history`; all write the
 same lines.
 The check file `checks/linearizable_<name>` reads every key back at the end and records the reads,
 so a write lost in a crash shows up. The host checks the history after the run (`linearizable`
 for registers and compare-and-set objects per key, Knossos/Porcupine style; `list_append`, Elle
 style, at the `consistency:` level the system claims) and names a minimal witness. The record
-format and the models: `hvx/HISTORIES.md` in hydo's repository. Example:
-`hvx/onboard/examples/redis-composed-hist/` in hydo's repository.
+format and the models: `hydo/HISTORIES.md` in hydo's repository. Example:
+`hydo/onboard/examples/redis-composed-hist/` in hydo's repository.
 
 ## Side effects at fake outside services
 

@@ -4,7 +4,7 @@
     python3 d7prob.py [--seeds N]
 
 The trigger set comes from the tail sweep and its validation (`--sweep tail`, listrun.py with
-tail-validate.txt; results in hvx/bench/README.md): Kafka must be unavailable from one of the
+tail-validate.txt; results in hydo/bench/README.md): Kafka must be unavailable from one of the
 last orders until the end of the workload, so the order whose send is uncertain is the LAST
 record in the topic when the client retries -- the record the defect's lookup skips -- with
 an honest disk and no power cut (a cut ends the run before the retry). The predicate below

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Rebuild the inputs of the Redis example image with the REAL pinned tools (no HYDO_GCC_MUSL /
 # HYDO_REDIS_OUT overrides) in a private directory, then build the example images and print
-# their sha256. See hvx/BUILD-PINS.md.
+# their sha256. See hv/hvx/BUILD-PINS.md.
 #
-# Usage on the build box:  PROOF=~/hydo-pins-proof hvx/pins-proof.sh   (run from the tree root)
+# Usage on the build box:  PROOF=~/hydo-pins-proof hv/hvx/images/pins-proof.sh   (run from the tree root)
 # The tree is expected at $PROOF/hydo; HOME is set to $PROOF so the manifests' ~/hydo/build/...
 # sources resolve inside the proof directory, never to the real ~/hydo/build.
 set -euo pipefail
@@ -19,14 +19,14 @@ grep -q 'GCC_MUSL="${HYDO_GCC_MUSL:-}"' <(blk 225,225) || { echo "line ranges mo
 eval "$(blk 225,238)"          # GCC_MUSL / MUSL_ROOT (pinned paths, no overrides)
 eval "$(blk 519,535)"          # REDIS_OUT -> build/redis-server, build/redis-cli
 eval "$(blk 559,559)"          # build/hvx_seedrng
-"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hvx/hydokv.c  -o build/hydokv
-"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hvx/hydoapp.c -o build/hydoapp
+"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hv/hvx/images/hydokv.c  -o build/hydokv
+"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hv/hvx/images/hydoapp.c -o build/hydoapp
 echo "GCC_MUSL=$GCC_MUSL"
 echo "REDIS_OUT=$REDIS_OUT"
 sha256sum build/hvx_seedrng build/hydokv build/hydoapp build/redis-server build/redis-cli
 
 PY3="$(ls /nix/store/*python3-3.11*/bin/python3 | head -1)"
-HOME="$PROOF" "$PY3" hvx/onboard/hydo-build hvx/onboard/examples/redis/hydo.yaml --out explore-ob-redis
+HOME="$PROOF" "$PY3" hydo/onboard/hydo-build hydo/onboard/examples/redis/hydo.yaml --out explore-ob-redis
 sha256sum build/explore-ob-redis-disk.img
 
 if [ "${STACK:-1}" = 1 ]; then
@@ -36,6 +36,6 @@ if [ "${STACK:-1}" = 1 ]; then
   mkdir -p "$SB"
   [ "$SB" = "$PROOF/hydo/build" ] || cp build/hvx_seedrng "$SB/hvx_seedrng"
   cp "${FRONT_BIN:-/home/user/hydo/build/explore-fix-hydostack}" build/explore-fix-hydostack
-  HOME="$PROOF" HYDO_PY3="$PY3" bash hvx/onboard/examples/stack/build.sh --build-dir "$SB"
+  HOME="$PROOF" HYDO_PY3="$PY3" bash hydo/onboard/examples/stack/build.sh --build-dir "$SB"
   sha256sum "$SB/explore-ob-stack-fix-disk.img"
 fi

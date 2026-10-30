@@ -1,10 +1,10 @@
-"""explore.py --backend hvm: run schedules on the Mac VMM (hvx-mac/explore/hvmx) instead of
+"""explore.py --backend hvm: run schedules on the Mac VMM (hv/hvm/explore/hvmx) instead of
 hvx_explore on the Linux box. The worker protocol (READY / RUN / RESULT / QUIT) is the same;
 only the engine's command line and the set of faults it can apply differ.
 
-The guest is a manifest-built arm64 initramfs (hvx/onboard/hydo-build --arch arm64): --image
-names it (a path, or a file under hvx-mac/explore/out), --hvm-kernel the arm64 kernel
-(default hvx-mac/explore/out/Image-explore, from hvx-mac/explore/build-guest.sh).
+The guest is a manifest-built arm64 initramfs (hydo/onboard/hydo-build --arch arm64): --image
+names it (a path, or a file under hv/hvm/explore/out), --hvm-kernel the arm64 kernel
+(default hv/hvm/explore/out/Image-explore, from hv/hvm/explore/build-guest.sh).
 
 The data disk (<NAME>-arm64-disk.img next to the initramfs, from hydo-build --arch arm64) is
 attached as the virtio-blk device when it exists; then disk faults and power cuts work as on
@@ -14,7 +14,7 @@ a fault it did not apply: no PMU clock (no run budget, no vCPU turn tokens q=/qs
 power cuts, and without tc in the image (an arm64 image built with HYDO_TC_ARM64= , or one built
 before tc was added) no N=/O= network faults. Whether the image has tc is read from its compiled
 manifest (etc/hydo/manifest.sh, HYDO_TC), not assumed. Tick jitter works, but its delays are
-counted in VM exits instead of guest branches (hvx-mac/hvm.c), so a seeded jitter's maximum
+counted in VM exits instead of guest branches (hv/hvm/hvm.c), so a seeded jitter's maximum
 delay is capped at HVM_TJ_MAX exits.
 
 The guest kernel (Milestone 99): an image built for the second kernel (network: bridge, addr:,
@@ -28,7 +28,7 @@ guest.ram_mib or --ram-mib) to engine_cmd/repro_line; hvmx accepts 256..4096 MiB
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MAC = os.path.join(os.path.dirname(os.path.dirname(HERE)), "hvx-mac", "explore")
+MAC = os.path.join(os.path.dirname(os.path.dirname(HERE)), "hv", "hvm", "explore")
 KERNEL = os.path.join(MAC, "out", "Image-explore")
 
 
@@ -63,7 +63,7 @@ def kernel_for(image, kernel=None, default=None):
     path = kernel or os.path.join(os.path.dirname(default), rec[0])
     if not os.path.isfile(path):
         raise SystemExit("%s was built for the guest kernel %s (sha256 %s...) and it is not at %s "
-                         "(hvx-mac/explore/build-guest-netns.sh builds it)" % (image, rec[0], rec[1][:16], path))
+                         "(hv/hvm/explore/build-guest-netns.sh builds it)" % (image, rec[0], rec[1][:16], path))
     got = _sha256(path)
     if got != rec[1]:
         raise SystemExit("%s was built for the guest kernel %s (sha256 %s...), but %s has sha256 %s..."

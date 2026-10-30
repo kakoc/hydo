@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Byte-for-byte conformance of hydo-assert/history (JavaScript) with hydohist (Go): build
 # test/history-go/main.go against the Go recorder's own sources (copied from
-# hvx/stack/hydohist), run it and test/history-conformance.js (through the CommonJS and through
+# hydo/stack/hydohist), run it and test/history-conformance.js (through the CommonJS and through
 # the ESM entry) with every sink setting, and compare their records and stdouts.
 #
 # The time field (field 5 of a HYDO-HIST line) differs between runs and implementations: the

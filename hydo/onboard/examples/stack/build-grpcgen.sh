@@ -12,7 +12,7 @@ case "$FRONT" in
   *) echo "FRONT must be fix or old" >&2; exit 2;;
 esac
 install -m 0755 "$BIN" "$HERE/front-door"
-"$TOP/hvx/onboard/hydo-grpc-gen" "$TOP/hvx/stack/proto" --hints "$TOP/hvx/stack/grpc-hints.yaml" --out "$HERE/grpcgen"
+"$TOP/hydo/onboard/hydo-grpc-gen" "$TOP/hydo/stack/proto" --hints "$TOP/hydo/stack/grpc-hints.yaml" --out "$HERE/grpcgen"
 echo "*" > "$HERE/grpcgen/.gitignore"   # generated: not tracked
 PY3="${HYDO_PY3:-$(command -v python3 || ls /nix/store/*python3-3.11*/bin/python3 | head -1)}"
 "$PY3" "$HERE/../../hydo-build" "$HERE/hydo-grpcgen.yaml" --out "explore-ob-stackgen-$FRONT" "$@"

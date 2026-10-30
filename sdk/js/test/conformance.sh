@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Byte-for-byte conformance of hydo-assert (JavaScript) with hydoassert (Go): build
 # test/go-conformance/main.go against the Go SDK's own sources (copied from
-# hvx/stack/hydoassert), run it and test/conformance.js (through the CommonJS and through the
+# hydo/stack/hydoassert), run it and test/conformance.js (through the CommonJS and through the
 # ESM entry) under five BUGGIFY configurations, and diff their consoles and stdouts.
 # Usage: sdk/js/test/conformance.sh   (needs go and node; exit 0 = identical)
 #        KEEP=<dir> keeps the outputs. GOTOOLCHAIN picks the Go version (default go1.26.5, the
@@ -17,7 +17,7 @@ trap 'rm -rf "$T"' EXIT
 
 export GOTOOLCHAIN=${GOTOOLCHAIN:-go1.26.5}
 mkdir -p "$T/go/hydoassert"
-cp "$REPO/hvx/stack/hydoassert/hydoassert.go" "$REPO/hvx/stack/hydoassert/eventually.go" "$T/go/hydoassert/"
+cp "$REPO/hydo/stack/hydoassert/hydoassert.go" "$REPO/hydo/stack/hydoassert/eventually.go" "$T/go/hydoassert/"
 cp "$HERE/go-conformance/main.go" "$T/go/"
 printf 'module conf\n\ngo 1.21\n' > "$T/go/go.mod"
 (cd "$T/go" && GOFLAGS=-mod=mod go build -o "$T/conf-go" .)

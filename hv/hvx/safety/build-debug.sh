@@ -9,7 +9,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 HVX="$(cd "$HERE/.." && pwd)"
 K="$SAFETY/kbuild/linux"
 . "$HERE/lib.sh"
-# static busybox: the pinned nix one (hvx/BUILD-PINS.md); on a machine without nix, a copy of
+# static busybox: the pinned nix one (docs/BUILD-PINS.md); on a machine without nix, a copy of
 # it in $SAFETY/bin/busybox (safety.sh fetch-busybox puts it there)
 BB=/nix/store/ahw5fkq085k5ppdsylyd475xlxb18pz1-busybox-static-x86_64-unknown-linux-musl-1.37.0/bin/busybox
 [ -x "$BB" ] || BB="$SAFETY/bin/busybox"
@@ -20,7 +20,7 @@ GUEST=${HVX_GUEST_DIR:-$HOME/hydo/build}	# the L2 guest images (bzImage, initram
 [ -f "$K/.config" ] || { echo "build-debug: run build-kernel.sh first" >&2; exit 1; }
 [ -x "$BB" ] || { echo "build-debug: no static busybox ($BB)" >&2; exit 1; }
 
-# The suite of hvx/deploy-metal.sh (hand-written tests, the several-vCPU tests), short
+# The suite of hv/hvx/deploy-metal.sh (hand-written tests, the several-vCPU tests), short
 # real-Linux boots under hvx, and the reproducers of the bugs M97 fixed. Tests that need the
 # PMU branch clock fail with ENODEV in a nested VM; they still run, which exercises the
 # module's refusal paths.

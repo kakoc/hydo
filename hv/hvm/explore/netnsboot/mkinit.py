@@ -5,19 +5,19 @@
 
 <busybox>: the static arm64 busybox of the Mac release (guest/busybox, 1.36.1); <store root>: a
 directory holding nix/store/... with the aarch64 iproute2 and iptables of hydo_build_arm64.py
-(hvx/dist/nix_cache_fetch.py --closure <root> <path>, or the release's guest tree). The archive
+(hydo/dist/linux/nix_cache_fetch.py --closure <root> <path>, or the release's guest tree). The archive
 holds /init (this directory's init, with the tool paths filled in), busybox and its applets, and
 ip, tc, iptables-legacy with exactly the files their loaders open; sorted, fixed mtimes, uid 0,
 gzip -n, so two builds are the same bytes. Boot it with the namespace kernel:
 
-    hvx-mac/hvm print hvx-mac/explore/out/Image-explore-netns <out.cpio.gz> "hydo-boot-marker: launching shell"
-    hvx-mac/hvm branch ... "hydo-netns: ns1 addresses" "hydo-boot-marker: launching shell"
+    hv/hvm/hvm print hv/hvm/explore/out/Image-explore-netns <out.cpio.gz> "hydo-boot-marker: launching shell"
+    hv/hvm/hvm branch ... "hydo-netns: ns1 addresses" "hydo-boot-marker: launching shell"
 """
 import os, shutil, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TOP = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
-sys.path.insert(0, os.path.join(TOP, "hvx", "onboard"))
+TOP = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(HERE))))
+sys.path.insert(0, os.path.join(TOP, "hydo", "onboard"))
 import hydo_build_arm64 as a64      # noqa: E402  (_cpio, TC_ARM64, IPTABLES_ARM64, IPT_FILES)
 
 APPLETS = ("sh mount echo cat uname seq md5sum sleep mkdir wget httpd ping nsenter unshare tr cut grep "

@@ -3,7 +3,7 @@
  * hvx_sched_race_test - turns alone hit a plain-computation race window
  * (HVX_VM_SMP_SCHED). Needs a bare-metal Intel PMU.
  *
- * The shared-counter race of hvx_smp_test, shaped like hvx/race/hydorace.c: two vCPUs
+ * The shared-counter race of hvx_smp_test, shaped like hv/hvx/race/hydorace.c: two vCPUs
  * sell seats from one counter with a check-then-act race:
  *     loop: OUT iterations of unrelated work (dec/jnz)
  *           s = seats ; if (s <= 0) stop          -- check

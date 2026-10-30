@@ -94,7 +94,7 @@ Network (`initramfs-net.cpio.gz`, `HVM_NET=1 HVM_NET_RX=guest/net-rx.bin`):
 ## How to run
 
 ```sh
-# build machine, scratch dir: WORK=$PWD sh <repo>/hvx-mac/linux/build-guest.sh; copy out/* to hvx-mac/guest/
+# the build machine (Linux with Nix), scratch dir: WORK=$PWD sh <repo>/hv/hvm/linux/build-guest.sh; copy out/* to hv/hvm/guest/
 sh build.sh
 HVM_DISK=guest/disk-ext4.img ./hvm print guest/Image-virtio guest/initramfs-disk.cpio.gz "hydo-disk: oracle complete"
 HVM_DISK=guest/disk-ext4.img HVM_FAULT=0x5017E0 HVM_FAULT_CLASSES=drop HVM_FAULT_PROB=10 ./hvm run guest/Image-virtio guest/initramfs-disk.cpio.gz "hydo-disk: oracle complete"

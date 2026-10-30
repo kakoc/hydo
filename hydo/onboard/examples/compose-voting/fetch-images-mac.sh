@@ -1,6 +1,6 @@
 #!/bin/sh
 # Fetch the arm64 images of docker-compose.yml for hydo-mac.yaml (Milestone 99) into images/, by the
-# digests of hydo-compose.lock.json, without skopeo: hvx/onboard/fetch_image.py checks every blob
+# digests of hydo-compose.lock.json, without skopeo: hydo/onboard/fetch_image.py checks every blob
 # against its digest and writes a `docker save` archive (hydo_oci.py reads it like the OCI copies
 # of fetch-images.sh; the image root depends only on the content). Needs network, once.
 set -eu

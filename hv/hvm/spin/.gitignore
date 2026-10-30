@@ -1,4 +1,4 @@
-# build outputs (rebuilt from the sources here and hvx-mac/linux)
+# build outputs (rebuilt from the sources here and hv/hvm/linux)
 bpprobe
 hvm-spin
 spinvar-out/

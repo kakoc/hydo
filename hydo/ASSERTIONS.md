@@ -73,7 +73,7 @@ emitted records (per process and outcome), not of every evaluation.
 
 ## Guest SDKs
 
-**Go** (`hvx/stack/hydoassert`, import `hydostack/hydoassert`):
+**Go** (`hydo/stack/hydoassert`, import `hydostack/hydoassert`):
 
 ```go
 var ackedInMySQL = hydoassert.Always("order.in_mysql", "every checked order is in MySQL with its amount")
@@ -98,7 +98,7 @@ w.Done(nil)               // ... condition true now (ok if in time)  /  w.Expire
 Records go to `/dev/ttyS0` (override with `HYDO_ASSERT_OUT=<path>|stderr|off`), so they reach the
 console even when the program's stdout is redirected to a log file.
 
-**Shell** (`hvx/stack/hydoassert/hydo_assert.sh`, for `/sbin/init` scripts; uses `$BB sed`):
+**Shell** (`hydo/stack/hydoassert/hydo_assert.sh`, for `/sbin/init` scripts; uses `$BB sed`):
 
 ```sh
 . /etc/hydo_assert.sh
@@ -145,7 +145,7 @@ call sequence through both SDKs under eight BUGGIFY configurations and diffs the
 encoded as Go's `encoding/json` encodes the same Go value. `HYDO_ASSERT_OUT` works as in Go, plus
 `logging` (each line goes to the Python logger `hydo_assert`). The catalog lists assertions in
 the order their declarations ran, so declare them at module level. `sdk/python/README.md` has
-the whole API, and `hvx/onboard/examples/python-kv` is a Python service that uses it under hydo.
+the whole API, and `hydo/onboard/examples/python-kv` is a Python service that uses it under hydo.
 
 **Rust** (`sdk/rust`, crate `hydo-assert`; std only; README in the crate):
 
@@ -169,7 +169,7 @@ hydo_assert::setup_complete();
 The run-time API (`hydo_assert::always(id, msg)`, `.check`, `.hit`, `.cmp`, `eventually`,
 `buggify`, `catalog`, `setup_complete`) is the Go SDK's, and for the same sequence of calls it
 writes the same bytes: `sdk/rust/tests/conformance.sh` builds a Go program against
-`hvx/stack/hydoassert`'s own sources and a Rust program making the same calls, and diffs their
+`hydo/stack/hydoassert`'s own sources and a Rust program making the same calls, and diffs their
 consoles and stdouts under three BUGGIFY configurations. Same output switch
 (`HYDO_ASSERT_OUT`), same deduplication, same BUGGIFY configuration (`$HYDO_BUGGIFY`, else
 `/tmp/hydo-buggify`) and decisions. Rust additions: call-site macros (`hydo_always!`,
@@ -184,8 +184,8 @@ details. `hydo_assert::emit_line(tag, &value)` writes any other one-line record 
 extension point for a history recorder).
 
 For an onboarded project, `buggify: true` in `hydo.yaml` makes the guest init write the
-schedule's `B=` token to `/tmp/hydo-buggify` (`hvx/onboard/MANIFEST.md`), as `stack-explore.sh`
-does for the stack. `hvx/onboard/examples/rust-kv` is a complete example.
+schedule's `B=` token to `/tmp/hydo-buggify` (`hydo/onboard/MANIFEST.md`), as `stack-explore.sh`
+does for the stack. `hydo/onboard/examples/rust-kv` is a complete example.
 
 **JavaScript** (`sdk/js`, package `hydo-assert`, Node.js; no dependencies; CommonJS and ESM;
 TypeScript types; README in the package):
@@ -210,7 +210,7 @@ The API is the Go SDK's in camelCase (`alwaysOrUnreachable`, `check`, `hit`, `cm
 `setupComplete`), plus the named comparison helpers (`greaterThan`,
 `greaterThanOrEqualTo`, `lessThan`, `lessThanOrEqualTo`) and `emitLine(tag, value)` for other
 one-line record kinds. For the same sequence of calls it writes the same bytes as the Go SDK:
-`sdk/js/test/conformance.sh` builds a Go program against `hvx/stack/hydoassert`'s own sources
+`sdk/js/test/conformance.sh` builds a Go program against `hydo/stack/hydoassert`'s own sources
 (Go 1.26.5) and runs a Node program making the same calls through both entries, under five
 BUGGIFY configurations, and diffs consoles and stdouts. Records are written synchronously
 (`fs.writeSync`, one write per record) to `/dev/ttyS0`; same output switch (`HYDO_ASSERT_OUT`,
@@ -219,10 +219,10 @@ are plain objects or `Map`s; numbers, bigints (Go's 64-bit integers), `Uint8Arra
 Go's `[]byte`) and strings are encoded as Go encodes the matching Go values, keys in UTF-8 byte
 order; a NaN, an infinity or a cycle drops the record, as `json.Marshal` fails on them. Go 1.27
 writes invalid UTF-8 as a raw U+FFFD; the SDK writes Go 1.26's `\ufffd` escape.
-`hvx/onboard/examples/node-kv` is a complete example (Mac backend).
+`hydo/onboard/examples/node-kv` is a complete example (Mac backend).
 
-**Reading the stores** (`hydo-read` / `hydo-check`, `hvx/readers`; full reference in
-`hvx/onboard/MANIFEST.md`, "Reading the stores"). A cross-service property often needs what
+**Reading the stores** (`hydo-read` / `hydo-check`, `hydo/readers`; full reference in
+`hydo/onboard/MANIFEST.md`, "Reading the stores"). A cross-service property often needs what
 is in a MySQL/PostgreSQL table, on a Kafka topic, under Redis or etcd keys. Any SDK or script
 can run the static helper instead of linking a client for every store:
 `hydo-read kafka 127.0.0.1:9092 orders` prints the records as sorted JSON Lines (exit 2 = could
@@ -238,22 +238,22 @@ status and the last line into the record.
 Assertions are evaluated inside the program. For linearizability and transactional isolation the
 evidence is the whole history of operations, so it is checked on the host after the run instead:
 the workload prints `HYDO-HIST` records (one per invocation and completion), and the checkers in
-`hvx/history/hydohist.py` (linearizable register / CAS per key, Elle-style list-append) turn the
+`hydo/history/hydohist.py` (linearizable register / CAS per key, Elle-style list-append) turn the
 history into ordinary `HYDO-ASSERT` records of type `always` plus the HYDO-ORACLE verdict. Format,
-models and recorders (shell, Go): `hvx/HISTORIES.md`; manifests use `checks:`.
+models and recorders (shell, Go): `hydo/HISTORIES.md`; manifests use `checks:`.
 
 ## Host side
 
-- `hvx/hydo_assert_table.h`: header-only parser and aggregator (`ha_feed_console` once per run,
+- `hydo/assert/hydo_assert_table.h`: header-only parser and aggregator (`ha_feed_console` once per run,
   `ha_print`, `ha_violations`), for harnesses and the explorer.
-- `hvx/hydo_assert_report`: `hydo_assert_report <console>...` prints the property table over the
+- `hv/hvx/hydo_assert_report`: `hydo_assert_report <console>...` prints the property table over the
   given saved consoles (e.g. `HVX_CONSOLE_OUT` dumps) and exits 1 if any property is violated.
   For `eventually` properties it also shows the slowest in-time episode and prints a
   `liveness: <n> eventually properties, <k> missed a deadline` line.
 - `explore.py` counts an `eventually` with `ok:false` as a failed assertion of the run (like a
   failed `always`), and `report.md` gets a "Liveness" table: per property, schedules where it
   held in time / missed its deadline, the slowest in-time episode and the first miss.
-- Manifest invariants (`hvx/onboard/MANIFEST.md`) can be `type: eventually` with a deadline
+- Manifest invariants (`hydo/onboard/MANIFEST.md`) can be `type: eventually` with a deadline
   after the heal or the workload start; the generic init polls and emits the records.
 
 ## The four-service stack's properties

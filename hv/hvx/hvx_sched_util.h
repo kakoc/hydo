@@ -71,7 +71,7 @@ static inline int su_create(struct su_vm *vm, uint64_t mem_size, unsigned int nv
 		return -1;
 	}
 #ifdef HVX_SET_TURNCTL
-	/* FT_MARGIN=<n>: turn-end landing margin (hvx/FASTTURN.md; a module that has
+	/* FT_MARGIN=<n>: turn-end landing margin (hv/hvx/FASTTURN.md; a module that has
 	 * HVX_SET_TURNCTL). Turn ends must land on the same branch counts with any margin
 	 * above the overflow skid, so every test result must stay the same. */
 	if (getenv("FT_MARGIN") && (flags & HVX_VM_SMP_SCHED) && nv > 1) {

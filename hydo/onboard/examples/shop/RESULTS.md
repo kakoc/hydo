@@ -1,6 +1,6 @@
 # shop: results (fake outside services and protocol faults, 2026-10-24)
 
-The demo project for `fakes:` / `H=` (hvx/onboard/MANIFEST.md, "Fake outside services and protocol
+The demo project for `fakes:` / `H=` (hydo/onboard/MANIFEST.md, "Fake outside services and protocol
 faults"). `shop` charges each order through a fake payment provider (`payments`, with idempotency
 keys and a `charge.succeeded` webhook back to the shop) and sends a receipt through a fake email
 service (`email`). One planted bug: `src/charge_buggy.go` gives every retry of a charge a new

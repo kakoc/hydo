@@ -5,21 +5,21 @@
 VT-x. A user installs it with one command and drives everything with one `hydo` command; no
 Nix, no `~/hydo` tree and no hand-written lock scripts are needed. `QUICKSTART-linux.md` is the
 user guide; it is shipped as the release's `README.md`. The Mac counterpart is
-`hvx-mac/dist/` (same verbs, same release pattern).
+`hydo/dist/mac/` (same verbs, same release pattern).
 
 ## The `hydo` command
 
 | verb | what it runs underneath |
 |---|---|
 | `hydo doctor` | checks: Intel CPU, `vmx` flag (VT-x on in firmware), bare metal, a usable PMU (non-hybrid, `arch_perfmon`; otherwise it says the exit-count clock is used), Python 3.9+, `cc`/`make`/`flock`/`xz`/`sudo`/`modinfo`, password-less sudo, kernel headers, lockdown, the module (built, loaded, same `srcversion` as this release), `kvm_intel` not loaded, release files, the run engine, the bundled `mke2fs`, disk space |
-| `hydo module build [--name N]` | `make -C /lib/modules/$(uname -r)/build` on `module/hvx.c`; with `--name` a side copy `N.ko` with device `/dev/N` (`-DHVX_DEVNAME`, the `hvx/tdet/build-hvxtd.sh` pattern) |
+| `hydo module build [--name N]` | `make -C /lib/modules/$(uname -r)/build` on `module/hvx.c`; with `--name` a side copy `N.ko` with device `/dev/N` (`-DHVX_DEVNAME`, the `hv/hvx/tdet/build-hvxtd.sh` pattern) |
 | `hydo module load\|unload [--name N] [--dry-run] [--param K=V]` | under `flock -x` on the module lock: `rmmod hvx`, `rmmod kvm_intel kvm` if loaded, `insmod`. A side module gets its own lock file (`<lock>.N`) and never touches `hvx` or KVM |
 | `hydo module udev install\|remove\|status [--name N] [--group G] [--dry-run]` | optional: with sudo, writes `/etc/udev/rules.d/70-hydo-N.rules` (`KERNEL=="N", SUBSYSTEM=="misc", GROUP="G", MODE="0660"`), creates the group if missing, adds the user, reloads udev and applies the rule to a loaded device; `remove` deletes the rule and sets the device back to root:root 0600. `install.sh --udev [--udev-group G] [--udev-name N]` runs `install` |
 | `hydo module status [--name N]` | loaded or not, `srcversion` of the loaded and the release-built module, device mode, KVM, how many processes hold the lock (read from `/proc/locks`, no lock taken) |
-| `hydo build <hydo.yaml>` | `hvx/onboard/hydo-build` (imported, not rewritten) with the bundled tools, into `./hydo-out` |
-| `hydo run [IMG] "<schedule>"` | `libexec/hvx-run sudo env HVX_SNAP_DIR=… hvx/hvx_explore [--ram-mib/--cpu from the image's manifest] one guest/bzImage guest/initramfs-kafka.cpio.gz IMG <dir> "<schedule>"`; writes `run.json` |
+| `hydo build <hydo.yaml>` | `hydo/onboard/hydo-build` (imported, not rewritten) with the bundled tools, into `./hydo-out` |
+| `hydo run [IMG] "<schedule>"` | `libexec/hvx-run sudo env HVX_SNAP_DIR=… hv/hvx/hvx_explore [--ram-mib/--cpu from the image's manifest] one guest/bzImage guest/initramfs-kafka.cpio.gz IMG <dir> "<schedule>"`; writes `run.json` |
 | `hydo repro <run dir \| explore dir \| "<schedule>">` | re-runs a `run.json`, or every failure and minimal schedule of an exploration's `report.json`, from a fresh boot, and compares fingerprints |
-| `hydo explore [IMG] [explore.py options]` | `hvx/explore/explore.py --image IMG` (default `--seeds 1-20 --workers 2 --out hydo-out/explore`) |
+| `hydo explore [IMG] [explore.py options]` | `hydo/explore/explore.py --image IMG` (default `--seeds 1-20 --workers 2 --out hydo-out/explore`) |
 | `hydo report [DIR]` | prints `report.md` |
 
 **sudo only when needed.** `hydo run` and `explore.py` call `libexec/hvx-run sudo env …`;
@@ -68,7 +68,7 @@ ships all of them (`guest/`, `tools/`), and `hydo build` points `hydo-build` at 
   bundled `debugfs` (same frozen clock), so the image does not depend on the building user's
   uid/gid (`HYDO_KEEP_OWNERS=1` skips this).
 
-**Checked** (Redis example, `hvx/onboard/examples/redis/hydo.yaml` and `hydo-netem.yaml`):
+**Checked** (Redis example, `hydo/onboard/examples/redis/hydo.yaml` and `hydo-netem.yaml`):
 - with `HYDO_KEEP_OWNERS=1`, the release on the NixOS build machine builds images byte-identical to
   a plain `hydo-build` with the pinned tools (root `bcea6b1d…`/data `2d52cd04…`; netem root
   `6d768c1c…`/data `6b1dab4d…`);
@@ -82,13 +82,13 @@ ships all of them (`guest/`, `tools/`), and `hydo build` points `hydo-build` at 
 ## Building a release
 
 ```sh
-hvx/dist/build-release.sh [OUTDIR]          # -> OUTDIR/hydo-linux-<version>/ and .tar.gz (default hvx/dist/out)
+hydo/dist/linux/build-release.sh [OUTDIR]          # -> OUTDIR/hydo-linux-<version>/ and .tar.gz (default hydo/dist/linux/out)
 ```
 
-The first run fills `hvx/dist/assets/` (git-ignored) over one ssh session to
+The first run fills `hydo/dist/linux/assets/` (git-ignored) from the build machine
 `$HYDO_BUILD_HOST` (default the build machine): the kernel and initramfs from
 `~/hydo/build`, every Nix store path named in the script (all gc-rooted there, see
-hvx/BUILD-PINS.md), and `hvx_seedrng`/`hydo_fc` compiled there with the pinned musl gcc
+docs/BUILD-PINS.md), and `hvx_seedrng`/`hydo_fc` compiled there with the pinned musl gcc
 (`hvx_seedrng` comes out as the pinned `c2a440c5…`). Every asset is checked against
 `assets.sha256`; `HYDO_PIN=1` writes that file when it is missing (a maintainer, once). After
 that the release builds offline in seconds on the Mac or any Linux machine. The tarball is

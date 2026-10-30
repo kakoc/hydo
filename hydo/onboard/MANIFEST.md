@@ -1,7 +1,7 @@
 # hydo.yaml — the project manifest
 
-A project is onboarded by writing ONE file, `hydo.yaml`. `hvx/onboard/hydo-build` compiles it
-into a guest image, and one generic guest init (`hvx/onboard/hydo-init.sh`) runs any manifest:
+A project is onboarded by writing ONE file, `hydo.yaml`. `hydo/onboard/hydo-build` compiles it
+into a guest image, and one generic guest init (`hydo/onboard/hydo-init.sh`) runs any manifest:
 it starts the services, runs the workload under the explorer's faults and checks the
 invariants. No per-project build script or boot script is written by hand.
 
@@ -15,7 +15,7 @@ examples: `examples/redis/hydo.yaml` (one service, about 60 lines),
 `examples/etcd/hydo.yaml` (a replicated system: a three-member etcd cluster, with link faults
 between members), `examples/stack/hydo-read.yaml` (the stack's invariants written with the
 ready-made store readers, see "Reading the stores"), and
-`hvx/knownbugs/sqlite/hydo.yaml` (no service: a multi-threaded program using SQLite; one
+`hydo/knownbugs/sqlite/hydo.yaml` (no service: a multi-threaded program using SQLite; one
 manifest, two versions via `params:`).
 
 ## What the user writes, and what is automatic
@@ -167,7 +167,7 @@ invariants:                    # required, at least one
     poll: 1                    # seconds between checks (default 1); no every:/final: here
 
 checks:                        # ready-made checkers for recorded histories (see "History
-  - id: kv.linearizable        #   checks" below; hvx/HISTORIES.md). With checks:, invariants:
+  - id: kv.linearizable        #   checks" below; hydo/HISTORIES.md). With checks:, invariants:
     type: linearizable         #   may be empty. linearizable | list-append
     history: kv                # required: the history the workload records (hydo_hist kv ...)
     model: register            # linearizable: register (default) | cas
@@ -197,7 +197,7 @@ errors: true                   # error logs as findings (see "Error logs as find
 
 `buggify: true` (top level, optional) says the project's programs carry BUGGIFY fault points
 from an assertion SDK (Go `hydoassert.Buggify`, Rust `hydo_assert::hydo_buggify!`, JavaScript `buggify`; see
-`hvx/ASSERTIONS.md`). The init then turns the schedule token `B=<seed-hex>[,<enable-pm>[,<fire-pm>]]`
+`hydo/ASSERTIONS.md`). The init then turns the schedule token `B=<seed-hex>[,<enable-pm>[,<fire-pm>]]`
 (drawn by `explore.py --buggify`, which keeps `B=` for such a manifest and drops it for others)
 into `/tmp/hydo-buggify`, the file the SDKs read at a
 program's first fault-point evaluation; without `B=` the file is absent and every point stays
@@ -281,7 +281,7 @@ An invariant is a shell command. Exit status 0 means the property holds, 1 means
 violated, 2 means it could not be evaluated right now. Its last output line (or its own
 `HYDO-ORACLE:` line, if it prints one) becomes the details.
 
-- Every evaluation becomes a `HYDO-ASSERT` record (`hvx/ASSERTIONS.md`), once per id and
+- Every evaluation becomes a `HYDO-ASSERT` record (`hydo/ASSERTIONS.md`), once per id and
   outcome, so `hydo_assert_report` and the explorer's property table include them.
 - `every:` invariants run while the workload runs. A violation is remembered and fails the
   run at the end.
@@ -321,12 +321,12 @@ workload -- the init waits for it before restarting anything) makes a `heal` dea
 deterministically.
 
 Only images whose manifest has an `eventually` invariant get the liveness code: `hydo-build`
-then inserts `hvx/onboard/hydo-liveness.sh` into `/sbin/init` before its `main` section, with
+then inserts `hydo/onboard/hydo-liveness.sh` into `/sbin/init` before its `main` section, with
 renamed copies of the four init functions it wraps (`step_range`, `start_periodic`,
 `start_all`, `finish`). Every other image's `/sbin/init` is `hydo-init.sh` byte for byte.
 `hydo-build --print-init` shows the generated init. Example: `examples/redis/hydo-live.yaml`.
 
-The program under test can still use the assertion SDK (`hvx/stack/hydoassert`) for
+The program under test can still use the assertion SDK (`hydo/stack/hydoassert`) for
 properties that need to see inside it; both kinds of record mix on the console.
 
 ### History checks (`checks:`)
@@ -339,13 +339,13 @@ checker: `linearizable` (a key-value register or compare-and-set object, per key
 Knossos style, with optional store-assigned versions) or `list-append` (Elle style: lost
 acknowledged appends, duplicates, incompatible orders, reads going back in time, G0 / G1c /
 G-single / G2 cycles at the chosen `consistency:`). The record format, the models and the
-verdict rules are in `hvx/HISTORIES.md`.
+verdict rules are in `hydo/HISTORIES.md`.
 
 - The workload, `retry`, `final:` and invariant commands get the recorder in their prelude
   (an executable sources `/etc/hydo/prelude.sh` to get it):
   `hydo_hist <history> <process> <invoke|ok|fail|info> <f> <args>...` (and `hydo_hist_enc` for
   free-form values). Give every concurrent client its own process number. Programs use the
-  recorder of their SDK, all writing the same lines: Go `hvx/stack/hydohist`, Rust
+  recorder of their SDK, all writing the same lines: Go `hydo/stack/hydohist`, Rust
   `hydo_assert::history`, JavaScript `hydo-assert/history` (`sdk/js/history.js`) and Python
   `hydo_assert.history` (Milestone 96).
 - `final:` runs after the workload, `retry` and healing (no cut), or in the recovery boot after a
@@ -354,7 +354,7 @@ verdict rules are in `hvx/HISTORIES.md`.
   status is reported (`HYDO-CHECK-FINAL`); non-zero turns a passing check into an ERROR.
 - The guest prints one `HYDO-CHECK <spec>` line per check when the workload starts. The checks run
   on the host: `explore.py` (and the shrinker, `run_list.py`), `hydo run` and
-  `hvx/history/hydo-check` combine the guest's verdict with the checks' (the guest's own invariant
+  `hydo/history/hydo-check` combine the guest's verdict with the checks' (the guest's own invariant
   violations come first) and write the explanation, e.g. the minimal set of operations that cannot
   be ordered, next to the console (`<tag>.checks.txt`).
 - Only manifests with `checks:` get the recorder and `hydo-init-history.sh` (spliced into
@@ -365,7 +365,7 @@ verdict rules are in `hvx/HISTORIES.md`.
   member: etcd issue 14685 shows as a version no order explains).
 - On arm64 (the Mac backend) the same: `explore.py --backend hvm` and the Mac release's
   `hydo run` / `hydo repro --regressions` run the host checkers (the release ships
-  `hvx/history/`). Examples: `hvx-mac/explore/examples/redis/hydo-hist.yaml` and
+  `hydo/history/`). Examples: `hydo/onboard/examples-mac/redis/hydo-hist.yaml` and
   `examples/python-kv/hydo-mac-hist.yaml` (the Python recorder).
 
 ### Fault tokens (what the explorer types at S1)
@@ -395,7 +395,7 @@ them in order), waits until the queue is empty (at most the largest delay in for
 deleted at once and every queued packet was lost, so TCP retransmitted after a timeout.
 
 A token naming a service the manifest does not have is ignored. `explore.py` draws its
-faults from the manifest (`hvx/explore/manifest_space.py`): kills and pauses from all
+faults from the manifest (`hydo/explore/manifest_space.py`): kills and pauses from all
 services, network and one-way faults from services with a `port:`, knob values from
 `knobs:`, fault placement from `workload.steps`, fault kinds from `faults:`. It reads
 `/etc/hydo/hydo.yaml` out of an `explore-ob-*` image automatically; pass `--manifest` for
@@ -578,8 +578,8 @@ other, such as a cluster) get every pair, as on loopback.
 
 hydo-build stages iproute2's `ip` and the guest kernel's `llc`, `stp`, `bridge` and `veth` modules
 and splices `hydo-init-netns.sh` into `/sbin/init`, only for `network: bridge`; every other
-manifest builds byte-identically (`hvx/explore/netns_ident.py`). On arm64 the default Mac guest
-kernel (`hvx-mac/explore/build-guest.sh`) has no network namespaces, so such a manifest is built
+manifest builds byte-identically (`hydo/explore/netns_ident.py`). On arm64 the default Mac guest
+kernel (`hv/hvm/explore/build-guest.sh`) has no network namespaces, so such a manifest is built
 for the second guest kernel (next section); the four modules are built into it. One bridge
 models every Compose network: services on different Compose networks can still reach each other.
 Examples: `examples/redis-bridge/` (two Redis servers on the same port, a replica link, a fault
@@ -587,10 +587,10 @@ proxy, freeze) and `examples/compose-voting/`.
 
 ### On the Mac: the second guest kernel (`Image-explore-netns`)
 
-The Mac backend has two arm64 guest kernels. `Image-explore` (`hvx-mac/explore/build-guest.sh`) is
+The Mac backend has two arm64 guest kernels. `Image-explore` (`hv/hvm/explore/build-guest.sh`) is
 the default and is unchanged, so every recorded Mac fingerprint stays valid. `Image-explore-netns`
-(`hvx-mac/explore/build-guest-netns.sh`, Milestone 99) is the same Linux 6.6.35 source, patches and
-configuration plus `hvx-mac/explore/hvm-netns.config`: network namespaces, veth, the bridge, IPv6,
+(`hv/hvm/explore/build-guest-netns.sh`, Milestone 99) is the same Linux 6.6.35 source, patches and
+configuration plus `hv/hvm/explore/hvm-netns.config`: network namespaces, veth, the bridge, IPv6,
 policy routing, and iptables (legacy, filter table) with NFQUEUE, all built in. `hydo-build --arch
 arm64` builds a manifest for the second kernel when it has `network: bridge`, an `addr:` or
 `freeze` in `faults:`; every other manifest builds exactly as before and boots the default kernel.
@@ -604,7 +604,7 @@ release sets its `guest/tc` tree; unset, the host's `/nix/store`): iproute2's `i
 store path as `tc`) for `network: bridge`, and for `freeze` the aarch64 `iptables-legacy` with the
 three extensions the freeze's rules load and `hydo_fc` built for aarch64 (`$HYDO_FCBIN_ARM64`,
 default `<build dir>/hydo_fc-arm64`; the Mac release ships `guest/hydo_fc`). Example
-`hvx-mac/explore/examples/redis-bridge`. On a Mac, `hydo compose` now writes `network: bridge`
+`hydo/onboard/examples-mac/redis-bridge`. On a Mac, `hydo compose` now writes `network: bridge`
 with an `addr:` per service, as on Linux. A big image root is a big initramfs on the Mac (the root
 lives in guest RAM): Docker's voting app needs `guest.ram_mib: 3072` there.
 
@@ -613,7 +613,7 @@ lives in guest RAM): Docker's voting app needs `guest.ram_mib: 3072` there.
 Business software mostly fails at its edges: a payment provider answers 500 or 429, answers too
 late, takes the money and never answers, sends a webhook twice or out of order. `fakes:` declares
 the outside services the system talks to; hydo serves them **inside the guest** (one static
-program, `/bin/hydo-world`, source `hvx/onboard/world/`), so they are as deterministic as
+program, `/bin/hydo-world`, source `hydo/onboard/world/`), so they are as deterministic as
 everything else. Every request a fake (or proxy) receives is **recorded**, so invariants can ask
 what the outside world saw: "the customer was charged at most once per order". `proxies:` puts
 the same faults and records in front of a real service of the manifest.
@@ -754,17 +754,17 @@ false verdict.
 **Explorer.** `explore.py --protocol-faults` draws `H=` (one token on 60% of the schedules, a
 second on 25%) on its own random stream, from the targets `manifest_space.py` lists: every fake
 route (with the webhook rules when it has a webhook), every proxy and proxy route. Without the flag
-every schedule string is byte-identical (`hvx/explore/protocol_faults_ident.py`).
+every schedule string is byte-identical (`hydo/explore/protocol_faults_ident.py`).
 `--sweep protocol` runs every rule kind (status, status with effect=yes, delay=3000, drop, reset,
 and on webhook routes dup, reorder, late=5000, lost) on every target, one workload step at a time. The shrinker drops
 `H=` tokens, narrows their window, and removes `p=`, `retry-after=` and `effect=`, then halves
 delays. A manifest with a `faults:` list draws `H=` only if it lists `protocol`.
 
-**Build.** `hvx/onboard/world/build.sh` builds `build/hydo-world` (pinned Go, standard library
+**Build.** `hydo/onboard/world/build.sh` builds `build/hydo-world` (pinned Go, standard library
 only); `hydo-build` stages it (`HYDO_WORLDBIN` overrides), writes `/etc/hydo/world.json`
-(`--print-world` shows it) and splices `hvx/onboard/hydo-init-fakes.sh` into the init. A manifest
+(`--print-world` shows it) and splices `hydo/onboard/hydo-init-fakes.sh` into the init. A manifest
 without `fakes:`/`proxies:` builds a byte-identical image. `--arch arm64` (the Mac backend) stages
-the arm64 build of the same program: `HYDO_WORLD_GOARCH=arm64 hvx/onboard/world/build.sh
+the arm64 build of the same program: `HYDO_WORLD_GOARCH=arm64 hydo/onboard/world/build.sh
 build/hydo-world-arm64` (`HYDO_WORLDBIN_ARM64` overrides; the Mac release ships it as
 `guest/hydo-world`), and the Mac engine `hvmx` carries the world across a power cut in the same
 3584-byte recovery command as `hvx_explore`; `explore.py --backend hvm` takes `--protocol-faults`
@@ -801,7 +801,7 @@ program; nothing of the SDK's setup code runs in the guest.
 format: 1                      # the plan format; this hydo reads 1 (anything else is refused)
 hydo_version: "0.1"            # the hydo the plan was written for: "0.1" (same major.minor; a
                                #   different patch only warns), "0.1.0", or ">=0.1". A mismatch
-                               #   is an error unless HYDO_VERSION_CHECK=warn. hvx/VERSION (or the
+                               #   is an error unless HYDO_VERSION_CHECK=warn. hydo/VERSION (or the
                                #   release's VERSION) is the engine's version.
 workload:
   steps: 20                    # rounds of the composition (default 20); faults are placed at
@@ -879,7 +879,7 @@ any invariant); a check that times out counts as 2.
 `eventually`: bounded liveness, polled after `after` (`heal` default, or `start`) until it
 holds or `within` seconds pass (MANIFEST "Liveness").
 `linearizable` / `list_append` (alias `list-append`): a ready-made **history check**
-(`hvx/HISTORIES.md`, "History checks" above): the commands record their operations with
+(`hydo/HISTORIES.md`, "History checks" above): the commands record their operations with
 `hydo_hist` (source `/etc/hydo/prelude.sh`; process = `$HYDO_CMD_ID`, unique per entry), and the
 host checks the history after the run. Fields: `history` (required), `model`/`initial`
 (linearizable), `consistency` (list_append), `msg`; `run` is optional and is the final read-back
@@ -920,7 +920,7 @@ manifest's defaults. This seed form is what the explorer draws; the shrinker's o
 regressions use the resolved form (below, "Stable compositions"). `explore.py`
 puts a `W=` on every schedule of such a plan, from its own random stream, so every other
 field equals the schedule without it (`--no-compose`: no `W=`); manifests without a test plan
-get exactly the old schedules (`hvx/explore/compose_ident.py`). The shrinker tries, in order:
+get exactly the old schedules (`hydo/explore/compose_ident.py`). The shrinker tries, in order:
 one command never run (`o`), half the commands (`n`), no concurrency (`p1`, then `p-1`), the
 first half of the entries dropped (`x`), single entries (when 8 or fewer are left); the report
 prints the minimal composition round by round.
@@ -1021,7 +1021,7 @@ an older hydo as an unknown field.
 
 Cross-service invariants need "what is in this table / on this topic / under this key". Instead
 of writing that reading code in shell for every manifest, a check can call two ready-made
-commands (source: `hvx/readers`; one static Go binary, `hydo-check` is a symlink to it):
+commands (source: `hydo/readers`; one static Go binary, `hydo-check` is a symlink to it):
 
 - `hydo-read <store> <args>` prints what a store holds as JSON Lines, one record per line,
   keys sorted, lines sorted bytewise (Kafka, Redis lists and sorted sets keep the store's
@@ -1104,13 +1104,13 @@ symlink only when some command of the manifest calls `hydo-read` or `hydo-check`
 and `msg:` do not count; `test:` entries count, and so does any file in the plan's `hydo/`
 folder that contains the name, a script or a compiled program); every other manifest builds a
 byte-identical image. Build the binary
-first with `hvx/readers/build.sh` (byte-reproducible; it lands in `build/hydo-read`, or point
+first with `hydo/readers/build.sh` (byte-reproducible; it lands in `build/hydo-read`, or point
 `HYDO_READ_BIN` at it). For `--arch arm64`, build it with `HYDO_READ_GOARCH=arm64
-hvx/readers/build.sh build/hydo-read-arm64` (`HYDO_READ_BIN_ARM64` overrides; the Mac release ships
-it as `guest/hydo-read`); example `hvx-mac/explore/examples/redis/hydo-read.yaml`. From a program under test (an SDK, not
+hydo/readers/build.sh build/hydo-read-arm64` (`HYDO_READ_BIN_ARM64` overrides; the Mac release ships
+it as `guest/hydo-read`); example `hydo/onboard/examples-mac/redis/hydo-read.yaml`. From a program under test (an SDK, not
 an invariant), run the same binary with `--id`/`--console` so the record reaches the console.
 Examples: `examples/stack/hydo-read.yaml`, `examples/miniflux/hydo-read.yaml`; tests against real
-stores: `hvx/readers/native-test.sh`.
+stores: `hydo/readers/native-test.sh`.
 
 ### gRPC faults (a fault proxy in front of a gRPC service)
 
@@ -1182,7 +1182,7 @@ server acted; failed before reaching it; failed, server's part unknown) as a HYD
 verdict shows each `call` record.
 
 **Explorer.** `explore.py --grpc-faults` draws up to two such tokens per schedule on the
-manifest's gRPC proxies (`hvx/explore/grpc_faults.py`), from its own random stream: without the
+manifest's gRPC proxies (`hydo/explore/grpc_faults.py`), from its own random stream: without the
 flag every schedule string is byte-identical (`grpc_faults_ident.py`). The shrinker drops a
 token, narrows its window, and removes `call=`, `rpc=`, `p=`/`seed=`, `dir=req`, turns
 `reset=conn` into `reset` and halves `cut=`/`hold=`. Example: `examples/stack-grpc/`.
@@ -1242,7 +1242,7 @@ HYDO-ERRLOG-SUM {"boot":"first","steps":30,"lines":3,"kinds":2,"shown":2}
   marker. At most `errors.max` (default 40) kinds per boot are printed; the summary says how many
   there were.
 
-**On the host** (`hvx/onboard/hydo_errors.py`, used by `explore.py`, `hydo run`, `hydo repro`
+**On the host** (`hydo/onboard/hydo_errors.py`, used by `explore.py`, `hydo run`, `hydo repro`
 and `hydo errors`). A kind's **signature** is the first 12 hex digits of
 `sha256("<service>\n<template>")`. The known list is `hydo/known-errors.yaml` (or
 `./known-errors.yaml`; `explore.py --known-errors FILE`, `hydo run --known-errors FILE`). It is
@@ -1314,14 +1314,14 @@ Quote values YAML would otherwise turn into numbers or booleans when you mean a 
 
 ```sh
 # on the build machine; tool paths default to build-stack.sh's pins
-HYDO_SEEDRNG=~/hydo/build/hvx_seedrng hvx/onboard/hydo-build path/to/hydo.yaml
-hvx/onboard/hydo-build path/to/hydo.yaml --set version=3.51.3   # a build parameter
-hvx/onboard/hydo-build path/to/hydo.yaml --check         # validate only
-hvx/onboard/hydo-build path/to/hydo.yaml --print-shell   # show the compiled manifest
+HYDO_SEEDRNG=~/hydo/build/hvx_seedrng hydo/onboard/hydo-build path/to/hydo.yaml
+hydo/onboard/hydo-build path/to/hydo.yaml --set version=3.51.3   # a build parameter
+hydo/onboard/hydo-build path/to/hydo.yaml --check         # validate only
+hydo/onboard/hydo-build path/to/hydo.yaml --print-shell   # show the compiled manifest
 # -> build/explore-ob-<name>-disk.img; copy it to ~/hydo/build on the bare-metal machine, then:
 ~/bin/hvx-run sudo ./hvx_explore one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz \
     ~/hydo/build/explore-ob-<name>-disk.img <outdir> "disk=none dseed=1 | run C=12"
-python3 hvx/explore/explore.py --image explore-ob-<name>-disk.img --seeds 1-50 --out <dir>
+python3 hydo/explore/explore.py --image explore-ob-<name>-disk.img --seeds 1-50 --out <dir>
 ```
 
 Guest RAM: `explore.py` reads `guest.ram_mib` from the manifest inside the image (or from
@@ -1351,12 +1351,12 @@ Inside the image: `/etc/hydo/hydo.yaml` (the manifest as written), `/etc/hydo/ma
 
 ## From Docker Compose
 
-A business stack usually ships a `docker-compose.yaml`. `hvx/onboard/hydo-compose` (or
+A business stack usually ships a `docker-compose.yaml`. `hydo/onboard/hydo-compose` (or
 `hydo compose` in a release) turns it into a starting `hydo.yaml`, so onboarding begins from
 what the team already runs:
 
 ```sh
-hvx/onboard/hydo-compose docker-compose.yml [--out hydo.yaml] [--images-dir images]
+hydo/onboard/hydo-compose docker-compose.yml [--out hydo.yaml] [--images-dir images]
         [--env-file F ...] [--profile P ...] [--use-env] [--no-resolve] [--lock FILE]
         [--network bridge|loopback] [--no-addr]
 sh fetch-images.sh            # written next to hydo.yaml: copies every image by digest (network, once)
@@ -1454,12 +1454,12 @@ A system whose inputs are gRPC endpoints needs no hand-written workload client.
 `hydo-grpc-gen` reads the service definitions and writes a driver for every RPC: one static
 client binary, `hydo-grpc`, with one subcommand per job, plus the project's schema and a plan.
 The client sends valid random requests from a seeded stream, records every call's outcome, and
-retries the way a careful client does. Source: `hvx/grpcgen/` (Go, the pinned toolchain).
+retries the way a careful client does. Source: `hydo/grpcgen/` (Go, the pinned toolchain).
 
 ```sh
-hvx/onboard/hydo-grpc-gen <proto dir> [--hints hints.yaml] --out <dir>   # every .proto under the dir
-hvx/onboard/hydo-grpc-gen --descriptor-set set.pb [--hints ...] --out <dir>   # protoc -o / buf build -o
-hvx/onboard/hydo-grpc-gen --reflect 127.0.0.1:7070 [--hints ...] --out <dir> # a running server's reflection
+hydo/onboard/hydo-grpc-gen <proto dir> [--hints hints.yaml] --out <dir>   # every .proto under the dir
+hydo/onboard/hydo-grpc-gen --descriptor-set set.pb [--hints ...] --out <dir>   # protoc -o / buf build -o
+hydo/onboard/hydo-grpc-gen --reflect 127.0.0.1:7070 [--hints ...] --out <dir> # a running server's reflection
 #   -I <dir>      extra .proto import path (repeatable)    --target host:port   the address in the guest
 #   --arch amd64,arm64   also build hydo-grpc.arm64        --no-build           only the schema and plan
 #   --steps N     workload.steps in the starter section     --rel <dir>          base of its relative paths
@@ -1471,11 +1471,11 @@ It writes, under `<dir>`:
 |---|---|
 | `grpc/desc.pb` | the schema: a `FileDescriptorSet`, dependencies first, no source info, deterministic bytes |
 | `grpc/plan.json` | every RPC with its hints, checked against the schema (unknown fields, wrong types and bad paths are errors) |
-| `hydo-grpc` | the static guest client for linux/amd64 (`-trimpath`, no build id: byte-identical from the same sources and Go); with `--arch amd64,arm64` also `hydo-grpc.arm64` for the Mac backend (example `hvx/grpcgen/demo/hydo-mac.yaml`) |
+| `hydo-grpc` | the static guest client for linux/amd64 (`-trimpath`, no build id: byte-identical from the same sources and Go); with `--arch amd64,arm64` also `hydo-grpc.arm64` for the Mac backend (example `hydo/grpcgen/demo/hydo-mac.yaml`) |
 | `workload/parallel_driver_<rpc>` | one test-composer command per RPC with a weight (and per scenario), in the `hydo/workload/` layout, with a `# hydo: timeout=` header |
 | `hydo.grpc.yaml` | a starter section to merge into `hydo.yaml`: files, `env:`, a `test:` section with the commands, `workload.retry`, and the numbered-steps `workload:` as a commented alternative |
 
-`hvx/onboard/hydo-grpc-gen` builds the generator for the host and the client with `$HYDO_GO`, else
+`hydo/onboard/hydo-grpc-gen` builds the generator for the host and the client with `$HYDO_GO`, else
 the pinned `go-1.26.5` of `build-stack.sh` if present, else `go` on PATH. Put `grpc/` at
 `/etc/hydo/grpc` and the client at `/bin/hydo-grpc` (the starter section does).
 
@@ -1502,7 +1502,7 @@ reset, a crash half-way). A non-status error is unknown. `classify:` overrides a
 for an API that documents a stronger promise.
 
 **Records.** Every attempt is two lines in the history recorder's format (`HYDO-HIST`,
-`hvx/HISTORIES.md`), history `grpc` (`record.history:`), in `/tmp/hydo/grpc/calls`
+`hydo/HISTORIES.md`), history `grpc` (`record.history:`), in `/tmp/hydo/grpc/calls`
 (`$HYDO_GRPC_CALLS`) with the bodies, and on the guest console without them (`record.console:
 brief`, the default; `full` or `off`), so a few hundred calls fit in the 64 KiB console:
 
@@ -1517,7 +1517,7 @@ HYDO-HIST grpc 0 info 14474532744 orders.v1.Orders/Create 11 DEADLINE_EXCEEDED c
 flight; the operation `<f>` is the RPC; `<op>` the operation id, the same for its retries (each
 retry is a new invocation with the same request); `<time>` guest nanoseconds since boot
 (CLOCK_BOOTTIME, deterministic under hydo); bodies are compact protobuf JSON (proto field names);
-every token is percent-encoded (`%20`, `%40` for `@`; `%` alone is empty). `hvx/history`'s parser
+every token is percent-encoded (`%20`, `%40` for `@`; `%` alone is empty). `hydo/history`'s parser
 reads them; no ready-made checker has a model for arbitrary RPCs, so a `checks:` entry that names
 history `grpc` needs RPCs that are reads and writes of a register (a future converter), and
 otherwise the records are for reading a failing run. An RPC with `outcome_id:` also writes the
@@ -1601,12 +1601,12 @@ whose invariants need one operation per step (the stack's ids 0..29) uses that m
 
 ### Example and evidence
 
-`hvx/grpcgen/demo/`: an order service (`orders.v1.Orders`: Create, Get, Cancel, List) on Redis
+`hydo/grpcgen/demo/`: an order service (`orders.v1.Orders`: Create, Get, Cancel, List) on Redis
 with one planted bug, driven only by generated drivers under the test composer: `proto/`, `hints.yaml`, `hydo.yaml`
 (`params: mode: buggy|fixed`), `build.sh`. The stack's front door has a `.proto` too
-(`hvx/stack/proto/hydo/order.proto`, `hvx/stack/grpc-hints.yaml`), and
+(`hydo/stack/proto/hydo/order.proto`, `hydo/stack/grpc-hints.yaml`), and
 `examples/stack/hydo-grpcgen.yaml` is the stack manifest with the generated driver in place of
-`hydostack place/retry` (numbered steps). Results: `hvx/HISTORY.md`, Milestone 91.
+`hydostack place/retry` (numbered steps). Results: `docs/HISTORY.md`, Milestone 91.
 
 Limits: a server that needs TLS, auth metadata or custom headers is not supported (plain-text
 HTTP/2 only); `from` carries scalar and enum values, not whole messages; values a request needs

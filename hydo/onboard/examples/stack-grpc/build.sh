@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Build the stack-grpc example (hydo.yaml here): the four-service stack with the gRPC fault proxy
 # "orders" between the client and the order service. One image per order service:
-#   VARIANT=cur      hvx/stack/main.go (retry-safe: M37 published flag, M50 per-order lock)
-#   VARIANT=old      hvx/bench/base/main-0112b48.go (the M39 order service)
+#   VARIANT=cur      hydo/stack/main.go (retry-safe: M37 published flag, M50 per-order lock)
+#   VARIANT=old      hydo/bench/base/main-0112b48.go (the M39 order service)
 #   VARIANT=planted  cur with a planted defect (Place publishes an already-published order again)
 # The client in every image is the cur client, built with one added file (target.go: dial
 # $HYDO_GRPC_TARGET when it is set), so it reaches the order service through the proxy.
@@ -28,9 +28,9 @@ gobuild() {   # <src dir> <out>: as build-stack.sh 6.1 (byte-reproducible)
 }
 src() {   # <variant>: build/stack-grpc-src/<variant>, the order service + client sources
   local d=build/stack-grpc-src/$1
-  rm -rf "$d"; mkdir -p "$d"; cp -a hvx/stack/. "$d/"
+  rm -rf "$d"; mkdir -p "$d"; cp -a hydo/stack/. "$d/"
   case "$1" in
-    old) cp hvx/bench/base/main-0112b48.go "$d/main.go"; rm -f "$d/buggify.go";;   # as hvx/bench/build-bench.sh
+    old) cp hydo/bench/base/main-0112b48.go "$d/main.go"; rm -f "$d/buggify.go";;   # as hydo/bench/build-bench.sh
     *)
       cat > "$d/target.go" <<'GO'
 package main

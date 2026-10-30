@@ -1,5 +1,5 @@
 /*
- * hvx-mac/spin_observer.c -- resolving exit-free spin loops deterministically (spin/RESEARCH.md).
+ * hv/hvm/spin_observer.c -- resolving exit-free spin loops deterministically (spin/RESEARCH.md).
  * Included by hvm.c (it uses hvm.c's statics); not a separate translation unit.
  *
  * Exact-repeat loops are always handled (HVM_SPIN_OBSERVE=0 turns it off: the old SPIN watchdog).

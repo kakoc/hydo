@@ -9,7 +9,7 @@ says what was restored and how, and records the proof that from-scratch builds w
 ## Inventory
 
 Pins referenced by `build-linux.sh`, `build-stack.sh`, `build-kafka.sh`, `build-mysql.sh`,
-`hvx/onboard/hydo-build` and `hvx/onboard/hydo_build_arm64.py` (store hash shortened to 8
+`hydo/onboard/hydo-build` and `hydo/onboard/hydo_build_arm64.py` (store hash shortened to 8
 characters; the full paths are in the scripts).
 
 | store path | used by | state on 2026-10-21 | action |
@@ -31,8 +31,8 @@ characters; the full paths are in the scripts).
 | `dx4fsbxs…-iproute2-6.8.0` | stack, hydo-build (`tc`) | present | gc-rooted |
 | `qmhi9c99…-iproute2-6.8.0` (aarch64) | hydo_build_arm64.py | present | gc-rooted |
 | `zbc5fx2y…-busybox-static-aarch64-unknown-linux-musl-1.36.1` | hydo_build_arm64.py | present | gc-rooted |
-| `f6c0sf4f…-nodejs-slim-22.2.0` (x86_64) | `hvx/onboard/examples/node-kv/hydo.yaml` (`root.nix`) | substituted from cache.nixos.org on 2026-10-24 | gc-rooted (`~/hydo-gcroots/nodejs-slim-22.2.0`) |
-| `vh315js3…-nodejs-slim-22.2.0` (aarch64) | `hvx/onboard/examples/node-kv/fetch-node-arm64.sh` (Mac example) | substituted from cache.nixos.org on 2026-10-24 | gc-rooted (`~/hydo-gcroots/nodejs-slim-22.2.0-aarch64`) |
+| `f6c0sf4f…-nodejs-slim-22.2.0` (x86_64) | `hydo/onboard/examples/node-kv/hydo.yaml` (`root.nix`) | substituted from cache.nixos.org on 2026-10-24 | gc-rooted (`~/hydo-gcroots/nodejs-slim-22.2.0`) |
+| `vh315js3…-nodejs-slim-22.2.0` (aarch64) | `hydo/onboard/examples/node-kv/fetch-node-arm64.sh` (Mac example) | substituted from cache.nixos.org on 2026-10-24 | gc-rooted (`~/hydo-gcroots/nodejs-slim-22.2.0-aarch64`) |
 
 ## How the two missing derivations were found and rebuilt
 
@@ -94,7 +94,7 @@ Everything was built in `~/hydo-pins-proof/hydo` (a copy of this tree) with `HYD
 `HYDO_REDIS_OUT`, `HYDO_MUSL_ROOT` unset, and `HOME` set to `~/hydo-pins-proof`, so the
 manifests' `~/hydo/build/...` sources resolved inside the proof directory. Steps:
 `head -n 1258 build-linux.sh` (everything up to and including §2j, the unmodified script) run
-in the proof tree, then `hvx/pins-proof.sh` (the Redis and stack examples through `hydo-build`).
+in the proof tree, then `hv/hvx/images/pins-proof.sh` (the Redis and stack examples through `hydo-build`).
 
 **`build-linux.sh` up to §2j: every artifact identical to the recorded/August builds**
 
@@ -140,7 +140,7 @@ binary whose build cannot be reproduced.
 
 ## Mac guest kernel for service networks (Milestone 99, no Nix)
 
-The second arm64 guest kernel, `Image-explore-netns` (`hvx-mac/explore/build-guest-netns.sh`), is
+The second arm64 guest kernel, `Image-explore-netns` (`hv/hvm/explore/build-guest-netns.sh`), is
 built without Nix, on any x86_64 Linux machine (built on the bare-metal machine in `~/hydo-macns`;
 nothing was installed system-wide: the bare-metal machine already had make, flex, bison, bc, perl, python3 and
 gcc 13.2.0). The script downloads its two inputs into `$DL` and checks them by sha256:
@@ -156,12 +156,12 @@ Outputs (two builds in different directories, byte-identical): `Image-explore-ne
 The default kernel `Image-explore` (`f80c5655…`, Nix cross gcc) is not rebuilt and not changed.
 
 The same toolchain builds the freeze helper for aarch64:
-`aarch64-none-linux-gnu-gcc -static -O2 -Wall hvx/onboard/hydo_fc.c -o hydo_fc-arm64` gives
+`aarch64-none-linux-gnu-gcc -static -O2 -Wall hydo/onboard/hydo_fc.c -o hydo_fc-arm64` gives
 `499f654e05b712601601c9286fa4c4836e28f31fd7e03e3443228f2fc5060c4e` (twice, in different
 directories; glibc static, the toolchain's own sysroot).
 
 The aarch64 user-space tools of these images come from the public Nix binary cache, taken with
-`hvx/dist/nix_cache_fetch.py --closure <dir> <path>` (checks each archive's FileHash and NarHash;
+`hydo/dist/linux/nix_cache_fetch.py --closure <dir> <path>` (checks each archive's FileHash and NarHash;
 on a case-insensitive Mac file system nine iptables extensions whose names differ only in case
 are read but not written, none of them used):
 
@@ -170,5 +170,5 @@ are read but not written, none of them used):
 | `qmhi9c99dpgxyfg6cipf8xbmcvsr1vx2-iproute2-6.8.0` | `sha256:11gbr98yllcv8cwxdmkn2iwgrrzyd4c01az9hyhicf5jfxjhs472` | `bin/ip` (its libraries are a subset of `tc`'s) |
 | `y6j6xf1bfshzhdw7hip3swpgd6fqfs3b-iptables-1.8.10` | `sha256:177d4lvj73k9r9xj5hjwfkc1z40yknnzh1dva8q8p9w42nxc38zw` | `bin/xtables-legacy-multi`, `lib/xtables/libxt_{NFQUEUE,tcp,standard}.so`, `lib/lib{ip4tc,ip6tc,xtables}.so*` |
 
-The files each image gets are exactly those `hvx-mac/services/elfdeps.py --root <dir>` lists for
+The files each image gets are exactly those `hv/hvm/services/elfdeps.py --root <dir>` lists for
 the binaries above (glibc 2.39-52, libmnl, zlib, xz, bzip2, zstd, elfutils from the same closure).

@@ -24,7 +24,7 @@
 //	                            marked published; every order NOT acked must not have
 //	                            reached Kafka (no "applied but reported as failed").
 //
-// Invariants are described with hydo's assertion SDK (package hydoassert, hvx/ASSERTIONS.md):
+// Invariants are described with hydo's assertion SDK (package hydoassert, hydo/ASSERTIONS.md):
 // the catalog below is declared up front and written to the console by `server` and
 // `oracle`; every evaluation is a HYDO-ASSERT line. The HYDO-ORACLE verdict line is derived
 // from the same checks (the first failing one), so existing harnesses keep working.

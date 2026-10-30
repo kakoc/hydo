@@ -165,7 +165,7 @@ module_param(chaos_preempt, uint, 0644);
  * (first 20) and answered with a deterministic value, CF=1. Diagnostic only. */
 static unsigned int probe_rand;
 module_param(probe_rand, uint, 0644);
-/* ft_opt: the cost cuts of hvx/FASTTURN.md, as bits, for A/B timing on one module
+/* ft_opt: the cost cuts of hv/hvx/FASTTURN.md, as bits, for A/B timing on one module
  * (none changes any guest-visible result): bit 0 = a landing step keeps PMC0 running
  * instead of re-programming it, bit 1 = no PERF_GLOBAL_STATUS read after a landing step,
  * bit 2 = VMX capability MSRs served from a cache. Default: all on. */
@@ -935,7 +935,7 @@ struct hvx_vm {
 	struct page *pt_topa;		/* the ToPA table */
 	u64 pt_mask, pt_status;		/* RTIT_OUTPUT_MASK_PTRS / RTIT_STATUS between runs */
 	u64 pmu_period, pmu_tick_tsc;
-	/* turn control (HVX_SET_TURNCTL, hvx/FASTTURN.md): the turn-end landing margin and
+	/* turn control (HVX_SET_TURNCTL, hv/hvx/FASTTURN.md): the turn-end landing margin and
 	 * the seeded burst policy. Policy, not state: not in any snapshot. */
 	u64 turn_margin;
 	struct hvx_turnctl tc;
@@ -1248,7 +1248,7 @@ struct dtr { u16 limit; u64 base; } __packed;
 
 /*
  * The VMX capability MSRs (0x480..0x490) are constant, but setup_vmcs read about a dozen
- * of them on every run call -- a few thousand cycles per vCPU turn (hvx/FASTTURN.md).
+ * of them on every run call -- a few thousand cycles per vCPU turn (hv/hvx/FASTTURN.md).
  * hvx_init fills this cache once; rd() serves them from it afterwards.
  */
 #define HVX_VMXCAP_LO	0x480

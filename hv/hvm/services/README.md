@@ -8,7 +8,7 @@
 
 ## Results
 
-The workloads and invariants are those of `hvx/onboard/examples/redis` and `hvx/onboard/examples/miniflux`:
+The workloads and invariants are those of `hydo/onboard/examples/redis` and `hydo/onboard/examples/miniflux`:
 - **Redis:** 20 SETs over 127.0.0.1. Every acknowledged SET must read back.
 - **miniflux:** 30 category creates over 127.0.0.1:8080 through its API. Every acknowledged category is stored exactly once, no rejected create is applied, and, in a single boot, the API lists every acknowledged category.
 
@@ -50,13 +50,13 @@ The power cut is the two-boot model of `cut-test.sh` and hvx M27. In boot 1 ever
 | `elfdeps.py` | the shared-library closure of ELF files, for any architecture |
 | `svc.config` | the kernel options above |
 | `init-redis`, `init-miniflux` | the guests' `/init`, with phases `solo`, `cut` and `recover` from the kernel command line |
-| `run.sh` | `run.sh solo <svc> <setting>` and `run.sh cut <svc> <setting> <dir>`, run from `hvx-mac/` |
+| `run.sh` | `run.sh solo <svc> <setting>` and `run.sh cut <svc> <setting> <dir>`, run from `hv/hvm/` |
 
 Build outputs (`SHA256SUMS`): `Image-svc` `24400b35dbb7be03…`, `redis.cpio.gz` `9d0d7f0a4c922e80…`, `miniflux.cpio.gz` `14c7a1b47f114b86…`, `redis-disk.img` `3bd2539ab11eeae2…`, `pg-disk.img` `81fb3fee1224710…`. A clean rebuild for byte-identity was not checked separately. The inputs are pinned and the packing is fixed: sorted cpio with fixed mtimes, `gzip -n`, and `E2FSPROGS_FAKE_TIME`.
 
 ```sh
-# Linux box, scratch dir:  WORK=$PWD sh <repo>/hvx-mac/services/build.sh;  copy out/* to hvx-mac/services/guest/
-cd hvx-mac && sh build.sh
+# Linux box, scratch dir:  WORK=$PWD sh <repo>/hv/hvm/services/build.sh;  copy out/* to hv/hvm/services/guest/
+cd hv/hvm && sh build.sh
 sh services/run.sh solo redis always
 sh services/run.sh cut redis everysec /tmp/r      # -> VIOLATION key k:0 lost
 sh services/run.sh cut miniflux off /tmp/m        # -> VIOLATION category c15 stored 0 times

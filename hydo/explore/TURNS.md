@@ -1,7 +1,7 @@
 # Several vCPUs in the explorer (SMP Stage 3, 2026-10-22)
 
-Stage 3 of `hvx/SMP_PLAN.md`: the harness and explorer side of the in-kernel vCPU
-scheduler that Stage 1 (`hvx/SMP_STAGE1.md`, Milestone 66) added to `hvx.ko`. No module
+Stage 3 of `hv/hvx/SMP_PLAN.md`: the harness and explorer side of the in-kernel vCPU
+scheduler that Stage 1 (`hv/hvx/SMP_STAGE1.md`, Milestone 66) added to `hvx.ko`. No module
 change: `hvx.c`, `hvx_abi.h` and `hvx_boot.h` are untouched (another agent owns them for
 Stage 2). Real Linux cannot use a second vCPU yet (no INIT/SIPI, the MP table lists one
 CPU), so this is plumbing that is tested now on what a two-vCPU VM can do today, and
@@ -9,7 +9,7 @@ end to end once Stage 2 lands.
 
 ## What was built
 
-**Engines** (`hvx/hvx_stack_verify.c`, which `hvx/hvx_explore.c` includes):
+**Engines** (`hv/hvx/hvx_stack_verify.c`, which `hv/hvx/hvx_explore.c` includes):
 
 - The vCPU count: `hvx_explore --vcpus N` (or `HVX_EXPLORE_VCPUS=N`),
   `hvx_stack_verify` with `HVX_VCPUS=N`. Default 1. With N > 1, `boot_setup` creates the
@@ -153,8 +153,8 @@ check-then-act race; PASS):
 
 ## Files
 
-`hvx/hvx_stack_verify.c` (`g_vcpus`, `smp_get`, `smp_set`, `fnv_smp`, `park_aps`, vCPU
-count in `boot_setup`, the two branch checks), `hvx/hvx_explore.c` (`--vcpus`, `q=`/`qs=`,
-snapshots), `hvx/explore/explore.py`, `hvx/explore/hvm_backend.py`,
-`hvx/explore/turns_selftest.c` (build: `cc -O2 -o turns_selftest turns_selftest.c` in
-`hvx/explore`), `hvx/explore/turns_ident.py`. Box results: `/var/tmp/turns`.
+`hv/hvx/hvx_stack_verify.c` (`g_vcpus`, `smp_get`, `smp_set`, `fnv_smp`, `park_aps`, vCPU
+count in `boot_setup`, the two branch checks), `hv/hvx/hvx_explore.c` (`--vcpus`, `q=`/`qs=`,
+snapshots), `hydo/explore/explore.py`, `hydo/explore/hvm_backend.py`,
+`hydo/explore/turns_selftest.c` (build: `cc -O2 -o turns_selftest turns_selftest.c` in
+`hydo/explore`), `hydo/explore/turns_ident.py`. Box results: `/var/tmp/turns`.

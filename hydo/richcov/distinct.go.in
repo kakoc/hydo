@@ -1,6 +1,6 @@
 package hydoassert
 
-// Distinct-details mode (richcov explorer images only; added by hvx/richcov/patch-src.py).
+// Distinct-details mode (richcov explorer images only; added by hydo/richcov/patch-src.py).
 // The stock SDK emits each (assertion, outcome) once per process, so only the first
 // occurrence's details reach the console. Here an outcome is emitted again when its
 // BUCKETED detail tuple differs from every tuple this process already emitted for it:

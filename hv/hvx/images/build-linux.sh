@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Stage a real Linux kernel + minimal busybox initramfs images for the hvx L2 boot.
-# Run this on the KVM host (via ./dev.sh "./build-linux.sh"). It writes into build/,
+# Run this on the KVM host (via ./dev.sh "hv/hvx/images/build-linux.sh"). It writes into build/,
 # which dev.sh excludes from rsync, so the artifacts persist on the host.
 #
 #   build/bzImage               a real x86-64 kernel (the NixOS host kernel)
@@ -13,6 +13,7 @@
 #   build/vblk-disk.img         a small backing disk with a recognizable marker at
 #                               sector 0 that the disk /init prints to the console
 set -euo pipefail
+cd "$(dirname "$0")/../../.."   # M100: this script lives in hv/hvx/images; every path below is relative to the repository root
 
 mkdir -p build
 
@@ -236,7 +237,7 @@ if [ -z "$GCC_MUSL" ] || [ ! -x "$GCC_MUSL" ] || [ ! -f "$MUSL_ROOT/lib/crt1.o" 
   echo "error: no static musl gcc found (set HYDO_GCC_MUSL + HYDO_MUSL_ROOT)" >&2
   exit 1
 fi
-"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hvx/hydokv.c -o build/hydokv
+"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hv/hvx/images/hydokv.c -o build/hydokv
 echo "built build/hydokv ($(stat -c%s build/hydokv) bytes, static musl) via $GCC_MUSL"
 
 rm -rf build/initramfs-kv
@@ -560,7 +561,7 @@ cp build/redis-cli    build/initramfs-redis/bin/redis-cli
 chmod +x build/initramfs-redis/bin/redis-server build/initramfs-redis/bin/redis-cli
 # hvx_seedrng: deterministically seed the CRNG so redis's blocking getrandom() does not
 # hang (built static+reproducible with the same pinned musl gcc as hydokv, §2e).
-"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hvx/hvx_seedrng.c -o build/hvx_seedrng
+"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hv/hvx/images/hvx_seedrng.c -o build/hvx_seedrng
 cp build/hvx_seedrng build/initramfs-redis/bin/hvx_seedrng
 chmod +x build/initramfs-redis/bin/hvx_seedrng
 echo "built build/hvx_seedrng ($(stat -c%s build/hvx_seedrng) bytes, static musl)"
@@ -1026,7 +1027,7 @@ echo "built build/initramfs-rootfs.cpio.gz ($(stat -c%s build/initramfs-rootfs.c
 #      disk), well under HVX_DISK_MAX and L1's RAM ceiling. --
 
 # The app tier: static + reproducible with the SAME pinned musl gcc as hydokv/seedrng (§2e).
-"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hvx/hydoapp.c -o build/hydoapp
+"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hv/hvx/images/hydoapp.c -o build/hydoapp
 echo "built build/hydoapp ($(stat -c%s build/hydoapp) bytes, static musl) via $GCC_MUSL"
 
 # A BYTE-REPRODUCIBLE empty ext2 image for the AOF (distinct UUID/hash_seed from the redis
@@ -1310,7 +1311,7 @@ fi
 # --- 2k.1 compile the workload (deterministic: fixed source + fixed javac; a bare
 #     .class carries no timestamp). Compile in a temp dir, stage the .class(es). ---
 rm -rf build/jvm-app; mkdir -p build/jvm-app
-"$JAVAC" -d build/jvm-app hvx/HydoWork.java
+"$JAVAC" -d build/jvm-app hv/hvx/images/HydoWork.java
 echo "compiled HydoWork.java -> $(ls build/jvm-app/*.class | tr '\n' ' ')(via $JAVAC)"
 cp build/jvm-app/HydoWork.class build/HydoWork.class
 
@@ -1593,7 +1594,7 @@ KAFKA_NMSG=30
 
 # --- 2l.1 compile KafkaClient.java against kafka-clients (a bare .class -> reproducible) ---
 rm -rf build/kafka-app; mkdir -p build/kafka-app
-"$KAFKA_JDK/bin/javac" -cp "$KP/libs/*" -d build/kafka-app hvx/KafkaClient.java
+"$KAFKA_JDK/bin/javac" -cp "$KP/libs/*" -d build/kafka-app hv/hvx/images/KafkaClient.java
 cp build/kafka-app/KafkaClient.class build/KafkaClient.class
 echo "compiled KafkaClient.java -> KafkaClient.class (via $KAFKA_JDK/bin/javac + kafka-clients)"
 
@@ -2072,7 +2073,7 @@ if [ -z "$GO_BIN" ]; then
 fi
 [ -x "$GO_BIN" ] || { echo "error: no go found (set HYDO_GO=/path/to/go)" >&2; exit 1; }
 SPREAD_DRV_OUT="$(pwd)/build/spread-drv"
-( cd hvx/spread-drv && CGO_ENABLED=0 GOFLAGS=-trimpath "$GO_BIN" build -o "$SPREAD_DRV_OUT" . )
+( cd hv/hvx/images/spread-drv && CGO_ENABLED=0 GOFLAGS=-trimpath "$GO_BIN" build -o "$SPREAD_DRV_OUT" . )
 echo "built build/spread-drv ($(stat -c%s build/spread-drv) bytes, static Go) via $GO_BIN"
 
 # --- 2m.3 the ro-root source tree: busybox + hvx_seedrng + /app/{spread,spread-drv} + the
@@ -2293,11 +2294,11 @@ if [ -z "$GO2_BIN" ]; then
 fi
 [ -x "$GO2_BIN" ] || { echo "error: no go found (set HYDO_GO=/path/to/go)" >&2; exit 1; }
 SP2_DRV_OUT="$(pwd)/build/spread-drv"
-( cd hvx/spread-drv && CGO_ENABLED=0 GOFLAGS=-trimpath "$GO2_BIN" build -o "$SP2_DRV_OUT" . )
+( cd hv/hvx/images/spread-drv && CGO_ENABLED=0 GOFLAGS=-trimpath "$GO2_BIN" build -o "$SP2_DRV_OUT" . )
 echo "built build/spread-drv ($(stat -c%s build/spread-drv) bytes, static Go) via $GO2_BIN"
 # Guest-side reader for the SYNCHRONOUS fuzz-input port (Phase 3): static musl, reuses the same
 # pinned toolchain as hvx_seedrng ($GCC_MUSL/$MUSL_ROOT are set by the build prelude).
-"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hvx/fuzz-read.c -o build/fuzz-read
+"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hv/hvx/images/fuzz-read.c -o build/fuzz-read
 echo "built build/fuzz-read ($(stat -c%s build/fuzz-read) bytes, static musl)"
 
 # --- 2n.2 the phase-2 ro-root source tree ---
@@ -2519,9 +2520,9 @@ if [ -z "$GO3_BIN" ]; then
 fi
 [ -x "$GO3_BIN" ] || { echo "error: no go found" >&2; exit 1; }
 SP3_DRV_OUT="$(pwd)/build/spread-drv"
-( cd hvx/spread-drv && CGO_ENABLED=0 GOFLAGS=-trimpath "$GO3_BIN" build -o "$SP3_DRV_OUT" . )
+( cd hv/hvx/images/spread-drv && CGO_ENABLED=0 GOFLAGS=-trimpath "$GO3_BIN" build -o "$SP3_DRV_OUT" . )
 # fuzz-read (guest reader for the synchronous port) — static musl, same toolchain as hvx_seedrng.
-"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hvx/fuzz-read.c -o build/fuzz-read
+"$GCC_MUSL" -static -O2 -Wall -B "${MUSL_ROOT%/}/lib" hv/hvx/images/fuzz-read.c -o build/fuzz-read
 echo "built build/fuzz-read ($(stat -c%s build/fuzz-read) bytes) for the search rootfs"
 
 chmod -R u+w build/rootfs-spread3-root 2>/dev/null || true

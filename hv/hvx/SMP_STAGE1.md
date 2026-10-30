@@ -1,11 +1,11 @@
 # SMP Stage 1: several vCPUs in exact branch-counted turns (2026-10-22)
 
-Stage 1 of `hvx/SMP_PLAN.md`: hand-written guests only, no real Linux SMP, no explorer
+Stage 1 of `hv/hvx/SMP_PLAN.md`: hand-written guests only, no real Linux SMP, no explorer
 work. Developed on the side-by-side module `hvxsmp.ko` (`/dev/hvxsmp`, built by
-`hvx/smp/build-hvxsmp.sh` in `~/hydo-smp` on the bare-metal test machine). The main `hvx.ko` was
+`hv/hvx/smp/build-hvxsmp.sh` in `~/hydo-smp` on the bare-metal test machine). The main `hvx.ko` was
 never touched. `hvxsmp` was unloaded at the end.
 
-## What was built (`hvx/hvx.c`, `hvx/hvx_abi.h`)
+## What was built (`hv/hvx/hvx.c`, `hv/hvx/hvx_abi.h`)
 
 - **Opt-in:** `HVX_VM_SMP_SCHED` (flags bit 5) together with `n_vcpus > 1`. It requires
   `HVX_VM_PMU_CLOCK` (CREATE_VM returns EINVAL otherwise). Every new path in the run loop
@@ -48,7 +48,7 @@ never touched. `hvxsmp` was unloaded at the end.
      KVM does. (The one-vCPU path still has this stale-shadow behaviour; changing it would
      move existing fingerprints.)
 
-## Tests (`hvx/hvx_sched_*_test.c`, helpers in `hvx/hvx_sched_util.h`)
+## Tests (`hv/hvx/hvx_sched_*_test.c`, helpers in `hv/hvx/hvx_sched_util.h`)
 
 All on `/dev/hvxsmp`, bare-metal test machine, final module unless noted.
 
@@ -94,7 +94,7 @@ All on `/dev/hvxsmp`, bare-metal test machine, final module unless noted.
 
 ## NOT done / not verified
 
-- **The regression gate `hvx/race/side-metal.sh` (HVX_DEV=/dev/hvxsmp) was NOT run.** The
+- **The regression gate `hv/hvx/race/side-metal.sh` (HVX_DEV=/dev/hvxsmp) was NOT run.** The
   one-vCPU byte-identity is argued from the code (every new path is behind `sched`, the
   refactored timer/device helpers are verbatim moves, index mixing adds 0 for vCPU 0), and
   two of its tests passed, but the 25 checks and both boot verifies are unverified.

@@ -1,7 +1,7 @@
 """gRPC-level faults for the explorer (explore.py --grpc-faults; MANIFEST.md, "gRPC faults").
 
 On a manifest with a gRPC proxy (proxies: with protocol: grpc), --grpc-faults adds H= tokens with
-the gRPC rules of hydo-world's streaming proxy (hvx/onboard/world/grpc.go): forward then drop the
+the gRPC rules of hydo-world's streaming proxy (hydo/onboard/world/grpc.go): forward then drop the
 answer, an injected status with or without the server having acted, a delay past the caller's
 deadline, a stream or connection reset, a stream cut or held after n messages; each one aimed at a
 method's calls in a window of workload steps, at one call index, or at a seeded share of the calls.

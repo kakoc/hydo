@@ -46,7 +46,7 @@ Classes of findings:
                     restores the old rule "any relaxed setting"): expected.
                     Caveat: MySQL trx_commit=0 can also lose ~1 s of commits on a mysqld kill;
                     such a run is now durable-defaults, and the bench's control check
-                    (hvx/bench/run.py) still rejects it because the control image fails too.
+                    (hydo/bench/run.py) still rejects it because the control image fails too.
   lying-disk        the disk acknowledged writes it never stored: expected
   io-errors         the disk returned I/O errors (also on reads of program files)
 """
@@ -57,7 +57,8 @@ import grpc_faults        # --grpc-faults (gRPC-level faults on gRPC proxies; gr
 M64 = (1 << 64) - 1
 NORDERS = 30
 HERE = os.path.dirname(os.path.abspath(__file__))
-HVX = os.path.dirname(HERE)
+HYDO = os.path.dirname(HERE)                                   # the product: onboard/, history/, assert/
+ENGINE_DIR = os.path.join(os.path.dirname(HYDO), "hv", "hvx")   # the Linux engine: hvx_explore
 BUILD = os.environ.get("HYDO_BUILD") or os.path.expanduser("~/hydo/build")   # the release's `hydo` sets it
 HVX_RUN = os.environ.get("HYDO_HVX_RUN") or os.path.expanduser("~/bin/hvx-run")  # shared module lock (flock -s)
 SNAP_DIR = os.environ.get("HYDO_SNAP_DIR") or "/var/tmp/hvx-snap"
@@ -113,7 +114,7 @@ FC_MATCH = []           # optional (payload string, direction) pairs (manifest f
                         # direction "<" / ">" (replies: / requests:) is the one the string occurs in
 FC_MATCH_NMAX = 32      # with a match, n is drawn 1 .. this (matched events are far fewer than all packets)
 PROTOCOL_FAULTS = False # --protocol-faults: faults at the edge of the system, on the manifest's fakes and
-                        # proxies (H=<target>@<from>-<to>:<rules>, hvx/onboard/hydo-init-fakes.sh)
+                        # proxies (H=<target>@<from>-<to>:<rules>, hydo/onboard/hydo-init-fakes.sh)
 PF_SALT = 0x4854505F46414B45
 PF_P = [60, 25]         # % of schedules that draw a first / a second H= token
 PF_TARGETS = []         # (target, request kinds, webhook kinds, protocol); manifest_space.py sets them
@@ -423,7 +424,7 @@ def pf_candidates(s, var):
 
 
 def _hc():
-    d = os.path.join(HVX, "onboard")
+    d = os.path.join(HYDO, "onboard")
     if d not in sys.path:
         sys.path.insert(0, d)
     import hydo_composer
@@ -443,7 +444,7 @@ def add_compose(s, seed):
 def add_buggify(s, seed):
     """--buggify (M56): every schedule gets a BUGGIFY seed (guest token B=), from a separate
     random stream, so every other field matches the same seed without --buggify. The front
-    door's fault points (hvx/stack/buggify.go) then misbehave at seeded places."""
+    door's fault points (hydo/stack/buggify.go) then misbehave at seeded places."""
     if BUGGIFY:
         s["B"] = "%x" % SplitMix(seed ^ BG_SALT).next()
     return s
@@ -595,9 +596,9 @@ def generate_swarm(seed):
 
 
 # ---------------------------------------------------------------- fault position (M56)
-# hvx/explore/RESEARCH-search.md: real bugs need few faults but at the right moment, and our
+# hydo/explore/RESEARCH-search.md: real bugs need few faults but at the right moment, and our
 # generators place every window uniformly, so the end of the workload is rarely faulted (d7
-# of hvx/bench needs Kafka down until the last order: ~1 in 2,800 random runs). Two generators
+# of hydo/bench needs Kafka down until the last order: ~1 in 2,800 random runs). Two generators
 # with their own random streams; the old generators and their strings are unchanged.
 POS_SALT = 0x9051710E9051710E
 PROC_SALT = 0x7E5751A47E5751A4
@@ -1120,7 +1121,7 @@ def finding_class(s):
     return "durable-defaults"
 
 
-# ---------------------------------------------------------------- assertions (hvx/ASSERTIONS.md)
+# ---------------------------------------------------------------- assertions (hydo/ASSERTIONS.md)
 ASSERT_RE = re.compile(r"HYDO-ASSERT (\{.*\})")
 
 
@@ -1148,7 +1149,7 @@ def assert_failures(outdir, tag):
 
 
 def property_table(outdir, tags):
-    """The exploration-wide property table from hvx/hydo_assert_report (built on the fly),
+    """The exploration-wide property table from hv/hvx/hydo_assert_report (built on the fly),
     over the consoles of the given runs. Returns its text, or None if no run emitted records."""
     # One console file per SCHEDULE: a power cut's recovery boot is part of the same run,
     # so its console is appended to the workload's (the report tool counts files as runs).
@@ -1168,7 +1169,7 @@ def property_table(outdir, tags):
     if not files:
         return None
     tool = os.path.join(outdir, "hydo_assert_report")
-    subprocess.run(["cc", "-O2", "-o", tool, os.path.join(HVX, "hydo_assert_report.c")], check=True)
+    subprocess.run(["cc", "-O2", "-o", tool, os.path.join(HYDO, "assert", "hydo_assert_report.c")], check=True)
     r = subprocess.run([tool] + files, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     return r.stdout
 
@@ -1265,11 +1266,11 @@ def signature(v):
     return v
 
 
-# ---------------------------------------------------------------- host-side history checks (hvx/HISTORIES.md)
+# ---------------------------------------------------------------- host-side history checks (hydo/HISTORIES.md)
 def host_checks(outdir, tag, res):
     """A run whose console declares history checks (HYDO-CHECK lines, from a manifest's
     checks:) is checked HERE, after the run: the consoles <tag>.log (+ .recovery.log) are read,
-    the checkers in hvx/history/hydohist.py run, their HYDO-ASSERT records go to
+    the checkers in hydo/history/hydohist.py run, their HYDO-ASSERT records go to
     consoles/<tag>.checks.log (read with the consoles by assert_failures / property_table), the
     full explanation to consoles/<tag>.checks.txt, and res["verdict"] becomes the combined
     verdict (the guest's own verdict is kept in res["guest_verdict"]). A pure function of the
@@ -1282,7 +1283,7 @@ def host_checks(outdir, tag, res):
             srcs.append((tag + suffix, open(p, errors="replace").read()))
     if not any("HYDO-CHECK " in t for _, t in srcs):
         return res
-    sys.path.insert(0, os.path.join(HVX, "history"))
+    sys.path.insert(0, os.path.join(HYDO, "history"))
     import hydohist
     r = hydohist.run_checks(srcs, res.get("verdict"))
     with open(os.path.join(d, "%s.checks.log" % tag), "w") as f:
@@ -1294,9 +1295,9 @@ def host_checks(outdir, tag, res):
     return res
 
 
-# ---------------------------------------------------------------- error logs as findings (hvx/onboard/hydo_errors.py)
+# ---------------------------------------------------------------- error logs as findings (hydo/onboard/hydo_errors.py)
 def _he():
-    d = os.path.join(HVX, "onboard")
+    d = os.path.join(HYDO, "onboard")
     if d not in sys.path:
         sys.path.insert(0, d)
     import hydo_errors
@@ -1402,7 +1403,7 @@ class Worker(threading.Thread):
     def start_engine(self):
         """Boot this worker's engine (serve mode). Returns the process, or None if it did not start."""
         cmd = [HVX_RUN, "sudo", "env", "HVX_SNAP_DIR=" + SNAP_DIR] + EXTRA_ENV + [
-               os.path.join(HVX, "hvx_explore")] + engine_args() + ["serve", os.path.join(BUILD, "bzImage"),
+               os.path.join(ENGINE_DIR, "hvx_explore")] + engine_args() + ["serve", os.path.join(BUILD, "bzImage"),
                os.path.join(BUILD, "initramfs-kafka.cpio.gz"), os.path.join(BUILD, IMAGE),
                os.path.join(self.outdir, "consoles")]
         if BACKEND == "hvm":
@@ -1858,8 +1859,8 @@ def main():
     ap.add_argument("--buggify", action="store_true",
                     help="M56: give every schedule a BUGGIFY seed (B=) for the front door's code-level fault points")
     ap.add_argument("--backend", choices=["hvx", "hvm"], default="hvx",
-                    help="hvm: the Mac VMM (hvx-mac/explore/hvmx); --image is then an arm64 manifest initramfs")
-    ap.add_argument("--hvm-kernel", help="arm64 kernel for --backend hvm (default hvx-mac/explore/out/Image-explore)")
+                    help="hvm: the Mac VMM (hv/hvm/explore/hvmx); --image is then an arm64 manifest initramfs")
+    ap.add_argument("--hvm-kernel", help="arm64 kernel for --backend hvm (default hv/hvm/explore/out/Image-explore)")
     ap.add_argument("--manifest", help="an onboarded project's hydo.yaml: draw faults from its services, ports, "
                                        "steps and knobs (manifest_space.py); default for explore-ob-* images: "
                                        "the manifest inside the image")

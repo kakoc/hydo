@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""History checks as test.checks entries (hydo_composer.history_check; hvx/HISTORIES.md).
+"""History checks as test.checks entries (hydo_composer.history_check; hydo/HISTORIES.md).
 
-    python3 hvx/onboard/tests/test_composer_history.py
+    python3 hydo/onboard/tests/test_composer_history.py
 """
 import os, subprocess, sys, tempfile, unittest
 

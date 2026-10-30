@@ -1,7 +1,7 @@
 # etcd example — results (2026-10-21/22, bare-metal test machine)
 
 Images built by `examples/etcd/build.sh <version>` on the build box with the pinned toolchain
-(`hvx_seedrng` `c2a440c5…`, hvx/BUILD-PINS.md), run with `hvx_explore` / `explore.py` from this
+(`hvx_seedrng` `c2a440c5…`, docs/BUILD-PINS.md), run with `hvx_explore` / `explore.py` from this
 branch, one VM at a time. Results under `/var/tmp/m59-etcd` on the box (`standin/` holds an
 earlier pass whose images carried the stand-in `hvx_seedrng` `01adf1bd…`; superseded).
 
@@ -74,7 +74,7 @@ packets waiting in netem's delay queue. They were rebuilt from `2e0e3fe` with th
 `explore-ob-etcd-<v>-nq-disk.img` (3.5.5 `2d4d9301…`, 3.5.6 `1df90f16…`, 3.6.8 `bf213ea5…`,
 3.6.9 `fd2e9c58…`; 3.6.15-nq `021d350a…` is from M71); only `/sbin/init` and
 `/etc/hydo/init-links.sh` differ. Use the `-nq` images for new runs. Full tables (every schedule
-above plus link-heal schedules, old image vs new image): `hvx/REBASELINE.md` section 7.
+above plus link-heal schedules, old image vs new image): `docs/REBASELINE.md` section 7.
 
 | version | clean run (`disk=none dseed=1 \| run`), new image | M60 explorer campaign, new image |
 |---|---|---|

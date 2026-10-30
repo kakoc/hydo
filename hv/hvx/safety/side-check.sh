@@ -2,7 +2,7 @@
 # Prove that a module change is inert for valid use (Milestone 97). Run FROM THE MAC.
 # Builds this tree's hvx.c as a SIDE module hvxsafe.ko (device /dev/hvxsafe) in
 # ~/hydo-safety on the bare-metal test machine, loads it next to the shared hvx.ko (which is never
-# touched), and runs the whole hvx/deploy-metal.sh suite (31 checks: 24 hand-written tests,
+# touched), and runs the whole hv/hvx/deploy-metal.sh suite (31 checks: 24 hand-written tests,
 # 4 several-vCPU tests, 3 boots) plus the two pinned explorer reproducers against it, one VM
 # at a time, every VM through ~/bin/hvx-run, through the devshim LD_PRELOAD that sends
 # open("/dev/hvx") to /dev/hvxsafe. Every expected fingerprint is the recorded baseline.

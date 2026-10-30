@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """richreport.py <result dir> -- tables for the M44 richer-signal comparison.
 
-Reads <dir>/{old,fix}-<mode>-<rep>/{report.json,runs.jsonl} written by hvx/explore/richguided.py
+Reads <dir>/{old,fix}-<mode>-<rep>/{report.json,runs.jsonl} written by hydo/explore/richguided.py
 and prints (1) runs until the first durable-defaults failure on the old front door, (2) feature
 growth and failures per class on the fixed front door, (3) tracing cost."""
 import glob, json, os, statistics, sys

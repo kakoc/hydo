@@ -1,10 +1,10 @@
 # DESIGN_NEXT — the next hvx milestone
 
 Design spec for the highest-value milestone after M24 (virtio-net fault injection, in
-progress). Read-only design pass; grounded in `hvx/hvx.c`, `hvx/hvx_abi.h`,
-`hvx/hvx_linux.c`, `hvx/hvx_disk_boot_verify.c`, `CLAUDE.md` (M1–M24), and the
+progress). Read-only design pass; grounded in `hv/hvx/hvx.c`, `hv/hvx/hvx_abi.h`,
+`hv/hvx/hvx_linux.c`, `hv/hvx/hvx_disk_boot_verify.c`, `CLAUDE.md` (M1–M24), and the
 deterministic-simulation-testing literature, FoundationDB's among it (sources at the
-end). Written in the style of `hvx/PHASE6_DESIGN.md`.
+end). Written in the style of `hv/hvx/PHASE6_DESIGN.md`.
 
 ---
 
@@ -170,7 +170,7 @@ existing primitive it stands on.
 **The new artifacts** (all *userspace* + build scripts; the `.c` kernel module is untouched
 in the minimal landing):
 
-1. **`guests/hydokv.c`** (or `hvx/sut/hydokv.c`) — the ~200-line raw-block, `O_DIRECT`,
+1. **`guests/hydokv.c`** (or `hv/hvx/sut/hydokv.c`) — the ~200-line raw-block, `O_DIRECT`,
    single-outstanding-I/O KV store with the ack-before-durability bug. Statically linked.
 2. **A `/init`** (in the new initramfs) that: brings up nothing networked, loads the virtio
    module stack (as M21's disk `/init` does), runs the **workload** against `/dev/vda`, then
@@ -181,11 +181,11 @@ in the minimal landing):
    (fixed mtimes + sorted names + `gzip -n`, and the pinned busybox — the exact discipline
    M21/M23 already established, because the initramfs is loaded into hashed guest RAM and any
    drift moves the fingerprint).
-4. **`hvx/hvx_bug_verify.c`** — the verify harness, modeled on `hvx_disk_boot_verify.c`: boots
+4. **`hv/hvx/hvx_bug_verify.c`** — the verify harness, modeled on `hvx_disk_boot_verify.c`: boots
    the KV image with the disk attached, optionally installs the seeded fault, runs to
    `hydo-flagship-marker`, parses the `HYDO-ORACLE:` verdict, and computes the full-state
    fingerprint. It runs the four checks of §1.
-5. **`hvx/run-flagship-demo.sh`** — host-side runner (scoped kills only, per the L1 safety
+5. **`hv/hvx/run-flagship-demo.sh`** — host-side runner (scoped kills only, per the L1 safety
    rules), staging + boot + grep-the-verdict + run the harness, mirroring `run-fault-demo.sh`.
 
 ### The workload and oracle (the "test")

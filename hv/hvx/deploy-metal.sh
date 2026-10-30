@@ -15,10 +15,13 @@
 # Every command that opens /dev/hvx runs under ~/bin/hvx-run (shared flock), so a concurrent
 # module reload waits for running VMs instead of killing them. Guest images are expected in
 # ~/hydo/build on the box (built on the build machine, shipped with rsync).
-# Env: HVX_METAL (the bare-metal machine).
+# Env: HVX_METAL (the bare-metal machine); HVX_METAL_TREE, the repository's directory in the box's home
+# (default hydo, the main tree; another session's own tree, e.g. hydo-layout, for a run that must
+# not touch the main tree). The engine sources go to ~/$HVX_METAL_TREE/hv/hvx on the box.
 set -euo pipefail
 
 BOX="${HVX_METAL:?}"
+TREE="${HVX_METAL_TREE:-hydo}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 LOAD=0; FLAG=0
 for a in "$@"; do
@@ -43,18 +46,21 @@ hvx_rootfs_verify hvx_system_verify hvx_jvm_verify hvx_kafka_verify hvx_mysql_ve
 FILES="hvx_boot.h hvx_sched_util.h"
 for t in $TESTS $SMPTESTS $HARNESSES; do FILES="$FILES $t.c"; done
 [ $LOAD = 1 ] && FILES="$FILES hvx.c hvx_abi.h Makefile"
-echo ">> syncing to $BOX:hydo/hvx/ ($([ $LOAD = 1 ] && echo 'with' || echo 'without') module sources)"
-(cd "$HERE" && rsync -az $FILES "$BOX:hydo/hvx/")
+echo ">> syncing to $BOX:$TREE/hv/hvx/ ($([ $LOAD = 1 ] && echo 'with' || echo 'without') module sources)"
+ssh -o BatchMode=yes "$BOX" "mkdir -p $TREE/hv/hvx"
+(cd "$HERE" && rsync -az $FILES "$BOX:$TREE/hv/hvx/")
 
-ssh -o BatchMode=yes "$BOX" "LOAD=$LOAD FLAG=$FLAG TESTS='$TESTS' SMPTESTS='$SMPTESTS' HARNESSES='$HARNESSES' bash -s" <<'REMOTE'
+ssh -o BatchMode=yes "$BOX" "TREE=$TREE LOAD=$LOAD FLAG=$FLAG TESTS='$TESTS' SMPTESTS='$SMPTESTS' HARNESSES='$HARNESSES' bash -s" <<'REMOTE'
 set -u
-cd ~/hydo/hvx
+cd ~/$TREE/hv/hvx
 B=~/hydo/build
 R=~/bin/hvx-run
 K="root=/dev/vda1 ro rootfstype=ext4 console=ttyS0 earlyprintk=ttyS0 loglevel=8 nokaslr acpi=off x2apic_phys"
 [ -f ~/hydo/COORD.md ] && { echo ">> COORD.md:"; cat ~/hydo/COORD.md; }
 
 if [ "$LOAD" = 1 ]; then
+  # ~/bin/hvx-reload builds the module in one fixed directory; refuse to reload anything else
+  grep -q "$HOME/$TREE/hv/hvx\b" ~/bin/hvx-reload || { echo "FAIL: ~/bin/hvx-reload does not build ~/$TREE/hv/hvx (it says: $(grep -o 'cd [^ ]*' ~/bin/hvx-reload | head -1)); not reloading"; exit 1; }
   echo ">> rebuilding + reloading the module"
   ~/bin/hvx-reload || { echo "FAIL: module reload"; exit 1; }
 fi

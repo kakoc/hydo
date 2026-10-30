@@ -1,6 +1,6 @@
 # Several virtual CPUs per guest: review and plan (2026-10-21)
 
-Written from three read-only investigations: the existing code (`hvx/hvx.c`, `hvx_abi.h`,
+Written from three read-only investigations: the existing code (`hv/hvx/hvx.c`, `hvx_abi.h`,
 `hvx_boot.h`, `hvx_smp_test.c`, `hvx_stack_verify.c`, `hvx_explore.c`), a design for
 repeatable switching, and published practice (the prior art below). Nothing
 was changed or run. Line numbers refer to `main` on 2026-10-21.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# hvx/bench/eval.sh -- the M46b strategy comparison on the bug benchmark (run on the box).
+# hydo/bench/eval.sh -- the M46b strategy comparison on the bug benchmark (run on the box).
 # Strategies one after another (each uses all the workers); results in $OUT/<strategy>/.
 set -u
 cd "$(dirname "$0")"

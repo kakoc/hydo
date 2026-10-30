@@ -8,8 +8,8 @@ TESTS="hvx_test hvx_rdtsc_test hvx_step_test hvx_tscclock_test hvx_snapshot_test
 hvx_verify hvx_console_test hvx_bigmem_test hvx_scale_test hvx_cpuid_test hvx_sregs_test
 hvx_input_test hvx_smp_test hvx_virtio_iso_test hvx_virtio_pci_test hvx_fault_test hvx_net_test
 hvx_net_fault_test hvx_bug_f0_test hvx_fuzzresume_test hvx_pmu_test hvx_bigram_test"
-for f in $TESTS hvx_boot_verify hvx_disk_boot_verify; do cp ~/hydo/hvx/$f.c .; done
-cp ~/hydo/hvx/hvx_boot.h ~/hydo/hvxtj/hvx_abi.h .
+for f in $TESTS hvx_boot_verify hvx_disk_boot_verify; do cp ~/hydo/hv/hvx/$f.c .; done
+cp ~/hydo/hv/hvx/hvx_boot.h ~/hydo/hvxtj/hvx_abi.h .
 sed -i 's#"/dev/hvx"#"/dev/hvxtj"#' *.c hvx_boot.h
 cfail=0
 for t in $TESTS hvx_boot_verify hvx_disk_boot_verify; do

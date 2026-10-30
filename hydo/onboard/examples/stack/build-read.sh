@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the stack example with the store-reader invariants (hydo-read.yaml). FRONT=fix
 # (default) or FRONT=old as in build.sh; hydo-read comes from build/hydo-read
-# (hvx/readers/build.sh) or HYDO_READ_BIN.
+# (hydo/readers/build.sh) or HYDO_READ_BIN.
 # Output: build/explore-ob-stack-read-$FRONT-disk.img (run from the repository root).
 set -euo pipefail
 FRONT="${FRONT:-fix}"

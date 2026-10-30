@@ -11,7 +11,7 @@ as a no-op inside the guest, with no VM exit. The guest then runs one more idle
 loop iteration (an extra RCU idle entry/exit, a tick_nohz recomputation) before
 the next WFI traps. Every exit stays identical, but those counters end up
 different, so the end state depends on host interrupt timing: the rare
-divergence under host load in hvx-mac/explore/README.md. An HVC always traps, so
+divergence under host load in hv/hvm/explore/README.md. An HVC always traps, so
 with this option every idle entry is a VM exit and the VMM decides it
 deterministically. With the option off the code is unchanged.
 """

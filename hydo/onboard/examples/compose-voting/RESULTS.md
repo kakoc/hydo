@@ -7,7 +7,7 @@ Source: github.com/dockersamples/example-voting-app at commit `63e9150ca17af4ed0
 ## Steps
 
 1. Import, on the build machine, with skopeo from the nix store:
-   `SKOPEO=<skopeo> hvx/onboard/hydo-compose docker-compose.yml`. The importer resolved the five
+   `SKOPEO=<skopeo> hydo/onboard/hydo-compose docker-compose.yml`. The importer resolved the five
    image tags to digests (comments in the manifest; `hydo-compose.lock.json`), and it wrote
    `hydo.generated.yaml` (kept unchanged here) and `fetch-images.sh`. It printed 5 warnings:
    - The worker has no healthcheck and no port.
@@ -64,7 +64,7 @@ new import (`network: bridge`, bridge addresses, no port-collision warning).
 
 **Build.** On the bare-metal machine with the Linux release's `hydo build` (no Nix; the build
 box was unavailable). The five amd64 images were fetched again by the digests in
-`fetch-images.sh` with `hvx/onboard/fetch_image.py` (no skopeo on the box or the Mac).
+`fetch-images.sh` with `hydo/onboard/fetch_image.py` (no skopeo on the bare-metal machine or the Mac).
 - `hydo-loopback.yaml` -> `4f6be9f3…`/`87555754…` instead of M84's `5d49ad99…`. The only
   difference is file owners: the release sets every staged file to 0:0, while M84's plain build machine
   build kept the build user's 1000:100. `owners_replay.py` applies the release's owner step to a

@@ -12,9 +12,9 @@ the offset the replica acknowledged) after every step.
 ## Build
 
 On the bare-metal test machine, through the Linux release's `hydo build` (no Nix; installed in
-`~/hydo-netns/rel` from `~/hydo-lrel/final`, overlaid with this branch's `hvx/onboard`, and with
+`~/hydo-netns/rel` from `~/hydo-lrel/final`, overlaid with this branch's `hydo/onboard`, and with
 the guest kernel's `llc`, `stp`, `bridge` and `veth` modules added; see Milestone 95 in
-`hvx/HISTORY.md` for where those came from). `hydo-world` was built on the Mac with Go 1.26.5
+`docs/HISTORY.md` for where those came from). `hydo-world` was built on the Mac with Go 1.26.5
 (`CGO_ENABLED=0 -trimpath -buildvcs=false -ldflags="-s -w -buildid="`), sha256 `91eb37c1…`.
 
 - `explore-ob-redis-bridge-disk.img`, sha256 `ab6847dfd275cbc8…` (root `9860e738…`, data `89c804a4…`).
@@ -45,7 +45,7 @@ acts, and the console shows the replication stall and the catch-up.
 
 ## Explorer campaign
 
-`explore.py --manifest hvx/onboard/examples/redis-bridge/hydo.yaml --image explore-ob-redis-bridge-disk.img
+`explore.py --manifest hydo/onboard/examples/redis-bridge/hydo.yaml --image explore-ob-redis-bridge-disk.img
 --strategy process --new-faults --freeze-call --protocol-faults --seeds 1-30 --workers 2` (`HYDO_BUILD`
 = the image's directory): 30 schedules, 0 failures, 260 s. The fault space's network targets are
 `primary`, `replica` and the one link `primary-replica`; 8 schedules drew a link fault (`N=` or

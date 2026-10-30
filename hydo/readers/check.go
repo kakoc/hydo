@@ -748,7 +748,7 @@ func valueCheck(cache, truth *source, o *checkOpts) (verdict, error) {
 		plural(len(bad), "value", "values"), cache.name, list(texts, o.show))}, nil
 }
 
-// emit prints the HYDO-ASSERT record when --id is given (hvx/ASSERTIONS.md wire format).
+// emit prints the HYDO-ASSERT record when --id is given (hydo/ASSERTIONS.md wire format).
 func emit(o *checkOpts, name string, ok bool, first, text string) {
 	if o.id == "" {
 		return

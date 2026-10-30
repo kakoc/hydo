@@ -1,6 +1,6 @@
 # The explorer and `hydo.yaml` on the Mac VMM
 
-**Result:** `hvx/explore/explore.py --backend hvm` runs fault schedules against an arm64 guest on this Mac (M2 Pro, macOS 26.4.1) exactly as it does against `hvx_explore` on the Linux box. Projects are built from their `hydo.yaml` with `hydo-build --arch arm64`, and the generic guest init `hvx/onboard/hydo-init.sh` runs unchanged. On the Redis example, with the virtio disk attached, power cuts and seeded disk faults work: 100 swarm schedules gave 37 failures, all in expected classes (lying disk, I/O errors, relaxed `appendfsync`), and all 37 reproduced bit-for-bit. There were no failures with durable settings and an honest disk. Throughput is about 11,500 runs per hour with 4 workers.
+**Result:** `hydo/explore/explore.py --backend hvm` runs fault schedules against an arm64 guest on this Mac (M2 Pro, macOS 26.4.1) exactly as it does against `hvx_explore` on the Linux box. Projects are built from their `hydo.yaml` with `hydo-build --arch arm64`, and the generic guest init `hydo/onboard/hydo-init.sh` runs unchanged. On the Redis example, with the virtio disk attached, power cuts and seeded disk faults work: 100 swarm schedules gave 37 failures, all in expected classes (lying disk, I/O errors, relaxed `appendfsync`), and all 37 reproduced bit-for-bit. There were no failures with durable settings and an honest disk. Throughput is about 11,500 runs per hour with 4 workers.
 
 ## Pieces
 
@@ -13,9 +13,9 @@
 | `apply-hvcidle.py` | adds `CONFIG_ARM64_HVM_IDLE_HVC`: `cpu_do_idle()` idles through HVC function `0xC6000020` instead of `WFI` (see "Fixed" below) |
 | `build-idle-m48.sh` | the M48 kernel configuration plus the HVC idle (`Image-idle`), for `../spin/hvm-spin.c` and M48-style boots |
 | `examples/ledger/` | a busybox `httpd` with a CGI that appends ledger entries. The CGI is deliberately not idempotent |
-| `examples/redis/` | `hvx/onboard/examples/redis` with the aarch64 Redis 7.2.4 from the nixpkgs cache |
-| `../../hvx/onboard/hydo_build_arm64.py` | `hydo-build --arch arm64` |
-| `../../hvx/explore/hvm_backend.py` | `explore.py --backend hvm` |
+| `examples/redis/` | `hydo/onboard/examples/redis` with the aarch64 Redis 7.2.4 from the nixpkgs cache |
+| `../../../hydo/onboard/hydo_build_arm64.py` | `hydo-build --arch arm64` |
+| `../../../hydo/explore/hvm_backend.py` | `explore.py --backend hvm` |
 
 **How a schedule runs.** `hvmx serve` boots once and stops at the guest's `hydo-explore-ready-S0` and `-S1` markers. At each it snapshots the vCPU registers, the machine and device state, the virtio device state with the disk image and its volatile write cache, the console text, and all guest RAM (in an unlinked file). For each schedule it restores S1 into a fresh VM and vCPU, arms the disk fault policy, and types the schedule's guest part on the serial console. Then it runs to `hydo-explore-workload-done`, and either:
 - turns faults off, types `go`, and runs to the verdict; or
@@ -34,7 +34,7 @@ The fingerprint covers the console, the registers, the machine state, the virtio
 
 **The limit.** Thread switches can still happen only at exits. A race window that contains no exit cannot be reached by any jitter, because no exit happens inside it. Linux's branch-counted jitter can reach such a window. On this guest kernel every clock read is an exit, so windows that read the clock (kernel code, system calls that take time, Go and Java programs) are reachable.
 
-**Measured** with `../race/macrace.c`. This is `hvx/race/hydorace.c`'s once-per-run seat race, with two processes on a shared page. Only the sale of seat 10,000 of 20,000 has a window, and between sales each process reads the clock once. Each build was booted 200 times, one jitter seed per boot (`../race/seeds.sh`, kernel `Image-explore-idle`, `HVM_SOFT_IRQ=1`):
+**Measured** with `../race/macrace.c`. This is `hv/hvx/race/hydorace.c`'s once-per-run seat race, with two processes on a shared page. Only the sale of seat 10,000 of 20,000 has a window, and between sales each process reads the clock once. Each build was booted 200 times, one jitter seed per boot (`../race/seeds.sh`, kernel `Image-explore-idle`, `HVM_SOFT_IRQ=1`):
 
 | Window | No jitter | Every tick delayed (permille 1000, max 1,000 exits) | 2 ticks in 10 delayed |
 |---|---|---|---|
@@ -80,7 +80,7 @@ The kernel was `Image-explore-idle` with `HVM_SOFT_IRQ=1`. Points were spread ov
   - `hvm_stop_hook`, checked at the top of the run loop;
   - `#ifndef HVM_NO_MAIN` around `main`;
   - `HVM_SOFT_IRQ=1`, which emulates the IRQ exception entry (VBAR + offset, SPSR/ELR, DAIF, PAN/SSBS) instead of raising the line. `hvmx` turns it on. The M48 boot gives the same fingerprint with it.
-- **`hvx/explore/explore.py`**, a small hook:
+- **`hydo/explore/explore.py`**, a small hook:
   - `--backend hvm` and `--hvm-kernel`;
   - `render()` applies `hvm_supported()` after the manifest's `SPACE.restrict()`;
   - the worker's command line;
@@ -88,7 +88,7 @@ The kernel was `Image-explore-idle` with `HVM_SOFT_IRQ=1`. Points were spread ov
   - the manifest read from an arm64 initramfs.
 
   The Linux path is byte-identical: 16,600 generated schedule strings (seeds 1–1000 × random/swarm × `--timing` × `--new-faults` × `--durable-only`, plus every sweep) equal main's. Through this `explore.py` on the bare-metal machine, the pinned reproducers still give `2403499c9a3f8419` (explore-disk.img) and `f87130453609a5d6` (explore-fix-disk.img).
-- **`hvx/onboard/hydo-build`**: `--arch arm64` calls `hydo_build_arm64.py`. The default path is unchanged.
+- **`hydo/onboard/hydo-build`**: `--arch arm64` calls `hydo_build_arm64.py`. The default path is unchanged.
 
 ## Results
 
@@ -234,13 +234,13 @@ Mac fingerprint is unchanged. `Image-explore-netns` is the same Linux 6.6.35, th
 `IP_ADVANCED_ROUTER` + `IP_MULTIPLE_TABLES`, and `NETFILTER` + `NETFILTER_NETLINK_QUEUE` +
 `NETFILTER_XTABLES` + `NETFILTER_XT_TARGET_NFQUEUE` + `IP_NF_IPTABLES` + `IP_NF_FILTER`; kept off:
 `BRIDGE_NETFILTER`, `BRIDGE_IGMP_SNOOPING`, `NF_CONNTRACK`, modules. That is what
-`hvx/onboard/hydo-init-netns.sh` (`network: bridge`), `hydo-init-links.sh` (`addr:`, and the
+`hydo/onboard/hydo-init-netns.sh` (`network: bridge`), `hydo-init-links.sh` (`addr:`, and the
 etcd example's per-user `ip rule`) and `hydo-init-freeze.sh` (`F=`) need; on x86_64 the NixOS
 guest kernel has all of it.
 
 **Build** (`build-guest-netns.sh`, no Nix; any x86_64 Linux machine; built on the bare-metal machine):
 the kernel.org tarball and the Arm GNU Toolchain 13.3.Rel1, both checked by sha256
-(`hvx/BUILD-PINS.md`). Two builds in different directories give the same bytes:
+(`docs/BUILD-PINS.md`). Two builds in different directories give the same bytes:
 `Image-explore-netns` `806807e7…`, `.config` `0aff8337…`.
 
 **Which images use it.** `hydo-build --arch arm64` builds a manifest with `network: bridge`, an
@@ -251,7 +251,7 @@ reproduction lines name the kernel file), and so do the Mac `hydo run`, `repro` 
 kernel must sit next to `Image-explore` and have the recorded sha256; another file is refused. An
 image without the record boots `Image-explore` exactly as before. These images also get iproute2's
 `ip` (`network: bridge`), and for `freeze` the aarch64 `iptables-legacy` with the three extensions
-the rules load plus `hydo_fc` built for aarch64 (`hvx/onboard/hydo_build_arm64.py`).
+the rules load plus `hydo_fc` built for aarch64 (`hydo/onboard/hydo_build_arm64.py`).
 
 **Deterministic, like M48** (`netnsboot/`: an initramfs whose `/init` makes two namespaces on a
 bridge, runs a web server on port 80 in each, fetches across the bridge and inside a namespace,
@@ -264,23 +264,23 @@ the continued run, 1 GiB twice `85464ddcc0a84e19`.
 **Examples.** `examples/redis-bridge` (two Redis servers in their own namespaces, both on port
 6379, a replica, a fault proxy): every schedule twice from a fresh boot, identical, and every fault
 visible on the console; an explorer campaign of 30 schedules; and Docker's voting app
-(`hvx/onboard/examples/compose-voting/hydo-mac.yaml`). Values in `hvx/HISTORY.md`, Milestone 99.
+(`hydo/onboard/examples/compose-voting/hydo-mac.yaml`). Values in `docs/HISTORY.md`, Milestone 99.
 
 ## Commands
 
 ```sh
 # the build machine (Linux with Nix), scratch dir: the kernel and the images (a tmpfs such as /dev/shm is fine)
-WORK=$PWD sh <repo>/hvx-mac/explore/build-guest.sh                               # out/Image-explore (HVC idle; HVM_IDLE_HVC=0: WFI idle)
-WORK=$PWD sh <repo>/hvx-mac/explore/build-idle-m48.sh                            # out/Image-idle (M48 config + HVC idle)
-nix shell nixpkgs#python3 --command python3 <repo>/hvx/onboard/hydo-build \
-    <repo>/hvx-mac/explore/examples/redis/hydo.yaml --arch arm64 --build-dir ob  # ob/explore-ob-redis-arm64{.cpio.gz,-disk.img}
-# Mac: copy Image-explore and the two images to hvx-mac/explore/out/, then
-sh hvx-mac/explore/build.sh
-cd hvx/explore && python3 explore.py --backend hvm --image explore-ob-redis-arm64.cpio.gz \
+WORK=$PWD sh <repo>/hv/hvm/explore/build-guest.sh                               # out/Image-explore (HVC idle; HVM_IDLE_HVC=0: WFI idle)
+WORK=$PWD sh <repo>/hv/hvm/explore/build-idle-m48.sh                            # out/Image-idle (M48 config + HVC idle)
+nix shell nixpkgs#python3 --command python3 <repo>/hydo/onboard/hydo-build \
+    <repo>/hydo/onboard/examples-mac/redis/hydo.yaml --arch arm64 --build-dir ob  # ob/explore-ob-redis-arm64{.cpio.gz,-disk.img}
+# Mac: copy Image-explore and the two images to hv/hvm/explore/out/, then
+sh hv/hvm/explore/build.sh
+cd hydo/explore && python3 explore.py --backend hvm --image explore-ob-redis-arm64.cpio.gz \
     --strategy swarm --new-faults --seeds 1-100 --workers 4 --out /tmp/hvm-redis
 # one schedule by hand (the report prints this line for each minimal reproducer)
-HVM_DISK=hvx-mac/explore/out/explore-ob-redis-arm64-disk.img hvx-mac/explore/hvmx one \
-    hvx-mac/explore/out/Image-explore hvx-mac/explore/out/explore-ob-redis-arm64.cpio.gz /tmp/o "disk=cut dseed=0 | run C=12 R=everysec"
+HVM_DISK=hv/hvm/explore/out/explore-ob-redis-arm64-disk.img hv/hvm/explore/hvmx one \
+    hv/hvm/explore/out/Image-explore hv/hvm/explore/out/explore-ob-redis-arm64.cpio.gz /tmp/o "disk=cut dseed=0 | run C=12 R=everysec"
 ```
 
 Diagnostics:

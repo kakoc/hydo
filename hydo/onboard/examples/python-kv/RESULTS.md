@@ -26,7 +26,7 @@ scratch prefix; at most two VMs at a time.
 | `disk=none \| run B=5abc,1000,500` | OK, acked=4 (both fault points fire: `HYDO-BUGGIFY {"seed":"5abc","enable_pm":1000,"fire_pm":500,"enabled":["kv.put.lost_reply","kv.put.slow"]}`) | `092c90dc4c56d181` |
 | `disk=none \| run K=pykv@5+2 B=77,1000,300` | OK, acked=10 | `0b1d382236c21141` |
 
-`hydo_assert_report` (compiled from `hvx/hydo_assert_report.c`) over each run's consoles gives
+`hydo_assert_report` (compiled from `hydo/assert/hydo_assert_report.c`) over each run's consoles gives
 the same property table for both runs of every schedule; it exits 1 only for the `S=never`
 cut (`kv.acked_durable` and `pykv.oracle` FAIL) and 0 for the others.
 

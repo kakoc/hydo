@@ -10,7 +10,7 @@
  * The JVM is the single hardest nondeterminism surface in the whole stack. This
  * harness proves hvx tames it: two boots from scratch reach a BIT-IDENTICAL full
  * state (guest RAM + rw disk + console), and branch-from-snapshot reproduces it.
- * The Java workload (hvx/HydoWork.java) deliberately exercises EVERY JVM
+ * The Java workload (hv/hvx/images/HydoWork.java) deliberately exercises EVERY JVM
  * nondeterminism source -- heap allocation + SerialGC, many threads on the single
  * deterministic vCPU contending on an ORDER-DEPENDENT lock, System.nanoTime /
  * currentTimeMillis (-> the deterministic virtual TSC), SecureRandom (default:

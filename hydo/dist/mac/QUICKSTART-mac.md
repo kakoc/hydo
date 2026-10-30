@@ -129,7 +129,7 @@ saved under `hydo-out/runs/`, so you can read what the software printed.
 
 hydo learns your project from one file, `hydo.yaml`: which programs to start, how to tell they
 are ready, the workload, the invariants that must always hold, and which faults are allowed.
-`~/.hydo/hvx/onboard/MANIFEST.md` describes every field, and `~/.hydo/examples/redis/hydo.yaml` is
+`~/.hydo/hydo/onboard/MANIFEST.md` describes every field, and `~/.hydo/examples/redis/hydo.yaml` is
 a complete example.
 
 The release includes an onboarding guide for AI coding tools of any vendor (an Agent Skills

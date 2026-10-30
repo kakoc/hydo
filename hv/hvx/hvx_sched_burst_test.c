@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * hvx_sched_burst_test - seeded burst turns of the in-kernel vCPU scheduler
- * (HVX_SET_TURNCTL, hvx/FASTTURN.md). Needs a bare-metal Intel PMU (SKIPs otherwise).
+ * (HVX_SET_TURNCTL, hv/hvx/FASTTURN.md). Needs a bare-metal Intel PMU (SKIPs otherwise).
  *
  * Two vCPUs run   1: dec %rcx ; jnz 1b ; hlt   (N0 and N1 guest conditional branches),
  * long turns of Q branches with seeded bursts of short turns (B branches per burst, turns

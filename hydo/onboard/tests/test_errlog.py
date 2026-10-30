@@ -12,10 +12,10 @@
      of every example manifest equal those of a reference hydo-build), and one with errors:
      validates and splices the extension.
 
-    HYDO_BUSYBOX=<static busybox> python3 hvx/onboard/tests/test_errlog.py [<reference hydo-build>]
+    HYDO_BUSYBOX=<static busybox> python3 hydo/onboard/tests/test_errlog.py [<reference hydo-build>]
 
 Without HYDO_BUSYBOX (or busybox on PATH) parts 1-2 are skipped; without a reference hydo-build
-part 4 compares against `git show HEAD:hvx/onboard/hydo-build`.
+part 4 compares against `git show HEAD:hydo/onboard/hydo-build`.
 """
 import glob, importlib.machinery, importlib.util, json, os, re, shutil, subprocess, sys, tempfile
 
@@ -282,14 +282,14 @@ def test_build(ref):
     if ref is None and not os.path.exists(os.path.join(top_dir, ".git")):
         print("skip  build identity: not a repository checkout and no reference hydo-build given")
         return
-    if ref is None:     # hvx/ where this branch left main (hydo-build reads its neighbours: init, composer, history)
+    if ref is None:     # hv/hvx/ where this branch left main (hydo-build reads its neighbours: init, composer, history)
         top = tempfile.mkdtemp(prefix="hbref-")
         base = os.environ.get("HYDO_REF") or subprocess.run(["git", "merge-base", "HEAD", "main"], cwd=top_dir,
                                                             stdout=subprocess.PIPE, text=True).stdout.strip()
-        arc = subprocess.run(["git", "archive", base, "hvx/onboard", "hvx/history"],
+        arc = subprocess.run(["git", "archive", base, "hydo/onboard", "hydo/history"],
                              cwd=os.path.dirname(os.path.dirname(ONB)), stdout=subprocess.PIPE).stdout
         subprocess.run(["tar", "-x", "-C", top], input=arc, check=True)
-        ref = os.path.join(top, "hvx", "onboard", "hydo-build")
+        ref = os.path.join(top, "hydo", "onboard", "hydo-build")
     n = 0
     for p in sorted(glob.glob(os.path.join(ONB, "examples", "**", "*.yaml"), recursive=True)):
         if p.endswith("known-errors.yaml") or "redis-errors" in p or "hydo-errors" in p or os.path.basename(p).startswith("hydo-grpcgen"):

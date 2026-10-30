@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Stable composer ids (M98): saved compositions name commands by id.
 
-    python3 hvx/onboard/tests/test_composer_ids.py
+    python3 hydo/onboard/tests/test_composer_ids.py
 
 On examples/redis-composed's plan: the resolved form names the same entries as the seed form;
 `hydo save`'s file reads back to a regression that replays those entries after commands are

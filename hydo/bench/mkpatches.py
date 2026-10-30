@@ -3,7 +3,7 @@
 import difflib, os, sys
 
 here = os.path.dirname(os.path.abspath(__file__))
-# the fixed front door; run as: python3 hvx/bench/mkpatches.py hvx/bench/patches
+# the fixed front door; run as: python3 hydo/bench/mkpatches.py hydo/bench/patches
 orig = open(os.path.join(here, "..", "stack", "main.go")).read()
 out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(here, "patches")
 

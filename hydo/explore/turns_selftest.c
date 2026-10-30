@@ -2,7 +2,7 @@
 /*
  * turns_selftest - checks the several-vCPU snapshot / restore / fingerprint helpers that
  * hvx_explore and hvx_stack_verify use (smp_get, smp_set, fnv_smp, park_aps and
- * fingerprint() in hvx_stack_verify.c; hvx/explore/TURNS.md) on a hand-written two-vCPU
+ * fingerprint() in hvx_stack_verify.c; hydo/explore/TURNS.md) on a hand-written two-vCPU
  * guest, since real Linux cannot start a second vCPU yet (SMP Stage 2).
  *
  * The guest is the seat-selling race of hvx_sched_race_test: both vCPUs sell seats from one
@@ -17,11 +17,11 @@
  *      works and halts.
  *   E  seeded turn lengths (the qs= token's policy) give a different, reproducible result.
  *
- * Build on the box: cc -O2 -o turns_selftest turns_selftest.c   (in hvx/explore)
+ * Build on the box: cc -O2 -o turns_selftest turns_selftest.c   (in hydo/explore)
  * Run:  ~/bin/hvx-run sudo ./turns_selftest
  */
 #define HVX_STACK_NO_MAIN
-#include "../hvx_stack_verify.c"
+#include "../../hv/hvx/hvx_stack_verify.c"
 #undef main
 
 #define MEM	(256UL * 1024)

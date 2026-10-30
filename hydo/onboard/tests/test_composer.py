@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The test composer's two plan implementations agree, and its plan code is sane.
 
-    python3 hvx/onboard/tests/test_composer.py [--awk "/path/to/busybox awk"] [--n 3000]
+    python3 hydo/onboard/tests/test_composer.py [--awk "/path/to/busybox awk"] [--n 3000]
 
 hydo_composer.plan()/kept() (host: explorer, shrinker, reports) and the awk program in
 hydo-composer.sh (guest) must produce the same entries for every W. Run it with the guest's

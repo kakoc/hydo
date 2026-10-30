@@ -5,7 +5,7 @@ Ported repeat's assertion-guided search onto the spread search loop so it STEERS
 states instead of generating purely-random workloads. hvx has no edge-coverage bitmap, so the novelty
 signal is the ORACLE's own reachability markers: the in-guest driver already prints `RPT decl/sat
 <name>` (send-accepted, send-fenced, queue-drained, send-concurrent, broker-paused, msg-nacked, ...).
-ALL changes are host-side in `hvx/hvx_spread_search.c` + `hvx/run-spread3-search.sh` — the boot path,
+ALL changes are host-side in `hv/hvx/hvx_spread_search.c` + `hv/hvx/run-spread3-search.sh` — the boot path,
 `hvx.c`, `build-linux.sh`, and `spread-drv` are UNTOUCHED, so the Phase-2 baseline `7b576827407c0644`
 is preserved by construction and each program still runs deterministically (snapshot restore).
 
@@ -60,9 +60,9 @@ nprog<=30 (the proven-clean range).
 
 Reproduce (on the box, L1 up, harness already built into /tmp/hvx-src):
 ```
-HVX_SEARCH_MODE=guided bash hvx/run-spread3-search.sh 30 1   # reachability-guided (corpus)
-HVX_SEARCH_MODE=random bash hvx/run-spread3-search.sh 30 1   # blind-random baseline
-HVX_SEARCH_MODE=guided HVX_GUIDE=1 bash hvx/run-spread3-search.sh 30 1   # + champion hill-climb (--guide)
+HVX_SEARCH_MODE=guided bash hv/hvx/run-spread3-search.sh 30 1   # reachability-guided (corpus)
+HVX_SEARCH_MODE=random bash hv/hvx/run-spread3-search.sh 30 1   # blind-random baseline
+HVX_SEARCH_MODE=guided HVX_GUIDE=1 bash hv/hvx/run-spread3-search.sh 30 1   # + champion hill-climb (--guide)
 ```
 
 ## PHASE 3 COMPLETE (2026-08-23): the deterministic search loop runs.
@@ -92,8 +92,8 @@ Determinism-mismatch RESOLVED (my part):
   deterministic under fault (fault fp != no-fault fp, so the DROP is exercised + reproducible). No
   BUG-ASSERT surfaced (finding a bug is future search breadth; the deliverable is the deterministic
   machine, which any finding would replay bit-for-bit).
-- Reproduce: `./build-spread3.sh && bash hvx/deploy-hvx.sh` then
-  `bash hvx/run-spread3-search.sh 30 1` (no fault) or the direct harness with a fault seed:
+- Reproduce: `hv/hvx/images/build-spread3.sh && bash hv/hvx/deploy-hvx.sh` then
+  `bash hv/hvx/run-spread3-search.sh 30 1` (no fault) or the direct harness with a fault seed:
   `hvx_spread_search <bz> <initramfs-spread3> <spread3-disk.img> "<cmdline> spread_mode=full" 512 30 1 0x51a0 30`.
 
 ## Split-test result (2026-08-23, hydo-16's decisive test): HANGS — real-Linux + fuzz-read
@@ -111,7 +111,7 @@ be re-dispatched after a deep-snapshot restore**, i.e. the Linux scheduler/heart
 after restore. This is DIFFERENT from hydo-16's bare busy-poll isolation (no real-Linux userspace
 process) which resumes byte-exact. Handoff: hydo-16 to build a real-Linux + fuzz-read-only
 "spread-lite" isolation on the hvx side to chase the heartbeat/scheduler-after-restore interaction.
-Reproduce: `SPREAD_MODE=fuzzonly bash hvx/run-spread3-search.sh 1 1` (or `/tmp/p3fuzzonly.sh`).
+Reproduce: `SPREAD_MODE=fuzzonly bash hv/hvx/run-spread3-search.sh 1 1` (or `/tmp/p3fuzzonly.sh`).
 
 ## Option A update (2026-08-23): the synchronous fuzz-input port was BUILT + PROVEN, but a
 ## SECOND wall appeared — deep mid-service snapshot restore does not RESUME the guest.
@@ -123,8 +123,8 @@ guest sits idle, 0 output. Distinct from Phase-2's SHALLOW pre-initramfs branch 
 its deep round-trip (which only re-FINGERPRINTED, never re-ran).**
 
 What works (observed):
-- **Module port (`hvx/hvx.c`)**: `HVX_SET_FUZZ_INPUT` (ioctl 25, `hvx_abi.h`) + IN ports 0x510
-  (data) / 0x511 (status), fed via `hvx/fuzz-read.c` (guest reader, `iopl(3)` — NOT `ioperm`, whose
+- **Module port (`hv/hvx/hvx.c`)**: `HVX_SET_FUZZ_INPUT` (ioctl 25, `hvx_abi.h`) + IN ports 0x510
+  (data) / 0x511 (status), fed via `hv/hvx/images/fuzz-read.c` (guest reader, `iopl(3)` — NOT `ioperm`, whose
   0..1023 range excludes 0x510). Confirmed by dmesg: the ioctl stages the buffer, the ports return
   the staged bytes during boot. Snapshot-EXCLUDED like the serial ring (named-field snapshot
   serialization never touches `fuzz_*`).
@@ -151,9 +151,9 @@ state a deep userspace snapshot needs to RESUME — most likely the pending-inte
 `inject_valid` fields and any "guest was runnable" bit — then re-run the branch test at the
 `FUZZREADY` depth (not just re-fingerprint) as the acceptance. All Phase-3 upper-half pieces
 (generator, restore loop, verdict parse, fingerprint, the port, fuzz-read, §2o rootfs) are built and
-plug straight in once a deep snapshot resumes. Files: `hvx/hvx_spread_search.c` (search harness with
-the seeded generator + determinism proof + `HVX_SET_FUZZ_INPUT` feed), `hvx/fuzz-read.c`,
-`build-linux.sh` §2o (spread3 search rootfs), `build-spread3.sh`, `hvx/run-spread3-search.sh`.
+plug straight in once a deep snapshot resumes. Files: `hv/hvx/hvx_spread_search.c` (search harness with
+the seeded generator + determinism proof + `HVX_SET_FUZZ_INPUT` feed), `hv/hvx/images/fuzz-read.c`,
+`build-linux.sh` §2o (spread3 search rootfs), `build-spread3.sh`, `hv/hvx/run-spread3-search.sh`.
 
 ---
 
@@ -165,7 +165,7 @@ is required.** Reported per the coordinator's "hit a wall -> stop + report sympt
 what a synchronous port would take" instruction, rather than thrashing.
 
 ## What was built (all correct + reusable; only the INPUT CHANNEL is the blocker)
-- **In-guest driver `looprun`** (`hvx/spread-drv/main.go`): reads ONE op-program from the serial
+- **In-guest driver `looprun`** (`hv/hvx/images/spread-drv/main.go`): reads ONE op-program from the serial
   console until a lone `RUN` line, drives the two brokers + the full mini-Jepsen oracle, prints the
   verdict, bracketed by `SPREAD-READY-FOR-INPUT` / `SPREAD-RUN-DONE`. Two read strategies were tried
   (blocking scanner; then a NON-BLOCKING busy-poll `readProgramBusy` to avoid idle-parking the vCPU).
@@ -174,7 +174,7 @@ what a synchronous port would take" instruction, rather than thrashing.
   brokers are up + queue `q` created, prints the BUSY snapshot-boundary marker `SPREAD-SNAPSHOT-READY`
   then runs `spread-drv looprun < /dev/console`. Default (token absent) = the Phase-2 baked path
   (unchanged). One rootfs, cmdline-selected workload (Phase-3-aligned).
-- **Host search harness** (`hvx/hvx_spread_search.c`): boots ONCE to `SPREAD-SNAPSHOT-READY`, takes a
+- **Host search harness** (`hv/hvx/hvx_spread_search.c`): boots ONCE to `SPREAD-SNAPSHOT-READY`, takes a
   file-backed snapshot (HVX_GET_SNAPSHOT + save RAM + save the rw data disk p2), then per program:
   HVX_SET_SNAPSHOT + reload RAM/p2, stage the program over `HVX_PUT_INPUT` (256B chunks) BEFORE
   resume, run to `SPREAD-RUN-DONE`, parse the verdict from the reconstructed console, and fingerprint
@@ -183,8 +183,8 @@ what a synchronous port would take" instruction, rather than thrashing.
   splitmix64 port of repeat's `propose_spread_seq` — S/R/N/P over g0..g3, unique bodies, tier-faults
   and broker-crash omitted), a **determinism proof** (prog#0 twice -> identical verdict + fingerprint),
   and an optional per-restore seeded DROP disk-fault schedule (reuses Phase-2 fault wiring).
-- **Run script** `hvx/run-spread3-search.sh`; harness wired into `hvx/deploy-hvx.sh`. Native F0:
-  `hvx/native-spread3-looprun.sh` (PASS).
+- **Run script** `hv/hvx/run-spread3-search.sh`; harness wired into `hv/hvx/deploy-hvx.sh`. Native F0:
+  `hv/hvx/images/native-spread3-looprun.sh` (PASS).
 
 ## The wall (confirmed with instrumentation)
 The serial-fed loop cannot make progress because **`HVX_RUN` never returns to userspace while the
@@ -216,7 +216,7 @@ interleaved with a host restore loop.
 
 ## What a synchronous input port would take (the fix)
 A module-level fw_cfg-equivalent — the same shape repeat solved with `guest/fwcfg-input.c`:
-1. **Module (`hvx/hvx.c`)**: handle a guest port-I/O read on a chosen port (e.g. `IN al, 0x510`) by
+1. **Module (`hv/hvx/hvx.c`)**: handle a guest port-I/O read on a chosen port (e.g. `IN al, 0x510`) by
    returning the next byte from a host-set buffer, synchronously (no interrupt). Add one ioctl,
    `HVX_SET_FUZZ_INPUT`, to set that buffer (snapshot-excluded, like HVX_PUT_INPUT). ~1 port handler
    + 1 ioctl, ~40 lines.
@@ -235,10 +235,10 @@ the exact template, and OpenThesis's `libvmcall.c` shows the host↔guest port p
 
 ## Reproduce (what runs today, up to the wall)
 ```
-cd ~/hydo && ./build-spread2.sh && bash hvx/deploy-hvx.sh
-# native (works): bash hvx/native-spread3-looprun.sh   -> SPREAD-READY-FOR-INPUT ... spread: consistent ... SPREAD-RUN-DONE
+cd ~/hydo && hv/hvx/images/build-spread2.sh && bash hv/hvx/deploy-hvx.sh
+# native (works): bash hv/hvx/images/native-spread3-looprun.sh   -> SPREAD-READY-FOR-INPUT ... spread: consistent ... SPREAD-RUN-DONE
 # under hvx (blocks in the READY wait as above):
-bash hvx/run-spread3-search.sh 24 1
+bash hv/hvx/run-spread3-search.sh 24 1
 # diagnosis: boot the search disk with hvx_linux to SEE the guest reach both markers, then idle:
 #   sudo env HVX_DISK=/tmp/spread2-disk.img HVX_CPU_V2=1 HVX_IDLE_HEARTBEAT=1 \
 #     /tmp/hvx-src/hvx_linux /tmp/bzImage /tmp/initramfs-spread2.cpio.gz "<cmdline> spread_mode=search" 640

@@ -1,4 +1,4 @@
-/* hydo_assert_table.h -- host side of hydo's assertion protocol (hvx/ASSERTIONS.md).
+/* hydo_assert_table.h -- host side of hydo's assertion protocol (hydo/ASSERTIONS.md).
  *
  * Parses the HYDO-ASSERT-DECL / HYDO-ASSERT / HYDO-SETUP-COMPLETE records that guest code
  * writes to the console, and aggregates them into a property table over one or more runs

@@ -2,7 +2,7 @@
 
 `build-release.sh` turns the Mac backend into a self-contained tarball that a user installs with
 one command and runs with no Linux machine, no root and no other software beyond the macOS
-Command Line Tools (for `python3` and `cc`). `QUICKSTART-mac.md` at the top of the repository is
+Command Line Tools (for `python3` and `cc`). `hydo/dist/mac/QUICKSTART-mac.md` at the top of the repository is
 the user guide; it is shipped inside the release.
 
 ## What is in a release
@@ -10,16 +10,16 @@ the user guide; it is shipped inside the release.
 | Path | What |
 |---|---|
 | `bin/hydo` | the CLI (`hydo-mac` wrapper around the pieces below): `build`, `run`, `repro`, `explore`, `report`, `doctor` |
-| `hvx-mac/hvm`, `hvx-mac/explore/hvmx` | the VMM and the explorer engine, re-signed by `install.sh` on the user's Mac |
-| `hvx-mac/explore/out/Image-explore` | the arm64 kernel (`hvx-mac/explore/build-guest.sh`, HVC idle) |
+| `hv/hvm/hvm`, `hv/hvm/explore/hvmx` | the VMM and the explorer engine, re-signed by `install.sh` on the user's Mac |
+| `hv/hvm/explore/out/Image-explore` | the arm64 kernel (`hv/hvm/explore/build-guest.sh`, HVC idle) |
 | `guest/busybox`, `guest/mke2fs` | static arm64 busybox 1.36.1 and e2fsprogs 1.47.0 (aarch64 nixpkgs) |
 | `guest/busybox-applets[.txt]` | the applet set to link, as the Linux build links it |
 | `guest/tc/`, `guest/tc-closure.txt` | the pinned aarch64 `tc` (iproute2 6.8.0) and every file its loader opens, at their `/nix/store` paths, for network faults |
-| `hvx/onboard/`, `hvx/explore/`, `hvx/hydo_assert_*` | `hydo-build`, the guest init, the manifest format, `explore.py` and the modules it imports |
+| `hydo/onboard/`, `hydo/explore/`, `hv/hvx/hydo_assert_*` | `hydo-build`, the guest init, the manifest format, `explore.py` and the modules it imports |
 | `examples/redis/` | the Redis example, with its arm64 binaries under `files/` (works offline) |
-| `examples/ledger-spin/` | the busy-wait example (`hvx-mac/explore/examples/ledger-spin`), with `bin/spin_load` and `bin/spin_count` (static arm64, `hvx-mac/spin/spinvar.c`; `$HYDO_SPIN_BIN` when filling `assets/`) |
-| `skill/hydo-onboard/` | the onboarding skill (Agent Skills format, any AI tool) that writes a project's `hydo/` folder; `hydo guide`, `hydo skill install` and `hydo init` read it (`hvx/onboard/hydo_agents.py`) |
-| `install.sh`, `QUICKSTART-mac.md`, `VERSION`, `SHA256SUMS` | |
+| `examples/ledger-spin/` | the busy-wait example (`hydo/onboard/examples-mac/ledger-spin`), with `bin/spin_load` and `bin/spin_count` (static arm64, `hv/hvm/spin/spinvar.c`; `$HYDO_SPIN_BIN` when filling `assets/`) |
+| `skill/hydo-onboard/` | the onboarding skill (Agent Skills format, any AI tool) that writes a project's `hydo/` folder; `hydo guide`, `hydo skill install` and `hydo init` read it (`hydo/onboard/hydo_agents.py`) |
+| `install.sh`, `hydo/dist/mac/QUICKSTART-mac.md`, `VERSION`, `SHA256SUMS` | |
 
 ## How `hydo build` works without Linux
 
@@ -38,7 +38,7 @@ No `faketime` is needed: the guest clock is deterministic, and `hydo-build` zero
 field afterwards.
 
 For network faults `hydo_build_arm64.py` copies the pinned aarch64 `tc` and the files its loader
-opens (found with `hvx-mac/services/elfdeps.py`) from the host's `/nix/store`. The release ships
+opens (found with `hv/hvm/services/elfdeps.py`) from the host's `/nix/store`. The release ships
 those files under `guest/tc/`, and `hydo build` points that one module's existence check and its
 copy at that tree (a module-local `os` view and a replacement `_copy_elf_closure` with the same
 rules), so the image gets the same paths, bytes and modes as a Linux build. A cleaner long-term
@@ -51,15 +51,15 @@ names `files/...` instead of `/nix/store/...`, and one library symlink is relati
 Two Mac builds give the same bytes.
 
 `root.nix:` (a Nix closure) still needs `nix-store`, so it is not supported on the Mac path; a
-project lists its arm64 files under `root.files:` instead (QUICKSTART-mac.md, step 5).
+project lists its arm64 files under `root.files:` instead (hydo/dist/mac/QUICKSTART-mac.md, step 5).
 
 ## Building a release
 
 ```sh
-HYDO_KERNEL=<path to Image-explore> hvx-mac/dist/build-release.sh [OUTDIR]
+HYDO_KERNEL=<path to Image-explore> hydo/dist/mac/build-release.sh [OUTDIR]
 ```
 
-The first run fills `hvx-mac/dist/assets/` (git-ignored): the kernel from `$HYDO_KERNEL`, and
+The first run fills `hydo/dist/mac/assets/` (git-ignored): the kernel from `$HYDO_KERNEL`, and
 busybox, `mke2fs`, the applet list and the Redis example's files over ssh from a Linux machine
 with these nixpkgs store paths (`$HYDO_BUILD_HOST`, default the build machine). Every asset is
 checked against `assets.sha256`. After that the release builds offline in a few seconds.

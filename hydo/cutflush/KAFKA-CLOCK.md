@@ -177,7 +177,7 @@ Two smaller observations that the fix does not address:
 - the explorer's verdict for a clock jump of more than 7 days depended on a race between
   the host's `go` and Kafka's first retention check; this is a property of the short
   workload, not of hvx (every run is deterministic for its exact schedule);
-- `hvx/onboard/examples/stack/hydo.yaml` and `build-kafka.sh`/`build-linux.sh` §2l keep the
+- `hydo/onboard/examples/stack/hydo.yaml` and `build-kafka.sh`/`build-linux.sh` §2l keep the
   default retention. They were left alone because changing them moves other baselines.
 
 ### Would a real Kafka deployment hit this?

@@ -1,4 +1,4 @@
-"""Error logs as findings, the host side (hvx/onboard/MANIFEST.md, "Error logs as findings").
+"""Error logs as findings, the host side (hydo/onboard/MANIFEST.md, "Error logs as findings").
 
 A manifest with `errors:` makes the guest scan each service's log at the end of every boot and
 print one record per error KIND (a service plus a template: the line with its timestamps,

@@ -3,7 +3,7 @@
  * sched_diag - debugging aid for hvx_sched_sweep_test: run the sweep guest straight to
  * the end and again with one mid-turn stop (HVX_RUNC max_insns K) or turn stop, and
  * print where the two final states differ (snapshot byte offsets, scheduler fields, RAM).
- * Build from hvx/:  cc -O2 -o sched_diag -DSWEEP_NO_MAIN -include hvx_sched_sweep_test.c smp/sched_diag.c
+ * Build from hv/hvx/:  cc -O2 -o sched_diag -DSWEEP_NO_MAIN -include hvx_sched_sweep_test.c smp/sched_diag.c
  * Usage: sched_diag Q K [turn]
  */
 #include <stddef.h>

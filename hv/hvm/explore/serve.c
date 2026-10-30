@@ -1,10 +1,10 @@
 /*
  * hvmx -- the explorer's run engine on the Mac (Hypervisor.framework), the counterpart of
- * hvx/hvx_explore.c for the deterministic arm64 VMM in ../hvm.c (Milestone 48).
+ * hv/hvx/hvx_explore.c for the deterministic arm64 VMM in ../hvm.c (Milestone 48).
  *
- * It speaks hvx_explore's protocol, so hvx/explore/explore.py drives it unchanged apart from
+ * It speaks hvx_explore's protocol, so hydo/explore/explore.py drives it unchanged apart from
  * the command line (explore.py --backend hvm). The guest is a manifest-built arm64 initramfs
- * (hvx/onboard/hydo-build --arch arm64) whose /sbin/init is the generic hvx/onboard/hydo-init.sh:
+ * (hydo/onboard/hydo-build --arch arm64) whose /sbin/init is the generic hydo/onboard/hydo-init.sh:
  *
  *   S0  "hydo-explore-ready-S0"   nothing started yet           -> start of a recovery boot
  *   S1  "hydo-explore-ready-S1"   services up, provisioned      -> start of every schedule
@@ -270,7 +270,7 @@ static int parse_tj(const char *host, struct tjit *t)
 }
 static int tj_wanted(const struct tjit *t) { return t->n_explicit || (t->permille && t->max_delay); }
 /* Does the (gzip'd cpio) initramfs carry a tc for hydo-init.sh's network faults? Its compiled
- * manifest (etc/hydo/manifest.sh, hvx/onboard/hydo-build) says HYDO_TC='<path>' or HYDO_TC=''. */
+ * manifest (etc/hydo/manifest.sh, hydo/onboard/hydo-build) says HYDO_TC='<path>' or HYDO_TC=''. */
 static int initrd_has_tc;
 static int scan_has_tc(const uint8_t *gz, size_t len)
 {

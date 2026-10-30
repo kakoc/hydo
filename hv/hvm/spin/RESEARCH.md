@@ -2,7 +2,7 @@
 
 ## The problem
 
-The Mac VMM (`hvx-mac/hvm.c`, CLAUDE.md M48) keeps a guest deterministic by acting only at
+The Mac VMM (`hv/hvm/hvm.c`, CLAUDE.md M48) keeps a guest deterministic by acting only at
 VM exits. Its clock advances by a fixed step per exit, and interrupts are delivered only at
 an exit. The M2 gives the guest no instruction counter, so there is no way to stop it after
 an exact number of instructions (`PROBE.md`).
@@ -257,7 +257,7 @@ fully merged code, with the 50 ms kick interval except where stated.
 - **A rare divergence under load** (1 in 300 with `hvm-spin`): fixed by the HVC idle and the
   re-arm fix (`explore/README.md`, "Fixed"); none in the load runs above.
 - **Whether real software hits counter loops at all.** Redis and PostgreSQL never tripped
-  the watchdog in more than 70 boots (`hvx-mac/services/README.md`).
+  the watchdog in more than 70 boots (`hv/hvm/services/README.md`).
 - **The host-PMU measurement** (root).
 - **Rewind cost.** The automatic re-run doubles the work for a schedule that hits a counter
   loop, and the whole re-run pays the checkpoint cost. Checkpointing only from the last exit
@@ -273,7 +273,7 @@ fully merged code, with the 50 ms kick interval except where stated.
 - `bpprobe.c`, `sguest.s`: breakpoint, watchpoint, write-protect, kick and private-API
   probes on tiny EL1 guests.
 - `spinvar.c`: the spin variants. `rootfs/init*` are the guest init scripts; `guest/` holds
-  the kernel and initramfs images (not committed, rebuilt from `hvx-mac/linux`).
+  the kernel and initramfs images (not committed, rebuilt from `hv/hvm/linux`).
 - `pmuprobe.c`, `README-pmu.md`: the host-PMU probe.
 - `out/`: the scripts and results quoted above.
 

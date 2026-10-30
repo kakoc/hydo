@@ -1,10 +1,10 @@
 # The safety net of the hvx kernel module (Milestone 97)
 
-`hvx/hvx.c` stays in C (language policy in `AGENTS.md`). This is what checks it instead of a
+`hv/hvx/hvx.c` stays in C (language policy in `AGENTS.md`). This is what checks it instead of a
 memory-safe language: a debug test kernel that turns memory errors, undefined behaviour, lock
 misuse and leaks into loud reports, and a coverage-guided fuzzer (syzkaller) of the `/dev/hvx`
 ioctl interface and of the device models a guest program drives. Everything lives in
-`hvx/safety/`; `hvx/safety/safety.sh` drives it from the Mac.
+`hv/hvx/safety/`; `hv/hvx/safety/safety.sh` drives it from the Mac.
 
 ## Where things run
 
@@ -22,7 +22,7 @@ falls below `MEM_FLOOR`), because other people's jobs share that host.
 ## The debug kernel
 
 Linux 6.8.12 (the bare-metal machine runs Ubuntu's 6.8), `defconfig` + `kvm_guest.config` +
-`hvx/safety/kernel/hvx-debug.config`: KASAN (generic, inline, vmalloc), kmemleak, UBSAN
+`hv/hvx/safety/kernel/hvx-debug.config`: KASAN (generic, inline, vmalloc), kmemleak, UBSAN
 (bounds, shift, bool, enum), PROVE_LOCKING, DEBUG_ATOMIC_SLEEP, DEBUG_PREEMPT with full
 preemption, DEBUG_LIST, DEBUG_VM, HARDENED_USERCOPY, FORTIFY_SOURCE, the soft-lockup, hung-task
 and RCU-stall detectors, KCOV with comparisons (for the fuzzer), and fault injection (failslab,
@@ -96,7 +96,7 @@ models — is the `syz_ext_hvx_guest` extension above.
 
 ## Proving a fix inert
 
-`hvx/safety/side-check.sh` (or `safety.sh side`) builds this tree's `hvx.c` as `hvxsafe.ko`
+`hv/hvx/safety/side-check.sh` (or `safety.sh side`) builds this tree's `hvx.c` as `hvxsafe.ko`
 (`/dev/hvxsafe`) on the bare-metal machine, loads it next to the shared `hvx.ko`, and runs the whole
 deploy-metal suite (31 checks) and the two pinned explorer reproducers against it, one VM at a
 time through `~/bin/hvx-run`, with the devshim LD_PRELOAD. `side-check.sh unload` removes it.

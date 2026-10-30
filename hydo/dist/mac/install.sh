@@ -30,8 +30,8 @@ fi
 # a downloaded archive carries the quarantine attribute; the VMM binaries must be signed on
 # this Mac with the hypervisor entitlement (an ad-hoc signature is enough)
 xattr -dr com.apple.quarantine "$PREFIX" 2>/dev/null || true
-for b in "$PREFIX/hvx-mac/hvm" "$PREFIX/hvx-mac/explore/hvmx"; do
-  codesign --force --entitlements "$PREFIX/hvx-mac/hv.entitlements" -s - "$b" 2>/dev/null
+for b in "$PREFIX/hv/hvm/hvm" "$PREFIX/hv/hvm/explore/hvmx"; do
+  codesign --force --entitlements "$PREFIX/hv/hvm/hv.entitlements" -s - "$b" 2>/dev/null
 done
 chmod 755 "$PREFIX/bin/hydo"
 

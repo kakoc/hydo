@@ -6,7 +6,7 @@
  * =============================================================================
  *
  * The SUT is an UNMODIFIED, upstream single-broker Apache Kafka 3.5.0 (KRaft) + a
- * producer/consumer client (hvx/KafkaClient.java) CO-LOCATED in one L2 guest, talking
+ * producer/consumer client (hv/hvx/images/KafkaClient.java) CO-LOCATED in one L2 guest, talking
  * over the in-kernel 127.0.0.1 LOOPBACK (the "loopback-first" pattern -- no virtio-net,
  * deterministic for free). It boots on the M29 ext4 READ-ONLY root (the big headless-JDK
  * closure + the 105 Kafka jars live on the ro-root, EXCLUDED from the snapshot); Kafka's

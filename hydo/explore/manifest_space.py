@@ -1,5 +1,5 @@
 """manifest_space -- the explorer's fault space for an onboarded project (hydo.yaml, see
-hvx/onboard/MANIFEST.md), instead of the four-service stack's fixed names.
+hydo/onboard/MANIFEST.md), instead of the four-service stack's fixed names.
 
 explore.py --manifest <hydo.yaml> (or an explore-ob-* image, whose manifest is read from the
 image itself) calls apply(), which rebinds the few module globals the generators, sweeps and
@@ -40,7 +40,7 @@ FAULT_KINDS = ["kill", "pause", "network", "oneway", "cut", "clock", "disk"]
 # guest schedule tokens with a fixed meaning (faults; Q/X = concurrency and timed kill, hydo-c7's branch);
 # a manifest knob may not reuse one, or parse() would read the knob as that fault. M/R stay knob names.
 RESERVED_TOKENS = {"K", "P", "N", "O", "C", "T", "Q", "X", "B", "F", "H", "W"}   # W: the test composer; H: protocol faults
-# protocol faults (H=, hvx/onboard/hydo-init-fakes.sh): rule kinds on requests and on webhooks
+# protocol faults (H=, hydo/onboard/hydo-init-fakes.sh): rule kinds on requests and on webhooks
 PF_REQ_KINDS = ["status", "delay", "drop", "reset"]
 PF_HOOK_KINDS = ["dup", "reorder", "late", "lost"]
 PF_TCP_KINDS = ["delay", "drop", "reset"]

@@ -12,7 +12,7 @@
 //	workload/parallel_driver_<rpc>  one composer command per RPC (+ finally_retry)
 //	hydo.grpc.yaml                  a starter section for hydo.yaml
 //
-// See hvx/onboard/MANIFEST.md, "gRPC services".
+// See hydo/onboard/MANIFEST.md, "gRPC services".
 package main
 
 import (
@@ -51,7 +51,7 @@ func main() {
 	arch := flag.String("arch", "amd64", "client architectures to build: amd64, arm64 or amd64,arm64")
 	noBuild := flag.Bool("no-build", false, "do not build the client binary")
 	goBin := flag.String("go", envOr("HYDO_GO", "go"), "Go toolchain used to build the client")
-	src := flag.String("src", os.Getenv("HYDO_GRPC_SRC"), "source of the client (hvx/grpcgen)")
+	src := flag.String("src", os.Getenv("HYDO_GRPC_SRC"), "source of the client (hydo/grpcgen)")
 	rel := flag.String("rel", "", "directory the starter section's paths are relative to (default: the parent of --out)")
 	steps := flag.Int("steps", 30, "workload.steps in the starter section")
 	flag.Var(&imports, "I", "extra import path for .proto files (repeatable)")
@@ -152,7 +152,7 @@ func main() {
 
 	if !*noBuild {
 		if *src == "" {
-			die("--src (or HYDO_GRPC_SRC) must name the client source (hvx/grpcgen), or pass --no-build")
+			die("--src (or HYDO_GRPC_SRC) must name the client source (hydo/grpcgen), or pass --no-build")
 		}
 		for _, a := range strings.Split(*arch, ",") {
 			name := "hydo-grpc"

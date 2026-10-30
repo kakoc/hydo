@@ -1,5 +1,5 @@
 #!/bin/bash
-# The before/after timing set of hvx/FASTTURN.md (run inside quiet.sh). On the box.
+# The before/after timing set of hv/hvx/FASTTURN.md (run inside quiet.sh). On the box.
 # "before" = the main module /dev/hvx (the old code) or the side module with ft_opt=0;
 # "after" = the side module /dev/hvxft with ft_opt=7 and the given turn-end margin.
 set -u

@@ -1,6 +1,6 @@
 # Searching fault schedules and interleavings: what the literature says, and what hydo should adopt
 
-Written 2026-10-20 for the explorer (`explore.py`, `portfolio.py`, `richguided.py`, `abranch.py`) and the bug benchmark (`hvx/bench`, CLAUDE.md M54). Every claim below comes from the source linked next to it; quotes are short. A few sources were read only through their abstracts or secondary summaries, and that is said where it applies.
+Written 2026-10-20 for the explorer (`explore.py`, `portfolio.py`, `richguided.py`, `abranch.py`) and the bug benchmark (`hydo/bench`, CLAUDE.md M54). Every claim below comes from the source linked next to it; quotes are short. A few sources were read only through their abstracts or secondary summaries, and that is said where it applies.
 
 ## Where we stand (the problem this answers)
 
@@ -92,7 +92,7 @@ So the two gaps are **where in time faults land** and **how preemptions relate t
 
 **Evidence.** The mechanism is described by third-party ports and talks; FoundationDB's own numbers were not found. Yuan's study (92% of catastrophic failures from mishandled errors) is the indirect evidence for why this pays off.
 
-**Maps to hydo.** We have external faults only. hydo's assertion SDK (`hvx/stack/hydoassert`) is the natural place for `hydo.Buggify("site")`: seeded from the schedule, reported on the console, so a run stays a pure function of its schedule string and is shrinkable (drop or pin sites). Typical sites in the front door: "Kafka produce returns a timeout after sending", "MySQL commit returns an error after committing", "sleep before the ACK".
+**Maps to hydo.** We have external faults only. hydo's assertion SDK (`hydo/stack/hydoassert`) is the natural place for `hydo.Buggify("site")`: seeded from the schedule, reported on the console, so a run stays a pure function of its schedule string and is shrinkable (drop or pin sites). Typical sites in the front door: "Kafka produce returns a timeout after sending", "MySQL commit returns an error after committing", "sleep before the ACK".
 
 **Effect on the benchmark.** d3, d4, d6 and d7 are all error-handling bugs around a Kafka send of unknown outcome. A site "produce times out after the record was sent", fired per call with a few percent, hits the **last** order in a sizeable fraction of runs (each order has an independent chance), so d7 no longer needs a lucky placement. **Prediction: d7 found in 3/3 repetitions within ~30 runs; d3/d4/d6 median under 10 runs.** Caveat: it needs source access, so it only applies to code we instrument (the front door, or user projects using the SDK), not to unmodified MySQL or Kafka.
 
@@ -145,9 +145,9 @@ We have the final heal-then-check (`final:` invariants, the oracle) and periodic
 
 ## Ranked recommendations
 
-Each prediction is falsifiable on `hvx/bench` (8 defects, 3 repetitions × 60 runs, early stop, `run.py`).
+Each prediction is falsifiable on `hydo/bench` (8 defects, 3 repetitions × 60 runs, early stop, `run.py`).
 
-1. **A complete depth-1 sweep, `--sweep single` (bounded-exhaustive, sections 1, 3, 4, 7).** Every fault kind (kill, pause `+n`, timed pause, one-way req/resp, two-way loss, cut, lying disk at a fixed seed) × every service × every order index × two durations, durable settings. About 4–5 kinds × 4 services × 30 positions × 2 ≈ 1,000 runs, about 2 hours on the box. Extends the `tail` sweep (branch `tail-sweep`) from the last orders to all orders. **Prediction:** finds all 8 defects, d7 included, because each defect's hand-written trigger is a depth-1 schedule (`hvx/bench/README.md`). Also gives the per-defect *trigger set*, which tells us how rare each defect is under random placement. Cost: low.
+1. **A complete depth-1 sweep, `--sweep single` (bounded-exhaustive, sections 1, 3, 4, 7).** Every fault kind (kill, pause `+n`, timed pause, one-way req/resp, two-way loss, cut, lying disk at a fixed seed) × every service × every order index × two durations, durable settings. About 4–5 kinds × 4 services × 30 positions × 2 ≈ 1,000 runs, about 2 hours on the box. Extends the `tail` sweep (branch `tail-sweep`) from the last orders to all orders. **Prediction:** finds all 8 defects, d7 included, because each defect's hand-written trigger is a depth-1 schedule (`hydo/bench/README.md`). Also gives the per-defect *trigger set*, which tells us how rare each defect is under random placement. Cost: low.
 
 2. **Position as a swarm feature, plus a recurring-fault process (sections 5, 8).** Swarm draws a position profile per run (uniform / early / late / last-3) and, as one more feature, a Jepsen-style on/off fault process over the whole workload. **Prediction:** swarm finds d7 in 3/3 repetitions within 20 runs, and detections of d0–d6 do not get slower by more than 2× median. Cost: low.
 
