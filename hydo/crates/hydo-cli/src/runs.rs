@@ -260,17 +260,15 @@ fn host_checks_linux(ctx: &Ctx, outdir: &Path, mut res: Map<String, Value>) -> M
     res
 }
 
+/// Error logs as findings for one run (the hydo-errors crate): prints the kinds, writes
+/// one.errors.json, folds the verdict into res.
 fn errors_one(
-    ctx: &Ctx,
     outdir: &Path,
     sched: &str,
     res: Map<String, Value>,
     known: Option<&str>,
 ) -> Map<String, Value> {
-    match bridge::errors_for_run_dir(ctx, outdir, sched, &Value::Object(res.clone()), known) {
-        Value::Object(m) => m,
-        _ => res,
-    }
+    hydo_errors::for_run_dir(outdir, sched, res, known, &mut |l| println!("{l}"))
 }
 
 fn new_run_dir() -> PathBuf {
@@ -296,7 +294,7 @@ pub fn cmd_run_linux(ctx: &Ctx, argv: &[String]) -> i32 {
     let eargs = linux_engine_args(&image, None, None, 1);
     let res = run_one_linux(ctx, &image, &sched, &outdir, &eargs, false);
     let res = host_checks_linux(ctx, &outdir, res);
-    let res = errors_one(ctx, &outdir, &sched, res, known.as_deref());
+    let res = errors_one(&outdir, &sched, res, known.as_deref());
     let mut rec = Map::new();
     rec.insert("image".into(), json!(image.display().to_string()));
     rec.insert(
@@ -424,7 +422,7 @@ pub fn cmd_repro_linux(ctx: &Ctx, argv: &[String]) -> i32 {
             let dir = base.join(format!("{k:03}"));
             let res = run_one_linux(ctx, &it.image, &it.sched, &dir, &it.eargs, true);
             let res = host_checks_linux(ctx, &dir, res);
-            let res = errors_one(ctx, &dir, &it.sched, res, None);
+            let res = errors_one(&dir, &it.sched, res, None);
             let fp = py_str(&res["fp"]);
             let ok = fp == it.fp;
             same += ok as usize;
@@ -466,25 +464,28 @@ fn compose_meta(image: &Path) -> Value {
 }
 
 /// One regression's pre-run check (M98). Returns false when it must not run.
-fn regression_precheck(ctx: &Ctx, r: &Value, meta: &Value, bad: &mut usize) -> bool {
+fn regression_precheck(r: &Value, meta: &Value, bad: &mut usize) -> bool {
     let name = py_str(&r["name"]);
     if meta.get("stable_compose").is_some_and(truthy) {
-        let st = bridge::regression_status(ctx, r, meta);
-        for w in st["warnings"].as_array().into_iter().flatten() {
-            println!("hydo: warning: {}: {}", name, py_str(w));
+        let st = hydo_composer::regression_status(r, meta, None)
+            .unwrap_or_else(|e| die(&format!("regression {name}: {e}")));
+        for w in &st.warnings {
+            println!("hydo: warning: {name}: {w}");
         }
-        if truthy(&st["error"]) {
+        if let Some(e) = st.error.as_ref().filter(|e| !e.is_empty()) {
             *bad += 1;
             println!(
                 "FAIL  {}  expect {}  not run: {}\n      {}",
                 name,
                 py_str(&r["expect"]),
-                py_str(&st["error"]),
+                e,
                 py_str(&r["schedule"])
             );
             return false;
         }
-    } else if let Some(w) = bridge::regression_warning(ctx, r, meta) {
+    } else if let Some(w) = hydo_composer::regression_warning(r, meta)
+        .unwrap_or_else(|e| die(&format!("regression {name}: {e}")))
+    {
         println!("hydo: warning: {w}");
     }
     true
@@ -524,7 +525,7 @@ fn cmd_regressions_linux(ctx: &Ctx, mut args: Vec<String>) -> i32 {
     let eargs = linux_engine_args(&image, None, None, 1);
     let mut bad = 0usize;
     for (k, r) in regs.iter().enumerate() {
-        if !regression_precheck(ctx, r, &meta, &mut bad) {
+        if !regression_precheck(r, &meta, &mut bad) {
             continue;
         }
         let name = py_str(&r["name"]);
@@ -671,7 +672,8 @@ pub fn cmd_run_mac(ctx: &Ctx, argv: &[String]) -> i32 {
         Some((fp, v)) => json!({"fp": fp, "verdict": v}),
         None => json!({"verdict": ""}),
     };
-    bridge::errors_for_run_dir(ctx, &outdir, &sched, &res, None);
+    let res = res.as_object().cloned().unwrap_or_default();
+    hydo_errors::for_run_dir(&outdir, &sched, res, None, &mut |l| println!("{l}"));
     0
 }
 
@@ -705,7 +707,7 @@ fn cmd_regressions_mac(ctx: &Ctx, mut args: Vec<String>) -> i32 {
     let base = Path::new(OUT).join(format!("regressions-{}", strftime("%Y%m%d-%H%M%S")));
     let mut bad = 0usize;
     for (k, r) in regs.iter().enumerate() {
-        if !regression_precheck(ctx, r, &meta, &mut bad) {
+        if !regression_precheck(r, &meta, &mut bad) {
             continue;
         }
         let name = py_str(&r["name"]);
@@ -759,7 +761,7 @@ fn slug(s: &str) -> String {
     out
 }
 
-pub fn cmd_save(ctx: &Ctx, argv: &[String]) -> i32 {
+pub fn cmd_save(_ctx: &Ctx, argv: &[String]) -> i32 {
     let mut args = argv.to_vec();
     let to = take(&mut args, "--to").unwrap_or_else(|| "hydo/regressions".into());
     if args.len() != 1 || !Path::new(&args[0]).join("report.json").is_file() {
@@ -790,7 +792,8 @@ pub fn cmd_save(ctx: &Ctx, argv: &[String]) -> i32 {
             println!("hydo: {p} exists, kept");
             continue;
         }
-        let text = bridge::saved_regression_text(ctx, x);
+        let text = hydo_composer::saved_regression_text(x)
+            .unwrap_or_else(|e| die(&format!("{}: {e}", args[0])));
         if let Err(e) = std::fs::write(&p, text) {
             die(&format!("{p}: {e}"));
         }

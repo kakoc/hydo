@@ -9,7 +9,7 @@ Prints one JSON line per case: {"op": <name>, "args": {...}, "out": <what Python
 same op on the same args and compares. The cases:
 
   1. the M98 corpora of hydo/onboard/tests/test_composer.py (the same random stream, seed 7):
-     --n seed-form W values over 54 command sets (render, kept), and the resolved compositions
+     --n seed-form W values over 80 command sets (render, kept), and the resolved compositions
      replayed on a changed, shuffled command list (514 replays, 86 with a removed command when
      n = 3000), with their candidates;
   2. every plan and hydo/ folder in the repository (every tracked *.yaml, *.yml, *.json that

@@ -32,8 +32,8 @@ use std::path::Path;
 pub use hydo_manifest::composer::{
     check_version, engine_version, expand, fits, kept, key_of, kind_of, parse_resolved, parse_w,
     plan, read_regression, render_resolved, resolve_seed, resolved_problems, scan_folder, shell_of,
-    shq, test_from_meta, w_of, with_w, Entry, Minstd, OItem, Resolved, WSeed, CHECK_KINDS,
-    DEFAULT_STEPS, FORMAT, GUEST_MAX, HISTORY_KINDS, PLAN_KINDS, SH, WORKLOAD_KINDS,
+    shq, test_from_meta, w_of, with_w, Entry, OItem, Resolved, WSeed, CHECK_KINDS, DEFAULT_STEPS,
+    FORMAT, GUEST_MAX, HISTORY_KINDS, PLAN_KINDS, SH, WORKLOAD_KINDS,
 };
 pub use hydo_manifest::{regression_status, ManifestError, Status};
 

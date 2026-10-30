@@ -1,3 +1,6 @@
+# Replaced by hydo-composer (hydo/crates/hydo-composer, with hydo-manifest's plan expansion), M104.
+# Kept as the reference of that crate's equivalence test and for the Python callers not ported yet
+# (hydo-build, explore.py, manifest_space.py); the lead deletes it after every port has merged.
 """hydo_composer -- the test composer: a project's test written as small commands and
 properties, composed by hydo into seeded sequences and concurrent mixes (MANIFEST.md "The test
 composer").

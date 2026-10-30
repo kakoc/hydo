@@ -3,12 +3,11 @@
 //! Each function here is one seam a port replaces: when the module behind it is a Rust crate, the
 //! function's body becomes a call into that crate and the bridge function in Python is deleted.
 //! Owners of the next ports (one crate each): hydo_agents.py (guide/skill/init), hydo_compose.py
-//! (compose), hydo_errors.py (errors, for_run_dir), hydohist.py (run_checks), hydo_composer.py
-//! (regression_status, saved_regression_text), hydo-build (build_linux, build_mac).
+//! (compose), hydohist.py (run_checks), hydo-build (build_linux, build_mac). Ported: hydo_errors.py
+//! (the hydo-errors crate) and hydo_composer.py's regression seams (the hydo-composer crate).
 
 use crate::ctx::{die, python, Ctx};
 use serde_json::{json, Value};
-use std::path::Path;
 use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -79,56 +78,4 @@ pub fn run_checks(ctx: &Ctx, srcs: &[(String, String)], verdict: Option<&str>) -
         std::process::exit(code);
     }
     v
-}
-
-/// hydo_errors.for_run_dir(outdir, schedule, res, known) -> res.
-pub fn errors_for_run_dir(
-    ctx: &Ctx,
-    outdir: &Path,
-    schedule: &str,
-    res: &Value,
-    known: Option<&str>,
-) -> Value {
-    let (code, v) = call(
-        ctx,
-        "errors_for_run_dir",
-        json!({"outdir": outdir.display().to_string(), "schedule": schedule, "res": res, "known": known}),
-        &[],
-    );
-    if code != 0 {
-        std::process::exit(code);
-    }
-    v
-}
-
-/// hydo_composer.regression_status(r, meta).
-pub fn regression_status(ctx: &Ctx, r: &Value, meta: &Value) -> Value {
-    let (code, v) = call(ctx, "regression_status", json!({"r": r, "meta": meta}), &[]);
-    if code != 0 {
-        std::process::exit(code);
-    }
-    v
-}
-
-/// hydo_composer.regression_warning(r, meta).
-pub fn regression_warning(ctx: &Ctx, r: &Value, meta: &Value) -> Option<String> {
-    let (code, v) = call(
-        ctx,
-        "regression_warning",
-        json!({"r": r, "meta": meta}),
-        &[],
-    );
-    if code != 0 {
-        std::process::exit(code);
-    }
-    v.as_str().map(str::to_string)
-}
-
-/// hydo_composer.saved_regression_text(x).
-pub fn saved_regression_text(ctx: &Ctx, x: &Value) -> String {
-    let (code, v) = call(ctx, "saved_regression_text", json!({"x": x}), &[]);
-    if code != 0 {
-        std::process::exit(code);
-    }
-    v.as_str().unwrap_or_default().to_string()
 }

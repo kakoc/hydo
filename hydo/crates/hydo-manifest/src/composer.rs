@@ -1203,12 +1203,12 @@ pub fn py_mod(a: i128, m: i128) -> R<i128> {
 
 pub const M31: i128 = 2147483647;
 
-pub struct Minstd {
-    pub s: i128,
+struct Minstd {
+    s: i128,
 }
 
 impl Minstd {
-    pub fn new(seed: i128) -> R<Minstd> {
+    fn new(seed: i128) -> R<Minstd> {
         let mut m = Minstd {
             s: py_mod(seed, M31 - 1)? + 1,
         };
@@ -1217,11 +1217,11 @@ impl Minstd {
         }
         Ok(m)
     }
-    pub fn next(&mut self) -> i128 {
+    fn next(&mut self) -> i128 {
         self.s = (self.s * 48271) % M31;
         self.s
     }
-    pub fn below(&mut self, n: i128) -> R<i128> {
+    fn below(&mut self, n: i128) -> R<i128> {
         let x = self.next();
         py_mod(x, n)
     }

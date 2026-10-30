@@ -111,15 +111,10 @@ pub fn cmd_report(_ctx: &Ctx, argv: &[String]) -> i32 {
     0
 }
 
-// ---------------------------------------------------------------- errors (hydo_errors.py)
+// ---------------------------------------------------------------- errors (the hydo-errors crate)
 
-pub fn cmd_errors(ctx: &Ctx, argv: &[String]) -> i32 {
-    bridge::rc(
-        ctx,
-        "errors_cli",
-        json!({"argv": argv, "default_dir": pjoin(OUT, "explore")}),
-        &[],
-    )
+pub fn cmd_errors(_ctx: &Ctx, argv: &[String]) -> i32 {
+    hydo_errors::cli(argv, &pjoin(OUT, "explore"))
 }
 
 // ---------------------------------------------------------------- compose (hydo_compose.py)
