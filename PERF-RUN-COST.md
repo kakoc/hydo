@@ -436,8 +436,8 @@ was 3.8 GB (1 GiB RAM, two snapshots, the disk).
   the same fingerprints as with file-backed buffers.
 - The zero-page-skipping hash equalled the byte-wise hash on every RAM state it was tried on
   (83 states, Redis and stack).
-- With the variables unset, the new code does nothing but test a flag and count run calls; it
-  reads no clock, issues no ioctl and prints nothing.
+- With the variables unset, the new code only tests a flag, counts run calls and reads the clock
+  a few times during the worker's boot; it issues no ioctl and prints nothing.
 
 ## 11. What was not measured, and why
 
