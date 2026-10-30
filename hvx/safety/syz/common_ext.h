@@ -20,7 +20,7 @@
 #include <sys/mman.h>
 
 #define HVX_SYZ_CODE 0x3000
-#define HVX_SYZ_CODE_MAX 0x4000
+#define HVX_SYZ_CODE_MAX 0x2000 // on the stack: the executor builds with -Wframe-larger-than=16384
 #define HVX_SYZ_F_IDMAP_MMIO 1 // map the 4th GiB (MMIO window) in the guest page tables
 #define HVX_SYZ_F_NO_HLT 2 // do not end the program with HLT (let it run off)
 
@@ -199,7 +199,7 @@ static void hvx_syz_assemble(struct hvx_syz_asm* s, const struct hvx_syz_op* op)
 	}
 	case 9: // raw bytes: a = pointer, b = length
 		if (a && b)
-			hvx_syz_emit(s, (const void*)(uintptr_t)a, b > 256 ? 256 : b);
+			hvx_syz_emit(s, (const void*)(uintptr_t)a, b > 128 ? 128 : b);
 		break;
 	case 10: { // PCI config cycle: a = config address (bus/dev/fn/reg), b = value, c = size | is_read << 8
 		uint32_t addr = 0x80000000u | ((uint32_t)a & 0x00fffffcu);

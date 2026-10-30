@@ -80,7 +80,7 @@ out=$(run timeout 600 $T/hvx_smp_boot_verify $B/bzImage $B/initramfs.cpio.gz 2);
 check "boot (2 vCPUs)" "$rc" "$out" 6584c954c2839491
 S='disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24'
 for img in explore-disk.img:2403499c9a3f8419 explore-fix-disk.img:f87130453609a5d6; do
-  rm -rf /var/tmp/m97-side/${img%%:*}
+  sudo rm -rf /var/tmp/m97-side/${img%%:*}	# written by the sudo run
   out=$(cd $T && run timeout 1800 $T/hvx_explore one $B/bzImage $B/initramfs-kafka.cpio.gz $B/${img%%:*} /var/tmp/m97-side/${img%%:*} "$S"); rc=$?
   echo "$out" > /var/tmp/m97-side/${img%%:*}.out; check "repro ${img%%:*} (rc=$rc)" 0 "$out" ${img##*:}
 done

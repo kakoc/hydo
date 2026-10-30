@@ -24,8 +24,9 @@ cp "$BB" "$R/bin/busybox"
 for a in $("$BB" --list); do [ "$a" = busybox ] || ln -sf /bin/busybox "$R/bin/$a"; done
 ln -sf /bin/busybox "$R/sbin/init"
 
-# sshd + sftp-server (scp uses SFTP) + ssh-keygen (host keys at first boot) and their libraries
-for f in /usr/sbin/sshd /usr/lib/openssh/sftp-server /usr/bin/ssh-keygen; do
+# sshd, scp (syzkaller copies with the legacy scp protocol, which runs scp on the target),
+# sftp-server, ssh-keygen (host keys at first boot), and their libraries
+for f in /usr/sbin/sshd /usr/bin/scp /usr/lib/openssh/sftp-server /usr/bin/ssh-keygen; do
   mkdir -p "$R$(dirname "$f")"; cp -L "$f" "$R$f"
   ldd "$f" | awk '/=>/ {print $3} /ld-linux/ {print $1}' | while read -r l; do
     [ -f "$l" ] && { mkdir -p "$R$(dirname "$l")"; cp -L "$l" "$R$l"; }

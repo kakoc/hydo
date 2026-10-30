@@ -38,6 +38,7 @@ config() {	# workdir nvms procs
 	"http": "127.0.0.1:${HTTP_PORT:-56741}",
 	"workdir": "$1",
 	"kernel_obj": "$SAFETY/kbuild",
+	"kernel_src": "$SAFETY/kbuild/linux",
 	"module_obj": ["$SAFETY/$BUNDLE/mod"],
 	"image": "$SAFETY/syz/image-$BUNDLE.ext4",
 	"sshkey": "$SAFETY/syz/id_syz",
