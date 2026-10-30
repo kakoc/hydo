@@ -16,7 +16,7 @@ in `hydo guide manifest`.
 | `cut` | power cut: only data that reached the disk survives; a fresh boot recovers and runs the final checks | `C=<round>`, host `cf=<k>` (at the k-th disk flush) |
 | `clock` | step the realtime clock (like an NTP step) | `T=<round>:<seconds>` |
 | `disk` | I/O errors, a lying disk that drops acknowledged writes | host `disk=ioerr:<p>`, `disk=lying:<p>` |
-| `freeze` | stop a service at the n-th packet it sends to or receives from a peer (x86_64 only) | `F=<svc>><peer>@<round>#<n>:<ms>` |
+| `freeze` | stop a service at the n-th packet it sends to or receives from a peer (on a Mac: a release with the second guest kernel) | `F=<svc>><peer>@<round>#<n>:<ms>` |
 | `protocol` | faults on fakes and proxies (outside-services.md) | `H=...` |
 
 Leave out kinds that cannot apply (no `network` for a project whose services have no port).

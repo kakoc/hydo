@@ -69,7 +69,7 @@ guest:
 
 network: bridge                # loopback (default): one network for everything in the guest;
                                # bridge: each service in its own network namespace at its addr:
-                               # (x86_64 only; see "Service networks")
+                               # (on arm64 with the second guest kernel; see "Service networks")
 
 root:                          # what goes on the read-only root filesystem
   size_mib: 1792               # default: 1.3 x the content, rounded up to 64 MiB
@@ -428,7 +428,9 @@ mapping `replies: [...]` (strings that occur in packets the frozen service recei
 `depends_on`; without such pairs, every ordered pair with a listening peer; and when no service
 calls another (a single server), the peer `workload`: the workload's own client connections from
 `127.0.0.1` to `<svc>`'s port (`F=redis<workload@3#2:500`; `examples/redis/hydo-freeze.yaml`).
-Not supported yet: `--arch arm64`.
+`--arch arm64` (the Mac backend) builds the image for the second guest kernel, which has iptables
+and NFQUEUE, and stages the aarch64 `iptables-legacy` and `hydo_fc` (see "On the Mac: the second
+guest kernel" below).
 
 A random draw rarely lands on the one packet a narrow-window bug needs. `explore.py --sweep freeze`
 tries every packet instead: for each packet stream (a pair, a direction, and either every packet
@@ -504,7 +506,8 @@ With two or more services that have `addr:`, `explore.py` (manifest_space.py) ad
 `a-b`, and with three or more every `a-*`, to the targets its network and one-way faults pick
 from. The extension lives in `hydo-init-links.sh`; hydo-build copies it into the image and adds one
 line to `/sbin/init` that sources it, only for manifests with an `addr:`, so every other
-manifest builds a byte-identical image. Not supported yet: `--arch arm64`.
+manifest builds a byte-identical image. `--arch arm64` builds such a manifest for the second guest
+kernel (policy routing for the per-user source routes; see "On the Mac: the second guest kernel").
 
 On one shared loopback network a program's outgoing connections leave from `127.0.0.1` unless it
 is made to do otherwise, so most programs need the uid recipe above before a link fault touches
@@ -575,12 +578,35 @@ other, such as a cluster) get every pair, as on loopback.
 
 hydo-build stages iproute2's `ip` and the guest kernel's `llc`, `stp`, `bridge` and `veth` modules
 and splices `hydo-init-netns.sh` into `/sbin/init`, only for `network: bridge`; every other
-manifest builds byte-identically (`hvx/explore/netns_ident.py`). x86_64 only: the arm64 guest kernel
-(`hvx-mac/explore/build-guest.sh`, built from `allnoconfig`) has no `CONFIG_NAMESPACES`,
-`CONFIG_NET_NS`, `CONFIG_VETH` or `CONFIG_BRIDGE`, and `--arch arm64` refuses the key. One bridge
+manifest builds byte-identically (`hvx/explore/netns_ident.py`). On arm64 the default Mac guest
+kernel (`hvx-mac/explore/build-guest.sh`) has no network namespaces, so such a manifest is built
+for the second guest kernel (next section); the four modules are built into it. One bridge
 models every Compose network: services on different Compose networks can still reach each other.
 Examples: `examples/redis-bridge/` (two Redis servers on the same port, a replica link, a fault
 proxy, freeze) and `examples/compose-voting/`.
+
+### On the Mac: the second guest kernel (`Image-explore-netns`)
+
+The Mac backend has two arm64 guest kernels. `Image-explore` (`hvx-mac/explore/build-guest.sh`) is
+the default and is unchanged, so every recorded Mac fingerprint stays valid. `Image-explore-netns`
+(`hvx-mac/explore/build-guest-netns.sh`, Milestone 99) is the same Linux 6.6.35 source, patches and
+configuration plus `hvx-mac/explore/hvm-netns.config`: network namespaces, veth, the bridge, IPv6,
+policy routing, and iptables (legacy, filter table) with NFQUEUE, all built in. `hydo-build --arch
+arm64` builds a manifest for the second kernel when it has `network: bridge`, an `addr:` or
+`freeze` in `faults:`; every other manifest builds exactly as before and boots the default kernel.
+Such an image says so in its own root: `/etc/hydo/kernel` holds `Image-explore-netns <sha256>`, and
+the build prints it. `explore.py --backend hvm`, the Mac `hydo run`/`repro`/`explore` and the
+report's reproduction lines read that record and boot exactly that kernel (it must sit next to
+`Image-explore`, and a file with another sha256 is refused), so a reproduction uses the same
+kernel as the run it reproduces; the report's summary shows `guest_kernel`. What the build stages
+for these manifests only, from `$HYDO_ARM64_STORE` (a directory holding `nix/store/...`; the Mac
+release sets its `guest/tc` tree; unset, the host's `/nix/store`): iproute2's `ip` (the same aarch64
+store path as `tc`) for `network: bridge`, and for `freeze` the aarch64 `iptables-legacy` with the
+three extensions the freeze's rules load and `hydo_fc` built for aarch64 (`$HYDO_FCBIN_ARM64`,
+default `<build dir>/hydo_fc-arm64`; the Mac release ships `guest/hydo_fc`). Example
+`hvx-mac/explore/examples/redis-bridge`. On a Mac, `hydo compose` now writes `network: bridge`
+with an `addr:` per service, as on Linux. A big image root is a big initramfs on the Mac (the root
+lives in guest RAM): Docker's voting app needs `guest.ram_mib: 3072` there.
 
 ## Fake outside services and protocol faults (`fakes:`, `proxies:`, `H=`)
 
@@ -1414,7 +1440,8 @@ before.
 - One bridge for every Compose network (no isolation between networks), one hostname (`hostname`
   inside a service is the guest's) and one PID namespace (services see each other's processes).
   Each service has its own network namespace only with `network: bridge`, the importer's default
-  on x86_64; with `--network loopback` or `--no-addr` link faults between services act on nothing.
+  (on a Mac too, with the second guest kernel); with `--network loopback` or `--no-addr` link
+  faults between services act on nothing.
 - The image roots are read-only except for the `mounts:`: a program that writes elsewhere fails
   with "Read-only file system"; add a `mounts:` entry (a volume or a tmpfs) for that path.
 - Healthchecks run through `hydo-oci`, as root unless the service has a `user:`; the image's own
