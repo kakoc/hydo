@@ -101,6 +101,7 @@ BURSTS = False          # --bursts: with --turns, half of the schedules also get
 BURSTS_SALT = 0xB0B5EED5C0FFEE77
 Q_DEFAULT = 1 << 20     # hvx.c HVX_SCHED_QUANTUM: the module's turn length (guest conditional branches)
 CLOCK_DELTAS = [-30 * 86400, -86400, -3600, -300, -30, 30, 300, 3600, 86400, 365 * 86400]
+ERRLOG = None           # error logs as findings (hydo_errors.py): the known list, loaded by main(); None = off
 FREEZE_CALL = False     # --freeze-call (M70): freeze a service at the n-th packet of one of its conversations (F=)
 FC_SALT = 0xF2EE2EC0FFEEF2EE
 FC_P = 50               # % of schedules that draw F=
@@ -1293,6 +1294,37 @@ def host_checks(outdir, tag, res):
     return res
 
 
+# ---------------------------------------------------------------- error logs as findings (hvx/onboard/hydo_errors.py)
+def _he():
+    d = os.path.join(HVX, "onboard")
+    if d not in sys.path:
+        sys.path.insert(0, d)
+    import hydo_errors
+    return hydo_errors
+
+
+def host_errlog(outdir, tag, text, res):
+    """A run whose console carries HYDO-ERRLOG records (a manifest with errors:): its error kinds
+    are compared with the known list here, the analysis goes to consoles/<tag>.errors.json, and
+    res gets errors_new (the signatures of the new kinds) and errors_known; with `unknown: fail`
+    an OK verdict becomes a VIOLATION. A pure function of the consoles, the schedule and the list;
+    runs without records are untouched."""
+    if ERRLOG is None or res.get("verdict", "").startswith("ERROR worker"):
+        return res
+    he = _he()
+    an = he.analyse(he.run_files(os.path.join(outdir, "consoles", tag)), text, ERRLOG)
+    if an is None:
+        return res
+    with open(os.path.join(outdir, "consoles", "%s.errors.json" % tag), "w") as f:
+        json.dump(an, f, indent=1)
+    return he.apply(res, an, ERRLOG)
+
+
+def errlog_of(outdir, tag):
+    p = os.path.join(outdir, "consoles", "%s.errors.json" % tag)
+    return json.load(open(p)) if os.path.exists(p) else None
+
+
 # ---------------------------------------------------------------- the worker pool
 QUIET_FILE = os.environ.get("HYDO_QUIET_FILE")      # a shared box's "quiet window" flag (unset: no wait)
 QUIET_MAX_S = 7200
@@ -1352,6 +1384,7 @@ class Worker(threading.Thread):
             res = self.parse_result(out)
             if not res["verdict"].startswith("ERROR worker"):
                 host_checks(self.outdir, tag, res)
+                host_errlog(self.outdir, tag, text, res)
             self.results.put((tag, text, res))
             if p is None:           # could not restart: answer the remaining jobs with an error
                 while True:
@@ -1441,6 +1474,7 @@ class Worker(threading.Thread):
                 res["tjk"] = [int(tk.group(1)), int(tk.group(2))]
                 res["tjn"] = int(tk.group(3))
             host_checks(self.outdir, sub, res)
+            host_errlog(self.outdir, sub, st, res)
             out["runs"].append((sub, st, res))
         return out
 
@@ -1491,7 +1525,13 @@ class Pool:
             if rec and all(os.path.exists(c) for c in rec["consoles"].values()):
                 for suffix, c in rec["consoles"].items():
                     shutil.copyfile(c, os.path.join(self.outdir, "consoles", tag + suffix + ".log"))
-                out[tag] = (text, dict(rec["result"], cached=True))
+                r = dict(rec["result"], cached=True)
+                if "errors_new" in r:       # the known list may have changed since: compare again
+                    if "pre_errlog_verdict" in r:
+                        r["verdict"] = r.pop("pre_errlog_verdict")
+                    r.pop("errors_new"); r.pop("errors_known", None)
+                    host_errlog(self.outdir, tag, text, r)
+                out[tag] = (text, r)
                 self.cache_hits += 1
             else:
                 todo.append((tag, text))
@@ -1685,7 +1725,12 @@ def same_failure(v_ref, v):
     return signature(v).split(" order=")[0] == signature(v_ref).split(" order=")[0]
 
 
-def shrink(pool, s, verdict, log, budget=40, tjk=None):
+def shrink(pool, s, verdict, log, budget=40, tjk=None, keep=None, prefix="shrink"):
+    """keep(verdict, result) -> True while a candidate still fails the same way (default:
+    same_failure on the verdict; an error-log kind: the kind is still new in the run). prefix:
+    the run tags' prefix -- an error-log shrink reads each run's console, and the engine
+    appends to a tag's console file, so it uses tags no other shrink uses."""
+    keep = keep or (lambda v, r: same_failure(cur_v, v))
     cur, cur_v, tries, rnd = s, verdict, 0, 0
     if "tj" in s:
         budget *= 3             # explicit tick lists shrink one entry at a time
@@ -1696,7 +1741,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
         if not cands:
             break
         rnd += 1
-        items = [("shrink-%d-%d" % (rnd, i), render(c)) for i, c in enumerate(cands)]
+        items = [("%s-%d-%d" % (prefix, rnd, i), render(c)) for i, c in enumerate(cands)]
         res = pool.run_all(items)
         tries += len(items)
         progressed = False
@@ -1704,7 +1749,7 @@ def shrink(pool, s, verdict, log, budget=40, tjk=None):
             v = res[tag][1]["verdict"]
             log.write(json.dumps({"shrink": text, "verdict": v}) + "\n")
             log.flush()
-            if same_failure(cur_v, v):
+            if keep(v, res[tag][1]):
                 cur, cur_v, progressed = c, v, True
                 tjk = res[tag][1].get("tjk", tjk)
                 break
@@ -1836,7 +1881,22 @@ def main():
                          "faster when smaller, must exceed the PMU overflow skid, FASTTURN.md)")
     ap.add_argument("--ram-mib", type=int, help="guest RAM in MiB (default: the manifest's guest.ram_mib, else 1024; "
                                                 "256..3072 on hvx, 256..4096 on hvm)")
+    ap.add_argument("--known-errors", metavar="FILE",
+                    help="error logs as findings (an image whose manifest has errors:): the reviewed list of expected "
+                         "error kinds (hydo/known-errors.yaml); without it every kind is new")
+    ap.add_argument("--errors", choices=["report", "fail"],
+                    help="what a new error kind does: report (a finding of its own, grouped by signature and shrunk; "
+                         "the default, or the list's unknown:) or fail (it also turns an OK run into a VIOLATION)")
+    ap.add_argument("--errors-shrink", type=int, default=8, metavar="N",
+                    help="shrink at most N new error kinds per exploration (default %(default)s; 0: none)")
     a = ap.parse_args()
+    global ERRLOG
+    try:
+        ERRLOG = _he().load_known(a.known_errors)
+    except _he().ErrorsError as e:
+        raise SystemExit("explore.py: --known-errors: %s" % e)
+    if a.errors:
+        ERRLOG["unknown"] = a.errors
     if a.fc_adaptive and a.sweep != "freeze":
         raise SystemExit("explore.py: --fc-adaptive goes with --sweep freeze")
     BACKEND, HVM_KERNEL = a.backend, a.hvm_kernel
@@ -2027,6 +2087,10 @@ def main():
                 shrunk[key]["commands"] = [c["id"] for c in SPACE.compose["commands"]]
                 shrunk[key]["contents"] = _hc().contents_of(stable["stable"], SPACE.compose)
                 shrunk[key].update(stable)
+    errors = None
+    an_runs = [(sd, res["seed-%d" % sd][0], errlog_of(a.out, "seed-%d" % sd)) for sd in seeds]
+    if any(x[2] is not None for x in an_runs):
+        errors = errlog_shrink(pool, a, _he().collect(an_runs), slog)
     slog.close()
     boot = [w.boot_secs for w in pool.workers if w.boot_secs]
     pool.close()
@@ -2051,14 +2115,56 @@ def main():
         summary["vcpus"] = VCPUS
     if CPU != "v2":
         summary["cpu"] = CPU
-    json.dump({"summary": summary, "failures": fails,
-               "shrunk": [{"class": k[0], "signature": k[1], **v} for k, v in shrunk.items()]},
-              open(os.path.join(a.out, "report.json"), "w"), indent=1)
+    rep_j = {"summary": summary, "failures": fails,
+             "shrunk": [{"class": k[0], "signature": k[1], **v} for k, v in shrunk.items()]}
+    if errors is not None:      # only for images with errors: (other reports are unchanged)
+        agg, eshr = errors
+        summary["error_kinds_new"] = sum(1 for x in agg.values() if x["new_runs"])
+        summary["runs_with_new_error_kinds"] = sum(1 for _, _, an in an_runs if an and an["new"])
+        rep_j["errors"] = {"known_file": ERRLOG["path"], "known_sha256": ERRLOG["sha256"], "unknown": ERRLOG["unknown"],
+                           "kinds": [dict(x, new=bool(x["new_runs"]), shrunk=eshr.get(x["sig"])) for x in agg.values()]}
+        json.dump({"known_file": ERRLOG["path"], "known_sha256": ERRLOG["sha256"], "unknown": ERRLOG["unknown"],
+                   "kinds": rep_j["errors"]["kinds"]}, open(os.path.join(a.out, "errors.json"), "w"), indent=1)
+    json.dump(rep_j, open(os.path.join(a.out, "report.json"), "w"), indent=1)
     table = property_table(a.out, ["seed-%d" % sd for sd in seeds])
     if table is not None:
         open(os.path.join(a.out, "properties.txt"), "w").write(table)
-    write_report(a.out, summary, fails, shrunk, table)
+    write_report(a.out, summary, fails, shrunk, table, errors)
     print(json.dumps(summary))
+
+
+def by_hand(sched):
+    """The command line that runs one schedule (the report's "by hand" lines)."""
+    if BACKEND == "hvm":
+        return "`%s`" % hvm_backend.repro_line(IMAGE, sched, HVM_KERNEL, ram_args())
+    if os.environ.get("HYDO_CLI"):
+        return "`hydo run --image %s \"%s\"`" % (os.path.join(BUILD, IMAGE), sched)
+    return "`~/bin/hvx-run sudo ./hvx_explore %sone ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz " \
+           "~/hydo/build/%s <outdir> \"%s\"`" % ("".join(x + " " for x in engine_args()), IMAGE, sched)
+
+
+def errlog_shrink(pool, a, agg, slog):
+    """Every new error kind of an exploration: shrink its first schedule to the smallest one in
+    which the kind is still new, then run that one twice (fingerprints and the kind in both).
+    At most --errors-shrink kinds, in the order of their first seed; none with --no-shrink.
+    Returns (agg, {sig: shrink record})."""
+    out = {}
+    if a.no_shrink or a.errors_shrink <= 0:
+        return agg, out
+    # a kind written before the workload (at "s": boot, provisioning) is in every schedule: nothing to shrink
+    new = sorted((x for x in agg.values() if x["new_runs"] and "s" not in x["first_new_at"]),
+                 key=lambda x: (x["first_new_seed"], x["sig"]))
+    for x in new[:a.errors_shrink]:
+        sig = x["sig"]
+        keep = lambda v, r, sig=sig: sig in (r.get("errors_new") or [])
+        s0 = parse(x["first_new_schedule"])
+        m, mv, n = shrink(pool, s0, "", slog, keep=keep, prefix="errshrink-%s" % sig)
+        mt = render(m)
+        conf = pool.run_all([("errmin-a-%s" % sig, mt), ("errmin-b-%s" % sig, mt)])
+        ra, rb = conf["errmin-a-%s" % sig][1], conf["errmin-b-%s" % sig][1]
+        out[sig] = {"minimal": mt, "tries": n, "fp_a": ra["fp"], "fp_b": rb["fp"], "verdict": ra["verdict"],
+                    "present_a": keep("", ra), "present_b": keep("", rb)}
+    return agg, out
 
 
 def branch_main(a, pool, t0):
@@ -2125,7 +2231,7 @@ def branch_main(a, pool, t0):
     print(json.dumps(summary))
 
 
-def write_report(out, summary, fails, shrunk, table=None):
+def write_report(out, summary, fails, shrunk, table=None, errors=None):
     L = ["# Explorer report", "", "| | |", "|---|---|"]
     for k, v in summary.items():
         L.append("| %s | %s |" % (k, v))
@@ -2161,6 +2267,8 @@ def write_report(out, summary, fails, shrunk, table=None):
     else:
         L += ["```", table.rstrip(), "```", ""]
         L += liveness_summary(out)
+    if errors is not None:      # error logs as findings (only for images with errors:)
+        L += _he().report_md(errors[0], ERRLOG, errors[1], by_hand)
     open(os.path.join(out, "report.md"), "w").write("\n".join(L) + "\n")
 
 

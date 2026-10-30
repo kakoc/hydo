@@ -303,9 +303,10 @@ KNOWN_TOP = {"name", "description", "guest", "root", "data", "env", "shell", "se
              "buggify",
              "test", "format", "hydo_version",      # these three: the test composer (hydo_composer.py)
              "checks",                                # history checks (hvx/HISTORIES.md)
-             "network"}                               # service networks (hydo-init-netns.sh)
+             "network",                               # service networks (hydo-init-netns.sh)
+             "errors"}                                # error logs as findings (hydo-init-errlog.sh)
 KNOWN_SVC = {"name", "cmd", "setup", "ready", "ready_timeout", "port", "depends_on",
-             "recovery", "description", "addr",
+             "recovery", "description", "addr", "errors",
              "image", "image_ref", "entrypoint", "workdir", "user", "env", "mounts"}   # the last seven: hydo_oci.py
 KNOWN_INV = {"id", "type", "msg", "cmd", "every", "final", "description", "within", "after", "poll"}
 LIVE_ANCHORS = ("heal", "start")
@@ -469,6 +470,7 @@ def validate(m):
     validate_network(m)
     validate_checks(m, ids)
     validate_world(m)
+    validate_errors(m)
     return m
 
 
@@ -566,6 +568,154 @@ def default_hosts(m):
         h += "".join("%s %s\n" % (s["addr"], s["name"]) for s in m["services"])
         h += "".join("%s %s\n" % (e.get("addr", NET_GW), e["name"]) for e in (m.get("fakes") or []) + (m.get("proxies") or []))
     return h
+
+
+# ------------------------------------------------------------------ error logs as findings
+# errors: (MANIFEST.md "Error logs as findings"): every covered service's log is scanned in the
+# guest at the end of each boot; each error line is reduced to a template and printed as a
+# HYDO-ERRLOG record (hydo-init-errlog.sh). The host compares the templates with the project's
+# known-errors list (hydo_errors.py), so that list is NOT part of the image. A manifest without
+# errors: builds exactly as before.
+ERRLOG_INIT = "hydo-init-errlog.sh"
+EL_WRAP = ("mount_data", "step_range", "retry_workload", "failed_ids", "final_verdict", "die_oracle")
+KNOWN_ERRORS_TOP = {"level", "max", "services", "description"}
+KNOWN_ERRORS_SVC = {"format", "level", "match", "ignore", "files", "normalize", "off", "description"}
+ERR_FORMATS = ("auto", "redis", "none")
+# Error-level lines in the common formats: an upper-case level word (log4j/logback, MySQL
+# "[ERROR]", PostgreSQL "ERROR:", glog-like "ERRO"/"FATA"), a capitalised one followed by ":" or
+# "]", logfmt/JSON levels (level=error, "level":"error"), bracketed lower-case levels, and Go's
+# runtime panics. POSIX ERE as busybox awk reads it, no interval expressions.
+LEVEL_ERROR = (r'(^|[^A-Za-z0-9_])(ERROR|ERRO|FATAL|FATA|CRITICAL|CRIT|PANIC|SEVERE|EMERG|ALERT)([^A-Za-z0-9_]|$)'
+               r'|(^|[^A-Za-z0-9_])(Error|Fatal|Critical|Panic|Severe)(:|\])'
+               r'|[Ll][Ee][Vv][Ee][Ll]"?[=:] *"?(error|err|fatal|crit|critical|panic|emerg|alert|ERROR|ERR|FATAL|CRITICAL|PANIC)([^A-Za-z]|$)'
+               r'|\[(error|err|fatal|crit|critical|alert|emerg|panic)\]'
+               r'|^panic: |^fatal error: ')
+LEVEL_WARNING = (r'(^|[^A-Za-z0-9_])(WARN|WARNING)([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])Warning(:|\])'
+                 r'|[Ll][Ee][Vv][Ee][Ll]"?[=:] *"?(warn|warning|WARN|WARNING)([^A-Za-z]|$)|\[(warn|warning)\]')
+# An exception line (Java "x.y.FooException: msg", Python "ValueError: msg"); one inside the stack
+# trace of an error line just counted is part of that error and is not counted again.
+EXCEPTION_LINE = r'^[A-Za-z_$][A-Za-z0-9_$.]*(Exception|Error)(:|$)'
+# Redis marks its most severe level with "#": "<pid>:<role> <date> <time> # <message>".
+REDIS_LEVEL = r'^[0-9]+:[XCSM] [^#]* # '
+
+
+def has_errlog(m):
+    return m.get("errors") not in (None, False)
+
+
+def _ere(v, where):
+    if not isinstance(v, str) or not v or "\n" in v or "\t" in v:
+        raise ManifestError("%s: a non-empty regular expression on one line, without tabs" % where)
+    try:
+        re.compile(v)
+    except re.error as e:
+        raise ManifestError("%s: %r is not a regular expression (%s); POSIX ERE, as busybox awk reads it" % (where, v, e))
+    return v
+
+
+def validate_errors(m):
+    e = m.get("errors")
+    svcs = m["services"]
+    if e in (None, False):
+        for i, s in enumerate(svcs):
+            if "errors" in s:
+                raise ManifestError("services[%d].errors: needs the top-level errors: (which turns error logs as "
+                                    "findings on; `errors: true` takes every default)" % i)
+        return
+    if e is True:
+        e = m["errors"] = {}
+    if not isinstance(e, dict):
+        raise ManifestError("errors: true, or a mapping (level, max, services)")
+    _unknown(e, KNOWN_ERRORS_TOP, "errors")
+    # a {{param}} placeholder: hydo-build checks the value after --set; a reader of the image's
+    # hydo.yaml (manifest_space.py) sees the placeholder and does not need the level
+    if e.get("level", "error") not in ("error", "warning") and "{{" not in str(e.get("level")):
+        raise ManifestError("errors.level: error (the default) or warning (also warning-level lines)")
+    mx = e.get("max", 40)
+    if not isinstance(mx, int) or isinstance(mx, bool) or not 1 <= mx <= 200:
+        raise ManifestError("errors.max: the most error kinds one boot prints, 1..200 (default 40)")
+    names = [s["name"] for s in svcs]
+    cov = e.get("services")
+    if cov is not None:
+        if not isinstance(cov, list) or any(c not in names for c in cov):
+            raise ManifestError("errors.services: a list of service names (default: every service)")
+    for i, s in enumerate(svcs):
+        se = s.get("errors")
+        if se is None:
+            continue
+        where = "services[%d].errors" % i
+        if not isinstance(se, dict):
+            raise ManifestError("%s: a mapping (format, level, match, ignore, files, normalize, off)" % where)
+        _unknown(se, KNOWN_ERRORS_SVC, where)
+        if se.get("format", "auto") not in ERR_FORMATS:
+            raise ManifestError("%s: format must be one of %s" % (where, ", ".join(ERR_FORMATS)))
+        lv = se.get("level", e.get("level", "error"))
+        if lv not in ("error", "warning") and "{{" not in str(lv):
+            raise ManifestError("%s: level: error or warning" % where)
+        for k in ("match", "ignore"):
+            if k in se:
+                _ere(se[k], "%s.%s" % (where, k))
+        if se.get("format") == "none" and "match" not in se:
+            raise ManifestError("%s: format: none needs match: (otherwise no line is an error)" % where)
+        fs = se.get("files") or []
+        if not isinstance(fs, list) or any(not isinstance(f, str) or not f.startswith("/") or re.search(r"[\s'\"$`\\]", f)
+                                           for f in fs):
+            raise ManifestError("%s.files: absolute paths of log files the service writes (no spaces or quotes)" % where)
+        for j, r in enumerate(se.get("normalize") or []):
+            w = "%s.normalize[%d]" % (where, j)
+            if isinstance(r, str):
+                _ere(r, w)
+            elif isinstance(r, dict) and set(r) <= {"pattern", "replace", "description"} and "pattern" in r:
+                _ere(r["pattern"], w + ".pattern")
+                if re.search(r"[\t\n]", str(r.get("replace", ""))):
+                    raise ManifestError("%s.replace: one line, no tabs" % w)
+            else:
+                raise ManifestError("%s: a regular expression (replaced by *), or {pattern, replace}" % w)
+        if "off" in se and not isinstance(se["off"], bool):
+            raise ManifestError("%s.off: true or false" % where)
+
+
+def errlog_services(m):
+    e = m["errors"]
+    cov = e.get("services") or [s["name"] for s in m["services"]]
+    return [s["name"] for s in m["services"] if s["name"] in cov and not (s.get("errors") or {}).get("off")]
+
+
+def errlog_level(m, s):
+    """The ERE of the error lines of service s (dict) under the manifest's errors:."""
+    se = s.get("errors") or {}
+    fmt = se.get("format", "auto")
+    alts = []
+    if fmt == "auto":
+        alts.append(LEVEL_ERROR)
+        if se.get("level", m["errors"].get("level", "error")) == "warning":
+            alts.append(LEVEL_WARNING)
+    elif fmt == "redis":
+        alts.append(REDIS_LEVEL)
+    if se.get("match"):
+        alts.append(se["match"])
+    return "|".join("(%s)" % a for a in alts)
+
+
+def compile_errors(m, order):
+    """manifest.sh lines for errors: (hydo-init-errlog.sh reads them)."""
+    e = m["errors"]
+    svcs = {s["name"]: s for s in m["services"]}
+    cov = errlog_services(m)
+    L = ["HYDO_ERR_MAX=%d" % int(e.get("max", 40)),
+         "HYDO_ERR_SERVICES=%s" % shq(" ".join(n for n in order if n in cov))]
+    for n in order:
+        if n not in cov:
+            continue
+        se = svcs[n].get("errors") or {}
+        norm = ["%s\t%s" % ((r, "*") if isinstance(r, str) else (r["pattern"], r.get("replace", "*")))
+                for r in se.get("normalize") or []]
+        L += ["HYDO_ERR_%s_level=%s" % (n, shq(errlog_level(m, svcs[n]))),
+              "HYDO_ERR_%s_exc=%s" % (n, shq(EXCEPTION_LINE if se.get("format", "auto") == "auto" else "")),
+              "HYDO_ERR_%s_ignore=%s" % (n, shq(se.get("ignore") or "")),
+              "HYDO_ERR_%s_files=%s" % (n, shq(" ".join(se.get("files") or []))),
+              "HYDO_ERR_%s_norm=%s" % (n, shq("\n".join(norm)))]
+    return L
 
 
 # ------------------------------------------------------------------ fake outside services
@@ -866,6 +1016,8 @@ def compile_shell(m, tc_path, fc=None, ip_path=None):
               "HYDO_KNOB_%s_name=%s" % (t, shq(k.get("name", t)))]
     if m.get("_compose"):   # the test composer (hydo_composer.py); only then: others compile unchanged
         L += _composer().shell_lines(m["_compose"])
+    if has_errlog(m):       # error logs as findings; only then: other manifests compile byte-identically
+        L += compile_errors(m, order)
     manifest_sh = "\n".join(L) + "\n"
     P = ["# generated by hvx/onboard/hydo-build: the project's env + shell helpers (hydo.yaml)",
          "export HOME=/tmp TZ=UTC LANG=C"]
@@ -1037,10 +1189,13 @@ def init_text(m):
         base = base[:i] + "# copies of the init functions hydo-init-freeze.sh wraps\n" + "".join(copies) + "\n" + fz + base[i:]
     if has_buggify(m):
         base = _splice(base, BG_WRAP, "_bg_orig_", BG_INIT, "buggify: true")
-    if has_world(m):    # fakes:/proxies: (hydo-init-fakes.sh), after every other extension but one
+    if has_world(m):    # fakes:/proxies: (hydo-init-fakes.sh), after every other extension but errors: and network:
         base = _splice(base, PF_WRAP, "_pf_orig_", WORLD_INIT, "fakes:/proxies:")
+    if has_errlog(m):   # errors: (hydo-init-errlog.sh), after fakes: it wraps what the other extensions left
+        base = _splice(base, EL_WRAP, "_el_orig_", ERRLOG_INIT, "errors:")
     if has_netns(m):    # network: bridge (hydo-init-netns.sh), last: it overrides the links, freeze and
-        # network-fault functions, and sets the network up when /sbin/init reaches it (before S0)
+        # network-fault functions, and sets the network up when /sbin/init reaches it (before S0);
+        # it wraps none of the functions errors: wraps
         base = _splice(base, NS_WRAP + (("fc_arm",) if has_freeze(m) else ()), "_ns_orig_", NETNS_INIT, "network: bridge")
     return base
 
@@ -1048,7 +1203,7 @@ def init_text(m):
 def install_init(m, dst):
     if any(v.get("type") == "eventually" for v in m["invariants"]) or has_links(m) or has_freeze(m) or \
        "clock_after_cut" in (m.get("guest") or {}) or has_buggify(m) or m.get("checks") or has_world(m) or \
-       has_netns(m):
+       has_netns(m) or has_errlog(m):
         with open(dst, "w") as f:
             f.write(init_text(m))
     else:

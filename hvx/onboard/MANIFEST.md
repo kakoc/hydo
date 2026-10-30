@@ -182,6 +182,17 @@ checks:                        # ready-made checkers for recorded histories (see
 faults: [kill, pause, network, oneway, cut, clock, disk]   # which kinds make sense here (also
                                # freeze, protocol; see their sections);
                                # network/oneway also pull iproute2 into the image
+
+errors: true                   # error logs as findings (see "Error logs as findings" below): scan
+                               #   every service's log; or a mapping: level: error|warning,
+                               #   max: 40 (kinds printed per boot), services: [names]
+# and per service, under services[]:
+#   errors:
+#     format: auto             # auto (default: ERROR/FATAL/level=error/panic: ...) | redis | none
+#     files: [/tmp/mysqld.err] # more log files the service writes (absolute paths)
+#     match: 'regex'           # also an error line (POSIX ERE); ignore: 'regex' never is
+#     normalize: ['req-[a-z0-9]+']   # more parts to blank out of the template
+#     off: true                # not this service
 ```
 
 `buggify: true` (top level, optional) says the project's programs carry BUGGIFY fault points
@@ -1159,6 +1170,109 @@ Limits: cleartext HTTP/2 only (no TLS); the client must be pointed at the proxy;
 `idempotency:` taken from the message (`pb:`) reads the call's first message before the decision
 (a protobuf field holding its default value, such as an id of 0, is absent, so the ref is empty);
 messages up to 64 MiB; compressed messages are passed through and counted, not decoded.
+
+## Error logs as findings (`errors:`, `hydo/known-errors.yaml`)
+
+An invariant checks what you thought of. A service that writes an error line to its log while the
+invariants still pass is often the first sign of a bug nobody wrote a check for. With `errors:` in
+the manifest, hydo reports every KIND of error line a run produced, compares the kinds with a
+reviewed list of expected ones, and reports the new ones as findings of their own.
+
+**In the guest** (`hydo-init-errlog.sh`, spliced into the init only for a manifest with `errors:`;
+every other image builds byte for byte as before). Each covered service has its stdout/stderr log
+(the init already captures it; a restart's rotation into `<svc>.log.old` is followed), the output
+of its `setup:` command, and the files in `errors.files` (MySQL's `log-error=` file, a Java
+service's own log file). At the end of every boot -- just before the verdict line, or at a power
+cut just before the frozen state is handed over (the services are stopped first) -- the init picks
+the error lines, reduces each to a **template** and prints one record per (service, template):
+
+```
+HYDO-ERRLOG {"svc":"mysql","src":"/tmp/mysqld.err","n":2,"at":"12,end","tpl":"<time> # [ERROR] [MY-012592] [InnoDB] Operating system error number # in a file operation.","ex":"2026-01-01T00:00:12.345678Z 0 [ERROR] ..."}
+HYDO-ERRLOG-SUM {"boot":"first","steps":30,"lines":3,"kinds":2,"shown":2}
+```
+
+- Which lines: `format: auto` (the default) takes an upper-case level word (`ERROR`, `FATAL`,
+  `CRITICAL`, `PANIC`, `SEVERE`, glog's `ERRO`/`FATA`; MySQL `[ERROR]`, PostgreSQL `ERROR:`,
+  log4j/logback), `Error:`/`[Error]`, logfmt and JSON levels (`level=error`, `"level":"error"`),
+  bracketed `[error]`, Go's `panic:` and `fatal error:`, and exception lines (`x.y.FooException:
+  ...`, Python's `ValueError: ...`) -- except an exception inside the stack trace of an error line
+  just counted. `level: warning` adds warning lines. `format: redis` takes Redis's `#` lines (its
+  most severe level). `format: none` takes only `match:`. `match:` adds lines, `ignore:` removes
+  them (POSIX extended regular expressions, as busybox awk reads them). Lines starting with
+  `HYDO-` are never errors.
+- The template: user `normalize:` patterns first, then timestamps and dates (`<time>`, `<date>`),
+  uuids (`<uuid>`), `0x...` and long hex runs (`<hex>`), long mixed ids (`<id>`), and every other
+  number becomes `#` -- except an error code after an upper-case prefix (`MY-012592`,
+  `ORA-00942`), a number after `errno`/`code`/`error`/`status`, and a port below the ephemeral
+  range after an IPv4 address, `localhost` or a service name (`127.0.0.1:3306` becomes
+  `#.#.#.#:3306`; the client side `127.0.0.1:54321` becomes `#.#.#.#:#`). Lines that differ only
+  in times, counters, ids and client ports give one template, and so one kind in every run.
+- `at`: when the lines were written. `s` = before the workload (boot, provisioning; the same in
+  every schedule), a number = the workload range that starts at that step (ranges are split at
+  every fault boundary), `end` = after the last step (healing, retry, final invariants), `r` = the
+  recovery boot after a power cut.
+- Record text has no backslash, double quote or control character (written `/`, `'`, space) and
+  no `hydo-`/`HYDO-` (written `hydo_`/`HYDO_`), so a log line can never look like a harness
+  marker. At most `errors.max` (default 40) kinds per boot are printed; the summary says how many
+  there were.
+
+**On the host** (`hvx/onboard/hydo_errors.py`, used by `explore.py`, `hydo run`, `hydo repro`
+and `hydo errors`). A kind's **signature** is the first 12 hex digits of
+`sha256("<service>\n<template>")`. The known list is `hydo/known-errors.yaml` (or
+`./known-errors.yaml`; `explore.py --known-errors FILE`, `hydo run --known-errors FILE`). It is
+NOT part of the image: accepting a kind changes no image and no fingerprint, and a run's findings
+are a pure function of its consoles, its schedule and the list.
+
+```yaml
+format: 1
+unknown: report            # report (default): a new kind is a finding of its own
+                           # fail: it also turns an OK run into "VIOLATION error-log [svc] <template> (<sig>)"
+known:
+  - sig: 0c1f2e3d4a5b      # one kind (as `hydo errors list` prints it); or
+    match: 'Connection to node # .* could not be established'   # a regular expression on the template
+    service: kafka         # optional: only this service's kinds
+    with: [C]              # optional: only in runs whose schedule has one of these faults
+    during: [K=kafka]      # optional: only for lines written while one of these faults was on
+    reason: "Kafka's clients retry while the broker restarts"   # required: why it is expected
+    by: user              # who decided (hydo errors accept writes it, and date:)
+```
+
+Fault patterns: `K` (any kill), `K=mysql`, `P=redis`, `N=kafka`, `O=`, `X=`, `F=`, `H=payments`,
+`C` (a power cut: `C=` or the flush cut `cf=`), `T` (a clock jump), `disk` / `disk=ioerr` (a disk
+fault), and knob values such as `R=everysec`. A line is "during" a fault when its range lies
+between the step the fault starts and the step it is lifted, inclusive -- so the range right after
+a restart or a resume, where the service recovers, is part of it. A power cut or a clock jump
+lasts to the end of the run, including the recovery boot; a disk fault covers the workload. A kind
+is known when one entry covers every one of its occurrences in that run.
+
+**The explorer** (`explore.py`) adds, only for images with `errors:`, `errors_new` (signatures)
+and `errors_known` to each run in `runs.jsonl`, `consoles/<tag>.errors.json`, an `errors.json` and
+a section "Error logs" in `report.md`: each new kind with the number of runs, the first seed and
+schedule that produced it, an example line, and -- unless `--no-shrink` -- the smallest schedule
+in which the kind is still new (the shrinker that minimises violations, with "the kind is still
+new" as its test; at most `--errors-shrink N` kinds, default 8), run twice (both fingerprints, and
+whether the kind appeared in both). `--errors fail` (or `unknown: fail`) also makes each such run
+a failure, grouped, reproduced and shrunk like a violation. A cached run (`HYDO_EXPLORE_CACHE`) is
+compared again with the current list.
+
+**Triage** (both release CLIs):
+
+```
+hydo errors list [DIR]                       # the kinds of an exploration (default hydo-out/explore) or a run dir
+hydo errors accept 0c1f2e3d4a5b --reason "the startup banner" [--by NAME] [--with C] [--during K=kafka]
+                   [--from DIR] [--file hydo/known-errors.yaml]
+hydo errors check                            # validate the list
+```
+
+`accept` appends one entry per kind (with its template and an example line, for the reader) and
+refuses to write a list that does not load. `hydo run` prints the run's new and known kinds and
+writes `one.errors.json`.
+
+Limits: the guest scans the logs at the end of each boot, so a kind's lines are counted, not
+timed within a range; a log written somewhere not listed in `files:` is not seen; a service that
+rotates its own log files by renaming loses the renamed part; multi-line messages count by their
+first matching line; the templates are heuristics (a project-specific id that does not look like
+a number, hex or a long mixed token needs a `normalize:` pattern).
 
 ## YAML subset
 

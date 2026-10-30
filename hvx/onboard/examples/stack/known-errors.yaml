@@ -1,0 +1,90 @@
+# Known error kinds: lines a service writes to its log that are expected (hydo/onboard/MANIFEST.md,
+# "Error logs as findings"). Each entry needs a reason; `hydo errors accept` appends them.
+#   sig:    the kind's signature (or match: a regular expression on its template)
+#   with:   only in runs whose schedule has one of these faults (K=mysql, C, disk, R=everysec)
+#   during: only for lines written while one of these faults was on
+format: 1
+unknown: report       # report: a new kind is a finding; fail: it also fails the run
+known:
+  - sig: f0c792251150
+    service: redis
+    tpl: "#:C <date> <time> # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low "
+    example: "127:C 01 Jan 2026 00:00:00.099 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures"
+    reason: "Redis 7.2 warns at every start that vm.overcommit_memory is 0 (the guest kernel default); only background saves under memory pressure are affected, which this test does not do"
+    by: "user"
+    date: "2026-10-30"
+  - sig: 89e061592c15
+    service: mysql
+    tpl: "<time> # [Warning] [MY-014084] [InnoDB] Threads are unable to reserve space in redo log which can't be reclaimed due to the 'log_checkpointer' consumer still lagging behind at LSN = #. Consider increa"
+    example: "2026-01-01T00:00:09.247594Z 0 [Warning] [MY-014084] [InnoDB] Threads are unable to reserve space in redo log which can't be reclaimed due to the 'log_checkpointer' consumer still lagging behind at LSN"
+    reason: "MySQL start-up warnings of this test configuration (no TLS certificates on purpose, --initialize-insecure, pid file in /tmp, a small redo log while the data directory is initialised); they appear at every mysqld start"
+    by: "user"
+    date: "2026-10-30"
+  - sig: 3ba78f48367e
+    service: mysql
+    tpl: "<time> # [Warning] [MY-013595] [Server] Failed to initialize TLS for channel: mysql_main. See below for the description of exact issue."
+    example: "2026-01-01T00:00:09.313584Z 0 [Warning] [MY-013595] [Server] Failed to initialize TLS for channel: mysql_main. See below for the description of exact issue."
+    reason: "MySQL start-up warnings of this test configuration (no TLS certificates on purpose, --initialize-insecure, pid file in /tmp, a small redo log while the data directory is initialised); they appear at every mysqld start"
+    by: "user"
+    date: "2026-10-30"
+  - sig: cb1f134d06ac
+    service: mysql
+    tpl: "<time> # [Warning] [MY-010069] [Server] Failed to set up SSL because of the following SSL library error: SSL context is not usable without certificate and private key"
+    example: "2026-01-01T00:00:09.313585Z 0 [Warning] [MY-010069] [Server] Failed to set up SSL because of the following SSL library error: SSL context is not usable without certificate and private key"
+    reason: "MySQL start-up warnings of this test configuration (no TLS certificates on purpose, --initialize-insecure, pid file in /tmp, a small redo log while the data directory is initialised); they appear at every mysqld start"
+    by: "user"
+    date: "2026-10-30"
+  - sig: 1823c0ca90a7
+    service: mysql
+    tpl: "<time> # [Warning] [MY-010453] [Server] root@localhost is created with an empty password ! Please consider switching off the --initialize-insecure option."
+    example: "2026-01-01T00:00:09.330582Z 6 [Warning] [MY-010453] [Server] root@localhost is created with an empty password ! Please consider switching off the --initialize-insecure option."
+    reason: "MySQL start-up warnings of this test configuration (no TLS certificates on purpose, --initialize-insecure, pid file in /tmp, a small redo log while the data directory is initialised); they appear at every mysqld start"
+    by: "user"
+    date: "2026-10-30"
+  - sig: 5847cbeebd62
+    service: mysql
+    tpl: "<time> # [Warning] [MY-011810] [Server] Insecure configuration for --pid-file: Location '/tmp' in the path is accessible to all OS users. Consider choosing a different directory."
+    example: "2026-01-01T00:00:18.841138Z 0 [Warning] [MY-011810] [Server] Insecure configuration for --pid-file: Location '/tmp' in the path is accessible to all OS users. Consider choosing a different directory."
+    reason: "MySQL start-up warnings of this test configuration (no TLS certificates on purpose, --initialize-insecure, pid file in /tmp, a small redo log while the data directory is initialised); they appear at every mysqld start"
+    by: "user"
+    date: "2026-10-30"
+  - sig: 723b2713fd02
+    service: mysql
+    tpl: "<time> # [ERROR] [MY-013622] [InnoDB] [FATAL] fsync() returned EIO, aborting."
+    example: "2026-01-01T00:00:26.289003Z 0 [ERROR] [MY-013622] [InnoDB] [FATAL] fsync() returned EIO, aborting."
+    with: [disk=ioerr]
+    reason: "the disk returned I/O errors (disk=ioerr): InnoDB aborts when fsync returns EIO and Kafka stops its raft thread when a log directory fails, both by design (fail-stop)"
+    by: "user"
+    date: "2026-10-30"
+  - sig: f8f5a9984671
+    service: mysql
+    tpl: "<time> # [ERROR] [MY-013183] [InnoDB] Assertion failure: os#file.cc:#:ib::fatal triggered thread #"
+    example: "2026-01-01T00:00:26.289004Z 0 [ERROR] [MY-013183] [InnoDB] Assertion failure: os0file.cc:2856:ib::fatal triggered thread 140560077665984"
+    with: [disk=ioerr]
+    reason: "the disk returned I/O errors (disk=ioerr): InnoDB aborts when fsync returns EIO and Kafka stops its raft thread when a log directory fails, both by design (fail-stop)"
+    by: "user"
+    date: "2026-10-30"
+  - sig: a9970aec795b
+    service: mysql
+    tpl: "<time> # [ERROR] [MY-013183] [InnoDB] Assertion failure: os#file.cc:#:ret == -# == # == # thread #"
+    example: "2026-01-01T00:00:26.531966Z 1 [ERROR] [MY-013183] [InnoDB] Assertion failure: os0file.cc:2907:ret == -1 == 0 == 0 thread 139991926691520"
+    with: [disk=ioerr]
+    reason: "the disk returned I/O errors (disk=ioerr): InnoDB aborts when fsync returns EIO and Kafka stops its raft thread when a log directory fails, both by design (fail-stop)"
+    by: "user"
+    date: "2026-10-30"
+  - sig: 49b1a791df99
+    service: kafka
+    tpl: "ERROR org.apache.kafka.storage.internals.log.LogDirFailureChannel Error while appending records to __cluster_metadata-# in dir /data/kafka-logs"
+    example: "ERROR org.apache.kafka.storage.internals.log.LogDirFailureChannel Error while appending records to __cluster_metadata-0 in dir /data/kafka-logs"
+    with: [disk=ioerr]
+    reason: "the disk returned I/O errors (disk=ioerr): InnoDB aborts when fsync returns EIO and Kafka stops its raft thread when a log directory fails, both by design (fail-stop)"
+    by: "user"
+    date: "2026-10-30"
+  - sig: 2761e8c6ba61
+    service: kafka
+    tpl: "ERROR org.apache.kafka.server.fault.ProcessTerminatingFaultHandler Encountered fatal fault: Unexpected error in raft IO thread"
+    example: "ERROR org.apache.kafka.server.fault.ProcessTerminatingFaultHandler Encountered fatal fault: Unexpected error in raft IO thread"
+    with: [disk=ioerr]
+    reason: "the disk returned I/O errors (disk=ioerr): InnoDB aborts when fsync returns EIO and Kafka stops its raft thread when a log directory fails, both by design (fail-stop)"
+    by: "user"
+    date: "2026-10-30"

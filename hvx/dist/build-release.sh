@@ -99,6 +99,8 @@ echo "$VERSION" > "$REL/hvx/VERSION"     # hydo_composer.engine_version: what a 
 mkdir -p "$REL/hvx/history"
 cp "$TOP/hvx/history/hydohist.py" "$TOP/hvx/history/hydo-check" "$TOP/hvx/history/hydo_hist.sh" "$REL/hvx/history/"
 cp "$TOP/hvx/onboard/hydo-init-history.sh" "$REL/hvx/onboard/"
+# error logs as findings (errors: in a manifest): the guest scan and the host side (hydo errors)
+cp "$TOP/hvx/onboard/hydo-init-errlog.sh" "$TOP/hvx/onboard/hydo_errors.py" "$REL/hvx/onboard/"
 cp "$TOP/hvx/explore/explore.py" "$TOP/hvx/explore/hvm_backend.py" "$TOP/hvx/explore/manifest_space.py" \
    "$TOP/hvx/explore/ptedges.h" "$REL/hvx/explore/"
 # the run engine's sources (install.sh compiles hvx/hvx_explore on the user's machine) and the

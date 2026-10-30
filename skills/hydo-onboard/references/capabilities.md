@@ -37,6 +37,7 @@ that contains `hvx/onboard/hydo_agents.py`.
 | `buggify: true` | not shipped (the init extension is missing from the release) | yes | yes |
 | `hydo-read`, `hydo-check` | not bundled (build `hydo-read` in the repository and set `HYDO_READ_BIN`) | after M96 (ships `guest/hydo-read`; else `HYDO_READ_BIN_ARM64`) | yes |
 | `fakes:`, `proxies:`, `H=` protocol faults, `hydo-world` checks | not shipped | after M96 (ships `guest/hydo-world`; else `HYDO_WORLDBIN_ARM64`) | yes |
+| `errors:` error logs as findings, `hydo errors`, `hydo/known-errors.yaml` | not shipped yet (needs a release with `hvx/onboard/hydo-init-errlog.sh` and `hydo_errors.py`) | not shipped yet (same; the arm64 build with `errors:` was not run) | yes |
 | `hydo-grpc-gen` generated drivers | not shipped (generate in the repository, then copy the output) | not shipped (generate with `--arch amd64,arm64` in the repository, copy `hydo-grpc.arm64`) | yes |
 
 Where a feature is missing, say so in the report and offer the closest substitute: a shell
