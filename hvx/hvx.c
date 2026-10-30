@@ -3407,9 +3407,15 @@ static void hvx_pio(struct hvx_vcpu *vcpu)
 		u64 addr = vmread(GUEST_LINEAR_ADDR);	/* GVA == GPA (identity map) */
 		u64 i, b;
 
-		for (i = 0; i < count; i++, addr += size) {
-			if (is_in || port != UART_BASE)
-				continue;
+		/*
+		 * Only OUTS to the UART has an effect (bytes into the console). The guest
+		 * chooses RCX, so this loop must not run `count` times: it ran with IRQs off
+		 * in VMX root, and a REP INS/OUTS with RCX near 2^64 held the host CPU for
+		 * good (M97). Stop once the console is full or the source leaves guest RAM;
+		 * a source address can only come back into RAM by wrapping past 2^64.
+		 */
+		for (i = 0; i < count && !is_in && port == UART_BASE &&
+			    vm->console_len < HVX_CONSOLE_SZ && addr < limit; i++, addr += size) {
 			for (b = 0; b < size; b++)
 				if (addr + b < limit && vm->console_len < HVX_CONSOLE_SZ)
 					vm->console[vm->console_len++] =
