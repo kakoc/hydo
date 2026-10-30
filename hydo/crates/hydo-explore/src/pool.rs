@@ -646,8 +646,13 @@ fn worker_main(
                     let r = match Schedule::parse(&job.text) {
                         Ok(s) => wk.run(&job.tag, &s),
                         Err(e) => {
-                            res = Some(error_result(
-                                &format!("RESULT {} refused: {}\n", job.tag, e.message),
+                            // a schedule the engines would refuse: no run (explore.py sent it and
+                            // got the engine's own error verdict)
+                            res = Some(parse_result(
+                                &format!(
+                                    "RESULT {} fp=0 wfp=0 secs=0 verdict=ERROR refused: {}",
+                                    job.tag, e.message
+                                ),
                                 i,
                             ));
                             break;
