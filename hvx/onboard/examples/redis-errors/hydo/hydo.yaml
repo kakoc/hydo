@@ -5,9 +5,11 @@
 # changes no image and no fingerprint). Build on the build box:
 #   HYDO_SEEDRNG=~/hydo/build/hvx_seedrng hvx/onboard/hydo-build \
 #       hvx/onboard/examples/redis-errors/hydo/hydo.yaml --out explore-ob-redis-errors
-# Try:  disk=none | run                          only the startup banner (known: hydo/known-errors.yaml)
-#       disk=cut | run C=12 R=everysec           the recovery boot loads a truncated AOF (known while C)
-#       disk=ioerr dseed=3 | run                 write errors: new kinds, reported by explore.py / hydo run
+# (On the bare-metal test machine it was built with the Linux release's tools: `hydo build` gives the same bytes.)
+# Try:  disk=none dseed=1 | run                  one kind, Redis's start-up overcommit warning (known)
+#       disk=ioerr:3 dseed=1 | run               AOF write errors (known with disk=ioerr) and "can't open
+#                                                the AOF manifest file" on the restart (new): ERROR verdict
+#       hydo explore --seeds 1-40 --strategy swarm   the new kinds of the disk faults, each shrunk
 name: redis-errors
 description: The composed Redis example with error logs as findings (known kinds in hydo/known-errors.yaml).
 hydo_version: "0.1"

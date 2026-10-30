@@ -561,7 +561,9 @@ def validate_errors(m):
     if not isinstance(e, dict):
         raise ManifestError("errors: true, or a mapping (level, max, services)")
     _unknown(e, KNOWN_ERRORS_TOP, "errors")
-    if e.get("level", "error") not in ("error", "warning"):
+    # a {{param}} placeholder: hydo-build checks the value after --set; a reader of the image's
+    # hydo.yaml (manifest_space.py) sees the placeholder and does not need the level
+    if e.get("level", "error") not in ("error", "warning") and "{{" not in str(e.get("level")):
         raise ManifestError("errors.level: error (the default) or warning (also warning-level lines)")
     mx = e.get("max", 40)
     if not isinstance(mx, int) or isinstance(mx, bool) or not 1 <= mx <= 200:
@@ -581,7 +583,8 @@ def validate_errors(m):
         _unknown(se, KNOWN_ERRORS_SVC, where)
         if se.get("format", "auto") not in ERR_FORMATS:
             raise ManifestError("%s: format must be one of %s" % (where, ", ".join(ERR_FORMATS)))
-        if se.get("level", e.get("level", "error")) not in ("error", "warning"):
+        lv = se.get("level", e.get("level", "error"))
+        if lv not in ("error", "warning") and "{{" not in str(lv):
             raise ManifestError("%s: level: error or warning" % where)
         for k in ("match", "ignore"):
             if k in se:
