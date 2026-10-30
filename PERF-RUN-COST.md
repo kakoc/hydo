@@ -5,7 +5,7 @@ This note measures the cost of one explorer run and of one campaign on the bare-
 rotating disks in RAID 1, the main `hvx.ko` built from `hvx/hvx.c` as on `main`), so that the Rust
 rewrite of the explorer and the engine runner aims at the real costs. Nothing in the product
 changed: the engine's measurement code is off unless an environment variable turns it on, and every
-fingerprint it produced was checked against the unchanged engine (section 9).
+fingerprint it produced was checked against the unchanged engine (section 10).
 
 ## 1. Summary (ranked)
 
@@ -17,7 +17,7 @@ fingerprint it produced was checked against the unchanged engine (section 9).
    `POSIX_FADV_DONTNEED`. On this machine that file is on a rotating disk. A power-cut run of the
    stack pays 5.4 s to write the 512 MiB data partition and 6.1 s to read it (and S0) back: 11.6 s
    of a 35 s run (33 %). The same step is a 0.1 s `memcpy` when the buffer stays in memory
-   (`HVX_SNAP_MALLOC=1`, section 6). The worker's boot pays 60–80 s of its 87–99 s for the same
+   (`HVX_SNAP_MALLOC=1`, section 4). For Redis the same files cost 1.9 s of a 5.7 s power-cut run. The worker's boot pays 60–80 s of its 87–99 s for the same
    reason (section 3).
 2. **The guest itself.** Inside `HVX_RUN` (workload + check + recovery boot) a stack run spends
    4.3 s without a power cut and 14.8 s with one (about 40 % of the run). A Redis run spends only
@@ -71,7 +71,17 @@ on the rotating disk, 3.0 s VM creation, restore copies and teardown), and the R
    run (11 %; a power-cut run builds two VMs) and 0.5 s per Redis run. Needs module work. A smaller
    first step with the same order of saving for the stack: share the read-only root partition
    between VMs instead of copying 1.75 GiB into each (0.9 s of the 1.2 s VM creation). [medium-high]
-4. **Workers sized to the machine.** {{WORKERS}}
+4. **Workers sized to the machine.** A worker keeps one hardware thread busy and holds, per
+   worker, the VM's kernel memory (1.1 GiB for Redis, 3.3 GiB for the stack, because the whole
+   disk image is copied in) plus its save buffers (2.1 GiB and 3 GiB, plus 0.5 GiB while a stack
+   power-cut run carries its data disk). On this 8-thread, 32 GB machine Redis in memory scaled to
+   3.7× at 4 workers and 5.2× at 6; the stack with file buffers peaked at 2.8× with 4 workers and
+   fell to 2.2× at 6, when the save files no longer fitted in the page cache. The worker count
+   should be computed from the image: about min(hardware threads, free memory ÷ per-worker
+   memory), which is 6–7 for Redis and 4 for the stack on this machine (the fixed default of 3
+   fits neither). Copy-on-write forking (idea 3) shrinks the per-worker memory to the dirtied
+   pages, after which the thread count alone decides. [high for the measurements, medium for the
+   rule]
 5. **Strategies that react to results as runs finish.** `explore.py` itself is not the cost
    (0.1 s CPU per campaign); the batch barriers are (3 % of worker time in the Redis campaign, more
    in small shrink rounds), plus shrink candidates that run after the round's first success and are
@@ -304,7 +314,47 @@ counts above come from comparing against the saved copy.
 
 ## 7. Throughput scaling with the number of workers
 
-{{SCALE}}
+`explore.py --strategy process --no-shrink` on a fixed seed range with 1, 2, 4 and 6 workers
+(`perf/scale.sh`; 4 and 6 inside the quiet window). "Runs/min" counts runs that finished after
+every worker had started its first run, so the worker boot is not in it; "run" is the mean run
+time without the measurement's own time; CPU is from `vmstat` (8 hardware threads = 100 %).
+
+**Redis, save buffers in memory** (`HVX_SNAP_MALLOC=1`, seeds 1–100; this isolates CPU and memory):
+
+| workers | runs/min | speed-up | mean run | new VM | restore RAM | workload | fingerprints | CPU user / system / idle / I/O wait |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 18.0 | 1.00 | 3.34 s | 0.15 | 0.38 | 0.13 | 2.35 | 10 / 3 / 87 / 0 % |
+| 2 | 34.9 | 1.94 | 3.41 s | 0.15 | 0.39 | 0.14 | 2.40 | 19 / 6 / 75 / 0 % |
+| 4 | 67.2 | 3.73 | 3.53 s | 0.17 | 0.41 | 0.14 | 2.47 | 37 / 12 / 50 / 1 % |
+| 6 | 94.0 | 5.23 | 3.78 s | 0.20 | 0.48 | 0.17 | 2.54 | 53 / 20 / 27 / 0 % |
+
+Each worker keeps one hardware thread busy, so throughput grows with the worker count up to the 4
+physical cores and then by about 40 % for the next two workers, which share cores with
+hyper-threading. The phases that slow down most are the memory-bound ones (new VM +35 %, RAM
+restore +25 % from 1 to 6 workers); the fingerprints slow down by 8 %. There is no lock: the
+module has no global run lock (each VM's run section disables preemption on its own CPU), and
+`hvx-run`'s lock is shared. With 8 workers the bare-metal machine would run out of hardware threads.
+
+**Stack, save buffers in files as today** (`--more-faults`, seeds 1–36; per-phase means in
+seconds):
+
+| workers | runs/min | speed-up | worker boot | mean run | new VM | restore RAM | restore data | save flushed disk | restore for recovery | workload | CPU user / system / idle / I/O wait |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 3.67 | 1.00 | 44 s | 16.4 | 1.13 | 0.45 | 0.15 | 1.51 | 1.52 | 4.74 | 4 / 7 / 87 / 3 % |
+| 2 | 6.20 | 1.69 | 97 s | 19.8 | 1.17 | 0.87 | 0.29 | 2.64 | 2.80 | 4.96 | 10 / 11 / 61 / 18 % |
+| 4 | 10.42 | 2.84 | 135 s | 22.9 | 1.29 | 1.52 | 0.53 | 2.78 | 4.21 | 5.14 | 7 / 15 / 48 / 30 % |
+| 6 | 7.91 | 2.16 | 221 s | 44.2 | 2.10 | 8.64 | 4.15 | 7.60 | 8.93 | 5.11 | 5 / 12 / 27 / 56 % |
+
+{{SCALE_SM}}
+
+Here the rotating disk is the limit. The guest phases do not slow down (workload 4.7–5.1 s at
+every worker count), but every phase that touches the save files does: the flushed-disk save and
+the recovery restore double from 1 to 2 workers, and at 6 workers the restore of S1 itself reads
+from the disk (8.6 s instead of 0.45 s), because 6 × 3.3 GiB of VM memory plus 6 × 3 GiB of save
+files no longer fit in the page cache of a 32 GB machine. Throughput peaks at 4 workers (2.8×) and
+falls at 6 (2.2×, I/O wait 56 %). The boot of 6 workers takes 3.7 minutes, almost all of it
+writing 18 GiB of save files. Each sample has 6–36 runs per worker; the drop at 6 is far larger
+than that noise.
 
 ## 8. Where a campaign spends its runs
 
