@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Replaced by hydo-compose (the Rust crate hydo/crates/hydo-compose, docs/HISTORY.md M106); kept as the
+# reference until every port is merged, then deleted.
 """hydo-compose -- turn a docker-compose.yaml into a starting hydo.yaml (MANIFEST.md, "From Docker
 Compose").
 

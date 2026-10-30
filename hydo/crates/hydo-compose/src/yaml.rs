@@ -108,6 +108,9 @@ struct Res {
     float: Regex,
     int: Regex,
     null: Regex,
+    /// the resolver's timestamp (a date alone needs two-digit month and day)
+    ts_res: Regex,
+    /// the constructor's timestamp, with its parts
     ts: Regex,
 }
 
@@ -118,6 +121,7 @@ fn res() -> &'static Res {
         float: Regex::new(r"^(?:[-+]?(?:[0-9][0-9_]*)\.[0-9_]*(?:[eE][-+][0-9]+)?|\.[0-9][0-9_]*(?:[eE][-+][0-9]+)?|[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+\.[0-9_]*|[-+]?\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN))$").unwrap(),
         int: Regex::new(r"^(?:[-+]?0b[0-1_]+|[-+]?0[0-7_]+|[-+]?(?:0|[1-9][0-9_]*)|[-+]?0x[0-9a-fA-F_]+|[-+]?[1-9][0-9_]*(?::[0-5]?[0-9])+)$").unwrap(),
         null: Regex::new(r"^(?:~|null|Null|NULL|)$").unwrap(),
+        ts_res: Regex::new(r"^(?:[0-9]{4}-[0-9][0-9]-[0-9][0-9]|[0-9]{4}-[0-9][0-9]?-[0-9][0-9]?(?:[Tt]|[ \t]+)[0-9][0-9]?:[0-9][0-9]:[0-9][0-9](?:\.[0-9]*)?(?:[ \t]*(?:Z|[-+][0-9][0-9]?(?::[0-9][0-9])?))?)$").unwrap(),
         ts: Regex::new(r"^(?P<y>[0-9][0-9][0-9][0-9])-(?P<m>[0-9][0-9]?)-(?P<d>[0-9][0-9]?)(?:(?:[Tt]|[ \t]+)(?P<H>[0-9][0-9]?):(?P<M>[0-9][0-9]):(?P<S>[0-9][0-9])(?:\.(?P<f>[0-9]*))?(?:[ \t]*(?P<tz>Z|(?P<ts>[-+])(?P<th>[0-9][0-9]?)(?::(?P<tm>[0-9][0-9]))?))?)?$").unwrap(),
     })
 }
@@ -145,7 +149,7 @@ fn resolve(v: &str) -> &'static str {
     if has("~nN") && r.null.is_match(v) {
         return "null";
     }
-    if has("0123456789") && r.ts.is_match(v) {
+    if has("0123456789") && r.ts_res.is_match(v) {
         return "timestamp";
     }
     if v == "=" {

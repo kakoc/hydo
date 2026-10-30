@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Replaced by hydo-compose (its hydo-fetch-image program, hydo/crates/hydo-compose, docs/HISTORY.md
+# M106); kept until every port is merged, then deleted.
 """fetch_image -- copy ONE image from a Docker registry by manifest digest into a `docker save`
 style archive, without skopeo (a machine where skopeo is not installed and may not be).
 
