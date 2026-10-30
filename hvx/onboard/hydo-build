@@ -481,8 +481,9 @@ def validate(m):
 #   namespace with its own lo (localhost is private to it) and eth0 = its addr:, an address in
 #   NET_BRIDGE, one end of a veth pair whose other end is a port of the bridge hydo0 in the guest's
 #   own namespace (NET_GW: the workload, the invariants and hydo-world). hydo-init-netns.sh sets it
-#   up at boot and moves network faults onto the veths. x86_64 only (the arm64 guest kernel has no
-#   network namespaces). A manifest without network: (or with loopback) builds exactly as before.
+#   up at boot and moves network faults onto the veths. On arm64 such an image boots the second
+#   guest kernel, Image-explore-netns (Milestone 99, hydo_build_arm64.py). A manifest without
+#   network: (or with loopback) builds exactly as before.
 NET_MODES = ("loopback", "bridge")
 NET_BRIDGE = "10.89.0.0/16"
 NET_GW = "10.89.0.1"
@@ -1569,14 +1570,8 @@ def main():
     os.makedirs(opt["--build-dir"], exist_ok=True)
     try:
         if opt["--arch"] == "arm64":
-            if has_netns(m):
-                print("hydo-build: --arch arm64 does not support network: bridge: the arm64 guest kernel "
-                      "(hvx-mac/explore/build-guest.sh) has no network namespaces, veth or bridge "
-                      "(CONFIG_NAMESPACES, CONFIG_NET_NS, CONFIG_VETH, CONFIG_BRIDGE)", file=sys.stderr); return 2
-            if has_links(m):
-                print("hydo-build: --arch arm64 does not support addr: (link faults) yet", file=sys.stderr); return 2
-            if has_freeze(m):
-                print("hydo-build: --arch arm64 does not support faults: freeze yet", file=sys.stderr); return 2
+            # network: bridge, addr: and faults: [freeze] build for the second arm64 kernel,
+            # Image-explore-netns (Milestone 99; hydo_build_arm64.needs_netns_kernel)
             sys.path.insert(0, HERE)
             import hydo_build_arm64
             hydo_build_arm64.build(m, path, out, opt["--build-dir"], globals(), oci=oci, params=params)
