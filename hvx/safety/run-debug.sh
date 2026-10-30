@@ -36,13 +36,15 @@ qrc=$?
 # --- report ---
 SPLAT='BUG:|KASAN:|UBSAN:|WARNING:|general protection fault|Oops|Kernel panic|kernel BUG|soft lockup|hard LOCKUP|rcu: INFO|rcu_sched self-detected|blocked for more than|possible circular locking|possible recursive locking|inconsistent lock state|suspicious RCU usage|sleeping function called from invalid context|scheduling while atomic|list_add corruption|list_del corruption|refcount_t:|Bad page|bad page state|stack-protector|stack guard page|unreferenced object|DEBUG_LOCKS_WARN_ON|hardened usercopy|detected buffer overflow'
 awk -v splat="$SPLAT" '
-  /SAFETY RESULT / { cur = "(between tests)"; print; next }
+  { gsub(/\r/, "") }
+  /SAFETY START /  { cur = $NF; next }
   /SAFETY END /    { cur = "(between tests)"; next }
-  /SAFETY BEGIN|SAFETY insmod ok/ { cur = "(module load)"; print; next }
-  /SAFETY rmmod/   { cur = "(module unload)"; print; next }
-  /SAFETY KMEMLEAK|SAFETY DONE|SAFETY FATAL/ { cur = "(after rmmod)"; print; next }
-  /SAFETY\| / { if (cur == "" || cur ~ /^\(/) { split($0, a, ": "); n = a[1]; sub(/.*SAFETY\| /, "", n); cur = n } next }
-  $0 ~ splat { gsub(/\r/, ""); print "SPLAT [" (cur == "" ? "(boot)" : cur) "] " $0 }
+  /SAFETY RESULT / { sub(/^.*SAFETY /, "SAFETY "); print; next }
+  /SAFETY BEGIN|SAFETY insmod ok/ { cur = "(module load)"; next }
+  /SAFETY rmmod/   { cur = "(module unload)"; next }
+  /SAFETY KMEMLEAK|SAFETY DONE|SAFETY FATAL/ { cur = "(after rmmod)"; next }
+  /SAFETY\| /      { next }
+  $0 ~ splat { print "SPLAT [" (cur == "" ? "(boot)" : cur) "] " $0 }
 ' "$LOG" > "$OUT/report.txt"
 grep -a 'SAFETY| ' "$LOG" | sed 's/^.*SAFETY| //' > "$OUT/tests.txt"
 
