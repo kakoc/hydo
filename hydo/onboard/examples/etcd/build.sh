@@ -30,5 +30,6 @@ X="$(mktemp -d)"; trap 'rm -rf "$X"' EXIT
 tar -xzf "$DL/$T" -C "$X"
 mkdir -p "$HERE/etcd-v$V"
 install -m 0755 "$X/etcd-v$V-linux-amd64/etcd" "$X/etcd-v$V-linux-amd64/etcdctl" "$HERE/etcd-v$V/"
-PY3="${HYDO_PY3:-$(command -v python3 || ls /nix/store/*python3-3.11*/bin/python3 | head -1)}"
-"$PY3" "$HERE/../../hydo-build" "$HERE/${HYDO_ETCD_MANIFEST:-hydo.yaml}" --set "version=$V" --out "explore-ob-etcd-$V" "${@:2}"
+HB="${HYDO_BUILD_BIN:-$(command -v hydo-build || echo "$HERE/../../../../target/release/hydo-build")}"   # the Rust image builder
+[ -x "$HB" ] || { echo "error: no hydo-build binary: cargo build --release -p hydo-build (or set HYDO_BUILD_BIN)" >&2; exit 1; }
+HYDO_ONBOARD="$HERE/../.." "$HB" "$HERE/${HYDO_ETCD_MANIFEST:-hydo.yaml}" --set "version=$V" --out "explore-ob-etcd-$V" "${@:2}"

@@ -11,5 +11,6 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 BIN="${HYDO_MINIFLUX_BIN:-$HOME/hydo/build/miniflux}"
 install -m 0755 "$BIN" "$HERE/miniflux"
-PY3="${HYDO_PY3:-$(command -v python3 || ls /nix/store/*python3-3.11*/bin/python3 | head -1)}"
-"$PY3" "$HERE/../../hydo-build" "$HERE/hydo.yaml" --out "explore-ob-miniflux" "$@"
+HB="${HYDO_BUILD_BIN:-$(command -v hydo-build || echo "$HERE/../../../../target/release/hydo-build")}"   # the Rust image builder
+[ -x "$HB" ] || { echo "error: no hydo-build binary: cargo build --release -p hydo-build (or set HYDO_BUILD_BIN)" >&2; exit 1; }
+HYDO_ONBOARD="$HERE/../.." "$HB" "$HERE/hydo.yaml" --out "explore-ob-miniflux" "$@"

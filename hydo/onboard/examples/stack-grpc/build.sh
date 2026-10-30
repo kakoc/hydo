@@ -57,5 +57,6 @@ src cur; gobuild build/stack-grpc-src/cur "$TOP/build/stack-grpc-cur-hydostack"
 if [ "$VARIANT" != cur ]; then src "$VARIANT"; gobuild "build/stack-grpc-src/$VARIANT" "$TOP/build/stack-grpc-$VARIANT-hydostack"; fi
 install -m 0755 "build/stack-grpc-$VARIANT-hydostack" "$HERE/front-door"
 install -m 0755 build/stack-grpc-cur-hydostack "$HERE/client"
-PY3="${HYDO_PY3:-$(command -v python3 || ls /nix/store/*python3-3.11*/bin/python3 | head -1)}"
-"$PY3" "$HERE/../../hydo-build" "$HERE/hydo.yaml" --out "explore-ob-stack-grpc-$VARIANT" "$@"
+HB="${HYDO_BUILD_BIN:-$(command -v hydo-build || echo "$HERE/../../../../target/release/hydo-build")}"   # the Rust image builder
+[ -x "$HB" ] || { echo "error: no hydo-build binary: cargo build --release -p hydo-build (or set HYDO_BUILD_BIN)" >&2; exit 1; }
+HYDO_ONBOARD="$HERE/../.." "$HB" "$HERE/hydo.yaml" --out "explore-ob-stack-grpc-$VARIANT" "$@"

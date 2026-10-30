@@ -14,5 +14,6 @@ esac
 install -m 0755 "$BIN" "$HERE/front-door"
 "$TOP/hydo/onboard/hydo-grpc-gen" "$TOP/hydo/stack/proto" --hints "$TOP/hydo/stack/grpc-hints.yaml" --out "$HERE/grpcgen"
 echo "*" > "$HERE/grpcgen/.gitignore"   # generated: not tracked
-PY3="${HYDO_PY3:-$(command -v python3 || ls /nix/store/*python3-3.11*/bin/python3 | head -1)}"
-"$PY3" "$HERE/../../hydo-build" "$HERE/hydo-grpcgen.yaml" --out "explore-ob-stackgen-$FRONT" "$@"
+HB="${HYDO_BUILD_BIN:-$(command -v hydo-build || echo "$HERE/../../../../target/release/hydo-build")}"   # the Rust image builder
+[ -x "$HB" ] || { echo "error: no hydo-build binary: cargo build --release -p hydo-build (or set HYDO_BUILD_BIN)" >&2; exit 1; }
+HYDO_ONBOARD="$HERE/../.." "$HB" "$HERE/hydo-grpcgen.yaml" --out "explore-ob-stackgen-$FRONT" "$@"

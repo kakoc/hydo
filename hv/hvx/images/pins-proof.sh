@@ -25,8 +25,9 @@ echo "GCC_MUSL=$GCC_MUSL"
 echo "REDIS_OUT=$REDIS_OUT"
 sha256sum build/hvx_seedrng build/hydokv build/hydoapp build/redis-server build/redis-cli
 
-PY3="$(ls /nix/store/*python3-3.11*/bin/python3 | head -1)"
-HOME="$PROOF" "$PY3" hydo/onboard/hydo-build hydo/onboard/examples/redis/hydo.yaml --out explore-ob-redis
+HB="${HYDO_BUILD_BIN:-$(command -v hydo-build || echo "$PROOF/hydo/target/release/hydo-build")}"   # the Rust image builder
+[ -x "$HB" ] || { echo "error: no hydo-build binary: cargo build --release -p hydo-build (or set HYDO_BUILD_BIN)" >&2; exit 1; }
+HOME="$PROOF" HYDO_ONBOARD="$PROOF/hydo/hydo/onboard" "$HB" hydo/onboard/examples/redis/hydo.yaml --out explore-ob-redis
 sha256sum build/explore-ob-redis-disk.img
 
 if [ "${STACK:-1}" = 1 ]; then
@@ -36,6 +37,6 @@ if [ "${STACK:-1}" = 1 ]; then
   mkdir -p "$SB"
   [ "$SB" = "$PROOF/hydo/build" ] || cp build/hvx_seedrng "$SB/hvx_seedrng"
   cp "${FRONT_BIN:-/home/user/hydo/build/explore-fix-hydostack}" build/explore-fix-hydostack
-  HOME="$PROOF" HYDO_PY3="$PY3" bash hydo/onboard/examples/stack/build.sh --build-dir "$SB"
+  HOME="$PROOF" HYDO_BUILD_BIN="$HB" bash hydo/onboard/examples/stack/build.sh --build-dir "$SB"
   sha256sum "$SB/explore-ob-stack-fix-disk.img"
 fi

@@ -13,13 +13,13 @@ GO="${HYDO_GO:-/nix/store/pwj3x44pp735yb038fnmqckyyra9k29x-go-1.26.5/bin/go}"
 [ -x "$GO" ] || GO=/nix/store/xrgn6m0c5vbz06467q06zdwnk6qqdl7z-go-1.26.5/bin/go
 [ -x "$GO" ] || GO=go
 export HYDO_GO="$GO"
-PY="${HYDO_PY3:-$(command -v python3 || true)}"   # the build box has no python3 on PATH:
-[ -n "$PY" ] || PY=/nix/store/4rf5qybw37b4lh1g0xczlv14sqdbmnpm-python3-3.11.9/bin/python3   # BUILD-PINS.md
+HB="${HYDO_BUILD_BIN:-$(command -v hydo-build || echo "$TOP/target/release/hydo-build")}"   # the Rust image builder
+[ -x "$HB" ] || { echo "error: no hydo-build binary: cargo build --release -p hydo-build (or set HYDO_BUILD_BIN)" >&2; exit 1; }
 mkdir -p "$D/build"
 ( cd "$TOP/hydo/grpcgen" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOFLAGS=-mod=readonly GOTOOLCHAIN=local \
   "$GO" build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o "$D/build/orderd" ./demo/orderd )
 "$TOP/hydo/onboard/hydo-grpc-gen" "$D/proto" --hints "$D/hints.yaml" --out "$D/build/gen"
 sha256sum "$D/build/orderd" "$D/build/gen/hydo-grpc" "$D/build/gen/grpc/desc.pb" "$D/build/gen/grpc/plan.json" 2>/dev/null || true
 for m in ${@:-buggy fixed}; do
-  "$PY" "$TOP/hydo/onboard/hydo-build" "$D/hydo.yaml" --set mode=$m --out explore-ob-grpcorders-$m --build-dir "${HYDO_BUILD_DIR:-$TOP/build}"
+  HYDO_ONBOARD="$TOP/hydo/onboard" "$HB" "$D/hydo.yaml" --set mode=$m --out explore-ob-grpcorders-$m --build-dir "${HYDO_BUILD_DIR:-$TOP/build}"
 done
