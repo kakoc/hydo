@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """equiv.py -- prove hydo-history (Rust) gives exactly what hydo/history/hydohist.py gives.
 
-    python3 equiv.py gen   <cases.jsonl> [--n N] [--seed S] [--large]
+    python3 equiv.py gen   <cases.jsonl> [--n N] [--seed S] [--large | --witness]
                                                                a seeded random corpus (--large:
-                                                               long histories, for timing)
+                                                               long histories, --witness: long
+                                                               violating registers; for timing)
     python3 equiv.py units <cases.jsonl>                       the histories of test_hydohist.py
     python3 equiv.py consoles <cases.jsonl> <dir>...           every saved run under the dirs
                                                                (<tag>.log + <tag>.recovery.log)
@@ -509,14 +510,23 @@ def gen_case(rnd):
     return {"kind": "checks", "srcs": srcs, "verdict": verdict, "budget": budget, "specs": given}
 
 
-def gen_large(rnd):
+def gen_large(rnd, witness=False):
     """One long history (the search's worst cases): a register or list-append history of
-    500-3000 operations by 5-24 processes on 1-3 keys, violating in about half."""
+    500-3000 operations by 5-24 processes on 1-3 keys, violating in about half. witness: a
+    register history of 200-1500 operations by 2-6 processes on one key with a wrong read, so the
+    witness search (a binary search over prefixes, then delta debugging) does the work."""
     name = "big"
     nproc = rnd.choice([5, 10, 16, 24])
     keys = ["x", "y", "z"][:rnd.choice([1, 1, 2, 3])]
     size = rnd.choice([500, 1000, 2000, 3000])
-    if rnd.random() < 0.6:
+    if witness:
+        lines = gen_register(rnd, name, ["x"], rnd.choice([2, 3, 4, 6]), rnd.choice([200, 500, 1000, 1500]),
+                             False, rnd.random() < 0.5, False)
+        reads = [i for i, l in enumerate(lines) if l[1] == "ok" and l[2] == "read"]
+        i = reads[rnd.randrange(len(reads) // 2, len(reads))]
+        lines[i] = (lines[i][0], "ok", "read", [lines[i][3][0], rnd.choice(["0", "1", "nil"])])
+        sp = {"id": "big.lin", "type": "linearizable", "history": name}
+    elif rnd.random() < 0.6:
         cas = rnd.random() < 0.3
         lines = gen_register(rnd, name, keys, nproc, size, cas, rnd.random() < 0.5, False)
         if rnd.random() < 0.5:
@@ -532,12 +542,12 @@ def gen_large(rnd):
             "budget": H.DEFAULT_BUDGET, "specs": None}
 
 
-def gen(path, n, seed, large=False):
+def gen(path, n, seed, large=False, witness=False):
     rnd = random.Random(seed)
     with open(path, "w") as f:
         for i in range(n):
-            if large:
-                f.write(dumps(gen_large(rnd)) + "\n")
+            if large or witness:
+                f.write(dumps(gen_large(rnd, witness)) + "\n")
                 continue
             f.write(dumps(gen_case(rnd)) + "\n")
             if i % 50 == 0:
@@ -563,7 +573,7 @@ def main(argv):
             n = int(argv[argv.index("--n") + 1])
         if "--seed" in argv:
             seed = int(argv[argv.index("--seed") + 1])
-        gen(argv[1], n, seed, "--large" in argv)
+        gen(argv[1], n, seed, "--large" in argv, "--witness" in argv)
     elif cmd == "units":
         units(argv[1])
     elif cmd == "consoles":
