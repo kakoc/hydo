@@ -9,32 +9,39 @@ fingerprint it produced was checked against the unchanged engine (section 10).
 
 ## 1. Summary (ranked)
 
-**What dominates one run.**
+**What dominates one run.** The stack's mean run in a `process --more-faults` campaign is 19.7 s:
+8.2 s in the guest (41 %), 4.3 s fingerprints (22 %), 4.1 s save files on the rotating disk (21 %)
+and 3.0 s creating, filling and tearing down VMs (15 %). A Redis run is 2.5 s without and 5.7 s
+with a power cut, of which the guest is only 0.13–0.16 s. More than half of every run is overhead
+around the guest, and all of it can be removed or shrunk without changing a fingerprint.
 
-1. **Writing and re-reading snapshot data through a rotating disk.** The engine keeps its save
+1. **The guest itself.** Inside `HVX_RUN` (workload + check + recovery boot) a stack run spends
+   4.3 s without a power cut and 14.8 s with one (about 40 % of the run); a Redis run 0.13–0.16 s
+   (3–6 %). It costs 1.0–1.5 µs of host time per VM exit, and the stack's workload makes 2.7
+   million exits per guest second; landing ticks on exact branches is only 9–18 % of it (section 4).
+2. **Fingerprints.** Every run hashes all of guest RAM and the data partition twice (end of
+   workload, end of check or recovery) with a byte-wise FNV-1a at 1.04–1.41 s per GiB: 2.4 s per
+   Redis run (70–78 % of a run without a power cut) and 4.3 s per stack run (37 % of a stack run
+   without a power cut). FNV-1a can skip all-zero pages exactly (a zero page multiplies the state
+   by P^4096); with that, the RAM hash of a Redis guest takes 0.145 s instead of about 1.07 s, and
+   of a stack guest 0.52 s instead of 1.05 s, with the same value (section 5).
+3. **Writing and re-reading snapshot data through a rotating disk.** The engine keeps its save
    buffers (S0, S1, and the data disk carried across a power cut) in files under
    `/var/tmp/hvx-snap`, written with `fdatasync` and then dropped from the page cache with
-   `POSIX_FADV_DONTNEED`. On this machine that file is on a rotating disk. A power-cut run of the
-   stack pays 5.4 s to write the 512 MiB data partition and 6.1 s to read it (and S0) back: 11.6 s
-   of a 35 s run (33 %). The same step is a 0.1 s `memcpy` when the buffer stays in memory
-   (`HVX_SNAP_MALLOC=1`, section 4). For Redis the same files cost 1.9 s of a 5.7 s power-cut run. The worker's boot pays 60–80 s of its 87–99 s for the same
-   reason (section 3).
-2. **The guest itself.** Inside `HVX_RUN` (workload + check + recovery boot) a stack run spends
-   4.3 s without a power cut and 14.8 s with one (about 40 % of the run). A Redis run spends only
-   0.15 s in the guest (3–6 % of its run).
-3. **Fingerprints.** Every run hashes all of guest RAM and the data partition two times (end of
-   workload, end of check or recovery) with a byte-wise FNV-1a: 1.07–1.41 s per GiB, so 2.4 s per
-   Redis run (70–78 % of a run without a power cut) and 4.3 s per stack run (37 % of a stack run
-   without a power cut). FNV-1a skips all-zero pages exactly (a zero page multiplies the state by
-   P^4096); with that trick the RAM hash of a Redis guest drops from about 1.07 s to 0.145 s with the
-   same value, so the fingerprints stay byte-for-byte the same (section 5).
+   `POSIX_FADV_DONTNEED`; on this machine they are on a rotating disk. A power-cut run of the stack
+   pays 5.4 s to write the 512 MiB data partition and 6.1 s to read it (and S0) back: 11.6 s of a
+   35 s run (33 %); for Redis 1.9 s of a 5.7 s power-cut run. With the buffers in memory
+   (`HVX_SNAP_MALLOC=1`) the same steps take 0.2–0.4 s. The worker's boot pays 60–80 % of its time
+   for the same reason (section 3), and with more than 4 stack workers the disk becomes the limit
+   for the whole machine (section 7).
 4. **Creating a fresh VM for every run and copying everything back.** `vm_fresh` + restore +
    teardown cost 0.5 s per Redis run and 1.7 s per stack run (twice for a power-cut run). Most of
    it is the module zeroing and freeing 1 GiB of RAM pages and a page array as large as the whole
-   disk image (2.3 GiB for the stack), and a `memcpy` of the whole image into it.
-5. **Python and the console.** The explorer's Python side is hidden: the next `RUN` line always
-   arrived while the engine was still tearing the previous VM down (0.2 s), so the engines never
-   waited for Python. Console handling costs under 1 ms per run.
+   disk image (2.3 GiB for the stack), and a `memcpy` of the whole image into it, although a run
+   changes only 0.4 % (Redis) to 11–29 % (stack) of guest RAM (section 6).
+5. **Python and the console: negligible.** The next `RUN` line always arrived while the engine was
+   still tearing the previous VM down (0.2 s), so the engines never waited for Python, and
+   `explore.py` used 0.1 s of CPU per campaign. Console handling costs under 1 ms per run.
 
 **What dominates a campaign.**
 
@@ -392,7 +399,8 @@ quarter of the runs and about a third of the wall time; in a campaign that keeps
 (swarm) more than half of the runs are re-runs and shrink candidates. The shrinker runs its
 candidates in batches (`Pool.run_all`) and takes the first one in list order that still fails, so
 every round waits for its slowest candidate, and candidates after the first success are wasted
-work. Most shrink candidates share the schedule's beginning with the failing run, which is what
+work. A shrink candidate is the failing schedule with one fault removed or changed, so it runs
+exactly like the failing run up to that fault's first effect; that common beginning is what
 mid-run branching could reuse (section 1, ideas).
 
 ## 9. The Mac backend (hvmx), for comparison
@@ -428,8 +436,8 @@ was 3.8 GB (1 GiB RAM, two snapshots, the disk).
   the same fingerprints as with file-backed buffers.
 - The zero-page-skipping hash equalled the byte-wise hash on every RAM state it was tried on
   (83 states, Redis and stack).
-- With the variables unset, the engine runs none of the new code except reading the clock around
-  phases that are already there.
+- With the variables unset, the new code does nothing but test a flag and count run calls; it
+  reads no clock, issues no ioctl and prints nothing.
 
 ## 11. What was not measured, and why
 
