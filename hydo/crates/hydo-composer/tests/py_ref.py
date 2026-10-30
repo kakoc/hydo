@@ -160,8 +160,20 @@ def corpora(n):
 
 # ---------------------------------------------------------------- 2. plans and folders
 def tracked(*pats):
-    out = subprocess.run(["git", "ls-files"] + list(pats), cwd=TOP, stdout=subprocess.PIPE, text=True).stdout
-    return [os.path.join(TOP, p) for p in out.split()]
+    """The repository's files (git ls-files), or, in a copy without a git index, every file under
+    the top directory except build outputs."""
+    out = subprocess.run(["git", "ls-files"] + list(pats), cwd=TOP, stdout=subprocess.PIPE,
+                         stderr=subprocess.DEVNULL, text=True).stdout.split()
+    if out:
+        return [os.path.join(TOP, p) for p in out]
+    import fnmatch
+    files = []
+    for d, dirs, fs in os.walk(TOP):
+        dirs[:] = sorted(x for x in dirs if x not in ("target", ".git", "node_modules"))
+        for f in sorted(fs):
+            if not pats or any(fnmatch.fnmatch(f, p) for p in pats):
+                files.append(os.path.join(d, f))
+    return files
 
 
 def raw_manifest(path):
