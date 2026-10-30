@@ -83,11 +83,14 @@ every schedule twice, both fingerprints equal):
 | `disk=none dseed=1 \| run K=worker@5+5` | OK: the worker is killed before step 5 and restarted in its namespace before step 10; all 20 counted 3.11 s after the heal | `5f808fb08bb905de` |
 | `disk=none dseed=1 \| run C=12` | VIOLATION `votes.counted_soon`: voter0 acknowledged but not counted (the M84 verdict: Redis has no AOF); the recovery boot brought all five services up in their namespaces | `ccb88b47eb6ef008` |
 | `disk=none dseed=1 \| run N=worker-redis@5-12:loss,100%` | OK; the fault matched no packet (`vh1:sent=0,dropped=0 vh5:sent=0,dropped=0`): steps 5..11 last about 0.1 s of guest time and the .NET worker polls Redis only every 100 ms | `200379290aa090d0` |
-VOTING_ROWS
+| `disk=none dseed=1 \| run N=worker-db@5-12:loss,100%` | OK; no packet in the window either (`vh3:sent=0,dropped=0 vh5:sent=0,dropped=0`), for the same reason | `412d038b91edd6f5` |
+| `disk=none dseed=1 \| run N=vote-redis@5-12:loss,100%` | OK with 13 of 20 votes acknowledged: the fault dropped 35 packets from vote to Redis (`vh1:sent=0,dropped=35`; none came back on `vh2`), so the 7 votes of steps 5..11 got no answer within the client's 5 s deadline (outcome unknown, which the invariant allows); the workload ran 35 s longer; the 13 acknowledged votes were counted 1.03 s after the heal | `da098498b325c557` |
 
 **Before and after.** The same `N=worker-redis@5-12:loss,100%` on the Milestone 84 image
 (`5d49ad99…`, one loopback network) passes with all votes counted 3.18 s after the heal and no
 packet queued: there the fault matches nothing, because the worker's connections leave from
 127.0.0.1. With `network: bridge` the fault sits on the bridge ports of the two services and
-matches every packet between their addresses; whether any packet flows inside the window is up to
-the app (above).
+matches every packet between their addresses. Which links carry traffic during the workload is up
+to the app: in this one the worker counts every vote about 3 s after the workload ends (each run
+reports 3.10 s), so faults on the worker's links during the 0.25 s workload act on no packet, while
+the vote app talks to Redis on every request and loses 7 acknowledgements to the same fault.
