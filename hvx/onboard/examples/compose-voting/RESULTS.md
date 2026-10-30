@@ -53,3 +53,41 @@ at-most-once".
 - Provisioning a fresh boot takes 270–320 s of wall time, which is 20 s of guest time (five
   services, PostgreSQL's initdb). A workload run takes 12–13 s, and a run with a power cut takes
   126–197 s including the recovery boot.
+
+## Milestone 95: each service in its own network namespace (`network: bridge`)
+
+`hydo.yaml` now has `network: bridge` (MANIFEST.md, "Service networks"): every service runs in its
+own network namespace at its `addr:` (10.89.0.11 to .15) on one bridge, as under Compose. The hand
+edit that moved `result` to port 81 is gone: `vote` and `result` both listen on 0.0.0.0:80 again.
+`hydo-loopback.yaml` is the Milestone 84 manifest, kept byte for byte. `hydo.generated.yaml` is the
+new import (`network: bridge`, bridge addresses, no port-collision warning).
+
+**Build.** On the bare-metal machine with the Linux release's `hydo build` (no Nix; the build
+box was unavailable). The five amd64 images were fetched again by the digests in
+`fetch-images.sh` with `hvx/onboard/fetch_image.py` (no skopeo on the box or the Mac).
+- `hydo-loopback.yaml` -> `4f6be9f3…`/`87555754…` instead of M84's `5d49ad99…`. The only
+  difference is file owners: the release sets every staged file to 0:0, while M84's plain build machine
+  build kept the build user's 1000:100. `owners_replay.py` applies the release's owner step to a
+  copy of M84's root partition; after it the two roots differ only in ext4's "Lifetime writes"
+  counter (1413 MB against 1624 MB), and the data partition and the partition table are identical.
+  So the re-fetched images and the bare-metal machine's tools reproduce M84's content.
+- `hydo.yaml` (bridge) -> `explore-ob-compose-voting-disk.img` sha256 `d36a4a00568733236a999427ff3aef9e3bc264671b12a416cd8b2897d0df4ef4`
+  (root `6df90161…`, data `13aaddb1…`), in `~/hydo-netns/build/br` on the bare-metal machine.
+
+**Runs** (fresh boots, `hvx_explore --ram-mib 2048 one`, main `hvx.ko` `CA5BF8BF2A0D66B312A68EF`;
+every schedule twice, both fingerprints equal):
+
+| schedule | verdict | fingerprint |
+|---|---|---|
+| `disk=none dseed=1 \| run` | OK: all 20 votes counted, 3.10 s after the heal | `565fcfb8318327d6` |
+| `disk=none dseed=1 \| run K=worker@5+5` | OK: the worker is killed before step 5 and restarted in its namespace before step 10; all 20 counted 3.11 s after the heal | `5f808fb08bb905de` |
+| `disk=none dseed=1 \| run C=12` | VIOLATION `votes.counted_soon`: voter0 acknowledged but not counted (the M84 verdict: Redis has no AOF); the recovery boot brought all five services up in their namespaces | `ccb88b47eb6ef008` |
+| `disk=none dseed=1 \| run N=worker-redis@5-12:loss,100%` | OK; the fault matched no packet (`vh1:sent=0,dropped=0 vh5:sent=0,dropped=0`): steps 5..11 last about 0.1 s of guest time and the .NET worker polls Redis only every 100 ms | `200379290aa090d0` |
+VOTING_ROWS
+
+**Before and after.** The same `N=worker-redis@5-12:loss,100%` on the Milestone 84 image
+(`5d49ad99…`, one loopback network) passes with all votes counted 3.18 s after the heal and no
+packet queued: there the fault matches nothing, because the worker's connections leave from
+127.0.0.1. With `network: bridge` the fault sits on the bridge ports of the two services and
+matches every packet between their addresses; whether any packet flows inside the window is up to
+the app (above).
