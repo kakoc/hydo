@@ -230,6 +230,7 @@ dependencies = [
  "hydo-composer",
  "hydo-engine",
  "hydo-errors",
+ "hydo-explore",
  "hydo-history",
  "hydo-manifest",
  "hydo-schedule",
@@ -276,6 +277,22 @@ dependencies = [
  "fancy-regex",
  "hydo-manifest",
  "libc",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "hydo-explore"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "hydo-engine",
+ "hydo-errors",
+ "hydo-history",
+ "hydo-manifest",
+ "hydo-schedule",
+ "libc",
+ "regex",
  "serde_json",
  "sha2",
 ]

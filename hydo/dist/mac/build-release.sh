@@ -72,7 +72,7 @@ sh "$TOP/hv/hvm/explore/build.sh" >/dev/null 2>&1
 REL=$OUTDIR/hydo-mac-$VERSION
 rm -rf "$REL"
 # the release tree mirrors the repository: hydo/ (the product) and hv/hvm/ (the Mac engine)
-mkdir -p "$REL/bin" "$REL/hydo/onboard" "$REL/hydo/explore" "$REL/hydo/assert" "$REL/hv/hvm/explore/out" "$REL/guest" \
+mkdir -p "$REL/bin" "$REL/hydo/onboard" "$REL/hydo/assert" "$REL/hv/hvm/explore/out" "$REL/guest" \
          "$REL/examples" "$REL/skill"
 # the hydo command: the Rust CLI (hydo/crates/hydo-cli) for aarch64-apple-darwin (M101), built with
 # the workspace's pinned toolchain (rust-toolchain.toml), or taken from $HYDO_RUST_BIN
@@ -89,14 +89,12 @@ cp "$TOP/hydo/onboard/hydo-build" "$TOP/hydo/onboard/hydo-compose" "$TOP/hydo/on
    "$TOP/hydo/onboard/hydo-liveness.sh" "$TOP/hydo/onboard/MANIFEST.md" "$TOP/hydo/onboard/hydo_composer.py" \
    "$TOP/hydo/onboard/hydo-composer.sh" "$TOP/hydo/onboard/hydo_bridge.py" "$REL/hydo/onboard/"
 echo "$VERSION" > "$REL/hydo/VERSION"     # hydo_composer.engine_version: what a plan's hydo_version is checked against
-# explore.py imports grpc_faults and fc_adaptive at its top (M90, M92): without them `hydo explore` stops
-cp "$TOP/hydo/explore/explore.py" "$TOP/hydo/explore/hvm_backend.py" "$TOP/hydo/explore/manifest_space.py" \
-   "$TOP/hydo/explore/grpc_faults.py" "$TOP/hydo/explore/fc_adaptive.py" "$REL/hydo/explore/"
+# the explorer is part of bin/hydo since M102 (the hydo-explore crate): no explore.py
 # the host-side history checkers and the guest recorder (hydo/HISTORIES.md): `hydo run`/`hydo explore`
 # check a run's history with hydohist.py; hydo-build stages hydo_hist.sh for a manifest with checks:
 mkdir -p "$REL/hydo/history"
 cp "$TOP/hydo/history/hydohist.py" "$TOP/hydo/history/hydo-check" "$TOP/hydo/history/hydo_hist.sh" "$REL/hydo/history/"
-cp "$TOP/hydo/assert/hydo_assert_report.c" "$TOP/hydo/assert/hydo_assert_table.h" "$REL/hydo/assert/"   # explore.py compiles the property table tool
+cp "$TOP/hydo/assert/hydo_assert_report.c" "$TOP/hydo/assert/hydo_assert_table.h" "$REL/hydo/assert/"   # the explorer compiles the property table tool
 cp "$TOP/hv/hvm/hvm" "$REL/hv/hvm/hvm"
 cp "$TOP/hv/hvm/explore/hvmx" "$REL/hv/hvm/explore/hvmx"
 cp "$TOP/hv/hvm/hv.entitlements" "$REL/hv/hvm/"

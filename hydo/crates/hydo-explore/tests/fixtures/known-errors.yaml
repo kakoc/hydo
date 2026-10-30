@@ -1,0 +1,10 @@
+# The known error kinds of tests/fake_engine.py's runs (tests/fake_engine.rs, the stack scenario).
+format: 1
+unknown: report
+known:
+  - match: "config reloaded"
+    service: app
+    reason: "printed at every boot by the scripted engine"
+  - match: "connection to redis lost"
+    reason: "redis restarts after a kill"
+    with: [K=redis]
