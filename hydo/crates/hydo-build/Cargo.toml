@@ -1,0 +1,25 @@
+[package]
+name = "hydo-build"
+description = "hydo's image builder: a project manifest compiled into a guest image (x86_64 ext4 disk, arm64 initramfs)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "hydo-build"
+path = "src/bin/hydo-build.rs"
+
+[dependencies]
+hydo-manifest = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+flate2 = { workspace = true }
+regex = "1"
+libc = "0.2"
+
+# zlib's own deflate, so an arm64 initramfs gets the bytes Python's gzip module wrote. The static
+# musl build (the Linux release) has no zlib to link and keeps the pure-Rust backend; it does not
+# build arm64 images (hydo-build says so).
+[target.'cfg(not(target_env = "musl"))'.dependencies]
+flate2 = { workspace = true, features = ["zlib"] }
