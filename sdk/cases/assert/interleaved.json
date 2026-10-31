@@ -1,0 +1,16 @@
+{
+  "about": "records are written in evaluation order, whatever the declaration order",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"t.a","msg":"a"},
+    {"do":"sometimes","id":"t.b","msg":"b"},
+    {"do":"reachable","id":"t.r","msg":"r"},
+    {"do":"check","a":1,"cond":true},
+    {"do":"hit","a":2},
+    {"do":"check","a":0,"cond":false,"details":{"map":[["order",{"int":"1"}]]}},
+    {"do":"check","a":0,"cond":true,"details":{"map":[["order",{"int":"2"}]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "interleaved.out", "returns": "101"}
+  ]
+}

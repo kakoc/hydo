@@ -1,0 +1,15 @@
+{
+  "about": "no details and empty details both leave out the details field; a null value is kept",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"t.none","msg":"no details"},
+    {"do":"always","id":"t.empty","msg":"empty details"},
+    {"do":"always","id":"t.null","msg":"a null value"},
+    {"do":"check","a":0,"cond":true},
+    {"do":"check","a":1,"cond":true,"details":{"map":[]}},
+    {"do":"check","a":2,"cond":true,"details":{"map":[["v",null]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "details_absent_or_empty.out", "returns": "111"}
+  ]
+}

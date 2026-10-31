@@ -1,0 +1,15 @@
+{
+  "about": "always: the first pass and the first failure are written, each with its own details, and nothing after them",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"t.always","msg":"an always property"},
+    {"do":"check","a":0,"cond":true},
+    {"do":"check","a":0,"cond":true,"details":{"map":[["again",{"int":"1"}]]}},
+    {"do":"check","a":0,"cond":false,"details":{"map":[["x",{"int":"1"}]]}},
+    {"do":"check","a":0,"cond":false,"details":{"map":[["x",{"int":"2"}]]}},
+    {"do":"check","a":0,"cond":true}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "always.out", "returns": "11001"}
+  ]
+}

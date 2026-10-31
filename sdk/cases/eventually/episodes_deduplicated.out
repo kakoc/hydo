@@ -1,0 +1,2 @@
+HYDO-ASSERT {"t":"eventually","id":"e.episodes","ok":true,"msg":"several episodes","details":{"elapsed_ms":0,"episode":1,"within_ms":10000}}
+HYDO-ASSERT {"t":"eventually","id":"e.zero","ok":false,"msg":"within 0","details":{"elapsed_ms":0,"episode":3,"within_ms":0}}

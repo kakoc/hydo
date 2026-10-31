@@ -1,0 +1,1 @@
+HYDO-ASSERT {"t":"always","id":"d.null_and_bool","ok":true,"msg":"details encoding","details":{"f":false,"n":null,"t":true}}

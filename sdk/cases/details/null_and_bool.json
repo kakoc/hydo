@@ -1,0 +1,11 @@
+{
+  "about": "null, true and false",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"d.null_and_bool","msg":"details encoding"},
+    {"do":"check","a":0,"cond":true,"details":{"map":[["n",null],["t",true],["f",false]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "null_and_bool.out", "returns": "1"}
+  ]
+}

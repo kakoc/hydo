@@ -1,0 +1,20 @@
+{
+  "about": "empty arguments are % and an operation may have no arguments",
+  "needs": [],
+  "steps": [
+    {"do":"history","name":"kv"},
+    {"do":"invoke","h":0,"proc":{"int":"9"},"f":"write","args":["",""]},
+    {"do":"ok","o":0,"args":["",""]},
+    {"do":"invoke","h":0,"proc":{"int":"9"},"f":"write","args":["",""]},
+    {"do":"ok_same","o":1},
+    {"do":"invoke","h":0,"proc":{"int":"5"},"f":"noop","args":[]},
+    {"do":"ok","o":2,"args":[]},
+    {"do":"invoke","h":0,"proc":{"int":"5"},"f":"noop","args":[]},
+    {"do":"fail","o":3},
+    {"do":"invoke","h":0,"proc":{"int":"5"},"f":"noop","args":[]},
+    {"do":"info","o":4}
+  ],
+  "runs": [
+    {"name": "", "out": "off", "hist_out": "file", "buggify_env": null, "buggify_file": null, "output": "empty_arguments.out", "returns": ""}
+  ]
+}

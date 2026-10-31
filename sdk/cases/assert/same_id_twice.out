@@ -1,0 +1,2 @@
+HYDO-ASSERT {"t":"always","id":"t.dup","ok":true,"msg":"declared twice"}
+HYDO-ASSERT {"t":"always","id":"t.dup","ok":true,"msg":"declared twice"}

@@ -152,8 +152,9 @@ impl Op {
     }
 }
 
-/// A value as one token: `%`, whitespace, control characters, `@` and the list / txn separators
-/// `,[]:` become `%XX`; the empty string is `%`, the string `nil` is `%6Eil` (`nil` = absent).
+/// A value as one token: `%`, `@`, the list / txn separators `,[]:`, DEL and every byte up to
+/// space become `%XX`; all other bytes (non-ASCII text included) stay, as in Go's `Enc`. The
+/// empty string is `%`, the string `nil` is `%6Eil` (`nil` = absent).
 pub fn enc(s: &str) -> String {
     if s.is_empty() {
         return "%".into();
@@ -164,11 +165,8 @@ pub fn enc(s: &str) -> String {
     let mut o = String::with_capacity(s.len());
     for ch in s.chars() {
         let c = ch as u32;
-        if ch == '%' || ch == '@' || c <= 0x20 || c == 0x7f || ch.is_whitespace() || ",[]:".contains(ch) {
-            let mut buf = [0u8; 4];
-            for b in ch.encode_utf8(&mut buf).bytes() {
-                o.push_str(&format!("%{:02X}", b));
-            }
+        if ch == '%' || ch == '@' || c <= 0x20 || c == 0x7f || ",[]:".contains(ch) {
+            o.push_str(&format!("%{:02X}", c));
         } else {
             o.push(ch);
         }

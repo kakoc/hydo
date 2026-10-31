@@ -1,0 +1,3 @@
+HYDO-ASSERT {"t":"always","id":"c.extremes","ok":true,"msg":"int64 extremes","details":{"left":-9223372036854775808,"op":"\u003c","right":9223372036854775807}}
+HYDO-ASSERT {"t":"always","id":"c.extremes_false","ok":false,"msg":"int64 extremes, false","details":{"left":9223372036854775807,"op":"\u003c=","right":-9223372036854775808}}
+HYDO-ASSERT {"t":"always","id":"c.extremes_false","ok":true,"msg":"int64 extremes, false","details":{"left":-1,"op":"==","right":-1}}

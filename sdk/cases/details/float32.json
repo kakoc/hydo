@@ -1,0 +1,11 @@
+{
+  "about": "float32 values (Go's float32 format, shortest digits of the 32-bit value); JavaScript and Python have no float32",
+  "needs": ["f32"],
+  "steps": [
+    {"do":"always","id":"d.float32","msg":"details encoding"},
+    {"do":"check","a":0,"cond":true,"details":{"map":[["a",{"f32":"0.1"}],["b",{"f32":"1e22"}],["c",{"f32":"3.4e-8"}],["d",{"f32":"16777216.0"}],["e",{"f32":"-0.0"}],["f",{"f32":"1e21"}],["g",{"f32":"1.5"}]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "float32.out", "returns": "1"}
+  ]
+}

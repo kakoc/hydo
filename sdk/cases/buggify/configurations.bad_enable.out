@@ -1,0 +1,16 @@
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.b.a","msg":"fault point fired: point b.a"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.b.b","msg":"fault point fired: point b.b"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.b.c","msg":"fault point fired: point b.c"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.b.d","msg":"fault point fired: point b.d"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.b.e","msg":"fault point fired: point b.e"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.b.f","msg":"fault point fired: point b.f"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.b.g","msg":"fault point fired: point b.g"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.b.h","msg":"fault point fired: point b.h"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.b.é","msg":"fault point fired: point b.é"}
+HYDO-ASSERT-DECL {"t":"always","id":"b.other","msg":"an ordinary assertion next to the points"}
+HYDO-ASSERT {"t":"always","id":"b.other","ok":true,"msg":"an ordinary assertion next to the points"}
+HYDO-BUGGIFY {"seed":"ffffffffffffffff","enable_pm":250,"fire_pm":1000,"enabled":["b.a","b.b","b.f","b.é"]}
+HYDO-ASSERT {"t":"sometimes","id":"buggify.b.a","ok":true,"msg":"fault point fired: point b.a","details":{"hit":1,"round":0}}
+HYDO-ASSERT {"t":"sometimes","id":"buggify.b.b","ok":true,"msg":"fault point fired: point b.b","details":{"hit":1,"x":[0]}}
+HYDO-ASSERT {"t":"sometimes","id":"buggify.b.f","ok":true,"msg":"fault point fired: point b.f","details":{"hit":1}}
+HYDO-ASSERT {"t":"sometimes","id":"buggify.b.é","ok":true,"msg":"fault point fired: point b.é","details":{"hit":1}}

@@ -1,0 +1,12 @@
+{
+  "about": "unreachable: the first hit is written as ok:false (a violation)",
+  "needs": [],
+  "steps": [
+    {"do":"unreachable","id":"t.unreach","msg":"an unreachable location"},
+    {"do":"hit","a":0,"details":{"map":[["why","test"]]}},
+    {"do":"hit","a":0}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "unreachable.out", "returns": ""}
+  ]
+}

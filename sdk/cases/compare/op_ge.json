@@ -1,0 +1,15 @@
+{
+  "about": "cmp with \u003e=: the details carry left, op and right; a false sometimes comparison is not written",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"c.always_ge","msg":"always left \u003e= right"},
+    {"do":"sometimes","id":"c.sometimes_ge","msg":"sometimes left \u003e= right"},
+    {"do":"cmp","a":0,"left":{"int":"2"},"op":"\u003e=","right":{"int":"2"}},
+    {"do":"cmp","a":0,"left":{"int":"1"},"op":"\u003e=","right":{"int":"2"}},
+    {"do":"cmp","a":1,"left":{"int":"1"},"op":"\u003e=","right":{"int":"2"}},
+    {"do":"cmp","a":1,"left":{"int":"2"},"op":"\u003e=","right":{"int":"2"}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "op_ge.out", "returns": "1001"}
+  ]
+}

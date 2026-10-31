@@ -1,0 +1,10 @@
+HYDO-HIST kv 9 invoke * write % %
+HYDO-HIST kv 9 ok * write % %
+HYDO-HIST kv 9 invoke * write % %
+HYDO-HIST kv 9 ok * write % %
+HYDO-HIST kv 5 invoke * noop
+HYDO-HIST kv 5 ok * noop
+HYDO-HIST kv 5 invoke * noop
+HYDO-HIST kv 5 fail * noop
+HYDO-HIST kv 5 invoke * noop
+HYDO-HIST kv 5 info * noop

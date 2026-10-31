@@ -1,0 +1,11 @@
+{
+  "about": "the async await (Go: Await) writes the same record",
+  "needs": [],
+  "steps": [
+    {"do":"eventually","id":"e.await_async","msg":"true at once (async)","within_ms":250},
+    {"do":"await","a":0,"async":true}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "await_async.out", "returns": "1"}
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "about": "each invalid UTF-8 byte of a string is written as \\ufffd (Go 1.26; Go 1.27 writes a raw U+FFFD)",
+  "needs": ["invalid_utf8"],
+  "steps": [
+    {"do":"always","id":"d.string_invalid_utf8","msg":"details encoding"},
+    {"do":"check","a":0,"cond":true,"details":{"map":[["a",{"raw":["a",255,"b"]}],["trunc",{"raw":[226,130]}],["lead",{"raw":[195,"("]}],["surrogate",{"raw":[237,160,128]}],["end",{"raw":["ok",195]}],["mixed",{"raw":["é",255,"中"]}]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "string_invalid_utf8.out", "returns": "1"}
+  ]
+}

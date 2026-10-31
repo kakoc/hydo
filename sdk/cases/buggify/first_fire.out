@@ -1,0 +1,3 @@
+HYDO-BUGGIFY {"seed":"1","enable_pm":1000,"fire_pm":1000,"enabled":["b.one"]}
+HYDO-ASSERT {"t":"sometimes","id":"buggify.b.one","ok":true,"msg":"fault point fired: always fires","details":{"hit":1}}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.b.one","msg":"fault point fired: always fires"}

@@ -1,0 +1,1 @@
+HYDO-ASSERT {"t":"always","id":"d.nested_maps","ok":true,"msg":"details encoding","details":{"deep":{"l1":{"l2":{"l3":[{"j":[1.25,-0.5],"k":"v"}]}}},"emap":{},"list":[{"a":[{"x":1,"y":2}],"b":1}]}}

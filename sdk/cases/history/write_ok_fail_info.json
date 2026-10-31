@@ -1,0 +1,18 @@
+{
+  "about": "invoke, then ok (with results), fail, info or ok_same (the invocation's arguments)",
+  "needs": [],
+  "steps": [
+    {"do":"history","name":"kv"},
+    {"do":"invoke","h":0,"proc":{"int":"3"},"f":"write","args":["k1",{"enc":"a b"}]},
+    {"do":"ok","o":0,"args":["k1",{"ver":["a b","83"]}]},
+    {"do":"invoke","h":0,"proc":{"int":"3"},"f":"write","args":["k2",{"enc":"v"}]},
+    {"do":"fail","o":1},
+    {"do":"invoke","h":0,"proc":{"int":"4"},"f":"write","args":["k3",{"enc":"v"}]},
+    {"do":"info","o":2},
+    {"do":"invoke","h":0,"proc":{"int":"4"},"f":"append","args":["l","7"]},
+    {"do":"ok_same","o":3}
+  ],
+  "runs": [
+    {"name": "", "out": "off", "hist_out": "file", "buggify_env": null, "buggify_file": null, "output": "write_ok_fail_info.out", "returns": ""}
+  ]
+}
