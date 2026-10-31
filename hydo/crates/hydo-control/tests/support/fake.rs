@@ -16,6 +16,8 @@ use hydo_agent_proto::msg::*;
 use hydo_control::{Ending, EngineAction, Link, LinkError, LinkNext, StopInfo, Why};
 use std::collections::BTreeMap;
 
+mod m123; // the processes, logs and reads of the feature controllers of M123
+
 pub fn mix(mut x: u64) -> u64 {
     x = x.wrapping_add(0x9e3779b97f4a7c15);
     x = (x ^ (x >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
@@ -67,6 +69,7 @@ struct World {
     evals: BTreeMap<String, u64>,
     clock: i64,
     calls: u64,
+    ext: m123::Ext,
 }
 
 #[derive(Clone, Debug)]
@@ -350,22 +353,15 @@ impl Fake {
             }
             Command::Read(r) => match self.world.files.get(&r.path).cloned() {
                 None => refuse(self, ErrCode::OsError, "open: ENOENT (errno 2)"),
-                Some(c) => {
-                    let off = (r.offset.unwrap_or(0) as usize).min(c.len());
-                    let end = (off + r.max as usize).min(c.len());
-                    self.emit(
-                        at,
-                        Msg::Reply(
-                            id,
-                            Reply::Read(ReadOk {
-                                data: c[off..end].to_string(),
-                                size: c.len() as u64,
-                                eof: end == c.len(),
-                            }),
-                        ),
-                    );
-                }
+                Some(c) => match Fake::m123_read(&c, &r) {
+                    Ok(ok) => self.emit(at, Msg::Reply(id, Reply::Read(ok))),
+                    Err((code, msg)) => refuse(self, code, &msg),
+                },
             },
+            Command::ClockGet(_) => {
+                let c = self.m123_clock();
+                self.emit(at, Msg::Reply(id, Reply::ClockGet(c)))
+            }
             Command::Mount(_) => {
                 if self.h(&["mount"]).is_multiple_of(61) {
                     refuse(self, ErrCode::OsError, "mount: EINVAL (errno 22)");
@@ -383,7 +379,9 @@ impl Fake {
                 self.emit(at, Msg::Reply(id, Reply::Run(RunOk {})));
                 let a1 = r.argv.get(1).cloned().unwrap_or_default();
                 let script = r.argv.get(3).cloned().unwrap_or_default();
-                let (dur, status, out) = if a1 == "sleep" {
+                let (dur, status, out) = if let Some(x) = self.m123_run(&r) {
+                    x
+                } else if a1 == "sleep" {
                     let ms: f64 = r.argv.get(2).and_then(|x| x.parse().ok()).unwrap_or(1.0);
                     ((ms * 40.0) as u64 + 3, 0, String::new())
                 } else if a1 == "pgrep" {
@@ -502,6 +500,9 @@ impl Fake {
                     },
                 );
                 self.emit(at, Msg::Reply(id, Reply::Spawn(SpawnOk {})));
+                if self.m123_spawn(&s, id, t) {
+                    return;
+                }
                 let h = s.h.clone();
                 let from = Self::env_of(&s.env, "HYDO_FROM").and_then(|x| x.parse().ok());
                 let to = Self::env_of(&s.env, "HYDO_TO").and_then(|x| x.parse().ok());

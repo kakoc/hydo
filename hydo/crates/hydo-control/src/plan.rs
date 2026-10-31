@@ -131,6 +131,12 @@ pub struct Plan {
     pub knobs: Vec<PlanKnob>,
     /// `buggify: true` (a B= token is then the BUGGIFY seam; without it B= is an unknown knob).
     pub buggify: bool,
+    /// `checks:` (the history seam, M123).
+    pub history: Vec<crate::schedule::history::HistCheck>,
+    /// `errors:` (the error-logs seam, M123).
+    pub errors: Option<crate::schedule::errlog::ErrPlan>,
+    /// A test composer plan (`test:`; the composer seam, M123).
+    pub compose: Option<crate::schedule::composer::ComposePlan>,
     pub layout: Layout,
 }
 
@@ -202,18 +208,7 @@ impl Plan {
         {
             return Err(Unsupported::seam(Seam::Liveness, "eventually invariants"));
         }
-        if !m.checks.is_empty() {
-            return Err(Unsupported::seam(
-                Seam::History,
-                "checks: (history recording)",
-            ));
-        }
-        if m.errors.is_some() {
-            return Err(Unsupported::seam(
-                Seam::ErrorLogs,
-                "errors: (the error-log scan)",
-            ));
-        }
+        // checks: (history) and errors: are driven by the feature controllers of M123
         if m.network.as_deref() == Some("bridge") {
             return Err(Unsupported::seam(Seam::NetNamespaces, "network: bridge"));
         }
@@ -225,12 +220,6 @@ impl Plan {
             .is_some_and(|f| f.iter().any(|x| x == "freeze"))
         {
             return Err(Unsupported::seam(Seam::Freeze, "faults: [freeze]"));
-        }
-        if get(d, "_compose").is_some_and(py::truthy) {
-            return Err(Unsupported::seam(
-                Seam::Composer,
-                "a test composer plan (test:)",
-            ));
         }
         let order = hydo_manifest::service_order(&d["services"])
             .map_err(|e| Unsupported::other(e.message))?;
@@ -333,6 +322,9 @@ impl Plan {
             invariants,
             knobs,
             buggify: m.buggify,
+            history: crate::schedule::history::plan_of(d),
+            errors: crate::schedule::errlog::ErrPlan::of(d, &order),
+            compose: crate::schedule::composer::ComposePlan::of(d)?,
             layout: Layout::default(),
         })
     }

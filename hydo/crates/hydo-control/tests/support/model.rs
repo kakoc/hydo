@@ -25,6 +25,8 @@ use hydo_control::schedule::GuestState;
 use hydo_control::{Ending, EngineAction, Plan};
 use std::collections::{BTreeMap, BTreeSet};
 
+mod m123; // history, error logs and the composer (M123)
+
 /// Why checking stopped early.
 #[derive(Debug)]
 pub enum Halt {
@@ -78,6 +80,7 @@ pub struct Model<'a> {
     own_out: BTreeMap<String, String>,
     jobs: Jobs,
     end_stop: u64,
+    m: m123::St,
 }
 
 const BB: &str = "/bin/busybox";
@@ -241,6 +244,7 @@ impl<'a> Model<'a> {
             own_out: BTreeMap::new(),
             jobs: Jobs::default(),
             end_stop: u64::MAX,
+            m: m123::St::default(),
         };
         for (i, it) in items.iter().enumerate() {
             match it {
@@ -521,7 +525,9 @@ impl<'a> Model<'a> {
 
     /// $H/violated: the first invariant with a failed record.
     fn violated(&self) -> Option<usize> {
-        for l in self.reports_before(self.point()) {
+        // $H/violated is written whether the record went to the console or into el.verdict
+        let held = self.m.held.iter().flatten().map(String::as_str);
+        for l in self.reports_before(self.point()).chain(held) {
             if !l.starts_with("HYDO-ASSERT {") || !l.contains("\"ok\":false,") {
                 continue;
             }
@@ -540,6 +546,7 @@ impl<'a> Model<'a> {
     // ------------------------------------------------------------------ hydo-init.sh
 
     fn die<T>(&mut self, line: String) -> R<T> {
+        self.el_report()?; // die_oracle() { el_report; _el_orig_die_oracle "$@"; }
         self.stop_periodic();
         self.report(line.clone())?;
         self.end(Ending::Verdict(line))
@@ -627,7 +634,8 @@ impl<'a> Model<'a> {
         self.note(format!(
             "mounted /dev/vda2 on /data ({})",
             self.plan.data_opts
-        ))
+        ))?;
+        self.el_after_mount()
     }
 
     fn start_svc(&mut self, name: &str) -> R<bool> {
@@ -769,7 +777,10 @@ impl<'a> Model<'a> {
     fn eval_inv(&mut self, i: usize) -> R<(u32, String)> {
         let inv = self.plan.invariants[i].clone();
         let e = self.env(&[]);
-        let (rc, out) = self.run(run_of(&inv.cmd), e, Some(3000))?;
+        let (rc, out) = match self.cmp_eval(&inv.cmd)? {
+            Some(x) => x,
+            None => self.run(run_of(&inv.cmd), e, Some(3000))?,
+        };
         self.own_out.insert(inv.key.clone(), out.clone());
         let d = inv_detail(&out);
         let ok = match rc {
@@ -777,8 +788,8 @@ impl<'a> Model<'a> {
             2 => return Ok((2, out)),
             _ => false,
         };
-        if !self.asserted(&inv.id, ok) {
-            self.report(format!(
+        if !self.asserted(&inv.id, ok) && !self.held_has(&inv.id, ok) {
+            self.assert_out(format!(
                 "HYDO-ASSERT {{\"t\":\"{}\",\"id\":\"{}\",\"ok\":{ok},\"msg\":\"{}\",\"details\":{{\"out\":\"{}\"}}}}",
                 inv.kind,
                 inv.id,
@@ -854,19 +865,25 @@ impl<'a> Model<'a> {
     }
 
     fn finish(&mut self) -> R<()> {
-        let v = self.final_verdict()?;
+        self.hist_final()?;
+        let v = self.el_final_verdict()?;
         self.report(v.clone())?;
         self.end(Ending::Verdict(v))
     }
 
     fn step_range(&mut self, a: i64, b: i64) -> R<()> {
+        self.el_mark(&a.to_string())?; // step_range() { el_mark "$1"; ... }
         if a >= b {
             return Ok(());
         }
-        let e = self.env(&[("HYDO_FROM", a.to_string()), ("HYDO_TO", b.to_string())]);
-        let mut argv = plain(&["timeout", &self.plan.workload_timeout.to_string()]);
-        argv.extend(run_of(&self.plan.workload_run));
-        let rc = self.spawn_wait("workload", argv, e, &format!("{H}/workload.log"), true)?;
+        let rc = if self.plan.compose.is_some() {
+            self.cmp_step(a, b)?
+        } else {
+            let e = self.env(&[("HYDO_FROM", a.to_string()), ("HYDO_TO", b.to_string())]);
+            let mut argv = plain(&["timeout", &self.plan.workload_timeout.to_string()]);
+            argv.extend(run_of(&self.plan.workload_run));
+            self.spawn_wait("workload", argv, e, &format!("{H}/workload.log"), true)?
+        };
         if rc == 143 {
             self.note(format!(
                 "workload steps {a}..{} TIMED OUT after {}s (killed)",
@@ -878,6 +895,7 @@ impl<'a> Model<'a> {
     }
 
     fn retry_workload(&mut self) -> R<()> {
+        self.el_mark("end")?; // retry_workload() { el_mark end; ... }
         if self.plan.workload_retry.is_empty() {
             return Ok(());
         }
@@ -898,14 +916,19 @@ impl<'a> Model<'a> {
 
     fn provision(&mut self) -> R<()> {
         if !self.plan.provision.is_empty() {
-            let e = self.env(&[]);
-            let rc = self.spawn_wait(
-                "provision",
-                run_of(&self.plan.provision),
-                e,
-                &format!("{H}/provision.log"),
-                false,
-            )?;
+            let rc = match self.cmp_provision()? {
+                Some(rc) => rc,
+                None => {
+                    let e = self.env(&[]);
+                    self.spawn_wait(
+                        "provision",
+                        run_of(&self.plan.provision),
+                        e,
+                        &format!("{H}/provision.log"),
+                        false,
+                    )?
+                }
+            };
             if rc != 0 {
                 return self.die(s("HYDO-ORACLE: ERROR provision failed"));
             }
@@ -917,6 +940,9 @@ impl<'a> Model<'a> {
     }
 
     fn set_knob(&mut self, letter: &str, value: &str) -> R<()> {
+        if letter == "W" && self.plan.compose.is_some() {
+            return self.cmp_setw(value); // the composer's knob (default '-')
+        }
         let k = self.plan.knobs.iter().find(|k| k.token == letter).cloned();
         let Some(k) = k.filter(|k| !k.default.is_empty()) else {
             return self.note(format!("knob {letter} not in the manifest, ignored"));
@@ -1032,6 +1058,7 @@ impl<'a> Model<'a> {
         self.jobs.periodic = (0..self.plan.invariants.len())
             .filter(|i| !self.plan.invariants[*i].every.is_empty())
             .collect();
+        self.hist_declare()?;
         let (mut down, mut cut, mut paused) = (false, false, false);
         let mut prev: Option<i64> = None;
         for p in pts {
@@ -1098,6 +1125,7 @@ impl<'a> Model<'a> {
             }
             self.stop_periodic();
             let f = self.failed_ids()?;
+            self.el_at_cut()?;
             let a = self.read_all(&format!("{H}/acked"))?;
             self.report(format!("hydo-explore-acked: {}", a.replace('\n', " ")))?;
             self.report(format!("hydo-explore-failed: {}", f.replace('\n', " ")))?;
@@ -1178,6 +1206,7 @@ impl<'a> Model<'a> {
                 self.jobs.periodic = (0..self.plan.invariants.len())
                     .filter(|i| !self.plan.invariants[*i].every.is_empty())
                     .collect();
+                self.hist_declare()?;
                 self.step_range(0, self.plan.steps)?;
                 self.retry_workload()?;
                 self.stop_periodic();
@@ -1186,6 +1215,7 @@ impl<'a> Model<'a> {
             }
             Conv::Run => self.explore_run(cmd),
             Conv::Recovery => {
+                self.m.recovery = true;
                 self.note(format!("command: {cmd}"))?;
                 self.date_s(true)?;
                 // `echo $id >> $dst`, the ids of each list in one write
@@ -1312,12 +1342,14 @@ pub fn check(
     if let Some((svc, off)) = m.jobs.kill.clone() {
         m.check_kill(&svc, off, &env)?;
     }
+    m.check_composer()?;
     for it in items {
         if let Some(by) = it.by() {
             let known = by == "main"
                 || by == "runner"
                 || (by == "pause-timer" && m.jobs.pause.is_some())
                 || (by == "kill-timer" && m.jobs.kill.is_some())
+                || (plan.compose.is_some() && (by == "composer" || by.starts_with("cmd:")))
                 || m.jobs
                     .periodic
                     .iter()
@@ -1510,10 +1542,18 @@ impl Model<'_> {
         let Some(_) = runs(&mut j, plain(&["sleep", &secs6(off)]))? else {
             return stop_ok(j);
         };
-        let Some(pg) = runs(&mut j, plain(&["pgrep", "-f", &self.plan.workload_pgrep]))? else {
-            return stop_ok(j);
+        let mid = if self.plan.compose.is_some() {
+            // `pgrep -f "compose.sh run1"`: a composed command running at the STOP
+            match items.get(j) {
+                Some(it) => self.cmp_in_flight(pos(it)),
+                None => return stop_ok(j),
+            }
+        } else {
+            let Some(pg) = runs(&mut j, plain(&["pgrep", "-f", &self.plan.workload_pgrep]))? else {
+                return stop_ok(j);
+            };
+            pg.status == 0
         };
-        let mid = pg.status == 0;
         let sig = |sg: Sig| {
             Command::Signal(Signal {
                 h: s(svc),
@@ -1634,10 +1674,17 @@ impl Model<'_> {
         let Some(_) = runs(&mut j, plain(&["sleep", &secs3(off)]))? else {
             return stop_ok(j);
         };
-        let Some(pg) = runs(&mut j, plain(&["pgrep", "-f", &self.plan.workload_pgrep]))? else {
-            return stop_ok(j);
+        let mid = if self.plan.compose.is_some() {
+            match items.get(j) {
+                Some(it) => self.cmp_in_flight(pos(it)),
+                None => return stop_ok(j),
+            }
+        } else {
+            let Some(pg) = runs(&mut j, plain(&["pgrep", "-f", &self.plan.workload_pgrep]))? else {
+                return stop_ok(j);
+            };
+            pg.status == 0
         };
-        let mid = pg.status == 0;
         match items.get(j) {
             None => return stop_ok(j),
             Some(Item::Send {

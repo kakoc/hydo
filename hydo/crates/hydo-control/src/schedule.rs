@@ -41,6 +41,12 @@ use hydo_schedule::{GuestToken, Pause, Schedule};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+// The feature controllers of M123 (seams history, error-logs, composer).
+pub mod composer;
+pub mod errlog;
+pub mod history;
+mod text;
+
 /// What the host knows about the guest at a snapshot, carried into the conversations that resume
 /// from it (the design: host state at a snapshot is the schedule, the seeds and the events so far).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -138,6 +144,10 @@ struct Host {
     /// The periodic checkers' threads.
     periodic: Vec<u64>,
     snaps: BTreeMap<String, GuestState>,
+    // SEAM(Composer), SEAM(ErrorLogs), SEAM(History): their files in $H
+    compose: composer::State,
+    errlog: errlog::State,
+    hist: history::State,
 }
 
 /// One thread of the controller.
@@ -156,6 +166,8 @@ enum Part {
         svc: String,
         off: u64,
     },
+    /// SEAM(Composer): the composer's daemon and one thread per launched command.
+    Compose(composer::Job),
 }
 
 fn label(p: &Part) -> String {
@@ -164,6 +176,7 @@ fn label(p: &Part) -> String {
         Part::Every(i) => format!("every:i{i}"),
         Part::PauseTimer { .. } => "pause-timer".into(),
         Part::KillTimer { .. } => "kill-timer".into(),
+        Part::Compose(j) => composer::label(j),
     }
 }
 
@@ -260,6 +273,9 @@ impl ScheduleController {
             last_out: BTreeMap::new(),
             periodic: Vec::new(),
             snaps: BTreeMap::new(),
+            compose: Default::default(),
+            errlog: Default::default(),
+            hist: Default::default(),
         };
         Ok(ScheduleController {
             flow: Flow::new(host, Part::Main),
@@ -516,6 +532,7 @@ fn body(fx: &mut F<'_>, part: &Part) -> Step<()> {
         Part::Every(i) => periodic_loop(fx, &ctx, *i),
         Part::PauseTimer { svc, off, dur } => pause_timer(fx, &ctx, svc, *off, *dur),
         Part::KillTimer { svc, off } => kill_timer(fx, &ctx, svc, *off),
+        Part::Compose(j) => composer::job(fx, &ctx, j),
     }
 }
 
@@ -902,6 +919,8 @@ fn xassert(fx: &mut F<'_>, t: &str, id: &str, msg: &str) {
 
 /// die_oracle: stop the checkers, the verdict line, the end.
 fn die_oracle<T>(fx: &mut F<'_>, line: String) -> Step<T> {
+    let ctx = fx.shared.ctx.clone();
+    errlog::report(fx, &ctx)?; // SEAM(ErrorLogs): the records before the verdict
     stop_periodic(fx);
     fx.report(line.clone());
     fx.settle()?;
@@ -1017,7 +1036,7 @@ fn mount_data(fx: &mut F<'_>, ctx: &Ctx, verdict: &str) -> Step<()> {
             l.data_dev, l.data_dir, ctx.plan.data_opts
         ),
     );
-    Ok(())
+    errlog::after_mount(fx, ctx) // SEAM(ErrorLogs): the data-disk files' line counts
 }
 
 /// start_svc: the old log appended to .log.old, setup, the service, its readiness. Ok(false) when
@@ -1176,7 +1195,8 @@ fn assert_once(fx: &mut F<'_>, ctx: &Ctx, i: usize, ok: bool, details: &str) {
     let inv = &ctx.plan.invariants[i];
     let key = inv.key.clone();
     if fx.effect_bool(|h, _| h.asserted.insert((key, ok))) {
-        fx.report(format!(
+        // SEAM(ErrorLogs): held back while final_verdict's output goes after the error records
+        errlog::assert_line(fx, format!(
             "HYDO-ASSERT {{\"t\":\"{}\",\"id\":\"{}\",\"ok\":{ok},\"msg\":\"{}\",\"details\":{{\"out\":\"{}\"}}}}",
             inv.kind,
             inv.id,
@@ -1192,7 +1212,11 @@ fn eval_inv(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<(u32, String)> {
     let e = env(fx, ctx, &[]);
     // `RUN cmd > $H/inv.$i.out 2>&1`; the output is kept host-side (AMBIGUOUS: an output longer
     // than 3,000 bytes is cut to its first 3,000 here; the shell's file keeps all of it)
-    let r = run(fx, run_argv(ctx, &inv.cmd), e, Some(CHUNK as u32))?;
+    // SEAM(Composer): compose.sh verdict | end IDX | check IDX
+    let r = match composer::eval(fx, ctx, &inv.cmd)? {
+        Some(r) => r,
+        None => run(fx, run_argv(ctx, &inv.cmd), e, Some(CHUNK as u32))?,
+    };
     let key = inv.key.clone();
     let out = r.out.clone();
     fx.effect(|h, _| {
@@ -1242,6 +1266,7 @@ fn start_periodic(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         h.periodic.extend(ts);
         Memo::Unit
     });
+    history::declare(fx, ctx); // SEAM(History): the HYDO-CHECK lines
     Ok(())
 }
 
@@ -1313,7 +1338,8 @@ fn final_verdict(fx: &mut F<'_>, ctx: &Ctx) -> Step<String> {
 
 /// finish: the final invariants, the verdict, the end of the conversation.
 fn finish(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
-    let v = final_verdict(fx, ctx)?;
+    history::finals(fx, ctx)?; // SEAM(History): the final: read-backs
+    let v = errlog::final_verdict(fx, ctx)?; // SEAM(ErrorLogs): wraps final_verdict
     fx.report(v.clone());
     fx.settle()?;
     fx.end(Ending::Verdict(v))
@@ -1321,22 +1347,27 @@ fn finish(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
 
 /// step_range: workload steps [a, b), one call bounded by workload.timeout.
 fn step_range(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
+    errlog::mark(fx, ctx, &a.to_string())?; // SEAM(ErrorLogs): el_mark <first step>
     if a >= b {
         return Ok(());
     }
-    let e = env(
-        fx,
-        ctx,
-        &[("HYDO_FROM", a.to_string()), ("HYDO_TO", b.to_string())],
-    );
-    let st = spawn_wait(
-        fx,
-        "workload",
-        timeout_argv(ctx, &ctx.plan.workload_run),
-        e,
-        &format!("{}/workload.log", ctx.plan.layout.dir),
-        true,
-    )?;
+    let st = if ctx.plan.compose.is_some() {
+        composer::step(fx, ctx, a, b)? // SEAM(Composer): compose.sh step FROM TO
+    } else {
+        let e = env(
+            fx,
+            ctx,
+            &[("HYDO_FROM", a.to_string()), ("HYDO_TO", b.to_string())],
+        );
+        spawn_wait(
+            fx,
+            "workload",
+            timeout_argv(ctx, &ctx.plan.workload_run),
+            e,
+            &format!("{}/workload.log", ctx.plan.layout.dir),
+            true,
+        )?
+    };
     if st == 143 {
         log(
             fx,
@@ -1352,6 +1383,7 @@ fn step_range(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
 }
 
 fn retry_workload(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
+    errlog::mark(fx, ctx, "end")?; // SEAM(ErrorLogs): el_mark end
     if ctx.plan.workload_retry.is_empty() {
         return Ok(());
     }
@@ -1392,15 +1424,21 @@ fn failed_ids(fx: &mut F<'_>, ctx: &Ctx) -> Step<String> {
 /// provision: the provisioning command, sync, the setup marker.
 fn provision(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     if !ctx.plan.provision.is_empty() {
-        let e = env(fx, ctx, &[]);
-        let st = spawn_wait(
-            fx,
-            "provision",
-            run_argv(ctx, &ctx.plan.provision),
-            e,
-            &format!("{}/provision.log", ctx.plan.layout.dir),
-            false,
-        )?;
+        // SEAM(Composer): `( own ) && compose.sh first`
+        let st = match composer::provision(fx, ctx)? {
+            Some(st) => st,
+            None => {
+                let e = env(fx, ctx, &[]);
+                spawn_wait(
+                    fx,
+                    "provision",
+                    run_argv(ctx, &ctx.plan.provision),
+                    e,
+                    &format!("{}/provision.log", ctx.plan.layout.dir),
+                    false,
+                )?
+            }
+        };
         if st != 0 {
             // AMBIGUOUS: the shell also prints the last 8 lines of provision.log here.
             return die_oracle(fx, "HYDO-ORACLE: ERROR provision failed".into());
@@ -1414,6 +1452,9 @@ fn provision(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
 
 /// set_knob: a manifest knob's `set` command with HYDO_VALUE, unless the value is the default.
 fn set_knob(fx: &mut F<'_>, ctx: &Ctx, letter: &str, value: &str) -> Step<()> {
+    if letter == "W" && ctx.plan.compose.is_some() {
+        return composer::set_knob(fx, ctx, value); // SEAM(Composer): compose.sh setw
+    }
     let k = ctx.plan.knob(letter).filter(|k| !k.default.is_empty());
     let Some(k) = k else {
         log(fx, format!("knob {letter} not in the manifest, ignored"));
@@ -1434,6 +1475,21 @@ fn set_knob(fx: &mut F<'_>, ctx: &Ctx, letter: &str, value: &str) -> Step<()> {
     Ok(())
 }
 
+/// `pgrep -f "$HYDO_WORKLOAD_PGREP"`: whether a client request is in flight.
+fn in_flight(fx: &mut F<'_>, ctx: &Ctx, e: Vec<String>) -> Step<bool> {
+    if ctx.plan.compose.is_some() {
+        // SEAM(Composer): `compose.sh run1` processes, i.e. composed commands running
+        return Ok(composer::in_flight(fx));
+    }
+    let argv = vec![
+        bb(ctx),
+        "pgrep".into(),
+        "-f".into(),
+        ctx.plan.workload_pgrep.clone(),
+    ];
+    Ok(run(fx, argv, e, None)?.status == 0)
+}
+
 /// pause_timer: after off ms, stop the service (asserting whether a request was in flight),
 /// for dur ms.
 fn pause_timer(fx: &mut F<'_>, ctx: &Ctx, svc: &str, off: u64, dur: u64) -> Step<()> {
@@ -1444,19 +1500,7 @@ fn pause_timer(fx: &mut F<'_>, ctx: &Ctx, svc: &str, off: u64, dur: u64) -> Step
         e.clone(),
         None,
     )?;
-    let mid = run(
-        fx,
-        vec![
-            bb(ctx),
-            "pgrep".into(),
-            "-f".into(),
-            ctx.plan.workload_pgrep.clone(),
-        ],
-        e.clone(),
-        None,
-    )?
-    .status
-        == 0;
+    let mid = in_flight(fx, ctx, e.clone())?;
     svc_sig(fx, svc, Sig::Stop)?;
     log(fx, format!("PAUSED {svc} (timer, mid_request={mid})"));
     xassert(
@@ -1491,19 +1535,7 @@ fn kill_timer(fx: &mut F<'_>, ctx: &Ctx, svc: &str, off: u64) -> Step<()> {
         e.clone(),
         None,
     )?;
-    let mid = run(
-        fx,
-        vec![
-            bb(ctx),
-            "pgrep".into(),
-            "-f".into(),
-            ctx.plan.workload_pgrep.clone(),
-        ],
-        e,
-        None,
-    )?
-    .status
-        == 0;
+    let mid = in_flight(fx, ctx, e)?;
     svc_sig(fx, svc, Sig::Kill)?;
     log(fx, format!("KILLED {svc} (timer, mid_request={mid})"));
     xassert(fx, KILL_TIMER_DECL.0, KILL_TIMER_DECL.1, KILL_TIMER_DECL.2);
@@ -1724,6 +1756,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         }
         stop_periodic(fx);
         let failed = failed_ids(fx, ctx)?;
+        errlog::at_cut(fx, ctx)?; // SEAM(ErrorLogs): failed_ids' wrapper at a cut
         let acked = read_all(fx, &l.acked())?;
         fx.report(format!("hydo-explore-acked: {}", acked.replace('\n', " ")));
         fx.report(format!(

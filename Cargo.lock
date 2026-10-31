@@ -391,11 +391,17 @@ version = "0.1.0"
 dependencies = [
  "flate2",
  "hydo-agent-proto",
+ "hydo-build",
+ "hydo-composer",
  "hydo-engine",
+ "hydo-errors",
  "hydo-explore",
+ "hydo-history",
  "hydo-manifest",
  "hydo-results",
  "hydo-schedule",
+ "regex",
+ "regex-automata",
  "serde_json",
  "sha2",
 ]

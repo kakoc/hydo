@@ -14,9 +14,16 @@ hydo-schedule = { workspace = true }
 hydo-manifest = { workspace = true }
 hydo-engine = { workspace = true }
 hydo-results = { workspace = true }
+hydo-composer = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
+# the error-log scan's POSIX expressions (M123): leftmost-longest needs regex-automata's DFA
+regex = "1"
+regex-automata = "0.4"
 
 [dev-dependencies]
 hydo-explore = { workspace = true }
+hydo-build = { workspace = true }
+hydo-errors = { workspace = true }
+hydo-history = { workspace = true }
 flate2 = { workspace = true }
