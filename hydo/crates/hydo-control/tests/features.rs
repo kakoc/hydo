@@ -495,6 +495,13 @@ fn the_feature_controllers_do_what_the_shell_extensions_do() {
             stream.extend(stream_of(&r.run.fin.transcript));
             if let Some(rc) = &r.recovery {
                 let inputs = r.inputs.clone().unwrap();
+                // what drive (C1) hands over from the run's transcript is the controller's
+                assert_eq!(
+                    hydo_control::RecoveryInputs::from_transcript(&r.run.fin.transcript).as_ref(),
+                    Some(&inputs),
+                    "{}",
+                    ctx("the transcript's hand-over differs from the controller's")
+                );
                 let cmd = support::oracle_of(&r.run.items).0;
                 if let Err(e) = check(
                     &v.plan,

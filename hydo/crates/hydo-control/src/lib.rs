@@ -12,12 +12,16 @@
 //! - [`replay`]: [`ReplayController`], which types a recorded transcript again;
 //! - [`runner`]: one conversation over an engine ([`Link`]): the agent session, the
 //!   acknowledgements, the transcript;
-//! - [`lockstep_link`]: [`Link`] over `hydo_engine::lockstep` (for step C1).
-//!
-//! Nothing in the product calls this crate yet (step C1 does); its proof is the scripted agent
-//! and engine of `tests/support/` (HANDOFF.md).
+//! - [`lockstep_link`]: [`Link`] over `hydo_engine::lockstep`, with the engine actions of agent
+//!   images (the workload's end, the power cut);
+//! - [`drive`]: the conversations of one engine run (boot, run, the recovery after a power cut,
+//!   a fresh boot's run), by the schedule or by recorded transcripts (step C1, M126);
+//! - [`agent`]: agent images on the engine interface ([`agent::AgentEngine`]), which the explorer
+//!   and the `hydo` command use for every image whose `/etc/hydo/control` says `agent` (M126).
 
+pub mod agent;
 pub mod control;
+pub mod drive;
 mod flow;
 pub mod lockstep_link;
 pub mod plan;
@@ -32,7 +36,9 @@ pub use control::{
 };
 pub use plan::{Layout, Plan};
 pub use replay::ReplayController;
-pub use runner::{run, AgentPoint, Finished, Link, LinkError, LinkNext, RunError, Start};
+pub use runner::{
+    run, run_with, AgentPoint, Finished, Link, LinkError, LinkNext, RunError, RunOpts, Start,
+};
 pub use schedule::{Conversation, GuestState, RecoveryInputs, ScheduleController};
 pub use seams::{Seam, Unsupported};
 pub use transcript::{Header, Record, Transcript};

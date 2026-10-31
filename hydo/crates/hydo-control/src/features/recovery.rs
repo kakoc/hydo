@@ -30,6 +30,44 @@ pub struct RecoveryInputs {
     pub world: Vec<String>,
 }
 
+impl RecoveryInputs {
+    /// The inputs a run's transcript hands over: the ids and the world of its power-cut ending,
+    /// and the first boot's clock from its acked report line (`clock=<epoch>`, which only
+    /// hydo-init-clock.sh's path writes). The same as the run controller's
+    /// [`super::ScheduleController::recovery_inputs`], also for a run typed again from its
+    /// transcript (`hydo repro --transcript`), where no policy ran. None without a power cut.
+    pub fn from_transcript(t: &crate::Transcript) -> Option<RecoveryInputs> {
+        let crate::Ending::PowerCut {
+            acked,
+            failed,
+            world,
+        } = t.ending()?
+        else {
+            return None;
+        };
+        let clock = t
+            .records
+            .iter()
+            .filter_map(|r| match r {
+                crate::Record::Report { line, .. } => line.strip_prefix("hydo-explore-acked:"),
+                _ => None,
+            })
+            .next_back()
+            .and_then(|l| {
+                l.split_whitespace()
+                    .filter_map(|w| w.strip_prefix("clock="))
+                    .next_back()
+            })
+            .and_then(|c| c.parse().ok());
+        Some(RecoveryInputs {
+            acked: acked.clone(),
+            failed: failed.clone(),
+            clock,
+            world: world.clone(),
+        })
+    }
+}
+
 /// The values a recovery conversation is given besides the ids.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct Carried {
