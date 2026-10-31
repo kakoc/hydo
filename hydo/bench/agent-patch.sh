@@ -62,6 +62,7 @@ if [ "${1:-}" = --check ]; then
   echo "entries: $(wc -l < "$w/a.list") vs $(wc -l < "$w/b.list"); files hashed: $(wc -l < "$w/a.sha") vs $(wc -l < "$w/b.sha")"
   for f in list sha own; do echo "== $f differences: $(wc -l < "$w/$f.diff") lines"; head -20 "$w/$f.diff"; done
   [ $rc = 0 ] && echo "SAME TREE" || echo "TREES DIFFER"
+  chmod -R u+w "$w/a" "$w/b" 2>/dev/null || true   # rdump keeps the store's read-only modes
   rm -rf "$w/a" "$w/b"
   exit $rc
 fi

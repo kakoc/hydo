@@ -1,0 +1,7 @@
+# Wider C2 cells (M129): every defect's trigger confirmed, then the process strategy with the M67
+# options on every defect, three repetitions (hydo-bench arguments without --out; c2-cells.sh runs
+# each step on the shell images, then on the agent images of hydo/bench/manifest).
+confirm-all confirm --defects all --base --workers 2
+process-m59 run --more-faults --cf-range 1-309 --strategy process --defects m59 --reps 1-3 --budget 30 --workers 2
+process-old run --more-faults --cf-range 1-309 --strategy process --defects all --reps 1-3 --budget 30 --workers 2
+swarm-cc3 run --strategy swarm --concurrency --defects d8-no-order-lock,d9-redis-unlocked,d12-shared-key-buffer --reps 1-3 --budget 30 --workers 2
