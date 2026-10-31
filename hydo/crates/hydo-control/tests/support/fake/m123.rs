@@ -50,7 +50,7 @@ impl Fake {
         let r = self.h(parts);
         if r % 17 == 0 {
             // a long line (the reads are 3,000-byte chunks)
-            return format!("ERROR {} \u{e9}{}", "x".repeat(1200 + (r % 400) as usize), r % 9);
+            return format!("ERROR {} {}", "\u{e9}".repeat(1300 + (r % 400) as usize), r % 9);
         }
         let t = LINES[(r % LINES.len() as u64) as usize];
         t.replace("{n}", &(r % 900 + 10).to_string())
@@ -77,7 +77,7 @@ impl Fake {
         if targets.is_empty() {
             return;
         }
-        let n = self.h(&["activity", why]) % 3;
+        let n = self.h(&["activity", why]) % 3 + u64::from(why.starts_with("retry"));
         for i in 0..n {
             let k = (self.h(&["target", why, &i.to_string()]) % targets.len() as u64) as usize;
             let l = self.m123_line(&["act", why, &i.to_string()]);
@@ -152,7 +152,7 @@ impl Fake {
             if out != "/dev/null" && !out.is_empty() {
                 self.append(&out, &text);
             }
-            if kind == "cmd" {
+            if kind == "cmd" || kind == "end" {
                 self.m123_activity(&format!("cmd{id}"));
             }
             self.emit(t + 1 + dur, Fake::exit_ev(h, id, status, None));
@@ -167,7 +167,7 @@ impl Fake {
             }
         }
         if h == "workload" || h == "retry" {
-            self.m123_activity(&format!("wl{id}"));
+            self.m123_activity(&format!("{h}{id}"));
         }
         false
     }
@@ -176,7 +176,7 @@ impl Fake {
     pub(super) fn m123_run(&mut self, r: &Run) -> Option<(u64, u32, String)> {
         let a1 = r.argv.get(1).map(String::as_str).unwrap_or("");
         let script = r.argv.get(3).cloned().unwrap_or_default();
-        if a1 == "sh" && script.contains(" wc -l") {
+        if a1 == "sh" && (script.contains("/tmp/hydo/el.m.") || script.contains("/tmp/hydo/el.b.")) {
             for line in script.lines() {
                 self.m123_pipeline(line);
             }

@@ -190,6 +190,8 @@ pub struct ScheduleController {
     conv: Conversation,
     waiting_hello: bool,
     started: bool,
+    /// A fresh boot (no runner sync to wait for).
+    fresh: bool,
 }
 
 /// The fault assertions explore_run declares, in its order (type, id, message).
@@ -283,6 +285,7 @@ impl ScheduleController {
             conv,
             waiting_hello: fresh,
             started: false,
+            fresh,
         })
     }
 
@@ -509,6 +512,10 @@ impl Controller for ScheduleController {
         }
         if self.waiting_hello || (self.started && !new) {
             return;
+        }
+        if !self.started && !self.fresh && out.next_id() > 1 {
+            // a resumed conversation began with the runner's sync (the id before ours)
+            self.flow.expect_answer(out.next_id() - 1);
         }
         self.started = true;
         self.flow.pump(&self.facts, out, label_of, body);
