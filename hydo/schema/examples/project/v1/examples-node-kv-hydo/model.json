@@ -1,0 +1,84 @@
+{
+  "format": 1,
+  "name": "node-kv",
+  "description": "nkv (Node.js, hydo-assert SDK); every acknowledged PUT must survive kills and power cuts.",
+  "root": {
+    "nix": [
+      "/nix/store/f6c0sf4fdm31ly01f8i9ca6xf5ixkjdj-nodejs-slim-22.2.0"
+    ],
+    "files": [
+      {
+        "src": "nkv-server.mjs",
+        "dst": "/app/nkv-server.mjs"
+      },
+      {
+        "src": "nkv.cjs",
+        "dst": "/app/nkv.cjs"
+      },
+      {
+        "src": "props.cjs",
+        "dst": "/app/props.cjs"
+      },
+      {
+        "src": "../../../../sdk/js/package.json",
+        "dst": "/app/node_modules/hydo-assert/package.json"
+      },
+      {
+        "src": "../../../../sdk/js/index.js",
+        "dst": "/app/node_modules/hydo-assert/index.js"
+      },
+      {
+        "src": "../../../../sdk/js/index.mjs",
+        "dst": "/app/node_modules/hydo-assert/index.mjs"
+      }
+    ]
+  },
+  "data": {
+    "size_mib": 64,
+    "dirs": [
+      "nkv"
+    ]
+  },
+  "env": {
+    "NODE": "/nix/store/f6c0sf4fdm31ly01f8i9ca6xf5ixkjdj-nodejs-slim-22.2.0/bin/node"
+  },
+  "services": [
+    {
+      "name": "nkv",
+      "cmd": "$NODE /app/nkv-server.mjs /data/nkv 7070",
+      "ready": "$NODE /app/nkv.cjs ping 7070",
+      "port": 7070
+    }
+  ],
+  "workload": {
+    "steps": 20,
+    "run": "i=$HYDO_FROM\nwhile [ $i -lt $HYDO_TO ]; do\n  if $NODE /app/nkv.cjs put 7070 k:$i v$i > /dev/null; then echo $i >> $HYDO_ACKED; echo \"$i ack\" >> $HYDO_OUTCOMES\n  else echo \"$i unknown\" >> $HYDO_OUTCOMES; fi\n  i=$((i + 1))\ndone\n"
+  },
+  "knobs": [
+    {
+      "token": "S",
+      "name": "nkv fdatasync before acknowledging",
+      "default": "always",
+      "set": "echo $HYDO_VALUE > /tmp/nkv-fsync",
+      "values": [
+        "always",
+        "never"
+      ]
+    }
+  ],
+  "invariants": [
+    {
+      "id": "nkv.oracle",
+      "msg": "every PUT the client saw acknowledged reads back with its value (nkv.cjs check)",
+      "cmd": "$NODE /app/nkv.cjs check 7070 $HYDO_ACKED"
+    }
+  ],
+  "faults": [
+    "kill",
+    "pause",
+    "cut",
+    "clock",
+    "disk"
+  ],
+  "buggify": true
+}

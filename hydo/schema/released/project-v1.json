@@ -1,0 +1,2354 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "hydo project (format 1)",
+  "description": "A hydo project, format 1: what runs in the guest, the workload, the properties, the faults that\nmake sense, and the test composer's plan. Experimental until hydo 1.0; within format 1 keys are\nonly added. String values may contain {{param}} references (params:).",
+  "type": "object",
+  "properties": {
+    "format": {
+      "description": "The project format: 1. A document without format: is read as format 1.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0,
+      "const": 1
+    },
+    "hydo_version": {
+      "description": "The hydo the project was made for (checked against hydo's own version).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/VersionPin"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "name": {
+      "description": "The project's name: lowercase letters, digits and '-'.",
+      "type": "string"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Scalar"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "guest": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Guest"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "network": {
+      "description": "loopback (default): one network for everything; bridge: each service in its own network\nnamespace at its addr:.",
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Network"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "root": {
+      "description": "What goes on the read-only root filesystem.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Root"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "data": {
+      "description": "The read-write data disk, mounted on /data: the fault target.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Data"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "env": {
+      "description": "Exported to every command.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "$ref": "#/$defs/Scalar"
+      }
+    },
+    "shell": {
+      "description": "Shell helpers, sourced before every command.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Text"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "params": {
+      "description": "Build parameters: {{name}} in any string value is replaced by the default here or by\n`hydo build --set name=value`.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Scalar"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "services": {
+      "description": "The long-running processes, started in dependency order.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/Service"
+      }
+    },
+    "provision": {
+      "description": "Run once after every service is ready, before the snapshot every schedule starts from.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Text"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "workload": {
+      "description": "The workload in numbered steps (with test commands: only steps and timeout).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Workload"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "knobs": {
+      "description": "Durability settings the explorer may relax.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/Knob"
+      }
+    },
+    "invariants": {
+      "description": "Properties as shell commands, run by the init.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/Invariant"
+      }
+    },
+    "checks": {
+      "description": "Ready-made checkers of recorded histories, run on the host.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/HistoryCheck"
+      }
+    },
+    "faults": {
+      "description": "The fault kinds that make sense for this project (default: all but freeze and protocol).",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/FaultKind"
+          },
+          {
+            "$ref": "#/$defs/ParamRef"
+          }
+        ]
+      }
+    },
+    "freeze_match": {
+      "description": "Payload strings that mark the packets a freeze sweep tries first.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FreezeMatch"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "fakes": {
+      "description": "Fake outside services, served and recorded in the guest.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/Fake"
+      }
+    },
+    "proxies": {
+      "description": "Fault proxies in front of real services.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/Proxy"
+      }
+    },
+    "errors": {
+      "description": "Error logs as findings: true, or a mapping.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ErrorsSetting"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "buggify": {
+      "description": "The programs carry BUGGIFY fault points (the schedule token B= sets them).",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "test": {
+      "description": "The test composer's plan (the hydo/ folder fills it too).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Test"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "name"
+  ],
+  "$defs": {
+    "VersionPin": {
+      "description": "The hydo the project was made for: \"0.1\" (same major.minor), \"0.1.0\", or \">=0.1\".",
+      "type": [
+        "string",
+        "number"
+      ]
+    },
+    "Scalar": {
+      "description": "A string, a number or true/false.",
+      "type": [
+        "string",
+        "number",
+        "boolean"
+      ]
+    },
+    "Guest": {
+      "type": "object",
+      "properties": {
+        "ram_mib": {
+          "description": "Guest RAM in MiB: 256..3072 on x86_64, 256..4096 on arm64.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 1024
+        },
+        "clock_start": {
+          "description": "Unix seconds the realtime clock starts at.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 1767225600
+        },
+        "clock_after_cut": {
+          "description": "After a power cut the recovery boot's clock continues from the cut plus this many seconds.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "cpu": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CpuLevel"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "v2"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "CpuLevel": {
+      "description": "The guest CPU level (x86_64 only).",
+      "type": "string",
+      "enum": [
+        "v2",
+        "v3"
+      ]
+    },
+    "ParamRef": {
+      "description": "A string with a {{param}} reference, replaced by params: before the value is checked.",
+      "type": "string",
+      "pattern": "\\{\\{[A-Za-z_][A-Za-z0-9_]*\\}\\}"
+    },
+    "Network": {
+      "description": "How the services reach each other.",
+      "type": "string",
+      "enum": [
+        "loopback",
+        "bridge"
+      ]
+    },
+    "Root": {
+      "type": "object",
+      "properties": {
+        "size_mib": {
+          "description": "Default: 1.3 x the content, rounded up to 64 MiB.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "nix": {
+          "description": "Nix store paths; each full closure is copied to the same path.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "files": {
+          "description": "Host files or directories copied into the guest.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/RootFile"
+          }
+        },
+        "text": {
+          "description": "Small files written inline: guest path -> content.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "dirs": {
+          "description": "Empty directories to create.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Text": {
+      "description": "A string, or a whole number (written as its digits).",
+      "type": [
+        "string",
+        "integer"
+      ]
+    },
+    "RootFile": {
+      "type": "object",
+      "properties": {
+        "src": {
+          "description": "Relative to the manifest, or ~ / absolute.",
+          "$ref": "#/$defs/Text"
+        },
+        "dst": {
+          "description": "The guest path.",
+          "$ref": "#/$defs/Text"
+        },
+        "mode": {
+          "description": "Octal permission bits, e.g. \"0755\".",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "src",
+        "dst"
+      ]
+    },
+    "Data": {
+      "type": "object",
+      "properties": {
+        "size_mib": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 512
+        },
+        "mount": {
+          "description": "ext4 mount options.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "rw"
+        },
+        "dirs": {
+          "description": "Created under /data on every mount.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Service": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "[a-z][a-z0-9_]*: also the name fault tokens use (K=<name>@...).",
+          "type": "string"
+        },
+        "cmd": {
+          "description": "Runs in the foreground (an image service: replaces the image's Cmd; a list = argv).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CommandLine"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "setup": {
+          "description": "Run before every start (also restarts and crash recovery).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ready": {
+          "description": "Exit 0 = ready; polled once per second.",
+          "$ref": "#/$defs/Text"
+        },
+        "ready_timeout": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 120
+        },
+        "port": {
+          "description": "The port network faults act on.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "addr": {
+          "description": "The service's own address (loopback 127.x.y.z, or 10.89.x.y with network: bridge).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "depends_on": {
+          "description": "Start after these services.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "recovery": {
+          "description": "false: not started for the power-cut recovery check.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": true
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "errors": {
+          "description": "This service's error-log settings (needs the top-level errors:).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ServiceErrors"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "image": {
+          "description": "A Docker/OCI image file the service's files come from.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ImageSource"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "image_ref": {
+          "description": "Which image in the file: a tag or sha256:<digest>.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "entrypoint": {
+          "description": "Replaces the image's Entrypoint (and drops its Cmd).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CommandLine"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "workdir": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "user": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "env": {
+          "description": "Added to or overriding the image's Env.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Scalar"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "mounts": {
+          "description": "Bind, volume and tmpfs mounts of an image service.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Mount"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "ready"
+      ]
+    },
+    "CommandLine": {
+      "description": "An argv list (exec'd, no shell), or a shell command string.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Text"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        }
+      ]
+    },
+    "ServiceErrors": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ErrorFormat"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "auto"
+        },
+        "level": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ErrorLevel"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "match": {
+          "description": "Also an error line (POSIX ERE).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ignore": {
+          "description": "Never an error line (POSIX ERE).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "files": {
+          "description": "More log files the service writes (absolute paths).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "normalize": {
+          "description": "More parts to blank out of the template.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Normalize"
+          }
+        },
+        "off": {
+          "description": "true: not this service.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ErrorFormat": {
+      "description": "How a service's log is read.",
+      "type": "string",
+      "enum": [
+        "auto",
+        "redis",
+        "none"
+      ]
+    },
+    "ErrorLevel": {
+      "description": "Which log lines are error lines.",
+      "type": "string",
+      "enum": [
+        "error",
+        "warning"
+      ]
+    },
+    "Normalize": {
+      "description": "A regular expression (replaced by *), or {pattern, replace}.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/NormalizeRule"
+        }
+      ]
+    },
+    "NormalizeRule": {
+      "type": "object",
+      "properties": {
+        "pattern": {
+          "type": "string"
+        },
+        "replace": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "pattern"
+      ]
+    },
+    "ImageSource": {
+      "description": "A Docker/OCI image: a `docker save` tar or an OCI layout directory, or one per architecture.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/ImagePerArch"
+        }
+      ]
+    },
+    "ImagePerArch": {
+      "type": "object",
+      "properties": {
+        "x86_64": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "arm64": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Mount": {
+      "type": "object",
+      "properties": {
+        "src": {
+          "description": "A guest path (bind or volume); or give tmpfs: true.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dst": {
+          "description": "The path in the image.",
+          "$ref": "#/$defs/Text"
+        },
+        "tmpfs": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "copy_up": {
+          "description": "Copy the image's files into src on first use (a volume).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "size": {
+          "description": "tmpfs size, e.g. 64m.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "dst"
+      ]
+    },
+    "Workload": {
+      "type": "object",
+      "properties": {
+        "steps": {
+          "description": "Faults are placed at step numbers (1..1000; with test commands: rounds, default 20).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "run": {
+          "description": "Runs steps [HYDO_FROM, HYDO_TO); not with test commands.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retry": {
+          "description": "Runs after the faults heal (no power cut).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timeout": {
+          "description": "Seconds per run/retry call.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 300
+        },
+        "process": {
+          "description": "A pgrep -f pattern telling whether a request is in flight (default: run's first word).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Knob": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "description": "One capital letter, not a built-in schedule token.",
+          "$ref": "#/$defs/Text"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "default": {
+          "description": "The value the image starts with (the safe one).",
+          "$ref": "#/$defs/Text"
+        },
+        "set": {
+          "description": "Sets the value $HYDO_VALUE.",
+          "$ref": "#/$defs/Text"
+        },
+        "values": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Scalar"
+          }
+        },
+        "safe": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "token",
+        "default",
+        "set"
+      ]
+    },
+    "Invariant": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "[A-Za-z0-9_.-]+, unique among invariants and checks.",
+          "$ref": "#/$defs/Text"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/InvariantType"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "always"
+        },
+        "msg": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cmd": {
+          "description": "Exit 0 = holds, 1 = violated, 2 = could not be evaluated now.",
+          "$ref": "#/$defs/Text"
+        },
+        "every": {
+          "description": "Also check every this many seconds of guest time during the workload.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "final": {
+          "description": "Check at the end (default: true unless every: is given).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "within": {
+          "description": "type: eventually: the deadline in seconds of guest time.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "after": {
+          "description": "type: eventually: the anchor of the deadline.",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Anchor"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "heal"
+        },
+        "poll": {
+          "description": "type: eventually: seconds between checks.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 1
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "cmd"
+      ]
+    },
+    "InvariantType": {
+      "description": "What kind of property an invariant is.",
+      "type": "string",
+      "enum": [
+        "always",
+        "always_or_unreachable",
+        "eventually"
+      ]
+    },
+    "Anchor": {
+      "description": "Where an eventually property's deadline counts from.",
+      "type": "string",
+      "enum": [
+        "heal",
+        "start"
+      ]
+    },
+    "HistoryCheck": {
+      "description": "A history check: the workload records operations (hydo_hist), the host checks them.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Text"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HistoryType"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        "history": {
+          "description": "The history the workload records under.",
+          "$ref": "#/$defs/Text"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/HistoryModel"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "register"
+        },
+        "initial": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/HistoryInitial"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "nil"
+        },
+        "consistency": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Consistency"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "strict-serializable"
+        },
+        "msg": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "final": {
+          "description": "A shell command that reads the final state back into the history.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "history"
+      ]
+    },
+    "HistoryType": {
+      "description": "A ready-made history checker.",
+      "type": "string",
+      "enum": [
+        "linearizable",
+        "list-append"
+      ]
+    },
+    "HistoryModel": {
+      "description": "The object a linearizable history is checked against.",
+      "type": "string",
+      "enum": [
+        "register",
+        "cas"
+      ]
+    },
+    "HistoryInitial": {
+      "description": "What a key holds before the first write.",
+      "type": "string",
+      "enum": [
+        "nil",
+        "any"
+      ]
+    },
+    "Consistency": {
+      "description": "The consistency level a list-append history is checked against.",
+      "type": "string",
+      "enum": [
+        "strict-serializable",
+        "strong-session-serializable",
+        "serializable",
+        "strong-snapshot-isolation",
+        "strong-session-snapshot-isolation",
+        "snapshot-isolation"
+      ]
+    },
+    "FaultKind": {
+      "description": "A fault kind the explorer may use.",
+      "type": "string",
+      "enum": [
+        "kill",
+        "pause",
+        "network",
+        "oneway",
+        "cut",
+        "clock",
+        "disk",
+        "freeze",
+        "protocol"
+      ]
+    },
+    "FreezeMatch": {
+      "description": "Payload strings for the freeze sweep: a list, or replies:/requests: lists.",
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "$ref": "#/$defs/FreezeSplit"
+        }
+      ]
+    },
+    "FreezeSplit": {
+      "type": "object",
+      "properties": {
+        "replies": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "requests": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "Fake": {
+      "description": "A fake outside service (HTTP, or cleartext HTTP/2 gRPC).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/Text"
+        },
+        "port": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "addr": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "protocol": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/FakeProtocol"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "http"
+        },
+        "idempotency": {
+          "description": "Where a request's idempotency key is (an extractor such as header:Idempotency-Key).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ref": {
+          "description": "Where a request's reference is (an extractor such as json:order).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "routes": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/FakeRoute"
+          }
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "port"
+      ]
+    },
+    "FakeProtocol": {
+      "description": "A fake outside service's protocol.",
+      "type": "string",
+      "enum": [
+        "http",
+        "grpc"
+      ]
+    },
+    "FakeRoute": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/Text"
+        },
+        "method": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "path": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "description": "The HTTP status of the answer.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "code": {
+          "description": "The gRPC status code of the answer.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "headers": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "body": {
+          "description": "The answer body (a template).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "message": {
+          "description": "gRPC: the answer message's protobuf bytes in hex.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "effect": {
+          "description": "The route has an effect in the outside world (a charge, an email).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "idempotent": {
+          "description": "The same idempotency key again gets the first answer and no new effect.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "webhook": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Webhook"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "Webhook": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "http://<address>:<port>/<path> of the system.",
+          "$ref": "#/$defs/Text"
+        },
+        "method": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "body": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "headers": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "delay_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "retries": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "url"
+      ]
+    },
+    "Proxy": {
+      "description": "A fault proxy in front of a real service.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/Text"
+        },
+        "port": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "addr": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "protocol": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ProxyProtocol"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "http"
+        },
+        "idempotency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "routes": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ProxyRoute"
+          }
+        },
+        "to": {
+          "description": "<address>:<port> of the real service (or give service:).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "service": {
+          "description": "The service (with a port:) the proxy stands in front of.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "port"
+      ]
+    },
+    "ProxyProtocol": {
+      "description": "A fault proxy's protocol.",
+      "type": "string",
+      "enum": [
+        "http",
+        "grpc",
+        "tcp"
+      ]
+    },
+    "ProxyRoute": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/Text"
+        },
+        "method": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "path": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "effect": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "ErrorsSetting": {
+      "description": "Error logs as findings: true (every default), false (off), or a mapping.",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "$ref": "#/$defs/ErrorsConfig"
+        }
+      ]
+    },
+    "ErrorsConfig": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ErrorLevel"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "error"
+        },
+        "max": {
+          "description": "The most error kinds one boot prints, 1..200.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 40
+        },
+        "services": {
+          "description": "The services whose logs are scanned (default: every service).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Test": {
+      "description": "The test composer's plan: small commands composed into seeded rounds (the schedule token W=),\nproperties, and saved regressions. The hydo/ folder fills commands, checks and regressions.",
+      "type": "object",
+      "properties": {
+        "parallel": {
+          "description": "At most this many commands at once (1..16).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 4
+        },
+        "per_round": {
+          "description": "Parallel drivers started per round (1..8).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 2
+        },
+        "round_ms": {
+          "description": "A round every this many ms of guest time (10..60000).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 200
+        },
+        "command_timeout": {
+          "description": "Seconds per command (1..3600).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 60
+        },
+        "drain_timeout": {
+          "description": "After the last round, running commands get this long (1..3600).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 60
+        },
+        "check_every": {
+          "description": "Default period of always checks (1..3600).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 2
+        },
+        "check_within": {
+          "description": "Default deadline of eventually checks (1..3600).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 30
+        },
+        "max_commands": {
+          "description": "0 = no limit.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 0
+        },
+        "budget_ms": {
+          "description": "0 = none; else no command starts later than this after round 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 0
+        },
+        "commands": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/TestCommand"
+          }
+        },
+        "checks": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/TestCheck"
+          }
+        },
+        "regressions": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/TestRegression"
+          }
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "TestCommand": {
+      "description": "A composed command; its id is <kind>_<name>.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Letters, digits, '.', '_', '-'.",
+          "$ref": "#/$defs/Text"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CommandKind"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        "run": {
+          "$ref": "#/$defs/CommandLine"
+        },
+        "timeout": {
+          "description": "Seconds (default: test.command_timeout).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "content": {
+          "description": "8 to 64 lowercase hex digits: a hash of the command's code (an SDK computes it).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "kind",
+        "run"
+      ]
+    },
+    "CommandKind": {
+      "description": "When a composed command runs.",
+      "type": "string",
+      "enum": [
+        "first",
+        "parallel_driver",
+        "serial_driver",
+        "singleton_driver",
+        "anytime",
+        "eventually",
+        "finally"
+      ]
+    },
+    "TestCheck": {
+      "description": "A composed check; its name is its property id.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/Text"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TestCheckKind"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        "run": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CommandLine"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "msg": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "every": {
+          "description": "kind always: seconds between checks (default test.check_every).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "within": {
+          "description": "kind eventually: the deadline (default test.check_within).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "after": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Anchor"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "poll": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "history": {
+          "description": "Retired (a history check written here; top-level checks: is its home).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "deprecated": true
+        },
+        "model": {
+          "description": "Retired (a history check written here).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "deprecated": true
+        },
+        "initial": {
+          "description": "Retired (a history check written here).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "deprecated": true
+        },
+        "consistency": {
+          "description": "Retired (a history check written here).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "deprecated": true
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "kind"
+      ]
+    },
+    "TestCheckKind": {
+      "description": "When a composed check runs. linearizable, list_append and list-append are retired here\n(they are history checks: top-level `checks:`); format 1 still reads them, and `hydo\nmigrate` moves them.",
+      "type": "string",
+      "enum": [
+        "final",
+        "always",
+        "eventually",
+        "linearizable",
+        "list_append",
+        "list-append"
+      ]
+    },
+    "TestRegression": {
+      "description": "A saved schedule replayed by `hydo repro --regressions`.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Default r<index>.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "schedule": {
+          "description": "'<host tokens> | run <guest tokens>'.",
+          "type": "string"
+        },
+        "expect": {
+          "description": "ok (default), violation, or fp=<16 hex digits>.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "commands": {
+          "description": "The command ids at save time (seed-form W= regressions written before M98).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "compose": {
+          "description": "The resolved composition a W=@<key> names.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "contents": {
+          "description": "Command id -> content hash at save time.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "saved_schedule": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schedule"
+      ]
+    }
+  },
+  "$comment": "Generated from hydo-manifest's model (hydo/crates/hydo-manifest/src/model.rs); do not edit. Project format 1, experimental until hydo 1.0: within format 1 keys are only added. HYDO_BLESS=1 cargo test -p hydo-manifest --test format rewrites it."
+}

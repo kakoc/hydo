@@ -1,0 +1,48 @@
+{
+  "format": 1,
+  "name": "kb-sqlite-reset-{{v}}",
+  "description": "SQLite {{v}} in WAL mode, walrace reset mode (frequent WAL restarts).",
+  "root": {
+    "files": [
+      {
+        "src": "bin/walrace-{{v}}",
+        "dst": "/bin/walrace",
+        "mode": "0755"
+      }
+    ]
+  },
+  "data": {
+    "size_mib": 256,
+    "dirs": [
+      "db"
+    ]
+  },
+  "params": {
+    "v": "3510200"
+  },
+  "services": [],
+  "workload": {
+    "steps": 4,
+    "run": "WALRACE_MODE=reset /bin/walrace run /data/db/t.db $HYDO_ACKED $HYDO_OUTCOMES $HYDO_FROM $HYDO_TO",
+    "timeout": 900,
+    "process": "walrace"
+  },
+  "knobs": [
+    {
+      "token": "S",
+      "name": "workload seed (reset-mode shape)",
+      "default": "0",
+      "set": "echo $HYDO_VALUE > /tmp/walrace.seed"
+    }
+  ],
+  "invariants": [
+    {
+      "id": "sqlite.committed_durable_and_intact",
+      "msg": "every committed write is present with its value and PRAGMA integrity_check is ok",
+      "cmd": "/bin/walrace check /data/db/t.db $HYDO_ACKED"
+    }
+  ],
+  "faults": [
+    "clock"
+  ]
+}

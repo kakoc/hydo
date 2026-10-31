@@ -6,4 +6,5 @@ seeded faults and replays every failure exactly. The test lives in `hydo/`: `hyd
 `hydo/checks/` (the properties) and `hydo/regressions/` (saved failing schedules).
 
 Before you change anything in `hydo/`, run `hydo guide` and follow it; `hydo guide manifest`
-is the schema. After a change, run `hydo build hydo/hydo.yaml --check`.
+explains the project format and `hydo guide schema` prints its JSON Schema. After a change, run
+`hydo build hydo/hydo.yaml --check`; `hydo migrate` rewrites an old file in the current format.

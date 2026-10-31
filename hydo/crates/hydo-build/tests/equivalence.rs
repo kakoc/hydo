@@ -76,7 +76,9 @@ fn tracked_now(root: &Path) -> Vec<String> {
         .unwrap()
         .lines()
         .filter(|l| l.ends_with(".yaml") || l.ends_with(".yml") || l.ends_with(".json"))
-        .filter(|l| !l.starts_with("hydo/onboard/tests/") && !l.contains("/tests/golden"))
+        // hydo/schema/: the project format's example documents (hydo-manifest tests/format.rs)
+        .filter(|l| !l.starts_with("hydo/onboard/tests/") && !l.starts_with("hydo/schema/"))
+        .filter(|l| !l.contains("/tests/golden"))
         .map(str::to_string)
         .collect();
     v.sort();

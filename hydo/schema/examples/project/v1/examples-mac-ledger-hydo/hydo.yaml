@@ -1,0 +1,62 @@
+# A tiny project for the Mac backend (hvx-mac/explore): busybox httpd with a CGI that appends
+# ledger entries, a 30-step client, and an exactly-once invariant. Needs only busybox, so it
+# builds for arm64 without any other cross-compiled binary:
+#   hvx/onboard/hydo-build hvx-mac/explore/examples/ledger/hydo.yaml --arch arm64 --build-dir <dir>
+# The CGI is deliberately not idempotent: when a request is applied but its answer is lost
+# (the server paused or killed mid-request, the client timing out), the client's retry stores
+# the entry twice -- the invariant catches it.
+name: ledger
+description: busybox httpd + a CGI ledger; every acknowledged entry must be stored exactly once.
+
+root:
+  files:
+    - {src: www, dst: /www}
+
+data:
+  size_mib: 64
+  dirs: [ledger]
+
+provision: ": > /data/ledger/entries"
+
+services:
+  - name: front
+    cmd: /bin/busybox httpd -f -p 127.0.0.1:8080 -h /www
+    ready: wget -q -T 2 -O- http://127.0.0.1:8080/cgi-bin/ping | grep -q pong
+    port: 8080
+
+workload:
+  steps: 30
+  process: wget
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      r=$(wget -q -T 2 -O- "http://127.0.0.1:8080/cgi-bin/put?id=$i" 2>/dev/null)
+      if [ "$r" = "OK $i" ]; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      i=$((i + 1))
+    done
+  retry: |
+    for i in $(awk '{ o[$1] = $2 } END { for (i in o) if (o[i] != "ack") print i }' $HYDO_OUTCOMES | sort -n); do
+      r=$(wget -q -T 2 -O- "http://127.0.0.1:8080/cgi-bin/put?id=$i" 2>/dev/null)
+      if [ "$r" = "OK $i" ]; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES; fi
+    done
+
+invariants:
+  - id: ledger.acked_exactly_once
+    msg: every entry the client saw acknowledged is stored exactly once
+    cmd: |
+      for i in $(cat $HYDO_ACKED); do
+        n=$(grep -cx "$i" /data/ledger/entries)
+        [ "$n" = 1 ] || { echo "entry $i stored $n times"; exit 1; }
+      done
+      echo "acked=$(wc -l < $HYDO_ACKED) each stored once"
+  - id: ledger.no_duplicates
+    msg: no entry is ever stored twice
+    every: 1
+    final: true
+    cmd: |
+      d=$(sort /data/ledger/entries | uniq -d | head -1)
+      [ -z "$d" ] || { echo "entry $d stored twice"; exit 1; }
+      echo "no duplicates ($(wc -l < /data/ledger/entries) entries)"
+
+faults: [kill, pause, network, oneway, clock]

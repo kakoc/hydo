@@ -1,0 +1,8 @@
+#!/bin/sh
+# hydo-msg: every SET the client saw acknowledged reads back with its value
+# The same property as examples/redis-composed, written with the ready-made store readers
+# (hvx/readers; MANIFEST.md "Reading the stores"): the acknowledged ids as "k:<i>=v<i>" must be
+# a subset of Redis's "key=value" pairs for k:*. Exit 0 holds, 1 violated, 2 Redis unreadable.
+exec hydo-check subset \
+  --left 'acked=hydo acked --item "k:{id}=v{id}"' \
+  --right 'redis=redis 127.0.0.1:6379 scan "k:*" --item "{key}={value}" --timeout 5'

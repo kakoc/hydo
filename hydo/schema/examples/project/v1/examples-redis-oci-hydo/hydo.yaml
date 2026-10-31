@@ -1,0 +1,61 @@
+# The Redis example, with Redis taken from the OFFICIAL Docker image (redis:7.2.4, unmodified,
+# pinned by digest) instead of listed files. Get the image files first (needs network, once):
+#   sh hvx/onboard/examples/redis-oci/fetch-image.sh       # -> redis-7.2.4-{amd64.docker.tar,arm64-oci}
+# then build on the build box:
+#   HYDO_SEEDRNG=~/hydo/build/hvx_seedrng hvx/onboard/hydo-build hvx/onboard/examples/redis-oci/hydo.yaml
+#   hvx/onboard/hydo-build hvx/onboard/examples/redis-oci/hydo.yaml --arch arm64 --build-dir ob
+# Try:  disk=none | run              -> OK (every acknowledged write survives)
+#       disk=none | run C=12 R=everysec   -> Redis's documented fsync window after a power cut
+name: redis-oci
+description: Redis from the official Docker image; every acknowledged SET must survive.
+
+data:
+  size_mib: 64
+
+services:
+  - name: redis
+    # x86_64: a `docker save`-format archive; arm64: an OCI layout directory (both made by
+    # fetch-image.sh with skopeo, pinned by the per-platform manifest digest)
+    image:
+      x86_64: redis-7.2.4-amd64.docker.tar
+      arm64: redis-7.2.4-arm64-oci
+    image_ref: redis:7.2.4
+    # the image's ENTRYPOINT (docker-entrypoint.sh: chown /data, then gosu redis) stays; this
+    # replaces its CMD. WorkingDir /data from the image is the data disk.
+    cmd: >-
+      redis-server --port 6379 --bind 127.0.0.1 --dir /data --save ""
+      --appendonly yes --appendfsync always --hz 1 --dynamic-hz no
+    ready: hydo-oci redis redis-cli ping | grep -q PONG
+    port: 6379
+
+workload:
+  steps: 20                         # step i = SET k:i v<i>
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      r=$(timeout 2 hydo-oci redis redis-cli SET k:$i v$i 2>/dev/null)   # a 2 s client deadline
+      if [ "$r" = OK ]; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      i=$((i + 1))
+    done
+  process: redis-cli
+
+knobs:
+  - token: R
+    name: Redis appendfsync
+    default: always
+    values: [always, everysec, "no"]
+    set: hydo-oci redis redis-cli CONFIG SET appendfsync $HYDO_VALUE
+
+invariants:
+  - id: redis.acked_writes_survive
+    msg: every SET the client saw acknowledged reads back with its value
+    cmd: |
+      lost=0
+      for i in $(cat $HYDO_ACKED); do
+        [ "$(hydo-oci redis redis-cli GET k:$i)" = "v$i" ] || { echo "key k:$i lost"; lost=1; break; }
+      done
+      [ $lost = 0 ] && echo "acked=$(wc -l < $HYDO_ACKED) all present"
+      [ $lost = 0 ]
+
+faults: [kill, pause, cut, clock, disk]

@@ -64,10 +64,16 @@ const READERS: &[(&str, &str)] = &[
         "Codex, Cursor, GitHub Copilot and Gemini CLI",
     ),
 ];
-const GUIDE_TOPICS: &[(&str, &str)] = &[(
-    "manifest",
-    "the hydo.yaml and hydo/ folder schema (MANIFEST.md)",
-)];
+const GUIDE_TOPICS: &[(&str, &str)] = &[
+    (
+        "manifest",
+        "the project format explained: hydo.yaml and the hydo/ folder (MANIFEST.md)",
+    ),
+    (
+        "schema",
+        "the project format's JSON Schema (format 1, hydo/schema/project-v1.json)",
+    ),
+];
 pub const BEGIN: &str =
     "<!-- hydo:begin (written by `hydo init`; edits between these markers are replaced) -->";
 pub const END: &str = "<!-- hydo:end -->";
@@ -469,6 +475,10 @@ pub fn guide(argv: &[String], root: &Path, out: &mut Out) -> R<i32> {
     }
     if a == "manifest" {
         out.put(&manifest_md(root, &sk)?)?;
+        return Ok(0);
+    }
+    if a == "schema" {
+        out.put(&hydo_manifest::model::schema_text())?;
         return Ok(0);
     }
     let name = if a.ends_with(".md") && !a.contains('/') {

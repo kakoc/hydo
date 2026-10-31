@@ -1,0 +1,280 @@
+{
+  "format": 1,
+  "hydo_version": "0.1",
+  "name": "redis-composed",
+  "description": "Redis with an append-only file, driven by composed commands (SETs, transfers, AOF rewrites).",
+  "root": {
+    "files": [
+      {
+        "src": "/nix/store/svzgg47md9362vjrq5x9k1djln2pkihj-redis-7.2.4/bin/redis-server",
+        "dst": "/bin/redis-server"
+      },
+      {
+        "src": "/nix/store/svzgg47md9362vjrq5x9k1djln2pkihj-redis-7.2.4/bin/redis-cli",
+        "dst": "/bin/redis-cli"
+      },
+      {
+        "src": "/nix/store/3z92sygrppbacsj05x9gwhpaxkivrzc8-systemd-255.6/lib/libsystemd.so.0",
+        "dst": "/nix/store/3z92sygrppbacsj05x9gwhpaxkivrzc8-systemd-255.6/lib/libsystemd.so.0"
+      },
+      {
+        "src": "/nix/store/3z92sygrppbacsj05x9gwhpaxkivrzc8-systemd-255.6/lib/libsystemd.so.0.38.0",
+        "dst": "/nix/store/3z92sygrppbacsj05x9gwhpaxkivrzc8-systemd-255.6/lib/libsystemd.so.0.38.0"
+      },
+      {
+        "src": "/nix/store/7lf9ba7lb8418ihzzy8gm985rk16bmbk-xz-5.4.7/lib/liblzma.so.5",
+        "dst": "/nix/store/7lf9ba7lb8418ihzzy8gm985rk16bmbk-xz-5.4.7/lib/liblzma.so.5"
+      },
+      {
+        "src": "/nix/store/7lf9ba7lb8418ihzzy8gm985rk16bmbk-xz-5.4.7/lib/liblzma.so.5.4.7",
+        "dst": "/nix/store/7lf9ba7lb8418ihzzy8gm985rk16bmbk-xz-5.4.7/lib/liblzma.so.5.4.7"
+      },
+      {
+        "src": "/nix/store/8klck62rcrjgck547m0rmwljivlxcssi-libcap-2.69-lib/lib/libcap.so.2",
+        "dst": "/nix/store/8klck62rcrjgck547m0rmwljivlxcssi-libcap-2.69-lib/lib/libcap.so.2"
+      },
+      {
+        "src": "/nix/store/8klck62rcrjgck547m0rmwljivlxcssi-libcap-2.69-lib/lib/libcap.so.2.69",
+        "dst": "/nix/store/8klck62rcrjgck547m0rmwljivlxcssi-libcap-2.69-lib/lib/libcap.so.2.69"
+      },
+      {
+        "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/ld-linux-aarch64.so.1",
+        "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/ld-linux-aarch64.so.1"
+      },
+      {
+        "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libc.so.6",
+        "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libc.so.6"
+      },
+      {
+        "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libdl.so.2",
+        "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libdl.so.2"
+      },
+      {
+        "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libm.so.6",
+        "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libm.so.6"
+      },
+      {
+        "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libpthread.so.0",
+        "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libpthread.so.0"
+      },
+      {
+        "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/librt.so.1",
+        "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/librt.so.1"
+      },
+      {
+        "src": "/nix/store/kablphmmlimsvz4qmf9xbgqpwa8b71nh-lz4-1.9.4/lib/liblz4.so.1",
+        "dst": "/nix/store/kablphmmlimsvz4qmf9xbgqpwa8b71nh-lz4-1.9.4/lib/liblz4.so.1"
+      },
+      {
+        "src": "/nix/store/kablphmmlimsvz4qmf9xbgqpwa8b71nh-lz4-1.9.4/lib/liblz4.so.1.9.4",
+        "dst": "/nix/store/kablphmmlimsvz4qmf9xbgqpwa8b71nh-lz4-1.9.4/lib/liblz4.so.1.9.4"
+      },
+      {
+        "src": "/nix/store/ma8n17lsrb9pgycvwyr3dhnalhkbqrdf-jemalloc-5.3.0/lib/libjemalloc.so.2",
+        "dst": "/nix/store/ma8n17lsrb9pgycvwyr3dhnalhkbqrdf-jemalloc-5.3.0/lib/libjemalloc.so.2"
+      },
+      {
+        "src": "/nix/store/p27dxq20hdvm8xjsgj4n103cl02x4jr4-openssl-3.0.14/lib/libcrypto.so.3",
+        "dst": "/nix/store/p27dxq20hdvm8xjsgj4n103cl02x4jr4-openssl-3.0.14/lib/libcrypto.so.3"
+      },
+      {
+        "src": "/nix/store/p27dxq20hdvm8xjsgj4n103cl02x4jr4-openssl-3.0.14/lib/libssl.so.3",
+        "dst": "/nix/store/p27dxq20hdvm8xjsgj4n103cl02x4jr4-openssl-3.0.14/lib/libssl.so.3"
+      },
+      {
+        "src": "/nix/store/piw1xfc6p66qf0malcfixz822q2b1wg1-libgpg-error-1.48/lib/libgpg-error.so.0",
+        "dst": "/nix/store/piw1xfc6p66qf0malcfixz822q2b1wg1-libgpg-error-1.48/lib/libgpg-error.so.0"
+      },
+      {
+        "src": "/nix/store/piw1xfc6p66qf0malcfixz822q2b1wg1-libgpg-error-1.48/lib/libgpg-error.so.0.35.0",
+        "dst": "/nix/store/piw1xfc6p66qf0malcfixz822q2b1wg1-libgpg-error-1.48/lib/libgpg-error.so.0.35.0"
+      },
+      {
+        "src": "/nix/store/pp8jrab5a9qfpn3la57r37x8kw2hrcil-gcc-13.2.0-libgcc/lib/libgcc_s.so.1",
+        "dst": "/nix/store/pp8jrab5a9qfpn3la57r37x8kw2hrcil-gcc-13.2.0-libgcc/lib/libgcc_s.so.1"
+      },
+      {
+        "src": "/nix/store/wmcyf2wn9wh491wi55j18kz6gsdz99cr-libgcrypt-1.10.3/lib/libgcrypt.so.20",
+        "dst": "/nix/store/wmcyf2wn9wh491wi55j18kz6gsdz99cr-libgcrypt-1.10.3/lib/libgcrypt.so.20"
+      },
+      {
+        "src": "/nix/store/wmcyf2wn9wh491wi55j18kz6gsdz99cr-libgcrypt-1.10.3/lib/libgcrypt.so.20.4.3",
+        "dst": "/nix/store/wmcyf2wn9wh491wi55j18kz6gsdz99cr-libgcrypt-1.10.3/lib/libgcrypt.so.20.4.3"
+      },
+      {
+        "src": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libgcc_s.so.1",
+        "dst": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libgcc_s.so.1"
+      },
+      {
+        "src": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libstdc++.so.6",
+        "dst": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libstdc++.so.6"
+      },
+      {
+        "src": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libstdc++.so.6.0.32",
+        "dst": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libstdc++.so.6.0.32"
+      },
+      {
+        "src": "/nix/store/ywz8lg1h600a888z67hpj632b8gri6wx-zstd-1.5.6/lib/libzstd.so.1",
+        "dst": "/nix/store/ywz8lg1h600a888z67hpj632b8gri6wx-zstd-1.5.6/lib/libzstd.so.1"
+      },
+      {
+        "src": "/nix/store/ywz8lg1h600a888z67hpj632b8gri6wx-zstd-1.5.6/lib/libzstd.so.1.5.6",
+        "dst": "/nix/store/ywz8lg1h600a888z67hpj632b8gri6wx-zstd-1.5.6/lib/libzstd.so.1.5.6"
+      }
+    ],
+    "text": {
+      "/etc/redis.conf": "port 6379\nbind 127.0.0.1\ndir /data/redis\nsave \"\"\nappendonly yes\nappendfsync always\nhz 1\ndynamic-hz no\n"
+    }
+  },
+  "data": {
+    "size_mib": 64,
+    "dirs": [
+      "redis"
+    ]
+  },
+  "env": {
+    "TRANSFER": "atomic",
+    "ACCOUNTS": "5",
+    "TOTAL": "500"
+  },
+  "services": [
+    {
+      "name": "redis",
+      "cmd": "/bin/redis-server /etc/redis.conf",
+      "ready": "/bin/redis-cli ping | grep -q PONG",
+      "port": 6379
+    }
+  ],
+  "workload": {
+    "steps": 20,
+    "timeout": 120
+  },
+  "knobs": [
+    {
+      "token": "R",
+      "name": "Redis appendfsync",
+      "default": "always",
+      "set": "/bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE",
+      "values": [
+        "always",
+        "everysec",
+        "no"
+      ]
+    }
+  ],
+  "faults": [
+    "kill",
+    "pause",
+    "cut",
+    "clock",
+    "disk"
+  ],
+  "test": {
+    "parallel": 4,
+    "per_round": 2,
+    "round_ms": 100,
+    "command_timeout": 20,
+    "drain_timeout": 30,
+    "commands": [
+      {
+        "name": "read",
+        "kind": "anytime",
+        "run": [
+          "/hydo/workload/anytime_read"
+        ],
+        "content": "1df44f77a6d37281"
+      },
+      {
+        "name": "serves",
+        "kind": "eventually",
+        "run": [
+          "/hydo/workload/eventually_serves"
+        ],
+        "content": "87a1afb01bb5f281"
+      },
+      {
+        "name": "summary",
+        "kind": "finally",
+        "run": [
+          "/hydo/workload/finally_summary"
+        ],
+        "content": "cbec9a49fa344789"
+      },
+      {
+        "name": "accounts",
+        "kind": "first",
+        "run": [
+          "/hydo/workload/first_accounts"
+        ],
+        "content": "6f320dbc39cf1346"
+      },
+      {
+        "name": "set",
+        "kind": "parallel_driver",
+        "run": [
+          "/hydo/workload/parallel_driver_set"
+        ],
+        "content": "5965096e1f90bc26"
+      },
+      {
+        "name": "transfer",
+        "kind": "parallel_driver",
+        "run": [
+          "/hydo/workload/parallel_driver_transfer"
+        ],
+        "content": "549e0b6d2561dc5b"
+      },
+      {
+        "name": "rewrite",
+        "kind": "serial_driver",
+        "run": [
+          "/hydo/workload/serial_driver_rewrite"
+        ],
+        "content": "643ccbd6b9b98a72"
+      }
+    ],
+    "checks": [
+      {
+        "name": "answers",
+        "kind": "eventually",
+        "run": [
+          "/hydo/checks/eventually_answers"
+        ],
+        "msg": "Redis answers PING within 15 s after the faults are healed",
+        "within": 15
+      },
+      {
+        "name": "acked_writes_survive",
+        "kind": "final",
+        "run": [
+          "/hydo/checks/final_acked_writes_survive"
+        ],
+        "msg": "every SET the client saw acknowledged reads back with its value"
+      },
+      {
+        "name": "total_conserved",
+        "kind": "final",
+        "run": [
+          "/hydo/checks/final_total_conserved"
+        ],
+        "msg": "transfers never create or destroy money: the balances sum to TOTAL"
+      }
+    ],
+    "regressions": [
+      {
+        "name": "lost-update",
+        "schedule": "disk=none dseed=1 | run W=0000002a,p4,q2,r100",
+        "expect": "ok",
+        "commands": [
+          "anytime_read",
+          "eventually_serves",
+          "finally_summary",
+          "first_accounts",
+          "parallel_driver_set",
+          "parallel_driver_transfer",
+          "serial_driver_rewrite"
+        ]
+      }
+    ]
+  }
+}

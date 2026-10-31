@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: within=15
+# hydo-msg: Redis answers PING within 15 s after the faults are healed
+/bin/redis-cli ping 2>/dev/null | grep -q PONG

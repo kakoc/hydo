@@ -1,11 +1,12 @@
 # hydo plan for @NAME@, written by `hydo init`. Fill in every TODO; `hydo guide` explains how,
-# and `hydo guide manifest` is the schema. Check it with:  hydo build hydo/hydo.yaml --check
+# `hydo guide manifest` explains the format and `hydo guide schema` prints its JSON Schema.
+# Check it with:  hydo build hydo/hydo.yaml --check
 # If the repository has a docker-compose.yaml, start from it instead (it replaces this file):
 #   hydo compose docker-compose.yaml --out hydo/hydo.yaml --images-dir images
 name: @NAME@
 description: TODO one line about the system under test
-format: 1
-hydo_version: "0.1"
+format: 1                        # the project format (experimental until hydo 1.0; additions only)
+hydo_version: "0.1"              # the hydo this project was made for
 
 guest:
   ram_mib: 1024                  # must hold every service (256..3072 on x86_64, 256..4096 on arm64)

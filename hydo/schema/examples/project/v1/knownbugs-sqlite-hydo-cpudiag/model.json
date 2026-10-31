@@ -1,0 +1,48 @@
+{
+  "format": 1,
+  "name": "kb-sqlite-cpudiag-{{v}}",
+  "description": "SQLite {{v}} walrace with per-CPU diagnostics on the console.",
+  "root": {
+    "files": [
+      {
+        "src": "bin/walrace-{{v}}",
+        "dst": "/bin/walrace",
+        "mode": "0755"
+      }
+    ]
+  },
+  "data": {
+    "size_mib": 256,
+    "dirs": [
+      "db"
+    ]
+  },
+  "params": {
+    "v": "3510200"
+  },
+  "services": [],
+  "workload": {
+    "steps": 4,
+    "run": "grep '^cpu' /proc/stat | sed \"s/^/hydo-cpudiag: step $HYDO_FROM before: /\" > /dev/console\n/bin/walrace run /data/db/t.db $HYDO_ACKED $HYDO_OUTCOMES $HYDO_FROM $HYDO_TO &\np=$!\nn=0\nwhile [ $n -lt 200 ] && [ -d /proc/$p ]; do\n  for t in /proc/$p/task/*; do\n    [ -r $t/stat ] && echo \"${t##*/} $(cut -d' ' -f39 $t/stat 2>/dev/null)\"\n  done\n  n=$((n+1))\ndone > /tmp/cpudiag.$HYDO_FROM\nwait $p\nrc=$?\nawk -v s=$HYDO_FROM 'NF==2 && $2!=\"\" { n[$2]++; seen[$1\" \"$2]=1 }\n  END { for (c in n) printf \"hydo-cpudiag: step %s samples on cpu%s: %d\\n\", s, c, n[c];\n        for (k in seen) { split(k, a, \" \"); cpus[a[1]] = cpus[a[1]] \" \" a[2] }\n        both=0; tot=0; for (t in cpus) { tot++; if (cpus[t] ~ / 0/ && cpus[t] ~ / 1/) both++ }\n        printf \"hydo-cpudiag: step %s threads sampled: %d, seen on both cpu0 and cpu1: %d\\n\", s, tot, both }' \\\n  /tmp/cpudiag.$HYDO_FROM > /dev/console\ngrep '^cpu' /proc/stat | sed \"s/^/hydo-cpudiag: step $HYDO_FROM after: /\" > /dev/console\nexit $rc\n",
+    "timeout": 900,
+    "process": "walrace"
+  },
+  "knobs": [
+    {
+      "token": "S",
+      "name": "workload seed (writer count, transaction sizes, checkpoint modes, autocheckpoint)",
+      "default": "0",
+      "set": "echo $HYDO_VALUE > /tmp/walrace.seed"
+    }
+  ],
+  "invariants": [
+    {
+      "id": "sqlite.committed_durable_and_intact",
+      "msg": "every committed write is present with its value and PRAGMA integrity_check is ok",
+      "cmd": "/bin/walrace check /data/db/t.db $HYDO_ACKED"
+    }
+  ],
+  "faults": [
+    "clock"
+  ]
+}
