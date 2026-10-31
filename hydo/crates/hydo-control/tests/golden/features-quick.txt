@@ -145,18 +145,26 @@ chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml#no-eventually	43	500	662
 chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml#no-eventually	44	500	1f666d55081d69313df50254bb566f4a742235b0e3a5ca8c5ef6cf2513f712f9
 chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml#no-eventually	45	500	e15e3d1c4e04e339356d1d3ba0429846af8b1eda5eb130f3b5d5783b13597e6e
 chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml#no-eventually	46	305	8a17189df3d5d0aaf171c94a10ff8193756c087cc3aa41a854447faff82b3b1c
-plan	hydo/onboard/examples/stack/hydo-errors.yaml	recovery:ok=3 recovery:violation=1 refused:clock=6 refused:net-faults=13 run:cut=4 run:violation=8 unparsed=3
+plan	hydo/onboard/examples/stack/hydo-errors.yaml	recovery:ok=4 recovery:violation=1 refused:clock=11 run:cut=5 run:ok=2 run:violation=13 unparsed=3
 boot-transcript	hydo/onboard/examples/stack/hydo-errors.yaml	2e4155eb78140ed2
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	0	500	958d3e7de5f31bd03ee0a669e650827868bcd7100a9a4f728024c45674237247
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	1	500	ea1ea8b325973ca7c84c29c82eb855d2ec4ef46e67c7ed84e13817a541fccbd0
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	2	500	948e08766c590c43de77279afc5966f80452ce4826b04cf48e4c04e05062291c
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	3	500	f99af360d082b737560c0f753bcb357bbce0b5527d2adfe8b69f2c21302be410
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	4	500	4f54a4da6bcc98d0626e96c05a3988d5d783b11c03ce52f79aa41c4473fa7eb0
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	5	500	787fbb0effad38bd9ee69ba5be5bf0a715373417ebc6dc0e7bdcd11a2672b0a8
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	6	500	9b5a2c10f318346a542544a10a909dae357d255cfaba42ad6164b551c4afc3c7
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	7	500	68b0b609a8260e738fb35d4980e65188ba68828c42d973f3d59bdd28c4ec1a08
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	8	500	bae6e4f3744f06d58ecd2655246e515662d23a5a797c643cafa8fd46d7c0fb07
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	9	150	88abb82b4ccc93a1bcc08ec747c91b4ec8fa6d60b17fbbef0e865d74b4310ac0
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	0	500	8314d4d33a201d0a11486a6bde96e67e5a89e219c52dc7528c0e9c49c64fd6c5
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	1	500	54f09c3bc6c44b528616c7e51b74dc03c479abfdd554081dcbbbec4dbd65b7e3
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	2	500	98fe93f8cf75b2758fc42861d4feef01f4b195dde77cc247316fe8b5303eaa73
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	3	500	35ef0a539ec5d9c189814d68400e96f1589432e2ec83dddff592917b88652029
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	4	500	d050461106bec0f812c5351d1934f13edcbba479c27aab5877dbe624918b18ed
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	5	500	e5248afcad774636a02781202a607bc10053af092778e66e43634e7d4cf22a4a
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	6	500	784e28d77c84e832c670ffb288685209036be2b69d4f4167580e9d825185783f
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	7	500	1e67a6b543e2a35bc16c04d5173603ed313974bfa3fd9a6d6cfbbcb103503a0e
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	8	500	55cafa8078f5c522aae80dcf0748c3ab56874f086d7c81c7d9109f4f80b72989
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	9	500	1c9488d4f503e0b8f83ee607eb5476a93c9afcf7579ed489a1ec1dbc28d1935d
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	10	500	1ea796b3164622376194096d29836496fdcd092df924123829ac99a0c215c8ba
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	11	500	3ceff7a29e33307c96e630439684f8c5b6bc013ecfe180d3e8fd61650e721e0c
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	12	500	23ffba4f18d7635aabfaf5f429af1068f51f8bb5ea61efb64f2afe8a82600c96
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	13	500	669b51bd70c7ebc251a8e4122aa51bb3acc5d78ff528de31a404dc0620f011b2
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	14	500	0cdc19b1cbc397a8ba56da3d1d1661cf9909befd2f66f4f71fac24b154b558f9
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	15	500	9360a322369a9ff1698dd1b3fd8c203b5fef3da3ac3aca23daa0a3260bbe23b5
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	16	500	86b63d0d782fb4d9e5e2bf2ab02ae0c98a6b72f836f1399a4f092c8b0b094f47
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	17	12	0724f2986a8b81b50eab2425fc13a2b3b9822f4499eb97b472790c04ba549b7c
 plan	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml#drain	recovery:ok=6 refused:clock=11 run:cut=6 run:error=2 run:ok=6 run:violation=23 unparsed=1
 boot-transcript	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml#drain	0b0ff40b1a75762b
 chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml#drain	0	500	7520e278ed90c0d0a0d5e2e3686ac9c4e97b8fcfa13c0566c85c0ab77a2c9770
@@ -279,4 +287,4 @@ chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml#saved	37	500	a716
 chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml#saved	38	500	cc65bd877b8d4cf34cc474f53436e94773f2560a2db26d0c12fed838bfbd30ae
 chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml#saved	39	500	6ead01c331f8614747ae3f8b43c976be2999372e18b7d3e5a2542cbf5bec846b
 chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml#saved	40	322	69a2b76fe132361e2610fdf136e795f7ee1281c0c52093dfe9638251b2d8f769
-paths	composer: a check timed out=5; composer: a command failed=148; composer: a command ok=167; composer: a command ran into its timeout=109; composer: a first command=111; composer: a pause timer while a command ran=27; composer: a round waited for its time=42; composer: a saved composition=2; composer: a skipped entry (budget)=38; composer: a violation (exit 100)=130; composer: an assertion of a command=162; composer: an end command=105; composer: compose.<id>.no_violation=130; composer: compose.<id>.succeeded=167; composer: killed by stop_all=51; composer: killed by the drain=15; composer: setw refused W=14; composer: stop_all's done line=53; composer: the resolved form=23; composer: the seed form=228; composer: the verdict invariant failed=121; errlog: a label of a workload range=52; errlog: a read as hex=16; errlog: a record=39; errlog: a record of a recovery boot=10; errlog: a record of a stream's setup log=21; errlog: the end label=5; history: HYDO-CHECK=142; history: HYDO-CHECK-FINAL=142
+paths	composer: a check timed out=5; composer: a command failed=148; composer: a command ok=167; composer: a command ran into its timeout=109; composer: a first command=111; composer: a pause timer while a command ran=29; composer: a round waited for its time=48; composer: a saved composition=2; composer: a skipped entry (budget)=38; composer: a violation (exit 100)=130; composer: an assertion of a command=162; composer: an end command=105; composer: compose.<id>.no_violation=130; composer: compose.<id>.succeeded=167; composer: killed by stop_all=51; composer: killed by the drain=15; composer: setw refused W=14; composer: stop_all's done line=53; composer: the resolved form=23; composer: the seed form=228; composer: the verdict invariant failed=121; errlog: a label of a workload range=70; errlog: a read as hex=16; errlog: a record=47; errlog: a record of a recovery boot=11; errlog: a record of a stream's setup log=29; errlog: the end label=9; history: HYDO-CHECK=142; history: HYDO-CHECK-FINAL=142
