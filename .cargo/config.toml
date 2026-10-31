@@ -3,3 +3,8 @@
 [target.x86_64-unknown-linux-musl]
 linker = "rust-lld"
 rustflags = ["-C", "target-feature=+crt-static"]
+
+# The arm64 guest client hydo-grpc (hydo/grpcgen/build-client.sh), linked the same way.
+[target.aarch64-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = ["-C", "target-feature=+crt-static"]

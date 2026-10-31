@@ -11,8 +11,10 @@ use crate::spec::{From, Plan, Rpc, Scenario};
 use crate::state::State;
 use crate::transport::Channel;
 use crate::valuegen::{self, canonical, Env, Gen, GenError};
-use prost::Message;
-use prost_reflect::{DescriptorPool, DynamicMessage, Kind as PKind, MessageDescriptor, ReflectMessage, Value};
+
+use prost_reflect::{
+    DescriptorPool, DynamicMessage, Kind as PKind, MessageDescriptor, ReflectMessage, Value,
+};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
@@ -40,6 +42,7 @@ pub struct Client {
     /// source rpc -> the pools it feeds, in plan order
     captures: BTreeMap<String, Vec<Capture>>,
     asserted: Mutex<HashSet<String>>,
+    json_pool: std::sync::OnceLock<DescriptorPool>,
 }
 
 /// Options for `Client::new`.
@@ -59,7 +62,8 @@ pub fn read_schema(path: &str) -> Result<DescriptorPool, String> {
 
 /// A message type by full name.
 pub fn message(pool: &DescriptorPool, name: &str) -> Result<MessageDescriptor, String> {
-    pool.get_message_by_name(name).ok_or_else(|| format!("message {name}: proto: not found"))
+    pool.get_message_by_name(name)
+        .ok_or_else(|| format!("message {name}: proto: not found"))
 }
 
 fn open_append(v: &str) -> Option<File> {
@@ -76,7 +80,11 @@ pub struct WorkerEnv<'a> {
 
 impl<'a> WorkerEnv<'a> {
     pub fn new(c: &'a Client) -> WorkerEnv<'a> {
-        WorkerEnv { c, local: HashMap::new(), scen: false }
+        WorkerEnv {
+            c,
+            local: HashMap::new(),
+            scen: false,
+        }
     }
 }
 
@@ -129,7 +137,11 @@ impl Client {
         let plan = Plan::load(&o.plan)?;
         let state = State::new(&o.state_dir)?;
         let seed = o.seed.unwrap_or(plan.seed);
-        let calls = if o.calls.is_empty() { format!("{}/calls", o.state_dir) } else { o.calls.clone() };
+        let calls = if o.calls.is_empty() {
+            format!("{}/calls", o.state_dir)
+        } else {
+            o.calls.clone()
+        };
         let mut rec = Recorder::open(&calls, &plan.record.console);
         if !plan.record.history.is_empty() {
             rec.history = plan.record.history.clone();
@@ -143,7 +155,11 @@ impl Client {
                 if let Some(f) = &r.fields[&path].from {
                     let cs = captures.entry(f.rpc.clone()).or_default();
                     if !cs.iter().any(|x| x.pool == f.pool()) {
-                        cs.push(Capture { side: f.side.clone(), path: f.path.clone(), pool: f.pool() });
+                        cs.push(Capture {
+                            side: f.side.clone(),
+                            path: f.path.clone(),
+                            pool: f.pool(),
+                        });
                     }
                 }
             }
@@ -158,12 +174,15 @@ impl Client {
             sinks: Mutex::new((outcomes, acked)),
             captures,
             asserted: Mutex::new(HashSet::new()),
+            json_pool: std::sync::OnceLock::new(),
         })
     }
 
     fn conn(&self, target: &str) -> Arc<Channel> {
         let mut g = self.conns.lock().unwrap_or_else(|e| e.into_inner());
-        g.entry(target.to_string()).or_insert_with(|| Arc::new(Channel::new(target))).clone()
+        g.entry(target.to_string())
+            .or_insert_with(|| Arc::new(Channel::new(target)))
+            .clone()
     }
 
     fn target(&self, r: &Rpc) -> String {
@@ -175,10 +194,24 @@ impl Client {
     }
 
     /// n requests for an RPC (n = 1 unless client-streaming).
-    pub fn generate(&self, r: &Rpc, rnd: &mut R, env: &mut dyn Env) -> Result<Vec<DynamicMessage>, GenError> {
+    pub fn generate(
+        &self,
+        r: &Rpc,
+        rnd: &mut R,
+        env: &mut dyn Env,
+    ) -> Result<Vec<DynamicMessage>, GenError> {
         let md = message(&self.pool, &r.input).map_err(GenError::Other)?;
-        let mut g = Gen { d: &self.plan.defaults, hints: &r.fields, oneofs: &r.oneofs, env };
-        let n = if r.client_streaming { rnd.range(r.stream_len[0], r.stream_len[1]) } else { 1 };
+        let mut g = Gen {
+            d: &self.plan.defaults,
+            hints: &r.fields,
+            oneofs: &r.oneofs,
+            env,
+        };
+        let n = if r.client_streaming {
+            rnd.range(r.stream_len[0], r.stream_len[1])
+        } else {
+            1
+        };
         let mut out = Vec::new();
         for _ in 0..n {
             out.push(g.message(&md, rnd)?);
@@ -186,18 +219,24 @@ impl Client {
         Ok(out)
     }
 
+    fn json_pool(&self) -> &DescriptorPool {
+        self.json_pool.get_or_init(|| json_pool(&self.pool))
+    }
+
     /// Reads requests back from JSON (the inverse of `pjson::json`).
     pub fn parse_json(&self, r: &Rpc, s: &str) -> Result<Vec<DynamicMessage>, String> {
-        let md = message(&self.pool, &r.input)?;
+        let v = crate::jsonin::parse(s)?;
         let raws: Vec<serde_json::Value> = if s.trim_start().starts_with('[') {
-            serde_json::from_str(s).map_err(|e| e.to_string())?
+            match v {
+                serde_json::Value::Array(a) => a,
+                _ => return Err("not an array".into()),
+            }
         } else {
-            vec![serde_json::from_str(s).map_err(|e| e.to_string())?]
+            vec![v]
         };
         let mut out = Vec::new();
         for raw in raws {
-            let m = DynamicMessage::deserialize(md.clone(), raw).map_err(|e| e.to_string())?;
-            out.push(m);
+            out.push(read_json(self.json_pool(), &r.input, raw)?);
         }
         Ok(out)
     }
@@ -206,30 +245,68 @@ impl Client {
     pub async fn call(&self, r: &Rpc, reqs: &[DynamicMessage]) -> (Outcome, Vec<DynamicMessage>) {
         let omd = match message(&self.pool, &r.output) {
             Ok(m) => m,
-            Err(e) => return (Outcome { kind: Kind::Unknown, code: oc::OK, msg: e }, Vec::new()),
+            Err(e) => {
+                return (
+                    Outcome {
+                        kind: Kind::Unknown,
+                        code: oc::OK,
+                        msg: e,
+                    },
+                    Vec::new(),
+                )
+            }
         };
         let ch = self.conn(&self.target(r));
         let deadline = Instant::now() + Duration::from_millis(r.deadline_ms.max(0) as u64);
-        let bodies: Vec<Vec<u8>> = reqs.iter().map(|m| m.encode_to_vec()).collect();
+        let bodies: Vec<Vec<u8>> = reqs.iter().map(crate::wire::encode).collect();
         let unary = !r.client_streaming && !r.server_streaming;
-        let send: &[Vec<u8>] = if r.client_streaming { &bodies } else { &bodies[..bodies.len().min(1)] };
+        let send: &[Vec<u8>] = if r.client_streaming {
+            &bodies
+        } else {
+            &bodies[..bodies.len().min(1)]
+        };
         let (msgs, st) = ch.call(&r.path, send, r.client_streaming, deadline).await;
         let mut resps = Vec::new();
         for b in &msgs {
             match DynamicMessage::decode(omd.clone(), b.as_slice()) {
                 Ok(m) => resps.push(m),
                 Err(e) => {
-                    let st = classify(oc::INTERNAL, &format!("grpc: failed to unmarshal the received message: {e}"), &r.classify);
-                    return (st, if r.server_streaming { resps } else { Vec::new() });
+                    let st = classify(
+                        oc::INTERNAL,
+                        &format!("grpc: failed to unmarshal the received message: {e}"),
+                        &r.classify,
+                    );
+                    return (
+                        st,
+                        if r.server_streaming {
+                            resps
+                        } else {
+                            Vec::new()
+                        },
+                    );
                 }
             }
         }
         if st.code != oc::OK {
             let res = classify(st.code, &st.msg, &r.classify);
-            return (res, if r.server_streaming { resps } else { Vec::new() });
+            return (
+                res,
+                if r.server_streaming {
+                    resps
+                } else {
+                    Vec::new()
+                },
+            );
         }
         if !r.server_streaming && resps.len() > 1 {
-            return (classify(oc::UNKNOWN, "grpc: client streaming protocol violation: get <nil>, want <EOF>", &r.classify), Vec::new());
+            return (
+                classify(
+                    oc::UNKNOWN,
+                    "grpc: client streaming protocol violation: get <nil>, want <EOF>",
+                    &r.classify,
+                ),
+                Vec::new(),
+            );
         }
         if unary && resps.is_empty() {
             // grpc-go's Invoke returns io.EOF here
@@ -240,14 +317,27 @@ impl Client {
 
     /// One logical operation: an attempt, then up to `retry.attempts` more with the SAME request
     /// while the outcome is unknown. Every attempt is recorded.
-    pub async fn op(&self, process: i64, op: u64, r: &Rpc, reqs: &[DynamicMessage], mut env: Option<&mut WorkerEnv<'_>>) -> Outcome {
+    pub async fn op(
+        &self,
+        process: i64,
+        op: u64,
+        r: &Rpc,
+        reqs: &[DynamicMessage],
+        mut env: Option<&mut WorkerEnv<'_>>,
+    ) -> Outcome {
         let body = pjson::json(reqs, r.client_streaming);
-        let mut res = Outcome { kind: Kind::Unknown, code: oc::UNKNOWN, msg: String::new() };
+        let mut res = Outcome {
+            kind: Kind::Unknown,
+            code: oc::UNKNOWN,
+            msg: String::new(),
+        };
         for a in 0..=r.retry.attempts.max(0) {
             if a > 0 && r.retry.backoff_ms > 0 {
                 tokio::time::sleep(Duration::from_millis(r.retry.backoff_ms as u64)).await;
             }
-            res = self.attempt(process, op, r, reqs, &body, env.as_deref_mut()).await;
+            res = self
+                .attempt(process, op, r, reqs, &body, env.as_deref_mut())
+                .await;
             if res.kind != Kind::Unknown {
                 break;
             }
@@ -255,11 +345,30 @@ impl Client {
         res
     }
 
-    async fn attempt(&self, process: i64, op: u64, r: &Rpc, reqs: &[DynamicMessage], body: &str, env: Option<&mut WorkerEnv<'_>>) -> Outcome {
+    async fn attempt(
+        &self,
+        process: i64,
+        op: u64,
+        r: &Rpc,
+        reqs: &[DynamicMessage],
+        body: &str,
+        env: Option<&mut WorkerEnv<'_>>,
+    ) -> Outcome {
         self.rec.invoke(process, op as i64, &r.name, body);
         let (res, resps) = self.call(r, reqs).await;
-        let out = if res.kind == Kind::Ok { pjson::json(&resps, r.server_streaming) } else { res.msg.clone() };
-        self.rec.complete(process, op as i64, res.kind.as_str(), &r.name, &code_name(res.code), &out);
+        let out = if res.kind == Kind::Ok {
+            pjson::json(&resps, r.server_streaming)
+        } else {
+            res.msg.clone()
+        };
+        self.rec.complete(
+            process,
+            op as i64,
+            res.kind.as_str(),
+            &r.name,
+            &code_name(res.code),
+            &out,
+        );
         self.assert_seen(r, res.kind);
         let id = self.outcome_id(r, reqs);
         if !id.is_empty() {
@@ -353,7 +462,13 @@ impl Client {
     }
 
     /// A single RPC operation with generated values: (ran, ok); ran is false if it had to be skipped.
-    async fn one(&self, process: i64, ri: usize, rnd: &mut R, e: &mut WorkerEnv<'_>) -> (bool, bool) {
+    async fn one(
+        &self,
+        process: i64,
+        ri: usize,
+        rnd: &mut R,
+        e: &mut WorkerEnv<'_>,
+    ) -> (bool, bool) {
         let r = &self.plan.rpcs[ri];
         let reqs = match self.generate(r, rnd, e) {
             Ok(q) => q,
@@ -364,10 +479,19 @@ impl Client {
             }
         };
         let op = self.state.next("op");
-        (true, self.op(process, op, r, &reqs, Some(e)).await.kind == Kind::Ok)
+        (
+            true,
+            self.op(process, op, r, &reqs, Some(e)).await.kind == Kind::Ok,
+        )
     }
 
-    async fn run_item(&self, process: i64, it: Item, rnd: &mut R, e: &mut WorkerEnv<'_>) -> (bool, bool) {
+    async fn run_item(
+        &self,
+        process: i64,
+        it: Item,
+        rnd: &mut R,
+        e: &mut WorkerEnv<'_>,
+    ) -> (bool, bool) {
         let sc: &Scenario = match it {
             Item::Rpc(i) => return self.one(process, i, rnd, e).await,
             Item::Scen(s) => &self.plan.scenarios[s],
@@ -437,7 +561,11 @@ impl Client {
                 None => return Err(err),
             },
         };
-        let calls = if calls <= 0 { self.plan.drive.calls } else { calls };
+        let calls = if calls <= 0 {
+            self.plan.drive.calls
+        } else {
+            calls
+        };
         let hs = std::env::var("HYDO_SEED").unwrap_or_default();
         let stream = match crate::gofmt::parse_uint(&hs, 64) {
             Ok(v) if !hs.is_empty() => derive(self.seed, &[2, v]),
@@ -477,11 +605,20 @@ impl Client {
         let mut ops: HashMap<u64, OpState> = HashMap::new();
         let mut order: Vec<u64> = Vec::new();
         for line in String::from_utf8_lossy(&text).lines() {
-            let Some(ev) = record::parse(line, &self.rec.history) else { continue };
-            let Ok(id) = crate::gofmt::parse_uint(&ev.op, 64) else { continue };
+            let Some(ev) = record::parse(line, &self.rec.history) else {
+                continue;
+            };
+            let Ok(id) = crate::gofmt::parse_uint(&ev.op, 64) else {
+                continue;
+            };
             let o = ops.entry(id).or_insert_with(|| {
                 order.push(id);
-                OpState { process: ev.process.parse().unwrap_or(0), rpc: ev.rpc.clone(), req: String::new(), last: String::new() }
+                OpState {
+                    process: ev.process.parse().unwrap_or(0),
+                    rpc: ev.rpc.clone(),
+                    req: String::new(),
+                    last: String::new(),
+                }
             });
             if ev.typ == "invoke" {
                 o.req = String::from_utf8_lossy(&ev.body).into_owned();
@@ -496,7 +633,9 @@ impl Client {
             if o.last != "info" && o.last != "invoke" {
                 continue;
             }
-            let Ok(ri) = self.plan.find(&o.rpc) else { continue };
+            let Ok(ri) = self.plan.find(&o.rpc) else {
+                continue;
+            };
             let r = &self.plan.rpcs[ri];
             if !r.retry.at_end {
                 continue;
@@ -515,6 +654,108 @@ impl Client {
             self.op(o.process, id, &rr, &reqs, None).await;
         }
         Ok(())
+    }
+}
+
+const EMPTY_ANY: &str = "type.googleapis.com/hydo.grpc.EmptyAny";
+
+/// protojson reads an empty `google.protobuf.Any` (`{}`, which the client writes for one);
+/// prost-reflect wants an `@type`. This is the schema plus one marker type, so that `{}` can be
+/// read as an Any of the marker type and emptied afterwards (`read_json`).
+pub fn json_pool(pool: &DescriptorPool) -> DescriptorPool {
+    let mut p = pool.clone();
+    let f = prost_reflect::prost_types::FileDescriptorProto {
+        name: Some("hydo/grpc/empty_any.proto".into()),
+        package: Some("hydo.grpc".into()),
+        message_type: vec![prost_reflect::prost_types::DescriptorProto {
+            name: Some("EmptyAny".into()),
+            ..Default::default()
+        }],
+        syntax: Some("proto3".into()),
+        ..Default::default()
+    };
+    if p.add_file_descriptor_proto(f).is_err() {
+        return pool.clone();
+    }
+    p
+}
+
+/// One message of type `name` from protobuf JSON, with a pool from `json_pool`.
+pub fn read_json(
+    json_pool: &DescriptorPool,
+    name: &str,
+    mut raw: serde_json::Value,
+) -> Result<DynamicMessage, String> {
+    let md = message(json_pool, name)?;
+    mark_any(&md, &mut raw);
+    let mut m = DynamicMessage::deserialize(md, raw).map_err(|e| e.to_string())?;
+    unmark_any(&mut m);
+    Ok(m)
+}
+
+fn mark_one(md: &MessageDescriptor, x: &mut serde_json::Value) {
+    if md.full_name() == "google.protobuf.Any" {
+        if x.as_object().is_some_and(|o| o.is_empty()) {
+            *x = serde_json::json!({ "@type": EMPTY_ANY });
+        }
+    } else {
+        mark_any(md, x);
+    }
+}
+
+/// Every empty Any object under `v` (a message of type `md`) becomes an Any of the marker type.
+fn mark_any(md: &MessageDescriptor, v: &mut serde_json::Value) {
+    let Some(obj) = v.as_object_mut() else { return };
+    for (k, val) in obj.iter_mut() {
+        let Some(fd) = md
+            .get_field_by_name(k)
+            .or_else(|| md.get_field_by_json_name(k))
+        else {
+            continue;
+        };
+        let PKind::Message(sub) = fd.kind() else {
+            continue;
+        };
+        if fd.is_map() {
+            if let PKind::Message(vm) = sub.map_entry_value_field().kind() {
+                if let Some(o) = val.as_object_mut() {
+                    o.values_mut().for_each(|x| mark_one(&vm, x));
+                }
+            }
+        } else if fd.is_list() {
+            if let Some(a) = val.as_array_mut() {
+                a.iter_mut().for_each(|x| mark_one(&sub, x));
+            }
+        } else {
+            mark_one(&sub, val);
+        }
+    }
+}
+
+fn unmark_value(v: &mut Value) {
+    match v {
+        Value::Message(m) => {
+            if m.descriptor().full_name() == "google.protobuf.Any" {
+                if m.get_field_by_name("type_url")
+                    .is_some_and(|u| u.as_str() == Some(EMPTY_ANY))
+                {
+                    m.clear_field_by_name("type_url");
+                    m.clear_field_by_name("value");
+                }
+            } else {
+                unmark_any(m);
+            }
+        }
+        Value::List(l) => l.iter_mut().for_each(unmark_value),
+        Value::Map(mp) => mp.values_mut().for_each(unmark_value),
+        _ => {}
+    }
+}
+
+/// The marker Anys of `mark_any`, emptied again.
+fn unmark_any(m: &mut DynamicMessage) {
+    for (_, v) in m.fields_mut() {
+        unmark_value(v);
     }
 }
 
@@ -541,14 +782,18 @@ pub fn extract(m: &DynamicMessage, path: &str) -> Vec<String> {
 
 fn walk(m: &DynamicMessage, segs: &[&str], i: usize, out: &mut Vec<String>) {
     let md = m.descriptor();
-    let Some(fd) = md.get_field_by_name(segs[i]) else { return };
+    let Some(fd) = md.get_field_by_name(segs[i]) else {
+        return;
+    };
     let last = i == segs.len() - 1;
     if fd.is_map() {
         if i + 1 >= segs.len() {
             return;
         }
         let sel = segs[i + 1];
-        let PKind::Message(entry) = fd.kind() else { return };
+        let PKind::Message(entry) = fd.kind() else {
+            return;
+        };
         let (kfd, vfd) = (entry.map_entry_key_field(), entry.map_entry_value_field());
         if let Value::Map(mp) = &*m.get_field(&fd) {
             for (k, v) in mp {

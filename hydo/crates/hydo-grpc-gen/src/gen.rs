@@ -62,15 +62,25 @@ pub fn usage() -> String {
     let arch_def = env_or("HYDO_GRPC_ARCH", "amd64");
     let client_def = std::env::var("HYDO_GRPC_CLIENT").unwrap_or_default();
     let mut s = format!("{USAGE}\n");
-    let q = |d: &str| if d.is_empty() { String::new() } else { format!(" (default {})", hydo_grpc::gofmt::quote(d)) };
+    let q = |d: &str| {
+        if d.is_empty() {
+            String::new()
+        } else {
+            format!(" (default {})", hydo_grpc::gofmt::quote(d))
+        }
+    };
     s += "  -I value\n    \textra import path for .proto files (repeatable)\n";
-    s += &format!("  -arch string\n    \tclient architectures to copy: amd64, arm64 or amd64,arm64{}\n", q(&arch_def));
+    s += &format!(
+        "  -arch string\n    \tclient architectures to copy: amd64, arm64 or amd64,arm64{}\n",
+        q(&arch_def)
+    );
     s += &format!("  -client string\n    \tdirectory with the prebuilt clients (hydo-grpc, hydo-grpc.<arch>){}\n", q(&client_def));
     s += "  -descriptor-set string\n    \tread a compiled FileDescriptorSet instead of .proto files\n";
     s += "  -hints string\n    \thints file (YAML or JSON)\n";
     s += "  -no-build\n    \tdo not copy the client binary\n";
     s += "  -out string\n    \toutput directory (required)\n";
-    s += "  -reflect string\n    \task a running server (gRPC server reflection) for its services\n";
+    s +=
+        "  -reflect string\n    \task a running server (gRPC server reflection) for its services\n";
     s += "  -rel string\n    \tdirectory the starter section's paths are relative to (default: the parent of --out)\n";
     s += "  -steps int\n    \tworkload.steps in the starter section (default 30)\n";
     s += "  -target string\n    \tserver address in the guest (overrides the hints' target)\n";
@@ -89,7 +99,12 @@ fn usage_fail(msg: Option<String>) -> Fail {
 
 /// Go's flag package, applied repeatedly so that flags may follow the proto dir.
 fn parse_args(argv: &[String]) -> Result<Args, Fail> {
-    let mut a = Args { arch: env_or("HYDO_GRPC_ARCH", "amd64"), client: std::env::var("HYDO_GRPC_CLIENT").unwrap_or_default(), steps: 30, ..Default::default() };
+    let mut a = Args {
+        arch: env_or("HYDO_GRPC_ARCH", "amd64"),
+        client: std::env::var("HYDO_GRPC_CLIENT").unwrap_or_default(),
+        steps: 30,
+        ..Default::default()
+    };
     let mut i = 0;
     while i < argv.len() {
         let s = &argv[i];
@@ -121,15 +136,32 @@ fn parse_args(argv: &[String]) -> Result<Args, Fail> {
         if name == "no-build" {
             a.no_build = match val.as_deref() {
                 None => true,
-                Some(v) => hydo_grpc::gofmt::parse_bool(v)
-                    .map_err(|_| usage_fail(Some(format!("invalid boolean value {} for -no-build: parse error", hydo_grpc::gofmt::quote(v)))))?,
+                Some(v) => hydo_grpc::gofmt::parse_bool(v).map_err(|_| {
+                    usage_fail(Some(format!(
+                        "invalid boolean value {} for -no-build: parse error",
+                        hydo_grpc::gofmt::quote(v)
+                    )))
+                })?,
             };
             i += 1;
             continue;
         }
-        let known = ["hints", "out", "descriptor-set", "reflect", "target", "arch", "client", "rel", "steps", "I"];
+        let known = [
+            "hints",
+            "out",
+            "descriptor-set",
+            "reflect",
+            "target",
+            "arch",
+            "client",
+            "rel",
+            "steps",
+            "I",
+        ];
         if !known.contains(&name.as_str()) {
-            return Err(usage_fail(Some(format!("flag provided but not defined: -{name}"))));
+            return Err(usage_fail(Some(format!(
+                "flag provided but not defined: -{name}"
+            ))));
         }
         let v = match val {
             Some(v) => v,
@@ -137,7 +169,9 @@ fn parse_args(argv: &[String]) -> Result<Args, Fail> {
                 i += 1;
                 match argv.get(i) {
                     Some(v) => v.clone(),
-                    None => return Err(usage_fail(Some(format!("flag needs an argument: -{name}")))),
+                    None => {
+                        return Err(usage_fail(Some(format!("flag needs an argument: -{name}"))))
+                    }
                 }
             }
         };
@@ -152,7 +186,12 @@ fn parse_args(argv: &[String]) -> Result<Args, Fail> {
             "rel" => a.rel = v,
             "I" => a.imports.push(v),
             _ => {
-                a.steps = parse_int0(&v).ok_or_else(|| usage_fail(Some(format!("invalid value {} for flag -steps: parse error", hydo_grpc::gofmt::quote(&v)))))?
+                a.steps = parse_int0(&v).ok_or_else(|| {
+                    usage_fail(Some(format!(
+                        "invalid value {} for flag -steps: parse error",
+                        hydo_grpc::gofmt::quote(&v)
+                    )))
+                })?
             }
         }
         i += 1;
@@ -203,7 +242,12 @@ pub fn commands(p: &Plan) -> Vec<Command> {
     let mut out = Vec::new();
     for r in &p.rpcs {
         if r.weight > 0 {
-            out.push(Command { name: r.short.clone(), target: r.name.clone(), msg: format!("{}: generated requests", r.name), timeout: bound(worst(r)) });
+            out.push(Command {
+                name: r.short.clone(),
+                target: r.name.clone(),
+                msg: format!("{}: generated requests", r.name),
+                timeout: bound(worst(r)),
+            });
         }
     }
     for sc in &p.scenarios {
@@ -213,7 +257,12 @@ pub fn commands(p: &Plan) -> Vec<Command> {
                 ms += worst(&p.rpcs[i]);
             }
         }
-        out.push(Command { name: sc.name.clone(), target: sc.name.clone(), msg: format!("scenario {}", sc.calls.join(" -> ")), timeout: bound(ms) });
+        out.push(Command {
+            name: sc.name.clone(),
+            target: sc.name.clone(),
+            msg: format!("scenario {}", sc.calls.join(" -> ")),
+            timeout: bound(ms),
+        });
     }
     out
 }
@@ -247,19 +296,29 @@ pub fn starter(p: &Plan, rel: &str, client: &str, steps: i64, retry_cmd: &str) -
     w("# Merge into hydo.yaml; paths are relative to the directory hydo.yaml is in.".into());
     w("# RPCs (hydo-grpc list):".into());
     for r in &p.rpcs {
-        w(format!("#   {:<20} {} weight={} deadline={}ms retry={}", r.short, r.name, r.weight, r.deadline_ms, r.retry.attempts));
+        w(format!(
+            "#   {:<20} {} weight={} deadline={}ms retry={}",
+            r.short, r.name, r.weight, r.deadline_ms, r.retry.attempts
+        ));
     }
     w("root:".into());
     w("  files:".into());
-    w(format!("    - {{src: {rel}/{client}, dst: /bin/hydo-grpc, mode: \"0755\"}}"));
+    w(format!(
+        "    - {{src: {rel}/{client}, dst: /bin/hydo-grpc, mode: \"0755\"}}"
+    ));
     w(format!("    - {{src: {rel}/grpc, dst: /etc/hydo/grpc}}"));
     w(String::new());
     w("env:".into());
     w(format!("  HYDO_GRPC_SEED: \"{}\"           # requests: a function of this seed and the composer entry (HYDO_SEED) or the step", p.seed));
     w(String::new());
     w("# The test composer (MANIFEST.md \"The test composer\") composes these commands; the schedule".into());
-    w("# token W= decides which run when, and each entry's HYDO_SEED decides its requests.".into());
-    w(format!("# The same commands are files in {rel}/workload/ (the hydo/workload/ layout)."));
+    w(
+        "# token W= decides which run when, and each entry's HYDO_SEED decides its requests."
+            .into(),
+    );
+    w(format!(
+        "# The same commands are files in {rel}/workload/ (the hydo/workload/ layout)."
+    ));
     w("test:".into());
     w("  commands:".into());
     for c in commands(p) {
@@ -284,7 +343,10 @@ pub fn starter(p: &Plan, rel: &str, client: &str, steps: i64, retry_cmd: &str) -
     w("# Without the composer (numbered steps), drop test: and use instead:".into());
     w("# workload:".into());
     w(format!("#   steps: {steps}"));
-    w(format!("#   run: /bin/hydo-grpc steps $HYDO_FROM $HYDO_TO   # {} call(s) x {} worker(s) per step", p.steps.calls, p.steps.concurrency));
+    w(format!(
+        "#   run: /bin/hydo-grpc steps $HYDO_FROM $HYDO_TO   # {} call(s) x {} worker(s) per step",
+        p.steps.calls, p.steps.concurrency
+    ));
     if !retry_cmd.is_empty() {
         w(format!("#   retry: {retry_cmd}"));
     }
@@ -292,7 +354,10 @@ pub fn starter(p: &Plan, rel: &str, client: &str, steps: i64, retry_cmd: &str) -
     w("#   process: hydo-grpc".into());
     w(String::new());
     w("# Invariants stay yours. Call records: /tmp/hydo/grpc/calls (HYDO-HIST lines, history grpc).".into());
-    w("# hydo-grpc call <rpc> '<json>' prints a response and exits 0 ok / 1 failed / 2 unknown,".into());
+    w(
+        "# hydo-grpc call <rpc> '<json>' prints a response and exits 0 ok / 1 failed / 2 unknown,"
+            .into(),
+    );
     w("# for read-backs in invariants. Outcomes of RPCs with outcome_id: also go to $HYDO_ACKED and $HYDO_OUTCOMES.".into());
     b
 }
@@ -340,8 +405,22 @@ pub fn rel(base: &str, targ: &str) -> Result<String, String> {
     if ba != ta {
         return Err(format!("Rel: can't make {targ} relative to {base}"));
     }
-    let bs: Vec<&str> = if b == "." { vec![] } else { b.trim_start_matches('/').split('/').filter(|s| !s.is_empty()).collect() };
-    let ts: Vec<&str> = if t == "." { vec![] } else { t.trim_start_matches('/').split('/').filter(|s| !s.is_empty()).collect() };
+    let bs: Vec<&str> = if b == "." {
+        vec![]
+    } else {
+        b.trim_start_matches('/')
+            .split('/')
+            .filter(|s| !s.is_empty())
+            .collect()
+    };
+    let ts: Vec<&str> = if t == "." {
+        vec![]
+    } else {
+        t.trim_start_matches('/')
+            .split('/')
+            .filter(|s| !s.is_empty())
+            .collect()
+    };
     let mut i = 0;
     while i < bs.len() && i < ts.len() && bs[i] == ts[i] {
         i += 1;
@@ -361,8 +440,18 @@ fn write_file(path: &Path, data: &[u8], mode: u32) -> Result<(), Fail> {
         .truncate(true)
         .mode(mode)
         .open(path)
-        .map_err(|e| Fail(format!("open {}: {}", path.display(), hydo_grpc::io_msg(&e)), 1))?;
-    f.write_all(data).map_err(|e| Fail(format!("write {}: {}", path.display(), hydo_grpc::io_msg(&e)), 1))
+        .map_err(|e| {
+            Fail(
+                format!("open {}: {}", path.display(), hydo_grpc::io_msg(&e)),
+                1,
+            )
+        })?;
+    f.write_all(data).map_err(|e| {
+        Fail(
+            format!("write {}: {}", path.display(), hydo_grpc::io_msg(&e)),
+            1,
+        )
+    })
 }
 
 fn mkdir_all(p: &Path) -> Result<(), Fail> {
@@ -370,7 +459,12 @@ fn mkdir_all(p: &Path) -> Result<(), Fail> {
         .recursive(true)
         .mode(0o755)
         .create(p)
-        .map_err(|e| Fail(format!("mkdir {}: {}", p.display(), hydo_grpc::io_msg(&e)), 1))
+        .map_err(|e| {
+            Fail(
+                format!("mkdir {}: {}", p.display(), hydo_grpc::io_msg(&e)),
+                1,
+            )
+        })
 }
 
 use std::os::unix::fs::DirBuilderExt;
@@ -383,25 +477,34 @@ fn base_name(p: &str) -> String {
     c.rsplit('/').next().unwrap_or(&c).to_string()
 }
 
-/// The generator; `argv` without the program name. Prints its summary on stdout.
-pub fn run(argv: &[String]) -> Result<(), Fail> {
+/// The generator; `argv` without the program name. Returns the summary to print on stdout.
+pub fn run(argv: &[String]) -> Result<String, Fail> {
     let a = parse_args(argv)?;
-    if a.out.is_empty() || a.pos.len() > 1 || a.pos.is_empty() == (a.desc_set.is_empty() && a.reflect.is_empty()) {
+    if a.out.is_empty()
+        || a.pos.len() > 1
+        || a.pos.is_empty() == (a.desc_set.is_empty() && a.reflect.is_empty())
+    {
         return Err(usage_fail(None));
     }
     let (files, sources): (Vec<FileBytes>, Vec<String>) = if a.pos.len() == 1 {
         let extra: Vec<PathBuf> = a.imports.iter().map(PathBuf::from).collect();
-        let (set, names) = desc::from_proto_dir(Path::new(&a.pos[0]), &extra).map_err(|e| Fail(e, 1))?;
+        let (set, names) =
+            desc::from_proto_dir(Path::new(&a.pos[0]), &extra).map_err(|e| Fail(e, 1))?;
         (set, names.iter().map(|n| format!("proto:{n}")).collect())
     } else if !a.desc_set.is_empty() {
         let set = desc::from_descriptor_set(Path::new(&a.desc_set)).map_err(|e| Fail(e, 1))?;
-        (set, vec![format!("descriptor-set:{}", base_name(&a.desc_set))])
+        (
+            set,
+            vec![format!("descriptor-set:{}", base_name(&a.desc_set))],
+        )
     } else {
-        let set = crate::reflect::from_reflection(&a.reflect, Duration::from_secs(10)).map_err(|e| Fail(e, 1))?;
+        let set = crate::reflect::from_reflection(&a.reflect, Duration::from_secs(10))
+            .map_err(|e| Fail(e, 1))?;
         (set, vec![format!("reflection:{}", a.reflect)])
     };
     let set_bytes = desc::encode_set(&files);
-    let pool = prost_reflect::DescriptorPool::decode(set_bytes.as_slice()).map_err(|e| Fail(format!("schema: {e}"), 1))?;
+    let pool = prost_reflect::DescriptorPool::decode(set_bytes.as_slice())
+        .map_err(|e| Fail(format!("schema: {e}"), 1))?;
     let mut h = load::read_hints(&a.hints).map_err(|e| Fail(e, 1))?;
     if !a.target.is_empty() {
         h.target = a.target.clone();
@@ -412,7 +515,11 @@ pub fn run(argv: &[String]) -> Result<(), Fail> {
     mkdir_all(&out.join("grpc"))?;
     mkdir_all(&out.join("workload"))?;
     write_file(&out.join("grpc").join("desc.pb"), &set_bytes, 0o644)?;
-    write_file(&out.join("grpc").join("plan.json"), plan.marshal().as_bytes(), 0o644)?;
+    write_file(
+        &out.join("grpc").join("plan.json"),
+        plan.marshal().as_bytes(),
+        0o644,
+    )?;
     if let Ok(rd) = fs::read_dir(out.join("workload")) {
         for e in rd.flatten() {
             let p = e.path();
@@ -423,13 +530,30 @@ pub fn run(argv: &[String]) -> Result<(), Fail> {
     }
     for c in commands(&plan) {
         let body = format!("#!/bin/busybox sh\n# hydo: timeout={}\n# hydo-msg: {} (hydo-grpc-gen)\nexec /bin/hydo-grpc drive {}\n", c.timeout, c.msg, c.target);
-        write_file(&out.join("workload").join(format!("parallel_driver_{}", c.name)), body.as_bytes(), 0o755)?;
+        write_file(
+            &out.join("workload")
+                .join(format!("parallel_driver_{}", c.name)),
+            body.as_bytes(),
+            0o755,
+        )?;
     }
-    let retry_cmd = if plan.rpcs.iter().any(|r| r.retry.at_end) { "/bin/hydo-grpc retry" } else { "" };
-    let base = if a.rel.is_empty() { dir(&clean(&a.out)) } else { a.rel.clone() };
+    let retry_cmd = if plan.rpcs.iter().any(|r| r.retry.at_end) {
+        "/bin/hydo-grpc retry"
+    } else {
+        ""
+    };
+    let base = if a.rel.is_empty() {
+        dir(&clean(&a.out))
+    } else {
+        a.rel.clone()
+    };
     let rel_out = rel(&base, &a.out).map_err(|e| Fail(e, 1))?;
     let archs: Vec<String> = a.arch.split(',').map(str::to_string).collect();
-    write_file(&out.join("hydo.grpc.yaml"), starter(&plan, &rel_out, &client_name(&archs), a.steps, retry_cmd).as_bytes(), 0o644)?;
+    write_file(
+        &out.join("hydo.grpc.yaml"),
+        starter(&plan, &rel_out, &client_name(&archs), a.steps, retry_cmd).as_bytes(),
+        0o644,
+    )?;
 
     if !a.no_build {
         if a.client.is_empty() {
@@ -438,16 +562,31 @@ pub fn run(argv: &[String]) -> Result<(), Fail> {
         for arch in &archs {
             let name = client_file(arch);
             let src = Path::new(&a.client).join(&name);
-            let b = fs::read(&src).map_err(|e| Fail(format!("no prebuilt client for {} in {} (open {}: {})", arch, a.client, src.display(), hydo_grpc::io_msg(&e)), 1))?;
+            let b = fs::read(&src).map_err(|e| {
+                Fail(
+                    format!(
+                        "no prebuilt client for {} in {} (open {}: {})",
+                        arch,
+                        a.client,
+                        src.display(),
+                        hydo_grpc::io_msg(&e)
+                    ),
+                    1,
+                )
+            })?;
             let dst = out.join(&name);
             write_file(&dst, &b, 0o755)?;
             let _ = fs::set_permissions(&dst, fs::Permissions::from_mode(0o755));
         }
     }
-    let mut s = format!("hydo-grpc-gen: {} RPCs, {} scenarios -> {}\n", plan.rpcs.len(), plan.scenarios.len(), a.out);
+    let mut s = format!(
+        "hydo-grpc-gen: {} RPCs, {} scenarios -> {}\n",
+        plan.rpcs.len(),
+        plan.scenarios.len(),
+        a.out
+    );
     for r in &plan.rpcs {
         s += &format!("  {:<22} {} weight={}\n", r.short, r.name, r.weight);
     }
-    print!("{s}");
-    Ok(())
+    Ok(s)
 }

@@ -26,7 +26,10 @@ pub struct Status {
 
 impl Status {
     pub fn new(code: u32, msg: impl Into<String>) -> Status {
-        Status { code, msg: msg.into() }
+        Status {
+            code,
+            msg: msg.into(),
+        }
     }
 
     pub fn ok() -> Status {
@@ -101,13 +104,23 @@ async fn resolve(target: &str) -> std::io::Result<std::net::SocketAddr> {
         return Ok(a);
     }
     let mut it = tokio::net::lookup_host(target).await?;
-    it.next().ok_or_else(|| std::io::Error::other("no such host"))
+    it.next()
+        .ok_or_else(|| std::io::Error::other("no such host"))
 }
 
 /// TCP, the HTTP/2 handshake and the server's preface (a PING answered after its SETTINGS).
-async fn dial(target: &str) -> Result<(SendRequest<Bytes>, h2::client::Connection<TcpStream, Bytes>), String> {
-    let addr = resolve(target).await.map_err(|e| format!("transport: Error while dialing: dial tcp: lookup {target}: {}", crate::io_msg(&e)))?;
-    let tcp = TcpStream::connect(addr).await.map_err(|e| format!("transport: Error while dialing: {}", dial_error(target, &e)))?;
+async fn dial(
+    target: &str,
+) -> Result<(SendRequest<Bytes>, h2::client::Connection<TcpStream, Bytes>), String> {
+    let addr = resolve(target).await.map_err(|e| {
+        format!(
+            "transport: Error while dialing: dial tcp: lookup {target}: {}",
+            crate::io_msg(&e)
+        )
+    })?;
+    let tcp = TcpStream::connect(addr)
+        .await
+        .map_err(|e| format!("transport: Error while dialing: {}", dial_error(target, &e)))?;
     let _ = tcp.set_nodelay(true);
     let (send, mut conn) = h2::client::Builder::new()
         .enable_push(false)
@@ -141,7 +154,14 @@ fn h2_text(e: &h2::Error) -> String {
 impl Channel {
     pub fn new(target: &str) -> Channel {
         let (tx, _) = watch::channel(0u64);
-        Channel { target: target.to_string(), inner: Arc::new(Mutex::new(Inner { st: St::Idle, conn_id: 0 })), tx: Arc::new(tx) }
+        Channel {
+            target: target.to_string(),
+            inner: Arc::new(Mutex::new(Inner {
+                st: St::Idle,
+                conn_id: 0,
+            })),
+            tx: Arc::new(tx),
+        }
     }
 
     fn bump(tx: &watch::Sender<u64>) {
@@ -161,7 +181,9 @@ impl Channel {
                 let r = timeout_at(start + Duration::from_secs(20), dial(&target)).await;
                 let r = match r {
                     Ok(r) => r,
-                    Err(_) => Err(format!("transport: Error while dialing: dial tcp {target}: i/o timeout")),
+                    Err(_) => Err(format!(
+                        "transport: Error while dialing: dial tcp {target}: i/o timeout"
+                    )),
                 };
                 match r {
                     Ok((send, conn)) => {
@@ -223,16 +245,34 @@ impl Channel {
 
     /// One call: sends the messages (one for a unary or server-streaming RPC) and returns every
     /// response message with the final status.
-    pub async fn call(&self, path: &str, reqs: &[Vec<u8>], client_streaming: bool, deadline: Instant) -> (Vec<Vec<u8>>, Status) {
+    pub async fn call(
+        &self,
+        path: &str,
+        reqs: &[Vec<u8>],
+        client_streaming: bool,
+        deadline: Instant,
+    ) -> (Vec<Vec<u8>>, Status) {
         let mut got = Vec::new();
-        let st = match timeout_at(deadline, self.attempt(path, reqs, client_streaming, deadline, &mut got)).await {
+        let st = match timeout_at(
+            deadline,
+            self.attempt(path, reqs, client_streaming, deadline, &mut got),
+        )
+        .await
+        {
             Ok(s) => s,
             Err(_) => Status::deadline(),
         };
         (got, st)
     }
 
-    async fn attempt(&self, path: &str, reqs: &[Vec<u8>], client_streaming: bool, deadline: Instant, got: &mut Vec<Vec<u8>>) -> Status {
+    async fn attempt(
+        &self,
+        path: &str,
+        reqs: &[Vec<u8>],
+        client_streaming: bool,
+        deadline: Instant,
+        got: &mut Vec<Vec<u8>>,
+    ) -> Status {
         let sr = match self.get(deadline).await {
             Ok(s) => s,
             Err(st) => return st,
@@ -245,9 +285,15 @@ impl Channel {
             .method("POST")
             .uri(format!("http://{}{}", self.target, path))
             .header("content-type", "application/grpc")
-            .header("user-agent", concat!("hydo-grpc/", env!("CARGO_PKG_VERSION")))
+            .header(
+                "user-agent",
+                concat!("hydo-grpc/", env!("CARGO_PKG_VERSION")),
+            )
             .header("te", "trailers")
-            .header("grpc-timeout", encode_timeout(deadline.saturating_duration_since(Instant::now())))
+            .header(
+                "grpc-timeout",
+                encode_timeout(deadline.saturating_duration_since(Instant::now())),
+            )
             .body(())
             .expect("request");
         let (resp, mut send) = match sr.send_request(req, false) {
@@ -275,7 +321,12 @@ impl Channel {
         if let Some(st) = check_headers(&parts.status, &parts.headers) {
             return st;
         }
-        let compressed = parts.headers.get("grpc-encoding").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+        let compressed = parts
+            .headers
+            .get("grpc-encoding")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_string();
         // a trailers-only answer: the status is in the headers
         let header_status = status_of(&parts.headers);
         let mut buf = BytesMut::new();
@@ -296,16 +347,28 @@ impl Channel {
                 let flag = buf[0];
                 let len = u32::from_be_bytes([buf[1], buf[2], buf[3], buf[4]]) as usize;
                 if len > MAX_RECV {
-                    return Status::new(oc::RESOURCE_EXHAUSTED, format!("grpc: received message larger than max ({len} vs. {MAX_RECV})"));
+                    return Status::new(
+                        oc::RESOURCE_EXHAUSTED,
+                        format!("grpc: received message larger than max ({len} vs. {MAX_RECV})"),
+                    );
                 }
                 if buf.len() < 5 + len {
                     break;
                 }
                 if flag == 1 {
                     if compressed.is_empty() || compressed == "identity" {
-                        return Status::new(oc::INTERNAL, "grpc: compressed flag set with identity or empty encoding");
+                        return Status::new(
+                            oc::INTERNAL,
+                            "grpc: compressed flag set with identity or empty encoding",
+                        );
                     }
-                    return Status::new(oc::UNIMPLEMENTED, format!("grpc: Decompressor is not installed for grpc-encoding {}", crate::gofmt::quote(&compressed)));
+                    return Status::new(
+                        oc::UNIMPLEMENTED,
+                        format!(
+                            "grpc: Decompressor is not installed for grpc-encoding {}",
+                            crate::gofmt::quote(&compressed)
+                        ),
+                    );
                 }
                 buf.advance(5);
                 got.push(buf.split_to(len).to_vec());
@@ -318,7 +381,12 @@ impl Channel {
         }
         match body.trailers().await {
             Ok(Some(t)) => status_of(&t).unwrap_or_else(|| Status::new(oc::UNKNOWN, "")),
-            Ok(None) => header_status.unwrap_or_else(|| Status::new(oc::INTERNAL, "server closed the stream without sending trailers")),
+            Ok(None) => header_status.unwrap_or_else(|| {
+                Status::new(
+                    oc::INTERNAL,
+                    "server closed the stream without sending trailers",
+                )
+            }),
             Err(e) => lost(&e),
         }
     }
@@ -331,7 +399,14 @@ pub fn encode_timeout(t: Duration) -> String {
         return "0n".into();
     }
     const MAX: i64 = 100_000_000 - 1;
-    for (unit, d) in [("n", 1i64), ("u", 1_000), ("m", 1_000_000), ("S", 1_000_000_000), ("M", 60_000_000_000), ("H", 3_600_000_000_000)] {
+    for (unit, d) in [
+        ("n", 1i64),
+        ("u", 1_000),
+        ("m", 1_000_000),
+        ("S", 1_000_000_000),
+        ("M", 60_000_000_000),
+        ("H", 3_600_000_000_000),
+    ] {
         let v = (ns + d - 1) / d;
         if v <= MAX {
             return format!("{v}{unit}");
@@ -376,13 +451,22 @@ fn lost(e: &h2::Error) -> Status {
     if e.is_reset() && e.is_remote() {
         if let Some(r) = e.reason() {
             let r = u32::from(r);
-            return Status::new(reason_code(r), format!("stream terminated by RST_STREAM with error code: {}", reason_name(r)));
+            return Status::new(
+                reason_code(r),
+                format!(
+                    "stream terminated by RST_STREAM with error code: {}",
+                    reason_name(r)
+                ),
+            );
         }
     }
     if e.is_go_away() {
         return Status::new(oc::UNAVAILABLE, "the connection is draining");
     }
-    Status::new(oc::UNAVAILABLE, format!("error reading from server: {}", h2_text(e)))
+    Status::new(
+        oc::UNAVAILABLE,
+        format!("error reading from server: {}", h2_text(e)),
+    )
 }
 
 fn status_text(c: u16) -> &'static str {
@@ -406,7 +490,9 @@ fn status_text(c: u16) -> &'static str {
 }
 
 fn valid_content_type(v: &str) -> bool {
-    let Some(rest) = v.strip_prefix("application/grpc") else { return false };
+    let Some(rest) = v.strip_prefix("application/grpc") else {
+        return false;
+    };
     rest.is_empty() || rest.starts_with('+') || rest.starts_with(';')
 }
 
@@ -422,10 +508,21 @@ fn check_headers(status: &http::StatusCode, h: &http::HeaderMap) -> Option<Statu
             ct_err = None;
             grpc = true;
         } else {
-            ct_err = Some(format!("transport: received unexpected content-type {}", crate::gofmt::quote(ct)));
+            ct_err = Some(format!(
+                "transport: received unexpected content-type {}",
+                crate::gofmt::quote(ct)
+            ));
         }
     }
-    let http_err = if code == 200 { None } else { Some(format!("unexpected HTTP status code received from server: {} ({})", code, status_text(code))) };
+    let http_err = if code == 200 {
+        None
+    } else {
+        Some(format!(
+            "unexpected HTTP status code received from server: {} ({})",
+            code,
+            status_text(code)
+        ))
+    };
     if grpc && http_err.is_none() {
         return None;
     }
@@ -452,7 +549,11 @@ fn decode_message(s: &str) -> String {
     let mut out = Vec::with_capacity(b.len());
     let mut i = 0;
     while i < b.len() {
-        if b[i] == b'%' && i + 2 < b.len() && b[i + 1].is_ascii_hexdigit() && b[i + 2].is_ascii_hexdigit() {
+        if b[i] == b'%'
+            && i + 2 < b.len()
+            && b[i + 1].is_ascii_hexdigit()
+            && b[i + 2].is_ascii_hexdigit()
+        {
             out.push(u8::from_str_radix(&s[i + 1..i + 3], 16).expect("hex"));
             i += 3;
             continue;
@@ -468,9 +569,20 @@ fn status_of(h: &http::HeaderMap) -> Option<Status> {
     let s = s.to_str().unwrap_or("");
     let code = match s.parse::<i64>() {
         Ok(c) if (i32::MIN as i64..=i32::MAX as i64).contains(&c) => c as i32 as u32,
-        _ => return Some(Status::new(oc::INTERNAL, format!("transport: malformed grpc-status: strconv.ParseInt: parsing {}: invalid syntax", crate::gofmt::quote(s)))),
+        _ => {
+            return Some(Status::new(
+                oc::INTERNAL,
+                format!(
+                "transport: malformed grpc-status: strconv.ParseInt: parsing {}: invalid syntax",
+                crate::gofmt::quote(s)
+            ),
+            ))
+        }
     };
-    let msg = h.get("grpc-message").map(|v| decode_message(&String::from_utf8_lossy(v.as_bytes()))).unwrap_or_default();
+    let msg = h
+        .get("grpc-message")
+        .map(|v| decode_message(&String::from_utf8_lossy(v.as_bytes())))
+        .unwrap_or_default();
     Some(Status::new(code, msg))
 }
 
@@ -494,6 +606,9 @@ mod tests {
         assert_eq!(backoff(0), Duration::from_secs(1));
         assert_eq!(backoff(1), Duration::from_secs_f64(1.6));
         assert_eq!(backoff(20), Duration::from_secs(120));
-        assert_eq!(conn_error("x \"y\""), "connection error: desc = \"x \\\"y\\\"\"");
+        assert_eq!(
+            conn_error("x \"y\""),
+            "connection error: desc = \"x \\\"y\\\"\""
+        );
     }
 }

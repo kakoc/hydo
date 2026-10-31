@@ -6,11 +6,21 @@ const ALPHA: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0
 pub fn encode(b: &[u8]) -> String {
     let mut out = String::with_capacity(b.len().div_ceil(3) * 4);
     for c in b.chunks(3) {
-        let n = (u32::from(c[0]) << 16) | (u32::from(*c.get(1).unwrap_or(&0)) << 8) | u32::from(*c.get(2).unwrap_or(&0));
+        let n = (u32::from(c[0]) << 16)
+            | (u32::from(*c.get(1).unwrap_or(&0)) << 8)
+            | u32::from(*c.get(2).unwrap_or(&0));
         out.push(ALPHA[(n >> 18) as usize & 63] as char);
         out.push(ALPHA[(n >> 12) as usize & 63] as char);
-        out.push(if c.len() > 1 { ALPHA[(n >> 6) as usize & 63] as char } else { '=' });
-        out.push(if c.len() > 2 { ALPHA[n as usize & 63] as char } else { '=' });
+        out.push(if c.len() > 1 {
+            ALPHA[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if c.len() > 2 {
+            ALPHA[n as usize & 63] as char
+        } else {
+            '='
+        });
     }
     out
 }
@@ -22,7 +32,7 @@ fn val(c: u8) -> Option<u32> {
 /// `base64.StdEncoding.DecodeString`; None where Go returns an error.
 pub fn decode(s: &str) -> Option<Vec<u8>> {
     let src: Vec<u8> = s.bytes().filter(|&c| c != b'\r' && c != b'\n').collect();
-    if src.len() % 4 != 0 {
+    if !src.len().is_multiple_of(4) {
         return None;
     }
     let mut out = Vec::with_capacity(src.len() / 4 * 3);

@@ -52,7 +52,8 @@ pub fn dec(s: &str) -> Result<Vec<u8>, String> {
             return Err(format!("bad escape in {}", crate::gofmt::quote(s)));
         }
         let h = &s[i + 1..i + 3];
-        let v = u8::from_str_radix(h, 16).map_err(|_| format!("bad escape in {}", crate::gofmt::quote(s)))?;
+        let v = u8::from_str_radix(h, 16)
+            .map_err(|_| format!("bad escape in {}", crate::gofmt::quote(s)))?;
         out.push(v);
         i += 3;
     }
@@ -111,7 +112,10 @@ pub fn parse(line: &str, h: &str) -> Option<Event> {
 pub fn now() -> i64 {
     #[cfg(target_os = "linux")]
     {
-        let mut ts = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+        let mut ts = libc::timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
         // SAFETY: clock_gettime writes one timespec.
         let r = unsafe { libc::clock_gettime(libc::CLOCK_BOOTTIME, &mut ts) };
         if r != 0 {
@@ -164,36 +168,74 @@ impl Recorder {
         }
         let mut file = None;
         if !path.is_empty() {
-            match OpenOptions::new().create(true).append(true).mode(0o644).open(path) {
+            match OpenOptions::new()
+                .create(true)
+                .append(true)
+                .mode(0o644)
+                .open(path)
+            {
                 Ok(f) => file = Some(f),
-                Err(e) => eprintln!("hydo-grpc: cannot open {}: open {}: {}", path, path, crate::io_msg(&e)),
+                Err(e) => eprintln!(
+                    "hydo-grpc: cannot open {}: open {}: {}",
+                    path,
+                    path,
+                    crate::io_msg(&e)
+                ),
             }
         }
         let mut console = Console::None;
         if mode == CONSOLE_BRIEF || mode == CONSOLE_FULL {
-            let dev = std::env::var("HYDO_GRPC_CONSOLE_DEV").ok().filter(|s| !s.is_empty());
+            let dev = std::env::var("HYDO_GRPC_CONSOLE_DEV")
+                .ok()
+                .filter(|s| !s.is_empty());
             let dev = dev.unwrap_or_else(|| "/dev/ttyS0".into());
             console = if dev == "stderr" {
                 Console::Stderr
             } else {
-                match OpenOptions::new().append(true).custom_flags(libc::O_NOCTTY).open(&dev) {
+                match OpenOptions::new()
+                    .append(true)
+                    .custom_flags(libc::O_NOCTTY)
+                    .open(&dev)
+                {
                     Ok(f) => Console::File(f),
                     Err(_) => Console::Stderr,
                 }
             };
         }
-        Recorder { history: "grpc".into(), mode, sinks: Mutex::new(Sinks { file, console }) }
+        Recorder {
+            history: "grpc".into(),
+            mode,
+            sinks: Mutex::new(Sinks { file, console }),
+        }
     }
 
     /// Records the start of an attempt.
     pub fn invoke(&self, process: i64, op: i64, rpc: &str, request: &str) {
-        let head = format!("{}{} {} invoke {} {} {}", TAG, self.history, process, now(), rpc, op);
+        let head = format!(
+            "{}{} {} invoke {} {} {}",
+            TAG,
+            self.history,
+            process,
+            now(),
+            rpc,
+            op
+        );
         self.write(&head, &enc(request.as_bytes()));
     }
 
     /// Records the outcome of an attempt.
     pub fn complete(&self, process: i64, op: i64, kind: &str, rpc: &str, code: &str, body: &str) {
-        let head = format!("{}{} {} {} {} {} {} {}", TAG, self.history, process, kind, now(), rpc, op, code);
+        let head = format!(
+            "{}{} {} {} {} {} {} {}",
+            TAG,
+            self.history,
+            process,
+            kind,
+            now(),
+            rpc,
+            op,
+            code
+        );
         self.write(&head, &enc(body.as_bytes()));
     }
 
@@ -204,7 +246,11 @@ impl Recorder {
             // one write: O_APPEND keeps the lines of concurrent processes whole
             let _ = f.write_all(full.as_bytes());
         }
-        let line = if self.mode == CONSOLE_FULL { full } else { format!("{head}\n") };
+        let line = if self.mode == CONSOLE_FULL {
+            full
+        } else {
+            format!("{head}\n")
+        };
         match &mut s.console {
             Console::None => {}
             Console::Stderr => {
@@ -240,9 +286,20 @@ mod tests {
     #[test]
     fn enc_dec() {
         let mut r = R::new(5);
-        for s in ["", "%", "a@b", "a b", "{\"k\":\"v w\"}", "naïve\n\t", "100%"] {
+        for s in [
+            "",
+            "%",
+            "a@b",
+            "a b",
+            "{\"k\":\"v w\"}",
+            "naïve\n\t",
+            "100%",
+        ] {
             let e = enc(s.as_bytes());
-            assert!(!e.contains([' ', '\n', '\t', '@']) && (s.is_empty() || e != "%"), "{s:?} -> {e:?}");
+            assert!(
+                !e.contains([' ', '\n', '\t', '@']) && (s.is_empty() || e != "%"),
+                "{s:?} -> {e:?}"
+            );
             assert_eq!(dec(&e).unwrap(), s.as_bytes());
         }
         for _ in 0..1000 {
@@ -260,24 +317,60 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join("calls");
         let _ = std::fs::remove_file(&p);
-        let rec = Recorder { history: "grpc".into(), mode: "off".into(), sinks: Mutex::new(Sinks { file: None, console: Console::None }) };
+        let rec = Recorder {
+            history: "grpc".into(),
+            mode: "off".into(),
+            sinks: Mutex::new(Sinks {
+                file: None,
+                console: Console::None,
+            }),
+        };
         drop(rec);
         let rec = {
-            let f = OpenOptions::new().create(true).append(true).open(&p).unwrap();
-            Recorder { history: "grpc".into(), mode: "off".into(), sinks: Mutex::new(Sinks { file: Some(f), console: Console::None }) }
+            let f = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&p)
+                .unwrap();
+            Recorder {
+                history: "grpc".into(),
+                mode: "off".into(),
+                sinks: Mutex::new(Sinks {
+                    file: Some(f),
+                    console: Console::None,
+                }),
+            }
         };
         assert!(parse("HYDO-HIST kv 1 invoke 5 write k1 v1", "grpc").is_none());
         rec.invoke(3, 17, "pkg.S/M", "{\"a\":\"b c\"}");
-        rec.complete(3, 17, "info", "pkg.S/M", "DEADLINE_EXCEEDED", "context deadline exceeded");
+        rec.complete(
+            3,
+            17,
+            "info",
+            "pkg.S/M",
+            "DEADLINE_EXCEEDED",
+            "context deadline exceeded",
+        );
         rec.complete(3, 18, "ok", "pkg.S/M", "OK", "");
         let b = std::fs::read_to_string(&p).unwrap();
         let lines: Vec<&str> = b.trim().split('\n').collect();
         assert_eq!(lines.len(), 3);
         let e = parse(&format!("console junk {}", lines[0]), "grpc").unwrap();
-        assert_eq!((e.process.as_str(), e.op.as_str(), e.typ.as_str(), e.rpc.as_str()), ("3", "17", "invoke", "pkg.S/M"));
+        assert_eq!(
+            (
+                e.process.as_str(),
+                e.op.as_str(),
+                e.typ.as_str(),
+                e.rpc.as_str()
+            ),
+            ("3", "17", "invoke", "pkg.S/M")
+        );
         assert_eq!(e.body, b"{\"a\":\"b c\"}");
         let e = parse(lines[1], "grpc").unwrap();
-        assert_eq!((e.typ.as_str(), e.code.as_str()), ("info", "DEADLINE_EXCEEDED"));
+        assert_eq!(
+            (e.typ.as_str(), e.code.as_str()),
+            ("info", "DEADLINE_EXCEEDED")
+        );
         assert_eq!(e.body, b"context deadline exceeded");
         let e = parse(lines[2], "grpc").unwrap();
         assert!(e.typ == "ok" && e.body.is_empty());

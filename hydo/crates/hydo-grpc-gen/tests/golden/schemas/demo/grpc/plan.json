@@ -1,0 +1,221 @@
+{
+  "format": 1,
+  "target": "127.0.0.1:7070",
+  "deadline_ms": 1000,
+  "seed": 1,
+  "steps": {
+    "calls": 2,
+    "concurrency": 1
+  },
+  "drive": {
+    "calls": 2
+  },
+  "defaults": {
+    "string_len": [
+      1,
+      10
+    ],
+    "bytes_len": [
+      0,
+      16
+    ],
+    "repeated_len": [
+      0,
+      3
+    ],
+    "map_len": [
+      0,
+      2
+    ],
+    "depth": 4,
+    "message_prob": 0.85,
+    "optional_prob": 0.7,
+    "oneof_none": 0
+  },
+  "record": {
+    "console": "brief",
+    "history": "grpc"
+  },
+  "rpcs": [
+    {
+      "name": "orders.v1.Orders/Create",
+      "path": "/orders.v1.Orders/Create",
+      "short": "create",
+      "input": "orders.v1.CreateRequest",
+      "output": "orders.v1.Order",
+      "weight": 3,
+      "deadline_ms": 1000,
+      "retry": {
+        "attempts": 4,
+        "backoff_ms": 100,
+        "at_end": true,
+        "end_tries": 0
+      },
+      "outcome_id": "request_id",
+      "fields": {
+        "amount_cents": {
+          "range": [
+            "1",
+            "50000"
+          ]
+        },
+        "customer": {
+          "choice": [
+            "alice",
+            "bob",
+            "carol"
+          ]
+        },
+        "items": {
+          "len": [
+            1,
+            3
+          ]
+        },
+        "items.qty": {
+          "range": [
+            "1",
+            "5"
+          ]
+        },
+        "items.sku": {
+          "len": [
+            3,
+            3
+          ],
+          "prefix": "sku-",
+          "format": "digits"
+        },
+        "labels": {
+          "len": [
+            0,
+            2
+          ]
+        },
+        "request_id": {
+          "unique": true,
+          "prefix": "r"
+        }
+      },
+      "stream_len": [
+        1,
+        3
+      ]
+    },
+    {
+      "name": "orders.v1.Orders/Get",
+      "path": "/orders.v1.Orders/Get",
+      "short": "get",
+      "input": "orders.v1.GetRequest",
+      "output": "orders.v1.Order",
+      "weight": 1,
+      "deadline_ms": 1000,
+      "retry": {
+        "attempts": 0,
+        "backoff_ms": 0,
+        "at_end": false,
+        "end_tries": 0
+      },
+      "fields": {
+        "id": {
+          "from": {
+            "rpc": "orders.v1.Orders/Create",
+            "side": "response",
+            "path": "id",
+            "pick": "random",
+            "fallback": "skip"
+          }
+        }
+      },
+      "stream_len": [
+        1,
+        3
+      ],
+      "needs": [
+        "orders.v1.Orders/Create.response.id"
+      ]
+    },
+    {
+      "name": "orders.v1.Orders/Cancel",
+      "path": "/orders.v1.Orders/Cancel",
+      "short": "cancel",
+      "input": "orders.v1.CancelRequest",
+      "output": "orders.v1.Order",
+      "weight": 1,
+      "deadline_ms": 1000,
+      "retry": {
+        "attempts": 1,
+        "backoff_ms": 100,
+        "at_end": true,
+        "end_tries": 0
+      },
+      "outcome_id": "id",
+      "fields": {
+        "id": {
+          "from": {
+            "rpc": "orders.v1.Orders/Create",
+            "side": "response",
+            "path": "id",
+            "pick": "random",
+            "fallback": "skip"
+          }
+        },
+        "reason": {
+          "choice": [
+            "changed-mind",
+            "duplicate",
+            "fraud"
+          ]
+        }
+      },
+      "stream_len": [
+        1,
+        3
+      ],
+      "needs": [
+        "orders.v1.Orders/Create.response.id"
+      ]
+    },
+    {
+      "name": "orders.v1.Orders/List",
+      "path": "/orders.v1.Orders/List",
+      "short": "list",
+      "input": "orders.v1.ListRequest",
+      "output": "orders.v1.ListResponse",
+      "weight": 1,
+      "deadline_ms": 1000,
+      "retry": {
+        "attempts": 0,
+        "backoff_ms": 0,
+        "at_end": false,
+        "end_tries": 0
+      },
+      "fields": {
+        "customer": {
+          "choice": [
+            "alice",
+            "bob",
+            "carol",
+            ""
+          ]
+        },
+        "page_size": {
+          "range": [
+            "1",
+            "20"
+          ]
+        },
+        "page_token": {
+          "omit": true
+        }
+      },
+      "stream_len": [
+        1,
+        3
+      ]
+    }
+  ],
+  "sources": [
+    "proto:orders/v1/orders.proto"
+  ]
+}

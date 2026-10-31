@@ -14,7 +14,10 @@ use crate::b64;
 use crate::gofmt;
 use crate::rng::R;
 use crate::spec::{Defaults, FieldHint, From};
-use prost_reflect::{Cardinality, DynamicMessage, FieldDescriptor, Kind, MapKey, MessageDescriptor, ReflectMessage, Value};
+use prost_reflect::{
+    Cardinality, DynamicMessage, FieldDescriptor, Kind, MapKey, MessageDescriptor, ReflectMessage,
+    Value,
+};
 use std::collections::BTreeMap;
 
 /// Why a message could not be generated.
@@ -51,7 +54,11 @@ pub trait Env {
 
 /// The fields of a message in declaration order (prost-reflect iterates them by number).
 pub fn decl_fields(md: &MessageDescriptor) -> Vec<FieldDescriptor> {
-    md.descriptor_proto().field.iter().filter_map(|f| md.get_field(f.number() as u32)).collect()
+    md.descriptor_proto()
+        .field
+        .iter()
+        .filter_map(|f| md.get_field(f.number() as u32))
+        .collect()
 }
 
 fn is_message(fd: &FieldDescriptor) -> bool {
@@ -78,8 +85,18 @@ fn join(prefix: &str, name: &str) -> String {
     }
 }
 
-static NO_HINT: FieldHint =
-    FieldHint { value: None, choice: Vec::new(), range: Vec::new(), len: Vec::new(), unique: false, prefix: String::new(), format: String::new(), omit: false, prob: None, from: None };
+static NO_HINT: FieldHint = FieldHint {
+    value: None,
+    choice: Vec::new(),
+    range: Vec::new(),
+    len: Vec::new(),
+    unique: false,
+    prefix: String::new(),
+    format: String::new(),
+    omit: false,
+    prob: None,
+    from: None,
+};
 
 impl<'a> Gen<'a> {
     /// A new message of type `md` with every field generated.
@@ -96,7 +113,13 @@ impl<'a> Gen<'a> {
     /// the hint fixes the value (so presence is not left to chance)
     fn hinted(&self, path: &str) -> bool {
         match self.hints.get(path) {
-            Some(h) => h.value.is_some() || !h.choice.is_empty() || h.from.is_some() || h.unique || !h.range.is_empty(),
+            Some(h) => {
+                h.value.is_some()
+                    || !h.choice.is_empty()
+                    || h.from.is_some()
+                    || h.unique
+                    || !h.range.is_empty()
+            }
             None => false,
         }
     }
@@ -112,7 +135,10 @@ impl<'a> Gen<'a> {
             if od.is_synthetic() {
                 continue; // proto3 `optional`: a field with presence
             }
-            let allowed = self.oneofs.get(&join(prefix, od.name())).and_then(|v| v.as_ref());
+            let allowed = self
+                .oneofs
+                .get(&join(prefix, od.name()))
+                .and_then(|v| v.as_ref());
             let mut members: Vec<FieldDescriptor> = Vec::new();
             for fd in od.fields() {
                 let p = join(prefix, fd.name());
@@ -160,7 +186,14 @@ impl<'a> Gen<'a> {
         Ok(())
     }
 
-    fn present(&self, fd: &FieldDescriptor, path: &str, h: &FieldHint, depth: i64, r: &mut R) -> bool {
+    fn present(
+        &self,
+        fd: &FieldDescriptor,
+        path: &str,
+        h: &FieldHint,
+        depth: i64,
+        r: &mut R,
+    ) -> bool {
         if fd.cardinality() == Cardinality::Required {
             return true;
         }
@@ -187,11 +220,23 @@ impl<'a> Gen<'a> {
     }
 
     fn length(h: &FieldHint, def: [i64; 2], r: &mut R) -> i64 {
-        let (lo, hi) = if h.len.len() == 2 { (h.len[0], h.len[1]) } else { (def[0], def[1]) };
+        let (lo, hi) = if h.len.len() == 2 {
+            (h.len[0], h.len[1])
+        } else {
+            (def[0], def[1])
+        };
         r.range(lo, hi)
     }
 
-    fn field(&mut self, m: &mut DynamicMessage, fd: &FieldDescriptor, path: &str, h: &FieldHint, depth: i64, r: &mut R) -> GResult<()> {
+    fn field(
+        &mut self,
+        m: &mut DynamicMessage,
+        fd: &FieldDescriptor,
+        path: &str,
+        h: &FieldHint,
+        depth: i64,
+        r: &mut R,
+    ) -> GResult<()> {
         if fd.is_map() {
             let n = Self::length(h, self.d.map_len, r);
             let entry = match fd.kind() {
@@ -270,7 +315,13 @@ impl<'a> Gen<'a> {
     }
 
     /// One non-message value of fd's kind.
-    fn scalar(&mut self, fd: &FieldDescriptor, path: &str, h: &FieldHint, r: &mut R) -> GResult<Value> {
+    fn scalar(
+        &mut self,
+        fd: &FieldDescriptor,
+        path: &str,
+        h: &FieldHint,
+        r: &mut R,
+    ) -> GResult<Value> {
         if let Some(f) = &h.from {
             if let Some(s) = self.env.take(f, r) {
                 return parse(fd, &s).or_else(other);
@@ -329,10 +380,18 @@ impl<'a> Gen<'a> {
         let n = self.env.unique();
         match fd.kind() {
             Kind::String => return Ok(Value::String(format!("{}{}", h.prefix, n))),
-            Kind::Bytes => return Ok(Value::Bytes(format!("{}{}", h.prefix, n).into_bytes().into())),
+            Kind::Bytes => {
+                return Ok(Value::Bytes(
+                    format!("{}{}", h.prefix, n).into_bytes().into(),
+                ))
+            }
             _ => {}
         }
-        let base = if h.range.len() == 2 { h.range[0].as_str() } else { "1" };
+        let base = if h.range.len() == 2 {
+            h.range[0].as_str()
+        } else {
+            "1"
+        };
         let lo = gofmt::parse_int(base, 64)
             .map_err(|e| GenError::Other(format!("unique: range {}: {}", gofmt::quote(base), e)))?;
         // the first unique value is the range's lower bound (default 1), then lo+1, ...
@@ -340,7 +399,10 @@ impl<'a> Gen<'a> {
         if h.range.len() == 2 {
             let hi = gofmt::parse_int(&h.range[1], 64).unwrap_or(0);
             if x > hi {
-                return other(format!("unique: more values than the range [{}, {}] holds", h.range[0], h.range[1]));
+                return other(format!(
+                    "unique: more values than the range [{}, {}] holds",
+                    h.range[0], h.range[1]
+                ));
             }
         }
         parse(fd, &x.to_string()).or_else(other)
@@ -350,7 +412,12 @@ impl<'a> Gen<'a> {
 /// The declared values of an enum field's type in declaration order.
 fn enum_decl(fd: &FieldDescriptor) -> Vec<(String, i32)> {
     match fd.kind() {
-        Kind::Enum(e) => e.enum_descriptor_proto().value.iter().map(|v| (v.name().to_string(), v.number())).collect(),
+        Kind::Enum(e) => e
+            .enum_descriptor_proto()
+            .value
+            .iter()
+            .map(|v| (v.name().to_string(), v.number()))
+            .collect(),
         _ => Vec::new(),
     }
 }
@@ -359,7 +426,11 @@ fn enum_decl(fd: &FieldDescriptor) -> Vec<(String, i32)> {
 /// value" marker, usually rejected by servers) unless it is the only one.
 fn enum_value(fd: &FieldDescriptor, r: &mut R) -> Value {
     let vs = enum_decl(fd);
-    let ok: Vec<i32> = vs.iter().filter(|(n, x)| !(*x == 0 && n.ends_with("UNSPECIFIED"))).map(|(_, x)| *x).collect();
+    let ok: Vec<i32> = vs
+        .iter()
+        .filter(|(n, x)| !(*x == 0 && n.ends_with("UNSPECIFIED")))
+        .map(|(_, x)| *x)
+        .collect();
     if ok.is_empty() {
         return Value::EnumNumber(vs.first().map(|v| v.1).unwrap_or(0));
     }
@@ -370,10 +441,14 @@ fn int_range(h: &FieldHint, min: i64, max: i64) -> Result<(i64, i64), String> {
     if h.range.len() != 2 {
         return Ok((min, max));
     }
-    let lo = gofmt::parse_int(&h.range[0], 64).map_err(|e| format!("range {}: {}", gofmt::quote(&h.range[0]), e))?;
-    let hi = gofmt::parse_int(&h.range[1], 64).map_err(|e| format!("range {}: {}", gofmt::quote(&h.range[1]), e))?;
+    let lo = gofmt::parse_int(&h.range[0], 64)
+        .map_err(|e| format!("range {}: {}", gofmt::quote(&h.range[0]), e))?;
+    let hi = gofmt::parse_int(&h.range[1], 64)
+        .map_err(|e| format!("range {}: {}", gofmt::quote(&h.range[1]), e))?;
     if lo < min || hi > max || lo > hi {
-        return Err(format!("range [{lo}, {hi}] does not fit the field ({min}..{max})"));
+        return Err(format!(
+            "range [{lo}, {hi}] does not fit the field ({min}..{max})"
+        ));
     }
     Ok((lo, hi))
 }
@@ -382,10 +457,14 @@ fn uint_range(h: &FieldHint, max: u64) -> Result<(u64, u64), String> {
     if h.range.len() != 2 {
         return Ok((0, max));
     }
-    let lo = gofmt::parse_uint(&h.range[0], 64).map_err(|e| format!("range {}: {}", gofmt::quote(&h.range[0]), e))?;
-    let hi = gofmt::parse_uint(&h.range[1], 64).map_err(|e| format!("range {}: {}", gofmt::quote(&h.range[1]), e))?;
+    let lo = gofmt::parse_uint(&h.range[0], 64)
+        .map_err(|e| format!("range {}: {}", gofmt::quote(&h.range[0]), e))?;
+    let hi = gofmt::parse_uint(&h.range[1], 64)
+        .map_err(|e| format!("range {}: {}", gofmt::quote(&h.range[1]), e))?;
     if hi > max || lo > hi {
-        return Err(format!("range [{lo}, {hi}] does not fit the field (0..{max})"));
+        return Err(format!(
+            "range [{lo}, {hi}] does not fit the field (0..{max})"
+        ));
     }
     Ok((lo, hi))
 }
@@ -426,10 +505,16 @@ fn unsigned(r: &mut R, lo: u64, hi: u64, explicit: bool) -> u64 {
 
 fn float(h: &FieldHint, r: &mut R) -> Result<f64, String> {
     if h.range.len() == 2 {
-        let lo = gofmt::parse_float(&h.range[0], 64).map_err(|e| format!("range {}: {}", gofmt::quote(&h.range[0]), e))?;
-        let hi = gofmt::parse_float(&h.range[1], 64).map_err(|e| format!("range {}: {}", gofmt::quote(&h.range[1]), e))?;
+        let lo = gofmt::parse_float(&h.range[0], 64)
+            .map_err(|e| format!("range {}: {}", gofmt::quote(&h.range[0]), e))?;
+        let hi = gofmt::parse_float(&h.range[1], 64)
+            .map_err(|e| format!("range {}: {}", gofmt::quote(&h.range[1]), e))?;
         if lo > hi {
-            return Err(format!("range [{}, {}] is empty", gofmt::format_g(lo, 64), gofmt::format_g(hi, 64)));
+            return Err(format!(
+                "range [{}, {}] is empty",
+                gofmt::format_g(lo, 64),
+                gofmt::format_g(hi, 64)
+            ));
         }
         return Ok(lo + r.float() * (hi - lo));
     }
@@ -465,7 +550,14 @@ fn rand_string(r: &mut R, format: &str, n: i64) -> String {
             }
             b[6] = (b[6] & 0x0f) | 0x40;
             b[8] = (b[8] & 0x3f) | 0x80;
-            return format!("{}-{}-{}-{}-{}", hex(&b[0..4]), hex(&b[4..6]), hex(&b[6..8]), hex(&b[8..10]), hex(&b[10..16]));
+            return format!(
+                "{}-{}-{}-{}-{}",
+                hex(&b[0..4]),
+                hex(&b[4..6]),
+                hex(&b[6..8]),
+                hex(&b[8..10]),
+                hex(&b[10..16])
+            );
         }
         _ => ALNUM,
     };
@@ -511,13 +603,19 @@ pub fn parse(fd: &FieldDescriptor, s: &str) -> Result<Value, String> {
                 Value::EnumNumber(*n)
             } else {
                 match gofmt::parse_int(s, 32) {
-                    Ok(n) if vs.iter().any(|(_, x)| i64::from(*x) == n) => Value::EnumNumber(n as i32),
+                    Ok(n) if vs.iter().any(|(_, x)| i64::from(*x) == n) => {
+                        Value::EnumNumber(n as i32)
+                    }
                     _ => return Err(bad(format!("not a value of enum {}", e.full_name()))),
                 }
             }
         }
-        Kind::Int32 | Kind::Sint32 | Kind::Sfixed32 => Value::I32(gofmt::parse_int(s, 32).map_err(bad)? as i32),
-        Kind::Int64 | Kind::Sint64 | Kind::Sfixed64 => Value::I64(gofmt::parse_int(s, 64).map_err(bad)?),
+        Kind::Int32 | Kind::Sint32 | Kind::Sfixed32 => {
+            Value::I32(gofmt::parse_int(s, 32).map_err(bad)? as i32)
+        }
+        Kind::Int64 | Kind::Sint64 | Kind::Sfixed64 => {
+            Value::I64(gofmt::parse_int(s, 64).map_err(bad)?)
+        }
         Kind::Uint32 | Kind::Fixed32 => Value::U32(gofmt::parse_uint(s, 32).map_err(bad)? as u32),
         Kind::Uint64 | Kind::Fixed64 => Value::U64(gofmt::parse_uint(s, 64).map_err(bad)?),
         Kind::Float => Value::F32(gofmt::parse_float(s, 32).map_err(bad)? as f32),
@@ -536,7 +634,10 @@ fn wkt(md: &MessageDescriptor, m: &mut DynamicMessage, r: &mut R) -> bool {
     match md.full_name() {
         "google.protobuf.Timestamp" => {
             // 2026-01-01 .. +30 days, whole seconds: the guest clock starts at 2026-01-01
-            m.set_field_by_name("seconds", Value::I64(1_767_225_600 + r.range(0, 30 * 86400)));
+            m.set_field_by_name(
+                "seconds",
+                Value::I64(1_767_225_600 + r.range(0, 30 * 86400)),
+            );
             true
         }
         "google.protobuf.Duration" => {

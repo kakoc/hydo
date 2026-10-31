@@ -75,16 +75,32 @@ pub fn parse(text: &str) -> Result<Option<Node>, String> {
                 } else if let Some(m) = e.problem_mark().filter(|m| m.line != 0) {
                     line = m.line + u64::from(scanner);
                 }
-                let wh = if line != 0 { format!("line {line}: ") } else { String::new() };
+                let wh = if line != 0 {
+                    format!("line {line}: ")
+                } else {
+                    String::new()
+                };
                 return Err(format!("yaml: {}{}", wh, e.problem()));
             }
         };
         let line = ev.start_mark.line as usize + 1;
         match ev.data {
             EventData::DocumentStart { .. } if b.root.is_some() => break,
-            EventData::Scalar { anchor, tag, value, style, .. } => {
+            EventData::Scalar {
+                anchor,
+                tag,
+                value,
+                style,
+                ..
+            } => {
                 let tag = tag.map(|t| short_tag(&t)).unwrap_or_default();
-                let quoted = matches!(style, ScalarStyle::SingleQuoted | ScalarStyle::DoubleQuoted | ScalarStyle::Literal | ScalarStyle::Folded);
+                let quoted = matches!(
+                    style,
+                    ScalarStyle::SingleQuoted
+                        | ScalarStyle::DoubleQuoted
+                        | ScalarStyle::Literal
+                        | ScalarStyle::Folded
+                );
                 let indicated = tag == "!!str" || ((tag.is_empty() || tag == "!") && quoted);
                 let n = Node::Scalar(value, indicated, tag, line);
                 if let Some(a) = anchor {
@@ -143,17 +159,18 @@ fn parse_base0(s: &str) -> Option<(bool, u64)> {
         Some(b'+') => (false, &s[1..]),
         _ => (false, s),
     };
-    let (base, digits) = if let Some(d) = body.strip_prefix("0x").or_else(|| body.strip_prefix("0X")) {
-        (16, d)
-    } else if let Some(d) = body.strip_prefix("0b").or_else(|| body.strip_prefix("0B")) {
-        (2, d)
-    } else if let Some(d) = body.strip_prefix("0o").or_else(|| body.strip_prefix("0O")) {
-        (8, d)
-    } else if body.len() > 1 && body.starts_with('0') {
-        (8, &body[1..])
-    } else {
-        (10, body)
-    };
+    let (base, digits) =
+        if let Some(d) = body.strip_prefix("0x").or_else(|| body.strip_prefix("0X")) {
+            (16, d)
+        } else if let Some(d) = body.strip_prefix("0b").or_else(|| body.strip_prefix("0B")) {
+            (2, d)
+        } else if let Some(d) = body.strip_prefix("0o").or_else(|| body.strip_prefix("0O")) {
+            (8, d)
+        } else if body.len() > 1 && body.starts_with('0') {
+            (8, &body[1..])
+        } else {
+            (10, body)
+        };
     if digits.is_empty() || digits.starts_with(['+', '-']) {
         return None;
     }
@@ -219,7 +236,10 @@ fn timestamp(s: &str) -> bool {
     let mut parts = rest.splitn(2, ['T', 't', ' ']);
     let date = parts.next().unwrap_or("");
     let dp: Vec<&str> = date.split('-').collect();
-    let ok_date = dp.len() == 2 && dp.iter().all(|p| (1..=2).contains(&p.len()) && p.bytes().all(|c| c.is_ascii_digit()));
+    let ok_date = dp.len() == 2
+        && dp
+            .iter()
+            .all(|p| (1..=2).contains(&p.len()) && p.bytes().all(|c| c.is_ascii_digit()));
     if !ok_date {
         return false;
     }
@@ -227,7 +247,9 @@ fn timestamp(s: &str) -> bool {
         None => true,
         Some(t) => {
             let hms: Vec<&str> = t.splitn(3, ':').collect();
-            hms.len() == 3 && hms[0].bytes().all(|c| c.is_ascii_digit()) && hms[1].bytes().all(|c| c.is_ascii_digit())
+            hms.len() == 3
+                && hms[0].bytes().all(|c| c.is_ascii_digit())
+                && hms[1].bytes().all(|c| c.is_ascii_digit())
         }
     }
 }
@@ -296,7 +318,11 @@ pub fn scalar_of(value: &str, indicated: bool, tag: &str) -> (String, R) {
         R::Str(_) => "!!str",
         R::Time(_) => "!!timestamp",
     };
-    let t = if !tag.is_empty() && tag != "!" { tag.to_string() } else { t.to_string() };
+    let t = if !tag.is_empty() && tag != "!" {
+        tag.to_string()
+    } else {
+        t.to_string()
+    };
     (t, r)
 }
 
@@ -306,13 +332,23 @@ impl D {
         let (tag, value) = match n {
             Node::Scalar(v, ind, tag, _) => {
                 let t = scalar_of(v, *ind, tag).0;
-                let shown = if v.len() > 10 { format!(" `{}...`", String::from_utf8_lossy(&v.as_bytes()[..7])) } else { format!(" `{v}`") };
+                let shown = if v.len() > 10 {
+                    format!(" `{}...`", String::from_utf8_lossy(&v.as_bytes()[..7]))
+                } else {
+                    format!(" `{v}`")
+                };
                 (t, shown)
             }
             Node::Seq(..) => ("!!seq".into(), String::new()),
             Node::Map(..) => ("!!map".into(), String::new()),
         };
-        self.errs.push(format!("line {}: cannot unmarshal {}{} into {}", n.line(), tag, value, ty));
+        self.errs.push(format!(
+            "line {}: cannot unmarshal {}{} into {}",
+            n.line(),
+            tag,
+            value,
+            ty
+        ));
     }
 
     fn is_null(n: &Node) -> bool {
@@ -459,7 +495,12 @@ impl D {
     }
 
     /// A slice: None for a null node (Go's nil slice).
-    pub fn seq<T: Default>(&mut self, n: &Node, ty: &str, mut each: impl FnMut(&mut D, &Node, &mut T) -> bool) -> Option<Vec<T>> {
+    pub fn seq<T: Default>(
+        &mut self,
+        n: &Node,
+        ty: &str,
+        mut each: impl FnMut(&mut D, &Node, &mut T) -> bool,
+    ) -> Option<Vec<T>> {
         match n {
             Node::Seq(items, _) => {
                 let mut out = Vec::new();
@@ -489,7 +530,12 @@ impl D {
                     for (kj, _) in &pairs[i + 1..] {
                         if let (Node::Scalar(a, ..), Node::Scalar(b, ..)) = (ki, kj) {
                             if a == b {
-                                self.errs.push(format!("line {}: mapping key {} already defined at line {}", kj.line(), gofmt::quote(b), ki.line()));
+                                self.errs.push(format!(
+                                    "line {}: mapping key {} already defined at line {}",
+                                    kj.line(),
+                                    gofmt::quote(b),
+                                    ki.line()
+                                ));
                             }
                         }
                     }
@@ -509,8 +555,16 @@ impl D {
 
     /// A struct with the keys `names`: calls `field(name, value)` for every known key; unknown
     /// keys are errors (KnownFields); a key seen twice is "already set".
-    pub fn strukt(&mut self, n: &Node, ty: &str, names: &[&str], mut field: impl FnMut(&mut D, &str, &Node)) {
-        let Some(pairs) = self.pairs(n, ty) else { return };
+    pub fn strukt(
+        &mut self,
+        n: &Node,
+        ty: &str,
+        names: &[&str],
+        mut field: impl FnMut(&mut D, &str, &Node),
+    ) {
+        let Some(pairs) = self.pairs(n, ty) else {
+            return;
+        };
         let mut seen: Vec<String> = Vec::new();
         for (k, v) in pairs {
             if !matches!(k, Node::Scalar(..)) {
@@ -520,11 +574,21 @@ impl D {
             let mut name = String::new();
             self.string(k, &mut name);
             if !names.contains(&name.as_str()) {
-                self.errs.push(format!("line {}: field {} not found in type {}", k.line(), name, ty));
+                self.errs.push(format!(
+                    "line {}: field {} not found in type {}",
+                    k.line(),
+                    name,
+                    ty
+                ));
                 continue;
             }
             if seen.contains(&name) {
-                self.errs.push(format!("line {}: field {} already set in type {}", k.line(), name, ty));
+                self.errs.push(format!(
+                    "line {}: field {} already set in type {}",
+                    k.line(),
+                    name,
+                    ty
+                ));
                 continue;
             }
             seen.push(name.clone());
@@ -533,7 +597,7 @@ impl D {
     }
 
     /// A value decoded into Go's `interface{}`.
-    pub fn any(&mut self, n: &Node) -> Any {
+    pub fn any(n: &Node) -> Any {
         match n {
             Node::Scalar(v, ind, tag, _) => match scalar_of(v, *ind, tag).1 {
                 R::Null => Any::Null,
@@ -544,13 +608,64 @@ impl D {
                 R::Str(s) => Any::Str(s),
                 R::Time(t) => Any::Time(t),
             },
-            Node::Seq(items, _) => Any::Seq(items.iter().map(|i| self.any(i)).collect()),
+            Node::Seq(items, _) => Any::Seq(items.iter().map(D::any).collect()),
             Node::Map(pairs, _) => {
                 let string_keys = pairs.iter().all(|(k, _)| matches!(k, Node::Scalar(v, ind, tag, _) if scalar_of(v, *ind, tag).0 == "!!str"));
-                Any::Map(pairs.iter().map(|(k, v)| (self.any(k), self.any(v))).collect(), string_keys)
+                Any::Map(
+                    pairs.iter().map(|(k, v)| (D::any(k), D::any(v))).collect(),
+                    string_keys,
+                )
             }
         }
     }
+}
+
+/// A YAML timestamp as Go's `%v` of the time.Time yaml.v3 made of it
+/// ("2026-01-01 00:00:00 +0000 UTC").
+fn go_time(t: &str) -> String {
+    let (date, rest) = match t.find(['T', 't', ' ']) {
+        Some(i) => (&t[..i], t[i + 1..].trim_start()),
+        None => (t, ""),
+    };
+    let d: Vec<u32> = date.split('-').filter_map(|x| x.parse().ok()).collect();
+    if d.len() != 3 {
+        return t.to_string();
+    }
+    let (mut clock, mut zone) = (rest.to_string(), String::new());
+    if let Some(z) = clock.strip_suffix(['Z', 'z']) {
+        clock = z.trim_end().to_string();
+    } else if let Some(i) = clock.rfind(['+', '-']) {
+        zone = clock[i..].replace(':', "");
+        clock = clock[..i].trim_end().to_string();
+    }
+    let mut hms = [0u32; 3];
+    let mut frac = String::new();
+    if !clock.is_empty() {
+        let (c, f) = clock.split_once('.').unwrap_or((&clock, ""));
+        for (i, p) in c.split(':').enumerate().take(3) {
+            hms[i] = p.parse().unwrap_or(0);
+        }
+        frac = f.trim_end_matches('0').to_string();
+    }
+    let frac = if frac.is_empty() {
+        String::new()
+    } else {
+        format!(".{frac}")
+    };
+    let zone = if zone.is_empty() || zone == "+00" || zone == "+0000" {
+        "+0000 UTC".to_string()
+    } else {
+        let z = if zone.len() == 3 {
+            format!("{zone}00")
+        } else {
+            zone
+        };
+        format!("{z} {z}")
+    };
+    format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}{} {}",
+        d[0], d[1], d[2], hms[0], hms[1], hms[2], frac, zone
+    )
 }
 
 /// Go's `interface{}` values from YAML.
@@ -578,12 +693,22 @@ impl Any {
             Any::Uint(u) => u.to_string(),
             Any::Float(f) => gofmt::format_g(*f, 64),
             Any::Str(s) => s.clone(),
-            Any::Time(t) => t.clone(),
-            Any::Seq(v) => format!("[{}]", v.iter().map(|x| x.go_v()).collect::<Vec<_>>().join(" ")),
+            Any::Time(t) => go_time(t),
+            Any::Seq(v) => format!(
+                "[{}]",
+                v.iter().map(|x| x.go_v()).collect::<Vec<_>>().join(" ")
+            ),
             Any::Map(p, _) => {
-                let mut kv: Vec<(String, String)> = p.iter().map(|(k, v)| (k.go_v(), v.go_v())).collect();
+                let mut kv: Vec<(String, String)> =
+                    p.iter().map(|(k, v)| (k.go_v(), v.go_v())).collect();
                 kv.sort();
-                format!("map[{}]", kv.iter().map(|(k, v)| format!("{k}:{v}")).collect::<Vec<_>>().join(" "))
+                format!(
+                    "map[{}]",
+                    kv.iter()
+                        .map(|(k, v)| format!("{k}:{v}"))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                )
             }
         }
     }
@@ -647,7 +772,10 @@ mod tests {
         let n = parse("a: 1\nwieght: 3\na: 2\n").unwrap().unwrap();
         let mut d = D::default();
         d.strukt(&n, "load.T", &["a"], |_, _, _| {});
-        assert_eq!(d.errs, vec!["line 3: mapping key \"a\" already defined at line 1"]);
+        assert_eq!(
+            d.errs,
+            vec!["line 3: mapping key \"a\" already defined at line 1"]
+        );
         assert!(parse("a: [1,\n").unwrap_err().starts_with("yaml: line"));
     }
 }

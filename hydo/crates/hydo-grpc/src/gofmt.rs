@@ -8,17 +8,31 @@ fn shortest(x: f64, bits: u32) -> (Vec<u8>, i32) {
     if a == 0.0 {
         return (Vec::new(), 0);
     }
-    // Rust's `{:e}` writes the shortest digits that read back to the same value, as Go's
-    // shortest formatting does (both pick the closest such string).
-    let s = if bits == 32 { format!("{:e}", a as f32) } else { format!("{:e}", a) };
-    let (m, e) = s.split_once('e').expect("exponent");
-    let e: i32 = e.parse().expect("exponent number");
-    let digits: Vec<u8> = m.bytes().filter(|c| c.is_ascii_digit()).collect();
-    let mut d = digits;
-    while d.len() > 1 && d.last() == Some(&b'0') {
+    // Go's shortest formatting is Ryū (strconv.ryuFtoaShortest): the shortest digits that read
+    // back to the same value, the closest such, a tie to the even digit. The ryu crate is the
+    // same algorithm; Rust's own `{}`/`{:e}` breaks ties upwards (168331.125f32 is "168331.13"
+    // there and "168331.12" in Go).
+    let mut buf = ryu::Buffer::new();
+    let s = if bits == 32 {
+        buf.format_finite(a as f32)
+    } else {
+        buf.format_finite(a)
+    };
+    let (m, e) = match s.split_once(['e', 'E']) {
+        Some((m, e)) => (m, e.parse::<i32>().expect("exponent number")),
+        None => (s, 0),
+    };
+    let (ip, fp) = m.split_once('.').unwrap_or((m, ""));
+    let mut d: Vec<u8> = ip.bytes().chain(fp.bytes()).collect();
+    let mut dp = ip.len() as i32;
+    while d.first() == Some(&b'0') {
+        d.remove(0);
+        dp -= 1;
+    }
+    while d.last() == Some(&b'0') {
         d.pop();
     }
-    (d, e + 1)
+    (d, dp + e)
 }
 
 fn fmt_e(out: &mut String, d: &[u8], dp: i32, prec: usize) {
@@ -55,7 +69,11 @@ fn fmt_f(out: &mut String, d: &[u8], dp: i32, prec: usize) {
         out.push('.');
         for i in 1..=prec as i32 {
             let j = dp + i - 1;
-            let c = if j < 0 || j as usize >= d.len() { b'0' } else { d[j as usize] };
+            let c = if j < 0 || j as usize >= d.len() {
+                b'0'
+            } else {
+                d[j as usize]
+            };
             out.push(c as char);
         }
     }
@@ -85,7 +103,7 @@ pub fn format_g(x: f64, bits: u32) -> String {
     }
     let nd = d.len() as i32;
     let exp = dp - 1;
-    if !d.is_empty() && (exp < -4 || exp >= 6) {
+    if !d.is_empty() && !(-4..6).contains(&exp) {
         fmt_e(&mut out, &d, dp, (nd - 1).max(0) as usize);
     } else {
         // prec = nd; "if prec > dp { prec = nd }"; then max(prec - dp, 0) fraction digits
@@ -150,7 +168,10 @@ pub fn parse_bool(s: &str) -> Result<bool, String> {
     match s {
         "1" | "t" | "T" | "TRUE" | "true" | "True" => Ok(true),
         "0" | "f" | "F" | "FALSE" | "false" | "False" => Ok(false),
-        _ => Err(format!("strconv.ParseBool: parsing {}: invalid syntax", quote(s))),
+        _ => Err(format!(
+            "strconv.ParseBool: parsing {}: invalid syntax",
+            quote(s)
+        )),
     }
 }
 
@@ -159,7 +180,11 @@ fn int_err(fname: &str, s: &str, range: bool) -> String {
         "strconv.{}: parsing {}: {}",
         fname,
         quote(s),
-        if range { "value out of range" } else { "invalid syntax" }
+        if range {
+            "value out of range"
+        } else {
+            "invalid syntax"
+        }
     )
 }
 
@@ -252,7 +277,10 @@ pub fn parse_float(s: &str, bits: u32) -> Result<f64, String> {
         s.parse::<f64>().map_err(|_| bad())?
     };
     if v.is_infinite() {
-        return Err(format!("strconv.ParseFloat: parsing {}: value out of range", quote(s)));
+        return Err(format!(
+            "strconv.ParseFloat: parsing {}: value out of range",
+            quote(s)
+        ));
     }
     Ok(v)
 }
@@ -271,7 +299,9 @@ pub fn quote(s: &str) -> String {
             '\x08' => out.push_str("\\b"),
             '\x0c' => out.push_str("\\f"),
             '\x0b' => out.push_str("\\v"),
-            c if (c as u32) < 0x20 || c as u32 == 0x7f => out.push_str(&format!("\\x{:02x}", c as u32)),
+            c if (c as u32) < 0x20 || c as u32 == 0x7f => {
+                out.push_str(&format!("\\x{:02x}", c as u32))
+            }
             c => out.push(c),
         }
     }

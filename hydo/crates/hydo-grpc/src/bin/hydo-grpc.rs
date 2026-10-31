@@ -28,6 +28,9 @@ use std::io::Read;
 use std::process::exit;
 use std::sync::Arc;
 
+/// The client thread's stack.
+const STACK: usize = 256 << 20;
+
 fn env_or(k: &str, d: &str) -> String {
     match std::env::var(k) {
         Ok(v) if !v.is_empty() => v,
@@ -42,7 +45,13 @@ fn die(msg: String) -> ! {
 
 /// `strconv.ParseUint(s, 0, 64)`: decimal, 0x hex, 0o / leading-0 octal, 0b binary, underscores.
 fn parse_uint0(s: &str) -> Result<u64, String> {
-    let err = |what: &str| format!("strconv.ParseUint: parsing {}: {}", hydo_grpc::gofmt::quote(s), what);
+    let err = |what: &str| {
+        format!(
+            "strconv.ParseUint: parsing {}: {}",
+            hydo_grpc::gofmt::quote(s),
+            what
+        )
+    };
     let (base, body) = if let Some(b) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
         (16, b)
     } else if let Some(b) = s.strip_prefix("0b").or_else(|| s.strip_prefix("0B")) {
@@ -60,7 +69,9 @@ fn parse_uint0(s: &str) -> Result<u64, String> {
     }
     match u64::from_str_radix(&digits, base) {
         Ok(v) => Ok(v),
-        Err(e) if matches!(e.kind(), std::num::IntErrorKind::PosOverflow) => Err(err("value out of range")),
+        Err(e) if matches!(e.kind(), std::num::IntErrorKind::PosOverflow) => {
+            Err(err("value out of range"))
+        }
         Err(_) => Err(err("invalid syntax")),
     }
 }
@@ -108,13 +119,33 @@ fn usage(f: &Flags) {
     let calls_default = std::env::var("HYDO_GRPC_CALLS").unwrap_or_default();
     let mut s = String::from("usage: hydo-grpc [flags] steps FROM TO | retry | drive <rpc> [N] | call <rpc> [JSON|-] | gen <rpc> [N] | list\n");
     let line = |name: &str, help: &str, def: &str| {
-        let d = if def.is_empty() { String::new() } else { format!(" (default {})", hydo_grpc::gofmt::quote(def)) };
+        let d = if def.is_empty() {
+            String::new()
+        } else {
+            format!(" (default {})", hydo_grpc::gofmt::quote(def))
+        };
         format!("  -{name} string\n    \t{help}{d}\n")
     };
-    s += &line("calls", "calls record file (default <state>/calls)", &calls_default);
-    s += &line("dir", "directory with desc.pb and plan.json", &env_or("HYDO_GRPC_DIR", "/etc/hydo/grpc"));
-    s += &line("seed", "seed (default: $HYDO_GRPC_SEED, <state>/seed, hydo_grpc_seed=, the plan's)", "");
-    s += &line("state", "state directory shared by one run's processes", &env_or("HYDO_GRPC_STATE", "/tmp/hydo/grpc"));
+    s += &line(
+        "calls",
+        "calls record file (default <state>/calls)",
+        &calls_default,
+    );
+    s += &line(
+        "dir",
+        "directory with desc.pb and plan.json",
+        &env_or("HYDO_GRPC_DIR", "/etc/hydo/grpc"),
+    );
+    s += &line(
+        "seed",
+        "seed (default: $HYDO_GRPC_SEED, <state>/seed, hydo_grpc_seed=, the plan's)",
+        "",
+    );
+    s += &line(
+        "state",
+        "state directory shared by one run's processes",
+        &env_or("HYDO_GRPC_STATE", "/tmp/hydo/grpc"),
+    );
     let _ = f;
     eprint!("{s}");
 }
@@ -183,10 +214,30 @@ fn main() {
         usage(&f);
         exit(3);
     }
-    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().expect("runtime");
-    let code = rt.block_on(run(f, args));
-    drop(rt);
-    exit(code);
+    // Generation recurses into nested and recursive messages as deep as the stream says (a map
+    // of messages that hold the map is a branching process); Go's stacks grow to 1 GiB, so the
+    // client runs on a thread with a large stack (address space only; pages come when touched).
+    // A small guest may refuse a large mapping (the kernel's overcommit heuristic): try smaller.
+    let job = std::sync::Arc::new(std::sync::Mutex::new(Some((f, args))));
+    for size in [STACK, STACK / 4, STACK / 32] {
+        let j = job.clone();
+        let t = std::thread::Builder::new().stack_size(size).spawn(move || {
+            let (f, args) = j
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take()
+                .expect("one run");
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("runtime");
+            rt.block_on(run(f, args))
+        });
+        if let Ok(t) = t {
+            exit(t.join().unwrap_or(3));
+        }
+    }
+    die("cannot start the client thread".into());
 }
 
 async fn run(f: Flags, args: Vec<String>) -> i32 {
@@ -206,12 +257,24 @@ async fn run(f: Flags, args: Vec<String>) -> i32 {
             c.plan.target = t;
         }
     }
-    let calls_file = if f.calls.is_empty() { format!("{}/calls", f.state) } else { f.calls.clone() };
+    let calls_file = if f.calls.is_empty() {
+        format!("{}/calls", f.state)
+    } else {
+        f.calls.clone()
+    };
     let num = |i: usize, what: &str| -> i64 {
-        let Some(a) = args.get(i) else { die(format!("{}: missing {}", args[0], what)) };
+        let Some(a) = args.get(i) else {
+            die(format!("{}: missing {}", args[0], what))
+        };
         match hydo_grpc::gofmt::parse_int(a, 64) {
             Ok(n) => n,
-            Err(e) => die(format!("{}: {} {}: {}", args[0], what, hydo_grpc::gofmt::quote(a), e.replace("ParseInt", "Atoi"))),
+            Err(e) => die(format!(
+                "{}: {} {}: {}",
+                args[0],
+                what,
+                hydo_grpc::gofmt::quote(a),
+                e.replace("ParseInt", "Atoi")
+            )),
         }
     };
     let c = Arc::new(c);
@@ -249,7 +312,8 @@ async fn run(f: Flags, args: Vec<String>) -> i32 {
                     let _ = std::io::stdin().read_to_string(&mut s);
                     body = s;
                 }
-                c.parse_json(&r, &body).unwrap_or_else(|e| die(format!("call: request: {e}")))
+                c.parse_json(&r, &body)
+                    .unwrap_or_else(|e| die(format!("call: request: {e}")))
             } else {
                 let mut rnd = R::new(derive(c.seed, &[3]));
                 match c.generate(&r, &mut rnd, &mut GenEnv::default()) {
@@ -297,10 +361,18 @@ async fn run(f: Flags, args: Vec<String>) -> i32 {
                     (false, true) => "server-stream",
                     _ => "unary",
                 };
-                println!("{:<24} {:<40} {} weight={} deadline={}ms retry={}", r.short, r.name, kind, r.weight, r.deadline_ms, r.retry.attempts);
+                println!(
+                    "{:<24} {:<40} {} weight={} deadline={}ms retry={}",
+                    r.short, r.name, kind, r.weight, r.deadline_ms, r.retry.attempts
+                );
             }
             for s in &c.plan.scenarios {
-                println!("{:<24} scenario: {} weight={}", s.name, s.calls.join(" -> "), s.weight);
+                println!(
+                    "{:<24} scenario: {} weight={}",
+                    s.name,
+                    s.calls.join(" -> "),
+                    s.weight
+                );
             }
         }
         _ => {

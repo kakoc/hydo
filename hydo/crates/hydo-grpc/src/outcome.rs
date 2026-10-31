@@ -135,7 +135,11 @@ pub fn classify(code: u32, msg: &str, overrides: &BTreeMap<String, String>) -> O
             k = x;
         }
     }
-    Outcome { kind: k, code, msg: msg.trim().to_string() }
+    Outcome {
+        kind: k,
+        code,
+        msg: msg.trim().to_string(),
+    }
 }
 
 /// Checks an override value.
@@ -181,13 +185,18 @@ mod tests {
 
     #[test]
     fn overrides() {
-        let o: BTreeMap<String, String> =
-            [("UNAVAILABLE".to_string(), "fail".to_string()), ("ABORTED".to_string(), "info".to_string())]
-                .into_iter()
-                .collect();
+        let o: BTreeMap<String, String> = [
+            ("UNAVAILABLE".to_string(), "fail".to_string()),
+            ("ABORTED".to_string(), "info".to_string()),
+        ]
+        .into_iter()
+        .collect();
         assert_eq!(classify(UNAVAILABLE, "x", &o).kind, Kind::Fail);
         assert_eq!(classify(ABORTED, "x", &o).kind, Kind::Unknown);
         assert_eq!(classify(OK, "", &o).kind, Kind::Ok);
-        assert_eq!((Kind::Ok.word(), Kind::Fail.word(), Kind::Unknown.word()), ("ack", "failed", "unknown"));
+        assert_eq!(
+            (Kind::Ok.word(), Kind::Fail.word(), Kind::Unknown.word()),
+            ("ack", "failed", "unknown")
+        );
     }
 }

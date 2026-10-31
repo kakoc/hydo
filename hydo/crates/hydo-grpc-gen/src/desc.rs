@@ -128,7 +128,9 @@ fn fields(b: &[u8]) -> Result<Vec<Occ<'_>>> {
             }
             2 => {
                 let n = get_varint(b, &mut i)? as usize;
-                let s = b.get(i..i.checked_add(n).ok_or("unexpected EOF")?).ok_or("unexpected EOF")?;
+                let s = b
+                    .get(i..i.checked_add(n).ok_or("unexpected EOF")?)
+                    .ok_or("unexpected EOF")?;
                 i += n;
                 (0, s)
             }
@@ -159,7 +161,13 @@ fn fields(b: &[u8]) -> Result<Vec<Occ<'_>>> {
             }
             _ => return Err("invalid wire type".into()),
         };
-        out.push(Occ { num, wt, val, data, raw: &b[start..i] });
+        out.push(Occ {
+            num,
+            wt,
+            val,
+            data,
+            raw: &b[start..i],
+        });
     }
     Ok(out)
 }
@@ -281,7 +289,11 @@ fn render_default(text: &[u8], float32: bool) -> Option<Vec<u8>> {
         "nan" | "-nan" => f64::NAN,
         _ => s.parse().ok()?,
     };
-    let (v, bits) = if float32 { (f64::from(v as f32), 32) } else { (v, 64) };
+    let (v, bits) = if float32 {
+        (f64::from(v as f32), 32)
+    } else {
+        (v, 64)
+    };
     let out = if v.is_nan() {
         "nan".to_string()
     } else if v == f64::INFINITY {
@@ -307,10 +319,12 @@ pub fn normalize(md: &MessageDescriptor, b: &[u8], origin: Origin) -> Result<Vec
                 Origin::Source(pool) if has_ranges => {
                     let mut raw = o.raw.to_vec();
                     if o.wt == 2 {
-                        let ext = pool.get_message_by_name(md.full_name()).and_then(|m| m.get_extension(o.num));
+                        let ext = pool
+                            .get_message_by_name(md.full_name())
+                            .and_then(|m| m.get_extension(o.num));
                         if let Some(Kind::Message(emd)) = ext.map(|e| e.kind()) {
                             raw.clear();
-                            put_len(&mut raw, o.num, &normalize_dyn(&emd, o.data, pool)?);
+                            put_len(&mut raw, o.num, &normalize_dyn(&emd, o.data)?);
                         }
                     }
                     exts.push((o.num, raw));
@@ -343,7 +357,9 @@ pub fn normalize(md: &MessageDescriptor, b: &[u8], origin: Origin) -> Result<Vec
                     unknown.extend_from_slice(o.raw);
                     continue;
                 }
-                let e = known.entry(o.num).or_insert_with(|| Vals::Bytes(Vec::new()));
+                let e = known
+                    .entry(o.num)
+                    .or_insert_with(|| Vals::Bytes(Vec::new()));
                 if let Vals::Bytes(v) = e {
                     if !repeated {
                         v.clear();
@@ -357,7 +373,9 @@ pub fn normalize(md: &MessageDescriptor, b: &[u8], origin: Origin) -> Result<Vec
                     unknown.extend_from_slice(o.raw);
                     continue;
                 }
-                let e = known.entry(o.num).or_insert_with(|| Vals::Scalars(Vec::new()));
+                let e = known
+                    .entry(o.num)
+                    .or_insert_with(|| Vals::Scalars(Vec::new()));
                 if let Vals::Scalars(v) = e {
                     if repeated {
                         v.extend(got);
@@ -444,7 +462,9 @@ fn entry_key(entry: &MessageDescriptor, data: &[u8]) -> Result<MapKeyOrd> {
                 Kind::String => MapKeyOrd::S(o.data.to_vec()),
                 Kind::Int32 | Kind::Sfixed32 => MapKeyOrd::I(o.val as u32 as i32 as i64),
                 Kind::Int64 | Kind::Sfixed64 => MapKeyOrd::I(o.val as i64),
-                Kind::Sint32 | Kind::Sint64 => MapKeyOrd::I(((o.val >> 1) as i64) ^ -((o.val & 1) as i64)),
+                Kind::Sint32 | Kind::Sint64 => {
+                    MapKeyOrd::I(((o.val >> 1) as i64) ^ -((o.val & 1) as i64))
+                }
                 Kind::Bool => MapKeyOrd::U(u64::from(o.val != 0)),
                 _ => MapKeyOrd::U(o.val),
             });
@@ -461,7 +481,7 @@ fn entry_key(entry: &MessageDescriptor, data: &[u8]) -> Result<MapKeyOrd> {
 /// marshal of a dynamicpb message writes it (order.LegacyFieldOrder): extensions first (by
 /// number), then the fields outside a oneof (by number), then the oneof members (by oneof, then
 /// number), then unknown fields; map entries by key. Scalars keep their encoding.
-pub fn normalize_dyn(md: &MessageDescriptor, b: &[u8], pool: &DescriptorPool) -> Result<Vec<u8>> {
+pub fn normalize_dyn(md: &MessageDescriptor, b: &[u8]) -> Result<Vec<u8>> {
     // (sort key, raw occurrences); repeated fields keep their order
     let mut groups: BTreeMap<(u8, u32, u32), Vec<Vec<u8>>> = BTreeMap::new();
     let mut unknown: Vec<u8> = Vec::new();
@@ -478,7 +498,7 @@ pub fn normalize_dyn(md: &MessageDescriptor, b: &[u8], pool: &DescriptorPool) ->
             if o.wt == 2 && !fd.is_map() {
                 if let Kind::Message(sub) = fd.kind() {
                     raw.clear();
-                    put_len(&mut raw, o.num, &normalize_dyn(&sub, o.data, pool)?);
+                    put_len(&mut raw, o.num, &normalize_dyn(&sub, o.data)?);
                 }
             }
             groups.entry(key).or_default().push(raw);
@@ -487,7 +507,7 @@ pub fn normalize_dyn(md: &MessageDescriptor, b: &[u8], pool: &DescriptorPool) ->
             if o.wt == 2 {
                 if let Kind::Message(sub) = ext.kind() {
                     raw.clear();
-                    put_len(&mut raw, o.num, &normalize_dyn(&sub, o.data, pool)?);
+                    put_len(&mut raw, o.num, &normalize_dyn(&sub, o.data)?);
                 }
             }
             groups.entry((0u8, 0, o.num)).or_default().push(raw);
@@ -506,7 +526,8 @@ pub fn normalize_dyn(md: &MessageDescriptor, b: &[u8], pool: &DescriptorPool) ->
                         let data = occ.first().map(|o| o.data.to_vec()).unwrap_or_default();
                         keyed.push((entry_key(&entry, &data)?, r));
                     }
-                    keyed.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+                    keyed
+                        .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
                     raws = keyed.into_iter().map(|(_, r)| r).collect();
                 }
             }
@@ -586,8 +607,10 @@ fn proto_names(dir: &Path) -> Result<Vec<String>> {
                 walk(base, &p, out)?;
             } else if p.to_string_lossy().ends_with(".proto") {
                 let rel = p.strip_prefix(base).unwrap_or(&p);
-                let s: Vec<String> =
-                    rel.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect();
+                let s: Vec<String> = rel
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                    .collect();
                 out.push(s.join("/"));
             }
         }
@@ -654,9 +677,15 @@ pub fn from_proto_dir(dir: &Path, extra: &[PathBuf]) -> Result<(Vec<FileBytes>, 
 /// build -o).
 pub fn from_descriptor_set(path: &Path) -> Result<Vec<FileBytes>> {
     let b = fs::read(path).map_err(|e| format!("open {}: {}", path.display(), io_msg(&e)))?;
-    let files = split_set(&b)
-        .map_err(|e| format!("{}: not a FileDescriptorSet: {}", path.display(), e))?;
-    canonical(files, Origin::Wire)
+    // Go's proto.Unmarshal says one thing for every malformed input
+    let bad = |_| {
+        format!(
+            "{}: not a FileDescriptorSet: proto: cannot parse invalid wire-format data",
+            path.display()
+        )
+    };
+    let files = split_set(&b).map_err(bad)?;
+    canonical(files, Origin::Wire).map_err(bad)
 }
 
 /// Go's wording of the common I/O errors ("no such file or directory").

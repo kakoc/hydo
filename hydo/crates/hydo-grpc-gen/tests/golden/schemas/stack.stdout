@@ -1,0 +1,2 @@
+hydo-grpc-gen: 1 RPCs, 0 scenarios -> OUT
+  place                  hydo.OrderService/Place weight=1

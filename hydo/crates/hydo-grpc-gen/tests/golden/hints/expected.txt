@@ -1,0 +1,183 @@
+== 1 exit 1
+hydo-grpc-gen: hints: rpcs.Nope: no rpc "Nope" in the plan
+== 2 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.nope: nope: no field "nope" in orders.v1.CreateRequest (fields: request_id, customer, amount_cents, items, channel, labels, card, voucher, note)
+== 3 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.customer: range needs a number field, customer is string
+== 4 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.amount_cents: range: lo > hi
+== 5 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.channel: field orders.v1.CreateRequest.channel: value "PURPLE": not a value of enum orders.v1.Channel
+== 6 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.items: value needs a scalar or enum field, items is repeated message orders.v1.Item
+== 7 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.customer: format "base64": a string field and one of alnum lower digits hex uuid
+== 8 exit 0
+== 9 exit 1
+hydo-grpc-gen: hints: rpcs.Get: fields.id: from: orders.v1.Orders/Create response.items is repeated message orders.v1.Item, this field is string
+== 10 exit 1
+hydo-grpc-gen: hints: rpcs.Get: fields.id: from: nope: no field "nope" in orders.v1.Order (fields: id, request_id, customer, amount_cents, status, items, created)
+== 11 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.labels.bogus: labels.bogus: after the map field labels comes key or value
+== 12 exit 1
+hydo-grpc-gen: hints: rpcs.Create: oneofs.payment: "cash" is not a member of the oneof
+== 13 exit 1
+hydo-grpc-gen: hints: rpcs.Create: oneofs.pay: no oneof "pay" in orders.v1.CreateRequest
+== 14 exit 1
+hydo-grpc-gen: hints: rpcs.Create: classify: "TIMEOUT" is not a gRPC code name (ABORTED ALREADY_EXISTS CANCELLED DATA_LOSS DEADLINE_EXCEEDED FAILED_PRECONDITION INTERNAL INVALID_ARGUMENT NOT_FOUND OK OUT_OF_RANGE PERMISSION_DENIED RESOURCE_EXHAUSTED UNAUTHENTICATED UNAVAILABLE UNIMPLEMENTED UNKNOWN)
+== 15 exit 1
+hydo-grpc-gen: hints: rpcs.Create: classify.UNAVAILABLE: "maybe" (ok, fail, info)
+== 16 exit 1
+hydo-grpc-gen: hints: rpcs.Create: outcome_id: items.sku must be a single scalar field
+== 17 exit 1
+hydo-grpc-gen: hints: services: Payments not in the schema
+== 18 exit 1
+hydo-grpc-gen: hints: scenarios.s: no rpc "Nope" in the plan
+== 19 exit 1
+hydo-grpc-gen: rec/h.yaml: yaml: unmarshal errors:
+  line 1: field wieght not found in type load.RPCHint
+== 20 exit 1
+hydo-grpc-gen: rec/h.yaml: yaml: unmarshal errors:
+  line 1: cannot unmarshal !!str `abc` into int
+== 21 exit 0
+== 22 exit 1
+hydo-grpc-gen: hints: rpcs.Create: weight: >= 0
+== 23 exit 1
+hydo-grpc-gen: rec/h.yaml: yaml: unmarshal errors:
+  line 1: cannot unmarshal !!int `-5` into uint64
+== 24 exit 0
+== 25 exit 0
+== 26 exit 1
+hydo-grpc-gen: rec/h.yaml: yaml: unmarshal errors:
+  line 1: cannot unmarshal !!str `yes` into int
+== 27 exit 1
+hydo-grpc-gen: hints: steps: calls must be 1..1000 and concurrency 1..64
+== 28 exit 1
+hydo-grpc-gen: hints: steps: calls must be 1..1000 and concurrency 1..64
+== 29 exit 1
+hydo-grpc-gen: hints: drive: calls must be 1..1000
+== 30 exit 1
+hydo-grpc-gen: hints: record.console: "loud" (off, brief, full)
+== 31 exit 1
+hydo-grpc-gen: hints: record.history: "a b" ([A-Za-z0-9_.-]+)
+== 32 exit 1
+hydo-grpc-gen: hints: defaults.string_len: want [lo, hi] with 0 <= lo <= hi
+== 33 exit 1
+hydo-grpc-gen: hints: defaults.depth: 0..32
+== 34 exit 1
+hydo-grpc-gen: hints: defaults.message_prob: 0..1
+== 35 exit 1
+hydo-grpc-gen: hints: defaults.string_len: want [lo, hi] with 0 <= lo <= hi
+== 36 exit 1
+hydo-grpc-gen: hints: rpcs.Create: stream_len: want [lo, hi] with 0 <= lo <= hi
+== 37 exit 1
+hydo-grpc-gen: hints: rpcs.Create: retry: attempts 0..100, end_tries 0..100, backoff_ms >= 0
+== 38 exit 0
+== 39 exit 1
+hydo-grpc-gen: rec/h.yaml: yaml: unmarshal errors:
+  line 1: cannot unmarshal !!str `maybe` into bool
+== 40 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.amount_cents: value: 2026-01-01 00:00:00 +0000 UTC (time.Time) is not a scalar value
+== 41 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.amount_cents: value: [1 2] ([]interface {}) is not a scalar value
+== 42 exit 0
+== 43 exit 0
+== 44 exit 0
+== 45 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.amount_cents: field orders.v1.CreateRequest.amount_cents: value "1.5": strconv.ParseInt: parsing "1.5": invalid syntax
+== 46 exit 0
+== 47 exit 0
+== 48 exit 0
+== 49 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.channel: unique needs a string, bytes or integer field, channel is enum orders.v1.Channel
+== 50 exit 0
+== 51 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.items.qty: range: field orders.v1.Item.qty: value "3000000000": strconv.ParseInt: parsing "3000000000": value out of range
+== 52 exit 0
+== 53 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.note: prob: 0..1
+== 54 exit 0
+== 55 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.amount_cents: prefix needs a string field
+== 56 exit 0
+== 57 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.channel: field orders.v1.CreateRequest.channel: value "7": not a value of enum orders.v1.Channel
+== 58 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.customer: choice: <nil> (<nil>) is not a scalar value
+== 59 exit 0
+== 60 exit 1
+hydo-grpc-gen: hints: rpcs.Cancel: fields.id: from: pick "oldest" (random, latest)
+== 61 exit 1
+hydo-grpc-gen: hints: rpcs.Cancel: fields.id: from: unknown key "bogus" (rpc, path, side, pick, fallback)
+== 62 exit 1
+hydo-grpc-gen: hints: rpcs.Cancel: fields.id: from: "Create": want <rpc>.<field path>
+== 63 exit 0
+== 64 exit 1
+hydo-grpc-gen: hints: rpcs.Cancel: fields.id: from: want a string or a mapping
+== 65 exit 0
+== 66 exit 0
+== 67 exit 0
+== 68 exit 1
+hydo-grpc-gen: hints: rpcs.List: fields.page_size: from: orders.v1.Orders/Create response.customer is string, this field is int32
+== 69 exit 1
+hydo-grpc-gen: hints: rpcs.orders.v1.Orders/Create: orders.v1.Orders/Create has hints twice
+== 70 exit 0
+== 71 exit 0
+== 72 exit 1
+hydo-grpc-gen: hints: scenarios: every scenario needs a name and calls
+== 73 exit 1
+hydo-grpc-gen: rec/h.yaml: yaml: unmarshal errors:
+  line 1: field foo not found in type load.Hints
+== 74 exit 1
+hydo-grpc-gen: rec/h.yaml: yaml: unmarshal errors:
+  line 1: cannot unmarshal !!seq into load.Hints
+== 75 exit 1
+hydo-grpc-gen: rec/h.yaml: yaml: unmarshal errors:
+  line 1: cannot unmarshal !!seq into load.Hints
+== 76 exit 1
+hydo-grpc-gen: rec/h.yaml: yaml: unmarshal errors:
+  line 1: cannot unmarshal !!str `just a ...` into load.Hints
+== 77 exit 0
+== 78 exit 0
+== 79 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.card.nope: card.nope: no field "nope" in orders.v1.Card (fields: last4, exp_month)
+== 80 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.customer.x: customer.x: customer is not a message
+== 81 exit 0
+== 82 exit 0
+== 83 exit 0
+== 84 exit 1
+hydo-grpc-gen: rec/h.yaml: yaml: line 1: did not find expected node content
+== 85 exit 0
+== 86 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.amount_cents: range: want [lo, hi]
+== 87 exit 0
+== 88 exit 0
+== 89 exit 0
+== 90 exit 0
+== 91 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.amount_cents: value: 2026-01-02 10:20:30 +0000 UTC (time.Time) is not a scalar value
+== 92 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.amount_cents: value: 2026-01-02 10:20:30.5 +0000 UTC (time.Time) is not a scalar value
+== 93 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.amount_cents: value: 2026-01-02 10:20:30 +0200 +0200 (time.Time) is not a scalar value
+== 94 exit 0
+== 95 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.customer: choice: map[a:1] (map[string]interface {}) is not a scalar value
+== 96 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.customer: choice: [1 2] ([]interface {}) is not a scalar value
+== 97 exit 1
+hydo-grpc-gen: rec/h.yaml: yaml: unmarshal errors:
+  line 1: field x not found in type load.Hints
+== 98 exit 0
+== 99 exit 1
+hydo-grpc-gen: rec/h.yaml: yaml: unmarshal errors:
+  line 1: mapping key "weight" already defined at line 1
+== 100 exit 0
+== 101 exit 0
+== 102 exit 0
+== 103 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.amount_cents: range: field orders.v1.CreateRequest.amount_cents: value "0.5": strconv.ParseInt: parsing "0.5": invalid syntax
+== 104 exit 0
+== 105 exit 1
+hydo-grpc-gen: hints: rpcs.Create: fields.amount_cents: field orders.v1.CreateRequest.amount_cents: value "1e+20": strconv.ParseInt: parsing "1e+20": invalid syntax

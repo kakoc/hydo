@@ -36,7 +36,13 @@ impl State {
     }
 
     fn locked(&self, name: &str) -> std::io::Result<Locked> {
-        let f = OpenOptions::new().create(true).read(true).write(true).mode(0o644).open(self.dir.join(name))?;
+        let f = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .mode(0o644)
+            .open(self.dir.join(name))?;
         // SAFETY: flock on an open descriptor.
         if unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX) } != 0 {
             return Err(std::io::Error::last_os_error());
@@ -50,7 +56,12 @@ impl State {
             let l = self.locked(name)?;
             let mut b = [0u8; 32];
             let k = l.0.read_at(&mut b, 0).unwrap_or(0);
-            let n = std::str::from_utf8(&b[..k]).unwrap_or("").trim().parse::<u64>().unwrap_or(0) + 1;
+            let n = std::str::from_utf8(&b[..k])
+                .unwrap_or("")
+                .trim()
+                .parse::<u64>()
+                .unwrap_or(0)
+                + 1;
             l.0.set_len(0)?;
             l.0.write_at(format!("{n}\n").as_bytes(), 0)?;
             Ok(n)

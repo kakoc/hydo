@@ -18,7 +18,10 @@ fn request(field: u32, value: &str) -> Vec<u8> {
     out
 }
 
-fn fields(b: &[u8]) -> Result<Vec<(u32, u8, Vec<u8>, u64)>, String> {
+/// number, wire type, payload (LEN), value (VARINT)
+type Field = (u32, u8, Vec<u8>, u64);
+
+fn fields(b: &[u8]) -> Result<Vec<Field>, String> {
     let mut out = Vec::new();
     let mut i = 0;
     while i < b.len() {
@@ -49,17 +52,27 @@ enum Answer {
 }
 
 async fn ask(ch: &Channel, field: u32, value: &str, deadline: Instant) -> Result<Answer, String> {
-    let (msgs, st) = ch.call(PATH, &[request(field, value)], true, deadline).await;
+    let (msgs, st) = ch
+        .call(PATH, &[request(field, value)], true, deadline)
+        .await;
     let Some(m) = msgs.first() else {
         if st.code != 0 {
-            return Err(format!("rpc error: code = {} desc = {}", go_code(st.code), st.msg));
+            return Err(format!(
+                "rpc error: code = {} desc = {}",
+                go_code(st.code),
+                st.msg
+            ));
         }
         return Err("EOF".into());
     };
     for (num, _, data, _) in fields(m)? {
         match num {
             4 => {
-                let files = fields(&data)?.into_iter().filter(|f| f.0 == 1).map(|f| f.2).collect();
+                let files = fields(&data)?
+                    .into_iter()
+                    .filter(|f| f.0 == 1)
+                    .map(|f| f.2)
+                    .collect();
                 return Ok(Answer::Files(files));
             }
             6 => {
@@ -98,13 +111,15 @@ fn go_code(c: u32) -> String {
     if n == "CANCELLED" {
         return "Canceled".into();
     }
-    n.split('_').map(|w| {
-        let mut cs = w.chars();
-        match cs.next() {
-            Some(f) => f.to_string() + &cs.as_str().to_lowercase(),
-            None => String::new(),
-        }
-    }).collect()
+    n.split('_')
+        .map(|w| {
+            let mut cs = w.chars();
+            match cs.next() {
+                Some(f) => f.to_string() + &cs.as_str().to_lowercase(),
+                None => String::new(),
+            }
+        })
+        .collect()
 }
 
 fn skip_service(name: &str) -> bool {
@@ -113,14 +128,25 @@ fn skip_service(name: &str) -> bool {
 
 /// Every service of the server at `target` and the files that define them.
 pub fn from_reflection(target: &str, timeout: Duration) -> Result<Vec<FileBytes>, String> {
-    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|e| e.to_string())?;
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| e.to_string())?;
     rt.block_on(async {
         let ch = Channel::new(target);
         let deadline = Instant::now() + timeout;
         let svcs = match ask(&ch, 7, "*", deadline).await {
             Ok(Answer::Services(s)) => s,
-            Ok(_) => return Err(format!("reflection on {target}: an unexpected answer (is server reflection enabled?)")),
-            Err(e) => return Err(format!("reflection on {target}: {e} (is server reflection enabled?)")),
+            Ok(_) => {
+                return Err(format!(
+                    "reflection on {target}: an unexpected answer (is server reflection enabled?)"
+                ))
+            }
+            Err(e) => {
+                return Err(format!(
+                    "reflection on {target}: {e} (is server reflection enabled?)"
+                ))
+            }
         };
         let mut got: BTreeMap<String, FileBytes> = BTreeMap::new();
         let take = |got: &mut BTreeMap<String, FileBytes>, a: Answer| -> Result<(), String> {
@@ -136,7 +162,9 @@ pub fn from_reflection(target: &str, timeout: Duration) -> Result<Vec<FileBytes>
             if skip_service(s) {
                 continue;
             }
-            let a = ask(&ch, 4, s, deadline).await.map_err(|e| format!("reflection: service {s}: {e}"))?;
+            let a = ask(&ch, 4, s, deadline)
+                .await
+                .map_err(|e| format!("reflection: service {s}: {e}"))?;
             take(&mut got, a)?;
         }
         loop {
@@ -154,7 +182,9 @@ pub fn from_reflection(target: &str, timeout: Duration) -> Result<Vec<FileBytes>
                 if got.contains_key(&d) {
                     continue;
                 }
-                let a = ask(&ch, 3, &d, deadline).await.map_err(|e| format!("reflection: file {d}: {e}"))?;
+                let a = ask(&ch, 3, &d, deadline)
+                    .await
+                    .map_err(|e| format!("reflection: file {d}: {e}"))?;
                 take(&mut got, a)?;
                 changed = true;
             }

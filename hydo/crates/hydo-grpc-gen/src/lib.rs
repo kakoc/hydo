@@ -16,7 +16,10 @@ pub mod yaml;
 /// printing errors as the Go program did ("hydo-grpc-gen: ...").
 pub fn main_with(argv: &[String]) -> i32 {
     match gen::run(argv) {
-        Ok(()) => 0,
+        Ok(summary) => {
+            print!("{summary}");
+            0
+        }
         Err(gen::Fail(msg, 0)) => {
             eprintln!("{msg}");
             0

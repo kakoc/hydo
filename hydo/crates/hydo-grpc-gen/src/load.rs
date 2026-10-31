@@ -4,9 +4,13 @@
 use crate::yaml::{self, Any, Node, D};
 use hydo_grpc::gofmt::{self, quote};
 use hydo_grpc::outcome;
-use hydo_grpc::spec::{self, Drive, FieldHint as SpecHint, From, Plan, Record, Retry, Rpc, Scenario, Steps};
+use hydo_grpc::spec::{
+    self, Drive, FieldHint as SpecHint, From, Plan, Record, Retry, Rpc, Scenario, Steps,
+};
 use hydo_grpc::valuegen;
-use prost_reflect::{DescriptorPool, FieldDescriptor, Kind, MessageDescriptor, MethodDescriptor, OneofDescriptor};
+use prost_reflect::{
+    DescriptorPool, FieldDescriptor, Kind, MessageDescriptor, MethodDescriptor, OneofDescriptor,
+};
 use std::collections::BTreeMap;
 
 /// The user's hints (YAML or JSON). Every key is optional; unknown keys are errors.
@@ -94,9 +98,9 @@ fn strings(d: &mut D, n: &Node) -> Option<Vec<String>> {
 
 fn anys(d: &mut D, n: &Node) -> Option<Vec<Any>> {
     match n {
-        Node::Seq(items, _) => Some(items.iter().map(|i| d.any(i)).collect()),
+        Node::Seq(items, _) => Some(items.iter().map(D::any).collect()),
         _ => {
-            let a = d.any(n);
+            let a = D::any(n);
             if a == Any::Null {
                 return None;
             }
@@ -106,9 +110,16 @@ fn anys(d: &mut D, n: &Node) -> Option<Vec<Any>> {
     }
 }
 
-fn string_map<T>(d: &mut D, n: &Node, ty: &str, mut val: impl FnMut(&mut D, &Node) -> T) -> BTreeMap<String, T> {
+fn string_map<T>(
+    d: &mut D,
+    n: &Node,
+    ty: &str,
+    mut val: impl FnMut(&mut D, &Node) -> T,
+) -> BTreeMap<String, T> {
     let mut out = BTreeMap::new();
-    let Some(pairs) = d.pairs(n, ty) else { return out };
+    let Some(pairs) = d.pairs(n, ty) else {
+        return out;
+    };
     for (k, v) in pairs {
         if !matches!(k, Node::Scalar(..)) {
             d.terror(k, "string");
@@ -123,93 +134,123 @@ fn string_map<T>(d: &mut D, n: &Node, ty: &str, mut val: impl FnMut(&mut D, &Nod
 
 fn decode_hints(d: &mut D, n: &Node) -> Hints {
     let mut h = Hints::default();
-    d.strukt(n, "load.Hints", &["target", "deadline_ms", "seed", "services", "steps", "drive", "record", "defaults", "rpcs", "scenarios"], |d, k, v| match k {
-        "target" => d.string(v, &mut h.target),
-        "deadline_ms" => {
-            d.int(v, &mut h.deadline_ms);
-        }
-        "seed" => d.opt_uint(v, &mut h.seed),
-        "services" => h.services = strings(d, v).unwrap_or_default(),
-        "steps" => {
-            h.steps = if is_null(v) {
-                None
-            } else {
-                let mut s = Steps::default();
-                d.strukt(v, "spec.Steps", &["calls", "concurrency"], |d, k, v| {
-                    if k == "calls" {
-                        d.int(v, &mut s.calls);
-                    } else {
-                        d.int(v, &mut s.concurrency);
-                    }
-                });
-                Some(s)
+    d.strukt(
+        n,
+        "load.Hints",
+        &[
+            "target",
+            "deadline_ms",
+            "seed",
+            "services",
+            "steps",
+            "drive",
+            "record",
+            "defaults",
+            "rpcs",
+            "scenarios",
+        ],
+        |d, k, v| match k {
+            "target" => d.string(v, &mut h.target),
+            "deadline_ms" => {
+                d.int(v, &mut h.deadline_ms);
             }
-        }
-        "drive" => {
-            h.drive = if is_null(v) {
-                None
-            } else {
-                let mut s = Drive::default();
-                d.strukt(v, "spec.Drive", &["calls"], |d, _, v| {
-                    d.int(v, &mut s.calls);
-                });
-                Some(s)
-            }
-        }
-        "record" => {
-            h.record = if is_null(v) {
-                None
-            } else {
-                let mut s = Record::default();
-                d.strukt(v, "spec.Record", &["console", "history"], |d, k, v| {
-                    if k == "console" {
-                        d.string(v, &mut s.console)
-                    } else {
-                        d.string(v, &mut s.history)
-                    }
-                });
-                Some(s)
-            }
-        }
-        "defaults" => {
-            h.defaults = if is_null(v) {
-                None
-            } else {
-                let mut s = DefaultsHint::default();
-                d.strukt(
-                    v,
-                    "load.DefaultsHint",
-                    &["string_len", "bytes_len", "repeated_len", "map_len", "depth", "message_prob", "optional_prob", "oneof_none"],
-                    |d, k, v| match k {
-                        "string_len" => s.string_len = ints(d, v),
-                        "bytes_len" => s.bytes_len = ints(d, v),
-                        "repeated_len" => s.repeated_len = ints(d, v),
-                        "map_len" => s.map_len = ints(d, v),
-                        "depth" => d.opt_int(v, &mut s.depth),
-                        "message_prob" => d.opt_float(v, &mut s.message_prob),
-                        "optional_prob" => d.opt_float(v, &mut s.optional_prob),
-                        _ => d.opt_float(v, &mut s.oneof_none),
-                    },
-                );
-                Some(s)
-            }
-        }
-        "rpcs" => h.rpcs = string_map(d, v, "map[string]load.RPCHint", decode_rpc),
-        _ => {
-            h.scenarios = d
-                .seq(v, "[]load.ScenarioHint", |d, it, s: &mut ScenarioHint| {
-                    d.strukt(it, "load.ScenarioHint", &["name", "weight", "calls"], |d, k, v| match k {
-                        "name" => d.string(v, &mut s.name),
-                        "weight" => {
-                            d.int(v, &mut s.weight);
+            "seed" => d.opt_uint(v, &mut h.seed),
+            "services" => h.services = strings(d, v).unwrap_or_default(),
+            "steps" => {
+                h.steps = if is_null(v) {
+                    None
+                } else {
+                    let mut s = Steps::default();
+                    d.strukt(v, "spec.Steps", &["calls", "concurrency"], |d, k, v| {
+                        if k == "calls" {
+                            d.int(v, &mut s.calls);
+                        } else {
+                            d.int(v, &mut s.concurrency);
                         }
-                        _ => s.calls = strings(d, v).unwrap_or_default(),
                     });
-                    true
-                })
-                .unwrap_or_default()
-        }
-    });
+                    Some(s)
+                }
+            }
+            "drive" => {
+                h.drive = if is_null(v) {
+                    None
+                } else {
+                    let mut s = Drive::default();
+                    d.strukt(v, "spec.Drive", &["calls"], |d, _, v| {
+                        d.int(v, &mut s.calls);
+                    });
+                    Some(s)
+                }
+            }
+            "record" => {
+                h.record = if is_null(v) {
+                    None
+                } else {
+                    let mut s = Record::default();
+                    d.strukt(v, "spec.Record", &["console", "history"], |d, k, v| {
+                        if k == "console" {
+                            d.string(v, &mut s.console)
+                        } else {
+                            d.string(v, &mut s.history)
+                        }
+                    });
+                    Some(s)
+                }
+            }
+            "defaults" => {
+                h.defaults = if is_null(v) {
+                    None
+                } else {
+                    let mut s = DefaultsHint::default();
+                    d.strukt(
+                        v,
+                        "load.DefaultsHint",
+                        &[
+                            "string_len",
+                            "bytes_len",
+                            "repeated_len",
+                            "map_len",
+                            "depth",
+                            "message_prob",
+                            "optional_prob",
+                            "oneof_none",
+                        ],
+                        |d, k, v| match k {
+                            "string_len" => s.string_len = ints(d, v),
+                            "bytes_len" => s.bytes_len = ints(d, v),
+                            "repeated_len" => s.repeated_len = ints(d, v),
+                            "map_len" => s.map_len = ints(d, v),
+                            "depth" => d.opt_int(v, &mut s.depth),
+                            "message_prob" => d.opt_float(v, &mut s.message_prob),
+                            "optional_prob" => d.opt_float(v, &mut s.optional_prob),
+                            _ => d.opt_float(v, &mut s.oneof_none),
+                        },
+                    );
+                    Some(s)
+                }
+            }
+            "rpcs" => h.rpcs = string_map(d, v, "map[string]load.RPCHint", decode_rpc),
+            _ => {
+                h.scenarios = d
+                    .seq(v, "[]load.ScenarioHint", |d, it, s: &mut ScenarioHint| {
+                        d.strukt(
+                            it,
+                            "load.ScenarioHint",
+                            &["name", "weight", "calls"],
+                            |d, k, v| match k {
+                                "name" => d.string(v, &mut s.name),
+                                "weight" => {
+                                    d.int(v, &mut s.weight);
+                                }
+                                _ => s.calls = strings(d, v).unwrap_or_default(),
+                            },
+                        );
+                        true
+                    })
+                    .unwrap_or_default()
+            }
+        },
+    );
     h
 }
 
@@ -222,7 +263,17 @@ fn decode_rpc(d: &mut D, n: &Node) -> RpcHint {
     d.strukt(
         n,
         "load.RPCHint",
-        &["weight", "deadline_ms", "target", "retry", "outcome_id", "classify", "fields", "oneofs", "stream_len"],
+        &[
+            "weight",
+            "deadline_ms",
+            "target",
+            "retry",
+            "outcome_id",
+            "classify",
+            "fields",
+            "oneofs",
+            "stream_len",
+        ],
         |d, k, v| match k {
             "weight" => d.opt_int(v, &mut r.weight),
             "deadline_ms" => {
@@ -234,18 +285,23 @@ fn decode_rpc(d: &mut D, n: &Node) -> RpcHint {
                     None
                 } else {
                     let mut x = RetryHint::default();
-                    d.strukt(v, "load.RetryHint", &["attempts", "backoff_ms", "at_end", "end_tries"], |d, k, v| match k {
-                        "attempts" => {
-                            d.int(v, &mut x.attempts);
-                        }
-                        "backoff_ms" => {
-                            d.int(v, &mut x.backoff_ms);
-                        }
-                        "at_end" => d.opt_bool(v, &mut x.at_end),
-                        _ => {
-                            d.int(v, &mut x.end_tries);
-                        }
-                    });
+                    d.strukt(
+                        v,
+                        "load.RetryHint",
+                        &["attempts", "backoff_ms", "at_end", "end_tries"],
+                        |d, k, v| match k {
+                            "attempts" => {
+                                d.int(v, &mut x.attempts);
+                            }
+                            "backoff_ms" => {
+                                d.int(v, &mut x.backoff_ms);
+                            }
+                            "at_end" => d.opt_bool(v, &mut x.at_end),
+                            _ => {
+                                d.int(v, &mut x.end_tries);
+                            }
+                        },
+                    );
                     Some(x)
                 }
             }
@@ -270,9 +326,11 @@ fn decode_field(d: &mut D, n: &Node) -> FieldHint {
     d.strukt(
         n,
         "load.FieldHint",
-        &["value", "choice", "range", "len", "unique", "prefix", "format", "omit", "prob", "from"],
+        &[
+            "value", "choice", "range", "len", "unique", "prefix", "format", "omit", "prob", "from",
+        ],
         |d, k, v| match k {
-            "value" => f.value = Some(d.any(v)).filter(|a| *a != Any::Null),
+            "value" => f.value = Some(D::any(v)).filter(|a| *a != Any::Null),
             "choice" => f.choice = anys(d, v).unwrap_or_default(),
             "range" => f.range = anys(d, v),
             "len" => f.len = ints(d, v),
@@ -281,7 +339,7 @@ fn decode_field(d: &mut D, n: &Node) -> FieldHint {
             "format" => d.string(v, &mut f.format),
             "omit" => d.bool(v, &mut f.omit),
             "prob" => d.opt_float(v, &mut f.prob),
-            _ => f.from = Some(d.any(v)).filter(|a| *a != Any::Null),
+            _ => f.from = Some(D::any(v)).filter(|a| *a != Any::Null),
         },
     );
     f
@@ -295,20 +353,28 @@ pub fn read_hints(path: &str) -> Result<Hints, String> {
     let b = std::fs::read(path).map_err(|e| format!("open {}: {}", path, hydo_grpc::io_msg(&e)))?;
     let text = String::from_utf8_lossy(&b);
     let root = yaml::parse(&text).map_err(|e| format!("{path}: {e}"))?;
-    let Some(root) = root else { return Ok(Hints::default()) };
+    let Some(root) = root else {
+        return Ok(Hints::default());
+    };
     let mut d = D::default();
     let h = match &root {
         Node::Scalar(..) if is_null(&root) => Hints::default(),
         _ => decode_hints(&mut d, &root),
     };
     if !d.errs.is_empty() {
-        return Err(format!("{}: yaml: unmarshal errors:\n  {}", path, d.errs.join("\n  ")));
+        return Err(format!(
+            "{}: yaml: unmarshal errors:\n  {}",
+            path,
+            d.errs.join("\n  ")
+        ));
     }
     Ok(h)
 }
 
 fn history_ok(s: &str) -> bool {
-    !s.is_empty() && s.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'.' || c == b'-')
+    !s.is_empty()
+        && s.bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'.' || c == b'-')
 }
 
 /// The method name in snake case.
@@ -344,16 +410,26 @@ fn skip_service(name: &str) -> bool {
 }
 
 /// Turns the schema and the hints into a plan.
-pub fn build(pool: &DescriptorPool, h: &Hints, sources: Option<Vec<String>>) -> Result<Plan, String> {
+pub fn build(
+    pool: &DescriptorPool,
+    h: &Hints,
+    sources: Option<Vec<String>>,
+) -> Result<Plan, String> {
     let mut p = Plan {
         format: spec::FORMAT,
         target: "127.0.0.1:50051".into(),
         deadline_ms: 2000,
         seed: 1,
-        steps: Steps { calls: 2, concurrency: 1 },
+        steps: Steps {
+            calls: 2,
+            concurrency: 1,
+        },
         drive: Drive { calls: 2 },
         defaults: spec::default_defaults(),
-        record: Record { console: "brief".into(), history: "grpc".into() },
+        record: Record {
+            console: "brief".into(),
+            history: "grpc".into(),
+        },
         sources,
         ..Default::default()
     };
@@ -382,12 +458,20 @@ pub fn build(pool: &DescriptorPool, h: &Hints, sources: Option<Vec<String>>) -> 
         if !r.console.is_empty() {
             match r.console.as_str() {
                 "off" | "brief" | "full" => p.record.console = r.console.clone(),
-                _ => return Err(format!("record.console: {} (off, brief, full)", quote(&r.console))),
+                _ => {
+                    return Err(format!(
+                        "record.console: {} (off, brief, full)",
+                        quote(&r.console)
+                    ))
+                }
             }
         }
         if !r.history.is_empty() {
             if !history_ok(&r.history) {
-                return Err(format!("record.history: {} ([A-Za-z0-9_.-]+)", quote(&r.history)));
+                return Err(format!(
+                    "record.history: {} ([A-Za-z0-9_.-]+)",
+                    quote(&r.history)
+                ));
             }
             p.record.history = r.history.clone();
         }
@@ -413,7 +497,10 @@ pub fn build(pool: &DescriptorPool, h: &Hints, sources: Option<Vec<String>>) -> 
         mds.extend(s.methods());
     }
     if !want.is_empty() {
-        return Err(format!("services: {} not in the schema", want.keys().cloned().collect::<Vec<_>>().join(", ")));
+        return Err(format!(
+            "services: {} not in the schema",
+            want.keys().cloned().collect::<Vec<_>>().join(", ")
+        ));
     }
     if mds.is_empty() {
         return Err("the schema has no services (nothing to drive)".into());
@@ -463,9 +550,15 @@ pub fn build(pool: &DescriptorPool, h: &Hints, sources: Option<Vec<String>>) -> 
         if sh.name.is_empty() || sh.calls.is_empty() {
             return Err("scenarios: every scenario needs a name and calls".into());
         }
-        let mut s = Scenario { name: sh.name.clone(), weight: if sh.weight == 0 { 1 } else { sh.weight }, calls: Vec::new() };
+        let mut s = Scenario {
+            name: sh.name.clone(),
+            weight: if sh.weight == 0 { 1 } else { sh.weight },
+            calls: Vec::new(),
+        };
         for c in &sh.calls {
-            let i = p.find(c).map_err(|e| format!("scenarios.{}: {}", sh.name, e))?;
+            let i = p
+                .find(c)
+                .map_err(|e| format!("scenarios.{}: {}", sh.name, e))?;
             s.calls.push(p.rpcs[i].name.clone());
         }
         p.scenarios.push(s);
@@ -506,7 +599,13 @@ fn apply_defaults(d: &mut spec::Defaults, h: Option<&DefaultsHint>) -> Result<()
     Ok(())
 }
 
-fn apply_rpc(p: &Plan, r: &mut Rpc, md: &MethodDescriptor, h: &RpcHint, pool: &DescriptorPool) -> Result<(), String> {
+fn apply_rpc(
+    p: &Plan,
+    r: &mut Rpc,
+    md: &MethodDescriptor,
+    h: &RpcHint,
+    pool: &DescriptorPool,
+) -> Result<(), String> {
     if let Some(w) = h.weight {
         if w < 0 {
             return Err("weight: >= 0".into());
@@ -518,10 +617,20 @@ fn apply_rpc(p: &Plan, r: &mut Rpc, md: &MethodDescriptor, h: &RpcHint, pool: &D
     }
     r.target = h.target.clone();
     if let Some(x) = &h.retry {
-        if x.attempts < 0 || x.attempts > 100 || x.backoff_ms < 0 || x.end_tries < 0 || x.end_tries > 100 {
+        if x.attempts < 0
+            || x.attempts > 100
+            || x.backoff_ms < 0
+            || x.end_tries < 0
+            || x.end_tries > 100
+        {
             return Err("retry: attempts 0..100, end_tries 0..100, backoff_ms >= 0".into());
         }
-        r.retry = Retry { attempts: x.attempts, backoff_ms: x.backoff_ms, at_end: x.at_end.unwrap_or(true), end_tries: x.end_tries };
+        r.retry = Retry {
+            attempts: x.attempts,
+            backoff_ms: x.backoff_ms,
+            at_end: x.at_end.unwrap_or(true),
+            end_tries: x.end_tries,
+        };
     }
     if let Some(s) = &h.stream_len {
         r.stream_len = pair(s, "stream_len", 0)?;
@@ -530,13 +639,20 @@ fn apply_rpc(p: &Plan, r: &mut Rpc, md: &MethodDescriptor, h: &RpcHint, pool: &D
     if !h.outcome_id.is_empty() {
         let (fd, rep) = resolve(&input, &h.outcome_id).map_err(|e| format!("outcome_id: {e}"))?;
         if rep || matches!(fd.kind(), Kind::Message(_)) {
-            return Err(format!("outcome_id: {} must be a single scalar field", h.outcome_id));
+            return Err(format!(
+                "outcome_id: {} must be a single scalar field",
+                h.outcome_id
+            ));
         }
         r.outcome_id = h.outcome_id.clone();
     }
     for (c, v) in &h.classify {
         if outcome::parse_code(c).is_none() {
-            return Err(format!("classify: {} is not a gRPC code name ({})", quote(c), outcome::code_names().join(" ")));
+            return Err(format!(
+                "classify: {} is not a gRPC code name ({})",
+                quote(c),
+                outcome::code_names().join(" ")
+            ));
         }
         if !outcome::valid_override(v) {
             return Err(format!("classify.{}: {} (ok, fail, info)", c, quote(v)));
@@ -547,7 +663,11 @@ fn apply_rpc(p: &Plan, r: &mut Rpc, md: &MethodDescriptor, h: &RpcHint, pool: &D
         let od = resolve_oneof(&input, path).map_err(|e| format!("oneofs.{path}: {e}"))?;
         for m in members.iter().flatten() {
             if !od.fields().any(|f| f.name() == m) {
-                return Err(format!("oneofs.{}: {} is not a member of the oneof", path, quote(m)));
+                return Err(format!(
+                    "oneofs.{}: {} is not a member of the oneof",
+                    path,
+                    quote(m)
+                ));
             }
         }
     }
@@ -567,7 +687,11 @@ fn apply_rpc(p: &Plan, r: &mut Rpc, md: &MethodDescriptor, h: &RpcHint, pool: &D
 
 /// The field names of a message in declaration order.
 fn field_names(md: &MessageDescriptor) -> String {
-    valuegen::decl_fields(md).iter().map(|f| f.name().to_string()).collect::<Vec<_>>().join(", ")
+    valuegen::decl_fields(md)
+        .iter()
+        .map(|f| f.name().to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn message_of(fd: &FieldDescriptor) -> Option<MessageDescriptor> {
@@ -587,10 +711,20 @@ pub fn resolve(md: &MessageDescriptor, path: &str) -> Result<(FieldDescriptor, b
     let mut i = 0;
     while i < segs.len() {
         let Some(c) = cur.clone() else {
-            return Err(format!("{}: {} is not a message", path, segs[..i].join(".")));
+            return Err(format!(
+                "{}: {} is not a message",
+                path,
+                segs[..i].join(".")
+            ));
         };
         let Some(f) = c.get_field_by_name(segs[i]) else {
-            return Err(format!("{}: no field {} in {} (fields: {})", path, quote(segs[i]), c.full_name(), field_names(&c)));
+            return Err(format!(
+                "{}: no field {} in {} (fields: {})",
+                path,
+                quote(segs[i]),
+                c.full_name(),
+                field_names(&c)
+            ));
         };
         let mut f = f;
         if f.is_list() {
@@ -604,7 +738,13 @@ pub fn resolve(md: &MessageDescriptor, path: &str) -> Result<(FieldDescriptor, b
                 f = match segs[i] {
                     "key" => entry.map_entry_key_field(),
                     "value" => entry.map_entry_value_field(),
-                    _ => return Err(format!("{}: after the map field {} comes key or value", path, segs[i - 1])),
+                    _ => {
+                        return Err(format!(
+                            "{}: after the map field {} comes key or value",
+                            path,
+                            segs[i - 1]
+                        ))
+                    }
                 };
             }
         }
@@ -648,7 +788,10 @@ fn is_msg_kind(k: &Kind) -> bool {
 }
 
 fn numeric(k: &Kind) -> bool {
-    !matches!(k, Kind::Bool | Kind::String | Kind::Bytes | Kind::Enum(_) | Kind::Message(_))
+    !matches!(
+        k,
+        Kind::Bool | Kind::String | Kind::Bytes | Kind::Enum(_) | Kind::Message(_)
+    )
 }
 
 fn integer(k: &Kind) -> bool {
@@ -704,17 +847,30 @@ fn compatible(src: &FieldDescriptor, dst: &FieldDescriptor) -> bool {
         Kind::Enum(de) => matches!(&sk, Kind::Enum(se) if se.full_name() == de.full_name()),
         k if integer(k) => integer(&sk),
         k if numeric(k) => numeric(&sk),
-        _ => kind_word(src) == kind_word(dst) && std::mem::discriminant(&sk) == std::mem::discriminant(&dk),
+        _ => {
+            kind_word(src) == kind_word(dst)
+                && std::mem::discriminant(&sk) == std::mem::discriminant(&dk)
+        }
     }
 }
 
-fn field_hint(p: &Plan, fd: &FieldDescriptor, h: &FieldHint, pool: &DescriptorPool) -> Result<SpecHint, String> {
+fn field_hint(
+    p: &Plan,
+    fd: &FieldDescriptor,
+    h: &FieldHint,
+    pool: &DescriptorPool,
+) -> Result<SpecHint, String> {
     let mut out = SpecHint::default();
     let k = fd.kind();
     let is_msg = is_msg_kind(&k);
     let scalar_only = |what: &str| -> Result<(), String> {
         if is_msg || fd.is_map() {
-            return Err(format!("{} needs a scalar or enum field, {} is {}", what, fd.name(), kind_name(fd)));
+            return Err(format!(
+                "{} needs a scalar or enum field, {} is {}",
+                what,
+                fd.name(),
+                kind_name(fd)
+            ));
         }
         Ok(())
     };
@@ -732,7 +888,11 @@ fn field_hint(p: &Plan, fd: &FieldDescriptor, h: &FieldHint, pool: &DescriptorPo
     }
     if let Some(range) = &h.range {
         if !numeric(&k) || fd.is_map() {
-            return Err(format!("range needs a number field, {} is {}", fd.name(), kind_name(fd)));
+            return Err(format!(
+                "range needs a number field, {} is {}",
+                fd.name(),
+                kind_name(fd)
+            ));
         }
         if range.len() != 2 {
             return Err("range: want [lo, hi]".into());
@@ -758,14 +918,22 @@ fn field_hint(p: &Plan, fd: &FieldDescriptor, h: &FieldHint, pool: &DescriptorPo
     }
     if let Some(l) = &h.len {
         if !(fd.is_list() || fd.is_map() || matches!(k, Kind::String | Kind::Bytes)) {
-            return Err(format!("len needs a string, bytes, repeated or map field, {} is {}", fd.name(), kind_name(fd)));
+            return Err(format!(
+                "len needs a string, bytes, repeated or map field, {} is {}",
+                fd.name(),
+                kind_name(fd)
+            ));
         }
         let pr = pair(l, "len", 0)?;
         out.len = vec![pr[0], pr[1]];
     }
     if h.unique {
         if !(matches!(k, Kind::String | Kind::Bytes) || integer(&k)) || fd.is_map() {
-            return Err(format!("unique needs a string, bytes or integer field, {} is {}", fd.name(), kind_name(fd)));
+            return Err(format!(
+                "unique needs a string, bytes or integer field, {} is {}",
+                fd.name(),
+                kind_name(fd)
+            ));
         }
         out.unique = true;
     }
@@ -777,7 +945,10 @@ fn field_hint(p: &Plan, fd: &FieldDescriptor, h: &FieldHint, pool: &DescriptorPo
     }
     if !h.format.is_empty() {
         if !valuegen::FORMATS.contains(&h.format.as_str()) || !matches!(k, Kind::String) {
-            return Err(format!("format {}: a string field and one of alnum lower digits hex uuid", quote(&h.format)));
+            return Err(format!(
+                "format {}: a string field and one of alnum lower digits hex uuid",
+                quote(&h.format)
+            ));
         }
         out.format = h.format.clone();
     }
@@ -794,11 +965,24 @@ fn field_hint(p: &Plan, fd: &FieldDescriptor, h: &FieldHint, pool: &DescriptorPo
         let si = p.find(&f.rpc).map_err(|e| format!("from: {e}"))?;
         let src = &p.rpcs[si];
         f.rpc = src.name.clone();
-        let md_name = if f.side == "request" { &src.input } else { &src.output };
-        let d = pool.get_message_by_name(md_name).ok_or_else(|| format!("from: {md_name}: not found"))?;
+        let md_name = if f.side == "request" {
+            &src.input
+        } else {
+            &src.output
+        };
+        let d = pool
+            .get_message_by_name(md_name)
+            .ok_or_else(|| format!("from: {md_name}: not found"))?;
         let (sfd, _) = resolve(&d, &f.path).map_err(|e| format!("from: {e}"))?;
         if !compatible(&sfd, fd) {
-            return Err(format!("from: {} {}.{} is {}, this field is {}", src.name, f.side, f.path, kind_name(&sfd), kind_name(fd)));
+            return Err(format!(
+                "from: {} {}.{} is {}, this field is {}",
+                src.name,
+                f.side,
+                f.path,
+                kind_name(&sfd),
+                kind_name(fd)
+            ));
         }
         out.from = Some(f);
     }
@@ -807,7 +991,12 @@ fn field_hint(p: &Plan, fd: &FieldDescriptor, h: &FieldHint, pool: &DescriptorPo
 
 /// `parseFrom`: "Create.id", "Create.request.request_id", "pkg.S/M.response.id", or a mapping.
 pub fn parse_from(v: &Any) -> Result<From, String> {
-    let mut f = From { side: "response".into(), pick: "random".into(), fallback: "skip".into(), ..Default::default() };
+    let mut f = From {
+        side: "response".into(),
+        pick: "random".into(),
+        fallback: "skip".into(),
+        ..Default::default()
+    };
     match v {
         Any::Str(x) => {
             let cut = x.find('/').unwrap_or(0);
@@ -824,7 +1013,10 @@ pub fn parse_from(v: &Any) -> Result<From, String> {
             }
         }
         Any::Map(pairs, true) => {
-            let mut kv: Vec<(String, &Any)> = pairs.iter().map(|(k, v)| (str_of(k).unwrap_or_default(), v)).collect();
+            let mut kv: Vec<(String, &Any)> = pairs
+                .iter()
+                .map(|(k, v)| (str_of(k).unwrap_or_default(), v))
+                .collect();
             kv.sort_by(|a, b| a.0.cmp(&b.0));
             for (k, val) in kv {
                 let s = str_of(val).map_err(|e| format!("{k}: {e}"))?;
@@ -834,7 +1026,12 @@ pub fn parse_from(v: &Any) -> Result<From, String> {
                     "side" => f.side = s,
                     "pick" => f.pick = s,
                     "fallback" => f.fallback = s,
-                    _ => return Err(format!("unknown key {} (rpc, path, side, pick, fallback)", quote(&k))),
+                    _ => {
+                        return Err(format!(
+                            "unknown key {} (rpc, path, side, pick, fallback)",
+                            quote(&k)
+                        ))
+                    }
                 }
             }
         }

@@ -152,6 +152,9 @@ mod tests {
             marshal_indent(&j),
             "{\n  \"a\": [\n    1,\n    10\n  ],\n  \"b\": [],\n  \"c\": {},\n  \"d\": \"\\u003cx\\u003e\\u0026\\u0001\\bé\\u2028\",\n  \"e\": 0.85,\n  \"f\": null\n}"
         );
-        assert_eq!(marshal(&J::Obj(vec![("t".into(), J::Bool(true))])), "{\"t\":true}");
+        assert_eq!(
+            marshal(&J::Obj(vec![("t".into(), J::Bool(true))])),
+            "{\"t\":true}"
+        );
     }
 }

@@ -23,3 +23,7 @@ h2 = "0.4"
 http = "1"
 bytes = "1"
 libc = "0.2"
+ryu = "1"
+
+[dev-dependencies]
+sha2 = { workspace = true }

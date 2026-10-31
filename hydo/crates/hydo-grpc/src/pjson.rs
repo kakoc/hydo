@@ -57,7 +57,9 @@ fn get<'a>(m: &'a DynamicMessage, name: &str) -> std::borrow::Cow<'a, Value> {
 }
 
 fn has(m: &DynamicMessage, name: &str) -> bool {
-    field_by_name(m, name).map(|fd| m.has_field(&fd)).unwrap_or(false)
+    field_by_name(m, name)
+        .map(|fd| m.has_field(&fd))
+        .unwrap_or(false)
 }
 
 /// Days since 1970-01-01 to (year, month, day) in the proleptic Gregorian calendar.
@@ -96,7 +98,10 @@ fn message(out: &mut String, m: &DynamicMessage) -> Result<(), String> {
                 return Err(format!("{full}: missing type_url field"));
             }
             let url = get(m, "type_url").as_str().unwrap_or("").to_string();
-            return Err(format!("{full}: unable to resolve {}: not found", gofmt::quote(&url)));
+            return Err(format!(
+                "{full}: unable to resolve {}: not found",
+                gofmt::quote(&url)
+            ));
         }
         "google.protobuf.Timestamp" => {
             let secs = get(m, "seconds").as_i64().unwrap_or(0);
@@ -109,7 +114,16 @@ fn message(out: &mut String, m: &DynamicMessage) -> Result<(), String> {
             }
             let (y, mo, d) = civil(secs.div_euclid(86400));
             let t = secs.rem_euclid(86400);
-            let x = format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:09}", y, mo, d, t / 3600, t / 60 % 60, t % 60, nanos);
+            let x = format!(
+                "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:09}",
+                y,
+                mo,
+                d,
+                t / 3600,
+                t / 60 % 60,
+                t % 60,
+                nanos
+            );
             write_str(out, &(trim_frac(x) + "Z"));
             return Ok(());
         }
@@ -135,9 +149,15 @@ fn message(out: &mut String, m: &DynamicMessage) -> Result<(), String> {
             write_str(out, &(trim_frac(x) + "s"));
             return Ok(());
         }
-        "google.protobuf.BoolValue" | "google.protobuf.Int32Value" | "google.protobuf.Int64Value"
-        | "google.protobuf.UInt32Value" | "google.protobuf.UInt64Value" | "google.protobuf.FloatValue"
-        | "google.protobuf.DoubleValue" | "google.protobuf.StringValue" | "google.protobuf.BytesValue" => {
+        "google.protobuf.BoolValue"
+        | "google.protobuf.Int32Value"
+        | "google.protobuf.Int64Value"
+        | "google.protobuf.UInt32Value"
+        | "google.protobuf.UInt64Value"
+        | "google.protobuf.FloatValue"
+        | "google.protobuf.DoubleValue"
+        | "google.protobuf.StringValue"
+        | "google.protobuf.BytesValue" => {
             let fd = md.get_field(1).ok_or("wrapper without field 1")?;
             return singular(out, &fd, &m.get_field(&fd));
         }
@@ -154,7 +174,10 @@ fn message(out: &mut String, m: &DynamicMessage) -> Result<(), String> {
                 if m.has_field(&fd) {
                     if let Value::F64(x) = &*m.get_field(&fd) {
                         if x.is_nan() || x.is_infinite() {
-                            return Err(format!("{full}: invalid {} value", gofmt::format_g(*x, 64)));
+                            return Err(format!(
+                                "{full}: invalid {} value",
+                                gofmt::format_g(*x, 64)
+                            ));
                         }
                     }
                     return singular(out, &fd, &m.get_field(&fd));
@@ -170,7 +193,10 @@ fn message(out: &mut String, m: &DynamicMessage) -> Result<(), String> {
                     let s = v.as_str().unwrap_or("");
                     let c = camel(s);
                     if snake(&c) != s || s.contains("__") {
-                        return Err(format!("{full}.paths contains invalid path: {}", gofmt::quote(s)));
+                        return Err(format!(
+                            "{full}.paths contains invalid path: {}",
+                            gofmt::quote(s)
+                        ));
                     }
                     parts.push(c);
                 }
@@ -219,7 +245,11 @@ fn camel(s: &str) -> String {
     let mut was_underscore = false;
     for &c in s.as_bytes() {
         if c != b'_' {
-            out.push(if was_underscore && c.is_ascii_lowercase() { c.to_ascii_uppercase() } else { c } as char);
+            out.push(if was_underscore && c.is_ascii_lowercase() {
+                c.to_ascii_uppercase()
+            } else {
+                c
+            } as char);
         }
         was_underscore = c == b'_';
     }
@@ -255,7 +285,9 @@ fn list(out: &mut String, fd: &FieldDescriptor, v: &Value) -> Result<(), String>
 }
 
 fn map(out: &mut String, fd: &FieldDescriptor, v: &Value) -> Result<(), String> {
-    let Kind::Message(entry) = fd.kind() else { return Err("map without entry".into()) };
+    let Kind::Message(entry) = fd.kind() else {
+        return Err("map without entry".into());
+    };
     let vfd = entry.map_entry_value_field();
     out.push('{');
     if let Value::Map(mp) = v {
@@ -315,11 +347,18 @@ fn singular(out: &mut String, fd: &FieldDescriptor, v: &Value) -> Result<(), Str
         Value::String(s) => write_str(out, s),
         Value::Bytes(b) => write_str(out, &b64::encode(b)),
         Value::EnumNumber(n) => {
-            let Kind::Enum(e) = fd.kind() else { return Err("enum value of a non-enum field".into()) };
+            let Kind::Enum(e) = fd.kind() else {
+                return Err("enum value of a non-enum field".into());
+            };
             if e.full_name() == "google.protobuf.NullValue" {
                 out.push_str("null");
             } else {
-                match e.enum_descriptor_proto().value.iter().find(|x| x.number() == *n) {
+                match e
+                    .enum_descriptor_proto()
+                    .value
+                    .iter()
+                    .find(|x| x.number() == *n)
+                {
                     Some(ev) => write_str(out, ev.name()),
                     None => out.push_str(&n.to_string()),
                 }
@@ -357,8 +396,14 @@ mod tests {
         assert_eq!(civil(1_767_225_600 / 86400), (2026, 1, 1));
         assert_eq!(civil(-62_135_596_800 / 86400), (1, 1, 1));
         assert_eq!(civil(253_402_300_799 / 86400), (9999, 12, 31));
-        assert_eq!(trim_frac("2026-01-01T00:00:00.000000000".into()), "2026-01-01T00:00:00");
-        assert_eq!(trim_frac("2026-01-01T00:00:00.120000000".into()), "2026-01-01T00:00:00.120");
+        assert_eq!(
+            trim_frac("2026-01-01T00:00:00.000000000".into()),
+            "2026-01-01T00:00:00"
+        );
+        assert_eq!(
+            trim_frac("2026-01-01T00:00:00.120000000".into()),
+            "2026-01-01T00:00:00.120"
+        );
         assert_eq!(trim_frac("1.000001000".into()), "1.000001");
     }
 }

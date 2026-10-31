@@ -11,6 +11,7 @@ pub mod b64;
 pub mod client;
 pub mod gofmt;
 pub mod gojson;
+pub mod jsonin;
 pub mod outcome;
 pub mod pjson;
 pub mod record;
@@ -19,6 +20,7 @@ pub mod spec;
 pub mod state;
 pub mod transport;
 pub mod valuegen;
+pub mod wire;
 
 /// Go's wording of an I/O error ("no such file or directory"), for messages that Go formatted
 /// from a *PathError.

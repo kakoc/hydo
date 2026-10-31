@@ -231,7 +231,10 @@ impl Plan {
                     ("concurrency".into(), J::Int(self.steps.concurrency)),
                 ]),
             ),
-            ("drive".into(), J::Obj(vec![("calls".into(), J::Int(self.drive.calls))])),
+            (
+                "drive".into(),
+                J::Obj(vec![("calls".into(), J::Int(self.drive.calls))]),
+            ),
         ];
         let d = &self.defaults;
         let pair = |p: [i64; 2]| J::Arr(vec![J::Int(p[0]), J::Int(p[1])]);
@@ -255,7 +258,10 @@ impl Plan {
                 ("history".into(), J::Str(self.record.history.clone())),
             ]),
         ));
-        o.push(("rpcs".into(), J::Arr(self.rpcs.iter().map(rpc_json).collect())));
+        o.push((
+            "rpcs".into(),
+            J::Arr(self.rpcs.iter().map(rpc_json).collect()),
+        ));
         if !self.scenarios.is_empty() {
             o.push((
                 "scenarios".into(),
@@ -292,8 +298,13 @@ impl Plan {
             target: string(&v["target"]),
             deadline_ms: int(&v["deadline_ms"]),
             seed: v["seed"].as_u64().unwrap_or(0),
-            steps: Steps { calls: int(&v["steps"]["calls"]), concurrency: int(&v["steps"]["concurrency"]) },
-            drive: Drive { calls: int(&v["drive"]["calls"]) },
+            steps: Steps {
+                calls: int(&v["steps"]["calls"]),
+                concurrency: int(&v["steps"]["concurrency"]),
+            },
+            drive: Drive {
+                calls: int(&v["drive"]["calls"]),
+            },
             ..Default::default()
         };
         let d = &v["defaults"];
@@ -307,12 +318,19 @@ impl Plan {
             optional_prob: d["optional_prob"].as_f64().unwrap_or(0.0),
             oneof_none: d["oneof_none"].as_f64().unwrap_or(0.0),
         };
-        p.record = Record { console: string(&v["record"]["console"]), history: string(&v["record"]["history"]) };
+        p.record = Record {
+            console: string(&v["record"]["console"]),
+            history: string(&v["record"]["history"]),
+        };
         for r in v["rpcs"].as_array().into_iter().flatten() {
             p.rpcs.push(rpc_from(r));
         }
         for s in v["scenarios"].as_array().into_iter().flatten() {
-            p.scenarios.push(Scenario { name: string(&s["name"]), weight: int(&s["weight"]), calls: strings(&s["calls"]) });
+            p.scenarios.push(Scenario {
+                name: string(&s["name"]),
+                weight: int(&s["weight"]),
+                calls: strings(&s["calls"]),
+            });
         }
         if let Some(a) = v["sources"].as_array() {
             p.sources = Some(a.iter().map(string).collect());
@@ -322,10 +340,14 @@ impl Plan {
 
     /// Loads a plan file.
     pub fn load(path: &str) -> Result<Plan, String> {
-        let b = std::fs::read_to_string(path).map_err(|e| format!("open {}: {}", path, crate::io_msg(&e)))?;
+        let b = std::fs::read_to_string(path)
+            .map_err(|e| format!("open {}: {}", path, crate::io_msg(&e)))?;
         let p = Plan::from_json(&b).map_err(|e| format!("{}: {}", path, e))?;
         if p.format != FORMAT {
-            return Err(format!("{}: plan format {}, this client reads {}", path, p.format, FORMAT));
+            return Err(format!(
+                "{}: plan format {}, this client reads {}",
+                path, p.format, FORMAT
+            ));
         }
         Ok(p)
     }
@@ -369,11 +391,24 @@ fn rpc_json(r: &Rpc) -> J {
     if !r.classify.is_empty() {
         o.push((
             "classify".into(),
-            J::Obj(r.classify.iter().map(|(k, v)| (k.clone(), J::Str(v.clone()))).collect()),
+            J::Obj(
+                r.classify
+                    .iter()
+                    .map(|(k, v)| (k.clone(), J::Str(v.clone())))
+                    .collect(),
+            ),
         ));
     }
     if !r.fields.is_empty() {
-        o.push(("fields".into(), J::Obj(r.fields.iter().map(|(k, h)| (k.clone(), hint_json(h))).collect())));
+        o.push((
+            "fields".into(),
+            J::Obj(
+                r.fields
+                    .iter()
+                    .map(|(k, h)| (k.clone(), hint_json(h)))
+                    .collect(),
+            ),
+        ));
     }
     if !r.oneofs.is_empty() {
         o.push((
@@ -386,7 +421,10 @@ fn rpc_json(r: &Rpc) -> J {
             ),
         ));
     }
-    o.push(("stream_len".into(), J::Arr(vec![J::Int(r.stream_len[0]), J::Int(r.stream_len[1])])));
+    o.push((
+        "stream_len".into(),
+        J::Arr(vec![J::Int(r.stream_len[0]), J::Int(r.stream_len[1])]),
+    ));
     if !r.needs.is_empty() {
         o.push(("needs".into(), strs(&r.needs)));
     }
@@ -405,7 +443,10 @@ fn hint_json(h: &FieldHint) -> J {
         o.push(("range".into(), strs(&h.range)));
     }
     if !h.len.is_empty() {
-        o.push(("len".into(), J::Arr(h.len.iter().map(|&x| J::Int(x)).collect())));
+        o.push((
+            "len".into(),
+            J::Arr(h.len.iter().map(|&x| J::Int(x)).collect()),
+        ));
     }
     if h.unique {
         o.push(("unique".into(), J::Bool(true)));
@@ -483,7 +524,8 @@ fn rpc_from(r: &Value) -> Rpc {
     }
     if let Some(m) = r["oneofs"].as_object() {
         for (k, v) in m {
-            out.oneofs.insert(k.clone(), v.as_array().map(|_| strings(v)));
+            out.oneofs
+                .insert(k.clone(), v.as_array().map(|_| strings(v)));
         }
     }
     if let Some(m) = r["fields"].as_object() {
