@@ -23,7 +23,8 @@ regex-automata = "0.4"
 
 [dev-dependencies]
 hydo-explore = { workspace = true }
-hydo-build = { workspace = true }
 hydo-errors = { workspace = true }
 hydo-history = { workspace = true }
 flate2 = { workspace = true }
+# tests/fakes.rs and tests/features.rs: the init, manifest.sh and compose.list hydo-build writes
+hydo-build = { workspace = true }

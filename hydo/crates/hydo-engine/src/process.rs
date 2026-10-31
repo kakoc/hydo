@@ -41,33 +41,50 @@ pub(crate) struct ProcessWorker {
     branch: bool,
 }
 
+/// Start `cmd` with stdin/stdout piped and stderr appended to `stderr_log`.
+fn spawn_piped(
+    mut cmd: Command,
+    stderr_log: &Path,
+) -> Result<(Child, ChildStdin, BufReader<ChildStdout>), EngineError> {
+    let err = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(stderr_log)?;
+    cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(err);
+    let mut child = cmd.spawn()?;
+    let stdin = child.stdin.take().expect("piped stdin");
+    let stdout = BufReader::new(child.stdout.take().expect("piped stdout"));
+    Ok((child, stdin, stdout))
+}
+
+/// Read the READY line of a serve process (or kill it and say what it printed instead).
+fn read_ready(child: &mut Child, stdout: &mut BufReader<ChildStdout>) -> Result<f64, EngineError> {
+    let mut line = String::new();
+    stdout.read_line(&mut line)?;
+    match Ready::parse(&line) {
+        Some(ready) => Ok(ready.boot_secs),
+        None => {
+            let _ = child.kill();
+            let _ = child.wait();
+            Err(EngineError::NotReady(line))
+        }
+    }
+}
+
 impl ProcessWorker {
     /// Start `cmd` with stdin/stdout piped and stderr appended to `stderr_log`, and wait for READY.
     pub(crate) fn start(
-        mut cmd: Command,
+        cmd: Command,
         stderr_log: &Path,
         branch: bool,
     ) -> Result<ProcessWorker, EngineError> {
-        let err = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(stderr_log)?;
-        cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(err);
-        let mut child = cmd.spawn()?;
-        let stdin = child.stdin.take().expect("piped stdin");
-        let mut stdout = BufReader::new(child.stdout.take().expect("piped stdout"));
-        let mut line = String::new();
-        stdout.read_line(&mut line)?;
-        let Some(ready) = Ready::parse(&line) else {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(EngineError::NotReady(line));
-        };
+        let (mut child, stdin, mut stdout) = spawn_piped(cmd, stderr_log)?;
+        let boot_secs = read_ready(&mut child, &mut stdout)?;
         Ok(ProcessWorker {
             child,
             stdin,
             stdout,
-            boot_secs: ready.boot_secs,
+            boot_secs,
             branch,
         })
     }
@@ -166,5 +183,95 @@ impl Worker for ProcessWorker {
         drop(this.stdin);
         this.child.wait()?;
         Ok(())
+    }
+}
+
+/// An engine process whose run is under lock-step control from its start: `--control one` (a
+/// shell image from its S1), and since M121 `--control boot one` (an agent image from its first
+/// instruction). `hvx::ControlledOne` and `hvm::ControlledOne` are this type.
+pub struct ControlledRun {
+    child: Child,
+    stdin: ChildStdin,
+    stdout: BufReader<ChildStdout>,
+}
+
+impl ControlledRun {
+    pub(crate) fn start(cmd: Command, stderr_log: &Path) -> Result<ControlledRun, EngineError> {
+        let (child, stdin, stdout) = spawn_piped(cmd, stderr_log)?;
+        Ok(ControlledRun {
+            child,
+            stdin,
+            stdout,
+        })
+    }
+
+    /// The session (the run's tag is `one`). `log`: also write the transcript.
+    pub fn session<'a>(&'a mut self, log: Option<&'a mut dyn Write>) -> Lockstep<'a> {
+        let s = Lockstep::new(&mut self.stdout, &mut self.stdin);
+        match log {
+            Some(l) => s.with_log(l),
+            None => s,
+        }
+    }
+
+    /// Wait for the engine to exit (after the RESULT); its exit status.
+    pub fn wait(mut self) -> Result<Option<i32>, EngineError> {
+        drop(self.stdin);
+        Ok(self.child.wait()?.code())
+    }
+}
+
+/// A `serve` engine booting an agent image under lock-step control (M121, `--control boot
+/// serve`; [`crate::Engine::start_controlled`]). [`ControlledBoot::session`] is the boot's
+/// lock-step session (tag `boot`, stops `phase=boot`): the host takes the snapshots `S0` and
+/// `S1` where it decides and ends the boot with END (RESULT `boot`). [`ControlledBoot::ready`]
+/// then reads READY and returns the worker, whose CTL runs restore the host's S1.
+pub struct ControlledBoot {
+    child: Child,
+    stdin: ChildStdin,
+    stdout: BufReader<ChildStdout>,
+    branch: bool,
+}
+
+impl ControlledBoot {
+    pub(crate) fn start(
+        cmd: Command,
+        stderr_log: &Path,
+        branch: bool,
+    ) -> Result<ControlledBoot, EngineError> {
+        let (child, stdin, stdout) = spawn_piped(cmd, stderr_log)?;
+        Ok(ControlledBoot {
+            child,
+            stdin,
+            stdout,
+            branch,
+        })
+    }
+
+    /// The boot's session. `log`: also write the transcript.
+    pub fn session<'a>(&'a mut self, log: Option<&'a mut dyn Write>) -> Lockstep<'a> {
+        let s = Lockstep::new(&mut self.stdout, &mut self.stdin);
+        match log {
+            Some(l) => s.with_log(l),
+            None => s,
+        }
+    }
+
+    /// After the boot's RESULT: wait for READY and return the worker.
+    pub fn ready(self) -> Result<Box<dyn Worker>, EngineError> {
+        let ControlledBoot {
+            mut child,
+            stdin,
+            mut stdout,
+            branch,
+        } = self;
+        let boot_secs = read_ready(&mut child, &mut stdout)?;
+        Ok(Box::new(ProcessWorker {
+            child,
+            stdin,
+            stdout,
+            boot_secs,
+            branch,
+        }))
     }
 }
