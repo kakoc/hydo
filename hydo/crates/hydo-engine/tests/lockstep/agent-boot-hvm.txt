@@ -1,0 +1,297 @@
+> STOP boot at=0 n=1 phase=boot why=start
+< CONT
+> STOP boot at=64 n=2 phase=boot why=cadence
+< CONT
+> STOP boot at=128 n=3 phase=boot why=cadence
+< CONT
+> EVENT boot at=192 n=1 [    0.000000] Booting Linux on physical CPU 0x0000000000 [0x610f0000]
+> STOP boot at=192 n=4 phase=boot why=cadence
+< CONT
+> STOP boot at=256 n=5 phase=boot why=cadence
+< CONT
+> STOP boot at=320 n=6 phase=boot why=cadence
+< CONT
+> STOP boot at=384 n=7 phase=boot why=cadence
+< CONT
+> EVENT boot at=448 n=2 [    0.000000] Linux version 6.6.35-hydo-hvm (hydo@hydo) (aarch64-unknown-linux-gnu-gcc (GCC) 13.2.0, GNU ld (GNU Binutils) 2.41) #1 SMP 2026-01-01
+> STOP boot at=448 n=8 phase=boot why=cadence
+< CONT
+> STOP boot at=512 n=9 phase=boot why=cadence
+< CONT
+> EVENT boot at=576 n=3 [    0.000000] random: crng init done
+> STOP boot at=576 n=10 phase=boot why=cadence
+< CONT
+> EVENT boot at=640 n=4 [    0.000000] Machine model: hydo-hvm
+> STOP boot at=640 n=11 phase=boot why=cadence
+< CONT
+> STOP boot at=704 n=12 phase=boot why=cadence
+< CONT
+> EVENT boot at=768 n=5 [    0.000000] earlycon: uart8250 at MMIO 0x0000000009000000 (options '')
+> STOP boot at=768 n=13 phase=boot why=cadence
+< CONT
+> STOP boot at=832 n=14 phase=boot why=cadence
+< CONT
+> EVENT boot at=896 n=6 [    0.000000] printk: bootconsole [uart8250] enabled
+> STOP boot at=896 n=15 phase=boot why=cadence
+< CONT
+> STOP boot at=960 n=16 phase=boot why=cadence
+< CONT
+> STOP boot at=1024 n=17 phase=boot why=cadence
+< CONT
+> STOP boot at=1088 n=18 phase=boot why=cadence
+< CONT
+> STOP boot at=1152 n=19 phase=boot why=cadence
+< CONT
+> STOP boot at=1216 n=20 phase=boot why=cadence
+< CONT
+> STOP boot at=1280 n=21 phase=boot why=cadence
+< CONT
+> STOP boot at=1344 n=22 phase=boot why=cadence
+< CONT
+> STOP boot at=1408 n=23 phase=boot why=cadence
+< CONT
+> STOP boot at=1472 n=24 phase=boot why=cadence
+< CONT
+> STOP boot at=1536 n=25 phase=boot why=cadence
+< CONT
+> STOP boot at=1600 n=26 phase=boot why=cadence
+< CONT
+> STOP boot at=1664 n=27 phase=boot why=cadence
+< CONT
+> STOP boot at=1728 n=28 phase=boot why=cadence
+< CONT
+> STOP boot at=1792 n=29 phase=boot why=cadence
+< CONT
+> STOP boot at=1856 n=30 phase=boot why=cadence
+< CONT
+> STOP boot at=1920 n=31 phase=boot why=cadence
+< CONT
+> STOP boot at=1984 n=32 phase=boot why=cadence
+< CONT
+> STOP boot at=2048 n=33 phase=boot why=cadence
+< CONT
+> STOP boot at=2112 n=34 phase=boot why=cadence
+< CONT
+> STOP boot at=2176 n=35 phase=boot why=cadence
+< CONT
+> STOP boot at=2240 n=36 phase=boot why=cadence
+< CONT
+> STOP boot at=2304 n=37 phase=boot why=cadence
+< CONT
+> EVENT boot at=2368 n=7 HYDO-AG 241 0a259a40 {"agent":"0.1.0","ev":"hello","features":["freeze"],"ops":["sync","spawn","signal","run","probe","write","read","mkdir","mount","syncfs","clock_set","clock_get","qlen","tail","untail","freeze","unfreeze"],"pid1":true,"proto":1,"seq":0,"v":1}
+> STOP boot at=2368 n=38 phase=boot why=cadence
+< SNAP S0
+> OK snap S0 at=2368 retype=-
+< SEND at=2368 \x18{"id":1,"nonce":0,"op":"sync","v":1}\n
+> OK send id=1 sent=2368
+< CONT
+> STOP boot at=2432 n=39 phase=boot why=cadence
+< CONT
+> STOP boot at=2496 n=40 phase=boot why=cadence
+< CONT
+> STOP boot at=2560 n=41 phase=boot why=cadence
+< CONT
+> STOP boot at=2624 n=42 phase=boot why=cadence
+< CONT
+> EVENT boot at=2688 n=8 HYDO-AG 54 54183f12 {"nonce":0,"ok":true,"op":"sync","re":1,"seq":1,"v":1}
+> STOP boot at=2688 n=43 phase=boot why=cadence
+< ACK 1
+> OK ack 1
+< SEND at=2688 {"argv":["/bin/test","-b","/dev/vda2"],"deadline_ms":10000,"env":["PATH=/bin:/sbin","HOME=/"],"every_ms":10,"id":2,"op":"probe","v":1}\n
+> OK send id=2 sent=2688
+< CONT
+> STOP boot at=2752 n=44 phase=boot why=cadence
+< CONT
+> STOP boot at=2816 n=45 phase=boot why=cadence
+< CONT
+> STOP boot at=2880 n=46 phase=boot why=cadence
+< CONT
+> STOP boot at=2944 n=47 phase=boot why=cadence
+< CONT
+> STOP boot at=3008 n=48 phase=boot why=cadence
+< CONT
+> STOP boot at=3072 n=49 phase=boot why=cadence
+< CONT
+> EVENT boot at=3136 n=9 HYDO-AG 45 9b46a7d4 {"ok":true,"op":"probe","re":2,"seq":2,"v":1}
+> STOP boot at=3136 n=50 phase=boot why=cadence
+< ACK 2
+> OK ack 2
+< CONT
+> STOP boot at=3200 n=51 phase=boot why=cadence
+< CONT
+> EVENT boot at=3264 n=10 HYDO-AG 77 68570db9 {"ev":"probe","id":2,"ok":true,"seq":3,"status":0,"tries":1,"v":1,"why":"ok"}
+> STOP boot at=3264 n=52 phase=boot why=cadence
+< SEND at=3264 {"dst":"/data","fstype":"ext4","id":3,"op":"mount","src":"/dev/vda2","v":1}\n
+> OK send id=3 sent=3264
+< CONT
+> STOP boot at=3328 n=53 phase=boot why=cadence
+< CONT
+> STOP boot at=3392 n=54 phase=boot why=cadence
+< CONT
+> STOP boot at=3456 n=55 phase=boot why=cadence
+< CONT
+> STOP boot at=3520 n=56 phase=boot why=cadence
+< CONT
+> STOP boot at=3584 n=57 phase=boot why=cadence
+< CONT
+> STOP boot at=3648 n=58 phase=boot why=cadence
+< CONT
+> STOP boot at=3712 n=59 phase=boot why=cadence
+< CONT
+> STOP boot at=3776 n=60 phase=boot why=cadence
+< CONT
+> STOP boot at=3840 n=61 phase=boot why=cadence
+< CONT
+> STOP boot at=3904 n=62 phase=boot why=cadence
+< CONT
+> STOP boot at=3968 n=63 phase=boot why=cadence
+< CONT
+> STOP boot at=4032 n=64 phase=boot why=cadence
+< CONT
+> EVENT boot at=4096 n=11 HYDO-AG 45 b221fcb5 {"ok":true,"op":"mount","re":3,"seq":4,"v":1}
+> STOP boot at=4096 n=65 phase=boot why=cadence
+< ACK 3
+> OK ack 3
+< SEND at=4096 {"argv":["/bin/ip","link","set","lo","up"],"env":["PATH=/bin:/sbin","HOME=/"],"id":4,"kill_after_ms":10000,"op":"run","v":1}\n
+> OK send id=4 sent=4096
+< CONT
+> STOP boot at=4160 n=66 phase=boot why=cadence
+< CONT
+> STOP boot at=4224 n=67 phase=boot why=cadence
+< CONT
+> STOP boot at=4288 n=68 phase=boot why=cadence
+< CONT
+> STOP boot at=4352 n=69 phase=boot why=cadence
+< CONT
+> STOP boot at=4416 n=70 phase=boot why=cadence
+< CONT
+> STOP boot at=4480 n=71 phase=boot why=cadence
+< CONT
+> EVENT boot at=4544 n=12 HYDO-AG 43 be88094c {"ok":true,"op":"run","re":4,"seq":5,"v":1}
+> STOP boot at=4544 n=72 phase=boot why=cadence
+< ACK 4
+> OK ack 4
+< CONT
+> STOP boot at=4608 n=73 phase=boot why=cadence
+< CONT
+> EVENT boot at=4672 n=13 HYDO-AG 66 0b9c65cc {"ev":"done","id":4,"out":"","out_len":0,"seq":6,"status":0,"v":1}
+> STOP boot at=4672 n=74 phase=boot why=cadence
+< SEND at=4672 {"id":5,"op":"mkdir","path":"/data/redis","v":1}\n
+> OK send id=5 sent=4672
+< CONT
+> STOP boot at=4736 n=75 phase=boot why=cadence
+< CONT
+> STOP boot at=4800 n=76 phase=boot why=cadence
+< CONT
+> STOP boot at=4864 n=77 phase=boot why=cadence
+< CONT
+> STOP boot at=4928 n=78 phase=boot why=cadence
+< CONT
+> STOP boot at=4992 n=79 phase=boot why=cadence
+< CONT
+> STOP boot at=5056 n=80 phase=boot why=cadence
+< CONT
+> EVENT boot at=5120 n=14 HYDO-AG 45 3d5caae0 {"ok":true,"op":"mkdir","re":5,"seq":7,"v":1}
+> STOP boot at=5120 n=81 phase=boot why=cadence
+< ACK 5
+> OK ack 5
+< SEND at=5120 {"argv":["/bin/redis-server","/etc/redis.conf"],"env":["PATH=/bin:/sbin","HOME=/"],"h":"redis","id":6,"op":"spawn","stderr":"/tmp/redis.log","stdout":"/tmp/redis.log","v":1}\n
+> OK send id=6 sent=5120
+< CONT
+> STOP boot at=5184 n=82 phase=boot why=cadence
+< CONT
+> STOP boot at=5248 n=83 phase=boot why=cadence
+< CONT
+> STOP boot at=5312 n=84 phase=boot why=cadence
+< CONT
+> STOP boot at=5376 n=85 phase=boot why=cadence
+< CONT
+> STOP boot at=5440 n=86 phase=boot why=cadence
+< CONT
+> STOP boot at=5504 n=87 phase=boot why=cadence
+< CONT
+> STOP boot at=5568 n=88 phase=boot why=cadence
+< CONT
+> EVENT boot at=5632 n=15 HYDO-AG 45 e7b45e3e {"ok":true,"op":"spawn","re":6,"seq":8,"v":1}
+> STOP boot at=5632 n=89 phase=boot why=cadence
+< ACK 6
+> OK ack 6
+< SEND at=5632 {"alive":"redis","argv":["/bin/sh","-c","/bin/redis-cli ping | grep -q PONG"],"deadline_ms":20000,"env":["PATH=/bin:/sbin","HOME=/"],"every_ms":20,"id":7,"op":"probe","v":1}\n
+> OK send id=7 sent=5632
+< CONT
+> STOP boot at=5696 n=90 phase=boot why=cadence
+< CONT
+> STOP boot at=5760 n=91 phase=boot why=cadence
+< CONT
+> STOP boot at=5824 n=92 phase=boot why=cadence
+< CONT
+> STOP boot at=5888 n=93 phase=boot why=cadence
+< CONT
+> STOP boot at=5952 n=94 phase=boot why=cadence
+< CONT
+> STOP boot at=6016 n=95 phase=boot why=cadence
+< CONT
+> STOP boot at=6080 n=96 phase=boot why=cadence
+< CONT
+> EVENT boot at=6144 n=16 HYDO-AG 45 bc756694 {"ok":true,"op":"probe","re":7,"seq":9,"v":1}
+> STOP boot at=6144 n=97 phase=boot why=cadence
+< ACK 7
+> OK ack 7
+< CONT
+> STOP boot at=6208 n=98 phase=boot why=cadence
+< CONT
+> STOP boot at=6272 n=99 phase=boot why=cadence
+< CONT
+> STOP boot at=6336 n=100 phase=boot why=cadence
+< CONT
+> STOP boot at=6400 n=101 phase=boot why=cadence
+< CONT
+> STOP boot at=6464 n=102 phase=boot why=cadence
+< CONT
+> STOP boot at=6528 n=103 phase=boot why=cadence
+< CONT
+> STOP boot at=6592 n=104 phase=boot why=cadence
+< CONT
+> STOP boot at=6656 n=105 phase=boot why=cadence
+< CONT
+> STOP boot at=6720 n=106 phase=boot why=cadence
+< CONT
+> STOP boot at=6784 n=107 phase=boot why=cadence
+< CONT
+> STOP boot at=6848 n=108 phase=boot why=cadence
+< CONT
+> STOP boot at=6912 n=109 phase=boot why=cadence
+< CONT
+> STOP boot at=6976 n=110 phase=boot why=cadence
+< CONT
+> STOP boot at=7040 n=111 phase=boot why=cadence
+< CONT
+> STOP boot at=7104 n=112 phase=boot why=cadence
+< CONT
+> STOP boot at=7168 n=113 phase=boot why=cadence
+< CONT
+> STOP boot at=7232 n=114 phase=boot why=cadence
+< CONT
+> STOP boot at=7296 n=115 phase=boot why=cadence
+< CONT
+> EVENT boot at=7360 n=17 HYDO-AG 78 02d9288a {"ev":"probe","id":7,"ok":true,"seq":10,"status":0,"tries":1,"v":1,"why":"ok"}
+> STOP boot at=7360 n=116 phase=boot why=cadence
+< SEND at=7360 {"id":8,"op":"syncfs","v":1}\n
+> OK send id=8 sent=7360
+< CONT
+> STOP boot at=7424 n=117 phase=boot why=cadence
+< CONT
+> STOP boot at=7488 n=118 phase=boot why=cadence
+< CONT
+> STOP boot at=7552 n=119 phase=boot why=cadence
+< CONT
+> STOP boot at=7616 n=120 phase=boot why=cadence
+< CONT
+> EVENT boot at=7680 n=18 HYDO-AG 47 d09fe70f {"ok":true,"op":"syncfs","re":8,"seq":11,"v":1}
+> STOP boot at=7680 n=121 phase=boot why=cadence
+< ACK 8
+> OK ack 8
+< SNAP S1
+> OK snap S1 at=7680 retype=-
+< END AGENT-E2E: OK sync=0 mount=mount mkdir=mkdir spawn=spawn syncfs=syncfs
+> RESULT boot fp=1a500744358512e2 wfp=c231e751bc014cdb secs=0.8 stops=121 typed=8 inh=4ea7a89fc72f0c97 verdict=AGENT-E2E: OK sync=0 mount=mount mkdir=mkdir spawn=spawn syncfs=syncfs

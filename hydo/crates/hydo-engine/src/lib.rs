@@ -68,6 +68,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 pub use lockstep::{Lockstep, LockstepStart};
+pub use process::{ControlledBoot, ControlledRun};
 pub use protocol::{BranchOutcome, BranchRequest, Ready, RunResult};
 
 /// Which engine a spec is for.
@@ -132,6 +133,26 @@ impl SnapshotPoint {
             SnapshotPoint::S1 => "hydo-explore-ready-S1",
         }
     }
+
+    /// The snapshot name the host gives the point in an agent image's controlled boot (M121:
+    /// there is no marker; the host says `SNAP S0` and `SNAP S1` at stops it chooses).
+    pub fn name(self) -> &'static str {
+        match self {
+            SnapshotPoint::S0 => "S0",
+            SnapshotPoint::S1 => "S1",
+        }
+    }
+}
+
+/// Who runs an image's guest side (`/etc/hydo/control`, [`image::control`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GuestControl {
+    /// The shell init (`hydo-init.sh`): every image without `/etc/hydo/control`. The engines
+    /// boot it to the S0/S1 markers by themselves.
+    Shell,
+    /// The guest agent `hydo-agent`, speaking agent protocol `proto` (`hydo-build --control
+    /// agent`, M121): boot it with [`Engine::start_controlled`] / [`Engine::one_controlled`].
+    Agent { proto: u64 },
 }
 
 /// What to boot. The defaults are what both engines assume when an option is not passed.
@@ -259,6 +280,42 @@ pub trait Engine {
 
     /// The shell line that reproduces one schedule by hand (report.md's repro line).
     fn repro_line(&self, spec: &BootSpec, schedule: &Schedule) -> String;
+
+    /// Boot an agent image (one whose [`image::control`] is [`GuestControl::Agent`]) under
+    /// lock-step control from its first instruction (M121): the returned boot's session reports
+    /// stops in [`lockstep::Phase::Boot`], the caller takes the snapshots `S0` and `S1` where it
+    /// decides (`SNAP S0`, `SNAP S1`; [`SnapshotPoint::name`]) and ends the boot with END; then
+    /// [`ControlledBoot::ready`] gives the worker. Its [`Worker::lockstep`] runs
+    /// ([`LockstepStart::Run`]) restore the caller's S1 and type nothing (the guest part is `run`);
+    /// [`Worker::run`] and [`Worker::branch`] are refused for such an image. `boot`'s `rb=` is
+    /// the boot's cadence (its other tokens are not used).
+    fn start_controlled(
+        &self,
+        spec: &BootSpec,
+        boot: &Schedule,
+        stderr_log: &std::path::Path,
+    ) -> Result<ControlledBoot, EngineError> {
+        let _ = (spec, boot, stderr_log);
+        Err(EngineError::Unsupported(
+            "booting an agent image under control is not supported by this engine".into(),
+        ))
+    }
+
+    /// The fresh-boot counterpart of [`Engine::start_controlled`] for one schedule: the boot runs
+    /// under control as there, and the caller's `SNAP S1` in the boot phase arms `schedule`'s host
+    /// part and starts the workload phase at that same stop, so the run equals a worker's CTL run
+    /// of `schedule` from that S1 (stop numbers, input hash and fingerprint).
+    fn one_controlled(
+        &self,
+        spec: &BootSpec,
+        schedule: &Schedule,
+        stderr_log: &std::path::Path,
+    ) -> Result<ControlledRun, EngineError> {
+        let _ = (spec, schedule, stderr_log);
+        Err(EngineError::Unsupported(
+            "booting an agent image under control is not supported by this engine".into(),
+        ))
+    }
 
     /// The name of the function behind `fp`/`wfp`. Two engines (or two implementations of one)
     /// with the same name give the same value for the same run, whatever they skip internally
