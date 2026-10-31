@@ -338,7 +338,10 @@ impl<'a> Model<'a> {
             "CLOCK JUMP of {tdelta}s before step {p} (realtime {tnow} -> {tnew})"
         ))?;
         let tdiff = num(&tnew) - num(&tnow) - num(tdelta);
-        if tdiff > 5 || tdiff < -5 {
+        // [ $tdiff -gt 5 ] || [ $tdiff -lt -5 ]
+        #[allow(clippy::manual_range_contains)]
+        let off = tdiff > 5 || tdiff < -5;
+        if off {
             return self.die(format!(
                 "HYDO-ORACLE: ERROR clock jump not applied ({tnow} -> {tnew}, wanted {tdelta})"
             ));

@@ -340,23 +340,33 @@ pub struct Ran {
     pub inputs: Option<RecoveryInputs>,
 }
 
-/// The recovery boot's `oracle` command line as a shell image gets it: the acked line's tokens
-/// (with hydo-init-clock.sh's `clock=<epoch>` after the ids), then `failed` and its ids.
-pub fn oracle_cmd(plan: &Plan, i: &RecoveryInputs) -> String {
+/// The recovery boot's `oracle` command line as a shell image gets it: hvx_explore's oracle_cmd
+/// copies the run's `hydo-explore-acked:` line (with hydo-init-clock.sh's `clock=<epoch>` after
+/// the ids), then ` failed` and the `hydo-explore-failed:` line. Built from the run's report, not
+/// from the controller's RecoveryInputs, so the shell model checks what the controller carried.
+pub fn oracle_cmd(run: &Transcript) -> String {
+    let line = |p: &str| -> Vec<String> {
+        run.records
+            .iter()
+            .filter_map(|r| match r {
+                Record::Report { line, .. } => line.strip_prefix(p),
+                _ => None,
+            })
+            .next_back()
+            .unwrap_or("")
+            .split_whitespace()
+            .map(str::to_string)
+            .collect()
+    };
+    let (acked, failed) = (line("hydo-explore-acked:"), line("hydo-explore-failed:"));
     let mut cmd = String::from("oracle");
-    for id in &i.acked {
+    for id in &acked {
         cmd.push(' ');
         cmd.push_str(id);
     }
-    if plan.clock_after_cut.is_some() {
-        cmd.push_str(&format!(
-            " clock={}",
-            i.clock.map(|c| c.to_string()).unwrap_or_default()
-        ));
-    }
-    if !i.failed.is_empty() {
+    if !failed.is_empty() {
         cmd.push_str(" failed");
-        for id in &i.failed {
+        for id in &failed {
             cmd.push(' ');
             cmd.push_str(id);
         }

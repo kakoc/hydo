@@ -185,8 +185,16 @@ fn variants() -> Vec<Variant> {
         "hydo/onboard/examples/compose-voting/hydo-loopback.yaml",
         &|_| {},
     );
-    add("rust-kv", "hydo/onboard/examples/rust-kv/hydo.yaml", &|_| {});
-    add("node-kv", "hydo/onboard/examples/node-kv/hydo.yaml", &|_| {});
+    add(
+        "rust-kv",
+        "hydo/onboard/examples/rust-kv/hydo.yaml",
+        &|_| {},
+    );
+    add(
+        "node-kv",
+        "hydo/onboard/examples/node-kv/hydo.yaml",
+        &|_| {},
+    );
     add(
         "python-kv-mac",
         "hydo/onboard/examples/python-kv/hydo-mac.yaml",
@@ -206,9 +214,11 @@ fn variants() -> Vec<Variant> {
         p.steps = 0;
         second_eventually(p, "start", 4, 1);
     });
-    add("rust-kv+clock_after_cut", "hydo/onboard/examples/rust-kv/hydo.yaml", &|p| {
-        p.clock_after_cut = Some(1)
-    });
+    add(
+        "rust-kv+clock_after_cut",
+        "hydo/onboard/examples/rust-kv/hydo.yaml",
+        &|p| p.clock_after_cut = Some(1),
+    );
     v
 }
 
@@ -307,7 +317,10 @@ fn boot_until_ok(v: &Variant, golden: &mut Vec<String>) -> Option<Booted> {
             },
         );
         if let Err(e) = check(&v.plan, &c.items, Conv::Boot, "provision", (&[], &[]), None) {
-            panic!("{}: boot {salt}: the controller differs from the shell:\n{e}", v.label);
+            panic!(
+                "{}: boot {salt}: the controller differs from the shell:\n{e}",
+                v.label
+            );
         }
         golden.push(format!(
             "boot\t{}\t{salt}\t{}\t{}",
@@ -364,12 +377,12 @@ fn paths_of(items: &[Item], conv: &str, cov: &mut BTreeMap<String, usize>) {
                     }
                 }
             }
-            Item::Send { by, cmd, .. } if by.starts_with("live:") => {
-                if let Command::Run(Run { argv, .. }) = cmd {
-                    if argv.get(1).is_some_and(|a| a == "timeout") {
-                        hit("live-attempt");
-                    }
-                }
+            Item::Send {
+                by,
+                cmd: Command::Run(Run { argv, .. }),
+                ..
+            } if by.starts_with("live:") && argv.get(1).is_some_and(|a| a == "timeout") => {
+                hit("live-attempt")
             }
             Item::Got {
                 msg: Msg::Event(hydo_agent_proto::msg::Event::Done(d)),
@@ -414,7 +427,10 @@ fn the_feature_controllers_do_what_the_shell_extensions_do() {
             let r = match run_schedule(&b, &s) {
                 Ok(r) => r,
                 Err(e) => {
-                    let seam = e.seam.map(|x| x.name().to_string()).unwrap_or("other".into());
+                    let seam = e
+                        .seam
+                        .map(|x| x.name().to_string())
+                        .unwrap_or("other".into());
                     *counts.entry(format!("refused:{seam}")).or_default() += 1;
                     continue;
                 }
@@ -451,7 +467,7 @@ fn the_feature_controllers_do_what_the_shell_extensions_do() {
             stream.extend(stream_of(&r.run.fin.transcript));
             if let Some(rc) = &r.recovery {
                 let inputs = r.inputs.clone().unwrap();
-                let cmd = support::oracle_cmd(&v.plan, &inputs);
+                let cmd = support::oracle_cmd(&r.run.fin.transcript);
                 if let Err(e) = check(
                     &v.plan,
                     &rc.items,
@@ -606,7 +622,7 @@ fn kept() -> Vec<Kept> {
                     plan: v.plan.clone(),
                     items: rc.items.clone(),
                     conv: Conv::Recovery,
-                    cmd: support::oracle_cmd(&v.plan, i),
+                    cmd: support::oracle_cmd(&r.run.fin.transcript),
                     ids: (i.acked.clone(), i.failed.clone()),
                     at: Some(b.s0.2.clone()),
                 });
@@ -638,16 +654,21 @@ fn replace_report(items: &[Item], i: usize, f: impl Fn(&str) -> String) -> Vec<I
 /// conversation does not have the place.
 fn mistakes() -> Vec<(&'static str, Mistake)> {
     vec![
-        ("eventually: a wrong elapsed time in the record", |_, items| {
-            let i = pos(items, |it| report_starts(it, "HYDO-ASSERT {\"t\":\"eventually\""))?;
-            Some(replace_report(items, i, |l| {
-                l.replacen("\"elapsed_s\":\"", "\"elapsed_s\":\"1", 1)
-            }))
-        }),
+        (
+            "eventually: a wrong elapsed time in the record",
+            |_, items| {
+                let i = pos(items, |it| {
+                    report_starts(it, "HYDO-ASSERT {\"t\":\"eventually\"")
+                })?;
+                Some(replace_report(items, i, |l| {
+                    l.replacen("\"elapsed_s\":\"", "\"elapsed_s\":\"1", 1)
+                }))
+            },
+        ),
         ("eventually: late counted as satisfied", |_, items| {
-            let late = items.iter().any(
-                |it| matches!(it, Item::Note { line, .. } if line.contains(": late after ")),
-            );
+            let late = items
+                .iter()
+                .any(|it| matches!(it, Item::Note { line, .. } if line.contains(": late after ")));
             if !late {
                 return None;
             }
@@ -659,100 +680,132 @@ fn mistakes() -> Vec<(&'static str, Mistake)> {
                 l.replacen("\"ok\":false", "\"ok\":true", 1)
             }))
         }),
-        ("eventually: a monitor with the environment of a later moment", |_, items| {
-            let i = pos(items, |it| {
-                matches!(it, Item::Send { by, cmd: Command::Run(r), .. }
+        (
+            "eventually: a monitor with the environment of a later moment",
+            |_, items| {
+                let i = pos(items, |it| {
+                    matches!(it, Item::Send { by, cmd: Command::Run(r), .. }
                     if by.starts_with("live:") && r.env.as_ref().is_some_and(|e| e.iter().any(|x| x.starts_with("HYDO_SVC="))))
-            })?;
-            let mut v = items.to_vec();
-            if let Item::Send {
-                cmd: Command::Run(r),
-                ..
-            } = &mut v[i]
-            {
-                for e in r.env.as_mut().unwrap() {
-                    if e.starts_with("HYDO_SVC=") {
-                        e.push_str("-later");
+                })?;
+                let mut v = items.to_vec();
+                if let Item::Send {
+                    cmd: Command::Run(r),
+                    ..
+                } = &mut v[i]
+                {
+                    for e in r.env.as_mut().unwrap() {
+                        if e.starts_with("HYDO_SVC=") {
+                            e.push_str("-later");
+                        }
                     }
                 }
-            }
-            Some(v)
-        }),
-        ("eventually: resolved before its monitor ended", |k, items| {
-            // the monitor's last answer comes after the record that needed it
-            let rec = pos(items, |it| report_starts(it, "HYDO-ASSERT {\"t\":\"eventually\""))?;
-            let Item::Report { line, .. } = &items[rec] else {
-                unreachable!()
-            };
-            let inv = k
-                .plan
-                .invariants
-                .iter()
-                .find(|v| line.contains(&format!("\"id\":\"{}\",", v.id)))?;
-            let label = format!("live:{}", inv.key);
-            let last_send = items[..rec].iter().rposition(
+                Some(v)
+            },
+        ),
+        (
+            "eventually: resolved before its monitor ended",
+            |k, items| {
+                // the monitor's last answer comes after the record that needed it
+                let rec = pos(items, |it| {
+                    report_starts(it, "HYDO-ASSERT {\"t\":\"eventually\"")
+                })?;
+                let Item::Report { line, .. } = &items[rec] else {
+                    unreachable!()
+                };
+                let inv = k
+                    .plan
+                    .invariants
+                    .iter()
+                    .find(|v| line.contains(&format!("\"id\":\"{}\",", v.id)))?;
+                let label = format!("live:{}", inv.key);
+                let last_send = items[..rec].iter().rposition(
                 |it| matches!(it, Item::Send { by, cmd: Command::ClockGet(_), .. } if *by == label),
             )?;
-            let Item::Send { id, .. } = &items[last_send] else {
-                unreachable!()
-            };
-            let ans = pos(items, |it| matches!(it, Item::Got { msg: Msg::Reply(re, _), .. } if re == id))?;
-            if ans > rec {
-                return None;
-            }
-            let mut v = items.to_vec();
-            let a = v.remove(ans);
-            v.insert(rec, a);
-            Some(v)
-        }),
-        ("eventually: a monitor that does not read the uptime", |_, items| {
-            let i = pos(items, |it| {
-                matches!(it, Item::Send { by, cmd: Command::ClockGet(_), .. } if by.starts_with("live:"))
-            })?;
-            let mut v = items.to_vec();
-            v.remove(i);
-            Some(v)
-        }),
-        ("eventually: the recovery's anchors after its services started", |k, items| {
-            if k.conv != Conv::Recovery {
-                return None;
-            }
-            let a = pos(items, |it| {
-                matches!(it, Item::Note { line, .. } if line.contains("liveness anchor 'heal'"))
-            })?;
-            let sp = pos(items, |it| matches!(it, Item::Send { cmd: Command::Spawn(_), .. }))?;
-            if sp < a {
-                return None;
-            }
-            let mut v = items.to_vec();
-            let n = v.remove(a);
-            v.insert(sp, n);
-            Some(v)
-        }),
-        ("T=: the clock stepped by delta instead of set to now + delta", |k, items| {
-            if k.conv != Conv::Run {
-                return None;
-            }
-            let i = pos(items, |it| {
-                matches!(it, Item::Send { by, cmd: Command::ClockSet(ClockSet { sec: Some(_), .. }), .. } if by == "main")
-            })?;
-            let mut v = items.to_vec();
-            if let Item::Send {
-                cmd: Command::ClockSet(c),
-                ..
-            } = &mut v[i]
-            {
-                *c = ClockSet {
-                    sec: None,
-                    step: Some(c.sec.unwrap() % 1000),
+                let Item::Send { id, .. } = &items[last_send] else {
+                    unreachable!()
                 };
-            }
-            Some(v)
-        }),
+                let ans = pos(
+                    items,
+                    |it| matches!(it, Item::Got { msg: Msg::Reply(re, _), .. } if re == id),
+                )?;
+                if ans > rec {
+                    return None;
+                }
+                let mut v = items.to_vec();
+                let a = v.remove(ans);
+                v.insert(rec, a);
+                Some(v)
+            },
+        ),
+        (
+            "eventually: a monitor that does not read the uptime",
+            |_, items| {
+                let i = pos(
+                    items,
+                    |it| matches!(it, Item::Send { by, cmd: Command::ClockGet(_), .. } if by.starts_with("live:")),
+                )?;
+                let mut v = items.to_vec();
+                v.remove(i);
+                Some(v)
+            },
+        ),
+        (
+            "eventually: the recovery's anchors after its services started",
+            |k, items| {
+                if k.conv != Conv::Recovery {
+                    return None;
+                }
+                let a = pos(
+                    items,
+                    |it| matches!(it, Item::Note { line, .. } if line.contains("liveness anchor 'heal'")),
+                )?;
+                let sp = pos(items, |it| {
+                    matches!(
+                        it,
+                        Item::Send {
+                            cmd: Command::Spawn(_),
+                            ..
+                        }
+                    )
+                })?;
+                if sp < a {
+                    return None;
+                }
+                let mut v = items.to_vec();
+                let n = v.remove(a);
+                v.insert(sp, n);
+                Some(v)
+            },
+        ),
+        (
+            "T=: the clock stepped by delta instead of set to now + delta",
+            |k, items| {
+                if k.conv != Conv::Run {
+                    return None;
+                }
+                let i = pos(
+                    items,
+                    |it| matches!(it, Item::Send { by, cmd: Command::ClockSet(ClockSet { sec: Some(_), .. }), .. } if by == "main"),
+                )?;
+                let mut v = items.to_vec();
+                if let Item::Send {
+                    cmd: Command::ClockSet(c),
+                    ..
+                } = &mut v[i]
+                {
+                    *c = ClockSet {
+                        sec: None,
+                        step: Some(c.sec.unwrap() % 1000),
+                    };
+                }
+                Some(v)
+            },
+        ),
         ("T=: the wrong direction's record", |_, items| {
-            let i = pos(items, |it| {
-                matches!(it, Item::Report { line, .. } if line.contains("\"id\":\"fault.clock_back\",\"ok\""))
-            })?;
+            let i = pos(
+                items,
+                |it| matches!(it, Item::Report { line, .. } if line.contains("\"id\":\"fault.clock_back\",\"ok\"")),
+            )?;
             Some(replace_report(items, i, |l| {
                 l.replace("fault.clock_back", "fault.clock_fwd")
                     .replace("backwards", "forwards")
@@ -767,9 +820,10 @@ fn mistakes() -> Vec<(&'static str, Mistake)> {
             Some(v)
         }),
         ("B=: the value written without its newline", |_, items| {
-            let i = pos(items, |it| {
-                matches!(it, Item::Send { cmd: Command::Write(w), .. } if w.path == "/tmp/hydo-buggify")
-            })?;
+            let i = pos(
+                items,
+                |it| matches!(it, Item::Send { cmd: Command::Write(w), .. } if w.path == "/tmp/hydo-buggify"),
+            )?;
             let mut v = items.to_vec();
             if let Item::Send {
                 cmd: Command::Write(w),
@@ -781,90 +835,123 @@ fn mistakes() -> Vec<(&'static str, Mistake)> {
             Some(v)
         }),
         ("B=: written after the fault declarations", |_, items| {
-            let i = pos(items, |it| {
-                matches!(it, Item::Send { cmd: Command::Write(w), .. } if w.path == "/tmp/hydo-buggify")
+            let i = pos(
+                items,
+                |it| matches!(it, Item::Send { cmd: Command::Write(w), .. } if w.path == "/tmp/hydo-buggify"),
+            )?;
+            let d = pos(items, |it| {
+                report_starts(
+                    it,
+                    "HYDO-ASSERT-DECL {\"t\":\"reachable\",\"id\":\"fault.paused\"",
+                )
             })?;
-            let d = pos(items, |it| report_starts(it, "HYDO-ASSERT-DECL {\"t\":\"reachable\",\"id\":\"fault.paused\""))?;
             let mut v = items.to_vec();
             let w = v.remove(i);
             v.insert(d, w);
             Some(v)
         }),
-        ("clock_after_cut: the acked line without the clock", |_, items| {
-            let i = pos(items, |it| {
-                report_starts(it, "hydo-explore-acked:")
-                    && matches!(it, Item::Report { line, .. } if line.contains("clock="))
-            })?;
-            Some(replace_report(items, i, |l| {
-                l.split(' ')
-                    .filter(|t| !t.starts_with("clock="))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            }))
-        }),
-        ("clock_after_cut: the clock read before failed_ids", |k, items| {
-            if k.plan.clock_after_cut.is_none() || k.conv != Conv::Run {
-                return None;
-            }
-            let acked = pos(items, |it| report_starts(it, "hydo-explore-acked:"))?;
-            let cg = items[..acked].iter().rposition(
+        (
+            "clock_after_cut: the acked line without the clock",
+            |_, items| {
+                let i = pos(items, |it| {
+                    report_starts(it, "hydo-explore-acked:")
+                        && matches!(it, Item::Report { line, .. } if line.contains("clock="))
+                })?;
+                Some(replace_report(items, i, |l| {
+                    l.split(' ')
+                        .filter(|t| !t.starts_with("clock="))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                }))
+            },
+        ),
+        (
+            "clock_after_cut: the clock read before failed_ids",
+            |k, items| {
+                if k.plan.clock_after_cut.is_none() || k.conv != Conv::Run {
+                    return None;
+                }
+                let acked = pos(items, |it| report_starts(it, "hydo-explore-acked:"))?;
+                let cg = items[..acked].iter().rposition(
                 |it| matches!(it, Item::Send { by, cmd: Command::ClockGet(_), .. } if by == "main"),
             )?;
-            let rd = items[..cg].iter().rposition(
-                |it| matches!(it, Item::Send { by, cmd: Command::Read(_), .. } if by == "main"),
-            )?;
-            let mut v = items.to_vec();
-            let c = v.remove(cg);
-            v.insert(rd, c);
-            Some(v)
-        }),
-        ("clock_after_cut: the recovery clock without the time off", |k, items| {
-            let after = k.plan.clock_after_cut?;
-            if k.conv != Conv::Recovery {
-                return None;
-            }
-            let sets: Vec<usize> = items
-                .iter()
-                .enumerate()
-                .filter(|(_, it)| matches!(it, Item::Send { cmd: Command::ClockSet(_), .. }))
-                .map(|(i, _)| i)
-                .collect();
-            let i = *sets.get(1)?;
-            let mut v = items.to_vec();
-            if let Item::Send {
-                cmd: Command::ClockSet(c),
-                ..
-            } = &mut v[i]
-            {
-                c.sec = c.sec.map(|s| s - after);
-            }
-            Some(v)
-        }),
-        ("clock_after_cut: the clock written among the recovered ids", |k, items| {
-            k.plan.clock_after_cut?;
-            if k.conv != Conv::Recovery {
-                return None;
-            }
-            let i = pos(items, |it| {
-                matches!(it, Item::Send { cmd: Command::Write(w), .. } if w.path == "/tmp/hydo/acked")
-            })?;
-            let mut v = items.to_vec();
-            let Item::Send { n, by, cmd: Command::Write(w), .. } = v[i].clone() else {
-                unreachable!()
-            };
-            let mut w2 = w.clone();
-            w2.data = "clock=1767225600\n".into();
-            v.insert(
-                i + 1,
-                Item::Send {
+                let rd = items[..cg].iter().rposition(
+                    |it| matches!(it, Item::Send { by, cmd: Command::Read(_), .. } if by == "main"),
+                )?;
+                let mut v = items.to_vec();
+                let c = v.remove(cg);
+                v.insert(rd, c);
+                Some(v)
+            },
+        ),
+        (
+            "clock_after_cut: the recovery clock without the time off",
+            |k, items| {
+                let after = k.plan.clock_after_cut?;
+                if k.conv != Conv::Recovery {
+                    return None;
+                }
+                let sets: Vec<usize> = items
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, it)| {
+                        matches!(
+                            it,
+                            Item::Send {
+                                cmd: Command::ClockSet(_),
+                                ..
+                            }
+                        )
+                    })
+                    .map(|(i, _)| i)
+                    .collect();
+                let i = *sets.get(1)?;
+                let mut v = items.to_vec();
+                if let Item::Send {
+                    cmd: Command::ClockSet(c),
+                    ..
+                } = &mut v[i]
+                {
+                    c.sec = c.sec.map(|s| s - after);
+                }
+                Some(v)
+            },
+        ),
+        (
+            "clock_after_cut: the clock written among the recovered ids",
+            |k, items| {
+                k.plan.clock_after_cut?;
+                if k.conv != Conv::Recovery {
+                    return None;
+                }
+                let i = pos(
+                    items,
+                    |it| matches!(it, Item::Send { cmd: Command::Write(w), .. } if w.path == "/tmp/hydo/acked"),
+                )?;
+                let mut v = items.to_vec();
+                let Item::Send {
                     n,
-                    id: 999_999,
                     by,
-                    cmd: Command::Write(w2),
-                },
-            );
-            Some(v)
-        }),
+                    cmd: Command::Write(w),
+                    ..
+                } = v[i].clone()
+                else {
+                    unreachable!()
+                };
+                let mut w2 = w.clone();
+                w2.data = "clock=1767225600\n".into();
+                v.insert(
+                    i + 1,
+                    Item::Send {
+                        n,
+                        id: 999_999,
+                        by,
+                        cmd: Command::Write(w2),
+                    },
+                );
+                Some(v)
+            },
+        ),
     ]
 }
 
@@ -892,7 +979,8 @@ fn the_shell_model_catches_mistakes_in_the_features() {
                 }
             }
         }
-        let (at, e) = first.unwrap_or_else(|| panic!("no conversation has the place for \"{what}\""));
+        let (at, e) =
+            first.unwrap_or_else(|| panic!("no conversation has the place for \"{what}\""));
         caught.push(format!(
             "{what}: caught in {n} conversations (first: {at}: {})",
             e.lines().next().unwrap_or("")

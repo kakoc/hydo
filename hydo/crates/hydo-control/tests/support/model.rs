@@ -1371,8 +1371,7 @@ pub fn check(
                 || by == "runner"
                 || (by == "pause-timer" && m.jobs.pause.is_some())
                 || (by == "kill-timer" && m.jobs.kill.is_some())
-                || m
-                    .live_jobs
+                || m.live_jobs
                     .iter()
                     .any(|j| by == format!("live:{}", plan.invariants[j.i].key))
                 || m.jobs

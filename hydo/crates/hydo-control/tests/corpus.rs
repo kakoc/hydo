@@ -314,7 +314,7 @@ fn the_core_controller_does_what_the_shell_init_does() {
                 let Some(Ending::PowerCut { acked, failed }) = r.run.fin.ending.clone() else {
                     unreachable!()
                 };
-                let cmd = support::oracle_cmd(&plan, r.inputs.as_ref().unwrap());
+                let cmd = support::oracle_cmd(&r.run.fin.transcript);
                 if let Err(e) = check(
                     &plan,
                     &rc.items,

@@ -187,13 +187,21 @@ fn live_resolve(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             r: "expired",
             el: "?".into(),
             rc: "?".into(),
-            out: fx.shared.last_out.get(&inv.key).cloned().unwrap_or_default(),
+            out: fx
+                .shared
+                .last_out
+                .get(&inv.key)
+                .cloned()
+                .unwrap_or_default(),
         });
         let det = inv_detail(&res.out);
         let (ok, line) = match res.r {
             "ok" => (
                 true,
-                format!("satisfied {}s after {a} (within {}s): {det}", res.el, lv.within),
+                format!(
+                    "satisfied {}s after {a} (within {}s): {det}",
+                    res.el, lv.within
+                ),
             ),
             "late" => (
                 false,

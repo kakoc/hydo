@@ -610,7 +610,11 @@ impl Fake {
     fn live_attempt(&mut self, argv: &[String]) -> (u64, u32, String) {
         let limit: u64 = argv.get(2).and_then(|x| x.parse().ok()).unwrap_or(1);
         let script = argv.get(6).cloned().unwrap_or_default();
-        let k = self.world.evals.entry(format!("live:{script}")).or_default();
+        let k = self
+            .world
+            .evals
+            .entry(format!("live:{script}"))
+            .or_default();
         *k += 1;
         let k = *k;
         let need = self.h(&["need", &script]) % 7;
