@@ -40,14 +40,22 @@ explorer, and no product behaviour changed.
 6. **Times.** Deadlines (`kill_after_ms`, a probe's `every_ms`/`deadline_ms`, a freeze's
    `dur_ms`) are CLOCK_MONOTONIC ms in the guest; the agent never reports times except in
    `clock_get` and the freeze trace file.
-7. **The engines cannot boot an agent image yet:** `hvx_explore one`/`serve` and `hvmx` wait for
-   the shell init's S0/S1 markers before any lock-step control starts. Booting an image whose
-   PID 1 is the agent needs either a controlled boot phase in the engines or markers from the
-   host's first commands (B3/C1).
+7. **Booting an agent image (done in M121):** `hydo build --control agent` stages the agent as
+   the first process and writes `/etc/hydo/control` = `agent 1`; `hydo_engine::image::control`
+   reads it. `Engine::start_controlled` (`--control boot serve`) runs lock-step control from the
+   VM's first instruction (stops `phase=boot`); the host takes `SNAP S0` (M121's check: at the
+   hello's stop) and `SNAP S1` (after provisioning) where it decides, ENDs the boot, and the
+   worker's CTL runs restore that S1 and type nothing (the guest part is `run`).
+   `Engine::one_controlled` (`--control boot one`) is the fresh-boot counterpart: the host's
+   `SNAP S1` there arms the schedule's host part and starts the workload phase at the same stop.
+   Rule used by the check (`hydo-engine/examples/agent_boot_check.rs`): send `sync` right after
+   every SNAP of a snapshot point, in the straight run too, so a continuation and the straight
+   run type the same bytes at the same stop. docs/HISTORY.md "Milestone 121".
 
 ## Left open
 
 - No `froze`/`resumed`/`warn` event and no successful `clock_set` in an example transcript: the
   first needs a netfilter queue (root; the bare-metal machine's unprivileged user namespaces are blocked), the
   second a guest. A transcript from an agent image driven by the controller should add them.
-- The hvx-boot of an agent image, the controller (B1/B2), `hydo-build --control agent` (B3).
+- The controller (B1/B2). (The boot of an agent image in both engines and `hydo-build --control
+  agent` (B3) are M121; a successful `clock_set` in a guest is in M121's check transcripts.)

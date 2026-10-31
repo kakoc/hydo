@@ -12,7 +12,9 @@
 //!    switched per seed exactly as identity.rs does; hvx, and hvm with and without a data disk
 //!    and tc), plus a few written here for the paths the explorer never draws for a manifest
 //!    (X=, an unknown service, a repeated letter, a knob at its default, an unknown knob), kept
-//!    when the core controller drives them (the others name their seam), one per guest part;
+//!    when the core controller drives them (the others name their seam), one per guest part; a
+//!    manifest with a fake world (M125) also gets every point of `--sweep protocol` and schedules
+//!    written for the H= paths (`protocol_schedules`);
 //! 3. each runs from S1 (and, after a power cut, its recovery boot from S0); both conversations
 //!    are checked against the shell model, the controller's thread by thread;
 //! 4. the run's transcript is typed again by the ReplayController on the same scripted guest, and
@@ -172,6 +174,75 @@ fn written_here(p: &Plan) -> Vec<String> {
     v
 }
 
+/// For a manifest with a fake world (M125): every point of the explorer's `--sweep protocol`
+/// (with its per-point streams, as identity.rs renders them), the first points again with a power
+/// cut inside their window, and schedules written for the extension's other paths (unknown
+/// targets, empty and reversed windows, overlapping and repeated tokens, windows past the last
+/// step, faults together with kills, knobs and cuts).
+fn protocol_schedules(m: &str, p: &Plan) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut ex = Ex::default();
+    let sp = Space::from_path(&top().join(m)).expect("the explorer reads the manifest");
+    ex.grpc_targets = grpc_targets(Some(&sp.m));
+    sp.apply(&mut ex);
+    if ex
+        .space
+        .as_ref()
+        .is_some_and(|sp| sp.check_sweep("protocol").is_ok())
+    {
+        let pts = ex.sweep("protocol").expect("the protocol sweep");
+        for (i, (_, s)) in pts.into_iter().enumerate() {
+            let text = ex.render(&ex.add_point_streams(s, i as u64 + 1));
+            if i < 24 {
+                // the same point with a power cut while its rule is on
+                let (host, guest) = text.split_once('|').unwrap();
+                let host = host.replace("disk=none", "disk=cut");
+                let at = guest
+                    .split_whitespace()
+                    .find_map(|t| t.strip_prefix("H="))
+                    .and_then(|h| h.split_once('@'))
+                    .and_then(|(_, r)| r.split_once('-'))
+                    .map(|(a, _)| a.parse::<i64>().unwrap() + 1)
+                    .unwrap_or(1);
+                out.push(format!("{host}|{guest} C={at}"));
+            }
+            out.push(text);
+        }
+    }
+    let w = p.world.as_ref().unwrap();
+    let t0 = &w.targets[0];
+    let t1 = w.targets.last().unwrap();
+    let svc = &p.services[0].name;
+    let n = p.steps;
+    let mut v = vec![
+        format!("disk=none | run H={t0}@1-3:drop"),
+        format!("disk=cut | run H={t0}@1-3:drop C=2"),
+        format!("disk=cut | run H={t1}@0-1:reset C=5"),
+        format!("disk=none | run H=nosuch@1-2:drop"),
+        format!("disk=none | run H=nosuch.route@1-2:drop H={t0}@2-3:drop"),
+        format!("disk=none | run H={t0}@3-3:drop"),
+        format!("disk=none | run H={t0}@4-2:drop"),
+        format!("disk=none | run H={t0}@0-{n}:delay=100 H={t1}@2-5:reset,p=50"),
+        format!("disk=none | run H={t0}@2-{}:drop", n + 5),
+        format!("disk=none | run K={svc}@2+2 H={t0}@1-4:drop"),
+        format!("disk=none | run H={t0}@2-4:drop H={t0}@2-4:drop"),
+        format!("disk=cut | run H={t0}@1-4:drop K={svc}@2+1 C=3"),
+        format!("disk=cut | run H={t1}@1-{n}:drop P={svc}@2+1 C={}", n - 1),
+        format!("disk=none | run P={svc}@1~10:300 H={t1}@1-2:drop"),
+        format!("rb=1 | run H={t0}@1-2:drop"),
+        format!("disk=cut | run H={t0}@0-2:drop C=0"),
+        format!("disk=cut | run H={t0}@0-2:drop C={n}"),
+    ];
+    if let Some(k) = p.knobs.first() {
+        v.push(format!(
+            "disk=none | run H={t1}@1-2:drop {}=zz H={t0}@3-4:drop",
+            k.token
+        ));
+    }
+    out.extend(v);
+    out
+}
+
 fn class(t: &Transcript) -> &'static str {
     match t.ending() {
         Some(Ending::Verdict(v)) if v.starts_with("HYDO-ORACLE: OK") => "ok",
@@ -259,6 +330,9 @@ fn the_core_controller_does_what_the_shell_init_does() {
         let mut texts = identity_schedules(&m, seeds);
         let n_identity = texts.len();
         texts.extend(written_here(&plan));
+        if plan.world.is_some() {
+            texts.extend(protocol_schedules(&m, &plan));
+        }
         for (k, text) in texts.iter().enumerate() {
             let s = Schedule::parse(text).unwrap_or_else(|e| panic!("{text}: {e}"));
             if !seen.insert(s.guest_text()) {
@@ -311,10 +385,29 @@ fn the_core_controller_does_what_the_shell_init_does() {
             stream.push(format!("S\t{text}"));
             stream.extend(stream_of(&r.run.fin.transcript));
             if let Some(rc) = &r.recovery {
-                let Some(Ending::PowerCut { acked, failed }) = r.run.fin.ending.clone() else {
+                let Some(Ending::PowerCut {
+                    acked: ids,
+                    failed: f,
+                    world,
+                }) = r.run.fin.ending.clone()
+                else {
                     unreachable!()
                 };
-                let cmd = support::oracle_cmd(&r.run.fin.transcript);
+                // the recovery is checked against the oracle line the engine builds today from
+                // the report (with a fake world, its records are words of the acked line; with
+                // guest.clock_after_cut, so is `clock=<epoch>`, which is not an id)
+                let (cmd, acked, failed) = support::oracle_of(&r.run.items);
+                let words: Vec<String> = acked
+                    .iter()
+                    .filter(|w| plan.clock_after_cut.is_none() || !w.starts_with("clock="))
+                    .cloned()
+                    .collect();
+                assert_eq!(
+                    (ids.iter().chain(&world).cloned().collect::<Vec<_>>(), f),
+                    (words, failed.clone()),
+                    "{}",
+                    ctx("the hand-over differs from the report's acked and failed lines")
+                );
                 if let Err(e) = check(
                     &plan,
                     &rc.items,

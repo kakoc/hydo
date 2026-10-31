@@ -219,6 +219,13 @@ fn variants() -> Vec<Variant> {
         "hydo/onboard/examples/rust-kv/hydo.yaml",
         &|p| p.clock_after_cut = Some(1),
     );
+    // liveness, the clock and the fake world together (M125 merged): at a cut the acked line is
+    // the ids, then clock=, then the world's records
+    add(
+        "shop+clock_after_cut",
+        "hydo/onboard/examples/shop/hydo.yaml",
+        &|p| p.clock_after_cut = Some(600),
+    );
     v
 }
 
@@ -356,6 +363,16 @@ fn paths_of(items: &[Item], conv: &str, cov: &mut BTreeMap<String, usize>) {
                 }
                 if line.starts_with("hydo-explore-acked:") && line.contains("clock=") {
                     hit("cut-clock");
+                    // with a fake world: the ids, then clock=, then the records (all after it)
+                    let words: Vec<&str> = line.split_whitespace().collect();
+                    let c = words.iter().position(|w| w.starts_with("clock=")).unwrap();
+                    if words.iter().any(|w| w.starts_with("w:")) {
+                        assert!(
+                            words.iter().position(|w| w.starts_with("w:")).unwrap() > c,
+                            "a world record before the clock: {line}"
+                        );
+                        hit("cut-clock-world");
+                    }
                 }
                 if line.starts_with("HYDO-ORACLE: ERROR clock jump not applied") {
                     hit("T-not-applied");
@@ -467,7 +484,7 @@ fn the_feature_controllers_do_what_the_shell_extensions_do() {
             stream.extend(stream_of(&r.run.fin.transcript));
             if let Some(rc) = &r.recovery {
                 let inputs = r.inputs.clone().unwrap();
-                let cmd = support::oracle_cmd(&r.run.fin.transcript);
+                let cmd = support::oracle_of(&r.run.items).0;
                 if let Err(e) = check(
                     &v.plan,
                     &rc.items,
@@ -563,6 +580,7 @@ fn the_feature_controllers_do_what_the_shell_extensions_do() {
         "run:T-not-applied",
         "run:clock-set-refused",
         "run:cut-clock",
+        "run:cut-clock-world",
         "run:buggify",
         "recovery:eventually-ok",
         "recovery:eventually-not-ok",
@@ -622,7 +640,7 @@ fn kept() -> Vec<Kept> {
                     plan: v.plan.clone(),
                     items: rc.items.clone(),
                     conv: Conv::Recovery,
-                    cmd: support::oracle_cmd(&r.run.fin.transcript),
+                    cmd: support::oracle_of(&r.run.items).0,
                     ids: (i.acked.clone(), i.failed.clone()),
                     at: Some(b.s0.2.clone()),
                 });

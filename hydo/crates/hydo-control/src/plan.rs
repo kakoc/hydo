@@ -147,7 +147,57 @@ pub struct Plan {
     /// `buggify: true`: a B= token is then written to /tmp/hydo-buggify (features/buggify.rs);
     /// without it B= is an unknown knob.
     pub buggify: bool,
+    /// The fake outside world (`fakes:` / `proxies:`, driven by `schedule/fakes.rs`).
+    pub world: Option<PlanWorld>,
     pub layout: Layout,
+}
+
+/// The fake outside world of a manifest with `fakes:` or `proxies:` (M89): one `hydo-world`
+/// process serves every fake service and every fault proxy (manifest.sh's HYDO_WORLD and
+/// HYDO_WORLD_TARGETS; hydo-build writes what it serves).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlanWorld {
+    /// The program (`$HYDO_WORLD`).
+    pub bin: String,
+    /// What it serves (`/etc/hydo/world.json`).
+    pub config: String,
+    /// Every name an `H=` token may name: each fake, then each proxy, each followed by its
+    /// routes as `<name>.<route>` (hydo-build's `world_targets`).
+    pub targets: Vec<String>,
+}
+
+impl PlanWorld {
+    /// hydo-build's `has_world` and `world_targets` of a validated manifest.
+    pub fn of(d: &Value) -> Option<PlanWorld> {
+        let has = |k: &str| get(d, k).is_some_and(py::truthy);
+        if !has("fakes") && !has("proxies") {
+            return None;
+        }
+        let list = |k: &str| {
+            d.get(k)
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default()
+        };
+        let mut targets = Vec::new();
+        for e in list("fakes").iter().chain(list("proxies").iter()) {
+            let n = py::str_of(&e["name"]);
+            targets.push(n.clone());
+            for r in e
+                .get("routes")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                targets.push(format!("{n}.{}", py::str_of(&r["name"])));
+            }
+        }
+        Some(PlanWorld {
+            bin: "/bin/hydo-world".into(),
+            config: "/etc/hydo/world.json".into(),
+            targets,
+        })
+    }
 }
 
 fn get<'a>(v: &'a Value, k: &str) -> Option<&'a Value> {
@@ -228,9 +278,6 @@ impl Plan {
         }
         if m.network.as_deref() == Some("bridge") {
             return Err(Unsupported::seam(Seam::NetNamespaces, "network: bridge"));
-        }
-        if !m.fakes.is_empty() || !m.proxies.is_empty() {
-            return Err(Unsupported::seam(Seam::Fakes, "fakes:/proxies:"));
         }
         if m.faults
             .as_ref()
@@ -360,6 +407,7 @@ impl Plan {
             invariants,
             knobs,
             buggify: m.buggify,
+            world: PlanWorld::of(d),
             layout: Layout::default(),
         })
     }

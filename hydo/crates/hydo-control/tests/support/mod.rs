@@ -340,40 +340,6 @@ pub struct Ran {
     pub inputs: Option<RecoveryInputs>,
 }
 
-/// The recovery boot's `oracle` command line as a shell image gets it: hvx_explore's oracle_cmd
-/// copies the run's `hydo-explore-acked:` line (with hydo-init-clock.sh's `clock=<epoch>` after
-/// the ids), then ` failed` and the `hydo-explore-failed:` line. Built from the run's report, not
-/// from the controller's RecoveryInputs, so the shell model checks what the controller carried.
-pub fn oracle_cmd(run: &Transcript) -> String {
-    let line = |p: &str| -> Vec<String> {
-        run.records
-            .iter()
-            .filter_map(|r| match r {
-                Record::Report { line, .. } => line.strip_prefix(p),
-                _ => None,
-            })
-            .next_back()
-            .unwrap_or("")
-            .split_whitespace()
-            .map(str::to_string)
-            .collect()
-    };
-    let (acked, failed) = (line("hydo-explore-acked:"), line("hydo-explore-failed:"));
-    let mut cmd = String::from("oracle");
-    for id in &acked {
-        cmd.push(' ');
-        cmd.push_str(id);
-    }
-    if !failed.is_empty() {
-        cmd.push_str(" failed");
-        for id in &failed {
-            cmd.push(' ');
-            cmd.push_str(id);
-        }
-    }
-    cmd
-}
-
 pub fn run_schedule(b: &Booted, s: &Schedule) -> Result<Ran, Unsupported> {
     let mut ctl = ScheduleController::run(b.plan.clone(), s, &b.s1.2)?;
     let salt = s.to_string();
@@ -396,9 +362,13 @@ pub fn run_schedule(b: &Booted, s: &Schedule) -> Result<Ran, Unsupported> {
     .transcript;
     let inputs = ctl.recovery_inputs().cloned();
     let recovery = match &run.fin.ending {
-        Some(Ending::PowerCut { acked, failed }) => {
+        Some(Ending::PowerCut {
+            acked,
+            failed,
+            world,
+        }) => {
             let i = inputs.as_ref().expect("a power cut hands its inputs over");
-            assert_eq!((&i.acked, &i.failed), (acked, failed));
+            assert_eq!((&i.acked, &i.failed, &i.world), (acked, failed, world));
             let mut rc = ScheduleController::recovery_from(b.plan.clone(), i, &b.s0.2)?;
             Some(converse(
                 Fake::resume(&b.s0.0, &format!("{salt} recovery"), cad),
@@ -415,6 +385,37 @@ pub fn run_schedule(b: &Booted, s: &Schedule) -> Result<Ran, Unsupported> {
         replay,
         inputs,
     })
+}
+
+/// The recovery boot's `oracle` command as the engine builds it today from a run's report
+/// (hvx_explore.c `oracle_cmd`: the words of the last `hydo-explore-acked:` line, then `failed`
+/// and those of the `hydo-explore-failed:` line when it has any), with its two word lists.
+pub fn oracle_of(items: &[Item]) -> (String, Vec<String>, Vec<String>) {
+    let last = |prefix: &str| -> Vec<String> {
+        items
+            .iter()
+            .filter_map(|i| match i {
+                Item::Report { line, .. } => line.strip_prefix(prefix),
+                _ => None,
+            })
+            .next_back()
+            .map(|l| l.split_whitespace().map(str::to_string).collect())
+            .unwrap_or_default()
+    };
+    let (acked, failed) = (last("hydo-explore-acked:"), last("hydo-explore-failed:"));
+    let mut cmd = String::from("oracle");
+    for i in &acked {
+        cmd.push(' ');
+        cmd.push_str(i);
+    }
+    if !failed.is_empty() {
+        cmd.push_str(" failed");
+        for i in &failed {
+            cmd.push(' ');
+            cmd.push_str(i);
+        }
+    }
+    (cmd, acked, failed)
 }
 
 /// A golden file: `#` comments, `input\t<path>\t<sha256>` pins, then `<key>\t...` lines.

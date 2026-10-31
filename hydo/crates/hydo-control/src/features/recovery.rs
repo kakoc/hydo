@@ -12,7 +12,7 @@
 //! console line.
 //!
 //! A carried value is a field here, never a token among the ids: `acked` and `failed` hold ids
-//! only. The fakes feature adds the carried world as another field.
+//! only. The fake world's records (M125) are `world`, as in [`crate::Ending::PowerCut`].
 
 /// The recovery conversation's inputs.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -25,6 +25,9 @@ pub struct RecoveryInputs {
     /// (None without the feature, or when the clock could not be read: the recovery boot then
     /// starts from guest.clock_start, as hydo-init-clock.sh does for a missing token).
     pub clock: Option<i64>,
+    /// `fakes:`/`proxies:`: the fake world's records the first boot carried (`w:` lines, the
+    /// `world` of [`crate::Ending::PowerCut`]; empty without a world).
+    pub world: Vec<String>,
 }
 
 /// The values a recovery conversation is given besides the ids.
