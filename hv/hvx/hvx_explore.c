@@ -184,7 +184,19 @@
  *       so its stops, typed=, inh= and fingerprint are a CTL run's; END prints "RESULT one".
  * The kernel command line gets " quiet loglevel=1" (the agent's framed lines share the console).
  * The shell markers are never looked for, and the recovery boot of a guest C= does not exist (the
- * guest part is empty); a power cut is a host decision for the controller (not done yet).
+ * guest part is empty): the end of the workload and a power cut are the host's (milestone 126),
+ * with two more host lines at a stop of an agent image's workload phase:
+ *   DISKOFF   the workload has ended (what the shell init's workload marker is to a RUN): answers
+ *             "OK diskoff at=<icount> cut=<0|1>"; when the host then says CONT, the engine does what
+ *             it does at that marker -- the workload fingerprint (wfp), the timing tokens and the
+ *             disk faults off -- and goes on in phase=check (a start stop, nothing typed), or, for a
+ *             cf= schedule (cut=1), carries the flushed disk into the recovery VM as below
+ *   CUT       a power cut here: answers "OK cut at=<icount>" and ends the stop (as CONT does); the
+ *             workload fingerprint is taken, only the flushed data disk survives, and the run goes
+ *             on in a fresh VM restored from the host's snapshot S0 (phase=recovery, a start stop;
+ *             queued input DROPped, nothing typed): the host's recovery conversation
+ * END in the check or recovery phase fingerprints there; the RESULT's fp is then fnv(wfp, that),
+ * as for a RUN; END in the workload phase gives fp = fnv(wfp, wfp), as before.
  * Caution (M118): the guest is not independent of where run calls return. The same input at the
  * same icount gives another fingerprint when the calls before it were capped (a send queued
  * early) than when they were not (typed at once at a stop): Linux's interrupt entropy pool
@@ -601,6 +613,7 @@ struct ctl_book {		/* what a snapshot carries besides the VM */
 static struct {
 	int on, start, capped;
 	int boot_s1;		/* --control boot one: SNAP S1 taken in the boot phase (M121) */
+	int wdone, cut;		/* M126: DISKOFF/CUT given (1), then acted on (2); CUT: a power cut */
 	char tag[64];
 	const char *phase;
 	uint64_t at;		/* icount of the current stop */
@@ -775,9 +788,11 @@ static void ctl_snap_cmd(struct boot *b, char *arg)
 	if (strcmp(C.phase, "workload") && strcmp(C.phase, "boot")) {
 		printf("ERR snap %s only in the workload or boot phase\n", name); return;
 	}
-	if (sc->tj_on || sc->xt_on || sc->pp || sc->pptsc || sc->q_on || sc->cf_on) {
+	/* the timing tokens are armed from S1 on: a boot-phase SNAP (S0, S1) is not affected (M126) */
+	if (strcmp(C.phase, "boot") && (sc->tj_on || sc->xt_on || sc->pp || sc->pptsc || sc->q_on || sc->cf_on)) {
 		printf("ERR snap %s not for tj/xt/pp/q/cf schedules\n", name); return;
 	}
+	if (C.wdone) { printf("ERR snap %s after DISKOFF/CUT\n", name); return; }
 	for (i = 0; i < C.k.ns; i++)
 		if (C.k.s[i].state == CS_TYPED)
 			il += (size_t)snprintf(ids + il, il < sizeof(ids) ? sizeof(ids) - il : 0, "%s%llu",
@@ -887,6 +902,18 @@ static int ctl_stop(struct boot *b, const char *why)
 			if (!done) printf("ERR ack %llu unknown\n", id);
 		} else if (!strncmp(ln, "SNAP ", 5)) {
 			ctl_snap_cmd(b, ln + 5);
+		} else if (!strcmp(ln, "DISKOFF") || !strcmp(ln, "CUT")) {	/* M126, see the header */
+			int cut = ln[0] == 'C';
+			const char *no = !g_ctl_boot ? "only for an agent image (--control boot)" :
+					 strcmp(C.phase, "workload") ? "only in the workload phase" :
+					 C.wdone ? "after DISKOFF/CUT" :
+					 cut && C.sc->cut ? "for a cf= schedule (its DISKOFF is the cut)" :
+					 cut && !ctl_find("S0") ? "without a snapshot S0" : NULL;
+			if (no) { printf("ERR %s %s\n", cut ? "cut" : "diskoff", no); fflush(stdout); continue; }
+			C.wdone = 1;
+			C.cut = cut;
+			if (cut) { printf("OK cut at=%llu\n", (unsigned long long)C.at); fflush(stdout); return 0; }
+			printf("OK diskoff at=%llu cut=%d\n", (unsigned long long)C.at, C.sc->cut ? 1 : 0);
 		} else {
 			a = ln;
 			printf("ERR unknown command ");
@@ -927,6 +954,7 @@ static int run_until_any(struct boot *b, const char *const *mk, int n, size_t fr
 		C.at = ctl_icount(b);
 		if (ctl_stop(b, why)) return -3;
 		if (C.boot_s1) return -4;	/* M121: --control boot one, S1 taken here */
+		if (C.wdone == 1) { C.wdone = 2; return -7; }	/* M126: DISKOFF or CUT */
 	}
 	/* a marker may already be there (a branch request whose first stop already reached
 	 * the end of the workload): stop where we are, as a single run would have */
@@ -982,6 +1010,7 @@ static int run_until_any(struct boot *b, const char *const *mk, int n, size_t fr
 						  ctl_due() ? "send" : "cadence";
 				if (ctl_stop(b, why)) return -3;
 				if (C.boot_s1) return -4;
+				if (C.wdone == 1) { C.wdone = 2; return -7; }
 			}
 		}
 		for (i = 0; i < n; i++)
@@ -1457,6 +1486,7 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 	pht = PH_T();
 	r = run_until_any(b, wk, g_ctl_boot ? 0 : 2, from);	/* an agent image prints no marker */
 	PH_ADD(PH_WORK, pht);
+	if (r == -7) r = 0;		/* M126: the host's DISKOFF/CUT is the agent image's workload marker */
 	if (r < 0 && r != -3) { snprintf(verdict, sizeof(verdict), r == -2 ? "TIMEOUT workload" : "ERROR vm workload"); goto out; }
 	if (ph_on()) {
 		ph_read(b, &pc1);
@@ -1543,15 +1573,15 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 	pht = PH_T();
 	save_console(b, from, tag, "");
 	PH_ADD(PH_SAVECON, pht);
-	if (!sc->cut) {			/* same boot: faults off, heal, recover, check */
+	if (!sc->cut && !C.cut) {	/* same boot: faults off, heal, recover, check */
 		size_t f2 = b->ulen;
 		phase = "check";
-		if (set_fault(b, 0, 0, 0) || put_input(b, "go\n")) { snprintf(verdict, sizeof(verdict), "ERROR harness go"); goto out; }
+		if (set_fault(b, 0, 0, 0) || (!g_ctl_boot && put_input(b, "go\n"))) {	/* agent: the host types */ snprintf(verdict, sizeof(verdict), "ERROR harness go"); goto out; }
 		if (ph_on()) ph_read(b, &pc1);
 		pht = PH_T();
 		C.phase = "check";
 		C.start = 1;
-		r = run_until_any(b, fin, 1, f2);
+		r = run_until_any(b, fin, g_ctl_boot ? 0 : 1, f2);
 		PH_ADD(PH_CHECK, pht);
 		if (r < 0 && r != -3) { snprintf(verdict, sizeof(verdict), r == -2 ? "TIMEOUT check" : "ERROR vm check"); goto out_save; }
 		if (ph_on()) {
@@ -1575,7 +1605,10 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 	{	/* power cut: only the flushed disk bytes survive; recover in a fresh VM from S0 */
 		struct savebuf durable;
 		struct boot ob;
+		struct ctl_snap *hs0 = g_ctl_boot ? ctl_find("S0") : NULL;	/* M126: the host's S0 */
 		phase = "recovery";
+		if (g_ctl_boot && !hs0) { snprintf(verdict, sizeof(verdict), "ERROR harness no snapshot S0"); goto out; }
+		if (hs0) s0 = &hs0->sn;
 		pht = PH_T();
 		if (savebuf_open(&durable, E.p2_len, "durable") || savebuf_store(&durable, b->disk_mm + E.p2_off, E.p2_len)) {
 			snprintf(verdict, sizeof(verdict), "ERROR harness durable"); goto out;
@@ -1604,7 +1637,7 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 		savebuf_close(&durable);
 		*b = ob;
 		from = b->ulen;
-		if (set_fault(b, 0, 0, 0) || put_input(b, orc)) { snprintf(verdict, sizeof(verdict), "ERROR harness oracle cmd"); goto out; }
+		if (set_fault(b, 0, 0, 0) || (!g_ctl_boot && put_input(b, orc))) { snprintf(verdict, sizeof(verdict), "ERROR harness oracle cmd"); goto out; }
 		if (ph_on()) ph_read(b, &pc1);
 		pht = PH_T();
 		if (C.on) {		/* a new VM with its own clock: queued input does not carry over */
@@ -1613,7 +1646,7 @@ static void finish_sched(struct boot *b, const char *tag, const struct sched *sc
 			C.start = 1;
 			C.k.evfrom = from;
 		}
-		r = run_until_any(b, fin, 1, from);
+		r = run_until_any(b, fin, g_ctl_boot ? 0 : 1, from);
 		PH_ADD(PH_RECOV, pht);
 		if (r < 0 && r != -3) { snprintf(verdict, sizeof(verdict), r == -2 ? "TIMEOUT recovery" : "ERROR vm recovery"); goto out_save; }
 		if (ph_on()) {

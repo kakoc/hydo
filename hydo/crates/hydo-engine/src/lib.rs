@@ -67,7 +67,7 @@ use std::fmt;
 use std::path::PathBuf;
 use std::time::Duration;
 
-pub use lockstep::{Lockstep, LockstepStart};
+pub use lockstep::{DiskOff, Driver, Lockstep, LockstepStart};
 pub use process::{ControlledBoot, ControlledRun};
 pub use protocol::{BranchOutcome, BranchRequest, Ready, RunResult};
 
@@ -414,6 +414,40 @@ pub trait Worker {
         Err(EngineError::Unsupported(
             "lock-step control is not supported by this engine".into(),
         ))
+    }
+
+    /// One schedule from S1 under a host controller (M126; the design's `run_controlled`): the
+    /// engine's CTL request, then `driver` answers every stop until the run's RESULT (the power
+    /// cut's recovery VM included). `log`: also write the engine transcript.
+    fn run_controlled<'a>(
+        &'a mut self,
+        tag: &str,
+        schedule: &Schedule,
+        driver: &mut dyn lockstep::Driver,
+        log: Option<&'a mut dyn std::io::Write>,
+    ) -> Result<RunResult, EngineError> {
+        let start = LockstepStart::Run {
+            tag: tag.to_string(),
+            schedule: schedule.clone(),
+        };
+        let mut ls = self.lockstep(&start, log)?;
+        driver.drive(&mut ls)
+    }
+
+    /// The same from a snapshot an earlier controlled run of this worker took (`RESUME`).
+    fn resume<'a>(
+        &'a mut self,
+        tag: &str,
+        snapshot: &str,
+        driver: &mut dyn lockstep::Driver,
+        log: Option<&'a mut dyn std::io::Write>,
+    ) -> Result<RunResult, EngineError> {
+        let start = LockstepStart::Resume {
+            tag: tag.to_string(),
+            snapshot: snapshot.to_string(),
+        };
+        let mut ls = self.lockstep(&start, log)?;
+        driver.drive(&mut ls)
     }
 
     /// Tear the worker down (QUIT) and wait for the engine to exit.

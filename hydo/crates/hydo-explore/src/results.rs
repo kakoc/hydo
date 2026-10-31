@@ -315,6 +315,7 @@ pub fn run_of(tag: &str, text: &str, r: &Res, consoles: &[(String, String)]) -> 
         fingerprints: Fingerprints {
             fp: s(r, "fp").unwrap_or_default(),
             wfp: s(r, "wfp"),
+            ctl: s(r, "ctl"),
         },
         findings,
         error_logs,
@@ -346,6 +347,9 @@ pub fn explorer_consoles(outdir: &Path, tag: &str) -> Vec<(String, String)> {
 pub fn explorer_run(outdir: &Path, tag: &str, text: &str, r: &Res, role: &str) -> Run {
     let mut run = run_of(tag, text, r, &explorer_consoles(outdir, tag));
     run.role = Some(role.to_string());
+    // an agent image's run: its control transcripts (M126)
+    run.control =
+        hydo_control::agent::controls_in(&outdir.join("consoles"), &format!("{tag}."), "consoles/");
     run
 }
 

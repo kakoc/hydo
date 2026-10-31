@@ -106,6 +106,13 @@ fn replay(name: &str, text: &str) {
                                 assert_eq!(at, rep.stop.at);
                             }
                         }
+                        HostCmd::DiskOff => {
+                            s.diskoff().unwrap().unwrap();
+                        }
+                        HostCmd::Cut => {
+                            s.cut().unwrap().unwrap();
+                            break;
+                        }
                         HostCmd::Cont => {
                             s.cont().unwrap();
                             break;

@@ -54,6 +54,7 @@ hydo-grpc = { path = "hydo/crates/hydo-grpc" }
 hydo-grpc-gen = { path = "hydo/crates/hydo-grpc-gen" }
 hydo-results = { path = "hydo/crates/hydo-results" }
 hydo-agent-proto = { path = "hydo/crates/hydo-agent-proto" }
+hydo-control = { path = "hydo/crates/hydo-control" }
 
 [profile.release]
 opt-level = 3

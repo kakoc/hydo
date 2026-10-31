@@ -123,8 +123,10 @@ fn result_re() -> &'static Regex {
     static R: OnceLock<Regex> = OnceLock::new();
     // explore.py accepted extras starting tj|xt|pct|qn; hvx_explore also prints qbn= with bursts
     // (qb=), which made every --bursts run an "ERROR worker" there: qbn is accepted here.
+    // An agent image's run (M126) also has the lock-step facts stops= typed= inh= and its control
+    // hash ctl=; shell images never print them.
     R.get_or_init(|| {
-        Regex::new(r"^RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: (?:tj|xt|pct|qbn|qn)\S+)*) verdict=(.*)$")
+        Regex::new(r"^RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: (?:tj|xt|pct|qbn|qn|stops=|typed=|inh=|ctl=)\S+)*) verdict=(.*)$")
             .expect("pattern")
     })
 }
@@ -194,6 +196,13 @@ pub fn parse_result(line: &str, worker: usize) -> Res {
     r.insert("verdict".into(), json!(&c[6]));
     r.insert("worker".into(), json!(worker));
     extras(&mut r, &c[5], true);
+    if let Some(ctl) = c[5]
+        .split(' ')
+        .find_map(|w| w.strip_prefix("ctl="))
+        .filter(|v| !v.is_empty())
+    {
+        r.insert("ctl".into(), json!(ctl));
+    }
     r
 }
 

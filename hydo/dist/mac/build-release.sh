@@ -110,6 +110,11 @@ cp "$A/busybox-applets.txt" "$A/tc-closure.txt" "$REL/guest/"
 cp -R "$A/tc" "$REL/guest/tc"
 printf '#!/bin/sh\n# stands in for `busybox --list` (hydo-build asks it for the applet set)\ncat "$(dirname "$0")/busybox-applets.txt"\n' > "$REL/guest/busybox-applets"
 chmod 755 "$REL/guest/busybox-applets"
+# the guest agent of agent images (hydo build --control agent, M121; driven by the host controller,
+# M126): the aarch64 build of hydo/crates/hydo-agent/build.sh (byte-reproducible, no C toolchain),
+# as guest/hydo-agent (the CLI's default HYDO_AGENT_BIN_ARM64); hydo-build checks its pinned sha256
+"$TOP/hydo/crates/hydo-agent/build.sh" aarch64 "$A/agent" >&2
+cp "$A/agent/hydo-agent-arm64" "$REL/guest/hydo-agent"; chmod 755 "$REL/guest/hydo-agent"
 # the Redis example: the Mac manifest with every /nix/store src made relative to files/
 mkdir -p "$REL/examples/redis"
 cp -R "$A/redis" "$REL/examples/redis/files"
