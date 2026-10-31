@@ -26,7 +26,7 @@ use hydo_control::{Ending, EngineAction, Plan};
 use std::collections::{BTreeMap, BTreeSet};
 
 mod m123; // history, error logs and the composer (M123)
-// hydo-init-links.sh, hydo-init-freeze.sh, hydo-init-netns.sh and the network faults (M124)
+          // hydo-init-links.sh, hydo-init-freeze.sh, hydo-init-netns.sh and the network faults (M124)
 mod net;
 
 /// Why checking stopped early.

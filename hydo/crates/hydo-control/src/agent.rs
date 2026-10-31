@@ -79,15 +79,11 @@ pub fn engine_schedule(s: &Schedule, cadence: u64) -> Result<(Schedule, Schedule
 pub fn plan_of_image(image: &Path) -> Result<Plan, Unsupported> {
     let text = hydo_engine::image::embedded_manifest(image)
         .map_err(|e| Unsupported::other(format!("{}: {e}", image.display())))?;
-    if hydo_engine::image::embedded_compose(image).is_some() {
-        return Err(Unsupported::seam(
-            Seam::Composer,
-            "a test composer plan (test:)",
-        ));
-    }
-    let m = hydo_manifest::from_embedded(&text, None)
-        .map_err(|e| Unsupported::other(format!("{}: {e}", image.display())))?;
-    let mut plan = Plan::from_manifest(&m)?;
+    let compose = hydo_engine::image::embedded_compose(image);
+    let mut plan = plan_of_embedded(&text, compose.as_deref()).map_err(|e| Unsupported {
+        what: format!("{}: {}", image.display(), e.what),
+        ..e
+    })?;
     // The pinned tc, ip and iptables are image facts: Plan::from_manifest leaves hydo-build's
     // placeholders where the manifest's faults need a tool; the image's manifest.sh has the paths.
     let needed = [&plan.layout.tc, &plan.layout.ip, &plan.layout.iptables]
@@ -117,6 +113,30 @@ pub fn plan_of_image(image: &Path) -> Result<Plan, Unsupported> {
         }
     }
     Ok(plan)
+}
+
+/// The plan of an image's manifest text and its test composer plan (`/etc/hydo/compose.json`, the
+/// meta hydo-build staged; M123): the manifest expanded as the explorer expands it, with that
+/// meta as `_compose`, where the composer's controller reads its commands, checks and saved
+/// compositions.
+pub fn plan_of_embedded(text: &str, compose: Option<&str>) -> Result<Plan, Unsupported> {
+    let meta: Option<serde_json::Value> = match compose {
+        None => None,
+        Some(c) => Some(
+            serde_json::from_str(c)
+                .map_err(|e| Unsupported::other(format!("etc/hydo/compose.json: {e}")))?,
+        ),
+    };
+    let m = hydo_manifest::from_embedded(text, meta.as_ref())
+        .map_err(|e| Unsupported::other(e.message))?;
+    match meta {
+        None => Plan::from_manifest(&m),
+        Some(meta) => {
+            let mut d = m.data.clone();
+            d["_compose"] = meta;
+            Plan::from_manifest(&hydo_manifest::Manifest::from_validated(d))
+        }
+    }
 }
 
 /// The value of `KEY=value` (or `KEY='value'`, hydo-build's `shq`) in a manifest.sh text.

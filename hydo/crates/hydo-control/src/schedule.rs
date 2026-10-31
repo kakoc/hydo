@@ -1003,7 +1003,7 @@ fn xassert(fx: &mut F<'_>, t: &str, id: &str, msg: &str) {
 fn die_oracle<T>(fx: &mut F<'_>, line: String) -> Step<T> {
     let ctx = fx.shared.ctx.clone();
     errlog::report(fx, &ctx)?; // SEAM(ErrorLogs): the records before the verdict
-    // SEAM(Freeze): stop_periodic's wrapper first stops the freeze helper (fc_kill)
+                               // SEAM(Freeze): stop_periodic's wrapper first stops the freeze helper (fc_kill)
     freeze::kill(fx)?;
     stop_periodic(fx);
     fx.report(line.clone());
@@ -1447,8 +1447,8 @@ fn finish(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
 /// step_range: workload steps [a, b), one call bounded by workload.timeout.
 fn step_range(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
     errlog::mark(fx, ctx, &a.to_string())?; // SEAM(ErrorLogs): el_mark <first step>
-    // SEAM(Fakes): split at the H= windows' boundaries, switching the rules there; each piece
-    // goes through the wrappers spliced before hydo-init-fakes.sh (freeze's)
+                                            // SEAM(Fakes): split at the H= windows' boundaries, switching the rules there; each piece
+                                            // goes through the wrappers spliced before hydo-init-fakes.sh (freeze's)
     if let Some(r) = fakes::step_range(fx, ctx, a, b, step_range_fc) {
         return r;
     }

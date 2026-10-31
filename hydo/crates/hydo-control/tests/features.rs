@@ -1438,3 +1438,38 @@ fn item_paths(items: &[Item]) -> Vec<&'static str> {
     }
     out
 }
+
+/// An agent image carries its manifest text and the composer's meta (`/etc/hydo/compose.json`, as
+/// hydo-build stages it): `agent::plan_of_embedded` gives the plan the explorer's reading gives.
+#[test]
+fn agent_images_carry_the_composer() {
+    let mut n = 0;
+    for rel in support::manifests() {
+        let Ok(d) = data_of(&rel) else { continue };
+        let Some(meta) = d.get("_compose").cloned() else {
+            continue;
+        };
+        let root = scratch(&format!("img{n}"));
+        let mut m2 = meta.clone();
+        m2.as_object_mut().unwrap().remove("_folder");
+        hydo_composer::stage(&m2, &root, &top().join("hydo/onboard"), None).unwrap();
+        let cj = std::fs::read_to_string(root.join("etc/hydo/compose.json")).unwrap();
+        let text = std::fs::read_to_string(top().join(&rel)).unwrap();
+        let from_image = hydo_control::agent::plan_of_embedded(&text, Some(&cj));
+        let from_explorer = support::plan_of(&rel);
+        match (&from_image, &from_explorer) {
+            (Ok(a), Ok(b)) => {
+                assert_eq!(a.compose, b.compose, "{rel}");
+                assert_eq!(a.invariants, b.invariants, "{rel}");
+                assert_eq!(a.provision, b.provision, "{rel}");
+                assert_eq!(a.workload_run, b.workload_run, "{rel}");
+                assert!(a.compose.is_some(), "{rel}");
+            }
+            (Err(a), Err(b)) => assert_eq!(a.seam, b.seam, "{rel}"),
+            other => panic!("{rel}: {other:?}"),
+        }
+        let _ = std::fs::remove_dir_all(&root);
+        n += 1;
+    }
+    assert!(n >= 4, "{n} composed examples");
+}
