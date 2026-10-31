@@ -108,7 +108,13 @@ commands, so the 3,584-byte recovery line disappears.
   written. With a fixed stop cadence (`rb=<n>` on hvx: every run call returns after at most n
   events; hvm: every exit) that stop is a pure function of the run, so a decision taken "at the
   stop where event E was first seen" is deterministic. Its time is recorded as the stop's
-  `icount`/exit count, so replay does not depend on the cadence.
+  `icount`/exit count, so replay does not depend on the cadence. The cadence decides how late
+  the host sees a line: with plain run calls (a return every 2^16 retired exits) the experiment's
+  host saw a mid-workload line only at the end of the Redis workload. Control mode therefore uses
+  a small fixed cadence (`rb=1` stops at every event; its cost is in the experiments), and the
+  cadence is part of the recorded run like every other host parameter. The end-of-run
+  fingerprint is taken at a recorded event too (the agent's final acknowledgement), not at "the
+  first stop after a marker".
 
 Problems with Phase 1, and how they are handled:
 
@@ -120,10 +126,15 @@ Problems with Phase 1, and how they are handled:
   next `read` in place of `go`. The agent owns the tty: it sets raw mode and no echo before it
   announces itself, and nothing else reads it.
 - Bytes still in the UART receive queue are not in any snapshot (hvx: transient host input, M18;
-  hvm: `rxq` is outside `struct mach`). Rule for the engines: a snapshot is taken only when every
-  command typed so far has been acknowledged by the agent (its reply proves the bytes left the
-  queue); a branch point is moved to the first such stop. The experiment shows what breaks without
-  the rule.
+  hvm: `rxq` is outside `struct mach`). Rule for the engines: the engine keeps the list of
+  commands it typed with their icount; a snapshot carries the commands the agent has not yet
+  acknowledged (its reply proves the bytes left the queue), and a restore types them again at the
+  snapshot's point. A command whose bytes were partly read before the snapshot is safe because
+  the restore first sends the resynchronisation line (below), which makes the agent drop a
+  partial line, and the agent ignores a command id it has already executed. (Saving the receive
+  queue in the module's snapshot is the cleaner fix; it belongs to Phase 2.) The experiment shows
+  what breaks without the rule: a line typed at the snapshot's own stop was lost in every
+  continuation.
 - The receive ring holds 4,096 bytes (hvx and hvm); a command must fit. Large payloads (a fake
   world, a list of acknowledged ids) go as several commands to a file, then one command uses it.
 
@@ -307,7 +318,81 @@ echoes it to the console at the point it arrives (and the init's later `read` co
 the fingerprint shows exactly when and whether it arrived. Each configuration ran as a serve
 process with the same schedule twice (restored from S1) and as `one` (a fresh boot).
 
-RESULTS_PLACEHOLDER
+**hvx on the bare-metal machine** (main module `0799F1B8EE2A35600D94EB4`, image `explore-ob-redis-nq-disk.img`,
+PMU clock, one VM at a time through `~/bin/hvx-run`; results in `/var/tmp/m116/b2`–`b4` on the bare-metal machine).
+The workload runs from icount 949,127 (S1) for about 46,000–98,000 icount. "a", "b" = serve,
+restored from S1; "one" = fresh boot.
+
+| configuration | a | b | one |
+|---|---|---|---|
+| plain `hvx_explore` (control) | `fd4b848eb8969419` | same | same |
+| the interposer with nothing to type (inert) | `fd4b848eb8969419` | same | same |
+| typed at icount +20,000 | `146dec7ffae541c1` | same | same |
+| typed at +20,001 | `46a292f1a33788cc` | same | same |
+| other text at +20,000 | `50a11f2b77861b05` | same | same |
+| at +60,000 (landed at +62,019, the first stop at or after it: a tick adds 2,048) | `023bcafa7233eaf2` | same | same |
+| two lines, +20,000 and +60,000 | `2309a3b53b2db7d0` | same | same |
+| reaction to `KILLED redis`, plain run calls | `7258219e8a25e337` | same | same |
+| the same reaction with `rb=16` | `b83bf67d682b4609` | same | same |
+| reaction +5,000 with `rb=16` (landed at +17,013) | `f6d7670d74596283` | same | same |
+| `rb=16`, nothing typed / `rb=1`, nothing typed | `a6e72fcdff5f17ed` / `93d199cae9ab642d` | same | same |
+
+Branches (`BRANCH br 2 0 1 <point>`: a base run to the point, a snapshot there, two
+continuations from the snapshot with zero jitter): typed at +60,000 after a branch point at tick 3
+(+11,569): base, both continuations, the plain `rb=16` run and the fresh boot all
+`456001c6ec2263cb`; typed at +5,000, before the branch point: all `8f87ca0fcdddf60a`. The snapshot
+rule: with the branch point and the reaction at the same stop (marker `KILLED`, +11,825), the base
+run types the line just after taking the snapshot. If the engine treats a command at the
+snapshot's own icount as already contained in it, both continuations give `a6e72fcdff5f17ed`, the
+fingerprint of the run with nothing typed: the line is lost. If it types it again after the
+restore, both give the base's `b83bf67d682b4609`.
+
+**hvm on this Mac** (M2 Pro, `explore-ob-redis-oci-arm64`, load average about 125 from other
+sessions during the runs; scratchpad results): the workload starts at exit 19,899.
+
+| configuration | a | b | one |
+|---|---|---|---|
+| nothing typed | `6b9321d4b13e5d12` | same | same |
+| typed at exit +500 / +1,500 / +3,000 | `dae633ebb392b3d8` / `7b01d5c261a5334a` / `ec004616904a49f0` | same | same |
+| other text at +1,500 | `5406af0d7002e705` | same | same |
+| at +1,501 | `7b01d5c261a5334a` (= +1,500) | same | same |
+| two lines, +500 and +3,000 | `d36401c377728af4` | same | same |
+| reaction to `KILLED redis` (seen at +3,542), at once / +200 exits | `c32331d43a6b3f37` / `762b3637033677ed` | same | same |
+
+What this shows:
+
+1. A command typed on the serial input at an exact point of virtual time is reproducible on both
+   engines: twice from a restored S1, from a fresh boot, and (hvx) from a mid-run snapshot, in
+   every configuration. Different times and different bytes give different fingerprints, so the
+   input really reaches the guest at that point. On hvx one event matters (+20,000 and +20,001
+   differ); on the Mac two times one exit apart can give the same state, because the guest takes
+   the interrupt only at its next exit with interrupts unmasked (M48).
+2. The interposer typing nothing gives the control's fingerprint, so converting the run calls to
+   capped `HVX_RUNC` changes nothing by itself.
+3. The stop cadence is part of a run's definition today: `rb=16`, `rb=1` and plain run calls give
+   three different fingerprints with nothing typed, because the host types `go` and takes the
+   final fingerprint at "the first stop after a marker". With plain run calls (a return every
+   2^16 retired exits) the host saw the `KILLED redis` line only at the end of the Redis workload
+   (+89,352 instead of +11,841), so a reaction came far too late. The design therefore records
+   every host action by its own icount/exit count, and the engines in control mode stop at every
+   event near the points that matter (exact delivery) and observe with a fixed small cadence.
+   Measured cost on this workload: `rb=1` runs took 2.6 s against 2.5 s for `rb=16` and plain
+   calls (the engine's own `secs`, which also contains about 2.4 s of fingerprinting); against a
+   Redis guest phase of about 0.13–0.16 s (PERF-RUN-COST.md) this may double the guest phase, so
+   it must be measured on the stack before it becomes a default.
+4. Snapshots must carry the host input that is not yet in the guest. The engine records what it
+   typed and at which icount; a restore types again every command at or after the snapshot's
+   icount that the snapshot cannot contain. (The general form: the receive queue is host state;
+   either the module saves it with the snapshot, or the engine snapshots only when the agent has
+   acknowledged every command, or the engine re-types what the guest had not acknowledged.)
+5. A stray line on a tty that someone else reads is taken as that reader's input. With a
+   newline, the line typed mid-run was echoed and then read by the init's next `read` in place
+   of `go`; the guest ran on to its verdict without waiting, and on hvx (which looks only at
+   stops) the run then hung until it was stopped by hand: as far as the console shows, the
+   guest printed its final marker before the stop at which the host typed `go` and started
+   looking for it, so the host looked only after it. On the Mac
+   (which looks at every exit) the same run finished. The hvx batch was repeated with the line
+   sent without its newline (only echoed). The agent must own its channel exclusively.
 
 ## Migration
 
