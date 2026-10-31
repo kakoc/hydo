@@ -27,7 +27,9 @@ pub mod schedule;
 pub mod seams;
 pub mod transcript;
 
-pub use control::{Action, Controller, EngineAction, Ending, Out, Seen, StopInfo, VTime, When, Why};
+pub use control::{
+    Action, Controller, Ending, EngineAction, Out, Seen, StopInfo, VTime, When, Why,
+};
 pub use plan::{Layout, Plan};
 pub use replay::ReplayController;
 pub use runner::{run, AgentPoint, Finished, Link, LinkError, LinkNext, RunError, Start};

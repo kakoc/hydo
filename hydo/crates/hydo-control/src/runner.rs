@@ -10,7 +10,7 @@
 //! acknowledges a send to the engine at the stop where the agent's answer to it is seen (the
 //! proof that its bytes left the serial queue, M118's snapshot rule).
 
-use crate::control::{Action, Controller, EngineAction, Ending, Out, Seen, StopInfo, VTime, When};
+use crate::control::{Action, Controller, Ending, EngineAction, Out, Seen, StopInfo, VTime, When};
 use crate::transcript::{Header, Record, Transcript};
 use hydo_agent_proto::frame::{deframe_line, Deframed};
 use hydo_agent_proto::line::{AgentLine, HostLine};
@@ -201,7 +201,10 @@ pub fn run(
                         acks.push(id);
                         Seen::Reply { id, body }
                     }
-                    Some(Ok(Incoming::Refused { id: Some(id), error })) => {
+                    Some(Ok(Incoming::Refused {
+                        id: Some(id),
+                        error,
+                    })) => {
                         acks.push(id);
                         Seen::Refused { id, error }
                     }

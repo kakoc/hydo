@@ -301,7 +301,13 @@ impl<S, K: Clone> Flow<S, K> {
 
     /// Run every live thread (and every thread cancelled at this stop) until none makes
     /// progress. `label` names a thread kind; `body` runs one.
-    pub fn pump(&mut self, facts: &Facts, out: &mut Out, label: fn(&K) -> String, body: Body<S, K>) {
+    pub fn pump(
+        &mut self,
+        facts: &Facts,
+        out: &mut Out,
+        label: fn(&K) -> String,
+        body: Body<S, K>,
+    ) {
         if self.ended {
             return;
         }

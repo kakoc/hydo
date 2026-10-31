@@ -93,10 +93,8 @@ impl Controller for ReplayController {
                         }
                     };
                     if hl.id != id {
-                        return self.diverged(
-                            out,
-                            format!("recorded command {id} carries id {}", hl.id),
-                        );
+                        return self
+                            .diverged(out, format!("recorded command {id} carries id {}", hl.id));
                     }
                     let when = if at == stop.at {
                         When::Now

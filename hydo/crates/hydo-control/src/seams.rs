@@ -174,7 +174,11 @@ impl Unsupported {
 impl fmt::Display for Unsupported {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.seam {
-            Some(s) => write!(f, "{} (not driven by the core controller yet: seam {s})", self.what),
+            Some(s) => write!(
+                f,
+                "{} (not driven by the core controller yet: seam {s})",
+                self.what
+            ),
             None => f.write_str(&self.what),
         }
     }

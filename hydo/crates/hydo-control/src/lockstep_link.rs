@@ -7,7 +7,7 @@
 //! recovery boot ([`Ending::PowerCut`]; today the engine reads the init's acked lines). A verdict
 //! ending becomes `END <verdict>`; a snapshot ending ends the run with the engine's own verdict.
 
-use crate::control::{EngineAction, Ending, StopInfo, VTime, Why};
+use crate::control::{Ending, EngineAction, StopInfo, VTime, Why};
 use crate::runner::{Link, LinkError, LinkNext};
 use hydo_engine::lockstep::{self, Lockstep, Next, SnapAnswer, StopWhy};
 
@@ -97,6 +97,9 @@ impl Link for LockstepLink<'_, '_> {
                 ))
             }
         };
-        Ok(format!("RESULT {} fp={} verdict={}", r.tag, r.fp, r.verdict))
+        Ok(format!(
+            "RESULT {} fp={} verdict={}",
+            r.tag, r.fp, r.verdict
+        ))
     }
 }

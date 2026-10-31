@@ -129,7 +129,10 @@ pub enum Ending {
     /// A power cut: every service is frozen; the engine cuts the power (the volatile write cache
     /// is lost) and a recovery conversation follows, given the acknowledged and the definitely
     /// failed ids (`hydo-explore-acked:` / `hydo-explore-failed:`).
-    PowerCut { acked: Vec<String>, failed: Vec<String> },
+    PowerCut {
+        acked: Vec<String>,
+        failed: Vec<String>,
+    },
     /// The conversation ends at the snapshot of this name, which later conversations resume
     /// from (the boot conversation ends at S1).
     AtSnapshot(String),
@@ -138,6 +141,8 @@ pub enum Ending {
 /// One thing the controller does at a stop. `by` names the part of the controller that did it
 /// (`main`, `every:<invariant>`, `pause-timer`, `kill-timer`, ...): the transcript keeps it so a
 /// reader (and the equivalence test) can follow each part on its own.
+// A command is the large variant; a stop has a handful of actions, so they are not boxed.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Action {
     /// Type agent command `id` (ids increase by one per command, see [`Out`]).

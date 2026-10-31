@@ -13,7 +13,7 @@
 use hydo_agent_proto::frame::frame;
 use hydo_agent_proto::line::{AgentLine, ErrorLine, HostLine};
 use hydo_agent_proto::msg::*;
-use hydo_control::{EngineAction, Ending, Link, LinkError, LinkNext, StopInfo, Why};
+use hydo_control::{Ending, EngineAction, Link, LinkError, LinkNext, StopInfo, Why};
 use std::collections::BTreeMap;
 
 pub fn mix(mut x: u64) -> u64 {
@@ -130,7 +130,10 @@ impl Fake {
             bad_lines: Vec::new(),
             max_stops: 400_000,
         };
-        f.emit(1, Msg::Kernel("[    0.000000] Linux version 6.6.35 (fake)".into()));
+        f.emit(
+            1,
+            Msg::Kernel("[    0.000000] Linux version 6.6.35 (fake)".into()),
+        );
         f.emit(
             2,
             Msg::Event(Event::Hello(Hello {
@@ -239,7 +242,9 @@ impl Fake {
         self.world
             .procs
             .iter()
-            .filter(|(h, _)| !h.contains(':') && !["workload", "retry", "provision"].contains(&h.as_str()))
+            .filter(|(h, _)| {
+                !h.contains(':') && !["workload", "retry", "provision"].contains(&h.as_str())
+            })
             .any(|(_, p)| !p.running || p.dying || p.stopped)
     }
 
@@ -251,7 +256,14 @@ impl Fake {
         let ids: Vec<u64> = if retry {
             // the ids whose last outcome is not ok
             let mut last: BTreeMap<u64, String> = BTreeMap::new();
-            for l in self.world.files.get(&outc).cloned().unwrap_or_default().lines() {
+            for l in self
+                .world
+                .files
+                .get(&outc)
+                .cloned()
+                .unwrap_or_default()
+                .lines()
+            {
                 let mut w = l.split(' ');
                 if let (Some(i), Some(o)) = (w.next(), w.next()) {
                     if let Ok(i) = i.parse() {
@@ -259,7 +271,10 @@ impl Fake {
                     }
                 }
             }
-            last.into_iter().filter(|(_, o)| o != "ok").map(|(i, _)| i).collect()
+            last.into_iter()
+                .filter(|(_, o)| o != "ok")
+                .map(|(i, _)| i)
+                .collect()
         } else {
             (from..to).collect()
         };
@@ -313,7 +328,9 @@ impl Fake {
             f.emit(at, Msg::Refused(id, op.clone(), code, msg.into()));
         };
         match hl.cmd {
-            Command::Sync(s) => self.emit(at, Msg::Reply(id, Reply::Sync(SyncOk { nonce: s.nonce }))),
+            Command::Sync(s) => {
+                self.emit(at, Msg::Reply(id, Reply::Sync(SyncOk { nonce: s.nonce })))
+            }
             Command::Mkdir(_) => self.emit(at, Msg::Reply(id, Reply::Mkdir(MkdirOk {}))),
             Command::Write(w) => {
                 let e = self.world.files.entry(w.path).or_default();
@@ -350,7 +367,7 @@ impl Fake {
                 }
             },
             Command::Mount(_) => {
-                if self.h(&["mount"]) % 61 == 0 {
+                if self.h(&["mount"]).is_multiple_of(61) {
                     refuse(self, ErrCode::OsError, "mount: EINVAL (errno 22)");
                 } else {
                     self.emit(at, Msg::Reply(id, Reply::Mount(MountOk {})));
@@ -370,14 +387,17 @@ impl Fake {
                     let ms: f64 = r.argv.get(2).and_then(|x| x.parse().ok()).unwrap_or(1.0);
                     ((ms * 40.0) as u64 + 3, 0, String::new())
                 } else if a1 == "pgrep" {
-                    let busy = ["workload", "retry"]
-                        .iter()
-                        .any(|h| self.world.procs.get(*h).is_some_and(|p| p.running && !p.dying));
+                    let busy = ["workload", "retry"].iter().any(|h| {
+                        self.world
+                            .procs
+                            .get(*h)
+                            .is_some_and(|p| p.running && !p.dying)
+                    });
                     (3, if busy { 0 } else { 1 }, String::new())
                 } else if a1 == "ifconfig" || a1 == "ip" || script.contains(".log.old") {
                     (2, 0, String::new())
                 } else if Self::env_of(&r.env, "HYDO_VALUE").is_some() {
-                    let bad = self.h(&["knob", &script]) % 37 == 0;
+                    let bad = self.h(&["knob", &script]).is_multiple_of(37);
                     (4, if bad { 1 } else { 0 }, String::new())
                 } else {
                     // an invariant: its k-th evaluation
@@ -400,13 +420,18 @@ impl Fake {
                         (0, _) => "HYDO-ORACLE: OK\n".to_string(),
                         (1, 0) => format!("HYDO-ORACLE: VIOLATION lost key k{tag}\n"),
                         (1, 1) => format!("missing \"k{tag}\"\tback\\slash\n   \n"),
-                        (1, _) => format!("noise\nHYDO-ORACLE:   VIOLATION   {tag} wrong HYDO-ORACLE: OK inner\n"),
+                        (1, _) => format!(
+                            "noise\nHYDO-ORACLE:   VIOLATION   {tag} wrong HYDO-ORACLE: OK inner\n"
+                        ),
                         (_, 0) => "cannot connect\n".to_string(),
                         (_, _) => String::new(),
                     };
                     (5, rc, out)
                 };
-                let kept: String = out.chars().take(r.capture.unwrap_or(2048) as usize).collect();
+                let kept: String = out
+                    .chars()
+                    .take(r.capture.unwrap_or(2048) as usize)
+                    .collect();
                 self.emit(
                     t + 2 + dur,
                     Msg::Event(Event::Done(Done {
@@ -424,14 +449,23 @@ impl Fake {
                 let alive = p
                     .alive
                     .as_ref()
-                    .map(|h| self.world.procs.get(h).is_some_and(|x| x.running && !x.dying))
+                    .map(|h| {
+                        self.world
+                            .procs
+                            .get(h)
+                            .is_some_and(|x| x.running && !x.dying)
+                    })
                     .unwrap_or(true);
-                let r = self.h(&["probe", &format!("{:?}", p.argv), &self.world.calls.to_string()]);
+                let r = self.h(&[
+                    "probe",
+                    &format!("{:?}", p.argv),
+                    &self.world.calls.to_string(),
+                ]);
                 self.world.calls += 1;
                 let max_tries = (p.deadline_ms / p.every_ms.max(1)).max(1);
                 let (ok, why, tries) = if !alive {
                     (false, ProbeEnd::Died, 1)
-                } else if r % 53 == 0 {
+                } else if r.is_multiple_of(53) {
                     (false, ProbeEnd::Deadline, max_tries)
                 } else {
                     (true, ProbeEnd::Ok, 1 + r % 3)
@@ -451,7 +485,12 @@ impl Fake {
                 if self.world.procs.get(&s.h).is_some_and(|p| p.running) {
                     return refuse(self, ErrCode::HandleBusy, "still running");
                 }
-                let starts = self.world.procs.get(&s.h).map(|p| p.starts + 1).unwrap_or(1);
+                let starts = self
+                    .world
+                    .procs
+                    .get(&s.h)
+                    .map(|p| p.starts + 1)
+                    .unwrap_or(1);
                 self.world.procs.insert(
                     s.h.clone(),
                     Proc {
@@ -478,9 +517,12 @@ impl Fake {
                     let dur = 10 + 30 * t2.saturating_sub(f);
                     self.emit(t + dur, Self::exit_ev(&h, id, status, None));
                 } else if h.starts_with("setup:") || h == "provision" {
-                    let bad = self.h(&[&h, "fails"]) % 41 == 0;
+                    let bad = self.h(&[&h, "fails"]).is_multiple_of(41);
                     self.emit(t + 6, Self::exit_ev(&h, id, if bad { 1 } else { 0 }, None));
-                } else if self.h(&[&h, "crash", &starts.to_string()]) % 23 == 0 {
+                } else if self
+                    .h(&[&h, "crash", &starts.to_string()])
+                    .is_multiple_of(23)
+                {
                     // a service that dies on its own a little later
                     self.emit(t + 40, Self::exit_ev(&h, id, 1, None));
                 }
@@ -509,7 +551,11 @@ impl Fake {
                     ),
                 );
             }
-            other => refuse(self, ErrCode::UnknownOp, &format!("the fake does not do {}", other.name())),
+            other => refuse(
+                self,
+                ErrCode::UnknownOp,
+                &format!("the fake does not do {}", other.name()),
+            ),
         }
     }
 
@@ -526,9 +572,10 @@ impl Fake {
             }
         }
         // a process already on its way out (a crash or the end of a call) exits once
-        let exiting = self.pending.iter().any(
-            |p| matches!(&p.msg, Msg::Event(Event::Exit(e)) if e.h == h && e.id == id),
-        );
+        let exiting = self
+            .pending
+            .iter()
+            .any(|p| matches!(&p.msg, Msg::Event(Event::Exit(e)) if e.h == h && e.id == id));
         if !exiting {
             self.emit(at.max(self.t + 1), Self::exit_ev(h, id, status, sig));
         }
@@ -567,7 +614,10 @@ impl Link for Fake {
         };
         self.n += 1;
         if self.n > self.max_stops {
-            return Err(LinkError(format!("the fake stopped {} times: a hang", self.n)));
+            return Err(LinkError(format!(
+                "the fake stopped {} times: a hang",
+                self.n
+            )));
         }
         self.pending.sort_by_key(|p| (p.at, p.ord));
         let k = self.pending.iter().take_while(|p| p.at <= self.t).count();

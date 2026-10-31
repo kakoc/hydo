@@ -98,7 +98,11 @@ fn set_flags(ex: &mut Ex, fl: &[(&str, bool)]) {
 /// The identity corpus's schedule strings for one manifest, in its order.
 fn identity_schedules(m: &str, seeds: u64) -> Vec<String> {
     let mut out = Vec::new();
-    for (backend, disk, tc) in [("hvx", false, false), ("hvm", true, true), ("hvm", false, false)] {
+    for (backend, disk, tc) in [
+        ("hvx", false, false),
+        ("hvm", true, true),
+        ("hvm", false, false),
+    ] {
         let label = if backend == "hvx" {
             format!("{m}/hvx")
         } else {
@@ -112,7 +116,11 @@ fn identity_schedules(m: &str, seeds: u64) -> Vec<String> {
         let sp = Space::from_path(&top().join(m)).expect("the explorer reads the manifest");
         ex.grpc_targets = grpc_targets(Some(&sp.m));
         sp.apply(&mut ex);
-        ex.backend = if backend == "hvm" { Backend::Hvm } else { Backend::Hvx };
+        ex.backend = if backend == "hvm" {
+            Backend::Hvm
+        } else {
+            Backend::Hvx
+        };
         ex.hvm_disk = disk;
         ex.hvm_tc = tc;
         ex.cf_range = Some((1, 300));
@@ -220,7 +228,11 @@ fn boot_until_ok(plan: &Plan, path: &str, report: &mut Vec<String>) -> Option<Bo
 
 #[test]
 fn the_core_controller_does_what_the_shell_init_does() {
-    let seeds = if std::env::var_os("HYDO_CONTROL_FULL").is_some() { 300 } else { 40 };
+    let seeds = if std::env::var_os("HYDO_CONTROL_FULL").is_some() {
+        300
+    } else {
+        40
+    };
     let t0 = std::time::Instant::now();
     let mut golden = Vec::new();
     let mut inputs = Vec::new();
@@ -255,17 +267,35 @@ fn the_core_controller_does_what_the_shell_init_does() {
             let r = match run_schedule(&b, &s) {
                 Ok(r) => r,
                 Err(e) => {
-                    let name = e.seam.map(|x| x.name().to_string()).unwrap_or("other".into());
+                    let name = e
+                        .seam
+                        .map(|x| x.name().to_string())
+                        .unwrap_or("other".into());
                     *seams.entry(name).or_default() += 1;
                     *counts.entry("refused".into()).or_default() += 1;
                     continue;
                 }
             };
-            let from = if k < n_identity { "identity" } else { "written" };
+            let from = if k < n_identity {
+                "identity"
+            } else {
+                "written"
+            };
             *counts.entry(from.into()).or_default() += 1;
             let ctx = |what: &str| format!("{m}: {text}: {what}");
-            if let Err(e) = check(&plan, &r.run.items, Conv::Run, &s.guest_text(), (&[], &[]), Some(&b.s1.2)) {
-                panic!("{}\n{e}\n--- transcript:\n{}", ctx("the run differs from the shell"), r.run.fin.transcript.to_jsonl());
+            if let Err(e) = check(
+                &plan,
+                &r.run.items,
+                Conv::Run,
+                &s.guest_text(),
+                (&[], &[]),
+                Some(&b.s1.2),
+            ) {
+                panic!(
+                    "{}\n{e}\n--- transcript:\n{}",
+                    ctx("the run differs from the shell"),
+                    r.run.fin.transcript.to_jsonl()
+                );
             }
             let mut reference = r.run.fin.transcript.clone();
             reference.header.controller = "replay".into();
@@ -281,7 +311,9 @@ fn the_core_controller_does_what_the_shell_init_does() {
             stream.push(format!("S\t{text}"));
             stream.extend(stream_of(&r.run.fin.transcript));
             if let Some(rc) = &r.recovery {
-                let Some(Ending::PowerCut { acked, failed }) = r.run.fin.ending.clone() else { unreachable!() };
+                let Some(Ending::PowerCut { acked, failed }) = r.run.fin.ending.clone() else {
+                    unreachable!()
+                };
                 let mut cmd = String::from("oracle");
                 for i in &acked {
                     cmd.push(' ');
@@ -294,10 +326,23 @@ fn the_core_controller_does_what_the_shell_init_does() {
                         cmd.push_str(i);
                     }
                 }
-                if let Err(e) = check(&plan, &rc.items, Conv::Recovery, &cmd, (&acked, &failed), Some(&b.s0.2)) {
-                    panic!("{}\n{e}\n--- transcript:\n{}", ctx("the recovery differs from the shell"), rc.fin.transcript.to_jsonl());
+                if let Err(e) = check(
+                    &plan,
+                    &rc.items,
+                    Conv::Recovery,
+                    &cmd,
+                    (&acked, &failed),
+                    Some(&b.s0.2),
+                ) {
+                    panic!(
+                        "{}\n{e}\n--- transcript:\n{}",
+                        ctx("the recovery differs from the shell"),
+                        rc.fin.transcript.to_jsonl()
+                    );
                 }
-                *counts.entry(format!("recovery:{}", class(&rc.fin.transcript))).or_default() += 1;
+                *counts
+                    .entry(format!("recovery:{}", class(&rc.fin.transcript)))
+                    .or_default() += 1;
                 stream.push("R".into());
                 stream.extend(stream_of(&rc.fin.transcript));
             }
@@ -314,22 +359,40 @@ fn the_core_controller_does_what_the_shell_init_does() {
         }
         golden.push(format!(
             "counts\t{m}\t{}",
-            counts.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(" ")
+            counts
+                .iter()
+                .map(|(k, v)| format!("{k}={v}"))
+                .collect::<Vec<_>>()
+                .join(" ")
         ));
-        golden.push(format!("boot-transcript\t{m}\t{}", b.boot.fin.transcript.hash()));
+        golden.push(format!(
+            "boot-transcript\t{m}\t{}",
+            b.boot.fin.transcript.hash()
+        ));
         golden.extend(support::chunked(&m, &stream, 500));
     }
     golden.push(format!(
         "refused\t{}",
-        seams.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(" ")
+        seams
+            .iter()
+            .map(|(k, v)| format!("{k}={v}"))
+            .collect::<Vec<_>>()
+            .join(" ")
     ));
     eprintln!(
         "corpus: {} runs over the core manifests in {:.1} s",
         total.get("runs").copied().unwrap_or(0),
         t0.elapsed().as_secs_f64()
     );
-    assert!(total.get("runs").copied().unwrap_or(0) > 500, "too few runs: {total:?}");
-    let name = if seeds == 300 { "corpus-full.txt" } else { "corpus-quick.txt" };
+    assert!(
+        total.get("runs").copied().unwrap_or(0) > 500,
+        "too few runs: {total:?}"
+    );
+    let name = if seeds == 300 {
+        "corpus-full.txt"
+    } else {
+        "corpus-quick.txt"
+    };
     support::check_golden(
         name,
         &[
@@ -350,8 +413,14 @@ fn the_core_controller_does_what_the_shell_init_does() {
             std::fs::create_dir_all(&dir).unwrap();
             std::fs::write(&p, body).unwrap();
         } else {
-            let want = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-            assert_eq!(&want, body, "{} differs (HYDO_BLESS=1 re-records it)", p.display());
+            let want =
+                std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
+            assert_eq!(
+                &want,
+                body,
+                "{} differs (HYDO_BLESS=1 re-records it)",
+                p.display()
+            );
         }
     }
     let ip = dir.join("INDEX");

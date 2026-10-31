@@ -29,7 +29,7 @@
 //!
 //! The features of the init extensions are seams ([`crate::seams`]), marked `SEAM(<name>)` below.
 
-use crate::control::{Controller, EngineAction, Ending, Out, Seen, StopInfo};
+use crate::control::{Controller, Ending, EngineAction, Out, Seen, StopInfo};
 use crate::flow::{Facts, Flow, Fx, Memo, Step};
 use crate::plan::Plan;
 use crate::seams::{Seam, Unsupported};
@@ -59,7 +59,10 @@ pub struct GuestState {
 pub enum Conversation {
     Boot,
     Run,
-    Recovery { acked: Vec<String>, failed: Vec<String> },
+    Recovery {
+        acked: Vec<String>,
+        failed: Vec<String>,
+    },
     Solo,
 }
 
@@ -77,8 +80,17 @@ impl Conversation {
 /// The pause token, resolved.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum PauseCfg {
-    Steps { svc: String, at: i64, up: i64 },
-    Timer { svc: String, at: i64, off: u64, dur: u64 },
+    Steps {
+        svc: String,
+        at: i64,
+        up: i64,
+    },
+    Timer {
+        svc: String,
+        at: i64,
+        off: u64,
+        dur: u64,
+    },
 }
 
 /// The schedule's guest part, as explore_run reads it (the last token of a letter wins, as the
@@ -134,9 +146,16 @@ enum Part {
     Main,
     /// periodic_loop for the invariant with this index.
     Every(usize),
-    PauseTimer { svc: String, off: u64, dur: u64 },
+    PauseTimer {
+        svc: String,
+        off: u64,
+        dur: u64,
+    },
     /// The stack's kill_timer (X=), see `explore_run`.
-    KillTimer { svc: String, off: u64 },
+    KillTimer {
+        svc: String,
+        off: u64,
+    },
 }
 
 fn label(p: &Part) -> String {
@@ -162,7 +181,11 @@ pub struct ScheduleController {
 
 /// The fault assertions explore_run declares, in its order (type, id, message).
 pub const FAULT_DECLS: [(&str, &str, &str); 6] = [
-    ("reachable", "fault.paused", "a service was paused (SIGSTOP)"),
+    (
+        "reachable",
+        "fault.paused",
+        "a service was paused (SIGSTOP)",
+    ),
     (
         "sometimes",
         "fault.pause_mid_request",
@@ -407,8 +430,8 @@ fn mount_opts(opts: &str) -> Result<(Vec<MountFlag>, Option<String>), Unsupporte
             | "rbind" | "shared" | "slave" | "private" | "unbindable" | "rshared" | "rslave"
             | "rprivate" | "runbindable" | "loop" => {
                 return Err(Unsupported::other(format!(
-                    "data.mount: the option {o} has no agent mount flag (hydo-agent-proto MountFlag)"
-                )))
+                "data.mount: the option {o} has no agent mount flag (hydo-agent-proto MountFlag)"
+            )))
             }
             other => data.push(other),
         }
@@ -616,12 +639,7 @@ struct Ran {
 
 /// Run a command to its end (the shell's synchronous command). A refused command counts as
 /// exit status 127 (the shell's "not found"), with the refusal as its output.
-fn run(
-    fx: &mut F<'_>,
-    argv: Vec<String>,
-    env: Vec<String>,
-    capture: Option<u32>,
-) -> Step<Ran> {
+fn run(fx: &mut F<'_>, argv: Vec<String>, env: Vec<String>, capture: Option<u32>) -> Step<Ran> {
     let id = fx.send(run_cmd(argv, env, capture))?;
     match fx.reply(id)? {
         Err(e) => Ok(Ran {
@@ -1122,10 +1140,9 @@ fn restart_dead(fx: &mut F<'_>, ctx: &Ctx, verdict: &str) -> Step<()> {
     // reaped). The controller first waits until every service it killed has reported its exit,
     // so a killed service always counts as down here.
     fx.until(|h, f| {
-        h.services
-            .values()
-            .filter(|s| s.killed)
-            .all(|s| f.exits.contains_key(&s.spawn) || matches!(f.replies.get(&s.spawn), Some(Err(_))))
+        h.services.values().filter(|s| s.killed).all(|s| {
+            f.exits.contains_key(&s.spawn) || matches!(f.replies.get(&s.spawn), Some(Err(_)))
+        })
     })?;
     for s in &ctx.plan.services {
         let alive = fx.effect_bool(|h, f| running(h, f, &s.name));
@@ -1360,7 +1377,11 @@ fn failed_ids(fx: &mut F<'_>, ctx: &Ctx) -> Step<String> {
     let parts = chunks(&failed);
     post(
         fx,
-        write_cmd(&l.failed(), parts.first().map(String::as_str).unwrap_or(""), false),
+        write_cmd(
+            &l.failed(),
+            parts.first().map(String::as_str).unwrap_or(""),
+            false,
+        ),
     )?;
     for p in parts.iter().skip(1) {
         post(fx, write_cmd(&l.failed(), p, true))?;
@@ -1404,7 +1425,10 @@ fn set_knob(fx: &mut F<'_>, ctx: &Ctx, letter: &str, value: &str) -> Step<()> {
     let e = env(fx, ctx, &[("HYDO_VALUE", value.to_string())]);
     let r = run(fx, run_argv(ctx, &k.set), e, None)?;
     if r.status != 0 {
-        return die_oracle(fx, format!("HYDO-ORACLE: ERROR knob {letter}={value} failed"));
+        return die_oracle(
+            fx,
+            format!("HYDO-ORACLE: ERROR knob {letter}={value} failed"),
+        );
     }
     log(fx, format!("knob {letter}={value} ({})", k.name));
     Ok(())
@@ -1414,7 +1438,12 @@ fn set_knob(fx: &mut F<'_>, ctx: &Ctx, letter: &str, value: &str) -> Step<()> {
 /// for dur ms.
 fn pause_timer(fx: &mut F<'_>, ctx: &Ctx, svc: &str, off: u64, dur: u64) -> Step<()> {
     let e = env(fx, ctx, &[]);
-    run(fx, vec![bb(ctx), "sleep".into(), secs(off, 6)], e.clone(), None)?;
+    run(
+        fx,
+        vec![bb(ctx), "sleep".into(), secs(off, 6)],
+        e.clone(),
+        None,
+    )?;
     let mid = run(
         fx,
         vec![
@@ -1430,7 +1459,12 @@ fn pause_timer(fx: &mut F<'_>, ctx: &Ctx, svc: &str, off: u64, dur: u64) -> Step
         == 0;
     svc_sig(fx, svc, Sig::Stop)?;
     log(fx, format!("PAUSED {svc} (timer, mid_request={mid})"));
-    xassert(fx, "reachable", "fault.paused", "a service was paused (SIGSTOP)");
+    xassert(
+        fx,
+        "reachable",
+        "fault.paused",
+        "a service was paused (SIGSTOP)",
+    );
     if mid {
         xassert(
             fx,
@@ -1451,7 +1485,12 @@ fn pause_timer(fx: &mut F<'_>, ctx: &Ctx, svc: &str, off: u64, dur: u64) -> Step
 /// it the stack's meaning, and the service is restarted by restart_dead at the end.
 fn kill_timer(fx: &mut F<'_>, ctx: &Ctx, svc: &str, off: u64) -> Step<()> {
     let e = env(fx, ctx, &[]);
-    run(fx, vec![bb(ctx), "sleep".into(), secs(off, 3)], e.clone(), None)?;
+    run(
+        fx,
+        vec![bb(ctx), "sleep".into(), secs(off, 3)],
+        e.clone(),
+        None,
+    )?;
     let mid = run(
         fx,
         vec![
@@ -1665,7 +1704,12 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
                 svc_sig(fx, &psvc, Sig::Stop)?;
                 paused = true;
                 log(fx, format!("PAUSED {psvc} before step {p}"));
-                xassert(fx, "reachable", "fault.paused", "a service was paused (SIGSTOP)");
+                xassert(
+                    fx,
+                    "reachable",
+                    "fault.paused",
+                    "a service was paused (SIGSTOP)",
+                );
             }
         }
         // SEAM(Clock): `p == tat`: the clock step, its 5 s check, fault.clock_back/fwd.
@@ -1682,12 +1726,18 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         let failed = failed_ids(fx, ctx)?;
         let acked = read_all(fx, &l.acked())?;
         fx.report(format!("hydo-explore-acked: {}", acked.replace('\n', " ")));
-        fx.report(format!("hydo-explore-failed: {}", failed.replace('\n', " ")));
+        fx.report(format!(
+            "hydo-explore-failed: {}",
+            failed.replace('\n', " ")
+        ));
         // NO sync: it would flush the volatile write cache and close the window under test.
         for s in &plan.services {
             svc_sig(fx, &s.name, Sig::Stop)?;
         }
-        log(fx, format!("POWER CUT before step {cat} (all services frozen)"));
+        log(
+            fx,
+            format!("POWER CUT before step {cat} (all services frozen)"),
+        );
         fx.report("hydo-explore-workload-done cut");
         fx.settle()?;
         return fx.end(Ending::PowerCut {
@@ -1714,7 +1764,10 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     let failed = failed_ids(fx, ctx)?;
     let acked = read_all(fx, &l.acked())?;
     fx.report(format!("hydo-explore-acked: {}", acked.replace('\n', " ")));
-    fx.report(format!("hydo-explore-failed: {}", failed.replace('\n', " ")));
+    fx.report(format!(
+        "hydo-explore-failed: {}",
+        failed.replace('\n', " ")
+    ));
     fx.report("hydo-explore-workload-done");
     // explore_read: "go" -- the host switches the disk faults off
     fx.engine(EngineAction::DiskFaultsOff);
@@ -1741,11 +1794,17 @@ mod tests {
         assert_eq!(secs(12, 3), "0.012");
         assert_eq!(jesc("a\"b\\c\nd\te"), "a\\\"b\\\\cde");
         assert_eq!(inv_detail("x\nHYDO-ORACLE: OK 3 keys\n"), "3 keys");
-        assert_eq!(inv_detail("HYDO-ORACLE: VIOLATION  lost 2\nmore\n"), "lost 2");
+        assert_eq!(
+            inv_detail("HYDO-ORACLE: VIOLATION  lost 2\nmore\n"),
+            "lost 2"
+        );
         assert_eq!(inv_detail("HYDO-ORACLE: OK\n"), "HYDO-ORACLE: OK");
         assert_eq!(inv_detail("a\nHYDO-ASSERT {}\n  \n"), "a");
         assert_eq!(inv_detail(""), "");
-        assert_eq!(failed_of("3 failed\n1 ok\n10 failed\n2 failed\n2 ok\n"), "3\n10\n");
+        assert_eq!(
+            failed_of("3 failed\n1 ok\n10 failed\n2 failed\n2 ok\n"),
+            "3\n10\n"
+        );
         assert_eq!(failed_of(""), "");
         assert_eq!(
             mount_opts("rw,data=journal").unwrap(),

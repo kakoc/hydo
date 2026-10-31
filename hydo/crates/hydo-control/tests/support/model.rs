@@ -22,7 +22,7 @@ use super::fake::Msg;
 use super::Item;
 use hydo_agent_proto::msg::*;
 use hydo_control::schedule::GuestState;
-use hydo_control::{EngineAction, Ending, Plan};
+use hydo_control::{Ending, EngineAction, Plan};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Why checking stopped early.
@@ -125,8 +125,15 @@ fn inv_detail(out: &str) -> String {
             t = &t[i + 12..];
         }
         let t = t.trim_start_matches(' ');
-        let t = if t.starts_with("OK") { t[2..].trim_start_matches(' ') } else { t };
-        let t = if t.starts_with("VIOLATION") { t[9..].trim_start_matches(' ') } else { t };
+        // s/^OK *//; s/^VIOLATION *//
+        let t = match t.split_at_checked(2) {
+            Some(("OK", r)) => r.trim_start_matches(' '),
+            _ => t,
+        };
+        let t = match t.split_at_checked(9) {
+            Some(("VIOLATION", r)) => r.trim_start_matches(' '),
+            _ => t,
+        };
         d = t.to_string();
     }
     if d.is_empty() {
@@ -146,7 +153,10 @@ fn failed_lines(outcomes: &str) -> String {
     let mut last: Vec<(String, String)> = Vec::new();
     for l in outcomes.lines() {
         let mut w = l.split_whitespace();
-        let (a, b) = (w.next().unwrap_or("").to_string(), w.next().unwrap_or("").to_string());
+        let (a, b) = (
+            w.next().unwrap_or("").to_string(),
+            w.next().unwrap_or("").to_string(),
+        );
         last.retain(|(x, _)| *x != a);
         last.push((a, b));
     }
@@ -174,7 +184,20 @@ fn utc(mut sec: i64) -> String {
         sec -= len;
         y += 1;
     }
-    let ml = [31, if leap(y) { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let ml = [
+        31,
+        if leap(y) { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
     let mut m = 0;
     while sec >= ml[m] * 86400 {
         sec -= ml[m] * 86400;
@@ -182,7 +205,13 @@ fn utc(mut sec: i64) -> String {
     }
     let d = sec / 86400 + 1;
     let r = sec % 86400;
-    format!("{y:04}-{:02}-{d:02}T{:02}:{:02}:{:02}Z", m + 1, r / 3600, r % 3600 / 60, r % 60)
+    format!(
+        "{y:04}-{:02}-{d:02}T{:02}:{:02}:{:02}Z",
+        m + 1,
+        r / 3600,
+        r % 3600 / 60,
+        r % 60
+    )
 }
 
 fn secs6(ms: u64) -> String {
@@ -266,7 +295,9 @@ impl<'a> Model<'a> {
 
     fn next_main(&mut self, want: &str) -> R<&'a Item> {
         let Some(&i) = self.main.get(self.k) else {
-            return bad(format!("the controller's main part ended; the shell does next: {want}"));
+            return bad(format!(
+                "the controller's main part ended; the shell does next: {want}"
+            ));
         };
         self.k += 1;
         Ok(&self.items[i])
@@ -276,22 +307,32 @@ impl<'a> Model<'a> {
         let what = format!("{want:?}");
         match self.next_main(&what)? {
             Item::Send { id, cmd, .. } if *cmd == want => Ok(*id),
-            other => bad(format!("the shell sends {what}\n  the controller: {other:?}")),
+            other => bad(format!(
+                "the shell sends {what}\n  the controller: {other:?}"
+            )),
         }
     }
 
     fn note(&mut self, line: String) -> R<()> {
-        let line = if line.starts_with("hydo-stack:") { line } else { format!("hydo-ob: {line}") };
+        let line = if line.starts_with("hydo-stack:") {
+            line
+        } else {
+            format!("hydo-ob: {line}")
+        };
         match self.next_main(&line)? {
             Item::Note { line: l, .. } if *l == line => Ok(()),
-            other => bad(format!("the shell logs {line:?}\n  the controller: {other:?}")),
+            other => bad(format!(
+                "the shell logs {line:?}\n  the controller: {other:?}"
+            )),
         }
     }
 
     fn report(&mut self, line: String) -> R<()> {
         match self.next_main(&line)? {
             Item::Report { line: l, .. } if *l == line => Ok(()),
-            other => bad(format!("the shell prints {line:?}\n  the controller: {other:?}")),
+            other => bad(format!(
+                "the shell prints {line:?}\n  the controller: {other:?}"
+            )),
         }
     }
 
@@ -299,8 +340,10 @@ impl<'a> Model<'a> {
     fn settled(&self) -> R<()> {
         let p = self.point();
         for (id, si) in &self.sends {
-            if *si < p && !self.replies.get(id).is_some_and(|(ri, _)| *ri < p) {
-                return bad(format!("command {id} was not answered before the snapshot or the end"));
+            if *si < p && self.replies.get(id).is_none_or(|(ri, _)| *ri >= p) {
+                return bad(format!(
+                    "command {id} was not answered before the snapshot or the end"
+                ));
             }
         }
         Ok(())
@@ -310,14 +353,18 @@ impl<'a> Model<'a> {
         self.settled()?;
         match self.next_main(name)? {
             Item::Snap { name: n, .. } if n == name => Ok(()),
-            other => bad(format!("the shell is at {name}\n  the controller: {other:?}")),
+            other => bad(format!(
+                "the shell is at {name}\n  the controller: {other:?}"
+            )),
         }
     }
 
     fn engine(&mut self, a: EngineAction) -> R<()> {
         match self.next_main("go")? {
             Item::Engine { action, .. } if *action == a => Ok(()),
-            other => bad(format!("the shell waits for go\n  the controller: {other:?}")),
+            other => bad(format!(
+                "the shell waits for go\n  the controller: {other:?}"
+            )),
         }
     }
 
@@ -325,7 +372,9 @@ impl<'a> Model<'a> {
         self.settled()?;
         match self.next_main("the end")? {
             Item::End { end, .. } if *end == e => Err(Halt::Ended),
-            other => bad(format!("the shell ends with {e:?}\n  the controller: {other:?}")),
+            other => bad(format!(
+                "the shell ends with {e:?}\n  the controller: {other:?}"
+            )),
         }
     }
 
@@ -351,7 +400,12 @@ impl<'a> Model<'a> {
     }
 
     /// `run` as the shell's synchronous command: (status, output).
-    fn run(&mut self, argv: Vec<String>, env: Vec<String>, capture: Option<u32>) -> R<(u32, String)> {
+    fn run(
+        &mut self,
+        argv: Vec<String>,
+        env: Vec<String>,
+        capture: Option<u32>,
+    ) -> R<(u32, String)> {
         let id = self.send(Command::Run(Run {
             argv,
             env: Some(env),
@@ -372,7 +426,14 @@ impl<'a> Model<'a> {
     }
 
     /// A command with its output in a file: the exit status.
-    fn spawn_wait(&mut self, h: &str, argv: Vec<String>, env: Vec<String>, out: &str, append: bool) -> R<u32> {
+    fn spawn_wait(
+        &mut self,
+        h: &str,
+        argv: Vec<String>,
+        env: Vec<String>,
+        out: &str,
+        append: bool,
+    ) -> R<u32> {
         let id = self.send(spawn(h, argv, env, out, append))?;
         if self.reply(id)?.is_err() {
             return Ok(127);
@@ -387,7 +448,11 @@ impl<'a> Model<'a> {
         loop {
             let id = self.send(Command::Read(Read {
                 path: s(path),
-                offset: if text.is_empty() { None } else { Some(text.len() as u64) },
+                offset: if text.is_empty() {
+                    None
+                } else {
+                    Some(text.len() as u64)
+                },
                 max: 3000,
                 hex: None,
             }))?;
@@ -448,10 +513,10 @@ impl<'a> Model<'a> {
     }
 
     fn asserted(&self, id: &str, ok: bool) -> bool {
-        let pat = format!("HYDO-ASSERT {{\"t\":");
+        let pat = "HYDO-ASSERT {\"t\":";
         let mid = format!("\"id\":\"{id}\",\"ok\":{ok},");
         self.reports_before(self.point())
-            .any(|l| l.starts_with(&pat) && l.contains(&mid))
+            .any(|l| l.starts_with(pat) && l.contains(&mid))
     }
 
     /// $H/violated: the first invariant with a failed record.
@@ -482,7 +547,12 @@ impl<'a> Model<'a> {
 
     fn stop_periodic(&mut self) {
         if !self.jobs.periodic.is_empty() && self.jobs.periodic_cut.is_none() {
-            self.jobs.periodic_cut = Some(self.items.get(self.point()).map(|i| i.stop()).unwrap_or(u64::MAX));
+            self.jobs.periodic_cut = Some(
+                self.items
+                    .get(self.point())
+                    .map(|i| i.stop())
+                    .unwrap_or(u64::MAX),
+            );
         }
     }
 
@@ -500,20 +570,34 @@ impl<'a> Model<'a> {
 
     /// The lines of hydo-init.sh before `case "$PHASE"`.
     fn boot_start(&mut self, phase: &str) -> R<()> {
-        self.send(Command::Mkdir(Mkdir { path: s(H), mode: None }))?;
+        self.send(Command::Mkdir(Mkdir {
+            path: s(H),
+            mode: None,
+        }))?;
         for f in ["acked", "outcomes", "failed"] {
             self.send(write(&format!("{H}/{f}"), "", false))?;
         }
         let e = self.env(&[]);
-        self.run(plain(&["ifconfig", "lo", "127.0.0.1", "netmask", "255.0.0.0", "up"]), e.clone(), None)?;
+        self.run(
+            plain(&["ifconfig", "lo", "127.0.0.1", "netmask", "255.0.0.0", "up"]),
+            e.clone(),
+            None,
+        )?;
         self.run(plain(&["ip", "link", "set", "lo", "up"]), e, None)?;
         let names: Vec<&str> = self.plan.services.iter().map(|x| x.name.as_str()).collect();
-        self.note(format!("phase={phase} services=[{}] steps={}", names.join(" "), self.plan.steps))?;
+        self.note(format!(
+            "phase={phase} services=[{}] steps={}",
+            names.join(" "),
+            self.plan.steps
+        ))?;
         self.declare_all()
     }
 
     fn date_s(&mut self, log: bool) -> R<()> {
-        let id = self.send(Command::ClockSet(ClockSet { sec: Some(self.plan.clock_start), step: None }))?;
+        let id = self.send(Command::ClockSet(ClockSet {
+            sec: Some(self.plan.clock_start),
+            step: None,
+        }))?;
         if let Ok(Reply::ClockSet(c)) = self.reply(id)? {
             if log {
                 self.note(format!("realtime clock set to {}", utc(c.sec)))?;
@@ -535,9 +619,15 @@ impl<'a> Model<'a> {
             return self.die(format!("{verdict} ({m})"));
         }
         for d in self.plan.data_dirs.clone() {
-            self.send(Command::Mkdir(Mkdir { path: format!("/data/{d}"), mode: None }))?;
+            self.send(Command::Mkdir(Mkdir {
+                path: format!("/data/{d}"),
+                mode: None,
+            }))?;
         }
-        self.note(format!("mounted /dev/vda2 on /data ({})", self.plan.data_opts))
+        self.note(format!(
+            "mounted /dev/vda2 on /data ({})",
+            self.plan.data_opts
+        ))
     }
 
     fn start_svc(&mut self, name: &str) -> R<bool> {
@@ -545,13 +635,23 @@ impl<'a> Model<'a> {
         let l = format!("{H}/{name}.log");
         if self.started.contains(name) {
             let e = self.env(&[]);
-            self.run(vec![s(BB), s("sh"), s("-c"), format!("{BB} cat {l} >> {l}.old")], e, None)?;
+            self.run(
+                vec![s(BB), s("sh"), s("-c"), format!("{BB} cat {l} >> {l}.old")],
+                e,
+                None,
+            )?;
         }
         self.started.insert(s(name));
         self.env_svc = Some((s(name), l.clone()));
         if !sv.setup.is_empty() {
             let e = self.env(&[]);
-            let st = self.spawn_wait(&format!("setup:{name}"), run_of(&sv.setup), e, &format!("{H}/{name}.setup.log"), true)?;
+            let st = self.spawn_wait(
+                &format!("setup:{name}"),
+                run_of(&sv.setup),
+                e,
+                &format!("{H}/{name}.setup.log"),
+                true,
+            )?;
             if st != 0 {
                 self.note(format!("{name} setup FAILED"))?;
                 return Ok(false);
@@ -561,11 +661,24 @@ impl<'a> Model<'a> {
         if let Some(old) = self.spawn.get(name).copied() {
             let p = self.point();
             if !self.exited_before(old, p) {
-                return bad(format!("{name} was started again before its old process ({old}) exited"));
+                return bad(format!(
+                    "{name} was started again before its old process ({old}) exited"
+                ));
             }
         }
         let e = self.env(&[]);
-        let id = self.send(spawn(name, vec![s(BB), s("sh"), s("-c"), format!(". {PRELUDE}; exec {}", sv.cmd)], e.clone(), &l, false))?;
+        let id = self.send(spawn(
+            name,
+            vec![
+                s(BB),
+                s("sh"),
+                s("-c"),
+                format!(". {PRELUDE}; exec {}", sv.cmd),
+            ],
+            e.clone(),
+            &l,
+            false,
+        ))?;
         self.spawn.insert(s(name), id);
         self.killed.remove(name);
         if self.reply(id)?.is_err() {
@@ -641,7 +754,12 @@ impl<'a> Model<'a> {
     }
 
     fn sig(&mut self, svc: &str, sig: Sig) -> R<()> {
-        self.send(Command::Signal(Signal { h: s(svc), sig, tree: true, wait_stopped: None }))?;
+        self.send(Command::Signal(Signal {
+            h: s(svc),
+            sig,
+            tree: true,
+            wait_stopped: None,
+        }))?;
         if sig == Sig::Kill {
             self.killed.insert(s(svc));
         }
@@ -679,7 +797,13 @@ impl<'a> Model<'a> {
         let want = run_of(&inv.cmd);
         let mut last = String::new();
         for it in self.items {
-            if let Item::Send { id, by, cmd: Command::Run(r), .. } = it {
+            if let Item::Send {
+                id,
+                by,
+                cmd: Command::Run(r),
+                ..
+            } = it
+            {
                 if *by == label && r.argv == want {
                     if let Some((_, d)) = self.dones.get(id) {
                         let at = self.items[self.dones[id].0].stop();
@@ -709,7 +833,10 @@ impl<'a> Model<'a> {
                     first = format!("{id}: {}", inv_detail(&out));
                 }
             } else if rc == 2 && self.violated().is_none() {
-                error = Some(format!("HYDO-ORACLE: ERROR invariant {id} could not be evaluated: {}", inv_detail(&out)));
+                error = Some(format!(
+                    "HYDO-ORACLE: ERROR invariant {id} could not be evaluated: {}",
+                    inv_detail(&out)
+                ));
             }
         }
         Ok(if let Some(v) = self.violated() {
@@ -741,7 +868,11 @@ impl<'a> Model<'a> {
         argv.extend(run_of(&self.plan.workload_run));
         let rc = self.spawn_wait("workload", argv, e, &format!("{H}/workload.log"), true)?;
         if rc == 143 {
-            self.note(format!("workload steps {a}..{} TIMED OUT after {}s (killed)", b - 1, self.plan.workload_timeout))?;
+            self.note(format!(
+                "workload steps {a}..{} TIMED OUT after {}s (killed)",
+                b - 1,
+                self.plan.workload_timeout
+            ))?;
         }
         self.note(format!("workload steps {a}..{} rc={rc}", b - 1))
     }
@@ -768,13 +899,19 @@ impl<'a> Model<'a> {
     fn provision(&mut self) -> R<()> {
         if !self.plan.provision.is_empty() {
             let e = self.env(&[]);
-            let rc = self.spawn_wait("provision", run_of(&self.plan.provision), e, &format!("{H}/provision.log"), false)?;
+            let rc = self.spawn_wait(
+                "provision",
+                run_of(&self.plan.provision),
+                e,
+                &format!("{H}/provision.log"),
+                false,
+            )?;
             if rc != 0 {
                 return self.die(s("HYDO-ORACLE: ERROR provision failed"));
             }
         }
         let id = self.send(Command::Syncfs(Syncfs {}))?;
-        self.reply(id)?;
+        let _ = self.reply(id)?;
         self.note(s("provisioning synced"))?;
         self.report(s("HYDO-SETUP-COMPLETE"))
     }
@@ -796,7 +933,9 @@ impl<'a> Model<'a> {
     }
 
     fn xassert(&mut self, t: &str, id: &str, msg: &str) -> R<()> {
-        self.report(format!("HYDO-ASSERT {{\"t\":\"{t}\",\"id\":\"{id}\",\"ok\":true,\"msg\":\"{msg}\"}}"))
+        self.report(format!(
+            "HYDO-ASSERT {{\"t\":\"{t}\",\"id\":\"{id}\",\"ok\":true,\"msg\":\"{msg}\"}}"
+        ))
     }
 
     /// explore_run, from `CMD="run <tokens>"`.
@@ -829,7 +968,9 @@ impl<'a> Model<'a> {
         for d in ds {
             let mut w = d.splitn(3, ' ');
             let (dt, di, msg) = (w.next().unwrap(), w.next().unwrap(), w.next().unwrap());
-            self.report(format!("HYDO-ASSERT-DECL {{\"t\":\"{dt}\",\"id\":\"{di}\",\"msg\":\"{msg}\"}}"))?;
+            self.report(format!(
+                "HYDO-ASSERT-DECL {{\"t\":\"{dt}\",\"id\":\"{di}\",\"msg\":\"{msg}\"}}"
+            ))?;
         }
         let known = |m: &Model, x: &str| m.plan.services.iter().any(|v| v.name == x);
         // ${K%@*}, ${K#*@}, ${r%+*}, ${r#*+}
@@ -912,7 +1053,9 @@ impl<'a> Model<'a> {
             }
             if p == xat {
                 self.jobs.kill = Some((xsvc.clone(), xoff));
-                self.note(format!("kill timer for {xsvc} armed before step {p} (after {xoff}ms)"))?;
+                self.note(format!(
+                    "kill timer for {xsvc} armed before step {p} (after {xoff}ms)"
+                ))?;
             }
             if p == kat {
                 self.sig(&ksvc.clone(), Sig::Kill)?;
@@ -932,13 +1075,21 @@ impl<'a> Model<'a> {
                     self.sig(&psvc.clone(), Sig::Stop)?;
                     paused = true;
                     self.note(format!("PAUSED {psvc} before step {p}"))?;
-                    self.xassert("reachable", "fault.paused", "a service was paused (SIGSTOP)")?;
+                    self.xassert(
+                        "reachable",
+                        "fault.paused",
+                        "a service was paused (SIGSTOP)",
+                    )?;
                 }
             }
             prev = Some(p);
         }
         if cut {
-            let here = self.items.get(self.point()).map(|i| i.stop()).unwrap_or(u64::MAX);
+            let here = self
+                .items
+                .get(self.point())
+                .map(|i| i.stop())
+                .unwrap_or(u64::MAX);
             if self.jobs.pause.is_some() {
                 self.jobs.pause_cut = Some(here);
             }
@@ -964,7 +1115,11 @@ impl<'a> Model<'a> {
             // `wait $ptimer`: the timer's last line comes before the main sequence goes on
             self.jobs.pause_joined = true;
             let p = self.point();
-            if let Some(last) = self.items.iter().rposition(|i| i.by() == Some("pause-timer")) {
+            if let Some(last) = self
+                .items
+                .iter()
+                .rposition(|i| i.by() == Some("pause-timer"))
+            {
                 if last > p {
                     return bad(s("the main part went on before the pause timer ended"));
                 }
@@ -977,7 +1132,11 @@ impl<'a> Model<'a> {
         }
         if self.jobs.kill.is_some() {
             let p = self.point();
-            if let Some(last) = self.items.iter().rposition(|i| i.by() == Some("kill-timer")) {
+            if let Some(last) = self
+                .items
+                .iter()
+                .rposition(|i| i.by() == Some("kill-timer"))
+            {
                 if last > p {
                     return bad(s("the main part went on before the kill timer ended"));
                 }
@@ -1038,7 +1197,10 @@ impl<'a> Model<'a> {
                 }
                 self.mount_data("HYDO-ORACLE: VIOLATION data disk unmountable")?;
                 self.note(s("hydo-stack: recovering from log"))?;
-                self.start_all("HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable)", true)?;
+                self.start_all(
+                    "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable)",
+                    true,
+                )?;
                 self.finish()
             }
         }
@@ -1048,7 +1210,10 @@ impl<'a> Model<'a> {
 
     /// A job's items, and the stop after which it takes in no answer and sends nothing.
     fn job_items(&self, label: &str) -> Vec<&'a Item> {
-        self.items.iter().filter(|i| i.by() == Some(label)).collect()
+        self.items
+            .iter()
+            .filter(|i| i.by() == Some(label))
+            .collect()
     }
 }
 
@@ -1094,13 +1259,15 @@ fn mount_args(opts: &str) -> (Option<Vec<MountFlag>>, Option<String>) {
             other => d.push(other),
         }
     }
-    ((!f.is_empty()).then_some(f), (!d.is_empty()).then(|| d.join(",")))
+    (
+        (!f.is_empty()).then_some(f),
+        (!d.is_empty()).then(|| d.join(",")),
+    )
 }
 
 fn done_at(m: &Model, id: u64) -> Option<(usize, u64)> {
     m.dones.get(&id).map(|(i, _)| (*i, m.items[*i].stop()))
 }
-
 
 /// Check one conversation; `cmd` is the shell's command line for it (the guest part of a run, or
 /// the recovery's oracle line), `at` the guest state it starts from.
@@ -1114,9 +1281,13 @@ pub fn check(
 ) -> Result<(), String> {
     let mut m = Model::new(plan, items, at);
     // a resumed conversation starts with the runner's resynchronisation
-    if let Some(Item::Send { by, cmd: c, .. }) = items.iter().find(|i| matches!(i, Item::Send { .. })) {
+    if let Some(Item::Send { by, cmd: c, .. }) =
+        items.iter().find(|i| matches!(i, Item::Send { .. }))
+    {
         if at.is_some() && (by != "runner" || !matches!(c, Command::Sync(_))) {
-            return Err(format!("a resumed conversation must start with the runner's sync, not {c:?}"));
+            return Err(format!(
+                "a resumed conversation must start with the runner's sync, not {c:?}"
+            ));
         }
     }
     match m.conversation(conv, cmd, ids) {
@@ -1147,7 +1318,10 @@ pub fn check(
                 || by == "runner"
                 || (by == "pause-timer" && m.jobs.pause.is_some())
                 || (by == "kill-timer" && m.jobs.kill.is_some())
-                || m.jobs.periodic.iter().any(|i| by == format!("every:{}", plan.invariants[*i].key));
+                || m.jobs
+                    .periodic
+                    .iter()
+                    .any(|i| by == format!("every:{}", plan.invariants[*i].key));
             if !known {
                 return Err(format!("an item of a part the shell does not have: {it:?}"));
             }
@@ -1175,12 +1349,23 @@ impl Model<'_> {
         let pos = |it: &Item| self.items.iter().position(|x| std::ptr::eq(x, it)).unwrap();
         loop {
             // sleep $e
-            let Some(it) = items.get(j) else { return Ok(()) };
-            let Item::Send { id, cmd: Command::Run(r), n, .. } = it else {
+            let Some(it) = items.get(j) else {
+                return Ok(());
+            };
+            let Item::Send {
+                id,
+                cmd: Command::Run(r),
+                n,
+                ..
+            } = it
+            else {
                 return Err(format!("{label}: expected its sleep, got {it:?}"));
             };
             if r.argv != plain(&["sleep", &inv.every]) || *n > cutoff {
-                return Err(format!("{label}: expected `sleep {}` before stop {cutoff}, got {it:?}", inv.every));
+                return Err(format!(
+                    "{label}: expected `sleep {}` before stop {cutoff}, got {it:?}",
+                    inv.every
+                ));
             }
             j += 1;
             match done_at(self, *id) {
@@ -1191,13 +1376,28 @@ impl Model<'_> {
                         }
                     }
                 }
-                _ => return if j == items.len() { Ok(()) } else { Err(format!("{label} went on after it had to stop")) },
+                _ => {
+                    return if j == items.len() {
+                        Ok(())
+                    } else {
+                        Err(format!("{label} went on after it had to stop"))
+                    }
+                }
             }
             // eval_inv
             let Some(it) = items.get(j) else {
-                return if cut.is_some() || self.end_stop != u64::MAX { Ok(()) } else { Err(format!("{label} stopped")) };
+                return if cut.is_some() || self.end_stop != u64::MAX {
+                    Ok(())
+                } else {
+                    Err(format!("{label} stopped"))
+                };
             };
-            let Item::Send { id, cmd: Command::Run(r), .. } = it else {
+            let Item::Send {
+                id,
+                cmd: Command::Run(r),
+                ..
+            } = it
+            else {
                 return Err(format!("{label}: expected its check, got {it:?}"));
             };
             if r.argv != run_of(&inv.cmd) || r.capture != Some(3000) {
@@ -1205,8 +1405,19 @@ impl Model<'_> {
             }
             j += 1;
             let (di, d) = match self.dones.get(id) {
-                Some((di, d)) if self.items[*di].stop() <= cutoff && self.items[*di].stop() < self.end_stop => (*di, d.clone()),
-                _ => return if j == items.len() { Ok(()) } else { Err(format!("{label} went on after it had to stop")) },
+                Some((di, d))
+                    if self.items[*di].stop() <= cutoff
+                        && self.items[*di].stop() < self.end_stop =>
+                {
+                    (*di, d.clone())
+                }
+                _ => {
+                    return if j == items.len() {
+                        Ok(())
+                    } else {
+                        Err(format!("{label} went on after it had to stop"))
+                    }
+                }
             };
             let ok = match d.status {
                 0 => true,
@@ -1255,19 +1466,37 @@ impl Model<'_> {
         let cutoff = cut.unwrap_or(u64::MAX);
         let pos = |it: &Item| self.items.iter().position(|x| std::ptr::eq(x, it)).unwrap();
         let mut j = 0;
-        let stop_ok = |j: usize| if j == items.len() { Ok(()) } else { Err(format!("{label} went on after it had to stop: {:?}", &items[j..])) };
+        let stop_ok = |j: usize| {
+            if j == items.len() {
+                Ok(())
+            } else {
+                Err(format!(
+                    "{label} went on after it had to stop: {:?}",
+                    &items[j..]
+                ))
+            }
+        };
         // one step: a run whose answer the job waits for
-        let mut runs = |j: &mut usize, argv: Vec<String>| -> Result<Option<Done>, String> {
+        let runs = |j: &mut usize, argv: Vec<String>| -> Result<Option<Done>, String> {
             let Some(it) = items.get(*j) else {
-                return if cut.is_some() || self.end_stop != u64::MAX { Ok(None) } else { Err(format!("{label} stopped early")) };
+                return if cut.is_some() || self.end_stop != u64::MAX {
+                    Ok(None)
+                } else {
+                    Err(format!("{label} stopped early"))
+                };
             };
-            let Item::Send { id, cmd, n, .. } = it else { return Err(format!("{label}: expected {argv:?}, got {it:?}")) };
+            let Item::Send { id, cmd, n, .. } = it else {
+                return Err(format!("{label}: expected {argv:?}, got {it:?}"));
+            };
             if !self.timer_env_ok(cmd, &argv) || *n > cutoff {
                 return Err(format!("{label}: expected {argv:?}, got {it:?}"));
             }
             *j += 1;
             match self.dones.get(id) {
-                Some((di, d)) if self.items[*di].stop() <= cutoff && self.items[*di].stop() < self.end_stop => {
+                Some((di, d))
+                    if self.items[*di].stop() <= cutoff
+                        && self.items[*di].stop() < self.end_stop =>
+                {
                     if let Some(nx) = items.get(*j) {
                         if pos(nx) < *di {
                             return Err(format!("{label} went on before {argv:?} ended"));
@@ -1278,14 +1507,27 @@ impl Model<'_> {
                 _ => Ok(None),
             }
         };
-        let Some(_) = runs(&mut j, plain(&["sleep", &secs6(off)]))? else { return stop_ok(j) };
-        let Some(pg) = runs(&mut j, plain(&["pgrep", "-f", &self.plan.workload_pgrep]))? else { return stop_ok(j) };
+        let Some(_) = runs(&mut j, plain(&["sleep", &secs6(off)]))? else {
+            return stop_ok(j);
+        };
+        let Some(pg) = runs(&mut j, plain(&["pgrep", "-f", &self.plan.workload_pgrep]))? else {
+            return stop_ok(j);
+        };
         let mid = pg.status == 0;
-        let sig = |sg: Sig| Command::Signal(Signal { h: s(svc), sig: sg, tree: true, wait_stopped: None });
+        let sig = |sg: Sig| {
+            Command::Signal(Signal {
+                h: s(svc),
+                sig: sg,
+                tree: true,
+                wait_stopped: None,
+            })
+        };
         let want_seq = |j: &mut usize, w: Item| -> Result<bool, String> {
             match items.get(*j) {
                 None => {
-                    if matches!(w, Item::Send { .. }) && (cut.is_some() || self.end_stop != u64::MAX) {
+                    if matches!(w, Item::Send { .. })
+                        && (cut.is_some() || self.end_stop != u64::MAX)
+                    {
                         Ok(false)
                     } else {
                         Err(format!("{label} stopped before {w:?}"))
@@ -1306,18 +1548,36 @@ impl Model<'_> {
                 }
             }
         };
-        let send = |c: Command| Item::Send { n: 0, id: 0, by: s(label), cmd: c };
-        let note = |l: String| Item::Note { n: 0, by: s(label), line: l };
-        let rep = |l: &str| Item::Report { n: 0, by: s(label), line: s(l) };
+        let send = |c: Command| Item::Send {
+            n: 0,
+            id: 0,
+            by: s(label),
+            cmd: c,
+        };
+        let note = |l: String| Item::Note {
+            n: 0,
+            by: s(label),
+            line: l,
+        };
+        let rep = |l: &str| Item::Report {
+            n: 0,
+            by: s(label),
+            line: s(l),
+        };
         if !want_seq(&mut j, send(sig(Sig::Stop)))? {
             return stop_ok(j);
         }
-        want_seq(&mut j, note(format!("hydo-ob: PAUSED {svc} (timer, mid_request={mid})")))?;
+        want_seq(
+            &mut j,
+            note(format!("hydo-ob: PAUSED {svc} (timer, mid_request={mid})")),
+        )?;
         want_seq(&mut j, rep("HYDO-ASSERT {\"t\":\"reachable\",\"id\":\"fault.paused\",\"ok\":true,\"msg\":\"a service was paused (SIGSTOP)\"}"))?;
         if mid {
             want_seq(&mut j, rep("HYDO-ASSERT {\"t\":\"sometimes\",\"id\":\"fault.pause_mid_request\",\"ok\":true,\"msg\":\"a pause began while a client request was in flight\"}"))?;
         }
-        let Some(_) = runs(&mut j, plain(&["sleep", &secs3(dur)]))? else { return stop_ok(j) };
+        let Some(_) = runs(&mut j, plain(&["sleep", &secs3(dur)]))? else {
+            return stop_ok(j);
+        };
         if !want_seq(&mut j, send(sig(Sig::Cont)))? {
             return stop_ok(j);
         }
@@ -1335,16 +1595,32 @@ impl Model<'_> {
         let cutoff = cut.unwrap_or(u64::MAX);
         let pos = |it: &Item| self.items.iter().position(|x| std::ptr::eq(x, it)).unwrap();
         let mut j = 0;
-        let stop_ok = |j: usize| if j == items.len() { Ok(()) } else { Err(format!("{label} went on after it had to stop: {:?}", &items[j..])) };
-        let mut runs = |j: &mut usize, argv: Vec<String>| -> Result<Option<Done>, String> {
-            let Some(it) = items.get(*j) else { return Ok(None) };
-            let Item::Send { id, cmd, n, .. } = it else { return Err(format!("{label}: expected {argv:?}, got {it:?}")) };
+        let stop_ok = |j: usize| {
+            if j == items.len() {
+                Ok(())
+            } else {
+                Err(format!(
+                    "{label} went on after it had to stop: {:?}",
+                    &items[j..]
+                ))
+            }
+        };
+        let runs = |j: &mut usize, argv: Vec<String>| -> Result<Option<Done>, String> {
+            let Some(it) = items.get(*j) else {
+                return Ok(None);
+            };
+            let Item::Send { id, cmd, n, .. } = it else {
+                return Err(format!("{label}: expected {argv:?}, got {it:?}"));
+            };
             if !self.timer_env_ok(cmd, &argv) || *n > cutoff {
                 return Err(format!("{label}: expected {argv:?}, got {it:?}"));
             }
             *j += 1;
             match self.dones.get(id) {
-                Some((di, d)) if self.items[*di].stop() <= cutoff && self.items[*di].stop() < self.end_stop => {
+                Some((di, d))
+                    if self.items[*di].stop() <= cutoff
+                        && self.items[*di].stop() < self.end_stop =>
+                {
                     if let Some(nx) = items.get(*j) {
                         if pos(nx) < *di {
                             return Err(format!("{label} went on before {argv:?} ended"));
@@ -1355,12 +1631,19 @@ impl Model<'_> {
                 _ => Ok(None),
             }
         };
-        let Some(_) = runs(&mut j, plain(&["sleep", &secs3(off)]))? else { return stop_ok(j) };
-        let Some(pg) = runs(&mut j, plain(&["pgrep", "-f", &self.plan.workload_pgrep]))? else { return stop_ok(j) };
+        let Some(_) = runs(&mut j, plain(&["sleep", &secs3(off)]))? else {
+            return stop_ok(j);
+        };
+        let Some(pg) = runs(&mut j, plain(&["pgrep", "-f", &self.plan.workload_pgrep]))? else {
+            return stop_ok(j);
+        };
         let mid = pg.status == 0;
         match items.get(j) {
             None => return stop_ok(j),
-            Some(Item::Send { cmd: Command::Signal(sg), .. }) if sg.h == svc && sg.sig == Sig::Kill && sg.tree => j += 1,
+            Some(Item::Send {
+                cmd: Command::Signal(sg),
+                ..
+            }) if sg.h == svc && sg.sig == Sig::Kill && sg.tree => j += 1,
             Some(other) => return Err(format!("{label}: expected the kill, got {other:?}")),
         }
         let want = [
@@ -1369,11 +1652,12 @@ impl Model<'_> {
         ];
         for w in want {
             match items.get(j) {
-                Some(Item::Note { line, .. }) | Some(Item::Report { line, .. }) if *line == w => j += 1,
+                Some(Item::Note { line, .. }) | Some(Item::Report { line, .. }) if *line == w => {
+                    j += 1
+                }
                 other => return Err(format!("{label}: expected {w:?}, got {other:?}")),
             }
         }
         stop_ok(j)
     }
 }
-

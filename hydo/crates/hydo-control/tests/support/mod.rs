@@ -11,7 +11,7 @@ use hydo_agent_proto::line::HostLine;
 use hydo_agent_proto::msg::Command;
 use hydo_control::transcript::{Header, Record};
 use hydo_control::{
-    run, AgentPoint, EngineAction, Ending, Finished, GuestState, Plan, ReplayController,
+    run, AgentPoint, Ending, EngineAction, Finished, GuestState, Plan, ReplayController,
     ScheduleController, Start, Transcript, Unsupported,
 };
 use hydo_schedule::Schedule;
@@ -34,7 +34,10 @@ pub fn bless() -> bool {
 }
 
 pub fn sha256_hex(b: &[u8]) -> String {
-    Sha256::digest(b).iter().map(|x| format!("{x:02x}")).collect()
+    Sha256::digest(b)
+        .iter()
+        .map(|x| format!("{x:02x}"))
+        .collect()
 }
 
 fn sorted_files(dir: &Path, pred: impl Fn(&str) -> bool) -> Vec<PathBuf> {
@@ -102,8 +105,8 @@ pub fn manifests() -> Vec<String> {
 
 /// The plan of a manifest as the explorer reads it (`hydo_manifest::for_explorer`).
 pub fn plan_of(rel: &str) -> Result<Plan, Unsupported> {
-    let (data, meta) = hydo_manifest::for_explorer(&top().join(rel))
-        .map_err(|e| Unsupported::other(e.message))?;
+    let (data, meta) =
+        hydo_manifest::for_explorer(&top().join(rel)).map_err(|e| Unsupported::other(e.message))?;
     if meta.is_some() {
         return Err(Unsupported::seam(
             hydo_control::Seam::Composer,
@@ -117,13 +120,38 @@ pub fn plan_of(rel: &str) -> Result<Plan, Unsupported> {
 /// the host did, in order (at each stop: the deliveries first, then the host's actions).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Item {
-    Got { n: u64, msg: Msg },
-    Send { n: u64, id: u64, by: String, cmd: Command },
-    Report { n: u64, by: String, line: String },
-    Note { n: u64, by: String, line: String },
-    Snap { n: u64, name: String },
-    Engine { n: u64, action: EngineAction },
-    End { n: u64, end: Ending },
+    Got {
+        n: u64,
+        msg: Msg,
+    },
+    Send {
+        n: u64,
+        id: u64,
+        by: String,
+        cmd: Command,
+    },
+    Report {
+        n: u64,
+        by: String,
+        line: String,
+    },
+    Note {
+        n: u64,
+        by: String,
+        line: String,
+    },
+    Snap {
+        n: u64,
+        name: String,
+    },
+    Engine {
+        n: u64,
+        action: EngineAction,
+    },
+    End {
+        n: u64,
+        end: Ending,
+    },
 }
 
 impl Item {
@@ -237,7 +265,11 @@ fn header(conv: &str, schedule: Option<&Schedule>, start: &str) -> Header {
 /// The cadence of the scripted engine: the schedule's rb= if it has one, else 16.
 pub fn cadence(s: Option<&Schedule>) -> u64 {
     s.and_then(|s| s.host_token("rb"))
-        .and_then(|t| t.to_string().strip_prefix("rb=").and_then(|v| v.parse().ok()))
+        .and_then(|t| {
+            t.to_string()
+                .strip_prefix("rb=")
+                .and_then(|v| v.parse().ok())
+        })
         .unwrap_or(16)
 }
 
@@ -247,7 +279,8 @@ pub fn converse(
     start: Start,
     h: Header,
 ) -> Conv {
-    let fin = run(&mut fake, ctl, start, h).unwrap_or_else(|e| panic!("the conversation failed: {e}"));
+    let fin =
+        run(&mut fake, ctl, start, h).unwrap_or_else(|e| panic!("the conversation failed: {e}"));
     assert!(
         fake.bad_lines.is_empty(),
         "the agent would refuse these host lines:\n{}",
@@ -327,8 +360,12 @@ pub fn run_schedule(b: &Booted, s: &Schedule) -> Result<Ran, Unsupported> {
     .transcript;
     let recovery = match &run.fin.ending {
         Some(Ending::PowerCut { acked, failed }) => {
-            let mut rc =
-                ScheduleController::recovery(b.plan.clone(), acked.clone(), failed.clone(), &b.s0.2)?;
+            let mut rc = ScheduleController::recovery(
+                b.plan.clone(),
+                acked.clone(),
+                failed.clone(),
+                &b.s0.2,
+            )?;
             Some(converse(
                 Fake::resume(&b.s0.0, &format!("{salt} recovery"), cad),
                 &mut rc,
@@ -398,7 +435,11 @@ pub fn chunked(label: &str, lines: &[String], per: usize) -> Vec<String> {
                 b.push_str(l);
                 b.push('\n');
             }
-            format!("chunk\t{label}\t{i}\t{}\t{}", c.len(), sha256_hex(b.as_bytes()))
+            format!(
+                "chunk\t{label}\t{i}\t{}\t{}",
+                c.len(),
+                sha256_hex(b.as_bytes())
+            )
         })
         .collect()
 }

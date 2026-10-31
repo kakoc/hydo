@@ -34,7 +34,7 @@
 //! - [`Transcript::hash`] (16 hex digits, `ctl=` on the RESULT line) covers every line except the
 //!   notes, which are for people.
 
-use crate::control::{EngineAction, Ending, VTime, Why};
+use crate::control::{Ending, EngineAction, VTime, Why};
 use hydo_agent_proto::json::{self, Obj, Value};
 use sha2::{Digest, Sha256};
 
@@ -388,7 +388,10 @@ impl Transcript {
             h.update(r.value().to_canonical().as_bytes());
             h.update(b"\n");
         }
-        h.finalize()[..8].iter().map(|b| format!("{b:02x}")).collect()
+        h.finalize()[..8]
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect()
     }
 
     /// The agent commands typed, in order.

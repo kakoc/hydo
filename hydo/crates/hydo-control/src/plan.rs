@@ -203,10 +203,16 @@ impl Plan {
             return Err(Unsupported::seam(Seam::Liveness, "eventually invariants"));
         }
         if !m.checks.is_empty() {
-            return Err(Unsupported::seam(Seam::History, "checks: (history recording)"));
+            return Err(Unsupported::seam(
+                Seam::History,
+                "checks: (history recording)",
+            ));
         }
         if m.errors.is_some() {
-            return Err(Unsupported::seam(Seam::ErrorLogs, "errors: (the error-log scan)"));
+            return Err(Unsupported::seam(
+                Seam::ErrorLogs,
+                "errors: (the error-log scan)",
+            ));
         }
         if m.network.as_deref() == Some("bridge") {
             return Err(Unsupported::seam(Seam::NetNamespaces, "network: bridge"));
@@ -221,7 +227,10 @@ impl Plan {
             return Err(Unsupported::seam(Seam::Freeze, "faults: [freeze]"));
         }
         if get(d, "_compose").is_some_and(py::truthy) {
-            return Err(Unsupported::seam(Seam::Composer, "a test composer plan (test:)"));
+            return Err(Unsupported::seam(
+                Seam::Composer,
+                "a test composer plan (test:)",
+            ));
         }
         let order = hydo_manifest::service_order(&d["services"])
             .map_err(|e| Unsupported::other(e.message))?;
