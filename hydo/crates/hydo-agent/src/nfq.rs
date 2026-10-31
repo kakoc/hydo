@@ -185,49 +185,53 @@ impl Nfq {
         if n < 0 {
             return Err(io::Error::last_os_error());
         }
-        let b = &self.buf[..n as usize];
-        let mut out = Vec::new();
-        let mut off = 0;
-        while b.len() - off >= NLMSG_HDRLEN {
-            let len = u32::from_ne_bytes([b[off], b[off + 1], b[off + 2], b[off + 3]]) as usize;
-            if len < NLMSG_HDRLEN || len > b.len() - off {
-                break;
-            }
-            let ty = u16::from_ne_bytes([b[off + 4], b[off + 5]]);
-            if ty & 0xff == NFQNL_MSG_PACKET
-                && ty >> 8 == NFNL_SUBSYS_QUEUE
-                && len >= NLMSG_HDRLEN + 4
-            {
-                let mut id = None;
-                let mut pkt: &[u8] = &[];
-                let mut a = off + NLMSG_HDRLEN + align(4);
-                let mut alen = len as isize - (NLMSG_HDRLEN + 4) as isize;
-                while alen >= 4 {
-                    let al = u16::from_ne_bytes([b[a], b[a + 1]]) as usize;
-                    if al < 4 || al as isize > alen {
-                        break;
-                    }
-                    let at = u16::from_ne_bytes([b[a + 2], b[a + 3]]) & NLA_TYPE_MASK;
-                    if at == NFQA_PACKET_HDR && al >= 8 {
-                        id = Some(u32::from_ne_bytes([b[a + 4], b[a + 5], b[a + 6], b[a + 7]]));
-                    }
-                    if at == NFQA_PAYLOAD {
-                        pkt = &b[a + 4..a + al];
-                    }
-                    alen -= align(al) as isize;
-                    a += align(al);
-                }
-                if let Some(id) = id {
-                    out.push(Queued {
-                        id,
-                        pkt: pkt.to_vec(),
-                    });
-                }
-            }
-            off += align(len);
-        }
-        Ok(out)
+        Ok(parse_batch(&self.buf[..n as usize]))
     }
+}
+
+/// The queued packets in one netlink batch (NLMSG_OK / NLMSG_NEXT: a message's length is padded
+/// to 4 bytes, but the last message of a batch need not be, so the next offset can pass the end).
+pub fn parse_batch(b: &[u8]) -> Vec<Queued> {
+    let mut out = Vec::new();
+    let mut off = 0;
+    while off + NLMSG_HDRLEN <= b.len() {
+        let len = u32::from_ne_bytes([b[off], b[off + 1], b[off + 2], b[off + 3]]) as usize;
+        if len < NLMSG_HDRLEN || len > b.len() - off {
+            break;
+        }
+        let ty = u16::from_ne_bytes([b[off + 4], b[off + 5]]);
+        if ty & 0xff == NFQNL_MSG_PACKET && ty >> 8 == NFNL_SUBSYS_QUEUE && len >= NLMSG_HDRLEN + 4
+        {
+            // the attributes, within this message (alen counts what is left of it)
+            let mut id = None;
+            let mut pkt: &[u8] = &[];
+            let mut a = off + NLMSG_HDRLEN + align(4);
+            let mut alen = len as isize - (NLMSG_HDRLEN + 4) as isize;
+            while alen >= 4 {
+                let al = u16::from_ne_bytes([b[a], b[a + 1]]) as usize;
+                if al < 4 || al as isize > alen {
+                    break;
+                }
+                let at = u16::from_ne_bytes([b[a + 2], b[a + 3]]) & NLA_TYPE_MASK;
+                if at == NFQA_PACKET_HDR && al >= 8 {
+                    id = Some(u32::from_ne_bytes([b[a + 4], b[a + 5], b[a + 6], b[a + 7]]));
+                }
+                if at == NFQA_PAYLOAD {
+                    pkt = &b[a + 4..a + al];
+                }
+                alen -= align(al) as isize;
+                a += align(al);
+            }
+            if let Some(id) = id {
+                out.push(Queued {
+                    id,
+                    pkt: pkt.to_vec(),
+                });
+            }
+        }
+        off += align(len);
+    }
+    out
 }
 
 impl Drop for Nfq {
@@ -237,6 +241,7 @@ impl Drop for Nfq {
 }
 
 /// One queued packet: its id and its bytes (IP header first).
+#[derive(Debug, PartialEq, Eq)]
 pub struct Queued {
     pub id: u32,
     pub pkt: Vec<u8>,
@@ -437,6 +442,40 @@ mod tests {
         p[32] = 5 << 4;
         p.extend_from_slice(payload);
         p
+    }
+
+    /// A NFQNL_MSG_PACKET message as the kernel sends it: header, nfgenmsg, the packet header
+    /// attribute (id), the payload attribute; not padded at its end.
+    fn queued_msg(id: u32, payload: &[u8]) -> Vec<u8> {
+        let mut m = Msg::new(7, NFQNL_MSG_PACKET, 0);
+        let mut hdr = id.to_be_bytes().to_vec();
+        hdr.extend_from_slice(&[0x08, 0x00, 3]);
+        m = m.attr(NFQA_PACKET_HDR, &hdr).attr(NFQA_PAYLOAD, payload);
+        let mut b = m.0;
+        let unpadded = b.len() - (align(4 + payload.len()) - (4 + payload.len()));
+        b.truncate(unpadded);
+        let len = b.len() as u32;
+        b[0..4].copy_from_slice(&len.to_ne_bytes());
+        b
+    }
+
+    #[test]
+    fn a_batch_whose_last_message_is_not_padded() {
+        // found in a guest (M117): the next offset after the last message passed the batch's end
+        let mut batch = queued_msg(1, &[0x45; 41]);
+        batch.resize(align(batch.len()), 0);
+        batch.extend(queued_msg(2, &[0x45; 30]));
+        assert_eq!(batch.len() % 4, 2);
+        let got = parse_batch(&batch);
+        assert_eq!(
+            got.iter()
+                .map(|q| (u32::from_be(q.id), q.pkt.len()))
+                .collect::<Vec<_>>(),
+            vec![(1, 41), (2, 30)]
+        );
+        for cut in 0..batch.len() {
+            parse_batch(&batch[..cut]);
+        }
     }
 
     #[test]

@@ -290,9 +290,12 @@ fn run_steps(name: &str, steps: &[Step]) -> Vec<Entry> {
 }
 
 /// The steps of a recorded transcript: each host entry and the agent lines after it.
-fn steps_of(entries: &[Entry]) -> (usize, Vec<(Vec<u8>, Vec<String>)>) {
+/// Bytes typed and the agent lines that followed.
+type Recorded = Vec<(Vec<u8>, Vec<String>)>;
+
+fn steps_of(entries: &[Entry]) -> (usize, Recorded) {
     let mut first = 0;
-    let mut steps: Vec<(Vec<u8>, Vec<String>)> = Vec::new();
+    let mut steps: Recorded = Vec::new();
     for e in entries {
         match e {
             Entry::Comment(_) => {}
