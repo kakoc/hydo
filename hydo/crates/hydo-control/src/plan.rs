@@ -107,14 +107,28 @@ pub struct PlanInvariant {
     /// The init's key (`i0`, `i1`, ...).
     pub key: String,
     pub id: String,
-    /// `always` or `always_or_unreachable` (`eventually` is the liveness seam).
+    /// `always`, `always_or_unreachable` or `eventually`.
     pub kind: String,
     pub msg: String,
     pub cmd: String,
     /// Seconds between checks while the workload runs ("" = not periodic), as written.
     pub every: String,
-    /// Checked for the verdict.
+    /// Checked for the verdict (never for an `eventually` invariant).
     pub final_: bool,
+    /// `type: eventually`: its deadline, anchor and poll interval (manifest.sh's
+    /// HYDO_INV_<k>_within/after/poll; hydo-liveness.sh).
+    pub live: Option<PlanLive>,
+}
+
+/// An `eventually` invariant's liveness fields, as manifest.sh writes them (`%d` of the value).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlanLive {
+    /// Seconds of guest time after the anchor.
+    pub within: i64,
+    /// The anchor: `heal` (the default) or `start`.
+    pub after: String,
+    /// Seconds between two checks (default 1).
+    pub poll: i64,
 }
 
 /// One knob (manifest.sh's HYDO_KNOB_<token>_*).
@@ -146,11 +160,13 @@ pub struct Plan {
     pub data_opts: String,
     pub data_dirs: Vec<String>,
     pub clock_start: i64,
-    /// `guest.clock_after_cut` (the clock seam).
+    /// `guest.clock_after_cut`: seconds the machine is off at a power cut; the recovery boot's
+    /// clock continues from the first boot's (features/clock.rs).
     pub clock_after_cut: Option<i64>,
     pub invariants: Vec<PlanInvariant>,
     pub knobs: Vec<PlanKnob>,
-    /// `buggify: true` (a B= token is then the BUGGIFY seam; without it B= is an unknown knob).
+    /// `buggify: true`: a B= token is then written to /tmp/hydo-buggify (features/buggify.rs);
+    /// without it B= is an unknown knob.
     pub buggify: bool,
     /// `freeze` in `faults:`: the image has hydo-init-freeze.sh, so F= is the freeze at a packet
     /// (without it F= is an unknown knob).
@@ -274,12 +290,8 @@ impl Plan {
         // The init extensions hydo-build splices for a manifest (hydo-build/src/init.rs
         // `any_extension`): each is a seam. `addr:` alone changes nothing without N=/O= (the
         // links extension only redefines known_svc and net_on), so it is not refused here.
-        if m.invariants
-            .iter()
-            .any(|i| i.kind == hydo_manifest::InvariantType::Eventually)
-        {
-            return Err(Unsupported::seam(Seam::Liveness, "eventually invariants"));
-        }
+        // Driven: `eventually` invariants (features/liveness.rs), guest.clock_after_cut
+        // (features/clock.rs), `buggify: true` (features/buggify.rs).
         if !m.checks.is_empty() {
             return Err(Unsupported::seam(
                 Seam::History,
@@ -347,22 +359,37 @@ impl Plan {
             .enumerate()
         {
             let every = get(v, "every");
+            let kind = get(v, "type")
+                .map(py::str_of)
+                .unwrap_or_else(|| "always".into());
+            let live = if kind == "eventually" {
+                Some(PlanLive {
+                    within: int(&v["within"], "invariants.within")?,
+                    after: get(v, "after")
+                        .map(py::str_of)
+                        .unwrap_or_else(|| "heal".into()),
+                    poll: int_or(v, "poll", 1, "invariants.poll")?,
+                })
+            } else {
+                None
+            };
             invariants.push(PlanInvariant {
                 key: format!("i{i}"),
                 id: py::str_of(&v["id"]),
-                kind: get(v, "type")
-                    .map(py::str_of)
-                    .unwrap_or_else(|| "always".into()),
+                kind,
                 msg: py::str_of(get(v, "msg").unwrap_or(&v["id"])),
                 cmd: py::str_of(&v["cmd"]),
                 every: every
                     .filter(|e| py::truthy(e))
                     .map(py::str_of)
                     .unwrap_or_default(),
-                final_: match v.get("final") {
-                    Some(f) => py::truthy(f),
-                    None => every.is_none(),
-                },
+                // manifest.sh writes final=0 for an eventually invariant, whatever it says
+                final_: live.is_none()
+                    && match v.get("final") {
+                        Some(f) => py::truthy(f),
+                        None => every.is_none(),
+                    },
+                live,
             });
         }
         // hydo-build shell.rs: `faults:` as listed, and `faults or DEFAULT_FAULT_KINDS`

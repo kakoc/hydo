@@ -77,7 +77,9 @@ impl Seam {
                  `eventually` invariant is polled every `poll` s after its anchor (`start` or \
                  `heal`) until it holds or `within` s pass. Controller: anchor at the stop where \
                  the anchor's command was acknowledged; one `probe` with every_ms = poll and \
-                 deadline_ms = within; the HYDO-ASSERT eventually records from the probe event."
+                 deadline_ms = within; the HYDO-ASSERT eventually records from the probe event. \
+                 Driven since M122 (src/features/liveness.rs): a monitor thread runs the shell's \
+                 loop instead of a probe (HANDOFF.md decision 18)."
             }
             Seam::Clock => {
                 "hydo-init.sh's T= branch steps the realtime clock before a step (date -s) and \
@@ -85,7 +87,8 @@ impl Seam {
                  line at a cut and starts the recovery boot at that epoch + clock_after_cut. \
                  Controller: `clock_set {step}` at the point (its reply gives the new time, so \
                  the 5 s check is host-side), the fault.clock_* records; at a cut `clock_get`, \
-                 carried to the recovery conversation as a value, not as a token in the ids."
+                 carried to the recovery conversation as a value, not as a token in the ids. \
+                 Driven since M122 (src/features/clock.rs)."
             }
             Seam::History => {
                 "hydo-init-history.sh wraps start_periodic and finish: it prints the history \
@@ -103,7 +106,8 @@ impl Seam {
             }
             Seam::Buggify => {
                 "hydo-init-buggify.sh turns the knob B= into /tmp/hydo-buggify (mode 644). \
-                 Controller: one `write` of the value before the steps, at the knob's place."
+                 Controller: one `write` of the value before the steps, at the knob's place. \
+                 Driven since M122 (src/features/buggify.rs)."
             }
             Seam::Fakes => {
                 "hydo-init-fakes.sh starts hydo-world before the services, turns H= into its \
@@ -141,9 +145,10 @@ impl Seam {
                 "The engine copies the acked/failed lines into the recovery boot's `oracle` \
                  command (3,584 bytes, M89). The core controller writes the ids itself in the \
                  recovery conversation (`write`, chunked); still to do: the engine side of the \
-                 hand-over (C1), the first boot's clock (Clock) and the carried world (Fakes; \
-                 done in M125: Ending::PowerCut's world, given to the recovery with \
-                 ScheduleController::with_world)."
+                 hand-over (C1), the first boot's clock (Clock) and the carried world (Fakes). \
+                 Done: the world in M125 (Ending::PowerCut's world, ScheduleController::with_world); \
+                 the clock in M122. The run's controller hands RecoveryInputs (the ids, the \
+                 clock, the world) to ScheduleController::recovery_from."
             }
         }
     }

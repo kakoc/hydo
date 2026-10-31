@@ -11,8 +11,8 @@ use hydo_agent_proto::line::HostLine;
 use hydo_agent_proto::msg::Command;
 use hydo_control::transcript::{Header, Record};
 use hydo_control::{
-    run, AgentPoint, Ending, EngineAction, Finished, GuestState, Plan, ReplayController,
-    ScheduleController, Start, Transcript, Unsupported,
+    run, AgentPoint, Ending, EngineAction, Finished, GuestState, Plan, RecoveryInputs,
+    ReplayController, ScheduleController, Start, Transcript, Unsupported,
 };
 use hydo_schedule::Schedule;
 use sha2::{Digest, Sha256};
@@ -336,6 +336,8 @@ pub struct Ran {
     pub run: Conv,
     pub recovery: Option<Conv>,
     pub replay: Transcript,
+    /// What the run handed to the recovery conversation (after a power cut).
+    pub inputs: Option<RecoveryInputs>,
 }
 
 pub fn run_schedule(b: &Booted, s: &Schedule) -> Result<Ran, Unsupported> {
@@ -358,19 +360,16 @@ pub fn run_schedule(b: &Booted, s: &Schedule) -> Result<Ran, Unsupported> {
     )
     .fin
     .transcript;
+    let inputs = ctl.recovery_inputs().cloned();
     let recovery = match &run.fin.ending {
         Some(Ending::PowerCut {
             acked,
             failed,
             world,
         }) => {
-            let mut rc = ScheduleController::recovery(
-                b.plan.clone(),
-                acked.clone(),
-                failed.clone(),
-                &b.s0.2,
-            )?
-            .with_world(world);
+            let i = inputs.as_ref().expect("a power cut hands its inputs over");
+            assert_eq!((&i.acked, &i.failed, &i.world), (acked, failed, world));
+            let mut rc = ScheduleController::recovery_from(b.plan.clone(), i, &b.s0.2)?;
             Some(converse(
                 Fake::resume(&b.s0.0, &format!("{salt} recovery"), cad),
                 &mut rc,
@@ -384,6 +383,7 @@ pub fn run_schedule(b: &Booted, s: &Schedule) -> Result<Ran, Unsupported> {
         run,
         recovery,
         replay,
+        inputs,
     })
 }
 

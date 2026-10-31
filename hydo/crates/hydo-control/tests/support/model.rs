@@ -17,6 +17,9 @@
 //!
 //! The text functions (jesc, inv_detail, the failed ids, the clock text) are written again here,
 //! differently, so that the controller's versions are checked too.
+//!
+//! The extensions M122 drives (liveness, T= and clock_after_cut, BUGGIFY) are modelled in the
+//! child module `features` (model_features.rs), from their shell text.
 
 use super::fake::Msg;
 use super::Item;
@@ -25,6 +28,9 @@ use hydo_control::schedule::GuestState;
 use hydo_control::{Ending, EngineAction, Plan};
 use std::collections::{BTreeMap, BTreeSet};
 
+#[path = "model_features.rs"]
+mod features;
+use features::LiveJob;
 // hydo-init-links.sh, hydo-init-freeze.sh, hydo-init-netns.sh and the network faults (M124)
 mod net;
 
@@ -81,6 +87,10 @@ pub struct Model<'a> {
     own_out: BTreeMap<String, String>,
     jobs: Jobs,
     end_stop: u64,
+    // hydo-liveness.sh: the anchors' uptime texts, the monitors started, the ones resolved
+    live_anchors: BTreeMap<String, String>,
+    live_jobs: Vec<LiveJob>,
+    live_done: BTreeSet<usize>,
     /// hydo-init-fakes.sh's files and variables (model/fakes.rs).
     pf: fakes::Pf,
     /// The other extensions' shell variables (model/net.rs).
@@ -251,6 +261,9 @@ impl<'a> Model<'a> {
             jobs: Jobs::default(),
             pf: fakes::Pf::default(),
             end_stop: u64::MAX,
+            live_anchors: BTreeMap::new(),
+            live_jobs: Vec::new(),
+            live_done: BTreeSet::new(),
             ext: net::Ext::default(),
         };
         for (i, it) in items.iter().enumerate() {
@@ -755,6 +768,7 @@ impl<'a> Model<'a> {
 
     fn start_all(&mut self, verdict: &str, recovery: bool) -> R<()> {
         self.pf_start_all(recovery)?;
+        self.live_before_start_all(recovery)?;
         for sv in self.plan.services.clone() {
             if recovery && !sv.recovery {
                 continue;
@@ -896,6 +910,7 @@ impl<'a> Model<'a> {
     }
 
     fn finish(&mut self) -> R<()> {
+        self.live_resolve()?;
         let v = self.final_verdict()?;
         self.report(v.clone())?;
         self.end(Ending::Verdict(v))
@@ -920,9 +935,13 @@ impl<'a> Model<'a> {
     }
 
     fn step_range_plain(&mut self, a: i64, b: i64) -> R<()> {
-        if a >= b {
-            return Ok(());
+        if a < b {
+            self.step_range_body(a, b)?;
         }
+        self.live_after_step_range(b)
+    }
+
+    fn step_range_body(&mut self, a: i64, b: i64) -> R<()> {
         let e = self.env(&[("HYDO_FROM", a.to_string()), ("HYDO_TO", b.to_string())]);
         let mut argv = plain(&["timeout", &self.plan.workload_timeout.to_string()]);
         argv.extend(run_of(&self.plan.workload_run));
@@ -977,6 +996,9 @@ impl<'a> Model<'a> {
     }
 
     fn set_knob(&mut self, letter: &str, value: &str) -> R<()> {
+        if self.plan.buggify && letter == "B" {
+            return self.buggify_knob(value);
+        }
         if self.plan.freeze && letter == "F" {
             // hydo-init-freeze.sh: set_knob() { if [ "$1" = F ]; then fc_parse "$2"; else ...
             return self.fc_parse(value);
@@ -1005,7 +1027,7 @@ impl<'a> Model<'a> {
     /// explore_run, from `CMD="run <tokens>"`.
     fn explore_run(&mut self, cmd: &str) -> R<()> {
         self.note(format!("command: {cmd}"))?;
-        let (mut kk, mut cc, mut pp, mut xx) = (None, None, None, None);
+        let (mut kk, mut cc, mut pp, mut xx, mut tt) = (None, None, None, None, None);
         let (mut nn, mut oo): (Option<String>, Option<String>) = (None, None);
         for t in cmd.split(' ').skip(1) {
             let (l, v) = t.split_once('=').unwrap();
@@ -1016,7 +1038,7 @@ impl<'a> Model<'a> {
                 "X" => xx = Some(s(v)),
                 "N" => nn = Some(s(v)),
                 "O" => oo = Some(s(v)),
-                "T" => return bad(format!("{l}= is a seam; the corpus has none")),
+                "T" => tt = Some(s(v)),
                 // hydo-init-fakes.sh's set_knob: `if [ "$1" = H ]; then pf_add "$2"; ...`
                 "H" if self.plan.world.is_some() => self.pf_add(v)?,
                 _ => self.set_knob(l, v)?,
@@ -1103,8 +1125,15 @@ impl<'a> Model<'a> {
                 xat = -1;
             }
         }
+        // tat=${T%%:*}; tdelta=${T#*:}
+        let (mut tat, mut tdelta) = (-1, s("0"));
+        if let Some(t) = &tt {
+            let i = t.find(':').unwrap();
+            tat = num(&t[..i]);
+            tdelta = s(&t[i + 1..]);
+        }
         let steps = self.plan.steps;
-        let mut pts: Vec<i64> = vec![0, kat, kup, cat, pat, pup, xat, steps];
+        let mut pts: Vec<i64> = vec![0, kat, kup, cat, pat, pup, tat, xat, steps];
         pts.extend(self.net_points());
         pts.retain(|p| *p >= 0 && *p <= steps);
         pts.sort();
@@ -1116,6 +1145,7 @@ impl<'a> Model<'a> {
         self.jobs.periodic = (0..self.plan.invariants.len())
             .filter(|i| !self.plan.invariants[*i].every.is_empty())
             .collect();
+        self.live_anchor("start")?;
         let (mut down, mut cut, mut paused) = (false, false, false);
         let mut prev: Option<i64> = None;
         for p in pts {
@@ -1168,6 +1198,9 @@ impl<'a> Model<'a> {
                     )?;
                 }
             }
+            if p == tat {
+                self.clock_jump(p, &tdelta.clone())?;
+            }
             prev = Some(p);
         }
         if cut {
@@ -1184,10 +1217,16 @@ impl<'a> Model<'a> {
             }
             self.stop_periodic()?;
             let f = self.failed_ids()?;
-            // hydo-init-fakes.sh's failed_ids: at a cut the world's dump goes after the ids
+            // hydo-init-clock.sh's failed_ids appends clock=<epoch>; hydo-init-fakes.sh's (which
+            // wraps it) then appends the world's dump: the acked file is ids, clock=, records
+            let clock = self.clock_at_cut()?;
             let dump = self.pf_dump()?;
-            let a = self.read_all(&format!("{H}/acked"))? + &dump;
-            self.report(format!("hydo-explore-acked: {}", a.replace('\n', " ")))?;
+            let a = self.read_all(&format!("{H}/acked"))?;
+            self.report(format!(
+                "hydo-explore-acked: {}",
+                format!("{a}{clock}{dump}").replace('\n', " ")
+            ))?;
+            let a = a + &dump;
             self.report(format!("hydo-explore-failed: {}", f.replace('\n', " ")))?;
             for sv in self.plan.services.clone() {
                 self.sig(&sv.name, Sig::Stop)?;
@@ -1242,7 +1281,7 @@ impl<'a> Model<'a> {
         self.finish()
     }
 
-    fn conversation(&mut self, conv: Conv, cmd: &str, ids: (&[String], &[String])) -> R<()> {
+    fn conversation(&mut self, conv: Conv, cmd: &str, _ids: (&[String], &[String])) -> R<()> {
         match conv {
             Conv::Boot => {
                 self.boot_start("serve")?;
@@ -1264,6 +1303,7 @@ impl<'a> Model<'a> {
                 self.jobs.periodic = (0..self.plan.invariants.len())
                     .filter(|i| !self.plan.invariants[*i].every.is_empty())
                     .collect();
+                self.live_anchor("start")?;
                 self.step_range(0, self.plan.steps)?;
                 self.retry_workload()?;
                 self.stop_periodic()?;
@@ -1278,14 +1318,27 @@ impl<'a> Model<'a> {
                     // the oracle loop, with hydo-init-fakes.sh's start_all after it
                     self.pf_oracle_loop(cmd)?;
                 } else {
-                    // `echo $id >> $dst`, the ids of each list in one write
-                    for (f, list) in [("acked", ids.0), ("failed", ids.1)] {
+                    // `for id in ${CMD#oracle}; do ... echo "$id" >> $dst; done`, each list in one
+                    // write; with hydo-init-clock.sh, `sed -i '/^clock=/d'` takes the clock lines out
+                    // again (the controller never writes them)
+                    let mut lists: [Vec<&str>; 2] = [Vec::new(), Vec::new()];
+                    let mut dst = 0;
+                    for id in cmd.strip_prefix("oracle").unwrap_or(cmd).split_whitespace() {
+                        if id == "failed" {
+                            dst = 1;
+                        } else if !(self.plan.clock_after_cut.is_some() && id.starts_with("clock="))
+                        {
+                            lists[dst].push(id);
+                        }
+                    }
+                    for (f, list) in [("acked", &lists[0]), ("failed", &lists[1])] {
                         let text: String = list.iter().map(|i| format!("{i}\n")).collect();
                         if !text.is_empty() {
                             self.send(write(&format!("{H}/{f}"), &text, true))?;
                         }
                     }
                 }
+                self.clock_recovery(cmd)?;
                 self.mount_data("HYDO-ORACLE: VIOLATION data disk unmountable")?;
                 self.note(s("hydo-stack: recovering from log"))?;
                 self.start_all(
@@ -1403,6 +1456,7 @@ pub fn check(
     if let Some((svc, off)) = m.jobs.kill.clone() {
         m.check_kill(&svc, off, &env)?;
     }
+    m.live_rest()?;
     m.check_freeze_watch()?;
     for it in items {
         if let Some(by) = it.by() {
@@ -1410,6 +1464,9 @@ pub fn check(
                 || by == "runner"
                 || (by == "pause-timer" && m.jobs.pause.is_some())
                 || (by == "kill-timer" && m.jobs.kill.is_some())
+                || m.live_jobs
+                    .iter()
+                    .any(|j| by == format!("live:{}", plan.invariants[j.i].key))
                 || (by == "freeze" && m.ext.fc_sent.is_some())
                 || m.jobs
                     .periodic

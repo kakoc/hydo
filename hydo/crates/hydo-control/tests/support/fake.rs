@@ -9,6 +9,12 @@
 //! one that never gets ready, a failed setup or provisioning, a knob whose `set` fails, a data
 //! disk that does not mount, invariants that hold, fail or cannot be evaluated, a workload call
 //! that times out, outcomes that failed or stayed unknown.
+//!
+//! For the features of M122 it also keeps a running realtime clock and the guest's uptime (one
+//! unit of virtual time is 25 ms), refuses a later clock change now and then (and any change to
+//! a time before 1970), and answers an `eventually` check (a run under `timeout`) the way a
+//! system that settles does: it fails for the first few attempts, a few never succeed, some
+//! attempts succeed only after the deadline, and some hang until the timeout kills them.
 
 use hydo_agent_proto::frame::frame;
 use hydo_agent_proto::line::{AgentLine, ErrorLine, HostLine};
@@ -67,6 +73,9 @@ struct World {
     evals: BTreeMap<String, u64>,
     clock: i64,
     calls: u64,
+    /// The virtual time at which the clock was last set, and how many times it was set.
+    clock_t: u64,
+    clock_sets: u64,
     /// The fake outside world (hydo-world), see `fake/world.rs`.
     fw: world::FakeWorld,
     /// qdiscs, the armed freeze (`fake/net.rs`)
@@ -383,9 +392,37 @@ impl Fake {
             }
             Command::Syncfs(_) => self.emit(at, Msg::Reply(id, Reply::Syncfs(SyncfsOk {}))),
             Command::ClockSet(c) => {
-                self.world.clock = c.sec.unwrap_or(self.world.clock + c.step.unwrap_or(0));
-                let sec = self.world.clock;
-                self.emit(at, Msg::Reply(id, Reply::ClockSet(ClockSetOk { sec })));
+                let want = c.sec.unwrap_or(self.realtime() + c.step.unwrap_or(0));
+                if want < 0 {
+                    return refuse(self, ErrCode::OsError, "clock_settime: EINVAL (errno 22)");
+                }
+                // the first change of a boot always works; a later one now and then not
+                if self.world.clock_sets > 0
+                    && self.h(&["clockset", &id.to_string()]).is_multiple_of(11)
+                {
+                    return refuse(self, ErrCode::OsError, "clock_settime: EPERM (errno 1)");
+                }
+                self.world.clock = want;
+                self.world.clock_t = t;
+                self.world.clock_sets += 1;
+                self.emit(
+                    at,
+                    Msg::Reply(id, Reply::ClockSet(ClockSetOk { sec: want })),
+                );
+            }
+            Command::ClockGet(_) => {
+                let ms = t * 25;
+                self.emit(
+                    at,
+                    Msg::Reply(
+                        id,
+                        Reply::ClockGet(ClockGetOk {
+                            sec: self.realtime(),
+                            nsec: ((ms % 1000) * 1_000_000) as u32,
+                            mono_ms: ms,
+                        }),
+                    ),
+                );
             }
             Command::Run(r) => {
                 self.emit(at, Msg::Reply(id, Reply::Run(RunOk {})));
@@ -406,6 +443,8 @@ impl Fake {
                             .is_some_and(|p| p.running && !p.dying)
                     });
                     (3, if busy { 0 } else { 1 }, String::new())
+                } else if a1 == "timeout" {
+                    self.live_attempt(&r.argv)
                 } else if a1 == "ifconfig" || a1 == "ip" || script.contains(".log.old") {
                     (2, 0, String::new())
                 } else if Self::env_of(&r.env, "HYDO_VALUE").is_some() {
@@ -577,6 +616,57 @@ impl Fake {
                 &format!("the fake does not do {}", other.name()),
             ),
         }
+    }
+
+    /// The realtime clock now: the value it was set to, plus the virtual time since.
+    fn realtime(&self) -> i64 {
+        self.world.clock + (self.t.saturating_sub(self.world.clock_t) * 25 / 1000) as i64
+    }
+
+    /// One attempt of an `eventually` check (`$BB timeout <within+1> $BB sh -c "<check>"`):
+    /// (duration, exit status, output). A check needs a few attempts before it holds; one in
+    /// seven never holds; an attempt now and then succeeds only after the deadline or hangs
+    /// until busybox timeout ends it (status 143).
+    fn live_attempt(&mut self, argv: &[String]) -> (u64, u32, String) {
+        let limit: u64 = argv.get(2).and_then(|x| x.parse().ok()).unwrap_or(1);
+        let script = argv.get(6).cloned().unwrap_or_default();
+        let k = self
+            .world
+            .evals
+            .entry(format!("live:{script}"))
+            .or_default();
+        *k += 1;
+        let k = *k;
+        let need = self.h(&["need", &script]) % 7;
+        let r = self.h(&["live", &script, &k.to_string()]);
+        let ok = need != 6 && k > need;
+        let mut dur = 4 + r % 30;
+        let mut status = if ok {
+            0
+        } else if r.is_multiple_of(5) {
+            2
+        } else {
+            1
+        };
+        if ok && self.h(&["late", &script, &k.to_string()]).is_multiple_of(9) {
+            dur = (limit - 1) * 40 + 20;
+        }
+        if r.is_multiple_of(31) {
+            dur = limit * 40 + 100;
+        }
+        if dur > limit * 40 {
+            dur = limit * 40;
+            status = 143;
+        }
+        let pending = if status == 0 { 0 } else { k % 5 + 1 };
+        let out = match self.h(&["lform", &script, &status.to_string()]) % 4 {
+            0 => format!("pending={pending}\n"),
+            1 => format!("checked \"k\"\tpending={pending}"),
+            2 if status == 0 => "HYDO-ORACLE: OK all resolved\n".to_string(),
+            2 => format!("HYDO-ORACLE: VIOLATION {pending} pending\n"),
+            _ => String::new(),
+        };
+        (dur, status, out)
     }
 
     /// The process under `h` (spawn `id`) exits at `at`: it is dying from now (no longer alive
