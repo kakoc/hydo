@@ -1,0 +1,6 @@
+HYDO-HIST la 3 invoke * txn a:x:2 r:y a:k%3A1:e%2C2 r:%
+HYDO-HIST la 3 ok * txn a:x:2 r:y:[] a:k%3A1:e%2C2 r:%:[a,b%20c]
+HYDO-HIST la 3 invoke * txn a:x:3
+HYDO-HIST la 3 fail * txn a:x:3
+HYDO-HIST la 4 invoke * txn r:x a:y:1 r:%6Eil:[%6Eil] a:%:% r:%40
+HYDO-HIST la 4 info * txn r:x a:y:1 r:%6Eil:[%6Eil] a:%:% r:%40

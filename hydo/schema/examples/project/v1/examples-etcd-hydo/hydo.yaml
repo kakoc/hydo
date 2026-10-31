@@ -1,0 +1,191 @@
+# A replicated system: a three-member etcd cluster in one guest over loopback, from the official
+# static release binaries (examples/etcd/build.sh downloads them and checks the pinned sha256).
+# Build on the build box (from the repository root):
+#   hvx/onboard/examples/etcd/build.sh                 # etcd 3.6.15 (default)
+#   hvx/onboard/examples/etcd/build.sh 3.5.5           # any version build.sh has a sha256 for
+# Try:  disk=none | run                    -> OK: every acked put readable, revisions monotonic,
+#                                              members agree
+#       disk=none | run K=etcd2@10+3       -> a member killed right after an online defrag
+#       disk=none | run N=etcd1-etcd2@5-20:loss,100%   -> partition between two members only
+#
+# Each member has its own loopback address (addr:) and runs as its own user; the setup sends that
+# user's connections out from that address (policy routing by uid), so a link fault such as
+# N=etcd1-etcd2 or N=etcd3-* (MANIFEST.md, "Link faults") cuts exactly the traffic between the
+# named members. Clients (etcdctl, run as root) connect from 127.0.0.1 and are not affected by a
+# link fault; N=etcd1 (no link) acts on etcd1's client port, as for any other service.
+name: etcd
+description: three-member etcd cluster; acked puts survive, client revisions never go back, members agree.
+
+params:
+  version: "3.6.15"
+
+root:
+  files:
+    - {src: "etcd-v{{version}}/etcd", dst: /bin/etcd, mode: "0755"}
+    - {src: "etcd-v{{version}}/etcdctl", dst: /bin/etcdctl, mode: "0755"}
+  text:
+    /etc/etcd-member: |
+      # etcd-member <n> <addr> <client-port> <peer-port>: member n as user etcd<n>. exec all the
+      # way down, so the service's PID is etcd itself (kills and pauses hit etcd).
+      exec su etcd$1 -s /bin/sh -c "exec /bin/etcd --name etcd$1 --data-dir /data/etcd$1 \
+        --listen-client-urls http://$2:$3 --advertise-client-urls http://$2:$3 \
+        --listen-peer-urls http://$2:$4 --initial-advertise-peer-urls http://$2:$4 \
+        --initial-cluster $ETCD_CLUSTER --initial-cluster-token hydo --initial-cluster-state new \
+        --log-level warn"
+    /etc/passwd: |
+      root:x:0:0:root:/tmp:/bin/sh
+      etcd1:x:1001:1001:etcd1:/tmp:/bin/sh
+      etcd2:x:1002:1002:etcd2:/tmp:/bin/sh
+      etcd3:x:1003:1003:etcd3:/tmp:/bin/sh
+    /etc/group: |
+      root:x:0:
+      etcd1:x:1001:
+      etcd2:x:1002:
+      etcd3:x:1003:
+
+data:
+  size_mib: 512                     # each member preallocates a 64 MiB WAL segment
+
+env:
+  IPR: /nix/store/dx4fsbxs5v82l9lzmjkpkhx5ygqcwm69-iproute2-6.8.0/bin/ip   # in the image with tc
+  EPS: 127.0.0.11:2379,127.0.0.12:12379,127.0.0.13:22379
+  ETCD_CLUSTER: etcd1=http://127.0.0.11:2380,etcd2=http://127.0.0.12:12380,etcd3=http://127.0.0.13:22380
+
+shell: |
+  ectl() { /bin/etcdctl --dial-timeout=1s --command-timeout=2s "$@"; }
+  ep_of() { case $1 in 0) echo 127.0.0.11:2379;; 1) echo 127.0.0.12:12379;; *) echo 127.0.0.13:22379;; esac; }
+  rev_of() { printf '%s' "$1" | sed -n 's/.*"header":{[^}]*"revision":\([0-9]*\).*/\1/p'; }
+  member_setup() {   # <n> <addr>: data dir owned by etcd<n>; uid 100<n> sends from <addr>
+    mkdir -p /data/etcd$1 && chown etcd$1:etcd$1 /data/etcd$1 && chmod 700 /data/etcd$1 || return 1
+    # the local table moves from rule 0 to rule 100, so the per-uid rules (pref 10) come first
+    $IPR rule show | grep -q '^100:.*lookup local' || { $IPR rule add pref 100 lookup local && $IPR rule del pref 0; } || return 1
+    $IPR route show table 10$1 | grep -q "src $2" || $IPR route add local 127.0.0.0/8 dev lo src $2 table 10$1 || return 1
+    $IPR rule show | grep -q "uidrange 100$1-100$1" || $IPR rule add pref 10 uidrange 100$1-100$1 lookup 10$1
+  }
+  wait_quorum() {   # up to 60 s for a linearizable read through any member
+    local n=0
+    until ectl --endpoints=$EPS get hydo-probe > /dev/null 2>&1; do
+      n=$((n + 1)); [ $n -lt 60 ] || return 1; sleep 1
+    done
+  }
+  observe() {   # <client> <revision> <what>: log it; a revision below this client's last one is a
+                # violation, reported at once (a power cut would lose the log before the final check)
+    local f=/tmp/hydo/rev.$1 last
+    last=$(tail -1 $f 2>/dev/null | cut -d' ' -f1)
+    if [ -n "$last" ] && [ "$2" -lt "$last" ]; then
+      echo "HYDO-ASSERT {\"t\":\"always\",\"id\":\"client.revisions_monotonic\",\"ok\":false,\"msg\":\"each client's observed revisions never go backwards\",\"details\":{\"out\":\"client $1 saw revision $2 ($3) after $last\"}}" > /dev/console
+    fi
+    echo "$2 $3" >> $f
+  }
+  client_op() {   # <client> <step>: put k<id>=v<id>, then read it back, through one member
+    local c=$1 id ep out r
+    id=$(($2 * 3 + $1)); ep=$(ep_of $((($1 + $2) % 3)))
+    if out=$(ectl --endpoints=$ep -w json put k$id v$id 2>/dev/null) && r=$(rev_of "$out") && [ -n "$r" ]; then
+      echo $id >> $HYDO_ACKED; echo "$id ack" >> $HYDO_OUTCOMES; observe $c $r put-k$id@$ep
+    else
+      echo "$id unknown" >> $HYDO_OUTCOMES
+    fi
+    out=$(ectl --endpoints=$ep -w json get k$id 2>/dev/null) && r=$(rev_of "$out") && [ -n "$r" ] && observe $c $r get-k$id@$ep
+    return 0
+  }
+
+services:
+  - name: etcd1
+    addr: 127.0.0.11
+    port: 2379                       # client port: N=etcd1 / O=etcd1 act on client traffic
+    setup: member_setup 1 127.0.0.11
+    cmd: sh /etc/etcd-member 1 127.0.0.11 2379 2380
+    ready: wget -q -T 2 -O /dev/null http://127.0.0.11:2380/version   # peer port up (no quorum needed)
+  - name: etcd2
+    addr: 127.0.0.12
+    port: 12379
+    setup: member_setup 2 127.0.0.12
+    cmd: sh /etc/etcd-member 2 127.0.0.12 12379 12380
+    ready: wget -q -T 2 -O /dev/null http://127.0.0.12:12380/version
+  - name: etcd3
+    addr: 127.0.0.13
+    port: 22379
+    setup: member_setup 3 127.0.0.13
+    cmd: sh /etc/etcd-member 3 127.0.0.13 22379 22380
+    ready: wget -q -T 2 -O /dev/null http://127.0.0.13:22380/version
+
+provision: |
+  wait_quorum && ectl --endpoints=$EPS put hydo-probe up
+
+workload:
+  steps: 30                          # step i: clients 0,1,2 at once each put k<3i+c> and read it
+                                     #   back, through members (c+i) mod 3; every 5th step ends
+                                     #   with one more put and at once an online defrag of every
+                                     #   member (a kill at the next step boundary then lands
+                                     #   right after a defrag)
+  timeout: 600
+  process: etcdctl
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      client_op 0 $i & client_op 1 $i & client_op 2 $i &
+      wait
+      if [ $((i % 5)) = 4 ]; then     # a write, then at once an online defrag of every member
+        ectl --endpoints=$EPS put hydo-defrag $i > /dev/null 2>&1
+        /bin/etcdctl --dial-timeout=1s --command-timeout=5s --endpoints=$EPS defrag > /dev/null 2>&1
+      fi
+      i=$((i + 1))
+    done
+  retry: |
+    wait_quorum || exit 0
+    i=0
+    while [ $i -lt $((HYDO_STEPS * 3)) ]; do
+      if ! grep -qx $i $HYDO_ACKED; then
+        for a in 1 2 3; do       # a fresh leader may still refuse the first attempt
+          ectl --endpoints=$EPS put k$i v$i > /dev/null 2>&1 && { echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES; break; }
+          sleep 1
+        done
+      fi
+      i=$((i + 1))
+    done
+
+invariants:
+  - id: etcd.acked_puts_readable
+    msg: every put a client saw acknowledged is readable with its value after recovery
+    cmd: |
+      wait_quorum || { echo "no quorum within 60 s"; exit 2; }
+      ectl --endpoints=$EPS get --prefix k > /tmp/hydo/kv 2>/dev/null || { echo "range read failed"; exit 2; }
+      awk 'FILENAME == ARGV[1] { if (FNR % 2) k = $0; else v[k] = $0; next }
+           { if (v["k" $1] != "v" $1) { print "acked put k" $1 " lost (read \"" v["k" $1] "\")"; bad = 1; exit } }
+           END { if (bad) exit 1 }' /tmp/hydo/kv $HYDO_ACKED || exit 1
+      echo "acked=$(wc -l < $HYDO_ACKED) all readable"
+  - id: client.revisions_monotonic
+    msg: each client's observed revisions never go backwards
+    cmd: |
+      n=0
+      for f in /tmp/hydo/rev.0 /tmp/hydo/rev.1 /tmp/hydo/rev.2; do
+        [ -f $f ] || continue
+        n=$((n + $(wc -l < $f)))
+        awk -v f=$f '$1 < last { print f ": revision " $1 " (" $2 ") after " last " (" what ")"; exit 1 } { last = $1; what = $2 }' $f || exit 1
+      done
+      echo "observations=$n monotonic"
+  - id: etcd.members_agree
+    msg: after the run every member reports the same revision and the same mod_revision of the last acked key
+    cmd: |
+      wait_quorum || { echo "no quorum within 60 s"; exit 2; }
+      last=$(sort -n $HYDO_ACKED | tail -1); key=k$last
+      [ -n "$last" ] || key=hydo-probe
+      n=0
+      while :; do
+        rs=""; ms=""; ok=1
+        for m in 0 1 2; do
+          r=$(rev_of "$(ectl --endpoints=$(ep_of $m) -w json endpoint status 2>/dev/null)")
+          mr=$(ectl --endpoints=$(ep_of $m) --consistency=s -w json get $key 2>/dev/null | sed -n 's/.*"mod_revision":\([0-9]*\).*/\1/p')
+          [ -n "$r" ] && [ -n "$mr" ] || ok=0
+          rs="$rs $r"; ms="$ms $mr"
+        done
+        if [ $ok = 1 ] && [ $(echo $rs | tr ' ' '\n' | sort -u | wc -l) = 1 ] && [ $(echo $ms | tr ' ' '\n' | sort -u | wc -l) = 1 ]; then
+          echo "members agree: revision$rs, $key mod_revision$ms"; exit 0
+        fi
+        n=$((n + 1)); [ $n -lt 30 ] || break
+        sleep 1
+      done
+      [ $ok = 1 ] || { echo "a member did not answer within 30 s (revisions$rs; $key mod_revisions$ms)"; exit 2; }
+      echo "members disagree: revisions$rs; $key mod_revisions$ms"; exit 1
+
+faults: [kill, pause, network, oneway, cut, clock, disk]

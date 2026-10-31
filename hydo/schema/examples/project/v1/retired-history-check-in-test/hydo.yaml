@@ -1,0 +1,35 @@
+# A retired format-1 spelling: history checks written in test.checks (kind linearizable,
+# list_append, or its alias list-append). Format 1 reads it as the top-level checks: entries the
+# case retired-history-check-in-test-migrated spells out; `hydo migrate` writes that file.
+name: kv-hist
+description: Redis with history checks written in test.checks
+root:
+  files:
+    - {src: bin/redis-server, dst: /bin/redis-server, mode: "0755"}
+    - {src: bin/kvtest, dst: /bin/kvtest, mode: "0755"}
+data:
+  dirs: [redis]
+services:
+  - name: redis
+    cmd: /bin/redis-server --dir /data/redis --appendonly yes
+    ready: /bin/kvtest ping
+    port: 6379
+workload:
+  steps: 10
+test:
+  parallel: 2
+  commands:
+    - {name: set, kind: parallel_driver, run: [/bin/kvtest, driver, set]}
+    - {name: append, kind: parallel_driver, run: [/bin/kvtest, driver, append]}
+  checks:
+    - {name: totals, kind: final, run: [/bin/kvtest, check, totals]}
+    - name: kv.linearizable
+      kind: linearizable
+      history: kv
+      model: register
+      run: [/bin/kvtest, readback, kv]
+    - name: lists.append
+      kind: list-append
+      history: lists
+      consistency: serializable
+      msg: every list is a serializable history of appends

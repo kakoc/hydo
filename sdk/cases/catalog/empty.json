@@ -1,0 +1,10 @@
+{
+  "about": "a catalog with nothing declared writes nothing",
+  "needs": [],
+  "steps": [
+    {"do":"catalog"}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "empty.out", "returns": ""}
+  ]
+}

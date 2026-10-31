@@ -1,0 +1,11 @@
+{
+  "about": "await with a condition that is true at once writes ok:true with elapsed_ms 0",
+  "needs": [],
+  "steps": [
+    {"do":"eventually","id":"e.await","msg":"true at once","within_ms":1500},
+    {"do":"await","a":0,"details":{"map":[["probe","ping"]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "await.out", "returns": "1"}
+  ]
+}

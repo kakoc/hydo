@@ -1,0 +1,12 @@
+{
+  "about": "the caller's details are kept and left, op and right replace keys of the same name",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"c.details","msg":"a comparison with details"},
+    {"do":"cmp","a":0,"left":{"int":"7"},"op":"\u003c","right":{"int":"5"},"details":{"map":[["extra","e"],["left","overwritten"],["op",{"int":"1"}],["right",[{"int":"1"}]]]}},
+    {"do":"cmp","a":0,"left":{"int":"1"},"op":"\u003c","right":{"int":"5"},"details":{"map":[["z",true]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "details_merged.out", "returns": "01"}
+  ]
+}

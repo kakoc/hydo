@@ -1,0 +1,14 @@
+{
+  "about": "expire writes ok:false; the episode is then over",
+  "needs": [],
+  "steps": [
+    {"do":"eventually","id":"e.late","msg":"never true","within_ms":0},
+    {"do":"begin","a":0},
+    {"do":"expire","w":0,"details":{"map":[["k","v"]]}},
+    {"do":"done","w":0},
+    {"do":"expire","w":0}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "expire.out", "returns": "0"}
+  ]
+}

@@ -342,6 +342,8 @@ pub fn prepare(
         "x86_64"
     };
     let oci = oci::prepare(&mut data, path, oarch, io)?;
+    // the project model (hydo-manifest model.rs) after the image reader's own checks
+    hydo_manifest::check_document(&loaded).map_err(|e| manifest_fail(&e))?;
     Ok(Prepared { data, loaded, oci })
 }
 

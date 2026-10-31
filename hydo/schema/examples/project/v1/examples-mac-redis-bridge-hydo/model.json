@@ -1,0 +1,193 @@
+{
+  "format": 1,
+  "name": "redis-bridge",
+  "description": "A Redis primary and replica in their own network namespaces; every acknowledged SET survives on the primary and reaches the replica.",
+  "network": "bridge",
+  "root": {
+    "files": [
+      {
+        "src": "/nix/store/svzgg47md9362vjrq5x9k1djln2pkihj-redis-7.2.4/bin/redis-server",
+        "dst": "/bin/redis-server"
+      },
+      {
+        "src": "/nix/store/svzgg47md9362vjrq5x9k1djln2pkihj-redis-7.2.4/bin/redis-cli",
+        "dst": "/bin/redis-cli"
+      },
+      {
+        "src": "/nix/store/3z92sygrppbacsj05x9gwhpaxkivrzc8-systemd-255.6/lib/libsystemd.so.0",
+        "dst": "/nix/store/3z92sygrppbacsj05x9gwhpaxkivrzc8-systemd-255.6/lib/libsystemd.so.0"
+      },
+      {
+        "src": "/nix/store/3z92sygrppbacsj05x9gwhpaxkivrzc8-systemd-255.6/lib/libsystemd.so.0.38.0",
+        "dst": "/nix/store/3z92sygrppbacsj05x9gwhpaxkivrzc8-systemd-255.6/lib/libsystemd.so.0.38.0"
+      },
+      {
+        "src": "/nix/store/7lf9ba7lb8418ihzzy8gm985rk16bmbk-xz-5.4.7/lib/liblzma.so.5",
+        "dst": "/nix/store/7lf9ba7lb8418ihzzy8gm985rk16bmbk-xz-5.4.7/lib/liblzma.so.5"
+      },
+      {
+        "src": "/nix/store/7lf9ba7lb8418ihzzy8gm985rk16bmbk-xz-5.4.7/lib/liblzma.so.5.4.7",
+        "dst": "/nix/store/7lf9ba7lb8418ihzzy8gm985rk16bmbk-xz-5.4.7/lib/liblzma.so.5.4.7"
+      },
+      {
+        "src": "/nix/store/8klck62rcrjgck547m0rmwljivlxcssi-libcap-2.69-lib/lib/libcap.so.2",
+        "dst": "/nix/store/8klck62rcrjgck547m0rmwljivlxcssi-libcap-2.69-lib/lib/libcap.so.2"
+      },
+      {
+        "src": "/nix/store/8klck62rcrjgck547m0rmwljivlxcssi-libcap-2.69-lib/lib/libcap.so.2.69",
+        "dst": "/nix/store/8klck62rcrjgck547m0rmwljivlxcssi-libcap-2.69-lib/lib/libcap.so.2.69"
+      },
+      {
+        "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/ld-linux-aarch64.so.1",
+        "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/ld-linux-aarch64.so.1"
+      },
+      {
+        "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libc.so.6",
+        "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libc.so.6"
+      },
+      {
+        "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libdl.so.2",
+        "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libdl.so.2"
+      },
+      {
+        "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libm.so.6",
+        "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libm.so.6"
+      },
+      {
+        "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libpthread.so.0",
+        "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/libpthread.so.0"
+      },
+      {
+        "src": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/librt.so.1",
+        "dst": "/nix/store/8sz64jcd47ihhd2y3yd40jya9v7lzjjy-glibc-2.39-52/lib/librt.so.1"
+      },
+      {
+        "src": "/nix/store/kablphmmlimsvz4qmf9xbgqpwa8b71nh-lz4-1.9.4/lib/liblz4.so.1",
+        "dst": "/nix/store/kablphmmlimsvz4qmf9xbgqpwa8b71nh-lz4-1.9.4/lib/liblz4.so.1"
+      },
+      {
+        "src": "/nix/store/kablphmmlimsvz4qmf9xbgqpwa8b71nh-lz4-1.9.4/lib/liblz4.so.1.9.4",
+        "dst": "/nix/store/kablphmmlimsvz4qmf9xbgqpwa8b71nh-lz4-1.9.4/lib/liblz4.so.1.9.4"
+      },
+      {
+        "src": "/nix/store/ma8n17lsrb9pgycvwyr3dhnalhkbqrdf-jemalloc-5.3.0/lib/libjemalloc.so.2",
+        "dst": "/nix/store/ma8n17lsrb9pgycvwyr3dhnalhkbqrdf-jemalloc-5.3.0/lib/libjemalloc.so.2"
+      },
+      {
+        "src": "/nix/store/p27dxq20hdvm8xjsgj4n103cl02x4jr4-openssl-3.0.14/lib/libcrypto.so.3",
+        "dst": "/nix/store/p27dxq20hdvm8xjsgj4n103cl02x4jr4-openssl-3.0.14/lib/libcrypto.so.3"
+      },
+      {
+        "src": "/nix/store/p27dxq20hdvm8xjsgj4n103cl02x4jr4-openssl-3.0.14/lib/libssl.so.3",
+        "dst": "/nix/store/p27dxq20hdvm8xjsgj4n103cl02x4jr4-openssl-3.0.14/lib/libssl.so.3"
+      },
+      {
+        "src": "/nix/store/piw1xfc6p66qf0malcfixz822q2b1wg1-libgpg-error-1.48/lib/libgpg-error.so.0",
+        "dst": "/nix/store/piw1xfc6p66qf0malcfixz822q2b1wg1-libgpg-error-1.48/lib/libgpg-error.so.0"
+      },
+      {
+        "src": "/nix/store/piw1xfc6p66qf0malcfixz822q2b1wg1-libgpg-error-1.48/lib/libgpg-error.so.0.35.0",
+        "dst": "/nix/store/piw1xfc6p66qf0malcfixz822q2b1wg1-libgpg-error-1.48/lib/libgpg-error.so.0.35.0"
+      },
+      {
+        "src": "/nix/store/pp8jrab5a9qfpn3la57r37x8kw2hrcil-gcc-13.2.0-libgcc/lib/libgcc_s.so.1",
+        "dst": "/nix/store/pp8jrab5a9qfpn3la57r37x8kw2hrcil-gcc-13.2.0-libgcc/lib/libgcc_s.so.1"
+      },
+      {
+        "src": "/nix/store/wmcyf2wn9wh491wi55j18kz6gsdz99cr-libgcrypt-1.10.3/lib/libgcrypt.so.20",
+        "dst": "/nix/store/wmcyf2wn9wh491wi55j18kz6gsdz99cr-libgcrypt-1.10.3/lib/libgcrypt.so.20"
+      },
+      {
+        "src": "/nix/store/wmcyf2wn9wh491wi55j18kz6gsdz99cr-libgcrypt-1.10.3/lib/libgcrypt.so.20.4.3",
+        "dst": "/nix/store/wmcyf2wn9wh491wi55j18kz6gsdz99cr-libgcrypt-1.10.3/lib/libgcrypt.so.20.4.3"
+      },
+      {
+        "src": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libgcc_s.so.1",
+        "dst": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libgcc_s.so.1"
+      },
+      {
+        "src": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libstdc++.so.6",
+        "dst": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libstdc++.so.6"
+      },
+      {
+        "src": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libstdc++.so.6.0.32",
+        "dst": "/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libstdc++.so.6.0.32"
+      },
+      {
+        "src": "/nix/store/ywz8lg1h600a888z67hpj632b8gri6wx-zstd-1.5.6/lib/libzstd.so.1",
+        "dst": "/nix/store/ywz8lg1h600a888z67hpj632b8gri6wx-zstd-1.5.6/lib/libzstd.so.1"
+      },
+      {
+        "src": "/nix/store/ywz8lg1h600a888z67hpj632b8gri6wx-zstd-1.5.6/lib/libzstd.so.1.5.6",
+        "dst": "/nix/store/ywz8lg1h600a888z67hpj632b8gri6wx-zstd-1.5.6/lib/libzstd.so.1.5.6"
+      }
+    ],
+    "text": {
+      "/etc/redis-primary.conf": "port 6379\nbind 0.0.0.0\nprotected-mode no\ndir /data/primary\nsave \"\"\nappendonly yes\nappendfsync always\nrepl-diskless-sync-delay 0\nhz 1\ndynamic-hz no\n",
+      "/etc/redis-replica.conf": "port 6379\nbind 0.0.0.0\nprotected-mode no\ndir /data/replica\nsave \"\"\nreplicaof primary 6379\nrepl-diskless-sync-delay 0\nhz 1\ndynamic-hz no\n"
+    }
+  },
+  "data": {
+    "size_mib": 64,
+    "dirs": [
+      "primary",
+      "replica"
+    ]
+  },
+  "shell": "lag() {   # the primary's replication offset minus the replica's acknowledged one\n  /bin/redis-cli -h primary INFO replication 2>/dev/null | tr -d '\\r' | awk -F'[:=,]' '\n    $1 == \"master_repl_offset\" { m = $2 } $1 == \"slave0\" { for (i = 2; i < NF; i += 2) if ($i == \"offset\") o = $(i + 1) }\n    END { if (o == \"\") print \"none\"; else print m - o }'\n}\n",
+  "services": [
+    {
+      "name": "primary",
+      "cmd": "/bin/redis-server /etc/redis-primary.conf",
+      "ready": "/bin/redis-cli ping | grep -q PONG",
+      "port": 6379,
+      "addr": "10.89.0.11"
+    },
+    {
+      "name": "replica",
+      "cmd": "/bin/redis-server /etc/redis-replica.conf",
+      "ready": "/bin/redis-cli INFO replication | grep -q master_link_status:up",
+      "port": 6379,
+      "addr": "10.89.0.12",
+      "depends_on": [
+        "primary"
+      ]
+    }
+  ],
+  "workload": {
+    "steps": 16,
+    "run": "i=$HYDO_FROM\nwhile [ $i -lt $HYDO_TO ]; do\n  r=$(timeout 2 /bin/redis-cli -h redisp -p 6380 SET k:$i v$i 2>/dev/null)\n  if [ \"$r\" = OK ]; then echo $i >> $HYDO_ACKED; echo \"$i ack\" >> $HYDO_OUTCOMES\n  else echo \"$i unknown\" >> $HYDO_OUTCOMES; fi\n  sleep 0.5\n  echo \"redis-bridge: step $i ${r:-no answer}, replica lag $(lag)\" > /dev/console\n  i=$((i + 1))\ndone\n"
+  },
+  "invariants": [
+    {
+      "id": "primary.acked_writes_survive",
+      "msg": "every SET the client saw acknowledged reads back from the primary",
+      "cmd": "for i in $(cat $HYDO_ACKED); do\n  [ \"$(/bin/redis-cli -h primary GET k:$i)\" = \"v$i\" ] || { echo \"key k:$i lost on the primary\"; exit 1; }\ndone\necho \"acked=$(wc -l < $HYDO_ACKED) all on the primary\"\n"
+    },
+    {
+      "id": "replica.catches_up",
+      "type": "eventually",
+      "msg": "every acknowledged SET reaches the replica within 30 s after the faults end",
+      "cmd": "for i in $(cat $HYDO_ACKED); do\n  [ \"$(/bin/redis-cli -h replica GET k:$i)\" = \"v$i\" ] || { echo \"k:$i not on the replica yet (lag $(lag))\"; exit 1; }\ndone\necho \"acked=$(wc -l < $HYDO_ACKED) all on the replica\"\n",
+      "within": 30
+    }
+  ],
+  "faults": [
+    "kill",
+    "pause",
+    "network",
+    "oneway",
+    "cut",
+    "clock",
+    "freeze",
+    "protocol"
+  ],
+  "proxies": [
+    {
+      "name": "redisp",
+      "port": 6380,
+      "protocol": "tcp",
+      "service": "primary"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "about": "without a configuration no point fires and nothing is written but the catalog",
+  "needs": [],
+  "steps": [
+    {"do":"buggify","id":"b.off","msg":"never configured"},
+    {"do":"fire","a":0},
+    {"do":"fire","a":0},
+    {"do":"catalog"}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "not_configured.out", "returns": "00"}
+  ]
+}

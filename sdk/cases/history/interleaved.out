@@ -1,0 +1,6 @@
+HYDO-HIST kv 30 invoke * write i 1
+HYDO-HIST la 30 invoke * append i 1
+HYDO-HIST other 31 invoke * read i
+HYDO-HIST la 30 ok * append i 1
+HYDO-HIST other 31 ok * read i 1
+HYDO-HIST kv 30 info * write i 1

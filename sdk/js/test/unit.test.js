@@ -1,6 +1,6 @@
 'use strict';
-// Unit tests of hydo-assert (node --test). The byte-for-byte comparison with the Go SDK is
-// test/conformance.sh; these cover what the Go program cannot express (cycles, undefined,
+// Unit tests of hydo-assert (node --test). The byte-for-byte comparison with the reference
+// SDK is test/cases.test.js (the shared cases); these cover what the cases cannot express (cycles, undefined,
 // Map/Set, async liveness, the sink switches) and the BUGGIFY rates.
 const test = require('node:test');
 const assert = require('node:assert');

@@ -1,0 +1,130 @@
+{
+  "format": 1,
+  "name": "grpcorders",
+  "description": "a gRPC order service on Redis, driven by generated gRPC drivers",
+  "root": {
+    "files": [
+      {
+        "src": "~/hydo/build/redis-server",
+        "dst": "/bin/redis-server",
+        "mode": "0755"
+      },
+      {
+        "src": "~/hydo/build/redis-cli",
+        "dst": "/bin/redis-cli",
+        "mode": "0755"
+      },
+      {
+        "src": "build/orderd",
+        "dst": "/bin/orderd",
+        "mode": "0755"
+      },
+      {
+        "src": "build/gen/hydo-grpc",
+        "dst": "/bin/hydo-grpc",
+        "mode": "0755"
+      },
+      {
+        "src": "build/gen/grpc",
+        "dst": "/etc/hydo/grpc"
+      }
+    ],
+    "text": {
+      "/etc/redis.conf": "port 6379\nbind 127.0.0.1\ndir /data/redis\nsave \"\"\nappendonly yes\nappendfsync always\nhz 1\ndynamic-hz no\n"
+    }
+  },
+  "data": {
+    "size_mib": 64,
+    "dirs": [
+      "redis"
+    ]
+  },
+  "env": {
+    "HYDO_GRPC_SEED": "1"
+  },
+  "params": {
+    "mode": "buggy"
+  },
+  "services": [
+    {
+      "name": "redis",
+      "cmd": "/bin/redis-server /etc/redis.conf",
+      "ready": "/bin/redis-cli ping | grep -q PONG",
+      "port": 6379
+    },
+    {
+      "name": "orderd",
+      "cmd": "/bin/orderd serve --mode {{mode}}",
+      "ready": "/bin/hydo-grpc call List '{\"page_size\":1}' > /dev/null",
+      "port": 7070,
+      "depends_on": [
+        "redis"
+      ]
+    }
+  ],
+  "workload": {
+    "steps": 30,
+    "retry": "/bin/hydo-grpc retry",
+    "timeout": 400
+  },
+  "invariants": [
+    {
+      "id": "orders.consistent",
+      "msg": "no request_id creates two orders; every acknowledged Create and Cancel is stored",
+      "cmd": "/bin/orderd check"
+    }
+  ],
+  "faults": [
+    "kill",
+    "pause",
+    "network",
+    "oneway",
+    "cut",
+    "clock",
+    "disk"
+  ],
+  "test": {
+    "commands": [
+      {
+        "name": "create",
+        "kind": "parallel_driver",
+        "run": [
+          "/bin/hydo-grpc",
+          "drive",
+          "orders.v1.Orders/Create"
+        ],
+        "timeout": 21
+      },
+      {
+        "name": "get",
+        "kind": "parallel_driver",
+        "run": [
+          "/bin/hydo-grpc",
+          "drive",
+          "orders.v1.Orders/Get"
+        ],
+        "timeout": 12
+      },
+      {
+        "name": "cancel",
+        "kind": "parallel_driver",
+        "run": [
+          "/bin/hydo-grpc",
+          "drive",
+          "orders.v1.Orders/Cancel"
+        ],
+        "timeout": 14
+      },
+      {
+        "name": "list",
+        "kind": "parallel_driver",
+        "run": [
+          "/bin/hydo-grpc",
+          "drive",
+          "orders.v1.Orders/List"
+        ],
+        "timeout": 12
+      }
+    ]
+  }
+}

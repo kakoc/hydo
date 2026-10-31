@@ -1,0 +1,83 @@
+# hydo.yaml (the Redis example) plus a workload retry and ONE bounded-liveness invariant
+# (type: eventually, MANIFEST.md "Liveness"). A separate manifest so the plain Redis image
+# stays byte-identical. Build on the build box:
+#   HYDO_SEEDRNG=~/hydo/build/hvx_seedrng hvx/onboard/hydo-build hvx/onboard/examples/redis/hydo-live.yaml
+# Try:  disk=none | run                       -> OK (nothing pending; resolved at once)
+#       disk=none | run K=redis@5+3           -> OK (the retry resolves 5..7 right after the heal)
+#       disk=none | run P=redis@18~0:20000    -> VIOLATION redis.pending_resolved: Redis stays
+#                                                paused ~16 s after the workload ends, deadline 10 s
+name: redis-live
+description: Redis with an append-only file; every acknowledged SET must survive, and every SET left pending by the faults is acknowledged within 10 s after fault injection ends.
+
+root:
+  files:
+    - {src: ~/hydo/build/redis-server, dst: /bin/redis-server, mode: "0755"}
+    - {src: ~/hydo/build/redis-cli, dst: /bin/redis-cli, mode: "0755"}
+  text:
+    /etc/redis.conf: |
+      port 6379
+      bind 127.0.0.1
+      dir /data/redis
+      save ""
+      appendonly yes
+      appendfsync always
+      hz 1
+      dynamic-hz no
+
+data:
+  size_mib: 64
+  dirs: [redis]
+
+services:
+  - name: redis
+    cmd: /bin/redis-server /etc/redis.conf
+    ready: /bin/redis-cli ping | grep -q PONG
+    port: 6379
+
+workload:
+  steps: 20                         # step i = SET k:i v<i>
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      r=$(timeout 2 /bin/redis-cli SET k:$i v$i 2>/dev/null)   # a 2 s client deadline
+      if [ "$r" = OK ]; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      i=$((i + 1))
+    done
+  retry: |                          # after the faults: re-send every SET not acknowledged yet
+    for i in $(awk '{ o[$1] = $2 } END { for (i in o) if (o[i] != "ack") print i }' $HYDO_OUTCOMES | sort -n); do
+      r=$(timeout 2 /bin/redis-cli SET k:$i v$i 2>/dev/null)
+      if [ "$r" = OK ]; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+    done
+
+knobs:
+  - token: R
+    name: Redis appendfsync
+    default: always
+    values: [always, everysec, "no"]
+    set: /bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE
+
+invariants:
+  - id: redis.acked_writes_survive
+    msg: every SET the client saw acknowledged reads back with its value
+    cmd: |
+      lost=0
+      for i in $(cat $HYDO_ACKED); do
+        [ "$(/bin/redis-cli GET k:$i)" = "v$i" ] || { echo "key k:$i lost"; lost=1; break; }
+      done
+      [ $lost = 0 ] && echo "acked=$(wc -l < $HYDO_ACKED) all present"
+      [ $lost = 0 ]
+
+  - id: redis.pending_resolved      # bounded liveness
+    msg: every SET whose outcome was unknown is acknowledged within 10 s after fault injection ends
+    type: eventually
+    after: heal                     # anchor: the workload's last step has run (healing starts)
+    within: 10                      # seconds of guest time
+    poll: 1
+    cmd: |
+      n=$(awk '{ o[$1] = $2 } END { n = 0; for (i in o) if (o[i] != "ack") n++; print n }' $HYDO_OUTCOMES)
+      echo "pending=$n"
+      [ "$n" = 0 ]
+
+faults: [kill, pause, cut, clock, disk]

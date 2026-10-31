@@ -1,0 +1,47 @@
+# Known error kinds: lines a service writes to its log that are expected (hydo/onboard/MANIFEST.md,
+# "Error logs as findings"). Each entry needs a reason; `hydo errors accept` appends them.
+#   sig:    the kind's signature (or match: a regular expression on its template)
+#   with:   only in runs whose schedule has one of these faults (K=mysql, C, disk, R=everysec)
+#   during: only for lines written while one of these faults was on
+format: 1
+unknown: report       # report: a new kind is a finding; fail: it also fails the run
+known:
+  - sig: f0c792251150
+    service: redis
+    tpl: "#:C <date> <time> # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low "
+    example: "133:C 01 Jan 2026 00:00:00.072 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures"
+    reason: "Redis 7.2 warns at every start that vm.overcommit_memory is 0 (the guest kernel default); it affects only background saves under memory pressure, which this test does not exercise"
+    by: "user"
+    date: "2026-10-30"
+  - sig: 0c3b6d2b3888
+    service: redis
+    tpl: "#:C <date> <time> # Write error writing append only file on disk: I/O error"
+    example: "394:C 01 Jan 2026 00:00:06.068 # Write error writing append only file on disk: I/O error"
+    with: [disk=ioerr]
+    reason: "the disk returned I/O errors (disk=ioerr): Redis reports the failed AOF write and, with appendfsync always, exits as documented"
+    by: "user"
+    date: "2026-10-30"
+  - sig: 84dcbcb26957
+    service: redis
+    tpl: "#:M <date> <time> # Background AOF rewrite terminated with error"
+    example: "133:M 01 Jan 2026 00:00:06.120 # Background AOF rewrite terminated with error"
+    with: [disk=ioerr]
+    reason: "the disk returned I/O errors (disk=ioerr): Redis reports the failed AOF write and, with appendfsync always, exits as documented"
+    by: "user"
+    date: "2026-10-30"
+  - sig: c0cc01ac5c71
+    service: redis
+    tpl: "#:M <date> <time> # Error writing to the AOF file: I/O error"
+    example: "133:M 01 Jan 2026 00:00:06.206 # Error writing to the AOF file: I/O error"
+    with: [disk=ioerr]
+    reason: "the disk returned I/O errors (disk=ioerr): Redis reports the failed AOF write and, with appendfsync always, exits as documented"
+    by: "user"
+    date: "2026-10-30"
+  - sig: 56b2cc15b135
+    service: redis
+    tpl: "#:M <date> <time> # Can't recover from AOF write error when the AOF fsync policy is 'always'. Exiting..."
+    example: "133:M 01 Jan 2026 00:00:06.206 # Can't recover from AOF write error when the AOF fsync policy is 'always'. Exiting..."
+    with: [disk=ioerr]
+    reason: "the disk returned I/O errors (disk=ioerr): Redis reports the failed AOF write and, with appendfsync always, exits as documented"
+    by: "user"
+    date: "2026-10-30"

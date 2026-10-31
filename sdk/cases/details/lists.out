@@ -1,0 +1,1 @@
+HYDO-ASSERT {"t":"always","id":"d.lists","ok":true,"msg":"details encoding","details":{"empty":[],"mixed":[1,"a",false,null,{"a":2,"z":1},[]],"nested":[[[]],[1,[2]]]}}

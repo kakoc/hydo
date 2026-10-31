@@ -141,11 +141,79 @@ its `build-rkv.sh` (two clean builds give the same sha256), and a `hydo.yaml`.
 ## Tests
 
 - `cargo test` (also with `--features noop` and `--features serde_json`): the encoder, the
-  BUGGIFY decisions and rates, the macros, the catalog order, the async eventually.
-- `tests/conformance.sh`: builds `tests/go-conformance/main.go` against the Go SDK's own
-  source files and `examples/conformance.rs`, runs both under three BUGGIFY configurations
-  (seed in the environment, seed in the file, none) and requires their consoles and stdouts
-  to be byte-identical. Needs `go` and `cargo`.
+  BUGGIFY decisions and rates, the macros, the catalog order, the async eventually, and the
+  shared cases below.
+
+## The shared cases (this crate is the reference for every SDK)
+
+`sdk/cases/` holds example files that say "this call, under this configuration, writes exactly
+these bytes". This crate's test `tests/cases/` writes them; the Go, Python and JavaScript SDKs
+each have a test that reads every case, makes the same calls with its own API and compares the
+bytes (`go test ./...` in `hydo/stack/hydoassert`, `python3 -m unittest discover -s
+sdk/python/tests`, `node --test` in `sdk/js`). No SDK test needs another language installed.
+
+```sh
+cargo test --test cases                # sdk/cases must equal what this crate writes
+HYDO_BLESS=1 cargo test --test cases   # rewrite sdk/cases (and remove files no case writes)
+```
+
+**A format change starts here:** change this crate, run with `HYDO_BLESS=1`, commit the changed
+files in `sdk/cases`; the other SDKs' case tests then fail on exactly the lines they must change.
+**To add a case:** add a program to `tests/cases/defs.rs` (the builder `Prog` checks the calls),
+bless, commit. `tests/cases/programs.rs` holds the call sequences of the Go-binary conformance
+programs these cases replaced (M110); their outputs equal Go 1.26.5's.
+
+**Files.** `sdk/cases/<area>/<name>.json` is one case; each of its runs has an output file,
+`<name>.out` (a case with one unnamed run) or `<name>.<run>.out`. Areas: `assert` (the types and
+deduplication), `compare`, `details` (the JSON encoding), `catalog`, `eventually`, `buggify`,
+`output` (`HYDO_ASSERT_OUT`), `emit` (`emit_line`), `history` (`HYDO-HIST` records and
+`HYDO_HIST_OUT`), `programs`. A case file has:
+
+- `about`: what the case shows.
+- `needs`: features a language may lack: `f32` (a float32 value), `bytes` (a byte string,
+  Go's `[]byte`), `invalid_utf8` (invalid UTF-8 in an assertion string), `raw_hist` (invalid
+  UTF-8 in a history record), `emit_line`. A reader skips, and reports, a case that needs what
+  its language cannot express, and fails on a need it does not know.
+- `steps`: the calls, in order. Declarations `always`, `always_or_unreachable`, `sometimes`,
+  `reachable`, `unreachable` (`id`, `msg`), `eventually` (`within_ms`) and `buggify` are
+  numbered from 0 in the order they appear and named by `a`; then `check` (`cond`), `hit`,
+  `cmp` (`left`, `op`, `right`; with `helper`, the SDKs that have named comparison helpers call
+  that one), `begin` (its watches are numbered and named by `w`), `done`, `expire`, `await`
+  (the condition is true at once; `async`: the async form), `fire`, `catalog`,
+  `setup_complete`, `emit_line` (`tag`, `value`). Any of them may carry `details` (a map
+  value). History steps: `history` (`name`; numbered, named by `h`), `invoke` (`proc`, `f`,
+  `args`; numbered, named by `o`), `ok` (`args`; empty only for an operation without
+  arguments), `ok_same` (the invocation's arguments: Go's, JavaScript's and Python's `ok()`),
+  `fail`, `info`, `record` (`proc`, `type`, `f`, `args`).
+- Values carry their Go type: `null`, `true`/`false`, a JSON string, a list, and the objects
+  `{"int": "<decimal>"}` (int64), `{"uint": ...}` (uint64), `{"f64": "<number>"}` and
+  `{"f32": ...}` (with `NaN`, `+Inf`, `-Inf`), `{"bytes": "<hex>"}`, `{"map": [[key, value],
+  ...]}`, and `{"raw": ["text", 255, ...]}` for a string with invalid UTF-8 bytes (each number
+  one byte; Python passes it as `chr(0xDC00 + byte)`, JavaScript as that lone surrogate). A
+  history argument is a token (a string or `raw`) or a helper: `{"enc": s}`, `{"ver": [s,
+  "<version>"]}`, `{"value_or_nil": s or null}`, `{"list": [...]}`, `{"append_mop": [k, e]}`,
+  `{"read_mop": k}`, `{"read_result_mop": [k, [...]]}`, `{"nil": true}` (the constant).
+- `runs`: each with `out` (where assertion records go: `file` = an empty file, `append` = a
+  file holding the line `PRE existing line`, `stderr`, `missing` = a path that does not exist,
+  `off`), `hist_out` (the same for history records, with `create` = a missing file and
+  `fallback` = a path in a missing directory), `buggify_env` (`HYDO_BUGGIFY`, null = unset),
+  `buggify_file` (the content of the file `HYDO_BUGGIFY_FILE` names; null = it names a missing
+  file), `output` (the file with the expected bytes) and `returns` (the results of `check`,
+  `cmp`, `done`, `await` and `fire`, `1`/`0` in order).
+
+**Reading a run.** Start a fresh process (SDK state is per process), set the four variables,
+make the calls, then take what the one sink that is not `off` received (the file, or standard
+error for `stderr`, `missing` and `fallback`), which must equal the output file byte for byte;
+standard error must stay empty otherwise. In a `HYDO-HIST` record the time field (the fifth)
+is `*` in the output file: replace it before comparing, and check that the times are decimal
+integers that never decrease (the Rust recorder writes `-` where `/proc/uptime` is missing).
+
+**Stand-ins in the Rust runner.** Rust has neither `[]byte` nor strings with invalid UTF-8: it
+passes a byte string as its base64 text (what Go writes for `[]byte`) and each invalid byte as
+the character U+10FF00 + byte, which the test turns into what Go 1.26 writes (`\ufffd` inside
+JSON, the raw byte in a history record). Keys with invalid bytes are chosen so that every SDK
+sorts them the same (the builder checks it). The history `ver` takes a `u64`, so the cases
+have no negative versions (the other SDKs' unit tests cover those).
 
 ## Limits
 

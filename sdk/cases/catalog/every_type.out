@@ -1,0 +1,7 @@
+HYDO-ASSERT-DECL {"t":"always","id":"k.always","msg":"always"}
+HYDO-ASSERT-DECL {"t":"always_or_unreachable","id":"k.aou","msg":"always or unreachable"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"k.sometimes","msg":"sometimes"}
+HYDO-ASSERT-DECL {"t":"reachable","id":"k.reachable","msg":"reachable"}
+HYDO-ASSERT-DECL {"t":"unreachable","id":"k.unreachable","msg":"unreachable"}
+HYDO-ASSERT-DECL {"t":"eventually","id":"k.eventually","msg":"eventually"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.k.point","msg":"fault point fired: a fault point"}

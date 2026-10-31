@@ -1,0 +1,75 @@
+# hydo.yaml (the Redis example) plus ONE invariant that counts TCP retransmissions in the guest
+# (/proc/net/snmp Tcp RetransSegs). It shows what lifting a network fault costs: every redis-cli
+# is a fresh loopback connection, so no retransmission is needed in any schedule unless a packet
+# is lost; a delay fault that is lifted while packets wait in netem's queue must not lose them.
+# A separate manifest so the plain Redis image stays byte-identical. Build on the build box:
+#   HYDO_SEEDRNG=~/hydo/build/hvx_seedrng hvx/onboard/hydo-build hvx/onboard/examples/redis/hydo-netem.yaml
+# Try:  disk=none | run                               -> OK retrans=0
+#       disk=none | run N=redis@3-6:delay,300ms       -> OK retrans=0 (before the netem drain fix
+#                                                        the queued FIN/ACK packets were dropped
+#                                                        when the fault was lifted: retrans>0)
+name: redis-netem
+description: Redis with an append-only file; every acknowledged SET must survive, and no TCP segment is retransmitted (no packet lost on loopback).
+
+root:
+  files:
+    - {src: ~/hydo/build/redis-server, dst: /bin/redis-server, mode: "0755"}
+    - {src: ~/hydo/build/redis-cli, dst: /bin/redis-cli, mode: "0755"}
+  text:
+    /etc/redis.conf: |
+      port 6379
+      bind 127.0.0.1
+      dir /data/redis
+      save ""
+      appendonly yes
+      appendfsync always
+      hz 1
+      dynamic-hz no
+
+data:
+  size_mib: 64
+  dirs: [redis]
+
+services:
+  - name: redis
+    cmd: /bin/redis-server /etc/redis.conf
+    ready: /bin/redis-cli ping | grep -q PONG
+    port: 6379
+
+workload:
+  steps: 20                         # step i = SET k:i v<i>
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      r=$(timeout 2 /bin/redis-cli SET k:$i v$i 2>/dev/null)   # a 2 s client deadline
+      if [ "$r" = OK ]; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      i=$((i + 1))
+    done
+
+knobs:
+  - token: R
+    name: Redis appendfsync
+    default: always
+    values: [always, everysec, "no"]
+    set: /bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE
+
+invariants:
+  - id: net.no_retransmission
+    msg: no TCP segment was retransmitted in this boot (loopback loses nothing unless a fault drops it)
+    cmd: |
+      r=$(awk '$1 == "Tcp:" { if (!h) { for (i = 2; i <= NF; i++) c[$i] = i; h = 1 } else print $c["RetransSegs"] }' /proc/net/snmp)
+      t=$(awk '$1 == "TcpExt:" { if (!h) { for (i = 2; i <= NF; i++) c[$i] = i; h = 1 } else print $c["TCPTimeouts"] }' /proc/net/netstat)
+      echo "retrans=$r timeouts=$t uptime=$(cut -d' ' -f1 /proc/uptime)"
+      [ "$r" = 0 ]
+  - id: redis.acked_writes_survive
+    msg: every SET the client saw acknowledged reads back with its value
+    cmd: |
+      lost=0
+      for i in $(cat $HYDO_ACKED); do
+        [ "$(/bin/redis-cli GET k:$i)" = "v$i" ] || { echo "key k:$i lost"; lost=1; break; }
+      done
+      [ $lost = 0 ] && echo "acked=$(wc -l < $HYDO_ACKED) all present"
+      [ $lost = 0 ]
+
+faults: [kill, pause, network, oneway, cut, clock, disk]

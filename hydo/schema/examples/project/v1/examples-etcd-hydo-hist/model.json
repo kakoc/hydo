@@ -1,0 +1,89 @@
+{
+  "format": 1,
+  "name": "etcd-hist",
+  "description": "three-member etcd cluster; the history of puts and gets (with revisions) is linearizable.",
+  "root": {
+    "files": [
+      {
+        "src": "etcd-v{{version}}/etcd",
+        "dst": "/bin/etcd",
+        "mode": "0755"
+      },
+      {
+        "src": "etcd-v{{version}}/etcdctl",
+        "dst": "/bin/etcdctl",
+        "mode": "0755"
+      }
+    ],
+    "text": {
+      "/etc/etcd-member": "# etcd-member <n> <addr> <client-port> <peer-port>: member n as user etcd<n>. exec all the\n# way down, so the service's PID is etcd itself (kills and pauses hit etcd).\nexec su etcd$1 -s /bin/sh -c \"exec /bin/etcd --name etcd$1 --data-dir /data/etcd$1 \\\n  --listen-client-urls http://$2:$3 --advertise-client-urls http://$2:$3 \\\n  --listen-peer-urls http://$2:$4 --initial-advertise-peer-urls http://$2:$4 \\\n  --initial-cluster $ETCD_CLUSTER --initial-cluster-token hydo --initial-cluster-state new \\\n  --log-level warn\"\n",
+      "/etc/passwd": "root:x:0:0:root:/tmp:/bin/sh\netcd1:x:1001:1001:etcd1:/tmp:/bin/sh\netcd2:x:1002:1002:etcd2:/tmp:/bin/sh\netcd3:x:1003:1003:etcd3:/tmp:/bin/sh\n",
+      "/etc/group": "root:x:0:\netcd1:x:1001:\netcd2:x:1002:\netcd3:x:1003:\n"
+    }
+  },
+  "data": {
+    "size_mib": 512
+  },
+  "env": {
+    "IPR": "/nix/store/dx4fsbxs5v82l9lzmjkpkhx5ygqcwm69-iproute2-6.8.0/bin/ip",
+    "EPS": "127.0.0.11:2379,127.0.0.12:12379,127.0.0.13:22379",
+    "ETCD_CLUSTER": "etcd1=http://127.0.0.11:2380,etcd2=http://127.0.0.12:12380,etcd3=http://127.0.0.13:22380"
+  },
+  "shell": "ectl() { /bin/etcdctl --dial-timeout=1s --command-timeout=2s \"$@\"; }\nep_of() { case $1 in 0) echo 127.0.0.11:2379;; 1) echo 127.0.0.12:12379;; *) echo 127.0.0.13:22379;; esac; }\nrev_of() { printf '%s' \"$1\" | sed -n 's/.*\"header\":{[^}]*\"revision\":\\([0-9]*\\).*/\\1/p'; }\nmember_setup() {   # <n> <addr>: data dir owned by etcd<n>; uid 100<n> sends from <addr>\n  mkdir -p /data/etcd$1 && chown etcd$1:etcd$1 /data/etcd$1 && chmod 700 /data/etcd$1 || return 1\n  # the local table moves from rule 0 to rule 100, so the per-uid rules (pref 10) come first\n  $IPR rule show | grep -q '^100:.*lookup local' || { $IPR rule add pref 100 lookup local && $IPR rule del pref 0; } || return 1\n  $IPR route show table 10$1 | grep -q \"src $2\" || $IPR route add local 127.0.0.0/8 dev lo src $2 table 10$1 || return 1\n  $IPR rule show | grep -q \"uidrange 100$1-100$1\" || $IPR rule add pref 10 uidrange 100$1-100$1 lookup 10$1\n}\nwait_quorum() {   # up to 60 s for a linearizable read through any member\n  local n=0\n  until ectl --endpoints=$EPS get hydo-probe > /dev/null 2>&1; do\n    n=$((n + 1)); [ $n -lt 60 ] || return 1; sleep 1\n  done\n}\nfields_kv() {   # stdin: `etcdctl -w fields get` output -> \"<key> <value>@<mod_revision>\" per kv\n  awk -F' : ' '$1 == \"\\\"Key\\\"\" { k = $2; gsub(/^\"|\"$/, \"\", k) }\n               $1 == \"\\\"ModRevision\\\"\" { m = $2 }\n               $1 == \"\\\"Value\\\"\" { v = $2; gsub(/^\"|\"$/, \"\", v); print k, v \"@\" m }'\n}\nclient_op() {   # <client> <step>: put k<id>=v<id>, then read it back, through one member;\n                # both recorded in history kv (process = client)\n  local c=$1 id ep out r kv\n  id=$(($2 * 3 + $1)); ep=$(ep_of $((($1 + $2) % 3)))\n  hydo_hist kv $c invoke write k$id v$id\n  if out=$(ectl --endpoints=$ep -w json put k$id v$id 2>/dev/null) && r=$(rev_of \"$out\") && [ -n \"$r\" ]; then\n    echo $id >> $HYDO_ACKED; echo \"$id ack\" >> $HYDO_OUTCOMES; hydo_hist kv $c ok write k$id v$id@$r\n  else\n    echo \"$id unknown\" >> $HYDO_OUTCOMES; hydo_hist kv $c info write k$id v$id\n  fi\n  hydo_hist kv $c invoke read k$id\n  if out=$(ectl --endpoints=$ep -w fields get k$id 2>/dev/null); then\n    kv=$(printf '%s\\n' \"$out\" | fields_kv)\n    hydo_hist kv $c ok read ${kv:-k$id nil}\n  else\n    hydo_hist kv $c info read k$id\n  fi\n  return 0\n}\n",
+  "params": {
+    "version": "3.6.15"
+  },
+  "services": [
+    {
+      "name": "etcd1",
+      "cmd": "sh /etc/etcd-member 1 127.0.0.11 2379 2380",
+      "setup": "member_setup 1 127.0.0.11",
+      "ready": "wget -q -T 2 -O /dev/null http://127.0.0.11:2380/version",
+      "port": 2379,
+      "addr": "127.0.0.11"
+    },
+    {
+      "name": "etcd2",
+      "cmd": "sh /etc/etcd-member 2 127.0.0.12 12379 12380",
+      "setup": "member_setup 2 127.0.0.12",
+      "ready": "wget -q -T 2 -O /dev/null http://127.0.0.12:12380/version",
+      "port": 12379,
+      "addr": "127.0.0.12"
+    },
+    {
+      "name": "etcd3",
+      "cmd": "sh /etc/etcd-member 3 127.0.0.13 22379 22380",
+      "setup": "member_setup 3 127.0.0.13",
+      "ready": "wget -q -T 2 -O /dev/null http://127.0.0.13:22380/version",
+      "port": 22379,
+      "addr": "127.0.0.13"
+    }
+  ],
+  "provision": "wait_quorum && ectl --endpoints=$EPS put hydo-probe up\n",
+  "workload": {
+    "steps": 30,
+    "run": "i=$HYDO_FROM\nwhile [ $i -lt $HYDO_TO ]; do\n  client_op 0 $i & client_op 1 $i & client_op 2 $i &\n  wait\n  if [ $((i % 5)) = 4 ]; then     # a write, then at once an online defrag of every member\n    ectl --endpoints=$EPS put hydo-defrag $i > /dev/null 2>&1\n    /bin/etcdctl --dial-timeout=1s --command-timeout=5s --endpoints=$EPS defrag > /dev/null 2>&1\n  fi\n  i=$((i + 1))\ndone\n",
+    "retry": "wait_quorum || exit 0\ni=0\nwhile [ $i -lt $((HYDO_STEPS * 3)) ]; do\n  if ! grep -qx $i $HYDO_ACKED; then\n    for a in 1 2 3; do       # a fresh leader may still refuse the first attempt\n      hydo_hist kv 10 invoke write k$i v$i\n      if out=$(ectl --endpoints=$EPS -w json put k$i v$i 2>/dev/null) && r=$(rev_of \"$out\") && [ -n \"$r\" ]; then\n        echo $i >> $HYDO_ACKED; echo \"$i ack\" >> $HYDO_OUTCOMES; hydo_hist kv 10 ok write k$i v$i@$r; break\n      fi\n      hydo_hist kv 10 info write k$i v$i\n      sleep 1\n    done\n  fi\n  i=$((i + 1))\ndone\n",
+    "timeout": 600,
+    "process": "etcdctl"
+  },
+  "checks": [
+    {
+      "id": "etcd.kv_linearizable",
+      "type": "linearizable",
+      "history": "kv",
+      "model": "register",
+      "msg": "every put and get, with the mod_revisions etcd returned, is linearizable per key",
+      "final": "# one linearizable range read through each member (process 20 + member): every key k0..k89,\n# nil for an absent one. Exit status 2 if a member does not answer: the host reports ERROR\nwait_quorum || { echo \"no quorum within 60 s\"; exit 2; }\nrc=0\nn=$((HYDO_STEPS * 3))\nfor m in 0 1 2; do\n  p=$((20 + m))\n  hydo_hist kv $p invoke read 'k*'\n  if out=$(ectl --endpoints=$(ep_of $m) -w fields get --prefix k 2>/dev/null); then\n    pairs=$(printf '%s\\n' \"$out\" | fields_kv | awk -v n=$n '{ v[$1] = $2 }\n      END { for (i = 0; i < n; i++) { k = \"k\" i; printf \"%s %s \", k, (k in v) ? v[k] : \"nil\" } }')\n    hydo_hist kv $p ok read $pairs\n  else\n    hydo_hist kv $p info read 'k*'; rc=2\n  fi\ndone\nexit $rc\n"
+    }
+  ],
+  "faults": [
+    "kill",
+    "pause",
+    "network",
+    "oneway",
+    "cut",
+    "clock",
+    "disk"
+  ]
+}

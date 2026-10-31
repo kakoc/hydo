@@ -252,7 +252,7 @@ match put("k1", v) { Ok(rev) => op.ok(&["k1", &ver(v, rev)]), Err(e) if e.reject
 kv.invoke(3, "read", &["k1"]).ok(&["k1", &value_or_nil(got.as_deref())]);
 ```
 
-Same lines as the Go recorder (`sdk/rust/tests/history.rs` checks the exact bytes), to
+Same lines as the Go recorder (the shared cases, `sdk/cases/history`, are written from it), to
 `/dev/console` (`HYDO_HIST_OUT`), time from `/proc/uptime`. The test SDK's plan builder declares
 the checks: `System::history_check(HistoryCheck::linearizable("db.kv", "kv").model("cas")
 .readback(&["/bin/mytest", "readback"]))`, `HistoryCheck::list_append(..).consistency(..)`.
@@ -261,7 +261,7 @@ the checks: `System::history_check(HistoryCheck::linearizable("db.kv", "kv").mod
 `enc`, `ver`, `valueOrNil`, `list`, `append`, `read`, `readResult`, `NIL`) and
 `from hydo_assert import history` (`sdk/python`: `History`, `enc`, `ver`, `value_or_nil`,
 `list_value`, `append_mop`, `read_mop`, `read_result_mop`, `NIL`). Both write the Go recorder's
-lines byte for byte (`test/history-conformance.sh`, `tests/history_conformance.sh`), to
+lines byte for byte (their case tests read `sdk/cases`, ASSERTIONS.md "The shared cases"), to
 `/dev/console` (`HYDO_HIST_OUT`), with the time from `CLOCK_MONOTONIC`.
 
 **Other languages** (and any client): print the lines

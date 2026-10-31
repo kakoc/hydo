@@ -1,0 +1,12 @@
+{
+  "about": "an unknown operator evaluates to false",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"c.unknown","msg":"an unknown operator"},
+    {"do":"cmp","a":0,"left":{"int":"1"},"op":"??","right":{"int":"1"}},
+    {"do":"cmp","a":0,"left":{"int":"1"},"op":"=\u003c","right":{"int":"2"},"details":{"map":[["k","v"]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "unknown_op.out", "returns": "00"}
+  ]
+}

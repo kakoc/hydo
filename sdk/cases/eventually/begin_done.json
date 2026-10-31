@@ -1,0 +1,13 @@
+{
+  "about": "an episode that ends in time writes ok:true with elapsed_ms and within_ms; a second done is ignored",
+  "needs": [],
+  "steps": [
+    {"do":"eventually","id":"e.in_time","msg":"true within 10 s","within_ms":10000},
+    {"do":"begin","a":0},
+    {"do":"done","w":0,"details":{"map":[["n",{"int":"1"}]]}},
+    {"do":"done","w":0,"details":{"map":[["n",{"int":"2"}]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "begin_done.out", "returns": "11"}
+  ]
+}

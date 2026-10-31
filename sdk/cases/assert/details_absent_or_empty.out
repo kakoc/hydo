@@ -1,0 +1,3 @@
+HYDO-ASSERT {"t":"always","id":"t.none","ok":true,"msg":"no details"}
+HYDO-ASSERT {"t":"always","id":"t.empty","ok":true,"msg":"empty details"}
+HYDO-ASSERT {"t":"always","id":"t.null","ok":true,"msg":"a null value","details":{"v":null}}

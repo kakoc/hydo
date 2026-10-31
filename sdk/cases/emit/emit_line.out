@@ -1,0 +1,4 @@
+HYDO-EXT {"a":"x","b":1,"n":[1.5,null,true]}
+HYDO-EXT [1,"two"]
+HYDO-EXT "a \u003cstring\u003e"
+HYDO-OTHER {}

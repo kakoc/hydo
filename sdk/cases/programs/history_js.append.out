@@ -1,0 +1,145 @@
+PRE existing line
+HYDO-HIST kv 0 invoke * write k0 %
+HYDO-HIST kv 0 ok * write k0 %
+HYDO-HIST kv 1 invoke * write k1 %6Eil
+HYDO-HIST kv 1 ok * write k1 %6Eil@1000003
+HYDO-HIST kv 2 invoke * write k2 Nil
+HYDO-HIST kv 2 fail * write k2 Nil
+HYDO-HIST kv 0 invoke * write k3 nil%20
+HYDO-HIST kv 0 info * write k3 nil%20
+HYDO-HIST kv 1 invoke * write k4 %20nil
+HYDO-HIST kv 1 ok * write k4 %20nil
+HYDO-HIST kv 2 invoke * write k5 nilnil
+HYDO-HIST kv 2 ok * write k5 nilnil@5000015
+HYDO-HIST kv 0 invoke * write k6 %25
+HYDO-HIST kv 0 fail * write k6 %25
+HYDO-HIST kv 1 invoke * write k7 %256Eil
+HYDO-HIST kv 1 info * write k7 %256Eil
+HYDO-HIST kv 2 invoke * write k8 %40
+HYDO-HIST kv 2 ok * write k8 %40
+HYDO-HIST kv 0 invoke * write k9 %20
+HYDO-HIST kv 0 ok * write k9 %20@9000027
+HYDO-HIST kv 1 invoke * write k10 %09
+HYDO-HIST kv 1 fail * write k10 %09
+HYDO-HIST kv 2 invoke * write k11 %0A
+HYDO-HIST kv 2 info * write k11 %0A
+HYDO-HIST kv 0 invoke * write k12 %0D
+HYDO-HIST kv 0 ok * write k12 %0D
+HYDO-HIST kv 1 invoke * write k13 %00
+HYDO-HIST kv 1 ok * write k13 %00@13000039
+HYDO-HIST kv 2 invoke * write k14 %01
+HYDO-HIST kv 2 fail * write k14 %01
+HYDO-HIST kv 0 invoke * write k15 %1F
+HYDO-HIST kv 0 info * write k15 %1F
+HYDO-HIST kv 1 invoke * write k16 %7F
+HYDO-HIST kv 1 ok * write k16 %7F
+HYDO-HIST kv 2 invoke * write k17 %2C
+HYDO-HIST kv 2 ok * write k17 %2C@17000051
+HYDO-HIST kv 0 invoke * write k18 %5B
+HYDO-HIST kv 0 fail * write k18 %5B
+HYDO-HIST kv 1 invoke * write k19 %5D
+HYDO-HIST kv 1 info * write k19 %5D
+HYDO-HIST kv 2 invoke * write k20 %3A
+HYDO-HIST kv 2 ok * write k20 %3A
+HYDO-HIST kv 0 invoke * write k21 a%2Cb%5Bc%5D%3Ad%40e%25f%09g
+HYDO-HIST kv 0 ok * write k21 a%2Cb%5Bc%5D%3Ad%40e%25f%09g@21000063
+HYDO-HIST kv 1 invoke * write k22 a%20b
+HYDO-HIST kv 1 fail * write k22 a%20b
+HYDO-HIST kv 2 invoke * write k23 plain-Token_1.2
+HYDO-HIST kv 2 info * write k23 plain-Token_1.2
+HYDO-HIST kv 0 invoke * write k24 ~!#$^&*()_+-={}|\;'"<>?/`
+HYDO-HIST kv 0 ok * write k24 ~!#$^&*()_+-={}|\;'"<>?/`
+HYDO-HIST kv 1 invoke * write k25 é
+HYDO-HIST kv 1 ok * write k25 é@25000075
+HYDO-HIST kv 2 invoke * write k26 café%20au%20lait
+HYDO-HIST kv 2 fail * write k26 café%20au%20lait
+HYDO-HIST kv 0 invoke * write k27 中文
+HYDO-HIST kv 0 info * write k27 中文
+HYDO-HIST kv 1 invoke * write k28 日本語%2Cテスト
+HYDO-HIST kv 1 ok * write k28 日本語%2Cテスト
+HYDO-HIST kv 2 invoke * write k29 😀
+HYDO-HIST kv 2 ok * write k29 😀@29000087
+HYDO-HIST kv 0 invoke * write k30 a😀b%20c
+HYDO-HIST kv 0 fail * write k30 a😀b%20c
+HYDO-HIST kv 1 invoke * write k31  
+HYDO-HIST kv 1 info * write k31  
+HYDO-HIST kv 2 invoke * write k32   
+HYDO-HIST kv 2 ok * write k32   
+HYDO-HIST kv 0 invoke * write k33 �
+HYDO-HIST kv 0 ok * write k33 �@33000099
+HYDO-HIST kv 1 invoke * write k34 ￿
+HYDO-HIST kv 1 fail * write k34 ￿
+HYDO-HIST kv 2 invoke * write k35 a�b
+HYDO-HIST kv 2 info * write k35 a�b
+HYDO-HIST kv 0 invoke * write k36 ��
+HYDO-HIST kv 0 ok * write k36 ��
+HYDO-HIST kv 1 invoke * write k37 42
+HYDO-HIST kv 1 ok * write k37 42@37000111
+HYDO-HIST kv 2 invoke * write k38 -7
+HYDO-HIST kv 2 fail * write k38 -7
+HYDO-HIST kv 0 invoke * write k39 %00%01%02%03%04%05%06%07%08%09%0A%0B%0C%0D%0E%0F%10%11%12%13%14%15%16%17%18%19%1A%1B%1C%1D%1E%1F%20!"#$%25&'()*+%2C-./0123456789%3A;<=>?%40ABCDEFGHIJKLMNOPQRSTUVWXYZ%5B\%5D^_`abcdefghijklmnopqrstuvwxyz{|}~%7F
+HYDO-HIST kv 0 info * write k39 %00%01%02%03%04%05%06%07%08%09%0A%0B%0C%0D%0E%0F%10%11%12%13%14%15%16%17%18%19%1A%1B%1C%1D%1E%1F%20!"#$%25&'()*+%2C-./0123456789%3A;<=>?%40ABCDEFGHIJKLMNOPQRSTUVWXYZ%5B\%5D^_`abcdefghijklmnopqrstuvwxyz{|}~%7F
+HYDO-HIST kv 10 invoke * write kv v
+HYDO-HIST kv 10 ok * write kv v@0
+HYDO-HIST kv 11 invoke * write kv v
+HYDO-HIST kv 11 ok * write kv v@1
+HYDO-HIST kv 13 invoke * write kv v
+HYDO-HIST kv 13 ok * write kv v@83
+HYDO-HIST kv 14 invoke * write kv v
+HYDO-HIST kv 14 ok * write kv v@0
+HYDO-HIST kv 15 invoke * write kv v
+HYDO-HIST kv 15 ok * write kv v@9007199254740992
+HYDO-HIST kv 16 invoke * write kv v
+HYDO-HIST kv 16 ok * write kv v@9223372036854775807
+HYDO-HIST kv 18 invoke * write kv v
+HYDO-HIST kv 18 ok * write kv v@9007199254740993
+HYDO-HIST kv 20 invoke * read k1 k2 k3
+HYDO-HIST kv 20 ok * read k1 % k2 nil k3 nil
+HYDO-HIST kv 20 invoke * read k4
+HYDO-HIST kv 20 ok * read k4 x%20y
+HYDO-HIST la 1 invoke * append x 1
+HYDO-HIST la 1 ok * append x 1
+HYDO-HIST la 1 invoke * read x
+HYDO-HIST la 1 ok * read x [1]
+HYDO-HIST la 2 invoke * read empty
+HYDO-HIST la 2 ok * read empty []
+HYDO-HIST la 2 invoke * read odd
+HYDO-HIST la 2 ok * read odd [a,b%2Cc,%5Bx%5D,%6Eil,%,é,1%202,%25,%3A]
+HYDO-HIST la 3 invoke * txn a:x:2 r:y a:k%3A1:e%2C2 r:%
+HYDO-HIST la 3 ok * txn a:x:2 r:y:[] a:k%3A1:e%2C2 r:%:[a,b%20c]
+HYDO-HIST la 3 invoke * txn a:x:3
+HYDO-HIST la 3 fail * txn a:x:3
+HYDO-HIST la 4 invoke * txn r:x a:y:1
+HYDO-HIST la 4 info * txn r:x a:y:1
+HYDO-HIST Other.hist_2-x 7 invoke * cas k a b
+HYDO-HIST Other.hist_2-x 7 ok * cas k a b@9
+HYDO-HIST Other.hist_2-x 8 info * read
+HYDO-HIST Other.hist_2-x 0 fail * write % x %
+HYDO-HIST kv 9 invoke * write % %
+HYDO-HIST kv 9 ok * write % %
+HYDO-HIST kv 9 invoke * write % %
+HYDO-HIST kv 9 ok * write % %
+HYDO-HIST kv 5 invoke * noop
+HYDO-HIST kv 5 ok * noop
+HYDO-HIST kv 5 invoke * noop
+HYDO-HIST kv 5 fail * noop
+HYDO-HIST kv 5 invoke * noop
+HYDO-HIST kv 5 info * noop
+HYDO-HIST kv 1099511627776 invoke * write big 1
+HYDO-HIST kv 1099511627776 ok * write big 1
+HYDO-HIST kv -5 invoke * write neg 1
+HYDO-HIST kv -5 ok * write neg 1
+HYDO-HIST kv 9223372036854775807 invoke * write max 1
+HYDO-HIST kv 9223372036854775807 info * write max 1
+HYDO-HIST kv -9223372036854775808 invoke * write min 1
+HYDO-HIST kv -9223372036854775808 fail * write min 1
+HYDO-HIST kv 30 invoke * write i 1
+HYDO-HIST la 30 invoke * append i 1
+HYDO-HIST Other.hist_2-x 31 invoke * read i
+HYDO-HIST la 30 ok * append i 1
+HYDO-HIST Other.hist_2-x 31 ok * read i 1
+HYDO-HIST kv 30 info * write i 1
+HYDO-HIST Other.hist_2-x 40 invoke * write x� é
+HYDO-HIST Other.hist_2-x 40 ok * write x� é
+HYDO-HIST Other.hist_2-x 41 invoke * write n 42
+HYDO-HIST Other.hist_2-x 41 ok * write n 42 -7

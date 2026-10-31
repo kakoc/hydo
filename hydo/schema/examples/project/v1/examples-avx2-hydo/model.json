@@ -1,0 +1,45 @@
+{
+  "format": 1,
+  "name": "avx2",
+  "description": "AVX2/FMA math across four threads, checked against scalar code (needs guest.cpu v3).",
+  "guest": {
+    "cpu": "v3"
+  },
+  "root": {
+    "nix": [
+      "/nix/store/dbcw19dshdwnxdv5q2g6wldj6syyvq7l-glibc-2.39-52"
+    ],
+    "files": [
+      {
+        "src": "hydoavx",
+        "dst": "/bin/hydoavx",
+        "mode": "0755"
+      }
+    ]
+  },
+  "data": {
+    "size_mib": 64,
+    "dirs": [
+      "avx"
+    ]
+  },
+  "workload": {
+    "steps": 8,
+    "run": "i=$HYDO_FROM\nif [ \"$i\" = 0 ]; then\n  { grep -m1 '^flags' /proc/cpuinfo\n    dmesg | grep 'x86/fpu'\n    /nix/store/dbcw19dshdwnxdv5q2g6wldj6syyvq7l-glibc-2.39-52/lib/ld-linux-x86-64.so.2 --help | grep 'x86-64-v'\n  } 2>&1 | sed 's/^/hydo-avx-cpu: /' > /dev/ttyS0\nfi\nwhile [ $i -lt $HYDO_TO ]; do\n  out=$(/bin/hydoavx $i)\n  if [ $? = 0 ]; then echo \"$out\" >> /data/avx/out; sync; echo $i >> $HYDO_ACKED; fi\n  echo \"hydo-avx: $out\" > /dev/ttyS0\n  i=$((i + 1))\ndone\n"
+  },
+  "invariants": [
+    {
+      "id": "avx.results_match_scalar",
+      "msg": "every hydoavx run had AVX2 + FMA and its vector results equal the scalar ones",
+      "cmd": "n=$(wc -l < $HYDO_ACKED)\ngood=$(grep -c ' avx2=1 ok=1 ' /data/avx/out 2>/dev/null)\nif [ \"$n\" = 8 ] && [ \"${good:-0}\" -ge \"$n\" ]; then echo \"steps=$n all AVX2 results equal the scalar ones\"; exit 0; fi\necho \"acked=$n good=${good:-0}\"; exit 1\n"
+    },
+    {
+      "id": "cpu.avx_enabled",
+      "msg": "the guest kernel sees AVX2 and uses XSAVE with x87|SSE|AVX",
+      "cmd": "grep -qw avx2 /proc/cpuinfo || { echo \"no avx2 in /proc/cpuinfo\"; exit 1; }\ndmesg | grep -q 'Enabled xstate features 0x7' || { echo \"no xstate 0x7 line\"; exit 1; }\necho \"avx2 in /proc/cpuinfo; xstate features 0x7\"\n"
+    }
+  ],
+  "faults": [
+    "clock"
+  ]
+}

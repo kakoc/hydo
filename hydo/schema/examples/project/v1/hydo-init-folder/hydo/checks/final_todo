@@ -1,0 +1,6 @@
+#!/bin/sh
+# hydo-msg: TODO replace with the system's real properties
+# TODO: replace this file with the checks (hydo guide checks). Exit 2 = cannot be evaluated, so
+# every run reports ERROR until the real checks exist.
+echo "hydo: TODO write the checks in hydo/checks/ (hydo guide checks)"
+exit 2

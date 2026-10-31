@@ -1,0 +1,20 @@
+{
+  "about": "process numbers are decimal int64s",
+  "needs": [],
+  "steps": [
+    {"do":"history","name":"kv"},
+    {"do":"invoke","h":0,"proc":{"int":"0"},"f":"write","args":["k","1"]},
+    {"do":"ok_same","o":0},
+    {"do":"invoke","h":0,"proc":{"int":"1099511627776"},"f":"write","args":["k","1"]},
+    {"do":"ok_same","o":1},
+    {"do":"invoke","h":0,"proc":{"int":"-5"},"f":"write","args":["k","1"]},
+    {"do":"ok_same","o":2},
+    {"do":"invoke","h":0,"proc":{"int":"9223372036854775807"},"f":"write","args":["k","1"]},
+    {"do":"info","o":3},
+    {"do":"invoke","h":0,"proc":{"int":"-9223372036854775808"},"f":"write","args":["k","1"]},
+    {"do":"fail","o":4}
+  ],
+  "runs": [
+    {"name": "", "out": "off", "hist_out": "file", "buggify_env": null, "buggify_file": null, "output": "process_numbers.out", "returns": ""}
+  ]
+}

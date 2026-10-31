@@ -1,0 +1,14 @@
+{
+  "about": "sometimes: a false evaluation is never written, the first true one is, later ones are not",
+  "needs": [],
+  "steps": [
+    {"do":"sometimes","id":"t.sometimes","msg":"a sometimes property"},
+    {"do":"check","a":0,"cond":false,"details":{"map":[["n",{"int":"1"}]]}},
+    {"do":"check","a":0,"cond":true,"details":{"map":[["n",{"int":"2"}]]}},
+    {"do":"check","a":0,"cond":true,"details":{"map":[["n",{"int":"3"}]]}},
+    {"do":"check","a":0,"cond":false}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "sometimes.out", "returns": "0110"}
+  ]
+}
