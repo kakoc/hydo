@@ -478,8 +478,10 @@ impl Pool {
             pool: self,
             ready,
             rx,
+            tx,
             pending,
             cancel,
+            high,
         }
     }
 
@@ -552,8 +554,10 @@ pub struct Batch<'a> {
     pool: &'a Pool,
     ready: VecDeque<Done>,
     rx: Receiver<(Done, Option<BranchDone>)>,
+    tx: Sender<(Done, Option<BranchDone>)>,
     pending: usize,
     cancel: Arc<AtomicBool>,
+    high: bool,
 }
 
 impl Batch<'_> {
@@ -562,6 +566,27 @@ impl Batch<'_> {
         self.cancel.store(true, Ordering::SeqCst);
         self.pending = 0;
         self.ready.clear();
+    }
+
+    /// Add one more run to this batch (a sliding window: the benchmark runner keeps a fixed number
+    /// of schedules in flight and submits the next one as each finishes). Like the batch's own
+    /// items, a cached first run is answered at once.
+    pub fn add(&mut self, tag: &str, text: &str) {
+        if let Some(r) = self.pool.cache_get(tag, text) {
+            self.ready.push_back((tag.to_string(), text.to_string(), r));
+            return;
+        }
+        self.pending += 1;
+        self.pool.push(
+            Job {
+                tag: tag.to_string(),
+                text: text.to_string(),
+                kind: Kind::Run,
+                reply: self.tx.clone(),
+                cancel: self.cancel.clone(),
+            },
+            self.high,
+        );
     }
 
     /// The next finished run of this batch, None when all are done.

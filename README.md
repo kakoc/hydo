@@ -39,7 +39,7 @@ product drives either through the same schedule strings.
 hv/hvx/     the Linux engine (kernel module, run engine, tests, guest images, engine tools)
 hv/hvm/     the Mac engine (VMM, explorer server, arm64 guest kernels, experiments)
 hydo/       the product: onboard/ explore/ history/ readers/ grpcgen/ assert/ stack/ bench/
-            knownbugs/ cutflush/ spec/ richcov/ dist/{linux,mac}
+            knownbugs/ cutflush/ spec/ dist/{linux,mac}
 sdk/        assertion SDKs for guest programs: JavaScript, Python, Rust, Rust test composer
 skills/     the hydo-onboard Agent Skill (writes a project's hydo/ folder)
 docs/       HISTORY.md (every milestone), REBASELINE.md (image fingerprints), BUILD-PINS.md

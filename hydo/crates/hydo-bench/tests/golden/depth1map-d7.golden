@@ -1,0 +1,9 @@
+points 165  triggers 7 {'K': 2, 'P': 3, 'N': 1, 'O': 1}  fail-on-both 6  control-only 0  not-reproduced []
+signature match 7 of 7
+  T K=kafka@27+3 | HYDO-ORACLE: VIOLATION kafka order=29 present 2 times (must be exactly once)
+  T K=kafka@28+2 | HYDO-ORACLE: VIOLATION kafka order=29 present 2 times (must be exactly once)
+  T P=kafka@27+3 | HYDO-ORACLE: VIOLATION kafka order=29 present 2 times (must be exactly once)
+  T P=kafka@28+2 | HYDO-ORACLE: VIOLATION kafka order=29 present 2 times (must be exactly once)
+  T P=kafka@29+1 | HYDO-ORACLE: VIOLATION kafka order=29 present 2 times (must be exactly once)
+  T N=mysql@27-30:loss,60% | HYDO-ORACLE: VIOLATION kafka order=29 present 2 times (must be exactly once)
+  T O=kafka@29-30:resp:loss,100% | HYDO-ORACLE: VIOLATION kafka order=29 present 2 times (must be exactly once)

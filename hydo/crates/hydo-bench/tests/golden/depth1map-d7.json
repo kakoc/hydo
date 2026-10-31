@@ -1,0 +1,60 @@
+{
+ "triggers": [
+  [
+   "K=kafka@27+3",
+   "HYDO-ORACLE: VIOLATION kafka order=29 present 2 times (must be exactly once)"
+  ],
+  [
+   "K=kafka@28+2",
+   "HYDO-ORACLE: VIOLATION kafka order=29 present 2 times (must be exactly once)"
+  ],
+  [
+   "P=kafka@27+3",
+   "HYDO-ORACLE: VIOLATION kafka order=29 present 2 times (must be exactly once)"
+  ],
+  [
+   "P=kafka@28+2",
+   "HYDO-ORACLE: VIOLATION kafka order=29 present 2 times (must be exactly once)"
+  ],
+  [
+   "P=kafka@29+1",
+   "HYDO-ORACLE: VIOLATION kafka order=29 present 2 times (must be exactly once)"
+  ],
+  [
+   "N=mysql@27-30:loss,60%",
+   "HYDO-ORACLE: VIOLATION kafka order=29 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@29-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=29 present 2 times (must be exactly once)"
+  ]
+ ],
+ "both": [
+  [
+   "K=kafka@29+1",
+   "HYDO-ORACLE: VIOLATION kafka topic unreadable (failed to dial: failed to open connection to 127.0.0.1:9092: dial tcp 127.0.0.1:9092: connect: connection refused)"
+  ],
+  [
+   "O=kafka@27-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=27 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@27-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=28 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@28-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=28 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@28-30:resp:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=29 present 2 times (must be exactly once)"
+  ],
+  [
+   "O=kafka@29-30:req:loss,100%",
+   "HYDO-ORACLE: VIOLATION kafka order=29 present 2 times (must be exactly once)"
+  ]
+ ],
+ "control_only": [],
+ "nonrepro": []
+}

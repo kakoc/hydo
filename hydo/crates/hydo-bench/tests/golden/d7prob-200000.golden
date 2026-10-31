@@ -1,0 +1,4 @@
+random             p=0.00001 (1 in 200000)  by kind {'N': 1}
+random +new-faults p=0.00072 (1 in 1399)  by kind {'P+': 142, 'N': 1}
+swarm              p=0.00000 (1 in inf)  by kind {}
+swarm  +new-faults p=0.00047 (1 in 2128)  by kind {'P+': 94}

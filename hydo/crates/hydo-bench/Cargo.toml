@@ -1,0 +1,25 @@
+[package]
+name = "hydo-bench"
+description = "The bug benchmark runner: how well the explorer's strategies find the planted defects d0-d12 of hydo/bench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+# A development tool, not part of either release: the benchmark images are built on the build
+# machine from the project's own order service (hydo/bench/README.md), so no user has them.
+[[bin]]
+name = "hydo-bench"
+path = "src/bin/hydo-bench.rs"
+
+[dependencies]
+hydo-explore = { workspace = true }
+hydo-engine = { workspace = true }
+serde_json = { workspace = true }
+regex = "1"
+
+[dev-dependencies]
+sha2 = { workspace = true }

@@ -1,4 +1,4 @@
-# schedules d7prob.trigger() predicts, first 20 per strategy from seed 1 (random+nf, swarm+nf)
+# schedules d7prob.trigger() (hydo-bench d7prob since M108) predicts, first 20 per strategy from seed 1 (random+nf, swarm+nf)
 disk=none dseed=209c26f8211bd185 | run N=mysql@10-25:delay,20ms,reorder,12% P=kafka@28+3 T=2:-30
 disk=none dseed=a0b640b4272ced71 | run N=mysql@15-27:duplicate,16% P=kafka@28+2
 disk=none dseed=5cc93b4e99817c50 | run K=kafka@24+3 R=everysec P=kafka@28+3 O=redis@18-27:resp:delay,284ms

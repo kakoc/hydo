@@ -445,7 +445,7 @@ N(s) - N(s+1) packets (the last step N(s)), and the sweep runs one schedule
 packet), `--sweep-with "<tokens>"` (one more fixed fault on every point and trace run, e.g.
 `K=kafka@9+1`; not a power cut, whose trace run never reaches the count), `--sweep-dry` (trace,
 write `points.txt`, stop). Every failure is re-run twice. Trace counts are in `fc-traces.jsonl`,
-point labels in `sweep-points.jsonl` (`compare.py sweep <out>` tabulates them).
+point labels in `sweep-points.jsonl`.
 
 Sweeping every packet is expensive (M76: 1,125 runs, 2 h 26 min for two links over two steps).
 `--sweep freeze --fc-adaptive` spends the runs where failures are, in two stages:

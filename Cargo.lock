@@ -209,6 +209,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "hydo-bench"
+version = "0.1.0"
+dependencies = [
+ "hydo-engine",
+ "hydo-explore",
+ "regex",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "hydo-build"
 version = "0.1.0"
 dependencies = [

@@ -20,7 +20,7 @@ a later checkpoint skips part of a committed transaction and the database goes c
 | `walrace.c` | the workload + checker, written from the public description only: writers, checkpointers and readers on one WAL database, each its own connection, all concurrent; every committed transaction recorded; check = every committed row present with its value + `PRAGMA integrity_check` = ok |
 | `hydo.yaml` | the manifest: no service, one workload, one invariant; `params: v` builds 3.51.2 (`3510200`, default) or 3.51.3 (`--set v=3510300`) |
 | `build.sh` | builds `bin/walrace-<v>` statically from the official amalgamation zips (sha256-pinned) on the bare-metal test machine (Ubuntu gcc 13.3.0, static glibc); byte-identical across builds |
-| `hunt.py` | the blind explorer for this target (below) |
+| `hunt.py` | the blind explorer for this target (below); removed in M108 with the other research scripts (`git show 705cf98:hydo/knownbugs/sqlite/hunt.py`, with the explorer of commit `2a58c4b`) |
 | `hydo-cpudiag.yaml` | diagnostic copy of the manifest that prints per-CPU counters (several-vCPU sanity check only) |
 | `hydo-reset.yaml` | the manifest for walrace's reset mode (frequent WAL restarts; section "A workload that restarts the WAL often") |
 | `native.sh` | native runner: one walrace process at a time, pinned with `taskset`, one result line per seed |
