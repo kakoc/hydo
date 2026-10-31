@@ -2172,6 +2172,8 @@ impl<'a> Importer<'a> {
             l.push_str("#\n");
             l.push_str(&comment(&format!("Notes:\n{}", body.join("\n")), 0));
         }
+        // the project format (hydo-manifest model.rs): every document hydo writes names it
+        l.push_str(&format!("format: {}\n", hydo_manifest::model::FORMAT));
         l.push_str(&format!("name: {name}\n"));
         l.push_str(&format!(
             "description: {}\n",
