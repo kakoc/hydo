@@ -32,7 +32,22 @@ pub struct Layout {
     pub data_dev: String,
     pub data_dir: String,
     pub data_fstype: String,
+    /// The image's pinned tools (manifest.sh's HYDO_TC, HYDO_IP and HYDO_IPT; "" = not in the
+    /// image). They are image facts: [`Plan::from_manifest`] fills hydo-build's `--print-shell`
+    /// placeholders when the manifest's faults need the tool, and the engine side (step C1)
+    /// gives the image's real paths. NET-FAULTS, NET-NAMESPACES and FREEZE run them through
+    /// `run` (docs/HISTORY.md M124).
+    pub tc: String,
+    pub ip: String,
+    pub iptables: String,
 }
+
+/// hydo-build's `--print-shell` placeholders for the pinned tools (`print_shell_tools`).
+pub const TC_PLACEHOLDER: &str = "/nix/store/...-iproute2/bin/tc";
+pub const IP_PLACEHOLDER: &str = "/nix/store/...-iproute2/bin/ip";
+pub const IPTABLES_PLACEHOLDER: &str = "/nix/store/...-iptables/bin/iptables-legacy";
+/// manifest.sh's HYDO_NET_GW (hydo-build shell.rs `NET_GW`): the bridge's own address.
+pub const NET_GW: &str = "10.89.0.1";
 
 impl Default for Layout {
     fn default() -> Layout {
@@ -43,6 +58,9 @@ impl Default for Layout {
             data_dev: "/dev/vda2".into(),
             data_dir: "/data".into(),
             data_fstype: "ext4".into(),
+            tc: String::new(),
+            ip: String::new(),
+            iptables: String::new(),
         }
     }
 }
@@ -78,6 +96,9 @@ pub struct PlanService {
     pub port: String,
     /// Started again in the recovery boot after a power cut (`recovery:`, default true).
     pub recovery: bool,
+    /// The service's `addr:` ("" = none): link faults (hydo-init-links.sh), the freeze's pair,
+    /// and its namespace's address with `network: bridge`.
+    pub addr: String,
 }
 
 /// One invariant (manifest.sh's HYDO_INV_<k>_*).
@@ -131,6 +152,13 @@ pub struct Plan {
     pub knobs: Vec<PlanKnob>,
     /// `buggify: true` (a B= token is then the BUGGIFY seam; without it B= is an unknown knob).
     pub buggify: bool,
+    /// `freeze` in `faults:`: the image has hydo-init-freeze.sh, so F= is the freeze at a packet
+    /// (without it F= is an unknown knob).
+    pub freeze: bool,
+    /// `network: bridge`: every service in its own network namespace (hydo-init-netns.sh).
+    pub bridge: bool,
+    /// manifest.sh's HYDO_NET_EXTRA: the fake world's addresses on the bridge besides NET_GW.
+    pub net_extra: Vec<String>,
     /// The fake outside world (`fakes:` / `proxies:`, driven by `schedule/fakes.rs`).
     pub world: Option<PlanWorld>,
     pub layout: Layout,
@@ -264,15 +292,6 @@ impl Plan {
                 "errors: (the error-log scan)",
             ));
         }
-        if m.network.as_deref() == Some("bridge") {
-            return Err(Unsupported::seam(Seam::NetNamespaces, "network: bridge"));
-        }
-        if m.faults
-            .as_ref()
-            .is_some_and(|f| f.iter().any(|x| x == "freeze"))
-        {
-            return Err(Unsupported::seam(Seam::Freeze, "faults: [freeze]"));
-        }
         if get(d, "_compose").is_some_and(py::truthy) {
             return Err(Unsupported::seam(
                 Seam::Composer,
@@ -304,6 +323,7 @@ impl Plan {
                 timeout: int_or(s, "ready_timeout", 120, "ready_timeout")?,
                 port: get(s, "port").map(py::str_of).unwrap_or_default(),
                 recovery: get(s, "recovery").map(py::truthy).unwrap_or(true),
+                addr: get(s, "addr").map(py::str_of).unwrap_or_default(),
             });
         }
         let wl = &d["workload"];
@@ -345,6 +365,55 @@ impl Plan {
                 },
             });
         }
+        // hydo-build shell.rs: `faults:` as listed, and `faults or DEFAULT_FAULT_KINDS`
+        let listed: Vec<String> = match get(d, "faults") {
+            Some(Value::Array(a)) => a.iter().map(py::str_of).collect(),
+            _ => Vec::new(),
+        };
+        let kinds: Vec<String> = if get(d, "faults").is_some_and(py::truthy) {
+            listed.clone()
+        } else {
+            ["kill", "pause", "network", "oneway", "cut", "clock", "disk"]
+                .iter()
+                .map(|x| x.to_string())
+                .collect()
+        };
+        let freeze = listed.iter().any(|f| f == "freeze");
+        let bridge = get(d, "network").map(py::str_of).as_deref() == Some("bridge");
+        // world_addrs: the addresses hydo-world listens on besides NET_GW (network: bridge)
+        let mut net_extra: Vec<String> = Vec::new();
+        if bridge {
+            for kind in ["fakes", "proxies"] {
+                for e in d[kind].as_array().cloned().unwrap_or_default() {
+                    let a = get(&e, "addr")
+                        .map(py::str_of)
+                        .unwrap_or_else(|| NET_GW.into());
+                    if a != NET_GW && !net_extra.contains(&a) {
+                        net_extra.push(a);
+                    }
+                }
+            }
+        }
+        let layout = Layout {
+            // hydo-build x86.rs: tc when the fault kinds have network or oneway, iptables with
+            // freeze, ip with network: bridge
+            tc: if kinds.iter().any(|f| f == "network" || f == "oneway") {
+                TC_PLACEHOLDER.into()
+            } else {
+                String::new()
+            },
+            ip: if bridge {
+                IP_PLACEHOLDER.into()
+            } else {
+                String::new()
+            },
+            iptables: if freeze {
+                IPTABLES_PLACEHOLDER.into()
+            } else {
+                String::new()
+            },
+            ..Layout::default()
+        };
         let knobs = d["knobs"]
             .as_array()
             .cloned()
@@ -380,8 +449,11 @@ impl Plan {
             invariants,
             knobs,
             buggify: m.buggify,
+            freeze,
+            bridge,
+            net_extra,
             world: PlanWorld::of(d),
-            layout: Layout::default(),
+            layout,
         })
     }
 

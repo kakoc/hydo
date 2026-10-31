@@ -1,0 +1,114 @@
+{"cadence":"default","control":1,"controller":"schedule","conversation":"run","schedule":"disk=none | run N=etcd1-etcd2@1-15:delay,200ms","start":"resume S1"}
+{"at":256,"n":1,"seen":29,"t":"stop","why":"resume"}
+{"at":256,"by":"runner","bytes":"\u0018{\"id\":20,\"nonce\":256,\"op\":\"sync\",\"v\":1}\n","id":20,"n":1,"t":"send"}
+{"by":"main","line":"hydo-ob: command: run N=etcd1-etcd2@1-15:delay,200ms","n":1,"t":"note"}
+{"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"reachable\",\"id\":\"fault.paused\",\"msg\":\"a service was paused (SIGSTOP)\"}","n":1,"t":"report"}
+{"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"sometimes\",\"id\":\"fault.pause_mid_request\",\"msg\":\"a pause began while a client request was in flight\"}","n":1,"t":"report"}
+{"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"reachable\",\"id\":\"fault.clock_back\",\"msg\":\"the realtime clock was stepped backwards\"}","n":1,"t":"report"}
+{"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"reachable\",\"id\":\"fault.clock_fwd\",\"msg\":\"the realtime clock was stepped forwards\"}","n":1,"t":"report"}
+{"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"reachable\",\"id\":\"fault.oneway_req\",\"msg\":\"a one-way network fault hit the req direction\"}","n":1,"t":"report"}
+{"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"reachable\",\"id\":\"fault.oneway_resp\",\"msg\":\"a one-way network fault hit the resp direction\"}","n":1,"t":"report"}
+{"at":256,"by":"main","bytes":"{\"data\":\"\",\"id\":21,\"op\":\"write\",\"path\":\"/tmp/hydo/acked\",\"v\":1}\n","id":21,"n":1,"t":"send"}
+{"at":256,"by":"main","bytes":"{\"data\":\"\",\"id\":22,\"op\":\"write\",\"path\":\"/tmp/hydo/outcomes\",\"v\":1}\n","id":22,"n":1,"t":"send"}
+{"at":256,"by":"main","bytes":"{\"data\":\"\",\"id\":23,\"op\":\"write\",\"path\":\"/tmp/hydo/workload.log\",\"v\":1}\n","id":23,"n":1,"t":"send"}
+{"at":256,"by":"main","bytes":"{\"append\":true,\"argv\":[\"/bin/busybox\",\"timeout\",\"600\",\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; i=$HYDO_FROM\\nwhile [ $i -lt $HYDO_TO ]; do\\n  client_op 0 $i & client_op 1 $i & client_op 2 $i &\\n  wait\\n  if [ $((i % 5)) = 4 ]; then     # a write, then at once an online defrag of every member\\n    ectl --endpoints=$EPS put hydo-defrag $i > /dev/null 2>&1\\n    /bin/etcdctl --dial-timeout=1s --command-timeout=5s --endpoints=$EPS defrag > /dev/null 2>&1\\n  fi\\n  i=$((i + 1))\\ndone\\n\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_FROM=0\",\"HYDO_LOG=/tmp/hydo/etcd3.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=30\",\"HYDO_SVC=etcd3\",\"HYDO_TO=1\",\"TERM=linux\"],\"h\":\"workload\",\"id\":24,\"op\":\"spawn\",\"stderr\":\"/tmp/hydo/workload.log\",\"stdout\":\"/tmp/hydo/workload.log\",\"v\":1}\n","id":24,"n":1,"t":"send"}
+{"at":272,"n":2,"seen":34,"t":"stop","why":"cadence"}
+{"id":20,"n":2,"send":1,"t":"ack"}
+{"id":21,"n":2,"send":2,"t":"ack"}
+{"id":22,"n":2,"send":3,"t":"ack"}
+{"id":23,"n":2,"send":4,"t":"ack"}
+{"id":24,"n":2,"send":5,"t":"ack"}
+{"at":304,"n":4,"seen":35,"t":"stop","why":"cadence"}
+{"by":"main","line":"hydo-ob: workload steps 0..0 rc=0","n":4,"t":"note"}
+{"at":304,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"insmod\",\"/lib/modules/sch_prio.ko\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/etcd3.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=30\",\"HYDO_SVC=etcd3\",\"TERM=linux\"],\"id\":25,\"op\":\"run\",\"v\":1}\n","id":25,"n":4,"t":"send"}
+{"at":320,"n":5,"seen":37,"t":"stop","why":"cadence"}
+{"id":25,"n":5,"send":6,"t":"ack"}
+{"at":320,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"insmod\",\"/lib/modules/sch_netem.ko\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/etcd3.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=30\",\"HYDO_SVC=etcd3\",\"TERM=linux\"],\"id\":26,\"op\":\"run\",\"v\":1}\n","id":26,"n":5,"t":"send"}
+{"at":336,"n":6,"seen":39,"t":"stop","why":"cadence"}
+{"id":26,"n":6,"send":7,"t":"ack"}
+{"at":336,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"insmod\",\"/lib/modules/cls_u32.ko\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/etcd3.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=30\",\"HYDO_SVC=etcd3\",\"TERM=linux\"],\"id\":27,\"op\":\"run\",\"v\":1}\n","id":27,"n":6,"t":"send"}
+{"at":352,"n":7,"seen":41,"t":"stop","why":"cadence"}
+{"id":27,"n":7,"send":8,"t":"ack"}
+{"at":352,"by":"main","bytes":"{\"argv\":[\"/nix/store/...-iproute2/bin/tc\",\"qdisc\",\"add\",\"dev\",\"lo\",\"root\",\"handle\",\"1:\",\"prio\",\"bands\",\"4\",\"priomap\",\"1\",\"1\",\"1\",\"1\",\"1\",\"1\",\"1\",\"1\",\"1\",\"1\",\"1\",\"1\",\"1\",\"1\",\"1\",\"1\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/etcd3.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=30\",\"HYDO_SVC=etcd3\",\"TERM=linux\"],\"id\":28,\"op\":\"run\",\"v\":1}\n","id":28,"n":7,"t":"send"}
+{"at":368,"n":8,"seen":43,"t":"stop","why":"cadence"}
+{"id":28,"n":8,"send":9,"t":"ack"}
+{"at":368,"by":"main","bytes":"{\"argv\":[\"/nix/store/...-iproute2/bin/tc\",\"qdisc\",\"add\",\"dev\",\"lo\",\"parent\",\"1:4\",\"handle\",\"40:\",\"netem\",\"delay\",\"200ms\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/etcd3.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=30\",\"HYDO_SVC=etcd3\",\"TERM=linux\"],\"id\":29,\"op\":\"run\",\"v\":1}\n","id":29,"n":8,"t":"send"}
+{"at":384,"n":9,"seen":45,"t":"stop","why":"cadence"}
+{"id":29,"n":9,"send":10,"t":"ack"}
+{"at":384,"by":"main","bytes":"{\"argv\":[\"/nix/store/...-iproute2/bin/tc\",\"filter\",\"add\",\"dev\",\"lo\",\"parent\",\"1:0\",\"protocol\",\"ip\",\"prio\",\"1\",\"u32\",\"match\",\"ip\",\"src\",\"127.0.0.11/32\",\"match\",\"ip\",\"dst\",\"127.0.0.12/32\",\"flowid\",\"1:4\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/etcd3.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=30\",\"HYDO_SVC=etcd3\",\"TERM=linux\"],\"id\":30,\"op\":\"run\",\"v\":1}\n","id":30,"n":9,"t":"send"}
+{"at":400,"n":10,"seen":47,"t":"stop","why":"cadence"}
+{"id":30,"n":10,"send":11,"t":"ack"}
+{"at":400,"by":"main","bytes":"{\"argv\":[\"/nix/store/...-iproute2/bin/tc\",\"filter\",\"add\",\"dev\",\"lo\",\"parent\",\"1:0\",\"protocol\",\"ip\",\"prio\",\"1\",\"u32\",\"match\",\"ip\",\"src\",\"127.0.0.12/32\",\"match\",\"ip\",\"dst\",\"127.0.0.11/32\",\"flowid\",\"1:4\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/etcd3.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=30\",\"HYDO_SVC=etcd3\",\"TERM=linux\"],\"id\":31,\"op\":\"run\",\"v\":1}\n","id":31,"n":10,"t":"send"}
+{"at":416,"n":11,"seen":49,"t":"stop","why":"cadence"}
+{"id":31,"n":11,"send":12,"t":"ack"}
+{"by":"main","line":"hydo-ob: LINK FAULT etcd1 <-> etcd2 (both): netem delay 200ms","n":11,"t":"note"}
+{"at":416,"by":"main","bytes":"{\"append\":true,\"argv\":[\"/bin/busybox\",\"timeout\",\"600\",\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; i=$HYDO_FROM\\nwhile [ $i -lt $HYDO_TO ]; do\\n  client_op 0 $i & client_op 1 $i & client_op 2 $i &\\n  wait\\n  if [ $((i % 5)) = 4 ]; then     # a write, then at once an online defrag of every member\\n    ectl --endpoints=$EPS put hydo-defrag $i > /dev/null 2>&1\\n    /bin/etcdctl --dial-timeout=1s --command-timeout=5s --endpoints=$EPS defrag > /dev/null 2>&1\\n  fi\\n  i=$((i + 1))\\ndone\\n\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_FROM=1\",\"HYDO_LOG=/tmp/hydo/etcd3.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=30\",\"HYDO_SVC=etcd3\",\"HYDO_TO=15\",\"TERM=linux\"],\"h\":\"workload\",\"id\":32,\"op\":\"spawn\",\"stderr\":\"/tmp/hydo/workload.log\",\"stdout\":\"/tmp/hydo/workload.log\",\"v\":1}\n","id":32,"n":11,"t":"send"}
+{"at":432,"n":12,"seen":50,"t":"stop","why":"cadence"}
+{"id":32,"n":12,"send":13,"t":"ack"}
+{"at":848,"n":38,"seen":51,"t":"stop","why":"cadence"}
+{"by":"main","line":"hydo-ob: workload steps 1..14 rc=0","n":38,"t":"note"}
+{"at":848,"by":"main","bytes":"{\"dev\":\"lo\",\"handle\":\"40:\",\"id\":33,\"op\":\"qlen\",\"tc\":\"/nix/store/...-iproute2/bin/tc\",\"v\":1}\n","id":33,"n":38,"t":"send"}
+{"at":864,"n":39,"seen":52,"t":"stop","why":"cadence"}
+{"id":33,"n":39,"send":14,"t":"ack"}
+{"at":864,"by":"main","bytes":"{\"argv\":[\"/nix/store/...-iproute2/bin/tc\",\"qdisc\",\"change\",\"dev\",\"lo\",\"parent\",\"1:4\",\"handle\",\"40:\",\"netem\",\"rate\",\"100gbit\",\"corrupt\",\"0%\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/etcd3.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=30\",\"HYDO_SVC=etcd3\",\"TERM=linux\"],\"id\":34,\"op\":\"run\",\"v\":1}\n","id":34,"n":39,"t":"send"}
+{"at":880,"n":40,"seen":54,"t":"stop","why":"cadence"}
+{"id":34,"n":40,"send":15,"t":"ack"}
+{"at":880,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"sleep\",\"0.01\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/etcd3.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=30\",\"HYDO_SVC=etcd3\",\"TERM=linux\"],\"id\":35,\"op\":\"run\",\"v\":1}\n","id":35,"n":40,"t":"send"}
+{"at":896,"n":41,"seen":56,"t":"stop","why":"cadence"}
+{"id":35,"n":41,"send":16,"t":"ack"}
+{"at":896,"by":"main","bytes":"{\"dev\":\"lo\",\"handle\":\"40:\",\"id\":36,\"op\":\"qlen\",\"tc\":\"/nix/store/...-iproute2/bin/tc\",\"v\":1}\n","id":36,"n":41,"t":"send"}
+{"at":912,"n":42,"seen":57,"t":"stop","why":"cadence"}
+{"id":36,"n":42,"send":17,"t":"ack"}
+{"at":912,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"sleep\",\"0.01\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/etcd3.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=30\",\"HYDO_SVC=etcd3\",\"TERM=linux\"],\"id\":37,\"op\":\"run\",\"v\":1}\n","id":37,"n":42,"t":"send"}
+{"at":928,"n":43,"seen":59,"t":"stop","why":"cadence"}
+{"id":37,"n":43,"send":18,"t":"ack"}
+{"at":928,"by":"main","bytes":"{\"dev\":\"lo\",\"handle\":\"40:\",\"id\":38,\"op\":\"qlen\",\"tc\":\"/nix/store/...-iproute2/bin/tc\",\"v\":1}\n","id":38,"n":43,"t":"send"}
+{"at":944,"n":44,"seen":60,"t":"stop","why":"cadence"}
+{"id":38,"n":44,"send":19,"t":"ack"}
+{"at":944,"by":"main","bytes":"{\"argv\":[\"/nix/store/...-iproute2/bin/tc\",\"filter\",\"del\",\"dev\",\"lo\",\"parent\",\"1:0\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/etcd3.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=30\",\"HYDO_SVC=etcd3\",\"TERM=linux\"],\"id\":39,\"op\":\"run\",\"v\":1}\n","id":39,"n":44,"t":"send"}
+{"at":960,"n":45,"seen":62,"t":"stop","why":"cadence"}
+{"id":39,"n":45,"send":20,"t":"ack"}
+{"at":960,"by":"main","bytes":"{\"dev\":\"lo\",\"handle\":\"40:\",\"id\":40,\"op\":\"qlen\",\"tc\":\"/nix/store/...-iproute2/bin/tc\",\"v\":1}\n","id":40,"n":45,"t":"send"}
+{"at":976,"n":46,"seen":63,"t":"stop","why":"cadence"}
+{"id":40,"n":46,"send":21,"t":"ack"}
+{"at":976,"by":"main","bytes":"{\"argv\":[\"/nix/store/...-iproute2/bin/tc\",\"qdisc\",\"del\",\"dev\",\"lo\",\"root\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/etcd3.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=30\",\"HYDO_SVC=etcd3\",\"TERM=linux\"],\"id\":41,\"op\":\"run\",\"v\":1}\n","id":41,"n":46,"t":"send"}
+{"at":992,"n":47,"seen":65,"t":"stop","why":"cadence"}
+{"id":41,"n":47,"send":22,"t":"ack"}
+{"by":"main","line":"hydo-ob: network fault lifted: queued=13 drained_ms=20 left=0","n":47,"t":"note"}
+{"by":"main","line":"hydo-ob: network healed before step 15","n":47,"t":"note"}
+{"at":992,"by":"main","bytes":"{\"append\":true,\"argv\":[\"/bin/busybox\",\"timeout\",\"600\",\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; i=$HYDO_FROM\\nwhile [ $i -lt $HYDO_TO ]; do\\n  client_op 0 $i & client_op 1 $i & client_op 2 $i &\\n  wait\\n  if [ $((i % 5)) = 4 ]; then     # a write, then at once an online defrag of every member\\n    ectl --endpoints=$EPS put hydo-defrag $i > /dev/null 2>&1\\n    /bin/etcdctl --dial-timeout=1s --command-timeout=5s --endpoints=$EPS defrag > /dev/null 2>&1\\n  fi\\n  i=$((i + 1))\\ndone\\n\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_FROM=15\",\"HYDO_LOG=/tmp/hydo/etcd3.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=30\",\"HYDO_SVC=etcd3\",\"HYDO_TO=30\",\"TERM=linux\"],\"h\":\"workload\",\"id\":42,\"op\":\"spawn\",\"stderr\":\"/tmp/hydo/workload.log\",\"stdout\":\"/tmp/hydo/workload.log\",\"v\":1}\n","id":42,"n":47,"t":"send"}
+{"at":1008,"n":48,"seen":66,"t":"stop","why":"cadence"}
+{"id":42,"n":48,"send":23,"t":"ack"}
+{"at":1456,"n":76,"seen":67,"t":"stop","why":"cadence"}
+{"by":"main","line":"hydo-ob: workload steps 15..29 rc=0","n":76,"t":"note"}
+{"at":1456,"by":"main","bytes":"{\"append\":true,\"argv\":[\"/bin/busybox\",\"timeout\",\"600\",\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; wait_quorum || exit 0\\ni=0\\nwhile [ $i -lt $((HYDO_STEPS * 3)) ]; do\\n  if ! grep -qx $i $HYDO_ACKED; then\\n    for a in 1 2 3; do       # a fresh leader may still refuse the first attempt\\n      ectl --endpoints=$EPS put k$i v$i > /dev/null 2>&1 && { echo $i >> $HYDO_ACKED; echo \\\"$i ack\\\" >> $HYDO_OUTCOMES; break; }\\n      sleep 1\\n    done\\n  fi\\n  i=$((i + 1))\\ndone\\n\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/etcd3.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=30\",\"HYDO_SVC=etcd3\",\"TERM=linux\"],\"h\":\"retry\",\"id\":43,\"op\":\"spawn\",\"stderr\":\"/tmp/hydo/workload.log\",\"stdout\":\"/tmp/hydo/workload.log\",\"v\":1}\n","id":43,"n":76,"t":"send"}
+{"at":1472,"n":77,"seen":69,"t":"stop","why":"cadence"}
+{"id":43,"n":77,"send":24,"t":"ack"}
+{"by":"main","line":"hydo-ob: workload retry rc=0","n":77,"t":"note"}
+{"at":1472,"by":"main","bytes":"{\"id\":44,\"max\":3000,\"op\":\"read\",\"path\":\"/tmp/hydo/outcomes\",\"v\":1}\n","id":44,"n":77,"t":"send"}
+{"at":1488,"n":78,"seen":70,"t":"stop","why":"cadence"}
+{"id":44,"n":78,"send":25,"t":"ack"}
+{"at":1488,"by":"main","bytes":"{\"data\":\"\",\"id\":45,\"op\":\"write\",\"path\":\"/tmp/hydo/failed\",\"v\":1}\n","id":45,"n":78,"t":"send"}
+{"at":1488,"by":"main","bytes":"{\"id\":46,\"max\":3000,\"op\":\"read\",\"path\":\"/tmp/hydo/acked\",\"v\":1}\n","id":46,"n":78,"t":"send"}
+{"at":1504,"n":79,"seen":72,"t":"stop","why":"cadence"}
+{"id":45,"n":79,"send":26,"t":"ack"}
+{"id":46,"n":79,"send":27,"t":"ack"}
+{"by":"main","line":"hydo-explore-acked: 0 1 2 3 4 6 7 9 10 11 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 29 5 8 12 28 ","n":79,"t":"report"}
+{"by":"main","line":"hydo-explore-failed: ","n":79,"t":"report"}
+{"by":"main","line":"hydo-explore-workload-done","n":79,"t":"report"}
+{"action":"disk-faults-off","n":79,"t":"engine"}
+{"by":"main","line":"hydo-ob: command: go","n":79,"t":"note"}
+{"at":1504,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; wait_quorum || { echo \\\"no quorum within 60 s\\\"; exit 2; }\\nectl --endpoints=$EPS get --prefix k > /tmp/hydo/kv 2>/dev/null || { echo \\\"range read failed\\\"; exit 2; }\\nawk 'FILENAME == ARGV[1] { if (FNR % 2) k = $0; else v[k] = $0; next }\\n     { if (v[\\\"k\\\" $1] != \\\"v\\\" $1) { print \\\"acked put k\\\" $1 \\\" lost (read \\\\\\\"\\\" v[\\\"k\\\" $1] \\\"\\\\\\\")\\\"; bad = 1; exit } }\\n     END { if (bad) exit 1 }' /tmp/hydo/kv $HYDO_ACKED || exit 1\\necho \\\"acked=$(wc -l < $HYDO_ACKED) all readable\\\"\\n\"],\"capture\":3000,\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/etcd3.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=30\",\"HYDO_SVC=etcd3\",\"TERM=linux\"],\"id\":47,\"op\":\"run\",\"v\":1}\n","id":47,"n":79,"t":"send"}
+{"at":1520,"n":80,"seen":74,"t":"stop","why":"cadence"}
+{"id":47,"n":80,"send":28,"t":"ack"}
+{"by":"main","line":"HYDO-ASSERT {\"t\":\"always\",\"id\":\"etcd.acked_puts_readable\",\"ok\":true,\"msg\":\"every put a client saw acknowledged is readable with its value after recovery\",\"details\":{\"out\":\"all 612 fine\"}}","n":80,"t":"report"}
+{"at":1520,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; n=0\\nfor f in /tmp/hydo/rev.0 /tmp/hydo/rev.1 /tmp/hydo/rev.2; do\\n  [ -f $f ] || continue\\n  n=$((n + $(wc -l < $f)))\\n  awk -v f=$f '$1 < last { print f \\\": revision \\\" $1 \\\" (\\\" $2 \\\") after \\\" last \\\" (\\\" what \\\")\\\"; exit 1 } { last = $1; what = $2 }' $f || exit 1\\ndone\\necho \\\"observations=$n monotonic\\\"\\n\"],\"capture\":3000,\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/etcd3.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=30\",\"HYDO_SVC=etcd3\",\"TERM=linux\"],\"id\":48,\"op\":\"run\",\"v\":1}\n","id":48,"n":80,"t":"send"}
+{"at":1536,"n":81,"seen":76,"t":"stop","why":"cadence"}
+{"id":48,"n":81,"send":29,"t":"ack"}
+{"by":"main","line":"HYDO-ASSERT {\"t\":\"always\",\"id\":\"client.revisions_monotonic\",\"ok\":true,\"msg\":\"each client's observed revisions never go backwards\",\"details\":{\"out\":\"HYDO-ORACLE: OK\"}}","n":81,"t":"report"}
+{"at":1536,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; wait_quorum || { echo \\\"no quorum within 60 s\\\"; exit 2; }\\nlast=$(sort -n $HYDO_ACKED | tail -1); key=k$last\\n[ -n \\\"$last\\\" ] || key=hydo-probe\\nn=0\\nwhile :; do\\n  rs=\\\"\\\"; ms=\\\"\\\"; ok=1\\n  for m in 0 1 2; do\\n    r=$(rev_of \\\"$(ectl --endpoints=$(ep_of $m) -w json endpoint status 2>/dev/null)\\\")\\n    mr=$(ectl --endpoints=$(ep_of $m) --consistency=s -w json get $key 2>/dev/null | sed -n 's/.*\\\"mod_revision\\\":\\\\([0-9]*\\\\).*/\\\\1/p')\\n    [ -n \\\"$r\\\" ] && [ -n \\\"$mr\\\" ] || ok=0\\n    rs=\\\"$rs $r\\\"; ms=\\\"$ms $mr\\\"\\n  done\\n  if [ $ok = 1 ] && [ $(echo $rs | tr ' ' '\\\\n' | sort -u | wc -l) = 1 ] && [ $(echo $ms | tr ' ' '\\\\n' | sort -u | wc -l) = 1 ]; then\\n    echo \\\"members agree: revision$rs, $key mod_revision$ms\\\"; exit 0\\n  fi\\n  n=$((n + 1)); [ $n -lt 30 ] || break\\n  sleep 1\\ndone\\n[ $ok = 1 ] || { echo \\\"a member did not answer within 30 s (revisions$rs; $key mod_revisions$ms)\\\"; exit 2; }\\necho \\\"members disagree: revisions$rs; $key mod_revisions$ms\\\"; exit 1\\n\"],\"capture\":3000,\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/etcd3.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=30\",\"HYDO_SVC=etcd3\",\"TERM=linux\"],\"id\":49,\"op\":\"run\",\"v\":1}\n","id":49,"n":81,"t":"send"}
+{"at":1552,"n":82,"seen":78,"t":"stop","why":"cadence"}
+{"id":49,"n":82,"send":30,"t":"ack"}
+{"by":"main","line":"HYDO-ASSERT {\"t\":\"always\",\"id\":\"etcd.members_agree\",\"ok\":true,\"msg\":\"after the run every member reports the same revision and the same mod_revision of the last acked key\",\"details\":{\"out\":\"HYDO-ORACLE: OK\"}}","n":82,"t":"report"}
+{"by":"main","line":"HYDO-ORACLE: OK invariants=3 held (etcd.acked_puts_readable: all 612 fine)","n":82,"t":"report"}
+{"end":{"verdict":"HYDO-ORACLE: OK invariants=3 held (etcd.acked_puts_readable: all 612 fine)"},"n":82,"t":"end"}

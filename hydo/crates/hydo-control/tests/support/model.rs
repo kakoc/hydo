@@ -25,6 +25,9 @@ use hydo_control::schedule::GuestState;
 use hydo_control::{Ending, EngineAction, Plan};
 use std::collections::{BTreeMap, BTreeSet};
 
+// hydo-init-links.sh, hydo-init-freeze.sh, hydo-init-netns.sh and the network faults (M124)
+mod net;
+
 /// Why checking stopped early.
 #[derive(Debug)]
 pub enum Halt {
@@ -80,6 +83,8 @@ pub struct Model<'a> {
     end_stop: u64,
     /// hydo-init-fakes.sh's files and variables (model/fakes.rs).
     pf: fakes::Pf,
+    /// The other extensions' shell variables (model/net.rs).
+    ext: net::Ext,
 }
 
 mod fakes;
@@ -246,6 +251,7 @@ impl<'a> Model<'a> {
             jobs: Jobs::default(),
             pf: fakes::Pf::default(),
             end_stop: u64::MAX,
+            ext: net::Ext::default(),
         };
         for (i, it) in items.iter().enumerate() {
             match it {
@@ -487,6 +493,10 @@ impl<'a> Model<'a> {
             v.push(format!("HYDO_SVC={a}"));
             v.push(format!("HYDO_LOG={b}"));
         }
+        if self.ext.xtables {
+            // fc_arm: export XTABLES_LOCKFILE=$H/xtables.lock
+            v.push(format!("XTABLES_LOCKFILE={H}/xtables.lock"));
+        }
         for (k, x) in extra {
             v.retain(|e| !e.starts_with(&format!("{k}=")));
             v.push(format!("{k}={x}"));
@@ -545,12 +555,21 @@ impl<'a> Model<'a> {
     // ------------------------------------------------------------------ hydo-init.sh
 
     fn die<T>(&mut self, line: String) -> R<T> {
-        self.stop_periodic();
+        self.stop_periodic()?;
         self.report(line.clone())?;
         self.end(Ending::Verdict(line))
     }
 
-    fn stop_periodic(&mut self) {
+    fn stop_periodic(&mut self) -> R<()> {
+        if self.plan.freeze {
+            // hydo-init-freeze.sh: stop_periodic() { fc_kill; _fc_orig_stop_periodic "$@"; }
+            self.fc_kill()?;
+        }
+        self.stop_periodic_plain();
+        Ok(())
+    }
+
+    fn stop_periodic_plain(&mut self) {
         if !self.jobs.periodic.is_empty() && self.jobs.periodic_cut.is_none() {
             self.jobs.periodic_cut = Some(
                 self.items
@@ -595,6 +614,8 @@ impl<'a> Model<'a> {
             names.join(" "),
             self.plan.steps
         ))?;
+        // hydo-init-netns.sh runs where /sbin/init reaches it: before main
+        self.ns_init()?;
         self.declare_all()
     }
 
@@ -638,24 +659,28 @@ impl<'a> Model<'a> {
     fn start_svc(&mut self, name: &str) -> R<bool> {
         let sv = self.plan.service(name).unwrap().clone();
         let l = format!("{H}/{name}.log");
+        // hydo-init-netns.sh's start_svc: BB="$BB nsenter -n$NSD/<svc> $BB" for all of it
+        let ns = self.ns_of(name);
         if self.started.contains(name) {
             let e = self.env(&[]);
-            self.run(
+            self.run_ns(
                 vec![s(BB), s("sh"), s("-c"), format!("{BB} cat {l} >> {l}.old")],
                 e,
                 None,
+                ns.clone(),
             )?;
         }
         self.started.insert(s(name));
         self.env_svc = Some((s(name), l.clone()));
         if !sv.setup.is_empty() {
             let e = self.env(&[]);
-            let st = self.spawn_wait(
+            let st = self.spawn_wait_ns(
                 &format!("setup:{name}"),
                 run_of(&sv.setup),
                 e,
                 &format!("{H}/{name}.setup.log"),
                 true,
+                ns.clone(),
             )?;
             if st != 0 {
                 self.note(format!("{name} setup FAILED"))?;
@@ -672,7 +697,7 @@ impl<'a> Model<'a> {
             }
         }
         let e = self.env(&[]);
-        let id = self.send(spawn(
+        let mut sp = spawn(
             name,
             vec![
                 s(BB),
@@ -683,7 +708,11 @@ impl<'a> Model<'a> {
             e.clone(),
             &l,
             false,
-        ))?;
+        );
+        if let Command::Spawn(x) = &mut sp {
+            x.netns = ns.clone();
+        }
+        let id = self.send(sp)?;
         self.spawn.insert(s(name), id);
         self.killed.remove(name);
         if self.reply(id)?.is_err() {
@@ -696,7 +725,7 @@ impl<'a> Model<'a> {
             cwd: None,
             uid: None,
             gid: None,
-            netns: None,
+            netns: ns,
             every_ms: 1000,
             deadline_ms: sv.timeout as u64 * 1000,
             alive: Some(s(name)),
@@ -738,7 +767,12 @@ impl<'a> Model<'a> {
     }
 
     fn restart_dead(&mut self, verdict: &str) -> R<()> {
+        // hydo-init-fakes.sh's wrapper is spliced after hydo-init-freeze.sh's, so it runs first
         self.pf_restart_dead()?;
+        if self.plan.freeze {
+            // hydo-init-freeze.sh: restart_dead() { fc_heal; _fc_orig_restart_dead "$@"; }
+            self.fc_heal()?;
+        }
         // the decision: every killed service has reported its exit before the alive checks
         let p = self.point();
         for k in self.killed.clone() {
@@ -870,12 +904,22 @@ impl<'a> Model<'a> {
     /// step_range as the init has it: hydo-init-fakes.sh's wrapper when it is spliced in.
     fn step_range(&mut self, a: i64, b: i64) -> R<()> {
         if self.plan.world.is_some() {
+            // hydo-init-fakes.sh's step_range, around freeze's
             return self.pf_step_range(a, b);
         }
         self.step_range_orig(a, b)
     }
 
+    /// The step_range hydo-init-fakes.sh wraps: hydo-init-freeze.sh's, or hydo-init.sh's own.
     fn step_range_orig(&mut self, a: i64, b: i64) -> R<()> {
+        if self.plan.freeze {
+            // hydo-init-freeze.sh's step_range (the declaration, fc_arm before fc_step)
+            return self.fc_step_range(a, b);
+        }
+        self.step_range_plain(a, b)
+    }
+
+    fn step_range_plain(&mut self, a: i64, b: i64) -> R<()> {
         if a >= b {
             return Ok(());
         }
@@ -933,6 +977,10 @@ impl<'a> Model<'a> {
     }
 
     fn set_knob(&mut self, letter: &str, value: &str) -> R<()> {
+        if self.plan.freeze && letter == "F" {
+            // hydo-init-freeze.sh: set_knob() { if [ "$1" = F ]; then fc_parse "$2"; else ...
+            return self.fc_parse(value);
+        }
         let k = self.plan.knobs.iter().find(|k| k.token == letter).cloned();
         let Some(k) = k.filter(|k| !k.default.is_empty()) else {
             return self.note(format!("knob {letter} not in the manifest, ignored"));
@@ -958,6 +1006,7 @@ impl<'a> Model<'a> {
     fn explore_run(&mut self, cmd: &str) -> R<()> {
         self.note(format!("command: {cmd}"))?;
         let (mut kk, mut cc, mut pp, mut xx) = (None, None, None, None);
+        let (mut nn, mut oo): (Option<String>, Option<String>) = (None, None);
         for t in cmd.split(' ').skip(1) {
             let (l, v) = t.split_once('=').unwrap();
             match l {
@@ -965,11 +1014,21 @@ impl<'a> Model<'a> {
                 "C" => cc = Some(s(v)),
                 "P" => pp = Some(s(v)),
                 "X" => xx = Some(s(v)),
-                "N" | "O" | "T" => return bad(format!("{l}= is a seam; the corpus has none")),
+                "N" => nn = Some(s(v)),
+                "O" => oo = Some(s(v)),
+                "T" => return bad(format!("{l}= is a seam; the corpus has none")),
                 // hydo-init-fakes.sh's set_knob: `if [ "$1" = H ]; then pf_add "$2"; ...`
                 "H" if self.plan.world.is_some() => self.pf_add(v)?,
                 _ => self.set_knob(l, v)?,
             }
+        }
+        for v in [
+            &mut self.ext.nfrom,
+            &mut self.ext.nto,
+            &mut self.ext.ofrom,
+            &mut self.ext.oto,
+        ] {
+            *v = s("-1");
         }
         let decls = [
             "reachable fault.paused a service was paused (SIGSTOP)",
@@ -1007,6 +1066,9 @@ impl<'a> Model<'a> {
                 kup = -1;
             }
         }
+        if let Some(n) = &nn {
+            self.read_n(n)?;
+        }
         let cat = cc.as_deref().map(num).unwrap_or(-1);
         let (mut psvc, mut pat, mut pup, mut poff, mut pdur) = (String::new(), -1, -1, None, 0u64);
         if let Some(p) = &pp {
@@ -1027,6 +1089,9 @@ impl<'a> Model<'a> {
                 pup = -1;
             }
         }
+        if let Some(o) = &oo {
+            self.read_o(o)?;
+        }
         let (mut xsvc, mut xat, mut xoff) = (String::new(), -1, 0u64);
         if let Some(x) = &xx {
             xsvc = before_last(x, '@');
@@ -1040,6 +1105,7 @@ impl<'a> Model<'a> {
         }
         let steps = self.plan.steps;
         let mut pts: Vec<i64> = vec![0, kat, kup, cat, pat, pup, xat, steps];
+        pts.extend(self.net_points());
         pts.retain(|p| *p >= 0 && *p <= steps);
         pts.sort();
         pts.dedup();
@@ -1062,6 +1128,7 @@ impl<'a> Model<'a> {
                 cut = true;
                 break;
             }
+            self.at_nto(&p.to_string())?;
             if p == kup && down {
                 self.note(format!("restarting {ksvc} before step {p}"))?;
                 if !self.start_svc(&ksvc.clone())? {
@@ -1080,6 +1147,7 @@ impl<'a> Model<'a> {
                 down = true;
                 self.note(format!("KILLED {ksvc} before step {p}"))?;
             }
+            self.at_n_o(&p.to_string())?;
             if p == pup && paused {
                 self.sig(&psvc.clone(), Sig::Cont)?;
                 paused = false;
@@ -1114,7 +1182,7 @@ impl<'a> Model<'a> {
             if self.jobs.kill.is_some() {
                 self.jobs.kill_cut = Some(here);
             }
-            self.stop_periodic();
+            self.stop_periodic()?;
             let f = self.failed_ids()?;
             // hydo-init-fakes.sh's failed_ids: at a cut the world's dump goes after the ids
             let dump = self.pf_dump()?;
@@ -1128,6 +1196,7 @@ impl<'a> Model<'a> {
             self.report(s("hydo-explore-workload-done cut"))?;
             return self.end(self.pf_hand_over(&a, &f));
         }
+        self.net_at_end()?;
         if self.jobs.pause.is_some() {
             // `wait $ptimer`: the timer's last line comes before the main sequence goes on
             self.jobs.pause_joined = true;
@@ -1161,7 +1230,7 @@ impl<'a> Model<'a> {
         }
         self.restart_dead("HYDO-ORACLE: ERROR restart after the faults")?;
         self.retry_workload()?;
-        self.stop_periodic();
+        self.stop_periodic()?;
         let f = self.failed_ids()?;
         let a = self.read_all(&format!("{H}/acked"))?;
         self.report(format!("hydo-explore-acked: {}", a.replace('\n', " ")))?;
@@ -1197,7 +1266,7 @@ impl<'a> Model<'a> {
                     .collect();
                 self.step_range(0, self.plan.steps)?;
                 self.retry_workload()?;
-                self.stop_periodic();
+                self.stop_periodic()?;
                 self.failed_ids()?;
                 self.finish()
             }
@@ -1334,12 +1403,14 @@ pub fn check(
     if let Some((svc, off)) = m.jobs.kill.clone() {
         m.check_kill(&svc, off, &env)?;
     }
+    m.check_freeze_watch()?;
     for it in items {
         if let Some(by) = it.by() {
             let known = by == "main"
                 || by == "runner"
                 || (by == "pause-timer" && m.jobs.pause.is_some())
                 || (by == "kill-timer" && m.jobs.kill.is_some())
+                || (by == "freeze" && m.ext.fc_sent.is_some())
                 || m.jobs
                     .periodic
                     .iter()
