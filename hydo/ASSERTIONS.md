@@ -230,7 +230,7 @@ case needing what a language lacks (float32, invalid UTF-8 in a JavaScript histo
 the lines they must change. To add a case, add it to `sdk/rust/tests/cases/defs.rs` and bless.
 The cases equal what Go 1.26.5 writes (docs/HISTORY.md, Milestone 110).
 
-**Reading the stores** (`hydo-read` / `hydo-check`, `hydo/readers`; full reference in
+**Reading the stores** (`hydo-read` / `hydo-check`, `hydo/crates/hydo-read`; full reference in
 `hydo/onboard/MANIFEST.md`, "Reading the stores"). A cross-service property often needs what
 is in a MySQL/PostgreSQL table, on a Kafka topic, under Redis or etcd keys. Any SDK or script
 can run the static helper instead of linking a client for every store:

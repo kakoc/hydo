@@ -228,3 +228,35 @@ from go.dev it still builds `orderd-arm64` `a87ca7fa…` (M96).
   `google/protobuf/*.proto` exactly as protocompile v0.14.1 with protobuf-go v1.35.2 produced them
   for the Go generator (sha256 `f9696902ad5a824e…`), so a schema that imports them is the same
   `desc.pb` as before.
+
+## hydo-read: the in-guest store reader in Rust (Milestone 112)
+
+`hydo/crates/hydo-read` (the program that runs as `hydo-read` and, through a symlink the image
+builder makes, as `hydo-check`) is staged into guest images, so its bytes are part of their
+fingerprints. It keeps its own Cargo workspace and `Cargo.lock` (it is not a member of the
+repository's workspace), so no dependency update elsewhere changes it. The pins:
+
+- **Compiler:** Rust 1.90.0 (`cargo +1.90.0`, the workspace's toolchain) with the targets
+  `x86_64-unknown-linux-musl` (hvx guests) and `aarch64-unknown-linux-musl` (Mac guests), linked
+  by Rust's own `rust-lld` with the targets' self-contained musl and `+crt-static`; no C compiler.
+- **Crates** (all pure Rust, pinned by the crate's `Cargo.lock`, built with `--locked`): flate2
+  1.1.10 with miniz_oxide 0.9.1 (gzip), snap 1.1.2 (snappy), lz4_flex 0.11.6 (LZ4 frames), ruzstd
+  0.7.3 (zstd), sha1 0.10.7, sha2 0.10.9, md-5 0.10.6 and hmac 0.12.1 (MySQL and PostgreSQL
+  authentication), rsa 0.9.10 with rand_core 0.6.4 (the RSA path of MySQL's
+  caching_sha2_password). The store protocols themselves are written in the crate.
+- **Build:** `hydo/crates/hydo-read/build.sh [x86_64|aarch64|all] [OUTDIR]` writes
+  `build/hydo-read` and `build/hydo-read-arm64`. It remaps the checkout path and `$CARGO_HOME`,
+  so the bytes do not depend on where the tree or the crate cache lives (checked: two
+  directories, two cargo homes, the same bytes).
+- **The build host matters.** Cargo puts the output of `rustc -vV`, which names the host
+  triple, into every crate's `-C metadata`, so the symbol hashes, and with them the bytes, depend
+  on the kind of host that compiles. The values for commit `c93657c`:
+
+  | target | built on | size | sha256 |
+  |---|---|---|---|
+  | x86_64 | x86_64-unknown-linux-gnu (the bare-metal machine, `~/hydo-rust`) | 1,389,016 | `6445237458633ef4df3622d3fcbaaa77cb15455cae53bddec06aa73f704734eb` |
+  | x86_64 | aarch64-apple-darwin (the Mac) | 1,389,024 | `2b4d6a62805ac8fce66c92dc66b417e1a0a02e24877f878cc126b7b9ed47fd4d` |
+  | aarch64 | aarch64-apple-darwin (the Mac) | 1,159,720 | `88576fa899570cc7f826a7e05f701f0aa3245cdd3f8be4f4adea8367d9b8842e` |
+
+  The x86_64 images of Milestone 112 carry the first, the Mac images the third. The Go program
+  it replaced was 10.3 MB, and nixpkgs Go and upstream Go built different bytes of it (M96).

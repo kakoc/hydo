@@ -97,3 +97,23 @@ lifted network fault delivers netem's queued packets. Only `/sbin/init` differs 
 verdict as on the old image, each twice with the same fingerprint, for example `run` OK
 `092d1ebdf7cfd714`, `C=20 S=off` VIOLATION `category c4 stored 0 times` `b883bfaac88baf61`. Full
 table: `docs/REBASELINE.md` section 7.1.
+
+## With the store readers in Rust (2026-10-31, M112)
+
+`hydo-read.yaml` (M88: the PostgreSQL loops replaced by `hydo-check`) with the Rust `hydo-read`
+(`hydo/crates/hydo-read`, `64452374…`), built on the bare-metal test machine: image `162da151…`.
+The image cannot be the M88 build's bytes with only the binary swapped, because a root without
+`root.size_mib` is sized from `du -sm` of the staged tree and that depends on the host's file
+system, so the Go binary was built into a new image on the same machine too (`303199af…`). Every
+verdict line is the Go image's:
+
+| schedule | verdict | Go M88 (`007c4590…`) | Go, rebuilt | Rust (twice) |
+|---|---|---|---|---|
+| `disk=none dseed=1 \| run C=20 S=off` | VIOLATION `exactly-once violated: acked c4 is in categories 0 times (of 20 in acked); missing 16: c4, c5, c6, c7, c8 (+11 more)` | `7c45986931b60e50` | `71f98926480cdf6b` | `0e257643269720d7` |
+| `disk=none dseed=1 \| run` | OK `each of the 30 items of acked occurs once in categories (categories has 31 records)` | `016e4b08a2ac4129` | `31bceb13d979a3e0` | `7681d3ab7dcb5947` |
+
+The eight other M88 schedules once each, all OK with Go's line: `K=postgres@10+3`
+`61ea87e5bd7c384c`, `K=front@10+3` `25fb9b8924154693`, `P=postgres@10+3` `185dbb0c176847d8`,
+`P=postgres@10~50:4000` `3412555891abf546`, `O=postgres@10-15:resp:loss,100%` `092a37d190a52d46`,
+`O=front@10-15:resp:loss,100%` `73f3ead7a5736fbc`, `O=front@10-15:req:loss,100%`
+`32876de933e0ca30`, `C=20` `ce35e3444da1d458`. Details: `docs/HISTORY.md` Milestone 112.
