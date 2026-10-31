@@ -22,7 +22,7 @@
 
 use crate::control::{Action, Ending, EngineAction, Out};
 use hydo_agent_proto::line::ErrorLine;
-use hydo_agent_proto::msg::{Command, Done, Exit, ProbeDone, Reply};
+use hydo_agent_proto::msg::{Command, Done, Event, Exit, ProbeDone, Reply};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Why a thread's function returned early.
@@ -56,6 +56,8 @@ pub(crate) struct Facts {
     pub probes: BTreeMap<u64, ProbeDone>,
     /// Exit events, by the id of the spawn that started the process.
     pub exits: BTreeMap<u64, Exit>,
+    /// Every other event (line, froze, resumed, dropped, warn), in the order the agent wrote them.
+    pub events: Vec<Event>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

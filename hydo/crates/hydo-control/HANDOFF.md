@@ -137,18 +137,16 @@ controller's choice.
   conversation.
 - **history:** `tail` the history file (or keep the console records), and run the `final:`
   read-backs before final_verdict.
-- **freeze:** the pinned iptables through `run`, then `freeze`/`unfreeze`, the `froze`/`resumed`
-  events and the fault.freeze_call records.
+- **freeze:** done in M124 (branch `ctl-net`), see "Network faults, the freeze and service
+  networks" below.
 - **buggify:** one `write` of `/tmp/hydo-buggify` (mode 644) at the knob's place.
 - **fakes:** done in M125 (branch `ctl-fakes`), see "The fakes controller" below.
 - **error-logs:** `tail` or `read` the service logs, and classify them on the host with
   hydo-errors.
-- **net-namespaces:** the pinned `ip` through `run` for the namespace plan, then `spawn` with
-  `netns`.
+- **net-namespaces:** done in M124 (branch `ctl-net`).
 - **composer:** `spawn` each composed command at its round (HYDO_SEED, HYDO_CMD_ID,
   HYDO_ROUND), with the drain and the kills.
-- **net-faults:** the tc lines through `run`, `qlen` polls for the M71 drain, and the heal points
-  (nto, oto, and at the end).
+- **net-faults:** done in M124 (branch `ctl-net`).
 - **recovery-inputs:** the engine's hand-over (C1), the first boot's clock (clock) and the
   carried world (fakes, done in M125). The ids are already written by the controller.
 
@@ -222,9 +220,112 @@ first. So:
   parts before the verdict come before the summary. netns wraps `start_svc` only.
 
 The manifests with fakes and another feature (shop and redis-bridge: liveness; redis-bridge:
-netns) are still refused by that feature's seam.
+netns) are still refused by that feature's seam. (M124: netns is driven now; redis-bridge waits
+only for liveness, and `tests/corpus_net.rs` runs it with its `eventually` check taken out.)
 
 What C1 needs from this: pass `Ending::PowerCut::world` to `with_world`. Nothing else.
+
+## Network faults, the freeze and service networks (M124, branch `ctl-net`; docs/HISTORY.md "Milestone 124")
+
+Three modules beside `schedule/fakes.rs`, each called from its `SEAM` comment in `schedule.rs`:
+
+- `src/schedule/netfault.rs` (NET-FAULTS): explore_run's `N=`/`O=` lines (read in the shell's
+  order, their points, "healed before step", "healed at the end"), hydo-init.sh's `net_on` and
+  `net_heal`, hydo-init-links.sh's `link_ends`/`known_svc`/`net_on` (a manifest with `addr:`), and
+  hydo-init-netns.sh's `net_on`/`ns_fault_dev`/`ns_heal`/`ns_stats` (`network: bridge`).
+- `src/schedule/freeze.rs` (FREEZE): hydo-init-freeze.sh's `fc_parse` (in set_knob), the
+  declaration and `fc_arm` (in step_range), `fc_heal` (in restart_dead), `fc_kill` (before
+  stop_periodic: in die_oracle, at a cut, after the retry), and the thread `freeze` that reports
+  hydo_fc's console lines from the agent's `froze`/`resumed`/`warn` events.
+- `src/schedule/netns.rs` (NET-NAMESPACES): `ns_setup` and its log line between the phase line and
+  declare_all (before S0, so every conversation resumed from S0 or S1 has the network), and the
+  namespace of start_svc's four commands.
+
+`Plan` gained `freeze`, `bridge`, `net_extra` and each service's `addr`; `Layout` gained the pinned
+tools `tc`, `ip`, `iptables` (manifest.sh's HYDO_TC, HYDO_IP, HYDO_IPT). The tool paths are image
+facts: `Plan::from_manifest` fills hydo-build's `--print-shell` placeholders
+(`/nix/store/...-iproute2/bin/tc`, ...) when the manifest's fault kinds need the tool, and leaves
+"" otherwise (the shell's "no tc" paths). **C1 must set the image's real paths** (they are in its
+`/etc/hydo/manifest.sh`), or the agent runs a program that does not exist. `Facts::events` keeps
+every other agent event in order (froze, resumed, warn, and line for the tail users).
+
+Decisions where the shell is ambiguous (marked `AMBIGUOUS:` in the module headers; the shell
+model in `tests/support/model/net.rs` checks each):
+
+1. **`$BB nsenter -n<file> <cmd>`** is the agent's `netns` field on the command (tc in a service's
+   namespace, the per-service `sh -c` of ns_setup, start_svc's `.log.old` copy, setup, command
+   and readiness probe).
+2. **The netem queue length.** In the guest's own namespace, the agent's `qlen` (`tc -s qdisc
+   show` and the backlog of handle 40:). In a service's namespace, where `qlen` cannot go, a `run`
+   of `tc -s qdisc show dev eth0` there (3,000 bytes kept) and the shell's awk on the host.
+   `ns_stats` is the same `run` with its awk on the host. `$tc` is one word.
+3. **Every `tc`, `insmod`, `sleep 0.01` and `iptables`** is a `run` that is waited for, also where
+   the shell ignores the status: the shell runs them one after another (M120's decision 9).
+4. **netns.log** stays on the host (the outputs of the commands that wrote to it, then the
+   `<svc>=<addr>@vh<i>` lines); the file is not written. On a failed setup its last 8 lines are
+   notes (`tail -8`). The insmods' output is not added (they print nothing on stdout).
+   `ns_v6off`'s builtins run as one `sh -c` with the same text; `: > $f` is a `write`; `mkdir -p
+   $NSD` is the agent's `mkdir`, not waited for (as M120's mkdirs).
+5. **hydo_fc is the agent's `freeze`.** Its arguments become the command's fields: `sa` →
+   `sip`, a target port → `port`, `s<port>` (the workload peer) → `own_port`, `-` → absent, the
+   match `-` → no `pattern`, n and dur by C's atol; the log is `$H/fc.log`, the queue 7. The marker
+   files are the reply (`fc.bound`) and the events (`fc.fired`, `fc.resumed`), so their `rm -f` is
+   not sent, and "freeze helper did not start" is the agent's refusal of `freeze`.
+6. **A refused freeze is not armed**, so `fc_kill` (die_oracle) sends no `unfreeze`. The shell
+   would kill the helper it had started. (The model found this difference; it is the controller's
+   choice, because the agent has nothing to stop and would refuse the `unfreeze`.)
+7. **A pair with neither an address nor a port** (a service without `addr:` and a peer without
+   `port:`): hydo_fc started with `- -` and counted nothing; the agent refuses such a freeze, so
+   the controller writes the helper's empty log instead and the rules give 3 ("skipped").
+8. **hydo_fc's console lines** are report lines of the thread `freeze`, at the stop where their
+   event is seen: `hydo-fc: FROZE <handle> (...)` (the handle where hydo_fc printed `pid <n>`; the
+   host has no pids; the explorer's `froze_re` still matches), the `fault.freeze_call` record,
+   `hydo-fc: RESUMED after <dur> ms (<n> processes)`, and `hydo-fc: <msg>` for the trigger's
+   warnings. An event seen at the stop where the conversation ends is not reported (the main
+   part ends the conversation first).
+9. **fired/resumed** in fc_heal's first test and its wait are the events seen so far; after the
+   trigger is stopped they are the `unfreeze` reply's (the markers' final state). "freeze helper
+   had exited early" is never logged: the trigger is part of the agent.
+10. **The "never fired" count** is the shell's `grep -c ' #'` in the guest (`sh -c` with
+    `2>/dev/null`); the `#0` trace is fc.log read on the host and the shell's awk ported there.
+11. **`cat $H/fc.ipt`** after failed rules: the rules' captured output, as notes.
+12. **XTABLES_LOCKFILE** is exported from the arming on (the shell's `export` in fc_arm), into
+    every later command of the main part. A background job of the shell keeps the environment of
+    its fork; the controller's threads build each command when they send it (M120's approach), so
+    a periodic check after the arming has the variable too.
+13. **F= with `network: bridge`** is refused (seam freeze): the helper runs in the frozen
+    service's namespace, and the agent's `freeze` has no namespace field. Doing it needs a
+    protocol addition (`netns` on `freeze`, with a feature name) in hydo-agent-proto and the agent.
+
+The order against the other extensions (hydo-build's `init_text`; a wrapper spliced later runs
+first): `step_range`: the fakes split, then freeze's (declaration, arming), then hydo-init.sh's;
+`set_knob`: the fakes `H`, then freeze's `F`; `restart_dead`: the fakes heal, then `fc_heal`;
+`stop_periodic`: `fc_kill` first; netns's setup runs where /sbin/init reaches it (before main),
+its start_svc wraps the whole of start_svc, and its `net_on`/`net_off` replace the links' and the
+plain ones. With buggify, liveness, history or error logs merged, check their places against this.
+
+The proofs (on the Mac, no VM):
+
+- `tests/corpus.rs` now drives `redis/hydo-freeze.yaml` and `compose-voting/hydo.generated.yaml`
+  (refused before), and every N=/O= schedule of the identity corpus (refused before); every run is
+  checked against the shell model with its new network part, and its replay against the policy
+  run. Boot transcripts of every other manifest are unchanged.
+- `tests/corpus_net.rs`: schedules written for every path of the three features on redis, the
+  netem example, etcd (links), the voting app (bridge), redis-bridge with fakes and bridge (its
+  `eventually` check taken out; both architectures' copies) and the freeze example; plan variants
+  for paths no example reaches (no tc; a freeze pair without a port; a pair without addresses or
+  ports; a pair with two addresses; a failing network setup; F= with bridge refused); solo mode;
+  the freeze sweep's point lists (M76: a `#0` trace per stream and step, the counts read from the
+  runs' own "freeze never fired" lines, then every packet of every step; M92: every 8th packet,
+  then a window of 16 around each failing point). Every path in its `PATHS` list (41) is reached.
+  Ten kinds of mistakes made in recorded conversations are each caught in every run they apply to.
+  Four mistakes made in the controller's code, one at a time, were caught and reverted (a failed
+  `qdisc change` that does not stop the drain, a heal that waits one second longer, no `unfreeze`
+  at a power cut, IPv6 left on hydo0).
+- Goldens: `tests/golden/corpus-net.txt`, readable transcripts in `tests/golden/examples-net/`.
+
+What C1 needs from this: the image's tool paths in `Layout`. Nothing else: the freeze, the netem
+faults and the namespaces are all agent commands.
 
 ## Left open
 
