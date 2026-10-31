@@ -15,6 +15,8 @@ pub struct Dev {
     q0: u64,
     stuck: bool,
     linger: bool,
+    /// `qdisc change` refused (a netem the kernel cannot change in place)
+    refuse_change: bool,
     changed_at: Option<u64>,
     filters_off_at: Option<u64>,
     sent: u64,
@@ -140,6 +142,7 @@ impl Fake {
                 d.q0 = if delay { q % 14 } else { q % 3 };
                 d.stuck = q.is_multiple_of(13);
                 d.linger = q.is_multiple_of(7);
+                d.refuse_change = q % 11 == 5;
                 d.sent = q % 50;
                 d.dropped = if loss { q % 5 } else { 0 };
                 (0, String::new())
@@ -149,7 +152,7 @@ impl Fake {
                 _ => (2, "Error: Parent Qdisc doesn't exists.\n".into()),
             },
             ["qdisc", "change", ..] => match self.world.net.devs.get_mut(&key) {
-                Some(d) if d.netem => {
+                Some(d) if d.netem && !d.refuse_change => {
                     d.changed_at = Some(t);
                     (0, String::new())
                 }
