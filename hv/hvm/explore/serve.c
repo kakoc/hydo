@@ -97,6 +97,7 @@ struct ctl_book {              /* what a snapshot carries besides the VM */
 static struct {
 	int on, start, ended;      /* start: 1 = the phase's start stop is due, 2 = a RESUME's */
 	int boot_s1;               /* --control boot one: SNAP S1 taken in the boot phase (M121) */
+	int wdone, cut;            /* M126: DISKOFF/CUT given (1), then acted on (2); CUT: a power cut */
 	char tag[64];
 	const char *phase;
 	uint64_t at, rb, last_x;   /* the current stop's exit count; the cadence in exits; the last exit seen */
@@ -453,9 +454,21 @@ static void run_once(const char *tag, const char *sched, int rewound);
  *   hvmx ... --control boot one <Image> <initramfs> <outdir> "<schedule>"
  *       the same from a fresh boot: SNAP S1 in the boot phase also arms the schedule's host part
  *       and the run goes on in phase=workload from that stop, as a CTL from S1 does.
- * The kernel command line gets " quiet loglevel=1" instead of " hydo_phase=serve". */
+ * The kernel command line gets " quiet loglevel=1" instead of " hydo_phase=serve".
+ * The end of the workload and a power cut are the host's (milestone 126; hvx_explore.c has the
+ * same text): two more host lines at a stop of an agent image's workload phase.
+ *   DISKOFF   the workload has ended (what the shell init's workload marker is to a RUN): answers
+ *             "OK diskoff at=<exits> cut=0"; at the host's CONT the engine takes the workload
+ *             fingerprint (wfp), switches the disk faults and the timing tokens off and goes on in
+ *             phase=check (a start stop; nothing typed)
+ *   CUT       a power cut here: answers "OK cut at=<exits>" and ends the stop (as CONT does); the
+ *             workload fingerprint is taken, only the flushed disk survives, and the run goes on
+ *             from the host's snapshot S0 (phase=recovery, a start stop; queued input DROPped,
+ *             nothing typed): the host's recovery conversation
+ * END in the check or recovery phase fingerprints there (fp = fnv(wfp, that), as for a RUN). */
 struct ctl_snap { char name[64]; struct xsnap x; struct runst rs; struct ctl_book k; uint64_t rb; int used; };
 static struct ctl_snap g_ctl_snaps[CTL_MAX_SNAPS];
+static struct ctl_snap *ctl_find(const char *name);
 
 static void ctl_esc(FILE *f, const uint8_t *p, size_t n)
 {
@@ -570,6 +583,7 @@ static void ctl_snap_cmd(char *arg)
 	if (n < 1 || (n == 2 && strcmp(mode, "retype"))) { printf("ERR snap bad request\n"); return; }
 	if (strcmp(C.phase, "workload") && strcmp(C.phase, "boot")) { printf("ERR snap %s only in the workload or boot phase\n", name); return; }
 	if (TJ.on || C.rs->pct_n) { printf("ERR snap %s not for tj/pct schedules\n", name); return; }
+	if (C.wdone) { printf("ERR snap %s after DISKOFF/CUT\n", name); return; }
 	for (int i = 0; i < C.k.ns; i++)
 		if (C.k.s[i].state == CS_TYPED)
 			il += (size_t)snprintf(ids + il, il < sizeof ids ? sizeof ids - il : 0, "%s%llu", il ? "," : "", (unsigned long long)C.k.s[i].id);
@@ -644,6 +658,16 @@ static int ctl_stop(const char *why)
 			if (!done) printf("ERR ack %llu unknown\n", id);
 		} else if (!strncmp(ln, "SNAP ", 5)) {
 			ctl_snap_cmd(ln + 5);
+		} else if (!strcmp(ln, "DISKOFF") || !strcmp(ln, "CUT")) {   /* M126, see above */
+			int cut = ln[0] == 'C';
+			const char *no = !g_agent ? "only for an agent image (--control boot)" :
+			                 strcmp(C.phase, "workload") ? "only in the workload phase" :
+			                 C.wdone ? "after DISKOFF/CUT" : cut && !ctl_find("S0") ? "without a snapshot S0" : NULL;
+			if (no) { printf("ERR %s %s\n", cut ? "cut" : "diskoff", no); fflush(stdout); continue; }
+			C.wdone = 1;
+			C.cut = cut;
+			if (cut) { printf("OK cut at=%llu\n", (unsigned long long)C.at); fflush(stdout); return 0; }
+			printf("OK diskoff at=%llu cut=0\n", (unsigned long long)C.at);
 		} else {
 			printf("ERR unknown command ");
 			ctl_esc(stdout, (const uint8_t *)ln, strlen(ln));
@@ -662,6 +686,7 @@ static int ctl_hook(void)         /* hvm_stop_hook at every loop top of a lock-s
 	const char *why = hit ? "marker" : ctl_due() ? "send" : (x - C.k.cad0) % C.rb == 0 ? "cadence" : NULL;
 	if (why && ctl_stop(why)) { C.ended = 1; return 1; }
 	if (C.boot_s1) { C.ended = 2; return 1; }   /* M121: --control boot one, S1 taken here */
+	if (C.wdone == 1) { C.wdone = 2; C.ended = 3; return 1; }   /* M126: DISKOFF or CUT */
 	return hit;
 }
 /* run_to under lock-step: the phase's start (or resume) stop, then stops at markers, due sends and
@@ -678,6 +703,7 @@ static int ctl_run_to(const char *const *m, int n, size_t from, int *why)
 		C.at = M.exits;
 		if (ctl_stop(w)) return -3;
 		if (C.boot_s1) return -4;
+		if (C.wdone == 1) { C.wdone = 2; return -7; }
 	}
 	for (int i = 0; i < n; i++)      /* a marker may already be there: stop where we are, as RUN would */
 		if (M.console_len > from && memmem(console + from, M.console_len - from, m[i], strlen(m[i]))) return i;
@@ -687,6 +713,7 @@ static int ctl_run_to(const char *const *m, int n, size_t from, int *why)
 	int s = run_until(NULL);
 	hvm_stop_hook = NULL;
 	if (C.ended == 2) return -4;
+	if (C.ended == 3) return -7;
 	if (C.ended) return -3;
 	if (s == STOP_MARKER) return hk_hit;
 	C.at = M.exits;
@@ -859,6 +886,7 @@ static void run_rest(struct runst *rs)
 	char orc[3584];
 	C.rs = rs;                     /* lock-step: what a SNAP in this run carries */
 	r = run_to(wk, g_agent ? 0 : 2, from, &why);   /* an agent image prints no marker */
+	if (r == -7) { r = 0; cut |= C.cut; }          /* M126: the host's DISKOFF/CUT is its workload marker */
 	if (pct_n) {
 		size_t l = strlen(tjinfo);
 		snprintf(tjinfo + l, sizeof rs->tjinfo - l, " pctf=%llu pctw=%llu", (unsigned long long)PCT.fired, (unsigned long long)(M.exits - wx0));
@@ -876,9 +904,9 @@ static void run_rest(struct runst *rs)
 	if (r == 1 || r == -3) { ctl_verdict(r, from, verdict, sizeof verdict); ffp = wfp; goto out; }
 	if (!cut) {                    /* same boot: faults off, heal, check */
 		set_fault(0, 0, 0);
-		hvm_put_input("go\n");
+		if (!g_agent) hvm_put_input("go\n");   /* an agent image: the host types */
 		if (C.on) { C.phase = "check"; C.start = 1; }
-		r = run_to(fin, 1, from, &why);
+		r = run_to(fin, g_agent ? 0 : 1, from, &why);
 		if (r < 0 && r != -3) { spin_hit |= why == STOP_SPIN; snprintf(verdict, sizeof verdict, "ERROR check: %s", stop_name(why)); goto out; }
 		ffp = xfp(); diag(tag, "f");
 		ctl_verdict(r, from, verdict, sizeof verdict);
@@ -894,12 +922,12 @@ static void run_rest(struct runst *rs)
 		free(durable);
 		set_fault(0, 0, 0);
 		from = M.console_len;
-		hvm_put_input(orc);
+		if (!g_agent) hvm_put_input(orc);   /* g_s0 is the host's S0 there (main) */
 		if (C.on) {                /* a new VM with its own clock: queued input does not carry over */
 			ctl_drop_pending();
 			C.phase = "recovery"; C.start = 1; C.k.evfrom = from;
 		}
-		r = run_to(fin, 1, from, &why);
+		r = run_to(fin, g_agent ? 0 : 1, from, &why);
 		if (r < 0 && r != -3) { spin_hit |= why == STOP_SPIN; snprintf(verdict, sizeof verdict, "ERROR recovery: %s", stop_name(why)); goto out_rec; }
 		ffp = xfp(); diag(tag, "f");
 		ctl_verdict(r, from, verdict, sizeof verdict);

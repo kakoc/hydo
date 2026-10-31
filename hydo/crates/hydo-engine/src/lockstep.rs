@@ -15,6 +15,8 @@
 //! host -> engine, at a stop:          SEND at=<icount> <escaped bytes>   -> OK send id=<id> sent=|queued=<n>
 //!                                     ACK <id>                           -> OK ack <id> | ERR ack ...
 //!                                     SNAP <name> [retype]               -> OK snap ... | ERR snap ...
+//!                                     DISKOFF (agent images, M126)       -> OK diskoff at=<n> cut=<0|1>
+//!                                     CUT     (agent images, M126)       -> OK cut at=<n>, ends the stop
 //!                                     CONT | END [<verdict>]
 //! the run ends with:                  RESULT <tag> fp=.. wfp=.. secs=.. stops=.. typed=.. inh=.. verdict=..
 //! ```
@@ -165,12 +167,35 @@ pub enum SnapAnswer {
     Refused(String),
 }
 
+/// The answer to DISKOFF: the stop's time, and whether the schedule's host part makes this the
+/// power cut (`cf=`: the disk lost power at the k-th flush, so the run goes on in the recovery VM
+/// at the next CONT, as a shell image's run does at its workload marker).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DiskOff {
+    pub at: u64,
+    pub cut: bool,
+}
+
+/// Carries out one controlled run over its lock-step session, to the run's RESULT: the shape of
+/// the design's `Worker::run_controlled(tag, ctl)` (docs/design/guest-control.md "Explorer API").
+/// The controller itself (`hydo_control::Controller`) lives in a crate that depends on this one,
+/// so the engines take this object-safe trait instead; `hydo_control` implements it for its
+/// conversations ([`crate::Worker::run_controlled`], [`crate::Worker::resume`]).
+pub trait Driver {
+    fn drive(&mut self, ls: &mut Lockstep<'_>) -> Result<RunResult, EngineError>;
+}
+
 /// One host line.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HostCmd {
     Send { at: u64, bytes: Vec<u8> },
     Ack(u64),
     Snap { name: String, retype: bool },
+    /// The workload has ended (agent images, M126): at the next CONT the engine takes the workload
+    /// fingerprint and switches the disk faults off, as at a shell image's workload marker.
+    DiskOff,
+    /// A power cut at this stop (agent images, M126): the run goes on in the recovery VM.
+    Cut,
     Cont,
     End(Option<String>),
 }
@@ -184,6 +209,8 @@ impl HostCmd {
             HostCmd::Snap { name, retype } => {
                 format!("SNAP {name}{}", if *retype { " retype" } else { "" })
             }
+            HostCmd::DiskOff => "DISKOFF".into(),
+            HostCmd::Cut => "CUT".into(),
             HostCmd::Cont => "CONT".into(),
             HostCmd::End(None) => "END".into(),
             HostCmd::End(Some(v)) => format!("END {v}"),
@@ -194,6 +221,12 @@ impl HostCmd {
     pub fn parse(line: &str) -> Option<HostCmd> {
         if line == "CONT" {
             return Some(HostCmd::Cont);
+        }
+        if line == "DISKOFF" {
+            return Some(HostCmd::DiskOff);
+        }
+        if line == "CUT" {
+            return Some(HostCmd::Cut);
         }
         if line == "END" {
             return Some(HostCmd::End(None));
@@ -542,6 +575,46 @@ impl<'a> Lockstep<'a> {
         }
     }
 
+    /// The workload has ended (an agent image's counterpart of the shell init's workload marker,
+    /// M126). Err(reason) when the engine refuses.
+    pub fn diskoff(&mut self) -> Result<Result<DiskOff, String>, EngineError> {
+        self.write(&HostCmd::DiskOff.line())?;
+        Ok(match self.answer()? {
+            Err(e) => Err(e),
+            Ok(a) => {
+                let bad = || EngineError::Protocol(format!("OK {a}"));
+                let mut w = a.split(' ');
+                if w.next() != Some("diskoff") {
+                    return Err(bad());
+                }
+                let at = w
+                    .next()
+                    .and_then(|x| x.strip_prefix("at="))
+                    .and_then(|x| x.parse().ok())
+                    .ok_or_else(bad)?;
+                let cut = match w.next() {
+                    Some("cut=1") => true,
+                    Some("cut=0") => false,
+                    _ => return Err(bad()),
+                };
+                Ok(DiskOff { at, cut })
+            }
+        })
+    }
+
+    /// A power cut at this stop (agent images, M126). On Ok the stop is over: the next stop is
+    /// the recovery VM's start stop. Err(reason) when the engine refuses (the stop goes on).
+    pub fn cut(&mut self) -> Result<Result<u64, String>, EngineError> {
+        self.write(&HostCmd::Cut.line())?;
+        Ok(match self.answer()? {
+            Err(e) => Err(e),
+            Ok(a) => Ok(a
+                .strip_prefix("cut at=")
+                .and_then(|x| x.parse().ok())
+                .ok_or_else(|| EngineError::Protocol(format!("OK {a}")))?),
+        })
+    }
+
     /// Run on to the next stop.
     pub fn cont(&mut self) -> Result<(), EngineError> {
         self.write(&HostCmd::Cont.line())
@@ -650,6 +723,8 @@ mod tests {
                 name: "t".into(),
                 retype: false,
             },
+            HostCmd::DiskOff,
+            HostCmd::Cut,
             HostCmd::Cont,
             HostCmd::End(None),
             HostCmd::End(Some("HYDO-ORACLE: OK".into())),

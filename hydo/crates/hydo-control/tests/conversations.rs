@@ -160,7 +160,7 @@ fn the_lockstep_link_speaks_the_engine_protocol() {
     let mut w = Vec::new();
     {
         let mut ls = Lockstep::new(&mut r, &mut w);
-        let mut link = LockstepLink { ls: &mut ls };
+        let mut link = LockstepLink::new(&mut ls);
         let fin = run(&mut link, &mut Tiny, Start::Boot, header("boot")).unwrap();
         assert_eq!(
             fin.ending,
