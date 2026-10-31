@@ -70,6 +70,7 @@
 #define FINAL_MARKER "hydo-stack-marker: workload complete"
 #define ACKED_PREFIX  "hydo-explore-acked:"
 #define FAILED_PREFIX "hydo-explore-failed:"
+#define AGENT_PREFIX  "HYDO-AG "   /* hydo-agent's framed lines: an agent image booted without --control boot */
 
 static const char *outdir = ".";
 static int spin_auto;          /* HVM_SPIN_REWIND=auto (default): escalate a SPIN run to rewind mode */
@@ -942,10 +943,11 @@ static void run_sched(const char *tag, const char *sched, struct xsnap *s1)
 
 static int boot_to_s1(struct xsnap *s0, struct xsnap *s1)
 {
-	static const char *const m0[] = { S0_MARKER, FINAL_MARKER };
+	static const char *const m0[] = { S0_MARKER, FINAL_MARKER, AGENT_PREFIX };
 	static const char *const m1[] = { S1_MARKER, FINAL_MARKER };
-	int why = 0;
-	if (run_to(m0, 2, 0, &why) != 0) { fprintf(stderr, "hvmx: no S0 marker (%s)\n", stop_name(why)); fwrite(console, 1, M.console_len, stderr); return -1; }
+	int why = 0, r0 = run_to(m0, 3, 0, &why);   /* a shell image never prints the agent's prefix (M121) */
+	if (r0 == 2) { fprintf(stderr, "hvmx: the guest's first process is hydo-agent (an agent image, /etc/hydo/control): boot it with --control boot\n"); return -1; }
+	if (r0 != 0) { fprintf(stderr, "hvmx: no S0 marker (%s)\n", stop_name(why)); fwrite(console, 1, M.console_len, stderr); return -1; }
 	if (s0) xsnap_take(s0, "s0");
 	fprintf(stderr, "hvmx: S0 at %llu console bytes, exit %llu, state %016llx\n", M.console_len, M.exits, (unsigned long long)xfp());
 	size_t f = M.console_len;

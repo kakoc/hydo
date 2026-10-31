@@ -207,6 +207,7 @@
 #define DONE_MARKER	"hydo-explore-workload-done"
 #define ACKED_PREFIX	"hydo-explore-acked:"
 #define FAILED_PREFIX	"hydo-explore-failed:"
+#define AGENT_PREFIX	"HYDO-AG "	/* hydo-agent's framed lines: an agent image booted without --control boot */
 /* Safety net only; a run that hits it is reported as TIMEOUT. HVX_EXPLORE_WALL_SECS overrides the
  * default 900 s (very short vCPU turns, q= of a few hundred branches, can need longer). */
 static double run_wall_secs(void)
@@ -1955,9 +1956,10 @@ static void agent_boot_result(struct boot *b, const char *tag, int r, double t0)
 /* Boot to S0, snapshot, provision to S1. Leaves b at S1 and fills s0 (and s1 if wanted). */
 static int boot_to_s1(struct boot *b, struct snap *s0, struct snap *s1)
 {
-	static const char *const m0[] = { S0_MARKER, FINAL_MARKER };
+	static const char *const m0[] = { S0_MARKER, FINAL_MARKER, AGENT_PREFIX };
 	static const char *const m1[] = { S1_MARKER, FINAL_MARKER };
 	char cmd[512];
+	int r0;
 	snprintf(cmd, sizeof(cmd), "%s hydo_jit=%s hydo_phase=serve", E.cmdbase, g_jit);
 	/* Boot with the flush-aware power-loss class armed at probability 0: nothing is dropped,
 	 * but the disk advertises a volatile write cache (VIRTIO_BLK_F_FLUSH), so the guest
@@ -1970,7 +1972,13 @@ static int boot_to_s1(struct boot *b, struct snap *s0, struct snap *s1)
 		       E.base, E.disk_len, cmd, 0, HVX_FAULT_DROP_UNFLUSHED, 0) != 0) return -1;
 	pt1 = now_s();
 	if (ph_on()) ph_read(b, &bc0);
-	if (run_until_any(b, m0, 2, 0) != 0) { fprintf(stderr, "hvx_explore: no S0 marker\n"); console_dump(b); return -1; }
+	r0 = run_until_any(b, m0, 3, 0);	/* a shell image never prints the agent's prefix (M121) */
+	if (r0 == 2) {
+		fprintf(stderr, "hvx_explore: the guest's first process is hydo-agent (an agent image, /etc/hydo/control): "
+			"boot it with --control boot\n");
+		return -1;
+	}
+	if (r0 != 0) { fprintf(stderr, "hvx_explore: no S0 marker\n"); console_dump(b); return -1; }
 	pt2 = now_s();
 	if (ph_on()) ph_read(b, &bc1);
 	if (snap_take(b, s0, "s0")) return -1;
