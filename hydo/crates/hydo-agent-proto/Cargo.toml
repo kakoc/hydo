@@ -1,0 +1,22 @@
+# hydo-agent-proto: the protocol between hydo's host and hydo-agent, the guest's first process
+# (docs/design/guest-control.md; docs/HISTORY.md M117).
+#
+# No dependencies, on purpose: the guest agent (hydo/crates/hydo-agent, std and libc only, its own
+# workspace and lock file because its bytes are inside guest images) compiles this crate into
+# itself, so the host and the agent read and write lines with the same code. The fields are written
+# out here rather than inherited from the workspace, so that the agent's workspace reads this file
+# on its own.
+[package]
+name = "hydo-agent-proto"
+description = "hydo's host-agent protocol: messages, canonical JSON, console framing, the host session with the version rule, the generated schema and the example transcripts"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+rust-version = "1.90"
+publish = false
+
+[dependencies]
+
+[dev-dependencies]
+hydo-results = { path = "../hydo-results" }
+serde_json = { version = "1", features = ["preserve_order"] }

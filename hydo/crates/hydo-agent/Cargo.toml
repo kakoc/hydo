@@ -1,0 +1,31 @@
+# hydo-agent: the guest's first process under host control (docs/design/guest-control.md,
+# docs/HISTORY.md M117). It executes the host's commands (hydo-agent-proto) and decides nothing.
+#
+# Not a member of the repository's workspace, on purpose: its bytes are inside guest images, so it
+# keeps its own lock file and the smallest dependency set (std, libc and the protocol crate, which
+# has no dependencies), and a dependency update elsewhere never changes those images. Build the
+# static binaries with build.sh (docs/BUILD-PINS.md, "hydo-agent").
+[package]
+name = "hydo-agent"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+rust-version = "1.90"
+publish = false
+
+[[bin]]
+name = "hydo-agent"
+path = "src/main.rs"
+
+[dependencies]
+hydo-agent-proto = { path = "../hydo-agent-proto" }
+libc = "0.2"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[workspace]

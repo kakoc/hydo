@@ -260,3 +260,30 @@ repository's workspace), so no dependency update elsewhere changes it. The pins:
 
   The x86_64 images of Milestone 112 carry the first, the Mac images the third. The Go program
   it replaced was 10.3 MB, and nixpkgs Go and upstream Go built different bytes of it (M96).
+
+## hydo-agent: the guest agent (Milestone 117)
+
+`hydo/crates/hydo-agent` is the program that will run as the guest's first process under host
+control (docs/design/guest-control.md). Its bytes will be inside guest images, so they are pinned
+here. It keeps its own Cargo workspace and `Cargo.lock` (not a member of the repository's
+workspace) and depends only on `libc` 0.2.191 and the protocol crate `hydo-agent-proto`, which
+has no dependencies.
+
+- **Compiler:** Rust 1.90.0 (the repository's `rust-toolchain.toml`) with the targets
+  `x86_64-unknown-linux-musl` and `aarch64-unknown-linux-musl`, linked by `rust-lld` with
+  `+crt-static` (`.cargo/config.toml`); no C compiler. Profile: `opt-level = "s"`, LTO, one
+  codegen unit, symbols stripped, `panic = "abort"`.
+- **Build:** `hydo/crates/hydo-agent/build.sh [x86_64|aarch64|all] [OUTDIR]` writes
+  `hydo-agent` and `hydo-agent-arm64`. It uses Milestone 113's recipe: rustc runs through
+  `hydo/grpcgen/rustc-stable` (a host-independent `-C metadata`; the tree and `$CARGO_HOME`
+  remapped to `/hydo` and `/cargo`), and `hydo-elf-comment` sets the `.comment` linker line to
+  `Linker: LLD`. So the bytes do not depend on the build host, the tree's path or the crate cache.
+- **Results (commit of M117):** the same bytes from this Mac and from the bare-metal test
+  machine (`~/hydo-ga2`, its private rustup), and from two clean builds on the Mac:
+
+  | target | size | sha256 |
+  |---|---|---|
+  | x86_64 (`ELF 64-bit LSB pie executable, static-pie linked`) | 665,632 | `ff7652a171f40c80f83c2c6ee871331f046b7c2953faf25e40505bbb12f2a16c` |
+  | aarch64 (`ELF 64-bit LSB executable, statically linked`) | 564,768 | `6a3ea9f8c80e972abda55a58e05fee9de0b7355b3a27f5ae7a8bb560d2f6fac1` |
+
+  The C freeze helper it can stand in for (`hydo_fc`, pinned musl gcc) is 68,504 bytes.

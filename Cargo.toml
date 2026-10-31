@@ -24,6 +24,7 @@ members = [
     "hydo/crates/hydo-grpc",
     "hydo/crates/hydo-grpc-gen",
     "hydo/crates/hydo-results",
+    "hydo/crates/hydo-agent-proto",
 ]
 exclude = ["sdk", "hydo/onboard/examples"]
 

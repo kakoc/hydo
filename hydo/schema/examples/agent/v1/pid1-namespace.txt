@@ -1,0 +1,18 @@
+# hydo agent transcript, protocol 1: the agent as the first process of a private PID and mount namespace, on a pty: the hello says pid1, it mounted /proc for its namespace, a tmpfs mount, and an orphaned grandchild reaped by the agent (no zombie is left).
+# Recorded on Linux with `sudo unshare --pid --fork --mount --propagation private hydo-agent`, HYDO_AGENT_TTY = a pty (hydo/crates/hydo-agent/tests/native.rs, pid1_in_a_namespace); never edited. replay: pid1
+< HYDO-AG 241 0a259a40 {"agent":"0.1.0","ev":"hello","features":["freeze"],"ops":["sync","spawn","signal","run","probe","write","read","mkdir","mount","syncfs","clock_set","clock_get","qlen","tail","untail","freeze","unfreeze"],"pid1":true,"proto":1,"seq":0,"v":1}
+> {"id":1,"nonce":1,"op":"sync","v":1}
+< HYDO-AG 54 f78e175e {"nonce":1,"ok":true,"op":"sync","re":1,"seq":1,"v":1}
+> {"data":"size=1m","dst":"/tmp/m","flags":["nosuid","nodev"],"fstype":"tmpfs","id":2,"op":"mount","src":"none","v":1}
+< HYDO-AG 45 da2664a3 {"ok":true,"op":"mount","re":2,"seq":2,"v":1}
+> {"data":"in a tmpfs\n","id":3,"op":"write","path":"/tmp/m/x","v":1}
+< HYDO-AG 56 7d2f963a {"bytes":11,"ok":true,"op":"write","re":3,"seq":3,"v":1}
+> {"argv":["sh","-c","grep ' /tmp/m ' /proc/mounts | cut -d' ' -f1-3; cat /tmp/m/x; cat /proc/1/comm"],"env":["PATH=/usr/local/bin:/usr/bin:/bin"],"id":4,"op":"run","v":1}
+< HYDO-AG 43 722209d2 {"ok":true,"op":"run","re":4,"seq":4,"v":1}
+< HYDO-AG 110 773dd83a {"ev":"done","id":4,"out":"none /tmp/m tmpfs\nin a tmpfs\nhydo-agent\n","out_len":40,"seq":5,"status":0,"v":1}
+> {"argv":["sh","-c","sleep 0.3 & exit 0"],"env":["PATH=/usr/local/bin:/usr/bin:/bin"],"h":"parent","id":5,"op":"spawn","v":1}
+< HYDO-AG 45 dbf6f8fe {"ok":true,"op":"spawn","re":5,"seq":6,"v":1}
+< HYDO-AG 58 a2e946c8 {"ev":"exit","h":"parent","id":5,"seq":7,"status":0,"v":1}
+> {"argv":["sh","-c","sleep 1; z=0; for f in /proc/[0-9]*/stat; do set -- $(cat $f); [ \"$3\" = Z ] && z=$((z+1)); done; echo zombies=$z"],"env":["PATH=/usr/local/bin:/usr/bin:/bin"],"id":6,"op":"run","v":1}
+< HYDO-AG 43 a22d39fe {"ok":true,"op":"run","re":6,"seq":8,"v":1}
+< HYDO-AG 78 9e25b8e6 {"ev":"done","id":6,"out":"zombies=0\n","out_len":10,"seq":9,"status":0,"v":1}
