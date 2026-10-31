@@ -111,8 +111,10 @@ controller's choice.
   recovery conversation resumes from S0. (The other wave-2 agent builds the boot phase.)
 - **`EngineAction::DiskFaultsOff`.** This is the shell's `go`. `LockstepLink` refuses it until
   the engines have a request for it.
-- **`Ending::PowerCut { acked, failed }`.** The engine must cut the power, keep the flushed data
-  disk and start the recovery conversation with these ids. `LockstepLink` refuses it until then.
+- **`Ending::PowerCut { acked, failed, world }`.** The engine must cut the power, keep the flushed
+  data disk and start the recovery conversation with these ids. `LockstepLink` refuses it until
+  then. `world` (M125) is the fake world the first boot carried; the caller passes it on with
+  `ScheduleController::recovery(..)?.with_world(&world)` (see "The fakes controller" below).
 - **The results files.** Write `control.jsonl` (the run) and `control.recovery.jsonl`, put
   `Transcript::to_results()` into `Run.control` and `ctl=<hash>` on the RESULT line, and add
   `hydo repro --transcript` (`ReplayController`).
@@ -131,8 +133,7 @@ controller's choice.
 - **freeze:** the pinned iptables through `run`, then `freeze`/`unfreeze`, the `froze`/`resumed`
   events and the fault.freeze_call records.
 - **buggify:** one `write` of `/tmp/hydo-buggify` (mode 644) at the knob's place.
-- **fakes:** `spawn` hydo-world, its ctl through `run`, and the world `read` at a cut and
-  `write`n into the recovery VM.
+- **fakes:** done in M125 (branch `ctl-fakes`), see "The fakes controller" below.
 - **error-logs:** `tail` or `read` the service logs, and classify them on the host with
   hydo-errors.
 - **net-namespaces:** the pinned `ip` through `run` for the namespace plan, then `spawn` with
@@ -142,7 +143,81 @@ controller's choice.
 - **net-faults:** the tc lines through `run`, `qlen` polls for the M71 drain, and the heal points
   (nto, oto, and at the end).
 - **recovery-inputs:** the engine's hand-over (C1), the first boot's clock (clock) and the
-  carried world (fakes). The ids are already written by the controller.
+  carried world (fakes, done in M125). The ids are already written by the controller.
+
+## The fakes controller (M125, branch `ctl-fakes`; docs/HISTORY.md "Milestone 125")
+
+`src/schedule/fakes.rs` is `hydo/onboard/hydo-init-fakes.sh` driven through the agent: one
+function per shell function, called at the start of `start_all`, in `set_knob` for `H`, around
+`step_range`, at the start of `restart_dead`, right after `failed_ids` at a cut, at the start of
+`final_verdict`, and in the recovery's id writes. `Plan::world` (`PlanWorld`) holds manifest.sh's
+HYDO_WORLD and HYDO_WORLD_TARGETS. `hydo-world` itself is unchanged (its Rust port is on branch
+`port-world`); the controller only starts it and runs `hydo-world ctl ping|on|off|heal|dump|summary`.
+
+The world is carried through the host: the cut's dump (`ctl dump` into `$H/world.dump`, then a
+`read`) becomes `Ending::PowerCut::world`; the recovery is given it with `with_world`, writes it
+into `$H/world.carry` with `write` commands (in pieces of at most 3,000 bytes) and starts the
+world with `--carry`. The carried content is the shell's (the `w:` words of the acked line, in
+its order). The 3,584-byte limit of the recovery command line no longer applies. The 3,000-byte
+limit of the records is hydo-world's own (`carryMax`; a longer world is dumped as `w:trunc` and
+every check answers "cannot decide"); the controller adds no limit, so a hydo-world without
+`carryMax` needs no controller change, and shell images keep the old behaviour because nothing
+in them changed.
+
+Decisions where the shell is ambiguous (marked `AMBIGUOUS:` in `src/schedule/fakes.rs`; the
+shell model checks each):
+
+1. **The world's readiness.** The shell pings up to 300 times, sleeping 0.1 s after each failed
+   ping, and stops when the world's process is gone. The controller sends one `probe` (every
+   100 ms, deadline 30 s, `alive` = the world's handle). Both make the same number of pings when
+   a ping is fast.
+2. **`grep -c`, `tail -5`, `head -1`, `wc`.** They work on a `read` of the file on the host. The
+   uptime in "fake world up" is left out, as in every log line. The 5 lines of `tail` are notes.
+3. **`ctl on`'s error text.** The agent's output holds stdout and stderr together; the shell's
+   `$(...)` keeps stdout only. When ctl cannot reach the world, the ERROR verdict therefore names
+   the reason (the dial error). The verdict class is the same.
+4. **`ctl dump` and `ctl summary` go through files** (`$H/world.dump`, as in the shell, and
+   `$H/world.summary`, new) and a `read`, so no output limit applies (a `run` keeps at most
+   3,000 bytes). The summary's stderr goes to /dev/null, as `2> /dev/null` does.
+5. **At a cut, the dump stays on the host.** The shell appends it to `$HYDO_ACKED` and writes
+   `w:trunc` into `$H/world.dump` after a failed dump; nothing in the guest reads either file
+   after the cut (the power cut discards /tmp). The `hydo-explore-acked:` report line still
+   carries the dump exactly as the shell's line did.
+6. **The hand-over.** `Ending::PowerCut` gives the acked line's `w:` words as `world` and the
+   other words as `acked`. Without a fake world every word stays an id, as before. The transcript
+   writes `world` only when it is not empty, so every earlier transcript reads back the same.
+7. **The recovery's id files.** The shell writes every word of the oracle line into the id files
+   and `start_all` moves the `w:` lines into `$H/world.carry` with `grep` and `sed`, before
+   anything reads the files. The controller never writes a `w:` word into an id file. The carry
+   is the `w:` words among the acknowledged ids, then the carried world, then those among the
+   failed ids: the shell's order, where the world followed the acknowledged ids.
+8. **The recovery's `command:` log line** puts the carried records after the acknowledged ids
+   (where the shell's line had them).
+9. **The summary lines are report lines** (in the transcript hash), not notes: they are the
+   outside world's record of the run.
+10. **Handles.** The world runs under `fakes:world`; the dump and the summary under `fakes:dump`
+    and `fakes:summary`. A service may be called `world`, so no bare name is used.
+11. **The environment** is M120's decision 1 for these commands too (the prelude's exports are
+    not there). hydo-world reads only HYDO_WORLD_SOCK and HYDO_WORLD_LOG, which no example sets.
+12. **`ctl off` and `ctl heal` are waited for** (M120's decision 9: the shell waits for them).
+
+The order against the other extensions (for whoever merges another seam): hydo-build splices
+`hydo-init-fakes.sh` after the liveness, clock, history, freeze and BUGGIFY extensions and before
+the error-log and network-namespace ones (`init_text`), and a wrapper spliced later runs its part
+first. So:
+- `step_range`: the error-log wrapper, then the fakes split, then freeze's, then liveness's;
+- `set_knob`: the fakes `H` branch first, then BUGGIFY's and freeze's;
+- `restart_dead`: the fakes heal before freeze's;
+- `failed_ids`: the clock extension's part (its `clock=` word at a cut) before the fakes dump, so
+  with both the shell's acked line is ids, then `clock=…`, then the `w:` records;
+- `start_all`: the world starts before liveness's part;
+- `final_verdict` is wrapped by the fakes only; liveness and history wrap `finish`, so their
+  parts before the verdict come before the summary. netns wraps `start_svc` only.
+
+The manifests with fakes and another feature (shop and redis-bridge: liveness; redis-bridge:
+netns) are still refused by that feature's seam.
+
+What C1 needs from this: pass `Ending::PowerCut::world` to `with_world`. Nothing else.
 
 ## Left open
 

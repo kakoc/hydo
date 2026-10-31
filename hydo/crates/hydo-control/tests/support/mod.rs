@@ -359,13 +359,18 @@ pub fn run_schedule(b: &Booted, s: &Schedule) -> Result<Ran, Unsupported> {
     .fin
     .transcript;
     let recovery = match &run.fin.ending {
-        Some(Ending::PowerCut { acked, failed }) => {
+        Some(Ending::PowerCut {
+            acked,
+            failed,
+            world,
+        }) => {
             let mut rc = ScheduleController::recovery(
                 b.plan.clone(),
                 acked.clone(),
                 failed.clone(),
                 &b.s0.2,
-            )?;
+            )?
+            .with_world(world);
             Some(converse(
                 Fake::resume(&b.s0.0, &format!("{salt} recovery"), cad),
                 &mut rc,
@@ -380,6 +385,37 @@ pub fn run_schedule(b: &Booted, s: &Schedule) -> Result<Ran, Unsupported> {
         recovery,
         replay,
     })
+}
+
+/// The recovery boot's `oracle` command as the engine builds it today from a run's report
+/// (hvx_explore.c `oracle_cmd`: the words of the last `hydo-explore-acked:` line, then `failed`
+/// and those of the `hydo-explore-failed:` line when it has any), with its two word lists.
+pub fn oracle_of(items: &[Item]) -> (String, Vec<String>, Vec<String>) {
+    let last = |prefix: &str| -> Vec<String> {
+        items
+            .iter()
+            .filter_map(|i| match i {
+                Item::Report { line, .. } => line.strip_prefix(prefix),
+                _ => None,
+            })
+            .next_back()
+            .map(|l| l.split_whitespace().map(str::to_string).collect())
+            .unwrap_or_default()
+    };
+    let (acked, failed) = (last("hydo-explore-acked:"), last("hydo-explore-failed:"));
+    let mut cmd = String::from("oracle");
+    for i in &acked {
+        cmd.push(' ');
+        cmd.push_str(i);
+    }
+    if !failed.is_empty() {
+        cmd.push_str(" failed");
+        for i in &failed {
+            cmd.push(' ');
+            cmd.push_str(i);
+        }
+    }
+    (cmd, acked, failed)
 }
 
 /// A golden file: `#` comments, `input\t<path>\t<sha256>` pins, then `<key>\t...` lines.

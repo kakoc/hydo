@@ -1,0 +1,3 @@
+redis-proxy-0.jsonl	disk=none | run H=redisp@2-5:drop
+redis-proxy-1.jsonl	disk=cut dseed=3 | run H=redisp@1-6:drop C=4
+redis-proxy-2.jsonl	disk=none | run H=redisp@3-3:drop H=nosuch@1-2:reset K=redis@4+2
