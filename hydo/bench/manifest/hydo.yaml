@@ -1,0 +1,217 @@
+# The bug benchmark's guest as a hydo manifest (Milestone 129, docs/C2-BENCH.md).
+#
+# The benchmark images (hydo/bench/build-bench*.sh) run the four-service stack under its own
+# hand-written init (hv/hvx/images/build-stack.sh's /sbin/init and /etc/stack-explore.sh), which
+# the host controller cannot drive: it drives manifests. This manifest describes the same guest
+# so that `hydo build` and `hydo build --control agent` give a shell image and an agent image of
+# each defect, built by the same builder from the same files:
+#   - the files are those of the -pin-kr control image (explore-bench-m59-control-pin-kr), dumped
+#     to ./root by hydo/bench/build-bench-manifest.sh: the MySQL and OpenJDK closures (the whole
+#     /nix/store of that image), Kafka's libs and the pinned Redis; ./front-door is the defect's
+#     order service (/bin/hydostack of its benchmark image);
+#   - the configuration is build-stack.sh's: the same my.cnf (skip-log-bin, as the benchmark
+#     images have it) with the line the init appends (innodb_flush_log_at_trx_commit=1), the same
+#     Kafka properties with log.retention.ms=-1 (the -pin-kr fix) and the appended
+#     log.flush.interval.messages=1, Redis with appendfsync always;
+#   - stack-explore.sh's tokens that the generic init does not have are knobs here: Q=<n>[d]
+#     (client concurrency, every order twice with d) and M= sets sync_binlog=0 as well as the redo
+#     log setting, as stack-explore.sh does. X= (the stack's timed kill) is driven by the host
+#     controller only (hydo-control HANDOFF.md decision 12; the shell init ignores it);
+#   - the oracle is stack-explore.sh's (`hydostack oracle`), and the M59 crash oracle (the order
+#     service must not panic, hydo-bench's crash_verdict) is the second invariant.
+# What stays different from the benchmark images: the generic init's workload loop, restarts and
+# markers instead of stack-explore.sh's (for example no M67 "front door cannot restart" path, and
+# no periodic checks), so fingerprints and some timings differ; the comparison in M129 is between
+# this manifest's shell and agent images, with the original images' M108 results beside them.
+format: 1
+name: bench
+description: the bug benchmark's stack guest (MySQL, Kafka, Redis, the order service) as a manifest
+
+guest:
+  ram_mib: 1024
+  clock_start: 1767225600         # 2026-01-01, stack-explore.sh's fixed date
+
+root:
+  size_mib: 1792
+  files:
+    - {src: root/nix/store, dst: /nix/store}
+    - {src: root/opt/kafka/libs, dst: /opt/kafka/libs}
+    - {src: root/bin/redis-server, dst: /bin/redis-server, mode: "0755"}
+    - {src: root/bin/redis-cli, dst: /bin/redis-cli, mode: "0755"}
+    - {src: front-door, dst: /bin/hydostack, mode: "0755"}
+  text:
+    /etc/redis.conf: |
+      port 6379
+      bind 127.0.0.1
+      protected-mode no
+      dir /data/redis
+      save ""
+      appendonly yes
+      appendfsync always
+      appenddirname appendonlydir
+      appendfilename appendonly.aof
+      auto-aof-rewrite-percentage 0
+      aof-load-truncated yes
+      aof-timestamp-enabled no
+      daemonize no
+      loglevel notice
+      hz 1
+      dynamic-hz no
+    /etc/my.cnf: |
+      [mysqld]
+      user=root
+      datadir=/data/mysql
+      socket=/tmp/mysql.sock
+      pid-file=/tmp/mysqld.pid
+      log-error=/tmp/mysqld.err
+      bind-address=127.0.0.1
+      port=3306
+      mysqlx=OFF
+      skip-name-resolve
+      skip-log-bin
+      performance_schema=OFF
+      auto_generate_certs=OFF
+      caching_sha2_password_auto_generate_rsa_keys=OFF
+      innodb_buffer_pool_size=32M
+      innodb_redo_log_capacity=8M
+      innodb_use_native_aio=OFF
+      innodb_flush_method=fsync
+      innodb_read_io_threads=1
+      innodb_write_io_threads=1
+      innodb_page_cleaners=1
+      innodb_purge_threads=1
+      max_connections=8
+      table_open_cache=64
+      default-time-zone=+00:00
+      init-file=/etc/mysql-init.sql
+      innodb_flush_log_at_trx_commit=1
+    /etc/mysql-init.sql: |
+      CREATE USER IF NOT EXISTS 'hydo'@'%' IDENTIFIED BY '';
+      GRANT ALL PRIVILEGES ON *.* TO 'hydo'@'%';
+    /etc/kafka/server.properties: |
+      process.roles=broker,controller
+      node.id=1
+      controller.quorum.voters=1@127.0.0.1:9093
+      listeners=PLAINTEXT://127.0.0.1:9092,CONTROLLER://127.0.0.1:9093
+      inter.broker.listener.name=PLAINTEXT
+      controller.listener.names=CONTROLLER
+      listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      advertised.listeners=PLAINTEXT://127.0.0.1:9092
+      log.dirs=/data/kafka-logs
+      num.partitions=1
+      default.replication.factor=1
+      offsets.topic.replication.factor=1
+      offsets.topic.num.partitions=1
+      transaction.state.log.replication.factor=1
+      transaction.state.log.min.isr=1
+      auto.create.topics.enable=true
+      num.network.threads=2
+      num.io.threads=2
+      background.threads=2
+      log.index.size.max.bytes=1048576
+      log.segment.bytes=16777216
+      metadata.log.segment.bytes=8388608
+      group.initial.rebalance.delay.ms=0
+      log.retention.ms=-1
+      log.flush.interval.messages=1
+    /etc/kafka/log4j.properties: |
+      log4j.rootLogger=WARN, stdout
+      log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+      log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+      log4j.appender.stdout.layout.ConversionPattern=%p %c %m%n
+      log4j.logger.kafka.server.KafkaRaftServer=INFO
+
+data:
+  size_mib: 512
+  mount: rw
+  dirs: [redis, kafka-logs]
+
+env:
+  MYSQL: /nix/store/aw6ljbiwgds7yw8x2jc3340dm46s7i2k-mysql-8.4.10
+  JAVA: /nix/store/vjcrra860yal7fzk1m81ddirrafqrccz-openjdk-headless-17.0.7+7/bin/java
+  NORDERS: "30"
+  GOMAXPROCS: "1"
+  KAFKA_CLUSTER_ID: P0hH8j92QAKKXdQ2D7Aw7A
+  JCOMMON: >-
+    -XX:TieredStopAtLevel=1 -XX:CICompilerCount=1 -XX:-BackgroundCompilation -XX:+UseSerialGC
+    -XX:-UsePerfData -XX:-UseContainerSupport -XX:ActiveProcessorCount=1 -Xshare:off
+    -Djava.security.egd=file:/dev/urandom -Duser.name=hydo -Duser.home=/tmp -Duser.timezone=UTC
+    -Duser.language=en -Duser.country=US -Dfile.encoding=UTF-8 -Djava.io.tmpdir=/tmp
+    -Dlog4j.configuration=file:/etc/kafka/log4j.properties
+
+shell: |
+  SQL() { "$MYSQL/bin/mysql" --no-defaults --protocol=TCP -h127.0.0.1 -P3306 -uhydo --ssl-mode=DISABLED -N -B "$@"; }
+  # Q= (stack-explore.sh: HYDO_CONC requests at a time, HYDO_DUP=1 sends every order twice)
+  if [ -f /tmp/hydo-q.env ]; then . /tmp/hydo-q.env; fi
+
+services:
+  - name: redis
+    cmd: /bin/redis-server /etc/redis.conf
+    ready: /bin/redis-cli -p 6379 ping | grep -q PONG
+    ready_timeout: 60
+    port: 6379
+  - name: mysql
+    setup: '[ -d /data/mysql/mysql ] || "$MYSQL/bin/mysqld" --defaults-file=/etc/my.cnf --initialize-insecure'
+    cmd: '"$MYSQL/bin/mysqld" --defaults-file=/etc/my.cnf'
+    ready: SQL -e "SELECT 1"
+    ready_timeout: 600
+    port: 3306
+  - name: kafka
+    setup: $JAVA $JCOMMON -Xms96m -Xmx96m -cp "/opt/kafka/libs/*" kafka.tools.StorageTool format -t $KAFKA_CLUSTER_ID -c /etc/kafka/server.properties --ignore-formatted
+    cmd: $JAVA $JCOMMON -Xms256m -Xmx256m -cp "/opt/kafka/libs/*" kafka.Kafka /etc/kafka/server.properties
+    ready: grep -qa "Kafka Server started" $HYDO_LOG
+    ready_timeout: 600
+    port: 9092
+  - name: front
+    description: the order service (creates the schema and the topic at start)
+    cmd: /bin/hydostack server
+    ready: grep -qa "server listening" $HYDO_LOG
+    ready_timeout: 120
+    depends_on: [redis, mysql, kafka]
+    recovery: false                 # the recovery check reads the stores directly
+
+workload:
+  steps: 30                         # one step = one order
+  run: /bin/hydostack place $HYDO_FROM $HYDO_TO
+  retry: /bin/hydostack retry $NORDERS $HYDO_ACKED
+  process: hydostack (place|retry)
+
+knobs:
+  - token: M
+    name: MySQL innodb_flush_log_at_trx_commit (and sync_binlog=0 when relaxed)
+    default: "1"
+    safe: "1"
+    values: ["0", "1", "2"]
+    set: SQL -e "SET GLOBAL innodb_flush_log_at_trx_commit=$HYDO_VALUE; SET GLOBAL sync_binlog=0"
+  - token: R
+    name: Redis appendfsync
+    default: always
+    safe: always
+    values: [always, everysec, "no"]
+    set: /bin/redis-cli -p 6379 CONFIG SET appendfsync $HYDO_VALUE
+  - token: Q
+    name: client concurrency (stack-explore.sh's Q=)
+    default: "1"
+    safe: "1"
+    values: ["1", "2", "3", "4", "1d", "2d", "3d", "4d"]
+    set: |
+      { echo "export HYDO_CONC=${HYDO_VALUE%d}"; case "$HYDO_VALUE" in *d) echo "export HYDO_DUP=1";; esac; } > /tmp/hydo-q.env
+
+invariants:
+  - id: stack.exactly_once
+    msg: every ACKed order is in MySQL and Kafka exactly once; nothing told 'failed' was applied
+    final: true
+    cmd: |
+      /bin/hydostack oracle $NORDERS $HYDO_ACKED $HYDO_FAILED > /tmp/hydo/oracle.log 2>&1
+      grep -a "HYDO-ORACLE" /tmp/hydo/oracle.log | tail -1
+      grep -a "HYDO-ORACLE" /tmp/hydo/oracle.log | tail -1 | grep -q "HYDO-ORACLE: OK"
+  - id: front.no_crash
+    msg: the order service never panics (hydo-bench's M59 crash oracle)
+    final: true
+    cmd: |
+      l=$(cat /tmp/hydo/front.log.old /tmp/hydo/front.log 2>/dev/null | grep -a -m 1 "^panic\|^fatal error")
+      [ -z "$l" ] && { echo "no panic in the order service's log"; exit 0; }
+      echo "front door crashed: $(printf '%s' "$l" | cut -c1-160)"
+      exit 1
+
+faults: [kill, pause, network, oneway, cut, clock, disk]

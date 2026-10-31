@@ -320,6 +320,7 @@ dependencies = [
 name = "hydo-bench"
 version = "0.1.0"
 dependencies = [
+ "hydo-control",
  "hydo-engine",
  "hydo-explore",
  "hydo-results",
