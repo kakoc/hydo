@@ -1,0 +1,22 @@
+# hydo-control: the host-side controller of guest control (docs/design/guest-control.md, step B1;
+# docs/HISTORY.md M120). Nothing calls it yet: the engines' callers start using it in step C1.
+[package]
+name = "hydo-control"
+description = "hydo's host controller for agent images: the Controller trait, the ScheduleController that runs today's schedules through hydo-agent's commands, the control transcript and its replay"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+hydo-agent-proto = { path = "../hydo-agent-proto" }
+hydo-schedule = { workspace = true }
+hydo-manifest = { workspace = true }
+hydo-engine = { workspace = true }
+hydo-results = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+
+[dev-dependencies]
+hydo-explore = { workspace = true }
+flate2 = { workspace = true }

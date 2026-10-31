@@ -299,6 +299,30 @@ pub struct Artifacts {
     pub engine_log: Option<String>,
 }
 
+/// The control transcript of one conversation of a run on an agent image (added in M120,
+/// docs/design/guest-control.md "The control transcript"): which controller decided, the
+/// engine's stop cadence, the transcript's hash and where the transcript file is. A run has one
+/// per conversation (the run; after a power cut also the recovery boot).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Control {
+    /// The conversation: `run`, `recovery`, `boot` or `solo`.
+    pub conversation: String,
+    /// The controller that decided (`schedule`), or `replay` for a transcript typed again.
+    pub controller: String,
+    /// The engine's stop cadence (`rb=<n>`, or `default`).
+    pub cadence: String,
+    /// The transcript's hash, 16 hex digits (`ctl=` on the RESULT line).
+    pub hash: String,
+    /// Agent commands typed.
+    pub sends: u64,
+    /// Stops at which the host acted.
+    pub stops: u64,
+    /// The transcript file (`control.jsonl`, `control.recovery.jsonl`), relative to the
+    /// document's directory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transcript: Option<String>,
+}
+
 /// One run of one schedule: `result.json` of `hydo run`, and every run of an exploration in
 /// `events.jsonl`.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -365,6 +389,9 @@ pub struct Run {
     pub result_line: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artifacts: Option<Artifacts>,
+    /// Runs on agent images: the control transcript of each conversation (added in M120).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub control: Vec<Control>,
 }
 
 /// One property over the runs of a table.

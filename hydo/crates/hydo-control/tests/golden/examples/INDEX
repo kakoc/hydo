@@ -1,0 +1,6 @@
+redis-0.jsonl	disk=none | run X=redis@10~250
+redis-1.jsonl	disk=none | run X=redis@1~40 K=redis@10+2
+redis-2.jsonl	disk=none | run K=redis@1+1 K=redis@10+0
+redis-3.jsonl	disk=none | run K=nosuch@2+2 P=nosuch@1+1 X=nosuch@1~10
+redis-4.jsonl	disk=none | run P=redis@10~120:300
+redis-5.jsonl	disk=cut | run P=redis@1~10:4000 C=10

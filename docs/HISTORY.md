@@ -1865,3 +1865,65 @@ Branch `guest-agent-2` (the start on `guest-agent`, `9cd6f64`, merged into it: i
   Fingerprints differ (another `/bin/hydo_fc`, 665 KB against 68 KB, shifts guest timing by milliseconds), as the design expected; three agent schedules run twice gave the same fingerprint (`313a56f5a142bd92`, `efbfef3aba39a8e2`, `0c9eda6b5fd4a086`). **Found by the first guest run:** the netlink batch parser stepped past the end of a batch whose last message is not padded to 4 bytes (a panic, so the helper exited before the first packet); fixed with a pure, bounded `parse_batch` and a unit test.
 - **Differences from the design.** The protocol crate has no serde: the agent is std + libc only, so the codec and the schema generator are written in the crate (the design said "no dependencies besides serde"). Replies carry `op` (self-describing lines and a discriminated schema). Transcripts live in `hydo/schema/examples/agent/v1/` (as the task asked) rather than the crate's `tests/transcripts/`. `run` and `probe` report their end as events (the agent keeps serving while they run). A repeated id is answered with a `duplicate-id` refusal rather than silence. The packet trigger arms by handle (the host's spawn), not by a pid file; hydo_fc's pid-file command line stays for today's images.
 - **Not done / for wave 2** (`hydo/crates/hydo-agent-proto/HANDOFF.md`): the controller (B1, B2), `hydo-build --control agent` (B3), and booting an agent image at all — `hvx_explore` and `hvmx` wait for the shell init's S0/S1 markers before lock-step control starts; no transcript of the freeze events or of a successful `clock_set` yet. On the bare-metal machine, four root processes of the first PID-1 attempt (`sudo`/`timeout`/`unshare`/`hydo-agent`, pids 217992–217996) remain: `unshare --fork` ignores SIGTERM, so `timeout 20` never ended them; the test now uses `timeout -s KILL`. They sleep and use nothing; ending them needs `sudo kill -9 217995`, which this session was not allowed to run.
+
+### Milestone 120 — DONE (the host controller for agent images, step B1: `hydo-control` with the `Controller` trait and a `ScheduleController` that drives today's schedules through hydo-agent's commands in the shell init's order; the control transcript with its hash and a replay; a scripted agent and engine and a shell model that check 1,986 runs of the explorer's identity corpus on 22 core manifests; 2026-10-31)
+
+Branch `control-core` (from `main` = `1d2f4a7`, M117 merged). Step B1 of `docs/design/guest-control.md`. No VM ran. Nothing in the product calls the crate yet. No change to `hydo-build`, the engines, the module, any image, manifest, schedule or fingerprint. The crate's `HANDOFF.md` says what step C1 and wave 3 need.
+
+- **The interface (`src/control.rs`).**
+  - The trait: `trait Controller { fn name(&self) -> &str; fn step(&mut self, stop: &StopInfo, seen: &[Seen], out: &mut Out); }`.
+  - The controller is called at every numbered stop. `StopInfo { n, at, why, seen }` gives the stop's number, its virtual time, why the engine stopped, and how many agent lines the session has read.
+  - `Seen` is what the controller learns since the previous stop: the hello, a reply or refusal to command `id`, an agent event, an unknown event, other console text, or a broken line (an ERROR of the run).
+  - The controller answers through `Out`: `send(by, cmd) -> id` (at this stop, or `send_at` a later virtual time), `report`, `note`, `snapshot`, `engine` (`EngineAction::DiskFaultsOff`, the shell's `go`), and `end`. An ending is `Ending::Verdict(line)`, `PowerCut { acked, failed }` or `AtSnapshot(name)`.
+  - This is the design's `step(now, events) -> Vec<Action>` shape. The difference is that `Out` gives out the command ids, starting at the agent session's next id, so a controller never needs to know where the numbering stands. Every action carries `by`, the part of the controller that made it.
+- **The core controller (`src/schedule.rs`, `src/plan.rs`).** `ScheduleController` does what `hydo/onboard/hydo-init.sh` does, in its order, with one Rust function per shell function under the same name:
+  - It drives services (start order, setup, the log moved to `.log.old` on a restart, readiness through `probe` with `alive`, restarts of dead services), provisioning and `sync`, workload steps (busybox `timeout` kept inside the command), kills `K=`, timed kills `X=`, both pause forms `P=`, knobs, the periodic and final invariants with their HYDO-ASSERT records, the verdict, the power cut, and the heal path with its retry.
+  - Its conversations follow today's serve protocol: `boot` (hello to S0 to S1), `run` (from S1), `recovery` (from S0, given the acked and failed ids) and `solo`.
+  - The shell's background jobs (`periodic_loop`, `pause_timer`) are threads of `src/flow.rs`. That runtime runs each thread's straight-line code again over its recorded effects until it finishes (the replay technique of workflow engines), so every decision is a pure function of the schedule and the answers seen so far.
+  - Report lines are the shell's console lines byte for byte. Notes are its `hydo-ob:` log lines, without the uptime.
+  - `Plan::from_manifest` reads a validated manifest with manifest.sh's defaults. `Layout` holds the guest paths that agent images must keep.
+  - The init extensions and fault kinds that are not driven yet are seams (`src/seams.rs`): liveness, clock (`T=`, clock_after_cut), history, freeze, buggify, fakes, error-logs, net-namespaces, composer, net-faults (`N=`/`O=`) and recovery-inputs. A manifest or schedule that needs one is refused with `Unsupported`, naming the seam, and `SEAM(<name>)` comments mark where its code goes.
+- **The control transcript (`src/transcript.rs`, format 1).** It is one canonical JSON object per line:
+  - a header with the controller, the conversation, the schedule, the cadence (`rb=<n>` or `default`) and where the conversation started (`boot`, `resume S1`);
+  - a `stop` record (number, virtual time, why, agent lines seen) before the records of each stop at which the host acted;
+  - `send` records (agent id, the requested time, the exact bytes, `by`), `ack` (the engine's send number), `report`, `note`, `snap`, `engine` and `end`.
+
+  The hash (16 hex digits, the design's `ctl=`) covers everything except the notes. This answers M118's finding: the transcript records the cadence and the host's commands at each numbered stop, not only times and bytes. `ReplayController` types a transcript again. It checks each recorded stop's time and line count, ends with an ERROR verdict at the first difference, and leaves the runner's resynchronisation and acknowledgements to the runner. `src/runner.rs` drives one conversation over a `Link` (an engine in lock step):
+  - it decodes the console through `hydo_agent_proto::Session`, with the version rule and the line numbering;
+  - after a restore it sends the CAN byte and the `sync`;
+  - it acknowledges a send at the stop where the agent's answer to it is seen (M118's snapshot rule);
+  - it refuses ops the hello did not offer.
+
+  `src/lockstep_link.rs` is the `Link` over `hydo_engine::lockstep::Lockstep`. **hydo-results:** `Run.control`, a list with one `Control` per conversation (conversation, controller, cadence, hash, sends, stops, transcript file), was added as an optional field. `hydo/schema/results-v1.json` was regenerated, and the additions-only check against the released schema passes.
+- **Proofs.**
+  - `tests/corpus.rs` reads every example manifest of the explorer's identity test. 22 are core; the other 20 name their seam (eventually invariants, `checks:`, `errors:`, `network: bridge`, fakes and proxies, freeze, composer plans).
+  - Each core manifest boots on a scripted agent and engine (`tests/support/fake.rs`). The fake reads host lines strictly with `HostLine::decode`, as the real agent does. Its answers are pure functions of a salt and its state. Its world reaches the rare paths: crashes, readiness timeouts, failed setups, provisioning and knobs, an unmountable disk, invariants that hold, fail or cannot be evaluated, timed-out workload calls, failed and unknown outcomes. 23 boots were checked, one of them failing.
+  - The schedules are those of the identity corpus (identity.rs's generators, option streams and per-seed flags, 40 seeds; `HYDO_CONTROL_FULL=1` uses 300), plus 11–14 per manifest written for the paths the explorer never draws for a manifest (X=, unknown services, a repeated letter, a knob at its default, unknown knobs, `C=0`, `C=<steps>`, `rb=1`). One schedule per guest part was kept; 3,903 others name their seam (clock 2,094, net-faults 1,431, buggify 378).
+  - **1,986 runs** were made, 525 of them with a power cut and a recovery boot. Run verdicts: 777 OK, 592 VIOLATION, 92 ERROR. The tokens used: K= 1,068, P= 844, C= 525, X= 88, plus the knobs.
+  - Every run and every recovery boot is checked against the **shell model** (`tests/support/model.rs`). The model is hydo-init.sh written again as blocking code, from the shell text and not from the controller. It parses the tokens with the shell's own `${x%@*}`-style cuts, and writes jesc, inv_detail, the failed ids and the clock text again, differently.
+    - It checks the main sequence strictly in order, including that every answer the shell waits for came before the controller went on.
+    - It checks each background job on its own, because its order against the main sequence depends on guest timing, in the shell too.
+    - It reads shared state (alive, the first violated invariant, the records already printed) from the items before the point where the main sequence continues.
+  - The model caught five deliberate mistakes in the controller: a wrong order at one point, a call not waited for, a wrong text escape, a cancelled checker that dropped answers already seen, and the last violated invariant instead of the first.
+  - Every run's transcript is typed again by `ReplayController`, and the replay's transcript equals the policy run's.
+  - Goldens: `tests/golden/corpus-quick.txt` (per manifest: the boots, the counts, and chunked SHA-256 of every command, report line and end) and six readable transcripts in `tests/golden/examples/`.
+  - `tests/conversations.rs` covers solo mode against the model (88 runs), the determinism of two runs, the transcript file's round trip and hash, the results field, and the lock-step adapter over a scripted engine stream (the exact `SEND`, `CONT`, `ACK` and `END` lines).
+  - `cargo test --locked`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --check` pass. The corpus takes 22 s.
+- **Decisions where the shell is ambiguous** (all 17 are in `hydo/crates/hydo-control/HANDOFF.md` and marked `AMBIGUOUS:` in the code):
+  - The environment of every command is the kernel's HOME and TERM, the init's exports, and HYDO_SVC/HYDO_LOG of the last service started (the shell's export leaks). It is sorted, and the kernel's unknown command-line words are left out.
+  - Standard input is /dev/null.
+  - The readiness probe makes the same number of polls with another pacing.
+  - A killed service counts as down once its exit is reported, and a restart waits for that exit; the shell's `kill -0` can still see a zombie.
+  - The last lines of a failed setup's log are not printed.
+  - A failed mount shows the agent's error text.
+  - Invariant output is cut to its first 3,000 bytes.
+  - A check still running when the checkers stop is ignored, while the answers seen up to that stop count.
+  - Commands whose answer the shell ignores (mkdir, writes, signals) are not waited for.
+  - X= gets the stack's kill_timer meaning: hydo-init.sh ignores it as an unknown knob, and the explorer never draws it for a manifest.
+  - When a letter is repeated, the last token wins.
+- **Not done / next.** C1 is the engine side:
+  - the controlled boot phase (the other wave-2 agent builds it);
+  - `DiskFaultsOff` and the power-cut hand-over in the engines (`LockstepLink` refuses both);
+  - `control.jsonl`, `Run.control` and `ctl=` in runs, and `hydo repro --transcript`.
+
+  Wave 3 is the eleven seams. Also open: a mid-run branch test (the controller is `Clone`, but nothing tests a branch), the full 300-seed corpus as a golden, and any agent image (B3) or real guest.

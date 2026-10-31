@@ -215,6 +215,13 @@
               "type": "null"
             }
           ]
+        },
+        "control": {
+          "description": "Runs on agent images: the control transcript of each conversation (added in M120).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Control"
+          }
         }
       },
       "required": [
@@ -744,6 +751,55 @@
           ]
         }
       }
+    },
+    "Control": {
+      "description": "The control transcript of one conversation of a run on an agent image (added in M120,\ndocs/design/guest-control.md \"The control transcript\"): which controller decided, the\nengine's stop cadence, the transcript's hash and where the transcript file is. A run has one\nper conversation (the run; after a power cut also the recovery boot).",
+      "type": "object",
+      "properties": {
+        "conversation": {
+          "description": "The conversation: `run`, `recovery`, `boot` or `solo`.",
+          "type": "string"
+        },
+        "controller": {
+          "description": "The controller that decided (`schedule`), or `replay` for a transcript typed again.",
+          "type": "string"
+        },
+        "cadence": {
+          "description": "The engine's stop cadence (`rb=<n>`, or `default`).",
+          "type": "string"
+        },
+        "hash": {
+          "description": "The transcript's hash, 16 hex digits (`ctl=` on the RESULT line).",
+          "type": "string"
+        },
+        "sends": {
+          "description": "Agent commands typed.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "stops": {
+          "description": "Stops at which the host acted.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "transcript": {
+          "description": "The transcript file (`control.jsonl`, `control.recovery.jsonl`), relative to the\ndocument's directory.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "conversation",
+        "controller",
+        "cadence",
+        "hash",
+        "sends",
+        "stops"
+      ]
     },
     "Exploration": {
       "description": "`exploration.json`: an exploration's result.",
