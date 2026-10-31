@@ -1,5 +1,5 @@
 # The feature controllers of M123 on the plans the identity corpus cannot reach yet
-# (hydo/crates/hydo-control/tests/features.rs). Re-record: HYDO_BLESS=1 cargo test -p hydo-control --test features
+# (hydo/crates/hydo-control/tests/m123.rs). Re-record: HYDO_BLESS=1 cargo test -p hydo-control --test m123
 input	hydo/onboard/hydo-init-history.sh	573cbaba8a56b755ced42b9c94c11a7feb0283a6b0ac9c634f9f306cc1ce4961
 input	hydo/onboard/hydo-init-errlog.sh	338b98b6dbea8600e53bc7a75c5a0856d798b6a5b5d06a3cabc39c1119ac2640
 input	hydo/onboard/hydo-composer.sh	87274da62259d820f52cee8383e25f879ce2041917326b4df03d1ad7b67b914d

@@ -10,7 +10,7 @@
 //!    drain, a budget, a short workload.timeout for stop_all, a saved composition for
 //!    `W=@<key>`). Schedules: the identity corpus's for the example, and `W=` forms written here.
 //!    Each run is typed again from its transcript (the replay's transcript must be the run's),
-//!    recorded as a golden (`tests/golden/features-quick.txt`), and counted: every path of the
+//!    recorded as a golden (`tests/golden/m123-quick.txt`), and counted: every path of the
 //!    three extensions must have been taken at least once.
 //! 2. `w_forms_as_compose_sh`: `setw` and `plan` of the real hydo-composer.sh (run by /bin/sh with
 //!    its dry-run variables and this machine's awk) against the controller's parse_w/wplan, on W
@@ -479,10 +479,10 @@ fn features_do_what_the_shell_extensions_do() {
     .map(|x| x.to_string())
     .collect();
     support::check_golden(
-        if seeds == 10 { "features-quick.txt" } else { "features-full.txt" },
+        if seeds == 10 { "m123-quick.txt" } else { "m123-full.txt" },
         &[
             "The feature controllers of M123 on the plans the identity corpus cannot reach yet",
-            "(hydo/crates/hydo-control/tests/features.rs). Re-record: HYDO_BLESS=1 cargo test -p hydo-control --test features",
+            "(hydo/crates/hydo-control/tests/m123.rs). Re-record: HYDO_BLESS=1 cargo test -p hydo-control --test m123",
         ],
         &inputs,
         &golden,

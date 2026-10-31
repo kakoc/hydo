@@ -337,7 +337,7 @@ Three modules of `src/schedule/`, each called from a one-line `SEAM(...)` hook i
   `history:c<i>`) and prints `HYDO-CHECK-FINAL {"id":..,"rc":..}`. The `HYDO-HIST` records stay
   where the workload writes them (/dev/console), and the checks stay on the host (hydo-history).
 - **`errlog.rs`** is hydo-init-errlog.sh. `Plan::errors` (`ErrPlan`) holds manifest.sh's
-  HYDO_ERR_* lines (hydo-build's presets are copied, and `tests/features.rs` compares the plan
+  HYDO_ERR_* lines (hydo-build's presets are copied, and `tests/m123.rs` compares the plan
   with hydo-build's manifest.sh). The bookkeeping files of the shell stay in the guest, written by
   the same `cat … | wc -l` pipelines, one `sh -c` per `el_mark` (in `step_range`, before the
   fakes' split, and in `retry_workload`) and one after `mount_data`. `el_report` runs once per
@@ -409,7 +409,7 @@ The proofs (no VM):
 
 - `tests/corpus.rs` now reaches the seven manifests of these seams that need no other seam
   (four history examples, the error-log stack, redis-composed-hist; 861 runs, 279 recoveries);
-  every other manifest's transcripts are byte-identical to main's. `tests/features.rs` runs the three composed examples
+  every other manifest's transcripts are byte-identical to main's. `tests/m123.rs` runs the three composed examples
   that also have an `eventually` check with that check removed (until the liveness controller is
   merged), four variants of redis-composed-hist (commands outliving the drain, a budget, a short
   workload.timeout for stop_all, a saved composition), and the error-log stack, with the identity
@@ -417,7 +417,7 @@ The proofs (no VM):
   (`tests/support/model/m123.rs`, written from the three shell files: EL_SCAN/EL_SUM again with
   awk's match/substr/gsub and a brute-force longest match, PLAN_AWK's generator again, RES_AWK
   field by field), its transcript typed again by the replay, recorded in
-  `tests/golden/features-quick.txt`, and every path of the three extensions taken at least once
+  `tests/golden/m123-quick.txt`, and every path of the three extensions taken at least once
   (the counts are in the golden).
 - `w_forms_as_compose_sh` and `m98_corpora_as_the_awk` run the real hydo-composer.sh (`setw`,
   then `plan`, under /bin/sh with its dry-run variables and this machine's awk): 31 hand-written
