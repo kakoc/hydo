@@ -64,7 +64,7 @@ impl Model<'_> {
     }
 
     /// A console line of the shell that is not a hydo-ob: log line (tail's output).
-    fn note_raw(&mut self, line: &str) -> R<()> {
+    pub(super) fn note_raw(&mut self, line: &str) -> R<()> {
         match self.next_main(line)? {
             Item::Note { line: l, .. } if l == line => Ok(()),
             other => bad(format!(

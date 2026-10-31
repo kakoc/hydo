@@ -226,6 +226,17 @@ fn variants() -> Vec<Variant> {
         "hydo/onboard/examples/shop/hydo.yaml",
         &|p| p.clock_after_cut = Some(600),
     );
+    // with service networks and network faults too (M124 merged)
+    add(
+        "redis-bridge",
+        "hydo/onboard/examples/redis-bridge/hydo.yaml",
+        &|_| {},
+    );
+    add(
+        "redis-bridge+clock_after_cut",
+        "hydo/onboard/examples/redis-bridge/hydo.yaml",
+        &|p| p.clock_after_cut = Some(7200),
+    );
     v
 }
 

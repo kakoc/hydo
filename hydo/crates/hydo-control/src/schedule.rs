@@ -43,6 +43,8 @@ use hydo_schedule::{GuestToken, Pause, Schedule};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+// The feature controllers of wave 3 (docs/design/guest-control.md step B2), each a module of its
+// own, called from its seam below.
 #[path = "features/buggify.rs"]
 mod buggify;
 #[path = "features/clock.rs"]
@@ -53,6 +55,9 @@ mod liveness;
 mod recovery;
 pub use recovery::RecoveryInputs;
 mod fakes;
+mod freeze;
+mod netfault;
+mod netns;
 
 /// What the host knows about the guest at a snapshot, carried into the conversations that resume
 /// from it (the design: host state at a snapshot is the schedule, the seeds and the events so far).
@@ -118,6 +123,9 @@ struct RunCfg {
     x: Option<(String, i64, u64)>,
     /// T=: (at, delta seconds).
     t: Option<(i64, i64)>,
+    /// The values of N= and O= as written (NET-FAULTS reads them as the shell does).
+    n: Option<String>,
+    o: Option<String>,
 }
 
 #[derive(Debug)]
@@ -161,6 +169,10 @@ struct Host {
     cut: Option<RecoveryInputs>,
     /// The fake outside world's state (SEAM(Fakes): schedule/fakes.rs).
     pf: fakes::Pf,
+    /// The shell's marker files of the feature controllers ($H/fc.decl, ...).
+    marks: BTreeSet<String>,
+    /// FREEZE: the id of the armed `freeze` command (the shell's $fc_pid: the helper runs).
+    fc_armed: Option<u64>,
 }
 
 /// One thread of the controller.
@@ -181,6 +193,11 @@ enum Part {
     },
     /// live_monitor for an eventually invariant.
     Live(liveness::Monitor),
+    /// FREEZE: hydo_fc's console lines, from the armed freeze's events.
+    FreezeWatch {
+        id: u64,
+        dur: String,
+    },
 }
 
 fn label(p: &Part) -> String {
@@ -190,6 +207,7 @@ fn label(p: &Part) -> String {
         Part::PauseTimer { .. } => "pause-timer".into(),
         Part::KillTimer { .. } => "kill-timer".into(),
         Part::Live(m) => liveness::label(m),
+        Part::FreezeWatch { .. } => "freeze".into(),
     }
 }
 
@@ -290,6 +308,8 @@ impl ScheduleController {
             live: liveness::Live::default(),
             cut: None,
             pf: fakes::Pf::default(),
+            marks: BTreeSet::new(),
+            fc_armed: None,
         };
         Ok(ScheduleController {
             flow: Flow::new(host, Part::Main),
@@ -435,16 +455,24 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
             GuestToken::TimedKill { svc, at, off_ms } => {
                 c.x = Some((svc.clone(), *at as i64, *off_ms));
             }
-            GuestToken::Net { .. } | GuestToken::OneWay { .. } => {
-                // SEAM(NetFaults)
-                return Err(Unsupported::seam(Seam::NetFaults, text));
+            // SEAM(NetFaults): netfault.rs
+            GuestToken::Net { .. } => c.n = Some(value),
+            GuestToken::OneWay { .. } => c.o = Some(value),
+            GuestToken::Freeze(_) if plan.freeze && plan.bridge => {
+                // SEAM(Freeze): freeze.rs. With network: bridge the helper runs in the frozen
+                // service's namespace; the agent's `freeze` has no namespace field.
+                return Err(Unsupported::seam(
+                    Seam::Freeze,
+                    format!("{text} with network: bridge (hydo-agent-proto's freeze has no netns)"),
+                ));
             }
             // SEAM(Clock): T=, driven by features/clock.rs
             GuestToken::Clock { at, delta } => c.t = Some((*at as i64, *delta)),
             // Every other letter is a knob to the shell (`?=*) set_knob`): B= (set_knob's BUGGIFY
-            // branch with `buggify: true`, else an unknown knob), and F=, H=, W=, Q= (core plans
-            // have no freeze, fakes or composer; Q= is the stack's) are knobs the manifest does
-            // not have, so they are ignored.
+            // branch with `buggify: true`, else an unknown knob), and H=, W=, Q= (core plans have
+            // no fakes or composer; Q= is the stack's) are knobs the manifest does not have, so
+            // they are ignored. F= is a knob too: with `faults: [freeze]` set_knob reads it
+            // (hydo-init-freeze.sh), else ignored.
             _ => c.knobs.push((t.letter().to_string(), value)),
         }
     }
@@ -536,7 +564,11 @@ impl Controller for ScheduleController {
                     new = true;
                 }
                 // line, froze, resumed, dropped, warn: used by the seams (tail, freeze)
-                Seen::Event(_) | Seen::UnknownEvent(_) | Seen::Console(_) => {}
+                Seen::Event(e) => {
+                    self.facts.events.push(e.clone());
+                    new = true;
+                }
+                Seen::UnknownEvent(_) | Seen::Console(_) => {}
                 Seen::Broken(why) => {
                     let line = format!("HYDO-ORACLE: ERROR agent protocol: {why}");
                     out.report("main", line.clone());
@@ -572,6 +604,7 @@ fn body(fx: &mut F<'_>, part: &Part) -> Step<()> {
         Part::PauseTimer { svc, off, dur } => pause_timer(fx, &ctx, svc, *off, *dur),
         Part::KillTimer { svc, off } => kill_timer(fx, &ctx, svc, *off),
         Part::Live(m) => liveness::live_monitor(fx, &ctx, m),
+        Part::FreezeWatch { id, dur } => freeze::watch(fx, *id, dur),
     }
 }
 
@@ -696,7 +729,22 @@ struct Ran {
 /// Run a command to its end (the shell's synchronous command). A refused command counts as
 /// exit status 127 (the shell's "not found"), with the refusal as its output.
 fn run(fx: &mut F<'_>, argv: Vec<String>, env: Vec<String>, capture: Option<u32>) -> Step<Ran> {
-    let id = fx.send(run_cmd(argv, env, capture))?;
+    run_in(fx, argv, env, capture, None)
+}
+
+/// `run` inside a network namespace (the shell's `$BB nsenter -n<ns> <cmd>`).
+fn run_in(
+    fx: &mut F<'_>,
+    argv: Vec<String>,
+    env: Vec<String>,
+    capture: Option<u32>,
+    netns: Option<String>,
+) -> Step<Ran> {
+    let mut cmd = run_cmd(argv, env, capture);
+    if let Command::Run(r) = &mut cmd {
+        r.netns = netns;
+    }
+    let id = fx.send(cmd)?;
     match fx.reply(id)? {
         Err(e) => Ok(Ran {
             status: 127,
@@ -722,7 +770,20 @@ fn spawn_wait(
     out: &str,
     append: bool,
 ) -> Step<u32> {
-    let id = fx.send(spawn_cmd(h, argv, env, out, append))?;
+    spawn_wait_in(fx, h, argv, env, out, append, None)
+}
+
+/// `spawn_wait` inside a network namespace.
+fn spawn_wait_in(
+    fx: &mut F<'_>,
+    h: &str,
+    argv: Vec<String>,
+    env: Vec<String>,
+    out: &str,
+    append: bool,
+    netns: Option<String>,
+) -> Step<u32> {
+    let id = fx.send(netns::put(spawn_cmd(h, argv, env, out, append), &netns))?;
     match fx.reply(id)? {
         Err(_) => Ok(127),
         Ok(_) => Ok(fx.exit(id)?.status),
@@ -958,6 +1019,8 @@ fn xassert(fx: &mut F<'_>, t: &str, id: &str, msg: &str) {
 
 /// die_oracle: stop the checkers, the verdict line, the end.
 fn die_oracle<T>(fx: &mut F<'_>, line: String) -> Step<T> {
+    // SEAM(Freeze): stop_periodic's wrapper first stops the freeze helper (fc_kill)
+    freeze::kill(fx)?;
     stop_periodic(fx);
     fx.report(line.clone());
     fx.settle()?;
@@ -1015,6 +1078,9 @@ fn boot_prelude(fx: &mut F<'_>, ctx: &Ctx, phase: &str) -> Step<()> {
             ctx.plan.steps
         ),
     );
+    // SEAM(NetNamespaces): hydo-init-netns.sh sets the service network up where /sbin/init
+    // reaches it, after the init's functions and before main (declare_all, S0)
+    netns::setup(fx, ctx)?;
     declare_all(fx, ctx);
     Ok(())
 }
@@ -1082,15 +1148,19 @@ fn start_svc(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<bool> {
     let l = &ctx.plan.layout;
     let sv = ctx.plan.service(s).expect("a service of the plan");
     let log_file = l.log_of(s);
+    // SEAM(NetNamespaces): with network: bridge, setup, the command and the readiness check run
+    // in the service's namespace (hydo-init-netns.sh's start_svc puts nsenter into $BB)
+    let ns = netns::of(ctx, s);
     let again = fx.effect_bool(|h, _| !h.started.insert(s.to_string()));
     if again {
         // `[ -f $L ] && cat $L >> $H/$s.log.old && : > $L` (the spawn below truncates $L)
         let e = env(fx, ctx, &[]);
-        run(
+        run_in(
             fx,
             sh(ctx, format!("{} cat {log_file} >> {log_file}.old", bb(ctx))),
             e,
             None,
+            ns.clone(),
         )?;
     }
     let lf = log_file.clone();
@@ -1101,13 +1171,14 @@ fn start_svc(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<bool> {
     });
     if !sv.setup.is_empty() {
         let e = env(fx, ctx, &[]);
-        let st = spawn_wait(
+        let st = spawn_wait_in(
             fx,
             &format!("setup:{s}"),
             run_argv(ctx, &sv.setup),
             e,
             &format!("{}/{s}.setup.log", l.dir),
             true,
+            ns.clone(),
         )?;
         if st != 0 {
             // AMBIGUOUS: the shell also prints the last 8 lines of the setup log here.
@@ -1119,12 +1190,15 @@ fn start_svc(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<bool> {
     // process has not exited, so the controller waits for the exit of a killed service first.
     fx.until(|h, f| !running(h, f, s))?;
     let e = env(fx, ctx, &[]);
-    let id = fx.send(spawn_cmd(
-        s,
-        sh(ctx, format!(". {}; exec {}", l.prelude, sv.cmd)),
-        e.clone(),
-        &log_file,
-        false,
+    let id = fx.send(netns::put(
+        spawn_cmd(
+            s,
+            sh(ctx, format!(". {}; exec {}", l.prelude, sv.cmd)),
+            e.clone(),
+            &log_file,
+            false,
+        ),
+        &ns,
     ))?;
     fx.effect(|h, _| {
         h.services.insert(
@@ -1149,7 +1223,7 @@ fn start_svc(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<bool> {
         cwd: None,
         uid: None,
         gid: None,
-        netns: None,
+        netns: ns,
         every_ms: 1000,
         deadline_ms: (sv.timeout.max(0) as u64) * 1000,
         alive: Some(s.to_string()),
@@ -1196,9 +1270,10 @@ fn start_all(fx: &mut F<'_>, ctx: &Ctx, verdict: &str, recovery: bool) -> Step<(
 
 fn restart_dead(fx: &mut F<'_>, ctx: &Ctx, verdict: &str) -> Step<()> {
     fakes::restart_dead(fx, ctx)?; // SEAM(Fakes): the protocol faults healed, once
-                                   // AMBIGUOUS: the shell's `kill -0` may still see a process it just killed (a zombie not yet
-                                   // reaped). The controller first waits until every service it killed has reported its exit,
-                                   // so a killed service always counts as down here.
+    freeze::heal(fx, ctx)?; // SEAM(Freeze): fc_heal, after the fakes heal (only its first call acts)
+                            // AMBIGUOUS: the shell's `kill -0` may still see a process it just killed (a zombie not yet
+                            // reaped). The controller first waits until every service it killed has reported its exit,
+                            // so a killed service always counts as down here.
     fx.until(|h, f| {
         h.services.values().filter(|s| s.killed).all(|s| {
             f.exits.contains_key(&s.spawn) || matches!(f.replies.get(&s.spawn), Some(Err(_)))
@@ -1385,13 +1460,24 @@ fn finish(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
 
 /// step_range: workload steps [a, b), one call bounded by workload.timeout.
 fn step_range(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
-    // SEAM(Fakes): split at the H= windows' boundaries, switching the rules there
-    if let Some(r) = fakes::step_range(fx, ctx, a, b, step_range_core) {
+    // SEAM(Fakes): split at the H= windows' boundaries, switching the rules there; each piece
+    // goes through the wrappers spliced before hydo-init-fakes.sh (freeze's)
+    if let Some(r) = fakes::step_range(fx, ctx, a, b, step_range_fc) {
         return r;
+    }
+    step_range_fc(fx, ctx, a, b)
+}
+
+/// hydo-init-freeze.sh's step_range around hydo-init.sh's own.
+fn step_range_fc(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
+    if ctx.plan.freeze {
+        // SEAM(Freeze): the declaration, the arming
+        return freeze::step_range(fx, ctx, a, b);
     }
     step_range_core(fx, ctx, a, b)
 }
 
+/// hydo-init.sh's own step_range.
 fn step_range_core(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
     if a < b {
         step_range_run(fx, ctx, a, b)?;
@@ -1497,6 +1583,10 @@ fn set_knob(fx: &mut F<'_>, ctx: &Ctx, letter: &str, value: &str) -> Step<()> {
     // SEAM(Buggify): hydo-init-buggify.sh's set_knob
     if letter == "B" && ctx.plan.buggify {
         return buggify::set_buggify(fx, value);
+    }
+    if letter == "F" && ctx.plan.freeze {
+        // SEAM(Freeze): hydo-init-freeze.sh's set_knob reads F=
+        return freeze::parse_knob(fx, value);
     }
     let k = ctx.plan.knob(letter).filter(|k| !k.default.is_empty());
     let Some(k) = k else {
@@ -1701,6 +1791,8 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         }
     }
     // SEAM(NetFaults): N= is read here (nsvc, nfrom, nto), with its "N: no service" line.
+    let mut net = netfault::Net::default();
+    net.read_n(fx, ctx, cfg.n.as_deref());
     let cat = cfg.c.unwrap_or(-1);
     let (mut psvc, mut pat, mut pup, mut ptime) = (String::new(), -1i64, -1i64, None);
     match &cfg.p {
@@ -1721,6 +1813,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     }
     // SEAM(Clock): T= (tat, tdelta). SEAM(NetFaults): O= (osvc, ofrom, oto, odir).
     let (tat, tdelta) = cfg.t.unwrap_or((-1, 0));
+    net.read_o(fx, ctx, cfg.o.as_deref());
     let (mut xsvc, mut xat, mut xoff) = (String::new(), -1i64, 0u64);
     if let Some((s, at, off)) = &cfg.x {
         xsvc = s.clone();
@@ -1732,6 +1825,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     }
     let mut pts: Vec<i64> = [0, kat, kup, cat, pat, pup, tat, xat, steps]
         .into_iter()
+        .chain(net.points())
         .filter(|p| *p >= 0 && *p <= steps)
         .collect();
     pts.sort();
@@ -1754,6 +1848,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             break;
         }
         // SEAM(NetFaults): `p == nto && netup`: net_off, "network healed before step p".
+        net.heal_n_at(fx, ctx, p)?;
         if p == kup && down {
             log(fx, format!("restarting {ksvc} before step {p}"));
             if !start_svc(fx, ctx, &ksvc)? {
@@ -1778,6 +1873,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             log(fx, format!("KILLED {ksvc} before step {p}"));
         }
         // SEAM(NetFaults): `p == nfrom`: net_on; `p == oto && oneup`: heal; `p == ofrom`: one-way on.
+        net.at(fx, ctx, p)?;
         if p == pup && paused {
             svc_sig(fx, &psvc, Sig::Cont)?;
             paused = false;
@@ -1821,6 +1917,8 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         if let Some(t) = xtimer {
             fx.cancel(t);
         }
+        // SEAM(Freeze): stop_periodic's wrapper: the helper must not continue the service
+        freeze::kill(fx)?;
         stop_periodic(fx);
         let failed = failed_ids(fx, ctx)?;
         // SEAM(Clock): hydo-init-clock.sh's failed_ids appends clock=<epoch> to the acked file
@@ -1872,6 +1970,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     }
     // no cut: faults are transient -- heal, bring everything back, let the workload retry
     // SEAM(NetFaults): `netup`/`oneup`: net_off, "healed at the end".
+    net.heal_at_end(fx, ctx)?;
     if let Some(t) = ptimer {
         fx.join(t)?;
         svc_sig(fx, &psvc, Sig::Cont)?;
@@ -1885,6 +1984,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     }
     restart_dead(fx, ctx, "HYDO-ORACLE: ERROR restart after the faults")?;
     retry_workload(fx, ctx)?;
+    freeze::kill(fx)?;
     stop_periodic(fx);
     let failed = failed_ids(fx, ctx)?;
     let acked = read_all(fx, &l.acked())?;

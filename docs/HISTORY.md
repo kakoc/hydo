@@ -1997,6 +1997,53 @@ Branch `ctl-fakes` (from `main` = `883a866`, M120 merged). Step B2 of `docs/desi
 
   HANDOFF.md also gives the order of the fakes wrappers against the other extensions, for whoever merges another seam. For example, with `guest.clock_after_cut` the shell's acked line at a cut is the ids, then `clock=…`, then the `w:` records.
 - **Not done / next.** The manifests with fakes and another feature (shop and redis-bridge, which use liveness; redis-bridge also uses network namespaces) stay refused until those seams are merged. Then the combined order above must be checked against the model. The controller has no architecture-specific part, and arm64 images stage hydo-world at the same paths (M96), but the only Mac manifest with fakes (`examples-mac/redis-bridge`) is refused by the liveness seam, so no arm64 run was made. C1 must pass `Ending::PowerCut::world` to `with_world`. No agent image or real guest has met this controller yet.
+### Milestone 124 — DONE (the host controllers for network faults, the freeze at a packet and service networks, step B2 for the net-faults, freeze and net-namespaces seams: `N=`/`O=` on a port or a link with the M71 drain and heal, `F=` through the agent's packet trigger, `network: bridge` set up before S0; 4,042 runs of the identity corpus and 446 written, variant and freeze-sweep runs checked against a shell model of the four shell files; 2026-10-31)
+
+Branch `ctl-net` (from `main` = `883a866`, M120; `main` = `221befe`, with M121 and M125, merged in before the end). Step B2 of `docs/design/guest-control.md` for three seams. No VM ran. Nothing in the product calls the controller yet. No change to `hydo-build`, the agent, the engines, any image, manifest, schedule or fingerprint. The crate's `HANDOFF.md` ("Network faults, the freeze and service networks") has the details.
+
+- **What the controllers do.** Each is a module beside `src/schedule/fakes.rs`, called from its `SEAM` comment in `schedule.rs` at the place where the shell function it replaces runs:
+  - `src/schedule/netfault.rs` (NET-FAULTS) is explore_run's `N=`/`O=` lines with hydo-init.sh's `net_on`/`net_heal`, hydo-init-links.sh's links (`a-b`, `a-*`) and hydo-init-netns.sh's netem on the veths and in a service's namespace. The `tc` invocations are the shell's, in its order, through `run`. The drain polls the netem queue with the agent's `qlen` (in a service's namespace, a `tc -s qdisc show` there and the shell's awk on the host), with `sleep 0.01` of guest time between polls, up to the largest delay + 500 ms and then up to 50 ms after the filters are gone. The heal lines and the `fault.oneway_*` records are the shell's.
+  - `src/schedule/freeze.rs` (FREEZE) reads `F=` in token order among the knobs, prints the `fault.freeze_call` declaration at the first step range of a boot, and arms before the step: the netfilter modules, `XTABLES_LOCKFILE` exported, the agent's `freeze` with hydo_fc's arguments as its fields, then the pinned iptables rules through `run`. The heal (at the first `restart_dead`) waits for a running freeze to end, removes the rules, stops the trigger with `unfreeze`, continues a service it left stopped, and logs "freeze healed" or the "never fired" count with the `#0` trace. At a power cut and in die_oracle the trigger is stopped before the checkers. A thread reports hydo_fc's FROZE, RESUMED and warning lines from the agent's events.
+  - `src/schedule/netns.rs` (NET-NAMESPACES) runs ns_setup (the bridge hydo0, one namespace and veth pair per service, IPv6 off, the log line) between the phase line and the declarations, before S0, and puts start_svc's setup, command and readiness check into the service's namespace.
+  - `Plan` gained `freeze`, `bridge`, `net_extra` and each service's `addr`. `Layout` gained the pinned tools `tc`, `ip` and `iptables`, filled with hydo-build's `--print-shell` placeholders when the fault kinds need them. Step C1 must give the image's real paths. `Facts::events` keeps the agent's other events in order.
+- **The order against the fakes controller (M125).** As hydo-build splices them, the fakes wrappers run outside freeze's: the fakes split of `step_range` calls freeze's wrapper for each piece, `set_knob` tries `H` before `F`, and `restart_dead` heals the fakes before the freeze. In the merge the freeze's heal moved into `restart_dead`, right after the fakes heal.
+- **Proof** (on the Mac, `cargo test -p hydo-control --locked`, clippy `-D warnings` and `cargo fmt --check` clean):
+  - The shell model got a network part, `tests/support/model/net.rs`, written from hydo-init.sh, hydo-init-links.sh, hydo-init-freeze.sh and hydo-init-netns.sh with the shell's variables as strings and its expansions spelled out. The scripted agent got a network world, `tests/support/fake/net.rs`: qdiscs per namespace and device with a queue that drains fast, slowly or not at all, a refused `qdisc change` now and then, `qlen`, ip and iptables with rare failures, and the packet trigger with its trace file, its `froze`/`resumed`/`warn` events and freezes that sometimes outlast the init's wait.
+  - `tests/corpus.rs` now drives `redis/hydo-freeze.yaml` and `compose-voting/hydo.generated.yaml`, which were refused before, and every `N=`/`O=` schedule of the identity corpus: 4,042 runs, each checked against the model, its replay equal to the policy run. The boot transcripts of the other manifests did not change. The remaining refusals name the buggify (431 schedules) and clock (3,103) seams.
+  - `tests/corpus_net.rs` (446 runs) adds the following, each checked the same way:
+    - schedules written for every shell path on redis, the netem example, etcd (links), the voting app (bridge), redis-bridge (fakes and bridge, both architectures' copies, with its `eventually` check taken out) and the freeze example;
+    - plan variants for paths no example reaches: no tc, a freeze pair without a port, a pair without addresses or ports, a pair between two addresses, and a failing network setup;
+    - solo mode;
+    - the freeze sweep's point lists: M76's (a `#0` trace run per stream and step, 40, with the counts read from their own "never fired" lines, then every packet of every step, 113 points) and M92's (every 8th packet, then a window of 16 around each failing point, 97 points).
+  - All 41 listed shell paths were reached.
+  - Ten kinds of mistakes made in recorded conversations were each caught in every run they applied to: an order of two tc commands, a missing drain poll, a wrong heal line, a service outside its namespace, the export missing, the freeze one packet late, a reply not waited for, a missing FROZE line, a cut trace line and a missing SIGCONT.
+  - Four mistakes were also made in the controller's code, one at a time, and reverted. All four were caught:
+    - a failed `qdisc change` that does not stop the drain (caught only after the scripted tc learned to refuse a change);
+    - a heal that waits one second longer;
+    - no `unfreeze` at a power cut;
+    - IPv6 left on hydo0.
+  - The model also found one real difference, which became decision 6: when the agent refuses `freeze`, the shell would still kill the helper it had started.
+  - Goldens: `tests/golden/corpus-net.txt` and five readable transcripts in `tests/golden/examples-net/`; `corpus-quick.txt` was re-recorded.
+- **Decisions where the shell is ambiguous** (13, in HANDOFF.md):
+  - `nsenter -n` is the command's `netns` field.
+  - The queue length comes from `qlen`, or from `tc -s qdisc show` and the awk on the host inside a service's namespace.
+  - Every tc, insmod and sleep is waited for.
+  - netns.log is kept on the host.
+  - hydo_fc's arguments become the `freeze` command's fields, and its marker files become the reply and the events.
+  - A refused freeze is not armed.
+  - A pair with neither an address nor a port gets no `freeze`.
+  - The FROZE line names the handle instead of the pid.
+  - fired and resumed come from the events, then from the `unfreeze` reply.
+  - The "never fired" count is the guest's `grep -c`, and the trace awk runs on the host.
+  - `cat fc.ipt` becomes notes.
+  - XTABLES_LOCKFILE is exported from the arming on.
+  - F= with `network: bridge` is refused.
+- **Not done / next.**
+  - F= with `network: bridge` needs a `netns` field on the agent's `freeze`, which is an addition to the protocol with a feature name.
+  - redis-bridge and the shop wait for the liveness seam.
+  - The tool paths in `Layout` must come from the image in C1.
+  - No agent image or real guest has met these controllers yet. The first real-guest run should compare the FROZE lines and the drain's heal lines with the shell images'.
+
 ### Milestone 122 — DONE (guest control, step B2 for four seams: the host controller drives `eventually` invariants, the `T=` clock steps, `guest.clock_after_cut`, `B=` BUGGIFY and the power cut's recovery inputs; after the merge of main (M121, M125), 2,611 feature runs and the 6,135 runs of the widened identity corpus checked against a shell model of the extensions; 2026-10-31)
 
 Branch `ctl-liveness-clock` (from `main` = `883a866`, M120 merged). Part of step B2 of `docs/design/guest-control.md`; three other agents build the other feature controllers in parallel, and one builds the agent images and the controlled boot (M121). No VM ran. Nothing in the product calls the controller yet. No change to `hydo-build`, the engines, the module, any image, manifest, schedule or fingerprint.
