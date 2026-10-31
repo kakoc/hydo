@@ -33,6 +33,6 @@ pub use control::{
 pub use plan::{Layout, Plan};
 pub use replay::ReplayController;
 pub use runner::{run, AgentPoint, Finished, Link, LinkError, LinkNext, RunError, Start};
-pub use schedule::{Conversation, GuestState, ScheduleController};
+pub use schedule::{Conversation, GuestState, RecoveryInputs, ScheduleController};
 pub use seams::{Seam, Unsupported};
 pub use transcript::{Header, Record, Transcript};

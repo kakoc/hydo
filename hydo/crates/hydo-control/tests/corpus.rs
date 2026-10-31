@@ -314,18 +314,7 @@ fn the_core_controller_does_what_the_shell_init_does() {
                 let Some(Ending::PowerCut { acked, failed }) = r.run.fin.ending.clone() else {
                     unreachable!()
                 };
-                let mut cmd = String::from("oracle");
-                for i in &acked {
-                    cmd.push(' ');
-                    cmd.push_str(i);
-                }
-                if !failed.is_empty() {
-                    cmd.push_str(" failed");
-                    for i in &failed {
-                        cmd.push(' ');
-                        cmd.push_str(i);
-                    }
-                }
+                let cmd = support::oracle_cmd(&plan, r.inputs.as_ref().unwrap());
                 if let Err(e) = check(
                     &plan,
                     &rc.items,

@@ -28,6 +28,8 @@
 //! ("Decisions where the shell is ambiguous"); each is also marked `AMBIGUOUS:` below.
 //!
 //! The features of the init extensions are seams ([`crate::seams`]), marked `SEAM(<name>)` below.
+//! The driven ones are child modules in `src/features/` (they use this module's helpers):
+//! liveness, clock, buggify and the recovery inputs (M122).
 
 use crate::control::{Controller, Ending, EngineAction, Out, Seen, StopInfo};
 use crate::flow::{Facts, Flow, Fx, Memo, Step};
@@ -40,6 +42,16 @@ use hydo_agent_proto::msg::{
 use hydo_schedule::{GuestToken, Pause, Schedule};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+
+#[path = "features/buggify.rs"]
+mod buggify;
+#[path = "features/clock.rs"]
+mod clock;
+#[path = "features/liveness.rs"]
+mod liveness;
+#[path = "features/recovery.rs"]
+mod recovery;
+pub use recovery::RecoveryInputs;
 
 /// What the host knows about the guest at a snapshot, carried into the conversations that resume
 /// from it (the design: host state at a snapshot is the schedule, the seeds and the events so far).
@@ -103,6 +115,8 @@ struct RunCfg {
     c: Option<i64>,
     p: Option<PauseCfg>,
     x: Option<(String, i64, u64)>,
+    /// T=: (at, delta seconds).
+    t: Option<(i64, i64)>,
 }
 
 #[derive(Debug)]
@@ -112,6 +126,8 @@ struct Ctx {
     run: RunCfg,
     mount_flags: Vec<MountFlag>,
     mount_data: Option<String>,
+    /// What the recovery conversation was given besides the ids.
+    carried: recovery::Carried,
 }
 
 #[derive(Clone, Debug)]
@@ -138,6 +154,10 @@ struct Host {
     /// The periodic checkers' threads.
     periodic: Vec<u64>,
     snaps: BTreeMap<String, GuestState>,
+    /// The liveness extension's files.
+    live: liveness::Live,
+    /// What a power cut hands to the recovery conversation.
+    cut: Option<RecoveryInputs>,
 }
 
 /// One thread of the controller.
@@ -156,6 +176,8 @@ enum Part {
         svc: String,
         off: u64,
     },
+    /// live_monitor for an eventually invariant.
+    Live(liveness::Monitor),
 }
 
 fn label(p: &Part) -> String {
@@ -164,6 +186,7 @@ fn label(p: &Part) -> String {
         Part::Every(i) => format!("every:i{i}"),
         Part::PauseTimer { .. } => "pause-timer".into(),
         Part::KillTimer { .. } => "kill-timer".into(),
+        Part::Live(m) => liveness::label(m),
     }
 }
 
@@ -236,6 +259,7 @@ impl ScheduleController {
             run,
             mount_flags,
             mount_data,
+            carried: recovery::Carried::default(),
         });
         let host = Host {
             ctx,
@@ -260,6 +284,8 @@ impl ScheduleController {
             last_out: BTreeMap::new(),
             periodic: Vec::new(),
             snaps: BTreeMap::new(),
+            live: liveness::Live::default(),
+            cut: None,
         };
         Ok(ScheduleController {
             flow: Flow::new(host, Part::Main),
@@ -291,27 +317,54 @@ impl ScheduleController {
         Self::new(plan, Conversation::Run, cfg, Some(s1))
     }
 
-    /// The recovery boot after a power cut, from the snapshot S0 whose guest state is `s0`.
+    /// The recovery boot after a power cut, from the snapshot S0 whose guest state is `s0`,
+    /// given only the ids (nothing carried: with guest.clock_after_cut the clock starts from
+    /// guest.clock_start, as for a missing `clock=` token).
     pub fn recovery(
         plan: Plan,
         acked: Vec<String>,
         failed: Vec<String>,
         s0: &GuestState,
     ) -> Result<ScheduleController, Unsupported> {
-        if plan.clock_after_cut.is_some() {
-            // SEAM(Clock): hydo-init-clock.sh starts the recovery clock at the first boot's
-            // clock at the cut + clock_after_cut.
-            return Err(Unsupported::seam(
-                Seam::Clock,
-                "guest.clock_after_cut in the recovery boot",
-            ));
-        }
-        Self::new(
+        Self::recovery_from(
             plan,
-            Conversation::Recovery { acked, failed },
+            &RecoveryInputs {
+                acked,
+                failed,
+                clock: None,
+            },
+            s0,
+        )
+    }
+
+    /// The recovery boot after a power cut, given what the run handed over
+    /// ([`ScheduleController::recovery_inputs`]), from the snapshot S0 whose guest state is `s0`.
+    pub fn recovery_from(
+        plan: Plan,
+        inputs: &RecoveryInputs,
+        s0: &GuestState,
+    ) -> Result<ScheduleController, Unsupported> {
+        let mut c = Self::new(
+            plan,
+            Conversation::Recovery {
+                acked: inputs.acked.clone(),
+                failed: inputs.failed.clone(),
+            },
             RunCfg::default(),
             Some(s0),
-        )
+        )?;
+        // SEAM(RecoveryInputs): the values carried across the cut
+        Arc::get_mut(&mut c.flow.shared.ctx)
+            .expect("a new controller")
+            .carried = recovery::Carried {
+            clock: inputs.clock,
+        };
+        Ok(c)
+    }
+
+    /// After a run that ended with a power cut: what the recovery conversation is given.
+    pub fn recovery_inputs(&self) -> Option<&RecoveryInputs> {
+        self.flow.shared.cut.as_ref()
     }
 
     pub fn conversation(&self) -> &Conversation {
@@ -335,6 +388,8 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
         guest_text: s.guest_text(),
         ..RunCfg::default()
     };
+    // (no driven token depends on the plan since T= and B= are; the remaining seams may)
+    let _ = plan;
     for t in &s.guest {
         let text = t.to_string();
         let value = text.split_once('=').map(|x| x.1).unwrap_or("").to_string();
@@ -362,16 +417,7 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
                     dur: *dur_ms,
                 });
             }
-            GuestToken::Cut(at) => {
-                if plan.clock_after_cut.is_some() {
-                    // SEAM(Clock): the cut path appends clock=<epoch> to the acked line.
-                    return Err(Unsupported::seam(
-                        Seam::Clock,
-                        format!("{text} with guest.clock_after_cut"),
-                    ));
-                }
-                c.c = Some(*at as i64);
-            }
+            GuestToken::Cut(at) => c.c = Some(*at as i64),
             GuestToken::TimedKill { svc, at, off_ms } => {
                 c.x = Some((svc.clone(), *at as i64, *off_ms));
             }
@@ -379,17 +425,12 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
                 // SEAM(NetFaults)
                 return Err(Unsupported::seam(Seam::NetFaults, text));
             }
-            GuestToken::Clock { .. } => {
-                // SEAM(Clock)
-                return Err(Unsupported::seam(Seam::Clock, text));
-            }
-            GuestToken::Buggify(_) if plan.buggify => {
-                // SEAM(Buggify)
-                return Err(Unsupported::seam(Seam::Buggify, text));
-            }
-            // Every other letter is a knob to the shell (`?=*) set_knob`): B= without
-            // `buggify: true`, and F=, H=, W=, Q= (core plans have no freeze, fakes or composer;
-            // Q= is the stack's) are knobs the manifest does not have, so they are ignored.
+            // SEAM(Clock): T=, driven by features/clock.rs
+            GuestToken::Clock { at, delta } => c.t = Some((*at as i64, *delta)),
+            // Every other letter is a knob to the shell (`?=*) set_knob`): B= (set_knob's BUGGIFY
+            // branch with `buggify: true`, else an unknown knob), and F=, H=, W=, Q= (core plans
+            // have no freeze, fakes or composer; Q= is the stack's) are knobs the manifest does
+            // not have, so they are ignored.
             _ => c.knobs.push((t.letter().to_string(), value)),
         }
     }
@@ -516,6 +557,7 @@ fn body(fx: &mut F<'_>, part: &Part) -> Step<()> {
         Part::Every(i) => periodic_loop(fx, &ctx, *i),
         Part::PauseTimer { svc, off, dur } => pause_timer(fx, &ctx, svc, *off, *dur),
         Part::KillTimer { svc, off } => kill_timer(fx, &ctx, svc, *off),
+        Part::Live(m) => liveness::live_monitor(fx, &ctx, m),
     }
 }
 
@@ -1124,6 +1166,8 @@ fn start_svc(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<bool> {
 }
 
 fn start_all(fx: &mut F<'_>, ctx: &Ctx, verdict: &str, recovery: bool) -> Step<()> {
+    // SEAM(Liveness): the recovery boot reaches both anchors before its services start
+    liveness::before_start_all(fx, ctx, recovery)?;
     for s in &ctx.plan.services {
         if recovery && !s.recovery {
             continue;
@@ -1242,7 +1286,8 @@ fn start_periodic(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         h.periodic.extend(ts);
         Memo::Unit
     });
-    Ok(())
+    // SEAM(Liveness): the `start` anchor
+    liveness::after_start_periodic(fx, ctx)
 }
 
 /// stop_periodic: the checkers stop (an evaluation the host has already seen still counts).
@@ -1313,6 +1358,8 @@ fn final_verdict(fx: &mut F<'_>, ctx: &Ctx) -> Step<String> {
 
 /// finish: the final invariants, the verdict, the end of the conversation.
 fn finish(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
+    // SEAM(Liveness): every eventually invariant is resolved first
+    liveness::before_finish(fx, ctx)?;
     let v = final_verdict(fx, ctx)?;
     fx.report(v.clone());
     fx.settle()?;
@@ -1321,9 +1368,14 @@ fn finish(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
 
 /// step_range: workload steps [a, b), one call bounded by workload.timeout.
 fn step_range(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
-    if a >= b {
-        return Ok(());
+    if a < b {
+        step_range_run(fx, ctx, a, b)?;
     }
+    // SEAM(Liveness): the `heal` anchor after the last step (also for an empty range)
+    liveness::after_step_range(fx, ctx, b)
+}
+
+fn step_range_run(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
     let e = env(
         fx,
         ctx,
@@ -1414,6 +1466,10 @@ fn provision(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
 
 /// set_knob: a manifest knob's `set` command with HYDO_VALUE, unless the value is the default.
 fn set_knob(fx: &mut F<'_>, ctx: &Ctx, letter: &str, value: &str) -> Step<()> {
+    // SEAM(Buggify): hydo-init-buggify.sh's set_knob
+    if letter == "B" && ctx.plan.buggify {
+        return buggify::set_buggify(fx, value);
+    }
     let k = ctx.plan.knob(letter).filter(|k| !k.default.is_empty());
     let Some(k) = k else {
         log(fx, format!("knob {letter} not in the manifest, ignored"));
@@ -1547,6 +1603,11 @@ fn main_recovery(fx: &mut F<'_>, ctx: &Ctx, acked: &[String], failed: &[String])
         cmd.push(' ');
         cmd.push_str(id);
     }
+    // SEAM(Clock): the shell's oracle command carries the first boot's clock among the ids
+    if let Some(t) = clock::oracle_token(ctx) {
+        cmd.push(' ');
+        cmd.push_str(&t);
+    }
     if !failed.is_empty() {
         cmd.push_str(" failed");
         for id in failed {
@@ -1555,17 +1616,18 @@ fn main_recovery(fx: &mut F<'_>, ctx: &Ctx, acked: &[String], failed: &[String])
         }
     }
     log(fx, format!("command: {cmd}"));
-    // SEAM(Clock): with guest.clock_after_cut the recovery clock starts later (refused in
-    // ScheduleController::recovery until wave 3).
     clock_start(fx, ctx, true)?;
     // SEAM(RecoveryInputs): the ids as files, as the oracle command's loop writes them
-    // (`echo $id >> $dst`); the carried fake world and the clock attach here.
+    // (`echo $id >> $dst`); the carried values are fields of RecoveryInputs, not ids, so no
+    // `clock=` line is written (the net effect of hydo-init-clock.sh's `sed -i '/^clock=/d'`).
     for (file, ids) in [(l.acked(), acked), (l.failed(), failed)] {
         let text: String = ids.iter().map(|i| format!("{i}\n")).collect();
         for c in chunks(&text) {
             post(fx, write_cmd(&file, &c, true))?;
         }
     }
+    // SEAM(Clock): hydo-init-clock.sh's mount_data: the clock continues from the first boot's
+    clock::recovery_clock(fx, ctx)?;
     mount_data(fx, ctx, "HYDO-ORACLE: VIOLATION data disk unmountable")?;
     fx.note("hydo-stack: recovering from log");
     start_all(
@@ -1625,6 +1687,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         (pat, pup) = (-1, -1);
     }
     // SEAM(Clock): T= (tat, tdelta). SEAM(NetFaults): O= (osvc, ofrom, oto, odir).
+    let (tat, tdelta) = cfg.t.unwrap_or((-1, 0));
     let (mut xsvc, mut xat, mut xoff) = (String::new(), -1i64, 0u64);
     if let Some((s, at, off)) = &cfg.x {
         xsvc = s.clone();
@@ -1634,7 +1697,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             xat = -1;
         }
     }
-    let mut pts: Vec<i64> = [0, kat, kup, cat, pat, pup, xat, steps]
+    let mut pts: Vec<i64> = [0, kat, kup, cat, pat, pup, tat, xat, steps]
         .into_iter()
         .filter(|p| *p >= 0 && *p <= steps)
         .collect();
@@ -1713,6 +1776,9 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             }
         }
         // SEAM(Clock): `p == tat`: the clock step, its 5 s check, fault.clock_back/fwd.
+        if p == tat {
+            clock::clock_jump(fx, p, tdelta)?;
+        }
         prev = Some(p);
     }
     if cut {
@@ -1724,12 +1790,27 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         }
         stop_periodic(fx);
         let failed = failed_ids(fx, ctx)?;
+        // SEAM(Clock): hydo-init-clock.sh's failed_ids appends clock=<epoch> to the acked file
+        let at_cut = clock::at_cut(fx, ctx)?;
         let acked = read_all(fx, &l.acked())?;
-        fx.report(format!("hydo-explore-acked: {}", acked.replace('\n', " ")));
+        fx.report(format!(
+            "hydo-explore-acked: {}",
+            format!("{acked}{}", clock::acked_token(at_cut)).replace('\n', " ")
+        ));
         fx.report(format!(
             "hydo-explore-failed: {}",
             failed.replace('\n', " ")
         ));
+        // SEAM(RecoveryInputs): what the recovery conversation is given
+        let inputs = RecoveryInputs {
+            acked: acked.split_whitespace().map(str::to_string).collect(),
+            failed: failed.split_whitespace().map(str::to_string).collect(),
+            clock: at_cut.flatten(),
+        };
+        fx.effect(|h, _| {
+            h.cut = Some(inputs);
+            Memo::Unit
+        });
         // NO sync: it would flush the volatile write cache and close the window under test.
         for s in &plan.services {
             svc_sig(fx, &s.name, Sig::Stop)?;
