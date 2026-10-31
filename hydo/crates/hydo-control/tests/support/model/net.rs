@@ -377,16 +377,6 @@ impl<'a> Model<'a> {
         Ok(e.unwrap().1.status)
     }
 
-    /// A console line of the shell that is not a `log` line (cat, tail).
-    fn note_raw(&mut self, line: String) -> R<()> {
-        match self.next_main(&line)? {
-            Item::Note { line: l, .. } if *l == line => Ok(()),
-            other => bad(format!(
-                "the shell prints {line:?}\n  the controller: {other:?}"
-            )),
-        }
-    }
-
     /// The namespace file of a service's commands with network: bridge.
     pub(super) fn ns_of(&self, svc: &str) -> Option<String> {
         if self.plan.bridge {
@@ -962,7 +952,7 @@ impl<'a> Model<'a> {
         }
         let from = ls.len().saturating_sub(8);
         for l in ls[from..].iter().copied() {
-            self.note_raw(s(l))?;
+            self.note_raw(l)?;
         }
         self.die(s(
             "HYDO-ORACLE: ERROR service network setup failed (network: bridge)",
@@ -1311,7 +1301,7 @@ impl<'a> Model<'a> {
                 ls.clear();
             }
             for l in ls {
-                self.note_raw(s(l))?;
+                self.note_raw(l)?;
             }
             return self.die(s("HYDO-ORACLE: ERROR freeze rules failed"));
         }

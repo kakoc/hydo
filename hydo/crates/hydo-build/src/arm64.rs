@@ -367,7 +367,13 @@ pub fn build(
         ip: ip.clone(),
     };
     x86::write_compiled(ctx, p, manifest_path, &r, &tools)?;
-    crate::init::install_init(ctx, &m, &r)?;
+    let agent = match p.control {
+        crate::agent::Control::Shell => {
+            crate::init::install_init(ctx, &m, &r)?;
+            None
+        }
+        crate::agent::Control::Agent => Some(crate::agent::binary(bdir, true, io)?),
+    };
     crate::stage::compose_stage(ctx, &m, &r)?;
     let oci_meta = crate::oci::stage(
         &mut p.oci,
@@ -377,8 +383,14 @@ pub fn build(
         netns,
         io,
     )?;
-    fsx::write_text(&r.join("init"), SHIM)?;
-    fsx::chmod(&r.join("init"), 0o755)?;
+    match &agent {
+        // the agent is the kernel's first process itself (rdinit=/init): no shell before it
+        Some((bin, sha)) => crate::agent::install(bin, sha, &r, "/init", io)?,
+        None => {
+            fsx::write_text(&r.join("init"), SHIM)?;
+            fsx::chmod(&r.join("init"), 0o755)?;
+        }
+    }
     let dsec = section(&m, "data")?;
     let dmib = pyv::get(dsec, "size_mib")?
         .map(|v| pyv::int(v, "data.size_mib"))

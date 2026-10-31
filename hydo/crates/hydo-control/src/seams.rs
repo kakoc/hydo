@@ -107,7 +107,8 @@ impl Seam {
                 "hydo-init-fakes.sh starts hydo-world before the services, turns H= into its \
                  rules, prints its summary, carries the world across a power cut on the acked \
                  line. Controller: `spawn` hydo-world, its ctl through `run`, `read` the world \
-                 file at a cut and `write` it into the recovery VM."
+                 file at a cut and `write` it into the recovery VM. Driven since M125 \
+                 (src/schedule/fakes.rs); no plan or schedule is refused with this seam any more."
             }
             Seam::ErrorLogs => {
                 "hydo-init-errlog.sh scans each service's log at the end of every boot and \
@@ -135,7 +136,9 @@ impl Seam {
                 "The engine copies the acked/failed lines into the recovery boot's `oracle` \
                  command (3,584 bytes, M89). The core controller writes the ids itself in the \
                  recovery conversation (`write`, chunked); still to do: the engine side of the \
-                 hand-over (C1), the first boot's clock (Clock) and the carried world (Fakes)."
+                 hand-over (C1), the first boot's clock (Clock) and the carried world (Fakes; \
+                 done in M125: Ending::PowerCut's world, given to the recovery with \
+                 ScheduleController::with_world)."
             }
         }
     }

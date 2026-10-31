@@ -67,13 +67,15 @@ struct World {
     evals: BTreeMap<String, u64>,
     clock: i64,
     calls: u64,
-    /// qdiscs, the armed freeze (fake_net.rs)
+    /// The fake outside world (hydo-world), see `fake/world.rs`.
+    fw: world::FakeWorld,
+    /// qdiscs, the armed freeze (`fake/net.rs`)
     net: net::NetWorld,
 }
 
 // tc, ip, iptables, qlen and the packet trigger (M124)
-#[path = "fake_net.rs"]
 mod net;
+mod world;
 
 #[derive(Clone, Debug)]
 struct Pending {
@@ -389,7 +391,9 @@ impl Fake {
                 self.emit(at, Msg::Reply(id, Reply::Run(RunOk {})));
                 let a1 = r.argv.get(1).cloned().unwrap_or_default();
                 let script = r.argv.get(3).cloned().unwrap_or_default();
-                let (dur, status, out) = if let Some(x) = self.net_run(id, &r) {
+                let (dur, status, out) = if r.argv.first().is_some_and(|a| a == world::BIN) {
+                    self.world_ctl(&r.argv)
+                } else if let Some(x) = self.net_run(id, &r) {
                     x
                 } else if a1 == "sleep" {
                     let ms: f64 = r.argv.get(2).and_then(|x| x.parse().ok()).unwrap_or(1.0);
@@ -513,7 +517,9 @@ impl Fake {
                 let h = s.h.clone();
                 let from = Self::env_of(&s.env, "HYDO_FROM").and_then(|x| x.parse().ok());
                 let to = Self::env_of(&s.env, "HYDO_TO").and_then(|x| x.parse().ok());
-                if h == "workload" || h == "retry" {
+                if h.starts_with("fakes:") {
+                    self.world_spawn(&h, id, &s);
+                } else if h == "workload" || h == "retry" {
                     let (f, t2) = (from.unwrap_or(0u64), to.unwrap_or(0u64));
                     let r = self.h(&[&h, &f.to_string()]) % 29;
                     let status = match r {

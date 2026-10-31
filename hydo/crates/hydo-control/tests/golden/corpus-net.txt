@@ -4,6 +4,8 @@ input	hydo/onboard/examples/redis/hydo.yaml	c34c172a137dd89e266d8e4e73288f9d9dc7
 input	hydo/onboard/examples/redis/hydo-netem.yaml	54ab0ea57ca3c5a6853528a00369d0eec11549d1a89cf3f420c21a2b37419481
 input	hydo/onboard/examples/etcd/hydo.yaml	ec0ae3f206de4167150fb4c94a0ab2e0a1ef9d983cd49005c5a9fdf18fe20c3c
 input	hydo/onboard/examples/compose-voting/hydo.generated.yaml	82bc84ea9cd401d4ada50b08d587d5133b96be5459d945a67715cba0d54361e4
+input	hydo/onboard/examples/redis-bridge/hydo.yaml	30da2c5ff1a49e0399e076cbda5bb3d62df316dcdc337a81077b3b24fc4003f6
+input	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	bcc3a34e69784a0133b1d6b3a5faeb4cdfa52c90ab219fd7536332539d797840
 input	hydo/onboard/examples/redis/hydo-freeze.yaml	beabc78508713a128971d5c35d87fe7df8c2a7277be0248af025f174e5d0cf77
 refused	F= with network: bridge	F=redis<vote@1#1:100 with network: bridge (hydo-agent-proto's freeze has no netns) (not driven by the core controller yet: seam freeze)
 boot	bridge setup fails	error	7e924bf55e27022b
@@ -34,6 +36,30 @@ chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	7	500	2bc5c9e5e21
 chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	8	500	58fec82e381ebfa83337a944783bee4604a56dbc8ddbefc23dc2c56f67815f96
 chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	9	500	0498b109c52058f11f51b9b7a6ae9f4dfaea696dfce525b370f184fe418c8aa6
 chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	10	125	456d8a270e7595f566451f0cae09d7238550779b638861668dd100438e30044e
+counts	hydo/onboard/examples/redis-bridge/hydo.yaml	recovery:ok=2 recovery:violation=2 refused:freeze=1 run:cut=4 run:error=3 run:ok=25 run:violation=3
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	0	500	86296a173aa9079075689c29173a7ed7e4058722a93c162e02f3355aacf7f2d4
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	1	500	9b315c87afb94135c90c5573310ffc2c2652a5c5311f397268b72366525ea3a2
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	2	500	472865d8957e5f5000d899939ae6573550930d5041ff73940b01d376ab8067d6
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	3	500	9d71ec8f123cc3c889292f8ba98cbef862965fd769b5362226f8b1345c829051
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	4	500	e1efcacc8ace28e0454d3bc20f22ba709d0baf78d0dde733deabd784781e61b2
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	5	500	ba67bc23dbe29348a7e94027dbb51fe0d9e31829740f62229275358c4e4cba94
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	6	500	3a684148d8d9e135804ea3bf7113880d9341cc9b3e319093af11eab52c0ce9a6
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	7	500	993dbeb9d0f7fee3f887432c8c7a1f8ba99f34d96444d258d1e9d276972f25ee
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	8	500	91af522289a38788f6f7a0f37614263056df81ebd267889b137e7abf9c353aec
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	9	500	d1b00d333679577d519e80d762bd2d1a083f273696f252adc4a6ebd96231738d
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	10	401	1fe725022936505e5eb06b4647ecba5e6d500853bd42cd9eef27d64f7f20a375
+counts	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	recovery:ok=2 recovery:violation=2 refused:freeze=1 run:cut=4 run:error=3 run:ok=25 run:violation=3
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	0	500	86296a173aa9079075689c29173a7ed7e4058722a93c162e02f3355aacf7f2d4
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	1	500	9b315c87afb94135c90c5573310ffc2c2652a5c5311f397268b72366525ea3a2
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	2	500	472865d8957e5f5000d899939ae6573550930d5041ff73940b01d376ab8067d6
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	3	500	9d71ec8f123cc3c889292f8ba98cbef862965fd769b5362226f8b1345c829051
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	4	500	e1efcacc8ace28e0454d3bc20f22ba709d0baf78d0dde733deabd784781e61b2
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	5	500	ba67bc23dbe29348a7e94027dbb51fe0d9e31829740f62229275358c4e4cba94
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	6	500	3a684148d8d9e135804ea3bf7113880d9341cc9b3e319093af11eab52c0ce9a6
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	7	500	993dbeb9d0f7fee3f887432c8c7a1f8ba99f34d96444d258d1e9d276972f25ee
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	8	500	91af522289a38788f6f7a0f37614263056df81ebd267889b137e7abf9c353aec
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	9	500	d1b00d333679577d519e80d762bd2d1a083f273696f252adc4a6ebd96231738d
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	10	401	1fe725022936505e5eb06b4647ecba5e6d500853bd42cd9eef27d64f7f20a375
 counts	hydo/onboard/examples/redis/hydo-freeze.yaml	recovery:error=1 recovery:ok=1 run:cut=2 run:error=35 run:ok=203 run:violation=29
 chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	0	500	55fa7182882be11901dc57fed392e775d189f3e719a86d738f76f08abe2dfda2
 chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	1	500	fb644dc41d2de2511b6ee2d20716c5d4331f0b7fbf3ab56e64e14a04b99b2f01
@@ -141,14 +167,14 @@ chunk	variant: freeze between two addresses	0	362	036e16fac70933f0e931aa9d998863
 sweep	hydo/onboard/examples/redis/hydo-freeze.yaml	traces=40 points=113 stride-and-window=97
 reached	bridge fault skipped (no port)	1
 reached	bridge fault skipped (no tc)	2
-reached	bridge link fault	6
-reached	bridge port fault (eth0 in the namespace)	6
-reached	bridge port fault (veth)	17
-reached	bridge set up	13
+reached	bridge link fault	20
+reached	bridge port fault (eth0 in the namespace)	14
+reached	bridge port fault (veth)	53
+reached	bridge set up	27
 reached	bridge set up failed	2
 reached	freeze ENOBUFS	16
 reached	freeze armed	243
-reached	freeze declared	299
+reached	freeze declared	380
 reached	freeze ended by the init	23
 reached	freeze healed	187
 reached	freeze helper did not start	4
@@ -162,28 +188,28 @@ reached	freeze without its process	1
 reached	froze	201
 reached	froze not all threads	18
 reached	froze record	201
-reached	heal	49
-reached	heal drained	24
-reached	heal left a packet	3
-reached	heal stats	24
-reached	healed at the end	3
-reached	healed before a step	29
-reached	link fault on	17
+reached	heal	99
+reached	heal drained	50
+reached	heal left a packet	15
+reached	heal stats	74
+reached	healed at the end	7
+reached	healed before a step	59
+reached	link fault on	39
 reached	link fault skipped	4
-reached	one-way healed at the end	3
-reached	one-way healed before a step	20
-reached	one-way req record	11
-reached	one-way resp record	14
-reached	port fault on	44
+reached	one-way healed at the end	7
+reached	one-way healed before a step	38
+reached	one-way req record	23
+reached	one-way resp record	26
+reached	port fault on	84
 reached	port fault skipped	22
 reached	resumed	165
-reached	tc setup failed	7
-reached	unknown N=	5
-reached	unknown O=	5
+reached	tc setup failed	11
+reached	unknown N=	9
+reached	unknown O=	9
 mistake	the netem qdisc before the prio root	caught 25 of 25
 mistake	a drain poll left out	caught 25 of 25
 mistake	a wrong heal line	caught 25 of 25
-mistake	a service outside its namespace	caught 2 of 2
+mistake	a service outside its namespace	caught 8 of 8
 mistake	XTABLES_LOCKFILE not exported	caught 25 of 25
 mistake	the freeze one packet late	caught 25 of 25
 mistake	the freeze's reply not waited for	caught 25 of 25

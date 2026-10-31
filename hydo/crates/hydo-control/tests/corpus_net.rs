@@ -249,21 +249,22 @@ impl Suite {
             .stream
             .extend(stream_of(&r.run.fin.transcript));
         if let Some(rc) = &r.recovery {
-            let Some(Ending::PowerCut { acked, failed }) = r.run.fin.ending.clone() else {
+            let Some(Ending::PowerCut {
+                acked: ids,
+                failed: f,
+                world,
+            }) = r.run.fin.ending.clone()
+            else {
                 unreachable!()
             };
-            let mut cmd = String::from("oracle");
-            for i in &acked {
-                cmd.push(' ');
-                cmd.push_str(i);
-            }
-            if !failed.is_empty() {
-                cmd.push_str(" failed");
-                for i in &failed {
-                    cmd.push(' ');
-                    cmd.push_str(i);
-                }
-            }
+            // as corpus.rs: the recovery against the oracle line built from the report
+            let (cmd, acked, failed) = support::oracle_of(&r.run.items);
+            assert_eq!(
+                (ids.iter().chain(&world).cloned().collect::<Vec<_>>(), f),
+                (acked.clone(), failed.clone()),
+                "{}",
+                ctx("the hand-over differs from the report's acked and failed lines")
+            );
             if let Err(e) = check(
                 &b.plan,
                 &rc.items,
@@ -555,6 +556,16 @@ fn sweep(
         }
     }
     (traces, points, windows)
+}
+
+/// A manifest's plan without its `eventually` invariants (as tests/fakes.rs reads the shop).
+fn without_liveness(m: &str) -> Plan {
+    let (mut data, meta) = hydo_manifest::for_explorer(&top().join(m)).unwrap();
+    assert!(meta.is_none());
+    if let Some(a) = data.get_mut("invariants").and_then(|x| x.as_array_mut()) {
+        a.retain(|i| i.get("type").and_then(|t| t.as_str()) != Some("eventually"));
+    }
+    Plan::from_manifest(&hydo_manifest::Manifest::from_validated(data)).unwrap()
 }
 
 // ------------------------------------------------------------------ deliberate mistakes
@@ -852,6 +863,32 @@ fn network_faults_freeze_and_namespaces_do_what_the_shell_does() {
         names[0], names[1]
     ));
     grp(&mut suite, m, &bridge, texts);
+    // network: bridge with a fake outside world (a proxy) and faults: [freeze]: redis-bridge
+    // without its `eventually` check (the liveness seam is not driven yet); its F= tokens are
+    // refused with the freeze seam (the agent's freeze has no namespace)
+    for m in [
+        "hydo/onboard/examples/redis-bridge/hydo.yaml",
+        "hydo/onboard/examples-mac/redis-bridge/hydo.yaml",
+    ] {
+        inputs.push(m.into());
+        let p = without_liveness(m);
+        assert!(p.bridge && p.freeze && p.world.is_some());
+        let mut texts = port_schedules("primary", p.steps);
+        texts.extend(link_schedules("primary", "replica", p.steps));
+        texts.extend([
+            "disk=none | run H=redisp@2-5:drop N=primary@1-6:delay,100ms".to_string(),
+            "disk=none | run H=redisp@1-3:reset O=primary-replica@2-8:req:loss,20%".to_string(),
+            "disk=cut | run H=redisp@1-6:drop N=replica@1-9:delay,40ms C=4".to_string(),
+            "disk=none | run F=primary<replica@1#1:100".to_string(),
+            "disk=none | run K=replica@2+3 N=primary-*@1-5:delay,60ms".to_string(),
+        ]);
+        let (g, _) = grp(&mut suite, m, &p, texts);
+        assert!(
+            suite.groups[g].counts.contains_key("refused:freeze"),
+            "{m}: {:?}",
+            suite.groups[g].counts
+        );
+    }
     // the freeze: Redis with faults: [freeze] (its pair redis<workload), and its sweep
     let m = "hydo/onboard/examples/redis/hydo-freeze.yaml";
     inputs.push(m.into());

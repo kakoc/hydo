@@ -129,9 +129,15 @@ pub enum Ending {
     /// A power cut: every service is frozen; the engine cuts the power (the volatile write cache
     /// is lost) and a recovery conversation follows, given the acknowledged and the definitely
     /// failed ids (`hydo-explore-acked:` / `hydo-explore-failed:`).
+    ///
+    /// `world` is the fake outside world the first boot carries across the cut (manifests with
+    /// `fakes:`/`proxies:`; empty otherwise): the `w:` records of `hydo-world ctl dump`, which
+    /// the shell init appended to the acknowledged-ids line. The recovery conversation is given
+    /// them with [`crate::ScheduleController::with_world`].
     PowerCut {
         acked: Vec<String>,
         failed: Vec<String>,
+        world: Vec<String>,
     },
     /// The conversation ends at the snapshot of this name, which later conversations resume
     /// from (the boot conversation ends at S1).

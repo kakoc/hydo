@@ -199,12 +199,12 @@ pub(super) fn step_range(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> 
     if let Some(fc) = effective(ctx) {
         let st: i64 = fc.step.parse().unwrap_or(i64::MAX);
         if !has_mark(fx, "fc.on") && st >= a && st < b {
-            step_range_orig(fx, ctx, a, st)?;
+            step_range_core(fx, ctx, a, st)?;
             arm(fx, ctx, &fc)?;
-            return step_range_orig(fx, ctx, st, b);
+            return step_range_core(fx, ctx, st, b);
         }
     }
-    step_range_orig(fx, ctx, a, b)
+    step_range_core(fx, ctx, a, b)
 }
 
 /// fc_arm, before step fc_step.

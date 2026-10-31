@@ -137,10 +137,18 @@ fn ending_value(e: &Ending) -> Value {
         Ending::Verdict(v) => {
             m.insert("verdict".into(), s(v));
         }
-        Ending::PowerCut { acked, failed } => {
+        Ending::PowerCut {
+            acked,
+            failed,
+            world,
+        } => {
             let mut c = Obj::new();
             c.insert("acked".into(), strs(acked));
             c.insert("failed".into(), strs(failed));
+            // an addition (M125): only a cut that carries a fake world has it
+            if !world.is_empty() {
+                c.insert("world".into(), strs(world));
+            }
             m.insert("cut".into(), Value::Obj(c));
         }
         Ending::AtSnapshot(n) => {
@@ -176,6 +184,10 @@ fn ending_of(v: &Value) -> Result<Ending, String> {
         return Ok(Ending::PowerCut {
             acked: list("acked")?,
             failed: list("failed")?,
+            world: match c.get("world") {
+                None => Vec::new(),
+                Some(_) => list("world")?,
+            },
         });
     }
     Err("end: no verdict, cut or snapshot".into())

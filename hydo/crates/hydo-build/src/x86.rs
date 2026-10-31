@@ -608,7 +608,13 @@ pub fn build(
         ip: netns.then(|| format!("{}/bin/ip", iproute2.clone().unwrap_or_default())),
     };
     write_compiled(ctx, p, manifest_path, &r, &tools)?;
-    crate::init::install_init(ctx, &m, &r)?;
+    match p.control {
+        crate::agent::Control::Shell => crate::init::install_init(ctx, &m, &r)?,
+        crate::agent::Control::Agent => {
+            let (bin, sha) = crate::agent::binary(bdir, false, io)?;
+            crate::agent::install(&bin, &sha, &r, "/sbin/init", io)?;
+        }
+    }
     crate::stage::compose_stage(ctx, &m, &r)?;
     let oci_meta = crate::oci::stage(
         &mut p.oci,

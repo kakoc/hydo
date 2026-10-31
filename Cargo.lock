@@ -333,6 +333,7 @@ name = "hydo-build"
 version = "0.1.0"
 dependencies = [
  "flate2",
+ "hydo-agent-proto",
  "hydo-manifest",
  "libc",
  "regex",
@@ -391,6 +392,7 @@ version = "0.1.0"
 dependencies = [
  "flate2",
  "hydo-agent-proto",
+ "hydo-build",
  "hydo-engine",
  "hydo-explore",
  "hydo-manifest",
@@ -405,6 +407,7 @@ name = "hydo-engine"
 version = "0.1.0"
 dependencies = [
  "flate2",
+ "hydo-agent-proto",
  "hydo-schedule",
  "sha2",
 ]

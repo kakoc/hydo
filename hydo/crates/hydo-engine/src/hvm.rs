@@ -6,6 +6,7 @@
 //! [env HVM_DISK=<data disk>] <hvmx> [--ram-mib N] one   <Image> <initramfs> <outdir> "<schedule>"
 //! [env HVM_DISK=<data disk>] <hvmx> [--ram-mib N] serve <Image> <initramfs> <outdir>
 //! [env HVM_DISK=<data disk>] <hvmx> [--ram-mib N] --control one <Image> <initramfs> <outdir> "<schedule>"
+//! [env HVM_DISK=<data disk>] <hvmx> [--ram-mib N] --control boot serve|one <Image> <initramfs> <outdir> ["<schedule>"]
 //! ```
 //!
 //! The data disk is `<image without .cpio.gz>-disk.img` next to the initramfs, attached only when
@@ -17,13 +18,14 @@
 //! [`Hvm::one_lockstep`]. The clock is the exit count instead of hvx's icount.
 
 use crate::image::{embedded_file, sha256_file, ImageError};
-use crate::lockstep::Lockstep;
-use crate::process::{run_one, ProcessWorker};
+use crate::process::{run_one, ControlledBoot, ControlledRun, ProcessWorker};
 use crate::{BootSpec, Engine, EngineError, EngineKind, OneRun, Worker};
 use hydo_schedule::Schedule;
-use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::Command;
+
+/// A fresh-boot hvmx under lock-step control ([`Hvm::one_lockstep`]).
+pub type ControlledOne = ControlledRun;
 
 /// How to start hvmx.
 #[derive(Clone, Debug)]
@@ -83,48 +85,27 @@ impl Hvm {
         stderr_log: &Path,
     ) -> Result<ControlledOne, EngineError> {
         self.check_built()?;
-        let mut argv = self.argv(spec, "one");
-        let mode = argv.len() - 4; // ... one <Image> <initramfs> <outdir>
-        argv.insert(mode, "--control".into());
-        argv.push(schedule.to_string());
-        let err = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(stderr_log)?;
-        let mut cmd = self.command(spec, &argv);
-        cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(err);
-        let mut child = cmd.spawn()?;
-        let stdin = child.stdin.take().expect("piped stdin");
-        let stdout = BufReader::new(child.stdout.take().expect("piped stdout"));
-        Ok(ControlledOne {
-            child,
-            stdin,
-            stdout,
-        })
+        let argv = self.control_argv(spec, "one", &["--control"], Some(schedule));
+        ControlledRun::start(self.command(spec, &argv), stderr_log)
     }
-}
 
-/// A fresh-boot hvmx under lock-step control ([`Hvm::one_lockstep`]).
-pub struct ControlledOne {
-    child: Child,
-    stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
-}
-
-impl ControlledOne {
-    /// The session (the run's tag is `one`). `log`: also write the transcript.
-    pub fn session<'a>(&'a mut self, log: Option<&'a mut dyn Write>) -> Lockstep<'a> {
-        let s = Lockstep::new(&mut self.stdout, &mut self.stdin);
-        match log {
-            Some(l) => s.with_log(l),
-            None => s,
+    /// argv for a controlled mode: `flags` go in front of the mode, `last` after the paths.
+    fn control_argv(
+        &self,
+        spec: &BootSpec,
+        mode: &str,
+        flags: &[&str],
+        last: Option<&Schedule>,
+    ) -> Vec<String> {
+        let mut argv = self.argv(spec, mode);
+        let at = argv.len() - 4; // ... <mode> <Image> <initramfs> <outdir>
+        for (i, f) in flags.iter().enumerate() {
+            argv.insert(at + i, f.to_string());
         }
-    }
-
-    /// Wait for the engine to exit (after the RESULT); its exit status.
-    pub fn wait(mut self) -> Result<Option<i32>, EngineError> {
-        drop(self.stdin);
-        Ok(self.child.wait()?.code())
+        if let Some(s) = last {
+            argv.push(s.to_string());
+        }
+        argv
     }
 }
 
@@ -220,5 +201,27 @@ impl Engine for Hvm {
         let last = argv.len() - 1;
         argv[last] = "<outdir>".into();
         format!("{env}{} \"{schedule}\"", argv.join(" "))
+    }
+
+    fn start_controlled(
+        &self,
+        spec: &BootSpec,
+        boot: &Schedule,
+        stderr_log: &Path,
+    ) -> Result<ControlledBoot, EngineError> {
+        self.check_built()?;
+        let argv = self.control_argv(spec, "serve", &["--control", "boot"], Some(boot));
+        ControlledBoot::start(self.command(spec, &argv), stderr_log, false)
+    }
+
+    fn one_controlled(
+        &self,
+        spec: &BootSpec,
+        schedule: &Schedule,
+        stderr_log: &Path,
+    ) -> Result<ControlledRun, EngineError> {
+        self.check_built()?;
+        let argv = self.control_argv(spec, "one", &["--control", "boot"], Some(schedule));
+        ControlledRun::start(self.command(spec, &argv), stderr_log)
     }
 }

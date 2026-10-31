@@ -20,3 +20,5 @@ sha2 = { workspace = true }
 [dev-dependencies]
 hydo-explore = { workspace = true }
 flate2 = { workspace = true }
+# tests/fakes.rs: the init and manifest.sh hydo-build writes for a manifest with a fake world
+hydo-build = { workspace = true }

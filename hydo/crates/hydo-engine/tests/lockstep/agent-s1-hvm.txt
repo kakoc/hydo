@@ -1,0 +1,122 @@
+< CTL s1a disk=none rb=64 | run
+> STOP s1a at=7680 n=121 phase=workload why=resume
+< SEND at=7680 \x18{"id":9,"nonce":1,"op":"sync","v":1}\n
+> OK send id=9 sent=7680
+< CONT
+> STOP s1a at=7744 n=122 phase=workload why=cadence
+< CONT
+> STOP s1a at=7808 n=123 phase=workload why=cadence
+< CONT
+> STOP s1a at=7872 n=124 phase=workload why=cadence
+< CONT
+> EVENT s1a at=7936 n=19 HYDO-AG 55 3034b440 {"nonce":1,"ok":true,"op":"sync","re":9,"seq":12,"v":1}
+> STOP s1a at=7936 n=125 phase=workload why=cadence
+< ACK 9
+> OK ack 9
+< SEND at=7936 {"argv":["/bin/redis-cli","SET","k:1","v1"],"env":["PATH=/bin:/sbin","HOME=/"],"id":10,"kill_after_ms":10000,"op":"run","v":1}\n
+> OK send id=10 sent=7936
+< CONT
+> STOP s1a at=8000 n=126 phase=workload why=cadence
+< CONT
+> STOP s1a at=8064 n=127 phase=workload why=cadence
+< CONT
+> STOP s1a at=8128 n=128 phase=workload why=cadence
+< CONT
+> STOP s1a at=8192 n=129 phase=workload why=cadence
+< CONT
+> STOP s1a at=8256 n=130 phase=workload why=cadence
+< CONT
+> STOP s1a at=8320 n=131 phase=workload why=cadence
+< CONT
+> EVENT s1a at=8384 n=20 HYDO-AG 45 7927fe2c {"ok":true,"op":"run","re":10,"seq":13,"v":1}
+> STOP s1a at=8384 n=132 phase=workload why=cadence
+< ACK 10
+> OK ack 10
+< CONT
+> STOP s1a at=8448 n=133 phase=workload why=cadence
+< CONT
+> STOP s1a at=8512 n=134 phase=workload why=cadence
+< CONT
+> STOP s1a at=8576 n=135 phase=workload why=cadence
+< CONT
+> STOP s1a at=8640 n=136 phase=workload why=cadence
+< CONT
+> STOP s1a at=8704 n=137 phase=workload why=cadence
+< CONT
+> STOP s1a at=8768 n=138 phase=workload why=cadence
+< CONT
+> STOP s1a at=8832 n=139 phase=workload why=cadence
+< CONT
+> EVENT s1a at=8896 n=21 HYDO-AG 72 96edec33 {"ev":"done","id":10,"out":"OK\\n","out_len":3,"seq":14,"status":0,"v":1}
+> STOP s1a at=8896 n=140 phase=workload why=cadence
+< SEND at=8896 {"argv":["/bin/redis-cli","GET","k:1"],"env":["PATH=/bin:/sbin","HOME=/"],"id":11,"kill_after_ms":10000,"op":"run","v":1}\n
+> OK send id=11 sent=8896
+< CONT
+> STOP s1a at=8960 n=141 phase=workload why=cadence
+< CONT
+> STOP s1a at=9024 n=142 phase=workload why=cadence
+< CONT
+> STOP s1a at=9088 n=143 phase=workload why=cadence
+< CONT
+> STOP s1a at=9152 n=144 phase=workload why=cadence
+< CONT
+> STOP s1a at=9216 n=145 phase=workload why=cadence
+< CONT
+> STOP s1a at=9280 n=146 phase=workload why=cadence
+< CONT
+> EVENT s1a at=9344 n=22 HYDO-AG 45 38ee3ce8 {"ok":true,"op":"run","re":11,"seq":15,"v":1}
+> STOP s1a at=9344 n=147 phase=workload why=cadence
+< ACK 11
+> OK ack 11
+< CONT
+> STOP s1a at=9408 n=148 phase=workload why=cadence
+< CONT
+> EVENT s1a at=9472 n=23 HYDO-AG 72 8d5e0e39 {"ev":"done","id":11,"out":"v1\\n","out_len":3,"seq":16,"status":0,"v":1}
+> STOP s1a at=9472 n=149 phase=workload why=cadence
+< SEND at=9472 {"id":12,"max":40,"op":"read","path":"/etc/redis.conf","v":1}\n
+> OK send id=12 sent=9472
+< CONT
+> STOP s1a at=9536 n=150 phase=workload why=cadence
+< CONT
+> STOP s1a at=9600 n=151 phase=workload why=cadence
+< CONT
+> STOP s1a at=9664 n=152 phase=workload why=cadence
+< CONT
+> STOP s1a at=9728 n=153 phase=workload why=cadence
+< CONT
+> STOP s1a at=9792 n=154 phase=workload why=cadence
+< CONT
+> EVENT s1a at=9856 n=24 HYDO-AG 121 8aaa2c3a {"data":"port 6379\\nbind 127.0.0.1\\ndir /data/redis","eof":false,"ok":true,"op":"read","re":12,"seq":17,"size":102,"v":1}
+> STOP s1a at=9856 n=155 phase=workload why=cadence
+< ACK 12
+> OK ack 12
+< SEND at=9856 {"id":13,"op":"clock_set","sec":1800000000,"v":1}\n
+> OK send id=13 sent=9856
+< CONT
+> STOP s1a at=9920 n=156 phase=workload why=cadence
+< CONT
+> STOP s1a at=9984 n=157 phase=workload why=cadence
+< CONT
+> STOP s1a at=10048 n=158 phase=workload why=cadence
+< CONT
+> STOP s1a at=10112 n=159 phase=workload why=cadence
+< CONT
+> EVENT s1a at=10176 n=25 HYDO-AG 68 ee0db948 {"ok":true,"op":"clock_set","re":13,"sec":1800000000,"seq":18,"v":1}
+> STOP s1a at=10176 n=160 phase=workload why=cadence
+< ACK 13
+> OK ack 13
+< SEND at=10176 {"id":14,"op":"clock_get","v":1}\n
+> OK send id=14 sent=10176
+< CONT
+> STOP s1a at=10240 n=161 phase=workload why=cadence
+< CONT
+> STOP s1a at=10304 n=162 phase=workload why=cadence
+< CONT
+> STOP s1a at=10368 n=163 phase=workload why=cadence
+< CONT
+> EVENT s1a at=10432 n=26 HYDO-AG 96 df2517a4 {"mono_ms":48,"nsec":3914666,"ok":true,"op":"clock_get","re":14,"sec":1800000000,"seq":19,"v":1}
+> STOP s1a at=10432 n=164 phase=workload why=cadence
+< ACK 14
+> OK ack 14
+< END AGENT-E2E: OK sync=0 mount=mount mkdir=mkdir spawn=spawn syncfs=syncfs sync=1 set=OK get=v1 conf=port_6379 clock_set=1800000000 clock_get=1800000000.003914666
+> RESULT s1a fp=f0d610541a5780ca wfp=dbbb755c3cc764d2 secs=0.4 stops=164 typed=14 inh=2af602f9d184fe90 verdict=AGENT-E2E: OK sync=0 mount=mount mkdir=mkdir spawn=spawn syncfs=syncfs sync=1 set=OK get=v1 conf=port_6379 clock_set=1800000000 clock_get=1800000000.003914666
