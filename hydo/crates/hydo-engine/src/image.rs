@@ -152,3 +152,24 @@ pub fn sha256_file(path: &Path) -> std::io::Result<String> {
     }
     Ok(h.finalize().iter().map(|b| format!("{b:02x}")).collect())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::parse_control;
+    use crate::GuestControl;
+
+    #[test]
+    fn control_file() {
+        assert_eq!(
+            parse_control("agent 1\n"),
+            Some(GuestControl::Agent { proto: 1 })
+        );
+        assert_eq!(
+            parse_control("agent 7"),
+            Some(GuestControl::Agent { proto: 7 })
+        );
+        for bad in ["", "agent", "agent x", "agent 1 2", "shell", "Agent 1"] {
+            assert_eq!(parse_control(bad), None, "{bad:?}");
+        }
+    }
+}

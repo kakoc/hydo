@@ -53,7 +53,11 @@ pub fn control_text() -> String {
 /// the pinned sha256.
 pub fn binary(bdir: &Path, arm64: bool, io: &mut Io) -> Result<(String, String), Fail> {
     let (env, name, pin) = if arm64 {
-        ("HYDO_AGENT_BIN_ARM64", "hydo-agent-arm64", AGENT_SHA256_ARM64)
+        (
+            "HYDO_AGENT_BIN_ARM64",
+            "hydo-agent-arm64",
+            AGENT_SHA256_ARM64,
+        )
     } else {
         ("HYDO_AGENT_BIN", "hydo-agent", AGENT_SHA256_X86_64)
     };

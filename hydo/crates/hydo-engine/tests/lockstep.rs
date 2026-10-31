@@ -1,5 +1,6 @@
 //! Replay the recorded lock-step transcripts (`tests/lockstep/*.txt`, written by
-//! `examples/lockstep_check.rs` on the bare-metal test machine, M118; never edited) through the
+//! `examples/lockstep_check.rs` on the bare-metal test machine, M118, and `agent-*.txt` by
+//! `examples/agent_boot_check.rs` on both engines, M121; never edited) through the
 //! typed client: every engine line parses, every host line is what the client writes for the
 //! same call, and the protocol's ordering rules hold (stop numbers count up by one, a resumed run
 //! repeats its snapshot's stop number, every command but CONT/END gets exactly one answer, the
@@ -30,11 +31,17 @@ fn transcripts() -> Vec<(String, String)> {
 /// Drive a client over the engine half of a transcript, issuing the host half's commands through
 /// the typed API; the bytes it writes must be the host half exactly.
 fn replay(name: &str, text: &str) {
-    // serve: the first line is the CTL/RESUME request; `--control one` has none on stdin
-    let resume = text.starts_with("< RESUME ");
-    let request = resume || text.starts_with("< CTL ");
+    // serve: the first line is the CTL/RESUME request; `--control one` has none on stdin, nor
+    // has an agent image's controlled boot (M121: `agent-boot-*`, `agent-one-*`). A CTL of an
+    // agent image restores the host's S1 and starts like a RESUME (why=resume, S1's number).
+    let agent = name.starts_with("agent-");
+    let resume = text.starts_with("< RESUME ") || (agent && text.starts_with("< CTL "));
+    let request = text.starts_with("< RESUME ") || text.starts_with("< CTL ");
     assert!(
-        request || name.starts_with("one"),
+        request
+            || name.starts_with("one")
+            || name.starts_with("agent-boot")
+            || name.starts_with("agent-one"),
         "{name}: no request line"
     );
     let body: Vec<&str> = text.lines().skip(request as usize).collect();
@@ -139,6 +146,69 @@ fn recorded_transcripts_replay() {
     for (name, text) in transcripts() {
         replay(&name, &text);
     }
+}
+
+#[test]
+fn agent_boot_transcripts() {
+    // M121: a controlled boot from the first instruction (icount or exit 0), the host's S0 and S1,
+    // and a CTL from that S1 that continues the boot's stop numbers
+    let all = transcripts();
+    let mut seen = 0;
+    for eng in ["hvx", "hvm"] {
+        let Some(boot) = all
+            .iter()
+            .find(|(f, _)| *f == format!("agent-boot-{eng}.txt"))
+        else {
+            continue;
+        };
+        seen += 1;
+        let boot = &boot.1;
+        assert!(
+            boot.starts_with("> STOP boot at=0 n=1 phase=boot why=start\n"),
+            "{eng}"
+        );
+        let snap = |name: &str| {
+            boot.lines()
+                .find_map(|l| l.strip_prefix(&format!("> OK snap {name} at=")))
+                .map(|r| r.split(' ').next().unwrap().to_string())
+                .unwrap_or_else(|| panic!("{eng}: no SNAP {name}"))
+        };
+        let (s0, s1) = (snap("S0"), snap("S1"));
+        // S0 is the stop where the agent's hello was seen
+        let hello = boot
+            .lines()
+            .find(|l| l.contains("\"ev\":\"hello\""))
+            .unwrap();
+        assert!(
+            hello.starts_with(&format!("> EVENT boot at={s0} ")),
+            "{eng}: {hello}"
+        );
+        let ctl = &all
+            .iter()
+            .find(|(f, _)| *f == format!("agent-s1-{eng}.txt"))
+            .unwrap()
+            .1;
+        let first = ctl.lines().find(|l| l.starts_with("> STOP ")).unwrap();
+        let s1_stop = boot
+            .lines()
+            .take_while(|l| !l.starts_with("> OK snap S1 "))
+            .filter(|l| l.starts_with("> STOP "))
+            .last()
+            .unwrap();
+        let n = s1_stop
+            .split(" n=")
+            .nth(1)
+            .unwrap()
+            .split(' ')
+            .next()
+            .unwrap();
+        assert_eq!(
+            first,
+            format!("> STOP s1a at={s1} n={n} phase=workload why=resume"),
+            "{eng}"
+        );
+    }
+    assert!(seen > 0, "no agent-boot transcript");
 }
 
 #[test]

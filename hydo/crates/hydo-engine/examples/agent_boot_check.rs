@@ -13,7 +13,8 @@
 //! - provisions: waits for the data disk, mounts it, brings `lo` up, makes `/data/redis`, spawns
 //!   Redis, probes it until it answers, `syncfs`; takes `SNAP S1` there and ends the boot;
 //! - from S1 (a worker's CTL run, twice) resynchronises and runs the workload: `redis-cli SET`,
-//!   `redis-cli GET`, reads `/etc/redis.conf`, and ends with a verdict built from the answers;
+//!   `redis-cli GET`, reads `/etc/redis.conf`, sets the realtime clock and reads it back, and
+//!   ends with a verdict built from the answers;
 //! - checks S0 by a RESUME from it that provisions again and ends at the S1 point (it must give
 //!   the boot's own fingerprint), and checks the fresh boot by `Engine::one_controlled` twice (the
 //!   same host from the first instruction; its SNAP S1 starts the workload): every workload run must
@@ -25,7 +26,7 @@
 //! every comparison holds.
 
 use hydo_agent_proto::frame::{deframe_line, Deframed};
-use hydo_agent_proto::msg::{Mkdir, Mount, Probe, Read, Run, Spawn, Syncfs};
+use hydo_agent_proto::msg::{ClockGet, ClockSet, Mkdir, Mount, Probe, Read, Run, Spawn, Syncfs};
 use hydo_agent_proto::{Command, Event, Incoming, Reply, Session};
 use hydo_engine::hvm::Hvm;
 use hydo_engine::hvx::Hvx;
@@ -34,7 +35,8 @@ use hydo_engine::{BootSpec, CpuLevel, Engine, RunResult, SnapshotStore};
 use hydo_schedule::Schedule;
 use std::path::{Path, PathBuf};
 
-/// One step of the host's script.
+/// One step of the host's script (a dozen of them; their size does not matter).
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
 enum Step {
     /// Wait for the agent's hello.
@@ -141,6 +143,15 @@ fn script(serve_boot: bool) -> Vec<Step> {
                 ..Default::default()
             }),
         ),
+        // the realtime clock (the T= fault's primitive): set it, then read it back
+        Step::Cmd(
+            "clock_set",
+            Command::ClockSet(ClockSet {
+                sec: Some(1_800_000_000),
+                step: None,
+            }),
+        ),
+        Step::Cmd("clock_get", Command::ClockGet(ClockGet {})),
         Step::End,
     ]);
     s
@@ -252,6 +263,8 @@ impl Host {
                 match body {
                     Reply::Read(r) => self.note(&name, r.data.lines().next().unwrap_or("")),
                     Reply::Sync(s) => self.note(&name, &s.nonce.to_string()),
+                    Reply::ClockSet(c) => self.note(&name, &c.sec.to_string()),
+                    Reply::ClockGet(c) => self.note(&name, &format!("{}.{:09}", c.sec, c.nsec)),
                     Reply::Run(_) | Reply::Probe(_) => {}
                     other => self.note(&name, other.name()),
                 }
@@ -273,14 +286,20 @@ impl Host {
             Incoming::Event(Event::Probe(p)) if p.id == id => {
                 evented = true;
                 if !p.ok {
-                    self.failed = Some(format!("{name}: probe ended {:?} after {} tries", p.why, p.tries));
+                    self.failed = Some(format!(
+                        "{name}: probe ended {:?} after {} tries",
+                        p.why, p.tries
+                    ));
                     return;
                 }
             }
             // a CAN that cut a partial line (none is expected: every snapshot point is idle)
             Incoming::Event(Event::Dropped(_)) => {}
             Incoming::Event(Event::Exit(e)) => {
-                self.failed = Some(format!("{} exited (status {}) during {name}", e.h, e.status));
+                self.failed = Some(format!(
+                    "{} exited (status {}) during {name}",
+                    e.h, e.status
+                ));
                 return;
             }
             other => {
@@ -329,6 +348,15 @@ impl Host {
                 Next::Stop(rep) => rep,
             };
             self.now = rep.stop.at;
+            if std::env::var_os("AGENT_CHECK_TIMES").is_some() && rep.stop.n % 1000 == 0 {
+                eprintln!(
+                    "{:8.2}s stop {} at={} {:?}",
+                    t0().elapsed().as_secs_f64(),
+                    rep.stop.n,
+                    rep.stop.at,
+                    rep.stop.phase
+                );
+            }
             for e in &rep.events {
                 self.line(&e.text);
             }
@@ -385,7 +413,11 @@ impl Host {
     }
 
     /// Drive to the end, remembering the host at each snapshot (for the continuations).
-    fn drive_all(mut self, s: &mut Lockstep<'_>, saved: &mut Vec<(&'static str, Host)>) -> RunResult {
+    fn drive_all(
+        mut self,
+        s: &mut Lockstep<'_>,
+        saved: &mut Vec<(&'static str, Host)>,
+    ) -> RunResult {
         loop {
             match self.drive(s, true) {
                 Outcome::Done(r) => return r,
@@ -410,7 +442,9 @@ impl Host {
                 None | Some(Step::End) | Some(Step::EndBoot) => {
                     return Some(s.end(Some(&self.verdict())).expect("END"))
                 }
-                Some(Step::Sync(n)) => self.send(s, at, "sync", Command::Syncfs(Syncfs {}), Some(n)),
+                Some(Step::Sync(n)) => {
+                    self.send(s, at, "sync", Command::Syncfs(Syncfs {}), Some(n))
+                }
                 Some(Step::Cmd(name, cmd)) => self.send(s, at, name, cmd, None),
                 Some(Step::Snap(_)) | Some(Step::Hello) => break,
             }
@@ -421,6 +455,12 @@ impl Host {
         s.cont().expect("CONT");
         None
     }
+}
+
+/// The process's start (for AGENT_CHECK_TIMES=1: host seconds every 1000 stops, on stderr).
+fn t0() -> std::time::Instant {
+    static T0: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    *T0.get_or_init(std::time::Instant::now)
 }
 
 struct Check {
@@ -477,8 +517,14 @@ impl Check {
         };
         show("boot", &rb);
         let mut w = boot.ready().expect("READY");
-        let s0 = saved.iter().find(|(n, _)| *n == "S0").map(|(_, h)| h.clone());
-        let s1 = saved.iter().find(|(n, _)| *n == "S1").map(|(_, h)| h.clone());
+        let s0 = saved
+            .iter()
+            .find(|(n, _)| *n == "S0")
+            .map(|(_, h)| h.clone());
+        let s1 = saved
+            .iter()
+            .find(|(n, _)| *n == "S1")
+            .map(|(_, h)| h.clone());
         let (Some(s0), Some(s1)) = (s0, s1) else {
             println!("  FAIL: the boot took no S0/S1 ({})", rb.verdict);
             self.fails += 1;
@@ -555,55 +601,61 @@ impl Check {
 }
 
 fn main() {
+    t0();
     let a: Vec<String> = std::env::args().skip(1).collect();
     let usage = "usage: agent_boot_check hvx <hvx_explore> <hvx-run|-> <bzImage> <initramfs> <disk.img> <outdir> [rb]\n       agent_boot_check hvm <hvmx> <Image> <image .cpio.gz> <outdir> [rb]";
-    let (engine, spec, rb): (Box<dyn Engine>, BootSpec, String) = match a.first().map(String::as_str) {
-        Some("hvx") if a.len() >= 7 => {
-            let out = PathBuf::from(&a[6]);
-            std::fs::create_dir_all(out.join("snap")).expect("outdir");
-            let e = Hvx {
-                engine: PathBuf::from(&a[1]),
-                hvx_run: (a[2] != "-").then(|| PathBuf::from(&a[2])),
-                snap_dir: out.join("snap").display().to_string(),
-                extra_env: Vec::new(),
-                env: Vec::new(),
-            };
-            let spec = BootSpec {
-                image: PathBuf::from(&a[5]),
-                ram_mib: 1024,
-                vcpus: 1,
-                cpu: CpuLevel::V2,
-                kernel: PathBuf::from(&a[3]),
-                initrd: Some(PathBuf::from(&a[4])),
-                outdir: out.join("consoles"),
-                snapshots: SnapshotStore::Files,
-            };
-            (Box::new(e), spec, a.get(7).cloned().unwrap_or("16".into()))
-        }
-        Some("hvm") if a.len() >= 5 => {
-            let out = PathBuf::from(&a[4]);
-            std::fs::create_dir_all(out.join("snap")).expect("outdir");
-            let e = Hvm {
-                hvmx: PathBuf::from(&a[1]),
-                env: vec![("HVM_SNAP_DIR".into(), out.join("snap").display().to_string())],
-            };
-            let spec = BootSpec {
-                image: PathBuf::from(&a[3]),
-                ram_mib: 1024,
-                vcpus: 1,
-                cpu: CpuLevel::V2,
-                kernel: PathBuf::from(&a[2]),
-                initrd: None,
-                outdir: out.join("consoles"),
-                snapshots: SnapshotStore::Files,
-            };
-            (Box::new(e), spec, a.get(5).cloned().unwrap_or("64".into()))
-        }
-        _ => {
-            eprintln!("{usage}");
-            std::process::exit(2);
-        }
-    };
+    let (engine, spec, rb): (Box<dyn Engine>, BootSpec, String) =
+        match a.first().map(String::as_str) {
+            Some("hvx") if a.len() >= 7 => {
+                let out = PathBuf::from(&a[6]);
+                std::fs::create_dir_all(out.join("snap")).expect("outdir");
+                let e = Hvx {
+                    engine: PathBuf::from(&a[1]),
+                    hvx_run: (a[2] != "-").then(|| PathBuf::from(&a[2])),
+                    snap_dir: out.join("snap").display().to_string(),
+                    extra_env: Vec::new(),
+                    env: Vec::new(),
+                };
+                let spec = BootSpec {
+                    image: PathBuf::from(&a[5]),
+                    ram_mib: 1024,
+                    vcpus: 1,
+                    cpu: CpuLevel::V2,
+                    kernel: PathBuf::from(&a[3]),
+                    initrd: Some(PathBuf::from(&a[4])),
+                    outdir: out.join("consoles"),
+                    // HVX_SNAP_MALLOC=1: S0/S1 in memory (no effect on any result, M118's rule)
+                    snapshots: SnapshotStore::Memory,
+                };
+                (Box::new(e), spec, a.get(7).cloned().unwrap_or("16".into()))
+            }
+            Some("hvm") if a.len() >= 5 => {
+                let out = PathBuf::from(&a[4]);
+                std::fs::create_dir_all(out.join("snap")).expect("outdir");
+                let e = Hvm {
+                    hvmx: PathBuf::from(&a[1]),
+                    env: vec![(
+                        "HVM_SNAP_DIR".into(),
+                        out.join("snap").display().to_string(),
+                    )],
+                };
+                let spec = BootSpec {
+                    image: PathBuf::from(&a[3]),
+                    ram_mib: 1024,
+                    vcpus: 1,
+                    cpu: CpuLevel::V2,
+                    kernel: PathBuf::from(&a[2]),
+                    initrd: None,
+                    outdir: out.join("consoles"),
+                    snapshots: SnapshotStore::Files,
+                };
+                (Box::new(e), spec, a.get(5).cloned().unwrap_or("64".into()))
+            }
+            _ => {
+                eprintln!("{usage}");
+                std::process::exit(2);
+            }
+        };
     match hydo_engine::image::control(&spec.image) {
         Ok(hydo_engine::GuestControl::Agent { proto }) => {
             println!("image {}: agent protocol {proto}", spec.image.display())

@@ -620,6 +620,16 @@ mod tests {
             }))
         );
         assert_eq!(EngineLine::parse("DROP a id=5"), Some(EngineLine::Drop(5)));
+        // an agent image's controlled boot (M121)
+        assert_eq!(
+            EngineLine::parse("STOP boot at=0 n=1 phase=boot why=start"),
+            Some(EngineLine::Stop(Stop {
+                at: 0,
+                n: 1,
+                phase: Phase::Boot,
+                why: StopWhy::Start
+            }))
+        );
         assert!(EngineLine::parse("STOP a at=9 n=4 phase=later why=marker").is_none());
         assert!(EngineLine::parse("hvx_explore: S1").is_none());
     }
