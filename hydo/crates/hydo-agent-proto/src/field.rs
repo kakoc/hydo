@@ -219,7 +219,7 @@ macro_rules! record {
                     .map_err(|what| $crate::field::FieldError { field: stringify!($f).to_string(), what })?, )* })
             }
 
-            #[allow(unused_variables)]
+            #[allow(unused_variables, clippy::ptr_arg)]
             pub(crate) fn schema_fields(
                 props: &mut $crate::json::Obj,
                 req: &mut Vec<$crate::json::Value>,
