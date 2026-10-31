@@ -51,6 +51,9 @@ fn out(b: &[u8]) {
 
 /// One command to the running world; prints the answer.
 pub fn ctl_main(args: &[Vec<u8>]) -> i32 {
+    if args.is_empty() {
+        crate::usage();
+    }
     let p = sock_path();
     let mut c = match UnixStream::connect(&p) {
         Ok(c) => c,

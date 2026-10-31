@@ -295,7 +295,7 @@ async fn http_conn(w: Arc<World>, idx: usize, mut s: TcpStream) {
         {
             return;
         }
-        let mut body = match c.read_body(&head).await {
+        let (mut body, whole) = match c.read_body(&head).await {
             Ok(b) => b,
             Err(()) => {
                 let _ = c.write(&http1::bad_request(400, "Bad Request")).await;
@@ -303,7 +303,7 @@ async fn http_conn(w: Arc<World>, idx: usize, mut s: TcpStream) {
             }
         };
         body.truncate(1 << 20);
-        let close = http1::wants_close(&head);
+        let close = http1::wants_close(&head) || !whole;
         let mut headers = head.headers.clone();
         headers.retain(|(k, _)| k != "Host");
         let rq = InReq {
@@ -321,6 +321,9 @@ async fn http_conn(w: Arc<World>, idx: usize, mut s: TcpStream) {
         };
         match out {
             Outcome::Answer(a) => {
+                // an HTTP/1.0 answer without a length ends with the connection
+                let close =
+                    close || (head.minor == 0 && a.body.len() > 2048 && head.method != "HEAD");
                 if c.write(&http1::answer_bytes(&a, &head, close))
                     .await
                     .is_err()

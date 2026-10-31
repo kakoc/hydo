@@ -246,9 +246,13 @@ async fn grpc_conn(w: Arc<World>, idx: usize, up: Arc<Upstream>, mut s: TcpStrea
     else {
         return;
     };
-    let kill = Latch::new();
+    let kill = Kill {
+        kill: Latch::new(),
+        done: Latch::new(),
+    };
+    let kill = Arc::new(kill);
     loop {
-        match rt::first(conn.accept(), kill.wait()).await {
+        match rt::first(conn.accept(), kill.kill.wait()).await {
             Either::L(Some(Ok((req, respond)))) => {
                 tokio::spawn(call(
                     w.clone(),
@@ -260,14 +264,25 @@ async fn grpc_conn(w: Arc<World>, idx: usize, up: Arc<Upstream>, mut s: TcpStrea
                     kill.clone(),
                 ));
             }
-            Either::L(_) => return,
+            Either::L(_) => {
+                kill.done.fire();
+                return;
+            }
             Either::R(()) => {
                 rt::zero_linger(fd); // closing the socket now resets the connection
                 drop(conn);
+                kill.done.fire();
                 return;
             }
         }
     }
+}
+
+/// Resetting a client's TCP connection (reset=conn): `kill` asks the connection's task, `done`
+/// says the socket is closed.
+struct Kill {
+    kill: Arc<Latch>,
+    done: Arc<Latch>,
 }
 
 /// The client's side of the call: before the answer's headers, or after them.
@@ -278,10 +293,18 @@ enum Down {
 }
 
 impl Down {
-    fn reset(&mut self) {
+    /// Reset the call's stream (Go: the handler's panic). After the answer started, the frames
+    /// already queued go out first: Go flushed them before the reset, and h2 drops queued frames
+    /// of a reset stream, so the connection task gets to write them.
+    async fn reset(&mut self) {
         match self {
-            Down::Head(r) => r.send_reset(Reason::INTERNAL_ERROR), // Go: the handler's panic
-            Down::Body(s) => s.send_reset(Reason::INTERNAL_ERROR),
+            Down::Head(r) => r.send_reset(Reason::INTERNAL_ERROR),
+            Down::Body(s) => {
+                for _ in 0..4 {
+                    tokio::task::yield_now().await;
+                }
+                s.send_reset(Reason::INTERNAL_ERROR)
+            }
             Down::Done => {}
         }
         *self = Down::Done;
@@ -390,7 +413,7 @@ async fn call(
     req: http::Request<RecvStream>,
     mut respond: SendResponse<Bytes>,
     from: String,
-    kill: Arc<Latch>,
+    kill: Arc<Kill>,
 ) {
     let e = endpoint(&w, idx);
     let (parts, body) = req.into_parts();
@@ -509,7 +532,13 @@ async fn call(
     match fin {
         Fin::Ret => {}
         Fin::RstStream => end.status = "rst".into(),
-        Fin::RstConn => end.status = "conn".into(),
+        Fin::RstConn => {
+            // Go closes the connection first, then the call's record is written
+            end.status = "conn".into();
+            kill.kill.fire();
+            let _ = tokio::time::timeout(Duration::from_secs(1), kill.done.wait()).await;
+            down = Down::Done;
+        }
     }
     {
         let mut st = w.lock();
@@ -532,13 +561,8 @@ async fn call(
             );
         }
     }
-    match fin {
-        Fin::Ret => {}
-        Fin::RstStream => down.reset(),
-        Fin::RstConn => {
-            kill.fire();
-            down = Down::Done;
-        }
+    if let Fin::RstStream = fin {
+        down.reset().await;
     }
     drop(down);
 }

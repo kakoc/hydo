@@ -1,0 +1,1048 @@
+## control commands
+$ ctl ping: ok rc=0
+$ ctl frob: error: unknown command frob rc=1
+$ ctl on 1: error: on <id> <token> rc=1
+$ ctl off: error: off <id> rc=1
+$ ctl event x: error: event <name> <ref> rc=1
+$ ctl on 1 nocolon: error: no ':' in "nocolon" rc=1
+$ ctl on 1 @0-1:drop: error: no target in "@0-1:drop" rc=1
+$ ctl on 1 nobody@0-1:drop: error: no fake or proxy nobody rc=1
+$ ctl on 1 payments@0-1:frob: error: unknown rule "frob" rc=1
+$ ctl on 1 payments@0-1:delay=x: error: delay="x" is not a number rc=1
+$ ctl on 1 payments@0-1:effect=maybe: error: effect="maybe": yes or no rc=1
+$ ctl on 1 payments@0-1:rpc=Unary: error: rpc=, call=, cut=, hold=, dir= and reset=conn need a gRPC proxy (payments is not one) rc=1
+$ ctl on 1 payments@0-1:reset=conn: error: rpc=, call=, cut=, hold=, dir= and reset=conn need a gRPC proxy (payments is not one) rc=1
+$ ctl on 1 orders@0-1:cut=x: error: cut="x" is not a number rc=1
+$ ctl on 1 orders@0-1:dir=up: error: dir="up": req or resp rc=1
+$ ctl on 1 orders@0-1:call=0: error: call="0": <n> or <a>-<b>, counted from 1 rc=1
+$ ctl on 1 orders@0-1:call=3-2: error: call="3-2": <n> or <a>-<b>, counted from 1 rc=1
+$ ctl on 1 orders@0-1:reset=foo: error: reset="foo": stream or conn rc=1
+$ ctl on 1 orders@0-1:seed=: error: seed=: a value rc=1
+$ ctl on 1 orders@0-1:rpc=: error: rpc="": a method name rc=1
+$ ctl on 1 orders@0-1:status=NOPE: error: status="NOPE" is not a number rc=1
+$ ctl: stderr: usage: hydo-world serve <world.json> [--carry FILE] | ctl <cmd...> | event <name> <ref> | check <kind> <target> [opts] rc=2
+## fake: charges, replays, routes
+charge o1 k1: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 40 | Connection: close || body={"id":"ch_1","order":"o1","amount":12.5}
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-1 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o1","charge":"ch_1","key":"k1"} -> 200
+charge o1 k1 again: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 40 | Connection: close || body={"id":"ch_1","order":"o1","amount":12.5}
+charge o2 (no key): HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 40 | Connection: close || body={"id":"ch_4","order":"o2","amount":12.5}
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 65 | Content-Type: application/json | X-Sig: s-4 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o2","charge":"ch_4","key":""} -> 200
+get ch_1: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 18 | Connection: close || body={"id":"ch_1","n":}
+get with a json body: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 32 | Connection: close || body={"id":"ch 2","n":[1,{"a":true}]}
+search: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 11 | Connection: close || body={"q":"a b"}
+refund (form): HTTP/1.1 201 Created | Content-Type: application/json | X-Refund: r-o1 | Content-Length: 17 | Connection: close || body={"refunded":"o1"}
+plain: HTTP/1.1 200 OK | Content-Type: text/plain | Content-Length: 8 | Connection: close || body=hello 10
+no route: HTTP/1.1 404 Not Found | Content-Type: text/plain; charset=utf-8 | X-Content-Type-Options: nosniff | Content-Length: 32 | Connection: close || body={"error":"hydo fake: no route"}\x0a
+HEAD of a route: HTTP/1.1 404 Not Found | Content-Type: text/plain; charset=utf-8 | X-Content-Type-Options: nosniff | Content-Length: 32 | Connection: close
+expect 100-continue: HTTP/1.1 100 Continue [timeout]
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 66 | Content-Type: application/json | X-Sig: s-13 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o3","charge":"ch_13","key":""} -> 200
+two requests on one connection: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 11 || body={"q":"one"} || HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 11 | Connection: close || body={"q":"two"}
+HTTP/1.0: HTTP/1.0 200 OK | Content-Type: application/json | Content-Length: 11 || body={"q":"old"}
+chunked request: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 37 | Connection: close || body={"id":"ch_18","order":"o4","amount":}
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 66 | Content-Type: application/json | X-Sig: s-18 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o4","charge":"ch_18","key":""} -> 200
+garbage:  [timeout]
+absolute URI: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 11 | Connection: close || body={"q":"abs"}
+## fake over HTTP/2
+h2 charge o5 k5: status=200 h[content-length=38;content-type=application/json] body={"id":"ch_21","order":"o5","amount":1} end
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 68 | Content-Type: application/json | X-Sig: s-21 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o5","charge":"ch_21","key":"k5"} -> 200
+h2 charge o5 k5 again: status=200 h[content-length=38;content-type=application/json] body={"id":"ch_21","order":"o5","amount":1} end
+h2 get: status=200 h[content-length=18;content-type=application/json] body={"id":"ch_9","n":} end
+h2 no route: status=404 h[content-length=32;content-type=text/plain; charset=utf-8;x-content-type-options=nosniff] body={"error":"hydo fake: no route"}\x0a end
+## gRPC fake
+Add: status=200 h[content-length=9;content-type=application/grpc] m[0a026f6b] t[grpc-message=;grpc-status=0]
+Deny: status=200 h[content-length=0;content-type=application/grpc;grpc-message=hydo fake;grpc-status=7] end
+unknown: status=200 h[content-length=0;content-type=application/grpc;grpc-message=hydo fake: no route for /ledger.Ledger/Nope;grpc-status=12] end
+$ ctl on 1 ledger.add@0-1:status=UNAVAILABLE: ok rc=0
+Add, UNAVAILABLE: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=14] end
+$ ctl off 1: ok rc=0
+$ ctl on 2 ledger@0-1:reset: ok rc=0
+Add, reset: [rst INTERNAL_ERROR]
+$ ctl off 2: ok rc=0
+## fake faults: status, delay, drop, reset
+$ ctl on 3 payments.charge@3-6:status=503,retry-after=2: ok rc=0
+charge o6: HTTP/1.1 503 Service Unavailable | Content-Type: application/json | Retry-After: 2 | Content-Length: 41 | Connection: close || body={"error":"injected by hydo","status":503}
+search (other route): HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 9 | Connection: close || body={"q":"s"}
+$ ctl off 3: ok rc=0
+$ ctl on 4 payments.charge@0-1:status=429,effect=yes: ok rc=0
+charge o7, 429 but done: HTTP/1.1 429 Too Many Requests | Content-Type: application/json | Content-Length: 41 | Connection: close || body={"error":"injected by hydo","status":429}
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 68 | Content-Type: application/json | X-Sig: s-33 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o7","charge":"ch_33","key":"k7"} -> 200
+$ ctl off 4: ok rc=0
+$ ctl on 5 payments.charge@0-1:delay=100: ok rc=0
+charge o8 delayed: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 41 | Connection: close || body={"id":"ch_35","order":"o8","amount":12.5}
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 66 | Content-Type: application/json | X-Sig: s-35 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o8","charge":"ch_35","key":""} -> 200
+$ ctl off 5: ok rc=0
+$ ctl on 6 payments.charge@0-1:drop: ok rc=0
+charge o9 dropped:  [timeout]
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 66 | Content-Type: application/json | X-Sig: s-37 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o9","charge":"ch_37","key":""} -> 200
+$ ctl off 6: ok rc=0
+$ ctl on 7 payments.charge@0-1:reset: ok rc=0
+charge o10 reset:  [reset]
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-39 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o10","charge":"ch_39","key":""} -> 200
+$ ctl off 7: ok rc=0
+$ ctl on 8 payments@0-1:status=500: ok rc=0
+search, every route: HTTP/1.1 500 Internal Server Error | Content-Type: application/json | Content-Length: 41 | Connection: close || body={"error":"injected by hydo","status":500}
+no route, every route: HTTP/1.1 500 Internal Server Error | Content-Type: application/json | Content-Length: 41 | Connection: close || body={"error":"injected by hydo","status":500}
+$ ctl off 8: ok rc=0
+$ ctl on 9 payments.charge@0-1:delay=50,effect=no: ok rc=0
+charge o11, no effect: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_43","order":"o11","amount":12.5}
+$ ctl off 9: ok rc=0
+## fake faults: p=50
+$ ctl on 10 payments.charge@2-4:status=503,p=50: ok rc=0
+charge o12: HTTP/1.1 503 Service Unavailable | Content-Type: application/json | Content-Length: 41 | Connection: close || body={"error":"injected by hydo","status":503}
+charge o13: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_45","order":"o13","amount":12.5}
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-45 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o13","charge":"ch_45","key":""} -> 200
+charge o14: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_47","order":"o14","amount":12.5}
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-47 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o14","charge":"ch_47","key":""} -> 200
+charge o15: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_49","order":"o15","amount":12.5}
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-49 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o15","charge":"ch_49","key":""} -> 200
+charge o16: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_51","order":"o16","amount":12.5}
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-51 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o16","charge":"ch_51","key":""} -> 200
+charge o17: HTTP/1.1 503 Service Unavailable | Content-Type: application/json | Content-Length: 41 | Connection: close || body={"error":"injected by hydo","status":503}
+charge o18: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_54","order":"o18","amount":12.5}
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-54 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o18","charge":"ch_54","key":""} -> 200
+charge o19: HTTP/1.1 503 Service Unavailable | Content-Type: application/json | Content-Length: 41 | Connection: close || body={"error":"injected by hydo","status":503}
+$ ctl off 10: ok rc=0
+## fake faults: a drop ended by off, by heal
+$ ctl on 11 payments.charge@0-1:drop: ok rc=0
+charge o20, off after 200 ms: [closed]
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-57 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o20","charge":"ch_57","key":""} -> 200
+$ ctl on 12 payments.charge@0-1:drop: ok rc=0
+$ ctl on 13 payments.get@0-1:drop: ok rc=0
+charge o21, heal after 200 ms: [closed]
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-59 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o21","charge":"ch_59","key":""} -> 200
+get after the heal: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 18 | Connection: close || body={"id":"ch_1","n":}
+## fake faults over HTTP/2
+$ ctl on 14 payments.charge@0-1:status=503: ok rc=0
+h2 charge o22, 503: status=503 h[content-length=41;content-type=application/json] body={"error":"injected by hydo","status":503} end
+$ ctl off 14: ok rc=0
+$ ctl on 15 payments.charge@0-1:drop: ok rc=0
+h2 charge o23, dropped: [timeout]
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-63 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o23","charge":"ch_63","key":""} -> 200
+$ ctl off 15: ok rc=0
+$ ctl on 16 payments.charge@0-1:reset: ok rc=0
+h2 charge o24, reset: [rst INTERNAL_ERROR]
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-65 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o24","charge":"ch_65","key":""} -> 200
+$ ctl off 16: ok rc=0
+## webhooks: dup
+$ ctl on 17 payments.charge@0-1:dup: ok rc=0
+charge o25: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_67","order":"o25","amount":12.5}
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 70 | Content-Type: application/json | X-Sig: s-67 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o25","charge":"ch_67","key":"k25"} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 70 | Content-Type: application/json | X-Sig: s-67 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o25","charge":"ch_67","key":"k25"} -> 200
+$ ctl off 17: ok rc=0
+## webhooks: lost, late, reorder, failing
+$ ctl on 18 payments.charge@0-1:lost: ok rc=0
+charge o26: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_70","order":"o26","amount":12.5}
+$ ctl off 18: ok rc=0
+$ ctl on 19 payments.charge@0-1:late=200: ok rc=0
+charge o27: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_72","order":"o27","amount":12.5}
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-72 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o27","charge":"ch_72","key":""} -> 200
+$ ctl off 19: ok rc=0
+$ ctl on 20 payments.charge@0-1:reorder: ok rc=0
+charge o28: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_74","order":"o28","amount":12.5}
+charge o29: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_75","order":"o29","amount":12.5}
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-74 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o28","charge":"ch_74","key":""} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-75 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o29","charge":"ch_75","key":""} -> 200
+charge o32 (held): HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_78","order":"o32","amount":12.5}
+$ ctl off 20: ok rc=0
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-78 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o32","charge":"ch_78","key":""} -> 200
+charge fail1: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 44 | Connection: close || body={"id":"ch_80","order":"fail1","amount":12.5}
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 69 | Content-Type: application/json | X-Sig: s-80 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"fail1","charge":"ch_80","key":""} -> 500
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 69 | Content-Type: application/json | X-Sig: s-80 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"fail1","charge":"ch_80","key":""} -> 500
+## events
+$ event cancelled o2: ok 84 rc=0
+$ event cancelled o 3,x: ok 85 rc=0
+$ event shipped : ok 86 rc=0
+$ event x: stderr: usage: hydo-world serve <world.json> [--carry FILE] | ctl <cmd...> | event <name> <ref> | check <kind> <target> [opts] rc=2
+## HTTP proxy
+get /api?order=o40: HTTP/1.1 200 OK | Content-Type: application/json | X-Upstream: yes | Content-Length: 31 | Connection: close || body={"path":"/api?order=o40","n":0}
+  upstream http: GET /api?order=o40 HTTP/1.1 | Host: 127.0.0.1:38611 | User-Agent: Go-http-client/1.1 | X-Trace: t1 | Accept-Encoding: gzip | Connection: close || body=
+post with hop headers: HTTP/1.1 200 OK | Content-Type: application/json | X-Upstream: yes | Content-Length: 33 | Connection: close || body={"path":"/api/x?order=o41","n":3}
+  upstream http: POST /api/x?order=o41 HTTP/1.1 | Host: 127.0.0.1:38611 | User-Agent: client/2 | Content-Length: 3 | Accept: */* | Accept-Encoding: gzip | Connection: close || body=abc
+gzip, the client asked for nothing: HTTP/1.1 200 OK | Content-Type: application/json | Vary: Accept-Encoding | Content-Length: 57 | Connection: close || body={"gz":true,"text":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+  upstream http: GET /gz?order=o42 HTTP/1.1 | Host: 127.0.0.1:38611 | User-Agent: Go-http-client/1.1 | Accept-Encoding: gzip | Connection: close || body=
+gzip, the client asked for it: HTTP/1.1 200 OK | Content-Encoding: gzip | Content-Type: application/json | Vary: Accept-Encoding | Content-Length: 54 | Connection: close || body=\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x8d\xc0\xb1\x0d\x00 \x08D\xd1]~\xed\x04lcA\xec\xcd\x99\x18\x08\xbb\xb3\x02/9\x81\xe9>_\xc8\xbf0\xf6\x00\xd5\xde\xca\xce\x9e9\x00\x00\x00
+  upstream http: GET /gz?order=o43 HTTP/1.1 | Host: 127.0.0.1:38611 | User-Agent: Go-http-client/1.1 | Accept-Encoding: gzip | Connection: close || body=
+chunked with a trailer: HTTP/1.1 200 OK | Content-Type: text/plain | Content-Length: 11 | Connection: close || body=hello world
+  upstream http: GET /chunked?order=o44 HTTP/1.1 | Host: 127.0.0.1:38611 | User-Agent: Go-http-client/1.1 | Accept-Encoding: gzip | Connection: close || body=
+over HTTP/2: status=200 h[content-length=31;content-type=application/json;x-upstream=yes] body={"path":"/api?order=o45","n":0} end
+  upstream http: GET /api?order=o45 HTTP/1.1 | Host: 127.0.0.1:38611 | User-Agent: Go-http-client/1.1 | X-H2: 1 | Accept-Encoding: gzip | Connection: close || body=
+$ ctl on 21 shop@0-1:status=502: ok rc=0
+502, not forwarded: HTTP/1.1 502 Bad Gateway | Content-Type: application/json | Content-Length: 41 | Connection: close || body={"error":"injected by hydo","status":502}
+$ ctl off 21: ok rc=0
+$ ctl on 22 shop.api@0-1:drop: ok rc=0
+dropped after forwarding:  [timeout]
+  upstream http: GET /api?order=o47 HTTP/1.1 | Host: 127.0.0.1:38611 | User-Agent: Go-http-client/1.1 | Accept-Encoding: gzip | Connection: close || body=
+$ ctl off 22: ok rc=0
+$ ctl on 23 shop@0-1:reset: ok rc=0
+reset after forwarding:  [reset]
+  upstream http: GET /api?order=o48 HTTP/1.1 | Host: 127.0.0.1:38611 | User-Agent: Go-http-client/1.1 | Accept-Encoding: gzip | Connection: close || body=
+$ ctl off 23: ok rc=0
+$ ctl on 24 shop@0-1:delay=100,effect=no: ok rc=0
+delay without effect: [closed]
+$ ctl off 24: ok rc=0
+$ ctl on 25 shop@0-1:status=503,effect=yes,retry-after=9: ok rc=0
+503 after forwarding: HTTP/1.1 503 Service Unavailable | Content-Type: application/json | Retry-After: 9 | Content-Length: 41 | Connection: close || body={"error":"injected by hydo","status":503}
+  upstream http: GET /api?order=o50 HTTP/1.1 | Host: 127.0.0.1:38611 | User-Agent: Go-http-client/1.1 | Accept-Encoding: gzip | Connection: close || body=
+$ ctl off 25: ok rc=0
+slow upstream, client gives up:  [timeout]
+  upstream http: GET /slow?order=o51 HTTP/1.1 | Host: 127.0.0.1:38611 | User-Agent: Go-http-client/1.1 | Accept-Encoding: gzip | Connection: close || body=
+no upstream: HTTP/1.1 502 Bad Gateway | Content-Type: text/plain; charset=utf-8 | X-Content-Type-Options: nosniff | Content-Length: 113 | Connection: close || body=hydo proxy: upstream: Post "http://127.0.0.1:38619/x?y=1": dial tcp 127.0.0.1:38619: connect: connection refused\x0a
+## TCP proxy
+echo: +PING\x0a+SET a 1\x0a [closed]
+  upstream tcp: PING\x0aSET a 1\x0a
+$ ctl on 26 kv@0-1:delay=100: ok rc=0
+delayed: +GET a\x0a [closed]
+  upstream tcp: GET a\x0a
+$ ctl off 26: ok rc=0
+$ ctl on 27 kv@0-1:reset: ok rc=0
+reset: [reset]
+  upstream tcp: GET b\x0a
+$ ctl off 27: ok rc=0
+$ ctl on 28 kv@0-1:drop: ok rc=0
+dropped: [timeout]
+  upstream tcp: GET c\x0a
+$ ctl off 28: ok rc=0
+$ ctl on 29 kv@0-1:drop,effect=no: ok rc=0
+dropped, no effect: [timeout]
+$ ctl off 29: ok rc=0
+$ ctl on 30 kv@0-1:reset,effect=no: ok rc=0
+reset, no effect: [reset]
+$ ctl off 30: ok rc=0
+$ ctl on 31 kv@0-1:status=500: ok rc=0
+status on a byte stream: +GET f\x0a [closed]
+  upstream tcp: GET f\x0a
+$ ctl off 31: ok rc=0
+## gRPC proxy: calls
+Unary o1: status=200 h[content-type=application/grpc] m[6f6b3a0a026f31] t[grpc-message=;grpc-status=0]
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+Stream: status=200 h[content-type=application/grpc] m[7331] m[7332] m[7333] t[grpc-message=;grpc-status=0]
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Stream h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+Client, 3 messages: status=200 h[content-type=application/grpc] m[33] t[grpc-message=;grpc-status=0]
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Client h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=3 end=eos
+Fail (trailers-only from the server): status=200 h[content-type=application/grpc;grpc-message=nope;grpc-status=5] end
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Fail h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+unknown method: status=200 h[content-type=application/grpc;grpc-message=unknown method;grpc-status=12] end
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Nope h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=0 end=eos
+no upstream: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=14] end
+slow, client gives up: [timeout]
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Slow h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+## gRPC proxy: faults without forwarding
+$ ctl on 32 orders@0-1:status=UNAVAILABLE: ok rc=0
+status=UNAVAILABLE: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=14] end
+$ ctl off 32: ok rc=0
+$ ctl on 33 orders@0-1:drop,effect=no: ok rc=0
+drop, no effect: [timeout]
+$ ctl off 33: ok rc=0
+$ ctl on 34 orders@0-1:reset,effect=no: ok rc=0
+reset, no effect: [rst INTERNAL_ERROR]
+$ ctl off 34: ok rc=0
+$ ctl on 35 orders@0-1:reset=conn,effect=no: ok rc=0
+reset=conn, no effect: [conn]
+$ ctl off 35: ok rc=0
+$ ctl on 36 orders@0-1:delay=100,effect=no: ok rc=0
+delay, no effect: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=14] end
+$ ctl off 36: ok rc=0
+$ ctl on 37 orders@0-1:drop,effect=no: ok rc=0
+drop, no effect, healed after 200 ms: [rst INTERNAL_ERROR]
+## gRPC proxy: faults on the answer
+$ ctl on 38 orders@0-1:status=ABORTED,effect=yes: ok rc=0
+status=ABORTED after forwarding: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=10] end
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+$ ctl off 38: ok rc=0
+$ ctl on 39 orders@0-1:drop: ok rc=0
+drop: [timeout]
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+drop, off after 200 ms: [rst INTERNAL_ERROR]
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+$ ctl on 40 orders@0-1:delay=100: ok rc=0
+delay: status=200 h[content-type=application/grpc] m[6f6b3a0a036f3133] t[grpc-message=;grpc-status=0]
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+$ ctl off 40: ok rc=0
+$ ctl on 41 orders@0-1:reset: ok rc=0
+reset: [rst INTERNAL_ERROR]
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+$ ctl off 41: ok rc=0
+$ ctl on 42 orders@0-1:reset=conn: ok rc=0
+reset=conn: [conn]
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+$ ctl off 42: ok rc=0
+$ ctl on 43 orders.place@0-1:status=14: ok rc=0
+route place: Unary: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=14] end
+route place: Stream passes: status=200 h[content-type=application/grpc] m[7331] m[7332] m[7333] t[grpc-message=;grpc-status=0]
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Stream h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+$ ctl off 43: ok rc=0
+## gRPC proxy: streams
+$ ctl on 44 orders@0-1:cut=1: ok rc=0
+cut=1: status=200 h[content-type=application/grpc] m[7331] [rst INTERNAL_ERROR]
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Stream h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+$ ctl off 44: ok rc=0
+$ ctl on 45 orders@0-1:cut=0: ok rc=0
+cut=0: status=200 h[content-type=application/grpc] [rst INTERNAL_ERROR]
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Stream h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+$ ctl off 45: ok rc=0
+$ ctl on 46 orders@0-1:hold=1: ok rc=0
+hold=1, client gives up: status=200 h[content-type=application/grpc] m[7331] [timeout]
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Stream h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+hold=1, off after 200 ms: status=200 h[content-type=application/grpc] m[7331] m[7332] m[7333] t[grpc-message=;grpc-status=0]
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Stream h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+$ ctl on 47 orders@0-1:cut=1,dir=req: ok rc=0
+cut=1 dir=req: [rst INTERNAL_ERROR]
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Client h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=reset
+$ ctl off 47: ok rc=0
+$ ctl on 48 orders@0-1:hold=1,dir=req: ok rc=0
+hold=1 dir=req, healed after 200 ms: status=200 h[content-type=application/grpc] m[33] t[grpc-message=;grpc-status=0]
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Client h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=3 end=eos
+## gRPC proxy: rpc=, call=, p=, seed=
+$ ctl on 49 orders@0-1:status=INTERNAL,rpc=Stream: ok rc=0
+rpc=Stream: Unary passes: status=200 h[content-type=application/grpc] m[6f6b3a0a036f3137] t[grpc-message=;grpc-status=0]
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+rpc=Stream: Stream fails: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=13] end
+$ ctl off 49: ok rc=0
+$ ctl on 50 orders@0-1:status=13,rpc=/t.S/Count,call=2-3: ok rc=0
+Count call 1: status=200 h[content-type=application/grpc] m[6f6b3a0a026e31] t[grpc-message=;grpc-status=0]
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Count h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+Count call 2: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=13] end
+Count call 3: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=13] end
+Count call 4: status=200 h[content-type=application/grpc] m[6f6b3a0a026e34] t[grpc-message=;grpc-status=0]
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Count h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+$ ctl off 50: ok rc=0
+$ ctl on 51 orders@0-1:status=14,p=50,seed=7: ok rc=0
+p=50 call 1: status=200 h[content-type=application/grpc] m[6f6b3a0a027031] t[grpc-message=;grpc-status=0]
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+p=50 call 2: status=200 h[content-type=application/grpc] m[6f6b3a0a027032] t[grpc-message=;grpc-status=0]
+  upstream grpc: POST 127.0.0.1:38613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+p=50 call 3: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=14] end
+p=50 call 4: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=14] end
+p=50 call 5: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=14] end
+p=50 call 6: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=14] end
+$ ctl off 51: ok rc=0
+## checks
+$ check at-most-once payments.charge: HYDO-ORACLE: OK payments.charge: 25 effects, every ref at most once rc=0
+$ check at-most-once payments.charge --by idem: HYDO-ORACLE: OK payments.charge: 25 effects, every idem at most once rc=0
+$ check exactly-once payments.charge --by idem --ref o{id} --acked <dir>/acked: HYDO-ORACLE: VIOLATION payments.charge: acknowledged o1 has no effect rc=1
+$ check effect-for-acked payments.charge --ref o{id} --acked <dir>/acked: HYDO-ORACLE: VIOLATION payments.charge: acknowledged ofail1 has no effect rc=1
+$ check effect-for-acked payments.charge --ref o{id} --acked <dir>/acked --unless event:cancelled: HYDO-ORACLE: VIOLATION payments.charge: acknowledged ofail1 has no effect rc=1
+$ check none-after payments.charge --after event:cancelled: HYDO-ORACLE: OK payments.charge: no effect after event:cancelled (2 refs had it) rc=0
+$ check none-after payments.charge: HYDO-ORACLE: ERROR check none-after needs --after event:<name> or <ep>.<route> rc=2
+$ check count payments.charge: HYDO-ORACLE: OK payments.charge: 25 effects, 25 refs rc=0
+$ check count payments: HYDO-ORACLE: OK payments: 27 effects, 26 refs rc=0
+$ check count event:cancelled: HYDO-ORACLE: OK event:cancelled: 2 effects, 2 refs rc=0
+$ check calls orders: HYDO-ORACLE: OK orders: 38 calls: 12 answered OK, 10 failed after the server acted, 14 failed before reaching it, 2 failed with the server's part unknown rc=0
+$ check calls orders.place: HYDO-ORACLE: OK orders.place: 21 calls: 5 answered OK, 5 failed after the server acted, 11 failed before reaching it, 0 failed with the server's part unknown rc=0
+$ check calls orders2: HYDO-ORACLE: OK orders2: 1 calls: 0 answered OK, 0 failed after the server acted, 0 failed before reaching it, 1 failed with the server's part unknown rc=0
+$ check frobnicate payments: HYDO-ORACLE: ERROR check: unknown kind frobnicate rc=2
+$ check count: stderr: usage: hydo-world serve <world.json> [--carry FILE] | ctl <cmd...> | event <name> <ref> | check <kind> <target> [opts] rc=2
+## summary
+  1 payments.charge ref=o1 idem=k1 fx=1 ok
+  2 webhook payments.charge ref=o1 src=1 n=1 200
+  3 payments.charge ref=o1 idem=k1 fx=0 replay
+  4 payments.charge ref=o2 idem=- fx=1 ok
+  5 webhook payments.charge ref=o2 src=4 n=1 200
+  6 payments.get ref=ch_1 idem=- fx=0 ok
+  7 payments.get ref=ch%202 idem=- fx=0 ok
+  8 payments.search ref=a%20b idem=- fx=0 ok
+  9 payments.refund ref=o1 idem=- fx=1 ok
+  10 payments.plain ref=- idem=- fx=1 ok
+  11 payments. ref=- idem=- fx=0 ok
+  12 payments. ref=- idem=- fx=0 ok
+  13 payments.charge ref=o3 idem=- fx=1 ok
+  14 webhook payments.charge ref=o3 src=13 n=1 200
+  15 payments.search ref=one idem=- fx=0 ok
+  16 payments.search ref=two idem=- fx=0 ok
+  17 payments.search ref=old idem=- fx=0 ok
+  18 payments.charge ref=o4 idem=- fx=1 ok
+  19 webhook payments.charge ref=o4 src=18 n=1 200
+  20 payments.search ref=abs idem=- fx=0 ok
+  21 payments.charge ref=o5 idem=k5 fx=1 ok
+  22 webhook payments.charge ref=o5 src=21 n=1 200
+  23 payments.charge ref=o5 idem=k5 fx=0 replay
+  24 payments.get ref=ch_9 idem=- fx=0 ok
+  25 payments. ref=- idem=- fx=0 ok
+  26 ledger.add ref=l1 idem=- fx=1 ok
+  27 ledger.deny ref=l2 idem=- fx=1 ok
+  28 ledger. ref=l3 idem=- fx=0 ok
+  29 ledger.add ref=l4 idem=- fx=0 -+status14
+  30 ledger.add ref=l5 idem=- fx=1 ok+reset
+  31 payments.charge ref=o6 idem=k6 fx=0 -+status503
+  32 payments.search ref=s idem=- fx=0 ok
+  33 payments.charge ref=o7 idem=k7 fx=1 ok+status429
+  34 webhook payments.charge ref=o7 src=33 n=1 200
+  35 payments.charge ref=o8 idem=- fx=1 ok+delay100
+  36 webhook payments.charge ref=o8 src=35 n=1 200
+  37 payments.charge ref=o9 idem=- fx=1 ok+drop
+  38 webhook payments.charge ref=o9 src=37 n=1 200
+  39 payments.charge ref=o10 idem=- fx=1 ok+reset
+  40 webhook payments.charge ref=o10 src=39 n=1 200
+  41 payments.search ref=e idem=- fx=0 -+status500
+  42 payments. ref=- idem=- fx=0 -+status500
+  43 payments.charge ref=o11 idem=k11 fx=0 -+delay50
+  44 payments.charge ref=o12 idem=- fx=0 -+status503
+  45 payments.charge ref=o13 idem=- fx=1 ok
+  46 webhook payments.charge ref=o13 src=45 n=1 200
+  47 payments.charge ref=o14 idem=- fx=1 ok
+  48 webhook payments.charge ref=o14 src=47 n=1 200
+  49 payments.charge ref=o15 idem=- fx=1 ok
+  50 webhook payments.charge ref=o15 src=49 n=1 200
+  51 payments.charge ref=o16 idem=- fx=1 ok
+  52 webhook payments.charge ref=o16 src=51 n=1 200
+  53 payments.charge ref=o17 idem=- fx=0 -+status503
+  54 payments.charge ref=o18 idem=- fx=1 ok
+  55 webhook payments.charge ref=o18 src=54 n=1 200
+  56 payments.charge ref=o19 idem=- fx=0 -+status503
+  57 payments.charge ref=o20 idem=- fx=1 ok+drop
+  58 webhook payments.charge ref=o20 src=57 n=1 200
+  59 payments.charge ref=o21 idem=- fx=1 ok+drop
+  60 webhook payments.charge ref=o21 src=59 n=1 200
+  61 payments.get ref=ch_1 idem=- fx=0 ok
+  62 payments.charge ref=o22 idem=- fx=0 -+status503
+  63 payments.charge ref=o23 idem=- fx=1 ok+drop
+  64 webhook payments.charge ref=o23 src=63 n=1 200
+  65 payments.charge ref=o24 idem=- fx=1 ok+reset
+  66 webhook payments.charge ref=o24 src=65 n=1 200
+  67 payments.charge ref=o25 idem=k25 fx=1 ok
+  ~ webhook payments.charge ref=o25 src=67 n=1 200
+  ~ webhook payments.charge ref=o25 src=67 n=1 200
+  70 payments.charge ref=o26 idem=- fx=1 ok
+  71 webhook payments.charge ref=o26 src=70 n= lost
+  72 payments.charge ref=o27 idem=- fx=1 ok
+  73 webhook payments.charge ref=o27 src=72 n=1 200
+  74 payments.charge ref=o28 idem=- fx=1 ok
+  75 payments.charge ref=o29 idem=- fx=1 ok
+  76 webhook payments.charge ref=o29 src=75 n=1 200
+  77 webhook payments.charge ref=o28 src=74 n=1 200
+  78 payments.charge ref=o32 idem=- fx=1 ok
+  79 webhook payments.charge ref=o32 src=78 n=1 200
+  80 payments.charge ref=fail1 idem=- fx=1 ok
+  81 webhook payments.charge ref=fail1 src=80 n=1 500
+  82 webhook payments.charge ref=fail1 src=80 n=2 500
+  83 webhook payments.charge ref=fail1 src=80 n= gave-up
+  84 event cancelled ref=o2
+  85 event cancelled ref=o%203%2Cx
+  86 event shipped ref=-
+  87 shop.api ref=o40 idem=- fx=1 fwd
+  88 shop.any ref=o41 idem=- fx=1 fwd
+  89 shop.any ref=o42 idem=- fx=1 fwd
+  90 shop.any ref=o43 idem=- fx=1 fwd
+  91 shop.any ref=o44 idem=- fx=1 fwd
+  92 shop.api ref=o45 idem=- fx=1 fwd
+  93 shop.api ref=o46 idem=- fx=0 -+status502
+  94 shop.api ref=o47 idem=- fx=1 fwd+drop
+  95 shop.api ref=o48 idem=- fx=1 fwd+reset
+  96 shop.api ref=o49 idem=- fx=0 -+delay100
+  97 shop.api ref=o50 idem=- fx=1 fwd+status503
+  98 shop.any ref=o51 idem=- fx=1 fwd
+  99 shop2.any ref=- idem=- fx=1 fwd
+  100 kv.conn ref=- idem=- fx=1 fwd
+  101 kv.conn ref=- idem=- fx=1 fwd+delay100
+  102 kv.conn ref=- idem=- fx=1 fwd+reset
+  103 kv.conn ref=- idem=- fx=1 fwd+drop
+  104 kv.conn ref=- idem=- fx=0 -+drop
+  105 kv.conn ref=- idem=- fx=0 -+reset
+  106 kv.conn ref=- idem=- fx=1 fwd+status500
+  107 orders.place ref=o1 idem=- fx=1 fwd
+  108 call orders.place /t.S/Unary ref=o1 n=1 status=0 server=1 upstream=0 msgs=1/1 fwd
+  109 orders.any ref=s idem=- fx=1 fwd
+  110 call orders.any /t.S/Stream ref=s n=1 status=0 server=1 upstream=0 msgs=1/3 fwd
+  111 orders.any ref=c1 idem=- fx=1 fwd
+  112 call orders.any /t.S/Client ref=c1 n=1 status=0 server=1 upstream=0 msgs=3/1 fwd
+  113 orders.any ref=f idem=- fx=1 fwd
+  114 call orders.any /t.S/Fail ref=f n=1 status=5 server=1 upstream=5 msgs=1/0 fwd
+  115 orders.any ref=- idem=- fx=1 fwd
+  116 call orders.any /t.S/Nope ref=- n=1 status=12 server=1 upstream=12 msgs=0/0 fwd
+  117 orders2.any ref=- idem=- fx=1 fwd
+  118 call orders2.any /t.S/Unary ref=- n=1 status=14 server=? upstream= msgs=0/0 fwd
+  119 orders.any ref=o3 idem=- fx=1 fwd
+  120 call orders.any /t.S/Slow ref=o3 n=1 status=none server=? upstream= msgs=1/0 fwd
+  121 orders.place ref=o4 idem=- fx=0 -+status14
+  122 call orders.place /t.S/Unary ref=o4 n=2 status=14 server=0 upstream= msgs=0/0 -+status14
+  123 orders.place ref=o5 idem=- fx=0 -+drop
+  124 call orders.place /t.S/Unary ref=o5 n=3 status=none server=0 upstream= msgs=0/0 -+drop
+  125 orders.place ref=o6 idem=- fx=0 -+reset
+  126 call orders.place /t.S/Unary ref=o6 n=4 status=rst server=0 upstream= msgs=0/0 -+reset
+  127 orders.place ref=o7 idem=- fx=0 -+resetconn
+  128 call orders.place /t.S/Unary ref=o7 n=5 status=conn server=0 upstream= msgs=0/0 -+resetconn
+  129 orders.place ref=o8 idem=- fx=0 -+delay100
+  130 call orders.place /t.S/Unary ref=o8 n=6 status=14 server=0 upstream= msgs=0/0 -+delay100
+  131 orders.place ref=o9 idem=- fx=0 -+drop
+  132 call orders.place /t.S/Unary ref=o9 n=7 status=rst server=0 upstream= msgs=0/0 -+drop
+  133 orders.place ref=o10 idem=- fx=1 fwd+status10
+  134 call orders.place /t.S/Unary ref=o10 n=8 status=10 server=1 upstream=0 msgs=1/0 fwd+status10
+  135 orders.place ref=o11 idem=- fx=1 fwd+drop
+  136 call orders.place /t.S/Unary ref=o11 n=9 status=none server=1 upstream=0 msgs=1/0 fwd+drop
+  137 orders.place ref=o12 idem=- fx=1 fwd+drop
+  138 call orders.place /t.S/Unary ref=o12 n=10 status=rst server=1 upstream=0 msgs=1/0 fwd+drop
+  139 orders.place ref=o13 idem=- fx=1 fwd+delay100
+  140 call orders.place /t.S/Unary ref=o13 n=11 status=0 server=1 upstream=0 msgs=1/1 fwd+delay100
+  141 orders.place ref=o14 idem=- fx=1 fwd+reset
+  142 call orders.place /t.S/Unary ref=o14 n=12 status=rst server=1 upstream= msgs=1/0 fwd+reset
+  143 orders.place ref=o15 idem=- fx=1 fwd+resetconn
+  144 call orders.place /t.S/Unary ref=o15 n=13 status=conn server=1 upstream= msgs=1/0 fwd+resetconn
+  145 orders.place ref=o16 idem=- fx=0 -+status14
+  146 call orders.place /t.S/Unary ref=o16 n=14 status=14 server=0 upstream= msgs=0/0 -+status14
+  147 orders.any ref=s idem=- fx=1 fwd
+  148 call orders.any /t.S/Stream ref=s n=2 status=0 server=1 upstream=0 msgs=1/3 fwd
+  149 orders.any ref=s idem=- fx=1 fwd+cut1resp
+  150 call orders.any /t.S/Stream ref=s n=3 status=rst server=1 upstream= msgs=1/1 fwd+cut1resp
+  ... 34 more records
+## record log
+  seq=1 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o1 idem=k1 body=a53a51d29818 fx=1 out=ok
+  seq=2 kind=hook ep=payments route=charge ref=o1 idem=k1 src=1 n=1 dup=0 out=200
+  seq=3 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o1 idem=k1 body=a53a51d29818 fx=0 out=replay orig=1
+  seq=4 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o2 idem=- body=40de3c245f07 fx=1 out=ok
+  seq=5 kind=hook ep=payments route=charge ref=o2 idem=- src=4 n=1 dup=0 out=200
+  seq=6 kind=req ep=payments route=get from=127.0.0.1 method=GET path=/v1/charges/ch_1 ref=ch_1 idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=7 kind=req ep=payments route=get from=127.0.0.1 method=GET path=/v1/charges/ch%202 ref=ch%202 idem=- body=55e3703709ec fx=0 out=ok
+  seq=8 kind=req ep=payments route=search from=127.0.0.1 method=GET path=/v1/search ref=a%20b idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=9 kind=req ep=payments route=refund from=127.0.0.1 method=POST path=/v1/refunds/x/y ref=o1 idem=- body=35408637bdce fx=1 out=ok
+  seq=10 kind=req ep=payments route=plain from=127.0.0.1 method=PUT path=/v1/plain ref=- idem=- body=2d711642b726 fx=1 out=ok
+  seq=11 kind=req ep=payments route=- from=127.0.0.1 method=GET path=/nope ref=- idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=12 kind=req ep=payments route=- from=127.0.0.1 method=HEAD path=/v1/search ref=- idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=13 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o3 idem=- body=5a9605086cff fx=1 out=ok
+  seq=14 kind=hook ep=payments route=charge ref=o3 idem=- src=13 n=1 dup=0 out=200
+  seq=15 kind=req ep=payments route=search from=127.0.0.1 method=GET path=/v1/search ref=one idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=16 kind=req ep=payments route=search from=127.0.0.1 method=GET path=/v1/search ref=two idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=17 kind=req ep=payments route=search from=127.0.0.1 method=GET path=/v1/search ref=old idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=18 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o4 idem=- body=24c35b0ccc16 fx=1 out=ok
+  seq=19 kind=hook ep=payments route=charge ref=o4 idem=- src=18 n=1 dup=0 out=200
+  seq=20 kind=req ep=payments route=search from=127.0.0.1 method=GET path=/v1/search ref=abs idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=21 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o5 idem=k5 body=6faf476078af fx=1 out=ok
+  seq=22 kind=hook ep=payments route=charge ref=o5 idem=k5 src=21 n=1 dup=0 out=200
+  seq=23 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o5 idem=k5 body=6faf476078af fx=0 out=replay orig=21
+  seq=24 kind=req ep=payments route=get from=127.0.0.1 method=GET path=/v1/charges/ch_9 ref=ch_9 idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=25 kind=req ep=payments route=- from=127.0.0.1 method=GET path=/zzz ref=- idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=26 kind=req ep=ledger route=add from=127.0.0.1 method=POST path=/ledger.Ledger/Add ref=l1 idem=- body=b9b0ef3b6d9f fx=1 out=ok
+  seq=27 kind=req ep=ledger route=deny from=127.0.0.1 method=POST path=/ledger.Ledger/Deny ref=l2 idem=- body=23ed384c95ef fx=1 out=ok
+  seq=28 kind=req ep=ledger route=- from=127.0.0.1 method=POST path=/ledger.Ledger/Nope ref=l3 idem=- body=f49b96a18197 fx=0 out=ok
+  seq=29 kind=req ep=ledger route=add from=127.0.0.1 method=POST path=/ledger.Ledger/Add ref=l4 idem=- body=753944ccfe72 fx=0 out=-+status14 rule=1
+  seq=30 kind=req ep=ledger route=add from=127.0.0.1 method=POST path=/ledger.Ledger/Add ref=l5 idem=- body=f1d2ef4492ae fx=1 out=ok+reset rule=2
+  seq=31 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o6 idem=k6 body=e9c55ff1c522 fx=0 out=-+status503 rule=3
+  seq=32 kind=req ep=payments route=search from=127.0.0.1 method=GET path=/v1/search ref=s idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=33 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o7 idem=k7 body=894255b9e505 fx=1 out=ok+status429 rule=4
+  seq=34 kind=hook ep=payments route=charge ref=o7 idem=k7 src=33 n=1 dup=0 out=200
+  seq=35 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o8 idem=- body=7d7974f8a1aa fx=1 out=ok+delay100 rule=5
+  seq=36 kind=hook ep=payments route=charge ref=o8 idem=- src=35 n=1 dup=0 out=200
+  seq=37 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o9 idem=- body=dca9d05790b3 fx=1 out=ok+drop rule=6
+  seq=38 kind=hook ep=payments route=charge ref=o9 idem=- src=37 n=1 dup=0 out=200
+  seq=39 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o10 idem=- body=0658ad298f5a fx=1 out=ok+reset rule=7
+  seq=40 kind=hook ep=payments route=charge ref=o10 idem=- src=39 n=1 dup=0 out=200
+  seq=41 kind=req ep=payments route=search from=127.0.0.1 method=GET path=/v1/search ref=e idem=- body=e3b0c44298fc fx=0 out=-+status500 rule=8
+  seq=42 kind=req ep=payments route=- from=127.0.0.1 method=GET path=/nope ref=- idem=- body=e3b0c44298fc fx=0 out=-+status500 rule=8
+  seq=43 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o11 idem=k11 body=71250f5fdca3 fx=0 out=-+delay50 rule=9
+  seq=44 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o12 idem=- body=22f7546fc6e6 fx=0 out=-+status503 rule=10
+  seq=45 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o13 idem=- body=0fb5adfd94c1 fx=1 out=ok
+  seq=46 kind=hook ep=payments route=charge ref=o13 idem=- src=45 n=1 dup=0 out=200
+  seq=47 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o14 idem=- body=3cf8dfd365a6 fx=1 out=ok
+  seq=48 kind=hook ep=payments route=charge ref=o14 idem=- src=47 n=1 dup=0 out=200
+  seq=49 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o15 idem=- body=9b92e9862e21 fx=1 out=ok
+  seq=50 kind=hook ep=payments route=charge ref=o15 idem=- src=49 n=1 dup=0 out=200
+  seq=51 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o16 idem=- body=cfa26650236e fx=1 out=ok
+  seq=52 kind=hook ep=payments route=charge ref=o16 idem=- src=51 n=1 dup=0 out=200
+  seq=53 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o17 idem=- body=82cb2ca0d3ea fx=0 out=-+status503 rule=10
+  seq=54 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o18 idem=- body=186e59910aa9 fx=1 out=ok
+  seq=55 kind=hook ep=payments route=charge ref=o18 idem=- src=54 n=1 dup=0 out=200
+  seq=56 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o19 idem=- body=6d74c5f21c9b fx=0 out=-+status503 rule=10
+  seq=57 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o20 idem=- body=29d503422108 fx=1 out=ok+drop rule=11
+  seq=58 kind=hook ep=payments route=charge ref=o20 idem=- src=57 n=1 dup=0 out=200
+  seq=59 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o21 idem=- body=572ee6617602 fx=1 out=ok+drop rule=12
+  seq=60 kind=hook ep=payments route=charge ref=o21 idem=- src=59 n=1 dup=0 out=200
+  seq=61 kind=req ep=payments route=get from=127.0.0.1 method=GET path=/v1/charges/ch_1 ref=ch_1 idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=62 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o22 idem=- body=e5cae42cdfcd fx=0 out=-+status503 rule=14
+  seq=63 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o23 idem=- body=7526a82efaf6 fx=1 out=ok+drop rule=15
+  seq=64 kind=hook ep=payments route=charge ref=o23 idem=- src=63 n=1 dup=0 out=200
+  seq=65 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o24 idem=- body=baac2e558f45 fx=1 out=ok+reset rule=16
+  seq=66 kind=hook ep=payments route=charge ref=o24 idem=- src=65 n=1 dup=0 out=200
+  seq=67 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o25 idem=k25 body=a12c2e2276ae fx=1 out=ok
+  ~ kind=hook ep=payments route=charge ref=o25 idem=k25 src=67 n=1 dup=1 out=200
+  ~ kind=hook ep=payments route=charge ref=o25 idem=k25 src=67 n=1 dup=1 out=200
+  seq=70 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o26 idem=- body=8ada4ff1bef2 fx=1 out=ok
+  seq=71 kind=hook ep=payments route=charge ref=o26 src=70 out=lost
+  seq=72 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o27 idem=- body=99cb1b56458e fx=1 out=ok
+  seq=73 kind=hook ep=payments route=charge ref=o27 idem=- src=72 n=1 dup=0 out=200
+  seq=74 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o28 idem=- body=584d6aa428d5 fx=1 out=ok
+  seq=75 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o29 idem=- body=d6f41dc7c2e7 fx=1 out=ok
+  seq=76 kind=hook ep=payments route=charge ref=o29 idem=- src=75 n=1 dup=0 out=200
+  seq=77 kind=hook ep=payments route=charge ref=o28 idem=- src=74 n=1 dup=0 out=200
+  seq=78 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o32 idem=- body=0509c30c7d47 fx=1 out=ok
+  seq=79 kind=hook ep=payments route=charge ref=o32 idem=- src=78 n=1 dup=0 out=200
+  seq=80 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=fail1 idem=- body=c2ed0f011040 fx=1 out=ok
+  seq=81 kind=hook ep=payments route=charge ref=fail1 idem=- src=80 n=1 dup=0 out=500
+  seq=82 kind=hook ep=payments route=charge ref=fail1 idem=- src=80 n=2 dup=0 out=500
+  seq=83 kind=hook ep=payments route=charge ref=fail1 src=80 out=gave-up
+  seq=84 kind=event ep=- route=cancelled ref=o2 fx=1
+  seq=85 kind=event ep=- route=cancelled ref=o%203%2Cx fx=1
+  seq=86 kind=event ep=- route=shipped ref=- fx=1
+  seq=87 kind=req ep=shop route=api from=127.0.0.1 method=GET path=/api ref=o40 idem=- body=e3b0c44298fc fx=1 out=fwd
+  seq=88 kind=req ep=shop route=any from=127.0.0.1 method=POST path=/api/x ref=o41 idem=- body=ba7816bf8f01 fx=1 out=fwd
+  seq=89 kind=req ep=shop route=any from=127.0.0.1 method=GET path=/gz ref=o42 idem=- body=e3b0c44298fc fx=1 out=fwd
+  seq=90 kind=req ep=shop route=any from=127.0.0.1 method=GET path=/gz ref=o43 idem=- body=e3b0c44298fc fx=1 out=fwd
+  seq=91 kind=req ep=shop route=any from=127.0.0.1 method=GET path=/chunked ref=o44 idem=- body=e3b0c44298fc fx=1 out=fwd
+  seq=92 kind=req ep=shop route=api from=127.0.0.1 method=GET path=/api ref=o45 idem=- body=e3b0c44298fc fx=1 out=fwd
+  seq=93 kind=req ep=shop route=api from=127.0.0.1 method=GET path=/api ref=o46 idem=- body=e3b0c44298fc fx=0 out=-+status502 rule=21
+  seq=94 kind=req ep=shop route=api from=127.0.0.1 method=GET path=/api ref=o47 idem=- body=e3b0c44298fc fx=1 out=fwd+drop rule=22
+  seq=95 kind=req ep=shop route=api from=127.0.0.1 method=GET path=/api ref=o48 idem=- body=e3b0c44298fc fx=1 out=fwd+reset rule=23
+  seq=96 kind=req ep=shop route=api from=127.0.0.1 method=GET path=/api ref=o49 idem=- body=e3b0c44298fc fx=0 out=-+delay100 rule=24
+  seq=97 kind=req ep=shop route=api from=127.0.0.1 method=GET path=/api ref=o50 idem=- body=e3b0c44298fc fx=1 out=fwd+status503 rule=25
+  seq=98 kind=req ep=shop route=any from=127.0.0.1 method=GET path=/slow ref=o51 idem=- body=e3b0c44298fc fx=1 out=fwd
+  seq=99 kind=req ep=shop2 route=any from=127.0.0.1 method=POST path=/x ref=- idem=- body=594e519ae499 fx=1 out=fwd
+  seq=100 kind=req ep=kv route=conn from=127.0.0.1 fx=1 out=fwd
+  seq=101 kind=req ep=kv route=conn from=127.0.0.1 fx=1 out=fwd+delay100 rule=26
+  seq=102 kind=req ep=kv route=conn from=127.0.0.1 fx=1 out=fwd+reset rule=27
+  seq=103 kind=req ep=kv route=conn from=127.0.0.1 fx=1 out=fwd+drop rule=28
+  seq=104 kind=req ep=kv route=conn from=127.0.0.1 fx=0 out=-+drop rule=29
+  seq=105 kind=req ep=kv route=conn from=127.0.0.1 fx=0 out=-+reset rule=30
+  seq=106 kind=req ep=kv route=conn from=127.0.0.1 fx=1 out=fwd+status500 rule=31
+  seq=107 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o1 idem=- body=651ac4bbf38c fx=1 out=fwd call=1
+  seq=108 kind=call ep=orders route=place path=/t.S/Unary ref=o1 call=1 req=107 status=0 server=1 upstream=0 msgs=1/1 out=fwd
+  seq=109 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Stream ref=s idem=- body=1fbda80b402a fx=1 out=fwd call=1
+  seq=110 kind=call ep=orders route=any path=/t.S/Stream ref=s call=1 req=109 status=0 server=1 upstream=0 msgs=1/3 out=fwd
+  seq=111 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Client ref=c1 idem=- body=4c31ec758541 fx=1 out=fwd call=1
+  seq=112 kind=call ep=orders route=any path=/t.S/Client ref=c1 call=1 req=111 status=0 server=1 upstream=0 msgs=3/1 out=fwd
+  seq=113 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Fail ref=f idem=- body=081f528bcfa5 fx=1 out=fwd call=1
+  seq=114 kind=call ep=orders route=any path=/t.S/Fail ref=f call=1 req=113 status=5 server=1 upstream=5 msgs=1/0 out=fwd
+  seq=115 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Nope ref=- idem=- body=- fx=1 out=fwd call=1
+  seq=116 kind=call ep=orders route=any path=/t.S/Nope ref=- call=1 req=115 status=12 server=1 upstream=12 msgs=0/0 out=fwd
+  seq=117 kind=req ep=orders2 route=any from=127.0.0.1 method=POST path=/t.S/Unary ref=- idem=- body=- fx=1 out=fwd call=1
+  seq=118 kind=call ep=orders2 route=any path=/t.S/Unary ref=- call=1 req=117 status=14 server=? upstream=- msgs=0/0 out=fwd
+  seq=119 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Slow ref=o3 idem=- body=0794d83584b8 fx=1 out=fwd call=1
+  seq=120 kind=call ep=orders route=any path=/t.S/Slow ref=o3 call=1 req=119 status=none server=? upstream=- msgs=1/0 out=fwd
+  seq=121 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o4 idem=- body=cd1ea33b7eb8 fx=0 out=-+status14 call=2 rule=32
+  seq=122 kind=call ep=orders route=place path=/t.S/Unary ref=o4 call=2 req=121 status=14 server=0 upstream=- msgs=0/0 out=-+status14
+  seq=123 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o5 idem=- body=b7048cfbf0c6 fx=0 out=-+drop call=3 rule=33
+  seq=124 kind=call ep=orders route=place path=/t.S/Unary ref=o5 call=3 req=123 status=none server=0 upstream=- msgs=0/0 out=-+drop
+  seq=125 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o6 idem=- body=550d0efd7140 fx=0 out=-+reset call=4 rule=34
+  seq=126 kind=call ep=orders route=place path=/t.S/Unary ref=o6 call=4 req=125 status=rst server=0 upstream=- msgs=0/0 out=-+reset
+  seq=127 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o7 idem=- body=b356db7f5766 fx=0 out=-+resetconn call=5 rule=35
+  seq=128 kind=call ep=orders route=place path=/t.S/Unary ref=o7 call=5 req=127 status=conn server=0 upstream=- msgs=0/0 out=-+resetconn
+  seq=129 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o8 idem=- body=17c9093011ed fx=0 out=-+delay100 call=6 rule=36
+  seq=130 kind=call ep=orders route=place path=/t.S/Unary ref=o8 call=6 req=129 status=14 server=0 upstream=- msgs=0/0 out=-+delay100
+  seq=131 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o9 idem=- body=61c96d551f70 fx=0 out=-+drop call=7 rule=37
+  seq=132 kind=call ep=orders route=place path=/t.S/Unary ref=o9 call=7 req=131 status=rst server=0 upstream=- msgs=0/0 out=-+drop
+  seq=133 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o10 idem=- body=b03efb193e48 fx=1 out=fwd+status10 call=8 rule=38
+  seq=134 kind=call ep=orders route=place path=/t.S/Unary ref=o10 call=8 req=133 status=10 server=1 upstream=0 msgs=1/0 out=fwd+status10
+  seq=135 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o11 idem=- body=d38892e70146 fx=1 out=fwd+drop call=9 rule=39
+  seq=136 kind=call ep=orders route=place path=/t.S/Unary ref=o11 call=9 req=135 status=none server=1 upstream=0 msgs=1/0 out=fwd+drop
+  seq=137 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o12 idem=- body=0b596b2f2c17 fx=1 out=fwd+drop call=10 rule=39
+  seq=138 kind=call ep=orders route=place path=/t.S/Unary ref=o12 call=10 req=137 status=rst server=1 upstream=0 msgs=1/0 out=fwd+drop
+  seq=139 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o13 idem=- body=8d7a6760c31b fx=1 out=fwd+delay100 call=11 rule=40
+  seq=140 kind=call ep=orders route=place path=/t.S/Unary ref=o13 call=11 req=139 status=0 server=1 upstream=0 msgs=1/1 out=fwd+delay100
+  seq=141 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o14 idem=- body=811cbb987414 fx=1 out=fwd+reset call=12 rule=41
+  seq=142 kind=call ep=orders route=place path=/t.S/Unary ref=o14 call=12 req=141 status=rst server=1 upstream=- msgs=1/0 out=fwd+reset
+  seq=143 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o15 idem=- body=2674ab143452 fx=1 out=fwd+resetconn call=13 rule=42
+  seq=144 kind=call ep=orders route=place path=/t.S/Unary ref=o15 call=13 req=143 status=conn server=1 upstream=- msgs=1/0 out=fwd+resetconn
+  seq=145 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o16 idem=- body=ffdb6a800fbe fx=0 out=-+status14 call=14 rule=43
+  seq=146 kind=call ep=orders route=place path=/t.S/Unary ref=o16 call=14 req=145 status=14 server=0 upstream=- msgs=0/0 out=-+status14
+  seq=147 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Stream ref=s idem=- body=1fbda80b402a fx=1 out=fwd call=2
+  seq=148 kind=call ep=orders route=any path=/t.S/Stream ref=s call=2 req=147 status=0 server=1 upstream=0 msgs=1/3 out=fwd
+  seq=149 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Stream ref=s idem=- body=1fbda80b402a fx=1 out=fwd+cut1resp call=3 rule=44
+  seq=150 kind=call ep=orders route=any path=/t.S/Stream ref=s call=3 req=149 status=rst server=1 upstream=- msgs=1/1 out=fwd+cut1resp
+  seq=151 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Stream ref=s idem=- body=1fbda80b402a fx=1 out=fwd+cut0resp call=4 rule=45
+  seq=152 kind=call ep=orders route=any path=/t.S/Stream ref=s call=4 req=151 status=rst server=1 upstream=- msgs=1/0 out=fwd+cut0resp
+  seq=153 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Stream ref=s idem=- body=1fbda80b402a fx=1 out=fwd+hold1resp call=5 rule=46
+  seq=154 kind=call ep=orders route=any path=/t.S/Stream ref=s call=5 req=153 status=none server=1 upstream=- msgs=1/1 out=fwd+hold1resp
+  seq=155 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Stream ref=s idem=- body=1fbda80b402a fx=1 out=fwd+hold1resp call=6 rule=46
+  seq=156 kind=call ep=orders route=any path=/t.S/Stream ref=s call=6 req=155 status=0 server=1 upstream=0 msgs=1/3 out=fwd+hold1resp
+  seq=157 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Client ref=c1 idem=- body=4c31ec758541 fx=1 out=fwd+cut1req call=2 rule=47
+  seq=158 kind=call ep=orders route=any path=/t.S/Client ref=c1 call=2 req=157 status=rst server=? upstream=- msgs=1/0 out=fwd+cut1req
+  seq=159 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Client ref=c1 idem=- body=4c31ec758541 fx=1 out=fwd+hold1req call=3 rule=48
+  seq=160 kind=call ep=orders route=any path=/t.S/Client ref=c1 call=3 req=159 status=0 server=1 upstream=0 msgs=3/1 out=fwd+hold1req
+  seq=161 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o17 idem=- body=4e4ae43413a9 fx=1 out=fwd call=15
+  seq=162 kind=call ep=orders route=place path=/t.S/Unary ref=o17 call=15 req=161 status=0 server=1 upstream=0 msgs=1/1 out=fwd
+  seq=163 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Stream ref=s idem=- body=1fbda80b402a fx=0 out=-+status13 call=7 rule=49
+  seq=164 kind=call ep=orders route=any path=/t.S/Stream ref=s call=7 req=163 status=13 server=0 upstream=- msgs=0/0 out=-+status13
+  seq=165 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Count ref=n1 idem=- body=23a4e97ee6ab fx=1 out=fwd call=1
+  seq=166 kind=call ep=orders route=any path=/t.S/Count ref=n1 call=1 req=165 status=0 server=1 upstream=0 msgs=1/1 out=fwd
+  seq=167 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Count ref=n2 idem=- body=8d1750d2abba fx=0 out=-+status13 call=2 rule=50
+  seq=168 kind=call ep=orders route=any path=/t.S/Count ref=n2 call=2 req=167 status=13 server=0 upstream=- msgs=0/0 out=-+status13
+  seq=169 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Count ref=n3 idem=- body=4efccb3df1be fx=0 out=-+status13 call=3 rule=50
+  seq=170 kind=call ep=orders route=any path=/t.S/Count ref=n3 call=3 req=169 status=13 server=0 upstream=- msgs=0/0 out=-+status13
+  seq=171 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Count ref=n4 idem=- body=43ed4d33d97a fx=1 out=fwd call=4
+  seq=172 kind=call ep=orders route=any path=/t.S/Count ref=n4 call=4 req=171 status=0 server=1 upstream=0 msgs=1/1 out=fwd
+  seq=173 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=p1 idem=- body=3ead3e039407 fx=1 out=fwd call=16
+  seq=174 kind=call ep=orders route=place path=/t.S/Unary ref=p1 call=16 req=173 status=0 server=1 upstream=0 msgs=1/1 out=fwd
+  seq=175 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=p2 idem=- body=c24dc67f3ac2 fx=1 out=fwd call=17
+  seq=176 kind=call ep=orders route=place path=/t.S/Unary ref=p2 call=17 req=175 status=0 server=1 upstream=0 msgs=1/1 out=fwd
+  seq=177 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=p3 idem=- body=4d760ae19f24 fx=0 out=-+status14 call=18 rule=51
+  seq=178 kind=call ep=orders route=place path=/t.S/Unary ref=p3 call=18 req=177 status=14 server=0 upstream=- msgs=0/0 out=-+status14
+  seq=179 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=p4 idem=- body=a127df067c99 fx=0 out=-+status14 call=19 rule=51
+  seq=180 kind=call ep=orders route=place path=/t.S/Unary ref=p4 call=19 req=179 status=14 server=0 upstream=- msgs=0/0 out=-+status14
+  seq=181 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=p5 idem=- body=e71bd9beb1fc fx=0 out=-+status14 call=20 rule=51
+  seq=182 kind=call ep=orders route=place path=/t.S/Unary ref=p5 call=20 req=181 status=14 server=0 upstream=- msgs=0/0 out=-+status14
+  seq=183 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=p6 idem=- body=83f7e716367a fx=0 out=-+status14 call=21 rule=51
+  seq=184 kind=call ep=orders route=place path=/t.S/Unary ref=p6 call=21 req=183 status=14 server=0 upstream=- msgs=0/0 out=-+status14
+## checks on a written log
+$ check at-most-once payments.charge: HYDO-ORACLE: ERROR payments.charge: the world log carried across the power cut was too long (more than 3000 bytes); cannot decide rc=2
+$ check at-most-once payments.charge --by idem: HYDO-ORACLE: ERROR payments.charge: the world log carried across the power cut was too long (more than 3000 bytes); cannot decide rc=2
+$ check effect-for-acked payments.charge --ref o{id} --acked <dir>/acked2: HYDO-ORACLE: ERROR payments.charge: the world log carried across the power cut was too long (more than 3000 bytes); cannot decide rc=2
+$ check none-after payments.charge --after event:cancelled: HYDO-ORACLE: ERROR payments.charge: the world log carried across the power cut was too long (more than 3000 bytes); cannot decide rc=2
+$ check exactly-once payments.charge --by idem --ref o{id} --acked <dir>/acked2: HYDO-ORACLE: ERROR payments.charge: the world log carried across the power cut was too long (more than 3000 bytes); cannot decide rc=2
+$ check count payments.charge: HYDO-ORACLE: ERROR payments.charge: the world log carried across the power cut was too long (more than 3000 bytes); cannot decide rc=2
+$ check count payments.charge (no log): HYDO-ORACLE: ERROR payments.charge: no world log (open <dir>/missing: no such file or directory) rc=2
+## power cut: a webhook pending, the world dumped
+$ ctl on 52 payments.charge@0-1:late=3000: ok rc=0
+charge o30: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 40 | Connection: close || body={"id":"ch_185","order":"o30","amount":3}
+$ ctl dump: w:1,e,payments,charge,o1,k1 / w:4,e,payments,charge,o2,- / w:9,e,payments,refund,o1,- / w:10,e,payments,plain,-,- / w:13,e,payments,charge,o3,- / w:18,e,payments,charge,o4,- / w:21,e,payments,charge,o5,k5 / w:26,e,ledger,add,l1,- / w:27,e,ledger,deny,l2,- / w:30,e,ledger,add,l5,- / w:33,e,payments,charge,o7,k7 / w:35,e,payments,charge,o8,- / w:37,e,payments,charge,o9,- / w:39,e,payments,charge,o10,- / w:45,e,payments,charge,o13,- / w:47,e,payments,charge,o14,- / w:49,e,payments,charge,o15,- / w:51,e,payments,charge,o16,- / w:54,e,payments,charge,o18,- / w:57,e,payments,charge,o20,- / w:59,e,payments,charge,o21,- / w:63,e,payments,charge,o23,- / w:65,e,payments,charge,o24,- / w:67,e,payments,charge,o25,k25 / w:70,e,payments,charge,o26,- / w:72,e,payments,charge,o27,- / w:74,e,payments,charge,o28,- / w:75,e,payments,charge,o29,- / w:78,e,payments,charge,o32,- / w:80,e,payments,charge,fail1,- / w:84,v,-,cancelled,o2,- / w:85,v,-,cancelled,o%203%2Cx,- / w:86,v,-,shipped,-,- / w:87,e,shop,api,o40,- / w:88,e,shop,any,o41,- / w:89,e,shop,any,o42,- / w:90,e,shop,any,o43,- / w:91,e,shop,any,o44,- / w:92,e,shop,api,o45,- / w:94,e,shop,api,o47,- / w:95,e,shop,api,o48,- / w:97,e,shop,api,o50,- / w:98,e,shop,any,o51,- / w:99,e,shop2,any,-,- / w:100,e,kv,conn,-,- / w:101,e,kv,conn,-,- / w:102,e,kv,conn,-,- / w:103,e,kv,conn,-,- / w:106,e,kv,conn,-,- / w:107,e,orders,place,o1,- / w:109,e,orders,any,s,- / w:111,e,orders,any,c1,- / w:113,e,orders,any,f,- / w:115,e,orders,any,-,- / w:117,e,orders2,any,-,- / w:119,e,orders,any,o3,- / w:133,e,orders,place,o10,- / w:135,e,orders,place,o11,- / w:137,e,orders,place,o12,- / w:139,e,orders,place,o13,- / w:141,e,orders,place,o14,- / w:143,e,orders,place,o15,- / w:147,e,orders,any,s,- / w:149,e,orders,any,s,- / w:151,e,orders,any,s,- / w:153,e,orders,any,s,- / w:155,e,orders,any,s,- / w:157,e,orders,any,c1,- / w:159,e,orders,any,c1,- / w:161,e,orders,place,o17,- / w:165,e,orders,any,n1,- / w:171,e,orders,any,n4,- / w:173,e,orders,place,p1,- / w:175,e,orders,place,p2,- / w:185,e,payments,charge,o30,k30 / w:185,p,payments,charge,o30,k30 rc=0
+charge o31 after the cut (never answered):  [timeout]
+## record log at the cut
+  seq=1 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o1 idem=k1 body=a53a51d29818 fx=1 out=ok
+  seq=2 kind=hook ep=payments route=charge ref=o1 idem=k1 src=1 n=1 dup=0 out=200
+  seq=3 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o1 idem=k1 body=a53a51d29818 fx=0 out=replay orig=1
+  seq=4 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o2 idem=- body=40de3c245f07 fx=1 out=ok
+  seq=5 kind=hook ep=payments route=charge ref=o2 idem=- src=4 n=1 dup=0 out=200
+  seq=6 kind=req ep=payments route=get from=127.0.0.1 method=GET path=/v1/charges/ch_1 ref=ch_1 idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=7 kind=req ep=payments route=get from=127.0.0.1 method=GET path=/v1/charges/ch%202 ref=ch%202 idem=- body=55e3703709ec fx=0 out=ok
+  seq=8 kind=req ep=payments route=search from=127.0.0.1 method=GET path=/v1/search ref=a%20b idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=9 kind=req ep=payments route=refund from=127.0.0.1 method=POST path=/v1/refunds/x/y ref=o1 idem=- body=35408637bdce fx=1 out=ok
+  seq=10 kind=req ep=payments route=plain from=127.0.0.1 method=PUT path=/v1/plain ref=- idem=- body=2d711642b726 fx=1 out=ok
+  seq=11 kind=req ep=payments route=- from=127.0.0.1 method=GET path=/nope ref=- idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=12 kind=req ep=payments route=- from=127.0.0.1 method=HEAD path=/v1/search ref=- idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=13 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o3 idem=- body=5a9605086cff fx=1 out=ok
+  seq=14 kind=hook ep=payments route=charge ref=o3 idem=- src=13 n=1 dup=0 out=200
+  seq=15 kind=req ep=payments route=search from=127.0.0.1 method=GET path=/v1/search ref=one idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=16 kind=req ep=payments route=search from=127.0.0.1 method=GET path=/v1/search ref=two idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=17 kind=req ep=payments route=search from=127.0.0.1 method=GET path=/v1/search ref=old idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=18 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o4 idem=- body=24c35b0ccc16 fx=1 out=ok
+  seq=19 kind=hook ep=payments route=charge ref=o4 idem=- src=18 n=1 dup=0 out=200
+  seq=20 kind=req ep=payments route=search from=127.0.0.1 method=GET path=/v1/search ref=abs idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=21 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o5 idem=k5 body=6faf476078af fx=1 out=ok
+  seq=22 kind=hook ep=payments route=charge ref=o5 idem=k5 src=21 n=1 dup=0 out=200
+  seq=23 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o5 idem=k5 body=6faf476078af fx=0 out=replay orig=21
+  seq=24 kind=req ep=payments route=get from=127.0.0.1 method=GET path=/v1/charges/ch_9 ref=ch_9 idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=25 kind=req ep=payments route=- from=127.0.0.1 method=GET path=/zzz ref=- idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=26 kind=req ep=ledger route=add from=127.0.0.1 method=POST path=/ledger.Ledger/Add ref=l1 idem=- body=b9b0ef3b6d9f fx=1 out=ok
+  seq=27 kind=req ep=ledger route=deny from=127.0.0.1 method=POST path=/ledger.Ledger/Deny ref=l2 idem=- body=23ed384c95ef fx=1 out=ok
+  seq=28 kind=req ep=ledger route=- from=127.0.0.1 method=POST path=/ledger.Ledger/Nope ref=l3 idem=- body=f49b96a18197 fx=0 out=ok
+  seq=29 kind=req ep=ledger route=add from=127.0.0.1 method=POST path=/ledger.Ledger/Add ref=l4 idem=- body=753944ccfe72 fx=0 out=-+status14 rule=1
+  seq=30 kind=req ep=ledger route=add from=127.0.0.1 method=POST path=/ledger.Ledger/Add ref=l5 idem=- body=f1d2ef4492ae fx=1 out=ok+reset rule=2
+  seq=31 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o6 idem=k6 body=e9c55ff1c522 fx=0 out=-+status503 rule=3
+  seq=32 kind=req ep=payments route=search from=127.0.0.1 method=GET path=/v1/search ref=s idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=33 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o7 idem=k7 body=894255b9e505 fx=1 out=ok+status429 rule=4
+  seq=34 kind=hook ep=payments route=charge ref=o7 idem=k7 src=33 n=1 dup=0 out=200
+  seq=35 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o8 idem=- body=7d7974f8a1aa fx=1 out=ok+delay100 rule=5
+  seq=36 kind=hook ep=payments route=charge ref=o8 idem=- src=35 n=1 dup=0 out=200
+  seq=37 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o9 idem=- body=dca9d05790b3 fx=1 out=ok+drop rule=6
+  seq=38 kind=hook ep=payments route=charge ref=o9 idem=- src=37 n=1 dup=0 out=200
+  seq=39 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o10 idem=- body=0658ad298f5a fx=1 out=ok+reset rule=7
+  seq=40 kind=hook ep=payments route=charge ref=o10 idem=- src=39 n=1 dup=0 out=200
+  seq=41 kind=req ep=payments route=search from=127.0.0.1 method=GET path=/v1/search ref=e idem=- body=e3b0c44298fc fx=0 out=-+status500 rule=8
+  seq=42 kind=req ep=payments route=- from=127.0.0.1 method=GET path=/nope ref=- idem=- body=e3b0c44298fc fx=0 out=-+status500 rule=8
+  seq=43 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o11 idem=k11 body=71250f5fdca3 fx=0 out=-+delay50 rule=9
+  seq=44 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o12 idem=- body=22f7546fc6e6 fx=0 out=-+status503 rule=10
+  seq=45 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o13 idem=- body=0fb5adfd94c1 fx=1 out=ok
+  seq=46 kind=hook ep=payments route=charge ref=o13 idem=- src=45 n=1 dup=0 out=200
+  seq=47 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o14 idem=- body=3cf8dfd365a6 fx=1 out=ok
+  seq=48 kind=hook ep=payments route=charge ref=o14 idem=- src=47 n=1 dup=0 out=200
+  seq=49 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o15 idem=- body=9b92e9862e21 fx=1 out=ok
+  seq=50 kind=hook ep=payments route=charge ref=o15 idem=- src=49 n=1 dup=0 out=200
+  seq=51 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o16 idem=- body=cfa26650236e fx=1 out=ok
+  seq=52 kind=hook ep=payments route=charge ref=o16 idem=- src=51 n=1 dup=0 out=200
+  seq=53 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o17 idem=- body=82cb2ca0d3ea fx=0 out=-+status503 rule=10
+  seq=54 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o18 idem=- body=186e59910aa9 fx=1 out=ok
+  seq=55 kind=hook ep=payments route=charge ref=o18 idem=- src=54 n=1 dup=0 out=200
+  seq=56 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o19 idem=- body=6d74c5f21c9b fx=0 out=-+status503 rule=10
+  seq=57 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o20 idem=- body=29d503422108 fx=1 out=ok+drop rule=11
+  seq=58 kind=hook ep=payments route=charge ref=o20 idem=- src=57 n=1 dup=0 out=200
+  seq=59 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o21 idem=- body=572ee6617602 fx=1 out=ok+drop rule=12
+  seq=60 kind=hook ep=payments route=charge ref=o21 idem=- src=59 n=1 dup=0 out=200
+  seq=61 kind=req ep=payments route=get from=127.0.0.1 method=GET path=/v1/charges/ch_1 ref=ch_1 idem=- body=e3b0c44298fc fx=0 out=ok
+  seq=62 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o22 idem=- body=e5cae42cdfcd fx=0 out=-+status503 rule=14
+  seq=63 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o23 idem=- body=7526a82efaf6 fx=1 out=ok+drop rule=15
+  seq=64 kind=hook ep=payments route=charge ref=o23 idem=- src=63 n=1 dup=0 out=200
+  seq=65 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o24 idem=- body=baac2e558f45 fx=1 out=ok+reset rule=16
+  seq=66 kind=hook ep=payments route=charge ref=o24 idem=- src=65 n=1 dup=0 out=200
+  seq=67 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o25 idem=k25 body=a12c2e2276ae fx=1 out=ok
+  ~ kind=hook ep=payments route=charge ref=o25 idem=k25 src=67 n=1 dup=1 out=200
+  ~ kind=hook ep=payments route=charge ref=o25 idem=k25 src=67 n=1 dup=1 out=200
+  seq=70 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o26 idem=- body=8ada4ff1bef2 fx=1 out=ok
+  seq=71 kind=hook ep=payments route=charge ref=o26 src=70 out=lost
+  seq=72 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o27 idem=- body=99cb1b56458e fx=1 out=ok
+  seq=73 kind=hook ep=payments route=charge ref=o27 idem=- src=72 n=1 dup=0 out=200
+  seq=74 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o28 idem=- body=584d6aa428d5 fx=1 out=ok
+  seq=75 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o29 idem=- body=d6f41dc7c2e7 fx=1 out=ok
+  seq=76 kind=hook ep=payments route=charge ref=o29 idem=- src=75 n=1 dup=0 out=200
+  seq=77 kind=hook ep=payments route=charge ref=o28 idem=- src=74 n=1 dup=0 out=200
+  seq=78 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o32 idem=- body=0509c30c7d47 fx=1 out=ok
+  seq=79 kind=hook ep=payments route=charge ref=o32 idem=- src=78 n=1 dup=0 out=200
+  seq=80 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=fail1 idem=- body=c2ed0f011040 fx=1 out=ok
+  seq=81 kind=hook ep=payments route=charge ref=fail1 idem=- src=80 n=1 dup=0 out=500
+  seq=82 kind=hook ep=payments route=charge ref=fail1 idem=- src=80 n=2 dup=0 out=500
+  seq=83 kind=hook ep=payments route=charge ref=fail1 src=80 out=gave-up
+  seq=84 kind=event ep=- route=cancelled ref=o2 fx=1
+  seq=85 kind=event ep=- route=cancelled ref=o%203%2Cx fx=1
+  seq=86 kind=event ep=- route=shipped ref=- fx=1
+  seq=87 kind=req ep=shop route=api from=127.0.0.1 method=GET path=/api ref=o40 idem=- body=e3b0c44298fc fx=1 out=fwd
+  seq=88 kind=req ep=shop route=any from=127.0.0.1 method=POST path=/api/x ref=o41 idem=- body=ba7816bf8f01 fx=1 out=fwd
+  seq=89 kind=req ep=shop route=any from=127.0.0.1 method=GET path=/gz ref=o42 idem=- body=e3b0c44298fc fx=1 out=fwd
+  seq=90 kind=req ep=shop route=any from=127.0.0.1 method=GET path=/gz ref=o43 idem=- body=e3b0c44298fc fx=1 out=fwd
+  seq=91 kind=req ep=shop route=any from=127.0.0.1 method=GET path=/chunked ref=o44 idem=- body=e3b0c44298fc fx=1 out=fwd
+  seq=92 kind=req ep=shop route=api from=127.0.0.1 method=GET path=/api ref=o45 idem=- body=e3b0c44298fc fx=1 out=fwd
+  seq=93 kind=req ep=shop route=api from=127.0.0.1 method=GET path=/api ref=o46 idem=- body=e3b0c44298fc fx=0 out=-+status502 rule=21
+  seq=94 kind=req ep=shop route=api from=127.0.0.1 method=GET path=/api ref=o47 idem=- body=e3b0c44298fc fx=1 out=fwd+drop rule=22
+  seq=95 kind=req ep=shop route=api from=127.0.0.1 method=GET path=/api ref=o48 idem=- body=e3b0c44298fc fx=1 out=fwd+reset rule=23
+  seq=96 kind=req ep=shop route=api from=127.0.0.1 method=GET path=/api ref=o49 idem=- body=e3b0c44298fc fx=0 out=-+delay100 rule=24
+  seq=97 kind=req ep=shop route=api from=127.0.0.1 method=GET path=/api ref=o50 idem=- body=e3b0c44298fc fx=1 out=fwd+status503 rule=25
+  seq=98 kind=req ep=shop route=any from=127.0.0.1 method=GET path=/slow ref=o51 idem=- body=e3b0c44298fc fx=1 out=fwd
+  seq=99 kind=req ep=shop2 route=any from=127.0.0.1 method=POST path=/x ref=- idem=- body=594e519ae499 fx=1 out=fwd
+  seq=100 kind=req ep=kv route=conn from=127.0.0.1 fx=1 out=fwd
+  seq=101 kind=req ep=kv route=conn from=127.0.0.1 fx=1 out=fwd+delay100 rule=26
+  seq=102 kind=req ep=kv route=conn from=127.0.0.1 fx=1 out=fwd+reset rule=27
+  seq=103 kind=req ep=kv route=conn from=127.0.0.1 fx=1 out=fwd+drop rule=28
+  seq=104 kind=req ep=kv route=conn from=127.0.0.1 fx=0 out=-+drop rule=29
+  seq=105 kind=req ep=kv route=conn from=127.0.0.1 fx=0 out=-+reset rule=30
+  seq=106 kind=req ep=kv route=conn from=127.0.0.1 fx=1 out=fwd+status500 rule=31
+  seq=107 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o1 idem=- body=651ac4bbf38c fx=1 out=fwd call=1
+  seq=108 kind=call ep=orders route=place path=/t.S/Unary ref=o1 call=1 req=107 status=0 server=1 upstream=0 msgs=1/1 out=fwd
+  seq=109 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Stream ref=s idem=- body=1fbda80b402a fx=1 out=fwd call=1
+  seq=110 kind=call ep=orders route=any path=/t.S/Stream ref=s call=1 req=109 status=0 server=1 upstream=0 msgs=1/3 out=fwd
+  seq=111 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Client ref=c1 idem=- body=4c31ec758541 fx=1 out=fwd call=1
+  seq=112 kind=call ep=orders route=any path=/t.S/Client ref=c1 call=1 req=111 status=0 server=1 upstream=0 msgs=3/1 out=fwd
+  seq=113 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Fail ref=f idem=- body=081f528bcfa5 fx=1 out=fwd call=1
+  seq=114 kind=call ep=orders route=any path=/t.S/Fail ref=f call=1 req=113 status=5 server=1 upstream=5 msgs=1/0 out=fwd
+  seq=115 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Nope ref=- idem=- body=- fx=1 out=fwd call=1
+  seq=116 kind=call ep=orders route=any path=/t.S/Nope ref=- call=1 req=115 status=12 server=1 upstream=12 msgs=0/0 out=fwd
+  seq=117 kind=req ep=orders2 route=any from=127.0.0.1 method=POST path=/t.S/Unary ref=- idem=- body=- fx=1 out=fwd call=1
+  seq=118 kind=call ep=orders2 route=any path=/t.S/Unary ref=- call=1 req=117 status=14 server=? upstream=- msgs=0/0 out=fwd
+  seq=119 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Slow ref=o3 idem=- body=0794d83584b8 fx=1 out=fwd call=1
+  seq=120 kind=call ep=orders route=any path=/t.S/Slow ref=o3 call=1 req=119 status=none server=? upstream=- msgs=1/0 out=fwd
+  seq=121 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o4 idem=- body=cd1ea33b7eb8 fx=0 out=-+status14 call=2 rule=32
+  seq=122 kind=call ep=orders route=place path=/t.S/Unary ref=o4 call=2 req=121 status=14 server=0 upstream=- msgs=0/0 out=-+status14
+  seq=123 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o5 idem=- body=b7048cfbf0c6 fx=0 out=-+drop call=3 rule=33
+  seq=124 kind=call ep=orders route=place path=/t.S/Unary ref=o5 call=3 req=123 status=none server=0 upstream=- msgs=0/0 out=-+drop
+  seq=125 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o6 idem=- body=550d0efd7140 fx=0 out=-+reset call=4 rule=34
+  seq=126 kind=call ep=orders route=place path=/t.S/Unary ref=o6 call=4 req=125 status=rst server=0 upstream=- msgs=0/0 out=-+reset
+  seq=127 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o7 idem=- body=b356db7f5766 fx=0 out=-+resetconn call=5 rule=35
+  seq=128 kind=call ep=orders route=place path=/t.S/Unary ref=o7 call=5 req=127 status=conn server=0 upstream=- msgs=0/0 out=-+resetconn
+  seq=129 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o8 idem=- body=17c9093011ed fx=0 out=-+delay100 call=6 rule=36
+  seq=130 kind=call ep=orders route=place path=/t.S/Unary ref=o8 call=6 req=129 status=14 server=0 upstream=- msgs=0/0 out=-+delay100
+  seq=131 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o9 idem=- body=61c96d551f70 fx=0 out=-+drop call=7 rule=37
+  seq=132 kind=call ep=orders route=place path=/t.S/Unary ref=o9 call=7 req=131 status=rst server=0 upstream=- msgs=0/0 out=-+drop
+  seq=133 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o10 idem=- body=b03efb193e48 fx=1 out=fwd+status10 call=8 rule=38
+  seq=134 kind=call ep=orders route=place path=/t.S/Unary ref=o10 call=8 req=133 status=10 server=1 upstream=0 msgs=1/0 out=fwd+status10
+  seq=135 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o11 idem=- body=d38892e70146 fx=1 out=fwd+drop call=9 rule=39
+  seq=136 kind=call ep=orders route=place path=/t.S/Unary ref=o11 call=9 req=135 status=none server=1 upstream=0 msgs=1/0 out=fwd+drop
+  seq=137 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o12 idem=- body=0b596b2f2c17 fx=1 out=fwd+drop call=10 rule=39
+  seq=138 kind=call ep=orders route=place path=/t.S/Unary ref=o12 call=10 req=137 status=rst server=1 upstream=0 msgs=1/0 out=fwd+drop
+  seq=139 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o13 idem=- body=8d7a6760c31b fx=1 out=fwd+delay100 call=11 rule=40
+  seq=140 kind=call ep=orders route=place path=/t.S/Unary ref=o13 call=11 req=139 status=0 server=1 upstream=0 msgs=1/1 out=fwd+delay100
+  seq=141 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o14 idem=- body=811cbb987414 fx=1 out=fwd+reset call=12 rule=41
+  seq=142 kind=call ep=orders route=place path=/t.S/Unary ref=o14 call=12 req=141 status=rst server=1 upstream=- msgs=1/0 out=fwd+reset
+  seq=143 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o15 idem=- body=2674ab143452 fx=1 out=fwd+resetconn call=13 rule=42
+  seq=144 kind=call ep=orders route=place path=/t.S/Unary ref=o15 call=13 req=143 status=conn server=1 upstream=- msgs=1/0 out=fwd+resetconn
+  seq=145 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o16 idem=- body=ffdb6a800fbe fx=0 out=-+status14 call=14 rule=43
+  seq=146 kind=call ep=orders route=place path=/t.S/Unary ref=o16 call=14 req=145 status=14 server=0 upstream=- msgs=0/0 out=-+status14
+  seq=147 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Stream ref=s idem=- body=1fbda80b402a fx=1 out=fwd call=2
+  seq=148 kind=call ep=orders route=any path=/t.S/Stream ref=s call=2 req=147 status=0 server=1 upstream=0 msgs=1/3 out=fwd
+  seq=149 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Stream ref=s idem=- body=1fbda80b402a fx=1 out=fwd+cut1resp call=3 rule=44
+  seq=150 kind=call ep=orders route=any path=/t.S/Stream ref=s call=3 req=149 status=rst server=1 upstream=- msgs=1/1 out=fwd+cut1resp
+  seq=151 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Stream ref=s idem=- body=1fbda80b402a fx=1 out=fwd+cut0resp call=4 rule=45
+  seq=152 kind=call ep=orders route=any path=/t.S/Stream ref=s call=4 req=151 status=rst server=1 upstream=- msgs=1/0 out=fwd+cut0resp
+  seq=153 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Stream ref=s idem=- body=1fbda80b402a fx=1 out=fwd+hold1resp call=5 rule=46
+  seq=154 kind=call ep=orders route=any path=/t.S/Stream ref=s call=5 req=153 status=none server=1 upstream=- msgs=1/1 out=fwd+hold1resp
+  seq=155 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Stream ref=s idem=- body=1fbda80b402a fx=1 out=fwd+hold1resp call=6 rule=46
+  seq=156 kind=call ep=orders route=any path=/t.S/Stream ref=s call=6 req=155 status=0 server=1 upstream=0 msgs=1/3 out=fwd+hold1resp
+  seq=157 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Client ref=c1 idem=- body=4c31ec758541 fx=1 out=fwd+cut1req call=2 rule=47
+  seq=158 kind=call ep=orders route=any path=/t.S/Client ref=c1 call=2 req=157 status=rst server=? upstream=- msgs=1/0 out=fwd+cut1req
+  seq=159 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Client ref=c1 idem=- body=4c31ec758541 fx=1 out=fwd+hold1req call=3 rule=48
+  seq=160 kind=call ep=orders route=any path=/t.S/Client ref=c1 call=3 req=159 status=0 server=1 upstream=0 msgs=3/1 out=fwd+hold1req
+  seq=161 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=o17 idem=- body=4e4ae43413a9 fx=1 out=fwd call=15
+  seq=162 kind=call ep=orders route=place path=/t.S/Unary ref=o17 call=15 req=161 status=0 server=1 upstream=0 msgs=1/1 out=fwd
+  seq=163 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Stream ref=s idem=- body=1fbda80b402a fx=0 out=-+status13 call=7 rule=49
+  seq=164 kind=call ep=orders route=any path=/t.S/Stream ref=s call=7 req=163 status=13 server=0 upstream=- msgs=0/0 out=-+status13
+  seq=165 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Count ref=n1 idem=- body=23a4e97ee6ab fx=1 out=fwd call=1
+  seq=166 kind=call ep=orders route=any path=/t.S/Count ref=n1 call=1 req=165 status=0 server=1 upstream=0 msgs=1/1 out=fwd
+  seq=167 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Count ref=n2 idem=- body=8d1750d2abba fx=0 out=-+status13 call=2 rule=50
+  seq=168 kind=call ep=orders route=any path=/t.S/Count ref=n2 call=2 req=167 status=13 server=0 upstream=- msgs=0/0 out=-+status13
+  seq=169 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Count ref=n3 idem=- body=4efccb3df1be fx=0 out=-+status13 call=3 rule=50
+  seq=170 kind=call ep=orders route=any path=/t.S/Count ref=n3 call=3 req=169 status=13 server=0 upstream=- msgs=0/0 out=-+status13
+  seq=171 kind=req ep=orders route=any from=127.0.0.1 method=POST path=/t.S/Count ref=n4 idem=- body=43ed4d33d97a fx=1 out=fwd call=4
+  seq=172 kind=call ep=orders route=any path=/t.S/Count ref=n4 call=4 req=171 status=0 server=1 upstream=0 msgs=1/1 out=fwd
+  seq=173 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=p1 idem=- body=3ead3e039407 fx=1 out=fwd call=16
+  seq=174 kind=call ep=orders route=place path=/t.S/Unary ref=p1 call=16 req=173 status=0 server=1 upstream=0 msgs=1/1 out=fwd
+  seq=175 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=p2 idem=- body=c24dc67f3ac2 fx=1 out=fwd call=17
+  seq=176 kind=call ep=orders route=place path=/t.S/Unary ref=p2 call=17 req=175 status=0 server=1 upstream=0 msgs=1/1 out=fwd
+  seq=177 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=p3 idem=- body=4d760ae19f24 fx=0 out=-+status14 call=18 rule=51
+  seq=178 kind=call ep=orders route=place path=/t.S/Unary ref=p3 call=18 req=177 status=14 server=0 upstream=- msgs=0/0 out=-+status14
+  seq=179 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=p4 idem=- body=a127df067c99 fx=0 out=-+status14 call=19 rule=51
+  seq=180 kind=call ep=orders route=place path=/t.S/Unary ref=p4 call=19 req=179 status=14 server=0 upstream=- msgs=0/0 out=-+status14
+  seq=181 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=p5 idem=- body=e71bd9beb1fc fx=0 out=-+status14 call=20 rule=51
+  seq=182 kind=call ep=orders route=place path=/t.S/Unary ref=p5 call=20 req=181 status=14 server=0 upstream=- msgs=0/0 out=-+status14
+  seq=183 kind=req ep=orders route=place from=127.0.0.1 method=POST path=/t.S/Unary ref=p6 idem=- body=83f7e716367a fx=0 out=-+status14 call=21 rule=51
+  seq=184 kind=call ep=orders route=place path=/t.S/Unary ref=p6 call=21 req=183 status=14 server=0 upstream=- msgs=0/0 out=-+status14
+  seq=185 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o30 idem=k30 body=3a5409592130 fx=1 out=ok
+## the world's stderr
+  hydo-world: fake ledger grpc on 127.0.0.1:38602
+  hydo-world: fake payments http on 127.0.0.1:38601
+  hydo-world: proxy kv tcp on 127.0.0.1:38604 -> 127.0.0.1:38612
+  hydo-world: proxy orders grpc on 127.0.0.1:38605
+  hydo-world: proxy orders2 grpc on 127.0.0.1:38606
+  hydo-world: proxy shop http on 127.0.0.1:38603
+  hydo-world: proxy shop2 http on 127.0.0.1:38607
+## the recovery world
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 71 | Content-Type: application/json | X-Sig: s-185 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o30","charge":"ch_185","key":"k30"} -> 200
+charge o1 k1 again (remembered): HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 40 | Connection: close || body={"id":"ch_1","order":"o1","amount":12.5}
+$ check at-most-once payments.charge --by idem: HYDO-ORACLE: OK payments.charge: 26 effects, every idem at most once rc=0
+$ check count payments.charge: HYDO-ORACLE: OK payments.charge: 26 effects, 26 refs rc=0
+## summary
+  1 payments.charge ref=o1 idem=k1 fx=1 carried
+  4 payments.charge ref=o2 idem=- fx=1 carried
+  9 payments.refund ref=o1 idem=- fx=1 carried
+  10 payments.plain ref=- idem=- fx=1 carried
+  13 payments.charge ref=o3 idem=- fx=1 carried
+  18 payments.charge ref=o4 idem=- fx=1 carried
+  21 payments.charge ref=o5 idem=k5 fx=1 carried
+  26 ledger.add ref=l1 idem=- fx=1 carried
+  27 ledger.deny ref=l2 idem=- fx=1 carried
+  30 ledger.add ref=l5 idem=- fx=1 carried
+  33 payments.charge ref=o7 idem=k7 fx=1 carried
+  35 payments.charge ref=o8 idem=- fx=1 carried
+  37 payments.charge ref=o9 idem=- fx=1 carried
+  39 payments.charge ref=o10 idem=- fx=1 carried
+  45 payments.charge ref=o13 idem=- fx=1 carried
+  47 payments.charge ref=o14 idem=- fx=1 carried
+  49 payments.charge ref=o15 idem=- fx=1 carried
+  51 payments.charge ref=o16 idem=- fx=1 carried
+  54 payments.charge ref=o18 idem=- fx=1 carried
+  57 payments.charge ref=o20 idem=- fx=1 carried
+  59 payments.charge ref=o21 idem=- fx=1 carried
+  63 payments.charge ref=o23 idem=- fx=1 carried
+  65 payments.charge ref=o24 idem=- fx=1 carried
+  67 payments.charge ref=o25 idem=k25 fx=1 carried
+  70 payments.charge ref=o26 idem=- fx=1 carried
+  72 payments.charge ref=o27 idem=- fx=1 carried
+  74 payments.charge ref=o28 idem=- fx=1 carried
+  75 payments.charge ref=o29 idem=- fx=1 carried
+  78 payments.charge ref=o32 idem=- fx=1 carried
+  80 payments.charge ref=fail1 idem=- fx=1 carried
+  84 event cancelled ref=o2
+  85 event cancelled ref=o%203%2Cx
+  86 event shipped ref=-
+  87 shop.api ref=o40 idem=- fx=1 carried
+  88 shop.any ref=o41 idem=- fx=1 carried
+  89 shop.any ref=o42 idem=- fx=1 carried
+  90 shop.any ref=o43 idem=- fx=1 carried
+  91 shop.any ref=o44 idem=- fx=1 carried
+  92 shop.api ref=o45 idem=- fx=1 carried
+  94 shop.api ref=o47 idem=- fx=1 carried
+  95 shop.api ref=o48 idem=- fx=1 carried
+  97 shop.api ref=o50 idem=- fx=1 carried
+  98 shop.any ref=o51 idem=- fx=1 carried
+  99 shop2.any ref=- idem=- fx=1 carried
+  100 kv.conn ref=- idem=- fx=1 carried
+  101 kv.conn ref=- idem=- fx=1 carried
+  102 kv.conn ref=- idem=- fx=1 carried
+  103 kv.conn ref=- idem=- fx=1 carried
+  106 kv.conn ref=- idem=- fx=1 carried
+  107 orders.place ref=o1 idem=- fx=1 carried
+  109 orders.any ref=s idem=- fx=1 carried
+  111 orders.any ref=c1 idem=- fx=1 carried
+  113 orders.any ref=f idem=- fx=1 carried
+  115 orders.any ref=- idem=- fx=1 carried
+  117 orders2.any ref=- idem=- fx=1 carried
+  119 orders.any ref=o3 idem=- fx=1 carried
+  133 orders.place ref=o10 idem=- fx=1 carried
+  135 orders.place ref=o11 idem=- fx=1 carried
+  137 orders.place ref=o12 idem=- fx=1 carried
+  139 orders.place ref=o13 idem=- fx=1 carried
+  141 orders.place ref=o14 idem=- fx=1 carried
+  143 orders.place ref=o15 idem=- fx=1 carried
+  147 orders.any ref=s idem=- fx=1 carried
+  149 orders.any ref=s idem=- fx=1 carried
+  151 orders.any ref=s idem=- fx=1 carried
+  153 orders.any ref=s idem=- fx=1 carried
+  155 orders.any ref=s idem=- fx=1 carried
+  157 orders.any ref=c1 idem=- fx=1 carried
+  159 orders.any ref=c1 idem=- fx=1 carried
+  161 orders.place ref=o17 idem=- fx=1 carried
+  165 orders.any ref=n1 idem=- fx=1 carried
+  171 orders.any ref=n4 idem=- fx=1 carried
+  173 orders.place ref=p1 idem=- fx=1 carried
+  175 orders.place ref=p2 idem=- fx=1 carried
+  185 payments.charge ref=o30 idem=k30 fx=1 carried
+  186 webhook payments.charge ref=o30 src=185 n=1 200
+  187 payments.charge ref=o1 idem=k1 fx=0 replay
+## record log of the recovery world
+  seq=1 kind=req ep=payments route=charge ref=o1 idem=k1 fx=1 out=carried
+  seq=4 kind=req ep=payments route=charge ref=o2 idem=- fx=1 out=carried
+  seq=9 kind=req ep=payments route=refund ref=o1 idem=- fx=1 out=carried
+  seq=10 kind=req ep=payments route=plain ref=- idem=- fx=1 out=carried
+  seq=13 kind=req ep=payments route=charge ref=o3 idem=- fx=1 out=carried
+  seq=18 kind=req ep=payments route=charge ref=o4 idem=- fx=1 out=carried
+  seq=21 kind=req ep=payments route=charge ref=o5 idem=k5 fx=1 out=carried
+  seq=26 kind=req ep=ledger route=add ref=l1 idem=- fx=1 out=carried
+  seq=27 kind=req ep=ledger route=deny ref=l2 idem=- fx=1 out=carried
+  seq=30 kind=req ep=ledger route=add ref=l5 idem=- fx=1 out=carried
+  seq=33 kind=req ep=payments route=charge ref=o7 idem=k7 fx=1 out=carried
+  seq=35 kind=req ep=payments route=charge ref=o8 idem=- fx=1 out=carried
+  seq=37 kind=req ep=payments route=charge ref=o9 idem=- fx=1 out=carried
+  seq=39 kind=req ep=payments route=charge ref=o10 idem=- fx=1 out=carried
+  seq=45 kind=req ep=payments route=charge ref=o13 idem=- fx=1 out=carried
+  seq=47 kind=req ep=payments route=charge ref=o14 idem=- fx=1 out=carried
+  seq=49 kind=req ep=payments route=charge ref=o15 idem=- fx=1 out=carried
+  seq=51 kind=req ep=payments route=charge ref=o16 idem=- fx=1 out=carried
+  seq=54 kind=req ep=payments route=charge ref=o18 idem=- fx=1 out=carried
+  seq=57 kind=req ep=payments route=charge ref=o20 idem=- fx=1 out=carried
+  seq=59 kind=req ep=payments route=charge ref=o21 idem=- fx=1 out=carried
+  seq=63 kind=req ep=payments route=charge ref=o23 idem=- fx=1 out=carried
+  seq=65 kind=req ep=payments route=charge ref=o24 idem=- fx=1 out=carried
+  seq=67 kind=req ep=payments route=charge ref=o25 idem=k25 fx=1 out=carried
+  seq=70 kind=req ep=payments route=charge ref=o26 idem=- fx=1 out=carried
+  seq=72 kind=req ep=payments route=charge ref=o27 idem=- fx=1 out=carried
+  seq=74 kind=req ep=payments route=charge ref=o28 idem=- fx=1 out=carried
+  seq=75 kind=req ep=payments route=charge ref=o29 idem=- fx=1 out=carried
+  seq=78 kind=req ep=payments route=charge ref=o32 idem=- fx=1 out=carried
+  seq=80 kind=req ep=payments route=charge ref=fail1 idem=- fx=1 out=carried
+  seq=84 kind=event ep=- route=cancelled ref=o2 fx=1 out=carried
+  seq=85 kind=event ep=- route=cancelled ref=o%203%2Cx fx=1 out=carried
+  seq=86 kind=event ep=- route=shipped ref=- fx=1 out=carried
+  seq=87 kind=req ep=shop route=api ref=o40 idem=- fx=1 out=carried
+  seq=88 kind=req ep=shop route=any ref=o41 idem=- fx=1 out=carried
+  seq=89 kind=req ep=shop route=any ref=o42 idem=- fx=1 out=carried
+  seq=90 kind=req ep=shop route=any ref=o43 idem=- fx=1 out=carried
+  seq=91 kind=req ep=shop route=any ref=o44 idem=- fx=1 out=carried
+  seq=92 kind=req ep=shop route=api ref=o45 idem=- fx=1 out=carried
+  seq=94 kind=req ep=shop route=api ref=o47 idem=- fx=1 out=carried
+  seq=95 kind=req ep=shop route=api ref=o48 idem=- fx=1 out=carried
+  seq=97 kind=req ep=shop route=api ref=o50 idem=- fx=1 out=carried
+  seq=98 kind=req ep=shop route=any ref=o51 idem=- fx=1 out=carried
+  seq=99 kind=req ep=shop2 route=any ref=- idem=- fx=1 out=carried
+  seq=100 kind=req ep=kv route=conn ref=- idem=- fx=1 out=carried
+  seq=101 kind=req ep=kv route=conn ref=- idem=- fx=1 out=carried
+  seq=102 kind=req ep=kv route=conn ref=- idem=- fx=1 out=carried
+  seq=103 kind=req ep=kv route=conn ref=- idem=- fx=1 out=carried
+  seq=106 kind=req ep=kv route=conn ref=- idem=- fx=1 out=carried
+  seq=107 kind=req ep=orders route=place ref=o1 idem=- fx=1 out=carried
+  seq=109 kind=req ep=orders route=any ref=s idem=- fx=1 out=carried
+  seq=111 kind=req ep=orders route=any ref=c1 idem=- fx=1 out=carried
+  seq=113 kind=req ep=orders route=any ref=f idem=- fx=1 out=carried
+  seq=115 kind=req ep=orders route=any ref=- idem=- fx=1 out=carried
+  seq=117 kind=req ep=orders2 route=any ref=- idem=- fx=1 out=carried
+  seq=119 kind=req ep=orders route=any ref=o3 idem=- fx=1 out=carried
+  seq=133 kind=req ep=orders route=place ref=o10 idem=- fx=1 out=carried
+  seq=135 kind=req ep=orders route=place ref=o11 idem=- fx=1 out=carried
+  seq=137 kind=req ep=orders route=place ref=o12 idem=- fx=1 out=carried
+  seq=139 kind=req ep=orders route=place ref=o13 idem=- fx=1 out=carried
+  seq=141 kind=req ep=orders route=place ref=o14 idem=- fx=1 out=carried
+  seq=143 kind=req ep=orders route=place ref=o15 idem=- fx=1 out=carried
+  seq=147 kind=req ep=orders route=any ref=s idem=- fx=1 out=carried
+  seq=149 kind=req ep=orders route=any ref=s idem=- fx=1 out=carried
+  seq=151 kind=req ep=orders route=any ref=s idem=- fx=1 out=carried
+  seq=153 kind=req ep=orders route=any ref=s idem=- fx=1 out=carried
+  seq=155 kind=req ep=orders route=any ref=s idem=- fx=1 out=carried
+  seq=157 kind=req ep=orders route=any ref=c1 idem=- fx=1 out=carried
+  seq=159 kind=req ep=orders route=any ref=c1 idem=- fx=1 out=carried
+  seq=161 kind=req ep=orders route=place ref=o17 idem=- fx=1 out=carried
+  seq=165 kind=req ep=orders route=any ref=n1 idem=- fx=1 out=carried
+  seq=171 kind=req ep=orders route=any ref=n4 idem=- fx=1 out=carried
+  seq=173 kind=req ep=orders route=place ref=p1 idem=- fx=1 out=carried
+  seq=175 kind=req ep=orders route=place ref=p2 idem=- fx=1 out=carried
+  seq=185 kind=req ep=payments route=charge ref=o30 idem=k30 fx=1 out=carried
+  seq=186 kind=hook ep=payments route=charge ref=o30 idem=k30 src=185 n=1 dup=0 out=200
+  seq=187 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o1 idem=k1 body=a53a51d29818 fx=0 out=replay orig=1
+## the world's stderr
+  hydo-world: fake ledger grpc on 127.0.0.1:38602
+  hydo-world: fake payments http on 127.0.0.1:38601
+  hydo-world: proxy kv tcp on 127.0.0.1:38604 -> 127.0.0.1:38612
+  hydo-world: proxy orders grpc on 127.0.0.1:38605
+  hydo-world: proxy orders2 grpc on 127.0.0.1:38606
+  hydo-world: proxy shop http on 127.0.0.1:38603
+  hydo-world: proxy shop2 http on 127.0.0.1:38607
+$ ctl ping: stderr: hydo-world ctl: dial unix <dir>/world.sock: connect: connection refused rc=1

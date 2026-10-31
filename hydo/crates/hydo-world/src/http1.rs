@@ -180,7 +180,10 @@ impl Conn {
     }
 
     /// The request body (Content-Length or chunked); None = a malformed framing (400).
-    pub async fn read_body(&mut self, h: &Head) -> Result<Vec<u8>, ()> {
+    /// The request body. Err = malformed framing headers (Go answers 400 before the handler);
+    /// a body that ends early is returned as far as it came, with `false` (Go's handler reads
+    /// it with `io.ReadAll` and ignores the error), and the connection must close after it.
+    pub async fn read_body(&mut self, h: &Head) -> Result<(Vec<u8>, bool), ()> {
         let te = hget(&h.headers, "Transfer-Encoding").map(|v| v.to_ascii_lowercase());
         if let Some(te) = te {
             if te != b"chunked" {
@@ -188,26 +191,38 @@ impl Conn {
             }
             let mut body = Vec::new();
             loop {
-                let l = self.line().await.map_err(|_| ())?;
+                let Ok(l) = self.line().await else {
+                    return Ok((body, false));
+                };
                 let sz = l.split(|&c| c == b';').next().unwrap_or(&[]);
-                let sz = std::str::from_utf8(trim(sz)).map_err(|_| ())?;
-                let n = usize::from_str_radix(sz, 16).map_err(|_| ())?;
+                let n = std::str::from_utf8(trim(sz))
+                    .ok()
+                    .and_then(|s| usize::from_str_radix(s, 16).ok());
+                let Some(n) = n else {
+                    return Ok((body, false));
+                };
                 if n == 0 {
                     // trailers, until the empty line
                     loop {
-                        if self.line().await.map_err(|_| ())?.is_empty() {
-                            break;
+                        match self.line().await {
+                            Ok(l) if l.is_empty() => break,
+                            Ok(_) => {}
+                            Err(_) => return Ok((body, false)),
                         }
                     }
-                    return Ok(body);
+                    return Ok((body, true));
                 }
-                self.need(n + 2).await.map_err(|_| ())?;
+                if self.need(n + 2).await.is_err() {
+                    let k = n.min(self.buf.len());
+                    body.extend(self.buf.drain(..k));
+                    return Ok((body, false));
+                }
                 body.extend(self.buf.drain(..n));
                 self.buf.drain(..2);
             }
         }
         let cl = match hget(&h.headers, "Content-Length") {
-            None => return Ok(Vec::new()),
+            None => return Ok((Vec::new(), true)),
             Some(v) => std::str::from_utf8(v)
                 .ok()
                 .and_then(|s| s.parse::<u64>().ok())
@@ -217,14 +232,14 @@ impl Conn {
         let mut body = Vec::new();
         let mut left = n;
         while left > 0 {
-            if self.buf.is_empty() && (self.eof || self.fill().await.map_err(|_| ())? == 0) {
-                return Err(());
+            if self.buf.is_empty() && (self.eof || self.fill().await.unwrap_or(0) == 0) {
+                return Ok((body, false));
             }
             let k = left.min(self.buf.len());
             body.extend(self.buf.drain(..k));
             left -= k;
         }
-        Ok(body)
+        Ok((body, true))
     }
 
     pub async fn write(&mut self, b: &[u8]) -> io::Result<()> {
@@ -378,18 +393,29 @@ pub fn error_answer(msg: &str, code: u16) -> Answer {
     a
 }
 
-/// The bytes of an answer as Go's HTTP/1 server writes a finished handler's answer: the headers
-/// in key order, Date, Content-Length, and Connection: close when the connection ends after it.
+/// Go's HTTP/1 server buffers this much of a handler's body before it writes the head; a
+/// handler that writes more at once gets a chunked answer (HTTP/1.1) or no length (HTTP/1.0).
+const BUFFER_BEFORE_CHUNKING: usize = 2048;
+
+/// The bytes of an answer as Go's HTTP/1 server writes a finished handler's answer (written
+/// with one `Write`): the status line in the request's protocol, the handler's headers in key
+/// order, then the server's own: Date, Content-Length, a sniffed Content-Type, Connection,
+/// Transfer-Encoding. Trailers go out only with a chunked answer.
 pub fn answer_bytes(a: &Answer, head: &Head, close: bool) -> Vec<u8> {
     let mut status = a.status;
     if status == 0 {
         status = 200;
     }
+    let proto = if head.minor >= 1 {
+        "HTTP/1.1"
+    } else {
+        "HTTP/1.0"
+    };
     let text = goish::status_text(status);
     let mut out = if text.is_empty() {
-        format!("HTTP/1.1 {status} status code {status}\r\n")
+        format!("{proto} {status} status code {status}\r\n")
     } else {
-        format!("HTTP/1.1 {status} {text}\r\n")
+        format!("{proto} {status} {text}\r\n")
     }
     .into_bytes();
     let head_req = head.method == "HEAD";
@@ -410,23 +436,45 @@ pub fn answer_bytes(a: &Answer, head: &Head, close: bool) -> Vec<u8> {
         out.extend_from_slice(b"\r\n");
     }
     let allowed = goish::body_allowed(status);
-    if !has("Content-Type") && allowed && !a.body.is_empty() && !head_req {
-        out.extend_from_slice(format!("Content-Type: {}\r\n", sniff(&a.body)).as_bytes());
-    }
+    let big = a.body.len() > BUFFER_BEFORE_CHUNKING;
+    let chunked = allowed && !head_req && big && head.minor >= 1;
+    // an HTTP/1.0 answer of unknown length ends with the connection
+    let close = close || (allowed && !head_req && big && head.minor == 0);
     if !has("Date") {
         out.extend_from_slice(format!("Date: {}\r\n", goish::http_date()).as_bytes());
     }
-    if allowed && !head_req {
+    if allowed && !big && (!a.body.is_empty() || !head_req) {
         out.extend_from_slice(format!("Content-Length: {}\r\n", a.body.len()).as_bytes());
+    }
+    if !has("Content-Type") && allowed && !a.body.is_empty() {
+        out.extend_from_slice(format!("Content-Type: {}\r\n", sniff(&a.body)).as_bytes());
     }
     if close && head.minor >= 1 {
         out.extend_from_slice(b"Connection: close\r\n");
     } else if !close && head.minor == 0 {
         out.extend_from_slice(b"Connection: keep-alive\r\n");
     }
+    if chunked {
+        out.extend_from_slice(b"Transfer-Encoding: chunked\r\n");
+    }
     out.extend_from_slice(b"\r\n");
     if allowed && !head_req {
-        out.extend_from_slice(&a.body);
+        if chunked {
+            out.extend_from_slice(format!("{:x}\r\n", a.body.len()).as_bytes());
+            out.extend_from_slice(&a.body);
+            out.extend_from_slice(b"\r\n0\r\n");
+            let mut ts: Vec<&(String, Vec<u8>)> = a.trailers.iter().collect();
+            ts.sort_by(|x, y| x.0.cmp(&y.0));
+            for (k, v) in ts {
+                out.extend_from_slice(k.as_bytes());
+                out.extend_from_slice(b": ");
+                out.extend_from_slice(v);
+                out.extend_from_slice(b"\r\n");
+            }
+            out.extend_from_slice(b"\r\n");
+        } else {
+            out.extend_from_slice(&a.body);
+        }
     }
     out
 }
@@ -644,11 +692,12 @@ async fn head(r: &Req<'_>, gzip: bool) -> Result<(Conn, Resp), String> {
         if (100..200).contains(&status) && status != 101 {
             continue; // 100 Continue and other informational answers
         }
-        let rs = Resp {
+        let mut rs = Resp {
             status,
             headers,
             ..Default::default()
         };
+        hdel(&mut rs.headers, "Trailer"); // Go's transport: the declared trailers are Resp.Trailer
         return Ok((c, rs));
     }
 }
