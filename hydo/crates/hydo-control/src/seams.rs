@@ -97,7 +97,9 @@ impl Seam {
                 "hydo-init-freeze.sh parses F= (a knob), arms hydo_fc before the step (iptables \
                  rules + the helper), heals in restart_dead and kills the helper at a cut. \
                  Controller: `run` the pinned iptables, then the agent's `freeze` command, the \
-                 `froze`/`resumed` events, `unfreeze` at the heal; the fault.freeze_call records."
+                 `froze`/`resumed` events, `unfreeze` at the heal; the fault.freeze_call records. \
+                 Driven since M124 (src/schedule/freeze.rs); only an F= token with `network: \
+                 bridge` is still refused with this seam (the agent's `freeze` has no namespace)."
             }
             Seam::Buggify => {
                 "hydo-init-buggify.sh turns the knob B= into /tmp/hydo-buggify (mode 644). \
@@ -118,7 +120,8 @@ impl Seam {
             Seam::NetNamespaces => {
                 "hydo-init-netns.sh gives each service its own namespace on a bridge before \
                  start_svc. Controller: the pinned `ip` through `run` for the plan, then `spawn` \
-                 with `netns`."
+                 with `netns`. Driven since M124 (src/schedule/netns.rs); no plan or schedule is \
+                 refused with this seam any more."
             }
             Seam::Composer => {
                 "The composer's W= knob writes the composition for /etc/hydo/compose.sh, whose \
@@ -130,7 +133,9 @@ impl Seam {
                 "hydo-init.sh's net_on/net_heal (and hydo-init-links.sh on links) configure \
                  netem with tc for [from, to) and drain the queue at the heal (M71). Controller: \
                  the same tc lines through `run`, `qlen` polls for the drain, the heal points \
-                 (nto, oto, and at the end before restart_dead), the fault.oneway_* records."
+                 (nto, oto, and at the end before restart_dead), the fault.oneway_* records. \
+                 Driven since M124 (src/schedule/netfault.rs); no schedule is refused with this \
+                 seam any more."
             }
             Seam::RecoveryInputs => {
                 "The engine copies the acked/failed lines into the recovery boot's `oracle` \
