@@ -196,13 +196,14 @@ evaluation; `details` carry `ops`, `keys`, the anomaly or failing key, and the o
 Where the checks run:
 
 - **The explorer** (`hydo explore`, the hydo-explore crate, and everything built on its worker pool:
-  the shrinker, branch runs): after every run whose console has `HYDO-CHECK` lines, it writes
-  `consoles/<tag>.checks.log` (the records; read together with the consoles by the property table
-  and the failed-assertion list) and `consoles/<tag>.checks.txt` (the explanation), and replaces the
-  run's verdict. Failure classes, shrinking and reports work unchanged; the guest's own verdict is
-  kept as `guest_verdict`.
-- **`hydo run` / `hydo repro`** (the Rust `hydo`, through the crate `hydo-history`):
-  `one.checks.log`, `one.checks.txt`, the combined verdict in `run.json`.
+  the shrinker, branch runs): after every run whose console has `HYDO-CHECK` lines, it reports each
+  check as a `history-check` finding of the run's record in `events.jsonl` (status, summary,
+  explanation, the checker's details; since M115, before that `consoles/<tag>.checks.log` and
+  `.checks.txt`), feeds the checks' HYDO-ASSERT records to the property table and the
+  failed-assertion list together with the consoles, and replaces the run's verdict. Failure
+  classes, shrinking and reports work unchanged; the guest's own verdict is kept (`verdict.guest`).
+- **`hydo run` / `hydo repro`** (the Rust `hydo`, through the crate `hydo-history`): the same
+  findings and the combined verdict in `result.json`.
 - **By hand:** `hydo check-history <outdir>` (an `hvx_explore one` or `hydo run` output directory),
   `hydo check-history <console> [<recovery console>]`, `hydo check-history --tag <T> <consoles dir>`,
   or `hydo check-history --check '<json spec>' <console>` for a console without declarations

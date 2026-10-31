@@ -77,6 +77,11 @@ fn tracked_now(root: &Path) -> Vec<String> {
         .lines()
         .filter(|l| l.ends_with(".yaml") || l.ends_with(".yml") || l.ends_with(".json"))
         .filter(|l| !l.starts_with("hydo/onboard/tests/") && !l.contains("/tests/golden"))
+        // documents of the results format (M115) are not manifest candidates: the schema, its
+        // examples and the CLI tests' recorded run and exploration directories
+        .filter(|l| {
+            !l.starts_with("hydo/schema/") && !l.starts_with("hydo/crates/hydo-cli/tests/fixtures/")
+        })
         .map(str::to_string)
         .collect();
     v.sort();

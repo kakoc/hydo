@@ -15,7 +15,7 @@ the user guide; it is shipped inside the release.
 | `guest/busybox`, `guest/mke2fs` | static arm64 busybox 1.36.1 and e2fsprogs 1.47.0 (aarch64 nixpkgs) |
 | `guest/busybox-applets[.txt]` | the applet set to link, as the Linux build links it |
 | `guest/tc/`, `guest/tc-closure.txt` | the pinned aarch64 `tc` (iproute2 6.8.0) and every file its loader opens, at their `/nix/store` paths, for network faults |
-| `hydo/onboard/`, `hydo/history/hydo_hist.sh`, `hydo/assert/` | the guest-side files `hydo build` puts into images (the generic init and every extension, the test composer's guest runner, the history recorder), the manifest format (`hydo guide manifest`), and the property-table tool the explorer compiles |
+| `hydo/onboard/`, `hydo/history/hydo_hist.sh` | the guest-side files `hydo build` puts into images (the generic init and every extension, the test composer's guest runner, the history recorder) and the manifest format (`hydo guide manifest`) |
 | `examples/redis/` | the Redis example, with its arm64 binaries under `files/` (works offline) |
 | `examples/ledger-spin/` | the busy-wait example (`hydo/onboard/examples-mac/ledger-spin`), with `bin/spin_load` and `bin/spin_count` (static arm64, `hv/hvm/spin/spinvar.c`; `$HYDO_SPIN_BIN` when filling `assets/`) |
 | `skill/hydo-onboard/` | the onboarding skill (Agent Skills format, any AI tool) that writes a project's `hydo/` folder; `hydo guide`, `hydo skill install` and `hydo init` read it (`bin/hydo` also carries a built-in copy) |

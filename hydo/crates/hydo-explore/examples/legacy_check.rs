@@ -418,7 +418,13 @@ fn check_run(c: &mut Check, old: &Path, new: &Path) {
 
 fn check_exploration(c: &mut Check, old: &Path, new: &Path) {
     let doc = read_exploration(&new.join(hydo_results::EXPLORATION_DOC)).expect("exploration.json");
-    let ev = read_events(&new.join(hydo_results::EVENTS)).expect("events.jsonl");
+    // (a converted fixture has no stream)
+    let evp = new.join(hydo_results::EVENTS);
+    let ev = if evp.is_file() {
+        read_events(&evp).expect("events.jsonl")
+    } else {
+        hydo_results::Stream::default()
+    };
     assert!(
         ev.skipped.is_empty(),
         "the reader skipped records it should know"
@@ -839,8 +845,286 @@ fn error_kinds(c: &mut Check, at: &str, o: &Value, dv: &Value) {
     }
 }
 
+// ---------------------------------------------------------------- --convert (test fixtures)
+
+fn sv(v: &Value) -> Option<String> {
+    v.as_str().map(str::to_string)
+}
+
+/// An old run record (runs.jsonl / report.json failure / run.json) as a run of the results
+/// format, as far as the old record says (findings: the error kinds' signatures and the failed
+/// properties' ids).
+fn conv_run(o: &Value) -> hydo_results::Run {
+    let text = sv(&o["verdict"]).unwrap_or_default();
+    let mut r = hydo_results::Run::new(
+        &sv(&o["schedule"]).unwrap_or_default(),
+        hydo_results::Verdict {
+            kind: hydo_explore::results::kind_of(&text),
+            text,
+            guest: sv(&o["guest_verdict"]),
+            before_error_logs: sv(&o["pre_errlog_verdict"]),
+        },
+        &sv(&o["fp"]).unwrap_or_default(),
+    );
+    r.fingerprints.wfp = sv(&o["wfp"]);
+    r.seed = o["seed"].as_i64();
+    r.tag = sv(&o["tag"]);
+    r.class = sv(&o["class"]);
+    r.secs = o["secs"].as_f64();
+    r.worker = o["worker"].as_u64();
+    r.role = Some(hydo_results::role::FIRST.into());
+    r.findings.extend(hydo_explore::results::invariant_finding(
+        &hydo_explore::results::guest_verdict(o.as_object().unwrap()),
+    ));
+    for id in o["assert_failures"].as_array().into_iter().flatten() {
+        r.findings.push(hydo_results::Finding {
+            kind: "assertion".into(),
+            id: sv(id).unwrap_or_default(),
+            status: "violation".into(),
+            ..Default::default()
+        });
+    }
+    for id in o["errors_new"].as_array().into_iter().flatten() {
+        r.findings.push(hydo_results::Finding {
+            kind: "error-log".into(),
+            id: sv(id).unwrap_or_default(),
+            status: "new".into(),
+            ..Default::default()
+        });
+    }
+    r
+}
+
+fn conv_kinds(e: &Value) -> hydo_results::ErrorKinds {
+    hydo_results::ErrorKinds {
+        known_file: sv(&e["known_file"]),
+        known_sha256: sv(&e["known_sha256"]),
+        unknown: sv(&e["unknown"]).unwrap_or_else(|| "report".into()),
+        kinds: e["kinds"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|k| {
+                let strs = |v: &Value| -> Vec<String> {
+                    v.as_array().into_iter().flatten().filter_map(sv).collect()
+                };
+                let sh = &k["shrunk"];
+                hydo_results::ErrorKind {
+                    signature: sv(&k["sig"]).unwrap_or_default(),
+                    service: sv(&k["svc"]).unwrap_or_default(),
+                    source: sv(&k["src"]).unwrap_or_default(),
+                    template: sv(&k["tpl"]).unwrap_or_default(),
+                    example: sv(&k["ex"]).unwrap_or_default(),
+                    new: k["new"] == true,
+                    runs: k["runs"].as_u64().unwrap_or(0),
+                    new_runs: k["new_runs"].as_u64().unwrap_or(0),
+                    seeds: k["seeds"].as_array().cloned().unwrap_or_default(),
+                    first_seed: k["first_seed"].clone(),
+                    first_schedule: sv(&k["first_schedule"]).unwrap_or_default(),
+                    first_at: strs(&k["first_at"]),
+                    lines: k["lines"].as_i64().unwrap_or(0),
+                    first_new: k.get("first_new_seed").map(|s| hydo_results::FirstNew {
+                        seed: s.clone(),
+                        schedule: sv(&k["first_new_schedule"]).unwrap_or_default(),
+                        at: strs(&k["first_new_at"]),
+                        example: sv(&k["first_new_ex"]).unwrap_or_default(),
+                    }),
+                    reason: k.get("reason").cloned(),
+                    shrink: (!sh.is_null()).then(|| hydo_results::ErrorShrink {
+                        minimal: sv(&sh["minimal"]).unwrap_or_default(),
+                        tries: sh["tries"].as_u64().unwrap_or(0),
+                        confirmations: ["a", "b"]
+                            .iter()
+                            .map(|x| hydo_results::Reproduction {
+                                tag: None,
+                                fp: sv(&sh[format!("fp_{x}")]),
+                                verdict: if *x == "a" { sv(&sh["verdict"]) } else { None },
+                                present: sh[format!("present_{x}")].as_bool(),
+                            })
+                            .collect(),
+                        identical: sh["fp_a"] == sh["fp_b"],
+                        repro_command: None,
+                    }),
+                }
+            })
+            .collect(),
+    }
+}
+
+/// Old files -> the results format (how the CLI test fixtures were moved to it in M115). What
+/// the old files did not hold stays absent; legacy_check of the old directory against the result
+/// finds every old value in it.
+fn convert(old: &Path, new: &Path) {
+    std::fs::create_dir_all(new).unwrap();
+    if let Some(rep) = json_of(&old.join("report.json")) {
+        let s = &rep["summary"];
+        let strategy = sv(&s["strategy"]).unwrap_or_default();
+        let mut doc = hydo_results::Exploration {
+            mode: if strategy.starts_with("sweep:") {
+                "sweep"
+            } else {
+                "seeds"
+            }
+            .into(),
+            config: hydo_results::Config {
+                sweep: strategy.strip_prefix("sweep:").map(String::from),
+                strategy,
+                ..Default::default()
+            },
+            image: hydo_results::Image {
+                path: sv(&s["image"]).unwrap_or_default(),
+                ..Default::default()
+            },
+            engine: hydo_results::Engine {
+                workers: s["workers"].as_u64(),
+                ram_mib: Some(s["ram_mib"].as_u64().unwrap_or(1024)),
+                vcpus: Some(s["vcpus"].as_u64().unwrap_or(1)),
+                cpu: Some(sv(&s["cpu"]).unwrap_or_else(|| "v2".into())),
+                guest_kernel: sv(&s["guest_kernel"]),
+                ..Default::default()
+            },
+            summary: serde_json::from_value(s.clone()).unwrap(),
+            artifacts: hydo_results::ExplorationArtifacts {
+                events: hydo_results::EVENTS.into(),
+                report: Some("report.md".into()),
+                consoles: Some("consoles".into()),
+            },
+            ..Default::default()
+        };
+        for f in rep["failures"].as_array().into_iter().flatten() {
+            let mut reps = vec![hydo_results::Reproduction {
+                tag: None,
+                fp: sv(&f["repro_fp"]),
+                verdict: sv(&f["repro_verdict"]),
+                present: None,
+            }];
+            for k in 2.. {
+                match f.get(format!("repro{k}_fp")) {
+                    Some(x) => reps.push(hydo_results::Reproduction {
+                        fp: sv(x),
+                        ..Default::default()
+                    }),
+                    None => break,
+                }
+            }
+            doc.failures.push(hydo_results::Failure {
+                signature: hydo_explore::report::sig_key(f["verdict"].as_str().unwrap_or("")),
+                reproduced: f["reproduced"] == true,
+                reproductions: reps,
+                timing_only: f["timing_only"].as_bool(),
+                run: conv_run(f),
+            });
+        }
+        for x in rep["shrunk"].as_array().into_iter().flatten() {
+            let mut sh: hydo_results::Shrink = serde_json::from_value(json!({
+                "v": 1, "type": "shrink", "class": x["class"], "signature": x["signature"],
+                "from_seed": x["from_seed"], "minimal": x["minimal"], "verdict": x["verdict"],
+                "tries": x["tries"]}))
+            .unwrap();
+            sh.min_class = sv(&x["min_class"]);
+            sh.min_verdict = sv(&x["min_verdict"]);
+            sh.confirmations = ["fp_a", "fp_b"]
+                .iter()
+                .map(|k| hydo_results::Reproduction {
+                    fp: sv(&x[*k]),
+                    ..Default::default()
+                })
+                .collect();
+            sh.identical = x["fp_a"] == x["fp_b"];
+            sh.composition = sv(&x["composition"]);
+            sh.commands = x["commands"]
+                .as_array()
+                .map(|a| a.iter().filter_map(sv).collect());
+            sh.contents = x["contents"].as_object().cloned();
+            sh.stable = sv(&x["stable"]);
+            sh.stable_schedule = sv(&x["stable_schedule"]);
+            sh.stable_note = sv(&x["stable_note"]);
+            doc.shrinks.push(sh);
+        }
+        let errs = json_of(&old.join("errors.json")).or_else(|| rep.get("errors").cloned());
+        doc.error_kinds = errs.as_ref().map(conv_kinds);
+        hydo_results::write_document(&new.join(hydo_results::EXPLORATION_DOC), &doc).unwrap();
+        if let Some(md) = read(&old.join("report.md")) {
+            std::fs::write(new.join("report.md"), md).unwrap();
+        }
+        return;
+    }
+    let rj = json_of(&old.join("run.json"));
+    let errs = json_of(&old.join("one.errors.json"));
+    let mut r = rj.as_ref().map(conv_run).unwrap_or_else(|| {
+        hydo_results::Run::new(
+            "",
+            hydo_results::Verdict {
+                kind: "error".into(),
+                text: "(converted from one.errors.json, which has no verdict)".into(),
+                ..Default::default()
+            },
+            "",
+        )
+    });
+    r.role = None;
+    if let Some(j) = &rj {
+        r.image = Some(hydo_results::Image {
+            path: sv(&j["image"]).unwrap_or_default(),
+            sha256: sv(&j["image_sha256"]),
+            resolved: None,
+        });
+        r.result_line = sv(&j["line"]);
+        r.engine = Some(hydo_results::Engine {
+            args: j["engine_args"]
+                .as_array()
+                .map(|a| a.iter().filter_map(sv).collect()),
+            ..Default::default()
+        });
+    }
+    if let Some(e) = &errs {
+        r.findings.retain(|f| f.kind != "error-log");
+        for k in e["kinds"].as_array().into_iter().flatten() {
+            let mut d = Map::new();
+            for (from, to) in [
+                ("svc", "service"),
+                ("src", "source"),
+                ("tpl", "template"),
+                ("ex", "example"),
+                ("n", "lines"),
+                ("at", "at"),
+                ("entry", "known_entry"),
+                ("reason", "reason"),
+            ] {
+                if let Some(v) = k.get(from) {
+                    d.insert(to.into(), v.clone());
+                }
+            }
+            r.findings.push(hydo_results::Finding {
+                kind: "error-log".into(),
+                id: sv(&k["sig"]).unwrap_or_default(),
+                status: if k["new"] == true { "new" } else { "known" }.into(),
+                message: format!(
+                    "[{}] {}",
+                    sv(&k["svc"]).unwrap_or_default(),
+                    sv(&k["tpl"]).unwrap_or_default()
+                ),
+                details: d,
+            });
+        }
+        r.error_logs = Some(hydo_results::ErrorLogs {
+            known_file: sv(&e["known_file"]),
+            known_sha256: sv(&e["known_sha256"]),
+            unknown: sv(&e["unknown"]),
+            steps: e["steps"].as_i64(),
+            boots: e["boots"].as_array().cloned().unwrap_or_default(),
+            truncated: false,
+        });
+    }
+    hydo_results::write_document(&new.join(hydo_results::RUN_DOC), &r).unwrap();
+}
+
 fn main() {
     let mut a: Vec<String> = std::env::args().skip(1).collect();
+    if a.first().map(String::as_str) == Some("--convert") && a.len() == 3 {
+        convert(Path::new(&a[1]), Path::new(&a[2]));
+        return;
+    }
     // --base OLD NEW [SUB]: every OLD/<name>/<SUB> against NEW/<name>/<SUB> (SUB default "out")
     if a.first().map(String::as_str) == Some("--base") && a.len() >= 3 {
         let sub = a.get(3).cloned().unwrap_or_else(|| "out".into());
@@ -862,7 +1146,7 @@ fn main() {
             })
             .collect();
     }
-    if a.is_empty() || a.len() % 2 != 0 {
+    if a.is_empty() || !a.len().is_multiple_of(2) {
         eprintln!("usage: legacy_check <old dir> <new dir> [<old dir> <new dir>]...");
         std::process::exit(2);
     }
@@ -870,7 +1154,7 @@ fn main() {
     for pair in a.chunks(2) {
         let (old, new) = (Path::new(&pair[0]), Path::new(&pair[1]));
         let mut c = Check::default();
-        if old.join("run.json").is_file() {
+        if old.join("run.json").is_file() || old.join("one.errors.json").is_file() {
             check_run(&mut c, old, new);
         } else {
             check_exploration(&mut c, old, new);

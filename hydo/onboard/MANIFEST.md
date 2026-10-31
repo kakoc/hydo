@@ -357,8 +357,9 @@ verdict rules are in `hydo/HISTORIES.md`.
 - The guest prints one `HYDO-CHECK <spec>` line per check when the workload starts. The checks run
   on the host: the explorer (`hydo explore`, and its shrinker), `hydo run` and
   `hydo check-history` combine the guest's verdict with the checks' (the guest's own invariant
-  violations come first) and write the explanation, e.g. the minimal set of operations that cannot
-  be ordered, next to the console (`<tag>.checks.txt`).
+  violations come first) and report each check as a `history-check` finding of the run, with the
+  explanation, e.g. the minimal set of operations that cannot be ordered (`result.json`, or the
+  run's record in `events.jsonl`; the results format, `hydo/PRODUCT.md`).
 - Only manifests with `checks:` get the recorder and `hydo-init-history.sh` (spliced into
   `/sbin/init` like the liveness code); every other image builds byte-identically.
 - Examples: `examples/redis/hydo-hist.yaml` (SET/GET as registers and RPUSH/LRANGE as
@@ -444,8 +445,9 @@ N(s) - N(s+1) packets (the last step N(s)), and the sweep runs one schedule
 `freeze_match:` string in its own direction), `--fc-durs 150000`, `--sweep-every k` (every k-th
 packet), `--sweep-with "<tokens>"` (one more fixed fault on every point and trace run, e.g.
 `K=kafka@9+1`; not a power cut, whose trace run never reaches the count), `--sweep-dry` (trace,
-write `points.txt`, stop). Every failure is re-run twice. Trace counts are in `fc-traces.jsonl`,
-point labels in `sweep-points.jsonl`.
+write `points.txt`, stop). Every failure is re-run twice. The trace runs and their counts are
+`run` records with `"role": "trace"` in `events.jsonl` (`--fc-traces <events.jsonl>` reuses them
+in a later sweep), and each point's run carries its label (`point`).
 
 Sweeping every packet is expensive (M76: 1,125 runs, 2 h 26 min for two links over two steps).
 `--sweep freeze --fc-adaptive` spends the runs where failures are, in two stages:
@@ -468,7 +470,7 @@ Sweeping every packet is expensive (M76: 1,125 runs, 2 h 26 min for two links ov
   stream's trace run.
 
 Every point is an ordinary schedule and every failure is re-run twice, as in the full sweep;
-`fc-adaptive.json` lists the centres, windows and rounds. Without `--fc-adaptive` the sweep is
+`exploration.json` (`freeze_sweep`) lists the centres, windows and rounds. Without `--fc-adaptive` the sweep is
 unchanged.
 
 ### Clock after a power cut (`guest.clock_after_cut`)
@@ -980,7 +982,7 @@ the schedule's guest part longer than 500 bytes (the engine's limit is 511).
 
 **Where each form appears.** The explorer draws the seed form. After shrinking, it turns the
 minimal composition into the resolved form and runs that twice; when it fails the same way, the
-resolved schedule is the reported minimal schedule (`report.json` `shrunk[].stable`,
+resolved schedule is the reported minimal schedule (`exploration.json` `shrinks[].stable`,
 `stable_schedule`, `contents`). Otherwise (the resolved run is a different run: the guest starts
 round 0 at another time, so a timing-sensitive failure may not recur) the report keeps the seed
 form and says why (`stable_note`), and `hydo save` writes that seed form with its command list
@@ -1272,9 +1274,10 @@ a restart or a resume, where the service recovers, is part of it. A power cut or
 lasts to the end of the run, including the recovery boot; a disk fault covers the workload. A kind
 is known when one entry covers every one of its occurrences in that run.
 
-**The explorer** (`hydo explore`) adds, only for images with `errors:`, `errors_new` (signatures)
-and `errors_known` to each run in `runs.jsonl`, `consoles/<tag>.errors.json`, an `errors.json` and
-a section "Error logs" in `report.md`: each new kind with the number of runs, the first seed and
+**The explorer** (`hydo explore`) adds, only for images with `errors:`, an `error-log` finding per
+kind (status `new` or `known`) and the analysis (`error_logs`) to each run's record in
+`events.jsonl`, the error kinds of the exploration to `exploration.json` (`error_kinds`), and a
+section "Error logs" in `report.md`: each new kind with the number of runs, the first seed and
 schedule that produced it, an example line, and -- unless `--no-shrink` -- the smallest schedule
 in which the kind is still new (the shrinker that minimises violations, with "the kind is still
 new" as its test; at most `--errors-shrink N` kinds, default 8), run twice (both fingerprints, and
@@ -1293,7 +1296,8 @@ hydo errors check                            # validate the list
 
 `accept` appends one entry per kind (with its template and an example line, for the reader) and
 refuses to write a list that does not load. `hydo run` prints the run's new and known kinds and
-writes `one.errors.json`.
+reports them in `result.json` (`error-log` findings; `hydo errors list|accept --from <run dir>`
+reads them there).
 
 Limits: the guest scans the logs at the end of each boot, so a kind's lines are counted, not
 timed within a range; a log written somewhere not listed in `files:` is not seen; a service that

@@ -20,6 +20,16 @@ call as ok, failed or unknown (`MANIFEST.md`, "gRPC services").
 
 The explorer (`hydo explore`, the crate `hydo/crates/hydo-explore`) generates schedules with several strategies and sweeps, re-runs every failure to prove it reproduces, and shrinks it to a minimal schedule. Cross-service checks can read the stores with ready-made commands instead of hand-written shell (`hydo-read` prints a MySQL/PostgreSQL query, a Kafka topic, Redis or etcd keys as sorted JSON Lines; `hydo-check` compares two readings: subset, exactly-once, disjoint, count, a cache never holding a wrong value; MANIFEST.md "Reading the stores"). Assertions are properties of five kinds (always, sometimes, reachable, unreachable, eventually; `hydo/ASSERTIONS.md`). It runs on x86_64 Linux with VT-x (`hydo/dist/linux/`, the Linux release) and on Apple Silicon Macs (`hydo/dist/mac/`).
 
+## Where the results are, and how to read them (experimental until hydo 1.0)
+
+Every run and every exploration reports in one versioned format, so a CI job or an AI tool reads one model instead of several ad-hoc files:
+
+- `hydo run` and `hydo repro` write `result.json` in the run directory: the schedule, the image (path and SHA-256), the engine, the verdict, the fingerprints, the findings, the run's property table and the files of the run (its consoles, `engine.log`).
+- `hydo explore` writes `events.jsonl` while it runs (one record per line: a `start` record, a `run` record for every run it makes, a `shrink` record per minimal schedule, an `end` record) and `exploration.json` when it is done (configuration, summary, every failure with its re-runs, the minimal schedules, the error kinds, the property table, the liveness summary). `report.md` is the same report for people, made from `exploration.json`; `hydo report` prints it from the document.
+- A finding has one shape whatever found it: `kind` (`invariant`, `assertion`, `history-check`, `error-log`), `id` (the property, check or invariant, or the error kind's signature), `status`, `message` and source-specific `details`.
+
+The schema is `hydo/schema/results-v1.json`, generated from the Rust types (`hydo/crates/hydo-results`), and `hydo/schema/examples/results/v1/` holds documents recorded from real runs. Every record carries `"v": 1` and a `"type"`. Within version 1 only additions are made (new optional fields, new record types); renaming, removing or changing a field needs version 2, read alongside version 1. A reader must ignore fields and record types it does not know; the crate's reader does exactly that and is what hydo's own commands use. The format is experimental until hydo 1.0, and it keeps the additions-only rule from version 1 on (a test fails on any other change against the last released schema).
+
 ## Two kinds of projects
 
 **Infrastructure** (message brokers, databases, consensus systems, caches). The properties are generic: acknowledged writes survive, replicas agree, histories are consistent. hydo finds this class well (durability windows, crash consistency, members diverging, as with etcd issue 14685).

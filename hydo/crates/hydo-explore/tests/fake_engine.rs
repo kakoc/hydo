@@ -9,13 +9,15 @@
 //! `git show 2a58c4b:hydo/crates/hydo-explore/tests/fake_engine.py`), answer for answer.
 //!
 //! Each scenario runs hydo-explore with its options and compares its outputs file by file —
-//! runs.jsonl, shrink.jsonl, report.json, report.md, errors.json, properties.txt,
-//! sweep-points.jsonl, fc-traces.jsonl, fc-adaptive.json and the printed summary — with
-//! `tests/golden/fake/<scenario>/`: explore.py's outputs at commit 2a58c4b (Python 3.15.0 on the
-//! Mac) on fake_engine.py, recorded in M107, after normalising only what is not a function of the
+//! events.jsonl, exploration.json (the results format, M115), report.md and the printed summary
+//! — with `tests/golden/fake/<scenario>/`, after normalising only what is not a function of the
 //! schedules: the wall times (sweep_wall_s, runs_per_hour, total_wall_s, stage1/2_wall_s, a
-//! stage-2 round's secs), the worker that ran a schedule and the worker count, and the output and
-//! scratch paths (`<out>`, `<dir>`). Files up to 4 KiB are kept verbatim; a longer one as its
+//! stage-2 round's secs), the worker that ran a schedule and the worker count, the loaded hvx
+//! module, and the output and scratch paths (`<out>`, `<dir>`). The goldens were explore.py's
+//! outputs at commit 2a58c4b on fake_engine.py (recorded in M107); in M115 they were re-recorded
+//! in the results format after hydo/crates/hydo-explore/examples/legacy_check.rs found every
+//! value of the old files of all 18 scenarios in the new ones (docs/HISTORY.md, Milestone 115),
+//! and report.md and the printed summary unchanged. Files up to 4 KiB are kept verbatim; a longer one as its
 //! digest (`<file>.sha256`: its SHA-256 and line count, then a hash per 32 lines, so a difference
 //! is shown with the written lines of the first differing chunk). `tests/golden/fake/SOURCE.txt`
 //! says how they were recorded.
@@ -152,27 +154,22 @@ fn run(prog: &mut Command, dir: &Path, out: &Path) -> String {
 }
 
 fn norm(text: &str) -> String {
+    // pretty JSON and report.md tables ("key": 1.5, | key | 1.5 |) and compact JSON ("key":1.5)
     let re = regex::Regex::new(
-        r#"("?(?:sweep_wall_s|runs_per_hour|total_wall_s|stage1_wall_s|stage2_wall_s|workers|worker)"?(?::| \|) )[0-9.]+"#,
+        r#"("?(?:sweep_wall_s|runs_per_hour|total_wall_s|stage1_wall_s|stage2_wall_s|workers|worker)"?(?:: | \| |:))[0-9.]+"#,
     )
     .unwrap();
     let t = re.replace_all(text, "${1}N").into_owned();
-    // a stage-2 round's wall time in fc-adaptive.json
+    // a stage-2 round's wall time (exploration.json freeze_sweep.rounds)
     let re2 = regex::Regex::new(r#"("failures": \d+,\s*"secs": )[0-9.]+"#).unwrap();
-    re2.replace_all(&t, "${1}N").into_owned()
+    let t = re2.replace_all(&t, "${1}N").into_owned();
+    // the loaded hvx module of the machine the test runs on (absent on a Mac)
+    let re3 = regex::Regex::new(r#",?\s*"module_srcversion": ?"[^"]*""#).unwrap();
+    re3.replace_all(&t, "").into_owned()
 }
 
-const FILES: [&str; 9] = [
-    "runs.jsonl",
-    "shrink.jsonl",
-    "report.json",
-    "report.md",
-    "errors.json",
-    "properties.txt",
-    "sweep-points.jsonl",
-    "fc-traces.jsonl",
-    "fc-adaptive.json",
-];
+/// What an exploration writes (M115: the results format and report.md, its view for people).
+const FILES: [&str; 3] = ["events.jsonl", "exploration.json", "report.md"];
 
 /// Above this a golden file is kept as its digest (`digest`).
 const VERBATIM_MAX: usize = 4 * 1024;

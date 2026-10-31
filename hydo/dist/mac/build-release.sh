@@ -74,7 +74,7 @@ sh "$TOP/hv/hvm/explore/build.sh" >/dev/null 2>&1
 REL=$OUTDIR/hydo-mac-$VERSION
 rm -rf "$REL"
 # the release tree mirrors the repository: hydo/ (the product) and hv/hvm/ (the Mac engine)
-mkdir -p "$REL/bin" "$REL/hydo/onboard" "$REL/hydo/assert" "$REL/hv/hvm/explore/out" "$REL/guest" \
+mkdir -p "$REL/bin" "$REL/hydo/onboard" "$REL/hv/hvm/explore/out" "$REL/guest" \
          "$REL/examples" "$REL/skill"
 # the programs, all Rust (M107: no Python anywhere in the release): bin/hydo (the one CLI,
 # hydo/crates/hydo-cli), bin/hydo-build (the image builder with its own command line, for
@@ -100,7 +100,7 @@ cp "$TOP"/hydo/onboard/hydo-init*.sh "$TOP/hydo/onboard/hydo-liveness.sh" "$TOP/
 echo "$VERSION" > "$REL/hydo/VERSION"     # what a plan's hydo_version: is checked against
 mkdir -p "$REL/hydo/history"
 cp "$TOP/hydo/history/hydo_hist.sh" "$REL/hydo/history/"
-cp "$TOP/hydo/assert/hydo_assert_report.c" "$TOP/hydo/assert/hydo_assert_table.h" "$REL/hydo/assert/"   # the explorer compiles the property table tool
+# (the property table is made by the explorer itself since M115: no hydo/assert tool in the release)
 cp "$TOP/hv/hvm/hvm" "$REL/hv/hvm/hvm"
 cp "$TOP/hv/hvm/explore/hvmx" "$REL/hv/hvm/explore/hvmx"
 cp "$TOP/hv/hvm/hv.entitlements" "$REL/hv/hvm/"

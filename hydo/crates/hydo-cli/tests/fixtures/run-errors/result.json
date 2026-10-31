@@ -1,0 +1,137 @@
+{
+  "v": 1,
+  "type": "run",
+  "schedule": "",
+  "verdict": {
+    "kind": "error",
+    "text": "(converted from one.errors.json, which has no verdict)"
+  },
+  "fingerprints": {
+    "fp": ""
+  },
+  "findings": [
+    {
+      "kind": "error-log",
+      "id": "6a4360275d80",
+      "status": "new",
+      "message": "[redis] #:M <date> <time> # Fatal error: can't open the AOF manifest file appendonlydir/appendonly.aof.manifest for reading: I/O error",
+      "details": {
+        "service": "redis",
+        "source": "log",
+        "template": "#:M <date> <time> # Fatal error: can't open the AOF manifest file appendonlydir/appendonly.aof.manifest for reading: I/O error",
+        "example": "1165:M 01 Jan 2026 00:00:07.729 # Fatal error: can't open the AOF manifest file appendonlydir/appendonly.aof.manifest for reading: I/O error",
+        "lines": 1,
+        "at": [
+          "0"
+        ]
+      }
+    },
+    {
+      "kind": "error-log",
+      "id": "f0c792251150",
+      "status": "known",
+      "message": "[redis] #:C <date> <time> # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low ",
+      "details": {
+        "service": "redis",
+        "source": "log",
+        "template": "#:C <date> <time> # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low ",
+        "example": "133:C 01 Jan 2026 00:00:00.072 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https",
+        "lines": 2,
+        "at": [
+          "s",
+          "0"
+        ],
+        "known_entry": 0,
+        "reason": "Redis 7.2 warns at every start that vm.overcommit_memory is 0 (the guest kernel default); it affects only background saves under memory pressure, which this test does not exercise"
+      }
+    },
+    {
+      "kind": "error-log",
+      "id": "0c3b6d2b3888",
+      "status": "known",
+      "message": "[redis] #:C <date> <time> # Write error writing append only file on disk: I/O error",
+      "details": {
+        "service": "redis",
+        "source": "log",
+        "template": "#:C <date> <time> # Write error writing append only file on disk: I/O error",
+        "example": "394:C 01 Jan 2026 00:00:06.068 # Write error writing append only file on disk: I/O error",
+        "lines": 1,
+        "at": [
+          "0"
+        ],
+        "known_entry": 1,
+        "reason": "the disk returned I/O errors (disk=ioerr): Redis reports the failed AOF write and, with appendfsync always, exits as documented"
+      }
+    },
+    {
+      "kind": "error-log",
+      "id": "84dcbcb26957",
+      "status": "known",
+      "message": "[redis] #:M <date> <time> # Background AOF rewrite terminated with error",
+      "details": {
+        "service": "redis",
+        "source": "log",
+        "template": "#:M <date> <time> # Background AOF rewrite terminated with error",
+        "example": "133:M 01 Jan 2026 00:00:06.120 # Background AOF rewrite terminated with error",
+        "lines": 1,
+        "at": [
+          "0"
+        ],
+        "known_entry": 2,
+        "reason": "the disk returned I/O errors (disk=ioerr): Redis reports the failed AOF write and, with appendfsync always, exits as documented"
+      }
+    },
+    {
+      "kind": "error-log",
+      "id": "c0cc01ac5c71",
+      "status": "known",
+      "message": "[redis] #:M <date> <time> # Error writing to the AOF file: I/O error",
+      "details": {
+        "service": "redis",
+        "source": "log",
+        "template": "#:M <date> <time> # Error writing to the AOF file: I/O error",
+        "example": "133:M 01 Jan 2026 00:00:06.206 # Error writing to the AOF file: I/O error",
+        "lines": 1,
+        "at": [
+          "0"
+        ],
+        "known_entry": 3,
+        "reason": "the disk returned I/O errors (disk=ioerr): Redis reports the failed AOF write and, with appendfsync always, exits as documented"
+      }
+    },
+    {
+      "kind": "error-log",
+      "id": "56b2cc15b135",
+      "status": "known",
+      "message": "[redis] #:M <date> <time> # Can't recover from AOF write error when the AOF fsync policy is 'always'. Exiting...",
+      "details": {
+        "service": "redis",
+        "source": "log",
+        "template": "#:M <date> <time> # Can't recover from AOF write error when the AOF fsync policy is 'always'. Exiting...",
+        "example": "133:M 01 Jan 2026 00:00:06.206 # Can't recover from AOF write error when the AOF fsync policy is 'always'. Exiting...",
+        "lines": 1,
+        "at": [
+          "0"
+        ],
+        "known_entry": 4,
+        "reason": "the disk returned I/O errors (disk=ioerr): Redis reports the failed AOF write and, with appendfsync always, exits as documented"
+      }
+    }
+  ],
+  "error_logs": {
+    "known_file": "hydo/known-errors.yaml",
+    "known_sha256": "9d5a646d6ab556a6fede3aa3f95ea427455215d9c8e4a8aacd8c628539c6f770",
+    "unknown": "report",
+    "steps": 20,
+    "boots": [
+      {
+        "boot": "first",
+        "steps": 20,
+        "lines": 7,
+        "kinds": 6,
+        "shown": 6
+      }
+    ],
+    "truncated": false
+  }
+}
