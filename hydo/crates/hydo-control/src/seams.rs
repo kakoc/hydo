@@ -94,7 +94,8 @@ impl Seam {
                 "hydo-init-history.sh wraps start_periodic and finish: it prints the history \
                  records and runs each check's `final:` read-back. Controller: `tail` the \
                  history file (line events) or keep the console records; run the read-backs \
-                 before final_verdict; the checks stay host-side (hydo-history)."
+                 before final_verdict; the checks stay host-side (hydo-history). Driven since M123 \
+                 (src/schedule/history.rs); no plan is refused with this seam any more."
             }
             Seam::Freeze => {
                 "hydo-init-freeze.sh parses F= (a knob), arms hydo_fc before the step (iptables \
@@ -119,7 +120,9 @@ impl Seam {
             Seam::ErrorLogs => {
                 "hydo-init-errlog.sh scans each service's log at the end of every boot and \
                  prints HYDO-ERRLOG records. Controller: `tail` the logs (or `read` them at the \
-                 end) and classify host-side with hydo-errors."
+                 end) and classify host-side with hydo-errors. Driven since M123 (src/schedule/errlog.rs: \
+                 the guest's bookkeeping files, the scan computed on the host); no plan is \
+                 refused with this seam any more."
             }
             Seam::NetNamespaces => {
                 "hydo-init-netns.sh gives each service its own namespace on a bridge before \
@@ -131,7 +134,9 @@ impl Seam {
                 "The composer's W= knob writes the composition for /etc/hydo/compose.sh, whose \
                  rounds start commands in the guest. Controller: the composition is computed \
                  host-side already (hydo-composer); each command `spawn`ed at its round with \
-                 HYDO_SEED/HYDO_CMD_ID/HYDO_ROUND, `exit` events, the drain and the kills."
+                 HYDO_SEED/HYDO_CMD_ID/HYDO_ROUND, `exit` events, the drain and the kills. Driven since \
+                 M123 (src/schedule/composer.rs); no plan is refused with this seam any more \
+                 (agent images: agent::plan_of_embedded reads compose.json)."
             }
             Seam::NetFaults => {
                 "hydo-init.sh's net_on/net_heal (and hydo-init-links.sh on links) configure \

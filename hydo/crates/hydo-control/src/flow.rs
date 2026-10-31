@@ -301,6 +301,13 @@ impl<S, K: Clone> Flow<S, K> {
         self.ended = true;
     }
 
+    /// A command typed outside the threads (the runner's resynchronisation `sync`) that an
+    /// ending must also wait for: the agent has read every byte the host typed (M123: a run can
+    /// now end before the controller sent anything).
+    pub fn expect_answer(&mut self, id: u64) {
+        self.unanswered.insert(id);
+    }
+
     /// Run every live thread (and every thread cancelled at this stop) until none makes
     /// progress. `label` names a thread kind; `body` runs one.
     pub fn pump(

@@ -14,7 +14,7 @@
 //! project's prelude, the run directory and the data disk. hydo-build's agent images (step B3)
 //! must keep these paths, or give the controller another layout.
 
-use crate::seams::{Seam, Unsupported};
+use crate::seams::Unsupported;
 use hydo_manifest::py;
 use hydo_manifest::Manifest;
 use serde_json::Value;
@@ -168,6 +168,12 @@ pub struct Plan {
     /// `buggify: true`: a B= token is then written to /tmp/hydo-buggify (features/buggify.rs);
     /// without it B= is an unknown knob.
     pub buggify: bool,
+    /// `checks:` (the history seam, M123).
+    pub history: Vec<crate::schedule::history::HistCheck>,
+    /// `errors:` (the error-logs seam, M123).
+    pub errors: Option<crate::schedule::errlog::ErrPlan>,
+    /// A test composer plan (`test:`; the composer seam, M123).
+    pub compose: Option<crate::schedule::composer::ComposePlan>,
     /// `freeze` in `faults:`: the image has hydo-init-freeze.sh, so F= is the freeze at a packet
     /// (without it F= is an unknown knob).
     pub freeze: bool,
@@ -291,25 +297,8 @@ impl Plan {
         // `any_extension`): each is a seam. `addr:` alone changes nothing without N=/O= (the
         // links extension only redefines known_svc and net_on), so it is not refused here.
         // Driven: `eventually` invariants (features/liveness.rs), guest.clock_after_cut
-        // (features/clock.rs), `buggify: true` (features/buggify.rs).
-        if !m.checks.is_empty() {
-            return Err(Unsupported::seam(
-                Seam::History,
-                "checks: (history recording)",
-            ));
-        }
-        if m.errors.is_some() {
-            return Err(Unsupported::seam(
-                Seam::ErrorLogs,
-                "errors: (the error-log scan)",
-            ));
-        }
-        if get(d, "_compose").is_some_and(py::truthy) {
-            return Err(Unsupported::seam(
-                Seam::Composer,
-                "a test composer plan (test:)",
-            ));
-        }
+        // (features/clock.rs), `buggify: true` (features/buggify.rs); checks:, errors: and test:
+        // (schedule/history.rs, errlog.rs, composer.rs); network: bridge, fakes:, freeze.
         let order = hydo_manifest::service_order(&d["services"])
             .map_err(|e| Unsupported::other(e.message))?;
         let svcs = d["services"].as_array().cloned().unwrap_or_default();
@@ -476,6 +465,9 @@ impl Plan {
             invariants,
             knobs,
             buggify: m.buggify,
+            history: crate::schedule::history::plan_of(d),
+            errors: crate::schedule::errlog::ErrPlan::of(d, &order),
+            compose: crate::schedule::composer::ComposePlan::of(d)?,
             freeze,
             bridge,
             net_extra,

@@ -105,15 +105,18 @@ pub fn manifests() -> Vec<String> {
 
 /// The plan of a manifest as the explorer reads it (`hydo_manifest::for_explorer`).
 pub fn plan_of(rel: &str) -> Result<Plan, Unsupported> {
-    let (data, meta) =
+    Plan::from_manifest(&hydo_manifest::Manifest::from_validated(data_of(rel)?))
+}
+
+/// The validated manifest as the explorer reads it, with a composer plan's meta as `_compose`
+/// (where hydo_manifest::load puts it).
+pub fn data_of(rel: &str) -> Result<serde_json::Value, Unsupported> {
+    let (mut data, meta) =
         hydo_manifest::for_explorer(&top().join(rel)).map_err(|e| Unsupported::other(e.message))?;
-    if meta.is_some() {
-        return Err(Unsupported::seam(
-            hydo_control::Seam::Composer,
-            "a test composer plan (test:)",
-        ));
+    if let Some(meta) = meta {
+        data["_compose"] = meta;
     }
-    Plan::from_manifest(&hydo_manifest::Manifest::from_validated(data))
+    Ok(data)
 }
 
 /// One item of a conversation as the shell model reads it: what the agent delivered and what

@@ -241,17 +241,15 @@ network namespaces; each later one wraps the earlier one's functions. So:
 
 - **liveness:** done in M122 (a monitor thread, not a probe: decision 18).
 - **clock:** done in M122 (decisions 22 and 23).
-- **history:** `tail` the history file (or keep the console records), and run the `final:`
-  read-backs before final_verdict.
+- **history:** done in M123 (branch `ctl-history-errors-composer`), see "History, error logs and
+  the composer" below.
 - **freeze:** done in M124 (branch `ctl-net`), see "Network faults, the freeze and service
   networks" below.
 - **buggify:** done in M122.
 - **fakes:** done in M125 (branch `ctl-fakes`), see "The fakes controller" below.
-- **error-logs:** `tail` or `read` the service logs, and classify them on the host with
-  hydo-errors.
+- **error-logs:** done in M123.
 - **net-namespaces:** done in M124 (branch `ctl-net`).
-- **composer:** `spawn` each composed command at its round (HYDO_SEED, HYDO_CMD_ID,
-  HYDO_ROUND), with the drain and the kills.
+- **composer:** done in M123.
 - **net-faults:** done in M124 (branch `ctl-net`).
 - **recovery-inputs:** done in M122 (`RecoveryInputs { acked, failed, clock, world }`, with
   M125's world); the engine's hand-over is C1's.
@@ -432,6 +430,131 @@ The proofs (on the Mac, no VM):
 
 What C1 needs from this: the image's tool paths in `Layout`. Nothing else: the freeze, the netem
 faults and the namespaces are all agent commands.
+
+## History, error logs and the composer (M123, branch `ctl-history-errors-composer`; docs/HISTORY.md "Milestone 123")
+
+Three modules of `src/schedule/`, each called from a one-line `SEAM(...)` hook in `schedule.rs`:
+
+- **`history.rs`** is hydo-init-history.sh. `Plan::history` holds manifest.sh's HYDO_CHECK_*
+  (the check's id, the spec JSON hydo-build's `check_spec` writes, its `final:` command). At the
+  end of `start_periodic` it prints one `HYDO-CHECK <spec>` line per check, once per
+  conversation. At the start of `finish` it runs each `final:` read-back (`spawn` of
+  `$BB timeout $T $BB sh -c ". prelude; <final>"`, output appended to workload.log, handle
+  `history:c<i>`) and prints `HYDO-CHECK-FINAL {"id":..,"rc":..}`. The `HYDO-HIST` records stay
+  where the workload writes them (/dev/console), and the checks stay on the host (hydo-history).
+- **`errlog.rs`** is hydo-init-errlog.sh. `Plan::errors` (`ErrPlan`) holds manifest.sh's
+  HYDO_ERR_* lines (hydo-build's presets are copied, and `tests/m123.rs` compares the plan
+  with hydo-build's manifest.sh). The bookkeeping files of the shell stay in the guest, written by
+  the same `cat … | wc -l` pipelines, one `sh -c` per `el_mark` (in `step_range`, before the
+  fakes' split, and in `retry_workload`) and one after `mount_data`. `el_report` runs once per
+  conversation: at the start of `die_oracle`, at a cut right after `failed_ids` (and after the
+  fakes' dump: the error logs wrap the fakes' failed_ids), and inside the `final_verdict` wrapper
+  (the assertion records of the final invariants are held back and printed after the error
+  records, as `> $H/el.verdict` does). It reads every stream, its marks and its base with `read`
+  (a chunk that is not UTF-8, or that cuts a character, is read again as hex), and computes
+  EL_SCAN and EL_SUM on the host: POSIX expressions translated to the regex crate (a backslash
+  inside brackets is a literal, as in busybox), leftmost-longest substitution through a
+  regex-automata DFA that reports every match, bytes in the C locale. The records are report
+  lines, so they reach a run's `<tag>.log` like every other report line (M126) and hydo-errors
+  reads them as it read the shell's.
+- **`composer.rs`** is hydo-composer.sh (`/etc/hydo/compose.sh`). `Plan::compose`
+  (`ComposePlan`) holds the HYDO_COMPOSE_* parameters, compose.list, compose.checks and
+  compose.saved/ as hydo-build stages them. The compose.sh calls of a composed plan are replaced:
+  `setw` in `set_knob` for `W` (parse_w as the shell parses it; the seed form's entries from
+  hydo-composer's generator with PLAN_AWK's x/o/n filters; RES_AWK with its messages for the
+  resolved and saved forms), `first` in `provision`, `step` in `step_range_core`, and `verdict`,
+  `end IDX` and `check IDX` in `eval_inv` (`verdict` is answered from the host's state; the other
+  two run their commands). The daemon and each launched entry (`run1`) are threads of the flow
+  (`Part::Compose`, labels `composer` and `cmd:<entry>`); the shell's files in `$C` are host
+  state (`composer::State`). Time is the agent's monotonic clock (`clock_get`'s `mono_ms`, in the
+  shell's centiseconds); a round waits with one `sleep` of the remaining time; the gate is host
+  state; `step`'s budget and the drain are guest timers (`spawn` of `sleep` under
+  `compose-step:<TO>` and `compose-drain`, killed when not needed).
+
+Decisions where the shell is ambiguous (each marked `AMBIGUOUS:` or explained in the module, and
+checked by the shell model as written here):
+
+1. **Durations (`ms=`).** The shell read /proc/uptime around a command. The controller reads the
+   agent's clock before it starts the command and after it saw the command's exit, so a duration
+   also holds how late the host saw the exit (at most one stop).
+2. **Round waits.** The shell polls every 10 ms until a round's time has come. The controller
+   sleeps exactly the rest of the time once. It reads the clock before and after the gate, as the
+   shell does.
+3. **`pgrep -f "compose.sh run1"`** (pause_timer and kill_timer for a composed plan) is answered
+   from the host's state: whether a launched entry has not ended. No `compose.sh run1` process
+   exists in an agent image.
+4. **compose.W and the shell's other $C files** are host state, not files in the guest. Only the
+   commands' logs ($C/log.<i>, log.f<i>, log.e<i>) are guest files.
+5. **`first` after the project's own provisioning.** `( own\n) && compose.sh first` becomes two
+   steps: the project's part as one `spawn` (into provision.log), then the first commands. The
+   shell's failure text of a first command ("<id> exited rc=..:" and the log's last 5 lines into
+   provision.log) is not written; nothing reads it.
+6. **The step's death check.** After `stop_all` the daemon is gone and `$C/done` exists, so a
+   later `step` returns 0 at once, as the shell's `kill -0` test does.
+7. **The empty seed (`W=,p2`).** busybox ash's `$((0x))` was not checked; the controller treats it
+   as the shell failing (no `HYDO-COMPOSE error` line, the knob fails). The schedule parser never
+   lets it through (it wants 8 hex digits), nor an unknown field or a key that is not hex.
+8. **Error-log text.** A busybox awk error on an expression the scan cannot compile is reported as
+   "error-log scan: awk: <svc>: <the regex crate's message>", not regerror's text. A byte that is
+   not UTF-8 in a record becomes U+FFFD in the report line (the shell printed it raw). Busybox's
+   handling of `\d`, `\w`, `\s` in a user's `match:`/`ignore:`/`normalize:` was taken to be
+   musl's (TRE's macros) and was not checked against a busybox.
+9. **The error logs together with fakes.** The fakes' summary lines that `final_verdict` prints
+   are not held back with the assertion records (in a shell image with both extensions they would
+   be). No example manifest has both.
+10. **An ending waits for the runner's sync.** A run can now end before the controller sent
+    anything (a `W=` that setw refuses), so `ScheduleController` also waits for the answer to the
+    runner's resynchronisation (`Flow::expect_answer`); no earlier transcript changed.
+11. **A round reached and the step's time up at the same stop.** At a stop the main part runs
+    before the daemon, so when the daemon's arrival at round TO and the step's timer are seen at
+    the same stop, the step finds the time up and stops the composition (stop_all). In the shell
+    either can win; the model accepts a timeout unless the daemon had arrived at an earlier stop.
+12. **The daemon's environment** is the init's when the first `step` call started it (HYDO_FROM and
+    HYDO_TO of that call, HYDO_SVC/HYDO_LOG of that moment) for every command it starts, its
+    round waits and its drain timer, as the shell's forked daemon keeps it. `check IDX` in a
+    periodic checker follows the core's periodic_loop (M122 decision 20's observation).
+
+- **Agent images.** `agent::plan_of_image` reads a composed image through
+  `agent::plan_of_embedded`: the manifest text expanded with `/etc/hydo/compose.json` (the meta
+  hydo-build staged), that meta kept as `_compose`. `agent_images_carry_the_composer` checks it
+  gives the explorer's plan for every composed example.
+
+The proofs (no VM):
+
+- `tests/corpus.rs` now drives all nine manifests of these seams (four history examples, the
+  error-log stack, and the four composed examples; the three with an `eventually` check together
+  with M122's liveness controller): 2,690 runs, 747 with a recovery boot. Every other manifest's
+  transcripts are byte-identical to main's. `tests/m123.rs` runs the three composed examples that
+  have an `eventually` check also with that check removed (the composer alone), four variants of redis-composed-hist (commands outliving the drain, a budget, a short
+  workload.timeout for stop_all, a saved composition), and the error-log stack, with the identity
+  corpus's schedules and written `W=` forms: 369 runs (88 with a recovery boot), each checked against the shell model
+  (`tests/support/model/m123.rs`, written from the three shell files: EL_SCAN/EL_SUM again with
+  awk's match/substr/gsub and a brute-force longest match, PLAN_AWK's generator again, RES_AWK
+  field by field), its transcript typed again by the replay, recorded in
+  `tests/golden/m123-quick.txt`, and every path of the three extensions taken at least once
+  (the counts are in the golden).
+- `w_forms_as_compose_sh` and `m98_corpora_as_the_awk` run the real hydo-composer.sh (`setw`,
+  then `plan`, under /bin/sh with its dry-run variables and this machine's awk): 31 hand-written
+  W values with every error message, and the M98 corpora (3,000 seed-form values over 80 command
+  sets, 514 resolved compositions replayed on a changed and shuffled list, 86 with a removed
+  command refused) give the controller's console lines, exit status and plan lines.
+- `errlog_scan_as_the_awk` runs EL_SCAN and EL_SUM (the awk text of hydo-init-errlog.sh, this
+  machine's awk) on 120 generated logs with the presets, ignore patterns, marks and bases: the
+  same records as the controller's port. Inputs avoid a backslash next to a date separator, where
+  BWK awk and busybox read `[-\/]` differently.
+- `plans_as_hydo_build`: every example's plan holds what hydo-build writes (HYDO_CHECK_*,
+  HYDO_ERR_*, compose.list, compose.checks, the composer's manifest.sh lines).
+- `deliberate_mistakes_are_caught`: 15 mistakes put into recorded conversations (an error record's
+  template, count or labels, the summary's boot, an error record after the held records, a
+  read-back's status, a check declaration, an entry's round, a duration, an end status, the done
+  line's counts, the plan line, HYDO_SEED, a command's timeout, a launch moved before its gate)
+  are each caught by the model.
+
+Left open: the scripted world is not busybox (no busybox on the Mac; `HYDO_AWK=busybox awk`
+makes the awk tests use one); the error-log reads cost one round trip per 3,000 bytes of log at
+the end of each boot, which was not measured on a real guest (a large Kafka or MySQL log may make
+the end of a run slow; tailing the logs during the run is the alternative); the error logs
+with fakes were not run together (no example has both).
 
 ## Left open
 
