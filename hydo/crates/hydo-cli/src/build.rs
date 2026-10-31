@@ -58,6 +58,7 @@ pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
             setdefault("HYDO_BUSYBOX", &guest.join("busybox"));
             setdefault("HYDO_SEEDRNG", &guest.join("hvx_seedrng"));
             setdefault("HYDO_FCBIN", &guest.join("hydo_fc"));
+            setdefault("HYDO_AGENT_BIN", &guest.join("hydo-agent"));
             setdefault("HYDO_MKE2FS", &ctx.p("tools/bin/mke2fs"));
             setdefault("HYDO_FAKETIME", &ctx.libexec().join("faketime"));
             setdefault("HYDO_MODROOT", &guest.join("modules"));
@@ -83,6 +84,7 @@ pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
             setdefault("HYDO_READ_BIN_ARM64", &guest.join("hydo-read"));
             setdefault("HYDO_ARM64_STORE", &guest.join("tc"));
             setdefault("HYDO_FCBIN_ARM64", &guest.join("hydo_fc"));
+            setdefault("HYDO_AGENT_BIN_ARM64", &guest.join("hydo-agent"));
             (
                 hydo_build::Release::Mac {
                     root: ctx.root.clone(),
@@ -103,7 +105,14 @@ pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
         release,
     };
     let rc = hydo_build::main(&bctx, &hb_argv);
-    if rc == 0 && no_print_flag(&rest) {
+    let agent = rest
+        .windows(2)
+        .any(|w| w[0] == "--control" && w[1] == "agent");
+    if rc == 0 && no_print_flag(&rest) && agent {
+        // M121: the engines boot such an image under lock-step control; the controller that
+        // drives it (hydo-control) is not part of hydo run/explore yet
+        println!("hydo: next:  an agent image runs under a host controller (lock-step control from boot); hydo run and hydo explore do not drive one yet");
+    } else if rc == 0 && no_print_flag(&rest) {
         println!("hydo: next:  hydo run \"disk=none | run\"     or     hydo explore --seeds 1-20");
     }
     rc
