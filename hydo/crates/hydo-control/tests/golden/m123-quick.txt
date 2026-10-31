@@ -196,15 +196,15 @@ chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml#no-eventually	63	248	203
 plan	hydo/onboard/examples/stack/hydo-errors.yaml	recovery:ok=6 recovery:violation=4 run:cut=10 run:error=1 run:ok=2 run:violation=18 unparsed=3
 boot-transcript	hydo/onboard/examples/stack/hydo-errors.yaml	2e4155eb78140ed2
 chunk	hydo/onboard/examples/stack/hydo-errors.yaml	0	500	8314d4d33a201d0a11486a6bde96e67e5a89e219c52dc7528c0e9c49c64fd6c5
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	1	500	54f09c3bc6c44b528616c7e51b74dc03c479abfdd554081dcbbbec4dbd65b7e3
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	2	500	9cfe6dba818eecea26f9ed7311d588ddf7c30761b04bac66a1d669009968ba6d
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	3	500	0f1ab03b83d472982abc6920381a993004d0ccbc30731f94037f445bbbe010c2
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	4	500	bef3cebae6e2a2edafb940b3ee046c2f5f16708e1ea15edb330f953da5e925ab
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	5	500	da9762869c64ab9bd0c74add20b56ac2f6c4c2d8feec763e7c51a5e245c88b32
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	6	500	5fc6507aa5b13e8cf8ce5b2e4d06b27f90765b1bb8dbbcc23ed5ed29e8ae7b80
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	7	500	bd4caaf8dd7f1382fa7ea5e25f27054142062e9eacfc88b0e3102b8e7a51b041
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	8	500	2be925789a189fe9bcdba114d7daa7f46272d8bd003ad9dd8696b37993a1bc64
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	9	500	3fe691509a0bf3a33101898d22b8a9d1fcca11eb16d7b8e6a52c712b9dafd017
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	1	500	fa9cee4aa7e51bf02319a7270dbbaa0b3aad5043fe04df3617d3f1c6961e4659
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	2	500	a7308077574f0f44bdd07f29425f495150b683eb296e35a61eb15348fa0ecd42
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	3	500	53903587943a1b07b8e5f88570d9548590427b51ee7f8cf80e0425841a80abe8
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	4	500	d8fd44d13ed8630c5af527d6d4129d13d552101f8dc1ee95411b766c57c8ee55
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	5	500	660d58b370abdfd37692ad9b26c2934a3f5ed7e69f4b05f89d8eac174abf55b6
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	6	500	dfb3764f581f69c3003bca7814ec5231a8bfaae4a4740483279be5dfaaeec3d1
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	7	500	09c02885ec62e2fa4ce9edc972a8bd8808e5cb9a142998b6c7386a525858151e
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	8	500	d43930dac96a8cda344b266af41de4f1358629e55e3095bbffca4ec8d33a828b
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	9	500	f36da939412956e548254c0a50096add781b79946492e110e47eb68c620cf239
 chunk	hydo/onboard/examples/stack/hydo-errors.yaml	10	500	4c69951a332188a365f7e5f5aaf679a5deeeead91df55b4cfec797f488dc087b
 chunk	hydo/onboard/examples/stack/hydo-errors.yaml	11	500	a5b652b927f6e27911be1b23658555766ff578ddf2c7084a3b95f466b364416b
 chunk	hydo/onboard/examples/stack/hydo-errors.yaml	12	500	c84ff543c92614a6b3342cd86c0171830b47383e41e56bdfb25ee27529239ba1
@@ -213,15 +213,15 @@ chunk	hydo/onboard/examples/stack/hydo-errors.yaml	14	500	8fb5834182f7716ccfd3d3
 chunk	hydo/onboard/examples/stack/hydo-errors.yaml	15	500	319d53e7baff59a101c483db9ba672877d4680a1b732b15a137b40e630ab2a74
 chunk	hydo/onboard/examples/stack/hydo-errors.yaml	16	500	027a7088c25c46d7419c93d42a11c1737bdea8f0ae5327a286f96c36a36d10e0
 chunk	hydo/onboard/examples/stack/hydo-errors.yaml	17	500	f9e559ebd6172fce2dcb0d2affaddf3c986b2ea883bacf06fbe1c789159add0e
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	18	500	35abb7a4570a0f1adc57b09afd1e46c12ceb327148df6f75d051fe94d8682414
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	18	500	1da11f325c4d68a3bd8563b2f4c682754a7249441e127d2b869630e4751e3a12
 chunk	hydo/onboard/examples/stack/hydo-errors.yaml	19	500	373054f8ab26b66c0a2c89a2c6e05818b337de18b1b695d05b5e648b54760e31
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	20	500	91f5806cb9a5e2f2696ac031e89c63e36b7739cb06d6f181a74e71f1d58ee4da
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	20	500	3ee80ff28b688fe5594a5809d39615d17a268d42e82ea7a7089bf2a197a3f4e8
 chunk	hydo/onboard/examples/stack/hydo-errors.yaml	21	500	489a24ae7648a91d05542adad32f7266c4aea66e8489a698749fd6d80ac8ebb1
 chunk	hydo/onboard/examples/stack/hydo-errors.yaml	22	500	3b3061cab4087b6300adea7135d947bca1d7c5418181a1915152734324357387
 chunk	hydo/onboard/examples/stack/hydo-errors.yaml	23	500	09a134b0812a1255c85e27de8053a9af61da4d3a3864cd3fc4225f1c8f7cd161
 chunk	hydo/onboard/examples/stack/hydo-errors.yaml	24	500	7505209d0150b71a9a6c59000f1c6d522c89903410219f42dccec899527a1bfe
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	25	500	f7e5eb17eca8e179a7b8f621214e7e630648358e8c5904c6f8b7b272e1710651
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	26	500	b637723d54202de48fd126b94cedce9eb36882c6ddb12d363f62cfa6b5c482ac
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	25	500	938d48555bcf88b21ac81d6534935a09a1134e572246e15e3b30d8ef57c4315d
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	26	500	2bde419b5af60e0fabb10ea3330f30a386bec466af498e74864e75da0ac54d9c
 chunk	hydo/onboard/examples/stack/hydo-errors.yaml	27	252	e80d1af736233d8d110220b58d311c62dab898bce8de9ca82b9e060183b639a8
 plan	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml#drain	recovery:ok=11 run:cut=11 run:error=2 run:ok=8 run:violation=27 unparsed=1
 boot-transcript	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml#drain	0b0ff40b1a75762b

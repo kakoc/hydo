@@ -141,11 +141,14 @@ controller.
     /proc/uptime, which reads CLOCK_BOOTTIME; the two agree in a guest that never suspends). An
     unreadable clock reads as empty, which awk takes as 0, as in the shell.
 20. **A monitor's environment is the init's environment at the anchor** (the shell forks the
-    monitor then). A later start_svc does not change it. (Observation for the core: M120's
-    periodic_loop builds its environment when each command is sent, so after a K= restart of a
-    service other than the last one started, its HYDO_SVC/HYDO_LOG differ from the shell's
-    subshell. The core model does not check the periodic job's environment. This was not
-    changed here.)
+    monitor then). A later start_svc does not change it. The core's periodic checkers do the
+    same since M127 (branch `c2-linux-fixes`): `Part::Every` carries the init's exports of the
+    moment start_periodic started it, and its `sleep`, its check and a composer `check IDX` or
+    `end IDX` it evaluates are built from them, so a K= restart of a service other than the last
+    one started no longer changes their HYDO_SVC/HYDO_LOG. The core model checks the periodic
+    job's environment against the one at start_periodic, and
+    `tests/conversations.rs::a_periodic_check_keeps_the_environment_of_its_start` restarts
+    miniflux's postgres (front is the last service) and checks every periodic command.
 21. **The monitors' files stay on the host** (`live.anchor.*`, `live.pid.*`, `live.res.*` are not
     written in the guest). The attempt's output is kept to 3,000 bytes (decision 7); the appended
     "satisfied ..." line follows the kept output, also when it does not end with a newline.
@@ -396,8 +399,9 @@ model in `tests/support/model/net.rs` checks each):
 11. **`cat $H/fc.ipt`** after failed rules: the rules' captured output, as notes.
 12. **XTABLES_LOCKFILE** is exported from the arming on (the shell's `export` in fc_arm), into
     every later command of the main part. A background job of the shell keeps the environment of
-    its fork; the controller's threads build each command when they send it (M120's approach), so
-    a periodic check after the arming has the variable too.
+    its fork. Since M127 the periodic checkers do too (M122 decision 20), so a periodic check
+    after the arming does not have the variable, as in the shell; the pause and kill timers still
+    build each command when they send it (M120's approach).
 13. **F= with `network: bridge`** is driven since M127 (branch `c2-linux-fixes`). The agent's
     `freeze` has an optional `netns` (an additions-only change of protocol 1, feature
     `freeze-netns` in the hello; `Command::features()` names both features, and neither the
@@ -522,8 +526,9 @@ checked by the shell model as written here):
     either can win; the model accepts a timeout unless the daemon had arrived at an earlier stop.
 12. **The daemon's environment** is the init's when the first `step` call started it (HYDO_FROM and
     HYDO_TO of that call, HYDO_SVC/HYDO_LOG of that moment) for every command it starts, its
-    round waits and its drain timer, as the shell's forked daemon keeps it. `check IDX` in a
-    periodic checker follows the core's periodic_loop (M122 decision 20's observation).
+    round waits and its drain timer, as the shell's forked daemon keeps it. `check IDX` (and
+    `end IDX`) in a periodic checker has the checker's environment, the init's at start_periodic,
+    with HYDO_CHECK (or HYDO_CMD) added (M127, M122 decision 20).
 
 - **Agent images.** `agent::plan_of_image` reads a composed image through
   `agent::plan_of_embedded`: the manifest text expanded with `/etc/hydo/compose.json` (the meta

@@ -174,3 +174,63 @@ fn the_lockstep_link_speaks_the_engine_protocol() {
         "SEND at=10 {\"id\":1,\"op\":\"syncfs\",\"v\":1}\\n\nCONT\nACK 1\nEND HYDO-ORACLE: OK tiny\n"
     );
 }
+
+#[test]
+fn a_periodic_check_keeps_the_environment_of_its_start() {
+    // miniflux: postgres, then front (the last service started, so HYDO_SVC=front when
+    // start_periodic forks its checker). A K= restart of postgres exports HYDO_SVC=postgres in
+    // the init; the shell's checker subshell keeps HYDO_SVC=front (HANDOFF.md, M122 decision 20).
+    let m = "hydo/onboard/examples/miniflux/hydo.yaml";
+    let plan = plan_of(m).unwrap();
+    assert!(plan.invariants.iter().any(|i| !i.every.is_empty()));
+    // the scripted guest fails some boots on purpose: the first salt that reaches S1
+    let b = (0..20)
+        .find_map(|i| support::boot(&plan, &format!("miniflux periodic env {i}")).ok())
+        .expect("a boot that reaches S1");
+    let has = |c: &Command, kv: &str| match c {
+        Command::Run(r) => r.env.as_ref().is_some_and(|e| e.iter().any(|x| x == kv)),
+        Command::Spawn(s) => s.env.as_ref().is_some_and(|e| e.iter().any(|x| x == kv)),
+        _ => false,
+    };
+    let mut after_restart = 0;
+    for text in [
+        "disk=none | run K=postgres@2+3",
+        "disk=none | run K=postgres@1+10",
+        "disk=none | run K=postgres@5+20",
+    ] {
+        let s: hydo_schedule::Schedule = text.parse().unwrap();
+        let r = support::run_schedule(&b, &s).unwrap();
+        check(
+            &plan,
+            &r.run.items,
+            Conv::Run,
+            &s.guest_text(),
+            (&[], &[]),
+            Some(&b.s1.2),
+        )
+        .unwrap_or_else(|e| panic!("{text}: the run differs from the shell:\n{e}"));
+        let mut restarted = false;
+        for it in &r.run.items {
+            let support::Item::Send { by, cmd, .. } = it else {
+                continue;
+            };
+            if by == "main" && has(cmd, "HYDO_SVC=postgres") {
+                restarted = true;
+            }
+            if by.starts_with("every:") {
+                assert!(
+                    has(cmd, "HYDO_SVC=front") && has(cmd, "HYDO_LOG=/tmp/hydo/front.log"),
+                    "{text}: a periodic command without the environment of its start: {cmd:?}"
+                );
+                if restarted {
+                    after_restart += 1;
+                }
+            }
+        }
+        assert!(restarted, "{text}: postgres was not restarted");
+    }
+    assert!(
+        after_restart > 0,
+        "no periodic command was sent after a restart of postgres"
+    );
+}

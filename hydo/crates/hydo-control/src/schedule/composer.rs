@@ -32,7 +32,8 @@
 
 use super::text::{centis, read_bytes, records, text};
 use super::{
-    bb, die_oracle, env, jesc, log, post, run, run_argv, signal_cmd, spawn_wait, Ctx, Part, Ran, F,
+    bb, die_oracle, env, env_with, jesc, log, post, run, run_argv, signal_cmd, spawn_wait, Ctx,
+    Part, Ran, F,
 };
 use crate::flow::{Memo, Step, Stop};
 use crate::seams::Unsupported;
@@ -1294,8 +1295,14 @@ pub(super) fn in_flight(fx: &mut F<'_>) -> bool {
 
 // ------------------------------------------------------------------ the invariants
 
-/// An invariant's command when it is one of the composer's: its exit status and output.
-pub(super) fn eval(fx: &mut F<'_>, ctx: &Ctx, cmd: &str) -> Step<Option<Ran>> {
+/// An invariant's command when it is one of the composer's: its exit status and output. `exports`
+/// are those of the shell process that evaluates it (a periodic checker keeps those of its fork).
+pub(super) fn eval(
+    fx: &mut F<'_>,
+    ctx: &Ctx,
+    cmd: &str,
+    exports: &BTreeMap<String, String>,
+) -> Step<Option<Ran>> {
     let Some(cp) = ctx.plan.compose.as_ref() else {
         return Ok(None);
     };
@@ -1321,19 +1328,19 @@ pub(super) fn eval(fx: &mut F<'_>, ctx: &Ctx, cmd: &str) -> Step<Option<Ran>> {
     let num = |s: &str| s.parse::<usize>().ok();
     if let Some(i) = rest.strip_prefix("end ").and_then(num) {
         if i < cp.commands.len() {
-            return end_cmd(fx, ctx, i).map(Some);
+            return end_cmd(fx, ctx, i, exports).map(Some);
         }
     }
     if let Some(i) = rest.strip_prefix("check ").and_then(num) {
         if i < cp.checks.len() {
-            return check_cmd(fx, ctx, i).map(Some);
+            return check_cmd(fx, ctx, i, exports).map(Some);
         }
     }
     Ok(None)
 }
 
 /// endc IDX: an eventually or finally command as an invariant.
-fn end_cmd(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<Ran> {
+fn end_cmd(fx: &mut F<'_>, ctx: &Ctx, i: usize, exports: &BTreeMap<String, String>) -> Step<Ran> {
     let c = &plan(ctx).commands[i];
     mkdir_c(fx, ctx)?;
     if c.kind == "finally" {
@@ -1360,7 +1367,7 @@ fn end_cmd(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<Ran> {
         c.kind, c.id
     ));
     let t1 = centis(fx)?;
-    let e = env(fx, ctx, &[("HYDO_CMD", c.id.clone())]);
+    let e = env_with(ctx, exports, &[("HYDO_CMD", c.id.clone())]);
     let log_file = format!("{}/log.e{i}", cdir(ctx));
     let st = spawn_wait(
         fx,
@@ -1392,9 +1399,9 @@ fn end_cmd(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<Ran> {
 }
 
 /// check IDX: a final/always check (0 holds, 1 violated, 2 not evaluable, a timeout too).
-fn check_cmd(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<Ran> {
+fn check_cmd(fx: &mut F<'_>, ctx: &Ctx, i: usize, exports: &BTreeMap<String, String>) -> Step<Ran> {
     let c = &plan(ctx).checks[i];
-    let e = env(fx, ctx, &[("HYDO_CHECK", c.id.clone())]);
+    let e = env_with(ctx, exports, &[("HYDO_CHECK", c.id.clone())]);
     let r = run(
         fx,
         timeout_sh(ctx, c.timeout, &c.cmd),
