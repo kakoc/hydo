@@ -1,0 +1,13 @@
+{
+  "about": "the configuration is read at the first evaluation, which writes HYDO-BUGGIFY; only the first firing is recorded, with \"hit\" (the evaluation's index at the point)",
+  "needs": [],
+  "steps": [
+    {"do":"buggify","id":"b.one","msg":"always fires"},
+    {"do":"fire","a":0},
+    {"do":"fire","a":0,"details":{"map":[["second",true]]}},
+    {"do":"catalog"}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": "1,1000,1000", "buggify_file": null, "output": "first_fire.out", "returns": "11"}
+  ]
+}

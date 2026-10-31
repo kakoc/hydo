@@ -1,0 +1,2 @@
+HYDO-ASSERT {"t":"always","id":"t.always","ok":true,"msg":"an always property"}
+HYDO-ASSERT {"t":"always","id":"t.always","ok":false,"msg":"an always property","details":{"x":1}}

@@ -1,0 +1,14 @@
+{
+  "about": "record writes one raw record; an empty argument is written as %",
+  "needs": [],
+  "steps": [
+    {"do":"history","name":"Other.hist_2-x"},
+    {"do":"record","h":0,"proc":{"int":"7"},"type":"invoke","f":"cas","args":["k","a","b"]},
+    {"do":"record","h":0,"proc":{"int":"7"},"type":"ok","f":"cas","args":["k","a","b@9"]},
+    {"do":"record","h":0,"proc":{"int":"8"},"type":"info","f":"read","args":[]},
+    {"do":"record","h":0,"proc":{"int":"0"},"type":"fail","f":"write","args":["","x",""]}
+  ],
+  "runs": [
+    {"name": "", "out": "off", "hist_out": "file", "buggify_env": null, "buggify_file": null, "output": "record.out", "returns": ""}
+  ]
+}

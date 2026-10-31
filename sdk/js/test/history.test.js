@@ -1,6 +1,6 @@
 'use strict';
-// Unit tests of hydo-assert/history (node --test). The byte-for-byte comparison with the Go
-// recorder is test/history-conformance.sh; these repeat Go's own unit test (hydohist_test.go)
+// Unit tests of hydo-assert/history (node --test). The byte-for-byte comparison with the
+// reference SDK is test/cases.test.js (the shared cases); these repeat Go's own unit test (hydohist_test.go)
 // and cover the argument checks, the sink switches and the one-write-per-record rule.
 const test = require('node:test');
 const assert = require('node:assert');

@@ -1,0 +1,7 @@
+PRE existing line
+HYDO-ASSERT-DECL {"t":"always","id":"o.a","msg":"an assertion"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.o.p","msg":"fault point fired: a point"}
+HYDO-ASSERT {"t":"always","id":"o.a","ok":false,"msg":"an assertion","details":{"k":"v"}}
+HYDO-BUGGIFY {"seed":"1","enable_pm":1000,"fire_pm":1000,"enabled":["o.p"]}
+HYDO-ASSERT {"t":"sometimes","id":"buggify.o.p","ok":true,"msg":"fault point fired: a point","details":{"hit":1}}
+HYDO-SETUP-COMPLETE

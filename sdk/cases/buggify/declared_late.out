@@ -1,0 +1,4 @@
+HYDO-ASSERT {"t":"always","id":"b.x","ok":true,"msg":"an assertion"}
+HYDO-BUGGIFY {"seed":"abc","enable_pm":1000,"fire_pm":1000,"enabled":["b.late"]}
+HYDO-ASSERT {"t":"sometimes","id":"buggify.b.late","ok":true,"msg":"fault point fired: declared before","details":{"hit":1,"k":"v"}}
+HYDO-ASSERT {"t":"sometimes","id":"buggify.b.later","ok":true,"msg":"fault point fired: declared after the first evaluation","details":{"hit":1}}

@@ -1,6 +1,6 @@
 """Unit tests of hydo_assert.history. Run: python3 -m unittest discover -s sdk/python/tests
 
-The byte-for-byte comparison with the Go recorder is tests/history_conformance.sh; these repeat
+The byte-for-byte comparison with the reference SDK is tests/test_cases.py (the shared cases); these repeat
 Go's own unit test (hydohist_test.go) and cover the argument checks, the sink switches, threads
 and fork."""
 

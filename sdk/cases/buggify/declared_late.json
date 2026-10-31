@@ -1,0 +1,16 @@
+{
+  "about": "the HYDO-BUGGIFY line lists the points declared before the first evaluation; a later point still fires by its own id; \"hit\" replaces a caller key",
+  "needs": [],
+  "steps": [
+    {"do":"buggify","id":"b.late","msg":"declared before"},
+    {"do":"always","id":"b.x","msg":"an assertion"},
+    {"do":"check","a":1,"cond":true},
+    {"do":"fire","a":0,"details":{"map":[["hit","mine"],["k","v"]]}},
+    {"do":"buggify","id":"b.later","msg":"declared after the first evaluation"},
+    {"do":"fire","a":2},
+    {"do":"fire","a":0}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": "abc,1000,1000", "buggify_file": null, "output": "declared_late.out", "returns": "1111"}
+  ]
+}

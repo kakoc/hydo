@@ -1,0 +1,2 @@
+HYDO-ASSERT {"t":"always","id":"c.details","ok":false,"msg":"a comparison with details","details":{"extra":"e","left":7,"op":"\u003c","right":5}}
+HYDO-ASSERT {"t":"always","id":"c.details","ok":true,"msg":"a comparison with details","details":{"left":1,"op":"\u003c","right":5,"z":true}}

@@ -1,0 +1,17 @@
+{
+  "about": "the catalog lists every declaration in declaration order; a BUGGIFY point is a sometimes property buggify.\u003cid\u003e",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"k.always","msg":"always"},
+    {"do":"always_or_unreachable","id":"k.aou","msg":"always or unreachable"},
+    {"do":"sometimes","id":"k.sometimes","msg":"sometimes"},
+    {"do":"reachable","id":"k.reachable","msg":"reachable"},
+    {"do":"unreachable","id":"k.unreachable","msg":"unreachable"},
+    {"do":"eventually","id":"k.eventually","msg":"eventually","within_ms":5000},
+    {"do":"buggify","id":"k.point","msg":"a fault point"},
+    {"do":"catalog"}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "every_type.out", "returns": ""}
+  ]
+}

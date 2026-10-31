@@ -1,0 +1,11 @@
+{
+  "about": "byte strings are written as base64 (Go's []byte)",
+  "needs": ["bytes"],
+  "steps": [
+    {"do":"always","id":"d.bytes","msg":"details encoding"},
+    {"do":"check","a":0,"cond":true,"details":{"map":[["b",{"bytes":"000102faff"}],["hello",{"bytes":"68656c6c6f"}],["empty",{"bytes":""}],["hi",{"bytes":"686900ff"}]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "bytes.out", "returns": "1"}
+  ]
+}

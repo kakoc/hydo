@@ -1,0 +1,24 @@
+{
+  "about": "ver writes enc(value)@version",
+  "needs": [],
+  "steps": [
+    {"do":"history","name":"kv"},
+    {"do":"invoke","h":0,"proc":{"int":"10"},"f":"write","args":["kv","v"]},
+    {"do":"ok","o":0,"args":["kv",{"ver":["v","0"]}]},
+    {"do":"invoke","h":0,"proc":{"int":"11"},"f":"write","args":["kv","v"]},
+    {"do":"ok","o":1,"args":["kv",{"ver":["v","1"]}]},
+    {"do":"invoke","h":0,"proc":{"int":"12"},"f":"write","args":["kv","v"]},
+    {"do":"ok","o":2,"args":["kv",{"ver":["v","83"]}]},
+    {"do":"invoke","h":0,"proc":{"int":"13"},"f":"write","args":["kv","v"]},
+    {"do":"ok","o":3,"args":["kv",{"ver":["v","9007199254740992"]}]},
+    {"do":"invoke","h":0,"proc":{"int":"14"},"f":"write","args":["kv","v"]},
+    {"do":"ok","o":4,"args":["kv",{"ver":["v","9007199254740993"]}]},
+    {"do":"invoke","h":0,"proc":{"int":"15"},"f":"write","args":["kv","v"]},
+    {"do":"ok","o":5,"args":["kv",{"ver":["v","9223372036854775807"]}]},
+    {"do":"invoke","h":0,"proc":{"int":"9"},"f":"write","args":["x","y"]},
+    {"do":"ok","o":6,"args":[{"ver":["","5"]},{"ver":["nil","6"]},{"ver":["a@b","7"]},{"ver":["12","12"]}]}
+  ],
+  "runs": [
+    {"name": "", "out": "off", "hist_out": "file", "buggify_env": null, "buggify_file": null, "output": "ver.out", "returns": ""}
+  ]
+}

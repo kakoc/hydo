@@ -1,0 +1,15 @@
+{
+  "about": "the less_than helper (JavaScript and Python; Go and Rust call cmp with its operator) writes the comparison record",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"c.less_than","msg":"always less_than"},
+    {"do":"sometimes","id":"c.s_less_than","msg":"sometimes less_than"},
+    {"do":"cmp","a":0,"left":{"int":"-5"},"op":"\u003c","right":{"int":"5"},"helper":"less_than","details":{"map":[["k","v"]]}},
+    {"do":"cmp","a":0,"left":{"int":"5"},"op":"\u003c","right":{"int":"-5"},"helper":"less_than"},
+    {"do":"cmp","a":1,"left":{"int":"5"},"op":"\u003c","right":{"int":"-5"},"helper":"less_than"},
+    {"do":"cmp","a":1,"left":{"int":"-5"},"op":"\u003c","right":{"int":"5"},"helper":"less_than"}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "less_than.out", "returns": "1001"}
+  ]
+}

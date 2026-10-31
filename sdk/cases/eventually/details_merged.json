@@ -1,0 +1,12 @@
+{
+  "about": "elapsed_ms and within_ms replace caller keys of the same name",
+  "needs": [],
+  "steps": [
+    {"do":"eventually","id":"e.keys","msg":"details with the same keys","within_ms":2000},
+    {"do":"begin","a":0},
+    {"do":"done","w":0,"details":{"map":[["elapsed_ms","mine"],["within_ms","mine"],["other",true]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "details_merged.out", "returns": "1"}
+  ]
+}

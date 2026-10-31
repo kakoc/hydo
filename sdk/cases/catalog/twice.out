@@ -1,0 +1,4 @@
+HYDO-ASSERT {"t":"always","id":"k.a","ok":true,"msg":"first"}
+HYDO-ASSERT-DECL {"t":"always","id":"k.a","msg":"first"}
+HYDO-ASSERT-DECL {"t":"always","id":"k.a","msg":"first"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"k.b","msg":"declared after the first catalog"}

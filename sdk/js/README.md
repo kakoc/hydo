@@ -99,10 +99,10 @@ comparison helpers add `left`/`op`/`right`, `eventually` adds `elapsed_ms`/`with
 fired fault point adds `hit`: each to the caller's own object (or `Map`) when one is given, as
 the Go SDK writes into the caller's map.
 
-**Go version note.** The conformance test pins Go 1.26.5, the version this repository's Go
-programs are built with. Go 1.27 changed one detail of `encoding/json`: invalid UTF-8 is written
-as a raw U+FFFD character instead of the escape `�`. This package writes the escape (the
-Go 1.26 form); everything else is the same for both Go versions.
+**Go version note.** The shared cases hold the bytes of Go 1.26.5, the version this
+repository's Go programs are built with. Go 1.27 changed one detail of `encoding/json`: invalid
+UTF-8 is written as a raw U+FFFD character instead of the escape `\ufffd`. This package
+writes the escape (the Go 1.26 form); everything else is the same for both Go versions.
 
 ## Eventually
 
@@ -193,27 +193,24 @@ tx.ok(hh.append('x', '1'), hh.readResult('y', '1', '2'));
 
 ## Tests
 
-- `npm test` (`node --test test/unit.test.js test/history.test.js`): what the Go program cannot
+- `npm test` (`node --test test/unit.test.js test/history.test.js`): what the shared cases cannot
   express (cycles, `undefined`, `Map`/`Set`, `Date`, async liveness, the sink switches) and the
   BUGGIFY rates over 400 seeds; for the history recorder, the exact lines of the Go recorder's
   own unit test, the encoding of every byte class, the argument checks, the sink settings and
   one `fs.writeSync` per record.
-- `test/history-conformance.sh`: builds `test/history-go/main.go` against the Go recorder's own
-  source files and runs it and `test/history-conformance.js` (the same calls, 150 records;
-  through the CommonJS and through the ESM entry) with five sink settings: an existing file, a
-  missing file, `stderr`, a path that cannot be opened, and `off`. The records must be
-  byte-identical with the time field masked, the time fields must be decimal integers that never
-  decrease, and the stdouts (the helpers' results) must be byte-identical. It passes with Go
-  1.26.5 (the default) and 1.27.3.
-- `test/conformance.sh`: builds `test/go-conformance/main.go` against the Go SDK's own source
-  files (Go 1.26.5 by default, through `GOTOOLCHAIN`) and runs it and `test/conformance.js`
-  (once through the CommonJS entry, once through the ESM entry) under five BUGGIFY
-  configurations (seed in the environment, seed in the file, none, odd enable value, invalid
-  seed); the consoles and stdouts must be byte-identical. The calls cover every type, dedup,
-  comparisons, NaN/±Inf records, eventually, fault points sharing one details object, and
-  details with nested maps and arrays, bytes, 64-bit integers, floats at every formatting
-  boundary, HTML characters, control characters, U+2028/U+2029, astral characters (key order),
-  and invalid UTF-8. Needs `go` and `node`.
+- `node --test` (every file in `test/`; `npm test` runs the two unit-test files only) also
+  runs `test/cases.test.js`: the shared cases (`sdk/cases`, written by the reference SDK,
+  `sdk/rust`; format and rules in `sdk/rust/README.md`, "The shared cases"). For every case
+  and run it starts itself as a child process, once through the CommonJS and once through the
+  ESM entry, makes the case's calls with this package and `hydo-assert/history`, and compares
+  the bytes the sink received and the calls' results with the case's files. Cases that need a
+  float32 (`f32`) or invalid UTF-8 bytes in a history record (`raw_hist`, which a JavaScript
+  string cannot hold) are skipped and listed. To add a case, add it to the Rust SDK's
+  `tests/cases/defs.rs` and run `HYDO_BLESS=1 cargo test --test cases` there; this test then
+  runs it. A format change starts in the Rust SDK too: after it is blessed, this test fails on
+  the lines this package must change. No other language is needed to run it.
+- `package.json` still names the deleted Go-binary scripts in its `conformance` script: the
+  file is copied into the node-kv example's images, so changing it would change their bytes.
 
 ## Example
 

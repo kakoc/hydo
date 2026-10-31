@@ -1,0 +1,4 @@
+HYDO-HIST la 1 invoke * read x
+HYDO-HIST la 1 ok * read x []
+HYDO-HIST la 1 invoke * read x
+HYDO-HIST la 1 ok * read x [%] [a] [a,b%2Cc,%5Bx%5D,%6Eil,%,é,1%202,%25,%3A] [1,2,3]

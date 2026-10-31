@@ -1,0 +1,10 @@
+HYDO-HIST kv 0 invoke * write k 1
+HYDO-HIST kv 0 ok * write k 1
+HYDO-HIST kv 1099511627776 invoke * write k 1
+HYDO-HIST kv 1099511627776 ok * write k 1
+HYDO-HIST kv -5 invoke * write k 1
+HYDO-HIST kv -5 ok * write k 1
+HYDO-HIST kv 9223372036854775807 invoke * write k 1
+HYDO-HIST kv 9223372036854775807 info * write k 1
+HYDO-HIST kv -9223372036854775808 invoke * write k 1
+HYDO-HIST kv -9223372036854775808 fail * write k 1

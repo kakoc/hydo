@@ -1,0 +1,8 @@
+HYDO-HIST kv 3 invoke * write k1 a%20b
+HYDO-HIST kv 3 ok * write k1 a%20b@83
+HYDO-HIST kv 3 invoke * write k2 v
+HYDO-HIST kv 3 fail * write k2 v
+HYDO-HIST kv 4 invoke * write k3 v
+HYDO-HIST kv 4 info * write k3 v
+HYDO-HIST kv 4 invoke * append l 7
+HYDO-HIST kv 4 ok * append l 7

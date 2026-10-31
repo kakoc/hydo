@@ -1,0 +1,1 @@
+HYDO-ASSERT {"t":"always","id":"d.keys_invalid_utf8","ok":true,"msg":"details encoding","details":{"a":1,"~":2,"\ufffdk":{"a":2,"a\ufffd":1}}}

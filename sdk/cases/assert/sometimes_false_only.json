@@ -1,0 +1,12 @@
+{
+  "about": "a sometimes property that is only ever false writes nothing",
+  "needs": [],
+  "steps": [
+    {"do":"sometimes","id":"t.sometimes_never","msg":"a sometimes property that is never true"},
+    {"do":"check","a":0,"cond":false},
+    {"do":"check","a":0,"cond":false,"details":{"map":[["n",{"int":"1"}]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "sometimes_false_only.out", "returns": "00"}
+  ]
+}

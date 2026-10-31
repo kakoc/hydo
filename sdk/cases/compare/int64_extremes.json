@@ -1,0 +1,14 @@
+{
+  "about": "comparisons of int64 extremes and negative numbers",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"c.extremes","msg":"int64 extremes"},
+    {"do":"always","id":"c.extremes_false","msg":"int64 extremes, false"},
+    {"do":"cmp","a":0,"left":{"int":"-9223372036854775808"},"op":"\u003c","right":{"int":"9223372036854775807"}},
+    {"do":"cmp","a":1,"left":{"int":"9223372036854775807"},"op":"\u003c=","right":{"int":"-9223372036854775808"}},
+    {"do":"cmp","a":1,"left":{"int":"-1"},"op":"==","right":{"int":"-1"}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "int64_extremes.out", "returns": "101"}
+  ]
+}

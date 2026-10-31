@@ -1,0 +1,13 @@
+{
+  "about": "hit records carry their details",
+  "needs": [],
+  "steps": [
+    {"do":"reachable","id":"d.reach","msg":"a reachable location with details"},
+    {"do":"unreachable","id":"d.unreach","msg":"an unreachable location with details"},
+    {"do":"hit","a":0,"details":{"map":[["where","here"],["n",[{"int":"1"},{"int":"2"}]]]}},
+    {"do":"hit","a":1,"details":{"map":[["order",{"int":"7"}]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "on_hit.out", "returns": ""}
+  ]
+}

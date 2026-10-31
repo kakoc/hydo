@@ -1,0 +1,1 @@
+HYDO-ASSERT {"t":"eventually","id":"e.await","ok":true,"msg":"true at once","details":{"elapsed_ms":0,"probe":"ping","within_ms":1500}}

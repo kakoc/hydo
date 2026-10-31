@@ -1,0 +1,13 @@
+{
+  "about": "always_or_unreachable is written like always",
+  "needs": [],
+  "steps": [
+    {"do":"always_or_unreachable","id":"t.aou","msg":"an always-or-unreachable property"},
+    {"do":"check","a":0,"cond":true,"details":{"map":[]}},
+    {"do":"check","a":0,"cond":false,"details":{"map":[["why",null]]}},
+    {"do":"check","a":0,"cond":false}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "always_or_unreachable.out", "returns": "100"}
+  ]
+}
