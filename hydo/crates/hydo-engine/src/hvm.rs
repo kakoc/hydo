@@ -5,7 +5,11 @@
 //! ```text
 //! [env HVM_DISK=<data disk>] <hvmx> [--ram-mib N] one   <Image> <initramfs> <outdir> "<schedule>"
 //! [env HVM_DISK=<data disk>] <hvmx> [--ram-mib N] serve <Image> <initramfs> <outdir>
+//! [env HVM_DISK=<data disk>] <hvmx> [--ram-mib N] fresh <Image> <initramfs> <outdir>
 //! ```
+//!
+//! `fresh` is `serve` whose first request runs on the boot's own state (`Engine::start_fresh`).
+//! Both serve lock-step control sessions (`crate::control`, M119).
 //!
 //! The data disk is `<image without .cpio.gz>-disk.img` next to the initramfs, attached only when
 //! it exists. An image built for the second guest kernel names it in `/etc/hydo/kernel`
@@ -143,11 +147,21 @@ impl Engine for Hvm {
     fn start(&self, spec: &BootSpec, stderr_log: &Path) -> Result<Box<dyn Worker>, EngineError> {
         self.check_built()?;
         let argv = self.argv(spec, "serve");
-        Ok(Box::new(ProcessWorker::start(
-            self.command(spec, &argv),
-            stderr_log,
-            false,
-        )?))
+        Ok(Box::new(
+            ProcessWorker::start(self.command(spec, &argv), stderr_log, false)?.with_control(),
+        ))
+    }
+
+    fn start_fresh(
+        &self,
+        spec: &BootSpec,
+        stderr_log: &Path,
+    ) -> Result<Box<dyn Worker>, EngineError> {
+        self.check_built()?;
+        let argv = self.argv(spec, "fresh");
+        Ok(Box::new(
+            ProcessWorker::start(self.command(spec, &argv), stderr_log, false)?.with_control(),
+        ))
     }
 
     fn repro_line(&self, spec: &BootSpec, schedule: &Schedule) -> String {

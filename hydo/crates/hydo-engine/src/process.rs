@@ -1,5 +1,6 @@
 //! Driving an engine program: a fresh-boot `one` run, and a `serve` worker over stdin/stdout.
 
+use crate::control::{ControlRequest, Lines, LockStep, Session, SnapAnswer, Stop, VTime};
 use crate::protocol::{BranchOutcome, BranchRequest, Ready, RunResult};
 use crate::{EngineError, OneRun, Worker};
 use hydo_schedule::Schedule;
@@ -34,13 +35,53 @@ pub(crate) fn run_one(mut cmd: Command) -> Result<OneRun, EngineError> {
 /// A `serve` engine process: READY, then one RESULT per RUN.
 pub(crate) struct ProcessWorker {
     child: Child,
-    stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
+    pipe: Pipe,
     boot_secs: f64,
     branch: bool,
+    /// The engine runs lock-step control sessions (hvmx since M119).
+    control: bool,
+    /// The open control session's tag.
+    ctl_tag: Option<String>,
+}
+
+/// The engine's stdin and stdout.
+struct Pipe {
+    stdin: ChildStdin,
+    stdout: BufReader<ChildStdout>,
+}
+
+impl Lines for Pipe {
+    fn send_line(&mut self, line: &str) -> Result<(), EngineError> {
+        self.stdin.write_all(line.as_bytes())?;
+        self.stdin.write_all(b"\n")?;
+        self.stdin.flush()?;
+        Ok(())
+    }
+
+    fn read_line(&mut self) -> Result<String, EngineError> {
+        let mut line = String::new();
+        let n = self.stdout.read_line(&mut line)?;
+        if n == 0 {
+            return Err(EngineError::Protocol("the engine exited".into()));
+        }
+        Ok(line)
+    }
 }
 
 impl ProcessWorker {
+    /// This engine answers CTRL (see [`crate::control`]).
+    pub(crate) fn with_control(mut self) -> ProcessWorker {
+        self.control = true;
+        self
+    }
+
+    fn session(&mut self) -> Session<'_, Pipe> {
+        Session {
+            io: &mut self.pipe,
+            tag: &mut self.ctl_tag,
+        }
+    }
+
     /// Start `cmd` with stdin/stdout piped and stderr appended to `stderr_log`, and wait for READY.
     pub(crate) fn start(
         mut cmd: Command,
@@ -64,27 +105,52 @@ impl ProcessWorker {
         };
         Ok(ProcessWorker {
             child,
-            stdin,
-            stdout,
+            pipe: Pipe { stdin, stdout },
             boot_secs: ready.boot_secs,
             branch,
+            control: false,
+            ctl_tag: None,
         })
     }
 
-    fn send(&mut self, line: &str) -> Result<(), EngineError> {
-        self.stdin.write_all(line.as_bytes())?;
-        self.stdin.write_all(b"\n")?;
-        self.stdin.flush()?;
-        Ok(())
+    fn send_req(&mut self, line: &str) -> Result<(), EngineError> {
+        if let Some(t) = &self.ctl_tag {
+            return Err(EngineError::Protocol(format!(
+                "control session {t:?} is still open"
+            )));
+        }
+        self.pipe.send_line(line)
     }
 
     fn read_line(&mut self) -> Result<String, EngineError> {
-        let mut line = String::new();
-        let n = self.stdout.read_line(&mut line)?;
-        if n == 0 {
-            return Err(EngineError::Protocol("the engine exited".into()));
-        }
-        Ok(line)
+        self.pipe.read_line()
+    }
+}
+
+impl LockStep for ProcessWorker {
+    fn begin(&mut self, req: &ControlRequest) -> Result<Stop, EngineError> {
+        self.session().begin(req)
+    }
+    fn send(&mut self, at: VTime, bytes: &[u8]) -> Result<(), EngineError> {
+        self.session().send(at, bytes)
+    }
+    fn wake(&mut self, at: VTime) -> Result<(), EngineError> {
+        self.session().wake(at)
+    }
+    fn watch(&mut self, text: &[u8]) -> Result<(), EngineError> {
+        self.session().watch(text)
+    }
+    fn snap(&mut self, name: &str) -> Result<SnapAnswer, EngineError> {
+        self.session().snap(name)
+    }
+    fn fingerprint(&mut self) -> Result<String, EngineError> {
+        self.session().fingerprint()
+    }
+    fn cont(&mut self) -> Result<Stop, EngineError> {
+        self.session().cont()
+    }
+    fn end(&mut self) -> Result<RunResult, EngineError> {
+        self.session().end()
     }
 }
 
@@ -99,7 +165,7 @@ impl Worker for ProcessWorker {
                 "bad tag {tag:?} (one word, at most 63 bytes)"
             )));
         }
-        self.send(&format!("RUN {tag} {schedule}"))?;
+        self.send_req(&format!("RUN {tag} {schedule}"))?;
         let line = self.read_line()?;
         RunResult::parse(&line).ok_or(EngineError::Protocol(line))
     }
@@ -110,7 +176,7 @@ impl Worker for ProcessWorker {
                 "BRANCH is not supported on hvm".into(),
             ));
         }
-        self.send(&req.line())?;
+        self.send_req(&req.line())?;
         let mut out = BranchOutcome::default();
         loop {
             let line = self.read_line()?;
@@ -139,10 +205,19 @@ impl Worker for ProcessWorker {
         }
     }
 
+    fn lock_step(&mut self) -> Option<&mut dyn LockStep> {
+        if self.control {
+            Some(self)
+        } else {
+            None
+        }
+    }
+
     fn close(self: Box<Self>) -> Result<(), EngineError> {
         let mut this = *self;
-        let _ = this.send("QUIT");
-        drop(this.stdin);
+        // an open control session: QUIT is not a stop command, so closing stdin ends the engine
+        let _ = this.send_req("QUIT");
+        drop(this.pipe);
         this.child.wait()?;
         Ok(())
     }
