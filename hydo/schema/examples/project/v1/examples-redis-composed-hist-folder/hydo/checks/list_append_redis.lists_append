@@ -1,0 +1,9 @@
+#!/bin/sh
+# hydo: history=log consistency=strict-serializable
+# hydo-msg: the lists never lose an acknowledged RPUSH, never duplicate one, and reads never go back
+. /hydo/workload/helper_lib.sh
+for l in l0 l1 l2; do
+  hydo_hist log 901 invoke read $l
+  if out=$(R LRANGE $l 0 -1); then hydo_hist log 901 ok read $l $(printf '%s' "$out" | list_tok)
+  else hydo_hist log 901 info read $l; exit 2; fi
+done

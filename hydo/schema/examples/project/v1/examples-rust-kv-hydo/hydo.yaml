@@ -1,0 +1,53 @@
+# A Rust program under hydo with the Rust assertion SDK (sdk/rust, crate hydo-assert): rkv, a
+# tiny key/value server over TCP on loopback with an append-only log on /data. Its own
+# assertions (HYDO-ASSERT records written by the program, not by this manifest) say what must
+# hold -- every acknowledged PUT reads back, every log line parses -- and what should happen at
+# least once (a non-empty log replayed, a PUT without a reply), and two BUGGIFY fault points in
+# the server (a lost reply, a slow fdatasync) fire when the schedule carries B=<seed>.
+# Build: ./build-rkv.sh puts the static x86_64 rkv in bin/rkv (./build-rkv.sh aarch64: the arm64
+# one, for the Mac backend); then, on the build box from the repository root,
+#   HYDO_SEEDRNG=~/hydo/build/hvx_seedrng hvx/onboard/hydo-build hvx/onboard/examples/rust-kv/hydo.yaml
+# or on a Mac with the Mac release: hydo build hydo.yaml
+# Try:  disk=none | run                 -> OK, every acknowledged PUT survives
+#       disk=cut | run C=12             -> OK: the server fdatasyncs before it acknowledges
+#       disk=cut | run C=12 S=never     -> VIOLATION: without fdatasync a power cut loses acked PUTs
+#       disk=none | run K=rkv@8+2 B=5abc -> OK; the fault points fire and are reported
+name: rust-kv
+description: rkv (Rust, hydo-assert SDK); every acknowledged PUT must survive kills and power cuts.
+buggify: true
+
+root:
+  files:
+    - {src: bin/rkv, dst: /bin/rkv, mode: "0755"}   # build-rkv.sh [aarch64]
+
+data:
+  size_mib: 64
+  dirs: [rkv]
+
+services:
+  - name: rkv
+    cmd: /bin/rkv serve /data/rkv 7070
+    ready: /bin/rkv ping 7070
+    port: 7070
+
+workload:
+  steps: 20                         # step i = PUT k:i v<i>, with the client's 2 s deadline
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      if /bin/rkv put 7070 k:$i v$i > /dev/null; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      i=$((i + 1))
+    done
+
+knobs:
+  - token: S
+    name: rkv fdatasync before acknowledging
+    default: always
+    values: [always, never]
+    set: echo $HYDO_VALUE > /tmp/rkv-fsync
+
+invariants:
+  - id: rkv.oracle
+    msg: every PUT the client saw acknowledged reads back with its value (rkv check)
+    cmd: /bin/rkv check 7070 $HYDO_ACKED

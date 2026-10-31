@@ -1,0 +1,77 @@
+# examples/redis-composed with two of its checks written with the ready-made store readers
+# (hvx/readers, MANIFEST.md "Reading the stores"): hydo/checks/final_acked_writes_survive calls
+# hydo-check, and test.checks below adds one as an argv entry. Everything else is a copy.
+# Build: hvx/onboard/hydo-build hvx/onboard/examples/redis-composed-read/hydo/hydo.yaml
+#        (hydo-read from build/hydo-read or HYDO_READ_BIN) -> build/explore-ob-redis-composed-read-disk.img
+#
+# A project in the agreed layout: the repository's hydo/ folder holds this manifest and the test
+# itself as small commands (workload/) and properties (checks/); hydo composes the commands into
+# seeded sequences and concurrent mixes (MANIFEST.md "The test composer"). Build on the build box:
+#   HYDO_SEEDRNG=~/hydo/build/hvx_seedrng hvx/onboard/hydo-build \
+#       hvx/onboard/examples/redis-composed/hydo/hydo.yaml                 # transfers via a Lua script (atomic)
+#   ... --set transfer=racy --out explore-ob-redis-composed-racy           # read-modify-write: a lost-update race
+# Try:  disk=none | run W=0000002a,p4,q2,r100        racy: two overlapping transfers lose an update
+#       disk=none | run W=0000002a,p1,q2,r100        the same composition, one command at a time: OK
+#       disk=cut | run C=12 R=everysec               Redis's documented fsync window loses acked SETs
+name: redis-composed-read
+description: Redis with an append-only file, driven by composed commands (SETs, transfers, AOF rewrites).
+hydo_version: "0.1"
+format: 1
+
+params:
+  transfer: atomic                  # atomic | racy
+
+root:
+  files:
+    - {src: ~/hydo/build/redis-server, dst: /bin/redis-server, mode: "0755"}
+    - {src: ~/hydo/build/redis-cli, dst: /bin/redis-cli, mode: "0755"}
+  text:
+    /etc/redis.conf: |
+      port 6379
+      bind 127.0.0.1
+      dir /data/redis
+      save ""
+      appendonly yes
+      appendfsync always
+      hz 1
+      dynamic-hz no
+
+data:
+  size_mib: 64
+  dirs: [redis]
+
+env:
+  TRANSFER: "{{transfer}}"
+  ACCOUNTS: "5"
+  TOTAL: "500"
+
+services:
+  - name: redis
+    cmd: /bin/redis-server /etc/redis.conf
+    ready: /bin/redis-cli ping | grep -q PONG
+    port: 6379
+
+workload:
+  steps: 20                         # rounds of the composition; faults are placed at round numbers
+  timeout: 120
+
+test:
+  parallel: 4                       # at most 4 commands at once (W= draws p in 1..4)
+  per_round: 2                      # parallel drivers started per round (W= draws q in 1..2)
+  round_ms: 100                     # a round every 100 ms of guest time (W= draws r: 50, 100 or 200)
+  command_timeout: 20
+  drain_timeout: 30
+  checks:                           # a check given in the plan (not the folder): an argv list, exec'd
+    - name: accounts_present
+      kind: final
+      msg: all ACCOUNTS balances exist after the run
+      run: [hydo-check, count, --eq, "5", --in, 'accounts=redis 127.0.0.1:6379 scan "acct:*"']
+
+knobs:
+  - token: R
+    name: Redis appendfsync
+    default: always
+    values: [always, everysec, "no"]
+    set: /bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE
+
+faults: [kill, pause, cut, clock, disk]

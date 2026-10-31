@@ -1,0 +1,60 @@
+# The test composer with ready-made history checks (hvx/HISTORIES.md, MANIFEST.md "History
+# checks"): the commands in workload/ record every Redis operation with hydo_hist (process = the
+# command's entry number HYDO_CMD_ID, unique in a run), and checks/ holds two history checks the
+# HOST runs after the run -- checks/linearizable_redis.kv_linearizable (SET/GET as registers) and
+# checks/list_append_redis.lists_append (RPUSH/LRANGE as append-only lists). Each check file is its final
+# read-back, run at the end of the same boot or of the recovery boot after a power cut.
+# Build on the build box:
+#   HYDO_SEEDRNG=<pinned hvx_seedrng> hvx/onboard/hydo-build \
+#       hvx/onboard/examples/redis-composed-hist/hydo/hydo.yaml --out explore-ob-redis-composed-hc
+# Try:  disk=cut | run C=12 W=0000002a,p4,q2,r100              -> OK
+#       disk=cut | run C=12 R=everysec W=0000002a,p4,q2,r100   -> VIOLATION: acknowledged writes lost
+name: redis-composed-hist
+description: Redis driven by composed commands; the recorded histories are checked on the host.
+hydo_version: "0.1"
+format: 1
+
+root:
+  files:
+    - {src: ~/hydo/build/redis-server, dst: /bin/redis-server, mode: "0755"}
+    - {src: ~/hydo/build/redis-cli, dst: /bin/redis-cli, mode: "0755"}
+  text:
+    /etc/redis.conf: |
+      port 6379
+      bind 127.0.0.1
+      dir /data/redis
+      save ""
+      appendonly yes
+      appendfsync always
+      hz 1
+      dynamic-hz no
+
+data:
+  size_mib: 64
+  dirs: [redis]
+
+services:
+  - name: redis
+    cmd: /bin/redis-server /etc/redis.conf
+    ready: /bin/redis-cli ping | grep -q PONG
+    port: 6379
+
+workload:
+  steps: 20                         # rounds of the composition
+  timeout: 120
+
+test:
+  parallel: 4
+  per_round: 2
+  round_ms: 100
+  command_timeout: 20
+  drain_timeout: 30
+
+knobs:
+  - token: R
+    name: Redis appendfsync
+    default: always
+    values: [always, everysec, "no"]
+    set: /bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE
+
+faults: [kill, pause, cut, clock, disk]

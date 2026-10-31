@@ -1,0 +1,63 @@
+{
+  "format": 1,
+  "name": "ledger-spin",
+  "description": "the ledger with a busy-wait per request; every acknowledged entry must be stored exactly once.",
+  "root": {
+    "files": [
+      {
+        "src": "www",
+        "dst": "/www"
+      },
+      {
+        "src": "bin/spin_load",
+        "dst": "/bin/spin_load",
+        "mode": "0755"
+      },
+      {
+        "src": "bin/spin_count",
+        "dst": "/bin/spin_count",
+        "mode": "0755"
+      }
+    ]
+  },
+  "data": {
+    "size_mib": 64,
+    "dirs": [
+      "ledger"
+    ]
+  },
+  "services": [
+    {
+      "name": "front",
+      "cmd": "/bin/busybox httpd -f -p 127.0.0.1:8080 -h /www",
+      "ready": "wget -q -T 2 -O- http://127.0.0.1:8080/cgi-bin/ping | grep -q pong",
+      "port": 8080
+    }
+  ],
+  "provision": ": > /data/ledger/entries",
+  "workload": {
+    "steps": 30,
+    "run": "i=$HYDO_FROM\nwhile [ $i -lt $HYDO_TO ]; do\n  r=$(wget -q -T 2 -O- \"http://127.0.0.1:8080/cgi-bin/put?id=$i\" 2>/dev/null)\n  if [ \"$r\" = \"OK $i\" ]; then echo $i >> $HYDO_ACKED; echo \"$i ack\" >> $HYDO_OUTCOMES\n  else echo \"$i unknown\" >> $HYDO_OUTCOMES; fi\n  i=$((i + 1))\ndone\n",
+    "retry": "for i in $(awk '{ o[$1] = $2 } END { for (i in o) if (o[i] != \"ack\") print i }' $HYDO_OUTCOMES | sort -n); do\n  r=$(wget -q -T 2 -O- \"http://127.0.0.1:8080/cgi-bin/put?id=$i\" 2>/dev/null)\n  if [ \"$r\" = \"OK $i\" ]; then echo $i >> $HYDO_ACKED; echo \"$i ack\" >> $HYDO_OUTCOMES; fi\ndone\n",
+    "process": "wget"
+  },
+  "invariants": [
+    {
+      "id": "ledger.acked_exactly_once",
+      "msg": "every entry the client saw acknowledged is stored exactly once",
+      "cmd": "for i in $(cat $HYDO_ACKED); do\n  n=$(grep -cx \"$i\" /data/ledger/entries)\n  [ \"$n\" = 1 ] || { echo \"entry $i stored $n times\"; exit 1; }\ndone\necho \"acked=$(wc -l < $HYDO_ACKED) each stored once\"\n"
+    },
+    {
+      "id": "ledger.no_duplicates",
+      "msg": "no entry is ever stored twice",
+      "cmd": "d=$(sort /data/ledger/entries | uniq -d | head -1)\n[ -z \"$d\" ] || { echo \"entry $d stored twice\"; exit 1; }\necho \"no duplicates ($(wc -l < /data/ledger/entries) entries)\"\n",
+      "every": 1,
+      "final": true
+    }
+  ],
+  "faults": [
+    "kill",
+    "pause",
+    "clock"
+  ]
+}

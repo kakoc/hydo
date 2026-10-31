@@ -1,0 +1,5 @@
+#!/bin/sh
+# TODO: replace this file with one command per client operation (hydo guide composer), e.g.
+# workload/parallel_driver_place_order. It exits 100 (a violation) so that no run passes by accident.
+echo "hydo: TODO write the workload commands in hydo/workload/ (hydo guide composer)"
+exit 100

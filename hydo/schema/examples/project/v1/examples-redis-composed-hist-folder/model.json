@@ -1,0 +1,112 @@
+{
+  "format": 1,
+  "hydo_version": "0.1",
+  "name": "redis-composed-hist",
+  "description": "Redis driven by composed commands; the recorded histories are checked on the host.",
+  "root": {
+    "files": [
+      {
+        "src": "~/hydo/build/redis-server",
+        "dst": "/bin/redis-server",
+        "mode": "0755"
+      },
+      {
+        "src": "~/hydo/build/redis-cli",
+        "dst": "/bin/redis-cli",
+        "mode": "0755"
+      }
+    ],
+    "text": {
+      "/etc/redis.conf": "port 6379\nbind 127.0.0.1\ndir /data/redis\nsave \"\"\nappendonly yes\nappendfsync always\nhz 1\ndynamic-hz no\n"
+    }
+  },
+  "data": {
+    "size_mib": 64,
+    "dirs": [
+      "redis"
+    ]
+  },
+  "services": [
+    {
+      "name": "redis",
+      "cmd": "/bin/redis-server /etc/redis.conf",
+      "ready": "/bin/redis-cli ping | grep -q PONG",
+      "port": 6379
+    }
+  ],
+  "workload": {
+    "steps": 20,
+    "timeout": 120
+  },
+  "knobs": [
+    {
+      "token": "R",
+      "name": "Redis appendfsync",
+      "default": "always",
+      "set": "/bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE",
+      "values": [
+        "always",
+        "everysec",
+        "no"
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "id": "redis.kv_linearizable",
+      "type": "linearizable",
+      "history": "kv",
+      "model": "register",
+      "msg": "every SET and GET of the composed commands is linearizable per key",
+      "final": "exec '/hydo/checks/linearizable_redis.kv_linearizable'"
+    },
+    {
+      "id": "redis.lists_append",
+      "type": "list-append",
+      "history": "log",
+      "consistency": "strict-serializable",
+      "msg": "the lists never lose an acknowledged RPUSH, never duplicate one, and reads never go back",
+      "final": "exec '/hydo/checks/list_append_redis.lists_append'"
+    }
+  ],
+  "faults": [
+    "kill",
+    "pause",
+    "cut",
+    "clock",
+    "disk"
+  ],
+  "test": {
+    "parallel": 4,
+    "per_round": 2,
+    "round_ms": 100,
+    "command_timeout": 20,
+    "drain_timeout": 30,
+    "commands": [
+      {
+        "name": "read",
+        "kind": "anytime",
+        "run": [
+          "/hydo/workload/anytime_read"
+        ],
+        "content": "f8bb126b6da43fe9"
+      },
+      {
+        "name": "append",
+        "kind": "parallel_driver",
+        "run": [
+          "/hydo/workload/parallel_driver_append"
+        ],
+        "content": "449298a95d770708"
+      },
+      {
+        "name": "set",
+        "kind": "parallel_driver",
+        "run": [
+          "/hydo/workload/parallel_driver_set"
+        ],
+        "content": "24ee18c1315e32f9"
+      }
+    ]
+  }
+}

@@ -145,7 +145,7 @@ I	hydo/stack/grpc-hints.yaml	14affe885365284f669ce608060c39376e7f7a6ee42df7ad4f1
 I	sdk/js/package.json	003a1b3d814441ccbb9dfc3a9af0980f6c01b61c988d27a3e3b0d3d054238a88
 I	skills/hydo-onboard/assets/example-miniflux.yaml	056fe1ea51d103145f0db56f65c550c83bd6a87b491b2cdbad74509dd3a2ee57
 I	skills/hydo-onboard/assets/example-redis-composed/hydo/hydo.yaml	a5d2effbdf6ba22a31cbbfbc07d1e52127834fa5ce4e1e14c5db619e2cb339b5
-I	skills/hydo-onboard/assets/hydo-init/hydo/hydo.yaml	b91b1a0cdaae9f0b22f0695a9e8f56dfef33eb1d49be9e8053b3e27f58702c84
+I	skills/hydo-onboard/assets/hydo-init/hydo/hydo.yaml	4f2ae608d43856af3e036e9b34f9738ae0893127472f3fa22b6a74fa0ba5d9d9
 G	hydo/history/hydo_hist.sh	1ea4d05fad96aafe522a14608702de49eccbdbe8bd57228966c5bf9b901da8a7
 G	hydo/onboard/hydo-composer.sh	87274da62259d820f52cee8383e25f879ce2041917326b4df03d1ad7b67b914d
 G	hydo/onboard/hydo-init-buggify.sh	0848d571d1fc834b206d26fb2af450320dd586f8e5c27e3349456f71752b60a7
@@ -250,8 +250,8 @@ R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/immich/docker-compo
 R	^	^ --print-world --print-init	run	1	""	"hydo-build: top level: unknown field(s) volumes (known: bugg…#304b3ab6302307fa"
 R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/immich/lock.json --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	1	""	"hydo-build: top level: unknown field(s) images (known: buggi…#0ed9b777e5aafb01"
-R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/mastodon/docker-compose.yml --set version=zz --print-shell	crash	"JSONDecodeError: Invalid \\escape: line 1 column 26 (char 25)"
-R	^	^ --print-world --print-init	crash	"JSONDecodeError: Invalid \\escape: line 1 column 26 (char 25)"
+R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/mastodon/docker-compose.yml --set version=zz --print-shell	run	1	""	"hydo-build: the manifest cannot be read: json.decoder.JSONDe…#f440c7ed6c5a71de"
+R	^	^ --print-world --print-init	run	1	""	^
 R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/mastodon/lock.json --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	1	""	"hydo-build: top level: unknown field(s) images (known: buggi…#0ed9b777e5aafb01"
 R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/n8n-postgres/docker-compose.yml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
@@ -431,7 +431,7 @@ R	^	^ --print-world --print-init	run	1	""	"hydo-build: name: use lowercase lette
 R	argument handling	<root>/hydo/onboard/examples/redis/hydo.yaml --bogus	run	2	""	"hydo-build: unknown argument --bogus\n"
 R	^	^ --set novalue --check	run	2	""	"hydo-build: unknown argument --set\n"
 R	^	^ --arch riscv --print-shell	run	0	#69ba0405030f5d4e/1561	""
-R	^	/nonexistent/hydo.yaml --check	crash	"FileNotFoundError: [Errno 2] No such file or directory: '/nonexistent/"
+R	^	/nonexistent/hydo.yaml --check	run	1	""	"hydo-build: the manifest cannot be read: /nonexistent/hydo.y…#41d67500c4a526a0"
 R	fixture cases	<tmp>/case000.json --arch x86_64 --check	run	0	"hydo-build: <tmp>/case000.json OK (3 services, 1 invariants, 10 workload steps)\n"	""
 R	^	^ --arch x86_64 --print-shell	run	0	#8ea53772b898b25e/1248	^
 R	^	^ --arch x86_64 --print-init	run	0	#5829ca42ed208a77/33964	^
@@ -736,14 +736,14 @@ R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case038.json --arch x86_64 --check	run	0	"hydo-build: <tmp>/case038.json OK (1 services, 1 invariants, 2 workload steps)\n"	""
-R	^	^ --arch x86_64 --print-shell	run	0	#d63b22d3f893fd1a/1293	^
-R	^	^ --arch x86_64 --print-init	run	0	#c10468c74f3f0971/34836	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	^ --arch arm64 --check	run	0	"hydo-build: <tmp>/case038.json OK (1 services, 1 invariants, 2 workload steps)\n"	^
-R	^	^ --arch arm64 --print-shell	run	0	#d63b22d3f893fd1a/1293	^
-R	^	^ --arch arm64 --print-init	run	0	#c10468c74f3f0971/34836	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/case038.json --arch x86_64 --check	run	1	""	"hydo-build: services[0].errors.normalize: invalid type: stri…#65a9192a5e20cac7"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	^ --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/case039.json --arch x86_64 --check	run	1	""	"hydo-build: services[0].errors: format: none needs match: (o…#f2692bc4ea449df4"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -888,15 +888,15 @@ R	^	^ --arch arm64 --check	run	0	"hydo-build: <tmp>/case056.json OK (1 services,
 R	^	^ --arch arm64 --print-shell	run	0	#eb18f6d3c2e95b43/743	^
 R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/case057.json --arch x86_64 --check	run	0	"hydo-build: <tmp>/case057.json OK (1 services, 1 invariants, 2 workload steps)\n"	^
-R	^	^ --arch x86_64 --print-shell	run	0	#eb18f6d3c2e95b43/743	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	^ --arch arm64 --check	run	0	"hydo-build: <tmp>/case057.json OK (1 services, 1 invariants, 2 workload steps)\n"	^
-R	^	^ --arch arm64 --print-shell	run	0	#eb18f6d3c2e95b43/743	^
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/case058.json --arch x86_64 --check	run	0	"hydo-build: <tmp>/case058.json OK (1 services, 1 invariants, 2 workload steps)\n"	^
+R	^	<tmp>/case057.json --arch x86_64 --check	run	1	""	"hydo-build: errors: true, false, or a mapping (level, max, s…#69b9da5332259631"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	^ --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/case058.json --arch x86_64 --check	run	0	"hydo-build: <tmp>/case058.json OK (1 services, 1 invariants, 2 workload steps)\n"	""
 R	^	^ --arch x86_64 --print-shell	run	0	#4d30bc63dce083c0/1286	^
 R	^	^ --arch x86_64 --print-init	run	0	#c10468c74f3f0971/34836	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
@@ -1080,14 +1080,14 @@ R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case081.json --arch x86_64 --check	run	0	#a9adefb13d74be9b/245	""
-R	^	^ --arch x86_64 --print-shell	run	0	#001464b1ebf35613/2580	^
-R	^	^ --arch x86_64 --print-init	run	0	#fafdabad7c1c6b33/28283	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	^ --arch arm64 --check	run	0	#a9adefb13d74be9b/245	^
-R	^	^ --arch arm64 --print-shell	run	0	#001464b1ebf35613/2580	^
-R	^	^ --arch arm64 --print-init	run	0	#fafdabad7c1c6b33/28283	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/case081.json --arch x86_64 --check	run	1	""	"hydo-build: test.commands[1].run: an argv list of strings (e…#9efb9b04b30c32b2"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	^ --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/case082.json --arch x86_64 --check	run	1	""	"hydo-build: test.commands[0]: kind must be one of first, par…#b21f1234f9e65bf5"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -1368,7 +1368,7 @@ R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case117.json --arch x86_64 --check	run	1	""	"hydo-build: format: this hydo reads plan format 1 (got 2); u…#52cb32bb3cc24ca5"
+R	^	<tmp>/case117.json --arch x86_64 --check	run	1	""	"hydo-build: format: this file is written in project format 2…#d1d7f1402e0e99d1"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
@@ -1384,15 +1384,15 @@ R	^	^ --arch arm64 --check	run	0	#24625fd364a4777a/163	^
 R	^	^ --arch arm64 --print-shell	run	0	#acaf7405be948095/1278	^
 R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/case119.json --arch x86_64 --check	run	0	#e79745cb22f45bce/163	^
-R	^	^ --arch x86_64 --print-shell	run	0	#acaf7405be948095/1278	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	^ --arch arm64 --check	run	0	#e79745cb22f45bce/163	^
-R	^	^ --arch arm64 --print-shell	run	0	#acaf7405be948095/1278	^
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/case120.json --arch x86_64 --check	run	0	"hydo-build: <tmp>/case120.json OK (1 services, 1 invariants, 2 workload steps)\n"	^
+R	^	<tmp>/case119.json --arch x86_64 --check	run	1	""	"hydo-build: format: the project format, a whole number; this…#5f57e5c75c241d7e"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	^ --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/case120.json --arch x86_64 --check	run	0	"hydo-build: <tmp>/case120.json OK (1 services, 1 invariants, 2 workload steps)\n"	""
 R	^	^ --arch x86_64 --print-shell	run	0	#eb18f6d3c2e95b43/743	^
 R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
@@ -1680,14 +1680,14 @@ R	^	^ --arch arm64 --check	run	0	#2245a3eabd692ba3/163	^
 R	^	^ --arch arm64 --print-shell	run	0	#acaf7405be948095/1278	^
 R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/case156.json --arch x86_64 --check	crash	"ZeroDivisionError: division by zero"
-R	^	^ --arch x86_64 --print-shell	crash	"ZeroDivisionError: division by zero"
-R	^	^ --arch x86_64 --print-init	crash	"ZeroDivisionError: division by zero"
-R	^	^ --arch x86_64 --print-world	crash	"ZeroDivisionError: division by zero"
-R	^	^ --arch arm64 --check	crash	"ZeroDivisionError: division by zero"
-R	^	^ --arch arm64 --print-shell	crash	"ZeroDivisionError: division by zero"
-R	^	^ --arch arm64 --print-init	crash	"ZeroDivisionError: division by zero"
-R	^	^ --arch arm64 --print-world	crash	"ZeroDivisionError: division by zero"
+R	^	<tmp>/case156.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: ZeroDivisionError: …#4e291d53620e7c03"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	^ --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/case157.json --arch x86_64 --check	run	1	""	"hydo-build: test.regressions[0]: a mapping with name, schedule, expect\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -1896,15 +1896,15 @@ R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case183.json --arch x86_64 --check	run	0	"hydo-build: <tmp>/case183.json OK (0 services, 1 invariants, 2 workload steps)\n"	""
-R	^	^ --arch x86_64 --print-shell	run	0	#12f83ba046a18824/618	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	^ --arch arm64 --check	run	0	"hydo-build: <tmp>/case183.json OK (0 services, 1 invariants, 2 workload steps)\n"	^
-R	^	^ --arch arm64 --print-shell	run	0	#12f83ba046a18824/618	^
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/case184.json --arch x86_64 --check	run	0	"hydo-build: <tmp>/case184.json OK (1 services, 1 invariants, 2 workload steps)\n"	^
+R	^	<tmp>/case183.json --arch x86_64 --check	run	1	""	"hydo-build: services: invalid type: integer `0`, expected a …#e8f5aee85c7a7015"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	^ --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/case184.json --arch x86_64 --check	run	0	"hydo-build: <tmp>/case184.json OK (1 services, 1 invariants, 2 workload steps)\n"	""
 R	^	^ --arch x86_64 --print-shell	run	0	#eb18f6d3c2e95b43/743	^
 R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
@@ -2016,14 +2016,14 @@ R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case198.json --arch x86_64 --check	run	0	"hydo-build: <tmp>/case198.json OK (1 services, 1 invariants, 2 workload steps)\n"	""
-R	^	^ --arch x86_64 --print-shell	run	0	#126b61a491c2163b/746	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	^ --arch arm64 --check	run	0	"hydo-build: <tmp>/case198.json OK (1 services, 1 invariants, 2 workload steps)\n"	^
-R	^	^ --arch arm64 --print-shell	run	0	#126b61a491c2163b/746	^
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/case198.json --arch x86_64 --check	run	1	""	"hydo-build: services[0].ready: a string (or a whole number),…#07bc5e5fcb53d9f6"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	^ --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/case199.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: field 'cmd' must be a str\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -2048,14 +2048,14 @@ R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case202.json --arch x86_64 --check	run	0	"hydo-build: <tmp>/case202.json OK (1 services, 1 invariants, 2 workload steps)\n"	""
-R	^	^ --arch x86_64 --print-shell	run	0	#389fc0757c2b9f9c/747	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	^ --arch arm64 --check	run	0	"hydo-build: <tmp>/case202.json OK (1 services, 1 invariants, 2 workload steps)\n"	^
-R	^	^ --arch arm64 --print-shell	run	0	#389fc0757c2b9f9c/747	^
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/case202.json --arch x86_64 --check	run	1	""	"hydo-build: services[0].port: invalid type: boolean `true`, …#8b9a6a551741e65c"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	^ --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/case203.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: port must be a number\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -2168,14 +2168,14 @@ R	^	^ --arch arm64 --check	run	0	"hydo-build: <tmp>/case216.json OK (3 services,
 R	^	^ --arch arm64 --print-shell	run	0	#5842390445882060/995	^
 R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/case217.json --arch x86_64 --check	crash	"AttributeError: 'int' object has no attribute 'get'"
-R	^	^ --arch x86_64 --print-shell	crash	"AttributeError: 'int' object has no attribute 'get'"
-R	^	^ --arch x86_64 --print-init	crash	"AttributeError: 'int' object has no attribute 'get'"
-R	^	^ --arch x86_64 --print-world	crash	"AttributeError: 'int' object has no attribute 'get'"
-R	^	^ --arch arm64 --check	crash	"AttributeError: 'int' object has no attribute 'get'"
-R	^	^ --arch arm64 --print-shell	crash	"AttributeError: 'int' object has no attribute 'get'"
-R	^	^ --arch arm64 --print-init	crash	"AttributeError: 'int' object has no attribute 'get'"
-R	^	^ --arch arm64 --print-world	crash	"AttributeError: 'int' object has no attribute 'get'"
+R	^	<tmp>/case217.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: 'int' object has no attribute 'get'\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	^ --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/case218.json --arch x86_64 --check	run	1	""	"hydo-build: workload: required (steps + run)\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -2224,14 +2224,14 @@ R	^	^ --arch arm64 --check	run	0	#90d6465945f4ac17/82	^
 R	^	^ --arch arm64 --print-shell	run	0	#dd20d56b8f102b73/746	^
 R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/case224.json --arch x86_64 --check	run	0	"hydo-build: <tmp>/case224.json OK (1 services, 1 invariants, 1 workload steps)\n"	^
-R	^	^ --arch x86_64 --print-shell	run	0	#c921ce8fae650af8/743	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	^ --arch arm64 --check	run	0	"hydo-build: <tmp>/case224.json OK (1 services, 1 invariants, 1 workload steps)\n"	^
-R	^	^ --arch arm64 --print-shell	run	0	#c921ce8fae650af8/743	^
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/case224.json --arch x86_64 --check	run	1	""	"hydo-build: workload.steps: invalid type: boolean `true`, ex…#39f9537a5a6842b9"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	^ --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/case225.json --arch x86_64 --check	run	1	""	"hydo-build: workload: field 'steps' must be a int\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -2408,14 +2408,14 @@ R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case247.json --arch x86_64 --check	run	0	"hydo-build: <tmp>/case247.json OK (1 services, 1 invariants, 2 workload steps)\n"	""
-R	^	^ --arch x86_64 --print-shell	run	0	#6bd75d47eaf163eb/744	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	^ --arch arm64 --check	run	0	"hydo-build: <tmp>/case247.json OK (1 services, 1 invariants, 2 workload steps)\n"	^
-R	^	^ --arch arm64 --print-shell	run	0	#6bd75d47eaf163eb/744	^
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/case247.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0].every: invalid type: boolean `true…#71cd617f6e9bf778"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	^ --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/case248.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0]: an invariant with final: false needs every:\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -2608,14 +2608,14 @@ R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case272.json --arch x86_64 --check	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch arm64 --check	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch arm64 --print-shell	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch arm64 --print-init	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch arm64 --print-world	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
+R	^	<tmp>/case272.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: unhashable type in faults:\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	^ --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/case273.json --arch x86_64 --check	run	1	""	"hydo-build: freeze_match: only with `freeze` in faults:\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -2808,14 +2808,14 @@ R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case297.json --arch x86_64 --check	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch arm64 --check	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch arm64 --print-shell	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch arm64 --print-init	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch arm64 --print-world	crash	"TypeError: 'int' object is not iterable"
+R	^	<tmp>/case297.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: int object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	^ --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/case298.json --arch x86_64 --check	run	1	""	"hydo-build: root: unknown field(s) nope (known: description,…#27b2978c511b516d"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -2936,22 +2936,22 @@ R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case313.json --arch x86_64 --check	run	0	"hydo-build: <tmp>/case313.json OK (1 services, 1 invariants, 2 workload steps)\n"	""
-R	^	^ --arch x86_64 --print-shell	crash	"ValueError: invalid literal for int() with base 10: '2024-01-01'"
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	""
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	^ --arch arm64 --check	run	0	"hydo-build: <tmp>/case313.json OK (1 services, 1 invariants, 2 workload steps)\n"	^
-R	^	^ --arch arm64 --print-shell	crash	"ValueError: invalid literal for int() with base 10: '2024-01-01'"
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	""
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/case314.json --arch x86_64 --check	crash	"TypeError: list indices must be integers or slices, not str"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: list indices must be integers or slices, not str"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: list indices must be integers or slices, not str"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: list indices must be integers or slices, not str"
-R	^	^ --arch arm64 --check	crash	"TypeError: list indices must be integers or slices, not str"
-R	^	^ --arch arm64 --print-shell	crash	"TypeError: list indices must be integers or slices, not str"
-R	^	^ --arch arm64 --print-init	crash	"TypeError: list indices must be integers or slices, not str"
-R	^	^ --arch arm64 --print-world	crash	"TypeError: list indices must be integers or slices, not str"
+R	^	<tmp>/case313.json --arch x86_64 --check	run	1	""	"hydo-build: guest.clock_start: invalid type: string \"2024-01…#b0fb0a9b67d59c7c"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	^ --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/case314.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: list object is not …#f7ac4cebf24ad563"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	^ --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/case315.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) x (known: clock_after_cu…#a501f21a710ee27f"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -3344,14 +3344,14 @@ R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case364.json --arch x86_64 --check	crash	"AttributeError: 'list' object has no attribute 'values'"
-R	^	^ --arch x86_64 --print-shell	crash	"AttributeError: 'list' object has no attribute 'values'"
-R	^	^ --arch x86_64 --print-init	crash	"AttributeError: 'list' object has no attribute 'values'"
-R	^	^ --arch x86_64 --print-world	crash	"AttributeError: 'list' object has no attribute 'values'"
-R	^	^ --arch arm64 --check	crash	"AttributeError: 'list' object has no attribute 'values'"
-R	^	^ --arch arm64 --print-shell	crash	"AttributeError: 'list' object has no attribute 'values'"
-R	^	^ --arch arm64 --print-init	crash	"AttributeError: 'list' object has no attribute 'values'"
-R	^	^ --arch arm64 --print-world	crash	"AttributeError: 'list' object has no attribute 'values'"
+R	^	<tmp>/case364.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: webhook headers has no .values()\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	^ --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/case365.json --arch x86_64 --check	run	1	""	"hydo-build: fakes[0].routes[0].webhook: retries is a whole number >= 0\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -4132,10 +4132,10 @@ R	^	<tmp>/mutant00150.json --arch x86_64 --check	run	1	""	"hydo-build: test.comm
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00151.json --arch x86_64 --check	crash	"ValueError: invalid literal for int() with base 10: 'kill'"
-R	^	^ --arch x86_64 --print-shell	crash	"ValueError: invalid literal for int() with base 10: 'kill'"
-R	^	^ --arch x86_64 --print-init	crash	"ValueError: invalid literal for int() with base 10: 'kill'"
-R	^	^ --arch x86_64 --print-world	crash	"ValueError: invalid literal for int() with base 10: 'kill'"
+R	^	<tmp>/mutant00151.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: invalid literal for…#5af418ba5d07f279"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00152.json --arch arm64 --check	run	0	#a11d8eb6b3efc07d/166	""
 R	^	^ --arch arm64 --print-shell	run	0	#3fbd4d093589cd1b/1279	^
 R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
@@ -4160,10 +4160,10 @@ R	^	<tmp>/mutant00157.json --arch x86_64 --check	run	1	""	"hydo-build: test.comm
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00158.json --arch x86_64 --check	crash	"ValueError: invalid literal for int() with base 10: '10.89.0.7'"
-R	^	^ --arch x86_64 --print-shell	crash	"ValueError: invalid literal for int() with base 10: '10.89.0.7'"
-R	^	^ --arch x86_64 --print-init	crash	"ValueError: invalid literal for int() with base 10: '10.89.0.7'"
-R	^	^ --arch x86_64 --print-world	crash	"ValueError: invalid literal for int() with base 10: '10.89.0.7'"
+R	^	<tmp>/mutant00158.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: invalid literal for…#0d37026b2b452b96"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00159.json --arch x86_64 --check	run	1	""	"hydo-build: test.commands[0]: name '': letters, digits, '.', '_', '-'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -4684,10 +4684,10 @@ R	^	<tmp>/mutant00288.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00289.json --arch x86_64 --check	run	0	#9cf2d4a924f47148/239	""
-R	^	^ --arch x86_64 --print-shell	run	0	#aa69bf9b2e6a2a43/1921	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00289.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[2].src: a string (or a whole number),…#aca5508fa7021027"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00290.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind False (known: clock, cut, d…#f2f048ad6e38555b"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -4720,30 +4720,30 @@ R	^	<tmp>/mutant00297.json --arch x86_64 --check	run	1	""	"hydo-build: test.comm
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00298.json --arch x86_64 --check	run	0	#de93fc2dd4ff40ab/239	""
-R	^	^ --arch x86_64 --print-shell	run	0	#aa69bf9b2e6a2a43/1921	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00299.json --arch x86_64 --check	run	0	#97300dc81d1ce79e/239	^
-R	^	^ --arch x86_64 --print-shell	run	0	#aa69bf9b2e6a2a43/1921	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00298.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[12].dst: a string (or a whole number)…#b49ec023fe431ab8"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00299.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[25].dst: a string (or a whole number)…#37d4f14c37f3be2a"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00300.json --arch arm64 --check	run	1	""	"hydo-build: test.commands[0]: must be a mapping\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00301.json --arch x86_64 --check	run	0	#92a80c1e5c797033/239	""
-R	^	^ --arch x86_64 --print-shell	run	0	#aa69bf9b2e6a2a43/1921	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00301.json --arch x86_64 --check	run	1	""	"hydo-build: test.commands[2].run: an argv list of strings (e…#1b1a61b3007191e0"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00302.json --arch x86_64 --check	run	1	""	"hydo-build: test.commands[0].run: an argv list of strings (e…#18e59e872282befd"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00303.json --arch x86_64 --check	run	0	#efc844d9ae42b53b/239	""
-R	^	^ --arch x86_64 --print-shell	run	0	#aa69bf9b2e6a2a43/1921	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00303.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[25]: invalid type: string \"\", expecte…#d95cefff6ce76af4"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00304.json --arch arm64 --check	run	1	""	"hydo-build: test.commands[1]: unknown field(s) bogus\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
@@ -4760,14 +4760,14 @@ R	^	<tmp>/mutant00307.json --arch x86_64 --check	run	0	#89172402217f471d/239	""
 R	^	^ --arch x86_64 --print-shell	run	0	#aa69bf9b2e6a2a43/1921	^
 R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00308.json --arch arm64 --check	run	0	#735ff2dcd7fdff7e/239	^
-R	^	^ --arch arm64 --print-shell	run	0	#aa69bf9b2e6a2a43/1921	^
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00309.json --arch x86_64 --check	run	0	#ba9ef9bcbca0fcd1/239	^
-R	^	^ --arch x86_64 --print-shell	run	0	#aa69bf9b2e6a2a43/1921	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00308.json --arch arm64 --check	run	1	""	"hydo-build: root.files[2]: missing field `dst` (project form…#75bf9eea7ad01637"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00309.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0]: missing field `src` (project form…#7120c3032438ee2e"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00310.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: buggif…#3956f7a2358bfb5e"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -4780,10 +4780,10 @@ R	^	<tmp>/mutant00312.json --arch arm64 --check	run	0	#8cc30b85ce544ade/239	""
 R	^	^ --arch arm64 --print-shell	run	0	#aa69bf9b2e6a2a43/1921	^
 R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00313.json --arch x86_64 --check	run	0	#e14b63ae1578e59e/240	^
-R	^	^ --arch x86_64 --print-shell	run	0	#aa69bf9b2e6a2a43/1921	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00313.json --arch x86_64 --check	run	1	""	"hydo-build: test.commands[1].name: a string (or a whole numb…#c603a63de1c96f86"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00314.json --arch x86_64 --check	run	1	""	"hydo-build: data: unknown field(s) ., 0, 1, 2, 7 (known: des…#755e306903c51666"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -4796,18 +4796,18 @@ R	^	<tmp>/mutant00316.json --arch arm64 --check	run	1	""	"hydo-build: services[0
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00317.json --arch x86_64 --check	run	0	#fd888b042e2b06d5/239	""
-R	^	^ --arch x86_64 --print-shell	run	0	#aa69bf9b2e6a2a43/1921	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00318.json --arch x86_64 --check	crash	"TypeError: 'float' object is not iterable"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: 'float' object is not iterable"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: 'float' object is not iterable"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: 'float' object is not iterable"
-R	^	<tmp>/mutant00319.json --arch x86_64 --check	run	0	#9c90f3b6942101ea/239	""
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: int() argument must be a string, a bytes-like object or a r"
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	""
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00317.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[4]: missing field `src` (project form…#fca2931ced2abe00"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00318.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: float object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00319.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[1]: invalid type: string \"v3\", expect…#113982639951e67a"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00320.json --arch arm64 --check	run	1	""	"hydo-build: root.files[0].dst: {{p}} is not a declared parameter\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
@@ -4912,14 +4912,14 @@ R	^	<tmp>/mutant00345.json --arch x86_64 --check	run	1	""	"hydo-build: params: m
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00346.json --arch x86_64 --check	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: 'int' object is not iterable"
-R	^	<tmp>/mutant00347.json --arch x86_64 --check	crash	"TypeError: 'bool' object is not iterable"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: 'bool' object is not iterable"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: 'bool' object is not iterable"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: 'bool' object is not iterable"
+R	^	<tmp>/mutant00346.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: int object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00347.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: bool object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00348.json --arch arm64 --check	run	1	""	"hydo-build: name: {{v}} is not a declared parameter\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
@@ -4936,10 +4936,10 @@ R	^	<tmp>/mutant00351.json --arch x86_64 --check	run	1	""	"hydo-build: data: unk
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00352.json --arch arm64 --check	run	0	#025954a78f3ac114/83	""
-R	^	^ --arch arm64 --print-shell	run	0	#18559ef0767a7ee5/972	^
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00352.json --arch arm64 --check	run	1	""	"hydo-build: root.files[0].mode: a string (or a whole number)…#bf70747b4d970414"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00353.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0]: field 'token' must be a str\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -4952,23 +4952,23 @@ R	^	<tmp>/mutant00355.json --arch x86_64 --check	run	1	""	"hydo-build: name: use
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00356.json --arch arm64 --check	run	0	#6d3ef2e77b88565b/83	""
-R	^	^ --arch arm64 --print-shell	run	0	#0237955accdfa8f8/1051	^
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00357.json --arch x86_64 --check	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: 'int' object is not iterable"
+R	^	<tmp>/mutant00356.json --arch arm64 --check	run	1	""	"hydo-build: root.files[0].dst: a string (or a whole number),…#20f5b37c9553290e"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00357.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: 'int' object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00358.json --arch x86_64 --check	run	1	""	"hydo-build: name: {{v}} is not a declared parameter\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00359.json --arch x86_64 --check	run	0	#32c044c2057043d8/83	""
-R	^	^ --arch x86_64 --print-shell	run	0	#dddb87ca411401a6/984	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00360.json --arch arm64 --check	run	0	#f8a02f7d31401684/83	^
+R	^	<tmp>/mutant00359.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0].name: a string (or a whole number), not…#a4a1be43209b0749"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00360.json --arch arm64 --check	run	0	#f8a02f7d31401684/83	""
 R	^	^ --arch arm64 --print-shell	run	0	#3bc708b25bc2e7ae/1051	^
 R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
@@ -4988,18 +4988,18 @@ R	^	<tmp>/mutant00364.json --arch arm64 --check	run	1	""	"hydo-build: invariants
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00365.json --arch x86_64 --check	run	0	#61dfe3d5cfbf1bda/83	""
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: can only join an iterable"
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	""
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00365.json --arch x86_64 --check	run	1	""	"hydo-build: data.dirs: invalid type: integer `4096`, expecte…#9fbdcbd629bc167f"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00366.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0]: token must be one capital letter other…#cfff9015b16210d0"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00367.json --arch x86_64 --check	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: 'int' object is not iterable"
+R	^	<tmp>/mutant00367.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: int object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00368.json --arch arm64 --check	run	0	#0bde033b27e410a5/84	""
 R	^	^ --arch arm64 --print-shell	run	0	#22b4222053c38db5/2115	^
 R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
@@ -5012,15 +5012,15 @@ R	^	<tmp>/mutant00370.json --arch x86_64 --check	run	0	#213b1867998751b6/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#46068988c9fbd3c0/2109	^
 R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00371.json --arch x86_64 --check	run	0	#0b2afff503198170/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#6c7fe87c18edb17f/1954	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00372.json --arch arm64 --check	run	0	#3cd640050fbf8c41/84	^
-R	^	^ --arch arm64 --print-shell	run	0	#22b4222053c38db5/2115	^
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00373.json --arch x86_64 --check	run	0	#ff2c3fb2adf10870/84	^
+R	^	<tmp>/mutant00371.json --arch x86_64 --check	run	1	""	"hydo-build: data.size_mib: invalid type: string \"v3\", expect…#fa6ab8b2bb746a8a"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00372.json --arch arm64 --check	run	1	""	"hydo-build: root.files: invalid type: integer `5000`, expect…#0a1905ab02cb4665"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00373.json --arch x86_64 --check	run	0	#ff2c3fb2adf10870/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#c98c1d879c569acb/1847	^
 R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
@@ -5032,10 +5032,10 @@ R	^	<tmp>/mutant00375.json --arch x86_64 --check	run	0	#e7e9512163670438/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#9fb086ba5c4f2193/1826	^
 R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00376.json --arch arm64 --check	run	0	#5a5c9065b65c116b/84	^
-R	^	^ --arch arm64 --print-shell	crash	"TypeError: can only join an iterable"
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	""
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00376.json --arch arm64 --check	run	1	""	"hydo-build: data.dirs: invalid type: integer `5000`, expecte…#3ee50111e2be7a82"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00377.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[1].dst: {{p}} is not a declared parameter\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -5044,22 +5044,22 @@ R	^	<tmp>/mutant00378.json --arch x86_64 --check	run	0	#16db74d06dacc425/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#22b4222053c38db5/2115	^
 R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00379.json --arch x86_64 --check	run	0	#f0e806003174fee1/84	^
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: can only join an iterable"
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	""
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00380.json --arch arm64 --check	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch arm64 --print-shell	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch arm64 --print-init	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch arm64 --print-world	crash	"TypeError: 'int' object is not iterable"
+R	^	<tmp>/mutant00379.json --arch x86_64 --check	run	1	""	"hydo-build: data.dirs: invalid type: integer `1`, expected a…#657befbb8eafb0ba"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00380.json --arch arm64 --check	run	1	""	"hydo-build: the manifest cannot be read: int object is not iterable\n"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00381.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: must be a mapping\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00382.json --arch x86_64 --check	run	0	#9ef28cf3ae1fab3d/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#22b4222053c38db5/2115	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00382.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[1]: missing field `dst` (project form…#4e2f68b324a83f03"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00383.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: buggif…#3956f7a2358bfb5e"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -5068,34 +5068,34 @@ R	^	<tmp>/mutant00384.json --arch arm64 --check	run	1	""	"hydo-build: services[0
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00385.json --arch x86_64 --check	run	0	#c698845c03c0a4bf/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#6ab9cdee59ac97f6/2067	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00385.json --arch x86_64 --check	run	1	""	"hydo-build: services[0].cmd: an argv list of strings (exec'd…#88d335310f0d58f9"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00386.json --arch x86_64 --check	run	1	""	"hydo-build: workload: unknown field(s) bogus (known: descrip…#310421b0daad604b"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00387.json --arch x86_64 --check	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: 'int' object is not iterable"
+R	^	<tmp>/mutant00387.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: int object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00388.json --arch arm64 --check	run	0	#96778618344e0c2c/84	""
 R	^	^ --arch arm64 --print-shell	run	0	#406eec89ce10db75/2065	^
 R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00389.json --arch x86_64 --check	run	0	#742bd6d81133d286/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#1823618d82a3c1a2/1919	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00389.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0].cmd: a string (or a whole number),…#6b1a74cd42c8076a"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00390.json --arch x86_64 --check	run	1	""	"hydo-build: workload: field 'steps' must be a int\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00391.json --arch x86_64 --check	run	0	#696db4ec41c0339c/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#cfaaa8cab0ba6ea5/2110	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00391.json --arch x86_64 --check	run	1	""	"hydo-build: root: invalid type: integer `0`, expected a mapp…#f05affdcb57d8b9c"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00392.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
@@ -5108,10 +5108,10 @@ R	^	<tmp>/mutant00394.json --arch x86_64 --check	run	1	""	"hydo-build: faults: u
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00395.json --arch x86_64 --check	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
+R	^	<tmp>/mutant00395.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: unhashable type in faults:\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00396.json --arch arm64 --check	run	1	""	"hydo-build: invariants[0]: unknown field(s) 1 (known: after,…#84f83d487c25f826"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
@@ -5128,14 +5128,14 @@ R	^	<tmp>/mutant00399.json --arch x86_64 --check	run	1	""	"hydo-build: workload:
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00400.json --arch arm64 --check	run	0	#8c8cdfa842718fa2/84	""
-R	^	^ --arch arm64 --print-shell	run	0	#fbe90b8bfe1a2bd7/2968	^
-R	^	^ --arch arm64 --print-init	run	0	#a0ff8358193af908/57181	^
-R	^	^ --arch arm64 --print-world	run	0	#131e0eafd9de5b5f/235	^
-R	^	<tmp>/mutant00401.json --arch x86_64 --check	run	0	#eed440a0b7508369/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#fbe90b8bfe1a2bd7/2968	^
-R	^	^ --arch x86_64 --print-init	run	0	#a0ff8358193af908/57181	^
-R	^	^ --arch x86_64 --print-world	run	0	#131e0eafd9de5b5f/235	^
+R	^	<tmp>/mutant00400.json --arch arm64 --check	run	1	""	"hydo-build: root.files[5].src: a string (or a whole number),…#e07748bfcdbf0c05"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00401.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[24]: missing field `src` (project for…#631702e62cc0d4bf"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00402.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: depends_on names unknown service []\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -5144,11 +5144,11 @@ R	^	<tmp>/mutant00403.json --arch x86_64 --check	run	0	#0ef6578a564c0c37/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#fbe90b8bfe1a2bd7/2968	^
 R	^	^ --arch x86_64 --print-init	run	0	#a0ff8358193af908/57181	^
 R	^	^ --arch x86_64 --print-world	run	0	#131e0eafd9de5b5f/235	^
-R	^	<tmp>/mutant00404.json --arch arm64 --check	run	0	#bbdc8a5e819f8c8b/84	^
-R	^	^ --arch arm64 --print-shell	run	0	#fbe90b8bfe1a2bd7/2968	^
-R	^	^ --arch arm64 --print-init	run	0	#a0ff8358193af908/57181	^
-R	^	^ --arch arm64 --print-world	run	0	#131e0eafd9de5b5f/235	^
-R	^	<tmp>/mutant00405.json --arch x86_64 --check	run	0	#13f02f661a1106ec/84	^
+R	^	<tmp>/mutant00404.json --arch arm64 --check	run	1	""	"hydo-build: root.files[10]: invalid type: floating point `2.…#f4c5357467b821fc"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00405.json --arch x86_64 --check	run	0	#13f02f661a1106ec/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#fbe90b8bfe1a2bd7/2968	^
 R	^	^ --arch x86_64 --print-init	run	0	#a0ff8358193af908/57181	^
 R	^	^ --arch x86_64 --print-world	run	0	#131e0eafd9de5b5f/235	^
@@ -5156,26 +5156,26 @@ R	^	<tmp>/mutant00406.json --arch x86_64 --check	run	1	""	"hydo-build: services[
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00407.json --arch x86_64 --check	run	0	#ef2a42070a4a4620/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#fbe90b8bfe1a2bd7/2968	^
-R	^	^ --arch x86_64 --print-init	run	0	#a0ff8358193af908/57181	^
-R	^	^ --arch x86_64 --print-world	run	0	#131e0eafd9de5b5f/235	^
-R	^	<tmp>/mutant00408.json --arch arm64 --check	run	0	#295496911e4ec8c0/84	^
+R	^	<tmp>/mutant00407.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[1].a: unknown field `a`, expected one…#43ab79c126b7e93b"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00408.json --arch arm64 --check	run	0	#295496911e4ec8c0/84	""
 R	^	^ --arch arm64 --print-shell	run	0	#fbe90b8bfe1a2bd7/2968	^
 R	^	^ --arch arm64 --print-init	run	0	#a0ff8358193af908/57181	^
 R	^	^ --arch arm64 --print-world	run	0	#131e0eafd9de5b5f/235	^
-R	^	<tmp>/mutant00409.json --arch x86_64 --check	run	0	#fcf73983c4f34b24/84	^
+R	^	<tmp>/mutant00409.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[17].dst: a string (or a whole number)…#c6b1a58ead69d84b"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00410.json --arch x86_64 --check	run	0	#678033193c7c7f63/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#fbe90b8bfe1a2bd7/2968	^
 R	^	^ --arch x86_64 --print-init	run	0	#a0ff8358193af908/57181	^
 R	^	^ --arch x86_64 --print-world	run	0	#131e0eafd9de5b5f/235	^
-R	^	<tmp>/mutant00410.json --arch x86_64 --check	run	0	#678033193c7c7f63/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#fbe90b8bfe1a2bd7/2968	^
-R	^	^ --arch x86_64 --print-init	run	0	#a0ff8358193af908/57181	^
-R	^	^ --arch x86_64 --print-world	run	0	#131e0eafd9de5b5f/235	^
-R	^	<tmp>/mutant00411.json --arch x86_64 --check	run	0	#3cec61d9adf5415a/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#fbe90b8bfe1a2bd7/2968	^
-R	^	^ --arch x86_64 --print-init	run	0	#a0ff8358193af908/57181	^
-R	^	^ --arch x86_64 --print-world	run	0	#131e0eafd9de5b5f/235	^
+R	^	<tmp>/mutant00411.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[14].a: unknown field `a`, expected on…#d5090259a18289bb"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00412.json --arch arm64 --check	run	1	""	"hydo-build: invariants[0]: unknown field(s) bogus (known: af…#0044df4d46759703"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
@@ -5256,18 +5256,18 @@ R	^	<tmp>/mutant00431.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00432.json --arch arm64 --check	run	0	#10ad72d465774ba1/84	""
-R	^	^ --arch arm64 --print-shell	run	0	#88123cc8efe2f413/1863	^
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00433.json --arch x86_64 --check	run	0	#448dd1be0639efe6/84	^
+R	^	<tmp>/mutant00432.json --arch arm64 --check	run	1	""	"hydo-build: root.files[16]: invalid type: string \"eventually…#cffee57073b93712"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00433.json --arch x86_64 --check	run	0	#448dd1be0639efe6/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#88123cc8efe2f413/1863	^
 R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00434.json --arch x86_64 --check	run	0	#2210ac59b9411085/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#88123cc8efe2f413/1863	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00434.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].bogus: unknown field `bogus`, expe…#fd9a461e72675b71"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00435.json --arch x86_64 --check	run	1	""	"hydo-build: workload: required (steps + run)\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -5276,10 +5276,10 @@ R	^	<tmp>/mutant00436.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00437.json --arch x86_64 --check	run	0	#c7fad440c5efee1c/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#88123cc8efe2f413/1863	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00437.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[10].x: unknown field `x`, expected on…#fe13ab3abb8b8e6e"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00438.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[21].dst: {{p}} is not a declared parameter\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -5296,35 +5296,35 @@ R	^	<tmp>/mutant00441.json --arch x86_64 --check	run	1	""	"hydo-build: invariant
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00442.json --arch x86_64 --check	run	0	#c927cb1519dd6c63/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#88123cc8efe2f413/1863	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00443.json --arch x86_64 --check	run	0	#133e5a5acac00b3d/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#88123cc8efe2f413/1863	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00442.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[19]: missing field `src` (project for…#2aeb00143d3d9deb"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00443.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[2]: invalid type: string \"kill\", expe…#1bcc3c3685e17ec6"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00444.json --arch arm64 --check	run	1	""	"hydo-build: services[0]: must be a mapping\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00445.json --arch x86_64 --check	run	0	#493b9ec97058151a/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#88123cc8efe2f413/1863	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00446.json --arch x86_64 --check	run	0	#8e319bc4b80d015d/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#88123cc8efe2f413/1863	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00447.json --arch x86_64 --check	run	0	#b88e7ea5f795bb02/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#88123cc8efe2f413/1863	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00448.json --arch arm64 --check	run	0	#0f8d595c440e8c65/103	^
-R	^	^ --arch arm64 --print-shell	run	0	#36fda5cb052fd74b/4799	^
-R	^	^ --arch arm64 --print-init	run	0	#52dc22bce83f5ae5/25497	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00449.json --arch x86_64 --check	run	0	#e0ce798a20f869ea/103	^
+R	^	<tmp>/mutant00445.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[11].dst: a string (or a whole number)…#352a2c8706ba7e2e"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00446.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[9]: invalid type: string \"x\", expecte…#f99fc054ef546677"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00447.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[22].bogus: unknown field `bogus`, exp…#b6164509a182c705"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00448.json --arch arm64 --check	run	1	""	"hydo-build: root.files[6]: invalid type: string \"12\", expect…#e65b13cf79f98a55"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00449.json --arch x86_64 --check	run	0	#e0ce798a20f869ea/103	""
 R	^	^ --arch x86_64 --print-shell	run	0	#36fda5cb052fd74b/4799	^
 R	^	^ --arch x86_64 --print-init	run	0	#52dc22bce83f5ae5/25497	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
@@ -5332,11 +5332,11 @@ R	^	<tmp>/mutant00450.json --arch x86_64 --check	run	1	""	"hydo-build: checks[0]
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00451.json --arch x86_64 --check	run	0	#86afded60ed77386/103	""
-R	^	^ --arch x86_64 --print-shell	run	0	#36fda5cb052fd74b/4799	^
-R	^	^ --arch x86_64 --print-init	run	0	#52dc22bce83f5ae5/25497	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00452.json --arch arm64 --check	run	0	#817f3f6f859694a2/103	^
+R	^	<tmp>/mutant00451.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[6]: missing field `src` (project form…#fe4171891109c2c6"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00452.json --arch arm64 --check	run	0	#817f3f6f859694a2/103	""
 R	^	^ --arch arm64 --print-shell	run	0	#36fda5cb052fd74b/4799	^
 R	^	^ --arch arm64 --print-init	run	0	#52dc22bce83f5ae5/25497	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
@@ -5368,14 +5368,14 @@ R	^	<tmp>/mutant00459.json --arch x86_64 --check	run	0	#00de2af4a17a6259/103	""
 R	^	^ --arch x86_64 --print-shell	run	0	#36fda5cb052fd74b/4799	^
 R	^	^ --arch x86_64 --print-init	run	0	#52dc22bce83f5ae5/25497	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00460.json --arch arm64 --check	run	0	#e3fe8dec90d929f7/103	^
-R	^	^ --arch arm64 --print-shell	run	0	#36fda5cb052fd74b/4799	^
-R	^	^ --arch arm64 --print-init	run	0	#52dc22bce83f5ae5/25497	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00461.json --arch x86_64 --check	run	0	#08186a0de8285438/103	^
-R	^	^ --arch x86_64 --print-shell	run	0	#36fda5cb052fd74b/4799	^
-R	^	^ --arch x86_64 --print-init	run	0	#52dc22bce83f5ae5/25497	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00460.json --arch arm64 --check	run	1	""	"hydo-build: root.files[7].src: a string (or a whole number),…#606a301bf6a36181"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00461.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[24]: missing field `src` (project for…#631702e62cc0d4bf"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00462.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0]: missing required field 'default'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -5384,11 +5384,11 @@ R	^	<tmp>/mutant00463.json --arch x86_64 --check	run	0	#a5fe150d0fbfee1b/103	""
 R	^	^ --arch x86_64 --print-shell	run	0	#36fda5cb052fd74b/4799	^
 R	^	^ --arch x86_64 --print-init	run	0	#52dc22bce83f5ae5/25497	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00464.json --arch arm64 --check	run	0	#23ed512e61cf0c37/84	^
-R	^	^ --arch arm64 --print-shell	run	0	#26161fb187c6bdd0/1530	^
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00465.json --arch x86_64 --check	run	0	#5cb44217bea1f0ba/84	^
+R	^	<tmp>/mutant00464.json --arch arm64 --check	run	1	""	"hydo-build: root.files[5]: invalid type: string \"bridge\", ex…#fb468da830b6d151"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00465.json --arch x86_64 --check	run	0	#5cb44217bea1f0ba/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#26161fb187c6bdd0/1530	^
 R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
@@ -5396,22 +5396,22 @@ R	^	<tmp>/mutant00466.json --arch x86_64 --check	run	0	#5df8b6120dcc7474/84	^
 R	^	^ --arch x86_64 --print-shell	run	0	#26161fb187c6bdd0/1530	^
 R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00467.json --arch x86_64 --check	run	0	#606ae8dee9693c4c/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#26161fb187c6bdd0/1530	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00468.json --arch arm64 --check	run	0	#2d310fe1cb9fdd92/84	^
-R	^	^ --arch arm64 --print-shell	run	0	#26161fb187c6bdd0/1530	^
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00469.json --arch x86_64 --check	run	0	#1c453b3b574aa459/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#26161fb187c6bdd0/1530	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00470.json --arch x86_64 --check	run	0	#58d159a502663155/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#26161fb187c6bdd0/1530	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00467.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[8]: invalid type: string \"10.89.0.7\",…#7abe3e62f07d06a9"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00468.json --arch arm64 --check	run	1	""	"hydo-build: root.files[14].src: a string (or a whole number)…#9c508e67bd61a690"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00469.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[26].src: a string (or a whole number)…#dfc6bc54de6510dd"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00470.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[24].src: a string (or a whole number)…#ea65743b54c6a565"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00471.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: buggif…#3956f7a2358bfb5e"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -5420,30 +5420,30 @@ R	^	<tmp>/mutant00472.json --arch arm64 --check	run	0	#726b62129cc5e0df/84	""
 R	^	^ --arch arm64 --print-shell	run	0	#26161fb187c6bdd0/1530	^
 R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00473.json --arch x86_64 --check	run	0	#01d9b2e327113900/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#b696811ab467b958/1509	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00473.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[7]: invalid type: string \"kill\", expe…#ba8b6b69d21de6f5"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00474.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: unknown field(s) bogus (known: addr…#994698e3732cd94c"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00475.json --arch x86_64 --check	run	0	#42471d7bb8260fb3/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#26161fb187c6bdd0/1530	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00476.json --arch arm64 --check	run	0	#717fabfb562a4cc9/84	^
+R	^	<tmp>/mutant00475.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[1].dst: a string (or a whole number),…#4bbd95532fb0be05"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00476.json --arch arm64 --check	run	0	#717fabfb562a4cc9/84	""
 R	^	^ --arch arm64 --print-shell	run	0	#26161fb187c6bdd0/1530	^
 R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00477.json --arch x86_64 --check	run	0	#38f53780854347ab/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#26161fb187c6bdd0/1530	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00478.json --arch x86_64 --check	run	0	#46d50665943abfd5/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#26161fb187c6bdd0/1530	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00477.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[22].bogus: unknown field `bogus`, exp…#b6164509a182c705"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00478.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[6]: invalid type: integer `-1`, expec…#452983c30df99837"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00479.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0].msg: {{p}} is not a declared parameter\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -5456,47 +5456,47 @@ R	^	<tmp>/mutant00481.json --arch x86_64 --check	run	1	""	"hydo-build: name: use
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00482.json --arch x86_64 --check	run	0	#ad56ee468365fadb/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#69ba0405030f5d4e/1561	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00483.json --arch x86_64 --check	run	0	#82eccac16ce811ee/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#69ba0405030f5d4e/1561	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00484.json --arch arm64 --check	run	0	#162555366782680e/84	^
-R	^	^ --arch arm64 --print-shell	run	0	#69ba0405030f5d4e/1561	^
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00482.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[5]: missing field `src` (project form…#4c44ce6d8a1a7d0e"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00483.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[14]: invalid type: integer `0`, expec…#58a69d60f2cc2fbe"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00484.json --arch arm64 --check	run	1	""	"hydo-build: root.files[6]: missing field `dst` (project form…#d3020bb61a027922"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00485.json --arch x86_64 --check	run	1	""	"hydo-build: workload: required (steps + run)\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00486.json --arch x86_64 --check	run	0	#ac7bba1c4cd44138/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#69ba0405030f5d4e/1561	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00486.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[13]: invalid type: string \"eventually…#f37c75028e3b1f2e"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00487.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: buggif…#3956f7a2358bfb5e"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00488.json --arch arm64 --check	run	0	#272faf75cf36465d/84	""
-R	^	^ --arch arm64 --print-shell	run	0	#69ba0405030f5d4e/1561	^
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00489.json --arch x86_64 --check	run	0	#f6f62e5e31828cb4/84	^
+R	^	<tmp>/mutant00488.json --arch arm64 --check	run	1	""	"hydo-build: root.files[27]: missing field `dst` (project for…#f1d6d38aa21d9b67"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00489.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[12].bogus: unknown field `bogus`, exp…#054302c0ca3acd9c"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00490.json --arch x86_64 --check	run	0	#f3059cac2870ad9b/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#69ba0405030f5d4e/1561	^
 R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00490.json --arch x86_64 --check	run	0	#f3059cac2870ad9b/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#69ba0405030f5d4e/1561	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00491.json --arch x86_64 --check	run	0	#ec95738ee5ec15d6/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#69ba0405030f5d4e/1561	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00492.json --arch arm64 --check	run	0	#3a7d5622a39a5e64/84	^
+R	^	<tmp>/mutant00491.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[6].x: unknown field `x`, expected one…#bc2169e14e8c108d"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00492.json --arch arm64 --check	run	0	#3a7d5622a39a5e64/84	""
 R	^	^ --arch arm64 --print-shell	run	0	#69ba0405030f5d4e/1561	^
 R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
@@ -5524,10 +5524,10 @@ R	^	<tmp>/mutant00498.json --arch x86_64 --check	run	1	""	"hydo-build: invariant
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00499.json --arch x86_64 --check	run	0	#86b547c594934d3b/83	""
-R	^	^ --arch x86_64 --print-shell	run	0	#8dabfe52a6691b8b/1865	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00499.json --arch x86_64 --check	run	1	""	"hydo-build: root.files: invalid type: mapping, expected a li…#9777ef1aa7252116"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00500.json --arch arm64 --check	run	1	""	"hydo-build: guest.cpu: v3 (AVX/AVX2) is an x86_64 option; --…#b2d519f950a5ac0e"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
@@ -5540,18 +5540,18 @@ R	^	<tmp>/mutant00502.json --arch x86_64 --check	run	1	""	"hydo-build: workload:
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00503.json --arch x86_64 --check	crash	"TypeError: 'bool' object is not iterable"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: 'bool' object is not iterable"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: 'bool' object is not iterable"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: 'bool' object is not iterable"
+R	^	<tmp>/mutant00503.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: bool object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00504.json --arch arm64 --check	run	1	""	"hydo-build: workload: field 'steps' must be a int\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00505.json --arch x86_64 --check	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: 'int' object is not iterable"
+R	^	<tmp>/mutant00505.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: int object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00506.json --arch x86_64 --check	run	0	#ae89d7b1ff7a64c1/83	""
 R	^	^ --arch x86_64 --print-shell	run	0	#32588bca87bf82e4/1663	^
 R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
@@ -5572,10 +5572,10 @@ R	^	<tmp>/mutant00510.json --arch x86_64 --check	run	0	#fc6c0504ffdce23e/83	""
 R	^	^ --arch x86_64 --print-shell	run	0	#1015a3b98c18be01/1879	^
 R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00511.json --arch x86_64 --check	run	0	#6359e858baf194b9/83	^
-R	^	^ --arch x86_64 --print-shell	run	0	#4fd780b143f2145c/1663	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00511.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].mode: a string (or a whole number)…#cbeafa937c158a99"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00512.json --arch arm64 --check	run	1	""	"hydo-build: faults[4]: {{p}} is not a declared parameter\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
@@ -5600,10 +5600,10 @@ R	^	<tmp>/mutant00517.json --arch x86_64 --check	run	1	""	"hydo-build: services[
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00518.json --arch x86_64 --check	crash	"AttributeError: 'str' object has no attribute 'get'"
-R	^	^ --arch x86_64 --print-shell	crash	"AttributeError: 'str' object has no attribute 'get'"
-R	^	^ --arch x86_64 --print-init	crash	"AttributeError: 'str' object has no attribute 'get'"
-R	^	^ --arch x86_64 --print-world	crash	"AttributeError: 'str' object has no attribute 'get'"
+R	^	<tmp>/mutant00518.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: 'str' object has no attribute 'get'\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00519.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (vote): image <tmp>/images/dockersam…#3fc1eb5c73b15672"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -5612,14 +5612,14 @@ R	^	<tmp>/mutant00520.json --arch arm64 --check	run	1	""	"hydo-build: services[0
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00521.json --arch x86_64 --check	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	<tmp>/mutant00522.json --arch x86_64 --check	crash	"AttributeError: 'str' object has no attribute 'get'"
-R	^	^ --arch x86_64 --print-shell	crash	"AttributeError: 'str' object has no attribute 'get'"
-R	^	^ --arch x86_64 --print-init	crash	"AttributeError: 'str' object has no attribute 'get'"
-R	^	^ --arch x86_64 --print-world	crash	"AttributeError: 'str' object has no attribute 'get'"
+R	^	<tmp>/mutant00521.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: unhashable type in faults:\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00522.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: 'str' object has no attribute 'get'\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00523.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (vote): image <tmp>/images/dockersam…#3fc1eb5c73b15672"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -5632,18 +5632,18 @@ R	^	<tmp>/mutant00525.json --arch x86_64 --check	run	1	""	"hydo-build: services[
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00526.json --arch x86_64 --check	crash	"TypeError: 'float' object is not iterable"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: 'float' object is not iterable"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: 'float' object is not iterable"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: 'float' object is not iterable"
+R	^	<tmp>/mutant00526.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: 'float' object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00527.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: buggif…#3956f7a2358bfb5e"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00528.json --arch arm64 --check	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch arm64 --print-shell	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch arm64 --print-init	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch arm64 --print-world	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
+R	^	<tmp>/mutant00528.json --arch arm64 --check	run	1	""	"hydo-build: the manifest cannot be read: unhashable type in faults:\n"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00529.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (vote): image <tmp>/images/dockersam…#3fc1eb5c73b15672"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -5660,10 +5660,10 @@ R	^	<tmp>/mutant00532.json --arch arm64 --check	run	1	""	"hydo-build: services[0
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00533.json --arch x86_64 --check	crash	"AttributeError: 'list' object has no attribute 'get'"
-R	^	^ --arch x86_64 --print-shell	crash	"AttributeError: 'list' object has no attribute 'get'"
-R	^	^ --arch x86_64 --print-init	crash	"AttributeError: 'list' object has no attribute 'get'"
-R	^	^ --arch x86_64 --print-world	crash	"AttributeError: 'list' object has no attribute 'get'"
+R	^	<tmp>/mutant00533.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: 'list' object has no attribute 'get'\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00534.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (vote): image <tmp>/images/dockersam…#3fc1eb5c73b15672"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -5708,10 +5708,10 @@ R	^	<tmp>/mutant00544.json --arch arm64 --check	run	1	""	"hydo-build: invariants
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00545.json --arch x86_64 --check	crash	"TypeError: cannot use 'dict' as a set element (unhashable type: 'dict'"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: cannot use 'dict' as a set element (unhashable type: 'dict'"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: cannot use 'dict' as a set element (unhashable type: 'dict'"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: cannot use 'dict' as a set element (unhashable type: 'dict'"
+R	^	<tmp>/mutant00545.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: unhashable type in faults:\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00546.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (vote): image <tmp>/images/dockersam…#3fc1eb5c73b15672"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -5748,10 +5748,10 @@ R	^	<tmp>/mutant00554.json --arch x86_64 --check	run	1	""	"hydo-build: services[
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00555.json --arch x86_64 --check	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: 'int' object is not iterable"
+R	^	<tmp>/mutant00555.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: int object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00556.json --arch arm64 --check	run	1	""	"hydo-build: services[0] (vote): image <tmp>/images/dockersam…#4ac2013f364b3092"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
@@ -5832,11 +5832,11 @@ R	^	<tmp>/mutant00575.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00576.json --arch arm64 --check	run	0	#fba4da02edd255fd/103	""
-R	^	^ --arch arm64 --print-shell	run	0	#73807809e3f0777b/7575	^
-R	^	^ --arch arm64 --print-init	run	0	#105c4da02ccf0d98/25568	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00577.json --arch x86_64 --check	run	0	#6fc3d111e925aa8f/103	^
+R	^	<tmp>/mutant00576.json --arch arm64 --check	run	1	""	"hydo-build: root.files[0]: invalid type: string \"10.89.0.7\",…#e3588fa58ec05969"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00577.json --arch x86_64 --check	run	0	#6fc3d111e925aa8f/103	""
 R	^	^ --arch x86_64 --print-shell	run	0	#ef2feaf69f4be6ea/8043	^
 R	^	^ --arch x86_64 --print-init	run	0	#105c4da02ccf0d98/25568	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
@@ -5860,22 +5860,22 @@ R	^	<tmp>/mutant00582.json --arch x86_64 --check	run	1	""	"hydo-build: checks[0]
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00583.json --arch x86_64 --check	crash	"TypeError: cannot use 'dict' as a set element (unhashable type: 'dict'"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: cannot use 'dict' as a set element (unhashable type: 'dict'"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: cannot use 'dict' as a set element (unhashable type: 'dict'"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: cannot use 'dict' as a set element (unhashable type: 'dict'"
+R	^	<tmp>/mutant00583.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: unhashable type in faults:\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00584.json --arch arm64 --check	run	1	""	"hydo-build: faults: unknown kind 'x' (known: clock, cut, dis…#225dd9992ad8eee5"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00585.json --arch x86_64 --check	crash	"AttributeError: 'str' object has no attribute 'get'"
-R	^	^ --arch x86_64 --print-shell	crash	"AttributeError: 'str' object has no attribute 'get'"
-R	^	^ --arch x86_64 --print-init	crash	"AttributeError: 'str' object has no attribute 'get'"
-R	^	^ --arch x86_64 --print-world	crash	"AttributeError: 'str' object has no attribute 'get'"
-R	^	<tmp>/mutant00586.json --arch x86_64 --check	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: 'int' object is not iterable"
+R	^	<tmp>/mutant00585.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: 'str' object has no attribute 'get'\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00586.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: 'int' object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00587.json --arch x86_64 --check	run	1	""	"hydo-build: params: must be a mapping of name: default value\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -5932,10 +5932,10 @@ R	^	<tmp>/mutant00600.json --arch arm64 --check	run	1	""	"hydo-build: services[0
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00601.json --arch x86_64 --check	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: 'int' object is not iterable"
+R	^	<tmp>/mutant00601.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: int object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00602.json --arch x86_64 --check	run	1	""	"hydo-build: services[1].setup: {{p}} is not a declared parameter\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -5944,10 +5944,10 @@ R	^	<tmp>/mutant00603.json --arch x86_64 --check	run	1	""	"hydo-build: root: unk
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00604.json --arch arm64 --check	run	0	#444e08615b7f12be/84	""
-R	^	^ --arch arm64 --print-shell	run	0	#ba3563c301464657/4831	^
-R	^	^ --arch arm64 --print-init	run	0	#6e5766334599f6c9/22854	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00604.json --arch arm64 --check	run	1	""	"hydo-build: shell: a string (or a whole number), not False (…#5cee5e16bdf4cbac"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00605.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind '12' (known: clock, cut, di…#57ba02e7fa63f383"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -5960,23 +5960,23 @@ R	^	<tmp>/mutant00607.json --arch x86_64 --check	run	0	#585c235d52588f00/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#486c037deb540763/7157	^
 R	^	^ --arch x86_64 --print-init	run	0	#6e5766334599f6c9/22854	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00608.json --arch arm64 --check	run	0	#330ad15c8a86fa67/84	^
-R	^	^ --arch arm64 --print-shell	run	0	#4b1da60e71e9ffa0/4772	^
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00609.json --arch x86_64 --check	run	0	#eacba44f86ac26d0/84	^
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: int() argument must be a string, a bytes-like object or a r"
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	""
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00610.json --arch x86_64 --check	run	0	#0a3081662bd8518a/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#93d1ee07e660254e/4678	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00611.json --arch x86_64 --check	run	0	#a89980ca6d1bc734/84	^
-R	^	^ --arch x86_64 --print-shell	crash	"ValueError: invalid literal for int() with base 10: 'bridge'"
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	""
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00612.json --arch arm64 --check	run	0	#6f310019c0b0d24e/84	^
+R	^	<tmp>/mutant00608.json --arch arm64 --check	run	1	""	"hydo-build: invariants[0].cmd: a string (or a whole number),…#6b1a74cd42c8076a"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00609.json --arch x86_64 --check	run	1	""	"hydo-build: services[0].ready_timeout: invalid type: list, e…#37a7d4c515111ffe"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00610.json --arch x86_64 --check	run	1	""	"hydo-build: services[1].setup: a string (or a whole number),…#96ee76ade819a781"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00611.json --arch x86_64 --check	run	1	""	"hydo-build: services[0].ready_timeout: invalid type: string …#e2d66d7d9c692962"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00612.json --arch arm64 --check	run	0	#6f310019c0b0d24e/84	""
 R	^	^ --arch arm64 --print-shell	run	0	#afa38559870af4d0/4960	^
 R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
@@ -6016,10 +6016,10 @@ R	^	<tmp>/mutant00621.json --arch x86_64 --check	run	1	""	"hydo-build: top level
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00622.json --arch x86_64 --check	run	0	#4ebf680a429202c6/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#e3eca9b5ef948e6c/4970	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00622.json --arch x86_64 --check	run	1	""	"hydo-build: env.RUN_MIGRATIONS: a string, a number or true/f…#599f2eaa64e7e6c1"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00623.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0]: unknown field(s) bogus (known: af…#0044df4d46759703"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -6032,10 +6032,10 @@ R	^	<tmp>/mutant00625.json --arch x86_64 --check	run	0	#e56242d101273580/84	^
 R	^	^ --arch x86_64 --print-shell	run	0	#f913dba5e6fe575c/5115	^
 R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00626.json --arch x86_64 --check	run	0	#4e009ad4d6657175/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#e9822d9dd30a3b6a/5122	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00626.json --arch x86_64 --check	run	1	""	"hydo-build: root.text./etc/passwd: a string (or a whole numb…#c23f949985467c43"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00627.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: unknown field(s) bogus (known: addr…#5f73d24e7a28b159"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -6044,26 +6044,26 @@ R	^	<tmp>/mutant00628.json --arch arm64 --check	run	0	#0a98beb103adfc91/84	""
 R	^	^ --arch arm64 --print-shell	run	0	#823a85eb3970f03f/4587	^
 R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00629.json --arch x86_64 --check	run	0	#9e506cc1a96efef4/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#e9822d9dd30a3b6a/5122	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00630.json --arch x86_64 --check	run	0	#80f3243b8778e092/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#b4c28aabbf631b93/4860	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00631.json --arch x86_64 --check	run	0	#f834185d9e877b5d/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#e9822d9dd30a3b6a/5122	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00632.json --arch arm64 --check	run	0	#10339da33c5664bc/84	^
+R	^	<tmp>/mutant00629.json --arch x86_64 --check	run	1	""	"hydo-build: faults: invalid type: boolean `false`, expected …#f8da9fba279f8393"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00630.json --arch x86_64 --check	run	1	""	"hydo-build: root.nix[0]: a string (or a whole number), not […#bcabf9ef2363c255"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00631.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0].safe: a string, a number or true/false,…#c814f5133d52f02d"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00632.json --arch arm64 --check	run	0	#10339da33c5664bc/84	""
 R	^	^ --arch arm64 --print-shell	run	0	#e9822d9dd30a3b6a/5122	^
 R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00633.json --arch x86_64 --check	run	0	#61296504a0617a22/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#fc58fa5286ba9413/5070	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00633.json --arch x86_64 --check	run	1	""	"hydo-build: data.size_mib: invalid type: string \"v3\", expect…#fa6ab8b2bb746a8a"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00634.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind '1' (known: clock, cut, dis…#9f3100d9ba5b732a"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -6084,26 +6084,26 @@ R	^	<tmp>/mutant00638.json --arch x86_64 --check	run	1	""	"hydo-build: invariant
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00639.json --arch x86_64 --check	run	0	#23c88d43fc3cc7ae/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#6fb6d1abe27bbafa/5006	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00639.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[2].msg: a string (or a whole number),…#679be292f5db85b3"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00640.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00641.json --arch x86_64 --check	run	0	#1a39affb338e17b9/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#1386200850a9d67f/1348	^
-R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00641.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[12]: missing field `src` (project for…#66b19c21255e820e"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00642.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0]: unknown field(s) k (known: default, de…#72b3eb0b6f52dfd7"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00643.json --arch x86_64 --check	run	0	#5afd7180823e23c5/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#1386200850a9d67f/1348	^
-R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00643.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[11].bogus: unknown field `bogus`, exp…#f366b7d0cad6b26d"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00644.json --arch arm64 --check	run	1	""	"hydo-build: knobs[0]: missing required field 'default'\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
@@ -6132,26 +6132,26 @@ R	^	<tmp>/mutant00650.json --arch x86_64 --check	run	1	""	"hydo-build: services[
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00651.json --arch x86_64 --check	run	0	#d2ec3d4c06c171e0/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#1386200850a9d67f/1348	^
-R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00652.json --arch arm64 --check	run	0	#d9d2f612002abcab/84	^
+R	^	<tmp>/mutant00651.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[23].src: a string (or a whole number)…#8ffd80ce3b295d50"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00652.json --arch arm64 --check	run	0	#d9d2f612002abcab/84	""
 R	^	^ --arch arm64 --print-shell	run	0	#1386200850a9d67f/1348	^
 R	^	^ --arch arm64 --print-init	run	0	#1df82dc011c6b60e/23881	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00653.json --arch x86_64 --check	run	0	#51f9293609127082/84	^
+R	^	<tmp>/mutant00653.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[16].dst: a string (or a whole number)…#30e58780b797c1ce"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00654.json --arch x86_64 --check	run	0	#35c49df27ff315a9/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#1386200850a9d67f/1348	^
 R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00654.json --arch x86_64 --check	run	0	#35c49df27ff315a9/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#1386200850a9d67f/1348	^
-R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00655.json --arch x86_64 --check	run	0	#fe71a15106a26cac/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#1386200850a9d67f/1348	^
-R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00655.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[4].bogus: unknown field `bogus`, expe…#a84c2cf35284a3ae"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00656.json --arch arm64 --check	run	1	""	"hydo-build: faults: unknown kind '10.89.0.7' (known: clock, …#ee19fad40bd96fdf"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
@@ -6164,19 +6164,19 @@ R	^	<tmp>/mutant00658.json --arch x86_64 --check	run	0	#b2f59bb49ae5e610/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#cec88402d1c0955f/1418	^
 R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00659.json --arch x86_64 --check	run	0	#8d8f07d1cbf92624/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#cec88402d1c0955f/1418	^
-R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00660.json --arch arm64 --check	run	0	#0d960e6fc74eedb1/84	^
+R	^	<tmp>/mutant00659.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[4]: invalid type: boolean `true`, exp…#022dc446d0ff60f7"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00660.json --arch arm64 --check	run	0	#0d960e6fc74eedb1/84	""
 R	^	^ --arch arm64 --print-shell	run	0	#cec88402d1c0955f/1418	^
 R	^	^ --arch arm64 --print-init	run	0	#1df82dc011c6b60e/23881	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00661.json --arch x86_64 --check	run	0	#b50a1ac828818ed5/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#cec88402d1c0955f/1418	^
-R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00662.json --arch x86_64 --check	run	0	#8979ee4cd61aa603/84	^
+R	^	<tmp>/mutant00661.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0]: missing field `src` (project form…#7120c3032438ee2e"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00662.json --arch x86_64 --check	run	0	#8979ee4cd61aa603/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#30990599f8ced46f/1340	^
 R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
@@ -6184,19 +6184,19 @@ R	^	<tmp>/mutant00663.json --arch x86_64 --check	run	0	#8ce93517a630dab0/84	^
 R	^	^ --arch x86_64 --print-shell	run	0	#cec88402d1c0955f/1418	^
 R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00664.json --arch arm64 --check	run	0	#07bd41c8fdf936f8/84	^
-R	^	^ --arch arm64 --print-shell	run	0	#cec88402d1c0955f/1418	^
-R	^	^ --arch arm64 --print-init	run	0	#1df82dc011c6b60e/23881	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00665.json --arch x86_64 --check	run	0	#6588a2d5c0477bb6/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#7d9d58ffda2e5071/1342	^
-R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00666.json --arch x86_64 --check	run	0	#6d5bddb6faca76fe/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#cec88402d1c0955f/1418	^
-R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00667.json --arch x86_64 --check	run	0	#4b4f7b7dbd406916/84	^
+R	^	<tmp>/mutant00664.json --arch arm64 --check	run	1	""	"hydo-build: root.files[2].dst: a string (or a whole number),…#77f5731e9ef4b897"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00665.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[3].bogus: unknown field `bogus`, expe…#953142d1b9ba862f"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00666.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[4].bogus: unknown field `bogus`, expe…#a84c2cf35284a3ae"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00667.json --arch x86_64 --check	run	0	#4b4f7b7dbd406916/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#cec88402d1c0955f/1418	^
 R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
@@ -6204,11 +6204,11 @@ R	^	<tmp>/mutant00668.json --arch arm64 --check	run	1	""	"hydo-build: faults: un
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00669.json --arch x86_64 --check	run	0	#b2a7973075cd8899/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#cec88402d1c0955f/1418	^
-R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00670.json --arch x86_64 --check	run	0	#3abd10aa5f52f107/84	^
+R	^	<tmp>/mutant00669.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[1].dst: a string (or a whole number),…#269dfb37b90e144d"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00670.json --arch x86_64 --check	run	0	#3abd10aa5f52f107/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#cec88402d1c0955f/1418	^
 R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
@@ -6224,10 +6224,10 @@ R	^	<tmp>/mutant00673.json --arch x86_64 --check	run	0	#daca1b5b143ca795/103	""
 R	^	^ --arch x86_64 --print-shell	run	0	#5d1d66f3faa3051c/3782	^
 R	^	^ --arch x86_64 --print-init	run	0	#fe659ac9fa0d4a36/26595	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00674.json --arch x86_64 --check	run	0	#11ea51152605acb1/103	^
-R	^	^ --arch x86_64 --print-shell	run	0	#5d1d66f3faa3051c/3782	^
-R	^	^ --arch x86_64 --print-init	run	0	#fe659ac9fa0d4a36/26595	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00674.json --arch x86_64 --check	run	1	""	"hydo-build: description: a string, a number or true/false, n…#7ab457340471988b"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00675.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind 'A b' (known: clock, cut, d…#786a9c401360c059"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -6240,18 +6240,18 @@ R	^	<tmp>/mutant00677.json --arch x86_64 --check	run	0	#ac26fea09f92c47b/103	""
 R	^	^ --arch x86_64 --print-shell	run	0	#5d1d66f3faa3051c/3782	^
 R	^	^ --arch x86_64 --print-init	run	0	#fe659ac9fa0d4a36/26595	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00678.json --arch x86_64 --check	run	0	#535e291c02dde5ec/103	^
-R	^	^ --arch x86_64 --print-shell	run	0	#5d1d66f3faa3051c/3782	^
-R	^	^ --arch x86_64 --print-init	run	0	#fe659ac9fa0d4a36/26595	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00679.json --arch x86_64 --check	run	0	#e57591d86989b6ee/103	^
-R	^	^ --arch x86_64 --print-shell	run	0	#5d1d66f3faa3051c/3782	^
-R	^	^ --arch x86_64 --print-init	run	0	#fe659ac9fa0d4a36/26595	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00680.json --arch arm64 --check	run	0	#1ca8531bc74dbd18/103	^
-R	^	^ --arch arm64 --print-shell	run	0	#5d1d66f3faa3051c/3782	^
-R	^	^ --arch arm64 --print-init	run	0	#fe659ac9fa0d4a36/26595	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00678.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0]: missing field `dst` (project form…#c8e14a091f24f1b1"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00679.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].dst: a string (or a whole number),…#36cea86ef1aadcb2"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00680.json --arch arm64 --check	run	1	""	"hydo-build: root.files[3]: invalid type: string \"x\", expecte…#7b4d97c7bc68e406"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00681.json --arch x86_64 --check	run	1	""	"hydo-build: checks[0]: unknown field(s) bogus (known: consis…#3a0d8d882c427632"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -6260,10 +6260,10 @@ R	^	<tmp>/mutant00682.json --arch x86_64 --check	run	1	""	"hydo-build: faults: u
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00683.json --arch x86_64 --check	run	0	#03a3178afbc776ac/103	""
-R	^	^ --arch x86_64 --print-shell	run	0	#5d1d66f3faa3051c/3782	^
-R	^	^ --arch x86_64 --print-init	run	0	#fe659ac9fa0d4a36/26595	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00683.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[3]: missing field `dst` (project form…#6452ecac89ca1f79"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00684.json --arch arm64 --check	run	1	""	"hydo-build: workload: unknown field(s) bogus (known: descrip…#310421b0daad604b"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
@@ -6272,10 +6272,10 @@ R	^	<tmp>/mutant00685.json --arch x86_64 --check	run	0	#7d075d283a297dfa/103	""
 R	^	^ --arch x86_64 --print-shell	run	0	#42a8c3ce29e5903b/3760	^
 R	^	^ --arch x86_64 --print-init	run	0	#fe659ac9fa0d4a36/26595	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00686.json --arch x86_64 --check	run	0	#e6434a6162e799d9/103	^
-R	^	^ --arch x86_64 --print-shell	run	0	#e9e21f60dde1134d/3778	^
-R	^	^ --arch x86_64 --print-init	run	0	#fe659ac9fa0d4a36/26595	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00686.json --arch x86_64 --check	run	1	""	"hydo-build: data.dirs: invalid type: integer `0`, expected a…#48f0ecc02d962298"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00687.json --arch x86_64 --check	run	1	""	"hydo-build: services: must be a list (it may be empty: a pro…#a73c150f25d1fea2"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -6288,14 +6288,14 @@ R	^	<tmp>/mutant00689.json --arch x86_64 --check	run	1	""	"hydo-build: invariant
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00690.json --arch x86_64 --check	run	0	#7d757f2cd5eeee78/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#d02c0055c8fcc9f6/1508	^
-R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00691.json --arch x86_64 --check	run	0	#6c79d520de919dd1/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#be0d10090d1401d1/1160	^
-R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00690.json --arch x86_64 --check	run	1	""	"hydo-build: env.PYTHONPATH: a string, a number or true/false…#a954ffcf10c70203"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00691.json --arch x86_64 --check	run	1	""	"hydo-build: services: invalid type: boolean `false`, expecte…#a429ba2293b6b715"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00692.json --arch arm64 --check	run	1	""	"hydo-build: root: unknown field(s) x (known: description, di…#14cbc237be5b080d"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
@@ -6304,10 +6304,10 @@ R	^	<tmp>/mutant00693.json --arch x86_64 --check	run	1	""	"hydo-build: workload:
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00694.json --arch x86_64 --check	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: 'int' object is not iterable"
+R	^	<tmp>/mutant00694.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: 'int' object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00695.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: must be a mapping\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -6324,10 +6324,10 @@ R	^	<tmp>/mutant00698.json --arch x86_64 --check	run	1	""	"hydo-build: services[
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00699.json --arch x86_64 --check	run	0	#1bd9d184c77dfc82/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#6f6a4207f32fd464/1515	^
-R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00699.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0]: invalid type: boolean `false`, ex…#ec5c9790b4e787a3"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00700.json --arch arm64 --check	run	1	""	"hydo-build: services[1]: duplicate service name 'pykv'\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
@@ -6336,10 +6336,10 @@ R	^	<tmp>/mutant00701.json --arch x86_64 --check	run	0	#4a1d54f9347f79d3/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#7d693574b8afddaa/1480	^
 R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00702.json --arch x86_64 --check	run	0	#094f5eb60780b6f2/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#6f6a4207f32fd464/1515	^
-R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00702.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0].values[0]: a string, a number or true/f…#74c3da575d1a8e07"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00703.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: buggif…#3956f7a2358bfb5e"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -6360,14 +6360,14 @@ R	^	<tmp>/mutant00707.json --arch x86_64 --check	run	1	""	"hydo-build: services[
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00708.json --arch arm64 --check	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch arm64 --print-shell	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch arm64 --print-init	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch arm64 --print-world	crash	"TypeError: 'int' object is not iterable"
-R	^	<tmp>/mutant00709.json --arch x86_64 --check	run	0	#ec378badf455257b/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#fbe90b8bfe1a2bd7/2968	^
-R	^	^ --arch x86_64 --print-init	run	0	#a0ff8358193af908/57181	^
-R	^	^ --arch x86_64 --print-world	run	0	#131e0eafd9de5b5f/235	^
+R	^	<tmp>/mutant00708.json --arch arm64 --check	run	1	""	"hydo-build: the manifest cannot be read: 'int' object is not iterable\n"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00709.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].a: unknown field `a`, expected one…#980e2b701f684191"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00710.json --arch x86_64 --check	run	1	""	"hydo-build: workload: required (steps + run)\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -6380,10 +6380,10 @@ R	^	<tmp>/mutant00712.json --arch arm64 --check	run	1	""	"hydo-build: services[1
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00713.json --arch x86_64 --check	run	0	#26206399e62f136d/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#d234ffec466d88e3/2453	^
-R	^	^ --arch x86_64 --print-init	run	0	#a0ff8358193af908/57181	^
-R	^	^ --arch x86_64 --print-world	run	0	#131e0eafd9de5b5f/235	^
+R	^	<tmp>/mutant00713.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[1].cmd: a string (or a whole number),…#03a3b2ee923a5aa2"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00714.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: addr '[]': with network: bridge, an…#97df1fae8d258502"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -6472,10 +6472,10 @@ R	^	<tmp>/mutant00735.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00736.json --arch arm64 --check	crash	"AttributeError: 'list' object has no attribute 'get'"
-R	^	^ --arch arm64 --print-shell	crash	"AttributeError: 'list' object has no attribute 'get'"
-R	^	^ --arch arm64 --print-init	crash	"AttributeError: 'list' object has no attribute 'get'"
-R	^	^ --arch arm64 --print-world	crash	"AttributeError: 'list' object has no attribute 'get'"
+R	^	<tmp>/mutant00736.json --arch arm64 --check	run	1	""	"hydo-build: the manifest cannot be read: workload has no attribute 'get'\n"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00737.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -6796,10 +6796,10 @@ R	^	<tmp>/mutant00816.json --arch arm64 --check	run	1	""	"hydo-build: invariants
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00817.json --arch x86_64 --check	run	0	#16d5772e92d33f3e/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#88123cc8efe2f413/1863	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00817.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[1].mode: a string (or a whole number)…#7775e36d9db362c5"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00818.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: unknown field(s) bogus (known: addr…#994698e3732cd94c"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -6824,18 +6824,18 @@ R	^	<tmp>/mutant00823.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0]:
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00824.json --arch arm64 --check	run	0	#530193a0534a3345/84	""
-R	^	^ --arch arm64 --print-shell	run	0	#88123cc8efe2f413/1863	^
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00824.json --arch arm64 --check	run	1	""	"hydo-build: root.files[0]: missing field `dst` (project form…#c8e14a091f24f1b1"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00825.json --arch x86_64 --check	run	1	""	"hydo-build: root: unknown field(s) i, k, l (known: descripti…#d29a6dfec651b270"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00826.json --arch x86_64 --check	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: 'int' object is not iterable"
+R	^	<tmp>/mutant00826.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: 'int' object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00827.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: must be a mapping\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -6852,14 +6852,14 @@ R	^	<tmp>/mutant00830.json --arch x86_64 --check	run	1	""	"hydo-build: faults: u
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00831.json --arch x86_64 --check	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: 'int' object is not iterable"
-R	^	<tmp>/mutant00832.json --arch arm64 --check	run	0	#29ed0cfe9b734abe/84	""
-R	^	^ --arch arm64 --print-shell	run	0	#e127a7b7593aa6f6/1431	^
-R	^	^ --arch arm64 --print-init	run	0	#afd9a45f9db08493/31785	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00831.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: 'int' object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00832.json --arch arm64 --check	run	1	""	"hydo-build: root.files[1].bogus: unknown field `bogus`, expe…#013fdf5dea60bfc5"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00833.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: field 'cmd' must be a str\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -6880,10 +6880,10 @@ R	^	<tmp>/mutant00837.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00838.json --arch x86_64 --check	crash	"TypeError: 'float' object is not iterable"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: 'float' object is not iterable"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: 'float' object is not iterable"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: 'float' object is not iterable"
+R	^	<tmp>/mutant00838.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: float object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00839.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0]: token must be one capital letter other…#cfff9015b16210d0"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -6892,23 +6892,23 @@ R	^	<tmp>/mutant00840.json --arch arm64 --check	run	0	#07d170bac6688b56/84	""
 R	^	^ --arch arm64 --print-shell	run	0	#08121f04c279cd26/1646	^
 R	^	^ --arch arm64 --print-init	run	0	#afd9a45f9db08493/31785	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00841.json --arch x86_64 --check	run	0	#09853a5ba061c4fb/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#96e4f313415af122/1645	^
-R	^	^ --arch x86_64 --print-init	run	0	#afd9a45f9db08493/31785	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00842.json --arch x86_64 --check	run	0	#30a9800d99cf5154/84	^
+R	^	<tmp>/mutant00841.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[1]: missing field `dst` (project form…#4e2f68b324a83f03"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00842.json --arch x86_64 --check	run	1	""	"hydo-build: root: invalid type: boolean `false`, expected a …#61018f9ebad5114c"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00843.json --arch x86_64 --check	run	0	#f4ba7e7bd3ad9f2c/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#45909a634e9aa573/1639	^
 R	^	^ --arch x86_64 --print-init	run	0	#afd9a45f9db08493/31785	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00843.json --arch x86_64 --check	run	0	#f4ba7e7bd3ad9f2c/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#45909a634e9aa573/1639	^
-R	^	^ --arch x86_64 --print-init	run	0	#afd9a45f9db08493/31785	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00844.json --arch arm64 --check	run	0	#b03d88b2bab1fa6b/84	^
-R	^	^ --arch arm64 --print-shell	run	0	#63cf6cff598f2e1c/1607	^
-R	^	^ --arch arm64 --print-init	run	0	#afd9a45f9db08493/31785	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00845.json --arch x86_64 --check	run	0	#933891c915187a4e/84	^
+R	^	<tmp>/mutant00844.json --arch arm64 --check	run	1	""	"hydo-build: root.files[0].bogus: unknown field `bogus`, expe…#fd9a461e72675b71"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00845.json --arch x86_64 --check	run	0	#933891c915187a4e/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#45909a634e9aa573/1639	^
 R	^	^ --arch x86_64 --print-init	run	0	#afd9a45f9db08493/31785	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
@@ -6924,14 +6924,14 @@ R	^	<tmp>/mutant00848.json --arch arm64 --check	run	1	""	"hydo-build: top level:
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00849.json --arch x86_64 --check	run	0	#ea33fb8c03d4aaad/103	""
-R	^	^ --arch x86_64 --print-shell	run	0	#36fda5cb052fd74b/4799	^
-R	^	^ --arch x86_64 --print-init	run	0	#52dc22bce83f5ae5/25497	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00850.json --arch x86_64 --check	run	0	#cd3cecc53798d5f8/103	^
-R	^	^ --arch x86_64 --print-shell	run	0	#36fda5cb052fd74b/4799	^
-R	^	^ --arch x86_64 --print-init	run	0	#52dc22bce83f5ae5/25497	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00849.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0].values: invalid type: string \"10.89.0.7…#c5834324ea901685"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00850.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0]: missing field `src` (project form…#7120c3032438ee2e"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00851.json --arch x86_64 --check	run	1	""	"hydo-build: services: must be a list (it may be empty: a pro…#a73c150f25d1fea2"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -6940,14 +6940,14 @@ R	^	<tmp>/mutant00852.json --arch arm64 --check	run	1	""	"hydo-build: workload: 
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00853.json --arch x86_64 --check	run	0	#76aeed63dee5b120/103	""
-R	^	^ --arch x86_64 --print-shell	run	0	#36fda5cb052fd74b/4799	^
-R	^	^ --arch x86_64 --print-init	run	0	#52dc22bce83f5ae5/25497	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00854.json --arch x86_64 --check	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
+R	^	<tmp>/mutant00853.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].mode: a string (or a whole number)…#ad0591ca57789b3f"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00854.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: unhashable type in faults:\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00855.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[1].dst: {{p}} is not a declared parameter\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -6964,10 +6964,10 @@ R	^	<tmp>/mutant00858.json --arch x86_64 --check	run	1	""	"hydo-build: workload:
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00859.json --arch x86_64 --check	run	0	#3f19810404c28c4a/103	""
-R	^	^ --arch x86_64 --print-shell	run	0	#36fda5cb052fd74b/4799	^
-R	^	^ --arch x86_64 --print-init	run	0	#52dc22bce83f5ae5/25497	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00859.json --arch x86_64 --check	run	1	""	"hydo-build: data.size_mib: invalid type: string \"A b\", expec…#26ef929e5ea8b7a3"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00860.json --arch arm64 --check	run	1	""	"hydo-build: checks[1]: missing required field 'type'\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
@@ -6976,10 +6976,10 @@ R	^	<tmp>/mutant00861.json --arch x86_64 --check	run	1	""	"hydo-build: top level
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00862.json --arch x86_64 --check	run	0	#5d25af7b2d1b72a3/103	""
-R	^	^ --arch x86_64 --print-shell	run	0	#36fda5cb052fd74b/4799	^
-R	^	^ --arch x86_64 --print-init	run	0	#52dc22bce83f5ae5/25497	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00862.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[1].dst: a string (or a whole number),…#a4016bd1331ffdee"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00863.json --arch x86_64 --check	run	1	""	"hydo-build: checks[1]: unknown field(s) bogus (known: consis…#d2c62b1f5c6447b4"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -7040,22 +7040,22 @@ R	^	<tmp>/mutant00877.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0]:
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00878.json --arch x86_64 --check	run	0	#5b383b2b5e1853e7/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#3072c46d8edb5b4c/2318	^
-R	^	^ --arch x86_64 --print-init	run	0	#fafdabad7c1c6b33/28283	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00878.json --arch x86_64 --check	run	1	""	"hydo-build: root.text./etc/redis.conf: a string (or a whole …#7a41d29ec40b5423"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00879.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[1]: unknown field(s) bogus (known: af…#6dcb78a6f79e4190"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00880.json --arch arm64 --check	run	0	#24918d2190a7f201/84	""
-R	^	^ --arch arm64 --print-shell	run	0	#497563072d685899/2166	^
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00881.json --arch x86_64 --check	run	0	#9c11909549bdb170/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#39f3847f2aca16b8/2032	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00880.json --arch arm64 --check	run	1	""	"hydo-build: root.files[0]: invalid type: string \"\", expected…#750a602d423c6a83"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00881.json --arch x86_64 --check	run	1	""	"hydo-build: knobs: invalid type: mapping, expected a list (p…#f87fd97284ff730f"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00882.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: missing required field 'ready'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -7068,14 +7068,14 @@ R	^	<tmp>/mutant00884.json --arch arm64 --check	run	0	#7b86b4bd28f61e3c/84	^
 R	^	^ --arch arm64 --print-shell	run	0	#dc476c7b4c8d6eef/2161	^
 R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00885.json --arch x86_64 --check	run	0	#e57000b0d9f61313/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#497563072d685899/2166	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00886.json --arch x86_64 --check	run	0	#1eb207cec00a7549/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#294599642ab114d5/1888	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00885.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].mode: a string (or a whole number)…#ad0591ca57789b3f"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00886.json --arch x86_64 --check	run	1	""	"hydo-build: workload.run: a string (or a whole number), not …#00fe25e37fbb34a0"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00887.json --arch x86_64 --check	run	1	""	"hydo-build: root: unknown field(s) i, k, l (known: descripti…#d29a6dfec651b270"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -7116,19 +7116,19 @@ R	^	<tmp>/mutant00896.json --arch arm64 --check	run	1	""	"hydo-build: top level:
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00897.json --arch x86_64 --check	run	0	#04f35d0e8cbedf8b/84	""
+R	^	<tmp>/mutant00897.json --arch x86_64 --check	run	1	""	"hydo-build: root.files: invalid type: integer `-1`, expected…#417901e66d873774"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00898.json --arch x86_64 --check	run	0	#8651148c9fd50f6a/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#d471e15435cef9ab/1624	^
 R	^	^ --arch x86_64 --print-init	run	0	#95da80a35b925288/31300	^
 R	^	^ --arch x86_64 --print-world	run	0	#a5847e82365a65b2/234	^
-R	^	<tmp>/mutant00898.json --arch x86_64 --check	run	0	#8651148c9fd50f6a/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#d471e15435cef9ab/1624	^
-R	^	^ --arch x86_64 --print-init	run	0	#95da80a35b925288/31300	^
-R	^	^ --arch x86_64 --print-world	run	0	#a5847e82365a65b2/234	^
-R	^	<tmp>/mutant00899.json --arch x86_64 --check	run	0	#c01b596c21251cdf/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#cd08fd3872c1cbad/1624	^
-R	^	^ --arch x86_64 --print-init	run	0	#95da80a35b925288/31300	^
-R	^	^ --arch x86_64 --print-world	run	0	#d5a77186ee19c51d/231	^
-R	^	<tmp>/mutant00900.json --arch arm64 --check	run	0	#09c94f855395cd07/84	^
+R	^	<tmp>/mutant00899.json --arch x86_64 --check	run	1	""	"hydo-build: services[0].port: invalid type: boolean `true`, …#8b9a6a551741e65c"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00900.json --arch arm64 --check	run	0	#09c94f855395cd07/84	""
 R	^	^ --arch arm64 --print-shell	run	0	#d471e15435cef9ab/1624	^
 R	^	^ --arch arm64 --print-init	run	0	#95da80a35b925288/31300	^
 R	^	^ --arch arm64 --print-world	run	0	#a5847e82365a65b2/234	^
@@ -7140,10 +7140,10 @@ R	^	<tmp>/mutant00902.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0]:
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00903.json --arch x86_64 --check	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: 'int' object is not iterable"
+R	^	<tmp>/mutant00903.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: int object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00904.json --arch arm64 --check	run	1	""	"hydo-build: workload: unknown field(s) bogus (known: descrip…#310421b0daad604b"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
@@ -7160,14 +7160,14 @@ R	^	<tmp>/mutant00907.json --arch x86_64 --check	run	0	#d9cb6349f7f4de66/84	^
 R	^	^ --arch x86_64 --print-shell	run	0	#d471e15435cef9ab/1624	^
 R	^	^ --arch x86_64 --print-init	run	0	#95da80a35b925288/31300	^
 R	^	^ --arch x86_64 --print-world	run	0	#a5847e82365a65b2/234	^
-R	^	<tmp>/mutant00908.json --arch arm64 --check	run	0	#f6ba5f7961eb0baf/84	^
-R	^	^ --arch arm64 --print-shell	run	0	#0a583dd2ca0743af/1603	^
-R	^	^ --arch arm64 --print-init	run	0	#95da80a35b925288/31300	^
-R	^	^ --arch arm64 --print-world	run	0	#a5847e82365a65b2/234	^
-R	^	<tmp>/mutant00909.json --arch x86_64 --check	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: 'int' object is not iterable"
+R	^	<tmp>/mutant00908.json --arch arm64 --check	run	1	""	"hydo-build: invariants[0].id: a string (or a whole number), …#e330b82a4f74b959"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00909.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: int object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00910.json --arch x86_64 --check	run	0	#efaa8fa35917a2f6/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#d471e15435cef9ab/1624	^
 R	^	^ --arch x86_64 --print-init	run	0	#95da80a35b925288/31300	^
@@ -7188,11 +7188,11 @@ R	^	<tmp>/mutant00914.json --arch x86_64 --check	run	1	""	"hydo-build: services[
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00915.json --arch x86_64 --check	run	0	#bb569d68ea77cf26/84	""
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: sequence item 0: expected str instance, bool found"
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	""
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00916.json --arch arm64 --check	run	0	#1bca80fe725942bb/84	^
+R	^	<tmp>/mutant00915.json --arch x86_64 --check	run	1	""	"hydo-build: data.dirs[0]: a string (or a whole number), not …#0716d9c64fc6b96d"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00916.json --arch arm64 --check	run	0	#1bca80fe725942bb/84	""
 R	^	^ --arch arm64 --print-shell	run	0	#69ba0405030f5d4e/1561	^
 R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
@@ -7248,10 +7248,10 @@ R	^	<tmp>/mutant00929.json --arch x86_64 --check	run	1	""	"hydo-build: services[
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00930.json --arch x86_64 --check	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: 'int' object is not iterable"
+R	^	<tmp>/mutant00930.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: int object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00931.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (restate): image <tmp>/restate-1.7.1…#63f64a86a74fdc92"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -7304,10 +7304,10 @@ R	^	<tmp>/mutant00943.json --arch x86_64 --check	run	1	""	"hydo-build: faults: u
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00944.json --arch arm64 --check	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch arm64 --print-shell	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch arm64 --print-init	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch arm64 --print-world	crash	"TypeError: 'int' object is not iterable"
+R	^	<tmp>/mutant00944.json --arch arm64 --check	run	1	""	"hydo-build: the manifest cannot be read: 'int' object is not iterable\n"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00945.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0]: missing required field 'set'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -7328,10 +7328,10 @@ R	^	<tmp>/mutant00949.json --arch x86_64 --check	run	0	#7bd7471d5749f3fe/84	^
 R	^	^ --arch x86_64 --print-shell	run	0	#ce21dafea4398355/1287	^
 R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00950.json --arch x86_64 --check	run	0	#19547bb793216b15/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#72c5c3d7ca9e5163/1099	^
-R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00950.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].src: a string (or a whole number),…#ca4491008cd69d4d"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00951.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: missing required field 'cmd'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -7348,10 +7348,10 @@ R	^	<tmp>/mutant00954.json --arch x86_64 --check	run	1	""	"hydo-build: top level
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00955.json --arch x86_64 --check	run	0	#3704d398e4d054a3/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#ce21dafea4398355/1287	^
-R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00955.json --arch x86_64 --check	run	1	""	"hydo-build: root.files: invalid type: string \"10.89.0.7\", ex…#3af54d83b30ee6df"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00956.json --arch arm64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: buggif…#3956f7a2358bfb5e"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
@@ -7360,10 +7360,10 @@ R	^	<tmp>/mutant00957.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0]:
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00958.json --arch x86_64 --check	run	0	#3a820de5c84d16fe/84	""
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: can only join an iterable"
-R	^	^ --arch x86_64 --print-init	run	0	#1df82dc011c6b60e/23881	""
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00958.json --arch x86_64 --check	run	1	""	"hydo-build: data.dirs: invalid type: integer `5000`, expecte…#3ee50111e2be7a82"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00959.json --arch x86_64 --check	run	1	""	"hydo-build: top level: field 'name' must be a str\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -7388,10 +7388,10 @@ R	^	<tmp>/mutant00964.json --arch arm64 --check	run	0	#c62633325517c309/84	""
 R	^	^ --arch arm64 --print-shell	run	0	#2737c6b10576b21e/3202	^
 R	^	^ --arch arm64 --print-init	run	0	#aa3137cd70ed3525/36303	^
 R	^	^ --arch arm64 --print-world	run	0	#a8f649e85d0999a9/1186	^
-R	^	<tmp>/mutant00965.json --arch x86_64 --check	run	0	#142ac7e81b2d7e67/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#9bb13f63e6581ad7/3267	^
-R	^	^ --arch x86_64 --print-init	run	0	#aa3137cd70ed3525/36303	^
-R	^	^ --arch x86_64 --print-world	run	0	#a8f649e85d0999a9/1186	^
+R	^	<tmp>/mutant00965.json --arch x86_64 --check	run	1	""	"hydo-build: root.files: invalid type: floating point `2.5`, …#30b878c08331642e"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00966.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[2]: missing required field 'cmd'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -7444,18 +7444,18 @@ R	^	<tmp>/mutant00978.json --arch x86_64 --check	run	0	#5f11230dc10e2516/84	^
 R	^	^ --arch x86_64 --print-shell	run	0	#ea41428d777ea15a/4696	^
 R	^	^ --arch x86_64 --print-init	run	0	#95da80a35b925288/31300	^
 R	^	^ --arch x86_64 --print-world	run	0	#d1f698326c9c1e7b/333	^
-R	^	<tmp>/mutant00979.json --arch x86_64 --check	run	0	#1cd81694c2d0be35/84	^
-R	^	^ --arch x86_64 --print-shell	crash	"ValueError: invalid literal for int() with base 10: ''"
-R	^	^ --arch x86_64 --print-init	run	0	#95da80a35b925288/31300	""
-R	^	^ --arch x86_64 --print-world	run	0	#d1f698326c9c1e7b/333	^
-R	^	<tmp>/mutant00980.json --arch arm64 --check	run	0	#d973588a9024f29b/84	^
+R	^	<tmp>/mutant00979.json --arch x86_64 --check	run	1	""	"hydo-build: services[1].ready_timeout: invalid type: string …#c58044c90225d301"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00980.json --arch arm64 --check	run	0	#d973588a9024f29b/84	""
 R	^	^ --arch arm64 --print-shell	run	0	#58c2c753a13088f1/4602	^
 R	^	^ --arch arm64 --print-init	run	0	#95da80a35b925288/31300	^
 R	^	^ --arch arm64 --print-world	run	0	#d1f698326c9c1e7b/333	^
-R	^	<tmp>/mutant00981.json --arch x86_64 --check	run	0	#71d999293a74e1b2/84	^
-R	^	^ --arch x86_64 --print-shell	crash	"ValueError: invalid literal for int() with base 10: 'eventually'"
-R	^	^ --arch x86_64 --print-init	run	0	#95da80a35b925288/31300	""
-R	^	^ --arch x86_64 --print-world	run	0	#d1f698326c9c1e7b/333	^
+R	^	<tmp>/mutant00981.json --arch x86_64 --check	run	1	""	"hydo-build: services[1].ready_timeout: invalid type: string …#453728ab3fd7c8e6"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00982.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: buggif…#3956f7a2358bfb5e"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -7464,11 +7464,11 @@ R	^	<tmp>/mutant00983.json --arch x86_64 --check	run	1	""	"hydo-build: services[
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00984.json --arch arm64 --check	run	0	#131b9c0405139b1b/84	""
-R	^	^ --arch arm64 --print-shell	run	0	#ea41428d777ea15a/4696	^
-R	^	^ --arch arm64 --print-init	run	0	#95da80a35b925288/31300	^
-R	^	^ --arch arm64 --print-world	run	0	#d1f698326c9c1e7b/333	^
-R	^	<tmp>/mutant00985.json --arch x86_64 --check	run	0	#1160b7d2def5a25d/84	^
+R	^	<tmp>/mutant00984.json --arch arm64 --check	run	1	""	"hydo-build: root.files[1].src: a string (or a whole number),…#d8de3110b7c6e661"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant00985.json --arch x86_64 --check	run	0	#1160b7d2def5a25d/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#ea41428d777ea15a/4696	^
 R	^	^ --arch x86_64 --print-init	run	0	#95da80a35b925288/31300	^
 R	^	^ --arch x86_64 --print-world	run	0	#d1f698326c9c1e7b/333	^
@@ -7524,14 +7524,14 @@ R	^	<tmp>/mutant00998.json --arch x86_64 --check	run	1	""	"hydo-build: services[
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00999.json --arch x86_64 --check	run	0	#9dec638fd159da1b/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#3516109b769de65a/6106	^
-R	^	^ --arch x86_64 --print-init	run	0	#c10468c74f3f0971/34836	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant01000.json --arch arm64 --check	run	0	#1978fec8ad8adae6/84	^
-R	^	^ --arch arm64 --print-shell	run	0	#3516109b769de65a/6106	^
-R	^	^ --arch arm64 --print-init	run	0	#c10468c74f3f0971/34836	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant00999.json --arch x86_64 --check	run	1	""	"hydo-build: root.text./etc/mysql-init.sql: a string (or a wh…#a45fe834107be0f9"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant01000.json --arch arm64 --check	run	1	""	"hydo-build: root.text: invalid type: boolean `true`, expecte…#b176404b5324dda5"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01001.json --arch x86_64 --check	run	1	""	"hydo-build: data: unknown field(s) bogus (known: description…#f4a88f234b0c8e9e"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -7540,10 +7540,10 @@ R	^	<tmp>/mutant01002.json --arch x86_64 --check	run	0	#512b7345da057524/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#c0a6076d35d0b875/6102	^
 R	^	^ --arch x86_64 --print-init	run	0	#c10468c74f3f0971/34836	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant01003.json --arch x86_64 --check	run	0	#68c62e57c43bbcc4/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#217e56e92cf4d364/6093	^
-R	^	^ --arch x86_64 --print-init	run	0	#c10468c74f3f0971/34836	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant01003.json --arch x86_64 --check	run	1	""	"hydo-build: data.dirs: invalid type: string \"12\", expected a…#8f7370592351076f"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01004.json --arch arm64 --check	run	1	""	"hydo-build: services[1]: unknown field(s) bogus (known: addr…#5f73d24e7a28b159"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
@@ -7556,15 +7556,15 @@ R	^	<tmp>/mutant01006.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0]:
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01007.json --arch x86_64 --check	run	0	#03df68ec5d535a7a/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#3516109b769de65a/6106	^
-R	^	^ --arch x86_64 --print-init	run	0	#c10468c74f3f0971/34836	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant01008.json --arch arm64 --check	run	0	#ea78c2e51ee68934/84	^
-R	^	^ --arch arm64 --print-shell	run	0	#026d449457153d8a/4274	^
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant01009.json --arch x86_64 --check	run	0	#5bbeeb3cd82f6f2d/84	^
+R	^	<tmp>/mutant01007.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[1].bogus: unknown field `bogus`, expe…#013fdf5dea60bfc5"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant01008.json --arch arm64 --check	run	1	""	"hydo-build: root.files[3].x: unknown field `x`, expected one…#a497ae4abc6d0a63"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant01009.json --arch x86_64 --check	run	0	#5bbeeb3cd82f6f2d/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#d10eb456a67308ac/4252	^
 R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
@@ -7576,10 +7576,10 @@ R	^	<tmp>/mutant01011.json --arch x86_64 --check	run	0	#c0a8751876258735/84	^
 R	^	^ --arch x86_64 --print-shell	run	0	#88ba2140afa29cb1/4257	^
 R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant01012.json --arch arm64 --check	run	0	#b2c8bc79fcbd0038/84	^
-R	^	^ --arch arm64 --print-shell	run	0	#026d449457153d8a/4274	^
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant01012.json --arch arm64 --check	run	1	""	"hydo-build: root.files[2]: missing field `src` (project form…#7771fdb4c4e28485"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01013.json --arch x86_64 --check	run	1	""	"hydo-build: services[4]: duplicate service name 'kafka'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -7588,11 +7588,11 @@ R	^	<tmp>/mutant01014.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0]:
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01015.json --arch x86_64 --check	run	0	#164b9e4ddd7e818f/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#026d449457153d8a/4274	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant01016.json --arch arm64 --check	run	0	#0b940dce035e41b5/84	^
+R	^	<tmp>/mutant01015.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[5].dst: a string (or a whole number),…#22c783d4b699a164"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant01016.json --arch arm64 --check	run	0	#0b940dce035e41b5/84	""
 R	^	^ --arch arm64 --print-shell	run	0	#026d449457153d8a/4274	^
 R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
@@ -7604,18 +7604,18 @@ R	^	<tmp>/mutant01018.json --arch x86_64 --check	run	1	""	"hydo-build: invariant
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01019.json --arch x86_64 --check	run	0	#defe57f346c5ab57/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#95395b13af8b5ee7/4254	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant01019.json --arch x86_64 --check	run	1	""	"hydo-build: env.KAFKA_CLUSTER_ID: a string, a number or true…#16108f7889cf77ec"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01020.json --arch arm64 --check	run	1	""	"hydo-build: services[2]: port must be a number\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01021.json --arch x86_64 --check	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: 'int' object is not iterable"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: 'int' object is not iterable"
+R	^	<tmp>/mutant01021.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: int object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01022.json --arch x86_64 --check	run	1	""	"hydo-build: services[3]: depends_on names unknown service 'redis'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -7628,10 +7628,10 @@ R	^	<tmp>/mutant01024.json --arch arm64 --check	run	1	""	"hydo-build: services[2
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01025.json --arch x86_64 --check	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch x86_64 --print-shell	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch x86_64 --print-init	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
-R	^	^ --arch x86_64 --print-world	crash	"TypeError: cannot use 'list' as a set element (unhashable type: 'list'"
+R	^	<tmp>/mutant01025.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: unhashable type in faults:\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01026.json --arch x86_64 --check	run	0	#ea91ed0e3a3be453/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#eb3d31f12122bbf1/6173	^
 R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
@@ -7648,23 +7648,23 @@ R	^	<tmp>/mutant01029.json --arch x86_64 --check	run	1	""	"hydo-build: faults: u
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01030.json --arch x86_64 --check	run	0	#64450b7f8ea3eb7f/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#e946f01b3bb4b28c/6213	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant01030.json --arch x86_64 --check	run	1	""	"hydo-build: root.text./etc/kafka/log4j.properties: a string …#793522d4d5502306"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01031.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: field 'ready' must be a str\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01032.json --arch arm64 --check	crash	"TypeError: 'NoneType' object is not iterable"
-R	^	^ --arch arm64 --print-shell	crash	"TypeError: 'NoneType' object is not iterable"
-R	^	^ --arch arm64 --print-init	crash	"TypeError: 'NoneType' object is not iterable"
-R	^	^ --arch arm64 --print-world	crash	"TypeError: 'NoneType' object is not iterable"
-R	^	<tmp>/mutant01033.json --arch x86_64 --check	run	0	#89a08210cc43de9c/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#e946f01b3bb4b28c/6213	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant01034.json --arch x86_64 --check	run	0	#0a6b98e8579c55ae/84	^
+R	^	<tmp>/mutant01032.json --arch arm64 --check	run	1	""	"hydo-build: the manifest cannot be read: NoneType object is not iterable\n"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant01033.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[1].final: invalid type: integer `1`, …#79f69c4f7041b6ce"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant01034.json --arch x86_64 --check	run	0	#0a6b98e8579c55ae/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#bf70611fa9c0ed41/6033	^
 R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
@@ -7676,10 +7676,10 @@ R	^	<tmp>/mutant01036.json --arch arm64 --check	run	1	""	"hydo-build: invariants
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01037.json --arch x86_64 --check	run	0	#70e2c9bd5c46b4e8/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#e946f01b3bb4b28c/6213	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant01037.json --arch x86_64 --check	run	1	""	"hydo-build: root.text: invalid type: integer `5000`, expecte…#01e426e25ca0f7a4"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01038.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: unknown field(s) bogus (known: addr…#994698e3732cd94c"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -7696,10 +7696,10 @@ R	^	<tmp>/mutant01041.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0]:
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01042.json --arch x86_64 --check	run	0	#3191064b1af9fc6e/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#5e8892f048a1fee8/4306	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant01042.json --arch x86_64 --check	run	1	""	"hydo-build: root.text./etc/redis.conf: a string (or a whole …#9219d1ac7ba0d7bf"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01043.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: missing required field 'ready'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -7736,15 +7736,15 @@ R	^	<tmp>/mutant01051.json --arch x86_64 --check	run	1	""	"hydo-build: workload:
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01052.json --arch arm64 --check	run	0	#b7c3e0326b857dea/84	""
-R	^	^ --arch arm64 --print-shell	crash	"TypeError: sequence item 0: expected str instance, float found"
-R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	""
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant01053.json --arch x86_64 --check	run	0	#9548381f298e5f11/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#5e8892f048a1fee8/4306	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant01054.json --arch x86_64 --check	run	0	#31b5963292975f33/84	^
+R	^	<tmp>/mutant01052.json --arch arm64 --check	run	1	""	"hydo-build: root.files[1].src: a string (or a whole number),…#f4b277346df2f847"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant01053.json --arch x86_64 --check	run	1	""	"hydo-build: root.text./etc/redis.conf: a string (or a whole …#b6016e2fcf33a70c"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant01054.json --arch x86_64 --check	run	0	#31b5963292975f33/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#3e6ed8dea2aa064a/4292	^
 R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
@@ -7752,10 +7752,10 @@ R	^	<tmp>/mutant01055.json --arch x86_64 --check	run	0	#662fdb5da1274bfa/84	^
 R	^	^ --arch x86_64 --print-shell	run	0	#5e8892f048a1fee8/4306	^
 R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant01056.json --arch arm64 --check	crash	"TypeError: 'bool' object is not iterable"
-R	^	^ --arch arm64 --print-shell	crash	"TypeError: 'bool' object is not iterable"
-R	^	^ --arch arm64 --print-init	crash	"TypeError: 'bool' object is not iterable"
-R	^	^ --arch arm64 --print-world	crash	"TypeError: 'bool' object is not iterable"
+R	^	<tmp>/mutant01056.json --arch arm64 --check	run	1	""	"hydo-build: the manifest cannot be read: bool object is not iterable\n"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01057.json --arch x86_64 --check	run	1	""	"hydo-build: data: unknown field(s) x (known: description, di…#0b4e76fb679edb27"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -7780,11 +7780,11 @@ R	^	<tmp>/mutant01062.json --arch x86_64 --check	run	1	""	"hydo-build: services[
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01063.json --arch x86_64 --check	run	0	#477553053a8ba388/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#672dd723632d367d/5123	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant01064.json --arch arm64 --check	run	0	#d5ca778cebbd0263/84	^
+R	^	<tmp>/mutant01063.json --arch x86_64 --check	run	1	""	"hydo-build: env.RUN_MIGRATIONS: a string, a number or true/f…#fa2d2c5edb561e10"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant01064.json --arch arm64 --check	run	0	#d5ca778cebbd0263/84	""
 R	^	^ --arch arm64 --print-shell	run	0	#e9822d9dd30a3b6a/5122	^
 R	^	^ --arch arm64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
@@ -7804,10 +7804,10 @@ R	^	<tmp>/mutant01068.json --arch arm64 --check	run	1	""	"hydo-build: services[0
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01069.json --arch x86_64 --check	run	0	#1cc98464f10f85ee/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#e9822d9dd30a3b6a/5122	^
-R	^	^ --arch x86_64 --print-init	run	0	#4123ed5e4fb95e6f/22783	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant01069.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].mode: a string (or a whole number)…#f045f1d8003dd069"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01070.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
@@ -7844,7 +7844,7 @@ R	^	<tmp>/mutant01078.json --arch x86_64 --check	run	1	""	"hydo-build: env.TRANS
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01079.json --arch x86_64 --check	run	1	""	"hydo-build: format: this hydo reads plan format 1 (got 'x');…#d3950624137a464a"
+R	^	<tmp>/mutant01079.json --arch x86_64 --check	run	1	""	"hydo-build: format: the project format, a whole number; this…#c516d736faeb1ac8"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
@@ -8312,14 +8312,14 @@ R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/mastodon/docker-compose.yml --arch x86_64 --check	crash	"JSONDecodeError: Invalid \\escape: line 1 column 26 (char 25)"
-R	^	^ --arch x86_64 --print-shell	crash	"JSONDecodeError: Invalid \\escape: line 1 column 26 (char 25)"
-R	^	^ --arch x86_64 --print-init	crash	"JSONDecodeError: Invalid \\escape: line 1 column 26 (char 25)"
-R	^	^ --arch x86_64 --print-world	crash	"JSONDecodeError: Invalid \\escape: line 1 column 26 (char 25)"
-R	^	^ --arch arm64 --check	crash	"JSONDecodeError: Invalid \\escape: line 1 column 26 (char 25)"
-R	^	^ --arch arm64 --print-shell	crash	"JSONDecodeError: Invalid \\escape: line 1 column 26 (char 25)"
-R	^	^ --arch arm64 --print-init	crash	"JSONDecodeError: Invalid \\escape: line 1 column 26 (char 25)"
-R	^	^ --arch arm64 --print-world	crash	"JSONDecodeError: Invalid \\escape: line 1 column 26 (char 25)"
+R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/mastodon/docker-compose.yml --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: json.decoder.JSONDe…#f440c7ed6c5a71de"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-init	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	^ --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-init	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/mastodon/lock.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) images (known: buggi…#0ed9b777e5aafb01"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^

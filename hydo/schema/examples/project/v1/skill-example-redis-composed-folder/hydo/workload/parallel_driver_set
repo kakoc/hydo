@@ -1,0 +1,6 @@
+#!/bin/sh
+# SET k:<id> v<id> and record the outcome; id = this command's entry number (unique in a run)
+. /hydo/workload/helper_lib.sh
+id=$HYDO_CMD_ID
+if [ "$(R SET k:$id v$id)" = OK ]; then echo $id >> $HYDO_ACKED; echo "$id ack" >> $HYDO_OUTCOMES
+else echo "$id unknown" >> $HYDO_OUTCOMES; exit 1; fi
