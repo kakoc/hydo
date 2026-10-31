@@ -13,6 +13,8 @@
 # Everything else (the project's files, the manifest, manifest.sh, prelude.sh, the data disk)
 # stays as the shell build staged it, as in an agent build. `--check` mode compares two images'
 # root trees (contents, modes, owners, link targets): agent-patch.sh --check <a> <b>.
+# `--swap` replaces one regular file of a copy, keeping its mode and owner (the benchmark's
+# defects differ only in /bin/hydostack): agent-patch.sh --swap <image> <path> <file> <out image>.
 set -euo pipefail
 PIN=ff7652a171f40c80f83c2c6ee871331f046b7c2953faf25e40505bbb12f2a16c
 OFF=1048576
@@ -62,6 +64,24 @@ if [ "${1:-}" = --check ]; then
   [ $rc = 0 ] && echo "SAME TREE" || echo "TREES DIFFER"
   rm -rf "$w/a" "$w/b"
   exit $rc
+fi
+
+if [ "${1:-}" = --swap ]; then
+  img=$2; path=$3; file=$4; dst=$5
+  st=$(debugfs -R "stat $path" "$img?offset=$OFF" 2>/dev/null)
+  mode=$(printf '%s\n' "$st" | sed -n 's/.*Mode: *\([0-7]*\).*/\1/p' | head -1)
+  uid=$(printf '%s\n' "$st" | sed -n 's/.*User: *\([0-9]*\).*/\1/p' | head -1)
+  gid=$(printf '%s\n' "$st" | sed -n 's/.*Group: *\([0-9]*\).*/\1/p' | head -1)
+  [ -n "$mode" ] && [ -n "$uid" ] && [ -n "$gid" ] || { echo "agent-patch: no regular file $path in $img" >&2; exit 1; }
+  cp --sparse=always "$img" "$dst.tmp"
+  printf 'rm %s\nwrite %s %s\nset_inode_field %s mode 0100%s\nset_inode_field %s uid %s\nset_inode_field %s gid %s\n' \
+    "$path" "$file" "$path" "$path" "${mode: -3}" "$path" "$uid" "$path" "$gid" | debugfs -w -f - "$dst.tmp?offset=$OFF" > /dev/null 2>&1
+  e2fsck -fn "$dst.tmp?offset=$OFF" > /dev/null 2>&1 || { echo "agent-patch: e2fsck -fn found problems in $dst.tmp" >&2; exit 1; }
+  debugfs -R "dump $path $dst.chk" "$dst.tmp?offset=$OFF" > /dev/null 2>&1
+  cmp -s "$dst.chk" "$file" || { rm -f "$dst.chk"; echo "agent-patch: $path did not read back" >&2; exit 1; }
+  rm -f "$dst.chk"; mv "$dst.tmp" "$dst"
+  echo "agent-patch: $dst = $img with $path = $(basename "$file") ($(sha256sum < "$file" | cut -c1-16), mode ${mode: -3}, owner $uid:$gid)"
+  exit 0
 fi
 
 src=$1; dst=$2; agent=${3:-$HOME/hydo-cw/build/hydo-agent}
