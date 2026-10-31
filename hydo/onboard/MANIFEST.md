@@ -1457,15 +1457,18 @@ A system whose inputs are gRPC endpoints needs no hand-written workload client.
 `hydo-grpc-gen` reads the service definitions and writes a driver for every RPC: one static
 client binary, `hydo-grpc`, with one subcommand per job, plus the project's schema and a plan.
 The client sends valid random requests from a seeded stream, records every call's outcome, and
-retries the way a careful client does. Source: `hydo/grpcgen/` (Go, the pinned toolchain).
+retries the way a careful client does. Source: `hydo/crates/hydo-grpc-gen` (the generator) and
+`hydo/crates/hydo-grpc` (the client), Rust (Milestone 113; the Go version of Milestone 91 wrote
+the same files).
 
 ```sh
 hydo/onboard/hydo-grpc-gen <proto dir> [--hints hints.yaml] --out <dir>   # every .proto under the dir
 hydo/onboard/hydo-grpc-gen --descriptor-set set.pb [--hints ...] --out <dir>   # protoc -o / buf build -o
 hydo/onboard/hydo-grpc-gen --reflect 127.0.0.1:7070 [--hints ...] --out <dir> # a running server's reflection
 #   -I <dir>      extra .proto import path (repeatable)    --target host:port   the address in the guest
-#   --arch amd64,arm64   also build hydo-grpc.arm64        --no-build           only the schema and plan
+#   --arch amd64,arm64   also copy hydo-grpc.arm64         --no-build           only the schema and plan
 #   --steps N     workload.steps in the starter section     --rel <dir>          base of its relative paths
+#   --client DIR  the prebuilt clients ($HYDO_GRPC_CLIENT)  $HYDO_GRPC_ARCH      the default of --arch
 ```
 
 It writes, under `<dir>`:
@@ -1474,13 +1477,17 @@ It writes, under `<dir>`:
 |---|---|
 | `grpc/desc.pb` | the schema: a `FileDescriptorSet`, dependencies first, no source info, deterministic bytes |
 | `grpc/plan.json` | every RPC with its hints, checked against the schema (unknown fields, wrong types and bad paths are errors) |
-| `hydo-grpc` | the static guest client for linux/amd64 (`-trimpath`, no build id: byte-identical from the same sources and Go); with `--arch amd64,arm64` also `hydo-grpc.arm64` for the Mac backend (example `hydo/grpcgen/demo/hydo-mac.yaml`) |
+| `hydo-grpc` | the static guest client for linux/amd64 (musl, rust-lld, host paths remapped: byte-identical from the same sources and toolchain on any machine); with `--arch amd64,arm64` also `hydo-grpc.arm64` for the Mac backend (example `hydo/grpcgen/demo/hydo-mac.yaml`); with `--arch arm64` alone the starter section stages `hydo-grpc.arm64` |
 | `workload/parallel_driver_<rpc>` | one test-composer command per RPC with a weight (and per scenario), in the `hydo/workload/` layout, with a `# hydo: timeout=` header |
 | `hydo.grpc.yaml` | a starter section to merge into `hydo.yaml`: files, `env:`, a `test:` section with the commands, `workload.retry`, and the numbered-steps `workload:` as a commented alternative |
 
-`hydo/onboard/hydo-grpc-gen` builds the generator for the host and the client with `$HYDO_GO`, else
-the pinned `go-1.26.5` of `build-stack.sh` if present, else `go` on PATH. Put `grpc/` at
-`/etc/hydo/grpc` and the client at `/bin/hydo-grpc` (the starter section does).
+The generator copies the clients from `--client DIR` (`$HYDO_GRPC_CLIENT`): `DIR/hydo-grpc` for
+amd64 and `DIR/hydo-grpc.<arch>` for another architecture. In this repository
+`hydo/onboard/hydo-grpc-gen` builds the generator for the host and the clients of `--arch` with
+`hydo/grpcgen/build-client.sh` (the pinned Rust toolchain and the two `*-unknown-linux-musl`
+targets, `docs/BUILD-PINS.md`), then runs it with `--client` pointing at them. (Neither release
+ships the generator or the clients yet.) Put `grpc/` at `/etc/hydo/grpc` and the client at
+`/bin/hydo-grpc` (the starter section does).
 
 ### What the client does
 

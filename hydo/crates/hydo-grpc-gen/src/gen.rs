@@ -1,4 +1,4 @@
-//! The generator's command line (`hydo-grpc-gen`, also `hydo grpc-gen`):
+//! The generator's command line (`hydo-grpc-gen`):
 //!
 //! ```text
 //! hydo-grpc-gen <proto dir> [--hints hints.yaml] --out <dir>

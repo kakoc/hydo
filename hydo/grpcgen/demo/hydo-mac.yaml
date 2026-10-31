@@ -1,11 +1,12 @@
 # ./hydo.yaml for the Mac backend (arm64 guest; Milestone 96): the same service, generated
 # drivers, workload and invariant, with the aarch64-linux Redis 7.2.4 of
 # hvx-mac/explore/examples/redis/hydo.yaml, orderd built for arm64 and the generated client's
-# arm64 build. Build the programs on any machine with Go 1.26.5 (no Nix needed):
-#   (cd hvx/grpcgen && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 GOFLAGS=-mod=readonly GOTOOLCHAIN=local \
+# arm64 build. Build orderd on any machine with Go 1.26.5 (no Nix needed) and the drivers with
+# this tree's Rust generator (Milestone 113; the clients need the two musl Rust targets):
+#   (cd hydo/grpcgen && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 GOFLAGS=-mod=readonly GOTOOLCHAIN=go1.26.5 \
 #      go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o demo/build/orderd-arm64 ./demo/orderd)
-#   hvx/onboard/hydo-grpc-gen hvx/grpcgen/demo/proto --hints hvx/grpcgen/demo/hints.yaml \
-#      --out hvx/grpcgen/demo/build/gen --arch amd64,arm64
+#   hydo/onboard/hydo-grpc-gen hydo/grpcgen/demo/proto --hints hydo/grpcgen/demo/hints.yaml \
+#      --out hydo/grpcgen/demo/build/gen --arch amd64,arm64
 # then the image with hydo-build --arch arm64 (the Redis store paths must exist; on a Mac, point
 # them at the release's examples/redis/files) and --set mode=buggy|fixed.
 name: grpcorders
