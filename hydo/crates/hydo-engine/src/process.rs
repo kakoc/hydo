@@ -145,11 +145,7 @@ impl Worker for ProcessWorker {
         start: &LockstepStart,
         log: Option<&'a mut dyn Write>,
     ) -> Result<Lockstep<'a>, EngineError> {
-        if !self.branch {
-            return Err(EngineError::Unsupported(
-                "lock-step control is not supported on hvm yet".into(),
-            ));
-        }
+        // both engines speak the protocol: hvx_explore (M118) and hvmx (M119)
         let tag = start.tag();
         if tag.is_empty() || tag.contains(char::is_whitespace) || tag.len() > 63 {
             return Err(EngineError::Protocol(format!(

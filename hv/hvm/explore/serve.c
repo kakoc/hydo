@@ -17,6 +17,9 @@
  *   hvmx [--ram-mib N] serve <Image> <initramfs> <outdir>         "RUN <tag> <schedule>" on stdin -> RESULT lines
  *   hvmx [--ram-mib N] one <Image> <initramfs> <outdir> "<schedule>"
  *        one schedule from a fresh boot, no snapshot restore: its fingerprint must equal serve's
+ *   serve also takes "CTL <tag> <schedule>" and "RESUME <tag> <snapshot>", and
+ *   hvmx [--ram-mib N] --control one ... runs `one` the same way: lock-step control (M119), the
+ *   protocol of hv/hvx/hvx_explore.c (see "lock-step control" below). Without them nothing changes.
  *
  * With the data disk attached (HVM_DISK=<NAME>-arm64-disk.img, the virtio-blk device of
  * ../virtio.c) the host part works as on hvx_explore: disk=none|ioerr:P|cut|lying:P with dseed
@@ -54,6 +57,7 @@
 #define HVM_NO_MAIN
 #include "../hvm.c"
 #include "../virtio_int.h"
+#include <ctype.h>
 #include <errno.h>
 #include <libkern/OSCacheControl.h>
 #include <zlib.h>
@@ -68,6 +72,35 @@
 static const char *outdir = ".";
 static int spin_auto;          /* HVM_SPIN_REWIND=auto (default): escalate a SPIN run to rewind mode */
 static uint64_t run_exits = 50000000ULL;
+
+/* ---- lock-step control (M119; the protocol is hvx_explore's, see "lock-step control" below).
+ * C.on is 0 unless a CTL/RESUME request or `--control one` asked for it; with it 0 none of the
+ * lock-step code runs and every RUN takes exactly the path it took before. */
+struct runst {                 /* a run from the workload's start on: what run_rest needs, and what a SNAP keeps */
+	char tag[64]; double t0; size_t from; int cut, rewound; uint32_t pct_n; uint64_t wx0; char tjinfo[160];
+};
+#define CTL_MAX_SENDS 1024
+#define CTL_MAX_SNAPS 8
+#define CTL_SEND_MAX  4096     /* the UART receive queue (../hvm.c rxq) */
+#define CTL_RB_DEFAULT 65536   /* the cadence without rb=: hvx's run calls return every 2^16 retired exits */
+enum { CS_PENDING, CS_TYPED, CS_ACKED, CS_RETYPE };
+struct ctl_send { uint64_t id, at, sent; int state; uint32_t len; uint8_t *buf; };
+struct ctl_book {              /* what a snapshot carries besides the VM */
+	uint64_t nstop, nev, next_id, ntyped, inh, cad0;   /* cad0: the exit count the cadence counts from */
+	size_t evfrom;             /* console offset up to which lines were reported as EVENTs */
+	int ns;
+	struct ctl_send s[CTL_MAX_SENDS];
+};
+static struct {
+	int on, start, ended;      /* start: 1 = the phase's start stop is due, 2 = a RESUME's */
+	char tag[64];
+	const char *phase;
+	uint64_t at, rb, last_x;   /* the current stop's exit count; the cadence in exits; the last exit seen */
+	struct ctl_book k;
+	char endv[256];
+	struct runst *rs;
+} C;
+static int ctl_run_to(const char *const *m, int n, size_t from, int *why);
 
 /* ---------------- stop at the first exit after any of several markers ---------------- */
 static const char *hk_m[4];
@@ -87,6 +120,7 @@ static int marker_hook(void)
 /* returns the index of the marker reached, or -1 (and the stop reason in *why) */
 static int run_to(const char *const *m, int n, size_t from, int *why)
 {
+	if (C.on) return ctl_run_to(m, n, from, why);
 	for (int i = 0; i < n; i++) hk_m[i] = m[i];
 	hk_n = n; hk_hit = -1; hk_from = hk_scan = from;
 	hvm_stop_hook = marker_hook;
@@ -352,13 +386,341 @@ static void oracle_cmd(size_t from, char *out, size_t n)   /* as hvx_explore's *
 }
 static struct xsnap *g_s0;
 static int spin_hit;           /* a phase of this run ended as SPIN (the run is invalid) */
+static void run_rest(struct runst *rs);
+static void run_once(const char *tag, const char *sched, int rewound);
+
+/* ---------------- lock-step control (M119) ----------------
+ * The protocol of hv/hvx/hvx_explore.c (milestone 118; docs/design/guest-control.md "The channel",
+ * Phase 1), so that one host client (hydo-engine's `lockstep` module) drives both engines. Only the
+ * clock differs: here "at" is the exit count M.exits, there the instruction clock icount.
+ *   CTL <tag> <schedule>      like RUN (restore S1, arm the host part, type the guest part --
+ *                             nothing when it is empty), but the engine stops and waits for the host
+ *   RESUME <tag> <snapshot>   a fresh VM from a snapshot taken by SNAP in an earlier controlled run;
+ *                             the run continues exactly where that run was (same schedule, console,
+ *                             queued input, stop and event numbers)
+ *   hvmx --control one ... "<schedule>"   the same as CTL from a fresh boot (stdin/stdout)
+ * At every STOP the engine has already printed, in this order, one EVENT per complete console line
+ * written since the last stop (escaped: \\ \n \r \t \xHH; without the line's \n and a trailing \r),
+ * one SENT per queued input typed at this stop, and DROP for queued input a phase change discards:
+ *   EVENT <tag> at=<exits> n=<event number> <escaped line>
+ *   SENT <tag> id=<id> at=<exits>[ retype=1]
+ *   DROP <tag> id=<id>
+ *   STOP <tag> at=<exits> n=<stop number> phase=workload|check|recovery why=<why>
+ * then it reads host lines until CONT or END; every other host line gets exactly one answer:
+ *   SEND at=<exits> <escaped bytes>    type the bytes into the serial input at exit <exits>  ->
+ *                                      "OK send id=<id> sent=<exits>" (typed now: at <= this stop) or
+ *                                      "OK send id=<id> queued=<at>"
+ *   ACK <id>                           the guest has consumed send <id>  ->  "OK ack <id>" / "ERR ack ..."
+ *   SNAP <name> [retype]               snapshot here (workload phase; not with tj=/pct= schedules), kept
+ *                                      under <name> (a second SNAP with the name replaces it; at most 8)
+ *                                      ->  "OK snap <name> at=<exits> retype=<ids|->"; refused ("ERR snap
+ *                                      <name> unacked=<ids>") while a typed send is not acknowledged,
+ *                                      unless `retype` is given: input still in the receive queue is in
+ *                                      no snapshot (M116), so RESUME types every such send again right
+ *                                      after the restore. Queued sends are part of the snapshot.
+ *   CONT                               run on to the next stop
+ *   END [<verdict>]                    end the run at this stop: fingerprint now, RESULT with <verdict>
+ *                                      (default: the last HYDO-ORACLE line)
+ * EOF on stdin ends the run with "ERROR control channel closed".
+ * Stops (`why`): `start` before a phase runs (the engine's own input -- the guest line, "go", the
+ * oracle command -- is already typed), `resume` after a RESUME restore, `send` at the exit where a
+ * queued send is due (it is typed there, before the guest runs again: exact to the exit), `marker`
+ * at the exit where the shell init's workload or check marker appeared (as RUN stops there; the
+ * engine then types its own next input), `cadence` every rb=<n> exits from the phase's start (the
+ * schedule's rb= is the cadence here, as hvx_explore's run-call budget is there; default 65,536),
+ * and `exit` when the guest stops (halt, idle, exit budget, SPIN) before the run's error RESULT.
+ * Kicks and the spin observer's own exits are not exits, so every stop is a pure function of the
+ * run; the rewind mode is refused (it moves M.exits backwards) and a SPIN is not re-run. A CTL
+ * with no SEND gives RUN's fingerprint. RESULT gets stops=<n> typed=<sends typed> inh=<hex16>
+ * (FNV-1a over every typed send's exit count, length and bytes, in typing order) before verdict=. */
+struct ctl_snap { char name[64]; struct xsnap x; struct runst rs; struct ctl_book k; uint64_t rb; int used; };
+static struct ctl_snap g_ctl_snaps[CTL_MAX_SNAPS];
+
+static void ctl_esc(FILE *f, const uint8_t *p, size_t n)
+{
+	for (size_t i = 0; i < n; i++) {
+		uint8_t c = p[i];
+		if (c == '\\') fputs("\\\\", f);
+		else if (c == '\n') fputs("\\n", f);
+		else if (c == '\r') fputs("\\r", f);
+		else if (c == '\t') fputs("\\t", f);
+		else if (c < 0x20 || c > 0x7e) fprintf(f, "\\x%02x", c);
+		else fputc(c, f);
+	}
+}
+static long ctl_unesc(char *s)   /* the inverse of ctl_esc, in place; -1 on a malformed escape */
+{
+	char *o = s;
+	const char *p = s;
+	while (*p) {
+		if (*p != '\\') { *o++ = *p++; continue; }
+		p++;
+		if (*p == '\\') *o++ = '\\';
+		else if (*p == 'n') *o++ = '\n';
+		else if (*p == 'r') *o++ = '\r';
+		else if (*p == 't') *o++ = '\t';
+		else if (*p == 'x' && isxdigit((unsigned char)p[1]) && isxdigit((unsigned char)p[2])) {
+			char h[3] = { p[1], p[2], 0 };
+			*o++ = (char)strtoul(h, NULL, 16);
+			p += 2;
+		} else return -1;
+		p++;
+	}
+	return o - s;
+}
+static void ctl_book_free(struct ctl_book *k)
+{
+	for (int i = 0; i < k->ns; i++) free(k->s[i].buf);
+	k->ns = 0;
+}
+static void ctl_book_copy(struct ctl_book *d, const struct ctl_book *s)
+{
+	memcpy(d, s, offsetof(struct ctl_book, s) + (size_t)s->ns * sizeof s->s[0]);
+	for (int i = 0; i < s->ns; i++) {
+		d->s[i].buf = malloc(s->s[i].len ? s->s[i].len : 1);
+		memcpy(d->s[i].buf, s->s[i].buf, s->s[i].len);
+	}
+}
+static void ctl_begin(const char *tag)
+{
+	ctl_book_free(&C.k);
+	memset(&C, 0, sizeof C);
+	snprintf(C.tag, sizeof C.tag, "%s", tag);
+	C.on = C.start = 1;
+	C.phase = "workload";
+	C.rb = CTL_RB_DEFAULT;
+}
+static void ctl_finish(void) { ctl_book_free(&C.k); C.on = 0; }
+static void ctl_verdict(int r, size_t from, char *verdict, size_t n)
+{
+	if (r == -3 && C.endv[0]) snprintf(verdict, n, "%s", C.endv);
+	else last_verdict(from, verdict, n);
+}
+static void ctl_type(struct ctl_send *s, int print)   /* type one send now (at the current stop) */
+{
+	int retype = s->state == CS_RETYPE;
+	uint32_t room = (uint32_t)sizeof rxq - (rx_tail - rx_head);
+	if (s->len > room) fprintf(stderr, "hvmx: %s: send %llu: %u of %u bytes do not fit in the receive queue\n",
+	                           C.tag, (unsigned long long)s->id, s->len - room, s->len);
+	for (uint32_t i = 0; i < s->len && i < room; i++) rxq[rx_tail++ % sizeof rxq] = s->buf[i];
+	s->state = CS_TYPED;
+	if (!retype) {                 /* a retype restores the base run's input, which typed= and inh= already count */
+		s->sent = C.at;
+		C.k.ntyped++;
+		C.k.inh = fnv(&C.at, sizeof C.at, C.k.inh ? C.k.inh : 0xcbf29ce484222325ULL);
+		C.k.inh = fnv(&s->len, sizeof s->len, C.k.inh);
+		C.k.inh = fnv(s->buf, s->len, C.k.inh);
+	}
+	if (print) printf("SENT %s id=%llu at=%llu%s\n", C.tag, (unsigned long long)s->id, (unsigned long long)C.at, retype ? " retype=1" : "");
+}
+static void ctl_deliver(void)    /* every send due at this stop: retypes first (id order), then (at, id) order */
+{
+	for (int i = 0; i < C.k.ns; i++) if (C.k.s[i].state == CS_RETYPE) ctl_type(&C.k.s[i], 1);
+	for (;;) {
+		struct ctl_send *best = NULL;
+		for (int i = 0; i < C.k.ns; i++) {
+			struct ctl_send *s = &C.k.s[i];
+			if (s->state != CS_PENDING || s->at > C.at) continue;
+			if (!best || s->at < best->at || (s->at == best->at && s->id < best->id)) best = s;
+		}
+		if (!best) return;
+		ctl_type(best, 1);
+	}
+}
+static int ctl_due(void)
+{
+	for (int i = 0; i < C.k.ns; i++)
+		if (C.k.s[i].state == CS_RETYPE || (C.k.s[i].state == CS_PENDING && C.k.s[i].at <= C.at)) return 1;
+	return 0;
+}
+static void ctl_drop_pending(void)   /* a phase change to a new VM: queued input belongs to the old one */
+{
+	for (int i = 0; i < C.k.ns; i++)
+		if (C.k.s[i].state == CS_PENDING || C.k.s[i].state == CS_RETYPE) {
+			C.k.s[i].state = CS_ACKED;
+			printf("DROP %s id=%llu\n", C.tag, (unsigned long long)C.k.s[i].id);
+		}
+}
+static void ctl_snap_cmd(char *arg)
+{
+	char name[64] = "", mode[16] = "", ids[512] = "";
+	size_t il = 0;
+	int slot = -1, n = sscanf(arg, "%63s %15s", name, mode);
+	if (n < 1 || (n == 2 && strcmp(mode, "retype"))) { printf("ERR snap bad request\n"); return; }
+	if (strcmp(C.phase, "workload")) { printf("ERR snap %s only in the workload phase\n", name); return; }
+	if (TJ.on || C.rs->pct_n) { printf("ERR snap %s not for tj/pct schedules\n", name); return; }
+	for (int i = 0; i < C.k.ns; i++)
+		if (C.k.s[i].state == CS_TYPED)
+			il += (size_t)snprintf(ids + il, il < sizeof ids ? sizeof ids - il : 0, "%s%llu", il ? "," : "", (unsigned long long)C.k.s[i].id);
+	if (il >= sizeof ids) snprintf(ids + sizeof ids - 5, 5, ",...");
+	if (il && n < 2) { printf("ERR snap %s unacked=%s\n", name, ids); return; }
+	for (int i = 0; i < CTL_MAX_SNAPS; i++) if (g_ctl_snaps[i].used && !strcmp(g_ctl_snaps[i].name, name)) slot = i;
+	for (int i = 0; i < CTL_MAX_SNAPS && slot < 0; i++) if (!g_ctl_snaps[i].used) slot = i;
+	if (slot < 0) { printf("ERR snap %s no free slot (%d names)\n", name, CTL_MAX_SNAPS); return; }
+	struct ctl_snap *cs = &g_ctl_snaps[slot];
+	if (cs->used) {                /* replaced: keep the RAM mapping, drop the rest */
+		free(cs->x.con); cs->x.con = NULL;
+		if (cs->x.vio) { virtio_save_free(cs->x.vio); cs->x.vio = NULL; }
+		ctl_book_free(&cs->k);
+	}
+	xsnap_take(&cs->x, "ctl");
+	ctl_book_copy(&cs->k, &C.k);
+	for (int i = 0; i < cs->k.ns; i++) if (cs->k.s[i].state == CS_TYPED) cs->k.s[i].state = CS_RETYPE;
+	cs->rs = *C.rs; cs->rb = C.rb; cs->used = 1;
+	snprintf(cs->name, sizeof cs->name, "%s", name);
+	printf("OK snap %s at=%llu retype=%s\n", name, (unsigned long long)C.at, il ? ids : "-");
+}
+/* one stop: report, then serve host lines until CONT (0) or END/EOF (1) */
+static int ctl_stop(const char *why)
+{
+	static char *ln;
+	static size_t lcap;
+	size_t p = C.k.evfrom;
+	for (size_t q = p; q < M.console_len; q++) {   /* complete console lines since the last stop */
+		size_t e = q;
+		if (console[q] != '\n') continue;
+		if (e > p && console[e - 1] == '\r') e--;
+		printf("EVENT %s at=%llu n=%llu ", C.tag, (unsigned long long)C.at, (unsigned long long)++C.k.nev);
+		ctl_esc(stdout, (const uint8_t *)console + p, e - p);
+		putchar('\n');
+		p = q + 1;
+	}
+	C.k.evfrom = p;
+	ctl_deliver();
+	printf("STOP %s at=%llu n=%llu phase=%s why=%s\n", C.tag, (unsigned long long)C.at, (unsigned long long)++C.k.nstop, C.phase, why);
+	fflush(stdout);
+	for (;;) {
+		ssize_t r = getline(&ln, &lcap, stdin);
+		if (r < 0) { snprintf(C.endv, sizeof C.endv, "ERROR control channel closed"); return 1; }
+		while (r > 0 && (ln[r - 1] == '\n' || ln[r - 1] == '\r')) ln[--r] = 0;
+		if (!strcmp(ln, "CONT")) return 0;
+		if (!strncmp(ln, "END", 3) && (!ln[3] || ln[3] == ' ')) { snprintf(C.endv, sizeof C.endv, "%s", ln[3] ? ln + 4 : ""); return 1; }
+		if (!strncmp(ln, "SEND at=", 8)) {
+			char *end;
+			unsigned long long at = strtoull(ln + 8, &end, 10);
+			long len;
+			if (end == ln + 8 || *end != ' ' || (len = ctl_unesc(end + 1)) < 0) { printf("ERR send bad request\n"); fflush(stdout); continue; }
+			if (len == 0 || len > CTL_SEND_MAX) { printf("ERR send length %ld not in [1, %d]\n", len, CTL_SEND_MAX); fflush(stdout); continue; }
+			if (C.k.ns >= CTL_MAX_SENDS) { printf("ERR send more than %d sends in one run\n", CTL_MAX_SENDS); fflush(stdout); continue; }
+			struct ctl_send *s = &C.k.s[C.k.ns++];
+			memset(s, 0, sizeof *s);
+			s->buf = malloc((size_t)len);
+			memcpy(s->buf, end + 1, (size_t)len);
+			s->len = (uint32_t)len; s->at = at; s->id = ++C.k.next_id;
+			if (at <= C.at) { ctl_type(s, 0); printf("OK send id=%llu sent=%llu\n", (unsigned long long)s->id, (unsigned long long)C.at); }
+			else printf("OK send id=%llu queued=%llu\n", (unsigned long long)s->id, at);
+		} else if (!strncmp(ln, "ACK ", 4)) {
+			unsigned long long id = strtoull(ln + 4, NULL, 10);
+			int done = 0;
+			for (int i = 0; i < C.k.ns && !done; i++) {
+				if (C.k.s[i].id != id) continue;
+				done = 1;
+				if (C.k.s[i].state == CS_PENDING) printf("ERR ack %llu not typed yet\n", id);
+				else { C.k.s[i].state = CS_ACKED; printf("OK ack %llu\n", id); }
+			}
+			if (!done) printf("ERR ack %llu unknown\n", id);
+		} else if (!strncmp(ln, "SNAP ", 5)) {
+			ctl_snap_cmd(ln + 5);
+		} else {
+			printf("ERR unknown command ");
+			ctl_esc(stdout, (const uint8_t *)ln, strlen(ln));
+			putchar('\n');
+		}
+		fflush(stdout);
+	}
+}
+static int ctl_hook(void)         /* hvm_stop_hook at every loop top of a lock-step phase */
+{
+	uint64_t x = M.exits;
+	if (x == C.last_x) return 0;   /* a kick or an observer exit: not a new exit */
+	C.last_x = x;
+	int hit = marker_hook();       /* RUN's marker stop, at the same exit */
+	C.at = x;
+	const char *why = hit ? "marker" : ctl_due() ? "send" : (x - C.k.cad0) % C.rb == 0 ? "cadence" : NULL;
+	if (why && ctl_stop(why)) { C.ended = 1; return 1; }
+	return hit;
+}
+/* run_to under lock-step: the phase's start (or resume) stop, then stops at markers, due sends and
+ * the cadence; -3 when the host ended the run (END) */
+static int ctl_run_to(const char *const *m, int n, size_t from, int *why)
+{
+	for (int i = 0; i < n; i++) hk_m[i] = m[i];
+	hk_n = n; hk_hit = -1; hk_from = hk_scan = from;
+	if (C.start) {
+		const char *w = C.start == 2 ? "resume" : "start";
+		if (C.start == 2) C.k.nstop--;   /* the snapshot's own stop, again: the same numbers as the base */
+		else C.k.cad0 = M.exits;
+		C.start = 0;
+		C.at = M.exits;
+		if (ctl_stop(w)) return -3;
+	}
+	for (int i = 0; i < n; i++)      /* a marker may already be there: stop where we are, as RUN would */
+		if (M.console_len > from && memmem(console + from, M.console_len - from, m[i], strlen(m[i]))) return i;
+	C.last_x = M.exits; C.ended = 0;
+	hvm_stop_hook = ctl_hook;
+	max_exits = M.exits + run_exits;
+	int s = run_until(NULL);
+	hvm_stop_hook = NULL;
+	if (C.ended) return -3;
+	if (s == STOP_MARKER) return hk_hit;
+	C.at = M.exits;
+	if (ctl_stop("exit")) return -3;
+	if (why) *why = s;
+	return -1;
+}
+/* CTL <tag> <schedule> (after the S1 restore) and `--control one`: the schedule's rb=<n> is the cadence */
+static void ctl_request(const char *tag, const char *sched)
+{
+	char s[4096];
+	uint64_t rb = 0;
+	snprintf(s, sizeof s, "%s", sched);
+	char *bar = strchr(s, '|');
+	if (rw_on || (bar && memmem(s, (size_t)(bar - s), "spin=rewind", 11))) {
+		printf("RESULT %s fp=0 wfp=0 secs=0 verdict=UNSUPPORTED on hvm: lock-step control does not run in rewind mode\n", tag);
+		fflush(stdout);
+		return;
+	}
+	for (char *w = s; bar && (w = strstr(w, "rb=")) && w < bar; ) {   /* take the cadence out of the host part */
+		if (w != s && w[-1] != ' ') { w += 3; continue; }
+		char *e;
+		rb = strtoull(w + 3, &e, 10);
+		if (e == w + 3 || (*e != ' ' && *e != '|')) {
+			printf("RESULT %s fp=0 wfp=0 secs=0 verdict=ERROR bad schedule: rb= takes a number of exits\n", tag);
+			fflush(stdout);
+			return;
+		}
+		memmove(w, e, strlen(e) + 1);
+		bar = strchr(s, '|');
+	}
+	ctl_begin(tag);
+	if (rb) C.rb = rb;
+	spin_hit = 0;
+	run_once(tag, s, 0);
+	if (C.on) ctl_finish();         /* a refused schedule: no run, no RESULT facts */
+}
+/* RESUME <tag> <snapshot>: continue a controlled run from a SNAP in a fresh VM (see above) */
+static void ctl_resume(const char *tag, const char *name)
+{
+	struct ctl_snap *cs = NULL;
+	for (int i = 0; i < CTL_MAX_SNAPS; i++) if (g_ctl_snaps[i].used && !strcmp(g_ctl_snaps[i].name, name)) cs = &g_ctl_snaps[i];
+	if (!cs) { printf("RESULT %s fp=0 wfp=0 secs=0 verdict=ERROR no snapshot %s\n", tag, name); fflush(stdout); return; }
+	xsnap_restore(&cs->x);
+	ctl_begin(tag);
+	ctl_book_copy(&C.k, &cs->k);
+	C.start = 2;                   /* the first stop says why=resume */
+	C.rb = cs->rb;
+	struct runst rs = cs->rs;
+	snprintf(rs.tag, sizeof rs.tag, "%s", tag);
+	rs.t0 = now_s();
+	spin_hit = 0;
+	run_rest(&rs);
+	if (C.on) ctl_finish();
+}
+
 static void run_once(const char *tag, const char *sched, int rewound)
 {
-	static const char *const wk[] = { DONE_MARKER, FINAL_MARKER };
-	static const char *const fin[] = { FINAL_MARKER };
-	char host[1024], guest[1024], verdict[300] = "", line[1100];
+	char host[1024], guest[1024], line[1100];
 	double t0 = now_s();
-	uint64_t wfp = 0, ffp = 0;
 	const char *bar = strchr(sched, '|');
 	if (!bar) { printf("RESULT %s fp=0 wfp=0 secs=0 verdict=ERROR bad schedule\n", tag); fflush(stdout); return; }
 	snprintf(host, sizeof host, "%.*s", (int)(bar - sched), sched);
@@ -376,7 +738,6 @@ static void run_once(const char *tag, const char *sched, int rewound)
 	if (parse_disk(host, &dseed, &dcl, &dpr)) { printf("RESULT %s fp=0 wfp=0 secs=0 verdict=ERROR bad disk token\n", tag); fflush(stdout); return; }
 	struct tjit tj;
 	if (parse_tj(host, &tj)) { printf("RESULT %s fp=0 wfp=0 secs=0 verdict=ERROR bad tick-jitter token\n", tag); fflush(stdout); return; }
-	char tjinfo[96] = "";
 	const char *pp = strstr(host, "pct=");
 	uint64_t pct_seed = pp ? strtoull(pp + 4, NULL, 16) : 0;
 	uint32_t pct_n = (pp = strstr(host, "pctn=")) ? (uint32_t)strtoul(pp + 5, NULL, 10) : 0;
@@ -384,44 +745,63 @@ static void run_once(const char *tag, const char *sched, int rewound)
 	if (!strstr(host, "pct=")) pct_n = 0;
 	int cut = strstr(guest, " C=") != NULL;
 	size_t from = M.console_len;
-	int why = 0, r;
+	if (C.on) C.k.evfrom = from;   /* lock-step: EVENTs start with the workload's console */
+	if (trace_f) fprintf(trace_f, "RUN %s\n", tag);
+	set_fault(dseed, dcl, dpr);
+	struct runst rs = { .t0 = t0, .from = from, .cut = cut, .rewound = rewound, .pct_n = pct_n };
+	snprintf(rs.tag, sizeof rs.tag, "%s", tag);
+	if (tj_wanted(&tj)) {            /* the jitter covers the workload only, like the disk fault */
+		TJ = tj; TJ.on = 1;
+		snprintf(rs.tjinfo, sizeof rs.tjinfo, " tjk=%llu", (unsigned long long)(M.vtime / TJ_PERIOD));
+	}
+	rs.wx0 = M.exits;
+	if (pct_n) pct_set(pct_seed, pct_n, M.exits, M.exits + pct_k);   /* the workload only */
+	snprintf(line, sizeof line, "%s\n", guest + 1);
+	if (!(C.on && !guest[0])) hvm_put_input(line);   /* lock-step: an empty guest part types nothing */
+	run_rest(&rs);
+}
+/* the rest of a run, from the workload's start: a RUN goes on here, a lock-step RESUME starts here */
+static void run_rest(struct runst *rs)
+{
+	static const char *const wk[] = { DONE_MARKER, FINAL_MARKER };
+	static const char *const fin[] = { FINAL_MARKER };
+	const char *tag = rs->tag;
+	char verdict[300] = "", *tjinfo = rs->tjinfo;
+	double t0 = rs->t0;
+	uint64_t wfp = 0, ffp = 0, wx0 = rs->wx0;
+	uint32_t pct_n = rs->pct_n;
+	int cut = rs->cut, rewound = rs->rewound, why = 0, r;
+	size_t from = rs->from;
 	/* the recovery boot's "oracle" command: 3584 bytes, as hvx_explore's, so that the fake outside
 	 * world of a manifest with fakes:/proxies: (hydo-init-fakes.sh appends its records to the
 	 * acknowledged ids at a power cut, at most 3000 bytes) fits; the UART input ring is 4096
 	 * (../hvm.c rxq). A command that fitted before is unchanged. */
 	char orc[3584];
-	if (trace_f) fprintf(trace_f, "RUN %s\n", tag);
-	set_fault(dseed, dcl, dpr);
-	if (tj_wanted(&tj)) {            /* the jitter covers the workload only, like the disk fault */
-		TJ = tj; TJ.on = 1;
-		snprintf(tjinfo, sizeof tjinfo, " tjk=%llu", (unsigned long long)(M.vtime / TJ_PERIOD));
-	}
-	uint64_t wx0 = M.exits;
-	if (pct_n) pct_set(pct_seed, pct_n, M.exits, M.exits + pct_k);   /* the workload only */
-	snprintf(line, sizeof line, "%s\n", guest + 1);
-	hvm_put_input(line);
+	C.rs = rs;                     /* lock-step: what a SNAP in this run carries */
 	r = run_to(wk, 2, from, &why);
 	if (pct_n) {
 		size_t l = strlen(tjinfo);
-		snprintf(tjinfo + l, sizeof tjinfo - l, " pctf=%llu pctw=%llu", (unsigned long long)PCT.fired, (unsigned long long)(M.exits - wx0));
+		snprintf(tjinfo + l, sizeof rs->tjinfo - l, " pctf=%llu pctw=%llu", (unsigned long long)PCT.fired, (unsigned long long)(M.exits - wx0));
 		memset(&PCT, 0, sizeof PCT);
 	}
 	if (TJ.on) {
 		size_t l = strlen(tjinfo);
-		snprintf(tjinfo + l, sizeof tjinfo - l, "-%llu tjn=%llu",
+		snprintf(tjinfo + l, sizeof rs->tjinfo - l, "-%llu tjn=%llu",
 		         (unsigned long long)(M.vtime / TJ_PERIOD), (unsigned long long)TJ.applied);
 		memset(&TJ, 0, sizeof TJ);
 	}
-	if (r < 0) { spin_hit |= why == STOP_SPIN; snprintf(verdict, sizeof verdict, "ERROR workload: %s", stop_name(why)); goto out; }
+	/* r == -3: the host ended a lock-step run at a stop (END); never without lock-step */
+	if (r < 0 && r != -3) { spin_hit |= why == STOP_SPIN; snprintf(verdict, sizeof verdict, "ERROR workload: %s", stop_name(why)); goto out; }
 	wfp = xfp(); diag(tag, "w");
-	if (r == 1) { last_verdict(from, verdict, sizeof verdict); ffp = wfp; goto out; }
+	if (r == 1 || r == -3) { ctl_verdict(r, from, verdict, sizeof verdict); ffp = wfp; goto out; }
 	if (!cut) {                    /* same boot: faults off, heal, check */
 		set_fault(0, 0, 0);
 		hvm_put_input("go\n");
+		if (C.on) { C.phase = "check"; C.start = 1; }
 		r = run_to(fin, 1, from, &why);
-		if (r < 0) { spin_hit |= why == STOP_SPIN; snprintf(verdict, sizeof verdict, "ERROR check: %s", stop_name(why)); goto out; }
+		if (r < 0 && r != -3) { spin_hit |= why == STOP_SPIN; snprintf(verdict, sizeof verdict, "ERROR check: %s", stop_name(why)); goto out; }
 		ffp = xfp(); diag(tag, "f");
-		last_verdict(from, verdict, sizeof verdict);
+		ctl_verdict(r, from, verdict, sizeof verdict);
 		goto out;
 	}
 	{                              /* power cut: only the flushed disk bytes survive; recover from S0 */
@@ -435,10 +815,14 @@ static void run_once(const char *tag, const char *sched, int rewound)
 		set_fault(0, 0, 0);
 		from = M.console_len;
 		hvm_put_input(orc);
+		if (C.on) {                /* a new VM with its own clock: queued input does not carry over */
+			ctl_drop_pending();
+			C.phase = "recovery"; C.start = 1; C.k.evfrom = from;
+		}
 		r = run_to(fin, 1, from, &why);
-		if (r < 0) { spin_hit |= why == STOP_SPIN; snprintf(verdict, sizeof verdict, "ERROR recovery: %s", stop_name(why)); goto out_rec; }
+		if (r < 0 && r != -3) { spin_hit |= why == STOP_SPIN; snprintf(verdict, sizeof verdict, "ERROR recovery: %s", stop_name(why)); goto out_rec; }
 		ffp = xfp(); diag(tag, "f");
-		last_verdict(from, verdict, sizeof verdict);
+		ctl_verdict(r, from, verdict, sizeof verdict);
 	out_rec:;
 		char rt[80]; snprintf(rt, sizeof rt, "%s.recovery", tag);
 		save_log(rt, from);
@@ -447,11 +831,17 @@ static void run_once(const char *tag, const char *sched, int rewound)
 out:
 	save_log(tag, from);
 done:
-	if (spin_hit && !rewound && spin_auto) return;   /* not reported: run_sched re-runs it with rewind */
+	if (spin_hit && !rewound && spin_auto && !C.on) return;   /* not reported: run_sched re-runs it with rewind */
 	if (rewound) fprintf(stderr, "hvmx: %s: reported from a rewind-mode run\n", tag);
+	if (C.on) {                    /* lock-step facts, before verdict= like the other extras */
+		size_t l = strlen(tjinfo);
+		snprintf(tjinfo + l, sizeof rs->tjinfo - l, " stops=%llu typed=%llu inh=%016llx",
+		         (unsigned long long)C.k.nstop, (unsigned long long)C.k.ntyped, (unsigned long long)C.k.inh);
+	}
 	printf("RESULT %s fp=%016llx wfp=%016llx secs=%.1f%s verdict=%s\n", tag,
 	       (unsigned long long)fnv(&ffp, 8, wfp), (unsigned long long)wfp, now_s() - t0, tjinfo, verdict);
 	fflush(stdout);
+	if (C.on) ctl_finish();
 }
 /* one schedule from the restored S1 (serve) or from the provisioned boot (one); see the header */
 static void run_sched(const char *tag, const char *sched, struct xsnap *s1)
@@ -514,8 +904,15 @@ int main(int argc, char **argv)
 		argv[2] = argv[0];
 		argv += 2; argc -= 2;
 	}
-	if (argc < 5 || (strcmp(argv[1], "serve") && strcmp(argv[1], "one")) || (!strcmp(argv[1], "one") && argc < 6)) {
-		fprintf(stderr, "usage: hvmx [--ram-mib N] serve <Image> <initramfs> <outdir>\n       hvmx [--ram-mib N] one <Image> <initramfs> <outdir> \"<schedule>\"\n");
+	int ctl_one = 0;
+	if (argc > 1 && !strcmp(argv[1], "--control")) {   /* lock-step control of `one` (M119) */
+		ctl_one = 1;
+		argv[1] = argv[0];
+		argv++; argc--;
+	}
+	if (argc < 5 || (strcmp(argv[1], "serve") && strcmp(argv[1], "one")) || (!strcmp(argv[1], "one") && argc < 6) ||
+	    (ctl_one && strcmp(argv[1], "one"))) {
+		fprintf(stderr, "usage: hvmx [--ram-mib N] serve <Image> <initramfs> <outdir>\n       hvmx [--ram-mib N] [--control] one <Image> <initramfs> <outdir> \"<schedule>\"\n");
 		return 2;
 	}
 	const char *mode = argv[1];
@@ -553,7 +950,8 @@ int main(int argc, char **argv)
 	if (!strcmp(mode, "one")) {
 		if (boot_to_s1(&s0, spin_auto ? &s1 : NULL)) return 1;   /* S0 is still needed for a power cut's recovery boot */
 		fprintf(stderr, "hvmx: provisioned in %.1f s (fresh boot, no snapshot restore)\n", now_s() - t0);
-		run_sched("one", argv[5], &s1);   /* S1 only if a SPIN run must be repeated with rewind */
+		if (ctl_one) ctl_request("one", argv[5]);
+		else run_sched("one", argv[5], &s1);   /* S1 only if a SPIN run must be repeated with rewind */
 		return 0;
 	}
 	if (boot_to_s1(&s0, &s1)) return 1;
@@ -563,9 +961,18 @@ int main(int argc, char **argv)
 		char tag[64]; int off = 0;
 		if (!strncmp(in, "QUIT", 4)) break;
 		if (!strncmp(in, "BRANCH ", 7)) { printf("BRANCHEND ? unsupported on hvm\n"); fflush(stdout); continue; }
-		if (sscanf(in, "RUN %63s %n", tag, &off) != 1 || !off) { printf("RESULT ? fp=0 wfp=0 secs=0 verdict=ERROR bad request\n"); fflush(stdout); continue; }
+		if (!strncmp(in, "RESUME ", 7)) {   /* lock-step (M119) */
+			char name[64];
+			if (sscanf(in, "RESUME %63s %63s", tag, name) != 2) { printf("RESULT ? fp=0 wfp=0 secs=0 verdict=ERROR bad request\n"); fflush(stdout); continue; }
+			ctl_resume(tag, name);
+			continue;
+		}
+		int ctl = !strncmp(in, "CTL ", 4);   /* lock-step (M119) */
+		const char *rq = in + (ctl ? 4 : 0);
+		if (sscanf(rq, ctl ? "%63s %n" : "RUN %63s %n", tag, &off) != 1 || !off) { printf("RESULT ? fp=0 wfp=0 secs=0 verdict=ERROR bad request\n"); fflush(stdout); continue; }
 		xsnap_restore(&s1);
-		run_sched(tag, in + off, &s1);
+		if (ctl) ctl_request(tag, rq + off);
+		else run_sched(tag, in + off, &s1);
 	}
 	return 0;
 }

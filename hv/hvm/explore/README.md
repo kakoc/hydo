@@ -6,8 +6,9 @@
 
 | File | What |
 |---|---|
-| `serve.c` (`hvmx`) | the run engine. It includes `../hvm.c` and speaks `hvx_explore`'s protocol: `READY`, `RUN <tag> <schedule>`, `RESULT ...`, `QUIT`. `hvmx one ...` runs one schedule from a fresh boot |
+| `serve.c` (`hvmx`) | the run engine. It includes `../hvm.c` and speaks `hvx_explore`'s protocol: `READY`, `RUN <tag> <schedule>`, `RESULT ...`, `QUIT`, and the lock-step requests `CTL` and `RESUME` (Milestone 119). `hvmx one ...` runs one schedule from a fresh boot |
 | `build.sh` | builds and signs `hvmx` (with `../virtio*.c`) |
+| `lockstep-check.sh` | the permanent test of lock-step control (Milestone 119): M116's Mac experiment, and CTL against RUN, through `hydo-engine/examples/hvm_lockstep_check.rs` |
 | `build-guest-netns.sh`, `hvm-netns.config`, `netnsboot/` | the second arm64 kernel `Image-explore-netns` (Milestone 99): `Image-explore` plus network namespaces, veth, bridge, IPv6, policy routing, iptables + NFQUEUE; only for manifests with `network: bridge`, `addr:` or `faults: [freeze]` (see "The second kernel" below) |
 | `build-guest.sh`, `hvm-explore.config` | the arm64 kernel `Image-explore`, built on the Linux box: the M48 kernel with `../linux/hvm-virtio.config`, `../services/svc.config`, MBR partitions and loop, and (by default) the HVC idle below. `HVM_IDLE_HVC=0` rebuilds the earlier WFI-idle kernel |
 | `apply-hvcidle.py` | adds `CONFIG_ARM64_HVM_IDLE_HVC`: `cpu_do_idle()` idles through HVC function `0xC6000020` instead of `WFI` (see "Fixed" below) |
@@ -265,6 +266,33 @@ the continued run, 1 GiB twice `85464ddcc0a84e19`.
 6379, a replica, a fault proxy): every schedule twice from a fresh boot, identical, and every fault
 visible on the console; an explorer campaign of 30 schedules; and Docker's voting app
 (`hydo/onboard/examples/compose-voting/hydo-mac.yaml`). Values in `docs/HISTORY.md`, Milestone 99.
+
+## Lock-step control (Milestone 119)
+
+`hvmx serve` also takes `CTL <tag> <schedule>` and `RESUME <tag> <snapshot>`, and
+`hvmx --control one ...` runs `one` the same way. This is `hv/hvx/hvx_explore.c`'s lock-step protocol
+(Milestone 118, the design in `docs/design/guest-control.md`), so one host client drives both engines:
+hydo-engine's `lockstep` module (`Worker::lockstep`, `Hvm::one_lockstep`). The only difference is the
+clock: `at=` is the exit count here and hvx's icount there. The full protocol is in `serve.c`'s
+comment above `ctl_esc`.
+
+- The engine stops and waits for the host at the run's start, at the exit where a queued `SEND`
+  is due (the bytes are typed there, before the guest runs again, so delivery is exact to the exit),
+  at the shell init's markers (where RUN stops), every `rb=<n>` exits (the schedule's `rb=` is the
+  cadence in a CTL; default 65,536), and when the guest stops. Before each `STOP` it prints the
+  complete console lines since the last stop (`EVENT`) and the sends typed there (`SENT`).
+- A snapshot (`SNAP <name>`) is refused while a typed send is not acknowledged (`ACK <id>`), unless
+  it is taken with `retype`: bytes still in the UART receive queue are in no snapshot, so `RESUME`
+  types every such send again right after the restore. Queued sends are part of the snapshot.
+  `RESUME` is the Mac's mid-run branch with typed input; the hvx-style `BRANCH` request (timing
+  variants after a marker) is still answered `unsupported on hvm`.
+- Without CTL, RESUME or `--control` nothing changes. A CTL whose host only answers CONT gives RUN's
+  fingerprint, for the quickstart schedules from S1 and from a fresh boot.
+
+`lockstep-check.sh <dir with Image-explore and explore-ob-redis-oci-arm64> <the Redis example's image>
+<out dir>` is the permanent test (`hydo-engine/examples/hvm_lockstep_check.rs`). It runs M116's Mac
+experiment and checks M116's values, and it checks CTL against RUN. Values in `docs/HISTORY.md`,
+Milestone 119.
 
 ## Commands
 

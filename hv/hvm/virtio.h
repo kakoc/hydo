@@ -44,6 +44,7 @@ int  virtio_attached(void);
 uint64_t virtio_hash(uint64_t h);                            /* device state + disk + cache + captured TX */
 void *virtio_save(void);                                     /* snapshot */
 void virtio_restore(const void *s);
+void virtio_save_free(void *s);                              /* free a snapshot of virtio_save */
 void virtio_finish(void);                                    /* write HVM_DISK_OUT / HVM_NET_TX_OUT */
 void virtio_stats(const char *tag);
 #endif
