@@ -16,10 +16,6 @@ I	hydo/bench/m56/map-d3-blind-retry.json	88047dc9284e69daf582bb60a50337bfb83bf90
 I	hydo/bench/m56/map-d4-produce-timeout-definite.json	c235006a2a46f001166fb67909a7e12e21d589fe264b51b9b421bbe5c9af3527
 I	hydo/bench/m56/map-d6-client-deadline-definite.json	67f5ae08481ca7c59ee87a56656a9211b7ab660484f1c0df0a8c23c690ebeba9
 I	hydo/bench/m56/map-d7.json	fa3d12a35627c6957fa85f64915fe57d54e5dc2f6df383da12da77388095af4b
-I	hydo/crates/hydo-cli/tests/fixtures/explore-composed/report.json	c691aa07076e3076dc2ab39f3593cdd86fd10520fb6e1fbcbd6bc7b93c8487d1
-I	hydo/crates/hydo-cli/tests/fixtures/explore-errors/errors.json	35fcb0a126a616615040a764236762c079acdce733727e3f65b842f0eac39e91
-I	hydo/crates/hydo-cli/tests/fixtures/explore-errors/report.json	6318bfe03b1664a55fa6d836e2d2b60459ae8718d7d3083ebb5a4e671c7962de
-I	hydo/crates/hydo-cli/tests/fixtures/run-errors/one.errors.json	8d04771a01ee8a619609446b8cbae9d38e75fc1431151f2fb987d6f8d8c1bcdc
 I	hydo/crates/hydo-compose/tests/cases.json	2c2854cfdb34127f65600c1537118f267b3d4379fb06b446697877d197c47149
 I	hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-elasticsearch-logstash-kibana/docker-compose.yml	09409df7d8b9cac06f9ebdc2bcdf11155d924307f2354f9de2973b81007bacc0
 I	hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-elasticsearch-logstash-kibana/lock.json	1104b866bc34aa6cbce6ddfcea238bec7f55b6caed7f7852b66a1157f3a8cefc
@@ -168,14 +164,6 @@ R	^	<root>/hydo/bench/m56/map-d6-client-deadline-definite.json --set version=zz 
 R	^	^ --print-world --print-init	run	1	""	"hydo-build: top level: unknown field(s) both, control_only, …#d28da33d650599a6"
 R	^	<root>/hydo/bench/m56/map-d7.json --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	1	""	"hydo-build: top level: unknown field(s) both, control_only, …#d28da33d650599a6"
-R	^	<root>/hydo/crates/hydo-cli/tests/fixtures/explore-composed/report.json --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
-R	^	^ --print-world --print-init	run	1	""	"hydo-build: top level: unknown field(s) failures, shrunk, su…#5a4c099c29509cda"
-R	^	<root>/hydo/crates/hydo-cli/tests/fixtures/explore-errors/errors.json --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
-R	^	^ --print-world --print-init	run	1	""	"hydo-build: top level: unknown field(s) kinds, known_file, k…#d8dbff3dd59a9d11"
-R	^	<root>/hydo/crates/hydo-cli/tests/fixtures/explore-errors/report.json --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
-R	^	^ --print-world --print-init	run	1	""	"hydo-build: top level: unknown field(s) failures, shrunk, su…#5a4c099c29509cda"
-R	^	<root>/hydo/crates/hydo-cli/tests/fixtures/run-errors/one.errors.json --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
-R	^	^ --print-world --print-init	run	1	""	"hydo-build: top level: unknown field(s) boots, kinds, known_…#66000d2414c35547"
 R	^	<root>/hydo/crates/hydo-compose/tests/cases.json --set version=zz --print-shell	run	1	""	"hydo-build: the manifest must be a mapping\n"
 R	^	^ --print-world --print-init	run	1	""	^
 R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-elasticsearch-logstash-kibana/docker-compose.yml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
@@ -7977,38 +7965,6 @@ R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-init	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<root>/hydo/bench/m56/map-d7.json --arch x86_64 --check	run	1	""	^
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-init	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	^ --arch arm64 --check	run	1	""	^
-R	^	^ --arch arm64 --print-shell	run	1	""	^
-R	^	^ --arch arm64 --print-init	run	1	""	^
-R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<root>/hydo/crates/hydo-cli/tests/fixtures/explore-composed/report.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) failures, shrunk, su…#5a4c099c29509cda"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-init	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	^ --arch arm64 --check	run	1	""	^
-R	^	^ --arch arm64 --print-shell	run	1	""	^
-R	^	^ --arch arm64 --print-init	run	1	""	^
-R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<root>/hydo/crates/hydo-cli/tests/fixtures/explore-errors/errors.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) kinds, known_file, k…#d8dbff3dd59a9d11"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-init	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	^ --arch arm64 --check	run	1	""	^
-R	^	^ --arch arm64 --print-shell	run	1	""	^
-R	^	^ --arch arm64 --print-init	run	1	""	^
-R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<root>/hydo/crates/hydo-cli/tests/fixtures/explore-errors/report.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) failures, shrunk, su…#5a4c099c29509cda"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-init	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	^ --arch arm64 --check	run	1	""	^
-R	^	^ --arch arm64 --print-shell	run	1	""	^
-R	^	^ --arch arm64 --print-init	run	1	""	^
-R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<root>/hydo/crates/hydo-cli/tests/fixtures/run-errors/one.errors.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) boots, kinds, known_…#66000d2414c35547"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-init	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^

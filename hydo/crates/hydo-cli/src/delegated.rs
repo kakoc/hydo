@@ -88,16 +88,36 @@ pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
 
 // ---------------------------------------------------------------- report (Rust)
 
+/// `hydo report [DIR]`: the report of an exploration (report.md, made from its exploration.json
+/// by the results reader) or of a run (its result.json); while an exploration still runs, how
+/// far its event stream has got.
 pub fn cmd_report(_ctx: &Ctx, argv: &[String]) -> i32 {
     let d = argv
         .first()
         .cloned()
         .unwrap_or_else(|| pjoin(OUT, "explore"));
-    let p = pjoin(&d, "report.md");
-    if !Path::new(&p).exists() {
-        die(&format!("no report at {p}"));
-    }
-    let text = crate::ctx::read_text(Path::new(&p)).unwrap_or_else(|e| die(&format!("{p}: {e}")));
+    let r =
+        hydo_results::read_dir(Path::new(&d)).unwrap_or_else(|e| die(&format!("no report: {e}")));
+    let text = match r {
+        hydo_results::Results::Run { run, .. } => hydo_explore::md::run_report(&run),
+        hydo_results::Results::Exploration { doc: Some(doc), .. } => hydo_explore::md::report(&doc),
+        hydo_results::Results::Exploration {
+            doc: None,
+            events: Some(ev),
+            ..
+        } => {
+            let first: Vec<_> = ev
+                .runs()
+                .filter(|r| r.role.as_deref() == Some(hydo_results::role::FIRST))
+                .collect();
+            format!(
+                "hydo: {d}: the exploration has not finished: {} schedules run, {} failing so far\n",
+                first.len(),
+                first.iter().filter(|r| r.verdict.kind != "ok").count()
+            )
+        }
+        hydo_results::Results::Exploration { .. } => die(&format!("no report in {d}")),
+    };
     let mut o = std::io::stdout().lock();
     let _ = o.write_all(text.as_bytes());
     0

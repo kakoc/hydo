@@ -11,8 +11,9 @@
 use crate::args::Args;
 use crate::gen::Ex;
 use crate::pool::{read_text, Pool, Res};
-use crate::py::{dumps, dumps_line, py_str, repr, round1};
+use crate::py::{dumps_line, py_str, repr, round1};
 use crate::report::{assert_failures, records, verdict_kind};
+use crate::results::Events;
 use crate::sched::{render_fc, Fc, S};
 use regex::Regex;
 use serde_json::{json, Map, Value};
@@ -178,10 +179,33 @@ fn streams_of(ex: &Ex, a: &Args) -> Result<Vec<Stream>, String> {
     Ok(out)
 }
 
+/// `--fc-traces`: the trace runs of earlier sweeps, by schedule. A file is an exploration's
+/// events.jsonl (its trace runs, read with the results reader) or, from before M115, an
+/// fc-traces.jsonl.
 fn known_traces(a: &Args) -> Result<HashMap<String, Map<String, Value>>, String> {
     let mut known = HashMap::new();
     for path in a.fc_traces.iter().flat_map(|t| t.split(',')) {
         let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+        if text.lines().next().is_some_and(|l| l.contains("\"v\":")) {
+            let st = hydo_results::reader::stream(&text).map_err(|e| format!("{path}: {e}"))?;
+            let dir = Path::new(path).parent().unwrap_or(Path::new(""));
+            for r in st.runs() {
+                let Some(t) = r.trace.as_ref().filter(|t| t.count.is_some()) else {
+                    continue;
+                };
+                let rec = json!({
+                    "tag": r.tag, "schedule": r.schedule, "pair": t.pair, "dir": t.dir,
+                    "match": t.matched, "step": t.step, "count": t.count,
+                    "verdict": r.verdict.text, "fp": r.fingerprints.fp, "secs": r.secs,
+                    "console": r.artifacts.as_ref().and_then(|x| x.consoles.first())
+                        .map(|c| dir.join(c).display().to_string()),
+                });
+                if let Some(o) = rec.as_object() {
+                    known.insert(r.schedule.clone(), o.clone());
+                }
+            }
+            continue;
+        }
         for line in text.lines() {
             let rec: Value = serde_json::from_str(line).map_err(|e| format!("{path}: {e}"))?;
             if rec.get("count").is_some_and(|c| !c.is_null()) {
@@ -194,6 +218,40 @@ fn known_traces(a: &Args) -> Result<HashMap<String, Map<String, Value>>, String>
     Ok(known)
 }
 
+/// A trace run (its record of the trace) as a run of the results format.
+fn trace_run(out: &Path, rec: &Map<String, Value>, res: Option<&Res>) -> hydo_results::Run {
+    let tag = py_str(&rec["tag"]);
+    let text = py_str(&rec["schedule"]);
+    let mut run = match res {
+        Some(r) => crate::results::explorer_run(out, &tag, &text, r, hydo_results::role::TRACE),
+        None => {
+            let v = py_str(&rec["verdict"]);
+            let mut r = hydo_results::Run::new(
+                &text,
+                hydo_results::Verdict {
+                    kind: crate::results::kind_of(&v),
+                    text: v,
+                    ..Default::default()
+                },
+                &py_str(&rec["fp"]),
+            );
+            r.tag = Some(tag);
+            r.role = Some(hydo_results::role::TRACE.into());
+            r.secs = rec.get("secs").and_then(Value::as_f64);
+            r
+        }
+    };
+    run.trace = Some(hydo_results::Trace {
+        pair: py_str(&rec["pair"]),
+        dir: py_str(&rec["dir"]),
+        matched: rec.get("match").filter(|m| !m.is_null()).map(py_str),
+        step: rec["step"].as_i64().unwrap_or(0),
+        count: rec.get("count").and_then(Value::as_i64),
+        reused: rec.get("reused").and_then(Value::as_bool),
+    });
+    run
+}
+
 fn with_f(base: &S, f: Fc) -> S {
     let mut s = base.clone();
     s.f = Some(f);
@@ -201,7 +259,13 @@ fn with_f(base: &S, f: Fc) -> S {
 }
 
 /// explore.py `freeze_sweep`: trace, then one point per packet.
-pub fn freeze_sweep(ex: &Ex, pool: &Pool, a: &Args, out: &Path) -> Result<Vec<Point>, String> {
+pub fn freeze_sweep(
+    ex: &Ex,
+    pool: &Pool,
+    a: &Args,
+    out: &Path,
+    ev: &Events,
+) -> Result<Vec<Point>, String> {
     if ex.fc_pairs.is_empty() {
         return Err("explore.py: --sweep freeze needs an image whose manifest lists `freeze` in faults: (manifest_space.py gives the pairs)".into());
     }
@@ -286,13 +350,14 @@ pub fn freeze_sweep(ex: &Ex, pool: &Pool, a: &Args, out: &Path) -> Result<Vec<Po
         rec.insert("count".into(), json!(n));
         rec.insert("verdict".into(), r["verdict"].clone());
         rec.insert("fp".into(), r["fp"].clone());
+        rec.insert("_res".into(), Value::Object(r.clone()));
         trec.push(rec);
     }
-    let lines: String = trec
-        .iter()
-        .map(|r| dumps_line(&Value::Object(r.clone())) + "\n")
-        .collect();
-    let _ = std::fs::write(out.join("fc-traces.jsonl"), lines);
+    // the trace runs go into the stream (events.jsonl; `--fc-traces` reads them back)
+    for rec in &trec {
+        let res = rec.get("_res").and_then(Value::as_object);
+        ev.write(&trace_run(out, rec, res));
+    }
     let missing: Vec<String> = trec
         .iter()
         .filter(|r| r.get("count").is_none_or(Value::is_null))
@@ -424,6 +489,8 @@ pub struct AdaptiveOut {
     pub items: Vec<(String, String)>,
     pub res: HashMap<String, (String, Res)>,
     pub info: Map<String, Value>,
+    /// The centres, windows, rounds and stages (exploration.json `freeze_sweep`).
+    pub doc: Map<String, Value>,
 }
 
 impl<'a> Adaptive<'a> {
@@ -494,6 +561,7 @@ impl<'a> Adaptive<'a> {
             rec.insert("secs".into(), r.get("secs").cloned().unwrap_or(Value::Null));
             rec.insert("console".into(), json!(path.display().to_string()));
             self.traces.insert(key, rec.clone());
+            rec.insert("_res".into(), Value::Object(r.clone()));
             self.trecs.push(rec);
         }
         Ok(())
@@ -561,7 +629,8 @@ impl<'a> Adaptive<'a> {
     fn failed(&self, i: usize) -> bool {
         let tag = format!("seed-{i}");
         let (_, r) = &self.res[&tag];
-        verdict_kind(&py_str(&r["verdict"])) != "ok" || !assert_failures(self.out, &tag).is_empty()
+        verdict_kind(&py_str(&r["verdict"])) != "ok"
+            || !assert_failures(self.out, &tag, r).is_empty()
     }
 
     fn console(&self, i: usize) -> String {
@@ -994,7 +1063,13 @@ fn merge(ivs: &[[i64; 2]]) -> Vec<[i64; 2]> {
 }
 
 /// fc_adaptive.run: `--sweep freeze --fc-adaptive`.
-pub fn adaptive(ex: &Ex, pool: &Pool, a: &Args, out: &Path) -> Result<AdaptiveOut, String> {
+pub fn adaptive(
+    ex: &Ex,
+    pool: &Pool,
+    a: &Args,
+    out: &Path,
+    ev: &Events,
+) -> Result<AdaptiveOut, String> {
     if ex.fc_pairs.is_empty() {
         return Err("explore.py: --sweep freeze needs an image whose manifest lists `freeze` in faults: (manifest_space.py gives the pairs)".into());
     }
@@ -1032,12 +1107,11 @@ pub fn adaptive(ex: &Ex, pool: &Pool, a: &Args, out: &Path) -> Result<AdaptiveOu
     let t1 = Instant::now();
     ad.stage2(&s1)?;
     let t2 = Instant::now();
-    let lines: String = ad
-        .trecs
-        .iter()
-        .map(|r| dumps_line(&Value::Object(r.clone())) + "\n")
-        .collect();
-    let _ = std::fs::write(out.join("fc-traces.jsonl"), lines);
+    // the trace runs go into the stream (events.jsonl; `--fc-traces` reads them back)
+    for rec in &ad.trecs {
+        let res = rec.get("_res").and_then(Value::as_object);
+        ev.write(&trace_run(out, rec, res));
+    }
     let n1 = ad.stage.values().filter(|v| **v == 1).count();
     let f1 = ad
         .stage
@@ -1070,8 +1144,12 @@ pub fn adaptive(ex: &Ex, pool: &Pool, a: &Args, out: &Path) -> Result<AdaptiveOu
     for (i, v) in &ad.stage {
         stage.insert(format!("seed-{i}"), json!(v));
     }
-    let doc = json!({"summary": info, "centres": ad.centre_log, "windows": ad.windows, "rounds": ad.rounds, "stage": stage});
-    let _ = std::fs::write(out.join("fc-adaptive.json"), dumps(&doc, 1));
+    // the rest of the record goes into exploration.json (`freeze_sweep`, after its summary)
+    let mut doc = Map::new();
+    doc.insert("centres".into(), Value::Array(ad.centre_log.clone()));
+    doc.insert("windows".into(), Value::Object(ad.windows.clone()));
+    doc.insert("rounds".into(), Value::Array(ad.rounds.clone()));
+    doc.insert("stage".into(), Value::Object(stage));
     eprintln!(
         "fc-adaptive: done: {}",
         dumps_line(&Value::Object(info.clone()))
@@ -1081,5 +1159,6 @@ pub fn adaptive(ex: &Ex, pool: &Pool, a: &Args, out: &Path) -> Result<AdaptiveOu
         items: ad.items,
         res: ad.res,
         info,
+        doc,
     })
 }

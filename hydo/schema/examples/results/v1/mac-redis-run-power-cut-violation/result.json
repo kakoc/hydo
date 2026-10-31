@@ -1,0 +1,146 @@
+{
+  "v": 1,
+  "type": "run",
+  "hydo_version": "0.1.0",
+  "schedule": "disk=cut | run C=12 R=everysec",
+  "image": {
+    "path": "/work/redis/hydo-out/explore-ob-redis-arm64.cpio.gz",
+    "sha256": "96f591d8f5cc79a51774b664a9bc5c8068e97e971eb9b0ab14ceea07204f54bd"
+  },
+  "engine": {
+    "backend": "hvm",
+    "args": []
+  },
+  "verdict": {
+    "kind": "violation",
+    "text": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+  },
+  "fingerprints": {
+    "fp": "29fb0d55a5ab8101",
+    "wfp": "285e790c0a7bbaf2"
+  },
+  "findings": [
+    {
+      "kind": "invariant",
+      "id": "redis.acked_writes_survive",
+      "status": "violation",
+      "message": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+      "details": {
+        "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost"
+      }
+    },
+    {
+      "kind": "assertion",
+      "id": "redis.acked_writes_survive",
+      "status": "violation",
+      "message": "every SET the client saw acknowledged reads back with its value",
+      "details": {
+        "assertion": "always",
+        "details": {
+          "out": "key k:0 lost"
+        }
+      }
+    }
+  ],
+  "properties": {
+    "runs": 1,
+    "setup_complete_runs": 0,
+    "violations": 1,
+    "properties": [
+      {
+        "id": "fault.paused",
+        "assertion": "reachable",
+        "message": "a service was paused (SIGSTOP)",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.pause_mid_request",
+        "assertion": "sometimes",
+        "message": "a pause began while a client request was in flight",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.clock_back",
+        "assertion": "reachable",
+        "message": "the realtime clock was stepped backwards",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.clock_fwd",
+        "assertion": "reachable",
+        "message": "the realtime clock was stepped forwards",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.oneway_req",
+        "assertion": "reachable",
+        "message": "a one-way network fault hit the req direction",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.oneway_resp",
+        "assertion": "reachable",
+        "message": "a one-way network fault hit the resp direction",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "redis.acked_writes_survive",
+        "assertion": "always",
+        "message": "every SET the client saw acknowledged reads back with its value",
+        "declared": false,
+        "passes": 0,
+        "fails": 1,
+        "runs_passed": 0,
+        "runs_failed": 1,
+        "verdict": "FAIL",
+        "status": "violation",
+        "first_failure": "{\"out\":\"key k:0 lost\"}"
+      }
+    ]
+  },
+  "secs": 1.4,
+  "result_line": "RESULT one fp=29fb0d55a5ab8101 wfp=285e790c0a7bbaf2 secs=1.4 verdict=HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+  "artifacts": {
+    "consoles": [
+      "one.log",
+      "one.recovery.log"
+    ],
+    "engine_log": "engine.log"
+  }
+}

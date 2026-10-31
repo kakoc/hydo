@@ -241,6 +241,7 @@ version = "0.1.0"
 dependencies = [
  "hydo-engine",
  "hydo-explore",
+ "hydo-results",
  "regex",
  "serde_json",
  "sha2",
@@ -271,6 +272,7 @@ dependencies = [
  "hydo-explore",
  "hydo-history",
  "hydo-manifest",
+ "hydo-results",
  "hydo-schedule",
  "libc",
  "serde_json",
@@ -317,6 +319,7 @@ version = "0.1.0"
 dependencies = [
  "fancy-regex",
  "hydo-manifest",
+ "hydo-results",
  "libc",
  "serde_json",
  "sha2",
@@ -331,9 +334,11 @@ dependencies = [
  "hydo-errors",
  "hydo-history",
  "hydo-manifest",
+ "hydo-results",
  "hydo-schedule",
  "libc",
  "regex",
+ "serde",
  "serde_json",
  "sha2",
 ]
@@ -357,6 +362,15 @@ dependencies = [
  "serde_json",
  "serde_path_to_error",
  "sha2",
+]
+
+[[package]]
+name = "hydo-results"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

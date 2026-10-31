@@ -86,7 +86,7 @@ nf=$(cd "$A" && find . -type f ! -name .complete | wc -l | tr -d ' ')
 REL=$OUTDIR/hydo-linux-$VERSION
 [ -d "$REL" ] && chmod -R u+w "$REL" && rm -rf "$REL"
 # the release tree mirrors the repository: hydo/ (the product) and hv/hvx/ (the run engine's sources)
-mkdir -p "$REL/bin" "$REL/libexec/bin" "$REL/hydo/onboard" "$REL/hydo/assert" "$REL/hv/hvx" \
+mkdir -p "$REL/bin" "$REL/libexec/bin" "$REL/hydo/onboard" "$REL/hv/hvx" \
          "$REL/module" "$REL/examples/redis/files" "$REL/skill"
 # the programs, all Rust (M107: no Python anywhere in the release): bin/hydo (the one CLI,
 # hydo/crates/hydo-cli), bin/hydo-build (the image builder with its own command line, for
@@ -127,7 +127,7 @@ cp "$TOP/hydo/history/hydo_hist.sh" "$REL/hydo/history/"
 cp "$TOP/hv/hvx/hvx_explore.c" "$TOP/hv/hvx/hvx_stack_verify.c" "$TOP/hv/hvx/hvx_boot.h" "$TOP/hv/hvx/hvx_abi.h" \
    "$TOP/hv/hvx/ptedges.h" "$REL/hv/hvx/"
 # the property-table tool the explorer compiles on the fly, and the assertion protocol it reads
-cp "$TOP/hydo/assert/hydo_assert_report.c" "$TOP/hydo/assert/hydo_assert_table.h" "$REL/hydo/assert/"
+# (the property table is made by the explorer itself since M115: no hydo/assert tool in the release)
 cp "$TOP/hydo/ASSERTIONS.md" "$REL/hydo/"
 # the kernel module's sources (hydo module build)
 cp "$TOP/hv/hvx/hvx.c" "$TOP/hv/hvx/hvx_abi.h" "$TOP/hv/hvx/Makefile" "$REL/module/"

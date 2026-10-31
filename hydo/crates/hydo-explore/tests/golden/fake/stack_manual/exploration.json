@@ -1,0 +1,42 @@
+{
+  "v": 1,
+  "type": "exploration",
+  "hydo_version": "0.1.0",
+  "mode": "schedule",
+  "config": {
+    "strategy": "random",
+    "schedule": "disk=cut dseed=0 | run C=4 R=everysec",
+    "argv": [
+      "--schedule",
+      "disk=cut dseed=0 | run C=4 R=everysec",
+      "--workers",
+      "3",
+      "--out",
+      "<out>"
+    ]
+  },
+  "image": {
+    "path": "explore-disk.img",
+    "resolved": "<dir>/explore-disk.img"
+  },
+  "engine": {
+    "backend": "hvx",
+    "args": [],
+    "ram_mib": 1024,
+    "vcpus": 1,
+    "cpu": "v2",
+    "workers": N
+  },
+  "summary": {
+    "schedules": 1,
+    "total_wall_s": N,
+    "failures": 1
+  },
+  "failures": [],
+  "shrinks": [],
+  "liveness": [],
+  "artifacts": {
+    "events": "events.jsonl",
+    "consoles": "consoles"
+  }
+}

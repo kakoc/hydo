@@ -27,8 +27,8 @@ the same (Milestone 107); only `hydo module` is Linux-only.
 | `hydo module udev install\|remove\|status [--name N] [--group G] [--dry-run]` | optional: with sudo, writes `/etc/udev/rules.d/70-hydo-N.rules` (`KERNEL=="N", SUBSYSTEM=="misc", GROUP="G", MODE="0660"`), creates the group if missing, adds the user, reloads udev and applies the rule to a loaded device; `remove` deletes the rule and sets the device back to root:root 0600. `install.sh --udev [--udev-group G] [--udev-name N]` runs `install` |
 | `hydo module status [--name N]` | loaded or not, `srcversion` of the loaded and the release-built module, device mode, KVM, how many processes hold the lock (read from `/proc/locks`, no lock taken) |
 | `hydo build [hydo.yaml]` | the Rust image builder (`hydo/crates/hydo-build`, since Milestone 103) with the bundled tools, into `./hydo-out` (`./.hydo` for a project's `hydo/hydo.yaml`, the default manifest) |
-| `hydo run [IMG] "<schedule>"` | `libexec/hvx-run sudo env HVX_SNAP_DIR=… hv/hvx/hvx_explore [--ram-mib/--cpu from the image's manifest] one guest/bzImage guest/initramfs-kafka.cpio.gz IMG <dir> "<schedule>"`; writes `run.json` |
-| `hydo repro <run dir \| explore dir \| "<schedule>">` | re-runs a `run.json`, or every failure and minimal schedule of an exploration's `report.json`, from a fresh boot, and compares fingerprints |
+| `hydo run [IMG] "<schedule>"` | `libexec/hvx-run sudo env HVX_SNAP_DIR=… hv/hvx/hvx_explore [--ram-mib/--cpu from the image's manifest] one guest/bzImage guest/initramfs-kafka.cpio.gz IMG <dir> "<schedule>"`; writes `result.json` |
+| `hydo repro <run dir \| explore dir \| "<schedule>">` | re-runs a `result.json`, or every failure and minimal schedule of an exploration's `exploration.json`, from a fresh boot, and compares fingerprints |
 | `hydo explore [IMG] [explorer options]` | the explorer (`hydo/crates/hydo-explore`) in the same process (default `--seeds 1-20 --out hydo-out/explore`; workers sized from the machine) |
 | `hydo report [DIR]` | prints `report.md` |
 
