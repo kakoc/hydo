@@ -87,7 +87,50 @@ pub fn plan_of_image(image: &Path) -> Result<Plan, Unsupported> {
     }
     let m = hydo_manifest::from_embedded(&text, None)
         .map_err(|e| Unsupported::other(format!("{}: {e}", image.display())))?;
-    Plan::from_manifest(&m)
+    let mut plan = Plan::from_manifest(&m)?;
+    // The pinned tc, ip and iptables are image facts: Plan::from_manifest leaves hydo-build's
+    // placeholders where the manifest's faults need a tool; the image's manifest.sh has the paths.
+    let needed = [&plan.layout.tc, &plan.layout.ip, &plan.layout.iptables]
+        .iter()
+        .any(|p| !p.is_empty());
+    if needed {
+        let sh = hydo_engine::image::embedded_file(image, "etc/hydo/manifest.sh")
+            .map_err(|e| Unsupported::other(format!("{}: {e}", image.display())))?;
+        let l = &mut plan.layout;
+        for (field, key, what) in [
+            (&mut l.tc, "HYDO_TC", "tc"),
+            (&mut l.ip, "HYDO_IP", "ip"),
+            (&mut l.iptables, "HYDO_IPT", "iptables"),
+        ] {
+            if field.is_empty() {
+                continue;
+            }
+            match shell_var(&sh, key).filter(|v| !v.is_empty()) {
+                Some(v) => *field = v,
+                None => {
+                    return Err(Unsupported::other(format!(
+                        "{}: the manifest's faults need {what}, and the image's manifest.sh has no {key}",
+                        image.display()
+                    )))
+                }
+            }
+        }
+    }
+    Ok(plan)
+}
+
+/// The value of `KEY=value` (or `KEY='value'`, hydo-build's `shq`) in a manifest.sh text.
+pub fn shell_var(sh: &str, key: &str) -> Option<String> {
+    let v = sh
+        .lines()
+        .find_map(|l| l.strip_prefix(key)?.strip_prefix('='))?;
+    Some(
+        match v.strip_prefix('\'').and_then(|x| x.strip_suffix('\'')) {
+            // shq writes a ' inside as '\'' (close, escaped quote, reopen)
+            Some(inner) => inner.replace("'\\''", "'"),
+            None => v.to_string(),
+        },
+    )
 }
 
 /// A run's report as the shell init's console shows it: the report lines and the notes, in order.
@@ -480,5 +523,45 @@ impl Worker for AgentWorker {
 
     fn close(self: Box<Self>) -> Result<(), EngineError> {
         self.inner.close()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn manifest_sh_values() {
+        let sh = "HYDO_X=1\nHYDO_TC='/nix/store/abc-iproute2/bin/tc'\nHYDO_IP=/bin/ip\nHYDO_Q='it'\\''s'\n";
+        assert_eq!(
+            shell_var(sh, "HYDO_TC").as_deref(),
+            Some("/nix/store/abc-iproute2/bin/tc")
+        );
+        assert_eq!(shell_var(sh, "HYDO_IP").as_deref(), Some("/bin/ip"));
+        assert_eq!(shell_var(sh, "HYDO_Q").as_deref(), Some("it's"));
+        assert_eq!(shell_var(sh, "HYDO_IPT"), None);
+        assert_eq!(shell_var(sh, "HYDO"), None);
+    }
+
+    #[test]
+    fn cadence_and_ctl() {
+        let s: Schedule = "disk=cut | run C=12".parse().unwrap();
+        let (full, eng) = engine_schedule(&s, 16).unwrap();
+        assert_eq!(full.to_string(), "disk=cut rb=16 | run C=12");
+        assert_eq!(eng.to_string(), "disk=cut rb=16 | run");
+        let s: Schedule = "rb=16 | run".parse().unwrap();
+        assert_eq!(engine_schedule(&s, 16).unwrap().0, s);
+        let s: Schedule = "rb=1 | run".parse().unwrap();
+        assert!(engine_schedule(&s, 16).is_err());
+        let r = RunResult::parse(
+            "RESULT a fp=1 wfp=2 secs=0.5 stops=3 typed=1 inh=00aa verdict=HYDO-ORACLE: OK x",
+        )
+        .unwrap();
+        let c = with_ctl(&r, "0123456789abcdef");
+        assert_eq!(
+            c.line,
+            "RESULT a fp=1 wfp=2 secs=0.5 stops=3 typed=1 inh=00aa ctl=0123456789abcdef verdict=HYDO-ORACLE: OK x"
+        );
+        assert_eq!(c.extra("ctl"), Some("0123456789abcdef"));
     }
 }

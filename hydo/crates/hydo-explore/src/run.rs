@@ -452,12 +452,7 @@ fn setup(a: Args, env: &Env) -> Cx {
 
 /// Fault kinds the host controller does not drive on agent images yet, with their seam
 /// (docs/design/guest-control.md step B2, "wave 3").
-const AGENT_LATER: [(&str, &str); 4] = [
-    ("network", "net-faults"),
-    ("oneway", "net-faults"),
-    ("clock", "clock"),
-    ("freeze", "freeze"),
-];
+const AGENT_LATER: [(&str, &str); 1] = [("clock", "clock")];
 
 /// An agent image (M126): the manifest must be one the controller drives, the options that need
 /// what waits for wave 3 are refused, and the fault kinds it cannot drive yet leave the space
@@ -472,7 +467,6 @@ fn agent_space(sp: &mut Space, a: &Args, img: &Path) {
     for (on, what) in [
         (a.branch.is_some(), "--branch"),
         (a.buggify, "--buggify (the seam buggify)"),
-        (a.freeze_call, "--freeze-call (the seam freeze)"),
     ] {
         if on {
             die(&format!(
