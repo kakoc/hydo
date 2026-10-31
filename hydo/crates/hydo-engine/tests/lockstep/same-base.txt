@@ -1,0 +1,3467 @@
+< CTL same-base disk=none rb=16 | run K=redis@5+2
+> STOP same-base at=949127 n=1 phase=workload why=start
+< CONT
+> STOP same-base at=949143 n=2 phase=workload why=cadence
+< CONT
+> STOP same-base at=949159 n=3 phase=workload why=cadence
+< CONT
+> STOP same-base at=949175 n=4 phase=workload why=cadence
+< CONT
+> STOP same-base at=949191 n=5 phase=workload why=cadence
+< CONT
+> STOP same-base at=949207 n=6 phase=workload why=cadence
+< CONT
+> STOP same-base at=949223 n=7 phase=workload why=cadence
+< CONT
+> STOP same-base at=949239 n=8 phase=workload why=cadence
+< CONT
+> STOP same-base at=949255 n=9 phase=workload why=cadence
+< CONT
+> EVENT same-base at=949271 n=1 run K=redis@5+2
+> STOP same-base at=949271 n=10 phase=workload why=cadence
+< CONT
+> STOP same-base at=949287 n=11 phase=workload why=cadence
+< CONT
+> STOP same-base at=949303 n=12 phase=workload why=cadence
+< CONT
+> STOP same-base at=949319 n=13 phase=workload why=cadence
+< CONT
+> STOP same-base at=949335 n=14 phase=workload why=cadence
+< CONT
+> STOP same-base at=949351 n=15 phase=workload why=cadence
+< CONT
+> STOP same-base at=949367 n=16 phase=workload why=cadence
+< CONT
+> STOP same-base at=949383 n=17 phase=workload why=cadence
+< CONT
+> STOP same-base at=949399 n=18 phase=workload why=cadence
+< CONT
+> STOP same-base at=949415 n=19 phase=workload why=cadence
+< CONT
+> STOP same-base at=949431 n=20 phase=workload why=cadence
+< CONT
+> EVENT same-base at=949447 n=2 hydo-ob: command: run K=redis@5+2
+> STOP same-base at=949447 n=21 phase=workload why=cadence
+< CONT
+> STOP same-base at=949463 n=22 phase=workload why=cadence
+< CONT
+> STOP same-base at=949479 n=23 phase=workload why=cadence
+< CONT
+> STOP same-base at=949495 n=24 phase=workload why=cadence
+< CONT
+> STOP same-base at=949511 n=25 phase=workload why=cadence
+< CONT
+> STOP same-base at=949527 n=26 phase=workload why=cadence
+< CONT
+> STOP same-base at=949543 n=27 phase=workload why=cadence
+< CONT
+> STOP same-base at=949559 n=28 phase=workload why=cadence
+< CONT
+> STOP same-base at=949575 n=29 phase=workload why=cadence
+< CONT
+> STOP same-base at=949591 n=30 phase=workload why=cadence
+< CONT
+> STOP same-base at=949607 n=31 phase=workload why=cadence
+< CONT
+> STOP same-base at=949623 n=32 phase=workload why=cadence
+< CONT
+> STOP same-base at=949639 n=33 phase=workload why=cadence
+< CONT
+> STOP same-base at=949655 n=34 phase=workload why=cadence
+< CONT
+> STOP same-base at=949671 n=35 phase=workload why=cadence
+< CONT
+> STOP same-base at=949687 n=36 phase=workload why=cadence
+< CONT
+> STOP same-base at=949703 n=37 phase=workload why=cadence
+< CONT
+> STOP same-base at=949719 n=38 phase=workload why=cadence
+< CONT
+> STOP same-base at=949735 n=39 phase=workload why=cadence
+< CONT
+> STOP same-base at=949751 n=40 phase=workload why=cadence
+< CONT
+> STOP same-base at=949767 n=41 phase=workload why=cadence
+< CONT
+> STOP same-base at=949783 n=42 phase=workload why=cadence
+< CONT
+> STOP same-base at=949799 n=43 phase=workload why=cadence
+< CONT
+> STOP same-base at=949815 n=44 phase=workload why=cadence
+< CONT
+> STOP same-base at=949831 n=45 phase=workload why=cadence
+< CONT
+> EVENT same-base at=949847 n=3 HYDO-ASSERT-DECL {"t":"reachable","id":"fault.paused","msg":"a service was paused (SIGSTOP)"}
+> STOP same-base at=949847 n=46 phase=workload why=cadence
+< CONT
+> STOP same-base at=949863 n=47 phase=workload why=cadence
+< CONT
+> STOP same-base at=949879 n=48 phase=workload why=cadence
+< CONT
+> STOP same-base at=949895 n=49 phase=workload why=cadence
+< CONT
+> STOP same-base at=949911 n=50 phase=workload why=cadence
+< CONT
+> STOP same-base at=949927 n=51 phase=workload why=cadence
+< CONT
+> STOP same-base at=949943 n=52 phase=workload why=cadence
+< CONT
+> STOP same-base at=949959 n=53 phase=workload why=cadence
+< CONT
+> STOP same-base at=949975 n=54 phase=workload why=cadence
+< CONT
+> STOP same-base at=949991 n=55 phase=workload why=cadence
+< CONT
+> STOP same-base at=950007 n=56 phase=workload why=cadence
+< CONT
+> STOP same-base at=950023 n=57 phase=workload why=cadence
+< CONT
+> STOP same-base at=950039 n=58 phase=workload why=cadence
+< CONT
+> STOP same-base at=950055 n=59 phase=workload why=cadence
+< CONT
+> STOP same-base at=950071 n=60 phase=workload why=cadence
+< CONT
+> STOP same-base at=950087 n=61 phase=workload why=cadence
+< CONT
+> STOP same-base at=950103 n=62 phase=workload why=cadence
+< CONT
+> STOP same-base at=950119 n=63 phase=workload why=cadence
+< CONT
+> STOP same-base at=950135 n=64 phase=workload why=cadence
+< CONT
+> STOP same-base at=950151 n=65 phase=workload why=cadence
+< CONT
+> STOP same-base at=950167 n=66 phase=workload why=cadence
+< CONT
+> STOP same-base at=950183 n=67 phase=workload why=cadence
+< CONT
+> STOP same-base at=950199 n=68 phase=workload why=cadence
+< CONT
+> STOP same-base at=950215 n=69 phase=workload why=cadence
+< CONT
+> STOP same-base at=950231 n=70 phase=workload why=cadence
+< CONT
+> STOP same-base at=950247 n=71 phase=workload why=cadence
+< CONT
+> STOP same-base at=950263 n=72 phase=workload why=cadence
+< CONT
+> STOP same-base at=950279 n=73 phase=workload why=cadence
+< CONT
+> STOP same-base at=950295 n=74 phase=workload why=cadence
+< CONT
+> STOP same-base at=950311 n=75 phase=workload why=cadence
+< CONT
+> STOP same-base at=950327 n=76 phase=workload why=cadence
+< CONT
+> STOP same-base at=950343 n=77 phase=workload why=cadence
+< CONT
+> STOP same-base at=950359 n=78 phase=workload why=cadence
+< CONT
+> EVENT same-base at=950375 n=4 HYDO-ASSERT-DECL {"t":"sometimes","id":"fault.pause_mid_request","msg":"a pause began while a client request was in flight"}
+> STOP same-base at=950375 n=79 phase=workload why=cadence
+< CONT
+> STOP same-base at=950391 n=80 phase=workload why=cadence
+< CONT
+> STOP same-base at=950407 n=81 phase=workload why=cadence
+< CONT
+> STOP same-base at=950423 n=82 phase=workload why=cadence
+< CONT
+> STOP same-base at=950439 n=83 phase=workload why=cadence
+< CONT
+> STOP same-base at=950455 n=84 phase=workload why=cadence
+< CONT
+> STOP same-base at=950471 n=85 phase=workload why=cadence
+< CONT
+> STOP same-base at=950487 n=86 phase=workload why=cadence
+< CONT
+> STOP same-base at=950503 n=87 phase=workload why=cadence
+< CONT
+> STOP same-base at=950519 n=88 phase=workload why=cadence
+< CONT
+> STOP same-base at=950535 n=89 phase=workload why=cadence
+< CONT
+> STOP same-base at=950551 n=90 phase=workload why=cadence
+< CONT
+> STOP same-base at=950567 n=91 phase=workload why=cadence
+< CONT
+> STOP same-base at=950583 n=92 phase=workload why=cadence
+< CONT
+> STOP same-base at=950599 n=93 phase=workload why=cadence
+< CONT
+> STOP same-base at=950615 n=94 phase=workload why=cadence
+< CONT
+> STOP same-base at=950631 n=95 phase=workload why=cadence
+< CONT
+> STOP same-base at=950647 n=96 phase=workload why=cadence
+< CONT
+> STOP same-base at=950663 n=97 phase=workload why=cadence
+< CONT
+> STOP same-base at=950679 n=98 phase=workload why=cadence
+< CONT
+> STOP same-base at=950695 n=99 phase=workload why=cadence
+< CONT
+> STOP same-base at=950711 n=100 phase=workload why=cadence
+< CONT
+> STOP same-base at=950727 n=101 phase=workload why=cadence
+< CONT
+> STOP same-base at=950743 n=102 phase=workload why=cadence
+< CONT
+> STOP same-base at=950759 n=103 phase=workload why=cadence
+< CONT
+> STOP same-base at=950775 n=104 phase=workload why=cadence
+< CONT
+> STOP same-base at=950791 n=105 phase=workload why=cadence
+< CONT
+> STOP same-base at=950807 n=106 phase=workload why=cadence
+< CONT
+> STOP same-base at=950823 n=107 phase=workload why=cadence
+< CONT
+> EVENT same-base at=950839 n=5 HYDO-ASSERT-DECL {"t":"reachable","id":"fault.clock_back","msg":"the realtime clock was stepped backwards"}
+> STOP same-base at=950839 n=108 phase=workload why=cadence
+< CONT
+> STOP same-base at=950855 n=109 phase=workload why=cadence
+< CONT
+> STOP same-base at=950871 n=110 phase=workload why=cadence
+< CONT
+> STOP same-base at=950887 n=111 phase=workload why=cadence
+< CONT
+> STOP same-base at=950903 n=112 phase=workload why=cadence
+< CONT
+> STOP same-base at=950919 n=113 phase=workload why=cadence
+< CONT
+> STOP same-base at=950935 n=114 phase=workload why=cadence
+< CONT
+> STOP same-base at=950951 n=115 phase=workload why=cadence
+< CONT
+> STOP same-base at=950967 n=116 phase=workload why=cadence
+< CONT
+> STOP same-base at=950983 n=117 phase=workload why=cadence
+< CONT
+> STOP same-base at=950999 n=118 phase=workload why=cadence
+< CONT
+> STOP same-base at=951015 n=119 phase=workload why=cadence
+< CONT
+> STOP same-base at=951031 n=120 phase=workload why=cadence
+< CONT
+> STOP same-base at=951047 n=121 phase=workload why=cadence
+< CONT
+> STOP same-base at=951063 n=122 phase=workload why=cadence
+< CONT
+> STOP same-base at=951079 n=123 phase=workload why=cadence
+< CONT
+> STOP same-base at=951095 n=124 phase=workload why=cadence
+< CONT
+> STOP same-base at=951111 n=125 phase=workload why=cadence
+< CONT
+> STOP same-base at=951127 n=126 phase=workload why=cadence
+< CONT
+> STOP same-base at=951143 n=127 phase=workload why=cadence
+< CONT
+> STOP same-base at=951159 n=128 phase=workload why=cadence
+< CONT
+> STOP same-base at=951175 n=129 phase=workload why=cadence
+< CONT
+> STOP same-base at=951191 n=130 phase=workload why=cadence
+< CONT
+> STOP same-base at=951207 n=131 phase=workload why=cadence
+< CONT
+> STOP same-base at=951223 n=132 phase=workload why=cadence
+< CONT
+> STOP same-base at=951239 n=133 phase=workload why=cadence
+< CONT
+> STOP same-base at=951255 n=134 phase=workload why=cadence
+< CONT
+> STOP same-base at=951271 n=135 phase=workload why=cadence
+< CONT
+> EVENT same-base at=951287 n=6 HYDO-ASSERT-DECL {"t":"reachable","id":"fault.clock_fwd","msg":"the realtime clock was stepped forwards"}
+> STOP same-base at=951287 n=136 phase=workload why=cadence
+< CONT
+> STOP same-base at=951303 n=137 phase=workload why=cadence
+< CONT
+> STOP same-base at=951319 n=138 phase=workload why=cadence
+< CONT
+> STOP same-base at=951335 n=139 phase=workload why=cadence
+< CONT
+> STOP same-base at=951351 n=140 phase=workload why=cadence
+< CONT
+> STOP same-base at=951367 n=141 phase=workload why=cadence
+< CONT
+> STOP same-base at=951383 n=142 phase=workload why=cadence
+< CONT
+> STOP same-base at=951399 n=143 phase=workload why=cadence
+< CONT
+> STOP same-base at=951415 n=144 phase=workload why=cadence
+< CONT
+> STOP same-base at=951431 n=145 phase=workload why=cadence
+< CONT
+> STOP same-base at=951447 n=146 phase=workload why=cadence
+< CONT
+> STOP same-base at=951463 n=147 phase=workload why=cadence
+< CONT
+> STOP same-base at=951479 n=148 phase=workload why=cadence
+< CONT
+> STOP same-base at=951495 n=149 phase=workload why=cadence
+< CONT
+> STOP same-base at=951511 n=150 phase=workload why=cadence
+< CONT
+> STOP same-base at=951527 n=151 phase=workload why=cadence
+< CONT
+> STOP same-base at=951543 n=152 phase=workload why=cadence
+< CONT
+> STOP same-base at=951559 n=153 phase=workload why=cadence
+< CONT
+> STOP same-base at=951575 n=154 phase=workload why=cadence
+< CONT
+> STOP same-base at=951591 n=155 phase=workload why=cadence
+< CONT
+> STOP same-base at=951607 n=156 phase=workload why=cadence
+< CONT
+> STOP same-base at=951623 n=157 phase=workload why=cadence
+< CONT
+> STOP same-base at=951639 n=158 phase=workload why=cadence
+< CONT
+> STOP same-base at=951655 n=159 phase=workload why=cadence
+< CONT
+> STOP same-base at=951671 n=160 phase=workload why=cadence
+< CONT
+> STOP same-base at=951687 n=161 phase=workload why=cadence
+< CONT
+> STOP same-base at=951703 n=162 phase=workload why=cadence
+< CONT
+> STOP same-base at=951719 n=163 phase=workload why=cadence
+< CONT
+> STOP same-base at=951735 n=164 phase=workload why=cadence
+< CONT
+> STOP same-base at=951751 n=165 phase=workload why=cadence
+< CONT
+> STOP same-base at=951767 n=166 phase=workload why=cadence
+< CONT
+> EVENT same-base at=951783 n=7 HYDO-ASSERT-DECL {"t":"reachable","id":"fault.oneway_req","msg":"a one-way network fault hit the req direction"}
+> STOP same-base at=951783 n=167 phase=workload why=cadence
+< CONT
+> STOP same-base at=951799 n=168 phase=workload why=cadence
+< CONT
+> STOP same-base at=951815 n=169 phase=workload why=cadence
+< CONT
+> STOP same-base at=951831 n=170 phase=workload why=cadence
+< CONT
+> STOP same-base at=951847 n=171 phase=workload why=cadence
+< CONT
+> STOP same-base at=951863 n=172 phase=workload why=cadence
+< CONT
+> STOP same-base at=951879 n=173 phase=workload why=cadence
+< CONT
+> STOP same-base at=951895 n=174 phase=workload why=cadence
+< CONT
+> STOP same-base at=951911 n=175 phase=workload why=cadence
+< CONT
+> STOP same-base at=951927 n=176 phase=workload why=cadence
+< CONT
+> STOP same-base at=951943 n=177 phase=workload why=cadence
+< CONT
+> STOP same-base at=951959 n=178 phase=workload why=cadence
+< CONT
+> STOP same-base at=951975 n=179 phase=workload why=cadence
+< CONT
+> STOP same-base at=951991 n=180 phase=workload why=cadence
+< CONT
+> STOP same-base at=952007 n=181 phase=workload why=cadence
+< CONT
+> STOP same-base at=952023 n=182 phase=workload why=cadence
+< CONT
+> STOP same-base at=952039 n=183 phase=workload why=cadence
+< CONT
+> STOP same-base at=952055 n=184 phase=workload why=cadence
+< CONT
+> STOP same-base at=952071 n=185 phase=workload why=cadence
+< CONT
+> STOP same-base at=952087 n=186 phase=workload why=cadence
+< CONT
+> STOP same-base at=952103 n=187 phase=workload why=cadence
+< CONT
+> STOP same-base at=952119 n=188 phase=workload why=cadence
+< CONT
+> STOP same-base at=952135 n=189 phase=workload why=cadence
+< CONT
+> STOP same-base at=952151 n=190 phase=workload why=cadence
+< CONT
+> STOP same-base at=952167 n=191 phase=workload why=cadence
+< CONT
+> STOP same-base at=952183 n=192 phase=workload why=cadence
+< CONT
+> STOP same-base at=952199 n=193 phase=workload why=cadence
+< CONT
+> STOP same-base at=952215 n=194 phase=workload why=cadence
+< CONT
+> STOP same-base at=952231 n=195 phase=workload why=cadence
+< CONT
+> STOP same-base at=952247 n=196 phase=workload why=cadence
+< CONT
+> EVENT same-base at=952263 n=8 HYDO-ASSERT-DECL {"t":"reachable","id":"fault.oneway_resp","msg":"a one-way network fault hit the resp direction"}
+> STOP same-base at=952263 n=197 phase=workload why=cadence
+< CONT
+> STOP same-base at=952279 n=198 phase=workload why=cadence
+< CONT
+> STOP same-base at=952295 n=199 phase=workload why=cadence
+< CONT
+> STOP same-base at=952311 n=200 phase=workload why=cadence
+< CONT
+> STOP same-base at=952327 n=201 phase=workload why=cadence
+< CONT
+> STOP same-base at=952343 n=202 phase=workload why=cadence
+< CONT
+> STOP same-base at=952359 n=203 phase=workload why=cadence
+< CONT
+> STOP same-base at=952375 n=204 phase=workload why=cadence
+< CONT
+> STOP same-base at=952391 n=205 phase=workload why=cadence
+< CONT
+> STOP same-base at=952407 n=206 phase=workload why=cadence
+< CONT
+> STOP same-base at=952423 n=207 phase=workload why=cadence
+< CONT
+> STOP same-base at=952439 n=208 phase=workload why=cadence
+< CONT
+> STOP same-base at=952455 n=209 phase=workload why=cadence
+< CONT
+> STOP same-base at=952471 n=210 phase=workload why=cadence
+< CONT
+> STOP same-base at=952487 n=211 phase=workload why=cadence
+< CONT
+> STOP same-base at=952503 n=212 phase=workload why=cadence
+< CONT
+> STOP same-base at=952519 n=213 phase=workload why=cadence
+< CONT
+> STOP same-base at=952535 n=214 phase=workload why=cadence
+< CONT
+> STOP same-base at=952551 n=215 phase=workload why=cadence
+< CONT
+> STOP same-base at=952567 n=216 phase=workload why=cadence
+< CONT
+> STOP same-base at=954630 n=217 phase=workload why=cadence
+< CONT
+> STOP same-base at=954654 n=218 phase=workload why=cadence
+< CONT
+> STOP same-base at=954670 n=219 phase=workload why=cadence
+< CONT
+> STOP same-base at=954686 n=220 phase=workload why=cadence
+< CONT
+> STOP same-base at=954702 n=221 phase=workload why=cadence
+< CONT
+> STOP same-base at=954718 n=222 phase=workload why=cadence
+< CONT
+> STOP same-base at=954742 n=223 phase=workload why=cadence
+< CONT
+> STOP same-base at=954758 n=224 phase=workload why=cadence
+< CONT
+> STOP same-base at=954782 n=225 phase=workload why=cadence
+< CONT
+> STOP same-base at=954806 n=226 phase=workload why=cadence
+< CONT
+> STOP same-base at=954822 n=227 phase=workload why=cadence
+< CONT
+> STOP same-base at=954838 n=228 phase=workload why=cadence
+< CONT
+> STOP same-base at=954854 n=229 phase=workload why=cadence
+< CONT
+> STOP same-base at=954870 n=230 phase=workload why=cadence
+< CONT
+> STOP same-base at=954886 n=231 phase=workload why=cadence
+< CONT
+> STOP same-base at=954902 n=232 phase=workload why=cadence
+< CONT
+> STOP same-base at=954918 n=233 phase=workload why=cadence
+< CONT
+> STOP same-base at=954934 n=234 phase=workload why=cadence
+< CONT
+> STOP same-base at=954950 n=235 phase=workload why=cadence
+< CONT
+> STOP same-base at=954966 n=236 phase=workload why=cadence
+< CONT
+> STOP same-base at=954982 n=237 phase=workload why=cadence
+< CONT
+> STOP same-base at=954998 n=238 phase=workload why=cadence
+< CONT
+> STOP same-base at=955014 n=239 phase=workload why=cadence
+< CONT
+> STOP same-base at=955034 n=240 phase=workload why=cadence
+< CONT
+> STOP same-base at=955050 n=241 phase=workload why=cadence
+< CONT
+> STOP same-base at=955066 n=242 phase=workload why=cadence
+< CONT
+> STOP same-base at=955090 n=243 phase=workload why=cadence
+< CONT
+> STOP same-base at=955106 n=244 phase=workload why=cadence
+< CONT
+> STOP same-base at=955130 n=245 phase=workload why=cadence
+< CONT
+> STOP same-base at=955146 n=246 phase=workload why=cadence
+< CONT
+> STOP same-base at=955162 n=247 phase=workload why=cadence
+< CONT
+> STOP same-base at=955178 n=248 phase=workload why=cadence
+< CONT
+> STOP same-base at=955194 n=249 phase=workload why=cadence
+< CONT
+> STOP same-base at=955210 n=250 phase=workload why=cadence
+< CONT
+> STOP same-base at=955226 n=251 phase=workload why=cadence
+< CONT
+> STOP same-base at=955242 n=252 phase=workload why=cadence
+< CONT
+> STOP same-base at=955258 n=253 phase=workload why=cadence
+< CONT
+> STOP same-base at=955274 n=254 phase=workload why=cadence
+< CONT
+> STOP same-base at=955298 n=255 phase=workload why=cadence
+< CONT
+> STOP same-base at=955314 n=256 phase=workload why=cadence
+< CONT
+> STOP same-base at=955330 n=257 phase=workload why=cadence
+< CONT
+> STOP same-base at=955346 n=258 phase=workload why=cadence
+< CONT
+> STOP same-base at=955370 n=259 phase=workload why=cadence
+< CONT
+> STOP same-base at=955394 n=260 phase=workload why=cadence
+< CONT
+> STOP same-base at=955410 n=261 phase=workload why=cadence
+< CONT
+> STOP same-base at=955426 n=262 phase=workload why=cadence
+< CONT
+> STOP same-base at=955442 n=263 phase=workload why=cadence
+< CONT
+> STOP same-base at=955458 n=264 phase=workload why=cadence
+< CONT
+> STOP same-base at=955474 n=265 phase=workload why=cadence
+< CONT
+> STOP same-base at=955490 n=266 phase=workload why=cadence
+< CONT
+> STOP same-base at=955506 n=267 phase=workload why=cadence
+< CONT
+> STOP same-base at=955522 n=268 phase=workload why=cadence
+< CONT
+> STOP same-base at=955538 n=269 phase=workload why=cadence
+< CONT
+> STOP same-base at=955554 n=270 phase=workload why=cadence
+< CONT
+> STOP same-base at=955578 n=271 phase=workload why=cadence
+< CONT
+> STOP same-base at=955594 n=272 phase=workload why=cadence
+< CONT
+> STOP same-base at=955610 n=273 phase=workload why=cadence
+< CONT
+> STOP same-base at=955626 n=274 phase=workload why=cadence
+< CONT
+> STOP same-base at=955642 n=275 phase=workload why=cadence
+< CONT
+> STOP same-base at=955658 n=276 phase=workload why=cadence
+< CONT
+> STOP same-base at=955682 n=277 phase=workload why=cadence
+< CONT
+> STOP same-base at=955698 n=278 phase=workload why=cadence
+< CONT
+> STOP same-base at=955722 n=279 phase=workload why=cadence
+< CONT
+> STOP same-base at=955738 n=280 phase=workload why=cadence
+< CONT
+> STOP same-base at=955754 n=281 phase=workload why=cadence
+< CONT
+> STOP same-base at=955770 n=282 phase=workload why=cadence
+< CONT
+> STOP same-base at=955786 n=283 phase=workload why=cadence
+< CONT
+> STOP same-base at=955802 n=284 phase=workload why=cadence
+< CONT
+> STOP same-base at=955818 n=285 phase=workload why=cadence
+< CONT
+> STOP same-base at=955834 n=286 phase=workload why=cadence
+< CONT
+> STOP same-base at=955850 n=287 phase=workload why=cadence
+< CONT
+> STOP same-base at=957913 n=288 phase=workload why=cadence
+< CONT
+> STOP same-base at=957929 n=289 phase=workload why=cadence
+< CONT
+> STOP same-base at=957945 n=290 phase=workload why=cadence
+< CONT
+> STOP same-base at=957961 n=291 phase=workload why=cadence
+< CONT
+> STOP same-base at=957985 n=292 phase=workload why=cadence
+< CONT
+> STOP same-base at=958001 n=293 phase=workload why=cadence
+< CONT
+> STOP same-base at=958025 n=294 phase=workload why=cadence
+< CONT
+> STOP same-base at=958041 n=295 phase=workload why=cadence
+< CONT
+> STOP same-base at=958065 n=296 phase=workload why=cadence
+< CONT
+> STOP same-base at=958089 n=297 phase=workload why=cadence
+< CONT
+> STOP same-base at=958105 n=298 phase=workload why=cadence
+< CONT
+> STOP same-base at=958121 n=299 phase=workload why=cadence
+< CONT
+> STOP same-base at=958137 n=300 phase=workload why=cadence
+< CONT
+> STOP same-base at=958153 n=301 phase=workload why=cadence
+< CONT
+> STOP same-base at=958169 n=302 phase=workload why=cadence
+< CONT
+> STOP same-base at=958185 n=303 phase=workload why=cadence
+< CONT
+> STOP same-base at=958201 n=304 phase=workload why=cadence
+< CONT
+> STOP same-base at=958217 n=305 phase=workload why=cadence
+< CONT
+> STOP same-base at=958233 n=306 phase=workload why=cadence
+< CONT
+> STOP same-base at=958249 n=307 phase=workload why=cadence
+< CONT
+> STOP same-base at=958265 n=308 phase=workload why=cadence
+< CONT
+> STOP same-base at=958281 n=309 phase=workload why=cadence
+< CONT
+> STOP same-base at=958297 n=310 phase=workload why=cadence
+< CONT
+> STOP same-base at=958313 n=311 phase=workload why=cadence
+< CONT
+> STOP same-base at=958329 n=312 phase=workload why=cadence
+< CONT
+> STOP same-base at=958345 n=313 phase=workload why=cadence
+< CONT
+> STOP same-base at=958361 n=314 phase=workload why=cadence
+< CONT
+> STOP same-base at=958377 n=315 phase=workload why=cadence
+< CONT
+> STOP same-base at=958393 n=316 phase=workload why=cadence
+< CONT
+> STOP same-base at=958409 n=317 phase=workload why=cadence
+< CONT
+> STOP same-base at=958425 n=318 phase=workload why=cadence
+< CONT
+> STOP same-base at=958441 n=319 phase=workload why=cadence
+< CONT
+> STOP same-base at=958457 n=320 phase=workload why=cadence
+< CONT
+> EVENT same-base at=958473 n=9 hydo-ob: workload steps 0..4 rc=0 (uptime=13.80s)
+> STOP same-base at=958473 n=321 phase=workload why=cadence
+< CONT
+> STOP same-base at=958489 n=322 phase=workload why=cadence
+< CONT
+> STOP same-base at=958505 n=323 phase=workload why=cadence
+< CONT
+> STOP same-base at=958521 n=324 phase=workload why=cadence
+< CONT
+> STOP same-base at=958537 n=325 phase=workload why=cadence
+< CONT
+> STOP same-base at=958553 n=326 phase=workload why=cadence
+< CONT
+> STOP same-base at=958569 n=327 phase=workload why=cadence
+< CONT
+> STOP same-base at=958585 n=328 phase=workload why=cadence
+< CONT
+> STOP same-base at=958601 n=329 phase=workload why=cadence
+< CONT
+> STOP same-base at=958617 n=330 phase=workload why=cadence
+< CONT
+> STOP same-base at=958633 n=331 phase=workload why=cadence
+< CONT
+> STOP same-base at=960696 n=332 phase=workload why=cadence
+< CONT
+> STOP same-base at=960712 n=333 phase=workload why=cadence
+< CONT
+> STOP same-base at=960728 n=334 phase=workload why=cadence
+< CONT
+> STOP same-base at=960744 n=335 phase=workload why=cadence
+< CONT
+> STOP same-base at=960760 n=336 phase=workload why=cadence
+< CONT
+> STOP same-base at=960776 n=337 phase=workload why=cadence
+< CONT
+> STOP same-base at=960792 n=338 phase=workload why=cadence
+< CONT
+> STOP same-base at=960808 n=339 phase=workload why=cadence
+< CONT
+> STOP same-base at=960824 n=340 phase=workload why=cadence
+< CONT
+> STOP same-base at=960840 n=341 phase=workload why=cadence
+< CONT
+> STOP same-base at=960856 n=342 phase=workload why=cadence
+< CONT
+> STOP same-base at=960872 n=343 phase=workload why=cadence
+< CONT
+> STOP same-base at=960888 n=344 phase=workload why=cadence
+< CONT
+> STOP same-base at=960904 n=345 phase=workload why=cadence
+< CONT
+> STOP same-base at=960920 n=346 phase=workload why=cadence
+< CONT
+> STOP same-base at=960936 n=347 phase=workload why=cadence
+< CONT
+> STOP same-base at=960952 n=348 phase=workload why=cadence
+< CONT
+> STOP same-base at=960968 n=349 phase=workload why=cadence
+< CONT
+> STOP same-base at=960984 n=350 phase=workload why=cadence
+< CONT
+> STOP same-base at=961000 n=351 phase=workload why=cadence
+< CONT
+> STOP same-base at=961016 n=352 phase=workload why=cadence
+< CONT
+> STOP same-base at=961032 n=353 phase=workload why=cadence
+< CONT
+> EVENT same-base at=961048 n=10 hydo-ob: KILLED redis before step 5
+> STOP same-base at=961048 n=354 phase=workload why=cadence
+< SEND at=961048 hydo-agent-ping 1
+> OK send id=1 sent=961048
+< SNAP same
+> ERR snap same unacked=1
+< SNAP same retype
+> OK snap same at=961048 retype=1
+< CONT
+> STOP same-base at=961064 n=355 phase=workload why=cadence
+< CONT
+> STOP same-base at=961080 n=356 phase=workload why=cadence
+< CONT
+> STOP same-base at=961096 n=357 phase=workload why=cadence
+< CONT
+> STOP same-base at=963159 n=358 phase=workload why=cadence
+< CONT
+> STOP same-base at=963175 n=359 phase=workload why=cadence
+< CONT
+> STOP same-base at=963191 n=360 phase=workload why=cadence
+< CONT
+> STOP same-base at=963207 n=361 phase=workload why=cadence
+< CONT
+> STOP same-base at=963223 n=362 phase=workload why=cadence
+< CONT
+> STOP same-base at=963239 n=363 phase=workload why=cadence
+< CONT
+> STOP same-base at=963255 n=364 phase=workload why=cadence
+< CONT
+> STOP same-base at=963271 n=365 phase=workload why=cadence
+< CONT
+> STOP same-base at=963287 n=366 phase=workload why=cadence
+< CONT
+> STOP same-base at=963303 n=367 phase=workload why=cadence
+< CONT
+> STOP same-base at=963319 n=368 phase=workload why=cadence
+< CONT
+> STOP same-base at=963335 n=369 phase=workload why=cadence
+< CONT
+> STOP same-base at=963351 n=370 phase=workload why=cadence
+< CONT
+> STOP same-base at=963367 n=371 phase=workload why=cadence
+< CONT
+> STOP same-base at=963383 n=372 phase=workload why=cadence
+< CONT
+> STOP same-base at=963399 n=373 phase=workload why=cadence
+< CONT
+> STOP same-base at=963415 n=374 phase=workload why=cadence
+< CONT
+> STOP same-base at=963431 n=375 phase=workload why=cadence
+< CONT
+> STOP same-base at=963447 n=376 phase=workload why=cadence
+< CONT
+> STOP same-base at=963463 n=377 phase=workload why=cadence
+< CONT
+> STOP same-base at=963479 n=378 phase=workload why=cadence
+< CONT
+> STOP same-base at=963495 n=379 phase=workload why=cadence
+< CONT
+> STOP same-base at=963511 n=380 phase=workload why=cadence
+< CONT
+> STOP same-base at=963527 n=381 phase=workload why=cadence
+< CONT
+> STOP same-base at=963543 n=382 phase=workload why=cadence
+< CONT
+> STOP same-base at=963559 n=383 phase=workload why=cadence
+< CONT
+> STOP same-base at=963575 n=384 phase=workload why=cadence
+< CONT
+> STOP same-base at=963591 n=385 phase=workload why=cadence
+< CONT
+> STOP same-base at=963607 n=386 phase=workload why=cadence
+< CONT
+> STOP same-base at=963623 n=387 phase=workload why=cadence
+< CONT
+> STOP same-base at=963639 n=388 phase=workload why=cadence
+< CONT
+> STOP same-base at=963655 n=389 phase=workload why=cadence
+< CONT
+> STOP same-base at=963671 n=390 phase=workload why=cadence
+< CONT
+> STOP same-base at=963687 n=391 phase=workload why=cadence
+< CONT
+> STOP same-base at=963703 n=392 phase=workload why=cadence
+< CONT
+> STOP same-base at=963719 n=393 phase=workload why=cadence
+< CONT
+> STOP same-base at=963735 n=394 phase=workload why=cadence
+< CONT
+> STOP same-base at=963751 n=395 phase=workload why=cadence
+< CONT
+> STOP same-base at=963767 n=396 phase=workload why=cadence
+< CONT
+> STOP same-base at=963783 n=397 phase=workload why=cadence
+< CONT
+> STOP same-base at=963799 n=398 phase=workload why=cadence
+< CONT
+> STOP same-base at=963815 n=399 phase=workload why=cadence
+< CONT
+> EVENT same-base at=963831 n=11 hydo-agent-ping 1hydo-ob: workload steps 5..6 rc=0 (uptime=13.82s)
+> STOP same-base at=963831 n=400 phase=workload why=cadence
+< CONT
+> STOP same-base at=963847 n=401 phase=workload why=cadence
+< CONT
+> STOP same-base at=963863 n=402 phase=workload why=cadence
+< CONT
+> STOP same-base at=963879 n=403 phase=workload why=cadence
+< CONT
+> STOP same-base at=963895 n=404 phase=workload why=cadence
+< CONT
+> STOP same-base at=963911 n=405 phase=workload why=cadence
+< CONT
+> STOP same-base at=963927 n=406 phase=workload why=cadence
+< CONT
+> STOP same-base at=963943 n=407 phase=workload why=cadence
+< CONT
+> STOP same-base at=963959 n=408 phase=workload why=cadence
+< CONT
+> STOP same-base at=963975 n=409 phase=workload why=cadence
+< CONT
+> STOP same-base at=963991 n=410 phase=workload why=cadence
+< CONT
+> STOP same-base at=964007 n=411 phase=workload why=cadence
+< CONT
+> STOP same-base at=964023 n=412 phase=workload why=cadence
+< CONT
+> EVENT same-base at=964039 n=12 hydo-ob: restarting redis before step 7
+> STOP same-base at=964039 n=413 phase=workload why=cadence
+< CONT
+> STOP same-base at=964055 n=414 phase=workload why=cadence
+< CONT
+> STOP same-base at=964071 n=415 phase=workload why=cadence
+< CONT
+> STOP same-base at=964087 n=416 phase=workload why=cadence
+< CONT
+> STOP same-base at=964103 n=417 phase=workload why=cadence
+< CONT
+> STOP same-base at=964119 n=418 phase=workload why=cadence
+< CONT
+> STOP same-base at=964135 n=419 phase=workload why=cadence
+< CONT
+> STOP same-base at=964151 n=420 phase=workload why=cadence
+< CONT
+> STOP same-base at=966214 n=421 phase=workload why=cadence
+< CONT
+> STOP same-base at=966230 n=422 phase=workload why=cadence
+< CONT
+> STOP same-base at=968293 n=423 phase=workload why=cadence
+< CONT
+> STOP same-base at=968309 n=424 phase=workload why=cadence
+< CONT
+> STOP same-base at=968325 n=425 phase=workload why=cadence
+< CONT
+> STOP same-base at=968341 n=426 phase=workload why=cadence
+< CONT
+> STOP same-base at=968357 n=427 phase=workload why=cadence
+< CONT
+> STOP same-base at=968373 n=428 phase=workload why=cadence
+< CONT
+> STOP same-base at=968389 n=429 phase=workload why=cadence
+< CONT
+> STOP same-base at=968405 n=430 phase=workload why=cadence
+< CONT
+> STOP same-base at=968421 n=431 phase=workload why=cadence
+< CONT
+> STOP same-base at=968445 n=432 phase=workload why=cadence
+< CONT
+> STOP same-base at=968461 n=433 phase=workload why=cadence
+< CONT
+> STOP same-base at=968477 n=434 phase=workload why=cadence
+< CONT
+> STOP same-base at=968493 n=435 phase=workload why=cadence
+< CONT
+> STOP same-base at=968509 n=436 phase=workload why=cadence
+< CONT
+> STOP same-base at=968525 n=437 phase=workload why=cadence
+< CONT
+> STOP same-base at=968541 n=438 phase=workload why=cadence
+< CONT
+> STOP same-base at=968557 n=439 phase=workload why=cadence
+< CONT
+> STOP same-base at=968573 n=440 phase=workload why=cadence
+< CONT
+> STOP same-base at=968589 n=441 phase=workload why=cadence
+< CONT
+> STOP same-base at=968605 n=442 phase=workload why=cadence
+< CONT
+> STOP same-base at=968621 n=443 phase=workload why=cadence
+< CONT
+> STOP same-base at=968637 n=444 phase=workload why=cadence
+< CONT
+> STOP same-base at=968653 n=445 phase=workload why=cadence
+< CONT
+> STOP same-base at=968669 n=446 phase=workload why=cadence
+< CONT
+> STOP same-base at=968685 n=447 phase=workload why=cadence
+< CONT
+> STOP same-base at=968701 n=448 phase=workload why=cadence
+< CONT
+> STOP same-base at=968717 n=449 phase=workload why=cadence
+< CONT
+> STOP same-base at=968733 n=450 phase=workload why=cadence
+< CONT
+> STOP same-base at=968749 n=451 phase=workload why=cadence
+< CONT
+> STOP same-base at=968765 n=452 phase=workload why=cadence
+< CONT
+> STOP same-base at=968781 n=453 phase=workload why=cadence
+< CONT
+> STOP same-base at=968797 n=454 phase=workload why=cadence
+< CONT
+> STOP same-base at=968813 n=455 phase=workload why=cadence
+< CONT
+> STOP same-base at=968829 n=456 phase=workload why=cadence
+< CONT
+> STOP same-base at=968845 n=457 phase=workload why=cadence
+< CONT
+> STOP same-base at=968861 n=458 phase=workload why=cadence
+< CONT
+> STOP same-base at=968877 n=459 phase=workload why=cadence
+< CONT
+> STOP same-base at=968893 n=460 phase=workload why=cadence
+< CONT
+> STOP same-base at=968909 n=461 phase=workload why=cadence
+< CONT
+> STOP same-base at=968925 n=462 phase=workload why=cadence
+< CONT
+> STOP same-base at=968941 n=463 phase=workload why=cadence
+< CONT
+> STOP same-base at=968957 n=464 phase=workload why=cadence
+< CONT
+> STOP same-base at=968973 n=465 phase=workload why=cadence
+< CONT
+> STOP same-base at=968989 n=466 phase=workload why=cadence
+< CONT
+> STOP same-base at=969005 n=467 phase=workload why=cadence
+< CONT
+> STOP same-base at=969021 n=468 phase=workload why=cadence
+< CONT
+> STOP same-base at=969037 n=469 phase=workload why=cadence
+< CONT
+> STOP same-base at=969053 n=470 phase=workload why=cadence
+< CONT
+> STOP same-base at=969069 n=471 phase=workload why=cadence
+< CONT
+> STOP same-base at=969085 n=472 phase=workload why=cadence
+< CONT
+> STOP same-base at=969101 n=473 phase=workload why=cadence
+< CONT
+> STOP same-base at=969117 n=474 phase=workload why=cadence
+< CONT
+> STOP same-base at=969133 n=475 phase=workload why=cadence
+< CONT
+> STOP same-base at=969149 n=476 phase=workload why=cadence
+< CONT
+> STOP same-base at=969165 n=477 phase=workload why=cadence
+< CONT
+> STOP same-base at=969181 n=478 phase=workload why=cadence
+< CONT
+> STOP same-base at=969197 n=479 phase=workload why=cadence
+< CONT
+> STOP same-base at=969213 n=480 phase=workload why=cadence
+< CONT
+> STOP same-base at=969229 n=481 phase=workload why=cadence
+< CONT
+> STOP same-base at=969245 n=482 phase=workload why=cadence
+< CONT
+> STOP same-base at=969261 n=483 phase=workload why=cadence
+< CONT
+> STOP same-base at=969277 n=484 phase=workload why=cadence
+< CONT
+> STOP same-base at=969293 n=485 phase=workload why=cadence
+< CONT
+> STOP same-base at=969309 n=486 phase=workload why=cadence
+< CONT
+> STOP same-base at=969325 n=487 phase=workload why=cadence
+< CONT
+> STOP same-base at=969341 n=488 phase=workload why=cadence
+< CONT
+> STOP same-base at=969357 n=489 phase=workload why=cadence
+< CONT
+> STOP same-base at=969373 n=490 phase=workload why=cadence
+< CONT
+> STOP same-base at=969389 n=491 phase=workload why=cadence
+< CONT
+> STOP same-base at=969405 n=492 phase=workload why=cadence
+< CONT
+> STOP same-base at=969421 n=493 phase=workload why=cadence
+< CONT
+> STOP same-base at=969437 n=494 phase=workload why=cadence
+< CONT
+> STOP same-base at=969453 n=495 phase=workload why=cadence
+< CONT
+> STOP same-base at=969469 n=496 phase=workload why=cadence
+< CONT
+> STOP same-base at=969485 n=497 phase=workload why=cadence
+< CONT
+> STOP same-base at=969501 n=498 phase=workload why=cadence
+< CONT
+> STOP same-base at=969517 n=499 phase=workload why=cadence
+< CONT
+> STOP same-base at=969533 n=500 phase=workload why=cadence
+< CONT
+> STOP same-base at=969549 n=501 phase=workload why=cadence
+< CONT
+> STOP same-base at=969565 n=502 phase=workload why=cadence
+< CONT
+> STOP same-base at=969581 n=503 phase=workload why=cadence
+< CONT
+> STOP same-base at=969597 n=504 phase=workload why=cadence
+< CONT
+> STOP same-base at=969613 n=505 phase=workload why=cadence
+< CONT
+> STOP same-base at=969629 n=506 phase=workload why=cadence
+< CONT
+> STOP same-base at=969645 n=507 phase=workload why=cadence
+< CONT
+> STOP same-base at=969661 n=508 phase=workload why=cadence
+< CONT
+> STOP same-base at=969677 n=509 phase=workload why=cadence
+< CONT
+> STOP same-base at=969693 n=510 phase=workload why=cadence
+< CONT
+> STOP same-base at=969709 n=511 phase=workload why=cadence
+< CONT
+> STOP same-base at=969725 n=512 phase=workload why=cadence
+< CONT
+> STOP same-base at=969741 n=513 phase=workload why=cadence
+< CONT
+> STOP same-base at=969757 n=514 phase=workload why=cadence
+< CONT
+> STOP same-base at=969773 n=515 phase=workload why=cadence
+< CONT
+> STOP same-base at=969789 n=516 phase=workload why=cadence
+< CONT
+> STOP same-base at=969805 n=517 phase=workload why=cadence
+< CONT
+> STOP same-base at=969821 n=518 phase=workload why=cadence
+< CONT
+> STOP same-base at=969837 n=519 phase=workload why=cadence
+< CONT
+> STOP same-base at=969853 n=520 phase=workload why=cadence
+< CONT
+> STOP same-base at=969869 n=521 phase=workload why=cadence
+< CONT
+> STOP same-base at=969885 n=522 phase=workload why=cadence
+< CONT
+> STOP same-base at=969901 n=523 phase=workload why=cadence
+< CONT
+> STOP same-base at=969917 n=524 phase=workload why=cadence
+< CONT
+> STOP same-base at=969933 n=525 phase=workload why=cadence
+< CONT
+> STOP same-base at=969949 n=526 phase=workload why=cadence
+< CONT
+> STOP same-base at=969965 n=527 phase=workload why=cadence
+< CONT
+> STOP same-base at=969981 n=528 phase=workload why=cadence
+< CONT
+> STOP same-base at=969997 n=529 phase=workload why=cadence
+< CONT
+> STOP same-base at=970013 n=530 phase=workload why=cadence
+< CONT
+> STOP same-base at=970029 n=531 phase=workload why=cadence
+< CONT
+> STOP same-base at=970045 n=532 phase=workload why=cadence
+< CONT
+> STOP same-base at=970061 n=533 phase=workload why=cadence
+< CONT
+> STOP same-base at=970077 n=534 phase=workload why=cadence
+< CONT
+> STOP same-base at=970093 n=535 phase=workload why=cadence
+< CONT
+> STOP same-base at=970109 n=536 phase=workload why=cadence
+< CONT
+> STOP same-base at=970125 n=537 phase=workload why=cadence
+< CONT
+> STOP same-base at=970141 n=538 phase=workload why=cadence
+< CONT
+> STOP same-base at=970157 n=539 phase=workload why=cadence
+< CONT
+> STOP same-base at=970173 n=540 phase=workload why=cadence
+< CONT
+> STOP same-base at=970189 n=541 phase=workload why=cadence
+< CONT
+> STOP same-base at=970205 n=542 phase=workload why=cadence
+< CONT
+> STOP same-base at=970221 n=543 phase=workload why=cadence
+< CONT
+> STOP same-base at=970237 n=544 phase=workload why=cadence
+< CONT
+> STOP same-base at=970253 n=545 phase=workload why=cadence
+< CONT
+> STOP same-base at=970269 n=546 phase=workload why=cadence
+< CONT
+> STOP same-base at=970285 n=547 phase=workload why=cadence
+< CONT
+> STOP same-base at=970301 n=548 phase=workload why=cadence
+< CONT
+> STOP same-base at=970317 n=549 phase=workload why=cadence
+< CONT
+> STOP same-base at=970333 n=550 phase=workload why=cadence
+< CONT
+> STOP same-base at=970349 n=551 phase=workload why=cadence
+< CONT
+> STOP same-base at=970365 n=552 phase=workload why=cadence
+< CONT
+> STOP same-base at=970381 n=553 phase=workload why=cadence
+< CONT
+> STOP same-base at=970397 n=554 phase=workload why=cadence
+< CONT
+> STOP same-base at=970413 n=555 phase=workload why=cadence
+< CONT
+> STOP same-base at=970429 n=556 phase=workload why=cadence
+< CONT
+> STOP same-base at=970445 n=557 phase=workload why=cadence
+< CONT
+> STOP same-base at=970461 n=558 phase=workload why=cadence
+< CONT
+> STOP same-base at=970477 n=559 phase=workload why=cadence
+< CONT
+> STOP same-base at=970493 n=560 phase=workload why=cadence
+< CONT
+> STOP same-base at=970509 n=561 phase=workload why=cadence
+< CONT
+> STOP same-base at=970525 n=562 phase=workload why=cadence
+< CONT
+> STOP same-base at=970541 n=563 phase=workload why=cadence
+< CONT
+> STOP same-base at=970557 n=564 phase=workload why=cadence
+< CONT
+> STOP same-base at=970573 n=565 phase=workload why=cadence
+< CONT
+> STOP same-base at=970589 n=566 phase=workload why=cadence
+< CONT
+> STOP same-base at=970605 n=567 phase=workload why=cadence
+< CONT
+> STOP same-base at=970621 n=568 phase=workload why=cadence
+< CONT
+> STOP same-base at=970637 n=569 phase=workload why=cadence
+< CONT
+> STOP same-base at=970653 n=570 phase=workload why=cadence
+< CONT
+> STOP same-base at=970669 n=571 phase=workload why=cadence
+< CONT
+> STOP same-base at=970685 n=572 phase=workload why=cadence
+< CONT
+> STOP same-base at=970701 n=573 phase=workload why=cadence
+< CONT
+> STOP same-base at=970717 n=574 phase=workload why=cadence
+< CONT
+> STOP same-base at=970733 n=575 phase=workload why=cadence
+< CONT
+> STOP same-base at=970749 n=576 phase=workload why=cadence
+< CONT
+> STOP same-base at=970765 n=577 phase=workload why=cadence
+< CONT
+> STOP same-base at=970781 n=578 phase=workload why=cadence
+< CONT
+> STOP same-base at=970797 n=579 phase=workload why=cadence
+< CONT
+> STOP same-base at=970813 n=580 phase=workload why=cadence
+< CONT
+> STOP same-base at=970829 n=581 phase=workload why=cadence
+< CONT
+> STOP same-base at=970845 n=582 phase=workload why=cadence
+< CONT
+> STOP same-base at=970861 n=583 phase=workload why=cadence
+< CONT
+> STOP same-base at=970877 n=584 phase=workload why=cadence
+< CONT
+> STOP same-base at=970893 n=585 phase=workload why=cadence
+< CONT
+> STOP same-base at=970909 n=586 phase=workload why=cadence
+< CONT
+> STOP same-base at=970925 n=587 phase=workload why=cadence
+< CONT
+> STOP same-base at=970941 n=588 phase=workload why=cadence
+< CONT
+> STOP same-base at=970957 n=589 phase=workload why=cadence
+< CONT
+> STOP same-base at=970973 n=590 phase=workload why=cadence
+< CONT
+> STOP same-base at=970989 n=591 phase=workload why=cadence
+< CONT
+> STOP same-base at=971005 n=592 phase=workload why=cadence
+< CONT
+> STOP same-base at=971021 n=593 phase=workload why=cadence
+< CONT
+> STOP same-base at=971037 n=594 phase=workload why=cadence
+< CONT
+> STOP same-base at=971053 n=595 phase=workload why=cadence
+< CONT
+> STOP same-base at=971069 n=596 phase=workload why=cadence
+< CONT
+> STOP same-base at=971085 n=597 phase=workload why=cadence
+< CONT
+> STOP same-base at=971101 n=598 phase=workload why=cadence
+< CONT
+> STOP same-base at=971117 n=599 phase=workload why=cadence
+< CONT
+> STOP same-base at=971133 n=600 phase=workload why=cadence
+< CONT
+> STOP same-base at=971149 n=601 phase=workload why=cadence
+< CONT
+> STOP same-base at=971165 n=602 phase=workload why=cadence
+< CONT
+> STOP same-base at=971181 n=603 phase=workload why=cadence
+< CONT
+> STOP same-base at=971197 n=604 phase=workload why=cadence
+< CONT
+> STOP same-base at=971213 n=605 phase=workload why=cadence
+< CONT
+> STOP same-base at=971229 n=606 phase=workload why=cadence
+< CONT
+> STOP same-base at=971245 n=607 phase=workload why=cadence
+< CONT
+> STOP same-base at=971261 n=608 phase=workload why=cadence
+< CONT
+> STOP same-base at=971277 n=609 phase=workload why=cadence
+< CONT
+> STOP same-base at=971293 n=610 phase=workload why=cadence
+< CONT
+> STOP same-base at=971309 n=611 phase=workload why=cadence
+< CONT
+> STOP same-base at=971325 n=612 phase=workload why=cadence
+< CONT
+> STOP same-base at=971341 n=613 phase=workload why=cadence
+< CONT
+> STOP same-base at=971357 n=614 phase=workload why=cadence
+< CONT
+> STOP same-base at=971373 n=615 phase=workload why=cadence
+< CONT
+> STOP same-base at=971389 n=616 phase=workload why=cadence
+< CONT
+> STOP same-base at=971405 n=617 phase=workload why=cadence
+< CONT
+> STOP same-base at=971421 n=618 phase=workload why=cadence
+< CONT
+> STOP same-base at=971437 n=619 phase=workload why=cadence
+< CONT
+> STOP same-base at=971453 n=620 phase=workload why=cadence
+< CONT
+> STOP same-base at=971469 n=621 phase=workload why=cadence
+< CONT
+> STOP same-base at=971485 n=622 phase=workload why=cadence
+< CONT
+> STOP same-base at=971501 n=623 phase=workload why=cadence
+< CONT
+> STOP same-base at=971517 n=624 phase=workload why=cadence
+< CONT
+> STOP same-base at=971533 n=625 phase=workload why=cadence
+< CONT
+> STOP same-base at=971549 n=626 phase=workload why=cadence
+< CONT
+> STOP same-base at=971565 n=627 phase=workload why=cadence
+< CONT
+> STOP same-base at=971581 n=628 phase=workload why=cadence
+< CONT
+> STOP same-base at=971597 n=629 phase=workload why=cadence
+< CONT
+> STOP same-base at=971613 n=630 phase=workload why=cadence
+< CONT
+> STOP same-base at=971629 n=631 phase=workload why=cadence
+< CONT
+> STOP same-base at=971645 n=632 phase=workload why=cadence
+< CONT
+> STOP same-base at=971661 n=633 phase=workload why=cadence
+< CONT
+> STOP same-base at=971677 n=634 phase=workload why=cadence
+< CONT
+> STOP same-base at=971693 n=635 phase=workload why=cadence
+< CONT
+> STOP same-base at=971709 n=636 phase=workload why=cadence
+< CONT
+> STOP same-base at=971725 n=637 phase=workload why=cadence
+< CONT
+> STOP same-base at=971741 n=638 phase=workload why=cadence
+< CONT
+> STOP same-base at=971757 n=639 phase=workload why=cadence
+< CONT
+> STOP same-base at=971773 n=640 phase=workload why=cadence
+< CONT
+> STOP same-base at=971789 n=641 phase=workload why=cadence
+< CONT
+> STOP same-base at=971805 n=642 phase=workload why=cadence
+< CONT
+> STOP same-base at=971821 n=643 phase=workload why=cadence
+< CONT
+> STOP same-base at=971837 n=644 phase=workload why=cadence
+< CONT
+> STOP same-base at=971853 n=645 phase=workload why=cadence
+< CONT
+> STOP same-base at=971869 n=646 phase=workload why=cadence
+< CONT
+> STOP same-base at=971885 n=647 phase=workload why=cadence
+< CONT
+> STOP same-base at=971901 n=648 phase=workload why=cadence
+< CONT
+> STOP same-base at=971917 n=649 phase=workload why=cadence
+< CONT
+> STOP same-base at=971933 n=650 phase=workload why=cadence
+< CONT
+> STOP same-base at=971949 n=651 phase=workload why=cadence
+< CONT
+> STOP same-base at=971965 n=652 phase=workload why=cadence
+< CONT
+> STOP same-base at=971981 n=653 phase=workload why=cadence
+< CONT
+> STOP same-base at=971997 n=654 phase=workload why=cadence
+< CONT
+> STOP same-base at=972013 n=655 phase=workload why=cadence
+< CONT
+> STOP same-base at=972029 n=656 phase=workload why=cadence
+< CONT
+> STOP same-base at=972045 n=657 phase=workload why=cadence
+< CONT
+> STOP same-base at=972061 n=658 phase=workload why=cadence
+< CONT
+> STOP same-base at=972077 n=659 phase=workload why=cadence
+< CONT
+> STOP same-base at=972093 n=660 phase=workload why=cadence
+< CONT
+> STOP same-base at=972109 n=661 phase=workload why=cadence
+< CONT
+> STOP same-base at=972125 n=662 phase=workload why=cadence
+< CONT
+> STOP same-base at=972141 n=663 phase=workload why=cadence
+< CONT
+> STOP same-base at=972157 n=664 phase=workload why=cadence
+< CONT
+> STOP same-base at=972173 n=665 phase=workload why=cadence
+< CONT
+> STOP same-base at=972189 n=666 phase=workload why=cadence
+< CONT
+> STOP same-base at=972205 n=667 phase=workload why=cadence
+< CONT
+> STOP same-base at=972221 n=668 phase=workload why=cadence
+< CONT
+> STOP same-base at=972237 n=669 phase=workload why=cadence
+< CONT
+> STOP same-base at=972253 n=670 phase=workload why=cadence
+< CONT
+> STOP same-base at=972269 n=671 phase=workload why=cadence
+< CONT
+> STOP same-base at=972285 n=672 phase=workload why=cadence
+< CONT
+> STOP same-base at=972301 n=673 phase=workload why=cadence
+< CONT
+> STOP same-base at=972317 n=674 phase=workload why=cadence
+< CONT
+> STOP same-base at=972333 n=675 phase=workload why=cadence
+< CONT
+> STOP same-base at=972349 n=676 phase=workload why=cadence
+< CONT
+> STOP same-base at=972365 n=677 phase=workload why=cadence
+< CONT
+> STOP same-base at=972381 n=678 phase=workload why=cadence
+< CONT
+> STOP same-base at=972397 n=679 phase=workload why=cadence
+< CONT
+> STOP same-base at=972413 n=680 phase=workload why=cadence
+< CONT
+> STOP same-base at=972429 n=681 phase=workload why=cadence
+< CONT
+> STOP same-base at=972445 n=682 phase=workload why=cadence
+< CONT
+> STOP same-base at=972461 n=683 phase=workload why=cadence
+< CONT
+> STOP same-base at=972477 n=684 phase=workload why=cadence
+< CONT
+> STOP same-base at=972493 n=685 phase=workload why=cadence
+< CONT
+> STOP same-base at=972509 n=686 phase=workload why=cadence
+< CONT
+> STOP same-base at=972525 n=687 phase=workload why=cadence
+< CONT
+> STOP same-base at=972541 n=688 phase=workload why=cadence
+< CONT
+> STOP same-base at=972557 n=689 phase=workload why=cadence
+< CONT
+> STOP same-base at=972573 n=690 phase=workload why=cadence
+< CONT
+> STOP same-base at=972589 n=691 phase=workload why=cadence
+< CONT
+> STOP same-base at=972605 n=692 phase=workload why=cadence
+< CONT
+> STOP same-base at=972621 n=693 phase=workload why=cadence
+< CONT
+> STOP same-base at=972637 n=694 phase=workload why=cadence
+< CONT
+> STOP same-base at=972653 n=695 phase=workload why=cadence
+< CONT
+> STOP same-base at=972669 n=696 phase=workload why=cadence
+< CONT
+> STOP same-base at=972685 n=697 phase=workload why=cadence
+< CONT
+> STOP same-base at=972701 n=698 phase=workload why=cadence
+< CONT
+> STOP same-base at=972717 n=699 phase=workload why=cadence
+< CONT
+> STOP same-base at=972733 n=700 phase=workload why=cadence
+< CONT
+> STOP same-base at=972749 n=701 phase=workload why=cadence
+< CONT
+> STOP same-base at=972765 n=702 phase=workload why=cadence
+< CONT
+> STOP same-base at=972781 n=703 phase=workload why=cadence
+< CONT
+> STOP same-base at=972797 n=704 phase=workload why=cadence
+< CONT
+> STOP same-base at=972813 n=705 phase=workload why=cadence
+< CONT
+> STOP same-base at=972829 n=706 phase=workload why=cadence
+< CONT
+> STOP same-base at=972845 n=707 phase=workload why=cadence
+< CONT
+> STOP same-base at=972861 n=708 phase=workload why=cadence
+< CONT
+> STOP same-base at=972877 n=709 phase=workload why=cadence
+< CONT
+> STOP same-base at=972893 n=710 phase=workload why=cadence
+< CONT
+> STOP same-base at=972909 n=711 phase=workload why=cadence
+< CONT
+> STOP same-base at=972925 n=712 phase=workload why=cadence
+< CONT
+> STOP same-base at=972941 n=713 phase=workload why=cadence
+< CONT
+> STOP same-base at=972957 n=714 phase=workload why=cadence
+< CONT
+> STOP same-base at=972973 n=715 phase=workload why=cadence
+< CONT
+> STOP same-base at=972989 n=716 phase=workload why=cadence
+< CONT
+> STOP same-base at=973005 n=717 phase=workload why=cadence
+< CONT
+> STOP same-base at=973021 n=718 phase=workload why=cadence
+< CONT
+> STOP same-base at=973037 n=719 phase=workload why=cadence
+< CONT
+> STOP same-base at=973053 n=720 phase=workload why=cadence
+< CONT
+> STOP same-base at=973069 n=721 phase=workload why=cadence
+< CONT
+> STOP same-base at=973085 n=722 phase=workload why=cadence
+< CONT
+> STOP same-base at=973101 n=723 phase=workload why=cadence
+< CONT
+> STOP same-base at=973117 n=724 phase=workload why=cadence
+< CONT
+> STOP same-base at=973133 n=725 phase=workload why=cadence
+< CONT
+> STOP same-base at=973149 n=726 phase=workload why=cadence
+< CONT
+> STOP same-base at=973165 n=727 phase=workload why=cadence
+< CONT
+> STOP same-base at=973181 n=728 phase=workload why=cadence
+< CONT
+> STOP same-base at=973197 n=729 phase=workload why=cadence
+< CONT
+> STOP same-base at=973213 n=730 phase=workload why=cadence
+< CONT
+> STOP same-base at=973229 n=731 phase=workload why=cadence
+< CONT
+> STOP same-base at=973245 n=732 phase=workload why=cadence
+< CONT
+> STOP same-base at=973261 n=733 phase=workload why=cadence
+< CONT
+> STOP same-base at=973277 n=734 phase=workload why=cadence
+< CONT
+> STOP same-base at=973293 n=735 phase=workload why=cadence
+< CONT
+> STOP same-base at=973309 n=736 phase=workload why=cadence
+< CONT
+> STOP same-base at=973325 n=737 phase=workload why=cadence
+< CONT
+> STOP same-base at=973341 n=738 phase=workload why=cadence
+< CONT
+> STOP same-base at=973357 n=739 phase=workload why=cadence
+< CONT
+> STOP same-base at=973373 n=740 phase=workload why=cadence
+< CONT
+> STOP same-base at=973389 n=741 phase=workload why=cadence
+< CONT
+> STOP same-base at=973405 n=742 phase=workload why=cadence
+< CONT
+> STOP same-base at=973421 n=743 phase=workload why=cadence
+< CONT
+> STOP same-base at=973437 n=744 phase=workload why=cadence
+< CONT
+> STOP same-base at=973453 n=745 phase=workload why=cadence
+< CONT
+> STOP same-base at=973469 n=746 phase=workload why=cadence
+< CONT
+> STOP same-base at=973485 n=747 phase=workload why=cadence
+< CONT
+> STOP same-base at=973501 n=748 phase=workload why=cadence
+< CONT
+> STOP same-base at=973517 n=749 phase=workload why=cadence
+< CONT
+> STOP same-base at=973533 n=750 phase=workload why=cadence
+< CONT
+> STOP same-base at=973549 n=751 phase=workload why=cadence
+< CONT
+> STOP same-base at=973565 n=752 phase=workload why=cadence
+< CONT
+> STOP same-base at=973581 n=753 phase=workload why=cadence
+< CONT
+> STOP same-base at=973597 n=754 phase=workload why=cadence
+< CONT
+> STOP same-base at=973613 n=755 phase=workload why=cadence
+< CONT
+> STOP same-base at=973629 n=756 phase=workload why=cadence
+< CONT
+> STOP same-base at=973645 n=757 phase=workload why=cadence
+< CONT
+> STOP same-base at=973661 n=758 phase=workload why=cadence
+< CONT
+> STOP same-base at=973677 n=759 phase=workload why=cadence
+< CONT
+> STOP same-base at=973693 n=760 phase=workload why=cadence
+< CONT
+> STOP same-base at=973709 n=761 phase=workload why=cadence
+< CONT
+> STOP same-base at=973725 n=762 phase=workload why=cadence
+< CONT
+> STOP same-base at=973741 n=763 phase=workload why=cadence
+< CONT
+> STOP same-base at=973757 n=764 phase=workload why=cadence
+< CONT
+> STOP same-base at=973773 n=765 phase=workload why=cadence
+< CONT
+> STOP same-base at=973789 n=766 phase=workload why=cadence
+< CONT
+> STOP same-base at=973805 n=767 phase=workload why=cadence
+< CONT
+> STOP same-base at=973821 n=768 phase=workload why=cadence
+< CONT
+> STOP same-base at=973837 n=769 phase=workload why=cadence
+< CONT
+> STOP same-base at=973853 n=770 phase=workload why=cadence
+< CONT
+> STOP same-base at=973869 n=771 phase=workload why=cadence
+< CONT
+> STOP same-base at=973885 n=772 phase=workload why=cadence
+< CONT
+> STOP same-base at=973901 n=773 phase=workload why=cadence
+< CONT
+> STOP same-base at=973917 n=774 phase=workload why=cadence
+< CONT
+> STOP same-base at=973933 n=775 phase=workload why=cadence
+< CONT
+> STOP same-base at=973949 n=776 phase=workload why=cadence
+< CONT
+> STOP same-base at=973965 n=777 phase=workload why=cadence
+< CONT
+> STOP same-base at=973981 n=778 phase=workload why=cadence
+< CONT
+> STOP same-base at=973997 n=779 phase=workload why=cadence
+< CONT
+> STOP same-base at=974013 n=780 phase=workload why=cadence
+< CONT
+> STOP same-base at=974029 n=781 phase=workload why=cadence
+< CONT
+> STOP same-base at=974045 n=782 phase=workload why=cadence
+< CONT
+> STOP same-base at=974061 n=783 phase=workload why=cadence
+< CONT
+> STOP same-base at=974077 n=784 phase=workload why=cadence
+< CONT
+> STOP same-base at=974093 n=785 phase=workload why=cadence
+< CONT
+> STOP same-base at=974109 n=786 phase=workload why=cadence
+< CONT
+> STOP same-base at=974125 n=787 phase=workload why=cadence
+< CONT
+> STOP same-base at=974141 n=788 phase=workload why=cadence
+< CONT
+> STOP same-base at=974157 n=789 phase=workload why=cadence
+< CONT
+> STOP same-base at=974173 n=790 phase=workload why=cadence
+< CONT
+> STOP same-base at=974189 n=791 phase=workload why=cadence
+< CONT
+> STOP same-base at=974205 n=792 phase=workload why=cadence
+< CONT
+> STOP same-base at=974221 n=793 phase=workload why=cadence
+< CONT
+> STOP same-base at=974237 n=794 phase=workload why=cadence
+< CONT
+> STOP same-base at=974253 n=795 phase=workload why=cadence
+< CONT
+> STOP same-base at=974269 n=796 phase=workload why=cadence
+< CONT
+> STOP same-base at=974285 n=797 phase=workload why=cadence
+< CONT
+> STOP same-base at=974301 n=798 phase=workload why=cadence
+< CONT
+> STOP same-base at=974317 n=799 phase=workload why=cadence
+< CONT
+> STOP same-base at=974333 n=800 phase=workload why=cadence
+< CONT
+> STOP same-base at=974349 n=801 phase=workload why=cadence
+< CONT
+> STOP same-base at=974365 n=802 phase=workload why=cadence
+< CONT
+> STOP same-base at=974381 n=803 phase=workload why=cadence
+< CONT
+> STOP same-base at=974397 n=804 phase=workload why=cadence
+< CONT
+> STOP same-base at=974413 n=805 phase=workload why=cadence
+< CONT
+> STOP same-base at=974429 n=806 phase=workload why=cadence
+< CONT
+> STOP same-base at=974445 n=807 phase=workload why=cadence
+< CONT
+> STOP same-base at=974461 n=808 phase=workload why=cadence
+< CONT
+> STOP same-base at=974477 n=809 phase=workload why=cadence
+< CONT
+> STOP same-base at=974493 n=810 phase=workload why=cadence
+< CONT
+> STOP same-base at=974509 n=811 phase=workload why=cadence
+< CONT
+> STOP same-base at=974525 n=812 phase=workload why=cadence
+< CONT
+> STOP same-base at=974541 n=813 phase=workload why=cadence
+< CONT
+> STOP same-base at=974557 n=814 phase=workload why=cadence
+< CONT
+> STOP same-base at=974573 n=815 phase=workload why=cadence
+< CONT
+> STOP same-base at=974589 n=816 phase=workload why=cadence
+< CONT
+> STOP same-base at=974605 n=817 phase=workload why=cadence
+< CONT
+> STOP same-base at=974621 n=818 phase=workload why=cadence
+< CONT
+> STOP same-base at=974637 n=819 phase=workload why=cadence
+< CONT
+> STOP same-base at=974653 n=820 phase=workload why=cadence
+< CONT
+> STOP same-base at=974669 n=821 phase=workload why=cadence
+< CONT
+> STOP same-base at=974685 n=822 phase=workload why=cadence
+< CONT
+> STOP same-base at=974701 n=823 phase=workload why=cadence
+< CONT
+> STOP same-base at=974717 n=824 phase=workload why=cadence
+< CONT
+> STOP same-base at=974733 n=825 phase=workload why=cadence
+< CONT
+> STOP same-base at=974749 n=826 phase=workload why=cadence
+< CONT
+> STOP same-base at=974765 n=827 phase=workload why=cadence
+< CONT
+> STOP same-base at=974781 n=828 phase=workload why=cadence
+< CONT
+> STOP same-base at=974797 n=829 phase=workload why=cadence
+< CONT
+> STOP same-base at=974813 n=830 phase=workload why=cadence
+< CONT
+> STOP same-base at=974829 n=831 phase=workload why=cadence
+< CONT
+> STOP same-base at=974845 n=832 phase=workload why=cadence
+< CONT
+> STOP same-base at=974861 n=833 phase=workload why=cadence
+< CONT
+> STOP same-base at=974877 n=834 phase=workload why=cadence
+< CONT
+> STOP same-base at=974893 n=835 phase=workload why=cadence
+< CONT
+> STOP same-base at=974909 n=836 phase=workload why=cadence
+< CONT
+> STOP same-base at=974925 n=837 phase=workload why=cadence
+< CONT
+> STOP same-base at=974941 n=838 phase=workload why=cadence
+< CONT
+> STOP same-base at=974957 n=839 phase=workload why=cadence
+< CONT
+> STOP same-base at=974973 n=840 phase=workload why=cadence
+< CONT
+> STOP same-base at=974989 n=841 phase=workload why=cadence
+< CONT
+> STOP same-base at=975005 n=842 phase=workload why=cadence
+< CONT
+> STOP same-base at=975021 n=843 phase=workload why=cadence
+< CONT
+> STOP same-base at=975037 n=844 phase=workload why=cadence
+< CONT
+> STOP same-base at=975053 n=845 phase=workload why=cadence
+< CONT
+> STOP same-base at=975069 n=846 phase=workload why=cadence
+< CONT
+> STOP same-base at=975085 n=847 phase=workload why=cadence
+< CONT
+> STOP same-base at=975101 n=848 phase=workload why=cadence
+< CONT
+> STOP same-base at=975117 n=849 phase=workload why=cadence
+< CONT
+> STOP same-base at=975133 n=850 phase=workload why=cadence
+< CONT
+> STOP same-base at=975149 n=851 phase=workload why=cadence
+< CONT
+> STOP same-base at=975165 n=852 phase=workload why=cadence
+< CONT
+> STOP same-base at=975181 n=853 phase=workload why=cadence
+< CONT
+> STOP same-base at=975197 n=854 phase=workload why=cadence
+< CONT
+> STOP same-base at=975213 n=855 phase=workload why=cadence
+< CONT
+> STOP same-base at=975229 n=856 phase=workload why=cadence
+< CONT
+> STOP same-base at=975245 n=857 phase=workload why=cadence
+< CONT
+> STOP same-base at=975261 n=858 phase=workload why=cadence
+< CONT
+> STOP same-base at=975277 n=859 phase=workload why=cadence
+< CONT
+> STOP same-base at=975293 n=860 phase=workload why=cadence
+< CONT
+> STOP same-base at=975309 n=861 phase=workload why=cadence
+< CONT
+> STOP same-base at=975325 n=862 phase=workload why=cadence
+< CONT
+> STOP same-base at=975341 n=863 phase=workload why=cadence
+< CONT
+> STOP same-base at=975357 n=864 phase=workload why=cadence
+< CONT
+> STOP same-base at=975373 n=865 phase=workload why=cadence
+< CONT
+> STOP same-base at=975389 n=866 phase=workload why=cadence
+< CONT
+> STOP same-base at=975405 n=867 phase=workload why=cadence
+< CONT
+> STOP same-base at=975421 n=868 phase=workload why=cadence
+< CONT
+> STOP same-base at=975437 n=869 phase=workload why=cadence
+< CONT
+> STOP same-base at=975453 n=870 phase=workload why=cadence
+< CONT
+> STOP same-base at=975469 n=871 phase=workload why=cadence
+< CONT
+> STOP same-base at=975485 n=872 phase=workload why=cadence
+< CONT
+> STOP same-base at=975501 n=873 phase=workload why=cadence
+< CONT
+> STOP same-base at=975517 n=874 phase=workload why=cadence
+< CONT
+> STOP same-base at=975533 n=875 phase=workload why=cadence
+< CONT
+> STOP same-base at=975549 n=876 phase=workload why=cadence
+< CONT
+> STOP same-base at=975565 n=877 phase=workload why=cadence
+< CONT
+> STOP same-base at=975581 n=878 phase=workload why=cadence
+< CONT
+> STOP same-base at=975597 n=879 phase=workload why=cadence
+< CONT
+> STOP same-base at=975613 n=880 phase=workload why=cadence
+< CONT
+> STOP same-base at=975629 n=881 phase=workload why=cadence
+< CONT
+> STOP same-base at=975645 n=882 phase=workload why=cadence
+< CONT
+> STOP same-base at=975661 n=883 phase=workload why=cadence
+< CONT
+> STOP same-base at=975677 n=884 phase=workload why=cadence
+< CONT
+> STOP same-base at=975693 n=885 phase=workload why=cadence
+< CONT
+> STOP same-base at=975709 n=886 phase=workload why=cadence
+< CONT
+> STOP same-base at=975725 n=887 phase=workload why=cadence
+< CONT
+> STOP same-base at=975741 n=888 phase=workload why=cadence
+< CONT
+> STOP same-base at=975757 n=889 phase=workload why=cadence
+< CONT
+> STOP same-base at=975773 n=890 phase=workload why=cadence
+< CONT
+> STOP same-base at=975789 n=891 phase=workload why=cadence
+< CONT
+> STOP same-base at=975805 n=892 phase=workload why=cadence
+< CONT
+> STOP same-base at=975821 n=893 phase=workload why=cadence
+< CONT
+> STOP same-base at=975837 n=894 phase=workload why=cadence
+< CONT
+> STOP same-base at=975853 n=895 phase=workload why=cadence
+< CONT
+> STOP same-base at=975869 n=896 phase=workload why=cadence
+< CONT
+> STOP same-base at=975885 n=897 phase=workload why=cadence
+< CONT
+> STOP same-base at=975901 n=898 phase=workload why=cadence
+< CONT
+> STOP same-base at=975917 n=899 phase=workload why=cadence
+< CONT
+> STOP same-base at=975933 n=900 phase=workload why=cadence
+< CONT
+> STOP same-base at=975949 n=901 phase=workload why=cadence
+< CONT
+> STOP same-base at=975965 n=902 phase=workload why=cadence
+< CONT
+> STOP same-base at=975981 n=903 phase=workload why=cadence
+< CONT
+> STOP same-base at=975997 n=904 phase=workload why=cadence
+< CONT
+> STOP same-base at=976013 n=905 phase=workload why=cadence
+< CONT
+> STOP same-base at=976029 n=906 phase=workload why=cadence
+< CONT
+> STOP same-base at=976045 n=907 phase=workload why=cadence
+< CONT
+> STOP same-base at=976061 n=908 phase=workload why=cadence
+< CONT
+> STOP same-base at=976077 n=909 phase=workload why=cadence
+< CONT
+> STOP same-base at=976093 n=910 phase=workload why=cadence
+< CONT
+> STOP same-base at=976109 n=911 phase=workload why=cadence
+< CONT
+> STOP same-base at=976125 n=912 phase=workload why=cadence
+< CONT
+> STOP same-base at=976141 n=913 phase=workload why=cadence
+< CONT
+> STOP same-base at=976157 n=914 phase=workload why=cadence
+< CONT
+> STOP same-base at=976173 n=915 phase=workload why=cadence
+< CONT
+> STOP same-base at=976189 n=916 phase=workload why=cadence
+< CONT
+> STOP same-base at=976205 n=917 phase=workload why=cadence
+< CONT
+> STOP same-base at=976221 n=918 phase=workload why=cadence
+< CONT
+> STOP same-base at=976237 n=919 phase=workload why=cadence
+< CONT
+> STOP same-base at=976253 n=920 phase=workload why=cadence
+< CONT
+> STOP same-base at=976269 n=921 phase=workload why=cadence
+< CONT
+> STOP same-base at=976285 n=922 phase=workload why=cadence
+< CONT
+> STOP same-base at=976301 n=923 phase=workload why=cadence
+< CONT
+> STOP same-base at=976317 n=924 phase=workload why=cadence
+< CONT
+> STOP same-base at=976333 n=925 phase=workload why=cadence
+< CONT
+> STOP same-base at=976349 n=926 phase=workload why=cadence
+< CONT
+> STOP same-base at=976365 n=927 phase=workload why=cadence
+< CONT
+> STOP same-base at=976381 n=928 phase=workload why=cadence
+< CONT
+> STOP same-base at=976397 n=929 phase=workload why=cadence
+< CONT
+> STOP same-base at=976413 n=930 phase=workload why=cadence
+< CONT
+> STOP same-base at=976429 n=931 phase=workload why=cadence
+< CONT
+> STOP same-base at=976445 n=932 phase=workload why=cadence
+< CONT
+> STOP same-base at=976461 n=933 phase=workload why=cadence
+< CONT
+> STOP same-base at=976477 n=934 phase=workload why=cadence
+< CONT
+> STOP same-base at=976493 n=935 phase=workload why=cadence
+< CONT
+> STOP same-base at=976509 n=936 phase=workload why=cadence
+< CONT
+> STOP same-base at=976525 n=937 phase=workload why=cadence
+< CONT
+> STOP same-base at=976541 n=938 phase=workload why=cadence
+< CONT
+> STOP same-base at=976557 n=939 phase=workload why=cadence
+< CONT
+> STOP same-base at=976573 n=940 phase=workload why=cadence
+< CONT
+> STOP same-base at=976589 n=941 phase=workload why=cadence
+< CONT
+> STOP same-base at=976605 n=942 phase=workload why=cadence
+< CONT
+> STOP same-base at=976621 n=943 phase=workload why=cadence
+< CONT
+> STOP same-base at=976637 n=944 phase=workload why=cadence
+< CONT
+> STOP same-base at=976653 n=945 phase=workload why=cadence
+< CONT
+> STOP same-base at=976669 n=946 phase=workload why=cadence
+< CONT
+> STOP same-base at=976685 n=947 phase=workload why=cadence
+< CONT
+> STOP same-base at=976701 n=948 phase=workload why=cadence
+< CONT
+> STOP same-base at=976717 n=949 phase=workload why=cadence
+< CONT
+> STOP same-base at=976733 n=950 phase=workload why=cadence
+< CONT
+> STOP same-base at=976749 n=951 phase=workload why=cadence
+< CONT
+> STOP same-base at=976765 n=952 phase=workload why=cadence
+< CONT
+> STOP same-base at=976781 n=953 phase=workload why=cadence
+< CONT
+> STOP same-base at=976797 n=954 phase=workload why=cadence
+< CONT
+> STOP same-base at=976813 n=955 phase=workload why=cadence
+< CONT
+> STOP same-base at=976829 n=956 phase=workload why=cadence
+< CONT
+> STOP same-base at=976845 n=957 phase=workload why=cadence
+< CONT
+> STOP same-base at=976861 n=958 phase=workload why=cadence
+< CONT
+> STOP same-base at=976877 n=959 phase=workload why=cadence
+< CONT
+> STOP same-base at=976893 n=960 phase=workload why=cadence
+< CONT
+> STOP same-base at=976909 n=961 phase=workload why=cadence
+< CONT
+> STOP same-base at=976925 n=962 phase=workload why=cadence
+< CONT
+> STOP same-base at=976941 n=963 phase=workload why=cadence
+< CONT
+> STOP same-base at=976957 n=964 phase=workload why=cadence
+< CONT
+> STOP same-base at=976973 n=965 phase=workload why=cadence
+< CONT
+> STOP same-base at=976989 n=966 phase=workload why=cadence
+< CONT
+> STOP same-base at=977005 n=967 phase=workload why=cadence
+< CONT
+> STOP same-base at=977021 n=968 phase=workload why=cadence
+< CONT
+> STOP same-base at=977037 n=969 phase=workload why=cadence
+< CONT
+> STOP same-base at=977053 n=970 phase=workload why=cadence
+< CONT
+> STOP same-base at=977069 n=971 phase=workload why=cadence
+< CONT
+> STOP same-base at=977085 n=972 phase=workload why=cadence
+< CONT
+> STOP same-base at=977101 n=973 phase=workload why=cadence
+< CONT
+> STOP same-base at=977117 n=974 phase=workload why=cadence
+< CONT
+> STOP same-base at=977133 n=975 phase=workload why=cadence
+< CONT
+> STOP same-base at=977149 n=976 phase=workload why=cadence
+< CONT
+> STOP same-base at=977165 n=977 phase=workload why=cadence
+< CONT
+> STOP same-base at=977181 n=978 phase=workload why=cadence
+< CONT
+> STOP same-base at=977197 n=979 phase=workload why=cadence
+< CONT
+> STOP same-base at=977213 n=980 phase=workload why=cadence
+< CONT
+> STOP same-base at=977229 n=981 phase=workload why=cadence
+< CONT
+> STOP same-base at=977245 n=982 phase=workload why=cadence
+< CONT
+> STOP same-base at=977261 n=983 phase=workload why=cadence
+< CONT
+> STOP same-base at=977277 n=984 phase=workload why=cadence
+< CONT
+> STOP same-base at=977293 n=985 phase=workload why=cadence
+< CONT
+> STOP same-base at=977309 n=986 phase=workload why=cadence
+< CONT
+> STOP same-base at=977325 n=987 phase=workload why=cadence
+< CONT
+> STOP same-base at=977341 n=988 phase=workload why=cadence
+< CONT
+> STOP same-base at=977357 n=989 phase=workload why=cadence
+< CONT
+> STOP same-base at=977373 n=990 phase=workload why=cadence
+< CONT
+> STOP same-base at=977389 n=991 phase=workload why=cadence
+< CONT
+> STOP same-base at=977405 n=992 phase=workload why=cadence
+< CONT
+> STOP same-base at=977421 n=993 phase=workload why=cadence
+< CONT
+> STOP same-base at=977437 n=994 phase=workload why=cadence
+< CONT
+> STOP same-base at=977453 n=995 phase=workload why=cadence
+< CONT
+> STOP same-base at=977469 n=996 phase=workload why=cadence
+< CONT
+> STOP same-base at=977485 n=997 phase=workload why=cadence
+< CONT
+> STOP same-base at=977501 n=998 phase=workload why=cadence
+< CONT
+> STOP same-base at=977517 n=999 phase=workload why=cadence
+< CONT
+> STOP same-base at=977533 n=1000 phase=workload why=cadence
+< CONT
+> STOP same-base at=977549 n=1001 phase=workload why=cadence
+< CONT
+> STOP same-base at=977565 n=1002 phase=workload why=cadence
+< CONT
+> STOP same-base at=977581 n=1003 phase=workload why=cadence
+< CONT
+> STOP same-base at=977597 n=1004 phase=workload why=cadence
+< CONT
+> STOP same-base at=977613 n=1005 phase=workload why=cadence
+< CONT
+> STOP same-base at=977629 n=1006 phase=workload why=cadence
+< CONT
+> STOP same-base at=977645 n=1007 phase=workload why=cadence
+< CONT
+> STOP same-base at=977661 n=1008 phase=workload why=cadence
+< CONT
+> STOP same-base at=977677 n=1009 phase=workload why=cadence
+< CONT
+> STOP same-base at=977693 n=1010 phase=workload why=cadence
+< CONT
+> STOP same-base at=977709 n=1011 phase=workload why=cadence
+< CONT
+> STOP same-base at=977725 n=1012 phase=workload why=cadence
+< CONT
+> STOP same-base at=977741 n=1013 phase=workload why=cadence
+< CONT
+> STOP same-base at=977757 n=1014 phase=workload why=cadence
+< CONT
+> STOP same-base at=977773 n=1015 phase=workload why=cadence
+< CONT
+> STOP same-base at=977789 n=1016 phase=workload why=cadence
+< CONT
+> STOP same-base at=977805 n=1017 phase=workload why=cadence
+< CONT
+> STOP same-base at=977821 n=1018 phase=workload why=cadence
+< CONT
+> STOP same-base at=977837 n=1019 phase=workload why=cadence
+< CONT
+> STOP same-base at=977853 n=1020 phase=workload why=cadence
+< CONT
+> STOP same-base at=977869 n=1021 phase=workload why=cadence
+< CONT
+> STOP same-base at=977885 n=1022 phase=workload why=cadence
+< CONT
+> STOP same-base at=977901 n=1023 phase=workload why=cadence
+< CONT
+> STOP same-base at=977917 n=1024 phase=workload why=cadence
+< CONT
+> STOP same-base at=977933 n=1025 phase=workload why=cadence
+< CONT
+> STOP same-base at=977949 n=1026 phase=workload why=cadence
+< CONT
+> STOP same-base at=977965 n=1027 phase=workload why=cadence
+< CONT
+> STOP same-base at=977981 n=1028 phase=workload why=cadence
+< CONT
+> STOP same-base at=977997 n=1029 phase=workload why=cadence
+< CONT
+> STOP same-base at=978013 n=1030 phase=workload why=cadence
+< CONT
+> STOP same-base at=980076 n=1031 phase=workload why=cadence
+< CONT
+> STOP same-base at=980092 n=1032 phase=workload why=cadence
+< CONT
+> STOP same-base at=980108 n=1033 phase=workload why=cadence
+< CONT
+> STOP same-base at=980124 n=1034 phase=workload why=cadence
+< CONT
+> STOP same-base at=980140 n=1035 phase=workload why=cadence
+< CONT
+> STOP same-base at=980156 n=1036 phase=workload why=cadence
+< CONT
+> STOP same-base at=980172 n=1037 phase=workload why=cadence
+< CONT
+> STOP same-base at=980188 n=1038 phase=workload why=cadence
+< CONT
+> STOP same-base at=980204 n=1039 phase=workload why=cadence
+< CONT
+> STOP same-base at=980220 n=1040 phase=workload why=cadence
+< CONT
+> STOP same-base at=980236 n=1041 phase=workload why=cadence
+< CONT
+> STOP same-base at=980252 n=1042 phase=workload why=cadence
+< CONT
+> STOP same-base at=980268 n=1043 phase=workload why=cadence
+< CONT
+> STOP same-base at=980284 n=1044 phase=workload why=cadence
+< CONT
+> STOP same-base at=980300 n=1045 phase=workload why=cadence
+< CONT
+> STOP same-base at=980316 n=1046 phase=workload why=cadence
+< CONT
+> STOP same-base at=980332 n=1047 phase=workload why=cadence
+< CONT
+> STOP same-base at=980348 n=1048 phase=workload why=cadence
+< CONT
+> STOP same-base at=980364 n=1049 phase=workload why=cadence
+< CONT
+> STOP same-base at=980380 n=1050 phase=workload why=cadence
+< CONT
+> STOP same-base at=980396 n=1051 phase=workload why=cadence
+< CONT
+> STOP same-base at=980412 n=1052 phase=workload why=cadence
+< CONT
+> STOP same-base at=980428 n=1053 phase=workload why=cadence
+< CONT
+> STOP same-base at=980444 n=1054 phase=workload why=cadence
+< CONT
+> STOP same-base at=980460 n=1055 phase=workload why=cadence
+< CONT
+> STOP same-base at=980476 n=1056 phase=workload why=cadence
+< CONT
+> STOP same-base at=980492 n=1057 phase=workload why=cadence
+< CONT
+> STOP same-base at=980508 n=1058 phase=workload why=cadence
+< CONT
+> STOP same-base at=980524 n=1059 phase=workload why=cadence
+< CONT
+> STOP same-base at=980540 n=1060 phase=workload why=cadence
+< CONT
+> STOP same-base at=980556 n=1061 phase=workload why=cadence
+< CONT
+> STOP same-base at=980572 n=1062 phase=workload why=cadence
+< CONT
+> STOP same-base at=980588 n=1063 phase=workload why=cadence
+< CONT
+> STOP same-base at=980604 n=1064 phase=workload why=cadence
+< CONT
+> STOP same-base at=980620 n=1065 phase=workload why=cadence
+< CONT
+> STOP same-base at=980636 n=1066 phase=workload why=cadence
+< CONT
+> STOP same-base at=980652 n=1067 phase=workload why=cadence
+< CONT
+> STOP same-base at=980668 n=1068 phase=workload why=cadence
+< CONT
+> STOP same-base at=980684 n=1069 phase=workload why=cadence
+< CONT
+> STOP same-base at=980700 n=1070 phase=workload why=cadence
+< CONT
+> STOP same-base at=980716 n=1071 phase=workload why=cadence
+< CONT
+> STOP same-base at=980732 n=1072 phase=workload why=cadence
+< CONT
+> STOP same-base at=980748 n=1073 phase=workload why=cadence
+< CONT
+> STOP same-base at=980764 n=1074 phase=workload why=cadence
+< CONT
+> STOP same-base at=980780 n=1075 phase=workload why=cadence
+< CONT
+> STOP same-base at=980796 n=1076 phase=workload why=cadence
+< CONT
+> STOP same-base at=980812 n=1077 phase=workload why=cadence
+< CONT
+> STOP same-base at=980828 n=1078 phase=workload why=cadence
+< CONT
+> STOP same-base at=980844 n=1079 phase=workload why=cadence
+< CONT
+> STOP same-base at=980860 n=1080 phase=workload why=cadence
+< CONT
+> STOP same-base at=980876 n=1081 phase=workload why=cadence
+< CONT
+> STOP same-base at=980892 n=1082 phase=workload why=cadence
+< CONT
+> STOP same-base at=980908 n=1083 phase=workload why=cadence
+< CONT
+> STOP same-base at=980924 n=1084 phase=workload why=cadence
+< CONT
+> STOP same-base at=980940 n=1085 phase=workload why=cadence
+< CONT
+> STOP same-base at=980956 n=1086 phase=workload why=cadence
+< CONT
+> STOP same-base at=980972 n=1087 phase=workload why=cadence
+< CONT
+> STOP same-base at=980988 n=1088 phase=workload why=cadence
+< CONT
+> STOP same-base at=981004 n=1089 phase=workload why=cadence
+< CONT
+> STOP same-base at=981020 n=1090 phase=workload why=cadence
+< CONT
+> STOP same-base at=981036 n=1091 phase=workload why=cadence
+< CONT
+> STOP same-base at=981052 n=1092 phase=workload why=cadence
+< CONT
+> STOP same-base at=981068 n=1093 phase=workload why=cadence
+< CONT
+> STOP same-base at=981084 n=1094 phase=workload why=cadence
+< CONT
+> STOP same-base at=981100 n=1095 phase=workload why=cadence
+< CONT
+> STOP same-base at=981116 n=1096 phase=workload why=cadence
+< CONT
+> STOP same-base at=981132 n=1097 phase=workload why=cadence
+< CONT
+> STOP same-base at=981148 n=1098 phase=workload why=cadence
+< CONT
+> STOP same-base at=981164 n=1099 phase=workload why=cadence
+< CONT
+> STOP same-base at=981180 n=1100 phase=workload why=cadence
+< CONT
+> STOP same-base at=981196 n=1101 phase=workload why=cadence
+< CONT
+> STOP same-base at=981212 n=1102 phase=workload why=cadence
+< CONT
+> STOP same-base at=981228 n=1103 phase=workload why=cadence
+< CONT
+> STOP same-base at=981244 n=1104 phase=workload why=cadence
+< CONT
+> STOP same-base at=981260 n=1105 phase=workload why=cadence
+< CONT
+> STOP same-base at=981276 n=1106 phase=workload why=cadence
+< CONT
+> STOP same-base at=981292 n=1107 phase=workload why=cadence
+< CONT
+> STOP same-base at=981308 n=1108 phase=workload why=cadence
+< CONT
+> STOP same-base at=981324 n=1109 phase=workload why=cadence
+< CONT
+> STOP same-base at=981340 n=1110 phase=workload why=cadence
+< CONT
+> STOP same-base at=981356 n=1111 phase=workload why=cadence
+< CONT
+> STOP same-base at=981372 n=1112 phase=workload why=cadence
+< CONT
+> STOP same-base at=981388 n=1113 phase=workload why=cadence
+< CONT
+> STOP same-base at=981404 n=1114 phase=workload why=cadence
+< CONT
+> STOP same-base at=981420 n=1115 phase=workload why=cadence
+< CONT
+> STOP same-base at=981436 n=1116 phase=workload why=cadence
+< CONT
+> STOP same-base at=981452 n=1117 phase=workload why=cadence
+< CONT
+> STOP same-base at=981468 n=1118 phase=workload why=cadence
+< CONT
+> STOP same-base at=981484 n=1119 phase=workload why=cadence
+< CONT
+> STOP same-base at=981500 n=1120 phase=workload why=cadence
+< CONT
+> STOP same-base at=981516 n=1121 phase=workload why=cadence
+< CONT
+> STOP same-base at=981532 n=1122 phase=workload why=cadence
+< CONT
+> STOP same-base at=981548 n=1123 phase=workload why=cadence
+< CONT
+> STOP same-base at=981564 n=1124 phase=workload why=cadence
+< CONT
+> STOP same-base at=981580 n=1125 phase=workload why=cadence
+< CONT
+> STOP same-base at=981596 n=1126 phase=workload why=cadence
+< CONT
+> STOP same-base at=981612 n=1127 phase=workload why=cadence
+< CONT
+> STOP same-base at=981628 n=1128 phase=workload why=cadence
+< CONT
+> STOP same-base at=981644 n=1129 phase=workload why=cadence
+< CONT
+> STOP same-base at=981660 n=1130 phase=workload why=cadence
+< CONT
+> STOP same-base at=981676 n=1131 phase=workload why=cadence
+< CONT
+> STOP same-base at=981692 n=1132 phase=workload why=cadence
+< CONT
+> STOP same-base at=981708 n=1133 phase=workload why=cadence
+< CONT
+> STOP same-base at=981724 n=1134 phase=workload why=cadence
+< CONT
+> STOP same-base at=981740 n=1135 phase=workload why=cadence
+< CONT
+> STOP same-base at=981756 n=1136 phase=workload why=cadence
+< CONT
+> STOP same-base at=981772 n=1137 phase=workload why=cadence
+< CONT
+> STOP same-base at=981788 n=1138 phase=workload why=cadence
+< CONT
+> STOP same-base at=981804 n=1139 phase=workload why=cadence
+< CONT
+> STOP same-base at=981820 n=1140 phase=workload why=cadence
+< CONT
+> STOP same-base at=981836 n=1141 phase=workload why=cadence
+< CONT
+> STOP same-base at=981852 n=1142 phase=workload why=cadence
+< CONT
+> STOP same-base at=981868 n=1143 phase=workload why=cadence
+< CONT
+> STOP same-base at=981884 n=1144 phase=workload why=cadence
+< CONT
+> STOP same-base at=981900 n=1145 phase=workload why=cadence
+< CONT
+> STOP same-base at=981916 n=1146 phase=workload why=cadence
+< CONT
+> STOP same-base at=981932 n=1147 phase=workload why=cadence
+< CONT
+> STOP same-base at=981948 n=1148 phase=workload why=cadence
+< CONT
+> STOP same-base at=981964 n=1149 phase=workload why=cadence
+< CONT
+> STOP same-base at=981980 n=1150 phase=workload why=cadence
+< CONT
+> STOP same-base at=981996 n=1151 phase=workload why=cadence
+< CONT
+> STOP same-base at=982012 n=1152 phase=workload why=cadence
+< CONT
+> STOP same-base at=982028 n=1153 phase=workload why=cadence
+< CONT
+> EVENT same-base at=982044 n=13 hydo-ob: redis ready after 1 polls (uptime=14.85s)
+> STOP same-base at=982044 n=1154 phase=workload why=cadence
+< CONT
+> STOP same-base at=982060 n=1155 phase=workload why=cadence
+< CONT
+> STOP same-base at=982076 n=1156 phase=workload why=cadence
+< CONT
+> STOP same-base at=982092 n=1157 phase=workload why=cadence
+< CONT
+> STOP same-base at=982108 n=1158 phase=workload why=cadence
+< CONT
+> STOP same-base at=982124 n=1159 phase=workload why=cadence
+< CONT
+> STOP same-base at=982140 n=1160 phase=workload why=cadence
+< CONT
+> STOP same-base at=982156 n=1161 phase=workload why=cadence
+< CONT
+> STOP same-base at=982172 n=1162 phase=workload why=cadence
+< CONT
+> STOP same-base at=982188 n=1163 phase=workload why=cadence
+< CONT
+> STOP same-base at=984251 n=1164 phase=workload why=cadence
+< CONT
+> STOP same-base at=984267 n=1165 phase=workload why=cadence
+< CONT
+> STOP same-base at=984283 n=1166 phase=workload why=cadence
+< CONT
+> STOP same-base at=984299 n=1167 phase=workload why=cadence
+< CONT
+> STOP same-base at=984315 n=1168 phase=workload why=cadence
+< CONT
+> STOP same-base at=984331 n=1169 phase=workload why=cadence
+< CONT
+> STOP same-base at=984347 n=1170 phase=workload why=cadence
+< CONT
+> STOP same-base at=984371 n=1171 phase=workload why=cadence
+< CONT
+> STOP same-base at=984395 n=1172 phase=workload why=cadence
+< CONT
+> STOP same-base at=984411 n=1173 phase=workload why=cadence
+< CONT
+> STOP same-base at=984435 n=1174 phase=workload why=cadence
+< CONT
+> STOP same-base at=984451 n=1175 phase=workload why=cadence
+< CONT
+> STOP same-base at=984467 n=1176 phase=workload why=cadence
+< CONT
+> STOP same-base at=984483 n=1177 phase=workload why=cadence
+< CONT
+> STOP same-base at=984499 n=1178 phase=workload why=cadence
+< CONT
+> STOP same-base at=984515 n=1179 phase=workload why=cadence
+< CONT
+> STOP same-base at=984531 n=1180 phase=workload why=cadence
+< CONT
+> STOP same-base at=984547 n=1181 phase=workload why=cadence
+< CONT
+> STOP same-base at=984563 n=1182 phase=workload why=cadence
+< CONT
+> STOP same-base at=984587 n=1183 phase=workload why=cadence
+< CONT
+> STOP same-base at=984603 n=1184 phase=workload why=cadence
+< CONT
+> STOP same-base at=984619 n=1185 phase=workload why=cadence
+< CONT
+> STOP same-base at=984635 n=1186 phase=workload why=cadence
+< CONT
+> STOP same-base at=984651 n=1187 phase=workload why=cadence
+< CONT
+> STOP same-base at=984675 n=1188 phase=workload why=cadence
+< CONT
+> STOP same-base at=984699 n=1189 phase=workload why=cadence
+< CONT
+> STOP same-base at=984715 n=1190 phase=workload why=cadence
+< CONT
+> STOP same-base at=984739 n=1191 phase=workload why=cadence
+< CONT
+> STOP same-base at=984755 n=1192 phase=workload why=cadence
+< CONT
+> STOP same-base at=984771 n=1193 phase=workload why=cadence
+< CONT
+> STOP same-base at=984787 n=1194 phase=workload why=cadence
+< CONT
+> STOP same-base at=984803 n=1195 phase=workload why=cadence
+< CONT
+> STOP same-base at=984819 n=1196 phase=workload why=cadence
+< CONT
+> STOP same-base at=984835 n=1197 phase=workload why=cadence
+< CONT
+> STOP same-base at=984851 n=1198 phase=workload why=cadence
+< CONT
+> STOP same-base at=984867 n=1199 phase=workload why=cadence
+< CONT
+> STOP same-base at=984883 n=1200 phase=workload why=cadence
+< CONT
+> STOP same-base at=984907 n=1201 phase=workload why=cadence
+< CONT
+> STOP same-base at=984923 n=1202 phase=workload why=cadence
+< CONT
+> STOP same-base at=984939 n=1203 phase=workload why=cadence
+< CONT
+> STOP same-base at=984963 n=1204 phase=workload why=cadence
+< CONT
+> STOP same-base at=984979 n=1205 phase=workload why=cadence
+< CONT
+> STOP same-base at=984997 n=1206 phase=workload why=cadence
+< CONT
+> STOP same-base at=985013 n=1207 phase=workload why=cadence
+< CONT
+> STOP same-base at=985037 n=1208 phase=workload why=cadence
+< CONT
+> STOP same-base at=985061 n=1209 phase=workload why=cadence
+< CONT
+> STOP same-base at=985077 n=1210 phase=workload why=cadence
+< CONT
+> STOP same-base at=985093 n=1211 phase=workload why=cadence
+< CONT
+> STOP same-base at=985109 n=1212 phase=workload why=cadence
+< CONT
+> STOP same-base at=985125 n=1213 phase=workload why=cadence
+< CONT
+> STOP same-base at=985141 n=1214 phase=workload why=cadence
+< CONT
+> STOP same-base at=985157 n=1215 phase=workload why=cadence
+< CONT
+> STOP same-base at=985173 n=1216 phase=workload why=cadence
+< CONT
+> STOP same-base at=985189 n=1217 phase=workload why=cadence
+< CONT
+> STOP same-base at=985206 n=1218 phase=workload why=cadence
+< CONT
+> STOP same-base at=985222 n=1219 phase=workload why=cadence
+< CONT
+> STOP same-base at=985238 n=1220 phase=workload why=cadence
+< CONT
+> STOP same-base at=985262 n=1221 phase=workload why=cadence
+< CONT
+> STOP same-base at=985278 n=1222 phase=workload why=cadence
+< CONT
+> STOP same-base at=985302 n=1223 phase=workload why=cadence
+< CONT
+> STOP same-base at=985326 n=1224 phase=workload why=cadence
+< CONT
+> STOP same-base at=985342 n=1225 phase=workload why=cadence
+< CONT
+> STOP same-base at=985366 n=1226 phase=workload why=cadence
+< CONT
+> STOP same-base at=985382 n=1227 phase=workload why=cadence
+< CONT
+> STOP same-base at=985398 n=1228 phase=workload why=cadence
+< CONT
+> STOP same-base at=985414 n=1229 phase=workload why=cadence
+< CONT
+> STOP same-base at=985430 n=1230 phase=workload why=cadence
+< CONT
+> STOP same-base at=985446 n=1231 phase=workload why=cadence
+< CONT
+> STOP same-base at=985462 n=1232 phase=workload why=cadence
+< CONT
+> STOP same-base at=985478 n=1233 phase=workload why=cadence
+< CONT
+> STOP same-base at=987541 n=1234 phase=workload why=cadence
+< CONT
+> STOP same-base at=987557 n=1235 phase=workload why=cadence
+< CONT
+> STOP same-base at=987581 n=1236 phase=workload why=cadence
+< CONT
+> STOP same-base at=987597 n=1237 phase=workload why=cadence
+< CONT
+> STOP same-base at=987613 n=1238 phase=workload why=cadence
+< CONT
+> STOP same-base at=987630 n=1239 phase=workload why=cadence
+< CONT
+> STOP same-base at=987646 n=1240 phase=workload why=cadence
+< CONT
+> STOP same-base at=987664 n=1241 phase=workload why=cadence
+< CONT
+> STOP same-base at=987680 n=1242 phase=workload why=cadence
+< CONT
+> STOP same-base at=987704 n=1243 phase=workload why=cadence
+< CONT
+> STOP same-base at=987728 n=1244 phase=workload why=cadence
+< CONT
+> STOP same-base at=987744 n=1245 phase=workload why=cadence
+< CONT
+> STOP same-base at=987760 n=1246 phase=workload why=cadence
+< CONT
+> STOP same-base at=987776 n=1247 phase=workload why=cadence
+< CONT
+> STOP same-base at=987792 n=1248 phase=workload why=cadence
+< CONT
+> STOP same-base at=987808 n=1249 phase=workload why=cadence
+< CONT
+> STOP same-base at=987824 n=1250 phase=workload why=cadence
+< CONT
+> STOP same-base at=987840 n=1251 phase=workload why=cadence
+< CONT
+> STOP same-base at=987856 n=1252 phase=workload why=cadence
+< CONT
+> STOP same-base at=987872 n=1253 phase=workload why=cadence
+< CONT
+> STOP same-base at=987888 n=1254 phase=workload why=cadence
+< CONT
+> STOP same-base at=987904 n=1255 phase=workload why=cadence
+< CONT
+> STOP same-base at=987928 n=1256 phase=workload why=cadence
+< CONT
+> STOP same-base at=987944 n=1257 phase=workload why=cadence
+< CONT
+> STOP same-base at=987960 n=1258 phase=workload why=cadence
+< CONT
+> STOP same-base at=987984 n=1259 phase=workload why=cadence
+< CONT
+> STOP same-base at=988008 n=1260 phase=workload why=cadence
+< CONT
+> STOP same-base at=988024 n=1261 phase=workload why=cadence
+< CONT
+> STOP same-base at=988048 n=1262 phase=workload why=cadence
+< CONT
+> STOP same-base at=988064 n=1263 phase=workload why=cadence
+< CONT
+> STOP same-base at=988080 n=1264 phase=workload why=cadence
+< CONT
+> STOP same-base at=988096 n=1265 phase=workload why=cadence
+< CONT
+> STOP same-base at=988112 n=1266 phase=workload why=cadence
+< CONT
+> STOP same-base at=988128 n=1267 phase=workload why=cadence
+< CONT
+> STOP same-base at=988144 n=1268 phase=workload why=cadence
+< CONT
+> STOP same-base at=988160 n=1269 phase=workload why=cadence
+< CONT
+> STOP same-base at=988176 n=1270 phase=workload why=cadence
+< CONT
+> STOP same-base at=988192 n=1271 phase=workload why=cadence
+< CONT
+> STOP same-base at=988208 n=1272 phase=workload why=cadence
+< CONT
+> STOP same-base at=988224 n=1273 phase=workload why=cadence
+< CONT
+> STOP same-base at=988248 n=1274 phase=workload why=cadence
+< CONT
+> STOP same-base at=988264 n=1275 phase=workload why=cadence
+< CONT
+> STOP same-base at=988282 n=1276 phase=workload why=cadence
+< CONT
+> STOP same-base at=988298 n=1277 phase=workload why=cadence
+< CONT
+> STOP same-base at=988322 n=1278 phase=workload why=cadence
+< CONT
+> STOP same-base at=988346 n=1279 phase=workload why=cadence
+< CONT
+> STOP same-base at=988362 n=1280 phase=workload why=cadence
+< CONT
+> STOP same-base at=988378 n=1281 phase=workload why=cadence
+< CONT
+> STOP same-base at=988394 n=1282 phase=workload why=cadence
+< CONT
+> STOP same-base at=988410 n=1283 phase=workload why=cadence
+< CONT
+> STOP same-base at=988426 n=1284 phase=workload why=cadence
+< CONT
+> STOP same-base at=988442 n=1285 phase=workload why=cadence
+< CONT
+> STOP same-base at=988458 n=1286 phase=workload why=cadence
+< CONT
+> STOP same-base at=988474 n=1287 phase=workload why=cadence
+< CONT
+> STOP same-base at=988490 n=1288 phase=workload why=cadence
+< CONT
+> STOP same-base at=988506 n=1289 phase=workload why=cadence
+< CONT
+> STOP same-base at=988522 n=1290 phase=workload why=cadence
+< CONT
+> STOP same-base at=988538 n=1291 phase=workload why=cadence
+< CONT
+> STOP same-base at=988562 n=1292 phase=workload why=cadence
+< CONT
+> STOP same-base at=988578 n=1293 phase=workload why=cadence
+< CONT
+> STOP same-base at=988602 n=1294 phase=workload why=cadence
+< CONT
+> STOP same-base at=988626 n=1295 phase=workload why=cadence
+< CONT
+> STOP same-base at=988642 n=1296 phase=workload why=cadence
+< CONT
+> STOP same-base at=988666 n=1297 phase=workload why=cadence
+< CONT
+> STOP same-base at=988682 n=1298 phase=workload why=cadence
+< CONT
+> STOP same-base at=988698 n=1299 phase=workload why=cadence
+< CONT
+> STOP same-base at=988714 n=1300 phase=workload why=cadence
+< CONT
+> STOP same-base at=988730 n=1301 phase=workload why=cadence
+< CONT
+> STOP same-base at=988746 n=1302 phase=workload why=cadence
+< CONT
+> STOP same-base at=988762 n=1303 phase=workload why=cadence
+< CONT
+> STOP same-base at=990825 n=1304 phase=workload why=cadence
+< CONT
+> STOP same-base at=990841 n=1305 phase=workload why=cadence
+< CONT
+> STOP same-base at=990865 n=1306 phase=workload why=cadence
+< CONT
+> STOP same-base at=990881 n=1307 phase=workload why=cadence
+< CONT
+> STOP same-base at=990897 n=1308 phase=workload why=cadence
+< CONT
+> STOP same-base at=990921 n=1309 phase=workload why=cadence
+< CONT
+> STOP same-base at=990937 n=1310 phase=workload why=cadence
+< CONT
+> STOP same-base at=990961 n=1311 phase=workload why=cadence
+< CONT
+> STOP same-base at=990985 n=1312 phase=workload why=cadence
+< CONT
+> STOP same-base at=991001 n=1313 phase=workload why=cadence
+< CONT
+> STOP same-base at=991025 n=1314 phase=workload why=cadence
+< CONT
+> STOP same-base at=991041 n=1315 phase=workload why=cadence
+< CONT
+> STOP same-base at=991057 n=1316 phase=workload why=cadence
+< CONT
+> STOP same-base at=991073 n=1317 phase=workload why=cadence
+< CONT
+> STOP same-base at=991089 n=1318 phase=workload why=cadence
+< CONT
+> STOP same-base at=991105 n=1319 phase=workload why=cadence
+< CONT
+> STOP same-base at=991121 n=1320 phase=workload why=cadence
+< CONT
+> STOP same-base at=991137 n=1321 phase=workload why=cadence
+< CONT
+> STOP same-base at=991153 n=1322 phase=workload why=cadence
+< CONT
+> STOP same-base at=991177 n=1323 phase=workload why=cadence
+< CONT
+> STOP same-base at=991193 n=1324 phase=workload why=cadence
+< CONT
+> STOP same-base at=991209 n=1325 phase=workload why=cadence
+< CONT
+> STOP same-base at=991230 n=1326 phase=workload why=cadence
+< CONT
+> STOP same-base at=991246 n=1327 phase=workload why=cadence
+< CONT
+> STOP same-base at=991264 n=1328 phase=workload why=cadence
+< CONT
+> STOP same-base at=991288 n=1329 phase=workload why=cadence
+< CONT
+> STOP same-base at=991304 n=1330 phase=workload why=cadence
+< CONT
+> STOP same-base at=991320 n=1331 phase=workload why=cadence
+< CONT
+> STOP same-base at=991336 n=1332 phase=workload why=cadence
+< CONT
+> STOP same-base at=991352 n=1333 phase=workload why=cadence
+< CONT
+> STOP same-base at=991368 n=1334 phase=workload why=cadence
+< CONT
+> STOP same-base at=991384 n=1335 phase=workload why=cadence
+< CONT
+> STOP same-base at=991400 n=1336 phase=workload why=cadence
+< CONT
+> STOP same-base at=991416 n=1337 phase=workload why=cadence
+< CONT
+> STOP same-base at=991432 n=1338 phase=workload why=cadence
+< CONT
+> STOP same-base at=991448 n=1339 phase=workload why=cadence
+< CONT
+> STOP same-base at=991464 n=1340 phase=workload why=cadence
+< CONT
+> STOP same-base at=991481 n=1341 phase=workload why=cadence
+< CONT
+> STOP same-base at=991497 n=1342 phase=workload why=cadence
+< CONT
+> STOP same-base at=991517 n=1343 phase=workload why=cadence
+< CONT
+> STOP same-base at=991533 n=1344 phase=workload why=cadence
+< CONT
+> STOP same-base at=991557 n=1345 phase=workload why=cadence
+< CONT
+> STOP same-base at=991573 n=1346 phase=workload why=cadence
+< CONT
+> STOP same-base at=991597 n=1347 phase=workload why=cadence
+< CONT
+> STOP same-base at=991613 n=1348 phase=workload why=cadence
+< CONT
+> STOP same-base at=991637 n=1349 phase=workload why=cadence
+< CONT
+> STOP same-base at=991653 n=1350 phase=workload why=cadence
+< CONT
+> STOP same-base at=991669 n=1351 phase=workload why=cadence
+< CONT
+> STOP same-base at=991685 n=1352 phase=workload why=cadence
+< CONT
+> STOP same-base at=991701 n=1353 phase=workload why=cadence
+< CONT
+> STOP same-base at=991717 n=1354 phase=workload why=cadence
+< CONT
+> STOP same-base at=991733 n=1355 phase=workload why=cadence
+< CONT
+> STOP same-base at=991749 n=1356 phase=workload why=cadence
+< CONT
+> STOP same-base at=991765 n=1357 phase=workload why=cadence
+< CONT
+> STOP same-base at=991789 n=1358 phase=workload why=cadence
+< CONT
+> STOP same-base at=991805 n=1359 phase=workload why=cadence
+< CONT
+> STOP same-base at=991829 n=1360 phase=workload why=cadence
+< CONT
+> STOP same-base at=991845 n=1361 phase=workload why=cadence
+< CONT
+> STOP same-base at=991861 n=1362 phase=workload why=cadence
+< CONT
+> STOP same-base at=991877 n=1363 phase=workload why=cadence
+< CONT
+> STOP same-base at=991901 n=1364 phase=workload why=cadence
+< CONT
+> STOP same-base at=991925 n=1365 phase=workload why=cadence
+< CONT
+> STOP same-base at=991941 n=1366 phase=workload why=cadence
+< CONT
+> STOP same-base at=991957 n=1367 phase=workload why=cadence
+< CONT
+> STOP same-base at=991973 n=1368 phase=workload why=cadence
+< CONT
+> STOP same-base at=991989 n=1369 phase=workload why=cadence
+< CONT
+> STOP same-base at=992005 n=1370 phase=workload why=cadence
+< CONT
+> STOP same-base at=992021 n=1371 phase=workload why=cadence
+< CONT
+> STOP same-base at=992037 n=1372 phase=workload why=cadence
+< CONT
+> STOP same-base at=992053 n=1373 phase=workload why=cadence
+< CONT
+> STOP same-base at=994116 n=1374 phase=workload why=cadence
+< CONT
+> STOP same-base at=994132 n=1375 phase=workload why=cadence
+< CONT
+> STOP same-base at=994152 n=1376 phase=workload why=cadence
+< CONT
+> STOP same-base at=994168 n=1377 phase=workload why=cadence
+< CONT
+> STOP same-base at=994184 n=1378 phase=workload why=cadence
+< CONT
+> STOP same-base at=994208 n=1379 phase=workload why=cadence
+< CONT
+> STOP same-base at=994232 n=1380 phase=workload why=cadence
+< CONT
+> STOP same-base at=994248 n=1381 phase=workload why=cadence
+< CONT
+> STOP same-base at=994272 n=1382 phase=workload why=cadence
+< CONT
+> STOP same-base at=994296 n=1383 phase=workload why=cadence
+< CONT
+> STOP same-base at=994312 n=1384 phase=workload why=cadence
+< CONT
+> STOP same-base at=994328 n=1385 phase=workload why=cadence
+< CONT
+> STOP same-base at=994344 n=1386 phase=workload why=cadence
+< CONT
+> STOP same-base at=994360 n=1387 phase=workload why=cadence
+< CONT
+> STOP same-base at=994376 n=1388 phase=workload why=cadence
+< CONT
+> STOP same-base at=994392 n=1389 phase=workload why=cadence
+< CONT
+> STOP same-base at=994408 n=1390 phase=workload why=cadence
+< CONT
+> STOP same-base at=994424 n=1391 phase=workload why=cadence
+< CONT
+> STOP same-base at=994440 n=1392 phase=workload why=cadence
+< CONT
+> STOP same-base at=994456 n=1393 phase=workload why=cadence
+< CONT
+> STOP same-base at=994472 n=1394 phase=workload why=cadence
+< CONT
+> STOP same-base at=994488 n=1395 phase=workload why=cadence
+< CONT
+> STOP same-base at=994504 n=1396 phase=workload why=cadence
+< CONT
+> STOP same-base at=994520 n=1397 phase=workload why=cadence
+< CONT
+> STOP same-base at=994536 n=1398 phase=workload why=cadence
+< CONT
+> STOP same-base at=994552 n=1399 phase=workload why=cadence
+< CONT
+> STOP same-base at=994568 n=1400 phase=workload why=cadence
+< CONT
+> STOP same-base at=994584 n=1401 phase=workload why=cadence
+< CONT
+> STOP same-base at=994600 n=1402 phase=workload why=cadence
+< CONT
+> STOP same-base at=994616 n=1403 phase=workload why=cadence
+< CONT
+> STOP same-base at=994632 n=1404 phase=workload why=cadence
+< CONT
+> STOP same-base at=994648 n=1405 phase=workload why=cadence
+< CONT
+> EVENT same-base at=994664 n=14 hydo-ob: workload steps 7..19 rc=0 (uptime=14.96s)
+> STOP same-base at=994664 n=1406 phase=workload why=cadence
+< CONT
+> STOP same-base at=994680 n=1407 phase=workload why=cadence
+< CONT
+> STOP same-base at=994696 n=1408 phase=workload why=cadence
+< CONT
+> STOP same-base at=994712 n=1409 phase=workload why=cadence
+< CONT
+> STOP same-base at=994728 n=1410 phase=workload why=cadence
+< CONT
+> STOP same-base at=994744 n=1411 phase=workload why=cadence
+< CONT
+> STOP same-base at=994760 n=1412 phase=workload why=cadence
+< CONT
+> STOP same-base at=994776 n=1413 phase=workload why=cadence
+< CONT
+> STOP same-base at=994792 n=1414 phase=workload why=cadence
+< CONT
+> STOP same-base at=994808 n=1415 phase=workload why=cadence
+< CONT
+> STOP same-base at=994824 n=1416 phase=workload why=cadence
+< CONT
+> STOP same-base at=994840 n=1417 phase=workload why=cadence
+< CONT
+> STOP same-base at=994856 n=1418 phase=workload why=cadence
+< CONT
+> STOP same-base at=994872 n=1419 phase=workload why=cadence
+< CONT
+> STOP same-base at=994888 n=1420 phase=workload why=cadence
+< CONT
+> STOP same-base at=994904 n=1421 phase=workload why=cadence
+< CONT
+> STOP same-base at=994920 n=1422 phase=workload why=cadence
+< CONT
+> STOP same-base at=994936 n=1423 phase=workload why=cadence
+< CONT
+> STOP same-base at=994952 n=1424 phase=workload why=cadence
+< CONT
+> STOP same-base at=994968 n=1425 phase=workload why=cadence
+< CONT
+> STOP same-base at=994984 n=1426 phase=workload why=cadence
+< CONT
+> STOP same-base at=995000 n=1427 phase=workload why=cadence
+< CONT
+> STOP same-base at=995016 n=1428 phase=workload why=cadence
+< CONT
+> STOP same-base at=995032 n=1429 phase=workload why=cadence
+< CONT
+> STOP same-base at=995048 n=1430 phase=workload why=cadence
+< CONT
+> STOP same-base at=995064 n=1431 phase=workload why=cadence
+< CONT
+> STOP same-base at=995080 n=1432 phase=workload why=cadence
+< CONT
+> STOP same-base at=995096 n=1433 phase=workload why=cadence
+< CONT
+> STOP same-base at=995112 n=1434 phase=workload why=cadence
+< CONT
+> STOP same-base at=995128 n=1435 phase=workload why=cadence
+< CONT
+> STOP same-base at=995144 n=1436 phase=workload why=cadence
+< CONT
+> STOP same-base at=995160 n=1437 phase=workload why=cadence
+< CONT
+> STOP same-base at=995176 n=1438 phase=workload why=cadence
+< CONT
+> EVENT same-base at=995192 n=15 hydo-explore-acked: 0 1 2 3 4 7 8 9 10 11 12 13 14 15 16 17 18 19 
+> STOP same-base at=995192 n=1439 phase=workload why=cadence
+< CONT
+> STOP same-base at=995208 n=1440 phase=workload why=cadence
+< CONT
+> STOP same-base at=995224 n=1441 phase=workload why=cadence
+< CONT
+> STOP same-base at=995240 n=1442 phase=workload why=cadence
+< CONT
+> STOP same-base at=995256 n=1443 phase=workload why=cadence
+< CONT
+> STOP same-base at=995272 n=1444 phase=workload why=cadence
+< CONT
+> STOP same-base at=995288 n=1445 phase=workload why=cadence
+< CONT
+> STOP same-base at=995304 n=1446 phase=workload why=cadence
+< CONT
+> STOP same-base at=995320 n=1447 phase=workload why=cadence
+< CONT
+> STOP same-base at=995336 n=1448 phase=workload why=cadence
+< CONT
+> EVENT same-base at=995352 n=16 hydo-explore-failed: 
+> STOP same-base at=995352 n=1449 phase=workload why=cadence
+< CONT
+> STOP same-base at=995368 n=1450 phase=workload why=cadence
+< CONT
+> STOP same-base at=995384 n=1451 phase=workload why=cadence
+< CONT
+> STOP same-base at=995400 n=1452 phase=workload why=cadence
+< CONT
+> STOP same-base at=995416 n=1453 phase=workload why=cadence
+< CONT
+> STOP same-base at=995432 n=1454 phase=workload why=cadence
+< CONT
+> STOP same-base at=995448 n=1455 phase=workload why=cadence
+< CONT
+> STOP same-base at=995464 n=1456 phase=workload why=marker
+< CONT
+> STOP same-base at=995464 n=1457 phase=check why=start
+< CONT
+> STOP same-base at=995480 n=1458 phase=check why=cadence
+< CONT
+> EVENT same-base at=995496 n=17 hydo-explore-workload-done
+> STOP same-base at=995496 n=1459 phase=check why=cadence
+< CONT
+> EVENT same-base at=995512 n=18 go
+> STOP same-base at=995512 n=1460 phase=check why=cadence
+< CONT
+> STOP same-base at=995528 n=1461 phase=check why=cadence
+< CONT
+> STOP same-base at=995544 n=1462 phase=check why=cadence
+< CONT
+> STOP same-base at=995560 n=1463 phase=check why=cadence
+< CONT
+> STOP same-base at=995576 n=1464 phase=check why=cadence
+< CONT
+> STOP same-base at=995592 n=1465 phase=check why=cadence
+< CONT
+> STOP same-base at=995608 n=1466 phase=check why=cadence
+< CONT
+> STOP same-base at=995624 n=1467 phase=check why=cadence
+< CONT
+> STOP same-base at=995640 n=1468 phase=check why=cadence
+< CONT
+> STOP same-base at=995656 n=1469 phase=check why=cadence
+< CONT
+> STOP same-base at=995672 n=1470 phase=check why=cadence
+< CONT
+> STOP same-base at=995688 n=1471 phase=check why=cadence
+< CONT
+> EVENT same-base at=995704 n=19 hydo-ob: command: hydo-agent-ping 1go
+> STOP same-base at=995704 n=1472 phase=check why=cadence
+< CONT
+> STOP same-base at=995720 n=1473 phase=check why=cadence
+< CONT
+> STOP same-base at=995736 n=1474 phase=check why=cadence
+< CONT
+> STOP same-base at=995752 n=1475 phase=check why=cadence
+< CONT
+> STOP same-base at=995768 n=1476 phase=check why=cadence
+< CONT
+> STOP same-base at=997831 n=1477 phase=check why=cadence
+< CONT
+> STOP same-base at=997847 n=1478 phase=check why=cadence
+< CONT
+> STOP same-base at=997863 n=1479 phase=check why=cadence
+< CONT
+> STOP same-base at=997879 n=1480 phase=check why=cadence
+< CONT
+> STOP same-base at=997895 n=1481 phase=check why=cadence
+< CONT
+> STOP same-base at=997911 n=1482 phase=check why=cadence
+< CONT
+> STOP same-base at=997927 n=1483 phase=check why=cadence
+< CONT
+> STOP same-base at=997943 n=1484 phase=check why=cadence
+< CONT
+> STOP same-base at=997959 n=1485 phase=check why=cadence
+< CONT
+> STOP same-base at=997975 n=1486 phase=check why=cadence
+< CONT
+> STOP same-base at=997991 n=1487 phase=check why=cadence
+< CONT
+> STOP same-base at=998007 n=1488 phase=check why=cadence
+< CONT
+> STOP same-base at=998023 n=1489 phase=check why=cadence
+< CONT
+> STOP same-base at=998039 n=1490 phase=check why=cadence
+< CONT
+> STOP same-base at=998055 n=1491 phase=check why=cadence
+< CONT
+> STOP same-base at=998071 n=1492 phase=check why=cadence
+< CONT
+> STOP same-base at=998087 n=1493 phase=check why=cadence
+< CONT
+> STOP same-base at=998103 n=1494 phase=check why=cadence
+< CONT
+> STOP same-base at=998119 n=1495 phase=check why=cadence
+< CONT
+> STOP same-base at=998135 n=1496 phase=check why=cadence
+< CONT
+> STOP same-base at=998151 n=1497 phase=check why=cadence
+< CONT
+> STOP same-base at=998167 n=1498 phase=check why=cadence
+< CONT
+> STOP same-base at=998183 n=1499 phase=check why=cadence
+< CONT
+> STOP same-base at=998199 n=1500 phase=check why=cadence
+< CONT
+> STOP same-base at=998215 n=1501 phase=check why=cadence
+< CONT
+> STOP same-base at=998231 n=1502 phase=check why=cadence
+< CONT
+> STOP same-base at=1000294 n=1503 phase=check why=cadence
+< CONT
+> STOP same-base at=1000310 n=1504 phase=check why=cadence
+< CONT
+> STOP same-base at=1000326 n=1505 phase=check why=cadence
+< CONT
+> STOP same-base at=1000342 n=1506 phase=check why=cadence
+< CONT
+> STOP same-base at=1000358 n=1507 phase=check why=cadence
+< CONT
+> STOP same-base at=1000374 n=1508 phase=check why=cadence
+< CONT
+> STOP same-base at=1000390 n=1509 phase=check why=cadence
+< CONT
+> STOP same-base at=1000406 n=1510 phase=check why=cadence
+< CONT
+> STOP same-base at=1000422 n=1511 phase=check why=cadence
+< CONT
+> STOP same-base at=1000438 n=1512 phase=check why=cadence
+< CONT
+> STOP same-base at=1000454 n=1513 phase=check why=cadence
+< CONT
+> STOP same-base at=1000470 n=1514 phase=check why=cadence
+< CONT
+> STOP same-base at=1000486 n=1515 phase=check why=cadence
+< CONT
+> STOP same-base at=1000502 n=1516 phase=check why=cadence
+< CONT
+> STOP same-base at=1000518 n=1517 phase=check why=cadence
+< CONT
+> STOP same-base at=1000534 n=1518 phase=check why=cadence
+< CONT
+> STOP same-base at=1000550 n=1519 phase=check why=cadence
+< CONT
+> STOP same-base at=1000566 n=1520 phase=check why=cadence
+< CONT
+> STOP same-base at=1000582 n=1521 phase=check why=cadence
+< CONT
+> STOP same-base at=1000598 n=1522 phase=check why=cadence
+< CONT
+> STOP same-base at=1000614 n=1523 phase=check why=cadence
+< CONT
+> STOP same-base at=1000630 n=1524 phase=check why=cadence
+< CONT
+> STOP same-base at=1000646 n=1525 phase=check why=cadence
+< CONT
+> STOP same-base at=1000662 n=1526 phase=check why=cadence
+< CONT
+> STOP same-base at=1000678 n=1527 phase=check why=cadence
+< CONT
+> STOP same-base at=1000694 n=1528 phase=check why=cadence
+< CONT
+> STOP same-base at=1000710 n=1529 phase=check why=cadence
+< CONT
+> STOP same-base at=1000726 n=1530 phase=check why=cadence
+< CONT
+> STOP same-base at=1000742 n=1531 phase=check why=cadence
+< CONT
+> STOP same-base at=1000758 n=1532 phase=check why=cadence
+< CONT
+> STOP same-base at=1002821 n=1533 phase=check why=cadence
+< CONT
+> STOP same-base at=1002837 n=1534 phase=check why=cadence
+< CONT
+> STOP same-base at=1002853 n=1535 phase=check why=cadence
+< CONT
+> STOP same-base at=1002869 n=1536 phase=check why=cadence
+< CONT
+> STOP same-base at=1002885 n=1537 phase=check why=cadence
+< CONT
+> STOP same-base at=1002901 n=1538 phase=check why=cadence
+< CONT
+> STOP same-base at=1002917 n=1539 phase=check why=cadence
+< CONT
+> STOP same-base at=1002933 n=1540 phase=check why=cadence
+< CONT
+> STOP same-base at=1002949 n=1541 phase=check why=cadence
+< CONT
+> STOP same-base at=1002965 n=1542 phase=check why=cadence
+< CONT
+> STOP same-base at=1002981 n=1543 phase=check why=cadence
+< CONT
+> STOP same-base at=1002997 n=1544 phase=check why=cadence
+< CONT
+> STOP same-base at=1003013 n=1545 phase=check why=cadence
+< CONT
+> STOP same-base at=1003029 n=1546 phase=check why=cadence
+< CONT
+> STOP same-base at=1003045 n=1547 phase=check why=cadence
+< CONT
+> STOP same-base at=1003061 n=1548 phase=check why=cadence
+< CONT
+> STOP same-base at=1003077 n=1549 phase=check why=cadence
+< CONT
+> STOP same-base at=1003093 n=1550 phase=check why=cadence
+< CONT
+> STOP same-base at=1003109 n=1551 phase=check why=cadence
+< CONT
+> STOP same-base at=1003125 n=1552 phase=check why=cadence
+< CONT
+> STOP same-base at=1003141 n=1553 phase=check why=cadence
+< CONT
+> STOP same-base at=1003157 n=1554 phase=check why=cadence
+< CONT
+> STOP same-base at=1003173 n=1555 phase=check why=cadence
+< CONT
+> STOP same-base at=1003189 n=1556 phase=check why=cadence
+< CONT
+> STOP same-base at=1003205 n=1557 phase=check why=cadence
+< CONT
+> STOP same-base at=1003221 n=1558 phase=check why=cadence
+< CONT
+> STOP same-base at=1003237 n=1559 phase=check why=cadence
+< CONT
+> STOP same-base at=1003253 n=1560 phase=check why=cadence
+< CONT
+> STOP same-base at=1003269 n=1561 phase=check why=cadence
+< CONT
+> STOP same-base at=1003285 n=1562 phase=check why=cadence
+< CONT
+> STOP same-base at=1005348 n=1563 phase=check why=cadence
+< CONT
+> STOP same-base at=1005364 n=1564 phase=check why=cadence
+< CONT
+> STOP same-base at=1005380 n=1565 phase=check why=cadence
+< CONT
+> STOP same-base at=1005396 n=1566 phase=check why=cadence
+< CONT
+> STOP same-base at=1005412 n=1567 phase=check why=cadence
+< CONT
+> STOP same-base at=1005428 n=1568 phase=check why=cadence
+< CONT
+> STOP same-base at=1005444 n=1569 phase=check why=cadence
+< CONT
+> STOP same-base at=1005460 n=1570 phase=check why=cadence
+< CONT
+> STOP same-base at=1005476 n=1571 phase=check why=cadence
+< CONT
+> STOP same-base at=1005492 n=1572 phase=check why=cadence
+< CONT
+> STOP same-base at=1005508 n=1573 phase=check why=cadence
+< CONT
+> STOP same-base at=1005524 n=1574 phase=check why=cadence
+< CONT
+> STOP same-base at=1005540 n=1575 phase=check why=cadence
+< CONT
+> STOP same-base at=1005556 n=1576 phase=check why=cadence
+< CONT
+> STOP same-base at=1005572 n=1577 phase=check why=cadence
+< CONT
+> STOP same-base at=1005588 n=1578 phase=check why=cadence
+< CONT
+> STOP same-base at=1005604 n=1579 phase=check why=cadence
+< CONT
+> STOP same-base at=1005620 n=1580 phase=check why=cadence
+< CONT
+> STOP same-base at=1005636 n=1581 phase=check why=cadence
+< CONT
+> STOP same-base at=1005652 n=1582 phase=check why=cadence
+< CONT
+> STOP same-base at=1005668 n=1583 phase=check why=cadence
+< CONT
+> STOP same-base at=1005684 n=1584 phase=check why=cadence
+< CONT
+> STOP same-base at=1005700 n=1585 phase=check why=cadence
+< CONT
+> STOP same-base at=1005716 n=1586 phase=check why=cadence
+< CONT
+> STOP same-base at=1005732 n=1587 phase=check why=cadence
+< CONT
+> STOP same-base at=1005748 n=1588 phase=check why=cadence
+< CONT
+> STOP same-base at=1007811 n=1589 phase=check why=cadence
+< CONT
+> STOP same-base at=1007827 n=1590 phase=check why=cadence
+< CONT
+> STOP same-base at=1007843 n=1591 phase=check why=cadence
+< CONT
+> STOP same-base at=1007859 n=1592 phase=check why=cadence
+< CONT
+> STOP same-base at=1007875 n=1593 phase=check why=cadence
+< CONT
+> STOP same-base at=1007891 n=1594 phase=check why=cadence
+< CONT
+> STOP same-base at=1007907 n=1595 phase=check why=cadence
+< CONT
+> STOP same-base at=1007923 n=1596 phase=check why=cadence
+< CONT
+> STOP same-base at=1007939 n=1597 phase=check why=cadence
+< CONT
+> STOP same-base at=1007955 n=1598 phase=check why=cadence
+< CONT
+> STOP same-base at=1007971 n=1599 phase=check why=cadence
+< CONT
+> STOP same-base at=1007987 n=1600 phase=check why=cadence
+< CONT
+> STOP same-base at=1008003 n=1601 phase=check why=cadence
+< CONT
+> STOP same-base at=1008019 n=1602 phase=check why=cadence
+< CONT
+> STOP same-base at=1008035 n=1603 phase=check why=cadence
+< CONT
+> STOP same-base at=1008051 n=1604 phase=check why=cadence
+< CONT
+> STOP same-base at=1008067 n=1605 phase=check why=cadence
+< CONT
+> STOP same-base at=1008083 n=1606 phase=check why=cadence
+< CONT
+> STOP same-base at=1008099 n=1607 phase=check why=cadence
+< CONT
+> STOP same-base at=1008115 n=1608 phase=check why=cadence
+< CONT
+> STOP same-base at=1008131 n=1609 phase=check why=cadence
+< CONT
+> STOP same-base at=1008147 n=1610 phase=check why=cadence
+< CONT
+> STOP same-base at=1008163 n=1611 phase=check why=cadence
+< CONT
+> STOP same-base at=1008179 n=1612 phase=check why=cadence
+< CONT
+> STOP same-base at=1008195 n=1613 phase=check why=cadence
+< CONT
+> STOP same-base at=1008211 n=1614 phase=check why=cadence
+< CONT
+> STOP same-base at=1008227 n=1615 phase=check why=cadence
+< CONT
+> STOP same-base at=1008243 n=1616 phase=check why=cadence
+< CONT
+> STOP same-base at=1008259 n=1617 phase=check why=cadence
+< CONT
+> STOP same-base at=1008275 n=1618 phase=check why=cadence
+< CONT
+> STOP same-base at=1008291 n=1619 phase=check why=cadence
+< CONT
+> STOP same-base at=1008307 n=1620 phase=check why=cadence
+< CONT
+> STOP same-base at=1008323 n=1621 phase=check why=cadence
+< CONT
+> STOP same-base at=1008339 n=1622 phase=check why=cadence
+< CONT
+> STOP same-base at=1008355 n=1623 phase=check why=cadence
+< CONT
+> STOP same-base at=1008371 n=1624 phase=check why=cadence
+< CONT
+> STOP same-base at=1008387 n=1625 phase=check why=cadence
+< CONT
+> STOP same-base at=1008403 n=1626 phase=check why=cadence
+< CONT
+> STOP same-base at=1008419 n=1627 phase=check why=cadence
+< CONT
+> STOP same-base at=1008435 n=1628 phase=check why=cadence
+< CONT
+> STOP same-base at=1008451 n=1629 phase=check why=cadence
+< CONT
+> STOP same-base at=1008467 n=1630 phase=check why=cadence
+< CONT
+> STOP same-base at=1008483 n=1631 phase=check why=cadence
+< CONT
+> STOP same-base at=1008499 n=1632 phase=check why=cadence
+< CONT
+> STOP same-base at=1008515 n=1633 phase=check why=cadence
+< CONT
+> STOP same-base at=1008531 n=1634 phase=check why=cadence
+< CONT
+> STOP same-base at=1008547 n=1635 phase=check why=cadence
+< CONT
+> STOP same-base at=1008563 n=1636 phase=check why=cadence
+< CONT
+> STOP same-base at=1008579 n=1637 phase=check why=cadence
+< CONT
+> STOP same-base at=1008595 n=1638 phase=check why=cadence
+< CONT
+> STOP same-base at=1008611 n=1639 phase=check why=cadence
+< CONT
+> STOP same-base at=1008627 n=1640 phase=check why=cadence
+< CONT
+> STOP same-base at=1008643 n=1641 phase=check why=cadence
+< CONT
+> STOP same-base at=1008659 n=1642 phase=check why=cadence
+< CONT
+> STOP same-base at=1008675 n=1643 phase=check why=cadence
+< CONT
+> STOP same-base at=1008691 n=1644 phase=check why=cadence
+< CONT
+> STOP same-base at=1008707 n=1645 phase=check why=cadence
+< CONT
+> STOP same-base at=1008723 n=1646 phase=check why=cadence
+< CONT
+> STOP same-base at=1008739 n=1647 phase=check why=cadence
+< CONT
+> STOP same-base at=1008755 n=1648 phase=check why=cadence
+< CONT
+> STOP same-base at=1008771 n=1649 phase=check why=cadence
+< CONT
+> STOP same-base at=1008787 n=1650 phase=check why=cadence
+< CONT
+> STOP same-base at=1008803 n=1651 phase=check why=cadence
+< CONT
+> STOP same-base at=1008819 n=1652 phase=check why=cadence
+< CONT
+> STOP same-base at=1008835 n=1653 phase=check why=cadence
+< CONT
+> STOP same-base at=1008851 n=1654 phase=check why=cadence
+< CONT
+> STOP same-base at=1008867 n=1655 phase=check why=cadence
+< CONT
+> STOP same-base at=1008883 n=1656 phase=check why=cadence
+< CONT
+> STOP same-base at=1008899 n=1657 phase=check why=cadence
+< CONT
+> STOP same-base at=1008915 n=1658 phase=check why=cadence
+< CONT
+> STOP same-base at=1008931 n=1659 phase=check why=cadence
+< CONT
+> STOP same-base at=1008947 n=1660 phase=check why=cadence
+< CONT
+> STOP same-base at=1008963 n=1661 phase=check why=cadence
+< CONT
+> STOP same-base at=1008979 n=1662 phase=check why=cadence
+< CONT
+> STOP same-base at=1008995 n=1663 phase=check why=cadence
+< CONT
+> EVENT same-base at=1009011 n=20 HYDO-ASSERT {"t":"always","id":"redis.acked_writes_survive","ok":true,"msg":"every SET the client saw acknowledged reads back with its value","details":{"out":"acked=18 all present"}}
+> STOP same-base at=1009011 n=1664 phase=check why=cadence
+< CONT
+> STOP same-base at=1009027 n=1665 phase=check why=cadence
+< CONT
+> STOP same-base at=1009043 n=1666 phase=check why=cadence
+< CONT
+> STOP same-base at=1009059 n=1667 phase=check why=cadence
+< CONT
+> STOP same-base at=1009075 n=1668 phase=check why=cadence
+< CONT
+> STOP same-base at=1009091 n=1669 phase=check why=cadence
+< CONT
+> STOP same-base at=1009107 n=1670 phase=check why=cadence
+< CONT
+> STOP same-base at=1009123 n=1671 phase=check why=cadence
+< CONT
+> STOP same-base at=1011186 n=1672 phase=check why=cadence
+< CONT
+> STOP same-base at=1011202 n=1673 phase=check why=cadence
+< CONT
+> STOP same-base at=1011218 n=1674 phase=check why=cadence
+< CONT
+> STOP same-base at=1011234 n=1675 phase=check why=cadence
+< CONT
+> STOP same-base at=1011250 n=1676 phase=check why=cadence
+< CONT
+> STOP same-base at=1011266 n=1677 phase=check why=cadence
+< CONT
+> STOP same-base at=1011282 n=1678 phase=check why=cadence
+< CONT
+> STOP same-base at=1011298 n=1679 phase=check why=cadence
+< CONT
+> STOP same-base at=1011314 n=1680 phase=check why=cadence
+< CONT
+> STOP same-base at=1011330 n=1681 phase=check why=cadence
+< CONT
+> STOP same-base at=1011346 n=1682 phase=check why=cadence
+< CONT
+> STOP same-base at=1011362 n=1683 phase=check why=cadence
+< CONT
+> STOP same-base at=1011378 n=1684 phase=check why=cadence
+< CONT
+> STOP same-base at=1011394 n=1685 phase=check why=cadence
+< CONT
+> STOP same-base at=1011410 n=1686 phase=check why=cadence
+< CONT
+> STOP same-base at=1011426 n=1687 phase=check why=cadence
+< CONT
+> STOP same-base at=1011442 n=1688 phase=check why=cadence
+< CONT
+> STOP same-base at=1011458 n=1689 phase=check why=cadence
+< CONT
+> STOP same-base at=1011474 n=1690 phase=check why=cadence
+< CONT
+> STOP same-base at=1011490 n=1691 phase=check why=cadence
+< CONT
+> STOP same-base at=1011506 n=1692 phase=check why=cadence
+< CONT
+> STOP same-base at=1011522 n=1693 phase=check why=cadence
+< CONT
+> STOP same-base at=1011538 n=1694 phase=check why=cadence
+< CONT
+> STOP same-base at=1011554 n=1695 phase=check why=cadence
+< CONT
+> STOP same-base at=1011570 n=1696 phase=check why=cadence
+< CONT
+> STOP same-base at=1011586 n=1697 phase=check why=cadence
+< CONT
+> STOP same-base at=1011602 n=1698 phase=check why=cadence
+< CONT
+> STOP same-base at=1011618 n=1699 phase=check why=cadence
+< CONT
+> STOP same-base at=1011634 n=1700 phase=check why=cadence
+< CONT
+> STOP same-base at=1011650 n=1701 phase=check why=cadence
+< CONT
+> STOP same-base at=1011666 n=1702 phase=check why=cadence
+< CONT
+> STOP same-base at=1011682 n=1703 phase=check why=cadence
+< CONT
+> STOP same-base at=1011698 n=1704 phase=check why=cadence
+< CONT
+> STOP same-base at=1011714 n=1705 phase=check why=cadence
+< CONT
+> STOP same-base at=1011730 n=1706 phase=check why=cadence
+< CONT
+> STOP same-base at=1011746 n=1707 phase=check why=cadence
+< CONT
+> STOP same-base at=1011762 n=1708 phase=check why=cadence
+< CONT
+> STOP same-base at=1011778 n=1709 phase=check why=cadence
+< CONT
+> EVENT same-base at=1011794 n=21 HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=18 all present)
+> STOP same-base at=1011794 n=1710 phase=check why=cadence
+< CONT
+> STOP same-base at=1011810 n=1711 phase=check why=cadence
+< CONT
+> STOP same-base at=1011826 n=1712 phase=check why=cadence
+< CONT
+> STOP same-base at=1011842 n=1713 phase=check why=cadence
+< CONT
+> STOP same-base at=1011858 n=1714 phase=check why=cadence
+< CONT
+> STOP same-base at=1011874 n=1715 phase=check why=cadence
+< CONT
+> STOP same-base at=1011890 n=1716 phase=check why=cadence
+< CONT
+> STOP same-base at=1011906 n=1717 phase=check why=cadence
+< CONT
+> STOP same-base at=1011922 n=1718 phase=check why=cadence
+< CONT
+> STOP same-base at=1011938 n=1719 phase=check why=marker
+< CONT
+> RESULT same-base fp=24b5730593297b77 wfp=6e0c8c5d813f450f secs=3.1 stops=1719 typed=1 inh=43beecca11241af6 verdict=HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=18 all present)

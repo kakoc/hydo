@@ -1,0 +1,1331 @@
+< RESUME br-after-c1 br-after
+> STOP br-after-c1 at=960696 n=332 phase=workload why=resume
+< CONT
+> STOP br-after-c1 at=960712 n=333 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=960728 n=334 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=960744 n=335 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=960760 n=336 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=960776 n=337 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=960792 n=338 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=960808 n=339 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=960824 n=340 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=960840 n=341 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=960856 n=342 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=960872 n=343 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=960888 n=344 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=960904 n=345 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=960920 n=346 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=960936 n=347 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=960952 n=348 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=960968 n=349 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=960984 n=350 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=961000 n=351 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=961016 n=352 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=961032 n=353 phase=workload why=cadence
+< CONT
+> EVENT br-after-c1 at=961048 n=10 hydo-ob: KILLED redis before step 5
+> STOP br-after-c1 at=961048 n=354 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963111 n=355 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963127 n=356 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963143 n=357 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963159 n=358 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963175 n=359 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963191 n=360 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963207 n=361 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963223 n=362 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963239 n=363 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963255 n=364 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963271 n=365 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963287 n=366 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963303 n=367 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963319 n=368 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963335 n=369 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963351 n=370 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963367 n=371 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963383 n=372 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963399 n=373 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963415 n=374 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963431 n=375 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963447 n=376 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963463 n=377 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963479 n=378 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963495 n=379 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963511 n=380 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963527 n=381 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963543 n=382 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963559 n=383 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963575 n=384 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963591 n=385 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963607 n=386 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963623 n=387 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963639 n=388 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963655 n=389 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963671 n=390 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963687 n=391 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963703 n=392 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963719 n=393 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963735 n=394 phase=workload why=cadence
+< CONT
+> EVENT br-after-c1 at=963751 n=11 hydo-ob: workload steps 5..6 rc=0 (uptime=13.82s)
+> STOP br-after-c1 at=963751 n=395 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963767 n=396 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963783 n=397 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963799 n=398 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963815 n=399 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963831 n=400 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963847 n=401 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963863 n=402 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963879 n=403 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963895 n=404 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963911 n=405 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963927 n=406 phase=workload why=cadence
+< CONT
+> EVENT br-after-c1 at=963943 n=12 hydo-ob: restarting redis before step 7
+> STOP br-after-c1 at=963943 n=407 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963959 n=408 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963975 n=409 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=963991 n=410 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=964007 n=411 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=964023 n=412 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=964039 n=413 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=964055 n=414 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=964071 n=415 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=964087 n=416 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=966150 n=417 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=966166 n=418 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968229 n=419 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968245 n=420 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968261 n=421 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968277 n=422 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968293 n=423 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968309 n=424 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968325 n=425 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968341 n=426 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968357 n=427 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968373 n=428 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968389 n=429 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968405 n=430 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968421 n=431 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968437 n=432 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968453 n=433 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968469 n=434 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968485 n=435 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968501 n=436 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968517 n=437 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968533 n=438 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968549 n=439 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968565 n=440 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968581 n=441 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968597 n=442 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968613 n=443 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968629 n=444 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968645 n=445 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968661 n=446 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968677 n=447 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968693 n=448 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968709 n=449 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968725 n=450 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968741 n=451 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968757 n=452 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968773 n=453 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968789 n=454 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968805 n=455 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968821 n=456 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968837 n=457 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968853 n=458 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968869 n=459 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968885 n=460 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968901 n=461 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968917 n=462 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968933 n=463 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968949 n=464 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968965 n=465 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968981 n=466 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=968997 n=467 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969013 n=468 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969029 n=469 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969045 n=470 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969061 n=471 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969077 n=472 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969093 n=473 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969109 n=474 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969125 n=475 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969141 n=476 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969157 n=477 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969173 n=478 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969189 n=479 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969205 n=480 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969221 n=481 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969237 n=482 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969253 n=483 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969269 n=484 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969285 n=485 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969301 n=486 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969317 n=487 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969333 n=488 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969349 n=489 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969365 n=490 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969381 n=491 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969397 n=492 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969413 n=493 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969429 n=494 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969445 n=495 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969461 n=496 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969477 n=497 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969493 n=498 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969509 n=499 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969525 n=500 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969541 n=501 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969557 n=502 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969573 n=503 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969589 n=504 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969605 n=505 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969621 n=506 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969637 n=507 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969653 n=508 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969669 n=509 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969685 n=510 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969701 n=511 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969717 n=512 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969733 n=513 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969749 n=514 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969765 n=515 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969781 n=516 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969797 n=517 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969813 n=518 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969829 n=519 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969845 n=520 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969861 n=521 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969877 n=522 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969893 n=523 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969909 n=524 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969925 n=525 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969941 n=526 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969957 n=527 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969973 n=528 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=969989 n=529 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970005 n=530 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970021 n=531 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970037 n=532 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970053 n=533 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970069 n=534 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970085 n=535 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970101 n=536 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970117 n=537 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970133 n=538 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970149 n=539 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970165 n=540 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970181 n=541 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970197 n=542 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970213 n=543 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970229 n=544 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970245 n=545 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970261 n=546 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970277 n=547 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970293 n=548 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970309 n=549 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970325 n=550 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970341 n=551 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970357 n=552 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970373 n=553 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970389 n=554 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970405 n=555 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970421 n=556 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970437 n=557 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970453 n=558 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970469 n=559 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970485 n=560 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970501 n=561 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970517 n=562 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970533 n=563 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970549 n=564 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970565 n=565 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970581 n=566 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970597 n=567 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970613 n=568 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970629 n=569 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970645 n=570 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970661 n=571 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970677 n=572 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970693 n=573 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970709 n=574 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970725 n=575 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970741 n=576 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970757 n=577 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970773 n=578 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970789 n=579 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970805 n=580 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970821 n=581 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970837 n=582 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970853 n=583 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970869 n=584 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970885 n=585 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970901 n=586 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970917 n=587 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970933 n=588 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970949 n=589 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970965 n=590 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970981 n=591 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=970997 n=592 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971013 n=593 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971029 n=594 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971045 n=595 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971061 n=596 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971077 n=597 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971093 n=598 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971109 n=599 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971125 n=600 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971141 n=601 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971157 n=602 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971173 n=603 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971189 n=604 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971205 n=605 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971221 n=606 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971237 n=607 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971253 n=608 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971269 n=609 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971285 n=610 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971301 n=611 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971317 n=612 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971333 n=613 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971349 n=614 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971365 n=615 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971381 n=616 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971397 n=617 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971413 n=618 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971429 n=619 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971445 n=620 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971461 n=621 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971477 n=622 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971493 n=623 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971509 n=624 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971525 n=625 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971541 n=626 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971557 n=627 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971573 n=628 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971589 n=629 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971605 n=630 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971621 n=631 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971637 n=632 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971653 n=633 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971669 n=634 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971685 n=635 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971701 n=636 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971717 n=637 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971733 n=638 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971749 n=639 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971765 n=640 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971781 n=641 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971797 n=642 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971813 n=643 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971829 n=644 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971845 n=645 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971861 n=646 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971877 n=647 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971893 n=648 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971909 n=649 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971925 n=650 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971941 n=651 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971957 n=652 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971973 n=653 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=971989 n=654 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972005 n=655 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972021 n=656 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972037 n=657 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972053 n=658 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972069 n=659 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972085 n=660 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972101 n=661 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972117 n=662 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972133 n=663 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972149 n=664 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972165 n=665 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972181 n=666 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972197 n=667 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972213 n=668 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972229 n=669 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972245 n=670 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972261 n=671 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972277 n=672 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972293 n=673 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972309 n=674 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972325 n=675 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972341 n=676 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972357 n=677 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972373 n=678 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972389 n=679 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972405 n=680 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972421 n=681 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972437 n=682 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972453 n=683 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972469 n=684 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972485 n=685 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972501 n=686 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972517 n=687 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972533 n=688 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972549 n=689 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972565 n=690 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972581 n=691 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972597 n=692 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972613 n=693 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972629 n=694 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972645 n=695 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972661 n=696 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972677 n=697 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972693 n=698 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972709 n=699 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972725 n=700 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972741 n=701 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972757 n=702 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972773 n=703 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972789 n=704 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972805 n=705 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972821 n=706 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972837 n=707 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972853 n=708 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972869 n=709 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972885 n=710 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972901 n=711 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972917 n=712 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972933 n=713 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972949 n=714 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972965 n=715 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972981 n=716 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=972997 n=717 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973013 n=718 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973029 n=719 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973045 n=720 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973061 n=721 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973077 n=722 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973093 n=723 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973109 n=724 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973125 n=725 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973141 n=726 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973157 n=727 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973173 n=728 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973189 n=729 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973205 n=730 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973221 n=731 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973237 n=732 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973253 n=733 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973269 n=734 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973285 n=735 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973301 n=736 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973317 n=737 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973333 n=738 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973349 n=739 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973365 n=740 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973381 n=741 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973397 n=742 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973413 n=743 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973429 n=744 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973445 n=745 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973461 n=746 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973477 n=747 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973493 n=748 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973509 n=749 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973525 n=750 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973541 n=751 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973557 n=752 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973573 n=753 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973589 n=754 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973605 n=755 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973621 n=756 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973637 n=757 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973653 n=758 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973669 n=759 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973685 n=760 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973701 n=761 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973717 n=762 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973733 n=763 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973749 n=764 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973765 n=765 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973781 n=766 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973797 n=767 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973813 n=768 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973829 n=769 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973845 n=770 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973861 n=771 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973877 n=772 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973893 n=773 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973909 n=774 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973925 n=775 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973941 n=776 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973957 n=777 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973973 n=778 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=973989 n=779 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974005 n=780 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974021 n=781 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974037 n=782 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974053 n=783 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974069 n=784 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974085 n=785 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974101 n=786 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974117 n=787 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974133 n=788 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974149 n=789 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974165 n=790 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974181 n=791 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974197 n=792 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974213 n=793 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974229 n=794 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974245 n=795 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974261 n=796 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974277 n=797 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974293 n=798 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974309 n=799 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974325 n=800 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974341 n=801 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974357 n=802 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974373 n=803 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974389 n=804 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974405 n=805 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974421 n=806 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974437 n=807 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974453 n=808 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974469 n=809 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974485 n=810 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974501 n=811 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974517 n=812 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974533 n=813 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974549 n=814 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974565 n=815 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974581 n=816 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974597 n=817 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974613 n=818 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974629 n=819 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974645 n=820 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974661 n=821 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974677 n=822 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974693 n=823 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974709 n=824 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974725 n=825 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974741 n=826 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974757 n=827 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974773 n=828 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974789 n=829 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974805 n=830 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974821 n=831 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974837 n=832 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974853 n=833 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974869 n=834 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974885 n=835 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974901 n=836 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974917 n=837 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974933 n=838 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974949 n=839 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974965 n=840 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974981 n=841 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=974997 n=842 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975013 n=843 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975029 n=844 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975045 n=845 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975061 n=846 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975077 n=847 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975093 n=848 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975109 n=849 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975125 n=850 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975141 n=851 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975157 n=852 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975173 n=853 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975189 n=854 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975205 n=855 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975221 n=856 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975237 n=857 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975253 n=858 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975269 n=859 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975285 n=860 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975301 n=861 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975317 n=862 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975333 n=863 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975349 n=864 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975365 n=865 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975381 n=866 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975397 n=867 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975413 n=868 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975429 n=869 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975445 n=870 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975461 n=871 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975477 n=872 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975493 n=873 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975509 n=874 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975525 n=875 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975541 n=876 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975557 n=877 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975573 n=878 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975589 n=879 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975605 n=880 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975621 n=881 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975637 n=882 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975653 n=883 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975669 n=884 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975685 n=885 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975701 n=886 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975717 n=887 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975733 n=888 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975749 n=889 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975765 n=890 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975781 n=891 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975797 n=892 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975813 n=893 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975829 n=894 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975845 n=895 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975861 n=896 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975877 n=897 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975893 n=898 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975909 n=899 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975925 n=900 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975941 n=901 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975957 n=902 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975973 n=903 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=975989 n=904 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976005 n=905 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976021 n=906 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976037 n=907 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976053 n=908 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976069 n=909 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976085 n=910 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976101 n=911 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976117 n=912 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976133 n=913 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976149 n=914 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976165 n=915 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976181 n=916 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976197 n=917 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976213 n=918 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976229 n=919 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976245 n=920 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976261 n=921 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976277 n=922 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976293 n=923 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976309 n=924 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976325 n=925 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976341 n=926 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976357 n=927 phase=workload why=cadence
+< CONT
+> STOP br-after-c1 at=976373 n=928 phase=workload why=cadence
+< CONT
+> EVENT br-after-c1 at=995356 n=13 hydo-ob: redis ready after 1 polls (uptime=14.85s)
+> EVENT br-after-c1 at=995356 n=14 hydo-ob: workload steps 7..19 rc=0 (uptime=14.96s)
+> EVENT br-after-c1 at=995356 n=15 hydo-explore-acked: 0 1 2 3 4 7 8 9 10 11 12 13 14 15 16 17 18 19 
+> EVENT br-after-c1 at=995356 n=16 hydo-explore-failed: 
+> STOP br-after-c1 at=995356 n=929 phase=workload why=marker
+< CONT
+> STOP br-after-c1 at=995356 n=930 phase=check why=start
+< CONT
+> EVENT br-after-c1 at=1011146 n=17 hydo-explore-workload-donego
+> EVENT br-after-c1 at=1011146 n=18 
+> EVENT br-after-c1 at=1011146 n=19 hydo-ob: command: go
+> EVENT br-after-c1 at=1011146 n=20 HYDO-ASSERT {"t":"always","id":"redis.acked_writes_survive","ok":true,"msg":"every SET the client saw acknowledged reads back with its value","details":{"out":"acked=18 all present"}}
+> SENT br-after-c1 id=1 at=1011146
+> STOP br-after-c1 at=1011146 n=931 phase=check why=send
+< CONT
+> STOP br-after-c1 at=1011162 n=932 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011178 n=933 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011194 n=934 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011210 n=935 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011226 n=936 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011242 n=937 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011258 n=938 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011274 n=939 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011290 n=940 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011306 n=941 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011322 n=942 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011338 n=943 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011354 n=944 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011370 n=945 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011386 n=946 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011402 n=947 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011418 n=948 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011434 n=949 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011450 n=950 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011466 n=951 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011482 n=952 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011498 n=953 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011514 n=954 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011530 n=955 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011546 n=956 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011562 n=957 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011578 n=958 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011594 n=959 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011610 n=960 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011626 n=961 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011642 n=962 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011658 n=963 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011674 n=964 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011690 n=965 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011706 n=966 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011722 n=967 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011738 n=968 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011754 n=969 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011770 n=970 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011786 n=971 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011802 n=972 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011818 n=973 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011834 n=974 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011850 n=975 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011866 n=976 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011882 n=977 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011898 n=978 phase=check why=cadence
+< CONT
+> EVENT br-after-c1 at=1011914 n=21 hydo-agent-ping 1HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=18 all present)
+> STOP br-after-c1 at=1011914 n=979 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011930 n=980 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011946 n=981 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011962 n=982 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011978 n=983 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1011994 n=984 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1012010 n=985 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1012026 n=986 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1012042 n=987 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1012058 n=988 phase=check why=cadence
+< CONT
+> STOP br-after-c1 at=1012074 n=989 phase=check why=marker
+< CONT
+> RESULT br-after-c1 fp=456001c6ec2263cb wfp=427031321268e595 secs=3.1 stops=989 typed=1 inh=a2488f48e1f30524 verdict=HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=18 all present)

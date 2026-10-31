@@ -118,7 +118,8 @@
  *                                      (default: the last HYDO-ORACLE line, as for a marker)
  * EOF on stdin ends the run with "ERROR control channel closed".
  * Stops (`why`): `start` before the first run call of each phase (the engine's own input -- the
- * guest line, "go", the oracle command -- is already typed), `resume` after a RESUME restore,
+ * guest line, "go", the oracle command -- is already typed), `resume` after a RESUME restore (it
+ * repeats the number of the stop where SNAP was taken, so a continuation numbers as its base),
  * `cadence` at every return of a run call that was not cut short for a pending send (so the
  * schedule's rb=<n> is the cadence: a stop after at most n events; without rb= the module's own
  * returns), `send` when a pending send was typed at a capped return, `marker` where the shell
@@ -129,27 +130,45 @@
  * the PMU clock these points are branch-exact; with several vCPUs they are the first clean turn
  * boundary at or after `at`. Each phase is its own VM clock: the recovery VM starts from S0's icount.
  * RESULT gets three more facts before verdict=: stops=<n> typed=<sends typed> inh=<hex16> (FNV-1a
- * over every typed send's icount, length and bytes, in typing order). Example (serve; `<` host,
- * `>` engine, abridged):
- *   < CTL a disk=none | run K=redis@5+2
- *   > STOP a at=949127 n=1 phase=workload why=start
+ * over every typed send's icount, length and bytes, in typing order; a retype after RESUME is not
+ * counted again, so a continuation reports its base's values). Examples from real runs (the
+ * onboarded Redis image; `<` host, `>` engine; "..." = lines left out here). A send queued at the
+ * start, plain run calls (the capped returns before it are not reported):
+ *   < CTL at20000-a disk=none | run K=redis@5+2
+ *   > STOP at20000-a at=949127 n=1 phase=workload why=start
  *   < SEND at=969127 hydo-agent-ping 1
  *   > OK send id=1 queued=969127
  *   < CONT
- *   > EVENT a at=967310 n=1 KILLED redis
- *   > STOP a at=967310 n=2 phase=workload why=cadence
+ *   > EVENT at20000-a at=969127 n=1 run K=redis@5+2
+ *   ...
+ *   > SENT at20000-a id=1 at=969127
+ *   > STOP at20000-a at=969127 n=2 phase=workload why=send
+ * A reaction at rb=16, the snapshot rule, and a continuation:
+ *   < CTL same-base disk=none rb=16 | run K=redis@5+2
+ *   ...
+ *   > EVENT same-base at=961048 n=10 hydo-ob: KILLED redis before step 5
+ *   > STOP same-base at=961048 n=354 phase=workload why=cadence
+ *   < SEND at=961048 hydo-agent-ping 1
+ *   > OK send id=1 sent=961048
+ *   < SNAP same
+ *   > ERR snap same unacked=1
+ *   < SNAP same retype
+ *   > OK snap same at=961048 retype=1
  *   < CONT
- *   > SENT a id=1 at=969127
- *   > STOP a at=969127 n=3 phase=workload why=send
- *   < SNAP s retype
- *   > OK snap s at=969127 retype=1
- *   < CONT                                 ... stops until the workload marker, then the check
- *   > RESULT a fp=... wfp=... secs=2.6 stops=40 typed=1 inh=... verdict=HYDO-ORACLE: OK ...
- *   < RESUME b s
- *   > SENT b id=1 at=969127 retype=1
- *   > STOP b at=969127 n=3 phase=workload why=resume
- *   < CONT ...                             (the same stops and RESULT fingerprint as run a)
- * The real transcripts are in hydo/crates/hydo-engine/tests/lockstep/.
+ *   ...
+ *   > RESULT same-base fp=24b5730593297b77 wfp=6e0c8c5d813f450f secs=3.1 stops=1719 typed=1 inh=43beecca11241af6 verdict=...
+ *   < RESUME same-c1 same
+ *   > SENT same-c1 id=1 at=961048 retype=1
+ *   > STOP same-c1 at=961048 n=354 phase=workload why=resume
+ *   < CONT
+ *   ...
+ *   > RESULT same-c1 fp=24b5730593297b77 wfp=6e0c8c5d813f450f secs=3.0 stops=1719 typed=1 inh=43beecca11241af6 verdict=...
+ * The whole transcripts are in hydo/crates/hydo-engine/tests/lockstep/.
+ * Caution (M118): the guest is not independent of where run calls return. The same input at the
+ * same icount gives another fingerprint when the calls before it were capped (a send queued
+ * early) than when they were not (typed at once at a stop): Linux's interrupt entropy pool
+ * (irq_randomness) differs. A run is therefore defined by its cadence and by the host commands at
+ * each numbered stop, not by (icount, bytes) alone; at rb=1 nothing is ever capped and the two agree.
  */
 #define HVX_STACK_NO_MAIN
 #include "hvx_stack_verify.c"
@@ -654,12 +673,14 @@ static void ctl_type(struct boot *b, struct ctl_send *s, int print)
 {
 	int retype = s->state == CS_RETYPE;
 	put_bytes(b, s->buf, s->len);
-	s->sent = C.at;
 	s->state = CS_TYPED;
-	C.k.ntyped++;
-	C.k.inh = fnv(C.k.inh ? C.k.inh : 0xcbf29ce484222325ULL, &C.at, sizeof(C.at));
-	C.k.inh = fnv(C.k.inh, &s->len, sizeof(s->len));
-	C.k.inh = fnv(C.k.inh, s->buf, s->len);
+	if (!retype) {	/* a retype restores the base run's input, which typed= and inh= already count */
+		s->sent = C.at;
+		C.k.ntyped++;
+		C.k.inh = fnv(C.k.inh ? C.k.inh : 0xcbf29ce484222325ULL, &C.at, sizeof(C.at));
+		C.k.inh = fnv(C.k.inh, &s->len, sizeof(s->len));
+		C.k.inh = fnv(C.k.inh, s->buf, s->len);
+	}
 	if (print) printf("SENT %s id=%llu at=%llu%s\n", C.tag, (unsigned long long)s->id,
 			  (unsigned long long)C.at, retype ? " retype=1" : "");
 }
@@ -864,6 +885,7 @@ static int run_until_any(struct boot *b, const char *const *mk, int n, size_t fr
 	int i;
 	if (C.on && C.start) {		/* lock-step: the phase's first stop, before any run call */
 		const char *why = C.start == 2 ? "resume" : "start";
+		if (C.start == 2) C.k.nstop--;	/* the snapshot's own stop, again: same numbers as the base */
 		C.start = 0;
 		C.at = ctl_icount(b);
 		if (ctl_stop(b, why)) return -3;
