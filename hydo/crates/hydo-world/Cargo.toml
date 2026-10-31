@@ -1,0 +1,21 @@
+[package]
+name = "hydo-world"
+description = "hydo-world: the fake outside services and fault proxies inside the guest (fakes:, proxies:, H= protocol faults)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "hydo-world"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+libc = "0.2"
+bytes = "1"
+http = "1"
+httparse = "1"
+h2 = "0.4"
+tokio = { version = "1", default-features = false, features = ["rt", "net", "time", "io-util", "sync"] }
