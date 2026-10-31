@@ -1,7 +1,8 @@
 //! The call sequences of the conformance programs that compared each SDK with a Go 1.26.5
-//! binary before the shared cases existed (deleted in M110; `git show` the M109 tree for
-//! `sdk/*/tests/conformance.*`, `sdk/js/test/history-conformance.*`). Their outputs equal the
-//! Go programs' consoles and records byte for byte (docs/HISTORY.md, Milestone 110).
+//! binary before the shared cases existed (deleted in M110; `git log --diff-filter=D --
+//! sdk/rust/tests/conformance.sh` names the commit, whose parent has them all). Their outputs
+//! equal the Go programs' consoles and records byte for byte (docs/HISTORY.md, Milestone 110);
+//! only the history programs' versions below zero are left out.
 
 use crate::model::*;
 
