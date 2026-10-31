@@ -464,7 +464,7 @@ fn check_offered(s: &Session, cmd: &Command) -> Result<(), RunError> {
             cmd.name()
         )));
     }
-    if let Some(f) = cmd.feature() {
+    for f in cmd.features() {
         if !s.has_feature(f) {
             return Err(RunError::Protocol(format!(
                 "the agent does not offer the feature {f}"

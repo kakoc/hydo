@@ -202,7 +202,7 @@ impl Session {
                 what: format!("the op {}", cmd.name()),
             });
         }
-        if let Some(f) = cmd.feature() {
+        for f in cmd.features() {
             if !self.has_feature(f) {
                 return Err(SessionError::NotOffered {
                     what: format!("the feature {f}"),
@@ -345,6 +345,10 @@ mod tests {
     use crate::msg::*;
 
     fn hello(proto: u64, ops: &[&str]) -> String {
+        hello_with(proto, ops, &[])
+    }
+
+    fn hello_with(proto: u64, ops: &[&str], features: &[&str]) -> String {
         AgentLine::Event {
             v: proto,
             seq: 0,
@@ -352,11 +356,44 @@ mod tests {
                 proto,
                 agent: "0.9.0".into(),
                 ops: ops.iter().map(|s| s.to_string()).collect(),
-                features: vec![],
+                features: features.iter().map(|s| s.to_string()).collect(),
                 pid1: true,
             }),
         }
         .encode()
+    }
+
+    #[test]
+    fn a_field_with_a_feature_needs_the_feature() {
+        let freeze = |netns: Option<&str>| {
+            Command::Freeze(Freeze {
+                h: "redis".into(),
+                queue: 7,
+                sip: None,
+                port: Some(6379),
+                own_port: None,
+                dir: Dir::Req,
+                n: 1,
+                pattern: None,
+                dur_ms: 100,
+                log: None,
+                netns: netns.map(str::to_string),
+            })
+        };
+        // an agent of M117 announces `freeze` only: a freeze in a namespace is not sent to it
+        let mut old = Session::from_hello(&hello_with(1, &["freeze"], &["freeze"])).unwrap();
+        assert!(old.command(freeze(None)).is_ok());
+        assert_eq!(
+            old.command(freeze(Some("/tmp/hydo/ns/redis"))).unwrap_err(),
+            SessionError::NotOffered {
+                what: "the feature freeze-netns".into()
+            }
+        );
+        let mut new =
+            Session::from_hello(&hello_with(1, &["freeze"], &["freeze", "freeze-netns"])).unwrap();
+        assert!(new.command(freeze(Some("/tmp/hydo/ns/redis"))).is_ok());
+        let mut none = Session::from_hello(&hello_with(1, &["freeze"], &[])).unwrap();
+        assert!(none.command(freeze(None)).is_err());
     }
 
     #[test]

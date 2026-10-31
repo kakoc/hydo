@@ -993,6 +993,34 @@ impl Agent {
         }
     }
 
+    /// Runs `f` inside the network namespace `ns` (a file such as /tmp/hydo/ns/redis), then
+    /// returns to the agent's own namespace; a socket made inside stays in that namespace (the
+    /// netfilter queue of a freeze with `netns`). The agent has one thread, so nothing else runs
+    /// in the other namespace meanwhile.
+    fn in_netns<T>(
+        &self,
+        ns: Option<&str>,
+        f: impl FnOnce() -> Result<T, Fail>,
+    ) -> Result<T, Fail> {
+        let Some(p) = ns else {
+            return f();
+        };
+        let own = File::open("/proc/self/ns/net")
+            .map_err(|e| os("open the agent's network namespace", &e))?;
+        let target = File::open(self.path(p)).map_err(|e| os(&format!("open {p}"), &e))?;
+        if unsafe { libc::setns(target.as_raw_fd(), libc::CLONE_NEWNET) } != 0 {
+            return Err(os(&format!("setns {p}"), &std::io::Error::last_os_error()));
+        }
+        let r = f();
+        if unsafe { libc::setns(own.as_raw_fd(), libc::CLONE_NEWNET) } != 0 {
+            // Every later child would start in the wrong namespace: the agent cannot go on.
+            let e = std::io::Error::last_os_error();
+            eprintln!("hydo-agent: setns back to its own network namespace: {e}");
+            std::process::abort();
+        }
+        r
+    }
+
     fn arm_freeze(&mut self, id: u64, f: Freeze) -> Result<Reply, Fail> {
         if self.freeze.is_some() {
             return Err(fail(ErrCode::Busy, "a freeze is already armed"));
@@ -1029,7 +1057,9 @@ impl Agent {
             Some(l) => Some(File::create(self.path(l)).map_err(|e| os(&format!("open {l}"), &e))?),
             None => None,
         };
-        let nfq = Nfq::bind(queue).map_err(|(what, e)| os(what, &e))?;
+        let nfq = self.in_netns(f.netns.as_deref(), || {
+            Nfq::bind(queue).map_err(|(what, e)| os(what, &e))
+        })?;
         let _ = sys::set_fifo(50);
         let counter = Counter {
             sip,

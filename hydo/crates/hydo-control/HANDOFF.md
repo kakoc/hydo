@@ -325,7 +325,8 @@ first. So:
 
 The manifests with fakes and another feature (shop and redis-bridge: liveness; redis-bridge:
 netns) are still refused by that feature's seam. (M124: netns is driven now; redis-bridge waits
-only for liveness, and `tests/corpus_net.rs` runs it with its `eventually` check taken out.)
+only for liveness, and `tests/corpus_net.rs` runs it with its `eventually` check taken out. M127:
+its F= tokens are driven too, decision 13 of M124.)
 
 What C1 needs from this: pass `Ending::PowerCut::world` to `with_world`. Nothing else.
 
@@ -397,9 +398,19 @@ model in `tests/support/model/net.rs` checks each):
     every later command of the main part. A background job of the shell keeps the environment of
     its fork; the controller's threads build each command when they send it (M120's approach), so
     a periodic check after the arming has the variable too.
-13. **F= with `network: bridge`** is refused (seam freeze): the helper runs in the frozen
-    service's namespace, and the agent's `freeze` has no namespace field. Doing it needs a
-    protocol addition (`netns` on `freeze`, with a feature name) in hydo-agent-proto and the agent.
+13. **F= with `network: bridge`** is driven since M127 (branch `c2-linux-fixes`). The agent's
+    `freeze` has an optional `netns` (an additions-only change of protocol 1, feature
+    `freeze-netns` in the hello; `Command::features()` names both features, and neither the
+    session nor the runner sends the field to an agent that does not announce it). The agent
+    enters that namespace with setns, binds its netfilter queue there and goes back to its own
+    namespace before it does anything else (one thread). The controller sends the frozen
+    service's `$NSD/<svc>` as `netns`, as hydo-init-netns.sh's fc_arm puts `nsenter -n` in front
+    of hydo_fc, and runs that file's fc_rules in the same namespace (`run` with `netns`): OUTPUT
+    `-s <sa> -d <ta>` and INPUT `-s <ta> -d <sa>`, or for the workload peer INPUT from and OUTPUT
+    to the bridge's address 10.89.0.1 on the service's port. An empty address is no word, as in
+    the unquoted shell. `tests/corpus_net.rs` drives F= on both redis-bridge copies (replica at
+    the primary, primary at the workload) and on the voting app with `faults: [freeze]`, each run
+    checked against the shell model of both files.
 
 The order against the other extensions (hydo-build's `init_text`; a wrapper spliced later runs
 first): `step_range`: the fakes split, then freeze's (declaration, arming), then hydo-init.sh's;

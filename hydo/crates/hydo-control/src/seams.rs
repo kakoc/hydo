@@ -102,8 +102,8 @@ impl Seam {
                  rules + the helper), heals in restart_dead and kills the helper at a cut. \
                  Controller: `run` the pinned iptables, then the agent's `freeze` command, the \
                  `froze`/`resumed` events, `unfreeze` at the heal; the fault.freeze_call records. \
-                 Driven since M124 (src/schedule/freeze.rs); only an F= token with `network: \
-                 bridge` is still refused with this seam (the agent's `freeze` has no namespace)."
+                 Driven since M124 (src/schedule/freeze.rs); with `network: bridge` since M127 \
+                 (the agent's `freeze` takes the frozen service's namespace, `freeze-netns`)."
             }
             Seam::Buggify => {
                 "hydo-init-buggify.sh turns the knob B= into /tmp/hydo-buggify (mode 644). \

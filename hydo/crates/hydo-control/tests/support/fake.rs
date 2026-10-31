@@ -160,7 +160,7 @@ impl Fake {
                 proto: 1,
                 agent: "0.1.0".into(),
                 ops: Command::NAMES.iter().map(|s| s.to_string()).collect(),
-                features: vec!["freeze".into()],
+                features: vec!["freeze".into(), "freeze-netns".into()],
                 pid1: true,
             })),
         );

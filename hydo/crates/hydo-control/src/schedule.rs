@@ -34,7 +34,7 @@
 use crate::control::{Controller, Ending, EngineAction, Out, Seen, StopInfo};
 use crate::flow::{Facts, Flow, Fx, Memo, Step};
 use crate::plan::Plan;
-use crate::seams::{Seam, Unsupported};
+use crate::seams::Unsupported;
 use hydo_agent_proto::msg::{
     ClockSet, Command, Event, Mkdir, Mount, MountFlag, Probe, ProbeEnd, Read, Reply, Run, Sig,
     Signal, Spawn, Syncfs, Write,
@@ -476,14 +476,8 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
             // SEAM(NetFaults): netfault.rs
             GuestToken::Net { .. } => c.n = Some(value),
             GuestToken::OneWay { .. } => c.o = Some(value),
-            GuestToken::Freeze(_) if plan.freeze && plan.bridge => {
-                // SEAM(Freeze): freeze.rs. With network: bridge the helper runs in the frozen
-                // service's namespace; the agent's `freeze` has no namespace field.
-                return Err(Unsupported::seam(
-                    Seam::Freeze,
-                    format!("{text} with network: bridge (hydo-agent-proto's freeze has no netns)"),
-                ));
-            }
+            // SEAM(Freeze): F= is a knob (freeze.rs); with network: bridge the agent's freeze
+            // and the rules run in the frozen service's namespace (M127)
             // SEAM(Clock): T=, driven by features/clock.rs
             GuestToken::Clock { at, delta } => c.t = Some((*at as i64, *delta)),
             // Every other letter is a knob to the shell (`?=*) set_knob`): B= (set_knob's BUGGIFY
