@@ -8,7 +8,8 @@
 //! console summary, the check outputs and the carried world.
 //!
 //! The transcript is compared with `tests/golden/xcheck.txt`, which was recorded from the Go
-//! version of hydo-world (M111) and is now the reference. `HYDO_WORLD_BIN` runs it against
+//! version of hydo-world (M111; its source, `hydo/onboard/world/`, was deleted after the proofs
+//! and is in git at dd2ea9c) and is now the reference. `HYDO_WORLD_BIN` runs it against
 //! another binary (the Go one, for example); `HYDO_BLESS=1` rewrites the golden file. The ports
 //! are fixed (base `HYDO_XCHECK_PORT`, default 38600) because they appear in error texts.
 //!
@@ -494,6 +495,15 @@ fn head_lines(h: &[u8]) -> String {
         .join(" | ")
 }
 
+/// The gzip answer of `/gz` (`{"gz":true,"text":"aaa…"}`), as fixed bytes: an encoder's output
+/// depends on which flate2 backend a whole-workspace build unifies to.
+const GZ_BODY: [u8; 54] = [
+    0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x8d, 0xc0, 0xb1, 0x0d, 0x00, 0x20,
+    0x08, 0x44, 0xd1, 0x5d, 0x7e, 0xed, 0x04, 0x6c, 0x63, 0x41, 0xec, 0xcd, 0x99, 0x18, 0x08, 0xbb,
+    0xb3, 0x02, 0x2f, 0x39, 0x81, 0xe9, 0x3e, 0x5f, 0xc8, 0xbf, 0x30, 0xf6, 0x00, 0xd5, 0xde, 0xca,
+    0xce, 0x9e, 0x39, 0x00, 0x00, 0x00,
+];
+
 /// The real HTTP service behind the proxy `shop`.
 async fn up_http(ln: TcpListener, seen: Seen) {
     loop {
@@ -517,17 +527,13 @@ async fn up_http(ln: TcpListener, seen: Seen) {
                 .to_string();
             let path = line.split(' ').nth(1).unwrap_or("").to_string();
             let resp: Vec<u8> = if path.starts_with("/gz") {
-                use std::io::Write;
-                let mut e = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::new(6));
-                e.write_all(b"{\"gz\":true,\"text\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}")
-                    .unwrap();
-                let z = e.finish().unwrap();
+                let z: &[u8] = &GZ_BODY;
                 let mut r = format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Encoding: gzip\r\nVary: Accept-Encoding\r\nContent-Length: {}\r\n\r\n",
                     z.len()
                 )
                 .into_bytes();
-                r.extend_from_slice(&z);
+                r.extend_from_slice(z);
                 r
             } else if path.starts_with("/chunked") {
                 b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\nTrailer: X-Sum\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\nX-Sum: 11\r\n\r\n".to_vec()
