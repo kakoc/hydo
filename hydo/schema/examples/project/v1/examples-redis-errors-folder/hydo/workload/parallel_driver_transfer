@@ -1,0 +1,13 @@
+#!/bin/sh
+# move AMT from account A to account B. TRANSFER=atomic: one Lua script (one Redis command);
+# TRANSFER=racy: GET, GET, SET, SET -- two transfers that overlap can lose an update.
+. /hydo/workload/helper_lib.sh
+pick
+if [ "$TRANSFER" = racy ]; then
+  a=$(R GET acct:$A) && b=$(R GET acct:$B) && [ -n "$a" ] && [ -n "$b" ] || exit 1
+  [ "$(R SET acct:$A $((a - AMT)))" = OK ] || exit 1
+  [ "$(R SET acct:$B $((b + AMT)))" = OK ] || exit 1
+else
+  r=$(R EVAL "redis.call('DECRBY', KEYS[1], ARGV[1]); return redis.call('INCRBY', KEYS[2], ARGV[1])" 2 acct:$A acct:$B $AMT)
+  [ -n "$r" ] || exit 1
+fi

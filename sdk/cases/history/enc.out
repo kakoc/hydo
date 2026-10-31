@@ -1,0 +1,80 @@
+HYDO-HIST kv 0 invoke * write k0 %
+HYDO-HIST kv 0 ok * write k0 %
+HYDO-HIST kv 1 invoke * write k1 %6Eil
+HYDO-HIST kv 1 ok * write k1 %6Eil
+HYDO-HIST kv 2 invoke * write k2 Nil
+HYDO-HIST kv 2 ok * write k2 Nil
+HYDO-HIST kv 3 invoke * write k3 nil%20
+HYDO-HIST kv 3 ok * write k3 nil%20
+HYDO-HIST kv 4 invoke * write k4 %20nil
+HYDO-HIST kv 4 ok * write k4 %20nil
+HYDO-HIST kv 5 invoke * write k5 nilnil
+HYDO-HIST kv 5 ok * write k5 nilnil
+HYDO-HIST kv 6 invoke * write k6 %25
+HYDO-HIST kv 6 ok * write k6 %25
+HYDO-HIST kv 7 invoke * write k7 %256Eil
+HYDO-HIST kv 7 ok * write k7 %256Eil
+HYDO-HIST kv 8 invoke * write k8 %40
+HYDO-HIST kv 8 ok * write k8 %40
+HYDO-HIST kv 9 invoke * write k9 %20
+HYDO-HIST kv 9 ok * write k9 %20
+HYDO-HIST kv 10 invoke * write k10 %09
+HYDO-HIST kv 10 ok * write k10 %09
+HYDO-HIST kv 11 invoke * write k11 %0A
+HYDO-HIST kv 11 ok * write k11 %0A
+HYDO-HIST kv 12 invoke * write k12 %0D
+HYDO-HIST kv 12 ok * write k12 %0D
+HYDO-HIST kv 13 invoke * write k13 %00
+HYDO-HIST kv 13 ok * write k13 %00
+HYDO-HIST kv 14 invoke * write k14 %01
+HYDO-HIST kv 14 ok * write k14 %01
+HYDO-HIST kv 15 invoke * write k15 %1F
+HYDO-HIST kv 15 ok * write k15 %1F
+HYDO-HIST kv 16 invoke * write k16 %7F
+HYDO-HIST kv 16 ok * write k16 %7F
+HYDO-HIST kv 17 invoke * write k17 %2C
+HYDO-HIST kv 17 ok * write k17 %2C
+HYDO-HIST kv 18 invoke * write k18 %5B
+HYDO-HIST kv 18 ok * write k18 %5B
+HYDO-HIST kv 19 invoke * write k19 %5D
+HYDO-HIST kv 19 ok * write k19 %5D
+HYDO-HIST kv 20 invoke * write k20 %3A
+HYDO-HIST kv 20 ok * write k20 %3A
+HYDO-HIST kv 21 invoke * write k21 a%2Cb%5Bc%5D%3Ad%40e%25f%09g
+HYDO-HIST kv 21 ok * write k21 a%2Cb%5Bc%5D%3Ad%40e%25f%09g
+HYDO-HIST kv 22 invoke * write k22 a%20b
+HYDO-HIST kv 22 ok * write k22 a%20b
+HYDO-HIST kv 23 invoke * write k23 plain-Token_1.2
+HYDO-HIST kv 23 ok * write k23 plain-Token_1.2
+HYDO-HIST kv 24 invoke * write k24 ~!#$^&*()_+-={}|\;'"<>?/`
+HYDO-HIST kv 24 ok * write k24 ~!#$^&*()_+-={}|\;'"<>?/`
+HYDO-HIST kv 25 invoke * write k25 é
+HYDO-HIST kv 25 ok * write k25 é
+HYDO-HIST kv 26 invoke * write k26 café%20au%20lait
+HYDO-HIST kv 26 ok * write k26 café%20au%20lait
+HYDO-HIST kv 27 invoke * write k27 中文
+HYDO-HIST kv 27 ok * write k27 中文
+HYDO-HIST kv 28 invoke * write k28 日本語%2Cテスト
+HYDO-HIST kv 28 ok * write k28 日本語%2Cテスト
+HYDO-HIST kv 29 invoke * write k29 😀
+HYDO-HIST kv 29 ok * write k29 😀
+HYDO-HIST kv 30 invoke * write k30 a😀b%20c
+HYDO-HIST kv 30 ok * write k30 a😀b%20c
+HYDO-HIST kv 31 invoke * write k31  
+HYDO-HIST kv 31 ok * write k31  
+HYDO-HIST kv 32 invoke * write k32 
+HYDO-HIST kv 32 ok * write k32 
+HYDO-HIST kv 33 invoke * write k33   
+HYDO-HIST kv 33 ok * write k33   
+HYDO-HIST kv 34 invoke * write k34 　
+HYDO-HIST kv 34 ok * write k34 　
+HYDO-HIST kv 35 invoke * write k35 �
+HYDO-HIST kv 35 ok * write k35 �
+HYDO-HIST kv 36 invoke * write k36 ￿
+HYDO-HIST kv 36 ok * write k36 ￿
+HYDO-HIST kv 37 invoke * write k37 42
+HYDO-HIST kv 37 ok * write k37 42
+HYDO-HIST kv 38 invoke * write k38 -7
+HYDO-HIST kv 38 ok * write k38 -7
+HYDO-HIST kv 39 invoke * write k39 %00%01%02%03%04%05%06%07%08%09%0A%0B%0C%0D%0E%0F%10%11%12%13%14%15%16%17%18%19%1A%1B%1C%1D%1E%1F%20!"#$%25&'()*+%2C-./0123456789%3A;<=>?%40ABCDEFGHIJKLMNOPQRSTUVWXYZ%5B\%5D^_`abcdefghijklmnopqrstuvwxyz{|}~%7F
+HYDO-HIST kv 39 ok * write k39 %00%01%02%03%04%05%06%07%08%09%0A%0B%0C%0D%0E%0F%10%11%12%13%14%15%16%17%18%19%1A%1B%1C%1D%1E%1F%20!"#$%25&'()*+%2C-./0123456789%3A;<=>?%40ABCDEFGHIJKLMNOPQRSTUVWXYZ%5B\%5D^_`abcdefghijklmnopqrstuvwxyz{|}~%7F

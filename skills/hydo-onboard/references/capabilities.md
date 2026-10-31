@@ -20,7 +20,8 @@ the commands). Since Milestone 107 a release is Rust programs only and needs no 
 - **hydo's repository on x86_64 Linux**: the `hydo-build` program (`cargo build --release -p
   hydo-build`) with the helper programs built
   from source (`hydo/onboard/world/build.sh` for `hydo-world`, `hydo/crates/hydo-read/build.sh` for
-  `hydo-read`, Go for `hydo-grpc-gen`) and the pinned tools of `docs/BUILD-PINS.md`.
+  `hydo-read`, `hydo/onboard/hydo-grpc-gen` for the gRPC generator and its static client) and
+  the pinned tools of `docs/BUILD-PINS.md`.
 
 | feature | Linux release | Mac release | repository (x86_64) |
 |---|---|---|---|

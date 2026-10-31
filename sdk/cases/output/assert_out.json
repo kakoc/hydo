@@ -1,0 +1,19 @@
+{
+  "about": "HYDO_ASSERT_OUT: a file (appended to, never created), stderr, a missing file (standard error), or off (nothing anywhere)",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"o.a","msg":"an assertion"},
+    {"do":"buggify","id":"o.p","msg":"a point"},
+    {"do":"catalog"},
+    {"do":"check","a":0,"cond":false,"details":{"map":[["k","v"]]}},
+    {"do":"fire","a":1},
+    {"do":"setup_complete"}
+  ],
+  "runs": [
+    {"name": "file", "out": "file", "hist_out": "off", "buggify_env": "1,1000,1000", "buggify_file": null, "output": "assert_out.file.out", "returns": "01"},
+    {"name": "append", "out": "append", "hist_out": "off", "buggify_env": "1,1000,1000", "buggify_file": null, "output": "assert_out.append.out", "returns": "01"},
+    {"name": "stderr", "out": "stderr", "hist_out": "off", "buggify_env": "1,1000,1000", "buggify_file": null, "output": "assert_out.stderr.out", "returns": "01"},
+    {"name": "missing", "out": "missing", "hist_out": "off", "buggify_env": "1,1000,1000", "buggify_file": null, "output": "assert_out.missing.out", "returns": "01"},
+    {"name": "off", "out": "off", "hist_out": "off", "buggify_env": "1,1000,1000", "buggify_file": null, "output": "assert_out.off.out", "returns": "01"}
+  ]
+}

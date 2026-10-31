@@ -1,0 +1,114 @@
+{
+  "format": 1,
+  "name": "miniflux",
+  "description": "miniflux + PostgreSQL; every acknowledged category must be stored exactly once.",
+  "root": {
+    "nix": [
+      "/nix/store/6mr1dkqqgkm6lhnkvir9i1jim2dnrl8j-postgresql-15.6",
+      "/nix/store/4wi4ck9lxpp37fijcna3c1wkm80zzs8v-curl-8.7.1-bin"
+    ],
+    "files": [
+      {
+        "src": "miniflux",
+        "dst": "/bin/miniflux",
+        "mode": "0755"
+      }
+    ],
+    "text": {
+      "/etc/passwd": "root:x:0:0:root:/root:/bin/sh\npostgres:x:70:70:postgres:/tmp:/bin/sh\n",
+      "/etc/group": "root:x:0:\npostgres:x:70:\n"
+    }
+  },
+  "data": {
+    "size_mib": 256,
+    "dirs": [
+      "pg"
+    ]
+  },
+  "env": {
+    "PG": "/nix/store/6mr1dkqqgkm6lhnkvir9i1jim2dnrl8j-postgresql-15.6",
+    "CURL": "/nix/store/4wi4ck9lxpp37fijcna3c1wkm80zzs8v-curl-8.7.1-bin/bin/curl",
+    "DATABASE_URL": "postgres://miniflux@127.0.0.1/miniflux?sslmode=disable",
+    "LISTEN_ADDR": "127.0.0.1:8080",
+    "BASE_URL": "http://127.0.0.1:8080",
+    "RUN_MIGRATIONS": "1",
+    "CREATE_ADMIN": "1",
+    "ADMIN_USERNAME": "admin",
+    "ADMIN_PASSWORD": "hydo-admin",
+    "DISABLE_SCHEDULER_SERVICE": "1",
+    "DATABASE_MAX_CONNS": "4",
+    "GOMAXPROCS": "1"
+  },
+  "shell": "PSQL() { \"$PG/bin/psql\" -h 127.0.0.1 -U miniflux -d miniflux -tA -c \"$1\"; }\nAPI() { $CURL -s -u \"$ADMIN_USERNAME:$ADMIN_PASSWORD\" \"$@\"; }\n",
+  "services": [
+    {
+      "name": "postgres",
+      "cmd": "su postgres -s /bin/sh -c \"exec $PG/bin/postgres -D /data/pg -c listen_addresses=127.0.0.1 -c unix_socket_directories=/tmp -c shared_buffers=32MB -c max_connections=20 -c dynamic_shared_memory_type=mmap\"",
+      "setup": "if [ ! -f /data/pg/PG_VERSION ]; then\n  chown postgres /data/pg\n  su postgres -s /bin/sh -c \"$PG/bin/initdb -D /data/pg -U postgres --auth=trust\"\nfi\n",
+      "ready": "\"$PG/bin/pg_isready\" -h 127.0.0.1 -U postgres",
+      "ready_timeout": 120,
+      "port": 5432
+    },
+    {
+      "name": "front",
+      "cmd": "/bin/miniflux",
+      "setup": "P() { \"$PG/bin/psql\" -h 127.0.0.1 -U postgres -tA -c \"$1\"; }\nP \"SELECT 1 FROM pg_roles WHERE rolname='miniflux'\" | grep -q 1 || P \"CREATE ROLE miniflux LOGIN\"\nP \"SELECT 1 FROM pg_database WHERE datname='miniflux'\" | grep -q 1 || P \"CREATE DATABASE miniflux OWNER miniflux\"\n",
+      "ready": "/bin/miniflux -healthcheck http://127.0.0.1:8080/healthcheck",
+      "port": 8080,
+      "depends_on": [
+        "postgres"
+      ],
+      "recovery": false,
+      "description": "miniflux itself (named front so the explorer's generators target it)"
+    }
+  ],
+  "workload": {
+    "steps": 30,
+    "run": "i=$HYDO_FROM\nwhile [ $i -lt $HYDO_TO ]; do\n  code=$(API -o /tmp/hydo/resp.$i -w '%{http_code}' --max-time 3 \\\n         -H 'Content-Type: application/json' -d \"{\\\"title\\\":\\\"c$i\\\"}\" \\\n         http://127.0.0.1:8080/v1/categories)\n  case $code in\n    201) echo $i >> $HYDO_ACKED; echo \"$i ack\" >> $HYDO_OUTCOMES;;\n    4??) echo \"$i failed\" >> $HYDO_OUTCOMES;;     # validation error: not applied\n    *)   echo \"$i unknown\" >> $HYDO_OUTCOMES;;    # timeout, 5xx, no connection\n  esac\n  i=$((i + 1))\ndone\n",
+    "retry": "i=0\nwhile [ $i -lt $HYDO_STEPS ]; do\n  if ! grep -qx $i $HYDO_ACKED; then\n    code=$(API -o /tmp/hydo/resp.$i -w '%{http_code}' --max-time 3 \\\n           -H 'Content-Type: application/json' -d \"{\\\"title\\\":\\\"c$i\\\"}\" \\\n           http://127.0.0.1:8080/v1/categories)\n    # a 400 \"already exists\" means an earlier attempt was applied: the title is the id\n    if [ \"$code\" = 201 ] || grep -q \"already exists\" /tmp/hydo/resp.$i; then\n      echo $i >> $HYDO_ACKED; echo \"$i ack\" >> $HYDO_OUTCOMES\n    fi\n  fi\n  i=$((i + 1))\ndone\n",
+    "timeout": 180,
+    "process": "curl"
+  },
+  "knobs": [
+    {
+      "token": "S",
+      "name": "PostgreSQL synchronous_commit",
+      "default": "on",
+      "set": "\"$PG/bin/psql\" -h 127.0.0.1 -U postgres -c \"ALTER SYSTEM SET synchronous_commit=$HYDO_VALUE\" -c \"SELECT pg_reload_conf()\"",
+      "values": [
+        "on",
+        "off"
+      ],
+      "safe": "on"
+    }
+  ],
+  "invariants": [
+    {
+      "id": "categories.acked_exactly_once",
+      "msg": "every category the client saw created (HTTP 201) is stored exactly once",
+      "cmd": "PSQL \"SELECT 1\" >/dev/null 2>&1 || exit 2\nfor i in $(cat $HYDO_ACKED); do\n  n=$(PSQL \"SELECT COUNT(*) FROM categories WHERE title='c$i'\")\n  [ \"$n\" = 1 ] || { echo \"category c$i stored $n times\"; exit 1; }\ndone\necho \"acked=$(wc -l < $HYDO_ACKED) exactly once\"\n"
+    },
+    {
+      "id": "categories.failed_not_applied",
+      "msg": "a create the server rejected with a 4xx was not applied",
+      "cmd": "PSQL \"SELECT 1\" >/dev/null 2>&1 || exit 2\nfor i in $(cat $HYDO_FAILED); do\n  n=$(PSQL \"SELECT COUNT(*) FROM categories WHERE title='c$i'\")\n  [ \"$n\" = 0 ] || { echo \"category c$i was rejected but is stored\"; exit 1; }\ndone\necho \"failed=$(wc -l < $HYDO_FAILED) none applied\"\n"
+    },
+    {
+      "id": "api.reads_acked_categories",
+      "type": "always_or_unreachable",
+      "msg": "while the workload runs, every acknowledged category is visible through the API",
+      "cmd": "code=$(API -o /tmp/hydo/cats -w '%{http_code}' --max-time 3 http://127.0.0.1:8080/v1/categories)\n[ \"$code\" = 200 ] || exit 2          # server or database down: cannot evaluate now\nlist=$(cat /tmp/hydo/cats)\nfor i in $(cat $HYDO_ACKED); do\n  echo \"$list\" | grep -q \"\\\"title\\\":\\\"c$i\\\"\" || { echo \"acked c$i missing from the API\"; exit 1; }\ndone\necho \"api shows all $(wc -l < $HYDO_ACKED) acked\"\n",
+      "every": 2,
+      "final": false
+    }
+  ],
+  "faults": [
+    "kill",
+    "pause",
+    "network",
+    "oneway",
+    "cut",
+    "clock",
+    "disk"
+  ]
+}

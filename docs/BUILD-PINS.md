@@ -198,6 +198,37 @@ the `hydo` command of both releases. The pins:
 The SDK crates (`sdk/rust`, `sdk/rust-test`) and the Rust examples are not workspace members:
 they keep their own workspaces and lock files, because their bytes are inside recorded images.
 
+## The gRPC client and generator (Milestone 113)
+
+`hydo-grpc`, the static client that generated gRPC drivers put in a guest image, and the
+generator `hydo-grpc-gen` are Rust (`hydo/crates/hydo-grpc`, `hydo/crates/hydo-grpc-gen`); the Go
+programs of Milestone 91 were deleted. The demo's service `orderd` stays Go (it is the system
+under test, not hydo's code): `hydo/grpcgen/go.mod` is kept unchanged for it, and with Go 1.26.5
+from go.dev it still builds `orderd-arm64` `a87ca7fa…` (M96).
+
+- **Toolchain:** the workspace's Rust 1.90.0 with the targets `x86_64-unknown-linux-musl` and
+  `aarch64-unknown-linux-musl`, both linked by `rust-lld` with `+crt-static` (`.cargo/config.toml`).
+- **Crates (Cargo.lock):** prost 0.14.4, prost-reflect 0.16.5 (with `serde`), tokio 1.54.1
+  (`rt`, `net`, `time`, `sync`, `macros`; a current-thread runtime), h2 0.4.20, http 1.5.0,
+  bytes 1.12.1, ryu 1.0.23 for the client; protox 0.9.1 and libyaml-safer 0.3.0 for the generator.
+  All pure Rust.
+- **Build:** `hydo/grpcgen/build-client.sh [--out DIR] amd64 arm64` (called by
+  `hydo/onboard/hydo-grpc-gen`). rustc runs through `hydo/grpcgen/rustc-stable`, which replaces
+  Cargo's `-C metadata` hash (it covers the host-built build scripts, so it differs between a Mac
+  and a Linux host and moves every function in the binary) by a hash of the crate's name, version,
+  type, target and cfgs, and remaps the tree and `$CARGO_HOME` to `/hydo` and `/cargo`;
+  `hydo-elf-comment` (`hydo/crates/hydo-tools`) then sets the `.comment` linker line to
+  `Linker: LLD` (the Linux and the Mac rust-lld name different build paths there).
+- **Results (this tree, M113):** `hydo-grpc` (x86_64, `ELF 64-bit LSB pie executable, static-pie
+  linked`, 3.1 MB) `3926d13712772cce…`, the same bytes from this Mac and from the bare-metal test
+  machine; `hydo-grpc.arm64` (`ELF 64-bit LSB executable, ARM aarch64, statically linked`, 2.6 MB)
+  `fd762fa06b352d0e…` (Mac; the bare-metal machine's private rustup has no aarch64 musl
+  target). The Go clients were 10.6 MB (`c772698c…`, nixpkgs Go) and `686b9e57…` (arm64, go.dev Go).
+- **Well-known imports:** `hydo/crates/hydo-grpc-gen/src/wkt.pb` holds the descriptors of
+  `google/protobuf/*.proto` exactly as protocompile v0.14.1 with protobuf-go v1.35.2 produced them
+  for the Go generator (sha256 `f9696902ad5a824e…`), so a schema that imports them is the same
+  `desc.pb` as before.
+
 ## hydo-read: the in-guest store reader in Rust (Milestone 112)
 
 `hydo/crates/hydo-read` (the program that runs as `hydo-read` and, through a symlink the image

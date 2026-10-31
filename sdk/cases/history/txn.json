@@ -1,0 +1,16 @@
+{
+  "about": "list-append micro-ops: a:\u003ck\u003e:\u003ce\u003e, r:\u003ck\u003e and r:\u003ck\u003e:[...], keys and elements encoded",
+  "needs": [],
+  "steps": [
+    {"do":"history","name":"la"},
+    {"do":"invoke","h":0,"proc":{"int":"3"},"f":"txn","args":[{"append_mop":["x","2"]},{"read_mop":"y"},{"append_mop":["k:1","e,2"]},{"read_mop":""}]},
+    {"do":"ok","o":0,"args":[{"append_mop":["x","2"]},{"read_result_mop":["y",[]]},{"append_mop":["k:1","e,2"]},{"read_result_mop":["",["a","b c"]]}]},
+    {"do":"invoke","h":0,"proc":{"int":"3"},"f":"txn","args":[{"append_mop":["x","3"]}]},
+    {"do":"fail","o":1},
+    {"do":"invoke","h":0,"proc":{"int":"4"},"f":"txn","args":[{"read_mop":"x"},{"append_mop":["y","1"]},{"read_result_mop":["nil",["nil"]]},{"append_mop":["",""]},{"read_mop":"@"}]},
+    {"do":"info","o":2}
+  ],
+  "runs": [
+    {"name": "", "out": "off", "hist_out": "file", "buggify_env": null, "buggify_file": null, "output": "txn.out", "returns": ""}
+  ]
+}

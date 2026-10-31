@@ -1,0 +1,19 @@
+{
+  "about": "HYDO_HIST_OUT: a file (appended to), a missing file (created), stderr, a path that cannot be opened (standard error), or off",
+  "needs": [],
+  "steps": [
+    {"do":"history","name":"kv"},
+    {"do":"invoke","h":0,"proc":{"int":"1"},"f":"write","args":["k",{"enc":"v 1"}]},
+    {"do":"ok_same","o":0},
+    {"do":"invoke","h":0,"proc":{"int":"1"},"f":"read","args":["k"]},
+    {"do":"ok","o":1,"args":["k",{"value_or_nil":"v 1"}]}
+  ],
+  "runs": [
+    {"name": "file", "out": "off", "hist_out": "file", "buggify_env": null, "buggify_file": null, "output": "hist_out.file.out", "returns": ""},
+    {"name": "append", "out": "off", "hist_out": "append", "buggify_env": null, "buggify_file": null, "output": "hist_out.append.out", "returns": ""},
+    {"name": "create", "out": "off", "hist_out": "create", "buggify_env": null, "buggify_file": null, "output": "hist_out.create.out", "returns": ""},
+    {"name": "stderr", "out": "off", "hist_out": "stderr", "buggify_env": null, "buggify_file": null, "output": "hist_out.stderr.out", "returns": ""},
+    {"name": "fallback", "out": "off", "hist_out": "fallback", "buggify_env": null, "buggify_file": null, "output": "hist_out.fallback.out", "returns": ""},
+    {"name": "off", "out": "off", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "hist_out.off.out", "returns": ""}
+  ]
+}

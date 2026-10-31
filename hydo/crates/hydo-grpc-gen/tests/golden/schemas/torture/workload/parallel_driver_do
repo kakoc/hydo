@@ -1,0 +1,4 @@
+#!/bin/busybox sh
+# hydo: timeout=14
+# hydo-msg: a.b.Svc/Do: generated requests (hydo-grpc-gen)
+exec /bin/hydo-grpc drive a.b.Svc/Do

@@ -1,0 +1,5 @@
+hydo-grpc-gen: 4 RPCs, 0 scenarios -> OUT
+  put                    kitchen.Kitchen/Put weight=1
+  fetch                  kitchen.Kitchen/Fetch weight=1
+  watch                  kitchen.Kitchen/Watch weight=1
+  upload                 kitchen.Kitchen/Upload weight=1

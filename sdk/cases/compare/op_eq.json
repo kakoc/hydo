@@ -1,0 +1,15 @@
+{
+  "about": "cmp with ==: the details carry left, op and right; a false sometimes comparison is not written",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"c.always_eq","msg":"always left == right"},
+    {"do":"sometimes","id":"c.sometimes_eq","msg":"sometimes left == right"},
+    {"do":"cmp","a":0,"left":{"int":"5"},"op":"==","right":{"int":"5"}},
+    {"do":"cmp","a":0,"left":{"int":"5"},"op":"==","right":{"int":"6"}},
+    {"do":"cmp","a":1,"left":{"int":"5"},"op":"==","right":{"int":"6"}},
+    {"do":"cmp","a":1,"left":{"int":"5"},"op":"==","right":{"int":"5"}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "op_eq.out", "returns": "1001"}
+  ]
+}

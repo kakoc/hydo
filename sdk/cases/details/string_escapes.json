@@ -1,0 +1,11 @@
+{
+  "about": "strings: Go's escapes for quote, backslash, \\b \\f \\n \\r \\t, other control characters as \\u00xx, and the HTML characters",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"d.string_escapes","msg":"details encoding"},
+    {"do":"check","a":0,"cond":true,"details":{"map":[["s","\u003c\u003e\u0026\"\\\n\r\t\b\f\u0000\u0001\u001f"],["html","\u003cscript\u003ea \u0026\u0026 b\u003c/script\u003e"],["slash","a/b"]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "string_escapes.out", "returns": "1"}
+  ]
+}

@@ -1,0 +1,4 @@
+#!/bin/busybox sh
+# hydo: timeout=14
+# hydo-msg: kitchen.Kitchen/Fetch: generated requests (hydo-grpc-gen)
+exec /bin/hydo-grpc drive kitchen.Kitchen/Fetch

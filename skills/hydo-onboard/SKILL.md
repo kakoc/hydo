@@ -30,11 +30,16 @@ only in the cases listed in [references/numbered-steps.md](references/numbered-s
 
 - `hydo guide` prints this file. `hydo guide <topic>` prints one reference file of this skill
   (`composer`, `checks`, `invariant-patterns`, `outside-services`, `faults`, `hazards`, `sdks`,
-  `capabilities`, `numbered-steps`), and `hydo guide manifest` prints `MANIFEST.md`, the schema
-  of `hydo.yaml` and of the `hydo/` folder. **The schema is authoritative: read the sections
-  you use before you write them.** `hydo guide --list` lists every topic.
+  `capabilities`, `numbered-steps`), `hydo guide manifest` prints `MANIFEST.md`, which explains
+  the project format (`hydo.yaml` and the `hydo/` folder are one model, `format: 1`), and `hydo
+  guide schema` prints the format's JSON Schema. **The schema is authoritative: read the
+  sections you use before you write them.** `hydo guide --list` lists every topic.
+- Write `format: 1` in every `hydo.yaml` (the skeleton has it). Within format 1 hydo only adds
+  keys; an unknown key is an error, so a typo fails the build. `hydo migrate` rewrites an older
+  file in the current spelling (for example a history check written in `test.checks` moves to
+  the top-level `checks:`); a newer format is refused with the format it needs.
 - Without the `hydo` command, inside hydo's own source repository, the same files are
-  `skills/hydo-onboard/` and `hydo/onboard/MANIFEST.md`, and
+  `skills/hydo-onboard/`, `hydo/onboard/MANIFEST.md` and `hydo/schema/project-v1.json`, and
   the `hydo-build` program (`cargo build --release -p hydo-build`, then
   `target/release/hydo-build <manifest> --check`) replaces `hydo build <manifest> --check`.
 - `hydo doctor` shows which backend this machine has: the Linux release builds x86_64 guests,

@@ -1,0 +1,11 @@
+{
+  "about": "an invalid byte in a key is written as \\ufffd and the key sorts by its raw bytes",
+  "needs": ["invalid_utf8"],
+  "steps": [
+    {"do":"always","id":"d.keys_invalid_utf8","msg":"details encoding"},
+    {"do":"check","a":0,"cond":true,"details":{"map":[[{"raw":[255,"k"]},{"map":[[{"raw":["a",254]},{"int":"1"}],["a",{"int":"2"}]]}],["a",{"int":"1"}],["~",{"int":"2"}]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "keys_invalid_utf8.out", "returns": "1"}
+  ]
+}

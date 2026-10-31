@@ -1,0 +1,13 @@
+{
+  "about": "HYDO-SETUP-COMPLETE is written at every call",
+  "needs": [],
+  "steps": [
+    {"do":"setup_complete"},
+    {"do":"always","id":"k.a","msg":"between"},
+    {"do":"check","a":0,"cond":true},
+    {"do":"setup_complete"}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "setup_complete.out", "returns": "1"}
+  ]
+}

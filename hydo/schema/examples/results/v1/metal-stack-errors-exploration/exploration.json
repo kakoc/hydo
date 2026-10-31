@@ -1,0 +1,2235 @@
+{
+  "v": 1,
+  "type": "exploration",
+  "hydo_version": "0.1.0",
+  "mode": "seeds",
+  "config": {
+    "strategy": "swarm",
+    "seeds": "1-8",
+    "argv": [
+      "--image",
+      "explore-ob-stack-errors-err-disk.img",
+      "--known-errors",
+      "hydo/onboard/examples/stack/known-errors.yaml",
+      "--seeds",
+      "1-8",
+      "--strategy",
+      "swarm",
+      "--new-faults",
+      "--errors-shrink",
+      "2",
+      "--workers",
+      "2",
+      "--out",
+      "~/hydo-pr/runs/stack-new/out"
+    ]
+  },
+  "image": {
+    "path": "explore-ob-stack-errors-err-disk.img",
+    "resolved": "~/hydo-errlog/build/explore-ob-stack-errors-err-disk.img",
+    "sha256": "6956e6d70a37c5bdad32683e0316c7bd2b4b050763abf78d9259ab82dca25b58"
+  },
+  "engine": {
+    "backend": "hvx",
+    "args": [],
+    "ram_mib": 1024,
+    "vcpus": 1,
+    "cpu": "v2",
+    "module_srcversion": "0799F1B8EE2A35600D94EB4",
+    "workers": 2
+  },
+  "summary": {
+    "schedules": 8,
+    "sweep_wall_s": 364.8,
+    "runs_per_hour": 79.0,
+    "mean_run_s": 10.0,
+    "worker_boot_s": 20.5,
+    "total_wall_s": 639.6,
+    "failures": 5,
+    "reproduced": 5,
+    "error_kinds_new": 25,
+    "runs_with_new_error_kinds": 4
+  },
+  "failures": [
+    {
+      "signature": "VIOLATION service cannot recover (committed data unrecoverable) (kafka)",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-1",
+          "fp": "c42665818b8d828a",
+          "verdict": "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable) (kafka)"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-1",
+        "seed": 1,
+        "role": "first",
+        "schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+        "class": "lying-disk",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable) (kafka)"
+        },
+        "fingerprints": {
+          "fp": "c42665818b8d828a",
+          "wfp": "2920ea8f98553160"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "VIOLATION service cannot recover (committed data unrecoverable) (kafka)",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable) (kafka)",
+            "details": {
+              "signature": "VIOLATION service cannot recover (committed data unrecoverable) (kafka)"
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "704053f4c802",
+            "status": "new",
+            "message": "[mysql] <time> # [ERROR] [MY-012592] [InnoDB] Operating system error number # in a file operation.",
+            "details": {
+              "service": "mysql",
+              "source": "/tmp/mysqld.err",
+              "template": "<time> # [ERROR] [MY-012592] [InnoDB] Operating system error number # in a file operation.",
+              "example": "2026-01-01T00:00:01.748734Z 1 [ERROR] [MY-012592] [InnoDB] Operating system error number 117 in a file operation.",
+              "lines": 18,
+              "at": [
+                "r"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "c4cccd633028",
+            "status": "new",
+            "message": "[mysql] <time> # [ERROR] [MY-012596] [InnoDB] Error number # means 'Structure needs cleaning'",
+            "details": {
+              "service": "mysql",
+              "source": "/tmp/mysqld.err",
+              "template": "<time> # [ERROR] [MY-012596] [InnoDB] Error number # means 'Structure needs cleaning'",
+              "example": "2026-01-01T00:00:01.748735Z 1 [ERROR] [MY-012596] [InnoDB] Error number 117 means 'Structure needs cleaning'",
+              "lines": 18,
+              "at": [
+                "r"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "fe5f6beff3ec",
+            "status": "new",
+            "message": "[mysql] <time> # [ERROR] [MY-012646] [InnoDB] File /data/mysql/ib_buffer_pool: 'file_status_posix_stat' returned OS error 217.",
+            "details": {
+              "service": "mysql",
+              "source": "/tmp/mysqld.err",
+              "template": "<time> # [ERROR] [MY-012646] [InnoDB] File /data/mysql/ib_buffer_pool: 'file_status_posix_stat' returned OS error 217.",
+              "example": "2026-01-01T00:00:01.748737Z 1 [ERROR] [MY-012646] [InnoDB] File /data/mysql/ib_buffer_pool: 'file_status_posix_stat' returned OS error 217.",
+              "lines": 6,
+              "at": [
+                "r"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "749f62a28a62",
+            "status": "new",
+            "message": "[mysql] <time> # [ERROR] [MY-012646] [InnoDB] File /data/mysql/sys: 'file_status_posix_stat' returned OS error 217.",
+            "details": {
+              "service": "mysql",
+              "source": "/tmp/mysqld.err",
+              "template": "<time> # [ERROR] [MY-012646] [InnoDB] File /data/mysql/sys: 'file_status_posix_stat' returned OS error 217.",
+              "example": "2026-01-01T00:00:01.750736Z 1 [ERROR] [MY-012646] [InnoDB] File /data/mysql/sys: 'file_status_posix_stat' returned OS error 217.",
+              "lines": 6,
+              "at": [
+                "r"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "81d9b0a6c20b",
+            "status": "new",
+            "message": "[mysql] <time> # [ERROR] [MY-012646] [InnoDB] File /data/mysql/mysql/slow_log.CSM: 'file_status_posix_stat' returned OS error 217.",
+            "details": {
+              "service": "mysql",
+              "source": "/tmp/mysqld.err",
+              "template": "<time> # [ERROR] [MY-012646] [InnoDB] File /data/mysql/mysql/slow_log.CSM: 'file_status_posix_stat' returned OS error 217.",
+              "example": "2026-01-01T00:00:01.758735Z 1 [ERROR] [MY-012646] [InnoDB] File /data/mysql/mysql/slow_log.CSM: 'file_status_posix_stat' returned OS error 217.",
+              "lines": 2,
+              "at": [
+                "r"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "3936f6f52a9a",
+            "status": "new",
+            "message": "[mysql] <time> # [ERROR] [MY-012646] [InnoDB] File /data/mysql/mysql/slow_log.CSV: 'file_status_posix_stat' returned OS error 217.",
+            "details": {
+              "service": "mysql",
+              "source": "/tmp/mysqld.err",
+              "template": "<time> # [ERROR] [MY-012646] [InnoDB] File /data/mysql/mysql/slow_log.CSV: 'file_status_posix_stat' returned OS error 217.",
+              "example": "2026-01-01T00:00:01.760735Z 1 [ERROR] [MY-012646] [InnoDB] File /data/mysql/mysql/slow_log.CSV: 'file_status_posix_stat' returned OS error 217.",
+              "lines": 2,
+              "at": [
+                "r"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "60afc1bbfa44",
+            "status": "new",
+            "message": "[mysql] <time> # [ERROR] [MY-012646] [InnoDB] File ./sys/sys_config.ibd: 'file_status_posix_stat' returned OS error 217.",
+            "details": {
+              "service": "mysql",
+              "source": "/tmp/mysqld.err",
+              "template": "<time> # [ERROR] [MY-012646] [InnoDB] File ./sys/sys_config.ibd: 'file_status_posix_stat' returned OS error 217.",
+              "example": "2026-01-01T00:00:03.410484Z 1 [ERROR] [MY-012646] [InnoDB] File ./sys/sys_config.ibd: 'file_status_posix_stat' returned OS error 217.",
+              "lines": 1,
+              "at": [
+                "r"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "94218796c56e",
+            "status": "new",
+            "message": "[mysql] <time> # [ERROR] [MY-012646] [InnoDB] File .//ib_buffer_pool: 'file_exists_posix_stat' returned OS error 217.",
+            "details": {
+              "service": "mysql",
+              "source": "/tmp/mysqld.err",
+              "template": "<time> # [ERROR] [MY-012646] [InnoDB] File .//ib_buffer_pool: 'file_exists_posix_stat' returned OS error 217.",
+              "example": "2026-01-01T00:00:03.805424Z 0 [ERROR] [MY-012646] [InnoDB] File .//ib_buffer_pool: 'file_exists_posix_stat' returned OS error 217.",
+              "lines": 1,
+              "at": [
+                "r"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "bbc0bbc262be",
+            "status": "new",
+            "message": "[mysql] <time> # [ERROR] [MY-011947] [InnoDB] Cannot open '/data/mysql/ib_buffer_pool' for reading: Structure needs cleaning",
+            "details": {
+              "service": "mysql",
+              "source": "/tmp/mysqld.err",
+              "template": "<time> # [ERROR] [MY-011947] [InnoDB] Cannot open '/data/mysql/ib_buffer_pool' for reading: Structure needs cleaning",
+              "example": "2026-01-01T00:00:03.805426Z 0 [ERROR] [MY-011947] [InnoDB] Cannot open '/data/mysql/ib_buffer_pool' for reading: Structure needs cleaning",
+              "lines": 1,
+              "at": [
+                "r"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "7e4e0ea5d6ec",
+            "status": "new",
+            "message": "[kafka] ERROR kafka.server.BrokerMetadataCheckpoint Failed to write meta.properties due to",
+            "details": {
+              "service": "kafka",
+              "source": "setup",
+              "template": "ERROR kafka.server.BrokerMetadataCheckpoint Failed to write meta.properties due to",
+              "example": "ERROR kafka.server.BrokerMetadataCheckpoint Failed to write meta.properties due to",
+              "lines": 1,
+              "at": [
+                "r"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "f0c792251150",
+            "status": "known",
+            "message": "[redis] #:C <date> <time> # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low ",
+            "details": {
+              "service": "redis",
+              "source": "log",
+              "template": "#:C <date> <time> # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low ",
+              "example": "127:C 01 Jan 2026 00:00:00.103 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https",
+              "lines": 2,
+              "at": [
+                "s",
+                "r"
+              ],
+              "known_entry": 0,
+              "reason": "Redis 7.2 warns at every start that vm.overcommit_memory is 0 (the guest kernel default); only background saves under memory pressure are affected, which this test does not do"
+            }
+          }
+        ],
+        "error_logs": {
+          "steps": 30,
+          "boots": [
+            {
+              "boot": "first",
+              "steps": 30,
+              "lines": 1,
+              "kinds": 1,
+              "shown": 1
+            },
+            {
+              "boot": "recovery",
+              "steps": 30,
+              "lines": 57,
+              "kinds": 11,
+              "shown": 11
+            }
+          ],
+          "truncated": false
+        },
+        "secs": 9.6,
+        "worker": 1,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-1.log",
+            "consoles/seed-1.recovery.log"
+          ]
+        }
+      }
+    },
+    {
+      "signature": "VIOLATION [stack.exactly_once] kafka",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-4",
+          "fp": "6d187899a59518bc",
+          "verdict": "HYDO-ORACLE: VIOLATION [stack.exactly_once] kafka order=0 expected=100000 got=MISSING (mysql has it: true)"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-4",
+        "seed": 4,
+        "role": "first",
+        "schedule": "disk=lying:8 dseed=b3c71c31800079a2 | run N=mysql@10-24:duplicate,26%,loss,20% C=24 T=26:-86400",
+        "class": "lying-disk",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [stack.exactly_once] kafka order=0 expected=100000 got=MISSING (mysql has it: true)"
+        },
+        "fingerprints": {
+          "fp": "6d187899a59518bc",
+          "wfp": "e8e1177ad33a2b17"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "stack.exactly_once",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [stack.exactly_once] kafka order=0 expected=100000 got=MISSING (mysql has it: true)",
+            "details": {
+              "signature": "VIOLATION [stack.exactly_once] kafka"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "order.acked_marked_published",
+            "status": "violation",
+            "message": "an ACKed order is marked published in MySQL",
+            "details": {
+              "assertion": "always_or_unreachable",
+              "details": {
+                "order": 12
+              }
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "order.in_kafka",
+            "status": "violation",
+            "message": "every checked order is in Kafka with its amount",
+            "details": {
+              "assertion": "always",
+              "details": {
+                "got": "MISSING",
+                "in_mysql": true,
+                "order": 0,
+                "want": 100000
+              }
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "order.in_mysql",
+            "status": "violation",
+            "message": "every checked order is in MySQL with its amount",
+            "details": {
+              "assertion": "always",
+              "details": {
+                "got": "MISSING",
+                "in_kafka": false,
+                "order": 13,
+                "want": 100013
+              }
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "stack.exactly_once",
+            "status": "violation",
+            "message": "every ACKed order is in MySQL and Kafka exactly once; nothing told 'failed' was applied",
+            "details": {
+              "assertion": "always",
+              "details": {
+                "out": "kafka order=0 expected=100000 got=MISSING (mysql has it: true)"
+              }
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "e6dbfdff0773",
+            "status": "new",
+            "message": "[mysql] <time> # [ERROR] [MY-011971] [InnoDB] Tablespace 'innodb_undo_#' Page [page id: space=#, page number=#] log sequence number # is in the future! Current system log sequence number #.",
+            "details": {
+              "service": "mysql",
+              "source": "/tmp/mysqld.err",
+              "template": "<time> # [ERROR] [MY-011971] [InnoDB] Tablespace 'innodb_undo_#' Page [page id: space=#, page number=#] log sequence number # is in the future! Current system log sequence number #.",
+              "example": "2026-01-01T00:00:02.875562Z 1 [ERROR] [MY-011971] [InnoDB] Tablespace 'innodb_undo_001' Page [page id: space=4294967279, page number=270] log sequence number 19368257 is in the future! Current system log sequence number 19367218.",
+              "lines": 30,
+              "at": [
+                "r"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "7df88adad38c",
+            "status": "new",
+            "message": "[mysql] <time> # [ERROR] [MY-011972] [InnoDB] Your database may be corrupt or you may have copied the InnoDB tablespace but not the InnoDB redo log files. Please refer to http://dev.mysql.com/doc/refman/#.#/e",
+            "details": {
+              "service": "mysql",
+              "source": "/tmp/mysqld.err",
+              "template": "<time> # [ERROR] [MY-011972] [InnoDB] Your database may be corrupt or you may have copied the InnoDB tablespace but not the InnoDB redo log files. Please refer to http://dev.mysql.com/doc/refman/#.#/e",
+              "example": "2026-01-01T00:00:02.875563Z 1 [ERROR] [MY-011972] [InnoDB] Your database may be corrupt or you may have copied the InnoDB tablespace but not the InnoDB redo log files. Please refer to http://dev.mysql.com/doc/refman/8.4/en/forcing-innodb-re",
+              "lines": 30,
+              "at": [
+                "r"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "f0c792251150",
+            "status": "known",
+            "message": "[redis] #:C <date> <time> # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low ",
+            "details": {
+              "service": "redis",
+              "source": "log",
+              "template": "#:C <date> <time> # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low ",
+              "example": "127:C 01 Jan 2026 00:00:00.103 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https",
+              "lines": 2,
+              "at": [
+                "s",
+                "r"
+              ],
+              "known_entry": 0,
+              "reason": "Redis 7.2 warns at every start that vm.overcommit_memory is 0 (the guest kernel default); only background saves under memory pressure are affected, which this test does not do"
+            }
+          }
+        ],
+        "error_logs": {
+          "steps": 30,
+          "boots": [
+            {
+              "boot": "first",
+              "steps": 30,
+              "lines": 1,
+              "kinds": 1,
+              "shown": 1
+            },
+            {
+              "boot": "recovery",
+              "steps": 30,
+              "lines": 61,
+              "kinds": 3,
+              "shown": 3
+            }
+          ],
+          "truncated": false
+        },
+        "secs": 13.2,
+        "worker": 0,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-4.log",
+            "consoles/seed-4.recovery.log"
+          ]
+        }
+      }
+    },
+    {
+      "signature": "VIOLATION [stack.exactly_once] mysql",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-5",
+          "fp": "35b192888da8c52b",
+          "verdict": "HYDO-ORACLE: VIOLATION [stack.exactly_once] mysql order=0 acked but not marked published"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-5",
+        "seed": 5,
+        "role": "first",
+        "schedule": "disk=cut dseed=1f16055b6d41c6d9 | run C=29 M=2 T=29:-3600",
+        "class": "unsafe-knob",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [stack.exactly_once] mysql order=0 acked but not marked published"
+        },
+        "fingerprints": {
+          "fp": "35b192888da8c52b",
+          "wfp": "8e587f6dd88bfeb4"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "stack.exactly_once",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [stack.exactly_once] mysql order=0 acked but not marked published",
+            "details": {
+              "signature": "VIOLATION [stack.exactly_once] mysql"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "order.acked_marked_published",
+            "status": "violation",
+            "message": "an ACKed order is marked published in MySQL",
+            "details": {
+              "assertion": "always_or_unreachable",
+              "details": {
+                "order": 0
+              }
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "order.in_mysql",
+            "status": "violation",
+            "message": "every checked order is in MySQL with its amount",
+            "details": {
+              "assertion": "always",
+              "details": {
+                "got": "MISSING",
+                "in_kafka": true,
+                "order": 1,
+                "want": 100001
+              }
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "stack.exactly_once",
+            "status": "violation",
+            "message": "every ACKed order is in MySQL and Kafka exactly once; nothing told 'failed' was applied",
+            "details": {
+              "assertion": "always",
+              "details": {
+                "out": "mysql order=0 acked but not marked published"
+              }
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "f0c792251150",
+            "status": "known",
+            "message": "[redis] #:C <date> <time> # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low ",
+            "details": {
+              "service": "redis",
+              "source": "log",
+              "template": "#:C <date> <time> # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low ",
+              "example": "127:C 01 Jan 2026 00:00:00.103 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https",
+              "lines": 2,
+              "at": [
+                "s",
+                "r"
+              ],
+              "known_entry": 0,
+              "reason": "Redis 7.2 warns at every start that vm.overcommit_memory is 0 (the guest kernel default); only background saves under memory pressure are affected, which this test does not do"
+            }
+          }
+        ],
+        "error_logs": {
+          "steps": 30,
+          "boots": [
+            {
+              "boot": "first",
+              "steps": 30,
+              "lines": 1,
+              "kinds": 1,
+              "shown": 1
+            },
+            {
+              "boot": "recovery",
+              "steps": 30,
+              "lines": 1,
+              "kinds": 1,
+              "shown": 1
+            }
+          ],
+          "truncated": false
+        },
+        "secs": 13.3,
+        "worker": 1,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-5.log",
+            "consoles/seed-5.recovery.log"
+          ]
+        }
+      }
+    },
+    {
+      "signature": "ERROR restart after the faults (redis)",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-6",
+          "fp": "61221a68ce21a145",
+          "verdict": "HYDO-ORACLE: ERROR restart after the faults (redis)"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-6",
+        "seed": 6,
+        "role": "first",
+        "schedule": "disk=ioerr:2 dseed=ea4fb8211cfa3702 | run M=0 P=kafka@26+2 T=10:-30",
+        "class": "io-errors",
+        "verdict": {
+          "kind": "error",
+          "text": "HYDO-ORACLE: ERROR restart after the faults (redis)"
+        },
+        "fingerprints": {
+          "fp": "61221a68ce21a145",
+          "wfp": "c34f7852279eeed3"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "ERROR restart after the faults (redis)",
+            "status": "error",
+            "message": "HYDO-ORACLE: ERROR restart after the faults (redis)",
+            "details": {
+              "signature": "ERROR restart after the faults (redis)"
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "97e5a1e30289",
+            "status": "new",
+            "message": "[redis] #:M <date> <time> # Can't persist AOF for fsync error when the AOF fsync policy is 'always': I/O error. Exiting...",
+            "details": {
+              "service": "redis",
+              "source": "log",
+              "template": "#:M <date> <time> # Can't persist AOF for fsync error when the AOF fsync policy is 'always': I/O error. Exiting...",
+              "example": "127:M 01 Jan 2026 00:00:25.893 # Can't persist AOF for fsync error when the AOF fsync policy is 'always': I/O error. Exiting...",
+              "lines": 1,
+              "at": [
+                "0"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "6a4360275d80",
+            "status": "new",
+            "message": "[redis] #:M <date> <time> # Fatal error: can't open the AOF manifest file appendonlydir/appendonly.aof.manifest for reading: I/O error",
+            "details": {
+              "service": "redis",
+              "source": "log",
+              "template": "#:M <date> <time> # Fatal error: can't open the AOF manifest file appendonlydir/appendonly.aof.manifest for reading: I/O error",
+              "example": "708:M 01 Jan 2026 00:00:15.068 # Fatal error: can't open the AOF manifest file appendonlydir/appendonly.aof.manifest for reading: I/O error",
+              "lines": 1,
+              "at": [
+                "28"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "741e5be321da",
+            "status": "new",
+            "message": "[mysql] <time> # [ERROR] [MY-012639] [InnoDB] Write to file ./#innodb_redo/#ib_redo# failed at offset #, # bytes should have been written, only # were written. Operating system error number #. Check that your",
+            "details": {
+              "service": "mysql",
+              "source": "/tmp/mysqld.err",
+              "template": "<time> # [ERROR] [MY-012639] [InnoDB] Write to file ./#innodb_redo/#ib_redo# failed at offset #, # bytes should have been written, only # were written. Operating system error number #. Check that your",
+              "example": "2026-01-01T00:00:25.935058Z 0 [ERROR] [MY-012639] [InnoDB] Write to file ./#innodb_redo/#ib_redo74 failed at offset 113664, 512 bytes should have been written, only 0 were written. Operating system error number 5. Check that your OS and fil",
+              "lines": 1,
+              "at": [
+                "0"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "b739c084fb42",
+            "status": "new",
+            "message": "[mysql] <time> # [ERROR] [MY-012640] [InnoDB] Error number # means 'Input/output error'",
+            "details": {
+              "service": "mysql",
+              "source": "/tmp/mysqld.err",
+              "template": "<time> # [ERROR] [MY-012640] [InnoDB] Error number # means 'Input/output error'",
+              "example": "2026-01-01T00:00:25.935059Z 0 [ERROR] [MY-012640] [InnoDB] Error number 5 means 'Input/output error'",
+              "lines": 1,
+              "at": [
+                "0"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "ce0161c25fd4",
+            "status": "new",
+            "message": "[mysql] <time> # [ERROR] [MY-013864] [InnoDB] [FATAL] Error 100 encountered when writing to the redo log file: ./#innodb_redo/#ib_redo#.",
+            "details": {
+              "service": "mysql",
+              "source": "/tmp/mysqld.err",
+              "template": "<time> # [ERROR] [MY-013864] [InnoDB] [FATAL] Error 100 encountered when writing to the redo log file: ./#innodb_redo/#ib_redo#.",
+              "example": "2026-01-01T00:00:25.935061Z 0 [ERROR] [MY-013864] [InnoDB] [FATAL] Error 100 encountered when writing to the redo log file: ./#innodb_redo/#ib_redo74.",
+              "lines": 1,
+              "at": [
+                "0"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "2b1e5b43976b",
+            "status": "new",
+            "message": "[mysql] <time> # [ERROR] [MY-013183] [InnoDB] Assertion failure: log#write.cc:#:ib::fatal triggered thread #",
+            "details": {
+              "service": "mysql",
+              "source": "/tmp/mysqld.err",
+              "template": "<time> # [ERROR] [MY-013183] [InnoDB] Assertion failure: log#write.cc:#:ib::fatal triggered thread #",
+              "example": "2026-01-01T00:00:25.935062Z 0 [ERROR] [MY-013183] [InnoDB] Assertion failure: log0write.cc:2120:ib::fatal triggered thread 140653459658432",
+              "lines": 1,
+              "at": [
+                "0"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "5b0422ee2e1b",
+            "status": "new",
+            "message": "[kafka] ERROR org.apache.kafka.storage.internals.log.LogDirFailureChannel Error while flushing log for orders-# in dir /data/kafka-logs with offset # (exclusive) and recovery point #",
+            "details": {
+              "service": "kafka",
+              "source": "log",
+              "template": "ERROR org.apache.kafka.storage.internals.log.LogDirFailureChannel Error while flushing log for orders-# in dir /data/kafka-logs with offset # (exclusive) and recovery point #",
+              "example": "ERROR org.apache.kafka.storage.internals.log.LogDirFailureChannel Error while flushing log for orders-0 in dir /data/kafka-logs with offset 3 (exclusive) and recovery point 3",
+              "lines": 1,
+              "at": [
+                "0"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "f8a18336c798",
+            "status": "new",
+            "message": "[kafka] ERROR kafka.log.LogManager Shutdown broker because all log dirs in /data/kafka-logs have failed",
+            "details": {
+              "service": "kafka",
+              "source": "log",
+              "template": "ERROR kafka.log.LogManager Shutdown broker because all log dirs in /data/kafka-logs have failed",
+              "example": "ERROR kafka.log.LogManager Shutdown broker because all log dirs in /data/kafka-logs have failed",
+              "lines": 1,
+              "at": [
+                "0"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "f0c792251150",
+            "status": "known",
+            "message": "[redis] #:C <date> <time> # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low ",
+            "details": {
+              "service": "redis",
+              "source": "log",
+              "template": "#:C <date> <time> # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low ",
+              "example": "127:C 01 Jan 2026 00:00:00.103 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https",
+              "lines": 2,
+              "at": [
+                "s",
+                "28"
+              ],
+              "known_entry": 0,
+              "reason": "Redis 7.2 warns at every start that vm.overcommit_memory is 0 (the guest kernel default); only background saves under memory pressure are affected, which this test does not do"
+            }
+          }
+        ],
+        "error_logs": {
+          "steps": 30,
+          "boots": [
+            {
+              "boot": "first",
+              "steps": 30,
+              "lines": 10,
+              "kinds": 9,
+              "shown": 9
+            }
+          ],
+          "truncated": false
+        },
+        "secs": 3.1,
+        "worker": 0,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-6.log"
+          ]
+        }
+      }
+    },
+    {
+      "signature": "VIOLATION service cannot recover (committed data unrecoverable) (kafka)",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-8",
+          "fp": "774d3b2a1e864c36",
+          "verdict": "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable) (kafka)"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-8",
+        "seed": 8,
+        "role": "first",
+        "schedule": "disk=lying:4 dseed=17144527b62d669c | run N=kafka@7-10:loss,11%,corrupt,7% C=27 M=0 P=redis@0~98:29516",
+        "class": "lying-disk",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable) (kafka)"
+        },
+        "fingerprints": {
+          "fp": "774d3b2a1e864c36",
+          "wfp": "442948736c7dfe9b"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "VIOLATION service cannot recover (committed data unrecoverable) (kafka)",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable) (kafka)",
+            "details": {
+              "signature": "VIOLATION service cannot recover (committed data unrecoverable) (kafka)"
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "1c580066e046",
+            "status": "new",
+            "message": "[mysql] <time> # [ERROR] [MY-012562] [InnoDB] We scanned the log up to #. A checkpoint was at # and the maximum LSN on a database page was #. It is possible that the database is now corrupt!",
+            "details": {
+              "service": "mysql",
+              "source": "/tmp/mysqld.err",
+              "template": "<time> # [ERROR] [MY-012562] [InnoDB] We scanned the log up to #. A checkpoint was at # and the maximum LSN on a database page was #. It is possible that the database is now corrupt!",
+              "example": "2026-01-01T00:00:01.992698Z 1 [ERROR] [MY-012562] [InnoDB] We scanned the log up to 19375616. A checkpoint was at 19376053 and the maximum LSN on a database page was 0. It is possible that the database is now corrupt!",
+              "lines": 1,
+              "at": [
+                "r"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "a66eb7de15d7",
+            "status": "new",
+            "message": "[mysql] <time> # [ERROR] [MY-011971] [InnoDB] Tablespace 'innodb_system' Page [page id: space=#, page number=#] log sequence number # is in the future! Current system log sequence number #.",
+            "details": {
+              "service": "mysql",
+              "source": "/tmp/mysqld.err",
+              "template": "<time> # [ERROR] [MY-011971] [InnoDB] Tablespace 'innodb_system' Page [page id: space=#, page number=#] log sequence number # is in the future! Current system log sequence number #.",
+              "example": "2026-01-01T00:00:02.181668Z 1 [ERROR] [MY-011971] [InnoDB] Tablespace 'innodb_system' Page [page id: space=0, page number=5] log sequence number 19377112 is in the future! Current system log sequence number 19376053.",
+              "lines": 1,
+              "at": [
+                "r"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "7df88adad38c",
+            "status": "new",
+            "message": "[mysql] <time> # [ERROR] [MY-011972] [InnoDB] Your database may be corrupt or you may have copied the InnoDB tablespace but not the InnoDB redo log files. Please refer to http://dev.mysql.com/doc/refman/#.#/e",
+            "details": {
+              "service": "mysql",
+              "source": "/tmp/mysqld.err",
+              "template": "<time> # [ERROR] [MY-011972] [InnoDB] Your database may be corrupt or you may have copied the InnoDB tablespace but not the InnoDB redo log files. Please refer to http://dev.mysql.com/doc/refman/#.#/e",
+              "example": "2026-01-01T00:00:02.181669Z 1 [ERROR] [MY-011972] [InnoDB] Your database may be corrupt or you may have copied the InnoDB tablespace but not the InnoDB redo log files. Please refer to http://dev.mysql.com/doc/refman/8.4/en/forcing-innodb-re",
+              "lines": 4,
+              "at": [
+                "r"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "e6dbfdff0773",
+            "status": "new",
+            "message": "[mysql] <time> # [ERROR] [MY-011971] [InnoDB] Tablespace 'innodb_undo_#' Page [page id: space=#, page number=#] log sequence number # is in the future! Current system log sequence number #.",
+            "details": {
+              "service": "mysql",
+              "source": "/tmp/mysqld.err",
+              "template": "<time> # [ERROR] [MY-011971] [InnoDB] Tablespace 'innodb_undo_#' Page [page id: space=#, page number=#] log sequence number # is in the future! Current system log sequence number #.",
+              "example": "2026-01-01T00:00:02.209664Z 1 [ERROR] [MY-011971] [InnoDB] Tablespace 'innodb_undo_001' Page [page id: space=4294967279, page number=133] log sequence number 19376180 is in the future! Current system log sequence number 19376053.",
+              "lines": 3,
+              "at": [
+                "r"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "4bbcbdc34338",
+            "status": "new",
+            "message": "[kafka] ERROR kafka.server.BrokerServer [BrokerServer id=#] Fatal error during broker startup. Prepare to shutdown",
+            "details": {
+              "service": "kafka",
+              "source": "log",
+              "template": "ERROR kafka.server.BrokerServer [BrokerServer id=#] Fatal error during broker startup. Prepare to shutdown",
+              "example": "ERROR kafka.server.BrokerServer [BrokerServer id=1] Fatal error during broker startup. Prepare to shutdown",
+              "lines": 1,
+              "at": [
+                "r"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "f51282e98f26",
+            "status": "new",
+            "message": "[kafka] ERROR kafka.Kafka$ Exiting Kafka due to fatal exception during startup.",
+            "details": {
+              "service": "kafka",
+              "source": "log",
+              "template": "ERROR kafka.Kafka$ Exiting Kafka due to fatal exception during startup.",
+              "example": "ERROR kafka.Kafka$ Exiting Kafka due to fatal exception during startup.",
+              "lines": 1,
+              "at": [
+                "r"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "1045866f160b",
+            "status": "new",
+            "message": "[kafka] ERROR org.apache.kafka.controller.QuorumController [QuorumController id=#] writeNoOpRecord: unable to start processing because of RejectedExecutionException. Reason: null",
+            "details": {
+              "service": "kafka",
+              "source": "log",
+              "template": "ERROR org.apache.kafka.controller.QuorumController [QuorumController id=#] writeNoOpRecord: unable to start processing because of RejectedExecutionException. Reason: null",
+              "example": "ERROR org.apache.kafka.controller.QuorumController [QuorumController id=1] writeNoOpRecord: unable to start processing because of RejectedExecutionException. Reason: null",
+              "lines": 1,
+              "at": [
+                "r"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "f0c792251150",
+            "status": "known",
+            "message": "[redis] #:C <date> <time> # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low ",
+            "details": {
+              "service": "redis",
+              "source": "log",
+              "template": "#:C <date> <time> # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low ",
+              "example": "127:C 01 Jan 2026 00:00:00.103 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https",
+              "lines": 2,
+              "at": [
+                "s",
+                "r"
+              ],
+              "known_entry": 0,
+              "reason": "Redis 7.2 warns at every start that vm.overcommit_memory is 0 (the guest kernel default); only background saves under memory pressure are affected, which this test does not do"
+            }
+          }
+        ],
+        "error_logs": {
+          "steps": 30,
+          "boots": [
+            {
+              "boot": "first",
+              "steps": 30,
+              "lines": 1,
+              "kinds": 1,
+              "shown": 1
+            },
+            {
+              "boot": "recovery",
+              "steps": 30,
+              "lines": 13,
+              "kinds": 8,
+              "shown": 8
+            }
+          ],
+          "truncated": false
+        },
+        "secs": 16.4,
+        "worker": 0,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-8.log",
+            "consoles/seed-8.recovery.log"
+          ]
+        }
+      }
+    }
+  ],
+  "shrinks": [
+    {
+      "v": 1,
+      "type": "shrink",
+      "class": "lying-disk",
+      "signature": "VIOLATION service cannot recover (committed data unrecoverable) (kafka)",
+      "from_seed": 1,
+      "minimal": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+1 C=20 P=kafka@3~314:500",
+      "verdict": "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable) (kafka)",
+      "tries": 18,
+      "min_class": "lying-disk",
+      "min_verdict": "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable) (kafka)",
+      "confirmations": [
+        {
+          "tag": "min-a",
+          "fp": "234e0e0b09a71729",
+          "verdict": "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable) (kafka)"
+        },
+        {
+          "tag": "min-b",
+          "fp": "234e0e0b09a71729",
+          "verdict": "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable) (kafka)"
+        }
+      ],
+      "identical": true,
+      "repro_command": "`~/bin/hvx-run sudo ./hvx_explore one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/explore-ob-stack-errors-err-disk.img <outdir> \"disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+1 C=20 P=kafka@3~314:500\"`"
+    },
+    {
+      "v": 1,
+      "type": "shrink",
+      "class": "lying-disk",
+      "signature": "VIOLATION [stack.exactly_once] kafka",
+      "from_seed": 4,
+      "minimal": "disk=lying:1 dseed=b3c71c31800079a2 | run C=24",
+      "verdict": "HYDO-ORACLE: VIOLATION [stack.exactly_once] kafka order=9 expected=100009 got=MISSING (mysql has it: true)",
+      "tries": 21,
+      "min_class": "lying-disk",
+      "min_verdict": "HYDO-ORACLE: VIOLATION [stack.exactly_once] kafka order=9 expected=100009 got=MISSING (mysql has it: true)",
+      "confirmations": [
+        {
+          "tag": "min2-a",
+          "fp": "ea0dc03821837259",
+          "verdict": "HYDO-ORACLE: VIOLATION [stack.exactly_once] kafka order=9 expected=100009 got=MISSING (mysql has it: true)"
+        },
+        {
+          "tag": "min2-b",
+          "fp": "ea0dc03821837259",
+          "verdict": "HYDO-ORACLE: VIOLATION [stack.exactly_once] kafka order=9 expected=100009 got=MISSING (mysql has it: true)"
+        }
+      ],
+      "identical": true,
+      "repro_command": "`~/bin/hvx-run sudo ./hvx_explore one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/explore-ob-stack-errors-err-disk.img <outdir> \"disk=lying:1 dseed=b3c71c31800079a2 | run C=24\"`"
+    },
+    {
+      "v": 1,
+      "type": "shrink",
+      "class": "unsafe-knob",
+      "signature": "VIOLATION [stack.exactly_once] mysql",
+      "from_seed": 5,
+      "minimal": "disk=cut dseed=1f16055b6d41c6d9 | run C=29 M=2",
+      "verdict": "HYDO-ORACLE: VIOLATION [stack.exactly_once] mysql order=0 acked but not marked published",
+      "tries": 6,
+      "min_class": "unsafe-knob",
+      "min_verdict": "HYDO-ORACLE: VIOLATION [stack.exactly_once] mysql order=0 acked but not marked published",
+      "confirmations": [
+        {
+          "tag": "min3-a",
+          "fp": "df885ac54c43f4a0",
+          "verdict": "HYDO-ORACLE: VIOLATION [stack.exactly_once] mysql order=0 acked but not marked published"
+        },
+        {
+          "tag": "min3-b",
+          "fp": "df885ac54c43f4a0",
+          "verdict": "HYDO-ORACLE: VIOLATION [stack.exactly_once] mysql order=0 acked but not marked published"
+        }
+      ],
+      "identical": true,
+      "repro_command": "`~/bin/hvx-run sudo ./hvx_explore one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/explore-ob-stack-errors-err-disk.img <outdir> \"disk=cut dseed=1f16055b6d41c6d9 | run C=29 M=2\"`"
+    }
+  ],
+  "error_kinds": {
+    "known_file": "hydo/onboard/examples/stack/known-errors.yaml",
+    "known_sha256": "ad216dc2626046594f113c09d4e3984ee6be18442d6a63fb1cb06e9f6b81c373",
+    "unknown": "report",
+    "kinds": [
+      {
+        "signature": "704053f4c802",
+        "service": "mysql",
+        "source": "/tmp/mysqld.err",
+        "template": "<time> # [ERROR] [MY-012592] [InnoDB] Operating system error number # in a file operation.",
+        "example": "2026-01-01T00:00:01.748734Z 1 [ERROR] [MY-012592] [InnoDB] Operating system error number 117 in a file operation.",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          1
+        ],
+        "first_seed": 1,
+        "first_schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+        "first_at": [
+          "r"
+        ],
+        "lines": 18,
+        "first_new": {
+          "seed": 1,
+          "schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+          "at": [
+            "r"
+          ],
+          "example": "2026-01-01T00:00:01.748734Z 1 [ERROR] [MY-012592] [InnoDB] Operating system error number 117 in a file operation."
+        }
+      },
+      {
+        "signature": "c4cccd633028",
+        "service": "mysql",
+        "source": "/tmp/mysqld.err",
+        "template": "<time> # [ERROR] [MY-012596] [InnoDB] Error number # means 'Structure needs cleaning'",
+        "example": "2026-01-01T00:00:01.748735Z 1 [ERROR] [MY-012596] [InnoDB] Error number 117 means 'Structure needs cleaning'",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          1
+        ],
+        "first_seed": 1,
+        "first_schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+        "first_at": [
+          "r"
+        ],
+        "lines": 18,
+        "first_new": {
+          "seed": 1,
+          "schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+          "at": [
+            "r"
+          ],
+          "example": "2026-01-01T00:00:01.748735Z 1 [ERROR] [MY-012596] [InnoDB] Error number 117 means 'Structure needs cleaning'"
+        }
+      },
+      {
+        "signature": "fe5f6beff3ec",
+        "service": "mysql",
+        "source": "/tmp/mysqld.err",
+        "template": "<time> # [ERROR] [MY-012646] [InnoDB] File /data/mysql/ib_buffer_pool: 'file_status_posix_stat' returned OS error 217.",
+        "example": "2026-01-01T00:00:01.748737Z 1 [ERROR] [MY-012646] [InnoDB] File /data/mysql/ib_buffer_pool: 'file_status_posix_stat' returned OS error 217.",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          1
+        ],
+        "first_seed": 1,
+        "first_schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+        "first_at": [
+          "r"
+        ],
+        "lines": 6,
+        "first_new": {
+          "seed": 1,
+          "schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+          "at": [
+            "r"
+          ],
+          "example": "2026-01-01T00:00:01.748737Z 1 [ERROR] [MY-012646] [InnoDB] File /data/mysql/ib_buffer_pool: 'file_status_posix_stat' returned OS error 217."
+        }
+      },
+      {
+        "signature": "749f62a28a62",
+        "service": "mysql",
+        "source": "/tmp/mysqld.err",
+        "template": "<time> # [ERROR] [MY-012646] [InnoDB] File /data/mysql/sys: 'file_status_posix_stat' returned OS error 217.",
+        "example": "2026-01-01T00:00:01.750736Z 1 [ERROR] [MY-012646] [InnoDB] File /data/mysql/sys: 'file_status_posix_stat' returned OS error 217.",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          1
+        ],
+        "first_seed": 1,
+        "first_schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+        "first_at": [
+          "r"
+        ],
+        "lines": 6,
+        "first_new": {
+          "seed": 1,
+          "schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+          "at": [
+            "r"
+          ],
+          "example": "2026-01-01T00:00:01.750736Z 1 [ERROR] [MY-012646] [InnoDB] File /data/mysql/sys: 'file_status_posix_stat' returned OS error 217."
+        }
+      },
+      {
+        "signature": "81d9b0a6c20b",
+        "service": "mysql",
+        "source": "/tmp/mysqld.err",
+        "template": "<time> # [ERROR] [MY-012646] [InnoDB] File /data/mysql/mysql/slow_log.CSM: 'file_status_posix_stat' returned OS error 217.",
+        "example": "2026-01-01T00:00:01.758735Z 1 [ERROR] [MY-012646] [InnoDB] File /data/mysql/mysql/slow_log.CSM: 'file_status_posix_stat' returned OS error 217.",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          1
+        ],
+        "first_seed": 1,
+        "first_schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+        "first_at": [
+          "r"
+        ],
+        "lines": 2,
+        "first_new": {
+          "seed": 1,
+          "schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+          "at": [
+            "r"
+          ],
+          "example": "2026-01-01T00:00:01.758735Z 1 [ERROR] [MY-012646] [InnoDB] File /data/mysql/mysql/slow_log.CSM: 'file_status_posix_stat' returned OS error 217."
+        }
+      },
+      {
+        "signature": "3936f6f52a9a",
+        "service": "mysql",
+        "source": "/tmp/mysqld.err",
+        "template": "<time> # [ERROR] [MY-012646] [InnoDB] File /data/mysql/mysql/slow_log.CSV: 'file_status_posix_stat' returned OS error 217.",
+        "example": "2026-01-01T00:00:01.760735Z 1 [ERROR] [MY-012646] [InnoDB] File /data/mysql/mysql/slow_log.CSV: 'file_status_posix_stat' returned OS error 217.",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          1
+        ],
+        "first_seed": 1,
+        "first_schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+        "first_at": [
+          "r"
+        ],
+        "lines": 2,
+        "first_new": {
+          "seed": 1,
+          "schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+          "at": [
+            "r"
+          ],
+          "example": "2026-01-01T00:00:01.760735Z 1 [ERROR] [MY-012646] [InnoDB] File /data/mysql/mysql/slow_log.CSV: 'file_status_posix_stat' returned OS error 217."
+        },
+        "shrink": {
+          "minimal": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+1 C=20 P=kafka@3~314:500",
+          "tries": 18,
+          "confirmations": [
+            {
+              "tag": "errmin-a-3936f6f52a9a",
+              "fp": "234e0e0b09a71729",
+              "verdict": "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable) (kafka)",
+              "present": true
+            },
+            {
+              "tag": "errmin-b-3936f6f52a9a",
+              "fp": "234e0e0b09a71729",
+              "verdict": "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable) (kafka)",
+              "present": true
+            }
+          ],
+          "identical": true,
+          "repro_command": "`~/bin/hvx-run sudo ./hvx_explore one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/explore-ob-stack-errors-err-disk.img <outdir> \"disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+1 C=20 P=kafka@3~314:500\"`"
+        }
+      },
+      {
+        "signature": "60afc1bbfa44",
+        "service": "mysql",
+        "source": "/tmp/mysqld.err",
+        "template": "<time> # [ERROR] [MY-012646] [InnoDB] File ./sys/sys_config.ibd: 'file_status_posix_stat' returned OS error 217.",
+        "example": "2026-01-01T00:00:03.410484Z 1 [ERROR] [MY-012646] [InnoDB] File ./sys/sys_config.ibd: 'file_status_posix_stat' returned OS error 217.",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          1
+        ],
+        "first_seed": 1,
+        "first_schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+        "first_at": [
+          "r"
+        ],
+        "lines": 1,
+        "first_new": {
+          "seed": 1,
+          "schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+          "at": [
+            "r"
+          ],
+          "example": "2026-01-01T00:00:03.410484Z 1 [ERROR] [MY-012646] [InnoDB] File ./sys/sys_config.ibd: 'file_status_posix_stat' returned OS error 217."
+        },
+        "shrink": {
+          "minimal": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+1 C=20 P=kafka@3~314:500",
+          "tries": 18,
+          "confirmations": [
+            {
+              "tag": "errmin-a-60afc1bbfa44",
+              "fp": "234e0e0b09a71729",
+              "verdict": "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable) (kafka)",
+              "present": true
+            },
+            {
+              "tag": "errmin-b-60afc1bbfa44",
+              "fp": "234e0e0b09a71729",
+              "verdict": "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable) (kafka)",
+              "present": true
+            }
+          ],
+          "identical": true,
+          "repro_command": "`~/bin/hvx-run sudo ./hvx_explore one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/explore-ob-stack-errors-err-disk.img <outdir> \"disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+1 C=20 P=kafka@3~314:500\"`"
+        }
+      },
+      {
+        "signature": "94218796c56e",
+        "service": "mysql",
+        "source": "/tmp/mysqld.err",
+        "template": "<time> # [ERROR] [MY-012646] [InnoDB] File .//ib_buffer_pool: 'file_exists_posix_stat' returned OS error 217.",
+        "example": "2026-01-01T00:00:03.805424Z 0 [ERROR] [MY-012646] [InnoDB] File .//ib_buffer_pool: 'file_exists_posix_stat' returned OS error 217.",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          1
+        ],
+        "first_seed": 1,
+        "first_schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+        "first_at": [
+          "r"
+        ],
+        "lines": 1,
+        "first_new": {
+          "seed": 1,
+          "schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+          "at": [
+            "r"
+          ],
+          "example": "2026-01-01T00:00:03.805424Z 0 [ERROR] [MY-012646] [InnoDB] File .//ib_buffer_pool: 'file_exists_posix_stat' returned OS error 217."
+        }
+      },
+      {
+        "signature": "bbc0bbc262be",
+        "service": "mysql",
+        "source": "/tmp/mysqld.err",
+        "template": "<time> # [ERROR] [MY-011947] [InnoDB] Cannot open '/data/mysql/ib_buffer_pool' for reading: Structure needs cleaning",
+        "example": "2026-01-01T00:00:03.805426Z 0 [ERROR] [MY-011947] [InnoDB] Cannot open '/data/mysql/ib_buffer_pool' for reading: Structure needs cleaning",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          1
+        ],
+        "first_seed": 1,
+        "first_schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+        "first_at": [
+          "r"
+        ],
+        "lines": 1,
+        "first_new": {
+          "seed": 1,
+          "schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+          "at": [
+            "r"
+          ],
+          "example": "2026-01-01T00:00:03.805426Z 0 [ERROR] [MY-011947] [InnoDB] Cannot open '/data/mysql/ib_buffer_pool' for reading: Structure needs cleaning"
+        }
+      },
+      {
+        "signature": "7e4e0ea5d6ec",
+        "service": "kafka",
+        "source": "setup",
+        "template": "ERROR kafka.server.BrokerMetadataCheckpoint Failed to write meta.properties due to",
+        "example": "ERROR kafka.server.BrokerMetadataCheckpoint Failed to write meta.properties due to",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          1
+        ],
+        "first_seed": 1,
+        "first_schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+        "first_at": [
+          "r"
+        ],
+        "lines": 1,
+        "first_new": {
+          "seed": 1,
+          "schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+          "at": [
+            "r"
+          ],
+          "example": "ERROR kafka.server.BrokerMetadataCheckpoint Failed to write meta.properties due to"
+        }
+      },
+      {
+        "signature": "f0c792251150",
+        "service": "redis",
+        "source": "log",
+        "template": "#:C <date> <time> # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low ",
+        "example": "127:C 01 Jan 2026 00:00:00.103 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https",
+        "new": false,
+        "runs": 8,
+        "new_runs": 0,
+        "seeds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ],
+        "first_seed": 1,
+        "first_schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=mysql@24+2 C=20 P=kafka@3~314:869",
+        "first_at": [
+          "s",
+          "r"
+        ],
+        "lines": 15,
+        "reason": "Redis 7.2 warns at every start that vm.overcommit_memory is 0 (the guest kernel default); only background saves under memory pressure are affected, which this test does not do"
+      },
+      {
+        "signature": "e6dbfdff0773",
+        "service": "mysql",
+        "source": "/tmp/mysqld.err",
+        "template": "<time> # [ERROR] [MY-011971] [InnoDB] Tablespace 'innodb_undo_#' Page [page id: space=#, page number=#] log sequence number # is in the future! Current system log sequence number #.",
+        "example": "2026-01-01T00:00:02.875562Z 1 [ERROR] [MY-011971] [InnoDB] Tablespace 'innodb_undo_001' Page [page id: space=4294967279, page number=270] log sequence number 19368257 is in the future! Current system log sequence number 19367218.",
+        "new": true,
+        "runs": 2,
+        "new_runs": 2,
+        "seeds": [
+          4,
+          8
+        ],
+        "first_seed": 4,
+        "first_schedule": "disk=lying:8 dseed=b3c71c31800079a2 | run N=mysql@10-24:duplicate,26%,loss,20% C=24 T=26:-86400",
+        "first_at": [
+          "r"
+        ],
+        "lines": 33,
+        "first_new": {
+          "seed": 4,
+          "schedule": "disk=lying:8 dseed=b3c71c31800079a2 | run N=mysql@10-24:duplicate,26%,loss,20% C=24 T=26:-86400",
+          "at": [
+            "r"
+          ],
+          "example": "2026-01-01T00:00:02.875562Z 1 [ERROR] [MY-011971] [InnoDB] Tablespace 'innodb_undo_001' Page [page id: space=4294967279, page number=270] log sequence number 19368257 is in the future! Current system log sequence number 19367218."
+        }
+      },
+      {
+        "signature": "7df88adad38c",
+        "service": "mysql",
+        "source": "/tmp/mysqld.err",
+        "template": "<time> # [ERROR] [MY-011972] [InnoDB] Your database may be corrupt or you may have copied the InnoDB tablespace but not the InnoDB redo log files. Please refer to http://dev.mysql.com/doc/refman/#.#/e",
+        "example": "2026-01-01T00:00:02.875563Z 1 [ERROR] [MY-011972] [InnoDB] Your database may be corrupt or you may have copied the InnoDB tablespace but not the InnoDB redo log files. Please refer to http://dev.mysql.com/doc/refman/8.4/en/forcing-innodb-re",
+        "new": true,
+        "runs": 2,
+        "new_runs": 2,
+        "seeds": [
+          4,
+          8
+        ],
+        "first_seed": 4,
+        "first_schedule": "disk=lying:8 dseed=b3c71c31800079a2 | run N=mysql@10-24:duplicate,26%,loss,20% C=24 T=26:-86400",
+        "first_at": [
+          "r"
+        ],
+        "lines": 34,
+        "first_new": {
+          "seed": 4,
+          "schedule": "disk=lying:8 dseed=b3c71c31800079a2 | run N=mysql@10-24:duplicate,26%,loss,20% C=24 T=26:-86400",
+          "at": [
+            "r"
+          ],
+          "example": "2026-01-01T00:00:02.875563Z 1 [ERROR] [MY-011972] [InnoDB] Your database may be corrupt or you may have copied the InnoDB tablespace but not the InnoDB redo log files. Please refer to http://dev.mysql.com/doc/refman/8.4/en/forcing-innodb-re"
+        }
+      },
+      {
+        "signature": "97e5a1e30289",
+        "service": "redis",
+        "source": "log",
+        "template": "#:M <date> <time> # Can't persist AOF for fsync error when the AOF fsync policy is 'always': I/O error. Exiting...",
+        "example": "127:M 01 Jan 2026 00:00:25.893 # Can't persist AOF for fsync error when the AOF fsync policy is 'always': I/O error. Exiting...",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          6
+        ],
+        "first_seed": 6,
+        "first_schedule": "disk=ioerr:2 dseed=ea4fb8211cfa3702 | run M=0 P=kafka@26+2 T=10:-30",
+        "first_at": [
+          "0"
+        ],
+        "lines": 1,
+        "first_new": {
+          "seed": 6,
+          "schedule": "disk=ioerr:2 dseed=ea4fb8211cfa3702 | run M=0 P=kafka@26+2 T=10:-30",
+          "at": [
+            "0"
+          ],
+          "example": "127:M 01 Jan 2026 00:00:25.893 # Can't persist AOF for fsync error when the AOF fsync policy is 'always': I/O error. Exiting..."
+        }
+      },
+      {
+        "signature": "6a4360275d80",
+        "service": "redis",
+        "source": "log",
+        "template": "#:M <date> <time> # Fatal error: can't open the AOF manifest file appendonlydir/appendonly.aof.manifest for reading: I/O error",
+        "example": "708:M 01 Jan 2026 00:00:15.068 # Fatal error: can't open the AOF manifest file appendonlydir/appendonly.aof.manifest for reading: I/O error",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          6
+        ],
+        "first_seed": 6,
+        "first_schedule": "disk=ioerr:2 dseed=ea4fb8211cfa3702 | run M=0 P=kafka@26+2 T=10:-30",
+        "first_at": [
+          "28"
+        ],
+        "lines": 1,
+        "first_new": {
+          "seed": 6,
+          "schedule": "disk=ioerr:2 dseed=ea4fb8211cfa3702 | run M=0 P=kafka@26+2 T=10:-30",
+          "at": [
+            "28"
+          ],
+          "example": "708:M 01 Jan 2026 00:00:15.068 # Fatal error: can't open the AOF manifest file appendonlydir/appendonly.aof.manifest for reading: I/O error"
+        }
+      },
+      {
+        "signature": "741e5be321da",
+        "service": "mysql",
+        "source": "/tmp/mysqld.err",
+        "template": "<time> # [ERROR] [MY-012639] [InnoDB] Write to file ./#innodb_redo/#ib_redo# failed at offset #, # bytes should have been written, only # were written. Operating system error number #. Check that your",
+        "example": "2026-01-01T00:00:25.935058Z 0 [ERROR] [MY-012639] [InnoDB] Write to file ./#innodb_redo/#ib_redo74 failed at offset 113664, 512 bytes should have been written, only 0 were written. Operating system error number 5. Check that your OS and fil",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          6
+        ],
+        "first_seed": 6,
+        "first_schedule": "disk=ioerr:2 dseed=ea4fb8211cfa3702 | run M=0 P=kafka@26+2 T=10:-30",
+        "first_at": [
+          "0"
+        ],
+        "lines": 1,
+        "first_new": {
+          "seed": 6,
+          "schedule": "disk=ioerr:2 dseed=ea4fb8211cfa3702 | run M=0 P=kafka@26+2 T=10:-30",
+          "at": [
+            "0"
+          ],
+          "example": "2026-01-01T00:00:25.935058Z 0 [ERROR] [MY-012639] [InnoDB] Write to file ./#innodb_redo/#ib_redo74 failed at offset 113664, 512 bytes should have been written, only 0 were written. Operating system error number 5. Check that your OS and fil"
+        }
+      },
+      {
+        "signature": "b739c084fb42",
+        "service": "mysql",
+        "source": "/tmp/mysqld.err",
+        "template": "<time> # [ERROR] [MY-012640] [InnoDB] Error number # means 'Input/output error'",
+        "example": "2026-01-01T00:00:25.935059Z 0 [ERROR] [MY-012640] [InnoDB] Error number 5 means 'Input/output error'",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          6
+        ],
+        "first_seed": 6,
+        "first_schedule": "disk=ioerr:2 dseed=ea4fb8211cfa3702 | run M=0 P=kafka@26+2 T=10:-30",
+        "first_at": [
+          "0"
+        ],
+        "lines": 1,
+        "first_new": {
+          "seed": 6,
+          "schedule": "disk=ioerr:2 dseed=ea4fb8211cfa3702 | run M=0 P=kafka@26+2 T=10:-30",
+          "at": [
+            "0"
+          ],
+          "example": "2026-01-01T00:00:25.935059Z 0 [ERROR] [MY-012640] [InnoDB] Error number 5 means 'Input/output error'"
+        }
+      },
+      {
+        "signature": "ce0161c25fd4",
+        "service": "mysql",
+        "source": "/tmp/mysqld.err",
+        "template": "<time> # [ERROR] [MY-013864] [InnoDB] [FATAL] Error 100 encountered when writing to the redo log file: ./#innodb_redo/#ib_redo#.",
+        "example": "2026-01-01T00:00:25.935061Z 0 [ERROR] [MY-013864] [InnoDB] [FATAL] Error 100 encountered when writing to the redo log file: ./#innodb_redo/#ib_redo74.",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          6
+        ],
+        "first_seed": 6,
+        "first_schedule": "disk=ioerr:2 dseed=ea4fb8211cfa3702 | run M=0 P=kafka@26+2 T=10:-30",
+        "first_at": [
+          "0"
+        ],
+        "lines": 1,
+        "first_new": {
+          "seed": 6,
+          "schedule": "disk=ioerr:2 dseed=ea4fb8211cfa3702 | run M=0 P=kafka@26+2 T=10:-30",
+          "at": [
+            "0"
+          ],
+          "example": "2026-01-01T00:00:25.935061Z 0 [ERROR] [MY-013864] [InnoDB] [FATAL] Error 100 encountered when writing to the redo log file: ./#innodb_redo/#ib_redo74."
+        }
+      },
+      {
+        "signature": "2b1e5b43976b",
+        "service": "mysql",
+        "source": "/tmp/mysqld.err",
+        "template": "<time> # [ERROR] [MY-013183] [InnoDB] Assertion failure: log#write.cc:#:ib::fatal triggered thread #",
+        "example": "2026-01-01T00:00:25.935062Z 0 [ERROR] [MY-013183] [InnoDB] Assertion failure: log0write.cc:2120:ib::fatal triggered thread 140653459658432",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          6
+        ],
+        "first_seed": 6,
+        "first_schedule": "disk=ioerr:2 dseed=ea4fb8211cfa3702 | run M=0 P=kafka@26+2 T=10:-30",
+        "first_at": [
+          "0"
+        ],
+        "lines": 1,
+        "first_new": {
+          "seed": 6,
+          "schedule": "disk=ioerr:2 dseed=ea4fb8211cfa3702 | run M=0 P=kafka@26+2 T=10:-30",
+          "at": [
+            "0"
+          ],
+          "example": "2026-01-01T00:00:25.935062Z 0 [ERROR] [MY-013183] [InnoDB] Assertion failure: log0write.cc:2120:ib::fatal triggered thread 140653459658432"
+        }
+      },
+      {
+        "signature": "5b0422ee2e1b",
+        "service": "kafka",
+        "source": "log",
+        "template": "ERROR org.apache.kafka.storage.internals.log.LogDirFailureChannel Error while flushing log for orders-# in dir /data/kafka-logs with offset # (exclusive) and recovery point #",
+        "example": "ERROR org.apache.kafka.storage.internals.log.LogDirFailureChannel Error while flushing log for orders-0 in dir /data/kafka-logs with offset 3 (exclusive) and recovery point 3",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          6
+        ],
+        "first_seed": 6,
+        "first_schedule": "disk=ioerr:2 dseed=ea4fb8211cfa3702 | run M=0 P=kafka@26+2 T=10:-30",
+        "first_at": [
+          "0"
+        ],
+        "lines": 1,
+        "first_new": {
+          "seed": 6,
+          "schedule": "disk=ioerr:2 dseed=ea4fb8211cfa3702 | run M=0 P=kafka@26+2 T=10:-30",
+          "at": [
+            "0"
+          ],
+          "example": "ERROR org.apache.kafka.storage.internals.log.LogDirFailureChannel Error while flushing log for orders-0 in dir /data/kafka-logs with offset 3 (exclusive) and recovery point 3"
+        }
+      },
+      {
+        "signature": "f8a18336c798",
+        "service": "kafka",
+        "source": "log",
+        "template": "ERROR kafka.log.LogManager Shutdown broker because all log dirs in /data/kafka-logs have failed",
+        "example": "ERROR kafka.log.LogManager Shutdown broker because all log dirs in /data/kafka-logs have failed",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          6
+        ],
+        "first_seed": 6,
+        "first_schedule": "disk=ioerr:2 dseed=ea4fb8211cfa3702 | run M=0 P=kafka@26+2 T=10:-30",
+        "first_at": [
+          "0"
+        ],
+        "lines": 1,
+        "first_new": {
+          "seed": 6,
+          "schedule": "disk=ioerr:2 dseed=ea4fb8211cfa3702 | run M=0 P=kafka@26+2 T=10:-30",
+          "at": [
+            "0"
+          ],
+          "example": "ERROR kafka.log.LogManager Shutdown broker because all log dirs in /data/kafka-logs have failed"
+        }
+      },
+      {
+        "signature": "1c580066e046",
+        "service": "mysql",
+        "source": "/tmp/mysqld.err",
+        "template": "<time> # [ERROR] [MY-012562] [InnoDB] We scanned the log up to #. A checkpoint was at # and the maximum LSN on a database page was #. It is possible that the database is now corrupt!",
+        "example": "2026-01-01T00:00:01.992698Z 1 [ERROR] [MY-012562] [InnoDB] We scanned the log up to 19375616. A checkpoint was at 19376053 and the maximum LSN on a database page was 0. It is possible that the database is now corrupt!",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          8
+        ],
+        "first_seed": 8,
+        "first_schedule": "disk=lying:4 dseed=17144527b62d669c | run N=kafka@7-10:loss,11%,corrupt,7% C=27 M=0 P=redis@0~98:29516",
+        "first_at": [
+          "r"
+        ],
+        "lines": 1,
+        "first_new": {
+          "seed": 8,
+          "schedule": "disk=lying:4 dseed=17144527b62d669c | run N=kafka@7-10:loss,11%,corrupt,7% C=27 M=0 P=redis@0~98:29516",
+          "at": [
+            "r"
+          ],
+          "example": "2026-01-01T00:00:01.992698Z 1 [ERROR] [MY-012562] [InnoDB] We scanned the log up to 19375616. A checkpoint was at 19376053 and the maximum LSN on a database page was 0. It is possible that the database is now corrupt!"
+        }
+      },
+      {
+        "signature": "a66eb7de15d7",
+        "service": "mysql",
+        "source": "/tmp/mysqld.err",
+        "template": "<time> # [ERROR] [MY-011971] [InnoDB] Tablespace 'innodb_system' Page [page id: space=#, page number=#] log sequence number # is in the future! Current system log sequence number #.",
+        "example": "2026-01-01T00:00:02.181668Z 1 [ERROR] [MY-011971] [InnoDB] Tablespace 'innodb_system' Page [page id: space=0, page number=5] log sequence number 19377112 is in the future! Current system log sequence number 19376053.",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          8
+        ],
+        "first_seed": 8,
+        "first_schedule": "disk=lying:4 dseed=17144527b62d669c | run N=kafka@7-10:loss,11%,corrupt,7% C=27 M=0 P=redis@0~98:29516",
+        "first_at": [
+          "r"
+        ],
+        "lines": 1,
+        "first_new": {
+          "seed": 8,
+          "schedule": "disk=lying:4 dseed=17144527b62d669c | run N=kafka@7-10:loss,11%,corrupt,7% C=27 M=0 P=redis@0~98:29516",
+          "at": [
+            "r"
+          ],
+          "example": "2026-01-01T00:00:02.181668Z 1 [ERROR] [MY-011971] [InnoDB] Tablespace 'innodb_system' Page [page id: space=0, page number=5] log sequence number 19377112 is in the future! Current system log sequence number 19376053."
+        }
+      },
+      {
+        "signature": "4bbcbdc34338",
+        "service": "kafka",
+        "source": "log",
+        "template": "ERROR kafka.server.BrokerServer [BrokerServer id=#] Fatal error during broker startup. Prepare to shutdown",
+        "example": "ERROR kafka.server.BrokerServer [BrokerServer id=1] Fatal error during broker startup. Prepare to shutdown",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          8
+        ],
+        "first_seed": 8,
+        "first_schedule": "disk=lying:4 dseed=17144527b62d669c | run N=kafka@7-10:loss,11%,corrupt,7% C=27 M=0 P=redis@0~98:29516",
+        "first_at": [
+          "r"
+        ],
+        "lines": 1,
+        "first_new": {
+          "seed": 8,
+          "schedule": "disk=lying:4 dseed=17144527b62d669c | run N=kafka@7-10:loss,11%,corrupt,7% C=27 M=0 P=redis@0~98:29516",
+          "at": [
+            "r"
+          ],
+          "example": "ERROR kafka.server.BrokerServer [BrokerServer id=1] Fatal error during broker startup. Prepare to shutdown"
+        }
+      },
+      {
+        "signature": "f51282e98f26",
+        "service": "kafka",
+        "source": "log",
+        "template": "ERROR kafka.Kafka$ Exiting Kafka due to fatal exception during startup.",
+        "example": "ERROR kafka.Kafka$ Exiting Kafka due to fatal exception during startup.",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          8
+        ],
+        "first_seed": 8,
+        "first_schedule": "disk=lying:4 dseed=17144527b62d669c | run N=kafka@7-10:loss,11%,corrupt,7% C=27 M=0 P=redis@0~98:29516",
+        "first_at": [
+          "r"
+        ],
+        "lines": 1,
+        "first_new": {
+          "seed": 8,
+          "schedule": "disk=lying:4 dseed=17144527b62d669c | run N=kafka@7-10:loss,11%,corrupt,7% C=27 M=0 P=redis@0~98:29516",
+          "at": [
+            "r"
+          ],
+          "example": "ERROR kafka.Kafka$ Exiting Kafka due to fatal exception during startup."
+        }
+      },
+      {
+        "signature": "1045866f160b",
+        "service": "kafka",
+        "source": "log",
+        "template": "ERROR org.apache.kafka.controller.QuorumController [QuorumController id=#] writeNoOpRecord: unable to start processing because of RejectedExecutionException. Reason: null",
+        "example": "ERROR org.apache.kafka.controller.QuorumController [QuorumController id=1] writeNoOpRecord: unable to start processing because of RejectedExecutionException. Reason: null",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          8
+        ],
+        "first_seed": 8,
+        "first_schedule": "disk=lying:4 dseed=17144527b62d669c | run N=kafka@7-10:loss,11%,corrupt,7% C=27 M=0 P=redis@0~98:29516",
+        "first_at": [
+          "r"
+        ],
+        "lines": 1,
+        "first_new": {
+          "seed": 8,
+          "schedule": "disk=lying:4 dseed=17144527b62d669c | run N=kafka@7-10:loss,11%,corrupt,7% C=27 M=0 P=redis@0~98:29516",
+          "at": [
+            "r"
+          ],
+          "example": "ERROR org.apache.kafka.controller.QuorumController [QuorumController id=1] writeNoOpRecord: unable to start processing because of RejectedExecutionException. Reason: null"
+        }
+      }
+    ]
+  },
+  "properties": {
+    "runs": 8,
+    "setup_complete_runs": 0,
+    "violations": 4,
+    "properties": [
+      {
+        "id": "fault.paused",
+        "assertion": "reachable",
+        "message": "a service was paused (SIGSTOP)",
+        "declared": true,
+        "passes": 3,
+        "fails": 0,
+        "runs_passed": 3,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "fault.pause_mid_request",
+        "assertion": "sometimes",
+        "message": "a pause began while a client request was in flight",
+        "declared": true,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "fault.clock_back",
+        "assertion": "reachable",
+        "message": "the realtime clock was stepped backwards",
+        "declared": true,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "fault.clock_fwd",
+        "assertion": "reachable",
+        "message": "the realtime clock was stepped forwards",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.oneway_req",
+        "assertion": "reachable",
+        "message": "a one-way network fault hit the req direction",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.oneway_resp",
+        "assertion": "reachable",
+        "message": "a one-way network fault hit the resp direction",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "server.place_acked",
+        "assertion": "sometimes",
+        "message": "a Place call was ACKed",
+        "declared": true,
+        "passes": 8,
+        "fails": 0,
+        "runs_passed": 8,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "server.redis_redialed",
+        "assertion": "reachable",
+        "message": "the front door re-dialed Redis after its connection broke",
+        "declared": true,
+        "passes": 3,
+        "fails": 0,
+        "runs_passed": 3,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "server.cache_write_skipped",
+        "assertion": "sometimes",
+        "message": "a Redis cache write failed and was skipped; the order was still ACKed",
+        "declared": true,
+        "passes": 3,
+        "fails": 0,
+        "runs_passed": 3,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "mysql.amounts_valid",
+        "assertion": "always_or_unreachable",
+        "message": "every order row in MySQL has the amount its id implies (100000 + id)",
+        "declared": false,
+        "passes": 8,
+        "fails": 0,
+        "runs_passed": 6,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "oracle.stores_readable",
+        "assertion": "always",
+        "message": "after recovery the oracle can read MySQL, Kafka and Redis",
+        "declared": true,
+        "passes": 5,
+        "fails": 0,
+        "runs_passed": 5,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "order.in_mysql",
+        "assertion": "always",
+        "message": "every checked order is in MySQL with its amount",
+        "declared": true,
+        "passes": 5,
+        "fails": 2,
+        "runs_passed": 5,
+        "runs_failed": 2,
+        "verdict": "FAIL",
+        "status": "violation",
+        "first_failure": "{\"got\":\"MISSING\",\"in_kafka\":false,\"order\":13,\"want\":100013}"
+      },
+      {
+        "id": "order.in_kafka",
+        "assertion": "always",
+        "message": "every checked order is in Kafka with its amount",
+        "declared": true,
+        "passes": 4,
+        "fails": 1,
+        "runs_passed": 4,
+        "runs_failed": 1,
+        "verdict": "FAIL",
+        "status": "violation",
+        "first_failure": "{\"got\":\"MISSING\",\"in_mysql\":true,\"order\":0,\"want\":100000}"
+      },
+      {
+        "id": "order.kafka_exactly_once",
+        "assertion": "always",
+        "message": "every checked order is in Kafka exactly once",
+        "declared": true,
+        "passes": 4,
+        "fails": 0,
+        "runs_passed": 4,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "order.acked_marked_published",
+        "assertion": "always_or_unreachable",
+        "message": "an ACKed order is marked published in MySQL",
+        "declared": true,
+        "passes": 4,
+        "fails": 2,
+        "runs_passed": 4,
+        "runs_failed": 2,
+        "verdict": "FAIL",
+        "status": "violation",
+        "first_failure": "{\"order\":12}"
+      },
+      {
+        "id": "order.redis_never_wrong",
+        "assertion": "always",
+        "message": "Redis never holds a wrong amount (a missing key is allowed)",
+        "declared": true,
+        "passes": 4,
+        "fails": 0,
+        "runs_passed": 4,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "order.told_failed_but_applied",
+        "assertion": "unreachable",
+        "message": "an order the client was told definitely failed reached Kafka",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "order.unknown_outcome_applied",
+        "assertion": "sometimes",
+        "message": "an order whose outcome the client could not know reached Kafka (the inherent lost-ACK window)",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "oracle.redis_cache_miss",
+        "assertion": "sometimes",
+        "message": "the oracle saw a Redis cache miss",
+        "declared": true,
+        "passes": 2,
+        "fails": 0,
+        "runs_passed": 2,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "oracle.pending_order",
+        "assertion": "sometimes",
+        "message": "an un-ACKed order was left pending (unpublished) in MySQL",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "server.store_error",
+        "assertion": "sometimes",
+        "message": "a Place call failed on a store error",
+        "declared": true,
+        "passes": 2,
+        "fails": 0,
+        "runs_passed": 2,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "server.kafka_recheck",
+        "assertion": "sometimes",
+        "message": "an order whose earlier produce was uncertain was looked up in Kafka first",
+        "declared": true,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "server.kafka_dedup_hit",
+        "assertion": "sometimes",
+        "message": "the Kafka lookup found the order already there (a duplicate was avoided)",
+        "declared": true,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "server.not_applied",
+        "assertion": "sometimes",
+        "message": "a Place failed before any produce was started (a definite failure)",
+        "declared": true,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "server.outcome_unknown",
+        "assertion": "sometimes",
+        "message": "a Place failed after a produce had been started (outcome unknown)",
+        "declared": true,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "client.place_failed",
+        "assertion": "sometimes",
+        "message": "a client Place attempt failed",
+        "declared": true,
+        "passes": 5,
+        "fails": 0,
+        "runs_passed": 2,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "client.definite_failure",
+        "assertion": "sometimes",
+        "message": "the client was told an attempt definitely did not apply",
+        "declared": true,
+        "passes": 4,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "client.outcome_unknown",
+        "assertion": "sometimes",
+        "message": "an attempt ended with an unknown outcome (timeout, lost ACK, outcome-unknown error)",
+        "declared": true,
+        "passes": 2,
+        "fails": 0,
+        "runs_passed": 2,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "client.retry_recovered",
+        "assertion": "sometimes",
+        "message": "an order that had failed was ACKed on a later attempt",
+        "declared": true,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "client.retry_exhausted",
+        "assertion": "sometimes",
+        "message": "an order was still un-ACKed after all retry attempts",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "redis.cache_never_wrong",
+        "assertion": "always_or_unreachable",
+        "message": "a cached order in Redis never holds a wrong amount (a missing key is allowed)",
+        "declared": false,
+        "passes": 5,
+        "fails": 0,
+        "runs_passed": 5,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "stack.exactly_once",
+        "assertion": "always",
+        "message": "every ACKed order is in MySQL and Kafka exactly once; nothing told 'failed' was applied",
+        "declared": false,
+        "passes": 3,
+        "fails": 2,
+        "runs_passed": 3,
+        "runs_failed": 2,
+        "verdict": "FAIL",
+        "status": "violation",
+        "first_failure": "{\"out\":\"kafka order=0 expected=100000 got=MISSING (mysql has it: true)\"}"
+      }
+    ]
+  },
+  "liveness": [],
+  "artifacts": {
+    "events": "events.jsonl",
+    "report": "report.md",
+    "consoles": "consoles"
+  }
+}

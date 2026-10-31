@@ -1,0 +1,11 @@
+{
+  "about": "non-ASCII text is written as UTF-8 except U+2028 and U+2029, which are escaped",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"d.string_unicode","msg":"details encoding"},
+    {"do":"check","a":0,"cond":true,"details":{"map":[["latin","é ÿ"],["cjk","中文 日本語"],["emoji","😀 a😀b"],["u2028","a\u2028b\u2029c"],["nbsp","a bc"],["fffd","�"],["ffff","￿"],["bom","﻿x"]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "string_unicode.out", "returns": "1"}
+  ]
+}

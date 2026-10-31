@@ -1,0 +1,12 @@
+{
+  "about": "reachable: the first hit is written as ok:true",
+  "needs": [],
+  "steps": [
+    {"do":"reachable","id":"t.reach","msg":"a reachable location"},
+    {"do":"hit","a":0},
+    {"do":"hit","a":0,"details":{"map":[["again",{"int":"1"}]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "reachable.out", "returns": ""}
+  ]
+}

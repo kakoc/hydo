@@ -1,0 +1,18 @@
+{
+  "about": "a NaN or an infinity anywhere in the details drops the record (Go's json.Marshal fails), and the outcome counts as written",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"d.nan","msg":"details with a NaN"},
+    {"do":"always","id":"d.inf","msg":"details with an infinity"},
+    {"do":"check","a":0,"cond":true,"details":{"map":[["f",{"f64":"NaN"}]]}},
+    {"do":"check","a":0,"cond":true,"details":{"map":[["f",{"int":"1"}]]}},
+    {"do":"check","a":0,"cond":false,"details":{"map":[["f",{"int":"2"}]]}},
+    {"do":"check","a":1,"cond":false,"details":{"map":[["nested",{"map":[["f",{"f64":"+Inf"}]]}]]}},
+    {"do":"check","a":1,"cond":false,"details":{"map":[["f",{"int":"3"}]]}},
+    {"do":"check","a":1,"cond":true,"details":{"map":[["list",[{"f64":"-Inf"}]]]}},
+    {"do":"check","a":1,"cond":true,"details":{"map":[["f",{"int":"4"}]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "nan_and_infinity.out", "returns": "1100011"}
+  ]
+}

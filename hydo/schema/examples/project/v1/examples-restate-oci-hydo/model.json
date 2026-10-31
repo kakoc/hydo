@@ -1,0 +1,47 @@
+{
+  "format": 1,
+  "name": "restate-oci",
+  "description": "Restate 1.7.13 from the official Docker image (AVX2 build); the server must come up and answer.",
+  "guest": {
+    "ram_mib": 2048,
+    "cpu": "v3"
+  },
+  "data": {
+    "size_mib": 1024,
+    "dirs": [
+      "restate"
+    ]
+  },
+  "services": [
+    {
+      "name": "restate",
+      "ready": "wget -q -T 2 -O /dev/null http://127.0.0.1:9070/health && wget -q -T 2 -O /dev/null http://127.0.0.1:8080/restate/health",
+      "ready_timeout": 300,
+      "port": 8080,
+      "image": "restate-1.7.13-amd64.docker.tar",
+      "env": {
+        "RESTATE_BASE_DIR": "/data/restate",
+        "RESTATE_NODE_NAME": "hydo",
+        "RESTATE_LOG_FILTER": "warn",
+        "RESTATE_ROCKSDB_TOTAL_MEMORY_SIZE": "256 MiB"
+      }
+    }
+  ],
+  "workload": {
+    "steps": 6,
+    "run": "i=$HYDO_FROM\nwhile [ $i -lt $HYDO_TO ]; do\n  if wget -q -T 5 -O /tmp/h$i http://127.0.0.1:9070/health && wget -q -T 5 -O /tmp/d$i http://127.0.0.1:9070/deployments; then\n    echo $i >> $HYDO_ACKED\n    echo \"hydo-restate: step $i deployments=$(cat /tmp/d$i)\" > /dev/ttyS0\n  fi\n  i=$((i + 1))\ndone\n"
+  },
+  "invariants": [
+    {
+      "id": "restate.answers",
+      "msg": "after the run (and any restart) the Restate server answers its health and admin endpoints",
+      "cmd": "n=$(wc -l < $HYDO_ACKED)\nif wget -q -T 5 -O /dev/null http://127.0.0.1:9070/health && wget -q -T 5 -O /dev/null http://127.0.0.1:8080/restate/health; then\n  echo \"answers; steps answered=$n of 6\"; exit 0\nfi\necho \"no answer at the end; steps answered=$n of 6\"; exit 1\n"
+    }
+  ],
+  "faults": [
+    "kill",
+    "pause",
+    "cut",
+    "clock"
+  ]
+}

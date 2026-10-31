@@ -1,0 +1,11 @@
+{
+  "about": "int64 and uint64 values, including the extremes and 2^53 + 1",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"d.integers","msg":"details encoding"},
+    {"do":"check","a":0,"cond":true,"details":{"map":[["zero",{"int":"0"}],["neg",{"int":"-5"}],["imin",{"int":"-9223372036854775808"}],["imax",{"int":"9223372036854775807"}],["umax",{"uint":"18446744073709551615"}],["i53",{"int":"9007199254740993"}],["u",{"uint":"7"}]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "integers.out", "returns": "1"}
+  ]
+}

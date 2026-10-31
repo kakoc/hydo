@@ -8,7 +8,7 @@ use crate::ctx::{
     abspath, die, glob_simple, pjoin, read_text, strftime, take, Ctx, Platform, OUT, PROJECT_OUT,
 };
 use crate::hvxenv;
-use crate::pyjson::{dumps, head, py_str, tail};
+use crate::pyjson::{head, py_str, tail};
 use hydo_engine::hvm::{kernel_for, Hvm};
 use hydo_engine::hvx::Hvx;
 use hydo_engine::image::{embedded_compose, embedded_manifest, sha256_file};
@@ -275,8 +275,9 @@ fn verdict_text(r: &hydo_history::Checks) -> String {
     r.verdict.clone().unwrap_or_else(|| "None".into())
 }
 
-/// History checks on the host (hydo/HISTORIES.md): writes one.checks.log and one.checks.txt and
-/// folds the combined verdict into res (the guest's own as guest_verdict).
+/// History checks on the host (hydo/HISTORIES.md): keeps the checks' findings and records in res
+/// (result.json reports them) and folds the combined verdict into res (the guest's own as
+/// guest_verdict).
 fn host_checks(outdir: &Path, mut res: Map<String, Value>, quiet: bool) -> Map<String, Value> {
     let srcs = console_sources(outdir);
     if !srcs.iter().any(|(_, t)| t.contains("HYDO-CHECK ")) {
@@ -287,7 +288,7 @@ fn host_checks(outdir: &Path, mut res: Map<String, Value>, quiet: bool) -> Map<S
         .and_then(Value::as_str)
         .map(str::to_string);
     let r = history_checks(&srcs, verdict.as_deref());
-    let _ = hydo_history::write_checks_files(outdir, "one", &r);
+    hydo_explore::results::keep_checks(&mut res, &r);
     let gv = res.get("verdict").cloned().unwrap_or(Value::Null);
     res.insert("guest_verdict".into(), gv);
     res.insert("verdict".into(), json!(r.verdict));
@@ -295,21 +296,106 @@ fn host_checks(outdir: &Path, mut res: Map<String, Value>, quiet: bool) -> Map<S
         println!(
             "hydo: history checks: {}   (explanations in {})",
             verdict_text(&r),
-            outdir.join("one.checks.txt").display()
+            outdir.join(hydo_results::RUN_DOC).display()
         );
     }
     res
 }
 
-/// Error logs as findings for one run (the hydo-errors crate): prints the kinds, writes
-/// one.errors.json, folds the verdict into res.
+/// The known-errors list a run's error kinds were compared with (result.json `error_logs`).
+const ERRLOG_KNOWN: &str = "_errlog_known";
+
+/// Error logs as findings for one run (the hydo-errors crate): prints the kinds, keeps the
+/// analysis in res (result.json reports it), folds the verdict into res.
 fn errors_one(
     outdir: &Path,
     sched: &str,
     res: Map<String, Value>,
     known: Option<&str>,
 ) -> Map<String, Value> {
-    hydo_errors::for_run_dir(outdir, sched, res, known, &mut |l| println!("{l}"))
+    let (mut res, an) =
+        hydo_errors::for_run_dir(outdir, sched, res, known, &mut |l| println!("{l}"));
+    if let Some((an, k)) = an {
+        res.insert(hydo_explore::results::ERRLOG.into(), an.to_json());
+        res.insert(
+            ERRLOG_KNOWN.into(),
+            json!({"known_file": k.path, "known_sha256": k.sha256, "unknown": k.unknown}),
+        );
+    }
+    res
+}
+
+/// One run's result.json (the results format): the run, its image and engine, its findings and
+/// property table, its files.
+fn run_document(
+    outdir: &Path,
+    image: &Path,
+    image_sha: Option<String>,
+    sched: &str,
+    eargs: &[String],
+    res: &Map<String, Value>,
+    platform: Platform,
+) -> hydo_results::Run {
+    let mut consoles = Vec::new();
+    for suffix in ["", ".recovery"] {
+        let rel = format!("one{suffix}.log");
+        if let Ok(t) = read_text(&outdir.join(&rel)) {
+            consoles.push((rel, t));
+        }
+    }
+    let mut run = hydo_explore::results::run_of("one", sched, res, &consoles);
+    run.tag = None;
+    run.hydo_version = Some(env!("CARGO_PKG_VERSION").into());
+    run.image = Some(hydo_results::Image {
+        path: image.display().to_string(),
+        resolved: None,
+        sha256: image_sha,
+    });
+    let mut engine = hydo_results::Engine {
+        backend: Some(
+            match platform {
+                Platform::Linux => "hvx",
+                Platform::Mac => "hvm",
+            }
+            .into(),
+        ),
+        args: Some(eargs.to_vec()),
+        ..hydo_results::Engine::default()
+    };
+    let mut i = 0;
+    while i + 1 < eargs.len() {
+        match eargs[i].as_str() {
+            "--ram-mib" => engine.ram_mib = eargs[i + 1].parse().ok(),
+            "--vcpus" => engine.vcpus = eargs[i + 1].parse().ok(),
+            "--cpu" => engine.cpu = Some(eargs[i + 1].clone()),
+            _ => {}
+        }
+        i += 2;
+    }
+    if platform == Platform::Linux {
+        engine.module_srcversion = std::fs::read_to_string("/sys/module/hvx/srcversion")
+            .ok()
+            .map(|s| s.trim().to_string());
+    }
+    run.engine = Some(engine);
+    let texts: Vec<String> = consoles.iter().map(|c| c.1.clone()).collect();
+    run.properties =
+        hydo_explore::results::property_table(&[hydo_explore::results::merged_text(&texts, res)]);
+    if let (Some(el), Some(k)) = (run.error_logs.as_mut(), res.get(ERRLOG_KNOWN)) {
+        let g = |f: &str| k.get(f).and_then(Value::as_str).map(str::to_string);
+        el.known_file = g("known_file");
+        el.known_sha256 = g("known_sha256");
+        el.unknown = g("unknown");
+    }
+    run.result_line = res.get("line").and_then(Value::as_str).map(str::to_string);
+    run.artifacts
+        .get_or_insert_with(Default::default)
+        .engine_log = Some("engine.log".into());
+    run
+}
+
+fn write_run_document(outdir: &Path, run: &hydo_results::Run) {
+    let _ = hydo_results::write_document(&outdir.join(hydo_results::RUN_DOC), run);
 }
 
 fn new_run_dir() -> PathBuf {
@@ -336,18 +422,17 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
     let res = run_one(ctx, &image, &sched, &outdir, &eargs, false);
     let res = host_checks(&outdir, res, false);
     let res = errors_one(&outdir, &sched, res, known.as_deref());
-    let mut rec = Map::new();
-    rec.insert("image".into(), json!(image.display().to_string()));
-    rec.insert(
-        "image_sha256".into(),
-        json!(sha256_file(&image).unwrap_or_else(|e| die(&format!("{}: {e}", image.display())))),
+    let sha = sha256_file(&image).unwrap_or_else(|e| die(&format!("{}: {e}", image.display())));
+    let run = run_document(
+        &outdir,
+        &image,
+        Some(sha),
+        &sched,
+        &eargs,
+        &res,
+        ctx.platform,
     );
-    rec.insert("schedule".into(), json!(sched));
-    rec.insert("engine_args".into(), json!(eargs));
-    for (k, v) in res {
-        rec.insert(k, v);
-    }
-    let _ = std::fs::write(outdir.join("run.json"), dumps(&Value::Object(rec), 1));
+    write_run_document(&outdir, &run);
     println!(
         "hydo: run directory {}   (hydo repro {}  runs it again and compares fp=)",
         outdir.display(),
@@ -364,77 +449,91 @@ struct ReproItem {
     eargs: Vec<String>,
 }
 
-fn load_json(p: &Path) -> Value {
-    let t = std::fs::read_to_string(p).unwrap_or_else(|e| die(&format!("{}: {e}", p.display())));
-    serde_json::from_str(&t).unwrap_or_else(|e| die(&format!("{}: {e}", p.display())))
+/// An exploration's document (the results reader); a directory without one is an error.
+pub fn exploration_of(d: &Path) -> hydo_results::Exploration {
+    match hydo_results::read_dir(d).unwrap_or_else(|e| die(&e.0)) {
+        hydo_results::Results::Exploration { doc: Some(doc), .. } => *doc,
+        hydo_results::Results::Exploration { doc: None, .. } => die(&format!(
+            "{} has no {} yet (the exploration has not finished)",
+            d.display(),
+            hydo_results::EXPLORATION_DOC
+        )),
+        hydo_results::Results::Run { .. } => die(&format!(
+            "{} is a run directory (hydo run), not an exploration",
+            d.display()
+        )),
+    }
 }
 
 fn repro_list(ctx: &Ctx, d: &Path) -> Vec<ReproItem> {
-    let rj = d.join("run.json");
-    if rj.is_file() {
-        let r = load_json(&rj);
-        let image = py_str(&r["image"]);
-        if let Some(sha) = r["image_sha256"].as_str().filter(|s| !s.is_empty()) {
-            if Path::new(&image).is_file()
-                && sha256_file(Path::new(&image)).ok().as_deref() != Some(sha)
+    let doc = match hydo_results::read_dir(d).unwrap_or_else(|e| die(&e.0)) {
+        hydo_results::Results::Run { run, .. } => {
+            let image = run
+                .image
+                .as_ref()
+                .map(|i| i.path.clone())
+                .unwrap_or_default();
+            if let Some(sha) = run
+                .image
+                .as_ref()
+                .and_then(|i| i.sha256.as_deref())
+                .filter(|s| !s.is_empty())
             {
-                println!("hydo: warning: {image} changed since the run (sha256 differs); fingerprints will differ");
+                if Path::new(&image).is_file()
+                    && sha256_file(Path::new(&image)).ok().as_deref() != Some(sha)
+                {
+                    println!("hydo: warning: {image} changed since the run (sha256 differs); fingerprints will differ");
+                }
             }
+            let eargs = run
+                .engine
+                .as_ref()
+                .and_then(|e| e.args.clone())
+                .unwrap_or_default();
+            return vec![ReproItem {
+                label: "run".into(),
+                image: PathBuf::from(image),
+                sched: run.schedule.clone(),
+                fp: run.fingerprints.fp.clone(),
+                eargs,
+            }];
         }
-        let eargs = r["engine_args"]
-            .as_array()
-            .map(|a| a.iter().map(py_str).collect())
-            .unwrap_or_default();
-        return vec![ReproItem {
-            label: "run".into(),
-            image: PathBuf::from(image),
-            sched: py_str(&r["schedule"]),
-            fp: py_str(&r["fp"]),
-            eargs,
-        }];
-    }
-    let rep = d.join("report.json");
-    if !rep.is_file() {
-        die(&format!(
-            "{} has neither run.json (hydo run) nor report.json (hydo explore)",
-            d.display()
-        ));
-    }
-    let j = load_json(&rep);
-    let s = &j["summary"];
-    let mut image = PathBuf::from(py_str(&s["image"]));
+        hydo_results::Results::Exploration { .. } => exploration_of(d),
+    };
+    let mut image = PathBuf::from(&doc.image.path);
     if !image.is_absolute() {
         image = ctx.guest().join(image);
     }
-    let ram = s.get("ram_mib").and_then(Value::as_u64).unwrap_or(1024);
-    let cpu = s
-        .get("cpu")
-        .and_then(Value::as_str)
-        .unwrap_or("v2")
-        .to_string();
-    let vcpus = s.get("vcpus").and_then(Value::as_u64).unwrap_or(1);
-    let eargs = engine_args(&image, Some(ram), Some(cpu), vcpus);
+    let e = &doc.engine;
+    let eargs = engine_args(
+        &image,
+        Some(e.ram_mib.unwrap_or(1024)),
+        Some(e.cpu.clone().unwrap_or_else(|| "v2".into())),
+        e.vcpus.unwrap_or(1),
+    );
     let mut out = Vec::new();
-    for f in j["failures"].as_array().into_iter().flatten() {
+    for f in &doc.failures {
         out.push(ReproItem {
-            label: format!("seed {}", py_str(&f["seed"])),
+            label: format!(
+                "seed {}",
+                f.run.seed.map(|s| s.to_string()).unwrap_or_default()
+            ),
             image: image.clone(),
-            sched: py_str(&f["schedule"]),
-            fp: py_str(&f["fp"]),
+            sched: f.run.schedule.clone(),
+            fp: f.run.fingerprints.fp.clone(),
             eargs: eargs.clone(),
         });
     }
-    for x in j
-        .get("shrunk")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
+    for x in &doc.shrinks {
         out.push(ReproItem {
-            label: format!("minimal {}", head(&py_str(&x["signature"]), 40)),
+            label: format!("minimal {}", head(&x.signature, 40)),
             image: image.clone(),
-            sched: py_str(&x["minimal"]),
-            fp: py_str(&x["fp_a"]),
+            sched: x.minimal.clone(),
+            fp: x
+                .confirmations
+                .first()
+                .and_then(|c| c.fp.clone())
+                .unwrap_or_else(|| "None".into()),
             eargs: eargs.clone(),
         });
     }
@@ -464,6 +563,16 @@ pub fn cmd_repro(ctx: &Ctx, argv: &[String]) -> i32 {
             let res = run_one(ctx, &it.image, &it.sched, &dir, &it.eargs, true);
             let res = host_checks(&dir, res, false);
             let res = errors_one(&dir, &it.sched, res, None);
+            let run = run_document(
+                &dir,
+                &it.image,
+                None,
+                &it.sched,
+                &it.eargs,
+                &res,
+                ctx.platform,
+            );
+            write_run_document(&dir, &run);
             let fp = py_str(&res["fp"]);
             let ok = fp == it.fp;
             same += ok as usize;
@@ -629,20 +738,24 @@ fn slug(s: &str) -> String {
 pub fn cmd_save(_ctx: &Ctx, argv: &[String]) -> i32 {
     let mut args = argv.to_vec();
     let to = take(&mut args, "--to").unwrap_or_else(|| "hydo/regressions".into());
-    if args.len() != 1 || !Path::new(&args[0]).join("report.json").is_file() {
+    if args.len() != 1
+        || !Path::new(&args[0])
+            .join(hydo_results::EXPLORATION_DOC)
+            .is_file()
+    {
         die("usage: hydo save <explore dir> [--to hydo/regressions]");
     }
-    let j = load_json(&Path::new(&args[0]).join("report.json"));
+    let doc = exploration_of(Path::new(&args[0]));
     if let Err(e) = std::fs::create_dir_all(&to) {
         die(&format!("{to}: {e}"));
     }
     let mut n = 0;
-    for x in j
-        .get("shrunk")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
+    for s in &doc.shrinks {
+        // the shrink as the composer reads it (the results format keeps the field names)
+        let mut x = serde_json::to_value(s).unwrap_or(Value::Null);
+        if let Some(o) = x.as_object_mut() {
+            o.entry("min_verdict").or_insert(Value::Null);
+        }
         let name = head(
             &slug(&format!(
                 "{}-{}",
@@ -657,7 +770,7 @@ pub fn cmd_save(_ctx: &Ctx, argv: &[String]) -> i32 {
             println!("hydo: {p} exists, kept");
             continue;
         }
-        let text = hydo_composer::saved_regression_text(x)
+        let text = hydo_composer::saved_regression_text(&x)
             .unwrap_or_else(|e| die(&format!("{}: {e}", args[0])));
         if let Err(e) = std::fs::write(&p, text) {
             die(&format!("{p}: {e}"));

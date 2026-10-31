@@ -5,10 +5,11 @@ into a guest image, and one generic guest init (`hydo/onboard/hydo-init.sh`) run
 it starts the services, runs the workload under the explorer's faults and checks the
 invariants. No per-project build script or boot script is written by hand.
 
-This file is the reference for people and for tools that generate manifests: the onboarding
-skill (`skills/hydo-onboard/`, an Agent Skills folder that any AI tool can follow; `hydo guide`
-prints it, `hydo guide manifest` prints this file) reads a repository and writes its `hydo/`
-folder. Complete
+This file explains the project format to people and to tools that generate manifests; the
+authority is the schema generated from the format's types and the permanent example documents
+("The project format" below). The onboarding skill (`skills/hydo-onboard/`, an Agent Skills
+folder that any AI tool can follow; `hydo guide` prints it, `hydo guide manifest` prints this
+file, `hydo guide schema` the schema) reads a repository and writes its `hydo/` folder. Complete
 examples: `examples/redis/hydo.yaml` (one service, about 60 lines),
 `examples/stack/hydo.yaml` (MySQL + Kafka + Redis + a gRPC front door),
 `examples/redis-oci/hydo.yaml` (Redis from the official Docker image, no file list),
@@ -17,6 +18,75 @@ between members), `examples/stack/hydo-read.yaml` (the stack's invariants writte
 ready-made store readers, see "Reading the stores"), and
 `hydo/knownbugs/sqlite/hydo.yaml` (no service: a multi-threaded program using SQLite; one
 manifest, two versions via `params:`).
+
+## The project format (one model, `format: 1`)
+
+A project is one document, however it is written: a `hydo.yaml`, a JSON plan (what an SDK
+writes), the plan's `test:` section, and the `hydo/` folder are spellings of ONE model. The model
+is the Rust types in `hydo/crates/hydo-manifest/src/model.rs`. The authority for what is valid is
+not this file but the JSON Schema generated from those types, **`hydo/schema/project-v1.json`**,
+and the permanent example documents in **`hydo/schema/examples/project/v1/`** (one case per
+directory, each with `model.json`, the model it reads into; `INDEX` lists them). The format is
+**experimental until hydo 1.0**, and it already follows these rules:
+
+- **A version in every document.** `format: 1`. A document without `format:` is read as format
+  1 (every file written before it existed). A hydo that sees a newer format refuses the file
+  before it reads any other key, and names the format it needs: `format: this file is written in
+  project format 2, and this hydo (0.1.0) reads project format 1 only; install a newer hydo, one
+  that reads format 2`. `hydo_version:` is a different, optional pin: the hydo release the
+  project was made for (what runs in the guest), checked against `hydo/VERSION`. A document that
+  uses a key added in a later release should pin that release (`hydo_version: ">=0.2"`), so an
+  older hydo says which release it needs instead of "unknown field".
+- **Additions only within a version.** New optional keys and new values may be added; renaming,
+  removing or changing the meaning of a key is not. Unknown keys are errors (typos are caught).
+  A test compares the schema with the schema of the last release
+  (`hydo/schema/released/project-v1.json`) and fails on any change that is not an addition; a
+  second test fails when an example document reads into another model than its `model.json`.
+- **Breaking changes only as a new format version,** read beside the old one for a long
+  transition. **`hydo migrate [hydo.yaml] [--check] [--out FILE | --stdout]`** rewrites a file
+  in the canonical spelling of the current format: it adds `format: 1` and replaces retired
+  spellings, and before writing it checks that the new file means exactly the same (the same
+  validated data and plan). A file with a retired spelling is written anew from its data
+  (comments are not kept); otherwise only the `format: 1` line is added.
+- The schema fixes the keys, their nesting and their kinds of value. Value rules (name patterns,
+  ranges, references between keys) are checked by `hydo build` after `params:` are replaced;
+  any string may hold a `{{param}}` reference, also where a fixed set of values is expected.
+
+**Top-level keys:** `format`, `hydo_version`, `name` (required), `description`, `guest`,
+`network`, `root`, `data`, `env`, `shell`, `params`, `services`, `provision`, `workload`,
+`knobs`, `invariants`, `checks`, `faults`, `freeze_match`, `fakes`, `proxies`, `errors`,
+`buggify`, `test`.
+
+**The `hydo/` folder is not a second format.** It is a directory convention: files next to the
+manifest (`hydo/hydo.yaml`, or any manifest whose directory has them) fill parts of the same
+model, exactly as these entries written in the file would:
+
+| file | the model entry it is |
+|---|---|
+| `workload/<kind>_<name>` | `test.commands[]`: `{name, kind, run: [/hydo/workload/<file>], content: <first 16 hex digits of the file's SHA-256>}`; a `# hydo: timeout=N` header gives `timeout` |
+| `checks/final_<name>`, `checks/always_<name>`, `checks/eventually_<name>` | `test.checks[]`: `{name, kind, run: [/hydo/checks/<file>]}`; the header gives `every` / `within`, `after`, `poll`, and `# hydo-msg:` gives `msg` |
+| `checks/linearizable_<name>`, `checks/list_append_<name>` | top-level `checks[]`: `{id: <name>, type: linearizable or list-append, history, msg, final: "exec '/hydo/checks/<file>'"}`; the header gives `history`, `model`, `initial`, `consistency` |
+| `regressions/<name>.schedule` | `test.regressions[]`: `{name, schedule, expect}` and, from its comment lines, `commands`, `compose`, `contents` |
+
+Kinds are the file name's prefix (the longest that matches); a `helper_*` or dot file is no
+entry; a name in both the file and the folder is an error; a header is read from the first 4 KiB.
+Each directory is copied whole to `/hydo/<dir>/` on the read-only root. Example:
+`hydo/schema/examples/project/v1/examples-redis-composed-hist-folder/` and its `model.json`.
+
+**Retired spellings** (format 1 still reads them, `hydo migrate` rewrites them): a history check
+written in `test.checks` (`kind: linearizable`, `list_append` or `list-append`) is the same thing
+as a top-level `checks:` entry, so the model has it once, in `checks:` (the entry the expansion
+always made from it: `id` = the name, `msg` = the msg or the name, `final` = the `run` as a shell
+command). The Rust test SDK (`hydo-test`) still writes the old spelling; it is read the same.
+Example pair: `retired-history-check-in-test` and `retired-history-check-in-test-migrated`.
+
+**Kept apart on purpose:** `invariants:` and `test.checks` are both properties, but different
+runners run them: the init runs an invariant's shell command as it is; the composer runs a check
+(argv or shell) under `test.command_timeout`, with the prelude and `HYDO_CHECK` set, a timeout
+counting as "could not be evaluated". Likewise `workload.run` (numbered steps) and
+`test.commands` (composed commands) are two ways to drive the system, and a plan with test
+commands may not also have `workload.run`. Merging either pair would change what runs in the
+guest.
 
 ## What the user writes, and what is automatic
 
@@ -54,9 +124,11 @@ no faults ("solo").
 ## Schema
 
 All keys are optional unless marked **required**. Unknown keys are errors (typos do not
-silently do nothing).
+silently do nothing). This is a commented tour; the complete list of keys and kinds of value is
+the schema, `hydo/schema/project-v1.json` ("The project format" above).
 
 ```yaml
+format: 1                      # the project format (a file without it is read as format 1)
 name: myapp                    # required. lowercase letters, digits, '-'
 description: one line          # free text, anywhere below too
 
@@ -357,8 +429,9 @@ verdict rules are in `hydo/HISTORIES.md`.
 - The guest prints one `HYDO-CHECK <spec>` line per check when the workload starts. The checks run
   on the host: the explorer (`hydo explore`, and its shrinker), `hydo run` and
   `hydo check-history` combine the guest's verdict with the checks' (the guest's own invariant
-  violations come first) and write the explanation, e.g. the minimal set of operations that cannot
-  be ordered, next to the console (`<tag>.checks.txt`).
+  violations come first) and report each check as a `history-check` finding of the run, with the
+  explanation, e.g. the minimal set of operations that cannot be ordered (`result.json`, or the
+  run's record in `events.jsonl`; the results format, `hydo/PRODUCT.md`).
 - Only manifests with `checks:` get the recorder and `hydo-init-history.sh` (spliced into
   `/sbin/init` like the liveness code); every other image builds byte-identically.
 - Examples: `examples/redis/hydo-hist.yaml` (SET/GET as registers and RPUSH/LRANGE as
@@ -444,8 +517,9 @@ N(s) - N(s+1) packets (the last step N(s)), and the sweep runs one schedule
 `freeze_match:` string in its own direction), `--fc-durs 150000`, `--sweep-every k` (every k-th
 packet), `--sweep-with "<tokens>"` (one more fixed fault on every point and trace run, e.g.
 `K=kafka@9+1`; not a power cut, whose trace run never reaches the count), `--sweep-dry` (trace,
-write `points.txt`, stop). Every failure is re-run twice. Trace counts are in `fc-traces.jsonl`,
-point labels in `sweep-points.jsonl`.
+write `points.txt`, stop). Every failure is re-run twice. The trace runs and their counts are
+`run` records with `"role": "trace"` in `events.jsonl` (`--fc-traces <events.jsonl>` reuses them
+in a later sweep), and each point's run carries its label (`point`).
 
 Sweeping every packet is expensive (M76: 1,125 runs, 2 h 26 min for two links over two steps).
 `--sweep freeze --fc-adaptive` spends the runs where failures are, in two stages:
@@ -468,7 +542,7 @@ Sweeping every packet is expensive (M76: 1,125 runs, 2 h 26 min for two links ov
   stream's trace run.
 
 Every point is an ordinary schedule and every failure is re-run twice, as in the full sweep;
-`fc-adaptive.json` lists the centres, windows and rounds. Without `--fc-adaptive` the sweep is
+`exploration.json` (`freeze_sweep`) lists the centres, windows and rounds. Without `--fc-adaptive` the sweep is
 unchanged.
 
 ### Clock after a power cut (`guest.clock_after_cut`)
@@ -799,7 +873,7 @@ SDK (`sdk/rust`, the `hydo-test` crate) writes this file on the host from the te
 program; nothing of the SDK's setup code runs in the guest.
 
 ```yaml
-format: 1                      # the plan format; this hydo reads 1 (anything else is refused)
+format: 1                      # the project format ("The project format"; a newer one is refused)
 hydo_version: "0.1"            # the hydo the plan was written for: "0.1" (same major.minor; a
                                #   different patch only warns), "0.1.0", or ">=0.1". A mismatch
                                #   is an error unless HYDO_VERSION_CHECK=warn. hydo/VERSION (or the
@@ -849,7 +923,8 @@ hydo/
 ```
 
 `hydo-build` reads the three directories when they exist next to the manifest and adds their
-entries to `test:` (a name in both is an error; an unknown prefix or a non-executable file is
+entries to the model ("The project format" has the exact mapping: commands and checks to
+`test:`, history read-backs to `checks:`, schedules to `test.regressions`; a name in both is an error; an unknown prefix or a non-executable file is
 an error, so typos do not silently do nothing). Each file becomes `run: [/hydo/<dir>/<file>]`;
 the whole directory, helpers included, is copied to `/hydo/<dir>/` on the read-only root. A
 text file may carry a header in its first 4 KiB: `# hydo: timeout=30` (commands), `# hydo:
@@ -879,7 +954,9 @@ any invariant); a check that times out counts as 2.
 `always`: also every `every` seconds while the workload runs (`check_every` by default).
 `eventually`: bounded liveness, polled after `after` (`heal` default, or `start`) until it
 holds or `within` seconds pass (MANIFEST "Liveness").
-`linearizable` / `list_append` (alias `list-append`): a ready-made **history check**
+`linearizable` / `list_append` (alias `list-append`), a retired spelling in `test.checks`
+(format 1 reads it, `hydo migrate` moves it to the top-level `checks:`, its home): a ready-made
+**history check**
 (`hydo/HISTORIES.md`, "History checks" above): the commands record their operations with
 `hydo_hist` (source `/etc/hydo/prelude.sh`; process = `$HYDO_CMD_ID`, unique per entry), and the
 host checks the history after the run. Fields: `history` (required), `model`/`initial`
@@ -980,7 +1057,7 @@ the schedule's guest part longer than 500 bytes (the engine's limit is 511).
 
 **Where each form appears.** The explorer draws the seed form. After shrinking, it turns the
 minimal composition into the resolved form and runs that twice; when it fails the same way, the
-resolved schedule is the reported minimal schedule (`report.json` `shrunk[].stable`,
+resolved schedule is the reported minimal schedule (`exploration.json` `shrinks[].stable`,
 `stable_schedule`, `contents`). Otherwise (the resolved run is a different run: the guest starts
 round 0 at another time, so a timing-sensitive failure may not recur) the report keeps the seed
 form and says why (`stable_note`), and `hydo save` writes that seed form with its command list
@@ -1014,9 +1091,9 @@ are `compose:` and `contents: {<id>: <hash>}`.
 wrote before M98: the list at save time; `commands:` in `test.regressions`) replays against that
 list: when the plan's list differs, `hydo build` resolves the composition with the saved list
 and stages the resolved form, so it runs the commands it ran when saved. A seed form without a
-saved list still composes from the current list, with a build warning. The plan format stays
+saved list still composes from the current list, with a build warning. The project format stays
 `format: 1`: old plans read the same, and a new plan's only new key (`content:`) is refused by
-an older hydo as an unknown field.
+an older hydo as an unknown field (additions only: "The project format").
 
 ## Reading the stores (`hydo-read`, `hydo-check`)
 
@@ -1272,9 +1349,10 @@ a restart or a resume, where the service recovers, is part of it. A power cut or
 lasts to the end of the run, including the recovery boot; a disk fault covers the workload. A kind
 is known when one entry covers every one of its occurrences in that run.
 
-**The explorer** (`hydo explore`) adds, only for images with `errors:`, `errors_new` (signatures)
-and `errors_known` to each run in `runs.jsonl`, `consoles/<tag>.errors.json`, an `errors.json` and
-a section "Error logs" in `report.md`: each new kind with the number of runs, the first seed and
+**The explorer** (`hydo explore`) adds, only for images with `errors:`, an `error-log` finding per
+kind (status `new` or `known`) and the analysis (`error_logs`) to each run's record in
+`events.jsonl`, the error kinds of the exploration to `exploration.json` (`error_kinds`), and a
+section "Error logs" in `report.md`: each new kind with the number of runs, the first seed and
 schedule that produced it, an example line, and -- unless `--no-shrink` -- the smallest schedule
 in which the kind is still new (the shrinker that minimises violations, with "the kind is still
 new" as its test; at most `--errors-shrink N` kinds, default 8), run twice (both fingerprints, and
@@ -1293,7 +1371,8 @@ hydo errors check                            # validate the list
 
 `accept` appends one entry per kind (with its template and an example line, for the reader) and
 refuses to write a list that does not load. `hydo run` prints the run's new and known kinds and
-writes `one.errors.json`.
+reports them in `result.json` (`error-log` findings; `hydo errors list|accept --from <run dir>`
+reads them there).
 
 Limits: the guest scans the logs at the end of each boot, so a kind's lines are counted, not
 timed within a range; a log written somewhere not listed in `files:` is not seen; a service that
@@ -1457,15 +1536,18 @@ A system whose inputs are gRPC endpoints needs no hand-written workload client.
 `hydo-grpc-gen` reads the service definitions and writes a driver for every RPC: one static
 client binary, `hydo-grpc`, with one subcommand per job, plus the project's schema and a plan.
 The client sends valid random requests from a seeded stream, records every call's outcome, and
-retries the way a careful client does. Source: `hydo/grpcgen/` (Go, the pinned toolchain).
+retries the way a careful client does. Source: `hydo/crates/hydo-grpc-gen` (the generator) and
+`hydo/crates/hydo-grpc` (the client), Rust (Milestone 113; the Go version of Milestone 91 wrote
+the same files).
 
 ```sh
 hydo/onboard/hydo-grpc-gen <proto dir> [--hints hints.yaml] --out <dir>   # every .proto under the dir
 hydo/onboard/hydo-grpc-gen --descriptor-set set.pb [--hints ...] --out <dir>   # protoc -o / buf build -o
 hydo/onboard/hydo-grpc-gen --reflect 127.0.0.1:7070 [--hints ...] --out <dir> # a running server's reflection
 #   -I <dir>      extra .proto import path (repeatable)    --target host:port   the address in the guest
-#   --arch amd64,arm64   also build hydo-grpc.arm64        --no-build           only the schema and plan
+#   --arch amd64,arm64   also copy hydo-grpc.arm64         --no-build           only the schema and plan
 #   --steps N     workload.steps in the starter section     --rel <dir>          base of its relative paths
+#   --client DIR  the prebuilt clients ($HYDO_GRPC_CLIENT)  $HYDO_GRPC_ARCH      the default of --arch
 ```
 
 It writes, under `<dir>`:
@@ -1474,13 +1556,17 @@ It writes, under `<dir>`:
 |---|---|
 | `grpc/desc.pb` | the schema: a `FileDescriptorSet`, dependencies first, no source info, deterministic bytes |
 | `grpc/plan.json` | every RPC with its hints, checked against the schema (unknown fields, wrong types and bad paths are errors) |
-| `hydo-grpc` | the static guest client for linux/amd64 (`-trimpath`, no build id: byte-identical from the same sources and Go); with `--arch amd64,arm64` also `hydo-grpc.arm64` for the Mac backend (example `hydo/grpcgen/demo/hydo-mac.yaml`) |
+| `hydo-grpc` | the static guest client for linux/amd64 (musl, rust-lld, host paths remapped: byte-identical from the same sources and toolchain on any machine); with `--arch amd64,arm64` also `hydo-grpc.arm64` for the Mac backend (example `hydo/grpcgen/demo/hydo-mac.yaml`); with `--arch arm64` alone the starter section stages `hydo-grpc.arm64` |
 | `workload/parallel_driver_<rpc>` | one test-composer command per RPC with a weight (and per scenario), in the `hydo/workload/` layout, with a `# hydo: timeout=` header |
 | `hydo.grpc.yaml` | a starter section to merge into `hydo.yaml`: files, `env:`, a `test:` section with the commands, `workload.retry`, and the numbered-steps `workload:` as a commented alternative |
 
-`hydo/onboard/hydo-grpc-gen` builds the generator for the host and the client with `$HYDO_GO`, else
-the pinned `go-1.26.5` of `build-stack.sh` if present, else `go` on PATH. Put `grpc/` at
-`/etc/hydo/grpc` and the client at `/bin/hydo-grpc` (the starter section does).
+The generator copies the clients from `--client DIR` (`$HYDO_GRPC_CLIENT`): `DIR/hydo-grpc` for
+amd64 and `DIR/hydo-grpc.<arch>` for another architecture. In this repository
+`hydo/onboard/hydo-grpc-gen` builds the generator for the host and the clients of `--arch` with
+`hydo/grpcgen/build-client.sh` (the pinned Rust toolchain and the two `*-unknown-linux-musl`
+targets, `docs/BUILD-PINS.md`), then runs it with `--client` pointing at them. (Neither release
+ships the generator or the clients yet.) Put `grpc/` at `/etc/hydo/grpc` and the client at
+`/bin/hydo-grpc` (the starter section does).
 
 ### What the client does
 

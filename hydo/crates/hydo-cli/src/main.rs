@@ -7,14 +7,16 @@
 //!
 //! Commands: run, repro (incl. --regressions: hydo-composer), save (hydo-composer), report,
 //! doctor, module (Linux), errors and run/repro's error kinds (hydo-errors), history checks
-//! (hydo-history), compose (hydo-compose), guide/skill/init (hydo-agents), build (hydo-build,
-//! src/build.rs), explore (hydo-explore). No command runs Python.
+//! (hydo-history), compose (hydo-compose), guide/skill/init (hydo-agents), migrate (hydo-manifest,
+//! src/migrate.rs), build (hydo-build, src/build.rs), explore (hydo-explore). No command runs
+//! Python.
 
 mod build;
 mod ctx;
 mod delegated;
 mod doctor;
 mod hvxenv;
+mod migrate;
 mod module;
 mod pyjson;
 mod runs;
@@ -36,6 +38,8 @@ const HELP_LINUX: &str = r#"hydo -- deterministic fault testing on an x86_64 Lin
                                                    start a hydo.yaml from a Compose file (MANIFEST.md)
     hydo build   [hydo.yaml] [--out DIR] [--set KEY=VALUE ...]
                                                    compile the manifest into a guest disk image
+    hydo migrate [hydo.yaml] [--check] [--out FILE | --stdout]
+                                                   rewrite a project file in the current format (format: 1)
     hydo run     [IMG] "<schedule>" [--image IMG] [--out DIR] [--known-errors FILE]
                                                    run one schedule from a fresh boot
     hydo repro   <run dir | explore dir | "<schedule>"> [--image IMG]
@@ -71,6 +75,8 @@ const HELP_MAC: &str = r#"hydo -- deterministic fault testing on an Apple Silico
                                                    start a hydo.yaml from a Compose file (MANIFEST.md)
     hydo build   [hydo.yaml] [--out DIR] [--set KEY=VALUE ...]
                                                    compile the manifest into an arm64 guest image
+    hydo migrate [hydo.yaml] [--check] [--out FILE | --stdout]
+                                                   rewrite a project file in the current format (format: 1)
     hydo run     [IMG] "<schedule>" [--image IMG] [--out DIR] [--known-errors FILE]
                                                    run one schedule from a fresh boot
     hydo repro   <run dir | explore dir | "<schedule>"> [--image IMG]
@@ -121,6 +127,7 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
         "save" => runs::cmd_save(ctx, rest),
         "errors" => delegated::cmd_errors(ctx, rest),
         "check-history" => hydo_history::cli::main(rest),
+        "migrate" => migrate::cmd_migrate(rest),
         "doctor" if linux => doctor::cmd_doctor_linux(ctx),
         "doctor" => doctor::cmd_doctor_mac(ctx),
         "module" if linux => module::cmd_module(ctx, rest),

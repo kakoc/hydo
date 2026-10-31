@@ -1,0 +1,1 @@
+HYDO-ASSERT {"t":"always","id":"d.integers","ok":true,"msg":"details encoding","details":{"i53":9007199254740993,"imax":9223372036854775807,"imin":-9223372036854775808,"neg":-5,"u":7,"umax":18446744073709551615,"zero":0}}

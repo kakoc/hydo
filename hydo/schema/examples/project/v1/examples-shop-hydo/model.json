@@ -1,0 +1,125 @@
+{
+  "format": 1,
+  "name": "shop",
+  "description": "an order service with a fake payment provider and a fake email service.",
+  "root": {
+    "files": [
+      {
+        "src": "{{bin}}/shop-{{variant}}",
+        "dst": "/bin/shop",
+        "mode": "0755"
+      }
+    ]
+  },
+  "data": {
+    "size_mib": 64,
+    "dirs": [
+      "shop"
+    ]
+  },
+  "params": {
+    "variant": "fixed",
+    "bin": "../../../../build"
+  },
+  "services": [
+    {
+      "name": "shop",
+      "cmd": "/bin/shop server",
+      "ready": "wget -q -O- http://127.0.0.1:8080/health | grep -q ok",
+      "port": 8080
+    }
+  ],
+  "workload": {
+    "steps": 12,
+    "run": "i=$HYDO_FROM\nwhile [ $i -lt $HYDO_TO ]; do\n  if shop place $i 2>> /tmp/hydo/shop-client.log; then echo $i >> $HYDO_ACKED; echo \"$i ack\" >> $HYDO_OUTCOMES\n  else echo \"$i unknown\" >> $HYDO_OUTCOMES; fi\n  if [ $((i % 4)) = 3 ]; then\n    c=$((i - 1))\n    # the cancellation is an event of the system's own history: hydo-world puts it into the\n    # outside world's record, in order, so \"no charge after a cancellation\" can be checked\n    if grep -qx $c $HYDO_ACKED; then\n      hydo-world event cancel-requested o$c > /dev/null   # from here on, no receipt is owed\n      shop cancel $c 2>> /tmp/hydo/shop-client.log && hydo-world event cancelled o$c > /dev/null\n    fi\n  fi\n  i=$((i + 1))\ndone\n",
+    "timeout": 300,
+    "process": "shop place"
+  },
+  "invariants": [
+    {
+      "id": "payments.charged_at_most_once",
+      "msg": "the provider took the money for an order at most once",
+      "cmd": "hydo-world check at-most-once payments.charge"
+    },
+    {
+      "id": "payments.acked_order_charged",
+      "msg": "every order the shop acknowledged was charged",
+      "cmd": "hydo-world check effect-for-acked payments.charge --ref 'o{id}'"
+    },
+    {
+      "id": "payments.no_charge_after_cancel",
+      "msg": "no charge for an order after its cancellation was acknowledged",
+      "cmd": "hydo-world check none-after payments.charge --after event:cancelled"
+    },
+    {
+      "id": "email.receipt_at_most_once",
+      "msg": "every order gets at most one receipt email",
+      "cmd": "hydo-world check at-most-once email.send"
+    },
+    {
+      "id": "email.no_receipt_after_cancel",
+      "msg": "no receipt email for an order after its cancellation was acknowledged",
+      "cmd": "hydo-world check none-after email.send --after event:cancelled"
+    },
+    {
+      "id": "email.receipt_eventually",
+      "type": "eventually",
+      "msg": "every acknowledged order that was not cancelled gets its receipt email within 30 s after the faults end",
+      "cmd": "hydo-world check effect-for-acked email.send --ref 'o{id}' --unless event:cancel-requested",
+      "within": 30,
+      "poll": 2
+    }
+  ],
+  "faults": [
+    "kill",
+    "pause",
+    "cut",
+    "clock",
+    "disk",
+    "protocol"
+  ],
+  "fakes": [
+    {
+      "name": "payments",
+      "port": 9001,
+      "idempotency": "header:Idempotency-Key",
+      "ref": "json:order",
+      "routes": [
+        {
+          "name": "charge",
+          "method": "POST",
+          "path": "/v1/charges",
+          "body": "{\"id\":\"ch_{seq}\",\"order\":\"{ref}\",\"amount\":{json:amount},\"status\":\"succeeded\"}",
+          "idempotent": true,
+          "webhook": {
+            "url": "http://127.0.0.1:8080/webhooks/payments",
+            "body": "{\"type\":\"charge.succeeded\",\"id\":\"ch_{seq}\",\"order\":\"{ref}\"}",
+            "delay_ms": 20
+          }
+        },
+        {
+          "name": "refund",
+          "method": "POST",
+          "path": "/v1/refunds",
+          "body": "{\"id\":\"re_{seq}\",\"order\":\"{ref}\",\"status\":\"succeeded\"}",
+          "idempotent": true
+        }
+      ]
+    },
+    {
+      "name": "email",
+      "port": 9002,
+      "idempotency": "header:Idempotency-Key",
+      "ref": "json:order",
+      "routes": [
+        {
+          "name": "send",
+          "method": "POST",
+          "path": "/v1/send",
+          "body": "{\"id\":\"em_{seq}\",\"status\":\"queued\"}",
+          "idempotent": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,161 @@
+{
+  "v": 1,
+  "type": "exploration",
+  "hydo_version": "0.1.0",
+  "mode": "sweep",
+  "config": {
+    "strategy": "sweep:freeze",
+    "sweep": "freeze",
+    "argv": [
+      "--sweep",
+      "freeze",
+      "--fc-adaptive",
+      "--manifest",
+      "hydo/onboard/examples/redis/hydo-freeze.yaml",
+      "--fc-steps",
+      "7-9",
+      "--fc-window",
+      "4",
+      "--workers",
+      "3",
+      "--out",
+      "<out>"
+    ]
+  },
+  "image": {
+    "path": "explore-disk.img",
+    "resolved": "<dir>/explore-disk.img"
+  },
+  "engine": {
+    "backend": "hvx",
+    "args": [],
+    "ram_mib": 1024,
+    "vcpus": 1,
+    "cpu": "v2",
+    "workers": N
+  },
+  "summary": {
+    "schedules": 6,
+    "sweep_wall_s": N,
+    "runs_per_hour": N,
+    "mean_run_s": 5.6,
+    "worker_boot_s": 2.5,
+    "total_wall_s": N,
+    "failures": 0,
+    "reproduced": 0,
+    "repro_runs": 2,
+    "error_kinds_new": 1,
+    "runs_with_new_error_kinds": 6
+  },
+  "freeze_sweep": {
+    "summary": {
+      "stage1_points": 6,
+      "stage2_points": 0,
+      "trace_runs": 8,
+      "stage1_failures": 0,
+      "stage2_failures": 0,
+      "stage1_wall_s": N,
+      "stage2_wall_s": N,
+      "fc_window": 4,
+      "fc_links": "svc",
+      "fc_centres": "fail"
+    },
+    "centres": [],
+    "windows": {},
+    "rounds": [],
+    "stage": {
+      "seed-1": 1,
+      "seed-2": 1,
+      "seed-3": 1,
+      "seed-4": 1,
+      "seed-5": 1,
+      "seed-6": 1
+    }
+  },
+  "failures": [],
+  "shrinks": [],
+  "error_kinds": {
+    "unknown": "report",
+    "kinds": [
+      {
+        "signature": "4c53c64297e2",
+        "service": "app",
+        "source": "log",
+        "template": "config reloaded",
+        "example": "config reloaded",
+        "new": true,
+        "runs": 6,
+        "new_runs": 6,
+        "seeds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "first_seed": 1,
+        "first_schedule": "disk=none dseed=0 | run F=redis<workload@7#1:150000",
+        "first_at": [
+          "s"
+        ],
+        "lines": 6,
+        "first_new": {
+          "seed": 1,
+          "schedule": "disk=none dseed=0 | run F=redis<workload@7#1:150000",
+          "at": [
+            "s"
+          ],
+          "example": "config reloaded"
+        }
+      }
+    ]
+  },
+  "properties": {
+    "runs": 6,
+    "setup_complete_runs": 0,
+    "violations": 0,
+    "properties": [
+      {
+        "id": "orders.drained",
+        "assertion": "eventually",
+        "message": "",
+        "declared": false,
+        "passes": 6,
+        "fails": 0,
+        "runs_passed": 6,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok",
+        "slowest_ok_s": 3.2
+      },
+      {
+        "id": "retry.taken",
+        "assertion": "sometimes",
+        "message": "",
+        "declared": false,
+        "passes": 0,
+        "fails": 6,
+        "runs_passed": 0,
+        "runs_failed": 6,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised",
+        "first_failure": "-"
+      }
+    ]
+  },
+  "liveness": [
+    {
+      "id": "orders.drained",
+      "held_runs": 6,
+      "missed_runs": 0,
+      "slowest_s": 3.2,
+      "slowest_run": "seed-1"
+    }
+  ],
+  "artifacts": {
+    "events": "events.jsonl",
+    "report": "report.md",
+    "consoles": "consoles"
+  }
+}

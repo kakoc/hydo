@@ -1,0 +1,31 @@
+{
+  "about": "invalid UTF-8 bytes in values and tokens are written as they are (JavaScript strings cannot hold them)",
+  "needs": ["raw_hist"],
+  "steps": [
+    {"do":"history","name":"kv"},
+    {"do":"invoke","h":0,"proc":{"int":"50"},"f":"write","args":["b",{"enc":{"raw":[255]}}]},
+    {"do":"ok","o":0,"args":["b",{"ver":[{"raw":[255]},"0"]},{"value_or_nil":{"raw":[255]}}]},
+    {"do":"invoke","h":0,"proc":{"int":"51"},"f":"write","args":["b",{"enc":{"raw":["a",255,"b"]}}]},
+    {"do":"ok","o":1,"args":["b",{"ver":[{"raw":["a",255,"b"]},"1"]},{"value_or_nil":{"raw":["a",255,"b"]}}]},
+    {"do":"invoke","h":0,"proc":{"int":"52"},"f":"write","args":["b",{"enc":{"raw":[128]}}]},
+    {"do":"ok","o":2,"args":["b",{"ver":[{"raw":[128]},"2"]},{"value_or_nil":{"raw":[128]}}]},
+    {"do":"invoke","h":0,"proc":{"int":"53"},"f":"write","args":["b",{"enc":{"raw":[195]}}]},
+    {"do":"ok","o":3,"args":["b",{"ver":[{"raw":[195]},"3"]},{"value_or_nil":{"raw":[195]}}]},
+    {"do":"invoke","h":0,"proc":{"int":"54"},"f":"write","args":["b",{"enc":{"raw":[195,"("]}}]},
+    {"do":"ok","o":4,"args":["b",{"ver":[{"raw":[195,"("]},"4"]},{"value_or_nil":{"raw":[195,"("]}}]},
+    {"do":"invoke","h":0,"proc":{"int":"55"},"f":"write","args":["b",{"enc":{"raw":[237,160,128]}}]},
+    {"do":"ok","o":5,"args":["b",{"ver":[{"raw":[237,160,128]},"5"]},{"value_or_nil":{"raw":[237,160,128]}}]},
+    {"do":"invoke","h":0,"proc":{"int":"56"},"f":"write","args":["b",{"enc":{"raw":[226,130]}}]},
+    {"do":"ok","o":6,"args":["b",{"ver":[{"raw":[226,130]},"6"]},{"value_or_nil":{"raw":[226,130]}}]},
+    {"do":"invoke","h":0,"proc":{"int":"57"},"f":"write","args":["b",{"enc":{"raw":["é",255,"中"]}}]},
+    {"do":"ok","o":7,"args":["b",{"ver":[{"raw":["é",255,"中"]},"7"]},{"value_or_nil":{"raw":["é",255,"中"]}}]},
+    {"do":"invoke","h":0,"proc":{"int":"58"},"f":"write","args":["b",{"enc":{"raw":[255,254," nil"]}}]},
+    {"do":"ok","o":8,"args":["b",{"ver":[{"raw":[255,254," nil"]},"8"]},{"value_or_nil":{"raw":[255,254," nil"]}}]},
+    {"do":"invoke","h":0,"proc":{"int":"60"},"f":"write","args":[{"raw":[255,"raw"]},"x"]},
+    {"do":"ok","o":9,"args":[{"list":[{"raw":[255]},"ok",{"raw":[195]}]},{"append_mop":[{"raw":[255]},{"raw":[128]}]},{"read_result_mop":[{"raw":[254]},[{"raw":[255]}]]}]},
+    {"do":"record","h":0,"proc":{"int":"62"},"type":"ok","f":"read","args":[{"raw":[226,130]},""]}
+  ],
+  "runs": [
+    {"name": "", "out": "off", "hist_out": "file", "buggify_env": null, "buggify_file": null, "output": "invalid_utf8.out", "returns": ""}
+  ]
+}

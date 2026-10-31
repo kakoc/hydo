@@ -1,0 +1,181 @@
+{
+  "format": 1,
+  "hydo_version": "0.1",
+  "name": "redis-composed-read",
+  "description": "Redis with an append-only file, driven by composed commands (SETs, transfers, AOF rewrites).",
+  "root": {
+    "files": [
+      {
+        "src": "~/hydo/build/redis-server",
+        "dst": "/bin/redis-server",
+        "mode": "0755"
+      },
+      {
+        "src": "~/hydo/build/redis-cli",
+        "dst": "/bin/redis-cli",
+        "mode": "0755"
+      }
+    ],
+    "text": {
+      "/etc/redis.conf": "port 6379\nbind 127.0.0.1\ndir /data/redis\nsave \"\"\nappendonly yes\nappendfsync always\nhz 1\ndynamic-hz no\n"
+    }
+  },
+  "data": {
+    "size_mib": 64,
+    "dirs": [
+      "redis"
+    ]
+  },
+  "env": {
+    "TRANSFER": "{{transfer}}",
+    "ACCOUNTS": "5",
+    "TOTAL": "500"
+  },
+  "params": {
+    "transfer": "atomic"
+  },
+  "services": [
+    {
+      "name": "redis",
+      "cmd": "/bin/redis-server /etc/redis.conf",
+      "ready": "/bin/redis-cli ping | grep -q PONG",
+      "port": 6379
+    }
+  ],
+  "workload": {
+    "steps": 20,
+    "timeout": 120
+  },
+  "knobs": [
+    {
+      "token": "R",
+      "name": "Redis appendfsync",
+      "default": "always",
+      "set": "/bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE",
+      "values": [
+        "always",
+        "everysec",
+        "no"
+      ]
+    }
+  ],
+  "faults": [
+    "kill",
+    "pause",
+    "cut",
+    "clock",
+    "disk"
+  ],
+  "test": {
+    "parallel": 4,
+    "per_round": 2,
+    "round_ms": 100,
+    "command_timeout": 20,
+    "drain_timeout": 30,
+    "commands": [
+      {
+        "name": "read",
+        "kind": "anytime",
+        "run": [
+          "/hydo/workload/anytime_read"
+        ],
+        "content": "1df44f77a6d37281"
+      },
+      {
+        "name": "serves",
+        "kind": "eventually",
+        "run": [
+          "/hydo/workload/eventually_serves"
+        ],
+        "content": "87a1afb01bb5f281"
+      },
+      {
+        "name": "summary",
+        "kind": "finally",
+        "run": [
+          "/hydo/workload/finally_summary"
+        ],
+        "content": "cbec9a49fa344789"
+      },
+      {
+        "name": "accounts",
+        "kind": "first",
+        "run": [
+          "/hydo/workload/first_accounts"
+        ],
+        "content": "6f320dbc39cf1346"
+      },
+      {
+        "name": "set",
+        "kind": "parallel_driver",
+        "run": [
+          "/hydo/workload/parallel_driver_set"
+        ],
+        "content": "5965096e1f90bc26"
+      },
+      {
+        "name": "transfer",
+        "kind": "parallel_driver",
+        "run": [
+          "/hydo/workload/parallel_driver_transfer"
+        ],
+        "content": "549e0b6d2561dc5b"
+      },
+      {
+        "name": "rewrite",
+        "kind": "serial_driver",
+        "run": [
+          "/hydo/workload/serial_driver_rewrite"
+        ],
+        "content": "643ccbd6b9b98a72"
+      }
+    ],
+    "checks": [
+      {
+        "name": "accounts_present",
+        "kind": "final",
+        "run": [
+          "hydo-check",
+          "count",
+          "--eq",
+          "5",
+          "--in",
+          "accounts=redis 127.0.0.1:6379 scan \"acct:*\""
+        ],
+        "msg": "all ACCOUNTS balances exist after the run"
+      },
+      {
+        "name": "answers",
+        "kind": "eventually",
+        "run": [
+          "/hydo/checks/eventually_answers"
+        ],
+        "msg": "Redis answers PING within 15 s after the faults are healed",
+        "within": 15
+      },
+      {
+        "name": "acked_writes_survive",
+        "kind": "final",
+        "run": [
+          "/hydo/checks/final_acked_writes_survive"
+        ],
+        "msg": "every SET the client saw acknowledged reads back with its value"
+      },
+      {
+        "name": "total_conserved",
+        "kind": "final",
+        "run": [
+          "/hydo/checks/final_total_conserved"
+        ],
+        "msg": "transfers never create or destroy money: the balances sum to TOTAL"
+      }
+    ],
+    "regressions": [
+      {
+        "name": "lost-update",
+        "schedule": "disk=none dseed=1 | run W=0000002a,p4,q2,r100",
+        "expect": "ok"
+      }
+    ]
+  }
+}

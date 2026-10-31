@@ -81,6 +81,17 @@ pub const KNOWN_INV: &[&str] = &[
     "poll",
 ];
 pub const LIVE_ANCHORS: &[&str] = &["heal", "start"];
+pub(crate) const KNOWN_WORKLOAD: &[&str] =
+    &["steps", "run", "retry", "process", "timeout", "description"];
+pub(crate) const KNOWN_DATA: &[&str] = &["size_mib", "mount", "dirs", "description"];
+pub(crate) const KNOWN_ROOT: &[&str] = &["size_mib", "nix", "files", "text", "dirs", "description"];
+pub(crate) const KNOWN_GUEST: &[&str] = &[
+    "ram_mib",
+    "clock_start",
+    "clock_after_cut",
+    "cpu",
+    "description",
+];
 pub const KNOWN_KNOB: &[&str] = &[
     "token",
     "name",
@@ -99,8 +110,8 @@ pub const NET_GW: &str = "10.89.0.1";
 pub const RAM_MIB_MIN: i128 = 256;
 pub const RAM_MIB_MAX_X86: i128 = 3072;
 pub const RAM_MIB_MAX_ARM: i128 = 4096;
-const KNOWN_ERRORS_TOP: &[&str] = &["level", "max", "services", "description"];
-const KNOWN_ERRORS_SVC: &[&str] = &[
+pub(crate) const KNOWN_ERRORS_TOP: &[&str] = &["level", "max", "services", "description"];
+pub(crate) const KNOWN_ERRORS_SVC: &[&str] = &[
     "format",
     "level",
     "match",
@@ -111,7 +122,7 @@ const KNOWN_ERRORS_SVC: &[&str] = &[
     "description",
 ];
 const ERR_FORMATS: &[&str] = &["auto", "redis", "none"];
-const KNOWN_FAKE: &[&str] = &[
+pub(crate) const KNOWN_FAKE: &[&str] = &[
     "name",
     "port",
     "addr",
@@ -121,7 +132,7 @@ const KNOWN_FAKE: &[&str] = &[
     "routes",
     "description",
 ];
-const KNOWN_PROXY: &[&str] = &[
+pub(crate) const KNOWN_PROXY: &[&str] = &[
     "name",
     "port",
     "addr",
@@ -133,7 +144,7 @@ const KNOWN_PROXY: &[&str] = &[
     "service",
     "description",
 ];
-const KNOWN_ROUTE: &[&str] = &[
+pub(crate) const KNOWN_ROUTE: &[&str] = &[
     "name",
     "method",
     "path",
@@ -148,8 +159,9 @@ const KNOWN_ROUTE: &[&str] = &[
     "webhook",
     "description",
 ];
-const KNOWN_PROXY_ROUTE: &[&str] = &["name", "method", "path", "ref", "effect", "description"];
-const KNOWN_HOOK: &[&str] = &[
+pub(crate) const KNOWN_PROXY_ROUTE: &[&str] =
+    &["name", "method", "path", "ref", "effect", "description"];
+pub(crate) const KNOWN_HOOK: &[&str] = &[
     "url",
     "method",
     "body",
@@ -160,7 +172,7 @@ const KNOWN_HOOK: &[&str] = &[
 ];
 const EXTRACT_RE: &str = r"(header:[A-Za-z0-9-]+|json:[A-Za-z0-9_.]+|query:[A-Za-z0-9_-]+|form:[A-Za-z0-9_-]+|path:[A-Za-z0-9_]+|pb:[1-9][0-9]*|body)";
 const HOOK_VARS: &[&str] = &["seq", "ref", "idem", "fake", "route"];
-const KNOWN_CHECK: &[&str] = &[
+pub(crate) const KNOWN_CHECK: &[&str] = &[
     "id",
     "type",
     "history",
@@ -459,11 +471,7 @@ pub fn validate(m: &mut Value) -> R<()> {
     if !wl.is_object() {
         return Err(err("workload: required (steps + run)"));
     }
-    unknown(
-        &wl,
-        &["steps", "run", "retry", "process", "timeout", "description"],
-        "workload",
-    )?;
+    unknown(&wl, KNOWN_WORKLOAD, "workload")?;
     let st = need(&wl, "steps", "workload", Typ::Int)?;
     let sti = py::int_of(&st).unwrap_or(0);
     if !(1..=1000).contains(&sti) {
@@ -617,25 +625,11 @@ pub fn validate(m: &mut Value) -> R<()> {
         }
     }
     let data = or_map(obj_get(m, "data"));
-    unknown(&data, &["size_mib", "mount", "dirs", "description"], "data")?;
+    unknown(&data, KNOWN_DATA, "data")?;
     let root = or_map(obj_get(m, "root"));
-    unknown(
-        &root,
-        &["size_mib", "nix", "files", "text", "dirs", "description"],
-        "root",
-    )?;
+    unknown(&root, KNOWN_ROOT, "root")?;
     let guest = or_map(obj_get(m, "guest"));
-    unknown(
-        &guest,
-        &[
-            "ram_mib",
-            "clock_start",
-            "clock_after_cut",
-            "cpu",
-            "description",
-        ],
-        "guest",
-    )?;
+    unknown(&guest, KNOWN_GUEST, "guest")?;
     if has(&guest, "clock_after_cut")? {
         let c = index(&guest, "clock_after_cut")?;
         if !int_in(c, 1, 10 * 365 * 86400) {

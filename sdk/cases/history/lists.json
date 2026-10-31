@@ -1,0 +1,14 @@
+{
+  "about": "list writes [e1,e2,...] with each element encoded",
+  "needs": [],
+  "steps": [
+    {"do":"history","name":"la"},
+    {"do":"invoke","h":0,"proc":{"int":"1"},"f":"read","args":["x"]},
+    {"do":"ok","o":0,"args":["x",{"list":[]}]},
+    {"do":"invoke","h":0,"proc":{"int":"1"},"f":"read","args":["x"]},
+    {"do":"ok","o":1,"args":["x",{"list":[""]},{"list":["a"]},{"list":["a","b,c","[x]","nil","","é","1 2","%",":"]},{"list":["1","2","3"]}]}
+  ],
+  "runs": [
+    {"name": "", "out": "off", "hist_out": "file", "buggify_env": null, "buggify_file": null, "output": "lists.out", "returns": ""}
+  ]
+}

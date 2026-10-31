@@ -1,0 +1,6 @@
+HYDO-HIST kv 20 invoke * read k1 k2 k3
+HYDO-HIST kv 20 ok * read k1 % k2 nil k3 nil
+HYDO-HIST kv 20 invoke * read k4
+HYDO-HIST kv 20 ok * read k4 x%20y
+HYDO-HIST kv 20 invoke * read k5
+HYDO-HIST kv 20 ok * read k5 %6Eil

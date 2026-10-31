@@ -167,12 +167,13 @@ pub fn make_rec(
     rec.insert("seed".into(), json!(sd));
     rec.insert("schedule".into(), json!(text));
     rec.insert("class".into(), json!(class));
-    for (k, v) in r {
-        rec.insert(k.clone(), v.clone());
+    // the result's host-only keys (history-check findings and records) are not part of the record
+    for (k, v) in hydo_explore::results::public(r) {
+        rec.insert(k, v);
     }
     let v = crash_verdict(outdir, &tag, &py_str(&rec["verdict"]), defect);
     rec.insert("verdict".into(), json!(v));
-    let af = assert_failures(outdir, &tag);
+    let af = assert_failures(outdir, &tag, r);
     let afl = !af.is_empty();
     let ids: Vec<String> = af.iter().map(py_str).collect();
     rec.insert("assert_failures".into(), Value::Array(af));

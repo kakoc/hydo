@@ -1,0 +1,74 @@
+{
+  "format": 1,
+  "name": "redis-netem",
+  "description": "Redis with an append-only file; every acknowledged SET must survive, and no TCP segment is retransmitted (no packet lost on loopback).",
+  "root": {
+    "files": [
+      {
+        "src": "~/hydo/build/redis-server",
+        "dst": "/bin/redis-server",
+        "mode": "0755"
+      },
+      {
+        "src": "~/hydo/build/redis-cli",
+        "dst": "/bin/redis-cli",
+        "mode": "0755"
+      }
+    ],
+    "text": {
+      "/etc/redis.conf": "port 6379\nbind 127.0.0.1\ndir /data/redis\nsave \"\"\nappendonly yes\nappendfsync always\nhz 1\ndynamic-hz no\n"
+    }
+  },
+  "data": {
+    "size_mib": 64,
+    "dirs": [
+      "redis"
+    ]
+  },
+  "services": [
+    {
+      "name": "redis",
+      "cmd": "/bin/redis-server /etc/redis.conf",
+      "ready": "/bin/redis-cli ping | grep -q PONG",
+      "port": 6379
+    }
+  ],
+  "workload": {
+    "steps": 20,
+    "run": "i=$HYDO_FROM\nwhile [ $i -lt $HYDO_TO ]; do\n  r=$(timeout 2 /bin/redis-cli SET k:$i v$i 2>/dev/null)   # a 2 s client deadline\n  if [ \"$r\" = OK ]; then echo $i >> $HYDO_ACKED; echo \"$i ack\" >> $HYDO_OUTCOMES\n  else echo \"$i unknown\" >> $HYDO_OUTCOMES; fi\n  i=$((i + 1))\ndone\n"
+  },
+  "knobs": [
+    {
+      "token": "R",
+      "name": "Redis appendfsync",
+      "default": "always",
+      "set": "/bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE",
+      "values": [
+        "always",
+        "everysec",
+        "no"
+      ]
+    }
+  ],
+  "invariants": [
+    {
+      "id": "net.no_retransmission",
+      "msg": "no TCP segment was retransmitted in this boot (loopback loses nothing unless a fault drops it)",
+      "cmd": "r=$(awk '$1 == \"Tcp:\" { if (!h) { for (i = 2; i <= NF; i++) c[$i] = i; h = 1 } else print $c[\"RetransSegs\"] }' /proc/net/snmp)\nt=$(awk '$1 == \"TcpExt:\" { if (!h) { for (i = 2; i <= NF; i++) c[$i] = i; h = 1 } else print $c[\"TCPTimeouts\"] }' /proc/net/netstat)\necho \"retrans=$r timeouts=$t uptime=$(cut -d' ' -f1 /proc/uptime)\"\n[ \"$r\" = 0 ]\n"
+    },
+    {
+      "id": "redis.acked_writes_survive",
+      "msg": "every SET the client saw acknowledged reads back with its value",
+      "cmd": "lost=0\nfor i in $(cat $HYDO_ACKED); do\n  [ \"$(/bin/redis-cli GET k:$i)\" = \"v$i\" ] || { echo \"key k:$i lost\"; lost=1; break; }\ndone\n[ $lost = 0 ] && echo \"acked=$(wc -l < $HYDO_ACKED) all present\"\n[ $lost = 0 ]\n"
+    }
+  ],
+  "faults": [
+    "kill",
+    "pause",
+    "network",
+    "oneway",
+    "cut",
+    "clock",
+    "disk"
+  ]
+}

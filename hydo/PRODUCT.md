@@ -20,6 +20,16 @@ call as ok, failed or unknown (`MANIFEST.md`, "gRPC services").
 
 The explorer (`hydo explore`, the crate `hydo/crates/hydo-explore`) generates schedules with several strategies and sweeps, re-runs every failure to prove it reproduces, and shrinks it to a minimal schedule. Cross-service checks can read the stores with ready-made commands instead of hand-written shell (`hydo-read` prints a MySQL/PostgreSQL query, a Kafka topic, Redis or etcd keys as sorted JSON Lines; `hydo-check` compares two readings: subset, exactly-once, disjoint, count, a cache never holding a wrong value; MANIFEST.md "Reading the stores"). Assertions are properties of five kinds (always, sometimes, reachable, unreachable, eventually; `hydo/ASSERTIONS.md`). It runs on x86_64 Linux with VT-x (`hydo/dist/linux/`, the Linux release) and on Apple Silicon Macs (`hydo/dist/mac/`).
 
+## Where the results are, and how to read them (experimental until hydo 1.0)
+
+Every run and every exploration reports in one versioned format, so a CI job or an AI tool reads one model instead of several ad-hoc files:
+
+- `hydo run` and `hydo repro` write `result.json` in the run directory: the schedule, the image (path and SHA-256), the engine, the verdict, the fingerprints, the findings, the run's property table and the files of the run (its consoles, `engine.log`).
+- `hydo explore` writes `events.jsonl` while it runs (one record per line: a `start` record, a `run` record for every run it makes, a `shrink` record per minimal schedule, an `end` record) and `exploration.json` when it is done (configuration, summary, every failure with its re-runs, the minimal schedules, the error kinds, the property table, the liveness summary). `report.md` is the same report for people, made from `exploration.json`; `hydo report` prints it from the document.
+- A finding has one shape whatever found it: `kind` (`invariant`, `assertion`, `history-check`, `error-log`), `id` (the property, check or invariant, or the error kind's signature), `status`, `message` and source-specific `details`.
+
+The schema is `hydo/schema/results-v1.json`, generated from the Rust types (`hydo/crates/hydo-results`), and `hydo/schema/examples/results/v1/` holds documents recorded from real runs. Every record carries `"v": 1` and a `"type"`. Within version 1 only additions are made (new optional fields, new record types); renaming, removing or changing a field needs version 2, read alongside version 1. A reader must ignore fields and record types it does not know; the crate's reader does exactly that and is what hydo's own commands use. The format is experimental until hydo 1.0, and it keeps the additions-only rule from version 1 on (a test fails on any other change against the last released schema).
+
 ## Two kinds of projects
 
 **Infrastructure** (message brokers, databases, consensus systems, caches). The properties are generic: acknowledged writes survive, replicas agree, histories are consistent. hydo finds this class well (durability windows, crash consistency, members diverging, as with etcd issue 14685).
@@ -55,11 +65,11 @@ hydo is used from the team's own repository. Nobody checks out hydo's repository
 
 | Language | Where | State | Proof of the same output |
 |---|---|---|---|
-| Go | `hydo/stack/hydoassert` (import `hydostack/hydoassert`) | on main (M38, M56, M59) | the reference |
+| Go | `hydo/stack/hydoassert` (import `hydostack/hydoassert`) | on main (M38, M56, M59) | `cases_test.go` reads the shared cases (`sdk/cases`), Go 1.26.5 |
 | shell (busybox sh) | `hydo/stack/hydoassert/hydo_assert.sh` | on main; no deduplication, no BUGGIFY | |
-| Rust | `sdk/rust` (crate `hydo-assert`, not published) | branch `rust-sdk` (M82), not merged yet; std only, call-site macros with file:line, `declare!`, sync and runtime-agnostic async `eventually`, features `noop` and `serde_json` | `sdk/rust/tests/conformance.sh` against the Go sources (Go 1.26.5 and 1.27.3), three BUGGIFY configurations |
-| Python (3.8+) | `sdk/python` (distribution `hydo-assert`, import `hydo_assert`, not published) | branch `python-sdk`, not merged yet (M86); standard library only, thread- and asyncio-safe; example `hydo/onboard/examples/python-kv` on the Mac backend | `sdk/python/tests/conformance.sh` against the Go sources (Go 1.26.5 and 1.27.3), eight BUGGIFY configurations, Python 3.8, 3.11 and 3.15 |
-| JavaScript / TypeScript (Node.js) | `sdk/js` (package `hydo-assert`, not published) | branch `js-sdk`, not merged yet; CommonJS and ESM, types, no dependencies | `sdk/js/test/conformance.sh` against the Go sources (Go 1.26.5), both entries, five BUGGIFY configurations |
+| Rust | `sdk/rust` (crate `hydo-assert`, not published) | branch `rust-sdk` (M82), not merged yet; std only, call-site macros with file:line, `declare!`, sync and runtime-agnostic async `eventually`, features `noop` and `serde_json` | the reference (M110): its test `tests/cases` writes the shared cases `sdk/cases`, which equal Go 1.26.5's bytes |
+| Python (3.8+) | `sdk/python` (distribution `hydo-assert`, import `hydo_assert`, not published) | branch `python-sdk`, not merged yet (M86); standard library only, thread- and asyncio-safe; example `hydo/onboard/examples/python-kv` on the Mac backend | `tests/test_cases.py` reads the shared cases, Python 3.8 and 3.15 |
+| JavaScript / TypeScript (Node.js) | `sdk/js` (package `hydo-assert`, not published) | branch `js-sdk`, not merged yet; CommonJS and ESM, types, no dependencies | `test/cases.test.js` reads the shared cases, both entries |
 
 **The `hydo/` folder** (agreed) holds everything hydo needs in the team's repository, next to `docker-compose.yaml`:
 

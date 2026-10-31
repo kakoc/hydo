@@ -25,7 +25,10 @@
 //! if hydo_history::has_checks(&srcs) {
 //!     let r = hydo_history::run_checks(&srcs, Some("HYDO-ORACLE: OK invariants=0 held ()"),
 //!                                      hydo_history::DEFAULT_BUDGET, None).unwrap();
-//!     hydo_history::write_checks_files(dir, "s1-42", &r).unwrap();
+//!     // each check's result (hydo-explore's results module makes them findings)
+//!     for c in &r.checks {
+//!         println!("{} {}: {}", c.id, c.status.name(), c.summary);
+//!     }
 //!     println!("{}", r.verdict.unwrap_or_default());
 //! }
 //! ```
@@ -153,6 +156,25 @@ pub struct Checks {
     pub report: String,
     /// Malformed-line warnings of the consoles.
     pub warnings: Vec<String>,
+    /// Each check as the results format reports it (one per id, in the order of `results`).
+    pub checks: Vec<CheckInfo>,
+}
+
+/// One check of [`Checks`]: what its spec says and what it found.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CheckInfo {
+    /// The spec's id, type (`linearizable`, `list-append`), history name and message.
+    pub id: String,
+    pub check: String,
+    pub history: String,
+    pub msg: String,
+    pub status: Outcome,
+    pub summary: String,
+    pub explanation: String,
+    pub warnings: Vec<String>,
+    /// The details of its HYDO-ASSERT record (JSON, sorted keys: the checker's details, `check`
+    /// and `out`).
+    pub details: String,
 }
 
 fn dict(pairs: Vec<(&str, PyVal)>) -> PyVal {
@@ -195,8 +217,10 @@ pub fn run_checks<S: AsRef<str>, T: AsRef<str>>(
             results: Vec::new(),
             report: String::new(),
             warnings: warn,
+            checks: Vec::new(),
         });
     }
+    let mut infos: Vec<CheckInfo> = Vec::new();
     let mut recs = Vec::new();
     let mut results: Vec<(PyVal, CheckResult)> = Vec::new();
     let mut result_keys: Vec<py::KeyRepr> = Vec::new();
@@ -264,6 +288,17 @@ pub fn run_checks<S: AsRef<str>, T: AsRef<str>>(
         let mut det = PyVal::Dict(r.details.clone());
         det.set("check", typ.clone());
         det.set("out", PyVal::str(py::head(&r.summary, 400)));
+        let info = CheckInfo {
+            id: id.str_of(),
+            check: typ.str_of(),
+            history: hist.str_of(),
+            msg: msg.str_of(),
+            status: r.status,
+            summary: r.summary.clone(),
+            explanation: r.explanation.clone(),
+            warnings: r.warnings.clone(),
+            details: py::dumps_sorted(&det),
+        };
         if matches!(r.status, Outcome::Ok | Outcome::Violation) {
             recs.push(format!(
                 "HYDO-ASSERT {}",
@@ -304,10 +339,18 @@ pub fn run_checks<S: AsRef<str>, T: AsRef<str>>(
             Outcome::Ok => oks.push((id.clone(), r.summary.clone())),
         }
         match result_keys.iter().position(|k| *k == key) {
-            Some(i) => results[i].1 = r,
+            Some(i) => {
+                results[i].1 = r;
+                // the result keeps the earlier spec's place and id (a dict key)
+                infos[i] = CheckInfo {
+                    id: infos[i].id.clone(),
+                    ..info
+                };
+            }
             None => {
                 result_keys.push(key);
                 results.push((id, r));
+                infos.push(info);
             }
         }
     }
@@ -341,6 +384,7 @@ pub fn run_checks<S: AsRef<str>, T: AsRef<str>>(
         results,
         report: rep.join("\n"),
         warnings: warn,
+        checks: infos,
     })
 }
 
@@ -381,16 +425,4 @@ pub fn has_checks<S: AsRef<str>, T: AsRef<str>>(sources: &[(S, T)]) -> bool {
     sources
         .iter()
         .any(|(_, t)| t.as_ref().contains(events::CHECK_TAG))
-}
-
-/// `<tag>.checks.log` (the records, one per line) and `<tag>.checks.txt` (the report, then the
-/// verdict) in `dir`, as `hydo run` and the explorer write them. A missing verdict is written as
-/// "None", as the Python CLI did.
-pub fn write_checks_files(dir: &Path, tag: &str, r: &Checks) -> std::io::Result<()> {
-    let recs: String = r.records.iter().map(|x| format!("{x}\n")).collect();
-    std::fs::write(dir.join(format!("{tag}.checks.log")), recs)?;
-    std::fs::write(
-        dir.join(format!("{tag}.checks.txt")),
-        format!("{}\n{}\n", r.report, r.verdict.as_deref().unwrap_or("None")),
-    )
 }

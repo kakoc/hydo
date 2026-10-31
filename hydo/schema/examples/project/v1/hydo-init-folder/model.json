@@ -1,0 +1,55 @@
+{
+  "format": 1,
+  "hydo_version": "0.1",
+  "name": "myproject",
+  "description": "TODO one line about the system under test",
+  "guest": {
+    "ram_mib": 1024
+  },
+  "root": {
+    "files": []
+  },
+  "data": {
+    "size_mib": 512,
+    "dirs": []
+  },
+  "services": [],
+  "workload": {
+    "steps": 20,
+    "timeout": 300
+  },
+  "faults": [
+    "kill",
+    "pause",
+    "network",
+    "oneway",
+    "cut",
+    "clock",
+    "disk"
+  ],
+  "test": {
+    "parallel": 4,
+    "per_round": 2,
+    "round_ms": 200,
+    "commands": [
+      {
+        "name": "todo",
+        "kind": "parallel_driver",
+        "run": [
+          "/hydo/workload/parallel_driver_todo"
+        ],
+        "content": "f27ee2ad54064494"
+      }
+    ],
+    "checks": [
+      {
+        "name": "todo",
+        "kind": "final",
+        "run": [
+          "/hydo/checks/final_todo"
+        ],
+        "msg": "TODO replace with the system's real properties"
+      }
+    ]
+  }
+}

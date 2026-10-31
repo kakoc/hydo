@@ -114,7 +114,8 @@ RESULT one fp=ecef6f8fe6c39ec0 wfp=6913b248b3ac2d47 secs=18.3 verdict=HYDO-ORACL
 - `secs=` is how long the run took.
 
 Run either command again: the fingerprint is the same. Each run leaves a directory under
-`hydo-out/runs/` with the guest's console output (`one.log`), the engine's log and `run.json`;
+`hydo-out/runs/` with the guest's console output (`one.log`), the engine's log and `result.json`
+(the run's result in hydo's results format);
 `hydo repro <that directory>` runs it again and compares the fingerprint:
 
 ```

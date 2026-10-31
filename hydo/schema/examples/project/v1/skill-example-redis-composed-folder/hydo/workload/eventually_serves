@@ -1,0 +1,5 @@
+#!/bin/sh
+# after the faults stop: Redis answers again (retries inside, as an eventually command should)
+. /hydo/workload/helper_lib.sh
+n=0; until [ "$(R PING)" = PONG ]; do n=$((n + 1)); [ $n -ge 50 ] && { echo "no PONG after 50 tries"; exit 1; }; sleep 0.2; done
+echo "PONG after $n retries"
