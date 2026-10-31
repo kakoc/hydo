@@ -34,7 +34,10 @@ pub fn serve_main(args: &[String]) -> i32 {
         }
         i += 2;
     }
-    let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
         Ok(r) => r,
         Err(e) => {
             eprintln!("hydo-world: {e}");
@@ -85,16 +88,26 @@ async fn serve(cfg: Config, carry: String) -> i32 {
         let ln = match TcpListener::bind(&a).await {
             Ok(l) => l,
             Err(err) => {
-                eprintln!("hydo-world: {}: listen tcp {a}: bind: {}", e.name, goish::errno_text(&err));
+                eprintln!(
+                    "hydo-world: {}: listen tcp {a}: bind: {}",
+                    e.name,
+                    goish::errno_text(&err)
+                );
                 return 1;
             }
         };
         if e.protocol == "tcp" {
-            eprintln!("hydo-world: proxy {} tcp on {}:{} -> {}", e.name, e.addr, e.port, e.to);
+            eprintln!(
+                "hydo-world: proxy {} tcp on {}:{} -> {}",
+                e.name, e.addr, e.port, e.to
+            );
             tokio::spawn(serve_tcp(w.clone(), idx, ln));
             continue;
         }
-        eprintln!("hydo-world: {} {} {} on {}:{}", e.kind, e.name, e.protocol, e.addr, e.port);
+        eprintln!(
+            "hydo-world: {} {} {} on {}:{}",
+            e.kind, e.name, e.protocol, e.addr, e.port
+        );
         if e.kind == "proxy" && e.protocol == "grpc" {
             tokio::spawn(crate::grpc::serve_grpc_proxy(w.clone(), idx, ln)); // the streaming gRPC proxy
             continue;
@@ -105,7 +118,10 @@ async fn serve(cfg: Config, carry: String) -> i32 {
     let cl = match UnixListener::bind(&sp) {
         Ok(l) => l,
         Err(e) => {
-            eprintln!("hydo-world: control socket: listen unix {sp}: bind: {}", goish::errno_text(&e));
+            eprintln!(
+                "hydo-world: control socket: listen unix {sp}: bind: {}",
+                goish::errno_text(&e)
+            );
             return 1;
         }
     };
@@ -121,7 +137,9 @@ pub fn endpoint(w: &World, idx: usize) -> &Endpoint {
 
 async fn control(w: Arc<World>, ln: UnixListener) {
     loop {
-        let Ok((mut c, _)) = ln.accept().await else { return };
+        let Ok((mut c, _)) = ln.accept().await else {
+            return;
+        };
         let w = w.clone();
         tokio::spawn(async move {
             let mut line = Vec::new();
@@ -138,7 +156,10 @@ async fn control(w: Arc<World>, ln: UnixListener) {
                     }
                 }
             }
-            let f: Vec<&[u8]> = line.split(|x| x.is_ascii_whitespace()).filter(|t| !t.is_empty()).collect();
+            let f: Vec<&[u8]> = line
+                .split(|x| x.is_ascii_whitespace())
+                .filter(|t| !t.is_empty())
+                .collect();
             if f.is_empty() {
                 return;
             }
@@ -180,7 +201,11 @@ pub fn parse_target(t: &[u8]) -> Option<(Vec<u8>, Vec<u8>, Vec<u8>)> {
         t
     } else {
         let p = t.windows(3).position(|w| w == b"://")?;
-        if p == 0 || !t[..p].iter().all(|c| c.is_ascii_alphanumeric() || b"+-.".contains(c)) {
+        if p == 0
+            || !t[..p]
+                .iter()
+                .all(|c| c.is_ascii_alphanumeric() || b"+-.".contains(c))
+        {
             return None;
         }
         let after = &t[p + 3..];
@@ -194,7 +219,11 @@ pub fn parse_target(t: &[u8]) -> Option<(Vec<u8>, Vec<u8>, Vec<u8>)> {
         None => (rest, &b""[..], false),
     };
     let path = goish::unescape(p, false)?;
-    let mut uri = if p.is_empty() { b"/".to_vec() } else { p.to_vec() };
+    let mut uri = if p.is_empty() {
+        b"/".to_vec()
+    } else {
+        p.to_vec()
+    };
     if hasq {
         uri.push(b'?');
         uri.extend_from_slice(q);
@@ -204,7 +233,9 @@ pub fn parse_target(t: &[u8]) -> Option<(Vec<u8>, Vec<u8>, Vec<u8>)> {
 
 async fn serve_http(w: Arc<World>, idx: usize, ln: TcpListener) {
     loop {
-        let Ok((s, _)) = ln.accept().await else { return };
+        let Ok((s, _)) = ln.accept().await else {
+            return;
+        };
         rt::tune(s.as_raw_fd());
         tokio::spawn(http_conn(w.clone(), idx, s));
     }
@@ -231,7 +262,10 @@ pub async fn read_preface(s: &mut TcpStream) -> (Vec<u8>, bool) {
 }
 
 async fn http_conn(w: Arc<World>, idx: usize, mut s: TcpStream) {
-    let from = s.peer_addr().map(|a| a.ip().to_string()).unwrap_or_default();
+    let from = s
+        .peer_addr()
+        .map(|a| a.ip().to_string())
+        .unwrap_or_default();
     let (pre, h2) = read_preface(&mut s).await;
     if h2 {
         serve_h2(w, idx, h2x::Rewind::new(pre, s), from).await;
@@ -255,7 +289,8 @@ async fn http_conn(w: Arc<World>, idx: usize, mut s: TcpStream) {
             || hget(&head.headers, "Content-Length").is_some_and(|v| v != b"0");
         if head.minor >= 1
             && has_body
-            && hget(&head.headers, "Expect").is_some_and(|v| v.eq_ignore_ascii_case(b"100-continue"))
+            && hget(&head.headers, "Expect")
+                .is_some_and(|v| v.eq_ignore_ascii_case(b"100-continue"))
             && c.write(b"HTTP/1.1 100 Continue\r\n\r\n").await.is_err()
         {
             return;
@@ -286,7 +321,11 @@ async fn http_conn(w: Arc<World>, idx: usize, mut s: TcpStream) {
         };
         match out {
             Outcome::Answer(a) => {
-                if c.write(&http1::answer_bytes(&a, &head, close)).await.is_err() || close {
+                if c.write(&http1::answer_bytes(&a, &head, close))
+                    .await
+                    .is_err()
+                    || close
+                {
                     return;
                 }
             }
@@ -299,7 +338,9 @@ async fn http_conn(w: Arc<World>, idx: usize, mut s: TcpStream) {
 }
 
 async fn serve_h2(w: Arc<World>, idx: usize, io: h2x::Rewind, from: String) {
-    let Ok(mut conn) = h2x::server_builder().handshake::<_, Bytes>(io).await else { return };
+    let Ok(mut conn) = h2x::server_builder().handshake::<_, Bytes>(io).await else {
+        return;
+    };
     while let Some(r) = conn.accept().await {
         let Ok((req, respond)) = r else { break };
         let w = w.clone();
@@ -316,7 +357,13 @@ async fn h2_stream(
     from: String,
 ) {
     let (parts, mut body) = req.into_parts();
-    let target = parts.uri.path_and_query().map(|p| p.as_str()).unwrap_or("/").as_bytes().to_vec();
+    let target = parts
+        .uri
+        .path_and_query()
+        .map(|p| p.as_str())
+        .unwrap_or("/")
+        .as_bytes()
+        .to_vec();
     let Some((path, uri, raw_query)) = parse_target(&target) else {
         respond.send_reset(h2::Reason::PROTOCOL_ERROR);
         return;
@@ -401,7 +448,6 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
     let grpc = e.protocol == "grpc";
     let fake = e.kind == "fake";
     let mut v = ReqView {
-        method: rq.method.clone(),
         path: rq.path.clone(),
         header: rq.headers.clone(),
         query: goish::parse_query(&rq.raw_query).0,
@@ -429,7 +475,8 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
         let mut st = w.lock_gate().await;
         let rule = st.request_rule(&e.name, &rname);
         let apply = rule.as_ref().is_none_or(|r| r.applied());
-        let mut fx = apply && (!fake || (rt.is_some() && Route::effectful(rt, &rq.method, &e.protocol)));
+        let mut fx =
+            apply && (!fake || (rt.is_some() && Route::effectful(rt, &rq.method, &e.protocol)));
         let seq = st.seq + 1;
         let mut ans_seq = seq;
         let mut out = if fake { "ok" } else { "fwd" }.to_string();
@@ -494,7 +541,11 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
     if !fake && apply {
         up = Some(match rt::or_gone(gone, forward(e, &rq)).await {
             Some(r) => r,
-            None => Err(http1::url_err(&rq.method, &format!("http://{}{}", e.to, String::from_utf8_lossy(&rq.uri)), "context canceled")),
+            None => Err(http1::url_err(
+                &rq.method,
+                &format!("http://{}{}", e.to, String::from_utf8_lossy(&rq.uri)),
+                "context canceled",
+            )),
         });
     }
     if let Some(r) = &rule {
@@ -517,10 +568,15 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
             }
             hset(&mut a.headers, "Content-Type", b"application/json".to_vec());
             if !r.retry_after.is_empty() {
-                hset(&mut a.headers, "Retry-After", r.retry_after.as_bytes().to_vec());
+                hset(
+                    &mut a.headers,
+                    "Retry-After",
+                    r.retry_after.as_bytes().to_vec(),
+                );
             }
             a.status = r.status.clamp(0, 999) as u16;
-            a.body = format!(r#"{{"error":"injected by hydo","status":{}}}"#, r.status).into_bytes();
+            a.body =
+                format!(r#"{{"error":"injected by hydo","status":{}}}"#, r.status).into_bytes();
             return Outcome::Answer(a);
         }
     }
@@ -550,7 +606,14 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
         let mut a;
         if grpc {
             a = Answer::default();
-            grpc_status(&mut a, 12, &format!("hydo fake: no route for {}", String::from_utf8_lossy(&rq.path)));
+            grpc_status(
+                &mut a,
+                12,
+                &format!(
+                    "hydo fake: no route for {}",
+                    String::from_utf8_lossy(&rq.path)
+                ),
+            );
         } else {
             a = http1::error_answer(r#"{"error":"hydo fake: no route"}"#, 404);
         }
@@ -597,10 +660,7 @@ async fn forward(e: &Endpoint, rq: &InReq) -> Result<http1::Resp, String> {
         headers: &hs,
         body: &rq.body,
     };
-    let url = format!("http://{}{}", e.to, String::from_utf8_lossy(&rq.uri));
-    http1::roundtrip(&req, true)
-        .await
-        .map_err(|why| http1::url_err(&rq.method, &url, &why))
+    http1::roundtrip(&req, true).await
 }
 
 fn copy_response(a: &mut Answer, resp: http1::Resp) {
@@ -623,7 +683,9 @@ fn copy_response(a: &mut Answer, resp: http1::Resp) {
 /// effect=no: nothing reaches the service (drop holds the connection, reset resets it at once).
 async fn serve_tcp(w: Arc<World>, idx: usize, ln: TcpListener) {
     loop {
-        let Ok((s, _)) = ln.accept().await else { return };
+        let Ok((s, _)) = ln.accept().await else {
+            return;
+        };
         rt::tune(s.as_raw_fd());
         tokio::spawn(tcp_conn(w.clone(), idx, s));
     }
@@ -642,7 +704,10 @@ enum Down {
 
 async fn tcp_conn(w: Arc<World>, idx: usize, c: TcpStream) {
     let e = endpoint(&w, idx);
-    let from = c.peer_addr().map(|a| a.ip().to_string()).unwrap_or_default();
+    let from = c
+        .peer_addr()
+        .map(|a| a.ip().to_string())
+        .unwrap_or_default();
     let (rule, heal) = {
         let mut st = w.lock_gate().await;
         let rule = st.request_rule(&e.name, "conn");

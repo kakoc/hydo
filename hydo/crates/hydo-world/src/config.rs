@@ -1,8 +1,8 @@
 //! `/etc/hydo/world.json` (compiled by hydo-build from the manifest's `fakes:` and `proxies:`),
 //! route matching, the request view with its extractors, and answer templates.
 
-use crate::gojson::{self, J};
 use crate::goish;
+use crate::gojson::{self, J};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -79,7 +79,10 @@ fn object<'a>(v: &'a Value, what: &str) -> Result<Option<Fields<'a>>, String> {
     match v {
         Value::Null => Ok(None),
         Value::Object(m) => Ok(Some(m.iter().map(|(k, v)| (k.as_str(), v)).collect())),
-        _ => Err(format!("json: cannot unmarshal {} into Go value of type {what}", jtype(v))),
+        _ => Err(format!(
+            "json: cannot unmarshal {} into Go value of type {what}",
+            jtype(v)
+        )),
     }
 }
 
@@ -106,7 +109,10 @@ fn set_str(dst: &mut String, v: &Value, f: &str) -> Result<(), String> {
             *dst = s.clone();
             Ok(())
         }
-        _ => Err(format!("json: cannot unmarshal {} into Go struct field .{f} of type string", jtype(v))),
+        _ => Err(format!(
+            "json: cannot unmarshal {} into Go struct field .{f} of type string",
+            jtype(v)
+        )),
     }
 }
 
@@ -117,7 +123,9 @@ fn set_int(dst: &mut i64, v: &Value, f: &str) -> Result<(), String> {
             *dst = n.as_i64().unwrap_or(0);
             Ok(())
         }
-        _ => Err(format!("json: cannot unmarshal {v} into Go struct field .{f} of type int")),
+        _ => Err(format!(
+            "json: cannot unmarshal {v} into Go struct field .{f} of type int"
+        )),
     }
 }
 
@@ -128,7 +136,10 @@ fn set_bool(dst: &mut bool, v: &Value, f: &str) -> Result<(), String> {
             *dst = *b;
             Ok(())
         }
-        _ => Err(format!("json: cannot unmarshal {} into Go struct field .{f} of type bool", jtype(v))),
+        _ => Err(format!(
+            "json: cannot unmarshal {} into Go struct field .{f} of type bool",
+            jtype(v)
+        )),
     }
 }
 
@@ -219,7 +230,12 @@ fn endpoint(v: &Value) -> Result<Endpoint, String> {
             _ if is(k, "routes") => match x {
                 Value::Null => e.routes.clear(),
                 Value::Array(a) => e.routes = a.iter().map(route).collect::<Result<_, _>>()?,
-                _ => return Err(format!("json: cannot unmarshal {} into Go struct field .routes", jtype(x))),
+                _ => {
+                    return Err(format!(
+                        "json: cannot unmarshal {} into Go struct field .routes",
+                        jtype(x)
+                    ))
+                }
             },
             _ => {}
         }
@@ -231,7 +247,10 @@ fn endpoints(v: &Value, f: &str) -> Result<Vec<Endpoint>, String> {
     match v {
         Value::Null => Ok(Vec::new()),
         Value::Array(a) => a.iter().map(endpoint).collect(),
-        _ => Err(format!("json: cannot unmarshal {} into Go struct field Config.{f}", jtype(v))),
+        _ => Err(format!(
+            "json: cannot unmarshal {} into Go struct field Config.{f}",
+            jtype(v)
+        )),
     }
 }
 
@@ -279,7 +298,13 @@ impl Config {
             }
             for r in &mut e.routes {
                 if !r.path.is_empty() && !r.path.ends_with('*') {
-                    r.segs = Some(r.path.trim_matches('/').split('/').map(str::to_string).collect());
+                    r.segs = Some(
+                        r.path
+                            .trim_matches('/')
+                            .split('/')
+                            .map(str::to_string)
+                            .collect(),
+                    );
                 }
                 if r.status == 0 {
                     r.status = 200;
@@ -309,10 +334,6 @@ impl Config {
 pub type Vars = Vec<(String, Vec<u8>)>;
 
 impl Endpoint {
-    pub fn route(&self, name: &str) -> Option<&Route> {
-        self.routes.iter().find(|r| r.name == name)
-    }
-
     /// The first route whose method and path fit; path params go into the vars.
     pub fn matches(&self, method: &str, path: &[u8]) -> (Option<&Route>, Vars) {
         for r in &self.routes {
@@ -378,7 +399,10 @@ impl Route {
         if proto == "grpc" {
             return true;
         }
-        !matches!(method.to_ascii_uppercase().as_str(), "GET" | "HEAD" | "OPTIONS")
+        !matches!(
+            method.to_ascii_uppercase().as_str(),
+            "GET" | "HEAD" | "OPTIONS"
+        )
     }
 }
 
@@ -386,7 +410,6 @@ impl Route {
 
 #[derive(Default)]
 pub struct ReqView {
-    pub method: String,
     pub path: Vec<u8>,
     /// canonical key, value (in arrival order)
     pub header: Vec<(String, Vec<u8>)>,
@@ -395,7 +418,7 @@ pub struct ReqView {
     /// grpc: the first message's bytes
     pub msg: Vec<u8>,
     pub vars: Vars,
-    js: OnceLock<Option<BTreeMap<String, J>>>,
+    pub js: OnceLock<Option<BTreeMap<String, J>>>,
 }
 
 pub fn body_hash(b: &[u8]) -> String {
@@ -411,12 +434,17 @@ pub fn atoi(s: &str) -> Option<i64> {
 
 impl ReqView {
     fn json(&self) -> Option<&BTreeMap<String, J>> {
-        self.js.get_or_init(|| gojson::parse_object(&self.body)).as_ref()
+        self.js
+            .get_or_init(|| gojson::parse_object(&self.body))
+            .as_ref()
     }
 
     pub fn header_get(&self, key: &str) -> Option<&[u8]> {
         let k = goish::canonical_key(key);
-        self.header.iter().find(|(h, _)| *h == k).map(|(_, v)| v.as_slice())
+        self.header
+            .iter()
+            .find(|(h, _)| *h == k)
+            .map(|(_, v)| v.as_slice())
     }
 
     /// An extractor: header:<Name> | json:<a.b> | query:<name> | path:<name or 1-based index> |
@@ -637,9 +665,15 @@ mod tests {
             &[("seq", b"3"), ("ref", b"o7")],
             Some(&v),
         );
-        assert_eq!(String::from_utf8(got).unwrap(), r#"{"id":"ch_3","order":"o7","a":12.5}"#);
+        assert_eq!(
+            String::from_utf8(got).unwrap(),
+            r#"{"id":"ch_3","order":"o7","a":12.5}"#
+        );
         // a reference the regular expression does not match stays as it is
-        assert_eq!(render(r#"{json:"a"}{x}{seq:}"#, &[("seq", b"9")], Some(&v)), br#"{json:"a"}{x}9"#);
+        assert_eq!(
+            render(r#"{json:"a"}{x}{seq:}"#, &[("seq", b"9")], Some(&v)),
+            br#"{json:"a"}{x}9"#
+        );
         assert_eq!(render("{json:order}", &[], None), b"");
     }
 
@@ -649,10 +683,27 @@ mod tests {
             fakes: vec![Endpoint {
                 name: "p".into(),
                 routes: vec![
-                    Route { name: "a".into(), method: "post".into(), path: "/v1/charges".into(), ..Default::default() },
-                    Route { name: "b".into(), path: "/v1/orders/{id}/cancel".into(), ..Default::default() },
-                    Route { name: "c".into(), path: "/files/*".into(), ..Default::default() },
-                    Route { name: "d".into(), path: "/".into(), ..Default::default() },
+                    Route {
+                        name: "a".into(),
+                        method: "post".into(),
+                        path: "/v1/charges".into(),
+                        ..Default::default()
+                    },
+                    Route {
+                        name: "b".into(),
+                        path: "/v1/orders/{id}/cancel".into(),
+                        ..Default::default()
+                    },
+                    Route {
+                        name: "c".into(),
+                        path: "/files/*".into(),
+                        ..Default::default()
+                    },
+                    Route {
+                        name: "d".into(),
+                        path: "/".into(),
+                        ..Default::default()
+                    },
                 ],
                 ..Default::default()
             }],
@@ -663,7 +714,10 @@ mod tests {
         assert_eq!(e.matches("POST", b"/v1/charges").0.unwrap().name, "a");
         assert!(e.matches("GET", b"/v1/charges").0.is_none());
         let (r, v) = e.matches("GET", b"/v1/orders/9/cancel");
-        assert_eq!((r.unwrap().name.as_str(), v), ("b", vec![("id".to_string(), b"9".to_vec())]));
+        assert_eq!(
+            (r.unwrap().name.as_str(), v),
+            ("b", vec![("id".to_string(), b"9".to_vec())])
+        );
         assert_eq!(e.matches("GET", b"/files/x/y").0.unwrap().name, "c");
         assert_eq!(e.matches("GET", b"/").0.unwrap().name, "d");
         assert_eq!(e.routes[0].status, 200);

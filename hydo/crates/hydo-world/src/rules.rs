@@ -327,8 +327,14 @@ mod tests {
         ] {
             assert!(Rule::parse(9, bad).is_err(), "{bad}: no error");
         }
-        assert_eq!(Rule::parse(9, "payments@0-1:frob").unwrap_err(), "unknown rule \"frob\"");
-        assert_eq!(Rule::parse(9, "p@0-1:delay=x").unwrap_err(), "delay=\"x\" is not a number");
+        assert_eq!(
+            Rule::parse(9, "payments@0-1:frob").unwrap_err(),
+            "unknown rule \"frob\""
+        );
+        assert_eq!(
+            Rule::parse(9, "p@0-1:delay=x").unwrap_err(),
+            "delay=\"x\" is not a number"
+        );
         let r = Rule::parse(5, "orders.place@0-30:drop,call=8-9,rpc=Place,reset=conn").unwrap();
         let x = r.ext.as_ref().unwrap();
         assert!(x.call_lo == 8 && x.call_hi == 9 && x.rpc == "Place" && x.conn);
@@ -343,10 +349,19 @@ mod tests {
     fn fires_deterministic() {
         let seq = |tok: &str| {
             let r = Rule::parse(1, tok).unwrap();
-            (0..64).map(|_| if r.fires() { '1' } else { '0' }).collect::<String>()
+            (0..64)
+                .map(|_| if r.fires() { '1' } else { '0' })
+                .collect::<String>()
         };
-        let (a, b, c) = (seq("x@0-1:drop,p=50"), seq("x@0-1:drop,p=50"), seq("x@1-2:drop,p=50"));
-        assert!(a == b && a != c && a.contains('1') && a.contains('0'), "a={a} b={b} c={c}");
+        let (a, b, c) = (
+            seq("x@0-1:drop,p=50"),
+            seq("x@0-1:drop,p=50"),
+            seq("x@1-2:drop,p=50"),
+        );
+        assert!(
+            a == b && a != c && a.contains('1') && a.contains('0'),
+            "a={a} b={b} c={c}"
+        );
         assert!(!seq("x@0-1:drop").contains('0'));
     }
 
@@ -354,10 +369,22 @@ mod tests {
     #[test]
     fn like_go() {
         for (tok, want) in [
-            ("x@0-1:drop,p=50", "1011110011000101011010001110010000011110"),
-            ("payments.charge@6-9:reset,p=50", "0101010010010010100100001010011010101001"),
-            ("orders.place@10-13:drop", "1111111111111111111111111111111111111111"),
-            ("a@0-1:status=500,p=7,seed=3", "0000000000100000011100001000000010000000"),
+            (
+                "x@0-1:drop,p=50",
+                "1011110011000101011010001110010000011110",
+            ),
+            (
+                "payments.charge@6-9:reset,p=50",
+                "0101010010010010100100001010011010101001",
+            ),
+            (
+                "orders.place@10-13:drop",
+                "1111111111111111111111111111111111111111",
+            ),
+            (
+                "a@0-1:status=500,p=7,seed=3",
+                "0000000000100000011100001000000010000000",
+            ),
         ] {
             let r = Rule::parse(1, tok).unwrap();
             let got: String = (0..40).map(|_| if r.fires() { '1' } else { '0' }).collect();

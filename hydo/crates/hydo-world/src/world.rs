@@ -63,7 +63,12 @@ pub fn kv(k: &str, v: &[u8]) -> String {
 impl St {
     pub fn record(&mut self, kind: &str, fields: &[String]) -> i64 {
         self.seq += 1;
-        let line = format!("seq={} t={} kind={kind} {}\n", self.seq, unix_milli(), fields.join(" "));
+        let line = format!(
+            "seq={} t={} kind={kind} {}\n",
+            self.seq,
+            unix_milli(),
+            fields.join(" ")
+        );
         self.write_log(line.as_bytes());
         self.seq
     }
@@ -88,7 +93,13 @@ impl St {
 
     /// The first active rule for a gRPC call (like request_rule, with the gRPC filters). Every
     /// rule whose target, route, rpc= and call= fit is rolled, in order.
-    pub fn grpc_rule(&self, ep: &str, route: &str, path: &[u8], call: i64) -> Option<(Arc<Rule>, GrpcExt)> {
+    pub fn grpc_rule(
+        &self,
+        ep: &str,
+        route: &str,
+        path: &[u8],
+        call: i64,
+    ) -> Option<(Arc<Rule>, GrpcExt)> {
         let mut hit = None;
         for r in &self.rules {
             let x = r.ext.as_ref();
@@ -96,7 +107,9 @@ impl St {
                 continue;
             }
             if let Some(x) = x {
-                if !rpc_match(&x.rpc, path) || (x.call_lo > 0 && (call < x.call_lo || call > x.call_hi)) {
+                if !rpc_match(&x.rpc, path)
+                    || (x.call_lo > 0 && (call < x.call_lo || call > x.call_hi))
+                {
                     continue;
                 }
             }
@@ -133,7 +146,10 @@ pub fn parse_record(ln: &[u8]) -> Option<Rec> {
         return None;
     }
     let mut m = Rec::new();
-    for f in ln.split(|c| c.is_ascii_whitespace()).filter(|f| !f.is_empty()) {
+    for f in ln
+        .split(|c| c.is_ascii_whitespace())
+        .filter(|f| !f.is_empty())
+    {
         let (k, v) = match f.iter().position(|&c| c == b'=') {
             Some(p) => (&f[..p], &f[p + 1..]),
             None => (f, &b""[..]),
@@ -190,7 +206,15 @@ impl World {
     }
 
     /// The webhook(s) an effect on rt triggers, with the webhook rules applied. Lock held.
-    pub fn new_hooks(self: &Arc<Self>, st: &mut St, ep: usize, rt: usize, r#ref: &[u8], idem: &[u8], src: i64) {
+    pub fn new_hooks(
+        self: &Arc<Self>,
+        st: &mut St,
+        ep: usize,
+        rt: usize,
+        r#ref: &[u8],
+        idem: &[u8],
+        src: i64,
+    ) {
         let e = &self.cfg.fakes[ep];
         let route = &e.routes[rt];
         let mut h = Hook {
@@ -300,7 +324,6 @@ impl World {
                 if http1::hget(&hs, "Content-Type").is_none_or(<[u8]>::is_empty) {
                     http1::hset(&mut hs, "Content-Type", b"application/json".to_vec());
                 }
-                http1::hset(&mut hs, "User-Agent", b"hydo-world".to_vec());
                 let req = http1::Req {
                     method: &wh.method,
                     host: &host,
@@ -377,7 +400,9 @@ impl World {
                 let Some(e) = self.cfg.endpoint(&r.target) else {
                     return format!("error: no fake or proxy {}\n", r.target).into_bytes();
                 };
-                if GrpcExt::grpc_only(r.ext.as_ref()) && !(e.kind == "proxy" && e.protocol == "grpc") {
+                if GrpcExt::grpc_only(r.ext.as_ref())
+                    && !(e.kind == "proxy" && e.protocol == "grpc")
+                {
                     return format!(
                         "error: rpc=, call=, cut=, hold=, dir= and reset=conn need a gRPC proxy ({} is not one)\n",
                         r.target
@@ -427,7 +452,12 @@ impl World {
                 }
                 let n = st.record(
                     "event",
-                    &[kv("ep", b"-"), kv("route", &unesc(f[1])), kv("ref", &unesc(f[2])), "fx=1".into()],
+                    &[
+                        kv("ep", b"-"),
+                        kv("route", &unesc(f[1])),
+                        kv("ref", &unesc(f[2])),
+                        "fx=1".into(),
+                    ],
                 );
                 format!("ok {n}\n").into_bytes()
             }
@@ -490,17 +520,25 @@ impl World {
         let b = std::fs::read(path).map_err(|e| crate::goish::path_err("open", path, &e))?;
         let mut st = self.lock();
         let mut hooks = Vec::new();
-        for tok in b.split(|c| c.is_ascii_whitespace()).filter(|t| !t.is_empty()) {
+        for tok in b
+            .split(|c| c.is_ascii_whitespace())
+            .filter(|t| !t.is_empty())
+        {
             if tok == b"w:trunc" {
                 st.trunc = true;
                 continue;
             }
-            let Some(body) = tok.strip_prefix(b"w:") else { continue };
+            let Some(body) = tok.strip_prefix(b"w:") else {
+                continue;
+            };
             let f: Vec<&[u8]> = body.split(|&c| c == b',').collect();
             if f.len() != 6 {
                 continue;
             }
-            let seq = std::str::from_utf8(f[0]).ok().and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
+            let seq = std::str::from_utf8(f[0])
+                .ok()
+                .and_then(|s| s.parse::<i64>().ok())
+                .unwrap_or(0);
             let (ep, route, r#ref, idem) = (unesc(f[2]), unesc(f[3]), unesc(f[4]), unesc(f[5]));
             if seq > st.seq {
                 st.seq = seq;
@@ -536,12 +574,18 @@ impl World {
                     let epn = String::from_utf8_lossy(&ep);
                     let rn = String::from_utf8_lossy(&route);
                     // the first endpoint of that name (Go: cfg.endpoint), a fake with that route
-                    let Some(e) = self.cfg.endpoint(&epn) else { continue };
-                    let Some(ri) = e.routes.iter().position(|r| r.name == rn) else { continue };
+                    let Some(e) = self.cfg.endpoint(&epn) else {
+                        continue;
+                    };
+                    let Some(ri) = e.routes.iter().position(|r| r.name == rn) else {
+                        continue;
+                    };
                     if e.routes[ri].webhook.is_none() {
                         continue;
                     }
-                    let Some(ei) = self.fake_index(e) else { continue };
+                    let Some(ei) = self.fake_index(e) else {
+                        continue;
+                    };
                     st.hook_n += 1;
                     hooks.push(Hook {
                         id: st.hook_n,
@@ -618,7 +662,13 @@ impl World {
                     b" ".to_vec(),
                     g("out"),
                 ],
-                b"event" => vec![g("seq"), b" event ".to_vec(), g("route"), b" ref=".to_vec(), e("ref")],
+                b"event" => vec![
+                    g("seq"),
+                    b" event ".to_vec(),
+                    g("route"),
+                    b" ref=".to_vec(),
+                    e("ref"),
+                ],
                 b"call" => vec![crate::grpc::call_summary(&r)],
                 _ => vec![],
             };
@@ -678,7 +728,10 @@ mod tests {
     /// order, and remembers the idempotency keys.
     #[test]
     fn carry_round_trip() {
-        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
         rt.block_on(async {
             let dir = tmpdir("carry");
             let w = test_world(&dir);
@@ -717,7 +770,16 @@ mod tests {
         let dir = tmpdir("long");
         let w = test_world(&dir);
         for i in 0..200 {
-            w.lock().record("req", &[kv("ep", b"payments"), kv("route", b"charge"), kv("ref", format!("order-{i}").as_bytes()), "fx=1".into(), "out=ok".into()]);
+            w.lock().record(
+                "req",
+                &[
+                    kv("ep", b"payments"),
+                    kv("route", b"charge"),
+                    kv("ref", format!("order-{i}").as_bytes()),
+                    "fx=1".into(),
+                    "out=ok".into(),
+                ],
+            );
         }
         assert_eq!(w.carry(&w.lock()), "w:trunc\nEND\n");
     }

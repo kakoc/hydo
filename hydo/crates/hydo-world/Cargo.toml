@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 serde_json = { workspace = true }
 sha2 = { workspace = true }
+flate2 = { workspace = true }
 libc = "0.2"
 bytes = "1"
 http = "1"

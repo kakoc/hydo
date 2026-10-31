@@ -213,7 +213,10 @@ mod tests {
             assert_eq!(wait(&mut Never, None, &[&l]).await, End::Latch);
             assert_eq!(wait(&mut Never, None, &[&l]).await, End::Latch); // stays fired
             let m = Latch::new();
-            assert_eq!(wait(&mut Never, Some(Duration::from_millis(5)), &[&m]).await, End::Timer);
+            assert_eq!(
+                wait(&mut Never, Some(Duration::from_millis(5)), &[&m]).await,
+                End::Timer
+            );
         });
     }
 }

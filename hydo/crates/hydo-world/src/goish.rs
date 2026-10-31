@@ -89,9 +89,9 @@ pub fn quote(s: &str) -> String {
 /// Go's `textproto.CanonicalMIMEHeaderKey`: "content-type" -> "Content-Type". A key with a byte
 /// that is not a token character is returned unchanged.
 pub fn canonical_key(k: &str) -> String {
-    let ok = k.bytes().all(|c| {
-        c.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&c)
-    });
+    let ok = k
+        .bytes()
+        .all(|c| c.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&c));
     if !ok {
         return k.to_string();
     }
@@ -256,9 +256,12 @@ pub fn unescape(s: &[u8], query: bool) -> Option<Vec<u8>> {
     Some(out)
 }
 
+/// Query pairs (key, value), in order.
+pub type Pairs = Vec<(Vec<u8>, Vec<u8>)>;
+
 /// `url.ParseQuery`: the values by key, in order, and whether any pair was bad (a ';' in it or a
 /// bad escape; such a pair is skipped, as in Go).
-pub fn parse_query(q: &[u8]) -> (Vec<(Vec<u8>, Vec<u8>)>, bool) {
+pub fn parse_query(q: &[u8]) -> (Pairs, bool) {
     let mut out = Vec::new();
     let mut bad = false;
     for part in q.split(|&c| c == b'&') {

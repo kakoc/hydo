@@ -29,7 +29,11 @@ impl Rewind {
 }
 
 impl AsyncRead for Rewind {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
         if self.pos < self.pre.len() {
             let n = (self.pre.len() - self.pos).min(buf.remaining());
             let p = self.pos;
@@ -42,7 +46,11 @@ impl AsyncRead for Rewind {
 }
 
 impl AsyncWrite for Rewind {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, b: &[u8]) -> Poll<io::Result<usize>> {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        b: &[u8],
+    ) -> Poll<io::Result<usize>> {
         Pin::new(&mut self.io).poll_write(cx, b)
     }
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
@@ -127,7 +135,11 @@ pub fn head(status: u16, h: &Hdrs, body: Option<&[u8]>, head_req: bool) -> http:
 }
 
 /// Send all of data, waiting for the peer's flow-control window.
-pub async fn send_all(s: &mut SendStream<Bytes>, mut data: Bytes, eos: bool) -> Result<(), h2::Error> {
+pub async fn send_all(
+    s: &mut SendStream<Bytes>,
+    mut data: Bytes,
+    eos: bool,
+) -> Result<(), h2::Error> {
     if data.is_empty() {
         return s.send_data(data, eos);
     }
@@ -151,11 +163,17 @@ pub async fn write_answer(mut respond: SendResponse<Bytes>, a: Answer, head_req:
     let status = if a.status == 0 { 200 } else { a.status };
     let end = (a.trailers.is_empty() && a.body.is_empty()) || head_req;
     let resp = head(status, &a.headers, Some(&a.body), head_req);
-    let Ok(mut s) = respond.send_response(resp, end) else { return };
+    let Ok(mut s) = respond.send_response(resp, end) else {
+        return;
+    };
     if end {
         return;
     }
-    if !a.body.is_empty() && send_all(&mut s, Bytes::from(a.body), a.trailers.is_empty()).await.is_err() {
+    if !a.body.is_empty()
+        && send_all(&mut s, Bytes::from(a.body), a.trailers.is_empty())
+            .await
+            .is_err()
+    {
         return;
     }
     if !a.trailers.is_empty() {
@@ -167,15 +185,6 @@ pub async fn write_answer(mut respond: SendResponse<Bytes>, a: Answer, head_req:
 pub struct RespGone<'a>(pub &'a mut SendResponse<Bytes>);
 
 impl Gone for RespGone<'_> {
-    fn poll_gone(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        self.0.poll_reset(cx).map(|_| ())
-    }
-}
-
-/// The same after the headers were sent.
-pub struct StreamGone<'a>(pub &'a mut SendStream<Bytes>);
-
-impl Gone for StreamGone<'_> {
     fn poll_gone(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         self.0.poll_reset(cx).map(|_| ())
     }

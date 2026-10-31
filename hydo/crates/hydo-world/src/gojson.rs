@@ -356,8 +356,8 @@ mod tests {
 
     #[test]
     fn objects() {
-        let m = parse_object(br#"{"order":"o7","n":{"amount":12.5},"a":[1,"x"],"b":true}"#)
-            .unwrap();
+        let m =
+            parse_object(br#"{"order":"o7","n":{"amount":12.5},"a":[1,"x"],"b":true}"#).unwrap();
         assert_eq!(m["order"], J::Str("o7".into()));
         assert_eq!(marshal(&m["n"]), r#"{"amount":12.5}"#);
         assert_eq!(marshal(&m["a"]), r#"[1,"x"]"#);
@@ -366,10 +366,11 @@ mod tests {
         assert!(parse_object(b"{\"a\":01}").is_none());
         assert!(parse_object(b" {\"a\":1}\n").is_some());
         assert!(parse_object(b"null").is_none());
-        let m = parse_object(br#"{"a":1e400,"b":"😀\ud800x","c":"<&>"}"#).unwrap();
+        let m = parse_object(b"{\"a\":1e400,\"b\":\"\xf0\x9f\x98\x80\\ud800x\",\"c\":\"<&>\"}")
+            .unwrap();
         assert_eq!(m["a"], J::Null);
         assert_eq!(m["b"], J::Str("\u{1f600}\u{fffd}x".into()));
-        assert_eq!(marshal(&m["c"]), r#""<&>""#);
+        assert_eq!(marshal(&m["c"]), r#""\u003c\u0026\u003e""#); // Go escapes HTML characters
         let m = parse_object(b"{\"a\":\"\xe2\x82x\"}").unwrap();
         assert_eq!(m["a"], J::Str("\u{fffd}\u{fffd}x".into()));
     }

@@ -227,13 +227,6 @@ impl Conn {
         Ok(body)
     }
 
-    pub fn peer_ip(&self) -> String {
-        self.rd
-            .peer_addr()
-            .map(|a| a.ip().to_string())
-            .unwrap_or_default()
-    }
-
     pub async fn write(&mut self, b: &[u8]) -> io::Result<()> {
         self.wr.write_all(b).await
     }
@@ -303,11 +296,29 @@ pub fn sniff(b: &[u8]) -> &'static str {
     }
     let ws = &b[i..b.len().min(i + 512)];
     const HTML: [&[u8]; 17] = [
-        b"<!DOCTYPE HTML", b"<HTML", b"<HEAD", b"<SCRIPT", b"<IFRAME", b"<H1", b"<DIV", b"<FONT",
-        b"<TABLE", b"<A", b"<STYLE", b"<TITLE", b"<B", b"<BODY", b"<BR", b"<P", b"<!--",
+        b"<!DOCTYPE HTML",
+        b"<HTML",
+        b"<HEAD",
+        b"<SCRIPT",
+        b"<IFRAME",
+        b"<H1",
+        b"<DIV",
+        b"<FONT",
+        b"<TABLE",
+        b"<A",
+        b"<STYLE",
+        b"<TITLE",
+        b"<B",
+        b"<BODY",
+        b"<BR",
+        b"<P",
+        b"<!--",
     ];
     for p in HTML {
-        if ws.len() > p.len() && ws[..p.len()].eq_ignore_ascii_case(p) && matches!(ws[p.len()], b' ' | b'>') {
+        if ws.len() > p.len()
+            && ws[..p.len()].eq_ignore_ascii_case(p)
+            && matches!(ws[p.len()], b' ' | b'>')
+        {
             return "text/html; charset=utf-8";
         }
     }
@@ -339,7 +350,9 @@ pub fn sniff(b: &[u8]) -> &'static str {
     if d.starts_with(b"\xFF\xFE") {
         return "text/plain; charset=utf-16le";
     }
-    if d.iter().any(|&c| c <= 0x08 || c == 0x0B || (0x0E..=0x1A).contains(&c) || (0x1C..=0x1F).contains(&c)) {
+    if d.iter().any(|&c| {
+        c <= 0x08 || c == 0x0B || (0x0E..=0x1A).contains(&c) || (0x1C..=0x1F).contains(&c)
+    }) {
         return "application/octet-stream";
     }
     "text/plain; charset=utf-8"
@@ -351,8 +364,16 @@ pub fn error_answer(msg: &str, code: u16) -> Answer {
         status: code,
         ..Default::default()
     };
-    hset(&mut a.headers, "Content-Type", b"text/plain; charset=utf-8".to_vec());
-    hset(&mut a.headers, "X-Content-Type-Options", b"nosniff".to_vec());
+    hset(
+        &mut a.headers,
+        "Content-Type",
+        b"text/plain; charset=utf-8".to_vec(),
+    );
+    hset(
+        &mut a.headers,
+        "X-Content-Type-Options",
+        b"nosniff".to_vec(),
+    );
     a.body = format!("{msg}\n").into_bytes();
     a
 }
@@ -382,7 +403,10 @@ pub fn answer_bytes(a: &Answer, head: &Head, close: bool) -> Vec<u8> {
     for (k, v) in hs {
         out.extend_from_slice(k.as_bytes());
         out.extend_from_slice(b": ");
-        out.extend(v.iter().map(|&c| if c == b'\r' || c == b'\n' { b' ' } else { c }));
+        out.extend(
+            v.iter()
+                .map(|&c| if c == b'\r' || c == b'\n' { b' ' } else { c }),
+        );
         out.extend_from_slice(b"\r\n");
     }
     let allowed = goish::body_allowed(status);
@@ -465,7 +489,10 @@ pub async fn dial(host: &str) -> Result<TcpStream, String> {
             rt::tune(s.as_raw_fd());
             Ok(s)
         }
-        Err(e) => Err(format!("dial tcp {host}: connect: {}", goish::errno_text(&e))),
+        Err(e) => Err(format!(
+            "dial tcp {host}: connect: {}",
+            goish::errno_text(&e)
+        )),
     }
 }
 
@@ -473,10 +500,13 @@ fn shall_send_length(method: &str, n: usize) -> bool {
     n > 0 || matches!(method, "POST" | "PUT" | "PATCH")
 }
 
-/// Write the request, read the answer's head and (if `body`) its body.
-pub async fn roundtrip(r: &Req<'_>, body: bool) -> Result<Resp, String> {
-    let s = dial(r.host).await?;
-    let mut c = Conn::new(s);
+/// What Go's HTTP/1 transport sends when the request has no User-Agent header.
+const GO_USER_AGENT: &[u8] = b"Go-http-client/1.1";
+
+/// The request as Go's transport writes it (`Request.write` with `DisableKeepAlives`): the
+/// request line, Host, User-Agent (Go's default unless the request has the key), Content-Length,
+/// the other headers sorted by key, then the transport's own Accept-Encoding and Connection.
+fn request_bytes(r: &Req<'_>, gzip: bool) -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(r.method.as_bytes());
     out.push(b' ');
@@ -484,7 +514,11 @@ pub async fn roundtrip(r: &Req<'_>, body: bool) -> Result<Resp, String> {
     out.extend_from_slice(b" HTTP/1.1\r\nHost: ");
     out.extend_from_slice(r.host.as_bytes());
     out.extend_from_slice(b"\r\n");
-    if let Some(ua) = hget(r.headers, "User-Agent") {
+    let ua = match r.headers.iter().find(|(k, _)| k == "User-Agent") {
+        Some((_, v)) => v.as_slice(),
+        None => GO_USER_AGENT,
+    };
+    if !ua.is_empty() {
         out.extend_from_slice(b"User-Agent: ");
         out.extend_from_slice(ua);
         out.extend_from_slice(b"\r\n");
@@ -492,27 +526,97 @@ pub async fn roundtrip(r: &Req<'_>, body: bool) -> Result<Resp, String> {
     if shall_send_length(r.method, r.body.len()) {
         out.extend_from_slice(format!("Content-Length: {}\r\n", r.body.len()).as_bytes());
     }
-    out.extend_from_slice(b"Connection: close\r\n");
     let mut hs: Vec<&(String, Vec<u8>)> = r
         .headers
         .iter()
         .filter(|(k, _)| {
             !matches!(
                 k.as_str(),
-                "Host" | "User-Agent" | "Content-Length" | "Transfer-Encoding" | "Trailer" | "Connection"
+                "Host" | "User-Agent" | "Content-Length" | "Transfer-Encoding" | "Trailer"
             )
         })
         .collect();
-    hs.sort_by(|x, y| x.0.cmp(&y.0));
+    hs.sort_by(|x, y| x.0.cmp(&y.0)); // stable: the values of one key keep their order
     for (k, v) in hs {
         out.extend_from_slice(k.as_bytes());
         out.extend_from_slice(b": ");
         out.extend_from_slice(v);
         out.extend_from_slice(b"\r\n");
     }
+    if gzip {
+        out.extend_from_slice(b"Accept-Encoding: gzip\r\n");
+    }
+    let close = hget(r.headers, "Connection").is_some_and(|v| {
+        v.split(|&c| c == b',')
+            .any(|t| trim(t).eq_ignore_ascii_case(b"close"))
+    });
+    if !close {
+        out.extend_from_slice(b"Connection: close\r\n");
+    }
     out.extend_from_slice(b"\r\n");
     out.extend_from_slice(r.body);
-    c.write(&out).await.map_err(|e| goish::errno_text(&e))?;
+    out
+}
+
+/// Go's transport asks for gzip itself unless the request chose an encoding or a range (and
+/// then unpacks the answer, `Response.Uncompressed`).
+fn wants_gzip(r: &Req<'_>) -> bool {
+    hget(r.headers, "Accept-Encoding").is_none_or(<[u8]>::is_empty)
+        && hget(r.headers, "Range").is_none_or(<[u8]>::is_empty)
+        && r.method != "HEAD"
+}
+
+/// Write the request, read the answer's head and (if `body`) its body. As with Go's
+/// `Client.Do` + `io.ReadAll`, an error before the answer's head is `<Method> "<url>": <why>`,
+/// an error in the body is the bare reason.
+pub async fn roundtrip(r: &Req<'_>, body: bool) -> Result<Resp, String> {
+    let url = format!(
+        "http://{}{}",
+        r.host,
+        String::from_utf8_lossy(if r.target.is_empty() { b"/" } else { r.target })
+    );
+    let gzip = wants_gzip(r);
+    let (mut c, mut rs) = head(r, gzip)
+        .await
+        .map_err(|why| url_err(r.method, &url, &why))?;
+    if !body || r.method == "HEAD" || !goish::body_allowed(rs.status) {
+        return Ok(rs);
+    }
+    read_resp_body(&mut c, &mut rs).await?;
+    if gzip
+        && hget(&rs.headers, "Content-Encoding").is_some_and(|v| v.eq_ignore_ascii_case(b"gzip"))
+    {
+        hdel(&mut rs.headers, "Content-Encoding");
+        hdel(&mut rs.headers, "Content-Length");
+        rs.body = gunzip(&rs.body)?;
+    }
+    Ok(rs)
+}
+
+/// Go's `gzip.Reader` (several members in a row are one stream).
+fn gunzip(b: &[u8]) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    if b.len() < 10 || b[0] != 0x1f || b[1] != 0x8b || b[2] != 8 {
+        return Err(if b.is_empty() {
+            "EOF"
+        } else {
+            "gzip: invalid header"
+        }
+        .into());
+    }
+    let mut out = Vec::new();
+    flate2::read::MultiGzDecoder::new(b)
+        .read_to_end(&mut out)
+        .map_err(|_| "unexpected EOF".to_string())?;
+    Ok(out)
+}
+
+async fn head(r: &Req<'_>, gzip: bool) -> Result<(Conn, Resp), String> {
+    let s = dial(r.host).await?;
+    let mut c = Conn::new(s);
+    c.write(&request_bytes(r, gzip))
+        .await
+        .map_err(|e| goish::errno_text(&e))?;
     loop {
         let (status, headers, consumed) = loop {
             let mut hs = [httparse::EMPTY_HEADER; 256];
@@ -523,7 +627,11 @@ pub async fn roundtrip(r: &Req<'_>, body: bool) -> Result<Resp, String> {
                 }
                 Ok(httparse::Status::Partial) => {
                     if c.eof {
-                        return Err(if c.buf.is_empty() { "EOF".into() } else { "unexpected EOF".into() });
+                        return Err(if c.buf.is_empty() {
+                            "EOF".into()
+                        } else {
+                            "unexpected EOF".into()
+                        });
                     }
                     if c.fill().await.map_err(|e| goish::errno_text(&e))? == 0 && c.buf.is_empty() {
                         return Err("EOF".into());
@@ -536,76 +644,81 @@ pub async fn roundtrip(r: &Req<'_>, body: bool) -> Result<Resp, String> {
         if (100..200).contains(&status) && status != 101 {
             continue; // 100 Continue and other informational answers
         }
-        let mut rs = Resp {
+        let rs = Resp {
             status,
             headers,
             ..Default::default()
         };
-        if !body || r.method == "HEAD" || !goish::body_allowed(status) {
-            return Ok(rs);
-        }
-        let te = hget(&rs.headers, "Transfer-Encoding").map(|v| v.to_ascii_lowercase());
-        if te.as_deref() == Some(b"chunked") {
-            loop {
-                let l = c.line().await.map_err(|_| "unexpected EOF".to_string())?;
-                let sz = l.split(|&x| x == b';').next().unwrap_or(&[]);
-                let n = std::str::from_utf8(trim(sz))
-                    .ok()
-                    .and_then(|s| usize::from_str_radix(s, 16).ok())
-                    .ok_or("malformed chunked encoding")?;
-                if n == 0 {
-                    loop {
-                        let t = c.line().await.map_err(|_| "unexpected EOF".to_string())?;
-                        if t.is_empty() {
-                            break;
-                        }
-                        if let Some(p) = t.iter().position(|&x| x == b':') {
-                            let k = String::from_utf8_lossy(&t[..p]).into_owned();
-                            hadd(&mut rs.trailers, &k, trim(&t[p + 1..]).to_vec());
-                        }
-                    }
-                    hdel(&mut rs.headers, "Transfer-Encoding");
-                    return Ok(rs);
-                }
-                c.need(n + 2).await.map_err(|_| "unexpected EOF".to_string())?;
-                rs.body.extend(c.buf.drain(..n));
-                c.buf.drain(..2);
-            }
-        }
-        match hget(&rs.headers, "Content-Length")
-            .and_then(|v| std::str::from_utf8(v).ok())
-            .and_then(|s| s.trim().parse::<usize>().ok())
-        {
-            Some(n) => {
-                c.need(n).await.map_err(|_| "unexpected EOF".to_string())?;
-                rs.body = c.buf.drain(..n).collect();
-            }
-            None => loop {
-                rs.body.append(&mut c.buf);
-                if c.eof || c.fill().await.map_err(|e| goish::errno_text(&e))? == 0 {
-                    rs.body.append(&mut c.buf);
-                    break;
-                }
-            },
-        }
-        return Ok(rs);
+        return Ok((c, rs));
     }
+}
+
+async fn read_resp_body(c: &mut Conn, rs: &mut Resp) -> Result<(), String> {
+    let te = hget(&rs.headers, "Transfer-Encoding").map(|v| v.to_ascii_lowercase());
+    if te.as_deref() == Some(b"chunked") {
+        loop {
+            let l = c.line().await.map_err(|_| "unexpected EOF".to_string())?;
+            let sz = l.split(|&x| x == b';').next().unwrap_or(&[]);
+            let n = std::str::from_utf8(trim(sz))
+                .ok()
+                .and_then(|s| usize::from_str_radix(s, 16).ok())
+                .ok_or("malformed chunked encoding")?;
+            if n == 0 {
+                loop {
+                    let t = c.line().await.map_err(|_| "unexpected EOF".to_string())?;
+                    if t.is_empty() {
+                        break;
+                    }
+                    if let Some(p) = t.iter().position(|&x| x == b':') {
+                        let k = String::from_utf8_lossy(&t[..p]).into_owned();
+                        hadd(&mut rs.trailers, &k, trim(&t[p + 1..]).to_vec());
+                    }
+                }
+                hdel(&mut rs.headers, "Transfer-Encoding");
+                return Ok(());
+            }
+            c.need(n + 2)
+                .await
+                .map_err(|_| "unexpected EOF".to_string())?;
+            rs.body.extend(c.buf.drain(..n));
+            c.buf.drain(..2);
+        }
+    }
+    match hget(&rs.headers, "Content-Length")
+        .and_then(|v| std::str::from_utf8(v).ok())
+        .and_then(|s| s.trim().parse::<usize>().ok())
+    {
+        Some(n) => {
+            c.need(n).await.map_err(|_| "unexpected EOF".to_string())?;
+            rs.body = c.buf.drain(..n).collect();
+        }
+        None => loop {
+            rs.body.append(&mut c.buf);
+            if c.eof || c.fill().await.map_err(|e| goish::errno_text(&e))? == 0 {
+                rs.body.append(&mut c.buf);
+                break;
+            }
+        },
+    }
+    Ok(())
 }
 
 /// `roundtrip` bounded by the client's timeout (Go: `Client.Timeout`).
 pub async fn roundtrip_timeout(r: &Req<'_>, body: bool, t: Duration) -> Result<Resp, String> {
     match tokio::time::timeout(t, roundtrip(r, body)).await {
         Ok(x) => x,
-        Err(_) => Err("context deadline exceeded (Client.Timeout exceeded while awaiting headers)".into()),
+        Err(_) => {
+            Err("context deadline exceeded (Client.Timeout exceeded while awaiting headers)".into())
+        }
     }
 }
 
 /// Split an http:// URL into host:port and the request target.
 pub fn split_url(u: &[u8]) -> Option<(String, Vec<u8>)> {
     let s = std::str::from_utf8(u).ok()?;
-    let rest = s.strip_prefix("http://").or_else(|| {
-        (s.len() > 7 && s[..7].eq_ignore_ascii_case("http://")).then(|| &s[7..])
-    })?;
+    let rest = s
+        .strip_prefix("http://")
+        .or_else(|| (s.len() > 7 && s[..7].eq_ignore_ascii_case("http://")).then(|| &s[7..]))?;
     let (auth, path) = match rest.find(['/', '?', '#']) {
         Some(p) => (&rest[..p], &rest[p..]),
         None => (rest, ""),
@@ -643,9 +756,15 @@ mod tests {
             split_url(b"http://127.0.0.1:8080/webhooks/payments"),
             Some(("127.0.0.1:8080".into(), b"/webhooks/payments".to_vec()))
         );
-        assert_eq!(split_url(b"http://shop?a=1"), Some(("shop:80".into(), b"/?a=1".to_vec())));
+        assert_eq!(
+            split_url(b"http://shop?a=1"),
+            Some(("shop:80".into(), b"/?a=1".to_vec()))
+        );
         assert_eq!(split_url(b"https://x/"), None);
-        assert_eq!(url_err("POST", "http://x/", "EOF"), "Post \"http://x/\": EOF");
+        assert_eq!(
+            url_err("POST", "http://x/", "EOF"),
+            "Post \"http://x/\": EOF"
+        );
     }
 
     #[test]

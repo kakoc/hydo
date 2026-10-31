@@ -55,7 +55,10 @@ pub fn ctl_main(args: &[Vec<u8>]) -> i32 {
     let mut c = match UnixStream::connect(&p) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("hydo-world ctl: dial unix {p}: connect: {}", goish::errno_text(&e));
+            eprintln!(
+                "hydo-world ctl: dial unix {p}: connect: {}",
+                goish::errno_text(&e)
+            );
             return 1;
         }
     };
@@ -99,7 +102,10 @@ fn read_log() -> Result<(Vec<Rec>, bool), String> {
 }
 
 fn atoi(s: &[u8]) -> i64 {
-    std::str::from_utf8(s).ok().and_then(|s| s.parse().ok()).unwrap_or(0)
+    std::str::from_utf8(s)
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0)
 }
 
 fn say(code: i32, msg: &[u8]) -> i32 {
@@ -146,7 +152,10 @@ fn acked_refs(file: &[u8], format: &[u8]) -> Result<Vec<Vec<u8>>, String> {
     let b = std::fs::read(&f).map_err(|e| goish::path_err("open", &f, &e))?;
     let mut out = Vec::new();
     let mut seen = BTreeSet::new();
-    for id in b.split(|c| c.is_ascii_whitespace()).filter(|t| !t.is_empty()) {
+    for id in b
+        .split(|c| c.is_ascii_whitespace())
+        .filter(|t| !t.is_empty())
+    {
         if id.starts_with(b"w:") || id.contains(&b'=') || seen.contains(id) {
             continue;
         }
@@ -157,7 +166,10 @@ fn acked_refs(file: &[u8], format: &[u8]) -> Result<Vec<Vec<u8>>, String> {
 }
 
 fn join_ints(s: &[i64]) -> String {
-    s.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",")
+    s.iter()
+        .map(|x| x.to_string())
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 pub fn check_main(args: &[Vec<u8>]) -> i32 {
@@ -168,10 +180,15 @@ pub fn check_main(args: &[Vec<u8>]) -> i32 {
     let mut opt: BTreeMap<&[u8], Vec<u8>> = BTreeMap::new();
     opt.insert(b"--by", b"ref".to_vec());
     opt.insert(b"--ref", b"{id}".to_vec());
-    opt.insert(b"--acked", std::env::var_os("HYDO_ACKED").map(|v| {
-        use std::os::unix::ffi::OsStrExt;
-        v.as_bytes().to_vec()
-    }).unwrap_or_default());
+    opt.insert(
+        b"--acked",
+        std::env::var_os("HYDO_ACKED")
+            .map(|v| {
+                use std::os::unix::ffi::OsStrExt;
+                v.as_bytes().to_vec()
+            })
+            .unwrap_or_default(),
+    );
     opt.insert(b"--after", Vec::new());
     opt.insert(b"--unless", Vec::new());
     let mut i = 2;
@@ -186,7 +203,12 @@ pub fn check_main(args: &[Vec<u8>]) -> i32 {
     let o = |k: &[u8]| opt[k].clone();
     let (recs, trunc) = match read_log() {
         Ok(x) => x,
-        Err(e) => return say(2, &[target, b": no world log (", e.as_bytes(), b")"].concat()),
+        Err(e) => {
+            return say(
+                2,
+                &[target, b": no world log (", e.as_bytes(), b")"].concat(),
+            )
+        }
     };
     if trunc {
         return say(
@@ -229,7 +251,8 @@ pub fn check_main(args: &[Vec<u8>]) -> i32 {
                         &by,
                         b" ",
                         g,
-                        format!(" took effect {} times (records {})", s.len(), join_ints(s)).as_bytes(),
+                        format!(" took effect {} times (records {})", s.len(), join_ints(s))
+                            .as_bytes(),
                     ]
                     .concat(),
                 ));
@@ -254,23 +277,48 @@ pub fn check_main(args: &[Vec<u8>]) -> i32 {
         }
         for rf in &refs {
             if effects.get(rf).is_none_or(Vec::is_empty) && !exempt.contains(rf) {
-                return say(1, &[target, b": acknowledged ", rf, b" has no effect"].concat());
+                return say(
+                    1,
+                    &[target, b": acknowledged ", rf, b" has no effect"].concat(),
+                );
             }
         }
         say(
             0,
-            &[target, format!(": all {} acknowledged have their effect ({n} effects)", refs.len()).as_bytes()].concat(),
+            &[
+                target,
+                format!(
+                    ": all {} acknowledged have their effect ({n} effects)",
+                    refs.len()
+                )
+                .as_bytes(),
+            ]
+            .concat(),
         )
     };
     match kind {
         b"count" => {
-            return say(0, &[target, format!(": {n} effects, {} refs", order.len()).as_bytes()].concat())
+            return say(
+                0,
+                &[
+                    target,
+                    format!(": {n} effects, {} refs", order.len()).as_bytes(),
+                ]
+                .concat(),
+            )
         }
         b"at-most-once" => {
             if let Some(rc) = at_most_once() {
                 return rc;
             }
-            return say(0, &[target, format!(": {n} effects, every {by_s} at most once").as_bytes()].concat());
+            return say(
+                0,
+                &[
+                    target,
+                    format!(": {n} effects, every {by_s} at most once").as_bytes(),
+                ]
+                .concat(),
+            );
         }
         b"exactly-once" => {
             if let Some(rc) = at_most_once() {
@@ -282,12 +330,17 @@ pub fn check_main(args: &[Vec<u8>]) -> i32 {
         b"none-after" => {
             let after = o(b"--after");
             if after.is_empty() {
-                return say(2, b"check none-after needs --after event:<name> or <ep>.<route>");
+                return say(
+                    2,
+                    b"check none-after needs --after event:<name> or <ep>.<route>",
+                );
             }
             let mut first: BTreeMap<Vec<u8>, i64> = BTreeMap::new();
             for r in &recs {
                 if is_effect(r, &after) && !get(r, "ref").is_empty() {
-                    first.entry(get(r, "ref").to_vec()).or_insert_with(|| atoi(get(r, "seq")));
+                    first
+                        .entry(get(r, "ref").to_vec())
+                        .or_insert_with(|| atoi(get(r, "seq")));
                 }
             }
             for r in &recs {
@@ -312,7 +365,16 @@ pub fn check_main(args: &[Vec<u8>]) -> i32 {
                     }
                 }
             }
-            return say(0, &[target, b": no effect after ", &after, format!(" ({} refs had it)", first.len()).as_bytes()].concat());
+            return say(
+                0,
+                &[
+                    target,
+                    b": no effect after ",
+                    &after,
+                    format!(" ({} refs had it)", first.len()).as_bytes(),
+                ]
+                .concat(),
+            );
         }
         _ => {}
     }
