@@ -54,6 +54,7 @@
 #define HVM_NO_MAIN
 #include "../hvm.c"
 #include "../virtio_int.h"
+#include <ctype.h>
 #include <errno.h>
 #include <libkern/OSCacheControl.h>
 #include <zlib.h>
@@ -471,6 +472,365 @@ static void run_sched(const char *tag, const char *sched, struct xsnap *s1)
 	rw_on = base;
 }
 
+/* ---------------- lock-step control (M119, docs/design/guest-control.md "Explorer API") ----------------
+ * Opt-in: nothing below runs unless the host sends CTRL. The engine types nothing by itself; the
+ * host decides every byte and its exit count, and sees console lines at a fixed cadence.
+ *
+ *   CTRL <tag> [every=<n>] [lines=<prefix>|lines=*] [<host tokens>]   a session from S1
+ *   CTRL <tag> from=<snapshot> [plan=drop]                           a session from a SNAP
+ *
+ * Engine lines while a session runs, in this order, then it waits for the host:
+ *   TYPED <tag> at=<x> req=<at> len=<n>  bytes of a SEND went into the UART receive queue at exit x
+ *   EVENT <tag> at=<x> <escaped line>    a complete console line (filter: lines=, default HYDO-AG),
+ *                                        first seen at the cadence point x (every <n> exits from
+ *                                        the session's origin; default 1 = every exit)
+ *   MATCH <tag> at=<x> <escaped text>    a WATCH text appeared in the session's console, seen at
+ *                                        the cadence point x (the watch is then gone)
+ *   STOP <tag> at=<x>[ end=<why>]        a stop: the session's start, a cadence point with events
+ *                                        or a match, a WAKE point, or the end of the guest (halt,
+ *                                        idle, limit, spin, input-overflow; then only FP, SNAP, END)
+ * Host commands at a stop, each answered by one OK/ERR line (CONT and END excepted):
+ *   SEND at=<x> <escaped bytes>  type the bytes at exit x (>= now); at a stop, bytes due at now
+ *                                are typed when the host sends CONT, before the guest runs again
+ *   WAKE at=<x>                  stop at exit x even if no line is seen there
+ *   WATCH <escaped text>         stop at the first later cadence point where the text occurs in the
+ *                                console written since the session's start (RUN's marker stops)
+ *   SNAP <name>                  snapshot here; refused (ERR ... input-pending=<n>) while typed
+ *                                bytes still wait in the receive queue, so a snapshot never holds
+ *                                half-delivered input. It carries the SENDs, WAKEs and WATCHes not yet
+ *                                done, which a session from it re-arms (re-types) unless plan=drop
+ *   FP                           OK FP at=<x> fp=<hex16>: the fingerprint of the state now
+ *   CONT                         run on to the next stop
+ *   END                          RESULT <tag> fp=<state now> wfp=<last FP or 0> secs= ctl=<hash of
+ *                                the typed (at, bytes)> stops=<n> verdict=<last HYDO-ORACLE line or
+ *                                "CONTROL ended at=<x>">; the console goes to <tag>.log
+ * Escapes (SEND bytes, EVENT text): \\ \n \r \t \xHH; EVENT prints bytes outside 0x20..0x7e as \xHH.
+ * "at" is the exit count M.exits (hvx_explore's lock-step mode uses its icount). Kicks and the spin
+ * observer's own exits do not count, so a stop's exit count is a pure function of the run. The
+ * rewind mode is refused (it moves M.exits backwards), and a SPIN ends the session (no re-run).
+ * The disk policy, tick jitter and preemption points of the host tokens cover the whole session. */
+#define CT_MAXQ 256
+#define CT_MAXSNAP 8
+#define CT_MAXWATCH 8
+struct ct_item { uint64_t at; uint64_t req; uint32_t len; int wake; uint8_t *b; };
+struct ct_watch { uint8_t *t; uint32_t len; size_t scan; };
+struct ctl {
+	char tag[64];
+	uint64_t origin, every;        /* cadence points: (exits - origin) % every == 0 */
+	char lines[64]; int all;       /* EVENT filter: a line that starts with lines[], or every line */
+	size_t con_from, scan;         /* session console start; complete lines reported up to here */
+	uint64_t last_x, stops, hash, last_fp;
+	int have_fp, nq, ended;
+	struct ct_item q[CT_MAXQ];     /* pending SENDs/WAKEs, in order of (at, arrival) */
+	struct ct_watch w[CT_MAXWATCH]; int nw;   /* WATCH texts not seen yet */
+};
+static struct ctl CT;
+struct ct_snap { char name[64]; struct xsnap x; struct ctl c; struct tjit tj; struct pctp pct; int used; };
+static struct ct_snap ct_snaps[CT_MAXSNAP];
+
+static int ct_unesc(const char *s, uint8_t *out, size_t cap, size_t *n)
+{
+	size_t o = 0;
+	for (; *s && *s != '\n'; s++) {
+		uint8_t c = (uint8_t)*s;
+		if (c == '\\') {
+			s++;
+			if (*s == '\\') c = '\\'; else if (*s == 'n') c = '\n'; else if (*s == 'r') c = '\r'; else if (*s == 't') c = '\t';
+			else if (*s == 'x' && isxdigit((unsigned char)s[1]) && isxdigit((unsigned char)s[2])) {
+				char h[3] = { s[1], s[2], 0 }; c = (uint8_t)strtoul(h, NULL, 16); s += 2;
+			} else return -1;
+		}
+		if (o >= cap) return -1;
+		out[o++] = c;
+	}
+	*n = o;
+	return 0;
+}
+static void ct_esc(FILE *f, const char *p, size_t n)
+{
+	for (size_t i = 0; i < n; i++) {
+		uint8_t c = (uint8_t)p[i];
+		if (c == '\\') fputs("\\\\", f); else if (c == '\t') fputs("\\t", f); else if (c == '\r') fputs("\\r", f);
+		else if (c < 0x20 || c > 0x7e) fprintf(f, "\\x%02x", c); else fputc(c, f);
+	}
+}
+static void ct_item_free(struct ct_item *it) { free(it->b); it->b = NULL; }
+static void ct_insert(struct ct_item it)   /* stable in at */
+{
+	int i = CT.nq;
+	while (i > 0 && CT.q[i - 1].at > it.at) { CT.q[i] = CT.q[i - 1]; i--; }
+	CT.q[i] = it; CT.nq++;
+}
+static void ct_copy(struct ctl *dst, const struct ctl *src)   /* deep: the pending bytes */
+{
+	*dst = *src;
+	for (int i = 0; i < src->nq; i++)
+		if (src->q[i].b) { dst->q[i].b = malloc(src->q[i].len ? src->q[i].len : 1); memcpy(dst->q[i].b, src->q[i].b, src->q[i].len); }
+	for (int i = 0; i < src->nw; i++) { dst->w[i].t = malloc(src->w[i].len); memcpy(dst->w[i].t, src->w[i].t, src->w[i].len); }
+}
+static void ct_clear(struct ctl *c)
+{
+	for (int i = 0; i < c->nq; i++) ct_item_free(&c->q[i]);
+	for (int i = 0; i < c->nw; i++) { free(c->w[i].t); c->w[i].t = NULL; }
+	c->nq = c->nw = 0;
+}
+/* the watches whose text has appeared: print MATCH and drop them; returns how many */
+static int ct_match(uint64_t x)
+{
+	int n = 0;
+	for (int i = 0; i < CT.nw;) {
+		struct ct_watch *w = &CT.w[i];
+		size_t st = w->scan > w->len ? w->scan - w->len : 0;
+		if (st < CT.con_from) st = CT.con_from;
+		if (M.console_len >= st + w->len && memmem(console + st, M.console_len - st, w->t, w->len)) {
+			printf("MATCH %s at=%llu ", CT.tag, (unsigned long long)x);
+			ct_esc(stdout, (const char *)w->t, w->len);
+			putchar('\n');
+			free(w->t);
+			memmove(CT.w + i, CT.w + i + 1, (size_t)(CT.nw - i - 1) * sizeof *CT.w); CT.nw--;
+			n++;
+			continue;
+		}
+		w->scan = M.console_len;
+		i++;
+	}
+	return n;
+}
+
+/* type every SEND due at x; -1 if the receive queue cannot take one whole (the session ends) */
+static int ct_type_due(uint64_t x)
+{
+	while (CT.nq && CT.q[0].at <= x && !CT.q[0].wake) {
+		struct ct_item it = CT.q[0];
+		if (it.len > sizeof rxq - (rx_tail - rx_head)) return -1;
+		for (uint32_t i = 0; i < it.len; i++) rxq[rx_tail++ % sizeof rxq] = it.b[i];
+		CT.hash = fnv(&x, 8, CT.hash); CT.hash = fnv(&it.len, 4, CT.hash); CT.hash = fnv(it.b, it.len, CT.hash);
+		printf("TYPED %s at=%llu req=%llu len=%u\n", CT.tag, (unsigned long long)x, (unsigned long long)it.req, it.len);
+		ct_item_free(&it);
+		memmove(CT.q, CT.q + 1, (size_t)(CT.nq - 1) * sizeof *CT.q); CT.nq--;
+	}
+	return 0;
+}
+/* WAKEs due at x are consumed; a WAKE never blocks a later SEND, and a due SEND never hides a WAKE */
+static int ct_wake_due(uint64_t x)
+{
+	int hit = 0;
+	for (int i = 0; i < CT.nq;) {
+		if (CT.q[i].at > x) break;
+		if (CT.q[i].wake) { hit = 1; memmove(CT.q + i, CT.q + i + 1, (size_t)(CT.nq - i - 1) * sizeof *CT.q); CT.nq--; }
+		else i++;
+	}
+	return hit;
+}
+/* report the complete console lines written since the last scan; returns how many passed the filter */
+static int ct_scan(uint64_t x)
+{
+	int n = 0;
+	for (;;) {
+		char *nl = M.console_len > CT.scan ? memchr(console + CT.scan, '\n', M.console_len - CT.scan) : NULL;
+		if (!nl) break;
+		size_t a = CT.scan, b = (size_t)(nl - console);
+		CT.scan = b + 1;
+		if (b > a && console[b - 1] == '\r') b--;
+		size_t pl = strlen(CT.lines);
+		if (!CT.all && (b - a < pl || memcmp(console + a, CT.lines, pl))) continue;
+		printf("EVENT %s at=%llu ", CT.tag, (unsigned long long)x);
+		ct_esc(stdout, console + a, b - a);
+		putchar('\n');
+		n++;
+	}
+	return n;
+}
+static struct ct_snap *ct_find(const char *name)
+{
+	for (int i = 0; i < CT_MAXSNAP; i++) if (ct_snaps[i].used && !strcmp(ct_snaps[i].name, name)) return &ct_snaps[i];
+	return NULL;
+}
+static int ct_name_ok(const char *s)
+{
+	size_t n = strlen(s);
+	if (!n || n > 63) return 0;
+	for (; *s; s++) if (!isalnum((unsigned char)*s) && *s != '.' && *s != '_' && *s != '-') return 0;
+	return 1;
+}
+static void ct_snap_take(struct ct_snap *sn, const char *name)
+{
+	if (sn->used) {                          /* replacing: keep the RAM mapping, drop the rest */
+		free(sn->x.con); sn->x.con = NULL;
+		if (sn->x.vio) { virtio_save_free(sn->x.vio); sn->x.vio = NULL; }
+		ct_clear(&sn->c);
+	}
+	char fname[80]; snprintf(fname, sizeof fname, "ctl-%s", name);
+	xsnap_take(&sn->x, fname);
+	ct_copy(&sn->c, &CT);
+	sn->tj = TJ; sn->pct = PCT; sn->used = 1;
+	snprintf(sn->name, sizeof sn->name, "%s", name);
+}
+
+/* At a stop: print STOP, then answer host commands until CONT (0) or END (1). */
+static char ct_in[1 << 16];
+static uint8_t ct_bytes[sizeof rxq];
+static int ct_stop(uint64_t x, const char *end)
+{
+	CT.stops++;
+	printf("STOP %s at=%llu%s%s\n", CT.tag, (unsigned long long)x, end ? " end=" : "", end ? end : "");
+	fflush(stdout);
+	while (fgets(ct_in, sizeof ct_in, stdin)) {
+		char *nl = strchr(ct_in, '\n'); if (nl) *nl = 0;
+		unsigned long long at; int off = 0; char name[128];
+		if (!strcmp(ct_in, "CONT")) {
+			if (end) { printf("ERR CONT the run has ended (%s)\n", end); fflush(stdout); continue; }
+			return 0;
+		}
+		if (!strcmp(ct_in, "END")) return 1;
+		if (!strcmp(ct_in, "FP")) {
+			CT.last_fp = xfp(); CT.have_fp = 1;
+			printf("OK FP at=%llu fp=%016llx\n", (unsigned long long)x, (unsigned long long)CT.last_fp);
+		} else if (sscanf(ct_in, "SEND at=%llu%n", &at, &off) == 1 && (ct_in[off] == ' ' || !ct_in[off])) {
+			size_t n = 0;
+			if (at < x) printf("ERR SEND at=%llu is before now (%llu)\n", at, (unsigned long long)x);
+			else if (ct_unesc(ct_in + off + (ct_in[off] == ' '), ct_bytes, sizeof ct_bytes, &n)) printf("ERR SEND bad escape or more than %zu bytes\n", sizeof ct_bytes);
+			else if (CT.nq >= CT_MAXQ) printf("ERR SEND more than %d pending\n", CT_MAXQ);
+			else {
+				struct ct_item it = { at, at, (uint32_t)n, 0, malloc(n ? n : 1) };
+				memcpy(it.b, ct_bytes, n);
+				ct_insert(it);
+				printf("OK SEND at=%llu len=%zu\n", at, n);
+			}
+		} else if (sscanf(ct_in, "WAKE at=%llu%n", &at, &off) == 1 && !ct_in[off]) {
+			if (end || at <= x) printf("ERR WAKE at=%llu is not after now (%llu)%s\n", at, (unsigned long long)x, end ? " or the run has ended" : "");
+			else if (CT.nq >= CT_MAXQ) printf("ERR WAKE more than %d pending\n", CT_MAXQ);
+			else { struct ct_item it = { at, at, 0, 1, NULL }; ct_insert(it); printf("OK WAKE at=%llu\n", at); }
+		} else if (!strncmp(ct_in, "WATCH ", 6)) {
+			size_t n = 0;
+			if (end) printf("ERR WATCH the run has ended\n");
+			else if (ct_unesc(ct_in + 6, ct_bytes, 256, &n) || !n) printf("ERR WATCH bad escape, empty, or more than 256 bytes\n");
+			else if (CT.nw >= CT_MAXWATCH) printf("ERR WATCH more than %d watches\n", CT_MAXWATCH);
+			else {
+				struct ct_watch *w = &CT.w[CT.nw++];
+				w->t = malloc(n); memcpy(w->t, ct_bytes, n); w->len = (uint32_t)n; w->scan = CT.con_from;
+				printf("OK WATCH len=%zu\n", n);
+			}
+		} else if (sscanf(ct_in, "SNAP %127s%n", name, &off) == 1 && !ct_in[off]) {
+			struct ct_snap *sn = ct_find(name);
+			uint32_t pend = rx_tail - rx_head;
+			if (!ct_name_ok(name)) printf("ERR SNAP bad name (1-63 of A-Z a-z 0-9 . _ -)\n");
+			else if (pend) printf("ERR SNAP %s input-pending=%u\n", name, pend);
+			else {
+				for (int i = 0; !sn && i < CT_MAXSNAP; i++) if (!ct_snaps[i].used) sn = &ct_snaps[i];
+				if (!sn) printf("ERR SNAP %s more than %d snapshots\n", name, CT_MAXSNAP);
+				else { ct_snap_take(sn, name); printf("OK SNAP %s at=%llu\n", name, (unsigned long long)x); }
+			}
+		} else {
+			char w[32] = ""; sscanf(ct_in, "%31s", w);
+			printf("ERR %s unknown command or bad arguments\n", w[0] ? w : "(empty)");
+		}
+		fflush(stdout);
+	}
+	fprintf(stderr, "hvmx: the host closed stdin during the control session %s\n", CT.tag);
+	exit(1);
+}
+static const char *ct_end_why;
+static int ct_hook(void)
+{
+	uint64_t x = M.exits;
+	if (x == CT.last_x) return 0;   /* a kick or an observer exit: not a new exit */
+	CT.last_x = x;
+	int ev = 0;
+	if ((x - CT.origin) % CT.every == 0) { ev = ct_scan(x); ev += ct_match(x); }
+	if ((ct_wake_due(x) || ev) && ct_stop(x, NULL)) { CT.ended = 1; return 1; }
+	if (ct_type_due(x)) { ct_end_why = "input-overflow"; return 1; }
+	return 0;
+}
+static void ct_session(const char *req, struct xsnap *s1, int fresh)
+{
+	char words[2048], *save = NULL, host[1024] = "", from[128] = "", lines[64] = "HYDO-AG", tag[64] = "";
+	uint64_t every = 1; int plan_drop = 0, other = 0;
+	double t0 = now_s();
+	snprintf(words, sizeof words, "%s", req);
+	char *w = strtok_r(words, " \t\r\n", &save);
+	if (w) snprintf(tag, sizeof tag, "%s", w);
+#define CT_FAIL(...) do { printf("RESULT %s fp=0 wfp=0 secs=0 verdict=", tag[0] ? tag : "?"); printf(__VA_ARGS__); putchar('\n'); fflush(stdout); return; } while (0)
+	if (!w || strlen(w) > 63) CT_FAIL("ERROR bad request");
+	while ((w = strtok_r(NULL, " \t\r\n", &save))) {
+		if (!strncmp(w, "from=", 5)) snprintf(from, sizeof from, "%s", w + 5);
+		else if (!strncmp(w, "every=", 6)) { every = strtoull(w + 6, NULL, 10); other = 1; }
+		else if (!strncmp(w, "lines=", 6)) { snprintf(lines, sizeof lines, "%s", w + 6); other = 1; }
+		else if (!strcmp(w, "plan=drop")) plan_drop = 1;
+		else { size_t l = strlen(host); snprintf(host + l, sizeof host - l, "%s%s", l ? " " : "", w); other = 1; }
+	}
+	if (rw_on) CT_FAIL("UNSUPPORTED on hvm: control sessions do not run in rewind mode (HVM_SPIN_REWIND=1)");
+	if (from[0]) {
+		struct ct_snap *sn = ct_find(from);
+		if (!sn) CT_FAIL("ERROR no snapshot %s", from);
+		if (other) CT_FAIL("ERROR a session from a snapshot keeps its cadence, filter and host tokens");
+		xsnap_restore(&sn->x);
+		TJ = sn->tj; PCT = sn->pct;
+		ct_clear(&CT);
+		ct_copy(&CT, &sn->c);
+		if (plan_drop) ct_clear(&CT);
+		CT.stops = 0; CT.have_fp = 0; CT.ended = 0;
+	} else {
+		if (plan_drop || !every) CT_FAIL("ERROR bad request");
+		char hw[200]; int unknown = 0;
+		if (strstr(host, "spin=rewind")) CT_FAIL("UNSUPPORTED on hvm: control sessions do not run in rewind mode");
+		if (host_token_problem(host, hw, sizeof hw, &unknown)) CT_FAIL("%s%s", unknown ? "ERROR bad schedule: " : "UNSUPPORTED on hvm: ", hw);
+		const char *u = unsupported(host, "");
+		if (u) CT_FAIL("UNSUPPORTED on hvm: %s", u);
+		uint64_t dseed; uint32_t dcl, dpr; struct tjit tj;
+		if (parse_disk(host, &dseed, &dcl, &dpr)) CT_FAIL("ERROR bad disk token");
+		if (parse_tj(host, &tj)) CT_FAIL("ERROR bad tick-jitter token");
+		if (!fresh) xsnap_restore(s1);
+		set_fault(dseed, dcl, dpr);
+		if (tj_wanted(&tj)) { TJ = tj; TJ.on = 1; }
+		const char *pp = strstr(host, "pct=");
+		if (pp) {
+			uint64_t seed = strtoull(pp + 4, NULL, 16);
+			uint32_t n = (pp = strstr(host, "pctn=")) ? (uint32_t)strtoul(pp + 5, NULL, 10) : 0;
+			uint64_t k = (pp = strstr(host, "pctk=")) ? strtoull(pp + 5, NULL, 10) : 20000;
+			if (n) pct_set(seed, n, M.exits, M.exits + k);
+		}
+		ct_clear(&CT);
+		memset(&CT, 0, sizeof CT);
+		CT.origin = M.exits; CT.every = every;
+		CT.all = !strcmp(lines, "*");
+		snprintf(CT.lines, sizeof CT.lines, "%s", CT.all ? "" : lines);
+		CT.con_from = CT.scan = M.console_len;
+		CT.hash = 0xcbf29ce484222325ULL;
+	}
+	snprintf(CT.tag, sizeof CT.tag, "%s", tag);
+	if (trace_f) fprintf(trace_f, "CTRL %s\n", tag);
+	ct_end_why = NULL;
+	uint64_t x0 = M.exits;
+	CT.last_x = x0;
+	int done = ct_stop(x0, NULL);
+	if (!done && ct_type_due(x0)) ct_end_why = "input-overflow";
+	if (!done && !ct_end_why) {
+		int why = 0;
+		max_exits = M.exits + run_exits;
+		hvm_stop_hook = ct_hook;
+		why = run_until(NULL);
+		hvm_stop_hook = NULL;
+		done = CT.ended;
+		if (!done && !ct_end_why) ct_end_why = why == STOP_SPIN ? "spin" : why == STOP_HALT ? "halt" : why == STOP_IDLE ? "idle" : "limit";
+	}
+	if (!done) {                       /* the guest cannot go on: report what it wrote, then FP/SNAP/END only */
+		ct_scan(M.exits);
+		ct_stop(M.exits, ct_end_why);
+	}
+	char verdict[300];
+	last_verdict(CT.con_from, verdict, sizeof verdict);
+	if (!strcmp(verdict, "ERROR no verdict")) snprintf(verdict, sizeof verdict, "CONTROL ended at=%llu", (unsigned long long)M.exits);
+	uint64_t fp = xfp();
+	save_log(tag, CT.con_from);
+	printf("RESULT %s fp=%016llx wfp=%016llx secs=%.1f ctl=%016llx stops=%llu verdict=%s\n", tag, (unsigned long long)fp,
+	       (unsigned long long)(CT.have_fp ? CT.last_fp : 0), now_s() - t0, (unsigned long long)CT.hash, (unsigned long long)CT.stops, verdict);
+	fflush(stdout);
+	ct_clear(&CT);
+	memset(&TJ, 0, sizeof TJ); memset(&PCT, 0, sizeof PCT);
+#undef CT_FAIL
+}
+
 static int boot_to_s1(struct xsnap *s0, struct xsnap *s1)
 {
 	static const char *const m0[] = { S0_MARKER, FINAL_MARKER };
@@ -514,8 +874,9 @@ int main(int argc, char **argv)
 		argv[2] = argv[0];
 		argv += 2; argc -= 2;
 	}
-	if (argc < 5 || (strcmp(argv[1], "serve") && strcmp(argv[1], "one")) || (!strcmp(argv[1], "one") && argc < 6)) {
-		fprintf(stderr, "usage: hvmx [--ram-mib N] serve <Image> <initramfs> <outdir>\n       hvmx [--ram-mib N] one <Image> <initramfs> <outdir> \"<schedule>\"\n");
+	if (argc < 5 || (strcmp(argv[1], "serve") && strcmp(argv[1], "one") && strcmp(argv[1], "fresh")) || (!strcmp(argv[1], "one") && argc < 6)) {
+		fprintf(stderr, "usage: hvmx [--ram-mib N] serve <Image> <initramfs> <outdir>\n       hvmx [--ram-mib N] one <Image> <initramfs> <outdir> \"<schedule>\"\n"
+		                "       hvmx [--ram-mib N] fresh <Image> <initramfs> <outdir>   (serve; the first request runs on the boot's own state)\n");
 		return 2;
 	}
 	const char *mode = argv[1];
@@ -558,13 +919,21 @@ int main(int argc, char **argv)
 	}
 	if (boot_to_s1(&s0, &s1)) return 1;
 	printf("READY boot_secs=%.1f\n", now_s() - t0);
+	int fresh = !strcmp(mode, "fresh");   /* the first request runs on the boot's own state, as one does */
 	char in[4096];
 	while (fgets(in, sizeof in, stdin)) {
 		char tag[64]; int off = 0;
 		if (!strncmp(in, "QUIT", 4)) break;
 		if (!strncmp(in, "BRANCH ", 7)) { printf("BRANCHEND ? unsupported on hvm\n"); fflush(stdout); continue; }
+		if (!strncmp(in, "CTRL ", 5)) {
+			int from = strstr(in, " from=") != NULL;
+			ct_session(in + 5, &s1, fresh && !from);
+			if (!from) fresh = 0;
+			continue;
+		}
 		if (sscanf(in, "RUN %63s %n", tag, &off) != 1 || !off) { printf("RESULT ? fp=0 wfp=0 secs=0 verdict=ERROR bad request\n"); fflush(stdout); continue; }
-		xsnap_restore(&s1);
+		if (!fresh) xsnap_restore(&s1);
+		fresh = 0;
 		run_sched(tag, in + off, &s1);
 	}
 	return 0;
