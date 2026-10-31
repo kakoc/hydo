@@ -510,7 +510,11 @@ pub fn trace_lines(log: &str, max: usize) -> Vec<String> {
             "hydo-fc-trace: {} {}{} {}{w}",
             fl(1),
             fl(3),
-            if h { format!(" {}", fl(4)) } else { String::new() },
+            if h {
+                format!(" {}", fl(4))
+            } else {
+                String::new()
+            },
             fl(if h { 5 } else { 4 })
         ));
     }
@@ -626,16 +630,37 @@ mod tests {
                 dur: dur.into(),
             })
         };
-        assert_eq!(parse(&p, "a>b@3#2:abc:500"), ok("a", "req", "b", "3", "2", "abc", "500"));
-        assert_eq!(parse(&p, "a<workload@0:1"), ok("a", "resp", "workload", "0", "1", "-", "1"));
-        assert_eq!(parse(&p, "a>b@3#0::9"), ok("a", "req", "b", "3", "0", "-", "9"));
-        assert_eq!(parse(&p, "a>b@3:x:y:9"), ok("a", "req", "b", "3", "1", "x:y", "9"));
+        assert_eq!(
+            parse(&p, "a>b@3#2:abc:500"),
+            ok("a", "req", "b", "3", "2", "abc", "500")
+        );
+        assert_eq!(
+            parse(&p, "a<workload@0:1"),
+            ok("a", "resp", "workload", "0", "1", "-", "1")
+        );
+        assert_eq!(
+            parse(&p, "a>b@3#0::9"),
+            ok("a", "req", "b", "3", "0", "-", "9")
+        );
+        assert_eq!(
+            parse(&p, "a>b@3:x:y:9"),
+            ok("a", "req", "b", "3", "1", "x:y", "9")
+        );
         assert_eq!(parse(&p, "a>b"), Parsed::Bad("no @"));
         assert_eq!(parse(&p, "ab@3:9"), Parsed::Bad("no > or <"));
         assert_eq!(parse(&p, "a>b@3"), Parsed::Bad("no :<dur>"));
-        assert_eq!(parse(&p, "a>b@x:9"), Parsed::Bad("step, n and dur must be numbers"));
-        assert_eq!(parse(&p, "a>a@1:9"), Parsed::Ignored("a".into(), "a".into()));
-        assert_eq!(parse(&p, "a>z@1:9"), Parsed::Ignored("a".into(), "z".into()));
+        assert_eq!(
+            parse(&p, "a>b@x:9"),
+            Parsed::Bad("step, n and dur must be numbers")
+        );
+        assert_eq!(
+            parse(&p, "a>a@1:9"),
+            Parsed::Ignored("a".into(), "a".into())
+        );
+        assert_eq!(
+            parse(&p, "a>z@1:9"),
+            Parsed::Ignored("a".into(), "z".into())
+        );
         assert_eq!(atol(" 12x"), 12);
         assert_eq!(atol(""), 0);
     }

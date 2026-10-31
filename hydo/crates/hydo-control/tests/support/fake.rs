@@ -67,7 +67,13 @@ struct World {
     evals: BTreeMap<String, u64>,
     clock: i64,
     calls: u64,
+    /// qdiscs, the armed freeze (fake_net.rs)
+    net: net::NetWorld,
 }
+
+// tc, ip, iptables, qlen and the packet trigger (M124)
+#[path = "fake_net.rs"]
+mod net;
 
 #[derive(Clone, Debug)]
 struct Pending {
@@ -383,7 +389,9 @@ impl Fake {
                 self.emit(at, Msg::Reply(id, Reply::Run(RunOk {})));
                 let a1 = r.argv.get(1).cloned().unwrap_or_default();
                 let script = r.argv.get(3).cloned().unwrap_or_default();
-                let (dur, status, out) = if a1 == "sleep" {
+                let (dur, status, out) = if let Some(x) = self.net_run(id, &r) {
+                    x
+                } else if a1 == "sleep" {
                     let ms: f64 = r.argv.get(2).and_then(|x| x.parse().ok()).unwrap_or(1.0);
                     ((ms * 40.0) as u64 + 3, 0, String::new())
                 } else if a1 == "pgrep" {
@@ -551,6 +559,12 @@ impl Fake {
                     ),
                 );
             }
+            Command::Qlen(q) => {
+                let packets = self.qlen(&q.dev);
+                self.emit(at, Msg::Reply(id, Reply::Qlen(QlenOk { packets })));
+            }
+            Command::Freeze(f) => self.freeze(id, at, f),
+            Command::Unfreeze(_) => self.unfreeze(id, at),
             other => refuse(
                 self,
                 ErrCode::UnknownOp,
@@ -582,6 +596,7 @@ impl Fake {
     }
 
     fn reap(&mut self, m: &Msg) {
+        self.net_deliver(m);
         if let Msg::Event(Event::Exit(e)) = m {
             if let Some(p) = self.world.procs.get_mut(&e.h) {
                 if p.spawn == e.id {

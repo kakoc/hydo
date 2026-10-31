@@ -167,7 +167,12 @@ fn ns_setup(fx: &mut F<'_>, ctx: &Ctx, log: &mut String) -> Step<bool> {
         let e = env(fx, ctx, &[]);
         let r = run(
             fx,
-            vec![bb(ctx), "unshare".into(), format!("--net={f}"), "true".into()],
+            vec![
+                bb(ctx),
+                "unshare".into(),
+                format!("--net={f}"),
+                "true".into(),
+            ],
             e,
             None,
         )?;

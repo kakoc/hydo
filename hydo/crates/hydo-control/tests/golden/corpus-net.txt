@@ -1,0 +1,192 @@
+# NET-FAULTS, FREEZE and NET-NAMESPACES against the shell model (hydo/crates/hydo-control/tests/corpus_net.rs).
+# Re-record: HYDO_BLESS=1 cargo test -p hydo-control --test corpus_net
+input	hydo/onboard/examples/redis/hydo.yaml	c34c172a137dd89e266d8e4e73288f9d9dc73dadf952d5b9c4a03f3547d5e443
+input	hydo/onboard/examples/redis/hydo-netem.yaml	54ab0ea57ca3c5a6853528a00369d0eec11549d1a89cf3f420c21a2b37419481
+input	hydo/onboard/examples/etcd/hydo.yaml	ec0ae3f206de4167150fb4c94a0ab2e0a1ef9d983cd49005c5a9fdf18fe20c3c
+input	hydo/onboard/examples/compose-voting/hydo.generated.yaml	82bc84ea9cd401d4ada50b08d587d5133b96be5459d945a67715cba0d54361e4
+input	hydo/onboard/examples/redis/hydo-freeze.yaml	beabc78508713a128971d5c35d87fe7df8c2a7277be0248af025f174e5d0cf77
+refused	F= with network: bridge	F=redis<vote@1#1:100 with network: bridge (hydo-agent-proto's freeze has no netns) (not driven by the core controller yet: seam freeze)
+boot	bridge setup fails	error	7e924bf55e27022b
+counts	hydo/onboard/examples/redis/hydo.yaml	recovery:ok=2 run:cut=2 run:ok=15 run:violation=3
+chunk	hydo/onboard/examples/redis/hydo.yaml	0	500	81f50c2d79594419379495f98679a0ecdef2532d2eb2c78bcbf931cb887a24d1
+chunk	hydo/onboard/examples/redis/hydo.yaml	1	450	f8bd9bd18988114aef13a5866e0c0387ab4cc7457347e3ab35315c71f5a87ea3
+counts	hydo/onboard/examples/redis/hydo-netem.yaml	recovery:ok=2 run:cut=2 run:error=3 run:ok=10 run:violation=5
+chunk	hydo/onboard/examples/redis/hydo-netem.yaml	0	500	4a7ccfb03beb20d2bfdafa7f4f625d04e5d4ac0a96fbc06c4dbec880869aa7fe
+chunk	hydo/onboard/examples/redis/hydo-netem.yaml	1	500	2f23e36218d2f1fcf4253f9fb12ff1a4881db04c6b052701f748ae16cb4fe222
+chunk	hydo/onboard/examples/redis/hydo-netem.yaml	2	500	4a32913b0a20cb7655ac4c6f0a4e7d74db28fe5a855fc03e4c54214320edc2bc
+chunk	hydo/onboard/examples/redis/hydo-netem.yaml	3	500	44d6913cb5a34cb306abef41b5d7e64609e6130f60f1c97e6017e7178fc08cc6
+chunk	hydo/onboard/examples/redis/hydo-netem.yaml	4	294	17ae079e2f440a45f9d711a0f5533606e4226b4d544cfb9cae6e5f3d49312344
+counts	hydo/onboard/examples/etcd/hydo.yaml	recovery:ok=1 run:cut=1 run:error=3 run:ok=10 run:violation=3
+chunk	hydo/onboard/examples/etcd/hydo.yaml	0	500	ec8caa6101fd2f959d6188b8cf24d4013ff06aa2010a64df9f6a03881728488a
+chunk	hydo/onboard/examples/etcd/hydo.yaml	1	500	133d6511e34851f8d46b0adee41dd82f81faa53367bbc134bf39964192817e38
+chunk	hydo/onboard/examples/etcd/hydo.yaml	2	500	1a3aef6ec6d42b21dbed193eefba6f2ab3f99a5ebc8a36b193ac86171b3f58cb
+chunk	hydo/onboard/examples/etcd/hydo.yaml	3	500	62f42696783d9ee0ae83d599c00540c6319e25a372f0e0723be3eac2f65f1187
+chunk	hydo/onboard/examples/etcd/hydo.yaml	4	377	0923ada753af4ca6322ec893591b2b35c3db3da356a9065c0d852392e6b2d660
+counts	hydo/onboard/examples/compose-voting/hydo.generated.yaml	recovery:ok=3 run:cut=3 run:error=2 run:ok=24 run:violation=5
+chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	0	500	f3259409f3fd459a519b7462d6116dcb2f2aa2965beaceafa8049566283dc900
+chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	1	500	bf88c73a1a21858568ac644b3601ee9d08c97da261ef74cff03ce3199a41235a
+chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	2	500	afd8ab8c873fa0d354f417e179e476b2456e5f81b6d2e772d58ad44ee8e33660
+chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	3	500	8aff2c84853b127dd0d31c973ab76c388f4a4fc91b38e21aa6acf1db98428000
+chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	4	500	56a1ab0047401f1a6a4fe4eafe17fef403ab6e2a82faad08ef235402f730c1c1
+chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	5	500	abb264e970f943d1fc8534d592284690022b5510af8ca140e01288ee8f56d8a7
+chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	6	500	3e599452cbf9294f5e8f2a8d5b6e1fed7279bbace5ad4a5d5975bad7c3921c2c
+chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	7	500	2bc5c9e5e211e4f5f8c0f9a38023301f4f8189d33dc88901d2e32354e2c21725
+chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	8	500	58fec82e381ebfa83337a944783bee4604a56dbc8ddbefc23dc2c56f67815f96
+chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	9	500	0498b109c52058f11f51b9b7a6ae9f4dfaea696dfce525b370f184fe418c8aa6
+chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	10	125	456d8a270e7595f566451f0cae09d7238550779b638861668dd100438e30044e
+counts	hydo/onboard/examples/redis/hydo-freeze.yaml	recovery:error=1 recovery:ok=1 run:cut=2 run:error=35 run:ok=203 run:violation=29
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	0	500	55fa7182882be11901dc57fed392e775d189f3e719a86d738f76f08abe2dfda2
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	1	500	fb644dc41d2de2511b6ee2d20716c5d4331f0b7fbf3ab56e64e14a04b99b2f01
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	2	500	8890b291a6356c1ab990e83fde91c57032291d32db8653ba1f36785ea1b9a444
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	3	500	192afdf971a444f7b10a7a836c23bf4a2d247936c0fa9ea2cae2a5f943a36c67
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	4	500	0514fa887876a0045b2a16ca8834fe80a1b131b492cdbcfd429c9e4facbf8f9e
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	5	500	5d122a1a224ec84e19558351f3c4ad69db56e45c667ec6689c10b9b7ffd411b8
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	6	500	0909b99f59d19175fca10897c5dab8aa5d9e64126b7c2b4a12215f4d9e6f6cee
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	7	500	11f354f509f7641ab6870898a3262ec8be4d61b8007622701c798ec69d27538e
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	8	500	1acc5d06d250927271a393368305601d07ac4a32962b663d21aee317b6b0d396
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	9	500	4015d8f471146498ef7bcd4c33c177bc7a5f180b2ea9fd7bd0807c100dac2ed9
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	10	500	593ec4016095c0e94571b54d00efc22127075ceb4d66398046a72142139d09e0
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	11	500	8c303d7f417af0e68f5fa7a36f653cddc201782df52fb636259e0b077b032c0b
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	12	500	f591293df4529ef23e147ba4d7010d4a778f9d94cea300cdc1c8318de823d35d
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	13	500	7000c40161b7c430bc589ac25c4aff66f3cb205e0b6939b89f36ee2498180a12
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	14	500	fcf33755e92d1a3cf0d9d3d341ba7523331ef1532cb84e673b195f149d618c0b
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	15	500	47a98e658230cda551059a66e79f21bcfe8b2b23053edeeb7a6f0482fafaf444
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	16	500	8290e68d0587eb28604e78ac30dcedbecc3e0f92590decac30e5215c172fc247
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	17	500	7ca9922da9f2d646447776090cb57d98f3bf98e87fbd2ac35298c495994923d9
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	18	500	7e0e16d52d1c266d8e120af1709e1f1bbe8df01959a04564b8834849e614aee3
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	19	500	e07544d2c28f6277e505a5a3ef6ba0a65ecc2e89f879b034b58114163ed0b94a
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	20	500	186e1117dce61a9677f8765f62be80fac668fdf81dc6d1c805978361a06e4855
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	21	500	18c51ee34d1b1c6b46c6e2964b98122aeefe51f0fe77a1d6afa0ae44df34eac6
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	22	500	1e29547319aee3db907dfa41686bdb20a1491f0cfbae720cfbdf289ddfa0a0a7
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	23	500	f56aa9a4b7dc0675f3211bf64f6201a5eba4655236ef719a5112b9c2a243ff6f
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	24	500	cf5754b3f74eb9c7ea0fcd9462e45aaef5c3954dd1545c260cc79da13db377e8
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	25	500	06a32092b6cc641bc693442f6b66d00cab60b21e8fa617cc02168c7ffbee8a6d
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	26	500	cd989ddcb0d93b7d6c5a67a44d6903cd90984a828525c0c670e0c54420842c6e
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	27	500	74b2359cefe4ceac4849edeb652998c02b15b2bd93cb9db0ad3ab675f6ae5e44
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	28	500	15ef17c3957bdb17f0defb73f4b7f6edd3f9e11f43d929519578b422249e3d40
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	29	500	1beed0a5ab2d5f82996e28c455942adc4d200c965de121fd6525e303f7ba3ff4
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	30	500	56543e2ad8df5eb10eefb5f3332f3168d88202e1bebd70b3cdc5ad7c5fcaf527
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	31	500	b6ed04af193dfc8f8109a96e84cd10844e46b7c753c176b6bc3ace3d0b077a03
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	32	500	af4e7c41268de823fc8edd4fb55a5ae0ae126eee1e5bd3c8bedc0d2137f5c3ca
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	33	500	8a1f5a28a6496122cad00e19dacc04a9a8e0ceb28084b771609b194b54a3c08b
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	34	500	2e224bbd12c564b329196f51ff24d35e29cff3a915b8706ffcb0f799d443a74c
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	35	500	23806e93690e0217b98c92bf090d9fae33cfb199331daeeab0033dd1af38dda9
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	36	500	aba3f2979edb091df16807269cb255627e70ecf765ccf8f74dca5fe4e1c74d67
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	37	500	f0af463bee0993cbfd64450f5f54e0b36efbd46b04f568df05dec447510db387
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	38	500	b732ef7fd7520374fd1db8b255f51f7ddb2c8cd07f4d5d1a036731c5a978fd27
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	39	500	5a839e97653e78ebb64404bbd5e1e0772f0afd92b8fc654b049824f357f68ec4
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	40	500	54d74ca59a75cf193fdf25e26c0360d1dcff63f6f81f404097aa9733580f9839
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	41	500	a74f37f685b5af7e5b152c9f2f178be86bdffe8c40b892c9742b5f98ca9f06d8
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	42	500	2fdd5f5fde3afea287c610339924d7ca0e4be3728924fe52eaaa0f1c4827ee76
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	43	500	3f7db4f62a664b5f6f9e875e54f3862c4bca8e655977cbe4150f7eb42ae86bcb
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	44	500	1236301121dfcdb1f5b3cb5f37d0b57d96a8f349c76d29685837e652c97537b8
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	45	500	0e28fa0ac3b38c576093406dacea931a757ed51632bbd6d5e2bbcf7ee6e4b504
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	46	500	bff9da7a9afdd21f7b1687abeb78a916c2ae2397cc46cd7304396e1f5ef2b63b
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	47	500	2473af81ae5c1569d19beeef59bb9609a4d706d7b86fbf5bc3e9ec92c9a563ee
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	48	500	e380ff01c87aeb4dc5c2f77e01324a94e778b617b31cabed9c08aaaa0c6ef887
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	49	500	4281896ed302a1a11eea3f6d7a762708d1d30f05f89c96e7964aa65badf0ae7f
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	50	500	af4a8efaa22e8a0488146b85dc98476a9aa037c9e06439f518e1c2cb0c231c70
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	51	500	603779ecb82c52fda925cdcaf098d66ad1b1b34c9bb35cf6073c7962151e1005
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	52	500	0fa98301d6b4422fbbb7c542f8bf6969faba64bdafb374a3f912a3396cefb774
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	53	500	eb8b977e86b0e0cb53f22ec8997021aa8531c74b79982bbbb745193a26851689
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	54	500	b29e8353403de2a21e5cad1683d1d3369dec04e683b2c338a2d78b68157ef27e
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	55	500	9398e18775561da75ab1356a800fce4cc31d9df5238272f790f1ccfee124d341
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	56	500	b8e08c7277820b77f52efbc4a7612c784eed6ae04c9b8afac1fcb5b8b701623d
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	57	500	1f1003dff3d83d63f3135d925ec96ae367187a62347ff3698686af07b2c4a5f3
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	58	500	6041754184809e4c6cf477f2542801b2dc4719f267fab1be14075b06672fbce2
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	59	500	ddd26ee0e731962fef76d9164b30ffafffab97b096e74529030dad3eef8857e6
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	60	500	cbaf0216bd8b69bd80716b279c55a9cc060884723baf0683c578c1f6afbdd594
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	61	500	15f6dec75aacdb0e09c90ad21bfd5158978965eb13777abac59bb56530a5be6e
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	62	500	9a038792a8c347dc741c9b06eeabf14f3dff7bcb612ba06328b020c7969d0b3b
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	63	500	50b88283909f06b3a5325e27690498c7587ef0329174589eb701da6339725c62
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	64	500	99a887bdf7171904b1981542cf8153452441e60f2e578475eb8bd05e21719831
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	65	500	ea94ba30e214f5682e83547a3b8a5a72b21c76340041f9d6630942f75fcb0470
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	66	500	1d3ea6020038a01836eb42ab2167bfcc7e5d61b9f5fcdcd8f0aee07c20a100b5
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	67	500	ce745700b11ba6bd6002c403893f8b36ed2ffb24bd3e7b2929e1b6ff3d0fc37a
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	68	500	b424e275815dc0a6805804e0a899f73544471ee4f165928a9a9c7b5e52dcdc55
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	69	500	13d2709a841f15b49e27b32a787f001586a2ca1def75b8c7087c5e885be1f0a1
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	70	500	5b6a67eb5626e7c3a8ab3f53076c2b6e24d3f028aefcdaab5224a177cdb52bcb
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	71	500	d0d4543eedd2b87e49710f226a1d05400ef7841d7c7ce86fff752897f16d2da2
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	72	500	1b7b30ae1406307526d1397dfb5aaa2a27da9cede19e7349d063670aaa2b4d29
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	73	500	12f48bdedd9a74061aa1fa6c4b31ab5bcae188ca4125b1cb4de0321af6ed500e
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	74	500	c794220a45c66e7bc09a67d76edd08f66bc38ec13053fa9afd3cc29aa603f70d
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	75	500	860a5717d708bbe45f694cc024929d51c6e32308002aaba9baa595efe6a512b3
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	76	500	3829d743db21d5c5e1a751e8c3a46395fbe45fe66a4009a34ed302b13a4fc035
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	77	500	5a8aa7bd5c0c5ceb107cfebe671578fd999640f7c1943dd4bbfe14dc08fa0269
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	78	500	881c29ee28f345077b02007f04334b272e9a13f455ae2f7c26600ff4f702bbbc
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	79	500	0c015d2989b86d1f0fa5a9f9ffee57c08d69f17f934d944f4e8e9d973e798b8f
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	80	500	1294ccbc138777f51b715ea52ba6981771eb62cbbfa98a2334c26659bf22452f
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	81	500	f399de4a451211faefcc30ea7943106fc1dbd7de091252eb31926789ba873045
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	82	500	3a3721d04578191538037bd451fb7d508c513fbcdfafed6d75c4d50277e3316e
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	83	500	e644afd36bf467629610d7c463775b3ee78df54352db6f7c6c04ad453d3063d3
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	84	500	e13b62459759745c06bf119e92c325de622100ad4c73a7868f99401f9f458b2e
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	85	500	045be3b639c200bd5fd6e6c1653c8c991261ede5e4fdf86bcf4bbe73f0eed986
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	86	500	cd51b46319fe9c14170a78bacf4b475da16d16c6f17e06e46a13e88d29d9b1c7
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	87	500	f4098489086aabf2ebc066b856942d984a6f2d461769fcc4eaf6dc3b336be94d
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	88	500	c4ecf0d4339b141271c2187d9ae73952c3237f8e54c683ab98837d50104c303b
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	89	500	bdc1693e31278b3c881a161ce2ceb3c8ad066294649f1ff83ec7a229c59a34bc
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	90	485	624302c47b75d3d990c512cdac9e8e6be61b72ddecdeebef16762c1c5bb9e3e4
+counts	variant: redis without tc	run:ok=2 run:violation=1
+chunk	variant: redis without tc	0	130	a64b2f00e59975c8f69530a7e0331566d26e5f0c5f07ddc922ad35678f25853d
+counts	variant: etcd without tc	run:ok=3
+chunk	variant: etcd without tc	0	167	2a619a2e19a90477cd0c65577dabb285f1ad2ce92949740b49f915d79f6b6a6a
+counts	variant: bridge without tc	run:ok=2
+chunk	variant: bridge without tc	0	88	8234de5a193f9408e4b97e68aa05c4cd39dd81500e383fee73985423a3de6b2d
+counts	variant: freeze without a port	run:ok=2
+chunk	variant: freeze without a port	0	211	8a2c41bf5577cf4168a7ed3ba3519e27aa312b6e26b7eff0ed1571fad30fb506
+counts	variant: freeze pair without addresses or ports	run:ok=2
+chunk	variant: freeze pair without addresses or ports	0	141	b949a0cbb15a8ed21e22b799b0789d5a82ec01dd737ce1bface9d0a989df4573
+counts	variant: freeze between two addresses	run:ok=4
+chunk	variant: freeze between two addresses	0	362	036e16fac70933f0e931aa9d998863ae5eb42df702be92898977d6f7988c97d6
+sweep	hydo/onboard/examples/redis/hydo-freeze.yaml	traces=40 points=113 stride-and-window=97
+reached	bridge fault skipped (no port)	1
+reached	bridge fault skipped (no tc)	2
+reached	bridge link fault	6
+reached	bridge port fault (eth0 in the namespace)	6
+reached	bridge port fault (veth)	17
+reached	bridge set up	13
+reached	bridge set up failed	2
+reached	freeze ENOBUFS	16
+reached	freeze armed	243
+reached	freeze declared	299
+reached	freeze ended by the init	23
+reached	freeze healed	187
+reached	freeze helper did not start	4
+reached	freeze ignored	4
+reached	freeze never fired	58
+reached	freeze parsed	273
+reached	freeze rules failed	19
+reached	freeze skipped (no address, no port)	4
+reached	freeze trace	41
+reached	freeze without its process	1
+reached	froze	201
+reached	froze not all threads	18
+reached	froze record	201
+reached	heal	49
+reached	heal drained	24
+reached	heal left a packet	3
+reached	heal stats	24
+reached	healed at the end	3
+reached	healed before a step	29
+reached	link fault on	17
+reached	link fault skipped	4
+reached	one-way healed at the end	3
+reached	one-way healed before a step	20
+reached	one-way req record	11
+reached	one-way resp record	14
+reached	port fault on	44
+reached	port fault skipped	22
+reached	resumed	165
+reached	tc setup failed	7
+reached	unknown N=	5
+reached	unknown O=	5
+mistake	the netem qdisc before the prio root	caught 25 of 25
+mistake	a drain poll left out	caught 25 of 25
+mistake	a wrong heal line	caught 25 of 25
+mistake	a service outside its namespace	caught 2 of 2
+mistake	XTABLES_LOCKFILE not exported	caught 25 of 25
+mistake	the freeze one packet late	caught 25 of 25
+mistake	the freeze's reply not waited for	caught 25 of 25
+mistake	the FROZE line missing	caught 25 of 25
+mistake	a trace line cut short	caught 25 of 25
+mistake	the init's SIGCONT after a freeze missing	caught 23 of 23

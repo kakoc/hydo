@@ -142,7 +142,10 @@ pub(super) fn bound_of(args: &str) -> i64 {
     }
     fn time_word(v: &str) -> bool {
         // ^[0-9.]+(us|usec|usecs|ms|msec|msecs|s|sec|secs)?$
-        let n = v.bytes().take_while(|b| b.is_ascii_digit() || *b == b'.').count();
+        let n = v
+            .bytes()
+            .take_while(|b| b.is_ascii_digit() || *b == b'.')
+            .count();
         n > 0
             && matches!(
                 &v[n..],
@@ -152,8 +155,8 @@ pub(super) fn bound_of(args: &str) -> i64 {
     let f: Vec<&str> = args.split_whitespace().collect();
     let field = |i: usize| f.get(i).copied().unwrap_or("");
     let mut m = 0.0;
-    for i in 0..f.len() {
-        if f[i] == "delay" {
+    for (i, w) in f.iter().enumerate() {
+        if *w == "delay" {
             m = ms(field(i + 1));
             if time_word(field(i + 2)) {
                 m += 4.0 * ms(field(i + 2));
@@ -221,8 +224,7 @@ fn has_links(ctx: &Ctx) -> bool {
 
 fn name_ok(s: &str) -> bool {
     !s.is_empty()
-        && s
-            .bytes()
+        && s.bytes()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
 }
 
@@ -278,11 +280,7 @@ pub(super) fn insmods(fx: &mut F<'_>, ctx: &Ctx, mods: &[&str]) -> Step<()> {
         let e = env(fx, ctx, &[]);
         run(
             fx,
-            vec![
-                bb(ctx),
-                "insmod".into(),
-                format!("/lib/modules/{m}.ko"),
-            ],
+            vec![bb(ctx), "insmod".into(), format!("/lib/modules/{m}.ko")],
             e,
             None,
         )?;
@@ -499,7 +497,10 @@ impl Net {
             return die_oracle(fx, TC_FAILED.into());
         }
         self.net_args = args.to_string();
-        log(fx, format!("NET FAULT on {t} (ip {m} {port}): netem {args}"));
+        log(
+            fx,
+            format!("NET FAULT on {t} (ip {m} {port}): netem {args}"),
+        );
         Ok(true)
     }
 
@@ -553,14 +554,7 @@ impl Net {
     }
 
     /// hydo-init-netns.sh's net_on: netem on the veth (or eth0) where the packets leave.
-    fn net_on_ns(
-        &mut self,
-        fx: &mut F<'_>,
-        ctx: &Ctx,
-        t: &str,
-        m: &str,
-        args: &str,
-    ) -> Step<bool> {
+    fn net_on_ns(&mut self, fx: &mut F<'_>, ctx: &Ctx, t: &str, m: &str, args: &str) -> Step<bool> {
         if ctx.plan.layout.tc.is_empty() {
             log(fx, format!("network fault on {t} skipped (no tc)"));
             return Ok(false);
@@ -754,9 +748,7 @@ impl Net {
             tc(fx, ctx, &f, strs(&["qdisc", "del", "dev", &d, "root"]))?;
         }
         self.devs.clear();
-        Ok(format!(
-            "queued={q0} drained_ms={t} left={n} acted on:{st}"
-        ))
+        Ok(format!("queued={q0} drained_ms={t} left={n} acted on:{st}"))
     }
 
     /// ns_stats: what each netem of the fault saw, ` <dev>[@<svc>]:sent=<n>,dropped=<n>`.
