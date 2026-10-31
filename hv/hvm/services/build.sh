@@ -65,7 +65,12 @@ pack() {         # <root> <out.cpio.gz>
   find "$1" -exec touch -h -d @1600000000 {} +
   (cd "$1" && find . | LC_ALL=C sort | nix shell nixpkgs#cpio --command cpio -o -H newc --reproducible --quiet) | gzip -n -9 > "$2"
 }
-deps() { nix shell nixpkgs#python3 --command python3 "$HERE/elfdeps.py" "$@"; }
+# the shared-library closure: hydo-elfdeps (hydo/crates/hydo-tools), a static x86_64 program; build it
+# with `cargo build --release -p hydo-tools --no-default-features --bin hydo-elfdeps --target x86_64-unknown-linux-musl`
+# (on any machine, the Mac included), copy it here, and name it with HYDO_ELFDEPS if it is not on PATH
+ELFDEPS=${HYDO_ELFDEPS:-hydo-elfdeps}
+command -v "$ELFDEPS" >/dev/null 2>&1 || { echo "no $ELFDEPS (set HYDO_ELFDEPS; see the comment above)" >&2; exit 1; }
+deps() { "$ELFDEPS" "$@"; }
 
 # redis
 R=$WORK/root-redis
