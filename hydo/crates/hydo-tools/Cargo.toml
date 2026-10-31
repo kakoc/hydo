@@ -1,0 +1,45 @@
+[package]
+name = "hydo-tools"
+description = "Build-machine and release-asset helpers (Nix archives without Nix, cpio extraction, ELF library closures); not shipped in a release"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+# hydo/dist/linux/nar_extract.py
+[[bin]]
+name = "hydo-nar-extract"
+path = "src/bin/hydo-nar-extract.rs"
+
+# hydo/dist/linux/nix_cache_fetch.py (the only program here that needs the network, so the only one
+# that needs a C compiler for the target: rustls's ring; the others build with
+# --no-default-features, for example as a static x86_64 program from a Mac)
+[[bin]]
+name = "hydo-nix-fetch"
+path = "src/bin/hydo-nix-fetch.rs"
+required-features = ["fetch"]
+
+# hydo/dist/mac/cpio_extract.py
+[[bin]]
+name = "hydo-cpio-extract"
+path = "src/bin/hydo-cpio-extract.rs"
+
+# hv/hvm/services/elfdeps.py
+[[bin]]
+name = "hydo-elfdeps"
+path = "src/bin/hydo-elfdeps.rs"
+
+[dependencies]
+hydo-build = { workspace = true }
+hydo-manifest = { workspace = true }
+sha2 = { workspace = true }
+flate2 = { workspace = true }
+lzma-rs = "0.3"
+ureq = { version = "3", default-features = false, features = ["rustls"], optional = true }
+
+[features]
+default = ["fetch"]
+fetch = ["dep:ureq"]

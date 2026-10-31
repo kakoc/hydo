@@ -1,5 +1,5 @@
 //! The shared-library closure of some ELF files, as absolute guest paths: port of
-//! hv/hvm/services/elfdeps.py, which hydo_build_arm64.py ran for the aarch64 `ip` and iptables.
+//! hv/hvm/services/elfdeps.py (deleted in M108; `hydo-elfdeps` of hydo-tools is this module's command line), which hydo_build_arm64.py ran for the aarch64 `ip` and iptables.
 //! Reads PT_INTERP, DT_NEEDED and DT_RUNPATH/DT_RPATH from the file (no readelf, so it works for
 //! foreign architectures), resolves each needed library through the RUNPATH of the object that
 //! needs it (then the loader's directory, then the object's own), and recurses. Every resolved
@@ -233,7 +233,13 @@ impl Elfdeps {
                     }
                 }
                 if !found {
-                    return Err(format!("elfdeps: {f}: cannot resolve {n} (runpath {rp:?})"));
+                    // the runpath as Python printed a list: ['a', 'b']
+                    let rps: Vec<String> =
+                        rp.iter().map(|d| hydo_manifest::py::repr_str(d)).collect();
+                    return Err(format!(
+                        "elfdeps: {f}: cannot resolve {n} (runpath [{}])",
+                        rps.join(", ")
+                    ));
                 }
             }
         }

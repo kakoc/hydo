@@ -52,9 +52,11 @@ if [ ! -d "$A/redis" ]; then   # tar keeps the libraries' symlinks, as hydo-buil
   ssh "$HOST" "cd / && tar cf - $srcs" | ( cd "$A/redis" && tar xf - )
   find "$A/redis" -type d -exec chmod u+w {} +   # files keep the store's read-only modes, as on Linux
 fi
-if [ ! -d "$A/tc" ]; then   # tc and every file its loader opens (hv/hvm/services/elfdeps.py on $HOST)
-  scp -q "$TOP/hv/hvm/services/elfdeps.py" "$HOST:/dev/shm/hydo-elfdeps.py"
-  ssh "$HOST" "p=\$(ls -d /nix/store/*-python3-3.1*/bin/python3 | head -1); \$p /dev/shm/hydo-elfdeps.py $TC" > "$A/tc-closure.txt"
+if [ ! -d "$A/tc" ]; then   # tc and every file its loader opens (hydo-elfdeps, hydo/crates/hydo-tools, on $HOST)
+  # a static x86_64 build (rust-lld, .cargo/config.toml), so $HOST needs nothing but /nix/store
+  ( cd "$TOP" && cargo build --release --locked -p hydo-tools --no-default-features --bin hydo-elfdeps --target x86_64-unknown-linux-musl ) >&2
+  scp -q "$TOP/target/x86_64-unknown-linux-musl/release/hydo-elfdeps" "$HOST:/dev/shm/hydo-elfdeps"
+  ssh "$HOST" "chmod 755 /dev/shm/hydo-elfdeps && /dev/shm/hydo-elfdeps $TC" > "$A/tc-closure.txt"
   echo "$TC" >> "$A/tc-closure.txt"
   mkdir -p "$A/tc"
   ssh "$HOST" "cd / && tar cf - $(sed 's#^/##' "$A/tc-closure.txt" | tr '\n' ' ')" | ( cd "$A/tc" && tar xf - )

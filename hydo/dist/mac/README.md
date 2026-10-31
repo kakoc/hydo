@@ -39,7 +39,7 @@ No `faketime` is needed: the guest clock is deterministic, and `hydo-build` zero
 field afterwards.
 
 For network faults the arm64 builder copies the pinned aarch64 `tc` and the files its loader
-opens (found with `hv/hvm/services/elfdeps.py`) from the host's `/nix/store`. The release ships
+opens (found with `hydo-elfdeps`, `hydo/crates/hydo-tools`) from the host's `/nix/store`. The release ships
 those files under `guest/tc/`, and `hydo build` points the existence check and the copy at that
 tree (the Rust builder's Mac release mode), so the image gets the
 same paths, bytes and modes as a Linux build.

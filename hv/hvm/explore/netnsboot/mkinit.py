@@ -8,7 +8,7 @@
 
 <busybox>: the static arm64 busybox of the Mac release (guest/busybox, 1.36.1); <store root>: a
 directory holding nix/store/... with the aarch64 iproute2 and iptables of hydo_build_arm64.py
-(hydo/dist/linux/nix_cache_fetch.py --closure <root> <path>, or the release's guest tree). The archive
+(hydo-nix-fetch --closure <root> <path>, hydo/crates/hydo-tools, or the release's guest tree). The archive
 holds /init (this directory's init, with the tool paths filled in), busybox and its applets, and
 ip, tc, iptables-legacy with exactly the files their loaders open; sorted, fixed mtimes, uid 0,
 gzip -n, so two builds are the same bytes. Boot it with the namespace kernel:
