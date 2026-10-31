@@ -349,6 +349,7 @@ dependencies = [
  "hydo-build",
  "hydo-compose",
  "hydo-composer",
+ "hydo-control",
  "hydo-engine",
  "hydo-errors",
  "hydo-explore",
@@ -428,6 +429,7 @@ name = "hydo-explore"
 version = "0.1.0"
 dependencies = [
  "flate2",
+ "hydo-control",
  "hydo-engine",
  "hydo-errors",
  "hydo-history",

@@ -188,9 +188,15 @@ pub trait Driver {
 /// One host line.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HostCmd {
-    Send { at: u64, bytes: Vec<u8> },
+    Send {
+        at: u64,
+        bytes: Vec<u8>,
+    },
     Ack(u64),
-    Snap { name: String, retype: bool },
+    Snap {
+        name: String,
+        retype: bool,
+    },
     /// The workload has ended (agent images, M126): at the next CONT the engine takes the workload
     /// fingerprint and switches the disk faults off, as at a shell image's workload marker.
     DiskOff,

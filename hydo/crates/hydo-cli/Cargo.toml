@@ -22,6 +22,7 @@ hydo-compose = { workspace = true }
 hydo-history = { workspace = true }
 hydo-build = { workspace = true }
 hydo-results = { workspace = true }
+hydo-control = { workspace = true }
 serde_json = { workspace = true }
 
 libc = "0.2"

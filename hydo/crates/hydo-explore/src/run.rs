@@ -81,6 +81,8 @@ struct Cx {
     argv: Vec<String>,
     /// events.jsonl (opened when the run starts).
     ev: Events,
+    /// The image's guest side is hydo-agent: the host controller drives it (M126).
+    agent: bool,
 }
 
 impl Cx {
@@ -250,6 +252,7 @@ fn setup(a: Args, env: &Env) -> Cx {
         known: Some(known),
         argv: Vec::new(),
         ev: Events::none(),
+        agent: false,
         a,
     };
     let a = cx.a.clone();
@@ -299,7 +302,16 @@ fn setup(a: Args, env: &Env) -> Cx {
                 .and_then(|t| serde_json::from_str(&t).ok());
             Space::from_text(&text, comp)
         };
-        let sp = sp.unwrap_or_else(|e| die(&e));
+        let mut sp = sp.unwrap_or_else(|e| die(&e));
+        let img = if cx.ex.backend == Backend::Hvm {
+            cx.hvm_image()
+        } else {
+            cx.build.join(&a.image)
+        };
+        if let Ok(hydo_engine::GuestControl::Agent { .. }) = hydo_engine::image::control(&img) {
+            agent_space(&mut sp, &a, &img);
+            cx.agent = true;
+        }
         eprintln!("fault space: {}", dumps_line(&sp.describe()));
         sp.apply(&mut cx.ex);
     }
@@ -438,6 +450,57 @@ fn setup(a: Args, env: &Env) -> Cx {
     cx
 }
 
+/// Fault kinds the host controller does not drive on agent images yet, with their seam
+/// (docs/design/guest-control.md step B2, "wave 3").
+const AGENT_LATER: [(&str, &str); 4] = [
+    ("network", "net-faults"),
+    ("oneway", "net-faults"),
+    ("clock", "clock"),
+    ("freeze", "freeze"),
+];
+
+/// An agent image (M126): the manifest must be one the controller drives, the options that need
+/// what waits for wave 3 are refused, and the fault kinds it cannot drive yet leave the space
+/// (the draws stay the same; [`Space::restrict`] drops those tokens, as for a `faults:` list).
+fn agent_space(sp: &mut Space, a: &Args, img: &Path) {
+    if let Err(e) = hydo_control::agent::plan_of_image(img) {
+        die(&format!(
+            "hydo: {}: an agent image whose manifest the host controller cannot drive yet: {e}",
+            img.display()
+        ));
+    }
+    for (on, what) in [
+        (a.branch.is_some(), "--branch"),
+        (a.buggify, "--buggify (the seam buggify)"),
+        (a.freeze_call, "--freeze-call (the seam freeze)"),
+        (a.protocol_faults, "--protocol-faults (the seam fakes)"),
+        (a.grpc_faults, "--grpc-faults (the seam fakes)"),
+    ] {
+        if on {
+            die(&format!(
+                "hydo: {what} is not supported on an agent image yet ({})",
+                img.display()
+            ));
+        }
+    }
+    let gone: Vec<String> = AGENT_LATER
+        .iter()
+        .filter(|(k, _)| sp.has_fault(k))
+        .map(|(k, seam)| format!("{k} (the seam {seam})"))
+        .collect();
+    sp.faults
+        .retain(|f| !AGENT_LATER.iter().any(|(k, _)| k == f));
+    eprintln!(
+        "agent image: the host controller drives {} (/etc/hydo/control){}",
+        img.display(),
+        if gone.is_empty() {
+            String::new()
+        } else {
+            format!("; fault kinds left out until wave 3: {}", gone.join(", "))
+        }
+    );
+}
+
 /// Build the engine and size the pool. The snapshot store: in memory when every worker's VM and
 /// its in-memory S0/S1 fit in the available memory (hvx; HYDO_SNAPSHOTS=files|memory decides).
 fn make_pool(cx: &Cx) -> Pool {
@@ -495,6 +558,15 @@ fn make_pool(cx: &Cx) -> Pool {
             snapshots: SnapshotStore::Files,
         };
         (Arc::new(e), spec)
+    };
+    let engine: Arc<dyn Engine + Send + Sync> = if cx.agent {
+        match hydo_control::agent::AgentEngine::for_image(engine, &spec.image) {
+            Ok(Some(a)) => Arc::new(a),
+            Ok(None) => die(&format!("{}: not an agent image", spec.image.display())),
+            Err(e) => die(&format!("hydo: {e}")),
+        }
+    } else {
+        engine
     };
     let (n, spec) = size_pool(cx, engine.as_ref(), spec);
     let host = Host {
@@ -1298,7 +1370,10 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
                 format!("repro{}-{sd}", k + 1)
             };
             let rr = rep.get(&tag);
-            ok = ok && rr.and_then(|r| r.get("fp")) == f.get("fp");
+            // an agent image's re-run also types the same commands (ctl=, M126); None == None otherwise
+            ok = ok
+                && rr.and_then(|r| r.get("fp")) == f.get("fp")
+                && rr.and_then(|r| r.get("ctl")) == f.get("ctl");
             if let Some(r) = rr {
                 let mut rr_run = cx.run_record(&tag, &run.schedule, r, role::RERUN);
                 rr_run.seed = Some(sd);

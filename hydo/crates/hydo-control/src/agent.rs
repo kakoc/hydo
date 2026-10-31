@@ -204,8 +204,14 @@ impl Driver for RunDriver<'_> {
     fn drive(&mut self, ls: &mut Lockstep<'_>) -> Result<RunResult, EngineError> {
         let r = {
             let mut link = LockstepLink::new(ls);
-            drive::run(&mut link, self.booted, self.schedule, self.from, self.policy)
-                .map(|ran| (ran, link.result.take()))
+            drive::run(
+                &mut link,
+                self.booted,
+                self.schedule,
+                self.from,
+                self.policy,
+            )
+            .map(|ran| (ran, link.result.take()))
         };
         match r {
             Ok((ran, result)) => {
@@ -256,7 +262,10 @@ impl AgentEngine {
                     ));
                 }
                 let plan = plan_of_image(image).map_err(|e| {
-                    format!("{}: this agent image cannot be run yet: {e}", image.display())
+                    format!(
+                        "{}: this agent image cannot be run yet: {e}",
+                        image.display()
+                    )
                 })?;
                 Ok(Some(AgentEngine::new(inner, plan)))
             }
@@ -317,13 +326,7 @@ impl AgentEngine {
         output.push_str(&note);
         let result = match got {
             Ok((b, Some(ran), result)) => {
-                write_run_files(
-                    &spec.outdir,
-                    "one",
-                    "",
-                    &ran,
-                    b.as_ref().map(|b| &b.boot),
-                );
+                write_run_files(&spec.outdir, "one", "", &ran, b.as_ref().map(|b| &b.boot));
                 result.map(|r| with_ctl(&r, &ran.ctl()))
             }
             Ok((_, None, result)) => result,
@@ -385,7 +388,9 @@ impl Engine for AgentEngine {
                 if let Ok(w) = cb.ready() {
                     let _ = w.close();
                 }
-                Err(EngineError::NotReady(format!("the agent image's boot: {e}")))
+                Err(EngineError::NotReady(format!(
+                    "the agent image's boot: {e}"
+                )))
             }
         }
     }
