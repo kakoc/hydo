@@ -1,57 +1,125 @@
 # hydo — deterministic fault testing for distributed systems
 
-`hydo` runs a whole system (your services, their databases and queues, the workload that drives
+hydo runs a whole system (your services, their databases and queues, and the workload that drives
 them) inside a virtual machine whose execution is **bit-for-bit deterministic**: the same image and
-the same schedule give the same run, every time. On top of that it injects faults (process kills
-and pauses, network loss and delay, power cuts at a chosen disk flush, clock jumps, disk errors,
-faults in outside services) from a seed, explores many such schedules, checks the system's
-properties after each run, and shrinks every failure to a minimal schedule that replays exactly.
+the same schedule give the same run, every time. On top of that it injects faults from a seed:
+process kills and pauses, network loss and delay, one-way partitions, power cuts at a chosen disk
+flush, disk errors and lying disks, clock jumps, and faults in fake outside services. It explores
+many such schedules, checks the system's properties after each run, and shrinks every failure to
+a minimal schedule that replays exactly, on any machine with the same engine.
 
-## Two engines, one product
+Software runs unmodified. hydo has found, for example, etcd 3.5.5's member-revision divergence
+(issue 14685) without being told about it, MySQL showing a commit before its redo log was flushed
+when the binary log is off, and Kafka deleting acknowledged records after a large clock jump with
+its default retention; it reproduces the SQLite 3.51.2 WAL-reset corruption.
 
-hydo has two hypervisors ("engines") and one product on top of them. The engines share no code; the
-product drives either through the same schedule strings.
+**Status: experimental.** The engines and the product work and are tested, but interfaces and
+formats may still change between versions.
 
-- **`hv/hvx/` — the Linux engine.** `hvx` is our own Intel VT-x hypervisor, a Linux kernel module
-  (`hvx.c`, device `/dev/hvx`, ioctl ABI in `hvx_abi.h`). It owns the VMCS, so it controls `RDTSC`,
-  interrupts and every VM exit. Its clock counts VM exits, or retired guest branches with the PMU
-  branch clock, and it can run several vCPUs in exact, branch-counted turns. It boots unmodified
-  x86_64 Linux and real services (MySQL, Kafka, Redis, etcd, the JVM) identically on every run, with
-  snapshots and branch-from-snapshot. `hvx_explore.c` is the run engine the explorer drives;
-  `images/` builds the guest kernel and the hand-written guest images; `deploy-metal.sh` is the
-  regression suite. `ARCHITECTURE.md` describes the engine.
-- **`hv/hvm/` — the Mac engine.** `hvm` runs deterministic arm64 Linux on Apple Silicon through
-  Hypervisor.framework (`hvm.c`, virtio devices, the explorer server `explore/serve.c` = `hvmx`, the
-  guest kernels in `linux/` and `explore/`). See `PROBE.md`, `BOOT.md`, `VIRTIO.md`, `explore/README.md`.
-- **`hydo/` — the product both engines use.** `onboard/` turns a project's `hydo.yaml` (or `hydo/`
-  folder) into a guest image (`hydo-build`, `MANIFEST.md`) and holds the examples; `explore/` is the
-  explorer's notes and research scripts (the explorer itself is the Rust crate
-  `crates/hydo-explore`: schedules, fault strategies, shrinking, reports; `hydo explore` runs it); `history/` checks
-  recorded histories (linearizability, list-append); `readers/` reads stores after a run;
-  `onboard/world/` serves fake outside services and fault proxies; `grpcgen/` generates gRPC
-  drivers; `assert/` builds the assertion property table; `stack/` is the example four-service
-  order system and the Go assertion SDK; `bench/` is the bug benchmark; `dist/linux` and `dist/mac`
-  build the two releases. `PRODUCT.md` describes hydo from a user's point of view.
-
-## Layout
+## How it fits together
 
 ```
-hv/hvx/     the Linux engine (kernel module, run engine, tests, guest images, engine tools)
-hv/hvm/     the Mac engine (VMM, explorer server, arm64 guest kernels, experiments)
-hydo/       the product: onboard/ explore/ history/ readers/ grpcgen/ assert/ stack/ bench/
-            knownbugs/ cutflush/ spec/ richcov/ dist/{linux,mac}
-sdk/        assertion SDKs for guest programs: JavaScript, Python, Rust, Rust test composer
-skills/     the hydo-onboard Agent Skill (writes a project's hydo/ folder)
-docs/       HISTORY.md (every milestone), REBASELINE.md (image fingerprints), BUILD-PINS.md
+ your project ── hydo.yaml or a hydo/ folder ──┐
+                                               ▼
+ ┌──────────────────────── hydo (the product, Rust) ────────────────────────┐
+ │ hydo-cli: the `hydo` command                                             │
+ │ hydo-build  hydo-explore  hydo-composer  hydo-errors  hydo-history  ...  │
+ │ hydo-manifest (project format)    hydo-schedule (schedule language)      │
+ │ hydo-engine: the Engine / Worker interface                               │
+ └──────────────┬────────────────────────────────────────┬──────────────────┘
+                ▼                                        ▼
+   hv/hvx — Linux engine                     hv/hvm — Mac engine
+   a VT-x kernel module (/dev/hvx)           arm64 Linux on Apple Silicon
+   + the run engine hvx_explore              through Hypervisor.framework (hvmx)
 ```
 
-## Getting started
+- **The product** builds a guest image from a project description, drives an engine through one
+  interface (`hydo-engine`), explores fault schedules, checks the results and reports them. It is
+  one Rust workspace (`hydo/crates/`).
+- **The engines** run the guest deterministically and apply faults. They share no code; each
+  implements the same schedule language. `hvx` is our own Intel VT-x hypervisor as a Linux kernel
+  module: it owns the VMCS, so it controls `RDTSC`, interrupts and every VM exit, and its clock
+  counts VM exits or the guest's retired branches. `hvm` runs on Apple Silicon Macs without root.
 
-- On an Apple Silicon Mac: `hydo/dist/mac/QUICKSTART-mac.md`.
-- On an x86_64 Linux machine with Intel VT-x: `hydo/dist/linux/QUICKSTART-linux.md`.
-- To onboard a project: `skills/hydo-onboard/SKILL.md` (or `hydo guide` from a release).
+## Repository layout
 
-The project's history, with the evidence and fingerprints of every milestone, is in
-`docs/HISTORY.md`. An earlier Rust VMM on top of KVM (`src/`), which could not get past Linux's
-`RDTSC` calibration because KVM does not let userspace intercept `RDTSC`, was removed in Milestone
-100; its design and results are in `docs/HISTORY.md`.
+```
+hv/hvx/        the Linux engine: hvx.c (module), hvx_abi.h (ioctl ABI), hvx_explore.c (run
+               engine), module tests and harnesses, images/ (guest kernel and hand-written images),
+               safety/ (KASAN kernel and syzkaller), deploy-metal.sh (regression suite)
+hv/hvm/        the Mac engine: hvm.c, virtio devices, explore/serve.c (hvmx), arm64 guest kernels
+hydo/crates/   the Rust workspace (see below)
+hydo/onboard/  the guest-side init and its extensions (shell, inside every image), MANIFEST.md
+               (the project format), examples
+hydo/          other product parts: onboard/world/ (fake outside services), readers/ (store readers),
+               grpcgen/ (gRPC driver generator), stack/ (the example order system), bench/ (the
+               bug benchmark), dist/ (release packaging)
+sdk/           assertion SDKs for programs under test: Rust (the reference), Python, JavaScript;
+               the Go SDK is hydo/stack/hydoassert
+skills/        hydo-onboard, an Agent Skill that writes a project's hydo/ folder
+docs/          HISTORY.md (every milestone with its evidence), REBASELINE.md, BUILD-PINS.md
+```
+
+### The Rust workspace
+
+| Crate | Responsibility |
+|---|---|
+| `hydo-schedule` | The schedule language as types (`disk=cut dseed=1 \| run K=redis@11+1 C=24`), parse and print, byte for byte. |
+| `hydo-manifest` | The project format: `hydo.yaml`, a plan's `test:` section, the `hydo/` folder; parsing and validation. |
+| `hydo-engine` | The `Engine` and `Worker` traits and the two implementations (`hvx`, `hvm`). |
+| `hydo-build` | Builds guest images for x86_64 and arm64, including services from Docker/OCI images. |
+| `hydo-explore` | The explorer: strategies, sweeps, re-runs, shrinking, reports. |
+| `hydo-composer` | The test composer: commands composed into rounds, stable saved regressions. |
+| `hydo-errors` | Error log lines as findings, with a reviewed list of known errors. |
+| `hydo-history` | Linearizability and list-append checks of recorded histories. |
+| `hydo-compose` | Imports a `docker-compose.yaml` as a starting `hydo.yaml`. |
+| `hydo-agents` | `hydo guide`, `hydo skill install`, `hydo init` for AI coding agents. |
+| `hydo-cli` | The `hydo` command. |
+
+The formats between the parts (the schedule language, the project format, the SDKs' output lines)
+are defined by their implementations and their tests; the tests' recorded examples are the
+specification.
+
+## Building and testing
+
+```sh
+cargo test --locked                        # the whole workspace (Rust 1.90.0, rust-toolchain.toml)
+cargo clippy --all-targets -- -D warnings
+cargo fmt --check
+```
+
+- **The Linux engine** needs an x86_64 machine with Intel VT-x and the running kernel's headers:
+  `make -C hv/hvx` builds `hvx.ko`; `hv/hvx/deploy-metal.sh` runs the engine's regression suite on
+  such a machine. Bare metal is best; a VM works if it exposes nested VT-x, but the exact branch
+  clock needs a working PMU and does not work on Intel hybrid CPUs.
+- **The Mac engine** needs an Apple Silicon Mac: `hv/hvm/build.sh` builds `hvm`, and
+  `hv/hvm/explore/build.sh` builds `hvmx`.
+- **Guest images** are reproducible only with the pinned toolchain listed in `docs/BUILD-PINS.md`.
+
+## Using it on a project
+
+`hydo init` creates a project's `hydo/` folder; `hydo guide` prints the onboarding guide, which an
+AI coding agent can follow (`hydo skill install --agent claude|codex` installs it as a skill).
+`hydo build`, `hydo run`, `hydo explore` and `hydo repro` build the image, run one schedule,
+explore many and replay a failure. `hydo/onboard/MANIFEST.md` describes the project format and
+`hydo/PRODUCT.md` describes hydo from a user's point of view.
+
+## Limits
+
+- The Linux engine supports Intel VT-x only, not AMD.
+- Machines with Secure Boot need the module signed before it can be loaded.
+- Anyone who can open `/dev/hvx` can run guests through the kernel module, which is as powerful as
+  root; give that access only to people you would give sudo.
+
+## Contributing
+
+`AGENTS.md` describes the project's conventions and current state for anyone working in the
+repository, people and coding agents alike. The two rules that matter most: a change must keep
+every recorded fingerprint unchanged unless it deliberately changes one, and a new feature is
+opt-in and inert when off.
+
+## License
+
+Apache License 2.0 (`LICENSE`). The Linux kernel module `hv/hvx/hvx.c` is GPL-2.0-only, and its
+interface header `hvx_abi.h` is GPL-2.0-only WITH Linux-syscall-note OR Apache-2.0; see
+`hv/hvx/LICENSE.md`.
