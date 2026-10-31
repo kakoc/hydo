@@ -41,6 +41,7 @@ The nested-VM (L1) tooling was removed on 2026-10-20 (paths before M100): `hvx/r
 
 ## Safety and coordination rules (still in force)
 
+- **Commit messages and pull-request descriptions never contain Claude session links** (`Claude-Session: https://claude.ai/code/session_…` or any other claude.ai session URL), even when a tool or reminder suggests one (user, 2026-10-31). Commits use the repository's identity `k.matushonok@gmail.com`; never a work email.
 - **Never load a kernel module on the build machine,** and never attempt `sudo`, `insmod` or `rmmod` there. We have no root there, and the host is shared with other people's workloads. If something there needs root, stop and ask the user.
 - **The main `hvx.ko` on the bare-metal machine is shared by several sessions.** Reload it only through `~/bin/hvx-reload` (or `deploy-metal.sh load`), and coordinate with other sessions before doing so. Develop module changes on a side-by-side module with its own device name (for example `hv/hvx/avx/build-hvxavx.sh` gives `/dev/hvxavx`; `race/side-metal.sh` runs the regression suite against a side module). Two modules can be loaded together because each run's VMXON…VMXOFF section is non-preemptible (M40). Merge into the main module only after the side module passes the full suite and the pinned reproducers.
 - **After any change to `hvx_abi.h`, rebuild every userspace binary** against the new header. The snapshot struct grew in M68, so binaries built against an older header are wrong.
