@@ -53,6 +53,51 @@ pub trait Link {
     fn cont(&mut self) -> Result<(), LinkError>;
     /// End the run here; the engine's RESULT line.
     fn end(&mut self, e: &Ending) -> Result<String, LinkError>;
+    /// A power cut at this stop ([`Ending::PowerCut`]): the stop is over, and the engine's next
+    /// stop is the recovery VM's first (restored from S0 with the flushed data disk), where the
+    /// recovery conversation starts. What the link says about it (M126; the default ends the
+    /// run, as a link without a recovery VM does).
+    fn cut(&mut self, e: &Ending) -> Result<String, LinkError> {
+        self.end(e)
+    }
+    /// Whether the last [`Link::engine`] action became a power cut on the engine's side: a
+    /// `cf=` schedule's disk lost power at its k-th flush, so the workload's end
+    /// ([`EngineAction::DiskFaultsOff`]) carries the run into the recovery VM at the next CONT,
+    /// as a shell image's run does at the workload marker (M126).
+    fn engine_cut(&self) -> bool {
+        false
+    }
+}
+
+/// How a conversation ends at the engine (M126).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RunOpts {
+    /// [`Ending::AtSnapshot`] ends the engine's run (END). Off for a fresh boot whose run goes on
+    /// at the same stop (`one`): the next conversation then starts with [`Start::Here`].
+    pub end_at_snapshot: bool,
+}
+
+impl Default for RunOpts {
+    fn default() -> RunOpts {
+        RunOpts {
+            end_at_snapshot: true,
+        }
+    }
+}
+
+/// The report lines the shell init prints at the end of the workload, which the engine reads for
+/// the recovery boot (hvx_explore's `oracle_cmd`): the acknowledged and the failed ids.
+pub const ACKED_PREFIX: &str = "hydo-explore-acked:";
+pub const FAILED_PREFIX: &str = "hydo-explore-failed:";
+
+/// The ids of the last `prefix` report line of `t` (what the engine reads from the console).
+fn report_ids(t: &Transcript, prefix: &str) -> Vec<String> {
+    t.report_lines()
+        .into_iter()
+        .rev()
+        .find_map(|l| l.strip_prefix(prefix))
+        .map(|r| r.split_whitespace().map(str::to_string).collect())
+        .unwrap_or_default()
 }
 
 /// Where the agent conversation stands at a snapshot: what a conversation that resumes from it
@@ -73,6 +118,11 @@ pub enum Start {
     Boot,
     /// From a snapshot: the runner resynchronises first.
     Resume(AgentPoint),
+    /// At the stop where the previous conversation of the same engine run ended without ending
+    /// the run (a fresh boot's S1, [`RunOpts::end_at_snapshot`] off): as [`Start::Resume`] from
+    /// that point, at that same stop. Its record says `why=resume`, as the stop a worker's CTL
+    /// run starts with does, so the two runs write the same transcript.
+    Here { point: AgentPoint, stop: StopInfo },
 }
 
 /// What a conversation gave.
@@ -84,6 +134,8 @@ pub struct Finished {
     pub result: String,
     /// The agent's position at each snapshot taken.
     pub snapshots: Vec<AgentPoint>,
+    /// The stop the conversation ended at (None when the engine ended it).
+    pub last_stop: Option<StopInfo>,
 }
 
 /// Why a conversation could not be carried out.
@@ -148,17 +200,35 @@ pub fn run(
     link: &mut dyn Link,
     ctl: &mut dyn Controller,
     start: Start,
+    header: Header,
+) -> Result<Finished, RunError> {
+    run_with(link, ctl, start, header, RunOpts::default())
+}
+
+/// [`run`] with [`RunOpts`].
+pub fn run_with(
+    link: &mut dyn Link,
+    ctl: &mut dyn Controller,
+    start: Start,
     mut header: Header,
+    opts: RunOpts,
 ) -> Result<Finished, RunError> {
     header.controller = ctl.name().to_string();
     let mut session: Option<Session> = None;
     let mut need_sync = false;
-    if let Start::Resume(p) = &start {
+    let mut here = None;
+    if let Start::Resume(p) | Start::Here { point: p, .. } = &start {
         let mut s = Session::from_hello(&p.hello)
             .map_err(|e| RunError::Protocol(format!("the snapshot's hello: {e}")))?;
         s.resume_at(p.next_id, p.next_seq);
         session = Some(s);
         need_sync = true;
+    }
+    if let Start::Here { stop, .. } = &start {
+        here = Some(StopInfo {
+            why: crate::control::Why::Resume,
+            ..*stop
+        });
     }
     let mut w = Writer {
         t: Transcript::new(header),
@@ -167,13 +237,21 @@ pub fn run(
     let mut send_of: BTreeMap<u64, u64> = BTreeMap::new();
     let mut snapshots = Vec::new();
     loop {
-        let (stop, lines) = match link.next_stop()? {
+        let next = match here.take() {
+            Some(stop) => LinkNext::Stop {
+                stop,
+                lines: Vec::new(),
+            },
+            None => link.next_stop()?,
+        };
+        let (stop, lines) = match next {
             LinkNext::Done(r) => {
                 return Ok(Finished {
                     ending: None,
                     transcript: w.t,
                     result: r,
                     snapshots,
+                    last_stop: None,
                 })
             }
             LinkNext::Stop { stop, lines } => (stop, lines),
@@ -321,6 +399,35 @@ pub fn run(
                         n: stop.n,
                         action: a,
                     });
+                    if link.engine_cut() {
+                        // The engine turned the workload's end into a power cut (cf=): the
+                        // conversation ends here as the shell init's run does, and the recovery
+                        // gets the ids the engine reads from the init's report lines. The
+                        // controller's later actions at this stop belong to a VM that is gone.
+                        // (the fake world's `w:` records, when the acknowledged line carries any,
+                        // go to the recovery as the world, as the shell's oracle command did)
+                        let (world, acked): (Vec<String>, Vec<String>) =
+                            report_ids(&w.t, ACKED_PREFIX)
+                                .into_iter()
+                                .partition(|x| x.starts_with("w:"));
+                        let e = Ending::PowerCut {
+                            acked,
+                            failed: report_ids(&w.t, FAILED_PREFIX),
+                            world,
+                        };
+                        w.push(Record::End {
+                            n: stop.n,
+                            end: e.clone(),
+                        });
+                        link.cont()?;
+                        return Ok(Finished {
+                            ending: Some(e),
+                            transcript: w.t,
+                            result: String::new(),
+                            snapshots,
+                            last_stop: Some(stop),
+                        });
+                    }
                 }
                 Action::End(e) => {
                     w.push(Record::End {
@@ -333,12 +440,17 @@ pub fn run(
             }
         }
         if let Some(e) = ended {
-            let result = link.end(&e)?;
+            let result = match &e {
+                Ending::PowerCut { .. } => link.cut(&e)?,
+                Ending::AtSnapshot(_) if !opts.end_at_snapshot => String::new(),
+                _ => link.end(&e)?,
+            };
             return Ok(Finished {
                 ending: Some(e),
                 transcript: w.t,
                 result,
                 snapshots,
+                last_stop: Some(stop),
             });
         }
         link.cont()?;

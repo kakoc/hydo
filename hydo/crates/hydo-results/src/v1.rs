@@ -186,6 +186,10 @@ pub struct Fingerprints {
     /// The workload's part.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wfp: Option<String>,
+    /// An agent image's run: the hash of its control transcripts (`ctl=` on the RESULT line,
+    /// M126): equal hashes mean the host typed the same commands at the same stops.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ctl: Option<String>,
 }
 
 /// What a run checked, in one shape for every source.
@@ -787,6 +791,7 @@ impl Run {
             fingerprints: Fingerprints {
                 fp: fp.into(),
                 wfp: None,
+                ctl: None,
             },
             ..Run::default()
         }

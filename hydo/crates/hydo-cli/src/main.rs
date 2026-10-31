@@ -45,6 +45,8 @@ const HELP_LINUX: &str = r#"hydo -- deterministic fault testing on an x86_64 Lin
     hydo repro   <run dir | explore dir | "<schedule>"> [--image IMG]
                                                    run again and compare the fingerprints
     hydo repro   --regressions [IMG]               replay the plan's saved regressions (hydo/regressions/)
+    hydo repro   --transcript <control.jsonl> [--image IMG]
+                                                   type an agent image's recorded run again
     hydo save    <explore dir> [--to hydo/regressions]
                                                    save the minimal schedules of an exploration as regressions
     hydo explore [IMG] [--seeds 1-20] [--strategy random|swarm|process|...] [--workers N]
@@ -82,6 +84,8 @@ const HELP_MAC: &str = r#"hydo -- deterministic fault testing on an Apple Silico
     hydo repro   <run dir | explore dir | "<schedule>"> [--image IMG]
                                                    run again and compare the fingerprints
     hydo repro   --regressions [IMG]               replay the plan's saved regressions (hydo/regressions/)
+    hydo repro   --transcript <control.jsonl> [--image IMG]
+                                                   type an agent image's recorded run again
     hydo save    <explore dir> [--to hydo/regressions]
                                                    save the minimal schedules of an exploration as regressions
     hydo explore [IMG] [--seeds 1-20] [--strategy random|swarm|process|...] [--workers N]

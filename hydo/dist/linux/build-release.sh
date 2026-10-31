@@ -135,6 +135,11 @@ mkdir -p "$REL/guest" "$REL/tools"
 ( cd "$A/guest" && tar cf - . ) | ( cd "$REL/guest" && tar xpf - )
 ( cd "$A/tools" && tar cf - . ) | ( cd "$REL/tools" && tar xpf - )
 chmod 755 "$REL/guest/busybox" "$REL/guest/hvx_seedrng" "$REL/guest/hydo_fc" "$REL/tools/bin/"*
+# the guest agent of agent images (hydo build --control agent, M121; driven by the host controller,
+# M126): built here byte-reproducibly (hydo/crates/hydo-agent/build.sh, no C toolchain); hydo-build
+# checks its sha256 against the pin in docs/BUILD-PINS.md when it stages it
+"$TOP/hydo/crates/hydo-agent/build.sh" x86_64 "$A/agent" >&2
+cp "$A/agent/hydo-agent" "$REL/guest/hydo-agent"; chmod 755 "$REL/guest/hydo-agent"
 # the Redis example (hydo/onboard/examples/redis) with its binaries under files/
 cp "$A/redis/redis-server" "$A/redis/redis-cli" "$REL/examples/redis/files/"
 chmod 755 "$REL/examples/redis/files/"*

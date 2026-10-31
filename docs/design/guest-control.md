@@ -482,7 +482,9 @@ Steps that can run in parallel are marked with the same letter. Each step lists 
 - **C1. `hydo-engine` `run_controlled`/`resume` and the explorer's strategies on controllers;
   `ctl=` in RESULT; `control.jsonl` in runs; `hydo repro --transcript`.** Proof: the 18
   scripted-engine scenarios unchanged for shell images; transcript replay equals policy replay on
-  every example.
+  every example. *Done in M126 (the engines' `DISKOFF`/`CUT`, `Worker::run_controlled`/`resume`
+  with a `Driver`, `hydo_control::agent::AgentEngine`; proven on the Redis example on hvx and hvm;
+  the other examples are C2's); docs/HISTORY.md "Milestone 126".*
 - **C2. Equivalence campaign** (after A–C1): every example, both architectures, seeds 1–100,
   the sweeps, the benchmark cells of M108. Proof: the verdict tables, every difference explained.
 - **C3. Re-baseline and switch the default; then retire the splicing.** Proof: REBASELINE.md
