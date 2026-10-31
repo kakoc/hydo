@@ -221,7 +221,7 @@ order; a NaN, an infinity or a cycle drops the record, as `json.Marshal` fails o
 writes invalid UTF-8 as a raw U+FFFD; the SDK writes Go 1.26's `\ufffd` escape.
 `hydo/onboard/examples/node-kv` is a complete example (Mac backend).
 
-**Reading the stores** (`hydo-read` / `hydo-check`, `hydo/readers`; full reference in
+**Reading the stores** (`hydo-read` / `hydo-check`, `hydo/crates/hydo-read`; full reference in
 `hydo/onboard/MANIFEST.md`, "Reading the stores"). A cross-service property often needs what
 is in a MySQL/PostgreSQL table, on a Kafka topic, under Redis or etcd keys. Any SDK or script
 can run the static helper instead of linking a client for every store:

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Build the miniflux example with the store-reader invariants (hydo-read.yaml); the miniflux
-# binary as in build.sh (HYDO_MINIFLUX_BIN), hydo-read from build/hydo-read or HYDO_READ_BIN.
+# binary as in build.sh (HYDO_MINIFLUX_BIN), hydo-read from build/hydo-read
+# (hydo/crates/hydo-read/build.sh) or HYDO_READ_BIN.
 # Output: build/explore-ob-miniflux-read-disk.img (run from the repository root).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"

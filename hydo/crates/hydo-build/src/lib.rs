@@ -231,7 +231,7 @@ Host tools (override with the environment variables):
     HYDO_BUSYBOX  static busybox          HYDO_SEEDRNG   prebuilt static hvx_seedrng
     HYDO_MKE2FS   e2fsprogs mke2fs        HYDO_FAKETIME  libfaketime's faketime
     HYDO_IPROUTE2 iproute2 store path     HYDO_MODROOT   guest kernel module tree
-    HYDO_READ_BIN hydo-read (hydo/readers/build.sh), staged only when a command calls
+    HYDO_READ_BIN hydo-read (hydo/crates/hydo-read/build.sh), staged only when a command calls
                   hydo-read or hydo-check
     HYDO_WORLDBIN hydo-world (hydo/onboard/world/build.sh), staged only for fakes:/proxies:
 --arch arm64 takes the arm64 builds of the last two from HYDO_READ_BIN_ARM64 and

@@ -1022,7 +1022,7 @@ an older hydo as an unknown field.
 
 Cross-service invariants need "what is in this table / on this topic / under this key". Instead
 of writing that reading code in shell for every manifest, a check can call two ready-made
-commands (source: `hydo/readers`; one static Go binary, `hydo-check` is a symlink to it):
+commands (source: `hydo/crates/hydo-read`; one static Rust binary, `hydo-check` is a symlink to it):
 
 - `hydo-read <store> <args>` prints what a store holds as JSON Lines, one record per line,
   keys sorted, lines sorted bytewise (Kafka, Redis lists and sorted sets keep the store's
@@ -1105,13 +1105,13 @@ symlink only when some command of the manifest calls `hydo-read` or `hydo-check`
 and `msg:` do not count; `test:` entries count, and so does any file in the plan's `hydo/`
 folder that contains the name, a script or a compiled program); every other manifest builds a
 byte-identical image. Build the binary
-first with `hydo/readers/build.sh` (byte-reproducible; it lands in `build/hydo-read`, or point
-`HYDO_READ_BIN` at it). For `--arch arm64`, build it with `HYDO_READ_GOARCH=arm64
-hydo/readers/build.sh build/hydo-read-arm64` (`HYDO_READ_BIN_ARM64` overrides; the Mac release ships
-it as `guest/hydo-read`); example `hydo/onboard/examples-mac/redis/hydo-read.yaml`. From a program under test (an SDK, not
+first with `hydo/crates/hydo-read/build.sh` (Rust 1.90.0, static musl, byte-reproducible on a given
+build host; it writes `build/hydo-read` for x86_64 and `build/hydo-read-arm64` for `--arch arm64`,
+or point `HYDO_READ_BIN` / `HYDO_READ_BIN_ARM64` at them; the Mac release ships the arm64 one as
+`guest/hydo-read`); example `hydo/onboard/examples-mac/redis/hydo-read.yaml`. From a program under test (an SDK, not
 an invariant), run the same binary with `--id`/`--console` so the record reaches the console.
 Examples: `examples/stack/hydo-read.yaml`, `examples/miniflux/hydo-read.yaml`; tests against real
-stores: `hydo/readers/native-test.sh`.
+stores: `hydo/crates/hydo-read/native-test.sh`.
 
 ### gRPC faults (a fault proxy in front of a gRPC service)
 
