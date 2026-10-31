@@ -389,6 +389,7 @@ dependencies = [
 name = "hydo-control"
 version = "0.1.0"
 dependencies = [
+ "flate2",
  "hydo-agent-proto",
  "hydo-engine",
  "hydo-explore",
