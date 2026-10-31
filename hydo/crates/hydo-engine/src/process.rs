@@ -1,5 +1,6 @@
 //! Driving an engine program: a fresh-boot `one` run, and a `serve` worker over stdin/stdout.
 
+use crate::lockstep::{Lockstep, LockstepStart};
 use crate::protocol::{BranchOutcome, BranchRequest, Ready, RunResult};
 use crate::{EngineError, OneRun, Worker};
 use hydo_schedule::Schedule;
@@ -137,6 +138,30 @@ impl Worker for ProcessWorker {
                 out.runs.push(r);
             }
         }
+    }
+
+    fn lockstep<'a>(
+        &'a mut self,
+        start: &LockstepStart,
+        log: Option<&'a mut dyn Write>,
+    ) -> Result<Lockstep<'a>, EngineError> {
+        if !self.branch {
+            return Err(EngineError::Unsupported(
+                "lock-step control is not supported on hvm yet".into(),
+            ));
+        }
+        let tag = start.tag();
+        if tag.is_empty() || tag.contains(char::is_whitespace) || tag.len() > 63 {
+            return Err(EngineError::Protocol(format!(
+                "bad tag {tag:?} (one word, at most 63 bytes)"
+            )));
+        }
+        let mut s = Lockstep::new(&mut self.stdout, &mut self.stdin);
+        if let Some(l) = log {
+            s = s.with_log(l);
+        }
+        s.request(&start.line())?;
+        Ok(s)
     }
 
     fn close(self: Box<Self>) -> Result<(), EngineError> {
