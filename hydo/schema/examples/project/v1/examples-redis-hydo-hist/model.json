@@ -1,0 +1,80 @@
+{
+  "format": 1,
+  "name": "redis-hist",
+  "description": "Redis with an append-only file; histories checked for linearizability and lost appends.",
+  "root": {
+    "files": [
+      {
+        "src": "~/hydo/build/redis-server",
+        "dst": "/bin/redis-server",
+        "mode": "0755"
+      },
+      {
+        "src": "~/hydo/build/redis-cli",
+        "dst": "/bin/redis-cli",
+        "mode": "0755"
+      }
+    ],
+    "text": {
+      "/etc/redis.conf": "port 6379\nbind 127.0.0.1\ndir /data/redis\nsave \"\"\nappendonly yes\nappendfsync always\nhz 1\ndynamic-hz no\n"
+    }
+  },
+  "data": {
+    "size_mib": 64,
+    "dirs": [
+      "redis"
+    ]
+  },
+  "shell": "rc() { timeout 2 /bin/redis-cli \"$@\" 2>/dev/null; }      # a 2 s client deadline\nlist_tok() { local l; l=$(tr '\\n' ',' | sed 's/,$//'); echo \"[$l]\"; }   # LRANGE lines -> [e1,e2,...]\n",
+  "services": [
+    {
+      "name": "redis",
+      "cmd": "/bin/redis-server /etc/redis.conf",
+      "ready": "/bin/redis-cli ping | grep -q PONG",
+      "port": 6379
+    }
+  ],
+  "workload": {
+    "steps": 20,
+    "run": "i=$HYDO_FROM\nwhile [ $i -lt $HYDO_TO ]; do\n  hydo_hist kv 0 invoke write k:$i v$i\n  if [ \"$(rc SET k:$i v$i)\" = OK ]; then echo $i >> $HYDO_ACKED; hydo_hist kv 0 ok write k:$i v$i\n  else hydo_hist kv 0 info write k:$i v$i; fi\n  l=l$((i % 3))\n  hydo_hist log 1 invoke append $l $i\n  case \"$(rc RPUSH $l $i)\" in [0-9]*) hydo_hist log 1 ok append $l $i;; *) hydo_hist log 1 info append $l $i;; esac\n  hydo_hist log 2 invoke read $l\n  if out=$(rc LRANGE $l 0 -1); then hydo_hist log 2 ok read $l $(printf '%s' \"$out\" | list_tok)\n  else hydo_hist log 2 info read $l; fi\n  i=$((i + 1))\ndone\n",
+    "process": "redis-cli"
+  },
+  "knobs": [
+    {
+      "token": "R",
+      "name": "Redis appendfsync",
+      "default": "always",
+      "set": "/bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE",
+      "values": [
+        "always",
+        "everysec",
+        "no"
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "id": "redis.kv_linearizable",
+      "type": "linearizable",
+      "history": "kv",
+      "model": "register",
+      "msg": "every SET and GET is linearizable per key (an acknowledged SET is never lost)",
+      "final": "i=0\nwhile [ $i -lt $HYDO_STEPS ]; do\n  hydo_hist kv 9 invoke read k:$i\n  if v=$(rc GET k:$i); then hydo_hist kv 9 ok read k:$i ${v:-nil}; else hydo_hist kv 9 info read k:$i; fi\n  i=$((i + 1))\ndone\n"
+    },
+    {
+      "id": "redis.lists_append",
+      "type": "list-append",
+      "history": "log",
+      "consistency": "strict-serializable",
+      "msg": "the lists never lose an acknowledged RPUSH, never duplicate one, and reads never go back in time",
+      "final": "for l in l0 l1 l2; do\n  hydo_hist log 9 invoke read $l\n  if out=$(rc LRANGE $l 0 -1); then hydo_hist log 9 ok read $l $(printf '%s' \"$out\" | list_tok)\n  else hydo_hist log 9 info read $l; fi\ndone\n"
+    }
+  ],
+  "faults": [
+    "kill",
+    "pause",
+    "cut",
+    "clock",
+    "disk"
+  ]
+}

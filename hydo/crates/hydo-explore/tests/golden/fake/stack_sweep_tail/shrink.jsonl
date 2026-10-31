@@ -1,7 +1,0 @@
-{"shrink": "disk=none dseed=0 | run", "verdict": "HYDO-ORACLE: OK acked=30"}
-{"shrink": "disk=none dseed=0 | run O=mysql@27-28:req:delay,1000ms", "verdict": "HYDO-ORACLE: OK acked=30"}
-{"shrink": "disk=none dseed=0 | run O=mysql@27-30:req:delay,500ms", "verdict": "HYDO-ORACLE: OK acked=30"}
-{"shrink": "disk=none dseed=0 | run", "verdict": "HYDO-ORACLE: OK acked=30"}
-{"shrink": "disk=none dseed=0 | run", "verdict": "HYDO-ORACLE: OK acked=30"}
-{"shrink": "disk=none dseed=0 | run", "verdict": "HYDO-ORACLE: OK acked=30"}
-{"shrink": "disk=none dseed=0 | run", "verdict": "HYDO-ORACLE: OK acked=30"}

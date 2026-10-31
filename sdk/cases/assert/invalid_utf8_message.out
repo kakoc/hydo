@@ -1,0 +1,2 @@
+HYDO-ASSERT-DECL {"t":"always","id":"t.bad\ufffd","msg":"invalid \ufffd UTF-8 \ufffd\ufffd in a message"}
+HYDO-ASSERT {"t":"always","id":"t.bad\ufffd","ok":true,"msg":"invalid \ufffd UTF-8 \ufffd\ufffd in a message"}

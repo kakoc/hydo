@@ -23,6 +23,7 @@ members = [
     "hydo/crates/hydo-tools",
     "hydo/crates/hydo-grpc",
     "hydo/crates/hydo-grpc-gen",
+    "hydo/crates/hydo-results",
 ]
 exclude = ["sdk", "hydo/onboard/examples"]
 
@@ -49,6 +50,7 @@ hydo-history = { path = "hydo/crates/hydo-history" }
 hydo-build = { path = "hydo/crates/hydo-build" }
 hydo-grpc = { path = "hydo/crates/hydo-grpc" }
 hydo-grpc-gen = { path = "hydo/crates/hydo-grpc-gen" }
+hydo-results = { path = "hydo/crates/hydo-results" }
 
 [profile.release]
 opt-level = 3

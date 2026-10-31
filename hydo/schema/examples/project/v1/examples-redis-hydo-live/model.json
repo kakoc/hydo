@@ -1,0 +1,77 @@
+{
+  "format": 1,
+  "name": "redis-live",
+  "description": "Redis with an append-only file; every acknowledged SET must survive, and every SET left pending by the faults is acknowledged within 10 s after fault injection ends.",
+  "root": {
+    "files": [
+      {
+        "src": "~/hydo/build/redis-server",
+        "dst": "/bin/redis-server",
+        "mode": "0755"
+      },
+      {
+        "src": "~/hydo/build/redis-cli",
+        "dst": "/bin/redis-cli",
+        "mode": "0755"
+      }
+    ],
+    "text": {
+      "/etc/redis.conf": "port 6379\nbind 127.0.0.1\ndir /data/redis\nsave \"\"\nappendonly yes\nappendfsync always\nhz 1\ndynamic-hz no\n"
+    }
+  },
+  "data": {
+    "size_mib": 64,
+    "dirs": [
+      "redis"
+    ]
+  },
+  "services": [
+    {
+      "name": "redis",
+      "cmd": "/bin/redis-server /etc/redis.conf",
+      "ready": "/bin/redis-cli ping | grep -q PONG",
+      "port": 6379
+    }
+  ],
+  "workload": {
+    "steps": 20,
+    "run": "i=$HYDO_FROM\nwhile [ $i -lt $HYDO_TO ]; do\n  r=$(timeout 2 /bin/redis-cli SET k:$i v$i 2>/dev/null)   # a 2 s client deadline\n  if [ \"$r\" = OK ]; then echo $i >> $HYDO_ACKED; echo \"$i ack\" >> $HYDO_OUTCOMES\n  else echo \"$i unknown\" >> $HYDO_OUTCOMES; fi\n  i=$((i + 1))\ndone\n",
+    "retry": "for i in $(awk '{ o[$1] = $2 } END { for (i in o) if (o[i] != \"ack\") print i }' $HYDO_OUTCOMES | sort -n); do\n  r=$(timeout 2 /bin/redis-cli SET k:$i v$i 2>/dev/null)\n  if [ \"$r\" = OK ]; then echo $i >> $HYDO_ACKED; echo \"$i ack\" >> $HYDO_OUTCOMES\n  else echo \"$i unknown\" >> $HYDO_OUTCOMES; fi\ndone\n"
+  },
+  "knobs": [
+    {
+      "token": "R",
+      "name": "Redis appendfsync",
+      "default": "always",
+      "set": "/bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE",
+      "values": [
+        "always",
+        "everysec",
+        "no"
+      ]
+    }
+  ],
+  "invariants": [
+    {
+      "id": "redis.acked_writes_survive",
+      "msg": "every SET the client saw acknowledged reads back with its value",
+      "cmd": "lost=0\nfor i in $(cat $HYDO_ACKED); do\n  [ \"$(/bin/redis-cli GET k:$i)\" = \"v$i\" ] || { echo \"key k:$i lost\"; lost=1; break; }\ndone\n[ $lost = 0 ] && echo \"acked=$(wc -l < $HYDO_ACKED) all present\"\n[ $lost = 0 ]\n"
+    },
+    {
+      "id": "redis.pending_resolved",
+      "type": "eventually",
+      "msg": "every SET whose outcome was unknown is acknowledged within 10 s after fault injection ends",
+      "cmd": "n=$(awk '{ o[$1] = $2 } END { n = 0; for (i in o) if (o[i] != \"ack\") n++; print n }' $HYDO_OUTCOMES)\necho \"pending=$n\"\n[ \"$n\" = 0 ]\n",
+      "within": 10,
+      "after": "heal",
+      "poll": 1
+    }
+  ],
+  "faults": [
+    "kill",
+    "pause",
+    "cut",
+    "clock",
+    "disk"
+  ]
+}

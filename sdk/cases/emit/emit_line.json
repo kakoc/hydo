@@ -1,0 +1,14 @@
+{
+  "about": "emit_line writes `\u003ctag\u003e \u003cjson\u003e` through the assertion sink; a value with a NaN writes nothing (Go's SDK has no emit_line)",
+  "needs": ["emit_line"],
+  "steps": [
+    {"do":"emit_line","tag":"HYDO-EXT","value":{"map":[["b",{"int":"1"}],["a","x"],["n",[{"f64":"1.5"},null,true]]]}},
+    {"do":"emit_line","tag":"HYDO-EXT","value":[{"int":"1"},"two"]},
+    {"do":"emit_line","tag":"HYDO-EXT","value":"a \u003cstring\u003e"},
+    {"do":"emit_line","tag":"HYDO-EXT","value":{"map":[["bad",{"f64":"NaN"}]]}},
+    {"do":"emit_line","tag":"HYDO-OTHER","value":{"map":[]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "emit_line.out", "returns": ""}
+  ]
+}

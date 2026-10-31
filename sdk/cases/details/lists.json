@@ -1,0 +1,11 @@
+{
+  "about": "lists of mixed values, empty and nested lists",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"d.lists","msg":"details encoding"},
+    {"do":"check","a":0,"cond":true,"details":{"map":[["mixed",[{"int":"1"},"a",false,null,{"map":[["z",{"int":"1"}],["a",{"int":"2"}]]},[]]],["empty",[]],["nested",[[[]],[{"int":"1"},[{"int":"2"}]]]]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "lists.out", "returns": "1"}
+  ]
+}

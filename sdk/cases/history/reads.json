@@ -1,0 +1,16 @@
+{
+  "about": "a read lists key/value pairs; value_or_nil gives nil for an absent key, and the constant NIL is nil",
+  "needs": [],
+  "steps": [
+    {"do":"history","name":"kv"},
+    {"do":"invoke","h":0,"proc":{"int":"20"},"f":"read","args":["k1","k2","k3"]},
+    {"do":"ok","o":0,"args":["k1",{"value_or_nil":""},"k2",{"value_or_nil":null},"k3",{"nil":true}]},
+    {"do":"invoke","h":0,"proc":{"int":"20"},"f":"read","args":["k4"]},
+    {"do":"ok","o":1,"args":["k4",{"value_or_nil":"x y"}]},
+    {"do":"invoke","h":0,"proc":{"int":"20"},"f":"read","args":["k5"]},
+    {"do":"ok","o":2,"args":["k5",{"value_or_nil":"nil"}]}
+  ],
+  "runs": [
+    {"name": "", "out": "off", "hist_out": "file", "buggify_env": null, "buggify_file": null, "output": "reads.out", "returns": ""}
+  ]
+}

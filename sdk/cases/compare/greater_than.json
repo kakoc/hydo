@@ -1,0 +1,15 @@
+{
+  "about": "the greater_than helper (JavaScript and Python; Go and Rust call cmp with its operator) writes the comparison record",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"c.greater_than","msg":"always greater_than"},
+    {"do":"sometimes","id":"c.s_greater_than","msg":"sometimes greater_than"},
+    {"do":"cmp","a":0,"left":{"int":"2"},"op":"\u003e","right":{"int":"1"},"helper":"greater_than","details":{"map":[["k","v"]]}},
+    {"do":"cmp","a":0,"left":{"int":"1"},"op":"\u003e","right":{"int":"2"},"helper":"greater_than"},
+    {"do":"cmp","a":1,"left":{"int":"1"},"op":"\u003e","right":{"int":"2"},"helper":"greater_than"},
+    {"do":"cmp","a":1,"left":{"int":"2"},"op":"\u003e","right":{"int":"1"},"helper":"greater_than"}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "greater_than.out", "returns": "1001"}
+  ]
+}

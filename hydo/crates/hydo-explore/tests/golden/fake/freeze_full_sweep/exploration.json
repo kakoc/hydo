@@ -1,0 +1,141 @@
+{
+  "v": 1,
+  "type": "exploration",
+  "hydo_version": "0.1.0",
+  "mode": "sweep",
+  "config": {
+    "strategy": "sweep:freeze",
+    "sweep": "freeze",
+    "argv": [
+      "--sweep",
+      "freeze",
+      "--manifest",
+      "hydo/onboard/examples/redis/hydo-freeze.yaml",
+      "--fc-steps",
+      "8-9",
+      "--fc-durs",
+      "1000",
+      "--workers",
+      "3",
+      "--out",
+      "<out>"
+    ]
+  },
+  "image": {
+    "path": "explore-disk.img",
+    "resolved": "<dir>/explore-disk.img"
+  },
+  "engine": {
+    "backend": "hvx",
+    "args": [],
+    "ram_mib": 1024,
+    "vcpus": 1,
+    "cpu": "v2",
+    "workers": N
+  },
+  "summary": {
+    "schedules": 16,
+    "sweep_wall_s": N,
+    "runs_per_hour": N,
+    "mean_run_s": 6.1,
+    "worker_boot_s": 2.5,
+    "total_wall_s": N,
+    "failures": 0,
+    "reproduced": 0,
+    "repro_runs": 2,
+    "error_kinds_new": 1,
+    "runs_with_new_error_kinds": 16
+  },
+  "failures": [],
+  "shrinks": [],
+  "error_kinds": {
+    "unknown": "report",
+    "kinds": [
+      {
+        "signature": "4c53c64297e2",
+        "service": "app",
+        "source": "log",
+        "template": "config reloaded",
+        "example": "config reloaded",
+        "new": true,
+        "runs": 16,
+        "new_runs": 16,
+        "seeds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "first_seed": 1,
+        "first_schedule": "disk=none dseed=0 | run F=redis<workload@8#1:1000",
+        "first_at": [
+          "s"
+        ],
+        "lines": 16,
+        "first_new": {
+          "seed": 1,
+          "schedule": "disk=none dseed=0 | run F=redis<workload@8#1:1000",
+          "at": [
+            "s"
+          ],
+          "example": "config reloaded"
+        }
+      }
+    ]
+  },
+  "properties": {
+    "runs": 16,
+    "setup_complete_runs": 0,
+    "violations": 0,
+    "properties": [
+      {
+        "id": "orders.drained",
+        "assertion": "eventually",
+        "message": "",
+        "declared": false,
+        "passes": 16,
+        "fails": 0,
+        "runs_passed": 16,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok",
+        "slowest_ok_s": 3.25
+      },
+      {
+        "id": "retry.taken",
+        "assertion": "sometimes",
+        "message": "",
+        "declared": false,
+        "passes": 0,
+        "fails": 16,
+        "runs_passed": 0,
+        "runs_failed": 16,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised",
+        "first_failure": "-"
+      }
+    ]
+  },
+  "liveness": [
+    {
+      "id": "orders.drained",
+      "held_runs": 16,
+      "missed_runs": 0,
+      "slowest_s": 3.25,
+      "slowest_run": "seed-14"
+    }
+  ],
+  "artifacts": {
+    "events": "events.jsonl",
+    "report": "report.md",
+    "consoles": "consoles"
+  }
+}

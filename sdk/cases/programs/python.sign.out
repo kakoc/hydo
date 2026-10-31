@@ -1,0 +1,51 @@
+HYDO-ASSERT-DECL {"t":"always","id":"c.always","msg":"always \u003cholds\u003e \u0026 \"quotes\""}
+HYDO-ASSERT-DECL {"t":"always_or_unreachable","id":"c.aou","msg":"always or unreachable"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"c.sometimes","msg":"sometimes é \u2028 true"}
+HYDO-ASSERT-DECL {"t":"reachable","id":"c.reach","msg":"reached"}
+HYDO-ASSERT-DECL {"t":"unreachable","id":"c.unreach","msg":"never reached"}
+HYDO-ASSERT-DECL {"t":"always","id":"c.never","msg":"never evaluated"}
+HYDO-ASSERT-DECL {"t":"always","id":"c.cmp","msg":"a comparison"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"c.scmp","msg":"a sometimes comparison"}
+HYDO-ASSERT-DECL {"t":"always","id":"c.gt","msg":"greater than"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"c.ge","msg":"greater than or equal"}
+HYDO-ASSERT-DECL {"t":"always","id":"c.lt","msg":"less than"}
+HYDO-ASSERT-DECL {"t":"always","id":"c.le","msg":"less than or equal"}
+HYDO-ASSERT-DECL {"t":"always","id":"c.nan","msg":"details with a NaN"}
+HYDO-ASSERT-DECL {"t":"always","id":"c.ünï/日本","msg":"unicode id and \u0001 control"}
+HYDO-ASSERT-DECL {"t":"always","id":"c.loop","msg":"evaluated many times"}
+HYDO-ASSERT-DECL {"t":"eventually","id":"c.live_ok","msg":"in time"}
+HYDO-ASSERT-DECL {"t":"eventually","id":"c.live_late","msg":"never"}
+HYDO-ASSERT-DECL {"t":"eventually","id":"c.live_await","msg":"await, true at once"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.p.a","msg":"fault point fired: point P.A"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.p.b","msg":"fault point fired: point P.B"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.p.c","msg":"fault point fired: point P.C"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.p.d","msg":"fault point fired: point P.D"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.p.e","msg":"fault point fired: point P.E"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.p.f","msg":"fault point fired: point P.F"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.p.g","msg":"fault point fired: point P.G"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.p.h","msg":"fault point fired: point P.H"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.p.é","msg":"fault point fired: point P.É"}
+HYDO-ASSERT {"t":"always","id":"c.always","ok":true,"msg":"always \u003cholds\u003e \u0026 \"quotes\""}
+HYDO-ASSERT {"t":"always","id":"c.always","ok":false,"msg":"always \u003cholds\u003e \u0026 \"quotes\"","details":{"\u003ckey\u003e":"\u0026","bytes":"aGkA/w==","deep":{"l1":{"l2":{"l3":[{"j":[1.25,-0.5],"k":"v"}]}}},"ebytes":"","emap":{},"empty":[],"f":false,"f0":0,"f1":0.1,"f1e15":123456789012345680,"f20":100000000000000000000,"f21":1e+21,"f3":3,"f6":0.000001,"f6b":9.99e-7,"fbig":1e+100,"fmaxf":1.7976931348623157e+308,"fmix":123456789.125,"fneg":-2.5,"fneg0":-0,"fsm":1.5e-7,"fsub":5e-324,"fthird":0.3333333333333333,"ftiny":2.5e-300,"imax":9223372036854775807,"imin":-9223372036854775808,"inv":"a\ufffdb\ufffd","list":[1,"a",false,null,{"a":2,"z":1},[[]]],"neg":-5,"nest":{"B":2,"Z":6,"_":4,"a":3,"a b":{"x":"y"},"~":8,"é":1,"ÿ":7,"😀":5},"nil":null,"s":"\u003c\u003e\u0026\"\\\n\r\t\b\f\u0001\u001f é \u2028 \u2029 😀 日本語","t":true,"umax":18446744073709551615,"zero":0,"\ufffdk":{"a":2,"a\ufffd":1}}}
+HYDO-ASSERT {"t":"always_or_unreachable","id":"c.aou","ok":true,"msg":"always or unreachable"}
+HYDO-ASSERT {"t":"always_or_unreachable","id":"c.aou","ok":false,"msg":"always or unreachable","details":{"why":null}}
+HYDO-ASSERT {"t":"sometimes","id":"c.sometimes","ok":true,"msg":"sometimes é \u2028 true","details":{"n":3}}
+HYDO-ASSERT {"t":"reachable","id":"c.reach","ok":true,"msg":"reached"}
+HYDO-ASSERT {"t":"unreachable","id":"c.unreach","ok":false,"msg":"never reached","details":{"why":"test"}}
+HYDO-ASSERT {"t":"always","id":"c.cmp","ok":true,"msg":"a comparison","details":{"left":3,"op":"\u003c=","right":5}}
+HYDO-ASSERT {"t":"always","id":"c.cmp","ok":false,"msg":"a comparison","details":{"extra":"e","left":7,"op":"\u003c","right":5}}
+HYDO-ASSERT {"t":"sometimes","id":"c.scmp","ok":true,"msg":"a sometimes comparison","details":{"left":2,"op":"==","right":2}}
+HYDO-ASSERT {"t":"always","id":"c.gt","ok":true,"msg":"greater than","details":{"left":2,"op":"\u003e","right":1}}
+HYDO-ASSERT {"t":"always","id":"c.gt","ok":false,"msg":"greater than","details":{"k":"v","left":1,"op":"\u003e","right":2}}
+HYDO-ASSERT {"t":"sometimes","id":"c.ge","ok":true,"msg":"greater than or equal","details":{"left":0,"op":"\u003e=","right":0}}
+HYDO-ASSERT {"t":"always","id":"c.lt","ok":true,"msg":"less than","details":{"left":-9223372036854775808,"op":"\u003c","right":9223372036854775807}}
+HYDO-ASSERT {"t":"always","id":"c.le","ok":false,"msg":"less than or equal","details":{"left":5,"op":"\u003c=","right":4}}
+HYDO-ASSERT {"t":"always","id":"c.ünï/日本","ok":false,"msg":"unicode id and \u0001 control","details":{"\t":"\t","ключ":"значение"}}
+HYDO-ASSERT {"t":"always","id":"c.loop","ok":true,"msg":"evaluated many times","details":{"i":0}}
+HYDO-ASSERT {"t":"always","id":"c.loop","ok":false,"msg":"evaluated many times","details":{"i":500}}
+HYDO-ASSERT {"t":"eventually","id":"c.live_ok","ok":true,"msg":"in time","details":{"elapsed_ms":0,"within_ms":10000}}
+HYDO-ASSERT {"t":"eventually","id":"c.live_late","ok":false,"msg":"never","details":{"elapsed_ms":0,"k":"v","within_ms":0}}
+HYDO-ASSERT {"t":"eventually","id":"c.live_await","ok":true,"msg":"await, true at once","details":{"elapsed_ms":0,"probe":"ping","within_ms":1500}}
+HYDO-SETUP-COMPLETE
+HYDO-BUGGIFY {"seed":"ab","enable_pm":250,"fire_pm":250,"enabled":[]}
+HYDO-SETUP-COMPLETE

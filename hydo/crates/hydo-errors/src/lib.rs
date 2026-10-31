@@ -1189,22 +1189,166 @@ fn take_many(args: &mut Vec<String>, flag: &str) -> Result<Vec<String>, ErrorsEr
     Ok(out)
 }
 
-/// `kinds_of_dir(d)`: the kinds recorded in an explore dir (errors.json) or a run dir
-/// (one.errors.json), and the file read.
+/// `kinds_of_dir(d)`: the kinds recorded in an explore dir (exploration.json's error kinds) or a
+/// run dir (result.json's error-log findings), read with the results reader, as
+/// `{"kinds": [{sig, svc, tpl, ex, at | first_at, runs, new}]}`, and the file read.
 pub fn kinds_of_dir(d: &str) -> Result<(Value, String), ErrorsError> {
-    for f in ["errors.json", "one.errors.json"] {
-        let p = Path::new(d).join(f);
-        if p.is_file() {
-            let ps = p.display().to_string();
-            let t = std::fs::read_to_string(&p).map_err(|e| eerr(format!("{ps}: {e}")))?;
-            let j: Value = serde_json::from_str(&t)
-                .map_err(|e| eerr(format!("{ps}: not a JSON file ({e})")))?;
-            return Ok((j, ps));
+    let none = || {
+        eerr(format!(
+            "{d} has no error kinds in {} (hydo explore) or {} (hydo run); was the image built with errors: in its manifest?",
+            hydo_results::EXPLORATION_DOC,
+            hydo_results::RUN_DOC
+        ))
+    };
+    let r = hydo_results::read_dir(Path::new(d)).map_err(|e| eerr(e.0))?;
+    let s = |x: &str| Value::String(x.to_string());
+    let (kinds, path) = match r {
+        hydo_results::Results::Exploration { doc, path, .. } => {
+            let ek = doc.and_then(|d| d.error_kinds).ok_or_else(none)?;
+            let kinds: Vec<Value> = ek
+                .kinds
+                .iter()
+                .map(|k| {
+                    let mut m = Map::new();
+                    m.insert("sig".into(), s(&k.signature));
+                    m.insert("svc".into(), s(&k.service));
+                    m.insert("tpl".into(), s(&k.template));
+                    m.insert("ex".into(), s(&k.example));
+                    m.insert("first_at".into(), strs(&k.first_at));
+                    m.insert("runs".into(), Value::from(k.runs));
+                    m.insert("new".into(), Value::Bool(k.new));
+                    Value::Object(m)
+                })
+                .collect();
+            (kinds, path)
+        }
+        hydo_results::Results::Run { run, path } => {
+            if run.error_logs.is_none() {
+                return Err(none());
+            }
+            let kinds: Vec<Value> = run
+                .findings_of(hydo_results::kind::ERROR_LOG)
+                .map(|f| {
+                    let g = |k: &str| f.details.get(k).cloned().unwrap_or(Value::Null);
+                    let mut m = Map::new();
+                    m.insert("sig".into(), s(&f.id));
+                    m.insert("svc".into(), g("service"));
+                    m.insert("tpl".into(), g("template"));
+                    m.insert("ex".into(), g("example"));
+                    m.insert("at".into(), g("at"));
+                    m.insert("runs".into(), Value::from(1));
+                    m.insert(
+                        "new".into(),
+                        Value::Bool(f.status == hydo_results::status::NEW),
+                    );
+                    Value::Object(m)
+                })
+                .collect();
+            (kinds, path)
+        }
+    };
+    let mut j = Map::new();
+    j.insert("kinds".into(), Value::Array(kinds));
+    Ok((Value::Object(j), path.display().to_string()))
+}
+
+impl Aggregate {
+    /// The kind in the results format.
+    pub fn to_model(&self, shrink: Option<hydo_results::ErrorShrink>) -> hydo_results::ErrorKind {
+        hydo_results::ErrorKind {
+            signature: self.sig.clone(),
+            service: self.svc.clone(),
+            source: self.src.clone(),
+            template: self.tpl.clone(),
+            example: self.ex.clone(),
+            new: self.new_runs > 0,
+            runs: self.runs,
+            new_runs: self.new_runs,
+            seeds: self.seeds.clone(),
+            first_seed: self.first_seed.clone(),
+            first_schedule: self.first_schedule.clone(),
+            first_at: self.first_at.clone(),
+            lines: self.lines,
+            first_new: self.first_new.as_ref().map(|(seed, sched, at, ex)| {
+                hydo_results::FirstNew {
+                    seed: seed.clone(),
+                    schedule: sched.clone(),
+                    at: at.clone(),
+                    example: ex.clone(),
+                }
+            }),
+            reason: self.reason.clone(),
+            shrink,
         }
     }
-    Err(eerr(format!(
-        "{d} has no errors.json (hydo explore) or one.errors.json (hydo run); was the image built with errors: in its manifest?"
-    )))
+
+    /// The kind as [`collect`] made it, from the results format.
+    pub fn from_model(k: &hydo_results::ErrorKind) -> Aggregate {
+        Aggregate {
+            sig: k.signature.clone(),
+            svc: k.service.clone(),
+            src: k.source.clone(),
+            tpl: k.template.clone(),
+            ex: k.example.clone(),
+            runs: k.runs,
+            new_runs: k.new_runs,
+            seeds: k.seeds.clone(),
+            first_seed: k.first_seed.clone(),
+            first_schedule: k.first_schedule.clone(),
+            first_at: k.first_at.clone(),
+            lines: k.lines,
+            first_new: k.first_new.as_ref().map(|f| {
+                (
+                    f.seed.clone(),
+                    f.schedule.clone(),
+                    f.at.clone(),
+                    f.example.clone(),
+                )
+            }),
+            reason: k.reason.clone(),
+            reason_first: false,
+        }
+    }
+}
+
+/// The "Error logs" section of report.md from an exploration's error kinds (the results format):
+/// [`report_md`] with each shrunk kind's command line.
+pub fn report_md_of(ek: &hydo_results::ErrorKinds) -> Vec<String> {
+    let agg: Vec<Aggregate> = ek.kinds.iter().map(Aggregate::from_model).collect();
+    let known = KnownList {
+        path: ek.known_file.clone(),
+        sha256: ek.known_sha256.clone(),
+        unknown: ek.unknown.clone(),
+        known: Vec::new(),
+    };
+    let mut shrunk = Map::new();
+    for k in &ek.kinds {
+        if let Some(s) = &k.shrink {
+            let c = |i: usize| s.confirmations.get(i).cloned().unwrap_or_default();
+            let fp = |i: usize| c(i).fp.map(Value::String).unwrap_or(Value::Null);
+            let mut m = Map::new();
+            m.insert("minimal".into(), Value::String(s.minimal.clone()));
+            m.insert("tries".into(), Value::from(s.tries));
+            m.insert("fp_a".into(), fp(0));
+            m.insert("fp_b".into(), fp(1));
+            m.insert(
+                "verdict".into(),
+                c(0).verdict.map(Value::String).unwrap_or(Value::Null),
+            );
+            m.insert("present_a".into(), Value::Bool(c(0).present == Some(true)));
+            m.insert("present_b".into(), Value::Bool(c(1).present == Some(true)));
+            shrunk.insert(k.signature.clone(), Value::Object(m));
+        }
+    }
+    let by_hand = |m: &str| {
+        ek.kinds
+            .iter()
+            .filter_map(|k| k.shrink.as_ref())
+            .find(|s| s.minimal == m)
+            .and_then(|s| s.repro_command.clone())
+            .unwrap_or_default()
+    };
+    report_md(&agg, &known, &shrunk, &by_hand)
 }
 
 fn kinds_list(j: &Value) -> Vec<Value> {
@@ -1489,8 +1633,9 @@ pub fn cli(argv: &[String], default_dir: &str) -> i32 {
 
 /// `for_run_dir(outdir, schedule, res, known_path, out)`: `hydo run` / `hydo repro`: the error
 /// kinds of the run whose consoles are in `outdir` (`<tag>.log`, `<tag>.recovery.log`) against
-/// the known list (`known_path`, else `hydo/known-errors.yaml` or `./known-errors.yaml`); writes
-/// `one.errors.json`, prints the summary through `out` and folds the result into `res`. Nothing
+/// the known list (`known_path`, else `hydo/known-errors.yaml` or `./known-errors.yaml`); prints
+/// the summary through `out`, folds the result into `res` and returns the analysis with the list
+/// (the run's result.json reports them; [`write_run_json`] is the M94 file of the same). Nothing
 /// happens for an image without `errors:`. A list that does not load is reported and every kind
 /// counts as new.
 pub fn for_run_dir(
@@ -1499,7 +1644,7 @@ pub fn for_run_dir(
     mut res: Map<String, Value>,
     known_path: Option<&str>,
     out: &mut dyn FnMut(&str),
-) -> Map<String, Value> {
+) -> (Map<String, Value>, Option<(Analysis, KnownList)>) {
     let mut cons: Vec<PathBuf> = std::fs::read_dir(outdir)
         .map(|rd| {
             rd.filter_map(Result::ok)
@@ -1545,9 +1690,8 @@ pub fn for_run_dir(
         }
     };
     let Some(an) = analyse(&srcs, schedule, &known) else {
-        return res;
+        return (res, None);
     };
-    let _ = write_run_json(&outdir.join("one.errors.json"), &an, &known);
     for line in summary_lines(Some(&an), 12) {
         out(&format!("hydo: {line}"));
     }
@@ -1564,7 +1708,7 @@ pub fn for_run_dir(
             res.get("verdict").map(str_of).unwrap_or_default()
         ));
     }
-    res
+    (res, Some((an, known)))
 }
 
 #[cfg(test)]

@@ -1,0 +1,13 @@
+[package]
+name = "hydo-results"
+description = "hydo's results format: the run and exploration documents, the exploration's event stream, the lenient reader, the generated JSON Schema and its compatibility check"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+schemars = "1"
+

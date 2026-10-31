@@ -1,0 +1,33 @@
+# hydo plan for myproject, written by `hydo init`. Fill in every TODO; `hydo guide` explains how,
+# and `hydo guide manifest` is the schema. Check it with:  hydo build hydo/hydo.yaml --check
+# If the repository has a docker-compose.yaml, start from it instead (it replaces this file):
+#   hydo compose docker-compose.yaml --out hydo/hydo.yaml --images-dir images
+name: myproject
+description: TODO one line about the system under test
+format: 1
+hydo_version: "0.1"
+
+guest:
+  ram_mib: 1024                  # must hold every service (256..3072 on x86_64, 256..4096 on arm64)
+  # cpu: v3                      # x86_64 only: AVX/AVX2 for binaries built for x86-64-v3
+  # clock_after_cut: 60          # when a check compares times from before and after a power cut
+
+root:
+  files: []                      # TODO the binaries and config files: {src: <relative to this file>, dst: /bin/x, mode: "0755"}
+
+data:
+  size_mib: 512                  # the persistent data disk, mounted on /data (the fault target)
+  dirs: []                       # TODO the services' data directories, created under /data
+
+services: []                     # TODO one entry per long-running process (name, cmd, ready, port, ...)
+
+workload:
+  steps: 20                      # rounds of the composition; faults are placed at round numbers
+  timeout: 300
+
+test:                            # the test composer: hydo/workload/ holds the commands, hydo/checks/ the checks
+  parallel: 4                    # at most this many commands at once
+  per_round: 2                   # parallel drivers started per round
+  round_ms: 200                  # a round every 200 ms of guest time
+
+faults: [kill, pause, network, oneway, cut, clock, disk]   # TODO keep the kinds that make sense

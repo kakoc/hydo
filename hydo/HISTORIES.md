@@ -196,13 +196,14 @@ evaluation; `details` carry `ops`, `keys`, the anomaly or failing key, and the o
 Where the checks run:
 
 - **The explorer** (`hydo explore`, the hydo-explore crate, and everything built on its worker pool:
-  the shrinker, branch runs): after every run whose console has `HYDO-CHECK` lines, it writes
-  `consoles/<tag>.checks.log` (the records; read together with the consoles by the property table
-  and the failed-assertion list) and `consoles/<tag>.checks.txt` (the explanation), and replaces the
-  run's verdict. Failure classes, shrinking and reports work unchanged; the guest's own verdict is
-  kept as `guest_verdict`.
-- **`hydo run` / `hydo repro`** (the Rust `hydo`, through the crate `hydo-history`):
-  `one.checks.log`, `one.checks.txt`, the combined verdict in `run.json`.
+  the shrinker, branch runs): after every run whose console has `HYDO-CHECK` lines, it reports each
+  check as a `history-check` finding of the run's record in `events.jsonl` (status, summary,
+  explanation, the checker's details; since M115, before that `consoles/<tag>.checks.log` and
+  `.checks.txt`), feeds the checks' HYDO-ASSERT records to the property table and the
+  failed-assertion list together with the consoles, and replaces the run's verdict. Failure
+  classes, shrinking and reports work unchanged; the guest's own verdict is kept (`verdict.guest`).
+- **`hydo run` / `hydo repro`** (the Rust `hydo`, through the crate `hydo-history`): the same
+  findings and the combined verdict in `result.json`.
 - **By hand:** `hydo check-history <outdir>` (an `hvx_explore one` or `hydo run` output directory),
   `hydo check-history <console> [<recovery console>]`, `hydo check-history --tag <T> <consoles dir>`,
   or `hydo check-history --check '<json spec>' <console>` for a console without declarations
@@ -251,7 +252,7 @@ match put("k1", v) { Ok(rev) => op.ok(&["k1", &ver(v, rev)]), Err(e) if e.reject
 kv.invoke(3, "read", &["k1"]).ok(&["k1", &value_or_nil(got.as_deref())]);
 ```
 
-Same lines as the Go recorder (`sdk/rust/tests/history.rs` checks the exact bytes), to
+Same lines as the Go recorder (the shared cases, `sdk/cases/history`, are written from it), to
 `/dev/console` (`HYDO_HIST_OUT`), time from `/proc/uptime`. The test SDK's plan builder declares
 the checks: `System::history_check(HistoryCheck::linearizable("db.kv", "kv").model("cas")
 .readback(&["/bin/mytest", "readback"]))`, `HistoryCheck::list_append(..).consistency(..)`.
@@ -260,7 +261,7 @@ the checks: `System::history_check(HistoryCheck::linearizable("db.kv", "kv").mod
 `enc`, `ver`, `valueOrNil`, `list`, `append`, `read`, `readResult`, `NIL`) and
 `from hydo_assert import history` (`sdk/python`: `History`, `enc`, `ver`, `value_or_nil`,
 `list_value`, `append_mop`, `read_mop`, `read_result_mop`, `NIL`). Both write the Go recorder's
-lines byte for byte (`test/history-conformance.sh`, `tests/history_conformance.sh`), to
+lines byte for byte (their case tests read `sdk/cases`, ASSERTIONS.md "The shared cases"), to
 `/dev/console` (`HYDO_HIST_OUT`), with the time from `CLOCK_MONOTONIC`.
 
 **Other languages** (and any client): print the lines

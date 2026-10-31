@@ -1,0 +1,115 @@
+# A small business service and its outside world: the demo for hydo's fake outside services and
+# protocol faults (hvx/onboard/MANIFEST.md, "Fake outside services").
+#
+# shop (src/, Go) takes orders over HTTP, charges each one through a payment provider, sends a
+# receipt email, and refunds an order that is cancelled. The provider and the email service are
+# FAKES served by hydo-world inside the guest: they answer like the real ones (with idempotency
+# keys and a charge.succeeded webhook back to the shop), and record every request they get, so
+# the invariants can ask what the outside world saw.
+#
+# One planted bug (src/charge_buggy.go): every retry of a charge gets a new idempotency key, so a
+# charge that took effect but whose answer was lost (a slow or dropped answer, a reset) is taken
+# twice. Build both versions with build.sh; the fixed one keys the charge by the order.
+# Try (explore-ob-shop-buggy / -fixed):
+#   disk=none | run                                    -> OK
+#   disk=none | run H=payments.charge@3-4:delay=3000   -> buggy: VIOLATION [payments.charged_at_most_once]
+#                                                         fixed: OK (the retries are replays)
+name: shop
+description: an order service with a fake payment provider and a fake email service.
+
+params:
+  variant: fixed                 # fixed | buggy: which shop binary goes into the image
+  bin: "../../../../build"       # where build.sh put shop-fixed and shop-buggy (relative to this file)
+
+root:
+  files:
+    - {src: "{{bin}}/shop-{{variant}}", dst: /bin/shop, mode: "0755"}
+
+data:
+  size_mib: 64
+  dirs: [shop]
+
+services:
+  - name: shop
+    cmd: /bin/shop server
+    ready: wget -q -O- http://127.0.0.1:8080/health | grep -q ok
+    port: 8080
+
+fakes:
+  - name: payments
+    port: 9001
+    idempotency: header:Idempotency-Key     # the provider de-duplicates by this header
+    ref: json:order                         # the order a charge or refund is for
+    routes:
+      - name: charge
+        method: POST
+        path: /v1/charges
+        idempotent: true                    # the same key again = the first answer, no new charge
+        body: '{"id":"ch_{seq}","order":"{ref}","amount":{json:amount},"status":"succeeded"}'
+        webhook:                            # the provider confirms every charge to the shop
+          url: http://127.0.0.1:8080/webhooks/payments
+          body: '{"type":"charge.succeeded","id":"ch_{seq}","order":"{ref}"}'
+          delay_ms: 20
+      - name: refund
+        method: POST
+        path: /v1/refunds
+        idempotent: true
+        body: '{"id":"re_{seq}","order":"{ref}","status":"succeeded"}'
+  - name: email
+    port: 9002
+    idempotency: header:Idempotency-Key
+    ref: json:order
+    routes:
+      - name: send
+        method: POST
+        path: /v1/send
+        idempotent: true
+        body: '{"id":"em_{seq}","status":"queued"}'
+
+workload:
+  steps: 12                       # step i: place order i; at i = 3, 7, 11 also cancel order i-1
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      if shop place $i 2>> /tmp/hydo/shop-client.log; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      if [ $((i % 4)) = 3 ]; then
+        c=$((i - 1))
+        # the cancellation is an event of the system's own history: hydo-world puts it into the
+        # outside world's record, in order, so "no charge after a cancellation" can be checked
+        if grep -qx $c $HYDO_ACKED; then
+          hydo-world event cancel-requested o$c > /dev/null   # from here on, no receipt is owed
+          shop cancel $c 2>> /tmp/hydo/shop-client.log && hydo-world event cancelled o$c > /dev/null
+        fi
+      fi
+      i=$((i + 1))
+    done
+  timeout: 300
+  process: shop place
+
+invariants:
+  - id: payments.charged_at_most_once
+    msg: the provider took the money for an order at most once
+    cmd: hydo-world check at-most-once payments.charge
+  - id: payments.acked_order_charged
+    msg: every order the shop acknowledged was charged
+    cmd: hydo-world check effect-for-acked payments.charge --ref 'o{id}'
+  - id: payments.no_charge_after_cancel
+    msg: no charge for an order after its cancellation was acknowledged
+    cmd: hydo-world check none-after payments.charge --after event:cancelled
+  - id: email.receipt_at_most_once
+    msg: every order gets at most one receipt email
+    cmd: hydo-world check at-most-once email.send
+  - id: email.no_receipt_after_cancel
+    msg: no receipt email for an order after its cancellation was acknowledged
+    cmd: hydo-world check none-after email.send --after event:cancelled
+  - id: email.receipt_eventually
+    msg: every acknowledged order that was not cancelled gets its receipt email within 30 s after the faults end
+    type: eventually
+    within: 30
+    poll: 2
+    # a cancelled order owes no receipt (the shop sends none once it is cancelled), even when the
+    # client never saw the cancellation's answer -- hence the event before the request
+    cmd: hydo-world check effect-for-acked email.send --ref 'o{id}' --unless event:cancel-requested
+
+faults: [kill, pause, cut, clock, disk, protocol]

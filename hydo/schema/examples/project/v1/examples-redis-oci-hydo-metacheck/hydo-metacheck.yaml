@@ -1,0 +1,106 @@
+# A check variant of hydo.yaml (same image, same workload): one more final invariant,
+# oci.meta_at_runtime, that reads owners, modes and setuid/setgid bits of the image's files from
+# inside the running guest (hydo-oci redis stat ...), checks that redis-server runs as the image's
+# redis user (uid/gid 999), that redis cannot read /etc/shadow, and that the setgid-shadow chage
+# can. Every line it reads goes to the console as "OCIMETA ...". Used to check that the arm64
+# build (owners/modes from cpio headers) and the x86_64 build (debugfs) give the image's metadata.
+#   hvx/onboard/hydo-build hvx/onboard/examples/redis-oci/hydo-metacheck.yaml --arch arm64 --build-dir ob
+# The Redis example, with Redis taken from the OFFICIAL Docker image (redis:7.2.4, unmodified,
+# pinned by digest) instead of listed files. Get the image files first (needs network, once):
+#   sh hvx/onboard/examples/redis-oci/fetch-image.sh       # -> redis-7.2.4-{amd64.docker.tar,arm64-oci}
+# then build on the build box:
+#   HYDO_SEEDRNG=~/hydo/build/hvx_seedrng hvx/onboard/hydo-build hvx/onboard/examples/redis-oci/hydo.yaml
+#   hvx/onboard/hydo-build hvx/onboard/examples/redis-oci/hydo.yaml --arch arm64 --build-dir ob
+# Try:  disk=none | run              -> OK (every acknowledged write survives)
+#       disk=none | run C=12 R=everysec   -> Redis's documented fsync window after a power cut
+name: redis-oci-meta
+description: Redis from the official Docker image; every acknowledged SET must survive.
+
+data:
+  size_mib: 64
+
+services:
+  - name: redis
+    # x86_64: a `docker save`-format archive; arm64: an OCI layout directory (both made by
+    # fetch-image.sh with skopeo, pinned by the per-platform manifest digest)
+    image:
+      x86_64: redis-7.2.4-amd64.docker.tar
+      arm64: redis-7.2.4-arm64-oci
+    image_ref: redis:7.2.4
+    # the image's ENTRYPOINT (docker-entrypoint.sh: chown /data, then gosu redis) stays; this
+    # replaces its CMD. WorkingDir /data from the image is the data disk.
+    cmd: >-
+      redis-server --port 6379 --bind 127.0.0.1 --dir /data --save ""
+      --appendonly yes --appendfsync always --hz 1 --dynamic-hz no
+    ready: hydo-oci redis redis-cli ping | grep -q PONG
+    port: 6379
+
+workload:
+  steps: 20                         # step i = SET k:i v<i>
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      r=$(timeout 2 hydo-oci redis redis-cli SET k:$i v$i 2>/dev/null)   # a 2 s client deadline
+      if [ "$r" = OK ]; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      i=$((i + 1))
+    done
+  process: redis-cli
+
+knobs:
+  - token: R
+    name: Redis appendfsync
+    default: always
+    values: [always, everysec, "no"]
+    set: hydo-oci redis redis-cli CONFIG SET appendfsync $HYDO_VALUE
+
+invariants:
+  - id: oci.meta_at_runtime
+    msg: owners, modes and setuid/setgid bits from the image are in effect inside the guest
+    cmd: |
+      bad=0
+      say() { echo "OCIMETA $*" > /dev/console; }
+      exp() {  # <path> <octal perm> <uid> <gid>
+        got=$(hydo-oci redis stat -c '%a %u %g' "$1")
+        say "$1 $got"
+        [ "$got" = "$2 $3 $4" ] || { say "MISMATCH $1 want '$2 $3 $4'"; bad=1; }
+      }
+      exp /usr/bin/su 4755 0 0
+      exp /usr/bin/passwd 4755 0 0
+      exp /usr/bin/mount 4755 0 0
+      exp /usr/bin/chage 2755 0 42
+      exp /usr/sbin/unix_chkpwd 2755 0 42
+      exp /etc/shadow 640 0 42
+      exp /tmp 1777 0 0
+      exp /var/mail 2775 0 8
+      exp /var/cache/apt/archives/partial 700 42 0
+      say "/data (the data disk mount) $(hydo-oci redis stat -c '%a %u %g' /data)"
+      exp /usr/local/bin/redis-server 755 0 0
+      exp /usr/local/bin/gosu 755 0 0
+      say "id-redis $(hydo-oci redis id redis)"
+      for p in /proc/[0-9]*; do
+        c=$(tr '\0' ' ' < $p/cmdline 2>/dev/null)
+        case "$c" in redis-server*) u=$(grep '^Uid:' $p/status); g=$(grep '^Gid:' $p/status)
+          say "proc ${p#/proc/} '$c' $u $g"
+          set -- $u; [ "$2" = 999 ] && [ "$3" = 999 ] || { say "MISMATCH redis-server not running as uid 999"; bad=1; };;
+        esac
+      done
+      say "datafiles $(hydo-oci redis sh -c 'ls -lnR /data | tr "\n" "|"')"
+      n=$(hydo-oci redis find /data ! -user 999 | wc -l); say "data-not-redis $n"; [ "$n" = 0 ] || bad=1
+      # functional: as the redis user, /etc/shadow is unreadable, but setgid-shadow chage can read it
+      if hydo-oci redis gosu redis cat /etc/shadow >/dev/null 2>&1; then say "MISMATCH redis can read shadow"; bad=1; else say "redis cat shadow: denied (ok)"; fi
+      if r=$(hydo-oci redis gosu redis chage -l redis 2>&1); then say "redis chage -l via setgid: ok ($(echo "$r" | head -1))"; else say "MISMATCH setgid chage failed: $r"; bad=1; fi
+      say "redis euid via setuid su? $(hydo-oci redis gosu redis sh -c 'ls -ln /usr/bin/su; id')"
+      [ $bad = 0 ] && echo "image metadata in effect" 
+      [ $bad = 0 ]
+  - id: redis.acked_writes_survive
+    msg: every SET the client saw acknowledged reads back with its value
+    cmd: |
+      lost=0
+      for i in $(cat $HYDO_ACKED); do
+        [ "$(hydo-oci redis redis-cli GET k:$i)" = "v$i" ] || { echo "key k:$i lost"; lost=1; break; }
+      done
+      [ $lost = 0 ] && echo "acked=$(wc -l < $HYDO_ACKED) all present"
+      [ $lost = 0 ]
+
+faults: [kill, pause, cut, clock, disk]

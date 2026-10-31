@@ -1,0 +1,1 @@
+HYDO-ASSERT {"t":"always","id":"d.string_unicode","ok":true,"msg":"details encoding","details":{"bom":"﻿x","cjk":"中文 日本語","emoji":"😀 a😀b","fffd":"�","ffff":"￿","latin":"é ÿ","nbsp":"a bc","u2028":"a\u2028b\u2029c"}}

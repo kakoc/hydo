@@ -1,0 +1,4 @@
+#!/bin/sh
+# a read that may run at any time, also during faults
+. /hydo/workload/helper_lib.sh
+R MGET acct:0 acct:1 acct:2 acct:3 acct:4 > /dev/null

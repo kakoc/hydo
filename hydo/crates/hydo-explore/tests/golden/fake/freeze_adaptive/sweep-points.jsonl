@@ -1,6 +1,0 @@
-{"seed": 1, "point": "redis<workload@7#1:150000"}
-{"seed": 2, "point": "redis<workload@8#1:150000"}
-{"seed": 3, "point": "redis<workload@9#1:150000"}
-{"seed": 4, "point": "redis>workload@7#1:150000"}
-{"seed": 5, "point": "redis>workload@8#1:150000"}
-{"seed": 6, "point": "redis>workload@9#1:150000"}

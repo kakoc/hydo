@@ -1,0 +1,1 @@
+HYDO-ASSERT {"t":"always","id":"d.string_escapes","ok":true,"msg":"details encoding","details":{"html":"\u003cscript\u003ea \u0026\u0026 b\u003c/script\u003e","s":"\u003c\u003e\u0026\"\\\n\r\t\b\f\u0000\u0001\u001f","slash":"a/b"}}

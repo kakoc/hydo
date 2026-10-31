@@ -1,0 +1,125 @@
+{
+  "format": 1,
+  "hydo_version": "0.1",
+  "name": "bank",
+  "description": "a plan as the Rust test SDK (hydo-test) writes it, with a history check in test.checks",
+  "guest": {
+    "ram_mib": 512
+  },
+  "root": {
+    "files": [
+      {
+        "src": "bin/bankd",
+        "dst": "/bin/bankd",
+        "mode": "0755"
+      },
+      {
+        "src": "target/x86_64-unknown-linux-musl/release/banktest",
+        "dst": "/bin/banktest",
+        "mode": "0755"
+      }
+    ]
+  },
+  "data": {
+    "size_mib": 64,
+    "dirs": [
+      "bank"
+    ]
+  },
+  "env": {
+    "BANK_DATA": "/data/bank"
+  },
+  "services": [
+    {
+      "name": "bankd",
+      "cmd": "/bin/bankd serve",
+      "ready": "/bin/banktest ping",
+      "port": 7000
+    }
+  ],
+  "workload": {
+    "steps": 12,
+    "timeout": 120
+  },
+  "test": {
+    "parallel": 3,
+    "round_ms": 100,
+    "commands": [
+      {
+        "name": "transfer",
+        "kind": "parallel_driver",
+        "run": [
+          "/bin/banktest",
+          "driver",
+          "transfer"
+        ],
+        "content": "549e0b6d2561dc5b"
+      },
+      {
+        "name": "audit",
+        "kind": "serial_driver",
+        "run": [
+          "/bin/banktest",
+          "driver",
+          "audit"
+        ],
+        "timeout": 30
+      },
+      {
+        "name": "accounts",
+        "kind": "first",
+        "run": [
+          "/bin/banktest",
+          "driver",
+          "accounts"
+        ]
+      }
+    ],
+    "checks": [
+      {
+        "name": "total_conserved",
+        "kind": "final",
+        "run": [
+          "/bin/banktest",
+          "check",
+          "total_conserved"
+        ],
+        "msg": "money is neither made nor lost"
+      },
+      {
+        "name": "balances_settle",
+        "kind": "eventually",
+        "run": [
+          "/bin/banktest",
+          "check",
+          "balances_settle"
+        ],
+        "within": 20
+      }
+    ],
+    "regressions": [
+      {
+        "name": "lost-update",
+        "schedule": "disk=none dseed=1 | run K=bankd@4+1",
+        "expect": "ok"
+      }
+    ]
+  },
+  "faults": [
+    "kill",
+    "pause",
+    "cut",
+    "clock",
+    "disk"
+  ],
+  "checks": [
+    {
+      "id": "balances.linearizable",
+      "type": "linearizable",
+      "history": "balances",
+      "msg": "balances.linearizable",
+      "model": "cas",
+      "final": "exec '/bin/banktest' 'readback' 'balances'"
+    }
+  ]
+}

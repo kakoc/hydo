@@ -14,7 +14,8 @@ use crate::pyre;
 use crate::validate::{err, iter_of, or_iter, R};
 use crate::ManifestError;
 
-pub const FORMAT: i128 = 1;
+/// The project format (the plan meta carries it too).
+pub const FORMAT: i128 = crate::model::FORMAT as i128;
 pub const WORKLOAD_KINDS: &[&str] = &[
     "first",
     "parallel_driver",
@@ -46,8 +47,8 @@ pub const PARAMS: &[(&str, i128, i128, i128)] = &[
     ("max_commands", 0, 0, 100000),
     ("budget_ms", 0, 0, 3600000),
 ];
-const KNOWN_CMD: &[&str] = &["name", "kind", "run", "timeout", "description", "content"];
-const KNOWN_CHECK: &[&str] = &[
+pub(crate) const KNOWN_CMD: &[&str] = &["name", "kind", "run", "timeout", "description", "content"];
+pub(crate) const KNOWN_CHECK: &[&str] = &[
     "name",
     "kind",
     "run",
@@ -62,7 +63,7 @@ const KNOWN_CHECK: &[&str] = &[
     "initial",
     "consistency",
 ];
-const KNOWN_REG: &[&str] = &[
+pub(crate) const KNOWN_REG: &[&str] = &[
     "name",
     "schedule",
     "expect",
@@ -76,7 +77,7 @@ pub const DEFAULT_STEPS: i128 = 20;
 pub const SH: &str = "/bin/busybox sh /etc/hydo/compose.sh";
 pub const GUEST_MAX: usize = 500;
 
-fn known_test() -> Vec<&'static str> {
+pub(crate) fn known_test() -> Vec<&'static str> {
     let mut v: Vec<&str> = PARAMS.iter().map(|p| p.0).collect();
     v.extend(["commands", "checks", "regressions", "description"]);
     v
@@ -481,7 +482,7 @@ pub fn shell_of(run: &Value) -> String {
     }
 }
 
-fn history_check(c: &Map<String, Value>, wh: &str) -> R<Value> {
+pub(crate) fn history_check(c: &Map<String, Value>, wh: &str) -> R<Value> {
     let kind_v = c.get("kind").cloned().unwrap_or(Value::Null);
     let kind = if in_strs(&kind_v, &["list_append", "list-append"]) {
         "list-append"
@@ -526,7 +527,7 @@ fn pair_hash_eq(a: &(Value, Value), b: &(Value, Value)) -> bool {
     eq(&a.0, &b.0) && eq(&a.1, &b.1)
 }
 
-fn merge_folder(m: &mut Map<String, Value>, folder: &Value) -> R<()> {
+pub(crate) fn merge_folder(m: &mut Map<String, Value>, folder: &Value) -> R<()> {
     if m.get("test").is_none_or(|t| t.is_null()) {
         m.insert("test".into(), Value::Object(Map::new()));
     }
@@ -575,14 +576,9 @@ pub fn expand(m: &mut Value, folder: Option<&Value>, warn: &mut Vec<String>) -> 
     if let Some(f) = folder.filter(|f| truthy(f)) {
         merge_folder(mo, f)?;
     }
-    if let Some(fv) = mo.get("format") {
-        if !eq(fv, &n(FORMAT)) {
-            return Err(err(format!(
-                "format: this hydo reads plan format {} (got {}); update hydo or regenerate the plan",
-                FORMAT,
-                repr(fv)
-            )));
-        }
+    if mo.contains_key("format") {
+        // the project format (model.rs); `load` checks it first, before anything else
+        crate::model::check_format(&Value::Object(mo.clone()), None)?;
     }
     let t = match mo.get("test") {
         None | Some(Value::Null) => return Ok(None),

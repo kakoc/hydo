@@ -1,0 +1,19 @@
+{
+  "about": "each outcome of an eventually property is written once per process, whatever the episode",
+  "needs": [],
+  "steps": [
+    {"do":"eventually","id":"e.episodes","msg":"several episodes","within_ms":10000},
+    {"do":"begin","a":0},
+    {"do":"begin","a":0},
+    {"do":"done","w":0,"details":{"map":[["episode",{"int":"1"}]]}},
+    {"do":"done","w":1,"details":{"map":[["episode",{"int":"2"}]]}},
+    {"do":"eventually","id":"e.zero","msg":"within 0","within_ms":0},
+    {"do":"begin","a":1},
+    {"do":"expire","w":2,"details":{"map":[["episode",{"int":"3"}]]}},
+    {"do":"begin","a":1},
+    {"do":"expire","w":3,"details":{"map":[["episode",{"int":"4"}]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "episodes_deduplicated.out", "returns": "11"}
+  ]
+}

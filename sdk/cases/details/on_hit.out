@@ -1,0 +1,2 @@
+HYDO-ASSERT {"t":"reachable","id":"d.reach","ok":true,"msg":"a reachable location with details","details":{"n":[1,2],"where":"here"}}
+HYDO-ASSERT {"t":"unreachable","id":"d.unreach","ok":false,"msg":"an unreachable location with details","details":{"order":7}}

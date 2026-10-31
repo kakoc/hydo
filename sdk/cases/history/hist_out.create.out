@@ -1,0 +1,4 @@
+HYDO-HIST kv 1 invoke * write k v%201
+HYDO-HIST kv 1 ok * write k v%201
+HYDO-HIST kv 1 invoke * read k
+HYDO-HIST kv 1 ok * read k v%201

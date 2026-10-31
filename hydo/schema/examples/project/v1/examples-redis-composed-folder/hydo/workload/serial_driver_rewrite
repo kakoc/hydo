@@ -1,0 +1,5 @@
+#!/bin/sh
+# compaction while writes flow: rewrite the append-only file (never two at once)
+. /hydo/workload/helper_lib.sh
+R BGREWRITEAOF | grep -q -e started -e scheduled || exit 1
+n=0; while [ "$(R INFO persistence | grep -c 'aof_rewrite_in_progress:1')" != 0 ] && [ $n -lt 50 ]; do sleep 0.1; n=$((n + 1)); done

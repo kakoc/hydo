@@ -10,21 +10,30 @@
 //! function of its schedule, so the records, the shrink paths and the minimal schedules are
 //! explore.py's; `tries` counts every candidate of a round, as explore.py did, so shrink budgets
 //! end at the same place.
+//!
+//! What it writes is the results format (hydo-results): `events.jsonl` as it runs (a start
+//! record, every run, the shrinks, an end record), `exploration.json` when it is done, and
+//! report.md, a view of exploration.json for people ([`crate::md`]).
 
 use crate::args::{self, Args};
 use crate::compose;
 use crate::errlog::{self, Known};
 use crate::fc;
 use crate::gen::{Backend, Ex, TJ_MAX};
+use crate::md;
 use crate::pool::{self, has_errlog, Host, Pool, Res};
-use crate::py::{dumps, dumps_line, fl, head, py_str, round1};
-use crate::report::{self, assert_failures, cell, same_failure, sig_key, verdict_kind};
+use crate::py::{dumps_line, head, py_str, round1};
+use crate::report::{self, assert_failures, same_failure, sig_key, verdict_kind};
+use crate::results::{self, Events};
 use crate::sched::S;
 use crate::space::{grpc_targets, Space};
 use hydo_engine::{hvm, hvx, BootSpec, CpuLevel, Engine, SnapshotStore};
+use hydo_results::{
+    role, Branch, Config, End, ErrorKinds, ErrorShrink, Exploration, ExplorationArtifacts, Failure,
+    Image, Reproduction, Run, ShrinkStep, Start, Summary,
+};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
@@ -68,6 +77,10 @@ struct Cx {
     cpu: String,
     hvm_kernel: Option<PathBuf>,
     known: Option<Known>,
+    /// The explorer's command line (the results' configuration).
+    argv: Vec<String>,
+    /// events.jsonl (opened when the run starts).
+    ev: Events,
 }
 
 impl Cx {
@@ -201,7 +214,8 @@ pub fn main_with(argv: &[String], env: &Env) -> i32 {
             return 2;
         }
     };
-    let cx = setup(a, env);
+    let mut cx = setup(a, env);
+    cx.argv = argv.to_vec();
     run(cx)
 }
 
@@ -234,6 +248,8 @@ fn setup(a: Args, env: &Env) -> Cx {
         cpu: "v2".into(),
         hvm_kernel: a.hvm_kernel.as_ref().map(PathBuf::from),
         known: Some(known),
+        argv: Vec::new(),
+        ev: Events::none(),
         a,
     };
     let a = cx.a.clone();
@@ -595,21 +611,39 @@ fn tag_items(cx: &Cx, seeds: &[i64], points: &[S]) -> Vec<(String, String)> {
         .collect()
 }
 
-fn run(cx: Cx) -> i32 {
+fn run(mut cx: Cx) -> i32 {
     let _ = std::fs::create_dir_all(&cx.out);
+    cx.ev = Events::create(&cx.out.join(hydo_results::EVENTS));
     let t0 = Instant::now();
     let pool = make_pool(&cx);
-    if let Some(sch) = &cx.a.schedule {
+    let image_sha = cx.image_sha_thread();
+    cx.ev.write(&cx.start_record(pool.workers()));
+    if let Some(sch) = cx.a.schedule.clone() {
         let res = pool.run_all(&[("manual".to_string(), sch.clone())], true);
-        println!("{}", dumps_line(&Value::Object(res["manual"].1.clone())));
+        let r = &res["manual"].1;
+        println!("{}", dumps_line(&Value::Object(results::public(r))));
+        let mut run = cx.run_record("manual", &sch, r, role::MANUAL);
+        run.class = Some(cx.ex.finding_class(&cx.parse(&sch)).to_string());
+        cx.ev.write(&run);
+        let summary = Summary {
+            schedules: 1,
+            failures: (run.verdict.kind != "ok") as u64,
+            total_wall_s: Some(round1(t0.elapsed().as_secs_f64())),
+            ..Summary::default()
+        };
+        cx.ev.write(&End {
+            summary: summary.clone(),
+            ..End::default()
+        });
+        let doc = cx.exploration(pool.workers(), summary, image_sha);
+        let _ = hydo_results::write_document(&cx.out.join(hydo_results::EXPLORATION_DOC), &doc);
         pool.close();
         return 0;
     }
     if cx.a.branch.is_some() {
-        return branch_main(&cx, pool, t0);
+        return branch_main(&cx, pool, t0, image_sha);
     }
-    let mut cx = cx;
-    let (seeds, items, pre_res, fc_info) = match &cx.a.sweep {
+    let (seeds, items, pre_res, fc_info, labels) = match &cx.a.sweep {
         Some(sw) => {
             if let Some(sp) = &cx.ex.space {
                 if let Err(e) = sp.check_sweep(sw) {
@@ -618,8 +652,15 @@ fn run(cx: Cx) -> i32 {
                 }
             }
             let (points, items, pre, info) = if sw == "freeze" && cx.a.fc_adaptive {
-                match fc::adaptive(&cx.ex, &pool, &cx.a, &cx.out) {
-                    Ok(o) => (o.points, Some(o.items), Some(o.res), Some(o.info)),
+                match fc::adaptive(&cx.ex, &pool, &cx.a, &cx.out, &cx.ev) {
+                    Ok(o) => {
+                        let mut fs = Map::new();
+                        fs.insert("summary".into(), Value::Object(o.info.clone()));
+                        for (k, v) in o.doc {
+                            fs.insert(k, v);
+                        }
+                        (o.points, Some(o.items), Some(o.res), Some((o.info, fs)))
+                    }
                     Err(e) => {
                         pool.close();
                         die(&e)
@@ -627,7 +668,7 @@ fn run(cx: Cx) -> i32 {
                 }
             } else {
                 let p = if sw == "freeze" {
-                    fc::freeze_sweep(&cx.ex, &pool, &cx.a, &cx.out)
+                    fc::freeze_sweep(&cx.ex, &pool, &cx.a, &cx.out, &cx.ev)
                 } else {
                     cx.ex.sweep(sw)
                 };
@@ -647,12 +688,7 @@ fn run(cx: Cx) -> i32 {
                     &points.iter().map(|p| p.1.clone()).collect::<Vec<_>>(),
                 )
             });
-            let lines: String = seeds
-                .iter()
-                .zip(&points)
-                .map(|(i, (lab, _))| dumps_line(&json!({"seed": i, "point": lab})) + "\n")
-                .collect();
-            let _ = std::fs::write(cx.out.join("sweep-points.jsonl"), lines);
+            let labels: Vec<String> = points.iter().map(|p| p.0.clone()).collect();
             if sw == "freeze" && cx.a.sweep_dry {
                 let t: String = seeds
                     .iter()
@@ -664,7 +700,7 @@ fn run(cx: Cx) -> i32 {
                 println!("{}", dumps_line(&json!({"points": points.len()})));
                 return 0;
             }
-            (seeds, items, pre, info)
+            (seeds, items, pre, info, Some(labels))
         }
         None => {
             let (lo, hi) =
@@ -676,7 +712,7 @@ fn run(cx: Cx) -> i32 {
                     .unwrap_or_else(|| die(&format!("explore.py: --seeds {}: lo-hi", cx.a.seeds)));
             let seeds: Vec<i64> = (lo..=hi).collect();
             if cx.ex.more_faults && cx.ex.cf_range.is_none() {
-                let r = measure_cf_range(&pool, &cx.out);
+                let r = measure_cf_range(&cx, &pool);
                 match r {
                     Some(r) => {
                         eprintln!("cf= range (measured with cfn): {}-{}", r.0, r.1);
@@ -697,23 +733,39 @@ fn run(cx: Cx) -> i32 {
                     (format!("seed-{sd}"), cx.render(&s))
                 })
                 .collect();
-            (seeds, items, None, None)
+            (seeds, items, None, None, None)
         }
     };
-    explore(&cx, pool, t0, seeds, items, pre_res, fc_info)
+    explore(
+        &cx,
+        pool,
+        t0,
+        Inputs {
+            seeds,
+            items,
+            pre_res,
+            fc_info,
+            labels,
+            image_sha,
+        },
+    )
 }
 
-/// explore.py `measure_cf_range`.
-fn measure_cf_range(pool: &Pool, out: &Path) -> Option<(i64, i64)> {
+/// explore.py `measure_cf_range` (the probe run goes into the stream).
+fn measure_cf_range(cx: &Cx, pool: &Pool) -> Option<(i64, i64)> {
     let tag = "cfn-probe";
-    pool.run_all(&[(tag.into(), "disk=cut dseed=0 cfn | run".into())], true);
+    let text = "disk=cut dseed=0 cfn | run";
+    let res = pool.run_all(&[(tag.into(), text.into())], true);
+    if let Some((_, r)) = res.get(tag) {
+        cx.ev.write(&cx.run_record(tag, text, r, role::PROBE));
+    }
     let re = regex::Regex::new(&format!(
         r"^FLUSHCUT {} target=\d+ flushes=(\d+)",
         regex::escape(tag)
     ))
     .ok()?;
     for i in 0..pool.workers() {
-        let f = out.join(format!("worker-{i}.err"));
+        let f = cx.out.join(format!("worker-{i}.err"));
         let text = std::fs::read(&f)
             .map(|b| String::from_utf8_lossy(&b).into_owned())
             .unwrap_or_default();
@@ -729,7 +781,8 @@ fn measure_cf_range(pool: &Pool, out: &Path) -> Option<(i64, i64)> {
     None
 }
 
-/// One failure's record (runs.jsonl / report.json "failures").
+/// One failure's record as the flow uses it (explore.py's dict: the run's result, seed,
+/// schedule, class, assert_failures).
 type Rec = Map<String, Value>;
 
 fn record(cx: &Cx, sd: i64, text: &str, r: &mut Res) -> Rec {
@@ -742,7 +795,7 @@ fn record(cx: &Cx, sd: i64, text: &str, r: &mut Res) -> Rec {
     for (k, v) in r.iter() {
         rec.insert(k.clone(), v.clone());
     }
-    let af = assert_failures(&cx.out, &tag);
+    let af = assert_failures(&cx.out, &tag, r);
     if !af.is_empty() && verdict_kind(&py_str(&r["verdict"])) == "ok" {
         let v = json!(format!(
             "VIOLATION assertion {}",
@@ -759,25 +812,42 @@ fn record(cx: &Cx, sd: i64, text: &str, r: &mut Res) -> Rec {
 struct Shrunk {
     key: (String, String),
     rec: Rec,
-    log: Vec<String>,
+    /// Every run the chain used: its candidates up to the kept ones, and the confirmations.
+    log: Vec<Run>,
+    /// The minimal schedule's two confirmation runs (tag, result).
+    conf: [(String, Res); 2],
 }
 
 /// A shrink's test of a candidate's (verdict, result): does it still fail the same way?
 type Keep<'a> = &'a dyn Fn(&str, &Res) -> bool;
-/// The error-log kinds and their shrink records (report.md's error section).
-type ErrorsReport = (Vec<errlog::Aggregate>, Map<String, Value>);
 
-/// explore.py `shrink`. Returns (minimal, its verdict, tries) and appends the log lines.
+/// Which shrink a run belongs to (its records' role, the signature shrunk, the seed).
+struct Chain<'a> {
+    role: &'a str,
+    of: String,
+    seed: i64,
+}
+
+impl Cx {
+    fn chain_run(&self, ch: &Chain, tag: &str, text: &str, r: &Res, role: &str) -> Run {
+        let mut run = self.run_record(tag, text, r, role);
+        run.seed = Some(ch.seed);
+        run
+    }
+}
+
+/// explore.py `shrink`. Returns (minimal, its verdict, tries) and appends the runs it used.
 #[allow(clippy::too_many_arguments)]
 fn shrink(
     cx: &Cx,
     pool: &Pool,
     s: S,
     verdict: &str,
-    log: &mut Vec<String>,
+    log: &mut Vec<Run>,
     tjk: Option<(i64, i64)>,
     keep: Option<Keep<'_>>,
     prefix: &str,
+    ch: &Chain,
 ) -> (S, String, i64) {
     let mut budget = 40;
     let (mut cur, mut cur_v, mut tries, mut rnd, mut tjk) = (s, verdict.to_string(), 0i64, 0, tjk);
@@ -813,11 +883,17 @@ fn shrink(
                     break;
                 };
                 let v = py_str(&r["verdict"]);
-                log.push(dumps_line(&json!({"shrink": items[next].1, "verdict": v})));
                 let kept = match keep {
                     Some(k) => k(&v, r),
                     None => same_failure(&cur_v, &v),
                 };
+                let mut run = cx.chain_run(ch, &items[next].0, &items[next].1, r, ch.role);
+                run.shrink = Some(ShrinkStep {
+                    of: ch.of.clone(),
+                    round: rnd as u64,
+                    kept,
+                });
+                log.push(run);
                 if kept {
                     cur = cands[next].clone();
                     cur_v = v;
@@ -852,6 +928,11 @@ fn shrink_violation(cx: &Cx, pool: &Pool, k: usize, key: (String, String), f: &R
             format!("min{}-b", k + 1),
         )
     };
+    let ch = Chain {
+        role: role::SHRINK,
+        of: key.1.clone(),
+        seed: f["seed"].as_i64().unwrap_or(0),
+    };
     let mut log = Vec::new();
     let tjk = f
         .get("tjk")
@@ -866,14 +947,21 @@ fn shrink_violation(cx: &Cx, pool: &Pool, k: usize, key: (String, String), f: &R
         tjk,
         None,
         &prefix,
+        &ch,
     );
     let mut mt = cx.render(&m);
-    let conf_pair = |t: &str| {
+    let conf_pair = |t: &str, log: &mut Vec<Run>| {
         let r = pool.run_all(
             &[(ma.clone(), t.to_string()), (mb.clone(), t.to_string())],
             true,
         );
-        (r[&ma].1.clone(), r[&mb].1.clone())
+        for tag in [&ma, &mb] {
+            log.push(cx.chain_run(&ch, tag, t, &r[tag].1, role::MINIMAL));
+        }
+        [
+            (ma.clone(), r[&ma].1.clone()),
+            (mb.clone(), r[&mb].1.clone()),
+        ]
     };
     let mut stable: Option<Map<String, Value>> = None;
     let conf;
@@ -888,19 +976,18 @@ fn shrink_violation(cx: &Cx, pool: &Pool, k: usize, key: (String, String), f: &R
                 let st = cx.render(&ms);
                 let mut c = None;
                 if compose::fits(&st) {
-                    let (ca, cb) = conf_pair(&st);
-                    log.push(dumps_line(&json!({"stable": st, "verdict": ca["verdict"]})));
-                    if same_failure(&mv, &py_str(&ca["verdict"])) && ca["fp"] == cb["fp"] {
+                    let [ca, cb] = conf_pair(&st, &mut log);
+                    if same_failure(&mv, &py_str(&ca.1["verdict"])) && ca.1["fp"] == cb.1["fp"] {
                         m = ms;
                         mt = st.clone();
                         st_map.insert("stable_schedule".into(), json!(st));
-                        c = Some((ca, cb));
+                        c = Some([ca, cb]);
                     } else {
                         st_map.insert(
                             "stable_note".into(),
                             json!(format!(
                                 "the resolved composition did not fail the same way ({}); the minimal schedule keeps the seed form",
-                                head(&py_str(&ca["verdict"]), 120)
+                                head(&py_str(&ca.1["verdict"]), 120)
                             )),
                         );
                         st_map.insert("stable_schedule".into(), json!(st));
@@ -917,15 +1004,15 @@ fn shrink_violation(cx: &Cx, pool: &Pool, k: usize, key: (String, String), f: &R
                         )),
                     );
                 }
-                conf = c.unwrap_or_else(|| conf_pair(&mt));
+                conf = c.unwrap_or_else(|| conf_pair(&mt, &mut log));
                 stable = Some(st_map);
             }
             Err(e) => {
                 eprintln!("hydo-explore: the composition of {mt}: {e}");
-                conf = conf_pair(&mt);
+                conf = conf_pair(&mt, &mut log);
             }
         },
-        _ => conf = conf_pair(&mt),
+        _ => conf = conf_pair(&mt, &mut log),
     }
     let mut rec = Map::new();
     rec.insert("from_seed".into(), f["seed"].clone());
@@ -933,9 +1020,7 @@ fn shrink_violation(cx: &Cx, pool: &Pool, k: usize, key: (String, String), f: &R
     rec.insert("verdict".into(), json!(mv));
     rec.insert("tries".into(), json!(n));
     rec.insert("min_class".into(), json!(cx.ex.finding_class(&m)));
-    rec.insert("fp_a".into(), conf.0["fp"].clone());
-    rec.insert("fp_b".into(), conf.1["fp"].clone());
-    rec.insert("min_verdict".into(), conf.0["verdict"].clone());
+    rec.insert("min_verdict".into(), conf[0].1["verdict"].clone());
     if let (Some(st), Some(meta)) = (stable, meta) {
         let w = m.w.clone().unwrap_or_default();
         rec.insert(
@@ -960,17 +1045,27 @@ fn shrink_violation(cx: &Cx, pool: &Pool, k: usize, key: (String, String), f: &R
             rec.insert(k, v);
         }
     }
-    Shrunk { key, rec, log }
+    Shrunk {
+        key,
+        rec,
+        log,
+        conf,
+    }
 }
 
 /// explore.py `errlog_shrink` for one kind.
-fn shrink_errkind(cx: &Cx, pool: &Pool, x: &errlog::Aggregate) -> (String, Value, Vec<String>) {
+fn shrink_errkind(cx: &Cx, pool: &Pool, x: &errlog::Aggregate) -> (String, ErrorShrink, Vec<Run>) {
     let sig = x.sig.clone();
     let mut log = Vec::new();
     let keep = |_: &str, r: &Res| {
         r.get("errors_new")
             .and_then(Value::as_array)
             .is_some_and(|a| a.iter().any(|s| py_str(s) == sig))
+    };
+    let ch = Chain {
+        role: role::ERROR_SHRINK,
+        of: sig.clone(),
+        seed: x.first_new.as_ref().and_then(|f| f.0.as_i64()).unwrap_or(0),
     };
     let s0 = cx.parse(
         x.first_new
@@ -987,26 +1082,66 @@ fn shrink_errkind(cx: &Cx, pool: &Pool, x: &errlog::Aggregate) -> (String, Value
         None,
         Some(&keep),
         &format!("errshrink-{sig}"),
+        &ch,
     );
     let mt = cx.render(&m);
     let (ta, tb) = (format!("errmin-a-{sig}"), format!("errmin-b-{sig}"));
     let conf = pool.run_all(&[(ta.clone(), mt.clone()), (tb.clone(), mt.clone())], true);
-    let (ra, rb) = (&conf[&ta].1, &conf[&tb].1);
-    let v = json!({"minimal": mt, "tries": n, "fp_a": ra["fp"], "fp_b": rb["fp"], "verdict": ra["verdict"],
-                   "present_a": keep("", ra), "present_b": keep("", rb)});
-    (sig, v, log)
+    let mut confirmations = Vec::new();
+    for t in [&ta, &tb] {
+        let r = &conf[t].1;
+        log.push(cx.chain_run(&ch, t, &mt, r, role::ERROR_MINIMAL));
+        confirmations.push(Reproduction {
+            tag: Some(t.clone()),
+            fp: r.get("fp").filter(|v| !v.is_null()).map(py_str),
+            verdict: r.get("verdict").filter(|v| !v.is_null()).map(py_str),
+            present: Some(keep("", r)),
+        });
+    }
+    let es = ErrorShrink {
+        identical: conf[&ta].1.get("fp") == conf[&tb].1.get("fp"),
+        repro_command: Some(cx.by_hand(&mt)),
+        minimal: mt,
+        tries: n as u64,
+        confirmations,
+    };
+    (sig, es, log)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn explore(
-    cx: &Cx,
-    pool: Pool,
-    t0: Instant,
+/// What the main flow runs: the first runs and, for sweeps, what the sweep found already.
+struct Inputs {
     seeds: Vec<i64>,
     items: Vec<(String, String)>,
     pre_res: Option<HashMap<String, (String, Res)>>,
-    fc_info: Option<Map<String, Value>>,
-) -> i32 {
+    /// The adaptive freeze sweep's counts (as summary rows) and its whole record.
+    fc_info: Option<(Map<String, Value>, Map<String, Value>)>,
+    labels: Option<Vec<String>>,
+    image_sha: ShaThread,
+}
+
+fn repro_of(tag: &str, r: Option<&Res>) -> Reproduction {
+    let g = |k: &str| {
+        r.and_then(|r| r.get(k))
+            .filter(|v| !v.is_null())
+            .map(py_str)
+    };
+    Reproduction {
+        tag: Some(tag.to_string()),
+        fp: g("fp"),
+        verdict: g("verdict"),
+        present: None,
+    }
+}
+
+fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
+    let Inputs {
+        seeds,
+        items,
+        pre_res,
+        fc_info,
+        labels,
+        image_sha,
+    } = inp;
     let a = &cx.a;
     let nrep = a.repro.unwrap_or(if a.sweep.as_deref() == Some("freeze") {
         2
@@ -1019,9 +1154,7 @@ fn explore(
         .map(|(i, (t, _))| (t.clone(), i))
         .collect();
     let mut slot: Vec<Option<(String, Res)>> = vec![None; items.len()];
-    let mut runs = std::fs::File::create(cx.out.join("runs.jsonl"))
-        .unwrap_or_else(|e| die(&format!("{}: {e}", cx.out.display())));
-    let mut fails: Vec<Rec> = Vec::new();
+    let mut fails: Vec<(Rec, Run)> = Vec::new();
     let mut reps: Vec<(String, String)> = Vec::new();
     let mut t_sweep = 0.0;
     let mut rep: HashMap<String, Res> = HashMap::new();
@@ -1056,7 +1189,11 @@ fn explore(
                 };
                 let sd = seeds[next];
                 let rec = record(cx, sd, text, r);
-                let _ = runs.write_all((dumps_line(&Value::Object(rec.clone())) + "\n").as_bytes());
+                let mut run = cx.run_record(&format!("seed-{sd}"), text, r, role::FIRST);
+                run.seed = Some(sd);
+                run.class = Some(py_str(&rec["class"]));
+                run.point = labels.as_ref().and_then(|l| l.get(next).cloned());
+                cx.ev.write(&run);
                 let v = py_str(&rec["verdict"]);
                 if verdict_kind(&v) != "ok" {
                     let ritems: Vec<(String, String)> = (0..nrep)
@@ -1079,13 +1216,13 @@ fn explore(
                             chains.push(sc.spawn(move || shrink_violation(cx, pool, k, key, &f)));
                         }
                     }
-                    fails.push(rec);
+                    fails.push((rec, run));
                 }
                 next += 1;
             }
         }
         t_sweep = match &fc_info {
-            Some(i) => {
+            Some((i, _)) => {
                 i["stage1_wall_s"].as_f64().unwrap_or(0.0)
                     + i["stage2_wall_s"].as_f64().unwrap_or(0.0)
             }
@@ -1102,10 +1239,10 @@ fn explore(
             .iter()
             .map(|sd| {
                 let tag = format!("seed-{sd}");
-                let text = all.get(&tag).map(|x| x.0.clone()).unwrap_or_default();
+                let (text, r) = all.get(&tag).cloned().unwrap_or_default();
                 // explore.py read back consoles/<tag>.errors.json; the analysis is a pure function
                 // of the consoles, the schedule and the list, so it is made again here
-                let an = if has_errlog(&cx.out, &tag) {
+                let an = if has_errlog(&r) {
                     cx.known.as_ref().and_then(|k| {
                         errlog::analyse(&cx.out.join("consoles").join(&tag), &text, k)
                     })
@@ -1140,7 +1277,7 @@ fn explore(
             .map(|h| h.join().expect("a shrink"))
             .collect();
         let errors = errors.map(|(agg, an_runs, hs)| {
-            let done: Vec<(String, Value, Vec<String>)> = hs
+            let done: Vec<(String, ErrorShrink, Vec<Run>)> = hs
                 .into_iter()
                 .map(|h| h.join().expect("a shrink"))
                 .collect();
@@ -1148,53 +1285,54 @@ fn explore(
         });
         (shrunk, errors, all)
     });
-    drop(runs);
-    // the re-runs
-    for f in fails.iter_mut() {
+    // the re-runs, in seed order
+    let mut failures = Vec::new();
+    for (f, run) in &fails {
         let sd = f["seed"].as_i64().unwrap_or(0);
-        let rr = rep.get(&format!("repro-{sd}")).cloned().unwrap_or_default();
-        f.insert(
-            "repro_fp".into(),
-            rr.get("fp").cloned().unwrap_or(Value::Null),
-        );
-        f.insert(
-            "repro_verdict".into(),
-            rr.get("verdict").cloned().unwrap_or(Value::Null),
-        );
-        let mut ok = rr.get("fp") == f.get("fp");
-        for k in 1..nrep {
-            let rk = rep
-                .get(&format!("repro{}-{sd}", k + 1))
-                .cloned()
-                .unwrap_or_default();
-            f.insert(
-                format!("repro{}_fp", k + 1),
-                rk.get("fp").cloned().unwrap_or(Value::Null),
-            );
-            ok = ok && rk.get("fp") == f.get("fp");
-        }
-        f.insert("reproduced".into(), json!(ok));
-    }
-    // shrink.jsonl: each chain's lines in explore.py's order (representatives by first seed, then
-    // the error-log kinds)
-    let mut slog = String::new();
-    for s in &shrunk {
-        for l in &s.log {
-            slog.push_str(l);
-            slog.push('\n');
-        }
-    }
-    let mut eshr = Map::new();
-    if let Some((_, _, done)) = &errors {
-        for (sig, v, log) in done {
-            for l in log {
-                slog.push_str(l);
-                slog.push('\n');
+        let mut reproductions = Vec::new();
+        let mut ok = true;
+        for k in 0..nrep {
+            let tag = if k == 0 {
+                format!("repro-{sd}")
+            } else {
+                format!("repro{}-{sd}", k + 1)
+            };
+            let rr = rep.get(&tag);
+            ok = ok && rr.and_then(|r| r.get("fp")) == f.get("fp");
+            if let Some(r) = rr {
+                let mut rr_run = cx.run_record(&tag, &run.schedule, r, role::RERUN);
+                rr_run.seed = Some(sd);
+                cx.ev.write(&rr_run);
             }
-            eshr.insert(sig.clone(), v.clone());
+            reproductions.push(repro_of(&tag, rr));
+        }
+        failures.push(Failure {
+            signature: sig_key(&run.verdict.text),
+            reproduced: ok,
+            reproductions,
+            timing_only: None,
+            run: run.clone(),
+        });
+    }
+    // the shrinks' runs, chain by chain (representatives by first seed, then the error kinds)
+    for s in &shrunk {
+        for r in &s.log {
+            cx.ev.write(r);
         }
     }
-    let _ = std::fs::write(cx.out.join("shrink.jsonl"), slog);
+    let mut eshr: HashMap<String, ErrorShrink> = HashMap::new();
+    if let Some((_, _, done)) = &errors {
+        for (sig, es, log) in done {
+            for r in log {
+                cx.ev.write(r);
+            }
+            eshr.insert(sig.clone(), es.clone());
+        }
+    }
+    let shrinks: Vec<hydo_results::Shrink> = shrunk.iter().map(|s| cx.shrink_model(s)).collect();
+    for s in &shrinks {
+        cx.ev.write(s);
+    }
     let boot = pool.mean_boot();
     let nworkers = pool.workers();
     let cache_hits = *pool.cache_hits.lock().expect("lock");
@@ -1210,298 +1348,242 @@ fn explore(
                 .unwrap_or(0.0)
         })
         .collect();
-    let mut summary = Map::new();
-    summary.insert("schedules".into(), json!(seeds.len()));
-    summary.insert(
-        "strategy".into(),
-        json!(a
-            .sweep
-            .as_ref()
-            .map(|s| format!("sweep:{s}"))
-            .unwrap_or_else(|| a.strategy.clone())),
-    );
-    summary.insert("image".into(), json!(cx.image));
-    summary.insert("workers".into(), json!(nworkers));
-    summary.insert("sweep_wall_s".into(), fl(round1(t_sweep)));
-    summary.insert(
-        "runs_per_hour".into(),
-        fl(round1(seeds.len() as f64 / t_sweep.max(1e-9) * 3600.0)),
-    );
-    summary.insert(
-        "mean_run_s".into(),
-        fl(round1(secs.iter().sum::<f64>() / secs.len().max(1) as f64)),
-    );
-    summary.insert("worker_boot_s".into(), fl(round1(boot)));
-    summary.insert("total_wall_s".into(), fl(round1(total)));
-    summary.insert("failures".into(), json!(fails.len()));
-    summary.insert(
-        "reproduced".into(),
-        json!(fails.iter().filter(|f| f["reproduced"] == true).count()),
-    );
-    if nrep != 1 {
-        summary.insert("repro_runs".into(), json!(nrep));
+    let mut summary = Summary {
+        schedules: seeds.len() as u64,
+        sweep_wall_s: Some(round1(t_sweep)),
+        runs_per_hour: Some(round1(seeds.len() as f64 / t_sweep.max(1e-9) * 3600.0)),
+        mean_run_s: Some(round1(secs.iter().sum::<f64>() / secs.len().max(1) as f64)),
+        worker_boot_s: Some(round1(boot)),
+        total_wall_s: Some(round1(total)),
+        failures: failures.len() as u64,
+        reproduced: Some(failures.iter().filter(|f| f.reproduced).count() as u64),
+        repro_runs: (nrep != 1).then_some(nrep as u64),
+        quiet_wait_s: {
+            let qw = pool::quiet_waited();
+            (qw > 0.0).then(|| round1(qw))
+        },
+        cache_hits: (cache_hits > 0).then_some(cache_hits as u64),
+        ..Summary::default()
+    };
+    let mut error_kinds = None;
+    if let Some((agg, an_runs, _)) = &errors {
+        summary.error_kinds_new = Some(agg.iter().filter(|x| x.new_runs > 0).count() as u64);
+        summary.runs_with_new_error_kinds = Some(
+            an_runs
+                .iter()
+                .filter(|x| x.2.as_ref().is_some_and(|an| !an.new.is_empty()))
+                .count() as u64,
+        );
+        let known = cx.known.clone().expect("loaded");
+        error_kinds = Some(ErrorKinds {
+            known_file: known.path.clone(),
+            known_sha256: known.sha256.clone(),
+            unknown: known.unknown.clone(),
+            kinds: agg
+                .iter()
+                .map(|x| x.to_model(eshr.get(&x.sig).cloned()))
+                .collect(),
+        });
     }
-    if let Some(info) = &fc_info {
-        for (k, v) in info {
-            summary.insert(k.clone(), v.clone());
+    cx.ev.write(&End {
+        summary: summary.clone(),
+        ..End::default()
+    });
+    let mut doc = cx.exploration(nworkers, summary, image_sha);
+    doc.freeze_sweep = fc_info.map(|x| x.1);
+    doc.failures = failures;
+    doc.shrinks = shrinks;
+    doc.error_kinds = error_kinds;
+    // the property table and the liveness summary over the first runs
+    let merged: Vec<(String, String)> = seeds
+        .iter()
+        .map(|sd| {
+            let tag = format!("seed-{sd}");
+            let r = res_all.get(&tag).map(|x| x.1.clone()).unwrap_or_default();
+            let m = merged_text(&cx.out, &tag, &r);
+            (tag, m)
+        })
+        .collect();
+    doc.properties =
+        results::property_table(&merged.iter().map(|x| x.1.clone()).collect::<Vec<_>>());
+    let mut with: Vec<(String, String)> = merged
+        .into_iter()
+        .filter(|x| x.1.contains("HYDO-ASSERT"))
+        .collect();
+    with.sort_by(|a, b| format!("{}.log", a.0).cmp(&format!("{}.log", b.0)));
+    doc.liveness = results::liveness(&with);
+    let _ = hydo_results::write_document(&cx.out.join(hydo_results::EXPLORATION_DOC), &doc);
+    let _ = std::fs::write(cx.out.join("report.md"), md::report(&doc));
+    println!("{}", md::summary_line(&doc));
+    0
+}
+
+fn merged_text(out: &Path, tag: &str, r: &Res) -> String {
+    report::merged(out, tag, r)
+}
+
+/// The image's SHA-256, computed beside the runs (an image can be gigabytes).
+type ShaThread = Option<std::thread::JoinHandle<Option<String>>>;
+
+impl Cx {
+    fn run_record(&self, tag: &str, text: &str, r: &Res, role: &str) -> Run {
+        results::explorer_run(&self.out, tag, text, r, role)
+    }
+
+    fn image_file(&self) -> PathBuf {
+        if self.ex.backend == Backend::Hvm {
+            self.hvm_image()
+        } else {
+            self.build.join(&self.image)
         }
     }
-    let qw = pool::quiet_waited();
-    if qw > 0.0 {
-        summary.insert("quiet_wait_s".into(), fl(round1(qw)));
+
+    fn image_sha_thread(&self) -> ShaThread {
+        let p = self.image_file();
+        Some(std::thread::spawn(move || {
+            hydo_engine::image::sha256_file(&p).ok()
+        }))
     }
-    if cache_hits > 0 {
-        summary.insert("cache_hits".into(), json!(cache_hits));
+
+    fn mode(&self) -> &'static str {
+        if self.a.schedule.is_some() {
+            "schedule"
+        } else if self.a.branch.is_some() {
+            "branch"
+        } else if self.a.sweep.is_some() {
+            "sweep"
+        } else {
+            "seeds"
+        }
     }
-    add_machine(cx, &mut summary);
-    if cx.ex.backend == Backend::Hvm {
-        if let Some((_, sha)) = hvm::image_kernel(&cx.hvm_image()) {
-            let k = cx
-                .hvm_kernel
-                .clone()
-                .unwrap_or_else(|| cx.hvm_default_kernel());
-            summary.insert(
-                "guest_kernel".into(),
-                json!(format!(
+
+    fn config(&self) -> Config {
+        let a = &self.a;
+        let mode = self.mode();
+        Config {
+            strategy: a
+                .sweep
+                .as_ref()
+                .map(|s| format!("sweep:{s}"))
+                .unwrap_or_else(|| a.strategy.clone()),
+            seeds: matches!(mode, "seeds" | "branch").then(|| a.seeds.clone()),
+            sweep: a.sweep.clone(),
+            branch_marker: a.branch.clone(),
+            variants: a.branch.as_ref().map(|_| a.variants as u64),
+            schedule: a.schedule.clone(),
+            argv: self.argv.clone(),
+        }
+    }
+
+    fn engine_info(&self, workers: usize) -> hydo_results::Engine {
+        let hvm_b = self.ex.backend == Backend::Hvm;
+        let guest_kernel = if hvm_b {
+            hvm::image_kernel(&self.hvm_image()).map(|(_, sha)| {
+                let k = self
+                    .hvm_kernel
+                    .clone()
+                    .unwrap_or_else(|| self.hvm_default_kernel());
+                format!(
                     "{} (sha256 {})",
                     k.file_name()
                         .map(|s| s.to_string_lossy().into_owned())
                         .unwrap_or_default(),
                     head(&sha, 16)
-                )),
-            );
-        }
-    }
-    let mut shrunk_json = Vec::new();
-    let mut shrunk_map: Vec<((String, String), Rec)> = Vec::new();
-    for s in &shrunk {
-        let mut o = Map::new();
-        o.insert("class".into(), json!(s.key.0));
-        o.insert("signature".into(), json!(s.key.1));
-        for (k, v) in &s.rec {
-            o.insert(k.clone(), v.clone());
-        }
-        shrunk_json.push(Value::Object(o));
-        shrunk_map.push((s.key.clone(), s.rec.clone()));
-    }
-    let mut rep_j = Map::new();
-    let known = cx.known.clone().expect("loaded");
-    let mut errs_report = None;
-    if let Some((agg, an_runs, _)) = &errors {
-        summary.insert(
-            "error_kinds_new".into(),
-            json!(agg.iter().filter(|x| x.new_runs > 0).count()),
-        );
-        summary.insert(
-            "runs_with_new_error_kinds".into(),
-            json!(an_runs
-                .iter()
-                .filter(|x| x.2.as_ref().is_some_and(|an| !an.new.is_empty()))
-                .count()),
-        );
-        let kinds: Vec<Value> = agg
-            .iter()
-            .map(|x| {
-                let mut o = x.to_json();
-                o.insert("new".into(), json!(x.new_runs > 0));
-                o.insert(
-                    "shrunk".into(),
-                    eshr.get(&x.sig).cloned().unwrap_or(Value::Null),
-                );
-                Value::Object(o)
+                )
             })
-            .collect();
-        let doc = json!({"known_file": known.path, "known_sha256": known.sha256, "unknown": known.unknown, "kinds": kinds});
-        let _ = std::fs::write(cx.out.join("errors.json"), dumps(&doc, 1));
-        errs_report = Some((agg.clone(), eshr.clone()));
-        rep_j.insert("summary".into(), Value::Object(summary.clone()));
-        rep_j.insert(
-            "failures".into(),
-            Value::Array(fails.iter().cloned().map(Value::Object).collect()),
-        );
-        rep_j.insert("shrunk".into(), Value::Array(shrunk_json));
-        rep_j.insert("errors".into(), doc);
-    } else {
-        rep_j.insert("summary".into(), Value::Object(summary.clone()));
-        rep_j.insert(
-            "failures".into(),
-            Value::Array(fails.iter().cloned().map(Value::Object).collect()),
-        );
-        rep_j.insert("shrunk".into(), Value::Array(shrunk_json));
-    }
-    let _ = std::fs::write(cx.out.join("report.json"), dumps(&Value::Object(rep_j), 1));
-    let tags: Vec<String> = seeds.iter().map(|sd| format!("seed-{sd}")).collect();
-    let table = report::property_table(&cx.out, &cx.env.root.join("hydo"), &tags);
-    if let Some(t) = &table {
-        let _ = std::fs::write(cx.out.join("properties.txt"), t);
-    }
-    write_report(
-        cx,
-        &summary,
-        &fails,
-        &shrunk_map,
-        table.as_deref(),
-        errs_report.as_ref(),
-        &known,
-    );
-    println!("{}", dumps_line(&Value::Object(summary)));
-    0
-}
-
-fn add_machine(cx: &Cx, summary: &mut Map<String, Value>) {
-    if cx.ram_mib != 1024 {
-        summary.insert("ram_mib".into(), json!(cx.ram_mib));
-    }
-    if cx.vcpus != 1 {
-        summary.insert("vcpus".into(), json!(cx.vcpus));
-    }
-    if cx.cpu != "v2" {
-        summary.insert("cpu".into(), json!(cx.cpu));
-    }
-}
-
-/// explore.py `write_report`.
-fn write_report(
-    cx: &Cx,
-    summary: &Map<String, Value>,
-    fails: &[Rec],
-    shrunk: &[((String, String), Rec)],
-    table: Option<&str>,
-    errors: Option<&ErrorsReport>,
-    known: &Known,
-) {
-    let mut l: Vec<String> = vec![
-        "# Explorer report".into(),
-        String::new(),
-        "| | |".into(),
-        "|---|---|".into(),
-    ];
-    for (k, v) in summary {
-        l.push(format!("| {k} | {} |", cell(v)));
-    }
-    let mut by: std::collections::BTreeMap<(String, String), Vec<&Rec>> = Default::default();
-    for f in fails {
-        let k = (py_str(&f["class"]), sig_key(&py_str(&f["verdict"])));
-        by.entry(k).or_default().push(f);
-    }
-    l.extend(
-        [
-            "",
-            "## Failures by class and signature",
-            "",
-            "| class | signature | runs | seeds | reproduced |",
-            "|---|---|---|---|---|",
-        ]
-        .map(String::from),
-    );
-    for ((c, sig), fs) in &by {
-        l.push(format!(
-            "| {c} | `{sig}` | {} | {} | {}/{} |",
-            fs.len(),
-            fs.iter()
-                .take(8)
-                .map(|f| py_str(&f["seed"]))
-                .collect::<Vec<_>>()
-                .join(" "),
-            fs.iter().filter(|f| f["reproduced"] == true).count(),
-            fs.len()
-        ));
-    }
-    l.extend(["", "## Minimal reproducers", ""].map(String::from));
-    let turns_re = regex::Regex::new(r"(?:^|\s)(?:qs?|qb)=").expect("p");
-    for ((c, sig), v) in shrunk {
-        let mc = v.get("min_class").map(py_str).unwrap_or_else(|| c.clone());
-        let hd = if mc == *c {
-            mc.clone()
         } else {
-            format!("{mc} (found as {c}; the minimal schedule needs only {mc})")
+            None
         };
-        let minimal = py_str(&v["minimal"]);
-        l.push(format!("### {hd}: `{sig}`"));
-        l.push(String::new());
-        l.push(format!(
-            "- from seed {}, {} shrink runs",
-            py_str(&v["from_seed"]),
-            py_str(&v["tries"])
-        ));
-        l.push(format!("- minimal schedule: `{minimal}`"));
-        l.push(format!(
-            "- needs a tick-timing change: {}",
-            if minimal.contains(" tj") { "yes" } else { "no" }
-        ));
-        if v.get("composition").is_some_and(hydo_manifest::py::truthy) {
-            l.push(format!(
-                "- composition (test composer, W=): {}",
-                py_str(&v["composition"])
-            ));
-        }
-        if v.get("stable").is_some_and(hydo_manifest::py::truthy) {
-            let st = v.get("stable_schedule").map(py_str);
-            l.push(format!(
-                "- stable form (commands by id; `hydo save` writes it): {}",
-                if st.as_deref() == Some(minimal.as_str()) {
-                    "the minimal schedule".to_string()
-                } else {
-                    format!(
-                        "`{}` ({})",
-                        st.unwrap_or_else(|| "None".into()),
-                        v.get("stable_note").map(py_str).unwrap_or_default()
-                    )
-                }
-            ));
-        }
-        if cx.vcpus > 1 {
-            let host = minimal.split('|').next().unwrap_or("");
-            l.push(format!(
-                "- needs vCPU turn lengths: {}",
-                if turns_re.is_match(host) { "yes" } else { "no" }
-            ));
-        }
-        l.push(format!("- verdict: `{}`", py_str(&v["min_verdict"])));
-        l.push(format!(
-            "- fingerprint, two runs: `{}` / `{}` ({})",
-            py_str(&v["fp_a"]),
-            py_str(&v["fp_b"]),
-            if v["fp_a"] == v["fp_b"] {
-                "identical"
+        hydo_results::Engine {
+            backend: Some(if hvm_b { "hvm" } else { "hvx" }.into()),
+            args: Some(self.engine_args()),
+            ram_mib: Some(self.ram_mib as u64),
+            vcpus: Some(self.vcpus as u64),
+            cpu: Some(self.cpu.clone()),
+            guest_kernel,
+            module_srcversion: if hvm_b {
+                None
             } else {
-                "DIFFERENT"
-            }
-        ));
-        l.push(format!("- by hand: {}", cx.by_hand(&minimal)));
-        l.push(String::new());
-    }
-    l.extend(
-        [
-            "## Property table over every schedule (hvx/ASSERTIONS.md)",
-            "",
-        ]
-        .map(String::from),
-    );
-    match table {
-        None => l.extend(
-            [
-                "The guest emitted no HYDO-ASSERT records (an image built without the assertion SDK).",
-                "",
-            ]
-            .map(String::from),
-        ),
-        Some(t) => {
-            l.push("```".into());
-            l.push(t.trim_end().to_string());
-            l.push("```".into());
-            l.push(String::new());
-            l.extend(report::liveness_summary(&cx.out));
+                std::fs::read_to_string("/sys/module/hvx/srcversion")
+                    .ok()
+                    .map(|s| s.trim().to_string())
+            },
+            workers: Some(workers as u64),
         }
     }
-    if let Some((agg, eshr)) = errors {
-        l.extend(hydo_errors::report_md(agg, known, eshr, &|s| cx.by_hand(s)));
+
+    fn image_info(&self, sha: Option<String>) -> Image {
+        let f = self.image_file().display().to_string();
+        Image {
+            resolved: (f != self.image).then_some(f),
+            path: self.image.clone(),
+            sha256: sha,
+        }
     }
-    let _ = std::fs::write(cx.out.join("report.md"), l.join("\n") + "\n");
+
+    fn start_record(&self, workers: usize) -> Start {
+        Start {
+            hydo_version: Some(env!("CARGO_PKG_VERSION").into()),
+            mode: self.mode().into(),
+            config: self.config(),
+            image: self.image_info(None),
+            engine: self.engine_info(workers),
+            ..Start::default()
+        }
+    }
+
+    fn exploration(&self, workers: usize, summary: Summary, sha: ShaThread) -> Exploration {
+        let sha = sha.and_then(|h| h.join().ok()).flatten();
+        Exploration {
+            hydo_version: Some(env!("CARGO_PKG_VERSION").into()),
+            mode: self.mode().into(),
+            config: self.config(),
+            image: self.image_info(sha),
+            engine: self.engine_info(workers),
+            summary,
+            artifacts: ExplorationArtifacts {
+                events: hydo_results::EVENTS.into(),
+                report: (self.mode() != "schedule").then(|| "report.md".into()),
+                consoles: Some("consoles".into()),
+            },
+            ..Exploration::default()
+        }
+    }
+
+    fn shrink_model(&self, s: &Shrunk) -> hydo_results::Shrink {
+        let r = &s.rec;
+        let st = |k: &str| r.get(k).filter(|v| !v.is_null()).map(py_str);
+        let minimal = py_str(&r["minimal"]);
+        let confirmations: Vec<Reproduction> =
+            s.conf.iter().map(|(t, x)| repro_of(t, Some(x))).collect();
+        hydo_results::Shrink {
+            class: s.key.0.clone(),
+            signature: s.key.1.clone(),
+            from_seed: r["from_seed"].as_i64().unwrap_or(0),
+            verdict: py_str(&r["verdict"]),
+            tries: r["tries"].as_u64().unwrap_or(0),
+            min_class: st("min_class"),
+            min_verdict: st("min_verdict"),
+            identical: s.conf[0].1.get("fp") == s.conf[1].1.get("fp"),
+            confirmations,
+            repro_command: Some(self.by_hand(&minimal)),
+            composition: st("composition"),
+            commands: r
+                .get("commands")
+                .and_then(Value::as_array)
+                .map(|a| a.iter().map(py_str).collect()),
+            contents: r.get("contents").and_then(Value::as_object).cloned(),
+            stable: st("stable"),
+            stable_schedule: st("stable_schedule"),
+            stable_note: st("stable_note"),
+            minimal,
+            ..hydo_results::Shrink::default()
+        }
+    }
 }
 
 /// explore.py `branch_main`: each seed's schedule runs to the marker, then timing variants.
-fn branch_main(cx: &Cx, pool: Pool, t0: Instant) -> i32 {
+fn branch_main(cx: &Cx, pool: Pool, t0: Instant, image_sha: ShaThread) -> i32 {
     let a = &cx.a;
     let (lo, hi) = a
         .seeds
@@ -1533,122 +1615,92 @@ fn branch_main(cx: &Cx, pool: Pool, t0: Instant) -> i32 {
     let t1 = Instant::now();
     let done = pool.branch_all(reqs.clone());
     let t_sweep = t1.elapsed().as_secs_f64();
-    let mut runs = String::new();
-    let (mut fails, mut nrun, mut nbp, mut secs) = (Vec::<Rec>::new(), 0usize, 0usize, 0.0f64);
-    for b in &done {
+    let (mut fails, mut nrun, mut nbp, mut secs) = (Vec::<Run>::new(), 0usize, 0usize, 0.0f64);
+    for (bi, b) in done.iter().enumerate() {
         nbp += usize::from(b.tjlo.is_some());
         for (sub, st, rr) in &b.runs {
             nrun += 1;
             secs += rr["secs"].as_f64().unwrap_or(0.0);
-            let mut rec = Map::new();
-            rec.insert("tag".into(), json!(sub));
-            rec.insert("schedule".into(), json!(st));
-            rec.insert("class".into(), json!(cx.ex.finding_class(&cx.parse(st))));
-            rec.insert("branch_tjlo".into(), json!(b.tjlo));
-            rec.insert("branch_held".into(), json!(b.held));
-            for (k, v) in rr {
-                rec.insert(k.clone(), v.clone());
-            }
-            runs.push_str(&(dumps_line(&Value::Object(rec.clone())) + "\n"));
+            let mut run = cx.run_record(sub, st, rr, role::BRANCH);
+            run.seed = Some(lo + bi as i64);
+            run.class = Some(cx.ex.finding_class(&cx.parse(st)).to_string());
+            run.branch = Some(Branch {
+                tjlo: b.tjlo,
+                held: b.held,
+            });
+            cx.ev.write(&run);
             if verdict_kind(&py_str(&rr["verdict"])) != "ok" {
-                fails.push(rec);
+                fails.push(run);
             }
         }
     }
-    let _ = std::fs::write(cx.out.join("runs.jsonl"), runs);
     let items: Vec<(String, String)> = fails
         .iter()
         .enumerate()
-        .map(|(i, f)| (format!("repro-{i}"), py_str(&f["schedule"])))
+        .map(|(i, f)| (format!("repro-{i}"), f.schedule.clone()))
         .collect();
     let rep = pool.run_all(&items, true);
-    for (i, f) in fails.iter_mut().enumerate() {
-        let rr = rep[&format!("repro-{i}")].1.clone();
-        f.insert("repro_fp".into(), rr["fp"].clone());
-        f.insert("repro_verdict".into(), rr["verdict"].clone());
-        let ok = rr["fp"] == f["fp"];
-        f.insert("reproduced".into(), json!(ok));
+    let mut failures = Vec::new();
+    for (i, f) in fails.iter().enumerate() {
+        let tag = format!("repro-{i}");
+        let rr = rep[&tag].1.clone();
+        let mut rr_run = cx.run_record(&tag, &f.schedule, &rr, role::RERUN);
+        rr_run.seed = f.seed;
+        cx.ev.write(&rr_run);
+        failures.push(Failure {
+            signature: sig_key(&f.verdict.text),
+            reproduced: rr.get("fp").map(py_str).as_deref() == Some(f.fingerprints.fp.as_str()),
+            reproductions: vec![repro_of(&tag, Some(&rr))],
+            timing_only: None,
+            run: f.clone(),
+        });
     }
     let mut base_sig: HashMap<String, String> = HashMap::new();
-    for f in &fails {
-        let tag = py_str(&f["tag"]);
+    for f in &failures {
+        let tag = f.run.tag.clone().unwrap_or_default();
         if let Some(b) = tag.strip_suffix("-base") {
-            base_sig.insert(b.to_string(), report::signature(&py_str(&f["verdict"])));
+            base_sig.insert(b.to_string(), report::signature(&f.run.verdict.text));
         }
     }
-    for f in fails.iter_mut() {
-        let tag = py_str(&f["tag"]);
+    for f in failures.iter_mut() {
+        let tag = f.run.tag.clone().unwrap_or_default();
         let pre = tag
             .rsplit_once("-v")
             .map(|x| x.0.to_string())
             .unwrap_or_else(|| tag.clone());
         let t = !tag.ends_with("-base")
-            && base_sig.get(&pre) != Some(&report::signature(&py_str(&f["verdict"])));
-        f.insert("timing_only".into(), json!(t));
+            && base_sig.get(&pre) != Some(&report::signature(&f.run.verdict.text));
+        f.timing_only = Some(t);
     }
-    let mut summary = Map::new();
-    summary.insert("schedules".into(), json!(reqs.len()));
-    summary.insert("branch_points".into(), json!(nbp));
-    summary.insert("runs".into(), json!(nrun));
-    summary.insert("variants_per_point".into(), json!(a.variants));
-    summary.insert("tjpm".into(), json!(pm));
-    summary.insert("sweep_wall_s".into(), fl(round1(t_sweep)));
-    summary.insert(
-        "runs_per_hour".into(),
-        fl(round1(nrun as f64 / t_sweep.max(1.0) * 3600.0)),
-    );
-    summary.insert("mean_run_s".into(), fl(round1(secs / nrun.max(1) as f64)));
-    summary.insert("failures".into(), json!(fails.len()));
-    summary.insert(
-        "reproduced_standalone".into(),
-        json!(fails.iter().filter(|f| f["reproduced"] == true).count()),
-    );
-    summary.insert(
-        "timing_only_failures".into(),
-        json!(fails.iter().filter(|f| f["timing_only"] == true).count()),
-    );
-    summary.insert(
-        "total_wall_s".into(),
-        fl(round1(t0.elapsed().as_secs_f64())),
-    );
-    add_machine(cx, &mut summary);
-    let doc = json!({"summary": summary, "failures": fails});
-    let _ = std::fs::write(cx.out.join("report.json"), dumps(&doc, 1));
-    let mut l = vec![
-        format!("# Branch report (marker `{marker}`)"),
-        String::new(),
-        "| | |".into(),
-        "|---|---|".into(),
-    ];
-    for (k, v) in &summary {
-        l.push(format!("| {k} | {} |", cell(v)));
-    }
-    l.extend(
-        [
-            "",
-            "## Failures",
-            "",
-            "| run | class | timing only | verdict | reproduced standalone |",
-            "|---|---|---|---|---|",
-        ]
-        .map(String::from),
-    );
-    for f in &fails {
-        l.push(format!(
-            "| {} | {} | {} | `{}` | {} |",
-            py_str(&f["tag"]),
-            py_str(&f["class"]),
-            if f["timing_only"] == true {
-                "yes"
-            } else {
-                "no"
-            },
-            head(&py_str(&f["verdict"]), 90),
-            if f["reproduced"] == true { "yes" } else { "NO" }
-        ));
-    }
-    let _ = std::fs::write(cx.out.join("report.md"), l.join("\n") + "\n");
+    let summary = Summary {
+        schedules: reqs.len() as u64,
+        branch_points: Some(nbp as u64),
+        runs: Some(nrun as u64),
+        variants_per_point: Some(a.variants as u64),
+        tjpm: Some(pm as u64),
+        sweep_wall_s: Some(round1(t_sweep)),
+        runs_per_hour: Some(round1(nrun as f64 / t_sweep.max(1.0) * 3600.0)),
+        mean_run_s: Some(round1(secs / nrun.max(1) as f64)),
+        failures: failures.len() as u64,
+        reproduced_standalone: Some(failures.iter().filter(|f| f.reproduced).count() as u64),
+        timing_only_failures: Some(
+            failures
+                .iter()
+                .filter(|f| f.timing_only == Some(true))
+                .count() as u64,
+        ),
+        total_wall_s: Some(round1(t0.elapsed().as_secs_f64())),
+        ..Summary::default()
+    };
+    cx.ev.write(&End {
+        summary: summary.clone(),
+        ..End::default()
+    });
+    let mut doc = cx.exploration(pool.workers(), summary, image_sha);
+    doc.failures = failures;
+    let _ = hydo_results::write_document(&cx.out.join(hydo_results::EXPLORATION_DOC), &doc);
+    let _ = std::fs::write(cx.out.join("report.md"), md::report(&doc));
     pool.close();
-    println!("{}", dumps_line(&Value::Object(summary)));
+    println!("{}", md::summary_line(&doc));
     0
 }

@@ -1,0 +1,12 @@
+{
+  "about": "an invalid byte in an id or a message is written as \\ufffd, as Go 1.26 writes it",
+  "needs": ["invalid_utf8"],
+  "steps": [
+    {"do":"always","id":{"raw":["t.bad",255]},"msg":{"raw":["invalid ",195," UTF-8 ",255,254," in a message"]}},
+    {"do":"catalog"},
+    {"do":"check","a":0,"cond":true}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "invalid_utf8_message.out", "returns": "1"}
+  ]
+}

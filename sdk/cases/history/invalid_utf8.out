@@ -1,0 +1,21 @@
+HYDO-HIST kv 50 invoke * write b ÿ
+HYDO-HIST kv 50 ok * write b ÿ@0 ÿ
+HYDO-HIST kv 51 invoke * write b aÿb
+HYDO-HIST kv 51 ok * write b aÿb@1 aÿb
+HYDO-HIST kv 52 invoke * write b €
+HYDO-HIST kv 52 ok * write b €@2 €
+HYDO-HIST kv 53 invoke * write b Ã
+HYDO-HIST kv 53 ok * write b Ã@3 Ã
+HYDO-HIST kv 54 invoke * write b Ã(
+HYDO-HIST kv 54 ok * write b Ã(@4 Ã(
+HYDO-HIST kv 55 invoke * write b í €
+HYDO-HIST kv 55 ok * write b í €@5 í €
+HYDO-HIST kv 56 invoke * write b â‚
+HYDO-HIST kv 56 ok * write b â‚@6 â‚
+HYDO-HIST kv 57 invoke * write b Ã©ÿä¸­
+HYDO-HIST kv 57 ok * write b Ã©ÿä¸­@7 Ã©ÿä¸­
+HYDO-HIST kv 58 invoke * write b ÿþ%20nil
+HYDO-HIST kv 58 ok * write b ÿþ%20nil@8 ÿþ%20nil
+HYDO-HIST kv 60 invoke * write ÿraw x
+HYDO-HIST kv 60 ok * write [ÿ,ok,Ã] a:ÿ:€ r:þ:[ÿ]
+HYDO-HIST kv 62 ok * read â‚ %
