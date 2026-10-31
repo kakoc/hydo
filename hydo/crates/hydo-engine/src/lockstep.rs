@@ -33,6 +33,9 @@ use std::io::{BufRead, Write};
 /// the recovery boot after a power cut restarts from S0's icount.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Phase {
+    /// An agent image's boot under control, from its first instruction (M121, `--control boot`):
+    /// the host takes S0 and S1 here with SNAP.
+    Boot,
     /// From S1 (or a resumed snapshot) to the end of the workload.
     Workload,
     /// The same VM after the engine typed `go` (shell-init images: heal and check).
@@ -44,6 +47,7 @@ pub enum Phase {
 impl Phase {
     fn parse(s: &str) -> Option<Phase> {
         Some(match s {
+            "boot" => Phase::Boot,
             "workload" => Phase::Workload,
             "check" => Phase::Check,
             "recovery" => Phase::Recovery,
@@ -333,7 +337,9 @@ pub fn unescape(s: &str) -> Option<Vec<u8>> {
 /// What a controlled run starts from.
 #[derive(Clone, Debug, PartialEq)]
 pub enum LockstepStart {
-    /// `CTL <tag> <schedule>`: from S1, like a RUN (an empty guest part types nothing).
+    /// `CTL <tag> <schedule>`: from S1, like a RUN (an empty guest part types nothing). On an
+    /// agent image's worker (M121) S1 is the snapshot the host took under that name in the boot,
+    /// the guest part must be just `run`, and nothing is typed.
     Run {
         tag: String,
         schedule: hydo_schedule::Schedule,

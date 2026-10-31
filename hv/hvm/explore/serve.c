@@ -20,6 +20,8 @@
  *   serve also takes "CTL <tag> <schedule>" and "RESUME <tag> <snapshot>", and
  *   hvmx [--ram-mib N] --control one ... runs `one` the same way: lock-step control (M119), the
  *   protocol of hv/hvx/hvx_explore.c (see "lock-step control" below). Without them nothing changes.
+ *   hvmx [--ram-mib N] --control boot serve|one ... boots an image whose first process is the
+ *   guest agent (milestone 121, "controlled boot" below): no S0/S1 markers; the host takes them.
  *
  * With the data disk attached (HVM_DISK=<NAME>-arm64-disk.img, the virtio-blk device of
  * ../virtio.c) the host part works as on hvx_explore: disk=none|ioerr:P|cut|lying:P with dseed
@@ -93,6 +95,7 @@ struct ctl_book {              /* what a snapshot carries besides the VM */
 };
 static struct {
 	int on, start, ended;      /* start: 1 = the phase's start stop is due, 2 = a RESUME's */
+	int boot_s1;               /* --control boot one: SNAP S1 taken in the boot phase (M121) */
 	char tag[64];
 	const char *phase;
 	uint64_t at, rb, last_x;   /* the current stop's exit count; the cadence in exits; the last exit seen */
@@ -101,6 +104,8 @@ static struct {
 	struct runst *rs;
 } C;
 static int ctl_run_to(const char *const *m, int n, size_t from, int *why);
+static int g_ctl_one;          /* --control: `one` runs under lock-step control */
+static int g_agent;            /* --control boot: an agent image, under control from its boot (M121) */
 
 /* ---------------- stop at the first exit after any of several markers ---------------- */
 static const char *hk_m[4];
@@ -432,7 +437,22 @@ static void run_once(const char *tag, const char *sched, int rewound);
  * Kicks and the spin observer's own exits are not exits, so every stop is a pure function of the
  * run; the rewind mode is refused (it moves M.exits backwards) and a SPIN is not re-run. A CTL
  * with no SEND gives RUN's fingerprint. RESULT gets stops=<n> typed=<sends typed> inh=<hex16>
- * (FNV-1a over every typed send's exit count, length and bytes, in typing order) before verdict=. */
+ * (FNV-1a over every typed send's exit count, length and bytes, in typing order) before verdict=.
+ *
+ * Controlled boot (milestone 121; hvx_explore.c's header has the same text for icount): an image
+ * built with hydo-build --control agent has the guest agent hydo-agent as /init and no S0/S1
+ * markers; the host reads its /etc/hydo/control and asks for this mode.
+ *   hvmx ... --control boot serve <Image> <initramfs> <outdir> ["<boot schedule>"]
+ *       the boot under control from the first instruction (stops phase=boot; the boot schedule's
+ *       rb= is the cadence); the host takes `SNAP S0` and `SNAP S1` where it decides; END prints
+ *       "RESULT boot ..." (the fingerprint at that stop), then READY. Then `CTL <tag> <schedule>`
+ *       restores the host's S1, arms the host part and types nothing (guest part "run" only; the
+ *       first stop is why=resume with S1's stop number), RESUME works from any snapshot, and RUN
+ *       and BRANCH are refused.
+ *   hvmx ... --control boot one <Image> <initramfs> <outdir> "<schedule>"
+ *       the same from a fresh boot: SNAP S1 in the boot phase also arms the schedule's host part
+ *       and the run goes on in phase=workload from that stop, as a CTL from S1 does.
+ * The kernel command line gets " quiet loglevel=1" instead of " hydo_phase=serve". */
 struct ctl_snap { char name[64]; struct xsnap x; struct runst rs; struct ctl_book k; uint64_t rb; int used; };
 static struct ctl_snap g_ctl_snaps[CTL_MAX_SNAPS];
 
@@ -547,7 +567,7 @@ static void ctl_snap_cmd(char *arg)
 	size_t il = 0;
 	int slot = -1, n = sscanf(arg, "%63s %15s", name, mode);
 	if (n < 1 || (n == 2 && strcmp(mode, "retype"))) { printf("ERR snap bad request\n"); return; }
-	if (strcmp(C.phase, "workload")) { printf("ERR snap %s only in the workload phase\n", name); return; }
+	if (strcmp(C.phase, "workload") && strcmp(C.phase, "boot")) { printf("ERR snap %s only in the workload or boot phase\n", name); return; }
 	if (TJ.on || C.rs->pct_n) { printf("ERR snap %s not for tj/pct schedules\n", name); return; }
 	for (int i = 0; i < C.k.ns; i++)
 		if (C.k.s[i].state == CS_TYPED)
@@ -569,6 +589,8 @@ static void ctl_snap_cmd(char *arg)
 	cs->rs = *C.rs; cs->rb = C.rb; cs->used = 1;
 	snprintf(cs->name, sizeof cs->name, "%s", name);
 	printf("OK snap %s at=%llu retype=%s\n", name, (unsigned long long)C.at, il ? ids : "-");
+	if (g_agent && g_ctl_one && !strcmp(C.phase, "boot") && !strcmp(name, "S1"))
+		C.boot_s1 = 1;             /* M121: the workload starts here once the host says CONT */
 }
 /* one stop: report, then serve host lines until CONT (0) or END/EOF (1) */
 static int ctl_stop(const char *why)
@@ -638,6 +660,7 @@ static int ctl_hook(void)         /* hvm_stop_hook at every loop top of a lock-s
 	C.at = x;
 	const char *why = hit ? "marker" : ctl_due() ? "send" : (x - C.k.cad0) % C.rb == 0 ? "cadence" : NULL;
 	if (why && ctl_stop(why)) { C.ended = 1; return 1; }
+	if (C.boot_s1) { C.ended = 2; return 1; }   /* M121: --control boot one, S1 taken here */
 	return hit;
 }
 /* run_to under lock-step: the phase's start (or resume) stop, then stops at markers, due sends and
@@ -653,6 +676,7 @@ static int ctl_run_to(const char *const *m, int n, size_t from, int *why)
 		C.start = 0;
 		C.at = M.exits;
 		if (ctl_stop(w)) return -3;
+		if (C.boot_s1) return -4;
 	}
 	for (int i = 0; i < n; i++)      /* a marker may already be there: stop where we are, as RUN would */
 		if (M.console_len > from && memmem(console + from, M.console_len - from, m[i], strlen(m[i]))) return i;
@@ -661,6 +685,7 @@ static int ctl_run_to(const char *const *m, int n, size_t from, int *why)
 	max_exits = M.exits + run_exits;
 	int s = run_until(NULL);
 	hvm_stop_hook = NULL;
+	if (C.ended == 2) return -4;
 	if (C.ended) return -3;
 	if (s == STOP_MARKER) return hk_hit;
 	C.at = M.exits;
@@ -668,35 +693,89 @@ static int ctl_run_to(const char *const *m, int n, size_t from, int *why)
 	if (why) *why = s;
 	return -1;
 }
-/* CTL <tag> <schedule> (after the S1 restore) and `--control one`: the schedule's rb=<n> is the cadence */
-static void ctl_request(const char *tag, const char *sched)
+/* The lock-step part of a schedule: s (a copy) loses its rb=<n> (the cadence, *rb; 0 = none).
+ * Prints the error RESULT and returns -1 for a rewind-mode schedule or a bad rb=. */
+static int ctl_sched(const char *tag, char *s, uint64_t *rb)
 {
-	char s[4096];
-	uint64_t rb = 0;
-	snprintf(s, sizeof s, "%s", sched);
 	char *bar = strchr(s, '|');
+	*rb = 0;
 	if (rw_on || (bar && memmem(s, (size_t)(bar - s), "spin=rewind", 11))) {
 		printf("RESULT %s fp=0 wfp=0 secs=0 verdict=UNSUPPORTED on hvm: lock-step control does not run in rewind mode\n", tag);
 		fflush(stdout);
-		return;
+		return -1;
 	}
 	for (char *w = s; bar && (w = strstr(w, "rb=")) && w < bar; ) {   /* take the cadence out of the host part */
 		if (w != s && w[-1] != ' ') { w += 3; continue; }
 		char *e;
-		rb = strtoull(w + 3, &e, 10);
+		*rb = strtoull(w + 3, &e, 10);
 		if (e == w + 3 || (*e != ' ' && *e != '|')) {
 			printf("RESULT %s fp=0 wfp=0 secs=0 verdict=ERROR bad schedule: rb= takes a number of exits\n", tag);
 			fflush(stdout);
-			return;
+			return -1;
 		}
 		memmove(w, e, strlen(e) + 1);
 		bar = strchr(s, '|');
 	}
+	return 0;
+}
+/* An agent image's schedule has no guest tokens: its guest part is "run" (or empty). */
+static int agent_guest_ok(const char *s)
+{
+	const char *bar = strchr(s, '|');
+	if (!bar) return 1;            /* run_once refuses it */
+	for (bar++; *bar == ' '; bar++) ;
+	size_t n = strlen(bar);
+	while (n && (bar[n - 1] == ' ' || bar[n - 1] == '\n' || bar[n - 1] == '\r')) n--;
+	return n == 0 || (n == 3 && !strncmp(bar, "run", 3));
+}
+static struct ctl_snap *ctl_find(const char *name)
+{
+	for (int i = 0; i < CTL_MAX_SNAPS; i++) if (g_ctl_snaps[i].used && !strcmp(g_ctl_snaps[i].name, name)) return &g_ctl_snaps[i];
+	return NULL;
+}
+/* CTL <tag> <schedule> (after the S1 restore) and `--control one`: the schedule's rb=<n> is the
+ * cadence. For an agent image (M121) a CTL restores the host's S1 (cs) here and continues its book. */
+static void ctl_request(const char *tag, const char *sched, struct ctl_snap *cs)
+{
+	char s[4096];
+	uint64_t rb = 0;
+	snprintf(s, sizeof s, "%s", sched);
+	if (ctl_sched(tag, s, &rb)) return;
+	if (cs) xsnap_restore(&cs->x);
 	ctl_begin(tag);
+	if (cs) { ctl_book_copy(&C.k, &cs->k); C.start = 2; }   /* the first stop is S1's own again */
 	if (rb) C.rb = rb;
 	spin_hit = 0;
 	run_once(tag, s, 0);
 	if (C.on) ctl_finish();         /* a refused schedule: no run, no RESULT facts */
+}
+/* ---- the controlled boot of an agent image (M121, see above) ---- */
+static struct runst g_boot_rs;
+/* the boot under control: -3 at the host's END, -4 (--control boot one) at the stop where the host
+ * took S1 and said CONT, -1 when the guest stopped (*why) */
+static int agent_boot(const char *tag, uint64_t rb, int *why)
+{
+	ctl_begin(tag);
+	C.phase = "boot";
+	if (rb) C.rb = rb;
+	memset(&g_boot_rs, 0, sizeof g_boot_rs);
+	snprintf(g_boot_rs.tag, sizeof g_boot_rs.tag, "%s", tag);
+	g_boot_rs.t0 = now_s();
+	C.rs = &g_boot_rs;             /* what a SNAP in the boot carries */
+	return run_to(NULL, 0, 0, why);
+}
+static void agent_boot_result(const char *tag, int r, int why, double t0)
+{
+	char verdict[300];
+	uint64_t wfp = 0;
+	if (r == -3) { wfp = xfp(); ctl_verdict(r, 0, verdict, sizeof verdict); }
+	else snprintf(verdict, sizeof verdict, "ERROR boot: %s", stop_name(why));
+	save_log(tag, 0);
+	printf("RESULT %s fp=%016llx wfp=%016llx secs=%.1f stops=%llu typed=%llu inh=%016llx verdict=%s\n", tag,
+	       (unsigned long long)fnv(&wfp, 8, wfp), (unsigned long long)wfp, now_s() - t0,
+	       (unsigned long long)C.k.nstop, (unsigned long long)C.k.ntyped, (unsigned long long)C.k.inh, verdict);
+	fflush(stdout);
+	ctl_finish();
 }
 /* RESUME <tag> <snapshot>: continue a controlled run from a SNAP in a fresh VM (see above) */
 static void ctl_resume(const char *tag, const char *name)
@@ -745,7 +824,7 @@ static void run_once(const char *tag, const char *sched, int rewound)
 	if (!strstr(host, "pct=")) pct_n = 0;
 	int cut = strstr(guest, " C=") != NULL;
 	size_t from = M.console_len;
-	if (C.on) C.k.evfrom = from;   /* lock-step: EVENTs start with the workload's console */
+	if (C.on && !g_agent) C.k.evfrom = from;   /* lock-step: EVENTs start with the workload's console */
 	if (trace_f) fprintf(trace_f, "RUN %s\n", tag);
 	set_fault(dseed, dcl, dpr);
 	struct runst rs = { .t0 = t0, .from = from, .cut = cut, .rewound = rewound, .pct_n = pct_n };
@@ -757,7 +836,7 @@ static void run_once(const char *tag, const char *sched, int rewound)
 	rs.wx0 = M.exits;
 	if (pct_n) pct_set(pct_seed, pct_n, M.exits, M.exits + pct_k);   /* the workload only */
 	snprintf(line, sizeof line, "%s\n", guest + 1);
-	if (!(C.on && !guest[0])) hvm_put_input(line);   /* lock-step: an empty guest part types nothing */
+	if (!(C.on && (!guest[0] || g_agent))) hvm_put_input(line);   /* lock-step: an empty guest part (an agent image: always) types nothing */
 	run_rest(&rs);
 }
 /* the rest of a run, from the workload's start: a RUN goes on here, a lock-step RESUME starts here */
@@ -778,7 +857,7 @@ static void run_rest(struct runst *rs)
 	 * (../hvm.c rxq). A command that fitted before is unchanged. */
 	char orc[3584];
 	C.rs = rs;                     /* lock-step: what a SNAP in this run carries */
-	r = run_to(wk, 2, from, &why);
+	r = run_to(wk, g_agent ? 0 : 2, from, &why);   /* an agent image prints no marker */
 	if (pct_n) {
 		size_t l = strlen(tjinfo);
 		snprintf(tjinfo + l, sizeof rs->tjinfo - l, " pctf=%llu pctw=%llu", (unsigned long long)PCT.fired, (unsigned long long)(M.exits - wx0));
@@ -905,14 +984,19 @@ int main(int argc, char **argv)
 		argv += 2; argc -= 2;
 	}
 	int ctl_one = 0;
-	if (argc > 1 && !strcmp(argv[1], "--control")) {   /* lock-step control of `one` (M119) */
+	if (argc > 2 && !strcmp(argv[1], "--control") && !strcmp(argv[2], "boot")) {   /* an agent image (M121) */
+		g_agent = 1;
+		argv[2] = argv[0];
+		argv += 2; argc -= 2;
+	} else if (argc > 1 && !strcmp(argv[1], "--control")) {   /* lock-step control of `one` (M119) */
 		ctl_one = 1;
 		argv[1] = argv[0];
 		argv++; argc--;
 	}
 	if (argc < 5 || (strcmp(argv[1], "serve") && strcmp(argv[1], "one")) || (!strcmp(argv[1], "one") && argc < 6) ||
 	    (ctl_one && strcmp(argv[1], "one"))) {
-		fprintf(stderr, "usage: hvmx [--ram-mib N] serve <Image> <initramfs> <outdir>\n       hvmx [--ram-mib N] [--control] one <Image> <initramfs> <outdir> \"<schedule>\"\n");
+		fprintf(stderr, "usage: hvmx [--ram-mib N] serve <Image> <initramfs> <outdir>\n       hvmx [--ram-mib N] [--control] one <Image> <initramfs> <outdir> \"<schedule>\"\n"
+		                "       hvmx [--ram-mib N] --control boot serve|one <Image> <initramfs> <outdir> [\"<schedule>\"]\n");
 		return 2;
 	}
 	const char *mode = argv[1];
@@ -932,7 +1016,8 @@ int main(int argc, char **argv)
 	if (getenv("HVM_TRACE")) trace_f = fopen(getenv("HVM_TRACE"), "w");
 	setvbuf(stdout, NULL, _IOLBF, 0);
 	char bootargs[1024];
-	snprintf(bootargs, sizeof bootargs, "%s hydo_phase=serve", getenv("HVM_BOOTARGS") ? getenv("HVM_BOOTARGS") : BOOTARGS);
+	snprintf(bootargs, sizeof bootargs, "%s %s", getenv("HVM_BOOTARGS") ? getenv("HVM_BOOTARGS") : BOOTARGS,
+	         g_agent ? "quiet loglevel=1" : "hydo_phase=serve");   /* an agent's framed lines share the console */
 	{ pthread_t t; pthread_create(&t, NULL, watchdog, NULL); }
 	if (getenv("HVM_DISK") && !getenv("HVM_FAULT")) {   /* negotiate FLUSH: flush-aware class at probability 0 */
 		setenv("HVM_FAULT", "0", 1); setenv("HVM_FAULT_CLASSES", "unflushed", 1); setenv("HVM_FAULT_PROB", "0", 1);
@@ -947,10 +1032,60 @@ int main(int argc, char **argv)
 	double t0 = now_s();
 	static struct xsnap s0, s1;
 	g_s0 = &s0;
+	if (g_agent) {                 /* M121: the boot under control; S0 and S1 are the host's SNAPs */
+		char s[4096];
+		uint64_t rb = 0;
+		int why = 0, r;
+		const char *tag = strcmp(mode, "one") ? "boot" : "one";
+		snprintf(s, sizeof s, "%s", argc > 5 ? argv[5] : "|");
+		if (ctl_sched(tag, s, &rb)) return 2;
+		if (!agent_guest_ok(s)) { fprintf(stderr, "hvmx: an agent image's schedule has the guest part \"run\" only\n"); return 2; }
+		g_ctl_one = !strcmp(mode, "one");
+		r = agent_boot(tag, rb, &why);
+		if (r != -4) agent_boot_result(tag, r, why, t0);
+		if (g_ctl_one) {
+			if (r == -4) {         /* the workload from the stop where S1 was taken, as a CTL from S1 */
+				struct ctl_snap *cs = ctl_find("S0");
+				if (cs) g_s0 = &cs->x;
+				C.boot_s1 = 0;
+				C.phase = "workload";
+				spin_hit = 0;
+				run_once(tag, s, 0);
+				if (C.on) ctl_finish();
+			}
+			return 0;
+		}
+		{
+			struct ctl_snap *cs = ctl_find("S0");
+			if (cs) g_s0 = &cs->x;
+		}
+		printf("READY boot_secs=%.1f\n", now_s() - t0);
+		char in[4096];
+		while (fgets(in, sizeof in, stdin)) {
+			char tag2[64]; int off = 0;
+			if (!strncmp(in, "QUIT", 4)) break;
+			if (!strncmp(in, "BRANCH ", 7)) { printf("BRANCHEND ? unsupported on hvm\n"); fflush(stdout); continue; }
+			if (!strncmp(in, "RESUME ", 7)) {
+				char name[64];
+				if (sscanf(in, "RESUME %63s %63s", tag2, name) != 2) { printf("RESULT ? fp=0 wfp=0 secs=0 verdict=ERROR bad request\n"); fflush(stdout); continue; }
+				ctl_resume(tag2, name);
+				continue;
+			}
+			int ctl = !strncmp(in, "CTL ", 4);
+			const char *rq = in + (ctl ? 4 : 0);
+			if (sscanf(rq, ctl ? "%63s %n" : "RUN %63s %n", tag2, &off) != 1 || !off) { printf("RESULT ? fp=0 wfp=0 secs=0 verdict=ERROR bad request\n"); fflush(stdout); continue; }
+			struct ctl_snap *cs = ctl_find("S1");
+			const char *no = !ctl ? "an agent image runs under control only (CTL, RESUME)" : !cs ? "no snapshot S1 (the boot took none)" :
+			                 !agent_guest_ok(rq + off) ? "an agent image's schedule has the guest part \"run\" only" : NULL;
+			if (no) { printf("RESULT %s fp=0 wfp=0 secs=0 verdict=ERROR %s\n", tag2, no); fflush(stdout); continue; }
+			ctl_request(tag2, rq + off, cs);
+		}
+		return 0;
+	}
 	if (!strcmp(mode, "one")) {
 		if (boot_to_s1(&s0, spin_auto ? &s1 : NULL)) return 1;   /* S0 is still needed for a power cut's recovery boot */
 		fprintf(stderr, "hvmx: provisioned in %.1f s (fresh boot, no snapshot restore)\n", now_s() - t0);
-		if (ctl_one) ctl_request("one", argv[5]);
+		if (ctl_one) ctl_request("one", argv[5], NULL);
 		else run_sched("one", argv[5], &s1);   /* S1 only if a SPIN run must be repeated with rewind */
 		return 0;
 	}
@@ -971,7 +1106,7 @@ int main(int argc, char **argv)
 		const char *rq = in + (ctl ? 4 : 0);
 		if (sscanf(rq, ctl ? "%63s %n" : "RUN %63s %n", tag, &off) != 1 || !off) { printf("RESULT ? fp=0 wfp=0 secs=0 verdict=ERROR bad request\n"); fflush(stdout); continue; }
 		xsnap_restore(&s1);
-		if (ctl) ctl_request(tag, rq + off);
+		if (ctl) ctl_request(tag, rq + off, NULL);
 		else run_sched(tag, in + off, &s1);
 	}
 	return 0;
