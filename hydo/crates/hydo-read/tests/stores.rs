@@ -30,7 +30,8 @@ fn bs(args: &[&str]) -> Vec<Vec<u8>> {
 }
 
 fn lines(args: &[&str]) -> String {
-    let (recs, ordered) = read_store(&bs(args)).unwrap_or_else(|e| panic!("hydo-read {args:?}: {e}"));
+    let (recs, ordered) =
+        read_store(&bs(args)).unwrap_or_else(|e| panic!("hydo-read {args:?}: {e}"));
     let l: Vec<String> = encode_all(&recs, ordered)
         .into_iter()
         .map(|x| String::from_utf8(x).unwrap())
@@ -51,7 +52,9 @@ fn s(v: &[&str]) -> Vec<String> {
 
 #[test]
 fn store_mysql() {
-    let Some(dsn) = env("HYDO_TEST_MYSQL") else { return };
+    let Some(dsn) = env("HYDO_TEST_MYSQL") else {
+        return;
+    };
     hydo_read::mysql::exec_statements(
         &dsn,
         &[
@@ -72,7 +75,9 @@ fn store_mysql() {
     // the URL form of the DSN gives the same rows
     let u = format!(
         "mysql://{}/t",
-        dsn.trim_end_matches('/').replacen("@tcp(", "@", 1).replacen(')', "", 1)
+        dsn.trim_end_matches('/')
+            .replacen("@tcp(", "@", 1)
+            .replacen(')', "", 1)
     );
     assert_eq!(
         lines(&["mysql", &u, "SELECT id FROM orders WHERE published = 1"]),
@@ -81,7 +86,13 @@ fn store_mysql() {
     // checks: published ids exactly once in a list; wrong amounts counted
     let d = write_files(&[("acked", "2\n10\n")]);
     let src = format!("mysql=mysql {dsn} \"SELECT id FROM t.orders WHERE published = 1\"");
-    let (rc, last) = run(&s(&["exactly-once", "--left", &format!("file {}/acked", d.display()), "--right", &src]));
+    let (rc, last) = run(&s(&[
+        "exactly-once",
+        "--left",
+        &format!("file {}/acked", d.display()),
+        "--right",
+        &src,
+    ]));
     assert_eq!(rc, 0, "{last}");
     let (rc, last) = run(&s(&[
         "count",
@@ -90,12 +101,21 @@ fn store_mysql() {
         "--eq",
         "0",
     ]));
-    assert_eq!(last, r#"count violated: mysql has 1 record, want == 0; first: {"id":"3"}"#);
+    assert_eq!(
+        last,
+        r#"count violated: mysql has 1 record, want == 0; first: {"id":"3"}"#
+    );
     assert_eq!(rc, 1);
     // errors: a bad query and a dead server are "could not read" (exit 2)
     expect_cannot(&["mysql", &dsn, "SELECT * FROM t.nope"]);
     if let Some(dead) = env("HYDO_TEST_DEADPORT") {
-        expect_cannot(&["--timeout", "2", "mysql", &format!("root@tcp({dead})/"), "SELECT 1"]);
+        expect_cannot(&[
+            "--timeout",
+            "2",
+            "mysql",
+            &format!("root@tcp({dead})/"),
+            "SELECT 1",
+        ]);
         let (rc, _) = run(&s(&[
             "subset",
             "--left",
@@ -109,7 +129,9 @@ fn store_mysql() {
 
 #[test]
 fn store_postgres() {
-    let Some(dsn) = env("HYDO_TEST_POSTGRES") else { return };
+    let Some(dsn) = env("HYDO_TEST_POSTGRES") else {
+        return;
+    };
     hydo_read::pg::exec_statements(
         &dsn,
         &[
@@ -120,7 +142,11 @@ fn store_postgres() {
     )
     .unwrap();
     assert_eq!(
-        lines(&["postgres", &dsn, "SELECT title, hidden, created FROM categories"]),
+        lines(&[
+            "postgres",
+            &dsn,
+            "SELECT title, hidden, created FROM categories"
+        ]),
         r#"{"created":"2026-01-01T00:00:00Z","hidden":"false","title":"All"}
 {"created":null,"hidden":"false","title":"c4"}
 {"created":null,"hidden":"true","title":"c0"}"#
@@ -134,7 +160,10 @@ fn store_postgres() {
         "--right",
         &cats,
     ]));
-    assert_eq!(last, "exactly-once violated: acked c7 is in categories 0 times (of 3 in acked); missing 1: c7");
+    assert_eq!(
+        last,
+        "exactly-once violated: acked c7 is in categories 0 times (of 3 in acked); missing 1: c7"
+    );
     assert_eq!(rc, 1);
     let (rc, last) = run(&s(&[
         "disjoint",
@@ -146,13 +175,21 @@ fn store_postgres() {
     assert_eq!(rc, 0, "{last}");
     expect_cannot(&["postgres", &dsn, "SELECT * FROM nope"]);
     if let Some(dead) = env("HYDO_TEST_DEADPORT") {
-        expect_cannot(&["--timeout", "2", "postgres", &format!("postgres://x@{dead}/x?sslmode=disable"), "SELECT 1"]);
+        expect_cannot(&[
+            "--timeout",
+            "2",
+            "postgres",
+            &format!("postgres://x@{dead}/x?sslmode=disable"),
+            "SELECT 1",
+        ]);
     }
 }
 
 #[test]
 fn store_kafka() {
-    let Some(boot) = env("HYDO_TEST_KAFKA") else { return };
+    let Some(boot) = env("HYDO_TEST_KAFKA") else {
+        return;
+    };
     use hydo_read::kafka::{create_topic, delete_topic, list_topics, produce, ProduceRec};
     let _ = delete_topic(&boot, "orders");
     std::thread::sleep(Duration::from_secs(2));
@@ -186,7 +223,10 @@ fn store_kafka() {
 {"key":null,"offset":1,"partition":1,"timestamp_ms":1767225600004,"value":"nokey"}"#
     );
     assert_eq!(
-        lines(&["kafka", &boot, "orders", "--base64"]).lines().next().unwrap(),
+        lines(&["kafka", &boot, "orders", "--base64"])
+            .lines()
+            .next()
+            .unwrap(),
         r#"{"key":"MA==","offset":0,"partition":0,"timestamp_ms":1767225600000,"value":"MTAwMDAw"}"#
     );
     let d = write_files(&[("acked", "0\n1\n2\n")]);
@@ -197,12 +237,21 @@ fn store_kafka() {
         "--right",
         &format!("kafka {boot} orders"),
     ]));
-    assert_eq!(last, "exactly-once violated: acked 2 is in kafka 2 times (of 3 in acked); duplicated 1: 2 (x2)");
+    assert_eq!(
+        last,
+        "exactly-once violated: acked 2 is in kafka 2 times (of 3 in acked); duplicated 1: 2 (x2)"
+    );
     assert_eq!(rc, 1);
     // a missing topic is "could not read", and reading it does not create it
     expect_cannot(&["kafka", &boot, "no-such-topic"]);
     std::thread::sleep(Duration::from_secs(1));
-    assert!(!list_topics(&boot).unwrap().iter().any(|t| t == "no-such-topic"), "reading a missing topic created it");
+    assert!(
+        !list_topics(&boot)
+            .unwrap()
+            .iter()
+            .any(|t| t == "no-such-topic"),
+        "reading a missing topic created it"
+    );
     // an empty topic: zero records, not an error
     if create_topic(&boot, "empty", 1).unwrap() == 0 {
         std::thread::sleep(Duration::from_secs(2));
@@ -215,7 +264,9 @@ fn store_kafka() {
 
 #[test]
 fn store_redis() {
-    let Some(addr) = env("HYDO_TEST_REDIS") else { return };
+    let Some(addr) = env("HYDO_TEST_REDIS") else {
+        return;
+    };
     let cmds: Vec<Vec<Vec<u8>>> = [
         vec!["FLUSHALL"],
         vec!["SET", "order:1", "100001"],
@@ -256,15 +307,24 @@ fn store_redis() {
         "{\"key\":\"order:z\",\"member\":\"m1\",\"score\":\"1\"}\n{\"key\":\"order:z\",\"member\":\"m2\",\"score\":\"2\"}"
     );
     assert_eq!(lines(&["redis", &addr, "cmd", "DBSIZE"]), "{\"reply\":7}");
-    let d = write_files(&[("truth.jsonl", "{\"id\":\"1\",\"amount\":\"100001\"}\n{\"id\":\"2\",\"amount\":\"100002\"}\n")]);
+    let d = write_files(&[(
+        "truth.jsonl",
+        "{\"id\":\"1\",\"amount\":\"100001\"}\n{\"id\":\"2\",\"amount\":\"100002\"}\n",
+    )]);
     let (code, last) = run(&s(&[
         "never-wrong-value",
         "--cache",
         &format!("redis {addr} get order:1 order:2 order:3 --strip-prefix order:"),
         "--truth",
-        &format!("mysql=jsonl {}/truth.jsonl --key id --value amount", d.display()),
+        &format!(
+            "mysql=jsonl {}/truth.jsonl --key id --value amount",
+            d.display()
+        ),
     ]));
-    assert_eq!(last, "never-wrong-value violated: 1 value wrong in redis: 2=7 but mysql has 100002");
+    assert_eq!(
+        last,
+        "never-wrong-value violated: 1 value wrong in redis: 2=7 but mysql has 100002"
+    );
     assert_eq!(code, 1);
     if let Some(dead) = env("HYDO_TEST_DEADPORT") {
         expect_cannot(&["redis", &dead, "get", "x"]);
@@ -273,7 +333,9 @@ fn store_redis() {
 
 #[test]
 fn store_etcd() {
-    let Some(ep) = env("HYDO_TEST_ETCD") else { return };
+    let Some(ep) = env("HYDO_TEST_ETCD") else {
+        return;
+    };
     for (k, v) in [("k1", "v1"), ("k2", "v2"), ("k1", "v1b"), ("l1", "x")] {
         hydo_read::etcd::put(&ep, k.as_bytes(), v.as_bytes()).unwrap();
     }
@@ -286,7 +348,8 @@ fn store_etcd() {
     assert_eq!(f(&recs[0], "value"), Val::str("v1b"), "{got}");
     assert_eq!(f(&recs[0], "version"), Val::Int(2), "{got}");
     assert_eq!(f(&recs[1], "key"), Val::str("k2"), "{got}");
-    let (Val::Int(m1), Val::Int(m2)) = (f(&recs[0], "mod_revision"), f(&recs[1], "mod_revision")) else {
+    let (Val::Int(m1), Val::Int(m2)) = (f(&recs[0], "mod_revision"), f(&recs[1], "mod_revision"))
+    else {
         panic!("{got}")
     };
     assert!(m1 > m2, "{got}");
@@ -295,8 +358,18 @@ fn store_etcd() {
         lines(&["etcd", &ep, "get", "l1"])
     );
     let st = lines(&["etcd", &ep, "status"]);
-    assert!(st.contains("\"revision\":") && !st.contains("\"revision\":0"), "status {st}");
+    assert!(
+        st.contains("\"revision\":") && !st.contains("\"revision\":0"),
+        "status {st}"
+    );
     if let Some(dead) = env("HYDO_TEST_DEADPORT") {
-        expect_cannot(&["--timeout", "2", "etcd", &format!("http://{dead}"), "get", "k"]);
+        expect_cannot(&[
+            "--timeout",
+            "2",
+            "etcd",
+            &format!("http://{dead}"),
+            "get",
+            "k",
+        ]);
     }
 }

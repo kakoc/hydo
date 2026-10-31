@@ -169,7 +169,11 @@ pub fn format_float(x: f64, bits32: bool) -> String {
         return "NaN".into();
     }
     if x.is_infinite() {
-        return if x > 0.0 { "+Inf".into() } else { "-Inf".into() };
+        return if x > 0.0 {
+            "+Inf".into()
+        } else {
+            "-Inf".into()
+        };
     }
     let e = if bits32 {
         format!("{:e}", x as f32)
@@ -394,7 +398,7 @@ mod tests {
             (0.0001, "0.0001"),
             (0.00001, "1e-05"),
             (-1.5e-7, "-1.5e-07"),
-            (3.14159, "3.14159"),
+            (2.5e-3, "0.0025"),
             (1e100, "1e+100"),
             (f64::INFINITY, "+Inf"),
         ] {

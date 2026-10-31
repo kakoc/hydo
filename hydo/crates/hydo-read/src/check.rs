@@ -249,7 +249,9 @@ impl Source {
             let mut f: B = self.field.clone();
             if f.is_empty() {
                 if rlen(r) == 1 {
-                    f = obj(r).and_then(|o| o.keys().next().cloned()).unwrap_or_default();
+                    f = obj(r)
+                        .and_then(|o| o.keys().next().cloned())
+                        .unwrap_or_default();
                 } else {
                     f = self.default_field().to_vec();
                     if f.is_empty() && has(r, b"key") {
@@ -324,8 +326,16 @@ impl Source {
 
     /// (key, value) per record; a null value (a missing key) is skipped.
     fn pairs(&self) -> Res<Vec<(B, B)>> {
-        let kf: &[u8] = if self.key.is_empty() { b"key" } else { &self.key };
-        let vf: &[u8] = if self.value.is_empty() { b"value" } else { &self.value };
+        let kf: &[u8] = if self.key.is_empty() {
+            b"key"
+        } else {
+            &self.key
+        };
+        let vf: &[u8] = if self.value.is_empty() {
+            b"value"
+        } else {
+            &self.value
+        };
         let mut out = Vec::new();
         for r in &self.records {
             let Some(k) = field(r, kf) else {
@@ -516,13 +526,23 @@ fn bfmt(parts: &[&[u8]]) -> B {
 pub fn check_main(args: &[B], out: &mut dyn Write, err: &mut dyn Write) -> i32 {
     if args.is_empty() || args[0] == b"-h" || args[0] == b"--help" {
         let _ = writeln!(err, "{CHECK_USAGE}");
-        return if args.is_empty() { EXIT_CANNOT } else { EXIT_OK };
+        return if args.is_empty() {
+            EXIT_CANNOT
+        } else {
+            EXIT_OK
+        };
     }
     let name = &args[0];
     let o = match parse_check_opts(&args[1..]) {
         Ok(o) => o,
         Err(e) => {
-            let _ = out.write_all(&bfmt(&[b"hydo-check ", name, b": ", e.to_string().as_bytes(), b"\n"]));
+            let _ = out.write_all(&bfmt(&[
+                b"hydo-check ",
+                name,
+                b": ",
+                e.to_string().as_bytes(),
+                b"\n",
+            ]));
             return EXIT_CANNOT;
         }
     };
@@ -654,7 +674,10 @@ fn load_all(o: &Opts, specs: &[&B]) -> Res<Vec<Source>> {
                 return Err(usage(format!("source {}: {e}", s.n())));
             }
             let es = e.to_string();
-            let es = es.strip_prefix("could not read: ").unwrap_or(&es).to_string();
+            let es = es
+                .strip_prefix("could not read: ")
+                .unwrap_or(&es)
+                .to_string();
             return Err(Error::Plain(format!(
                 "could not read {} ({}): {es}",
                 s.n(),
@@ -824,13 +847,24 @@ fn set_check(name: &[u8], l: &Source, r: &Source, o: &Opts) -> Res<Verdict> {
                 });
             }
             let first = badv[0].clone();
-            let head = bfmt(&[&first, b" is in ", rn, format!(" {} times", get(&rc, &first)).as_bytes()]);
+            let head = bfmt(&[
+                &first,
+                b" is in ",
+                rn,
+                format!(" {} times", get(&rc, &first)).as_bytes(),
+            ]);
             let mut parts: Vec<B> = Vec::new();
             if !missing.is_empty() {
-                parts.push(bfmt(&[format!("missing {}: ", missing.len()).as_bytes(), &list(&missing, o.show)]));
+                parts.push(bfmt(&[
+                    format!("missing {}: ", missing.len()).as_bytes(),
+                    &list(&missing, o.show),
+                ]));
             }
             if !dup.is_empty() {
-                parts.push(bfmt(&[format!("duplicated {}: ", dup.len()).as_bytes(), &list(&dup, o.show)]));
+                parts.push(bfmt(&[
+                    format!("duplicated {}: ", dup.len()).as_bytes(),
+                    &list(&dup, o.show),
+                ]));
             }
             Ok(bad(
                 first,
@@ -910,7 +944,15 @@ fn one_check(name: &[u8], s: &Source, o: &Opts) -> Res<Verdict> {
             return Ok(Verdict {
                 ok: true,
                 first: B::new(),
-                text: bfmt(&[b"count holds: ", &s.name, b" has ", recs.as_bytes(), b" (want ", w.as_bytes(), b")"]),
+                text: bfmt(&[
+                    b"count holds: ",
+                    &s.name,
+                    b" has ",
+                    recs.as_bytes(),
+                    b" (want ",
+                    w.as_bytes(),
+                    b")",
+                ]),
             });
         }
         let mut first = B::new();
@@ -921,7 +963,15 @@ fn one_check(name: &[u8], s: &Source, o: &Opts) -> Res<Verdict> {
         }
         return Ok(bad(
             first,
-            bfmt(&[b"count violated: ", &s.name, b" has ", recs.as_bytes(), b", want ", w.as_bytes(), &ex]),
+            bfmt(&[
+                b"count violated: ",
+                &s.name,
+                b" has ",
+                recs.as_bytes(),
+                b", want ",
+                w.as_bytes(),
+                &ex,
+            ]),
         ));
     }
     let (items, _) = s.items()?;
@@ -1048,7 +1098,11 @@ fn emit(o: &Opts, name: &[u8], okv: bool, first: &[u8], text: &[u8], out: &mut d
     if o.id.is_empty() {
         return;
     }
-    let msg = if o.msg.is_empty() { name.to_vec() } else { o.msg.clone() };
+    let msg = if o.msg.is_empty() {
+        name.to_vec()
+    } else {
+        o.msg.clone()
+    };
     let mut d = Obj::new();
     d.insert(b"check".to_vec(), Val::str(name.to_vec()));
     d.insert(b"explanation".to_vec(), Val::str(text.to_vec()));

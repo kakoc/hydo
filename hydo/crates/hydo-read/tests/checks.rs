@@ -15,10 +15,19 @@ fn b(s: &str) -> Vec<u8> {
 fn shell_words_like_a_shell() {
     let cases: Vec<(&str, Vec<&str>)> = vec![
         ("a b  c", vec!["a", "b", "c"]),
-        ("mysql u:@tcp(h:1)/ \"SELECT 1\"", vec!["mysql", "u:@tcp(h:1)/", "SELECT 1"]),
-        ("x 'it''s' \"a\\\"b\" c\\ d", vec!["x", "its", "a\"b", "c d"]),
+        (
+            "mysql u:@tcp(h:1)/ \"SELECT 1\"",
+            vec!["mysql", "u:@tcp(h:1)/", "SELECT 1"],
+        ),
+        (
+            "x 'it''s' \"a\\\"b\" c\\ d",
+            vec!["x", "its", "a\"b", "c d"],
+        ),
         ("\"\" ''", vec!["", ""]),
-        ("name=file /tmp/a --field line ", vec!["name=file", "/tmp/a", "--field", "line"]),
+        (
+            "name=file /tmp/a --field line ",
+            vec!["name=file", "/tmp/a", "--field", "line"],
+        ),
     ];
     for (input, want) in cases {
         let got = shell_words(input.as_bytes()).unwrap();
@@ -50,7 +59,10 @@ fn natural_item_order() {
         .map(b)
         .collect();
     sort_items(&mut x);
-    let got: Vec<String> = x.iter().map(|v| String::from_utf8_lossy(v).into_owned()).collect();
+    let got: Vec<String> = x
+        .iter()
+        .map(|v| String::from_utf8_lossy(v).into_owned())
+        .collect();
     assert_eq!(got.join(" "), "-1 9 10 100 a b c1 c1x c04 c4 c10 order:2");
 }
 
@@ -157,12 +169,20 @@ fn hydo_source() {
     let d = write_files(&[
         ("acked", "1\n3\n"),
         ("failed", "2\n3\n"),
-        ("outcomes", "1 ack\n2 failed\n3 failed\n3 ack\n4 unknown\n5 unknown\n5 ack\n"),
+        (
+            "outcomes",
+            "1 ack\n2 failed\n3 failed\n3 ack\n4 unknown\n5 unknown\n5 ack\n",
+        ),
     ]);
     std::env::set_var("HYDO_ACKED", d.join("acked"));
     std::env::set_var("HYDO_FAILED", d.join("failed"));
     std::env::set_var("HYDO_OUTCOMES", d.join("outcomes"));
-    for (what, want) in [("acked", "1 3"), ("failed", "2 3"), ("told-failed", "2"), ("unknown", "4")] {
+    for (what, want) in [
+        ("acked", "1 3"),
+        ("failed", "2 3"),
+        ("told-failed", "2"),
+        ("unknown", "4"),
+    ] {
         let (recs, _) = hydo_read::read_store(&[b("hydo"), b(what)]).unwrap();
         let ids: Vec<String> = recs
             .iter()

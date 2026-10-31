@@ -31,4 +31,3 @@ pub fn run(args: &[String]) -> (i32, String) {
     let last = s.trim().lines().last().unwrap_or("").to_string();
     (rc, last)
 }
-

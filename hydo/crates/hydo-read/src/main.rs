@@ -4,7 +4,10 @@ use std::os::unix::ffi::OsStrExt;
 
 fn main() {
     let mut argv = std::env::args_os();
-    let argv0 = argv.next().map(|a| a.as_bytes().to_vec()).unwrap_or_default();
+    let argv0 = argv
+        .next()
+        .map(|a| a.as_bytes().to_vec())
+        .unwrap_or_default();
     let args: Vec<Vec<u8>> = argv.map(|a| a.as_bytes().to_vec()).collect();
     let rc = std::panic::catch_unwind(|| {
         let mut out = std::io::stdout().lock();

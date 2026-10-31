@@ -292,7 +292,11 @@ pub fn read(a: &[Vec<u8>], o: &ReadOpts) -> Res<(Vec<Record>, bool)> {
                 if typ == b"none" {
                     continue; // deleted between SCAN and TYPE
                 }
-                out.push(rec(vec![("key", key(&k)), ("type", Val::Str(typ)), ("value", v)]));
+                out.push(rec(vec![
+                    ("key", key(&k)),
+                    ("type", Val::Str(typ)),
+                    ("value", v),
+                ]));
             }
         }
         b"hgetall" => {

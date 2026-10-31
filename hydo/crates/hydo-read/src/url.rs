@@ -38,10 +38,7 @@ pub fn unescape(s: &str, plus: bool) -> Result<String, String> {
                     }
                     _ => {
                         let end = (i + 3).min(b.len());
-                        return Err(format!(
-                            "invalid URL escape {}",
-                            quote(&b[i..end])
-                        ));
+                        return Err(format!("invalid URL escape {}", quote(&b[i..end])));
                     }
                 }
             }
@@ -146,9 +143,14 @@ mod tests {
         assert_eq!(u.host, "127.0.0.1");
         assert_eq!(u.user, Some(("miniflux".into(), None)));
         assert_eq!(u.path, "/miniflux");
-        assert_eq!(query(&u.raw_query), vec![("sslmode".into(), "disable".into())]);
+        assert_eq!(
+            query(&u.raw_query),
+            vec![("sslmode".into(), "disable".into())]
+        );
         let u = parse("redis://:p%40ss@h:1/2").unwrap();
         assert_eq!(u.user, Some(("".into(), Some("p@ss".into()))));
-        assert!(parse("mysql://h:x/").unwrap_err().contains("invalid port \":x\" after host"));
+        assert!(parse("mysql://h:x/")
+            .unwrap_err()
+            .contains("invalid port \":x\" after host"));
     }
 }

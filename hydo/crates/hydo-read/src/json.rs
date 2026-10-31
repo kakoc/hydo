@@ -477,16 +477,30 @@ mod tests {
 
     #[test]
     fn strings_as_go_writes_them() {
-        assert_eq!(s(&Val::str(&b"a\"\\<>&/\x7f"[..])), r#""a\"\\<>&/\x7f""#.replace("\\x7f", "\x7f"));
-        assert_eq!(s(&Val::str(&b"\x00\x08\x0c\n\r\t\x1f"[..])), r#""\u0000\b\f\n\r\t\u001f""#);
-        assert_eq!(s(&Val::str(&b"\xff\xe2\x82"[..])), r#""\ufffd\ufffd\ufffd""#);
+        assert_eq!(
+            s(&Val::str(&b"a\"\\<>&/\x7f"[..])),
+            r#""a\"\\<>&/\x7f""#.replace("\\x7f", "\x7f")
+        );
+        assert_eq!(
+            s(&Val::str(&b"\x00\x08\x0c\n\r\t\x1f"[..])),
+            r#""\u0000\b\f\n\r\t\u001f""#
+        );
+        assert_eq!(
+            s(&Val::str(&b"\xff\xe2\x82"[..])),
+            r#""\ufffd\ufffd\ufffd""#
+        );
         assert_eq!(s(&Val::str("é\u{2028}\u{fffd}")), "\"é\\u2028\u{fffd}\"");
     }
 
     #[test]
     fn decode_like_go() {
-        let o = decode_record_line(br#"{"b":1,"a":[1.50,"x"],"a":true} trailing"#).unwrap().unwrap();
-        assert_eq!(String::from_utf8(encode_obj(&o)).unwrap(), r#"{"a":true,"b":1}"#);
+        let o = decode_record_line(br#"{"b":1,"a":[1.50,"x"],"a":true} trailing"#)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8(encode_obj(&o)).unwrap(),
+            r#"{"a":true,"b":1}"#
+        );
         assert_eq!(decode_record_line(b"null").unwrap(), None);
         assert_eq!(
             decode_record_line(b"[1]").unwrap_err().0,
@@ -496,8 +510,13 @@ mod tests {
             decode_record_line(b"x").unwrap_err().0,
             "invalid character 'x' looking for beginning of value"
         );
-        assert_eq!(decode_record_line(br#"{"a":1"#).unwrap_err().0, "unexpected EOF");
-        let o = decode_record_line(br#"{"k":"\ud83d\ude00\ud800x\u00e9"}"#).unwrap().unwrap();
+        assert_eq!(
+            decode_record_line(br#"{"a":1"#).unwrap_err().0,
+            "unexpected EOF"
+        );
+        let o = decode_record_line(br#"{"k":"\ud83d\ude00\ud800x\u00e9"}"#)
+            .unwrap()
+            .unwrap();
         assert_eq!(o[&b"k"[..].to_vec()], Val::str("\u{1f600}\u{fffd}x\u{e9}"));
     }
 }

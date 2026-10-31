@@ -140,7 +140,10 @@ fn parse_dsn(dsn: &str) -> Result<Config, String> {
                     if dsn[k + 1..i].contains(')') {
                         return Err("invalid DSN: did you forget to escape a param value?".into());
                     }
-                    return Err("invalid DSN: network address not terminated (missing closing brace)".into());
+                    return Err(
+                        "invalid DSN: network address not terminated (missing closing brace)"
+                            .into(),
+                    );
                 }
                 cfg.addr = dsn[k + 1..i - 1].to_string();
                 break;
@@ -160,20 +163,32 @@ fn parse_dsn(dsn: &str) -> Result<Config, String> {
             match key {
                 "allowNativePasswords" => cfg.native = bool_of(value)?,
                 "multiStatements" => cfg.multi = bool_of(value)?,
-                "allowAllFiles" | "allowCleartextPasswords" | "allowFallbackToPlaintext"
-                | "allowOldPasswords" | "checkConnLiveness" | "clientFoundRows"
-                | "columnsWithAlias" | "interpolateParams" | "parseTime" | "rejectReadOnly" => {
+                "allowAllFiles"
+                | "allowCleartextPasswords"
+                | "allowFallbackToPlaintext"
+                | "allowOldPasswords"
+                | "checkConnLiveness"
+                | "clientFoundRows"
+                | "columnsWithAlias"
+                | "interpolateParams"
+                | "parseTime"
+                | "rejectReadOnly" => {
                     bool_of(value)?;
                 }
                 "compress" => return Err("compression not implemented yet".into()),
                 "collation" => cfg.collation_name = Some(value.to_string()),
-                "timeout" | "readTimeout" | "writeTimeout" | "loc" | "timeTruncate"
-                | "maxAllowedPacket" | "connectionAttributes" | "strict" | "serverPubKey" => {}
+                "timeout"
+                | "readTimeout"
+                | "writeTimeout"
+                | "loc"
+                | "timeTruncate"
+                | "maxAllowedPacket"
+                | "connectionAttributes"
+                | "strict"
+                | "serverPubKey" => {}
                 "tls" => {
                     if !matches!(value, "false" | "") {
-                        return Err(format!(
-                            "tls={value}: TLS is not supported by hydo-read"
-                        ));
+                        return Err(format!("tls={value}: TLS is not supported by hydo-read"));
                     }
                 }
                 _ => {
@@ -442,13 +457,19 @@ fn connect(cfg: &Config, deadline: Instant) -> Result<My, Fail> {
     let mut pos = 1 + d[1..].iter().position(|&c| c == 0).ok_or_else(bad)? + 1 + 4;
     let mut scramble = d.get(pos..pos + 8).ok_or_else(bad)?.to_vec();
     pos += 9;
-    let caps_lo = u16::from_le_bytes([*d.get(pos).ok_or_else(bad)?, *d.get(pos + 1).ok_or_else(bad)?]) as u32;
+    let caps_lo = u16::from_le_bytes([
+        *d.get(pos).ok_or_else(bad)?,
+        *d.get(pos + 1).ok_or_else(bad)?,
+    ]) as u32;
     pos += 2;
     let mut caps = caps_lo;
     let mut plugin = String::from("mysql_native_password");
     if d.len() > pos {
         // charset(1) status(2) caps_hi(2) auth_len(1) reserved(10)
-        let caps_hi = u16::from_le_bytes([*d.get(pos + 3).ok_or_else(bad)?, *d.get(pos + 4).ok_or_else(bad)?]) as u32;
+        let caps_hi = u16::from_le_bytes([
+            *d.get(pos + 3).ok_or_else(bad)?,
+            *d.get(pos + 4).ok_or_else(bad)?,
+        ]) as u32;
         caps |= caps_hi << 16;
         pos += 16;
         if let Some(part2) = d.get(pos..pos + 12) {
@@ -456,21 +477,26 @@ fn connect(cfg: &Config, deadline: Instant) -> Result<My, Fail> {
         }
         pos += 13;
         if pos < d.len() {
-            let end = d[pos..].iter().position(|&c| c == 0).map(|e| pos + e).unwrap_or(d.len());
+            let end = d[pos..]
+                .iter()
+                .position(|&c| c == 0)
+                .map(|e| pos + e)
+                .unwrap_or(d.len());
             plugin = lossy(&d[pos..end]);
         }
     }
     if caps & CLIENT_PROTOCOL_41 == 0 {
-        return Err(Fail::Err("MySQL server does not support required protocol 41+".into()));
+        return Err(Fail::Err(
+            "MySQL server does not support required protocol 41+".into(),
+        ));
     }
-    let mut resp = auth_resp(cfg, &plugin, &scramble)
-        .or_else(|e| match e {
-            Fail::Err(s) if s == "this authentication plugin is not supported" => {
-                plugin = "mysql_native_password".into();
-                auth_resp(cfg, &plugin, &scramble)
-            }
-            e => Err(e),
-        })?;
+    let mut resp = auth_resp(cfg, &plugin, &scramble).or_else(|e| match e {
+        Fail::Err(s) if s == "this authentication plugin is not supported" => {
+            plugin = "mysql_native_password".into();
+            auth_resp(cfg, &plugin, &scramble)
+        }
+        e => Err(e),
+    })?;
     let mut flags = CLIENT_PROTOCOL_41
         | CLIENT_SECURE_CONN
         | CLIENT_LONG_PASSWORD
@@ -510,7 +536,11 @@ fn connect(cfg: &Config, deadline: Instant) -> Result<My, Fail> {
     p.extend_from_slice(plugin.as_bytes());
     p.push(0);
     let mut attrs = Vec::new();
-    for (k, v) in [("_client_name", "Go-MySQL-Driver"), ("_os", "linux"), ("_platform", std::env::consts::ARCH)] {
+    for (k, v) in [
+        ("_client_name", "Go-MySQL-Driver"),
+        ("_os", "linux"),
+        ("_platform", std::env::consts::ARCH),
+    ] {
         attrs.push(k.len() as u8);
         attrs.extend_from_slice(k.as_bytes());
         attrs.push(v.len() as u8);
@@ -584,7 +614,11 @@ fn connect(cfg: &Config, deadline: Instant) -> Result<My, Fail> {
         }
     }
     if !cfg.params.is_empty() {
-        let set: Vec<String> = cfg.params.iter().map(|(k, v)| format!("{k} = {v}")).collect();
+        let set: Vec<String> = cfg
+            .params
+            .iter()
+            .map(|(k, v)| format!("{k} = {v}"))
+            .collect();
         exec(&mut my, &format!("SET {}", set.join(", ")))?;
     }
     Ok(my)
@@ -639,8 +673,12 @@ fn column_value(col: &Col, b: &[u8]) -> Result<Val, String> {
     let int = |s: &str| -> Result<Val, String> {
         match s.parse::<i64>() {
             Ok(n) => Ok(Val::str(n.to_string())),
-            Err(e) if *e.kind() == std::num::IntErrorKind::PosOverflow
-                || *e.kind() == std::num::IntErrorKind::NegOverflow => Err(rng("ParseInt")),
+            Err(e)
+                if *e.kind() == std::num::IntErrorKind::PosOverflow
+                    || *e.kind() == std::num::IntErrorKind::NegOverflow =>
+            {
+                Err(rng("ParseInt"))
+            }
             Err(_) => Err(perr("ParseInt")),
         }
     };
@@ -656,13 +694,17 @@ fn column_value(col: &Col, b: &[u8]) -> Result<Val, String> {
         8 => int(&s),
         // FLOAT: parsed as float32
         4 => match s.parse::<f32>() {
-            Ok(f) if f.is_finite() || s.contains("inf") => Ok(Val::str(gofmt::format_float(f as f64, true))),
+            Ok(f) if f.is_finite() || s.contains("inf") => {
+                Ok(Val::str(gofmt::format_float(f as f64, true)))
+            }
             Ok(_) => Err(rng("ParseFloat")),
             Err(_) => Err(perr("ParseFloat")),
         },
         // DOUBLE
         5 => match s.parse::<f64>() {
-            Ok(f) if f.is_finite() || s.contains("inf") => Ok(Val::str(gofmt::format_float(f, false))),
+            Ok(f) if f.is_finite() || s.contains("inf") => {
+                Ok(Val::str(gofmt::format_float(f, false)))
+            }
             Ok(_) => Err(rng("ParseFloat")),
             Err(_) => Err(perr("ParseFloat")),
         },
@@ -676,7 +718,11 @@ fn query(my: &mut My, query: &str) -> Result<Vec<Record>, Fail> {
     match d.first() {
         Some(0x00) => return Ok(Vec::new()),
         Some(0xff) => return Err(Fail::Err(error_packet(&d))),
-        Some(0xfb) => return Err(Fail::Err("LOCAL INFILE is not supported by hydo-read".into())),
+        Some(0xfb) => {
+            return Err(Fail::Err(
+                "LOCAL INFILE is not supported by hydo-read".into(),
+            ))
+        }
         _ => {}
     }
     let mut pos = 0;
@@ -698,11 +744,10 @@ fn query(my: &mut My, query: &str) -> Result<Vec<Record>, Fail> {
             }
         }
         // 0x0c, charset(2), length(4), type(1), flags(2), decimals(1)
-        let typ = *d.get(p + 7).ok_or_else(|| Fail::Err("malformed packet".into()))?;
-        let flags = u16::from_le_bytes([
-            *d.get(p + 8).unwrap_or(&0),
-            *d.get(p + 9).unwrap_or(&0),
-        ]);
+        let typ = *d
+            .get(p + 7)
+            .ok_or_else(|| Fail::Err("malformed packet".into()))?;
+        let flags = u16::from_le_bytes([*d.get(p + 8).unwrap_or(&0), *d.get(p + 9).unwrap_or(&0)]);
         cols.push(Col {
             name,
             typ,
@@ -787,11 +832,29 @@ mod tests {
     #[test]
     fn dsn_forms() {
         let d = mysql_dsn("hydo:@tcp(127.0.0.1:3306)/", Duration::from_secs(30)).unwrap();
-        assert_eq!(d, "hydo:@tcp(127.0.0.1:3306)/?timeout=30s&readTimeout=30s&writeTimeout=30s");
+        assert_eq!(
+            d,
+            "hydo:@tcp(127.0.0.1:3306)/?timeout=30s&readTimeout=30s&writeTimeout=30s"
+        );
         let c = parse_dsn(&d).unwrap();
-        assert_eq!((c.user.as_str(), c.passwd.as_str(), c.addr.as_str(), c.dbname.as_str()), ("hydo", "", "127.0.0.1:3306", ""));
-        let d = mysql_dsn("mysql://root@127.0.0.1:37306/t", Duration::from_millis(2500)).unwrap();
-        assert_eq!(d, "root@tcp(127.0.0.1:37306)/t?timeout=3s&readTimeout=3s&writeTimeout=3s");
+        assert_eq!(
+            (
+                c.user.as_str(),
+                c.passwd.as_str(),
+                c.addr.as_str(),
+                c.dbname.as_str()
+            ),
+            ("hydo", "", "127.0.0.1:3306", "")
+        );
+        let d = mysql_dsn(
+            "mysql://root@127.0.0.1:37306/t",
+            Duration::from_millis(2500),
+        )
+        .unwrap();
+        assert_eq!(
+            d,
+            "root@tcp(127.0.0.1:37306)/t?timeout=3s&readTimeout=3s&writeTimeout=3s"
+        );
         let d = mysql_dsn("mysql://u:p@h/", Duration::from_secs(1)).unwrap();
         assert!(d.starts_with("u:p@tcp(h:3306)/?"));
         assert!(parse_dsn("nope").unwrap_err().contains("missing the slash"));
@@ -799,11 +862,24 @@ mod tests {
 
     #[test]
     fn values() {
-        let c = |typ, unsigned| Col { name: vec![], typ, unsigned };
+        let c = |typ, unsigned| Col {
+            name: vec![],
+            typ,
+            unsigned,
+        };
         assert_eq!(column_value(&c(3, false), b"0007").unwrap(), Val::str("7"));
-        assert_eq!(column_value(&c(8, true), b"18446744073709551615").unwrap(), Val::str("18446744073709551615"));
-        assert_eq!(column_value(&c(5, false), b"1234567").unwrap(), Val::str("1.234567e+06"));
+        assert_eq!(
+            column_value(&c(8, true), b"18446744073709551615").unwrap(),
+            Val::str("18446744073709551615")
+        );
+        assert_eq!(
+            column_value(&c(5, false), b"1234567").unwrap(),
+            Val::str("1.234567e+06")
+        );
         assert_eq!(column_value(&c(4, false), b"0.1").unwrap(), Val::str("0.1"));
-        assert_eq!(column_value(&c(246, false), b"1.50").unwrap(), Val::str("1.50"));
+        assert_eq!(
+            column_value(&c(246, false), b"1.50").unwrap(),
+            Val::str("1.50")
+        );
     }
 }

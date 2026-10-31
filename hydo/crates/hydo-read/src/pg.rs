@@ -290,7 +290,11 @@ fn parse_error(b: &[u8]) -> String {
     while i < b.len() && b[i] != 0 {
         let t = b[i];
         i += 1;
-        let end = b[i..].iter().position(|&c| c == 0).map(|e| i + e).unwrap_or(b.len());
+        let end = b[i..]
+            .iter()
+            .position(|&c| c == 0)
+            .map(|e| i + e)
+            .unwrap_or(b.len());
         if t == b'M' {
             msg = b[i..end].to_vec();
         }
@@ -300,7 +304,11 @@ fn parse_error(b: &[u8]) -> String {
 }
 
 fn cstr(b: &[u8], pos: &mut usize) -> Vec<u8> {
-    let end = b[*pos..].iter().position(|&c| c == 0).map(|e| *pos + e).unwrap_or(b.len());
+    let end = b[*pos..]
+        .iter()
+        .position(|&c| c == 0)
+        .map(|e| *pos + e)
+        .unwrap_or(b.len());
     let s = b[*pos..end].to_vec();
     *pos = (end + 1).min(b.len());
     s
@@ -341,7 +349,10 @@ fn auth(pg: &mut Pg, body: &[u8], o: &Values) -> Result<(), String> {
             return Err(format!("pq: unexpected password response: {}", q(&[t])));
         }
         if b.len() < 4 || i32::from_be_bytes([b[0], b[1], b[2], b[3]]) != 0 {
-            return Err(format!("pq: unexpected authentication response: {}", q(&[t])));
+            return Err(format!(
+                "pq: unexpected authentication response: {}",
+                q(&[t])
+            ));
         }
         Ok(())
     };
@@ -461,7 +472,10 @@ fn open(o: &Values, deadline: Instant) -> Result<Pg, String> {
         dl = dl.min(Instant::now() + Duration::from_secs(secs.max(0) as u64));
     }
     let c = if host.starts_with('/') {
-        dial_unix(&format!("{}/.s.PGSQL.{port}", host.trim_end_matches('/')), dl)
+        dial_unix(
+            &format!("{}/.s.PGSQL.{port}", host.trim_end_matches('/')),
+            dl,
+        )
     } else {
         let addr = if host.contains(':') {
             format!("[{host}]:{port}")
@@ -497,7 +511,11 @@ fn open(o: &Values, deadline: Instant) -> Result<Pg, String> {
         if is_driver_setting(k) {
             continue;
         }
-        body.extend_from_slice(if k == "dbname" { b"database" } else { k.as_bytes() });
+        body.extend_from_slice(if k == "dbname" {
+            b"database"
+        } else {
+            k.as_bytes()
+        });
         body.push(0);
         body.extend_from_slice(v.as_bytes());
         body.push(0);
@@ -648,10 +666,15 @@ fn parse_ts(s: &str) -> Result<String, String> {
             .unwrap_or(b.len() as isize - fs);
         let frac = atoi(fs, fs + off, &mut err);
         let div = 10i64.checked_pow(off as u32).unwrap_or(i64::MAX);
-        nano = if div == 0 { 0 } else { frac * (1_000_000_000 / div.max(1)) };
+        nano = if div == 0 {
+            0
+        } else {
+            frac * (1_000_000_000 / div.max(1))
+        };
         rem += off + 1;
     }
-    if rem >= 0 && (rem as usize) < b.len() && (b[rem as usize] == b'-' || b[rem as usize] == b'+') {
+    if rem >= 0 && (rem as usize) < b.len() && (b[rem as usize] == b'-' || b[rem as usize] == b'+')
+    {
         let sign = if b[rem as usize] == b'-' { -1 } else { 1 };
         let tzs = rem;
         let th = atoi(tzs + 1, tzs + 3, &mut err);
@@ -681,7 +704,9 @@ fn parse_ts(s: &str) -> Result<String, String> {
     if let Some(e) = err {
         return Err(e);
     }
-    Ok(rfc3339_utc(iso_year, month, day, hour, minute, second, nano, tz_off))
+    Ok(rfc3339_utc(
+        iso_year, month, day, hour, minute, second, nano, tz_off,
+    ))
 }
 
 /// time and timetz: `time.Parse("15:04:05[-07[:00[:00]]]", s)` on 0000-01-01.
@@ -705,7 +730,12 @@ fn parse_clock(s: &str, tz: bool) -> Result<String, String> {
             plus_day = true;
         }
     }
-    let bad = || format!("pq: decode: parsing time {} as \"15:04:05\": cannot parse", q(s.as_bytes()));
+    let bad = || {
+        format!(
+            "pq: decode: parsing time {} as \"15:04:05\": cannot parse",
+            q(s.as_bytes())
+        )
+    };
     let b = st.as_bytes();
     let digits = |from: usize, n: usize| -> Option<i64> {
         let p = b.get(from..from + n)?;
@@ -818,7 +848,11 @@ fn value(oid: u32, b: &[u8]) -> Result<Val, String> {
         }
         1083 => Val::str(parse_clock(&s, false)?),
         1266 => Val::str(parse_clock(&s, true)?),
-        16 => Val::str(if b.first() == Some(&b't') { "true" } else { "false" }),
+        16 => Val::str(if b.first() == Some(&b't') {
+            "true"
+        } else {
+            "false"
+        }),
         20 | 23 | 21 => match s.parse::<i64>() {
             Ok(n) => Val::str(n.to_string()),
             Err(_) => {
@@ -919,7 +953,12 @@ fn simple_query(pg: &mut Pg, query: &[u8]) -> Result<Vec<Record>, String> {
             }
             b'T' => cols = Some(row_description(&b)),
             b'N' | b'S' | b'A' => {}
-            _ => return Err(format!("pq: unknown response for simple query: {}", q(&[t]))),
+            _ => {
+                return Err(format!(
+                    "pq: unknown response for simple query: {}",
+                    q(&[t])
+                ))
+            }
         }
     }
     let cols = cols.unwrap_or_default();
@@ -980,20 +1019,44 @@ mod tests {
 
     #[test]
     fn times() {
-        assert_eq!(parse_ts("2026-01-01 00:00:00+00").unwrap(), "2026-01-01T00:00:00Z");
-        assert_eq!(parse_ts("2026-01-01 02:30:00.5+05:30").unwrap(), "2025-12-31T21:00:00.5Z");
+        assert_eq!(
+            parse_ts("2026-01-01 00:00:00+00").unwrap(),
+            "2026-01-01T00:00:00Z"
+        );
+        assert_eq!(
+            parse_ts("2026-01-01 02:30:00.5+05:30").unwrap(),
+            "2025-12-31T21:00:00.5Z"
+        );
         assert_eq!(parse_ts("2026-01-01").unwrap(), "2026-01-01T00:00:00Z");
-        assert_eq!(parse_ts("0001-01-01 00:00:00 BC").unwrap(), "0000-01-01T00:00:00Z");
-        assert_eq!(parse_ts("12026-03-01 00:00:00.000123").unwrap(), "12026-03-01T00:00:00.000123Z");
-        assert_eq!(parse_clock("12:34:56.789", false).unwrap(), "0000-01-01T12:34:56.789Z");
-        assert_eq!(parse_clock("02:00:00+05", true).unwrap(), "-0001-12-31T21:00:00Z");
-        assert_eq!(parse_clock("24:00:00", false).unwrap(), "0000-01-02T00:00:00Z");
+        assert_eq!(
+            parse_ts("0001-01-01 00:00:00 BC").unwrap(),
+            "0000-01-01T00:00:00Z"
+        );
+        assert_eq!(
+            parse_ts("12026-03-01 00:00:00.000123").unwrap(),
+            "12026-03-01T00:00:00.000123Z"
+        );
+        assert_eq!(
+            parse_clock("12:34:56.789", false).unwrap(),
+            "0000-01-01T12:34:56.789Z"
+        );
+        assert_eq!(
+            parse_clock("02:00:00+05", true).unwrap(),
+            "-0001-12-31T21:00:00Z"
+        );
+        assert_eq!(
+            parse_clock("24:00:00", false).unwrap(),
+            "0000-01-02T00:00:00Z"
+        );
     }
 
     #[test]
     fn dsns() {
         assert_eq!(
-            postgres_dsn("postgres://miniflux@127.0.0.1/miniflux?sslmode=disable", Duration::from_secs(30)),
+            postgres_dsn(
+                "postgres://miniflux@127.0.0.1/miniflux?sslmode=disable",
+                Duration::from_secs(30)
+            ),
             "postgres://miniflux@127.0.0.1/miniflux?sslmode=disable&connect_timeout=30"
         );
         assert_eq!(

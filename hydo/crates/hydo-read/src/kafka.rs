@@ -198,7 +198,13 @@ impl Broker {
         Ok(Broker { c, corr: 0 })
     }
 
-    fn request(&mut self, key: i16, ver: i16, body: &[u8], deadline: Instant) -> Result<Vec<u8>, KErr> {
+    fn request(
+        &mut self,
+        key: i16,
+        ver: i16,
+        body: &[u8],
+        deadline: Instant,
+    ) -> Result<Vec<u8>, KErr> {
         self.c.deadline = deadline;
         self.corr += 1;
         let mut h = W::default();
@@ -478,7 +484,11 @@ pub fn crc32c(b: &[u8]) -> u32 {
     for &x in b {
         crc ^= x as u32;
         for _ in 0..8 {
-            crc = if crc & 1 != 0 { (crc >> 1) ^ CRC32C_POLY } else { crc >> 1 };
+            crc = if crc & 1 != 0 {
+                (crc >> 1) ^ CRC32C_POLY
+            } else {
+                crc >> 1
+            };
         }
     }
     !crc
@@ -508,7 +518,11 @@ fn decompress(codec: i16, src: &[u8]) -> Rr<Vec<u8>> {
                     if s.len() < n {
                         return Err("malformed xerial framing".into());
                     }
-                    out.extend(snap::raw::Decoder::new().decompress_vec(&s[..n]).map_err(|e| e.to_string())?);
+                    out.extend(
+                        snap::raw::Decoder::new()
+                            .decompress_vec(&s[..n])
+                            .map_err(|e| e.to_string())?,
+                    );
                     s = &s[n..];
                 }
                 return Ok(out);
@@ -600,7 +614,11 @@ fn parse_records(set: &[u8], next: &mut i64) -> Rr<Vec<FRec>> {
                     control,
                     key,
                     value,
-                    ts: if log_append { max_ts } else { first_ts + ts_delta },
+                    ts: if log_append {
+                        max_ts
+                    } else {
+                        first_ts + ts_delta
+                    },
                 })
             })();
             br.i = rend;
@@ -736,12 +754,7 @@ pub fn read(bootstrap: &[u8], topic: &[u8], o: &ReadOpts) -> Res<Vec<Record>> {
                         meta = None;
                         continue;
                     }
-                    e => {
-                        return Err(cannot(format!(
-                            "kafka {t} partition {p}: {}",
-                            kerr_text(e)
-                        )))
-                    }
+                    e => return Err(cannot(format!("kafka {t} partition {p}: {}", kerr_text(e)))),
                 }
                 let end = ends[&p];
                 let mut np = pos;
@@ -796,7 +809,14 @@ fn admin(bootstrap: &str) -> Client {
 pub fn create_topic(bootstrap: &str, topic: &str, partitions: i32) -> Result<i16, String> {
     let mut cl = admin(bootstrap);
     let mut w = W::default();
-    w.i32(1).str(topic.as_bytes()).i32(partitions).i16(1).i32(0).i32(0).i32(30000).i8(0);
+    w.i32(1)
+        .str(topic.as_bytes())
+        .i32(partitions)
+        .i16(1)
+        .i32(0)
+        .i32(0)
+        .i32(30000)
+        .i8(0);
     let seed = cl.seeds[0].clone();
     let r = cl.req(&seed, 19, 2, &w.0).map_err(|e| e.text())?;
     let mut rd = Rd { b: &r, i: 0 };
@@ -869,22 +889,51 @@ pub fn produce(bootstrap: &str, topic: &str, recs: &[ProduceRec]) -> Result<(), 
     let mut cl = admin(bootstrap);
     let meta = cl.metadata(topic.as_bytes()).map_err(|e| e.text())?;
     for r in recs {
-        let leader = meta.parts.get(&r.partition).ok_or("no such partition")?.leader;
+        let leader = meta
+            .parts
+            .get(&r.partition)
+            .ok_or("no such partition")?
+            .leader;
         let addr = meta.brokers.get(&leader).ok_or("no leader")?.clone();
         let mut rec = W::default();
-        rec.i8(0).varint(0).varint(0).vbytes(r.key).vbytes(r.value).varint(0);
+        rec.i8(0)
+            .varint(0)
+            .varint(0)
+            .vbytes(r.key)
+            .vbytes(r.value)
+            .varint(0);
         let mut recs_b = W::default();
         recs_b.varint(rec.0.len() as i64);
         recs_b.0.extend_from_slice(&rec.0);
         let mut after_crc = W::default();
-        after_crc.i16(0).i32(0).i64(r.ts).i64(r.ts).i64(-1).i16(-1).i32(-1).i32(1);
+        after_crc
+            .i16(0)
+            .i32(0)
+            .i64(r.ts)
+            .i64(r.ts)
+            .i64(-1)
+            .i16(-1)
+            .i32(-1)
+            .i32(1);
         after_crc.0.extend_from_slice(&recs_b.0);
         let crc = crc32c(&after_crc.0);
         let mut batch = W::default();
-        batch.i64(0).i32((4 + 1 + 4 + after_crc.0.len()) as i32).i32(0).i8(2).i32(crc as i32);
+        batch
+            .i64(0)
+            .i32((4 + 1 + 4 + after_crc.0.len()) as i32)
+            .i32(0)
+            .i8(2)
+            .i32(crc as i32);
         batch.0.extend_from_slice(&after_crc.0);
         let mut w = W::default();
-        w.i16(-1).i16(-1).i32(30000).i32(1).str(topic.as_bytes()).i32(1).i32(r.partition).bytes(&batch.0);
+        w.i16(-1)
+            .i16(-1)
+            .i32(30000)
+            .i32(1)
+            .str(topic.as_bytes())
+            .i32(1)
+            .i32(r.partition)
+            .bytes(&batch.0);
         let resp = cl.req(&addr, 0, 3, &w.0).map_err(|e| e.text())?;
         let mut rd = Rd { b: &resp, i: 0 };
         rd.arr()?;

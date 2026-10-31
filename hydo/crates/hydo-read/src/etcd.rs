@@ -21,7 +21,10 @@ fn http_post(url: &str, body: &[u8], t: Duration) -> Result<(u16, Vec<u8>), Stri
     let fail = |e: String| format!("Post {}: {e}", q(url.as_bytes()));
     let u = crate::url::parse(url).map_err(|e| e.to_string())?;
     if u.scheme != "http" && u.scheme != "https" {
-        return Err(fail(format!("unsupported protocol scheme {}", q(u.scheme.as_bytes()))));
+        return Err(fail(format!(
+            "unsupported protocol scheme {}",
+            q(u.scheme.as_bytes())
+        )));
     }
     let host = u.host.clone();
     let addr = if crate::net::split_host_port(&host).is_ok() {
@@ -35,11 +38,15 @@ fn http_post(url: &str, body: &[u8], t: Duration) -> Result<(u16, Vec<u8>), Stri
     let after = &url[url.find("//").map(|i| i + 2).unwrap_or(0)..];
     let target = after.find('/').map(|i| &after[i..]).unwrap_or("/");
     let mut c = dial_tcp(&addr, deadline).map_err(|e| match e {
-        NetErr::Timeout(s) => fail(format!("{s} (Client.Timeout exceeded while awaiting headers)")),
+        NetErr::Timeout(s) => fail(format!(
+            "{s} (Client.Timeout exceeded while awaiting headers)"
+        )),
         e => fail(e.to_string()),
     })?;
     if u.scheme == "https" {
-        return Err(fail("https endpoints are not supported by hydo-read (no TLS)".into()));
+        return Err(fail(
+            "https endpoints are not supported by hydo-read (no TLS)".into(),
+        ));
     }
     let mut req = format!(
         "POST {target} HTTP/1.1\r\nHost: {host}\r\nUser-Agent: Go-http-client/1.1\r\nContent-Length: {}\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n",
@@ -48,9 +55,9 @@ fn http_post(url: &str, body: &[u8], t: Duration) -> Result<(u16, Vec<u8>), Stri
     .into_bytes();
     req.extend_from_slice(body);
     let headers_err = |e: NetErr| match e {
-        NetErr::Timeout(_) => {
-            fail("context deadline exceeded (Client.Timeout exceeded while awaiting headers)".into())
-        }
+        NetErr::Timeout(_) => fail(
+            "context deadline exceeded (Client.Timeout exceeded while awaiting headers)".into(),
+        ),
         e => fail(e.to_string()),
     };
     c.write_all(&req).map_err(headers_err)?;
@@ -60,7 +67,12 @@ fn http_post(url: &str, body: &[u8], t: Duration) -> Result<(u16, Vec<u8>), Stri
         .split_whitespace()
         .nth(1)
         .and_then(|s| s.parse().ok())
-        .ok_or_else(|| fail(format!("malformed HTTP response {}", q(sl.trim_end().as_bytes()))))?;
+        .ok_or_else(|| {
+            fail(format!(
+                "malformed HTTP response {}",
+                q(sl.trim_end().as_bytes())
+            ))
+        })?;
     let mut clen: Option<usize> = None;
     let mut chunked = false;
     loop {
@@ -93,7 +105,8 @@ fn http_post(url: &str, body: &[u8], t: Duration) -> Result<(u16, Vec<u8>), Stri
             let l = c.read_line().map_err(body_err)?;
             let ls = String::from_utf8_lossy(&l);
             let size_s = ls.trim().split(';').next().unwrap_or("").to_string();
-            let n = usize::from_str_radix(&size_s, 16).map_err(|_| "malformed chunked encoding".to_string())?;
+            let n = usize::from_str_radix(&size_s, 16)
+                .map_err(|_| "malformed chunked encoding".to_string())?;
             if n == 0 {
                 break;
             }
@@ -217,7 +230,8 @@ pub fn read(a: &[Vec<u8>], o: &ReadOpts) -> Res<Vec<Record>> {
                     };
                     let k = base64_decode(&str_field(m, "Key", "Kvs.Key").map_err(wrap)?);
                     let v = base64_decode(&str_field(m, "Value", "Kvs.Value").map_err(wrap)?);
-                    let cr = str_field(m, "create_revision", "Kvs.create_revision").map_err(wrap)?;
+                    let cr =
+                        str_field(m, "create_revision", "Kvs.create_revision").map_err(wrap)?;
                     let mr = str_field(m, "mod_revision", "Kvs.mod_revision").map_err(wrap)?;
                     let ver = str_field(m, "Version", "Kvs.Version").map_err(wrap)?;
                     out.push(rec(vec![
@@ -266,7 +280,11 @@ pub fn put(ep: &str, k: &[u8], v: &[u8]) -> Result<(), String> {
         ("key", Val::str(base64_encode(k))),
         ("value", Val::str(base64_encode(v))),
     ]);
-    let (code, b) = http_post(&format!("{}/v3/kv/put", etcd_base(ep)), &body, Duration::from_secs(5))?;
+    let (code, b) = http_post(
+        &format!("{}/v3/kv/put", etcd_base(ep)),
+        &body,
+        Duration::from_secs(5),
+    )?;
     if code != 200 {
         return Err(format!("HTTP {code}: {}", lossy(&b)));
     }

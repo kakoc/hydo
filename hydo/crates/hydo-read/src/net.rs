@@ -77,7 +77,8 @@ pub fn split_host_port(addr: &str) -> Result<(String, String), String> {
 
 /// `net.Dial("tcp", addr)` with the deadline.
 pub fn dial_tcp(addr: &str, deadline: Instant) -> Result<Conn, NetErr> {
-    let (host, port) = split_host_port(addr).map_err(|e| NetErr::Other(format!("dial tcp: {e}")))?;
+    let (host, port) =
+        split_host_port(addr).map_err(|e| NetErr::Other(format!("dial tcp: {e}")))?;
     let host = if host.is_empty() {
         "127.0.0.1".to_string()
     } else {
@@ -112,10 +113,7 @@ pub fn dial_tcp(addr: &str, deadline: Instant) -> Result<Conn, NetErr> {
         match TcpStream::connect_timeout(&sa, left) {
             Ok(s) => {
                 let _ = s.set_nodelay(true);
-                let local = s
-                    .local_addr()
-                    .map(|l| l.to_string())
-                    .unwrap_or_default();
+                let local = s.local_addr().map(|l| l.to_string()).unwrap_or_default();
                 return Ok(Conn {
                     sock: Sock::Tcp(s),
                     desc: format!("tcp {local}->{sa}"),

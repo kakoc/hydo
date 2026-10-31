@@ -19,9 +19,9 @@
 pub mod check;
 pub mod etcd;
 pub mod gofmt;
-pub mod kerr;
 pub mod json;
 pub mod kafka;
+pub mod kerr;
 pub mod mysql;
 pub mod net;
 pub mod pg;
@@ -154,7 +154,11 @@ pub fn split_read_opts(args: &[Vec<u8>]) -> Res<(Vec<Vec<u8>>, ReadOpts)> {
 pub fn read_main(args: &[Vec<u8>], out: &mut dyn Write, err: &mut dyn Write) -> i32 {
     if args.is_empty() || args[0] == b"-h" || args[0] == b"--help" {
         let _ = writeln!(err, "{READ_USAGE}");
-        return if args.is_empty() { EXIT_CANNOT } else { EXIT_OK };
+        return if args.is_empty() {
+            EXIT_CANNOT
+        } else {
+            EXIT_OK
+        };
     }
     match read_store(args) {
         Err(e) => {
@@ -366,7 +370,8 @@ pub fn read_hydo(what: &[u8]) -> Res<Vec<Record>> {
             _ => Vec::new(),
         }
     }
-    fn ids(env: &str) -> Res<(std::collections::HashSet<Vec<u8>>, Vec<Vec<u8>>)> {
+    type Ids = (std::collections::HashSet<Vec<u8>>, Vec<Vec<u8>>);
+    fn ids(env: &str) -> Res<Ids> {
         let p = env_path(env)?;
         let recs = read_file(&p)?;
         let mut set = std::collections::HashSet::new();
@@ -391,7 +396,10 @@ pub fn read_hydo(what: &[u8]) -> Res<Vec<Record>> {
         b"told-failed" => {
             let (acked, _) = ids("HYDO_ACKED")?;
             let (_, failed) = ids("HYDO_FAILED")?;
-            Ok(out(failed.into_iter().filter(|x| !acked.contains(x)).collect()))
+            Ok(out(failed
+                .into_iter()
+                .filter(|x| !acked.contains(x))
+                .collect()))
         }
         b"unknown" => {
             let p = env_path("HYDO_OUTCOMES")?;
