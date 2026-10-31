@@ -1,0 +1,38 @@
+> STOP one at=949127 n=1 phase=workload why=start
+< SEND at=969127 hydo-agent-ping 1
+> OK send id=1 queued=969127
+< CONT
+> EVENT one at=969127 n=1 run K=redis@5+2
+> EVENT one at=969127 n=2 hydo-ob: command: run K=redis@5+2
+> EVENT one at=969127 n=3 HYDO-ASSERT-DECL {"t":"reachable","id":"fault.paused","msg":"a service was paused (SIGSTOP)"}
+> EVENT one at=969127 n=4 HYDO-ASSERT-DECL {"t":"sometimes","id":"fault.pause_mid_request","msg":"a pause began while a client request was in flight"}
+> EVENT one at=969127 n=5 HYDO-ASSERT-DECL {"t":"reachable","id":"fault.clock_back","msg":"the realtime clock was stepped backwards"}
+> EVENT one at=969127 n=6 HYDO-ASSERT-DECL {"t":"reachable","id":"fault.clock_fwd","msg":"the realtime clock was stepped forwards"}
+> EVENT one at=969127 n=7 HYDO-ASSERT-DECL {"t":"reachable","id":"fault.oneway_req","msg":"a one-way network fault hit the req direction"}
+> EVENT one at=969127 n=8 HYDO-ASSERT-DECL {"t":"reachable","id":"fault.oneway_resp","msg":"a one-way network fault hit the resp direction"}
+> EVENT one at=969127 n=9 hydo-ob: workload steps 0..4 rc=0 (uptime=13.80s)
+> EVENT one at=969127 n=10 hydo-ob: KILLED redis before step 5
+> EVENT one at=969127 n=11 hydo-ob: workload steps 5..6 rc=0 (uptime=13.82s)
+> EVENT one at=969127 n=12 hydo-ob: restarting redis before step 7
+> SENT one id=1 at=969127
+> STOP one at=969127 n=2 phase=workload why=send
+< CONT
+> EVENT one at=1047595 n=13 hydo-agent-ping 1hydo-ob: redis ready after 1 polls (uptime=14.85s)
+> EVENT one at=1047595 n=14 hydo-ob: workload steps 7..19 rc=0 (uptime=14.96s)
+> EVENT one at=1047595 n=15 hydo-explore-acked: 0 1 2 3 4 7 8 9 10 11 12 13 14 15 16 17 18 19 
+> EVENT one at=1047595 n=16 hydo-explore-failed: 
+> EVENT one at=1047595 n=17 hydo-explore-workload-done
+> STOP one at=1047595 n=3 phase=workload why=marker
+< CONT
+> STOP one at=1047595 n=4 phase=check why=start
+< CONT
+> EVENT one at=1125683 n=18 go
+> EVENT one at=1125683 n=19 hydo-ob: command: hydo-agent-ping 1go
+> EVENT one at=1125683 n=20 HYDO-ASSERT {"t":"always","id":"redis.acked_writes_survive","ok":true,"msg":"every SET the client saw acknowledged reads back with its value","details":{"out":"acked=18 all present"}}
+> EVENT one at=1125683 n=21 HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=18 all present)
+> EVENT one at=1125683 n=22 hydo-stack-marker: workload complete
+> EVENT one at=1125683 n=23 hydo-boot-marker: launching shell on ttyS0
+> EVENT one at=1125683 n=24 sh: can't access tty; job control turned off
+> STOP one at=1125683 n=5 phase=check why=marker
+< CONT
+> RESULT one fp=146dec7ffae541c1 wfp=7042fb17007982b2 secs=2.6 stops=5 typed=1 inh=4d9bf8de8cb458d0 verdict=HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=18 all present)

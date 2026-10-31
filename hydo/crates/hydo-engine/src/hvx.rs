@@ -11,11 +11,13 @@
 //! `hvx-run` takes the shared module lock (`flock -s $HYDO_LOCK`) and drops the `sudo` when the
 //! user can open the device; without a wrapper the engine is started directly.
 
+use crate::lockstep::Lockstep;
 use crate::process::{run_one, ProcessWorker};
 use crate::{BootSpec, Engine, EngineError, EngineKind, OneRun, Worker};
 use hydo_schedule::Schedule;
+use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
 /// How to start hvx_explore.
 #[derive(Clone, Debug)]
@@ -88,11 +90,65 @@ impl Hvx {
         c
     }
 
+    /// One schedule from a fresh boot under lock-step control (`hvx_explore --control one`): the
+    /// fresh-boot counterpart of [`Worker::lockstep`], to prove that a controlled run from a fresh
+    /// boot equals the same run restored from S1. The engine's stderr goes to `stderr_log`.
+    pub fn one_lockstep(
+        &self,
+        spec: &BootSpec,
+        schedule: &Schedule,
+        stderr_log: &Path,
+    ) -> Result<ControlledOne, EngineError> {
+        self.check_built()?;
+        let mut argv = self.argv(spec, "one");
+        let mode = argv.len() - 5; // ... one <kernel> <initrd> <image> <outdir>
+        argv.insert(mode, "--control".into());
+        argv.push(schedule.to_string());
+        let err = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(stderr_log)?;
+        let mut cmd = self.command(spec, &argv);
+        cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(err);
+        let mut child = cmd.spawn()?;
+        let stdin = child.stdin.take().expect("piped stdin");
+        let stdout = BufReader::new(child.stdout.take().expect("piped stdout"));
+        Ok(ControlledOne {
+            child,
+            stdin,
+            stdout,
+        })
+    }
+
     fn check_built(&self) -> Result<(), EngineError> {
         if !is_executable(&self.engine) {
             return Err(EngineError::NotBuilt(self.engine.clone()));
         }
         Ok(())
+    }
+}
+
+/// A fresh-boot engine process under lock-step control ([`Hvx::one_lockstep`]).
+pub struct ControlledOne {
+    child: Child,
+    stdin: ChildStdin,
+    stdout: BufReader<ChildStdout>,
+}
+
+impl ControlledOne {
+    /// The session (the run's tag is `one`). `log`: also write the transcript.
+    pub fn session<'a>(&'a mut self, log: Option<&'a mut dyn Write>) -> Lockstep<'a> {
+        let s = Lockstep::new(&mut self.stdout, &mut self.stdin);
+        match log {
+            Some(l) => s.with_log(l),
+            None => s,
+        }
+    }
+
+    /// Wait for the engine to exit (after the RESULT); its exit status.
+    pub fn wait(mut self) -> Result<Option<i32>, EngineError> {
+        drop(self.stdin);
+        Ok(self.child.wait()?.code())
     }
 }
 

@@ -58,6 +58,7 @@
 pub mod hvm;
 pub mod hvx;
 pub mod image;
+pub mod lockstep;
 mod process;
 pub mod protocol;
 
@@ -66,6 +67,7 @@ use std::fmt;
 use std::path::PathBuf;
 use std::time::Duration;
 
+pub use lockstep::{Lockstep, LockstepStart};
 pub use protocol::{BranchOutcome, BranchRequest, Ready, RunResult};
 
 /// Which engine a spec is for.
@@ -341,6 +343,21 @@ pub trait Worker {
 
     /// Snapshot mid-run and run timing variants from there (hvx's BRANCH; hvm answers Unsupported).
     fn branch(&mut self, req: &BranchRequest) -> Result<BranchOutcome, EngineError>;
+
+    /// Start a run under lock-step control (hvx's CTL/RESUME, [`lockstep`]): the returned session
+    /// reports every stop and waits for the caller's commands until the run's RESULT. No existing
+    /// caller uses it; engines without it answer Unsupported.
+    /// `log`: also write the transcript (`< ` host lines, `> ` engine lines), request included.
+    fn lockstep<'a>(
+        &'a mut self,
+        start: &LockstepStart,
+        log: Option<&'a mut dyn std::io::Write>,
+    ) -> Result<Lockstep<'a>, EngineError> {
+        let _ = (start, log);
+        Err(EngineError::Unsupported(
+            "lock-step control is not supported by this engine".into(),
+        ))
+    }
 
     /// Tear the worker down (QUIT) and wait for the engine to exit.
     fn close(self: Box<Self>) -> Result<(), EngineError>;
