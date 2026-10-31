@@ -12,7 +12,9 @@
 //!    switched per seed exactly as identity.rs does; hvx, and hvm with and without a data disk
 //!    and tc), plus a few written here for the paths the explorer never draws for a manifest
 //!    (X=, an unknown service, a repeated letter, a knob at its default, an unknown knob), kept
-//!    when the core controller drives them (the others name their seam), one per guest part;
+//!    when the core controller drives them (the others name their seam), one per guest part; a
+//!    manifest with a fake world (M125) also gets every point of `--sweep protocol` and schedules
+//!    written for the H= paths (`protocol_schedules`);
 //! 3. each runs from S1 (and, after a power cut, its recovery boot from S0); both conversations
 //!    are checked against the shell model, the controller's thread by thread;
 //! 4. the run's transcript is typed again by the ReplayController on the same scripted guest, and
