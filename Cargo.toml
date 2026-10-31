@@ -19,6 +19,8 @@ members = [
     "hydo/crates/hydo-agents",
     "hydo/crates/hydo-compose",
     "hydo/crates/hydo-history",
+    "hydo/crates/hydo-bench",
+    "hydo/crates/hydo-tools",
 ]
 exclude = ["sdk", "hydo/onboard/examples"]
 

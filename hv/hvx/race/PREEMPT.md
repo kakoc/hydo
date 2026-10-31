@@ -24,9 +24,9 @@ ALL PASS 25 checks; pinned reproducers `2403499c9a3f8419` / `f87130453609a5d6`):
 All 664 hits replayed with identical full-state fingerprints. Cost per boot (median, whole
 boot + workload): default and jitter 1.5 s (~413 ticks), pp=2^16 6.2 s (~6650 ticks, 4.1x),
 inserted 4.0 s (~3720 ticks, 2.6x). Files: `pre_race1.sh` (one boot), `pre_campaign.sh`,
-`pre_table.py`; results on the box in `/var/tmp/m49-preempt/camp*.txt`.
+`pre_table.py` (removed in M108: `git show 705cf98:hv/hvx/race/pre_table.py`); results on the box in `/var/tmp/m49-preempt/camp*.txt`.
 
-## SQLite 3.51.2 WAL-reset corruption (hydo/knownbugs/sqlite, hunt.py arms pp and xt)
+## SQLite 3.51.2 WAL-reset corruption (hydo/knownbugs/sqlite, hunt.py arms pp and xt; hunt.py was removed in M108)
 
 600 blind runs on `explore-ob-kb-sqlite-3510200-disk.img` through `/dev/hvxpre`, workload seed
 varied per run: **no violation**, so no minimal schedule and nothing to check on 3.51.3.

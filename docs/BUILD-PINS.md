@@ -162,7 +162,7 @@ The same toolchain builds the freeze helper for aarch64:
 directories; glibc static, the toolchain's own sysroot).
 
 The aarch64 user-space tools of these images come from the public Nix binary cache, taken with
-`hydo/dist/linux/nix_cache_fetch.py --closure <dir> <path>` (checks each archive's FileHash and NarHash;
+`hydo-nix-fetch --closure <dir> <path>` (`hydo/crates/hydo-tools`; until M108 `hydo/dist/linux/nix_cache_fetch.py`, which gives the same tree; it checks each archive's FileHash and NarHash;
 on a case-insensitive Mac file system nine iptables extensions whose names differ only in case
 are read but not written, none of them used):
 
@@ -171,7 +171,7 @@ are read but not written, none of them used):
 | `qmhi9c99dpgxyfg6cipf8xbmcvsr1vx2-iproute2-6.8.0` | `sha256:11gbr98yllcv8cwxdmkn2iwgrrzyd4c01az9hyhicf5jfxjhs472` | `bin/ip` (its libraries are a subset of `tc`'s) |
 | `y6j6xf1bfshzhdw7hip3swpgd6fqfs3b-iptables-1.8.10` | `sha256:177d4lvj73k9r9xj5hjwfkc1z40yknnzh1dva8q8p9w42nxc38zw` | `bin/xtables-legacy-multi`, `lib/xtables/libxt_{NFQUEUE,tcp,standard}.so`, `lib/lib{ip4tc,ip6tc,xtables}.so*` |
 
-The files each image gets are exactly those `hv/hvm/services/elfdeps.py --root <dir>` lists for
+The files each image gets are exactly those `hydo-elfdeps --root <dir>` (`hydo/crates/hydo-tools`) lists for
 the binaries above (glibc 2.39-52, libmnl, zlib, xz, bzip2, zstd, elfutils from the same closure).
 
 ## Rust: the workspace toolchain and the release binaries (Milestone 101)

@@ -5,6 +5,14 @@
 > `hydo-explore` program, with the same options); the Python files were deleted in M107 and can
 > be restored from commit 2a58c4b (`git checkout 2a58c4b -- hydo/explore hydo/onboard hydo/history` in a scratch checkout).
 > The commands below are records of how things were run and measured.
+>
+> Note (M108): the benchmark runner is now the Rust program `hydo-bench` (`hydo/crates/hydo-bench`):
+> `python3 run.py ...` is `hydo-bench run ...` (bench_more_faults.py's cells are `hydo-bench run --more-faults
+> --cf-range LO-HI ...`), `confirm.py` is `hydo-bench confirm`, `listrun.py` is `hydo-bench list`, `depth1map.py`,
+> `d7prob.py` and `addbuggify.py` are `hydo-bench depth1map|d7prob|addbuggify`, and `--table DIR...` is
+> `hydo-bench table DIR...`; the same options, outputs and printed lines. Not ported: `--strategy portfolio` and
+> `--rescore` (one-time M56 re-scoring). The Python files, `mkpatches.py` and `smp_ident.py` were deleted in M108;
+> restore one with `git show 705cf98:hydo/bench/<file>` (docs/HISTORY.md M108).
 
 Question: do two virtual CPUs with branch-counted turns (Milestones 66 and 69) find the
 benchmark's race defects faster, or find them where one vCPU does not?

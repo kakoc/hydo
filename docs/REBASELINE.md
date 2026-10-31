@@ -4,6 +4,10 @@
 > arm64 builder of the time, replaced by the hydo-explore and hydo-build crates (`hydo explore`,
 > `hydo-build`, the same options) and deleted in M107; the commands below are records of how the
 > baselines were measured.
+>
+> Note (M108): `hydo/bench/run.py` and `confirm.py` are now `hydo-bench run` and `hydo-bench confirm`
+> (`hydo/crates/hydo-bench`); `hydo/richcov/` (with `build-richcov.sh`) and the explorer's research
+> strategies (`richguided.py`, `abranch.py`) were deleted in M108 and can be restored from commit `705cf98`.
 
 From 2026-10-17 until 2026-10-21 the build machine had no pinned static musl gcc
 (`aa1jsl19…-gcc-static-x86_64-unknown-linux-musl-13.2.0`). Image builds then used a stand-in

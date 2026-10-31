@@ -102,7 +102,7 @@ longer fails. A hand sweep of its variants found it again; the clock step is not
 | image | run | verdict | fingerprint |
 |---|---|---|---|
 | 3.5.5-nq | fresh boot (`hvx_explore one`), twice | VIOLATION `client.revisions_monotonic`: client 2 read revision 83 through etcd1 (get k77, step 25), then 82 through etcd2 (get k80, step 26); the final check also reports `members disagree: revisions 101 100 100` | `0470512bb297c87f` both times |
-| 3.5.5-nq | from the S1 snapshot (`run_list.py`) | the same | `0470512bb297c87f` |
+| 3.5.5-nq | from the S1 snapshot (`run_list.py`, removed in M108; `hydo-bench list` runs a list the same way) | the same | `0470512bb297c87f` |
 | 3.5.6-nq | fresh boot, twice | OK, acked=90, every invariant holds | `63e112769072c0c1` both times |
 | 3.5.6-nq | from the S1 snapshot | OK | `63e112769072c0c1` |
 
@@ -122,5 +122,5 @@ pausing etcd2 at step 26 or etcd3 at step 25 gives `members disagree` only, paus
 (for one or two steps) or 27 also makes a client's revision go back (at step 27 it is client 1,
 86 then 85), and pausing etcd1 itself gives no failure. Why the one-revision lead appears only
 together with the later pause was not investigated. On 3.5.6-nq all six failing schedules of the
-sweep pass. Results: `/var/tmp/m78-etcd` on the box (`A`, `B`, `D`, `E` = run_list outputs,
+sweep pass. Results: `/var/tmp/m78-etcd` on the box (`A`, `B`, `D`, `E` = `run_list.py` outputs,
 `runs/one5*` = the fresh-boot runs, `results.txt`).

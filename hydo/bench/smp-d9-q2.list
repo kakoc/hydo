@@ -1,6 +1,6 @@
 # d9 (Redis connection unlocked): Q=2 and Q=2d do not crash it on 1 vCPU (README, -pin images).
 # Do two vCPUs with branch-counted turns reach a crashing interleaving with only 2 concurrent requests?
-# Run with listrun.py --vcpus 2. The first two lines use the module's default turn length (2^20).
+# Run with hydo-bench list --vcpus 2 (listrun.py until M108). The first two lines use the module's default turn length (2^20).
 disk=none dseed=0 | run Q=2
 disk=none dseed=0 | run Q=2d
 disk=none dseed=0 q=1000 | run Q=2

@@ -273,6 +273,9 @@ That is the same validation loop the bug benchmark already provides.
 
 ## 5. The prototype: `hydo/spec/sqs_checker/`
 
+(Removed in M108 with the other research scripts; restore it with
+`git checkout 705cf98 -- hydo/spec/sqs_checker`.)
+
 `checker.py` (about 200 lines, no dependencies) checks a JSON-able history against a `Spec`.
 
 **Contracts, as `Spec` presets:**

@@ -1,0 +1,11 @@
+control|addbuggify: main.go exec=2 produce=1 check=1 redis=1 ack=1|b5f38864a5cf46ea4f92816fc49315d81859ac93d62050005578d68aeac0cbfc
+d0-old-front-door|addbuggify: main.go exec=2 produce=1 check=1 redis=1 ack=1|6ddba86c2af95c95c97f825c664b4a70c4db18906a57399829ad69a2c9fad17a
+d1-kafka-first|addbuggify: main.go exec=2 produce=2 check=1 redis=1 ack=1|2e68507417b799dca74d06e86d7e6094234b1d0bd2d0f94c3b6304166ae57198
+d2-batched-publish-flag|addbuggify: main.go exec=2 produce=1 check=1 redis=1 ack=1|f59c4345c647b640d715a4d5c34cf8ae8f14186cf5feb8904a1307d9c3d177a4
+d3-blind-retry|addbuggify: main.go exec=2 produce=1 check=1 redis=1 ack=1|508dfb7ff00b8d8e34d74a9c827e523ab315b80422a935eff3b07569a57f6efd
+d4-produce-timeout-definite|addbuggify: main.go exec=2 produce=1 check=1 redis=1 ack=1|96c5e1902a5344fcb23c78627a8bd5f08e96572f9f42ab1a7724a42688c94085
+d5-myisam|addbuggify: main.go exec=2 produce=1 check=1 redis=1 ack=1|365c309741ac87335e05bd21802524fcf9bd652ecbe615117928ab5c97bbd1a5
+d6-client-deadline-definite|addbuggify: main.go exec=2 produce=1 check=1 redis=1 ack=1|3712671d8ef8e0f884f5325b73ddef4863f900e2bb62a992e37c7eccd97550e3
+d7-skip-last-record|addbuggify: main.go exec=2 produce=1 check=1 redis=1 ack=1|085e20ae5ac36bb37e57579f863d2e6c9223ea0e6f9ff7edcab1ea31864ab2a2
+main-3773607|addbuggify: main.go exec=0 produce=0 check=0 redis=0 ack=0|311599b750d80871e2e60d70087046704d431c123a752008262715bc01a878d0
+main-m59-control|addbuggify: main.go exec=1 produce=0 check=0 redis=0 ack=0|998bcbe3e06fcec9f5b845f8400c645dda0e1217056bce1e50275aace86b5b0c

@@ -148,7 +148,7 @@ fn copy_store_files(paths: &[String], r: &Path) -> Result<(), Fail> {
                 format!(" under {root}")
             };
             return Err(Fail::Exit(format!(
-                "hydo-build: {p} not found{under} (the aarch64 store paths: hydo/dist/linux/nix_cache_fetch.py --closure <dir> <path>, then HYDO_ARM64_STORE=<dir>)"
+                "hydo-build: {p} not found{under} (the aarch64 store paths: hydo-nix-fetch --closure <dir> <path> (hydo/crates/hydo-tools), then HYDO_ARM64_STORE=<dir>)"
             )));
         }
     }

@@ -187,7 +187,7 @@ All on `/dev/hvxft` with the final module.
   `hydo/explore/bursts_ident.py`: with `--turns --bursts` every field but `qb` equals the
   `--turns` schedule (2,000 schedules, 48.9% get `qb`), strings round-trip, shrink
   candidates as documented. A small `explore.py --vcpus 2 --turns --bursts --turn-margin 160`
-  run through the serve workers (`hv/hvx/fastturn/explore_dev.py`) was started but stopped by
+  run through the serve workers (`hv/hvx/fastturn/explore_dev.py`, removed in M108) was started but stopped by
   hand: one worker died at start-up without a message and the other was still writing its
   S0/S1 snapshots after 15 minutes while the box's disk was saturated by seven other
   explorers. So **serve mode (restore from S1, then `qb=`) was not checked**; only `one`.

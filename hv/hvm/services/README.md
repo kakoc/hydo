@@ -36,7 +36,7 @@ The power cut is the two-boot model of `cut-test.sh` and hvx M27. In boot 1 ever
 ## What was needed
 
 - **Kernel options** (`svc.config`, on top of `../linux/hvm.config` + `../linux/hvm-virtio.config`). `allnoconfig` turns these syscalls off, and the services need them: `SYSVIPC` (PostgreSQL's interlock segment), `ADVISE_SYSCALLS`, `FILE_LOCKING`, `MEMBARRIER`, `RSEQ`, `FHANDLE`, `INOTIFY_USER`, `KCMP`.
-- **Only the files the loader opens.** The nixpkgs closures are large (Redis 207 MB, mostly systemd), so `elfdeps.py` reads `PT_INTERP`/`DT_NEEDED`/`DT_RUNPATH` straight from the ELF files and copies only what the dynamic loader will open. The guests are 22 MB (Redis) and 124 MB (miniflux + PostgreSQL + curl) unpacked.
+- **Only the files the loader opens.** The nixpkgs closures are large (Redis 207 MB, mostly systemd), so `hydo-elfdeps` (`hydo/crates/hydo-tools`; this folder's `elfdeps.py` until M108) reads `PT_INTERP`/`DT_NEEDED`/`DT_RUNPATH` straight from the ELF files and copies only what the dynamic loader will open. The guests are 22 MB (Redis) and 124 MB (miniflux + PostgreSQL + curl) unpacked.
 - **PostgreSQL's `initdb` is a bash wrapper in nixpkgs.** It adds glibc's `locale` to `PATH`. With `--locale=C` the wrapped binary (`.initdb-wrapped`) is enough, so bash is not needed.
 - **No CRNG seeder.** The device tree's `rng-seed` with `random.trust_bootloader=on` (`hvm.c`) initialises the CRNG at boot, so the hvx M27 seeder is not needed here.
 - **No idle heartbeat.** Neither service stalled tickless.
@@ -47,7 +47,7 @@ The power cut is the two-boot model of `cut-test.sh` and hvx M27. In boot 1 ever
 | File | What |
 |---|---|
 | `build.sh` | builds everything on the build machine with nix: `Image-svc`, `redis.cpio.gz`, `miniflux.cpio.gz`, `redis-disk.img` (64 MiB ext4), `pg-disk.img` (256 MiB ext4). Pinned store paths at the top |
-| `elfdeps.py` | the shared-library closure of ELF files, for any architecture |
+| `hydo-elfdeps` (not here: `hydo/crates/hydo-tools`, a static program; `HYDO_ELFDEPS` names it for `build.sh`) | the shared-library closure of ELF files, for any architecture |
 | `svc.config` | the kernel options above |
 | `init-redis`, `init-miniflux` | the guests' `/init`, with phases `solo`, `cut` and `recover` from the kernel command line |
 | `run.sh` | `run.sh solo <svc> <setting>` and `run.sh cut <svc> <setting> <dir>`, run from `hv/hvm/` |

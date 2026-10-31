@@ -4,7 +4,7 @@
 # interpreter, its standard library without the parts a server never imports (test, idlelib,
 # tkinter, turtledemo, ensurepip, lib2to3, pydoc_data, the config dir, the -O/-OO .pyc files),
 # its extension modules, and exactly the shared libraries the loader opens for them
-# (hv/hvm/services/elfdeps.py), at their /nix/store paths.
+# (hydo-elfdeps, hydo/crates/hydo-tools), at their /nix/store paths.
 # Needs ssh to a Linux machine with nix that has (or can substitute) the store path:
 #     nix build --max-jobs 0 --system aarch64-linux nixpkgs#python3   (prints the path below)
 # Also copies the SDK (sdk/python/src/hydo_assert, without __pycache__) to files/opt/pykv/.
@@ -15,9 +15,11 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../../../.." && pwd)
 HOST=${HYDO_BUILD_HOST:?}
 PY=/nix/store/ic0l2ykss28lr7r4by14inb3pqw87yza-python3-3.11.9     # aarch64-linux, nixpkgs#python3
-HOSTPY=/nix/store/4rf5qybw37b4lh1g0xczlv14sqdbmnpm-python3-3.11.9/bin/python3   # x86_64, runs elfdeps
+# hydo-elfdeps (hydo/crates/hydo-tools), built here as a static x86_64 program that runs on $HOST
+(cd "$REPO" && cargo build --release --locked -p hydo-tools --no-default-features --bin hydo-elfdeps --target x86_64-unknown-linux-musl) >&2
+ELFDEPS=$REPO/target/x86_64-unknown-linux-musl/release/hydo-elfdeps
 
-ssh "$HOST" "mkdir -p /tmp/hydo-pyfetch && cat > /tmp/hydo-pyfetch/elfdeps.py" < "$REPO/hv/hvm/services/elfdeps.py"
+ssh "$HOST" "mkdir -p /tmp/hydo-pyfetch && cat > /tmp/hydo-pyfetch/hydo-elfdeps && chmod 755 /tmp/hydo-pyfetch/hydo-elfdeps" < "$ELFDEPS"
 rm -rf "$HERE/files"; mkdir -p "$HERE/files"
 ssh "$HOST" "set -e; P=$PY; L=\$P/lib/python3.11
   [ -e \$P/bin/python3.11 ] || { echo 'missing \$P: nix build --max-jobs 0 --system aarch64-linux nixpkgs#python3' >&2; exit 1; }
@@ -26,7 +28,7 @@ ssh "$HOST" "set -e; P=$PY; L=\$P/lib/python3.11
         -o -path '*/ensurepip' -o -path '*/lib2to3' -o -path '*/pydoc_data' -o -path '*/config-3.11-*' \
         -o -path '*/site-packages' -o -name '_tkinter*' \\) -prune -o \\( -name '*.opt-1.pyc' -o -name '*.opt-2.pyc' \\) -prune -o -print
     echo \${P#/}/bin/python3.11
-    $HOSTPY /tmp/hydo-pyfetch/elfdeps.py \$P/bin/python3.11 \$(ls \$L/lib-dynload/*.so | grep -v _tkinter) | sed 's#^/##'
+    /tmp/hydo-pyfetch/hydo-elfdeps \$P/bin/python3.11 \$(ls \$L/lib-dynload/*.so | grep -v _tkinter) | sed 's#^/##'
   } | LC_ALL=C sort -u > /tmp/hydo-pyfetch/list
   tar cf - --no-recursion --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -T /tmp/hydo-pyfetch/list
   rm -rf /tmp/hydo-pyfetch" | (cd "$HERE/files" && tar xf -)

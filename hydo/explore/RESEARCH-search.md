@@ -5,6 +5,10 @@
 > `hydo-explore` program, with the same options); the Python files were deleted in M107 and can
 > be restored from commit 2a58c4b (`git checkout 2a58c4b -- hydo/explore hydo/onboard hydo/history` in a scratch checkout).
 > The commands below are records of how things were run and measured.
+>
+> Note (M108): `portfolio.py`, `richguided.py`, `abranch.py` and the rest of `hydo/explore/archive/` were deleted
+> in M108 (restore with `git show 705cf98:hydo/explore/archive/<file>`); the benchmark's `run.py` is now
+> `hydo-bench run` (`hydo/crates/hydo-bench`).
 
 Written 2026-10-20 for the explorer (`explore.py`, `portfolio.py`, `richguided.py`, `abranch.py`) and the bug benchmark (`hydo/bench`, CLAUDE.md M54). Every claim below comes from the source linked next to it; quotes are short. A few sources were read only through their abstracts or secondary summaries, and that is said where it applies.
 

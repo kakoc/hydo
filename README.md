@@ -74,6 +74,8 @@ docs/          HISTORY.md (every milestone with its evidence), REBASELINE.md, BU
 | `hydo-history` | Linearizability and list-append checks of recorded histories. |
 | `hydo-compose` | Imports a `docker-compose.yaml` as a starting `hydo.yaml`. |
 | `hydo-agents` | `hydo guide`, `hydo skill install`, `hydo init` for AI coding agents. |
+| `hydo-bench` | The bug benchmark: how well explorer strategies find the planted defects (not shipped). |
+| `hydo-tools` | Build-machine helpers: Nix-cache fetch and unpack, cpio extraction, ELF library lists (not shipped). |
 | `hydo-cli` | The `hydo` command. |
 
 The formats between the parts (the schedule language, the project format, the SDKs' output lines)

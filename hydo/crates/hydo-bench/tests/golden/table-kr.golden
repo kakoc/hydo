@@ -1,0 +1,5 @@
+| defect | process+xcf | swarm+xcf |
+|---|---|---|
+| d10-outcome-in-memory | 3/3 (7, 35, 10) med 10 | 2/3 (20, -, 17) med 18.5 |
+| d11-ack-unflushed-flag | 0/3 (-, -, -) | 0/3 (-, -, -) |
+| defects found (any rep) | 1 | 1 |
