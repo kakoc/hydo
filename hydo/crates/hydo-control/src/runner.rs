@@ -404,9 +404,16 @@ pub fn run_with(
                         // conversation ends here as the shell init's run does, and the recovery
                         // gets the ids the engine reads from the init's report lines. The
                         // controller's later actions at this stop belong to a VM that is gone.
+                        // (the fake world's `w:` records, when the acknowledged line carries any,
+                        // go to the recovery as the world, as the shell's oracle command did)
+                        let (world, acked): (Vec<String>, Vec<String>) =
+                            report_ids(&w.t, ACKED_PREFIX)
+                                .into_iter()
+                                .partition(|x| x.starts_with("w:"));
                         let e = Ending::PowerCut {
-                            acked: report_ids(&w.t, ACKED_PREFIX),
+                            acked,
                             failed: report_ids(&w.t, FAILED_PREFIX),
+                            world,
                         };
                         w.push(Record::End {
                             n: stop.n,

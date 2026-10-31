@@ -381,6 +381,13 @@
             "string",
             "null"
           ]
+        },
+        "ctl": {
+          "description": "An agent image's run: the hash of its control transcripts (`ctl=` on the RESULT line,\nM126): equal hashes mean the host typed the same commands at the same stops.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [

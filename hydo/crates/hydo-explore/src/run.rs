@@ -473,8 +473,6 @@ fn agent_space(sp: &mut Space, a: &Args, img: &Path) {
         (a.branch.is_some(), "--branch"),
         (a.buggify, "--buggify (the seam buggify)"),
         (a.freeze_call, "--freeze-call (the seam freeze)"),
-        (a.protocol_faults, "--protocol-faults (the seam fakes)"),
-        (a.grpc_faults, "--grpc-faults (the seam fakes)"),
     ] {
         if on {
             die(&format!(

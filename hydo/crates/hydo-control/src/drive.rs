@@ -226,7 +226,11 @@ pub fn run(
         }
     };
     let recovery = match &run.ending {
-        Some(Ending::PowerCut { acked, failed }) => {
+        Some(Ending::PowerCut {
+            acked,
+            failed,
+            world,
+        }) => {
             let h = header("recovery", Some(schedule), "resume S0");
             let start = Start::Resume(b.s0.0.clone());
             Some(match policy {
@@ -239,7 +243,8 @@ pub fn run(
                         acked.clone(),
                         failed.clone(),
                         &b.s0.1,
-                    )?;
+                    )?
+                    .with_world(world);
                     runner::run(link, &mut ctl, start, h)?
                 }
             })

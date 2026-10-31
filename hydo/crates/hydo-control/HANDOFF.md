@@ -1,4 +1,4 @@
-# hydo-control — handoff (milestone M120, step B1 done; what wave 3 and step C1 need)
+# hydo-control — handoff (M120 step B1, M126 step C1 done; what wave 3 needs)
 
 Step B1 of `docs/design/guest-control.md` is done on branch `control-core` (docs/HISTORY.md
 "Milestone 120"). Nothing in the product calls this crate yet, and no product behaviour changed.
@@ -103,23 +103,30 @@ controller's choice.
 17. **die_oracle and a running pause timer.** In the shell, die_oracle does not stop a running
     pause timer. Here the timer also runs on until the conversation ends.
 
-## What step C1 needs (the engine side)
+## Step C1: done in M126 (branch `control-wiring`; docs/HISTORY.md "Milestone 126")
 
-- **A controlled boot phase.** The boot conversation starts at the agent's hello, takes S0 and
-  S1 with `SNAP`, and ends with `Ending::AtSnapshot("S1")`. The run conversation resumes from S1
-  with `Start::Resume(AgentPoint)` and the `GuestState` the boot's `snapshots()` give. The
-  recovery conversation resumes from S0. (The other wave-2 agent builds the boot phase.)
-- **`EngineAction::DiskFaultsOff`.** This is the shell's `go`. `LockstepLink` refuses it until
-  the engines have a request for it.
-- **`Ending::PowerCut { acked, failed, world }`.** The engine must cut the power, keep the flushed
-  data disk and start the recovery conversation with these ids. `LockstepLink` refuses it until
-  then. `world` (M125) is the fake world the first boot carried; the caller passes it on with
-  `ScheduleController::recovery(..)?.with_world(&world)` (see "The fakes controller" below).
-- **The results files.** Write `control.jsonl` (the run) and `control.recovery.jsonl`, put
-  `Transcript::to_results()` into `Run.control` and `ctl=<hash>` on the RESULT line, and add
-  `hydo repro --transcript` (`ReplayController`).
-- **The cadence.** The schedule's `rb=` (or the engine's default) is the cadence the transcript
-  records. Snapshots and their continuations must use the same cadence (M43, M118).
+- **The engines.** Two host lines at a stop of an agent image's workload phase, in both
+  `hvx_explore.c` and `serve.c`: `DISKOFF` (the workload's end, what the shell init's marker is to
+  a RUN: the workload fingerprint, the timing tokens and the disk faults off, then `phase=check`;
+  for a `cf=` schedule it answers `cut=1` and the engine carries the run into the recovery VM
+  instead) and `CUT` (a power cut at this stop: the flushed data disk into a fresh VM restored from
+  the host's S0, `phase=recovery`). hydo-engine: `Lockstep::diskoff`/`cut`, the `Driver` trait and
+  `Worker::run_controlled`/`resume` (the design's shape; the controller lives in this crate, so the
+  engines take the object-safe `Driver`).
+- **This crate.** `Link::cut` and `Link::engine_cut` (defaults keep the scripted engine as it was);
+  the runner hands a `PowerCut` to `Link::cut`, ends a `cf=` run at its `DiskFaultsOff` with the ids
+  (and `w:` world records) of its report lines, and can start a conversation at the current stop
+  (`Start::Here`, `RunOpts`); `LockstepLink` speaks `DISKOFF`/`CUT` and keeps the RESULT.
+  `drive` runs one engine run's conversations (boot, run, the recovery with `with_world`, a fresh
+  boot's run; by the schedule or by recorded transcripts); `agent::AgentEngine`/`AgentWorker` put
+  agent images behind `hydo_engine::Engine`/`Worker`, write the run's report as `<tag>.log`, the
+  agent's console as `<tag>.agent.log`, the transcripts, and `ctl=` on the RESULT line.
+- **The product.** `hydo-explore` wraps the engine for an agent image (the fault kinds still on
+  seams leave its space, with a message); `hydo run`, `hydo repro` and `hydo repro --transcript`
+  drive agent images; `Run.control` and `fingerprints.ctl` are in the results.
+- **Cadence.** An agent image runs at `rb=16` (hvx) / `rb=64` (hvm) unless the schedule says that
+  cadence; another `rb=` is refused (the worker boots at the default, and a snapshot and its
+  continuations share one cadence).
 
 ## What wave 3 needs (one line per seam; `Seam::wave3()` has the details)
 
@@ -221,9 +228,9 @@ What C1 needs from this: pass `Ending::PowerCut::world` to `with_world`. Nothing
 
 ## Left open
 
-- **Agent images and real guests.** No agent image exists yet (step B3), so the controller has
-  only met the scripted agent. The first real-guest run should compare verdict classes with the
-  shell images (design step C2).
+- **Real guests.** Since M126 the core controller has driven the Redis example's agent image on
+  hvx and hvm (clean, kill, pause, power cuts; the shell image's verdicts). The equivalence
+  campaign over every example and the benchmark is design step C2.
 - **Branching.** A mid-run branch (cloning the controller at a stop and continuing two engines)
   is supported by the types (`ScheduleController: Clone`), but no test checks it.
 - **The full corpus.** `HYDO_CONTROL_FULL=1` (300 seeds) was not recorded as a golden.
