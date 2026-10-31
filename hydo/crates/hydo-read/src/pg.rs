@@ -892,11 +892,13 @@ fn simple_query(pg: &mut Pg, query: &[u8]) -> Result<Vec<Record>, String> {
     pg.send(b'Q', &b)?;
     let mut cols: Option<Vec<Col>> = None;
     let mut err: Option<String> = None;
-    let first_row: Option<Vec<u8>>;
-    // simpleQuery: until the first DataRow or ReadyForQuery
+    // simpleQuery: until the first DataRow, the end of a statement with columns, or
+    // ReadyForQuery
+    let mut first_row: Option<Vec<u8>> = None;
     loop {
         let (t, b) = pg.recv()?;
         match t {
+            b'C' if cols.is_some() => break,
             b'C' | b'I' => {}
             b'Z' => {
                 return match err {

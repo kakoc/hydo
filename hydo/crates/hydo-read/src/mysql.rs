@@ -5,8 +5,8 @@
 //! same error texts ("Error 1146 (42S02): Table 't.nope' doesn't exist").
 //!
 //! Authentication: mysql_native_password and caching_sha2_password (the scramble, the fast path,
-//! and the full path over a Unix socket). The full caching_sha2_password path over TCP needs TLS
-//! or RSA, which hydo-read does not have (the examples' accounts have empty passwords).
+//! and the full path: the cleartext password over a Unix socket, over TCP the password encrypted
+//! with the server's RSA public key, as go-sql-driver does). No TLS.
 
 use crate::json::Val;
 use crate::net::{dial_tcp, dial_unix, Conn, NetErr};
@@ -63,6 +63,8 @@ struct Config {
     addr: String,
     dbname: String,
     collation: u8,
+    /// A collation= parameter, looked up when connecting (as the driver does).
+    collation_name: Option<String>,
     charset: Option<String>,
     params: Vec<(String, String)>,
     native: bool,
@@ -164,10 +166,7 @@ fn parse_dsn(dsn: &str) -> Result<Config, String> {
                     bool_of(value)?;
                 }
                 "compress" => return Err("compression not implemented yet".into()),
-                "collation" => {
-                    cfg.collation = collation_id(value)
-                        .ok_or_else(|| format!("unknown collation: {}", q(value.as_bytes())))?
-                }
+                "collation" => cfg.collation_name = Some(value.to_string()),
                 "timeout" | "readTimeout" | "writeTimeout" | "loc" | "timeTruncate"
                 | "maxAllowedPacket" | "connectionAttributes" | "strict" | "serverPubKey" => {}
                 "tls" => {
@@ -366,6 +365,31 @@ fn scramble_sha256(scr: &[u8], pw: &str) -> Vec<u8> {
     m1.iter().zip(m2.iter()).map(|(a, b)| a ^ b).collect()
 }
 
+/// go-sql-driver's encryptPassword: (password + NUL) XOR the scramble, RSA-OAEP with SHA-1 under
+/// the server's PEM public key.
+fn encrypt_password(pw: &str, seed: &[u8], pem: &[u8]) -> Result<Vec<u8>, Fail> {
+    use rsa::pkcs8::DecodePublicKey;
+    let text = String::from_utf8_lossy(pem);
+    let Some(start) = text.find("-----BEGIN") else {
+        return Err(Fail::Err(format!("no pem data found, data: {}", text)));
+    };
+    let key = rsa::RsaPublicKey::from_public_key_pem(text[start..].trim_end_matches('\0').trim())
+        .or_else(|_| {
+            use rsa::pkcs1::DecodeRsaPublicKey;
+            rsa::RsaPublicKey::from_pkcs1_pem(text[start..].trim())
+        })
+        .map_err(|e| Fail::Err(format!("x509: {e}")))?;
+    let mut plain = pw.as_bytes().to_vec();
+    plain.push(0);
+    if !seed.is_empty() {
+        for (i, b) in plain.iter_mut().enumerate() {
+            *b ^= seed[i % seed.len()];
+        }
+    }
+    key.encrypt(&mut rand_core::OsRng, rsa::Oaep::new::<Sha1>(), &plain)
+        .map_err(|e| Fail::Err(format!("crypto/rsa: {e}")))
+}
+
 fn auth_resp(cfg: &Config, plugin: &str, data: &[u8]) -> Result<Vec<u8>, Fail> {
     match plugin {
         "caching_sha2_password" => Ok(scramble_sha256(data, &cfg.passwd)),
@@ -385,6 +409,11 @@ fn auth_resp(cfg: &Config, plugin: &str, data: &[u8]) -> Result<Vec<u8>, Fail> {
 
 /// The result of one connection attempt.
 fn connect(cfg: &Config, deadline: Instant) -> Result<My, Fail> {
+    let mut collation = cfg.collation;
+    if let Some(n) = &cfg.collation_name {
+        collation = collation_id(n)
+            .ok_or_else(|| Fail::Err(format!("unknown collation: {}", q(n.as_bytes()))))?;
+    }
     let c = if cfg.net == "unix" {
         dial_unix(&cfg.addr, deadline)
     } else {
@@ -463,7 +492,7 @@ fn connect(cfg: &Config, deadline: Instant) -> Result<My, Fail> {
     let mut p = Vec::new();
     p.extend_from_slice(&flags.to_le_bytes());
     p.extend_from_slice(&0u32.to_le_bytes());
-    p.push(cfg.collation);
+    p.push(collation);
     p.extend_from_slice(&[0u8; 23]);
     p.extend_from_slice(cfg.user.as_bytes());
     p.push(0);
@@ -523,7 +552,14 @@ fn connect(cfg: &Config, deadline: Instant) -> Result<My, Fail> {
                         pw.push(0);
                         my.write_packet(&pw)?;
                     } else {
-                        return Err(Fail::Err("caching_sha2_password: full authentication over TCP needs TLS or the server's RSA key, which hydo-read does not support".into()));
+                        // the server's RSA public key, then the password XOR the scramble, encrypted
+                        my.write_packet(&[2])?;
+                        let k = my.read_packet()?;
+                        if k.first() != Some(&1) {
+                            return Err(Fail::Err("unexpected resp from server for caching_sha2_password, perform full authentication".into()));
+                        }
+                        let enc = encrypt_password(&cfg.passwd, &scramble, &k[1..])?;
+                        my.write_packet(&enc)?;
                     }
                 }
                 _ => return Err(Fail::Err("malformed packet".into())),

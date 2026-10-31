@@ -169,25 +169,32 @@ struct Broker {
     corr: i32,
 }
 
-/// Why a request failed: the connection (retry another time), or something final.
+/// Why a request failed, with franz-go's retry rule: a dial error other than a timeout is final
+/// for that broker (the next seed may be tried), a dial timeout or a broken connection is
+/// retried, the deadline is final.
 #[derive(Debug)]
 enum KErr {
     Dial(String),
+    DialTimeout(String),
+    Retry(String),
     Io(String),
 }
 
 impl KErr {
     fn text(&self) -> String {
         match self {
-            KErr::Dial(s) => format!("unable to dial: {s}"),
-            KErr::Io(s) => s.clone(),
+            KErr::Dial(s) | KErr::DialTimeout(s) => format!("unable to dial: {s}"),
+            KErr::Retry(s) | KErr::Io(s) => s.clone(),
         }
     }
 }
 
 impl Broker {
     fn dial(addr: &str, deadline: Instant) -> Result<Broker, KErr> {
-        let c = dial_tcp(addr, deadline).map_err(|e| KErr::Dial(e.to_string()))?;
+        let c = dial_tcp(addr, deadline).map_err(|e| match e {
+            NetErr::Timeout(s) => KErr::DialTimeout(s),
+            e => KErr::Dial(e.to_string()),
+        })?;
         Ok(Broker { c, corr: 0 })
     }
 
@@ -202,8 +209,8 @@ impl Broker {
         p.0.extend_from_slice(body);
         let io = |e: NetErr| match e {
             NetErr::Timeout(_) => KErr::Io("context deadline exceeded".into()),
-            NetErr::Eof => KErr::Io("EOF".into()),
-            e => KErr::Io(e.to_string()),
+            NetErr::Eof => KErr::Retry("EOF".into()),
+            e => KErr::Retry(e.to_string()),
         };
         self.c.write_all(&p.0).map_err(io)?;
         let l = self.c.read_exact(4).map_err(io)?;
@@ -242,37 +249,37 @@ struct Client {
 }
 
 impl Client {
-    /// One request to `addr`, redialling a broken connection until the deadline (kgo retries
-    /// connection errors until its retry timeout).
+    /// One request to `addr`, as kgo's retryable request: up to 20 tries with a growing backoff
+    /// while the error is retriable and the deadline allows.
     fn req(&mut self, addr: &str, key: i16, ver: i16, body: &[u8]) -> Result<Vec<u8>, KErr> {
-        let mut last: Option<KErr> = None;
-        let mut backoff = Duration::from_millis(100);
+        let mut tries = 0u32;
         loop {
+            tries += 1;
             if Instant::now() >= self.deadline {
-                return Err(last.unwrap_or(KErr::Io("context deadline exceeded".into())));
+                return Err(KErr::Io("context deadline exceeded".into()));
             }
+            let mut res: Result<Vec<u8>, KErr> = Err(KErr::Io(String::new()));
             if !self.conns.contains_key(addr) {
                 match Broker::dial(addr, self.deadline) {
                     Ok(b) => {
                         self.conns.insert(addr.to_string(), b);
                     }
-                    Err(e) => {
-                        last = Some(e);
-                        sleep_until(self.deadline, backoff);
-                        backoff = (backoff * 2).min(Duration::from_secs(1));
-                        continue;
-                    }
+                    Err(e) => res = Err(e),
                 }
             }
-            let b = self.conns.get_mut(addr).expect("connection");
-            match b.request(key, ver, body, self.deadline) {
+            if let Some(b) = self.conns.get_mut(addr) {
+                res = b.request(key, ver, body, self.deadline);
+            }
+            match res {
                 Ok(r) => return Ok(r),
                 Err(e) => {
                     self.conns.remove(addr);
-                    if Instant::now() >= self.deadline {
+                    let backoff = Duration::from_millis(250u64 << (tries - 1).min(4))
+                        .min(Duration::from_millis(2500));
+                    let retry = matches!(e, KErr::DialTimeout(_) | KErr::Retry(_));
+                    if !retry || tries >= 20 || Instant::now() + backoff >= self.deadline {
                         return Err(e);
                     }
-                    last = Some(e);
                     sleep_until(self.deadline, backoff);
                 }
             }
@@ -291,13 +298,51 @@ impl Client {
                     resp = Some(r);
                     break;
                 }
-                Err(e) => last = Some(e),
+                // a dial error skips to the next seed; anything else is the answer
+                Err(e @ (KErr::Dial(_) | KErr::DialTimeout(_))) => last = Some(e),
+                Err(e) => return Err(e),
             }
         }
         let Some(r) = resp else {
             return Err(last.unwrap_or(KErr::Io("no seed brokers".into())));
         };
         parse_metadata(&r, topic).map_err(KErr::Io)
+    }
+}
+
+/// kgo's parseBrokerAddr: host:port, a missing port is 9092.
+fn seed_addr(a: &str) -> Result<String, String> {
+    let port_err = |p: &str| {
+        format!(
+            "unable to parse port from addr: strconv.ParseInt: parsing {}: invalid syntax",
+            crate::q(p.as_bytes())
+        )
+    };
+    if let Some(rest) = a.strip_prefix('[') {
+        let parts: Vec<&str> = rest.split(']').collect();
+        if parts.len() != 2 {
+            return Err(format!("invalid addr: {a}"));
+        }
+        if parts[1].is_empty() {
+            return Ok(format!("[{}]:9092", parts[0]));
+        }
+        let p = &parts[1][1..];
+        let n: i32 = p.parse().map_err(|_| port_err(p))?;
+        return Ok(format!("[{}]:{n}", parts[0]));
+    }
+    if !a.contains(':') {
+        return Ok(format!("{a}:9092"));
+    }
+    match crate::net::split_host_port(a) {
+        Err(_) => Ok(format!("[{a}]:9092")),
+        Ok((h, p)) => {
+            let n: i32 = p.parse().map_err(|_| port_err(&p))?;
+            Ok(if h.contains(':') {
+                format!("[{h}]:{n}")
+            } else {
+                format!("{h}:{n}")
+            })
+        }
     }
 }
 
@@ -574,8 +619,12 @@ fn parse_records(set: &[u8], next: &mut i64) -> Rr<Vec<FRec>> {
 pub fn read(bootstrap: &[u8], topic: &[u8], o: &ReadOpts) -> Res<Vec<Record>> {
     let t = lossy(topic);
     let deadline = Instant::now() + o.timeout;
+    let mut seeds = Vec::new();
+    for sd in lossy(bootstrap).split(',') {
+        seeds.push(seed_addr(sd).map_err(|e| crate::usage(format!("kafka: {e}")))?);
+    }
     let mut cl = Client {
-        seeds: lossy(bootstrap).split(',').map(str::to_string).collect(),
+        seeds,
         conns: HashMap::new(),
         deadline,
     };

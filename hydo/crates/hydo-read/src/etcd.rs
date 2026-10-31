@@ -20,15 +20,14 @@ fn http_post(url: &str, body: &[u8], t: Duration) -> Result<(u16, Vec<u8>), Stri
     let deadline = Instant::now() + t;
     let fail = |e: String| format!("Post {}: {e}", q(url.as_bytes()));
     let u = crate::url::parse(url).map_err(|e| e.to_string())?;
-    if u.scheme == "https" {
-        return Err(fail("https endpoints are not supported by hydo-read".into()));
-    }
-    if u.scheme != "http" {
+    if u.scheme != "http" && u.scheme != "https" {
         return Err(fail(format!("unsupported protocol scheme {}", q(u.scheme.as_bytes()))));
     }
     let host = u.host.clone();
     let addr = if crate::net::split_host_port(&host).is_ok() {
         host.clone()
+    } else if u.scheme == "https" {
+        format!("{host}:443")
     } else {
         format!("{host}:80")
     };
@@ -39,6 +38,9 @@ fn http_post(url: &str, body: &[u8], t: Duration) -> Result<(u16, Vec<u8>), Stri
         NetErr::Timeout(s) => fail(format!("{s} (Client.Timeout exceeded while awaiting headers)")),
         e => fail(e.to_string()),
     })?;
+    if u.scheme == "https" {
+        return Err(fail("https endpoints are not supported by hydo-read (no TLS)".into()));
+    }
     let mut req = format!(
         "POST {target} HTTP/1.1\r\nHost: {host}\r\nUser-Agent: Go-http-client/1.1\r\nContent-Length: {}\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n",
         body.len()

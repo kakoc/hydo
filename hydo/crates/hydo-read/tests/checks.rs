@@ -1,8 +1,11 @@
 //! The Go program's check_test.go, ported: the source syntax, the natural order, every check's
 //! explanation line and exit status, the HYDO-ASSERT record and the hydo source.
 
+mod common;
+
+use common::{run, write_files};
 use hydo_read::check::{check_main, parse_source, shell_words, sort_items};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 fn b(s: &str) -> Vec<u8> {
     s.as_bytes().to_vec()
@@ -49,34 +52,6 @@ fn natural_item_order() {
     sort_items(&mut x);
     let got: Vec<String> = x.iter().map(|v| String::from_utf8_lossy(v).into_owned()).collect();
     assert_eq!(got.join(" "), "-1 9 10 100 a b c1 c1x c04 c4 c10 order:2");
-}
-
-/// A temp dir with the given files.
-pub fn write_files(files: &[(&str, &str)]) -> PathBuf {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    static N: AtomicUsize = AtomicUsize::new(0);
-    let d = std::env::temp_dir().join(format!(
-        "hydo-read-test-{}-{}",
-        std::process::id(),
-        N.fetch_add(1, Ordering::SeqCst)
-    ));
-    let _ = std::fs::remove_dir_all(&d);
-    std::fs::create_dir_all(&d).unwrap();
-    for (n, c) in files {
-        std::fs::write(d.join(n), c).unwrap();
-    }
-    d
-}
-
-/// A check in-process: its exit status and its last output line.
-pub fn run(args: &[String]) -> (i32, String) {
-    let args: Vec<Vec<u8>> = args.iter().map(|a| a.as_bytes().to_vec()).collect();
-    let mut out = Vec::new();
-    let mut err = Vec::new();
-    let rc = check_main(&args, &mut out, &mut err);
-    let s = String::from_utf8_lossy(&out).into_owned();
-    let last = s.trim().lines().last().unwrap_or("").to_string();
-    (rc, last)
 }
 
 fn p(d: &Path, n: &str) -> String {

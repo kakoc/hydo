@@ -18,3 +18,5 @@ Module.symvers
 __pycache__/
 # local machine details (addresses, logins); never commit
 /AGENTS.local.md
+# hydo-read keeps its own Cargo workspace (its bytes are inside guest images)
+/hydo/crates/hydo-read/target/
