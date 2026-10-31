@@ -22,7 +22,11 @@ pub fn crc32(data: &[u8]) -> u32 {
     for &b in data {
         c ^= b as u32;
         for _ in 0..8 {
-            c = if c & 1 != 0 { (c >> 1) ^ 0xedb8_8320 } else { c >> 1 };
+            c = if c & 1 != 0 {
+                (c >> 1) ^ 0xedb8_8320
+            } else {
+                c >> 1
+            };
         }
     }
     !c
@@ -150,8 +154,20 @@ mod tests {
         out.extend(d.push(b"junk HYDO-AG 2 00000000 {}\r\n"));
         assert_eq!(out[0], Deframed::Other("[    1.0] kernel says hi".into()));
         assert_eq!(out[1], Deframed::Agent(j.into()));
-        assert!(matches!(out[2], Deframed::Corrupt { why: "the CRC does not match", .. }));
-        assert!(matches!(out[3], Deframed::Corrupt { why: "the CRC does not match", .. }));
+        assert!(matches!(
+            out[2],
+            Deframed::Corrupt {
+                why: "the CRC does not match",
+                ..
+            }
+        ));
+        assert!(matches!(
+            out[3],
+            Deframed::Corrupt {
+                why: "the CRC does not match",
+                ..
+            }
+        ));
         assert_eq!(out.len(), 4);
         assert_eq!(
             deframe_line(format!("x {}", frame("{}").trim_end()).as_bytes()),

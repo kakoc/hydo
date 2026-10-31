@@ -92,6 +92,44 @@ impl Value {
         }
     }
 
+    /// The canonical value laid out for people: two-space indentation, one member or item per
+    /// line, keys sorted, and a final newline (the committed schema's form).
+    pub fn to_pretty(&self) -> String {
+        let mut s = String::new();
+        self.pretty(0, &mut s);
+        s.push('\n');
+        s
+    }
+
+    fn pretty(&self, depth: usize, out: &mut String) {
+        let pad = |d: usize, out: &mut String| out.extend(std::iter::repeat_n(' ', 2 * d));
+        match self {
+            Value::Arr(a) if !a.is_empty() => {
+                out.push_str("[\n");
+                for (i, v) in a.iter().enumerate() {
+                    pad(depth + 1, out);
+                    v.pretty(depth + 1, out);
+                    out.push_str(if i + 1 < a.len() { ",\n" } else { "\n" });
+                }
+                pad(depth, out);
+                out.push(']');
+            }
+            Value::Obj(m) if !m.is_empty() => {
+                out.push_str("{\n");
+                for (i, (k, v)) in m.iter().enumerate() {
+                    pad(depth + 1, out);
+                    write_str(k, out);
+                    out.push_str(": ");
+                    v.pretty(depth + 1, out);
+                    out.push_str(if i + 1 < m.len() { ",\n" } else { "\n" });
+                }
+                pad(depth, out);
+                out.push('}');
+            }
+            v => v.write(out),
+        }
+    }
+
     /// The JSON kind, for messages.
     pub fn kind(&self) -> &'static str {
         match self {
@@ -366,8 +404,10 @@ mod tests {
 
     #[test]
     fn canonical_form() {
-        let v = parse(br#" { "b" : [1, -2, true, null], "a" : "x\u0001\n\"\\\u00e9\ud83d\ude00\u007f" } "#)
-            .unwrap();
+        let v = parse(
+            br#" { "b" : [1, -2, true, null], "a" : "x\u0001\n\"\\\u00e9\ud83d\ude00\u007f" } "#,
+        )
+        .unwrap();
         assert_eq!(
             v.to_canonical(),
             "{\"a\":\"x\\u0001\\n\\\"\\\\\u{e9}\u{1f600}\\u007f\",\"b\":[1,-2,true,null]}"
@@ -379,9 +419,23 @@ mod tests {
 
     #[test]
     fn integers_only() {
-        assert_eq!(parse(b"18446744073709551615").unwrap(), Value::Int(u64::MAX as i128));
-        assert_eq!(parse(b"-9223372036854775808").unwrap(), Value::Int(i64::MIN as i128));
-        for bad in [&b"18446744073709551616"[..], b"-9223372036854775809", b"1.0", b"1e3", b"01", b"-", b"+1"] {
+        assert_eq!(
+            parse(b"18446744073709551615").unwrap(),
+            Value::Int(u64::MAX as i128)
+        );
+        assert_eq!(
+            parse(b"-9223372036854775808").unwrap(),
+            Value::Int(i64::MIN as i128)
+        );
+        for bad in [
+            &b"18446744073709551616"[..],
+            b"-9223372036854775809",
+            b"1.0",
+            b"1e3",
+            b"01",
+            b"-",
+            b"+1",
+        ] {
             assert!(parse(bad).is_err(), "{}", String::from_utf8_lossy(bad));
         }
     }
