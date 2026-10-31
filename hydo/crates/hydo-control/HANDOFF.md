@@ -1,4 +1,4 @@
-# hydo-control — handoff (M120 step B1, M126 step C1 done; what wave 3 needs)
+# hydo-control — handoff (M120 step B1, M126 step C1, M122 four wave-3 seams done; what the rest of wave 3 needs)
 
 Step B1 of `docs/design/guest-control.md` is done on branch `control-core` (docs/HISTORY.md
 "Milestone 120"). Nothing in the product calls this crate yet, and no product behaviour changed.
@@ -103,6 +103,115 @@ controller's choice.
 17. **die_oracle and a running pause timer.** In the shell, die_oracle does not stop a running
     pause timer. Here the timer also runs on until the conversation ends.
 
+## M122: liveness, clock, BUGGIFY and the recovery inputs (branch `ctl-liveness-clock`)
+
+Four seams are driven (docs/HISTORY.md "Milestone 122"). Each feature is a child module of
+`schedule` in `src/features/` (`#[path]`, so it uses schedule.rs's private helpers without any
+visibility change), called from its `SEAM(<name>)` place with a one-line hook:
+
+- `features/liveness.rs`: hydo-liveness.sh's four wrappers (after start_periodic: the `start`
+  anchor; after step_range ending at the last step: `heal`; before start_all in the recovery
+  boot: both; before finish: live_resolve). A monitor per eventually invariant is a flow thread
+  (`live:i<k>`).
+- `features/clock.rs`: hydo-init.sh's T= branch (it is core shell, not an extension), and
+  hydo-init-clock.sh (the clock at the cut, the recovery boot's clock).
+- `features/buggify.rs`: hydo-init-buggify.sh's set_knob branch.
+- `features/recovery.rs`: `RecoveryInputs { acked, failed, clock, world }` (`world`: M125's records).
+  `ScheduleController::recovery_inputs()` gives it after a run that ended with a power cut, and
+  `ScheduleController::recovery_from(plan, &inputs, s0)` starts the recovery conversation with
+  it (`recovery(plan, acked, failed, s0)` still exists and carries nothing). After the merge of
+  M125, `recovery_from` passes `world` on with `with_world`. `RecoveryInputs::from_transcript`
+  reads the same inputs from a run's transcript; `drive::run` (C1, M126) uses it, so a recovery
+  after a replayed run gets the same clock. The cut's acked line is the ids,
+  then `clock=`, then the world's records (`tests/features.rs` checks that order on a shop
+  variant with clock_after_cut).
+
+Every hook does nothing for a plan without the feature, so the 1,986 runs of M120's corpus give
+byte-identical transcripts (notes included). This was checked run by run against the M120
+controller.
+
+### Decisions where the shell is ambiguous (continued; each is marked `AMBIGUOUS:` or explained in the module)
+
+18. **The liveness monitor is not the agent's `probe`.** A probe kills an attempt at the
+    deadline, paces attempts from its own start, and reports neither the elapsed time nor the
+    output, so it could not give the shell's `late` outcome, `elapsed_s` or details. The monitor
+    runs the shell's loop instead: `timeout <within+1>` attempt, `clock_get`, compare,
+    `sleep <poll>`.
+19. **`UP` is the agent's CLOCK_MONOTONIC** (`clock_get.mono_ms`, shown in hundredths like
+    /proc/uptime, which reads CLOCK_BOOTTIME; the two agree in a guest that never suspends). An
+    unreadable clock reads as empty, which awk takes as 0, as in the shell.
+20. **A monitor's environment is the init's environment at the anchor** (the shell forks the
+    monitor then). A later start_svc does not change it. (Observation for the core: M120's
+    periodic_loop builds its environment when each command is sent, so after a K= restart of a
+    service other than the last one started, its HYDO_SVC/HYDO_LOG differ from the shell's
+    subshell. The core model does not check the periodic job's environment. This was not
+    changed here.)
+21. **The monitors' files stay on the host** (`live.anchor.*`, `live.pid.*`, `live.res.*` are not
+    written in the guest). The attempt's output is kept to 3,000 bytes (decision 7); the appended
+    "satisfied ..." line follows the kept output, also when it does not end with a newline.
+22. **T= reads the new time from the `clock_set` reply** (the agent reads the clock right after
+    setting it). When the set is refused, a `clock_get` reads it, as the shell's `date +%s`.
+    The clock is set to `now + delta` as an absolute second (the shell's `date -s @`), not
+    stepped by delta, so the fraction of the second is dropped as in the shell.
+23. **The clock at a power cut** is read with `clock_get` after failed_ids, as
+    hydo-init-clock.sh does. It is not written into the guest's acked file (the VM is cut right
+    after and nothing reads the file again). The report's acked line still shows
+    `clock=<epoch>` byte for byte. `Ending::PowerCut.acked` and `RecoveryInputs.acked` hold ids
+    only; the epoch is `RecoveryInputs.clock`. The recovery boot writes only the ids (the net
+    effect of the shell's `sed -i '/^clock=/d'`), and its `command:` note shows the token after
+    the acked ids. A missing or negative clock falls back to guest.clock_start, as the shell's
+    `case` does.
+24. **B=** is one `write` with mode 0644, not waited for (PID 1's umask is 022, so this equals
+    the shell's `chmod 644`).
+
+### Order against the other extensions (for the merge of wave 3)
+
+hydo-build splices liveness first, then clock, history, freeze, buggify, fakes, error logs and
+network namespaces; each later one wraps the earlier one's functions. So:
+- in `finish`, history's `final:` read-backs come **before** live_resolve (hydo-init-history.sh
+  wraps liveness's finish), and the final_verdict hooks of fakes and error logs come after it;
+- in `start_periodic`, history's declarations come **after** the `start` anchor;
+- in `start_all` of the recovery boot, fakes start the world **before** the anchors;
+- in `step_range`, the `heal` anchor stays innermost: fakes split a range and call it per piece
+  (only the piece ending at the last step stamps `heal`), error logs and freeze wrap outside;
+- at the cut, fakes' `w:` lines come **after** `clock=` in the acked line (fakes wraps the clock
+  extension's failed_ids).
+
+### Proofs
+
+- `tests/corpus.rs` (all manifests): T= and B= schedules now run (they were refused), and
+  redis/hydo-live.yaml and compose-voting/hydo-loopback.yaml are core now. Its golden
+  `corpus-quick.txt` was re-recorded. **Every wave-3 branch changes this golden, so after the
+  merges it has to be re-recorded once (`HYDO_BLESS=1`) and the diff reviewed.**
+- `tests/features.rs`: 3,609 runs on thirteen plans (after the merges of M124–M126; the last three are the shop with clock_after_cut, redis-bridge, and redis-bridge with clock_after_cut) (the liveness and BUGGIFY manifests and variants
+  with clock_after_cut, a second eventually invariant anchored at `start` or `heal`, and zero
+  steps), every run and recovery checked against the shell model, both transcripts typed again
+  by the ReplayController, 28 feature paths that must each be reached, golden
+  `features-quick.txt`. Its second test makes 15 kinds of deliberate mistakes in the
+  conversations and checks that the model refuses every one.
+- `tests/support/model_features.rs`: the shell model of the four features, from the shell text.
+
+## What step C1 needs (the engine side)
+
+- **A controlled boot phase.** The boot conversation starts at the agent's hello, takes S0 and
+  S1 with `SNAP`, and ends with `Ending::AtSnapshot("S1")`. The run conversation resumes from S1
+  with `Start::Resume(AgentPoint)` and the `GuestState` the boot's `snapshots()` give. The
+  recovery conversation resumes from S0. (The other wave-2 agent builds the boot phase.)
+- **`EngineAction::DiskFaultsOff`.** This is the shell's `go`. `LockstepLink` refuses it until
+  the engines have a request for it.
+- **`Ending::PowerCut { acked, failed, world }`.** The engine must cut the power, keep the flushed
+  data disk and start the recovery conversation. Its controller is
+  `ScheduleController::recovery_from(plan, run_ctl.recovery_inputs(), s0)` (M122): the ids, the
+  first boot's clock and the fake world (M125's `world`) go from controller to controller as
+  `RecoveryInputs`, not through the engine or a console line. (`recovery(..)?.with_world(&world)`
+  still works but carries no clock.) `LockstepLink` refuses the ending until the engines can do
+  it.
+- **The results files.** Write `control.jsonl` (the run) and `control.recovery.jsonl`, put
+  `Transcript::to_results()` into `Run.control` and `ctl=<hash>` on the RESULT line, and add
+  `hydo repro --transcript` (`ReplayController`).
+- **The cadence.** The schedule's `rb=` (or the engine's default) is the cadence the transcript
+  records. Snapshots and their continuations must use the same cadence (M43, M118).
+
 ## Step C1: done in M126 (branch `control-wiring`; docs/HISTORY.md "Milestone 126")
 
 - **The engines.** Two host lines at a stop of an agent image's workload phase, in both
@@ -121,8 +230,8 @@ controller's choice.
   boot's run; by the schedule or by recorded transcripts); `agent::AgentEngine`/`AgentWorker` put
   agent images behind `hydo_engine::Engine`/`Worker`, write the run's report as `<tag>.log`, the
   agent's console as `<tag>.agent.log`, the transcripts, and `ctl=` on the RESULT line.
-- **The product.** `hydo-explore` wraps the engine for an agent image (the fault kinds still on
-  seams leave its space, with a message); `hydo run`, `hydo repro` and `hydo repro --transcript`
+- **The product.** `hydo-explore` wraps the engine for an agent image (the clock faults, the only
+  kind left out at first, and `--buggify` are allowed since M122's seams are merged); `hydo run`, `hydo repro` and `hydo repro --transcript`
   drive agent images; `Run.control` and `fingerprints.ctl` are in the results.
 - **Cadence.** An agent image runs at `rb=16` (hvx) / `rb=64` (hvm) unless the schedule says that
   cadence; another `rb=` is refused (the worker boots at the default, and a snapshot and its
@@ -130,23 +239,20 @@ controller's choice.
 
 ## What wave 3 needs (one line per seam; `Seam::wave3()` has the details)
 
-- **liveness:** `eventually` invariants as one `probe` per anchor, with every_ms = poll and
-  deadline_ms = within, and the records from the probe event.
-- **clock:** `T=` as `clock_set {step}` with the 5-second check done on the host; and for
-  clock_after_cut, a `clock_get` at the cut whose value is carried into the recovery
-  conversation.
+- **liveness:** done in M122 (a monitor thread, not a probe: decision 18).
+- **clock:** done in M122 (decisions 22 and 23).
 - **history:** done in M123 (branch `ctl-history-errors-composer`), see "History, error logs and
   the composer" below.
 - **freeze:** done in M124 (branch `ctl-net`), see "Network faults, the freeze and service
   networks" below.
-- **buggify:** one `write` of `/tmp/hydo-buggify` (mode 644) at the knob's place.
+- **buggify:** done in M122.
 - **fakes:** done in M125 (branch `ctl-fakes`), see "The fakes controller" below.
 - **error-logs:** done in M123.
 - **net-namespaces:** done in M124 (branch `ctl-net`).
 - **composer:** done in M123.
 - **net-faults:** done in M124 (branch `ctl-net`).
-- **recovery-inputs:** the engine's hand-over (C1), the first boot's clock (clock) and the
-  carried world (fakes, done in M125). The ids are already written by the controller.
+- **recovery-inputs:** done in M122 (`RecoveryInputs { acked, failed, clock, world }`, with
+  M125's world); the engine's hand-over is C1's.
 
 ## The fakes controller (M125, branch `ctl-fakes`; docs/HISTORY.md "Milestone 125")
 
@@ -399,6 +505,14 @@ checked by the shell model as written here):
 10. **An ending waits for the runner's sync.** A run can now end before the controller sent
     anything (a `W=` that setw refuses), so `ScheduleController` also waits for the answer to the
     runner's resynchronisation (`Flow::expect_answer`); no earlier transcript changed.
+11. **A round reached and the step's time up at the same stop.** At a stop the main part runs
+    before the daemon, so when the daemon's arrival at round TO and the step's timer are seen at
+    the same stop, the step finds the time up and stops the composition (stop_all). In the shell
+    either can win; the model accepts a timeout unless the daemon had arrived at an earlier stop.
+12. **The daemon's environment** is the init's when the first `step` call started it (HYDO_FROM and
+    HYDO_TO of that call, HYDO_SVC/HYDO_LOG of that moment) for every command it starts, its
+    round waits and its drain timer, as the shell's forked daemon keeps it. `check IDX` in a
+    periodic checker follows the core's periodic_loop (M122 decision 20's observation).
 
 - **Agent images.** `agent::plan_of_image` reads a composed image through
   `agent::plan_of_embedded`: the manifest text expanded with `/etc/hydo/compose.json` (the meta
@@ -407,13 +521,13 @@ checked by the shell model as written here):
 
 The proofs (no VM):
 
-- `tests/corpus.rs` now reaches the seven manifests of these seams that need no other seam
-  (four history examples, the error-log stack, redis-composed-hist; 861 runs, 279 recoveries);
-  every other manifest's transcripts are byte-identical to main's. `tests/m123.rs` runs the three composed examples
-  that also have an `eventually` check with that check removed (until the liveness controller is
-  merged), four variants of redis-composed-hist (commands outliving the drain, a budget, a short
+- `tests/corpus.rs` now drives all nine manifests of these seams (four history examples, the
+  error-log stack, and the four composed examples; the three with an `eventually` check together
+  with M122's liveness controller): 2,690 runs, 747 with a recovery boot. Every other manifest's
+  transcripts are byte-identical to main's. `tests/m123.rs` runs the three composed examples that
+  have an `eventually` check also with that check removed (the composer alone), four variants of redis-composed-hist (commands outliving the drain, a budget, a short
   workload.timeout for stop_all, a saved composition), and the error-log stack, with the identity
-  corpus's schedules and written `W=` forms: 281 runs, each checked against the shell model
+  corpus's schedules and written `W=` forms: 369 runs (88 with a recovery boot), each checked against the shell model
   (`tests/support/model/m123.rs`, written from the three shell files: EL_SCAN/EL_SUM again with
   awk's match/substr/gsub and a brute-force longest match, PLAN_AWK's generator again, RES_AWK
   field by field), its transcript typed again by the replay, recorded in
@@ -439,8 +553,8 @@ The proofs (no VM):
 Left open: the scripted world is not busybox (no busybox on the Mac; `HYDO_AWK=busybox awk`
 makes the awk tests use one); the error-log reads cost one round trip per 3,000 bytes of log at
 the end of each boot, which was not measured on a real guest (a large Kafka or MySQL log may make
-the end of a run slow; tailing the logs during the run is the alternative); the composer with
-the liveness seam (three examples) and the error logs with fakes were not run together.
+the end of a run slow; tailing the logs during the run is the alternative); the error logs
+with fakes were not run together (no example has both).
 
 ## Left open
 

@@ -394,11 +394,17 @@ fn the_core_controller_does_what_the_shell_init_does() {
                     unreachable!()
                 };
                 // the recovery is checked against the oracle line the engine builds today from
-                // the report (with a fake world, its records are words of the acked line)
+                // the report (with a fake world, its records are words of the acked line; with
+                // guest.clock_after_cut, so is `clock=<epoch>`, which is not an id)
                 let (cmd, acked, failed) = support::oracle_of(&r.run.items);
+                let words: Vec<String> = acked
+                    .iter()
+                    .filter(|w| plan.clock_after_cut.is_none() || !w.starts_with("clock="))
+                    .cloned()
+                    .collect();
                 assert_eq!(
                     (ids.iter().chain(&world).cloned().collect::<Vec<_>>(), f),
-                    (acked.clone(), failed.clone()),
+                    (words, failed.clone()),
                     "{}",
                     ctx("the hand-over differs from the report's acked and failed lines")
                 );

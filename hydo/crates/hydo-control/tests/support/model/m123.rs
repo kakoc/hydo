@@ -1419,9 +1419,13 @@ impl<'a> Model<'a> {
                 other => return Err(format!("composer: step ..{b} came back at item {q}, the daemon's arrival at round {b}: {other:?}")),
             }
         }
+        // (at one stop the main part goes first: when the daemon's arrival and the step's timer
+        // are seen at the same stop, the time is up before the daemon takes in its arrival;
+        // HANDOFF.md M123 decision 11)
         for (q, b) in &self.m.timed_out {
             if let Some(a) = arrivals.get(b) {
-                if a < q && self.gate_at(a + 1) <= *b {
+                let earlier = self.items[*a].stop() < self.items[*q].stop();
+                if earlier && self.gate_at(a + 1) <= *b {
                     return Err(format!("composer: step ..{b} timed out at item {q} although the daemon waited at round {b} from item {a}"));
                 }
             }
@@ -1588,11 +1592,11 @@ impl<'a> Model<'a> {
             spawn_to(
                 "compose-drain",
                 plain(&["sleep", &cp.drain_timeout.to_string()]),
-                Vec::new(),
+                self.m.denv.clone(),
                 "/dev/null",
                 false,
             ),
-            false,
+            true,
         )?;
         let x = w.peek_index()?;
         let fired = self.exits.get(&tid).is_some_and(|e| e.0 < x);
@@ -1844,12 +1848,13 @@ impl Walk<'_, '_> {
 
     fn send_run(&mut self, argv: Vec<String>) -> R<u64> {
         let label = self.label.clone();
+        let denv = self.m.m.denv.clone();
         match self.next()? {
             Item::Send {
                 id,
                 cmd: Command::Run(r),
                 ..
-            } if r.argv == argv && r.capture.is_none() => Ok(*id),
+            } if r.argv == argv && r.capture.is_none() && r.env.as_ref() == Some(&denv) => Ok(*id),
             other => bad(format!(
                 "{label}: compose.sh runs {argv:?}\n  the controller: {other:?}"
             )),

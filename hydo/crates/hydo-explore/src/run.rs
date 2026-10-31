@@ -302,14 +302,14 @@ fn setup(a: Args, env: &Env) -> Cx {
                 .and_then(|t| serde_json::from_str(&t).ok());
             Space::from_text(&text, comp)
         };
-        let mut sp = sp.unwrap_or_else(|e| die(&e));
+        let sp = sp.unwrap_or_else(|e| die(&e));
         let img = if cx.ex.backend == Backend::Hvm {
             cx.hvm_image()
         } else {
             cx.build.join(&a.image)
         };
         if let Ok(hydo_engine::GuestControl::Agent { .. }) = hydo_engine::image::control(&img) {
-            agent_space(&mut sp, &a, &img);
+            agent_space(&a, &img);
             cx.agent = true;
         }
         eprintln!("fault space: {}", dumps_line(&sp.describe()));
@@ -450,46 +450,25 @@ fn setup(a: Args, env: &Env) -> Cx {
     cx
 }
 
-/// Fault kinds the host controller does not drive on agent images yet, with their seam
-/// (docs/design/guest-control.md step B2, "wave 3").
-const AGENT_LATER: [(&str, &str); 1] = [("clock", "clock")];
-
-/// An agent image (M126): the manifest must be one the controller drives, the options that need
-/// what waits for wave 3 are refused, and the fault kinds it cannot drive yet leave the space
-/// (the draws stay the same; [`Space::restrict`] drops those tokens, as for a `faults:` list).
-fn agent_space(sp: &mut Space, a: &Args, img: &Path) {
+/// An agent image (M126): the manifest must be one the controller drives, and the options that
+/// need what waits for wave 3 are refused. Every fault kind of the space is driven since the
+/// clock seam (M122: `T=`, `guest.clock_after_cut`) and BUGGIFY (`B=`, `--buggify`) landed.
+fn agent_space(a: &Args, img: &Path) {
     if let Err(e) = hydo_control::agent::plan_of_image(img) {
         die(&format!(
             "hydo: {}: an agent image whose manifest the host controller cannot drive yet: {e}",
             img.display()
         ));
     }
-    for (on, what) in [
-        (a.branch.is_some(), "--branch"),
-        (a.buggify, "--buggify (the seam buggify)"),
-    ] {
-        if on {
-            die(&format!(
-                "hydo: {what} is not supported on an agent image yet ({})",
-                img.display()
-            ));
-        }
+    if a.branch.is_some() {
+        die(&format!(
+            "hydo: --branch is not supported on an agent image yet ({})",
+            img.display()
+        ));
     }
-    let gone: Vec<String> = AGENT_LATER
-        .iter()
-        .filter(|(k, _)| sp.has_fault(k))
-        .map(|(k, seam)| format!("{k} (the seam {seam})"))
-        .collect();
-    sp.faults
-        .retain(|f| !AGENT_LATER.iter().any(|(k, _)| k == f));
     eprintln!(
-        "agent image: the host controller drives {} (/etc/hydo/control){}",
-        img.display(),
-        if gone.is_empty() {
-            String::new()
-        } else {
-            format!("; fault kinds left out until wave 3: {}", gone.join(", "))
-        }
+        "agent image: the host controller drives {} (/etc/hydo/control)",
+        img.display()
     );
 }
 

@@ -672,13 +672,25 @@ fn spawn_to(h: &str, argv: Vec<String>, env: Vec<String>, out: &str) -> Command 
 
 /// A guest timer: `sleep <secs>` under a handle of its own, killed when it is not needed.
 fn timer(fx: &mut F<'_>, ctx: &Ctx, h: &str, secs: &str) -> Step<u64> {
-    let e = env(fx, ctx, &[]);
+    // the daemon's own timers run with its environment; the step's with the init's
+    let e = if h == "compose-drain" {
+        daemon_env(fx)
+    } else {
+        env(fx, ctx, &[])
+    };
     fx.send(spawn_to(
         h,
         vec![bb(ctx), "sleep".into(), secs.into()],
         e,
         "/dev/null",
     ))
+}
+
+/// The daemon's environment: the init's when the first step call forked it (later restarts do
+/// not change it, as in the shell's background process).
+fn daemon_env(fx: &mut F<'_>) -> Vec<String> {
+    let base = fx.effect_text(|h, _| h.compose.env.join("\n"));
+    base.lines().map(str::to_string).collect()
 }
 
 /// `grep -a '^HYDO-ASSERT' log` and `grep -av '^HYDO-ASSERT' log | tail -1`.
@@ -1041,7 +1053,7 @@ fn round_start(fx: &mut F<'_>, ctx: &Ctx, r: i64, rc: i64, t: &mut i64, k: &mut 
         let now = centis(fx)?;
         if now < *t {
             let d = *t - now;
-            let e = env(fx, ctx, &[]);
+            let e = daemon_env(fx);
             *k += 1;
             run(
                 fx,

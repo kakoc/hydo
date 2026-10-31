@@ -18,7 +18,7 @@ use crate::control::Ending;
 use crate::plan::Plan;
 use crate::replay::ReplayController;
 use crate::runner::{self, AgentPoint, Finished, Link, RunError, RunOpts, Start};
-use crate::schedule::{GuestState, ScheduleController};
+use crate::schedule::{GuestState, RecoveryInputs, ScheduleController};
 use crate::seams::Unsupported;
 use crate::transcript::{Header, Transcript};
 use hydo_schedule::Schedule;
@@ -238,13 +238,18 @@ pub fn run(
                     recovery: Some(t), ..
                 } => runner::run(link, &mut ReplayController::new(t), start, h)?,
                 _ => {
-                    let mut ctl = ScheduleController::recovery(
-                        b.plan.clone(),
-                        acked.clone(),
-                        failed.clone(),
-                        &b.s0.1,
-                    )?
-                    .with_world(world);
+                    // the ids, the fake world and the first boot's clock (M122), from the run's
+                    // transcript, so a run typed again from its transcript hands over the same
+                    let inputs = RecoveryInputs::from_transcript(&run.transcript).unwrap_or(
+                        RecoveryInputs {
+                            acked: acked.clone(),
+                            failed: failed.clone(),
+                            clock: None,
+                            world: world.clone(),
+                        },
+                    );
+                    let mut ctl =
+                        ScheduleController::recovery_from(b.plan.clone(), &inputs, &b.s0.1)?;
                     runner::run(link, &mut ctl, start, h)?
                 }
             })

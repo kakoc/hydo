@@ -29,7 +29,7 @@ use crate::drive::{self, Booted, DriveError, Policy, Ran, RunFrom};
 use crate::lockstep_link::LockstepLink;
 use crate::plan::Plan;
 use crate::runner::{Finished, RunError, RunOpts};
-use crate::seams::{Seam, Unsupported};
+use crate::seams::Unsupported;
 use crate::transcript::Transcript;
 use hydo_engine::lockstep::{Driver, Lockstep, LockstepStart};
 use hydo_engine::{

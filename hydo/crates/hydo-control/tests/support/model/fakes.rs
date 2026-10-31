@@ -191,6 +191,8 @@ impl Model<'_> {
             let text: String = list
                 .iter()
                 .filter(|l| !l.starts_with("w:"))
+                // hydo-init-clock.sh's `sed -i '/^clock=/d'` (M122: never written either)
+                .filter(|l| self.plan.clock_after_cut.is_none() || !l.starts_with("clock="))
                 .map(|l| format!("{l}\n"))
                 .collect();
             if !text.is_empty() {

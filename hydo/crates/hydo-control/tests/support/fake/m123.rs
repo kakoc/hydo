@@ -3,7 +3,7 @@
 //! `end:<i>`, `compose-step:<n>`, `compose-drain`), service logs with error lines of every shape
 //! the error-log scan knows (Redis, MySQL, Kafka with Java traces, Go, logfmt, control
 //! characters, long lines, a character the 3,000-byte reads can cut), the error-log bookkeeping
-//! pipelines (`cat … | wc -l`), the agent's monotonic clock, and reads that refuse text cut inside
+//! pipelines (`cat … | wc -l`), and reads that refuse text cut inside
 //! a character (the controller then reads hex).
 
 use super::Fake;
@@ -200,7 +200,7 @@ impl Fake {
             }
             return Some((2, 0, String::new()));
         }
-        if a1 == "timeout" {
+        if a1 == "timeout" && Fake::env_of(&r.env, "HYDO_CHECK").is_some() {
             // a composed check under busybox timeout
             let last = r.argv.last().cloned().unwrap_or_default();
             let k = self.world.evals.entry(last.clone()).or_default();
@@ -247,15 +247,6 @@ impl Fake {
         } else {
             let dst = line.rsplit("> ").next().unwrap_or("").to_string();
             self.world.files.insert(dst, format!("{n}\n"));
-        }
-    }
-
-    /// The agent's monotonic clock: 25 ms of guest time per unit (a fake second is 40 units).
-    pub(super) fn m123_clock(&self) -> ClockGetOk {
-        ClockGetOk {
-            sec: self.world.clock,
-            nsec: 0,
-            mono_ms: self.t * 25,
         }
     }
 
