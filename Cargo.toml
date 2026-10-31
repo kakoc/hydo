@@ -21,6 +21,8 @@ members = [
     "hydo/crates/hydo-history",
     "hydo/crates/hydo-bench",
     "hydo/crates/hydo-tools",
+    "hydo/crates/hydo-grpc",
+    "hydo/crates/hydo-grpc-gen",
 ]
 exclude = ["sdk", "hydo/onboard/examples"]
 
@@ -45,6 +47,8 @@ hydo-agents = { path = "hydo/crates/hydo-agents" }
 hydo-compose = { path = "hydo/crates/hydo-compose" }
 hydo-history = { path = "hydo/crates/hydo-history" }
 hydo-build = { path = "hydo/crates/hydo-build" }
+hydo-grpc = { path = "hydo/crates/hydo-grpc" }
+hydo-grpc-gen = { path = "hydo/crates/hydo-grpc-gen" }
 
 [profile.release]
 opt-level = 3
