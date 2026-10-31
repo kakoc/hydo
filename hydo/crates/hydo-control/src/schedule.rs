@@ -41,6 +41,8 @@ use hydo_schedule::{GuestToken, Pause, Schedule};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+mod fakes;
+
 /// What the host knows about the guest at a snapshot, carried into the conversations that resume
 /// from it (the design: host state at a snapshot is the schedule, the seeds and the events so far).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -138,6 +140,8 @@ struct Host {
     /// The periodic checkers' threads.
     periodic: Vec<u64>,
     snaps: BTreeMap<String, GuestState>,
+    /// The fake outside world's state (SEAM(Fakes): schedule/fakes.rs).
+    pf: fakes::Pf,
 }
 
 /// One thread of the controller.
@@ -260,6 +264,7 @@ impl ScheduleController {
             last_out: BTreeMap::new(),
             periodic: Vec::new(),
             snaps: BTreeMap::new(),
+            pf: fakes::Pf::default(),
         };
         Ok(ScheduleController {
             flow: Flow::new(host, Part::Main),
@@ -312,6 +317,16 @@ impl ScheduleController {
             RunCfg::default(),
             Some(s0),
         )
+    }
+
+    /// The fake outside world the first boot carried across the power cut
+    /// ([`Ending::PowerCut`]'s `world`), for a recovery conversation of a plan with `fakes:` or
+    /// `proxies:` (it starts the world from them). Without it the recovery's world starts from
+    /// the records among the acknowledged and failed ids only, as the shell's would from an
+    /// oracle line without them.
+    pub fn with_world(mut self, world: &[String]) -> ScheduleController {
+        self.flow.shared.pf.carried = world.to_vec();
+        self
     }
 
     pub fn conversation(&self) -> &Conversation {
@@ -1124,6 +1139,7 @@ fn start_svc(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<bool> {
 }
 
 fn start_all(fx: &mut F<'_>, ctx: &Ctx, verdict: &str, recovery: bool) -> Step<()> {
+    fakes::start_all(fx, ctx)?; // SEAM(Fakes): the world starts before the services
     for s in &ctx.plan.services {
         if recovery && !s.recovery {
             continue;
@@ -1136,9 +1152,10 @@ fn start_all(fx: &mut F<'_>, ctx: &Ctx, verdict: &str, recovery: bool) -> Step<(
 }
 
 fn restart_dead(fx: &mut F<'_>, ctx: &Ctx, verdict: &str) -> Step<()> {
-    // AMBIGUOUS: the shell's `kill -0` may still see a process it just killed (a zombie not yet
-    // reaped). The controller first waits until every service it killed has reported its exit,
-    // so a killed service always counts as down here.
+    fakes::restart_dead(fx, ctx)?; // SEAM(Fakes): the protocol faults healed, once
+                                   // AMBIGUOUS: the shell's `kill -0` may still see a process it just killed (a zombie not yet
+                                   // reaped). The controller first waits until every service it killed has reported its exit,
+                                   // so a killed service always counts as down here.
     fx.until(|h, f| {
         h.services.values().filter(|s| s.killed).all(|s| {
             f.exits.contains_key(&s.spawn) || matches!(f.replies.get(&s.spawn), Some(Err(_)))
@@ -1261,6 +1278,7 @@ fn stop_periodic(fx: &mut F<'_>) {
 
 /// final_verdict: every `final` invariant in manifest order, then one HYDO-ORACLE line.
 fn final_verdict(fx: &mut F<'_>, ctx: &Ctx) -> Step<String> {
+    fakes::final_verdict(fx, ctx)?; // SEAM(Fakes): what the outside world saw
     let mut nheld = 0;
     let mut first = String::new();
     for (i, inv) in ctx.plan.invariants.iter().enumerate() {
@@ -1321,6 +1339,14 @@ fn finish(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
 
 /// step_range: workload steps [a, b), one call bounded by workload.timeout.
 fn step_range(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
+    // SEAM(Fakes): split at the H= windows' boundaries, switching the rules there
+    if let Some(r) = fakes::step_range(fx, ctx, a, b, step_range_core) {
+        return r;
+    }
+    step_range_core(fx, ctx, a, b)
+}
+
+fn step_range_core(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
     if a >= b {
         return Ok(());
     }
@@ -1414,6 +1440,9 @@ fn provision(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
 
 /// set_knob: a manifest knob's `set` command with HYDO_VALUE, unless the value is the default.
 fn set_knob(fx: &mut F<'_>, ctx: &Ctx, letter: &str, value: &str) -> Step<()> {
+    if fakes::set_knob(fx, ctx, letter, value)? {
+        return Ok(()); // SEAM(Fakes): H= is pf_add
+    }
     let k = ctx.plan.knob(letter).filter(|k| !k.default.is_empty());
     let Some(k) = k else {
         log(fx, format!("knob {letter} not in the manifest, ignored"));
@@ -1543,7 +1572,7 @@ fn main_recovery(fx: &mut F<'_>, ctx: &Ctx, acked: &[String], failed: &[String])
     // AMBIGUOUS: the shell logs the oracle command line the engine typed; the engine's exact
     // text is not the controller's business, so the ids are logged in this form.
     let mut cmd = String::from("oracle");
-    for id in acked {
+    for id in &fakes::recovery_words(fx, ctx, acked) {
         cmd.push(' ');
         cmd.push_str(id);
     }
@@ -1561,7 +1590,11 @@ fn main_recovery(fx: &mut F<'_>, ctx: &Ctx, acked: &[String], failed: &[String])
     // SEAM(RecoveryInputs): the ids as files, as the oracle command's loop writes them
     // (`echo $id >> $dst`); the carried fake world and the clock attach here.
     for (file, ids) in [(l.acked(), acked), (l.failed(), failed)] {
-        let text: String = ids.iter().map(|i| format!("{i}\n")).collect();
+        // SEAM(Fakes): the world records stay out of the id files (fakes::start_all carries them)
+        let text: String = fakes::ids_of(ctx, ids)
+            .iter()
+            .map(|i| format!("{i}\n"))
+            .collect();
         for c in chunks(&text) {
             post(fx, write_cmd(&file, &c, true))?;
         }
@@ -1724,7 +1757,8 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         }
         stop_periodic(fx);
         let failed = failed_ids(fx, ctx)?;
-        let acked = read_all(fx, &l.acked())?;
+        let world = fakes::failed_ids_at_cut(fx, ctx)?; // SEAM(Fakes): the world frozen, dumped
+        let acked = read_all(fx, &l.acked())? + &world;
         fx.report(format!("hydo-explore-acked: {}", acked.replace('\n', " ")));
         fx.report(format!(
             "hydo-explore-failed: {}",
@@ -1740,10 +1774,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         );
         fx.report("hydo-explore-workload-done cut");
         fx.settle()?;
-        return fx.end(Ending::PowerCut {
-            acked: acked.split_whitespace().map(str::to_string).collect(),
-            failed: failed.split_whitespace().map(str::to_string).collect(),
-        });
+        return fx.end(fakes::power_cut(ctx, &acked, &failed));
     }
     // no cut: faults are transient -- heal, bring everything back, let the workload retry
     // SEAM(NetFaults): `netup`/`oneup`: net_off, "healed at the end".
