@@ -219,3 +219,28 @@ read-only mount and `diff -r`). Results `/var/tmp/nq/b2`, `/var/tmp/nq/swarm-*`.
   40th (seed 8, a cut schedule) OK on both with one more un-ACKed order applied on the new image.
   30 schedules had a network fault; 21 heals ran, 9 with packets in the queue (12 packets),
   `left=0` in every one.
+
+## The store readers in Rust (2026-10-31, M112)
+
+`hydo-read`/`hydo-check` are a Rust program since M112 (`hydo/crates/hydo-read`; the Go program
+of M88 was deleted after the comparison in `docs/HISTORY.md` Milestone 112). Images contain the
+binary, so the reader examples have new fingerprints; every verdict and explanation line is the
+one the Go images print, each schedule below twice with the same fingerprint (bare-metal test
+machine, `hvx_explore` `38455ace…`; Rust hydo-read `64452374…` x86_64, `88576fa8…` arm64):
+
+| example, image | schedule | verdict | Go | Rust |
+|---|---|---|---|---|
+| `stack/hydo-read.yaml` old order service (`ce559e51…`; Go `558b8248…`) | `disk=none dseed=4d5cb825dfaab05b \| run K=redis@11+1 C=24` | VIOLATION `disjoint violated: 1 item of told_failed is also in kafka: 11` | `3c15d7ff5d519483` | `8f963d4f266998c9` |
+| the same | `disk=none dseed=1 \| run` | OK, 7 held | `93fcc6553f5583c3` | `c8ddb1ac217db4f9` |
+| `stack/hydo-read.yaml` fixed order service (`cf7901b5…`; Go `4a26328a…`) | the pinned reproducer | OK, 7 held | `d94e97cb016a49ca` | `640514fdd9b15f87` |
+| the same | `disk=none dseed=1 \| run` | OK, 7 held | `c447d11b257cfcef` | `c26e8cb75971ea11` |
+| `redis-composed-read` (`ae115f6f…`; Go rebuilt `cd91ca43…`) | `disk=none dseed=1 \| run W=0000002a,p4,q2,r100` | OK, 34 commands | `d8a292e551541f01` (rebuilt `e92fe548d3f2f9a8`) | `765d5a882c554ecb` |
+| the same | `disk=cut dseed=1 \| run C=12 R=everysec W=85ebca77,p4,q2,r100` | VIOLATION `subset violated: 1 item of 6 in acked not in redis: k:21=v21` | `da42b7722985605c` (rebuilt `d74802881611fa1c`) | `1d0f56120f6c4b38` |
+| the same | `... R=always ...` | OK | `c8507284879bdaca` (rebuilt `b332ca6fdc9ddd02`) | `631b3aa767cba394` |
+| `examples-mac/redis/hydo-read.yaml`, Mac (cpio `5592645f…`; Go `50d13de5…`) | `disk=none \| run` | OK `subset holds: all 20 items of acked are in redis (redis has 20 items)` | `d5577a4f26cffe1b` | `9bfed6578c82ffd0` |
+| the same | `disk=cut dseed=1 \| run C=12 R=everysec` | VIOLATION `subset violated: 12 items of 12 in acked not in redis: k:0=v0, ...` | `52eea0ecf13fb256` | `6b01ba56f975e9ce` |
+
+The stack images with the Go binary rebuilt on the bare-metal test machine equal the M88 images
+byte for byte, so the Rust stack images differ from them only in `/bin/hydo-read`. The other
+seven recorded stack violations and four OK schedules give Go's verdict lines too (HISTORY M112);
+miniflux: `examples/miniflux/RESULTS.md`. Images in `~/hydo-prd/build/img` on the box.
