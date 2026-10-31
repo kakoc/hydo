@@ -18,7 +18,11 @@
 //!
 //! The verdict stays the last line: the assertion records the final invariants print (the
 //! shell's final_verdict output, redirected into `$H/el.verdict`) are held back until the error
-//! records are out ([`final_verdict`], [`assert_line`]).
+//! records are out ([`final_verdict`], [`assert_line`]). With fakes as well, the fake world's
+//! summary lines are held with them: hydo-build splices hydo-init-errlog.sh after
+//! hydo-init-fakes.sh, so its final_verdict redirects the fakes' one, summary included. The
+//! shell then prints the error records, the summary lines, the assertion records and the verdict
+//! (M127; HANDOFF.md M123 decision 9).
 
 use super::text::{read_bytes, records, shq, text};
 use super::{bb, env, log, run, sh, svc_sig, Conversation, Ctx, F};
@@ -1033,7 +1037,8 @@ pub(super) fn final_verdict(fx: &mut F<'_>, ctx: &Ctx) -> Step<String> {
     Ok(v)
 }
 
-/// assert_once's record: printed now, or held while final_verdict's output is redirected.
+/// A line of final_verdict's output (assert_once's record, the fakes' summary line): printed now,
+/// or held while final_verdict's output is redirected.
 pub(super) fn assert_line(fx: &mut F<'_>, line: String) {
     let l = line.clone();
     let held = fx.effect_bool(|h, _| match &mut h.errlog.held {

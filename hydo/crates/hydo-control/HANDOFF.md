@@ -323,8 +323,9 @@ first. So:
 - `failed_ids`: the clock extension's part (its `clock=` word at a cut) before the fakes dump, so
   with both the shell's acked line is ids, then `clock=…`, then the `w:` records;
 - `start_all`: the world starts before liveness's part;
-- `final_verdict` is wrapped by the fakes only; liveness and history wrap `finish`, so their
-  parts before the verdict come before the summary. netns wraps `start_svc` only.
+- `final_verdict` is wrapped by the fakes, and with `errors:` the error logs wrap the fakes'
+  wrapper (M123 decision 9); liveness and history wrap `finish`, so their parts before the
+  verdict come before the summary. netns wraps `start_svc` only.
 
 The manifests with fakes and another feature (shop and redis-bridge: liveness; redis-bridge:
 netns) are still refused by that feature's seam. (M124: netns is driven now; redis-bridge waits
@@ -514,9 +515,17 @@ checked by the shell model as written here):
    not UTF-8 in a record becomes U+FFFD in the report line (the shell printed it raw). Busybox's
    handling of `\d`, `\w`, `\s` in a user's `match:`/`ignore:`/`normalize:` was taken to be
    musl's (TRE's macros) and was not checked against a busybox.
-9. **The error logs together with fakes.** The fakes' summary lines that `final_verdict` prints
-   are not held back with the assertion records (in a shell image with both extensions they would
-   be). No example manifest has both.
+9. **The error logs together with fakes** (M127, branch `c2-linux-fixes`). hydo-build splices
+   hydo-init-fakes.sh before hydo-init-errlog.sh, so the error logs' final_verdict redirects the
+   fakes' one (`_el_orig_final_verdict` is the fakes' `ctl summary | sed 's/^/hydo-world: /';
+   _pf_orig_final_verdict`) into `$H/el.verdict`. The shell's console gets the error records
+   (el_report), then the summary lines, then the final invariants' assertion records and the
+   verdict line. The controller holds the summary lines with the assertion records
+   (`errlog::assert_line`), so its report lines come in that order; without `errors:` nothing
+   changes. `tests/fakes.rs::error_logs_with_fakes_print_in_the_shells_order` reads that order
+   from `hydo-build --print-init` of `tests/manifests/redis-proxy-errors.yaml` (the Redis proxy
+   example with `errors:`; not an example, so the identity corpus does not read it), drives five
+   schedules against the shell model and checks the order of the report lines.
 10. **An ending waits for the runner's sync.** A run can now end before the controller sent
     anything (a `W=` that setw refuses), so `ScheduleController` also waits for the answer to the
     runner's resynchronisation (`Flow::expect_answer`); no earlier transcript changed.
@@ -570,7 +579,7 @@ Left open: the scripted world is not busybox (no busybox on the Mac; `HYDO_AWK=b
 makes the awk tests use one); the error-log reads cost one round trip per 3,000 bytes of log at
 the end of each boot, which was not measured on a real guest (a large Kafka or MySQL log may make
 the end of a run slow; tailing the logs during the run is the alternative); the error logs
-with fakes were not run together (no example has both).
+with fakes run together only on a test manifest (decision 9; no example has both).
 
 ## Left open
 
