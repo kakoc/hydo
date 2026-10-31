@@ -12,10 +12,6 @@
 //! booting to S1, then answers each `RUN <tag> <schedule>` line with one `RESULT` line (hvx also
 //! answers `BRANCH`), and `one` runs a single schedule from a fresh boot and prints its `RESULT`.
 //!
-//! hvm also runs lock-step control sessions (`CTRL`, M119): the host types every byte at an exact
-//! virtual time and the engine waits at each stop ([`control`], [`Worker::lock_step`],
-//! [`Engine::start_fresh`]). Nothing in `run` or `branch` changes for them.
-//!
 //! The snapshot points ([`SnapshotPoint`]) are the same for every image: S0 (root mounted,
 //! nothing started: the start of every recovery boot) and S1 (services up and provisioned: the
 //! start of every schedule). The recovery boot after a power cut (a guest `C=` token or a host
@@ -59,10 +55,10 @@
 //!   this machine can run for a spec: min(hardware threads, free memory / memory per worker),
 //!   not a fixed number ([`machine_workers`]).
 
-pub mod control;
 pub mod hvm;
 pub mod hvx;
 pub mod image;
+pub mod lockstep;
 mod process;
 pub mod protocol;
 
@@ -71,6 +67,7 @@ use std::fmt;
 use std::path::PathBuf;
 use std::time::Duration;
 
+pub use lockstep::{Lockstep, LockstepStart};
 pub use protocol::{BranchOutcome, BranchRequest, Ready, RunResult};
 
 /// Which engine a spec is for.
@@ -221,9 +218,6 @@ pub enum EngineError {
     Protocol(String),
     /// The engine cannot do this (for example a BRANCH on hvm).
     Unsupported(String),
-    /// The engine refused a control command or session (its `ERR` text, or the verdict of the
-    /// RESULT line that answered a `CTRL`); the session state is unchanged.
-    Refused(String),
 }
 
 impl fmt::Display for EngineError {
@@ -234,7 +228,6 @@ impl fmt::Display for EngineError {
             EngineError::NotReady(l) => write!(f, "the engine did not start: {l:?}"),
             EngineError::Protocol(l) => write!(f, "unexpected engine output: {l:?}"),
             EngineError::Unsupported(w) => write!(f, "{w}"),
-            EngineError::Refused(w) => write!(f, "the engine refused: {w}"),
         }
     }
 }
@@ -263,22 +256,6 @@ pub trait Engine {
         spec: &BootSpec,
         stderr_log: &std::path::Path,
     ) -> Result<Box<dyn Worker>, EngineError>;
-
-    /// A worker whose FIRST request (a RUN or a control session from S1) runs on the boot's own
-    /// state at S1 without a snapshot restore, as [`Engine::one`] does; later requests restore as
-    /// in [`Engine::start`]. It proves that a control session from a fresh boot equals the same
-    /// session from the restored S1 (M119; hvmx's `fresh` mode). Unsupported by default.
-    fn start_fresh(
-        &self,
-        spec: &BootSpec,
-        stderr_log: &std::path::Path,
-    ) -> Result<Box<dyn Worker>, EngineError> {
-        let _ = (spec, stderr_log);
-        Err(EngineError::Unsupported(format!(
-            "{} has no fresh-boot worker",
-            self.kind().name()
-        )))
-    }
 
     /// The shell line that reproduces one schedule by hand (report.md's repro line).
     fn repro_line(&self, spec: &BootSpec, schedule: &Schedule) -> String;
@@ -367,10 +344,19 @@ pub trait Worker {
     /// Snapshot mid-run and run timing variants from there (hvx's BRANCH; hvm answers Unsupported).
     fn branch(&mut self, req: &BranchRequest) -> Result<BranchOutcome, EngineError>;
 
-    /// The worker's lock-step control sessions ([`control`], M119), or None when its engine has
-    /// none (hvx_explore so far). No existing caller uses it: `run` and `branch` are unchanged.
-    fn lock_step(&mut self) -> Option<&mut dyn control::LockStep> {
-        None
+    /// Start a run under lock-step control (hvx's CTL/RESUME, [`lockstep`]): the returned session
+    /// reports every stop and waits for the caller's commands until the run's RESULT. No existing
+    /// caller uses it; engines without it answer Unsupported.
+    /// `log`: also write the transcript (`< ` host lines, `> ` engine lines), request included.
+    fn lockstep<'a>(
+        &'a mut self,
+        start: &LockstepStart,
+        log: Option<&'a mut dyn std::io::Write>,
+    ) -> Result<Lockstep<'a>, EngineError> {
+        let _ = (start, log);
+        Err(EngineError::Unsupported(
+            "lock-step control is not supported by this engine".into(),
+        ))
     }
 
     /// Tear the worker down (QUIT) and wait for the engine to exit.
