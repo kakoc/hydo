@@ -6,8 +6,9 @@
 //! options: splitmix64 streams), runs the schedules on a pool of engine workers (each boots the
 //! guest once and starts every schedule from a snapshot; [`hydo_engine::Engine`]), keeps every run
 //! whose invariant fails, re-runs each failure to confirm it reproduces bit for bit, shrinks one
-//! failure per (class, signature) to a minimal failing schedule, and writes `report.md`,
-//! `report.json`, `runs.jsonl` and `shrink.jsonl` (and `errors.json` for images with error logs).
+//! failure per (class, signature) to a minimal failing schedule, and writes its results in the
+//! results format (hydo-results: `events.jsonl` as it runs, `exploration.json` at the end;
+//! [`results`]) and `report.md`, made from exploration.json ([`md`]).
 //!
 //! The schedule strings, finding classes, shrink candidates and shrink paths are explore.py's,
 //! byte for byte (`tests/identity.rs` against explore.py's answers, `tests/fake_engine.rs` end to

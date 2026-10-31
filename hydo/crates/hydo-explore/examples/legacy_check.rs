@@ -59,6 +59,14 @@ impl Check {
         let timing = TIMING.contains(&key);
         let ok = if timing {
             old.is_null() || !n.is_null()
+        } else if key == "line" {
+            // the engine's RESULT line: the same but for its wall time (secs=)
+            let re = regex::Regex::new(r"secs=\S+").unwrap();
+            let s = |v: &Value| {
+                re.replace_all(v.as_str().unwrap_or(""), "secs=N")
+                    .into_owned()
+            };
+            s(old) == s(n)
         } else {
             same(old, n)
         };
@@ -612,9 +620,15 @@ fn check_exploration(c: &mut Check, old: &Path, new: &Path) {
     if let Some(t) = read(&so) {
         c.checked += 1;
         c.files += 1;
-        let last = t.lines().last().unwrap_or("").to_string();
-        let now = read(&new.parent().unwrap().join("stdout")).unwrap_or_default();
-        let now = now.lines().last().unwrap_or("").to_string();
+        // the explorer's JSON line (`hydo explore` prints a line about report.md after it)
+        let json_line = |t: &str| {
+            t.lines()
+                .rfind(|l| l.starts_with('{'))
+                .unwrap_or("")
+                .to_string()
+        };
+        let last = json_line(&t);
+        let now = json_line(&read(&new.parent().unwrap().join("stdout")).unwrap_or_default());
         let made = hydo_explore::md::summary_line(&doc);
         if norm(&last) != norm(&now) || (doc.mode != "schedule" && norm(&now) != norm(&made)) {
             c.miss(

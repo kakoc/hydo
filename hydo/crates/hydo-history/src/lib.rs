@@ -25,7 +25,10 @@
 //! if hydo_history::has_checks(&srcs) {
 //!     let r = hydo_history::run_checks(&srcs, Some("HYDO-ORACLE: OK invariants=0 held ()"),
 //!                                      hydo_history::DEFAULT_BUDGET, None).unwrap();
-//!     hydo_history::write_checks_files(dir, "s1-42", &r).unwrap();
+//!     // each check's result (hydo-explore's results module makes them findings)
+//!     for c in &r.checks {
+//!         println!("{} {}: {}", c.id, c.status.name(), c.summary);
+//!     }
 //!     println!("{}", r.verdict.unwrap_or_default());
 //! }
 //! ```
@@ -422,16 +425,4 @@ pub fn has_checks<S: AsRef<str>, T: AsRef<str>>(sources: &[(S, T)]) -> bool {
     sources
         .iter()
         .any(|(_, t)| t.as_ref().contains(events::CHECK_TAG))
-}
-
-/// `<tag>.checks.log` (the records, one per line) and `<tag>.checks.txt` (the report, then the
-/// verdict) in `dir`, as `hydo run` and the explorer write them. A missing verdict is written as
-/// "None", as the Python CLI did.
-pub fn write_checks_files(dir: &Path, tag: &str, r: &Checks) -> std::io::Result<()> {
-    let recs: String = r.records.iter().map(|x| format!("{x}\n")).collect();
-    std::fs::write(dir.join(format!("{tag}.checks.log")), recs)?;
-    std::fs::write(
-        dir.join(format!("{tag}.checks.txt")),
-        format!("{}\n{}\n", r.report, r.verdict.as_deref().unwrap_or("None")),
-    )
 }

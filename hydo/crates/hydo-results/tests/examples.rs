@@ -21,7 +21,11 @@ fn root() -> PathBuf {
 }
 
 fn files(d: &Path, out: &mut Vec<PathBuf>) {
-    let mut es: Vec<_> = std::fs::read_dir(d).unwrap().flatten().map(|e| e.path()).collect();
+    let mut es: Vec<_> = std::fs::read_dir(d)
+        .unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .collect();
     es.sort();
     for p in es {
         if p.is_dir() {
@@ -79,9 +83,16 @@ fn valid(schema: &Value, defs: &Value, v: &Value, at: &str, errs: &mut Vec<Strin
             errs.push(format!("{at}: {v} < {m}"));
         }
     }
-    if let (Some(o), Some(props)) = (v.as_object(), s.get("properties").and_then(Value::as_object))
-    {
-        for r in s.get("required").and_then(Value::as_array).into_iter().flatten() {
+    if let (Some(o), Some(props)) = (
+        v.as_object(),
+        s.get("properties").and_then(Value::as_object),
+    ) {
+        for r in s
+            .get("required")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
             let r = r.as_str().unwrap_or_default();
             if !o.contains_key(r) {
                 errs.push(format!("{at}: no {r}"));
@@ -182,10 +193,9 @@ fn note(s: &mut Seen, r: &Record) {
 
 #[test]
 fn every_example_parses_and_is_valid() {
-    let schema: Value = serde_json::from_str(
-        &std::fs::read_to_string(root().join("results-v1.json")).unwrap(),
-    )
-    .unwrap();
+    let schema: Value =
+        serde_json::from_str(&std::fs::read_to_string(root().join("results-v1.json")).unwrap())
+            .unwrap();
     let defs = schema["$defs"].clone();
     let mut fs = Vec::new();
     files(&root().join("examples/results/v1"), &mut fs);
@@ -198,11 +208,17 @@ fn every_example_parses_and_is_valid() {
             let st = stream(&text).unwrap_or_else(|e| panic!("{name}: {e}"));
             assert!(st.skipped.is_empty(), "{name}: skipped {:?}", st.skipped);
             assert!(!st.incomplete_tail, "{name}: a cut-off last line");
-            assert!(st.records.len() >= 2, "{name}: a stream of {} records", st.records.len());
+            assert!(
+                st.records.len() >= 2,
+                "{name}: a stream of {} records",
+                st.records.len()
+            );
             for r in &st.records {
                 note(&mut seen, r);
             }
-            text.lines().map(|l| serde_json::from_str(l).unwrap()).collect()
+            text.lines()
+                .map(|l| serde_json::from_str(l).unwrap())
+                .collect()
         } else if name.ends_with(".json") {
             let r = document(&text).unwrap_or_else(|e| panic!("{name}: {e}"));
             note(&mut seen, &r);
@@ -213,7 +229,11 @@ fn every_example_parses_and_is_valid() {
         for (i, v) in values.iter().enumerate() {
             let mut errs = Vec::new();
             valid(&schema, &defs, v, &format!("{name}:{}", i + 1), &mut errs);
-            assert!(errs.is_empty(), "not valid against results-v1.json:\n{}", errs.join("\n"));
+            assert!(
+                errs.is_empty(),
+                "not valid against results-v1.json:\n{}",
+                errs.join("\n")
+            );
             n += 1;
         }
     }
@@ -228,19 +248,24 @@ fn every_example_parses_and_is_valid() {
         assert!(seen.roles.contains(r), "no example has a {r} run");
     }
     for v in ["ok", "violation"] {
-        assert!(seen.verdicts.contains(v), "no example has a run whose verdict is {v}");
+        assert!(
+            seen.verdicts.contains(v),
+            "no example has a run whose verdict is {v}"
+        );
     }
-    assert!(seen.recovery, "no example has a power cut with a recovery boot");
+    assert!(
+        seen.recovery,
+        "no example has a power cut with a recovery boot"
+    );
     assert!(seen.shrinks && seen.error_kinds && seen.properties);
 }
 
 /// The validator itself rejects what the schema does not allow.
 #[test]
 fn the_validator_rejects_invalid_records() {
-    let schema: Value = serde_json::from_str(
-        &std::fs::read_to_string(root().join("results-v1.json")).unwrap(),
-    )
-    .unwrap();
+    let schema: Value =
+        serde_json::from_str(&std::fs::read_to_string(root().join("results-v1.json")).unwrap())
+            .unwrap();
     let defs = schema["$defs"].clone();
     for bad in [
         r#"{"v":1,"type":"run","verdict":{"kind":"ok","text":"x"},"fingerprints":{"fp":"1"}}"#,
@@ -249,11 +274,23 @@ fn the_validator_rejects_invalid_records() {
         r#"{"v":1,"type":"nothing"}"#,
     ] {
         let mut e = Vec::new();
-        valid(&schema, &defs, &serde_json::from_str(bad).unwrap(), "x", &mut e);
+        valid(
+            &schema,
+            &defs,
+            &serde_json::from_str(bad).unwrap(),
+            "x",
+            &mut e,
+        );
         assert!(!e.is_empty(), "accepted {bad}");
     }
     let good = r#"{"v":1,"type":"run","schedule":"s","verdict":{"kind":"ok","text":"x"},"fingerprints":{"fp":"1"},"later":1}"#;
     let mut e = Vec::new();
-    valid(&schema, &defs, &serde_json::from_str(good).unwrap(), "x", &mut e);
+    valid(
+        &schema,
+        &defs,
+        &serde_json::from_str(good).unwrap(),
+        "x",
+        &mut e,
+    );
     assert!(e.is_empty(), "{e:?}");
 }
