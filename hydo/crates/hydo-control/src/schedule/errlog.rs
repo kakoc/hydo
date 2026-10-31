@@ -501,7 +501,10 @@ const NORM_FIXED: [(&str, &str); 7] = [
         r"[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9][T ][0-9][0-9]:[0-9][0-9](:[0-9][0-9]([.,][0-9]+)?)?(Z|[+-][0-9][0-9]:?[0-9][0-9])?",
         "<time>",
     ),
-    (r"[0-9][0-9][0-9][0-9][-\/][0-9][0-9][-\/][0-9][0-9]", "<date>"),
+    (
+        r"[0-9][0-9][0-9][0-9][-\/][0-9][0-9][-\/][0-9][0-9]",
+        "<date>",
+    ),
     (r"[0-9]?[0-9]:[0-9][0-9]:[0-9][0-9]([.,][0-9]+)?", "<time>"),
     (
         r"[0-9]?[0-9][ -](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[ -][0-9][0-9][0-9][0-9]",
@@ -520,9 +523,7 @@ const NORM_FIXED: [(&str, &str); 7] = [
 
 fn fixed() -> &'static [(Rx, &'static [u8]); 7] {
     static F: OnceLock<[(Rx, &'static [u8]); 7]> = OnceLock::new();
-    F.get_or_init(|| {
-        NORM_FIXED.map(|(p, r)| (Rx::new(p).expect("a fixed pattern"), r.as_bytes()))
-    })
+    F.get_or_init(|| NORM_FIXED.map(|(p, r)| (Rx::new(p).expect("a fixed pattern"), r.as_bytes())))
 }
 
 /// clean(s): no backslash, double quote, control character or harness prefix.
@@ -588,7 +589,9 @@ pub fn nums(s: &[u8], hosts: &[String]) -> Vec<u8> {
             );
             let host = prev == b"localhost" || hosts.iter().any(|h| h.as_bytes() == prev);
             let keep = (pre == b"-" && upper2)
-                || (!pre.is_empty() && pre.iter().all(|c| matches!(c, b' ' | b':' | b'=')) && codeword)
+                || (!pre.is_empty()
+                    && pre.iter().all(|c| matches!(c, b' ' | b':' | b'='))
+                    && codeword)
                 || (pre == b":"
                     && tok.len() <= 5
                     && n < 32768.0
@@ -630,13 +633,16 @@ pub fn nums(s: &[u8], hosts: &[String]) -> Vec<u8> {
     out
 }
 
+/// A user `normalize` substitution: the expression and its replacement.
+type UserNorm = (Rx, Vec<u8>);
+
 /// The patterns of one stream, compiled when first used (as awk compiles a dynamic regex).
 struct Pats<'a> {
     sv: &'a ErrSvc,
     level: Option<Result<Rx, String>>,
     exc: Option<Result<Rx, String>>,
     ignore: Option<Result<Rx, String>>,
-    norm: Option<Result<Vec<(Rx, Vec<u8>)>, String>>,
+    norm: Option<Result<Vec<UserNorm>, String>>,
 }
 
 fn get<'b>(slot: &'b mut Option<Result<Rx, String>>, p: &str) -> Result<&'b Rx, String> {
@@ -795,12 +801,7 @@ pub fn scan(
                 let c = clean(line);
                 let user = match p.norm() {
                     Ok(u) => u,
-                    Err(e) => {
-                        return Scan {
-                            recs,
-                            err: Some(e),
-                        }
-                    }
+                    Err(e) => return Scan { recs, err: Some(e) },
                 };
                 recs.push(Rec {
                     svc: svc.clone(),
@@ -810,12 +811,7 @@ pub fn scan(
                     ex: c[..c.len().min(240)].to_vec(),
                 });
             }
-            Err(e) => {
-                return Scan {
-                    recs,
-                    err: Some(e),
-                }
-            }
+            Err(e) => return Scan { recs, err: Some(e) },
         }
     }
     Scan { recs, err: None }
@@ -1080,7 +1076,10 @@ mod tests {
             b"<time> # [ERROR] [MY-012592] [InnoDB] number # in".to_vec()
         );
         assert_eq!(
-            nums(b"dial tcp 127.0.0.1:54321->127.0.0.1:3306 errno 2 thread12 HY000 deadbeef42", &[]),
+            nums(
+                b"dial tcp 127.0.0.1:54321->127.0.0.1:3306 errno 2 thread12 HY000 deadbeef42",
+                &[]
+            ),
             b"dial tcp #.#.#.#:#->#.#.#.#:3306 errno 2 thread# HY000 <hex>".to_vec()
         );
     }

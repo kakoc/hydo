@@ -100,7 +100,8 @@ fn plans() -> Vec<(String, String, Plan)> {
     v
 }
 
-const SAVED: &str = ":p2,r100,canytime_read+parallel_driver_set,0.0.1.11,1.0.0.12,2.1.1.13,3.4.1.14";
+const SAVED: &str =
+    ":p2,r100,canytime_read+parallel_driver_set,0.0.1.11,1.0.0.12,2.1.1.13,3.4.1.14";
 
 fn s(x: &str) -> String {
     x.to_string()
@@ -116,8 +117,14 @@ fn written(p: &Plan) -> Vec<String> {
             .map(|c| c.id.clone())
     };
     let par = id_of("parallel_driver").unwrap_or_default();
-    let any = id_of("anytime").or_else(|| id_of("serial_driver")).unwrap_or_default();
-    let first_cmd = cp.commands.first().map(|c| c.id.clone()).unwrap_or_default();
+    let any = id_of("anytime")
+        .or_else(|| id_of("serial_driver"))
+        .unwrap_or_default();
+    let first_cmd = cp
+        .commands
+        .first()
+        .map(|c| c.id.clone())
+        .unwrap_or_default();
     let n = p.steps;
     let mut v = vec![
         "disk=none | run W=0000002a,p4,q2,r100".to_string(),
@@ -151,8 +158,20 @@ fn written(p: &Plan) -> Vec<String> {
 
 // the identity corpus's schedules (corpus.rs), fewer seeds
 const FLAGS: [&str; 14] = [
-    "TIMING", "NEW_FAULTS", "DURABLE", "MORE_FAULTS", "PREEMPT", "TURNS", "BURSTS", "BUGGIFY",
-    "CONCURRENCY", "FREEZE_CALL", "PROTOCOL_FAULTS", "GRPC", "COMPOSE", "KNOB_ANY",
+    "TIMING",
+    "NEW_FAULTS",
+    "DURABLE",
+    "MORE_FAULTS",
+    "PREEMPT",
+    "TURNS",
+    "BURSTS",
+    "BUGGIFY",
+    "CONCURRENCY",
+    "FREEZE_CALL",
+    "PROTOCOL_FAULTS",
+    "GRPC",
+    "COMPOSE",
+    "KNOB_ANY",
 ];
 
 fn identity_schedules(m: &str, seeds: u64) -> Vec<String> {
@@ -239,31 +258,64 @@ fn oracle_cmd(acked: &[String], failed: &[String]) -> String {
 
 /// The paths each extension has, and a line (or a sent command) that shows a run took it.
 const PATHS: &[(&str, &str)] = &[
-    ("composer: a round waited for its time", "\\\"sleep\\\",\\\"0."),
+    (
+        "composer: a round waited for its time",
+        "\\\"sleep\\\",\\\"0.",
+    ),
     ("composer: a first command", "HYDO-CMD start i=f"),
     ("composer: an end command", "HYDO-CMD start i=e"),
     ("composer: a command ok", "status=ok"),
     ("composer: a command failed", "status=failed"),
     ("composer: a command ran into its timeout", "status=timeout"),
     ("composer: a violation (exit 100)", "status=violation"),
-    ("composer: killed by the drain", "status=killed (still running"),
-    ("composer: killed by stop_all", "status=killed (workload.timeout)"),
-    ("composer: stop_all's done line", "ran into workload.timeout="),
+    (
+        "composer: killed by the drain",
+        "status=killed (still running",
+    ),
+    (
+        "composer: killed by stop_all",
+        "status=killed (workload.timeout)",
+    ),
+    (
+        "composer: stop_all's done line",
+        "ran into workload.timeout=",
+    ),
     ("composer: a skipped entry (budget)", "HYDO-CMD skip i="),
     ("composer: the seed form", " seed="),
     ("composer: the resolved form", " resolved p="),
     ("composer: a saved composition", "plan W=@"),
     ("composer: setw refused W", "HYDO-COMPOSE error: W="),
-    ("composer: an assertion of a command", "HYDO-ASSERT {\\\"t\\\":\\\"always\\\",\\\"id\\\":\\\"kv."),
-    ("composer: compose.<id>.succeeded", ".succeeded\\\",\\\"ok\\\":true"),
-    ("composer: compose.<id>.no_violation", ".no_violation\\\",\\\"ok\\\":false"),
-    ("composer: the verdict invariant failed", "[compose.commands] command "),
-    ("composer: a pause timer while a command ran", "mid_request=true"),
+    (
+        "composer: an assertion of a command",
+        "HYDO-ASSERT {\\\"t\\\":\\\"always\\\",\\\"id\\\":\\\"kv.",
+    ),
+    (
+        "composer: compose.<id>.succeeded",
+        ".succeeded\\\",\\\"ok\\\":true",
+    ),
+    (
+        "composer: compose.<id>.no_violation",
+        ".no_violation\\\",\\\"ok\\\":false",
+    ),
+    (
+        "composer: the verdict invariant failed",
+        "[compose.commands] command ",
+    ),
+    (
+        "composer: a pause timer while a command ran",
+        "mid_request=true",
+    ),
     ("history: HYDO-CHECK", "HYDO-CHECK {"),
     ("history: HYDO-CHECK-FINAL", "HYDO-CHECK-FINAL"),
     ("errlog: a record", "HYDO-ERRLOG {"),
-    ("errlog: a record of a recovery boot", "HYDO-ERRLOG-SUM {\\\"boot\\\":\\\"recovery\\\""),
-    ("errlog: a record of a stream's setup log", "\\\"src\\\":\\\"setup\\\""),
+    (
+        "errlog: a record of a recovery boot",
+        "HYDO-ERRLOG-SUM {\\\"boot\\\":\\\"recovery\\\"",
+    ),
+    (
+        "errlog: a record of a stream's setup log",
+        "\\\"src\\\":\\\"setup\\\"",
+    ),
     ("errlog: a read as hex", "\\\"hex\\\":true"),
 ];
 
@@ -283,10 +335,16 @@ fn features_do_what_the_shell_extensions_do() {
         if plan.compose.is_some() {
             texts.extend(written(&plan));
         } else {
-            texts.extend([
-                "disk=none | run", "disk=none | run K=kafka+2", "disk=cut | run C=5",
-                "disk=none | run P=mysql+3", "disk=none | run K=redis+1",
-            ].map(String::from));
+            texts.extend(
+                [
+                    "disk=none | run",
+                    "disk=none | run K=kafka+2",
+                    "disk=cut | run C=5",
+                    "disk=none | run P=mysql+3",
+                    "disk=none | run K=redis+1",
+                ]
+                .map(String::from),
+            );
         }
         let mut counts: BTreeMap<String, usize> = BTreeMap::new();
         let mut stream = Vec::new();
@@ -303,26 +361,60 @@ fn features_do_what_the_shell_extensions_do() {
                 Ok(r) => r,
                 Err(e) => {
                     *counts
-                        .entry(format!("refused:{}", e.seam.map(|x| x.name()).unwrap_or("other")))
+                        .entry(format!(
+                            "refused:{}",
+                            e.seam.map(|x| x.name()).unwrap_or("other")
+                        ))
                         .or_default() += 1;
                     continue;
                 }
             };
             let ctx = |w: &str| format!("{label}: {text}: {w}");
-            if let Err(e) = check(&plan, &r.run.items, Conv::Run, &s.guest_text(), (&[], &[]), Some(&b.s1.2)) {
-                panic!("{}\n{e}\n--- transcript:\n{}", ctx("the run differs from the shell"), r.run.fin.transcript.to_jsonl());
+            if let Err(e) = check(
+                &plan,
+                &r.run.items,
+                Conv::Run,
+                &s.guest_text(),
+                (&[], &[]),
+                Some(&b.s1.2),
+            ) {
+                panic!(
+                    "{}\n{e}\n--- transcript:\n{}",
+                    ctx("the run differs from the shell"),
+                    r.run.fin.transcript.to_jsonl()
+                );
             }
             let mut reference = r.run.fin.transcript.clone();
             reference.header.controller = "replay".into();
-            assert_eq!(r.replay.to_jsonl(), reference.to_jsonl(), "{}", ctx("transcript replay differs from the policy run"));
+            assert_eq!(
+                r.replay.to_jsonl(),
+                reference.to_jsonl(),
+                "{}",
+                ctx("transcript replay differs from the policy run")
+            );
             let mut all = r.run.fin.transcript.to_jsonl();
             if let Some(rc) = &r.recovery {
-                let Some(Ending::PowerCut { acked, failed, .. }) = r.run.fin.ending.clone() else { unreachable!() };
-                if let Err(e) = check(&plan, &rc.items, Conv::Recovery, &oracle_cmd(&acked, &failed), (&acked, &failed), Some(&b.s0.2)) {
-                    panic!("{}\n{e}\n--- transcript:\n{}", ctx("the recovery differs from the shell"), rc.fin.transcript.to_jsonl());
+                let Some(Ending::PowerCut { acked, failed, .. }) = r.run.fin.ending.clone() else {
+                    unreachable!()
+                };
+                if let Err(e) = check(
+                    &plan,
+                    &rc.items,
+                    Conv::Recovery,
+                    &oracle_cmd(&acked, &failed),
+                    (&acked, &failed),
+                    Some(&b.s0.2),
+                ) {
+                    panic!(
+                        "{}\n{e}\n--- transcript:\n{}",
+                        ctx("the recovery differs from the shell"),
+                        rc.fin.transcript.to_jsonl()
+                    );
                 }
                 all.push_str(&rc.fin.transcript.to_jsonl());
-                *counts.entry(format!("recovery:{}", class(&rc.fin.transcript))).or_default() += 1;
+                *counts
+                    .entry(format!("recovery:{}", class(&rc.fin.transcript)))
+                    .or_default() += 1;
             }
             all.push_str(&b.boot.fin.transcript.to_jsonl());
             for (name, pat) in PATHS {
@@ -330,24 +422,52 @@ fn features_do_what_the_shell_extensions_do() {
                     *seen_paths.entry(name).or_default() += 1;
                 }
             }
-            for name in item_paths(&r.run.items).into_iter().chain(r.recovery.iter().flat_map(|c| item_paths(&c.items))) {
+            for name in item_paths(&r.run.items)
+                .into_iter()
+                .chain(r.recovery.iter().flat_map(|c| item_paths(&c.items)))
+            {
                 *seen_paths.entry(name).or_default() += 1;
             }
-            *counts.entry(format!("run:{}", class(&r.run.fin.transcript))).or_default() += 1;
+            *counts
+                .entry(format!("run:{}", class(&r.run.fin.transcript)))
+                .or_default() += 1;
             runs += 1;
             stream.push(format!("S\t{text}"));
-            stream.extend(all.lines().filter(|l| !l.contains("\"t\":\"note\"")).map(str::to_string));
+            stream.extend(
+                all.lines()
+                    .filter(|l| !l.contains("\"t\":\"note\""))
+                    .map(str::to_string),
+            );
         }
-        golden.push(format!("plan\t{label}\t{}", counts.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(" ")));
-        golden.push(format!("boot-transcript\t{label}\t{}", b.boot.fin.transcript.hash()));
+        golden.push(format!(
+            "plan\t{label}\t{}",
+            counts
+                .iter()
+                .map(|(k, v)| format!("{k}={v}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        ));
+        golden.push(format!(
+            "boot-transcript\t{label}\t{}",
+            b.boot.fin.transcript.hash()
+        ));
         golden.extend(support::chunked(&label, &stream, 500));
     }
     golden.push(format!(
         "paths\t{}",
-        seen_paths.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join("; ")
+        seen_paths
+            .iter()
+            .map(|(k, v)| format!("{k}={v}"))
+            .collect::<Vec<_>>()
+            .join("; ")
     ));
     eprintln!("features: {runs} runs; paths: {seen_paths:?}");
-    let missing: Vec<&str> = PATHS.iter().map(|p| p.0).chain(ITEM_PATHS.iter().copied()).filter(|n| !seen_paths.contains_key(n)).collect();
+    let missing: Vec<&str> = PATHS
+        .iter()
+        .map(|p| p.0)
+        .chain(ITEM_PATHS.iter().copied())
+        .filter(|n| !seen_paths.contains_key(n))
+        .collect();
     assert!(missing.is_empty(), "paths no run took: {missing:?}");
     let inputs: Vec<String> = [
         "hydo/onboard/hydo-init-history.sh",
@@ -394,7 +514,10 @@ impl Dry {
         std::fs::copy(onb.join("hydo-composer.sh"), etc.join("compose.sh")).unwrap();
         let mut list = String::new();
         for (i, c) in cp.commands.iter().enumerate() {
-            list.push_str(&format!("{i} {} {} {} {}\n", c.kind, c.timeout, c.id, c.cmd));
+            list.push_str(&format!(
+                "{i} {} {} {} {}\n",
+                c.kind, c.timeout, c.id, c.cmd
+            ));
         }
         std::fs::write(etc.join("compose.list"), list).unwrap();
         for (k, c) in &cp.saved {
@@ -450,20 +573,28 @@ fn same_setw(dry: &Dry, cp: &ComposePlan, steps: i64, w: &str) -> Result<(), Str
     }
     let con_lines: Vec<String> = con.lines().map(str::to_string).collect();
     if con_lines != want_con {
-        return Err(format!("W={w}: console\n  compose.sh: {con_lines:?}\n  controller: {want_con:?}"));
+        return Err(format!(
+            "W={w}: console\n  compose.sh: {con_lines:?}\n  controller: {want_con:?}"
+        ));
     }
     match (&r, st) {
         (Ok(_), 0) => {}
         (Err(composer::WFail::Werr(e)), 1) if out.trim_end_matches('\n') == e => {}
         (Err(composer::WFail::Crash), s) if s != 0 => {}
-        _ => return Err(format!("W={w}: setw status {st} stdout {out:?}, the controller {r:?}")),
+        _ => {
+            return Err(format!(
+                "W={w}: setw status {st} stdout {out:?}, the controller {r:?}"
+            ))
+        }
     }
     if let Ok((_, es)) = &r {
         let (st, out, _) = dry.run(&["plan"]);
         let want: Vec<String> = es.iter().map(|e| e.line()).collect();
         let got: Vec<String> = out.lines().map(str::to_string).collect();
         if st != 0 || got != want {
-            return Err(format!("W={w}: plan\n  compose.sh: {got:?}\n  controller: {want:?}"));
+            return Err(format!(
+                "W={w}: plan\n  compose.sh: {got:?}\n  controller: {want:?}"
+            ));
         }
     }
     Ok(())
@@ -506,25 +637,41 @@ fn w_forms_as_compose_sh() {
         cmd("serial_driver", "serial_driver_rewrite"),
     ]);
     let key = hydo_composer::key_of(SAVED);
-    cp.saved.insert(key.clone(), ":p2,r100,canytime_read,0.0.0.5,1.3.0.6".into());
+    cp.saved
+        .insert(key.clone(), ":p2,r100,canytime_read,0.0.0.5,1.3.0.6".into());
     let dry = Dry::new("w", &cp, 20);
     let ws = [
-        "".to_string(), "-".into(), "0000002a".into(), "0000002a,p4,q2,r100".into(),
-        "0000002a,p1,q1,r50,n3".into(), "0000002a,p4,q2,r100,n0".into(), "0000002a,p4,q3,r100,t500".into(),
-        "0000002a,p4,q2,r100,x0.2-5.9,o3".into(), "0000002a,p4,q2,r100,oparallel_driver_set+anytime_read".into(),
-        "0000002a,p4,q2,r100,zz".into(), "0000002a,,p2".into(), "0000002a,p4,q2,r100,".into(),
-        "ffffffffff,p2".into(), "zz,p2".into(), "0000002a,q0".into(),
-        format!("@{key}"), "@0123456789ab".into(), "@XYZ".into(), "@".into(),
+        "".to_string(),
+        "-".into(),
+        "0000002a".into(),
+        "0000002a,p4,q2,r100".into(),
+        "0000002a,p1,q1,r50,n3".into(),
+        "0000002a,p4,q2,r100,n0".into(),
+        "0000002a,p4,q3,r100,t500".into(),
+        "0000002a,p4,q2,r100,x0.2-5.9,o3".into(),
+        "0000002a,p4,q2,r100,oparallel_driver_set+anytime_read".into(),
+        "0000002a,p4,q2,r100,zz".into(),
+        "0000002a,,p2".into(),
+        "0000002a,p4,q2,r100,".into(),
+        "ffffffffff,p2".into(),
+        "zz,p2".into(),
+        "0000002a,q0".into(),
+        format!("@{key}"),
+        "@0123456789ab".into(),
+        "@XYZ".into(),
+        "@".into(),
         ":p2,r100,canytime_read+parallel_driver_set,0.0.0.1,1.0.1.2,2.3.1.3".into(),
         ":p2,r100,t300,cparallel_driver_set,0.19.0.1".into(),
         ":p2,r100,cparallel_driver_set,0.20.0.1".into(),
         ":p2,r100,cparallel_driver_set,0.0.1.1".into(),
         ":p2,r100,cparallel_driver_nosuch,0.0.0.1".into(),
         ":p2,r100,cfirst_accounts,0.0.0.1".into(),
-        ":p2,r100,cparallel_driver_set".into(), ":p2,r100,c,0.0.0.1".into(),
+        ":p2,r100,cparallel_driver_set".into(),
+        ":p2,r100,c,0.0.0.1".into(),
         ":p2,r100,cparallel_driver_set,bogus".into(),
         ":p2,r100,cparallel_driver_set,canytime_read,0.0.0.1".into(),
-        ":pX,r100,cparallel_driver_set,0.0.0.1".into(), ":p2,r100,cparallel_driver_set,0.0.0.1,".into(),
+        ":pX,r100,cparallel_driver_set,0.0.0.1".into(),
+        ":p2,r100,cparallel_driver_set,0.0.0.1,".into(),
     ];
     let mut n = 0;
     for w in &ws {
@@ -557,7 +704,9 @@ impl Rng {
 /// hydo-composer's tests/awk.rs command sets (80 of them).
 fn cmd_sets() -> Vec<Vec<(String, String)>> {
     let k = |kind: &str, n: usize| -> Vec<(String, String)> {
-        (0..n).map(|i| (kind.to_string(), format!("{kind}_{i}"))).collect()
+        (0..n)
+            .map(|i| (kind.to_string(), format!("{kind}_{i}")))
+            .collect()
     };
     let mut sets = Vec::new();
     for npar in [0, 1, 3] {
@@ -604,7 +753,10 @@ fn m98_corpora_as_the_awk() {
     let sets = cmd_sets();
     assert_eq!(sets.len(), 80);
     let mut rnd = Rng(7);
-    let n_values = std::env::var("HYDO_AWK_N").ok().and_then(|x| x.parse().ok()).unwrap_or(3000);
+    let n_values = std::env::var("HYDO_AWK_N")
+        .ok()
+        .and_then(|x| x.parse().ok())
+        .unwrap_or(3000);
     let mut checked = 0;
     let mut drys: BTreeMap<(usize, i64), Dry> = BTreeMap::new();
     for n in 0..n_values {
@@ -613,7 +765,11 @@ fn m98_corpora_as_the_awk() {
         let steps = rnd.choice(&[1i64, 4, 20, 57]);
         let m = meta_of(cmds, steps);
         let (ids, kinds) = hydo_composer::ids_kinds(&m);
-        let seed = if n % 5 != 0 { (rnd.next() & 0xffff_ffff) as i128 } else { n as i128 };
+        let seed = if n % 5 != 0 {
+            (rnd.next() & 0xffff_ffff) as i128
+        } else {
+            n as i128
+        };
         let mut d = hydo_composer::WSeed {
             seed,
             p: 1 + rnd.below(4) as i128,
@@ -639,7 +795,9 @@ fn m98_corpora_as_the_awk() {
         }
         let w = hydo_composer::render_w(&d);
         let cp = cplan_of(cmds);
-        let dry = drys.entry((si, steps)).or_insert_with(|| Dry::new(&format!("c{si}-{steps}"), &cp, steps));
+        let dry = drys
+            .entry((si, steps))
+            .or_insert_with(|| Dry::new(&format!("c{si}-{steps}"), &cp, steps));
         same_setw(dry, &cp, steps, &w).unwrap_or_else(|e| panic!("{e}"));
         checked += 1;
     }
@@ -670,7 +828,12 @@ fn m98_corpora_as_the_awk() {
         now.push(("anytime".into(), "anytime_0new".into()));
         let mut dropped = None;
         if n % 7 == 3 {
-            let used: Vec<String> = hydo_composer::parse_resolved(&res).unwrap().entries.iter().map(|e| e.2.clone()).collect();
+            let used: Vec<String> = hydo_composer::parse_resolved(&res)
+                .unwrap()
+                .entries
+                .iter()
+                .map(|e| e.2.clone())
+                .collect();
             let d = used[rnd.below(used.len())].clone();
             now.retain(|c| c.1 != d);
             dropped = Some(d);
@@ -692,8 +855,14 @@ fn m98_corpora_as_the_awk() {
             }
             (None, Ok((_, es))) => {
                 // the same commands, rounds, entries and seeds as the seed form on the old list
-                let got: Vec<(i64, i64, String, i64)> = es.iter().map(|e| (e.entry, e.round, now[e.idx].1.clone(), e.seed)).collect();
-                let want: Vec<(i64, i64, String, i64)> = old.iter().map(|(e, r, c, s)| (*e as i64, *r as i64, cmds[*c].1.clone(), *s as i64)).collect();
+                let got: Vec<(i64, i64, String, i64)> = es
+                    .iter()
+                    .map(|e| (e.entry, e.round, now[e.idx].1.clone(), e.seed))
+                    .collect();
+                let want: Vec<(i64, i64, String, i64)> = old
+                    .iter()
+                    .map(|(e, r, c, s)| (*e as i64, *r as i64, cmds[*c].1.clone(), *s as i64))
+                    .collect();
                 assert_eq!(got, want, "{res}");
                 nres += 1;
             }
@@ -748,24 +917,59 @@ fn errlog_scan_as_the_awk() {
     let (scan, sum) = (awk_prog("EL_SCAN"), awk_prog("EL_SUM"));
     let hosts = vec![s("redis"), s("front"), s("kafka")];
     let presets: [(&str, String, String); 4] = [
-        ("auto", format!("({})", errlog::LEVEL_ERROR), errlog::EXCEPTION_LINE.into()),
-        ("warning", format!("({})|({})", errlog::LEVEL_ERROR, errlog::LEVEL_WARNING), errlog::EXCEPTION_LINE.into()),
+        (
+            "auto",
+            format!("({})", errlog::LEVEL_ERROR),
+            errlog::EXCEPTION_LINE.into(),
+        ),
+        (
+            "warning",
+            format!("({})|({})", errlog::LEVEL_ERROR, errlog::LEVEL_WARNING),
+            errlog::EXCEPTION_LINE.into(),
+        ),
         ("redis", format!("({})", errlog::REDIS_LEVEL), String::new()),
-        ("match", format!("({})|(boom|Loading)", errlog::LEVEL_ERROR), errlog::EXCEPTION_LINE.into()),
+        (
+            "match",
+            format!("({})|(boom|Loading)", errlog::LEVEL_ERROR),
+            errlog::EXCEPTION_LINE.into(),
+        ),
     ];
     let mut rnd = Rng(11);
     let mut n = 0;
     for round in 0..120 {
         let (name, lev, exc) = &presets[round % presets.len()];
-        let ign = if round % 5 == 0 { s("Connection refused") } else { String::new() };
-        let lines: Vec<String> = (0..1 + rnd.below(30)).map(|_| LOG[rnd.below(LOG.len())].to_string()).collect();
+        let ign = if round % 5 == 0 {
+            s("Connection refused")
+        } else {
+            String::new()
+        };
+        let lines: Vec<String> = (0..1 + rnd.below(30))
+            .map(|_| LOG[rnd.below(LOG.len())].to_string())
+            .collect();
         let text = lines.join("\n") + if round % 7 == 0 { "" } else { "\n" };
         let nl = lines.len();
-        let marks: String = (0..rnd.below(4)).map(|k| format!("{} {}\n", if k == 3 { s("end") } else { (k * 5).to_string() }, rnd.below(nl + 1))).collect::<Vec<_>>().concat();
+        let marks: String = (0..rnd.below(4))
+            .map(|k| {
+                format!(
+                    "{} {}\n",
+                    if k == 3 {
+                        s("end")
+                    } else {
+                        (k * 5).to_string()
+                    },
+                    rnd.below(nl + 1)
+                )
+            })
+            .collect::<Vec<_>>()
+            .concat();
         let mut ms: Vec<String> = marks.lines().map(str::to_string).collect();
         ms.sort_by_key(|l| l.split(' ').nth(1).unwrap().parse::<usize>().unwrap());
         let marks = ms.iter().map(|l| format!("{l}\n")).collect::<String>();
-        let base = if round % 6 == 0 { (rnd.below(nl + 1)).to_string() } else { s("0") };
+        let base = if round % 6 == 0 {
+            (rnd.below(nl + 1)).to_string()
+        } else {
+            s("0")
+        };
         let first = if round % 9 == 0 { "r" } else { "s" };
         let (stream, mf) = (d.join("stream"), d.join("marks"));
         std::fs::write(&stream, &text).unwrap();
@@ -774,19 +978,32 @@ fn errlog_scan_as_the_awk() {
             .args(&awk[1..])
             .arg(&scan)
             .arg(&stream)
-            .env("EL_SVC", "svc").env("EL_SRC", "log").env("EL_MARKS", &mf).env("EL_FIRST", first)
-            .env("EL_BASE", &base).env("EL_LEVEL", lev).env("EL_EXC", exc).env("EL_IGNORE", &ign)
-            .env("EL_NORM", "").env("EL_HOSTS", hosts.join(" "))
+            .env("EL_SVC", "svc")
+            .env("EL_SRC", "log")
+            .env("EL_MARKS", &mf)
+            .env("EL_FIRST", first)
+            .env("EL_BASE", &base)
+            .env("EL_LEVEL", lev)
+            .env("EL_EXC", exc)
+            .env("EL_IGNORE", &ign)
+            .env("EL_NORM", "")
+            .env("EL_HOSTS", hosts.join(" "))
             .output()
             .unwrap();
-        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
         let rec = d.join("rec");
         std::fs::write(&rec, &out.stdout).unwrap();
         let out2 = Proc::new(awk[0])
             .args(&awk[1..])
             .arg(&sum)
             .arg(&rec)
-            .env("EL_MAX", "5").env("EL_BOOT", "first").env("EL_STEPS", "20")
+            .env("EL_MAX", "5")
+            .env("EL_BOOT", "first")
+            .env("EL_STEPS", "20")
             .output()
             .unwrap();
         let want = String::from_utf8_lossy(&out2.stdout).into_owned();
@@ -798,14 +1015,31 @@ fn errlog_scan_as_the_awk() {
             files: vec![],
             norm: vec![],
         };
-        let sc = errlog::scan(&sv, 0, text.as_bytes(), marks.as_bytes(), base.as_bytes(), first, &hosts);
+        let sc = errlog::scan(
+            &sv,
+            0,
+            text.as_bytes(),
+            marks.as_bytes(),
+            base.as_bytes(),
+            first,
+            &hosts,
+        );
         assert!(sc.err.is_none());
-        let got: String = errlog::summarize(&sc.recs, 5, "first", 20).iter().map(|l| format!("{l}\n")).collect();
-        assert_eq!(got, want, "preset {name}, round {round}\n--- log:\n{text}\n--- marks:\n{marks}");
+        let got: String = errlog::summarize(&sc.recs, 5, "first", 20)
+            .iter()
+            .map(|l| format!("{l}\n"))
+            .collect();
+        assert_eq!(
+            got, want,
+            "preset {name}, round {round}\n--- log:\n{text}\n--- marks:\n{marks}"
+        );
         n += 1;
     }
     let _ = std::fs::remove_dir_all(&d);
-    eprintln!("errlog: {n} logs, EL_SCAN+EL_SUM ({}) == the controller", awk.join(" "));
+    eprintln!(
+        "errlog: {n} logs, EL_SCAN+EL_SUM ({}) == the controller",
+        awk.join(" ")
+    );
 }
 
 // ------------------------------------------------------------------ the plans and hydo-build
@@ -816,23 +1050,53 @@ fn plans_as_hydo_build() {
     let mut n = 0;
     for rel in support::manifests() {
         let Ok(d) = data_of(&rel) else { continue };
-        let Ok(plan) = Plan::from_manifest(&hydo_manifest::Manifest::from_validated(d.clone())) else { continue };
+        let Ok(plan) = Plan::from_manifest(&hydo_manifest::Manifest::from_validated(d.clone()))
+        else {
+            continue;
+        };
         let m = d.clone();
         let order: Vec<String> = plan.services.iter().map(|x| x.name.clone()).collect();
-        let tools = hydo_build::shell::ShellTools { tc: "TC".into(), fc: None, ip: None };
-        let Ok((ms, _)) = hydo_build::shell::compile_shell(&hydo_build::Ctx::standalone(), &m, &order, &tools) else { continue };
+        let tools = hydo_build::shell::ShellTools {
+            tc: "TC".into(),
+            fc: None,
+            ip: None,
+        };
+        let Ok((ms, _)) =
+            hydo_build::shell::compile_shell(&hydo_build::Ctx::standalone(), &m, &order, &tools)
+        else {
+            continue;
+        };
         for (i, c) in plan.history.iter().enumerate() {
-            assert!(ms.contains(&format!("HYDO_CHECK_c{i}_json={}\n", sq(&c.json))), "{rel}: {}", c.json);
-            assert!(ms.contains(&format!("HYDO_CHECK_c{i}_final={}\n", sq(&c.final_))), "{rel}");
+            assert!(
+                ms.contains(&format!("HYDO_CHECK_c{i}_json={}\n", sq(&c.json))),
+                "{rel}: {}",
+                c.json
+            );
+            assert!(
+                ms.contains(&format!("HYDO_CHECK_c{i}_final={}\n", sq(&c.final_))),
+                "{rel}"
+            );
         }
         if let Some(ep) = &plan.errors {
             assert!(ms.contains(&format!("HYDO_ERR_MAX={}\n", ep.max)));
             let names: Vec<&str> = ep.services.iter().map(|x| x.name.as_str()).collect();
-            assert!(ms.contains(&format!("HYDO_ERR_SERVICES={}\n", sq(&names.join(" ")))), "{rel}");
+            assert!(
+                ms.contains(&format!("HYDO_ERR_SERVICES={}\n", sq(&names.join(" ")))),
+                "{rel}"
+            );
             for sv in &ep.services {
                 let n = &sv.name;
-                for (k, v) in [("level", sv.level.clone()), ("exc", sv.exc.clone()), ("ignore", sv.ignore.clone()), ("files", sv.files.join(" ")), ("norm", sv.norm.join("\n"))] {
-                    assert!(ms.contains(&format!("HYDO_ERR_{n}_{k}={}\n", sq(&v))), "{rel}: HYDO_ERR_{n}_{k}");
+                for (k, v) in [
+                    ("level", sv.level.clone()),
+                    ("exc", sv.exc.clone()),
+                    ("ignore", sv.ignore.clone()),
+                    ("files", sv.files.join(" ")),
+                    ("norm", sv.norm.join("\n")),
+                ] {
+                    assert!(
+                        ms.contains(&format!("HYDO_ERR_{n}_{k}={}\n", sq(&v))),
+                        "{rel}: HYDO_ERR_{n}_{k}"
+                    );
                 }
             }
         }
@@ -845,15 +1109,36 @@ fn plans_as_hydo_build() {
             let list = std::fs::read_to_string(root.join("etc/hydo/compose.list")).unwrap();
             for (i, (l, c)) in list.lines().zip(&cp.commands).enumerate() {
                 let w: Vec<&str> = l.splitn(5, ' ').collect();
-                assert_eq!((w[0], w[1], w[2], w[3], w[4].trim()), (i.to_string().as_str(), c.kind.as_str(), c.timeout.to_string().as_str(), c.id.as_str(), c.cmd.as_str()), "{rel}");
+                assert_eq!(
+                    (w[0], w[1], w[2], w[3], w[4].trim()),
+                    (
+                        i.to_string().as_str(),
+                        c.kind.as_str(),
+                        c.timeout.to_string().as_str(),
+                        c.id.as_str(),
+                        c.cmd.as_str()
+                    ),
+                    "{rel}"
+                );
             }
             let checks = std::fs::read_to_string(root.join("etc/hydo/compose.checks")).unwrap();
             for (l, c) in checks.lines().zip(&cp.checks) {
                 let w: Vec<&str> = l.splitn(5, ' ').collect();
-                assert_eq!((w[2], w[3], w[4].trim()), (c.timeout.to_string().as_str(), c.id.as_str(), c.cmd.as_str()), "{rel}");
+                assert_eq!(
+                    (w[2], w[3], w[4].trim()),
+                    (
+                        c.timeout.to_string().as_str(),
+                        c.id.as_str(),
+                        c.cmd.as_str()
+                    ),
+                    "{rel}"
+                );
             }
             for l in hydo_composer::shell_lines(meta) {
-                assert!(ms.contains(&format!("{l}\n")) || l.starts_with("HYDO_KNOB_W"), "{rel}: {l}");
+                assert!(
+                    ms.contains(&format!("{l}\n")) || l.starts_with("HYDO_KNOB_W"),
+                    "{rel}: {l}"
+                );
             }
             let _ = std::fs::remove_dir_all(&root);
         }
@@ -869,7 +1154,11 @@ fn plans_as_hydo_build() {
 #[test]
 fn deliberate_mistakes_are_caught() {
     type Mut = fn(&mut Vec<Item>) -> bool;
-    fn edit_report(items: &mut [Item], pick: impl Fn(&str) -> bool, f: impl Fn(&str) -> String) -> bool {
+    fn edit_report(
+        items: &mut [Item],
+        pick: impl Fn(&str) -> bool,
+        f: impl Fn(&str) -> String,
+    ) -> bool {
         for it in items.iter_mut() {
             if let Item::Report { line, .. } = it {
                 if pick(line) {
@@ -881,32 +1170,114 @@ fn deliberate_mistakes_are_caught() {
         false
     }
     let mutations: Vec<(&str, Mut)> = vec![
-        ("an error record's template changed", |v| edit_report(v, |l| l.starts_with("HYDO-ERRLOG {"), |l| l.replacen("\"tpl\":\"", "\"tpl\":\"x", 1))),
-        ("an error record's count changed", |v| edit_report(v, |l| l.starts_with("HYDO-ERRLOG {"), |l| l.replacen("\"n\":", "\"n\":9", 1))),
-        ("the labels of an error kind changed", |v| edit_report(v, |l| l.starts_with("HYDO-ERRLOG {") && l.contains("\"at\":\"s"), |l| l.replacen("\"at\":\"s", "\"at\":\"r", 1))),
-        ("the summary's boot changed", |v| edit_report(v, |l| l.starts_with("HYDO-ERRLOG-SUM"), |l| l.replace("first", "recovery"))),
+        ("an error record's template changed", |v| {
+            edit_report(
+                v,
+                |l| l.starts_with("HYDO-ERRLOG {"),
+                |l| l.replacen("\"tpl\":\"", "\"tpl\":\"x", 1),
+            )
+        }),
+        ("an error record's count changed", |v| {
+            edit_report(
+                v,
+                |l| l.starts_with("HYDO-ERRLOG {"),
+                |l| l.replacen("\"n\":", "\"n\":9", 1),
+            )
+        }),
+        ("the labels of an error kind changed", |v| {
+            edit_report(
+                v,
+                |l| l.starts_with("HYDO-ERRLOG {") && l.contains("\"at\":\"s"),
+                |l| l.replacen("\"at\":\"s", "\"at\":\"r", 1),
+            )
+        }),
+        ("the summary's boot changed", |v| {
+            edit_report(
+                v,
+                |l| l.starts_with("HYDO-ERRLOG-SUM"),
+                |l| l.replace("first", "recovery"),
+            )
+        }),
         ("an error record after the held assertion records", |v| {
-            let Some(a) = v.iter().position(|i| matches!(i, Item::Report { line, .. } if line.starts_with("HYDO-ERRLOG-SUM"))) else { return false };
-            let Some(b) = v[a..].iter().position(|i| matches!(i, Item::Report { line, .. } if line.starts_with("HYDO-ASSERT {"))) else { return false };
+            let Some(a) = v.iter().position(
+                |i| matches!(i, Item::Report { line, .. } if line.starts_with("HYDO-ERRLOG-SUM")),
+            ) else {
+                return false;
+            };
+            let Some(b) = v[a..].iter().position(
+                |i| matches!(i, Item::Report { line, .. } if line.starts_with("HYDO-ASSERT {")),
+            ) else {
+                return false;
+            };
             let (x, y) = (v[a].clone(), v[a + b].clone());
             if let (Item::Report { line: l1, .. }, Item::Report { line: l2, .. }) = (&x, &y) {
                 let (l1, l2) = (l1.clone(), l2.clone());
-                if let Item::Report { line, .. } = &mut v[a] { *line = l2; }
-                if let Item::Report { line, .. } = &mut v[a + b] { *line = l1; }
+                if let Item::Report { line, .. } = &mut v[a] {
+                    *line = l2;
+                }
+                if let Item::Report { line, .. } = &mut v[a + b] {
+                    *line = l1;
+                }
                 return true;
             }
             false
         }),
-        ("a read-back's exit status changed", |v| edit_report(v, |l| l.starts_with("HYDO-CHECK-FINAL"), |l| l.replace("\"rc\":", "\"rc\":1"))),
-        ("a check declaration changed", |v| edit_report(v, |l| l.starts_with("HYDO-CHECK {"), |l| l.replacen("\"id\":\"", "\"id\":\"z", 1))),
-        ("an entry's round changed", |v| edit_report(v, |l| l.starts_with("HYDO-CMD start i=") && l.contains(" r=1 "), |l| l.replacen(" r=1 ", " r=2 ", 1))),
-        ("a command's duration changed", |v| edit_report(v, |l| l.starts_with("HYDO-CMD end i=") && l.contains(" ms="), |l| l.replacen(" ms=", " ms=1", 1))),
-        ("an end status changed", |v| edit_report(v, |l| l.contains("status=ok"), |l| l.replace("status=ok", "status=failed"))),
-        ("the done line's counts changed", |v| edit_report(v, |l| l.starts_with("HYDO-COMPOSE done"), |l| l.replacen(" ok=", " ok=1", 1))),
-        ("the plan line changed", |v| edit_report(v, |l| l.starts_with("HYDO-COMPOSE plan"), |l| l.replacen("entries=", "entries=1", 1))),
+        ("a read-back's exit status changed", |v| {
+            edit_report(
+                v,
+                |l| l.starts_with("HYDO-CHECK-FINAL"),
+                |l| l.replace("\"rc\":", "\"rc\":1"),
+            )
+        }),
+        ("a check declaration changed", |v| {
+            edit_report(
+                v,
+                |l| l.starts_with("HYDO-CHECK {"),
+                |l| l.replacen("\"id\":\"", "\"id\":\"z", 1),
+            )
+        }),
+        ("an entry's round changed", |v| {
+            edit_report(
+                v,
+                |l| l.starts_with("HYDO-CMD start i=") && l.contains(" r=1 "),
+                |l| l.replacen(" r=1 ", " r=2 ", 1),
+            )
+        }),
+        ("a command's duration changed", |v| {
+            edit_report(
+                v,
+                |l| l.starts_with("HYDO-CMD end i=") && l.contains(" ms="),
+                |l| l.replacen(" ms=", " ms=1", 1),
+            )
+        }),
+        ("an end status changed", |v| {
+            edit_report(
+                v,
+                |l| l.contains("status=ok"),
+                |l| l.replace("status=ok", "status=failed"),
+            )
+        }),
+        ("the done line's counts changed", |v| {
+            edit_report(
+                v,
+                |l| l.starts_with("HYDO-COMPOSE done"),
+                |l| l.replacen(" ok=", " ok=1", 1),
+            )
+        }),
+        ("the plan line changed", |v| {
+            edit_report(
+                v,
+                |l| l.starts_with("HYDO-COMPOSE plan"),
+                |l| l.replacen("entries=", "entries=1", 1),
+            )
+        }),
         ("HYDO_SEED changed", |v| {
             for it in v.iter_mut() {
-                if let Item::Send { cmd: hydo_agent_proto::msg::Command::Spawn(sp), .. } = it {
+                if let Item::Send {
+                    cmd: hydo_agent_proto::msg::Command::Spawn(sp),
+                    ..
+                } = it
+                {
                     if let Some(e) = sp.env.as_mut() {
                         if let Some(x) = e.iter_mut().find(|x| x.starts_with("HYDO_SEED=")) {
                             x.push('7');
@@ -919,7 +1290,12 @@ fn deliberate_mistakes_are_caught() {
         }),
         ("a composed command's timeout changed", |v| {
             for it in v.iter_mut() {
-                if let Item::Send { by, cmd: hydo_agent_proto::msg::Command::Spawn(sp), .. } = it {
+                if let Item::Send {
+                    by,
+                    cmd: hydo_agent_proto::msg::Command::Spawn(sp),
+                    ..
+                } = it
+                {
                     if by.starts_with("cmd:") {
                         sp.argv[2] = "61".into();
                         return true;
@@ -945,17 +1321,45 @@ fn deliberate_mistakes_are_caught() {
         for w in ws {
             let s = Schedule::parse(w).unwrap();
             if let Ok(r) = run_schedule(&b, &s) {
-                convs.push((plan.clone(), r.run.items.clone(), b.s1.2.clone(), s.guest_text()));
+                convs.push((
+                    plan.clone(),
+                    r.run.items.clone(),
+                    b.s1.2.clone(),
+                    s.guest_text(),
+                ));
             }
         }
     };
-    add(support::plan_of("hydo/onboard/examples/stack/hydo-errors.yaml").unwrap(), "stack-errors", &["disk=none | run", "disk=none | run K=kafka@3+2"]);
-    add(support::plan_of("hydo/onboard/examples/redis/hydo-hist.yaml").unwrap(), "redis-hist", &["disk=none | run"]);
+    add(
+        support::plan_of("hydo/onboard/examples/stack/hydo-errors.yaml").unwrap(),
+        "stack-errors",
+        &["disk=none | run", "disk=none | run K=kafka@3+2"],
+    );
+    add(
+        support::plan_of("hydo/onboard/examples/redis/hydo-hist.yaml").unwrap(),
+        "redis-hist",
+        &["disk=none | run"],
+    );
     let ps = plans();
-    add(ps[2].2.clone(), &ps[2].0, &["disk=none | run W=0000002a,p4,q2,r100", "disk=none | run W=00000005,p1,q2,r50"]);
-    add(support::plan_of(HIST).unwrap(), HIST, &["disk=none | run W=0000002a,p4,q2,r100", "disk=none | run W=00000009,p2,q2,r100"]);
+    add(
+        ps[2].2.clone(),
+        &ps[2].0,
+        &[
+            "disk=none | run W=0000002a,p4,q2,r100",
+            "disk=none | run W=00000005,p1,q2,r50",
+        ],
+    );
+    add(
+        support::plan_of(HIST).unwrap(),
+        HIST,
+        &[
+            "disk=none | run W=0000002a,p4,q2,r100",
+            "disk=none | run W=00000009,p2,q2,r100",
+        ],
+    );
     for (plan, items, s1, cmd) in &convs {
-        check(plan, items, Conv::Run, cmd, (&[], &[]), Some(s1)).unwrap_or_else(|e| panic!("unchanged: {e}"));
+        check(plan, items, Conv::Run, cmd, (&[], &[]), Some(s1))
+            .unwrap_or_else(|e| panic!("unchanged: {e}"));
     }
     let mut caught = 0;
     for (name, f) in &mutations {
@@ -966,11 +1370,17 @@ fn deliberate_mistakes_are_caught() {
                 continue;
             }
             applied = true;
-            assert!(check(plan, &v, Conv::Run, cmd, (&[], &[]), Some(s1)).is_err(), "not caught: {name}");
+            assert!(
+                check(plan, &v, Conv::Run, cmd, (&[], &[]), Some(s1)).is_err(),
+                "not caught: {name}"
+            );
             caught += 1;
             break;
         }
-        assert!(applied, "the mistake could not be put into any conversation: {name}");
+        assert!(
+            applied,
+            "the mistake could not be put into any conversation: {name}"
+        );
     }
     eprintln!("mistakes: {caught} of {} caught", mutations.len());
 }

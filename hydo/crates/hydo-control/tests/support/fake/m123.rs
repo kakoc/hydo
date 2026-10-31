@@ -48,9 +48,13 @@ impl Fake {
     fn m123_line(&mut self, parts: &[&str]) -> String {
         self.world.ext.lines += 1;
         let r = self.h(parts);
-        if r % 17 == 0 {
+        if r.is_multiple_of(17) {
             // a long line (the reads are 3,000-byte chunks)
-            return format!("ERROR {} {}", "\u{e9}".repeat(1300 + (r % 400) as usize), r % 9);
+            return format!(
+                "ERROR {} {}",
+                "\u{e9}".repeat(1300 + (r % 400) as usize),
+                r % 9
+            );
         }
         let t = LINES[(r % LINES.len() as u64) as usize];
         t.replace("{n}", &(r % 900 + 10).to_string())
@@ -122,7 +126,7 @@ impl Fake {
                 _ => (cto + 50, 0), // runs into its timeout
             };
             if kind == "first" || kind == "history" {
-                status = if r % 29 == 0 { 1 } else { 0 };
+                status = if r.is_multiple_of(29) { 1 } else { 0 };
                 dur = 3 + r % 9;
             }
             if dur > cto {
@@ -136,7 +140,7 @@ impl Fake {
                 env_of("HYDO_SEED"),
                 env_of("HYDO_ROUND")
             ));
-            if r % 3 == 0 {
+            if r.is_multiple_of(3) {
                 text.push_str(&format!(
                     "HYDO-ASSERT {{\"t\":\"always\",\"id\":\"kv.{}\",\"ok\":true,\"msg\":\"m\"}}\n",
                     r % 4
@@ -145,7 +149,10 @@ impl Fake {
             match (r / 7) % 5 {
                 0 => text.push_str("total 495 \"quoted\" back\\slash\n"),
                 1 => text.push_str("lost 2 writes\n\n"),
-                2 => text.push_str(&format!("HYDO-ASSERT-DECL {{\"t\":\"x\",\"id\":\"d{}\"}}\n", r % 3)),
+                2 => text.push_str(&format!(
+                    "HYDO-ASSERT-DECL {{\"t\":\"x\",\"id\":\"d{}\"}}\n",
+                    r % 3
+                )),
                 3 => {}
                 _ => text.push_str("tail without a newline"),
             }
@@ -176,7 +183,8 @@ impl Fake {
     pub(super) fn m123_run(&mut self, r: &Run) -> Option<(u64, u32, String)> {
         let a1 = r.argv.get(1).map(String::as_str).unwrap_or("");
         let script = r.argv.get(3).cloned().unwrap_or_default();
-        if a1 == "sh" && (script.contains("/tmp/hydo/el.m.") || script.contains("/tmp/hydo/el.b.")) {
+        if a1 == "sh" && (script.contains("/tmp/hydo/el.m.") || script.contains("/tmp/hydo/el.b."))
+        {
             for line in script.lines() {
                 self.m123_pipeline(line);
             }

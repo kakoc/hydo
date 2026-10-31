@@ -80,7 +80,9 @@ pub struct ComposePlan {
 }
 
 fn int(v: &Value) -> i64 {
-    py::int_of(v).and_then(|i| i64::try_from(i).ok()).unwrap_or(0)
+    py::int_of(v)
+        .and_then(|i| i64::try_from(i).ok())
+        .unwrap_or(0)
 }
 
 /// `read -r ci ck cto cid ccmd`: the last field without the blanks around it.
@@ -222,7 +224,11 @@ fn comma_fields(x: &str) -> Vec<String> {
 pub fn parse_w(cp: &ComposePlan, w: &str) -> (Vec<String>, Result<WFields, WFail>) {
     let mut lines = Vec::new();
     let mut f = WFields {
-        w: if w == "-" { String::new() } else { w.to_string() },
+        w: if w == "-" {
+            String::new()
+        } else {
+            w.to_string()
+        },
         ws: 0,
         wp: cp.parallel.to_string(),
         wq: cp.per_round.to_string(),
@@ -479,12 +485,11 @@ fn res_awk(cp: &ComposePlan, steps: i64, v: &str) -> Result<Vec<Entry>, String> 
     Ok(out)
 }
 
+/// W's fields and its entries.
+pub type Composition = (WFields, Vec<Entry>);
+
 /// wplan: the console lines parse_w prints, and W's fields and composition on this image.
-pub fn wplan(
-    cp: &ComposePlan,
-    steps: i64,
-    w: &str,
-) -> (Vec<String>, Result<(WFields, Vec<Entry>), WFail>) {
+pub fn wplan(cp: &ComposePlan, steps: i64, w: &str) -> (Vec<String>, Result<Composition, WFail>) {
     let (lines, r) = parse_w(cp, w);
     let f = match r {
         Ok(f) => f,
@@ -769,10 +774,7 @@ pub(super) fn provision(fx: &mut F<'_>, ctx: &Ctx) -> Step<Option<u32>> {
         if c.kind != "first" {
             continue;
         }
-        fx.report(format!(
-            "HYDO-CMD start i=f{ci} kind=first cmd={}",
-            c.id
-        ));
+        fx.report(format!("HYDO-CMD start i=f{ci} kind=first cmd={}", c.id));
         let t1 = centis(fx)?;
         let e = env(fx, ctx, &[("HYDO_CMD", c.id.clone())]);
         let st = spawn_wait(
@@ -890,10 +892,7 @@ pub(super) fn step(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<u32> {
 fn stop_all(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
     let dt = fx.effect_text(|h, _| {
         h.compose.stopped = true;
-        h.compose
-            .daemon
-            .map(|d| d.to_string())
-            .unwrap_or_default()
+        h.compose.daemon.map(|d| d.to_string()).unwrap_or_default()
     });
     if let Ok(d) = dt.parse::<usize>() {
         fx.cancel(d);
@@ -1036,14 +1035,7 @@ fn daemon(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
 
 /// round_start: wait for the round's time, then for the gate. `k` numbers the round waits (the
 /// handles of their timers).
-fn round_start(
-    fx: &mut F<'_>,
-    ctx: &Ctx,
-    r: i64,
-    rc: i64,
-    t: &mut i64,
-    k: &mut usize,
-) -> Step<()> {
+fn round_start(fx: &mut F<'_>, ctx: &Ctx, r: i64, rc: i64, t: &mut i64, k: &mut usize) -> Step<()> {
     if r > 0 {
         *t += rc;
         let now = centis(fx)?;
@@ -1053,7 +1045,11 @@ fn round_start(
             *k += 1;
             run(
                 fx,
-                vec![bb(ctx), "sleep".into(), format!("{}.{:02}", d / 100, d % 100)],
+                vec![
+                    bb(ctx),
+                    "sleep".into(),
+                    format!("{}.{:02}", d / 100, d % 100),
+                ],
                 e,
                 None,
             )?;
@@ -1397,10 +1393,7 @@ fn check_cmd(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<Ran> {
         0..=2 => r,
         143 => Ran {
             status: 2,
-            out: format!(
-                "{}check {} timed out after {}s\n",
-                r.out, c.id, c.timeout
-            ),
+            out: format!("{}check {} timed out after {}s\n", r.out, c.id, c.timeout),
         },
         _ => Ran {
             status: 1,

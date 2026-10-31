@@ -10,8 +10,10 @@
 //! end, not with a DFA), PLAN_AWK's Park-Miller generator itself (not hydo-composer's), RES_AWK
 //! field by field. Where the controller had to choose how a shell construct becomes agent
 //! commands (HANDOFF.md, M123), the model checks that choice as written there.
+// the if / else if chains are the awk's, as written there
+#![allow(clippy::if_same_then_else)]
 
-use super::{bad, plain, run_of, s, Halt, Model, R, BB, H};
+use super::{bad, plain, run_of, s, Halt, Model, BB, H, R};
 use crate::support::fake::Msg;
 use crate::support::Item;
 use hydo_agent_proto::msg::*;
@@ -249,12 +251,24 @@ fn nums(s0: &[u8], hosts: &[String]) -> Vec<u8> {
 /// norm(s): the fixed substitutions as the awk text has them ([-\/] holds a backslash in busybox).
 fn norm(s0: &[u8], hosts: &[String]) -> Vec<u8> {
     let subs: [(&str, &[u8]); 7] = [
-        (r"[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}(:[0-9]{2}([.,][0-9]+)?)?(Z|[+-][0-9]{2}:?[0-9]{2})?", b"<time>"),
+        (
+            r"[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}(:[0-9]{2}([.,][0-9]+)?)?(Z|[+-][0-9]{2}:?[0-9]{2})?",
+            b"<time>",
+        ),
         (r"[0-9]{4}[-\\/][0-9]{2}[-\\/][0-9]{2}", b"<date>"),
         (r"[0-9]?[0-9]:[0-9]{2}:[0-9]{2}([.,][0-9]+)?", b"<time>"),
-        (r"[0-9]?[0-9][ -](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[ -][0-9]{4}", b"<date>"),
-        (r"((Mon|Tue|Wed|Thu|Fri|Sat|Sun),? +)?(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) +[0-9]?[0-9],?( [0-9]{4})? <time>", b"<date> <time>"),
-        (r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]+", b"<uuid>"),
+        (
+            r"[0-9]?[0-9][ -](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[ -][0-9]{4}",
+            b"<date>",
+        ),
+        (
+            r"((Mon|Tue|Wed|Thu|Fri|Sat|Sun),? +)?(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) +[0-9]?[0-9],?( [0-9]{4})? <time>",
+            b"<date> <time>",
+        ),
+        (
+            r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]+",
+            b"<uuid>",
+        ),
         (r"0[xX][0-9a-fA-F]+", b"<hex>"),
     ];
     let mut s = s0.to_vec();
@@ -339,7 +353,13 @@ fn el_scan(
         }
         trace = true;
         let c = clean(line);
-        out.push((s(svc), s(src), norm(&c, hosts), lab.clone(), substr(&c, 1, 240)));
+        out.push((
+            s(svc),
+            s(src),
+            norm(&c, hosts),
+            lab.clone(),
+            substr(&c, 1, 240),
+        ));
     }
     out
 }
@@ -546,7 +566,10 @@ fn res_awk(kinds: &[String], ids: &[String], v: &str, steps: i64) -> Result<Vec<
                 ));
             }
             if num(e[1]) >= steps as f64 {
-                return Err(format!("entry {x} is in round {}, the plan has {steps} rounds", e[1]));
+                return Err(format!(
+                    "entry {x} is in round {}, the plan has {steps} rounds",
+                    e[1]
+                ));
             }
             let c = ci[num(e[2]) as usize];
             out.push(format!(
@@ -589,8 +612,18 @@ fn wplan(m: &Model, w0: &str) -> (Vec<String>, Result<(Wv, Vec<String>), Option<
         return (con, p.map(|p| (v, p)).ok_or(Some(s(""))));
     }
     if let Some(k) = v.w.strip_prefix('@') {
-        if k.is_empty() || !k.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)) {
-            return (con, Err(Some(format!("W={}: @ takes the key of a saved composition (hex)", v.w))));
+        if k.is_empty()
+            || !k
+                .chars()
+                .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
+        {
+            return (
+                con,
+                Err(Some(format!(
+                    "W={}: @ takes the key of a saved composition (hex)",
+                    v.w
+                ))),
+            );
         }
         match cp.saved.get(k) {
             Some(x) if !x.is_empty() => v.wv = x.clone(),
@@ -623,7 +656,11 @@ fn wplan(m: &Model, w0: &str) -> (Vec<String>, Result<(Wv, Vec<String>), Option<
             }
         }
         let r = res_awk(&kinds, &ids, &v.wv, m.plan.steps);
-        return (con, r.map(|p| (v.clone(), p)).map_err(|e| Some(format!("W={}: {e}", v.w))));
+        return (
+            con,
+            r.map(|p| (v.clone(), p))
+                .map_err(|e| Some(format!("W={}: {e}", v.w))),
+        );
     }
     let fs = fields(&v.w);
     match i64::from_str_radix(&fs[0], 16) {
@@ -643,7 +680,10 @@ fn wplan(m: &Model, w0: &str) -> (Vec<String>, Result<(Wv, Vec<String>), Option<
             Some('t') => v.wt = rest,
             Some('x') => v.wx = rest,
             Some('o') => v.wo = rest,
-            _ => con.push(format!("HYDO-COMPOSE: W={}: unknown field '{f}' ignored", v.w)),
+            _ => con.push(format!(
+                "HYDO-COMPOSE: W={}: unknown field '{f}' ignored",
+                v.w
+            )),
         }
     }
     let p = plan_awk(&kinds, &ids, &v, m.plan.steps);
@@ -683,7 +723,11 @@ impl<'a> Model<'a> {
     fn read_bytes(&mut self, path: &str) -> R<Vec<u8>> {
         let mut b: Vec<u8> = Vec::new();
         loop {
-            let off = if b.is_empty() { None } else { Some(b.len() as u64) };
+            let off = if b.is_empty() {
+                None
+            } else {
+                Some(b.len() as u64)
+            };
             let id = self.send(Command::Read(Read {
                 path: s(path),
                 offset: off,
@@ -741,9 +785,18 @@ impl<'a> Model<'a> {
             let e = self.env(&[]);
             let mut argv = plain(&["timeout", &self.plan.workload_timeout.to_string()]);
             argv.extend(run_of(&c.final_));
-            let rc = self.spawn_wait(&format!("history:c{i}"), argv, e, &format!("{H}/workload.log"), true)?;
+            let rc = self.spawn_wait(
+                &format!("history:c{i}"),
+                argv,
+                e,
+                &format!("{H}/workload.log"),
+                true,
+            )?;
             self.note(format!("check {}: final read rc={rc}", c.id))?;
-            self.report(format!("HYDO-CHECK-FINAL {{\"id\":\"{}\",\"rc\":{rc}}}", c.id))?;
+            self.report(format!(
+                "HYDO-CHECK-FINAL {{\"id\":\"{}\",\"rc\":{rc}}}",
+                c.id
+            ))?;
         }
         Ok(())
     }
@@ -751,7 +804,15 @@ impl<'a> Model<'a> {
     // ------------------------------------------------------------------ hydo-init-errlog.sh
 
     fn el_cat(&self, svc: &str, k: usize) -> String {
-        let sv = self.plan.errors.as_ref().unwrap().services.iter().find(|x| x.name == svc).unwrap();
+        let sv = self
+            .plan
+            .errors
+            .as_ref()
+            .unwrap()
+            .services
+            .iter()
+            .find(|x| x.name == svc)
+            .unwrap();
         match k {
             0 => format!("{BB} cat {H}/{svc}.log.old {H}/{svc}.log"),
             1 => format!("{BB} cat {H}/{svc}.setup.log"),
@@ -772,11 +833,17 @@ impl<'a> Model<'a> {
 
     /// mount_data(): after the mount, `el_cat $s $k | wc -l > $H/el.b.$s.$k` for k >= 2.
     pub(super) fn el_after_mount(&mut self) -> R<()> {
-        let Some(ep) = self.plan.errors.clone() else { return Ok(()) };
+        let Some(ep) = self.plan.errors.clone() else {
+            return Ok(());
+        };
         let mut ls = Vec::new();
         for sv in &ep.services {
             for k in 2..sv.files.len() + 2 {
-                ls.push(format!("{} 2>/dev/null | {BB} wc -l > {H}/el.b.{}.{k}", self.el_cat(&sv.name, k), sv.name));
+                ls.push(format!(
+                    "{} 2>/dev/null | {BB} wc -l > {H}/el.b.{}.{k}",
+                    self.el_cat(&sv.name, k),
+                    sv.name
+                ));
             }
         }
         self.el_script(ls)
@@ -784,7 +851,9 @@ impl<'a> Model<'a> {
 
     /// el_mark <label>: `echo "$1 $(el_cat $s $k | $BB wc -l)" >> $H/el.m.$s.$k`.
     pub(super) fn el_mark(&mut self, label: &str) -> R<()> {
-        let Some(ep) = self.plan.errors.clone() else { return Ok(()) };
+        let Some(ep) = self.plan.errors.clone() else {
+            return Ok(());
+        };
         let mut ls = Vec::new();
         for sv in &ep.services {
             for k in 0..sv.files.len() + 2 {
@@ -801,12 +870,18 @@ impl<'a> Model<'a> {
     /// el_report, once per boot. The streams, marks and bases are read in the shell's loop
     /// order (stream, then its marks, then its base: the controller's order).
     pub(super) fn el_report(&mut self) -> R<()> {
-        let Some(ep) = self.plan.errors.clone() else { return Ok(()) };
+        let Some(ep) = self.plan.errors.clone() else {
+            return Ok(());
+        };
         if self.m.el_reported {
             return Ok(());
         }
         self.m.el_reported = true;
-        let (first, boot) = if self.m.recovery { ("r", "recovery") } else { ("s", "first") };
+        let (first, boot) = if self.m.recovery {
+            ("r", "recovery")
+        } else {
+            ("s", "first")
+        };
         let hosts: Vec<String> = self.plan.services.iter().map(|x| x.name.clone()).collect();
         let mut rec = Vec::new();
         for sv in &ep.services {
@@ -817,13 +892,17 @@ impl<'a> Model<'a> {
                         t.extend(self.read_bytes(&format!("{H}/{}.log", sv.name))?);
                         (s("log"), t)
                     }
-                    1 => (s("setup"), self.read_bytes(&format!("{H}/{}.setup.log", sv.name))?),
+                    1 => (
+                        s("setup"),
+                        self.read_bytes(&format!("{H}/{}.setup.log", sv.name))?,
+                    ),
                     _ => (sv.files[k - 2].clone(), self.read_bytes(&sv.files[k - 2])?),
                 };
                 let marks = self.read_bytes(&format!("{H}/el.m.{}.{k}", sv.name))?;
                 let base = self.read_bytes(&format!("{H}/el.b.{}.{k}", sv.name))?;
                 rec.extend(el_scan(
-                    &sv.name, &src, &sv.level, &sv.exc, &sv.ignore, &text, &marks, &base, first, &hosts,
+                    &sv.name, &src, &sv.level, &sv.exc, &sv.ignore, &text, &marks, &base, first,
+                    &hosts,
                 ));
             }
         }
@@ -901,11 +980,18 @@ impl<'a> Model<'a> {
 
     /// provision's `( own\n) && compose.sh first`: Some(status) when provisioning is composed.
     pub(super) fn cmp_provision(&mut self) -> R<Option<u32>> {
-        let Some(cp) = self.plan.compose.clone() else { return Ok(None) };
+        let Some(cp) = self.plan.compose.clone() else {
+            return Ok(None);
+        };
         let tail = format!("\n) && {SH} first");
         let own = if self.plan.provision == format!("{SH} first") {
             None
-        } else if let Some(x) = self.plan.provision.strip_prefix("( ").and_then(|x| x.strip_suffix(&tail)) {
+        } else if let Some(x) = self
+            .plan
+            .provision
+            .strip_prefix("( ")
+            .and_then(|x| x.strip_suffix(&tail))
+        {
             Some(s(x))
         } else {
             return Ok(None);
@@ -913,12 +999,21 @@ impl<'a> Model<'a> {
         if let Some(own) = own {
             // the controller runs the subshell on its own, and `first` only when it exited 0
             let e = self.env(&[]);
-            let rc = self.spawn_wait("provision", run_of(&format!("( {own}\n)")), e, &format!("{H}/provision.log"), false)?;
+            let rc = self.spawn_wait(
+                "provision",
+                run_of(&format!("( {own}\n)")),
+                e,
+                &format!("{H}/provision.log"),
+                false,
+            )?;
             if rc != 0 {
                 return Ok(Some(rc));
             }
         }
-        self.send(Command::Mkdir(Mkdir { path: s(C), mode: None }))?;
+        self.send(Command::Mkdir(Mkdir {
+            path: s(C),
+            mode: None,
+        }))?;
         let mut rcall = 0;
         for (ci, c) in cp.commands.iter().enumerate() {
             if c.kind != "first" {
@@ -927,9 +1022,19 @@ impl<'a> Model<'a> {
             self.report(format!("HYDO-CMD start i=f{ci} kind=first cmd={}", c.id))?;
             let t1 = self.clock()?;
             let e = self.env(&[("HYDO_CMD", c.id.clone())]);
-            let rc = self.spawn_wait(&format!("first:{ci}"), timeout_of(c.timeout, &c.cmd), e, &format!("{C}/log.f{ci}"), false)?;
+            let rc = self.spawn_wait(
+                &format!("first:{ci}"),
+                timeout_of(c.timeout, &c.cmd),
+                e,
+                &format!("{C}/log.f{ci}"),
+                false,
+            )?;
             let t2 = self.clock()?;
-            self.report(format!("HYDO-CMD end i=f{ci} cmd={} rc={rc} ms={}", c.id, (t2 - t1) * 10))?;
+            self.report(format!(
+                "HYDO-CMD end i=f{ci} cmd={} rc={rc} ms={}",
+                c.id,
+                (t2 - t1) * 10
+            ))?;
             if rc != 0 {
                 rcall = 1;
             }
@@ -940,7 +1045,10 @@ impl<'a> Model<'a> {
     /// step FROM TO (the workload of a composed plan): its exit status.
     pub(super) fn cmp_step(&mut self, a: i64, b: i64) -> R<u32> {
         let steps = self.plan.steps;
-        self.send(Command::Mkdir(Mkdir { path: s(C), mode: None }))?;
+        self.send(Command::Mkdir(Mkdir {
+            path: s(C),
+            mode: None,
+        }))?;
         let gate_at = self.main[self.k - 1];
         self.m.gates.push((gate_at, b));
         if !self.m.started {
@@ -950,7 +1058,13 @@ impl<'a> Model<'a> {
         let wt = self.plan.workload_timeout;
         let budget = if wt > 10 { wt - 5 } else { wt / 2 + 1 };
         let th = format!("compose-step:{b}");
-        let tid = self.send(spawn_to(&th, plain(&["sleep", &budget.to_string()]), self.env(&[]), "/dev/null", false))?;
+        let tid = self.send(spawn_to(
+            &th,
+            plain(&["sleep", &budget.to_string()]),
+            self.env(&[]),
+            "/dev/null",
+            false,
+        ))?;
         // what the controller did when it went on: the shell's loop checks the round (or the
         // drain's end), then whether the daemon is gone, then the time
         let q = self.point();
@@ -958,7 +1072,8 @@ impl<'a> Model<'a> {
         let done = before(self.composer_report_at("HYDO-COMPOSE done"));
         let timer = before(self.exits.get(&tid).map(|x| x.0));
         let died = before(self.composer_report_at("HYDO-COMPOSE error"));
-        let kill_next = matches!(self.items.get(q), Some(Item::Send { cmd, .. }) if *cmd == kill(&th));
+        let kill_next =
+            matches!(self.items.get(q), Some(Item::Send { cmd, .. }) if *cmd == kill(&th));
         let write_after = matches!(self.items.get(q + 1), Some(Item::Send { cmd: Command::Write(_), by, .. }) if by == "main");
         if kill_next && died && write_after && !(b >= steps && done) {
             self.send(kill(&th))?;
@@ -1005,7 +1120,9 @@ impl<'a> Model<'a> {
         self.items
             .iter()
             .find_map(|i| match i {
-                Item::Report { by, line, .. } if by == "composer" => line.strip_prefix("HYDO-COMPOSE error: ").map(s),
+                Item::Report { by, line, .. } if by == "composer" => {
+                    line.strip_prefix("HYDO-COMPOSE error: ").map(s)
+                }
                 _ => None,
             })
             .unwrap_or_default()
@@ -1015,7 +1132,9 @@ impl<'a> Model<'a> {
     fn running_at(&self, p: usize) -> Vec<(i64, String, String)> {
         let mut run: Vec<(i64, String, String)> = Vec::new();
         for it in &self.items[..p] {
-            let Item::Report { line, .. } = it else { continue };
+            let Item::Report { line, .. } = it else {
+                continue;
+            };
             if let Some(r) = line.strip_prefix("HYDO-CMD start i=") {
                 let w: Vec<&str> = r.split(' ').collect();
                 if let Ok(e) = w[0].parse::<i64>() {
@@ -1037,8 +1156,14 @@ impl<'a> Model<'a> {
         self.items[..p]
             .iter()
             .filter_map(|it| match it {
-                Item::Report { line, .. } if line.starts_with("HYDO-CMD end i=") && !line.starts_with("HYDO-CMD end i=e") && !line.starts_with("HYDO-CMD end i=f") => {
-                    line.split(" status=").nth(1).map(|x| s(x.split(' ').next().unwrap()))
+                Item::Report { line, .. }
+                    if line.starts_with("HYDO-CMD end i=")
+                        && !line.starts_with("HYDO-CMD end i=e")
+                        && !line.starts_with("HYDO-CMD end i=f") =>
+                {
+                    line.split(" status=")
+                        .nth(1)
+                        .map(|x| s(x.split(' ').next().unwrap()))
                 }
                 _ => None,
             })
@@ -1062,7 +1187,9 @@ impl<'a> Model<'a> {
             self.send(kill(&format!("cmd:{e}")))?;
         }
         for (e, _, id) in &open {
-            self.report(format!("HYDO-CMD end i={e} cmd={id} rc=137 status=killed (workload.timeout)"))?;
+            self.report(format!(
+                "HYDO-CMD end i={e} cmd={id} rc=137 status=killed (workload.timeout)"
+            ))?;
         }
         let q = self.point();
         let st = self.statuses_at(q);
@@ -1085,23 +1212,44 @@ impl<'a> Model<'a> {
 
     /// An invariant command of the composer: Some((status, output)).
     pub(super) fn cmp_eval(&mut self, cmd: &str) -> R<Option<(u32, String)>> {
-        let Some(cp) = self.plan.compose.clone() else { return Ok(None) };
-        let Some(rest) = cmd.strip_prefix(&format!("{SH} ")) else { return Ok(None) };
+        let Some(cp) = self.plan.compose.clone() else {
+            return Ok(None);
+        };
+        let Some(rest) = cmd.strip_prefix(&format!("{SH} ")) else {
+            return Ok(None);
+        };
         let p = self.point();
         if rest == "verdict" {
             // $C/violation (the first violation's entry, id and detail), else $C/summary
             let vio = self.items[..p].iter().find_map(|it| match it {
-                Item::Report { by, line, .. } if by.starts_with("cmd:") && line.starts_with("HYDO-CMD end i=") && line.ends_with("status=violation") => Some((by.clone(), line.clone())),
+                Item::Report { by, line, .. }
+                    if by.starts_with("cmd:")
+                        && line.starts_with("HYDO-CMD end i=")
+                        && line.ends_with("status=violation") =>
+                {
+                    Some((by.clone(), line.clone()))
+                }
                 _ => None,
             });
             if let Some((by, line)) = vio {
                 let e = &by[4..];
-                let id = line.split(" cmd=").nth(1).unwrap().split(' ').next().unwrap();
+                let id = line
+                    .split(" cmd=")
+                    .nth(1)
+                    .unwrap()
+                    .split(' ')
+                    .next()
+                    .unwrap();
                 let detail = self.run1_detail(&by);
-                return Ok(Some((1, format!("command {id} (entry {e}) reported a violation (exit 100): {detail}\n"))));
+                return Ok(Some((
+                    1,
+                    format!("command {id} (entry {e}) reported a violation (exit 100): {detail}\n"),
+                )));
             }
             let sum = self.items[..p].iter().find_map(|it| match it {
-                Item::Report { line, .. } => line.strip_prefix("HYDO-COMPOSE done ").map(|x| s(x.split(" (stopped").next().unwrap())),
+                Item::Report { line, .. } => line
+                    .strip_prefix("HYDO-COMPOSE done ")
+                    .map(|x| s(x.split(" (stopped").next().unwrap())),
                 _ => None,
             });
             return Ok(Some(match sum {
@@ -1109,24 +1257,44 @@ impl<'a> Model<'a> {
                 None => (0, s("no composed workload ran in this boot\n")),
             }));
         }
-        if let Some(i) = rest.strip_prefix("end ").and_then(|x| x.parse::<usize>().ok()) {
+        if let Some(i) = rest
+            .strip_prefix("end ")
+            .and_then(|x| x.parse::<usize>().ok())
+        {
             let c = cp.commands[i].clone();
-            self.send(Command::Mkdir(Mkdir { path: s(C), mode: None }))?;
+            self.send(Command::Mkdir(Mkdir {
+                path: s(C),
+                mode: None,
+            }))?;
             if c.kind == "finally" {
                 let q = self.point();
-                let done = self.composer_report_at("HYDO-COMPOSE done").is_some_and(|x| x < q);
+                let done = self
+                    .composer_report_at("HYDO-COMPOSE done")
+                    .is_some_and(|x| x < q);
                 let incomplete = self.items[..q].iter().any(|it| matches!(it, Item::Report { line, .. } if line.starts_with("HYDO-COMPOSE done") && (line.contains("(stopped") || !line.contains(" killed=0 ") || !line.contains(" timeout=0 "))));
                 if !self.m.started {
                     return Ok(Some((0, s("skipped: no composed workload ran in this boot (recovery boot after a power cut)\n"))));
                 }
                 if !done || incomplete {
-                    return Ok(Some((0, s("skipped: not every started command ran to completion\n"))));
+                    return Ok(Some((
+                        0,
+                        s("skipped: not every started command ran to completion\n"),
+                    )));
                 }
             }
-            self.report(format!("HYDO-CMD start i=e{i} kind={} cmd={}", c.kind, c.id))?;
+            self.report(format!(
+                "HYDO-CMD start i=e{i} kind={} cmd={}",
+                c.kind, c.id
+            ))?;
             let t1 = self.clock()?;
             let e = self.env(&[("HYDO_CMD", c.id.clone())]);
-            let rc = self.spawn_wait(&format!("end:{i}"), timeout_of(c.timeout, &c.cmd), e, &format!("{C}/log.e{i}"), false)?;
+            let rc = self.spawn_wait(
+                &format!("end:{i}"),
+                timeout_of(c.timeout, &c.cmd),
+                e,
+                &format!("{C}/log.e{i}"),
+                false,
+            )?;
             let t2 = self.clock()?;
             let ms = (t2 - t1) * 10;
             self.report(format!("HYDO-CMD end i=e{i} cmd={} rc={rc} ms={ms}", c.id))?;
@@ -1139,16 +1307,27 @@ impl<'a> Model<'a> {
             if rc == 0 {
                 return Ok(Some((0, format!("{} ok ({ms} ms)\n", c.id))));
             }
-            let last = ls.iter().rev().find(|l| !l.starts_with("HYDO-ASSERT")).copied().unwrap_or("");
+            let last = ls
+                .iter()
+                .rev()
+                .find(|l| !l.starts_with("HYDO-ASSERT"))
+                .copied()
+                .unwrap_or("");
             return Ok(Some((1, format!("{} exited rc={rc}: {last}\n", c.id))));
         }
-        if let Some(i) = rest.strip_prefix("check ").and_then(|x| x.parse::<usize>().ok()) {
+        if let Some(i) = rest
+            .strip_prefix("check ")
+            .and_then(|x| x.parse::<usize>().ok())
+        {
             let c = cp.checks[i].clone();
             let e = self.env(&[("HYDO_CHECK", c.id.clone())]);
             let (rc, out) = self.run(timeout_of(c.timeout, &c.cmd), e, Some(3000))?;
             return Ok(Some(match rc {
                 0..=2 => (rc, out),
-                143 => (2, format!("{out}check {} timed out after {}s\n", c.id, c.timeout)),
+                143 => (
+                    2,
+                    format!("{out}check {} timed out after {}s\n", c.id, c.timeout),
+                ),
                 _ => (1, out),
             }));
         }
@@ -1160,11 +1339,22 @@ impl<'a> Model<'a> {
     fn run1_detail(&self, by: &str) -> String {
         let mut b: Vec<u8> = Vec::new();
         for it in self.items {
-            if let Item::Send { by: x, cmd: Command::Read(_), id, .. } = it {
+            if let Item::Send {
+                by: x,
+                cmd: Command::Read(_),
+                id,
+                ..
+            } = it
+            {
                 if x == by {
                     if let Some((_, Ok(Reply::Read(r)))) = self.replies.get(id) {
-                        if r.data.len() % 2 == 0 && r.data.bytes().all(|c| c.is_ascii_hexdigit()) && self.refused_code(id - 1) == Some(ErrCode::NotUtf8) {
-                            b.extend((0..r.data.len() / 2).map(|i| u8::from_str_radix(&r.data[2 * i..2 * i + 2], 16).unwrap()));
+                        if r.data.len() % 2 == 0
+                            && r.data.bytes().all(|c| c.is_ascii_hexdigit())
+                            && self.refused_code(id - 1) == Some(ErrCode::NotUtf8)
+                        {
+                            b.extend((0..r.data.len() / 2).map(|i| {
+                                u8::from_str_radix(&r.data[2 * i..2 * i + 2], 16).unwrap()
+                            }));
                         } else {
                             b.extend_from_slice(r.data.as_bytes());
                         }
@@ -1173,7 +1363,11 @@ impl<'a> Model<'a> {
             }
         }
         let t = String::from_utf8_lossy(&b).into_owned();
-        t.split_terminator('\n').rev().find(|l| !l.starts_with("HYDO-ASSERT")).map(s).unwrap_or_default()
+        t.split_terminator('\n')
+            .rev()
+            .find(|l| !l.starts_with("HYDO-ASSERT"))
+            .map(s)
+            .unwrap_or_default()
     }
 
     /// Whether a composed command runs at item p (pgrep -f "compose.sh run1").
@@ -1185,12 +1379,25 @@ impl<'a> Model<'a> {
 
     /// The daemon's and every run1's items, each on its own, against compose.sh.
     pub(super) fn check_composer(&self) -> Result<(), String> {
-        let Some(cp) = self.plan.compose.as_ref() else { return Ok(()) };
-        let d: Vec<usize> = (0..self.items.len()).filter(|i| self.items[*i].by() == Some("composer")).collect();
+        let Some(cp) = self.plan.compose.as_ref() else {
+            return Ok(());
+        };
+        let d: Vec<usize> = (0..self.items.len())
+            .filter(|i| self.items[*i].by() == Some("composer"))
+            .collect();
         if !self.m.started {
-            return if d.is_empty() { Ok(()) } else { Err(s("the composer ran without a step")) };
+            return if d.is_empty() {
+                Ok(())
+            } else {
+                Err(s("the composer ran without a step"))
+            };
         }
-        let mut w = Walk { m: self, idx: d, j: 0, label: s("composer") };
+        let mut w = Walk {
+            m: self,
+            idx: d,
+            j: 0,
+            label: s("composer"),
+        };
         // the daemon may be cut off by the end of the conversation or by stop_all
         let mut arrivals: BTreeMap<i64, usize> = BTreeMap::new();
         let r = self.daemon(&mut w, cp, &mut arrivals);
@@ -1199,7 +1406,10 @@ impl<'a> Model<'a> {
             Err(Halt::Mismatch(e)) => return Err(format!("composer: {e}")),
         }
         if w.j < w.idx.len() {
-            return Err(format!("composer: more than compose.sh does: {:?}", self.items[w.idx[w.j]]));
+            return Err(format!(
+                "composer: more than compose.sh does: {:?}",
+                self.items[w.idx[w.j]]
+            ));
         }
         // a step that came back for round b did so once the daemon waited at b (the gate still
         // at b when it arrived); one that timed out did so while the daemon had not
@@ -1217,23 +1427,45 @@ impl<'a> Model<'a> {
             }
         }
         // every run1
-        let labels: BTreeSet<String> = self.items.iter().filter_map(|i| i.by()).filter(|b| b.starts_with("cmd:")).map(s).collect();
+        let labels: BTreeSet<String> = self
+            .items
+            .iter()
+            .filter_map(|i| i.by())
+            .filter(|b| b.starts_with("cmd:"))
+            .map(s)
+            .collect();
         for l in labels {
-            let idx: Vec<usize> = (0..self.items.len()).filter(|i| self.items[*i].by() == Some(l.as_str())).collect();
-            let mut w = Walk { m: self, idx, j: 0, label: l.clone() };
+            let idx: Vec<usize> = (0..self.items.len())
+                .filter(|i| self.items[*i].by() == Some(l.as_str()))
+                .collect();
+            let mut w = Walk {
+                m: self,
+                idx,
+                j: 0,
+                label: l.clone(),
+            };
             match self.run1(&mut w, cp) {
                 Ok(()) | Err(Halt::Ended) => {}
                 Err(Halt::Mismatch(e)) => return Err(format!("{l}: {e}")),
             }
             if w.j < w.idx.len() {
-                return Err(format!("{l}: more than run1 does: {:?}", self.items[w.idx[w.j]]));
+                return Err(format!(
+                    "{l}: more than run1 does: {:?}",
+                    self.items[w.idx[w.j]]
+                ));
             }
         }
         Ok(())
     }
 
     fn gate_at(&self, p: usize) -> i64 {
-        self.m.gates.iter().filter(|(i, _)| *i < p).map(|x| x.1).max().unwrap_or(0)
+        self.m
+            .gates
+            .iter()
+            .filter(|(i, _)| *i < p)
+            .map(|x| x.1)
+            .max()
+            .unwrap_or(0)
     }
 
     fn daemon(
@@ -1257,13 +1489,36 @@ impl<'a> Model<'a> {
             }
         };
         let line = if v.wv.is_empty() {
-            format!("HYDO-COMPOSE plan W={} seed={} p={} q={} r={} n={} rounds={steps} entries={}", if v.w.is_empty() { "-" } else { &v.w }, v.ws, v.wp, v.wq, v.wr, v.wn, plan.len())
+            format!(
+                "HYDO-COMPOSE plan W={} seed={} p={} q={} r={} n={} rounds={steps} entries={}",
+                if v.w.is_empty() { "-" } else { &v.w },
+                v.ws,
+                v.wp,
+                v.wq,
+                v.wr,
+                v.wn,
+                plan.len()
+            )
         } else {
-            format!("HYDO-COMPOSE plan W={} resolved p={} r={} t={} rounds={steps} entries={}", v.w, v.wp, v.wr, v.wt, plan.len())
+            format!(
+                "HYDO-COMPOSE plan W={} resolved p={} r={} t={} rounds={steps} entries={}",
+                v.w,
+                v.wp,
+                v.wr,
+                v.wt,
+                plan.len()
+            )
         };
         w.report(&line)?;
         for c in &cp.commands {
-            if ["parallel_driver", "serial_driver", "singleton_driver", "anytime"].contains(&c.kind.as_str()) {
+            if [
+                "parallel_driver",
+                "serial_driver",
+                "singleton_driver",
+                "anytime",
+            ]
+            .contains(&c.kind.as_str())
+            {
                 w.report(&format!("HYDO-ASSERT-DECL {{\"t\":\"sometimes\",\"id\":\"compose.{}.succeeded\",\"msg\":\"{} exited 0 at least once\"}}", c.id, c.id))?;
                 w.report(&format!("HYDO-ASSERT-DECL {{\"t\":\"always_or_unreachable\",\"id\":\"compose.{}.no_violation\",\"msg\":\"{} never reports a violation (exit 100)\"}}", c.id, c.id))?;
             }
@@ -1278,7 +1533,12 @@ impl<'a> Model<'a> {
         let mut nskip = 0;
         for pl in &plan {
             let f: Vec<&str> = pl.split(' ').collect();
-            let (pe, pr, pc, pk) = (f[0], f[1].parse::<i64>().unwrap(), f[2].parse::<usize>().unwrap(), f[3]);
+            let (pe, pr, pc, pk) = (
+                f[0],
+                f[1].parse::<i64>().unwrap(),
+                f[2].parse::<usize>().unwrap(),
+                f[3],
+            );
             while r < pr {
                 r += 1;
                 arrive = self.round_start(w, r, rc, &mut t, arrive, arrivals)?;
@@ -1291,19 +1551,28 @@ impl<'a> Model<'a> {
             let ok = match wp {
                 None => false,
                 Some(wp) => match pk {
-                    "parallel_driver" => all < wp && n("serial_driver") + n("singleton_driver") == 0,
+                    "parallel_driver" => {
+                        all < wp && n("serial_driver") + n("singleton_driver") == 0
+                    }
                     "anytime" => all < wp,
-                    _ => n("parallel_driver") + n("serial_driver") + n("singleton_driver") == 0 && all < wp,
+                    _ => {
+                        n("parallel_driver") + n("serial_driver") + n("singleton_driver") == 0
+                            && all < wp
+                    }
                 },
             };
             if !ok {
-                return bad(format!("entry {pe} ({pk}) launched while can_start was false ({run:?})"));
+                return bad(format!(
+                    "entry {pe} ({pk}) launched while can_start was false ({run:?})"
+                ));
             }
             let (now, a2) = w.clock()?;
             arrive = a2;
             let id = &cp.commands[pc].id;
             if wt > 0 && (now - t0) * 10 >= wt {
-                w.report(&format!("HYDO-CMD skip i={pe} r={r} cmd={id} budget_ms={wt}"))?;
+                w.report(&format!(
+                    "HYDO-CMD skip i={pe} r={r} cmd={id} budget_ms={wt}"
+                ))?;
                 nskip += 1;
             } else {
                 w.report(&format!("HYDO-CMD start i={pe} r={r} kind={pk} cmd={id}"))?;
@@ -1315,20 +1584,39 @@ impl<'a> Model<'a> {
         }
         let _ = arrive;
         // drain
-        let tid = w.send(spawn_to("compose-drain", plain(&["sleep", &cp.drain_timeout.to_string()]), Vec::new(), "/dev/null", false), false)?;
+        let tid = w.send(
+            spawn_to(
+                "compose-drain",
+                plain(&["sleep", &cp.drain_timeout.to_string()]),
+                Vec::new(),
+                "/dev/null",
+                false,
+            ),
+            false,
+        )?;
         let x = w.peek_index()?;
         let fired = self.exits.get(&tid).is_some_and(|e| e.0 < x);
         let mut open = self.running_at(x);
         // the order of $RUNNING: launch order
-        let starts: Vec<i64> = self.items.iter().filter_map(|i| match i {
-            Item::Report { by, line, .. } if by == "composer" => line.strip_prefix("HYDO-CMD start i=").and_then(|r| r.split(' ').next()).and_then(|e| e.parse().ok()),
-            _ => None,
-        }).collect();
+        let starts: Vec<i64> = self
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                Item::Report { by, line, .. } if by == "composer" => line
+                    .strip_prefix("HYDO-CMD start i=")
+                    .and_then(|r| r.split(' ').next())
+                    .and_then(|e| e.parse().ok()),
+                _ => None,
+            })
+            .collect();
         open.sort_by_key(|o| starts.iter().position(|e| *e == o.0));
         if open.is_empty() {
             w.send(kill("compose-drain"), false)?;
         } else if !fired {
-            return bad(format!("the drain killed {open:?} before its {}s were up", cp.drain_timeout));
+            return bad(format!(
+                "the drain killed {open:?} before its {}s were up",
+                cp.drain_timeout
+            ));
         }
         for (e, _, id) in &open {
             w.send(kill(&format!("cmd:{e}")), false)?;
@@ -1376,7 +1664,10 @@ impl<'a> Model<'a> {
         arrivals.insert(r, arrive);
         let c = w.peek_index()?;
         if self.gate_at(c) <= r {
-            return bad(format!("round {r} began before the gate was open (gate {})", self.gate_at(c)));
+            return bad(format!(
+                "round {r} began before the gate was open (gate {})",
+                self.gate_at(c)
+            ));
         }
         let (now, a) = w.clock()?;
         if now > *t {
@@ -1388,42 +1679,92 @@ impl<'a> Model<'a> {
     fn run1(&self, w: &mut Walk, cp: &hydo_control::schedule::composer::ComposePlan) -> R<()> {
         let e: i64 = w.label[4..].parse().unwrap();
         // the start line names the round and the command; the plan names the seed
-        let start = self.items.iter().find_map(|i| match i {
-            Item::Report { by, line, .. } if by == "composer" && line.starts_with(&format!("HYDO-CMD start i={e} ")) => Some(line.clone()),
-            _ => None,
-        }).ok_or_else(|| Halt::Mismatch(s("a run1 without its start line")))?;
-        let round = start.split(" r=").nth(1).unwrap().split(' ').next().unwrap().to_string();
+        let start = self
+            .items
+            .iter()
+            .find_map(|i| match i {
+                Item::Report { by, line, .. }
+                    if by == "composer" && line.starts_with(&format!("HYDO-CMD start i={e} ")) =>
+                {
+                    Some(line.clone())
+                }
+                _ => None,
+            })
+            .ok_or_else(|| Halt::Mismatch(s("a run1 without its start line")))?;
+        let round = start
+            .split(" r=")
+            .nth(1)
+            .unwrap()
+            .split(' ')
+            .next()
+            .unwrap()
+            .to_string();
         let (_, r) = wplan(self, &self.m.w);
         let plan = r.map_err(|_| Halt::Mismatch(s("no plan")))?.1;
-        let pl = plan.iter().find(|l| l.split(' ').next() == Some(&e.to_string())).ok_or_else(|| Halt::Mismatch(s("an entry the plan does not have")))?;
+        let pl = plan
+            .iter()
+            .find(|l| l.split(' ').next() == Some(&e.to_string()))
+            .ok_or_else(|| Halt::Mismatch(s("an entry the plan does not have")))?;
         let f: Vec<&str> = pl.split(' ').collect();
         let c = &cp.commands[f[2].parse::<usize>().unwrap()];
         let killed = self.items.iter().any(|i| matches!(i, Item::Report { line, .. } if line.starts_with(&format!("HYDO-CMD end i={e} cmd=")) && line.contains("status=killed")));
         let r = (|| -> R<()> {
             let (t1, _) = w.clock()?;
             let mut env = self.m.denv.clone();
-            for (k, x) in [("HYDO_CMD", c.id.clone()), ("HYDO_CMD_ID", e.to_string()), ("HYDO_ROUND", round.clone()), ("HYDO_SEED", s(f[4]))] {
+            for (k, x) in [
+                ("HYDO_CMD", c.id.clone()),
+                ("HYDO_CMD_ID", e.to_string()),
+                ("HYDO_ROUND", round.clone()),
+                ("HYDO_SEED", s(f[4])),
+            ] {
                 env.retain(|y| !y.starts_with(&format!("{k}=")));
                 env.push(format!("{k}={x}"));
             }
             env.sort();
             let log = format!("{C}/log.{e}");
-            let id = w.send(spawn_to(&w.label.clone(), timeout_of(c.timeout, &c.cmd), env, &log, false), true)?;
+            let id = w.send(
+                spawn_to(
+                    &w.label.clone(),
+                    timeout_of(c.timeout, &c.cmd),
+                    env,
+                    &log,
+                    false,
+                ),
+                true,
+            )?;
             let rc = match self.replies.get(&id) {
                 Some((_, Err(_))) => 127,
                 _ => w.waited_exit(id)?,
             };
             let (t2, _) = w.clock()?;
-            let st = match rc { 0 => "ok", 100 => "violation", 143 => "timeout", _ => "failed" };
+            let st = match rc {
+                0 => "ok",
+                100 => "violation",
+                143 => "timeout",
+                _ => "failed",
+            };
             let text = w.read_all(&log)?;
             let ls: Vec<&str> = text.split_terminator('\n').collect();
             for l in ls.iter().filter(|l| l.starts_with("HYDO-ASSERT")) {
                 w.report(l)?;
             }
-            w.report(&format!("HYDO-CMD end i={e} cmd={} rc={rc} ms={} status={st}", c.id, (t2 - t1) * 10))?;
+            w.report(&format!(
+                "HYDO-CMD end i={e} cmd={} rc={rc} ms={} status={st}",
+                c.id,
+                (t2 - t1) * 10
+            ))?;
             let here = w.idx.get(w.j.saturating_sub(1)).copied().unwrap_or(0);
-            let earlier = |pat: &str| self.items[..here].iter().any(|i| matches!(i, Item::Report { line, .. } if line.starts_with(pat)));
-            if st == "ok" && !earlier(&format!("HYDO-ASSERT {{\"t\":\"sometimes\",\"id\":\"compose.{}.succeeded\"", c.id)) {
+            let earlier = |pat: &str| {
+                self.items[..here]
+                    .iter()
+                    .any(|i| matches!(i, Item::Report { line, .. } if line.starts_with(pat)))
+            };
+            if st == "ok"
+                && !earlier(&format!(
+                    "HYDO-ASSERT {{\"t\":\"sometimes\",\"id\":\"compose.{}.succeeded\"",
+                    c.id
+                ))
+            {
                 w.report(&format!("HYDO-ASSERT {{\"t\":\"sometimes\",\"id\":\"compose.{}.succeeded\",\"ok\":true,\"msg\":\"{} exited 0 at least once\"}}", c.id, c.id))?;
             }
             if st == "violation" && !earlier(&format!("HYDO-ASSERT {{\"t\":\"always_or_unreachable\",\"id\":\"compose.{}.no_violation\"", c.id)) {
@@ -1433,7 +1774,9 @@ impl<'a> Model<'a> {
             Ok(())
         })();
         match r {
-            Err(Halt::Ended) if killed || self.m.stopped.is_some() || self.end_stop != u64::MAX => Ok(()),
+            Err(Halt::Ended) if killed || self.m.stopped.is_some() || self.end_stop != u64::MAX => {
+                Ok(())
+            }
             Err(Halt::Ended) => bad(s("run1 stopped before its end line")),
             Ok(()) if killed => bad(s("an entry the drain killed went on to its end line")),
             other => other,
@@ -1470,7 +1813,9 @@ impl Walk<'_, '_> {
         let label = self.label.clone();
         match self.next()? {
             Item::Report { line, .. } if line == want => Ok(()),
-            other => bad(format!("{label}: compose.sh prints {want:?}\n  the controller: {other:?}")),
+            other => bad(format!(
+                "{label}: compose.sh prints {want:?}\n  the controller: {other:?}"
+            )),
         }
     }
 
@@ -1479,22 +1824,35 @@ impl Walk<'_, '_> {
         let label = self.label.clone();
         let same = |a: &Command| match (a, &want) {
             (Command::Spawn(x), Command::Spawn(y)) if !exact => {
-                x.h == y.h && x.argv == y.argv && x.stdout == y.stdout && x.append == y.append
-                    && x.env.as_ref().is_some_and(|e| e.iter().any(|v| v.starts_with("HYDO_STEPS=")))
+                x.h == y.h
+                    && x.argv == y.argv
+                    && x.stdout == y.stdout
+                    && x.append == y.append
+                    && x.env
+                        .as_ref()
+                        .is_some_and(|e| e.iter().any(|v| v.starts_with("HYDO_STEPS=")))
             }
             _ => *a == want,
         };
         match self.next()? {
             Item::Send { id, cmd, .. } if same(cmd) => Ok(*id),
-            other => bad(format!("{label}: compose.sh does {want:?}\n  the controller: {other:?}")),
+            other => bad(format!(
+                "{label}: compose.sh does {want:?}\n  the controller: {other:?}"
+            )),
         }
     }
 
     fn send_run(&mut self, argv: Vec<String>) -> R<u64> {
         let label = self.label.clone();
         match self.next()? {
-            Item::Send { id, cmd: Command::Run(r), .. } if r.argv == argv && r.capture.is_none() => Ok(*id),
-            other => bad(format!("{label}: compose.sh runs {argv:?}\n  the controller: {other:?}")),
+            Item::Send {
+                id,
+                cmd: Command::Run(r),
+                ..
+            } if r.argv == argv && r.capture.is_none() => Ok(*id),
+            other => bad(format!(
+                "{label}: compose.sh runs {argv:?}\n  the controller: {other:?}"
+            )),
         }
     }
 
@@ -1531,16 +1889,41 @@ impl Walk<'_, '_> {
     fn read_all(&mut self, path: &str) -> R<String> {
         let mut b: Vec<u8> = Vec::new();
         loop {
-            let off = if b.is_empty() { None } else { Some(b.len() as u64) };
-            let id = self.send(Command::Read(Read { path: s(path), offset: off, max: 3000, hex: None }), true)?;
+            let off = if b.is_empty() {
+                None
+            } else {
+                Some(b.len() as u64)
+            };
+            let id = self.send(
+                Command::Read(Read {
+                    path: s(path),
+                    offset: off,
+                    max: 3000,
+                    hex: None,
+                }),
+                true,
+            )?;
             self.waited("the read", self.m.replies.get(&id).map(|x| x.0))?;
             let (data, eof) = match &self.m.replies[&id].1 {
                 Ok(Reply::Read(r)) => (r.data.clone().into_bytes(), r.eof),
                 Err(_) if self.m.refused_code(id) == Some(ErrCode::NotUtf8) => {
-                    let h = self.send(Command::Read(Read { path: s(path), offset: off, max: 1500, hex: Some(true) }), true)?;
+                    let h = self.send(
+                        Command::Read(Read {
+                            path: s(path),
+                            offset: off,
+                            max: 1500,
+                            hex: Some(true),
+                        }),
+                        true,
+                    )?;
                     self.waited("the read", self.m.replies.get(&h).map(|x| x.0))?;
                     match &self.m.replies[&h].1 {
-                        Ok(Reply::Read(r)) => ((0..r.data.len() / 2).map(|i| u8::from_str_radix(&r.data[2 * i..2 * i + 2], 16).unwrap()).collect(), r.eof),
+                        Ok(Reply::Read(r)) => (
+                            (0..r.data.len() / 2)
+                                .map(|i| u8::from_str_radix(&r.data[2 * i..2 * i + 2], 16).unwrap())
+                                .collect(),
+                            r.eof,
+                        ),
                         _ => break,
                     }
                 }
