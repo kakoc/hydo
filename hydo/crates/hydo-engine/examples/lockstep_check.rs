@@ -557,7 +557,12 @@ fn check(env: &Env) -> bool {
         "one",
         &env.one("one-br-after", SB, &p(vec![(60000, PING1)])),
     );
-    g.add("end", Some(END_FP), "one", &env.one("one-end", SB, &end_plan));
+    g.add(
+        "end",
+        Some(END_FP),
+        "one",
+        &env.one("one-end", SB, &end_plan),
+    );
     g.verdict() && extra_ok
 }
 
