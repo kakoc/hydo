@@ -1,0 +1,29 @@
+[package]
+name = "hydo-grpc-gen"
+description = "hydo-grpc-gen: gRPC drivers for a hydo project from its .proto files, a descriptor set or a server's reflection"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "hydo-grpc-gen"
+path = "src/bin/hydo-grpc-gen.rs"
+
+[dependencies]
+hydo-grpc = { workspace = true }
+prost = "0.14"
+prost-reflect = "0.16"
+protox = "0.9"
+libyaml-safer = "0.3"
+tokio = { version = "1", default-features = false, features = ["rt", "net", "time", "sync", "macros"] }
+
+[dev-dependencies]
+sha2 = { workspace = true }
+serde_json = { workspace = true }
+h2 = "0.4"
+http = "1"
+bytes = "1"

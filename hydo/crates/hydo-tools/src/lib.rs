@@ -12,6 +12,7 @@
 //! unpack the release's pinned assets, once, on a maintainer's machine.
 
 pub mod cpio;
+pub mod elfcomment;
 pub mod nar;
 
 /// Python's `os.path.join(a, b)` for two POSIX path parts.

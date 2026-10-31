@@ -1,0 +1,5 @@
+hydo-grpc-gen: 4 RPCs, 0 scenarios -> OUT
+  create                 orders.v1.Orders/Create weight=3
+  get                    orders.v1.Orders/Get weight=1
+  cancel                 orders.v1.Orders/Cancel weight=1
+  list                   orders.v1.Orders/List weight=1

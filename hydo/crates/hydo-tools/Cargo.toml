@@ -32,6 +32,11 @@ path = "src/bin/hydo-cpio-extract.rs"
 name = "hydo-elfdeps"
 path = "src/bin/hydo-elfdeps.rs"
 
+# hydo/grpcgen/build-client.sh: the linker's line in .comment (Milestone 113)
+[[bin]]
+name = "hydo-elf-comment"
+path = "src/bin/hydo-elf-comment.rs"
+
 [dependencies]
 hydo-build = { workspace = true }
 hydo-manifest = { workspace = true }
