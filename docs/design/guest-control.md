@@ -399,7 +399,9 @@ What this shows:
 1. **Side by side.** Images built with the agent carry `/etc/hydo/control` = `agent <proto>`;
    images without it are shell-init images. Engines and the explorer pick the protocol from the
    image, so every existing image, schedule and recorded fingerprint keeps working, and both
-   kinds can be explored by the same `hydo`.
+   kinds can be explored by the same `hydo`. (M121: the host reads the file,
+   `hydo_engine::image::control`, and asks the engine for its controlled boot, `--control boot`;
+   the C engines do not read the image themselves.)
 2. **Verdict equivalence before fingerprint baselines.** An agent image cannot have the shell
    image's fingerprints (different `/sbin/init`, different guest execution). The proof is at the
    level of meaning: on every example manifest (42) and both architectures, the same verdict
@@ -473,7 +475,10 @@ Steps that can run in parallel are marked with the same letter. Each step lists 
   shell images' (both architectures where the feature exists), plus the scripted-agent test.
 - **B3. `hydo-build --control agent`** (stages the agent and `/etc/hydo/control`; no `init.rs`
   splicing for such images). Proof: byte-identical images in two builds; shell images unchanged
-  (the existing 15 + 11 image hashes).
+  (the existing 15 + 11 image hashes). *Done in M121, with the controlled boot phase both engines
+  need for such an image (`--control boot`: lock-step control from the first instruction, S0 and
+  S1 taken by the host with `SNAP S0`/`SNAP S1`; `Engine::start_controlled`/`one_controlled`);
+  docs/HISTORY.md "Milestone 121".*
 - **C1. `hydo-engine` `run_controlled`/`resume` and the explorer's strategies on controllers;
   `ctl=` in RESULT; `control.jsonl` in runs; `hydo repro --transcript`.** Proof: the 18
   scripted-engine scenarios unchanged for shell images; transcript replay equals policy replay on

@@ -287,3 +287,8 @@ has no dependencies.
   | aarch64 (`ELF 64-bit LSB executable, statically linked`) | 564,768 | `6a3ea9f8c80e972abda55a58e05fee9de0b7355b3a27f5ae7a8bb560d2f6fac1` |
 
   The C freeze helper it can stand in for (`hydo_fc`, pinned musl gcc) is 68,504 bytes.
+- **In images (Milestone 121):** `hydo-build --control agent` stages exactly these bytes as the
+  image's first process and refuses another build of the agent (`HYDO_AGENT_UNPINNED=1` stages it
+  with a warning, for work on the agent). The two sha256 values are also in
+  `hydo/crates/hydo-build/src/agent.rs` (`AGENT_SHA256_X86_64`, `AGENT_SHA256_ARM64`); a new agent
+  changes this table and those constants together, and every agent image's bytes with them.
