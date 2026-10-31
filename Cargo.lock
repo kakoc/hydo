@@ -386,6 +386,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "hydo-control"
+version = "0.1.0"
+dependencies = [
+ "hydo-agent-proto",
+ "hydo-engine",
+ "hydo-explore",
+ "hydo-manifest",
+ "hydo-results",
+ "hydo-schedule",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "hydo-engine"
 version = "0.1.0"
 dependencies = [
