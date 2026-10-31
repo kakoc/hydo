@@ -233,7 +233,7 @@ Host tools (override with the environment variables):
     HYDO_IPROUTE2 iproute2 store path     HYDO_MODROOT   guest kernel module tree
     HYDO_READ_BIN hydo-read (hydo/readers/build.sh), staged only when a command calls
                   hydo-read or hydo-check
-    HYDO_WORLDBIN hydo-world (hydo/onboard/world/build.sh), staged only for fakes:/proxies:
+    HYDO_WORLDBIN hydo-world (hydo/crates/hydo-world/build.sh), staged only for fakes:/proxies:
 --arch arm64 takes the arm64 builds of the last two from HYDO_READ_BIN_ARM64 and
 HYDO_WORLDBIN_ARM64 (default <build dir>/hydo-read-arm64 and hydo-world-arm64).
 HYDO_ONBOARD names the onboard/ directory (hydo-init*.sh); the default is the release's or the

@@ -614,7 +614,7 @@ lives in guest RAM): Docker's voting app needs `guest.ram_mib: 3072` there.
 Business software mostly fails at its edges: a payment provider answers 500 or 429, answers too
 late, takes the money and never answers, sends a webhook twice or out of order. `fakes:` declares
 the outside services the system talks to; hydo serves them **inside the guest** (one static
-program, `/bin/hydo-world`, source `hydo/onboard/world/`), so they are as deterministic as
+program, `/bin/hydo-world`, source `hydo/crates/hydo-world/`), so they are as deterministic as
 everything else. Every request a fake (or proxy) receives is **recorded**, so invariants can ask
 what the outside world saw: "the customer was charged at most once per order". `proxies:` puts
 the same faults and records in front of a real service of the manifest.
@@ -761,24 +761,28 @@ and on webhook routes dup, reorder, late=5000, lost) on every target, one worklo
 `H=` tokens, narrows their window, and removes `p=`, `retry-after=` and `effect=`, then halves
 delays. A manifest with a `faults:` list draws `H=` only if it lists `protocol`.
 
-**Build.** `hydo/onboard/world/build.sh` builds `build/hydo-world` (pinned Go, standard library
-only); `hydo-build` stages it (`HYDO_WORLDBIN` overrides), writes `/etc/hydo/world.json`
-(`--print-world` shows it) and splices `hydo/onboard/hydo-init-fakes.sh` into the init. A manifest
-without `fakes:`/`proxies:` builds a byte-identical image. `--arch arm64` (the Mac backend) stages
-the arm64 build of the same program: `HYDO_WORLD_GOARCH=arm64 hydo/onboard/world/build.sh
-build/hydo-world-arm64` (`HYDO_WORLDBIN_ARM64` overrides; the Mac release ships it as
-`guest/hydo-world`), and the Mac engine `hvmx` carries the world across a power cut in the same
+**Build.** `hydo/crates/hydo-world/build.sh` builds `build/hydo-world`, a static x86_64 musl
+binary (Rust since Milestone 111, the workspace's pinned toolchain, reproducible from any
+checkout); `hydo-build` stages it (`HYDO_WORLDBIN` overrides; both releases ship it as
+`guest/hydo-world`), writes `/etc/hydo/world.json` (`--print-world` shows it) and splices
+`hydo/onboard/hydo-init-fakes.sh` into the init. A manifest without `fakes:`/`proxies:` builds a
+byte-identical image. `--arch arm64` (the Mac backend) stages the arm64 build of the same
+program: `HYDO_WORLD_ARCH=arm64 hydo/crates/hydo-world/build.sh build/hydo-world-arm64`
+(`HYDO_WORLDBIN_ARM64` overrides), and the Mac engine `hvmx` carries the world across a power cut in the same
 3584-byte recovery command as `hvx_explore`; `hydo explore` on the Mac takes `--protocol-faults`
 and `--grpc-faults` (Milestone 96).
 
-**Extending it (the code layout).** `world/rules.go`: the `H=` grammar (`parseRule`, one `Rule`
-per token, `fires`, `applied`); a new rule is a field there plus its action. `world/serve.go`: one
-handler per endpoint protocol -- HTTP and gRPC share `handler()` (decide under the world lock,
-record, then act: delay / drop / reset / status / answer), `serveTCP` is the byte-stream proxy;
-a new protocol is a new serve function that calls `lockGate`, `requestRule`, `record` in that order.
-`world/world.go`: records, webhooks, the control socket (`on`/`off`/`heal`/`event`/`dump`/`summary`)
-and the power-cut carry. `world/check.go`: the checks. `world/config.go`: `world.json`, extractors,
-templates. The explorer's draws are `add_protocol_faults` in the hydo-explore crate (rule kinds
+**Extending it (the code layout, `hydo/crates/hydo-world/src/`).** `rules.rs`: the `H=` grammar
+(`Rule::parse`, one `Rule` per token, `fires`, `applied`, the gRPC-only keys in `GrpcExt`); a new
+rule is a field there plus its action. `serve.rs`: the listeners and one handler per endpoint
+protocol -- HTTP/1.1 and cleartext HTTP/2 share `handle()` (decide under the world lock, record,
+then act: delay / drop / reset / status / answer), `tcp_conn` is the byte-stream proxy; a new
+protocol is a new serve function that calls `lock_gate`, `request_rule`, `record` in that order.
+`world.rs`: records, webhooks, the control socket (`on`/`off`/`heal`/`event`/`dump`/`summary`) and
+the power-cut carry. `check.rs`: the checks. `config.rs`: `world.json`, extractors, templates.
+`http1.rs`, `h2x.rs` and `goish.rs` reproduce what the Go version's `net/http` put on the wire.
+`tests/xcheck.rs` drives one world through every rule kind and compares the whole transcript with
+the one recorded from the Go version; run it after any change. The explorer's draws are `add_protocol_faults` in the hydo-explore crate (rule kinds
 per target come from its `space.rs`).
 ## The test composer (`test:` and the `hydo/` folder)
 
@@ -1188,10 +1192,10 @@ flag every schedule string is byte-identical. The shrinker drops a
 token, narrows its window, and removes `call=`, `rpc=`, `p=`/`seed=`, `dir=req`, turns
 `reset=conn` into `reset` and halves `cut=`/`hold=`. Example: `examples/stack-grpc/`.
 
-**Code.** gRPC proxies are served by `world/grpc.go` (`serveGRPCProxy`, `grpcHandler`), not by
-`handler()`; it parses the gRPC-only rule keys (`parseRuleExt`, called from `parseRule`), picks the
-rule with the extra filters (`grpcRule`), and implements `check calls`. gRPC fakes still use
-`handler()`.
+**Code.** gRPC proxies are served by `grpc.rs` of `hydo/crates/hydo-world` (`serve_grpc_proxy`,
+`call`), not by `handle()`; the gRPC-only rule keys are parsed in `rules.rs` (`parse_ext`), the rule
+with the extra filters is picked by `grpc_rule` (`world.rs`), and `grpc.rs` implements `check
+calls`. gRPC fakes still use `handle()`.
 
 Limits: cleartext HTTP/2 only (no TLS); the client must be pointed at the proxy; a `ref:`/
 `idempotency:` taken from the message (`pb:`) reads the call's first message before the decision

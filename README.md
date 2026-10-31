@@ -51,7 +51,7 @@ hv/hvm/        the Mac engine: hvm.c, virtio devices, explore/serve.c (hvmx), ar
 hydo/crates/   the Rust workspace (see below)
 hydo/onboard/  the guest-side init and its extensions (shell, inside every image), MANIFEST.md
                (the project format), examples
-hydo/          other product parts: onboard/world/ (fake outside services), readers/ (store readers),
+hydo/          other product parts: readers/ (store readers),
                grpcgen/ (gRPC driver generator), stack/ (the example order system), bench/ (the
                bug benchmark), dist/ (release packaging)
 sdk/           assertion SDKs for programs under test: Rust (the reference), Python, JavaScript;
@@ -74,6 +74,7 @@ docs/          HISTORY.md (every milestone with its evidence), REBASELINE.md, BU
 | `hydo-history` | Linearizability and list-append checks of recorded histories. |
 | `hydo-compose` | Imports a `docker-compose.yaml` as a starting `hydo.yaml`. |
 | `hydo-agents` | `hydo guide`, `hydo skill install`, `hydo init` for AI coding agents. |
+| `hydo-world` | The program inside the guest that serves `fakes:` and `proxies:` (HTTP, gRPC, TCP), applies `H=` protocol faults and records what the outside world saw (a static musl binary in every such image). |
 | `hydo-bench` | The bug benchmark: how well explorer strategies find the planted defects (not shipped). |
 | `hydo-tools` | Build-machine helpers: Nix-cache fetch and unpack, cpio extraction, ELF library lists (not shipped). |
 | `hydo-cli` | The `hydo` command. |

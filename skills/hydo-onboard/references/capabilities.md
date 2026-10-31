@@ -19,7 +19,7 @@ the commands). Since Milestone 107 a release is Rust programs only and needs no 
   release rebuilt with them.
 - **hydo's repository on x86_64 Linux**: the `hydo-build` program (`cargo build --release -p
   hydo-build`) with the helper programs built
-  from source (`hydo/onboard/world/build.sh` for `hydo-world`, `hydo/readers/build.sh` for
+  from source (`hydo/crates/hydo-world/build.sh` for `hydo-world`, `hydo/readers/build.sh` for
   `hydo-read`, Go for `hydo-grpc-gen`) and the pinned tools of `docs/BUILD-PINS.md`.
 
 | feature | Linux release | Mac release | repository (x86_64) |
@@ -39,7 +39,7 @@ the commands). Since Milestone 107 a release is Rust programs only and needs no 
 | `checks:` / `linearizable_` / `list_append_` history checks | yes | after M96 (ships `hydo/history/`) | yes |
 | `buggify: true` | since M107 (the release ships every init extension) | yes | yes |
 | `hydo-read`, `hydo-check` | not bundled (build `hydo-read` in the repository and set `HYDO_READ_BIN`) | after M96 (ships `guest/hydo-read`; else `HYDO_READ_BIN_ARM64`) | yes |
-| `fakes:`, `proxies:`, `H=` protocol faults, `hydo-world` checks | not shipped | after M96 (ships `guest/hydo-world`; else `HYDO_WORLDBIN_ARM64`) | yes |
+| `fakes:`, `proxies:`, `H=` protocol faults, `hydo-world` checks | after M111 (ships `guest/hydo-world`; else `HYDO_WORLDBIN`) | after M111 (ships `guest/hydo-world`; else `HYDO_WORLDBIN_ARM64`) | yes |
 | `errors:` error logs as findings, `hydo errors`, `hydo/known-errors.yaml` | yes (ships `hydo-init-errlog.sh`) | shipped (the arm64 build with `errors:` was not run) | yes |
 | `hydo-grpc-gen` generated drivers | not shipped (generate in the repository, then copy the output) | not shipped (generate with `--arch amd64,arm64` in the repository, copy `hydo-grpc.arm64`) | yes |
 

@@ -106,6 +106,10 @@ cp "$TOP/hv/hvm/explore/hvmx" "$REL/hv/hvm/explore/hvmx"
 cp "$TOP/hv/hvm/hv.entitlements" "$REL/hv/hvm/"
 cp "$A/Image-explore" "$REL/hv/hvm/explore/out/Image-explore"
 cp "$A/busybox" "$A/mke2fs" "$REL/guest/"; chmod 755 "$REL/guest/busybox" "$REL/guest/mke2fs"
+# guest/hydo-world: the in-guest program of fakes: and proxies: (hydo/crates/hydo-world, Rust since
+# M111), a static aarch64 musl build made here on the Mac; `hydo build` stages it
+HYDO_WORLD_ARCH=arm64 bash "$TOP/hydo/crates/hydo-world/build.sh" "$REL/guest/hydo-world" >&2
+chmod 755 "$REL/guest/hydo-world"
 cp "$A/busybox-applets.txt" "$A/tc-closure.txt" "$REL/guest/"
 cp -R "$A/tc" "$REL/guest/tc"
 printf '#!/bin/sh\n# stands in for `busybox --list` (hydo-build asks it for the applet set)\ncat "$(dirname "$0")/busybox-applets.txt"\n' > "$REL/guest/busybox-applets"
