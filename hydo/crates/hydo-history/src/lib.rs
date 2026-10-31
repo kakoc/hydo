@@ -153,6 +153,25 @@ pub struct Checks {
     pub report: String,
     /// Malformed-line warnings of the consoles.
     pub warnings: Vec<String>,
+    /// Each check as the results format reports it (one per id, in the order of `results`).
+    pub checks: Vec<CheckInfo>,
+}
+
+/// One check of [`Checks`]: what its spec says and what it found.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CheckInfo {
+    /// The spec's id, type (`linearizable`, `list-append`), history name and message.
+    pub id: String,
+    pub check: String,
+    pub history: String,
+    pub msg: String,
+    pub status: Outcome,
+    pub summary: String,
+    pub explanation: String,
+    pub warnings: Vec<String>,
+    /// The details of its HYDO-ASSERT record (JSON, sorted keys: the checker's details, `check`
+    /// and `out`).
+    pub details: String,
 }
 
 fn dict(pairs: Vec<(&str, PyVal)>) -> PyVal {
@@ -195,8 +214,10 @@ pub fn run_checks<S: AsRef<str>, T: AsRef<str>>(
             results: Vec::new(),
             report: String::new(),
             warnings: warn,
+            checks: Vec::new(),
         });
     }
+    let mut infos: Vec<CheckInfo> = Vec::new();
     let mut recs = Vec::new();
     let mut results: Vec<(PyVal, CheckResult)> = Vec::new();
     let mut result_keys: Vec<py::KeyRepr> = Vec::new();
@@ -264,6 +285,17 @@ pub fn run_checks<S: AsRef<str>, T: AsRef<str>>(
         let mut det = PyVal::Dict(r.details.clone());
         det.set("check", typ.clone());
         det.set("out", PyVal::str(py::head(&r.summary, 400)));
+        let info = CheckInfo {
+            id: id.str_of(),
+            check: typ.str_of(),
+            history: hist.str_of(),
+            msg: msg.str_of(),
+            status: r.status,
+            summary: r.summary.clone(),
+            explanation: r.explanation.clone(),
+            warnings: r.warnings.clone(),
+            details: py::dumps_sorted(&det),
+        };
         if matches!(r.status, Outcome::Ok | Outcome::Violation) {
             recs.push(format!(
                 "HYDO-ASSERT {}",
@@ -304,10 +336,18 @@ pub fn run_checks<S: AsRef<str>, T: AsRef<str>>(
             Outcome::Ok => oks.push((id.clone(), r.summary.clone())),
         }
         match result_keys.iter().position(|k| *k == key) {
-            Some(i) => results[i].1 = r,
+            Some(i) => {
+                results[i].1 = r;
+                // the result keeps the earlier spec's place and id (a dict key)
+                infos[i] = CheckInfo {
+                    id: infos[i].id.clone(),
+                    ..info
+                };
+            }
             None => {
                 result_keys.push(key);
                 results.push((id, r));
+                infos.push(info);
             }
         }
     }
@@ -341,6 +381,7 @@ pub fn run_checks<S: AsRef<str>, T: AsRef<str>>(
         results,
         report: rep.join("\n"),
         warnings: warn,
+        checks: infos,
     })
 }
 

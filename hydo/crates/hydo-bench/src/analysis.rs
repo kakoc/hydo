@@ -106,10 +106,36 @@ pub fn d7prob(seeds: i64) -> String {
     out
 }
 
-/// A sweep folder: seed -> point label (sweep-points.jsonl), seed -> run record (runs.jsonl).
+/// A sweep folder: seed -> point label, seed -> {verdict, reproduced} of its first run.
 type Sweep = (BTreeMap<i64, String>, BTreeMap<i64, Value>);
 
+/// A sweep's first runs: from its events.jsonl (the results reader; `reproduced` from the
+/// failures of its exploration.json), or, for a sweep recorded before M115, from its
+/// sweep-points.jsonl and runs.jsonl (which had no `reproduced`).
 fn load(d: &Path) -> Result<Sweep, String> {
+    let ev = d.join(hydo_results::EVENTS);
+    if ev.is_file() {
+        let st = hydo_results::reader::read_events(&ev).map_err(|e| e.0)?;
+        let doc =
+            hydo_results::reader::read_exploration(&d.join(hydo_results::EXPLORATION_DOC)).ok();
+        let (mut pts, mut runs) = (BTreeMap::new(), BTreeMap::new());
+        for r in st
+            .runs()
+            .filter(|r| r.role.as_deref() == Some(hydo_results::role::FIRST))
+        {
+            let sd = r.seed.unwrap_or(0);
+            pts.insert(sd, r.point.clone().unwrap_or_default());
+            let mut v = json!({"verdict": r.verdict.text});
+            if let Some(f) = doc
+                .as_ref()
+                .and_then(|x| x.failures.iter().find(|f| f.run.seed == Some(sd)))
+            {
+                v["reproduced"] = json!(f.reproduced);
+            }
+            runs.insert(sd, v);
+        }
+        return Ok((pts, runs));
+    }
     let read = |n: &str| {
         let p = d.join(n);
         std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))

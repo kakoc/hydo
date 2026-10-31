@@ -183,14 +183,19 @@ fn run(op: &str, a: &Value, work: &Path, n: usize) -> Out {
                 std::fs::write(d.join(name), text.as_str().unwrap()).unwrap();
             }
             let mut printed: Vec<String> = Vec::new();
-            let res = he::for_run_dir(
+            let (res, an) = he::for_run_dir(
                 &d,
                 a["schedule"].as_str().unwrap(),
                 a["res"].as_object().unwrap().clone(),
                 a["known"].as_str(),
                 &mut |l| printed.push(l.to_string()),
             );
+            // since M115 hydo run reports the analysis in result.json; the M94 file of the same
+            // analysis is what the recorded answers hold
             let p = d.join("one.errors.json");
+            if let Some((an, k)) = &an {
+                he::write_run_json(&p, an, k).unwrap();
+            }
             json!({"res": res, "printed": printed,
                    "one_errors": std::fs::read_to_string(&p).ok()})
         }

@@ -246,3 +246,59 @@ fn depth1map_is_depth1map_py() {
     let (text, _) = analysis::depth1map(&nf, &d7, "").expect("map");
     assert_eq!(text, golden("depth1map-rev.golden"));
 }
+
+/// The same sweeps in the results format (M115): their first runs as an events.jsonl give the
+/// same map.
+#[test]
+fn depth1map_reads_the_results_format() {
+    let f = here().join("tests/fixtures/results/m55-tail");
+    let tmp = std::env::temp_dir().join(format!("hydo-bench-d1m-{}", std::process::id()));
+    let conv = |name: &str| {
+        let src = f.join(name);
+        let pts: std::collections::HashMap<i64, String> =
+            std::fs::read_to_string(src.join("sweep-points.jsonl"))
+                .unwrap()
+                .lines()
+                .map(|l| {
+                    let v: serde_json::Value = serde_json::from_str(l).unwrap();
+                    (
+                        v["seed"].as_i64().unwrap(),
+                        v["point"].as_str().unwrap().to_string(),
+                    )
+                })
+                .collect();
+        let mut out = String::new();
+        for l in std::fs::read_to_string(src.join("runs.jsonl"))
+            .unwrap()
+            .lines()
+        {
+            let v: serde_json::Value = serde_json::from_str(l).unwrap();
+            let sd = v["seed"].as_i64().unwrap();
+            let verdict = v["verdict"].as_str().unwrap();
+            let mut r = hydo_results::Run::new(
+                v["schedule"].as_str().unwrap(),
+                hydo_results::Verdict {
+                    kind: hydo_explore::report::verdict_kind(verdict).into(),
+                    text: verdict.into(),
+                    ..Default::default()
+                },
+                v["fp"].as_str().unwrap(),
+            );
+            r.seed = Some(sd);
+            r.role = Some(hydo_results::role::FIRST.into());
+            r.point = pts.get(&sd).cloned();
+            out.push_str(&hydo_results::to_line(&r));
+        }
+        let d = tmp.join(name);
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join(hydo_results::EVENTS), out).unwrap();
+        d
+    };
+    let d7 = conv("sweep-explore-bench-d7-skip-last-record");
+    let nf = conv("sweep-explore-nf");
+    let (text, json) =
+        analysis::depth1map(&d7, &nf, r"present \d+ times|kafka_exactly_once").expect("map");
+    assert_eq!(text, golden("depth1map-d7.golden"));
+    assert_eq!(json, golden("depth1map-d7.json"));
+    let _ = std::fs::remove_dir_all(&tmp);
+}
