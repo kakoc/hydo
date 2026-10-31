@@ -860,8 +860,7 @@
             "not-found",
             "os-error",
             "not-utf8",
-            "too-long",
-            "not-supported"
+            "too-long"
           ],
           "type": "string"
         },

@@ -126,8 +126,6 @@ names! {
         NotUtf8 = "not-utf8",
         /// The input line is longer than the agent reads; it was discarded up to its newline.
         TooLong = "too-long",
-        /// This agent cannot do it here (for example a Linux-only primitive on another system).
-        NotSupported = "not-supported",
     }
 }
 

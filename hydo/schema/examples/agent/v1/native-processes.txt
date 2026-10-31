@@ -1,0 +1,43 @@
+# hydo agent transcript, protocol 1: spawn a process tree, signal it (STOP with waiting, CONT, KILL), exit events with status and signal, a handle used again, a busy handle, kill_after_ms, the environment, output files, a program that does not exist.
+# Recorded from `hydo-agent serve --root <scratch>` on Linux as an unprivileged user (hydo/crates/hydo-agent/tests/native.rs); never edited. replay: native
+< HYDO-AG 242 65657430 {"agent":"0.1.0","ev":"hello","features":["freeze"],"ops":["sync","spawn","signal","run","probe","write","read","mkdir","mount","syncfs","clock_set","clock_get","qlen","tail","untail","freeze","unfreeze"],"pid1":false,"proto":1,"seq":0,"v":1}
+> {"argv":["sh","-c","sleep 100 & sleep 100 & echo up > up; wait"],"cwd":"/work","env":["PATH=/usr/local/bin:/usr/bin:/bin"],"h":"svc","id":1,"op":"spawn","stderr":"/work/svc.log","stdout":"/work/svc.log","v":1}
+< HYDO-AG 45 0502bd60 {"ok":true,"op":"spawn","re":1,"seq":1,"v":1}
+> {"argv":["sh","-c","while [ ! -f up ]; do sleep 0.01; done; echo seen"],"cwd":"/work","env":["PATH=/usr/local/bin:/usr/bin:/bin"],"id":2,"op":"run","v":1}
+< HYDO-AG 43 e7dc69b1 {"ok":true,"op":"run","re":2,"seq":2,"v":1}
+< HYDO-AG 72 5f221d28 {"ev":"done","id":2,"out":"seen\n","out_len":5,"seq":3,"status":0,"v":1}
+> {"h":"svc","id":3,"op":"signal","sig":"STOP","tree":true,"v":1,"wait_stopped":true}
+< HYDO-AG 71 107f818a {"ok":true,"op":"signal","procs":3,"re":3,"seq":4,"stopped":true,"v":1}
+> {"h":"svc","id":4,"op":"signal","sig":"CONT","tree":true,"v":1}
+< HYDO-AG 56 cc797779 {"ok":true,"op":"signal","procs":3,"re":4,"seq":5,"v":1}
+> {"h":"svc","id":5,"op":"signal","sig":"KILL","tree":true,"v":1}
+< HYDO-AG 56 ec9ee10b {"ok":true,"op":"signal","procs":3,"re":5,"seq":6,"v":1}
+< HYDO-AG 65 cf7a0e5c {"ev":"exit","h":"svc","id":1,"seq":7,"sig":9,"status":137,"v":1}
+> {"h":"svc","id":6,"op":"signal","sig":"KILL","tree":true,"v":1}
+< HYDO-AG 90 8a117015 {"err":"not-running","msg":"svc has exited","ok":false,"op":"signal","re":6,"seq":8,"v":1}
+> {"argv":["sh","-c","echo second >> svc.log; exit 3"],"cwd":"/work","env":["PATH=/usr/local/bin:/usr/bin:/bin"],"h":"svc","id":7,"op":"spawn","v":1}
+< HYDO-AG 45 8576cf31 {"ok":true,"op":"spawn","re":7,"seq":9,"v":1}
+< HYDO-AG 56 59757024 {"ev":"exit","h":"svc","id":7,"seq":10,"status":3,"v":1}
+> {"id":8,"max":100,"op":"read","path":"/work/svc.log","v":1}
+< HYDO-AG 83 76df030f {"data":"second\n","eof":true,"ok":true,"op":"read","re":8,"seq":11,"size":7,"v":1}
+> {"argv":["sleep","100"],"env":["PATH=/usr/local/bin:/usr/bin:/bin"],"h":"slow","id":9,"kill_after_ms":200,"op":"spawn","v":1}
+< HYDO-AG 46 f1a72541 {"ok":true,"op":"spawn","re":9,"seq":12,"v":1}
+< HYDO-AG 84 c63c9f7c {"ev":"exit","h":"slow","id":9,"seq":13,"sig":9,"status":137,"timed_out":true,"v":1}
+> {"argv":["sleep","100"],"env":["PATH=/usr/local/bin:/usr/bin:/bin"],"h":"b","id":10,"op":"spawn","v":1}
+< HYDO-AG 47 6bce9119 {"ok":true,"op":"spawn","re":10,"seq":14,"v":1}
+> {"argv":["sleep","100"],"env":["PATH=/usr/local/bin:/usr/bin:/bin"],"h":"b","id":11,"op":"spawn","v":1}
+< HYDO-AG 95 e8a366e4 {"err":"handle-busy","msg":"b is still running","ok":false,"op":"spawn","re":11,"seq":15,"v":1}
+> {"h":"b","id":12,"op":"signal","sig":"TERM","tree":false,"v":1}
+< HYDO-AG 58 6011aaae {"ok":true,"op":"signal","procs":1,"re":12,"seq":16,"v":1}
+< HYDO-AG 66 03fca2a6 {"ev":"exit","h":"b","id":10,"seq":17,"sig":15,"status":143,"v":1}
+> {"argv":["sh","-c","echo \"$X\" > env.out"],"cwd":"/work","env":["PATH=/usr/bin:/bin","X=hello there"],"h":"env","id":13,"op":"spawn","v":1}
+< HYDO-AG 47 6ffbdfd2 {"ok":true,"op":"spawn","re":13,"seq":18,"v":1}
+< HYDO-AG 57 6fcfd12e {"ev":"exit","h":"env","id":13,"seq":19,"status":0,"v":1}
+> {"id":14,"max":100,"op":"read","path":"/work/env.out","v":1}
+< HYDO-AG 90 bded0bb5 {"data":"hello there\n","eof":true,"ok":true,"op":"read","re":14,"seq":20,"size":12,"v":1}
+> {"argv":["no-such-program"],"env":["PATH=/usr/local/bin:/usr/bin:/bin"],"h":"x","id":15,"op":"spawn","v":1}
+< HYDO-AG 113 71191fb3 {"err":"os-error","errno":2,"msg":"spawn no-such-program: ENOENT","ok":false,"op":"spawn","re":15,"seq":21,"v":1}
+> {"argv":["true"],"env":["PATH=/usr/local/bin:/usr/bin:/bin"],"h":"x","id":16,"netns":"/no/such/ns","op":"spawn","v":1}
+< HYDO-AG 108 2cce7a66 {"err":"os-error","errno":2,"msg":"open /no/such/ns: ENOENT","ok":false,"op":"spawn","re":16,"seq":22,"v":1}
+> {"argv":["true"],"env":["NOEQUALS"],"h":"x","id":17,"op":"spawn","v":1}
+< HYDO-AG 110 3fb88f75 {"err":"bad-field","msg":"env: \"NOEQUALS\" is not NAME=VALUE","ok":false,"op":"spawn","re":17,"seq":23,"v":1}

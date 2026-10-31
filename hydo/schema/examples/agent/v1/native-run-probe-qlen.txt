@@ -1,0 +1,35 @@
+# hydo agent transcript, protocol 1: run with output, with a capture limit, with kill_after_ms, and a program that does not exist; probes that succeed at once, reach their deadline, kill a hanging attempt, and end because a process died; qlen.
+# Recorded from `hydo-agent serve --root <scratch>` on Linux as an unprivileged user (hydo/crates/hydo-agent/tests/native.rs); never edited. replay: native
+< HYDO-AG 242 65657430 {"agent":"0.1.0","ev":"hello","features":["freeze"],"ops":["sync","spawn","signal","run","probe","write","read","mkdir","mount","syncfs","clock_set","clock_get","qlen","tail","untail","freeze","unfreeze"],"pid1":false,"proto":1,"seq":0,"v":1}
+> {"argv":["sh","-c","echo out; echo err >&2; exit 3"],"env":["PATH=/usr/local/bin:/usr/bin:/bin"],"id":1,"op":"run","v":1}
+< HYDO-AG 43 409bdaa0 {"ok":true,"op":"run","re":1,"seq":1,"v":1}
+< HYDO-AG 76 bdd455c2 {"ev":"done","id":1,"out":"out\nerr\n","out_len":8,"seq":2,"status":3,"v":1}
+> {"argv":["sh","-c","i=0; while [ $i -lt 100 ]; do echo line$i; i=$((i+1)); done"],"capture":10,"env":["PATH=/usr/local/bin:/usr/bin:/bin"],"id":2,"op":"run","v":1}
+< HYDO-AG 43 2b76692f {"ok":true,"op":"run","re":2,"seq":3,"v":1}
+< HYDO-AG 79 ef234a13 {"ev":"done","id":2,"out":"line0\nline","out_len":690,"seq":4,"status":0,"v":1}
+> {"argv":["sleep","100"],"env":["PATH=/usr/local/bin:/usr/bin:/bin"],"id":3,"kill_after_ms":200,"op":"run","v":1}
+< HYDO-AG 43 4371f139 {"ok":true,"op":"run","re":3,"seq":5,"v":1}
+< HYDO-AG 93 4e345f7a {"ev":"done","id":3,"out":"","out_len":0,"seq":6,"sig":9,"status":137,"timed_out":true,"v":1}
+> {"argv":["no-such-program"],"env":["PATH=/usr/local/bin:/usr/bin:/bin"],"id":4,"op":"run","v":1}
+< HYDO-AG 107 dffde083 {"err":"os-error","errno":2,"msg":"run no-such-program: ENOENT","ok":false,"op":"run","re":4,"seq":7,"v":1}
+> {"argv":["true"],"deadline_ms":1000,"env":["PATH=/usr/local/bin:/usr/bin:/bin"],"every_ms":100,"id":5,"op":"probe","v":1}
+< HYDO-AG 45 f77f4369 {"ok":true,"op":"probe","re":5,"seq":8,"v":1}
+< HYDO-AG 77 b8f88631 {"ev":"probe","id":5,"ok":true,"seq":9,"status":0,"tries":1,"v":1,"why":"ok"}
+> {"argv":["false"],"deadline_ms":1000,"env":["PATH=/usr/local/bin:/usr/bin:/bin"],"every_ms":400,"id":6,"op":"probe","v":1}
+< HYDO-AG 46 d3854527 {"ok":true,"op":"probe","re":6,"seq":10,"v":1}
+< HYDO-AG 85 1e5b443f {"ev":"probe","id":6,"ok":false,"seq":11,"status":1,"tries":3,"v":1,"why":"deadline"}
+> {"argv":["sleep","100"],"deadline_ms":300,"env":["PATH=/usr/local/bin:/usr/bin:/bin"],"every_ms":100,"id":7,"op":"probe","v":1}
+< HYDO-AG 46 16068919 {"ok":true,"op":"probe","re":7,"seq":12,"v":1}
+< HYDO-AG 87 9e9794dc {"ev":"probe","id":7,"ok":false,"seq":13,"status":137,"tries":1,"v":1,"why":"deadline"}
+> {"argv":["sh","-c","exit 7"],"env":["PATH=/usr/local/bin:/usr/bin:/bin"],"h":"short","id":8,"op":"spawn","v":1}
+< HYDO-AG 46 b06ee785 {"ok":true,"op":"spawn","re":8,"seq":14,"v":1}
+< HYDO-AG 58 6bc7366a {"ev":"exit","h":"short","id":8,"seq":15,"status":7,"v":1}
+> {"alive":"short","argv":["false"],"deadline_ms":5000,"env":["PATH=/usr/local/bin:/usr/bin:/bin"],"every_ms":100,"id":9,"op":"probe","v":1}
+< HYDO-AG 46 d3687f75 {"ok":true,"op":"probe","re":9,"seq":16,"v":1}
+< HYDO-AG 81 4362dd5f {"ev":"probe","id":9,"ok":false,"seq":17,"status":1,"tries":1,"v":1,"why":"died"}
+> {"dev":"lo","handle":"40:","id":10,"op":"qlen","tc":"./bin/tc","v":1}
+< HYDO-AG 58 3ad775fc {"ok":true,"op":"qlen","packets":7,"re":10,"seq":18,"v":1}
+> {"dev":"lo","handle":"50:","id":11,"op":"qlen","tc":"./bin/tc","v":1}
+< HYDO-AG 46 743801ca {"ok":true,"op":"qlen","re":11,"seq":19,"v":1}
+> {"dev":"lo","handle":"40:","id":12,"op":"qlen","tc":"./bin/no-tc","v":1}
+< HYDO-AG 106 e4f5a7e5 {"err":"os-error","errno":2,"msg":"run ./bin/no-tc: ENOENT","ok":false,"op":"qlen","re":12,"seq":20,"v":1}
