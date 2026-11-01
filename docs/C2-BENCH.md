@@ -143,3 +143,21 @@ agent images give the same verdict class (OK, or a violation with or without the
 signature) on every seed both ran (4 + 4 + 6 + 6 + 8 + 8 = 36 seeds), except d10's seed 1007: the
 shell image ignores its `X=front@8~160` and passes, the agent image kills the order service 160 ms
 after order 8 and finds the defect (order 11 twice in Kafka; M108's original image: order 10).
+
+## 5. Three repetitions of M108's cells
+
+Repetitions 2 and 3 of the same cells (seeds 2001… and 3001…), merged with repetition 1 by
+`hydo-bench table`:
+
+| defect | strategy | shell (manifest) | agent (manifest) |
+|---|---|---|---|
+| d1-kafka-first | random, budget 4 | 2/3 (2, 3, -) | 2/3 (2, 3, -) |
+| d5-myisam | random, budget 4 | 2/3 (3, 4, -) | 2/3 (3, 4, -) |
+| d8-no-order-lock | swarm+cc, budget 6 | 2/3 (5, 2, -) | 2/3 (5, 2, -) |
+| d12-shared-key-buffer | swarm+cc, budget 6 | 3/3 (5, 2, 1) | 3/3 (5, 2, 1) |
+| d10-outcome-in-memory | process+xcf, budget 8 | 0/3 (-, -, -) | 2/3 (7, -, 4) |
+| d11-ack-unflushed-flag | process+xcf, budget 8 | 1/3 (-, -, 7) | 0/3 (-, -, -) |
+
+d1, d5, d8 and d12 are found in the same repetitions, at the same schedule, on both kinds.
+Per seed, 96 of the 103 seeds both kinds ran in these 18 repetition cells give the same verdict
+class; the seven that differ are explained in section 6.
