@@ -176,6 +176,11 @@ d1, d5, d8 and d12 are found in the same repetitions, at the same schedule, on b
 Per seed, 96 of the 103 seeds both kinds ran in these 18 repetition cells give the same verdict
 class; the seven that differ are explained in section 6.
 
+The process strategy with `--more-faults --cf-range 1-309` on d8, d9 and d12 (repetition 1,
+budget 8; cut from three repetitions for time): none of the three is found on either kind, and all
+24 seeds give the same verdict class on both kinds (the process strategy draws no `Q=`, which these
+defects need).
+
 ## 6. Every difference and its classification
 
 1. **`X=` (the stack's timed kill): a designed difference in the shell init, not an agent fault.**
