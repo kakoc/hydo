@@ -43,7 +43,7 @@ schedule.
 
 ## Which examples
 
-Built and compared (19 images from 15 manifests):
+Built and compared (19 images from 16 manifests):
 
 | example | manifest | kernel | shell image | agent image (two builds identical) | data disk |
 |---|---|---|---|---|---|
@@ -80,11 +80,11 @@ have no arm64 manifest.
 
 | example | equivalent? | what differs (classification below) |
 |---|---|---|
-| redis | yes | nothing (swarm 100 of 100, process 100 of 100, kill, cut and net sweeps all the same) |
+| redis | yes | nothing (swarm 100 of 100 once D3's wording is set aside, process 100 of 100, kill, cut and net sweeps all the same) |
 | redis-hist | yes, after fix 1 | nothing after the fix; before it the history checks saw no records on the agent image |
 | redis-read | yes | nothing |
 | redis-ram | yes | 1 of 100 swarm seeds (an injected I/O error hits another disk request: D2) |
-| redis-oci | yes | see its rows (recorded schedules; swarm) |
+| redis-oci | yes | nothing (swarm 100 of 100) |
 | redis-bridge | yes, except `F=` | the two freeze schedules are refused on the agent image (D4); everything else the same |
 | ledger | yes | 7 of 100 swarm seeds, both directions, 39 against 38 failures, the same minimal schedule (packet-loss timing: D1) |
 | ledger-spin | **no** | every agent run ends as SPIN: lock-step control does not run the rewind mode a counter loop needs (D5) |
@@ -96,7 +96,7 @@ have no arm64 manifest.
 | rust-kv | yes | nothing |
 | shop (buggy and fixed) | yes | nothing; the same 4 failures and the same two minimal schedules as M89/M96 |
 | gRPC demo (buggy and fixed) | yes, after fix 2 | nothing after the fix; before it `orderd` did not start on the agent image |
-| voting app | yes (recorded schedules) | see its exploration row |
+| voting app | mostly | recorded schedules the same; exploration (seeds 1–50, process `--new-faults`, no shrinking) 47 of 50, 31 failures on each image: 1 seed timing (D1), 2 seeds where the agent image's checks find the database not answering (D6, not explained) |
 
 ## Recorded schedules
 
@@ -188,7 +188,8 @@ names the replay controller (M126).
 ## Explorations
 
 The explorer's schedules for seeds 1–100 with the strategy and options each example is explored
-with, on both images, and the deterministic sweeps that apply on the Mac. "Same meaning" counts the
+with, on both images (the voting app seeds 1–50 without shrinking: its 3 GiB guests took about two
+minutes a run with the Mac swapping), and the deterministic sweeps that apply on the Mac. "Same meaning" counts the
 seeds whose first runs have the same verdict class and the same violated properties (the explorer
 generated the same schedule string on both images for every seed of every exploration). Every
 failure was re-run by the explorer and reproduced on both images. "Shrunk classes" are the
@@ -211,14 +212,20 @@ property table (assertions and invariants: passed, failed, not exercised).
 | redis | `--sweep kill` | 20 | 20 | 0 (0 reproduced) | 0 (0 reproduced) | same: none | 7 of 7 |
 | redis | `--sweep net` | 5 | 5 | 0 (0 reproduced) | 0 (0 reproduced) | same: none | 7 of 7 |
 | redis-bridge | `--strategy process --new-faults --protocol-faults --seeds 1-100` | 100 | 100 | 0 (0 reproduced) | 0 (0 reproduced) | same: none | 10 of 10 |
+| redis-bridge | `--sweep net` | 15 | 15 | 0 (0 reproduced) | 0 (0 reproduced) | same: none | 9 of 9 |
+| redis-bridge | `--sweep protocol` | 48 | 48 | 0 (0 reproduced) | 0 (0 reproduced) | same: none | 10 of 10 |
 | redis-composed | `--strategy swarm --seeds 1-100` | 100 | 98 | 49 (49 reproduced) | 47 (47 reproduced) | same: `VIOLATION data disk unmountable (mount ...)`, `VIOLATION service cannot recover (committed data`, `acked_writes_survive`, `answers` | 20 of 20 |
 | redis-composed-racy | `--strategy swarm --seeds 1-100` | 100 | 96 | 64 (64 reproduced) | 62 (62 reproduced) | same: `VIOLATION data disk unmountable (mount ...)`, `VIOLATION service cannot recover (committed data`, `acked_writes_survive`, `answers`, `total_conserved` | 20 of 20 |
 | redis-hist | `--strategy swarm --new-faults --seeds 1-100` | 100 | 100 | 45 (45 reproduced) | 45 (45 reproduced) | same: `VIOLATION data disk unmountable (mount ...)`, `redis.kv_linearizable`, `redis.lists_append` | 8 of 8 |
+| redis-oci | `--strategy swarm --new-faults --seeds 1-100` | 100 | 100 | 36 (36 reproduced) | 36 (36 reproduced) | same: `VIOLATION data disk unmountable (mount ...)`, `redis.acked_writes_survive` | 7 of 7 |
 | redis-ram | `--strategy swarm --new-faults --seeds 1-100` | 100 | 99 | 37 (37 reproduced) | 36 (36 reproduced) | same: `VIOLATION data disk unmountable (mount ...)`, `redis.acked_writes_survive` | 8 of 8 |
 | redis-read | `--strategy swarm --new-faults --seeds 1-100` | 100 | 100 | 36 (36 reproduced) | 36 (36 reproduced) | same: `VIOLATION data disk unmountable (mount ...)`, `redis.acked_writes_survive` | 7 of 7 |
 | rust-kv | `--strategy swarm --buggify --seeds 1-100` | 100 | 100 | 32 (32 reproduced) | 32 (32 reproduced) | same: `VIOLATION data disk unmountable (mount ...)`, `rkv.oracle` | 19 of 19 |
 | shop-buggy | `--strategy process --protocol-faults --seeds 1-100` | 100 | 100 | 4 (4 reproduced) | 4 (4 reproduced) | same: `payments.charged_at_most_once` | 13 of 13 |
+| shop-buggy | `--sweep protocol` | 228 | 228 | 48 (48 reproduced) | 48 (48 reproduced) | same: `payments.charged_at_most_once` | 13 of 13 |
 | shop-fixed | `--strategy process --protocol-faults --seeds 1-100` | 100 | 100 | 0 (0 reproduced) | 0 (0 reproduced) | same: none | 13 of 13 |
+| shop-fixed | `--sweep protocol` | 228 | 228 | 0 (0 reproduced) | 0 (0 reproduced) | same: none | 13 of 13 |
+| voting | `--strategy process --new-faults --no-shrink --seeds 1-50` | 50 | 47 | 31 (31 reproduced) | 31 (31 reproduced) | same: none | 8 of 8 |
 
 ## Differences and their classification
 
@@ -257,6 +264,19 @@ property table (assertions and invariants: passed, failed, not exercised).
   loop. All 100 agent runs of the swarm and both recorded schedules fail this way, so the agent
   image cannot test this example at all. Exact-repeat loops (`spin_load`) are resolved under
   control as before.
+- **D6, not explained: the voting app's database after a pause and a clock jump.** Two of 50
+  seeds: `P=db@18+2 T=7:-2592000 O=db-*@0-6:resp:loss,74%` (shell OK, agent VIOLATION
+  `votes.counted_soon`) and `P=db@1+5 T=18:31536000` (both VIOLATION `votes.counted_soon`, but the
+  shell image's final `votes.counted` also fails while the agent image's cannot decide): on the
+  agent image the checks' `psql` gets no answer from PostgreSQL ("db not answering") for the 60 s
+  after the heal. In both agent runs the .NET worker exited after the heal's restart pass (the
+  shell image's worker died before it and was restarted), so part of it is timing, but the
+  database itself answers in the shell runs. Each schedule without one of its faults (without
+  `T=`, without `O=`, without `T=` for the second) gives OK on both images. Not investigated
+  further; a case for C3 (the controller's `T=` and pause, or the worker's reconnect storm against
+  a database whose clock moved). The third differing seed (`K=db@8+1 P=redis@18+2 T=2:-30
+  O=redis-*@10-15:req:loss,61%`: shell VIOLATION, agent OK) looks like the same timing in the other
+  direction.
 
 ## Fixes (each with a test)
 
@@ -297,6 +317,8 @@ and `cargo fmt --check` pass. The identity corpora and the scripted-engine scena
 - **`F=` with `network: bridge` (D4):** the `freeze` op's namespace field (an addition to protocol
   version 1 with a feature name), a new pinned agent build for both architectures, and the
   redis-bridge freeze schedules and a `--sweep freeze` on the Mac then.
+- **The voting app's database (D6):** find why the agent image's checks get no answer from
+  PostgreSQL after a pause combined with a clock jump; and its seeds 51–100.
 - **The mount error's wording (D3):** a decision, because it changes the explorer's signatures of
   the "data disk unmountable" class.
 - **The re-baseline** of every Mac fingerprint (the agent images' values above are the first
