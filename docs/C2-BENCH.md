@@ -102,3 +102,19 @@ agent `36ac86dd40f28bd9`.
 | `disk=none dseed=0 \| run` | OK acked=30/30 `59d12b91b1de0233` | OK acked=30/30 `3daf8ea141b7c843` |
 | `disk=none dseed=0 \| run Q=2d` | OK acked=30/30 `c30e6098f3d4cec8` | OK acked=30/30 `ef8bd4c3399d3289` |
 | `disk=cut dseed=0 \| run C=15` | OK acked=15/30 `805420f1ae19f622` | OK acked=15/30 `709c4c2bc7440ddb` |
+
+## 3. The triggers (`hydo-bench confirm`)
+
+Each defect's hand-written trigger runs twice on its image (both runs gave the same fingerprint
+in every row below) and once on the control of the same kind. "M108" is the original benchmark
+image's result from M108's proof (`/var/tmp/m108/rs` on the box).
+
+| defect | trigger | M108 (original image) | shell (manifest) | agent (manifest) |
+|---|---|---|---|---|
+| d1-kafka-first | `disk=none dseed=0 \| run K=mysql@10+1` | VIOLATION order=10 twice in Kafka (M108's d0/d3 run; d1 confirmed in M54) | VIOLATION order=10 present 2 times `c39344804028e7a8`; control OK | VIOLATION order=10 present 2 times `5e89855d88b1c00d`; control OK |
+| d5-myisam | `disk=cut dseed=0 \| run C=15` | (M54) | VIOLATION mysql order=0 MISSING `e683fa1df14af57e`; control OK | VIOLATION mysql order=0 MISSING `c15e9c5879d9a0b1`; control OK |
+| d8-no-order-lock | `disk=none dseed=0 \| run Q=2d` | VIOLATION order=0 present 2 times `6a56326d6de88bba` | VIOLATION order=0 present 2 times `b5db689787b3fa39`; control OK | VIOLATION order=0 present 2 times `2d9c12461b7c35d4`; control OK |
+| d9-redis-unlocked | `disk=none dseed=0 \| run Q=4` | VIOLATION front door crashed: panic: slice bounds out of range `6a5f06b675687ac4` | **OK** (no panic) `9d1fa0421dcd233a` | VIOLATION [front.no_crash] front door crashed: panic: slice bounds out of range `7d4f2e7e31e03f27`; control OK |
+| d10-outcome-in-memory | `disk=none dseed=0 \| run X=front@9~20` | VIOLATION order=10 present 2 times `5d03c640c24f667d` | **OK**: the shell init ignores `X=` (`knob X not in the manifest, ignored`) `acf36daf59e7b196` | VIOLATION order=10 present 2 times `51e4d29967f025b1`; control OK |
+| d11-ack-unflushed-flag | `disk=cut dseed=0 cf=238 \| run` | VIOLATION order=22 acked but not marked published `adadedf9698291bd` | **OK** acked=23/30 `9ddbc9ce8d7e842f` | **OK** acked=23/30 `bfce19ce39f712d8` |
+| d12-shared-key-buffer | `disk=none dseed=0 \| run Q=2` | VIOLATION order=0 present 2 times `d89a283a66ac19a9` | VIOLATION order=0 present 2 times `7e3d75367b1f9ee6`; control OK | VIOLATION order=0 present 2 times `a4f7227c1371b44c`; control OK |
