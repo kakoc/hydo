@@ -477,11 +477,13 @@ fn check_offered(s: &Session, cmd: &Command) -> Result<(), RunError> {
             cmd.name()
         )));
     }
-    if let Some(f) = cmd.feature() {
+    // A field behind a feature (the freeze's netns, M131): an image built before the field was
+    // added has an agent without it; the message says so and what to do.
+    for f in cmd.features() {
         if !s.has_feature(f) {
-            return Err(RunError::Protocol(format!(
-                "the agent does not offer the feature {f}"
-            )));
+            return Err(RunError::Protocol(
+                hydo_agent_proto::session::missing_feature_message(f, &s.hello().agent),
+            ));
         }
     }
     Ok(())

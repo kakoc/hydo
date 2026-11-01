@@ -417,7 +417,7 @@ fn paths_of(items: &[Item], conv: &str, cov: &mut BTreeMap<String, usize>) {
                 ..
             } if d.status == 143 => hit("status-143"),
             Item::Got {
-                msg: Msg::Refused(_, op, _, _),
+                msg: Msg::Refused(_, op, _, _, _),
                 ..
             } if op == "clock_set" => hit("clock-set-refused"),
             _ => {}

@@ -1,6 +1,6 @@
 # hydo agent transcript, protocol 1: tailing a file that does not exist yet, from its start; whole and partial lines, a truncated file, a line cut at 2,000 bytes, untail; a tail from the end; a busy name; a missing directory.
 # Recorded from `hydo-agent serve --root <scratch>` on Linux as an unprivileged user (hydo/crates/hydo-agent/tests/native.rs); never edited. replay: native
-< HYDO-AG 242 65657430 {"agent":"0.1.0","ev":"hello","features":["freeze"],"ops":["sync","spawn","signal","run","probe","write","read","mkdir","mount","syncfs","clock_set","clock_get","qlen","tail","untail","freeze","unfreeze"],"pid1":false,"proto":1,"seq":0,"v":1}
+< HYDO-AG 257 c3d3be4a {"agent":"0.2.0","ev":"hello","features":["freeze","freeze-netns"],"ops":["sync","spawn","signal","run","probe","write","read","mkdir","mount","syncfs","clock_set","clock_get","qlen","tail","untail","freeze","unfreeze"],"pid1":false,"proto":1,"seq":0,"v":1}
 > {"from_start":true,"id":1,"name":"log","op":"tail","path":"/work/t.log","v":1}
 < HYDO-AG 44 53a4555a {"ok":true,"op":"tail","re":1,"seq":1,"v":1}
 > {"data":"one\ntwo\n","id":2,"op":"write","path":"/work/t.log","v":1}

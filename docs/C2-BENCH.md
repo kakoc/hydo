@@ -6,6 +6,8 @@ file holds the answer for the bare-metal test machine (hvx). The criterion is a 
 detection rate, not single verdicts, because a change of guest timing changes which schedule
 finds what.
 
+**Agent version.** Every agent image here carries hydo-agent 0.1.0 (the M117 pin, x86_64 sha256 `ff7652a1…`); M131's 0.2.0 (`1f517e04…`, an optional `netns` field in `freeze`, busybox's exact mount-error text) came later. No schedule here uses `F=` or a failed mount, so the comparison holds for 0.2.0 images too, but their fingerprints will differ. M131's D7 (a timed-out check prints `Terminated` only on shell images) did not show up: no console of this campaign has a `Terminated` line on either kind.
+
 ## 1. The benchmark images cannot be driven by the host controller
 
 The benchmark images (`explore-bench-*`, `explore-nf`, `explore-disk`/`explore-fix-disk` of the

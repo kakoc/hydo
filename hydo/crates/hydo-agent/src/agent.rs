@@ -1029,7 +1029,10 @@ impl Agent {
             Some(l) => Some(File::create(self.path(l)).map_err(|e| os(&format!("open {l}"), &e))?),
             None => None,
         };
-        let nfq = Nfq::bind(queue).map_err(|(what, e)| os(what, &e))?;
+        let nfq = match &f.netns {
+            None => Nfq::bind(queue).map_err(|(what, e)| os(what, &e))?,
+            Some(p) => self.bind_in(p, queue)?,
+        };
         let _ = sys::set_fifo(50);
         let counter = Counter {
             sip,
@@ -1060,6 +1063,25 @@ impl Agent {
             frozen: Vec::new(),
         });
         Ok(Reply::Freeze(FreezeOk {}))
+    }
+
+    /// The freeze's queue bound inside the network namespace `p` (feature `freeze-netns`): a
+    /// netfilter queue belongs to the namespace its netlink socket was made in, so the agent
+    /// enters `p` for the socket and the bind (what hydo_fc does under `nsenter -n<p>` for its
+    /// whole life) and goes back to its own namespace at once, whatever the bind gave. Only the
+    /// queue's socket lives in `p`; every other command keeps the agent's namespace.
+    fn bind_in(&self, p: &str, queue: u16) -> Result<Nfq, Fail> {
+        let target = File::open(self.path(p)).map_err(|e| os(&format!("open {p}"), &e))?;
+        let home = File::open("/proc/self/ns/net").map_err(|e| os("open /proc/self/ns/net", &e))?;
+        sys::setns_net(target.as_raw_fd()).map_err(|e| os(&format!("setns {p}"), &e))?;
+        let bound = Nfq::bind(queue);
+        if let Err(e) = sys::setns_net(home.as_raw_fd()) {
+            // cannot happen for a namespace the agent was in a moment ago; if it did, every
+            // later command would run in the service's namespace, so say so loudly
+            drop(bound);
+            return Err(os("setns back to the agent's namespace", &e));
+        }
+        bound.map_err(|(what, e)| os(&format!("{what} in {p}"), &e))
     }
 
     fn on_packets(&mut self) {

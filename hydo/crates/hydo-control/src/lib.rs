@@ -20,6 +20,7 @@
 //!   and the `hydo` command use for every image whose `/etc/hydo/control` says `agent` (M126).
 
 pub mod agent;
+pub mod busybox;
 pub mod control;
 pub mod drive;
 mod flow;
