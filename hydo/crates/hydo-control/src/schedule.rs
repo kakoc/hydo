@@ -1133,20 +1133,22 @@ fn clock_start(fx: &mut F<'_>, ctx: &Ctx, with_log: bool) -> Step<()> {
 
 fn mount_data(fx: &mut F<'_>, ctx: &Ctx, verdict: &str) -> Step<()> {
     let l = &ctx.plan.layout;
-    let r = call(
-        fx,
-        Command::Mount(Mount {
-            src: l.data_dev.clone(),
-            dst: l.data_dir.clone(),
-            fstype: l.data_fstype.clone(),
-            flags: (!ctx.mount_flags.is_empty()).then(|| ctx.mount_flags.clone()),
-            data: ctx.mount_data.clone(),
-        }),
-    )?;
-    if let Err(msg) = r {
-        // AMBIGUOUS: the shell puts mount's own error text here; the agent's refusal names the
-        // system call and its errno instead.
-        return die_oracle(fx, format!("{verdict} ({msg})"));
+    let id = fx.send(Command::Mount(Mount {
+        src: l.data_dev.clone(),
+        dst: l.data_dir.clone(),
+        fstype: l.data_fstype.clone(),
+        flags: (!ctx.mount_flags.is_empty()).then(|| ctx.mount_flags.clone()),
+        data: ctx.mount_data.clone(),
+    }))?;
+    if let Err(e) = fx.reply(id)? {
+        // The shell puts busybox mount's own error text here (M127): for an errno that musl's
+        // strerror has a text for, the same words; otherwise (AMBIGUOUS) the agent's refusal,
+        // which names the system call and its errno.
+        let text = e
+            .errno
+            .and_then(|n| busybox_mount_error(&l.data_dev, &l.data_dir, n))
+            .unwrap_or(e.msg);
+        return die_oracle(fx, format!("{verdict} ({text})"));
     }
     for d in &ctx.plan.data_dirs {
         post(
@@ -1165,6 +1167,35 @@ fn mount_data(fx: &mut F<'_>, ctx: &Ctx, verdict: &str) -> Step<()> {
         ),
     );
     errlog::after_mount(fx, ctx) // SEAM(ErrorLogs): the data-disk files' line counts
+}
+
+/// What the guest's busybox `mount` (static, musl) prints on stderr when mount(2) fails with
+/// `errno` (busybox `bb_perror_msg("mounting %s on %s failed")` with musl's `strerror` text): the
+/// text hydo-init.sh's mount_data puts in its verdict. M127 found the difference on the Redis
+/// example's lying-disk schedules (`Data consistency error`, EUCLEAN). None for an errno that is
+/// not in this table (the Linux errno numbers of x86_64 and aarch64).
+fn busybox_mount_error(src: &str, dst: &str, errno: i64) -> Option<String> {
+    // musl 1.2's src/errno/__strerror.h, for the errors a mount of a block device can give
+    let text = match errno {
+        1 => "Operation not permitted",
+        2 => "No such file or directory",
+        5 => "I/O error",
+        6 => "No such device or address",
+        12 => "Out of memory",
+        13 => "Permission denied",
+        15 => "Block device required",
+        16 => "Resource busy",
+        19 => "No such device",
+        20 => "Not a directory",
+        22 => "Invalid argument",
+        24 => "No file descriptors available",
+        28 => "No space left on device",
+        30 => "Read-only file system",
+        74 => "Bad message",
+        117 => "Data consistency error",
+        _ => return None,
+    };
+    Some(format!("mount: mounting {src} on {dst} failed: {text}"))
 }
 
 /// start_svc: the old log appended to .log.old, setup, the service, its readiness. Ok(false) when
@@ -2051,6 +2082,20 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mount_error_is_busybox_text() {
+        // the shell image's verdict on the Redis example's lying-disk seed 4 (M127)
+        assert_eq!(
+            busybox_mount_error("/dev/vda2", "/data", 117).as_deref(),
+            Some("mount: mounting /dev/vda2 on /data failed: Data consistency error")
+        );
+        assert_eq!(
+            busybox_mount_error("/dev/vda2", "/data", 5).as_deref(),
+            Some("mount: mounting /dev/vda2 on /data failed: I/O error")
+        );
+        assert_eq!(busybox_mount_error("/dev/vda2", "/data", 9999), None);
+    }
 
     #[test]
     fn shell_text_helpers() {
