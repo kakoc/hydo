@@ -460,7 +460,9 @@ pub fn validate(m: &mut Value) -> R<()> {
         }
         if let Some(b) = obj_get(s, "restart_may_fail") {
             if !b.is_boolean() {
-                return Err(err(format!("{wh}: restart_may_fail: must be true or false")));
+                return Err(err(format!(
+                    "{wh}: restart_may_fail: must be true or false"
+                )));
             }
         }
         for dep in or_iter(obj_get(s, "depends_on"))? {
