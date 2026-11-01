@@ -118,3 +118,28 @@ image's result from M108's proof (`/var/tmp/m108/rs` on the box).
 | d10-outcome-in-memory | `disk=none dseed=0 \| run X=front@9~20` | VIOLATION order=10 present 2 times `5d03c640c24f667d` | **OK**: the shell init ignores `X=` (`knob X not in the manifest, ignored`) `acf36daf59e7b196` | VIOLATION order=10 present 2 times `51e4d29967f025b1`; control OK |
 | d11-ack-unflushed-flag | `disk=cut dseed=0 cf=238 \| run` | VIOLATION order=22 acked but not marked published `adadedf9698291bd` | **OK** acked=23/30 `9ddbc9ce8d7e842f` | **OK** acked=23/30 `bfce19ce39f712d8` |
 | d12-shared-key-buffer | `disk=none dseed=0 \| run Q=2` | VIOLATION order=0 present 2 times `d89a283a66ac19a9` | VIOLATION order=0 present 2 times `7e3d75367b1f9ee6`; control OK | VIOLATION order=0 present 2 times `a4f7227c1371b44c`; control OK |
+
+## 4. M108's cells (the same cells, seeds and budgets as M108's proof)
+
+`hydo-bench run` with M108's arguments (process with `--more-faults --cf-range 1-309` on d10/d11,
+budget 8; swarm with `--concurrency` on d8/d12, budget 6; random on d1/d5, budget 4; repetition 1,
+seeds 1001…; 2 workers), first on the shell images, then on the agent images. A cell stops at its
+first detection; a detection counts only if the control passes the same schedule and a re-run gives
+the same fingerprint. `n/m (k)` = found in n of m repetitions, at the k-th schedule.
+
+| defect | strategy | M108 (original images) | shell (manifest) | agent (manifest) |
+|---|---|---|---|---|
+| d1-kafka-first | random | 1/1 (2) | 1/1 (2) | 1/1 (2) |
+| d5-myisam | random | 1/1 (3) | 1/1 (3) | 1/1 (3) |
+| d8-no-order-lock | swarm+cc | 1/1 (5) | 1/1 (5) | 1/1 (5) |
+| d12-shared-key-buffer | swarm+cc | 1/1 (5) | 1/1 (5) | 1/1 (5) |
+| d10-outcome-in-memory | process+xcf | 1/1 (7) | **0/1** | 1/1 (7) |
+| d11-ack-unflushed-flag | process+xcf | 0/1 | 0/1 | 0/1 |
+
+Every detection is the same schedule on every kind: d1 seed 1002 `K=kafka@14+1`; d5 seed 1003
+`disk=cut … C=10`; d8 and d12 seed 1005 `K=redis@23+1 N=redis@28-30:corrupt,8%,loss,8% Q=4d`; d10
+seed 1007 `K=mysql@20+8 N=kafka@10-11:loss,49% T=8:-30 X=front@8~160`. **Per seed**, the shell and
+agent images give the same verdict class (OK, or a violation with or without the defect's
+signature) on every seed both ran (4 + 4 + 6 + 6 + 8 + 8 = 36 seeds), except d10's seed 1007: the
+shell image ignores its `X=front@8~160` and passes, the agent image kills the order service 160 ms
+after order 8 and finds the defect (order 11 twice in Kafka; M108's original image: order 10).
