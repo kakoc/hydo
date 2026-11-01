@@ -1,0 +1,68 @@
+# A test manifest of hydo-control (tests/errlog_fakes.rs, M127): hydo/onboard/examples/redis/hydo-proxy.yaml
+# (Redis behind a fault proxy, a fake outside world) with error logs as findings (errors:), so that
+# the init has both hydo-init-fakes.sh and hydo-init-errlog.sh and final_verdict is wrapped by both.
+# No example has both; this file is not an example (the identity corpus does not read it).
+name: redis
+description: Redis behind a fault proxy, with error logs as findings.
+
+root:
+  files:
+    - {src: ~/hydo/build/redis-server, dst: /bin/redis-server, mode: "0755"}
+    - {src: ~/hydo/build/redis-cli, dst: /bin/redis-cli, mode: "0755"}
+  text:
+    /etc/redis.conf: |
+      port 6379
+      bind 127.0.0.1
+      dir /data/redis
+      save ""
+      appendonly yes
+      appendfsync always
+      hz 1
+      dynamic-hz no
+
+data:
+  size_mib: 64
+  dirs: [redis]
+
+services:
+  - name: redis
+    cmd: /bin/redis-server /etc/redis.conf
+    ready: /bin/redis-cli ping | grep -q PONG
+    port: 6379
+    errors:
+      format: redis
+
+proxies:
+  - name: redisp
+    port: 6380
+    service: redis
+    protocol: tcp
+
+errors: true
+
+workload:
+  steps: 20
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      r=$(timeout 2 /bin/redis-cli -p 6380 SET k:$i v$i 2>/dev/null)
+      if [ "$r" = OK ]; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      i=$((i + 1))
+    done
+
+invariants:
+  - id: redis.acked_writes_survive
+    msg: every SET the client saw acknowledged reads back with its value
+    cmd: |
+      lost=0
+      for i in $(cat $HYDO_ACKED); do
+        [ "$(/bin/redis-cli GET k:$i)" = "v$i" ] || { echo "key k:$i lost"; lost=1; break; }
+      done
+      [ $lost = 0 ] && echo "acked=$(wc -l < $HYDO_ACKED) all present"
+      [ $lost = 0 ]
+  - id: redis.ping
+    msg: Redis answers
+    cmd: /bin/redis-cli ping | grep -q PONG
+
+faults: [kill, pause, cut, clock, disk, protocol]

@@ -15,12 +15,12 @@ use crate::fsx;
 use crate::{outln, Fail, Io};
 use std::path::Path;
 
-/// sha256 of the pinned x86_64 agent (`hydo/crates/hydo-agent/build.sh x86_64`, M131; M117 `ff7652a1…`).
+/// sha256 of the pinned x86_64 agent (`hydo/crates/hydo-agent/build.sh x86_64`, M127 after M131; M131 `1f517e04…`, M117 `ff7652a1…`).
 pub const AGENT_SHA256_X86_64: &str =
-    "1f517e04f837658a0f0fb85b0077d29b491d10eca75c2529ba0e67944ad24422";
-/// sha256 of the pinned aarch64 agent (`hydo/crates/hydo-agent/build.sh aarch64`, M131; M117 `6a3ea9f8…`).
+    "b72c5caa38484202541d2a2272726e06ffea674991df7a968fd270894f12239d";
+/// sha256 of the pinned aarch64 agent (`hydo/crates/hydo-agent/build.sh aarch64`, M127 after M131; M131 `585f0bdb…`, M117 `6a3ea9f8…`).
 pub const AGENT_SHA256_ARM64: &str =
-    "585f0bdb8cf1d03a3e95d0c8844e85617515939f42d1fe76d02fe8d2c7d72d30";
+    "340a1eec749909a65f8fb8990629c36108b9bc8d91b997e6a000d601c21013d9";
 
 /// The image's first process.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]

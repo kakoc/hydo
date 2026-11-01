@@ -486,8 +486,11 @@ pub(super) fn final_verdict(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         fx.exit(id)?;
     }
     let text = read_all(fx, &file)?;
+    // The lines are final_verdict's output: with errors: as well, hydo-init-errlog.sh's
+    // final_verdict wraps this one (hydo-build splices the error logs after the fakes), so they go
+    // into $H/el.verdict and come after the error records, before the assertion records.
     for l in lines(&text) {
-        fx.report(format!("hydo-world: {l}"));
+        super::errlog::assert_line(fx, format!("hydo-world: {l}"));
     }
     Ok(())
 }

@@ -16,7 +16,7 @@
 # `--swap` replaces one regular file of a copy, keeping its mode and owner (the benchmark's
 # defects differ only in /bin/hydostack): agent-patch.sh --swap <image> <path> <file> <out image>.
 set -euo pipefail
-PIN=${HYDO_AGENT_PIN:-1f517e04f837658a0f0fb85b0077d29b491d10eca75c2529ba0e67944ad24422}   # hydo-agent 0.2.0 (docs/BUILD-PINS.md, M131; 0.1.0 was ff7652a1…)
+PIN=${HYDO_AGENT_PIN:-b72c5caa38484202541d2a2272726e06ffea674991df7a968fd270894f12239d}   # hydo-agent 0.2.0 with the empty child signal mask (docs/BUILD-PINS.md, M127; M131 1f517e04…, 0.1.0 ff7652a1…)
 OFF=1048576
 
 tree_list() {   # <image> <dir>: rdump the root and list every entry with type, mode, owner, sha

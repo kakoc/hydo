@@ -588,6 +588,16 @@ impl Agent {
         let nsfd = ns.as_ref().map(|f| f.as_raw_fd());
         unsafe {
             cmd.pre_exec(move || {
+                // The agent blocks SIGCHLD for its signalfd, and a child inherits the mask (the
+                // standard library does not reset it here). A shell started with SIGCHLD blocked
+                // never wakes from `wait` (busybox ash waits in sigsuspend for SIGCHLD), so the
+                // etcd example's `client_op ... & wait` hung until its timeout (M127). Every
+                // child starts with an empty mask, as under the shell init.
+                let mut set = std::mem::MaybeUninit::<libc::sigset_t>::uninit();
+                libc::sigemptyset(set.as_mut_ptr());
+                if libc::sigprocmask(libc::SIG_SETMASK, set.as_ptr(), std::ptr::null_mut()) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
                 libc::setsid();
                 if let Some(fd) = nsfd {
                     if libc::setns(fd, libc::CLONE_NEWNET) != 0 {

@@ -613,3 +613,25 @@ fn an_idle_agent_waits_without_waking() {
     a.type_bytes(&host(r#"{"v":1,"id":1,"op":"syncfs"}"#));
     a.take(1, "syncfs");
 }
+
+#[test]
+fn children_start_with_no_blocked_signals() {
+    // M127: the agent blocks SIGCHLD for its signalfd; a child that inherited that mask and runs
+    // a shell's `wait` for a background job never wakes (the etcd example's `client_op ... &
+    // wait` hung until its timeout). Every child must start with an empty signal mask.
+    let mut a = Running::start("sigmask");
+    a.take(1, "hello");
+    a.type_bytes(&host(&format!(
+        r#"{{"v":1,"id":1,"op":"run","argv":["sh","-c","grep SigBlk /proc/self/status; sleep 0.1 & wait; echo waited"],"capture":200,{PATH}}}"#
+    )));
+    let ls = a.take(2, "run with a background job and wait");
+    assert!(ls[0].contains(r#""ok":true"#), "{}", ls[0]);
+    assert!(
+        ls[1].contains(r#""ev":"done""#)
+            && ls[1].contains(r#"SigBlk:\t0000000000000000"#)
+            && ls[1].contains("waited")
+            && ls[1].contains(r#""status":0"#),
+        "{}",
+        ls[1]
+    );
+}

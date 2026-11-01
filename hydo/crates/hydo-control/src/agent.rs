@@ -148,7 +148,34 @@ pub fn plan_of_image(image: &Path) -> Result<Plan, Unsupported> {
             }
         }
     }
+    // A hydo/ folder plan's history checks (test.checks of kind linearizable / list_append) come
+    // from its checks/ files, which hydo-build expanded into the manifest it compiled; the
+    // embedded hydo.yaml does not carry them, so the image's manifest.sh (HYDO_CHECK_c<i>_*) is
+    // the record of what the shell image's init declares and reads back (M127: on the composed
+    // Redis history example the agent image printed no HYDO-CHECK line and ran no `final:`
+    // read-back, so every history check was skipped).
+    if plan.history.is_empty() {
+        if let Ok(sh) = hydo_engine::image::embedded_file(image, "etc/hydo/manifest.sh") {
+            plan.history = history_of_manifest_sh(&sh);
+        }
+    }
     Ok(plan)
+}
+
+/// The history checks a manifest.sh carries (hydo-build's compile_checks: `HYDO_CHECKS` names
+/// them, `HYDO_CHECK_<k>_id`, `_json` and `_final` describe each), in their order.
+pub fn history_of_manifest_sh(sh: &str) -> Vec<crate::schedule::history::HistCheck> {
+    let names = shell_var(sh, "HYDO_CHECKS").unwrap_or_default();
+    names
+        .split_whitespace()
+        .filter_map(|k| {
+            Some(crate::schedule::history::HistCheck {
+                id: shell_var(sh, &format!("HYDO_CHECK_{k}_id"))?,
+                json: shell_var(sh, &format!("HYDO_CHECK_{k}_json"))?,
+                final_: shell_var(sh, &format!("HYDO_CHECK_{k}_final")).unwrap_or_default(),
+            })
+        })
+        .collect()
 }
 
 /// The plan of an image's manifest text and its test composer plan (`/etc/hydo/compose.json`, the
@@ -674,6 +701,36 @@ impl Worker for AgentWorker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn history_checks_from_manifest_sh() {
+        // the lines of examples/redis-composed-hist's x86_64 image (M127)
+        let sh = concat!(
+            "HYDO_CHECK_c0_id='redis.kv_linearizable'\n",
+            "HYDO_CHECK_c0_json='{\"history\":\"kv\",\"id\":\"redis.kv_linearizable\",\"initial\":\"nil\",\"model\":\"register\",\"msg\":\"m\",\"type\":\"linearizable\"}'\n",
+            "HYDO_CHECK_c0_final='exec '\\''/hydo/checks/linearizable_redis.kv_linearizable'\\'''\n",
+            "HYDO_CHECK_c1_id='redis.lists_append'\n",
+            "HYDO_CHECK_c1_json='{\"history\":\"log\",\"id\":\"redis.lists_append\",\"type\":\"list-append\"}'\n",
+            "HYDO_CHECK_c1_final=''\n",
+            "HYDO_CHECKS='c0 c1'\n",
+        );
+        let h = history_of_manifest_sh(sh);
+        assert_eq!(h.len(), 2);
+        assert_eq!(h[0].id, "redis.kv_linearizable");
+        assert!(
+            h[0].json.starts_with("{\"history\":\"kv\""),
+            "{}",
+            h[0].json
+        );
+        assert_eq!(
+            h[0].final_,
+            "exec '/hydo/checks/linearizable_redis.kv_linearizable'"
+        );
+        assert_eq!(h[1].id, "redis.lists_append");
+        assert_eq!(h[1].final_, "");
+        assert!(history_of_manifest_sh("HYDO_CHECKS=''\n").is_empty());
+        assert!(history_of_manifest_sh("").is_empty());
+    }
 
     #[test]
     fn manifest_sh_values() {

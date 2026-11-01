@@ -961,3 +961,132 @@ fn readable_transcripts() {
         assert_eq!(std::fs::read_to_string(&ip).unwrap_or_default(), index);
     }
 }
+
+/// A manifest with both `fakes:`/`proxies:` and `errors:` (no example has both).
+const PROXY_ERRORS: &str = "hydo/crates/hydo-control/tests/manifests/redis-proxy-errors.yaml";
+
+/// Every definition of a shell function in an init text (`name() {` to the `}` at the start of a
+/// line, or a one-line definition).
+fn shell_defs(init: &str, name: &str) -> Vec<String> {
+    let head = format!("{name}() {{");
+    let mut out = Vec::new();
+    let ls: Vec<&str> = init.lines().collect();
+    let mut i = 0;
+    while i < ls.len() {
+        if ls[i].starts_with(&head) {
+            if ls[i].trim_end().ends_with('}') && ls[i].len() > head.len() + 1 {
+                out.push(ls[i].to_string());
+            } else {
+                let mut j = i;
+                while j < ls.len() && ls[j] != "}" {
+                    j += 1;
+                }
+                out.push(ls[i..=j.min(ls.len() - 1)].join("\n"));
+                i = j;
+            }
+        }
+        i += 1;
+    }
+    out
+}
+
+#[test]
+fn error_logs_with_fakes_print_in_the_shells_order() {
+    // 1. The order, from the init hydo-build writes: the error logs are spliced after the fakes,
+    //    so hydo-init-errlog.sh's final_verdict (the last definition) redirects the fakes'
+    //    final_verdict, whose summary comes before the core's final_verdict:
+    //      final_verdict() { _el_orig_final_verdict "$@" > $H/el.verdict; el_report; cat $H/el.verdict; }
+    //      _el_orig_final_verdict() { ctl summary | sed 's/^/hydo-world: /'; _pf_orig_final_verdict "$@"; }
+    //    The console gets the error records, then the summary lines, then the final invariants'
+    //    assertion records and the verdict line.
+    let ctx = hydo_build::Ctx {
+        onboard: top().join("hydo/onboard"),
+        release: hydo_build::Release::None,
+    };
+    let (mut out, mut err) = (Vec::new(), Vec::new());
+    let mut io = hydo_build::Io {
+        out: &mut out,
+        err: &mut err,
+    };
+    let path = top().join(PROXY_ERRORS).to_string_lossy().into_owned();
+    let rc = hydo_build::main_with(&ctx, &[path, "--print-init".into()], &mut io);
+    assert_eq!(rc, 0, "{}", String::from_utf8_lossy(&err));
+    let init = String::from_utf8(out).unwrap();
+    // the extensions are spliced in before hydo-init.sh's main section
+    let main_at = init.find("---- main\n").expect("the main section");
+    let defs = shell_defs(&init[..main_at], "final_verdict");
+    let last = defs.last().expect("final_verdict");
+    assert!(
+        last.contains("_el_orig_final_verdict \"$@\" > $H/el.verdict")
+            && last.find("el_report") < last.find("$BB cat $H/el.verdict"),
+        "the last final_verdict is not the error logs' one:\n{last}"
+    );
+    let el = shell_defs(&init, "_el_orig_final_verdict");
+    assert_eq!(el.len(), 1, "{el:?}");
+    let s = el[0].find("ctl summary").expect("the fakes' summary");
+    let o = el[0]
+        .find("_pf_orig_final_verdict")
+        .expect("the core's final_verdict");
+    assert!(s < o, "{}", el[0]);
+
+    // 2. The controller's report lines in that order, every run checked against the shell model
+    let plan = plan_of(PROXY_ERRORS).unwrap_or_else(|e| panic!("{e}"));
+    assert!(plan.errors.is_some() && plan.world.is_some());
+    let b = (0..20)
+        .find_map(|i| boot(&plan, &format!("proxy errors {i}")).ok())
+        .expect("a boot that reaches S1");
+    let mut ordered = 0;
+    for text in [
+        "disk=none | run",
+        "disk=none | run H=redisp@2-5:drop",
+        "disk=none | run H=redisp@1-3:reset K=redis@4+2",
+        "disk=none | run P=redis@3+2 H=redisp@6-9:delay=300",
+        "disk=cut | run H=redisp@1-6:drop C=8",
+    ] {
+        let r = ran(&b, text);
+        let lines: Vec<&str> = r
+            .run
+            .items
+            .iter()
+            .filter_map(|it| match it {
+                Item::Report { line, .. } => Some(line.as_str()),
+                _ => None,
+            })
+            .collect();
+        if verdict(&r) == "cut" {
+            continue;
+        }
+        let sum = lines
+            .iter()
+            .position(|l| l.starts_with("HYDO-ERRLOG-SUM "))
+            .unwrap_or_else(|| panic!("{text}: no error-log summary: {lines:?}"));
+        let world: Vec<usize> = (0..lines.len())
+            .filter(|&i| lines[i].starts_with("hydo-world: "))
+            .collect();
+        let finals: Vec<usize> = (0..lines.len())
+            .filter(|&i| {
+                lines[i].starts_with("HYDO-ASSERT {")
+                    && plan
+                        .invariants
+                        .iter()
+                        .filter(|v| v.final_)
+                        .any(|v| lines[i].contains(&format!("\"id\":\"{}\",", v.id)))
+            })
+            .collect();
+        // (the scripted world's summary can be empty)
+        assert!(
+            world.iter().all(|&w| w > sum),
+            "{text}: a summary line before the error records: {lines:?}"
+        );
+        assert!(
+            finals
+                .iter()
+                .all(|&f| f > sum && world.iter().all(|&w| f > w)),
+            "{text}: an assertion record before the error records or the summary: {lines:?}"
+        );
+        if !finals.is_empty() && !world.is_empty() {
+            ordered += 1;
+        }
+    }
+    assert!(ordered >= 3, "only {ordered} runs with final records");
+}

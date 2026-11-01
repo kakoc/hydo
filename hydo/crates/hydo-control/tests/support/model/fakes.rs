@@ -383,8 +383,10 @@ impl Model<'_> {
             self.waited("the end of ctl summary", e.map(|x| x.0))?;
         }
         let t = self.read_all(&f)?;
+        // stdout of final_verdict: into $H/el.verdict when hydo-init-errlog.sh's final_verdict
+        // wraps this one (it is spliced after this file), else on the console
         for l in file_lines(&t) {
-            self.report(format!("hydo-world: {l}"))?;
+            self.assert_out(format!("hydo-world: {l}"))?;
         }
         Ok(())
     }

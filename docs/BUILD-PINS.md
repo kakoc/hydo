@@ -296,14 +296,21 @@ has no dependencies.
   `hydo/grpcgen/rustc-stable` (a host-independent `-C metadata`; the tree and `$CARGO_HOME`
   remapped to `/hydo` and `/cargo`), and `hydo-elf-comment` sets the `.comment` linker line to
   `Linker: LLD`. So the bytes do not depend on the build host, the tree's path or the crate cache.
-- **Results (Milestone 131, hydo-agent 0.2.0: the freeze's `netns` field, feature
-  `freeze-netns`):** the same bytes from two clean builds on this Mac and from a build on the
-  bare-metal test machine (`~/hydo-anf`, its private rustup):
+- **Results (Milestone 127, hydo-agent 0.2.0 with every child started with an empty signal
+  mask; the version string is unchanged, so the recorded native transcripts still replay):** the
+  same bytes from a build on this Mac and from a build on the bare-metal test machine
+  (`~/hydo-c2l`, its private rustup):
 
   | target | size | sha256 |
   |---|---|---|
-  | x86_64 (`ELF 64-bit LSB pie executable, static-pie linked`) | 667,904 | `1f517e04f837658a0f0fb85b0077d29b491d10eca75c2529ba0e67944ad24422` |
-  | aarch64 (`ELF 64-bit LSB executable, statically linked`) | 566,448 | `585f0bdb8cf1d03a3e95d0c8844e85617515939f42d1fe76d02fe8d2c7d72d30` |
+  | x86_64 (`ELF 64-bit LSB pie executable, static-pie linked`) | 668,032 | `b72c5caa38484202541d2a2272726e06ffea674991df7a968fd270894f12239d` |
+  | aarch64 (`ELF 64-bit LSB executable, statically linked`) | 566,528 | `340a1eec749909a65f8fb8990629c36108b9bc8d91b997e6a000d601c21013d9` |
+
+  Before (Milestone 131, hydo-agent 0.2.0 with the freeze's `netns` field, feature
+  `freeze-netns`; children inherited the agent's blocked SIGCHLD, so a shell's `wait` for a
+  background job never returned): x86_64 667,904 bytes
+  `1f517e04f837658a0f0fb85b0077d29b491d10eca75c2529ba0e67944ad24422`, aarch64 566,448 bytes
+  `585f0bdb8cf1d03a3e95d0c8844e85617515939f42d1fe76d02fe8d2c7d72d30`.
 
   Before (M117, hydo-agent 0.1.0, the same from the Mac and from Linux): x86_64 665,632 bytes
   `ff7652a171f40c80f83c2c6ee871331f046b7c2953faf25e40505bbb12f2a16c`, aarch64 564,768 bytes

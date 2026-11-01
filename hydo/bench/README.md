@@ -541,7 +541,7 @@ builds give the same bytes. Binaries (sha256 prefixes): control `4aefc78f…`, d
 
 **Building the images** (on the bare-metal test machine; no Nix): `ORDER_BIN=<dir>
 build-bench-manifest.sh <work dir> <release dir>` with `HYDO_AGENT_BIN` = the pinned hydo-agent
-(0.2.0, `1f517e04…`, docs/BUILD-PINS.md). `<work dir>/benchroot` is the debugfs rdump of the
+(0.2.0, `b72c5caa…` since M127, docs/BUILD-PINS.md; the images of M135 were built with M131's `1f517e04…`). `<work dir>/benchroot` is the debugfs rdump of the
 `-pin-kr` control image's root (the MySQL and OpenJDK closures, Kafka's libs, the pinned Redis);
 the release dir is a Linux release layout with this tree's `bin/hydo` and `hydo/`. Without stem
 arguments it builds the default set: the control in full, then every other order service as a copy
