@@ -403,6 +403,25 @@ pub fn main_with(ctx: &Ctx, argv: &[String], io: &mut Io) -> i32 {
     let m = &p.data;
     let order = &p.loaded.service_order;
     let has = |f: &str| a.flags.iter().any(|x| x == f);
+    if a.control == agent::Control::Shell {
+        // restart policies (M134) are followed by the host controller, so by agent images only
+        for s in m["services"].as_array().into_iter().flatten() {
+            let r = s
+                .get("restart")
+                .and_then(|r| hydo_manifest::Restart::parse(r).ok())
+                .unwrap_or_default();
+            if r.restarts() {
+                errln(
+                    io,
+                    &format!(
+                        "hydo-build: warning: service {}: restart: {} is followed by agent images only (--control agent); this shell image starts a service that ended by itself again only at the heal",
+                        py::str_of(&s["name"]),
+                        r.name()
+                    ),
+                );
+            }
+        }
+    }
     if has("--print-shell") {
         return match shell::compile_shell(ctx, m, order, &print_shell_tools(m)) {
             Ok((ms, pre)) => {

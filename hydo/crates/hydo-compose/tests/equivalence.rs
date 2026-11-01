@@ -164,7 +164,12 @@ fn compose_equals_python() {
     let mut gold: serde_json::Value =
         serde_json::from_slice(&std::fs::read(here().join("golden.json")).unwrap()).unwrap();
     let bless = std::env::var_os("HYDO_BLESS").is_some();
-    let base = std::env::temp_dir().join(format!("hydo-compose-eq-{}", std::process::id()));
+    // HYDO_COMPOSE_KEEP=<dir> keeps every case's directory there, to compare two trees' outputs
+    // file by file when a deliberate change is re-recorded (M134)
+    let keep = std::env::var_os("HYDO_COMPOSE_KEEP").map(PathBuf::from);
+    let base = keep.clone().unwrap_or_else(|| {
+        std::env::temp_dir().join(format!("hydo-compose-eq-{}", std::process::id()))
+    });
     let mut bad = Vec::new();
     let (mut n, mut crashes) = (0, 0);
     for case in &cases {
@@ -243,7 +248,9 @@ fn compose_equals_python() {
             why.push(format!("files: {files:?}\n--- python: {want:?}"));
         }
         if why.is_empty() {
-            let _ = std::fs::remove_dir_all(&d);
+            if keep.is_none() {
+                let _ = std::fs::remove_dir_all(&d);
+            }
         } else {
             bad.push(format!(
                 "== {name} (kept in {})\n{}",
@@ -253,7 +260,7 @@ fn compose_equals_python() {
         }
         n += 1;
     }
-    if bad.is_empty() {
+    if bad.is_empty() && keep.is_none() {
         let _ = std::fs::remove_dir_all(&base);
     }
     if bless {

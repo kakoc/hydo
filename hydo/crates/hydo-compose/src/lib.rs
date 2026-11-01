@@ -192,6 +192,25 @@ impl Warn {
     }
 }
 
+// ---------------------------------------------------------------- restart policies (M134)
+
+/// A Compose `restart:` value in Compose's words, or None when it is not one.
+fn compose_restart(v: &Y) -> Option<String> {
+    let s = match v {
+        Y::Bool(false) => return Some("no".into()),
+        _ => pstr(v),
+    };
+    match s.as_str() {
+        "no" | "False" | "false" => Some("no".into()),
+        "always" | "unless-stopped" | "on-failure" => Some(s),
+        _ => s
+            .strip_prefix("on-failure:")
+            .filter(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+            .and_then(|n| n.parse::<u64>().ok())
+            .map(|n| format!("on-failure:{n}")),
+    }
+}
+
 // ---------------------------------------------------------------- small Python helpers
 
 fn re(p: &str) -> Regex {
@@ -656,6 +675,8 @@ struct Svc {
     ready: String,
     ready_timeout: Option<i128>,
     recovery_false: bool,
+    /// The Compose restart policy, in its words (`restart:` or `deploy.restart_policy`), M134.
+    restart: Option<String>,
     mounts: Vec<Mount>,
 }
 
@@ -1191,6 +1212,7 @@ impl<'a> Importer<'a> {
             ready: String::new(),
             ready_timeout: None,
             recovery_false: false,
+            restart: None,
             mounts: Vec::new(),
         };
         let is_job = jobs.iter().any(|j| j == n);
@@ -1415,20 +1437,22 @@ impl<'a> Importer<'a> {
         } else {
             self.readiness(&mut svc, s, &cfg, &user, &wh)?;
         }
-        // restart -> recovery
-        let rs = s.get("restart");
-        let no = match rs {
-            Some(Y::Bool(false)) => true,
-            Some(Y::Null) | None => false,
-            Some(v) => matches!(pstr(v).as_str(), "no" | "False" | "false"),
-        };
-        if no {
-            svc.recovery_false = true;
-            svc.comments.push("restart: \"no\" -> recovery: false (not started again after a power cut, as Docker does not restart it after a reboot; hydo still restarts it after a kill fault)".into());
-        } else if let Some(v) = rs.filter(|v| !v.is_none()) {
-            if pstr(v).starts_with("on-failure") {
-                svc.comments.push(format!("restart: {}: hydo restarts the service after every kill fault and after a power cut (crash recovery)", pstr(v)));
+        // restart (or deploy.restart_policy) -> restart: and recovery (M134)
+        let (rs, from) = self.restart_of(s, &wh);
+        if let Some(r) = rs {
+            // where it came from, unless that is restart: with the same words
+            let src = if from.starts_with("restart: ") {
+                String::new()
+            } else {
+                format!("{from} -> ")
+            };
+            if r == "no" {
+                svc.recovery_false = true;
+                svc.comments.push(format!("{src}restart: \"no\": the service stays down when its process ends by itself, until the heal; and recovery: false (not started again after a power cut, as Docker does not restart it after a reboot; hydo still restarts it after a kill fault and at the heal)"));
+            } else {
+                svc.comments.push(format!("{src}restart: {r}: an agent image starts the service again when its process ends by itself while the test runs (MANIFEST.md \"Restart policies\"); hydo's kill faults keep their own restart points"));
             }
+            svc.restart = Some(r);
         }
         // volumes, secrets, tmpfs, writable /run + /dev/shm
         self.mounts(&mut svc, s, &cfg, n, &wh)?;
@@ -1630,6 +1654,53 @@ impl<'a> Importer<'a> {
         ]);
         svc.cmd = None;
         svc.comments.push("a one-shot job (others depend on it with service_completed_successfully): it idles here and its command runs in the setup: of each service that waits for it".into());
+    }
+
+    /// The service's restart policy in Compose's words and where it came from: `deploy.
+    /// restart_policy` when it is set (Compose then ignores `restart:`), else `restart:`.
+    fn restart_of(&mut self, s: &Y, wh: &str) -> (Option<String>, String) {
+        let rp = s.getn("deploy").getn("restart_policy").clone();
+        if let Some(c) = rp.get("condition").filter(|c| !c.is_none()) {
+            let cond = pstr(c);
+            let max = rp.get("max_attempts").and_then(int_of).filter(|n| *n > 0);
+            let r = match cond.as_str() {
+                "none" => Some("no".to_string()),
+                "any" => Some("always".to_string()),
+                "on-failure" => Some(match max {
+                    Some(n) => format!("on-failure:{n}"),
+                    None => "on-failure".to_string(),
+                }),
+                _ => None,
+            };
+            if r.is_none() {
+                self.w.warn(
+                    "deploy",
+                    format!("{wh}: deploy.restart_policy.condition {cond}: not none, on-failure or any; no restart policy written"),
+                );
+            }
+            for k in ["delay", "window"] {
+                if rp.get(k).is_some_and(|v| !v.is_none()) {
+                    self.w.warn(
+                        "deploy",
+                        format!("{wh}: deploy.restart_policy.{k} ignored: hydo waits Docker's own restart delays (100 ms, doubled after each restart, at most 60 s)"),
+                    );
+                }
+            }
+            return (r, format!("deploy.restart_policy.condition {cond}"));
+        }
+        match s.get("restart").filter(|v| !v.is_none()) {
+            None => (None, String::new()),
+            Some(v) => {
+                let r = compose_restart(v);
+                if r.is_none() {
+                    self.w.warn(
+                        "restart",
+                        format!("{wh}: restart: {}: not a Compose restart policy (no, always, on-failure[:max], unless-stopped); no restart policy written", pstr(v)),
+                    );
+                }
+                (r, format!("restart: {}", pstr(v)))
+            }
+        }
     }
 
     fn readiness(&mut self, svc: &mut Svc, s: &Y, cfg: &Y, user: &str, wh: &str) -> R<()> {
@@ -2280,6 +2351,9 @@ impl<'a> Importer<'a> {
             }
             if s.recovery_false {
                 l.push_str("    recovery: false\n");
+            }
+            if let Some(r) = &s.restart {
+                l.push_str(&format!("    restart: {}\n", dumps_str(r)));
             }
             l.push_str("    mounts:\n");
             for m in &s.mounts {

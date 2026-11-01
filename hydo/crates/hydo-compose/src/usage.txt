@@ -37,7 +37,9 @@ What it does, per Compose service (the table in MANIFEST.md lists every key):
     on first use, as Docker does; bind mounts of existing files/directories -> copied into the
     read-only root and mounted; tmpfs -> tmpfs. Every image service also gets a writable /run and
     a /dev/shm (a container has them; the hydo image root is read-only).
-  * restart -> recovery (restart: "no" = not started again after a power cut).
+  * restart (or deploy.restart_policy) -> restart: with Compose's words (followed by agent
+    images: a service whose process ends by itself is started again); restart: "no" also gives
+    recovery: false (not started again after a power cut).
 It cannot know the workload or the invariants: it writes a TODO skeleton for both, which the
 hydo-onboard skill (`hydo guide`; skills/hydo-onboard in hydo's repository) fills in. Unsupported keys are reported as warnings
 with what to do. Stdlib only; PyYAML is used when installed (anchors, merge keys), otherwise the

@@ -5,9 +5,9 @@
 # Re-record from the Rust output (the reference since M107): HYDO_BLESS=1 cargo test -p hydo-explore --test corpus
 input	hydo/onboard/examples/avx2/hydo.yaml	c0d18567ef65d9300820b8944ffcee57cd228512eedf147ac7e624b8eff2592a
 input	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	a4ba83796fb727145d516a32229c1896e3fffcbfcfb0ee40b6f447ea4e093ab4
-input	hydo/onboard/examples/compose-voting/hydo-mac.yaml	e40c543d89e8089aea32e5d8a110ebfe948cd0213b8f2e2124038d3b6e0ece24
+input	hydo/onboard/examples/compose-voting/hydo-mac.yaml	f31a88f96297c1b4a0de709926c3ac420bce149c69248ff064f54b661c63aac1
 input	hydo/onboard/examples/compose-voting/hydo.generated.yaml	82bc84ea9cd401d4ada50b08d587d5133b96be5459d945a67715cba0d54361e4
-input	hydo/onboard/examples/compose-voting/hydo.yaml	0dade793d18104ef5a21026c5b80964f89ae980169ad89111bca1f8e9d0051d7
+input	hydo/onboard/examples/compose-voting/hydo.yaml	90b3e80fb1e04d4cc5d9a1def209a4a98e81414f2d959acfa5c3a5fe0b257654
 input	hydo/onboard/examples/etcd/hydo-hist.yaml	3ba821683b206d5ec9bf8a83f7879198bb3fb99ec2163700ceeb4ed8b7e027b2
 input	hydo/onboard/examples/etcd/hydo.yaml	ec0ae3f206de4167150fb4c94a0ab2e0a1ef9d983cd49005c5a9fdf18fe20c3c
 input	hydo/onboard/examples/miniflux/hydo-read.yaml	1b3d58300d7bfdfaed92347bc9594734df29ed6cdf40a6f61eeae312b89bfa31

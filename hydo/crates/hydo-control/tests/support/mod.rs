@@ -290,7 +290,43 @@ pub fn converse(
         fake.bad_lines.join("\n")
     );
     let items = merge(&fake.delivered, &fin.transcript);
+    dump(&fin.transcript);
     Conv { fin, items, fake }
+}
+
+/// With `HYDO_CONTROL_DUMP=<dir>`, every conversation's transcript is written to
+/// `<dir>/<sha256>.jsonl`, and `<dir>/index.<test>` gets one line `<n>\t<sha256>` per
+/// conversation of that test, in order: two trees' dumps can then be compared conversation by
+/// conversation, to review what a re-recording of the goldens changed (M134).
+fn dump(t: &Transcript) {
+    use std::io::Write;
+    let Some(dir) = std::env::var_os("HYDO_CONTROL_DUMP") else {
+        return;
+    };
+    thread_local!(static N: std::cell::Cell<u64> = const { std::cell::Cell::new(0) });
+    let n = N.with(|c| {
+        c.set(c.get() + 1);
+        c.get()
+    });
+    let dir = PathBuf::from(dir);
+    let _ = std::fs::create_dir_all(&dir);
+    let body = t.to_jsonl();
+    let h = sha256_hex(body.as_bytes());
+    let p = dir.join(format!("{h}.jsonl"));
+    if !p.exists() {
+        let _ = std::fs::write(&p, &body);
+    }
+    let test = std::thread::current()
+        .name()
+        .unwrap_or("main")
+        .replace("::", ".");
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join(format!("index.{test}")))
+    {
+        let _ = writeln!(f, "{n}\t{h}");
+    }
 }
 
 /// A manifest's boot to S1, with what the runs need.

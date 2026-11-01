@@ -1,0 +1,43 @@
+# Milestone 134: every way a Compose file states a restart policy, for hydo-compose's import of
+# restart: and deploy.restart_policy into the services' restart: (hydo-compose tests/cases.json).
+name: restarts
+services:
+  web:
+    image: example/web:1.0
+    ports: ["8080:80"]
+    restart: always
+  api:
+    image: example/api:2.3
+    expose: ["9000"]
+    restart: unless-stopped
+  worker:
+    image: example/worker:1
+    restart: on-failure:3
+  seed:
+    image: example/seed:1
+    restart: "no"
+  bare:
+    image: example/app:1
+    restart: no
+  cache:
+    image: redis:7.2.4
+    restart: on-failure
+  db:
+    image: postgres:16.4
+    environment:
+      POSTGRES_PASSWORD: example
+    # deploy.restart_policy wins over restart: (as in Compose)
+    restart: "no"
+    deploy:
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        delay: 5s
+  app:
+    image: example/app:1.2
+    deploy:
+      restart_policy:
+        condition: any
+  odd:
+    image: example/app:1
+    restart: sometimes

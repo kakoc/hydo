@@ -1,0 +1,68 @@
+{
+  "format": 1,
+  "name": "restart-policies",
+  "description": "a project whose services carry every restart policy",
+  "params": {
+    "policy": "always"
+  },
+  "services": [
+    {
+      "name": "db",
+      "cmd": "/bin/db --data /data/db",
+      "ready": "/bin/db-ping",
+      "restart": "unless-stopped"
+    },
+    {
+      "name": "cache",
+      "cmd": "/bin/cache",
+      "ready": "/bin/cache-ping",
+      "restart": "on-failure"
+    },
+    {
+      "name": "queue",
+      "cmd": "/bin/queue",
+      "ready": "/bin/queue-ping",
+      "restart": "on-failure:3"
+    },
+    {
+      "name": "worker",
+      "cmd": "/bin/worker",
+      "ready": "true",
+      "restart": "always"
+    },
+    {
+      "name": "seed",
+      "cmd": "/bin/seed",
+      "ready": "true",
+      "recovery": false,
+      "restart": "no"
+    },
+    {
+      "name": "bare",
+      "cmd": "/bin/bare",
+      "ready": "true",
+      "restart": false
+    },
+    {
+      "name": "chosen",
+      "cmd": "/bin/chosen",
+      "ready": "true",
+      "restart": "{{policy}}"
+    },
+    {
+      "name": "plain",
+      "cmd": "/bin/plain",
+      "ready": "true"
+    }
+  ],
+  "workload": {
+    "steps": 4,
+    "run": "/bin/client"
+  },
+  "invariants": [
+    {
+      "id": "counted",
+      "cmd": "/bin/check"
+    }
+  ]
+}
