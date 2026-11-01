@@ -264,8 +264,8 @@ impl Set {
     fn timed_trigger(&self, name: &str) -> Option<String> {
         let s = match (name, self.kind) {
             ("d9-redis-unlocked", Kind::Stack) => "disk=none dseed=0 | run Q=4",
-            // M135 (franz-go v1.22.2): on the agent kind the race shows with Q=3 and Q=4d of
-            // Q=2,3,4,2d,3d,4d; M129 saw Q=3 and Q=4d on the shell kind
+            // M135 (franz-go v1.22.2): of Q=2,3,4,2d,3d,4d the race shows with Q=3 and Q=4d on
+            // the agent kind, with all but Q=2d on the shell kind
             ("d9-redis-unlocked", Kind::Agent | Kind::Shell) => "disk=none dseed=0 | run Q=3",
             // M72: the -pin-kr image's timing moved d10's window: X=front@12~20 passes there
             ("d10-outcome-in-memory", Kind::Stack) if self.m59_suffix != "-pin-kr" => {
@@ -278,6 +278,8 @@ impl Set {
             // M135: 9 of the 61 points cf=245..305 fail on the agent kind (249, 250, 260, 271,
             // 272, 282, 292, 302, 303)
             ("d11-ack-unflushed-flag", Kind::Agent) => "disk=cut dseed=0 cf=260 | run",
+            // M135: 8 of the 61 points fail on the shell kind (245, 255, 256, 266, 277, 287, 297,
+            // 298)
             ("d11-ack-unflushed-flag", Kind::Shell) => "disk=cut dseed=0 cf=255 | run",
             _ => return None,
         };
