@@ -312,7 +312,8 @@ left; each is listed with what would run it:
   agent images: their init is `stack-explore.sh` and they carry no manifest (M129's finding); the
   reproducer's schedule ran on the onboarding stack's old and fixed images instead (above).
 - D7 (a check killed by its timeout prints "Terminated" in the shell's output): not seen in these
-  rows; M134's fix is on main and was not merged into this branch.
+  rows (they ran before M134); M134's fix (`hydo-control/src/busybox.rs`, `foreground_signal_line`)
+  is on main and merged into this branch, so a re-run would carry it; none was needed.
 
 ## Fixes made in this campaign
 
@@ -335,7 +336,7 @@ left; each is listed with what would run it:
    `hydo.yaml` does not carry the checks the build expanded from `checks/`; the plan now takes
    them from the image's `manifest.sh`. Test `agent::tests::history_checks_from_manifest_sh`.
 
-Made here and superseded at the merge of main: the `netns` field of the agent's `freeze` and F=
+Made here and superseded at the merges of main: the `netns` field of the agent's `freeze` and F=
 with `network: bridge` (`ed10886`), busybox's mount-error words (`adf823e`) and the guest console
 records in the report (`f9a78e1`): M131 and M128 did the same on main, and their versions were
 kept (merges `8115694`, `30cb865`).

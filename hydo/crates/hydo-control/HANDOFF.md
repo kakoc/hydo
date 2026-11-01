@@ -640,6 +640,65 @@ with fakes run together only on a test manifest (decision 9; no example has both
   deliberate mistakes (the queue or a rule outside the namespace). The scripted agent's mount
   refusals now carry an errno (EUCLEAN, EINVAL, EIO, EBADMSG, EROFS with a read-only retry).
 
+## M134: a check a signal ended, and restart policies (branch `c3-prep`)
+
+**D7, busybox ash's line after a signal.** `src/busybox.rs` has musl's `strsignal` (the table read
+out of both pinned busyboxes) and `foreground_signal_line`: busybox ash (shell/ash.c, the same in
+1.36.1 and 1.37.0) applies a simple command's redirections in the shell itself before it forks
+(`evalcommand`: `redirectsafe(..., REDIR_PUSH)`, `forkshell`, `waitforjob`), and `waitone`, for the
+job it waits for, writes `sprint_status48(status, sigonly=1)` plus a newline with `out2str` to the
+shell's own error output, which is the redirected file at that moment. Nothing is written for an
+exit, SIGINT or SIGPIPE; otherwise `strsignal(sig)`. So the output of `cmd > out 2>&1` whose
+process busybox `timeout` ends is the command's output followed by `Terminated\n` (no newline is
+added before it). `Ran` carries the `done`/`exit` event's `sig`, and the controller appends the
+line where the shell redirected the command into a file the run reads back:
+`eval_inv`'s `RUN cmd > $H/inv.$i.out 2>&1`, live_monitor's attempt under `timeout`, the
+composer's `check` (compose.sh's own error output is eval_inv's file, so the line comes between
+the check's output and "check X timed out"), `endc`'s and `run1`'s `> $C/log.* 2>&1` (run1's line
+is never visible: a violation is exit 100). Not added where nothing reads the file (the workload's
+`workload.log`, setup and provisioning logs, `first` commands' logs, the history read-backs'
+`workload.log`) or where the output is discarded. The scripted agent now reports SIGTERM for every
+status 143 (busybox `timeout`'s kill), the shell model appends the line itself (`ash_after`), and
+the re-recorded goldens changed in 1,308 of about 44,000 conversations, each only in report, note
+and verdict lines that gained "Terminated" after a timed-out check (no command changed).
+
+**Restart policies (`services[].restart`, user decision 2026-11-01).** `src/schedule/restart.rs`:
+one supervisor thread (`restart:<svc>`) per service with a policy other than `no`, started after
+`start_periodic` (run, solo) and after `start_all` in the recovery boot, stopped at a power cut.
+It waits for the exit of the service's current process that hydo did not cause (a K= or X= kill
+sets `killed`, which it ignores), decides as Docker's restart manager (always/unless-stopped:
+every exit; on-failure: status not 0, at most `max` restarts per conversation, 0 = no limit),
+waits 100 ms doubled per restart up to 60 s (back to 100 ms after a process that ran 10 s of guest
+time: `clock_get` at the restart it made; a process it did not start counts as long-running),
+logs `<svc> exited (status N); restarting it in D ms (restart: P)`, sleeps in the guest, and
+starts the service with `start_svc`. Decisions:
+
+25. **One start of a service at a time.** `Host::starting` is claimed by every `start_svc`;
+    `restart_dead` waits for a start in progress before its alive check, and a supervisor whose
+    delay ends after the main sequence started the service again (or killed it: `killed`) does
+    nothing. Without a policy nothing ever waits there, so the transcripts are unchanged (the
+    corpora prove it).
+26. **hydo's kills keep the schedule's meaning.** A K=-killed service comes back before step
+    at+down, an X=-killed one at the heal, whatever its policy (Docker would restart a container
+    killed from outside; a schedule's kill window is the fault under test).
+27. **No supervisor in the boot to S1.** A service that dies while it is being provisioned fails
+    the start-up as before.
+28. **A refused restart** counts as exit status 127 (the shell's "not found") and is retried
+    with the growing delay.
+29. **The heal's restart passes stay** for every policy (the end of fault injection starts every
+    dead service again, as hydo always did).
+
+Shell images keep the shell init's behaviour; `hydo-build` warns for every service with a policy
+when it builds a shell image. Proof, no VM: `tests/restart.rs` (every policy on the scripted agent,
+with `HYDO_FAKE_EXIT=` exits after the heal, during the workload, after a restart and in the
+recovery boot, and a check `HYDO_FAKE_NEEDS=` that holds only when the worker runs after the
+faults: under the default and `no` the worker that dies after the heal stays down and the
+eventually check fails; under `always` and `unless-stopped` it is restarted after "go" and the
+check holds; `on-failure` restarts a failure and not an exit 0, `on-failure:1` once, `on-failure:0`
+without limit; the delay doubles in a crash loop and starts again after a long run; K= and X=
+keep their meaning; nothing after a power cut and a supervisor of its own in the recovery boot;
+solo mode; each run twice identical and its transcript typed again identical).
+
 ## C2 on x86_64 (M127, branch `c2-linux`; docs/C2-LINUX.md)
 
 What real hvx guests showed the controller and the agent needed (each fixed with a test):
@@ -661,14 +720,7 @@ on the agent image only; miniflux seed 11 ends "front restart failed" on the age
   hvx and hvm (clean, kill, pause, power cuts; the shell image's verdicts). M128 ran the
   equivalence campaign (C2) over every arm64 example on hvm; the x86_64 examples (M127) and the
   benchmark (M129) are the other parts of C2.
-- **A command killed by a signal (found in M131, docs/C2-MAC.md D7).** busybox ash prints the
-  signal's name ("Terminated") on its error output when a foreground command is killed by a
-  signal other than SIGINT or SIGPIPE; where the shell init redirects that command's output
-  (`> $H/inv.$i.out 2>&1` in hydo-liveness.sh's monitor, the periodic and final invariants, the
-  workload), the line ends up in the captured output and so in the verdict's details. A `run` the
-  agent ends with status 143 has the command's own output only, so the two images' signatures
-  differ in that word (every point of redis-bridge's freeze sweep). To do: append the shell's line
-  in the controller for such runs, with the shell model and the goldens.
+- **A command killed by a signal (D7):** done in M134 (below).
 - **Branching.** A mid-run branch (cloning the controller at a stop and continuing two engines)
   is supported by the types (`ScheduleController: Clone`), but no test checks it.
 - **The full corpus.** `HYDO_CONTROL_FULL=1` (300 seeds) was not recorded as a golden.

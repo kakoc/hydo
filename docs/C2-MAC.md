@@ -288,14 +288,27 @@ property table (assertions and invariants: passed, failed, not exercised).
   heal's restart pass (hydo-init.sh's `restart_dead`, which the controller reproduces). Whether the
   worker dies just before that pass (restarted, OK) or just after it (never restarted, VIOLATION)
   depends on guest timing, which differs between the two images. Details and evidence in section
-  "Milestone 130".
-- **D7, wording only (found in M131, open).** A check that its `timeout` kills: busybox ash
-  prints the signal's name ("Terminated") on its error output, which in hydo-liveness.sh's monitor
-  is the check's redirected output file, so the shell image's signature ends `(last check rc=#:
-  Terminated)` and the agent image's `(last check rc=#: )`. Seen on every point of redis-bridge's
-  freeze sweep. The fix belongs in the controller (the shell's line after the output of a `run`
-  that a signal other than INT or PIPE ended, wherever the shell redirects a foreground command's
-  output), with the shell model and the goldens.
+  "Milestone 130". **Both decisions taken in Milestone 134:** the check now says what it saw ("db
+  not answering: <psql's error>", "no vote counted yet: the votes table does not exist", or "too
+  few votes counted: <n> of <total> ..."; the exit statuses are unchanged), with the new Mac
+  fingerprints in the example's RESULTS.md; and a service can now have a restart policy
+  (`services[].restart`, Docker Compose's words, followed by agent images: MANIFEST.md "Restart
+  policies"), while the default stays the heal's restart passes. The voting app's manifests keep
+  the default, because its Compose file has no `restart:`; with `restart: always` on the worker
+  an agent image would start the worker again after it dies after the heal.
+- **D7, wording only (found in M131, fixed in M134).** A check that its `timeout` kills: busybox
+  ash prints the signal's name ("Terminated") on its error output, which in hydo-liveness.sh's
+  monitor is the check's redirected output file, so the shell image's signature ended `(last check
+  rc=#: Terminated)` and the agent image's `(last check rc=#: )`. Seen on every point of
+  redis-bridge's freeze sweep. Since M134 the controller writes busybox ash's line after the
+  output of every check (and composed command) that a signal other than SIGINT or SIGPIPE ended
+  (`hydo-control/src/busybox.rs`, `foreground_signal_line`: the redirection is the shell's own
+  while it waits, and `waitone` prints `strsignal` and a newline). Proof on this Mac: `hydo
+  explore --schedule "disk=none dseed=0 | run F=replica<primary@0#1:150000"` (the sweep's first
+  failing point) on M131's redis-bridge images gives one signature on both, `VIOLATION
+  [replica.catches_up] not satisfied #.#s after heal, deadline #s (last check rc=#: Terminated)`;
+  the same schedule on M131's x86_64 redis-bridge images on the bare-metal machine (hvx, this
+  branch's `hydo-explore`, one VM at a time) gives that signature on both kinds too.
 
 
 ## Fixes (each with a test)
@@ -333,13 +346,10 @@ and `cargo fmt --check` pass. The identity corpora and the scripted-engine scena
 - **`F=` with `network: bridge` (D4):** done in M131 (the `freeze` op's `netns` field, a new
   pinned agent for both architectures, the redis-bridge freeze schedules and a `--sweep freeze`
   on the Mac).
-- **A check killed by its timeout (D7):** the shell's "Terminated" line in the check's output.
-- **The voting app's check (D6), a decision:** the example's `votes_counted` reports a missing
-  `votes` table (no worker has connected yet) as "db not answering". Saying "no vote counted yet"
-  instead is more accurate but changes the example's image and its verdict texts, so it belongs
-  to the re-baseline. Whether hydo should restart a service that dies after the heal's one restart
-  pass is a semantics question; M130 changed nothing (it is hydo-init.sh's behaviour and Compose's
-  without `restart:`).
+- **A check killed by its timeout (D7):** done in M134 (the shell's "Terminated" line in the
+  check's output, written by the controller).
+- **The voting app's check (D6):** done in M134 (the check names what it saw; restart policies
+  for services that must come back after the heal).
 - **The mount error's wording (D3):** done in M131 (busybox's own text from the agent's errno).
 - **The re-baseline** of every Mac fingerprint (the agent images' values above are the first
   ones), the Mac release rebuilt with `guest/hydo-agent` and the second kernel, and its quickstart

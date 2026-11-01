@@ -1,0 +1,6 @@
+disk=none dseed=b67859562d8bfd0f pp=524288 | run P=kafka@14+16
+disk=none dseed=b67859562d8bfd0f pp=262144 | run P=kafka@14+16
+disk=none dseed=b67859562d8bfd0f xt=1 xtr=4 xtpm=100 | run P=kafka@14+16
+disk=none dseed=b67859562d8bfd0f xt=2 xtr=4 xtpm=200 | run P=kafka@14+16
+disk=none dseed=b67859562d8bfd0f tj=9 tjpm=200 tjmax=500000 | run P=kafka@13+17
+disk=none dseed=b67859562d8bfd0f tj=a tjpm=200 tjmax=500000 | run P=kafka@12+18

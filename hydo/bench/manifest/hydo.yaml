@@ -1,0 +1,330 @@
+# The bug benchmark's guest as a hydo manifest (Milestone 129, docs/C2-BENCH.md).
+#
+# The benchmark images (hydo/bench/build-bench*.sh) run the four-service stack under its own
+# hand-written init (hv/hvx/images/build-stack.sh's /sbin/init and /etc/stack-explore.sh), which
+# the host controller cannot drive: it drives manifests. This manifest describes the same guest
+# so that `hydo build` and `hydo build --control agent` give a shell image and an agent image of
+# each defect, built by the same builder from the same files:
+#   - the files are those of the -pin-kr control image (explore-bench-m59-control-pin-kr), dumped
+#     to ./root by hydo/bench/build-bench-manifest.sh: the MySQL and OpenJDK closures (./store:
+#     that image's /nix/store without the iproute2 closure, which hydo-build stages itself from
+#     the same pinned path), Kafka's libs and the pinned Redis; ./front-door is the defect's order
+#     service (/bin/hydostack of its benchmark image);
+#   - the configuration is build-stack.sh's: the same my.cnf (skip-log-bin, as the benchmark
+#     images have it) with the line the init appends (innodb_flush_log_at_trx_commit=1), the same
+#     Kafka properties with log.retention.ms=-1 (the -pin-kr fix) and the appended
+#     log.flush.interval.messages=1, Redis with appendfsync always;
+#   - stack-explore.sh's tokens that the generic init does not have are knobs here: Q=<n>[d]
+#     (client concurrency, every order twice with d) and M= sets sync_binlog=0 as well as the redo
+#     log setting, as stack-explore.sh does. X= (the stack's timed kill) is driven by the host
+#     controller only (hydo-control HANDOFF.md decision 12; the shell init ignores it);
+#   - the oracle is stack-explore.sh's (`hydostack oracle`), and the M59 crash oracle (the order
+#     service must not panic, hydo-bench's crash_verdict) is the second invariant;
+#   - stack-explore.sh's M67 path (an order service that cannot come back after the workload, for
+#     example after a cf= power cut when MySQL's sessions hang on the dead disk: the un-ACKed
+#     orders stay un-ACKed, there is no retry, and the power cut's recovery boot gives the verdict;
+#     without a cut the run ends in ERROR) is written with the format's existing features
+#     (Milestone 135): the order service runs under /etc/hydo-bench/front.sh, which stays up and
+#     says so when the order service exits after the workload's last step; its ready: accepts
+#     that line, the retry: skips the retry pass then, and the invariant front.restarted gives the
+#     ERROR when the run ends without a cut. The format has no key for "a restart that may fail"
+#     (docs/HISTORY.md "Milestone 135");
+#   - buggify: true, so B= reaches the order service's BUGGIFY points as on the stack images
+#     (stack-explore.sh writes /tmp/hydo-buggify too).
+# Since M135 these images are the benchmark's default (hydo-bench --kind agent; --kind shell for the
+# shell images); the stack images stay only as the engine's regression baselines. What stays
+# different from the stack images: the generic init's workload loop, restarts and markers instead
+# of stack-explore.sh's (for example a restart of every dead service before the retry pass, and no
+# periodic checks), so fingerprints and some timings differ from M54-M108's.
+format: 1
+name: bench
+description: the bug benchmark's stack guest (MySQL, Kafka, Redis, the order service) as a manifest
+buggify: true
+
+guest:
+  ram_mib: 1024
+  clock_start: 1767225600         # 2026-01-01, stack-explore.sh's fixed date
+
+root:
+  size_mib: 1792
+  files:
+    # the image's /nix/store without the iproute2 closure that hydo-build stages itself (one entry
+    # per path: a files: entry replaces its destination, so /nix/store cannot be given as one)
+    - {src: store/116ggk05qjp9v0wprwag1mw7g13ara96-keyutils-1.6.3-lib, dst: /nix/store/116ggk05qjp9v0wprwag1mw7g13ara96-keyutils-1.6.3-lib}
+    - {src: store/29isvm6vfq10c528i31igdiy3fnvjcm3-glibc-2.42-67-dev, dst: /nix/store/29isvm6vfq10c528i31igdiy3fnvjcm3-glibc-2.42-67-dev}
+    - {src: store/2l3a3fhc1nyp69mlq5ifb4mkb9mryb98-pkg-config-wrapper-0.29.2, dst: /nix/store/2l3a3fhc1nyp69mlq5ifb4mkb9mryb98-pkg-config-wrapper-0.29.2}
+    - {src: store/38n0ganzvrlk08c8l3wbwxzsqmxgqi6j-acl-2.4.0, dst: /nix/store/38n0ganzvrlk08c8l3wbwxzsqmxgqi6j-acl-2.4.0}
+    - {src: store/39jzpf9ray7mxjnlmqbrxlyz0dsz0448-openssl-3.6.3, dst: /nix/store/39jzpf9ray7mxjnlmqbrxlyz0dsz0448-openssl-3.6.3}
+    - {src: store/3spfii4vdpdsk1vq6a3dpy3bglbbfpvq-binutils-2.46-lib, dst: /nix/store/3spfii4vdpdsk1vq6a3dpy3bglbbfpvq-binutils-2.46-lib}
+    - {src: store/40f93cf70andsdmlp61rj1yf7v8b66j5-abseil-cpp-20210324.2, dst: /nix/store/40f93cf70andsdmlp61rj1yf7v8b66j5-abseil-cpp-20210324.2}
+    - {src: store/54y8r4srwlgwyjm55zz3zlaq4bgd3344-libedit-20260508-3.1, dst: /nix/store/54y8r4srwlgwyjm55zz3zlaq4bgd3344-libedit-20260508-3.1}
+    - {src: store/5kxax2fn0ng91zvirpspqsdvn06bl02q-gmp-6.3.0, dst: /nix/store/5kxax2fn0ng91zvirpspqsdvn06bl02q-gmp-6.3.0}
+    - {src: store/6j2dzlpn0gim9py78w88qwlzga7s2z8c-nghttp3-1.16.0, dst: /nix/store/6j2dzlpn0gim9py78w88qwlzga7s2z8c-nghttp3-1.16.0}
+    - {src: store/6z26dc1v401ik06yam5qksr5mcrihqia-protobuf-21.12, dst: /nix/store/6z26dc1v401ik06yam5qksr5mcrihqia-protobuf-21.12}
+    - {src: store/6z90l28w0aqfqgb34gzh3linnci8k1id-gmp-with-cxx-6.3.0, dst: /nix/store/6z90l28w0aqfqgb34gzh3linnci8k1id-gmp-with-cxx-6.3.0}
+    - {src: store/70zn0hivh5kmsdwznn9xbrd9q5b01kib-libedit-20260508-3.1-dev, dst: /nix/store/70zn0hivh5kmsdwznn9xbrd9q5b01kib-libedit-20260508-3.1-dev}
+    - {src: store/7ik8057hajl6vq9j40h3jracxjn0bb5x-bash-5.3p15, dst: /nix/store/7ik8057hajl6vq9j40h3jracxjn0bb5x-bash-5.3p15}
+    - {src: store/7shim6z3db23d2cj1lx7x3m2z624kdfp-set-java-classpath-hook, dst: /nix/store/7shim6z3db23d2cj1lx7x3m2z624kdfp-set-java-classpath-hook}
+    - {src: store/7svf4fa139ajvhfaxry3smvlbhrnraq1-libidn2-2.3.8, dst: /nix/store/7svf4fa139ajvhfaxry3smvlbhrnraq1-libidn2-2.3.8}
+    - {src: store/8i8vavxai9s80xlx6y5kmiw7l63491m0-glibc-2.42-67-bin, dst: /nix/store/8i8vavxai9s80xlx6y5kmiw7l63491m0-glibc-2.42-67-bin}
+    - {src: store/8rdn2fp1v57fd8zlx883jj7s5yfgkwgm-expand-response-params, dst: /nix/store/8rdn2fp1v57fd8zlx883jj7s5yfgkwgm-expand-response-params}
+    - {src: store/9gg2kw74rag1sjl2jl6qaddaisllpdip-curl-8.21.0, dst: /nix/store/9gg2kw74rag1sjl2jl6qaddaisllpdip-curl-8.21.0}
+    - {src: store/9nizcmvz2699nkrbzxx8xsp5d8jp686w-zstd-1.5.7, dst: /nix/store/9nizcmvz2699nkrbzxx8xsp5d8jp686w-zstd-1.5.7}
+    - {src: store/9p2m54a01dgwzvk6pc6kijk6vldp0n2y-linux-headers-7.1, dst: /nix/store/9p2m54a01dgwzvk6pc6kijk6vldp0n2y-linux-headers-7.1}
+    - {src: store/aak8d9mrdv9sgn0lcg7xss7wxdg9sqh3-gnugrep-3.12, dst: /nix/store/aak8d9mrdv9sgn0lcg7xss7wxdg9sqh3-gnugrep-3.12}
+    - {src: store/advlbxfc5cg0jswl7zv40h2lzlxiksr6-binutils-2.46, dst: /nix/store/advlbxfc5cg0jswl7zv40h2lzlxiksr6-binutils-2.46}
+    - {src: store/aw6ljbiwgds7yw8x2jc3340dm46s7i2k-mysql-8.4.10, dst: /nix/store/aw6ljbiwgds7yw8x2jc3340dm46s7i2k-mysql-8.4.10}
+    - {src: store/b78fv63pcn60c92sw8w97vciymrza8nx-libmpc-1.4.1, dst: /nix/store/b78fv63pcn60c92sw8w97vciymrza8nx-libmpc-1.4.1}
+    - {src: store/cw6dc1jdmcmy6mbdz4am8095ggaqzc5q-icu4c-78.3-dev, dst: /nix/store/cw6dc1jdmcmy6mbdz4am8095ggaqzc5q-icu4c-78.3-dev}
+    - {src: store/di26b1kkbammy0sj70nq5qzvfrh78wxl-coreutils-9.11, dst: /nix/store/di26b1kkbammy0sj70nq5qzvfrh78wxl-coreutils-9.11}
+    - {src: store/dk7hr3k13w4vqqx6xai1rpfv0mrivx9r-isl-0.20, dst: /nix/store/dk7hr3k13w4vqqx6xai1rpfv0mrivx9r-isl-0.20}
+    - {src: store/dq2kkgcr97hga5pi24d1yld2f66s8ram-icu4c-78.3, dst: /nix/store/dq2kkgcr97hga5pi24d1yld2f66s8ram-icu4c-78.3}
+    - {src: store/f1k9qd0r0wxz5dphlvh78j5ailkmwpx8-libtirpc-1.3.7, dst: /nix/store/f1k9qd0r0wxz5dphlvh78j5ailkmwpx8-libtirpc-1.3.7}
+    - {src: store/fgnp7d7n76rxhlys4s843wlm3wc5v8x4-lz4-1.10.0-lib, dst: /nix/store/fgnp7d7n76rxhlys4s843wlm3wc5v8x4-lz4-1.10.0-lib}
+    - {src: store/fkcbg2c1w29jr5yp9awai9w3v1wvxdk9-zlib-1.3.2, dst: /nix/store/fkcbg2c1w29jr5yp9awai9w3v1wvxdk9-zlib-1.3.2}
+    - {src: store/g7b1jkypxsa9r4642kjcbsmmlvrhb3n8-xgcc-15.3.0-libgcc, dst: /nix/store/g7b1jkypxsa9r4642kjcbsmmlvrhb3n8-xgcc-15.3.0-libgcc}
+    - {src: store/gvn2w8kxsxdjh1nsw88gp9fjyrcxwmkj-pcre2-10.47, dst: /nix/store/gvn2w8kxsxdjh1nsw88gp9fjyrcxwmkj-pcre2-10.47}
+    - {src: store/h19ndds7xqxnhgy43ngkzxdan0vznak9-pkg-config-0.29.2, dst: /nix/store/h19ndds7xqxnhgy43ngkzxdan0vznak9-pkg-config-0.29.2}
+    - {src: store/hgxdip8y842zsdl8zwkjxkj38qjks751-expand-response-params, dst: /nix/store/hgxdip8y842zsdl8zwkjxkj38qjks751-expand-response-params}
+    - {src: store/hmi4qvjrcdvzsing2l56ybcwb6hkmf6y-gcc-15.3.0-libgcc, dst: /nix/store/hmi4qvjrcdvzsing2l56ybcwb6hkmf6y-gcc-15.3.0-libgcc}
+    - {src: store/ikwwr36027x4wjdbj6p4ph8y0i4fqmyq-lz4-1.10.0-dev, dst: /nix/store/ikwwr36027x4wjdbj6p4ph8y0i4fqmyq-lz4-1.10.0-dev}
+    - {src: store/kqrn9gf9lv62cwcfn3pcydg9yjq197d1-ncurses-6.6-dev, dst: /nix/store/kqrn9gf9lv62cwcfn3pcydg9yjq197d1-ncurses-6.6-dev}
+    - {src: store/kv6x4rhvmmxcymnmvn868vb49sra14i1-brotli-1.2.0-lib, dst: /nix/store/kv6x4rhvmmxcymnmvn868vb49sra14i1-brotli-1.2.0-lib}
+    - {src: store/l5qkpzsr4gxvksh45b3nhxbkyr5cviar-gcc-wrapper-15.3.0, dst: /nix/store/l5qkpzsr4gxvksh45b3nhxbkyr5cviar-gcc-wrapper-15.3.0}
+    - {src: store/mcpf950nkfxhnsh8zzf51j0fvaxidp01-nghttp2-1.69.0-lib, dst: /nix/store/mcpf950nkfxhnsh8zzf51j0fvaxidp01-nghttp2-1.69.0-lib}
+    - {src: store/n0zq9n5ipqmg6wi7a1dvk9vgrc76b34s-zstd-1.5.7-bin, dst: /nix/store/n0zq9n5ipqmg6wi7a1dvk9vgrc76b34s-zstd-1.5.7-bin}
+    - {src: store/n1axb0xwihqfzijxmcna23rnw8h9c8s3-publicsuffix-list-0-unstable-2026-06-24, dst: /nix/store/n1axb0xwihqfzijxmcna23rnw8h9c8s3-publicsuffix-list-0-unstable-2026-06-24}
+    - {src: store/ncjjjhkrbrlr21zr416sr315mxfi0y8q-binutils-wrapper-2.46, dst: /nix/store/ncjjjhkrbrlr21zr416sr315mxfi0y8q-binutils-wrapper-2.46}
+    - {src: store/ncz17hlq92j5y0dslb73ysiil9nmh9wg-lcms2-2.16, dst: /nix/store/ncz17hlq92j5y0dslb73ysiil9nmh9wg-lcms2-2.16}
+    - {src: store/pilsssjjdxvdphlg2h19p0bfx5q0jzkn-strip.sh, dst: /nix/store/pilsssjjdxvdphlg2h19p0bfx5q0jzkn-strip.sh}
+    - {src: store/prp6myfj7ssv92v9kzz1m05cng5ss0bx-zstd-1.5.7-dev, dst: /nix/store/prp6myfj7ssv92v9kzz1m05cng5ss0bx-zstd-1.5.7-dev}
+    - {src: store/prwwwfv9fzj73rxndccym3zm9dp0scss-ncurses-6.6-man, dst: /nix/store/prwwwfv9fzj73rxndccym3zm9dp0scss-ncurses-6.6-man}
+    - {src: store/pzvcwi6y0vfmfpni6b52jwy9x6sj1yv1-patchelf-0.15.2, dst: /nix/store/pzvcwi6y0vfmfpni6b52jwy9x6sj1yv1-patchelf-0.15.2}
+    - {src: store/qiwg67zp9w898zwr57g2lnhmhk0bifxa-krb5-1.22.2-lib, dst: /nix/store/qiwg67zp9w898zwr57g2lnhmhk0bifxa-krb5-1.22.2-lib}
+    - {src: store/qqiqd3ah10x8hzsif4j1y4xc1miw23nx-glibc-2.42-67, dst: /nix/store/qqiqd3ah10x8hzsif4j1y4xc1miw23nx-glibc-2.42-67}
+    - {src: store/qrn789mrv652j7f5bcjp367npzpcyvdi-gcc-15.3.0, dst: /nix/store/qrn789mrv652j7f5bcjp367npzpcyvdi-gcc-15.3.0}
+    - {src: store/qw4aqjbqcwgisk46vycc7g1xa9482ccv-numactl-2.0.18, dst: /nix/store/qw4aqjbqcwgisk46vycc7g1xa9482ccv-numactl-2.0.18}
+    - {src: store/r88gpfhsd1bww3bz9cl5crrxnwg5kiap-attr-2.6.0, dst: /nix/store/r88gpfhsd1bww3bz9cl5crrxnwg5kiap-attr-2.6.0}
+    - {src: store/sy2whqnl8z8aakhh0n0sgrflj27hc6in-libunistring-1.4.2, dst: /nix/store/sy2whqnl8z8aakhh0n0sgrflj27hc6in-libunistring-1.4.2}
+    - {src: store/v5jxphjj37sqyh5f7yhqll2rnlnqzdzn-lz4-1.10.0, dst: /nix/store/v5jxphjj37sqyh5f7yhqll2rnlnqzdzn-lz4-1.10.0}
+    - {src: store/vjcrra860yal7fzk1m81ddirrafqrccz-openjdk-headless-17.0.7+7, dst: /nix/store/vjcrra860yal7fzk1m81ddirrafqrccz-openjdk-headless-17.0.7+7}
+    - {src: store/w11kc8r5ixj3ir37q8ndrv82gimr5vjd-ncurses-6.6, dst: /nix/store/w11kc8r5ixj3ir37q8ndrv82gimr5vjd-ncurses-6.6}
+    - {src: store/w2nk3f7prwzpm6h13rfxh8lh46yfdysj-gcc-15.3.0-lib, dst: /nix/store/w2nk3f7prwzpm6h13rfxh8lh46yfdysj-gcc-15.3.0-lib}
+    - {src: store/wakpd2hs4s37xmn3yqhkcrlxiixcgfkz-ngtcp2-1.23.0, dst: /nix/store/wakpd2hs4s37xmn3yqhkcrlxiixcgfkz-ngtcp2-1.23.0}
+    - {src: store/x7p3dkj051g47q81kg7f79rxgm4p9xs7-libjpeg-turbo-3.0.3, dst: /nix/store/x7p3dkj051g47q81kg7f79rxgm4p9xs7-libjpeg-turbo-3.0.3}
+    - {src: store/xi8983lcv6yavp4lsvjv8q6rna3yyjz4-mpfr-4.2.2, dst: /nix/store/xi8983lcv6yavp4lsvjv8q6rna3yyjz4-mpfr-4.2.2}
+    - {src: store/z5kci0gxs7yw3b6h341r10jsmkmvz2wq-libpsl-0.21.5, dst: /nix/store/z5kci0gxs7yw3b6h341r10jsmkmvz2wq-libpsl-0.21.5}
+    - {src: store/zzq7pa15jb9bip5yhl7cdjr3wx5xhra2-libssh2-1.11.1, dst: /nix/store/zzq7pa15jb9bip5yhl7cdjr3wx5xhra2-libssh2-1.11.1}
+    - {src: root/opt/kafka/libs, dst: /opt/kafka/libs}
+    - {src: root/bin/redis-server, dst: /bin/redis-server, mode: "0755"}
+    - {src: root/bin/redis-cli, dst: /bin/redis-cli, mode: "0755"}
+    - {src: front-door, dst: /bin/hydostack, mode: "0755"}
+  text:
+    /etc/hydo-bench/front.sh: |
+      # The order service (hydo/bench/manifest/hydo.yaml), and stack-explore.sh's M67 path: when
+      # it exits after the workload's last step (the run: command leaves /tmp/hydo-bench-steps-done),
+      # for example because its restart before the retry pass fails after a cf= power cut, this
+      # process stays and prints the line ready: and retry: look for (also on the console, where
+      # the SDKs' records go, so a run's log shows the path). A kill or a pause reaches both
+      # processes (faults act on a service's whole tree).
+      /bin/hydostack server
+      rc=$?
+      [ -e /tmp/hydo-bench-steps-done ] || exit $rc
+      m="hydo-bench: the order service exited after the workload's last step (status $rc); it stays down"
+      echo "$m"; echo "$m" > /dev/ttyS0 2>/dev/null
+      exec /bin/busybox sleep 1000000000
+    /etc/redis.conf: |
+      port 6379
+      bind 127.0.0.1
+      protected-mode no
+      dir /data/redis
+      save ""
+      appendonly yes
+      appendfsync always
+      appenddirname appendonlydir
+      appendfilename appendonly.aof
+      auto-aof-rewrite-percentage 0
+      aof-load-truncated yes
+      aof-timestamp-enabled no
+      daemonize no
+      loglevel notice
+      hz 1
+      dynamic-hz no
+    /etc/my.cnf: |
+      [mysqld]
+      user=root
+      datadir=/data/mysql
+      socket=/tmp/mysql.sock
+      pid-file=/tmp/mysqld.pid
+      log-error=/tmp/mysqld.err
+      bind-address=127.0.0.1
+      port=3306
+      mysqlx=OFF
+      skip-name-resolve
+      skip-log-bin
+      performance_schema=OFF
+      auto_generate_certs=OFF
+      caching_sha2_password_auto_generate_rsa_keys=OFF
+      innodb_buffer_pool_size=32M
+      innodb_redo_log_capacity=8M
+      innodb_use_native_aio=OFF
+      innodb_flush_method=fsync
+      innodb_read_io_threads=1
+      innodb_write_io_threads=1
+      innodb_page_cleaners=1
+      innodb_purge_threads=1
+      max_connections=8
+      table_open_cache=64
+      default-time-zone=+00:00
+      init-file=/etc/mysql-init.sql
+      innodb_flush_log_at_trx_commit=1
+    /etc/mysql-init.sql: |
+      CREATE USER IF NOT EXISTS 'hydo'@'%' IDENTIFIED BY '';
+      GRANT ALL PRIVILEGES ON *.* TO 'hydo'@'%';
+    /etc/kafka/server.properties: |
+      process.roles=broker,controller
+      node.id=1
+      controller.quorum.voters=1@127.0.0.1:9093
+      listeners=PLAINTEXT://127.0.0.1:9092,CONTROLLER://127.0.0.1:9093
+      inter.broker.listener.name=PLAINTEXT
+      controller.listener.names=CONTROLLER
+      listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      advertised.listeners=PLAINTEXT://127.0.0.1:9092
+      log.dirs=/data/kafka-logs
+      num.partitions=1
+      default.replication.factor=1
+      offsets.topic.replication.factor=1
+      offsets.topic.num.partitions=1
+      transaction.state.log.replication.factor=1
+      transaction.state.log.min.isr=1
+      auto.create.topics.enable=true
+      num.network.threads=2
+      num.io.threads=2
+      background.threads=2
+      log.index.size.max.bytes=1048576
+      log.segment.bytes=16777216
+      metadata.log.segment.bytes=8388608
+      group.initial.rebalance.delay.ms=0
+      log.retention.ms=-1
+      log.flush.interval.messages=1
+    /etc/kafka/log4j.properties: |
+      log4j.rootLogger=WARN, stdout
+      log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+      log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+      log4j.appender.stdout.layout.ConversionPattern=%p %c %m%n
+      log4j.logger.kafka.server.KafkaRaftServer=INFO
+
+data:
+  size_mib: 512
+  mount: rw
+  dirs: [redis, kafka-logs]
+
+env:
+  MYSQL: /nix/store/aw6ljbiwgds7yw8x2jc3340dm46s7i2k-mysql-8.4.10
+  JAVA: /nix/store/vjcrra860yal7fzk1m81ddirrafqrccz-openjdk-headless-17.0.7+7/bin/java
+  NORDERS: "30"
+  GOMAXPROCS: "1"
+  KAFKA_CLUSTER_ID: P0hH8j92QAKKXdQ2D7Aw7A
+  JCOMMON: >-
+    -XX:TieredStopAtLevel=1 -XX:CICompilerCount=1 -XX:-BackgroundCompilation -XX:+UseSerialGC
+    -XX:-UsePerfData -XX:-UseContainerSupport -XX:ActiveProcessorCount=1 -Xshare:off
+    -Djava.security.egd=file:/dev/urandom -Duser.name=hydo -Duser.home=/tmp -Duser.timezone=UTC
+    -Duser.language=en -Duser.country=US -Dfile.encoding=UTF-8 -Djava.io.tmpdir=/tmp
+    -Dlog4j.configuration=file:/etc/kafka/log4j.properties
+
+shell: |
+  SQL() { "$MYSQL/bin/mysql" --no-defaults --protocol=TCP -h127.0.0.1 -P3306 -uhydo --ssl-mode=DISABLED -N -B "$@"; }
+  # Q= (stack-explore.sh: HYDO_CONC requests at a time, HYDO_DUP=1 sends every order twice)
+  if [ -f /tmp/hydo-q.env ]; then . /tmp/hydo-q.env; fi
+
+services:
+  - name: redis
+    cmd: /bin/redis-server /etc/redis.conf
+    ready: /bin/redis-cli -p 6379 ping | grep -q PONG
+    ready_timeout: 60
+    port: 6379
+  - name: mysql
+    setup: '[ -d /data/mysql/mysql ] || "$MYSQL/bin/mysqld" --defaults-file=/etc/my.cnf --initialize-insecure'
+    cmd: '"$MYSQL/bin/mysqld" --defaults-file=/etc/my.cnf'
+    ready: SQL -e "SELECT 1"
+    ready_timeout: 600
+    port: 3306
+  - name: kafka
+    setup: $JAVA $JCOMMON -Xms96m -Xmx96m -cp "/opt/kafka/libs/*" kafka.tools.StorageTool format -t $KAFKA_CLUSTER_ID -c /etc/kafka/server.properties --ignore-formatted
+    cmd: $JAVA $JCOMMON -Xms256m -Xmx256m -cp "/opt/kafka/libs/*" kafka.Kafka /etc/kafka/server.properties
+    ready: grep -qa "Kafka Server started" $HYDO_LOG
+    ready_timeout: 600
+    port: 9092
+  - name: front
+    description: the order service (creates the schema and the topic at start)
+    cmd: /bin/busybox sh /etc/hydo-bench/front.sh   # /bin/hydostack server, and M67's path
+    # ready: listening, or (M67's path) down for good after the workload's last step
+    ready: grep -qa "server listening" $HYDO_LOG || grep -qa "^hydo-bench: the order service exited after" $HYDO_LOG
+    ready_timeout: 120
+    depends_on: [redis, mysql, kafka]
+    recovery: false                 # the recovery check reads the stores directly
+
+workload:
+  steps: 30                         # one step = one order
+  run: |
+    /bin/hydostack place $HYDO_FROM $HYDO_TO
+    rc=$?
+    [ "$HYDO_TO" -lt "$NORDERS" ] || : > /tmp/hydo-bench-steps-done
+    exit $rc
+  # M67's path: an order service that could not come back gets no retry pass; the un-ACKed orders
+  # stay un-ACKed (no guarantee, as for any un-ACKed order) and the recovery boot decides
+  retry: |
+    if grep -qa "^hydo-bench: the order service exited after" /tmp/hydo/front.log; then
+      echo "hydo-bench: the order service cannot restart; no retry pass, the un-ACKed orders stay un-ACKed" > /dev/ttyS0 2>/dev/null
+      : > /tmp/hydo-bench-no-retry
+      exit 0
+    fi
+    /bin/hydostack retry $NORDERS $HYDO_ACKED
+  process: hydostack (place|retry)
+
+knobs:
+  - token: M
+    name: MySQL innodb_flush_log_at_trx_commit (and sync_binlog=0 when relaxed)
+    default: "1"
+    safe: "1"
+    values: ["0", "1", "2"]
+    set: SQL -e "SET GLOBAL innodb_flush_log_at_trx_commit=$HYDO_VALUE; SET GLOBAL sync_binlog=0"
+  - token: R
+    name: Redis appendfsync
+    default: always
+    safe: always
+    values: [always, everysec, "no"]
+    set: /bin/redis-cli -p 6379 CONFIG SET appendfsync $HYDO_VALUE
+  - token: Q
+    name: client concurrency (stack-explore.sh's Q=)
+    default: "1"
+    safe: "1"
+    values: ["1", "2", "3", "4", "1d", "2d", "3d", "4d"]
+    set: |
+      { echo "export HYDO_CONC=${HYDO_VALUE%d}"; case "$HYDO_VALUE" in *d) echo "export HYDO_DUP=1";; esac; } > /tmp/hydo-q.env
+
+invariants:
+  - id: stack.exactly_once
+    msg: every ACKed order is in MySQL and Kafka exactly once; nothing told 'failed' was applied
+    final: true
+    cmd: |
+      /bin/hydostack oracle $NORDERS $HYDO_ACKED $HYDO_FAILED > /tmp/hydo/oracle.log 2>&1
+      grep -a "HYDO-ORACLE" /tmp/hydo/oracle.log | tail -1
+      grep -a "HYDO-ORACLE" /tmp/hydo/oracle.log | tail -1 | grep -q "HYDO-ORACLE: OK"
+  - id: front.no_crash
+    msg: the order service never panics (hydo-bench's M59 crash oracle)
+    final: true
+    cmd: |
+      l=$(cat /tmp/hydo/front.log.old /tmp/hydo/front.log 2>/dev/null | grep -a -m 1 "^panic\|^fatal error")
+      [ -z "$l" ] && { echo "no panic in the order service's log"; exit 0; }
+      echo "front door crashed: $(printf '%s' "$l" | cut -c1-160)"
+      exit 1
+  - id: front.restarted
+    msg: the order service came back for the retry pass (stack-explore.sh's ERROR front door restart, M67)
+    final: true
+    cmd: |
+      [ -e /tmp/hydo-bench-no-retry ] || { echo "the order service ran the retry pass"; exit 0; }
+      echo "front door restart: the order service could not come back after the faults"
+      exit 2
+
+faults: [kill, pause, network, oneway, cut, clock, disk]

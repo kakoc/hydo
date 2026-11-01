@@ -189,6 +189,10 @@ services:                      # may be empty ([] or left out): a project that i
                                           #   (see "Service networks")
     depends_on: [cache]                   # start after these
     recovery: true                        # false: not started for the power-cut recovery check
+    restart: on-failure                   # what happens when its process ends by itself while the
+                                          #   test runs: no (default: down until the heal), always,
+                                          #   unless-stopped, on-failure[:max] (Docker Compose's
+                                          #   words; agent images only, see "Restart policies")
 
   - name: cache                # a service whose files come from a Docker/OCI image (see below)
     image: images/redis.tar    # a `docker save` tar or an OCI layout directory, relative to
@@ -335,6 +339,38 @@ What the build does:
   default x86_64 build, `arm64` for `--arch arm64`); anything else is refused with an error.
 - Inside the image: `/etc/hydo/oci/<service>/run` (the launcher), `exec` (used by `hydo-oci`),
   `image.json` (digests, layers, the image config and the effective command/env/workdir/user).
+
+### Restart policies (`services[].restart`)
+
+What hydo does when a service's process ends by itself (it crashes or exits; not a hydo fault)
+while a test runs, named and meant as Docker Compose's `restart:` (Milestone 134). The default
+keeps the behaviour hydo always had.
+
+| `restart:` | the service's process ends by itself |
+|---|---|
+| `no` (the default; a bare `no` reads as `false` in YAML, which means the same) | it stays down until the heal: the restart passes at the end of fault injection and after the disk faults are off start every dead service again (as hydo-init.sh's `restart_dead`); a service that dies after them stays down, as under Compose without `restart:` |
+| `always` | it is started again, whatever its exit status |
+| `unless-stopped` | the same as `always` (in a test run nobody stops a service by hand) |
+| `on-failure` | it is started again when its exit status is not 0 (killed by a signal counts as a failure) |
+| `on-failure:<max>` | the same, at most `<max>` times in one boot (`on-failure:0`: no limit, as Docker) |
+
+- **When.** From the start of the workload (a run from S1, solo mode) and, in the recovery boot
+  after a power cut, once the services are up, until the verdict. Not while the image is being
+  provisioned (a service that dies then fails the start-up), and not after a power cut (nothing
+  is started while the machine is off).
+- **Delay.** Docker's: 100 ms of guest time before the first restart, doubled after each restart
+  up to 60 s, and 100 ms again after a process that ran 10 s or more.
+- **Determinism.** The host controller sees the exit at a numbered stop, waits the delay with a
+  `sleep` in the guest and then starts the service as every start does (`setup:`, `cmd:`, the
+  `ready:` check). A restart therefore sits at a defined stop of the run and is in the control
+  transcript; the same schedule restarts at the same point every time.
+- **hydo's own faults keep their meaning.** A service killed by `K=` comes back before step
+  `at+down`, one killed by `X=` at the heal, whatever its policy; pauses, freezes and the power
+  cut's SIGSTOP end no process. The heal's restart passes still start every service that is down.
+- **Agent images only.** The policy is followed by the host controller (`hydo build --control
+  agent`). A shell image (the default build) keeps the shell init's behaviour, and `hydo build`
+  says so in a warning for every service with a policy. `hydo compose` writes the Compose file's
+  `restart:` (or `deploy.restart_policy`) here.
 
 ### Variables every command sees
 
@@ -1483,7 +1519,7 @@ validator before it is written. Example: `examples/compose-voting/` (Docker's ex
 | `tmpfs:`, `type: tmpfs` | a tmpfs mount (mode 1777, `size=` kept) |
 | `secrets:` with `file:` | the file, copied into the root, mounted on `/run/secrets/<name>` (or `target:`) |
 | (every image service) | `mounts:` also gives it a writable `/run` (a tmpfs with a copy of the image's `/run`) and a 64 MiB `/dev/shm`: a container has a writable layer and its own `/dev/shm`, the hydo image root is read-only. |
-| `restart:` | `restart: "no"` -> `recovery: false` (not started again after a power cut, as Docker does not restart it after a reboot); every other policy -> started in crash recovery. hydo restarts every service after a kill fault whatever the policy. |
+| `restart:`, `deploy.restart_policy` | `restart:` with the same words (see "Restart policies"; `deploy.restart_policy.condition` `none` -> `no`, `any` -> `always`, `on-failure` with `max_attempts` -> `on-failure:<max>`, and it wins over `restart:` as in Compose; its `delay` and `window` are ignored with a warning, hydo waits Docker's own delays); a value that is not a policy is left out with a warning. `restart: "no"` also gives `recovery: false` (not started again after a power cut, as Docker does not restart it after a reboot); every other policy -> started in crash recovery. hydo's kill faults keep their own restart points whatever the policy. |
 | `profiles:` | services in a profile are left out unless `--profile <p>` (as `docker compose up`) |
 | `mem_limit:`, `deploy.resources.limits.memory` | counted in the `guest.ram_mib` guess |
 | (images) | `guest.ram_mib`: 256 MiB + a per-image guess (PostgreSQL 384, MySQL/MongoDB 640, Redis 96, JVM services 1024, others 256), at least 1024, at most 3072. `guest.cpu: v3` when an image's linux/amd64 manifest has variant v3/v4 or the image is known to need AVX2 (restatedev/restate); otherwise a commented line to uncomment if a service stops with "invalid opcode". `data.size_mib` from the volumes. |

@@ -29,6 +29,7 @@
 //! `elapsed_s` or its details. The monitor runs the shell's loop command by command instead.
 
 use super::{bb, call, env, inv_detail, jesc, log, run, run_argv, Ctx, Part, Step, CHUNK, F};
+use crate::busybox;
 use crate::flow::Memo;
 use hydo_agent_proto::msg::{ClockGet, Command, Reply};
 use std::collections::BTreeMap;
@@ -137,6 +138,12 @@ pub(super) fn live_monitor(fx: &mut F<'_>, ctx: &Ctx, m: &Monitor) -> Step<()> {
         let mut argv = vec![bb(ctx), "timeout".into(), (w + 1).to_string()];
         argv.extend(run_argv(ctx, &inv.cmd));
         let ran = run(fx, argv, m.env.clone(), Some(CHUNK as u32))?;
+        // a check its timeout ended (SIGTERM, status 143): the monitor's shell writes
+        // "Terminated" after the check's output into $H/inv.$i.out (busybox.rs, D7)
+        let ran = super::Ran {
+            out: busybox::with_signal_line(ran.out, ran.sig),
+            ..ran
+        };
         let b = up(fx)?;
         let el = b.unwrap_or(0) - m.t0.unwrap_or(0);
         if ran.status == 0 {

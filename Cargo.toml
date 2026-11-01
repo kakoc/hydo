@@ -27,6 +27,7 @@ members = [
     "hydo/crates/hydo-results",
     "hydo/crates/hydo-agent-proto",
     "hydo/crates/hydo-control",
+    "hydo/crates/hydo-hvx",
 ]
 exclude = ["sdk", "hydo/onboard/examples"]
 
@@ -56,6 +57,7 @@ hydo-grpc-gen = { path = "hydo/crates/hydo-grpc-gen" }
 hydo-results = { path = "hydo/crates/hydo-results" }
 hydo-agent-proto = { path = "hydo/crates/hydo-agent-proto" }
 hydo-control = { path = "hydo/crates/hydo-control" }
+hydo-hvx = { path = "hydo/crates/hydo-hvx" }
 
 [profile.release]
 opt-level = 3

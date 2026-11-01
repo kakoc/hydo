@@ -13,6 +13,18 @@
 > `hydo-bench table DIR...`; the same options, outputs and printed lines. Not ported: `--strategy portfolio` and
 > `--rescore` (one-time M56 re-scoring). The Python files, `mkpatches.py` and `smp_ident.py` were deleted in M108;
 > restore one with `git show 705cf98:hydo/bench/<file>` (docs/HISTORY.md M108).
+>
+> Note (M135): the benchmark's images are now built from one manifest, `manifest/hydo.yaml`, by
+> `build-bench-manifest.sh` on the bare-metal test machine (section "The manifest images
+> (Milestone 135)" at the end, with the triggers recorded on them). `hydo-bench` runs their agent
+> images by default (`--kind agent`), their shell images with `--kind shell`, and the hand-written
+> stack images that the older sections below describe with `--kind stack`. The stack images
+> (`build-bench*.sh` with `hv/hvx/images/build-stack.sh` and `hydo/explore/stack-explore.sh`)
+> stay only as the engine's regression baselines (`deploy-metal.sh`, the pinned reproducers on
+> `explore-disk.img` and `explore-fix-disk.img`), as the record of the measurements below, and as
+> the source of the manifest build's root files (the `-pin-kr` control's root); do not delete
+> them. They keep franz-go v1.17.1; the manifest images' order services are built from source
+> with v1.22.2 (`build-order-services.sh`).
 
 Every explorer strategy comparison up to Milestone 45 rested on ONE bug: the pre-M39 front door
 (publish to Kafka, then fail the order because the Redis cache was down). This benchmark gives
@@ -79,6 +91,23 @@ ignores context cancellation for a record already sent, so the front door's "eve
 bounded by the request deadline" does not hold for Kafka. Because of this bug, `run.py` re-runs
 every candidate detection on the control image and counts it only if the control passes
 (`base_bug_hits` in the results lists the ones it rejected).
+
+## A second bug in the fixed front door: franz-go's idempotent producer (Milestone 133)
+
+On agent images of the benchmark manifest (`manifest/hydo.yaml`), the control loses an
+acknowledged order after a long Kafka pause:
+
+    disk=none dseed=0 | run P=kafka@14+16
+    -> HYDO-ORACLE: VIOLATION [stack.exactly_once] kafka order=15 expected=100015 got=MISSING (mysql has it: true)   fp c4a120cca428aa48
+
+The cause is franz-go v1.17.1 (the version in `hydo/stack/go.mod`), issue 1484, fixed in
+v1.22.2: after Kafka is continued, the producer fails order 14's batch, which the broker had
+already appended, and rewinds the sequence number under the same producer id and epoch; order
+15's retry is then produced with order 14's sequence number, the broker takes it for a re-send,
+answers success and stores nothing. The front door rebuilt with franz-go v1.22.2 passes the
+same schedule. The shell images' timing has not reached the window (tick jitter included).
+`kafka-diag.sh` makes a diagnostic copy of a manifest image that prints Kafka's batches with
+their sequence numbers. Details: `docs/C2-BENCH.md` section 6 item 4.
 
 
 ## Files
@@ -484,3 +513,146 @@ Checks (bare-metal test machine, results `/var/tmp/kr`): `confirm.py --defects m
 | d11 | 1/3 (3) | 0/3 | 2/3 (13, 4) | 0/3 |
 
 All detections reproduced. Off-signature hits: `mysql table unreadable` after a MySQL kill near the end (harness artefact, like M55's Kafka one) and `M=0` + a MySQL kill (the relaxed setting's documented window). The four schedules that found d11 in M67 give OK on the new image (the cut lands elsewhere). d11's window is about 3 of ~310 cut points and `cf=` is drawn in 40–60% of schedules, so three repetitions cannot separate a per-repetition rate between about 0 and 30%; 0/6 here and 3/6 in M67 are consistent. Branch `bench-m59-kr` (from pre-binlog `57864c6`) is a build recipe only — do not merge it.
+
+## The manifest images (Milestone 135)
+
+Since M135 the benchmark runs on images built from one manifest, `manifest/hydo.yaml` (the
+`-pin-kr` control image's files and configuration as a manifest, M129, `docs/C2-BENCH.md`), with
+`hydo build` and `hydo build --control agent`. Each order service (a defect or a control) gives a
+shell image and an agent image that differ only in what `--control agent` changes.
+
+**The order services** (M135): every order service is built from source by
+`build-order-services.sh <dir>` (the pinned Go 1.26.5 as `HYDO_GO`; on the bare-metal test machine
+the copy of its Nix store path in `~/hydo-rp/nixgo`, which rebuilt the `-pin-kr` control's binary
+`78290125…` byte for byte from that image's commit; the official go1.26.5 tarball gives other
+bytes). The sources are put together as the stack builders do it: a copy of `hydo/stack` with the
+stored base (`base/main-m59-control.go` for `control` and d8–d12 with `patches-m59/`,
+`base/main-0112b48.go` without `buggify.go` for `nf`, `fix` and d1–d7 with `patches/`,
+`base/main-7e32c4a.go` for d0, `hydo-bench addbuggify` over the same bases for `bg-*`). The
+module files are `hydo/stack/go.mod` and `go.sum`, with **franz-go v1.22.2** since M135 (v1.17.1
+let the idempotent producer acknowledge a record it never wrote, franz-go issue 1484, M133); the
+stack images keep v1.17.1 (`hydo/stack/go.mod.baseline`, which `build-stack.sh` uses). Two
+builds give the same bytes. Binaries (sha256 prefixes): control `4aefc78f…`, d8 `9d6c5865…`, d9
+`686a5f40…`, d10 `18c74d20…`, d11 `99bb7f05…`, d12 `55e6c743…`, nf and fix `0e8d9b79…`, d1
+`a3b33974…`, d2 `409ce491…`, d3 `4ef29104…`, d4 `4bfb8a19…`, d5 `33771b66…`, d6 `0c500027…`, d7
+`31b37c9b…`, d0 `6953a8d8…`; bg-control `3d96345e…`, bg-d0 `d36425d9…`, bg-d1 `516696a9…`, bg-d2
+`2c4c5559…`, bg-d3 `06b8bd83…`, bg-d4 `1b563425…`, bg-d5 `65edc90d…`, bg-d6 `a601a240…`, bg-d7
+`3c190f30…`.
+
+**Building the images** (on the bare-metal test machine; no Nix): `ORDER_BIN=<dir>
+build-bench-manifest.sh <work dir> <release dir>` with `HYDO_AGENT_BIN` = the pinned hydo-agent
+(0.2.0, `b72c5caa…` since M127, docs/BUILD-PINS.md; the images of M135 were built with M131's `1f517e04…`). `<work dir>/benchroot` is the debugfs rdump of the
+`-pin-kr` control image's root (the MySQL and OpenJDK closures, Kafka's libs, the pinned Redis);
+the release dir is a Linux release layout with this tree's `bin/hydo` and `hydo/`. Without stem
+arguments it builds the default set: the control in full, then every other order service as a copy
+with `/bin/hydostack` swapped in (`agent-patch.sh --swap`; M129 proved a swapped image equal to a
+full build). `BG=1` adds the BUGGIFY order services (`bg-*`), `KEEP=1` keeps images that exist.
+Without `ORDER_BIN` the order services come from the stack images' `/bin/hydostack` (franz-go
+v1.17.1, as M129 built its images). Output, in `$OUT` (default `<work dir>/build`, with `bzImage`
+and `initramfs-kafka.cpio.gz` linked in):
+
+| stem | order service | used as |
+|---|---|---|
+| `control` | the M59 control | the control of d8–d12 |
+| `d8-no-order-lock` … `d12-shared-key-buffer` | the M59 defects | d8–d12 |
+| `nf` | the M46 order service (the M39 fix) | the control of d1–d7 |
+| `d1-kafka-first` … `d7-skip-last-record` | the M54 defects | d1–d7 |
+| `d0-old-front-door` | the pre-M39 order service | d0 |
+| `fix` | the same binary as `nf` | the control of d0 |
+| `bg-control`, `bg-d0-…` … `bg-d7-…` (`BG=1`) | the M56 BUGGIFY order services | `--bg-images` |
+
+The images are `explore-ob-bench-<stem>-disk.img` (shell) and `explore-ob-bench-<stem>-agent-disk.img`
+(agent). Run hydo-bench with `HYDO_BUILD=<that directory>`; `--kind agent` is the default,
+`--kind shell` picks the shell images, `--kind stack` the stack images in this file's older
+sections. `list --images` takes a defect name or `control:<defect>` for the kind's image. Every
+stack-sized guest needs about 6 GiB of the box's memory: run one worker (`--workers 1`) and start
+a step only when `free -m` shows at least 6 GiB available (`c2-cells.sh` waits for it).
+
+**What differs from the stack images.** The generic init (shell kind) or the host controller
+(agent kind) runs the workload instead of `stack-explore.sh`: other console lines, a restart of
+every dead service before the retry pass, no periodic checks, so the fingerprints and some trigger
+points differ from M54–M108's. `Q=` and `M=` are knobs of the manifest; `X=` (the stack's timed
+kill) works on the agent kind only (the generic shell init ignores it; the format reserves the
+letter, so it cannot be a knob). `B=` reaches the order service's BUGGIFY points on both kinds
+(`buggify: true`). stack-explore.sh's M67 path (an order service that cannot come back after the
+workload: no retry pass, the power cut's recovery boot decides) is in the manifest too, below.
+
+**M67's path in the manifest.** After a `cf=` power cut the data disk stops completing writes,
+MySQL's sessions hang, and an order service killed late in the run (`X=front@…`, or `K=front`
+at the last step) cannot start again: it exits. stack-explore.sh then leaves the un-ACKed orders
+un-ACKed, skips the retry pass and ends the workload, so the host's recovery boot gives the
+verdict; without a cut it ends with `ERROR front door restart`. The generic init and the host
+controller end such a run with `ERROR restart after the faults (front)` (M129 saw one, process
+seed 3003). The manifest writes the path with the format's existing features:
+- the order service runs as `/bin/busybox sh /etc/hydo-bench/front.sh`: `/bin/hydostack server`,
+  and when that exits after the workload's last step (the `run:` command leaves
+  `/tmp/hydo-bench-steps-done` after the range that ends at step 30), the script stays up and
+  prints `hydo-bench: the order service exited after the workload's last step (status N); it
+  stays down` (to its log and the console);
+- `ready:` accepts that line as well as `server listening`, so the restart does not end the run;
+- `retry:` sees the line, prints `hydo-bench: the order service cannot restart; no retry pass,
+  the un-ACKed orders stay un-ACKed` and skips the retry pass (marker `/tmp/hydo-bench-no-retry`);
+- the third invariant, `front.restarted`, answers "could not be evaluated" (exit 2) when the retry
+  was skipped, so a run without a cut ends in `ERROR invariant front.restarted could not be
+  evaluated: front door restart: …` unless another invariant is violated (stack-explore.sh's ERROR
+  comes first; here a violation comes first). In a recovery boot it holds.
+A kill or a pause still reaches the order service (faults act on a service's whole process
+tree). An order service that hangs instead of exiting is still `ERROR restart after the faults`
+(stack-explore.sh's `NOT ready` case is not covered). The format has no key for a restart that may
+fail; docs/HISTORY.md "Milestone 135" says what such a key needs to do.
+
+The M67 path, measured (twice each, identical): M129's ERROR schedule `disk=cut
+dseed=806555b3e1262cc5 cf=147 | run P=redis@10+3 T=26:-3600 X=front@20~151` on the agent control
+gives OK `acked=11/30` from the recovery boot (`91ebd4a2e0731975`); `disk=cut dseed=0 cf=147 | run
+K=front@29+1` takes the path on both kinds (agent OK `acked=13/30` `c7e09c18bf68d064`, shell OK
+`acked=14/30` `ad4939963f7aefc8`), and both consoles show the two `hydo-bench:` lines.
+
+### The triggers on the manifest images (Milestone 135)
+
+`hydo-bench confirm --kind agent --defects <all thirteen> --base --workers 1` on the images above
+(franz-go v1.22.2, hydo-agent 0.2.0; results `/var/tmp/m135/confirm-agent` on the box): every
+trigger failed twice with the same fingerprint and the defect's signature (class
+`durable-defaults` for all), and passed once on its control. Three triggers were measured again
+first, because the agent images' timing moved them (`hydo-bench list`, one run per point): d9 on
+`Q=2,3,4,2d,3d,4d` crashes for `Q=3` and `Q=4d` (M129's agent images: five of six, M108's `Q=4`
+no longer); d10 on `X=front@6..13~20` fails at 7, 9, 10, 11 and 13 (the control passes all eight,
+so M72's `@9` stays); d11 on `cf=245..305` fails at 9 of 61 points, k = 249, 250 (order 23), 260
+(24), 271, 272 (25), 282 (26), 292 (27), 302, 303 (28), on swapped images built before the swap
+was made byte-reproducible (the fingerprints of those runs are not the table's; `cf=260` was then
+confirmed on the final images).
+
+| defect | trigger (agent kind) | verdict | fingerprint (twice) | control (OK) |
+|---|---|---|---|---|
+| d0-old-front-door | `disk=none dseed=4d5cb825dfaab05b \| run K=redis@11+1 C=24` | order=11 is in kafka (1 times) but the client was never ACKed | `8a7a57a44b2e1e8a` | fix: acked=24/30 `12ae3bb9fa046080` |
+| d1-kafka-first | `disk=none dseed=0 \| run K=mysql@10+1` | kafka order=10 present 2 times | `27776b3e63e42ff0` | `f549cfc024ca4822` |
+| d2-batched-publish-flag | `disk=cut dseed=0 \| run C=12` | mysql order=10 acked but not marked published | `5e15465dac8cb3e1` | acked=12/30 `9a5d5bdfccc2dafb` |
+| d3-blind-retry | `disk=none dseed=0 \| run P=kafka@5+2` | kafka order=5 present 2 times | `2cd0278ca81afecf` | `001e6a275980fa96` |
+| d3-blind-retry | `disk=none dseed=0 \| run O=kafka@5-10:resp:loss,100%` | kafka order=5 present 2 times | `1cac02b0305f5a9c` | `240b2565dac1e000` |
+| d4-produce-timeout-definite | `disk=cut dseed=0 \| run O=kafka@5-10:resp:loss,100% C=12` | order=5 is in kafka (1 times) but the client was told it failed | `f1186262b0bc8037` | acked=7/30 `66cb2aa449d3f6b7` |
+| d4-produce-timeout-definite | `disk=cut dseed=0 \| run P=kafka@5+2 C=8` | order=5 … told it failed | `d7bee1f2e6ba3f5a` | acked=6/30 `61d35b92a2c3eafa` |
+| d5-myisam | `disk=cut dseed=0 \| run C=15` | mysql order=0 expected=100000 got=MISSING (kafka has it: true) | `b34e7ff647075d43` | acked=15/30 `2dfba0a1d795afe7` |
+| d6-client-deadline-definite | `disk=none dseed=0 \| run P=kafka@5+2` | order=5 … told it failed | `77c5094837f0e617` | `001e6a275980fa96` |
+| d7-skip-last-record | `disk=none dseed=0 \| run P=kafka@28+2` | kafka order=29 present 2 times | `32a0fc66c14173c0` | `eecd63a9e8d1ce49` |
+| d8-no-order-lock | `disk=none dseed=0 \| run Q=2d` | kafka order=0 present 2 times | `112bd790c58cf83a` | `9fc6b149e94b7cca` |
+| d9-redis-unlocked | `disk=none dseed=0 \| run Q=3` | [front.no_crash] front door crashed: panic: runtime error: slice bounds out of range [15:10] | `e5eedcdbc635fd62` | `643a520d0576c694` |
+| d10-outcome-in-memory | `disk=none dseed=0 \| run X=front@9~20` | kafka order=10 present 2 times | `d15cccef5888b5d0` | `196d342bbd850774` |
+| d11-ack-unflushed-flag | `disk=cut dseed=0 cf=260 \| run` | mysql order=24 acked but not marked published | `caa0b4855957a6da` | acked=24/30 `59d93b039af27ba7` |
+| d12-shared-key-buffer | `disk=none dseed=0 \| run Q=2` | kafka order=0 present 2 times | `324da2b742df58e9` | `5aa98bced794bdeb` |
+
+The control of d1–d7 (`nf`, the M46 order service) keeps its known bug (section "A bug in the fixed
+front door"): `disk=none dseed=0 | run O=kafka@25-30:resp:loss,100%` gives `kafka order=26 present
+2 times`, twice `4eb6204775941205`, as on the stack image; the franz-go upgrade does not change it
+(that bug is the order service's lookup racing its own in-flight produce, not issue 1484). Other
+checks on the agent control: `disk=none dseed=0 | run` OK `acked=30/30` `f0017db9b378d8e4`, and
+`disk=none dseed=0 | run P=kafka@14+16` (the M129/M133 lost order) OK `a41a29598b2738ea`.
+
+On the shell kind (`hydo-bench confirm --kind shell`, the same images' shell builds, results
+`/var/tmp/m135/confirm-shell`), every trigger but d10's failed twice with one fingerprint and the
+signature, and every control passed: d0 `f3823c5fb59509de`, d1 `88281feb616bbc1e`, d2
+`8a454dfde2e16c80`, d3 `b79868d500d1c069` / `f2dec81fe23a9886`, d4 `e0c32971fc99b8d8` /
+`6ae6aa92727d25d0`, d5 `1f33e100c6615eb6`, d6 `8b88d1a9c2eaea7f`, d7 `de93bec6815cf318`, d8
+`a37e377a57bfde73`, d9 `Q=3` `67c6f9f7f92acd2d`, d11 `cf=255` `4df9e6583e79423c` (order 24), d12
+`a183710476e82968`; the control's known bug twice `4edd5c6d1244cc8c`. d10's `X=front@9~20` passes
+(`e5232a07be7245a2`) because the generic shell init ignores `X=`: d10 has no trigger on the shell
+kind. Measured first on the shell kind: d9 crashes for every `Q=` but `Q=2d`; d11 fails at 8 of
+the 61 points (245, 255, 256, 266, 277, 287, 297, 298).

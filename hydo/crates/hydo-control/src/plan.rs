@@ -16,7 +16,7 @@
 
 use crate::seams::Unsupported;
 use hydo_manifest::py;
-use hydo_manifest::Manifest;
+use hydo_manifest::{Manifest, Restart};
 use serde_json::Value;
 
 /// Paths inside the guest.
@@ -104,6 +104,10 @@ pub struct PlanService {
     /// The service's `addr:` ("" = none): link faults (hydo-init-links.sh), the freeze's pair,
     /// and its namespace's address with `network: bridge`.
     pub addr: String,
+    /// `restart:` (M134): what the controller does when the service's process ends by itself
+    /// while the test runs (`schedule/restart.rs`). The shell init has no such key; `no`, the
+    /// default, is its behaviour.
+    pub restart: Restart,
 }
 
 /// One invariant (manifest.sh's HYDO_INV_<k>_*).
@@ -330,6 +334,11 @@ impl Plan {
                 port: get(s, "port").map(py::str_of).unwrap_or_default(),
                 recovery: get(s, "recovery").map(py::truthy).unwrap_or(true),
                 addr: get(s, "addr").map(py::str_of).unwrap_or_default(),
+                restart: match get(s, "restart") {
+                    Some(r) => Restart::parse(r)
+                        .map_err(|m| Unsupported::other(format!("services: {n}: restart: {m}")))?,
+                    None => Restart::No,
+                },
             });
         }
         let wl = &d["workload"];

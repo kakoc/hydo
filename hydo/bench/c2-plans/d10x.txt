@@ -1,0 +1,8 @@
+disk=none dseed=0 | run X=front@6~20
+disk=none dseed=0 | run X=front@7~20
+disk=none dseed=0 | run X=front@8~20
+disk=none dseed=0 | run X=front@9~20
+disk=none dseed=0 | run X=front@10~20
+disk=none dseed=0 | run X=front@11~20
+disk=none dseed=0 | run X=front@12~20
+disk=none dseed=0 | run X=front@13~20

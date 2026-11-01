@@ -235,6 +235,45 @@ impl JsonSchema for Scalar {
     }
 }
 
+/// A service's restart policy: a string (Docker Compose's `restart:` words, checked by the
+/// validator after `params:` are replaced: `crate::restart`), or false (a bare YAML `no`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct RestartPolicy(pub Value);
+
+impl<'de> Deserialize<'de> for RestartPolicy {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        match Value::deserialize(d)? {
+            v @ (Value::String(_) | Value::Bool(false)) => Ok(RestartPolicy(v)),
+            other => Err(D::Error::custom(format!(
+                "no, always, on-failure, on-failure:<max> or unless-stopped (a string), not {}",
+                repr(&other)
+            ))),
+        }
+    }
+}
+
+impl Serialize for RestartPolicy {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        self.0.serialize(s)
+    }
+}
+
+impl JsonSchema for RestartPolicy {
+    fn schema_name() -> Cow<'static, str> {
+        "RestartPolicy".into()
+    }
+    fn json_schema(g: &mut SchemaGenerator) -> Schema {
+        json_schema!({
+            "description": "Docker Compose's restart: words: no (the default), always, unless-stopped, on-failure or on-failure:<max> (0 = no limit); false (a bare YAML no) means no.",
+            "anyOf": [
+                {"type": "string", "pattern": "^(no|always|unless-stopped|on-failure(:[0-9]+)?)$"},
+                {"const": false},
+                g.subschema_for::<ParamRef>(),
+            ]
+        })
+    }
+}
+
 /// A version pin: "0.1", "0.1.0" or ">=0.1" (a bare 0.1 also reads as that version).
 #[derive(Clone, Debug, PartialEq)]
 pub struct VersionPin(pub Value);
@@ -630,6 +669,11 @@ pub struct Service {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = true))]
     pub recovery: Option<bool>,
+    /// What hydo does when the service's process ends by itself while the test runs, in Docker
+    /// Compose's words: no (the default: it stays down until the heal), always, unless-stopped,
+    /// on-failure, on-failure:<max>. Followed by agent images (MANIFEST.md "Restart policies").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restart: Option<RestartPolicy>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
     /// This service's error-log settings (needs the top-level errors:).

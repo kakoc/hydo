@@ -1,0 +1,7 @@
+# M108's proof cells and trigger confirmations (hydo-bench run/confirm arguments without --out),
+# run by c2-cells.sh on the shell images, then on the agent images of hydo/bench/manifest (M129).
+confirm-old confirm --defects d1-kafka-first,d5-myisam --workers 1
+random-old run --strategy random --defects d1-kafka-first,d5-myisam --reps 1-1 --budget 4 --workers 1
+process-xcf run --more-faults --cf-range 1-309 --strategy process --defects d10-outcome-in-memory,d11-ack-unflushed-flag --reps 1-1 --budget 8 --workers 1
+confirm-m59 confirm --defects m59 --workers 1
+swarm-cc run --strategy swarm --concurrency --defects d8-no-order-lock,d12-shared-key-buffer --reps 1-1 --budget 6 --workers 1

@@ -320,6 +320,7 @@ dependencies = [
 name = "hydo-bench"
 version = "0.1.0"
 dependencies = [
+ "hydo-control",
  "hydo-engine",
  "hydo-explore",
  "hydo-results",
@@ -414,6 +415,7 @@ version = "0.1.0"
 dependencies = [
  "flate2",
  "hydo-agent-proto",
+ "hydo-hvx",
  "hydo-schedule",
  "sha2",
 ]
@@ -488,6 +490,13 @@ name = "hydo-history"
 version = "0.1.0"
 dependencies = [
  "sha2",
+]
+
+[[package]]
+name = "hydo-hvx"
+version = "0.1.0"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
