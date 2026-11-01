@@ -589,7 +589,8 @@ with fakes were not run together (no example has both).
   `agent::tests::a_spin_on_hvm_runs_again_in_rewind_mode`.
 - **Decision:** the escalation is the host's, not the engine's, because the engine cannot undo a
   conversation; the alternative, the rewind mode for every agent run on hvm, costs a stage-2
-  write fault per first write to each page after every exit, and changes nothing else.
+  write fault per first write to each page after every exit, for the same results (a plain
+  schedule in the rewind mode gives the plain run's fingerprint, stops and `inh=`; M130).
 - **The voting app's D6 is not a controller bug** (docs/C2-MAC.md "D6"): the .NET worker exits on
   an exception its retry loop does not catch after a realtime clock step, and the heal's one
   restart pass (`restart_dead`, the shell's order) sees it alive or dead depending on guest timing.

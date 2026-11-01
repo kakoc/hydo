@@ -102,7 +102,7 @@ have no arm64 manifest.
 | rust-kv | yes | nothing |
 | shop (buggy and fixed) | yes | nothing; the same 4 failures and the same two minimal schedules as M89/M96 |
 | gRPC demo (buggy and fixed) | yes, after fix 2 | nothing after the fix; before it `orderd` did not start on the agent image |
-| voting app | mostly | recorded schedules the same; exploration (seeds 1–50, process `--new-faults`, no shrinking) 47 of 50, 31 failures on each image: 1 seed timing (D1), 2 seeds where the agent image's checks find the database not answering (D6, not explained) |
+| voting app | yes, apart from timing | recorded schedules the same; exploration (M130: seeds 1–100, process `--new-faults`, with shrinking) 97 of 100, 60 failures on each image, the same two minimal schedules; the 3 differing seeds are M128's (seeds 7, 31, 41), all timing around the worker's death after a clock step (D6, explained in M130) |
 
 ## Recorded schedules
 
@@ -195,7 +195,7 @@ names the replay controller (M126).
 
 The explorer's schedules for seeds 1–100 with the strategy and options each example is explored
 with, on both images (the voting app seeds 1–50 without shrinking: its 3 GiB guests took about two
-minutes a run with the Mac swapping), and the deterministic sweeps that apply on the Mac. "Same meaning" counts the
+minutes a run with the Mac swapping; M130 ran seeds 1–100 with shrinking, two workers per image), and the deterministic sweeps that apply on the Mac. "Same meaning" counts the
 seeds whose first runs have the same verdict class and the same violated properties (the explorer
 generated the same schedule string on both images for every seed of every exploration). Every
 failure was re-run by the explorer and reproduced on both images. "Shrunk classes" are the
@@ -231,7 +231,8 @@ property table (assertions and invariants: passed, failed, not exercised).
 | shop-buggy | `--sweep protocol` | 228 | 228 | 48 (48 reproduced) | 48 (48 reproduced) | same: `payments.charged_at_most_once` | 13 of 13 |
 | shop-fixed | `--strategy process --protocol-faults --seeds 1-100` | 100 | 100 | 0 (0 reproduced) | 0 (0 reproduced) | same: none | 13 of 13 |
 | shop-fixed | `--sweep protocol` | 228 | 228 | 0 (0 reproduced) | 0 (0 reproduced) | same: none | 13 of 13 |
-| voting | `--strategy process --new-faults --no-shrink --seeds 1-50` | 50 | 47 | 31 (31 reproduced) | 31 (31 reproduced) | same: none | 8 of 8 |
+| voting | `--strategy process --new-faults --no-shrink --seeds 1-50` (M128) | 50 | 47 | 31 (31 reproduced) | 31 (31 reproduced) | same: none | 8 of 8 |
+| voting (M130) | `--strategy process --new-faults --seeds 1-100` | 100 | 97 | 60 (60 reproduced) | 60 (60 reproduced) | same: `votes.counted_soon` (`disk=cut … C=20`, `disk=cut … C=20 P=vote@6+1`); the agent image also shrank seed 7 to `T=7:-2592000 O=db-*@0-1:resp:loss,37%` | 8 of 8 |
 
 ## Differences and their classification
 
@@ -336,3 +337,102 @@ and `cargo fmt --check` pass. The identity corpora and the scripted-engine scena
 - **Not run here:** `--sweep freeze` (D4), `cf=`/`X=` (`--more-faults`; hvmx refuses `cf=`), BRANCH,
   several vCPUs and a schedule's own `rb=` under control (refused by the controller, M126), and the
   etcd example (no aarch64 etcd).
+
+## Milestone 130: busy-wait loops on agent images, and the voting app's database
+
+Branch `c2-mac-fixes`, on this Mac, with M128's images and a prefix with this branch's `hydo`,
+`hydo-build`, `hydo-explore` and `hvmx`. Two workers per image for the voting app (3 GiB guests),
+two for ledger-spin.
+
+### Rewind under lock-step control (D5)
+
+**How it works.** hvm's rewind mode (M57) takes a copy-on-write checkpoint of the vCPU, the
+machine state and the pages written since the last exit, at the loop top of every exit. When the
+spin observer proves an exit-free counter loop, the engine rewinds to that checkpoint and
+re-executes to the loop's canonical point, where it delivers the pending interrupt. Under
+lock-step control this keeps the stops pure, because a rewind never moves the exit count: the
+checkpoint is taken after the stop hook of its exit, and the guest makes no exit between the
+checkpoint and the rewind (the loop is exit-free), so the rewind restores the same exit count,
+console and queued input, and the hook, which stops at most once per exit count, does not stop
+again. M128's reason for refusing it ("it moves M.exits backwards") did not hold. The real
+obstacle was the automatic re-run: hvmx runs a shell image's schedule plainly and runs it again
+in the rewind mode only when it ends as SPIN, and it cannot do that under control, where the
+host's conversation has already happened. So the choice moved to the host:
+- `serve.c`: a CTL, a RESUME and `--control boot one` whose schedule has `spin=rewind` (or
+  `HVM_SPIN_REWIND=1`) run the workload, check and recovery phases in the rewind mode (the boot of
+  `--control boot one` stays plain, as a worker's boot does); a SNAP keeps the mode for its RESUME.
+- `hydo-control` (`agent::rewind_again`): when an agent image's run on hvm ends as SPIN and its
+  schedule has no `spin=rewind`, the worker (from S1) or `hydo run` (a new fresh boot) runs the
+  schedule again with `spin=rewind` and reports only that run. `HVM_SPIN_REWIND=0` turns it off.
+  The transcript's header names `spin=rewind`, so a transcript replay is in the rewind mode.
+
+**Proofs.**
+
+| check | result |
+|---|---|
+| ledger-spin agent `disk=none \| run`: fresh boot twice, from S1 twice (explorer worker) | OK `9016421c181fc5ba`, stops 617, `inh=9f8ab84c8416601a`, `ctl=f9c60fb418e129fa` all four times; the four transcripts byte-identical |
+| ledger-spin agent `disk=none \| run P=front@10+2`: the same | VIOLATION `8ca0de67dafd69ac`, stops 819, `inh=f69ca8f184cea50c`, `ctl=2fb68165f0b33af8` all four times; transcripts byte-identical |
+| `hydo repro --transcript` of both | REPRODUCED, the same commands at the same stops |
+| a plain schedule in the rewind mode on agent images (fingerprint, stops, `inh=` as the plain run; `ctl=` differs only by the header) | Redis `disk=none` `251aa0074e7e7642` stops 388; Redis `disk=cut C=12 R=everysec` (with its recovery) `2ba69ae149ad2ed0` stops 341; ledger `disk=none` `9142e77626d9dde0` stops 335; ledger `P=front@10+2` `ead725b801c7a3b6` stops 558 |
+| every rewind restores the exit count it was proven at (`HVM_SPLOG`, ledger-spin `P=front@10+2`) | 87 rewinds, 87 to a checkpoint at the same exit count |
+| `lockstep-check.sh` with ledger-spin's shell image as fourth argument | every M116/M119 value, CTL = RUN; `spin=rewind` schedules CTL = RUN = fresh boot: `12e6a03e6e22595d`, `85e7e22a2d0a0746` (with M128's hvmx the CTL gives `fp=0`: the group fails) |
+| M128's recorded values with this branch's programs | Redis plain and cut (shell and agent), ledger, node-kv's cut, the buggy shop's dropped answer, the racy composed plan, redis-bridge's link fault: the same fingerprint, stops, `inh=` and `ctl=`; ledger-spin's shell runs `12e6a03e6e22595d` and `85e7e22a2d0a0746`; the voting app's seeds 1–50 on both images and ledger-spin's shell seeds 1–100: the same fingerprint and `ctl=` for every seed |
+
+**ledger-spin's verdicts.** Recorded schedules: `disk=none | run` OK on both images;
+`P=front@10+2` VIOLATION on both, with both properties violated on both images (`ledger.no_duplicates`
+and `ledger.acked_exactly_once`); the verdict line names the first one found, which differs (D1
+timing): on the shell image the periodic `no_duplicates` check ran between the workload's retry
+(which stores entry 10 again) and the workload's end, on the agent image it did not, so the final
+`acked_exactly_once` check is the first to see the duplicate. Swarm `--new-faults` seeds 1–100:
+100 of 100 with the same meaning, 44 failures on each image (44 reproduced each), the same two
+failure classes shrunk on both (`P=front@…` pauses: shell `P=front@22~422:10963` and
+`P=front@6~0:2417`, agent `P=front@22~0:2740` and `P=front@26+2`), the property table 8 of 8.
+
+### The voting app's database (D6)
+
+The three differing seeds are M128's (7, 31 and 41, with M128's fingerprints). What happens, from
+runs with diagnostic checks (an agent image driven with an extended check, and a shell image built
+from a copy of the manifest whose check also prints the worker's log; neither is committed):
+- The check's "db not answering" is not PostgreSQL: `psql -c 'select 1'` answers, and the query
+  fails with `relation "votes" does not exist`. The .NET worker creates that table only after its
+  first database connection, and the manifest's `votes_counted` reports any failing `psql` as "db
+  not answering".
+- **Seed 7** (`P=db@18+2 T=7:-2592000 O=db-*@0-6:resp:loss,74%`): the worker's first connection
+  is still being opened while the database's answers are lost; the clock is then stepped back 30
+  days. Npgsql's timeout was computed from the wall clock, so the remaining time becomes 30 days,
+  more than 2^31 ms, and `Socket.set_ReceiveTimeout` throws `System.ArgumentOutOfRangeException`,
+  which the worker's retry loop (it catches `SocketException` and `DbException`) does not catch:
+  the worker exits with status 1. Both images: the same exception in the worker's log. On the
+  shell image it exits before the heal and the heal's restart pass restarts it (OK). On the agent
+  image its pending read is answered only when the paused database continues, 11 ms of guest time
+  after the restart pass had seen it alive, so it is never restarted and no vote reaches the
+  database (VIOLATION). The agent image's exploration shrank this to `T=7:-2592000
+  O=db-*@0-1:resp:loss,37%` (no pause needed there); from a fresh boot that schedule gives OK `e2807227ec1f84df` on
+  the shell image and VIOLATION `votes.counted_soon` `525026bff2a7347b` on the agent image (twice,
+  stops 9922, `ctl=adf022ccf023fb23`).
+- **Seed 31** (`P=db@1+5 T=18:31536000`): after the clock is stepped forward a year, the first
+  worker exits on an exception from Npgsql's timeout check (`NpgsqlTimeout.Check`), and the worker
+  restarted in the heal's pass exits too: Redis refuses writes (`MISCONF … unable to persist to
+  disk`, its RDB save fails because `/data` is in the read-only root), and the worker's `LPOP`
+  throws. Both images: VIOLATION `votes.counted_soon`. The final `votes.counted` differs only in
+  whether the restarted worker created the table before it died (shell: "voter0 acknowledged but
+  not counted"; agent: "db not answering", which counts as "cannot decide").
+- **Seed 41** (`K=db@8+1 P=redis@18+2 T=2:-30 O=redis-*@10-15:req:loss,61%`, shell VIOLATION,
+  agent OK) differs in the other direction. It was not run with diagnostics; its faults (a
+  database kill, a Redis pause, a 30 s clock step) point to the same kind of timing race around
+  the worker's death and the heal's one restart pass.
+
+So the difference is timing (D1) around two real bugs of the voting app (the worker dies on a
+clock step and nothing restarts it after the heal, as under Compose without `restart:`; Redis
+refuses writes after a forward clock step). The controller does what hydo-init.sh does; nothing
+in hydo was changed. Two decisions are listed under "What C3 still needs".
+
+### The voting app's seeds 1–100
+
+`--strategy process --new-faults --seeds 1-100`, with shrinking: 97 of 100 seeds with the same
+meaning, 60 failures on each image, every failure reproduced on both, the property table 8 of 8.
+Seeds 1–50 gave M128's fingerprints on both images; seeds 51–100 all have the same meaning. Both
+images shrank to the same two minimal schedules (`disk=cut dseed=4127cc1347fae6ba | run C=20` and
+`disk=cut dseed=978180e49ee2ae24 | run C=20 P=vote@6+1`, both `votes.counted_soon`: the app
+acknowledges votes held in a Redis list without persistence, M84's finding); the agent image also
+shrank seed 7 (above).
