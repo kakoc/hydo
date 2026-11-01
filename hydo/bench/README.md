@@ -80,6 +80,23 @@ bounded by the request deadline" does not hold for Kafka. Because of this bug, `
 every candidate detection on the control image and counts it only if the control passes
 (`base_bug_hits` in the results lists the ones it rejected).
 
+## A second bug in the fixed front door: franz-go's idempotent producer (Milestone 133)
+
+On agent images of the benchmark manifest (`manifest/hydo.yaml`), the control loses an
+acknowledged order after a long Kafka pause:
+
+    disk=none dseed=0 | run P=kafka@14+16
+    -> HYDO-ORACLE: VIOLATION [stack.exactly_once] kafka order=15 expected=100015 got=MISSING (mysql has it: true)   fp c4a120cca428aa48
+
+The cause is franz-go v1.17.1 (the version in `hydo/stack/go.mod`), issue 1484, fixed in
+v1.22.2: after Kafka is continued, the producer fails order 14's batch, which the broker had
+already appended, and rewinds the sequence number under the same producer id and epoch; order
+15's retry is then produced with order 14's sequence number, the broker takes it for a re-send,
+answers success and stores nothing. The front door rebuilt with franz-go v1.22.2 passes the
+same schedule. The shell images' timing has not reached the window (tick jitter included).
+`kafka-diag.sh` makes a diagnostic copy of a manifest image that prints Kafka's batches with
+their sequence numbers. Details: `docs/C2-BENCH.md` section 6 item 4.
+
 
 ## Files
 

@@ -1,0 +1,6 @@
+disk=none dseed=0 | run P=kafka@14+16
+disk=none dseed=0 | run P=kafka@14+1
+disk=none dseed=0 | run P=kafka@14+2
+disk=none dseed=0 | run P=kafka@14+4
+disk=none dseed=0 | run P=kafka@14+8
+disk=none dseed=0 | run P=kafka@28+2

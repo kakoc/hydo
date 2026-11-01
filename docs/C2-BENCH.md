@@ -219,7 +219,8 @@ defects need).
 3. **d11's trigger `cf=238`: timing.** It passes on both manifest kinds (the k-th flush is another
    write than on the original image, whose init differs); section 7 maps d11's window on both.
 4. **An acknowledged order missing from Kafka after a long Kafka pause, on agent images only: a
-   real difference, not explained.** d10, repetition 3, seed 3004 (`K=redis@10+1
+   real bug of franz-go v1.17.1 that the agent image's timing reaches (explained in M133,
+   below).** d10, repetition 3, seed 3004 (`K=redis@10+1
    P=kafka@16+14`, no `X=`): the agent image gives `VIOLATION kafka order=17 expected=100017
    got=MISSING (mysql has it: true)` (not d10's signature; it counted as a detection because the
    control passes that schedule), the shell image passes. Ten variants of the schedule
@@ -230,13 +231,71 @@ defects need).
    is the second order placed after Kafka was stopped, every order is acknowledged, Kafka was
    resumed before the retry pass, and the order service logged a Kafka re-check and a duplicate
    hit for the first order after the pause (`server.kafka_recheck`, `server.kafka_dedup_hit`,
-   order 14 in the control's run). Not ruled out: an order-service bug in the re-check path that
-   the agent image's timing exposes (the fixed order service has one known bug already, README "A
-   bug in the fixed front door"), or a difference in how the controller runs the workload around
-   a long pause (in the control's run the step range hit the workload's 300 s timeout on both
-   kinds; the shell's orphaned client and the agent's are both left running). A candidate whose
-   schedule fails on the control is not counted, so this lowers the agent kind's detections when
-   such a schedule is drawn. Left for C3 (section 8).
+   order 14 in the control's run). A candidate whose schedule fails on the control is not
+   counted, so this lowers the agent kind's detections when such a schedule is drawn.
+
+   **Answer (Milestone 133): a real bug in the order service's Kafka client, not a controller
+   difference.** The order service uses franz-go v1.17.1 (`hydo/stack/go.mod`; `go version -m`
+   of the control image's `/bin/hydostack` says the same), whose idempotent producer can
+   acknowledge a record it never wrote. franz-go fixed it in v1.22.2 (issue 1484): "an idempotent
+   producer could ack a record without writing it, if a context, `RecordDeliveryTimeout`, or
+   `RecordRetries` failed a batch the broker had already appended and the next batch had the
+   same number of records". The agent image's timing reaches that window; the shell image's
+   timing does not.
+
+   *The evidence.* A diagnostic copy of each control image (`hydo/bench/kafka-diag.sh`: one more
+   final invariant that always passes and prints Kafka's record batches with their producer id,
+   epoch and sequence numbers, MySQL's `published` flags, the client's outcomes and the workload
+   log) gives, for `P=kafka@14+16`:
+
+   | | shell image (OK) | agent image (order 15 MISSING) |
+   |---|---|---|
+   | client outcomes | 14–27 `unknown` (20 s deadline), every order acked by the retry pass, 16 retry attempts | the same, 17 retry attempts; the first retry of order 14 failed with `kafka check: failed to dial: failed to open connection to :0` (the partition had no leader just after Kafka was continued) |
+   | MySQL | every order `published=1` | every order `published=1` |
+   | Kafka log, producer 0, epoch 0 | sequence 14 = order 14, 15 = 15, 16 = 16, 17 = 17, 18–28 = orders 18–28 (one batch), 29 = 29; the records of 14–28 carry the create times of their first attempts (made during the pause, appended when Kafka was continued) | sequence 14 = order 14 (its first attempt's record, created at the pause), then **15 = order 16**, 16 = 17, …, 28 = 29; orders 16–29 are the retry pass's records (created after the continue); **no record of order 15** |
+
+   The mechanism, in franz-go 1.17.1 (`pkg/kgo/sink.go`): order 14's batch (sequence 14) was sent
+   before the pause and could not be answered. When Kafka was continued, it appended that batch,
+   but the answer never reached the producer (its connection had timed out), and for a moment the
+   broker answered produce requests with a retriable error (the partition had no leader, which the
+   retry's lookup saw). A response for a batch makes it failable again
+   (`canFailFromLoadErrs = true`); the retriable error sends it to `handleRetryBatches` with
+   `canFail`, and `maybeFailErr` fails it because its records are older than
+   `RecordDeliveryTimeout` (10 s): `failAllRecords` fails order 14's batch and every batch behind
+   it and rewinds the partition's sequence to `batch0Seq` = 14, with the same producer id and
+   epoch. The retry pass then works through the orders in id order: order 14's retry finds its
+   record (`server.kafka_dedup_hit`) and produces nothing; order 15's retry finds no record
+   (correctly) and produces one record, which gets sequence 14 again. The broker sees producer 0,
+   epoch 0, sequence 14, the sequence of the batch it already has, treats the new record as a
+   re-send of that batch, answers success with the old batch's offset, and stores nothing. The
+   order service marks order 15 published and acknowledges it. Every later record is one
+   sequence number behind, which is why the log shows 16 under sequence 15. The order service's
+   own logic is right at every step (the lookup before re-producing, `published`, the per-order
+   lock); it trusts the producer's success, and the producer's success is false.
+
+   *The checks.* The same control order service rebuilt from `hydo/bench/base/main-m59-control.go`
+   with franz-go v1.17.1 (Go 1.27.3, not the image's Go 1.26.5) and swapped into a copy of the
+   agent image fails the same way (order 15 MISSING, `c5efd57df3c63b99`); rebuilt with franz-go
+   **v1.22.2** (the only change in `go.mod`), it passes (`OK acked=30/30`, `e2a8db82c5229e5d`; the
+   retry pass again hits `server.kafka_recheck` and `server.kafka_dedup_hit` for order 14).
+   The controller sends the pause and the continue where the shell init does (transcript:
+   `signal STOP` before the step range 14..29, which times out after 300 s on both kinds, then
+   `signal CONT`, then the retry; `restart_dead` restarts nothing on either kind).
+
+   *The minimal schedule* is `disk=none dseed=0 | run P=kafka@14+16` on the agent control image
+   (`c4a120cca428aa48`, order 15 MISSING; the disk seed plays no part). The same pause for 1, 2,
+   4 and 8 orders, and `P=kafka@28+2`, pass (`hydo/bench/c2-plans/kp-min.txt`): the window needs
+   the step range to end in the workload's 300 s timeout. *On shell images* the window was not
+   reached with a timing token: `P=kafka@14+16` with tick jitter (`tj=1`…`8`, `tjpm=100`/`200`,
+   `kp-tj.txt`) passes 8 of 8, and so do a shorter tick period (`pp=524288`, `pp=262144`), inserted ticks (`xt=1 xtr=4 xtpm=100`, `xt=2 xtr=4 xtpm=200`) and jitter with the pause moved to orders 13 and 12 (`kp-pp.txt`, 6 of 6 OK). The original stack-explore control image
+   (`explore-bench-m59-control-pin-kr`, `stack-explore.sh`'s init, which has no 300 s step-range timeout): OK acked=30/30 `fdf5277af2820c13`.
+
+   *What to do* (a user decision, AGENTS.md open item 34): upgrade franz-go to v1.22.2 or later in
+   `hydo/stack/go.mod`. That changes the order service's bytes, and so every stack and benchmark
+   image and their fingerprints, and the images are built on the build machine. Until then, a
+   schedule that pauses Kafka across a whole timed-out step range can fail on the control of
+   agent images, and hydo-bench rejects it as a control failure, as it does for README's
+   "A bug in the fixed front door".
 5. **Lying disks: different losses, not detections.** d12 swarm repetition 2 seed 2003
    (`disk=lying:5 … C=4 R=no`: shell OK, agent `kafka order=1 …`) and d5 random repetition 3 seed
    3001 (`disk=lying:5 … C=5 M=2`: shell `mysql order=0 … MISSING`, agent `service cannot recover`).
@@ -276,11 +335,11 @@ acknowledged the same number of orders within one (41 points equal; 24 at k=250,
    start; it lacks `stack-explore.sh`'s M67 path, item 3). Until then hydo-bench, the pinned
    reproducers (`explore-disk.img`, `explore-fix-disk.img`) and `deploy-metal.sh`'s stack checks
    stay on shell images.
-2. **The agent-only lost order after a long Kafka pause** (section 6, item 4): find out whether
-   it is an order-service bug that the agent image's timing exposes or a difference in how the
-   controller runs a workload around a long pause (for example by recording Kafka's log and the
-   order service's log in such a run, and by running the same schedule on the original
-   stack-explore control image).
+2. **The agent-only lost order after a long Kafka pause** (section 6, item 4): explained in
+   M133 as franz-go v1.17.1's issue 1484 (an idempotent producer acknowledges a record it never
+   wrote after failing a batch the broker had appended), fixed in franz-go v1.22.2. What is
+   left is the user's decision to upgrade the order service's franz-go, which moves every stack
+   and benchmark fingerprint (AGENTS.md open item 34).
 3. **`X=` on the manifest form**: the controller gives it the stack's meaning, the shell init
    ignores it; when the shell path is retired that difference disappears, but the generic init's
    restart after a `cf=` cut (M67's case) still ends such a run with an error instead of the
