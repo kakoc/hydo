@@ -577,8 +577,31 @@ with fakes were not run together (no example has both).
   manifest without applying them, so the corpus runs of a manifest with `params:` carry the
   literal `{{name}}` in their commands, as before; changing that changes their goldens.
 - **Limits found on real guests:** hvm's rewind mode is refused under lock-step control, so a
-  workload with a busy-wait counter loop (ledger-spin) ends as SPIN on an agent image; `F=` with
-  `network: bridge` was refused until M131 (below).
+  workload with a busy-wait counter loop (ledger-spin) ends as SPIN on an agent image (resolved in
+  M130, below); `F=` with `network:
+  bridge` was refused until M131 (below).
+
+## M130: busy-wait loops on agent images, the voting app's database (branch `c2-mac-fixes`)
+
+- **A SPIN on hvm runs again in the rewind mode.** `agent::rewind_again` says when: the engine is
+  hvm, the verdict is an `ERROR …: SPIN (guest loops without exits …)` (workload, check or
+  recovery), and the schedule has no `spin=rewind`. `AgentWorker::run_with` and
+  `AgentEngine::one_with` then run the same schedule with `spin=rewind` as a new conversation (from
+  S1, or a new fresh boot) and report only that run, as hvmx does for a shell image's RUN
+  (`HVM_SPIN_REWIND=auto`); `HVM_SPIN_REWIND=0` turns it off. Only for `Policy::Schedule`: a
+  transcript replay types its recorded transcript, whose header already names `spin=rewind`. The
+  plain run is not kept (its files are overwritten by the second run's). serve.c runs a CTL,
+  RESUME or `--control boot one` with `spin=rewind` in the rewind mode (before M130 it refused
+  it); why the stops stay pure is in serve.c's lock-step header. Test:
+  `agent::tests::a_spin_on_hvm_runs_again_in_rewind_mode`.
+- **Decision:** the escalation is the host's, not the engine's, because the engine cannot undo a
+  conversation; the alternative, the rewind mode for every agent run on hvm, costs a stage-2
+  write fault per first write to each page after every exit, for the same results (a plain
+  schedule in the rewind mode gives the plain run's fingerprint, stops and `inh=`; M130).
+- **The voting app's D6 is not a controller bug** (docs/C2-MAC.md "D6"): the .NET worker exits on
+  an exception its retry loop does not catch after a realtime clock step, and the heal's one
+  restart pass (`restart_dead`, the shell's order) sees it alive or dead depending on guest timing.
+  The controller does what hydo-init.sh does; nothing was changed.
 
 ## M131: the freeze in a service's namespace, and busybox's words for a failed mount
 

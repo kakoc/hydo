@@ -140,6 +140,16 @@ chmod 755 "$REL/guest/busybox" "$REL/guest/hvx_seedrng" "$REL/guest/hydo_fc" "$R
 # checks its sha256 against the pin in docs/BUILD-PINS.md when it stages it
 "$TOP/hydo/crates/hydo-agent/build.sh" x86_64 "$A/agent" >&2
 cp "$A/agent/hydo-agent" "$REL/guest/hydo-agent"; chmod 755 "$REL/guest/hydo-agent"
+# guest/hydo-world: the in-guest program of fakes: and proxies: (hydo/crates/hydo-world, Rust since
+# M111), a static x86_64 musl build that needs no build machine; `hydo build` stages it
+# ($HYDO_RUST_BIN_DIR/hydo-world when the binaries were built elsewhere)
+if [ -n "$HYDO_RUST_BIN_DIR" ] && [ -f "$HYDO_RUST_BIN_DIR/hydo-world" ]; then
+  cp "$HYDO_RUST_BIN_DIR/hydo-world" "$REL/guest/hydo-world"
+else
+  bash "$TOP/hydo/crates/hydo-world/build.sh" "$REL/guest/hydo-world" >&2
+fi
+file -L "$REL/guest/hydo-world" | grep -q 'x86-64.*static' || { echo "guest/hydo-world is not a static x86_64 binary" >&2; exit 1; }
+chmod 755 "$REL/guest/hydo-world"
 # the Redis example (hydo/onboard/examples/redis) with its binaries under files/
 cp "$A/redis/redis-server" "$A/redis/redis-cli" "$REL/examples/redis/files/"
 chmod 755 "$REL/examples/redis/files/"*
