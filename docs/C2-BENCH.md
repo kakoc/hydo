@@ -290,7 +290,7 @@ defects need).
    `kp-tj.txt`) passes 8 of 8, and so do a shorter tick period (`pp=524288`, `pp=262144`), inserted ticks (`xt=1 xtr=4 xtpm=100`, `xt=2 xtr=4 xtpm=200`) and jitter with the pause moved to orders 13 and 12 (`kp-pp.txt`, 6 of 6 OK). The original stack-explore control image
    (`explore-bench-m59-control-pin-kr`, `stack-explore.sh`'s init, which has no 300 s step-range timeout): OK acked=30/30 `fdf5277af2820c13`.
 
-   *What to do* (a user decision, AGENTS.md open item 34): upgrade franz-go to v1.22.2 or later in
+   *What to do* (a user decision, AGENTS.md open item 35): upgrade franz-go to v1.22.2 or later in
    `hydo/stack/go.mod`. That changes the order service's bytes, and so every stack and benchmark
    image and their fingerprints, and the images are built on the build machine. Until then, a
    schedule that pauses Kafka across a whole timed-out step range can fail on the control of
