@@ -58,6 +58,7 @@
 pub mod hvm;
 pub mod hvx;
 pub mod image;
+pub mod inproc;
 pub mod lockstep;
 mod process;
 pub mod protocol;

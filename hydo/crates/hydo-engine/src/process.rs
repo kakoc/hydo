@@ -6,7 +6,42 @@ use crate::{EngineError, OneRun, Worker};
 use hydo_schedule::Schedule;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, Command, Stdio};
+
+/// The engine's stdin and stdout as this side sees them: a child process's pipes, or the pipes of
+/// an engine running on a thread of this process (the in-process engine, [`crate::inproc`]).
+pub(crate) type Stdin = Box<dyn Write + Send>;
+pub(crate) type Stdout = BufReader<Box<dyn Read + Send>>;
+
+/// What runs the engine: a child process, or a thread of this process (its exit status is the
+/// thread's return value).
+pub(crate) enum Proc {
+    Child(Child),
+    Thread(Option<std::thread::JoinHandle<i32>>),
+}
+
+impl Proc {
+    fn kill(&mut self) {
+        // a thread cannot be killed; it ends when its stdin closes (the caller drops it)
+        if let Proc::Child(c) = self {
+            let _ = c.kill();
+        }
+    }
+
+    fn wait(&mut self) -> std::io::Result<Option<i32>> {
+        match self {
+            Proc::Child(c) => Ok(c.wait()?.code()),
+            Proc::Thread(h) => Ok(h.take().and_then(|h| h.join().ok())),
+        }
+    }
+}
+
+/// An engine with piped stdin and stdout.
+pub(crate) struct Piped {
+    pub(crate) proc: Proc,
+    pub(crate) stdin: Stdin,
+    pub(crate) stdout: Stdout,
+}
 use std::time::Instant;
 
 /// Run `cmd` to completion with stdout and stderr written into ONE pipe (so the text keeps the
@@ -34,37 +69,38 @@ pub(crate) fn run_one(mut cmd: Command) -> Result<OneRun, EngineError> {
 
 /// A `serve` engine process: READY, then one RESULT per RUN.
 pub(crate) struct ProcessWorker {
-    child: Child,
-    stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
+    child: Proc,
+    stdin: Stdin,
+    stdout: Stdout,
     boot_secs: f64,
     branch: bool,
 }
 
 /// Start `cmd` with stdin/stdout piped and stderr appended to `stderr_log`.
-fn spawn_piped(
-    mut cmd: Command,
-    stderr_log: &Path,
-) -> Result<(Child, ChildStdin, BufReader<ChildStdout>), EngineError> {
+fn spawn_piped(mut cmd: Command, stderr_log: &Path) -> Result<Piped, EngineError> {
     let err = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(stderr_log)?;
     cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(err);
     let mut child = cmd.spawn()?;
-    let stdin = child.stdin.take().expect("piped stdin");
-    let stdout = BufReader::new(child.stdout.take().expect("piped stdout"));
-    Ok((child, stdin, stdout))
+    let stdin: Stdin = Box::new(child.stdin.take().expect("piped stdin"));
+    let out: Box<dyn Read + Send> = Box::new(child.stdout.take().expect("piped stdout"));
+    Ok(Piped {
+        proc: Proc::Child(child),
+        stdin,
+        stdout: BufReader::new(out),
+    })
 }
 
 /// Read the READY line of a serve process (or kill it and say what it printed instead).
-fn read_ready(child: &mut Child, stdout: &mut BufReader<ChildStdout>) -> Result<f64, EngineError> {
+fn read_ready(child: &mut Proc, stdout: &mut Stdout) -> Result<f64, EngineError> {
     let mut line = String::new();
     stdout.read_line(&mut line)?;
     match Ready::parse(&line) {
         Some(ready) => Ok(ready.boot_secs),
         None => {
-            let _ = child.kill();
+            child.kill();
             let _ = child.wait();
             Err(EngineError::NotReady(line))
         }
@@ -78,7 +114,16 @@ impl ProcessWorker {
         stderr_log: &Path,
         branch: bool,
     ) -> Result<ProcessWorker, EngineError> {
-        let (mut child, stdin, mut stdout) = spawn_piped(cmd, stderr_log)?;
+        ProcessWorker::from_piped(spawn_piped(cmd, stderr_log)?, branch)
+    }
+
+    /// A serve engine already started (a process or a thread): wait for READY.
+    pub(crate) fn from_piped(p: Piped, branch: bool) -> Result<ProcessWorker, EngineError> {
+        let Piped {
+            proc: mut child,
+            stdin,
+            mut stdout,
+        } = p;
         let boot_secs = read_ready(&mut child, &mut stdout)?;
         Ok(ProcessWorker {
             child,
@@ -190,19 +235,22 @@ impl Worker for ProcessWorker {
 /// shell image from its S1), and since M121 `--control boot one` (an agent image from its first
 /// instruction). `hvx::ControlledOne` and `hvm::ControlledOne` are this type.
 pub struct ControlledRun {
-    child: Child,
-    stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
+    child: Proc,
+    stdin: Stdin,
+    stdout: Stdout,
 }
 
 impl ControlledRun {
     pub(crate) fn start(cmd: Command, stderr_log: &Path) -> Result<ControlledRun, EngineError> {
-        let (child, stdin, stdout) = spawn_piped(cmd, stderr_log)?;
-        Ok(ControlledRun {
-            child,
-            stdin,
-            stdout,
-        })
+        Ok(ControlledRun::from_piped(spawn_piped(cmd, stderr_log)?))
+    }
+
+    pub(crate) fn from_piped(p: Piped) -> ControlledRun {
+        ControlledRun {
+            child: p.proc,
+            stdin: p.stdin,
+            stdout: p.stdout,
+        }
     }
 
     /// The session (the run's tag is `one`). `log`: also write the transcript.
@@ -217,7 +265,7 @@ impl ControlledRun {
     /// Wait for the engine to exit (after the RESULT); its exit status.
     pub fn wait(mut self) -> Result<Option<i32>, EngineError> {
         drop(self.stdin);
-        Ok(self.child.wait()?.code())
+        Ok(self.child.wait()?)
     }
 }
 
@@ -227,9 +275,9 @@ impl ControlledRun {
 /// `S1` where it decides and ends the boot with END (RESULT `boot`). [`ControlledBoot::ready`]
 /// then reads READY and returns the worker, whose CTL runs restore the host's S1.
 pub struct ControlledBoot {
-    child: Child,
-    stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
+    child: Proc,
+    stdin: Stdin,
+    stdout: Stdout,
     branch: bool,
 }
 
@@ -239,13 +287,19 @@ impl ControlledBoot {
         stderr_log: &Path,
         branch: bool,
     ) -> Result<ControlledBoot, EngineError> {
-        let (child, stdin, stdout) = spawn_piped(cmd, stderr_log)?;
-        Ok(ControlledBoot {
-            child,
-            stdin,
-            stdout,
+        Ok(ControlledBoot::from_piped(
+            spawn_piped(cmd, stderr_log)?,
             branch,
-        })
+        ))
+    }
+
+    pub(crate) fn from_piped(p: Piped, branch: bool) -> ControlledBoot {
+        ControlledBoot {
+            child: p.proc,
+            stdin: p.stdin,
+            stdout: p.stdout,
+            branch,
+        }
     }
 
     /// The boot's session. `log`: also write the transcript.

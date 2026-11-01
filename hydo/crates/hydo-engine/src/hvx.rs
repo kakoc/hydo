@@ -13,6 +13,9 @@
 //!
 //! `hvx-run` takes the shared module lock (`flock -s $HYDO_LOCK`) and drops the `sudo` when the
 //! user can open the device; without a wrapper the engine is started directly.
+//!
+//! With `HYDO_ENGINE=inproc` (M132, opt-in) every method runs the Rust engine on a thread of this
+//! process instead ([`crate::inproc`]); the protocol and every result are the same.
 
 use crate::process::{run_one, ControlledBoot, ControlledRun, ProcessWorker};
 use crate::{BootSpec, Engine, EngineError, EngineKind, OneRun, Worker};
@@ -103,6 +106,9 @@ impl Hvx {
         schedule: &Schedule,
         stderr_log: &Path,
     ) -> Result<ControlledOne, EngineError> {
+        if crate::inproc::enabled() {
+            return crate::inproc::one_lockstep(self, spec, schedule, stderr_log);
+        }
         self.check_built()?;
         let argv = self.control_argv(spec, "one", &["--control"], Some(schedule));
         ControlledRun::start(self.command(spec, &argv), stderr_log)
@@ -148,6 +154,9 @@ impl Engine for Hvx {
     }
 
     fn one(&self, spec: &BootSpec, schedule: &Schedule) -> Result<OneRun, EngineError> {
+        if crate::inproc::enabled() {
+            return crate::inproc::one(self, spec, schedule);
+        }
         self.check_built()?;
         let mut argv = self.argv(spec, "one");
         argv.push(schedule.to_string());
@@ -155,6 +164,9 @@ impl Engine for Hvx {
     }
 
     fn start(&self, spec: &BootSpec, stderr_log: &Path) -> Result<Box<dyn Worker>, EngineError> {
+        if crate::inproc::enabled() {
+            return crate::inproc::serve(self, spec, stderr_log);
+        }
         self.check_built()?;
         let argv = self.argv(spec, "serve");
         Ok(Box::new(ProcessWorker::start(
@@ -176,6 +188,9 @@ impl Engine for Hvx {
         boot: &Schedule,
         stderr_log: &Path,
     ) -> Result<ControlledBoot, EngineError> {
+        if crate::inproc::enabled() {
+            return crate::inproc::start_controlled(self, spec, boot, stderr_log);
+        }
         self.check_built()?;
         let argv = self.control_argv(spec, "serve", &["--control", "boot"], Some(boot));
         ControlledBoot::start(self.command(spec, &argv), stderr_log, false)
@@ -187,6 +202,9 @@ impl Engine for Hvx {
         schedule: &Schedule,
         stderr_log: &Path,
     ) -> Result<ControlledRun, EngineError> {
+        if crate::inproc::enabled() {
+            return crate::inproc::one_controlled(self, spec, schedule, stderr_log);
+        }
         self.check_built()?;
         let argv = self.control_argv(spec, "one", &["--control", "boot"], Some(schedule));
         ControlledRun::start(self.command(spec, &argv), stderr_log)
