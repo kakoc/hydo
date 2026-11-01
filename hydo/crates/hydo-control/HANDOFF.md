@@ -66,8 +66,12 @@ controller's choice.
    agent refuses to start a handle that is still busy, so it would also refuse an early restart.
 5. **A failed setup or provisioning step.** The shell also prints the last 8 lines of the log.
    This is not reproduced (it would need a `read`).
-6. **A failed mount.** The text in parentheses is the agent's refusal message instead of busybox
-   mount's error text. The verdict class is the same.
+6. **A failed mount.** Since M131 the text in parentheses is busybox mount's own text for the
+   errno of the agent's refusal (`src/busybox.rs`: "mount: mounting /dev/vda2 on /data failed:
+   <musl's strerror>", with the musl table of the image's own busybox, the read-only retry of
+   EACCES/EROFS and EPERM's line), so both kinds of image give one verdict. Before M131 it was the
+   agent's message ("mount /dev/vda2 on /data: errno 117"), which the explorer counted as another
+   signature. A refusal without an errno (a refused line) keeps the agent's message.
 7. **Invariant output.** The controller keeps the output on the host and cuts it to its first
    3,000 bytes. The shell's file keeps all of it, so for a longer output the last HYDO-ORACLE line
    that inv_detail reads may be lost.
@@ -397,9 +401,12 @@ model in `tests/support/model/net.rs` checks each):
     every later command of the main part. A background job of the shell keeps the environment of
     its fork; the controller's threads build each command when they send it (M120's approach), so
     a periodic check after the arming has the variable too.
-13. **F= with `network: bridge`** is refused (seam freeze): the helper runs in the frozen
-    service's namespace, and the agent's `freeze` has no namespace field. Doing it needs a
-    protocol addition (`netns` on `freeze`, with a feature name) in hydo-agent-proto and the agent.
+13. **F= with `network: bridge`** is driven since M131: the freeze's optional `netns` field
+    (feature `freeze-netns` in the hello) makes the agent bind the netfilter queue inside the
+    frozen service's namespace (hydo_fc under `nsenter -n<file>`), and the rules are
+    hydo-init-netns.sh's fc_rules, each `iptables` a `run` with that `netns`. An agent without the
+    feature (images built before M131) is refused at the arming with a message that names the
+    feature and says to rebuild the image (`session::missing_feature_message`).
 
 The order against the other extensions (hydo-build's `init_text`; a wrapper spliced later runs
 first): `step_range`: the fakes split, then freeze's (declaration, arming), then hydo-init.sh's;
@@ -570,8 +577,52 @@ with fakes were not run together (no example has both).
   manifest without applying them, so the corpus runs of a manifest with `params:` carry the
   literal `{{name}}` in their commands, as before; changing that changes their goldens.
 - **Limits found on real guests:** hvm's rewind mode is refused under lock-step control, so a
-  workload with a busy-wait counter loop (ledger-spin) ends as SPIN on an agent image; `F=` with
-  `network: bridge` stays refused (the agent's `freeze` has no namespace field).
+  workload with a busy-wait counter loop (ledger-spin) ends as SPIN on an agent image (resolved in
+  M130, below); `F=` with `network:
+  bridge` was refused until M131 (below).
+
+## M130: busy-wait loops on agent images, the voting app's database (branch `c2-mac-fixes`)
+
+- **A SPIN on hvm runs again in the rewind mode.** `agent::rewind_again` says when: the engine is
+  hvm, the verdict is an `ERROR …: SPIN (guest loops without exits …)` (workload, check or
+  recovery), and the schedule has no `spin=rewind`. `AgentWorker::run_with` and
+  `AgentEngine::one_with` then run the same schedule with `spin=rewind` as a new conversation (from
+  S1, or a new fresh boot) and report only that run, as hvmx does for a shell image's RUN
+  (`HVM_SPIN_REWIND=auto`); `HVM_SPIN_REWIND=0` turns it off. Only for `Policy::Schedule`: a
+  transcript replay types its recorded transcript, whose header already names `spin=rewind`. The
+  plain run is not kept (its files are overwritten by the second run's). serve.c runs a CTL,
+  RESUME or `--control boot one` with `spin=rewind` in the rewind mode (before M130 it refused
+  it); why the stops stay pure is in serve.c's lock-step header. Test:
+  `agent::tests::a_spin_on_hvm_runs_again_in_rewind_mode`.
+- **Decision:** the escalation is the host's, not the engine's, because the engine cannot undo a
+  conversation; the alternative, the rewind mode for every agent run on hvm, costs a stage-2
+  write fault per first write to each page after every exit, for the same results (a plain
+  schedule in the rewind mode gives the plain run's fingerprint, stops and `inh=`; M130).
+- **The voting app's D6 is not a controller bug** (docs/C2-MAC.md "D6"): the .NET worker exits on
+  an exception its retry loop does not catch after a realtime clock step, and the heal's one
+  restart pass (`restart_dead`, the shell's order) sees it alive or dead depending on guest timing.
+  The controller does what hydo-init.sh does; nothing was changed.
+
+## M131: the freeze in a service's namespace, and busybox's words for a failed mount
+
+- **Protocol (additions only):** `freeze` gained the optional `netns`; the hello's features are
+  `freeze` and `freeze-netns` (`msg::FEATURES`); `Command::features()` lists every feature a
+  command needs (it replaced `feature()`), and `Session::command` and the runner refuse a command
+  whose feature the hello lacks with `SessionError::MissingFeature` /
+  `session::missing_feature_message`. The schema grew by the one field (the additions-only check
+  against `hydo/schema/released/agent-v1.json` passes). hydo-agent is 0.2.0; its pinned bytes are
+  in docs/BUILD-PINS.md and `hydo-build/src/agent.rs`.
+- **Controller:** `src/schedule/freeze.rs` sends the freeze with `netns::of(ctx, svc)` and, with
+  `network: bridge`, runs hydo-init-netns.sh's fc_rules (`rules_netns`); `run_cfg` no longer
+  refuses F=. `src/busybox.rs` and `Layout::strerror` (read from the image's busybox by
+  `agent::plan_of_image`) give the mount verdict busybox's words.
+- **Proof, no VM:** the 191 identity-corpus schedules with F= on a bridge that M124 refused are
+  driven and checked against the shell model (`tests/support/model/net.rs` gained the netns
+  fc_rules and the freeze's netns, transliterated from hydo-init-netns.sh; the model's mount_data
+  writes busybox's lines from mount.c's text); `tests/corpus_net.rs` drives redis-bridge's freeze
+  schedules (both pairs, the workload peer, the two recorded ones, freeze_schedules) with two more
+  deliberate mistakes (the queue or a rule outside the namespace). The scripted agent's mount
+  refusals now carry an errno (EUCLEAN, EINVAL, EIO, EBADMSG, EROFS with a read-only retry).
 
 ## Left open
 
@@ -579,6 +630,14 @@ with fakes were not run together (no example has both).
   hvx and hvm (clean, kill, pause, power cuts; the shell image's verdicts). M128 ran the
   equivalence campaign (C2) over every arm64 example on hvm; the x86_64 examples (M127) and the
   benchmark (M129) are the other parts of C2.
+- **A command killed by a signal (found in M131, docs/C2-MAC.md D7).** busybox ash prints the
+  signal's name ("Terminated") on its error output when a foreground command is killed by a
+  signal other than SIGINT or SIGPIPE; where the shell init redirects that command's output
+  (`> $H/inv.$i.out 2>&1` in hydo-liveness.sh's monitor, the periodic and final invariants, the
+  workload), the line ends up in the captured output and so in the verdict's details. A `run` the
+  agent ends with status 143 has the command's own output only, so the two images' signatures
+  differ in that word (every point of redis-bridge's freeze sweep). To do: append the shell's line
+  in the controller for such runs, with the shell model and the goldens.
 - **Branching.** A mid-run branch (cloning the controller at a stop and continuing two engines)
   is supported by the types (`ScheduleController: Clone`), but no test checks it.
 - **The full corpus.** `HYDO_CONTROL_FULL=1` (300 seeds) was not recorded as a golden.

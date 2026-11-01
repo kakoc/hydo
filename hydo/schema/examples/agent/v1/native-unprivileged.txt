@@ -1,6 +1,6 @@
-# hydo agent transcript, protocol 1: what an agent that is not root cannot do: set the clock, mount, bind a netfilter queue.
+# hydo agent transcript, protocol 1: what an agent that is not root cannot do: set the clock, mount, bind a netfilter queue (also in a network namespace: a missing namespace file, a file that is not a namespace).
 # Recorded from `hydo-agent serve --root <scratch>` on Linux as an unprivileged user (hydo/crates/hydo-agent/tests/native.rs); never edited. replay: native
-< HYDO-AG 242 65657430 {"agent":"0.1.0","ev":"hello","features":["freeze"],"ops":["sync","spawn","signal","run","probe","write","read","mkdir","mount","syncfs","clock_set","clock_get","qlen","tail","untail","freeze","unfreeze"],"pid1":false,"proto":1,"seq":0,"v":1}
+< HYDO-AG 257 c3d3be4a {"agent":"0.2.0","ev":"hello","features":["freeze","freeze-netns"],"ops":["sync","spawn","signal","run","probe","write","read","mkdir","mount","syncfs","clock_set","clock_get","qlen","tail","untail","freeze","unfreeze"],"pid1":false,"proto":1,"seq":0,"v":1}
 > {"id":1,"op":"clock_set","sec":1700000000,"v":1}
 < HYDO-AG 106 bdcfa106 {"err":"os-error","errno":1,"msg":"clock_settime: EPERM","ok":false,"op":"clock_set","re":1,"seq":1,"v":1}
 > {"id":2,"op":"clock_set","step":-5,"v":1}
@@ -15,6 +15,10 @@
 < HYDO-AG 103 907c6077 {"err":"bad-field","msg":"one of sip, port and own_port","ok":false,"op":"freeze","re":6,"seq":6,"v":1}
 > {"dir":"req","dur_ms":100,"h":"svc","id":7,"log":"/work/fc.log","n":1,"op":"freeze","pattern":"SET","port":6379,"queue":7,"v":1}
 < HYDO-AG 100 bd2ca991 {"err":"os-error","errno":1,"msg":"bind queue: EPERM","ok":false,"op":"freeze","re":7,"seq":7,"v":1}
-> {"h":"svc","id":8,"op":"signal","sig":"KILL","tree":true,"v":1}
-< HYDO-AG 56 1dc86289 {"ok":true,"op":"signal","procs":1,"re":8,"seq":8,"v":1}
-< HYDO-AG 65 1e645ac7 {"ev":"exit","h":"svc","id":4,"seq":9,"sig":9,"status":137,"v":1}
+> {"dir":"req","dur_ms":100,"h":"svc","id":8,"n":1,"netns":"/work/ns/none","op":"freeze","port":6379,"queue":7,"v":1}
+< HYDO-AG 109 1abe55e9 {"err":"os-error","errno":2,"msg":"open /work/ns/none: ENOENT","ok":false,"op":"freeze","re":8,"seq":8,"v":1}
+> {"dir":"req","dur_ms":100,"h":"svc","id":9,"n":1,"netns":"/work/fc.log","op":"freeze","port":6379,"queue":7,"v":1}
+< HYDO-AG 110 fd215a5c {"err":"os-error","errno":22,"msg":"setns /work/fc.log: EINVAL","ok":false,"op":"freeze","re":9,"seq":9,"v":1}
+> {"h":"svc","id":10,"op":"signal","sig":"KILL","tree":true,"v":1}
+< HYDO-AG 58 724233ee {"ok":true,"op":"signal","procs":1,"re":10,"seq":10,"v":1}
+< HYDO-AG 66 df2179aa {"ev":"exit","h":"svc","id":4,"seq":11,"sig":9,"status":137,"v":1}

@@ -74,6 +74,32 @@ pub fn engine_schedule(s: &Schedule, cadence: u64) -> Result<(Schedule, Schedule
     Ok((full, eng))
 }
 
+/// The end of an hvm verdict for a run that stopped in an exit-free loop the plain spin observer
+/// cannot resolve (serve.c's `stop_name(STOP_SPIN)`, after "ERROR workload: " and the like).
+const SPIN_VERDICT: &str = ": SPIN (guest loops without exits";
+
+/// The schedule to run again in hvm's rewind mode (M130), or None: a run on hvm whose verdict is
+/// a SPIN and whose schedule has no `spin=rewind`. hvmx re-runs a shell image's SPIN run in the
+/// rewind mode itself (`HVM_SPIN_REWIND=auto`, M57), but under lock-step control it cannot: the
+/// host's conversation has happened. So the host does it: the same schedule with `spin=rewind`,
+/// a new conversation from S1 (or a new fresh boot), whose stops, sends and verdict are a pure
+/// function of that schedule; the plain run is not reported, as with RUN. A counter loop that
+/// only the rewind mode resolves (ledger-spin) then runs to its verdict. `HVM_SPIN_REWIND=0`
+/// turns it off, as for hvmx.
+pub fn rewind_again(kind: EngineKind, r: &RunResult, s: &Schedule) -> Option<Schedule> {
+    if kind != EngineKind::Hvm
+        || !r.verdict.starts_with("ERROR")
+        || !r.verdict.contains(SPIN_VERDICT)
+        || s.host_token("spin").is_some()
+        || std::env::var("HVM_SPIN_REWIND").is_ok_and(|v| v == "0")
+    {
+        return None;
+    }
+    let mut again = s.clone();
+    again.host.push(HostToken::SpinRewind);
+    Some(again)
+}
+
 /// The core plan of an agent image's manifest (`/etc/hydo/hydo.yaml`); a manifest that needs a
 /// wave-3 feature is refused with its seam.
 pub fn plan_of_image(image: &Path) -> Result<Plan, Unsupported> {
@@ -89,6 +115,11 @@ pub fn plan_of_image(image: &Path) -> Result<Plan, Unsupported> {
             what: format!("{}: {}", image.display(), e.what),
             ..e
         })?;
+    // The musl table of the image's busybox: the words of an unmountable data disk (M131).
+    let bb = plan.layout.busybox.trim_start_matches('/').to_string();
+    if let Ok(bytes) = hydo_engine::image::embedded_file(image, &bb) {
+        plan.layout.strerror = crate::busybox::Strerror::of_busybox(bytes.as_bytes());
+    }
     // The pinned tc, ip and iptables are image facts: Plan::from_manifest leaves hydo-build's
     // placeholders where the manifest's faults need a tool; the image's manifest.sh has the paths.
     let needed = [&plan.layout.tc, &plan.layout.ip, &plan.layout.iptables]
@@ -405,6 +436,31 @@ impl AgentEngine {
         schedule: &Schedule,
         policy: &Policy,
     ) -> Result<OneRun, EngineError> {
+        let r = self.one_once(spec, schedule, policy)?;
+        let again = match (policy, &r.result) {
+            (Policy::Schedule, Some(res)) => rewind_again(self.inner.kind(), res, schedule),
+            _ => None,
+        };
+        match again {
+            Some(s) => {
+                let mut r2 = self.one_once(spec, &s, policy)?;
+                r2.output = format!(
+                    "{}hydo: the run ended as SPIN; ran it again in hvm's rewind mode ({s})\n{}",
+                    r.output, r2.output
+                );
+                r2.wall += r.wall;
+                Ok(r2)
+            }
+            None => Ok(r),
+        }
+    }
+
+    fn one_once(
+        &self,
+        spec: &BootSpec,
+        schedule: &Schedule,
+        policy: &Policy,
+    ) -> Result<OneRun, EngineError> {
         let t0 = Instant::now();
         let (full, eng) = self.check(schedule).map_err(EngineError::Unsupported)?;
         let _ = std::fs::create_dir_all(&spec.outdir);
@@ -493,6 +549,7 @@ impl Engine for AgentEngine {
                 let w = cb.ready()?;
                 Ok(Box::new(AgentWorker {
                     inner: w,
+                    kind: self.inner.kind(),
                     booted: b,
                     cadence: self.cadence,
                     outdir: spec.outdir.clone(),
@@ -528,6 +585,7 @@ impl Engine for AgentEngine {
 /// A booted agent image (see the module documentation).
 pub struct AgentWorker {
     inner: Box<dyn Worker>,
+    kind: EngineKind,
     booted: Booted,
     cadence: u64,
     outdir: PathBuf,
@@ -536,6 +594,19 @@ pub struct AgentWorker {
 impl AgentWorker {
     /// [`Worker::run`] under `policy` (a replay of recorded transcripts, or the schedule's).
     pub fn run_with(
+        &mut self,
+        tag: &str,
+        schedule: &Schedule,
+        policy: &Policy,
+    ) -> Result<RunResult, EngineError> {
+        let r = self.run_once(tag, schedule, policy)?;
+        match (policy, rewind_again(self.kind, &r, schedule)) {
+            (Policy::Schedule, Some(again)) => self.run_once(tag, &again, policy),
+            _ => Ok(r),
+        }
+    }
+
+    fn run_once(
         &mut self,
         tag: &str,
         schedule: &Schedule,
@@ -637,6 +708,48 @@ mod tests {
             "RESULT a fp=1 wfp=2 secs=0.5 stops=3 typed=1 inh=00aa ctl=0123456789abcdef verdict=HYDO-ORACLE: OK x"
         );
         assert_eq!(c.extra("ctl"), Some("0123456789abcdef"));
+    }
+
+    /// M130: on hvm a run that ended as SPIN is run again with `spin=rewind` (hvmx cannot re-run a
+    /// controlled run itself); nothing else is: another engine, another verdict, a schedule
+    /// already in the rewind mode.
+    #[test]
+    fn a_spin_on_hvm_runs_again_in_rewind_mode() {
+        let s: Schedule = "disk=none | run P=front@10+2".parse().unwrap();
+        let spin = RunResult::parse(
+            "RESULT one fp=0000000000000000 wfp=0000000000000000 secs=0.0 stops=208 typed=19 \
+             inh=855549cd692f7247 verdict=ERROR workload: SPIN (guest loops without exits; run invalid)",
+        )
+        .unwrap();
+        let again = rewind_again(EngineKind::Hvm, &spin, &s).expect("a SPIN on hvm");
+        assert_eq!(
+            again.to_string(),
+            "disk=none spin=rewind | run P=front@10+2"
+        );
+        // the engine's form keeps the token (the cadence after it), the controller drives it
+        let (full, eng) = engine_schedule(&again, 64).unwrap();
+        assert_eq!(
+            full.to_string(),
+            "disk=none spin=rewind rb=64 | run P=front@10+2"
+        );
+        assert_eq!(eng.to_string(), "disk=none spin=rewind rb=64 | run");
+        for phase in ["check", "recovery"] {
+            let r = RunResult::parse(&format!(
+                "RESULT a fp=1 wfp=2 secs=0 verdict=ERROR {phase}: SPIN (guest loops without exits; run invalid)"
+            ))
+            .unwrap();
+            assert!(rewind_again(EngineKind::Hvm, &r, &s).is_some(), "{phase}");
+        }
+        assert!(rewind_again(EngineKind::Hvx, &spin, &s).is_none());
+        assert!(rewind_again(EngineKind::Hvm, &spin, &again).is_none());
+        for v in [
+            "HYDO-ORACLE: OK invariants=2 held",
+            "HYDO-ORACLE: VIOLATION [x] out: SPIN (guest loops without exits",
+            "ERROR workload: exit budget exhausted",
+        ] {
+            let r = RunResult::parse(&format!("RESULT a fp=1 wfp=2 secs=0 verdict={v}")).unwrap();
+            assert!(rewind_again(EngineKind::Hvm, &r, &s).is_none(), "{v}");
+        }
     }
 
     /// M128: an agent image's plan has the parameter values the image was built with (its

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the shop demo (hydo.yaml in this directory): hydo-world, the two shop binaries (the
+# Build the shop demo (hydo.yaml in this directory): hydo-world (Rust, hydo/crates/hydo-world), the two shop binaries (the
 # planted bug and the fix: src/charge_buggy.go / src/charge_fixed.go, chosen by the Go build tag
 # "fixed"), and the two images build/explore-ob-shop-buggy-disk.img and -fixed-disk.img.
 # Run from the repository root on the build box; needs build/hvx_seedrng built with the pinned
@@ -19,7 +19,7 @@ mkdir -p "$TOP/build"
 ARCH="${SHOP_GOARCH:-amd64}"
 if [ "$ARCH" = amd64 ]; then BIN="$TOP/build"; WORLD="$TOP/build/hydo-world"
 else BIN="$TOP/build/$ARCH"; WORLD="$TOP/build/hydo-world-$ARCH"; mkdir -p "$BIN"; fi
-HYDO_GO="$GO" HYDO_WORLD_GOARCH="$ARCH" "$TOP/hydo/onboard/world/build.sh" "$WORLD"
+HYDO_WORLD_ARCH="$ARCH" "$TOP/hydo/crates/hydo-world/build.sh" "$WORLD"   # Rust (M111)
 for v in buggy fixed; do
   tags=""; [ $v = fixed ] && tags="-tags=fixed"
   ( cd "$HERE/src" && GOPATH="$TOP/build/world-gopath" GOMODCACHE="$TOP/build/world-gomod" GOCACHE="$TOP/build/world-gocache" \
