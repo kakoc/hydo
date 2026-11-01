@@ -21,6 +21,7 @@ members = [
     "hydo/crates/hydo-history",
     "hydo/crates/hydo-bench",
     "hydo/crates/hydo-tools",
+    "hydo/crates/hydo-world",
     "hydo/crates/hydo-grpc",
     "hydo/crates/hydo-grpc-gen",
     "hydo/crates/hydo-results",

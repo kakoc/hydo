@@ -62,6 +62,7 @@ pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
             setdefault("HYDO_MKE2FS", &ctx.p("tools/bin/mke2fs"));
             setdefault("HYDO_FAKETIME", &ctx.libexec().join("faketime"));
             setdefault("HYDO_MODROOT", &guest.join("modules"));
+            setdefault("HYDO_WORLDBIN", &guest.join("hydo-world"));
             if let Some((_, path)) = hvxenv::tool_env(ctx).into_iter().find(|(k, _)| k == "PATH") {
                 std::env::set_var("PATH", path);
             }

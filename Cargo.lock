@@ -531,6 +531,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "hydo-world"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "flate2",
+ "h2",
+ "http",
+ "httparse",
+ "libc",
+ "serde_json",
+ "sha2",
+ "tokio",
+]
+
+[[package]]
 name = "indexmap"
 version = "2.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
