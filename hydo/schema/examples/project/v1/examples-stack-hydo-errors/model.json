@@ -1,0 +1,176 @@
+{
+  "format": 1,
+  "name": "stack-errors",
+  "description": "MySQL + Kafka + Redis behind a gRPC front door; orders must be exactly-once.",
+  "guest": {
+    "ram_mib": 1024,
+    "clock_start": 1767225600
+  },
+  "root": {
+    "size_mib": 1792,
+    "nix": [
+      "/nix/store/aw6ljbiwgds7yw8x2jc3340dm46s7i2k-mysql-8.4.10",
+      "/nix/store/vjcrra860yal7fzk1m81ddirrafqrccz-openjdk-headless-17.0.7+7"
+    ],
+    "files": [
+      {
+        "src": "/nix/store/prk07apdgqqjcqyxr5fqww1y8bxpw7z9-apache-kafka-2.13-3.5.0/libs",
+        "dst": "/opt/kafka/libs"
+      },
+      {
+        "src": "~/hydo/build/redis-server",
+        "dst": "/bin/redis-server",
+        "mode": "0755"
+      },
+      {
+        "src": "~/hydo/build/redis-cli",
+        "dst": "/bin/redis-cli",
+        "mode": "0755"
+      },
+      {
+        "src": "front-door",
+        "dst": "/bin/hydostack",
+        "mode": "0755"
+      }
+    ],
+    "text": {
+      "/etc/redis.conf": "port 6379\nbind 127.0.0.1\nprotected-mode no\ndir /data/redis\nsave \"\"\nappendonly yes\nappendfsync always\nappenddirname appendonlydir\nappendfilename appendonly.aof\nauto-aof-rewrite-percentage 0\naof-load-truncated yes\naof-timestamp-enabled no\ndaemonize no\nloglevel notice\nhz 1\ndynamic-hz no\n",
+      "/etc/my.cnf": "[mysqld]\nuser=root\ndatadir=/data/mysql\nsocket=/tmp/mysql.sock\npid-file=/tmp/mysqld.pid\nlog-error=/tmp/mysqld.err\nbind-address=127.0.0.1\nport=3306\nmysqlx=OFF\nskip-name-resolve\nskip-log-bin\nperformance_schema=OFF\nauto_generate_certs=OFF\ncaching_sha2_password_auto_generate_rsa_keys=OFF\ninnodb_buffer_pool_size=32M\ninnodb_redo_log_capacity=8M\ninnodb_use_native_aio=OFF\ninnodb_flush_method=fsync\ninnodb_read_io_threads=1\ninnodb_write_io_threads=1\ninnodb_page_cleaners=1\ninnodb_purge_threads=1\nmax_connections=8\ntable_open_cache=64\ndefault-time-zone=+00:00\ninit-file=/etc/mysql-init.sql\ninnodb_flush_log_at_trx_commit=1\n",
+      "/etc/mysql-init.sql": "CREATE USER IF NOT EXISTS 'hydo'@'%' IDENTIFIED BY '';\nGRANT ALL PRIVILEGES ON *.* TO 'hydo'@'%';\n",
+      "/etc/kafka/server.properties": "process.roles=broker,controller\nnode.id=1\ncontroller.quorum.voters=1@127.0.0.1:9093\nlisteners=PLAINTEXT://127.0.0.1:9092,CONTROLLER://127.0.0.1:9093\ninter.broker.listener.name=PLAINTEXT\ncontroller.listener.names=CONTROLLER\nlistener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT\nadvertised.listeners=PLAINTEXT://127.0.0.1:9092\nlog.dirs=/data/kafka-logs\nnum.partitions=1\ndefault.replication.factor=1\noffsets.topic.replication.factor=1\noffsets.topic.num.partitions=1\ntransaction.state.log.replication.factor=1\ntransaction.state.log.min.isr=1\nauto.create.topics.enable=true\nnum.network.threads=2\nnum.io.threads=2\nbackground.threads=2\nlog.index.size.max.bytes=1048576\nlog.segment.bytes=16777216\nmetadata.log.segment.bytes=8388608\ngroup.initial.rebalance.delay.ms=0\nlog.flush.interval.messages=1\n",
+      "/etc/kafka/log4j.properties": "log4j.rootLogger=WARN, stdout\nlog4j.appender.stdout=org.apache.log4j.ConsoleAppender\nlog4j.appender.stdout.layout=org.apache.log4j.PatternLayout\nlog4j.appender.stdout.layout.ConversionPattern=%p %c %m%n\nlog4j.logger.kafka.server.KafkaRaftServer=INFO\n"
+    }
+  },
+  "data": {
+    "size_mib": 512,
+    "mount": "rw",
+    "dirs": [
+      "redis",
+      "kafka-logs"
+    ]
+  },
+  "env": {
+    "MYSQL": "/nix/store/aw6ljbiwgds7yw8x2jc3340dm46s7i2k-mysql-8.4.10",
+    "JAVA": "/nix/store/vjcrra860yal7fzk1m81ddirrafqrccz-openjdk-headless-17.0.7+7/bin/java",
+    "NORDERS": "30",
+    "GOMAXPROCS": "1",
+    "KAFKA_CLUSTER_ID": "P0hH8j92QAKKXdQ2D7Aw7A",
+    "JCOMMON": "-XX:TieredStopAtLevel=1 -XX:CICompilerCount=1 -XX:-BackgroundCompilation -XX:+UseSerialGC -XX:-UsePerfData -XX:-UseContainerSupport -XX:ActiveProcessorCount=1 -Xshare:off -Djava.security.egd=file:/dev/urandom -Duser.name=hydo -Duser.home=/tmp -Duser.timezone=UTC -Duser.language=en -Duser.country=US -Dfile.encoding=UTF-8 -Djava.io.tmpdir=/tmp -Dlog4j.configuration=file:/etc/kafka/log4j.properties"
+  },
+  "shell": "SQL() { \"$MYSQL/bin/mysql\" --no-defaults --protocol=TCP -h127.0.0.1 -P3306 -uhydo --ssl-mode=DISABLED -N -B \"$@\"; }\n",
+  "params": {
+    "errlevel": "error"
+  },
+  "services": [
+    {
+      "name": "redis",
+      "cmd": "/bin/redis-server /etc/redis.conf",
+      "ready": "/bin/redis-cli -p 6379 ping | grep -q PONG",
+      "ready_timeout": 60,
+      "port": 6379,
+      "errors": {
+        "format": "redis"
+      }
+    },
+    {
+      "name": "mysql",
+      "cmd": "\"$MYSQL/bin/mysqld\" --defaults-file=/etc/my.cnf",
+      "setup": "[ -d /data/mysql/mysql ] || \"$MYSQL/bin/mysqld\" --defaults-file=/etc/my.cnf --initialize-insecure",
+      "ready": "SQL -e \"SELECT 1\"",
+      "ready_timeout": 600,
+      "port": 3306,
+      "errors": {
+        "files": [
+          "/tmp/mysqld.err"
+        ]
+      }
+    },
+    {
+      "name": "kafka",
+      "cmd": "$JAVA $JCOMMON -Xms256m -Xmx256m -cp \"/opt/kafka/libs/*\" kafka.Kafka /etc/kafka/server.properties",
+      "setup": "$JAVA $JCOMMON -Xms96m -Xmx96m -cp \"/opt/kafka/libs/*\" kafka.tools.StorageTool format -t $KAFKA_CLUSTER_ID -c /etc/kafka/server.properties --ignore-formatted",
+      "ready": "grep -qa \"Kafka Server started\" $HYDO_LOG",
+      "ready_timeout": 600,
+      "port": 9092
+    },
+    {
+      "name": "front",
+      "cmd": "/bin/hydostack server",
+      "ready": "grep -qa \"server listening\" $HYDO_LOG",
+      "depends_on": [
+        "redis",
+        "mysql",
+        "kafka"
+      ],
+      "recovery": false,
+      "description": "the gRPC front door (creates the schema and the topic at start)"
+    }
+  ],
+  "workload": {
+    "steps": 30,
+    "run": "/bin/hydostack place $HYDO_FROM $HYDO_TO",
+    "retry": "/bin/hydostack retry $NORDERS $HYDO_ACKED",
+    "process": "hydostack (place|retry)"
+  },
+  "knobs": [
+    {
+      "token": "M",
+      "name": "MySQL innodb_flush_log_at_trx_commit",
+      "default": "1",
+      "set": "SQL -e \"SET GLOBAL innodb_flush_log_at_trx_commit=$HYDO_VALUE\"",
+      "values": [
+        "0",
+        "1",
+        "2"
+      ],
+      "safe": "1"
+    },
+    {
+      "token": "R",
+      "name": "Redis appendfsync",
+      "default": "always",
+      "set": "/bin/redis-cli -p 6379 CONFIG SET appendfsync $HYDO_VALUE",
+      "values": [
+        "always",
+        "everysec",
+        "no"
+      ],
+      "safe": "always"
+    }
+  ],
+  "invariants": [
+    {
+      "id": "mysql.amounts_valid",
+      "type": "always_or_unreachable",
+      "msg": "every order row in MySQL has the amount its id implies (100000 + id)",
+      "cmd": "n=$(SQL -e \"SELECT COUNT(*) FROM stack.orders WHERE amount <> 100000 + id\" 2>/dev/null) || exit 2\necho \"rows with a wrong amount: $n\"; [ \"$n\" = 0 ]\n",
+      "every": 1,
+      "final": true
+    },
+    {
+      "id": "redis.cache_never_wrong",
+      "type": "always_or_unreachable",
+      "msg": "a cached order in Redis never holds a wrong amount (a missing key is allowed)",
+      "cmd": "/bin/redis-cli -p 6379 ping 2>/dev/null | grep -q PONG || exit 2\nbad=0; i=0\nwhile [ $i -lt $NORDERS ]; do\n  v=$(/bin/redis-cli -p 6379 GET order:$i 2>/dev/null)\n  if [ -n \"$v\" ] && [ \"$v\" != $((100000 + i)) ]; then echo \"order:$i = $v\"; bad=1; fi\n  i=$((i + 1))\ndone\n[ $bad = 0 ] && echo \"no wrong cached amount\"\n[ $bad = 0 ]\n",
+      "final": true
+    },
+    {
+      "id": "stack.exactly_once",
+      "msg": "every ACKed order is in MySQL and Kafka exactly once; nothing told 'failed' was applied",
+      "cmd": "/bin/hydostack oracle $NORDERS $HYDO_ACKED $HYDO_FAILED > /tmp/hydo/oracle.log 2>&1\ngrep -a \"HYDO-ORACLE\" /tmp/hydo/oracle.log | tail -1\ngrep -a \"HYDO-ORACLE\" /tmp/hydo/oracle.log | tail -1 | grep -q \"HYDO-ORACLE: OK\"\n",
+      "final": true
+    }
+  ],
+  "faults": [
+    "kill",
+    "pause",
+    "network",
+    "oneway",
+    "cut",
+    "clock",
+    "disk"
+  ],
+  "errors": {
+    "level": "{{errlevel}}"
+  }
+}

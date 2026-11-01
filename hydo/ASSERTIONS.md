@@ -139,9 +139,8 @@ ha.setup_complete()
 
 The records, the deduplication (each (assertion, outcome) once per process; a false
 `sometimes` never written; a record with a NaN dropped), the BUGGIFY decisions and the
-`HYDO-BUGGIFY` line are the Go SDK's, byte for byte: `sdk/python/tests/conformance.sh` runs one
-call sequence through both SDKs under eight BUGGIFY configurations and diffs the consoles
-(identical with Go 1.26.5 and 1.27.3, and Python 3.8, 3.11 and 3.15). Details are any mapping,
+`HYDO-BUGGIFY` line are the Go SDK's, byte for byte (the shared cases below; Python 3.8 and
+3.15). Details are any mapping,
 encoded as Go's `encoding/json` encodes the same Go value. `HYDO_ASSERT_OUT` works as in Go, plus
 `logging` (each line goes to the Python logger `hydo_assert`). The catalog lists assertions in
 the order their declarations ran, so declare them at module level. `sdk/python/README.md` has
@@ -168,9 +167,7 @@ hydo_assert::setup_complete();
 
 The run-time API (`hydo_assert::always(id, msg)`, `.check`, `.hit`, `.cmp`, `eventually`,
 `buggify`, `catalog`, `setup_complete`) is the Go SDK's, and for the same sequence of calls it
-writes the same bytes: `sdk/rust/tests/conformance.sh` builds a Go program against
-`hydo/stack/hydoassert`'s own sources and a Rust program making the same calls, and diffs their
-consoles and stdouts under three BUGGIFY configurations. Same output switch
+writes the same bytes (it is the reference: its tests write the shared cases below). Same output switch
 (`HYDO_ASSERT_OUT`), same deduplication, same BUGGIFY configuration (`$HYDO_BUGGIFY`, else
 `/tmp/hydo-buggify`) and decisions. Rust additions: call-site macros (`hydo_always!`,
 `hydo_sometimes!`, `hydo_reachable!`, `hydo_unreachable!`, `hydo_always_or_unreachable!`, the
@@ -209,10 +206,8 @@ The API is the Go SDK's in camelCase (`alwaysOrUnreachable`, `check`, `hit`, `cm
 `eventually(id, msg, withinMs)` with `begin`/`done`/`expire`, `buggify`/`fire`, `catalog`,
 `setupComplete`), plus the named comparison helpers (`greaterThan`,
 `greaterThanOrEqualTo`, `lessThan`, `lessThanOrEqualTo`) and `emitLine(tag, value)` for other
-one-line record kinds. For the same sequence of calls it writes the same bytes as the Go SDK:
-`sdk/js/test/conformance.sh` builds a Go program against `hydo/stack/hydoassert`'s own sources
-(Go 1.26.5) and runs a Node program making the same calls through both entries, under five
-BUGGIFY configurations, and diffs consoles and stdouts. Records are written synchronously
+one-line record kinds. For the same sequence of calls it writes the same bytes as the Go SDK
+(the shared cases below, through both entries). Records are written synchronously
 (`fs.writeSync`, one write per record) to `/dev/ttyS0`; same output switch (`HYDO_ASSERT_OUT`,
 `off` makes it a no-op), same deduplication, same BUGGIFY configuration and decisions. Details
 are plain objects or `Map`s; numbers, bigints (Go's 64-bit integers), `Uint8Array` (base64,
@@ -221,7 +216,21 @@ order; a NaN, an infinity or a cycle drops the record, as `json.Marshal` fails o
 writes invalid UTF-8 as a raw U+FFFD; the SDK writes Go 1.26's `\ufffd` escape.
 `hydo/onboard/examples/node-kv` is a complete example (Mac backend).
 
-**Reading the stores** (`hydo-read` / `hydo-check`, `hydo/readers`; full reference in
+**The shared cases** (`sdk/cases`; the format and the rules for reading it are in
+`sdk/rust/README.md`, "The shared cases"). The Rust SDK is the reference: its test
+`cargo test --test cases` (in `sdk/rust`) runs each case's calls and writes, for every run,
+the exact bytes the sink receives and what the calls return, under the run's output target
+(`HYDO_ASSERT_OUT` / `HYDO_HIST_OUT`) and BUGGIFY configuration. The other SDKs read every case,
+make the same calls and compare: Go `go test ./...` in `hydo/stack/hydoassert` (Go 1.26.5,
+the guest images' Go; with Go 1.27 or later the invalid-UTF-8 cases are skipped), Python
+`python3 -m unittest discover -s sdk/python/tests`, JavaScript `node --test` in `sdk/js`. A
+case needing what a language lacks (float32, invalid UTF-8 in a JavaScript history record,
+`emit_line` in Go) is skipped and reported. A format change starts in Rust: change it, run
+`HYDO_BLESS=1 cargo test --test cases`, commit `sdk/cases`, and the other SDKs' tests fail on
+the lines they must change. To add a case, add it to `sdk/rust/tests/cases/defs.rs` and bless.
+The cases equal what Go 1.26.5 writes (docs/HISTORY.md, Milestone 110).
+
+**Reading the stores** (`hydo-read` / `hydo-check`, `hydo/crates/hydo-read`; full reference in
 `hydo/onboard/MANIFEST.md`, "Reading the stores"). A cross-service property often needs what
 is in a MySQL/PostgreSQL table, on a Kafka topic, under Redis or etcd keys. Any SDK or script
 can run the static helper instead of linking a client for every store:

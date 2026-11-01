@@ -1,0 +1,31 @@
+HYDO-ASSERT-DECL {"t":"always","id":"c.always","msg":"always \u003cholds\u003e \u0026 \"quotes\""}
+HYDO-ASSERT-DECL {"t":"always_or_unreachable","id":"c.aou","msg":"always or unreachable"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"c.sometimes","msg":"sometimes é \u2028 true"}
+HYDO-ASSERT-DECL {"t":"reachable","id":"c.reach","msg":"reached"}
+HYDO-ASSERT-DECL {"t":"unreachable","id":"c.unreach","msg":"never reached"}
+HYDO-ASSERT-DECL {"t":"always","id":"c.never","msg":"never evaluated"}
+HYDO-ASSERT-DECL {"t":"always","id":"c.cmp","msg":"a comparison"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"c.scmp","msg":"a sometimes comparison"}
+HYDO-ASSERT-DECL {"t":"always","id":"c.nan","msg":"details with a NaN"}
+HYDO-ASSERT-DECL {"t":"eventually","id":"c.live_ok","msg":"in time"}
+HYDO-ASSERT-DECL {"t":"eventually","id":"c.live_late","msg":"never"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.p.a","msg":"fault point fired: point P.A"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.p.b","msg":"fault point fired: point P.B"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.p.c","msg":"fault point fired: point P.C"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.p.d","msg":"fault point fired: point P.D"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.p.e","msg":"fault point fired: point P.E"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.p.f","msg":"fault point fired: point P.F"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.p.g","msg":"fault point fired: point P.G"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.p.h","msg":"fault point fired: point P.H"}
+HYDO-ASSERT {"t":"always","id":"c.always","ok":true,"msg":"always \u003cholds\u003e \u0026 \"quotes\""}
+HYDO-ASSERT {"t":"always","id":"c.always","ok":false,"msg":"always \u003cholds\u003e \u0026 \"quotes\"","details":{"emap":{},"empty":[],"f1":0.1,"f20":100000000000000000000,"f21":1e+21,"f3":3,"f32a":0.1,"f32b":1e+22,"f32c":3.4e-8,"f6":0.000001,"fbig":1e+100,"fmix":123456789.125,"fneg0":-0,"fsm":1.5e-7,"ftiny":2.5e-300,"imin":-9223372036854775808,"list":[1,"a",false,null,{"a":2,"z":1}],"neg":-5,"nest":{"B":2,"_":4,"a":3,"a b":{"x":"y"},"é":1},"nil":null,"s":"\u003c\u003e\u0026\"\\\n\r\t\b\f\u0001\u001f é \u2028 \u2029 😀","t":true,"umax":18446744073709551615}}
+HYDO-ASSERT {"t":"always_or_unreachable","id":"c.aou","ok":true,"msg":"always or unreachable"}
+HYDO-ASSERT {"t":"sometimes","id":"c.sometimes","ok":true,"msg":"sometimes é \u2028 true","details":{"n":3}}
+HYDO-ASSERT {"t":"reachable","id":"c.reach","ok":true,"msg":"reached"}
+HYDO-ASSERT {"t":"unreachable","id":"c.unreach","ok":false,"msg":"never reached","details":{"why":"test"}}
+HYDO-ASSERT {"t":"always","id":"c.cmp","ok":true,"msg":"a comparison","details":{"left":3,"op":"\u003c=","right":5}}
+HYDO-ASSERT {"t":"always","id":"c.cmp","ok":false,"msg":"a comparison","details":{"extra":"e","left":7,"op":"\u003c","right":5}}
+HYDO-ASSERT {"t":"sometimes","id":"c.scmp","ok":true,"msg":"a sometimes comparison","details":{"left":2,"op":"==","right":2}}
+HYDO-ASSERT {"t":"eventually","id":"c.live_ok","ok":true,"msg":"in time","details":{"elapsed_ms":0,"within_ms":10000}}
+HYDO-ASSERT {"t":"eventually","id":"c.live_late","ok":false,"msg":"never","details":{"elapsed_ms":0,"k":"v","within_ms":0}}
+HYDO-SETUP-COMPLETE

@@ -1,0 +1,16 @@
+syntax = "proto3";
+package a.b;
+import "google/protobuf/any.proto";
+import "google/protobuf/wrappers.proto";
+message Pub {
+  optional string maybe = 1;
+  repeated google.protobuf.Any anys = 2;
+  google.protobuf.Int32Value w = 3;
+  map<int64, Pub> kids = 4;
+  oneof o { int32 a = 5; string b = 6; }
+  optional int32 second = 7;
+  E e = 8;
+  enum E { E_UNSPECIFIED = 0; E_ONE = 1; E_ALIAS = 1; option allow_alias = true; }
+  reserved 9;
+}
+service PubSvc { rpc Get(Pub) returns (Pub); }

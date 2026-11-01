@@ -215,3 +215,98 @@ the `hydo` command of both releases. The pins:
 
 The SDK crates (`sdk/rust`, `sdk/rust-test`) and the Rust examples are not workspace members:
 they keep their own workspaces and lock files, because their bytes are inside recorded images.
+
+## The gRPC client and generator (Milestone 113)
+
+`hydo-grpc`, the static client that generated gRPC drivers put in a guest image, and the
+generator `hydo-grpc-gen` are Rust (`hydo/crates/hydo-grpc`, `hydo/crates/hydo-grpc-gen`); the Go
+programs of Milestone 91 were deleted. The demo's service `orderd` stays Go (it is the system
+under test, not hydo's code): `hydo/grpcgen/go.mod` is kept unchanged for it, and with Go 1.26.5
+from go.dev it still builds `orderd-arm64` `a87ca7fa…` (M96).
+
+- **Toolchain:** the workspace's Rust 1.90.0 with the targets `x86_64-unknown-linux-musl` and
+  `aarch64-unknown-linux-musl`, both linked by `rust-lld` with `+crt-static` (`.cargo/config.toml`).
+- **Crates (Cargo.lock):** prost 0.14.4, prost-reflect 0.16.5 (with `serde`), tokio 1.54.1
+  (`rt`, `net`, `time`, `sync`, `macros`; a current-thread runtime), h2 0.4.20, http 1.5.0,
+  bytes 1.12.1, ryu 1.0.23 for the client; protox 0.9.1 and libyaml-safer 0.3.0 for the generator.
+  All pure Rust.
+- **Build:** `hydo/grpcgen/build-client.sh [--out DIR] amd64 arm64` (called by
+  `hydo/onboard/hydo-grpc-gen`). rustc runs through `hydo/grpcgen/rustc-stable`, which replaces
+  Cargo's `-C metadata` hash (it covers the host-built build scripts, so it differs between a Mac
+  and a Linux host and moves every function in the binary) by a hash of the crate's name, version,
+  type, target and cfgs, and remaps the tree and `$CARGO_HOME` to `/hydo` and `/cargo`;
+  `hydo-elf-comment` (`hydo/crates/hydo-tools`) then sets the `.comment` linker line to
+  `Linker: LLD` (the Linux and the Mac rust-lld name different build paths there).
+- **Results (this tree, M113):** `hydo-grpc` (x86_64, `ELF 64-bit LSB pie executable, static-pie
+  linked`, 3.1 MB) `3926d13712772cce…`, the same bytes from this Mac and from the bare-metal test
+  machine; `hydo-grpc.arm64` (`ELF 64-bit LSB executable, ARM aarch64, statically linked`, 2.6 MB)
+  `fd762fa06b352d0e…` (Mac; the bare-metal machine's private rustup has no aarch64 musl
+  target). The Go clients were 10.6 MB (`c772698c…`, nixpkgs Go) and `686b9e57…` (arm64, go.dev Go).
+- **Well-known imports:** `hydo/crates/hydo-grpc-gen/src/wkt.pb` holds the descriptors of
+  `google/protobuf/*.proto` exactly as protocompile v0.14.1 with protobuf-go v1.35.2 produced them
+  for the Go generator (sha256 `f9696902ad5a824e…`), so a schema that imports them is the same
+  `desc.pb` as before.
+
+## hydo-read: the in-guest store reader in Rust (Milestone 112)
+
+`hydo/crates/hydo-read` (the program that runs as `hydo-read` and, through a symlink the image
+builder makes, as `hydo-check`) is staged into guest images, so its bytes are part of their
+fingerprints. It keeps its own Cargo workspace and `Cargo.lock` (it is not a member of the
+repository's workspace), so no dependency update elsewhere changes it. The pins:
+
+- **Compiler:** Rust 1.90.0 (`cargo +1.90.0`, the workspace's toolchain) with the targets
+  `x86_64-unknown-linux-musl` (hvx guests) and `aarch64-unknown-linux-musl` (Mac guests), linked
+  by Rust's own `rust-lld` with the targets' self-contained musl and `+crt-static`; no C compiler.
+- **Crates** (all pure Rust, pinned by the crate's `Cargo.lock`, built with `--locked`): flate2
+  1.1.10 with miniz_oxide 0.9.1 (gzip), snap 1.1.2 (snappy), lz4_flex 0.11.6 (LZ4 frames), ruzstd
+  0.7.3 (zstd), sha1 0.10.7, sha2 0.10.9, md-5 0.10.6 and hmac 0.12.1 (MySQL and PostgreSQL
+  authentication), rsa 0.9.10 with rand_core 0.6.4 (the RSA path of MySQL's
+  caching_sha2_password). The store protocols themselves are written in the crate.
+- **Build:** `hydo/crates/hydo-read/build.sh [x86_64|aarch64|all] [OUTDIR]` writes
+  `build/hydo-read` and `build/hydo-read-arm64`. It remaps the checkout path and `$CARGO_HOME`,
+  so the bytes do not depend on where the tree or the crate cache lives (checked: two
+  directories, two cargo homes, the same bytes).
+- **The build host matters.** Cargo puts the output of `rustc -vV`, which names the host
+  triple, into every crate's `-C metadata`, so the symbol hashes, and with them the bytes, depend
+  on the kind of host that compiles. The values for commit `c93657c`:
+
+  | target | built on | size | sha256 |
+  |---|---|---|---|
+  | x86_64 | x86_64-unknown-linux-gnu (the bare-metal machine, `~/hydo-rust`) | 1,389,016 | `6445237458633ef4df3622d3fcbaaa77cb15455cae53bddec06aa73f704734eb` |
+  | x86_64 | aarch64-apple-darwin (the Mac) | 1,389,024 | `2b4d6a62805ac8fce66c92dc66b417e1a0a02e24877f878cc126b7b9ed47fd4d` |
+  | aarch64 | aarch64-apple-darwin (the Mac) | 1,159,720 | `88576fa899570cc7f826a7e05f701f0aa3245cdd3f8be4f4adea8367d9b8842e` |
+
+  The x86_64 images of Milestone 112 carry the first, the Mac images the third. The Go program
+  it replaced was 10.3 MB, and nixpkgs Go and upstream Go built different bytes of it (M96).
+
+## hydo-agent: the guest agent (Milestone 117)
+
+`hydo/crates/hydo-agent` is the program that will run as the guest's first process under host
+control (docs/design/guest-control.md). Its bytes will be inside guest images, so they are pinned
+here. It keeps its own Cargo workspace and `Cargo.lock` (not a member of the repository's
+workspace) and depends only on `libc` 0.2.191 and the protocol crate `hydo-agent-proto`, which
+has no dependencies.
+
+- **Compiler:** Rust 1.90.0 (the repository's `rust-toolchain.toml`) with the targets
+  `x86_64-unknown-linux-musl` and `aarch64-unknown-linux-musl`, linked by `rust-lld` with
+  `+crt-static` (`.cargo/config.toml`); no C compiler. Profile: `opt-level = "s"`, LTO, one
+  codegen unit, symbols stripped, `panic = "abort"`.
+- **Build:** `hydo/crates/hydo-agent/build.sh [x86_64|aarch64|all] [OUTDIR]` writes
+  `hydo-agent` and `hydo-agent-arm64`. It uses Milestone 113's recipe: rustc runs through
+  `hydo/grpcgen/rustc-stable` (a host-independent `-C metadata`; the tree and `$CARGO_HOME`
+  remapped to `/hydo` and `/cargo`), and `hydo-elf-comment` sets the `.comment` linker line to
+  `Linker: LLD`. So the bytes do not depend on the build host, the tree's path or the crate cache.
+- **Results (commit of M117):** the same bytes from this Mac and from the bare-metal test
+  machine (`~/hydo-ga2`, its private rustup), and from two clean builds on the Mac:
+
+  | target | size | sha256 |
+  |---|---|---|
+  | x86_64 (`ELF 64-bit LSB pie executable, static-pie linked`) | 665,632 | `ff7652a171f40c80f83c2c6ee871331f046b7c2953faf25e40505bbb12f2a16c` |
+  | aarch64 (`ELF 64-bit LSB executable, statically linked`) | 564,768 | `6a3ea9f8c80e972abda55a58e05fee9de0b7355b3a27f5ae7a8bb560d2f6fac1` |
+
+  The C freeze helper it can stand in for (`hydo_fc`, pinned musl gcc) is 68,504 bytes.
+- **In images (Milestone 121):** `hydo-build --control agent` stages exactly these bytes as the
+  image's first process and refuses another build of the agent (`HYDO_AGENT_UNPINNED=1` stages it
+  with a warning, for work on the agent). The two sha256 values are also in
+  `hydo/crates/hydo-build/src/agent.rs` (`AGENT_SHA256_X86_64`, `AGENT_SHA256_ARM64`); a new agent
+  changes this table and those constants together, and every agent image's bytes with them.

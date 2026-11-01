@@ -1,0 +1,28 @@
+# hydo agent transcript, protocol 1: mkdir, write, append, read as text and as hex, at an offset, a file that is not UTF-8, a missing file, syncfs.
+# Recorded from `hydo-agent serve --root <scratch>` on Linux as an unprivileged user (hydo/crates/hydo-agent/tests/native.rs); never edited. replay: native
+< HYDO-AG 242 65657430 {"agent":"0.1.0","ev":"hello","features":["freeze"],"ops":["sync","spawn","signal","run","probe","write","read","mkdir","mount","syncfs","clock_set","clock_get","qlen","tail","untail","freeze","unfreeze"],"pid1":false,"proto":1,"seq":0,"v":1}
+> {"id":1,"op":"mkdir","path":"/work/d/e","v":1}
+< HYDO-AG 45 2f02efe0 {"ok":true,"op":"mkdir","re":1,"seq":1,"v":1}
+> {"data":"hello\n","id":2,"op":"write","path":"/work/d/e/f.txt","v":1}
+< HYDO-AG 55 6918e3ed {"bytes":6,"ok":true,"op":"write","re":2,"seq":2,"v":1}
+> {"append":true,"data":"world é\n","id":3,"op":"write","path":"/work/d/e/f.txt","v":1}
+< HYDO-AG 55 e7796640 {"bytes":9,"ok":true,"op":"write","re":3,"seq":3,"v":1}
+> {"id":4,"max":100,"op":"read","path":"/work/d/e/f.txt","v":1}
+< HYDO-AG 92 64c70266 {"data":"hello\nworld é\n","eof":true,"ok":true,"op":"read","re":4,"seq":4,"size":15,"v":1}
+> {"id":5,"max":3,"offset":6,"op":"read","path":"/work/d/e/f.txt","v":1}
+< HYDO-AG 79 8f80179a {"data":"wor","eof":false,"ok":true,"op":"read","re":5,"seq":5,"size":15,"v":1}
+> {"hex":true,"id":6,"max":5,"op":"read","path":"/work/d/e/f.txt","v":1}
+< HYDO-AG 86 928f9703 {"data":"68656c6c6f","eof":false,"ok":true,"op":"read","re":6,"seq":6,"size":15,"v":1}
+> {"data":"s","id":7,"mode":384,"op":"write","path":"/work/new/dir/secret","v":1}
+< HYDO-AG 55 ffacf427 {"bytes":1,"ok":true,"op":"write","re":7,"seq":7,"v":1}
+> {"id":8,"max":10,"op":"read","path":"/work/missing","v":1}
+< HYDO-AG 107 ebc36182 {"err":"os-error","errno":2,"msg":"open /work/missing: ENOENT","ok":false,"op":"read","re":8,"seq":8,"v":1}
+> {"argv":["sh","-c","printf '\\377\\376' > bin.dat"],"cwd":"/work","env":["PATH=/usr/local/bin:/usr/bin:/bin"],"id":9,"op":"run","v":1}
+< HYDO-AG 43 e06d5e5a {"ok":true,"op":"run","re":9,"seq":9,"v":1}
+< HYDO-AG 67 7022fe35 {"ev":"done","id":9,"out":"","out_len":0,"seq":10,"status":0,"v":1}
+> {"id":10,"max":10,"op":"read","path":"/work/bin.dat","v":1}
+< HYDO-AG 123 7150e74b {"err":"not-utf8","msg":"/work/bin.dat holds bytes that are not UTF-8 there","ok":false,"op":"read","re":10,"seq":11,"v":1}
+> {"hex":true,"id":11,"max":10,"op":"read","path":"/work/bin.dat","v":1}
+< HYDO-AG 80 ba86644a {"data":"fffe","eof":true,"ok":true,"op":"read","re":11,"seq":12,"size":2,"v":1}
+> {"id":12,"op":"syncfs","v":1}
+< HYDO-AG 48 f2add6b6 {"ok":true,"op":"syncfs","re":12,"seq":13,"v":1}

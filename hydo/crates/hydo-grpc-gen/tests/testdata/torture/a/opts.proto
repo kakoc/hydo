@@ -1,0 +1,14 @@
+syntax = "proto2";
+package a.opts;
+import "google/protobuf/descriptor.proto";
+
+message Rule { optional string name = 1; optional int32 min = 2; repeated string tags = 3; }
+
+extend google.protobuf.FieldOptions {
+  optional Rule rule = 50001;
+  optional string label = 50000;
+  repeated int32 nums = 50003;
+}
+extend google.protobuf.MessageOptions { optional bool important = 51000; }
+extend google.protobuf.MethodOptions { optional string route = 52000; }
+extend google.protobuf.FileOptions { optional string owner = 53000; optional int64 build = 52999; }

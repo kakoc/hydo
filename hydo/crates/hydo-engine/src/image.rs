@@ -106,6 +106,33 @@ pub fn embedded_compose(image: &Path) -> Option<String> {
     t.trim().starts_with('{').then_some(t)
 }
 
+/// Who runs the image's guest side: `/etc/hydo/control` = `agent <protocol>` (an image built
+/// with `hydo-build --control agent`, M121), else the shell init. A control file with any other
+/// text is an error: an image this hydo does not know how to boot.
+pub fn control(image: &Path) -> Result<crate::GuestControl, ImageError> {
+    let text = match embedded_file(image, "etc/hydo/control") {
+        Ok(t) => t,
+        Err(ImageError::Missing(_)) => return Ok(crate::GuestControl::Shell),
+        Err(e) => return Err(e),
+    };
+    parse_control(&text).ok_or_else(|| {
+        ImageError::Missing(format!(
+            "{}: /etc/hydo/control says {:?}; this hydo boots \"agent <protocol>\" images and shell-init images",
+            image.display(),
+            text.trim()
+        ))
+    })
+}
+
+/// The text of `/etc/hydo/control`: `agent <protocol>` and a newline.
+pub fn parse_control(text: &str) -> Option<crate::GuestControl> {
+    let mut w = text.split_whitespace();
+    match (w.next(), w.next().and_then(|p| p.parse().ok()), w.next()) {
+        (Some("agent"), Some(proto), None) => Some(crate::GuestControl::Agent { proto }),
+        _ => None,
+    }
+}
+
 /// The manifest an image carries (`/etc/hydo/hydo.yaml`, whatever its format).
 pub fn embedded_manifest(image: &Path) -> Result<String, ImageError> {
     embedded_file(image, "etc/hydo/hydo.yaml")
@@ -124,4 +151,25 @@ pub fn sha256_file(path: &Path) -> std::io::Result<String> {
         h.update(&buf[..n]);
     }
     Ok(h.finalize().iter().map(|b| format!("{b:02x}")).collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_control;
+    use crate::GuestControl;
+
+    #[test]
+    fn control_file() {
+        assert_eq!(
+            parse_control("agent 1\n"),
+            Some(GuestControl::Agent { proto: 1 })
+        );
+        assert_eq!(
+            parse_control("agent 7"),
+            Some(GuestControl::Agent { proto: 7 })
+        );
+        for bad in ["", "agent", "agent x", "agent 1 2", "shell", "Agent 1"] {
+            assert_eq!(parse_control(bad), None, "{bad:?}");
+        }
+    }
 }

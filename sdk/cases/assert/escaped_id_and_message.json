@@ -1,0 +1,12 @@
+{
+  "about": "ids and messages are JSON strings with Go's escapes in both the evaluation and the declaration",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"t.\"quoted\" \u003cid\u003e \u0026 é","msg":"a message with \"quotes\", \u003chtml\u003e \u0026 \\ \n\t\u0001 é 😀 \u2028"},
+    {"do":"check","a":0,"cond":false},
+    {"do":"catalog"}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "escaped_id_and_message.out", "returns": "0"}
+  ]
+}

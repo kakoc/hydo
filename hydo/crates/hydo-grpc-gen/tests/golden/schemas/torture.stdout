@@ -1,0 +1,4 @@
+hydo-grpc-gen: 3 RPCs, 0 scenarios -> OUT
+  get                    a.b.PubSvc/Get weight=1
+  do                     a.b.Svc/Do weight=1
+  stream                 a.b.Svc/Stream weight=1

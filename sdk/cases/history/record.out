@@ -1,0 +1,4 @@
+HYDO-HIST Other.hist_2-x 7 invoke * cas k a b
+HYDO-HIST Other.hist_2-x 7 ok * cas k a b@9
+HYDO-HIST Other.hist_2-x 8 info * read
+HYDO-HIST Other.hist_2-x 0 fail * write % x %

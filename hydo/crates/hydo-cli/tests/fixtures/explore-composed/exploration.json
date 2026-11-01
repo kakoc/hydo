@@ -1,0 +1,536 @@
+{
+  "v": 1,
+  "type": "exploration",
+  "mode": "seeds",
+  "config": {
+    "strategy": "random",
+    "argv": []
+  },
+  "image": {
+    "path": "explore-ob-redis-composed-disk.img"
+  },
+  "engine": {
+    "ram_mib": 1024,
+    "vcpus": 1,
+    "cpu": "v2",
+    "workers": 2
+  },
+  "summary": {
+    "schedules": 16,
+    "sweep_wall_s": 126.4,
+    "runs_per_hour": 455.6,
+    "mean_run_s": 7.0,
+    "worker_boot_s": 44.1,
+    "total_wall_s": 1331.1,
+    "failures": 9,
+    "reproduced": 9
+  },
+  "failures": [
+    {
+      "signature": "ERROR restart after the faults (redis)",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "fp": "355f8738fdeef137",
+          "verdict": "HYDO-ORACLE: ERROR restart after the faults (redis)"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "seed": 1,
+        "role": "first",
+        "schedule": "disk=ioerr:1 dseed=910a2dec89025cc1 | run K=redis@0+2 W=3e71cf9e,p1,q2,r200",
+        "class": "io-errors",
+        "verdict": {
+          "kind": "error",
+          "text": "HYDO-ORACLE: ERROR restart after the faults (redis)"
+        },
+        "fingerprints": {
+          "fp": "355f8738fdeef137",
+          "wfp": "5e3d77bf49351c8c"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "ERROR restart after the faults (redis)",
+            "status": "error",
+            "message": "HYDO-ORACLE: ERROR restart after the faults (redis)",
+            "details": {
+              "signature": "ERROR restart after the faults (redis)"
+            }
+          }
+        ],
+        "secs": 2.1,
+        "worker": 0
+      }
+    },
+    {
+      "signature": "VIOLATION [total_conserved] balances sum to #, not #",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "fp": "1f4cb8a5a69a821c",
+          "verdict": "HYDO-ORACLE: VIOLATION [total_conserved] balances sum to 499, not 500"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "seed": 6,
+        "role": "first",
+        "schedule": "disk=none dseed=bd64a5d9adefe000 | run K=redis@5+4 R=no W=a27c6885,p3,q2,r200",
+        "class": "durable-defaults",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [total_conserved] balances sum to 499, not 500"
+        },
+        "fingerprints": {
+          "fp": "1f4cb8a5a69a821c",
+          "wfp": "658a861e1d22b39b"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "total_conserved",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [total_conserved] balances sum to 499, not 500",
+            "details": {
+              "signature": "VIOLATION [total_conserved] balances sum to #, not #"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "total_conserved",
+            "status": "violation",
+            "message": ""
+          }
+        ],
+        "secs": 3.8,
+        "worker": 1
+      }
+    },
+    {
+      "signature": "VIOLATION [acked_writes_survive] key k:# lost",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "fp": "c60db56a14d59d1d",
+          "verdict": "HYDO-ORACLE: VIOLATION [acked_writes_survive] key k:0 lost"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "seed": 7,
+        "role": "first",
+        "schedule": "disk=lying:11 dseed=63cbe1e459320dd7 | run K=redis@12+3 C=1 W=740c6cfa,p1,q1,r100",
+        "class": "lying-disk",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [acked_writes_survive] key k:0 lost"
+        },
+        "fingerprints": {
+          "fp": "c60db56a14d59d1d",
+          "wfp": "6c38db94c8da811d"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "acked_writes_survive",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [acked_writes_survive] key k:0 lost",
+            "details": {
+              "signature": "VIOLATION [acked_writes_survive] key k:# lost"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "acked_writes_survive",
+            "status": "violation",
+            "message": ""
+          }
+        ],
+        "secs": 29.2,
+        "worker": 0
+      }
+    },
+    {
+      "signature": "ERROR redis restart failed",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "fp": "e90b83a890b468c5",
+          "verdict": "HYDO-ORACLE: ERROR redis restart failed"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "seed": 8,
+        "role": "first",
+        "schedule": "disk=ioerr:2 dseed=9e5651b0ef953636 | run K=redis@8+3 W=340bcd65,p1,q1,r200",
+        "class": "io-errors",
+        "verdict": {
+          "kind": "error",
+          "text": "HYDO-ORACLE: ERROR redis restart failed"
+        },
+        "fingerprints": {
+          "fp": "e90b83a890b468c5",
+          "wfp": "35c5ed0122f78059"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "ERROR redis restart failed",
+            "status": "error",
+            "message": "HYDO-ORACLE: ERROR redis restart failed",
+            "details": {
+              "signature": "ERROR redis restart failed"
+            }
+          }
+        ],
+        "secs": 1.6,
+        "worker": 1
+      }
+    },
+    {
+      "signature": "ERROR redis restart failed",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "fp": "c5286cd3f538a483",
+          "verdict": "HYDO-ORACLE: ERROR redis restart failed"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "seed": 9,
+        "role": "first",
+        "schedule": "disk=ioerr:2 dseed=aeaf52febe706064 | run K=redis@4+2 R=no W=5372f125,p3,q1,r200",
+        "class": "io-errors",
+        "verdict": {
+          "kind": "error",
+          "text": "HYDO-ORACLE: ERROR redis restart failed"
+        },
+        "fingerprints": {
+          "fp": "c5286cd3f538a483",
+          "wfp": "1e088f0a9b5adffa"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "ERROR redis restart failed",
+            "status": "error",
+            "message": "HYDO-ORACLE: ERROR redis restart failed",
+            "details": {
+              "signature": "ERROR redis restart failed"
+            }
+          }
+        ],
+        "secs": 1.6,
+        "worker": 1
+      }
+    },
+    {
+      "signature": "VIOLATION [total_conserved] balances sum to #, not #",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "fp": "0381759614d01f7a",
+          "verdict": "HYDO-ORACLE: VIOLATION [total_conserved] balances sum to 498, not 500"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "seed": 10,
+        "role": "first",
+        "schedule": "disk=none dseed=88712be8a582fca | run K=redis@14+1 W=a36fcf62,p3,q2,r200",
+        "class": "durable-defaults",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [total_conserved] balances sum to 498, not 500"
+        },
+        "fingerprints": {
+          "fp": "0381759614d01f7a",
+          "wfp": "44558ba8d364d892"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "total_conserved",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [total_conserved] balances sum to 498, not 500",
+            "details": {
+              "signature": "VIOLATION [total_conserved] balances sum to #, not #"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "total_conserved",
+            "status": "violation",
+            "message": ""
+          }
+        ],
+        "secs": 3.8,
+        "worker": 1
+      }
+    },
+    {
+      "signature": "VIOLATION [total_conserved] balances sum to #, not #",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "fp": "150be9161de89cd6",
+          "verdict": "HYDO-ORACLE: VIOLATION [total_conserved] balances sum to 495, not 500"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "seed": 12,
+        "role": "first",
+        "schedule": "disk=lying:2 dseed=943ff9fc99de8f03 | run K=redis@6+3 C=7 W=86f364de,p4,q1,r50",
+        "class": "lying-disk",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [total_conserved] balances sum to 495, not 500"
+        },
+        "fingerprints": {
+          "fp": "150be9161de89cd6",
+          "wfp": "de947dbf4a1c407d"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "total_conserved",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [total_conserved] balances sum to 495, not 500",
+            "details": {
+              "signature": "VIOLATION [total_conserved] balances sum to #, not #"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "total_conserved",
+            "status": "violation",
+            "message": ""
+          }
+        ],
+        "secs": 12.5,
+        "worker": 0
+      }
+    },
+    {
+      "signature": "VIOLATION [total_conserved] balances sum to #, not #",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "fp": "7feae605c9cdf801",
+          "verdict": "HYDO-ORACLE: VIOLATION [total_conserved] balances sum to 501, not 500"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "seed": 13,
+        "role": "first",
+        "schedule": "disk=none dseed=c4ca37b7f8ad8aff | run K=redis@14+4 W=6311ab23,p4,q2,r100",
+        "class": "durable-defaults",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [total_conserved] balances sum to 501, not 500"
+        },
+        "fingerprints": {
+          "fp": "7feae605c9cdf801",
+          "wfp": "60a2f9f25878fd3b"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "total_conserved",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [total_conserved] balances sum to 501, not 500",
+            "details": {
+              "signature": "VIOLATION [total_conserved] balances sum to #, not #"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "total_conserved",
+            "status": "violation",
+            "message": ""
+          }
+        ],
+        "secs": 5.2,
+        "worker": 1
+      }
+    },
+    {
+      "signature": "VIOLATION [total_conserved] balances sum to #, not #",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "fp": "8e3ab5cdd46e2892",
+          "verdict": "HYDO-ORACLE: VIOLATION [total_conserved] balances sum to 502, not 500"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "seed": 16,
+        "role": "first",
+        "schedule": "disk=none dseed=5de186dcba779207 | run K=redis@12+3 W=a8ec432d,p3,q1,r200",
+        "class": "durable-defaults",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [total_conserved] balances sum to 502, not 500"
+        },
+        "fingerprints": {
+          "fp": "8e3ab5cdd46e2892",
+          "wfp": "aae539cb51c6c0c7"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "total_conserved",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [total_conserved] balances sum to 502, not 500",
+            "details": {
+              "signature": "VIOLATION [total_conserved] balances sum to #, not #"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "total_conserved",
+            "status": "violation",
+            "message": ""
+          }
+        ],
+        "secs": 3.7,
+        "worker": 0
+      }
+    }
+  ],
+  "shrinks": [
+    {
+      "v": 1,
+      "type": "shrink",
+      "class": "durable-defaults",
+      "signature": "VIOLATION [total_conserved] balances sum to #, not #",
+      "from_seed": 6,
+      "minimal": "disk=none dseed=bd64a5d9adefe000 | run W=:p2,r200,cserial_driver_rewrite+parallel_driver_transfer,0.0.0.741982988,1.1.1.2145334547,2.2.0.439026114,4.3.1.1907381756,5.4.1.1187301234,12.7.1.931266821,13.8.0.1223352624,18.10.0.1899335559,20.11.1.1861045581",
+      "verdict": "HYDO-ORACLE: VIOLATION [total_conserved] balances sum to 497, not 500",
+      "tries": 52,
+      "min_class": "durable-defaults",
+      "min_verdict": "HYDO-ORACLE: VIOLATION [total_conserved] balances sum to 503, not 500",
+      "confirmations": [
+        {
+          "fp": "b60a695011cf4087"
+        },
+        {
+          "fp": "b60a695011cf4087"
+        }
+      ],
+      "identical": true,
+      "composition": "r0: serial_driver_rewrite | r1: parallel_driver_transfer | r2: serial_driver_rewrite | r3: parallel_driver_transfer | r4: parallel_driver_transfer | r7: parallel_driver_transfer | r8: serial_driver_rewrite | r10: serial_driver_rewrite | r11: parallel_driver_transfer",
+      "commands": [
+        "anytime_read",
+        "eventually_serves",
+        "finally_summary",
+        "first_accounts",
+        "parallel_driver_set",
+        "parallel_driver_transfer",
+        "serial_driver_rewrite"
+      ],
+      "contents": {
+        "parallel_driver_transfer": "549e0b6d2561dc5b",
+        "serial_driver_rewrite": "643ccbd6b9b98a72"
+      },
+      "stable": ":p2,r200,cserial_driver_rewrite+parallel_driver_transfer,0.0.0.741982988,1.1.1.2145334547,2.2.0.439026114,4.3.1.1907381756,5.4.1.1187301234,12.7.1.931266821,13.8.0.1223352624,18.10.0.1899335559,20.11.1.1861045581",
+      "stable_schedule": "disk=none dseed=bd64a5d9adefe000 | run W=:p2,r200,cserial_driver_rewrite+parallel_driver_transfer,0.0.0.741982988,1.1.1.2145334547,2.2.0.439026114,4.3.1.1907381756,5.4.1.1187301234,12.7.1.931266821,13.8.0.1223352624,18.10.0.1899335559,20.11.1.1861045581"
+    },
+    {
+      "v": 1,
+      "type": "shrink",
+      "class": "lying-disk",
+      "signature": "VIOLATION [acked_writes_survive] key k:# lost",
+      "from_seed": 7,
+      "minimal": "disk=lying:11 dseed=63cbe1e459320dd7 | run C=1 W=:p1,r100,cparallel_driver_set,0.0.0.2130986824",
+      "verdict": "HYDO-ORACLE: VIOLATION [acked_writes_survive] key k:0 lost",
+      "tries": 49,
+      "min_class": "lying-disk",
+      "min_verdict": "HYDO-ORACLE: VIOLATION [acked_writes_survive] key k:0 lost",
+      "confirmations": [
+        {
+          "fp": "fd0dff892a691b1b"
+        },
+        {
+          "fp": "fd0dff892a691b1b"
+        }
+      ],
+      "identical": true,
+      "composition": "r0: parallel_driver_set",
+      "commands": [
+        "anytime_read",
+        "eventually_serves",
+        "finally_summary",
+        "first_accounts",
+        "parallel_driver_set",
+        "parallel_driver_transfer",
+        "serial_driver_rewrite"
+      ],
+      "contents": {
+        "parallel_driver_set": "5965096e1f90bc26"
+      },
+      "stable": ":p1,r100,cparallel_driver_set,0.0.0.2130986824",
+      "stable_schedule": "disk=lying:11 dseed=63cbe1e459320dd7 | run C=1 W=:p1,r100,cparallel_driver_set,0.0.0.2130986824"
+    },
+    {
+      "v": 1,
+      "type": "shrink",
+      "class": "lying-disk",
+      "signature": "VIOLATION [total_conserved] balances sum to #, not #",
+      "from_seed": 12,
+      "minimal": "disk=none dseed=943ff9fc99de8f03 | run K=redis@6+1 W=86f364de,p1,q1,r50,n7,x0.3-4,oanytime_read+parallel_driver_set",
+      "verdict": "HYDO-ORACLE: VIOLATION [total_conserved] balances sum to 495, not 500",
+      "tries": 82,
+      "min_class": "durable-defaults",
+      "min_verdict": "HYDO-ORACLE: VIOLATION [total_conserved] balances sum to 495, not 500",
+      "confirmations": [
+        {
+          "fp": "ab1c1cc42cf40d18"
+        },
+        {
+          "fp": "ab1c1cc42cf40d18"
+        }
+      ],
+      "identical": true,
+      "composition": "r4: serial_driver_rewrite | r5: parallel_driver_transfer | r6: serial_driver_rewrite | r7: parallel_driver_transfer | r9: parallel_driver_transfer | r12: serial_driver_rewrite | r13: parallel_driver_transfer",
+      "commands": [
+        "anytime_read",
+        "eventually_serves",
+        "finally_summary",
+        "first_accounts",
+        "parallel_driver_set",
+        "parallel_driver_transfer",
+        "serial_driver_rewrite"
+      ],
+      "contents": {
+        "parallel_driver_transfer": "549e0b6d2561dc5b",
+        "serial_driver_rewrite": "643ccbd6b9b98a72"
+      },
+      "stable": ":p1,r50,cserial_driver_rewrite+parallel_driver_transfer,5.4.0.1933323583,6.5.1.1969323408,7.6.0.1677547070,8.7.1.1565087473,11.9.1.1720564279,15.12.0.818962248,17.13.1.1343998502",
+      "stable_schedule": "disk=none dseed=943ff9fc99de8f03 | run K=redis@6+1 W=:p1,r50,cserial_driver_rewrite+parallel_driver_transfer,5.4.0.1933323583,6.5.1.1969323408,7.6.0.1677547070,8.7.1.1565087473,11.9.1.1720564279,15.12.0.818962248,17.13.1.1343998502",
+      "stable_note": "the resolved composition did not fail the same way (HYDO-ORACLE: OK invariants=5 held (compose.commands: started=7 ok=5 failed=2 timeout=0 violation=0 killed=0 skipped=0)); the minimal schedule keeps the seed form"
+    }
+  ],
+  "liveness": [],
+  "artifacts": {
+    "events": "events.jsonl",
+    "report": "report.md",
+    "consoles": "consoles"
+  }
+}

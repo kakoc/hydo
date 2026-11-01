@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# RUSTC_WRAPPER of hydo/grpcgen/build-client.sh: makes the static client's bytes independent of
+# the machine that builds it. Cargo calls it as `rustc-stable <rustc> <args...>`.
+# - `-C metadata=<hash>`: Cargo's hash covers the build scripts' and proc macros' units, which are
+#   built for the host, so it differs between a Mac and a Linux host and changes every symbol's
+#   hash (and with them the order of code and data in the binary). The wrapper replaces it by a
+#   hash of what the crate is: package name and version, crate name and type, target, cfgs.
+# - `--remap-path-prefix`: the tree ($HYDO_REMAP_TOP) and $CARGO_HOME become /hydo and /cargo in
+#   panic locations.
+set -euo pipefail
+rustc=$1; shift
+args=()
+key="${CARGO_PKG_NAME:-} ${CARGO_PKG_VERSION:-} ${CARGO_CRATE_NAME:-}"
+prev=""
+for a in "$@"; do
+  case "$prev" in
+    --crate-type|--target|--cfg) key="$key $prev=$a";;
+  esac
+  prev=$a
+done
+if command -v sha256sum > /dev/null; then sum=$(printf '%s' "$key" | sha256sum); else sum=$(printf '%s' "$key" | shasum -a 256); fi
+meta=${sum:0:16}
+prev=""
+for a in "$@"; do
+  if [ "$prev" = "-C" ] && [ "${a#metadata=}" != "$a" ]; then
+    a="metadata=$meta"
+  elif [ "${a#-Cmetadata=}" != "$a" ]; then
+    a="-Cmetadata=$meta"
+  fi
+  args+=("$a")
+  prev=$a
+done
+remap=()
+[ -n "${HYDO_REMAP_TOP:-}" ] && remap+=("--remap-path-prefix=$HYDO_REMAP_TOP=/hydo")
+remap+=("--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo")
+# rustc -vV and the other probes Cargo makes take no remapping
+case " $* " in
+  *" - "*|*" -vV "*|*" --version "*) exec "$rustc" "${args[@]}";;
+esac
+exec "$rustc" "${args[@]}" "${remap[@]}"

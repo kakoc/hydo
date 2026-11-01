@@ -1,0 +1,52 @@
+{
+  "format": 1,
+  "name": "rust-kv",
+  "description": "rkv (Rust, hydo-assert SDK); every acknowledged PUT must survive kills and power cuts.",
+  "root": {
+    "files": [
+      {
+        "src": "bin/rkv",
+        "dst": "/bin/rkv",
+        "mode": "0755"
+      }
+    ]
+  },
+  "data": {
+    "size_mib": 64,
+    "dirs": [
+      "rkv"
+    ]
+  },
+  "services": [
+    {
+      "name": "rkv",
+      "cmd": "/bin/rkv serve /data/rkv 7070",
+      "ready": "/bin/rkv ping 7070",
+      "port": 7070
+    }
+  ],
+  "workload": {
+    "steps": 20,
+    "run": "i=$HYDO_FROM\nwhile [ $i -lt $HYDO_TO ]; do\n  if /bin/rkv put 7070 k:$i v$i > /dev/null; then echo $i >> $HYDO_ACKED; echo \"$i ack\" >> $HYDO_OUTCOMES\n  else echo \"$i unknown\" >> $HYDO_OUTCOMES; fi\n  i=$((i + 1))\ndone\n"
+  },
+  "knobs": [
+    {
+      "token": "S",
+      "name": "rkv fdatasync before acknowledging",
+      "default": "always",
+      "set": "echo $HYDO_VALUE > /tmp/rkv-fsync",
+      "values": [
+        "always",
+        "never"
+      ]
+    }
+  ],
+  "invariants": [
+    {
+      "id": "rkv.oracle",
+      "msg": "every PUT the client saw acknowledged reads back with its value (rkv check)",
+      "cmd": "/bin/rkv check 7070 $HYDO_ACKED"
+    }
+  ],
+  "buggify": true
+}

@@ -1,0 +1,86 @@
+{
+  "format": 1,
+  "name": "kv-hist",
+  "description": "Redis with history checks written in test.checks",
+  "root": {
+    "files": [
+      {
+        "src": "bin/redis-server",
+        "dst": "/bin/redis-server",
+        "mode": "0755"
+      },
+      {
+        "src": "bin/kvtest",
+        "dst": "/bin/kvtest",
+        "mode": "0755"
+      }
+    ]
+  },
+  "data": {
+    "dirs": [
+      "redis"
+    ]
+  },
+  "services": [
+    {
+      "name": "redis",
+      "cmd": "/bin/redis-server --dir /data/redis --appendonly yes",
+      "ready": "/bin/kvtest ping",
+      "port": 6379
+    }
+  ],
+  "workload": {
+    "steps": 10
+  },
+  "checks": [
+    {
+      "id": "kv.linearizable",
+      "type": "linearizable",
+      "history": "kv",
+      "model": "register",
+      "msg": "kv.linearizable",
+      "final": "exec '/bin/kvtest' 'readback' 'kv'"
+    },
+    {
+      "id": "lists.append",
+      "type": "list-append",
+      "history": "lists",
+      "consistency": "serializable",
+      "msg": "every list is a serializable history of appends"
+    }
+  ],
+  "test": {
+    "parallel": 2,
+    "commands": [
+      {
+        "name": "set",
+        "kind": "parallel_driver",
+        "run": [
+          "/bin/kvtest",
+          "driver",
+          "set"
+        ]
+      },
+      {
+        "name": "append",
+        "kind": "parallel_driver",
+        "run": [
+          "/bin/kvtest",
+          "driver",
+          "append"
+        ]
+      }
+    ],
+    "checks": [
+      {
+        "name": "totals",
+        "kind": "final",
+        "run": [
+          "/bin/kvtest",
+          "check",
+          "totals"
+        ]
+      }
+    ]
+  }
+}

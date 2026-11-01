@@ -1,0 +1,105 @@
+rpcs: {Nope: {}}
+rpcs: {Create: {fields: {nope: {value: 1}}}}
+rpcs: {Create: {fields: {customer: {range: [1, 2]}}}}
+rpcs: {Create: {fields: {amount_cents: {range: [5, 1]}}}}
+rpcs: {Create: {fields: {channel: {choice: [PURPLE]}}}}
+rpcs: {Create: {fields: {items: {value: x}}}}
+rpcs: {Create: {fields: {customer: {format: base64}}}}
+rpcs: {Get: {fields: {id: {from: Create.amount_cents}}}}
+rpcs: {Get: {fields: {id: {from: Create.items}}}}
+rpcs: {Get: {fields: {id: {from: Create.nope}}}}
+rpcs: {Create: {fields: {labels.key: {len: [2, 2]}, labels.bogus: {}}}}
+rpcs: {Create: {oneofs: {payment: [cash]}}}
+rpcs: {Create: {oneofs: {pay: [card]}}}
+rpcs: {Create: {classify: {TIMEOUT: fail}}}
+rpcs: {Create: {classify: {UNAVAILABLE: maybe}}}
+rpcs: {Create: {outcome_id: items.sku}}
+services: [Payments]
+scenarios: [{name: s, calls: [Create, Nope]}]
+rpcs: {Create: {wieght: 3}}
+rpcs: {Create: {weight: abc}}
+rpcs: {Create: {weight: 3.7}}
+rpcs: {Create: {weight: -1}}
+seed: -5
+seed: 0x10
+seed: 1.5
+deadline_ms: yes
+steps: {calls: 0}
+steps: {calls: 2, concurrency: 65}
+drive: {calls: 5000}
+record: {console: loud}
+record: {history: "a b"}
+defaults: {string_len: [3, 1]}
+defaults: {depth: 40}
+defaults: {message_prob: 2}
+defaults: {string_len: [1]}
+rpcs: {Create: {stream_len: []}}
+rpcs: {Create: {retry: {attempts: 200}}}
+rpcs: {Create: {retry: {attempts: 2, at_end: no}}}
+rpcs: {Create: {retry: {at_end: maybe}}}
+rpcs: {Create: {fields: {amount_cents: {value: 2026-01-01}}}}
+rpcs: {Create: {fields: {amount_cents: {value: [1, 2]}}}}
+rpcs: {Create: {fields: {amount_cents: {value: 010}}}}
+rpcs: {Create: {fields: {amount_cents: {value: 08}}}}
+rpcs: {Create: {fields: {amount_cents: {value: 1e3}}}}
+rpcs: {Create: {fields: {amount_cents: {value: 1.5}}}}
+rpcs: {Create: {fields: {customer: {value: yes}}}}
+rpcs: {Create: {fields: {customer: {value: true}}}}
+rpcs: {Create: {fields: {customer: {unique: true}}}}
+rpcs: {Create: {fields: {channel: {unique: true}}}}
+rpcs: {Create: {fields: {items: {len: [1, 2]}, items.qty: {range: [-5, 5]}}}}
+rpcs: {Create: {fields: {items.qty: {range: [1, 3000000000]}}}}
+rpcs: {Create: {fields: {note: {prob: 0.5}}}}
+rpcs: {Create: {fields: {note: {prob: 1.5}}}}
+rpcs: {Create: {fields: {request_id: {prefix: x, format: uuid}}}}
+rpcs: {Create: {fields: {amount_cents: {prefix: x}}}}
+rpcs: {Create: {fields: {channel: {choice: [WEB, 2]}}}}
+rpcs: {Create: {fields: {channel: {choice: [7]}}}}
+rpcs: {Create: {fields: {customer: {choice: [a, ~]}}}}
+rpcs: {Cancel: {fields: {id: {from: {rpc: Create, path: id, pick: latest}}}}}
+rpcs: {Cancel: {fields: {id: {from: {rpc: Create, path: id, pick: oldest}}}}}
+rpcs: {Cancel: {fields: {id: {from: {rpc: Create, path: id, bogus: 1}}}}}
+rpcs: {Cancel: {fields: {id: {from: Create}}}}
+rpcs: {Cancel: {fields: {id: {from: Create.request.request_id}}}}
+rpcs: {Cancel: {fields: {id: {from: [a]}}}}
+rpcs: {Cancel: {fields: {id: {from: {rpc: Create, path: id, fallback: generate}}}}}
+rpcs: {Get: {fields: {id: {from: Create.status}}}}
+rpcs: {List: {fields: {page_size: {from: Create.amount_cents}}}}
+rpcs: {List: {fields: {page_size: {from: Create.customer}}}}
+rpcs: {Create: {}, orders.v1.Orders/Create: {}}
+rpcs: {Create: {deadline_ms: 50, target: "x:1"}, List: {weight: 0}}
+scenarios: [{name: cc, calls: [Create, Cancel]}, {name: c2, weight: 4, calls: [Get]}]
+scenarios: [{name: "", calls: [Create]}]
+foo: bar
+- a
+- b
+just a string
+rpcs: {Create: {fields: {labels.value: {len: [1, 1]}, labels: {len: [2, 2]}}}}
+rpcs: {Create: {fields: {card.exp_month: {range: [1, 12]}, card: {prob: 1}}}}
+rpcs: {Create: {fields: {card.nope: {}}}}
+rpcs: {Create: {fields: {customer.x: {}}}}
+rpcs: {Create: {oneofs: {payment: []}}}
+rpcs: {Create: {oneofs: {payment: ~}}}
+rpcs: {Create: {classify: {}}}
+a: [1,
+rpcs: {Create: {fields: {amount_cents: {range: ["1", "2"]}}}}
+rpcs: {Create: {fields: {amount_cents: {range: [1, 2, 3]}}}}
+rpcs: {Create: {fields: {customer: {len: [0, 0]}}}}
+target: 10.0.0.1:99
+rpcs: {Create: {fields: {customer: {value: "a b"}}}}
+rpcs: {Create: {fields: {request_id: {value: "<&>"}}}}
+rpcs: {Create: {fields: {amount_cents: {value: 2026-1-2T10:20:30Z}}}}
+rpcs: {Create: {fields: {amount_cents: {value: 2026-01-02 10:20:30.500}}}}
+rpcs: {Create: {fields: {amount_cents: {value: 2026-01-02T10:20:30+02:00}}}}
+rpcs: {Create: {fields: {customer: {prefix: 2026-01-01}}}}
+rpcs: {Create: {fields: {customer: {choice: [{a: 1}]}}}}
+rpcs: {Create: {fields: {customer: {choice: [[1, 2]]}}}}
+x: &a 1
+rpcs: &r {Create: {weight: 2}}
+rpcs: {Create: {weight: 2, weight: 3}}
+seed: 18446744073709551615
+seed: 0o17
+rpcs: {Create: {fields: {amount_cents: {range: [0x10, 0b111111]}}}}
+rpcs: {Create: {fields: {amount_cents: {range: [.5, 2]}}}}
+rpcs: {Create: {fields: {items.qty: {range: [-2147483648, 2147483647]}}}}
+rpcs: {Create: {fields: {amount_cents: {value: 99999999999999999999}}}}

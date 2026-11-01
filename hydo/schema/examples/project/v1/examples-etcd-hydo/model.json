@@ -1,0 +1,96 @@
+{
+  "format": 1,
+  "name": "etcd",
+  "description": "three-member etcd cluster; acked puts survive, client revisions never go back, members agree.",
+  "root": {
+    "files": [
+      {
+        "src": "etcd-v{{version}}/etcd",
+        "dst": "/bin/etcd",
+        "mode": "0755"
+      },
+      {
+        "src": "etcd-v{{version}}/etcdctl",
+        "dst": "/bin/etcdctl",
+        "mode": "0755"
+      }
+    ],
+    "text": {
+      "/etc/etcd-member": "# etcd-member <n> <addr> <client-port> <peer-port>: member n as user etcd<n>. exec all the\n# way down, so the service's PID is etcd itself (kills and pauses hit etcd).\nexec su etcd$1 -s /bin/sh -c \"exec /bin/etcd --name etcd$1 --data-dir /data/etcd$1 \\\n  --listen-client-urls http://$2:$3 --advertise-client-urls http://$2:$3 \\\n  --listen-peer-urls http://$2:$4 --initial-advertise-peer-urls http://$2:$4 \\\n  --initial-cluster $ETCD_CLUSTER --initial-cluster-token hydo --initial-cluster-state new \\\n  --log-level warn\"\n",
+      "/etc/passwd": "root:x:0:0:root:/tmp:/bin/sh\netcd1:x:1001:1001:etcd1:/tmp:/bin/sh\netcd2:x:1002:1002:etcd2:/tmp:/bin/sh\netcd3:x:1003:1003:etcd3:/tmp:/bin/sh\n",
+      "/etc/group": "root:x:0:\netcd1:x:1001:\netcd2:x:1002:\netcd3:x:1003:\n"
+    }
+  },
+  "data": {
+    "size_mib": 512
+  },
+  "env": {
+    "IPR": "/nix/store/dx4fsbxs5v82l9lzmjkpkhx5ygqcwm69-iproute2-6.8.0/bin/ip",
+    "EPS": "127.0.0.11:2379,127.0.0.12:12379,127.0.0.13:22379",
+    "ETCD_CLUSTER": "etcd1=http://127.0.0.11:2380,etcd2=http://127.0.0.12:12380,etcd3=http://127.0.0.13:22380"
+  },
+  "shell": "ectl() { /bin/etcdctl --dial-timeout=1s --command-timeout=2s \"$@\"; }\nep_of() { case $1 in 0) echo 127.0.0.11:2379;; 1) echo 127.0.0.12:12379;; *) echo 127.0.0.13:22379;; esac; }\nrev_of() { printf '%s' \"$1\" | sed -n 's/.*\"header\":{[^}]*\"revision\":\\([0-9]*\\).*/\\1/p'; }\nmember_setup() {   # <n> <addr>: data dir owned by etcd<n>; uid 100<n> sends from <addr>\n  mkdir -p /data/etcd$1 && chown etcd$1:etcd$1 /data/etcd$1 && chmod 700 /data/etcd$1 || return 1\n  # the local table moves from rule 0 to rule 100, so the per-uid rules (pref 10) come first\n  $IPR rule show | grep -q '^100:.*lookup local' || { $IPR rule add pref 100 lookup local && $IPR rule del pref 0; } || return 1\n  $IPR route show table 10$1 | grep -q \"src $2\" || $IPR route add local 127.0.0.0/8 dev lo src $2 table 10$1 || return 1\n  $IPR rule show | grep -q \"uidrange 100$1-100$1\" || $IPR rule add pref 10 uidrange 100$1-100$1 lookup 10$1\n}\nwait_quorum() {   # up to 60 s for a linearizable read through any member\n  local n=0\n  until ectl --endpoints=$EPS get hydo-probe > /dev/null 2>&1; do\n    n=$((n + 1)); [ $n -lt 60 ] || return 1; sleep 1\n  done\n}\nobserve() {   # <client> <revision> <what>: log it; a revision below this client's last one is a\n              # violation, reported at once (a power cut would lose the log before the final check)\n  local f=/tmp/hydo/rev.$1 last\n  last=$(tail -1 $f 2>/dev/null | cut -d' ' -f1)\n  if [ -n \"$last\" ] && [ \"$2\" -lt \"$last\" ]; then\n    echo \"HYDO-ASSERT {\\\"t\\\":\\\"always\\\",\\\"id\\\":\\\"client.revisions_monotonic\\\",\\\"ok\\\":false,\\\"msg\\\":\\\"each client's observed revisions never go backwards\\\",\\\"details\\\":{\\\"out\\\":\\\"client $1 saw revision $2 ($3) after $last\\\"}}\" > /dev/console\n  fi\n  echo \"$2 $3\" >> $f\n}\nclient_op() {   # <client> <step>: put k<id>=v<id>, then read it back, through one member\n  local c=$1 id ep out r\n  id=$(($2 * 3 + $1)); ep=$(ep_of $((($1 + $2) % 3)))\n  if out=$(ectl --endpoints=$ep -w json put k$id v$id 2>/dev/null) && r=$(rev_of \"$out\") && [ -n \"$r\" ]; then\n    echo $id >> $HYDO_ACKED; echo \"$id ack\" >> $HYDO_OUTCOMES; observe $c $r put-k$id@$ep\n  else\n    echo \"$id unknown\" >> $HYDO_OUTCOMES\n  fi\n  out=$(ectl --endpoints=$ep -w json get k$id 2>/dev/null) && r=$(rev_of \"$out\") && [ -n \"$r\" ] && observe $c $r get-k$id@$ep\n  return 0\n}\n",
+  "params": {
+    "version": "3.6.15"
+  },
+  "services": [
+    {
+      "name": "etcd1",
+      "cmd": "sh /etc/etcd-member 1 127.0.0.11 2379 2380",
+      "setup": "member_setup 1 127.0.0.11",
+      "ready": "wget -q -T 2 -O /dev/null http://127.0.0.11:2380/version",
+      "port": 2379,
+      "addr": "127.0.0.11"
+    },
+    {
+      "name": "etcd2",
+      "cmd": "sh /etc/etcd-member 2 127.0.0.12 12379 12380",
+      "setup": "member_setup 2 127.0.0.12",
+      "ready": "wget -q -T 2 -O /dev/null http://127.0.0.12:12380/version",
+      "port": 12379,
+      "addr": "127.0.0.12"
+    },
+    {
+      "name": "etcd3",
+      "cmd": "sh /etc/etcd-member 3 127.0.0.13 22379 22380",
+      "setup": "member_setup 3 127.0.0.13",
+      "ready": "wget -q -T 2 -O /dev/null http://127.0.0.13:22380/version",
+      "port": 22379,
+      "addr": "127.0.0.13"
+    }
+  ],
+  "provision": "wait_quorum && ectl --endpoints=$EPS put hydo-probe up\n",
+  "workload": {
+    "steps": 30,
+    "run": "i=$HYDO_FROM\nwhile [ $i -lt $HYDO_TO ]; do\n  client_op 0 $i & client_op 1 $i & client_op 2 $i &\n  wait\n  if [ $((i % 5)) = 4 ]; then     # a write, then at once an online defrag of every member\n    ectl --endpoints=$EPS put hydo-defrag $i > /dev/null 2>&1\n    /bin/etcdctl --dial-timeout=1s --command-timeout=5s --endpoints=$EPS defrag > /dev/null 2>&1\n  fi\n  i=$((i + 1))\ndone\n",
+    "retry": "wait_quorum || exit 0\ni=0\nwhile [ $i -lt $((HYDO_STEPS * 3)) ]; do\n  if ! grep -qx $i $HYDO_ACKED; then\n    for a in 1 2 3; do       # a fresh leader may still refuse the first attempt\n      ectl --endpoints=$EPS put k$i v$i > /dev/null 2>&1 && { echo $i >> $HYDO_ACKED; echo \"$i ack\" >> $HYDO_OUTCOMES; break; }\n      sleep 1\n    done\n  fi\n  i=$((i + 1))\ndone\n",
+    "timeout": 600,
+    "process": "etcdctl"
+  },
+  "invariants": [
+    {
+      "id": "etcd.acked_puts_readable",
+      "msg": "every put a client saw acknowledged is readable with its value after recovery",
+      "cmd": "wait_quorum || { echo \"no quorum within 60 s\"; exit 2; }\nectl --endpoints=$EPS get --prefix k > /tmp/hydo/kv 2>/dev/null || { echo \"range read failed\"; exit 2; }\nawk 'FILENAME == ARGV[1] { if (FNR % 2) k = $0; else v[k] = $0; next }\n     { if (v[\"k\" $1] != \"v\" $1) { print \"acked put k\" $1 \" lost (read \\\"\" v[\"k\" $1] \"\\\")\"; bad = 1; exit } }\n     END { if (bad) exit 1 }' /tmp/hydo/kv $HYDO_ACKED || exit 1\necho \"acked=$(wc -l < $HYDO_ACKED) all readable\"\n"
+    },
+    {
+      "id": "client.revisions_monotonic",
+      "msg": "each client's observed revisions never go backwards",
+      "cmd": "n=0\nfor f in /tmp/hydo/rev.0 /tmp/hydo/rev.1 /tmp/hydo/rev.2; do\n  [ -f $f ] || continue\n  n=$((n + $(wc -l < $f)))\n  awk -v f=$f '$1 < last { print f \": revision \" $1 \" (\" $2 \") after \" last \" (\" what \")\"; exit 1 } { last = $1; what = $2 }' $f || exit 1\ndone\necho \"observations=$n monotonic\"\n"
+    },
+    {
+      "id": "etcd.members_agree",
+      "msg": "after the run every member reports the same revision and the same mod_revision of the last acked key",
+      "cmd": "wait_quorum || { echo \"no quorum within 60 s\"; exit 2; }\nlast=$(sort -n $HYDO_ACKED | tail -1); key=k$last\n[ -n \"$last\" ] || key=hydo-probe\nn=0\nwhile :; do\n  rs=\"\"; ms=\"\"; ok=1\n  for m in 0 1 2; do\n    r=$(rev_of \"$(ectl --endpoints=$(ep_of $m) -w json endpoint status 2>/dev/null)\")\n    mr=$(ectl --endpoints=$(ep_of $m) --consistency=s -w json get $key 2>/dev/null | sed -n 's/.*\"mod_revision\":\\([0-9]*\\).*/\\1/p')\n    [ -n \"$r\" ] && [ -n \"$mr\" ] || ok=0\n    rs=\"$rs $r\"; ms=\"$ms $mr\"\n  done\n  if [ $ok = 1 ] && [ $(echo $rs | tr ' ' '\\n' | sort -u | wc -l) = 1 ] && [ $(echo $ms | tr ' ' '\\n' | sort -u | wc -l) = 1 ]; then\n    echo \"members agree: revision$rs, $key mod_revision$ms\"; exit 0\n  fi\n  n=$((n + 1)); [ $n -lt 30 ] || break\n  sleep 1\ndone\n[ $ok = 1 ] || { echo \"a member did not answer within 30 s (revisions$rs; $key mod_revisions$ms)\"; exit 2; }\necho \"members disagree: revisions$rs; $key mod_revisions$ms\"; exit 1\n"
+    }
+  ],
+  "faults": [
+    "kill",
+    "pause",
+    "network",
+    "oneway",
+    "cut",
+    "clock",
+    "disk"
+  ]
+}

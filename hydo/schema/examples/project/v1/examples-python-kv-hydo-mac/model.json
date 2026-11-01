@@ -1,0 +1,72 @@
+{
+  "format": 1,
+  "name": "python-kv",
+  "description": "pykv (Python, hydo-assert SDK); every acknowledged PUT must survive kills and power cuts.",
+  "root": {
+    "files": [
+      {
+        "src": "files/nix",
+        "dst": "/nix"
+      },
+      {
+        "src": "files/opt/pykv/hydo_assert",
+        "dst": "/opt/pykv/hydo_assert"
+      },
+      {
+        "src": "pykv.py",
+        "dst": "/opt/pykv/pykv.py"
+      }
+    ]
+  },
+  "data": {
+    "size_mib": 64,
+    "dirs": [
+      "pykv"
+    ]
+  },
+  "env": {
+    "PY": "/nix/store/ic0l2ykss28lr7r4by14inb3pqw87yza-python3-3.11.9/bin/python3.11",
+    "PYTHONPATH": "/opt/pykv",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONHASHSEED": "0"
+  },
+  "services": [
+    {
+      "name": "pykv",
+      "cmd": "$PY /opt/pykv/pykv.py serve /data/pykv 7070",
+      "ready": "$PY /opt/pykv/pykv.py ping 7070",
+      "port": 7070
+    }
+  ],
+  "workload": {
+    "steps": 20,
+    "run": "i=$HYDO_FROM\nwhile [ $i -lt $HYDO_TO ]; do\n  if $PY /opt/pykv/pykv.py put 7070 k:$i v$i; then echo $i >> $HYDO_ACKED; echo \"$i ack\" >> $HYDO_OUTCOMES\n  else echo \"$i unknown\" >> $HYDO_OUTCOMES; fi\n  i=$((i + 1))\ndone\n"
+  },
+  "knobs": [
+    {
+      "token": "S",
+      "name": "pykv fsync before acknowledging",
+      "default": "always",
+      "set": "echo $HYDO_VALUE > /tmp/pykv-fsync",
+      "values": [
+        "always",
+        "never"
+      ]
+    }
+  ],
+  "invariants": [
+    {
+      "id": "pykv.oracle",
+      "msg": "every PUT the client saw acknowledged reads back with its value (pykv check)",
+      "cmd": "$PY /opt/pykv/pykv.py check 7070 $HYDO_ACKED"
+    }
+  ],
+  "faults": [
+    "kill",
+    "pause",
+    "cut",
+    "clock",
+    "disk"
+  ],
+  "buggify": true
+}

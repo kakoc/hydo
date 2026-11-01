@@ -1,0 +1,53 @@
+syntax = "proto2";
+package a.b;
+import "a/opts.proto";
+import public "a/b/pub.proto";
+import "google/protobuf/timestamp.proto";
+import "google/api/http.proto";
+
+option java_package = "com.example.ab";
+option (a.opts.owner) = "team";
+option (a.opts.build) = 7;
+option optimize_for = CODE_SIZE;
+
+message Main {
+  option (a.opts.important) = true;
+  option deprecated = true;
+  required string id = 1 [(a.opts.label) = "x", (a.opts.rule) = {name: "r" min: 3 tags: "t1" tags: "t2"}, (a.opts.nums) = 1, (a.opts.nums) = 2];
+  optional double ratio = 2 [default = 1.5];
+  optional float f = 3 [default = 1e10];
+  optional int64 big = 4 [default = -9223372036854775808];
+  optional string s = 5 [default = "a\"b\n\x01\\"];
+  optional bytes by = 6 [default = "\001\377abc"];
+  optional Color color = 7 [default = GREEN];
+  optional double inf = 8 [default = inf];
+  optional double ninf = 9 [default = -inf];
+  optional double nan = 10 [default = nan];
+  optional bool flag = 11 [default = true];
+  optional uint64 u = 12 [default = 18446744073709551615];
+  optional float tiny = 13 [default = 0.000001];
+  repeated int32 packed = 14 [packed = true];
+  repeated int32 unpacked = 15;
+  optional string jn = 16 [json_name = "customName"];
+  optional group Grp = 17 { optional int32 gx = 18; }
+  map<string, Pub.E> cmap = 19;
+  oneof which { string w1 = 20; Nested w2 = 21; }
+  optional google.protobuf.Timestamp ts = 22;
+  optional Pub pub = 23;
+  enum Color { RED = 1; GREEN = 2; reserved 5 to 7; reserved "OLD"; }
+  message Nested { optional int32 n = 1; extensions 100 to 199; }
+  reserved 30 to 40, 50;
+  reserved "gone", "old";
+  extensions 1000 to max;
+  optional double sci = 24 [default = 123456789012];
+  optional float fneg = 25 [default = -0.5];
+}
+
+extend Main.Nested { optional string ext_s = 150; }
+extend Main { optional int32 ext_main = 1000; }
+
+service Svc {
+  option deprecated = true;
+  rpc Do(Main) returns (Main) { option (a.opts.route) = "/do"; option idempotency_level = NO_SIDE_EFFECTS; }
+  rpc Stream(stream Main) returns (stream Pub) { option (google.api.http) = { post: "/v1/stream" body: "*" }; }
+}

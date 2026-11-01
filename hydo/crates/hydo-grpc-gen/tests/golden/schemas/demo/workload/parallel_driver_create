@@ -1,0 +1,4 @@
+#!/bin/busybox sh
+# hydo: timeout=21
+# hydo-msg: orders.v1.Orders/Create: generated requests (hydo-grpc-gen)
+exec /bin/hydo-grpc drive orders.v1.Orders/Create

@@ -1,0 +1,14 @@
+{
+  "about": "each catalog call writes every declaration so far, also after evaluations",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"k.a","msg":"first"},
+    {"do":"check","a":0,"cond":true},
+    {"do":"catalog"},
+    {"do":"sometimes","id":"k.b","msg":"declared after the first catalog"},
+    {"do":"catalog"}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "twice.out", "returns": "1"}
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "about": "map keys are written in the order of their UTF-8 bytes",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"d.key_order","msg":"details encoding"},
+    {"do":"check","a":0,"cond":true,"details":{"map":[["é",{"int":"1"}],["B",{"int":"2"}],["a",{"int":"3"}],["_",{"int":"4"}],["a b",{"int":"5"}],["￿",{"int":"6"}],["😀",{"int":"7"}],["",{"int":"8"}],["Z",{"int":"9"}],["ÿ",{"int":"10"}],["~",{"int":"11"}],["\u003ckey\u003e","\u0026"],["aa",{"int":"12"}],["a\u0000",{"int":"13"}]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "key_order.out", "returns": "1"}
+  ]
+}

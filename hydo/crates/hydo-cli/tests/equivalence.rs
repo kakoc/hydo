@@ -274,19 +274,23 @@ fn fixtures() -> PathBuf {
 fn with_explore(cwd: &Path) {
     let d = cwd.join("hydo-out/explore");
     std::fs::create_dir_all(&d).unwrap();
-    for f in ["report.json", "report.md"] {
+    // the results format (M115: the M94/M98 recordings moved to it with
+    // hydo-explore's examples/legacy_check.rs --convert)
+    for f in ["exploration.json", "report.md"] {
         std::fs::copy(fixtures().join("explore-composed").join(f), d.join(f)).unwrap();
     }
     let e = cwd.join("errs");
     std::fs::create_dir_all(&e).unwrap();
-    for f in ["errors.json", "report.json"] {
-        std::fs::copy(fixtures().join("explore-errors").join(f), e.join(f)).unwrap();
-    }
+    std::fs::copy(
+        fixtures().join("explore-errors/exploration.json"),
+        e.join("exploration.json"),
+    )
+    .unwrap();
     std::fs::create_dir_all(cwd.join("rundir")).unwrap();
     std::fs::create_dir_all(cwd.join("run1")).unwrap();
     std::fs::copy(
-        fixtures().join("run-errors/one.errors.json"),
-        cwd.join("run1/one.errors.json"),
+        fixtures().join("run-errors/result.json"),
+        cwd.join("run1/result.json"),
     )
     .unwrap();
     std::fs::write(cwd.join("bogus.img"), b"not an image").unwrap();

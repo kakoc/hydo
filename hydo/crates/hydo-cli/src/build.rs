@@ -58,6 +58,7 @@ pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
             setdefault("HYDO_BUSYBOX", &guest.join("busybox"));
             setdefault("HYDO_SEEDRNG", &guest.join("hvx_seedrng"));
             setdefault("HYDO_FCBIN", &guest.join("hydo_fc"));
+            setdefault("HYDO_AGENT_BIN", &guest.join("hydo-agent"));
             setdefault("HYDO_MKE2FS", &ctx.p("tools/bin/mke2fs"));
             setdefault("HYDO_FAKETIME", &ctx.libexec().join("faketime"));
             setdefault("HYDO_MODROOT", &guest.join("modules"));
@@ -84,6 +85,7 @@ pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
             setdefault("HYDO_READ_BIN_ARM64", &guest.join("hydo-read"));
             setdefault("HYDO_ARM64_STORE", &guest.join("tc"));
             setdefault("HYDO_FCBIN_ARM64", &guest.join("hydo_fc"));
+            setdefault("HYDO_AGENT_BIN_ARM64", &guest.join("hydo-agent"));
             (
                 hydo_build::Release::Mac {
                     root: ctx.root.clone(),
@@ -104,6 +106,8 @@ pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
         release,
     };
     let rc = hydo_build::main(&bctx, &hb_argv);
+    // an agent image (--control agent) takes the same next steps: since M126 hydo run, repro and
+    // explore drive it through the host controller (the image's /etc/hydo/control decides)
     if rc == 0 && no_print_flag(&rest) {
         println!("hydo: next:  hydo run \"disk=none | run\"     or     hydo explore --seeds 1-20");
     }

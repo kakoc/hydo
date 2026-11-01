@@ -1,0 +1,2 @@
+HYDO-ASSERT {"t":"always","id":"t.loop","ok":true,"msg":"evaluated many times","details":{"i":0}}
+HYDO-ASSERT {"t":"always","id":"t.loop","ok":false,"msg":"evaluated many times","details":{"i":120}}

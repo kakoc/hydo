@@ -1,0 +1,221 @@
+{
+  "format": 1,
+  "name": "compose-voting",
+  "description": "imported from docker-compose.yml (5 services); TODO: what is tested",
+  "guest": {
+    "ram_mib": 3072
+  },
+  "network": "bridge",
+  "root": {
+    "files": [
+      {
+        "src": "healthchecks",
+        "dst": "/etc/hydo/compose/bind/0-healthchecks"
+      }
+    ],
+    "text": {
+      "/etc/hosts": "127.0.0.1 localhost\n::1 localhost ip6-localhost ip6-loopback\n10.89.0.11 vote\n10.89.0.12 result\n10.89.0.13 worker\n10.89.0.14 redis\n10.89.0.15 db\n"
+    }
+  },
+  "data": {
+    "size_mib": 1280,
+    "dirs": [
+      "vol/db-data"
+    ]
+  },
+  "shell": "# hand-written: every acknowledged vote is a row (voter, vote) in PostgreSQL's votes table\nvotes_counted() {\n  got=$(hydo-oci db psql -U postgres -tAc \"select id || ' ' || vote from votes\" 2>/dev/null) || { echo \"db not answering\"; return 2; }\n  n=0\n  for id in $(cat $HYDO_ACKED); do\n    i=${id#voter}; v=a; [ $((i % 2)) = 1 ] && v=b\n    echo \"$got\" | grep -qx \"$id $v\" || { echo \"$id (vote $v) acknowledged but not counted\"; return 1; }\n    n=$((n + 1))\n  done\n  echo \"all $n acknowledged votes counted\"\n}\n",
+  "services": [
+    {
+      "name": "vote",
+      "ready": "nc -z -w 2 10.89.0.11 80",
+      "port": 80,
+      "addr": "10.89.0.11",
+      "depends_on": [
+        "redis"
+      ],
+      "image": {
+        "x86_64": "images/dockersamples-examplevotingapp_vote-latest-amd64.docker.tar",
+        "arm64": "images/dockersamples-examplevotingapp_vote-latest-arm64.docker.tar"
+      },
+      "image_ref": "dockersamples/examplevotingapp_vote:latest",
+      "mounts": [
+        {
+          "src": "/etc/hosts",
+          "dst": "/etc/hosts"
+        },
+        {
+          "dst": "/run",
+          "tmpfs": true,
+          "copy_up": true
+        },
+        {
+          "dst": "/dev/shm",
+          "tmpfs": true,
+          "size": "64m"
+        }
+      ]
+    },
+    {
+      "name": "result",
+      "ready": "nc -z -w 2 10.89.0.12 80",
+      "port": 80,
+      "addr": "10.89.0.12",
+      "depends_on": [
+        "db"
+      ],
+      "image": {
+        "x86_64": "images/dockersamples-examplevotingapp_result-latest-amd64.docker.tar",
+        "arm64": "images/dockersamples-examplevotingapp_result-latest-arm64.docker.tar"
+      },
+      "image_ref": "dockersamples/examplevotingapp_result:latest",
+      "mounts": [
+        {
+          "src": "/etc/hosts",
+          "dst": "/etc/hosts"
+        },
+        {
+          "dst": "/run",
+          "tmpfs": true,
+          "copy_up": true
+        },
+        {
+          "dst": "/dev/shm",
+          "tmpfs": true,
+          "size": "64m"
+        }
+      ]
+    },
+    {
+      "name": "worker",
+      "ready": "true",
+      "addr": "10.89.0.13",
+      "depends_on": [
+        "redis",
+        "db"
+      ],
+      "image": {
+        "x86_64": "images/dockersamples-examplevotingapp_worker-latest-amd64.docker.tar",
+        "arm64": "images/dockersamples-examplevotingapp_worker-latest-arm64.docker.tar"
+      },
+      "image_ref": "dockersamples/examplevotingapp_worker:latest",
+      "mounts": [
+        {
+          "src": "/etc/hosts",
+          "dst": "/etc/hosts"
+        },
+        {
+          "dst": "/run",
+          "tmpfs": true,
+          "copy_up": true
+        },
+        {
+          "dst": "/dev/shm",
+          "tmpfs": true,
+          "size": "64m"
+        }
+      ]
+    },
+    {
+      "name": "redis",
+      "ready": "timeout 30 hydo-oci redis /bin/sh -c /healthchecks/redis.sh",
+      "ready_timeout": 120,
+      "port": 6379,
+      "addr": "10.89.0.14",
+      "image": {
+        "x86_64": "images/redis-alpine-amd64.docker.tar",
+        "arm64": "images/redis-alpine-arm64.docker.tar"
+      },
+      "image_ref": "redis:alpine",
+      "mounts": [
+        {
+          "src": "/etc/hosts",
+          "dst": "/etc/hosts"
+        },
+        {
+          "dst": "/run",
+          "tmpfs": true,
+          "copy_up": true
+        },
+        {
+          "dst": "/dev/shm",
+          "tmpfs": true,
+          "size": "64m"
+        },
+        {
+          "src": "/etc/hydo/compose/bind/0-healthchecks",
+          "dst": "/healthchecks"
+        }
+      ]
+    },
+    {
+      "name": "db",
+      "ready": "timeout 30 hydo-oci db /bin/sh -c /healthchecks/postgres.sh",
+      "ready_timeout": 120,
+      "port": 5432,
+      "addr": "10.89.0.15",
+      "image": {
+        "x86_64": "images/postgres-15-alpine-amd64.docker.tar",
+        "arm64": "images/postgres-15-alpine-arm64.docker.tar"
+      },
+      "image_ref": "postgres:15-alpine",
+      "env": {
+        "POSTGRES_USER": "postgres",
+        "POSTGRES_PASSWORD": "postgres"
+      },
+      "mounts": [
+        {
+          "src": "/etc/hosts",
+          "dst": "/etc/hosts"
+        },
+        {
+          "dst": "/run",
+          "tmpfs": true,
+          "copy_up": true
+        },
+        {
+          "dst": "/dev/shm",
+          "tmpfs": true,
+          "size": "64m"
+        },
+        {
+          "src": "/data/vol/db-data",
+          "dst": "/var/lib/postgresql/data",
+          "copy_up": true
+        },
+        {
+          "src": "/etc/hydo/compose/bind/0-healthchecks",
+          "dst": "/healthchecks"
+        }
+      ]
+    }
+  ],
+  "workload": {
+    "steps": 20,
+    "run": "i=$HYDO_FROM\nwhile [ $i -lt $HYDO_TO ]; do\n  v=a; [ $((i % 2)) = 1 ] && v=b\n  if wget -q -T 5 -O /dev/null --header \"Cookie: voter_id=voter$i\" --post-data \"vote=$v\" http://vote/ 2>/dev/null; then\n    echo voter$i >> $HYDO_ACKED; echo \"voter$i ack\" >> $HYDO_OUTCOMES\n  else\n    echo \"voter$i unknown\" >> $HYDO_OUTCOMES\n  fi\n  i=$((i + 1))\ndone\n",
+    "timeout": 300,
+    "process": "wget"
+  },
+  "invariants": [
+    {
+      "id": "votes.counted_soon",
+      "type": "eventually",
+      "msg": "every acknowledged vote reaches PostgreSQL within 60 s after the faults end",
+      "cmd": "votes_counted",
+      "within": 60
+    },
+    {
+      "id": "votes.counted",
+      "msg": "every acknowledged vote is counted, with the choice the voter made",
+      "cmd": "votes_counted"
+    }
+  ],
+  "faults": [
+    "kill",
+    "pause",
+    "network",
+    "oneway",
+    "cut",
+    "clock",
+    "disk"
+  ]
+}

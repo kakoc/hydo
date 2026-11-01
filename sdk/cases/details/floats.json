@@ -1,0 +1,11 @@
+{
+  "about": "float64 values in Go's format: shortest digits, exponent form below 1e-6 and from 1e21, -0",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"d.floats","msg":"details encoding"},
+    {"do":"check","a":0,"cond":true,"details":{"map":[["f0",{"f64":"0.0"}],["fneg0",{"f64":"-0.0"}],["f1",{"f64":"0.1"}],["f3",{"f64":"3.0"}],["fneg",{"f64":"-2.5"}],["fthird",{"f64":"0.3333333333333333"}],["f20",{"f64":"1e20"}],["f21",{"f64":"1e21"}],["fn21",{"f64":"-1e21"}],["f64",{"f64":"1.8446744073709552e19"}],["fbig",{"f64":"1e100"}],["fmax",{"f64":"1.7976931348623157e308"}],["f6",{"f64":"1e-6"}],["f6b",{"f64":"1.234e-6"}],["fsm",{"f64":"1.5e-7"}],["fsm2",{"f64":"9.99e-7"}],["ftiny",{"f64":"2.5e-300"}],["fsub",{"f64":"5e-324"}],["fmix",{"f64":"123456789.125"}],["f17",{"f64":"1.2345678901234568e17"}]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "floats.out", "returns": "1"}
+  ]
+}

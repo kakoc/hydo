@@ -1,0 +1,4 @@
+HYDO-ASSERT {"t":"sometimes","id":"t.b","ok":true,"msg":"b"}
+HYDO-ASSERT {"t":"reachable","id":"t.r","ok":true,"msg":"r"}
+HYDO-ASSERT {"t":"always","id":"t.a","ok":false,"msg":"a","details":{"order":1}}
+HYDO-ASSERT {"t":"always","id":"t.a","ok":true,"msg":"a","details":{"order":2}}

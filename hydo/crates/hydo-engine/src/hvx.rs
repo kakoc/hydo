@@ -6,16 +6,22 @@
 //! <hvx-run> sudo env HVX_SNAP_DIR=<dir> [<extra env>...] <hvx_explore> [--ram-mib N] [--vcpus N] [--cpu v3]
 //!     one   <bzImage> <initramfs> <image> <outdir> "<schedule>"
 //!     serve <bzImage> <initramfs> <image> <outdir>          (then RUN/BRANCH/QUIT on stdin)
+//!     --control one   ... "<schedule>"                       (lock-step control from S1, M118)
+//!     --control boot serve ... ["<boot schedule>"]           (an agent image, M121)
+//!     --control boot one   ... "<schedule>"
 //! ```
 //!
 //! `hvx-run` takes the shared module lock (`flock -s $HYDO_LOCK`) and drops the `sudo` when the
 //! user can open the device; without a wrapper the engine is started directly.
 
-use crate::process::{run_one, ProcessWorker};
+use crate::process::{run_one, ControlledBoot, ControlledRun, ProcessWorker};
 use crate::{BootSpec, Engine, EngineError, EngineKind, OneRun, Worker};
 use hydo_schedule::Schedule;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+/// A fresh-boot engine process under lock-step control ([`Hvx::one_lockstep`]).
+pub type ControlledOne = ControlledRun;
 
 /// How to start hvx_explore.
 #[derive(Clone, Debug)]
@@ -88,6 +94,39 @@ impl Hvx {
         c
     }
 
+    /// One schedule from a fresh boot under lock-step control (`hvx_explore --control one`): the
+    /// fresh-boot counterpart of [`Worker::lockstep`], to prove that a controlled run from a fresh
+    /// boot equals the same run restored from S1. The engine's stderr goes to `stderr_log`.
+    pub fn one_lockstep(
+        &self,
+        spec: &BootSpec,
+        schedule: &Schedule,
+        stderr_log: &Path,
+    ) -> Result<ControlledOne, EngineError> {
+        self.check_built()?;
+        let argv = self.control_argv(spec, "one", &["--control"], Some(schedule));
+        ControlledRun::start(self.command(spec, &argv), stderr_log)
+    }
+
+    /// argv for a controlled mode: `flags` go in front of the mode, `last` after the paths.
+    fn control_argv(
+        &self,
+        spec: &BootSpec,
+        mode: &str,
+        flags: &[&str],
+        last: Option<&Schedule>,
+    ) -> Vec<String> {
+        let mut argv = self.argv(spec, mode);
+        let at = argv.len() - 5; // ... <mode> <kernel> <initrd> <image> <outdir>
+        for (i, f) in flags.iter().enumerate() {
+            argv.insert(at + i, f.to_string());
+        }
+        if let Some(s) = last {
+            argv.push(s.to_string());
+        }
+        argv
+    }
+
     fn check_built(&self) -> Result<(), EngineError> {
         if !is_executable(&self.engine) {
             return Err(EngineError::NotBuilt(self.engine.clone()));
@@ -129,5 +168,27 @@ impl Engine for Hvx {
         let mut argv = self.argv(spec, "one");
         argv.push(format!("\"{schedule}\""));
         argv.join(" ")
+    }
+
+    fn start_controlled(
+        &self,
+        spec: &BootSpec,
+        boot: &Schedule,
+        stderr_log: &Path,
+    ) -> Result<ControlledBoot, EngineError> {
+        self.check_built()?;
+        let argv = self.control_argv(spec, "serve", &["--control", "boot"], Some(boot));
+        ControlledBoot::start(self.command(spec, &argv), stderr_log, false)
+    }
+
+    fn one_controlled(
+        &self,
+        spec: &BootSpec,
+        schedule: &Schedule,
+        stderr_log: &Path,
+    ) -> Result<ControlledRun, EngineError> {
+        self.check_built()?;
+        let argv = self.control_argv(spec, "one", &["--control", "boot"], Some(schedule));
+        ControlledRun::start(self.command(spec, &argv), stderr_log)
     }
 }

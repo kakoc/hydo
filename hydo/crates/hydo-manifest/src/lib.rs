@@ -8,6 +8,10 @@
 //! It accepts and refuses the same manifests with the same messages and gives the same normalised
 //! data; `tests/equivalence.rs` proves that against hydo-build on every manifest in the repository.
 //!
+//! The project format itself (one document model for all three, its version rule, the schema and
+//! the permanent example documents) is `model.rs`; `migrate.rs` has the canonical spelling,
+//! `read_project` and `hydo migrate`.
+//!
 //! API contract other crates rely on (keep these names and signatures):
 //! - `parse_text(text, name, by_content) -> Result<serde_json::Value, ManifestError>`
 //! - `Guest::from_value(&Value)`: the `guest:` section with hydo-build's defaults
@@ -17,7 +21,10 @@
 //! Where hydo-build itself stops with a Python exception (a traceback, not a ManifestError), the
 //! input is refused here too, with a message that starts with [`py::CRASH_PREFIX`].
 
+pub mod compat;
 pub mod composer;
+pub mod migrate;
+pub mod model;
 mod oci;
 pub mod py;
 mod pyre;
@@ -119,10 +126,13 @@ pub struct Loaded {
     pub service_order: Vec<String>,
     /// Image services whose image exists but was not read (see `oci.rs`): (service, image path).
     pub oci_unchecked: Vec<(String, String)>,
+    /// The document as written (after the format check, before `params:` and the expansion):
+    /// what [`check_document`] reads into the project model.
+    pub document: Value,
 }
 
 /// hydo-build's `main()` up to the build: read, `--set`, the composer's plan, validate, the
-/// architecture checks, the service order and the image checks.
+/// architecture checks, the service order, the image checks and the project model.
 pub fn load(path: &Path, opts: &LoadOptions) -> Result<Loaded, ManifestError> {
     let mut l = load_until_images(path, opts).0?;
     let p = path.to_string_lossy().into_owned();
@@ -132,7 +142,45 @@ pub fn load(path: &Path, opts: &LoadOptions) -> Result<Loaded, ManifestError> {
         "x86_64"
     };
     l.oci_unchecked = oci::prepare(&l.manifest.data, &p, arch)?;
+    check_document(&l)?;
     Ok(l)
+}
+
+/// The loaded document read into the project model (model.rs): its keys, their nesting and their
+/// kinds of value, also where the validator does not look (root.files entries, mounts, routes).
+/// `load` calls it after the image checks, and hydo-build after reading the images, so that the
+/// more specific messages of the validator and of the image reader come first.
+pub fn check_document(l: &Loaded) -> Result<model::Project, ManifestError> {
+    model::from_value(&l.document)
+}
+
+/// The keys the validator knows, per place (for the test that keeps the model and the validator
+/// on the same keys): (the model's definition name, the keys).
+#[doc(hidden)]
+pub fn validator_keys() -> Vec<(&'static str, Vec<&'static str>)> {
+    use validate as v;
+    vec![
+        ("Project", v::KNOWN_TOP.to_vec()),
+        ("Service", v::KNOWN_SVC.to_vec()),
+        ("Invariant", v::KNOWN_INV.to_vec()),
+        ("Knob", v::KNOWN_KNOB.to_vec()),
+        ("Workload", v::KNOWN_WORKLOAD.to_vec()),
+        ("Data", v::KNOWN_DATA.to_vec()),
+        ("Root", v::KNOWN_ROOT.to_vec()),
+        ("Guest", v::KNOWN_GUEST.to_vec()),
+        ("ErrorsConfig", v::KNOWN_ERRORS_TOP.to_vec()),
+        ("ServiceErrors", v::KNOWN_ERRORS_SVC.to_vec()),
+        ("Fake", v::KNOWN_FAKE.to_vec()),
+        ("Proxy", v::KNOWN_PROXY.to_vec()),
+        ("FakeRoute", v::KNOWN_ROUTE.to_vec()),
+        ("ProxyRoute", v::KNOWN_PROXY_ROUTE.to_vec()),
+        ("Webhook", v::KNOWN_HOOK.to_vec()),
+        ("HistoryCheck", v::KNOWN_CHECK.to_vec()),
+        ("Test", composer::known_test()),
+        ("TestCommand", composer::KNOWN_CMD.to_vec()),
+        ("TestCheck", composer::KNOWN_CHECK.to_vec()),
+        ("TestRegression", composer::KNOWN_REG.to_vec()),
+    ]
 }
 
 /// [`load`] without the image checks (hydo-build crate reads the images itself, in hydo_oci's
@@ -168,6 +216,9 @@ fn load_inner(
             message: "the manifest must be a mapping".into(),
         });
     }
+    // the project format first: a newer document is refused before any of its keys is read
+    model::check_format(&m, Some(&composer::engine_version(&opts.onboard_dir)))?;
+    let as_written = m.clone();
     let params = validate::apply_params(&mut m, &opts.sets)?;
     if let Some(v) = m.get("hydo_version").cloned() {
         composer::check_version(&v, &composer::engine_version(&opts.onboard_dir), warnings)?;
@@ -190,6 +241,7 @@ fn load_inner(
         params,
         service_order: order,
         oci_unchecked: Vec::new(),
+        document: as_written,
     })
 }
 
@@ -217,7 +269,41 @@ pub fn from_embedded_meta(
     text: &str,
     compose: Option<&Value>,
 ) -> Result<(Manifest, Option<Value>), ManifestError> {
+    embedded(text, compose, None)
+}
+
+/// [`from_embedded`] with the image's parameter values (`/etc/hydo/params`, the `name=value`
+/// lines hydo-build writes for a manifest with `params:`): `params:` is applied as hydo-build
+/// applies it (its defaults, then these values; every `{{name}}` substituted), so the manifest
+/// says what the image's compiled manifest.sh says (M128: an agent image's controller read
+/// `/bin/orderd serve --mode {{mode}}` literally). Without `params:` this is [`from_embedded`].
+pub fn from_embedded_params(
+    text: &str,
+    compose: Option<&Value>,
+    params: &[(String, String)],
+) -> Result<Manifest, ManifestError> {
+    embedded(text, compose, Some(params)).map(|(m, _)| m)
+}
+
+/// The `name=value` lines of an image's `/etc/hydo/params`.
+pub fn parse_params_file(text: &str) -> Vec<(String, String)> {
+    text.lines()
+        .filter_map(|l| l.split_once('='))
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
+}
+
+fn embedded(
+    text: &str,
+    compose: Option<&Value>,
+    params: Option<&[(String, String)]>,
+) -> Result<(Manifest, Option<Value>), ManifestError> {
     let mut m = parse_text(text, "hydo.yaml", true)?;
+    if let Some(p) = params {
+        if m.get("params").is_some() {
+            validate::apply_params(&mut m, p)?;
+        }
+    }
     let mut meta = None;
     let has_test = match &m {
         Value::Object(o) => o.contains_key("test"),
@@ -247,6 +333,9 @@ pub fn for_explorer(path: &Path) -> Result<(Value, Option<Value>), ManifestError
     let p = path.to_string_lossy().into_owned();
     let text = read_text(&p)?;
     let mut m = parse_text(&text, &py::basename(&p), true)?;
+    if m.is_object() {
+        model::check_format(&m, None)?;
+    }
     let folder = composer::scan_folder(&py::dirname(&py::abspath(&p)))?;
     let mut warnings = Vec::new();
     let meta = composer::expand(&mut m, folder.as_ref(), &mut warnings)?;

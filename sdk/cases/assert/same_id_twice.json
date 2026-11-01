@@ -1,0 +1,14 @@
+{
+  "about": "two assertions with the same id are deduplicated separately",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"t.dup","msg":"declared twice"},
+    {"do":"always","id":"t.dup","msg":"declared twice"},
+    {"do":"check","a":0,"cond":true},
+    {"do":"check","a":1,"cond":true},
+    {"do":"check","a":0,"cond":true}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "same_id_twice.out", "returns": "111"}
+  ]
+}

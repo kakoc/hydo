@@ -1,0 +1,217 @@
+{
+  "v": 1,
+  "type": "run",
+  "hydo_version": "0.1.0",
+  "schedule": "disk=cut | run C=12 R=everysec",
+  "image": {
+    "path": "/work/hist/hydo-out/explore-ob-redis-hist-arm64.cpio.gz",
+    "sha256": "26e67eab9bf8bb677148025b29377edff52418f3d41545d235a36ffe99bbd457"
+  },
+  "engine": {
+    "backend": "hvm",
+    "args": []
+  },
+  "verdict": {
+    "kind": "violation",
+    "text": "HYDO-ORACLE: VIOLATION [redis.kv_linearizable] key k:0: an acknowledged write is lost or a read is stale: a read that began after the write of v0 completed returned nil: p0 write k:0=v0 (ok, t=0.03-0.03s); p9 read k:0 -> nil (ok, t=1.02-1.02s (recovery boot)) (12 keys not linearizable)",
+    "guest": "HYDO-ORACLE: OK invariants=0 held ()"
+  },
+  "fingerprints": {
+    "fp": "0f6a26b51b3ed657",
+    "wfp": "6ee47c9024951472"
+  },
+  "findings": [
+    {
+      "kind": "assertion",
+      "id": "redis.kv_linearizable",
+      "status": "violation",
+      "message": "every SET and GET is linearizable per key (an acknowledged SET is never lost)",
+      "details": {
+        "assertion": "always",
+        "details": {
+          "check": "linearizable",
+          "key": "k:0",
+          "keys": 20,
+          "nonlinearizable_keys": 12,
+          "ops": 32,
+          "out": "key k:0: an acknowledged write is lost or a read is stale: a read that began after the write of v0 completed returned nil: p0 write k:0=v0 (ok, t=0.03-0.03s); p9 read k:0 -> nil (ok, t=1.02-1.02s (recovery boot)) (12 keys not linearizable)",
+          "witness_ops": 2
+        }
+      }
+    },
+    {
+      "kind": "assertion",
+      "id": "redis.lists_append",
+      "status": "violation",
+      "message": "the lists never lose an acknowledged RPUSH, never duplicate one, and reads never go back in time",
+      "details": {
+        "assertion": "always",
+        "details": {
+          "anomalies": "lost-append,stale-read,G-single-realtime",
+          "anomaly": "lost-append",
+          "check": "list-append",
+          "consistency": "strict-serializable",
+          "keys": 3,
+          "ops": 27,
+          "out": "lost-append: l0: T0 appended 0 and was acknowledged, but T24, which began after that, read [] without it"
+        }
+      }
+    },
+    {
+      "kind": "history-check",
+      "id": "redis.kv_linearizable",
+      "status": "violation",
+      "message": "key k:0: an acknowledged write is lost or a read is stale: a read that began after the write of v0 completed returned nil: p0 write k:0=v0 (ok, t=0.03-0.03s); p9 read k:0 -> nil (ok, t=1.02-1.02s (recovery boot)) (12 keys not linearizable)",
+      "details": {
+        "check": "linearizable",
+        "history": "kv",
+        "description": "every SET and GET is linearizable per key (an acknowledged SET is never lost)",
+        "details": {
+          "check": "linearizable",
+          "key": "k:0",
+          "keys": 20,
+          "nonlinearizable_keys": 12,
+          "ops": 32,
+          "out": "key k:0: an acknowledged write is lost or a read is stale: a read that began after the write of v0 completed returned nil: p0 write k:0=v0 (ok, t=0.03-0.03s); p9 read k:0 -> nil (ok, t=1.02-1.02s (recovery boot)) (12 keys not linearizable)",
+          "witness_ops": 2
+        },
+        "explanation": "not linearizable: 12 of 20 keys\nkeys: k:0 k:1 k:10 k:11 k:2 k:3 k:4 k:5 k:6 k:7 k:8 k:9\nwitness (these operations alone cannot be ordered; operations are removed while that stays true):\n  p0 write k:0=v0 (ok, t=0.03-0.03s)\n  p9 read k:0 -> nil (ok, t=1.02-1.02s (recovery boot))"
+      }
+    },
+    {
+      "kind": "history-check",
+      "id": "redis.lists_append",
+      "status": "violation",
+      "message": "lost-append: l0: T0 appended 0 and was acknowledged, but T24, which began after that, read [] without it",
+      "details": {
+        "check": "list-append",
+        "history": "log",
+        "description": "the lists never lose an acknowledged RPUSH, never duplicate one, and reads never go back in time",
+        "details": {
+          "anomalies": "lost-append,stale-read,G-single-realtime",
+          "anomaly": "lost-append",
+          "check": "list-append",
+          "consistency": "strict-serializable",
+          "keys": 3,
+          "ops": 27,
+          "out": "lost-append: l0: T0 appended 0 and was acknowledged, but T24, which began after that, read [] without it"
+        },
+        "explanation": "anomalies (strict-serializable): lost-append, stale-read, G-single-realtime\nlost-append: l0: T0 appended 0 and was acknowledged, but T24, which began after that, read [] without it\n    T0 p1 append l0 0 (ok, t=0.03-0.03s)\n    T24 p9 read l0 [] (ok, t=1.04-1.04s (recovery boot))\nstale-read: l0: T1 read [0], then T24, which began after T1 completed, read the older []\n    T1 p2 read l0 [0] (ok, t=0.03-0.03s)\n    T24 p9 read l0 [] (ok, t=1.04-1.04s (recovery boot))\nlost-append: l1: T2 appended 1 and was acknowledged, but T25, which began after that, read [] without it\n    T2 p1 append l1 1 (ok, t=0.03-0.03s)\n    T25 p9 read l1 [] (ok, t=1.04-1.04s (recovery boot))\nstale-read: l1: T3 read [1], then T25, which began after T3 completed, read the older []\n    T3 p2 read l1 [1] (ok, t=0.03-0.03s)\n    T25 p9 read l1 [] (ok, t=1.04-1.04s (recovery boot))\nlost-append: l2: T4 appended 2 and was acknowledged, but T26, which began after that, read [] without it\n    T4 p1 append l2 2 (ok, t=0.03-0.03s)\n    T26 p9 read l2 [] (ok, t=1.04-1.04s (recovery boot))\nstale-read: l2: T5 read [2], then T26, which began after T5 completed, read the older []\n    T5 p2 read l2 [2] (ok, t=0.03-0.03s)\n    T26 p9 read l2 [] (ok, t=1.04-1.04s (recovery boot))\nG-single-realtime: cycle of 8 transactions: T24 read l0=[], missing 0, which T0 appended next; process 1 ran T0 before T2; process 1 ran T2 before T4; T4 appended 2 to l2 before T10 appended 5; T10 appended 5 to l2 before T16 appended 8; T16 appended 8 to l2 before T22 appended 11; T23 read l2=[...,11], which T22 appended; T23 completed before T24 began\n    T24 p9 read l0 [] (ok, t=1.04-1.04s (recovery boot))\n    T0 p1 append l0 0 (ok, t=0.03-0.03s)\n    T2 p1 append l1 1 (ok, t=0.03-0.03s)\n    T4 p1 append l2 2 (ok, t=0.03-0.03s)\n    T10 p1 append l2 5 (ok, t=0.04-0.04s)\n    T16 p1 append l2 8 (ok, t=0.05-0.05s)\n    T22 p1 append l2 11 (ok, t=0.05-0.05s)\n    T23 p2 read l2 [2,5,8,11] (ok, t=0.05-0.05s)"
+      }
+    }
+  ],
+  "properties": {
+    "runs": 1,
+    "setup_complete_runs": 0,
+    "violations": 2,
+    "properties": [
+      {
+        "id": "fault.paused",
+        "assertion": "reachable",
+        "message": "a service was paused (SIGSTOP)",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.pause_mid_request",
+        "assertion": "sometimes",
+        "message": "a pause began while a client request was in flight",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.clock_back",
+        "assertion": "reachable",
+        "message": "the realtime clock was stepped backwards",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.clock_fwd",
+        "assertion": "reachable",
+        "message": "the realtime clock was stepped forwards",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.oneway_req",
+        "assertion": "reachable",
+        "message": "a one-way network fault hit the req direction",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.oneway_resp",
+        "assertion": "reachable",
+        "message": "a one-way network fault hit the resp direction",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "redis.kv_linearizable",
+        "assertion": "always",
+        "message": "every SET and GET is linearizable per key (an acknowledged SET is never lost)",
+        "declared": true,
+        "passes": 0,
+        "fails": 1,
+        "runs_passed": 0,
+        "runs_failed": 1,
+        "verdict": "FAIL",
+        "status": "violation",
+        "first_failure": "{\"check\":\"linearizable\",\"key\":\"k:0\",\"keys\":20,\"nonlinearizable_keys\":12,\"ops\":32,\"out\":\"key k:0: an acknowledged write is lost or a read is stale: a read that "
+      },
+      {
+        "id": "redis.lists_append",
+        "assertion": "always",
+        "message": "the lists never lose an acknowledged RPUSH, never duplicate one, and reads never go back in time",
+        "declared": true,
+        "passes": 0,
+        "fails": 1,
+        "runs_passed": 0,
+        "runs_failed": 1,
+        "verdict": "FAIL",
+        "status": "violation",
+        "first_failure": "{\"anomalies\":\"lost-append,stale-read,G-single-realtime\",\"anomaly\":\"lost-append\",\"check\":\"list-append\",\"consistency\":\"strict-serializable\",\"keys\":3,\"ops\":27,\"ou"
+      }
+    ]
+  },
+  "secs": 1.5,
+  "result_line": "RESULT one fp=0f6a26b51b3ed657 wfp=6ee47c9024951472 secs=1.5 verdict=HYDO-ORACLE: OK invariants=0 held ()",
+  "artifacts": {
+    "consoles": [
+      "one.log",
+      "one.recovery.log"
+    ],
+    "engine_log": "engine.log"
+  }
+}

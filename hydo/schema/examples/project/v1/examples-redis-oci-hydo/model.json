@@ -1,0 +1,53 @@
+{
+  "format": 1,
+  "name": "redis-oci",
+  "description": "Redis from the official Docker image; every acknowledged SET must survive.",
+  "data": {
+    "size_mib": 64
+  },
+  "services": [
+    {
+      "name": "redis",
+      "cmd": "redis-server --port 6379 --bind 127.0.0.1 --dir /data --save \"\" --appendonly yes --appendfsync always --hz 1 --dynamic-hz no",
+      "ready": "hydo-oci redis redis-cli ping | grep -q PONG",
+      "port": 6379,
+      "image": {
+        "x86_64": "redis-7.2.4-amd64.docker.tar",
+        "arm64": "redis-7.2.4-arm64-oci"
+      },
+      "image_ref": "redis:7.2.4"
+    }
+  ],
+  "workload": {
+    "steps": 20,
+    "run": "i=$HYDO_FROM\nwhile [ $i -lt $HYDO_TO ]; do\n  r=$(timeout 2 hydo-oci redis redis-cli SET k:$i v$i 2>/dev/null)   # a 2 s client deadline\n  if [ \"$r\" = OK ]; then echo $i >> $HYDO_ACKED; echo \"$i ack\" >> $HYDO_OUTCOMES\n  else echo \"$i unknown\" >> $HYDO_OUTCOMES; fi\n  i=$((i + 1))\ndone\n",
+    "process": "redis-cli"
+  },
+  "knobs": [
+    {
+      "token": "R",
+      "name": "Redis appendfsync",
+      "default": "always",
+      "set": "hydo-oci redis redis-cli CONFIG SET appendfsync $HYDO_VALUE",
+      "values": [
+        "always",
+        "everysec",
+        "no"
+      ]
+    }
+  ],
+  "invariants": [
+    {
+      "id": "redis.acked_writes_survive",
+      "msg": "every SET the client saw acknowledged reads back with its value",
+      "cmd": "lost=0\nfor i in $(cat $HYDO_ACKED); do\n  [ \"$(hydo-oci redis redis-cli GET k:$i)\" = \"v$i\" ] || { echo \"key k:$i lost\"; lost=1; break; }\ndone\n[ $lost = 0 ] && echo \"acked=$(wc -l < $HYDO_ACKED) all present\"\n[ $lost = 0 ]\n"
+    }
+  ],
+  "faults": [
+    "kill",
+    "pause",
+    "cut",
+    "clock",
+    "disk"
+  ]
+}

@@ -1,0 +1,2 @@
+HYDO-ASSERT {"t":"always_or_unreachable","id":"t.aou","ok":true,"msg":"an always-or-unreachable property"}
+HYDO-ASSERT {"t":"always_or_unreachable","id":"t.aou","ok":false,"msg":"an always-or-unreachable property","details":{"why":null}}

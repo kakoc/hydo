@@ -1,0 +1,1616 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "hydo results, version 1",
+  "description": "Any version-1 record or document (the schema's root).",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/Run"
+    },
+    {
+      "$ref": "#/$defs/Exploration"
+    },
+    {
+      "$ref": "#/$defs/Start"
+    },
+    {
+      "$ref": "#/$defs/Shrink"
+    },
+    {
+      "$ref": "#/$defs/End"
+    }
+  ],
+  "$defs": {
+    "Run": {
+      "description": "One run of one schedule: `result.json` of `hydo run`, and every run of an exploration in\n`events.jsonl`.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/RunType"
+        },
+        "hydo_version": {
+          "description": "The hydo that wrote the document (documents only).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tag": {
+          "description": "The explorer's name for the run (`seed-3`, `repro-3`, `shrink-1-0`, `min-a`, ...).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "seed": {
+          "description": "The exploration seed (or sweep point number) the run belongs to.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "role": {
+          "description": "Why the explorer made the run ([`role`]).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schedule": {
+          "description": "The schedule, in the schedule language (`disk=cut | run C=12`).",
+          "type": "string"
+        },
+        "class": {
+          "description": "The explorer's finding class of the schedule (`durable-defaults`, `unsafe-knob`, ...).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "point": {
+          "description": "A sweep point's label.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image": {
+          "description": "Documents only: in a stream, the [`Start`] record names the image.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Image"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "engine": {
+          "description": "Documents only: in a stream, the [`Start`] record names the engine.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Engine"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "verdict": {
+          "$ref": "#/$defs/Verdict"
+        },
+        "fingerprints": {
+          "$ref": "#/$defs/Fingerprints"
+        },
+        "findings": {
+          "description": "What the run checked: failed invariants and assertions, every history check, every\nerror kind.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Finding"
+          },
+          "default": []
+        },
+        "properties": {
+          "description": "Documents only: the run's property table.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PropertyTable"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error_logs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ErrorLogs"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "secs": {
+          "description": "The run's wall time in seconds (engine side).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "counters": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Counters"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "worker": {
+          "description": "The explorer worker that ran it.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "cached": {
+          "description": "Answered from `$HYDO_EXPLORE_CACHE` instead of run.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "branch": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Branch"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "trace": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Trace"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "shrink": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ShrinkStep"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "result_line": {
+          "description": "The engine's RESULT line.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "artifacts": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Artifacts"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "schedule",
+        "verdict",
+        "fingerprints"
+      ]
+    },
+    "RunType": {
+      "description": "The `type` of this record: always `\"run\"`.",
+      "type": "string",
+      "enum": [
+        "run"
+      ]
+    },
+    "Image": {
+      "description": "The image a run booted.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "The image as it was given (a path, or an explorer image name).",
+          "type": "string"
+        },
+        "resolved": {
+          "description": "The path the engine opened, when it differs from `path`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sha256": {
+          "description": "SHA-256 of the image file.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "path"
+      ]
+    },
+    "Engine": {
+      "description": "The engine and the machine it gave the guest.",
+      "type": "object",
+      "properties": {
+        "backend": {
+          "description": "`hvx` (the Linux kernel module) or `hvm` (Hypervisor.framework on the Mac).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "args": {
+          "description": "The options passed to the engine (`--ram-mib`, `--vcpus`, `--cpu`).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "ram_mib": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "vcpus": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "cpu": {
+          "description": "The guest CPU level (`v2`, `v3`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "guest_kernel": {
+          "description": "hvm: the guest kernel and the first 16 hex digits of its SHA-256.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "module_srcversion": {
+          "description": "hvx: the loaded module's srcversion.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "workers": {
+          "description": "An exploration's worker count.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      }
+    },
+    "Verdict": {
+      "description": "A run's verdict.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "`ok`, `violation` or `error` (of `text`).",
+          "type": "string"
+        },
+        "text": {
+          "description": "The verdict line (the guest's `HYDO-ORACLE: ...`, or what the host made of it).",
+          "type": "string"
+        },
+        "guest": {
+          "description": "The guest's own verdict, when the host's history checks replaced it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "before_error_logs": {
+          "description": "The verdict before the error logs failed the run (`unknown: fail`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ]
+    },
+    "Fingerprints": {
+      "description": "A run's fingerprints: equal fingerprints mean bit-identical runs.",
+      "type": "object",
+      "properties": {
+        "fp": {
+          "description": "The whole run (console, snapshot, guest RAM, disk).",
+          "type": "string"
+        },
+        "wfp": {
+          "description": "The workload's part.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "fp"
+      ]
+    },
+    "Finding": {
+      "description": "What a run checked, in one shape for every source.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "The source: `invariant`, `assertion`, `history-check`, `error-log` ([`kind`]).",
+          "type": "string"
+        },
+        "id": {
+          "description": "The property id, the check id, the invariant's id (or the verdict's signature), or the\nerror kind's signature.",
+          "type": "string"
+        },
+        "status": {
+          "description": "The outcome ([`status`]).",
+          "type": "string"
+        },
+        "message": {
+          "description": "One line for people.",
+          "type": "string",
+          "default": ""
+        },
+        "details": {
+          "description": "What the source says beyond that (the examples show each source's fields).",
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "status"
+      ]
+    },
+    "PropertyTable": {
+      "description": "The property table: every assertion property over a set of runs (hydo/ASSERTIONS.md).",
+      "type": "object",
+      "properties": {
+        "runs": {
+          "description": "Runs whose consoles carried records.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "setup_complete_runs": {
+          "description": "Of those, runs that printed HYDO-SETUP-COMPLETE.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "violations": {
+          "description": "Properties whose verdict is a FAIL.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "properties": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Property"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "runs"
+      ]
+    },
+    "Property": {
+      "description": "One property over the runs of a table.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "assertion": {
+          "description": "`always`, `always_or_unreachable`, `sometimes`, `reachable`, `unreachable`, `eventually`.",
+          "type": "string"
+        },
+        "message": {
+          "type": "string",
+          "default": ""
+        },
+        "declared": {
+          "description": "Declared in a HYDO-ASSERT-DECL record (the catalog).",
+          "type": "boolean",
+          "default": false
+        },
+        "passes": {
+          "description": "Evaluations that held, and that did not.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "fails": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "runs_passed": {
+          "description": "Runs with at least one such evaluation.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "runs_failed": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "verdict": {
+          "description": "The table's verdict (`PASS`, `FAIL`, `FAIL (never evaluated)`, `FAIL (reached)`,\n`FAIL (deadline missed)`, `NOT EXERCISED`, `NOT EVALUATED`).",
+          "type": "string"
+        },
+        "status": {
+          "description": "The verdict as a [`status`]: `ok`, `violation`, `not-exercised`, `not-evaluated`.",
+          "type": "string"
+        },
+        "first_failure": {
+          "description": "The details of the first failing evaluation, as the record wrote them.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "slowest_ok_s": {
+          "description": "Eventually properties: the slowest episode that held, in seconds.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        }
+      },
+      "required": [
+        "id",
+        "assertion",
+        "verdict",
+        "status"
+      ]
+    },
+    "ErrorLogs": {
+      "description": "A run's error-log analysis (`errors:` in the manifest).",
+      "type": "object",
+      "properties": {
+        "known_file": {
+          "description": "The known list used (absent: none).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "known_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "unknown": {
+          "description": "`report` or `fail`: what a new kind does to the run.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "steps": {
+          "description": "The workload's steps (the labels of where a line was written refer to them).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "boots": {
+          "description": "The guest's HYDO-ERRLOG-SUM record of every boot.",
+          "type": "array",
+          "items": true,
+          "default": []
+        },
+        "truncated": {
+          "description": "A boot printed only its first kinds (`errors.max`).",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "Counters": {
+      "description": "Engine counters a run reported.",
+      "type": "object",
+      "properties": {
+        "tjk": {
+          "description": "Tick jitter: the first and last delayed tick.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "tjn": {
+          "description": "Tick jitter: delayed ticks.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "pctf": {
+          "description": "PCT points that fired, and the window.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "pctw": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "xtn": {
+          "description": "Inserted ticks.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "qn": {
+          "description": "vCPU turns.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      }
+    },
+    "Branch": {
+      "description": "A branch run's branch point.",
+      "type": "object",
+      "properties": {
+        "tjlo": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "held": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      }
+    },
+    "Trace": {
+      "description": "A freeze sweep's trace run.",
+      "type": "object",
+      "properties": {
+        "pair": {
+          "description": "`<service>><peer>`.",
+          "type": "string"
+        },
+        "dir": {
+          "description": "`<` or `>`.",
+          "type": "string"
+        },
+        "match": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "step": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "count": {
+          "description": "Packets of the stream in that step (absent: the freeze never fired).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "reused": {
+          "description": "Taken from an earlier sweep (`--fc-traces`), not run.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "pair",
+        "dir",
+        "step"
+      ]
+    },
+    "ShrinkStep": {
+      "description": "A shrink candidate's place in its shrink.",
+      "type": "object",
+      "properties": {
+        "of": {
+          "description": "The signature being shrunk (a failure's, or an error kind's).",
+          "type": "string"
+        },
+        "round": {
+          "description": "The round (1, 2, ...).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "kept": {
+          "description": "The candidate kept the failure and became the next round's schedule.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "of",
+        "round",
+        "kept"
+      ]
+    },
+    "Artifacts": {
+      "description": "Files of a run, relative to the document's directory.",
+      "type": "object",
+      "properties": {
+        "consoles": {
+          "description": "The guest consoles: the run's, then the recovery boot's after a power cut.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "engine_log": {
+          "description": "Everything the engine printed (`hydo run`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Exploration": {
+      "description": "`exploration.json`: an exploration's result.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/ExplorationType"
+        },
+        "hydo_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "description": "`seeds`, `sweep`, `branch` or `schedule`.",
+          "type": "string"
+        },
+        "config": {
+          "$ref": "#/$defs/Config"
+        },
+        "image": {
+          "$ref": "#/$defs/Image"
+        },
+        "engine": {
+          "$ref": "#/$defs/Engine"
+        },
+        "summary": {
+          "$ref": "#/$defs/Summary"
+        },
+        "freeze_sweep": {
+          "description": "`--sweep freeze`: the trace and adaptive stages (their counts, centres, windows, rounds).",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "failures": {
+          "description": "Every failing first run, in seed order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Failure"
+          },
+          "default": []
+        },
+        "shrinks": {
+          "description": "One minimal schedule per class and signature.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Shrink"
+          },
+          "default": []
+        },
+        "error_kinds": {
+          "description": "Images built with `errors:`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ErrorKinds"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "properties": {
+          "description": "Images whose guests emit HYDO-ASSERT records.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PropertyTable"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "liveness": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Liveness"
+          },
+          "default": []
+        },
+        "artifacts": {
+          "$ref": "#/$defs/ExplorationArtifacts"
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "mode",
+        "config",
+        "image",
+        "engine",
+        "summary",
+        "artifacts"
+      ]
+    },
+    "ExplorationType": {
+      "description": "The `type` of this record: always `\"exploration\"`.",
+      "type": "string",
+      "enum": [
+        "exploration"
+      ]
+    },
+    "Config": {
+      "description": "How the exploration was asked for.",
+      "type": "object",
+      "properties": {
+        "strategy": {
+          "description": "The strategy (`random`, `swarm`, `process`, ...), or `sweep:<kind>` for a sweep.",
+          "type": "string"
+        },
+        "seeds": {
+          "description": "`--seeds lo-hi`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sweep": {
+          "description": "`--sweep`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "branch_marker": {
+          "description": "`--branch`: the marker the runs branch at, and the variants per branch point.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "variants": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "schedule": {
+          "description": "`--schedule`: the one schedule given by hand.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "argv": {
+          "description": "The explorer's whole command line.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "strategy"
+      ]
+    },
+    "Summary": {
+      "description": "The numbers of an exploration. Absent fields do not apply to its mode.",
+      "type": "object",
+      "properties": {
+        "schedules": {
+          "description": "Schedules (seeds or sweep points) explored.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "branch_points": {
+          "description": "Branch explorations: branch points found, runs made, timing variants per point and the\ntick-jitter permille.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "runs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "variants_per_point": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "tjpm": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "sweep_wall_s": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "runs_per_hour": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "mean_run_s": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "worker_boot_s": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "total_wall_s": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "failures": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "reproduced": {
+          "description": "Failures whose every re-run gave the same fingerprint.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "reproduced_standalone": {
+          "description": "Branch explorations: failures reproduced as plain schedules, and failures that need the\ntiming change.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "timing_only_failures": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "repro_runs": {
+          "description": "Re-runs per failure (when not 1).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "quiet_wait_s": {
+          "description": "Seconds the pool waited for `$HYDO_QUIET_FILE` to go away.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "cache_hits": {
+          "description": "First runs answered from `$HYDO_EXPLORE_CACHE`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "error_kinds_new": {
+          "description": "Error kinds new in some run, and runs with a new kind.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "runs_with_new_error_kinds": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "schedules",
+        "failures"
+      ]
+    },
+    "Failure": {
+      "description": "A failing run of an exploration and its re-runs.",
+      "type": "object",
+      "properties": {
+        "signature": {
+          "description": "The grouping key: the verdict with numbers as `#` (violations: up to ` order=`).",
+          "type": "string"
+        },
+        "reproduced": {
+          "description": "Every re-run gave the run's fingerprint.",
+          "type": "boolean"
+        },
+        "reproductions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Reproduction"
+          },
+          "default": []
+        },
+        "timing_only": {
+          "description": "Branch explorations: the failure appears only with the timing change.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "run": {
+          "description": "The failing run.",
+          "$ref": "#/$defs/Run"
+        }
+      },
+      "required": [
+        "signature",
+        "reproduced",
+        "run"
+      ]
+    },
+    "Reproduction": {
+      "description": "A run of a schedule again, to confirm it.",
+      "type": "object",
+      "properties": {
+        "tag": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fp": {
+          "description": "Absent: the run gave no result.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "present": {
+          "description": "Error kinds: the kind was present in this run.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
+    "Shrink": {
+      "description": "A failure shrunk to a minimal schedule (one per class and signature).",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/ShrinkType"
+        },
+        "class": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        },
+        "from_seed": {
+          "description": "The failure it started from.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "minimal": {
+          "description": "The minimal schedule.",
+          "type": "string"
+        },
+        "verdict": {
+          "description": "The verdict the minimal schedule kept during the shrink.",
+          "type": "string"
+        },
+        "tries": {
+          "description": "Shrink candidates run (every candidate of a round counts).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "min_class": {
+          "description": "The minimal schedule's own finding class.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "min_verdict": {
+          "description": "The verdict of the first confirmation run.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confirmations": {
+          "description": "The minimal schedule run twice.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Reproduction"
+          },
+          "default": []
+        },
+        "identical": {
+          "description": "The two confirmations gave the same fingerprint.",
+          "type": "boolean",
+          "default": false
+        },
+        "repro_command": {
+          "description": "The command line that runs the minimal schedule once.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "composition": {
+          "description": "Test composer: the composition of the minimal `W=` in words.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "commands": {
+          "description": "Test composer: the command ids of the plan.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "contents": {
+          "description": "Test composer: each used command's content hash.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "stable": {
+          "description": "Test composer: the resolved `W=:` form (commands by id).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stable_schedule": {
+          "description": "Test composer: the schedule with the resolved form (or `W=@<key>`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stable_note": {
+          "description": "Test composer: why the minimal schedule keeps the seed form.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "class",
+        "signature",
+        "from_seed",
+        "minimal",
+        "verdict",
+        "tries"
+      ]
+    },
+    "ShrinkType": {
+      "description": "The `type` of this record: always `\"shrink\"`.",
+      "type": "string",
+      "enum": [
+        "shrink"
+      ]
+    },
+    "ErrorKinds": {
+      "description": "The error kinds of an exploration.",
+      "type": "object",
+      "properties": {
+        "known_file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "known_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "unknown": {
+          "description": "`report` or `fail`.",
+          "type": "string"
+        },
+        "kinds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ErrorKind"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "unknown"
+      ]
+    },
+    "ErrorKind": {
+      "description": "One error kind over an exploration.",
+      "type": "object",
+      "properties": {
+        "signature": {
+          "description": "The first 12 hex digits of sha256(\"<service>\\n<template>\").",
+          "type": "string"
+        },
+        "service": {
+          "type": "string"
+        },
+        "source": {
+          "description": "`log`, `setup`, or a file.",
+          "type": "string",
+          "default": ""
+        },
+        "template": {
+          "description": "The line with its times, numbers, ids and client ports blanked.",
+          "type": "string"
+        },
+        "example": {
+          "description": "A line of this kind.",
+          "type": "string",
+          "default": ""
+        },
+        "new": {
+          "description": "New in at least one run (the known list did not cover it).",
+          "type": "boolean"
+        },
+        "runs": {
+          "description": "Runs that had it, and runs in which it was new.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "new_runs": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "seeds": {
+          "description": "The first 12 seeds that had it.",
+          "type": "array",
+          "items": true,
+          "default": []
+        },
+        "first_seed": true,
+        "first_schedule": {
+          "type": "string",
+          "default": ""
+        },
+        "first_at": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "lines": {
+          "description": "Lines of this kind over every run.",
+          "type": "integer",
+          "format": "int64",
+          "default": 0
+        },
+        "first_new": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FirstNew"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason": {
+          "description": "The reason of the known-list entry that covered it."
+        },
+        "shrink": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ErrorShrink"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "signature",
+        "service",
+        "template",
+        "new",
+        "runs",
+        "first_seed"
+      ]
+    },
+    "FirstNew": {
+      "description": "An error kind's first run in which it was new.",
+      "type": "object",
+      "properties": {
+        "seed": true,
+        "schedule": {
+          "type": "string"
+        },
+        "at": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "example": {
+          "type": "string",
+          "default": ""
+        }
+      },
+      "required": [
+        "seed",
+        "schedule"
+      ]
+    },
+    "ErrorShrink": {
+      "description": "A new error kind shrunk to the smallest schedule that still writes it.",
+      "type": "object",
+      "properties": {
+        "minimal": {
+          "type": "string"
+        },
+        "tries": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "confirmations": {
+          "description": "The minimal schedule run twice.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Reproduction"
+          },
+          "default": []
+        },
+        "identical": {
+          "type": "boolean",
+          "default": false
+        },
+        "repro_command": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "minimal",
+        "tries"
+      ]
+    },
+    "Liveness": {
+      "description": "One eventually property over an exploration.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "held_runs": {
+          "description": "Runs in which every episode held in time, and runs with a missed deadline.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "missed_runs": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "slowest_s": {
+          "description": "The slowest run that held: its time and its run (tag).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "slowest_run": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "first_miss_run": {
+          "description": "The first run with a missed deadline, and that episode's details.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "first_miss": true
+      },
+      "required": [
+        "id",
+        "held_runs",
+        "missed_runs"
+      ]
+    },
+    "ExplorationArtifacts": {
+      "description": "Where an exploration's files are, relative to its directory.",
+      "type": "object",
+      "properties": {
+        "events": {
+          "description": "The event stream.",
+          "type": "string"
+        },
+        "report": {
+          "description": "The report for people.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "consoles": {
+          "description": "The directory of the guest consoles (`<tag>.log`, `<tag>.recovery.log`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "events"
+      ]
+    },
+    "Start": {
+      "description": "The first record of an exploration's stream.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/StartType"
+        },
+        "hydo_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "description": "`seeds`, `sweep`, `branch` or `schedule`.",
+          "type": "string"
+        },
+        "config": {
+          "$ref": "#/$defs/Config"
+        },
+        "image": {
+          "$ref": "#/$defs/Image"
+        },
+        "engine": {
+          "$ref": "#/$defs/Engine"
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "mode",
+        "config",
+        "image",
+        "engine"
+      ]
+    },
+    "StartType": {
+      "description": "The `type` of this record: always `\"start\"`.",
+      "type": "string",
+      "enum": [
+        "start"
+      ]
+    },
+    "End": {
+      "description": "The last record of an exploration's stream: the exploration finished.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/EndType"
+        },
+        "summary": {
+          "$ref": "#/$defs/Summary"
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "summary"
+      ]
+    },
+    "EndType": {
+      "description": "The `type` of this record: always `\"end\"`.",
+      "type": "string",
+      "enum": [
+        "end"
+      ]
+    }
+  }
+}

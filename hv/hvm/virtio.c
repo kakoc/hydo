@@ -226,6 +226,13 @@ void *virtio_save(void)
 	}
 	return s;
 }
+void virtio_save_free(void *p)   /* a snapshot taken by virtio_save that is no longer needed */
+{
+	struct vsave *s = p;
+	if (!s) return;
+	for (uint64_t k = 0; k < s->S.blk.n_unsync; k++) free(s->cache[k].data);
+	free(s->cache); free(s->disk); free(s->tx); free(s);
+}
 void virtio_restore(const void *p)
 {
 	const struct vsave *s = p;

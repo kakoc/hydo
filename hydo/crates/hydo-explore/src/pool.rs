@@ -123,8 +123,10 @@ fn result_re() -> &'static Regex {
     static R: OnceLock<Regex> = OnceLock::new();
     // explore.py accepted extras starting tj|xt|pct|qn; hvx_explore also prints qbn= with bursts
     // (qb=), which made every --bursts run an "ERROR worker" there: qbn is accepted here.
+    // An agent image's run (M126) also has the lock-step facts stops= typed= inh= and its control
+    // hash ctl=; shell images never print them.
     R.get_or_init(|| {
-        Regex::new(r"^RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: (?:tj|xt|pct|qbn|qn)\S+)*) verdict=(.*)$")
+        Regex::new(r"^RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: (?:tj|xt|pct|qbn|qn|stops=|typed=|inh=|ctl=)\S+)*) verdict=(.*)$")
             .expect("pattern")
     })
 }
@@ -194,6 +196,13 @@ pub fn parse_result(line: &str, worker: usize) -> Res {
     r.insert("verdict".into(), json!(&c[6]));
     r.insert("worker".into(), json!(worker));
     extras(&mut r, &c[5], true);
+    if let Some(ctl) = c[5]
+        .split(' ')
+        .find_map(|w| w.strip_prefix("ctl="))
+        .filter(|v| !v.is_empty())
+    {
+        r.insert("ctl".into(), json!(ctl));
+    }
     r
 }
 
@@ -213,8 +222,9 @@ pub fn console(outdir: &Path, tag: &str, suffix: &str) -> PathBuf {
 }
 
 /// explore.py `host_checks`: the history checks (hydo-history) of a run whose console declares
-/// them (HYDO-CHECK); their records and report go next to the console, and the combined verdict
-/// replaces the guest's (kept as `guest_verdict`).
+/// them (HYDO-CHECK); their findings and records go into the result (the run's record reports
+/// them, the property table reads the records), and the combined verdict replaces the guest's
+/// (kept as `guest_verdict`).
 pub fn host_checks(h: &Host, tag: &str, res: &mut Res) {
     let d = h.outdir.join("consoles");
     let srcs = hydo_history::console_sources(&d, tag);
@@ -232,14 +242,14 @@ pub fn host_checks(h: &Host, tag: &str, res: &mut Res) {
                 std::process::exit(1);
             }
         };
-    let _ = hydo_history::write_checks_files(&d, tag, &r);
+    crate::results::keep_checks(res, &r);
     res.insert("guest_verdict".into(), verdict);
     res.insert("verdict".into(), json!(r.verdict));
 }
 
 /// explore.py `host_errlog`: the error-log analysis (hydo-errors) of a run whose console carries
-/// records; it goes to `consoles/<tag>.errors.json` and into the result (errors_new, errors_known,
-/// and with `unknown: fail` an OK verdict becomes a VIOLATION).
+/// records; it goes into the result (the analysis, for the run's record; errors_new,
+/// errors_known, and with `unknown: fail` an OK verdict becomes a VIOLATION).
 pub fn host_errlog(h: &Host, tag: &str, text: &str, res: &mut Res) {
     let Some(known) = &h.known else { return };
     if res
@@ -252,20 +262,14 @@ pub fn host_errlog(h: &Host, tag: &str, text: &str, res: &mut Res) {
     }
     let prefix = h.outdir.join("consoles").join(tag);
     if let Some(an) = errlog::analyse(&prefix, text, known) {
-        let _ = std::fs::write(
-            h.outdir.join("consoles").join(format!("{tag}.errors.json")),
-            crate::py::dumps(&an.to_json(), 1),
-        );
+        res.insert(crate::results::ERRLOG.into(), an.to_json());
         hydo_errors::apply(res, Some(&an), known);
     }
 }
 
-/// Whether a run's error-log analysis was written (explore.py `errlog_of(...) is not None`).
-pub fn has_errlog(outdir: &Path, tag: &str) -> bool {
-    outdir
-        .join("consoles")
-        .join(format!("{tag}.errors.json"))
-        .exists()
+/// Whether a run's consoles carried error-log records (explore.py `errlog_of(...) is not None`).
+pub fn has_errlog(r: &Res) -> bool {
+    r.contains_key(crate::results::ERRLOG)
 }
 
 // ---------------------------------------------------------------- the pool
@@ -395,10 +399,22 @@ impl Pool {
         if !cons.values().all(|c| Path::new(&py_str(c)).exists()) {
             return None;
         }
+        let mut r = rec["result"].as_object()?.clone();
         for (suffix, c) in cons {
+            if suffix == ".checks" {
+                // a cache written before M115 kept the history checks' records as a console
+                if !r.contains_key(crate::results::CHECK_RECORDS) {
+                    let lines: Vec<Value> = read_text(Path::new(&py_str(c)))
+                        .unwrap_or_default()
+                        .lines()
+                        .map(|l| json!(l))
+                        .collect();
+                    r.insert(crate::results::CHECK_RECORDS.into(), Value::Array(lines));
+                }
+                continue;
+            }
             let _ = std::fs::copy(py_str(c), console(&self.host.outdir, tag, suffix));
         }
-        let mut r = rec["result"].as_object()?.clone();
         r.insert("cached".into(), json!(true));
         if r.contains_key("errors_new") {
             if let Some(v) = r.remove("pre_errlog_verdict") {
@@ -432,7 +448,8 @@ impl Pool {
             x.iter().map(|b| format!("{b:02x}")).collect::<String>()[..16].to_string()
         };
         let mut cons = Map::new();
-        for suffix in ["", ".recovery", ".checks"] {
+        // the history checks' records are in the result itself (results::CHECK_RECORDS)
+        for suffix in ["", ".recovery"] {
             let src = console(&self.host.outdir, tag, suffix);
             if src.exists() {
                 let dst = d.join(format!("{h}{suffix}.log"));

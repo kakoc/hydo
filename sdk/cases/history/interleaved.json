@@ -1,0 +1,18 @@
+{
+  "about": "operations of several histories complete in any order; each record names its history",
+  "needs": [],
+  "steps": [
+    {"do":"history","name":"kv"},
+    {"do":"history","name":"la"},
+    {"do":"history","name":"other"},
+    {"do":"invoke","h":0,"proc":{"int":"30"},"f":"write","args":["i","1"]},
+    {"do":"invoke","h":1,"proc":{"int":"30"},"f":"append","args":["i","1"]},
+    {"do":"invoke","h":2,"proc":{"int":"31"},"f":"read","args":["i"]},
+    {"do":"ok_same","o":1},
+    {"do":"ok","o":2,"args":["i","1"]},
+    {"do":"info","o":0}
+  ],
+  "runs": [
+    {"name": "", "out": "off", "hist_out": "file", "buggify_env": null, "buggify_file": null, "output": "interleaved.out", "returns": ""}
+  ]
+}

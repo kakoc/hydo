@@ -1,0 +1,14 @@
+HYDO-HIST kv 10 invoke * write kv v
+HYDO-HIST kv 10 ok * write kv v@0
+HYDO-HIST kv 11 invoke * write kv v
+HYDO-HIST kv 11 ok * write kv v@1
+HYDO-HIST kv 12 invoke * write kv v
+HYDO-HIST kv 12 ok * write kv v@83
+HYDO-HIST kv 13 invoke * write kv v
+HYDO-HIST kv 13 ok * write kv v@9007199254740992
+HYDO-HIST kv 14 invoke * write kv v
+HYDO-HIST kv 14 ok * write kv v@9007199254740993
+HYDO-HIST kv 15 invoke * write kv v
+HYDO-HIST kv 15 ok * write kv v@9223372036854775807
+HYDO-HIST kv 9 invoke * write x y
+HYDO-HIST kv 9 ok * write %@5 %6Eil@6 a%40b@7 12@12

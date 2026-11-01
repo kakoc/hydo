@@ -85,7 +85,7 @@ record kinds.
 - Python values Go has no form for: a tuple is an array; `bytes` is a base64 string (as Go
   encodes `[]byte`); a set is an array sorted by encoded element; integer dict keys are written
   in decimal; any other object is the string `str(obj)`. A lone surrogate (an undecodable byte
-  read with `surrogateescape`) is written as `�`, as the pinned guest Go 1.26.5 writes an
+  read with `surrogateescape`) is written as `\ufffd`, as the pinned guest Go 1.26.5 writes an
   invalid UTF-8 byte (Go 1.27 writes a raw U+FFFD instead).
 - `details` that is not a mapping is wrapped as `{"value": details}`.
 - After `os.fork()` the child keeps the parent's deduplication state (it is one program's
@@ -183,24 +183,23 @@ writing `.pyc` files on the guest's read-only root.
   forms), deduplication, details not mutated, NaN, catalog order, 16 threads writing 2000
   evaluations each without an interleaved line, asyncio `eventually`, fork, BUGGIFY decisions
   and rates. Passes on Python 3.8.20 and 3.15.0.
-- `sdk/python/tests/conformance.sh [python...]`: builds `tests/go-conformance/main.go` against
-  the Go SDK's own source files and runs it and `tests/conformance.py` (the same calls) under
-  eight BUGGIFY configurations: seed in the environment, seed in the file, none, and malformed
-  ones (`  BEEF,07,+5\t`, `0xbeef`, a 65-bit seed, `ab, 300,1_0`, all points always firing).
-  Consoles and stdouts must be byte-identical. It pins `GOTOOLCHAIN=go1.26.5` (the guest Go, as
-  `sdk/js` does); `GOTOOLCHAIN=local` uses the installed Go, and with Go 1.27 or later the
-  invalid-UTF-8 case is skipped (Go 1.27 writes a raw U+FFFD there).
+- `tests/test_cases.py` (run by the same `unittest` command): the shared cases (`sdk/cases`,
+  written by the reference SDK, `sdk/rust`; format and rules in `sdk/rust/README.md`, "The
+  shared cases"). For every case and run it starts itself as a child process, makes the
+  case's calls with this package and `hydo_assert.history`, and compares the bytes the sink
+  received and the calls' results with the case's files: every assertion type, comparisons,
+  details with tricky values (invalid UTF-8 as `surrogateescape` characters), the catalog,
+  `eventually`, BUGGIFY under 18 configurations, `HYDO_ASSERT_OUT`, `emit_line`, and the
+  history records with every helper and `HYDO_HIST_OUT` setting. Cases that need a float32
+  (`f32`) are skipped and listed. To add a case, add it to the Rust SDK's
+  `tests/cases/defs.rs` and run `HYDO_BLESS=1 cargo test --test cases` there; this test then
+  runs it. A format change starts in the Rust SDK too: after it is blessed, this test fails on
+  the lines this package must change. No other language is needed to run it. Passes on Python
+  3.8.20 and 3.15.0.
 - `tests/test_history.py` (run by the same `unittest` command): the exact lines of the Go
   recorder's own unit test, the encoding of every byte class, the argument checks, the sink
   settings, one `os.write` per record, 8 threads writing 400 records each without an
   interleaved line, and fork.
-- `sdk/python/tests/history_conformance.sh [python...]`: builds `tests/history-go/main.go`
-  against the Go recorder's own source files and runs it and `tests/history_conformance.py`
-  (the same calls, 179 records, including invalid UTF-8 given as `bytes`) with five sink
-  settings: an existing file, a missing file, `stderr`, a path that cannot be opened, and `off`.
-  The records must be byte-identical with the time field masked, the time fields must be
-  decimal integers that never decrease, and the stdouts (the helpers' results) must be
-  byte-identical. It passes with Go 1.26.5 and 1.27.3 and with Python 3.8.20, 3.9.6 and 3.15.0.
 
 ## Limits
 

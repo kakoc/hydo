@@ -58,6 +58,7 @@
 pub mod hvm;
 pub mod hvx;
 pub mod image;
+pub mod lockstep;
 mod process;
 pub mod protocol;
 
@@ -66,6 +67,8 @@ use std::fmt;
 use std::path::PathBuf;
 use std::time::Duration;
 
+pub use lockstep::{DiskOff, Driver, Lockstep, LockstepStart};
+pub use process::{ControlledBoot, ControlledRun};
 pub use protocol::{BranchOutcome, BranchRequest, Ready, RunResult};
 
 /// Which engine a spec is for.
@@ -130,6 +133,26 @@ impl SnapshotPoint {
             SnapshotPoint::S1 => "hydo-explore-ready-S1",
         }
     }
+
+    /// The snapshot name the host gives the point in an agent image's controlled boot (M121:
+    /// there is no marker; the host says `SNAP S0` and `SNAP S1` at stops it chooses).
+    pub fn name(self) -> &'static str {
+        match self {
+            SnapshotPoint::S0 => "S0",
+            SnapshotPoint::S1 => "S1",
+        }
+    }
+}
+
+/// Who runs an image's guest side (`/etc/hydo/control`, [`image::control`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GuestControl {
+    /// The shell init (`hydo-init.sh`): every image without `/etc/hydo/control`. The engines
+    /// boot it to the S0/S1 markers by themselves.
+    Shell,
+    /// The guest agent `hydo-agent`, speaking agent protocol `proto` (`hydo-build --control
+    /// agent`, M121): boot it with [`Engine::start_controlled`] / [`Engine::one_controlled`].
+    Agent { proto: u64 },
 }
 
 /// What to boot. The defaults are what both engines assume when an option is not passed.
@@ -258,6 +281,42 @@ pub trait Engine {
     /// The shell line that reproduces one schedule by hand (report.md's repro line).
     fn repro_line(&self, spec: &BootSpec, schedule: &Schedule) -> String;
 
+    /// Boot an agent image (one whose [`image::control`] is [`GuestControl::Agent`]) under
+    /// lock-step control from its first instruction (M121): the returned boot's session reports
+    /// stops in [`lockstep::Phase::Boot`], the caller takes the snapshots `S0` and `S1` where it
+    /// decides (`SNAP S0`, `SNAP S1`; [`SnapshotPoint::name`]) and ends the boot with END; then
+    /// [`ControlledBoot::ready`] gives the worker. Its [`Worker::lockstep`] runs
+    /// ([`LockstepStart::Run`]) restore the caller's S1 and type nothing (the guest part is `run`);
+    /// [`Worker::run`] and [`Worker::branch`] are refused for such an image. `boot`'s `rb=` is
+    /// the boot's cadence (its other tokens are not used).
+    fn start_controlled(
+        &self,
+        spec: &BootSpec,
+        boot: &Schedule,
+        stderr_log: &std::path::Path,
+    ) -> Result<ControlledBoot, EngineError> {
+        let _ = (spec, boot, stderr_log);
+        Err(EngineError::Unsupported(
+            "booting an agent image under control is not supported by this engine".into(),
+        ))
+    }
+
+    /// The fresh-boot counterpart of [`Engine::start_controlled`] for one schedule: the boot runs
+    /// under control as there, and the caller's `SNAP S1` in the boot phase arms `schedule`'s host
+    /// part and starts the workload phase at that same stop, so the run equals a worker's CTL run
+    /// of `schedule` from that S1 (stop numbers, input hash and fingerprint).
+    fn one_controlled(
+        &self,
+        spec: &BootSpec,
+        schedule: &Schedule,
+        stderr_log: &std::path::Path,
+    ) -> Result<ControlledRun, EngineError> {
+        let _ = (spec, schedule, stderr_log);
+        Err(EngineError::Unsupported(
+            "booting an agent image under control is not supported by this engine".into(),
+        ))
+    }
+
     /// The name of the function behind `fp`/`wfp`. Two engines (or two implementations of one)
     /// with the same name give the same value for the same run, whatever they skip internally
     /// (an exact hash may skip all-zero pages). hvx and hvm both hash with 64-bit FNV-1a.
@@ -341,6 +400,55 @@ pub trait Worker {
 
     /// Snapshot mid-run and run timing variants from there (hvx's BRANCH; hvm answers Unsupported).
     fn branch(&mut self, req: &BranchRequest) -> Result<BranchOutcome, EngineError>;
+
+    /// Start a run under lock-step control (hvx's CTL/RESUME, [`lockstep`]): the returned session
+    /// reports every stop and waits for the caller's commands until the run's RESULT. No existing
+    /// caller uses it; engines without it answer Unsupported.
+    /// `log`: also write the transcript (`< ` host lines, `> ` engine lines), request included.
+    fn lockstep<'a>(
+        &'a mut self,
+        start: &LockstepStart,
+        log: Option<&'a mut dyn std::io::Write>,
+    ) -> Result<Lockstep<'a>, EngineError> {
+        let _ = (start, log);
+        Err(EngineError::Unsupported(
+            "lock-step control is not supported by this engine".into(),
+        ))
+    }
+
+    /// One schedule from S1 under a host controller (M126; the design's `run_controlled`): the
+    /// engine's CTL request, then `driver` answers every stop until the run's RESULT (the power
+    /// cut's recovery VM included). `log`: also write the engine transcript.
+    fn run_controlled<'a>(
+        &'a mut self,
+        tag: &str,
+        schedule: &Schedule,
+        driver: &mut dyn lockstep::Driver,
+        log: Option<&'a mut dyn std::io::Write>,
+    ) -> Result<RunResult, EngineError> {
+        let start = LockstepStart::Run {
+            tag: tag.to_string(),
+            schedule: schedule.clone(),
+        };
+        let mut ls = self.lockstep(&start, log)?;
+        driver.drive(&mut ls)
+    }
+
+    /// The same from a snapshot an earlier controlled run of this worker took (`RESUME`).
+    fn resume<'a>(
+        &'a mut self,
+        tag: &str,
+        snapshot: &str,
+        driver: &mut dyn lockstep::Driver,
+        log: Option<&'a mut dyn std::io::Write>,
+    ) -> Result<RunResult, EngineError> {
+        let start = LockstepStart::Resume {
+            tag: tag.to_string(),
+            snapshot: snapshot.to_string(),
+        };
+        let mut ls = self.lockstep(&start, log)?;
+        driver.drive(&mut ls)
+    }
 
     /// Tear the worker down (QUIT) and wait for the engine to exit.
     fn close(self: Box<Self>) -> Result<(), EngineError>;

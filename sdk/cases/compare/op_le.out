@@ -1,0 +1,3 @@
+HYDO-ASSERT {"t":"always","id":"c.always_le","ok":true,"msg":"always left \u003c= right","details":{"left":2,"op":"\u003c=","right":2}}
+HYDO-ASSERT {"t":"always","id":"c.always_le","ok":false,"msg":"always left \u003c= right","details":{"left":3,"op":"\u003c=","right":2}}
+HYDO-ASSERT {"t":"sometimes","id":"c.sometimes_le","ok":true,"msg":"sometimes left \u003c= right","details":{"left":2,"op":"\u003c=","right":2}}

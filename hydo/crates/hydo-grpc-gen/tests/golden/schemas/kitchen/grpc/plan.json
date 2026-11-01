@@ -1,0 +1,123 @@
+{
+  "format": 1,
+  "target": "127.0.0.1:50051",
+  "deadline_ms": 2000,
+  "seed": 1,
+  "steps": {
+    "calls": 2,
+    "concurrency": 1
+  },
+  "drive": {
+    "calls": 2
+  },
+  "defaults": {
+    "string_len": [
+      1,
+      10
+    ],
+    "bytes_len": [
+      0,
+      16
+    ],
+    "repeated_len": [
+      0,
+      3
+    ],
+    "map_len": [
+      0,
+      2
+    ],
+    "depth": 4,
+    "message_prob": 0.85,
+    "optional_prob": 0.7,
+    "oneof_none": 0
+  },
+  "record": {
+    "console": "brief",
+    "history": "grpc"
+  },
+  "rpcs": [
+    {
+      "name": "kitchen.Kitchen/Put",
+      "path": "/kitchen.Kitchen/Put",
+      "short": "put",
+      "input": "kitchen.Sink",
+      "output": "kitchen.Ids",
+      "weight": 1,
+      "deadline_ms": 2000,
+      "retry": {
+        "attempts": 0,
+        "backoff_ms": 0,
+        "at_end": false,
+        "end_tries": 0
+      },
+      "stream_len": [
+        1,
+        3
+      ]
+    },
+    {
+      "name": "kitchen.Kitchen/Fetch",
+      "path": "/kitchen.Kitchen/Fetch",
+      "short": "fetch",
+      "input": "kitchen.Ids",
+      "output": "kitchen.Sink",
+      "weight": 1,
+      "deadline_ms": 2000,
+      "retry": {
+        "attempts": 0,
+        "backoff_ms": 0,
+        "at_end": false,
+        "end_tries": 0
+      },
+      "stream_len": [
+        1,
+        3
+      ]
+    },
+    {
+      "name": "kitchen.Kitchen/Watch",
+      "path": "/kitchen.Kitchen/Watch",
+      "short": "watch",
+      "input": "kitchen.Ids",
+      "output": "kitchen.Ids",
+      "server_streaming": true,
+      "weight": 1,
+      "deadline_ms": 2000,
+      "retry": {
+        "attempts": 0,
+        "backoff_ms": 0,
+        "at_end": false,
+        "end_tries": 0
+      },
+      "stream_len": [
+        1,
+        3
+      ]
+    },
+    {
+      "name": "kitchen.Kitchen/Upload",
+      "path": "/kitchen.Kitchen/Upload",
+      "short": "upload",
+      "input": "kitchen.Ids",
+      "output": "kitchen.Ids",
+      "client_streaming": true,
+      "weight": 1,
+      "deadline_ms": 2000,
+      "retry": {
+        "attempts": 0,
+        "backoff_ms": 0,
+        "at_end": false,
+        "end_tries": 0
+      },
+      "stream_len": [
+        1,
+        3
+      ]
+    }
+  ],
+  "sources": [
+    "proto:kitchen.proto",
+    "proto:legacy.proto"
+  ]
+}

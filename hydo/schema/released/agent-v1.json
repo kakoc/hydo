@@ -1,0 +1,2283 @@
+{
+  "$defs": {
+    "command.clock_get": {
+      "additionalProperties": false,
+      "description": "Host to agent: Read the realtime and the monotonic clock.",
+      "properties": {
+        "id": {
+          "description": "The command's id; every command has a higher id than the one before.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "op": {
+          "const": "clock_get",
+          "description": "The command.",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "op",
+        "v"
+      ],
+      "type": "object"
+    },
+    "command.clock_set": {
+      "additionalProperties": false,
+      "description": "Host to agent: Set the realtime clock: to `sec` (seconds since 1970), or by `step` seconds from now. Exactly one of the two.",
+      "properties": {
+        "id": {
+          "description": "The command's id; every command has a higher id than the one before.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "op": {
+          "const": "clock_set",
+          "description": "The command.",
+          "type": "string"
+        },
+        "sec": {
+          "description": "The new time, seconds since 1970 (nanoseconds 0).",
+          "maximum": 9223372036854775807,
+          "minimum": -9223372036854775808,
+          "type": "integer"
+        },
+        "step": {
+          "description": "Seconds to add to the current time (negative: backwards).",
+          "maximum": 9223372036854775807,
+          "minimum": -9223372036854775808,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "op",
+        "v"
+      ],
+      "type": "object"
+    },
+    "command.freeze": {
+      "additionalProperties": false,
+      "description": "Host to agent: Arm the packet trigger (hydo_fc, the F= fault): read the packets the image's iptables rules put into netfilter queue `queue`, count those with TCP payload in direction `dir` that contain `pattern`, and at the n-th hold it, stop the process tree of `h` (SIGSTOP, then wait until every thread is stopped), report `froze`, and only then let the packet through. After dur_ms of guest time the tree is continued and `resumed` reported. Every other packet is accepted at once. n = 0 never fires (a trace in `log`).",
+      "properties": {
+        "dir": {
+          "description": "Which direction counts.",
+          "enum": [
+            "req",
+            "resp"
+          ],
+          "type": "string"
+        },
+        "dur_ms": {
+          "description": "How long the tree stays stopped, in ms of guest time.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "h": {
+          "description": "The process to freeze.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The command's id; every command has a higher id than the one before.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "log": {
+          "description": "Write a trace line per payload packet to this file (hydo_fc's log format).",
+          "type": "string"
+        },
+        "n": {
+          "description": "Fire at the n-th counted packet.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "op": {
+          "const": "freeze",
+          "description": "The command.",
+          "type": "string"
+        },
+        "own_port": {
+          "description": "Otherwise: a request when its source port is this port (the service's own port, the peer being the workload's client).",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pattern": {
+          "description": "Count only packets whose payload contains these bytes (%xx escapes any byte).",
+          "type": "string"
+        },
+        "port": {
+          "description": "Otherwise: a request when its destination port is this port.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "queue": {
+          "description": "The netfilter queue number.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sip": {
+          "description": "A packet is a request when its source address is this IPv4 address.",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "dir",
+        "dur_ms",
+        "h",
+        "id",
+        "n",
+        "op",
+        "queue",
+        "v"
+      ],
+      "type": "object"
+    },
+    "command.mkdir": {
+      "additionalProperties": false,
+      "description": "Host to agent: Make a directory and its parents.",
+      "properties": {
+        "id": {
+          "description": "The command's id; every command has a higher id than the one before.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "mode": {
+          "description": "The mode of directories made (default 0755).",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "op": {
+          "const": "mkdir",
+          "description": "The command.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The directory.",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "op",
+        "path",
+        "v"
+      ],
+      "type": "object"
+    },
+    "command.mount": {
+      "additionalProperties": false,
+      "description": "Host to agent: Mount a file system (mount(2)); the mount point is made first.",
+      "properties": {
+        "data": {
+          "description": "The file system's own options (mount(2)'s data, for example data=journal).",
+          "type": "string"
+        },
+        "dst": {
+          "description": "The mount point.",
+          "type": "string"
+        },
+        "flags": {
+          "description": "The flags.",
+          "items": {
+            "enum": [
+              "ro",
+              "nosuid",
+              "nodev",
+              "noexec",
+              "noatime",
+              "relatime",
+              "sync",
+              "remount",
+              "bind"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "fstype": {
+          "description": "The file system type.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The command's id; every command has a higher id than the one before.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "op": {
+          "const": "mount",
+          "description": "The command.",
+          "type": "string"
+        },
+        "src": {
+          "description": "The source (a device, or none).",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "dst",
+        "fstype",
+        "id",
+        "op",
+        "src",
+        "v"
+      ],
+      "type": "object"
+    },
+    "command.probe": {
+      "additionalProperties": false,
+      "description": "Host to agent: Run a command again and again until it exits 0 or a deadline in guest time passes, and report the attempts in a `probe` event (readiness checks, eventually-polls).",
+      "properties": {
+        "alive": {
+          "description": "Give up as soon as the process under this handle is not running.",
+          "type": "string"
+        },
+        "argv": {
+          "description": "The program and its arguments.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cwd": {
+          "description": "The working directory (default /).",
+          "type": "string"
+        },
+        "deadline_ms": {
+          "description": "Give up this many ms after the command; an attempt still running then is killed.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "env": {
+          "description": "The environment, as NAME=VALUE strings.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "every_ms": {
+          "description": "Start attempt k at k * every_ms after the command (or when attempt k-1 ended, if later).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "gid": {
+          "description": "Run as this group id.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "description": "The command's id; every command has a higher id than the one before.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "netns": {
+          "description": "Enter this network namespace first.",
+          "type": "string"
+        },
+        "op": {
+          "const": "probe",
+          "description": "The command.",
+          "type": "string"
+        },
+        "uid": {
+          "description": "Run as this user id.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "argv",
+        "deadline_ms",
+        "every_ms",
+        "id",
+        "op",
+        "v"
+      ],
+      "type": "object"
+    },
+    "command.qlen": {
+      "additionalProperties": false,
+      "description": "Host to agent: The number of packets queued in a qdisc: runs `<tc> -s qdisc show dev <dev>` and reads the backlog of the qdisc with that handle (the drain of a lifted netem fault).",
+      "properties": {
+        "dev": {
+          "description": "The device (for example lo).",
+          "type": "string"
+        },
+        "handle": {
+          "description": "The qdisc handle as tc prints it (for example 40:).",
+          "type": "string"
+        },
+        "id": {
+          "description": "The command's id; every command has a higher id than the one before.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "op": {
+          "const": "qlen",
+          "description": "The command.",
+          "type": "string"
+        },
+        "tc": {
+          "description": "The image's pinned tc.",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "dev",
+        "handle",
+        "id",
+        "op",
+        "tc",
+        "v"
+      ],
+      "type": "object"
+    },
+    "command.read": {
+      "additionalProperties": false,
+      "description": "Host to agent: Read part of a file.",
+      "properties": {
+        "hex": {
+          "description": "Answer in lower-case hex instead of text.",
+          "type": "boolean"
+        },
+        "id": {
+          "description": "The command's id; every command has a higher id than the one before.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max": {
+          "description": "Read at most this many bytes (at most 3000).",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "offset": {
+          "description": "Start at this byte (default 0).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "op": {
+          "const": "read",
+          "description": "The command.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The file.",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "max",
+        "op",
+        "path",
+        "v"
+      ],
+      "type": "object"
+    },
+    "command.run": {
+      "additionalProperties": false,
+      "description": "Host to agent: Run a command to its end and report its exit status and output in a `done` event (stdout and stderr share one pipe; stdin is /dev/null).",
+      "properties": {
+        "argv": {
+          "description": "The program and its arguments.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "capture": {
+          "description": "Keep at most this many bytes of output (default 2048, at most 3000).",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cwd": {
+          "description": "The working directory (default /).",
+          "type": "string"
+        },
+        "env": {
+          "description": "The environment, as NAME=VALUE strings.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "gid": {
+          "description": "Run as this group id.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "description": "The command's id; every command has a higher id than the one before.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kill_after_ms": {
+          "description": "Kill the command's tree after this many ms of guest time.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "netns": {
+          "description": "Enter this network namespace first.",
+          "type": "string"
+        },
+        "op": {
+          "const": "run",
+          "description": "The command.",
+          "type": "string"
+        },
+        "uid": {
+          "description": "Run as this user id.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "argv",
+        "id",
+        "op",
+        "v"
+      ],
+      "type": "object"
+    },
+    "command.signal": {
+      "additionalProperties": false,
+      "description": "Host to agent: Send a signal to the process under a handle, or to it and every descendant.",
+      "properties": {
+        "h": {
+          "description": "The process's handle.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The command's id; every command has a higher id than the one before.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "op": {
+          "const": "signal",
+          "description": "The command.",
+          "type": "string"
+        },
+        "sig": {
+          "description": "The signal.",
+          "enum": [
+            "KILL",
+            "TERM",
+            "STOP",
+            "CONT",
+            "INT",
+            "HUP",
+            "QUIT",
+            "USR1",
+            "USR2"
+          ],
+          "type": "string"
+        },
+        "tree": {
+          "description": "Also every descendant (the tree as /proc shows it at this moment).",
+          "type": "boolean"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        },
+        "wait_stopped": {
+          "description": "After STOP: wait until every thread of the tree is stopped (at most about 2 s of guest time), and say whether they all were.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "h",
+        "id",
+        "op",
+        "sig",
+        "tree",
+        "v"
+      ],
+      "type": "object"
+    },
+    "command.spawn": {
+      "additionalProperties": false,
+      "description": "Host to agent: Start a long-running process (a service) under a handle. Its stdin is /dev/null, it gets a new session, its environment is exactly `env`. When it exits the agent reports an `exit` event; the handle can then be used again.",
+      "properties": {
+        "append": {
+          "description": "Append to the output files instead of truncating them.",
+          "type": "boolean"
+        },
+        "argv": {
+          "description": "The program and its arguments; the program is looked up in the PATH of `env` when it has no slash.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cwd": {
+          "description": "The working directory (default /).",
+          "type": "string"
+        },
+        "env": {
+          "description": "The environment, as NAME=VALUE strings (nothing is inherited from the agent).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "gid": {
+          "description": "Run as this group id.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "h": {
+          "description": "The handle the host names the process by (for signals and in the exit event).",
+          "type": "string"
+        },
+        "id": {
+          "description": "The command's id; every command has a higher id than the one before.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kill_after_ms": {
+          "description": "Kill the process tree (SIGKILL) after this many ms of guest time; the exit event then says timed_out.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "netns": {
+          "description": "Enter this network namespace first (a path such as /var/run/netns/a).",
+          "type": "string"
+        },
+        "op": {
+          "const": "spawn",
+          "description": "The command.",
+          "type": "string"
+        },
+        "stderr": {
+          "description": "Write stderr to this file; the same path as stdout shares one file (default /dev/null).",
+          "type": "string"
+        },
+        "stdout": {
+          "description": "Write stdout to this file (default /dev/null).",
+          "type": "string"
+        },
+        "uid": {
+          "description": "Run as this user id.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "argv",
+        "h",
+        "id",
+        "op",
+        "v"
+      ],
+      "type": "object"
+    },
+    "command.sync": {
+      "additionalProperties": false,
+      "description": "Host to agent: Resynchronise after a restore: the agent echoes the nonce. Sent after a CAN byte (0x18), which makes the agent drop a partly read line first.",
+      "properties": {
+        "id": {
+          "description": "The command's id; every command has a higher id than the one before.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "nonce": {
+          "description": "Any number; echoed in the reply.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "op": {
+          "const": "sync",
+          "description": "The command.",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "nonce",
+        "op",
+        "v"
+      ],
+      "type": "object"
+    },
+    "command.syncfs": {
+      "additionalProperties": false,
+      "description": "Host to agent: sync(2): write every file system's dirty data to its disk.",
+      "properties": {
+        "id": {
+          "description": "The command's id; every command has a higher id than the one before.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "op": {
+          "const": "syncfs",
+          "description": "The command.",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "op",
+        "v"
+      ],
+      "type": "object"
+    },
+    "command.tail": {
+      "additionalProperties": false,
+      "description": "Host to agent: Report every new complete line of a file as a `line` event, from its current end (or from its start). A file that shrinks is read again from its start. The file need not exist yet; its directory must.",
+      "properties": {
+        "from_start": {
+          "description": "Start at the beginning of the file instead of its end.",
+          "type": "boolean"
+        },
+        "id": {
+          "description": "The command's id; every command has a higher id than the one before.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "The name the events carry.",
+          "type": "string"
+        },
+        "op": {
+          "const": "tail",
+          "description": "The command.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The file.",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "op",
+        "path",
+        "v"
+      ],
+      "type": "object"
+    },
+    "command.unfreeze": {
+      "additionalProperties": false,
+      "description": "Host to agent: Disarm the packet trigger: close the queue (the image's rules must be removed first, or their packets bypass it). A freeze still in force is NOT continued; the host decides.",
+      "properties": {
+        "id": {
+          "description": "The command's id; every command has a higher id than the one before.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "op": {
+          "const": "unfreeze",
+          "description": "The command.",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "op",
+        "v"
+      ],
+      "type": "object"
+    },
+    "command.untail": {
+      "additionalProperties": false,
+      "description": "Host to agent: Stop a tail; a partial last line is not reported.",
+      "properties": {
+        "id": {
+          "description": "The command's id; every command has a higher id than the one before.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "The tail's name.",
+          "type": "string"
+        },
+        "op": {
+          "const": "untail",
+          "description": "The command.",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "op",
+        "v"
+      ],
+      "type": "object"
+    },
+    "command.write": {
+      "additionalProperties": false,
+      "description": "Host to agent: Write a file (created with its parent directories).",
+      "properties": {
+        "append": {
+          "description": "Append instead of replacing.",
+          "type": "boolean"
+        },
+        "data": {
+          "description": "The text to write.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The command's id; every command has a higher id than the one before.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "mode": {
+          "description": "The file mode for a new file (default 0644).",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "op": {
+          "const": "write",
+          "description": "The command.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The file.",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "data",
+        "id",
+        "op",
+        "path",
+        "v"
+      ],
+      "type": "object"
+    },
+    "error": {
+      "description": "Agent to host: a line or command the agent refused or could not carry out.",
+      "properties": {
+        "err": {
+          "description": "Why.",
+          "enum": [
+            "bad-json",
+            "bad-line",
+            "bad-version",
+            "unknown-op",
+            "bad-field",
+            "duplicate-id",
+            "no-such-handle",
+            "handle-busy",
+            "not-running",
+            "busy",
+            "not-found",
+            "os-error",
+            "not-utf8",
+            "too-long"
+          ],
+          "type": "string"
+        },
+        "errno": {
+          "description": "The errno of a failed system call.",
+          "maximum": 9223372036854775807,
+          "minimum": -9223372036854775808,
+          "type": "integer"
+        },
+        "msg": {
+          "description": "The reason in words.",
+          "type": "string"
+        },
+        "ok": {
+          "const": false,
+          "description": "The command was not carried out.",
+          "type": "boolean"
+        },
+        "op": {
+          "description": "The refused command's op, when the agent could read it.",
+          "type": "string"
+        },
+        "re": {
+          "description": "The id of the refused command, when the agent could read it.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "err",
+        "msg",
+        "ok",
+        "seq",
+        "v"
+      ],
+      "type": "object"
+    },
+    "event.done": {
+      "description": "Agent to host, an event: A run command ended.",
+      "properties": {
+        "ev": {
+          "const": "done",
+          "description": "The event.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The id of the run command.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "out": {
+          "description": "The output kept (invalid UTF-8 replaced by U+FFFD).",
+          "type": "string"
+        },
+        "out_len": {
+          "description": "The output's whole length in bytes.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sig": {
+          "description": "The signal that ended it, if one did.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "status": {
+          "description": "The exit status (code, or 128 + signal).",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "timed_out": {
+          "description": "Whether kill_after_ms ended it.",
+          "type": "boolean"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ev",
+        "id",
+        "out",
+        "out_len",
+        "seq",
+        "status",
+        "v"
+      ],
+      "type": "object"
+    },
+    "event.dropped": {
+      "description": "Agent to host, an event: A CAN byte discarded a partly read input line.",
+      "properties": {
+        "bytes": {
+          "description": "The bytes discarded.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ev": {
+          "const": "dropped",
+          "description": "The event.",
+          "type": "string"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "bytes",
+        "ev",
+        "seq",
+        "v"
+      ],
+      "type": "object"
+    },
+    "event.exit": {
+      "description": "Agent to host, an event: A process started by spawn exited.",
+      "properties": {
+        "ev": {
+          "const": "exit",
+          "description": "The event.",
+          "type": "string"
+        },
+        "h": {
+          "description": "Its handle.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The id of the spawn command.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sig": {
+          "description": "The signal that ended it, if one did.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "status": {
+          "description": "The exit status as a shell reports it: the code, or 128 + the signal number.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "timed_out": {
+          "description": "Whether kill_after_ms ended it.",
+          "type": "boolean"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ev",
+        "h",
+        "id",
+        "seq",
+        "status",
+        "v"
+      ],
+      "type": "object"
+    },
+    "event.froze": {
+      "description": "Agent to host, an event: The packet trigger fired: the process tree is stopped and the packet let through.",
+      "properties": {
+        "all_stopped": {
+          "description": "Whether every thread stopped in time.",
+          "type": "boolean"
+        },
+        "count": {
+          "description": "The packet's number among the counted ones (= n).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "dir": {
+          "description": "The counted direction.",
+          "enum": [
+            "req",
+            "resp"
+          ],
+          "type": "string"
+        },
+        "dport": {
+          "description": "Destination port.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ev": {
+          "const": "froze",
+          "description": "The event.",
+          "type": "string"
+        },
+        "h": {
+          "description": "The frozen process's handle.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The id of the freeze command.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "k": {
+          "description": "Its number among the payload packets of its direction.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kdir": {
+          "description": "The packet's own direction.",
+          "enum": [
+            "req",
+            "resp"
+          ],
+          "type": "string"
+        },
+        "len": {
+          "description": "Payload length.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "procs": {
+          "description": "Processes stopped.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "snippet": {
+          "description": "The first 60 payload bytes, printable ASCII kept, others as '.'.",
+          "type": "string"
+        },
+        "sport": {
+          "description": "Source port.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "all_stopped",
+        "count",
+        "dir",
+        "dport",
+        "ev",
+        "h",
+        "id",
+        "k",
+        "kdir",
+        "len",
+        "procs",
+        "seq",
+        "snippet",
+        "sport",
+        "v"
+      ],
+      "type": "object"
+    },
+    "event.hello": {
+      "description": "Agent to host, an event: The agent's first line. The host sends only ops and optional fields it lists.",
+      "properties": {
+        "agent": {
+          "description": "The agent's version.",
+          "type": "string"
+        },
+        "ev": {
+          "const": "hello",
+          "description": "The event.",
+          "type": "string"
+        },
+        "features": {
+          "description": "Optional capabilities (see FEATURES).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "ops": {
+          "description": "Every op it executes.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pid1": {
+          "description": "Whether it runs as the guest's first process.",
+          "type": "boolean"
+        },
+        "proto": {
+          "description": "The protocol version (the highest this agent speaks).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "agent",
+        "ev",
+        "features",
+        "ops",
+        "pid1",
+        "proto",
+        "seq",
+        "v"
+      ],
+      "type": "object"
+    },
+    "event.line": {
+      "description": "Agent to host, an event: A new line of a tailed file.",
+      "properties": {
+        "cut": {
+          "description": "Whether the line was longer and was cut.",
+          "type": "boolean"
+        },
+        "ev": {
+          "const": "line",
+          "description": "The event.",
+          "type": "string"
+        },
+        "n": {
+          "description": "The line's number in the file, from 1 (counted from where the tail started).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "The tail's name.",
+          "type": "string"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text": {
+          "description": "The line without its newline (invalid UTF-8 replaced by U+FFFD; at most 2,000 bytes).",
+          "type": "string"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ev",
+        "n",
+        "name",
+        "seq",
+        "text",
+        "v"
+      ],
+      "type": "object"
+    },
+    "event.probe": {
+      "description": "Agent to host, an event: A probe ended.",
+      "properties": {
+        "ev": {
+          "const": "probe",
+          "description": "The event.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The id of the probe command.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ok": {
+          "description": "Whether an attempt succeeded.",
+          "type": "boolean"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "status": {
+          "description": "The last attempt's exit status, if one ended.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tries": {
+          "description": "Attempts started.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        },
+        "why": {
+          "description": "How it ended.",
+          "enum": [
+            "ok",
+            "deadline",
+            "died"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "ev",
+        "id",
+        "ok",
+        "seq",
+        "tries",
+        "v",
+        "why"
+      ],
+      "type": "object"
+    },
+    "event.resumed": {
+      "description": "Agent to host, an event: The frozen tree was continued after dur_ms.",
+      "properties": {
+        "ev": {
+          "const": "resumed",
+          "description": "The event.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The id of the freeze command.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "procs": {
+          "description": "Processes continued.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ev",
+        "id",
+        "procs",
+        "seq",
+        "v"
+      ],
+      "type": "object"
+    },
+    "event.warn": {
+      "description": "Agent to host, an event: Something went wrong outside a command.",
+      "properties": {
+        "code": {
+          "description": "What.",
+          "enum": [
+            "netlink-enobufs",
+            "verdict-failed",
+            "tail-failed",
+            "freeze-no-process"
+          ],
+          "type": "string"
+        },
+        "ev": {
+          "const": "warn",
+          "description": "The event.",
+          "type": "string"
+        },
+        "msg": {
+          "description": "In words.",
+          "type": "string"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "code",
+        "ev",
+        "msg",
+        "seq",
+        "v"
+      ],
+      "type": "object"
+    },
+    "reply.clock_get": {
+      "description": "Agent to host, the answer to clock_get: The clocks.",
+      "properties": {
+        "mono_ms": {
+          "description": "CLOCK_MONOTONIC in ms (guest time since boot).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "nsec": {
+          "description": "Realtime, nanoseconds.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ok": {
+          "const": true,
+          "description": "The command was carried out.",
+          "type": "boolean"
+        },
+        "op": {
+          "const": "clock_get",
+          "description": "The command this answers.",
+          "type": "string"
+        },
+        "re": {
+          "description": "The id of the command this answers.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sec": {
+          "description": "Realtime, seconds since 1970.",
+          "maximum": 9223372036854775807,
+          "minimum": -9223372036854775808,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "mono_ms",
+        "nsec",
+        "ok",
+        "op",
+        "re",
+        "sec",
+        "seq",
+        "v"
+      ],
+      "type": "object"
+    },
+    "reply.clock_set": {
+      "description": "Agent to host, the answer to clock_set: The clock was set.",
+      "properties": {
+        "ok": {
+          "const": true,
+          "description": "The command was carried out.",
+          "type": "boolean"
+        },
+        "op": {
+          "const": "clock_set",
+          "description": "The command this answers.",
+          "type": "string"
+        },
+        "re": {
+          "description": "The id of the command this answers.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sec": {
+          "description": "The realtime clock after the change, seconds since 1970.",
+          "maximum": 9223372036854775807,
+          "minimum": -9223372036854775808,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "op",
+        "re",
+        "sec",
+        "seq",
+        "v"
+      ],
+      "type": "object"
+    },
+    "reply.freeze": {
+      "description": "Agent to host, the answer to freeze: The queue is bound; packets are counted from now.",
+      "properties": {
+        "ok": {
+          "const": true,
+          "description": "The command was carried out.",
+          "type": "boolean"
+        },
+        "op": {
+          "const": "freeze",
+          "description": "The command this answers.",
+          "type": "string"
+        },
+        "re": {
+          "description": "The id of the command this answers.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "op",
+        "re",
+        "seq",
+        "v"
+      ],
+      "type": "object"
+    },
+    "reply.mkdir": {
+      "description": "Agent to host, the answer to mkdir: The directory exists.",
+      "properties": {
+        "ok": {
+          "const": true,
+          "description": "The command was carried out.",
+          "type": "boolean"
+        },
+        "op": {
+          "const": "mkdir",
+          "description": "The command this answers.",
+          "type": "string"
+        },
+        "re": {
+          "description": "The id of the command this answers.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "op",
+        "re",
+        "seq",
+        "v"
+      ],
+      "type": "object"
+    },
+    "reply.mount": {
+      "description": "Agent to host, the answer to mount: The file system is mounted.",
+      "properties": {
+        "ok": {
+          "const": true,
+          "description": "The command was carried out.",
+          "type": "boolean"
+        },
+        "op": {
+          "const": "mount",
+          "description": "The command this answers.",
+          "type": "string"
+        },
+        "re": {
+          "description": "The id of the command this answers.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "op",
+        "re",
+        "seq",
+        "v"
+      ],
+      "type": "object"
+    },
+    "reply.probe": {
+      "description": "Agent to host, the answer to probe: The probe was started; a `probe` event follows.",
+      "properties": {
+        "ok": {
+          "const": true,
+          "description": "The command was carried out.",
+          "type": "boolean"
+        },
+        "op": {
+          "const": "probe",
+          "description": "The command this answers.",
+          "type": "string"
+        },
+        "re": {
+          "description": "The id of the command this answers.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "op",
+        "re",
+        "seq",
+        "v"
+      ],
+      "type": "object"
+    },
+    "reply.qlen": {
+      "description": "Agent to host, the answer to qlen: The queue length.",
+      "properties": {
+        "ok": {
+          "const": true,
+          "description": "The command was carried out.",
+          "type": "boolean"
+        },
+        "op": {
+          "const": "qlen",
+          "description": "The command this answers.",
+          "type": "string"
+        },
+        "packets": {
+          "description": "Packets queued; absent when there is no qdisc with that handle.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "re": {
+          "description": "The id of the command this answers.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "op",
+        "re",
+        "seq",
+        "v"
+      ],
+      "type": "object"
+    },
+    "reply.read": {
+      "description": "Agent to host, the answer to read: The bytes read.",
+      "properties": {
+        "data": {
+          "description": "The bytes, as text or hex.",
+          "type": "string"
+        },
+        "eof": {
+          "description": "Whether the read reached the end of the file.",
+          "type": "boolean"
+        },
+        "ok": {
+          "const": true,
+          "description": "The command was carried out.",
+          "type": "boolean"
+        },
+        "op": {
+          "const": "read",
+          "description": "The command this answers.",
+          "type": "string"
+        },
+        "re": {
+          "description": "The id of the command this answers.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "size": {
+          "description": "The file's size.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "data",
+        "eof",
+        "ok",
+        "op",
+        "re",
+        "seq",
+        "size",
+        "v"
+      ],
+      "type": "object"
+    },
+    "reply.run": {
+      "description": "Agent to host, the answer to run: The command was started; a `done` event follows.",
+      "properties": {
+        "ok": {
+          "const": true,
+          "description": "The command was carried out.",
+          "type": "boolean"
+        },
+        "op": {
+          "const": "run",
+          "description": "The command this answers.",
+          "type": "string"
+        },
+        "re": {
+          "description": "The id of the command this answers.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "op",
+        "re",
+        "seq",
+        "v"
+      ],
+      "type": "object"
+    },
+    "reply.signal": {
+      "description": "Agent to host, the answer to signal: The signal was sent.",
+      "properties": {
+        "ok": {
+          "const": true,
+          "description": "The command was carried out.",
+          "type": "boolean"
+        },
+        "op": {
+          "const": "signal",
+          "description": "The command this answers.",
+          "type": "string"
+        },
+        "procs": {
+          "description": "How many processes were signalled.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "re": {
+          "description": "The id of the command this answers.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stopped": {
+          "description": "With wait_stopped: whether every thread stopped in time.",
+          "type": "boolean"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "op",
+        "procs",
+        "re",
+        "seq",
+        "v"
+      ],
+      "type": "object"
+    },
+    "reply.spawn": {
+      "description": "Agent to host, the answer to spawn: The process was started.",
+      "properties": {
+        "ok": {
+          "const": true,
+          "description": "The command was carried out.",
+          "type": "boolean"
+        },
+        "op": {
+          "const": "spawn",
+          "description": "The command this answers.",
+          "type": "string"
+        },
+        "re": {
+          "description": "The id of the command this answers.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "op",
+        "re",
+        "seq",
+        "v"
+      ],
+      "type": "object"
+    },
+    "reply.sync": {
+      "description": "Agent to host, the answer to sync: The nonce of the sync.",
+      "properties": {
+        "nonce": {
+          "description": "The nonce.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ok": {
+          "const": true,
+          "description": "The command was carried out.",
+          "type": "boolean"
+        },
+        "op": {
+          "const": "sync",
+          "description": "The command this answers.",
+          "type": "string"
+        },
+        "re": {
+          "description": "The id of the command this answers.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "nonce",
+        "ok",
+        "op",
+        "re",
+        "seq",
+        "v"
+      ],
+      "type": "object"
+    },
+    "reply.syncfs": {
+      "description": "Agent to host, the answer to syncfs: sync(2) returned.",
+      "properties": {
+        "ok": {
+          "const": true,
+          "description": "The command was carried out.",
+          "type": "boolean"
+        },
+        "op": {
+          "const": "syncfs",
+          "description": "The command this answers.",
+          "type": "string"
+        },
+        "re": {
+          "description": "The id of the command this answers.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "op",
+        "re",
+        "seq",
+        "v"
+      ],
+      "type": "object"
+    },
+    "reply.tail": {
+      "description": "Agent to host, the answer to tail: The tail is on.",
+      "properties": {
+        "ok": {
+          "const": true,
+          "description": "The command was carried out.",
+          "type": "boolean"
+        },
+        "op": {
+          "const": "tail",
+          "description": "The command this answers.",
+          "type": "string"
+        },
+        "re": {
+          "description": "The id of the command this answers.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "op",
+        "re",
+        "seq",
+        "v"
+      ],
+      "type": "object"
+    },
+    "reply.unfreeze": {
+      "description": "Agent to host, the answer to unfreeze: The trigger is off.",
+      "properties": {
+        "counted": {
+          "description": "Packets counted (in the counted direction, with the pattern).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fired": {
+          "description": "Whether it had fired.",
+          "type": "boolean"
+        },
+        "ok": {
+          "const": true,
+          "description": "The command was carried out.",
+          "type": "boolean"
+        },
+        "op": {
+          "const": "unfreeze",
+          "description": "The command this answers.",
+          "type": "string"
+        },
+        "re": {
+          "description": "The id of the command this answers.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "resumed": {
+          "description": "Whether the tree had been continued.",
+          "type": "boolean"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "counted",
+        "fired",
+        "ok",
+        "op",
+        "re",
+        "resumed",
+        "seq",
+        "v"
+      ],
+      "type": "object"
+    },
+    "reply.untail": {
+      "description": "Agent to host, the answer to untail: The tail is off.",
+      "properties": {
+        "lines": {
+          "description": "Lines it reported.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ok": {
+          "const": true,
+          "description": "The command was carried out.",
+          "type": "boolean"
+        },
+        "op": {
+          "const": "untail",
+          "description": "The command this answers.",
+          "type": "string"
+        },
+        "re": {
+          "description": "The id of the command this answers.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "lines",
+        "ok",
+        "op",
+        "re",
+        "seq",
+        "v"
+      ],
+      "type": "object"
+    },
+    "reply.write": {
+      "description": "Agent to host, the answer to write: The file was written.",
+      "properties": {
+        "bytes": {
+          "description": "Bytes written.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ok": {
+          "const": true,
+          "description": "The command was carried out.",
+          "type": "boolean"
+        },
+        "op": {
+          "const": "write",
+          "description": "The command this answers.",
+          "type": "string"
+        },
+        "re": {
+          "description": "The id of the command this answers.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "description": "The agent line's number, from 0 (the hello).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "v": {
+          "const": 1,
+          "description": "The protocol version of the line.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "bytes",
+        "ok",
+        "op",
+        "re",
+        "seq",
+        "v"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One line of the conversation between hydo's host and hydo-agent, the guest's first process. Host lines are canonical JSON followed by a newline on the serial input; agent lines are framed on the console as `HYDO-AG <len> <crc32> <json>`. Generated from the crate hydo-agent-proto; version 1 only grows (new ops, events, optional fields and names).",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/command.sync"
+    },
+    {
+      "$ref": "#/$defs/command.spawn"
+    },
+    {
+      "$ref": "#/$defs/command.signal"
+    },
+    {
+      "$ref": "#/$defs/command.run"
+    },
+    {
+      "$ref": "#/$defs/command.probe"
+    },
+    {
+      "$ref": "#/$defs/command.write"
+    },
+    {
+      "$ref": "#/$defs/command.read"
+    },
+    {
+      "$ref": "#/$defs/command.mkdir"
+    },
+    {
+      "$ref": "#/$defs/command.mount"
+    },
+    {
+      "$ref": "#/$defs/command.syncfs"
+    },
+    {
+      "$ref": "#/$defs/command.clock_set"
+    },
+    {
+      "$ref": "#/$defs/command.clock_get"
+    },
+    {
+      "$ref": "#/$defs/command.qlen"
+    },
+    {
+      "$ref": "#/$defs/command.tail"
+    },
+    {
+      "$ref": "#/$defs/command.untail"
+    },
+    {
+      "$ref": "#/$defs/command.freeze"
+    },
+    {
+      "$ref": "#/$defs/command.unfreeze"
+    },
+    {
+      "$ref": "#/$defs/reply.sync"
+    },
+    {
+      "$ref": "#/$defs/reply.spawn"
+    },
+    {
+      "$ref": "#/$defs/reply.signal"
+    },
+    {
+      "$ref": "#/$defs/reply.run"
+    },
+    {
+      "$ref": "#/$defs/reply.probe"
+    },
+    {
+      "$ref": "#/$defs/reply.write"
+    },
+    {
+      "$ref": "#/$defs/reply.read"
+    },
+    {
+      "$ref": "#/$defs/reply.mkdir"
+    },
+    {
+      "$ref": "#/$defs/reply.mount"
+    },
+    {
+      "$ref": "#/$defs/reply.syncfs"
+    },
+    {
+      "$ref": "#/$defs/reply.clock_set"
+    },
+    {
+      "$ref": "#/$defs/reply.clock_get"
+    },
+    {
+      "$ref": "#/$defs/reply.qlen"
+    },
+    {
+      "$ref": "#/$defs/reply.tail"
+    },
+    {
+      "$ref": "#/$defs/reply.untail"
+    },
+    {
+      "$ref": "#/$defs/reply.freeze"
+    },
+    {
+      "$ref": "#/$defs/reply.unfreeze"
+    },
+    {
+      "$ref": "#/$defs/error"
+    },
+    {
+      "$ref": "#/$defs/event.hello"
+    },
+    {
+      "$ref": "#/$defs/event.exit"
+    },
+    {
+      "$ref": "#/$defs/event.done"
+    },
+    {
+      "$ref": "#/$defs/event.probe"
+    },
+    {
+      "$ref": "#/$defs/event.line"
+    },
+    {
+      "$ref": "#/$defs/event.froze"
+    },
+    {
+      "$ref": "#/$defs/event.resumed"
+    },
+    {
+      "$ref": "#/$defs/event.dropped"
+    },
+    {
+      "$ref": "#/$defs/event.warn"
+    }
+  ],
+  "title": "hydo agent protocol, version 1"
+}

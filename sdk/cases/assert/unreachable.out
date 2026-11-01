@@ -1,0 +1,1 @@
+HYDO-ASSERT {"t":"unreachable","id":"t.unreach","ok":false,"msg":"an unreachable location","details":{"why":"test"}}

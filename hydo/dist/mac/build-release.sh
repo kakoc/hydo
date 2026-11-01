@@ -74,7 +74,7 @@ sh "$TOP/hv/hvm/explore/build.sh" >/dev/null 2>&1
 REL=$OUTDIR/hydo-mac-$VERSION
 rm -rf "$REL"
 # the release tree mirrors the repository: hydo/ (the product) and hv/hvm/ (the Mac engine)
-mkdir -p "$REL/bin" "$REL/hydo/onboard" "$REL/hydo/assert" "$REL/hv/hvm/explore/out" "$REL/guest" \
+mkdir -p "$REL/bin" "$REL/hydo/onboard" "$REL/hv/hvm/explore/out" "$REL/guest" \
          "$REL/examples" "$REL/skill"
 # the programs, all Rust (M107: no Python anywhere in the release): bin/hydo (the one CLI,
 # hydo/crates/hydo-cli), bin/hydo-build (the image builder with its own command line, for
@@ -100,7 +100,7 @@ cp "$TOP"/hydo/onboard/hydo-init*.sh "$TOP/hydo/onboard/hydo-liveness.sh" "$TOP/
 echo "$VERSION" > "$REL/hydo/VERSION"     # what a plan's hydo_version: is checked against
 mkdir -p "$REL/hydo/history"
 cp "$TOP/hydo/history/hydo_hist.sh" "$REL/hydo/history/"
-cp "$TOP/hydo/assert/hydo_assert_report.c" "$TOP/hydo/assert/hydo_assert_table.h" "$REL/hydo/assert/"   # the explorer compiles the property table tool
+# (the property table is made by the explorer itself since M115: no hydo/assert tool in the release)
 cp "$TOP/hv/hvm/hvm" "$REL/hv/hvm/hvm"
 cp "$TOP/hv/hvm/explore/hvmx" "$REL/hv/hvm/explore/hvmx"
 cp "$TOP/hv/hvm/hv.entitlements" "$REL/hv/hvm/"
@@ -114,6 +114,11 @@ cp "$A/busybox-applets.txt" "$A/tc-closure.txt" "$REL/guest/"
 cp -R "$A/tc" "$REL/guest/tc"
 printf '#!/bin/sh\n# stands in for `busybox --list` (hydo-build asks it for the applet set)\ncat "$(dirname "$0")/busybox-applets.txt"\n' > "$REL/guest/busybox-applets"
 chmod 755 "$REL/guest/busybox-applets"
+# the guest agent of agent images (hydo build --control agent, M121; driven by the host controller,
+# M126): the aarch64 build of hydo/crates/hydo-agent/build.sh (byte-reproducible, no C toolchain),
+# as guest/hydo-agent (the CLI's default HYDO_AGENT_BIN_ARM64); hydo-build checks its pinned sha256
+"$TOP/hydo/crates/hydo-agent/build.sh" aarch64 "$A/agent" >&2
+cp "$A/agent/hydo-agent-arm64" "$REL/guest/hydo-agent"; chmod 755 "$REL/guest/hydo-agent"
 # the Redis example: the Mac manifest with every /nix/store src made relative to files/
 mkdir -p "$REL/examples/redis"
 cp -R "$A/redis" "$REL/examples/redis/files"

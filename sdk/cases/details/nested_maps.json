@@ -1,0 +1,11 @@
+{
+  "about": "maps inside maps and lists, each sorted",
+  "needs": [],
+  "steps": [
+    {"do":"always","id":"d.nested_maps","msg":"details encoding"},
+    {"do":"check","a":0,"cond":true,"details":{"map":[["deep",{"map":[["l1",{"map":[["l2",{"map":[["l3",[{"map":[["k","v"],["j",[{"f64":"1.25"},{"f64":"-0.5"}]]]}]]]}]]}]]}],["emap",{"map":[]}],["list",[{"map":[["b",{"int":"1"}],["a",[{"map":[["y",{"int":"2"}],["x",{"int":"1"}]]}]]]}]]]}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "nested_maps.out", "returns": "1"}
+  ]
+}

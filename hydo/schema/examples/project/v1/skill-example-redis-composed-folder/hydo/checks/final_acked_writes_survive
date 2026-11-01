@@ -1,0 +1,8 @@
+#!/bin/sh
+# hydo-msg: every SET the client saw acknowledged reads back with its value
+. /hydo/workload/helper_lib.sh
+[ "$(R PING)" = PONG ] || { echo "redis does not answer"; exit 2; }
+for i in $(cat $HYDO_ACKED); do
+  [ "$(R GET k:$i)" = "v$i" ] || { echo "key k:$i lost"; exit 1; }
+done
+echo "acked=$(wc -l < $HYDO_ACKED) all present"

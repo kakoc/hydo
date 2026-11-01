@@ -8,7 +8,9 @@ use crate::ctx::{
     abspath, die, glob_simple, pjoin, read_text, strftime, take, Ctx, Platform, OUT, PROJECT_OUT,
 };
 use crate::hvxenv;
-use crate::pyjson::{dumps, head, py_str, tail};
+use crate::pyjson::{head, py_str, tail};
+use hydo_control::agent::AgentEngine;
+use hydo_control::drive::Policy;
 use hydo_engine::hvm::{kernel_for, Hvm};
 use hydo_engine::hvx::Hvx;
 use hydo_engine::image::{embedded_compose, embedded_manifest, sha256_file};
@@ -18,6 +20,7 @@ use hydo_manifest::Guest;
 use hydo_schedule::Schedule;
 use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 // ---------------------------------------------------------------- images and engine options
 
@@ -160,6 +163,8 @@ pub fn mac_kernel_for(ctx: &Ctx, image: &Path, quiet: bool) -> PathBuf {
 
 /// One schedule from a fresh boot on this platform's engine. Writes `engine.log` (everything the
 /// engine printed) into outdir. Returns the RESULT, or None (the engine's output is returned too).
+/// An agent image (`/etc/hydo/control`, M126) runs under the host controller: `policy` is the
+/// schedule's, or recorded transcripts typed again (`hydo repro --transcript`).
 fn run_engine(
     ctx: &Ctx,
     image: &Path,
@@ -167,9 +172,36 @@ fn run_engine(
     outdir: &Path,
     eargs: &[String],
     quiet: bool,
+    policy: &Policy,
 ) -> (Option<RunResult>, String) {
     let _ = std::fs::create_dir_all(outdir);
     let s = schedule(sched);
+    // the engine and the boot spec of this platform, then the run: an agent image under the host
+    // controller, every other image as before
+    let one = |eng: Arc<dyn Engine + Send + Sync>, spec: &BootSpec| match AgentEngine::for_image(
+        eng.clone(),
+        image,
+    )
+    .unwrap_or_else(|e| die(&format!("hydo: {e}")))
+    {
+        Some(a) => {
+            if !quiet {
+                println!(
+                    "hydo: an agent image: the host controller drives the run (/etc/hydo/control)"
+                );
+            }
+            a.one_with(spec, &s, policy)
+        }
+        None => {
+            if !matches!(policy, Policy::Schedule) {
+                die(&format!(
+                    "{} is a shell-init image; only an agent image's run has a control transcript",
+                    image.display()
+                ));
+            }
+            eng.one(spec, &s)
+        }
+    };
     let run = match ctx.platform {
         Platform::Linux => {
             let engine = hvxenv::engine(ctx);
@@ -193,12 +225,12 @@ fn run_engine(
                 Some(hvxenv::initrd(ctx)),
                 &abspath(outdir),
             );
-            hvx.one(&spec, &s)
+            one(Arc::new(hvx), &spec)
         }
         Platform::Mac => {
             let kernel = mac_kernel_for(ctx, image, quiet);
             let spec = spec_from_args(eargs, image, kernel, None, outdir);
-            Hvm::for_release(&ctx.root).one(&spec, &s)
+            one(Arc::new(Hvm::for_release(&ctx.root)), &spec)
         }
     }
     .unwrap_or_else(|e| die(&format!("cannot start the engine: {e}")));
@@ -224,7 +256,20 @@ pub fn run_one(
     eargs: &[String],
     quiet: bool,
 ) -> Map<String, Value> {
-    match run_engine(ctx, image, sched, outdir, eargs, quiet) {
+    run_one_with(ctx, image, sched, outdir, eargs, quiet, &Policy::Schedule)
+}
+
+/// [`run_one`] under `policy`.
+fn run_one_with(
+    ctx: &Ctx,
+    image: &Path,
+    sched: &str,
+    outdir: &Path,
+    eargs: &[String],
+    quiet: bool,
+    policy: &Policy,
+) -> Map<String, Value> {
+    match run_engine(ctx, image, sched, outdir, eargs, quiet, policy) {
         (Some(r), _) => result_map(&r),
         (None, output) => {
             eprint!("{}", tail(&output, 3000));
@@ -243,6 +288,9 @@ fn result_map(r: &RunResult) -> Map<String, Value> {
     m.insert("secs".into(), json!(r.secs));
     m.insert("verdict".into(), json!(r.verdict));
     m.insert("line".into(), json!(r.line));
+    if let Some(c) = r.extra("ctl") {
+        m.insert("ctl".into(), json!(c));
+    }
     m
 }
 
@@ -275,8 +323,9 @@ fn verdict_text(r: &hydo_history::Checks) -> String {
     r.verdict.clone().unwrap_or_else(|| "None".into())
 }
 
-/// History checks on the host (hydo/HISTORIES.md): writes one.checks.log and one.checks.txt and
-/// folds the combined verdict into res (the guest's own as guest_verdict).
+/// History checks on the host (hydo/HISTORIES.md): keeps the checks' findings and records in res
+/// (result.json reports them) and folds the combined verdict into res (the guest's own as
+/// guest_verdict).
 fn host_checks(outdir: &Path, mut res: Map<String, Value>, quiet: bool) -> Map<String, Value> {
     let srcs = console_sources(outdir);
     if !srcs.iter().any(|(_, t)| t.contains("HYDO-CHECK ")) {
@@ -287,7 +336,7 @@ fn host_checks(outdir: &Path, mut res: Map<String, Value>, quiet: bool) -> Map<S
         .and_then(Value::as_str)
         .map(str::to_string);
     let r = history_checks(&srcs, verdict.as_deref());
-    let _ = hydo_history::write_checks_files(outdir, "one", &r);
+    hydo_explore::results::keep_checks(&mut res, &r);
     let gv = res.get("verdict").cloned().unwrap_or(Value::Null);
     res.insert("guest_verdict".into(), gv);
     res.insert("verdict".into(), json!(r.verdict));
@@ -295,21 +344,108 @@ fn host_checks(outdir: &Path, mut res: Map<String, Value>, quiet: bool) -> Map<S
         println!(
             "hydo: history checks: {}   (explanations in {})",
             verdict_text(&r),
-            outdir.join("one.checks.txt").display()
+            outdir.join(hydo_results::RUN_DOC).display()
         );
     }
     res
 }
 
-/// Error logs as findings for one run (the hydo-errors crate): prints the kinds, writes
-/// one.errors.json, folds the verdict into res.
+/// The known-errors list a run's error kinds were compared with (result.json `error_logs`).
+const ERRLOG_KNOWN: &str = "_errlog_known";
+
+/// Error logs as findings for one run (the hydo-errors crate): prints the kinds, keeps the
+/// analysis in res (result.json reports it), folds the verdict into res.
 fn errors_one(
     outdir: &Path,
     sched: &str,
     res: Map<String, Value>,
     known: Option<&str>,
 ) -> Map<String, Value> {
-    hydo_errors::for_run_dir(outdir, sched, res, known, &mut |l| println!("{l}"))
+    let (mut res, an) =
+        hydo_errors::for_run_dir(outdir, sched, res, known, &mut |l| println!("{l}"));
+    if let Some((an, k)) = an {
+        res.insert(hydo_explore::results::ERRLOG.into(), an.to_json());
+        res.insert(
+            ERRLOG_KNOWN.into(),
+            json!({"known_file": k.path, "known_sha256": k.sha256, "unknown": k.unknown}),
+        );
+    }
+    res
+}
+
+/// One run's result.json (the results format): the run, its image and engine, its findings and
+/// property table, its files.
+fn run_document(
+    outdir: &Path,
+    image: &Path,
+    image_sha: Option<String>,
+    sched: &str,
+    eargs: &[String],
+    res: &Map<String, Value>,
+    platform: Platform,
+) -> hydo_results::Run {
+    let mut consoles = Vec::new();
+    for suffix in ["", ".recovery"] {
+        let rel = format!("one{suffix}.log");
+        if let Ok(t) = read_text(&outdir.join(&rel)) {
+            consoles.push((rel, t));
+        }
+    }
+    let mut run = hydo_explore::results::run_of("one", sched, res, &consoles);
+    run.tag = None;
+    run.hydo_version = Some(env!("CARGO_PKG_VERSION").into());
+    run.image = Some(hydo_results::Image {
+        path: image.display().to_string(),
+        resolved: None,
+        sha256: image_sha,
+    });
+    let mut engine = hydo_results::Engine {
+        backend: Some(
+            match platform {
+                Platform::Linux => "hvx",
+                Platform::Mac => "hvm",
+            }
+            .into(),
+        ),
+        args: Some(eargs.to_vec()),
+        ..hydo_results::Engine::default()
+    };
+    let mut i = 0;
+    while i + 1 < eargs.len() {
+        match eargs[i].as_str() {
+            "--ram-mib" => engine.ram_mib = eargs[i + 1].parse().ok(),
+            "--vcpus" => engine.vcpus = eargs[i + 1].parse().ok(),
+            "--cpu" => engine.cpu = Some(eargs[i + 1].clone()),
+            _ => {}
+        }
+        i += 2;
+    }
+    if platform == Platform::Linux {
+        engine.module_srcversion = std::fs::read_to_string("/sys/module/hvx/srcversion")
+            .ok()
+            .map(|s| s.trim().to_string());
+    }
+    run.engine = Some(engine);
+    let texts: Vec<String> = consoles.iter().map(|c| c.1.clone()).collect();
+    run.properties =
+        hydo_explore::results::property_table(&[hydo_explore::results::merged_text(&texts, res)]);
+    if let (Some(el), Some(k)) = (run.error_logs.as_mut(), res.get(ERRLOG_KNOWN)) {
+        let g = |f: &str| k.get(f).and_then(Value::as_str).map(str::to_string);
+        el.known_file = g("known_file");
+        el.known_sha256 = g("known_sha256");
+        el.unknown = g("unknown");
+    }
+    run.result_line = res.get("line").and_then(Value::as_str).map(str::to_string);
+    // an agent image's run: the control transcripts of its conversations (M126)
+    run.control = hydo_control::agent::controls_in(outdir, "", "");
+    run.artifacts
+        .get_or_insert_with(Default::default)
+        .engine_log = Some("engine.log".into());
+    run
+}
+
+fn write_run_document(outdir: &Path, run: &hydo_results::Run) {
+    let _ = hydo_results::write_document(&outdir.join(hydo_results::RUN_DOC), run);
 }
 
 fn new_run_dir() -> PathBuf {
@@ -336,18 +472,17 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
     let res = run_one(ctx, &image, &sched, &outdir, &eargs, false);
     let res = host_checks(&outdir, res, false);
     let res = errors_one(&outdir, &sched, res, known.as_deref());
-    let mut rec = Map::new();
-    rec.insert("image".into(), json!(image.display().to_string()));
-    rec.insert(
-        "image_sha256".into(),
-        json!(sha256_file(&image).unwrap_or_else(|e| die(&format!("{}: {e}", image.display())))),
+    let sha = sha256_file(&image).unwrap_or_else(|e| die(&format!("{}: {e}", image.display())));
+    let run = run_document(
+        &outdir,
+        &image,
+        Some(sha),
+        &sched,
+        &eargs,
+        &res,
+        ctx.platform,
     );
-    rec.insert("schedule".into(), json!(sched));
-    rec.insert("engine_args".into(), json!(eargs));
-    for (k, v) in res {
-        rec.insert(k, v);
-    }
-    let _ = std::fs::write(outdir.join("run.json"), dumps(&Value::Object(rec), 1));
+    write_run_document(&outdir, &run);
     println!(
         "hydo: run directory {}   (hydo repro {}  runs it again and compares fp=)",
         outdir.display(),
@@ -364,77 +499,91 @@ struct ReproItem {
     eargs: Vec<String>,
 }
 
-fn load_json(p: &Path) -> Value {
-    let t = std::fs::read_to_string(p).unwrap_or_else(|e| die(&format!("{}: {e}", p.display())));
-    serde_json::from_str(&t).unwrap_or_else(|e| die(&format!("{}: {e}", p.display())))
+/// An exploration's document (the results reader); a directory without one is an error.
+pub fn exploration_of(d: &Path) -> hydo_results::Exploration {
+    match hydo_results::read_dir(d).unwrap_or_else(|e| die(&e.0)) {
+        hydo_results::Results::Exploration { doc: Some(doc), .. } => *doc,
+        hydo_results::Results::Exploration { doc: None, .. } => die(&format!(
+            "{} has no {} yet (the exploration has not finished)",
+            d.display(),
+            hydo_results::EXPLORATION_DOC
+        )),
+        hydo_results::Results::Run { .. } => die(&format!(
+            "{} is a run directory (hydo run), not an exploration",
+            d.display()
+        )),
+    }
 }
 
 fn repro_list(ctx: &Ctx, d: &Path) -> Vec<ReproItem> {
-    let rj = d.join("run.json");
-    if rj.is_file() {
-        let r = load_json(&rj);
-        let image = py_str(&r["image"]);
-        if let Some(sha) = r["image_sha256"].as_str().filter(|s| !s.is_empty()) {
-            if Path::new(&image).is_file()
-                && sha256_file(Path::new(&image)).ok().as_deref() != Some(sha)
+    let doc = match hydo_results::read_dir(d).unwrap_or_else(|e| die(&e.0)) {
+        hydo_results::Results::Run { run, .. } => {
+            let image = run
+                .image
+                .as_ref()
+                .map(|i| i.path.clone())
+                .unwrap_or_default();
+            if let Some(sha) = run
+                .image
+                .as_ref()
+                .and_then(|i| i.sha256.as_deref())
+                .filter(|s| !s.is_empty())
             {
-                println!("hydo: warning: {image} changed since the run (sha256 differs); fingerprints will differ");
+                if Path::new(&image).is_file()
+                    && sha256_file(Path::new(&image)).ok().as_deref() != Some(sha)
+                {
+                    println!("hydo: warning: {image} changed since the run (sha256 differs); fingerprints will differ");
+                }
             }
+            let eargs = run
+                .engine
+                .as_ref()
+                .and_then(|e| e.args.clone())
+                .unwrap_or_default();
+            return vec![ReproItem {
+                label: "run".into(),
+                image: PathBuf::from(image),
+                sched: run.schedule.clone(),
+                fp: run.fingerprints.fp.clone(),
+                eargs,
+            }];
         }
-        let eargs = r["engine_args"]
-            .as_array()
-            .map(|a| a.iter().map(py_str).collect())
-            .unwrap_or_default();
-        return vec![ReproItem {
-            label: "run".into(),
-            image: PathBuf::from(image),
-            sched: py_str(&r["schedule"]),
-            fp: py_str(&r["fp"]),
-            eargs,
-        }];
-    }
-    let rep = d.join("report.json");
-    if !rep.is_file() {
-        die(&format!(
-            "{} has neither run.json (hydo run) nor report.json (hydo explore)",
-            d.display()
-        ));
-    }
-    let j = load_json(&rep);
-    let s = &j["summary"];
-    let mut image = PathBuf::from(py_str(&s["image"]));
+        hydo_results::Results::Exploration { .. } => exploration_of(d),
+    };
+    let mut image = PathBuf::from(&doc.image.path);
     if !image.is_absolute() {
         image = ctx.guest().join(image);
     }
-    let ram = s.get("ram_mib").and_then(Value::as_u64).unwrap_or(1024);
-    let cpu = s
-        .get("cpu")
-        .and_then(Value::as_str)
-        .unwrap_or("v2")
-        .to_string();
-    let vcpus = s.get("vcpus").and_then(Value::as_u64).unwrap_or(1);
-    let eargs = engine_args(&image, Some(ram), Some(cpu), vcpus);
+    let e = &doc.engine;
+    let eargs = engine_args(
+        &image,
+        Some(e.ram_mib.unwrap_or(1024)),
+        Some(e.cpu.clone().unwrap_or_else(|| "v2".into())),
+        e.vcpus.unwrap_or(1),
+    );
     let mut out = Vec::new();
-    for f in j["failures"].as_array().into_iter().flatten() {
+    for f in &doc.failures {
         out.push(ReproItem {
-            label: format!("seed {}", py_str(&f["seed"])),
+            label: format!(
+                "seed {}",
+                f.run.seed.map(|s| s.to_string()).unwrap_or_default()
+            ),
             image: image.clone(),
-            sched: py_str(&f["schedule"]),
-            fp: py_str(&f["fp"]),
+            sched: f.run.schedule.clone(),
+            fp: f.run.fingerprints.fp.clone(),
             eargs: eargs.clone(),
         });
     }
-    for x in j
-        .get("shrunk")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
+    for x in &doc.shrinks {
         out.push(ReproItem {
-            label: format!("minimal {}", head(&py_str(&x["signature"]), 40)),
+            label: format!("minimal {}", head(&x.signature, 40)),
             image: image.clone(),
-            sched: py_str(&x["minimal"]),
-            fp: py_str(&x["fp_a"]),
+            sched: x.minimal.clone(),
+            fp: x
+                .confirmations
+                .first()
+                .and_then(|c| c.fp.clone())
+                .unwrap_or_else(|| "None".into()),
             eargs: eargs.clone(),
         });
     }
@@ -446,6 +595,9 @@ pub fn cmd_repro(ctx: &Ctx, argv: &[String]) -> i32 {
     if let Some(i) = args.iter().position(|a| a == "--regressions") {
         args.remove(i);
         return cmd_regressions(ctx, args);
+    }
+    if let Some(t) = take(&mut args, "--transcript") {
+        return cmd_transcript(ctx, &t, args);
     }
     if args.first().is_some_and(|a| Path::new(a).is_dir()) {
         let d = PathBuf::from(args.remove(0));
@@ -464,6 +616,16 @@ pub fn cmd_repro(ctx: &Ctx, argv: &[String]) -> i32 {
             let res = run_one(ctx, &it.image, &it.sched, &dir, &it.eargs, true);
             let res = host_checks(&dir, res, false);
             let res = errors_one(&dir, &it.sched, res, None);
+            let run = run_document(
+                &dir,
+                &it.image,
+                None,
+                &it.sched,
+                &it.eargs,
+                &res,
+                ctx.platform,
+            );
+            write_run_document(&dir, &run);
             let fp = py_str(&res["fp"]);
             let ok = fp == it.fp;
             same += ok as usize;
@@ -486,6 +648,151 @@ pub fn cmd_repro(ctx: &Ctx, argv: &[String]) -> i32 {
         return if same == items.len() { 0 } else { 1 };
     }
     cmd_run(ctx, argv)
+}
+
+// ---------------------------------------------------------------- transcripts (agent images, M126)
+
+/// The recorded run next to a transcript: (image, engine options, fp, ctl) from a run directory's
+/// result.json, or from the exploration whose `consoles/` holds it (its events.jsonl).
+fn recorded_of(
+    t: &Path,
+) -> (
+    Option<PathBuf>,
+    Option<Vec<String>>,
+    Option<String>,
+    Option<String>,
+) {
+    let dir = t.parent().unwrap_or(Path::new("."));
+    if let Ok(hydo_results::Results::Run { run, .. }) = hydo_results::read_dir(dir) {
+        return (
+            run.image.as_ref().map(|i| PathBuf::from(&i.path)),
+            run.engine.as_ref().and_then(|e| e.args.clone()),
+            Some(run.fingerprints.fp.clone()),
+            run.fingerprints.ctl.clone(),
+        );
+    }
+    let name = t
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let Some(tag) = name.strip_suffix(".control.jsonl") else {
+        return (None, None, None, None);
+    };
+    let ev = dir.parent().unwrap_or(Path::new(".")).join("events.jsonl");
+    let text = std::fs::read_to_string(ev).unwrap_or_default();
+    for l in text.lines() {
+        let Ok(v) = serde_json::from_str::<Value>(l) else {
+            continue;
+        };
+        if v["type"] == "run" && v["tag"] == tag {
+            let fps = &v["fingerprints"];
+            return (
+                None,
+                None,
+                fps["fp"].as_str().map(str::to_string),
+                fps["ctl"].as_str().map(str::to_string),
+            );
+        }
+    }
+    (None, None, None, None)
+}
+
+/// `hydo repro --transcript <control.jsonl> [--image IMG] [--out DIR]`: type a recorded run's
+/// commands again at their recorded stops, without the controller's policy (the recovery boot's
+/// transcript `control.recovery.jsonl` next to it, when there is one), and compare the fingerprint
+/// and the control hash with the recorded run's. The boot to S1 runs by its policy (it is the
+/// same for every run of an image).
+fn cmd_transcript(ctx: &Ctx, file: &str, mut args: Vec<String>) -> i32 {
+    let path = PathBuf::from(file);
+    let read = |p: &Path| {
+        let text =
+            std::fs::read_to_string(p).unwrap_or_else(|e| die(&format!("{}: {e}", p.display())));
+        hydo_control::Transcript::parse(&text)
+            .unwrap_or_else(|e| die(&format!("{}: {e}", p.display())))
+    };
+    let run = read(&path);
+    if run.header.conversation != "run" {
+        die(&format!(
+            "{file}: a transcript of the {} conversation; give the run's (control.jsonl)",
+            run.header.conversation
+        ));
+    }
+    let rec_path = PathBuf::from(file.replace("control.jsonl", "control.recovery.jsonl"));
+    let recovery = (rec_path != path && rec_path.is_file()).then(|| Box::new(read(&rec_path)));
+    let sched = run
+        .header
+        .schedule
+        .clone()
+        .unwrap_or_else(|| die(&format!("{file}: the transcript names no schedule")));
+    let (rec_image, rec_eargs, rec_fp, rec_ctl) = recorded_of(&path);
+    let outdir = take(&mut args, "--out")
+        .map(PathBuf::from)
+        .unwrap_or_else(new_run_dir);
+    let image = if args.iter().any(|a| a == "--image") || !args.is_empty() || rec_image.is_none() {
+        find_image(ctx, &mut args)
+    } else {
+        rec_image.clone().expect("an image")
+    };
+    if !args.is_empty() {
+        die("usage: hydo repro --transcript <control.jsonl> [--image IMG] [--out DIR]");
+    }
+    let eargs = rec_eargs.unwrap_or_else(|| engine_args(&image, None, None, 1));
+    // the recorded commands, stops and reports (a replay's header names its own controller)
+    let want: Vec<_> = std::iter::once(run.records.clone())
+        .chain(recovery.iter().map(|t| t.records.clone()))
+        .collect();
+    let rec_ctl = rec_ctl.unwrap_or_else(|| hydo_control::drive::ctl_of(&run, recovery.as_deref()));
+    let policy = Policy::Replay {
+        run: Box::new(run),
+        recovery,
+    };
+    let res = run_one_with(ctx, &image, &sched, &outdir, &eargs, false, &policy);
+    let res = host_checks(&outdir, res, false);
+    let run_doc = run_document(
+        &outdir,
+        &image,
+        sha256_file(&image).ok(),
+        &sched,
+        &eargs,
+        &res,
+        ctx.platform,
+    );
+    write_run_document(&outdir, &run_doc);
+    let fp = py_str(&res["fp"]);
+    let got: Vec<_> = ["control.jsonl", "control.recovery.jsonl"]
+        .iter()
+        .filter_map(|f| std::fs::read_to_string(outdir.join(f)).ok())
+        .filter_map(|t| hydo_control::Transcript::parse(&t).ok())
+        .map(|t| t.records)
+        .collect();
+    let same_records = got == want;
+    println!(
+        "hydo: transcript replay: fp={fp}{}, ctl={} (the recorded run's {rec_ctl}, which names its policy), {}",
+        rec_fp
+            .as_ref()
+            .map(|f| format!(" (recorded {f})"))
+            .unwrap_or_default(),
+        res.get("ctl").map(py_str).unwrap_or_default(),
+        if same_records {
+            "the same commands at the same stops"
+        } else {
+            "OTHER commands or stops than recorded"
+        }
+    );
+    let same_fp = rec_fp.as_ref().is_none_or(|f| *f == fp);
+    let ok = same_fp && same_records;
+    println!(
+        "{}  {}\n             {}",
+        if ok { "REPRODUCED" } else { "DIFFERENT" },
+        sched,
+        head(&py_str(&res["verdict"]), 160)
+    );
+    println!("hydo: run directory {}", outdir.display());
+    if ok {
+        0
+    } else {
+        1
+    }
 }
 
 // ---------------------------------------------------------------- regressions (the test composer's plan)
@@ -575,7 +882,8 @@ fn cmd_regressions(ctx: &Ctx, mut args: Vec<String>) -> i32 {
         let name = py_str(&r["name"]);
         let sched = py_str(&r["schedule"]);
         let dir = base.join(format!("{k:03}-{name}"));
-        let (fp, v) = match run_engine(ctx, &image, &sched, &dir, &eargs, true).0 {
+        let (fp, v) = match run_engine(ctx, &image, &sched, &dir, &eargs, true, &Policy::Schedule).0
+        {
             Some(res) => {
                 let res = host_checks(&dir, result_map(&res), true);
                 (py_str(&res["fp"]), py_str(&res["verdict"]))
@@ -629,20 +937,24 @@ fn slug(s: &str) -> String {
 pub fn cmd_save(_ctx: &Ctx, argv: &[String]) -> i32 {
     let mut args = argv.to_vec();
     let to = take(&mut args, "--to").unwrap_or_else(|| "hydo/regressions".into());
-    if args.len() != 1 || !Path::new(&args[0]).join("report.json").is_file() {
+    if args.len() != 1
+        || !Path::new(&args[0])
+            .join(hydo_results::EXPLORATION_DOC)
+            .is_file()
+    {
         die("usage: hydo save <explore dir> [--to hydo/regressions]");
     }
-    let j = load_json(&Path::new(&args[0]).join("report.json"));
+    let doc = exploration_of(Path::new(&args[0]));
     if let Err(e) = std::fs::create_dir_all(&to) {
         die(&format!("{to}: {e}"));
     }
     let mut n = 0;
-    for x in j
-        .get("shrunk")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
+    for s in &doc.shrinks {
+        // the shrink as the composer reads it (the results format keeps the field names)
+        let mut x = serde_json::to_value(s).unwrap_or(Value::Null);
+        if let Some(o) = x.as_object_mut() {
+            o.entry("min_verdict").or_insert(Value::Null);
+        }
         let name = head(
             &slug(&format!(
                 "{}-{}",
@@ -657,7 +969,7 @@ pub fn cmd_save(_ctx: &Ctx, argv: &[String]) -> i32 {
             println!("hydo: {p} exists, kept");
             continue;
         }
-        let text = hydo_composer::saved_regression_text(x)
+        let text = hydo_composer::saved_regression_text(&x)
             .unwrap_or_else(|e| die(&format!("{}: {e}", args[0])));
         if let Err(e) = std::fs::write(&p, text) {
             die(&format!("{p}: {e}"));

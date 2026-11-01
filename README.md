@@ -72,6 +72,7 @@ docs/          HISTORY.md (every milestone with its evidence), REBASELINE.md, BU
 | `hydo-composer` | The test composer: commands composed into rounds, stable saved regressions. |
 | `hydo-errors` | Error log lines as findings, with a reviewed list of known errors. |
 | `hydo-history` | Linearizability and list-append checks of recorded histories. |
+| `hydo-results` | The results format: run and exploration documents, the event stream, the lenient reader, the generated JSON Schema. |
 | `hydo-compose` | Imports a `docker-compose.yaml` as a starting `hydo.yaml`. |
 | `hydo-agents` | `hydo guide`, `hydo skill install`, `hydo init` for AI coding agents. |
 | `hydo-world` | The program inside the guest that serves `fakes:` and `proxies:` (HTTP, gRPC, TCP), applies `H=` protocol faults and records what the outside world saw (a static musl binary in every such image). |
@@ -104,7 +105,9 @@ cargo fmt --check
 `hydo init` creates a project's `hydo/` folder; `hydo guide` prints the onboarding guide, which an
 AI coding agent can follow (`hydo skill install --agent claude|codex` installs it as a skill).
 `hydo build`, `hydo run`, `hydo explore` and `hydo repro` build the image, run one schedule,
-explore many and replay a failure. `hydo/onboard/MANIFEST.md` describes the project format and
+explore many and replay a failure; their results are `result.json`, `exploration.json` and
+`events.jsonl` (schema `hydo/schema/results-v1.json`; `hydo/PRODUCT.md`, "Where the results are").
+`hydo/onboard/MANIFEST.md` describes the project format and
 `hydo/PRODUCT.md` describes hydo from a user's point of view.
 
 ## Limits

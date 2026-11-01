@@ -5,18 +5,27 @@
 //! ```text
 //! [env HVM_DISK=<data disk>] <hvmx> [--ram-mib N] one   <Image> <initramfs> <outdir> "<schedule>"
 //! [env HVM_DISK=<data disk>] <hvmx> [--ram-mib N] serve <Image> <initramfs> <outdir>
+//! [env HVM_DISK=<data disk>] <hvmx> [--ram-mib N] --control one <Image> <initramfs> <outdir> "<schedule>"
+//! [env HVM_DISK=<data disk>] <hvmx> [--ram-mib N] --control boot serve|one <Image> <initramfs> <outdir> ["<schedule>"]
 //! ```
 //!
 //! The data disk is `<image without .cpio.gz>-disk.img` next to the initramfs, attached only when
 //! it exists. An image built for the second guest kernel names it in `/etc/hydo/kernel`
 //! (`<file name> <sha256>`); [`kernel_for`] resolves and checks it.
+//!
+//! Since M119 hvmx speaks hvx_explore's lock-step protocol ([`crate::lockstep`]): `CTL`/`RESUME`
+//! through [`Worker::lockstep`] on a serve worker, and `--control one` through
+//! [`Hvm::one_lockstep`]. The clock is the exit count instead of hvx's icount.
 
 use crate::image::{embedded_file, sha256_file, ImageError};
-use crate::process::{run_one, ProcessWorker};
+use crate::process::{run_one, ControlledBoot, ControlledRun, ProcessWorker};
 use crate::{BootSpec, Engine, EngineError, EngineKind, OneRun, Worker};
 use hydo_schedule::Schedule;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+/// A fresh-boot hvmx under lock-step control ([`Hvm::one_lockstep`]).
+pub type ControlledOne = ControlledRun;
 
 /// How to start hvmx.
 #[derive(Clone, Debug)]
@@ -63,6 +72,40 @@ impl Hvm {
             return Err(EngineError::NotBuilt(self.hvmx.clone()));
         }
         Ok(())
+    }
+
+    /// One schedule from a fresh boot under lock-step control (`hvmx --control one`): the
+    /// fresh-boot counterpart of [`Worker::lockstep`], to prove that a controlled run from a fresh
+    /// boot equals the same run restored from S1 (as `hvx::Hvx::one_lockstep` on hvx). The
+    /// engine's stderr goes to `stderr_log`.
+    pub fn one_lockstep(
+        &self,
+        spec: &BootSpec,
+        schedule: &Schedule,
+        stderr_log: &Path,
+    ) -> Result<ControlledOne, EngineError> {
+        self.check_built()?;
+        let argv = self.control_argv(spec, "one", &["--control"], Some(schedule));
+        ControlledRun::start(self.command(spec, &argv), stderr_log)
+    }
+
+    /// argv for a controlled mode: `flags` go in front of the mode, `last` after the paths.
+    fn control_argv(
+        &self,
+        spec: &BootSpec,
+        mode: &str,
+        flags: &[&str],
+        last: Option<&Schedule>,
+    ) -> Vec<String> {
+        let mut argv = self.argv(spec, mode);
+        let at = argv.len() - 4; // ... <mode> <Image> <initramfs> <outdir>
+        for (i, f) in flags.iter().enumerate() {
+            argv.insert(at + i, f.to_string());
+        }
+        if let Some(s) = last {
+            argv.push(s.to_string());
+        }
+        argv
     }
 }
 
@@ -158,5 +201,27 @@ impl Engine for Hvm {
         let last = argv.len() - 1;
         argv[last] = "<outdir>".into();
         format!("{env}{} \"{schedule}\"", argv.join(" "))
+    }
+
+    fn start_controlled(
+        &self,
+        spec: &BootSpec,
+        boot: &Schedule,
+        stderr_log: &Path,
+    ) -> Result<ControlledBoot, EngineError> {
+        self.check_built()?;
+        let argv = self.control_argv(spec, "serve", &["--control", "boot"], Some(boot));
+        ControlledBoot::start(self.command(spec, &argv), stderr_log, false)
+    }
+
+    fn one_controlled(
+        &self,
+        spec: &BootSpec,
+        schedule: &Schedule,
+        stderr_log: &Path,
+    ) -> Result<ControlledRun, EngineError> {
+        self.check_built()?;
+        let argv = self.control_argv(spec, "one", &["--control", "boot"], Some(schedule));
+        ControlledRun::start(self.command(spec, &argv), stderr_log)
     }
 }

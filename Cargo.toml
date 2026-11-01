@@ -22,6 +22,11 @@ members = [
     "hydo/crates/hydo-bench",
     "hydo/crates/hydo-tools",
     "hydo/crates/hydo-world",
+    "hydo/crates/hydo-grpc",
+    "hydo/crates/hydo-grpc-gen",
+    "hydo/crates/hydo-results",
+    "hydo/crates/hydo-agent-proto",
+    "hydo/crates/hydo-control",
 ]
 exclude = ["sdk", "hydo/onboard/examples"]
 
@@ -46,9 +51,23 @@ hydo-agents = { path = "hydo/crates/hydo-agents" }
 hydo-compose = { path = "hydo/crates/hydo-compose" }
 hydo-history = { path = "hydo/crates/hydo-history" }
 hydo-build = { path = "hydo/crates/hydo-build" }
+hydo-grpc = { path = "hydo/crates/hydo-grpc" }
+hydo-grpc-gen = { path = "hydo/crates/hydo-grpc-gen" }
+hydo-results = { path = "hydo/crates/hydo-results" }
+hydo-agent-proto = { path = "hydo/crates/hydo-agent-proto" }
+hydo-control = { path = "hydo/crates/hydo-control" }
 
 [profile.release]
 opt-level = 3
 lto = "thin"
 codegen-units = 1
 strip = true
+
+# The gRPC client's tests generate deeply nested messages (recursive schemas); unoptimized,
+# they take minutes. Only debug builds are affected (the release client is built with --release).
+[profile.dev.package.hydo-grpc]
+opt-level = 2
+[profile.dev.package.prost-reflect]
+opt-level = 2
+[profile.dev.package.prost]
+opt-level = 2
