@@ -491,6 +491,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "hydo-hvx"
+version = "0.1.0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "hydo-manifest"
 version = "0.1.0"
 dependencies = [
