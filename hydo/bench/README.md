@@ -22,8 +22,9 @@
 > (`build-bench*.sh` with `hv/hvx/images/build-stack.sh` and `hydo/explore/stack-explore.sh`)
 > stay only as the engine's regression baselines (`deploy-metal.sh`, the pinned reproducers on
 > `explore-disk.img` and `explore-fix-disk.img`), as the record of the measurements below, and as
-> the inputs of the manifest build (each defect's order-service binary, and the root files of the
-> `-pin-kr` control); do not delete them.
+> the source of the manifest build's root files (the `-pin-kr` control's root); do not delete
+> them. They keep franz-go v1.17.1; the manifest images' order services are built from source
+> with v1.22.2 (`build-order-services.sh`).
 
 Every explorer strategy comparison up to Milestone 45 rested on ONE bug: the pre-M39 front door
 (publish to Kafka, then fail the order because the Redis cache was down). This benchmark gives
@@ -503,25 +504,45 @@ Since M135 the benchmark runs on images built from one manifest, `manifest/hydo.
 `hydo build` and `hydo build --control agent`. Each order service (a defect or a control) gives a
 shell image and an agent image that differ only in what `--control agent` changes.
 
-**Building** (on the bare-metal test machine; no Nix): `build-bench-manifest.sh <work dir>
-<release dir>` with `HYDO_AGENT_BIN` = the pinned hydo-agent (0.2.0, `1f517e04…`,
-docs/BUILD-PINS.md). `<work dir>/benchroot` is the debugfs rdump of the `-pin-kr` control image's
-root; the release dir is a Linux release layout with this tree's `bin/hydo` and `hydo/`. Without
-stem arguments it builds the default set from `$STACK_BUILD` (default `~/hydo/build`): the
-control in full, then every other order service as a copy with `/bin/hydostack` swapped in
-(`agent-patch.sh --swap`; M129 proved a swapped image equal to a full build). `BG=1` adds the
-BUGGIFY order services (`bg-*`), `KEEP=1` keeps images that exist. Output, in `$OUT` (default
-`<work dir>/build`, with `bzImage` and `initramfs-kafka.cpio.gz` linked in):
+**The order services** (M135): every order service is built from source by
+`build-order-services.sh <dir>` (the pinned Go 1.26.5 as `HYDO_GO`; on the bare-metal test machine
+the copy of its Nix store path in `~/hydo-rp/nixgo`, which rebuilt the `-pin-kr` control's binary
+`78290125…` byte for byte from that image's commit; the official go1.26.5 tarball gives other
+bytes). The sources are put together as the stack builders do it: a copy of `hydo/stack` with the
+stored base (`base/main-m59-control.go` for `control` and d8–d12 with `patches-m59/`,
+`base/main-0112b48.go` without `buggify.go` for `nf`, `fix` and d1–d7 with `patches/`,
+`base/main-7e32c4a.go` for d0, `hydo-bench addbuggify` over the same bases for `bg-*`). The
+module files are `hydo/stack/go.mod` and `go.sum`, with **franz-go v1.22.2** since M135 (v1.17.1
+let the idempotent producer acknowledge a record it never wrote, franz-go issue 1484, M133); the
+stack images keep v1.17.1 (`hydo/stack/go.mod.baseline`, which `build-stack.sh` uses). Two
+builds give the same bytes. Binaries (sha256 prefixes): control `4aefc78f…`, d8 `9d6c5865…`, d9
+`686a5f40…`, d10 `18c74d20…`, d11 `99bb7f05…`, d12 `55e6c743…`, nf and fix `0e8d9b79…`, d1
+`a3b33974…`, d2 `409ce491…`, d3 `4ef29104…`, d4 `4bfb8a19…`, d5 `33771b66…`, d6 `0c500027…`, d7
+`31b37c9b…`, d0 `6953a8d8…`; bg-control `3d96345e…`, bg-d0 `d36425d9…`, bg-d1 `516696a9…`, bg-d2
+`2c4c5559…`, bg-d3 `06b8bd83…`, bg-d4 `1b563425…`, bg-d5 `65edc90d…`, bg-d6 `a601a240…`, bg-d7
+`3c190f30…`.
 
-| stem | order service from | used as |
+**Building the images** (on the bare-metal test machine; no Nix): `ORDER_BIN=<dir>
+build-bench-manifest.sh <work dir> <release dir>` with `HYDO_AGENT_BIN` = the pinned hydo-agent
+(0.2.0, `1f517e04…`, docs/BUILD-PINS.md). `<work dir>/benchroot` is the debugfs rdump of the
+`-pin-kr` control image's root (the MySQL and OpenJDK closures, Kafka's libs, the pinned Redis);
+the release dir is a Linux release layout with this tree's `bin/hydo` and `hydo/`. Without stem
+arguments it builds the default set: the control in full, then every other order service as a copy
+with `/bin/hydostack` swapped in (`agent-patch.sh --swap`; M129 proved a swapped image equal to a
+full build). `BG=1` adds the BUGGIFY order services (`bg-*`), `KEEP=1` keeps images that exist.
+Without `ORDER_BIN` the order services come from the stack images' `/bin/hydostack` (franz-go
+v1.17.1, as M129 built its images). Output, in `$OUT` (default `<work dir>/build`, with `bzImage`
+and `initramfs-kafka.cpio.gz` linked in):
+
+| stem | order service | used as |
 |---|---|---|
-| `control` | `explore-bench-m59-control-pin-kr-disk.img` | the control of d8–d12 |
-| `d8-no-order-lock` … `d12-shared-key-buffer` | `explore-bench-m59-<defect>-pin-kr-disk.img` | d8–d12 |
-| `nf` | `explore-nf-disk.img` (the M46 order service) | the control of d1–d7 |
-| `d1-kafka-first` … `d7-skip-last-record` | `explore-bench-<defect>-disk.img` | d1–d7 |
-| `d0-old-front-door` | `explore-disk.img` (the pre-M39 order service) | d0 |
-| `fix` | `explore-fix-disk.img` (the M39 fix; the same binary as `nf`, `1f18f855…`) | the control of d0 |
-| `bg-control`, `bg-d0-…` … `bg-d7-…` (`BG=1`) | `explore-bench-bg-*-disk.img` | `--bg-images` |
+| `control` | the M59 control | the control of d8–d12 |
+| `d8-no-order-lock` … `d12-shared-key-buffer` | the M59 defects | d8–d12 |
+| `nf` | the M46 order service (the M39 fix) | the control of d1–d7 |
+| `d1-kafka-first` … `d7-skip-last-record` | the M54 defects | d1–d7 |
+| `d0-old-front-door` | the pre-M39 order service | d0 |
+| `fix` | the same binary as `nf` | the control of d0 |
+| `bg-control`, `bg-d0-…` … `bg-d7-…` (`BG=1`) | the M56 BUGGIFY order services | `--bg-images` |
 
 The images are `explore-ob-bench-<stem>-disk.img` (shell) and `explore-ob-bench-<stem>-agent-disk.img`
 (agent). Run hydo-bench with `HYDO_BUILD=<that directory>`; `--kind agent` is the default,
