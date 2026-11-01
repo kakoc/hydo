@@ -93,6 +93,24 @@ impl Vm {
         Ok(())
     }
 
+    /// Map every page of guest RAM and of `[off, off + len)` of the disk window into this process
+    /// now (MADV_POPULATE_WRITE, Linux 5.14), so that a later restore and fingerprint take no
+    /// page faults. Only the page tables change; the pages and their bytes are the module's.
+    pub fn populate(&self, disk_off: usize, disk_len: usize) {
+        const MADV_POPULATE_WRITE: libc::c_int = 23;
+        // SAFETY: madvise on our own mappings; failure (an older kernel) is harmless
+        unsafe {
+            if !self.mem.is_null() {
+                libc::madvise(self.mem as *mut _, self.mem_size, MADV_POPULATE_WRITE);
+            }
+            if !self.disk.is_null() && disk_off + disk_len <= self.disk_len {
+                let page = disk_off & !4095;
+                let len = disk_off + disk_len - page;
+                libc::madvise(self.disk.add(page) as *mut _, len, MADV_POPULATE_WRITE);
+            }
+        }
+    }
+
     fn map(&self, len: usize, off: u64) -> io::Result<*mut u8> {
         // SAFETY: a shared mapping of the device file
         let p = unsafe {

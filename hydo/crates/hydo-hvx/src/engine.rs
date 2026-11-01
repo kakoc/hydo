@@ -524,6 +524,9 @@ impl Core {
             .spawn(move || {
                 let mut m = Vec::new();
                 let vm = create_vm(&e, &o, Setup::Fresh, "console=ttyS0", 0, &bl, &mut m);
+                if let Some(v) = &vm {
+                    v.populate(e.p2_off as usize, e.p2_len as usize);
+                }
                 (vm, m)
             })
             .ok();

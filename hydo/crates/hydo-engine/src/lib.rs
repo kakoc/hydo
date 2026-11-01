@@ -18,18 +18,16 @@
 //! `cf=` token) is part of one run: the engine carries the flushed data disk into a VM restored
 //! from S0, and the run's result is that boot's verdict ([`RunResult::recovery`] tells).
 //!
-//! # The intended next step: an in-process engine
+//! # The in-process engine (M132, opt-in)
 //!
-//! The trait is shaped so that a third implementation can replace the subprocess without changing
-//! any caller: the Rust explorer driving `/dev/hvx` directly through its ioctls (`hv/hvx/hvx_abi.h`)
-//! inside the `hydo` process. Such an engine boots once, keeps S0 and S1 as in-memory snapshots
-//! (registers, device state, the data disk's volatile write cache and guest RAM), and serves each
-//! [`Worker::run`] by forking a copy-on-write child VM from S1 instead of restoring from files;
-//! a power cut forks the recovery VM from S0 with the flushed disk. [`Engine::start`] then
-//! returns a worker that owns those snapshots, [`Worker::run`] keeps its signature, and
-//! [`Engine::one`] stays the fresh-boot path that proves a snapshot run equals a boot run. The
-//! fingerprints must stay the C engine's (`fnv` over console, snapshot, RAM and disk) so every
-//! recorded baseline still holds.
+//! `HYDO_ENGINE=inproc` makes [`hvx::Hvx`] run the Rust engine (`hydo/crates/hydo-hvx`, the port
+//! of `hvx_explore.c`) on a thread of this process, driving `/dev/hvx` through its ioctls; see
+//! [`inproc`]. It keeps S0 and S1 in memory as their non-zero pages, fills each fresh VM with the
+//! non-zero pages it needs only, makes the next fresh VM on a helper thread while a run runs,
+//! tears old VMs down on another, and hashes with the exact zero-page shortcut; every line,
+//! console and fingerprint is the C engine's. The same engine is also the program `hydo-hvx`
+//! (hvx_explore's command line), which `HYDO_HVX_EXPLORE` can name. Copy-on-write forks of a VM
+//! and a VM kept between runs need module support (see docs/HISTORY.md, Milestone 132).
 //!
 //! # Where the time of a run goes, and how the trait leaves room for it (docs/PERF-RUN-COST.md)
 //!
@@ -262,8 +260,8 @@ impl From<std::io::Error> for EngineError {
     }
 }
 
-/// A run engine. Implementations: [`hvx::Hvx`], [`hvm::Hvm`]; next, an in-process engine (see the
-/// crate documentation).
+/// A run engine. Implementations: [`hvx::Hvx`] (a process, or with `HYDO_ENGINE=inproc` the Rust
+/// engine in this process, [`inproc`]) and [`hvm::Hvm`].
 pub trait Engine {
     fn kind(&self) -> EngineKind;
 
