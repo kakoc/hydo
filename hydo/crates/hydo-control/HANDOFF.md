@@ -640,6 +640,21 @@ with fakes run together only on a test manifest (decision 9; no example has both
   deliberate mistakes (the queue or a rule outside the namespace). The scripted agent's mount
   refusals now carry an errno (EUCLEAN, EINVAL, EIO, EBADMSG, EROFS with a read-only retry).
 
+## C2 on x86_64 (M127, branch `c2-linux`; docs/C2-LINUX.md)
+
+What real hvx guests showed the controller and the agent needed (each fixed with a test):
+- The periodic checkers' environment is the one of start_periodic (decision 20 above).
+- With `errors:` and `fakes:` together the fakes' summary lines are held back with the assertion
+  records (M123 decision 9).
+- hydo-agent: a child inherited the agent's blocked SIGCHLD, so a busybox shell's `wait` for a
+  background job never returned (etcd's workload); pre_exec now empties the signal mask.
+- `agent::plan_of_image`: a `hydo/` folder plan's history checks are not in the embedded
+  `hydo.yaml` (the build expands them from `checks/`), so they are taken from the image's
+  `manifest.sh` (`history_of_manifest_sh`).
+Differences still to explain on real guests: `stack-grpc` planted seed 6 ends "TIMEOUT workload"
+on the agent image only; miniflux seed 11 ends "front restart failed" on the agent image only
+(a restart during a 97 % request loss window; decision 3's readiness timing is the suspect).
+
 ## Left open
 
 - **Real guests.** Since M126 the core controller has driven the Redis example's agent image on
