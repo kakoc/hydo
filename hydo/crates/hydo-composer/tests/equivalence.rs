@@ -171,8 +171,7 @@ fn run(op: &str, a: &Value, work: &Path, n: usize) -> Out {
         "stage" => {
             let folder = hc::scan_folder(s(a, "dir")).map_err(merr)?;
             let root = work.join(format!("rs-stage-{n}"));
-            let onboard = crate_dir().join("../../onboard");
-            hc::stage(meta, &root, &onboard, folder.as_ref()).map_err(|e| ("crash", e))?;
+            hc::stage(meta, &root, folder.as_ref()).map_err(|e| ("crash", e))?;
             let snap = snapshot(&root);
             let _ = std::fs::remove_dir_all(&root);
             snap

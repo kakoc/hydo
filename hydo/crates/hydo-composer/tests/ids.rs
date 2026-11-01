@@ -169,7 +169,7 @@ fn stable_compositions() {
     assert!(st.error.is_none());
     // staging: the saved form's file
     let root = td.join("root");
-    hc::stage(&meta2, &root, &onboard(), None).unwrap();
+    hc::stage(&meta2, &root, None).unwrap();
     assert_eq!(
         std::fs::read_to_string(root.join("etc/hydo/compose.saved").join(&ow[1..]))
             .unwrap()
@@ -244,7 +244,7 @@ fn stable_compositions() {
     // staging copies the folder with its modes and times (shutil.copytree(symlinks=True))
     let root = td.join("root2");
     let folder = hc::scan_folder(&d.display().to_string()).unwrap();
-    hc::stage(&meta_of(&d), &root, &onboard(), folder.as_ref()).unwrap();
+    hc::stage(&meta_of(&d), &root, folder.as_ref()).unwrap();
     for e in std::fs::read_dir(d.join("workload"))
         .unwrap()
         .filter_map(Result::ok)

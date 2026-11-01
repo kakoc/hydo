@@ -2,10 +2,12 @@
 # M127 (docs/C2-LINUX.md, "Agent images made from shell images"): make an agent image from an
 # x86_64 shell-init image, for examples whose inputs only the Nix build machine can stage (the
 # stack with MySQL, Kafka and the JDK, etcd, the shop, the gRPC stack, ...). It changes exactly
-# what `hydo build --control agent` changes (hydo-build: x86.rs, agent.rs, init.rs install_init):
+# what `hydo build` (agent images only since M136) does differently from the shell build of
+# M126 and before (hydo-build: x86.rs, agent.rs, the deleted init.rs, stage.rs):
 #   /sbin/init              the pinned hydo-agent (mode 0755, owner 0:0) instead of the shell init
 #   /etc/hydo/control       "agent 1\n" (mode 0644, owner 0:0), new
 #   /etc/hydo/init-links.sh removed (shell images of manifests with links only)
+#   /etc/hydo/compose.sh    removed (images of composed plans only; M136: no guest composer)
 # with hydo-build's timestamps (mtime FIXED_MTIME, atime, ctime and crtime 0) on the two files and
 # their directories. The data partition is not touched. The result passes `e2fsck -fn`.
 # Compared with a real `--control agent` build of the same inputs, the file trees are the same
@@ -44,6 +46,7 @@ printf 'agent 1\n' > "$TMP/control"
 cp --sparse=always "$SRC" "$DST"
 FS="$DST?offset=$OFF"
 links=$("$DBG" -R "stat /etc/hydo/init-links.sh" "$FS" 2>&1 | grep -c "^Inode:" || true)
+csh=$("$DBG" -R "stat /etc/hydo/compose.sh" "$FS" 2>&1 | grep -c "^Inode:" || true)
 {
   echo "rm /sbin/init"
   echo "write $AG /sbin/init"
@@ -55,6 +58,7 @@ links=$("$DBG" -R "stat /etc/hydo/init-links.sh" "$FS" 2>&1 | grep -c "^Inode:" 
     for t in atime ctime crtime atime_extra mtime_extra ctime_extra crtime_extra; do echo "sif $f $t 0"; done
   done
   [ "$links" = 1 ] && echo "rm /etc/hydo/init-links.sh"
+  [ "$csh" = 1 ] && echo "rm /etc/hydo/compose.sh"
   for d in /sbin /etc/hydo; do echo "sif $d mtime $MT"; echo "sif $d atime 0"; echo "sif $d ctime 0"; done
 } > "$TMP/cmds"
 # the changes under hydo-build's frozen clock (a removed inode's dtime must not be 0, or e2fsck
@@ -68,4 +72,4 @@ if grep -v '^debugfs' "$TMP/log" | grep -q -i -E "error|not found|cannot"; then 
 size=$("$DBG" -R stats "$FS" 2>/dev/null | awk '/^Block count:/{c=$3} /^Block size:/{s=$3} END{print c*s}')
 dd if="$DST" of="$TMP/root.img" bs=1M skip=1 count=$((size / 1048576)) status=none
 "$FSCK" -fn "$TMP/root.img" > "$TMP/fsck" 2>&1 || { tail -5 "$TMP/fsck" >&2; exit 1; }
-echo "patch-agent: $DST: /sbin/init = hydo-agent ${SHA:0:16}, /etc/hydo/control = $("$DBG" -R 'cat /etc/hydo/control' "$FS" 2>/dev/null), init-links.sh removed: $links, e2fsck clean"
+echo "patch-agent: $DST: /sbin/init = hydo-agent ${SHA:0:16}, /etc/hydo/control = $("$DBG" -R 'cat /etc/hydo/control' "$FS" 2>/dev/null), init-links.sh removed: $links, compose.sh removed: $csh, e2fsck clean"

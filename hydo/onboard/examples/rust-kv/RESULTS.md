@@ -52,3 +52,33 @@ Built on the build machine with the pinned `hvx_seedrng` (`c2a440c5…`) from co
 OK `ecfd264f2e19865f`; `disk=cut dseed=1 | run C=12` OK `0d8d109d8a1eca66`. The SDK's records
 are in both consoles (`hydo_assert_report`: 0 violations). The other schedules were moved to
 the Mac because the box was crowded.
+
+## Milestone 136: agent images (the current values)
+
+Since M136 every image is an agent image (the guest agent `hydo-agent` as the first process, the
+host controller driving it; docs/HISTORY.md "Milestone 136"), so every fingerprint above this
+section belongs to a shell-init image of an earlier milestone. The current values, each schedule
+run twice with the same fingerprint (docs/REBASELINE.md section 8, which also says how each image
+was made):
+
+**x86_64 (hvx), rust-kv**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present) | `389bc482e51e2194` | yes |
+| `disk=cut \| run C=12` | OK invariants=1 held (rkv.oracle: rkv check: acked=12 all present) | `d4604820a762223b` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [rkv.oracle] rkv check: acked=12 lost=12 | `1591a9e914967b33` | yes |
+| `disk=none \| run K=rkv@8+2 B=1234` | OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present) | `d4d56cb09417de82` | yes |
+
+**Mac (hvm), rust-kv**
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present) | `5777c136b33b2224` | `41f2ebf5d53abd98` | yes |
+| `disk=cut \| run C=12` | OK invariants=1 held (rkv.oracle: rkv check: acked=12 all present) | `74c66bb13973fd34` | `1dbfd8f3d1e8d604` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [rkv.oracle] rkv check: acked=12 lost=12 | `72da87f9b318654b` | `2e45ad554dc8876c` | yes |
+| `disk=none \| run K=rkv@8+2` | OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present) | `d94833c3a18f8546` | `0dd8982209f7390b` | yes |
+| `disk=none \| run B=5abc,1000,500` | OK invariants=1 held (rkv.oracle: rkv check: acked=2 all present) | `28e10d55aef58de9` | `c6f3b015807efab0` | yes |
+| `disk=none \| run B=1234` | OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present) | `548606cca90e0e00` | `243f271a5911baf1` | yes |
+| `disk=none \| run K=rkv@8+2 B=1234` | OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present) | `050f2a8526860056` | `b2a49ac46a82c64a` | yes |
+| `disk=none \| run P=rkv@5+3` | OK invariants=1 held (rkv.oracle: rkv check: acked=17 all present) | `a853e49fb584b0fc` | `5dfdccf8b8dd97c5` | yes |

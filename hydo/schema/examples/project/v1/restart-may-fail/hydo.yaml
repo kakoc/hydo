@@ -1,0 +1,32 @@
+# Milestone 136: services[].restart_may_fail, both spellings of format 1 (true, false) and its
+# default (absent), next to a restart policy.
+format: 1
+name: restart-may-fail
+description: "a project whose order service may stay down after the faults"
+services:
+  - name: db
+    cmd: /bin/db --data /data/db
+    ready: /bin/db-ping
+    restart_may_fail: false
+  - name: front
+    cmd: /bin/front server
+    ready: grep -qa "listening" $HYDO_LOG
+    depends_on: [db]
+    recovery: false
+    restart_may_fail: true     # its restart at the heal may fail: no retry, a cf= cut still decides
+  - name: worker
+    cmd: /bin/worker
+    ready: "true"
+    restart: on-failure
+    restart_may_fail: true
+  - name: plain
+    cmd: /bin/plain
+    ready: "true"
+workload:
+  steps: 10
+  run: /bin/client place $HYDO_FROM $HYDO_TO
+  retry: /bin/client retry $HYDO_ACKED
+invariants:
+  - id: every_ack_kept
+    final: true
+    cmd: /bin/check $HYDO_ACKED

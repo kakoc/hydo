@@ -13,14 +13,14 @@ pub const USAGE: &str = "usage: hydo-bench <command> [options]   (hydo/bench/REA
   run      --strategy random|swarm|swarm-pos|process [--new-faults] [--buggify] [--bg-images]
            [--concurrency] [--more-faults --cf-range LO-HI] [--knob-rule cut|any] [--vcpus N [--turns]]
            [--window N] [--defects all|m59|d1-...,...] [--reps 1-3] [--budget 60] [--workers 3]
-           [--kind agent|shell|stack] --out DIR
+           [--kind agent|stack] --out DIR
                cells of strategy x defect x repetitions; appends DIR/results.jsonl
   table    DIR...                       the detection table of finished cells (run --table DIR... too)
   confirm  --out DIR [--defects all|m59|...] [--workers 3] [--no-control] [--base] [--bg-images] [--vcpus N]
-           [--kind agent|shell|stack]
+           [--kind agent|stack]
                every defect's trigger schedules twice on its image and once on its control
   list     --images IMG[,IMG...] --list FILE --out DIR [--workers 3] [--vcpus N] [--repeat 1|2] [--env K=V]...
-           [--kind agent|shell|stack] [--bg-images]
+           [--kind agent|stack] [--bg-images]
                a fixed list of schedules on each image (IMG: an image file, a defect name for its
                image of the kind, or control:<defect> for its control)
   depth1map DEFECT-SWEEP-DIR CONTROL-SWEEP-DIR [--sig REGEX] [--json FILE]
@@ -28,8 +28,8 @@ pub const USAGE: &str = "usage: hydo-bench <command> [options]   (hydo/bench/REA
   addbuggify MAIN.GO [--check]
 
 Images are read from $HYDO_BUILD (default ~/hydo/build). --kind (or $HYDO_BENCH_KIND) picks them: agent (the
-default) = the manifest-built agent images explore-ob-bench-<defect>-agent-disk.img, shell = the same manifest's
-shell images explore-ob-bench-<defect>-disk.img (both from hydo/bench/build-bench-manifest.sh), stack = the
+default) = the manifest-built agent images explore-ob-bench-<defect>-agent-disk.img (hydo/bench/build-bench-manifest.sh;
+M135's shell kind went with the shell init in M136), stack = the
 build-stack.sh images (the engine's regression baselines; their m59 set is $HYDO_M59_SUFFIX, default -pin-kr).
 The hvx engine runs in this process when it can open /dev/hvx (run hydo-bench as ~/bin/hvx-run sudo ...);
 otherwise every VM is the program hydo-hvx ($HYDO_HVX_EXPLORE) started through ~/bin/hvx-run ($HYDO_HVX_RUN).";

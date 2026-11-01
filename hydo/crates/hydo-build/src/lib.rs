@@ -2,13 +2,19 @@
 //! guest image. The Rust port of hydo/onboard/hydo-build (x86_64), hydo_build_arm64.py (arm64),
 //! hydo_oci.py (services from Docker/OCI images) and the release-time build patches that were in
 //! hydo_bridge.py (`build_linux`, `build_mac`). It starts from [`hydo_manifest`] (reading,
-//! `--set`, the composer's plan, validation) and gives the same `--check`, `--print-shell`,
-//! `--print-init` and `--print-world` output, the same refusals and the same image bytes.
+//! `--set`, the composer's plan, validation) and gave the same `--check`, `--print-shell` and
+//! `--print-world` output, the same refusals and the same image bytes.
+//!
+//! Since Milestone 136 every image's first process is the guest agent hydo-agent (`agent.rs`),
+//! driven by the host controller (hydo-control); the shell init (`hydo-init.sh`, its spliced
+//! `hydo-init-*.sh` extensions and the guest composer `hydo-composer.sh`) and `--print-init`
+//! are gone. The compiled manifest (`/etc/hydo/manifest.sh`, `prelude.sh`) stays: the controller
+//! reads it out of the image and runs the project's commands through it.
 //!
 //! It runs the same external tools the Python did: mke2fs and debugfs under the pinned
 //! libfaketime (or, on the Mac release, mke2fs inside a helper VM), busybox (its applet list),
 //! `cp -a` for store closures, `du`, `find` and `xz` for kernel modules, `nix-store -qR` for
-//! `root.nix:` closures. The init extensions (`hydo-init-*.sh`) stay shell files.
+//! `root.nix:` closures.
 //!
 //! Where the Python stopped with a traceback, this port stops with a plain message
 //! ([`Fail::Crash`]); docs/HISTORY.md (Milestone 103) lists those cases.
@@ -19,7 +25,6 @@ pub mod cpio;
 pub mod elfdeps;
 pub mod fsx;
 pub mod image;
-pub mod init;
 pub mod oci;
 pub mod pyjson;
 pub mod pyv;
@@ -74,7 +79,7 @@ pub enum Release {
 /// What a build needs besides its arguments.
 #[derive(Clone, Debug)]
 pub struct Ctx {
-    /// The product's onboard/ directory (hydo-init*.sh, hydo-composer.sh; ../history/hydo_hist.sh;
+    /// The product's onboard/ directory (MANIFEST.md; ../history/hydo_hist.sh;
     /// ../VERSION for a plan's hydo_version:).
     pub onboard: PathBuf,
     pub release: Release,
@@ -212,18 +217,18 @@ pub fn tool(env: &str, default: &str, check: impl Fn(&str) -> bool) -> Result<St
 pub const HELP: &str = "hydo-build -- compile a project manifest (hydo.yaml, see MANIFEST.md) into a hydo guest image.
 
     hydo-build <hydo.yaml> [--set KEY=VALUE ...] [--out NAME] [--build-dir DIR] [--arch x86_64|arm64]
-               [--control shell|agent] [--check] [--print-shell] [--print-init] [--print-world]
+               [--check] [--print-shell] [--print-world]
 
 Produces, in --build-dir (default ./build):
     <NAME>-ext4.img   read-only ext4 root (p1): the project's files + closures, busybox, the
-                      generic /sbin/init (hydo-init.sh), the compiled manifest in /etc/hydo/
+                      guest agent hydo-agent as /sbin/init, the compiled manifest in /etc/hydo/
     <NAME>-data.img   journaled ext4 data disk (p2), mounted on /data: the fault target
     <NAME>-disk.img   both behind a hand-made MBR -- the file the harnesses take
 NAME defaults to explore-ob-<project name> (the \"explore\" prefix: hvx_explore serves it).
---control agent makes the guest agent hydo-agent the first process instead of the shell init
-(x86_64: /sbin/init; arm64: /init) and writes /etc/hydo/control (\"agent <protocol>\"): the engines
-then boot the image under the host's lock-step control. No init extension is spliced. NAME then
-defaults to explore-ob-<project name>-agent. The default, --control shell, is unchanged.
+The image's first process is the guest agent hydo-agent (x86_64: /sbin/init; arm64: /init), and
+/etc/hydo/control (\"agent <protocol>\") tells the engines to boot it under the host's lock-step
+control: the host controller runs the services, the workload, the faults and the checks. (Until
+Milestone 136 the default was a shell init; --control agent is still accepted and changes nothing.)
 --arch arm64 builds <NAME>-arm64.cpio.gz instead, one initramfs for the Mac VMM
 (hv/hvm/explore/hvmx), and <NAME>-arm64-disk.img, the data disk.
 
@@ -239,12 +244,12 @@ Host tools (override with the environment variables):
     HYDO_READ_BIN hydo-read (hydo/crates/hydo-read/build.sh), staged only when a command calls
                   hydo-read or hydo-check
     HYDO_WORLDBIN hydo-world (hydo/crates/hydo-world/build.sh), staged only for fakes:/proxies:
-    HYDO_AGENT_BIN the pinned hydo-agent (hydo/crates/hydo-agent/build.sh), for --control agent
+    HYDO_AGENT_BIN the pinned hydo-agent (hydo/crates/hydo-agent/build.sh)
                   (default <build dir>/hydo-agent; arm64: HYDO_AGENT_BIN_ARM64, <build dir>/hydo-agent-arm64)
 --arch arm64 takes the arm64 builds of the last two from HYDO_READ_BIN_ARM64 and
 HYDO_WORLDBIN_ARM64 (default <build dir>/hydo-read-arm64 and hydo-world-arm64).
-HYDO_ONBOARD names the onboard/ directory (hydo-init*.sh); the default is the release's or the
-source tree's.
+HYDO_ONBOARD names the onboard/ directory (../history/hydo_hist.sh, ../VERSION); the default is
+the release's or the source tree's.
 ";
 
 /// What the command line asked for.
@@ -254,7 +259,6 @@ struct Args {
     out: Option<String>,
     build_dir: String,
     arch: String,
-    control: agent::Control,
     flags: Vec<String>,
 }
 
@@ -265,7 +269,6 @@ fn parse_args(a: &[String], io: &mut Io) -> Result<Args, i32> {
         out: None,
         build_dir: "build".into(),
         arch: "x86_64".into(),
-        control: agent::Control::Shell,
         flags: Vec::new(),
     };
     let mut i = 1;
@@ -276,11 +279,10 @@ fn parse_args(a: &[String], io: &mut Io) -> Result<Args, i32> {
             r.sets.push((k.to_string(), v.to_string()));
             i += 2;
         } else if x == "--control" {
-            let Some(c) = a.get(i + 1).and_then(|v| agent::Control::parse(v)) else {
-                errln(io, "hydo-build: --control is shell or agent");
+            if let Err(m) = agent::parse_control(a.get(i + 1).map_or("", String::as_str)) {
+                errln(io, &m);
                 return Err(2);
-            };
-            r.control = c;
+            }
             i += 2;
         } else if x == "--out" || x == "--build-dir" || x == "--arch" {
             let Some(v) = a.get(i + 1) else {
@@ -293,7 +295,13 @@ fn parse_args(a: &[String], io: &mut Io) -> Result<Args, i32> {
                 _ => r.arch = v.clone(),
             }
             i += 2;
-        } else if ["--check", "--print-shell", "--print-init", "--print-world"].contains(&x) {
+        } else if x == "--print-init" {
+            errln(
+                io,
+                "hydo-build: --print-init was removed in Milestone 136: images have no shell init (their first process is hydo-agent, driven by the host)",
+            );
+            return Err(2);
+        } else if ["--check", "--print-shell", "--print-world"].contains(&x) {
             r.flags.push(x.to_string());
             i += 1;
         } else {
@@ -329,8 +337,6 @@ pub struct Prepared {
     pub data: serde_json::Value,
     pub loaded: hydo_manifest::Loaded,
     pub oci: Vec<oci::OciService>,
-    /// The image's first process (`--control`; the shell init unless asked).
-    pub control: agent::Control,
 }
 
 /// hydo-build's `main()` up to the flags: read, `--set`, the composer's plan, validate, the
@@ -362,12 +368,7 @@ pub fn prepare(
     let oci = oci::prepare(&mut data, path, oarch, io)?;
     // the project model (hydo-manifest model.rs) after the image reader's own checks
     hydo_manifest::check_document(&loaded).map_err(|e| manifest_fail(&e))?;
-    Ok(Prepared {
-        data,
-        loaded,
-        oci,
-        control: agent::Control::Shell,
-    })
+    Ok(Prepared { data, loaded, oci })
 }
 
 /// The `--print-shell` placeholders for the tool paths.
@@ -385,8 +386,8 @@ pub fn print_shell_tools(m: &serde_json::Value) -> shell::ShellTools {
 }
 
 /// hydo-build's command line: `hydo-build <hydo.yaml> [--set K=V ...] [--out NAME]
-/// [--build-dir DIR] [--arch x86_64|arm64] [--check] [--print-shell] [--print-init]
-/// [--print-world]`. Returns the exit status.
+/// [--build-dir DIR] [--arch x86_64|arm64] [--check] [--print-shell] [--print-world]`. Returns
+/// the exit status.
 pub fn main_with(ctx: &Ctx, argv: &[String], io: &mut Io) -> i32 {
     if argv.is_empty() || argv[0] == "-h" || argv[0] == "--help" {
         outln(io, HELP);
@@ -403,46 +404,10 @@ pub fn main_with(ctx: &Ctx, argv: &[String], io: &mut Io) -> i32 {
     let m = &p.data;
     let order = &p.loaded.service_order;
     let has = |f: &str| a.flags.iter().any(|x| x == f);
-    if a.control == agent::Control::Shell {
-        // restart policies (M134) are followed by the host controller, so by agent images only
-        for s in m["services"].as_array().into_iter().flatten() {
-            let r = s
-                .get("restart")
-                .and_then(|r| hydo_manifest::Restart::parse(r).ok())
-                .unwrap_or_default();
-            if r.restarts() {
-                errln(
-                    io,
-                    &format!(
-                        "hydo-build: warning: service {}: restart: {} is followed by agent images only (--control agent); this shell image starts a service that ended by itself again only at the heal",
-                        py::str_of(&s["name"]),
-                        r.name()
-                    ),
-                );
-            }
-        }
-    }
     if has("--print-shell") {
         return match shell::compile_shell(ctx, m, order, &print_shell_tools(m)) {
             Ok((ms, pre)) => {
                 let _ = write!(io.out, "{ms}\n# ---- prelude.sh\n{pre}\n");
-                let _ = io.out.flush();
-                0
-            }
-            Err(f) => report(io, &f),
-        };
-    }
-    if has("--print-init") {
-        if a.control == agent::Control::Agent {
-            errln(
-                io,
-                "hydo-build: an agent image (--control agent) has no shell init: its first process is hydo-agent",
-            );
-            return 1;
-        }
-        return match init::init_text(ctx, m) {
-            Ok(t) => {
-                let _ = io.out.write_all(t.as_bytes());
                 let _ = io.out.flush();
                 0
             }
@@ -465,14 +430,10 @@ pub fn main_with(ctx: &Ctx, argv: &[String], io: &mut Io) -> i32 {
         }
         return 0;
     }
-    let suffix = match a.control {
-        agent::Control::Shell => "",
-        agent::Control::Agent => "-agent",
-    };
     let out = a
         .out
         .clone()
-        .unwrap_or_else(|| format!("explore-ob-{}{suffix}", py::str_of(&m["name"])));
+        .unwrap_or_else(|| format!("explore-ob-{}", py::str_of(&m["name"])));
     if let Err(e) = std::fs::create_dir_all(&a.build_dir) {
         return report(
             io,
@@ -480,7 +441,6 @@ pub fn main_with(ctx: &Ctx, argv: &[String], io: &mut Io) -> i32 {
         );
     }
     let mut p = p;
-    p.control = a.control;
     let r = if a.arch == "arm64" {
         arm64::build(ctx, &mut p, &a.path, &out, Path::new(&a.build_dir), io)
     } else if a.arch != "x86_64" {

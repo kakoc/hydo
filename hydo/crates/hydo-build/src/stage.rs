@@ -1,10 +1,11 @@
 //! The test composer's plan copied into the root (port of hydo_composer.py's `stage`): the hydo/
 //! folder (whole, helpers included) under /hydo/, the command and check lists the guest composer
 //! reads, the plan for the explorer (compose.json), the saved compositions of regressions, the
-//! plan's own regressions as files, and hydo-composer.sh as /etc/hydo/compose.sh.
+//! plan's own regressions as files. (hydo-composer.sh, the guest composer of the shell-init
+//! images, was staged as /etc/hydo/compose.sh until M136; the host controller runs the rounds.)
 
 use crate::fsx;
-use crate::{pyjson, Ctx, Fail};
+use crate::{pyjson, Fail};
 use hydo_manifest::composer::{key_of, shell_of};
 use hydo_manifest::py;
 use serde_json::{Map, Value};
@@ -30,7 +31,7 @@ fn d(v: &Value, what: &str) -> Result<String, Fail> {
 }
 
 /// `_compose_stage(m, R)`.
-pub fn compose_stage(ctx: &Ctx, m: &Value, root: &Path) -> Result<(), Fail> {
+pub fn compose_stage(m: &Value, root: &Path) -> Result<(), Fail> {
     let Some(full) = m.get("_compose").filter(|c| py::truthy(c)) else {
         return Ok(());
     };
@@ -153,7 +154,7 @@ pub fn compose_stage(ctx: &Ctx, m: &Value, root: &Path) -> Result<(), Fail> {
             fsx::write_text(&p, &t)?;
         }
     }
-    let dst = root.join("etc/hydo/compose.sh");
-    fsx::copy_file(&ctx.onboard.join("hydo-composer.sh"), &dst)?;
-    fsx::chmod(&dst, 0o755)
+    // The guest composer (hydo-composer.sh as /etc/hydo/compose.sh) was staged here until M136;
+    // the host controller drives the rounds itself (hydo-control schedule/composer.rs).
+    Ok(())
 }

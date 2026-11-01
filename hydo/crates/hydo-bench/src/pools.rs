@@ -71,11 +71,12 @@ impl Engines {
             extra_env: self.extra_env.clone(),
             env: Vec::new(),
         };
+        let (ram_mib, cpu) = guest_of(&self.build.join(image));
         let spec = BootSpec {
             image: self.build.join(image),
-            ram_mib: 1024,
+            ram_mib,
             vcpus: self.vcpus,
-            cpu: CpuLevel::V2,
+            cpu,
             kernel: self.build.join("bzImage"),
             initrd: Some(self.build.join("initramfs-kafka.cpio.gz")),
             outdir: outdir.join("consoles"),
@@ -106,6 +107,27 @@ impl Engines {
 
 /// `engine` itself for a shell image, the host controller over it for an agent image; exits with
 /// the controller's refusal when it cannot drive the image.
+/// The guest's RAM and CPU level from the manifest an image carries (`guest.ram_mib`,
+/// `guest.cpu`, as the explorer picks them for `--image`; M136: `list` on the onboarding examples
+/// needs them, the benchmark's own manifest has the defaults); 1024 MiB and v2 for an image
+/// without a manifest (the stack images) or without the keys.
+fn guest_of(image: &Path) -> (u32, CpuLevel) {
+    let Ok(text) = hydo_engine::image::embedded_manifest(image) else {
+        return (1024, CpuLevel::V2);
+    };
+    let Ok(m) = hydo_manifest::from_embedded(&text, None) else {
+        return (1024, CpuLevel::V2);
+    };
+    let g = &m.data["guest"];
+    let ram = g["ram_mib"].as_u64().map_or(1024, |r| r as u32);
+    let cpu = if g["cpu"].as_str() == Some("v3") {
+        CpuLevel::V3
+    } else {
+        CpuLevel::V2
+    };
+    (ram, cpu)
+}
+
 fn agent_or(engine: Arc<dyn Engine + Send + Sync>, image: &Path) -> Arc<dyn Engine + Send + Sync> {
     match hydo_control::agent::AgentEngine::for_image(engine.clone(), image) {
         Ok(None) => engine,

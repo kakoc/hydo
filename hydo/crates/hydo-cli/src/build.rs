@@ -106,8 +106,8 @@ pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
         release,
     };
     let rc = hydo_build::main(&bctx, &hb_argv);
-    // an agent image (--control agent) takes the same next steps: since M126 hydo run, repro and
-    // explore drive it through the host controller (the image's /etc/hydo/control decides)
+    // every image is an agent image (M136): hydo run, repro and explore drive it through the host
+    // controller (the image's /etc/hydo/control decides; older shell images still run)
     if rc == 0 && no_print_flag(&rest) {
         println!("hydo: next:  hydo run \"disk=none | run\"     or     hydo explore --seeds 1-20");
     }

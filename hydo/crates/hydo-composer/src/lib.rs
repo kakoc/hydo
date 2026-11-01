@@ -14,10 +14,12 @@
 //! - saved regressions: [`regression_status`] (what a replay does), [`regression_warning`],
 //!   [`saved_regression_text`] (`hydo save`);
 //! - what a plan puts into an image: [`shell_lines`] (manifest.sh) and [`stage`] (compose.list,
-//!   compose.checks, compose.json, compose.saved/, hydo/regressions/, compose.sh).
+//!   compose.checks, compose.json, compose.saved/, hydo/regressions/).
 //!
-//! The guest side (`hydo/onboard/hydo-composer.sh` and its two awk programs) stays shell: its bytes
-//! are inside images. [`plan`] is mirrored exactly by that awk; the tests check that they agree.
+//! Until M136 the guest side was `hydo/onboard/hydo-composer.sh` with two awk programs that
+//! mirrored [`plan`] exactly (the tests checked that they agreed); since M136 the host controller
+//! (hydo-control `schedule/composer.rs`) runs the rounds with this crate's code, and images carry
+//! no guest composer (`git show d9202e7:hydo/onboard/hydo-composer.sh` restores it).
 //!
 //! `meta` everywhere is the plan meta as `expand` returns it and an image carries it
 //! (`/etc/hydo/compose.json`): a JSON object with `params`, `commands` (each with `id`, `kind`,
@@ -37,7 +39,9 @@ pub use hydo_manifest::composer::{
 };
 pub use hydo_manifest::{regression_status, ManifestError, Status};
 
-/// The guest composer script inside an image.
+/// The guest composer the expanded plan's commands name (`compose.sh step`, `first`, `setw`,
+/// `verdict`, ...). Since M136 no image carries it: the host controller recognises those calls and
+/// runs the rounds itself (hydo-control `schedule/composer.rs`).
 pub const COMPOSE_SH: &str = "/etc/hydo/compose.sh";
 /// The composer's schedule token.
 pub const W_TOKEN: &str = "W";
@@ -669,17 +673,11 @@ fn mkdirs(p: &Path) -> Result<(), String> {
 /// (whole, helpers included) under `/hydo/`, the command and check lists the guest composer reads
 /// (`/etc/hydo/compose.list`, `compose.checks`), the plan for the explorer (`compose.json`), the
 /// saved compositions (`compose.saved/<key>`), a plan's own regressions as
-/// `/hydo/regressions/<name>.schedule`, and `hydo-composer.sh` from `onboard_dir` as
-/// `/etc/hydo/compose.sh`. `meta` is the plan meta without `_folder`; `folder` is what
-/// `scan_folder` returned.
+/// `/hydo/regressions/<name>.schedule`. (Until M136 also `hydo-composer.sh` as
+/// `/etc/hydo/compose.sh`, the guest composer of the shell-init images.) `meta` is the plan meta
+/// without `_folder`; `folder` is what `scan_folder` returned.
 #[cfg(unix)]
-pub fn stage(
-    meta: &Value,
-    root: &Path,
-    onboard_dir: &Path,
-    folder: Option<&Value>,
-) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
+pub fn stage(meta: &Value, root: &Path, folder: Option<&Value>) -> Result<(), String> {
     if let Some(Value::Object(dirs)) = folder.and_then(|f| f.get("_dirs")) {
         let mut subs: Vec<(&String, &Value)> = dirs.iter().collect();
         subs.sort_by(|a, b| a.0.cmp(b.0));
@@ -783,11 +781,6 @@ pub fn stage(
             write(&p, &t)?;
         }
     }
-    let sh = root.join(COMPOSE_SH.trim_start_matches('/'));
-    let src = onboard_dir.join("hydo-composer.sh");
-    std::fs::copy(&src, &sh).map_err(|e| io_err(&src, e))?;
-    std::fs::set_permissions(&sh, std::fs::Permissions::from_mode(0o755))
-        .map_err(|e| io_err(&sh, e))?;
     Ok(())
 }
 

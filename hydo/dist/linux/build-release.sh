@@ -117,13 +117,10 @@ done
 cp "$D/libexec/hvx-run" "$D/libexec/faketime" "$REL/libexec/"
 cp "$D/libexec/bin/debugfs" "$REL/libexec/bin/"
 chmod 755 "$REL/libexec/hvx-run" "$REL/libexec/faketime" "$REL/libexec/bin/debugfs"
-# the guest-side files hydo-build puts into images: the generic init and every extension it
-# splices in by manifest (liveness, recovery clock, links, network namespaces, freeze, fakes,
-# BUGGIFY, history recording, error-log scan), the test composer's guest runner, the history
-# recorder, and the format reference (`hydo guide manifest`); hydo_fc.c is the source of
-# guest/hydo_fc
-cp "$TOP"/hydo/onboard/hydo-init*.sh "$TOP/hydo/onboard/hydo-liveness.sh" "$TOP/hydo/onboard/hydo-composer.sh" \
-   "$TOP/hydo/onboard/hydo_fc.c" "$TOP/hydo/onboard/MANIFEST.md" "$REL/hydo/onboard/"
+# the format reference (`hydo guide manifest`) and hydo_fc.c, the source of guest/hydo_fc (the
+# history recorder follows); the shell init and its extensions are gone since M136 (every image's
+# first process is guest/hydo-agent)
+cp "$TOP/hydo/onboard/hydo_fc.c" "$TOP/hydo/onboard/MANIFEST.md" "$REL/hydo/onboard/"
 echo "$VERSION" > "$REL/hydo/VERSION"     # what a plan's hydo_version: is checked against
 mkdir -p "$REL/hydo/history"
 cp "$TOP/hydo/history/hydo_hist.sh" "$REL/hydo/history/"

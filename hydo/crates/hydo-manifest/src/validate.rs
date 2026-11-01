@@ -68,6 +68,7 @@ pub const KNOWN_SVC: &[&str] = &[
     "env",
     "mounts",
     "restart",
+    "restart_may_fail",
 ];
 pub const KNOWN_INV: &[&str] = &[
     "id",
@@ -456,6 +457,13 @@ pub fn validate(m: &mut Value) -> R<()> {
         validate_addr(s, &svcs, &wh, bridge)?;
         if let Some(r) = obj_get(s, "restart") {
             crate::restart::Restart::parse(r).map_err(|m| err(format!("{wh}: restart: {m}")))?;
+        }
+        if let Some(b) = obj_get(s, "restart_may_fail") {
+            if !b.is_boolean() {
+                return Err(err(format!(
+                    "{wh}: restart_may_fail: must be true or false"
+                )));
+            }
         }
         for dep in or_iter(obj_get(s, "depends_on"))? {
             let mut names = Vec::new();

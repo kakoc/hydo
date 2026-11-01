@@ -1369,7 +1369,10 @@ fn start_all(fx: &mut F<'_>, ctx: &Ctx, verdict: &str, recovery: bool) -> Step<(
     Ok(())
 }
 
-fn restart_dead(fx: &mut F<'_>, ctx: &Ctx, verdict: &str) -> Step<()> {
+/// The heal's restart pass: every dead service is started again; one that does not come back
+/// ends the run with `verdict (<service>)`, unless it has `restart_may_fail: true` (M136) and
+/// `may_fail` allows it: then it stays down, a line says so, and its name is returned.
+fn restart_dead(fx: &mut F<'_>, ctx: &Ctx, verdict: &str, may_fail: bool) -> Step<Vec<String>> {
     fakes::restart_dead(fx, ctx)?; // SEAM(Fakes): the protocol faults healed, once
     freeze::heal(fx, ctx)?; // SEAM(Freeze): fc_heal, after the fakes heal (only its first call acts)
                             // AMBIGUOUS: the shell's `kill -0` may still see a process it just killed (a zombie not yet
@@ -1380,6 +1383,7 @@ fn restart_dead(fx: &mut F<'_>, ctx: &Ctx, verdict: &str) -> Step<()> {
             f.exits.contains_key(&s.spawn) || matches!(f.replies.get(&s.spawn), Some(Err(_)))
         })
     })?;
+    let mut down = Vec::new();
     for s in &ctx.plan.services {
         // a restart policy's restart in progress ends first (M134; never waits without a policy)
         fx.until(|h, _| !h.starting.contains(&s.name))?;
@@ -1389,10 +1393,21 @@ fn restart_dead(fx: &mut F<'_>, ctx: &Ctx, verdict: &str) -> Step<()> {
         }
         log(fx, format!("{} is down; restarting it", s.name));
         if !start_svc(fx, ctx, &s.name)? {
+            if may_fail && s.restart_may_fail {
+                log(
+                    fx,
+                    format!(
+                        "{} did not come back after the faults (restart_may_fail): no workload retry; a power cut's recovery boot gives the verdict, else ERROR",
+                        s.name
+                    ),
+                );
+                down.push(s.name.clone());
+                continue;
+            }
             return die_oracle(fx, format!("{verdict} ({})", s.name));
         }
     }
-    Ok(())
+    Ok(down)
 }
 
 /// Send a signal to a service's whole tree; the answer is ignored (`kill ... 2>/dev/null`).
@@ -2008,7 +2023,18 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         if p == kup && down {
             log(fx, format!("restarting {ksvc} before step {p}"));
             if !start_svc(fx, ctx, &ksvc)? {
-                return die_oracle(fx, format!("HYDO-ORACLE: ERROR {ksvc} restart failed"));
+                // M136: a K= restart that falls after the workload's last step is a restart
+                // after the faults; with restart_may_fail the service stays down and the heal's
+                // restart pass decides (restart_dead), as for any service that is down then
+                let after_faults =
+                    p == steps && ctx.plan.service(&ksvc).is_some_and(|s| s.restart_may_fail);
+                if !after_faults {
+                    return die_oracle(fx, format!("HYDO-ORACLE: ERROR {ksvc} restart failed"));
+                }
+                log(
+                    fx,
+                    format!("{ksvc} restart failed after the last step (restart_may_fail): left to the heal"),
+                );
             }
             down = false;
         }
@@ -2143,8 +2169,13 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     if let Some(t) = xtimer {
         fx.join(t)?;
     }
-    restart_dead(fx, ctx, "HYDO-ORACLE: ERROR restart after the faults")?;
-    retry_workload(fx, ctx)?;
+    const NO_RESTART: &str = "HYDO-ORACLE: ERROR restart after the faults";
+    let down = restart_dead(fx, ctx, NO_RESTART, true)?;
+    // M136: a service with restart_may_fail that stayed down gets no retry pass (its un-ACKed
+    // requests stay un-ACKed); the run ends as usual, so a cf= cut reaches its recovery boot
+    if down.is_empty() {
+        retry_workload(fx, ctx)?;
+    }
     freeze::kill(fx)?;
     stop_periodic(fx);
     let failed = failed_ids(fx, ctx)?;
@@ -2158,10 +2189,16 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     // explore_read: "go" -- the host switches the disk faults off
     fx.engine(EngineAction::DiskFaultsOff);
     log(fx, "command: go");
+    // no cf= cut answered the workload's end (the engine would have moved to the recovery VM):
+    // a service that stayed down is the ERROR it is without restart_may_fail
+    if let Some(s) = down.first() {
+        return die_oracle(fx, format!("{NO_RESTART} ({s})"));
+    }
     restart_dead(
         fx,
         ctx,
         "HYDO-ORACLE: VIOLATION service cannot recover after the faults",
+        false,
     )?;
     finish(fx, ctx)
 }

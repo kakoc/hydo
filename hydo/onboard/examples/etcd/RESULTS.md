@@ -124,3 +124,41 @@ pausing etcd2 at step 26 or etcd3 at step 25 gives `members disagree` only, paus
 together with the later pause was not investigated. On 3.5.6-nq all six failing schedules of the
 sweep pass. Results: `/var/tmp/m78-etcd` on the box (`A`, `B`, `D`, `E` = `run_list.py` outputs,
 `runs/one5*` = the fresh-boot runs, `results.txt`).
+
+## Milestone 136: agent images (the current values)
+
+Since M136 every image is an agent image (the guest agent `hydo-agent` as the first process, the
+host controller driving it; docs/HISTORY.md "Milestone 136"), so every fingerprint above this
+section belongs to a shell-init image of an earlier milestone. The current values, each schedule
+run twice with the same fingerprint (docs/REBASELINE.md section 8, which also says how each image
+was made):
+
+**x86_64 (hvx), etcd-3.5.5**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=3 held (etcd.acked_puts_readable: acked=90 all readable) | `ed50aa191ffd0a39` | yes |
+| `disk=cut dseed=1 \| run C=30` | VIOLATION [etcd.members_agree] members disagree: revisions 98 99 98; k89 mod_revisions 97 97 97 | `200822da59c2ec72` | yes |
+| `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | OK invariants=3 held (etcd.acked_puts_readable: acked=90 all readable) | `3b47960fb89dd908` | yes |
+
+**x86_64 (hvx), etcd-3.5.6**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=3 held (etcd.acked_puts_readable: acked=90 all readable) | `fe7fa0444ca89f70` | yes |
+| `disk=cut dseed=1 \| run C=30` | OK invariants=3 held (etcd.acked_puts_readable: acked=90 all readable) | `b95213ade20090b2` | yes |
+| `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | OK invariants=3 held (etcd.acked_puts_readable: acked=90 all readable) | `220a997535814ade` | yes |
+
+**x86_64 (hvx), etcd-hc-3.5.5**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK checks=1 held (etcd.kv_linearizable: 183 operations on 90 keys linearizable) | `edec19943cb68c42` | yes |
+| `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | VIOLATION [etcd.kv_linearizable] key k31: these 4 operations cannot be ordered consistently with real time ... | `2367445439ec5bc8` | yes |
+
+**x86_64 (hvx), etcd-hc-3.5.6**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK checks=1 held (etcd.kv_linearizable: 183 operations on 90 keys linearizable) | `f9142657ac4708ac` | yes |
+| `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | OK checks=1 held (etcd.kv_linearizable: 187 operations on 90 keys linearizable) | `55e6b1dda9a9b14e` | yes |

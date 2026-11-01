@@ -488,7 +488,12 @@ Steps that can run in parallel are marked with the same letter. Each step lists 
 - **C2. Equivalence campaign** (after A–C1): every example, both architectures, seeds 1–100,
   the sweeps, the benchmark cells of M108. Proof: the verdict tables, every difference explained.
 - **C3. Re-baseline and switch the default; then retire the splicing.** Proof: REBASELINE.md
-  section with two runs per value; releases rebuilt and their quickstarts run.
+  section with two runs per value; releases rebuilt and their quickstarts run. *Done in M136,
+  except the release rebuild (the user's decision, at the end of the project's work): every
+  image is an agent image, `init.rs`, the shell init and its extensions and the guest composer
+  are deleted, `services[].restart_may_fail` replaces the benchmark's wrapper, and
+  docs/REBASELINE.md section 8 has the new values (every recorded schedule twice on both
+  engines); docs/HISTORY.md "Milestone 136".*
 - **D1 (later, independent). Host-call port** on a side module and in hvm. Proof: inert when
   off (full suite, pinned reproducers), exact observation points (a record's stop equals the
   instruction that wrote it, checked against the PMU branch count), branch equality with a

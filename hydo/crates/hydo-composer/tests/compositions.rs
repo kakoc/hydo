@@ -1,17 +1,16 @@
-//! hydo/onboard/tests/test_composer.py re-expressed in Rust: the host's composition code
-//! (`plan`, `kept`, `entries_of`) and the awk programs inside the guest's composer
-//! (`hydo-composer.sh`: PLAN_AWK for the seed form, RES_AWK for the resolved form) give the same
-//! entries for 3,000 seed-form W values over 80 command sets, and for resolved compositions
-//! replayed on a changed, shuffled command list; a removed command fails on both sides. Also the
-//! plan rules (a singleton plan runs one singleton and nothing but anytime commands besides it)
-//! and that shrink candidates never add entries.
+//! The composition code (`plan`, `kept`, `entries_of`) on 3,000 seed-form W values over 80 command
+//! sets and on resolved compositions replayed on a changed, shuffled command list: W values
+//! round-trip, the plan rules hold (a singleton plan runs one singleton and nothing but anytime
+//! commands besides it), shrink candidates never add entries, a resolved composition replays the
+//! same commands by id, and a removed command is an error that names it.
 //!
-//! The awk is `awk` from PATH, or HYDO_AWK (for example "/path/to/busybox awk", the guest's own).
+//! Until M136 this test (then `awk.rs`) also compared every answer with the awk programs of the
+//! guest composer `hydo-composer.sh` (PLAN_AWK, RES_AWK), which ran the rounds inside shell-init
+//! images; the guest composer was deleted with the shell init, and the host controller runs the
+//! rounds with this crate's code (`git show d9202e7:hydo/crates/hydo-composer/tests/awk.rs`).
 
 use hydo_composer as hc;
 use serde_json::{json, Value};
-use std::path::{Path, PathBuf};
-use std::process::Command;
 
 struct Rng(u64);
 
@@ -30,22 +29,6 @@ impl Rng {
     fn choice<T: Copy>(&mut self, v: &[T]) -> T {
         v[self.below(v.len())]
     }
-}
-
-fn awk_program(name: &str) -> String {
-    let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../onboard/hydo-composer.sh");
-    let t = std::fs::read_to_string(p).unwrap();
-    let start = t.find(&format!("\n{name}='")).unwrap() + name.len() + 3;
-    let len = t[start..].find("'\n").unwrap();
-    t[start..start + len].to_string()
-}
-
-fn awk() -> Vec<String> {
-    std::env::var("HYDO_AWK")
-        .unwrap_or_else(|_| "awk".into())
-        .split_whitespace()
-        .map(str::to_string)
-        .collect()
 }
 
 fn cmd_sets() -> Vec<Vec<(String, String)>> {
@@ -88,47 +71,14 @@ fn meta(cmds: &[(String, String)], steps: i64) -> Value {
            "steps": steps})
 }
 
-fn write_list(p: &Path, cmds: &[(String, String)]) {
-    let mut s = String::new();
-    for (i, (k, id)) in cmds.iter().enumerate() {
-        s.push_str(&format!("{i} {k} 60 {id} exec /bin/true\n"));
-    }
-    std::fs::write(p, s).unwrap();
-}
-
-fn lines(out: &[u8]) -> Vec<String> {
-    String::from_utf8_lossy(out)
-        .split('\n')
-        .filter(|l| !l.is_empty())
-        .map(str::to_string)
-        .collect()
-}
-
-fn scratch() -> PathBuf {
-    let d = std::env::temp_dir().join(format!("hydo-composer-awk-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    std::fs::create_dir_all(&d).unwrap();
-    d
-}
-
 #[test]
-fn awk_matches_rust() {
-    let prog = awk_program("PLAN_AWK");
-    let res_prog = awk_program("RES_AWK");
-    let awk = awk();
-    let td = scratch();
-    let lst = td.join("compose.list");
+fn compositions() {
     let sets = cmd_sets();
     assert_eq!(sets.len(), 80);
     let mut rnd = Rng(7);
-    let n_values = std::env::var("HYDO_AWK_N")
-        .ok()
-        .and_then(|x| x.parse().ok())
-        .unwrap_or(3000);
-    let mut checked = 0;
+    let n_values = 3000;
     for n in 0..n_values {
         let cmds = &sets[n % sets.len()];
-        write_list(&lst, cmds);
         let steps = rnd.choice(&[1i64, 4, 20, 57]);
         let m = meta(cmds, steps);
         let (ids, kinds) = hc::ids_kinds(&m);
@@ -163,41 +113,9 @@ fn awk_matches_rust() {
         let w = hc::render_w(&d);
         let d2 = hc::parse_seed(&w, &m).unwrap();
         assert_eq!(hc::render_w(&d2), w);
-        let want: Vec<String> = hc::kept_of(&d2, steps as i128, &m)
-            .unwrap()
-            .iter()
-            .map(|(i, r, c, s)| format!("{i} {r} {c} {} {s}", kinds[*c]))
-            .collect();
-        let f: Vec<&str> = w.split(',').collect();
-        let field = |p: char| {
-            f.iter()
-                .find(|x| x.starts_with(p))
-                .map(|x| x[1..].to_string())
-                .unwrap_or_default()
-        };
-        let out = Command::new(&awk[0])
-            .args(&awk[1..])
-            .args([
-                "-v",
-                &format!("seed={}", i64::from_str_radix(f[0], 16).unwrap()),
-                "-v",
-                &format!("q={}", d.q),
-                "-v",
-                &format!("S={steps}"),
-                "-v",
-                &format!("X={}", field('x')),
-                "-v",
-                &format!("O={}", field('o')),
-                "-v",
-                &format!("N={}", d.n),
-                &prog,
-            ])
-            .arg(&lst)
-            .output()
-            .expect("awk is needed (set HYDO_AWK)");
-        assert!(out.status.success());
-        assert_eq!(lines(&out.stdout), want, "W={w} steps={steps}");
-        checked += 1;
+        // what is kept is a part of the full plan
+        let kept = hc::kept_of(&d2, steps as i128, &m).unwrap();
+        assert!(kept.len() <= full.len(), "W={w} steps={steps}");
     }
     // every kind's rule: a singleton plan has one singleton and nothing but anytime besides it
     for cmds in &sets {
@@ -232,8 +150,8 @@ fn awk_matches_rust() {
             assert!(hc::entries_of(&c, &m, None, None).unwrap().len() <= n0);
         }
     }
-    // the resolved form (M98): RES_AWK gives the entries entries_of gives, whatever the order of
-    // the image's list; an id the list lacks is an error on both sides
+    // the resolved form (M98): the same entries by id whatever the order of the image's list;
+    // an id the list lacks is an error that names it
     let (mut nres, mut nerr) = (0, 0);
     for n in 0..(n_values / 5).max(200) {
         let cmds = &sets[n % sets.len()];
@@ -275,22 +193,8 @@ fn awk_matches_rust() {
                 now.swap(i, rnd.below(i + 1));
             }
         }
-        write_list(&lst, &now);
         let m2 = meta(&now, steps);
-        let p = Command::new(&awk[0])
-            .args(&awk[1..])
-            .args([
-                "-v",
-                &format!("V={res}"),
-                "-v",
-                &format!("S={steps}"),
-                &res_prog,
-            ])
-            .arg(&lst)
-            .output()
-            .unwrap();
         if let Some(d) = drop {
-            assert!(!p.status.success() && String::from_utf8_lossy(&p.stdout).contains(&d));
             match hc::entries_of(&res, &m2, None, None) {
                 Err(hc::WError::Invalid(e)) => assert!(e.contains(&d)),
                 other => panic!("a missing command was accepted: {other:?}"),
@@ -298,13 +202,7 @@ fn awk_matches_rust() {
             nerr += 1;
             continue;
         }
-        assert!(p.status.success(), "{res}");
         let got = hc::entries_of(&res, &m2, None, None).unwrap();
-        let want: Vec<String> = got
-            .iter()
-            .map(|(e, r, c, s)| format!("{e} {r} {c} {} {s}", now[*c].0))
-            .collect();
-        assert_eq!(lines(&p.stdout), want, "{res}");
         // the same commands, rounds, entry numbers and seeds as the seed form on the old list
         let by_id = |es: &[hc::Entry], l: &[(String, String)]| -> Vec<(i128, i128, String, i128)> {
             es.iter()
@@ -318,10 +216,9 @@ fn awk_matches_rust() {
         }
         nres += 1;
     }
-    let _ = std::fs::remove_dir_all(&td);
+    assert!(nres > 100 && nerr > 10, "{nres} resolved, {nerr} refused");
     eprintln!(
-        "awk: {checked} W values, awk ({}) == Rust; plan rules and shrink candidates OK; {nres} resolved \
-         compositions replay by id on a changed list (awk == Rust), {nerr} with a removed command fail on both sides",
-        awk.join(" ")
+        "compositions: {n_values} W values; plan rules and shrink candidates OK; {nres} resolved \
+         compositions replay by id on a changed list, {nerr} with a removed command refused"
     );
 }

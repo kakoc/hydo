@@ -148,3 +148,43 @@ the same fingerprints, stops, `inh=` and `ctl=` (no check of these schedules is 
 and the manifest has no restart policy). These replace the Mac values of Milestone 99 (shell) and Milestone 128 (agent) for the current
 manifest; the verdicts are the same. The x86_64 images were not rebuilt (no VM budget was spent on
 them on the bare-metal machine); the re-baseline at the switch to agent images records them.
+
+## Milestone 136: agent images (the current values)
+
+Since M136 every image is an agent image (the guest agent `hydo-agent` as the first process, the
+host controller driving it; docs/HISTORY.md "Milestone 136"), so every fingerprint above this
+section belongs to a shell-init image of an earlier milestone. The current values, each schedule
+run twice with the same fingerprint (docs/REBASELINE.md section 8, which also says how each image
+was made):
+
+**x86_64 (hvx), voting**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=1 held (votes.counted: all 20 acknowledged votes counted) | `5178e8c08ecf93cc` | yes |
+| `disk=none dseed=1 \| run K=worker@5+5` | OK invariants=1 held (votes.counted: all 20 acknowledged votes counted) | `473a8fea22bcde0f` | yes |
+| `disk=none dseed=1 \| run C=12` | VIOLATION [votes.counted_soon] not satisfied 60.79s after heal, deadline 60s (last check rc=1: too few vote... | `3e0c121b964fd925` | yes |
+| `disk=none dseed=1 \| run N=vote-redis@5-12:loss,100%` | OK invariants=1 held (votes.counted: all 13 acknowledged votes counted) | `6d6fa005c6971bbc` | yes |
+
+**x86_64 (hvx), voting-generated**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | ERROR invariant todo.acked_operations_survive could not be evaluated: TODO: write the invariants (hydo.yaml) | `7eed916a16de1b82` | yes |
+| `disk=none dseed=1 \| run K=worker@5+5` | ERROR invariant todo.acked_operations_survive could not be evaluated: TODO: write the invariants (hydo.yaml) | `b43a721c180f16ae` | yes |
+
+**x86_64 (hvx), voting-loopback**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=1 held (votes.counted: all 20 acknowledged votes counted) | `32a8fda173a1552c` | yes |
+| `disk=none dseed=1 \| run K=worker@5+5` | OK invariants=1 held (votes.counted: all 20 acknowledged votes counted) | `76991ff091db8c00` | yes |
+
+**Mac (hvm), voting**
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (votes.counted: all 20 acknowledged votes counted) | `3cf409bead783e0e` | `1b9e5fbb98634f9c` | yes |
+| `disk=none \| run K=worker@5+5` | OK invariants=1 held (votes.counted: all 20 acknowledged votes counted) | `e5ea05f9170541b5` | `e39f6fb3fb98c8d0` | yes |
+| `disk=cut \| run C=12` | VIOLATION [votes.counted_soon] not satisfied 60.83s after heal, deadline 60s (last check rc=1: too few vote... | `ff4dc7a30d3a8c98` | `64b7f90f3b5cd36e` | yes |
+| `disk=none \| run N=vote-redis@5-12:loss,100%` | OK invariants=1 held (votes.counted: all 13 acknowledged votes counted) | `22b4be3c7a922d35` | `aa587576ffe76bf2` | yes |

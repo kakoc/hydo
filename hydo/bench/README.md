@@ -15,9 +15,10 @@
 > restore one with `git show 705cf98:hydo/bench/<file>` (docs/HISTORY.md M108).
 >
 > Note (M135): the benchmark's images are now built from one manifest, `manifest/hydo.yaml`, by
-> `build-bench-manifest.sh` on the bare-metal test machine (section "The manifest images
-> (Milestone 135)" at the end, with the triggers recorded on them). `hydo-bench` runs their agent
-> images by default (`--kind agent`), their shell images with `--kind shell`, and the hand-written
+> `build-bench-manifest.sh` on the bare-metal machine (section "The manifest images
+> (Milestone 135)" and "The manifest images after the switch (Milestone 136)" at the end, with the
+> triggers recorded on them). `hydo-bench` runs their agent images by default (`--kind agent`;
+> M135's shell images went with the shell init in M136, `--kind shell` is refused), and the hand-written
 > stack images that the older sections below describe with `--kind stack`. The stack images
 > (`build-bench*.sh` with `hv/hvx/images/build-stack.sh` and `hydo/explore/stack-explore.sh`)
 > stay only as the engine's regression baselines (`deploy-metal.sh`, the pinned reproducers on
@@ -125,9 +126,9 @@ their sequence numbers. Details: `docs/C2-BENCH.md` section 6 item 4.
 - `hydo-bench run` (run.py until M108) — runs a strategy on every defect image with an early stop at
   the first detection; `hydo-bench table <dirs>` prints the comparison table.
 
-## Commands (on the box, from a tree with `hv/hvx/hvx_explore` built)
+## Commands (on the bare-metal machine, from a tree with `hv/hvx/hvx_explore` built)
 
-    cargo build --release -p hydo-bench            # or copy a static x86_64 musl build to the box
+    cargo build --release -p hydo-bench            # or copy a static x86_64 musl build to the bare-metal machine
     B=target/release/hydo-bench
     $B confirm --out /var/tmp/m46-bench/confirm
     $B run --strategy random  [--new-faults] --defects all --reps 1-3 --budget 60 --workers 3 --out /var/tmp/m46-bench/random
@@ -142,7 +143,7 @@ their sequence numbers. Details: `docs/C2-BENCH.md` section 6 item 4.
 (the M42/M44 repetitions). Cell: repetitions that detected the defect, (run of first detection
 per repetition), median. random/swarm stop at the first detection; portfolio always runs 60.
 `+nf` = `--new-faults` (M46 pause / clock jump / one-way loss). Results in
-`/var/tmp/m46-bench/<strategy>/results.jsonl` on the box; table `/var/tmp/m46-bench/table.md`.
+`/var/tmp/m46-bench/<strategy>/results.jsonl` on the bare-metal machine; table `/var/tmp/m46-bench/table.md`.
 
 | defect | random | random+nf | swarm | swarm+nf | portfolio |
 |---|---|---|---|---|---|
@@ -253,7 +254,7 @@ byte-identical console.
 
 **Evaluation** (`run.py --buggify --bg-images`, 3 reps × ≤60 runs, 1 worker, module srcversion
 `7CA13762C89AF3BF16F2CCF`; every detection reproduced its fingerprint and passed the control check;
-results `/var/tmp/m56-bg/{random-bg,swarm-bg}` on the box; plain columns are Milestone 54's):
+results `/var/tmp/m56-bg/{random-bg,swarm-bg}` on the bare-metal machine; plain columns are Milestone 54's):
 
 | defect | random | random+bg | swarm | swarm+bg |
 |---|---|---|---|---|
@@ -349,7 +350,7 @@ d7; both long Kafka outages) — not investigated.
 
 **Verdict.** Fault position and combination matter more than the search strategy: a simple
 staggered fault process beats every earlier strategy on all eight defects, including d7 and the
-two-fault defects d0 and d4, at under half the box time; per-category positions alone
+two-fault defects d0 and d4, at under half the machine time; per-category positions alone
 (swarm-pos) do not. The depth-1 sweep is the ground truth for single-fault defects but cannot
 reach two-fault ones (d0, d4).
 
@@ -392,10 +393,10 @@ applies only to the m59 defects and their control, so earlier results keep their
 Each trigger failed twice on its image with the same fingerprint, and passed on the control.
 Control fingerprints (verdict OK): d8 trigger `909faca647bf1e4a`, d9 `b530be611c79196f`,
 d10 `98ccdb150d322993`, d11 `5036d0ec822239b8` (acked 23 of 30, no violation), d12
-`9a0b90a1febea0be`. Records: `/var/tmp/m59-bench/confirm.out` and `confirm2.out` on the box.
+`9a0b90a1febea0be`. Records: `/var/tmp/m59-bench/confirm.out` and `confirm2.out` on the bare-metal machine.
 
 **Stand-in images (superseded).** A first build used the stand-in `hvx_seedrng` (`01adf1bd…`,
-image names without `-pin`, still on the box). On those images the triggers were
+image names without `-pin`, still on the bare-metal machine). On those images the triggers were
 `Q=2d`/`Q=2`/`X=front@9~20`/`cf=254`/`Q=2`, with fingerprints d8 `1ea2367350c96f6c`,
 d9 `b79e932f269c77f0`, d10 `184af14cf3e7345a`, d11 `894c669947627042` and d12 `e2b254736e39ec3b`.
 The seeder's bytes change guest timing. On the -pin images, d8 and d12 fail on the same
@@ -414,7 +415,6 @@ A cell gives the repetitions that detected the defect, the run of the first dete
 repetition, and the median. Every detection reproduced its fingerprint, matched its defect's
 oracle line and passed on the control (no candidate was rejected). Module srcversion
 `38E88060EEC5F955DFDFD03`. Results are in `/var/tmp/m59-bench/<strategy>/results.jsonl` on
-the box.
 
 | defect | random+cc | swarm+cc | process+cc | swarm+bg+cc | random (no cc) |
 |---|---|---|---|---|---|
@@ -458,7 +458,7 @@ What the concurrency defects show:
 
 ### Control sweeps (-pin images)
 
-`/var/tmp/m59-bench/ctl-sweep.table` and `d11-sweep.table` on the box:
+`/var/tmp/m59-bench/ctl-sweep.table` and `d11-sweep.table` on the bare-metal machine:
 - **Control, all 40 `frontkill` points: 40 OK.** On d10 the same points give 26 duplicates.
   So the `published = 2` state in MySQL (M50 fix 3) is what makes a service crash safe.
 - **Control, 20 flush-cut points: 20 OK.** The points are k = 204–283, the M58 failure points
@@ -474,7 +474,7 @@ What the concurrency defects show:
 - `base/main-3773607.go`: the order service at 3773607.
 - `base/main-m59-control.go`: the control (3773607 plus the M58 fix).
 - `patches-m59/*.patch` and `build-bench-m59.sh`: the defects and how to build them. Builds go on
-  the build box with the pinned tools:
+  the build machine with the pinned tools:
   `BENCH_SUFFIX=-pin bash hydo/bench/build-bench-m59.sh`, about 15 s per image.
 - `run.py` options: `--defects m59` (only d8–d12), `--concurrency`, and `--window N`
   (schedules in flight). `HYDO_M59_SUFFIX` picks the image set; the default is `-pin`, and `""`
@@ -496,7 +496,7 @@ applies exactly two changes and nothing else: `log.retention.ms=-1` in the stack
 `hydo/explore/stack-explore.sh` (commit `941f9f3`, cherry-picked from a benchmark branch commit). MySQL's binary
 log (the other M63 change) is deliberately NOT applied, because it closes d11 by itself.
 
-    BENCH_SUFFIX=-pin-kr bash hydo/bench/build-bench-m59.sh   # build box, pinned tools
+    BENCH_SUFFIX=-pin-kr bash hydo/bench/build-bench-m59.sh   # build machine, pinned tools
 
 Images `explore-bench-m59-<name>-pin-kr-disk.img` (each built twice, byte-identical; seeder
 `c2a440c5…`): control `61e843f0…`, d8 `76d77289…`, d9 `ac4ee872…`, d10 `a13fbfee…`, d11
@@ -505,7 +505,7 @@ byte-identical, the root partition has the same 14,026 files with the same modes
 only `/etc/kafka/server.properties` (one added line) and `/etc/stack-explore.sh` (the M67 change)
 differ; `/bin/hydostack` is byte-identical per defect. They are the default m59 set in `run.py` since 2026-10-23 (`HYDO_M59_SUFFIX=-pin` selects the earlier set).
 
-Checks (bare-metal test machine, results `/var/tmp/kr`): `confirm.py --defects m59` — d8 `Q=2d` `6a56326d6de88bba`, d9 `Q=4` `6a5f06b675687ac4`, d11 `cf=238` `adadedf9698291bd` (order 22), d12 `Q=2` `d89a283a66ac19a9`, each twice identical; d10's old trigger `X=front@12~20` passes on the new image (timing moved), so its trigger here is `X=front@9~20` (`5d03c640c24f667d`, `kafka order=10 present 2 times`, three times identical; the control passes it, `20a1bc5f8906233b`); `frontkill` 24 of 40 fail on d10, 40 of 40 pass on the control. The control passes every trigger and the M63 clock-jump candidate (`496ca3033e335c4c`, twice; the `-pin` control still fails it, `9577ae9341ea86c2`). A workload makes 365 flushes (309 on `-pin`); every flush after 311 comes after the last order, so the cells keep `--cf-range 1-309` and their schedule strings equal M67's. d11 cut sweep k=200..364 step 4: k=248 (order 23) and k=280 (order 26) fail, twice each; the control passes both.
+Checks (bare-metal machine, results `/var/tmp/kr`): `confirm.py --defects m59` — d8 `Q=2d` `6a56326d6de88bba`, d9 `Q=4` `6a5f06b675687ac4`, d11 `cf=238` `adadedf9698291bd` (order 22), d12 `Q=2` `d89a283a66ac19a9`, each twice identical; d10's old trigger `X=front@12~20` passes on the new image (timing moved), so its trigger here is `X=front@9~20` (`5d03c640c24f667d`, `kafka order=10 present 2 times`, three times identical; the control passes it, `20a1bc5f8906233b`); `frontkill` 24 of 40 fail on d10, 40 of 40 pass on the control. The control passes every trigger and the M63 clock-jump candidate (`496ca3033e335c4c`, twice; the `-pin` control still fails it, `9577ae9341ea86c2`). A workload makes 365 flushes (309 on `-pin`); every flush after 311 comes after the last order, so the cells keep `--cf-range 1-309` and their schedule strings equal M67's. d11 cut sweep k=200..364 step 4: k=248 (order 23) and k=280 (order 26) fail, twice each; the control passes both.
 
 | defect | process, M67 (`-pin`) | process, `-pin-kr` | swarm, M67 | swarm, `-pin-kr` |
 |---|---|---|---|---|
@@ -522,7 +522,7 @@ Since M135 the benchmark runs on images built from one manifest, `manifest/hydo.
 shell image and an agent image that differ only in what `--control agent` changes.
 
 **The order services** (M135): every order service is built from source by
-`build-order-services.sh <dir>` (the pinned Go 1.26.5 as `HYDO_GO`; on the bare-metal test machine
+`build-order-services.sh <dir>` (the pinned Go 1.26.5 as `HYDO_GO`; on the bare-metal machine
 the copy of its Nix store path in `~/hydo-rp/nixgo`, which rebuilt the `-pin-kr` control's binary
 `78290125…` byte for byte from that image's commit; the official go1.26.5 tarball gives other
 bytes). The sources are put together as the stack builders do it: a copy of `hydo/stack` with the
@@ -565,7 +565,7 @@ The images are `explore-ob-bench-<stem>-disk.img` (shell) and `explore-ob-bench-
 (agent). Run hydo-bench with `HYDO_BUILD=<that directory>`; `--kind agent` is the default,
 `--kind shell` picks the shell images, `--kind stack` the stack images in this file's older
 sections. `list --images` takes a defect name or `control:<defect>` for the kind's image. Every
-stack-sized guest needs about 6 GiB of the box's memory: run one worker (`--workers 1`) and start
+stack-sized guest needs about 6 GiB of the bare-metal machine's memory: run one worker (`--workers 1`) and start
 a step only when `free -m` shows at least 6 GiB available (`c2-cells.sh` waits for it).
 
 **What differs from the stack images.** The generic init (shell kind) or the host controller
@@ -610,7 +610,7 @@ K=front@29+1` takes the path on both kinds (agent OK `acked=13/30` `c7e09c18bf68
 ### The triggers on the manifest images (Milestone 135)
 
 `hydo-bench confirm --kind agent --defects <all thirteen> --base --workers 1` on the images above
-(franz-go v1.22.2, hydo-agent 0.2.0; results `/var/tmp/m135/confirm-agent` on the box): every
+(franz-go v1.22.2, hydo-agent 0.2.0; results `/var/tmp/m135/confirm-agent` on the bare-metal machine): every
 trigger failed twice with the same fingerprint and the defect's signature (class
 `durable-defaults` for all), and passed once on its control. Three triggers were measured again
 first, because the agent images' timing moved them (`hydo-bench list`, one run per point): d9 on
@@ -656,3 +656,30 @@ signature, and every control passed: d0 `f3823c5fb59509de`, d1 `88281feb616bbc1e
 (`e5232a07be7245a2`) because the generic shell init ignores `X=`: d10 has no trigger on the shell
 kind. Measured first on the shell kind: d9 crashes for every `Q=` but `Q=2d`; d11 fails at 8 of
 the 61 points (245, 255, 256, 266, 277, 287, 297, 298).
+
+## The manifest images after the switch (Milestone 136)
+
+Since M136 hydo builds agent images only, so the manifest images are agent images only:
+`build-bench-manifest.sh` builds one image per stem (`explore-ob-bench-<stem>-agent-disk.img`, the
+`-agent` kept so that the names stay apart from M135's shell images in older directories), and
+`hydo-bench --kind shell` is refused (`--kind agent`, the default, and `--kind stack` remain).
+
+**M67's path is a manifest key.** The order service has `restart_may_fail: true`
+(MANIFEST.md "A restart after the faults that may fail"): when its restart at the heal fails (it
+exits, or its `ready:` check does not pass within `ready_timeout`), the run goes on without the
+retry pass, the workload ends, a `cf=` power cut takes the run into its recovery boot, whose
+invariants give the verdict, and without a cut the verdict is `ERROR restart after the faults
+(front)`. The wrapper script `/etc/hydo-bench/front.sh`, the `ready:`/`retry:` that read its line
+and the invariant `front.restarted` of M135 are gone; the manifest's order service is
+`/bin/hydostack server` again, its `run:` and `retry:` are M129's. An order service that hangs on
+its restart instead of exiting (M135: not covered by the wrapper) is now covered too.
+
+**The images** (M136, on the bare-metal machine, `~/c3-work/bench/build`): the control built in full twice
+(`96e63d7a…`, both builds the same bytes), every other stem a swap of it (`agent-patch.sh --swap`), with the pinned agent
+`b72c5caa…` (M127's fix for children's signal mask; M135's images carried M131's `1f517e04…`)
+and M135's order services (franz-go v1.22.2). Hashes: control `96e63d7a…`, d8 `3036cad8…`, d9 `d80cc957…`, d10 `49f015d5…`, d11 `a4d186da…`, d12 `33b19218…`, nf and fix `fe2e99f6…` (one binary, one image), d1 `f75d80a8…`, d2 `5b8c794b…`, d3 `33c89216…`, d4 `d1decb3c…`, d5 `2f04a0bb…`, d6 `aa707bf5…`, d7 `0f2ee55b…`, d0 `13982f64…` (the `bg-*` images were not rebuilt).
+
+**Measured (twice each, one fingerprint):** on the control, `disk=none dseed=0 | run` OK `acked=30/30` (`f4865ef32569d91b`), `P=kafka@14+16` (M133's lost order, fixed by franz-go v1.22.2) OK `acked=30/30` (`27ace56c076f0aae`), M129's ERROR schedule `disk=cut dseed=806555b3e1262cc5 cf=147 | run P=redis@10+3 T=26:-3600 X=front@20~151` OK `acked=11/30` from the recovery boot (`8a8b1cb779a686b3`, as M135's wrapper gave), and `disk=cut dseed=0 cf=147 | run K=front@29+1` OK `acked=14/30` from the recovery boot (`955d5ef00c3b919a`). The last one first ended `ERROR front restart failed`: a `K=` kill whose restart point is the workload's end restarts the service after the last step, where the key did not apply yet; the controller now treats a failed restart there as a restart after the faults (left to the heal's pass, `tests/restart_may_fail.rs` `a_kill_restart_at_the_workloads_end_follows_the_key`), and the run gives the recovery boot's verdict as M135's wrapper did (`/var/tmp/m136/extra/m67b`).
+
+**The triggers on the M136 images** (`hydo-bench confirm --kind agent --defects all --base`,
+results `/var/tmp/m136/bench/confirm` on the bare-metal machine): every trigger of d0–d7 failed twice with one fingerprint and its defect's signature, and every control passed it: d0 `cbbf4fc222f54ca8` (order 11 in Kafka, never acknowledged; fix OK `bba72ff55f35cc98`), d1 `adc48e618fcc6b76`, d2 `37535b22454d4f29`, d3 `2bb4fc57f3c55ec9` / `a18e87bbf308b07f`, d4 `8a11c9e2313997c9` / `93aaa0248e846692`, d5 `b430e80234ab276a`, d6 `ec416019120fc489`, d7 `4abeae3a3020e667`; the control's known bug (`O=kafka@25-30:resp:loss,100%`) is still there, twice `57101737a30caa64`. Of d8–d12 (`--defects m59`), d8 `Q=2d` `c310b97659bbe1b6`, d10 `X=front@9~20` `3e2bdc70fa6bcb84` (order 10 twice) and d12 `Q=2` `e0cab9aa24458f7a` failed twice with their signatures and passed on the control (`d5a4fcd2a8cf5f88`, `2ccfc3c2262bfd26`, `eb8fb562a7603135`); the two timing-dependent triggers moved: M135's d9 `Q=3` and d11 `cf=260` pass on the M136 images. Measured again (one run per point): d9 crashes for `Q=2`, `Q=4`, `Q=3d` and `Q=4d` of `Q=2,3,4,2d,3d,4d`; d11 fails at 9 of the 61 points `cf=245..305` (249, 261, 262, 272, 273, 283, 284, 294, 304; M135: 249, 250, 260, 271, 272, 282, 292, 302, 303, the same shape one flush later). The new triggers (`defects.rs`), confirmed twice with one fingerprint and the signature and passed on the control: d9 `Q=2` `05ff670ada38dab7` (the M50 panic; control `eb8fb562a7603135`), d11 `cf=261` `46be4104b850feec` (order 24 acknowledged but not marked published; control `c2601b12624791af`).

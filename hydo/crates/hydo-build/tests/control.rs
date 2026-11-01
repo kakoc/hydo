@@ -1,8 +1,9 @@
-//! `--control agent` (M121): the command line, and the staging of the agent into a root. The
-//! image bytes themselves are checked on the machines that have the build tools (docs/HISTORY.md
-//! M121: two builds identical on each architecture; every shell image keeps its recorded hash).
+//! The image's first process (M121; the only kind of image since M136): the command line, and
+//! the staging of the agent into a root. The image bytes themselves are checked on the machines
+//! that have the build tools (docs/HISTORY.md M121 and M136: two builds identical on each
+//! architecture).
 
-use hydo_build::agent::{self, Control};
+use hydo_build::agent;
 use hydo_build::{main_with, Ctx, Io};
 use std::path::{Path, PathBuf};
 
@@ -34,24 +35,25 @@ fn run(args: &[&str]) -> (i32, String, String) {
 #[test]
 fn control_flag() {
     let m = redis();
+    let only = "hydo-build: --control takes agent (the only kind of image since Milestone 136)\n";
     let (rc, _, err) = run(&[&m, "--control", "init"]);
-    assert_eq!(rc, 2);
-    assert_eq!(err, "hydo-build: --control is shell or agent\n");
+    assert_eq!((rc, err.as_str()), (2, only));
     let (rc, _, err) = run(&[&m, "--control"]);
-    assert_eq!(
-        (rc, err.as_str()),
-        (2, "hydo-build: --control is shell or agent\n")
+    assert_eq!((rc, err.as_str()), (2, only));
+    // shell images are gone (M136): --control shell and --print-init say why
+    let (rc, out, err) = run(&[&m, "--control", "shell", "--check"]);
+    assert_eq!((rc, out.as_str()), (2, ""));
+    assert!(
+        err.contains("--control shell was removed in Milestone 136"),
+        "{err}"
     );
-    // --print-init: the shell init, unchanged with --control shell; none for an agent image
-    let (rc, a, _) = run(&[&m, "--print-init"]);
-    let (rc2, b, _) = run(&[&m, "--control", "shell", "--print-init"]);
-    assert_eq!((rc, rc2), (0, 0));
-    assert_eq!(a, b);
-    assert!(a.starts_with("#!"), "{}", &a[..40.min(a.len())]);
-    let (rc, out, err) = run(&[&m, "--control", "agent", "--print-init"]);
-    assert_eq!((rc, out.as_str()), (1, ""));
-    assert!(err.contains("has no shell init"), "{err}");
-    // --check is the same for both
+    let (rc, out, err) = run(&[&m, "--print-init"]);
+    assert_eq!((rc, out.as_str()), (2, ""));
+    assert!(
+        err.contains("--print-init was removed in Milestone 136"),
+        "{err}"
+    );
+    // --control agent is accepted and changes nothing
     let (rc, a, _) = run(&[&m, "--check"]);
     let (rc2, b, _) = run(&[&m, "--control", "agent", "--check"]);
     assert_eq!((rc, rc2), (0, 0));
@@ -106,6 +108,6 @@ fn staging_and_the_pin() {
         String::from_utf8(o).unwrap(),
         "hydo-build: staged hydo-agent as /sbin/init (agent protocol 1, sha256 0000000000000000)\n"
     );
-    assert_eq!(Control::parse("agent"), Some(Control::Agent));
+    assert_eq!(agent::parse_control("agent"), Ok(()));
     let _ = std::fs::remove_dir_all(&d);
 }

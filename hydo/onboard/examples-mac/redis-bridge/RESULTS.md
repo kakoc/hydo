@@ -33,3 +33,25 @@ schedules give the same four fingerprints as the fresh boots.
 `vh1:sent=37,dropped=16`, `vh2:sent=0,dropped=4 vh1:sent=0,dropped=3`), and freezes landed on
 replication packets (`REPLCONF ACK`). The report's summary names `guest_kernel
 Image-explore-netns (sha256 806807e7be5f55da)`.
+
+## Milestone 136: agent images (the current values)
+
+Since M136 every image is an agent image (the guest agent `hydo-agent` as the first process, the
+host controller driving it; docs/HISTORY.md "Milestone 136"), so every fingerprint above this
+section belongs to a shell-init image of an earlier milestone. The current values, each schedule
+run twice with the same fingerprint (docs/REBASELINE.md section 8, which also says how each image
+was made):
+
+**Mac (hvm), redis-bridge**
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `8fd9e1576dee25c4` | `14af985fafa6a0ca` | yes |
+| `disk=none \| run N=primary-replica@5-10:loss,100%` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `c42fb828cb40ea69` | `b9b191afe8ff347f` | yes |
+| `disk=none \| run O=primary-replica@5-10:req:loss,100%` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `022f2184ab03958f` | `4f0e58064c0510be` | yes |
+| `disk=none \| run O=primary@5-8:resp:delay,300ms` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `c2bc92c9a0b26ea4` | `72f5aa1bb200a63b` | yes |
+| `disk=none \| run K=replica@5+3` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `2f0c2e49fb70d37a` | `6a8c64c25c180c74` | yes |
+| `disk=cut \| run C=8` | OK invariants=1 held (primary.acked_writes_survive: acked=8 all on the primary) | `bd3d67ef875fb289` | `0f774df0f3a9ecb2` | yes |
+| `disk=none \| run F=replica<primary@5#3:2000` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `c5468c557f44330f` | `1993b9669f47ad4e` | yes |
+| `disk=none \| run F=primary<workload@5#2:1000` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `e2d9ddbf12753896` | `db19e485a83060b1` | yes |
+| `disk=none \| run H=redisp@3-6:drop` | OK invariants=1 held (primary.acked_writes_survive: acked=13 all on the primary) | `9da67ba88882b5d5` | `01634ac3903ea950` | yes |

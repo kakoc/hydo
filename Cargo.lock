@@ -323,6 +323,7 @@ dependencies = [
  "hydo-control",
  "hydo-engine",
  "hydo-explore",
+ "hydo-manifest",
  "hydo-results",
  "regex",
  "serde_json",

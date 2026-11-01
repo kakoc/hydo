@@ -1,5 +1,11 @@
 # C2: the bug benchmark on shell images and agent images (Milestone 129)
 
+> Since Milestone 136 (step C3) the benchmark's manifest images are agent images only (hydo-bench
+> `--kind shell` is refused), the order service's "a restart after the faults may fail" is the
+> manifest key `restart_may_fail: true` instead of section 9's wrapper script, and the images were
+> rebuilt with the fixed agent (M127) and the triggers confirmed again: `hydo/bench/README.md`
+> "The manifest images after the switch (Milestone 136)".
+
 Step C2 of `docs/design/guest-control.md` asks whether a strategy finds each planted defect of the
 bug benchmark (`hydo/bench`, defects d0–d12) as often on agent images as on shell images. This
 file holds the answer for the bare-metal test machine (hvx). The criterion is a strategy's

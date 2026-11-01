@@ -1,5 +1,12 @@
 # C2 on Linux: verdict equivalence of agent images and shell images (Milestone 127)
 
+> Since Milestone 136 (step C3) hydo builds agent images only; the shell init and its extensions
+> are deleted. This file is the record of the comparison that justified the switch. The current
+> fingerprints of the agent images (built for real where no Nix is needed, patched otherwise) are
+> in docs/REBASELINE.md section 8, and M136 ran the rows of "Not run" below at least on their
+> recorded schedules and explained the two agent-only differences (docs/HISTORY.md
+> "Milestone 136").
+
 Step C2 of `docs/design/guest-control.md` for the x86_64 engine (hvx): for each example, an
 image whose first process is `hydo-agent` (driven by the host controller, `hydo-control`) is
 compared with the image whose first process is the shell init (`hydo-init.sh` with its spliced
