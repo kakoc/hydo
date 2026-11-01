@@ -119,6 +119,20 @@ image's result from M108's proof (`/var/tmp/m108/rs` on the box).
 | d11-ack-unflushed-flag | `disk=cut dseed=0 cf=238 \| run` | VIOLATION order=22 acked but not marked published `adadedf9698291bd` | **OK** acked=23/30 `9ddbc9ce8d7e842f` | **OK** acked=23/30 `bfce19ce39f712d8` |
 | d12-shared-key-buffer | `disk=none dseed=0 \| run Q=2` | VIOLATION order=0 present 2 times `d89a283a66ac19a9` | VIOLATION order=0 present 2 times `7e3d75367b1f9ee6`; control OK | VIOLATION order=0 present 2 times `a4f7227c1371b44c`; control OK |
 
+The other defects' triggers (`hydo-bench confirm --base`, wide plan step `confirm-rest`): on both
+kinds every trigger fails twice with the same fingerprint, with the original image's verdict, and
+every control passes it.
+
+| defect | trigger | shell (manifest) | agent (manifest) |
+|---|---|---|---|
+| d0-old-front-door (the pinned reproducer's schedule; control = the M39 fix) | `disk=none dseed=4d5cb825dfaab05b \| run K=redis@11+1 C=24` | VIOLATION order=11 in Kafka but never acknowledged `d7a739a52d1a7bd2`; the fix: OK acked=24/30 `240f9dedeab39b54` | VIOLATION order=11 … `7064cd947dbbe114`; the fix: OK acked=24/30 `81d6117b6f11a016` |
+| d2-batched-publish-flag | `disk=cut dseed=0 \| run C=12` | VIOLATION order=10 acked but not marked published `5c3794dc4bc8ed0b` | the same `5fa55f7273f52666` |
+| d3-blind-retry | `P=kafka@5+2`; `O=kafka@5-10:resp:loss,100%` | order=5 twice in Kafka, both | the same, both |
+| d4-produce-timeout-definite | `O=kafka@5-10:resp:loss,100% C=12`; `P=kafka@5+2 C=8` | order=5 in Kafka but told failed, both | the same, both |
+| d6-client-deadline-definite | `P=kafka@5+2` | order=5 in Kafka but told failed | the same |
+| d7-skip-last-record | `P=kafka@28+2` | order=29 twice in Kafka | the same |
+| the control's known bug (README "A bug in the fixed front door") | `O=kafka@25-30:resp:loss,100%` | VIOLATION order=26 twice in Kafka, twice `7dd0d0fe188a6f46` (M108's original image: order 26 too) | the same, twice `af463a05cc06b797` |
+
 ## 4. M108's cells (the same cells, seeds and budgets as M108's proof)
 
 `hydo-bench run` with M108's arguments (process with `--more-faults --cf-range 1-309` on d10/d11,
@@ -265,5 +279,5 @@ acknowledged the same number of orders within one (41 points equal; 24 at k=250,
    recovery boot's verdict.
 4. **Re-baselining**: the benchmark's recorded triggers moved on the manifest images (d9 needs
    `Q=3` or `Q=4d` on the shell kind; d11's `cf=238` passes on both, its window is at k≈246–303;
-   d10's `X=` trigger works on the agent kind only), so the trigger table of `hydo bench confirm`
+   d10's `X=` trigger works on the agent kind only), so the trigger table of `hydo-bench confirm`
    needs new values for agent images, recorded twice each, as M72 did for `-pin-kr`.
