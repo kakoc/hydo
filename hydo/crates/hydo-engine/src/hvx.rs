@@ -1,9 +1,16 @@
-//! The hvx engine: `hv/hvx/hvx_explore` (x86_64 Linux, VT-x, `/dev/hvx`).
+//! The hvx engine (x86_64 Linux, VT-x, `/dev/hvx`): the Rust engine `hydo-hvx` (M132; the C
+//! `hvx_explore` it replaced was deleted in M137), run in this process or as a program.
 //!
-//! Command lines, as the Linux CLI and explore.py build them:
+//! Where it runs ([`Hvx::in_process`]): on a thread of this process ([`crate::inproc`]) when this
+//! process can open the device (root, or a user in the udev rule's group), otherwise as the
+//! program `hydo-hvx` under the shared-lock wrapper with sudo. `HYDO_ENGINE=inproc` or
+//! `HYDO_ENGINE=process` forces one of the two; `HYDO_SUDO=1` keeps the program with sudo. The
+//! protocol, the lines and every result are the same either way.
+//!
+//! The program's command lines (the same as the C engine's had):
 //!
 //! ```text
-//! <hvx-run> sudo env HVX_SNAP_DIR=<dir> [<extra env>...] <hvx_explore> [--ram-mib N] [--vcpus N] [--cpu v3]
+//! <hvx-run> sudo env HVX_SNAP_DIR=<dir> [<extra env>...] <hydo-hvx> [--ram-mib N] [--vcpus N] [--cpu v3]
 //!     one   <bzImage> <initramfs> <image> <outdir> "<schedule>"
 //!     serve <bzImage> <initramfs> <image> <outdir>          (then RUN/BRANCH/QUIT on stdin)
 //!     --control one   ... "<schedule>"                       (lock-step control from S1, M118)
@@ -12,10 +19,8 @@
 //! ```
 //!
 //! `hvx-run` takes the shared module lock (`flock -s $HYDO_LOCK`) and drops the `sudo` when the
-//! user can open the device; without a wrapper the engine is started directly.
-//!
-//! With `HYDO_ENGINE=inproc` (M132, opt-in) every method runs the Rust engine on a thread of this
-//! process instead ([`crate::inproc`]); the protocol and every result are the same.
+//! user can open the device; without a wrapper the program is started directly. In this process
+//! the engine thread takes the same shared lock itself ([`crate::inproc`]).
 
 use crate::process::{run_one, ControlledBoot, ControlledRun, ProcessWorker};
 use crate::{BootSpec, Engine, EngineError, EngineKind, OneRun, Worker};
@@ -26,10 +31,11 @@ use std::process::Command;
 /// A fresh-boot engine process under lock-step control ([`Hvx::one_lockstep`]).
 pub type ControlledOne = ControlledRun;
 
-/// How to start hvx_explore.
+/// How to start the hvx engine.
 #[derive(Clone, Debug)]
 pub struct Hvx {
-    /// The engine binary (`hv/hvx/hvx_explore`).
+    /// The engine program (`hydo-hvx`; see [`program`]), used when the engine does not run in
+    /// this process.
     pub engine: PathBuf,
     /// The shared-lock wrapper (`libexec/hvx-run`, or the box's `~/bin/hvx-run`); None: run the
     /// engine directly (as root, or as a user who can open the device).
@@ -43,10 +49,10 @@ pub struct Hvx {
 }
 
 impl Hvx {
-    /// The release layout: `<root>/hv/hvx/hvx_explore` and `<root>/libexec/hvx-run`.
+    /// The release layout: `<root>/bin/hydo-hvx` and `<root>/libexec/hvx-run`.
     pub fn for_release(root: &Path) -> Hvx {
         Hvx {
-            engine: root.join("hv").join("hvx").join("hvx_explore"),
+            engine: root.join("bin").join("hydo-hvx"),
             hvx_run: Some(root.join("libexec").join("hvx-run")),
             snap_dir: "/var/tmp/hvx-snap".into(),
             extra_env: Vec::new(),
@@ -106,7 +112,7 @@ impl Hvx {
         schedule: &Schedule,
         stderr_log: &Path,
     ) -> Result<ControlledOne, EngineError> {
-        if crate::inproc::enabled() {
+        if crate::inproc::chosen(self) {
             return crate::inproc::one_lockstep(self, spec, schedule, stderr_log);
         }
         self.check_built()?;
@@ -133,12 +139,37 @@ impl Hvx {
         argv
     }
 
+    /// Whether the engine runs on a thread of this process (see the module comment).
+    pub fn in_process(&self) -> bool {
+        crate::inproc::chosen(self)
+    }
+
+    /// The engine program is needed (it does not run in this process) and is not there.
+    pub fn missing_program(&self) -> Option<&Path> {
+        (!self.in_process() && !is_executable(&self.engine)).then_some(self.engine.as_path())
+    }
+
     fn check_built(&self) -> Result<(), EngineError> {
         if !is_executable(&self.engine) {
             return Err(EngineError::NotBuilt(self.engine.clone()));
         }
         Ok(())
     }
+}
+
+/// The engine program for a release or a tree at `root`: `$HYDO_HVX_EXPLORE` (the variable's
+/// name is the C engine's; it names any program with that command line), else
+/// `<root>/target/release/hydo-hvx` when a tree has built it, else `<root>/bin/hydo-hvx` (a
+/// release).
+pub fn program(root: &Path) -> PathBuf {
+    if let Some(p) = std::env::var_os("HYDO_HVX_EXPLORE").filter(|v| !v.is_empty()) {
+        return PathBuf::from(p);
+    }
+    let tree = root.join("target").join("release").join("hydo-hvx");
+    if is_executable(&tree) {
+        return tree;
+    }
+    root.join("bin").join("hydo-hvx")
 }
 
 pub(crate) fn is_executable(p: &Path) -> bool {
@@ -154,7 +185,7 @@ impl Engine for Hvx {
     }
 
     fn one(&self, spec: &BootSpec, schedule: &Schedule) -> Result<OneRun, EngineError> {
-        if crate::inproc::enabled() {
+        if crate::inproc::chosen(self) {
             return crate::inproc::one(self, spec, schedule);
         }
         self.check_built()?;
@@ -164,7 +195,7 @@ impl Engine for Hvx {
     }
 
     fn start(&self, spec: &BootSpec, stderr_log: &Path) -> Result<Box<dyn Worker>, EngineError> {
-        if crate::inproc::enabled() {
+        if crate::inproc::chosen(self) {
             return crate::inproc::serve(self, spec, stderr_log);
         }
         self.check_built()?;
@@ -188,7 +219,7 @@ impl Engine for Hvx {
         boot: &Schedule,
         stderr_log: &Path,
     ) -> Result<ControlledBoot, EngineError> {
-        if crate::inproc::enabled() {
+        if crate::inproc::chosen(self) {
             return crate::inproc::start_controlled(self, spec, boot, stderr_log);
         }
         self.check_built()?;
@@ -202,7 +233,7 @@ impl Engine for Hvx {
         schedule: &Schedule,
         stderr_log: &Path,
     ) -> Result<ControlledRun, EngineError> {
-        if crate::inproc::enabled() {
+        if crate::inproc::chosen(self) {
             return crate::inproc::one_controlled(self, spec, schedule, stderr_log);
         }
         self.check_built()?;

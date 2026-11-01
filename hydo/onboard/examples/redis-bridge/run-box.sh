@@ -12,7 +12,7 @@ echo $$ > "$OUT/$tag.pid"
 n=0
 while [ -e /var/tmp/hydo-QUIET ] && [ $n -lt 180 ]; do sleep 10; n=$((n + 1)); done
 [ -e /var/tmp/hydo-QUIET ] && { echo "quiet file still there after 30 min" > "$OUT/$tag.err"; rm -f "$OUT/$tag.pid"; exit 3; }
-~/bin/hvx-run sudo "$T/hv/hvx/hvx_explore" --ram-mib "$ram" one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz \
+~/bin/hvx-run sudo "$T/target/release/hydo-hvx" --ram-mib "$ram" one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz \
   "$img" "$OUT/$tag" "$sched" > "$OUT/$tag.out" 2> "$OUT/$tag.err"
 echo "rc=$?" >> "$OUT/$tag.out"
 rm -f "$OUT/$tag.pid"

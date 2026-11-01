@@ -85,17 +85,21 @@ nf=$(cd "$A" && find . -type f ! -name .complete | wc -l | tr -d ' ')
 # --- 2. the release tree ---
 REL=$OUTDIR/hydo-linux-$VERSION
 [ -d "$REL" ] && chmod -R u+w "$REL" && rm -rf "$REL"
-# the release tree mirrors the repository: hydo/ (the product) and hv/hvx/ (the run engine's sources)
-mkdir -p "$REL/bin" "$REL/libexec/bin" "$REL/hydo/onboard" "$REL/hv/hvx" \
+# the release tree mirrors the repository: hydo/ (the product) and module/ (the kernel module)
+mkdir -p "$REL/bin" "$REL/libexec/bin" "$REL/hydo/onboard" \
          "$REL/module" "$REL/examples/redis/files" "$REL/skill"
 # the programs, all Rust (M107: no Python anywhere in the release): bin/hydo (the one CLI,
-# hydo/crates/hydo-cli), bin/hydo-build (the image builder with its own command line, for
-# scripts; `hydo build` is the same builder with the release's tools) and bin/hydo-fetch-image
-# (what fetch-images.sh of `hydo compose` calls), static x86_64 musl binaries. Built here with the
-# workspace's pinned toolchain (rust-toolchain.toml; rustup adds the musl target; the TLS code of
-# hydo-fetch-image compiles some C, with musl-gcc when present, else the host's cc), or taken
-# from $HYDO_RUST_BIN_DIR (a directory with the three) when they were built elsewhere.
-BINS="hydo hydo-build hydo-fetch-image"
+# hydo/crates/hydo-cli; the run engine runs inside it when the user can open /dev/hvx, M137),
+# bin/hydo-hvx (the same run engine as a program, hydo/crates/hydo-hvx, which hydo starts under
+# libexec/hvx-run with sudo when the user cannot open the device; M137: it replaces hvx_explore,
+# so install.sh compiles nothing for it), bin/hydo-build (the image builder with its own
+# command line, for scripts; `hydo build` is the same builder with the release's tools) and
+# bin/hydo-fetch-image (what fetch-images.sh of `hydo compose` calls), static x86_64 musl
+# binaries. Built here with the workspace's pinned toolchain (rust-toolchain.toml; rustup adds
+# the musl target; the TLS code of hydo-fetch-image compiles some C, with musl-gcc when present,
+# else the host's cc), or taken from $HYDO_RUST_BIN_DIR (a directory with the four) when they
+# were built elsewhere.
+BINS="hydo hydo-hvx hydo-build hydo-fetch-image"
 if [ -n "$HYDO_RUST_BIN_DIR" ]; then
   BD=$HYDO_RUST_BIN_DIR
 else
@@ -103,7 +107,7 @@ else
     CC_x86_64_unknown_linux_musl=$(command -v musl-gcc || command -v cc); export CC_x86_64_unknown_linux_musl
   fi
   ( cd "$TOP" && { rustup target add x86_64-unknown-linux-musl >/dev/null 2>&1 || true; } &&
-    cargo build --release --locked -p hydo-cli -p hydo-build -p hydo-compose --target x86_64-unknown-linux-musl ) >&2
+    cargo build --release --locked -p hydo-cli -p hydo-hvx -p hydo-build -p hydo-compose --target x86_64-unknown-linux-musl ) >&2
   BD=$TOP/target/x86_64-unknown-linux-musl/release
 fi
 for b in $BINS; do
@@ -123,9 +127,6 @@ cp "$TOP"/hydo/onboard/hydo-init*.sh "$TOP/hydo/onboard/hydo-liveness.sh" "$TOP/
 echo "$VERSION" > "$REL/hydo/VERSION"     # what a plan's hydo_version: is checked against
 mkdir -p "$REL/hydo/history"
 cp "$TOP/hydo/history/hydo_hist.sh" "$REL/hydo/history/"
-# the run engine's sources (install.sh compiles hv/hvx/hvx_explore on the user's machine)
-cp "$TOP/hv/hvx/hvx_explore.c" "$TOP/hv/hvx/hvx_stack_verify.c" "$TOP/hv/hvx/hvx_boot.h" "$TOP/hv/hvx/hvx_abi.h" \
-   "$TOP/hv/hvx/ptedges.h" "$REL/hv/hvx/"
 # the property-table tool the explorer compiles on the fly, and the assertion protocol it reads
 # (the property table is made by the explorer itself since M115: no hydo/assert tool in the release)
 cp "$TOP/hydo/ASSERTIONS.md" "$REL/hydo/"

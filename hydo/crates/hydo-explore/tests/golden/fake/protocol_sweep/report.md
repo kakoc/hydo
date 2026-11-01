@@ -31,7 +31,7 @@
 - needs a tick-timing change: no
 - verdict: `HYDO-ORACLE: VIOLATION charged twice order=0`
 - fingerprint, two runs: `41947dc896f68534` / `41947dc896f68534` (identical)
-- by hand: `~/bin/hvx-run sudo ./hvx_explore one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/explore-disk.img <outdir> "disk=none dseed=0 | run H=payments.charge@0-1:drop"`
+- by hand: `~/bin/hvx-run sudo target/release/hydo-hvx one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/explore-disk.img <outdir> "disk=none dseed=0 | run H=payments.charge@0-1:drop"`
 
 ## Property table over every schedule (hvx/ASSERTIONS.md)
 

@@ -1,14 +1,20 @@
-//! The in-process hvx engine (M132, opt-in): `HYDO_ENGINE=inproc` makes every [`Hvx`] method
-//! run the Rust engine (`hydo-hvx`, the port of `hvx_explore.c`) on a thread of this process,
-//! which opens `/dev/hvx` itself, instead of starting the `hvx_explore` program. The engine
-//! thread speaks the same protocol over in-process pipes, so every caller (the explorer, `hydo
+//! The in-process hvx engine (M132; the default since M137): every [`Hvx`] method runs the Rust
+//! engine (`hydo-hvx`, the port of the deleted `hvx_explore.c`) on a thread of this process,
+//! which opens `/dev/hvx` itself, instead of starting the engine program. The engine thread
+//! speaks the same protocol over in-process pipes, so every caller (the explorer, `hydo
 //! run`/`repro`, the controller, the lock-step client) works unchanged and gets the same lines.
 //!
-//! The process must be allowed to open the device and must hold the module's shared lock for
-//! the whole time, so it runs under the wrapper as a whole: `~/bin/hvx-run sudo env
-//! HYDO_ENGINE=inproc hydo-explore ...` on the bare-metal machine. The [`Hvx`] fields map as
-//! follows: `engine` and `hvx_run` are not used, `extra_env` (`KEY=VALUE` words) and `env` are the
-//! engine thread's environment on top of this process's, and the snapshot store is always memory.
+//! [`chosen`] decides: `HYDO_ENGINE=inproc` always, `HYDO_ENGINE=process` (or `c`) never, and
+//! otherwise exactly when this is Linux, `HYDO_SUDO` is not `1` and this process can read and
+//! write the device (`HVX_DEV`, default `/dev/hvx`): as root, or as a user the udev rule gives the
+//! device to. A user who cannot open it gets the program `hydo-hvx` under `hvx-run sudo`.
+//!
+//! Each engine thread holds the module's shared lock while it runs, as `hvx-run` holds it for a
+//! program: `flock(LOCK_SH)` on `$HYDO_LOCK`, default `.hvx-module.lock` in the home directory
+//! (the invoking user's under sudo: `$SUDO_USER`'s), so a module reload waits for it. The [`Hvx`]
+//! fields map as follows: `engine` and `hvx_run` are not used, `extra_env` (`KEY=VALUE` words)
+//! and `env` are the engine thread's environment on top of this process's, and the snapshot
+//! store is always memory.
 
 use crate::hvx::Hvx;
 use crate::process::{Piped, Proc};
@@ -18,9 +24,101 @@ use std::io::{BufReader, Read, Write};
 use std::path::Path;
 use std::time::Instant;
 
-/// `HYDO_ENGINE=inproc`.
-pub fn enabled() -> bool {
-    std::env::var("HYDO_ENGINE").as_deref() == Ok("inproc")
+/// Whether `h` runs in this process (see the module comment).
+pub fn chosen(h: &Hvx) -> bool {
+    let get = lookup(h);
+    match get("HYDO_ENGINE").as_deref() {
+        Some("inproc") => true,
+        Some("process") | Some("c") => false,
+        _ => {
+            cfg!(target_os = "linux")
+                && get("HYDO_SUDO").as_deref() != Some("1")
+                && device_usable(&get("HVX_DEV").unwrap_or_else(|| "/dev/hvx".into()))
+        }
+    }
+}
+
+/// This process can read and write `dev` (access(2) with the real ids, as `hvx-run`'s test).
+fn device_usable(dev: &str) -> bool {
+    let Ok(c) = std::ffi::CString::new(dev) else {
+        return false;
+    };
+    // SAFETY: a valid NUL-terminated path
+    unsafe { libc::access(c.as_ptr(), libc::R_OK | libc::W_OK) == 0 }
+}
+
+/// The module lock file: `$HYDO_LOCK`, else `.hvx-module.lock` in `$SUDO_USER`'s home when this
+/// runs as root under sudo, else in `$HOME`.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn lock_path(get: &dyn Fn(&str) -> Option<String>) -> Option<std::path::PathBuf> {
+    if let Some(l) = get("HYDO_LOCK").filter(|s| !s.is_empty()) {
+        return Some(l.into());
+    }
+    // SAFETY: geteuid has no preconditions
+    if unsafe { libc::geteuid() } == 0 {
+        if let Some(u) = get("SUDO_USER").filter(|u| !u.is_empty() && u != "root") {
+            if let Some(h) = home_of(&u) {
+                return Some(h.join(".hvx-module.lock"));
+            }
+        }
+    }
+    get("HOME")
+        .filter(|h| !h.is_empty())
+        .map(|h| std::path::Path::new(&h).join(".hvx-module.lock"))
+}
+
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn home_of(user: &str) -> Option<std::path::PathBuf> {
+    let c = std::ffi::CString::new(user).ok()?;
+    // SAFETY: getpwnam returns NULL or a pointer into static storage, read at once
+    unsafe {
+        let pw = libc::getpwnam(c.as_ptr());
+        if pw.is_null() || (*pw).pw_dir.is_null() {
+            return None;
+        }
+        let d = std::ffi::CStr::from_ptr((*pw).pw_dir);
+        Some(std::path::PathBuf::from(d.to_string_lossy().into_owned()))
+    }
+}
+
+/// Take the shared module lock (blocking while a reload holds it exclusively). The file is
+/// created when missing, owned by the sudo user when this runs as root. None: no lock file can
+/// be opened (no home directory); the engine then runs without it, as a program run without
+/// the wrapper does.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn shared_lock(get: &dyn Fn(&str) -> Option<String>) -> Option<std::fs::File> {
+    use std::os::unix::io::AsRawFd;
+    let p = lock_path(get)?;
+    let f = std::fs::OpenOptions::new()
+        .read(true)
+        .open(&p)
+        .or_else(|_| {
+            let f = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(false)
+                .open(&p)?;
+            let ids = (
+                get("SUDO_UID").and_then(|v| v.parse::<u32>().ok()),
+                get("SUDO_GID").and_then(|v| v.parse::<u32>().ok()),
+            );
+            if let (Some(u), Some(g)) = ids {
+                // SAFETY: a valid open descriptor
+                unsafe { libc::fchown(f.as_raw_fd(), u, g) };
+            }
+            Ok::<_, std::io::Error>(f)
+        })
+        .ok()?;
+    loop {
+        // SAFETY: a valid open descriptor
+        if unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_SH) } == 0 {
+            return Some(f);
+        }
+        if std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
+            return None;
+        }
+    }
 }
 
 /// The engine program's arguments for `mode`, as `Hvx::argv` builds them for hvx_explore.
@@ -72,9 +170,14 @@ fn spawn(
     use hydo_hvx::engine::{main_with, Io, Options};
     let get = lookup(h);
     let o = Options::from_lookup(&get);
+    let lock = shared_lock(&get);
     std::thread::Builder::new()
         .name("hvx-engine".into())
-        .spawn(move || main_with(&argv, o, Io { out, input, diag }))
+        .spawn(move || {
+            let rc = main_with(&argv, o, Io { out, input, diag });
+            drop(lock); // the shared module lock, held while this engine ran
+            rc
+        })
         .map_err(EngineError::Io)
 }
 
@@ -229,5 +332,20 @@ mod tests {
         let get = lookup(&h);
         assert_eq!(get("HVX_TURN_MARGIN").as_deref(), Some("160"));
         assert_eq!(get("HVX_DEV").as_deref(), Some("/dev/hvxside"));
+        // a device nobody has: the program, unless forced
+        assert!(!chosen(&h));
+        let mut f = h.clone();
+        f.env.push(("HYDO_ENGINE".into(), "inproc".into()));
+        assert!(chosen(&f));
+        let mut p = h.clone();
+        p.env.push(("HVX_DEV".into(), "/dev/null".into()));
+        p.env.push(("HYDO_ENGINE".into(), "process".into()));
+        assert!(!chosen(&p));
+        let mut l = h.clone();
+        l.env.push(("HYDO_LOCK".into(), "/tmp/x.lock".into()));
+        assert_eq!(
+            lock_path(&lookup(&l)).as_deref(),
+            Some(std::path::Path::new("/tmp/x.lock"))
+        );
     }
 }

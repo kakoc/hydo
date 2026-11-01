@@ -1,5 +1,6 @@
-//! The engine: `hv/hvx/hvx_explore.c` (and the parts of `hvx_stack_verify.c` it uses) in Rust,
-//! function by function, driving `/dev/hvx` from this process. The same requests give the same
+//! The engine: `hv/hvx/hvx_explore.c` (deleted in M137; `git show d9202e7:hv/hvx/hvx_explore.c`)
+//! and the parts of `hvx_stack_verify.c` it used, in Rust, function by function, driving
+//! `/dev/hvx` from this process. Comments name the C functions and variables they port. The same requests give the same
 //! output lines (RESULT, READY, BRANCHPOINT, the lock-step lines) and the same consoles; the
 //! differences are inside: snapshots stay in memory as their non-zero pages, a fresh VM is filled
 //! with the non-zero pages of what it needs only, fingerprints skip zero pages exactly, and old
@@ -61,8 +62,24 @@ pub struct Options {
     pub vcpustat: bool,
     pub ram_mib_env: Option<String>,
     pub vcpus_env: Option<String>,
-    /// HVX_EXPLORE_PT_ELF / HVX_EXPLORE_PT_RANGES: coverage tracing, not in this engine.
-    pub pt: bool,
+    /// HVX_EXPLORE_PT_ELF: trace this program's text (coverage, `crate::pt`).
+    pub pt_elf: Option<String>,
+    /// HVX_EXPLORE_PT_RANGES: trace up to two IP ranges instead.
+    pub pt_ranges: Option<String>,
+    /// HVX_EXPLORE_PTMULTI: the external decoder for PT_RANGES traces.
+    pub ptmulti: Option<String>,
+    /// HVX_EXPLORE_PT_MIB: the trace buffer (default 256 MiB).
+    pub pt_mib: Option<String>,
+    /// HVX_EXPLORE_PT_SAVE: keep the raw trace as `<tag>.pt`.
+    pub pt_save: bool,
+    /// HVX_EXPLORE_DIRTY=1 (with PHASES): pages of RAM and of the data disk that differ from S1.
+    pub dirty: bool,
+    /// HVX_EXPLORE_ZSKIP=1 (with PHASES): hash RAM both ways at the workload's end and compare.
+    pub zskip: bool,
+    /// HVX_EXPLORE_RETLOG=1: one `RET` line per run call on stderr.
+    pub retlog: bool,
+    /// HVX_SIM_DRAIN_DROP=<marker>: fail the first console read that shows the marker, once.
+    pub sim_drain_drop: Option<String>,
     /// HYDO_HVX_REAPER=0: tear old VMs down in line, as the C engine does (default: on a thread).
     pub reaper: bool,
     /// HYDO_HVX_CHECK_ZERO=1: verify that a fresh VM's RAM and disk are zero before a restore.
@@ -108,7 +125,15 @@ impl Options {
             vcpustat: get("HVX_EXPLORE_VCPUSTAT").is_some(),
             ram_mib_env: get("HVX_EXPLORE_RAM_MIB"),
             vcpus_env: get("HVX_EXPLORE_VCPUS"),
-            pt: get("HVX_EXPLORE_PT_ELF").is_some() || get("HVX_EXPLORE_PT_RANGES").is_some(),
+            pt_elf: get("HVX_EXPLORE_PT_ELF"),
+            pt_ranges: get("HVX_EXPLORE_PT_RANGES"),
+            ptmulti: get("HVX_EXPLORE_PTMULTI"),
+            pt_mib: get("HVX_EXPLORE_PT_MIB"),
+            pt_save: get("HVX_EXPLORE_PT_SAVE").is_some(),
+            dirty,
+            zskip: get("HVX_EXPLORE_ZSKIP").is_some(),
+            retlog: get("HVX_EXPLORE_RETLOG").is_some(),
+            sim_drain_drop: get("HVX_SIM_DRAIN_DROP").filter(|s| !s.is_empty()),
             reaper: not_0("HYDO_HVX_REAPER"),
             check_zero: set_not0("HYDO_HVX_CHECK_ZERO"),
             prepare: not_0("HYDO_HVX_PREPARE"),
@@ -284,6 +309,7 @@ enum Ph {
     Tear,
     RunIoctl,
     Drain,
+    Dirty,
 }
 
 /// How a VM is set up: a real boot, or a fresh VM a snapshot is restored into.
@@ -353,6 +379,62 @@ pub struct Core {
     ph_extra: String,
     ph_rsplit: bool,
     line_buf: Vec<u8>,
+    /// Coverage tracing (`crate::pt`), when on.
+    pt: Option<PtOn>,
+    /// HVX_SIM_DRAIN_DROP has dropped its one read.
+    sim_dropped: bool,
+}
+
+/// `struct ph_ctr`: the counters PHASES reports.
+#[derive(Clone, Copy, Default)]
+struct PhCtr {
+    exits: u64,
+    branches: u64,
+    ticks: u64,
+    vtsc: u64,
+    cyc: u64,
+    entries: u64,
+    steps: u64,
+    calls: u64,
+    stepcyc: u64,
+    freecyc: u64,
+    stephw: u64,
+    rdtsc: u64,
+    dreq: u64,
+}
+
+/// MSR_SMI_COUNT (0x34) of CPU 0 through /dev/cpu/0/msr (root and the msr module), else 0.
+fn smi_count() -> u64 {
+    use std::os::unix::fs::FileExt;
+    let mut v = [0u8; 8];
+    match std::fs::File::open("/dev/cpu/0/msr") {
+        Ok(f) if f.read_exact_at(&mut v, 0x34).is_ok() => u64::from_le_bytes(v),
+        _ => 0,
+    }
+}
+
+/// `ph_rss_kb`: a field of /proc/self/status in kB (-1 when missing).
+fn rss_kb(key: &str) -> i64 {
+    std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|s| {
+            s.lines().find_map(|l| {
+                l.strip_prefix(key)
+                    .map(|v| crate::cstr::strtol(v.as_bytes()).0)
+            })
+        })
+        .unwrap_or(-1)
+}
+
+/// Coverage tracing as set up from the environment (hvx_explore.c's g_pt* globals).
+struct PtOn {
+    lo: [u64; 2],
+    hi: [u64; 2],
+    mib: u64,
+    elf: Option<crate::pt::Elf>,
+    ptmulti: Option<String>,
+    save: bool,
+    cov: PathBuf,
 }
 
 impl Drop for Core {
@@ -532,12 +614,264 @@ impl Core {
             .ok();
     }
 
+    // ---- diagnostics (HVX_EXPLORE_RETLOG, the PHASES counters, DIRTY, ZSKIP) ----
+
+    /// HVX_EXPLORE_RETLOG: where a run call returned.
+    fn retlog(&mut self, b: &Boot, reason: u32) {
+        let mut pm = hvx_pmu::default();
+        let mut ts = hvx_tsc::default();
+        let _ = b.vm().io(HVX_GET_PMU, &mut pm);
+        let _ = b.vm().io(HVX_GET_TSC, &mut ts);
+        let smi = smi_count();
+        diag!(
+            self,
+            "RET reason={reason} ulen={} total={} ticks={} over={} land={:016x} steps={} hops={} tsc={} rdtsc={} smi={smi}",
+            b.ulen(),
+            pm.total,
+            pm.ticks,
+            pm.overshoots,
+            pm.land_hash,
+            pm.steps,
+            pm.hops,
+            ts.tsc,
+            ts.count
+        );
+    }
+
+    /// `ph_read`: the guest counters PHASES reports (exits, PMU branches and ticks, virtual TSC,
+    /// and the module's HVX_GET_FTSTAT times, in microseconds).
+    fn ph_read(&self, b: &Boot) -> PhCtr {
+        let mut c = PhCtr::default();
+        let vm = b.vm();
+        let mut s = hvx_snapshot::zeroed_box();
+        if vm.io(HVX_GET_SNAPSHOT, &mut *s).is_ok() {
+            c.exits = s.icount;
+            c.vtsc = s.tsc;
+            c.rdtsc = s.rdtsc_count;
+            c.dreq = s.fault_req_seq;
+        }
+        let mut pm = hvx_pmu::default();
+        if vm.io(HVX_GET_PMU, &mut pm).is_ok() {
+            c.branches = pm.total;
+            c.ticks = pm.ticks;
+        }
+        let mut f = hvx_ftstat::zeroed_box();
+        if vm.io(HVX_GET_FTSTAT, &mut *f).is_ok() {
+            for v in f.v.iter().take((f.n_vcpus as usize).min(8)) {
+                c.cyc = c.cyc.wrapping_add(v.total_cyc);
+                c.entries = c
+                    .entries
+                    .wrapping_add(v.free_entries.wrapping_add(v.step_entries));
+                c.steps = c.steps.wrapping_add(v.step_entries);
+                c.calls = c.calls.wrapping_add(v.calls);
+                c.stepcyc = c.stepcyc.wrapping_add(v.step_cyc);
+                c.freecyc = c.freecyc.wrapping_add(v.free_cyc);
+                c.stephw = c.stephw.wrapping_add(v.step_hw_cyc);
+            }
+            if f.tsc_khz != 0 {
+                let us = |x: u64| x.wrapping_mul(1000) / f.tsc_khz;
+                c.cyc = us(c.cyc);
+                c.stepcyc = us(c.stepcyc);
+                c.freecyc = us(c.freecyc);
+                c.stephw = us(c.stephw);
+            }
+        }
+        c
+    }
+
+    /// `ph_delta`: the counters' change between `a` and `z` as PHASES key=value pairs.
+    fn ph_delta(&mut self, pre: &str, a: &PhCtr, z: &PhCtr) {
+        let d = |x: u64, y: u64| y.wrapping_sub(x);
+        let s = format!(
+            " {pre}_exits={} {pre}_branches={} {pre}_ticks={} {pre}_vtsc={} {pre}_vmx_s={:.3} {pre}_entries={} {pre}_steps={} {pre}_runcalls={} {pre}_step_s={:.3} {pre}_step_hw_s={:.3} {pre}_free_s={:.3} {pre}_rdtsc={} {pre}_diskreq={}",
+            d(a.exits, z.exits),
+            d(a.branches, z.branches),
+            d(a.ticks, z.ticks),
+            d(a.vtsc, z.vtsc),
+            d(a.cyc, z.cyc) as f64 / 1e6,
+            d(a.entries, z.entries),
+            d(a.steps, z.steps),
+            d(a.calls, z.calls),
+            d(a.stepcyc, z.stepcyc) as f64 / 1e6,
+            d(a.stephw, z.stephw) as f64 / 1e6,
+            d(a.freecyc, z.freecyc) as f64 / 1e6,
+            d(a.rdtsc, z.rdtsc),
+            d(a.dreq, z.dreq)
+        );
+        self.ph_extra.push_str(&s);
+    }
+
+    /// `ph_diff` (HVX_EXPLORE_DIRTY): blocks of `cur` that differ from the saved `sv`.
+    fn ph_diff(&mut self, pre: &str, sv: &Pages, cur: &[u8]) {
+        let t = now();
+        let (n, diff, nz, curnz) = sv.diff(cur);
+        self.ph_extra.push_str(&format!(
+            " {pre}_pages={n} {pre}_dirty={diff} {pre}_nonzero_before={nz} {pre}_nonzero_after={curnz}"
+        ));
+        self.ph[Ph::Dirty as usize] += now() - t;
+    }
+
+    /// `ph_zskip` (HVX_EXPLORE_ZSKIP): hash guest RAM with and without the zero-page shortcut.
+    fn ph_zskip(&mut self, b: &Boot) {
+        if !self.o.zskip {
+            return;
+        }
+        let t1 = now();
+        let h1 = fnv(BASIS, b.vm().mem());
+        let t2 = now();
+        let h2 = fnv_zskip(BASIS, b.vm().mem());
+        let t3 = now();
+        self.ph_extra.push_str(&format!(
+            " zskip_same={} fnv_ram_s={:.3} fnv_zskip_ram_s={:.3}",
+            (h1 == h2) as i32,
+            t2 - t1,
+            t3 - t2
+        ));
+        self.ph[Ph::Dirty as usize] += t3 - t1;
+    }
+
+    /// The S0 snapshot a recovery restores (the host's under control of an agent image).
+    fn s0_ref(&self) -> Option<&Snap> {
+        if self.ctl_boot {
+            let i = self.ctl_find("S0")?;
+            self.snaps[i].as_ref().map(|c| &c.sn)
+        } else {
+            self.s0.as_deref()
+        }
+    }
+
+    // ---- coverage tracing (crate::pt) ----
+
+    /// `pt_arm`: trace this (workload) VM from here on.
+    fn pt_arm(&mut self, b: &Boot) {
+        let Some(p) = &self.pt else { return };
+        let mut pc = hvx_pt_config {
+            buf_mib: p.mib,
+            flags: HVX_PT_USER | HVX_PT_NORETCOMP,
+            lo: p.lo,
+            hi: p.hi,
+            ..Default::default()
+        };
+        if let Err(e) = b.vm().io(HVX_SET_PT, &mut pc) {
+            diag!(self, "HVX_SET_PT: {e}");
+        }
+    }
+
+    /// `pt_collect`: read this VM's trace and decode it into `<cov>/<tag>.edges` and
+    /// `<tag>.stats` (or hand it to the external decoder).
+    fn pt_collect(&mut self, b: &Boot, tag: &str) {
+        let Some(p) = &self.pt else { return };
+        let stats = p.cov.join(format!("{tag}.stats"));
+        let mut ps = hvx_pt_status::default();
+        if let Err(e) = b.vm().io(HVX_GET_PT, &mut ps) {
+            diag!(self, "HVX_GET_PT: {e}");
+            return;
+        }
+        if ps.saved != 0 {
+            // HVX_SET_PT failed (ENOMEM on a busy host): this VM has no trace of its own and the
+            // module returned the last freed one, which may be another process's: never decode it
+            let _ = std::fs::write(&stats, "no_trace=1\n");
+            return;
+        }
+        let mut buf = vec![0u8; ps.bytes as usize];
+        if ps.bytes != 0 {
+            let mut rq = hvx_pt_read {
+                offset: 0,
+                len: ps.bytes,
+                addr: buf.as_mut_ptr() as u64,
+            };
+            if let Err(e) = b.vm().io(HVX_READ_PT, &mut rq) {
+                diag!(self, "HVX_READ_PT: {e}");
+                return;
+            }
+        }
+        let truncated = (ps.bytes != 0 && ps.bytes >= ps.buf_bytes) as i32;
+        let raw = p.cov.join(format!("{tag}.pt"));
+        if let Some(dec) = p.ptmulti.clone() {
+            // whole-system: save the trace and run "<decoder> <trace> <dir> <name>=<elf> ..."
+            let _ = std::fs::write(&raw, &buf);
+            let dir = p.cov.join(tag);
+            let _ = std::fs::create_dir(&dir);
+            let (bin, rest) = match dec.find(' ') {
+                Some(i) => (&dec[..i], &dec[i..]),
+                None => (dec.as_str(), ""),
+            };
+            let cmd = format!(
+                "{bin} {} {}{rest} > {}/ptmulti.log 2>&1",
+                raw.display(),
+                dir.display(),
+                dir.display()
+            );
+            let t0 = now();
+            let rc = std::process::Command::new("/bin/sh")
+                .arg("-c")
+                .arg(&cmd)
+                .status()
+                .map(|s| {
+                    use std::os::unix::process::ExitStatusExt;
+                    s.into_raw()
+                })
+                .unwrap_or(-1);
+            let _ = std::fs::write(
+                &stats,
+                format!(
+                    "trace_bytes={} truncated={truncated} ptmulti_rc={rc} decode_secs={:.2}\n",
+                    ps.bytes,
+                    now() - t0
+                ),
+            );
+            if !p.save {
+                let _ = std::fs::remove_file(&raw);
+            }
+            return;
+        }
+        if p.save {
+            let _ = std::fs::write(&raw, &buf);
+        }
+        let t0 = now();
+        let edges = p.cov.join(format!("{tag}.edges"));
+        let (n, errs) = match &p.elf {
+            Some(elf) => crate::pt::decode(&buf, elf, &edges, &mut self.io.diag),
+            // ranges without a decoder program: hvx_explore decoded them against the ELF regions
+            // it had, which were none
+            None => crate::pt::decode(
+                &buf,
+                &crate::pt::Elf {
+                    regions: Vec::new(),
+                    lo: 0,
+                    hi: 0,
+                },
+                &edges,
+                &mut self.io.diag,
+            ),
+        };
+        let _ = std::fs::write(
+            &stats,
+            format!(
+                "trace_bytes={} truncated={truncated} edges={n} decode_errors={errs} decode_secs={:.2}\n",
+                ps.bytes,
+                now() - t0
+            ),
+        );
+    }
+
     // ---- the console ----
 
     fn console_fetch(&mut self, b: &Boot) -> Result<(), ()> {
         let mut tries = 0u32;
         loop {
-            match b.vm().get_console(&mut self.con) {
+            let mut got = b.vm().get_console(&mut self.con);
+            if got.is_ok() && !self.sim_dropped {
+                if let Some(m) = &self.o.sim_drain_drop {
+                    let n = (self.con.len as usize).min(HVX_CONSOLE_SZ);
+                    if find(&self.con.buf[..n], m.as_bytes()).is_some() {
+                        self.sim_dropped = true;
+                        got = Err(std::io::Error::from_raw_os_error(libc::ENOMEM));
+                        diag!(self, "hvx_stack_verify: HVX_SIM_DRAIN_DROP: dropped the read that first shows \"{m}\"");
+                    }
+                }
+            }
+            match got {
                 Ok(()) => return Ok(()),
                 Err(e) => {
                     if self.o.drain_no_retry {
@@ -1355,6 +1689,9 @@ impl Core {
                 return -1;
             }
             self.padd(Ph::Drain, pht);
+            if self.o.retlog {
+                self.retlog(b, reason);
+            }
             let hit = first_hit(b, &mut scanned);
             if self.c.on
                 && (hit >= 0 || !self.c.capped || reason != HVX_EXIT_THROTTLE || self.ctl_due())
@@ -1633,6 +1970,12 @@ impl Core {
         self.c.from = from;
         self.c.tjinfo = tjinfo_in.to_string();
         let ab = self.ctl_boot;
+        let phc0 = self.ph_calls;
+        let pc0 = if self.o.phases {
+            self.ph_read(&b)
+        } else {
+            PhCtr::default()
+        };
         let pht = self.pt();
         let mut r = self.run_until_any(&mut b, &wk[..nmk(2, ab)], from);
         self.padd(Ph::Work, pht);
@@ -1654,6 +1997,25 @@ impl Core {
                     "ERROR vm workload".into()
                 };
                 break 'body End::Out;
+            }
+            if self.o.phases {
+                let pc1 = self.ph_read(&b);
+                self.ph_delta("w", &pc0, &pc1);
+                self.ph_extra.push_str(&format!(
+                    " w_runcalls_user={} rss_kb={} rss_shmem_kb={} con_bytes={}",
+                    self.ph_calls - phc0,
+                    rss_kb("VmRSS:"),
+                    rss_kb("RssShmem:"),
+                    b.ulen() - from
+                ));
+                if self.o.dirty && !ab {
+                    if let Some(s1) = self.s1.take() {
+                        self.ph_diff("w_ram", &s1.ram, b.vm().mem());
+                        self.ph_diff("w_disk", &s1.rw, b.p2());
+                        self.s1 = Some(s1);
+                    }
+                }
+                self.ph_zskip(&b);
             }
             let pht = self.pt();
             wfp = self.fingerprint(&b);
@@ -1752,6 +2114,11 @@ impl Core {
                     verdict = "ERROR harness go".into();
                     break 'body End::Out;
                 }
+                let pc1 = if self.o.phases {
+                    self.ph_read(&b)
+                } else {
+                    PhCtr::default()
+                };
                 let pht = self.pt();
                 self.c.phase = "check";
                 self.c.start = 1;
@@ -1765,6 +2132,17 @@ impl Core {
                     };
                     break 'body End::OutSave;
                 }
+                if self.o.phases {
+                    let pc2 = self.ph_read(&b);
+                    self.ph_delta("c", &pc1, &pc2);
+                    if self.o.dirty && !ab {
+                        if let Some(s1) = self.s1.take() {
+                            self.ph_diff("c_ram", &s1.ram, b.vm().mem());
+                            self.ph_diff("c_disk", &s1.rw, b.p2());
+                            self.s1 = Some(s1);
+                        }
+                    }
+                }
                 let pht = self.pt();
                 ffp = self.fingerprint(&b);
                 self.padd(Ph::Ffp, pht);
@@ -1775,6 +2153,7 @@ impl Core {
                     Self::last_verdict(&b, f2)
                 };
                 self.save_console(&b, f2, tag, "");
+                self.pt_collect(&b, tag);
                 break 'body End::Done;
             }
             // the power cut: only the flushed disk survives; recover in a fresh VM from S0
@@ -1788,6 +2167,7 @@ impl Core {
             if let Some(p) = &self.o.durable_out {
                 let _ = std::fs::write(p, b.p2());
             }
+            self.pt_collect(&b, tag);
             let pht = self.pt();
             self.teardown(&mut b);
             self.padd(Ph::RTear, pht);
@@ -1819,6 +2199,11 @@ impl Core {
                 verdict = "ERROR harness oracle cmd".into();
                 break 'body End::Out;
             }
+            let pc1 = if self.o.phases {
+                self.ph_read(&b)
+            } else {
+                PhCtr::default()
+            };
             let pht = self.pt();
             if self.c.on {
                 self.ctl_drop_pending();
@@ -1835,6 +2220,16 @@ impl Core {
                     "ERROR vm recovery".into()
                 };
                 break 'body End::OutSave;
+            }
+            if self.o.phases {
+                let pc2 = self.ph_read(&b);
+                self.ph_delta("rc", &pc1, &pc2);
+                if self.o.dirty {
+                    let ram = self.s0_ref().map(|s| s.ram.clone());
+                    if let Some(r) = ram {
+                        self.ph_diff("rc_ram", &r, b.vm().mem());
+                    }
+                }
             }
             let pht = self.pt();
             ffp = self.fingerprint(&b);
@@ -1984,6 +2379,7 @@ impl Core {
             if self.vcpustat_on() {
                 self.vcpustat(&b, None);
             }
+            self.pt_arm(&b);
             let skip = self.c.on && (sc.guest_len == 0 || self.ctl_boot);
             if !skip {
                 let mut line = sc.guest().to_vec();
@@ -2212,6 +2608,12 @@ impl Core {
         let pt0 = now();
         let mut b = self.boot_setup(Setup::Boot, &cmd, HVX_FAULT_DROP_UNFLUSHED)?;
         let pt1 = now();
+        let ph = self.o.phases;
+        let bc0 = if ph {
+            self.ph_read(&b)
+        } else {
+            PhCtr::default()
+        };
         let m0: [&[u8]; 3] = [S0_MARKER, FINAL_MARKER, AGENT_PREFIX];
         let r0 = self.run_until_any(&mut b, &m0, 0);
         if r0 == 2 {
@@ -2224,6 +2626,11 @@ impl Core {
             return None;
         }
         let pt2 = now();
+        let bc1 = if ph {
+            self.ph_read(&b)
+        } else {
+            PhCtr::default()
+        };
         let s0 = self.snap_take(&b)?;
         let s0_ulen = s0.con.len();
         self.s0 = Some(Box::new(s0));
@@ -2259,6 +2666,11 @@ impl Core {
             return None;
         }
         let pt4 = now();
+        let bc2 = if ph {
+            self.ph_read(&b)
+        } else {
+            PhCtr::default()
+        };
         let f = self.fingerprint(&b);
         diag!(
             self,
@@ -2270,9 +2682,13 @@ impl Core {
             let s1 = self.snap_take(&b)?;
             let t6 = now();
             if self.o.phases {
+                let keep = std::mem::take(&mut self.ph_extra);
+                self.ph_delta("s0", &bc0, &bc1);
+                self.ph_delta("s1", &bc1, &bc2);
+                let extra = std::mem::replace(&mut self.ph_extra, keep);
                 diag!(
                     self,
-                    "PHBOOT setup={:.3} to_s0={:.3} snap_s0={:.3} fp_s0={:.3} to_s1={:.3} fp_s1={:.3} snap_s1={:.3} s1_ram_nonzero_pages={} s1_p2_nonzero_pages={} con_s0={} con_s1={} engine=rust",
+                    "PHBOOT setup={:.3} to_s0={:.3} snap_s0={:.3} fp_s0={:.3} to_s1={:.3} fp_s1={:.3} snap_s1={:.3} mem={} disk={} p2={} s1_ram_nonzero_pages={} s1_p2_nonzero_pages={} con_s0={} con_s1={} rss_kb={} rss_shmem_kb={}{extra} engine=rust",
                     pt1 - pt0,
                     pt2 - pt1,
                     pt3 - pt2,
@@ -2280,10 +2696,15 @@ impl Core {
                     pt4 - pt3b,
                     t5 - pt4,
                     t6 - t5,
+                    self.e.mem_size,
+                    self.e.disk_len,
+                    self.e.p2_len,
                     s1.ram.nonzero_blocks(),
                     s1.rw.nonzero_blocks(),
                     s0_ulen,
-                    b.ulen()
+                    b.ulen(),
+                    rss_kb("VmRSS:"),
+                    rss_kb("RssShmem:")
                 );
             }
             self.s1 = Some(Box::new(s1));
@@ -2778,6 +3199,74 @@ fn empty_snap() -> Snap {
 }
 
 /// `MemAvailable` in MiB.
+/// hvx_explore.c's coverage set-up in main: HVX_EXPLORE_PT_RANGES (with HVX_EXPLORE_PTMULTI) or
+/// HVX_EXPLORE_PT_ELF; the VMs are then created with HVX_VM_PT_TRACE and `<outdir>/../cov` holds
+/// the edge and stats files. Err: a bad range or an unreadable program (exit status 1).
+fn pt_setup(o: &mut Options, outdir: &Path, diag: &mut dyn Write) -> Result<Option<PtOn>, ()> {
+    if o.pt_ranges.is_none() && o.pt_elf.is_none() {
+        return Ok(None);
+    }
+    let mib = o
+        .pt_mib
+        .as_deref()
+        .map(|m| strtoull0(m.as_bytes()))
+        .unwrap_or(256);
+    let cov = outdir.join("..").join("cov");
+    let mut p = PtOn {
+        lo: [0; 2],
+        hi: [0; 2],
+        mib,
+        elf: None,
+        ptmulti: None,
+        save: o.pt_save,
+        cov: cov.clone(),
+    };
+    if let Some(r) = &o.pt_ranges {
+        let Some(v) = crate::pt::parse_ranges(r) else {
+            let _ = writeln!(diag, "hvx_explore: bad HVX_EXPLORE_PT_RANGES");
+            return Err(());
+        };
+        for (i, (lo, hi)) in v.iter().enumerate() {
+            p.lo[i] = *lo;
+            p.hi[i] = *hi;
+        }
+        p.ptmulti = o.ptmulti.clone();
+        let _ = std::fs::create_dir(&cov);
+        let _ = writeln!(
+            diag,
+            "hvx_explore: whole-system coverage on: {} range(s), {} MiB buffer, decoder {}",
+            v.len(),
+            mib,
+            p.ptmulti
+                .as_deref()
+                .unwrap_or("(none: edges via ptedges.h)")
+        );
+    } else if let Some(e) = &o.pt_elf {
+        let elf = std::fs::read(e).ok().and_then(|b| crate::pt::load_elf(&b));
+        let Some(elf) = elf else {
+            let _ = writeln!(diag, "hvx_explore: cannot load {e}");
+            return Err(());
+        };
+        p.lo[0] = elf.lo;
+        p.hi[0] = elf.hi;
+        let _ = std::fs::create_dir(&cov);
+        let _ = writeln!(
+            diag,
+            "hvx_explore: coverage on: text [{:#x}, {:#x}), {} MiB buffer",
+            elf.lo, elf.hi, mib
+        );
+        if !crate::pt::DECODER {
+            let _ = writeln!(
+                diag,
+                "hydo-hvx: built without the cargo feature pt (libipt): traces are taken, not decoded"
+            );
+        }
+        p.elf = Some(elf);
+    }
+    o.pt_trace_vm = true;
+    Ok(Some(p))
+}
+
 fn mem_available_mib() -> Option<u64> {
     let t = std::fs::read_to_string("/proc/meminfo").ok()?;
     let kb: u64 = t
@@ -2895,13 +3384,13 @@ pub fn main_with(args: &[String], mut o: Options, mut io: Io) -> i32 {
         let _ = writeln!(io.diag, "usage: {} [--ram-mib N] [--vcpus N] [--cpu v2|v3] [--control [boot]] serve|one <bzImage> <initramfs> <explore-disk.img> <outdir> [\"<schedule>\"]", a.first().map(String::as_str).unwrap_or("hydo-hvx"));
         return 2;
     }
-    if o.pt {
-        let _ = writeln!(io.diag, "hydo-hvx: coverage tracing (HVX_EXPLORE_PT_ELF, HVX_EXPLORE_PT_RANGES) is not in the Rust engine; use hvx_explore");
-        return 1;
-    }
     let mode = a[1].clone();
     let outdir = PathBuf::from(&a[5]);
     let _ = std::fs::create_dir(&outdir);
+    let pt = match pt_setup(&mut o, &outdir, &mut io.diag) {
+        Ok(p) => p,
+        Err(()) => return 1,
+    };
     if ram_mib != EXP_MEM_MIB {
         let _ = writeln!(io.diag, "hvx_explore: guest RAM {ram_mib} MiB");
     }
@@ -3016,6 +3505,8 @@ pub fn main_with(args: &[String], mut o: Options, mut io: Io) -> i32 {
         ph_extra: String::new(),
         ph_rsplit: false,
         line_buf: Vec::new(),
+        pt,
+        sim_dropped: false,
         o,
     };
     if mode == "one" {

@@ -30,8 +30,9 @@ export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
 The installer checks the files against `SHA256SUMS`, copies the release into `~/.hydo`, compiles
-the run engine (`hv/hvx/hvx_explore`) and the `hvx` kernel module for your kernel, and runs
-`hydo doctor`. It changes nothing outside `~/.hydo` and does not load the module.
+the `hvx` kernel module for your kernel, and runs `hydo doctor`. The run engine needs no
+compiling: it is Rust, and it runs inside `hydo` itself when you can open `/dev/hvx` (as root, or
+after `hydo module udev install`), or as the program `bin/hydo-hvx` under `sudo` when you cannot. It changes nothing outside `~/.hydo` and does not load the module.
 
 Load the module (this unloads `kvm_intel` and `kvm` if they are loaded):
 

@@ -1,7 +1,7 @@
 //! hydo-explore end to end on a scripted engine, against explore.py's recorded outputs.
 //!
 //! The scripted engine is this test binary itself: run with `HYDO_FAKE_ENGINE=1` it stands in for
-//! `hvx-run sudo env ... hvx_explore serve ...` (it is put in `$HYDO_HVX_RUN`, so the explorer
+//! `hvx-run sudo env ... hydo-hvx serve ...` (it is put in `$HYDO_HVX_RUN`, so the explorer
 //! starts it exactly as it starts hvx_explore) and speaks the serve protocol: READY, then a RESULT
 //! for every RUN, BRANCHPOINT/RESULT/BRANCHEND for every BRANCH. Every answer is a pure function of
 //! the schedule text (never of the tag or of the order of requests), so two explorers that ask for
@@ -123,6 +123,7 @@ fn run(prog: &mut Command, dir: &Path, out: &Path) -> String {
         .env("HYDO_FAKE_ENGINE", "1")
         .env("HYDO_HVX_RUN", engine_path())
         .env("HYDO_HVX_EXPLORE", engine_path())
+        .env("HYDO_ENGINE", "process") // the fake program, never the engine in-process
         .env("HYDO_BUILD", dir)
         .env("HYDO_SNAP_DIR", dir.join("snap"))
         .env_remove("HYDO_EXPLORE_CACHE")

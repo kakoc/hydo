@@ -12,8 +12,9 @@
 # every kind in $KINDS (default "shell agent"; `stack` runs the build-stack.sh images in
 # $STACK_BUILD, default ~/hydo/build), into <out dir>/<kind>/<step name>. Waits while
 # /var/tmp/hydo-QUIET exists (the pool also honours it between runs). Every step has a timeout.
-# pid file: <out dir>/cells.pid. $HYDO_TREE (default ~/hydo) is the tree whose hydo-bench and
-# hvx_explore run.
+# pid file: <out dir>/cells.pid. $HYDO_TREE (default ~/hydo) is the tree whose hydo-bench runs; the
+# run engine is the Rust one (in hydo-bench's process when it can open /dev/hvx, otherwise that
+# tree's target/release/hydo-hvx; $HYDO_HVX_EXPLORE names another engine program; M137).
 set -u
 imgs=$1; out=$2; plan=$3
 T=${HYDO_TREE:-$HOME/hydo}
@@ -21,7 +22,7 @@ B=${HYDO_BENCH_BIN:-$T/target/release/hydo-bench}
 mkdir -p "$out"
 echo $$ > "$out/cells.pid"
 export HYDO_QUIET_FILE=/var/tmp/hydo-QUIET HYDO_M59_SUFFIX=-pin-kr
-export HYDO_HVX_EXPLORE=${HYDO_HVX_EXPLORE:-$T/hv/hvx/hvx_explore}
+export HYDO_HVX_EXPLORE=${HYDO_HVX_EXPLORE:-$T/target/release/hydo-hvx}
 unset HYDO_EXPLORE_CACHE
 log() { echo "$(date -u +%FT%TZ) $*" >> "$out/progress"; }
 while read -r name args; do

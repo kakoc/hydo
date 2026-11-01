@@ -162,7 +162,7 @@ impl Cx {
             return format!("`{}`", self.hvm_repro_line(sched));
         }
         format!(
-            "`~/bin/hvx-run sudo ./hvx_explore {}one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/{} <outdir> \"{}\"`",
+            "`~/bin/hvx-run sudo target/release/hydo-hvx {}one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/{} <outdir> \"{}\"`",
             self.engine_args().iter().map(|x| format!("{x} ")).collect::<String>(),
             self.image,
             sched
@@ -502,10 +502,7 @@ fn make_pool(cx: &Cx) -> Pool {
         (Arc::new(e), spec)
     } else {
         let e = hvx::Hvx {
-            engine: env_or(
-                "HYDO_HVX_EXPLORE",
-                cx.env.root.join("hv").join("hvx").join("hvx_explore"),
-            ),
+            engine: hvx::program(&cx.env.root),
             hvx_run: Some(env_or("HYDO_HVX_RUN", home().join("bin").join("hvx-run"))),
             snap_dir: std::env::var("HYDO_SNAP_DIR")
                 .ok()

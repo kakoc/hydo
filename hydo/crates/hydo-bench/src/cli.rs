@@ -31,7 +31,8 @@ Images are read from $HYDO_BUILD (default ~/hydo/build). --kind (or $HYDO_BENCH_
 default) = the manifest-built agent images explore-ob-bench-<defect>-agent-disk.img, shell = the same manifest's
 shell images explore-ob-bench-<defect>-disk.img (both from hydo/bench/build-bench-manifest.sh), stack = the
 build-stack.sh images (the engine's regression baselines; their m59 set is $HYDO_M59_SUFFIX, default -pin-kr).
-Every VM is started through ~/bin/hvx-run ($HYDO_HVX_RUN) with <root>/hv/hvx/hvx_explore ($HYDO_HVX_EXPLORE).";
+The hvx engine runs in this process when it can open /dev/hvx (run hydo-bench as ~/bin/hvx-run sudo ...);
+otherwise every VM is the program hydo-hvx ($HYDO_HVX_EXPLORE) started through ~/bin/hvx-run ($HYDO_HVX_RUN).";
 
 /// Options as (name, value); flags get "".
 struct Opts {
