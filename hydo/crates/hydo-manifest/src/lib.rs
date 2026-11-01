@@ -269,7 +269,41 @@ pub fn from_embedded_meta(
     text: &str,
     compose: Option<&Value>,
 ) -> Result<(Manifest, Option<Value>), ManifestError> {
+    embedded(text, compose, None)
+}
+
+/// [`from_embedded`] with the image's parameter values (`/etc/hydo/params`, the `name=value`
+/// lines hydo-build writes for a manifest with `params:`): `params:` is applied as hydo-build
+/// applies it (its defaults, then these values; every `{{name}}` substituted), so the manifest
+/// says what the image's compiled manifest.sh says (M128: an agent image's controller read
+/// `/bin/orderd serve --mode {{mode}}` literally). Without `params:` this is [`from_embedded`].
+pub fn from_embedded_params(
+    text: &str,
+    compose: Option<&Value>,
+    params: &[(String, String)],
+) -> Result<Manifest, ManifestError> {
+    embedded(text, compose, Some(params)).map(|(m, _)| m)
+}
+
+/// The `name=value` lines of an image's `/etc/hydo/params`.
+pub fn parse_params_file(text: &str) -> Vec<(String, String)> {
+    text.lines()
+        .filter_map(|l| l.split_once('='))
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
+}
+
+fn embedded(
+    text: &str,
+    compose: Option<&Value>,
+    params: Option<&[(String, String)]>,
+) -> Result<(Manifest, Option<Value>), ManifestError> {
     let mut m = parse_text(text, "hydo.yaml", true)?;
+    if let Some(p) = params {
+        if m.get("params").is_some() {
+            validate::apply_params(&mut m, p)?;
+        }
+    }
     let mut meta = None;
     let has_test = match &m {
         Value::Object(o) => o.contains_key("test"),
