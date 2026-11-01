@@ -19,6 +19,7 @@ path = "src/bin/hydo-bench.rs"
 hydo-explore = { workspace = true }
 hydo-engine = { workspace = true }
 hydo-control = { workspace = true }
+hydo-manifest = { workspace = true }
 hydo-results = { workspace = true }
 serde_json = { workspace = true }
 regex = "1"
