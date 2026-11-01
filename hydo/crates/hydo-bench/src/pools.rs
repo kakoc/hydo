@@ -4,7 +4,11 @@
 //! `$HYDO_HVX_EXPLORE`) started through `~/bin/hvx-run` (or `$HYDO_HVX_RUN`, the box's shared
 //! module lock), with snapshot files in `$HYDO_SNAP_DIR` (default `/var/tmp/hvx-snap`). Snapshots
 //! stay in files unless `HYDO_SNAPSHOTS=memory` (the benchmark runs beside other sessions on a
-//! shared box; either store gives the same fingerprints, M102).
+//! shared box; either store gives the same fingerprints, M102). An agent image (its
+//! `/etc/hydo/control` says `agent`, M121) is run through the host controller
+//! (`hydo_control::agent::AgentEngine`, M126), as `hydo explore` runs one; an agent image the
+//! controller cannot drive (for example one without an embedded manifest) is refused with the
+//! controller's message (M129).
 
 use hydo_engine::{hvx, BootSpec, CpuLevel, Engine, SnapshotStore};
 use hydo_explore::pool::{Host, Pool};
@@ -90,6 +94,7 @@ impl Engines {
             known: None,
         };
         let engine: Arc<dyn Engine + Send + Sync> = Arc::new(engine);
+        let engine = agent_or(engine, &spec.image);
         Pool::new(
             engine,
             spec,
@@ -98,5 +103,18 @@ impl Engines {
             image.to_string(),
             self.engine_args(),
         )
+    }
+}
+
+/// `engine` itself for a shell image, the host controller over it for an agent image; exits with
+/// the controller's refusal when it cannot drive the image.
+fn agent_or(engine: Arc<dyn Engine + Send + Sync>, image: &Path) -> Arc<dyn Engine + Send + Sync> {
+    match hydo_control::agent::AgentEngine::for_image(engine.clone(), image) {
+        Ok(None) => engine,
+        Ok(Some(a)) => Arc::new(a),
+        Err(e) => {
+            eprintln!("hydo-bench: {e}");
+            std::process::exit(2);
+        }
     }
 }

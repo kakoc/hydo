@@ -530,7 +530,16 @@ fn make_pool(cx: &Cx) -> Pool {
         };
         (Arc::new(e), spec)
     };
-    let engine: Arc<dyn Engine + Send + Sync> = if cx.agent {
+    // An agent image explored without a manifest space (the stack's schedules, as hydo-bench
+    // draws them) goes through the controller too (M129); one it cannot drive (no embedded
+    // manifest, for example a patched stack-explore image) is refused with the controller's
+    // message instead of every worker failing to start.
+    let stack_agent = cx.ex.space.is_none()
+        && matches!(
+            hydo_engine::image::control(&spec.image),
+            Ok(hydo_engine::GuestControl::Agent { .. })
+        );
+    let engine: Arc<dyn Engine + Send + Sync> = if cx.agent || stack_agent {
         match hydo_control::agent::AgentEngine::for_image(engine, &spec.image) {
             Ok(Some(a)) => Arc::new(a),
             Ok(None) => die(&format!("{}: not an agent image", spec.image.display())),

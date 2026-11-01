@@ -1,0 +1,10 @@
+disk=none dseed=b67859562d8bfd0f | run K=redis@10+1 P=kafka@14+16
+disk=none dseed=b67859562d8bfd0f | run K=redis@10+1 P=kafka@15+15
+disk=none dseed=b67859562d8bfd0f | run K=redis@10+1 P=kafka@16+14
+disk=none dseed=b67859562d8bfd0f | run K=redis@10+1 P=kafka@17+13
+disk=none dseed=b67859562d8bfd0f | run K=redis@10+1 P=kafka@18+12
+disk=none dseed=b67859562d8bfd0f | run P=kafka@14+16
+disk=none dseed=b67859562d8bfd0f | run P=kafka@15+15
+disk=none dseed=b67859562d8bfd0f | run P=kafka@16+14
+disk=none dseed=b67859562d8bfd0f | run P=kafka@17+13
+disk=none dseed=b67859562d8bfd0f | run P=kafka@18+12

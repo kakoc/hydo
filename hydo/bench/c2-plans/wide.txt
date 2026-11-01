@@ -1,0 +1,21 @@
+# Wider C2 cells (M129), after m108.txt (hydo-bench arguments without --out; c2-cells.sh runs each
+# step on the shell images, then on the agent images of hydo/bench/manifest). Repetitions 2-3 of
+# M108's cells (repetition 1 is m108.txt's; hydo-bench table merges the directories), then the
+# triggers that moved, then the other defects' triggers (d0 = the pinned reproducer's schedule)
+# with the control's known failure, then the process strategy with the M67 options on the other
+# m59 defects for three repetitions. (The order was changed once while it ran: the targeted lists
+# were moved before process-m59-rest; finished steps keep their done markers.)
+process-xcf-23 run --more-faults --cf-range 1-309 --strategy process --defects d10-outcome-in-memory,d11-ack-unflushed-flag --reps 2-3 --budget 8 --workers 2
+swarm-cc-23 run --strategy swarm --concurrency --defects d8-no-order-lock,d12-shared-key-buffer --reps 2-3 --budget 6 --workers 2
+random-old-23 run --strategy random --defects d1-kafka-first,d5-myisam --reps 2-3 --budget 4 --workers 2
+# d9's race (Q= variants, three disk seeds), d11's flush-cut window (cf=150..400 step 5, M72's
+# sweep) and d10's agent-only detection without X= (process-xcf-23 seed 3004, the Kafka pause
+# moved, with and without the Redis kill), each on the defect (and the control)
+d9-q list --images explore-bench-m59-d9-redis-unlocked-pin-kr-disk.img --list hydo/bench/c2-plans/d9q.txt --workers 2
+d10-kp list --images explore-bench-m59-d10-outcome-in-memory-pin-kr-disk.img,explore-bench-m59-control-pin-kr-disk.img --list hydo/bench/c2-plans/d10kp.txt --workers 2
+d11-cuts list --images explore-bench-m59-d11-ack-unflushed-flag-pin-kr-disk.img,explore-bench-m59-control-pin-kr-disk.img --list hydo/bench/c2-plans/d11cuts.txt --workers 2
+d11-fine list --images explore-bench-m59-d11-ack-unflushed-flag-pin-kr-disk.img --list hydo/bench/c2-plans/d11fine.txt --workers 2
+confirm-rest confirm --defects d0-old-front-door,d2-batched-publish-flag,d3-blind-retry,d4-produce-timeout-definite,d6-client-deadline-definite,d7-skip-last-record --base --workers 2
+recheck-process-xcf run --more-faults --cf-range 1-309 --strategy process --defects d10-outcome-in-memory,d11-ack-unflushed-flag --reps 1-1 --budget 8 --workers 2
+recheck-confirm-m59 confirm --defects m59 --workers 2
+process-m59-rest run --more-faults --cf-range 1-309 --strategy process --defects d8-no-order-lock,d9-redis-unlocked,d12-shared-key-buffer --reps 1-1 --budget 8 --workers 2
