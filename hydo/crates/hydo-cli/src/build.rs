@@ -105,14 +105,9 @@ pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
         release,
     };
     let rc = hydo_build::main(&bctx, &hb_argv);
-    let agent = rest
-        .windows(2)
-        .any(|w| w[0] == "--control" && w[1] == "agent");
-    if rc == 0 && no_print_flag(&rest) && agent {
-        // M121: the engines boot such an image under lock-step control; the controller that
-        // drives it (hydo-control) is not part of hydo run/explore yet
-        println!("hydo: next:  an agent image runs under a host controller (lock-step control from boot); hydo run and hydo explore do not drive one yet");
-    } else if rc == 0 && no_print_flag(&rest) {
+    // an agent image (--control agent) takes the same next steps: since M126 hydo run, repro and
+    // explore drive it through the host controller (the image's /etc/hydo/control decides)
+    if rc == 0 && no_print_flag(&rest) {
         println!("hydo: next:  hydo run \"disk=none | run\"     or     hydo explore --seeds 1-20");
     }
     rc

@@ -556,11 +556,29 @@ the end of each boot, which was not measured on a real guest (a large Kafka or M
 the end of a run slow; tailing the logs during the run is the alternative); the error logs
 with fakes were not run together (no example has both).
 
+## M128: C2 on the Mac (branch `c2-mac`; `docs/C2-MAC.md`)
+
+- **The guest's own console lines.** A run's `<tag>.log` was only the transcript's report lines,
+  so records the guest's programs print on /dev/console themselves (`HYDO-HIST`, `HYDO-ASSERT`)
+  were missing for every reader. `Finished::console` now keeps each non-agent console line with
+  the stop that reported it (outside the transcript: `ctl=` is unchanged) and
+  `agent::console_text` writes them before that stop's report lines. A reader that needs a
+  record's exact place among the report lines within one stop has only this order (the stop
+  reports its lines before the controller acts).
+- **`params:`.** `plan_of_image` reads `/etc/hydo/params` and applies `params:` as hydo-build
+  does (`plan_of_embedded_params`). `plan_of_embedded` (used by the identity corpus) still reads a
+  manifest without applying them, so the corpus runs of a manifest with `params:` carry the
+  literal `{{name}}` in their commands, as before; changing that changes their goldens.
+- **Limits found on real guests:** hvm's rewind mode is refused under lock-step control, so a
+  workload with a busy-wait counter loop (ledger-spin) ends as SPIN on an agent image; `F=` with
+  `network: bridge` stays refused (the agent's `freeze` has no namespace field).
+
 ## Left open
 
 - **Real guests.** Since M126 the core controller has driven the Redis example's agent image on
-  hvx and hvm (clean, kill, pause, power cuts; the shell image's verdicts). The equivalence
-  campaign over every example and the benchmark is design step C2.
+  hvx and hvm (clean, kill, pause, power cuts; the shell image's verdicts). M128 ran the
+  equivalence campaign (C2) over every arm64 example on hvm; the x86_64 examples (M127) and the
+  benchmark (M129) are the other parts of C2.
 - **Branching.** A mid-run branch (cloning the controller at a stop and continuing two engines)
   is supported by the types (`ScheduleController: Clone`), but no test checks it.
 - **The full corpus.** `HYDO_CONTROL_FULL=1` (300 seeds) was not recorded as a golden.
