@@ -18,9 +18,11 @@ fn timing(k: &str) -> bool {
         || k == "worker"
         || k == "argv"
         || k == "out"
-        || ["secs", "wall", "time", "elapsed", "duration", "boot_s"]
-            .iter()
-            .any(|w| k.contains(w))
+        || [
+            "secs", "wall", "time", "elapsed", "duration", "boot_s", "per_hour", "mean_run",
+        ]
+        .iter()
+        .any(|w| k.contains(w))
 }
 
 fn strip(v: &mut Value) {

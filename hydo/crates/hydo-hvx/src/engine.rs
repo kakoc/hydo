@@ -67,6 +67,9 @@ pub struct Options {
     pub reaper: bool,
     /// HYDO_HVX_CHECK_ZERO=1: verify that a fresh VM's RAM and disk are zero before a restore.
     pub check_zero: bool,
+    /// HYDO_HVX_PREPARE=0: make every fresh VM when it is needed (default in serve mode: the
+    /// next one is made on a helper thread while a run runs).
+    pub prepare: bool,
 }
 
 impl Options {
@@ -108,6 +111,7 @@ impl Options {
             pt: get("HVX_EXPLORE_PT_ELF").is_some() || get("HVX_EXPLORE_PT_RANGES").is_some(),
             reaper: not_0("HYDO_HVX_REAPER"),
             check_zero: set_not0("HYDO_HVX_CHECK_ZERO"),
+            prepare: not_0("HYDO_HVX_PREPARE"),
         }
     }
 
@@ -317,7 +321,7 @@ fn now() -> f64 {
 
 pub struct Core {
     o: Options,
-    e: Env,
+    e: std::sync::Arc<Env>,
     outdir: PathBuf,
     io: Io,
     budget: u64,
@@ -340,6 +344,8 @@ pub struct Core {
     pmu_noted: bool,
     reaper: Option<std::sync::mpsc::SyncSender<Vm>>,
     reaper_join: Option<std::thread::JoinHandle<()>>,
+    prep: Option<std::thread::JoinHandle<(Option<Vm>, Vec<String>)>>,
+    prep_on: bool,
     boot_line: Option<String>,
     ph: [f64; 21],
     ph_t0: f64,
@@ -351,6 +357,9 @@ pub struct Core {
 
 impl Drop for Core {
     fn drop(&mut self) {
+        if let Some(h) = self.prep.take() {
+            let _ = h.join();
+        }
         self.reaper = None;
         if let Some(j) = self.reaper_join.take() {
             let _ = j.join();
@@ -411,298 +420,41 @@ impl Core {
 
     // ---- VMs ----
 
-    /// `boot_setup`: a VM with the base disk; `Setup::Boot` also loads the kernel (a real boot),
-    /// `Setup::Fresh` leaves RAM and the data partition zero for a restore.
+    /// `boot_setup`: a VM made here (see [`create_vm`]).
     fn boot_setup(&mut self, mode: Setup, cmdline: &str, fault_classes: u32) -> Option<Boot> {
+        let mut m = Vec::new();
+        let vm = create_vm(
+            &self.e,
+            &self.o,
+            mode,
+            cmdline,
+            fault_classes,
+            &self.boot_line,
+            &mut m,
+        );
+        self.print_msgs(m);
+        Some(self.boot_of(vm?))
+    }
+
+    fn print_msgs(&mut self, m: Vec<String>) {
+        for l in m {
+            if l == PMU_NOTE {
+                if self.pmu_noted {
+                    continue;
+                }
+                self.pmu_noted = true;
+            }
+            diag!(self, "{l}");
+        }
+    }
+
+    fn boot_of(&self, vm: Vm) -> Boot {
         let mut b = Boot::none();
         b.ubuf.reserve(UBUF_CAP);
         b.p2_off = self.e.p2_off as usize;
         b.p2_len = self.e.p2_len as usize;
-        let mut vm = match Vm::open(&self.o.dev) {
-            Ok(v) => v,
-            Err(e) => {
-                diag!(self, "open /dev/hvx: {e}");
-                return None;
-            }
-        };
-        let vcpus = self.o.vcpus;
-        let mut cfg = hvx_config {
-            mem_size: self.e.mem_size,
-            n_vcpus: 0,
-            flags: HVX_VM_X86_64_V2 | HVX_VM_IDLE_HEARTBEAT,
-        };
-        if self.o.pause_exit {
-            cfg.flags |= HVX_VM_PAUSE_EXIT;
-        }
-        if self.o.pmu_clock {
-            cfg.flags |= HVX_VM_PMU_CLOCK;
-        }
-        if self.o.cpu_v3 {
-            cfg.flags |= HVX_VM_X86_64_V3;
-        }
-        if self.o.pt_trace_vm {
-            cfg.flags |= HVX_VM_PT_TRACE;
-        }
-        if vcpus > 1 {
-            cfg.n_vcpus = vcpus;
-            cfg.flags |= HVX_VM_SMP_SCHED;
-            if !self.o.park {
-                cfg.flags |= HVX_VM_SMP_BOOT;
-            }
-            if cfg.flags & HVX_VM_PMU_CLOCK == 0 {
-                diag!(
-                    self,
-                    "hvx_stack_verify: {vcpus} vCPUs need the PMU clock (HVX_PMU_CLOCK=0 given)"
-                );
-                return None;
-            }
-        }
-        if let Err(e) = vm.create(&cfg) {
-            if vcpus > 1 && e.raw_os_error() == Some(libc::ENODEV) {
-                diag!(self, "hvx_stack_verify: {vcpus} vCPUs need the PMU clock; this host has no usable PMU");
-                return None;
-            }
-            if e.raw_os_error() != Some(libc::ENODEV) || cfg.flags & HVX_VM_PMU_CLOCK == 0 {
-                diag!(self, "HVX_CREATE_VM: {e}");
-                return None;
-            }
-            if !self.pmu_noted {
-                self.pmu_noted = true;
-                diag!(
-                    self,
-                    "hvx_stack_verify: no usable PMU on this host; using the exit-count clock"
-                );
-            }
-            cfg.flags &= !HVX_VM_PMU_CLOCK;
-            if let Err(e) = vm.create(&cfg) {
-                diag!(self, "HVX_CREATE_VM: {e}");
-                return None;
-            }
-        }
-        if let Err(e) = vm.map_ram(self.e.mem_size as usize) {
-            diag!(self, "mmap RAM: {e}");
-            return None;
-        }
-        let mut tsc = hvx_tsc {
-            tsc: 0,
-            step: BOOT_TSC_STEP,
-            aux: 0,
-            count: 0,
-            mode: HVX_TSC_COUNTER,
-        };
-        if let Err(e) = vm.io(HVX_SET_TSC, &mut tsc) {
-            diag!(self, "HVX_SET_TSC: {e}");
-            return None;
-        }
-        let mut dk = hvx_disk {
-            len: self.e.disk_len,
-            data: 0,
-            flags: HVX_DISK_NO_IDMAP,
-        };
-        if let Err(e) = vm.io(HVX_SET_DISK, &mut dk) {
-            diag!(self, "HVX_SET_DISK: {e}");
-            return None;
-        }
-        if let Err(e) = vm.map_disk(self.e.disk_len as usize) {
-            diag!(self, "mmap disk window: {e}");
-            return None;
-        }
-        // the image's non-zero blocks (the page array is zero); a fresh VM leaves the data
-        // partition zero, the restore writes it
-        {
-            let base = self.e.base.bytes();
-            let (lo, hi) = (b.p2_off, b.p2_off + b.p2_len);
-            let disk = vm.disk_mut();
-            for &(o, n) in &self.e.base_runs {
-                let (s, t) = (o, o + n);
-                if mode == Setup::Boot || t <= lo || s >= hi {
-                    disk[s..t].copy_from_slice(&base[s..t]);
-                    continue;
-                }
-                if s < lo {
-                    disk[s..lo].copy_from_slice(&base[s..lo]);
-                }
-                if t > hi {
-                    disk[hi..t].copy_from_slice(&base[hi..t]);
-                }
-            }
-        }
-        if fault_classes != 0 {
-            let mut f = hvx_fault {
-                classes: fault_classes,
-                ..Default::default()
-            };
-            if let Err(e) = vm.io(HVX_SET_FAULT, &mut f) {
-                diag!(self, "HVX_SET_FAULT: {e}");
-                return None;
-            }
-        }
-        let ncpus = if vcpus > 1 && !self.o.park { vcpus } else { 1 };
-        if mode == Setup::Boot {
-            let mut w = Vec::new();
-            boot::build_page_tables_and_gdt(vm.mem_mut(), &mut w);
-            let image = self.e.image.bytes();
-            let initrd = self.e.initrd.bytes();
-            match boot::load_bzimage_n(vm.mem_mut(), image, initrd, cmdline, ncpus, &mut w) {
-                Ok(l) => diag!(self, "{l}"),
-                Err(m) => {
-                    diag!(self, "{m}");
-                    return None;
-                }
-            }
-        } else {
-            // the C engine loads a kernel into every fresh VM too (overwritten by the restore);
-            // here RAM stays zero and only its line is printed, for the same log
-            if self.boot_line.is_none() {
-                let mut scratch = vec![0u8; self.e.mem_size as usize];
-                let mut w = Vec::new();
-                self.boot_line = boot::load_bzimage_n(
-                    &mut scratch,
-                    self.e.image.bytes(),
-                    self.e.initrd.bytes(),
-                    cmdline,
-                    ncpus,
-                    &mut w,
-                )
-                .ok();
-            }
-            if let Some(l) = self.boot_line.clone() {
-                diag!(self, "{l}");
-            }
-        }
-        let mut sregs = boot::fill_sregs();
-        if let Err(e) = vm.io(HVX_SET_SREGS, &mut sregs) {
-            diag!(self, "HVX_SET_SREGS: {e}");
-            return None;
-        }
-        let mut regs = hvx_regs {
-            rip: boot::KERNEL_LOAD_ADDR + boot::KERNEL_ENTRY_OFF,
-            rsi: boot::BOOT_PARAMS_ADDR,
-            rsp: boot::STACK_TOP,
-            rflags: 0x2,
-            ..Default::default()
-        };
-        if let Err(e) = vm.io(HVX_SET_REGS, &mut regs) {
-            diag!(self, "HVX_SET_REGS: {e}");
-            return None;
-        }
-        if vcpus > 1 && self.o.park && self.park_aps(&vm).is_err() {
-            return None;
-        }
-        if vcpus > 1 && !self.o.park {
-            let mut c = hvx_sched::zeroed_box();
-            if vm.set_vcpu(0).is_err() || vm.io(HVX_GET_SCHED, &mut *c).is_err() {
-                diag!(self, "HVX_GET_SCHED: failed");
-                return None;
-            }
-            c.pause_k = match &self.o.pause_k {
-                Some(p) => strtoull0(p.as_bytes()) as u32,
-                None => 4,
-            };
-            if let Err(e) = vm.io(HVX_SET_SCHED, &mut *c) {
-                diag!(self, "HVX_SET_SCHED: {e}");
-                return None;
-            }
-        }
-        if vcpus > 1 && !self.o.quantum_after && self.turn_knobs(&vm).is_err() {
-            return None;
-        }
         b.vm = Some(vm);
-        Some(b)
-    }
-
-    fn park_aps(&mut self, vm: &Vm) -> Result<(), ()> {
-        for i in 1..self.o.vcpus {
-            let mut r = hvx_regs {
-                rflags: 0x2,
-                ..Default::default()
-            };
-            if vm.set_vcpu(i).is_err() || vm.io(HVX_SET_REGS, &mut r).is_err() {
-                diag!(self, "park: HVX_SET_REGS: failed");
-                return Err(());
-            }
-        }
-        let mut c = hvx_sched::zeroed_box();
-        if vm.set_vcpu(0).is_err() || vm.io(HVX_GET_SCHED, &mut *c).is_err() {
-            diag!(self, "park: HVX_GET_SCHED: failed");
-            return Err(());
-        }
-        for i in 1..self.o.vcpus as usize {
-            c.v[i].halted = 1;
-            c.v[i].halt_len = 1;
-        }
-        if vm.io(HVX_SET_SCHED, &mut *c).is_err() {
-            diag!(self, "park: HVX_SET_SCHED: failed");
-            return Err(());
-        }
-        Ok(())
-    }
-
-    /// `turn_knobs` (hvx_stack_verify.c): HVX_QUANTUM / HVX_TURN_MARGIN / HVX_BURST at boot setup.
-    fn turn_knobs(&mut self, vm: &Vm) -> Result<(), ()> {
-        let (q, m, bu) = (
-            self.o.quantum.clone(),
-            self.o.turn_margin.clone(),
-            self.o.burst.clone(),
-        );
-        if self.o.vcpus < 2 || (q.is_none() && m.is_none() && bu.is_none()) {
-            return Ok(());
-        }
-        if self.o.ftstat {
-            let _ = vm.reset_ftstat();
-        }
-        if let Some(q) = &q {
-            let mut c = hvx_sched::zeroed_box();
-            if vm.io(HVX_GET_SCHED, &mut *c).is_err() {
-                diag!(self, "HVX_GET_SCHED (HVX_QUANTUM): failed");
-                return Err(());
-            }
-            c.quantum = strtoull0(q.as_bytes());
-            if vm.io(HVX_SET_SCHED, &mut *c).is_err() {
-                diag!(self, "HVX_SET_SCHED (HVX_QUANTUM): failed");
-                return Err(());
-            }
-        }
-        if m.is_some() || bu.is_some() {
-            let mut t = hvx_turnctl::default();
-            if let Some(m) = &m {
-                t.margin = strtoull0(m.as_bytes());
-            }
-            if let Some(bu) = &bu {
-                let mut s = Scan::new(bu.as_bytes());
-                let bl = s.ull();
-                s.lit(":");
-                let bq = s.ull();
-                s.lit(":");
-                let pm = s.uint();
-                s.lit(":");
-                let sd = s.hex();
-                if s.n < 3 {
-                    diag!(self, "bad HVX_BURST");
-                    return Err(());
-                }
-                t.burst_len = bl.unwrap_or(0);
-                t.burst_q = bq.unwrap_or(0);
-                t.burst_permille = pm.unwrap_or(0);
-                t.burst_seed = sd.unwrap_or(1);
-            }
-            if vm.io(HVX_SET_TURNCTL, &mut t).is_err() {
-                diag!(self, "HVX_SET_TURNCTL: failed");
-                return Err(());
-            }
-        }
-        let f = |k: &str, v: &Option<String>| match v {
-            Some(v) => format!(" {k}={v}"),
-            None => String::new(),
-        };
-        diag!(
-            self,
-            "hvx_stack_verify: turn knobs applied:{}{}{}",
-            f("quantum", &q),
-            f("margin", &m),
-            f("burst", &bu)
-        );
-        Ok(())
+        b
     }
 
     fn teardown(&mut self, b: &mut Boot) {
@@ -719,9 +471,30 @@ impl Core {
         }
     }
 
-    /// `vm_fresh`: a VM ready for a restore.
+    /// `vm_fresh`: a VM ready for a restore. With HYDO_HVX_PREPARE on (the default in serve
+    /// mode), the VM was made on a helper thread while the previous run ran (a fresh VM is the
+    /// same whenever it is made), and the next one is started at once.
     fn vm_fresh(&mut self) -> Option<Boot> {
-        let b = self.boot_setup(Setup::Fresh, "console=ttyS0", 0)?;
+        let got = self.prep.take().and_then(|h| h.join().ok());
+        let (vm, m) = match got {
+            Some(x) => x,
+            None => {
+                let mut m = Vec::new();
+                let vm = create_vm(
+                    &self.e,
+                    &self.o,
+                    Setup::Fresh,
+                    "console=ttyS0",
+                    0,
+                    &self.boot_line,
+                    &mut m,
+                );
+                (vm, m)
+            }
+        };
+        self.print_msgs(m);
+        self.start_prep();
+        let b = self.boot_of(vm?);
         if self.o.check_zero {
             let vm = b.vm();
             if !crate::fnv::is_zero(vm.mem()) || !crate::fnv::is_zero(b.p2()) {
@@ -733,6 +506,27 @@ impl Core {
             }
         }
         Some(b)
+    }
+
+    /// Start making the next fresh VM on a helper thread (when on, and when the machine has
+    /// memory for two more VMs of this size).
+    fn start_prep(&mut self) {
+        if !self.prep_on || self.prep.is_some() {
+            return;
+        }
+        let need = (self.e.mem_size + self.e.disk_len) >> 20;
+        if mem_available_mib().is_some_and(|av| av < 2 * need + 1024) {
+            return;
+        }
+        let (e, o, bl) = (self.e.clone(), self.o.clone(), self.boot_line.clone());
+        self.prep = std::thread::Builder::new()
+            .name("hvx-prepare".into())
+            .spawn(move || {
+                let mut m = Vec::new();
+                let vm = create_vm(&e, &o, Setup::Fresh, "console=ttyS0", 0, &bl, &mut m);
+                (vm, m)
+            })
+            .ok();
     }
 
     // ---- the console ----
@@ -2680,6 +2474,290 @@ impl Core {
     }
 }
 
+const PMU_NOTE: &str = "hvx_stack_verify: no usable PMU on this host; using the exit-count clock";
+
+/// `boot_setup`'s VM: the base disk attached; `Setup::Boot` also loads the kernel (a real
+/// boot), `Setup::Fresh` leaves RAM and the data partition zero for a restore (the C engine
+/// loads a kernel there too, which the restore overwrites; `boot_line` is the line it prints
+/// for it). Messages go to `m` (printed by the caller, so a VM can be made on another thread).
+fn create_vm(
+    e: &Env,
+    o: &Options,
+    mode: Setup,
+    cmdline: &str,
+    fault_classes: u32,
+    boot_line: &Option<String>,
+    m: &mut Vec<String>,
+) -> Option<Vm> {
+    macro_rules! say {
+        ($($a:tt)*) => { m.push(format!($($a)*)) };
+    }
+    let (p2_off, p2_len) = (e.p2_off as usize, e.p2_len as usize);
+    let mut vm = match Vm::open(&o.dev) {
+        Ok(v) => v,
+        Err(e) => {
+            say!("open /dev/hvx: {e}");
+            return None;
+        }
+    };
+    let vcpus = o.vcpus;
+    let mut cfg = hvx_config {
+        mem_size: e.mem_size,
+        n_vcpus: 0,
+        flags: HVX_VM_X86_64_V2 | HVX_VM_IDLE_HEARTBEAT,
+    };
+    if o.pause_exit {
+        cfg.flags |= HVX_VM_PAUSE_EXIT;
+    }
+    if o.pmu_clock {
+        cfg.flags |= HVX_VM_PMU_CLOCK;
+    }
+    if o.cpu_v3 {
+        cfg.flags |= HVX_VM_X86_64_V3;
+    }
+    if o.pt_trace_vm {
+        cfg.flags |= HVX_VM_PT_TRACE;
+    }
+    if vcpus > 1 {
+        cfg.n_vcpus = vcpus;
+        cfg.flags |= HVX_VM_SMP_SCHED;
+        if !o.park {
+            cfg.flags |= HVX_VM_SMP_BOOT;
+        }
+        if cfg.flags & HVX_VM_PMU_CLOCK == 0 {
+            say!("hvx_stack_verify: {vcpus} vCPUs need the PMU clock (HVX_PMU_CLOCK=0 given)");
+            return None;
+        }
+    }
+    if let Err(e) = vm.create(&cfg) {
+        if vcpus > 1 && e.raw_os_error() == Some(libc::ENODEV) {
+            say!("hvx_stack_verify: {vcpus} vCPUs need the PMU clock; this host has no usable PMU");
+            return None;
+        }
+        if e.raw_os_error() != Some(libc::ENODEV) || cfg.flags & HVX_VM_PMU_CLOCK == 0 {
+            say!("HVX_CREATE_VM: {e}");
+            return None;
+        }
+        say!("{PMU_NOTE}");
+        cfg.flags &= !HVX_VM_PMU_CLOCK;
+        if let Err(e) = vm.create(&cfg) {
+            say!("HVX_CREATE_VM: {e}");
+            return None;
+        }
+    }
+    if let Err(e) = vm.map_ram(e.mem_size as usize) {
+        say!("mmap RAM: {e}");
+        return None;
+    }
+    let mut tsc = hvx_tsc {
+        tsc: 0,
+        step: BOOT_TSC_STEP,
+        aux: 0,
+        count: 0,
+        mode: HVX_TSC_COUNTER,
+    };
+    if let Err(e) = vm.io(HVX_SET_TSC, &mut tsc) {
+        say!("HVX_SET_TSC: {e}");
+        return None;
+    }
+    let mut dk = hvx_disk {
+        len: e.disk_len,
+        data: 0,
+        flags: HVX_DISK_NO_IDMAP,
+    };
+    if let Err(e) = vm.io(HVX_SET_DISK, &mut dk) {
+        say!("HVX_SET_DISK: {e}");
+        return None;
+    }
+    if let Err(e) = vm.map_disk(e.disk_len as usize) {
+        say!("mmap disk window: {e}");
+        return None;
+    }
+    // the image's non-zero blocks (the page array is zero); a fresh VM leaves the data
+    // partition zero, the restore writes it
+    {
+        let base = e.base.bytes();
+        let (lo, hi) = (p2_off, p2_off + p2_len);
+        let disk = vm.disk_mut();
+        for &(o, n) in &e.base_runs {
+            let (s, t) = (o, o + n);
+            if mode == Setup::Boot || t <= lo || s >= hi {
+                disk[s..t].copy_from_slice(&base[s..t]);
+                continue;
+            }
+            if s < lo {
+                disk[s..lo].copy_from_slice(&base[s..lo]);
+            }
+            if t > hi {
+                disk[hi..t].copy_from_slice(&base[hi..t]);
+            }
+        }
+    }
+    if fault_classes != 0 {
+        let mut f = hvx_fault {
+            classes: fault_classes,
+            ..Default::default()
+        };
+        if let Err(e) = vm.io(HVX_SET_FAULT, &mut f) {
+            say!("HVX_SET_FAULT: {e}");
+            return None;
+        }
+    }
+    let ncpus = if vcpus > 1 && !o.park { vcpus } else { 1 };
+    if mode == Setup::Boot {
+        let mut w = Vec::new();
+        boot::build_page_tables_and_gdt(vm.mem_mut(), &mut w);
+        let image = e.image.bytes();
+        let initrd = e.initrd.bytes();
+        match boot::load_bzimage_n(vm.mem_mut(), image, initrd, cmdline, ncpus, &mut w) {
+            Ok(l) => say!("{l}"),
+            Err(m) => {
+                say!("{m}");
+                return None;
+            }
+        }
+    } else {
+        // the C engine loads a kernel into every fresh VM too (overwritten by the restore);
+        // here RAM stays zero and only its line is printed, for the same log
+        if let Some(l) = boot_line {
+            say!("{l}");
+        }
+    }
+    let mut sregs = boot::fill_sregs();
+    if let Err(e) = vm.io(HVX_SET_SREGS, &mut sregs) {
+        say!("HVX_SET_SREGS: {e}");
+        return None;
+    }
+    let mut regs = hvx_regs {
+        rip: boot::KERNEL_LOAD_ADDR + boot::KERNEL_ENTRY_OFF,
+        rsi: boot::BOOT_PARAMS_ADDR,
+        rsp: boot::STACK_TOP,
+        rflags: 0x2,
+        ..Default::default()
+    };
+    if let Err(e) = vm.io(HVX_SET_REGS, &mut regs) {
+        say!("HVX_SET_REGS: {e}");
+        return None;
+    }
+    if vcpus > 1 && o.park && park_aps(o, &vm, m).is_err() {
+        return None;
+    }
+    if vcpus > 1 && !o.park {
+        let mut c = hvx_sched::zeroed_box();
+        if vm.set_vcpu(0).is_err() || vm.io(HVX_GET_SCHED, &mut *c).is_err() {
+            say!("HVX_GET_SCHED: failed");
+            return None;
+        }
+        c.pause_k = match &o.pause_k {
+            Some(p) => strtoull0(p.as_bytes()) as u32,
+            None => 4,
+        };
+        if let Err(e) = vm.io(HVX_SET_SCHED, &mut *c) {
+            say!("HVX_SET_SCHED: {e}");
+            return None;
+        }
+    }
+    if vcpus > 1 && !o.quantum_after && turn_knobs(o, &vm, m).is_err() {
+        return None;
+    }
+    Some(vm)
+}
+
+fn park_aps(o: &Options, vm: &Vm, m: &mut Vec<String>) -> Result<(), ()> {
+    macro_rules! say {
+        ($($a:tt)*) => { m.push(format!($($a)*)) };
+    }
+    for i in 1..o.vcpus {
+        let mut r = hvx_regs {
+            rflags: 0x2,
+            ..Default::default()
+        };
+        if vm.set_vcpu(i).is_err() || vm.io(HVX_SET_REGS, &mut r).is_err() {
+            say!("park: HVX_SET_REGS: failed");
+            return Err(());
+        }
+    }
+    let mut c = hvx_sched::zeroed_box();
+    if vm.set_vcpu(0).is_err() || vm.io(HVX_GET_SCHED, &mut *c).is_err() {
+        say!("park: HVX_GET_SCHED: failed");
+        return Err(());
+    }
+    for i in 1..o.vcpus as usize {
+        c.v[i].halted = 1;
+        c.v[i].halt_len = 1;
+    }
+    if vm.io(HVX_SET_SCHED, &mut *c).is_err() {
+        say!("park: HVX_SET_SCHED: failed");
+        return Err(());
+    }
+    Ok(())
+}
+
+/// `turn_knobs` (hvx_stack_verify.c): HVX_QUANTUM / HVX_TURN_MARGIN / HVX_BURST at boot setup.
+fn turn_knobs(o: &Options, vm: &Vm, m: &mut Vec<String>) -> Result<(), ()> {
+    macro_rules! say {
+        ($($a:tt)*) => { m.push(format!($($a)*)) };
+    }
+    let (q, m, bu) = (o.quantum.clone(), o.turn_margin.clone(), o.burst.clone());
+    if o.vcpus < 2 || (q.is_none() && m.is_none() && bu.is_none()) {
+        return Ok(());
+    }
+    if o.ftstat {
+        let _ = vm.reset_ftstat();
+    }
+    if let Some(q) = &q {
+        let mut c = hvx_sched::zeroed_box();
+        if vm.io(HVX_GET_SCHED, &mut *c).is_err() {
+            say!("HVX_GET_SCHED (HVX_QUANTUM): failed");
+            return Err(());
+        }
+        c.quantum = strtoull0(q.as_bytes());
+        if vm.io(HVX_SET_SCHED, &mut *c).is_err() {
+            say!("HVX_SET_SCHED (HVX_QUANTUM): failed");
+            return Err(());
+        }
+    }
+    if m.is_some() || bu.is_some() {
+        let mut t = hvx_turnctl::default();
+        if let Some(m) = &m {
+            t.margin = strtoull0(m.as_bytes());
+        }
+        if let Some(bu) = &bu {
+            let mut s = Scan::new(bu.as_bytes());
+            let bl = s.ull();
+            s.lit(":");
+            let bq = s.ull();
+            s.lit(":");
+            let pm = s.uint();
+            s.lit(":");
+            let sd = s.hex();
+            if s.n < 3 {
+                say!("bad HVX_BURST");
+                return Err(());
+            }
+            t.burst_len = bl.unwrap_or(0);
+            t.burst_q = bq.unwrap_or(0);
+            t.burst_permille = pm.unwrap_or(0);
+            t.burst_seed = sd.unwrap_or(1);
+        }
+        if vm.io(HVX_SET_TURNCTL, &mut t).is_err() {
+            say!("HVX_SET_TURNCTL: failed");
+            return Err(());
+        }
+    }
+    let f = |k: &str, v: &Option<String>| match v {
+        Some(v) => format!(" {k}={v}"),
+        None => String::new(),
+    };
+    say!(
+        "hvx_stack_verify: turn knobs applied:{}{}{}",
+        f("quantum", &q),
+        f("margin", &m),
+        f("burst", &bu)
+    );
+    Ok(())
+}
+
 fn b_set_tj(vb: &Boot, tj: &mut hvx_tjitter) -> bool {
     vb.vm().io(HVX_SET_TJITTER, tj).is_ok()
 }
@@ -2694,6 +2772,19 @@ fn empty_snap() -> Snap {
         unsync: Vec::new(),
         unsync_n: 0,
     }
+}
+
+/// `MemAvailable` in MiB.
+fn mem_available_mib() -> Option<u64> {
+    let t = std::fs::read_to_string("/proc/meminfo").ok()?;
+    let kb: u64 = t
+        .lines()
+        .find(|l| l.starts_with("MemAvailable:"))?
+        .split_whitespace()
+        .nth(1)?
+        .parse()
+        .ok()?;
+    Some(kb / 1024)
 }
 
 /// The non-zero 4 KiB blocks of `p` as merged (offset, length) runs.
@@ -2865,8 +2956,22 @@ pub fn main_with(args: &[String], mut o: Options, mut io: Io) -> i32 {
     } else {
         (None, None)
     };
+    let boot_line = {
+        let ncpus = if o.vcpus > 1 && !o.park { o.vcpus } else { 1 };
+        let mut scratch = vec![0u8; (ram_mib << 20) as usize];
+        let mut w = Vec::new();
+        boot::load_bzimage_n(
+            &mut scratch,
+            image.bytes(),
+            initrd.bytes(),
+            "console=ttyS0",
+            ncpus,
+            &mut w,
+        )
+        .ok()
+    };
     let mut core = Core {
-        e: Env {
+        e: std::sync::Arc::new(Env {
             mem_size: ram_mib << 20,
             image,
             initrd,
@@ -2876,7 +2981,7 @@ pub fn main_with(args: &[String], mut o: Options, mut io: Io) -> i32 {
             p2_len,
             cmdbase,
             base_runs,
-        },
+        }),
         outdir,
         io,
         budget: 0,
@@ -2899,7 +3004,9 @@ pub fn main_with(args: &[String], mut o: Options, mut io: Io) -> i32 {
         pmu_noted: false,
         reaper,
         reaper_join,
-        boot_line: None,
+        boot_line,
+        prep: None,
+        prep_on: false,
         ph: [0.0; 21],
         ph_t0: 0.0,
         ph_calls: 0,
@@ -2998,6 +3105,8 @@ pub fn main_with(args: &[String], mut o: Options, mut io: Io) -> i32 {
     }
     let l = format!("READY boot_secs={:.1}", now() - t_start);
     core.say(&l);
+    core.prep_on = core.o.prepare;
+    core.start_prep();
     core.serve_loop();
     0
 }
