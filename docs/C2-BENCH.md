@@ -348,3 +348,48 @@ acknowledged the same number of orders within one (41 points equal; 24 at k=250,
    `Q=3` or `Q=4d` on the shell kind; d11's `cf=238` passes on both, its window is at k≈246–303;
    d10's `X=` trigger works on the agent kind only), so the trigger table of `hydo-bench confirm`
    needs new values for agent images, recorded twice each, as M72 did for `-pin-kr`.
+
+Status after Milestone 135 (section 9): item 1 is done for hydo-bench (the manifest images are
+its default; the pinned reproducers and `deploy-metal.sh` stay on the stack images as the engine's
+baselines); item 2 was M133's (franz-go issue 1484), and the order services of the manifest images
+now use franz-go v1.22.2; item 3's M67 path is in the manifest; item 4 is done for the agent kind.
+
+## 9. Milestone 135: the manifest images are the benchmark's images
+
+**What changed.** hydo-bench runs the manifest-built agent images by default (`--kind agent`),
+the shell images with `--kind shell`, the stack images with `--kind stack`; the images live in one
+directory as `explore-ob-bench-<stem>[-agent]-disk.img` (`hydo/bench/README.md` "The manifest
+images (Milestone 135)"). Every order service is built from source with franz-go v1.22.2
+(`hydo/bench/build-order-services.sh`); the stack images keep v1.17.1 (`hydo/stack/go.mod.baseline`).
+The images carry hydo-agent 0.2.0. A swapped image is now byte-reproducible
+(`agent-patch.sh --swap` keeps the image's inode times and fixes the superblock's write time; two
+swaps of the same order service gave the same bytes, and `nf` and `fix`, the same binary, give the
+same images).
+
+**The M67 path.** In the manifest (`/etc/hydo-bench/front.sh`, `ready:`, `retry:` and the
+invariant `front.restarted`; the README has the details). M129's ERROR schedule, process seed 3003
+`disk=cut dseed=806555b3e1262cc5 cf=147 | run P=redis@10+3 T=26:-3600 X=front@20~151`, on the
+agent control: the killed order service exits on its restart (status 1), the script stays up and
+says so, the retry pass is skipped, and the recovery boot gives `OK invariants=3 held (… acked=11/30
+…)`, twice `91ebd4a2e0731975` (M129: `ERROR restart after the faults (front)`).
+
+**The franz-go upgrade (user decision, 2026-11-01).** `disk=none dseed=0 | run P=kafka@14+16`,
+which lost order 15 from Kafka on M129's agent control (section 6, item 4), passes on the new agent
+control, twice `a41a29598b2738ea` (`acked=31/30`: order 29 is in the acknowledged list twice; the
+step range 14..29 hit the workload's 300 s timeout, and both that range's client, left running,
+and the retry pass recorded order 29; the oracle counts lines, so `not-acked` shows -1; the
+verdict is OK because every order is in MySQL and Kafka exactly once).
+
+**The triggers re-recorded on the agent images** (`hydo-bench confirm --kind agent`, all thirteen
+defects with `--base`; the table is in `hydo/bench/README.md` "The triggers on the manifest
+images"): all 16 triggers fail twice with one fingerprint and the defect's signature, every control
+passes them, and the control's known bug (order 26 twice) remains. The moved ones: d9 crashes for
+`Q=3` and `Q=4d` (not `Q=4`) on the agent kind, so its trigger is `Q=3`; d10's `X=front@9~20`
+still fails; d11's window is 9 of 61 cut points in `cf=245..305` (249, 250, 260, 271, 272, 282,
+292, 302, 303), and its trigger is `cf=260` (order 24).
+
+
+On the shell kind (`--kind shell`) every trigger but d10's is confirmed the same way (d9 `Q=3`,
+d11 `cf=255`; the shell kind's d11 window is 8 of 61 points: 245, 255, 256, 266, 277, 287, 297,
+298); d10's `X=` trigger passes there because the generic shell init ignores `X=`. M108's cells
+were not run again on these images.

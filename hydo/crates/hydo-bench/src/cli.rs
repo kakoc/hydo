@@ -3,7 +3,7 @@
 //! `--opt=value`).
 
 use crate::cells::{self, Cell};
-use crate::defects::Set;
+use crate::defects::{Kind, Set};
 use crate::pools::Engines;
 use crate::{analysis, buggify, confirm, listrun};
 use std::path::{Path, PathBuf};
@@ -12,18 +12,25 @@ pub const USAGE: &str = "usage: hydo-bench <command> [options]   (hydo/bench/REA
 
   run      --strategy random|swarm|swarm-pos|process [--new-faults] [--buggify] [--bg-images]
            [--concurrency] [--more-faults --cf-range LO-HI] [--knob-rule cut|any] [--vcpus N [--turns]]
-           [--window N] [--defects all|m59|d1-...,...] [--reps 1-3] [--budget 60] [--workers 3] --out DIR
+           [--window N] [--defects all|m59|d1-...,...] [--reps 1-3] [--budget 60] [--workers 3]
+           [--kind agent|shell|stack] --out DIR
                cells of strategy x defect x repetitions; appends DIR/results.jsonl
   table    DIR...                       the detection table of finished cells (run --table DIR... too)
   confirm  --out DIR [--defects all|m59|...] [--workers 3] [--no-control] [--base] [--bg-images] [--vcpus N]
+           [--kind agent|shell|stack]
                every defect's trigger schedules twice on its image and once on its control
   list     --images IMG[,IMG...] --list FILE --out DIR [--workers 3] [--vcpus N] [--repeat 1|2] [--env K=V]...
-               a fixed list of schedules on each image
+           [--kind agent|shell|stack] [--bg-images]
+               a fixed list of schedules on each image (IMG: an image file, a defect name for its
+               image of the kind, or control:<defect> for its control)
   depth1map DEFECT-SWEEP-DIR CONTROL-SWEEP-DIR [--sig REGEX] [--json FILE]
   d7prob   [--seeds 200000]
   addbuggify MAIN.GO [--check]
 
-Images are read from $HYDO_BUILD (default ~/hydo/build); the m59 set is $HYDO_M59_SUFFIX (default -pin-kr).
+Images are read from $HYDO_BUILD (default ~/hydo/build). --kind (or $HYDO_BENCH_KIND) picks them: agent (the
+default) = the manifest-built agent images explore-ob-bench-<defect>-agent-disk.img, shell = the same manifest's
+shell images explore-ob-bench-<defect>-disk.img (both from hydo/bench/build-bench-manifest.sh), stack = the
+build-stack.sh images (the engine's regression baselines; their m59 set is $HYDO_M59_SUFFIX, default -pin-kr).
 Every VM is started through ~/bin/hvx-run ($HYDO_HVX_RUN) with <root>/hv/hvx/hvx_explore ($HYDO_HVX_EXPLORE).";
 
 /// Options as (name, value); flags get "".
@@ -154,6 +161,7 @@ fn cmd_run(root: &Path, o: &Opts) -> Result<(), String> {
         "--budget",
         "--workers",
         "--out",
+        "--kind",
     ])?;
     let strategy = o
         .get("--strategy")
@@ -198,7 +206,7 @@ fn cmd_run(root: &Path, o: &Opts) -> Result<(), String> {
         workers: o.num("--workers", 3)?,
         out: PathBuf::from(out),
     };
-    let set = Set::from_env(o.flag("--bg-images"));
+    let set = Set::new(Kind::select(o.get("--kind"))?, o.flag("--bg-images"));
     let names = Set::names(o.get("--defects").unwrap_or("all"))?;
     let eng = Engines::new(root, v, Vec::new());
     cells::run_cell(&c, &set, &eng, &names)
@@ -213,9 +221,10 @@ fn cmd_confirm(root: &Path, o: &Opts) -> Result<(), String> {
         "--vcpus",
         "--base",
         "--bg-images",
+        "--kind",
     ])?;
     let out = o.get("--out").ok_or("--out is required")?;
-    let set = Set::from_env(o.flag("--bg-images"));
+    let set = Set::new(Kind::select(o.get("--kind"))?, o.flag("--bg-images"));
     let names = Set::names(o.get("--defects").unwrap_or("all"))?;
     let eng = Engines::new(root, vcpus(o)?, Vec::new());
     confirm::confirm(
@@ -231,6 +240,28 @@ fn cmd_confirm(root: &Path, o: &Opts) -> Result<(), String> {
     )
 }
 
+/// One `list --images` entry: an image file name (`….img`) as given, a defect name as that
+/// defect's image of the selected kind, `control:<defect>` as its control.
+fn list_image(set: &Set, i: &str) -> Result<String, String> {
+    if i.ends_with(".img") {
+        return Ok(i.to_string());
+    }
+    let (control, name) = match i.strip_prefix("control:") {
+        Some(n) => (true, n),
+        None => (false, i),
+    };
+    if !Set::known(name) {
+        return Err(format!(
+            "--images {i}: an image file (….img), a defect name or control:<defect>"
+        ));
+    }
+    Ok(if control {
+        set.control_of(name)
+    } else {
+        set.image_of(name)
+    })
+}
+
 fn cmd_list(root: &Path, o: &Opts) -> Result<(), String> {
     o.check(&[
         "--images",
@@ -240,13 +271,16 @@ fn cmd_list(root: &Path, o: &Opts) -> Result<(), String> {
         "--vcpus",
         "--repeat",
         "--env",
+        "--kind",
+        "--bg-images",
     ])?;
-    let images: Vec<String> = o
+    let set = Set::new(Kind::select(o.get("--kind"))?, o.flag("--bg-images"));
+    let images = o
         .get("--images")
         .ok_or("--images is required")?
         .split(',')
-        .map(str::to_string)
-        .collect();
+        .map(|i| list_image(&set, i))
+        .collect::<Result<Vec<String>, String>>()?;
     let lp = o.get("--list").ok_or("--list is required")?;
     let text = std::fs::read_to_string(lp).map_err(|e| format!("{lp}: {e}"))?;
     let out = o.get("--out").ok_or("--out is required")?;

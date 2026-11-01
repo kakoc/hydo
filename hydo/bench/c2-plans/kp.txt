@@ -1,0 +1,1 @@
+disk=none dseed=0 | run P=kafka@14+16

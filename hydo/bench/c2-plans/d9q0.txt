@@ -1,0 +1,6 @@
+disk=none dseed=0 | run Q=2
+disk=none dseed=0 | run Q=3
+disk=none dseed=0 | run Q=4
+disk=none dseed=0 | run Q=2d
+disk=none dseed=0 | run Q=3d
+disk=none dseed=0 | run Q=4d

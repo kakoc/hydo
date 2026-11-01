@@ -11,7 +11,7 @@ I	hydo/bench/m56/map-d3-blind-retry.json	88047dc9284e69daf582bb60a50337bfb83bf90
 I	hydo/bench/m56/map-d4-produce-timeout-definite.json	c235006a2a46f001166fb67909a7e12e21d589fe264b51b9b421bbe5c9af3527
 I	hydo/bench/m56/map-d6-client-deadline-definite.json	67f5ae08481ca7c59ee87a56656a9211b7ab660484f1c0df0a8c23c690ebeba9
 I	hydo/bench/m56/map-d7.json	fa3d12a35627c6957fa85f64915fe57d54e5dc2f6df383da12da77388095af4b
-I	hydo/bench/manifest/hydo.yaml	c81b0e275ab39c3886b30ee56569ebed83c45d996e0cae08805d2c7a53158f4b
+I	hydo/bench/manifest/hydo.yaml	e77cf5c30343328134c715b05adf02cf95c37ec84c7eac76c2fa68b502016b5e
 I	hydo/crates/hydo-compose/tests/cases.json	814f8d674ac2f018897d3682252a3bbc893497afae23b21449dd981c78f70303
 I	hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-elasticsearch-logstash-kibana/docker-compose.yml	09409df7d8b9cac06f9ebdc2bcdf11155d924307f2354f9de2973b81007bacc0
 I	hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-elasticsearch-logstash-kibana/lock.json	1104b866bc34aa6cbce6ddfcea238bec7f55b6caed7f7852b66a1157f3a8cefc
@@ -1026,66 +1026,66 @@ R	^	<root>/hydo/crates/hydo-manifest/tests/fixtures/folders/saved-key/hydo/hydo.
 R	^	<root>/hydo/crates/hydo-manifest/tests/fixtures/folders/saved-key/hydo/hydo.yaml --arch arm64 []	ok	d:8b9b3cb0 w:4f53cda1 c:6d8e6c72 m:74234e98
 R	^	<root>/hydo/crates/hydo-manifest/tests/fixtures/folders/two-schedules/hydo/hydo.yaml --arch x86_64 []	err	"<root>/hydo/crates/hydo-manifest/tests/fixtures/folders/two-…#61cbd660aa103ea6"
 R	^	<root>/hydo/crates/hydo-manifest/tests/fixtures/folders/two-schedules/hydo/hydo.yaml --arch arm64 []	err	"<root>/hydo/crates/hydo-manifest/tests/fixtures/folders/two-…#61cbd660aa103ea6"
-R	mutants	<tmp>/mutants/m0.json --arch x86_64 []	err	"root.files[54]: missing field `dst` (project format 1; the s…#910d9a6b00370016"
-R	^	<tmp>/mutants/m1.json --arch x86_64 []	err	"invariants[1].final: {{p}} is not a declared parameter"
-R	^	<tmp>/mutants/m2.json --arch x86_64 []	err	"root.files[55]: missing field `dst` (project format 1; the s…#f5e6a509efaa0a91"
-R	^	<tmp>/mutants/m3.json --arch x86_64 []	ok	d:c46c2f97 w:4f53cda1 c:c11712cf m:74234e98
-R	^	<tmp>/mutants/m4.json --arch x86_64 []	err	"root.files[14]: missing field `src` (project format 1; the s…#7c9214a771126e1d"
-R	^	<tmp>/mutants/m5.json --arch x86_64 []	ok	d:eefbdc8e w:4f53cda1 c:fb03566e m:74234e98
-R	^	<tmp>/mutants/m6.json --arch x86_64 []	err	"root.files[11]: invalid type: boolean `true`, expected a map…#90d0353e258c13d0"
-R	^	<tmp>/mutants/m7.json --arch x86_64 []	err	"root.files[62].dst: a string (or a whole number), not {'a': …#3f4ee3bb12a55504"
-R	^	<tmp>/mutants/m8.json --arch x86_64 []	err	"root.files[26].src: a string (or a whole number), not {} (pr…#a271997871d9b2eb"
-R	^	<tmp>/mutants/m9.json --arch x86_64 []	err	"knobs[1].values[1]: a string, a number or true/false, not []…#cc606159b9255e5e"
-R	^	<tmp>/mutants/m10.json --arch x86_64 []	err	"root.files[66].dst: {{p}} is not a declared parameter"
-R	^	<tmp>/mutants/m11.json --arch x86_64 []	ok	d:66e8dc7c w:4f53cda1 c:ba89b1cd m:74234e98
-R	^	<tmp>/mutants/m12.json --arch x86_64 []	ok	d:c537c59d w:4f53cda1 c:a3fa449d m:74234e98
-R	^	<tmp>/mutants/m13.json --arch x86_64 []	ok	d:6e5fead4 w:4f53cda1 c:6408ae6d m:74234e98
-R	^	<tmp>/mutants/m14.json --arch x86_64 []	err	"root.files[20].bogus: unknown field `bogus`, expected one of…#8311d0d496c51cc3"
-R	^	<tmp>/mutants/m15.json --arch x86_64 []	err	"invariants[1]: unknown field(s) bogus (known: after, cmd, de…#c22424a74973d803"
-R	^	<tmp>/mutants/m16.json --arch x86_64 []	ok	d:7924ccc0 w:4f53cda1 c:6739aacd m:74234e98
-R	^	<tmp>/mutants/m17.json --arch x86_64 []	err	"root.files[43].bogus: unknown field `bogus`, expected one of…#8c0baf8f641050a8"
-R	^	<tmp>/mutants/m18.json --arch x86_64 []	err	"root.files[10]: invalid type: integer `1`, expected a mappin…#3da07c55375b8425"
-R	^	<tmp>/mutants/m19.json --arch x86_64 []	ok	d:29aca30b w:4f53cda1 c:65dcf85d m:74234e98
-R	^	<tmp>/mutants/m20.json --arch x86_64 []	err	"root.files[18].bogus: unknown field `bogus`, expected one of…#7ae0ff14664a8559"
-R	^	<tmp>/mutants/m21.json --arch x86_64 []	err	"root.files[58].src: a string (or a whole number), not {} (pr…#da97f633d49a4783"
-R	^	<tmp>/mutants/m22.json --arch x86_64 []	ok	d:8b9031ca w:4f53cda1 c:a110d48a m:74234e98
-R	^	<tmp>/mutants/m23.json --arch x86_64 []	err	"root.files[54]: missing field `src` (project format 1; the s…#8f2a762da447ebbe"
-R	^	<tmp>/mutants/m24.json --arch x86_64 []	err	"root.files[54].src: a string (or a whole number), not False …#3680b5b5536adfc1"
-R	^	<tmp>/mutants/m25.json --arch x86_64 []	err	"root.files[4]: invalid type: string \"\", expected a mapping (…#9ce0f5e10856feb1"
-R	^	<tmp>/mutants/m26.json --arch x86_64 []	err	"root.files[58].bogus: unknown field `bogus`, expected one of…#916791c569acbea5"
-R	^	<tmp>/mutants/m27.json --arch x86_64 []	err	"services[3]: must be a mapping"
-R	^	<tmp>/mutants/m28.json --arch x86_64 []	err	"root.files[11].bogus: unknown field `bogus`, expected one of…#009169810f780b81"
-R	^	<tmp>/mutants/m29.json --arch x86_64 []	err	"knobs[0]: unknown field(s) x (known: default, description, n…#4da075689f1bdb13"
-R	^	<tmp>/mutants/m30.json --arch x86_64 []	err	"root.files[14]: invalid type: string \"kill\", expected a mapp…#df33e9cf2d2a0ea5"
-R	^	<tmp>/mutants/m31.json --arch x86_64 []	ok	d:c8074292 w:4f53cda1 c:8b83395f m:74234e98
-R	^	<tmp>/mutants/m32.json --arch x86_64 []	err	"services[1].ready_timeout: invalid type: string \"10.89.0.7\",…#5f81a29ce3543de0"
-R	^	<tmp>/mutants/m33.json --arch x86_64 []	err	"data.dirs: invalid type: integer `4096`, expected a list (pr…#2fac1a8df92d9e6e"
-R	^	<tmp>/mutants/m34.json --arch x86_64 []	ok	d:c15a3dbe w:4f53cda1 c:77c49d58 m:74234e98
-R	^	<tmp>/mutants/m35.json --arch x86_64 []	ok	d:4efafe41 w:4f53cda1 c:b0f0b8cf m:74234e98
-R	^	<tmp>/mutants/m36.json --arch x86_64 []	err	"root.files[16].bogus: unknown field `bogus`, expected one of…#5b9e9d3aabfa0235"
-R	^	<tmp>/mutants/m37.json --arch x86_64 []	err	"root.files[28].dst: a string (or a whole number), not False …#e718e86f33c06d52"
-R	^	<tmp>/mutants/m38.json --arch x86_64 []	ok	d:b59d351d w:4f53cda1 c:a18fbc84 m:74234e98
-R	^	<tmp>/mutants/m39.json --arch x86_64 []	err	"root.files[65].bogus: unknown field `bogus`, expected one of…#57ae1063126d5031"
-R	^	<tmp>/mutants/m40.json --arch x86_64 []	ok	d:89e05b9c w:4f53cda1 c:a6fcef1d m:74234e98
-R	^	<tmp>/mutants/m41.json --arch x86_64 []	err	"root.files[7].bogus: unknown field `bogus`, expected one of …#061606ac5e553dd1"
-R	^	<tmp>/mutants/m42.json --arch x86_64 []	ok	d:ffe6d0b3 w:4f53cda1 c:4abc046b m:74234e98
-R	^	<tmp>/mutants/m43.json --arch x86_64 []	err	"invariants[1].final: invalid type: mapping, expected true or…#94e95b5128ad1a21"
-R	^	<tmp>/mutants/m44.json --arch x86_64 []	ok	d:bfabe0b5 w:4f53cda1 c:a6042d36 m:74234e98
-R	^	<tmp>/mutants/m45.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c29cc0a92ce32dbe"
-R	^	<tmp>/mutants/m46.json --arch x86_64 []	err	"root.files[52].bogus: unknown field `bogus`, expected one of…#5bf8d57aa67b8e99"
-R	^	<tmp>/mutants/m47.json --arch x86_64 []	ok	d:f7832e53 w:4f53cda1 c:b21c52ee m:74234e98
-R	^	<tmp>/mutants/m48.json --arch x86_64 []	err	"services[0]: name 'False' must match [a-z][a-z0-9_]* (it bec…#04c14e00cbfdacc9"
-R	^	<tmp>/mutants/m49.json --arch x86_64 []	ok	d:7a5f6f0b w:4f53cda1 c:b34748c9 m:74234e98
-R	^	<tmp>/mutants/m50.json --arch x86_64 []	err	"root.files[56]: invalid type: string \"v3\", expected a mappin…#20735904a5f61421"
-R	^	<tmp>/mutants/m51.json --arch x86_64 []	err	"root.files[30].bogus: unknown field `bogus`, expected one of…#26c38d840b55d86c"
-R	^	<tmp>/mutants/m52.json --arch x86_64 []	ok	d:89e05b9c w:4f53cda1 c:1638acaa m:74234e98
-R	^	<tmp>/mutants/m53.json --arch x86_64 []	err	"root.files[56].dst: {{p}} is not a declared parameter"
-R	^	<tmp>/mutants/m54.json --arch x86_64 []	err	"data: unknown field(s) x (known: description, dirs, mount, size_mib)"
-R	^	<tmp>/mutants/m55.json --arch x86_64 []	err	"root.files[44]: missing field `dst` (project format 1; the s…#5ce4748425f8f0c6"
-R	^	<tmp>/mutants/m56.json --arch x86_64 []	err	"root.files[45]: invalid type: string \"x\", expected a mapping…#dc046c00bf9471fb"
-R	^	<tmp>/mutants/m57.json --arch x86_64 []	ok	d:61173ab7 w:4f53cda1 c:f6e57bfc m:74234e98
-R	^	<tmp>/mutants/m58.json --arch x86_64 []	err	"knobs[0].values[2]: a string, a number or true/false, not No…#dc70d8753415a3c8"
-R	^	<tmp>/mutants/m59.json --arch x86_64 []	err	"services[0]: missing required field 'cmd'"
+R	mutants	<tmp>/mutants/m0.json --arch x86_64 []	err	"workload: missing required field 'run'"
+R	^	<tmp>/mutants/m1.json --arch x86_64 []	err	"root.files[9].dst: {{p}} is not a declared parameter"
+R	^	<tmp>/mutants/m2.json --arch x86_64 []	ok	d:982c6a33 w:4f53cda1 c:f7a4c81e m:74234e98
+R	^	<tmp>/mutants/m3.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: int object is not iterable"
+R	^	<tmp>/mutants/m4.json --arch x86_64 []	err	"root.files[47]: missing field `src` (project format 1; the s…#6229a32835a511f2"
+R	^	<tmp>/mutants/m5.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: 'int' object is not iterable"
+R	^	<tmp>/mutants/m6.json --arch x86_64 []	err	"root.files[5].dst: a string (or a whole number), not True (p…#ef4144ad6dbaea2b"
+R	^	<tmp>/mutants/m7.json --arch x86_64 []	err	"root.files[12].dst: a string (or a whole number), not {'a': …#12e3d469a247f53e"
+R	^	<tmp>/mutants/m8.json --arch x86_64 []	err	"root.files[45].src: a string (or a whole number), not {} (pr…#ca8d31c123ef1834"
+R	^	<tmp>/mutants/m9.json --arch x86_64 []	err	"services[3]: name '10.89.0.7' must match [a-z][a-z0-9_]* (it…#362d6936c3ecfb24"
+R	^	<tmp>/mutants/m10.json --arch x86_64 []	err	"root.files[32].dst: {{p}} is not a declared parameter"
+R	^	<tmp>/mutants/m11.json --arch x86_64 []	ok	d:2f7996f5 w:4f53cda1 c:3a4b807f m:74234e98
+R	^	<tmp>/mutants/m12.json --arch x86_64 []	err	"invariants[0]: missing required field 'id'"
+R	^	<tmp>/mutants/m13.json --arch x86_64 []	ok	d:1c44f62c w:4f53cda1 c:4e37d958 m:74234e98
+R	^	<tmp>/mutants/m14.json --arch x86_64 []	err	"root.files[64].bogus: unknown field `bogus`, expected one of…#3726a4b0be73eea1"
+R	^	<tmp>/mutants/m15.json --arch x86_64 []	err	"root.files[20]: invalid type: integer `4096`, expected a map…#aa75609186a368cd"
+R	^	<tmp>/mutants/m16.json --arch x86_64 []	err	"root.files[53].bogus: unknown field `bogus`, expected one of…#3977fc36e0d60b3d"
+R	^	<tmp>/mutants/m17.json --arch x86_64 []	err	"root.files[59].bogus: unknown field `bogus`, expected one of…#7119c3e5db11843e"
+R	^	<tmp>/mutants/m18.json --arch x86_64 []	err	"data: unknown field(s) bogus (known: description, dirs, mount, size_mib)"
+R	^	<tmp>/mutants/m19.json --arch x86_64 []	err	"root.files[44].bogus: unknown field `bogus`, expected one of…#dd85891de9b4e78f"
+R	^	<tmp>/mutants/m20.json --arch x86_64 []	err	"invariants[2]: unknown field(s) bogus (known: after, cmd, de…#3ca9b4afc54bdb1f"
+R	^	<tmp>/mutants/m21.json --arch x86_64 []	err	"knobs[0].values[1]: a string, a number or true/false, not {}…#b30631a649f99deb"
+R	^	<tmp>/mutants/m22.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
+R	^	<tmp>/mutants/m23.json --arch x86_64 []	ok	d:242439a6 w:4f53cda1 c:08dac8a6 m:74234e98
+R	^	<tmp>/mutants/m24.json --arch x86_64 []	err	"root.files[8]: missing field `src` (project format 1; the sc…#f54a173c8c95ff16"
+R	^	<tmp>/mutants/m25.json --arch x86_64 []	err	"invariants: at least one invariant (or one entry in checks:)…#2cc2f7924780106c"
+R	^	<tmp>/mutants/m26.json --arch x86_64 []	err	"invariants[3]: duplicate id 'stack.exactly_once'"
+R	^	<tmp>/mutants/m27.json --arch x86_64 []	err	"root.files[20].dst: a string (or a whole number), not [] (pr…#f5bd520e65c41992"
+R	^	<tmp>/mutants/m28.json --arch x86_64 []	err	"root: unknown field(s) bogus (known: description, dirs, file…#2a60bb009ebe595e"
+R	^	<tmp>/mutants/m29.json --arch x86_64 []	ok	d:9a0d762c w:4f53cda1 c:6873ccb3 m:74234e98
+R	^	<tmp>/mutants/m30.json --arch x86_64 []	err	"root.files[42]: invalid type: string \"kill\", expected a mapp…#98f0d62ac056a9d3"
+R	^	<tmp>/mutants/m31.json --arch x86_64 []	err	"services[3]: depends_on names unknown service '10.89.0.7'"
+R	^	<tmp>/mutants/m32.json --arch x86_64 []	err	"root.files[22]: invalid type: string \"10.89.0.7\", expected a…#96bfb91f9167d167"
+R	^	<tmp>/mutants/m33.json --arch x86_64 []	err	"root.files[28]: invalid type: string \"10.89.0.7\", expected a…#e40bcff1baf31c27"
+R	^	<tmp>/mutants/m34.json --arch x86_64 []	err	"root.files[38]: missing field `src` (project format 1; the s…#0b88e7c86a01e7fd"
+R	^	<tmp>/mutants/m35.json --arch x86_64 []	err	"root: unknown field(s) bogus (known: description, dirs, file…#2a60bb009ebe595e"
+R	^	<tmp>/mutants/m36.json --arch x86_64 []	err	"root.files[40].bogus: unknown field `bogus`, expected one of…#3741c3e62193032f"
+R	^	<tmp>/mutants/m37.json --arch x86_64 []	err	"root.files[39].src: a string (or a whole number), not False …#5e420ba5b71ed664"
+R	^	<tmp>/mutants/m38.json --arch x86_64 []	ok	d:3980e5cf w:4f53cda1 c:d0743d3b m:74234e98
+R	^	<tmp>/mutants/m39.json --arch x86_64 []	err	"knobs[1]: unknown field(s) bogus (known: default, descriptio…#139cc62bbb4ec30f"
+R	^	<tmp>/mutants/m40.json --arch x86_64 []	ok	d:005facd6 w:4f53cda1 c:511cf86e m:74234e98
+R	^	<tmp>/mutants/m41.json --arch x86_64 []	err	"root.files[51].bogus: unknown field `bogus`, expected one of…#2c33c362e89efe95"
+R	^	<tmp>/mutants/m42.json --arch x86_64 []	err	"faults: invalid type: integer `0`, expected a list (project …#b0008fd2897b5626"
+R	^	<tmp>/mutants/m43.json --arch x86_64 []	err	"root.files[47].a: unknown field `a`, expected one of `src`, …#f81245a67a240b4b"
+R	^	<tmp>/mutants/m44.json --arch x86_64 []	ok	d:01016d0e w:4f53cda1 c:b4bae9a0 m:74234e98
+R	^	<tmp>/mutants/m45.json --arch x86_64 []	err	"knobs[3]: duplicate token M"
+R	^	<tmp>/mutants/m46.json --arch x86_64 []	ok	d:f4ef7738 w:4f53cda1 c:ba36c428 m:74234e98
+R	^	<tmp>/mutants/m47.json --arch x86_64 []	err	"root.files[15].bogus: unknown field `bogus`, expected one of…#4d854c4f95e03bfb"
+R	^	<tmp>/mutants/m48.json --arch x86_64 []	err	"root.files[10]: invalid type: boolean `false`, expected a ma…#10c0bfe1ba3ad8d9"
+R	^	<tmp>/mutants/m49.json --arch x86_64 []	err	"data: unknown field(s) bogus (known: description, dirs, mount, size_mib)"
+R	^	<tmp>/mutants/m50.json --arch x86_64 []	err	"root.files[0]: invalid type: string \"v3\", expected a mapping…#85e1b9a973551232"
+R	^	<tmp>/mutants/m51.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
+R	^	<tmp>/mutants/m52.json --arch x86_64 []	ok	d:475d9c64 w:4f53cda1 c:f4f3507b m:74234e98
+R	^	<tmp>/mutants/m53.json --arch x86_64 []	err	"root.files[8].src: {{p}} is not a declared parameter"
+R	^	<tmp>/mutants/m54.json --arch x86_64 []	err	"root.files[17]: invalid type: string \"x\", expected a mapping…#cb7dbfdb9d12d782"
+R	^	<tmp>/mutants/m55.json --arch x86_64 []	ok	d:d18b9772 w:4f53cda1 c:7e943f9f m:74234e98
+R	^	<tmp>/mutants/m56.json --arch x86_64 []	err	"root.files[18]: invalid type: string \"x\", expected a mapping…#7d82c47482edd671"
+R	^	<tmp>/mutants/m57.json --arch x86_64 []	err	"root.files[3]: missing field `src` (project format 1; the sc…#170ad6cdc6ca7600"
+R	^	<tmp>/mutants/m58.json --arch x86_64 []	err	"root.files[39]: invalid type: null, expected a mapping (proj…#bde6ac52897498e6"
+R	^	<tmp>/mutants/m59.json --arch x86_64 []	err	"root.files[5]: missing field `dst` (project format 1; the sc…#a62e5dd9de0ce604"
 R	^	<tmp>/mutants/m60.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m61.json --arch x86_64 []	err	"workload: required (steps + run)"
 R	^	<tmp>/mutants/m62.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -5236,8 +5236,8 @@ R	^	<root>/hydo/bench/m56/map-d6-client-deadline-definite.json --arch x86_64 []	
 R	^	<root>/hydo/bench/m56/map-d6-client-deadline-definite.json --arch arm64 []	err	"top level: unknown field(s) both, control_only, nonrepro, tr…#50e2cc0b92a1f0b8"
 R	^	<root>/hydo/bench/m56/map-d7.json --arch x86_64 []	err	"top level: unknown field(s) both, control_only, nonrepro, tr…#50e2cc0b92a1f0b8"
 R	^	<root>/hydo/bench/m56/map-d7.json --arch arm64 []	err	"top level: unknown field(s) both, control_only, nonrepro, tr…#50e2cc0b92a1f0b8"
-R	^	<root>/hydo/bench/manifest/hydo.yaml --arch x86_64 []	ok	d:e089fd52 w:4f53cda1 c:324ede53 m:74234e98
-R	^	<root>/hydo/bench/manifest/hydo.yaml --arch arm64 []	ok	d:e089fd52 w:4f53cda1 c:324ede53 m:74234e98
+R	^	<root>/hydo/bench/manifest/hydo.yaml --arch x86_64 []	ok	d:214cef2b w:4f53cda1 c:a0c4524f m:74234e98
+R	^	<root>/hydo/bench/manifest/hydo.yaml --arch arm64 []	ok	d:214cef2b w:4f53cda1 c:a0c4524f m:74234e98
 R	^	<root>/hydo/crates/hydo-compose/tests/cases.json --arch x86_64 []	err	"the manifest must be a mapping"
 R	^	<root>/hydo/crates/hydo-compose/tests/cases.json --arch arm64 []	err	"the manifest must be a mapping"
 R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-elasticsearch-logstash-kibana/docker-compose.yml --arch x86_64 []	err	"top level: unknown field(s) networks (known: buggify, checks…#e8cc952f23568454"
@@ -5773,25 +5773,17 @@ R	^	embedded <root>/hydo/crates/hydo-manifest/tests/fixtures/folders/crlf-reg/hy
 R	^	embedded <root>/hydo/crates/hydo-manifest/tests/fixtures/folders/merge-yaml/hydo/hydo.yaml Some("<tmp>/embedded/804.compose.json")	ok	d:3d461382 w:74234e98 c:74234e98 m:a9c84540
 R	^	embedded <root>/hydo/crates/hydo-manifest/tests/fixtures/folders/ok/hydo/hydo.yaml Some("<tmp>/embedded/808.compose.json")	ok	d:8001e79a w:74234e98 c:74234e98 m:55786676
 R	^	embedded <root>/hydo/crates/hydo-manifest/tests/fixtures/folders/saved-key/hydo/hydo.yaml Some("<tmp>/embedded/812.compose.json")	ok	d:6b06d3b9 w:74234e98 c:74234e98 m:25f84ffa
-R	^	embedded <tmp>/mutants/m3.json None	ok	d:c46c2f97 w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <tmp>/mutants/m5.json None	ok	d:eefbdc8e w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <tmp>/mutants/m11.json None	ok	d:66e8dc7c w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <tmp>/mutants/m12.json None	ok	d:c537c59d w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <tmp>/mutants/m13.json None	ok	d:6e5fead4 w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <tmp>/mutants/m16.json None	ok	d:7924ccc0 w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <tmp>/mutants/m19.json None	ok	d:29aca30b w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <tmp>/mutants/m22.json None	ok	d:8b9031ca w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <tmp>/mutants/m31.json None	ok	d:c8074292 w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <tmp>/mutants/m34.json None	ok	d:c15a3dbe w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <tmp>/mutants/m35.json None	ok	d:4efafe41 w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <tmp>/mutants/m38.json None	ok	d:b59d351d w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <tmp>/mutants/m40.json None	ok	d:89e05b9c w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <tmp>/mutants/m42.json None	ok	d:ffe6d0b3 w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <tmp>/mutants/m44.json None	ok	d:bfabe0b5 w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <tmp>/mutants/m47.json None	ok	d:f7832e53 w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <tmp>/mutants/m49.json None	ok	d:7a5f6f0b w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <tmp>/mutants/m52.json None	ok	d:89e05b9c w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <tmp>/mutants/m57.json None	ok	d:61173ab7 w:74234e98 c:74234e98 m:74234e98
+R	^	embedded <tmp>/mutants/m2.json None	ok	d:982c6a33 w:74234e98 c:74234e98 m:74234e98
+R	^	embedded <tmp>/mutants/m11.json None	ok	d:2f7996f5 w:74234e98 c:74234e98 m:74234e98
+R	^	embedded <tmp>/mutants/m13.json None	ok	d:1c44f62c w:74234e98 c:74234e98 m:74234e98
+R	^	embedded <tmp>/mutants/m23.json None	ok	d:242439a6 w:74234e98 c:74234e98 m:74234e98
+R	^	embedded <tmp>/mutants/m29.json None	ok	d:9a0d762c w:74234e98 c:74234e98 m:74234e98
+R	^	embedded <tmp>/mutants/m38.json None	ok	d:3980e5cf w:74234e98 c:74234e98 m:74234e98
+R	^	embedded <tmp>/mutants/m40.json None	ok	d:005facd6 w:74234e98 c:74234e98 m:74234e98
+R	^	embedded <tmp>/mutants/m44.json None	ok	d:01016d0e w:74234e98 c:74234e98 m:74234e98
+R	^	embedded <tmp>/mutants/m46.json None	ok	d:f4ef7738 w:74234e98 c:74234e98 m:74234e98
+R	^	embedded <tmp>/mutants/m52.json None	ok	d:475d9c64 w:74234e98 c:74234e98 m:74234e98
+R	^	embedded <tmp>/mutants/m55.json None	ok	d:d18b9772 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/mutants/m602.json Some("<tmp>/embedded/1418.compose.json")	ok	d:e4ebf677 w:74234e98 c:74234e98 m:c2fc033d
 R	^	embedded <tmp>/mutants/m607.json Some("<tmp>/embedded/1423.compose.json")	ok	d:7267d0ca w:74234e98 c:74234e98 m:8240e698
 R	^	embedded <tmp>/mutants/m609.json Some("<tmp>/embedded/1425.compose.json")	ok	d:040da638 w:74234e98 c:74234e98 m:7cc83ace
@@ -6457,7 +6449,7 @@ R	^	embedded <tmp>/mutants/m4067.json None	ok	d:c336b9c3 w:74234e98 c:74234e98 m
 R	^	embedded <tmp>/mutants/m4073.json None	ok	d:6ac31b8e w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/mutants/m4076.json None	ok	d:570616f3 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/mutants/m4079.json None	ok	d:61915b99 w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <root>/hydo/bench/manifest/hydo.yaml None	ok	d:e089fd52 w:74234e98 c:74234e98 m:74234e98
+R	^	embedded <root>/hydo/bench/manifest/hydo.yaml None	ok	d:214cef2b w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/crates/hydo-manifest/tests/fixtures/folders/binary-header/hydo/hydo.yaml Some("<tmp>/embedded/5136.compose.json")	ok	d:5d0f58bd w:74234e98 c:74234e98 m:b246e130
 R	^	embedded <root>/hydo/crates/hydo-manifest/tests/fixtures/folders/crlf-reg/hydo/hydo.yaml Some("<tmp>/embedded/5140.compose.json")	ok	d:7e097f62 w:74234e98 c:74234e98 m:d5541554
 R	^	embedded <root>/hydo/crates/hydo-manifest/tests/fixtures/folders/merge-yaml/hydo/hydo.yaml Some("<tmp>/embedded/5150.compose.json")	ok	d:3d461382 w:74234e98 c:74234e98 m:a9c84540

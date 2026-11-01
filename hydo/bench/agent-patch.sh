@@ -16,7 +16,7 @@
 # `--swap` replaces one regular file of a copy, keeping its mode and owner (the benchmark's
 # defects differ only in /bin/hydostack): agent-patch.sh --swap <image> <path> <file> <out image>.
 set -euo pipefail
-PIN=ff7652a171f40c80f83c2c6ee871331f046b7c2953faf25e40505bbb12f2a16c
+PIN=${HYDO_AGENT_PIN:-1f517e04f837658a0f0fb85b0077d29b491d10eca75c2529ba0e67944ad24422}   # hydo-agent 0.2.0 (docs/BUILD-PINS.md, M131; 0.1.0 was ff7652a1…)
 OFF=1048576
 
 tree_list() {   # <image> <dir>: rdump the root and list every entry with type, mode, owner, sha
@@ -75,8 +75,16 @@ if [ "${1:-}" = --swap ]; then
   gid=$(printf '%s\n' "$st" | sed -n 's/.*Group: *\([0-9]*\).*/\1/p' | head -1)
   [ -n "$mode" ] && [ -n "$uid" ] && [ -n "$gid" ] || { echo "agent-patch: no regular file $path in $img" >&2; exit 1; }
   cp --sparse=always "$img" "$dst.tmp"
-  printf 'rm %s\nwrite %s %s\nset_inode_field %s mode 0100%s\nset_inode_field %s uid %s\nset_inode_field %s gid %s\n' \
-    "$path" "$file" "$path" "$path" "${mode: -3}" "$path" "$uid" "$path" "$gid" | debugfs -w -f - "$dst.tmp?offset=$OFF" > /dev/null 2>&1
+  # the replaced file keeps the image's own times (hydo-build: atime, ctime and crtime 0, mtime
+  # the source's fixed one), and the superblock's write time is a fixed instant
+  # (E2FSPROGS_FAKE_TIME), so the same swap gives the same bytes (M135; before, both carried the
+  # wall clock)
+  times=$(printf '%s\n' "$st" | sed -n 's/^ *\(ctime\|atime\|mtime\|crtime\): 0x\([0-9a-f]*\):.*/\1 \2/p')
+  {
+    printf 'rm %s\nwrite %s %s\nset_inode_field %s mode 0100%s\nset_inode_field %s uid %s\nset_inode_field %s gid %s\n' \
+      "$path" "$file" "$path" "$path" "${mode: -3}" "$path" "$uid" "$path" "$gid"
+    printf '%s\n' "$times" | while read -r f v; do [ -n "$f" ] && printf 'set_inode_field %s %s @%s\n' "$path" "$f" "$((16#$v))"; done
+  } | E2FSPROGS_FAKE_TIME=${SWAP_FAKE_TIME:-1600000000} debugfs -w -f - "$dst.tmp?offset=$OFF" > /dev/null 2>&1
   e2fsck -fn "$dst.tmp?offset=$OFF" > /dev/null 2>&1 || { echo "agent-patch: e2fsck -fn found problems in $dst.tmp" >&2; exit 1; }
   debugfs -R "dump $path $dst.chk" "$dst.tmp?offset=$OFF" > /dev/null 2>&1
   cmp -s "$dst.chk" "$file" || { rm -f "$dst.chk"; echo "agent-patch: $path did not read back" >&2; exit 1; }
@@ -85,7 +93,7 @@ if [ "${1:-}" = --swap ]; then
   exit 0
 fi
 
-src=$1; dst=$2; agent=${3:-$HOME/hydo-cw/build/hydo-agent}
+src=$1; dst=$2; agent=${3:-${HYDO_AGENT_BIN:-$HOME/hydo-cw/build/hydo-agent}}
 sha=$(sha256sum "$agent" | cut -d' ' -f1)
 [ "$sha" = $PIN ] || { echo "agent-patch: $agent has sha256 $sha, not the pinned $PIN" >&2; exit 1; }
 debugfs -R "cat /etc/hydo/control" "$src?offset=$OFF" 2>/dev/null | grep -q . && { echo "agent-patch: $src is already an agent image" >&2; exit 1; }

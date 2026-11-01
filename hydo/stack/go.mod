@@ -5,16 +5,16 @@ go 1.26.5
 require (
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/segmentio/kafka-go v0.4.47
-	github.com/twmb/franz-go v1.17.1
+	github.com/twmb/franz-go v1.22.2
 	google.golang.org/grpc v1.68.1
 	google.golang.org/protobuf v1.35.2
 )
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
-	github.com/klauspost/compress v1.17.8 // indirect
-	github.com/pierrec/lz4/v4 v4.1.21 // indirect
-	github.com/twmb/franz-go/pkg/kmsg v1.8.0 // indirect
+	github.com/klauspost/compress v1.20.3 // indirect
+	github.com/pierrec/lz4/v4 v4.1.33 // indirect
+	github.com/twmb/franz-go/pkg/kmsg v1.15.0 // indirect
 	golang.org/x/net v0.29.0 // indirect
 	golang.org/x/sys v0.25.0 // indirect
 	golang.org/x/text v0.18.0 // indirect
