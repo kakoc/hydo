@@ -4,6 +4,12 @@ Step C2 of `docs/design/guest-control.md` ("Migration", point 2, and "Implementa
 arm64 examples on the Mac engine hvm. The x86_64 examples (M127) and the bug benchmark (M129) ran
 on the bare-metal machine in parallel and are not in this file.
 
+**Milestone 130** (branch `c2-mac-fixes`) closed two of M128's differences: D5 (busy-wait counter
+loops) is resolved by hvm's rewind mode under lock-step control, and D6 (the voting app's
+database) is explained: it is a timing difference around two real bugs of the voting app, not a
+hydo bug. The voting app's seeds 1–100 ran on both images. The tables below carry M130's values
+where they changed; the section "Milestone 130" at the end has the evidence.
+
 The question: does an image whose first process is `hydo-agent` (built with
 `hydo build --control agent`, driven by the host controller `hydo-control`) give the same answers
 as the shell-init image of the same manifest? An agent image cannot have the shell image's
@@ -87,7 +93,7 @@ have no arm64 manifest.
 | redis-oci | yes | nothing (swarm 100 of 100) |
 | redis-bridge | yes, except `F=` | the two freeze schedules are refused on the agent image (D4); everything else the same |
 | ledger | yes | 7 of 100 swarm seeds, both directions, 39 against 38 failures, the same minimal schedule (packet-loss timing: D1) |
-| ledger-spin | **no** | every agent run ends as SPIN: lock-step control does not run the rewind mode a counter loop needs (D5) |
+| ledger-spin | yes (since M130) | nothing (swarm 100 of 100, 44 failures each, both classes shrunk); in M128 every agent run ended as SPIN (D5, resolved by the rewind mode under lock-step control) |
 | redis-composed (atomic) | yes | 2 of 100 swarm seeds, both lying disk (D2) |
 | redis-composed (racy) | yes | 4 of 100 swarm seeds: 2 lost-update races (D1), 2 lying disk (D2); the same classes found and shrunk |
 | node-kv | yes | nothing (the SDK's HYDO-ASSERT properties included, after fix 1) |
@@ -137,8 +143,8 @@ verdict. Fingerprints of the two images differ by design.
 | ledger | `disk=none \| run O=front@0-30:resp:loss,50%` | VIOLATION `ledger.acked_exactly_once` `34f01afcf85b9322` | VIOLATION `ledger.acked_exactly_once` `6fb5073b7ad855b2` | yes | yes |
 | ledger | `disk=none \| run N=front@0-30:loss,60%` | VIOLATION `ledger.acked_exactly_once` `854a3f0de47b74e5` | VIOLATION `ledger.acked_exactly_once` `e03863089782235a` | yes | yes |
 | ledger | `disk=none \| run P=front@10+2` | VIOLATION `ledger.acked_exactly_once` `23cc35358531f39d` | VIOLATION `ledger.acked_exactly_once` `ead725b801c7a3b6` | yes | yes |
-| ledger-spin | `disk=none \| run` | OK `12e6a03e6e22595d` | ERROR ERROR workload: SPIN (guest loops without exits; run invalid) `0000000000000000` | yes | **no** |
-| ledger-spin | `disk=none \| run P=front@10+2` | VIOLATION `ledger.no_duplicates` `85e7e22a2d0a0746` | ERROR ERROR workload: SPIN (guest loops without exits; run invalid) `0000000000000000` | yes | **no** |
+| ledger-spin | `disk=none \| run` | OK `12e6a03e6e22595d` | OK `9016421c181fc5ba` (M130, rewind mode; M128: ERROR workload: SPIN) | yes | yes |
+| ledger-spin | `disk=none \| run P=front@10+2` | VIOLATION `ledger.no_duplicates` `85e7e22a2d0a0746` | VIOLATION `ledger.acked_exactly_once` `8ca0de67dafd69ac` (M130, rewind mode; M128: ERROR workload: SPIN) | yes | yes (both properties violated on both images; see D1 in M130) |
 | redis-composed | `disk=none \| run W=0000002a,p4,q2,r100` | OK `524d3a03ac1276d4` | OK `fcbbeeec95b3d53a` | yes | yes |
 | redis-composed-racy | `disk=none \| run W=0000002a,p4,q2,r100` | VIOLATION `total_conserved` `96f97912783caa87` | VIOLATION `total_conserved` `00dab157eee8e18f` | yes | yes |
 | node-kv | `disk=none \| run` | OK `40065ecb80f4905e` | OK `bc9803591bc4dca4` | yes | yes |
@@ -202,7 +208,7 @@ property table (assertions and invariants: passed, failed, not exercised).
 | grpc-fixed | `--strategy swarm --seeds 1-100` | 100 | 100 | 40 (40 reproduced) | 40 (40 reproduced) | same: `VIOLATION data disk unmountable (mount ...)`, `VIOLATION service cannot recover after the fault`, `orders.consistent` | 24 of 24 |
 | ledger | `--strategy swarm --new-faults --seeds 1-100` | 100 | 93 | 39 (39 reproduced) | 38 (38 reproduced) | same: `ledger.acked_exactly_once` | 8 of 8 |
 | ledger | `--sweep pause` | 12 | 12 | 6 (6 reproduced) | 6 (6 reproduced) | same: `ledger.acked_exactly_once` | 8 of 8 |
-| ledger-spin | `--strategy swarm --new-faults --seeds 1-100` | 100 | 0 | 44 (44 reproduced) | 100 (100 reproduced) | differ: none | 5 of 8 |
+| ledger-spin (M130) | `--strategy swarm --new-faults --seeds 1-100` | 100 | 100 | 44 (44 reproduced) | 44 (44 reproduced) | same: `ledger.acked_exactly_once`, `ledger.no_duplicates` | 8 of 8 |
 | node-kv | `--strategy swarm --buggify --seeds 1-100` | 100 | 100 | 32 (32 reproduced) | 32 (32 reproduced) | same: `VIOLATION data disk unmountable (mount ...)`, `nkv.oracle` | 17 of 17 |
 | python-kv | `--strategy swarm --buggify --seeds 1-100` | 100 | 100 | 31 (31 reproduced) | 31 (31 reproduced) | same: `VIOLATION data disk unmountable (mount ...)`, `pykv.oracle` | 17 of 17 |
 | python-kv-hist | `--strategy swarm --seeds 1-100` | 100 | 100 | 32 (32 reproduced) | 32 (32 reproduced) | same: `VIOLATION data disk unmountable (mount ...)`, `kv.linearizable` | 10 of 10 |
@@ -256,27 +262,26 @@ property table (assertions and invariants: passed, failed, not exercised).
   controller refuses the schedule ("hydo-agent-proto's freeze has no netns"). Without
   `--freeze-call` the explorer draws no `F=`, so the redis-bridge exploration is unaffected. Needs
   the protocol addition (a new agent build, which changes the pinned agent and every agent image).
-- **D5, an engine limit that needs a decision: busy-wait counter loops.** ledger-spin's
-  `spin_count` is a counter loop that only hvm's rewind mode resolves (M57). The shell image's run
-  ends as SPIN, hvmx runs it again with rewind and reports that run; under lock-step control
-  `serve.c` refuses the rewind mode (it moves the exit count backwards, so stops would not be a
-  pure function of the run), and the agent run ends `ERROR workload: SPIN` at its first counter
-  loop. All 100 agent runs of the swarm and both recorded schedules fail this way, so the agent
-  image cannot test this example at all. Exact-repeat loops (`spin_load`) are resolved under
-  control as before.
-- **D6, not explained: the voting app's database after a pause and a clock jump.** Two of 50
-  seeds: `P=db@18+2 T=7:-2592000 O=db-*@0-6:resp:loss,74%` (shell OK, agent VIOLATION
-  `votes.counted_soon`) and `P=db@1+5 T=18:31536000` (both VIOLATION `votes.counted_soon`, but the
-  shell image's final `votes.counted` also fails while the agent image's cannot decide): on the
-  agent image the checks' `psql` gets no answer from PostgreSQL ("db not answering") for the 60 s
-  after the heal. In both agent runs the .NET worker exited after the heal's restart pass (the
-  shell image's worker died before it and was restarted), so part of it is timing, but the
-  database itself answers in the shell runs. Each schedule without one of its faults (without
-  `T=`, without `O=`, without `T=` for the second) gives OK on both images. Not investigated
-  further; a case for C3 (the controller's `T=` and pause, or the worker's reconnect storm against
-  a database whose clock moved). The third differing seed (`K=db@8+1 P=redis@18+2 T=2:-30
-  O=redis-*@10-15:req:loss,61%`: shell VIOLATION, agent OK) looks like the same timing in the other
-  direction.
+- **D5, busy-wait counter loops: resolved in M130.** ledger-spin's `spin_count` is a counter
+  loop that only hvm's rewind mode resolves (M57). In M128 lock-step control refused the rewind
+  mode, so every agent run ended `ERROR workload: SPIN`. Since M130 `serve.c` runs a controlled
+  schedule with `spin=rewind` in the rewind mode, and the host runs an agent image's schedule
+  again with `spin=rewind` when its run on hvm ends as SPIN, as hvmx does for a shell image's RUN.
+  The agent image now gives the shell image's verdicts (section "Milestone 130").
+- **D6, the voting app's database after a pause and a clock jump: explained in M130, a timing
+  difference (D1) around two real bugs of the voting app.** The check's "db not answering" is not
+  PostgreSQL: `psql` answers, but the `votes` table does not exist, because the .NET worker creates
+  it only after its first database connection, and `votes_counted` reports every failing `psql`
+  as "db not answering". The worker exits on errors its retry loop does not catch: after the
+  realtime clock is stepped back 30 days, Npgsql's connection timeout, computed from the wall
+  clock, becomes more than 2^31 ms, and `Socket.ReceiveTimeout` throws
+  `ArgumentOutOfRangeException`; after a step forward of a year, Npgsql's timeout expires at once,
+  and Redis refuses writes (`MISCONF`: its RDB save fails, `/data` is in the read-only root), so
+  even a restarted worker exits at its first `LPOP`. hydo restarts dead services once, in the
+  heal's restart pass (hydo-init.sh's `restart_dead`, which the controller reproduces). Whether the
+  worker dies just before that pass (restarted, OK) or just after it (never restarted, VIOLATION)
+  depends on guest timing, which differs between the two images. Details and evidence in section
+  "Milestone 130".
 
 ## Fixes (each with a test)
 
@@ -310,15 +315,15 @@ and `cargo fmt --check` pass. The identity corpora and the scripted-engine scena
 
 ## What C3 still needs on the Mac
 
-- **Busy-wait counter loops under control (D5).** Either a rewind mode that keeps the stop
-  numbering pure (stops counted outside the rewound exits), or a documented limit that agent images
-  do not run counter-loop busy-waits; until then ledger-spin can only be tested with a shell image,
-  and switching the default would lose it.
 - **`F=` with `network: bridge` (D4):** the `freeze` op's namespace field (an addition to protocol
   version 1 with a feature name), a new pinned agent build for both architectures, and the
   redis-bridge freeze schedules and a `--sweep freeze` on the Mac then.
-- **The voting app's database (D6):** find why the agent image's checks get no answer from
-  PostgreSQL after a pause combined with a clock jump; and its seeds 51–100.
+- **The voting app's check (D6), a decision:** the example's `votes_counted` reports a missing
+  `votes` table (no worker has connected yet) as "db not answering". Saying "no vote counted yet"
+  instead is more accurate but changes the example's image and its verdict texts, so it belongs
+  to the re-baseline. Whether hydo should restart a service that dies after the heal's one restart
+  pass is a semantics question; M130 changed nothing (it is hydo-init.sh's behaviour and Compose's
+  without `restart:`).
 - **The mount error's wording (D3):** a decision, because it changes the explorer's signatures of
   the "data disk unmountable" class.
 - **The re-baseline** of every Mac fingerprint (the agent images' values above are the first
