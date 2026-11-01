@@ -20,7 +20,8 @@ record. CLAUDE.md is not changed here.
 
 Contents: 1. Inventory. 2. How the images were rebuilt and verified. 3. Old → new image
 hashes. 4. Old → new fingerprints, one table per image. 5. Verdict changes. 6. Paths.
-7. Rebuild after the netem drain fix (M77, 2026-10-23): the `-nq` images.
+7. Rebuild after the netem drain fix (M77, 2026-10-23): the `-nq` images. 8. The switch to agent
+images (M136, 2026-11-01): every manifest image's new values, on both engines.
 
 ## 1. Inventory
 
@@ -901,3 +902,552 @@ not rebuild, so its values still stand. M69 did not run the stack on 3 or 4 vCPU
 Raw results: `/var/tmp/smpb-nq/<tag>.log` (tags `old-all`, `new-all-1`, `new-all-2`, `old-fault-kafka10`,
 `new-fault-kafka10-1`, `new-fault-kafka10-2`), `<tag>.console` (consoles), `<tag>.done` (exit code, seconds);
 runner `~/hydo-smpb/smpb-run.sh`.
+
+## 8. The switch to agent images (M136, 2026-11-01)
+
+Step C3 of `docs/design/guest-control.md`: since Milestone 136 every image `hydo build` makes is
+an agent image (the guest agent `hydo-agent` as the first process, the host controller driving
+it), and the shell init with its spliced extensions is deleted. Every manifest image therefore
+has new bytes and new fingerprints; this section is the one re-recording of them (the user's
+decision, open item 30). The hand-written images (the stack-explore images, the flagships, the
+`deploy-metal.sh` tests, the pinned reproducers) are not manifest images and keep every value
+of sections 1–7.
+
+**How each value was measured.** Every recorded schedule of an example ran twice and both runs
+gave the same fingerprint (the "twice" column). On the Mac: `hydo run --image` (a fresh boot)
+twice, from a release-like prefix with this branch's programs (as M128). On the bare-metal machine:
+`hydo-bench list --repeat 2 --workers 1` (one boot under lock-step control, then every schedule
+twice from S1; an agent image's run from S1 gives the fingerprint of `hydo run` from a fresh boot,
+M121, and the six x86_64 Redis schedules that also ran with `hydo run` from a fresh boot twice gave the same
+values); the history examples' history verdicts with `hydo run`. The verdict column is the
+invariants' verdict line (and, on the Mac, the history checks' verdict where the plan has them).
+
+**The images.**
+- **Mac (arm64), all built here, two builds byte-identical each** (initramfs and data disk), by
+  this branch's `hydo build` from M128's staged example folders and prefix (busybox, mke2fs, tc,
+  both guest kernels) with the pinned agent `340a1eec…`, the Rust `hydo-world` `fefcca66…` and the
+  Rust `hydo-read` `88576fa8…` (M128's images carried M99's Go `hydo-read`). Initramfs sha256
+  prefixes: redis `38364f57…`, redis-hist `05dfbbd5…`, redis-read `dbc071f3…`, redis-ram `583fd9f8…`, redis-bridge `a54c2248…` (second kernel), ledger `648814ff…`, ledger-spin `5062cc20…`, redis-composed atomic `4c8f2530…` and racy `9a3a9e30…`, node-kv `e1f75034…`, python-kv `b231c9f6…`, python-kv-hist `38f0e7cc…`, rust-kv `84b12d3e…`, shop buggy `400c87c0…` and fixed `69cbf111…`, gRPC demo buggy `a535cd40…` and fixed `fde16ebc…`, the voting app `60981390…` (second kernel), redis-oci `be44cc22…`.
+- **x86_64, three tiers as in M127 (docs/C2-LINUX.md):** tier A (the Redis family and the voting
+  app) built twice on the bare-metal machine with the Linux release's tools, two builds byte-identical each;
+  tier B (the stack, `stack/hydo-read.yaml`, `stack/hydo-errors.yaml` with the old and the fixed
+  order service, miniflux and miniflux-read) built in M112's no-Nix chroot (`stack-old` twice,
+  byte-identical); tier C (etcd and its history images, the shop, the gRPC stack, the
+  generated-driver stack, rust-kv, avx2, redis-oci, and restate-oci)
+  patched from the recorded shell images by `hv/hvx/images/patch-agent.sh` (the pinned agent
+  `b72c5caa…`, `/etc/hydo/control`, `init-links.sh` and, new, `/etc/hydo/compose.sh` removed),
+  two patches byte-identical each. Disk image sha256 prefixes: tier A: redis `e39cb02a…`, redis-netem `b4bc8aba…`, redis-freeze `3cd41615…`, redis-hist `3dff5850…`, redis-live `80527451…`, redis-proxy `60d21cf9…`, redis-ram `14685a2a…`, redis-composed `e9c9e93e…`, redis-composed-hist `95c1500c…`, redis-composed-read `07d5e8ac…`, redis-errors `d430360d…`, redis-bridge `1661b504…`, the voting app `48dc9b22…` (generated manifest `38374949…`, loopback `63d176d9…`); tier B: stack old `000448fc…`, fixed `c0273506…`, stack-read old `18f8a2df…`, fixed `433cfab8…`, stack-errors fixed `e6bcc4f9…`, old `242de999…`, miniflux `07a7a90e…`, miniflux-read `6da84738…`; tier C (source → patched): etcd 3.5.5 `2d4d9301…` → `bf800b87…`, 3.5.6 `1df90f16…` → `5802a2a9…`, etcd-hc 3.5.5 `4f8aa317…` → `2e7e2d92…`, 3.5.6 `2a4a5d4d…` → `8a1e7da9…`, shop buggy `f331c6be…` → `82ebd785…`, fixed `6c669320…` → `016483b6…`, stack-grpc cur `b2206ebf…` → `6fb57d56…`, old `224b42f4…` → `df47fe94…`, planted `47ab04a7…` → `260a046a…`, stackgen `b70caeab…` → `b389dd8b…`, rust-kv `118c9f2c…` → `e8e44df0…`, avx2 `68267cf4…` → `5eeec022…`, restate-oci `2842986a…` → `13e5df59…`, redis-oci `ca3ea2b0…` → `eca096f1…`.
+- **What only a Nix build can make** (the tier-C images are patched stand-ins whose fingerprints
+  are their own; a real build needs the build machine): etcd 3.5.5/3.5.6 and their `-hc` images
+  (etcd and its tools from Nix), the shop (its two programs built with Nix's Go), the gRPC stack
+  (the order service with franz-go v1.22.2, which `stack-grpc/build.sh` takes from `hydo/stack`
+  since M135, and the stack's closures), the generated-driver stack (the stack's closures and the
+  generated folder), rust-kv's x86_64 build, avx2 (`hydoavx` from Nix's gcc), redis-oci and
+  restate-oci (their OCI layouts; `hydo-fetch-image` could fetch them, not tried), and the
+  workflow engine (the user's project).
+
+### 8.1 Mac (hvm), every recorded schedule twice
+
+67 schedules on 19 images, all twice identical. The verdict classes are M128's agent images'
+(and, where M130, M131 and M134 changed them, theirs): ledger-spin runs under the rewind mode,
+the redis-bridge freezes run in the namespace, python-kv starts, the gRPC demo violates on the
+buggy build and passes on the fixed one.
+
+
+#### redis
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (redis.acked_writes_survive: acked=20 all present) | `193b67145318d6cf` | `3a017c99868bdde2` | yes |
+| `disk=none \| run K=redis@5+2` | OK invariants=1 held (redis.acked_writes_survive: acked=18 all present) | `7d89169baf52ecc2` | `e363b83c51fe1b6a` | yes |
+| `disk=none \| run P=redis@5+2` | OK invariants=1 held (redis.acked_writes_survive: acked=18 all present) | `1f61a9f4c6743764` | `2d7e8790ccc7ae8c` | yes |
+| `disk=cut \| run C=12 R=everysec` | VIOLATION [redis.acked_writes_survive] key k:0 lost | `fb9c6839e1f6f4f7` | `af04504002d1ee7a` | yes |
+| `disk=cut \| run C=12 R=always` | OK invariants=1 held (redis.acked_writes_survive: acked=12 all present) | `431723382cd6f829` | `17a9c9c812890c76` | yes |
+| `disk=none \| run O=redis@5-8:resp:loss,100%` | OK invariants=1 held (redis.acked_writes_survive: acked=17 all present) | `1655543a974efcbe` | `e786d086c906ce14` | yes |
+| `disk=none \| run N=redis@5-10:loss,60%` | OK invariants=1 held (redis.acked_writes_survive: acked=17 all present) | `72ba6bc7c6de2503` | `b49246907b6b6431` | yes |
+| `disk=none \| run T=10:3600` | OK invariants=1 held (redis.acked_writes_survive: acked=20 all present) | `ee1f3c01eb04616f` | `3eb0d887243ec326` | yes |
+
+#### redis-hist
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=cut dseed=1 \| run C=12` | OK invariants=0 held (); history OK | `4957be0a6dcb2035` | `f5977b5f85d127d8` | yes |
+| `disk=cut dseed=1 \| run C=12 R=everysec` | OK invariants=0 held (); history VIOLATION [redis.kv_linearizable] | `957cb0ad3bb0b259` | `90144220037ae4ec` | yes |
+
+#### redis-read
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (redis.acked_writes_survive: subset holds: all 20 items of acked are in redis (redis h... | `6ae40167e8288b87` | `f3ba88cf863b6426` | yes |
+| `disk=cut dseed=1 \| run C=12 R=everysec` | VIOLATION [redis.acked_writes_survive] subset violated: 12 items of 12 in acked not in redis: k:0=v0, k:1=v... | `cdc8de057c26cbb3` | `71466bb198edf9f9` | yes |
+
+#### redis-ram
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=2 held (redis.acked_writes_survive: acked=20 all present) | `067dd2c6d54e2ca6` | `9d2a1edace89eb0f` | yes |
+| `disk=cut \| run C=12 R=everysec` | VIOLATION [redis.acked_writes_survive] key k:0 lost | `ca5031a62951d171` | `533ee15b0e8b4e30` | yes |
+
+#### redis-bridge
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `8fd9e1576dee25c4` | `14af985fafa6a0ca` | yes |
+| `disk=none \| run N=primary-replica@5-10:loss,100%` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `c42fb828cb40ea69` | `b9b191afe8ff347f` | yes |
+| `disk=none \| run O=primary-replica@5-10:req:loss,100%` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `022f2184ab03958f` | `4f0e58064c0510be` | yes |
+| `disk=none \| run O=primary@5-8:resp:delay,300ms` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `c2bc92c9a0b26ea4` | `72f5aa1bb200a63b` | yes |
+| `disk=none \| run K=replica@5+3` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `2f0c2e49fb70d37a` | `6a8c64c25c180c74` | yes |
+| `disk=cut \| run C=8` | OK invariants=1 held (primary.acked_writes_survive: acked=8 all on the primary) | `bd3d67ef875fb289` | `0f774df0f3a9ecb2` | yes |
+| `disk=none \| run F=replica<primary@5#3:2000` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `c5468c557f44330f` | `1993b9669f47ad4e` | yes |
+| `disk=none \| run F=primary<workload@5#2:1000` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `e2d9ddbf12753896` | `db19e485a83060b1` | yes |
+| `disk=none \| run H=redisp@3-6:drop` | OK invariants=1 held (primary.acked_writes_survive: acked=13 all on the primary) | `9da67ba88882b5d5` | `01634ac3903ea950` | yes |
+
+#### ledger
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=2 held (ledger.acked_exactly_once: acked=30 each stored once) | `0d47c63d0101b506` | `f68317656d50efba` | yes |
+| `disk=none \| run O=front@5-8:resp:loss,100%` | OK invariants=2 held (ledger.acked_exactly_once: acked=30 each stored once) | `946266e1c874aa0b` | `de5826d41aa3ceef` | yes |
+| `disk=none \| run O=front@0-30:resp:loss,70%` | VIOLATION [ledger.acked_exactly_once] entry 1 stored 2 times | `5af3b8a3cab4723b` | `11127ff78b0d4810` | yes |
+| `disk=none \| run O=front@0-30:resp:loss,50%` | VIOLATION [ledger.acked_exactly_once] entry 10 stored 2 times | `61113c627c33395f` | `162cc6d22b65be38` | yes |
+| `disk=none \| run N=front@0-30:loss,60%` | VIOLATION [ledger.acked_exactly_once] entry 9 stored 2 times | `d1536c0e926261c8` | `fbff9fa6de9b9cf0` | yes |
+| `disk=none \| run P=front@10+2` | VIOLATION [ledger.acked_exactly_once] entry 10 stored 2 times | `fda105a8fa77341b` | `27229cb79acbbb1b` | yes |
+
+#### ledger-spin
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=2 held (ledger.acked_exactly_once: acked=30 each stored once) | `e0518577f10b88c3` | `8898c0caab66f7ff` | yes |
+| `disk=none \| run P=front@10+2` | VIOLATION [ledger.acked_exactly_once] entry 10 stored 2 times | `2dcb3c0bf16ed0c0` | `24f5e0f77c0e0778` | yes |
+
+#### redis-composed
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run W=0000002a,p4,q2,r100` | OK invariants=5 held (compose.commands: started=34 ok=34 failed=0 timeout=0 violation=0 killed=0 skipped=0) | `5efdd2f240a987e7` | `5b8c3c98d0ddb1b4` | yes |
+
+#### redis-composed-racy
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run W=0000002a,p4,q2,r100` | VIOLATION [total_conserved] balances sum to 495, not 500 | `0d5d1e702e3ac25e` | `1a0a10b88c498849` | yes |
+
+#### node-kv
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (nkv.oracle: acked=20 all present) | `f15f18b0c9841e28` | `541802f17cca1c77` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [nkv.oracle] key k:0 lost (got null) | `46e0b639fcbcdf95` | `1e967c83932acc4b` | yes |
+| `disk=cut \| run C=12` | OK invariants=1 held (nkv.oracle: acked=12 all present) | `001f3efd81700a81` | `ac19dfcca9ed9f5e` | yes |
+| `disk=none \| run K=nkv@8+2 B=1234` | OK invariants=1 held (nkv.oracle: acked=18 all present) | `258ef05237ca123e` | `a907a15d495d8deb` | yes |
+
+#### python-kv
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (pykv.oracle: acked=20 all present) | `26d1a7ff9f69fc6e` | `b7a4875e60aad8cf` | yes |
+| `disk=none \| run K=pykv@8+2` | OK invariants=1 held (pykv.oracle: acked=18 all present) | `2bf54a9ce250ed03` | `ac6ca0286e71a319` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [pykv.oracle] key k:0 lost (got 'NONE') | `9860f80fb0e1625b` | `8c230ac87c46cb19` | yes |
+| `disk=none \| run B=1234` | OK invariants=1 held (pykv.oracle: acked=18 all present) | `d3709c242b3f967a` | `6e977dae9aa72cba` | yes |
+
+#### python-kv-hist
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=cut \| run C=12` | OK invariants=0 held (); history OK | `a7a64977623a9b0e` | `59f9219faa984ef8` | yes |
+| `disk=cut \| run C=12 S=never` | OK invariants=0 held (); history VIOLATION [kv.linearizable] | `88d948c63401bb25` | `f9cb1876c15427a0` | yes |
+
+#### rust-kv
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present) | `5777c136b33b2224` | `41f2ebf5d53abd98` | yes |
+| `disk=cut \| run C=12` | OK invariants=1 held (rkv.oracle: rkv check: acked=12 all present) | `74c66bb13973fd34` | `1dbfd8f3d1e8d604` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [rkv.oracle] rkv check: acked=12 lost=12 | `72da87f9b318654b` | `2e45ad554dc8876c` | yes |
+| `disk=none \| run K=rkv@8+2` | OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present) | `d94833c3a18f8546` | `0dd8982209f7390b` | yes |
+| `disk=none \| run B=5abc,1000,500` | OK invariants=1 held (rkv.oracle: rkv check: acked=2 all present) | `28e10d55aef58de9` | `c6f3b015807efab0` | yes |
+| `disk=none \| run B=1234` | OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present) | `548606cca90e0e00` | `243f271a5911baf1` | yes |
+| `disk=none \| run K=rkv@8+2 B=1234` | OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present) | `050f2a8526860056` | `b2a49ac46a82c64a` | yes |
+| `disk=none \| run P=rkv@5+3` | OK invariants=1 held (rkv.oracle: rkv check: acked=17 all present) | `a853e49fb584b0fc` | `5dfdccf8b8dd97c5` | yes |
+
+#### shop-buggy
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once) | `287ec924a7c24266` | `cb5e8cab8f6ad1e8` | yes |
+| `disk=none dseed=efb4cfbc49052179 \| run H=payments.charge@0-1:drop` | VIOLATION [payments.charged_at_most_once] payments.charge: ref o0 took effect 3 times (records 1,2,3) | `3ca443aabec98486` | `8c5be03f3908e8e4` | yes |
+| `disk=cut dseed=1 \| run H=payments.charge@0-1:drop C=6` | VIOLATION [payments.charged_at_most_once] payments.charge: ref o0 took effect 3 times (records 1,2,3) | `9496d19fc5de2a84` | `4e904702332fb368` | yes |
+| `disk=none \| run H=payments.charge@6-9:reset,p=50` | VIOLATION [payments.charged_at_most_once] payments.charge: ref o7 took effect 2 times (records 24,26) | `36de7a870a2f929b` | `88ac58547d058752` | yes |
+
+#### shop-fixed
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once) | `4837e65705116cdb` | `42df466b523f61a8` | yes |
+| `disk=none dseed=efb4cfbc49052179 \| run H=payments.charge@0-1:drop` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once) | `61a13ebe6297ead4` | `c22306de0f9f6947` | yes |
+| `disk=cut dseed=1 \| run H=payments.charge@0-1:drop C=6` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 6 effects, every ref at most once) | `a6999e49d410101a` | `e1634bd4c544b877` | yes |
+
+#### grpc-buggy
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none dseed=d7071eb1f9d436b9 \| run P=redis@16+11 W=5764a73c,p1,q2,r200,n3,x0.2.6.13.26-27.34.46-47,o0.2-3` | VIOLATION [orders.consistent] VIOLATION request_id r1 created 5 orders: o11 o1 o2 o3 o4 | `1c3ee0d25016e91b` | `449b66182014be39` | yes |
+
+#### grpc-fixed
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none dseed=d7071eb1f9d436b9 \| run P=redis@16+11 W=5764a73c,p1,q2,r200,n3,x0.2.6.13.26-27.34.46-47,o0.2-3` | OK invariants=2 held (compose.commands: started=2 ok=1 failed=1 timeout=0 violation=0 killed=0 skipped=0) | `00d2c1058ea96480` | `dab029d6add95a35` | yes |
+
+#### voting
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (votes.counted: all 20 acknowledged votes counted) | `3cf409bead783e0e` | `1b9e5fbb98634f9c` | yes |
+| `disk=none \| run K=worker@5+5` | OK invariants=1 held (votes.counted: all 20 acknowledged votes counted) | `e5ea05f9170541b5` | `e39f6fb3fb98c8d0` | yes |
+| `disk=cut \| run C=12` | VIOLATION [votes.counted_soon] not satisfied 60.83s after heal, deadline 60s (last check rc=1: too few vote... | `ff4dc7a30d3a8c98` | `64b7f90f3b5cd36e` | yes |
+| `disk=none \| run N=vote-redis@5-12:loss,100%` | OK invariants=1 held (votes.counted: all 13 acknowledged votes counted) | `22b4be3c7a922d35` | `aa587576ffe76bf2` | yes |
+
+#### redis-oci
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (redis.acked_writes_survive: acked=20 all present) | `f5368b1e6404ab4c` | `a9c56f64c3140e36` | yes |
+| `disk=cut \| run C=12 R=everysec` | VIOLATION [redis.acked_writes_survive] key k:1 lost | `1103323601bea190` | `ba162b683a58bea2` | yes |
+| `disk=none \| run K=redis@5+2` | OK invariants=1 held (redis.acked_writes_survive: acked=18 all present) | `e19719312392a8f1` | `1596f40e650cc3f4` | yes |
+
+
+### 8.2 x86_64 (hvx), every recorded schedule twice
+
+128 schedules on 38 images (`hydo-bench list --repeat 2 --workers 1`; a pool boots each image with
+its manifest's `guest.ram_mib` and `guest.cpu`, which hydo-bench learned in M136), all twice
+identical. Results on the bare-metal machine: `/var/tmp/m136/list/<name>/` (`<image>.jsonl` with `fp` and `fp2`,
+consoles and control transcripts). The verdicts are the shell images' of sections 4 and 7 and of
+the examples' RESULTS.md at the level of meaning: the stack's pinned-reproducer schedule
+violates order 11 on the old order service and passes on the fixed one, every 7.1 schedule gives
+7.1's verdict and order, the shop's planted bug and the gRPC stack's planted duplicate are found,
+etcd 3.5.5 shows 14685's revision split at `C=30` and its history check flags the second
+symptom, 3.5.6 passes both; `compose-voting/hydo.generated.yaml` ends in ERROR by design (its
+invariants are the importer's TODOs). One verdict differs from earlier recordings, by timing:
+
+
+#### redis (`redis_hydo`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (redis.acked_writes_survive: acked=20 all present) | `6875291e90072ae6` | yes |
+| `disk=none \| run K=redis@5+2` | OK invariants=1 held (redis.acked_writes_survive: acked=18 all present) | `53f01e40711ccfdf` | yes |
+| `disk=none \| run P=redis@5+2` | OK invariants=1 held (redis.acked_writes_survive: acked=18 all present) | `7b2f0cd241ca4d4c` | yes |
+| `disk=cut \| run C=12 R=everysec` | VIOLATION [redis.acked_writes_survive] key k:1 lost | `beb90e457eed6cd7` | yes |
+| `disk=cut \| run C=12 R=always` | OK invariants=1 held (redis.acked_writes_survive: acked=12 all present) | `e94d248dc0263db7` | yes |
+| `disk=none dseed=1 \| run K=redis@5+3 P=redis@12+2 T=8:-86400` | OK invariants=1 held (redis.acked_writes_survive: acked=15 all present) | `9161ea99985a7dfc` | yes |
+| `disk=cut dseed=1f16055b6d41c6d9 \| run C=9 R=no` | VIOLATION [redis.acked_writes_survive] key k:0 lost | `1ab0adbd21b84609` | yes |
+
+#### redis-netem (`redis_hydo-netem`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none \| run` | OK invariants=2 held (net.no_retransmission: retrans=0 timeouts=0 uptime=7.99) | `ccbf6defbc79c73d` | yes |
+| `disk=none \| run N=redis@5-10:loss,60%` | VIOLATION [net.no_retransmission] retrans=20 timeouts=16 uptime=14.08 | `0709180f00628487` | yes |
+| `disk=none \| run O=redis@5-8:resp:loss,100%` | VIOLATION [net.no_retransmission] retrans=11 timeouts=8 uptime=14.08 | `bf326d61b307fe1b` | yes |
+
+#### redis-freeze (`redis_hydo-freeze`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (redis.acked_writes_survive: acked=20 all present) | `00e91cf282302822` | yes |
+| `disk=none dseed=0 \| run F=redis<workload@5#1:150000` | OK invariants=1 held (redis.acked_writes_survive: acked=5 all present) | `84ccade7ac058525` | yes |
+| `disk=none dseed=0 \| run F=redis<workload@12#0:1` | OK invariants=1 held (redis.acked_writes_survive: acked=20 all present) | `635d755e11838cc8` | yes |
+
+#### redis-hist (`redis_hydo-hist`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=cut dseed=1 \| run C=12` | OK checks=2 held (redis.kv_linearizable: 32 operations on 20 keys linearizable) | `92ff124ba40094ce` | yes |
+| `disk=cut dseed=1 \| run C=12 R=everysec` | VIOLATION [redis.kv_linearizable] key k:1: an acknowledged write is lost or a read is stale: a read that be... | `c1e60506e16ab573` | yes |
+
+#### redis-live (`redis_hydo-live`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=1 held (redis.acked_writes_survive: acked=20 all present) | `7dadf3d612873e3f` | yes |
+| `disk=none dseed=1 \| run K=redis@5+3` | OK invariants=1 held (redis.acked_writes_survive: acked=20 all present) | `c1532e566d404833` | yes |
+| `disk=none dseed=1 \| run P=redis@18~0:20000` | VIOLATION [redis.pending_resolved] not satisfied 10.14s after heal, deadline 10s (last check rc=1: pending=1) | `eb479d619d4f470b` | yes |
+
+#### redis-proxy (`redis_hydo-proxy`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (redis.acked_writes_survive: acked=20 all present) | `b32e2470daf79567` | yes |
+| `disk=none \| run H=redisp@2-5:drop` | OK invariants=1 held (redis.acked_writes_survive: acked=17 all present) | `8d758359f1f1cbb0` | yes |
+| `disk=none \| run H=redisp@1-3:reset K=redis@4+2` | OK invariants=1 held (redis.acked_writes_survive: acked=16 all present) | `0b4d666bbd6c6873` | yes |
+
+#### redis-ram (`redis-ram_hydo`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none \| run` | OK invariants=2 held (redis.acked_writes_survive: acked=20 all present) | `66426149ddd86227` | yes |
+| `disk=cut \| run C=12 R=everysec` | VIOLATION [redis.acked_writes_survive] key k:1 lost | `68c822c265af3c69` | yes |
+
+#### redis-composed (`redis-composed_hydo_hydo`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run W=0000002a,p4,q2,r100` | OK invariants=5 held (compose.commands: started=34 ok=34 failed=0 timeout=0 violation=0 killed=0 skipped=0) | `9699814e85527567` | yes |
+| `disk=cut dseed=1 \| run C=12 R=everysec W=85ebca77,p4,q2,r100` | VIOLATION [acked_writes_survive] key k:21 lost | `ecc0f218e02c56a4` | yes |
+
+#### redis-composed-hist (`redis-composed-hist_hydo_hydo`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=cut dseed=1 \| run C=12 W=0000002a,p4,q2,r100` | OK invariants=1 held (compose.commands: no composed workload ran in this boot) \| checks=2 held (redis.kv_li... | `eb9c4ad0a14e5f6e` | yes |
+| `disk=cut dseed=1 \| run C=12 R=everysec W=0000002a,p4,q2,r100` | VIOLATION [redis.kv_linearizable] key k:12: an acknowledged write is lost or a read is stale: a read that b... | `87d270f8f5466dff` | yes |
+
+#### redis-composed-read (`redis-composed-read_hydo_hydo`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run W=0000002a,p4,q2,r100` | OK invariants=6 held (compose.commands: started=34 ok=34 failed=0 timeout=0 violation=0 killed=0 skipped=0) | `e993025ac922649e` | yes |
+| `disk=cut dseed=1 \| run C=12 R=everysec W=0000002a,p4,q2,r100` | OK invariants=6 held (compose.commands: no composed workload ran in this boot) | `40a281b8671f1da6` | yes |
+
+#### redis-errors (`redis-errors_hydo_hydo`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run W=0000002a,p4,q2,r100` | OK invariants=5 held (compose.commands: started=34 ok=34 failed=0 timeout=0 violation=0 killed=0 skipped=0) | `014ee59eba36eadf` | yes |
+| `disk=ioerr:1 dseed=281cc34161f446f4 \| run K=redis@1+1 W=6311ab23,p1,q2,r100,n6,oanytime_read` | OK invariants=5 held (compose.commands: started=6 ok=4 failed=2 timeout=0 violation=0 killed=0 skipped=0) | `b35ee148adf7d89a` | yes |
+
+#### redis-bridge (`redis-bridge_hydo`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `db3984d26b70e52b` | yes |
+| `disk=none \| run N=primary-replica@5-10:loss,100%` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `282f100fa2ebf1bd` | yes |
+| `disk=none \| run K=replica@5+3` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `526a9673d7fff440` | yes |
+| `disk=cut dseed=1 \| run C=8` | OK invariants=1 held (primary.acked_writes_survive: acked=8 all on the primary) | `f237f2cc19c52b43` | yes |
+| `disk=none \| run F=replica<primary@5#3:2000` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `cf3f34ef035a7f4e` | yes |
+| `disk=none \| run H=redisp@3-6:drop` | OK invariants=1 held (primary.acked_writes_survive: acked=13 all on the primary) | `1fb5b228073c9443` | yes |
+
+#### rust-kv (`rust-kv-v2`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present) | `389bc482e51e2194` | yes |
+| `disk=cut \| run C=12` | OK invariants=1 held (rkv.oracle: rkv check: acked=12 all present) | `d4604820a762223b` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [rkv.oracle] rkv check: acked=12 lost=12 | `1591a9e914967b33` | yes |
+| `disk=none \| run K=rkv@8+2 B=1234` | OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present) | `d4d56cb09417de82` | yes |
+
+#### avx2 (`avx2`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none \| run` | OK invariants=2 held (avx.results_match_scalar: steps=8 all AVX2 results equal the scalar ones) | `334f56db42148c38` | yes |
+
+#### redis-oci (`redis-oci`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (redis.acked_writes_survive: acked=20 all present) | `6147e0344f24a878` | yes |
+| `disk=cut \| run C=12 R=everysec` | VIOLATION [redis.acked_writes_survive] key k:1 lost | `231146340448942c` | yes |
+| `disk=none \| run K=redis@5+2` | OK invariants=1 held (redis.acked_writes_survive: acked=18 all present) | `a86ca371b62d709b` | yes |
+
+#### restate-oci (`restate-oci`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (restate.answers: answers; steps answered=6 of 6) | `01b32189a1ec35e8` | yes |
+| `disk=none \| run K=restate@2+2` | OK invariants=1 held (restate.answers: answers; steps answered=4 of 6) | `6127ac2b0ce527bc` | yes |
+| `disk=cut \| run C=4` | OK invariants=1 held (restate.answers: answers; steps answered=4 of 6) | `4cde851a6dfcaa06` | yes |
+
+#### shop-buggy (`shop2-buggy`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once) | `b9568c33cf16930e` | yes |
+| `disk=none dseed=efb4cfbc49052179 \| run H=payments.charge@0-1:drop` | VIOLATION [payments.charged_at_most_once] payments.charge: ref o0 took effect 3 times (records 1,2,3) | `c0b64b0991adc479` | yes |
+| `disk=none dseed=fbb60485ae17b0ba \| run H=payments.charge@6-9:reset,p=50` | VIOLATION [payments.charged_at_most_once] payments.charge: ref o7 took effect 2 times (records 25,26) | `fbf9e64b1e159b9d` | yes |
+| `disk=cut dseed=1 \| run H=payments.charge@0-1:drop C=6` | VIOLATION [payments.charged_at_most_once] payments.charge: ref o0 took effect 3 times (records 1,2,3) | `5a8193e66693ed9a` | yes |
+
+#### shop-fixed (`shop2-fixed`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once) | `a38984a542210bd8` | yes |
+| `disk=none dseed=efb4cfbc49052179 \| run H=payments.charge@0-1:drop` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once) | `92e91caf0502fe49` | yes |
+| `disk=none dseed=fbb60485ae17b0ba \| run H=payments.charge@6-9:reset,p=50` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once) | `a9b788c96aa2ccf3` | yes |
+| `disk=cut dseed=1 \| run H=payments.charge@0-1:drop C=6` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 6 effects, every ref at most once) | `5c628c155c3f0b77` | yes |
+
+#### etcd-3.5.5 (`etcd-3.5.5`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=3 held (etcd.acked_puts_readable: acked=90 all readable) | `ed50aa191ffd0a39` | yes |
+| `disk=cut dseed=1 \| run C=30` | VIOLATION [etcd.members_agree] members disagree: revisions 98 99 98; k89 mod_revisions 97 97 97 | `200822da59c2ec72` | yes |
+| `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | OK invariants=3 held (etcd.acked_puts_readable: acked=90 all readable) | `3b47960fb89dd908` | yes |
+
+#### etcd-3.5.6 (`etcd-3.5.6`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=3 held (etcd.acked_puts_readable: acked=90 all readable) | `fe7fa0444ca89f70` | yes |
+| `disk=cut dseed=1 \| run C=30` | OK invariants=3 held (etcd.acked_puts_readable: acked=90 all readable) | `b95213ade20090b2` | yes |
+| `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | OK invariants=3 held (etcd.acked_puts_readable: acked=90 all readable) | `220a997535814ade` | yes |
+
+#### etcd-hc-3.5.5 (`etcd-hc-3.5.5`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK checks=1 held (etcd.kv_linearizable: 183 operations on 90 keys linearizable) | `edec19943cb68c42` | yes |
+| `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | VIOLATION [etcd.kv_linearizable] key k31: these 4 operations cannot be ordered consistently with real time ... | `2367445439ec5bc8` | yes |
+
+#### etcd-hc-3.5.6 (`etcd-hc-3.5.6`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK checks=1 held (etcd.kv_linearizable: 183 operations on 90 keys linearizable) | `f9142657ac4708ac` | yes |
+| `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | OK checks=1 held (etcd.kv_linearizable: 187 operations on 90 keys linearizable) | `55e6b1dda9a9b14e` | yes |
+
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+
+#### voting (`compose-voting_hydo`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=1 held (votes.counted: all 20 acknowledged votes counted) | `5178e8c08ecf93cc` | yes |
+| `disk=none dseed=1 \| run K=worker@5+5` | OK invariants=1 held (votes.counted: all 20 acknowledged votes counted) | `473a8fea22bcde0f` | yes |
+| `disk=none dseed=1 \| run C=12` | VIOLATION [votes.counted_soon] not satisfied 60.79s after heal, deadline 60s (last check rc=1: too few vote... | `3e0c121b964fd925` | yes |
+| `disk=none dseed=1 \| run N=vote-redis@5-12:loss,100%` | OK invariants=1 held (votes.counted: all 13 acknowledged votes counted) | `6d6fa005c6971bbc` | yes |
+
+#### voting-generated (`compose-voting_hydo.generated`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | ERROR invariant todo.acked_operations_survive could not be evaluated: TODO: write the invariants (hydo.yaml) | `7eed916a16de1b82` | yes |
+| `disk=none dseed=1 \| run K=worker@5+5` | ERROR invariant todo.acked_operations_survive could not be evaluated: TODO: write the invariants (hydo.yaml) | `b43a721c180f16ae` | yes |
+
+#### voting-loopback (`compose-voting_hydo-loopback`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=1 held (votes.counted: all 20 acknowledged votes counted) | `32a8fda173a1552c` | yes |
+| `disk=none dseed=1 \| run K=worker@5+5` | OK invariants=1 held (votes.counted: all 20 acknowledged votes counted) | `76991ff091db8c00` | yes |
+
+#### stack-fix (`stack-fix`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0) | `af02273eb613d4f1` | yes |
+| `disk=none dseed=4d5cb825dfaab05b \| run K=redis@11+1 C=24` | OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0) | `952f376397b32f0d` | yes |
+| `disk=none dseed=1 \| run K=kafka@10+3 P=mysql@15~100:400` | OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0) | `7c442cdf89fbafe4` | yes |
+| `disk=cut dseed=45e6d4ac0682d6a9 \| run K=redis@6+4 N=mysql@20-26:delay,48ms C=13` | OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0) | `7c836e665dc86a6a` | yes |
+| `disk=cut dseed=676bcff7dd7d00ca \| run K=kafka@1+2 C=23` | OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0) | `9c1a09eb84c10492` | yes |
+| `disk=cut dseed=cf949e8cc47e94d2 \| run K=kafka@5+3 N=redis@19-30:delay,80ms C=28` | OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0) | `134db765072a2a4b` | yes |
+| `disk=cut dseed=787cfeea930dd7c3 \| run K=redis@8+1 N=kafka@25-30:delay,20ms,reorder,45% C=24` | OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0) | `392607638b9a2814` | yes |
+| `disk=cut dseed=3e46da0b0d53091a \| run K=kafka@12+1 N=mysql@0-13:delay,20ms,reorder,39%,corrupt,3% C=18` | OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0) | `c1b2c134dfa2408d` | yes |
+| `disk=cut dseed=4631de84f54a4a77 \| run K=kafka@17+2 N=kafka@27-29:corrupt,4% C=21` | OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0) | `464325fad244757b` | yes |
+| `disk=cut dseed=31aad0ceab8015ae \| run K=redis@1+3 N=mysql@20-29:delay,20ms,reorder,43%,duplicate,46% C=11` | OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0) | `3bae7cbcc42c41d2` | yes |
+| `disk=none dseed=1 \| run N=kafka@5-10:delay,300ms` | OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0) | `4a3c93815639896d` | yes |
+| `disk=none dseed=1 \| run O=mysql@5-10:resp:delay,1000ms` | OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0) | `738c3ce88bc57adf` | yes |
+| `disk=none dseed=1 \| run N=mysql@3-8:delay,50ms,loss,20%` | OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0) | `a1d1231abc0fa65e` | yes |
+
+#### stack-old (`stack-old`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0) | `0dde9af6eff8b2e7` | yes |
+| `disk=none dseed=4d5cb825dfaab05b \| run K=redis@11+1 C=24` | VIOLATION [stack.exactly_once] order=11 is in kafka (1 times) but the client was never ACKed | `b9e6fc324fa8ed76` | yes |
+| `disk=none dseed=1 \| run K=kafka@10+3 P=mysql@15~100:400` | OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0) | `b2c3e23999830920` | yes |
+| `disk=cut dseed=45e6d4ac0682d6a9 \| run K=redis@6+4 N=mysql@20-26:delay,48ms C=13` | VIOLATION [stack.exactly_once] order=6 is in kafka (1 times) but the client was never ACKed | `07bc12a5783716de` | yes |
+| `disk=cut dseed=676bcff7dd7d00ca \| run K=kafka@1+2 C=23` | VIOLATION [stack.exactly_once] order=1 is in kafka (1 times) but the client was never ACKed | `30d5c3e2073cfac1` | yes |
+| `disk=cut dseed=cf949e8cc47e94d2 \| run K=kafka@5+3 N=redis@19-30:delay,80ms C=28` | VIOLATION [stack.exactly_once] order=5 is in kafka (1 times) but the client was never ACKed | `3681cf66a8a666f6` | yes |
+| `disk=cut dseed=787cfeea930dd7c3 \| run K=redis@8+1 N=kafka@25-30:delay,20ms,reorder,45% C=24` | VIOLATION [stack.exactly_once] order=8 is in kafka (1 times) but the client was never ACKed | `064aac00f5becfe0` | yes |
+| `disk=cut dseed=3e46da0b0d53091a \| run K=kafka@12+1 N=mysql@0-13:delay,20ms,reorder,39%,corrupt,3% C=18` | VIOLATION [stack.exactly_once] order=12 is in kafka (1 times) but the client was never ACKed | `5ef55431f88e353e` | yes |
+| `disk=cut dseed=4631de84f54a4a77 \| run K=kafka@17+2 N=kafka@27-29:corrupt,4% C=21` | VIOLATION [stack.exactly_once] order=17 is in kafka (1 times) but the client was never ACKed | `1d415e4720037456` | yes |
+| `disk=cut dseed=31aad0ceab8015ae \| run K=redis@1+3 N=mysql@20-29:delay,20ms,reorder,43%,duplicate,46% C=11` | VIOLATION [stack.exactly_once] order=1 is in kafka (1 times) but the client was never ACKed | `7f95d1abc26d0d83` | yes |
+
+#### stack-read-fix (`stack-read-fix`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=7 held (mysql.amounts_valid: count holds: wrong_amount has 0 records (want == 0)) | `84d920df46d6e1be` | yes |
+| `disk=none dseed=4d5cb825dfaab05b \| run K=redis@11+1 C=24` | OK invariants=7 held (mysql.amounts_valid: count holds: wrong_amount has 0 records (want == 0)) | `2b09df294c12b4c4` | yes |
+
+#### stack-read-old (`stack-read-old`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=7 held (mysql.amounts_valid: count holds: wrong_amount has 0 records (want == 0)) | `c9d9b56b99037daf` | yes |
+| `disk=none dseed=4d5cb825dfaab05b \| run K=redis@11+1 C=24` | VIOLATION [order.told_failed_not_applied] disjoint violated: 1 item of told_failed is also in kafka: 11 | `ec83563bdd9838ef` | yes |
+
+#### stack-errors-fix (`stack-errors-fix`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0) | `348cd1e351ee0583` | yes |
+| `disk=none dseed=1 \| run K=kafka@10+3 P=mysql@15~100:400` | OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0) | `e17626b8099af7e3` | yes |
+| `disk=ioerr:5 dseed=1 \| run` | ERROR restart after the faults (mysql) | `6d8a523700f109e4` | yes |
+
+#### stack-errors-old (`stack-errors-old`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=4d5cb825dfaab05b \| run K=redis@11+1 C=24` | VIOLATION [stack.exactly_once] order=11 is in kafka (1 times) but the client was never ACKed | `ecbdc4b8fed098c8` | yes |
+
+#### miniflux (`miniflux`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once) | `bf92f72fb2ee7743` | yes |
+| `disk=none dseed=1 \| run K=postgres@10+3` | OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once) | `94f7dff586a28ece` | yes |
+| `disk=none dseed=1 \| run K=front@10+3` | OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once) | `fe35c945ecc011c3` | yes |
+| `disk=none dseed=1 \| run P=postgres@10+3` | OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once) | `f2a0a493e00ee1fa` | yes |
+| `disk=none dseed=1 \| run P=postgres@10~50:4000` | OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once) | `17ee484de861e07a` | yes |
+| `disk=none dseed=1 \| run O=postgres@10-15:resp:loss,100%` | OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once) | `22222bf0ae764cf7` | yes |
+| `disk=none dseed=1 \| run O=front@10-15:resp:loss,100%` | OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once) | `2165a6d333a70bb5` | yes |
+| `disk=none dseed=1 \| run O=front@10-15:req:loss,100%` | OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once) | `632a3ecf4a94866f` | yes |
+| `disk=none dseed=1 \| run C=20` | OK invariants=2 held (categories.acked_exactly_once: acked=20 exactly once) | `de5339c8ae51f04a` | yes |
+| `disk=none dseed=1 \| run C=20 S=off` | VIOLATION [categories.acked_exactly_once] category c18 stored 0 times | `5cd2fcd9fc424b6b` | yes |
+
+#### miniflux-read (`miniflux-read`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=2 held (categories.acked_exactly_once: exactly-once holds: each of the 30 items of acked occu... | `d9945a951b2253fd` | yes |
+| `disk=none dseed=1 \| run C=20 S=off` | VIOLATION [categories.acked_exactly_once] exactly-once violated: acked c18 is in categories 0 times (of 20 ... | `aa403b06c9e5391d` | yes |
+
+#### stack-grpc-cur (`stack-grpc-cur`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=4 held (mysql.amounts_valid: rows with a wrong amount: 0) | `444c61285b66c236` | yes |
+| `disk=none dseed=1 \| run H=orders.place@10-13:drop` | OK invariants=4 held (mysql.amounts_valid: rows with a wrong amount: 0) | `9242ed976a23fb24` | yes |
+
+#### stack-grpc-old (`stack-grpc-old`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=4 held (mysql.amounts_valid: rows with a wrong amount: 0) | `c3ea21902906e620` | yes |
+| `disk=none dseed=1 \| run H=orders.place@10-13:drop` | OK invariants=4 held (mysql.amounts_valid: rows with a wrong amount: 0) | `1dfcf63387024add` | yes |
+
+#### stack-grpc-planted (`stack-grpc-planted`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=4 held (mysql.amounts_valid: rows with a wrong amount: 0) | `fb676b97ed846766` | yes |
+| `disk=none dseed=1 \| run H=orders.place@10-13:drop` | VIOLATION [stack.exactly_once] kafka order=10 present 2 times (must be exactly once) | `441b8084ef4767db` | yes |
+
+#### stackgen (`stackgen-rs`)
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none \| run` | OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0) | `05f46c749f5f6cc5` | yes |
+| `disk=none \| run K=front@10+2` | OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0) | `d7c83fa446cd0313` | yes |
+| `disk=cut \| run C=15` | OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0) | `aef706013160bb3a` | yes |
+
+### 8.3 The benchmark
+
+The benchmark's manifest images (agent images, `restart_may_fail` on the order service) and their
+triggers on the M136 images: `hydo/bench/README.md` "The manifest images after the switch
+(Milestone 136)".

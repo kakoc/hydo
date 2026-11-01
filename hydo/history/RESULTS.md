@@ -110,3 +110,53 @@ compiled from main at `b2eea37`:
 
 With the same engine binary, `explore-ob-redis-hc` `disk=cut dseed=1 | run C=12` still gives
 `9c80ba97a7fc299b`, and that image rebuilt from the merged tree is byte-identical (`343d20ba…`).
+
+## Milestone 136: agent images (the current values)
+
+Since M136 every image is an agent image (the guest agent `hydo-agent` as the first process, the
+host controller driving it; docs/HISTORY.md "Milestone 136"), so every fingerprint above this
+section belongs to a shell-init image of an earlier milestone. The current values, each schedule
+run twice with the same fingerprint (docs/REBASELINE.md section 8, which also says how each image
+was made):
+
+**x86_64 (hvx), redis-hist**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=cut dseed=1 \| run C=12` | OK checks=2 held (redis.kv_linearizable: 32 operations on 20 keys linearizable) | `92ff124ba40094ce` | yes |
+| `disk=cut dseed=1 \| run C=12 R=everysec` | VIOLATION [redis.kv_linearizable] key k:1: an acknowledged write is lost or a read is stale: a read that be... | `c1e60506e16ab573` | yes |
+
+**x86_64 (hvx), redis-composed-hist**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=cut dseed=1 \| run C=12 W=0000002a,p4,q2,r100` | OK invariants=1 held (compose.commands: no composed workload ran in this boot) \| checks=2 held (redis.kv_li... | `eb9c4ad0a14e5f6e` | yes |
+| `disk=cut dseed=1 \| run C=12 R=everysec W=0000002a,p4,q2,r100` | VIOLATION [redis.kv_linearizable] key k:12: an acknowledged write is lost or a read is stale: a read that b... | `87d270f8f5466dff` | yes |
+
+**x86_64 (hvx), etcd-hc-3.5.5**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK checks=1 held (etcd.kv_linearizable: 183 operations on 90 keys linearizable) | `edec19943cb68c42` | yes |
+| `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | VIOLATION [etcd.kv_linearizable] key k31: these 4 operations cannot be ordered consistently with real time ... | `2367445439ec5bc8` | yes |
+
+**x86_64 (hvx), etcd-hc-3.5.6**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK checks=1 held (etcd.kv_linearizable: 183 operations on 90 keys linearizable) | `f9142657ac4708ac` | yes |
+| `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | OK checks=1 held (etcd.kv_linearizable: 187 operations on 90 keys linearizable) | `55e6b1dda9a9b14e` | yes |
+
+**Mac (hvm), redis-hist**
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=cut dseed=1 \| run C=12` | OK invariants=0 held (); history OK | `4957be0a6dcb2035` | `f5977b5f85d127d8` | yes |
+| `disk=cut dseed=1 \| run C=12 R=everysec` | OK invariants=0 held (); history VIOLATION [redis.kv_linearizable] | `957cb0ad3bb0b259` | `90144220037ae4ec` | yes |
+
+**Mac (hvm), python-kv-hist**
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=cut \| run C=12` | OK invariants=0 held (); history OK | `a7a64977623a9b0e` | `59f9219faa984ef8` | yes |
+| `disk=cut \| run C=12 S=never` | OK invariants=0 held (); history VIOLATION [kv.linearizable] | `88d948c63401bb25` | `f9cb1876c15427a0` | yes |

@@ -117,3 +117,33 @@ The eight other M88 schedules once each, all OK with Go's line: `K=postgres@10+3
 `P=postgres@10~50:4000` `3412555891abf546`, `O=postgres@10-15:resp:loss,100%` `092a37d190a52d46`,
 `O=front@10-15:resp:loss,100%` `73f3ead7a5736fbc`, `O=front@10-15:req:loss,100%`
 `32876de933e0ca30`, `C=20` `ce35e3444da1d458`. Details: `docs/HISTORY.md` Milestone 112.
+
+## Milestone 136: agent images (the current values)
+
+Since M136 every image is an agent image (the guest agent `hydo-agent` as the first process, the
+host controller driving it; docs/HISTORY.md "Milestone 136"), so every fingerprint above this
+section belongs to a shell-init image of an earlier milestone. The current values, each schedule
+run twice with the same fingerprint (docs/REBASELINE.md section 8, which also says how each image
+was made):
+
+**x86_64 (hvx), miniflux**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once) | `bf92f72fb2ee7743` | yes |
+| `disk=none dseed=1 \| run K=postgres@10+3` | OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once) | `94f7dff586a28ece` | yes |
+| `disk=none dseed=1 \| run K=front@10+3` | OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once) | `fe35c945ecc011c3` | yes |
+| `disk=none dseed=1 \| run P=postgres@10+3` | OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once) | `f2a0a493e00ee1fa` | yes |
+| `disk=none dseed=1 \| run P=postgres@10~50:4000` | OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once) | `17ee484de861e07a` | yes |
+| `disk=none dseed=1 \| run O=postgres@10-15:resp:loss,100%` | OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once) | `22222bf0ae764cf7` | yes |
+| `disk=none dseed=1 \| run O=front@10-15:resp:loss,100%` | OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once) | `2165a6d333a70bb5` | yes |
+| `disk=none dseed=1 \| run O=front@10-15:req:loss,100%` | OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once) | `632a3ecf4a94866f` | yes |
+| `disk=none dseed=1 \| run C=20` | OK invariants=2 held (categories.acked_exactly_once: acked=20 exactly once) | `de5339c8ae51f04a` | yes |
+| `disk=none dseed=1 \| run C=20 S=off` | VIOLATION [categories.acked_exactly_once] category c18 stored 0 times | `5cd2fcd9fc424b6b` | yes |
+
+**x86_64 (hvx), miniflux-read**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=2 held (categories.acked_exactly_once: exactly-once holds: each of the 30 items of acked occu... | `d9945a951b2253fd` | yes |
+| `disk=none dseed=1 \| run C=20 S=off` | VIOLATION [categories.acked_exactly_once] exactly-once violated: acked c18 is in categories 0 times (of 20 ... | `aa403b06c9e5391d` | yes |

@@ -76,3 +76,27 @@ The original `hydo-mac.yaml` image, rebuilt from the M83 sources with the M96 to
 `d96a0feb…` / `93c5d2ca…` and gives `bfe5a4e04ca43a71` and `74debdd69ee7af08` as above. A fetch
 made after M96 copies `history.py` into `files/opt/pykv/hydo_assert/` too, so that image then
 differs by that one file.
+
+## Milestone 136: agent images (the current values)
+
+Since M136 every image is an agent image (the guest agent `hydo-agent` as the first process, the
+host controller driving it; docs/HISTORY.md "Milestone 136"), so every fingerprint above this
+section belongs to a shell-init image of an earlier milestone. The current values, each schedule
+run twice with the same fingerprint (docs/REBASELINE.md section 8, which also says how each image
+was made):
+
+**Mac (hvm), python-kv**
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (pykv.oracle: acked=20 all present) | `26d1a7ff9f69fc6e` | `b7a4875e60aad8cf` | yes |
+| `disk=none \| run K=pykv@8+2` | OK invariants=1 held (pykv.oracle: acked=18 all present) | `2bf54a9ce250ed03` | `ac6ca0286e71a319` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [pykv.oracle] key k:0 lost (got 'NONE') | `9860f80fb0e1625b` | `8c230ac87c46cb19` | yes |
+| `disk=none \| run B=1234` | OK invariants=1 held (pykv.oracle: acked=18 all present) | `d3709c242b3f967a` | `6e977dae9aa72cba` | yes |
+
+**Mac (hvm), python-kv-hist**
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=cut \| run C=12` | OK invariants=0 held (); history OK | `a7a64977623a9b0e` | `59f9219faa984ef8` | yes |
+| `disk=cut \| run C=12 S=never` | OK invariants=0 held (); history VIOLATION [kv.linearizable] | `88d948c63401bb25` | `f9cb1876c15427a0` | yes |
