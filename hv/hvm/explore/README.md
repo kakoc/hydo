@@ -214,6 +214,14 @@ exit is resolved deterministically instead of ending the run as SPIN.
   default here) runs a schedule plainly and, only if a phase ends as SPIN, restores S1 and runs it
   again with rewind on; that run is reported, and stderr says so. `=1` always, `=0` never; the
   host token `spin=rewind` forces it for one schedule. The RESULT line format is unchanged.
+- **Under lock-step control** (CTL, RESUME, `--control one|boot`; Milestone 130) a schedule with
+  `spin=rewind` (or `HVM_SPIN_REWIND=1`) runs its workload, check and recovery phases in the rewind
+  mode, and a SNAP keeps the mode for its RESUME. The stops stay a pure function of the run: the
+  checkpoint is taken at the loop top of every exit after the stop hook, and the guest makes no
+  exit between it and a rewind, so a rewind restores the same exit count, console and queued
+  input. hvmx does not re-run a controlled SPIN itself (the host's conversation has happened); the
+  host does: hydo-control runs an agent image's schedule again with `spin=rewind` when its run
+  ended as SPIN (`agent::rewind_again`; `HVM_SPIN_REWIND=0` turns that off too).
 - **Kick interval** `HVM_SPIN_MS`, default 5 ms: lower is faster for a spinning guest, at the
   price of more (harmless) kicks on a loaded host.
 
@@ -290,9 +298,10 @@ comment above `ctl_esc`.
   fingerprint, for the quickstart schedules from S1 and from a fresh boot.
 
 `lockstep-check.sh <dir with Image-explore and explore-ob-redis-oci-arm64> <the Redis example's image>
-<out dir>` is the permanent test (`hydo-engine/examples/hvm_lockstep_check.rs`). It runs M116's Mac
-experiment and checks M116's values, and it checks CTL against RUN. Values in `docs/HISTORY.md`,
-Milestone 119.
+<out dir> [<ledger-spin's shell image>]` is the permanent test (`hydo-engine/examples/hvm_lockstep_check.rs`). It runs M116's Mac
+experiment and checks M116's values, and it checks CTL against RUN. With the fourth argument it
+also checks CTL against RUN for ledger-spin's schedules in the rewind mode (Milestone 130). Values
+in `docs/HISTORY.md`, Milestones 119 and 130.
 
 ## Commands
 

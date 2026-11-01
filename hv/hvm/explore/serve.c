@@ -437,8 +437,13 @@ static void run_once(const char *tag, const char *sched, int rewound);
  * schedule's rb= is the cadence here, as hvx_explore's run-call budget is there; default 65,536),
  * and `exit` when the guest stops (halt, idle, exit budget, SPIN) before the run's error RESULT.
  * Kicks and the spin observer's own exits are not exits, so every stop is a pure function of the
- * run; the rewind mode is refused (it moves M.exits backwards) and a SPIN is not re-run. A CTL
- * with no SEND gives RUN's fingerprint. RESULT gets stops=<n> typed=<sends typed> inh=<hex16>
+ * run. The rewind mode (milestone 130) is the host's choice: a schedule with the host token
+ * spin=rewind (or HVM_SPIN_REWIND=1) runs its workload, check and recovery phases in it, and a
+ * SNAP keeps the mode for its RESUME. It keeps the stops pure: the checkpoint is taken at the loop
+ * top of every exit after the stop hook, and the guest makes no exit between it and the rewind,
+ * so a rewind restores the same M.exits, console and queued input, and the hook does not stop
+ * twice at one exit. A SPIN is not re-run here (the host's conversation cannot be undone): the
+ * host runs the schedule again with spin=rewind. A CTL with no SEND gives RUN's fingerprint. RESULT gets stops=<n> typed=<sends typed> inh=<hex16>
  * (FNV-1a over every typed send's exit count, length and bytes, in typing order) before verdict=.
  *
  * Controlled boot (milestone 121; hvx_explore.c's header has the same text for icount): an image
@@ -466,7 +471,7 @@ static void run_once(const char *tag, const char *sched, int rewound);
  *             from the host's snapshot S0 (phase=recovery, a start stop; queued input DROPped,
  *             nothing typed): the host's recovery conversation
  * END in the check or recovery phase fingerprints there (fp = fnv(wfp, that), as for a RUN). */
-struct ctl_snap { char name[64]; struct xsnap x; struct runst rs; struct ctl_book k; uint64_t rb; int used; };
+struct ctl_snap { char name[64]; struct xsnap x; struct runst rs; struct ctl_book k; uint64_t rb; int used, rw; };
 static struct ctl_snap g_ctl_snaps[CTL_MAX_SNAPS];
 static struct ctl_snap *ctl_find(const char *name);
 
@@ -601,7 +606,7 @@ static void ctl_snap_cmd(char *arg)
 	xsnap_take(&cs->x, "ctl");
 	ctl_book_copy(&cs->k, &C.k);
 	for (int i = 0; i < cs->k.ns; i++) if (cs->k.s[i].state == CS_TYPED) cs->k.s[i].state = CS_RETYPE;
-	cs->rs = *C.rs; cs->rb = C.rb; cs->used = 1;
+	cs->rs = *C.rs; cs->rb = C.rb; cs->used = 1; cs->rw = rw_on;
 	snprintf(cs->name, sizeof cs->name, "%s", name);
 	printf("OK snap %s at=%llu retype=%s\n", name, (unsigned long long)C.at, il ? ids : "-");
 	if (g_agent && g_ctl_one && !strcmp(C.phase, "boot") && !strcmp(name, "S1"))
@@ -721,17 +726,14 @@ static int ctl_run_to(const char *const *m, int n, size_t from, int *why)
 	if (why) *why = s;
 	return -1;
 }
-/* The lock-step part of a schedule: s (a copy) loses its rb=<n> (the cadence, *rb; 0 = none).
- * Prints the error RESULT and returns -1 for a rewind-mode schedule or a bad rb=. */
-static int ctl_sched(const char *tag, char *s, uint64_t *rb)
+/* The lock-step part of a schedule: s (a copy) loses its rb=<n> (the cadence, *rb; 0 = none);
+ * *rw = 1 when its run is in the rewind mode (spin=rewind or HVM_SPIN_REWIND=1, M130).
+ * Prints the error RESULT and returns -1 for a bad rb=. */
+static int ctl_sched(const char *tag, char *s, uint64_t *rb, int *rw)
 {
 	char *bar = strchr(s, '|');
 	*rb = 0;
-	if (rw_on || (bar && memmem(s, (size_t)(bar - s), "spin=rewind", 11))) {
-		printf("RESULT %s fp=0 wfp=0 secs=0 verdict=UNSUPPORTED on hvm: lock-step control does not run in rewind mode\n", tag);
-		fflush(stdout);
-		return -1;
-	}
+	*rw = rw_on || (bar && memmem(s, (size_t)(bar - s), "spin=rewind", 11));
 	for (char *w = s; bar && (w = strstr(w, "rb=")) && w < bar; ) {   /* take the cadence out of the host part */
 		if (w != s && w[-1] != ' ') { w += 3; continue; }
 		char *e;
@@ -767,14 +769,17 @@ static void ctl_request(const char *tag, const char *sched, struct ctl_snap *cs)
 {
 	char s[4096];
 	uint64_t rb = 0;
+	int rw = 0, base = rw_on;
 	snprintf(s, sizeof s, "%s", sched);
-	if (ctl_sched(tag, s, &rb)) return;
+	if (ctl_sched(tag, s, &rb, &rw)) return;
 	if (cs) xsnap_restore(&cs->x);
 	ctl_begin(tag);
 	if (cs) { ctl_book_copy(&C.k, &cs->k); C.start = 2; }   /* the first stop is S1's own again */
 	if (rb) C.rb = rb;
 	spin_hit = 0;
-	run_once(tag, s, 0);
+	rw_on = rw;                    /* M130: the run's phases in the rewind mode; checkpoints from here */
+	run_once(tag, s, rw);
+	rw_on = base;
 	if (C.on) ctl_finish();         /* a refused schedule: no run, no RESULT facts */
 }
 /* ---- the controlled boot of an agent image (M121, see above) ---- */
@@ -820,7 +825,10 @@ static void ctl_resume(const char *tag, const char *name)
 	snprintf(rs.tag, sizeof rs.tag, "%s", tag);
 	rs.t0 = now_s();
 	spin_hit = 0;
+	int base = rw_on;
+	rw_on = cs->rw;                /* M130: the snapshot's run was in the rewind mode or not */
 	run_rest(&rs);
+	rw_on = base;
 	if (C.on) ctl_finish();
 }
 
@@ -1065,10 +1073,10 @@ int main(int argc, char **argv)
 	if (g_agent) {                 /* M121: the boot under control; S0 and S1 are the host's SNAPs */
 		char s[4096];
 		uint64_t rb = 0;
-		int why = 0, r;
+		int why = 0, r, rw = 0;
 		const char *tag = strcmp(mode, "one") ? "boot" : "one";
 		snprintf(s, sizeof s, "%s", argc > 5 ? argv[5] : "|");
-		if (ctl_sched(tag, s, &rb)) return 2;
+		if (ctl_sched(tag, s, &rb, &rw)) return 2;
 		if (!agent_guest_ok(s)) { fprintf(stderr, "hvmx: an agent image's schedule has the guest part \"run\" only\n"); return 2; }
 		g_ctl_one = !strcmp(mode, "one");
 		r = agent_boot(tag, rb, &why);
@@ -1080,7 +1088,8 @@ int main(int argc, char **argv)
 				C.boot_s1 = 0;
 				C.phase = "workload";
 				spin_hit = 0;
-				run_once(tag, s, 0);
+				rw_on = rw;        /* M130: the rewind mode from S1's stop on, as a CTL from S1 */
+				run_once(tag, s, rw);
 				if (C.on) ctl_finish();
 			}
 			return 0;
