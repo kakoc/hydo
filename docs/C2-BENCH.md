@@ -245,3 +245,25 @@ d11's window has the same size on both kinds (about one cut point in seven betwe
 but its cut points are a few flushes apart, so a sweep with step 5 hit it on the shell kind only.
 The flush counts themselves agree: on the control, at each of the 51 cut points both kinds had
 acknowledged the same number of orders within one (41 points equal; 24 at k=250, 30 from k=325 on).
+
+## 8. What C3 still needs for the benchmark
+
+1. **A way to run the stack's own images under the agent** (section 1): a controller for
+   `stack-explore.sh`'s init, or the benchmark, the pinned reproducers' images and the stack's
+   explorer images rebuilt from a manifest on the build machine (this milestone's manifest is a
+   start; it lacks `stack-explore.sh`'s M67 path, item 3). Until then hydo-bench, the pinned
+   reproducers (`explore-disk.img`, `explore-fix-disk.img`) and `deploy-metal.sh`'s stack checks
+   stay on shell images.
+2. **The agent-only lost order after a long Kafka pause** (section 6, item 4): find out whether
+   it is an order-service bug that the agent image's timing exposes or a difference in how the
+   controller runs a workload around a long pause (for example by recording Kafka's log and the
+   order service's log in such a run, and by running the same schedule on the original
+   stack-explore control image).
+3. **`X=` on the manifest form**: the controller gives it the stack's meaning, the shell init
+   ignores it; when the shell path is retired that difference disappears, but the generic init's
+   restart after a `cf=` cut (M67's case) still ends such a run with an error instead of the
+   recovery boot's verdict.
+4. **Re-baselining**: the benchmark's recorded triggers moved on the manifest images (d9 needs
+   `Q=3` or `Q=4d` on the shell kind; d11's `cf=238` passes on both, its window is at k≈246–303;
+   d10's `X=` trigger works on the agent kind only), so the trigger table of `hydo bench confirm`
+   needs new values for agent images, recorded twice each, as M72 did for `-pin-kr`.
