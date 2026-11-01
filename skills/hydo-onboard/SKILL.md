@@ -141,6 +141,12 @@ rules that matter most:
   program's outgoing connections leave from it.
 - `depends_on`; `recovery: false` for a stateless tier that the final checks do not need after a
   power cut.
+- `restart`: what happens when the process ends by itself while the test runs, in Docker
+  Compose's words (`no`, the default: it stays down until the heal; `always`; `unless-stopped`;
+  `on-failure[:max]`). Give a service the policy it has in production (the Compose import copies
+  `restart:`): a worker that crashes after the faults and is never started again otherwise makes
+  every later check fail for a reason the deployment does not have. Agent images only (`hydo build
+  --control agent`); MANIFEST.md "Restart policies".
 - `provision`: schemas, topics, users: what must exist before the window under test. Seed data
   that belongs to the test is a `first_<name>` command instead.
 - Guest settings: `guest.ram_mib` (default 1024) must hold every service; `guest.cpu: v3` when a

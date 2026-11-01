@@ -12,7 +12,9 @@ found.
   block.
 - Loopback is up; the realtime clock starts at `guest.clock_start` (default 2026-01-01).
 - Services start in dependency order with readiness waits; killed services are restarted; the
-  recovery boot after a power cut is automatic.
+  recovery boot after a power cut is automatic. A service that crashes by itself is started again
+  only at the heal, unless it has a `restart:` policy (`always`, `on-failure`, ...: agent images,
+  MANIFEST.md "Restart policies").
 - Faults (kill, pause, the freeze of a power cut) reach a service's whole process tree.
 
 ## Must be checked per project
