@@ -583,3 +583,48 @@ A kill or a pause still reaches the order service (faults act on a service's who
 tree). An order service that hangs instead of exiting is still `ERROR restart after the faults`
 (stack-explore.sh's `NOT ready` case is not covered). The format has no key for a restart that may
 fail; docs/HISTORY.md "Milestone 135" says what such a key needs to do.
+
+The M67 path, measured (twice each, identical): M129's ERROR schedule `disk=cut
+dseed=806555b3e1262cc5 cf=147 | run P=redis@10+3 T=26:-3600 X=front@20~151` on the agent control
+gives OK `acked=11/30` from the recovery boot (`91ebd4a2e0731975`); `disk=cut dseed=0 cf=147 | run
+K=front@29+1` takes the path on both kinds (agent OK `acked=13/30` `c7e09c18bf68d064`, shell OK
+`acked=14/30` `ad4939963f7aefc8`), and both consoles show the two `hydo-bench:` lines.
+
+### The triggers on the manifest images (Milestone 135)
+
+`hydo-bench confirm --kind agent --defects <all thirteen> --base --workers 1` on the images above
+(franz-go v1.22.2, hydo-agent 0.2.0; results `/var/tmp/m135/confirm-agent` on the box): every
+trigger failed twice with the same fingerprint and the defect's signature (class
+`durable-defaults` for all), and passed once on its control. Three triggers were measured again
+first, because the agent images' timing moved them (`hydo-bench list`, one run per point): d9 on
+`Q=2,3,4,2d,3d,4d` crashes for `Q=3` and `Q=4d` (M129's agent images: five of six, M108's `Q=4`
+no longer); d10 on `X=front@6..13~20` fails at 7, 9, 10, 11 and 13 (the control passes all eight,
+so M72's `@9` stays); d11 on `cf=245..305` fails at 9 of 61 points, k = 249, 250 (order 23), 260
+(24), 271, 272 (25), 282 (26), 292 (27), 302, 303 (28), on swapped images built before the swap
+was made byte-reproducible (the fingerprints of those runs are not the table's; `cf=260` was then
+confirmed on the final images).
+
+| defect | trigger (agent kind) | verdict | fingerprint (twice) | control (OK) |
+|---|---|---|---|---|
+| d0-old-front-door | `disk=none dseed=4d5cb825dfaab05b \| run K=redis@11+1 C=24` | order=11 is in kafka (1 times) but the client was never ACKed | `8a7a57a44b2e1e8a` | fix: acked=24/30 `12ae3bb9fa046080` |
+| d1-kafka-first | `disk=none dseed=0 \| run K=mysql@10+1` | kafka order=10 present 2 times | `27776b3e63e42ff0` | `f549cfc024ca4822` |
+| d2-batched-publish-flag | `disk=cut dseed=0 \| run C=12` | mysql order=10 acked but not marked published | `5e15465dac8cb3e1` | acked=12/30 `9a5d5bdfccc2dafb` |
+| d3-blind-retry | `disk=none dseed=0 \| run P=kafka@5+2` | kafka order=5 present 2 times | `2cd0278ca81afecf` | `001e6a275980fa96` |
+| d3-blind-retry | `disk=none dseed=0 \| run O=kafka@5-10:resp:loss,100%` | kafka order=5 present 2 times | `1cac02b0305f5a9c` | `240b2565dac1e000` |
+| d4-produce-timeout-definite | `disk=cut dseed=0 \| run O=kafka@5-10:resp:loss,100% C=12` | order=5 is in kafka (1 times) but the client was told it failed | `f1186262b0bc8037` | acked=7/30 `66cb2aa449d3f6b7` |
+| d4-produce-timeout-definite | `disk=cut dseed=0 \| run P=kafka@5+2 C=8` | order=5 … told it failed | `d7bee1f2e6ba3f5a` | acked=6/30 `61d35b92a2c3eafa` |
+| d5-myisam | `disk=cut dseed=0 \| run C=15` | mysql order=0 expected=100000 got=MISSING (kafka has it: true) | `b34e7ff647075d43` | acked=15/30 `2dfba0a1d795afe7` |
+| d6-client-deadline-definite | `disk=none dseed=0 \| run P=kafka@5+2` | order=5 … told it failed | `77c5094837f0e617` | `001e6a275980fa96` |
+| d7-skip-last-record | `disk=none dseed=0 \| run P=kafka@28+2` | kafka order=29 present 2 times | `32a0fc66c14173c0` | `eecd63a9e8d1ce49` |
+| d8-no-order-lock | `disk=none dseed=0 \| run Q=2d` | kafka order=0 present 2 times | `112bd790c58cf83a` | `9fc6b149e94b7cca` |
+| d9-redis-unlocked | `disk=none dseed=0 \| run Q=3` | [front.no_crash] front door crashed: panic: runtime error: slice bounds out of range [15:10] | `e5eedcdbc635fd62` | `643a520d0576c694` |
+| d10-outcome-in-memory | `disk=none dseed=0 \| run X=front@9~20` | kafka order=10 present 2 times | `d15cccef5888b5d0` | `196d342bbd850774` |
+| d11-ack-unflushed-flag | `disk=cut dseed=0 cf=260 \| run` | mysql order=24 acked but not marked published | `caa0b4855957a6da` | acked=24/30 `59d93b039af27ba7` |
+| d12-shared-key-buffer | `disk=none dseed=0 \| run Q=2` | kafka order=0 present 2 times | `324da2b742df58e9` | `5aa98bced794bdeb` |
+
+The control of d1–d7 (`nf`, the M46 order service) keeps its known bug (section "A bug in the fixed
+front door"): `disk=none dseed=0 | run O=kafka@25-30:resp:loss,100%` gives `kafka order=26 present
+2 times`, twice `4eb6204775941205`, as on the stack image; the franz-go upgrade does not change it
+(that bug is the order service's lookup racing its own in-flight produce, not issue 1484). Other
+checks on the agent control: `disk=none dseed=0 | run` OK `acked=30/30` `f0017db9b378d8e4`, and
+`disk=none dseed=0 | run P=kafka@14+16` (the M129/M133 lost order) OK `a41a29598b2738ea`.
