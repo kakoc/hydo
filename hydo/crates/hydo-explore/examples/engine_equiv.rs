@@ -127,7 +127,25 @@ fn main() {
         v
     };
     diff(&ex(da), &ex(db), "exploration", &mut bad);
-    let (ca, cb) = (consoles(da), consoles(db));
+    // a console whose run is in neither events.jsonl belongs to a shrink candidate the explorer
+    // started and then cancelled (its round had already kept a candidate): which ones get started
+    // depends on how fast runs finish, so they are counted, not compared
+    let tags: std::collections::BTreeSet<String> = ra
+        .iter()
+        .chain(&rb)
+        .filter_map(|r| {
+            let v: Value = serde_json::from_str(r).ok()?;
+            v["tag"].as_str().map(str::to_string)
+        })
+        .collect();
+    let recorded = |n: &str| {
+        let t = n.trim_end_matches(".log").trim_end_matches(".recovery");
+        tags.contains(t)
+    };
+    let (mut ca, mut cb) = (consoles(da), consoles(db));
+    let cancelled = ca.keys().chain(cb.keys()).filter(|n| !recorded(n)).count();
+    ca.retain(|n, _| recorded(n));
+    cb.retain(|n, _| recorded(n));
     let mut same = 0;
     for (n, x) in &ca {
         match cb.get(n) {
@@ -138,6 +156,9 @@ fn main() {
     }
     for n in cb.keys().filter(|n| !ca.contains_key(*n)) {
         bad.push(format!("console {n} only in B"));
+    }
+    if cancelled > 0 {
+        println!("{cancelled} consoles of cancelled runs (in neither events.jsonl) set aside");
     }
     let roles = |rs: &[String]| {
         let mut m: BTreeMap<String, usize> = BTreeMap::new();
