@@ -80,10 +80,15 @@ pub fn plan_of_image(image: &Path) -> Result<Plan, Unsupported> {
     let text = hydo_engine::image::embedded_manifest(image)
         .map_err(|e| Unsupported::other(format!("{}: {e}", image.display())))?;
     let compose = hydo_engine::image::embedded_compose(image);
-    let mut plan = plan_of_embedded(&text, compose.as_deref()).map_err(|e| Unsupported {
-        what: format!("{}: {}", image.display(), e.what),
-        ..e
-    })?;
+    // a manifest with params: is the image's only with the values it was built with (M128)
+    let params = hydo_engine::image::embedded_file(image, "etc/hydo/params")
+        .map(|t| hydo_manifest::parse_params_file(&t))
+        .unwrap_or_default();
+    let mut plan =
+        plan_of_embedded_params(&text, compose.as_deref(), &params).map_err(|e| Unsupported {
+            what: format!("{}: {}", image.display(), e.what),
+            ..e
+        })?;
     // The pinned tc, ip and iptables are image facts: Plan::from_manifest leaves hydo-build's
     // placeholders where the manifest's faults need a tool; the image's manifest.sh has the paths.
     let needed = [&plan.layout.tc, &plan.layout.ip, &plan.layout.iptables]
@@ -120,6 +125,25 @@ pub fn plan_of_image(image: &Path) -> Result<Plan, Unsupported> {
 /// meta as `_compose`, where the composer's controller reads its commands, checks and saved
 /// compositions.
 pub fn plan_of_embedded(text: &str, compose: Option<&str>) -> Result<Plan, Unsupported> {
+    plan_of(text, compose, None)
+}
+
+/// [`plan_of_embedded`] with the image's parameter values (`/etc/hydo/params`): a manifest's
+/// `params:` applied as hydo-build applied it, so `{{name}}` in a service's command or a step is
+/// the built value (M128). Without `params:` in the manifest the same as [`plan_of_embedded`].
+pub fn plan_of_embedded_params(
+    text: &str,
+    compose: Option<&str>,
+    params: &[(String, String)],
+) -> Result<Plan, Unsupported> {
+    plan_of(text, compose, Some(params))
+}
+
+fn plan_of(
+    text: &str,
+    compose: Option<&str>,
+    params: Option<&[(String, String)]>,
+) -> Result<Plan, Unsupported> {
     let meta: Option<serde_json::Value> = match compose {
         None => None,
         Some(c) => Some(
@@ -127,8 +151,11 @@ pub fn plan_of_embedded(text: &str, compose: Option<&str>) -> Result<Plan, Unsup
                 .map_err(|e| Unsupported::other(format!("etc/hydo/compose.json: {e}")))?,
         ),
     };
-    let m = hydo_manifest::from_embedded(text, meta.as_ref())
-        .map_err(|e| Unsupported::other(e.message))?;
+    let m = match params {
+        None => hydo_manifest::from_embedded(text, meta.as_ref()),
+        Some(p) => hydo_manifest::from_embedded_params(text, meta.as_ref(), p),
+    }
+    .map_err(|e| Unsupported::other(e.message))?;
     match meta {
         None => Plan::from_manifest(&m),
         Some(meta) => {
@@ -162,6 +189,33 @@ pub fn report_text(t: &Transcript) -> String {
             s.push_str(line);
             s.push('\n');
         }
+    }
+    s
+}
+
+/// A run's console as the shell init's console shows it (M128): the report lines and the notes
+/// of the transcript, with the guest's own console lines (`console`: what its programs print on
+/// /dev/console, with the stop that reported each) put before the report lines of the stop that
+/// saw them, since the controller writes those after it has seen that stop's lines. Readers of
+/// records the guest's programs print themselves (the history checkers' `HYDO-HIST` lines, the
+/// SDKs' `HYDO-ASSERT` records) find them in `<tag>.log` as they do on a shell image.
+pub fn console_text(t: &Transcript, console: &[(u64, String)]) -> String {
+    use crate::transcript::Record;
+    let mut s = String::new();
+    let mut c = console.iter().peekable();
+    for r in &t.records {
+        if let Record::Report { n, line, .. } | Record::Note { n, line, .. } = r {
+            while let Some((_, l)) = c.next_if(|(cn, _)| cn <= n) {
+                s.push_str(l);
+                s.push('\n');
+            }
+            s.push_str(line);
+            s.push('\n');
+        }
+    }
+    for (_, l) in c {
+        s.push_str(l);
+        s.push('\n');
     }
     s
 }
@@ -215,14 +269,14 @@ pub fn write_run_files(dir: &Path, tag: &str, prefix: &str, ran: &Ran, boot: Opt
     }
     let _ = std::fs::write(
         dir.join(format!("{tag}.log")),
-        report_text(&ran.run.transcript),
+        console_text(&ran.run.transcript, &ran.run.console),
     );
     let [b, r, rc] = transcript_files(prefix);
     let _ = std::fs::write(dir.join(&r.1), ran.run.transcript.to_jsonl());
     if let Some(rec) = &ran.recovery {
         let _ = std::fs::write(
             dir.join(format!("{tag}.recovery.log")),
-            report_text(&rec.transcript),
+            console_text(&rec.transcript, &rec.console),
         );
         let _ = std::fs::write(dir.join(&rc.1), rec.transcript.to_jsonl());
     }
@@ -583,5 +637,65 @@ mod tests {
             "RESULT a fp=1 wfp=2 secs=0.5 stops=3 typed=1 inh=00aa ctl=0123456789abcdef verdict=HYDO-ORACLE: OK x"
         );
         assert_eq!(c.extra("ctl"), Some("0123456789abcdef"));
+    }
+
+    /// M128: an agent image's plan has the parameter values the image was built with (its
+    /// `/etc/hydo/params`), as the shell image's compiled manifest.sh has; before, the gRPC demo's
+    /// `/bin/orderd serve --mode {{mode}}` was started literally and exited.
+    #[test]
+    fn params_are_the_images() {
+        let text = "name: p\nparams:\n  mode: buggy\nservices:\n  - name: s\n    cmd: /bin/s --mode {{mode}}\n    ready: /bin/true\nworkload:\n  steps: 2\n  run: echo {{mode}}\ninvariants:\n  - id: i\n    cmd: /bin/true\n";
+        let built = hydo_manifest::parse_params_file("mode=fixed\n");
+        let p = plan_of_embedded_params(text, None, &built).unwrap();
+        assert_eq!(p.services[0].cmd, "/bin/s --mode fixed");
+        assert_eq!(p.workload_run.trim(), "echo fixed");
+        // the defaults when the image says nothing (hydo-build substitutes them too)
+        let p = plan_of_embedded_params(text, None, &[]).unwrap();
+        assert_eq!(p.services[0].cmd, "/bin/s --mode buggy");
+        // without params: the reading is plan_of_embedded's
+        let plain = text.replace("params:\n  mode: buggy\n", "");
+        assert_eq!(
+            plan_of_embedded_params(&plain, None, &built).unwrap(),
+            plan_of_embedded(&plain, None).unwrap()
+        );
+    }
+
+    /// M128: the HYDO-HIST records a workload prints on /dev/console reach `<tag>.log`, before
+    /// the report lines of the stop that saw them (on a shell image the history checkers read
+    /// them from the console; on the agent image they were only in `<tag>.agent.log`).
+    #[test]
+    fn console_text_keeps_the_guests_own_lines() {
+        use crate::transcript::{Header, Record};
+        let mut t = Transcript::new(Header {
+            controller: "schedule".into(),
+            conversation: "run".into(),
+            schedule: None,
+            cadence: "rb=64".into(),
+            start: "resume".into(),
+        });
+        let rep = |n: u64, line: &str| Record::Report {
+            n,
+            by: "schedule".into(),
+            line: line.into(),
+        };
+        t.records.push(rep(3, "hydo-ob: command: run"));
+        t.records.push(Record::Note {
+            n: 3,
+            by: "schedule".into(),
+            line: "note".into(),
+        });
+        t.records.push(rep(9, "hydo-ob: workload steps 0..2 rc=0"));
+        t.records.push(rep(12, "HYDO-ORACLE: OK"));
+        let console = vec![
+            (5, "HYDO-HIST {\"p\":0}".to_string()),
+            (9, "HYDO-HIST {\"p\":1}".to_string()),
+            (14, "late line".to_string()),
+        ];
+        assert_eq!(
+            console_text(&t, &console),
+            "hydo-ob: command: run\nnote\nHYDO-HIST {\"p\":0}\nHYDO-HIST {\"p\":1}\n\
+             hydo-ob: workload steps 0..2 rc=0\nHYDO-ORACLE: OK\nlate line\n"
+        );
+        assert_eq!(console_text(&t, &[]), report_text(&t));
     }
 }

@@ -136,6 +136,12 @@ pub struct Finished {
     pub snapshots: Vec<AgentPoint>,
     /// The stop the conversation ended at (None when the engine ended it).
     pub last_stop: Option<StopInfo>,
+    /// The guest's own console lines (not the agent's framed lines), each with the number of the
+    /// stop that reported it: what the guest's programs print on /dev/console, such as the
+    /// `HYDO-HIST` records of a history recorder and the SDKs' `HYDO-ASSERT` records (M128).
+    /// They are not part of the transcript; [`crate::agent::console_text`] puts them between
+    /// the report lines, where the shell init's console has them.
+    pub console: Vec<(u64, String)>,
 }
 
 /// Why a conversation could not be carried out.
@@ -236,6 +242,7 @@ pub fn run_with(
     };
     let mut send_of: BTreeMap<u64, u64> = BTreeMap::new();
     let mut snapshots = Vec::new();
+    let mut console: Vec<(u64, String)> = Vec::new();
     loop {
         let next = match here.take() {
             Some(stop) => LinkNext::Stop {
@@ -252,6 +259,7 @@ pub fn run_with(
                     result: r,
                     snapshots,
                     last_stop: None,
+                    console,
                 })
             }
             LinkNext::Stop { stop, lines } => (stop, lines),
@@ -294,6 +302,9 @@ pub fn run_with(
                     Some(Ok(Incoming::UnknownEvent { ev })) => Seen::UnknownEvent(ev),
                 },
             };
+            if let Seen::Console(t) = &item {
+                console.push((stop.n, t.trim_end_matches(['\r', '\n']).to_string()));
+            }
             seen.push(item);
         }
         let seen_n = session.as_ref().map(|s| s.position().1).unwrap_or(0);
@@ -426,6 +437,7 @@ pub fn run_with(
                             result: String::new(),
                             snapshots,
                             last_stop: Some(stop),
+                            console,
                         });
                     }
                 }
@@ -451,6 +463,7 @@ pub fn run_with(
                 result,
                 snapshots,
                 last_stop: Some(stop),
+                console,
             });
         }
         link.cont()?;
