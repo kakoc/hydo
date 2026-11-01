@@ -399,7 +399,10 @@ back:
 4. without such a cut the verdict is `HYDO-ORACLE: ERROR restart after the faults (<service>)`,
    as without the key, and the final invariants do not run.
 
-A service that does come back behaves exactly as without the key. Example: the bug benchmark's
+A `K=` kill whose restart point is the workload's end (for example `K=front@29+1` with 30 steps)
+restarts the service after the last step, which is a restart after the faults too: with the key a
+failed restart there leaves the service to the heal's restart pass instead of ending the run with
+`ERROR <service> restart failed`. A service that does come back behaves exactly as without the key. Example: the bug benchmark's
 order service (`hydo/bench/manifest/hydo.yaml`), which replaced a wrapper script (Milestone 135)
 with this key.
 

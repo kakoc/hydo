@@ -2023,7 +2023,18 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         if p == kup && down {
             log(fx, format!("restarting {ksvc} before step {p}"));
             if !start_svc(fx, ctx, &ksvc)? {
-                return die_oracle(fx, format!("HYDO-ORACLE: ERROR {ksvc} restart failed"));
+                // M136: a K= restart that falls after the workload's last step is a restart
+                // after the faults; with restart_may_fail the service stays down and the heal's
+                // restart pass decides (restart_dead), as for any service that is down then
+                let after_faults =
+                    p == steps && ctx.plan.service(&ksvc).is_some_and(|s| s.restart_may_fail);
+                if !after_faults {
+                    return die_oracle(fx, format!("HYDO-ORACLE: ERROR {ksvc} restart failed"));
+                }
+                log(
+                    fx,
+                    format!("{ksvc} restart failed after the last step (restart_may_fail): left to the heal"),
+                );
             }
             down = false;
         }

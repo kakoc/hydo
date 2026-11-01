@@ -118,10 +118,15 @@ fn without_the_key_a_failed_restart_is_an_error_at_once() {
     for k in [None, Some(false)] {
         let r = run(&plan(k, FAILS), KILL_LAST);
         let v = verdict(&r.run);
-        assert_eq!(v, "HYDO-ORACLE: ERROR restart after the faults (worker)", "{k:?}");
+        assert_eq!(
+            v, "HYDO-ORACLE: ERROR restart after the faults (worker)",
+            "{k:?}"
+        );
         // the run ends before the workload's end: no DiskFaultsOff, no retry
         assert_eq!(engine_actions(&r.run), 0, "{k:?}");
-        assert!(!runs(&r.run.items).iter().any(|c| c.contains("client-retry")));
+        assert!(!runs(&r.run.items)
+            .iter()
+            .any(|c| c.contains("client-retry")));
     }
     // restart_may_fail: false is the default, command for command
     let a = run(&plan(None, FAILS), KILL_LAST);
@@ -154,6 +159,39 @@ fn with_the_key_the_run_goes_on_without_the_retry_and_ends_in_error() {
     assert!(!cmds.iter().any(|c| c.contains("final-check")), "{cmds:#?}");
 }
 
+/// A kill whose restart point is the workload's end (`K=worker@3+1`, 4 steps): the K= restart
+/// happens after the last step. The worker's second and third processes exit at once.
+const KILL_TO_END: &str = "disk=none | run K=worker@3+1";
+const FAILS_TWICE: &str = "2/+0/1,3/+0/1";
+
+#[test]
+fn a_kill_restart_at_the_workloads_end_follows_the_key() {
+    // without the key: the K= restart's own ERROR, at once
+    let r = run(&plan(None, FAILS_TWICE), KILL_TO_END);
+    assert_eq!(verdict(&r.run), "HYDO-ORACLE: ERROR worker restart failed");
+    assert_eq!(engine_actions(&r.run), 0);
+    // with it: left to the heal, whose restart fails too; no retry, the workload's end, the ERROR
+    let r = run(&plan(Some(true), FAILS_TWICE), KILL_TO_END);
+    let ns = notes(&r.run.items);
+    assert!(
+        ns.iter().any(|n| n
+            == "hydo-ob: worker restart failed after the last step (restart_may_fail): left to the heal"),
+        "{ns:#?}"
+    );
+    assert!(ns
+        .iter()
+        .any(|n| n
+            .starts_with("hydo-ob: worker did not come back after the faults (restart_may_fail)")));
+    assert!(!runs(&r.run.items)
+        .iter()
+        .any(|c| c.contains("client-retry")));
+    assert_eq!(engine_actions(&r.run), 1);
+    assert_eq!(
+        verdict(&r.run),
+        "HYDO-ORACLE: ERROR restart after the faults (worker)"
+    );
+}
+
 #[test]
 fn with_the_key_a_restart_that_succeeds_changes_nothing() {
     // the worker's second process lives: the key is not used, the transcript is the default one
@@ -162,5 +200,7 @@ fn with_the_key_a_restart_that_succeeds_changes_nothing() {
     assert_eq!(a.run.fin.transcript, b.run.fin.transcript);
     let v = verdict(&a.run);
     assert!(!v.contains("restart after the faults"), "{v}");
-    assert!(runs(&a.run.items).iter().any(|c| c.contains("client-retry")));
+    assert!(runs(&a.run.items)
+        .iter()
+        .any(|c| c.contains("client-retry")));
 }
