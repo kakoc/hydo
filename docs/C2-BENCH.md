@@ -45,3 +45,60 @@ Until one of the two is done, the benchmark images, the pinned reproducers' imag
 stack's explorer images stay shell-only.
 
 ## 2. What can be driven: the benchmark guest as a manifest
+
+`hydo/bench/manifest/hydo.yaml` describes the benchmark's guest as a manifest, so that one builder
+gives a shell image and an agent image of each defect from the same files:
+
+- **Files:** those of the `-pin-kr` control image (`explore-bench-m59-control-pin-kr-disk.img`),
+  dumped with `debugfs rdump` on the bare-metal test machine: the 65 store paths of its
+  `/nix/store` that are not in the pinned iproute2 closure (MySQL 8.4.10 and OpenJDK 17 with their
+  closures; hydo-build stages the iproute2 closure itself, from the same pinned path), Kafka's
+  libs and the pinned Redis. `front-door` is the defect's order service, `/bin/hydostack` of its
+  benchmark image.
+- **Configuration:** `build-stack.sh`'s: the same `my.cnf` (with `skip-log-bin`, as every
+  benchmark image has it) plus the line the init appends (`innodb_flush_log_at_trx_commit=1`), the
+  same Kafka properties with `log.retention.ms=-1` (the `-pin-kr` fix) and the appended
+  `log.flush.interval.messages=1`, Redis with `appendfsync always`, 30 orders, the fixed clock.
+- **Tokens:** `stack-explore.sh`'s tokens that the generic init lacks are knobs: `Q=<n>[d]`
+  writes `HYDO_CONC`/`HYDO_DUP` for the client, `M=` also sets `sync_binlog=0`. `X=` (the stack's
+  timed kill) has no knob: the shell init ignores it, the host controller gives it the stack's
+  meaning (hydo-control `HANDOFF.md` decision 12). This is a designed difference; section 4 says
+  what it does to d10.
+- **Oracles:** the first invariant is `stack-explore.sh`'s (`hydostack oracle`); the second is the
+  M59 crash oracle (the order service's log must have no `panic`/`fatal error` line, hydo-bench's
+  `crash_verdict`), so d9's signature `front door crashed` is in the verdict on both kinds.
+- **What stays different from the benchmark images:** the generic init's workload loop, restarts
+  and markers instead of `stack-explore.sh`'s (no M67 "front door cannot restart" path, a
+  restart of every dead service before the retry pass, other console lines), so the fingerprints
+  and some timings differ from M108's. The comparison is between this manifest's shell and agent
+  images; the original images' M108 results are given beside them.
+
+**Building on the bare-metal test machine** (no Nix): `hydo/bench/build-bench-manifest.sh` runs this
+tree's `hydo build` in a release layout (the Linux release's `guest/`, `tools/` and `libexec/`, this
+tree's `bin/hydo` and `hydo/onboard`) twice per image, with `--control shell` and `--control agent`.
+The control pair and d8 were built in full; every other defect's pair is a copy of the control
+pair with `/bin/hydostack` replaced (`FROM=`, `agent-patch.sh --swap`), because the manifest and
+every other file are the same.
+
+**Proofs that the images are what they claim** (`agent-patch.sh --check`: every entry's type, mode,
+link target, owner and file contents, by `debugfs rdump` and a `debugfs ls -p` walk; the data
+partitions by their SHA-256):
+
+| check | result |
+|---|---|
+| the Redis example: M121's shell image patched by `agent-patch.sh` vs M121's `hydo build --control agent` image | same tree (423 entries, 13 files); same data partition `2d52cd04…`; the unpatched shell image differs in exactly `/sbin/init` and `/etc/hydo/control` |
+| the manifest's control: the shell build patched vs the agent build | same tree (14,425 entries, 9,966 files, every owner and mode) |
+| d8: the control pair with d8's order service swapped in (`--swap`) vs d8 built in full | same tree for the shell pair (14,424 entries, 9,965 files) and for the agent pair (14,425 entries, 9,966 files) |
+
+Images (sha256 prefixes; in `~/c2b-work/bm/{shell,agent}` on the box, under hydo-bench's names):
+control shell `01fc889be9b8d807`, agent `50e6ee9a4903e85c`; d8 (built) shell `821d2f989e6cad69`,
+agent `36ac86dd40f28bd9`.
+
+**The controller drives the manifest's agent images.** On the control pair, `hydo-bench list`
+(one worker, fresh pools) gives the same verdicts on both kinds:
+
+| schedule | shell | agent |
+|---|---|---|
+| `disk=none dseed=0 \| run` | OK acked=30/30 `59d12b91b1de0233` | OK acked=30/30 `3daf8ea141b7c843` |
+| `disk=none dseed=0 \| run Q=2d` | OK acked=30/30 `c30e6098f3d4cec8` | OK acked=30/30 `ef8bd4c3399d3289` |
+| `disk=cut dseed=0 \| run C=15` | OK acked=15/30 `805420f1ae19f622` | OK acked=15/30 `709c4c2bc7440ddb` |
