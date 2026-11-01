@@ -1017,8 +1017,8 @@ done:
 	return rc;
 }
 
-/* hvx_explore.c includes this file for its boot/snapshot/fingerprint machinery and
- * supplies its own main. */
+/* A program that includes this file for its boot/snapshot/fingerprint machinery and defines
+ * HVX_STACK_NO_MAIN supplies its own main (hvx_explore.c did, until M137 deleted it). */
 #ifdef HVX_STACK_NO_MAIN
 #define main hvx_stack_verify_main
 #endif
