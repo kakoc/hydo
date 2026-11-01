@@ -48,10 +48,17 @@ pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
     let mut full: Vec<String> = Vec::new();
     if linux {
         let engine = hvxenv::engine(ctx);
-        if !crate::ctx::access(&engine, libc::X_OK) {
+        let probe = hydo_engine::hvx::Hvx {
+            engine: engine.clone(),
+            hvx_run: None,
+            snap_dir: String::new(),
+            extra_env: Vec::new(),
+            env: hvxenv::tool_env(ctx),
+        };
+        if let Some(p) = probe.missing_program() {
             die(&format!(
-                "{} is not built (run install.sh again)",
-                engine.display()
+                "{} is not there (reinstall the release, or build it: cargo build --release -p hydo-hvx)",
+                p.display()
             ));
         }
         // the release's run environment (the lock, the snapshot directory, the bundled tools on

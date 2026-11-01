@@ -417,6 +417,7 @@ dependencies = [
  "hydo-agent-proto",
  "hydo-hvx",
  "hydo-schedule",
+ "libc",
  "sha2",
 ]
 
@@ -496,7 +497,9 @@ dependencies = [
 name = "hydo-hvx"
 version = "0.1.0"
 dependencies = [
+ "cc",
  "libc",
+ "sha2",
 ]
 
 [[package]]

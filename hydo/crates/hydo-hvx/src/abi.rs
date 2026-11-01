@@ -484,6 +484,40 @@ pub struct hvx_ftstat {
     pub v: [hvx_ftstat_vcpu; 8],
 }
 
+pub const HVX_PT_USER: u32 = 1 << 1;
+pub const HVX_PT_NORETCOMP: u32 = 1 << 3;
+
+/// Intel PT of the guest (HVX_VM_PT_TRACE): the trace's configuration.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct hvx_pt_config {
+    pub buf_mib: u64,
+    pub flags: u32,
+    pub pad: u32,
+    pub cr3: u64,
+    pub lo: [u64; 2],
+    pub hi: [u64; 2],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct hvx_pt_status {
+    pub bytes: u64,
+    pub buf_bytes: u64,
+    pub status: u64,
+    pub ctl: u64,
+    pub saved: u32,
+    pub pad: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct hvx_pt_read {
+    pub offset: u64,
+    pub len: u64,
+    pub addr: u64,
+}
+
 pub const HVX_CREATE_VM: u64 = iow::<hvx_config>(1);
 pub const HVX_SET_REGS: u64 = iow::<hvx_regs>(2);
 pub const HVX_GET_REGS: u64 = ior::<hvx_regs>(3);
@@ -502,6 +536,9 @@ pub const HVX_SET_DISK: u64 = iow::<hvx_disk>(16);
 pub const HVX_SET_FAULT: u64 = iow::<hvx_fault>(18);
 pub const HVX_SET_PMU: u64 = iow::<hvx_pmu>(40);
 pub const HVX_GET_PMU: u64 = ior::<hvx_pmu>(41);
+pub const HVX_SET_PT: u64 = iow::<hvx_pt_config>(42);
+pub const HVX_GET_PT: u64 = ior::<hvx_pt_status>(43);
+pub const HVX_READ_PT: u64 = iow::<hvx_pt_read>(44);
 pub const HVX_SET_TJITTER: u64 = iow::<hvx_tjitter>(45);
 pub const HVX_GET_TJITTER: u64 = ior::<hvx_tjitter>(46);
 pub const HVX_GET_UNSYNC: u64 = iowr::<hvx_unsync_io>(47);
@@ -554,6 +591,9 @@ macro_rules! pod {
     ($($t:ty),*) => { $(unsafe impl Pod for $t {})* };
 }
 pod!(
+    hvx_pt_config,
+    hvx_pt_status,
+    hvx_pt_read,
     hvx_config,
     hvx_regs,
     hvx_exit,

@@ -110,7 +110,7 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         true,
     );
     for (t, why) in [
-        ("cc", "builds the run engine and the report tool"),
+        ("cc", "builds the kernel module"),
         ("make", "builds the kernel module"),
         ("flock", "the module lock, util-linux"),
         ("xz", "unpacks guest kernel modules for network faults"),
@@ -143,7 +143,7 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
     if usable == Some(true) {
         c.check(
             true,
-            &format!("{d} can be opened by you: runs do not use sudo"),
+            &format!("{d} can be opened by you: runs do not use sudo, and the run engine runs inside hydo"),
             "",
             false,
         );
@@ -156,7 +156,7 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
     } else {
         c.check(
             sudo_ok,
-            &format!("runs use sudo (you cannot open {d} yourself), and sudo asks no password"),
+            &format!("runs use sudo (you cannot open {d} yourself: the run engine runs as bin/hydo-hvx under sudo), and sudo asks no password"),
             &format!(
                 "a password prompt can block the explorer's workers: `hydo module udev install` (once, with \
                  sudo) gives {d} to a group, after which runs need no sudo -- see README"
@@ -268,8 +268,8 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         );
     }
     c.check(
-        access(&ctx.p("hv/hvx/hvx_explore"), libc::X_OK),
-        "run engine built (hv/hvx/hvx_explore)",
+        access(&ctx.p("bin/hydo-hvx"), libc::X_OK),
+        "run engine present (bin/hydo-hvx; it runs inside hydo when /dev/hvx is usable)",
         "run install.sh again",
         false,
     );

@@ -23,8 +23,9 @@ if [ "$what" = build ] || [ "$what" = all ]; then
   ssh -o BatchMode=yes "$BOX" 'mkdir -p ~/hydo-safety/hvxsafe ~/hydo-safety/hvx/race ~/hydo-safety/hvx/explore'
   rsync -az "$HVX/hvx.c" "$HVX/hvx_abi.h" "$BOX:hydo-safety/hvxsafe/"
   rsync -az "$HVX/hvx_abi.h" "$HVX/hvx_boot.h" "$HVX/hvx_sched_util.h" "$HVX"/hvx_*_test.c "$HVX"/hvx_test.c \
-    "$HVX"/hvx_verify.c "$HVX"/hvx_*_verify.c "$HVX/hvx_explore.c" "$BOX:hydo-safety/hvx/"
-  rsync -az "$HVX/explore/ptedges.h" "$BOX:hydo-safety/hvx/explore/"
+    "$HVX"/hvx_verify.c "$HVX"/hvx_*_verify.c "$BOX:hydo-safety/hvx/"
+  # the run engine (hydo-hvx, Rust since M137): the workspace, built on the box below
+  (cd "$HVX/../.." && rsync -azR --exclude target Cargo.toml Cargo.lock rust-toolchain.toml .cargo hydo/crates "$BOX:hydo-safety/ws/")
   rsync -az "$HVX/race/devshim.c" "$BOX:hydo-safety/hvx/race/"
   ssh -o BatchMode=yes "$BOX" 'cd ~/hydo-safety/hvxsafe && cp -f hvx.c hvxsafe.c && cat > Makefile <<"EOF"
 obj-m := hvxsafe.o
@@ -53,7 +54,7 @@ hvx_net_fault_test hvx_bug_f0_test hvx_fuzzresume_test hvx_pmu_test hvx_bigram_t
 SMPTESTS="hvx_sched_pmu_test hvx_sched_race_test hvx_sipi_test hvx_sched_sweep_test"
 for t in $TESTS $SMPTESTS hvx_boot_verify hvx_disk_boot_verify hvx_smp_boot_verify; do
   cc -O2 -Wall -o $T/$t $t.c 2>/dev/null || echo "COMPILE FAIL $t"; done
-cc -O2 -Wall -o $T/hvx_explore hvx_explore.c -lipt 2>/dev/null || cc -O2 -Wall -DHYDO_NO_LIBIPT -o $T/hvx_explore hvx_explore.c
+( . ~/hydo-rust/env.sh && cd ~/hydo-safety/ws && cargo build --release --locked -q -p hydo-hvx ) && cp ~/hydo-safety/ws/target/release/hydo-hvx $T/ || echo "COMPILE FAIL hydo-hvx"
 declare -A EXP=(
   [hvx_virtio_iso_test]="7e586473f6e494d7" [hvx_virtio_pci_test]="3f95ef833747f3ec"
   [hvx_fault_test]="91170d4dbf101c5b 88f680fc22cc9bb0 9090286f3fc59682" [hvx_net_test]="0e2b7acf2f4f94ee"
@@ -81,7 +82,7 @@ check "boot (2 vCPUs)" "$rc" "$out" 6584c954c2839491
 S='disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24'
 for img in explore-disk.img:2403499c9a3f8419 explore-fix-disk.img:f87130453609a5d6; do
   sudo rm -rf /var/tmp/m97-side/${img%%:*}	# written by the sudo run
-  out=$(cd $T && run timeout 1800 $T/hvx_explore one $B/bzImage $B/initramfs-kafka.cpio.gz $B/${img%%:*} /var/tmp/m97-side/${img%%:*} "$S"); rc=$?
+  out=$(cd $T && run timeout 1800 $T/hydo-hvx one $B/bzImage $B/initramfs-kafka.cpio.gz $B/${img%%:*} /var/tmp/m97-side/${img%%:*} "$S"); rc=$?
   echo "$out" > /var/tmp/m97-side/${img%%:*}.out; check "repro ${img%%:*} (rc=$rc)" 0 "$out" ${img##*:}
 done
 lock=$(sudo dmesg | grep -aiE 'soft lockup|rcu.*stall|BUG:|Oops' | tail -3)

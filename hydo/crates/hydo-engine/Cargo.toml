@@ -1,6 +1,6 @@
 [package]
 name = "hydo-engine"
-description = "One interface to hydo's run engines: hvx (hv/hvx/hvx_explore) and hvm (hv/hvm/explore/hvmx)"
+description = "One interface to hydo's run engines: hvx (the Rust engine hydo-hvx, in-process or as a program) and hvm (hv/hvm/explore/hvmx)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,6 +9,7 @@ rust-version.workspace = true
 [dependencies]
 hydo-schedule = { workspace = true }
 hydo-hvx = { workspace = true }
+libc = "0.2"
 flate2 = { workspace = true }
 sha2 = { workspace = true }
 

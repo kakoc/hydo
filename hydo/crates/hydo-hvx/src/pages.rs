@@ -71,6 +71,44 @@ impl Pages {
         }
     }
 
+    /// HVX_EXPLORE_DIRTY: compare `cur` with the saved bytes 4 KiB block by block: (blocks,
+    /// blocks that differ, saved blocks that are not zero, blocks of `cur` that are not zero).
+    pub fn diff(&self, cur: &[u8]) -> (u64, u64, u64, u64) {
+        let mut next = self.idx.iter().peekable();
+        let mut off = 0;
+        let (mut n, mut diff, mut nz, mut curnz) = (0u64, 0u64, 0u64, 0u64);
+        for (i, c) in cur.chunks(BLOCK).enumerate() {
+            n += 1;
+            let saved: Option<&[u8]> = if next.peek() == Some(&&(i as u32)) {
+                next.next();
+                let l = c.len().min(self.len.saturating_sub(i * BLOCK));
+                let s = &self.data[off..off + l];
+                off += l;
+                Some(s)
+            } else {
+                None
+            };
+            let cz = crate::fnv::is_zero(c);
+            if !cz {
+                curnz += 1;
+            }
+            match saved {
+                Some(s) => {
+                    nz += 1;
+                    if s != c {
+                        diff += 1;
+                    }
+                }
+                None => {
+                    if !cz {
+                        diff += 1;
+                    }
+                }
+            }
+        }
+        (n, diff, nz, curnz)
+    }
+
     /// The whole saved bytes (a diagnostic: HVX_EXPLORE_DURABLE_OUT).
     pub fn to_vec(&self) -> Vec<u8> {
         let mut v = vec![0u8; self.len];
@@ -98,5 +136,10 @@ mod tests {
         p.load_into(&mut d);
         assert_eq!(d, src);
         assert_eq!(p.to_vec(), src);
+        let mut cur = src.clone();
+        assert_eq!(p.diff(&cur), (4, 0, 3, 3));
+        cur[5] = 0; // block 0 now zero
+        cur[BLOCK + 1] = 9; // block 1 now non-zero
+        assert_eq!(p.diff(&cur), (4, 2, 3, 3));
     }
 }

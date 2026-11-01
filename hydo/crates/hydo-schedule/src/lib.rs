@@ -2,8 +2,9 @@
 //!
 //! A schedule is one line, `<host tokens> | run <guest tokens>`, for example
 //! `disk=cut dseed=1 | run C=12 R=everysec`. The host part is applied by the engine
-//! (`hv/hvx/hvx_explore.c`, `hv/hvm/explore/serve.c`): disk faults, tick jitter, preemption, vCPU
-//! turns, the run budget, a power cut at a FLUSH. The guest part is typed on the guest's console
+//! (`hydo/crates/hydo-hvx`, `hv/hvm/explore/serve.c`): disk faults, tick jitter, preemption, vCPU
+//! turns, the run budget, a power cut at a FLUSH. Comments that cite `hvx_explore.c` name the C
+//! engine the Rust one was ported from (deleted in M137; `git show d9202e7:hv/hvx/hvx_explore.c`). The guest part is typed on the guest's console
 //! and applied by its init (`hydo/onboard/hydo-init*.sh`, the stack's `stack-explore.sh`): kills,
 //! pauses, network faults, power cuts, clock jumps, protocol faults, freezes, BUGGIFY, the test
 //! composer's composition and the manifest's knobs.

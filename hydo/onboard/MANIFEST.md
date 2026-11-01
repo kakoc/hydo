@@ -1447,7 +1447,7 @@ hydo-build path/to/hydo.yaml --set version=3.51.3   # a build parameter
 hydo-build path/to/hydo.yaml --check         # validate only
 hydo-build path/to/hydo.yaml --print-shell   # show the compiled manifest
 # -> build/explore-ob-<name>-disk.img; copy it to ~/hydo/build on the bare-metal machine, then:
-~/bin/hvx-run sudo ./hvx_explore one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz \
+~/bin/hvx-run sudo target/release/hydo-hvx one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz \
     ~/hydo/build/explore-ob-<name>-disk.img <outdir> "disk=none dseed=1 | run C=12"
 hydo-explore --image explore-ob-<name>-disk.img --seeds 1-50 --out <dir>   # cargo build --release -p hydo-explore
 ```
@@ -1455,10 +1455,11 @@ hydo-explore --image explore-ob-<name>-disk.img --seeds 1-50 --out <dir>   # car
 Guest RAM: the explorer reads `guest.ram_mib` from the manifest inside the image (or from
 `--manifest`) and starts the engine with `--ram-mib N`; `hydo explore --ram-mib N` overrides it.
 The size is not part of a schedule, so a hand run of a non-default image needs the same flag:
-`~/bin/hvx-run sudo ./hvx_explore --ram-mib 2048 one ...` (the report's repro line includes it).
+`~/bin/hvx-run sudo target/release/hydo-hvx --ram-mib 2048 one ...` (the report's repro line
+includes it; `hydo-hvx` is the run engine as a program, M137).
 Out-of-range values are rejected by `hydo-build`, the explorer and both engines.
 
-Guest CPU: `guest.cpu: v3` makes the explorer start `hvx_explore --cpu v3` (hvx flag
+Guest CPU: `guest.cpu: v3` makes the explorer start the engine with `--cpu v3` (hvx flag
 `HVX_VM_X86_64_V3`): the guest sees AVX/AVX2, FMA, BMI1/2, F16C, LZCNT, MOVBE and XSAVE (x87|SSE|AVX
 only, no AVX-512), which prebuilt x86-64-v3 binaries and images built for Haswell/Broadwell need.
 `hydo explore --cpu v3|v2` overrides it. Like the RAM size it is not in the schedule, so a hand run

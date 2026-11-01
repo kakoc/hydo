@@ -95,8 +95,10 @@ pub fn tool_env(ctx: &Ctx) -> Vec<(String, String)> {
     e
 }
 
+/// The run engine's program (`bin/hydo-hvx`; `$HYDO_HVX_EXPLORE` overrides it), started when the
+/// engine cannot run in this process (see `hydo_engine::hvx`).
 pub fn engine(ctx: &Ctx) -> PathBuf {
-    ctx.p("hv/hvx/hvx_explore")
+    hydo_engine::hvx::program(&ctx.root)
 }
 
 pub fn bzimage(ctx: &Ctx) -> PathBuf {

@@ -117,6 +117,9 @@ fn structs_and_ioctls_match_the_header() {
             pmuoff_cyc, vmxoff_cyc, step_entries, step_cyc, free_entries, free_cyc, ovf, skid_max, skid_sum,
             skid_hist, steps_turn, steps_tick, rearms, resident, step_hw_cyc, pad }
         hvx_ftstat { n_vcpus, pad0, tsc_khz, sched_cyc, sched_turns, pad, v }
+        hvx_pt_config { buf_mib, flags, pad, cr3, lo, hi }
+        hvx_pt_status { bytes, buf_bytes, status, ctl, saved, pad }
+        hvx_pt_read { offset, len, addr }
     };
     // the explicit pads of the snapshot are not fields in C: check that the next field's offset
     // is the C one (it is in the list) and leave them out
@@ -141,6 +144,9 @@ fn structs_and_ioctls_match_the_header() {
         HVX_SET_FAULT,
         HVX_SET_PMU,
         HVX_GET_PMU,
+        HVX_SET_PT,
+        HVX_GET_PT,
+        HVX_READ_PT,
         HVX_SET_TJITTER,
         HVX_GET_TJITTER,
         HVX_GET_UNSYNC,
@@ -165,6 +171,8 @@ fn structs_and_ioctls_match_the_header() {
         ("HVX_VM_PMU_CLOCK".into(), HVX_VM_PMU_CLOCK as usize),
         ("HVX_VM_PAUSE_EXIT".into(), HVX_VM_PAUSE_EXIT as usize),
         ("HVX_VM_PT_TRACE".into(), HVX_VM_PT_TRACE as usize),
+        ("HVX_PT_USER".into(), HVX_PT_USER as usize),
+        ("HVX_PT_NORETCOMP".into(), HVX_PT_NORETCOMP as usize),
         ("HVX_VM_SMP_SCHED".into(), HVX_VM_SMP_SCHED as usize),
         ("HVX_VM_SMP_BOOT".into(), HVX_VM_SMP_BOOT as usize),
         ("HVX_VM_X86_64_V3".into(), HVX_VM_X86_64_V3 as usize),

@@ -1,7 +1,8 @@
 # The Linux release of hydo
 
-`build-release.sh` turns the bare-metal backend (the `hvx` kernel module, `hvx_explore`, and the
-Rust programs `hydo`, `hydo-build` and `hydo-fetch-image`) into a self-contained tarball for x86_64 Linux machines with Intel
+`build-release.sh` turns the bare-metal backend (the `hvx` kernel module and the Rust programs
+`hydo`, `hydo-hvx` (the run engine as a program; since M137 it replaces `hvx_explore`), `hydo-build`
+and `hydo-fetch-image`) into a self-contained tarball for x86_64 Linux machines with Intel
 VT-x. A user installs it with one command and drives everything with one `hydo` command; no
 Nix, no `~/hydo` tree and no hand-written lock scripts are needed. `QUICKSTART-linux.md` is the
 user guide; it is shipped as the release's `README.md`. The Mac counterpart is
@@ -27,7 +28,7 @@ the same (Milestone 107); only `hydo module` is Linux-only.
 | `hydo module udev install\|remove\|status [--name N] [--group G] [--dry-run]` | optional: with sudo, writes `/etc/udev/rules.d/70-hydo-N.rules` (`KERNEL=="N", SUBSYSTEM=="misc", GROUP="G", MODE="0660"`), creates the group if missing, adds the user, reloads udev and applies the rule to a loaded device; `remove` deletes the rule and sets the device back to root:root 0600. `install.sh --udev [--udev-group G] [--udev-name N]` runs `install` |
 | `hydo module status [--name N]` | loaded or not, `srcversion` of the loaded and the release-built module, device mode, KVM, how many processes hold the lock (read from `/proc/locks`, no lock taken) |
 | `hydo build [hydo.yaml]` | the Rust image builder (`hydo/crates/hydo-build`, since Milestone 103) with the bundled tools, into `./hydo-out` (`./.hydo` for a project's `hydo/hydo.yaml`, the default manifest) |
-| `hydo run [IMG] "<schedule>"` | `libexec/hvx-run sudo env HVX_SNAP_DIR=… hv/hvx/hvx_explore [--ram-mib/--cpu from the image's manifest] one guest/bzImage guest/initramfs-kafka.cpio.gz IMG <dir> "<schedule>"`; writes `result.json` |
+| `hydo run [IMG] "<schedule>"` | the run engine (`hydo/crates/hydo-hvx`) on a thread of `hydo`, holding the module lock shared, when the user can open `/dev/hvx`; otherwise `libexec/hvx-run sudo env HVX_SNAP_DIR=… bin/hydo-hvx [--ram-mib/--cpu from the image's manifest] one guest/bzImage guest/initramfs-kafka.cpio.gz IMG <dir> "<schedule>"` (M137); writes `result.json` |
 | `hydo repro <run dir \| explore dir \| "<schedule>">` | re-runs a `result.json`, or every failure and minimal schedule of an exploration's `exploration.json`, from a fresh boot, and compares fingerprints |
 | `hydo explore [IMG] [explorer options]` | the explorer (`hydo/crates/hydo-explore`) in the same process (default `--seeds 1-20 --out hydo-out/explore`; workers sized from the machine) |
 | `hydo report [DIR]` | prints `report.md` |

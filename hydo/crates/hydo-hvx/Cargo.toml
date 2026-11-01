@@ -1,14 +1,26 @@
 [package]
 name = "hydo-hvx"
-description = "The hvx run engine in Rust: drives /dev/hvx through its ioctls (hv/hvx/hvx_abi.h); hvx_explore's protocol, in-process or as the hydo-hvx program"
+description = "The hvx run engine in Rust: drives /dev/hvx through its ioctls (hv/hvx/hvx_abi.h); in-process or as the hydo-hvx program (the C hvx_explore's command line and protocol)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+build = "build.rs"
+
+[features]
+# coverage decoding with libipt (pt/ptedges.c; Linux, libipt-dev): off by default, so the default
+# build needs no libipt. Without it a traced run still writes its stats, with edges=-1.
+pt = ["dep:cc"]
 
 [dependencies]
 libc = "0.2"
 
+[build-dependencies]
+cc = { version = "1", optional = true }
+
 [[bin]]
 name = "hydo-hvx"
 path = "src/bin/hydo-hvx.rs"
+
+[dev-dependencies]
+sha2 = { workspace = true }

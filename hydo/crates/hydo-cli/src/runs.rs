@@ -204,20 +204,19 @@ fn run_engine(
     };
     let run = match ctx.platform {
         Platform::Linux => {
-            let engine = hvxenv::engine(ctx);
-            if !crate::ctx::access(&engine, libc::X_OK) {
-                die(&format!(
-                    "{} is not built (run install.sh again)",
-                    engine.display()
-                ));
-            }
             let hvx = Hvx {
-                engine,
+                engine: hvxenv::engine(ctx),
                 hvx_run: Some(ctx.libexec().join("hvx-run")),
                 snap_dir: hvxenv::snap_dir(),
                 extra_env: Vec::new(),
                 env: hvxenv::tool_env(ctx),
             };
+            if let Some(p) = hvx.missing_program() {
+                die(&format!(
+                    "{} is not there (reinstall the release, or build it: cargo build --release -p hydo-hvx)",
+                    p.display()
+                ));
+            }
             let spec = spec_from_args(
                 eargs,
                 image,
