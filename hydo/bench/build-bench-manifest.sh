@@ -18,7 +18,9 @@
 # The stems in $FULL (default: the first stem) are built in full; every other stem is a copy of the
 # first full build with /bin/hydostack replaced (agent-patch.sh --swap), because the manifest and
 # every other file are the same (proven against full builds with agent-patch.sh --check,
-# docs/C2-BENCH.md). KEEP=1 keeps a stem whose two images exist (to resume, or to add stems to a
+# docs/C2-BENCH.md). ORDER_BIN=<dir> takes each order service from <dir>/<stem>-hydostack
+# (build-order-services.sh: franz-go v1.22.2 since M135, the benchmark's images) instead of the
+# stack image's /bin/hydostack (franz-go v1.17.1, M129's images). KEEP=1 keeps a stem whose two images exist (to resume, or to add stems to a
 # set). $HYDO_AGENT_BIN is the pinned hydo-agent. <work dir>/benchroot is the debugfs
 # rdump of the -pin-kr control image's root; bzImage and initramfs-kafka.cpio.gz are linked into
 # $OUT from $STACK_BUILD.
@@ -76,8 +78,13 @@ for pair in $order; do
   cp "$here/manifest/hydo.yaml" "$d/hydo.yaml"
   ln -s "$work/benchroot" "$d/root"
   ln -s "$work/benchstore" "$d/store"
-  debugfs -R "dump /bin/hydostack $d/front-door" "$img?offset=$OFF" > /dev/null 2>&1
-  [ -s "$d/front-door" ] || { echo "no /bin/hydostack in $img" >&2; exit 1; }
+  if [ -n "${ORDER_BIN:-}" ]; then
+    img=$ORDER_BIN/$stem-hydostack
+    cp "$img" "$d/front-door" || { echo "no $img (build-order-services.sh)" >&2; exit 1; }
+  else
+    debugfs -R "dump /bin/hydostack $d/front-door" "$img?offset=$OFF" > /dev/null 2>&1
+    [ -s "$d/front-door" ] || { echo "no /bin/hydostack in $img" >&2; exit 1; }
+  fi
   echo "== $stem: order service $(sha256sum < "$d/front-door" | cut -c1-16) from $(basename "$img")"
   case " $FULL " in
     *" $stem "*) ;;

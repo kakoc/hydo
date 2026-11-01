@@ -172,6 +172,17 @@ STACK_KAFKA_CLUSTER_ID="P0hH8j92QAKKXdQ2D7Aw7A"
 #     -trimpath, empty build id. Modules are cached under build/stack-gomod. ---
 mkdir -p build/stack-gomod build/stack-gocache
 TOP="$PWD"
+# M135: the stack images are the engine's regression baselines, so their order service keeps the
+# module versions it was built with (franz-go v1.17.1: hydo/stack/go.mod.baseline and
+# go.sum.baseline). hydo/stack/go.mod itself has franz-go v1.22.2 (franz-go issue 1484, M133) for
+# the manifest-built images. The build runs in a copy with the baseline's module files;
+# STACK_GOMOD=current keeps the source's own go.mod/go.sum instead.
+GOSRC="build/stack-go-src-${STACK_OUT}"
+chmod -R u+w "$GOSRC" 2>/dev/null || true; rm -rf "$GOSRC"; mkdir -p "$GOSRC"; cp -a "$STACK_GO_SRC"/. "$GOSRC"/
+if [ "${STACK_GOMOD:-baseline}" = baseline ]; then
+  cp hydo/stack/go.mod.baseline "$GOSRC/go.mod"; cp hydo/stack/go.sum.baseline "$GOSRC/go.sum"
+fi
+STACK_GO_SRC="$GOSRC"
 ( cd "$STACK_GO_SRC" && \
   GOPATH="$TOP/build/stack-gopath" GOMODCACHE="$TOP/build/stack-gomod" \
   GOCACHE="$TOP/build/stack-gocache" GOFLAGS=-mod=readonly GOTOOLCHAIN=local \
