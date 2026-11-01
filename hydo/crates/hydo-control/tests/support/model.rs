@@ -61,6 +61,9 @@ pub enum Conv {
 #[derive(Default, Debug)]
 struct Jobs {
     periodic: Vec<usize>,
+    /// The environment when start_periodic forked the checkers (`periodic_loop $i &`): each
+    /// checker's subshell keeps it.
+    periodic_env: Vec<String>,
     /// The stop at which stop_periodic ran (the stop of the next main item).
     periodic_cut: Option<u64>,
     pause: Option<(String, u64, u64)>,
@@ -1166,10 +1169,7 @@ impl<'a> Model<'a> {
         for f in ["acked", "outcomes", "workload.log"] {
             self.send(write(&format!("{H}/{f}"), "", false))?;
         }
-        // start_periodic
-        self.jobs.periodic = (0..self.plan.invariants.len())
-            .filter(|i| !self.plan.invariants[*i].every.is_empty())
-            .collect();
+        self.start_periodic();
         self.live_anchor("start")?;
         self.hist_declare()?; // history's start_periodic wraps liveness's
         let (mut down, mut cut, mut paused) = (false, false, false);
@@ -1328,9 +1328,7 @@ impl<'a> Model<'a> {
                 self.mount_data("HYDO-ORACLE: ERROR mount data")?;
                 self.start_all("HYDO-ORACLE: ERROR service start", false)?;
                 self.provision()?;
-                self.jobs.periodic = (0..self.plan.invariants.len())
-                    .filter(|i| !self.plan.invariants[*i].every.is_empty())
-                    .collect();
+                self.start_periodic();
                 self.live_anchor("start")?;
                 self.hist_declare()?;
                 self.step_range(0, self.plan.steps)?;
@@ -1513,11 +1511,21 @@ pub fn check(
 }
 
 impl Model<'_> {
+    /// start_periodic: `periodic_loop $i &` for every invariant with `every`; each subshell keeps
+    /// the environment of this moment.
+    fn start_periodic(&mut self) {
+        self.jobs.periodic = (0..self.plan.invariants.len())
+            .filter(|i| !self.plan.invariants[*i].every.is_empty())
+            .collect();
+        self.jobs.periodic_env = self.env(&[]);
+    }
+
     /// The jobs run with the environment the init had when it started them (after the knobs).
     fn env_at_jobs(&self) -> Vec<String> {
         // in a run conversation start_svc changes HYDO_SVC/LOG only at a restart, which can come
-        // after a job started; the controller builds each command when it sends it, so the job's
-        // env is checked per command against both the start and the latest value
+        // after a job started; the pause and kill timers build each command when they send it, so
+        // their env is checked loosely (the periodic checkers keep the environment of their
+        // start: Jobs::periodic_env, checked command by command)
         self.env(&[])
     }
 
@@ -1547,6 +1555,12 @@ impl Model<'_> {
                 return Err(format!(
                     "{label}: expected `sleep {}` before stop {cutoff}, got {it:?}",
                     inv.every
+                ));
+            }
+            if r.env.as_ref() != Some(&self.jobs.periodic_env) {
+                return Err(format!(
+                    "{label}: its sleep must have the environment of start_periodic {:?}, got {it:?}",
+                    self.jobs.periodic_env
                 ));
             }
             j += 1;
@@ -1584,6 +1598,12 @@ impl Model<'_> {
             };
             if r.argv != run_of(&inv.cmd) || r.capture != Some(3000) {
                 return Err(format!("{label}: expected its check command, got {it:?}"));
+            }
+            if r.env.as_ref() != Some(&self.jobs.periodic_env) {
+                return Err(format!(
+                    "{label}: its check must have the environment of start_periodic {:?}, got {it:?}",
+                    self.jobs.periodic_env
+                ));
             }
             j += 1;
             let (di, d) = match self.dones.get(id) {

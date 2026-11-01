@@ -22,11 +22,17 @@
 //! reply and events, so their `rm -f` is not sent and "helper did not start" is the agent's
 //! refusal of `freeze`; the helper cannot exit early (it is the agent); a freeze whose pair gives
 //! neither an address nor a port is not sent (the agent refuses it; hydo_fc counted nothing), its
-//! empty log is written instead. With `network: bridge` the helper runs in the frozen service's
-//! namespace, which the agent's `freeze` has no field for: such F= tokens are refused (run_cfg).
+//! empty log is written instead.
+//!
+//! With `network: bridge` (hydo-init-netns.sh's fc_arm and fc_rules, M127): the helper runs in
+//! the frozen service's namespace, so the agent's `freeze` carries that namespace in `netns`
+//! (feature `freeze-netns`, the agent binds its netfilter queue there), and the rules run there
+//! too (`run` with `netns`): OUTPUT for what the service sends, INPUT for what it receives, the
+//! workload peer being the bridge's address.
 
 use super::*;
 use crate::flow::Stop;
+use crate::plan::NET_GW;
 use hydo_agent_proto::msg::{Dir, Freeze, Unfreeze, UnfreezeOk, WarnCode};
 
 /// The freeze helper's queue, its log, and the rules' NFQUEUE target.
@@ -257,6 +263,8 @@ fn arm(fx: &mut F<'_>, ctx: &Ctx, fc: &Fc) -> Step<()> {
             pattern: (fc.matching != "-").then(|| fc.matching.clone()),
             dur_ms: atol(&fc.dur).max(0) as u64,
             log: Some(fc_log(ctx)),
+            // hydo-init-netns.sh's fc_arm: `HYDO_FC="$BB nsenter -n$NSD/$fc_svc $_fc"`
+            netns: netns::of(ctx, &fc.svc),
         }))?;
         fx.start(Part::FreezeWatch {
             id,
@@ -320,7 +328,34 @@ fn rules(
         }
     };
     let (mut r1, mut r2) = (w(&[op, "OUTPUT"]), w(&[op, "OUTPUT"]));
-    if fc.tgt == "workload" {
+    // hydo-init-netns.sh's fc_rules (network: bridge): the rules in the frozen service's
+    // namespace, OUTPUT for what it sends and INPUT for what it receives; the workload peer is
+    // the bridge's address
+    let ns = netns::of(ctx, &fc.svc);
+    if ns.is_some() {
+        // unquoted in the shell: an empty address is no word at all
+        let words = |v: &[&str]| -> Vec<String> {
+            v.iter()
+                .filter(|x| !x.is_empty())
+                .map(|x| x.to_string())
+                .collect()
+        };
+        if fc.tgt == "workload" {
+            tp = port(ctx, &fc.svc);
+            if tp.is_empty() {
+                return Ok((3, String::new()));
+            }
+            r1 = words(&[
+                op, "INPUT", "-s", NET_GW, "-d", &sa, "-p", "tcp", "--dport", &tp,
+            ]);
+            r2 = words(&[
+                op, "OUTPUT", "-s", &sa, "-d", NET_GW, "-p", "tcp", "--sport", &tp,
+            ]);
+        } else {
+            r1 = words(&[op, "OUTPUT", "-s", &sa, "-d", &ta]);
+            r2 = words(&[op, "INPUT", "-s", &ta, "-d", &sa]);
+        }
+    } else if fc.tgt == "workload" {
         tp = port(ctx, &fc.svc);
         if tp.is_empty() {
             return Ok((3, String::new()));
@@ -355,7 +390,7 @@ fn rules(
             .collect();
         argv.extend(r);
         let e = env(fx, ctx, &[]);
-        let ran = run(fx, argv, e, capture)?;
+        let ran = run_in(fx, argv, e, capture, ns.clone())?;
         out.push_str(&ran.out);
         rc = ran.status;
         if rc != 0 {

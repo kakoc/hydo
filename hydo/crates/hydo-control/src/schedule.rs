@@ -34,7 +34,7 @@
 use crate::control::{Controller, Ending, EngineAction, Out, Seen, StopInfo};
 use crate::flow::{Facts, Flow, Fx, Memo, Step};
 use crate::plan::Plan;
-use crate::seams::{Seam, Unsupported};
+use crate::seams::Unsupported;
 use hydo_agent_proto::msg::{
     ClockSet, Command, Event, Mkdir, Mount, MountFlag, Probe, ProbeEnd, Read, Reply, Run, Sig,
     Signal, Spawn, Syncfs, Write,
@@ -188,8 +188,10 @@ struct Host {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Part {
     Main,
-    /// periodic_loop for the invariant with this index.
-    Every(usize),
+    /// periodic_loop for the invariant with this index, with the init's exports when
+    /// start_periodic forked it (the shell's subshell keeps them; a later start_svc or export
+    /// does not reach it).
+    Every(usize, BTreeMap<String, String>),
     PauseTimer {
         svc: String,
         off: u64,
@@ -214,7 +216,7 @@ enum Part {
 fn label(p: &Part) -> String {
     match p {
         Part::Main => "main".into(),
-        Part::Every(i) => format!("every:i{i}"),
+        Part::Every(i, _) => format!("every:i{i}"),
         Part::PauseTimer { .. } => "pause-timer".into(),
         Part::KillTimer { .. } => "kill-timer".into(),
         Part::Compose(j) => composer::label(j),
@@ -476,14 +478,8 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
             // SEAM(NetFaults): netfault.rs
             GuestToken::Net { .. } => c.n = Some(value),
             GuestToken::OneWay { .. } => c.o = Some(value),
-            GuestToken::Freeze(_) if plan.freeze && plan.bridge => {
-                // SEAM(Freeze): freeze.rs. With network: bridge the helper runs in the frozen
-                // service's namespace; the agent's `freeze` has no namespace field.
-                return Err(Unsupported::seam(
-                    Seam::Freeze,
-                    format!("{text} with network: bridge (hydo-agent-proto's freeze has no netns)"),
-                ));
-            }
+            // SEAM(Freeze): F= is a knob (freeze.rs); with network: bridge the agent's freeze
+            // and the rules run in the frozen service's namespace (M127)
             // SEAM(Clock): T=, driven by features/clock.rs
             GuestToken::Clock { at, delta } => c.t = Some((*at as i64, *delta)),
             // Every other letter is a knob to the shell (`?=*) set_knob`): B= (set_knob's BUGGIFY
@@ -622,7 +618,7 @@ fn body(fx: &mut F<'_>, part: &Part) -> Step<()> {
             Conversation::Recovery { acked, failed } => main_recovery(fx, &ctx, acked, failed),
             Conversation::Solo => main_solo(fx, &ctx),
         },
-        Part::Every(i) => periodic_loop(fx, &ctx, *i),
+        Part::Every(i, exports) => periodic_loop(fx, &ctx, *i, exports),
         Part::PauseTimer { svc, off, dur } => pause_timer(fx, &ctx, svc, *off, *dur),
         Part::KillTimer { svc, off } => kill_timer(fx, &ctx, svc, *off),
         Part::Compose(j) => composer::job(fx, &ctx, j),
@@ -662,6 +658,15 @@ fn timeout_argv(ctx: &Ctx, cmd: &str) -> Vec<String> {
 /// hydo_phase=serve to init; they are not reproduced): what the kernel gives init, what the init
 /// exports, what it exported later (HYDO_SVC, HYDO_LOG), and the command's own variables. Sorted.
 fn env(fx: &F<'_>, ctx: &Ctx, extra: &[(&str, String)]) -> Vec<String> {
+    env_with(ctx, &fx.shared.env, extra)
+}
+
+/// [`env`] with the init's later exports as `exports` (a background job's: those of its fork).
+fn env_with(
+    ctx: &Ctx,
+    exports: &BTreeMap<String, String>,
+    extra: &[(&str, String)],
+) -> Vec<String> {
     let l = &ctx.plan.layout;
     let mut m: BTreeMap<String, String> = BTreeMap::new();
     m.insert("HOME".into(), "/".into());
@@ -670,7 +675,7 @@ fn env(fx: &F<'_>, ctx: &Ctx, extra: &[(&str, String)]) -> Vec<String> {
     m.insert("HYDO_ACKED".into(), l.acked());
     m.insert("HYDO_OUTCOMES".into(), l.outcomes());
     m.insert("HYDO_FAILED".into(), l.failed());
-    for (k, v) in &fx.shared.env {
+    for (k, v) in exports {
         m.insert(k.clone(), v.clone());
     }
     for (k, v) in extra {
@@ -1380,12 +1385,24 @@ fn assert_once(fx: &mut F<'_>, ctx: &Ctx, i: usize, ok: bool, details: &str) {
 
 /// eval_inv: 0 holds, 1 violated, 2 could not be evaluated; also its output.
 fn eval_inv(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<(u32, String)> {
+    let exports = fx.shared.env.clone();
+    eval_inv_with(fx, ctx, i, &exports)
+}
+
+/// eval_inv with the exports of the shell process that runs it (a periodic checker's are those
+/// of its fork).
+fn eval_inv_with(
+    fx: &mut F<'_>,
+    ctx: &Ctx,
+    i: usize,
+    exports: &BTreeMap<String, String>,
+) -> Step<(u32, String)> {
     let inv = &ctx.plan.invariants[i];
-    let e = env(fx, ctx, &[]);
+    let e = env_with(ctx, exports, &[]);
     // `RUN cmd > $H/inv.$i.out 2>&1`; the output is kept host-side (AMBIGUOUS: an output longer
     // than 3,000 bytes is cut to its first 3,000 here; the shell's file keeps all of it)
     // SEAM(Composer): compose.sh verdict | end IDX | check IDX
-    let r = match composer::eval(fx, ctx, &inv.cmd)? {
+    let r = match composer::eval(fx, ctx, &inv.cmd, exports)? {
         Some(r) => r,
         None => run(fx, run_argv(ctx, &inv.cmd), e, Some(CHUNK as u32))?,
     };
@@ -1416,23 +1433,32 @@ fn eval_inv(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<(u32, String)> {
     }
 }
 
-/// periodic_loop: every `every` seconds of guest time while the workload runs.
-fn periodic_loop(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<()> {
+/// periodic_loop: every `every` seconds of guest time while the workload runs, with the
+/// environment of the moment start_periodic forked it (`exports`).
+fn periodic_loop(
+    fx: &mut F<'_>,
+    ctx: &Ctx,
+    i: usize,
+    exports: &BTreeMap<String, String>,
+) -> Step<()> {
     let every = ctx.plan.invariants[i].every.clone();
     loop {
-        let e = env(fx, ctx, &[]);
+        let e = env_with(ctx, exports, &[]);
         run(fx, vec![bb(ctx), "sleep".into(), every.clone()], e, None)?;
-        eval_inv(fx, ctx, i)?;
+        eval_inv_with(fx, ctx, i, exports)?;
     }
 }
 
 fn start_periodic(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     let mut ts = Vec::new();
+    // `periodic_loop $i &`: the subshell keeps the environment of this moment (a later K=
+    // restart's start_svc, or freeze's export of XTABLES_LOCKFILE, does not reach it)
+    let exports = fx.shared.env.clone();
     for (i, inv) in ctx.plan.invariants.iter().enumerate() {
         if inv.every.is_empty() {
             continue;
         }
-        ts.push(fx.start(Part::Every(i))? as u64);
+        ts.push(fx.start(Part::Every(i, exports.clone()))? as u64);
     }
     fx.effect(|h, _| {
         h.periodic.extend(ts);

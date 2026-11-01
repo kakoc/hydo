@@ -101,6 +101,10 @@
           "minimum": 0,
           "type": "integer"
         },
+        "netns": {
+          "description": "Bind the queue inside this network namespace (a path such as /tmp/hydo/ns/redis; the rules that feed the queue must be in that namespace too), then return to the agent's own namespace. Needs the feature `freeze-netns`.",
+          "type": "string"
+        },
         "op": {
           "const": "freeze",
           "description": "The command.",

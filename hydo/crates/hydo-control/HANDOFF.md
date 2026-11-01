@@ -141,11 +141,14 @@ controller.
     /proc/uptime, which reads CLOCK_BOOTTIME; the two agree in a guest that never suspends). An
     unreadable clock reads as empty, which awk takes as 0, as in the shell.
 20. **A monitor's environment is the init's environment at the anchor** (the shell forks the
-    monitor then). A later start_svc does not change it. (Observation for the core: M120's
-    periodic_loop builds its environment when each command is sent, so after a K= restart of a
-    service other than the last one started, its HYDO_SVC/HYDO_LOG differ from the shell's
-    subshell. The core model does not check the periodic job's environment. This was not
-    changed here.)
+    monitor then). A later start_svc does not change it. The core's periodic checkers do the
+    same since M127 (branch `c2-linux-fixes`): `Part::Every` carries the init's exports of the
+    moment start_periodic started it, and its `sleep`, its check and a composer `check IDX` or
+    `end IDX` it evaluates are built from them, so a K= restart of a service other than the last
+    one started no longer changes their HYDO_SVC/HYDO_LOG. The core model checks the periodic
+    job's environment against the one at start_periodic, and
+    `tests/conversations.rs::a_periodic_check_keeps_the_environment_of_its_start` restarts
+    miniflux's postgres (front is the last service) and checks every periodic command.
 21. **The monitors' files stay on the host** (`live.anchor.*`, `live.pid.*`, `live.res.*` are not
     written in the guest). The attempt's output is kept to 3,000 bytes (decision 7); the appended
     "satisfied ..." line follows the kept output, also when it does not end with a newline.
@@ -320,12 +323,14 @@ first. So:
 - `failed_ids`: the clock extension's part (its `clock=` word at a cut) before the fakes dump, so
   with both the shell's acked line is ids, then `clock=…`, then the `w:` records;
 - `start_all`: the world starts before liveness's part;
-- `final_verdict` is wrapped by the fakes only; liveness and history wrap `finish`, so their
-  parts before the verdict come before the summary. netns wraps `start_svc` only.
+- `final_verdict` is wrapped by the fakes, and with `errors:` the error logs wrap the fakes'
+  wrapper (M123 decision 9); liveness and history wrap `finish`, so their parts before the
+  verdict come before the summary. netns wraps `start_svc` only.
 
 The manifests with fakes and another feature (shop and redis-bridge: liveness; redis-bridge:
 netns) are still refused by that feature's seam. (M124: netns is driven now; redis-bridge waits
-only for liveness, and `tests/corpus_net.rs` runs it with its `eventually` check taken out.)
+only for liveness, and `tests/corpus_net.rs` runs it with its `eventually` check taken out. M127:
+its F= tokens are driven too, decision 13 of M124.)
 
 What C1 needs from this: pass `Ending::PowerCut::world` to `with_world`. Nothing else.
 
@@ -395,11 +400,22 @@ model in `tests/support/model/net.rs` checks each):
 11. **`cat $H/fc.ipt`** after failed rules: the rules' captured output, as notes.
 12. **XTABLES_LOCKFILE** is exported from the arming on (the shell's `export` in fc_arm), into
     every later command of the main part. A background job of the shell keeps the environment of
-    its fork; the controller's threads build each command when they send it (M120's approach), so
-    a periodic check after the arming has the variable too.
-13. **F= with `network: bridge`** is refused (seam freeze): the helper runs in the frozen
-    service's namespace, and the agent's `freeze` has no namespace field. Doing it needs a
-    protocol addition (`netns` on `freeze`, with a feature name) in hydo-agent-proto and the agent.
+    its fork. Since M127 the periodic checkers do too (M122 decision 20), so a periodic check
+    after the arming does not have the variable, as in the shell; the pause and kill timers still
+    build each command when they send it (M120's approach).
+13. **F= with `network: bridge`** is driven since M127 (branch `c2-linux-fixes`). The agent's
+    `freeze` has an optional `netns` (an additions-only change of protocol 1, feature
+    `freeze-netns` in the hello; `Command::features()` names both features, and neither the
+    session nor the runner sends the field to an agent that does not announce it). The agent
+    enters that namespace with setns, binds its netfilter queue there and goes back to its own
+    namespace before it does anything else (one thread). The controller sends the frozen
+    service's `$NSD/<svc>` as `netns`, as hydo-init-netns.sh's fc_arm puts `nsenter -n` in front
+    of hydo_fc, and runs that file's fc_rules in the same namespace (`run` with `netns`): OUTPUT
+    `-s <sa> -d <ta>` and INPUT `-s <ta> -d <sa>`, or for the workload peer INPUT from and OUTPUT
+    to the bridge's address 10.89.0.1 on the service's port. An empty address is no word, as in
+    the unquoted shell. `tests/corpus_net.rs` drives F= on both redis-bridge copies (replica at
+    the primary, primary at the workload) and on the voting app with `faults: [freeze]`, each run
+    checked against the shell model of both files.
 
 The order against the other extensions (hydo-build's `init_text`; a wrapper spliced later runs
 first): `step_range`: the fakes split, then freeze's (declaration, arming), then hydo-init.sh's;
@@ -499,9 +515,17 @@ checked by the shell model as written here):
    not UTF-8 in a record becomes U+FFFD in the report line (the shell printed it raw). Busybox's
    handling of `\d`, `\w`, `\s` in a user's `match:`/`ignore:`/`normalize:` was taken to be
    musl's (TRE's macros) and was not checked against a busybox.
-9. **The error logs together with fakes.** The fakes' summary lines that `final_verdict` prints
-   are not held back with the assertion records (in a shell image with both extensions they would
-   be). No example manifest has both.
+9. **The error logs together with fakes** (M127, branch `c2-linux-fixes`). hydo-build splices
+   hydo-init-fakes.sh before hydo-init-errlog.sh, so the error logs' final_verdict redirects the
+   fakes' one (`_el_orig_final_verdict` is the fakes' `ctl summary | sed 's/^/hydo-world: /';
+   _pf_orig_final_verdict`) into `$H/el.verdict`. The shell's console gets the error records
+   (el_report), then the summary lines, then the final invariants' assertion records and the
+   verdict line. The controller holds the summary lines with the assertion records
+   (`errlog::assert_line`), so its report lines come in that order; without `errors:` nothing
+   changes. `tests/fakes.rs::error_logs_with_fakes_print_in_the_shells_order` reads that order
+   from `hydo-build --print-init` of `tests/manifests/redis-proxy-errors.yaml` (the Redis proxy
+   example with `errors:`; not an example, so the identity corpus does not read it), drives five
+   schedules against the shell model and checks the order of the report lines.
 10. **An ending waits for the runner's sync.** A run can now end before the controller sent
     anything (a `W=` that setw refuses), so `ScheduleController` also waits for the answer to the
     runner's resynchronisation (`Flow::expect_answer`); no earlier transcript changed.
@@ -511,8 +535,9 @@ checked by the shell model as written here):
     either can win; the model accepts a timeout unless the daemon had arrived at an earlier stop.
 12. **The daemon's environment** is the init's when the first `step` call started it (HYDO_FROM and
     HYDO_TO of that call, HYDO_SVC/HYDO_LOG of that moment) for every command it starts, its
-    round waits and its drain timer, as the shell's forked daemon keeps it. `check IDX` in a
-    periodic checker follows the core's periodic_loop (M122 decision 20's observation).
+    round waits and its drain timer, as the shell's forked daemon keeps it. `check IDX` (and
+    `end IDX`) in a periodic checker has the checker's environment, the init's at start_periodic,
+    with HYDO_CHECK (or HYDO_CMD) added (M127, M122 decision 20).
 
 - **Agent images.** `agent::plan_of_image` reads a composed image through
   `agent::plan_of_embedded`: the manifest text expanded with `/etc/hydo/compose.json` (the meta
@@ -554,7 +579,7 @@ Left open: the scripted world is not busybox (no busybox on the Mac; `HYDO_AWK=b
 makes the awk tests use one); the error-log reads cost one round trip per 3,000 bytes of log at
 the end of each boot, which was not measured on a real guest (a large Kafka or MySQL log may make
 the end of a run slow; tailing the logs during the run is the alternative); the error logs
-with fakes were not run together (no example has both).
+with fakes run together only on a test manifest (decision 9; no example has both).
 
 ## Left open
 

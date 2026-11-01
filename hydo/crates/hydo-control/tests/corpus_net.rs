@@ -24,7 +24,7 @@
 mod support;
 
 use hydo_agent_proto::msg::{Command, Sig};
-use hydo_control::{Ending, Plan, Seam, Transcript};
+use hydo_control::{Ending, Plan, Transcript};
 use hydo_explore::gen::Ex;
 use hydo_explore::sched::{Fc, S};
 use hydo_explore::space::Space;
@@ -789,6 +789,42 @@ const MISTAKES: &[(&str, Mutator)] = &[
     ),
 ];
 
+/// A group of F= runs with network: bridge: nothing refused, every freeze sent with the frozen
+/// service's namespace, every rule run in a namespace, and some freeze fired.
+fn bridge_freezes(g: &Group) {
+    assert!(
+        g.counts.keys().all(|k| !k.starts_with("refused")),
+        "{}: {:?}",
+        g.name,
+        g.counts
+    );
+    let sends = |what: &str| -> Vec<&String> {
+        g.stream
+            .iter()
+            .filter(|l| l.contains(r#""t":"send""#) && l.contains(what))
+            .collect()
+    };
+    let freezes = sends(r#"\"op\":\"freeze\""#);
+    let rules = sends("--queue-num");
+    assert!(
+        !freezes.is_empty() && !rules.is_empty(),
+        "{}: no freeze sent",
+        g.name
+    );
+    for l in freezes.iter().chain(&rules) {
+        assert!(
+            l.contains(r#"\"netns\":\"/tmp/hydo/ns/"#),
+            "{}: {l}",
+            g.name
+        );
+    }
+    assert!(
+        g.stream.iter().any(|l| l.contains("hydo-fc: FROZE")),
+        "{}: no freeze fired",
+        g.name
+    );
+}
+
 #[test]
 fn network_faults_freeze_and_namespaces_do_what_the_shell_does() {
     let t0 = std::time::Instant::now();
@@ -865,7 +901,8 @@ fn network_faults_freeze_and_namespaces_do_what_the_shell_does() {
     grp(&mut suite, m, &bridge, texts);
     // network: bridge with a fake outside world (a proxy) and faults: [freeze]: redis-bridge
     // without its `eventually` check (the liveness seam is not driven yet); its F= tokens are
-    // refused with the freeze seam (the agent's freeze has no namespace)
+    // driven since M127 (the agent's freeze takes the frozen service's namespace)
+    let mut bridged = Vec::new();
     for m in [
         "hydo/onboard/examples/redis-bridge/hydo.yaml",
         "hydo/onboard/examples-mac/redis-bridge/hydo.yaml",
@@ -884,10 +921,14 @@ fn network_faults_freeze_and_namespaces_do_what_the_shell_does() {
         ]);
         let (g, _) = grp(&mut suite, m, &p, texts);
         assert!(
-            suite.groups[g].counts.contains_key("refused:freeze"),
+            !suite.groups[g]
+                .counts
+                .keys()
+                .any(|k| k.starts_with("refused")),
             "{m}: {:?}",
             suite.groups[g].counts
         );
+        bridged.push((m, p));
     }
     // the freeze: Redis with faults: [freeze] (its pair redis<workload), and its sweep
     let m = "hydo/onboard/examples/redis/hydo-freeze.yaml";
@@ -975,22 +1016,37 @@ fn network_faults_freeze_and_namespaces_do_what_the_shell_does() {
             format!("disk=none | run N={svc}-peer@1-3:delay,10ms F={svc}>peer@1#1:100"),
         ],
     );
-    // the freeze with network: bridge is refused (the agent's freeze has no namespace)
+    // the freeze with network: bridge (M127): the agent's freeze and the rules in the frozen
+    // service's namespace. redis-bridge's pair (the replica frozen at its primary's packets) and
+    // its workload peer, and the voting app with faults: [freeze] (two services with addresses
+    // and ports, and a service's workload peer)
+    for (m, p) in &bridged {
+        let mut texts = freeze_schedules("replica", "primary", p.steps);
+        texts.extend(
+            freeze_schedules("primary", "workload", p.steps)
+                .into_iter()
+                .take(8),
+        );
+        let g = grp(&mut suite, &format!("variant: {m} freeze"), p, texts).0;
+        bridge_freezes(&suite.groups[g]);
+    }
     let mut p = bridge.clone();
     p.freeze = true;
-    let s1 = hydo_control::GuestState::default();
-    let e = hydo_control::ScheduleController::run(
-        p.clone(),
-        &Schedule::parse(&format!(
-            "disk=none | run F={}<{}@1#1:100",
-            names[0], names[1]
-        ))
-        .unwrap(),
-        &s1,
+    p.layout.iptables = hydo_control::plan::IPTABLES_PLACEHOLDER.into();
+    let mut texts = freeze_schedules(&names[0], &names[1], p.steps);
+    texts.extend(
+        freeze_schedules(&ported, "workload", p.steps)
+            .into_iter()
+            .take(6),
+    );
+    let g = grp(
+        &mut suite,
+        "variant: bridge with faults: [freeze]",
+        &p,
+        texts,
     )
-    .unwrap_err();
-    assert_eq!(e.seam, Some(Seam::Freeze), "{e}");
-    golden.push(format!("refused\tF= with network: bridge\t{e}"));
+    .0;
+    bridge_freezes(&suite.groups[g]);
     // a network setup that fails (an address the scripted ip refuses)
     let mut p = bridge.clone();
     p.net_extra = vec!["10.89.255.254".into()];

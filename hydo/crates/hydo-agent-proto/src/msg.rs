@@ -16,8 +16,9 @@ pub const PROTO: u64 = 1;
 /// Every protocol version the host side of this crate reads (it keeps every released one).
 pub const HOST_PROTOCOLS: std::ops::RangeInclusive<u64> = 1..=1;
 
-/// Optional capabilities an agent of version 1 can announce in its hello.
-pub const FEATURES: &[&str] = &["freeze"];
+/// Optional capabilities an agent of version 1 can announce in its hello: `freeze` (the ops
+/// `freeze` and `unfreeze`) and `freeze-netns` (the optional `netns` of `freeze`, M127).
+pub const FEATURES: &[&str] = &["freeze", "freeze-netns"];
 
 /// The longest host line the agent reads (the serial receive ring holds 4,096 bytes), without
 /// its newline.
@@ -388,6 +389,10 @@ record! {
         dur_ms: u64,
         /// Write a trace line per payload packet to this file (hydo_fc's log format).
         log: Option<String>,
+        /// Bind the queue inside this network namespace (a path such as /tmp/hydo/ns/redis; the
+        /// rules that feed the queue must be in that namespace too), then return to the agent's
+        /// own namespace. Needs the feature `freeze-netns`.
+        netns: Option<String>,
     }
 }
 
@@ -768,11 +773,12 @@ union! {
 }
 
 impl Command {
-    /// The optional feature (from the hello) the command needs, if any.
-    pub fn feature(&self) -> Option<&'static str> {
+    /// The optional features (from the hello) the command needs; none for most commands.
+    pub fn features(&self) -> &'static [&'static str] {
         match self {
-            Command::Freeze(_) | Command::Unfreeze(_) => Some("freeze"),
-            _ => None,
+            Command::Freeze(f) if f.netns.is_some() => &["freeze", "freeze-netns"],
+            Command::Freeze(_) | Command::Unfreeze(_) => &["freeze"],
+            _ => &[],
         }
     }
 }
