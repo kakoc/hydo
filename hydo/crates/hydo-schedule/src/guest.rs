@@ -247,7 +247,7 @@ pub enum Status {
     Name(String),
 }
 
-/// One rule of an `H=` token (hydo-world rules.go parseRule and grpc.go parseRuleExt).
+/// One rule of an `H=` token (hydo-world's `Rule::parse` and `parse_ext`, hydo/crates/hydo-world/src/rules.rs).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Rule {
     /// `status=<code|NAME>`

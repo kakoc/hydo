@@ -238,7 +238,7 @@ Host tools (override with the environment variables):
     HYDO_IPROUTE2 iproute2 store path     HYDO_MODROOT   guest kernel module tree
     HYDO_READ_BIN hydo-read (hydo/crates/hydo-read/build.sh), staged only when a command calls
                   hydo-read or hydo-check
-    HYDO_WORLDBIN hydo-world (hydo/onboard/world/build.sh), staged only for fakes:/proxies:
+    HYDO_WORLDBIN hydo-world (hydo/crates/hydo-world/build.sh), staged only for fakes:/proxies:
     HYDO_AGENT_BIN the pinned hydo-agent (hydo/crates/hydo-agent/build.sh), for --control agent
                   (default <build dir>/hydo-agent; arm64: HYDO_AGENT_BIN_ARM64, <build dir>/hydo-agent-arm64)
 --arch arm64 takes the arm64 builds of the last two from HYDO_READ_BIN_ARM64 and
