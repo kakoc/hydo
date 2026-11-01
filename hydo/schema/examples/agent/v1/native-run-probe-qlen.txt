@@ -1,6 +1,6 @@
 # hydo agent transcript, protocol 1: run with output, with a capture limit, with kill_after_ms, and a program that does not exist; probes that succeed at once, reach their deadline, kill a hanging attempt, and end because a process died; qlen.
 # Recorded from `hydo-agent serve --root <scratch>` on Linux as an unprivileged user (hydo/crates/hydo-agent/tests/native.rs); never edited. replay: native
-< HYDO-AG 242 65657430 {"agent":"0.1.0","ev":"hello","features":["freeze"],"ops":["sync","spawn","signal","run","probe","write","read","mkdir","mount","syncfs","clock_set","clock_get","qlen","tail","untail","freeze","unfreeze"],"pid1":false,"proto":1,"seq":0,"v":1}
+< HYDO-AG 257 c3d3be4a {"agent":"0.2.0","ev":"hello","features":["freeze","freeze-netns"],"ops":["sync","spawn","signal","run","probe","write","read","mkdir","mount","syncfs","clock_set","clock_get","qlen","tail","untail","freeze","unfreeze"],"pid1":false,"proto":1,"seq":0,"v":1}
 > {"argv":["sh","-c","echo out; echo err >&2; exit 3"],"env":["PATH=/usr/local/bin:/usr/bin:/bin"],"id":1,"op":"run","v":1}
 < HYDO-AG 43 409bdaa0 {"ok":true,"op":"run","re":1,"seq":1,"v":1}
 < HYDO-AG 76 bdd455c2 {"ev":"done","id":1,"out":"out\nerr\n","out_len":8,"seq":2,"status":3,"v":1}

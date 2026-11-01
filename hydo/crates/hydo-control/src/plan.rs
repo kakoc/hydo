@@ -40,6 +40,10 @@ pub struct Layout {
     pub tc: String,
     pub ip: String,
     pub iptables: String,
+    /// The musl strerror table of the image's busybox, for the words busybox `mount` would print
+    /// when the data disk cannot be mounted (an image fact like the tools; [`crate::busybox`],
+    /// M131). The default is musl 1.2.x's; `agent::plan_of_image` reads the image's busybox.
+    pub strerror: crate::busybox::Strerror,
 }
 
 /// hydo-build's `--print-shell` placeholders for the pinned tools (`print_shell_tools`).
@@ -61,6 +65,7 @@ impl Default for Layout {
             tc: String::new(),
             ip: String::new(),
             iptables: String::new(),
+            strerror: crate::busybox::Strerror::default(),
         }
     }
 }

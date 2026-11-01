@@ -1,92 +1,104 @@
-{"cadence":"default","control":1,"controller":"schedule","conversation":"run","schedule":"disk=none | run F=redis<workload@1#2:500","start":"resume S1"}
-{"at":128,"n":1,"seen":16,"t":"stop","why":"resume"}
-{"at":128,"by":"runner","bytes":"\u0018{\"id\":13,\"nonce\":128,\"op\":\"sync\",\"v\":1}\n","id":13,"n":1,"t":"send"}
-{"by":"main","line":"hydo-ob: command: run F=redis<workload@1#2:500","n":1,"t":"note"}
-{"by":"main","line":"hydo-ob: freeze at a call: redis (resp with workload) from step 1, event #2, match '-', for 500ms","n":1,"t":"note"}
+{"cadence":"default","control":1,"controller":"schedule","conversation":"run","schedule":"disk=none | run F=primary<replica@1#1:100","start":"resume S1"}
+{"at":528,"n":1,"seen":63,"t":"stop","why":"resume"}
+{"at":528,"by":"runner","bytes":"\u0018{\"id\":40,\"nonce\":528,\"op\":\"sync\",\"v\":1}\n","id":40,"n":1,"t":"send"}
+{"by":"main","line":"hydo-ob: command: run F=primary<replica@1#1:100","n":1,"t":"note"}
+{"by":"main","line":"hydo-ob: freeze at a call: primary (resp with replica) from step 1, event #1, match '-', for 100ms","n":1,"t":"note"}
 {"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"reachable\",\"id\":\"fault.paused\",\"msg\":\"a service was paused (SIGSTOP)\"}","n":1,"t":"report"}
 {"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"sometimes\",\"id\":\"fault.pause_mid_request\",\"msg\":\"a pause began while a client request was in flight\"}","n":1,"t":"report"}
 {"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"reachable\",\"id\":\"fault.clock_back\",\"msg\":\"the realtime clock was stepped backwards\"}","n":1,"t":"report"}
 {"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"reachable\",\"id\":\"fault.clock_fwd\",\"msg\":\"the realtime clock was stepped forwards\"}","n":1,"t":"report"}
 {"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"reachable\",\"id\":\"fault.oneway_req\",\"msg\":\"a one-way network fault hit the req direction\"}","n":1,"t":"report"}
 {"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"reachable\",\"id\":\"fault.oneway_resp\",\"msg\":\"a one-way network fault hit the resp direction\"}","n":1,"t":"report"}
-{"at":128,"by":"main","bytes":"{\"data\":\"\",\"id\":14,\"op\":\"write\",\"path\":\"/tmp/hydo/acked\",\"v\":1}\n","id":14,"n":1,"t":"send"}
-{"at":128,"by":"main","bytes":"{\"data\":\"\",\"id\":15,\"op\":\"write\",\"path\":\"/tmp/hydo/outcomes\",\"v\":1}\n","id":15,"n":1,"t":"send"}
-{"at":128,"by":"main","bytes":"{\"data\":\"\",\"id\":16,\"op\":\"write\",\"path\":\"/tmp/hydo/workload.log\",\"v\":1}\n","id":16,"n":1,"t":"send"}
+{"at":528,"by":"main","bytes":"{\"data\":\"\",\"id\":41,\"op\":\"write\",\"path\":\"/tmp/hydo/acked\",\"v\":1}\n","id":41,"n":1,"t":"send"}
+{"at":528,"by":"main","bytes":"{\"data\":\"\",\"id\":42,\"op\":\"write\",\"path\":\"/tmp/hydo/outcomes\",\"v\":1}\n","id":42,"n":1,"t":"send"}
+{"at":528,"by":"main","bytes":"{\"data\":\"\",\"id\":43,\"op\":\"write\",\"path\":\"/tmp/hydo/workload.log\",\"v\":1}\n","id":43,"n":1,"t":"send"}
 {"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"reachable\",\"id\":\"fault.freeze_call\",\"msg\":\"a service was frozen at a call (F=)\"}","n":1,"t":"report"}
-{"at":128,"by":"main","bytes":"{\"append\":true,\"argv\":[\"/bin/busybox\",\"timeout\",\"300\",\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; i=$HYDO_FROM\\nwhile [ $i -lt $HYDO_TO ]; do\\n  r=$(timeout 2 /bin/redis-cli SET k:$i v$i 2>/dev/null)   # a 2 s client deadline\\n  if [ \\\"$r\\\" = OK ]; then echo $i >> $HYDO_ACKED; echo \\\"$i ack\\\" >> $HYDO_OUTCOMES\\n  else echo \\\"$i unknown\\\" >> $HYDO_OUTCOMES; fi\\n  i=$((i + 1))\\ndone\\n\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_FROM=0\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"HYDO_TO=1\",\"TERM=linux\"],\"h\":\"workload\",\"id\":17,\"op\":\"spawn\",\"stderr\":\"/tmp/hydo/workload.log\",\"stdout\":\"/tmp/hydo/workload.log\",\"v\":1}\n","id":17,"n":1,"t":"send"}
-{"at":144,"n":2,"seen":21,"t":"stop","why":"cadence"}
-{"id":13,"n":2,"send":1,"t":"ack"}
-{"id":14,"n":2,"send":2,"t":"ack"}
-{"id":15,"n":2,"send":3,"t":"ack"}
-{"id":16,"n":2,"send":4,"t":"ack"}
-{"id":17,"n":2,"send":5,"t":"ack"}
-{"at":176,"n":4,"seen":22,"t":"stop","why":"cadence"}
+{"at":528,"by":"main","bytes":"{\"append\":true,\"argv\":[\"/bin/busybox\",\"timeout\",\"300\",\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; i=$HYDO_FROM\\nwhile [ $i -lt $HYDO_TO ]; do\\n  r=$(timeout 2 /bin/redis-cli -h redisp -p 6380 SET k:$i v$i 2>/dev/null)\\n  if [ \\\"$r\\\" = OK ]; then echo $i >> $HYDO_ACKED; echo \\\"$i ack\\\" >> $HYDO_OUTCOMES\\n  else echo \\\"$i unknown\\\" >> $HYDO_OUTCOMES; fi\\n  sleep 0.5\\n  echo \\\"redis-bridge: step $i ${r:-no answer}, replica lag $(lag)\\\" > /dev/console\\n  i=$((i + 1))\\ndone\\n\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_FROM=0\",\"HYDO_LOG=/tmp/hydo/replica.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=16\",\"HYDO_SVC=replica\",\"HYDO_TO=1\",\"TERM=linux\"],\"h\":\"workload\",\"id\":44,\"op\":\"spawn\",\"stderr\":\"/tmp/hydo/workload.log\",\"stdout\":\"/tmp/hydo/workload.log\",\"v\":1}\n","id":44,"n":1,"t":"send"}
+{"at":544,"n":2,"seen":68,"t":"stop","why":"cadence"}
+{"id":40,"n":2,"send":1,"t":"ack"}
+{"id":41,"n":2,"send":2,"t":"ack"}
+{"id":42,"n":2,"send":3,"t":"ack"}
+{"id":43,"n":2,"send":4,"t":"ack"}
+{"id":44,"n":2,"send":5,"t":"ack"}
+{"at":576,"n":4,"seen":69,"t":"stop","why":"cadence"}
 {"by":"main","line":"hydo-ob: workload steps 0..0 rc=0","n":4,"t":"note"}
-{"at":176,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"insmod\",\"/lib/modules/x_tables.ko\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":18,\"op\":\"run\",\"v\":1}\n","id":18,"n":4,"t":"send"}
-{"at":192,"n":5,"seen":24,"t":"stop","why":"cadence"}
-{"id":18,"n":5,"send":6,"t":"ack"}
-{"at":192,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"insmod\",\"/lib/modules/ip_tables.ko\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":19,\"op\":\"run\",\"v\":1}\n","id":19,"n":5,"t":"send"}
-{"at":208,"n":6,"seen":26,"t":"stop","why":"cadence"}
-{"id":19,"n":6,"send":7,"t":"ack"}
-{"at":208,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"insmod\",\"/lib/modules/iptable_filter.ko\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":20,\"op\":\"run\",\"v\":1}\n","id":20,"n":6,"t":"send"}
-{"at":224,"n":7,"seen":28,"t":"stop","why":"cadence"}
-{"id":20,"n":7,"send":8,"t":"ack"}
-{"at":224,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"insmod\",\"/lib/modules/xt_tcpudp.ko\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":21,\"op\":\"run\",\"v\":1}\n","id":21,"n":7,"t":"send"}
-{"at":240,"n":8,"seen":30,"t":"stop","why":"cadence"}
-{"id":21,"n":8,"send":9,"t":"ack"}
-{"at":240,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"insmod\",\"/lib/modules/xt_NFQUEUE.ko\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":22,\"op\":\"run\",\"v\":1}\n","id":22,"n":8,"t":"send"}
-{"at":256,"n":9,"seen":32,"t":"stop","why":"cadence"}
-{"id":22,"n":9,"send":10,"t":"ack"}
-{"at":256,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"insmod\",\"/lib/modules/nfnetlink.ko\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":23,\"op\":\"run\",\"v\":1}\n","id":23,"n":9,"t":"send"}
-{"at":272,"n":10,"seen":34,"t":"stop","why":"cadence"}
-{"id":23,"n":10,"send":11,"t":"ack"}
-{"at":272,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"insmod\",\"/lib/modules/nfnetlink_queue.ko\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":24,\"op\":\"run\",\"v\":1}\n","id":24,"n":10,"t":"send"}
-{"at":288,"n":11,"seen":36,"t":"stop","why":"cadence"}
-{"id":24,"n":11,"send":12,"t":"ack"}
-{"at":288,"by":"main","bytes":"{\"dir\":\"resp\",\"dur_ms\":500,\"h\":\"redis\",\"id\":25,\"log\":\"/tmp/hydo/fc.log\",\"n\":2,\"op\":\"freeze\",\"own_port\":6379,\"queue\":7,\"v\":1}\n","id":25,"n":11,"t":"send"}
-{"at":304,"n":12,"seen":37,"t":"stop","why":"cadence"}
-{"id":25,"n":12,"send":13,"t":"ack"}
-{"at":304,"by":"main","bytes":"{\"argv\":[\"/nix/store/...-iptables/bin/iptables-legacy\",\"-A\",\"OUTPUT\",\"-s\",\"127.0.0.1\",\"-p\",\"tcp\",\"--dport\",\"6379\",\"-j\",\"NFQUEUE\",\"--queue-num\",\"7\",\"--queue-bypass\"],\"capture\":3000,\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":26,\"op\":\"run\",\"v\":1}\n","id":26,"n":12,"t":"send"}
-{"at":320,"n":13,"seen":40,"t":"stop","why":"cadence"}
-{"id":26,"n":13,"send":14,"t":"ack"}
-{"at":320,"by":"main","bytes":"{\"argv\":[\"/nix/store/...-iptables/bin/iptables-legacy\",\"-A\",\"OUTPUT\",\"-d\",\"127.0.0.1\",\"-p\",\"tcp\",\"--sport\",\"6379\",\"-j\",\"NFQUEUE\",\"--queue-num\",\"7\",\"--queue-bypass\"],\"capture\":3000,\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":27,\"op\":\"run\",\"v\":1}\n","id":27,"n":13,"t":"send"}
-{"by":"freeze","line":"hydo-fc: FROZE redis (3 processes) at resp #2 (resp2, 6379>40000 len=57) for 500 ms: +OK..","n":13,"t":"report"}
-{"by":"freeze","line":"HYDO-ASSERT {\"t\":\"reachable\",\"id\":\"fault.freeze_call\",\"ok\":true,\"msg\":\"a service was frozen at a call (F=)\"}","n":13,"t":"report"}
-{"at":336,"n":14,"seen":43,"t":"stop","why":"cadence"}
-{"id":27,"n":14,"send":15,"t":"ack"}
-{"by":"main","line":"hydo-ob: FREEZE ARMED before step 1: redis at resp #2 with workload","n":14,"t":"note"}
-{"at":336,"by":"main","bytes":"{\"append\":true,\"argv\":[\"/bin/busybox\",\"timeout\",\"300\",\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; i=$HYDO_FROM\\nwhile [ $i -lt $HYDO_TO ]; do\\n  r=$(timeout 2 /bin/redis-cli SET k:$i v$i 2>/dev/null)   # a 2 s client deadline\\n  if [ \\\"$r\\\" = OK ]; then echo $i >> $HYDO_ACKED; echo \\\"$i ack\\\" >> $HYDO_OUTCOMES\\n  else echo \\\"$i unknown\\\" >> $HYDO_OUTCOMES; fi\\n  i=$((i + 1))\\ndone\\n\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_FROM=1\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"HYDO_TO=20\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"h\":\"workload\",\"id\":28,\"op\":\"spawn\",\"stderr\":\"/tmp/hydo/workload.log\",\"stdout\":\"/tmp/hydo/workload.log\",\"v\":1}\n","id":28,"n":14,"t":"send"}
-{"by":"freeze","line":"hydo-fc: RESUMED after 500 ms (1 processes)","n":14,"t":"report"}
-{"at":352,"n":15,"seen":44,"t":"stop","why":"cadence"}
-{"id":28,"n":15,"send":16,"t":"ack"}
-{"at":928,"n":51,"seen":45,"t":"stop","why":"cadence"}
-{"by":"main","line":"hydo-ob: workload steps 1..19 rc=0","n":51,"t":"note"}
-{"at":928,"by":"main","bytes":"{\"argv\":[\"/nix/store/...-iptables/bin/iptables-legacy\",\"-D\",\"OUTPUT\",\"-s\",\"127.0.0.1\",\"-p\",\"tcp\",\"--dport\",\"6379\",\"-j\",\"NFQUEUE\",\"--queue-num\",\"7\",\"--queue-bypass\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":29,\"op\":\"run\",\"v\":1}\n","id":29,"n":51,"t":"send"}
-{"at":944,"n":52,"seen":47,"t":"stop","why":"cadence"}
-{"id":29,"n":52,"send":17,"t":"ack"}
-{"at":944,"by":"main","bytes":"{\"argv\":[\"/nix/store/...-iptables/bin/iptables-legacy\",\"-D\",\"OUTPUT\",\"-d\",\"127.0.0.1\",\"-p\",\"tcp\",\"--sport\",\"6379\",\"-j\",\"NFQUEUE\",\"--queue-num\",\"7\",\"--queue-bypass\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":30,\"op\":\"run\",\"v\":1}\n","id":30,"n":52,"t":"send"}
-{"at":960,"n":53,"seen":49,"t":"stop","why":"cadence"}
-{"id":30,"n":53,"send":18,"t":"ack"}
-{"at":960,"by":"main","bytes":"{\"id\":31,\"op\":\"unfreeze\",\"v\":1}\n","id":31,"n":53,"t":"send"}
-{"at":976,"n":54,"seen":50,"t":"stop","why":"cadence"}
-{"id":31,"n":54,"send":19,"t":"ack"}
-{"by":"main","line":"hydo-ob: freeze healed","n":54,"t":"note"}
-{"at":976,"by":"main","bytes":"{\"id\":32,\"max\":3000,\"op\":\"read\",\"path\":\"/tmp/hydo/outcomes\",\"v\":1}\n","id":32,"n":54,"t":"send"}
-{"at":992,"n":55,"seen":51,"t":"stop","why":"cadence"}
-{"id":32,"n":55,"send":20,"t":"ack"}
-{"at":992,"by":"main","bytes":"{\"data\":\"10\\n\",\"id\":33,\"op\":\"write\",\"path\":\"/tmp/hydo/failed\",\"v\":1}\n","id":33,"n":55,"t":"send"}
-{"at":992,"by":"main","bytes":"{\"id\":34,\"max\":3000,\"op\":\"read\",\"path\":\"/tmp/hydo/acked\",\"v\":1}\n","id":34,"n":55,"t":"send"}
-{"at":1008,"n":56,"seen":53,"t":"stop","why":"cadence"}
-{"id":33,"n":56,"send":21,"t":"ack"}
-{"id":34,"n":56,"send":22,"t":"ack"}
-{"by":"main","line":"hydo-explore-acked: 0 1 3 5 6 8 9 11 12 13 14 15 17 18 19 ","n":56,"t":"report"}
-{"by":"main","line":"hydo-explore-failed: 10 ","n":56,"t":"report"}
-{"by":"main","line":"hydo-explore-workload-done","n":56,"t":"report"}
-{"action":"disk-faults-off","n":56,"t":"engine"}
-{"by":"main","line":"hydo-ob: command: go","n":56,"t":"note"}
-{"at":1008,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; lost=0\\nfor i in $(cat $HYDO_ACKED); do\\n  [ \\\"$(/bin/redis-cli GET k:$i)\\\" = \\\"v$i\\\" ] || { echo \\\"key k:$i lost\\\"; lost=1; break; }\\ndone\\n[ $lost = 0 ] && echo \\\"acked=$(wc -l < $HYDO_ACKED) all present\\\"\\n[ $lost = 0 ]\\n\"],\"capture\":3000,\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":35,\"op\":\"run\",\"v\":1}\n","id":35,"n":56,"t":"send"}
-{"at":1024,"n":57,"seen":55,"t":"stop","why":"cadence"}
-{"id":35,"n":57,"send":23,"t":"ack"}
-{"by":"main","line":"HYDO-ASSERT {\"t\":\"always\",\"id\":\"redis.acked_writes_survive\",\"ok\":false,\"msg\":\"every SET the client saw acknowledged reads back with its value\",\"details\":{\"out\":\"missing \\\"k202\\\"back\\\\slash\"}}","n":57,"t":"report"}
-{"by":"main","line":"HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] missing \"k202\"\tback\\slash","n":57,"t":"report"}
-{"end":{"verdict":"HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] missing \"k202\"\tback\\slash"},"n":57,"t":"end"}
+{"at":576,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"insmod\",\"/lib/modules/x_tables.ko\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/replica.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=16\",\"HYDO_SVC=replica\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":45,\"op\":\"run\",\"v\":1}\n","id":45,"n":4,"t":"send"}
+{"at":592,"n":5,"seen":71,"t":"stop","why":"cadence"}
+{"id":45,"n":5,"send":6,"t":"ack"}
+{"at":592,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"insmod\",\"/lib/modules/ip_tables.ko\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/replica.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=16\",\"HYDO_SVC=replica\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":46,\"op\":\"run\",\"v\":1}\n","id":46,"n":5,"t":"send"}
+{"at":608,"n":6,"seen":73,"t":"stop","why":"cadence"}
+{"id":46,"n":6,"send":7,"t":"ack"}
+{"at":608,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"insmod\",\"/lib/modules/iptable_filter.ko\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/replica.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=16\",\"HYDO_SVC=replica\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":47,\"op\":\"run\",\"v\":1}\n","id":47,"n":6,"t":"send"}
+{"at":624,"n":7,"seen":75,"t":"stop","why":"cadence"}
+{"id":47,"n":7,"send":8,"t":"ack"}
+{"at":624,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"insmod\",\"/lib/modules/xt_tcpudp.ko\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/replica.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=16\",\"HYDO_SVC=replica\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":48,\"op\":\"run\",\"v\":1}\n","id":48,"n":7,"t":"send"}
+{"at":640,"n":8,"seen":77,"t":"stop","why":"cadence"}
+{"id":48,"n":8,"send":9,"t":"ack"}
+{"at":640,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"insmod\",\"/lib/modules/xt_NFQUEUE.ko\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/replica.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=16\",\"HYDO_SVC=replica\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":49,\"op\":\"run\",\"v\":1}\n","id":49,"n":8,"t":"send"}
+{"at":656,"n":9,"seen":79,"t":"stop","why":"cadence"}
+{"id":49,"n":9,"send":10,"t":"ack"}
+{"at":656,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"insmod\",\"/lib/modules/nfnetlink.ko\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/replica.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=16\",\"HYDO_SVC=replica\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":50,\"op\":\"run\",\"v\":1}\n","id":50,"n":9,"t":"send"}
+{"at":672,"n":10,"seen":81,"t":"stop","why":"cadence"}
+{"id":50,"n":10,"send":11,"t":"ack"}
+{"at":672,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"insmod\",\"/lib/modules/nfnetlink_queue.ko\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/replica.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=16\",\"HYDO_SVC=replica\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":51,\"op\":\"run\",\"v\":1}\n","id":51,"n":10,"t":"send"}
+{"at":688,"n":11,"seen":83,"t":"stop","why":"cadence"}
+{"id":51,"n":11,"send":12,"t":"ack"}
+{"at":688,"by":"main","bytes":"{\"dir\":\"resp\",\"dur_ms\":100,\"h\":\"primary\",\"id\":52,\"log\":\"/tmp/hydo/fc.log\",\"n\":1,\"netns\":\"/tmp/hydo/ns/primary\",\"op\":\"freeze\",\"port\":6379,\"queue\":7,\"sip\":\"10.89.0.11\",\"v\":1}\n","id":52,"n":11,"t":"send"}
+{"at":704,"n":12,"seen":86,"t":"stop","why":"cadence"}
+{"id":52,"n":12,"send":13,"t":"ack"}
+{"at":704,"by":"main","bytes":"{\"argv\":[\"/nix/store/...-iptables/bin/iptables-legacy\",\"-A\",\"OUTPUT\",\"-s\",\"10.89.0.11\",\"-d\",\"10.89.0.12\",\"-j\",\"NFQUEUE\",\"--queue-num\",\"7\",\"--queue-bypass\"],\"capture\":3000,\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/replica.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=16\",\"HYDO_SVC=replica\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":53,\"netns\":\"/tmp/hydo/ns/primary\",\"op\":\"run\",\"v\":1}\n","id":53,"n":12,"t":"send"}
+{"by":"freeze","line":"hydo-fc: FROZE primary (3 processes) at resp #1 (resp1, 6379>40000 len=13) for 100 ms: +OK..","n":12,"t":"report"}
+{"by":"freeze","line":"HYDO-ASSERT {\"t\":\"reachable\",\"id\":\"fault.freeze_call\",\"ok\":true,\"msg\":\"a service was frozen at a call (F=)\"}","n":12,"t":"report"}
+{"by":"freeze","line":"hydo-fc: RESUMED after 100 ms (1 processes)","n":12,"t":"report"}
+{"at":720,"n":13,"seen":88,"t":"stop","why":"cadence"}
+{"id":53,"n":13,"send":14,"t":"ack"}
+{"at":720,"by":"main","bytes":"{\"argv\":[\"/nix/store/...-iptables/bin/iptables-legacy\",\"-A\",\"INPUT\",\"-s\",\"10.89.0.12\",\"-d\",\"10.89.0.11\",\"-j\",\"NFQUEUE\",\"--queue-num\",\"7\",\"--queue-bypass\"],\"capture\":3000,\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/replica.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=16\",\"HYDO_SVC=replica\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":54,\"netns\":\"/tmp/hydo/ns/primary\",\"op\":\"run\",\"v\":1}\n","id":54,"n":13,"t":"send"}
+{"at":736,"n":14,"seen":90,"t":"stop","why":"cadence"}
+{"id":54,"n":14,"send":15,"t":"ack"}
+{"by":"main","line":"hydo-ob: FREEZE ARMED before step 1: primary at resp #1 with replica","n":14,"t":"note"}
+{"at":736,"by":"main","bytes":"{\"append\":true,\"argv\":[\"/bin/busybox\",\"timeout\",\"300\",\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; i=$HYDO_FROM\\nwhile [ $i -lt $HYDO_TO ]; do\\n  r=$(timeout 2 /bin/redis-cli -h redisp -p 6380 SET k:$i v$i 2>/dev/null)\\n  if [ \\\"$r\\\" = OK ]; then echo $i >> $HYDO_ACKED; echo \\\"$i ack\\\" >> $HYDO_OUTCOMES\\n  else echo \\\"$i unknown\\\" >> $HYDO_OUTCOMES; fi\\n  sleep 0.5\\n  echo \\\"redis-bridge: step $i ${r:-no answer}, replica lag $(lag)\\\" > /dev/console\\n  i=$((i + 1))\\ndone\\n\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_FROM=1\",\"HYDO_LOG=/tmp/hydo/replica.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=16\",\"HYDO_SVC=replica\",\"HYDO_TO=16\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"h\":\"workload\",\"id\":55,\"op\":\"spawn\",\"stderr\":\"/tmp/hydo/workload.log\",\"stdout\":\"/tmp/hydo/workload.log\",\"v\":1}\n","id":55,"n":14,"t":"send"}
+{"at":752,"n":15,"seen":91,"t":"stop","why":"cadence"}
+{"id":55,"n":15,"send":16,"t":"ack"}
+{"at":1200,"n":43,"seen":92,"t":"stop","why":"cadence"}
+{"by":"main","line":"hydo-ob: workload steps 1..15 rc=0","n":43,"t":"note"}
+{"at":1200,"by":"main","bytes":"{\"argv\":[\"/nix/store/...-iptables/bin/iptables-legacy\",\"-D\",\"OUTPUT\",\"-s\",\"10.89.0.11\",\"-d\",\"10.89.0.12\",\"-j\",\"NFQUEUE\",\"--queue-num\",\"7\",\"--queue-bypass\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/replica.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=16\",\"HYDO_SVC=replica\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":56,\"netns\":\"/tmp/hydo/ns/primary\",\"op\":\"run\",\"v\":1}\n","id":56,"n":43,"t":"send"}
+{"at":1216,"n":44,"seen":94,"t":"stop","why":"cadence"}
+{"id":56,"n":44,"send":17,"t":"ack"}
+{"at":1216,"by":"main","bytes":"{\"argv\":[\"/nix/store/...-iptables/bin/iptables-legacy\",\"-D\",\"INPUT\",\"-s\",\"10.89.0.12\",\"-d\",\"10.89.0.11\",\"-j\",\"NFQUEUE\",\"--queue-num\",\"7\",\"--queue-bypass\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/replica.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=16\",\"HYDO_SVC=replica\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":57,\"netns\":\"/tmp/hydo/ns/primary\",\"op\":\"run\",\"v\":1}\n","id":57,"n":44,"t":"send"}
+{"at":1232,"n":45,"seen":96,"t":"stop","why":"cadence"}
+{"id":57,"n":45,"send":18,"t":"ack"}
+{"at":1232,"by":"main","bytes":"{\"id\":58,\"op\":\"unfreeze\",\"v\":1}\n","id":58,"n":45,"t":"send"}
+{"at":1248,"n":46,"seen":97,"t":"stop","why":"cadence"}
+{"id":58,"n":46,"send":19,"t":"ack"}
+{"by":"main","line":"hydo-ob: freeze healed","n":46,"t":"note"}
+{"at":1248,"by":"main","bytes":"{\"id\":59,\"max\":3000,\"op\":\"read\",\"path\":\"/tmp/hydo/outcomes\",\"v\":1}\n","id":59,"n":46,"t":"send"}
+{"at":1264,"n":47,"seen":98,"t":"stop","why":"cadence"}
+{"id":59,"n":47,"send":20,"t":"ack"}
+{"at":1264,"by":"main","bytes":"{\"data\":\"14\\n15\\n\",\"id\":60,\"op\":\"write\",\"path\":\"/tmp/hydo/failed\",\"v\":1}\n","id":60,"n":47,"t":"send"}
+{"at":1264,"by":"main","bytes":"{\"id\":61,\"max\":3000,\"op\":\"read\",\"path\":\"/tmp/hydo/acked\",\"v\":1}\n","id":61,"n":47,"t":"send"}
+{"at":1280,"n":48,"seen":100,"t":"stop","why":"cadence"}
+{"id":60,"n":48,"send":21,"t":"ack"}
+{"id":61,"n":48,"send":22,"t":"ack"}
+{"by":"main","line":"hydo-explore-acked: 0 1 2 3 4 5 7 8 9 10 11 12 13 ","n":48,"t":"report"}
+{"by":"main","line":"hydo-explore-failed: 14 15 ","n":48,"t":"report"}
+{"by":"main","line":"hydo-explore-workload-done","n":48,"t":"report"}
+{"action":"disk-faults-off","n":48,"t":"engine"}
+{"by":"main","line":"hydo-ob: command: go","n":48,"t":"note"}
+{"at":1280,"by":"main","bytes":"{\"argv\":[\"/bin/hydo-world\",\"ctl\",\"summary\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/replica.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=16\",\"HYDO_SVC=replica\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"h\":\"fakes:summary\",\"id\":62,\"op\":\"spawn\",\"stdout\":\"/tmp/hydo/world.summary\",\"v\":1}\n","id":62,"n":48,"t":"send"}
+{"at":1296,"n":49,"seen":102,"t":"stop","why":"cadence"}
+{"id":62,"n":49,"send":23,"t":"ack"}
+{"at":1296,"by":"main","bytes":"{\"id\":63,\"max\":3000,\"op\":\"read\",\"path\":\"/tmp/hydo/world.summary\",\"v\":1}\n","id":63,"n":49,"t":"send"}
+{"at":1312,"n":50,"seen":103,"t":"stop","why":"cadence"}
+{"id":63,"n":50,"send":24,"t":"ack"}
+{"by":"main","line":"hydo-world: 1 pay.charge ref=o0 idem= fx=1 ok","n":50,"t":"report"}
+{"by":"main","line":"hydo-world: 2 pay.charge ref=o1 idem= fx=1 ok","n":50,"t":"report"}
+{"by":"main","line":"hydo-world: 3 pay.charge ref=o2 idem= fx=1 ok","n":50,"t":"report"}
+{"by":"main","line":"hydo-world: 4 pay.charge ref=o3 idem= fx=1 ok","n":50,"t":"report"}
+{"by":"main","line":"hydo-world: 5 pay.charge ref=o4 idem= fx=1 ok","n":50,"t":"report"}
+{"by":"main","line":"hydo-world: 6 pay.charge ref=o5 idem= fx=1 ok","n":50,"t":"report"}
+{"at":1312,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; for i in $(cat $HYDO_ACKED); do\\n  [ \\\"$(/bin/redis-cli -h primary GET k:$i)\\\" = \\\"v$i\\\" ] || { echo \\\"key k:$i lost on the primary\\\"; exit 1; }\\ndone\\necho \\\"acked=$(wc -l < $HYDO_ACKED) all on the primary\\\"\\n\"],\"capture\":3000,\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/replica.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=16\",\"HYDO_SVC=replica\",\"TERM=linux\",\"XTABLES_LOCKFILE=/tmp/hydo/xtables.lock\"],\"id\":64,\"op\":\"run\",\"v\":1}\n","id":64,"n":50,"t":"send"}
+{"at":1328,"n":51,"seen":105,"t":"stop","why":"cadence"}
+{"id":64,"n":51,"send":25,"t":"ack"}
+{"by":"main","line":"HYDO-ASSERT {\"t\":\"always\",\"id\":\"primary.acked_writes_survive\",\"ok\":false,\"msg\":\"every SET the client saw acknowledged reads back from the primary\",\"details\":{\"out\":\"lost key k371\"}}","n":51,"t":"report"}
+{"by":"main","line":"HYDO-ORACLE: VIOLATION [primary.acked_writes_survive] lost key k371","n":51,"t":"report"}
+{"end":{"verdict":"HYDO-ORACLE: VIOLATION [primary.acked_writes_survive] lost key k371"},"n":51,"t":"end"}

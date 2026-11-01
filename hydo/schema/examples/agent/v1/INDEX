@@ -2,12 +2,14 @@
 # transcript.rs has the format). Recorded from real runs of hydo-agent and never edited; a new
 # example is a new file. "replay: native" ones are replayed byte for byte, twice, by
 # hydo/crates/hydo-agent/tests/native.rs; "replay: pid1" by its ignored test pid1_in_a_namespace
-# (sudo). Checked by hydo/crates/hydo-agent-proto/tests/examples.rs.
+# (sudo). Checked by hydo/crates/hydo-agent-proto/tests/examples.rs. All eight were recorded again
+# in M131 with hydo-agent 0.2.0, whose hello adds the feature freeze-netns (the M117 recordings
+# are in git history).
 native-clock.txt                 clock_get (recorded once; the times differ in every run)
 native-files.txt                 mkdir, write, append, read (text, hex, offset), not UTF-8, a missing file, syncfs
 native-hello-sync-refusals.txt   the hello, sync, CAN, and every way a host line is refused
 native-processes.txt             spawn, process-tree signals, exit events, handles, kill_after_ms, env, output files
 native-run-probe-qlen.txt        run with output and limits, probes (ok, deadline, killed attempt, died), qlen
 native-tail.txt                  tail and untail: whole, partial, truncated and cut lines
-native-unprivileged.txt          clock_set, mount and freeze refused to an agent that is not root
+native-unprivileged.txt          clock_set, mount and freeze refused to an agent that is not root (and a freeze in a missing or wrong namespace, M131)
 pid1-namespace.txt               the agent as PID 1 of a PID and mount namespace on a pty: /proc, a mount, orphans reaped

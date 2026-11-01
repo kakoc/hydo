@@ -27,7 +27,9 @@ optionally waiting until every thread stopped), `run` (to its end, output captur
 event), `probe` (repeat until exit 0 or a guest-time deadline, `probe` event), `write`, `read`,
 `mkdir`, `mount`, `syncfs`, `clock_set`, `clock_get`, `qlen` (packets in a qdisc, the netem
 drain), `tail`/`untail` (new lines of a file as `line` events), `freeze`/`unfreeze` (the packet
-trigger of `F=`: `froze` and `resumed` events). Events: `hello`, `exit`, `done`, `probe`, `line`,
+trigger of `F=`: `froze` and `resumed` events; since milestone 131 `freeze` takes an optional
+`netns`, the network namespace whose netfilter queue it binds, behind the feature
+`freeze-netns`). Events: `hello`, `exit`, `done`, `probe`, `line`,
 `froze`, `resumed`, `dropped`, `warn`. The agent decides nothing: the only timeouts are the
 deadlines a command gives.
 
@@ -37,7 +39,11 @@ deadlines a command gives.
   serving. The host ignores unknown fields of agent lines and reports an unknown event as such.
 - Additions only within version 1: new ops, events, optional fields and names. A new optional
   command field also gets a feature name in the hello (`msg::FEATURES`), so a host never sends a
-  field an older agent of the same version would refuse. `tests/schema.rs` fails when the
+  field an older agent of the same version would refuse: `Command::features` lists what a command
+  needs, and `Session::command` refuses one whose feature the hello lacks with a message that
+  names the feature and says to rebuild the image ("this image's agent (hydo-agent 0.1.0) does
+  not offer the feature freeze-netns (...); rebuild the image with this hydo (...), whose agent
+  does"). Features so far: `freeze` (M117), `freeze-netns` (M131, hydo-agent 0.2.0). `tests/schema.rs` fails when the
   generated schema differs from the committed one (`HYDO_BLESS=1` rewrites it) or is not an
   additive change of `hydo/schema/released/agent-v1.json` (a release copies it there with
   `HYDO_RELEASE_SCHEMA=1`). A breaking change is version 2, read beside version 1.

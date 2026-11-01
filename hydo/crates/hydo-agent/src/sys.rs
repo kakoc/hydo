@@ -264,6 +264,12 @@ pub fn sync() {
     unsafe { libc::sync() };
 }
 
+/// setns(fd, CLONE_NEWNET): the calling thread (the agent has one) moves to the network
+/// namespace of `fd`. Sockets made afterwards belong to that namespace for their whole life.
+pub fn setns_net(fd: RawFd) -> io::Result<()> {
+    check(unsafe { libc::setns(fd, libc::CLONE_NEWNET) }).map(|_| ())
+}
+
 /// SCHED_FIFO at `prio` (children reset to SCHED_OTHER), or back to SCHED_OTHER with 0.
 /// Through the system call: musl's sched_setscheduler() is a stub that fails with ENOSYS.
 pub fn set_fifo(prio: i32) -> io::Result<()> {
