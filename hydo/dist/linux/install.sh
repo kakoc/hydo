@@ -1,8 +1,9 @@
 #!/bin/sh
 # Install hydo for x86_64 Linux (Intel VT-x) from an unpacked release directory:
 #     ./install.sh [--prefix DIR] [--add-to-path] [--no-module] [--udev [--udev-group G] [--udev-name N]]
-# Checks the release's SHA256SUMS, copies it into DIR (default ~/.hydo), compiles the run engine
-# (hv/hvx/hvx_explore) and the hvx kernel module for the running kernel, and runs `hydo doctor`.
+# Checks the release's SHA256SUMS, copies it into DIR (default ~/.hydo), compiles the hvx kernel
+# module for the running kernel, and runs `hydo doctor`. The run engine is Rust and comes built
+# (inside bin/hydo, and as bin/hydo-hvx for runs that need sudo; M137): nothing to compile for it.
 # It needs no root and installs nothing outside DIR; it does NOT load the module (that needs
 # sudo: `hydo module load`). Your shell startup file is changed only with --add-to-path.
 # --udev (optional, asks for sudo once): installs a udev rule that gives /dev/hvx to group G
@@ -31,7 +32,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ "$(uname -s)" = Linux ] && [ "$(uname -m)" = x86_64 ] || { echo "hydo's Linux release needs x86_64 Linux (on an Apple Silicon Mac use the Mac release)." >&2; exit 1; }
-command -v cc >/dev/null || { echo "hydo needs a C compiler (cc) to build its run engine (Debian/Ubuntu: sudo apt install build-essential)." >&2; exit 1; }
+[ $MODULE = 0 ] || command -v cc >/dev/null || { echo "hydo needs a C compiler (cc) to build its kernel module (Debian/Ubuntu: sudo apt install build-essential), or --no-module." >&2; exit 1; }
 
 ( cd "$SRC" && sha256sum -c --quiet SHA256SUMS ) || { echo "the release does not match its SHA256SUMS (a damaged download?)" >&2; exit 1; }
 
@@ -49,16 +50,8 @@ if [ -f "$P/guest/store.tar" ]; then
   mkdir -p "$P/guest/store" && tar -C "$P/guest/store" -xpf "$P/guest/store.tar" && rm -f "$P/guest/store.tar"
 fi
 
-# the run engine, against this release's hvx_abi.h; libipt (coverage decoding) is optional
-cd "$P/hv/hvx"
-if cc -O2 -Wall -o hvx_explore hvx_explore.c -lipt 2>/dev/null; then
-  echo "built hv/hvx/hvx_explore (with libipt: coverage decoding available)"
-else
-  cc -O2 -Wall -DHYDO_NO_LIBIPT -o hvx_explore hvx_explore.c
-  echo "built hv/hvx/hvx_explore (without libipt: coverage decoding off; install libipt-dev to get it)"
-fi
 cd "$P"
-chmod 755 bin/hydo bin/hydo-build bin/hydo-fetch-image
+chmod 755 bin/hydo bin/hydo-hvx bin/hydo-build bin/hydo-fetch-image
 
 if [ $MODULE = 1 ]; then
   if [ -d "/lib/modules/$(uname -r)/build" ]; then

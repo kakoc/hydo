@@ -1,5 +1,6 @@
 #!/bin/bash
-# Run a list of schedules through one hvx_explore engine in serve mode and keep its stdout
+# Run a list of schedules through one engine program in serve mode (target/release/hydo-hvx; it
+# was hvx_explore until M137) and keep its stdout
 # (READY / RESULT lines) and stderr (PHBOOT / PHASES lines). Measurement only (PERF-RUN-COST.md).
 #
 #   perf/serve.sh <engine binary> <image under $BUILD> <outdir> <schedules file> [VAR=value ...]

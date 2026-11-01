@@ -2,11 +2,14 @@
 //!
 //! An engine boots a guest image, takes the two snapshot points every image defines, runs one
 //! schedule at a time and answers with a verdict and fingerprints. Two engines exist today, both
-//! separate programs that this crate drives over their text protocol, unchanged:
+//! driven over the same text protocol:
 //!
-//! - [`hvx::Hvx`]: `hv/hvx/hvx_explore` on x86_64 Linux with the hvx kernel module (`/dev/hvx`),
-//!   started through the shared-lock wrapper (`hvx-run`, sudo only when needed).
-//! - [`hvm::Hvm`]: `hv/hvm/explore/hvmx` on an Apple Silicon Mac (Hypervisor.framework).
+//! - [`hvx::Hvx`]: the Rust engine `hydo-hvx` (`hydo/crates/hydo-hvx`) on x86_64 Linux with the
+//!   hvx kernel module (`/dev/hvx`): on a thread of this process when it can open the device,
+//!   otherwise as the program `hydo-hvx` under the shared-lock wrapper (`hvx-run`, with sudo).
+//!   It replaced the C `hv/hvx/hvx_explore` (M132; deleted in M137).
+//! - [`hvm::Hvm`]: `hv/hvm/explore/hvmx` on an Apple Silicon Mac (Hypervisor.framework), a
+//!   program.
 //!
 //! Both speak the same protocol (see [`protocol`]): `serve` prints `READY boot_secs=<s>` after
 //! booting to S1, then answers each `RUN <tag> <schedule>` line with one `RESULT` line (hvx also
@@ -18,15 +21,16 @@
 //! `cf=` token) is part of one run: the engine carries the flushed data disk into a VM restored
 //! from S0, and the run's result is that boot's verdict ([`RunResult::recovery`] tells).
 //!
-//! # The in-process engine (M132, opt-in)
+//! # The in-process engine (M132; the default since M137)
 //!
-//! `HYDO_ENGINE=inproc` makes [`hvx::Hvx`] run the Rust engine (`hydo/crates/hydo-hvx`, the port
-//! of `hvx_explore.c`) on a thread of this process, driving `/dev/hvx` through its ioctls; see
+//! [`hvx::Hvx`] runs the Rust engine (`hydo/crates/hydo-hvx`, the port of the deleted
+//! `hvx_explore.c`) on a thread of this process, driving `/dev/hvx` through its ioctls, whenever
+//! this process can open the device (`HYDO_ENGINE=inproc|process` forces a choice); see
 //! [`inproc`]. It keeps S0 and S1 in memory as their non-zero pages, fills each fresh VM with the
 //! non-zero pages it needs only, makes the next fresh VM on a helper thread while a run runs,
 //! tears old VMs down on another, and hashes with the exact zero-page shortcut; every line,
 //! console and fingerprint is the C engine's. The same engine is also the program `hydo-hvx`
-//! (hvx_explore's command line), which `HYDO_HVX_EXPLORE` can name. Copy-on-write forks of a VM
+//! (the C engine's command line; [`hvx::program`] finds it, `HYDO_HVX_EXPLORE` names another). Copy-on-write forks of a VM
 //! and a VM kept between runs need module support (see docs/HISTORY.md, Milestone 132).
 //!
 //! # Where the time of a run goes, and how the trait leaves room for it (docs/PERF-RUN-COST.md)
@@ -73,7 +77,7 @@ pub use protocol::{BranchOutcome, BranchRequest, Ready, RunResult};
 /// Which engine a spec is for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EngineKind {
-    /// `hv/hvx/hvx_explore` (x86_64 Linux, VT-x, the hvx kernel module).
+    /// The Rust hvx engine (`hydo-hvx`; x86_64 Linux, VT-x, the hvx kernel module).
     Hvx,
     /// `hv/hvm/explore/hvmx` (Apple Silicon, Hypervisor.framework).
     Hvm,

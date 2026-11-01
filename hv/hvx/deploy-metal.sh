@@ -3,9 +3,11 @@
 # deploy-metal.sh -- regression runner for the dedicated bare-metal test machine (run FROM THE MAC).
 # hvx runs directly on that host (no nested L1), so this replaces deploy-hvx.sh there.
 #
-#   ./deploy-metal.sh              sync userspace sources, compile them on the box, run the
-#                                  hand-written suite + both boot verifies against the module
-#                                  that is ALREADY loaded, print PASS/FAIL per baseline
+#   ./deploy-metal.sh              sync userspace sources and the Rust workspace, compile them on
+#                                  the box, run the hand-written suite + the boot verifies + the
+#                                  two pinned reproducers through the run engine (hydo-hvx, the
+#                                  Rust engine; M137) against the module that is ALREADY loaded,
+#                                  print PASS/FAIL per baseline
 #   ./deploy-metal.sh load         also sync hvx.c/hvx_abi.h/Makefile and rebuild + reload the
 #                                  module first (via ~/bin/hvx-reload: exclusive module lock)
 #   ./deploy-metal.sh flagships    also run the real-service verifies (hydokv, SQLite, Redis,
@@ -14,7 +16,8 @@
 #
 # Every command that opens /dev/hvx runs under ~/bin/hvx-run (shared flock), so a concurrent
 # module reload waits for running VMs instead of killing them. Guest images are expected in
-# ~/hydo/build on the box (built on the build machine, shipped with rsync).
+# ~/hydo/build on the box (built on the build machine, shipped with rsync). The run engine is built
+# with the box's Rust (~/hydo-rust/env.sh) in ~/$HVX_METAL_TREE (cargo build --release -p hydo-hvx).
 # Env: HVX_METAL (the bare-metal machine); HVX_METAL_TREE, the repository's directory in the box's home
 # (default hydo, the main tree; another session's own tree, e.g. hydo-layout, for a run that must
 # not touch the main tree). The engine sources go to ~/$HVX_METAL_TREE/hv/hvx on the box.
@@ -46,9 +49,11 @@ hvx_rootfs_verify hvx_system_verify hvx_jvm_verify hvx_kafka_verify hvx_mysql_ve
 FILES="hvx_boot.h hvx_sched_util.h"
 for t in $TESTS $SMPTESTS $HARNESSES; do FILES="$FILES $t.c"; done
 [ $LOAD = 1 ] && FILES="$FILES hvx.c hvx_abi.h Makefile"
-echo ">> syncing to $BOX:$TREE/hv/hvx/ ($([ $LOAD = 1 ] && echo 'with' || echo 'without') module sources)"
+echo ">> syncing to $BOX:$TREE/hv/hvx/ ($([ $LOAD = 1 ] && echo 'with' || echo 'without') module sources) and the Rust workspace"
 ssh -o BatchMode=yes "$BOX" "mkdir -p $TREE/hv/hvx"
 (cd "$HERE" && rsync -az $FILES "$BOX:$TREE/hv/hvx/")
+# the run engine's sources (the Rust workspace's crates; never hvx.c or hvx_abi.h)
+(cd "$HERE/../.." && rsync -azR --exclude target Cargo.toml Cargo.lock rust-toolchain.toml .cargo hydo/crates "$BOX:$TREE/")
 
 ssh -o BatchMode=yes "$BOX" "TREE=$TREE LOAD=$LOAD FLAG=$FLAG TESTS='$TESTS' SMPTESTS='$SMPTESTS' HARNESSES='$HARNESSES' bash -s" <<'REMOTE'
 set -u
@@ -74,6 +79,10 @@ for t in $TESTS $SMPTESTS $HARNESSES; do
   if cc -O2 -Wall -o "$t.new" "$t.c" 2> "/tmp/cc-$t.log"; then mv -f "$t.new" "$t"
   else echo "  COMPILE FAIL: $t"; cat "/tmp/cc-$t.log"; cfail=1; fi
 done
+
+echo ">> building the run engine (hydo-hvx)"
+if [ -f ~/hydo-rust/env.sh ] && ( . ~/hydo-rust/env.sh && cd ~/$TREE && cargo build --release --locked -q -p hydo-hvx ) 2> /tmp/cc-hydo-hvx.log; then :
+else echo "  COMPILE FAIL: hydo-hvx (~/hydo-rust/env.sh and cargo)"; tail -20 /tmp/cc-hydo-hvx.log; cfail=1; fi
 
 # test -> fingerprints that must ALL appear in its output (empty = rc only)
 declare -A EXP=(
@@ -125,6 +134,17 @@ out=$($R sudo timeout 300 ./hvx_disk_boot_verify $B/bzImage $B/initramfs-disk.cp
 check "boot (with disk)" "$rc" "$(grep -a 'fp1\|fp_a' <<< "$out")" 36583d533d7c989b
 out=$($R sudo timeout 600 ./hvx_smp_boot_verify $B/bzImage $B/initramfs.cpio.gz 2 2>&1); rc=$?
 check "boot (2 vCPUs)" "$rc" "$out" 6584c954c2839491
+
+echo ">> the run engine: the pinned reproducers (a stack VM each; waits for 6 GiB of free memory)"
+E=~/$TREE/target/release/hydo-hvx
+S="disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24"
+for p in explore-disk.img:2403499c9a3f8419 explore-fix-disk.img:f87130453609a5d6; do
+  img=${p%%:*}; want=${p##*:}
+  n=0; while [ $n -lt 1800 ] && [ "$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)" -lt 6144 ]; do sleep 30; n=$((n+30)); done
+  o=/var/tmp/deploy-metal-pin-$img; sudo rm -rf "$o"; mkdir -p "$o"
+  out=$($R sudo timeout 1800 "$E" one $B/bzImage $B/initramfs-kafka.cpio.gz $B/$img "$o" "$S" 2>&1); rc=$?
+  check "pinned $img" "$rc" "$(grep -a '^RESULT' <<< "$out")" $want
+done
 
 if [ "$FLAG" = 1 ]; then
   echo ">> flagship verifies (PASS = the harness's own MILESTONE PASS line)"

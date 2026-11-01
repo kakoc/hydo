@@ -1,6 +1,7 @@
-//! hydo-hvx: the hvx run engine in Rust (M132). It drives `/dev/hvx` (the hvx kernel module,
-//! `hv/hvx/hvx.c`) directly through the ioctls of `hv/hvx/hvx_abi.h` and does everything the C
-//! engine runner `hv/hvx/hvx_explore` does: boot an image to its snapshot points S0 and S1, serve
+//! hydo-hvx: the hvx run engine in Rust (M132; the only hvx engine since M137, which deleted the C
+//! engine runner `hv/hvx/hvx_explore.c` it was ported from: `git show d9202e7:hv/hvx/hvx_explore.c`).
+//! It drives `/dev/hvx` (the hvx kernel module, `hv/hvx/hvx.c`) directly through the ioctls of
+//! `hv/hvx/hvx_abi.h` and does everything the C engine did: boot an image to its snapshot points S0 and S1, serve
 //! schedules from S1 (every host token: `disk=`/`dseed=`, `tj*`, `pp=`/`xt*`, `cf=`, `rb=`,
 //! `q=`/`qs=`/`qb=`/`qm=`), several vCPUs, `--cpu v3`, the RAM size, the power cut's recovery VM
 //! from S0, `BRANCH`, the fingerprints `fp`/`wfp`, the lock-step control protocol (M118) and the
@@ -8,16 +9,19 @@
 //!
 //! Two ways to use it:
 //!
-//! - the program `hydo-hvx`, with hvx_explore's command line and protocol (a drop-in for the C
-//!   program: `HYDO_HVX_EXPLORE=.../hydo-hvx` makes the explorer start it);
-//! - in-process: [`engine::main_with`] runs the same engine over any streams; hydo-engine's
-//!   `HYDO_ENGINE=inproc` runs one per worker on a thread of the `hydo` process itself.
+//! - in-process (the default): [`engine::main_with`] runs the engine over any streams;
+//!   hydo-engine runs one per worker on a thread of the `hydo` process itself whenever that
+//!   process can open the device (`HYDO_ENGINE=inproc` forces it);
+//! - the program `hydo-hvx`, with the C engine's command line and protocol, which hydo-engine
+//!   starts under `hvx-run sudo` when the process cannot open the device (`HYDO_ENGINE=process`
+//!   forces it; `HYDO_HVX_EXPLORE` names another program).
 //!
 //! What differs inside, never in a result: snapshots stay in this process's memory as their
 //! non-zero 4 KiB blocks ([`pages`]); a fresh VM gets only the non-zero blocks of the base image
 //! and of the snapshot restored into it (the module's pages start zeroed); fingerprints skip
 //! all-zero pages exactly ([`fnv::fnv_zskip`]); and an old VM is torn down on a helper thread
-//! while the next run starts. Coverage tracing (`HVX_EXPLORE_PT_*`) is not ported.
+//! while the next run starts. Coverage tracing (`HVX_EXPLORE_PT_*`, [`pt`]) is ported since M137;
+//! its decoder needs libipt and is built with the cargo feature `pt` only.
 //!
 //! The module and its ABI are Linux-only; on other systems the pure parts (ABI types, the boot
 //! recipe, fingerprints, schedule parsing) build and are tested, and the engine is not compiled.
@@ -28,6 +32,7 @@ pub mod cstr;
 pub mod ctl;
 pub mod fnv;
 pub mod pages;
+pub mod pt;
 pub mod sched;
 
 #[cfg(target_os = "linux")]

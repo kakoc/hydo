@@ -178,6 +178,11 @@ fn main() {
         same,
         ca.len().max(cb.len())
     );
+    if ra.is_empty() && rb.is_empty() {
+        // two explorations that never ran (a missing binary, no device) are not a proof
+        println!("engine_equiv: NOTHING COMPARED (no run record in either exploration)");
+        std::process::exit(1);
+    }
     if bad.is_empty() {
         println!("engine_equiv: IDENTICAL");
     } else {

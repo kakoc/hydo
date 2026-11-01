@@ -1,6 +1,7 @@
 //! Worker pools over the hvx engine, one per image, as explore.py's `Pool(n, outdir)` started
 //! them for run.py: `$HYDO_BUILD` (default `~/hydo/build`) holds the images, the guest kernel
-//! `bzImage` and `initramfs-kafka.cpio.gz`; the engine is `<root>/hv/hvx/hvx_explore` (or
+//! `bzImage` and `initramfs-kafka.cpio.gz`; the engine is the Rust engine in this process when it
+//! can open the device, otherwise the program `hydo-hvx` (`hydo_engine::hvx::program`, or
 //! `$HYDO_HVX_EXPLORE`) started through `~/bin/hvx-run` (or `$HYDO_HVX_RUN`, the box's shared
 //! module lock), with snapshot files in `$HYDO_SNAP_DIR` (default `/var/tmp/hvx-snap`). Snapshots
 //! stay in files unless `HYDO_SNAPSHOTS=memory` (the benchmark runs beside other sessions on a
@@ -61,10 +62,7 @@ impl Engines {
     /// `outdir/worker-<i>.err`). Each boots in its own thread; jobs wait for the boot.
     pub fn pool(&self, image: &str, workers: usize, outdir: &Path) -> Pool {
         let engine = hvx::Hvx {
-            engine: env_path(
-                "HYDO_HVX_EXPLORE",
-                self.root.join("hv").join("hvx").join("hvx_explore"),
-            ),
+            engine: hvx::program(&self.root),
             hvx_run: Some(env_path("HYDO_HVX_RUN", home().join("bin").join("hvx-run"))),
             snap_dir: std::env::var("HYDO_SNAP_DIR")
                 .ok()

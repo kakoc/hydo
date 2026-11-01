@@ -30,7 +30,7 @@ formats may still change between versions.
                 ▼                                        ▼
    hv/hvx — Linux engine                     hv/hvm — Mac engine
    a VT-x kernel module (/dev/hvx)           arm64 Linux on Apple Silicon
-   + the run engine hvx_explore              through Hypervisor.framework (hvmx)
+   + the run engine hydo-hvx (Rust)          through Hypervisor.framework (hvmx)
 ```
 
 - **The product** builds a guest image from a project description, drives an engine through one
@@ -44,9 +44,10 @@ formats may still change between versions.
 ## Repository layout
 
 ```
-hv/hvx/        the Linux engine: hvx.c (module), hvx_abi.h (ioctl ABI), hvx_explore.c (run
-               engine), module tests and harnesses, images/ (guest kernel and hand-written images),
-               safety/ (KASAN kernel and syzkaller), deploy-metal.sh (regression suite)
+hv/hvx/        the Linux engine: hvx.c (module), hvx_abi.h (ioctl ABI), module tests and
+               harnesses, images/ (guest kernel and hand-written images), safety/ (KASAN kernel
+               and syzkaller), deploy-metal.sh (regression suite); its run engine is the Rust
+               crate hydo/crates/hydo-hvx (M132; the C hvx_explore.c was deleted in M137)
 hv/hvm/        the Mac engine: hvm.c, virtio devices, explore/serve.c (hvmx), arm64 guest kernels
 hydo/crates/   the Rust workspace (see below)
 hydo/onboard/  the guest-side init and its extensions (shell, inside every image), MANIFEST.md
