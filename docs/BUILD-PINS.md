@@ -319,8 +319,8 @@ has no dependencies.
   with a message (its hello has no `freeze-netns`).
 
   The C freeze helper it can stand in for (`hydo_fc`, pinned musl gcc) is 68,504 bytes.
-- **In images (Milestone 121):** `hydo-build --control agent` stages exactly these bytes as the
-  image's first process and refuses another build of the agent (`HYDO_AGENT_UNPINNED=1` stages it
+- **In images (Milestone 121; every image since Milestone 136):** `hydo-build` stages exactly
+  these bytes as the image's first process and refuses another build of the agent (`HYDO_AGENT_UNPINNED=1` stages it
   with a warning, for work on the agent). The two sha256 values are also in
   `hydo/crates/hydo-build/src/agent.rs` (`AGENT_SHA256_X86_64`, `AGENT_SHA256_ARM64`); a new agent
   changes this table and those constants together, and every agent image's bytes with them.

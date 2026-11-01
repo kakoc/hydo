@@ -1,5 +1,10 @@
 # C2 on the Mac: verdict equivalence of agent images on hvm (Milestone 128)
 
+> Since Milestone 136 (step C3) hydo builds agent images only; the shell init and its extensions
+> are deleted. This file is the record of the comparison that justified the switch; the current
+> fingerprints of the Mac examples (all 19 images built twice with the same bytes, every recorded
+> schedule run twice) are in docs/REBASELINE.md section 8.
+
 Step C2 of `docs/design/guest-control.md` ("Migration", point 2, and "Implementation plan"), for the
 arm64 examples on the Mac engine hvm. The x86_64 examples (M127) and the bug benchmark (M129) ran
 on the bare-metal machine in parallel and are not in this file.

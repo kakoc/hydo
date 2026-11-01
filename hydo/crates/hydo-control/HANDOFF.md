@@ -710,9 +710,39 @@ What real hvx guests showed the controller and the agent needed (each fixed with
 - `agent::plan_of_image`: a `hydo/` folder plan's history checks are not in the embedded
   `hydo.yaml` (the build expands them from `checks/`), so they are taken from the image's
   `manifest.sh` (`history_of_manifest_sh`).
-Differences still to explain on real guests: `stack-grpc` planted seed 6 ends "TIMEOUT workload"
-on the agent image only; miniflux seed 11 ends "front restart failed" on the agent image only
-(a restart during a 97 % request loss window; decision 3's readiness timing is the suspect).
+Differences M127 left to explain on real guests: `stack-grpc` planted seed 6 ends "TIMEOUT
+workload" on the agent image only; miniflux seed 11 ends "front restart failed" on the agent image
+only. Both are explained in M136 (next section).
+
+## C3: the switch to agent images (M136; docs/HISTORY.md "Milestone 136")
+
+- **Only agent images.** `hydo-build` makes agent images only; the shell init (`hydo-init.sh`),
+  its extensions and the guest composer are deleted (`git show d9202e7:hydo/onboard/<file>`
+  restores them). The shell models in `tests/support/model*.rs` stay: they are now the frozen
+  description of what the shell images did, and the identity corpora keep checking the
+  controller against them. The tests that ran the shell files themselves are gone (m123's
+  `w_forms_as_compose_sh`, `m98_corpora_as_the_awk`, `errlog_scan_as_the_awk`; fakes'
+  `--print-init` checks; the pin of hydo-init-fakes.sh's hash).
+- **`restart_may_fail` (a service whose restart at the heal may fail).** `PlanService::
+  restart_may_fail`; `restart_dead(fx, ctx, verdict, may_fail)` returns the services that stayed
+  down instead of ending the run when `may_fail` and the service's key allow it, logs
+  `<svc> did not come back after the faults (restart_may_fail): ...`; the run then skips
+  `retry_workload`, reaches the engine's `DiskFaultsOff` (where a `cf=` cut moves the run into the
+  recovery VM and the controller's later actions are dropped) and, without a cut, ends with
+  `HYDO-ORACLE: ERROR restart after the faults (<svc>)`, the verdict the run has without the key.
+  The second restart pass (after `DiskFaultsOff`) never uses the key. Proof:
+  `tests/restart_may_fail.rs` (the scripted guest's `HYDO_FAKE_EXIT=2/+0/1` makes the heal's
+  restart fail; without the key the same ERROR at once, with it no retry, the workload's end and
+  the ERROR; a restart that succeeds gives the default transcript). The `cf=` path ran on the
+  bench's real images (`hydo-bench confirm`, docs/HISTORY.md M136).
+- **Decision 3 (readiness polls) has a visible consequence.** miniflux seed 11 of M127 (a kill of
+  the front service whose restart falls into a 97 % request-loss window): each readiness poll
+  takes about 4 s of guest time there (the health check's TCP retries), so the shell made its 72
+  polls in 291 s and passed, while the agent's probe stops at `ready_timeout` = 120 s of guest
+  time and the run ends `ERROR front restart failed`. MANIFEST.md documents `ready_timeout` in
+  seconds, which is what the controller does; the shell counted polls.
+- **stack-grpc planted seed 6 of M127** ("TIMEOUT workload" on the agent image only): see
+  docs/HISTORY.md "Milestone 136" for the measurement.
 
 ## Left open
 

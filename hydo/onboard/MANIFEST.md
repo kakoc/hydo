@@ -1,9 +1,12 @@
 # hydo.yaml — the project manifest
 
 A project is onboarded by writing ONE file, `hydo.yaml`. `hydo build` (or the `hydo-build` program) compiles it
-into a guest image, and one generic guest init (`hydo/onboard/hydo-init.sh`) runs any manifest:
-it starts the services, runs the workload under the explorer's faults and checks the
-invariants. No per-project build script or boot script is written by hand.
+into a guest image whose first process is the small guest agent `hydo-agent`; the host
+controller (`hydo-control`, inside `hydo`) drives any manifest through it: it starts the
+services, runs the workload under the explorer's faults and checks the invariants. No
+per-project build script or boot script is written by hand. (Until Milestone 136 a generic shell
+init, `hydo-init.sh` with extensions spliced in per manifest, did this inside the guest; images
+built then still run.)
 
 This file explains the project format to people and to tools that generate manifests; the
 authority is the schema generated from the format's types and the permanent example documents
@@ -81,7 +84,7 @@ command). The Rust test SDK (`hydo-test`) still writes the old spelling; it is r
 Example pair: `retired-history-check-in-test` and `retired-history-check-in-test-migrated`.
 
 **Kept apart on purpose:** `invariants:` and `test.checks` are both properties, but different
-runners run them: the init runs an invariant's shell command as it is; the composer runs a check
+runners run them: hydo runs an invariant's shell command as it is; the composer runs a check
 (argv or shell) under `test.command_timeout`, with the prelude and `HYDO_CHECK` set, a timeout
 counting as "could not be evaluated". Likewise `workload.run` (numbered steps) and
 `test.commands` (composed commands) are two ways to drive the system, and a plan with test
@@ -192,7 +195,10 @@ services:                      # may be empty ([] or left out): a project that i
     restart: on-failure                   # what happens when its process ends by itself while the
                                           #   test runs: no (default: down until the heal), always,
                                           #   unless-stopped, on-failure[:max] (Docker Compose's
-                                          #   words; agent images only, see "Restart policies")
+                                          #   words, see "Restart policies")
+    restart_may_fail: false               # true: its restart after the faults may fail (no
+                                          #   retry then; see "A restart after the faults that
+                                          #   may fail")
 
   - name: cache                # a service whose files come from a Docker/OCI image (see below)
     image: images/redis.tar    # a `docker save` tar or an OCI layout directory, relative to
@@ -277,8 +283,8 @@ from an assertion SDK (Go `hydoassert.Buggify`, Rust `hydo_assert::hydo_buggify!
 (drawn by `hydo explore --buggify`, which keeps `B=` for such a manifest and drops it for others)
 into `/tmp/hydo-buggify`, the file the SDKs read at a
 program's first fault-point evaluation; without `B=` the file is absent and every point stays
-off. The token `B` is then reserved (no knob may use it). Opt-in: `hydo-init-buggify.sh` is
-spliced into the init only for a manifest that sets it, so other images build as before.
+off. The token `B` is then reserved (no knob may use it). Opt-in: the host controller writes the
+file only for a manifest that sets it.
 
 ### Services from a Docker/OCI image
 
@@ -348,7 +354,7 @@ keeps the behaviour hydo always had.
 
 | `restart:` | the service's process ends by itself |
 |---|---|
-| `no` (the default; a bare `no` reads as `false` in YAML, which means the same) | it stays down until the heal: the restart passes at the end of fault injection and after the disk faults are off start every dead service again (as hydo-init.sh's `restart_dead`); a service that dies after them stays down, as under Compose without `restart:` |
+| `no` (the default; a bare `no` reads as `false` in YAML, which means the same) | it stays down until the heal: the restart passes at the end of fault injection and after the disk faults are off start every dead service again (the heal's restart pass); a service that dies after them stays down, as under Compose without `restart:` |
 | `always` | it is started again, whatever its exit status |
 | `unless-stopped` | the same as `always` (in a test run nobody stops a service by hand) |
 | `on-failure` | it is started again when its exit status is not 0 (killed by a signal counts as a failure) |
@@ -367,10 +373,35 @@ keeps the behaviour hydo always had.
 - **hydo's own faults keep their meaning.** A service killed by `K=` comes back before step
   `at+down`, one killed by `X=` at the heal, whatever its policy; pauses, freezes and the power
   cut's SIGSTOP end no process. The heal's restart passes still start every service that is down.
-- **Agent images only.** The policy is followed by the host controller (`hydo build --control
-  agent`). A shell image (the default build) keeps the shell init's behaviour, and `hydo build`
-  says so in a warning for every service with a policy. `hydo compose` writes the Compose file's
-  `restart:` (or `deploy.restart_policy`) here.
+- **The host controller follows it** (every image since M136; the shell-init images before it
+  did not). `hydo compose` writes the Compose file's `restart:` (or `deploy.restart_policy`)
+  here.
+
+### A restart after the faults that may fail (`services[].restart_may_fail`)
+
+Without a power cut, the faults are healed at the end of the workload and every service that is
+down is started again before `workload.retry` (the heal's restart pass). A service that does not
+come back then (its command exits, or its `ready:` check does not pass within `ready_timeout`)
+ends the run at once: `HYDO-ORACLE: ERROR restart after the faults (<service>)`.
+
+`restart_may_fail: true` (Milestone 136; default false) says that such a failed restart is a
+possible outcome of the faults, not a broken test. For example, after a power cut at the k-th
+disk flush (`cf=`) the disk is dead, a service whose sessions hang on it cannot come back, and
+the interesting question is what the recovery boot finds. Then, when that service does not come
+back:
+
+1. the run goes on (a line says so: `hydo-ob: <service> did not come back after the faults
+   (restart_may_fail): ...`);
+2. `workload.retry` is not run (requests that were not acknowledged stay not acknowledged, which
+   is no guarantee broken);
+3. the workload ends normally, so a `cf=` power cut takes the run into its recovery boot, whose
+   invariants give the verdict;
+4. without such a cut the verdict is `HYDO-ORACLE: ERROR restart after the faults (<service>)`,
+   as without the key, and the final invariants do not run.
+
+A service that does come back behaves exactly as without the key. Example: the bug benchmark's
+order service (`hydo/bench/manifest/hydo.yaml`), which replaced a wrapper script (Milestone 135)
+with this key.
 
 ### Variables every command sees
 
@@ -411,10 +442,10 @@ every run of a schedule. Anchors:
 
 | `after:` | the deadline counts from |
 |---|---|
-| `heal` (default) | the end of fault injection: the workload's last step has run. Everything the init then does to heal -- lift network faults, end pauses, restart killed services, the workload's `retry` -- counts against the deadline. After a power cut: the start of the recovery boot (the services' crash recovery counts). Solo: after the last step. |
+| `heal` (default) | the end of fault injection: the workload's last step has run. Everything hydo then does to heal -- lift network faults, end pauses, restart killed services, the workload's `retry` -- counts against the deadline. After a power cut: the start of the recovery boot (the services' crash recovery counts). Solo: after the last step. |
 | `start` | the start of the workload (after a power cut: the start of the recovery boot) |
 
-From the anchor the init polls `cmd` in the background every `poll` seconds (each call bounded
+From the anchor hydo polls `cmd` in the background every `poll` seconds (each call bounded
 by `within + 1` s). Exit 0 = satisfied; any other status = not yet. At the end (`finish`,
 before the `final` invariants) it waits for the result and emits ONE `HYDO-ASSERT` record of
 type `eventually` with `details` `{"after","elapsed_s","out","within_s"}`: `ok:true` if the
@@ -427,14 +458,12 @@ invariants, so when both fail the verdict names the liveness one; the OK line's
 Deadlines are in seconds, not workload steps: after the heal no steps run, and a step's
 duration depends on the faults. A fault that keeps a service unavailable after the workload
 ends (for example a timed pause `P=<svc>@<at>~<off>:<dur>` longer than the remaining
-workload -- the init waits for it before restarting anything) makes a `heal` deadline miss
+workload -- hydo waits for it before restarting anything) makes a `heal` deadline miss
 deterministically.
 
-Only images whose manifest has an `eventually` invariant get the liveness code: `hydo-build`
-then inserts `hydo/onboard/hydo-liveness.sh` into `/sbin/init` before its `main` section, with
-renamed copies of the four init functions it wraps (`step_range`, `start_periodic`,
-`start_all`, `finish`). Every other image's `/sbin/init` is `hydo-init.sh` byte for byte.
-`hydo-build --print-init` shows the generated init. Example: `examples/redis/hydo-live.yaml`.
+The host controller polls `eventually` invariants as monitors (one per invariant) for manifests
+that have them (until M136 `hydo-build` spliced `hydo-liveness.sh` into the shell init for
+them). Example: `examples/redis/hydo-live.yaml`.
 
 The program under test can still use the assertion SDK (`hydo/stack/hydoassert`) for
 properties that need to see inside it; both kinds of record mix on the console.
@@ -468,8 +497,8 @@ verdict rules are in `hydo/HISTORIES.md`.
   violations come first) and report each check as a `history-check` finding of the run, with the
   explanation, e.g. the minimal set of operations that cannot be ordered (`result.json`, or the
   run's record in `events.jsonl`; the results format, `hydo/PRODUCT.md`).
-- Only manifests with `checks:` get the recorder and `hydo-init-history.sh` (spliced into
-  `/sbin/init` like the liveness code); every other image builds byte-identically.
+- Only manifests with `checks:` get the recorder (and the host controller's history lines);
+  every other image builds as before.
 - Examples: `examples/redis/hydo-hist.yaml` (SET/GET as registers and RPUSH/LRANGE as
   list-append: `R=everysec` + a power cut loses an acknowledged write, both checks see it) and
   `examples/etcd/hydo-hist.yaml` (puts and gets with etcd's mod_revision, read back through every
@@ -497,7 +526,7 @@ verdict rules are in `hydo/HISTORIES.md`.
 | host side: `disk=ioerr:<p>` / `lying:<p>` | disk I/O errors / a disk that drops acknowledged writes |
 
 Lifting a network fault (`N=`/`O=`, at `to` or at the end of the workload) does not drop
-the packets still waiting in netem's delay queue: the init first changes the netem to no
+the packets still waiting in netem's delay queue: hydo first changes the netem to no
 delay/loss/duplication/corruption (queued packets keep their send times, new packets follow
 them in order), waits until the queue is empty (at most the largest delay in force plus
 500 ms of guest time), then removes the qdisc. The console shows
@@ -528,7 +557,7 @@ schedule) can use `F=<svc><dir><peer>@<step>[#<n>][:<match>]:<dur>`:
   packet, which is then let through -- and SIGCONTed after `<dur>` ms of guest time.
 
 It is deterministic under hydo, so the freeze lands on the same instruction every run. A packet
-is held in a netfilter queue (`nfnetlink_queue` + the static helper `hydo_fc`, pinned
+is held in a netfilter queue (`nfnetlink_queue` + the packet trigger of the guest agent `hydo-agent`, pinned
 `iptables-legacy`); nothing of this is staged unless `freeze` is in `faults:`, so every other
 image builds byte-identically. `freeze_match:` at the top level lists payload strings the
 explorer may draw as `<match>` (so a known event has a small `<n>`): either a plain list, or a
@@ -591,8 +620,8 @@ only after the restart) then sees time run backwards and can report a false viol
 instead: at the cut the first boot adds `clock=<epoch>` to its `hydo-explore-acked:` line, which
 the harness passes on in the recovery boot's `oracle` command, and the recovery boot starts its
 clock at that epoch plus `<seconds>` (the time the machine was off), as a real
-clock keeps running across a power loss. Opt-in: `hydo-init-clock.sh` is spliced into the
-init only for a manifest that sets it.
+clock keeps running across a power loss. Opt-in: only for a manifest that sets it (the host
+controller reads the clock at the cut and hands it to the recovery boot).
 
 ### Link faults (a network fault between two named services)
 
@@ -605,7 +634,7 @@ connected (a partition). For that, give each member an `addr:`: its own loopback
 - `N=a-*@...`: the same between `a` and every other service with an `addr:` (isolates `a`);
 - `O=a-b@...:req:<netem>` / `:resp:` : only the packets from `a` to `b` / from `b` to `a`.
 
-hydo-init matches on the IP source and destination (tc u32 on `lo`), so the packets must carry
+hydo matches on the IP source and destination (tc u32 on `lo`), so the packets must carry
 the members' addresses at both ends: each member listens on its `addr:` and its **outgoing**
 connections must leave from it too. On loopback the kernel picks `127.0.0.1` as the source unless
 the program binds its dialer or the routing says otherwise; `examples/etcd/hydo.yaml` shows a
@@ -615,9 +644,8 @@ routing rule per uid (`ip rule add uidrange …`, a table whose `local 127.0.0.0
 
 With two or more services that have `addr:`, `hydo explore` adds every pair
 `a-b`, and with three or more every `a-*`, to the targets its network and one-way faults pick
-from. The extension lives in `hydo-init-links.sh`; hydo-build copies it into the image and adds one
-line to `/sbin/init` that sources it, only for manifests with an `addr:`, so every other
-manifest builds a byte-identical image. `--arch arm64` builds such a manifest for the second guest
+from. The host controller sets the links' filters up (until M136 the shell extension
+`hydo-init-links.sh` did, copied into images of manifests with an `addr:`). `--arch arm64` builds such a manifest for the second guest
 kernel (policy routing for the per-user source routes; see "On the Mac: the second guest kernel").
 
 On one shared loopback network a program's outgoing connections leave from `127.0.0.1` unless it
@@ -653,7 +681,7 @@ Like Docker's bridge network, every service runs in its own network namespace:
 - `/etc/hosts`, when the manifest gives none, maps every service's name (and every fake's and
   proxy's) to its address, as Docker resolves service names.
 
-The network is set up when `/sbin/init` starts, before the first snapshot, so every boot has it,
+The network is set up at the start of every boot, before the first snapshot, so every boot has it,
 including the recovery boot after a power cut. What runs where:
 
 | | where |
@@ -688,8 +716,8 @@ with two or more such peers. Services without any `depends_on` between them (pee
 other, such as a cluster) get every pair, as on loopback.
 
 hydo-build stages iproute2's `ip` and the guest kernel's `llc`, `stp`, `bridge` and `veth` modules
-and splices `hydo-init-netns.sh` into `/sbin/init`, only for `network: bridge`; every other
-manifest builds byte-identically. On arm64 the default Mac guest
+only for `network: bridge` (the host controller sets the bridge and the namespaces up before the
+first snapshot; until M136 the shell extension `hydo-init-netns.sh` did). On arm64 the default Mac guest
 kernel (`hv/hvm/explore/build-guest.sh`) has no network namespaces, so such a manifest is built
 for the second guest kernel (next section); the four modules are built into it. One bridge
 models every Compose network: services on different Compose networks can still reach each other.
@@ -874,9 +902,9 @@ delays. A manifest with a `faults:` list draws `H=` only if it lists `protocol`.
 **Build.** `hydo/crates/hydo-world/build.sh` builds `build/hydo-world`, a static x86_64 musl
 binary (Rust since Milestone 111, the workspace's pinned toolchain, reproducible from any
 checkout); `hydo-build` stages it (`HYDO_WORLDBIN` overrides; both releases ship it as
-`guest/hydo-world`), writes `/etc/hydo/world.json` (`--print-world` shows it) and splices
-`hydo/onboard/hydo-init-fakes.sh` into the init. A manifest without `fakes:`/`proxies:` builds a
-byte-identical image. `--arch arm64` (the Mac backend) stages the arm64 build of the same
+`guest/hydo-world`) and writes `/etc/hydo/world.json` (`--print-world` shows it); the host
+controller starts it, switches the `H=` windows and carries the world across a power cut. A
+manifest without `fakes:`/`proxies:` gets none of this. `--arch arm64` (the Mac backend) stages the arm64 build of the same
 program: `HYDO_WORLD_ARCH=arm64 hydo/crates/hydo-world/build.sh build/hydo-world-arm64`
 (`HYDO_WORLDBIN_ARM64` overrides), and the Mac engine `hvmx` carries the world across a power cut in the same
 3584-byte recovery command as `hvx_explore`; `hydo explore` on the Mac takes `--protocol-faults`
@@ -900,8 +928,9 @@ Instead of a fixed `workload.run` split into numbered steps, a project can write
 **small commands and properties** and let hydo compose the commands into seeded sequences and
 concurrent mixes. The composition is part of the schedule (token `W=`), so a schedule replays
 the same commands in the same order and overlap, bit for bit, and the explorer varies and
-shrinks it like a fault. Implementation: the hydo-composer crate (build side, explorer side),
-`hydo-composer.sh` (the guest side; staged only for such a plan). Example:
+shrinks it like a fault. Implementation: the hydo-composer crate (build side, explorer side)
+and the host controller, which runs the rounds (until M136 a guest composer,
+`hydo-composer.sh`, did). Example:
 `examples/redis-composed/` (the repository layout below, with SETs, transfers, AOF rewrites).
 
 ### The plan format (what SDKs generate; versioned)
@@ -947,9 +976,9 @@ A command's id is `<kind>_<name>` (`parallel_driver_place_order`); ids are uniqu
 saved compositions name commands ("Stable compositions" below). A command may carry `content:
 <hex>` (8 to 64 lowercase hex digits), a hash of its code that an SDK computes, so a saved
 regression warns when the command changed. A check's name is its property id. Everything the composer adds to the manifest (the workload, a `first` step in
-provisioning, invariants for checks and for `eventually`/`finally` commands) is a rewrite the
-generic init already understands, so `hydo-init.sh` is unchanged; a manifest without `test:`
-and without a `hydo/` folder builds byte-identically to before.
+provisioning, invariants for checks and for `eventually`/`finally` commands) is a rewrite into
+the manifest's own terms, which the host controller recognises; a manifest without `test:` and
+without a `hydo/` folder is not changed by it.
 
 ### The `hydo/` folder (the repository layout)
 
@@ -1024,7 +1053,7 @@ singleton run, the singleton in round 0. Each entry gets its own `HYDO_SEED`. Ro
 running across later rounds and fault points until it ends, so faults land mid-command.
 Rules while running: at most `p` commands at once; parallel drivers wait while a serial or
 singleton driver runs; serial and singleton drivers wait until no other driver runs. At a
-fault point before round t the composer stops starting rounds, the init applies the fault,
+fault point before round t the composer stops starting rounds, hydo applies the fault,
 then round t starts. After the last round the composer waits for the running commands
 (`drain_timeout`), kills what is left, and the run continues as before (heal, restart,
 `eventually` commands, checks, verdict). At a power cut everything freezes as before.
@@ -1147,7 +1176,7 @@ commands (source: `hydo/crates/hydo-read`; one static Rust binary, `hydo-check` 
   exist, a timeout; also a wrong command line). Every read has a deadline (`--timeout <s>`,
   default 30).
 - `hydo-check <check> <sources>` compares readings and prints ONE explanation line (the last
-  line of its output, which the init puts into the invariant's `HYDO-ASSERT` details and the
+  line of its output, which hydo puts into the invariant's `HYDO-ASSERT` details and the
   `HYDO-ORACLE` verdict). Exit 0 = holds, 1 = violated, 2 = could not be evaluated: exactly the
   invariant contract above, so a check is one command.
 
@@ -1207,7 +1236,7 @@ or `exactly-once violated: acked c4 is in categories 0 times (of 20 in acked); m
 Options: `--unreadable violation` turns "could not read a source" into a violation (exit 1) --
 for a final check after recovery, where an unreadable store is itself lost data; `--oracle` ends
 with a `HYDO-ORACLE: OK|VIOLATION|ERROR <explanation>` line (for a program or script that is not
-run by the init); `--id <id> [--type <t>] [--msg <m>]` also prints a `HYDO-ASSERT-DECL` and a
+run by hydo); `--id <id> [--type <t>] [--msg <m>]` also prints a `HYDO-ASSERT-DECL` and a
 `HYDO-ASSERT` record (`details`: `check`, `first`, `explanation`), on stdout or `--console
 /dev/ttyS0`; `--show N` lists up to N offending items (default 5).
 
@@ -1327,13 +1356,14 @@ invariants still pass is often the first sign of a bug nobody wrote a check for.
 the manifest, hydo reports every KIND of error line a run produced, compares the kinds with a
 reviewed list of expected ones, and reports the new ones as findings of their own.
 
-**In the guest** (`hydo-init-errlog.sh`, spliced into the init only for a manifest with `errors:`;
-every other image builds byte for byte as before). Each covered service has its stdout/stderr log
-(the init already captures it; a restart's rotation into `<svc>.log.old` is followed), the output
-of its `setup:` command, and the files in `errors.files` (MySQL's `log-error=` file, a Java
-service's own log file). At the end of every boot -- just before the verdict line, or at a power
-cut just before the frozen state is handed over (the services are stopped first) -- the init picks
-the error lines, reduces each to a **template** and prints one record per (service, template):
+**In the run** (only for a manifest with `errors:`; until M136 the shell extension
+`hydo-init-errlog.sh` did this inside the guest, now the host controller reads the logs out of the
+guest and computes the same records). Each covered service has its stdout/stderr log (captured
+for every service; a restart's rotation into `<svc>.log.old` is followed), the output of its
+`setup:` command, and the files in `errors.files` (MySQL's `log-error=` file, a Java service's own
+log file). At the end of every boot -- just before the verdict line, or at a power cut just
+before the frozen state is handed over (the services are stopped first) -- the error lines are
+picked, each is reduced to a **template**, and one record is printed per (service, template):
 
 ```
 HYDO-ERRLOG {"svc":"mysql","src":"/tmp/mysqld.err","n":2,"at":"12,end","tpl":"<time> # [ERROR] [MY-012592] [InnoDB] Operating system error number # in a file operation.","ex":"2026-01-01T00:00:12.345678Z 0 [ERROR] ..."}
@@ -1465,7 +1495,8 @@ only, no AVX-512), which prebuilt x86-64-v3 binaries and images built for Haswel
 needs `--cpu v3` too (the report's repro line includes it). Without the key nothing changes.
 
 Inside the image: `/etc/hydo/hydo.yaml` (the manifest as written), `/etc/hydo/manifest.sh`
-(compiled), `/etc/hydo/prelude.sh` (env + shell helpers), `/sbin/init` (`hydo-init.sh`).
+(compiled), `/etc/hydo/prelude.sh` (env + shell helpers), `/etc/hydo/control` (`agent 1`: boot
+under the host's lock-step control) and `/sbin/init` (the pinned `hydo-agent`; on arm64 `/init`).
 
 ## Limits of v1
 
@@ -1727,7 +1758,7 @@ The starter section uses the test composer (MANIFEST "The test composer"): one
 `parallel_driver` per RPC with a weight (`run: [/bin/hydo-grpc, drive, <rpc>]`, a `timeout:`
 that bounds `drive.calls` operations whose every attempt runs into its deadline) and per
 scenario, the same commands as files in `<out>/workload/` for a `hydo/` folder, and
-`workload.retry: /bin/hydo-grpc retry` (the generic init runs it after the faults heal; the
+`workload.retry: /bin/hydo-grpc retry` (hydo runs it after the faults heal; the
 composer leaves `workload.retry` alone). The composer draws commands uniformly, so `weight:` only
 matters in steps mode; give an RPC weight 0 to leave out its command. Without the composer, the
 commented `workload:` in the starter section runs `hydo-grpc steps` per step range; a plan

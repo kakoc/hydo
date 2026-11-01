@@ -145,8 +145,14 @@ rules that matter most:
   Compose's words (`no`, the default: it stays down until the heal; `always`; `unless-stopped`;
   `on-failure[:max]`). Give a service the policy it has in production (the Compose import copies
   `restart:`): a worker that crashes after the faults and is never started again otherwise makes
-  every later check fail for a reason the deployment does not have. Agent images only (`hydo build
-  --control agent`); MANIFEST.md "Restart policies".
+  every later check fail for a reason the deployment does not have. MANIFEST.md "Restart
+  policies".
+- `restart_may_fail: true` only for a service whose restart after the faults can legitimately
+  fail (for example an API whose database sessions hang on a disk that lost power at a `cf=` cut):
+  the run then goes on without `workload.retry`, a power cut's recovery boot still gives the
+  verdict, and without a cut the verdict is ERROR naming the service. Leave it out otherwise: a
+  service that does not come back is a broken test or a real bug. MANIFEST.md "A restart after
+  the faults that may fail".
 - `provision`: schemas, topics, users: what must exist before the window under test. Seed data
   that belongs to the test is a `first_<name>` command instead.
 - Guest settings: `guest.ram_mib` (default 1024) must hold every service; `guest.cpu: v3` when a
