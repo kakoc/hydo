@@ -261,18 +261,19 @@ impl Set {
     fn timed_trigger(&self, name: &str) -> Option<String> {
         let s = match (name, self.kind) {
             ("d9-redis-unlocked", Kind::Stack) => "disk=none dseed=0 | run Q=4",
-            // M135 (franz-go v1.22.2): of Q=2,3,4,2d,3d,4d the race shows with Q=3 and Q=4d on
-            // the agent kind
-            ("d9-redis-unlocked", Kind::Agent) => "disk=none dseed=0 | run Q=3",
+            // of Q=2,3,4,2d,3d,4d the race shows with Q=2, Q=4, Q=3d and Q=4d on the M136 images
+            // (the fixed agent, restart_may_fail); M135's images showed it with Q=3 and Q=4d
+            ("d9-redis-unlocked", Kind::Agent) => "disk=none dseed=0 | run Q=2",
             // M72: the -pin-kr image's timing moved d10's window: X=front@12~20 passes there
             ("d10-outcome-in-memory", Kind::Stack) if self.m59_suffix != "-pin-kr" => {
                 "disk=none dseed=0 | run X=front@12~20"
             }
             ("d10-outcome-in-memory", _) => "disk=none dseed=0 | run X=front@9~20",
             ("d11-ack-unflushed-flag", Kind::Stack) => "disk=cut dseed=0 cf=238 | run",
-            // M135: 9 of the 61 points cf=245..305 fail on the agent kind (249, 250, 260, 271,
-            // 272, 282, 292, 302, 303)
-            ("d11-ack-unflushed-flag", Kind::Agent) => "disk=cut dseed=0 cf=260 | run",
+            // M136: 9 of the 61 points cf=245..305 fail on the M136 images (249, 261, 262, 272,
+            // 273, 283, 284, 294, 304); M135's images failed at 249, 250, 260, 271, 272, 282,
+            // 292, 302, 303
+            ("d11-ack-unflushed-flag", Kind::Agent) => "disk=cut dseed=0 cf=261 | run",
             _ => return None,
         };
         Some(s.to_string())
