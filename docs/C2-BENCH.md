@@ -321,3 +321,11 @@ step range 14..29 hit the workload's 300 s timeout, and both that range's client
 and the retry pass recorded order 29; the oracle counts lines, so `not-acked` shows -1; the
 verdict is OK because every order is in MySQL and Kafka exactly once).
 
+**The triggers re-recorded on the agent images** (`hydo-bench confirm --kind agent`, all thirteen
+defects with `--base`; the table is in `hydo/bench/README.md` "The triggers on the manifest
+images"): all 16 triggers fail twice with one fingerprint and the defect's signature, every control
+passes them, and the control's known bug (order 26 twice) remains. The moved ones: d9 crashes for
+`Q=3` and `Q=4d` (not `Q=4`) on the agent kind, so its trigger is `Q=3`; d10's `X=front@9~20`
+still fails; d11's window is 9 of 61 cut points in `cf=245..305` (249, 250, 260, 271, 272, 282,
+292, 302, 303), and its trigger is `cf=260` (order 24).
+
