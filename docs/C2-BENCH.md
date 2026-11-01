@@ -243,7 +243,8 @@ it with the controller's message (section 1). After M128's fixes were merged (gu
 `HYDO-ASSERT`/`HYDO-HIST` lines now reach an agent run's report), every agent run of this
 campaign was checked for assertion records with `ok:false` that its report lacked: 44 runs had
 such records, every one of them with a VIOLATION verdict already, so no verdict or detection here
-changes (hydo-bench turns an assertion failure into a violation only when the verdict is OK).
+changes (hydo-bench turns an assertion failure into a violation only when the verdict is OK). M108's process cell (16 runs) and the m59 confirmations (10 records) were run again on the agent
+kind with the merged binaries: every fingerprint and verdict is the one recorded before.
 
 ## 7. The triggers that moved, measured on both kinds (`hydo-bench list`)
 
