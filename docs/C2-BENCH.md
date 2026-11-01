@@ -329,3 +329,8 @@ passes them, and the control's known bug (order 26 twice) remains. The moved one
 still fails; d11's window is 9 of 61 cut points in `cf=245..305` (249, 250, 260, 271, 272, 282,
 292, 302, 303), and its trigger is `cf=260` (order 24).
 
+
+On the shell kind (`--kind shell`) every trigger but d10's is confirmed the same way (d9 `Q=3`,
+d11 `cf=255`; the shell kind's d11 window is 8 of 61 points: 245, 255, 256, 266, 277, 287, 297,
+298); d10's `X=` trigger passes there because the generic shell init ignores `X=`. M108's cells
+were not run again on these images.
