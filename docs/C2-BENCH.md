@@ -243,5 +243,5 @@ changes (hydo-bench turns an assertion failure into a violation only when the ve
 d11's window has the same size on both kinds (about one cut point in seven between orders 23 and
 28: the cut must fall between an order's acknowledgement and the flush of its `published` flag),
 but its cut points are a few flushes apart, so a sweep with step 5 hit it on the shell kind only.
-The flush counts themselves agree: at every sampled k both kinds had acknowledged the same number
-of orders within one (for example 24 at k=250, 30 from k=325 on).
+The flush counts themselves agree: on the control, at each of the 51 cut points both kinds had
+acknowledged the same number of orders within one (41 points equal; 24 at k=250, 30 from k=325 on).
