@@ -16,8 +16,9 @@
 >
 > Note (M135): the benchmark's images are now built from one manifest, `manifest/hydo.yaml`, by
 > `build-bench-manifest.sh` on the bare-metal test machine (section "The manifest images
-> (Milestone 135)" at the end, with the triggers recorded on them). `hydo-bench` runs their agent
-> images by default (`--kind agent`), their shell images with `--kind shell`, and the hand-written
+> (Milestone 135)" and "The manifest images after the switch (Milestone 136)" at the end, with the
+> triggers recorded on them). `hydo-bench` runs their agent images by default (`--kind agent`;
+> M135's shell images went with the shell init in M136, `--kind shell` is refused), and the hand-written
 > stack images that the older sections below describe with `--kind stack`. The stack images
 > (`build-bench*.sh` with `hv/hvx/images/build-stack.sh` and `hydo/explore/stack-explore.sh`)
 > stay only as the engine's regression baselines (`deploy-metal.sh`, the pinned reproducers on

@@ -712,7 +712,7 @@ What real hvx guests showed the controller and the agent needed (each fixed with
   `manifest.sh` (`history_of_manifest_sh`).
 Differences M127 left to explain on real guests: `stack-grpc` planted seed 6 ends "TIMEOUT
 workload" on the agent image only; miniflux seed 11 ends "front restart failed" on the agent image
-only. Both are explained in M136 (next section).
+only. M136 explained the first and found the second to be a hang (next section).
 
 ## C3: the switch to agent images (M136; docs/HISTORY.md "Milestone 136")
 
@@ -741,8 +741,11 @@ only. Both are explained in M136 (next section).
   polls in 291 s and passed, while the agent's probe stops at `ready_timeout` = 120 s of guest
   time and the run ends `ERROR front restart failed`. MANIFEST.md documents `ready_timeout` in
   seconds, which is what the controller does; the shell counted polls.
-- **stack-grpc planted seed 6 of M127** ("TIMEOUT workload" on the agent image only): see
-  docs/HISTORY.md "Milestone 136" for the measurement.
+- **stack-grpc planted seed 6 of M127** ("TIMEOUT workload" on the agent image only) is a hang,
+  not a slow run: with a 3600 s wall limit instead of 900 s the run stops at nearly the same stop
+  and guest clock (step range 11..16, 178 periodic checks, the agent's last frame cut in the
+  middle) on M127's and M136's images. The cause is not found yet (AGENTS.md open item 30 d;
+  docs/HISTORY.md "Milestone 136").
 
 ## Left open
 
