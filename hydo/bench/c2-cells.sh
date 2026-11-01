@@ -30,6 +30,9 @@ while read -r name args; do
     d=$out/$kind/$name
     [ -f "$d.done" ] && continue
     n=0; while [ -e /var/tmp/hydo-QUIET ] && [ $n -lt 720 ]; do sleep 10; n=$((n + 1)); done
+    # a stack-sized guest needs about 6 GiB: wait (at most 4 h) until that much memory is free
+    # (the box ran out of memory with seven such VMs, 2026-11-01); run steps with --workers 1
+    n=0; while [ "$(awk '/^MemAvailable:/ {print int($2 / 1024)}' /proc/meminfo)" -lt "${MIN_FREE_MIB:-6144}" ] && [ $n -lt 480 ]; do sleep 30; n=$((n + 1)); done
     rm -rf "$d"; mkdir -p "$out/$kind"
     dir=$imgs; [ "$kind" = stack ] && dir=${STACK_BUILD:-$HOME/hydo/build}
     log "start $kind $name"

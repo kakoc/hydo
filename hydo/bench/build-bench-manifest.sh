@@ -18,7 +18,8 @@
 # The stems in $FULL (default: the first stem) are built in full; every other stem is a copy of the
 # first full build with /bin/hydostack replaced (agent-patch.sh --swap), because the manifest and
 # every other file are the same (proven against full builds with agent-patch.sh --check,
-# docs/C2-BENCH.md). $HYDO_AGENT_BIN is the pinned hydo-agent. <work dir>/benchroot is the debugfs
+# docs/C2-BENCH.md). KEEP=1 keeps a stem whose two images exist (to resume, or to add stems to a
+# set). $HYDO_AGENT_BIN is the pinned hydo-agent. <work dir>/benchroot is the debugfs
 # rdump of the -pin-kr control image's root; bzImage and initramfs-kafka.cpio.gz are linked into
 # $OUT from $STACK_BUILD.
 set -euo pipefail
@@ -67,6 +68,9 @@ fi
 order=$(for pair in "$@"; do s=${pair%%=*}; case " $FULL " in *" $s "*) echo "0 $pair";; *) echo "1 $pair";; esac; done | sort -s -k1,1 | cut -d' ' -f2-)
 for pair in $order; do
   stem=${pair%%=*}; img=${pair#*=}
+  if [ "${KEEP:-0}" = 1 ] && [ -s "$OUT/$(name "$stem" shell)" ] && [ -s "$OUT/$(name "$stem" agent)" ]; then
+    echo "== $stem: kept (KEEP=1)"; continue
+  fi
   d=$work/src/$stem
   rmtree "$d"; mkdir -p "$d"
   cp "$here/manifest/hydo.yaml" "$d/hydo.yaml"
