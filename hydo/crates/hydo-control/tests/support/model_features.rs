@@ -11,7 +11,7 @@
 //!   realtime clock; after `date -s` the reply's time stands for the next `date +%s`, and a
 //!   carried value is never written among the ids (the controller's decisions, HANDOFF.md).
 
-use super::{inv_detail, jesc, plain, run_of, s, Item, Model, R};
+use super::{ash_after, inv_detail, jesc, plain, run_of, s, Item, Model, R};
 use hydo_agent_proto::msg::*;
 
 /// A monitor the model started: its invariant, the environment of the init when it forked it,
@@ -184,7 +184,8 @@ impl<'a> Model<'a> {
             };
             let (rc, out) = match a {
                 Ans::Refused(e) => (127, e),
-                Ans::Done(d) => (d.status, d.out),
+                // `> $H/inv.$i.out 2>&1`: timeout's SIGTERM gives the monitor's "Terminated" there
+                Ans::Done(d) => (d.status, d.out + ash_after(d.sig)),
                 Ans::Reply(_) => unreachable!(),
             };
             // el=$(awk -v a="$t0" -v b="$(UP)" 'BEGIN { printf "%.2f", b - a }')

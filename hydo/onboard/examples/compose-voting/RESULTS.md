@@ -110,3 +110,41 @@ Every schedule twice from a fresh boot (`hydo run` on the M2 Pro), identical:
 | `disk=none \| run K=worker@5+5` | OK: worker killed before step 5, restarted before step 10, all 20 counted | `642d89607d21aa2e` |
 | `disk=cut \| run C=12` | VIOLATION `votes.counted_soon`: voter0 acknowledged but not counted (as on x86_64) | `1058b9d6fc1854f7` |
 | `disk=none \| run N=vote-redis@5-12:loss,100%` | OK with 13 of 20 acknowledged; `vh1:sent=0,dropped=35`, as on x86_64 | `88b7fe56b6025545` |
+
+## Milestone 134: the check says what it saw
+
+`votes_counted` (in `hydo.yaml` and `hydo-mac.yaml`; `hydo-loopback.yaml` stays the Milestone 84
+manifest byte for byte) used to report every failing `psql` as "db not answering", although the
+usual cause is that no vote has been counted yet: the .NET worker creates the `votes` table only
+after its first database connection (Milestone 130). The check now keeps `psql`'s error output
+and says which of three things it saw:
+
+| what the check saw | message | exit status |
+|---|---|---|
+| `psql` failed, and its error is not about the table | `db not answering: <psql's first error line>` | 2 (cannot decide) |
+| the `votes` table does not exist | `no vote counted yet: the votes table does not exist (the worker creates it at its first database connection)` | 2 (cannot decide) |
+| some acknowledged votes are missing | `too few votes counted: <n> of <total> acknowledged votes are in PostgreSQL; voter<i> (vote <v>) is not` | 1 (violated) |
+| every acknowledged vote is there | `all <n> acknowledged votes counted` (unchanged) | 0 |
+
+The exit statuses are the ones the check had before, so no verdict changes its kind; only the
+texts of a failing check change (and the image, which holds the check).
+
+**On this Mac, the Mac manifest** (`hydo-mac.yaml`, M2 Pro, this branch's `hydo build` with the
+release-like prefix of docs/C2-MAC.md and the pinned agent 0.2.0, aarch64 `585f0bdb…`): shell image
+`f7159341…`, agent image `c595a65d…` (two agent builds byte-identical), data disk `120e7088…`
+(unchanged). Every recorded schedule ran twice from a fresh boot on each image (`hydo run`), and
+both runs of each pair were identical:
+
+| schedule | shell image | agent image |
+|---|---|---|
+| `disk=none \| run` | OK, all 20 votes counted, `35a6b85db4b735ba` | OK, `dd74bc1b87cc294d`, stops 4729, `ctl=1b9e5fbb98634f9c` |
+| `disk=none \| run K=worker@5+5` | OK, all 20 counted, `96baab51fafc8d64` | OK, `2a717f95fb338b41`, stops 4786, `ctl=e39f6fb3fb98c8d0` |
+| `disk=cut \| run C=12` | VIOLATION `votes.counted_soon`: `not satisfied 60.09s after heal, deadline 60s (last check rc=1: too few votes counted: 0 of 12 acknowledged votes are in PostgreSQL; voter0 (vote a) is not)`, `e388cf8a9b3240bd` | the same VIOLATION (60.83 s), `cfb222e3f27fb154`, stops 20522, `ctl=64b7f90f3b5cd36e` |
+| `disk=none \| run N=vote-redis@5-12:loss,100%` | OK, 13 of 20 acknowledged and counted, `ad66bdd583205494` | OK, 13 counted, `e50a13e3ca70e1a9`, stops 12879, `ctl=aa587576ffe76bf2` |
+
+The recorded runs used programs built before this milestone's controller changes; the agent
+image's `disk=none | run` and `disk=cut | run C=12` were run again with the final programs and gave
+the same fingerprints, stops, `inh=` and `ctl=` (no check of these schedules is ended by a signal,
+and the manifest has no restart policy). These replace the Mac values of Milestone 99 (shell) and Milestone 128 (agent) for the current
+manifest; the verdicts are the same. The x86_64 images were not rebuilt (no VM budget was spent on
+them on the bare-metal machine); the re-baseline at the switch to agent images records them.

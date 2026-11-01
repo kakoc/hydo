@@ -49,6 +49,27 @@ fn bad<T>(m: String) -> R<T> {
     Err(Halt::Mismatch(m))
 }
 
+/// What busybox ash writes to its own error output after a foreground command that a signal
+/// ended (shell/ash.c: `waitone` prints `sprint_status48(status, 1)` and a newline for the job it
+/// waits for; nothing for SIGINT, SIGPIPE or an exit; musl's `strsignal` words). Where the shell
+/// redirected the command (`cmd > file 2>&1`), the redirection is the shell's own for the time
+/// of the command, so the line lands in the file after the command's output.
+fn ash_after(sig: Option<u32>) -> &'static str {
+    match sig {
+        Some(15) => "Terminated\n",
+        Some(9) => "Killed\n",
+        Some(1) => "Hangup\n",
+        Some(3) => "Quit\n",
+        Some(6) => "Aborted\n",
+        Some(11) => "Segmentation fault\n",
+        Some(14) => "Alarm clock\n",
+        Some(10) => "User defined signal 1\n",
+        Some(12) => "User defined signal 2\n",
+        None | Some(2) | Some(13) => "",
+        Some(n) => panic!("the model does not know signal {n}'s words"),
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Conv {
     Boot,
@@ -439,6 +460,17 @@ impl<'a> Model<'a> {
         env: Vec<String>,
         capture: Option<u32>,
     ) -> R<(u32, String)> {
+        let (st, out, _) = self.run_sig(argv, env, capture)?;
+        Ok((st, out))
+    }
+
+    /// `run` with the signal that ended the command.
+    fn run_sig(
+        &mut self,
+        argv: Vec<String>,
+        env: Vec<String>,
+        capture: Option<u32>,
+    ) -> R<(u32, String, Option<u32>)> {
         let id = self.send(Command::Run(Run {
             argv,
             env: Some(env),
@@ -450,10 +482,10 @@ impl<'a> Model<'a> {
             capture,
         }))?;
         match self.reply(id)? {
-            Err(e) => Ok((127, e)),
+            Err(e) => Ok((127, e, None)),
             Ok(_) => {
                 let d = self.done(id)?;
-                Ok((d.status, d.out))
+                Ok((d.status, d.out, d.sig))
             }
         }
     }
@@ -467,13 +499,26 @@ impl<'a> Model<'a> {
         out: &str,
         append: bool,
     ) -> R<u32> {
+        Ok(self.spawn_wait_sig(h, argv, env, out, append)?.0)
+    }
+
+    /// `spawn_wait` with the signal that ended the command.
+    fn spawn_wait_sig(
+        &mut self,
+        h: &str,
+        argv: Vec<String>,
+        env: Vec<String>,
+        out: &str,
+        append: bool,
+    ) -> R<(u32, Option<u32>)> {
         let id = self.send(spawn(h, argv, env, out, append))?;
         if self.reply(id)?.is_err() {
-            return Ok(127);
+            return Ok((127, None));
         }
         let e = self.exits.get(&id);
         self.waited(&format!("the exit of {h}"), e.map(|x| x.0))?;
-        Ok(e.unwrap().1.status)
+        let x = &e.unwrap().1;
+        Ok((x.status, x.sig))
     }
 
     fn read_all(&mut self, path: &str) -> R<String> {
@@ -867,7 +912,11 @@ impl<'a> Model<'a> {
         let e = self.env(&[]);
         let (rc, out) = match self.cmp_eval(&inv.cmd)? {
             Some(x) => x,
-            None => self.run(run_of(&inv.cmd), e, Some(3000))?,
+            // `RUN "$(iv $1 cmd)" > $o 2>&1`: ash's line after a signal goes into $o too
+            None => {
+                let (rc, out, sig) = self.run_sig(run_of(&inv.cmd), e, Some(3000))?;
+                (rc, out + ash_after(sig))
+            }
         };
         self.own_out.insert(inv.key.clone(), out.clone());
         let d = inv_detail(&out);

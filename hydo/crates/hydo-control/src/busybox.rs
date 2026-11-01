@@ -1,4 +1,5 @@
-//! busybox's words for a failed `mount` (docs/HISTORY.md M131).
+//! busybox's words for a failed `mount` (docs/HISTORY.md M131), and busybox ash's line after a
+//! foreground command that a signal ended ([`foreground_signal_line`], M134).
 //!
 //! hydo-init.sh mounts the data disk with `MERR=$($BB mount -t ext4 -o "$HYDO_DATA_OPTS" /dev/vda2
 //! /data 2>&1) || die_oracle "$1 ($MERR)"`, so the verdict of an unmountable disk holds busybox's
@@ -185,9 +186,124 @@ pub fn mount_error(src: &str, dst: &str, errno: i64, table: Strerror) -> String 
     )
 }
 
+// ------------------------------------------------------------------ a foreground command's signal
+
+/// SIGINT and SIGPIPE: the two signals busybox ash says nothing about.
+const SIGINT: u32 = 2;
+const SIGPIPE: u32 = 13;
+
+/// musl's `strsignal` (src/string/strsignal.c) for a Linux signal number, as linked into both
+/// pinned busyboxes (the table was read out of the two binaries, M134: 1..31 are the words below,
+/// 32..64 are `RT<n>`, everything else "Unknown signal"; x86_64 and arm64 number the signals the
+/// same way).
+pub fn strsignal(sig: u32) -> String {
+    const WORDS: [&str; 31] = [
+        "Hangup",
+        "Interrupt",
+        "Quit",
+        "Illegal instruction",
+        "Trace/breakpoint trap",
+        "Aborted",
+        "Bus error",
+        "Arithmetic exception",
+        "Killed",
+        "User defined signal 1",
+        "Segmentation fault",
+        "User defined signal 2",
+        "Broken pipe",
+        "Alarm clock",
+        "Terminated",
+        "Stack fault",
+        "Child process status",
+        "Continued",
+        "Stopped (signal)",
+        "Stopped",
+        "Stopped (tty input)",
+        "Stopped (tty output)",
+        "Urgent I/O condition",
+        "CPU time limit exceeded",
+        "File size limit exceeded",
+        "Virtual timer expired",
+        "Profiling timer expired",
+        "Window changed",
+        "I/O possible",
+        "Power failure",
+        "Bad system call",
+    ];
+    match sig {
+        1..=31 => WORDS[sig as usize - 1].to_string(),
+        32..=64 => format!("RT{sig}"),
+        _ => "Unknown signal".to_string(),
+    }
+}
+
+/// What busybox ash writes after a foreground command that `sig` ended (docs/HISTORY.md M134,
+/// docs/C2-MAC.md D7): `shell/ash.c` (the same in 1.36.1 and 1.37.0) redirects a simple
+/// command's output in the shell itself before it forks (`evalcommand`: `redirectsafe(...,
+/// REDIR_PUSH)`, then `forkshell` and `waitforjob`), and `waitone`, waiting for that job, prints
+/// `sprint_status48(status, sigonly=1)` and a newline with `out2str`, to the shell's own error
+/// output, which is then the redirected file. `sprint_status48` writes nothing for an exit, for
+/// SIGINT and for SIGPIPE, and otherwise `strsignal(sig)` (cut at 32 bytes, which no word
+/// reaches), plus " (core dumped)" for a core dump (the guests write none: init's core limit is
+/// 0). So `cmd > out 2>&1` whose process a busybox `timeout` ends gives the command's output
+/// followed by "Terminated\n" in `out`. The controller appends this line to the outputs it keeps
+/// of such commands (an invariant's check, an `eventually` attempt, a composed command's log and
+/// check), so an agent image gives the shell image's details.
+pub fn foreground_signal_line(sig: Option<u32>) -> Option<String> {
+    match sig {
+        None | Some(0) | Some(SIGINT) | Some(SIGPIPE) => None,
+        Some(s) => Some(format!("{}\n", strsignal(s & 0x7f))),
+    }
+}
+
+/// `out` with busybox ash's line for a foreground command that `sig` ended appended.
+pub fn with_signal_line(mut out: String, sig: Option<u32>) -> String {
+    if let Some(l) = foreground_signal_line(sig) {
+        out.push_str(&l);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_shells_line_after_a_signal() {
+        // a check that busybox timeout ends (SIGTERM, status 143): the D7 case
+        assert_eq!(
+            foreground_signal_line(Some(15)).as_deref(),
+            Some("Terminated\n")
+        );
+        assert_eq!(
+            with_signal_line("pending=3\n".into(), Some(15)),
+            "pending=3\nTerminated\n"
+        );
+        // no newline of its own: the line follows the output's last bytes, as in the file
+        assert_eq!(
+            with_signal_line("checked \"k\"\tpending=1".into(), Some(15)),
+            "checked \"k\"\tpending=1Terminated\n"
+        );
+        assert_eq!(foreground_signal_line(Some(9)).as_deref(), Some("Killed\n"));
+        assert_eq!(
+            foreground_signal_line(Some(11)).as_deref(),
+            Some("Segmentation fault\n")
+        );
+        assert_eq!(
+            foreground_signal_line(Some(6)).as_deref(),
+            Some("Aborted\n")
+        );
+        // nothing for an exit, SIGINT or SIGPIPE
+        for s in [None, Some(2), Some(13)] {
+            assert_eq!(foreground_signal_line(s), None);
+            assert_eq!(with_signal_line("x\n".into(), s), "x\n");
+        }
+        assert_eq!(strsignal(31), "Bad system call");
+        assert_eq!(strsignal(34), "RT34");
+        assert_eq!(strsignal(64), "RT64");
+        assert_eq!(strsignal(65), "Unknown signal");
+        assert_eq!(strsignal(0), "Unknown signal");
+    }
 
     #[test]
     fn the_words_of_the_shell_images() {

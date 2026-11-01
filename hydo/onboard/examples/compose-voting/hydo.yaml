@@ -162,15 +162,25 @@ workload:
   process: wget
 
 shell: |
-  # hand-written: every acknowledged vote is a row (voter, vote) in PostgreSQL's votes table
+  # hand-written: every acknowledged vote is a row (voter, vote) in PostgreSQL's votes table.
+  # The message says what the check saw (Milestone 134): the database did not answer, the votes
+  # table is not there yet (the .NET worker creates it only after its first database connection),
+  # or too few votes are counted. A check that cannot decide exits 2, a missing vote 1.
   votes_counted() {
-    got=$(hydo-oci db psql -U postgres -tAc "select id || ' ' || vote from votes" 2>/dev/null) || { echo "db not answering"; return 2; }
-    n=0
+    got=$(hydo-oci db psql -U postgres -tAc "select id || ' ' || vote from votes" 2>/tmp/votes_counted.err) || {
+      if grep -q 'relation "votes" does not exist' /tmp/votes_counted.err; then
+        echo "no vote counted yet: the votes table does not exist (the worker creates it at its first database connection)"
+      else
+        echo "db not answering: $(head -1 /tmp/votes_counted.err)"
+      fi
+      return 2; }
+    n=0; total=0; missing=""
     for id in $(cat $HYDO_ACKED); do
       i=${id#voter}; v=a; [ $((i % 2)) = 1 ] && v=b
-      echo "$got" | grep -qx "$id $v" || { echo "$id (vote $v) acknowledged but not counted"; return 1; }
-      n=$((n + 1))
+      total=$((total + 1))
+      if echo "$got" | grep -qx "$id $v"; then n=$((n + 1)); else [ -n "$missing" ] || missing="$id (vote $v)"; fi
     done
+    [ -z "$missing" ] || { echo "too few votes counted: $n of $total acknowledged votes are in PostgreSQL; $missing is not"; return 1; }
     echo "all $n acknowledged votes counted"
   }
 

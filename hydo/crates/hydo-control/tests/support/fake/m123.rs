@@ -162,7 +162,10 @@ impl Fake {
             if kind == "cmd" || kind == "end" {
                 self.m123_activity(&format!("cmd{id}"));
             }
-            self.emit(t + 1 + dur, Fake::exit_ev(h, id, status, None));
+            self.emit(
+                t + 1 + dur,
+                Fake::exit_ev(h, id, status, Fake::timeout_sig(status)),
+            );
             return true;
         }
         // a service, its setup, the workload: lines in its log, and activity elsewhere

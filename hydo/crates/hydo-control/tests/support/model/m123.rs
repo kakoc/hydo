@@ -13,7 +13,7 @@
 // the if / else if chains are the awk's, as written there
 #![allow(clippy::if_same_then_else)]
 
-use super::{bad, plain, run_of, s, Halt, Model, BB, H, R};
+use super::{ash_after, bad, plain, run_of, s, Halt, Model, BB, H, R};
 use crate::support::fake::Msg;
 use crate::support::Item;
 use hydo_agent_proto::msg::*;
@@ -1288,7 +1288,7 @@ impl<'a> Model<'a> {
             ))?;
             let t1 = self.clock()?;
             let e = self.env(&[("HYDO_CMD", c.id.clone())]);
-            let rc = self.spawn_wait(
+            let (rc, sig) = self.spawn_wait_sig(
                 &format!("end:{i}"),
                 timeout_of(c.timeout, &c.cmd),
                 e,
@@ -1299,7 +1299,9 @@ impl<'a> Model<'a> {
             let ms = (t2 - t1) * 10;
             self.report(format!("HYDO-CMD end i=e{i} cmd={} rc={rc} ms={ms}", c.id))?;
             let log = self.read_bytes(&format!("{C}/log.e{i}"))?;
-            let text = String::from_utf8_lossy(&log).into_owned();
+            // endc: `... > $C/log.e$1 2>&1`, so compose.sh's ash writes its line after a
+            // signal into the log (the exit's signal, as the agent reported it)
+            let text = String::from_utf8_lossy(&log).into_owned() + ash_after(sig);
             let ls: Vec<&str> = text.split_terminator('\n').collect();
             for l in ls.iter().filter(|l| l.starts_with("HYDO-ASSERT")) {
                 self.report(s(l))?;
@@ -1321,7 +1323,9 @@ impl<'a> Model<'a> {
         {
             let c = cp.checks[i].clone();
             let e = self.env(&[("HYDO_CHECK", c.id.clone())]);
-            let (rc, out) = self.run(timeout_of(c.timeout, &c.cmd), e, Some(3000))?;
+            // check: no redirection of its own; compose.sh's error output is eval_inv's file
+            let (rc, out, sig) = self.run_sig(timeout_of(c.timeout, &c.cmd), e, Some(3000))?;
+            let out = out + ash_after(sig);
             return Ok(Some(match rc {
                 0..=2 => (rc, out),
                 143 => (

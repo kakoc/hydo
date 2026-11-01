@@ -2102,5 +2102,27 @@
   "env": {},
   "setup": "dotenv",
   "raw": false
+ },
+ {
+  "name": "unit-restart-default",
+  "fixture": "hydo/onboard/tests/compose/restart",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-restart-noresolve",
+  "fixture": "hydo/onboard/tests/compose/restart",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
  }
 ]

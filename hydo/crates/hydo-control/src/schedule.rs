@@ -64,6 +64,8 @@ mod fakes;
 mod freeze;
 mod netfault;
 mod netns;
+// restart policies (M134)
+mod restart;
 
 /// What the host knows about the guest at a snapshot, carried into the conversations that resume
 /// from it (the design: host state at a snapshot is the schedule, the seeds and the events so far).
@@ -183,6 +185,11 @@ struct Host {
     marks: BTreeSet<String>,
     /// FREEZE: the id of the armed `freeze` command (the shell's $fc_pid: the helper runs).
     fc_armed: Option<u64>,
+    /// The services a `start_svc` is starting now: one start of a service at a time (a restart
+    /// policy's supervisor against the main sequence, M134).
+    starting: BTreeSet<String>,
+    /// The restart policies' supervisors (schedule/restart.rs).
+    restart: restart::State,
 }
 
 /// One thread of the controller.
@@ -210,6 +217,8 @@ enum Part {
         id: u64,
         dur: String,
     },
+    /// The supervisor of a service with a restart policy (M134).
+    Restart(String),
 }
 
 fn label(p: &Part) -> String {
@@ -221,6 +230,7 @@ fn label(p: &Part) -> String {
         Part::Compose(j) => composer::label(j),
         Part::Live(m) => liveness::label(m),
         Part::FreezeWatch { .. } => "freeze".into(),
+        Part::Restart(s) => restart::label(s),
     }
 }
 
@@ -328,6 +338,8 @@ impl ScheduleController {
             pf: fakes::Pf::default(),
             marks: BTreeSet::new(),
             fc_armed: None,
+            starting: BTreeSet::new(),
+            restart: Default::default(),
         };
         Ok(ScheduleController {
             flow: Flow::new(host, Part::Main),
@@ -624,6 +636,7 @@ fn body(fx: &mut F<'_>, part: &Part) -> Step<()> {
         Part::Compose(j) => composer::job(fx, &ctx, j),
         Part::Live(m) => liveness::live_monitor(fx, &ctx, m),
         Part::FreezeWatch { id, dur } => freeze::watch(fx, *id, dur),
+        Part::Restart(s) => restart::watch(fx, &ctx, s),
     }
 }
 
@@ -739,10 +752,13 @@ fn call(fx: &mut F<'_>, cmd: Command) -> Step<Result<Reply, String>> {
     Ok(fx.reply(id)?.map_err(|e| e.msg))
 }
 
-/// What a `run` gave: its exit status and the output kept.
+/// What a `run` gave: its exit status, the signal that ended it, and the output kept.
 struct Ran {
     status: u32,
     out: String,
+    /// The signal that ended the process (`Done.sig`), for busybox ash's line after it
+    /// ([`busybox::with_signal_line`]) where the shell redirects the command's output.
+    sig: Option<u32>,
 }
 
 /// Run a command to its end (the shell's synchronous command). A refused command counts as
@@ -768,12 +784,14 @@ fn run_in(
         Err(e) => Ok(Ran {
             status: 127,
             out: e.msg,
+            sig: None,
         }),
         Ok(_) => {
             let d = fx.done(id)?;
             Ok(Ran {
                 status: d.status,
                 out: d.out,
+                sig: d.sig,
             })
         }
     }
@@ -802,10 +820,26 @@ fn spawn_wait_in(
     append: bool,
     netns: Option<String>,
 ) -> Step<u32> {
+    Ok(spawn_wait_sig(fx, h, argv, env, out, append, netns)?.0)
+}
+
+/// `spawn_wait_in` with the signal that ended the process (None for an exit or a refusal).
+fn spawn_wait_sig(
+    fx: &mut F<'_>,
+    h: &str,
+    argv: Vec<String>,
+    env: Vec<String>,
+    out: &str,
+    append: bool,
+    netns: Option<String>,
+) -> Step<(u32, Option<u32>)> {
     let id = fx.send(netns::put(spawn_cmd(h, argv, env, out, append), &netns))?;
     match fx.reply(id)? {
-        Err(_) => Ok(127),
-        Ok(_) => Ok(fx.exit(id)?.status),
+        Err(_) => Ok((127, None)),
+        Ok(_) => {
+            let e = fx.exit(id)?;
+            Ok((e.status, e.sig))
+        }
     }
 }
 
@@ -1183,8 +1217,24 @@ fn mount_data(fx: &mut F<'_>, ctx: &Ctx, verdict: &str) -> Step<()> {
 }
 
 /// start_svc: the old log appended to .log.old, setup, the service, its readiness. Ok(false) when
-/// it did not come up.
+/// it did not come up. One start of a service runs at a time (M134: a restart policy's
+/// supervisor and the main sequence may both start one); a plan without a restart policy has only
+/// the main sequence's starts, which never wait here.
 fn start_svc(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<bool> {
+    fx.until(|h, _| !h.starting.contains(s))?;
+    fx.effect(|h, _| {
+        h.starting.insert(s.to_string());
+        Memo::Unit
+    });
+    let up = start_svc_once(fx, ctx, s)?;
+    fx.effect(|h, _| {
+        h.starting.remove(s);
+        Memo::Unit
+    });
+    Ok(up)
+}
+
+fn start_svc_once(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<bool> {
     let l = &ctx.plan.layout;
     let sv = ctx.plan.service(s).expect("a service of the plan");
     let log_file = l.log_of(s);
@@ -1320,6 +1370,8 @@ fn restart_dead(fx: &mut F<'_>, ctx: &Ctx, verdict: &str) -> Step<()> {
         })
     })?;
     for s in &ctx.plan.services {
+        // a restart policy's restart in progress ends first (M134; never waits without a policy)
+        fx.until(|h, _| !h.starting.contains(&s.name))?;
         let alive = fx.effect_bool(|h, f| running(h, f, &s.name));
         if alive {
             continue;
@@ -1371,7 +1423,15 @@ fn eval_inv(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<(u32, String)> {
     // SEAM(Composer): compose.sh verdict | end IDX | check IDX
     let r = match composer::eval(fx, ctx, &inv.cmd)? {
         Some(r) => r,
-        None => run(fx, run_argv(ctx, &inv.cmd), e, Some(CHUNK as u32))?,
+        None => {
+            // busybox ash's line after the check, when a signal ended it, goes into the same file
+            // (the shell redirected its own error output there before it forked: busybox.rs)
+            let r = run(fx, run_argv(ctx, &inv.cmd), e, Some(CHUNK as u32))?;
+            Ran {
+                out: busybox::with_signal_line(r.out, r.sig),
+                ..r
+            }
+        }
     };
     let key = inv.key.clone();
     let out = r.out.clone();
@@ -1734,6 +1794,11 @@ fn kill_timer(fx: &mut F<'_>, ctx: &Ctx, svc: &str, off: u64) -> Step<()> {
         None,
     )?;
     let mid = in_flight(fx, ctx, e)?;
+    if ctx.plan.service(svc).is_some_and(|s| s.restart.restarts()) {
+        // a restart policy's start in progress ends first (M134); without a policy the timer
+        // may still kill the main sequence's K= restart, as the shell's timer does
+        fx.until(|h, _| !h.starting.contains(svc))?;
+    }
     svc_sig(fx, svc, Sig::Kill)?;
     log(fx, format!("KILLED {svc} (timer, mid_request={mid})"));
     xassert(fx, KILL_TIMER_DECL.0, KILL_TIMER_DECL.1, KILL_TIMER_DECL.2);
@@ -1761,6 +1826,7 @@ fn main_solo(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     start_all(fx, ctx, "HYDO-ORACLE: ERROR service start", false)?;
     provision(fx, ctx)?;
     start_periodic(fx, ctx)?;
+    restart::start(fx, ctx)?; // restart policies (M134)
     step_range(fx, ctx, 0, ctx.plan.steps)?;
     retry_workload(fx, ctx)?;
     stop_periodic(fx);
@@ -1815,6 +1881,7 @@ fn main_recovery(fx: &mut F<'_>, ctx: &Ctx, acked: &[String], failed: &[String])
         "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable)",
         true,
     )?;
+    restart::start(fx, ctx)?; // restart policies (M134): once every recovering service is up
     finish(fx, ctx)
 }
 
@@ -1890,6 +1957,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         post(fx, write_cmd(&f, "", false))?;
     }
     start_periodic(fx, ctx)?;
+    restart::start(fx, ctx)?; // restart policies (M134): from the workload's start
     let (mut down, mut cut, mut paused) = (false, false, false);
     let (mut ptimer, mut xtimer): (Option<usize>, Option<usize>) = (None, None);
     let mut prev: Option<i64> = None;
@@ -1924,6 +1992,8 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             );
         }
         if p == kat {
+            // a restart policy's start in progress ends first (M134; never waits without a policy)
+            fx.until(|h, _| !h.starting.contains(&ksvc))?;
             svc_sig(fx, &ksvc, Sig::Kill)?;
             down = true;
             log(fx, format!("KILLED {ksvc} before step {p}"));
@@ -1967,6 +2037,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         prev = Some(p);
     }
     if cut {
+        restart::stop(fx); // no service is started after the cut (M134)
         if let Some(t) = ptimer {
             fx.cancel(t); // no SIGCONT may follow the freeze
         }

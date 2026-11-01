@@ -32,8 +32,10 @@
 
 use super::text::{centis, read_bytes, records, text};
 use super::{
-    bb, die_oracle, env, jesc, log, post, run, run_argv, signal_cmd, spawn_wait, Ctx, Part, Ran, F,
+    bb, die_oracle, env, jesc, log, post, run, run_argv, signal_cmd, spawn_wait, spawn_wait_sig,
+    Ctx, Part, Ran, F,
 };
+use crate::busybox;
 use crate::flow::{Memo, Step, Stop};
 use crate::seams::Unsupported;
 use hydo_agent_proto::msg::{Command, Mkdir, Sig, Spawn};
@@ -1220,9 +1222,12 @@ fn run1(fx: &mut F<'_>, ctx: &Ctx, entry: i64, round: i64, idx: usize, seed: i64
         e,
         &log_file,
     ))?;
-    let rc = match fx.reply(id)? {
-        Err(_) => 127,
-        Ok(_) => fx.exit(id)?.status,
+    let (rc, sig) = match fx.reply(id)? {
+        Err(_) => (127, None),
+        Ok(_) => {
+            let x = fx.exit(id)?;
+            (x.status, x.sig)
+        }
     };
     let t2 = centis(fx)?;
     let st = match rc {
@@ -1231,7 +1236,13 @@ fn run1(fx: &mut F<'_>, ctx: &Ctx, entry: i64, round: i64, idx: usize, seed: i64
         143 => "timeout",
         _ => "failed",
     };
-    let out = read_bytes(fx, &log_file)?;
+    // run1's `> $C/log.$1 2>&1`: compose.sh's shell writes its line after a signal there
+    let mut out = read_bytes(fx, &log_file)?;
+    out.extend(
+        busybox::foreground_signal_line(sig)
+            .unwrap_or_default()
+            .bytes(),
+    );
     guard(fx, Some(entry))?;
     let (asserts, last) = asserts_and_last(&out);
     for a in asserts {
@@ -1316,6 +1327,7 @@ pub(super) fn eval(fx: &mut F<'_>, ctx: &Ctx, cmd: &str) -> Step<Option<Ran>> {
         return Ok(Some(Ran {
             status: if t.starts_with('1') { 1 } else { 0 },
             out: t[1..].to_string(),
+            sig: None,
         }));
     }
     let num = |s: &str| s.parse::<usize>().ok();
@@ -1352,6 +1364,7 @@ fn end_cmd(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<Ran> {
             return Ok(Ran {
                 status: 0,
                 out: format!("{why}\n"),
+                sig: None,
             });
         }
     }
@@ -1362,18 +1375,25 @@ fn end_cmd(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<Ran> {
     let t1 = centis(fx)?;
     let e = env(fx, ctx, &[("HYDO_CMD", c.id.clone())]);
     let log_file = format!("{}/log.e{i}", cdir(ctx));
-    let st = spawn_wait(
+    let (st, sig) = spawn_wait_sig(
         fx,
         &format!("end:{i}"),
         timeout_sh(ctx, c.timeout, &c.cmd),
         e,
         &log_file,
         false,
+        None,
     )?;
     let t2 = centis(fx)?;
     let ms = (t2 - t1) * 10;
     fx.report(format!("HYDO-CMD end i=e{i} cmd={} rc={st} ms={ms}", c.id));
-    let out = read_bytes(fx, &log_file)?;
+    // endc's `> $C/log.e$1 2>&1`: compose.sh's shell writes its line after a signal there
+    let mut out = read_bytes(fx, &log_file)?;
+    out.extend(
+        busybox::foreground_signal_line(sig)
+            .unwrap_or_default()
+            .bytes(),
+    );
     let (asserts, last) = asserts_and_last(&out);
     for a in asserts {
         fx.report(a);
@@ -1382,11 +1402,13 @@ fn end_cmd(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<Ran> {
         Ran {
             status: 0,
             out: format!("{} ok ({ms} ms)\n", c.id),
+            sig: None,
         }
     } else {
         Ran {
             status: 1,
             out: format!("{} exited rc={st}: {last}\n", c.id),
+            sig: None,
         }
     })
 }
@@ -1401,15 +1423,25 @@ fn check_cmd(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<Ran> {
         e,
         Some(super::CHUNK as u32),
     )?;
+    // check's command has no redirection of its own: compose.sh's shell writes its line after a
+    // signal to its error output, which eval_inv's `> $H/inv.$i.out 2>&1` made that file too,
+    // between the check's output and the timeout line
+    let out = busybox::with_signal_line(r.out, r.sig);
     Ok(match r.status {
-        0..=2 => r,
+        0..=2 => Ran {
+            out,
+            sig: None,
+            ..r
+        },
         143 => Ran {
             status: 2,
-            out: format!("{}check {} timed out after {}s\n", r.out, c.id, c.timeout),
+            out: format!("{out}check {} timed out after {}s\n", c.id, c.timeout),
+            sig: None,
         },
         _ => Ran {
             status: 1,
-            out: r.out,
+            out,
+            sig: None,
         },
     })
 }

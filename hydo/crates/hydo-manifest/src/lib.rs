@@ -28,6 +28,7 @@ pub mod model;
 mod oci;
 pub mod py;
 mod pyre;
+pub mod restart;
 pub mod rx;
 mod types;
 mod validate;
@@ -38,6 +39,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 pub use composer::{regression_status, Status};
+pub use restart::Restart;
 pub use types::{
     CheckCmd, Command, Expect, Guest, HistoryCheck, Invariant, InvariantType, Knob, Manifest,
     Regression, Route, Run, Service, TestPlan, Workload, World,

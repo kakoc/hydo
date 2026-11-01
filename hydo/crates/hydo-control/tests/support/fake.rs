@@ -85,6 +85,60 @@ struct World {
     fw: world::FakeWorld,
     /// qdiscs, the armed freeze (`fake/net.rs`)
     net: net::NetWorld,
+    /// Scripted exits waiting for their trigger (M134: `HYDO_FAKE_EXIT=` in a service command).
+    deferred: Vec<Deferred>,
+    /// The virtual time of the engine's DiskFaultsOff (the workload's end, "go").
+    go_t: Option<u64>,
+}
+
+/// When a scripted exit happens (M134, the restart policies' tests).
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Trigger {
+    /// units after the process's spawn
+    Spawn(u64),
+    /// units after the engine's DiskFaultsOff ("go": after the heal's restart passes)
+    Go(u64),
+    /// units after the first workload call starts (during the workload)
+    Workload(u64),
+    /// units after the spawn, in a recovery boot only
+    Recovery(u64),
+}
+
+/// A scripted exit of a service's process, waiting for its trigger.
+#[derive(Clone, Debug)]
+struct Deferred {
+    h: String,
+    spawn: u64,
+    trigger: Trigger,
+    status: u32,
+}
+
+/// `HYDO_FAKE_EXIT=<start>/<trigger>/<status>[,...]` in a service's command (no example manifest
+/// has it): the exits of its `start`-th process, `trigger` one of `+N` (N units after the spawn),
+/// `go+N`, `wl+N` and `rec+N`. With the word present, a start it does not list does not crash
+/// on its own either. None: no such word.
+fn scripted_exit(argv: &[String], start: u64) -> Option<Option<(Trigger, u32)>> {
+    let text = argv.join(" ");
+    let spec = text.split("HYDO_FAKE_EXIT=").nth(1)?;
+    let spec = spec.split_whitespace().next().unwrap_or("");
+    for e in spec.split(',') {
+        let f: Vec<&str> = e.split('/').collect();
+        if f.len() != 3 || f[0].parse::<u64>().ok() != Some(start) {
+            continue;
+        }
+        let n = |p: &str| f[1].strip_prefix(p).and_then(|x| x.parse::<u64>().ok());
+        let trig = if let Some(x) = n("go+") {
+            Trigger::Go(x)
+        } else if let Some(x) = n("wl+") {
+            Trigger::Workload(x)
+        } else if let Some(x) = n("rec+") {
+            Trigger::Recovery(x)
+        } else {
+            Trigger::Spawn(n("+").expect("a trigger: +N, go+N, wl+N or rec+N"))
+        };
+        return Some(Some((trig, f[2].parse().expect("an exit status"))));
+    }
+    Some(None)
 }
 
 // tc, ip, iptables, qlen and the packet trigger (M124)
@@ -253,6 +307,13 @@ impl Fake {
             sig,
             timed_out: None,
         }))
+    }
+
+    /// The signal of a process that ended with `status`: 143 is busybox `timeout`'s SIGTERM (the
+    /// command runs under it, `timeout` execs into it and its watcher sends SIGTERM), as the
+    /// real agent reports it; every other status of the fake is an exit.
+    pub fn timeout_sig(status: u32) -> Option<u32> {
+        (status == 143).then_some(15)
     }
 
     fn env_of(env: &Option<Vec<String>>, k: &str) -> Option<String> {
@@ -464,6 +525,11 @@ impl Fake {
                             .is_some_and(|p| p.running && !p.dying)
                     });
                     (3, if busy { 0 } else { 1 }, String::new())
+                } else if let Some(x) = (a1 == "timeout")
+                    .then(|| self.needs(&r.argv.get(6).cloned().unwrap_or_default()))
+                    .flatten()
+                {
+                    x
                 } else if a1 == "timeout" {
                     self.live_attempt(&r.argv)
                 } else if a1 == "ifconfig" || a1 == "ip" || script.contains(".log.old") {
@@ -471,6 +537,8 @@ impl Fake {
                 } else if Self::env_of(&r.env, "HYDO_VALUE").is_some() {
                     let bad = self.h(&["knob", &script]).is_multiple_of(37);
                     (4, if bad { 1 } else { 0 }, String::new())
+                } else if let Some(x) = self.needs(&script) {
+                    x
                 } else {
                     // an invariant: its k-th evaluation
                     let k = self.world.evals.entry(script.clone()).or_default();
@@ -509,7 +577,7 @@ impl Fake {
                     Msg::Event(Event::Done(Done {
                         id,
                         status,
-                        sig: None,
+                        sig: Self::timeout_sig(status),
                         timed_out: None,
                         out: kept,
                         out_len: out.len() as u64,
@@ -592,10 +660,42 @@ impl Fake {
                     };
                     self.workload(f, t2, h == "retry");
                     let dur = 10 + 30 * t2.saturating_sub(f);
-                    self.emit(t + dur, Self::exit_ev(&h, id, status, None));
+                    self.emit(
+                        t + dur,
+                        Self::exit_ev(&h, id, status, Self::timeout_sig(status)),
+                    );
+                    if h == "workload" {
+                        // scripted exits during the workload (M134)
+                        for d in std::mem::take(&mut self.world.deferred) {
+                            match d.trigger {
+                                Trigger::Workload(n) => {
+                                    self.emit(t + n, Self::exit_ev(&d.h, d.spawn, d.status, None))
+                                }
+                                _ => self.world.deferred.push(d),
+                            }
+                        }
+                    }
                 } else if h.starts_with("setup:") || h == "provision" {
                     let bad = self.h(&[&h, "fails"]).is_multiple_of(41);
                     self.emit(t + 6, Self::exit_ev(&h, id, if bad { 1 } else { 0 }, None));
+                } else if let Some(x) = scripted_exit(&s.argv, starts) {
+                    // a scripted exit (M134), or none for this start
+                    let recovery = self.salt.ends_with(" recovery");
+                    match x {
+                        Some((Trigger::Spawn(n), st)) => {
+                            self.emit(t + n, Self::exit_ev(&h, id, st, None))
+                        }
+                        Some((Trigger::Recovery(n), st)) if recovery => {
+                            self.emit(t + n, Self::exit_ev(&h, id, st, None))
+                        }
+                        Some((Trigger::Recovery(_), _)) | None => {}
+                        Some((trigger, status)) => self.world.deferred.push(Deferred {
+                            h: h.clone(),
+                            spawn: id,
+                            trigger,
+                            status,
+                        }),
+                    }
                 } else if self
                     .h(&[&h, "crash", &starts.to_string()])
                     .is_multiple_of(23)
@@ -726,6 +826,34 @@ impl Fake {
         }
     }
 
+    /// `HYDO_FAKE_NEEDS=<h>[@<start>]` in a check (M134): it holds once the engine's "go" is 60
+    /// units past and the process under `h` runs (its `start`-th process or a later one): a
+    /// worker that must be up after the faults to count.
+    fn needs(&self, script: &str) -> Option<(u64, u32, String)> {
+        let w = script
+            .split("HYDO_FAKE_NEEDS=")
+            .nth(1)?
+            .split_whitespace()
+            .next()?;
+        let (h, min) = match w.split_once('@') {
+            Some((h, k)) => (h, k.parse::<u64>().unwrap_or(1)),
+            None => (w, 1),
+        };
+        let up = self
+            .world
+            .procs
+            .get(h)
+            .is_some_and(|p| p.running && !p.dying && p.starts >= min);
+        let late = self.world.go_t.is_some_and(|g| self.t >= g + 60);
+        Some(if up && late {
+            (4, 0, format!("HYDO-ORACLE: OK {h} counted everything\n"))
+        } else if up {
+            (4, 1, format!("{h} has not counted yet\n"))
+        } else {
+            (4, 1, format!("{h} is down: nothing counted\n"))
+        })
+    }
+
     pub fn state(&self) -> VmState {
         VmState {
             t: self.t,
@@ -801,6 +929,26 @@ impl Link for Fake {
 
     fn engine(&mut self, a: &EngineAction) -> Result<(), LinkError> {
         self.engine_actions.push((self.n, a.clone()));
+        if *a == EngineAction::DiskFaultsOff {
+            // "go": the scripted exits that wait for it (M134), of processes still running
+            self.world.go_t = Some(self.t);
+            let t = self.t;
+            for d in std::mem::take(&mut self.world.deferred) {
+                match d.trigger {
+                    Trigger::Go(n) => {
+                        let live = self
+                            .world
+                            .procs
+                            .get(&d.h)
+                            .is_some_and(|p| p.spawn == d.spawn && p.running && !p.dying);
+                        if live {
+                            self.emit(t + n, Self::exit_ev(&d.h, d.spawn, d.status, None));
+                        }
+                    }
+                    _ => self.world.deferred.push(d),
+                }
+            }
+        }
         Ok(())
     }
 
