@@ -1,11 +1,15 @@
-//! `--control agent` (Milestone 121; docs/design/guest-control.md, "Migration" step 1): an image
-//! whose first process is the guest agent `hydo-agent` (hydo/crates/hydo-agent) instead of the
-//! shell init. Such an image carries `/etc/hydo/control` = `agent <protocol version>`, which tells
-//! the host to boot it under lock-step control from its first instruction; it gets no `init.rs`
-//! splicing and no `/sbin/init` shell file. Everything else (the project's files, busybox, the
-//! compiled manifest, the composer's files, the data disk) is staged as for a shell-init image,
-//! so the host controller can read the manifest out of the image and the services find their
-//! files. An image without `/etc/hydo/control` is a shell-init image (the default, unchanged).
+//! The image's first process: the guest agent `hydo-agent` (hydo/crates/hydo-agent), under
+//! lock-step control by the host (Milestone 121; the only kind of image since Milestone 136, step
+//! C3 of docs/design/guest-control.md). Every image carries `/etc/hydo/control` = `agent
+//! <protocol version>`, which tells the host to boot it under lock-step control from its first
+//! instruction. Everything else (the project's files, busybox, the compiled manifest, the
+//! composer's files, the data disk) is staged so that the host controller can read the manifest
+//! out of the image and the services find their files.
+//!
+//! Images built before M136 without `/etc/hydo/control` are shell-init images: the engines still
+//! run them, hydo-build no longer makes them (the shell init `hydo-init.sh` and its spliced
+//! extensions were deleted in M136; `git show d9202e7:hydo/onboard/hydo-init.sh` and
+//! `git show d9202e7:hydo/crates/hydo-build/src/init.rs` restore the last versions).
 //!
 //! The agent's bytes are inside the image, so they are pinned (docs/BUILD-PINS.md, "hydo-agent"):
 //! the staged binary must have the sha256 below. `HYDO_AGENT_UNPINNED=1` stages another build
@@ -22,28 +26,22 @@ pub const AGENT_SHA256_X86_64: &str =
 pub const AGENT_SHA256_ARM64: &str =
     "340a1eec749909a65f8fb8990629c36108b9bc8d91b997e6a000d601c21013d9";
 
-/// The image's first process.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub enum Control {
-    /// The shell init (`hydo-init.sh` with its spliced extensions): every image before M121.
-    #[default]
-    Shell,
-    /// hydo-agent, under lock-step control by the host.
-    Agent,
-}
-
-impl Control {
-    /// `--control shell|agent`.
-    pub fn parse(s: &str) -> Option<Control> {
-        match s {
-            "shell" => Some(Control::Shell),
-            "agent" => Some(Control::Agent),
-            _ => None,
-        }
+/// `--control <kind>`: `agent` is the only kind of image since M136 (the flag stays for the
+/// scripts that pass it); `shell` is refused with a message that says why.
+pub fn parse_control(s: &str) -> Result<(), String> {
+    match s {
+        "agent" => Ok(()),
+        "shell" => Err(
+            "hydo-build: --control shell was removed in Milestone 136: every image's first process is hydo-agent, driven by the host (shell-init images built before keep running)"
+                .into(),
+        ),
+        _ => Err(
+            "hydo-build: --control takes agent (the only kind of image since Milestone 136)".into(),
+        ),
     }
 }
 
-/// The text of `/etc/hydo/control` in an agent image.
+/// The text of `/etc/hydo/control`.
 pub fn control_text() -> String {
     format!("agent {}\n", hydo_agent_proto::PROTO)
 }
@@ -86,7 +84,7 @@ pub fn binary(bdir: &Path, arm64: bool, io: &mut Io) -> Result<(String, String),
             );
         } else {
             return Err(Fail::Exit(format!(
-                "hydo-build: {env}={p} has sha256 {sha}; an agent image stages the pinned hydo-agent {pin} \
+                "hydo-build: {env}={p} has sha256 {sha}; an image stages the pinned hydo-agent {pin} \
                  (docs/BUILD-PINS.md \"hydo-agent\"; hydo/crates/hydo-agent/build.sh builds it; \
                  HYDO_AGENT_UNPINNED=1 stages another build)"
             )));
@@ -123,10 +121,11 @@ mod tests {
 
     #[test]
     fn control_values() {
-        assert_eq!(Control::parse("agent"), Some(Control::Agent));
-        assert_eq!(Control::parse("shell"), Some(Control::Shell));
-        assert_eq!(Control::parse("Agent"), None);
-        assert_eq!(Control::default(), Control::Shell);
+        assert_eq!(parse_control("agent"), Ok(()));
+        assert!(parse_control("shell")
+            .unwrap_err()
+            .contains("removed in Milestone 136"));
+        assert!(parse_control("Agent").is_err());
         assert_eq!(control_text(), "agent 1\n");
     }
 }

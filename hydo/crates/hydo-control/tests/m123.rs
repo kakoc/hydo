@@ -12,23 +12,20 @@
 //!    Each run is typed again from its transcript (the replay's transcript must be the run's),
 //!    recorded as a golden (`tests/golden/m123-quick.txt`), and counted: every path of the
 //!    three extensions must have been taken at least once.
-//! 2. `w_forms_as_compose_sh`: `setw` and `plan` of the real hydo-composer.sh (run by /bin/sh with
-//!    its dry-run variables and this machine's awk) against the controller's parse_w/wplan, on W
-//!    values the schedule parser would refuse too (unknown fields, a seed that is not hex, keys).
-//! 3. `m98_corpora_as_the_awk`: the M98 corpora (3,000 seed-form W values over 80 command sets,
-//!    the resolved compositions replayed on a changed and shuffled list, a removed command
-//!    refused): the controller's compositions are those `compose.sh plan` prints.
-//! 4. `errlog_scan_as_the_awk`: EL_SCAN and EL_SUM (the awk text of hydo-init-errlog.sh) against
-//!    the controller's port on generated logs.
-//! 5. `plans_as_hydo_build`: the controller's plans hold what hydo-build writes into the image
+//! 2. `plans_as_hydo_build`: the controller's plans hold what hydo-build writes into the image
 //!    (manifest.sh's HYDO_CHECK_* and HYDO_ERR_* lines, compose.list, compose.checks).
-//! 6. `deliberate_mistakes_are_caught`: mistakes put into recorded conversations are caught by
+//! 3. `deliberate_mistakes_are_caught`: mistakes put into recorded conversations are caught by
 //!    the model.
+//!
+//! Until M136 three more tests ran the shell files themselves (`w_forms_as_compose_sh`: setw and
+//! plan of the real hydo-composer.sh; `m98_corpora_as_the_awk`: the M98 corpora against
+//! `compose.sh plan`; `errlog_scan_as_the_awk`: EL_SCAN and EL_SUM of hydo-init-errlog.sh against
+//! the controller's port). The shell init and the guest composer were deleted at the switch to
+//! agent images, so those tests went with them (`git show d9202e7:hydo/crates/hydo-control/tests/m123.rs`);
+//! the shell model stays as the frozen description of what the shell images did.
 
 mod support;
 
-use hydo_control::schedule::composer::{self, ComposePlan};
-use hydo_control::schedule::errlog;
 use hydo_control::{Ending, Plan, Transcript};
 use hydo_explore::gen::{Backend, Ex};
 use hydo_explore::space::{grpc_targets, Space};
@@ -36,7 +33,6 @@ use hydo_schedule::Schedule;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::process::Command as Proc;
 use support::model::{check, Conv};
 use support::{boot, data_of, run_schedule, top, Booted, Item};
 
@@ -469,15 +465,7 @@ fn features_do_what_the_shell_extensions_do() {
         .filter(|n| !seen_paths.contains_key(n))
         .collect();
     assert!(missing.is_empty(), "paths no run took: {missing:?}");
-    let inputs: Vec<String> = [
-        "hydo/onboard/hydo-init-history.sh",
-        "hydo/onboard/hydo-init-errlog.sh",
-        "hydo/onboard/hydo-composer.sh",
-        HIST,
-    ]
-    .iter()
-    .map(|x| x.to_string())
-    .collect();
+    let inputs: Vec<String> = [HIST].iter().map(|x| x.to_string()).collect();
     support::check_golden(
         if seeds == 10 { "m123-quick.txt" } else { "m123-full.txt" },
         &[
@@ -489,7 +477,7 @@ fn features_do_what_the_shell_extensions_do() {
     );
 }
 
-// ------------------------------------------------------------------ compose.sh itself
+// ------------------------------------------------------------------ scratch roots
 
 fn scratch(tag: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("hydo-control-m123-{}-{tag}", std::process::id()));
@@ -497,551 +485,6 @@ fn scratch(tag: &str) -> PathBuf {
     std::fs::create_dir_all(&d).unwrap();
     d
 }
-
-/// A guest root for compose.sh's dry run: compose.sh, compose.list, compose.saved/, manifest.sh,
-/// and `$BB` as a wrapper that runs its arguments (this machine's cat and awk).
-struct Dry {
-    dir: PathBuf,
-}
-
-impl Dry {
-    fn new(tag: &str, cp: &ComposePlan, steps: i64) -> Dry {
-        let d = scratch(tag);
-        let etc = d.join("etc");
-        std::fs::create_dir_all(etc.join("compose.saved")).unwrap();
-        std::fs::create_dir_all(d.join("tmp")).unwrap();
-        let onb = top().join("hydo/onboard");
-        std::fs::copy(onb.join("hydo-composer.sh"), etc.join("compose.sh")).unwrap();
-        let mut list = String::new();
-        for (i, c) in cp.commands.iter().enumerate() {
-            list.push_str(&format!(
-                "{i} {} {} {} {}\n",
-                c.kind, c.timeout, c.id, c.cmd
-            ));
-        }
-        std::fs::write(etc.join("compose.list"), list).unwrap();
-        for (k, c) in &cp.saved {
-            std::fs::write(etc.join("compose.saved").join(k), format!("{c}\n")).unwrap();
-        }
-        let ms = format!(
-            "HYDO_STEPS={steps}\nHYDO_COMPOSE=1\nHYDO_COMPOSE_PARALLEL={}\nHYDO_COMPOSE_PER_ROUND={}\nHYDO_COMPOSE_ROUND_MS={}\nHYDO_COMPOSE_COMMAND_TIMEOUT={}\nHYDO_COMPOSE_DRAIN_TIMEOUT={}\nHYDO_COMPOSE_MAX_COMMANDS={}\nHYDO_COMPOSE_BUDGET_MS={}\n",
-            cp.parallel, cp.per_round, cp.round_ms, cp.command_timeout, cp.drain_timeout, cp.max_commands, cp.budget_ms
-        );
-        std::fs::write(etc.join("manifest.sh"), ms).unwrap();
-        let bb = d.join("bb");
-        std::fs::write(&bb, "#!/bin/sh\nexec \"$@\"\n").unwrap();
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&bb, std::fs::Permissions::from_mode(0o755)).unwrap();
-        Dry { dir: d }
-    }
-
-    /// `compose.sh <args>`: (exit status, stdout, the console lines).
-    fn run(&self, args: &[&str]) -> (i32, String, String) {
-        let con = self.dir.join("console");
-        let _ = std::fs::write(&con, "");
-        let out = Proc::new("/bin/sh")
-            .arg(self.dir.join("etc/compose.sh"))
-            .args(args)
-            .env("BB", self.dir.join("bb"))
-            .env("HYDO_ETC", self.dir.join("etc"))
-            .env("HYDO_TMP", self.dir.join("tmp"))
-            .env("HYDO_CONSOLE", &con)
-            .output()
-            .expect("/bin/sh");
-        (
-            out.status.code().unwrap_or(-1),
-            String::from_utf8_lossy(&out.stdout).into_owned(),
-            std::fs::read_to_string(&con).unwrap_or_default(),
-        )
-    }
-}
-
-impl Drop for Dry {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
-    }
-}
-
-/// The controller's setw against compose.sh's.
-fn same_setw(dry: &Dry, cp: &ComposePlan, steps: i64, w: &str) -> Result<(), String> {
-    let (st, out, con) = dry.run(&["setw", w]);
-    let (lines, r) = composer::wplan(cp, steps, w);
-    let mut want_con = lines.clone();
-    match &r {
-        Err(composer::WFail::Werr(e)) => want_con.push(format!("HYDO-COMPOSE error: {e}")),
-        Err(composer::WFail::Crash) | Ok(_) => {}
-    }
-    let con_lines: Vec<String> = con.lines().map(str::to_string).collect();
-    if con_lines != want_con {
-        return Err(format!(
-            "W={w}: console\n  compose.sh: {con_lines:?}\n  controller: {want_con:?}"
-        ));
-    }
-    match (&r, st) {
-        (Ok(_), 0) => {}
-        (Err(composer::WFail::Werr(e)), 1) if out.trim_end_matches('\n') == e => {}
-        (Err(composer::WFail::Crash), s) if s != 0 => {}
-        _ => {
-            return Err(format!(
-                "W={w}: setw status {st} stdout {out:?}, the controller {r:?}"
-            ))
-        }
-    }
-    if let Ok((_, es)) = &r {
-        let (st, out, _) = dry.run(&["plan"]);
-        let want: Vec<String> = es.iter().map(|e| e.line()).collect();
-        let got: Vec<String> = out.lines().map(str::to_string).collect();
-        if st != 0 || got != want {
-            return Err(format!(
-                "W={w}: plan\n  compose.sh: {got:?}\n  controller: {want:?}"
-            ));
-        }
-    }
-    Ok(())
-}
-
-fn cmd(kind: &str, id: &str) -> composer::Cmd {
-    composer::Cmd {
-        kind: kind.into(),
-        timeout: 60,
-        id: id.into(),
-        cmd: "exec /bin/true".into(),
-    }
-}
-
-fn cplan(cmds: Vec<composer::Cmd>) -> ComposePlan {
-    ComposePlan {
-        parallel: 4,
-        per_round: 2,
-        round_ms: 200,
-        command_timeout: 60,
-        drain_timeout: 60,
-        max_commands: 0,
-        budget_ms: 0,
-        commands: cmds,
-        checks: Vec::new(),
-        saved: BTreeMap::new(),
-        has_first: false,
-        own_provision: None,
-    }
-}
-
-#[test]
-fn w_forms_as_compose_sh() {
-    let mut cp = cplan(vec![
-        cmd("anytime", "anytime_read"),
-        cmd("eventually", "eventually_serves"),
-        cmd("first", "first_accounts"),
-        cmd("parallel_driver", "parallel_driver_set"),
-        cmd("parallel_driver", "parallel_driver_transfer"),
-        cmd("serial_driver", "serial_driver_rewrite"),
-    ]);
-    let key = hydo_composer::key_of(SAVED);
-    cp.saved
-        .insert(key.clone(), ":p2,r100,canytime_read,0.0.0.5,1.3.0.6".into());
-    let dry = Dry::new("w", &cp, 20);
-    let ws = [
-        "".to_string(),
-        "-".into(),
-        "0000002a".into(),
-        "0000002a,p4,q2,r100".into(),
-        "0000002a,p1,q1,r50,n3".into(),
-        "0000002a,p4,q2,r100,n0".into(),
-        "0000002a,p4,q3,r100,t500".into(),
-        "0000002a,p4,q2,r100,x0.2-5.9,o3".into(),
-        "0000002a,p4,q2,r100,oparallel_driver_set+anytime_read".into(),
-        "0000002a,p4,q2,r100,zz".into(),
-        "0000002a,,p2".into(),
-        "0000002a,p4,q2,r100,".into(),
-        "ffffffffff,p2".into(),
-        "zz,p2".into(),
-        "0000002a,q0".into(),
-        format!("@{key}"),
-        "@0123456789ab".into(),
-        "@XYZ".into(),
-        "@".into(),
-        ":p2,r100,canytime_read+parallel_driver_set,0.0.0.1,1.0.1.2,2.3.1.3".into(),
-        ":p2,r100,t300,cparallel_driver_set,0.19.0.1".into(),
-        ":p2,r100,cparallel_driver_set,0.20.0.1".into(),
-        ":p2,r100,cparallel_driver_set,0.0.1.1".into(),
-        ":p2,r100,cparallel_driver_nosuch,0.0.0.1".into(),
-        ":p2,r100,cfirst_accounts,0.0.0.1".into(),
-        ":p2,r100,cparallel_driver_set".into(),
-        ":p2,r100,c,0.0.0.1".into(),
-        ":p2,r100,cparallel_driver_set,bogus".into(),
-        ":p2,r100,cparallel_driver_set,canytime_read,0.0.0.1".into(),
-        ":pX,r100,cparallel_driver_set,0.0.0.1".into(),
-        ":p2,r100,cparallel_driver_set,0.0.0.1,".into(),
-    ];
-    let mut n = 0;
-    for w in &ws {
-        same_setw(&dry, &cp, 20, w).unwrap_or_else(|e| panic!("{e}"));
-        n += 1;
-    }
-    eprintln!("w forms: {n} W values, compose.sh setw/plan == the controller");
-}
-
-// ------------------------------------------------------------------ the M98 corpora
-
-struct Rng(u64);
-
-impl Rng {
-    fn next(&mut self) -> u64 {
-        self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-        z ^ (z >> 31)
-    }
-    fn below(&mut self, n: usize) -> usize {
-        (self.next() % n as u64) as usize
-    }
-    fn choice<T: Copy>(&mut self, v: &[T]) -> T {
-        v[self.below(v.len())]
-    }
-}
-
-/// hydo-composer's tests/awk.rs command sets (80 of them).
-fn cmd_sets() -> Vec<Vec<(String, String)>> {
-    let k = |kind: &str, n: usize| -> Vec<(String, String)> {
-        (0..n)
-            .map(|i| (kind.to_string(), format!("{kind}_{i}")))
-            .collect()
-    };
-    let mut sets = Vec::new();
-    for npar in [0, 1, 3] {
-        for nser in [0, 1, 2] {
-            for nsg in [0, 1, 2] {
-                for nany in [0, 1, 2] {
-                    if npar + nser + nsg + nany == 0 {
-                        continue;
-                    }
-                    let mut cs = [
-                        k("parallel_driver", npar),
-                        k("serial_driver", nser),
-                        k("singleton_driver", nsg),
-                        k("anytime", nany),
-                        k("first", 1),
-                        k("eventually", 1),
-                    ]
-                    .concat();
-                    cs.sort_by(|a, b| a.1.cmp(&b.1));
-                    sets.push(cs);
-                }
-            }
-        }
-    }
-    sets
-}
-
-fn meta_of(cmds: &[(String, String)], steps: i64) -> Value {
-    json!({"params": {"parallel": 4, "per_round": 2, "round_ms": 200, "command_timeout": 60,
-                      "drain_timeout": 60, "check_every": 2, "check_within": 30,
-                      "max_commands": 0, "budget_ms": 0},
-           "commands": cmds.iter().map(|(k, id)| json!({"kind": k, "id": id})).collect::<Vec<_>>(),
-           "steps": steps})
-}
-
-fn cplan_of(cmds: &[(String, String)]) -> ComposePlan {
-    cplan(cmds.iter().map(|(k, id)| cmd(k, id)).collect())
-}
-
-/// The corpora of hydo-composer's awk.rs (the same generator and seed, so the same W values):
-/// the controller's composition against `compose.sh plan` after `setw`.
-#[test]
-fn m98_corpora_as_the_awk() {
-    let sets = cmd_sets();
-    assert_eq!(sets.len(), 80);
-    let mut rnd = Rng(7);
-    let n_values = std::env::var("HYDO_AWK_N")
-        .ok()
-        .and_then(|x| x.parse().ok())
-        .unwrap_or(3000);
-    let mut checked = 0;
-    let mut drys: BTreeMap<(usize, i64), Dry> = BTreeMap::new();
-    for n in 0..n_values {
-        let si = n % sets.len();
-        let cmds = &sets[si];
-        let steps = rnd.choice(&[1i64, 4, 20, 57]);
-        let m = meta_of(cmds, steps);
-        let (ids, kinds) = hydo_composer::ids_kinds(&m);
-        let seed = if n % 5 != 0 {
-            (rnd.next() & 0xffff_ffff) as i128
-        } else {
-            n as i128
-        };
-        let mut d = hydo_composer::WSeed {
-            seed,
-            p: 1 + rnd.below(4) as i128,
-            q: 1 + rnd.below(3) as i128,
-            r: 100,
-            n: rnd.choice(&[0i128, 0, 3, 10]),
-            t: 0,
-            x: Vec::new(),
-            o: Vec::new(),
-        };
-        let full = hydo_composer::plan(d.seed, d.q, steps as i128, &kinds).unwrap();
-        if !full.is_empty() && n % 3 == 0 {
-            for _ in 0..(1 + rnd.below(5)).min(full.len()) {
-                d.x.push(rnd.below(full.len()) as i128);
-            }
-        }
-        if n % 4 == 0 {
-            d.o = vec![hydo_composer::OItem::I(rnd.below(cmds.len()) as i128)];
-        } else if n % 4 == 1 {
-            for _ in 0..(1 + rnd.below(2)).min(cmds.len()) {
-                d.o.push(hydo_composer::OItem::S(ids[rnd.below(ids.len())].clone()));
-            }
-        }
-        let w = hydo_composer::render_w(&d);
-        let cp = cplan_of(cmds);
-        let dry = drys
-            .entry((si, steps))
-            .or_insert_with(|| Dry::new(&format!("c{si}-{steps}"), &cp, steps));
-        same_setw(dry, &cp, steps, &w).unwrap_or_else(|e| panic!("{e}"));
-        checked += 1;
-    }
-    drop(drys);
-    // the resolved form: replayed by id on a changed and shuffled list; a removed command fails
-    let (mut nres, mut nerr) = (0, 0);
-    for n in 0..(n_values / 5).max(200) {
-        let cmds = &sets[n % sets.len()];
-        let steps = rnd.choice(&[4i64, 20, 57]);
-        let w = hydo_composer::render_w(&hydo_composer::WSeed {
-            seed: (rnd.next() & 0xffff_ffff) as i128,
-            p: 1 + rnd.below(4) as i128,
-            q: 1 + rnd.below(3) as i128,
-            r: 100,
-            n: rnd.choice(&[0i128, 3]),
-            t: rnd.choice(&[0i128, 0, 500]),
-            x: vec![],
-            o: vec![],
-        });
-        let m = meta_of(cmds, steps);
-        let old = hydo_composer::entries_of(&w, &m, None, None).unwrap();
-        if old.is_empty() {
-            continue;
-        }
-        let res = hydo_composer::stable_w(&w, &m, None, None).unwrap();
-        let mut now = cmds.clone();
-        now.push(("parallel_driver".into(), format!("parallel_driver_new{n}")));
-        now.push(("anytime".into(), "anytime_0new".into()));
-        let mut dropped = None;
-        if n % 7 == 3 {
-            let used: Vec<String> = hydo_composer::parse_resolved(&res)
-                .unwrap()
-                .entries
-                .iter()
-                .map(|e| e.2.clone())
-                .collect();
-            let d = used[rnd.below(used.len())].clone();
-            now.retain(|c| c.1 != d);
-            dropped = Some(d);
-        }
-        now.sort_by(|a, b| a.1.cmp(&b.1));
-        if n % 2 == 1 {
-            for i in (1..now.len()).rev() {
-                now.swap(i, rnd.below(i + 1));
-            }
-        }
-        let cp = cplan_of(&now);
-        let dry = Dry::new(&format!("r{n}"), &cp, steps);
-        same_setw(&dry, &cp, steps, &res).unwrap_or_else(|e| panic!("{e}"));
-        let (_, r) = composer::wplan(&cp, steps, &res);
-        match (dropped, r) {
-            (Some(d), Err(composer::WFail::Werr(e))) => {
-                assert!(e.contains(&d), "{e}");
-                nerr += 1;
-            }
-            (None, Ok((_, es))) => {
-                // the same commands, rounds, entries and seeds as the seed form on the old list
-                let got: Vec<(i64, i64, String, i64)> = es
-                    .iter()
-                    .map(|e| (e.entry, e.round, now[e.idx].1.clone(), e.seed))
-                    .collect();
-                let want: Vec<(i64, i64, String, i64)> = old
-                    .iter()
-                    .map(|(e, r, c, s)| (*e as i64, *r as i64, cmds[*c].1.clone(), *s as i64))
-                    .collect();
-                assert_eq!(got, want, "{res}");
-                nres += 1;
-            }
-            (d, r) => panic!("{res}: dropped {d:?}, the controller {r:?}"),
-        }
-    }
-    eprintln!("m98: {checked} seed-form W values; {nres} resolved compositions replayed by id; {nerr} with a removed command refused; compose.sh (awk = this machine's) == the controller");
-    assert!(checked >= 3000.min(n_values) && nres > 400 && nerr > 50);
-}
-
-// ------------------------------------------------------------------ EL_SCAN and EL_SUM
-
-fn awk_prog(name: &str) -> String {
-    let t = std::fs::read_to_string(top().join("hydo/onboard/hydo-init-errlog.sh")).unwrap();
-    let start = t.find(&format!("\n{name}='")).unwrap() + name.len() + 3;
-    let len = t[start..].find("'\n").unwrap();
-    t[start..start + len].to_string()
-}
-
-const LOG: &[&str] = &[
-    "57:C 01 Jan 2026 00:00:00.001 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo",
-    "57:M 01 Jan 2026 00:00:00.002 * Ready to accept connections tcp",
-    "91:M 01 Jan 2026 00:03:10.100 # !!! Warning: short read while loading the AOF file appendonly.aof.1.incr.aof!",
-    "2026-01-01T00:00:12.345678Z 0 [ERROR] [MY-012592] [InnoDB] Operating system error number 2 in a file operation.",
-    "2026-01-01T00:07:44.000999Z 3 [ERROR] [MY-012592] [InnoDB] Operating system error number 28 in a file operation.",
-    "ERROR [Controller id=1, targetBrokerId=1] Connection to node 1 (localhost/127.0.0.1:9093) could not be established. (org.apache.kafka.clients.NetworkClient)",
-    "java.net.ConnectException: Connection refused",
-    "\tat java.base/sun.nio.ch.Net.pollConnect(Native Method)",
-    "Caused by: java.io.IOException: boom",
-    "\t... 12 more",
-    "INFO kafka.log.LogManager Loading logs",
-    "java.lang.IllegalStateException: request 3f2a9c1e-0b7d-4c1e-9a2b-1234567890ab failed at 0x7ffd1234 id deadbeef42",
-    "time=2026-01-01T00:00:05Z level=error msg=\"dial tcp 127.0.0.1:54321->127.0.0.1:3306: connect: connection refused\"",
-    "panic: runtime error: index out of range [3] with length 3",
-    "HYDO-ASSERT {\"t\":\"always\",\"id\":\"x\",\"ok\":false}",
-    "level=error msg=\"contains \\\"quotes\\\" and back slash and hydo-explore-workload-done\"",
-    "WARN org.apache.kafka.clients.NetworkClient [Producer clientId=producer-1] Connection to node 1 could not be established.",
-    "ctrl\u{1}char\u{7f} line ERROR: here 7",
-    "Fatal: something broke in thread12 on localhost:6379 and front:8080",
-    "[error] bracketed at Mon, Jan 5 2026 12:00:01",
-    "Error: errno 5 code=7 status: 9 HY000 E1234 x1y2z3 ABCDEFGHIJKLMNOP1",
-    "  continuation that is not a trace",
-    "fatal error: concurrent map writes",
-    "ERROR caf\u{e9} \u{2192} 2026/01/02 and 10:11:12,5 and 1 Feb 2026",
-];
-
-#[test]
-fn errlog_scan_as_the_awk() {
-    let awk = std::env::var("HYDO_AWK").unwrap_or_else(|_| "awk".into());
-    let awk: Vec<&str> = awk.split_whitespace().collect();
-    let d = scratch("el");
-    let (scan, sum) = (awk_prog("EL_SCAN"), awk_prog("EL_SUM"));
-    let hosts = vec![s("redis"), s("front"), s("kafka")];
-    let presets: [(&str, String, String); 4] = [
-        (
-            "auto",
-            format!("({})", errlog::LEVEL_ERROR),
-            errlog::EXCEPTION_LINE.into(),
-        ),
-        (
-            "warning",
-            format!("({})|({})", errlog::LEVEL_ERROR, errlog::LEVEL_WARNING),
-            errlog::EXCEPTION_LINE.into(),
-        ),
-        ("redis", format!("({})", errlog::REDIS_LEVEL), String::new()),
-        (
-            "match",
-            format!("({})|(boom|Loading)", errlog::LEVEL_ERROR),
-            errlog::EXCEPTION_LINE.into(),
-        ),
-    ];
-    let mut rnd = Rng(11);
-    let mut n = 0;
-    for round in 0..120 {
-        let (name, lev, exc) = &presets[round % presets.len()];
-        let ign = if round % 5 == 0 {
-            s("Connection refused")
-        } else {
-            String::new()
-        };
-        let lines: Vec<String> = (0..1 + rnd.below(30))
-            .map(|_| LOG[rnd.below(LOG.len())].to_string())
-            .collect();
-        let text = lines.join("\n") + if round % 7 == 0 { "" } else { "\n" };
-        let nl = lines.len();
-        let marks: String = (0..rnd.below(4))
-            .map(|k| {
-                format!(
-                    "{} {}\n",
-                    if k == 3 {
-                        s("end")
-                    } else {
-                        (k * 5).to_string()
-                    },
-                    rnd.below(nl + 1)
-                )
-            })
-            .collect::<Vec<_>>()
-            .concat();
-        let mut ms: Vec<String> = marks.lines().map(str::to_string).collect();
-        ms.sort_by_key(|l| l.split(' ').nth(1).unwrap().parse::<usize>().unwrap());
-        let marks = ms.iter().map(|l| format!("{l}\n")).collect::<String>();
-        let base = if round % 6 == 0 {
-            (rnd.below(nl + 1)).to_string()
-        } else {
-            s("0")
-        };
-        let first = if round % 9 == 0 { "r" } else { "s" };
-        let (stream, mf) = (d.join("stream"), d.join("marks"));
-        std::fs::write(&stream, &text).unwrap();
-        std::fs::write(&mf, &marks).unwrap();
-        let out = Proc::new(awk[0])
-            .args(&awk[1..])
-            .arg(&scan)
-            .arg(&stream)
-            .env("EL_SVC", "svc")
-            .env("EL_SRC", "log")
-            .env("EL_MARKS", &mf)
-            .env("EL_FIRST", first)
-            .env("EL_BASE", &base)
-            .env("EL_LEVEL", lev)
-            .env("EL_EXC", exc)
-            .env("EL_IGNORE", &ign)
-            .env("EL_NORM", "")
-            .env("EL_HOSTS", hosts.join(" "))
-            .output()
-            .unwrap();
-        assert!(
-            out.status.success(),
-            "{}",
-            String::from_utf8_lossy(&out.stderr)
-        );
-        let rec = d.join("rec");
-        std::fs::write(&rec, &out.stdout).unwrap();
-        let out2 = Proc::new(awk[0])
-            .args(&awk[1..])
-            .arg(&sum)
-            .arg(&rec)
-            .env("EL_MAX", "5")
-            .env("EL_BOOT", "first")
-            .env("EL_STEPS", "20")
-            .output()
-            .unwrap();
-        let want = String::from_utf8_lossy(&out2.stdout).into_owned();
-        let sv = errlog::ErrSvc {
-            name: s("svc"),
-            level: lev.clone(),
-            exc: exc.clone(),
-            ignore: ign.clone(),
-            files: vec![],
-            norm: vec![],
-        };
-        let sc = errlog::scan(
-            &sv,
-            0,
-            text.as_bytes(),
-            marks.as_bytes(),
-            base.as_bytes(),
-            first,
-            &hosts,
-        );
-        assert!(sc.err.is_none());
-        let got: String = errlog::summarize(&sc.recs, 5, "first", 20)
-            .iter()
-            .map(|l| format!("{l}\n"))
-            .collect();
-        assert_eq!(
-            got, want,
-            "preset {name}, round {round}\n--- log:\n{text}\n--- marks:\n{marks}"
-        );
-        n += 1;
-    }
-    let _ = std::fs::remove_dir_all(&d);
-    eprintln!(
-        "errlog: {n} logs, EL_SCAN+EL_SUM ({}) == the controller",
-        awk.join(" ")
-    );
-}
-
 // ------------------------------------------------------------------ the plans and hydo-build
 
 #[test]
@@ -1105,7 +548,7 @@ fn plans_as_hydo_build() {
             let root = scratch(&format!("stage{n}"));
             let mut meta2 = meta.clone();
             meta2.as_object_mut().unwrap().remove("_folder");
-            hydo_composer::stage(&meta2, &root, &top().join("hydo/onboard"), None).unwrap();
+            hydo_composer::stage(&meta2, &root, None).unwrap();
             let list = std::fs::read_to_string(root.join("etc/hydo/compose.list")).unwrap();
             for (i, (l, c)) in list.lines().zip(&cp.commands).enumerate() {
                 let w: Vec<&str> = l.splitn(5, ' ').collect();
@@ -1452,7 +895,7 @@ fn agent_images_carry_the_composer() {
         let root = scratch(&format!("img{n}"));
         let mut m2 = meta.clone();
         m2.as_object_mut().unwrap().remove("_folder");
-        hydo_composer::stage(&m2, &root, &top().join("hydo/onboard"), None).unwrap();
+        hydo_composer::stage(&m2, &root, None).unwrap();
         let cj = std::fs::read_to_string(root.join("etc/hydo/compose.json")).unwrap();
         let text = std::fs::read_to_string(top().join(&rel)).unwrap();
         let from_image = hydo_control::agent::plan_of_embedded(&text, Some(&cj));

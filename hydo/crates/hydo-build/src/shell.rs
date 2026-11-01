@@ -81,16 +81,8 @@ pub fn has_errlog(m: &Value) -> bool {
     }
 }
 
-pub fn has_buggify(m: &Value) -> bool {
-    m.get("buggify") == Some(&Value::Bool(true))
-}
-
 pub fn has_checks(m: &Value) -> bool {
     m.get("checks").is_some_and(py::truthy)
-}
-
-pub fn has_clock_after_cut(m: &Value) -> Result<bool, Fail> {
-    Ok(section(m, "guest")?.is_some_and(|g| has(g, "clock_after_cut")))
 }
 
 pub fn has_eventually(m: &Value) -> bool {

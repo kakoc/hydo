@@ -108,6 +108,10 @@ pub struct PlanService {
     /// while the test runs (`schedule/restart.rs`). The shell init has no such key; `no`, the
     /// default, is its behaviour.
     pub restart: Restart,
+    /// `restart_may_fail:` (M136): the restart at the heal may fail; the run then goes on without
+    /// the workload's retry, and without a power cut ends in ERROR naming the service
+    /// (`schedule.rs` `restart_dead`; MANIFEST.md "A restart after the faults that may fail").
+    pub restart_may_fail: bool,
 }
 
 /// One invariant (manifest.sh's HYDO_INV_<k>_*).
@@ -339,6 +343,7 @@ impl Plan {
                         .map_err(|m| Unsupported::other(format!("services: {n}: restart: {m}")))?,
                     None => Restart::No,
                 },
+                restart_may_fail: get(s, "restart_may_fail") == Some(&Value::Bool(true)),
             });
         }
         let wl = &d["workload"];

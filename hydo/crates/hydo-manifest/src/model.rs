@@ -674,6 +674,14 @@ pub struct Service {
     /// on-failure, on-failure:<max>. Followed by agent images (MANIFEST.md "Restart policies").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub restart: Option<RestartPolicy>,
+    /// true: the restart at the heal (after the faults, before workload.retry) may fail. If the
+    /// service does not come back then, the run goes on without workload.retry; a power cut at
+    /// the k-th flush (cf=) still reaches its recovery boot, which gives the verdict; without a
+    /// cut the verdict is ERROR naming the service. Default false: a service that does not come
+    /// back is at once ERROR (MANIFEST.md "A restart after the faults that may fail").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = false))]
+    pub restart_may_fail: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
     /// This service's error-log settings (needs the top-level errors:).

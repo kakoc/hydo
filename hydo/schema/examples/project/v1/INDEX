@@ -56,3 +56,4 @@ retired-history-check-in-test-migrated
 skill-example-miniflux
 skill-example-redis-composed-folder
 restart-policies
+restart-may-fail

@@ -71,15 +71,15 @@ pub const M59: [(&str, &str); 5] = [
 pub const CONTROL: &str = "explore-nf-disk.img";
 
 /// Which kind of image the benchmark runs (M135). The default is the manifest-built agent images
-/// (`hydo/bench/manifest/hydo.yaml` built with `hydo build --control agent` by
-/// `hydo/bench/build-bench-manifest.sh`); `shell` is the same manifest built for the generic shell
-/// init; `stack` is the hand-written stack images of `build-stack.sh` (with `stack-explore.sh`),
-/// which stay only as the engine's regression baselines (`deploy-metal.sh`, the pinned
-/// reproducers) and as the record of the M54-M108 measurements.
+/// (`hydo/bench/manifest/hydo.yaml` built with `hydo build` by
+/// `hydo/bench/build-bench-manifest.sh`); `stack` is the hand-written stack images of
+/// `build-stack.sh` (with `stack-explore.sh`), which stay only as the engine's regression
+/// baselines (`deploy-metal.sh`, the pinned reproducers) and as the record of the M54-M108
+/// measurements. M135's third kind, `shell` (the same manifest built for the generic shell init),
+/// went with the shell init in M136.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
     Agent,
-    Shell,
     Stack,
 }
 
@@ -87,16 +87,18 @@ impl Kind {
     pub fn parse(s: &str) -> Result<Kind, String> {
         match s {
             "agent" => Ok(Kind::Agent),
-            "shell" => Ok(Kind::Shell),
             "stack" => Ok(Kind::Stack),
-            _ => Err(format!("--kind {s}: agent, shell or stack")),
+            "shell" => Err(
+                "--kind shell was removed in Milestone 136 with the shell init (the manifest images are agent images)"
+                    .into(),
+            ),
+            _ => Err(format!("--kind {s}: agent or stack")),
         }
     }
 
     pub fn name(self) -> &'static str {
         match self {
             Kind::Agent => "agent",
-            Kind::Shell => "shell",
             Kind::Stack => "stack",
         }
     }
@@ -150,15 +152,10 @@ impl Set {
     }
 
     /// A manifest-built image, as build-bench-manifest.sh names its outputs: the manifest's name
-    /// `bench`, the order service's stem, and `-agent` for an agent image (as `hydo build` names
-    /// one, `explore-ob-<name>-agent-disk.img`).
+    /// `bench`, the order service's stem, and `-agent` (M135's name for an agent image, kept so
+    /// that the name stays apart from M135's shell images in older directories).
     fn ob(&self, stem: &str) -> String {
-        let agent = if self.kind == Kind::Agent {
-            "-agent"
-        } else {
-            ""
-        };
-        format!("explore-ob-bench-{stem}{agent}-disk.img")
+        format!("explore-ob-bench-{stem}-agent-disk.img")
     }
 
     pub fn m59_control(&self) -> String {
@@ -265,22 +262,17 @@ impl Set {
         let s = match (name, self.kind) {
             ("d9-redis-unlocked", Kind::Stack) => "disk=none dseed=0 | run Q=4",
             // M135 (franz-go v1.22.2): of Q=2,3,4,2d,3d,4d the race shows with Q=3 and Q=4d on
-            // the agent kind, with all but Q=2d on the shell kind
-            ("d9-redis-unlocked", Kind::Agent | Kind::Shell) => "disk=none dseed=0 | run Q=3",
+            // the agent kind
+            ("d9-redis-unlocked", Kind::Agent) => "disk=none dseed=0 | run Q=3",
             // M72: the -pin-kr image's timing moved d10's window: X=front@12~20 passes there
             ("d10-outcome-in-memory", Kind::Stack) if self.m59_suffix != "-pin-kr" => {
                 "disk=none dseed=0 | run X=front@12~20"
             }
-            // the shell init ignores X= (docs/C2-BENCH.md), so on the shell kind this schedule
-            // passes: d10 has no trigger there
             ("d10-outcome-in-memory", _) => "disk=none dseed=0 | run X=front@9~20",
             ("d11-ack-unflushed-flag", Kind::Stack) => "disk=cut dseed=0 cf=238 | run",
             // M135: 9 of the 61 points cf=245..305 fail on the agent kind (249, 250, 260, 271,
             // 272, 282, 292, 302, 303)
             ("d11-ack-unflushed-flag", Kind::Agent) => "disk=cut dseed=0 cf=260 | run",
-            // M135: 8 of the 61 points fail on the shell kind (245, 255, 256, 266, 277, 287, 297,
-            // 298)
-            ("d11-ack-unflushed-flag", Kind::Shell) => "disk=cut dseed=0 cf=255 | run",
             _ => return None,
         };
         Some(s.to_string())
@@ -370,15 +362,6 @@ mod tests {
             a.control_of("d3-blind-retry"),
             "explore-ob-bench-nf-agent-disk.img"
         );
-        let s = set(Kind::Shell, false);
-        assert_eq!(
-            s.image_of("d1-kafka-first"),
-            "explore-ob-bench-d1-kafka-first-disk.img"
-        );
-        assert_eq!(
-            s.control_of("d1-kafka-first"),
-            "explore-ob-bench-nf-disk.img"
-        );
         let b = set(Kind::Agent, true);
         assert_eq!(
             b.image_of("d7-skip-last-record"),
@@ -433,5 +416,8 @@ mod tests {
         assert_eq!(Kind::parse("agent"), Ok(Kind::Agent));
         assert_eq!(Kind::select(Some("stack")), Ok(Kind::Stack));
         assert!(Kind::parse("bogus").is_err());
+        assert!(Kind::parse("shell")
+            .unwrap_err()
+            .contains("removed in Milestone 136"));
     }
 }

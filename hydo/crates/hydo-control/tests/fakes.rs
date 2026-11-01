@@ -2,7 +2,8 @@
 //! the identity corpus (which runs every schedule of the fakes manifests against the shell model,
 //! tests/corpus.rs):
 //!
-//! - the model was written from this shell text, and the plan reads the targets hydo-build writes;
+//! - the plan reads the targets hydo-build writes (until M136 also: the model was written from
+//!   the shell text hydo-build spliced);
 //! - H= windows are switched where the shell switches them, and healed once;
 //! - the world is carried across a power cut and the recovery's world starts from it;
 //! - a carried world longer than one command is written in pieces;
@@ -23,12 +24,9 @@ use support::{boot, converse, oracle_of, plan_of, run_schedule, top, Booted, Ite
 const PROXY: &str = "hydo/onboard/examples/redis/hydo-proxy.yaml";
 const GRPC: &str = "hydo/onboard/examples/stack-grpc/hydo.yaml";
 
-/// The shell text the model (tests/support/model/fakes.rs) transliterates. A change to it needs
-/// the model and the controller looked at again.
-const EXTENSION: (&str, &str) = (
-    "hydo/onboard/hydo-init-fakes.sh",
-    "4869e5d45642778b8ea14f97fa25259dd2d1e13cf20aa3d64f0982b8ab31c762",
-);
+// The model (tests/support/model/fakes.rs) transliterates hydo-init-fakes.sh as it was when the
+// shell init was deleted (M136; sha256 4869e5d4…, `git show d9202e7:hydo/onboard/hydo-init-fakes.sh`).
+// The model is now the frozen description of what the shell images did.
 
 fn booted(m: &str) -> Booted {
     let plan = plan_of(m).unwrap_or_else(|e| panic!("{m}: {e}"));
@@ -135,14 +133,7 @@ fn in_order(got: &[String], want: &[&str]) -> bool {
 }
 
 #[test]
-fn the_model_was_written_from_this_shell_text_and_the_plan_reads_hydo_builds_targets() {
-    let ext = std::fs::read(top().join(EXTENSION.0)).unwrap();
-    assert_eq!(
-        support::sha256_hex(&ext),
-        EXTENSION.1,
-        "{} changed: look at tests/support/model/fakes.rs and src/schedule/fakes.rs again, then pin the new hash",
-        EXTENSION.0
-    );
+fn the_plan_reads_hydo_builds_targets() {
     let ctx = hydo_build::Ctx {
         onboard: top().join("hydo/onboard"),
         release: hydo_build::Release::None,
@@ -158,7 +149,6 @@ fn the_model_was_written_from_this_shell_text_and_the_plan_reads_hydo_builds_tar
         assert_eq!(rc, 0, "{m} {flag}: {}", String::from_utf8_lossy(&err));
         String::from_utf8(out).unwrap()
     };
-    let ext = String::from_utf8(ext).unwrap();
     // every manifest with a fake world, also those another seam still refuses
     let mut n = 0;
     for m in support::manifests() {
@@ -167,12 +157,6 @@ fn the_model_was_written_from_this_shell_text_and_the_plan_reads_hydo_builds_tar
             continue;
         };
         n += 1;
-        let init = run(&m, "--print-init");
-        assert!(
-            init.contains(ext.trim_end()),
-            "{m}: the init hydo-build writes does not contain {}",
-            EXTENSION.0
-        );
         let shell = run(&m, "--print-shell");
         let line = |k: &str| -> String {
             let l = shell
@@ -189,7 +173,7 @@ fn the_model_was_written_from_this_shell_text_and_the_plan_reads_hydo_builds_tar
         }
     }
     assert!(n >= 5, "only {n} manifests with a fake world");
-    // a manifest without one has none, and its init has no extension
+    // a manifest without one has none
     let p = plan_of("hydo/onboard/examples/redis/hydo.yaml").unwrap();
     assert!(p.world.is_none());
 }
@@ -965,71 +949,13 @@ fn readable_transcripts() {
 /// A manifest with both `fakes:`/`proxies:` and `errors:` (no example has both).
 const PROXY_ERRORS: &str = "hydo/crates/hydo-control/tests/manifests/redis-proxy-errors.yaml";
 
-/// Every definition of a shell function in an init text (`name() {` to the `}` at the start of a
-/// line, or a one-line definition).
-fn shell_defs(init: &str, name: &str) -> Vec<String> {
-    let head = format!("{name}() {{");
-    let mut out = Vec::new();
-    let ls: Vec<&str> = init.lines().collect();
-    let mut i = 0;
-    while i < ls.len() {
-        if ls[i].starts_with(&head) {
-            if ls[i].trim_end().ends_with('}') && ls[i].len() > head.len() + 1 {
-                out.push(ls[i].to_string());
-            } else {
-                let mut j = i;
-                while j < ls.len() && ls[j] != "}" {
-                    j += 1;
-                }
-                out.push(ls[i..=j.min(ls.len() - 1)].join("\n"));
-                i = j;
-            }
-        }
-        i += 1;
-    }
-    out
-}
-
 #[test]
 fn error_logs_with_fakes_print_in_the_shells_order() {
-    // 1. The order, from the init hydo-build writes: the error logs are spliced after the fakes,
-    //    so hydo-init-errlog.sh's final_verdict (the last definition) redirects the fakes'
-    //    final_verdict, whose summary comes before the core's final_verdict:
-    //      final_verdict() { _el_orig_final_verdict "$@" > $H/el.verdict; el_report; cat $H/el.verdict; }
-    //      _el_orig_final_verdict() { ctl summary | sed 's/^/hydo-world: /'; _pf_orig_final_verdict "$@"; }
-    //    The console gets the error records, then the summary lines, then the final invariants'
-    //    assertion records and the verdict line.
-    let ctx = hydo_build::Ctx {
-        onboard: top().join("hydo/onboard"),
-        release: hydo_build::Release::None,
-    };
-    let (mut out, mut err) = (Vec::new(), Vec::new());
-    let mut io = hydo_build::Io {
-        out: &mut out,
-        err: &mut err,
-    };
-    let path = top().join(PROXY_ERRORS).to_string_lossy().into_owned();
-    let rc = hydo_build::main_with(&ctx, &[path, "--print-init".into()], &mut io);
-    assert_eq!(rc, 0, "{}", String::from_utf8_lossy(&err));
-    let init = String::from_utf8(out).unwrap();
-    // the extensions are spliced in before hydo-init.sh's main section
-    let main_at = init.find("---- main\n").expect("the main section");
-    let defs = shell_defs(&init[..main_at], "final_verdict");
-    let last = defs.last().expect("final_verdict");
-    assert!(
-        last.contains("_el_orig_final_verdict \"$@\" > $H/el.verdict")
-            && last.find("el_report") < last.find("$BB cat $H/el.verdict"),
-        "the last final_verdict is not the error logs' one:\n{last}"
-    );
-    let el = shell_defs(&init, "_el_orig_final_verdict");
-    assert_eq!(el.len(), 1, "{el:?}");
-    let s = el[0].find("ctl summary").expect("the fakes' summary");
-    let o = el[0]
-        .find("_pf_orig_final_verdict")
-        .expect("the core's final_verdict");
-    assert!(s < o, "{}", el[0]);
-
-    // 2. The controller's report lines in that order, every run checked against the shell model
+    // The order the shell images had (hydo-build spliced hydo-init-errlog.sh after the fakes, so
+    // the console got the error records, then the fakes' summary lines, then the final
+    // invariants' assertion records and the verdict line; M127 fix 2, checked against
+    // `hydo-build --print-init` until M136): the controller's report lines in that order, every
+    // run checked against the shell model
     let plan = plan_of(PROXY_ERRORS).unwrap_or_else(|e| panic!("{e}"));
     assert!(plan.errors.is_some() && plan.world.is_some());
     let b = (0..20)

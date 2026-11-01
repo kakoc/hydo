@@ -38,16 +38,6 @@ const FIXED_APPLETS: &str = "sh ash cat echo grep egrep sed awk tr cut sort uniq
 mount umount mkdir rm cp mv ln ls test [ [[ true false printf env expr seq tee touch sync usleep \
 ifconfig ip wget nc httpd md5sum sha256sum xargs find basename dirname uname id hostname dd";
 
-pub const SHIM: &str = "#!/bin/busybox sh
-# /init of an arm64 manifest image (hvx/onboard/hydo_build_arm64.py): wait for the data
-# partition of the virtio disk, then the generic init (hydo-init.sh).
-/bin/busybox mount -t devtmpfs none /dev
-n=0
-while [ ! -b /dev/vda2 ] && [ $n -lt 200 ]; do /bin/busybox usleep 10000; n=$((n + 1)); done
-[ -b /dev/vda2 ] || echo \"hydo-ob: no /dev/vda2 (run with the -arm64-disk.img attached: HVM_DISK)\"
-exec /sbin/init
-";
-
 /// The Mac release's bundled aarch64 tc: guest/tc/<absolute paths> and guest/tc-closure.txt.
 struct BundledTc {
     top: PathBuf,
@@ -367,14 +357,8 @@ pub fn build(
         ip: ip.clone(),
     };
     x86::write_compiled(ctx, p, manifest_path, &r, &tools)?;
-    let agent = match p.control {
-        crate::agent::Control::Shell => {
-            crate::init::install_init(ctx, &m, &r)?;
-            None
-        }
-        crate::agent::Control::Agent => Some(crate::agent::binary(bdir, true, io)?),
-    };
-    crate::stage::compose_stage(ctx, &m, &r)?;
+    let (agent_bin, agent_sha) = crate::agent::binary(bdir, true, io)?;
+    crate::stage::compose_stage(&m, &r)?;
     let oci_meta = crate::oci::stage(
         &mut p.oci,
         &r,
@@ -383,14 +367,8 @@ pub fn build(
         netns,
         io,
     )?;
-    match &agent {
-        // the agent is the kernel's first process itself (rdinit=/init): no shell before it
-        Some((bin, sha)) => crate::agent::install(bin, sha, &r, "/init", io)?,
-        None => {
-            fsx::write_text(&r.join("init"), SHIM)?;
-            fsx::chmod(&r.join("init"), 0o755)?;
-        }
-    }
+    // the agent is the kernel's first process itself (rdinit=/init): no shell before it
+    crate::agent::install(&agent_bin, &agent_sha, &r, "/init", io)?;
     let dsec = section(&m, "data")?;
     let dmib = pyv::get(dsec, "size_mib")?
         .map(|v| pyv::int(v, "data.size_mib"))

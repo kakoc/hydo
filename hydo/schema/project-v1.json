@@ -603,6 +603,14 @@
             }
           ]
         },
+        "restart_may_fail": {
+          "description": "true: the restart at the heal (after the faults, before workload.retry) may fail. If the\nservice does not come back then, the run goes on without workload.retry; a power cut at\nthe k-th flush (cf=) still reaches its recovery boot, which gives the verdict; without a\ncut the verdict is ERROR naming the service. Default false: a service that does not come\nback is at once ERROR (MANIFEST.md \"A restart after the faults that may fail\").",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": false
+        },
         "description": {
           "anyOf": [
             {

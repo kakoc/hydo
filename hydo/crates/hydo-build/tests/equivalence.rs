@@ -1,5 +1,6 @@
 //! hydo-build (Rust) against the answers of hydo/onboard/hydo-build (the Python reference, frozen):
-//! `--check`, `--print-shell`, `--print-init` and `--print-world`, on both architectures, for every
+//! `--check`, `--print-shell` and `--print-world` (and, until M136, `--print-init`, now a refusal
+//! that one `--set and flag combinations` line still records), on both architectures, for every
 //! manifest candidate in the repository (the pinned list of tracked *.yaml, *.yml and *.json, which
 //! includes the hydo/ folder fixtures), for every fixture case of hydo-manifest's tests (written out
 //! as JSON plans), for seeded mutants of the repository manifests, and with `--set` and argument
@@ -15,7 +16,8 @@
 //! the whole); the repository root is written `<root>` and the scratch directory `<tmp>`.
 //!
 //! The input set is pinned in the same file (`I` lines: each repository manifest candidate, the
-//! guest init files that `--print-init` and `--print-shell` read, each with the SHA-256 of its
+//! guest files that `--print-shell` reads (until M136 also the shell init files `--print-init`
+//! read), each with the SHA-256 of its
 //! bytes, or of its whole `hydo/` folder for a folder plan), so `git ls-files` does not decide it:
 //! when an input changed or vanished since the recording, the test fails and names it. Recorded
 //! answers of other tests (`*/tests/golden*`) and the Python unit tests' fixtures
@@ -350,7 +352,7 @@ fn mutate(m: &mut Value, rng: &mut SplitMix) {
 /// 12 per file over a larger set of candidates, 1,104 in all).
 const MUTANTS_PER_FILE: usize = 16;
 
-const FLAGS: &[&str] = &["--check", "--print-shell", "--print-init", "--print-world"];
+const FLAGS: &[&str] = &["--check", "--print-shell", "--print-world"];
 
 const GOLDEN_HEADER: &str = "\
 # hydo-build's equivalence test: the answers of the Python hydo-build (the reference).

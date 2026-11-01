@@ -92,11 +92,10 @@ for b in $BINS; do
   file "$BD/$b" | grep -q 'Mach-O 64-bit executable arm64' || { echo "$BD/$b is not an arm64 Mac binary" >&2; exit 1; }
   cp "$BD/$b" "$REL/bin/$b"; chmod 755 "$REL/bin/$b"
 done
-# the guest-side files hydo-build puts into images: the generic init and every extension it
-# splices in by manifest, the test composer's guest runner, the history recorder (for a
-# manifest with checks:), and the format reference (`hydo guide manifest`)
-cp "$TOP"/hydo/onboard/hydo-init*.sh "$TOP/hydo/onboard/hydo-liveness.sh" "$TOP/hydo/onboard/MANIFEST.md" \
-   "$TOP/hydo/onboard/hydo-composer.sh" "$REL/hydo/onboard/"
+# the format reference (`hydo guide manifest`; the history recorder for a manifest with checks:
+# follows); the shell init and its extensions are gone since M136 (every image's first process is
+# guest/hydo-agent)
+cp "$TOP/hydo/onboard/MANIFEST.md" "$REL/hydo/onboard/"
 echo "$VERSION" > "$REL/hydo/VERSION"     # what a plan's hydo_version: is checked against
 mkdir -p "$REL/hydo/history"
 cp "$TOP/hydo/history/hydo_hist.sh" "$REL/hydo/history/"

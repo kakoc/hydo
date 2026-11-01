@@ -3,8 +3,8 @@
 # The benchmark images (hydo/bench/build-bench*.sh) run the four-service stack under its own
 # hand-written init (hv/hvx/images/build-stack.sh's /sbin/init and /etc/stack-explore.sh), which
 # the host controller cannot drive: it drives manifests. This manifest describes the same guest
-# so that `hydo build` and `hydo build --control agent` give a shell image and an agent image of
-# each defect, built by the same builder from the same files:
+# so that `hydo build` gives an image of each defect, built by the same builder from the same
+# files (until M136 also a shell image of each, `--control shell`):
 #   - the files are those of the -pin-kr control image (explore-bench-m59-control-pin-kr), dumped
 #     to ./root by hydo/bench/build-bench-manifest.sh: the MySQL and OpenJDK closures (./store:
 #     that image's /nix/store without the iproute2 closure, which hydo-build stages itself from
@@ -23,17 +23,15 @@
 #   - stack-explore.sh's M67 path (an order service that cannot come back after the workload, for
 #     example after a cf= power cut when MySQL's sessions hang on the dead disk: the un-ACKed
 #     orders stay un-ACKed, there is no retry, and the power cut's recovery boot gives the verdict;
-#     without a cut the run ends in ERROR) is written with the format's existing features
-#     (Milestone 135): the order service runs under /etc/hydo-bench/front.sh, which stays up and
-#     says so when the order service exits after the workload's last step; its ready: accepts
-#     that line, the retry: skips the retry pass then, and the invariant front.restarted gives the
-#     ERROR when the run ends without a cut. The format has no key for "a restart that may fail"
-#     (docs/HISTORY.md "Milestone 135");
+#     without a cut the run ends in ERROR) is the order service's `restart_may_fail: true`
+#     (Milestone 136; MANIFEST.md "A restart after the faults that may fail"). Milestone 135 wrote
+#     it with a wrapper script (/etc/hydo-bench/front.sh), a ready:/retry: that read its line and
+#     an invariant front.restarted, because the format had no such key;
 #   - buggify: true, so B= reaches the order service's BUGGIFY points as on the stack images
 #     (stack-explore.sh writes /tmp/hydo-buggify too).
-# Since M135 these images are the benchmark's default (hydo-bench --kind agent; --kind shell for the
-# shell images); the stack images stay only as the engine's regression baselines. What stays
-# different from the stack images: the generic init's workload loop, restarts and markers instead
+# Since M135 these images are the benchmark's default (hydo-bench --kind agent); the stack images
+# stay only as the engine's regression baselines. What stays different from the stack images: the
+# host controller's workload loop, restarts and markers (those of the generic init) instead
 # of stack-explore.sh's (for example a restart of every dead service before the retry pass, and no
 # periodic checks), so fingerprints and some timings differ from M54-M108's.
 format: 1
@@ -120,19 +118,6 @@ root:
     - {src: root/bin/redis-cli, dst: /bin/redis-cli, mode: "0755"}
     - {src: front-door, dst: /bin/hydostack, mode: "0755"}
   text:
-    /etc/hydo-bench/front.sh: |
-      # The order service (hydo/bench/manifest/hydo.yaml), and stack-explore.sh's M67 path: when
-      # it exits after the workload's last step (the run: command leaves /tmp/hydo-bench-steps-done),
-      # for example because its restart before the retry pass fails after a cf= power cut, this
-      # process stays and prints the line ready: and retry: look for (also on the console, where
-      # the SDKs' records go, so a run's log shows the path). A kill or a pause reaches both
-      # processes (faults act on a service's whole tree).
-      /bin/hydostack server
-      rc=$?
-      [ -e /tmp/hydo-bench-steps-done ] || exit $rc
-      m="hydo-bench: the order service exited after the workload's last step (status $rc); it stays down"
-      echo "$m"; echo "$m" > /dev/ttyS0 2>/dev/null
-      exec /bin/busybox sleep 1000000000
     /etc/redis.conf: |
       port 6379
       bind 127.0.0.1
@@ -257,29 +242,21 @@ services:
     port: 9092
   - name: front
     description: the order service (creates the schema and the topic at start)
-    cmd: /bin/busybox sh /etc/hydo-bench/front.sh   # /bin/hydostack server, and M67's path
-    # ready: listening, or (M67's path) down for good after the workload's last step
-    ready: grep -qa "server listening" $HYDO_LOG || grep -qa "^hydo-bench: the order service exited after" $HYDO_LOG
+    cmd: /bin/hydostack server
+    ready: grep -qa "server listening" $HYDO_LOG
     ready_timeout: 120
     depends_on: [redis, mysql, kafka]
     recovery: false                 # the recovery check reads the stores directly
+    # M67's path: an order service that cannot come back after the faults (its restart before the
+    # retry pass exits or hangs, for example after a cf= power cut) gets no retry pass; the
+    # un-ACKed orders stay un-ACKed and the power cut's recovery boot decides; without a cut the
+    # run ends in ERROR restart after the faults (front)
+    restart_may_fail: true
 
 workload:
   steps: 30                         # one step = one order
-  run: |
-    /bin/hydostack place $HYDO_FROM $HYDO_TO
-    rc=$?
-    [ "$HYDO_TO" -lt "$NORDERS" ] || : > /tmp/hydo-bench-steps-done
-    exit $rc
-  # M67's path: an order service that could not come back gets no retry pass; the un-ACKed orders
-  # stay un-ACKed (no guarantee, as for any un-ACKed order) and the recovery boot decides
-  retry: |
-    if grep -qa "^hydo-bench: the order service exited after" /tmp/hydo/front.log; then
-      echo "hydo-bench: the order service cannot restart; no retry pass, the un-ACKed orders stay un-ACKed" > /dev/ttyS0 2>/dev/null
-      : > /tmp/hydo-bench-no-retry
-      exit 0
-    fi
-    /bin/hydostack retry $NORDERS $HYDO_ACKED
+  run: /bin/hydostack place $HYDO_FROM $HYDO_TO
+  retry: /bin/hydostack retry $NORDERS $HYDO_ACKED
   process: hydostack (place|retry)
 
 knobs:
@@ -319,12 +296,5 @@ invariants:
       [ -z "$l" ] && { echo "no panic in the order service's log"; exit 0; }
       echo "front door crashed: $(printf '%s' "$l" | cut -c1-160)"
       exit 1
-  - id: front.restarted
-    msg: the order service came back for the retry pass (stack-explore.sh's ERROR front door restart, M67)
-    final: true
-    cmd: |
-      [ -e /tmp/hydo-bench-no-retry ] || { echo "the order service ran the retry pass"; exit 0; }
-      echo "front door restart: the order service could not come back after the faults"
-      exit 2
 
 faults: [kill, pause, network, oneway, cut, clock, disk]

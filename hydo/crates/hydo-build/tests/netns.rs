@@ -1,6 +1,6 @@
 //! hydo/onboard/tests/test_netns.py (deleted in M107) re-expressed in Rust: `network: bridge`
-//! (hydo-init-netns.sh, MANIFEST.md "Service networks"): validation, the compiled shell, the init
-//! splice, the default /etc/hosts, hydo-oci, and fakes on the bridge. The explorer's links of the
+//! (MANIFEST.md "Service networks"): validation, the compiled shell (the init splice until M136),
+//! the default /etc/hosts, hydo-oci, and fakes on the bridge. The explorer's links of the
 //! same manifests are checked in hydo-explore's `tests/netns_links.rs`.
 
 use hydo_build::shell::{compile_shell, default_hosts, world_config, ShellTools};
@@ -151,36 +151,6 @@ fn compile_no_network_key_compiles_as_before() {
     let m = ok(m);
     assert!(!shell(&m).contains("HYDO_NET"));
     assert_eq!(default_hosts(&m), "127.0.0.1 localhost\n");
-}
-
-#[test]
-fn init_splice() {
-    let ctx = Ctx::standalone();
-    let m = ok(with(json!({"faults": ["kill", "network", "freeze"]})));
-    let t = hydo_build::init::init_text(&ctx, &m)
-        .map_err(|e| e.message())
-        .unwrap();
-    assert_eq!(t.matches("_ns_orig_start_svc() {").count(), 1);
-    assert_eq!(t.matches("_ns_orig_fc_arm() {").count(), 1);
-    assert!(
-        t.find("hydo-init-netns.sh").unwrap()
-            < t.find("# ---------------------------------------------------------------- main\n")
-                .unwrap()
-    );
-    // last: it overrides fc_rules
-    assert!(t.find("ns_setup() {").unwrap() > t.find("hydo-init-freeze.sh").unwrap());
-    let mut sh = std::process::Command::new("sh")
-        .arg("-n")
-        .stdin(std::process::Stdio::piped())
-        .spawn()
-        .expect("sh");
-    use std::io::Write;
-    sh.stdin.take().unwrap().write_all(t.as_bytes()).unwrap();
-    assert!(sh.wait().unwrap().success(), "sh -n refused the init");
-    let t2 = hydo_build::init::init_text(&ctx, &ok(base()))
-        .map_err(|e| e.message())
-        .unwrap();
-    assert!(!t2.contains("_ns_orig_fc_arm() {"));
 }
 
 #[test]
