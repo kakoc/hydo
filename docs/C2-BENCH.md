@@ -230,3 +230,18 @@ it with the controller's message (section 1). After M128's fixes were merged (gu
 campaign was checked for assertion records with `ok:false` that its report lacked: 44 runs had
 such records, every one of them with a VIOLATION verdict already, so no verdict or detection here
 changes (hydo-bench turns an assertion failure into a violation only when the verdict is OK).
+
+## 7. The triggers that moved, measured on both kinds (`hydo-bench list`)
+
+| list | shell (manifest) | agent (manifest) |
+|---|---|---|
+| d9, `Q=2,3,4,2d,3d,4d` × disk seeds 0–2 (`d9q.txt`, 18 runs) | crash (`front door crashed: panic …`) for `Q=3` and `Q=4d`: 6 of 18 | crash for `Q=2,3,4,3d,4d`: 15 of 18 |
+| d11 and the control, `disk=cut dseed=0 cf=150…400` step 5 (`d11cuts.txt`, M72's sweep, 51 points) | d11 fails at 3 points (k=255 order 24, k=290 order 27, k=300 order 28); the control passes all 51 | d11 passes all 51; the control passes all 51 |
+| d11, `cf=245…305` step 1 (`d11fine.txt`, 61 points) | fails at 8 points: 255 (order 24), 268, 269 (25), 278, 279 (26), 290 (27), 300, 301 (28) | fails at 9 points: 246, 247 (order 23), 257 (24), 267 (25), 279 (26), 288, 289 (27), 302, 303 (28) |
+| d10 and the control, seed 3004's schedule with the Kafka pause moved (`d10kp.txt`, 10 schedules) | all 20 runs OK | d10 fails `K=redis@10+1 P=kafka@16+14` (order 17 MISSING in Kafka); the **control** fails `P=kafka@14+16` (order 15 MISSING); the other 18 OK |
+
+d11's window has the same size on both kinds (about one cut point in seven between orders 23 and
+28: the cut must fall between an order's acknowledgement and the flush of its `published` flag),
+but its cut points are a few flushes apart, so a sweep with step 5 hit it on the shell kind only.
+The flush counts themselves agree: at every sampled k both kinds had acknowledged the same number
+of orders within one (for example 24 at k=250, 30 from k=325 on).
