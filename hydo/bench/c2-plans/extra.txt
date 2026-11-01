@@ -1,0 +1,3 @@
+# M129: run after wide.txt. d10's non-X= agent-only detection (seed 3004 of process-xcf-23) with
+# the Kafka pause moved and with and without the Redis kill, on the defect and the control.
+d10-kp list --images explore-bench-m59-d10-outcome-in-memory-pin-kr-disk.img,explore-bench-m59-control-pin-kr-disk.img --list hydo/bench/c2-plans/d10kp.txt --workers 2
