@@ -488,6 +488,151 @@ pub struct Buggify {
     pub fire_permille: Option<u64>,
 }
 
+/// What a reaction does (`A=`'s action, M139).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ReactAction {
+    /// `cut`: a power cut at the reaction point (the workload and every service frozen, then the
+    /// recovery boot), as `C=` does between two steps.
+    Cut,
+    /// `kill-<svc>`: SIGKILL the service's process tree; it stays down until the heal's restart
+    /// pass, as after `X=`.
+    Kill(String),
+    /// `stop-<svc>-<ms>`: SIGSTOP the service's tree for ms of guest time.
+    Stop(String, u64),
+    /// `cont-<svc>`: SIGCONT the service (a `P=` pause healed at the reaction point instead of
+    /// at its step).
+    Cont(String),
+}
+
+impl ReactAction {
+    fn parse(v: &str, what: &str) -> Result<ReactAction, ParseError> {
+        if v == "cut" {
+            return Ok(ReactAction::Cut);
+        }
+        let bad = || {
+            err(format!(
+                "{what}: the action is cut, kill-<svc>, stop-<svc>-<ms> or cont-<svc>"
+            ))
+        };
+        let (kind, rest) = v.split_once('-').ok_or_else(bad)?;
+        Ok(match kind {
+            "kill" => {
+                name(rest, what)?;
+                ReactAction::Kill(rest.to_string())
+            }
+            "cont" => {
+                name(rest, what)?;
+                ReactAction::Cont(rest.to_string())
+            }
+            "stop" => {
+                let (svc, ms) = rest.rsplit_once('-').ok_or_else(bad)?;
+                name(svc, what)?;
+                let ms = dec(ms, what)?;
+                if ms == 0 {
+                    return Err(err(format!("{what}: a stop lasts at least 1 ms")));
+                }
+                ReactAction::Stop(svc.to_string(), ms)
+            }
+            _ => return Err(bad()),
+        })
+    }
+
+    /// The service the action acts on (none for a cut).
+    pub fn svc(&self) -> Option<&str> {
+        match self {
+            ReactAction::Cut => None,
+            ReactAction::Kill(s) | ReactAction::Stop(s, _) | ReactAction::Cont(s) => Some(s),
+        }
+    }
+}
+
+impl fmt::Display for ReactAction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ReactAction::Cut => f.write_str("cut"),
+            ReactAction::Kill(s) => write!(f, "kill-{s}"),
+            ReactAction::Stop(s, ms) => write!(f, "stop-{s}-{ms}"),
+            ReactAction::Cont(s) => write!(f, "cont-{s}"),
+        }
+    }
+}
+
+/// `A=<event>[@<step>][+<ms>]:<action>` (M139, reactive exploration): from before workload step
+/// `step` (0 when not written) the host controller watches the guest's console for the first
+/// assertion record of `event` whose outcome is the event's (`ok:true` for a `sometimes` or
+/// `reachable` assertion, `ok:false` for the others), waits `ms` of guest time and does the
+/// action. The schedule string is the whole run: the controller's decision is a pure function of
+/// it and of the guest's console, so the run reproduces from the string and from its control
+/// transcript. `@0` and `+0` are not written (the canonical form).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct React {
+    pub event: String,
+    pub at: u64,
+    pub delay_ms: u64,
+    pub action: ReactAction,
+}
+
+impl React {
+    fn parse(v: &str) -> Result<React, ParseError> {
+        let what = format!("A={v}");
+        let (head, act) = v
+            .split_once(':')
+            .ok_or_else(|| err(format!("{what}: A=<event>[@<step>][+<ms>]:<action>")))?;
+        let (head, delay_ms) = match head.rsplit_once('+') {
+            Some((h, ms)) => {
+                let ms = dec(ms, &what)?;
+                if ms == 0 {
+                    return Err(err(format!(
+                        "{what}: write no +0 (the delay is 0 without it)"
+                    )));
+                }
+                (h, ms)
+            }
+            None => (head, 0),
+        };
+        let (event, at) = match head.split_once('@') {
+            Some((e, a)) => {
+                let a = dec(a, &what)?;
+                if a == 0 {
+                    return Err(err(format!(
+                        "{what}: write no @0 (the reaction is armed at step 0 without it)"
+                    )));
+                }
+                (e, a)
+            }
+            None => (head, 0),
+        };
+        if event.is_empty()
+            || !event
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'.' || b == b'-')
+        {
+            return Err(err(format!(
+                "{what}: {event:?} is not an assertion id ([A-Za-z0-9_.-])"
+            )));
+        }
+        Ok(React {
+            event: event.to_string(),
+            at,
+            delay_ms,
+            action: ReactAction::parse(act, &what)?,
+        })
+    }
+}
+
+impl fmt::Display for React {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.event)?;
+        if self.at > 0 {
+            write!(f, "@{}", self.at)?;
+        }
+        if self.delay_ms > 0 {
+            write!(f, "+{}", self.delay_ms)?;
+        }
+        write!(f, ":{}", self.action)
+    }
+}
+
 /// One guest token (after `run`).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum GuestToken {
@@ -526,6 +671,8 @@ pub enum GuestToken {
     Freeze(Freeze),
     /// `W=`: the test composer's composition.
     Compose(Compose),
+    /// `A=`: a reaction to an assertion record (M139).
+    React(React),
     /// Any other single upper-case letter: a manifest knob (`M=`, `R=`, `S=`, ...), whose value
     /// the guest passes to the knob's `set:` command.
     Knob { letter: char, value: String },
@@ -533,7 +680,7 @@ pub enum GuestToken {
 
 /// The letters with a fixed meaning (manifest_space.RESERVED_TOKENS plus the stack's M/R knobs,
 /// which stay knobs).
-pub const RESERVED: &str = "KPNOCTQXBFHW";
+pub const RESERVED: &str = "KPNOCTQXBFHWA";
 
 fn at_plus(v: &str, what: &str) -> Result<(String, u64, u64), ParseError> {
     let (svc, r) = v
@@ -569,6 +716,7 @@ impl GuestToken {
             GuestToken::Protocol(_) => 'H',
             GuestToken::Freeze(_) => 'F',
             GuestToken::Compose(_) => 'W',
+            GuestToken::React(_) => 'A',
             GuestToken::Knob { letter, .. } => *letter,
         }
     }
@@ -711,6 +859,7 @@ impl GuestToken {
             'H' => GuestToken::Protocol(ProtocolFault::parse(v)?),
             'F' => GuestToken::Freeze(Freeze::parse(v)?),
             'W' => GuestToken::Compose(Compose::parse(v)?),
+            'A' => GuestToken::React(React::parse(v)?),
             _ => {
                 if v.is_empty() {
                     return Err(err(format!("{what}: a knob needs a value")));
@@ -777,6 +926,7 @@ impl fmt::Display for GuestToken {
             GuestToken::Protocol(h) => write!(f, "H={h}"),
             GuestToken::Freeze(x) => write!(f, "F={x}"),
             GuestToken::Compose(w) => write!(f, "W={w}"),
+            GuestToken::React(r) => write!(f, "A={r}"),
             GuestToken::Knob { letter, value } => write!(f, "{letter}={value}"),
         }
     }

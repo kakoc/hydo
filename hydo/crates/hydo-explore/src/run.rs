@@ -399,6 +399,28 @@ fn setup(a: Args, env: &Env) -> Cx {
     cx.ex.knob_rule_any = a.knob_rule == "any";
     cx.ex.concurrency = a.concurrency;
     cx.ex.more_faults = a.more_faults;
+    // M139: reactions (A=) from their own stream
+    if let Some(r) = &a.reactive {
+        cx.ex.react_fault = r == "fault" || r == "both";
+        cx.ex.react_heal = r == "heal" || r == "both";
+    }
+    let ids = |v: &str| -> Vec<String> {
+        v.split(',')
+            .map(str::trim)
+            .filter(|x| !x.is_empty())
+            .map(String::from)
+            .collect()
+    };
+    if let Some(v) = &a.react_events {
+        cx.ex.react_events = ids(v);
+    } else if m.is_some() && cx.ex.react_fault {
+        die("explore.py: --reactive fault|both on a manifest needs --react-events (the assertion ids of the system's SDK records to react to; the defaults are the stack's)");
+    }
+    if let Some(v) = &a.heal_events {
+        cx.ex.heal_events = ids(v);
+    } else if m.is_some() && cx.ex.react_heal {
+        die("explore.py: --reactive heal|both on a manifest needs --heal-events (the assertion ids that mean a client request made no progress; the defaults are the stack's)");
+    }
     cx.ex.freeze_call = a.freeze_call;
     cx.ex.fc_nmax = a.fc_nmax;
     cx.ex.protocol_faults = a.protocol_faults;

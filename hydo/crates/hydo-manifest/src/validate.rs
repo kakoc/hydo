@@ -590,6 +590,11 @@ pub fn validate(m: &mut Value) -> R<()> {
                 "{wh}: token must be one capital letter other than K N C P T O F H (fault tokens)"
             )));
         }
+        if t == "A" {
+            return Err(err(format!(
+                "{wh}: token A is the schedule's reaction token (A=, M139); rename the knob"
+            )));
+        }
         if toks.contains(&t) {
             return Err(err(format!("{wh}: duplicate token {t}")));
         }

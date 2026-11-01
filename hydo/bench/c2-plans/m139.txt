@@ -1,0 +1,81 @@
+# M139 (reactive exploration, docs/design/guest-control.md step D2): the process strategy with
+# --more-faults (px) against the same strategy with reactions on top (pxr: --reactive both; the
+# base schedules of every seed are the same, only A= tokens are added, a healed pause lasts to the
+# workload's end and a reaction's power cut makes the disk `cut`). One step per defect and
+# repetition (seeds r*1000+1..r*1000+60, early stop at the first detection), so a wedged box loses
+# at most one cell. Run by c2-cells.sh with KINDS=agent on the M136 images. d8, d9 and d12 need
+# Q= (client concurrency), which neither strategy draws (M129: process 0/3 on them).
+px-d0-r1 run --strategy process --more-faults --cf-range 1-309 --defects d0-old-front-door --reps 1-1 --budget 60 --workers 1
+pxr-d0-r1 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d0-old-front-door --reps 1-1 --budget 60 --workers 1
+px-d1-r1 run --strategy process --more-faults --cf-range 1-309 --defects d1-kafka-first --reps 1-1 --budget 60 --workers 1
+pxr-d1-r1 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d1-kafka-first --reps 1-1 --budget 60 --workers 1
+px-d2-r1 run --strategy process --more-faults --cf-range 1-309 --defects d2-batched-publish-flag --reps 1-1 --budget 60 --workers 1
+pxr-d2-r1 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d2-batched-publish-flag --reps 1-1 --budget 60 --workers 1
+px-d3-r1 run --strategy process --more-faults --cf-range 1-309 --defects d3-blind-retry --reps 1-1 --budget 60 --workers 1
+pxr-d3-r1 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d3-blind-retry --reps 1-1 --budget 60 --workers 1
+px-d4-r1 run --strategy process --more-faults --cf-range 1-309 --defects d4-produce-timeout-definite --reps 1-1 --budget 60 --workers 1
+pxr-d4-r1 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d4-produce-timeout-definite --reps 1-1 --budget 60 --workers 1
+px-d5-r1 run --strategy process --more-faults --cf-range 1-309 --defects d5-myisam --reps 1-1 --budget 60 --workers 1
+pxr-d5-r1 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d5-myisam --reps 1-1 --budget 60 --workers 1
+px-d6-r1 run --strategy process --more-faults --cf-range 1-309 --defects d6-client-deadline-definite --reps 1-1 --budget 60 --workers 1
+pxr-d6-r1 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d6-client-deadline-definite --reps 1-1 --budget 60 --workers 1
+px-d7-r1 run --strategy process --more-faults --cf-range 1-309 --defects d7-skip-last-record --reps 1-1 --budget 60 --workers 1
+pxr-d7-r1 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d7-skip-last-record --reps 1-1 --budget 60 --workers 1
+px-d10-r1 run --strategy process --more-faults --cf-range 1-309 --defects d10-outcome-in-memory --reps 1-1 --budget 60 --workers 1
+pxr-d10-r1 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d10-outcome-in-memory --reps 1-1 --budget 60 --workers 1
+px-d11-r1 run --strategy process --more-faults --cf-range 1-309 --defects d11-ack-unflushed-flag --reps 1-1 --budget 60 --workers 1
+pxr-d11-r1 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d11-ack-unflushed-flag --reps 1-1 --budget 60 --workers 1
+px-d0-r2 run --strategy process --more-faults --cf-range 1-309 --defects d0-old-front-door --reps 2-2 --budget 60 --workers 1
+pxr-d0-r2 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d0-old-front-door --reps 2-2 --budget 60 --workers 1
+px-d1-r2 run --strategy process --more-faults --cf-range 1-309 --defects d1-kafka-first --reps 2-2 --budget 60 --workers 1
+pxr-d1-r2 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d1-kafka-first --reps 2-2 --budget 60 --workers 1
+px-d2-r2 run --strategy process --more-faults --cf-range 1-309 --defects d2-batched-publish-flag --reps 2-2 --budget 60 --workers 1
+pxr-d2-r2 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d2-batched-publish-flag --reps 2-2 --budget 60 --workers 1
+px-d3-r2 run --strategy process --more-faults --cf-range 1-309 --defects d3-blind-retry --reps 2-2 --budget 60 --workers 1
+pxr-d3-r2 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d3-blind-retry --reps 2-2 --budget 60 --workers 1
+px-d4-r2 run --strategy process --more-faults --cf-range 1-309 --defects d4-produce-timeout-definite --reps 2-2 --budget 60 --workers 1
+pxr-d4-r2 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d4-produce-timeout-definite --reps 2-2 --budget 60 --workers 1
+px-d5-r2 run --strategy process --more-faults --cf-range 1-309 --defects d5-myisam --reps 2-2 --budget 60 --workers 1
+pxr-d5-r2 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d5-myisam --reps 2-2 --budget 60 --workers 1
+px-d6-r2 run --strategy process --more-faults --cf-range 1-309 --defects d6-client-deadline-definite --reps 2-2 --budget 60 --workers 1
+pxr-d6-r2 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d6-client-deadline-definite --reps 2-2 --budget 60 --workers 1
+px-d7-r2 run --strategy process --more-faults --cf-range 1-309 --defects d7-skip-last-record --reps 2-2 --budget 60 --workers 1
+pxr-d7-r2 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d7-skip-last-record --reps 2-2 --budget 60 --workers 1
+px-d10-r2 run --strategy process --more-faults --cf-range 1-309 --defects d10-outcome-in-memory --reps 2-2 --budget 60 --workers 1
+pxr-d10-r2 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d10-outcome-in-memory --reps 2-2 --budget 60 --workers 1
+px-d11-r2 run --strategy process --more-faults --cf-range 1-309 --defects d11-ack-unflushed-flag --reps 2-2 --budget 60 --workers 1
+pxr-d11-r2 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d11-ack-unflushed-flag --reps 2-2 --budget 60 --workers 1
+px-d0-r3 run --strategy process --more-faults --cf-range 1-309 --defects d0-old-front-door --reps 3-3 --budget 60 --workers 1
+pxr-d0-r3 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d0-old-front-door --reps 3-3 --budget 60 --workers 1
+px-d1-r3 run --strategy process --more-faults --cf-range 1-309 --defects d1-kafka-first --reps 3-3 --budget 60 --workers 1
+pxr-d1-r3 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d1-kafka-first --reps 3-3 --budget 60 --workers 1
+px-d2-r3 run --strategy process --more-faults --cf-range 1-309 --defects d2-batched-publish-flag --reps 3-3 --budget 60 --workers 1
+pxr-d2-r3 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d2-batched-publish-flag --reps 3-3 --budget 60 --workers 1
+px-d3-r3 run --strategy process --more-faults --cf-range 1-309 --defects d3-blind-retry --reps 3-3 --budget 60 --workers 1
+pxr-d3-r3 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d3-blind-retry --reps 3-3 --budget 60 --workers 1
+px-d4-r3 run --strategy process --more-faults --cf-range 1-309 --defects d4-produce-timeout-definite --reps 3-3 --budget 60 --workers 1
+pxr-d4-r3 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d4-produce-timeout-definite --reps 3-3 --budget 60 --workers 1
+px-d5-r3 run --strategy process --more-faults --cf-range 1-309 --defects d5-myisam --reps 3-3 --budget 60 --workers 1
+pxr-d5-r3 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d5-myisam --reps 3-3 --budget 60 --workers 1
+px-d6-r3 run --strategy process --more-faults --cf-range 1-309 --defects d6-client-deadline-definite --reps 3-3 --budget 60 --workers 1
+pxr-d6-r3 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d6-client-deadline-definite --reps 3-3 --budget 60 --workers 1
+px-d7-r3 run --strategy process --more-faults --cf-range 1-309 --defects d7-skip-last-record --reps 3-3 --budget 60 --workers 1
+pxr-d7-r3 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d7-skip-last-record --reps 3-3 --budget 60 --workers 1
+px-d10-r3 run --strategy process --more-faults --cf-range 1-309 --defects d10-outcome-in-memory --reps 3-3 --budget 60 --workers 1
+pxr-d10-r3 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d10-outcome-in-memory --reps 3-3 --budget 60 --workers 1
+px-d11-r3 run --strategy process --more-faults --cf-range 1-309 --defects d11-ack-unflushed-flag --reps 3-3 --budget 60 --workers 1
+pxr-d11-r3 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d11-ack-unflushed-flag --reps 3-3 --budget 60 --workers 1
+px-d11-r4 run --strategy process --more-faults --cf-range 1-309 --defects d11-ack-unflushed-flag --reps 4-4 --budget 60 --workers 1
+pxr-d11-r4 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d11-ack-unflushed-flag --reps 4-4 --budget 60 --workers 1
+px-d11-r5 run --strategy process --more-faults --cf-range 1-309 --defects d11-ack-unflushed-flag --reps 5-5 --budget 60 --workers 1
+pxr-d11-r5 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d11-ack-unflushed-flag --reps 5-5 --budget 60 --workers 1
+px-d11-r6 run --strategy process --more-faults --cf-range 1-309 --defects d11-ack-unflushed-flag --reps 6-6 --budget 60 --workers 1
+pxr-d11-r6 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d11-ack-unflushed-flag --reps 6-6 --budget 60 --workers 1
+px-d11-r7 run --strategy process --more-faults --cf-range 1-309 --defects d11-ack-unflushed-flag --reps 7-7 --budget 60 --workers 1
+pxr-d11-r7 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d11-ack-unflushed-flag --reps 7-7 --budget 60 --workers 1
+px-d11-r8 run --strategy process --more-faults --cf-range 1-309 --defects d11-ack-unflushed-flag --reps 8-8 --budget 60 --workers 1
+pxr-d11-r8 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d11-ack-unflushed-flag --reps 8-8 --budget 60 --workers 1
+px-d11-r9 run --strategy process --more-faults --cf-range 1-309 --defects d11-ack-unflushed-flag --reps 9-9 --budget 60 --workers 1
+pxr-d11-r9 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d11-ack-unflushed-flag --reps 9-9 --budget 60 --workers 1
+px-d11-r10 run --strategy process --more-faults --cf-range 1-309 --defects d11-ack-unflushed-flag --reps 10-10 --budget 60 --workers 1
+pxr-d11-r10 run --strategy process --more-faults --cf-range 1-309 --reactive both --defects d11-ack-unflushed-flag --reps 10-10 --budget 60 --workers 1

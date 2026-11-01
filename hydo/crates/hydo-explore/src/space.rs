@@ -16,8 +16,9 @@ use std::path::Path;
 
 pub const FAULT_KINDS: [&str; 7] = ["kill", "pause", "network", "oneway", "cut", "clock", "disk"];
 /// Guest tokens with a fixed meaning; a manifest knob may not reuse one.
-pub const RESERVED_TOKENS: [&str; 12] =
-    ["K", "P", "N", "O", "C", "T", "Q", "X", "B", "F", "H", "W"];
+pub const RESERVED_TOKENS: [&str; 13] = [
+    "K", "P", "N", "O", "C", "T", "Q", "X", "B", "F", "H", "W", "A",
+];
 pub const PF_REQ_KINDS: [&str; 4] = ["status", "delay", "drop", "reset"];
 pub const PF_HOOK_KINDS: [&str; 4] = ["dup", "reorder", "late", "lost"];
 pub const PF_TCP_KINDS: [&str; 3] = ["delay", "drop", "reset"];
@@ -372,6 +373,19 @@ impl Space {
         if s.disk == "none" || s.disk_is("ioerr") {
             s.c = None;
         }
+        // M139: a reaction whose action the manifest does not allow, or on a service it does not
+        // have, goes (a cut like C=: with the cut disk only)
+        let disk_cut = s.disk == "cut";
+        s.a.retain(|a| match a.kind() {
+            "cut" => disk_cut && self.has_fault("cut"),
+            "kill" => {
+                self.has_fault("kill") && a.svc().is_some_and(|v| self.svcs.iter().any(|x| x == v))
+            }
+            "stop" | "cont" => {
+                self.has_fault("pause") && a.svc().is_some_and(|v| self.svcs.iter().any(|x| x == v))
+            }
+            _ => false,
+        });
         // single upper-case keys other than K N C P T O F H: knobs only when the manifest has the
         // token; B only with buggify: true; W only for a composed plan; Q and X never.
         let tokens: Vec<&str> = self.knobs.iter().map(|(t, _, _)| t.as_str()).collect();

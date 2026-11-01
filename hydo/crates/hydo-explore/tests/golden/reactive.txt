@@ -1,0 +1,24 @@
+random fault mf=0|180|e0352be047586ecd0768a837a77c6693b19e206979a4988ca19a586c7e94f99a|disk=none dseed=533e00f7f3c606d4 | run K=redis@16+4 A=server.not_applied@16+10:kill-front
+random fault mf=1|180|4d838349d1a61cf42b849107a57437e9ab1563749ce29249f15f9e7094540d25|disk=none dseed=533e00f7f3c606d4 | run K=redis@16+4 A=server.not_applied@16+10:kill-front
+random heal mf=0|180|23b1b38e91abaf3f53746ab2f80d2e1e0983988350b067d4c25ee1166d672d4a|disk=none dseed=533e00f7f3c606d4 | run K=redis@16+4
+random heal mf=1|180|01573741e91d377825b27ac10bc4088dbd9662a73947735fd07ada1754985bf8|disk=none dseed=533e00f7f3c606d4 | run K=redis@16+4
+random both mf=0|180|e0352be047586ecd0768a837a77c6693b19e206979a4988ca19a586c7e94f99a|disk=none dseed=533e00f7f3c606d4 | run K=redis@16+4 A=server.not_applied@16+10:kill-front
+random both mf=1|180|4d838349d1a61cf42b849107a57437e9ab1563749ce29249f15f9e7094540d25|disk=none dseed=533e00f7f3c606d4 | run K=redis@16+4 A=server.not_applied@16+10:kill-front
+swarm fault mf=0|180|d3d30aaabff3f6ff5571cf31dcb4e45fea2085c80a52be1764c81a3fb54eeada|disk=lying:6 dseed=6c1f89083e8cade4 | run N=redis@24-27:delay,166ms C=9 A=server.not_applied@24+10:kill-redis
+swarm fault mf=1|180|1189a863ec6308a407792849c8cf717b3c5194b40dba1296d758fa52c76ffb96|disk=lying:6 dseed=6c1f89083e8cade4 | run N=redis@24-27:delay,166ms C=9 A=server.not_applied@24+10:kill-redis
+swarm heal mf=0|180|5b434eacd1c89d92360dc611c86dea941014556a713b6796aa07a0a8e2fe66c0|disk=lying:6 dseed=6c1f89083e8cade4 | run N=redis@24-27:delay,166ms C=9
+swarm heal mf=1|180|f278ad502dc2dbabab1f7b608b1e8e7f83482c917fd0e9ebf297651984167bcf|disk=lying:6 dseed=6c1f89083e8cade4 | run N=redis@24-27:delay,166ms C=9
+swarm both mf=0|180|d3d30aaabff3f6ff5571cf31dcb4e45fea2085c80a52be1764c81a3fb54eeada|disk=lying:6 dseed=6c1f89083e8cade4 | run N=redis@24-27:delay,166ms C=9 A=server.not_applied@24+10:kill-redis
+swarm both mf=1|180|1189a863ec6308a407792849c8cf717b3c5194b40dba1296d758fa52c76ffb96|disk=lying:6 dseed=6c1f89083e8cade4 | run N=redis@24-27:delay,166ms C=9 A=server.not_applied@24+10:kill-redis
+swarm-pos fault mf=0|180|62f8cdd7e72b3de7146a112c2d691033ebf55689ce2523f83e0a7c746278e688|disk=lying:9 dseed=3440ea92199cad2 | run N=mysql@29-30:delay,74ms C=20 M=0 P=front@15~332:7542 A=server.not_applied@15+10:kill-redis
+swarm-pos fault mf=1|180|f08caf0826caa7dc6f28445f11390055e3532a44c50e2eccc4f99f9b87e4e1b6|disk=lying:9 dseed=3440ea92199cad2 | run N=mysql@29-30:delay,74ms C=20 M=0 P=front@15~332:7542 A=server.not_applied@15+10:kill-redis
+swarm-pos heal mf=0|180|c089aff5bf2d311dc12f67ca78e74331faa71e86baf82b87ce58bbdc758a749b|disk=lying:9 dseed=3440ea92199cad2 | run N=mysql@29-30:delay,74ms C=20 M=0 P=front@15~332:7542
+swarm-pos heal mf=1|180|8cb825bd6c0b3f2288b8cd9e19ab4a63669b6678f5142e1d58f73abc8a700813|disk=lying:9 dseed=3440ea92199cad2 | run N=mysql@29-30:delay,74ms C=20 M=0 P=front@15~332:7542
+swarm-pos both mf=0|180|6c33ede91a311374eec8fb0c27ebe482a443cdf2e245efd15768e49d004dac6d|disk=lying:9 dseed=3440ea92199cad2 | run N=mysql@29-30:delay,74ms C=20 M=0 P=front@15~332:7542 A=server.not_applied@15+10:kill-redis
+swarm-pos both mf=1|180|4a265f8eedb86c3b94648b8af392dc61660c3a1080266d62f8e2e6083b05e032|disk=lying:9 dseed=3440ea92199cad2 | run N=mysql@29-30:delay,74ms C=20 M=0 P=front@15~332:7542 A=server.not_applied@15+10:kill-redis
+process fault mf=0|180|4ab8e5773e434e7f0bb5f107f6e8b3701842575a5c3e027e659c097077102b32|disk=none dseed=a6a69ba3eb969264 | run T=12:-86400 O=redis@27-28:req:delay,1320ms A=server.not_applied@27+10:kill-redis
+process fault mf=1|180|2f56dd83d9bb3d0c97ecd31d98ebdd8a4545482104a92d8e7dd22e71927cb7d8|disk=none dseed=a6a69ba3eb969264 | run T=12:-86400 O=redis@27-28:req:delay,1320ms A=server.not_applied@27+10:kill-redis
+process heal mf=0|180|9e2a8df299c1558a0b4a6a20b233b0284ef35fe033b0adc1c45cc99fcec65ed4|disk=none dseed=a6a69ba3eb969264 | run T=12:-86400 O=redis@27-28:req:delay,1320ms
+process heal mf=1|180|5dc057cd99fb22d0b478ec9694fd3d78d527bde544775c8d7bd948df71fcf8a3|disk=none dseed=a6a69ba3eb969264 | run T=12:-86400 O=redis@27-28:req:delay,1320ms
+process both mf=0|180|e3d0d69e4db5a5c639e2442d4575fbae307ea3957cdba473f47c5c82de24ab25|disk=none dseed=a6a69ba3eb969264 | run T=12:-86400 O=redis@27-28:req:delay,1320ms A=server.not_applied@27+10:kill-redis
+process both mf=1|180|8b6181f26c6e88be291f94556717c43932cae8670b5da170261336f23f3ef18e|disk=none dseed=a6a69ba3eb969264 | run T=12:-86400 O=redis@27-28:req:delay,1320ms A=server.not_applied@27+10:kill-redis

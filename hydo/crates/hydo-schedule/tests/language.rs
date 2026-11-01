@@ -326,6 +326,42 @@ fn refusals() {
     refused(&long, "keeps 511");
 }
 
+/// M139: the reaction token `A=<event>[@<step>][+<ms>]:<action>`.
+#[test]
+fn reactions() {
+    for s in [
+        "disk=cut dseed=0 | run P=kafka@5+2 A=client.place_failed:cut",
+        "disk=none dseed=0 | run O=kafka@5-10:resp:loss,100% A=client.outcome_unknown+20:kill-front",
+        "disk=none dseed=0 | run P=kafka@5+25 A=client.outcome_unknown@5+500:cont-kafka",
+        "disk=none dseed=0 | run A=server.store_error@3:stop-mysql-3000 A=client.place_failed:cut",
+        "disk=none | run A=Fault-X.y_1:kill-redis",
+    ] {
+        round_trip(s);
+    }
+    let s = Schedule::parse("disk=none | run A=client.place_failed@4+250:stop-kafka-1000").unwrap();
+    assert_eq!(
+        s.guest,
+        vec![GuestToken::React(React {
+            event: "client.place_failed".into(),
+            at: 4,
+            delay_ms: 250,
+            action: ReactAction::Stop("kafka".into(), 1000),
+        })]
+    );
+    assert_eq!(s.guest[0].letter(), 'A');
+    assert!(RESERVED.contains('A'));
+    refused("disk=none | run A=x", "A=<event>");
+    refused("disk=none | run A=x:boom", "the action is");
+    refused("disk=none | run A=x:kill-", "not a service name");
+    refused("disk=none | run A=x:stop-kafka", "the action is");
+    refused("disk=none | run A=x:stop-kafka-0", "at least 1 ms");
+    refused("disk=none | run A=x@0:cut", "no @0");
+    refused("disk=none | run A=x+0:cut", "no +0");
+    refused("disk=none | run A=x+05:cut", "leading zero");
+    refused("disk=none | run A=:cut", "not an assertion id");
+    refused("disk=none | run A=a/b:cut", "not an assertion id");
+}
+
 /// `<seed>`, `<outdir>` or an ellipsis: a pattern in the text, not a schedule.
 fn placeholder(s: &str) -> bool {
     if s.contains('…') || s.contains("...") {

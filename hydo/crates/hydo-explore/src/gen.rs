@@ -10,7 +10,7 @@ use crate::compose;
 use crate::py::{fdiv, isdigit, py_hex, py_int};
 use crate::rng::{mix64, SplitMix, GOLDEN};
 use crate::sched::{netem_args, render_fc, render_h, render_preempt, render_tj, render_turns};
-use crate::sched::{Fc, Kinds, Pause, Tj, H, KV, RV, S};
+use crate::sched::{parse_a, render_a, Fc, Kinds, Pause, Ra, Tj, H, KV, RV, S};
 use crate::space::{PfTarget, Space};
 use regex::Regex;
 use std::sync::OnceLock;
@@ -57,6 +57,30 @@ pub const TIMING_SALT: u64 = 0x7417D1CE7417D1CE;
 pub const PREEMPT_SALT: u64 = 0x9EE397C0FFEE9EE3;
 pub const GF_SALT: u64 = 0x475250435F464C54;
 pub const HVM_TJ_MAX: i64 = 1000;
+/// M139: the reactions' own stream (`--reactive`).
+pub const REACT_SALT: u64 = 0xA5EAC7C0FFEEA5EA;
+/// The stack's assertion events a fault reaction waits for (the order service's and its client's
+/// `sometimes`/`reachable` assertions that fire during the workload; hydo/stack/main.go).
+pub const STACK_REACT_EVENTS: [&str; 9] = [
+    "server.store_error",
+    "server.kafka_recheck",
+    "server.cache_write_skipped",
+    "server.not_applied",
+    "server.outcome_unknown",
+    "server.redis_redialed",
+    "client.place_failed",
+    "client.definite_failure",
+    "client.outcome_unknown",
+];
+/// The stack's "no progress" events a heal reaction waits for: a client request that failed or
+/// whose outcome the client could not know.
+pub const STACK_HEAL_EVENTS: [&str; 2] = ["client.outcome_unknown", "client.place_failed"];
+/// A fault reaction's delay after its event, ms of guest time.
+pub const REACT_DELAYS: [i64; 7] = [0, 0, 10, 50, 200, 1000, 5000];
+/// A heal reaction's delay after its event.
+pub const HEAL_DELAYS: [i64; 5] = [0, 100, 500, 2000, 10000];
+/// How long a `stop-<svc>-<ms>` reaction stops its service.
+pub const REACT_STOP_MS: [i64; 5] = [300, 1000, 3000, 10000, 30000];
 
 const CATEGORIES: [&str; 5] = ["kill", "net", "cut", "disk", "knob"];
 const POSITIONS: [&str; 4] = ["early", "middle", "late", "end"];
@@ -129,6 +153,14 @@ pub struct Ex {
     pub grpc_on: bool,
     pub grpc_targets: Vec<(String, Vec<String>)>,
     pub compose: bool,
+    /// M139 `--reactive fault|heal|both`: add a fault reaction (A=...:cut|kill-|stop-) and/or
+    /// turn a counted pause into one healed at the first sign of no progress (A=...:cont-).
+    pub react_fault: bool,
+    pub react_heal: bool,
+    /// The assertion ids a fault reaction waits for (`--react-events`; the stack's by default).
+    pub react_events: Vec<String>,
+    /// The assertion ids a heal reaction waits for (`--heal-events`).
+    pub heal_events: Vec<String>,
 }
 
 impl Default for Ex {
@@ -176,6 +208,10 @@ impl Default for Ex {
             grpc_on: false,
             grpc_targets: Vec::new(),
             compose: true,
+            react_fault: false,
+            react_heal: false,
+            react_events: STACK_REACT_EVENTS.map(String::from).to_vec(),
+            heal_events: STACK_HEAL_EVENTS.map(String::from).to_vec(),
         }
     }
 }
@@ -842,6 +878,113 @@ impl Ex {
         s
     }
 
+    /// M139 `--reactive`: reactions from their own stream (REACT_SALT), so every other field of
+    /// a seed's schedule stays as it was. Every draw is made whether it is used or not.
+    ///
+    /// - heal (70% of the schedules with a counted pause `P=svc@a+n`): the pause lasts to the end
+    ///   of the workload and a reaction `A=<no-progress event>[@a][+ms]:cont-svc` resumes it at
+    ///   the first sign of no progress (a client request that failed or whose outcome was not
+    ///   known; with the order service itself paused, its client's events only).
+    /// - fault (60% of the schedules): `A=<event>[@a][+ms]:<action>`, the event from
+    ///   `react_events`, armed at the workload's start or at the start of one of the schedule's
+    ///   faults, with an action of three kinds: a power cut (only without `cf=`, with an honest
+    ///   disk, which becomes `cut`), a kill or a stop of a service (not the `K=` or `P=` one; with
+    ///   `cf=` only the order service, as for `X=`).
+    pub fn add_reactive(&self, mut s: S, seed: u64) -> S {
+        if !self.react_fault && !self.react_heal {
+            return s;
+        }
+        let mut t = SplitMix::new(seed ^ REACT_SALT);
+        let h_on = t.below(100) < 70;
+        let h_ev = t.next();
+        let h_delay = t.pick(&HEAL_DELAYS);
+        let f_on = t.below(100) < 60;
+        let f_ev = t.next();
+        let f_arm = t.below(2);
+        let f_arm_k = t.next();
+        let f_delay = t.pick(&REACT_DELAYS);
+        let f_kind = t.below(3);
+        let f_svc = t.next();
+        let f_ms = t.pick(&REACT_STOP_MS);
+        let pick = |l: &[String], r: u64| -> Option<String> {
+            (!l.is_empty()).then(|| l[(r % l.len() as u64) as usize].clone())
+        };
+        if self.react_heal && h_on {
+            if let Some(Pause::Plus(svc, a, _)) = s.p.clone() {
+                let evs: Vec<String> = if svc == "front" {
+                    self.heal_events
+                        .iter()
+                        .filter(|e| e.starts_with("client."))
+                        .cloned()
+                        .collect()
+                } else {
+                    self.heal_events.clone()
+                };
+                if let Some(ev) = pick(&evs, h_ev) {
+                    s.p = Some(Pause::Plus(svc.clone(), a, (self.norders - a).max(1)));
+                    s.a.push(Ra {
+                        event: ev,
+                        at: a,
+                        delay: h_delay,
+                        action: format!("cont-{svc}"),
+                    });
+                }
+            }
+        }
+        if self.react_fault && f_on {
+            if let Some(ev) = pick(&self.react_events, f_ev) {
+                let starts: Vec<i64> = [
+                    s.k.as_ref().map(|k| k.1),
+                    s.p.as_ref().map(|p| match p {
+                        Pause::Plus(_, a, _) | Pause::Timed(_, a, _, _) => *a,
+                    }),
+                    s.n.as_ref().map(|n| n.1),
+                    s.o.as_ref().map(|o| o.1),
+                ]
+                .into_iter()
+                .flatten()
+                .filter(|a| *a > 0 && *a < self.norders)
+                .collect();
+                let at = if f_arm == 1 && !starts.is_empty() {
+                    starts[(f_arm_k % starts.len() as u64) as usize]
+                } else {
+                    0
+                };
+                let cut_ok = s.cf.is_none() && (s.disk == "none" || s.disk == "cut");
+                let svcs: Vec<String> = self
+                    .pause_svcs
+                    .iter()
+                    .filter(|v| {
+                        s.k.as_ref().is_none_or(|k| **v != k.0)
+                            && s.p.as_ref().is_none_or(|p| p.svc() != v.as_str())
+                            && (s.cf.is_none() || *v == "front")
+                    })
+                    .cloned()
+                    .collect();
+                let action = match (f_kind, pick(&svcs, f_svc)) {
+                    (0, _) if cut_ok => Some("cut".to_string()),
+                    (1, Some(v)) => Some(format!("kill-{v}")),
+                    (2, Some(v)) => Some(format!("stop-{v}-{f_ms}")),
+                    (_, Some(v)) => Some(format!("kill-{v}")),
+                    (_, None) if cut_ok => Some("cut".to_string()),
+                    _ => None,
+                };
+                if let Some(action) = action {
+                    if action == "cut" {
+                        s.disk = "cut".into();
+                    }
+                    s.a.push(Ra {
+                        event: ev,
+                        at,
+                        delay: f_delay,
+                        action,
+                    });
+                }
+            }
+        }
+        s
+    }
+
     /// The composition explore.py main() applies to a generated schedule.
     pub fn compose_seed(&self, strategy: &str, seed: u64, durable_only: bool) -> S {
         let mut s = self.generator(strategy, seed);
@@ -852,6 +995,7 @@ impl Ex {
             s = self.add_new_faults(s, seed, strategy == "swarm");
         }
         s = self.add_more_faults(s, seed, strategy);
+        s = self.add_reactive(s, seed);
         s = self.add_freeze_call(s, seed);
         s = self.add_protocol_faults(s, seed);
         s = self.add_grpc_faults(s, seed);
@@ -978,6 +1122,9 @@ impl Ex {
         }
         if let Some(w) = &s.w {
             g.push(format!("W={w}"));
+        }
+        for a in &s.a {
+            g.push(render_a(a));
         }
         format!(
             "disk={} dseed={:x}{}{}{} | {}",
@@ -1156,6 +1303,7 @@ impl Ex {
                 "F" => s.f = Some(parse_fc(v)?),
                 "H" => s.h.push(parse_h(v)?),
                 "W" => s.w = Some(v.to_string()),
+                "A" => s.a.push(parse_a(v)?),
                 k if self.knob_tokens.iter().any(|t| t == k) => {
                     s.set_knob(k, KV::Str(v.to_string()))
                 }
@@ -1286,6 +1434,37 @@ impl Ex {
             var(&|t| t.cf = None);
             if cf > 1 {
                 var(&|t| t.cf = Some(fdiv(cf, 2)));
+            }
+        }
+        // M139: a reaction is anchored to its event, so dropping another fault keeps its
+        // meaning; it shrinks by going, by acting at once, by being armed from the start, and
+        // (a stop) by a shorter stop
+        for (i, a) in s.a.iter().enumerate() {
+            var(&|t| {
+                t.a.remove(i);
+            });
+            if a.delay > 0 {
+                var(&|t| t.a[i].delay = 0);
+                if a.delay > 1 {
+                    var(&|t| t.a[i].delay = fdiv(t.a[i].delay, 2));
+                }
+            }
+            if a.at > 0 {
+                var(&|t| t.a[i].at = 0);
+            }
+            if a.kind() == "stop" {
+                if let Some(ms) = a
+                    .action
+                    .rsplit('-')
+                    .next()
+                    .and_then(|x| x.parse::<i64>().ok())
+                {
+                    if ms > 300 {
+                        let act =
+                            format!("stop-{}-{}", a.svc().unwrap_or(""), 300.max(fdiv(ms, 2)));
+                        var(&|t| t.a[i].action = act.clone());
+                    }
+                }
             }
         }
         if s.b.is_some() {
