@@ -582,7 +582,18 @@ impl Controller for ScheduleController {
                     self.facts.events.push(e.clone());
                     new = true;
                 }
-                Seen::UnknownEvent(_) | Seen::Console(_) => {}
+                // M127: the records the guest's own programs write to the serial console (the
+                // SDKs' HYDO-ASSERT and HYDO-HIST lines, a shell recorder's lines) are on a shell
+                // image's console among the init's lines; here they arrive as console text, and
+                // they go into the run's report (as notes of the thread "console", where they
+                // were seen), so every console reader finds them in <tag>.log as before.
+                Seen::Console(t) => {
+                    let t = t.trim_end_matches(['\r', '\n']);
+                    if is_guest_record(t) {
+                        out.note(CONSOLE, t);
+                    }
+                }
+                Seen::UnknownEvent(_) => {}
                 Seen::Broken(why) => {
                     let line = format!("HYDO-ORACLE: ERROR agent protocol: {why}");
                     out.report("main", line.clone());
@@ -1172,6 +1183,15 @@ fn mount_data(fx: &mut F<'_>, ctx: &Ctx, verdict: &str) -> Step<()> {
         ),
     );
     errlog::after_mount(fx, ctx) // SEAM(ErrorLogs): the data-disk files' line counts
+}
+
+/// The thread name of the guest programs' console records in a transcript.
+const CONSOLE: &str = "console";
+
+/// A console line a guest program wrote that a console reader looks for: the SDKs' assertion
+/// records and declarations (`HYDO-ASSERT`, `HYDO-ASSERT-DECL`) and history records (`HYDO-HIST`).
+fn is_guest_record(t: &str) -> bool {
+    t.starts_with("HYDO-ASSERT") || t.starts_with("HYDO-HIST")
 }
 
 /// What the guest's busybox `mount` (static, musl) prints on stderr when mount(2) fails with

@@ -234,3 +234,41 @@ fn a_periodic_check_keeps_the_environment_of_its_start() {
         "no periodic command was sent after a restart of postgres"
     );
 }
+
+/// M127: a guest program's records on the serial console (the SDKs write HYDO-ASSERT and
+/// HYDO-HIST lines to /dev/ttyS0 or /dev/console, not through the agent) are on a shell image's
+/// console; the controller must carry them into the run's report, or the explorer loses the
+/// assertion findings of the order service's oracle (the stack's power-cut schedules) and the
+/// history checkers lose their records. Other console text (kernel lines) stays out.
+#[test]
+fn guest_console_records_go_into_the_report() {
+    use hydo_control::{Action, Why};
+    let plan = plan_of("hydo/onboard/examples/redis/hydo.yaml").unwrap();
+    let mut ctl = ScheduleController::solo(plan).unwrap();
+    let rec = r#"HYDO-ASSERT {"t":"always","id":"order.in_kafka","ok":false,"msg":"m"}"#;
+    let hist = r#"HYDO-HIST {"p":1,"f":"write","k":"k:1","v":"1","t":"invoke"}"#;
+    let decl = r#"HYDO-ASSERT-DECL {"t":"always","id":"x","msg":"m"}"#;
+    let seen = [
+        Seen::Console("[    1.000000] EXT4-fs (vda2): mounted".into()),
+        Seen::Console(format!("{rec}\r")),
+        Seen::Console(hist.into()),
+        Seen::Console(decl.into()),
+    ];
+    let mut out = Out::new(1);
+    let stop = StopInfo {
+        n: 1,
+        at: 0,
+        why: Why::Start,
+        seen: seen.len() as u64,
+    };
+    ctl.step(&stop, &seen, &mut out);
+    let notes: Vec<_> = out
+        .actions()
+        .iter()
+        .filter_map(|a| match a {
+            Action::Note { by, line } if by == "console" => Some(line.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(notes, vec![rec, hist, decl]);
+}
