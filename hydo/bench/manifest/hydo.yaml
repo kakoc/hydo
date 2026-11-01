@@ -124,12 +124,14 @@ root:
       # The order service (hydo/bench/manifest/hydo.yaml), and stack-explore.sh's M67 path: when
       # it exits after the workload's last step (the run: command leaves /tmp/hydo-bench-steps-done),
       # for example because its restart before the retry pass fails after a cf= power cut, this
-      # process stays and prints the line ready: and retry: look for. A kill or a pause reaches
-      # both processes (faults act on a service's whole tree).
+      # process stays and prints the line ready: and retry: look for (also on the console, where
+      # the SDKs' records go, so a run's log shows the path). A kill or a pause reaches both
+      # processes (faults act on a service's whole tree).
       /bin/hydostack server
       rc=$?
       [ -e /tmp/hydo-bench-steps-done ] || exit $rc
-      echo "hydo-bench: the order service exited after the workload's last step (status $rc); it stays down"
+      m="hydo-bench: the order service exited after the workload's last step (status $rc); it stays down"
+      echo "$m"; echo "$m" > /dev/ttyS0 2>/dev/null
       exec /bin/busybox sleep 1000000000
     /etc/redis.conf: |
       port 6379
@@ -273,7 +275,7 @@ workload:
   # stay un-ACKed (no guarantee, as for any un-ACKed order) and the recovery boot decides
   retry: |
     if grep -qa "^hydo-bench: the order service exited after" /tmp/hydo/front.log; then
-      echo "hydo-bench: the order service cannot restart; the un-ACKed orders stay un-ACKed"
+      echo "hydo-bench: the order service cannot restart; no retry pass, the un-ACKed orders stay un-ACKed" > /dev/ttyS0 2>/dev/null
       : > /tmp/hydo-bench-no-retry
       exit 0
     fi

@@ -13,6 +13,17 @@
 > `hydo-bench table DIR...`; the same options, outputs and printed lines. Not ported: `--strategy portfolio` and
 > `--rescore` (one-time M56 re-scoring). The Python files, `mkpatches.py` and `smp_ident.py` were deleted in M108;
 > restore one with `git show 705cf98:hydo/bench/<file>` (docs/HISTORY.md M108).
+>
+> Note (M135): the benchmark's images are now built from one manifest, `manifest/hydo.yaml`, by
+> `build-bench-manifest.sh` on the bare-metal test machine (section "The manifest images
+> (Milestone 135)" at the end, with the triggers recorded on them). `hydo-bench` runs their agent
+> images by default (`--kind agent`), their shell images with `--kind shell`, and the hand-written
+> stack images that the older sections below describe with `--kind stack`. The stack images
+> (`build-bench*.sh` with `hv/hvx/images/build-stack.sh` and `hydo/explore/stack-explore.sh`)
+> stay only as the engine's regression baselines (`deploy-metal.sh`, the pinned reproducers on
+> `explore-disk.img` and `explore-fix-disk.img`), as the record of the measurements below, and as
+> the inputs of the manifest build (each defect's order-service binary, and the root files of the
+> `-pin-kr` control); do not delete them.
 
 Every explorer strategy comparison up to Milestone 45 rested on ONE bug: the pre-M39 front door
 (publish to Kafka, then fail the order because the Redis cache was down). This benchmark gives
