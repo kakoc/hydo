@@ -85,7 +85,7 @@ have no arm64 manifest.
 | redis-read | yes | nothing |
 | redis-ram | yes | 1 of 100 swarm seeds (an injected I/O error hits another disk request: D2) |
 | redis-oci | yes | nothing (swarm 100 of 100) |
-| redis-bridge | yes, except `F=` | the two freeze schedules are refused on the agent image (D4); everything else the same |
+| redis-bridge | yes (`F=` since M131) | the two freeze schedules were refused on the agent image (D4); since M131 they give the shell image's FROZE points and verdicts, and the freeze sweep is the same on both images except one word of its signature (D7); everything else the same |
 | ledger | yes | 7 of 100 swarm seeds, both directions, 39 against 38 failures, the same minimal schedule (packet-loss timing: D1) |
 | ledger-spin | **no** | every agent run ends as SPIN: lock-step control does not run the rewind mode a counter loop needs (D5) |
 | redis-composed (atomic) | yes | 2 of 100 swarm seeds, both lying disk (D2) |
@@ -128,8 +128,8 @@ verdict. Fingerprints of the two images differ by design.
 | redis-bridge | `disk=none \| run O=primary@5-8:resp:delay,300ms` | OK `d703e61bdbdb51fb` | OK `ff600aa415e3ab79` | yes | yes |
 | redis-bridge | `disk=none \| run K=replica@5+3` | OK `16407a89bd0e0f3a` | OK `1bcbdeb825bf2497` | yes | yes |
 | redis-bridge | `disk=cut \| run C=8` | OK `bd53c4eb42a31e21` | OK `d85122936a927ee9` | yes | yes |
-| redis-bridge | `disk=none \| run F=replica<primary@5#3:2000` | OK `5ab120707c50bcb4` | ERROR no result `` | NO | **no** |
-| redis-bridge | `disk=none \| run F=primary<workload@5#2:1000` | OK `d51a611fa1a33838` | ERROR no result `` | NO | **no** |
+| redis-bridge | `disk=none \| run F=replica<primary@5#3:2000` | OK `5ab120707c50bcb4` | M128: ERROR no result (refused); M131: OK `10923c154b50fe48`, the same packet frozen (resp #3, `SET k:7 v7`) | yes (M131) | yes (M131) |
+| redis-bridge | `disk=none \| run F=primary<workload@5#2:1000` | OK `d51a611fa1a33838` | M128: ERROR no result (refused); M131: OK `f1b963a1d51fb2df`, the same packet frozen (resp #2, `INFO replication`) | yes (M131) | yes (M131) |
 | redis-bridge | `disk=none \| run H=redisp@3-6:drop` | OK `1cdc1d26691e912c` | OK `3e381682b8072473` | yes | yes |
 | ledger | `disk=none \| run` | OK `41b0e641957da1a6` | OK `9142e77626d9dde0` | yes | yes |
 | ledger | `disk=none \| run O=front@5-8:resp:loss,100%` | OK `ce410b59d77057f9` | OK `226636df28deeab1` | yes | yes |
@@ -245,17 +245,30 @@ property table (assertions and invariants: passed, failed, not exercised).
   `syncfs` at S1), so the same index hits another request (on redis-ram the shell image's I/O error
   aborted the ext4 journal, the agent image's did not). M126 saw the same on hvx. The lying-disk
   and I/O-error classes are found and shrunk on both images.
-- **D3, wording only.** "data disk unmountable" names the mount error differently: busybox `mount`
-  (shell init) prints "No error information", the agent's `mount` op reports "errno 117" (EUCLEAN).
-  The property and the verdict class are the same; the explorer's signatures differ, so the two
-  images list this class under two signature strings. The comparison treats them as one property.
-  A decision for C3: keep the agent's errno (more precise) and accept the new signature, or make
-  the controller print busybox's text.
-- **D4, refused by design (open in M124).** `F=` on a manifest with `network: bridge`
-  (redis-bridge's two freeze schedules): the agent's `freeze` has no namespace field yet, so the
-  controller refuses the schedule ("hydo-agent-proto's freeze has no netns"). Without
-  `--freeze-call` the explorer draws no `F=`, so the redis-bridge exploration is unaffected. Needs
-  the protocol addition (a new agent build, which changes the pinned agent and every agent image).
+- **D3, wording only (fixed in M131).** "data disk unmountable" named the mount error differently:
+  busybox `mount` (shell init) prints "No error information", the agent's `mount` op reported
+  "errno 117" (EUCLEAN). The property and the verdict class were the same; the explorer's
+  signatures differed, so the two images listed this class under two signature strings. Since
+  M131 the controller writes busybox's own text for the errno (`hydo-control/src/busybox.rs`, with
+  the musl table of the image's busybox: the arm64 busybox's musl has no words for EUCLEAN, hence
+  "No error information"; the x86_64 one says "Data consistency error"): on Redis
+  `disk=lying:7 dseed=b74758aed7322936 | run C=18` both images now give `VIOLATION data disk
+  unmountable (mount: mounting /dev/vda2 on /data failed: No error information)` and the
+  explorer records one signature.
+- **D4, refused by design (open in M124; fixed in M131).** `F=` on a manifest with `network:
+  bridge` (redis-bridge's two freeze schedules): the agent's `freeze` had no namespace field, so
+  the controller refused the schedule. M131 added the optional `netns` (feature `freeze-netns`,
+  hydo-agent 0.2.0, aarch64 `585f0bdb…`): both schedules give the shell image's FROZE points and
+  verdicts, each agent run twice identical (table above), and `--sweep freeze --fc-adaptive`
+  gives the same 32 trace runs, 208 points and 628 failing runs (`replica.catches_up`) on both
+  images, apart from D7.
+- **D7, wording only (found in M131, open).** A check that its `timeout` kills: busybox ash
+  prints the signal's name ("Terminated") on its error output, which in hydo-liveness.sh's monitor
+  is the check's redirected output file, so the shell image's signature ends `(last check rc=#:
+  Terminated)` and the agent image's `(last check rc=#: )`. Seen on every point of redis-bridge's
+  freeze sweep. The fix belongs in the controller (the shell's line after the output of a `run`
+  that a signal other than INT or PIPE ended, wherever the shell redirects a foreground command's
+  output), with the shell model and the goldens.
 - **D5, an engine limit that needs a decision: busy-wait counter loops.** ledger-spin's
   `spin_count` is a counter loop that only hvm's rewind mode resolves (M57). The shell image's run
   ends as SPIN, hvmx runs it again with rewind and reports that run; under lock-step control
@@ -314,13 +327,13 @@ and `cargo fmt --check` pass. The identity corpora and the scripted-engine scena
   numbering pure (stops counted outside the rewound exits), or a documented limit that agent images
   do not run counter-loop busy-waits; until then ledger-spin can only be tested with a shell image,
   and switching the default would lose it.
-- **`F=` with `network: bridge` (D4):** the `freeze` op's namespace field (an addition to protocol
-  version 1 with a feature name), a new pinned agent build for both architectures, and the
-  redis-bridge freeze schedules and a `--sweep freeze` on the Mac then.
+- **`F=` with `network: bridge` (D4):** done in M131 (the `freeze` op's `netns` field, a new
+  pinned agent for both architectures, the redis-bridge freeze schedules and a `--sweep freeze`
+  on the Mac).
+- **A check killed by its timeout (D7):** the shell's "Terminated" line in the check's output.
 - **The voting app's database (D6):** find why the agent image's checks get no answer from
   PostgreSQL after a pause combined with a clock jump; and its seeds 51–100.
-- **The mount error's wording (D3):** a decision, because it changes the explorer's signatures of
-  the "data disk unmountable" class.
+- **The mount error's wording (D3):** done in M131 (busybox's own text from the agent's errno).
 - **The re-baseline** of every Mac fingerprint (the agent images' values above are the first
   ones), the Mac release rebuilt with `guest/hydo-agent` and the second kernel, and its quickstart
   run on agent images.
@@ -328,6 +341,6 @@ and `cargo fmt --check` pass. The identity corpora and the scripted-engine scena
   `hydo-nix-fetch` gives the same files (checked against `files.sha256`), and their symlinks must
   be staged too. `hydo-elfdeps --root` does not follow an absolute symlink into another store path
   (python's `libgcc_s.so.1`), so a Mac-only fetch script would need that fixed or worked around.
-- **Not run here:** `--sweep freeze` (D4), `cf=`/`X=` (`--more-faults`; hvmx refuses `cf=`), BRANCH,
+- **Not run here:** `cf=`/`X=` (`--more-faults`; hvmx refuses `cf=`), BRANCH,
   several vCPUs and a schedule's own `rb=` under control (refused by the controller, M126), and the
   etcd example (no aarch64 etcd).

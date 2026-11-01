@@ -607,6 +607,14 @@ with fakes were not run together (no example has both).
   hvx and hvm (clean, kill, pause, power cuts; the shell image's verdicts). M128 ran the
   equivalence campaign (C2) over every arm64 example on hvm; the x86_64 examples (M127) and the
   benchmark (M129) are the other parts of C2.
+- **A command killed by a signal (found in M131, docs/C2-MAC.md D7).** busybox ash prints the
+  signal's name ("Terminated") on its error output when a foreground command is killed by a
+  signal other than SIGINT or SIGPIPE; where the shell init redirects that command's output
+  (`> $H/inv.$i.out 2>&1` in hydo-liveness.sh's monitor, the periodic and final invariants, the
+  workload), the line ends up in the captured output and so in the verdict's details. A `run` the
+  agent ends with status 143 has the command's own output only, so the two images' signatures
+  differ in that word (every point of redis-bridge's freeze sweep). To do: append the shell's line
+  in the controller for such runs, with the shell model and the goldens.
 - **Branching.** A mid-run branch (cloning the controller at a stop and continuing two engines)
   is supported by the types (`ScheduleController: Clone`), but no test checks it.
 - **The full corpus.** `HYDO_CONTROL_FULL=1` (300 seeds) was not recorded as a golden.
