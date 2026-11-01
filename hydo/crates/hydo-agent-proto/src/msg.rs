@@ -16,9 +16,20 @@ pub const PROTO: u64 = 1;
 /// Every protocol version the host side of this crate reads (it keeps every released one).
 pub const HOST_PROTOCOLS: std::ops::RangeInclusive<u64> = 1..=1;
 
-/// Optional capabilities an agent of version 1 can announce in its hello: `freeze` (the ops
-/// `freeze` and `unfreeze`) and `freeze-netns` (the optional `netns` of `freeze`, M127).
+/// Optional capabilities an agent of version 1 can announce in its hello.
 pub const FEATURES: &[&str] = &["freeze", "freeze-netns"];
+
+/// What each feature of [`FEATURES`] gives, in words (for the host's message when an image's
+/// agent lacks one).
+pub fn feature_purpose(feature: &str) -> &'static str {
+    match feature {
+        "freeze" => "the packet trigger (F=)",
+        "freeze-netns" => {
+            "the packet trigger inside a service's network namespace (F= with network: bridge)"
+        }
+        _ => "an optional capability",
+    }
+}
 
 /// The longest host line the agent reads (the serial receive ring holds 4,096 bytes), without
 /// its newline.
@@ -389,9 +400,11 @@ record! {
         dur_ms: u64,
         /// Write a trace line per payload packet to this file (hydo_fc's log format).
         log: Option<String>,
-        /// Bind the queue inside this network namespace (a path such as /tmp/hydo/ns/redis; the
-        /// rules that feed the queue must be in that namespace too), then return to the agent's
-        /// own namespace. Needs the feature `freeze-netns`.
+        /// Bind the netfilter queue inside this network namespace (a path such as
+        /// /tmp/hydo/ns/a): netfilter queues are per namespace, so the trigger reads the packets
+        /// that namespace's rules queue, as hydo_fc does under `nsenter -n<file>`. Only the
+        /// queue's socket is made there; the agent stays in its own namespace. Needs the feature
+        /// `freeze-netns`.
         netns: Option<String>,
     }
 }
@@ -773,7 +786,7 @@ union! {
 }
 
 impl Command {
-    /// The optional features (from the hello) the command needs; none for most commands.
+    /// The optional features (from the hello) the command needs, every one of them.
     pub fn features(&self) -> &'static [&'static str] {
         match self {
             Command::Freeze(f) if f.netns.is_some() => &["freeze", "freeze-netns"],

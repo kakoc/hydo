@@ -773,7 +773,51 @@ fn no_cont_after_freeze(items: &[Item], _: &Plan) -> Option<Vec<Item>> {
     Some(v)
 }
 
+/// With network: bridge, the freeze's queue bound in the guest's own namespace (M131).
+fn freeze_outside_namespace(items: &[Item], _: &Plan) -> Option<Vec<Item>> {
+    let mut v = items.to_vec();
+    for i in v.iter_mut() {
+        if let Item::Send {
+            cmd: Command::Freeze(f),
+            ..
+        } = i
+        {
+            if f.netns.is_some() {
+                f.netns = None;
+                return Some(v);
+            }
+        }
+    }
+    None
+}
+
+/// With network: bridge, a freeze rule put into the guest's own namespace (M131).
+fn freeze_rule_outside_namespace(items: &[Item], _: &Plan) -> Option<Vec<Item>> {
+    let mut v = items.to_vec();
+    for i in v.iter_mut() {
+        if let Item::Send {
+            cmd: Command::Run(r),
+            ..
+        } = i
+        {
+            if r.netns.is_some() && r.argv.iter().any(|a| a == "NFQUEUE") {
+                r.netns = None;
+                return Some(v);
+            }
+        }
+    }
+    None
+}
+
 const MISTAKES: &[(&str, Mutator)] = &[
+    (
+        "a bridge freeze bound outside the service's namespace",
+        freeze_outside_namespace,
+    ),
+    (
+        "a bridge freeze rule outside the service's namespace",
+        freeze_rule_outside_namespace,
+    ),
     ("the netem qdisc before the prio root", swap_tc_order),
     ("a drain poll left out", drop_drain_poll),
     ("a wrong heal line", wrong_heal_line),
@@ -788,42 +832,6 @@ const MISTAKES: &[(&str, Mutator)] = &[
         no_cont_after_freeze,
     ),
 ];
-
-/// A group of F= runs with network: bridge: nothing refused, every freeze sent with the frozen
-/// service's namespace, every rule run in a namespace, and some freeze fired.
-fn bridge_freezes(g: &Group) {
-    assert!(
-        g.counts.keys().all(|k| !k.starts_with("refused")),
-        "{}: {:?}",
-        g.name,
-        g.counts
-    );
-    let sends = |what: &str| -> Vec<&String> {
-        g.stream
-            .iter()
-            .filter(|l| l.contains(r#""t":"send""#) && l.contains(what))
-            .collect()
-    };
-    let freezes = sends(r#"\"op\":\"freeze\""#);
-    let rules = sends("--queue-num");
-    assert!(
-        !freezes.is_empty() && !rules.is_empty(),
-        "{}: no freeze sent",
-        g.name
-    );
-    for l in freezes.iter().chain(&rules) {
-        assert!(
-            l.contains(r#"\"netns\":\"/tmp/hydo/ns/"#),
-            "{}: {l}",
-            g.name
-        );
-    }
-    assert!(
-        g.stream.iter().any(|l| l.contains("hydo-fc: FROZE")),
-        "{}: no freeze fired",
-        g.name
-    );
-}
 
 #[test]
 fn network_faults_freeze_and_namespaces_do_what_the_shell_does() {
@@ -900,9 +908,10 @@ fn network_faults_freeze_and_namespaces_do_what_the_shell_does() {
     ));
     grp(&mut suite, m, &bridge, texts);
     // network: bridge with a fake outside world (a proxy) and faults: [freeze]: redis-bridge
-    // without its `eventually` check (the liveness seam is not driven yet); its F= tokens are
-    // driven since M127 (the agent's freeze takes the frozen service's namespace)
-    let mut bridged = Vec::new();
+    // without its `eventually` check; its F= tokens are driven since M131 (the freeze's netns:
+    // the trigger and the rules in the frozen service's namespace), both pairs and both
+    // directions, the workload peer, the example's two recorded freeze schedules, and every path
+    // of freeze_schedules on the replica's link
     for m in [
         "hydo/onboard/examples/redis-bridge/hydo.yaml",
         "hydo/onboard/examples-mac/redis-bridge/hydo.yaml",
@@ -918,17 +927,20 @@ fn network_faults_freeze_and_namespaces_do_what_the_shell_does() {
             "disk=cut | run H=redisp@1-6:drop N=replica@1-9:delay,40ms C=4".to_string(),
             "disk=none | run F=primary<replica@1#1:100".to_string(),
             "disk=none | run K=replica@2+3 N=primary-*@1-5:delay,60ms".to_string(),
+            "disk=none | run F=replica<primary@5#3:2000".to_string(),
+            "disk=none | run F=primary<workload@5#2:1000".to_string(),
+            "disk=none | run F=primary>workload@2#1:300 N=replica@1-4:delay,20ms".to_string(),
+            "disk=cut | run F=replica>primary@3#1:150000 H=redisp@1-3:drop C=5".to_string(),
         ]);
-        let (g, _) = grp(&mut suite, m, &p, texts);
-        assert!(
-            !suite.groups[g]
-                .counts
-                .keys()
-                .any(|k| k.starts_with("refused")),
-            "{m}: {:?}",
-            suite.groups[g].counts
+        texts.extend(freeze_schedules("replica", "primary", p.steps));
+        texts.extend(
+            freeze_schedules("primary", "workload", p.steps)
+                .into_iter()
+                .take(6),
         );
-        bridged.push((m, p));
+        let (g, _) = grp(&mut suite, m, &p, texts);
+        let c = &suite.groups[g].counts;
+        assert!(!c.keys().any(|k| k.starts_with("refused")), "{m}: {c:?}");
     }
     // the freeze: Redis with faults: [freeze] (its pair redis<workload), and its sweep
     let m = "hydo/onboard/examples/redis/hydo-freeze.yaml";
@@ -1016,37 +1028,18 @@ fn network_faults_freeze_and_namespaces_do_what_the_shell_does() {
             format!("disk=none | run N={svc}-peer@1-3:delay,10ms F={svc}>peer@1#1:100"),
         ],
     );
-    // the freeze with network: bridge (M127): the agent's freeze and the rules in the frozen
-    // service's namespace. redis-bridge's pair (the replica frozen at its primary's packets) and
-    // its workload peer, and the voting app with faults: [freeze] (two services with addresses
-    // and ports, and a service's workload peer)
-    for (m, p) in &bridged {
-        let mut texts = freeze_schedules("replica", "primary", p.steps);
-        texts.extend(
-            freeze_schedules("primary", "workload", p.steps)
-                .into_iter()
-                .take(8),
-        );
-        let g = grp(&mut suite, &format!("variant: {m} freeze"), p, texts).0;
-        bridge_freezes(&suite.groups[g]);
-    }
+    // the freeze with network: bridge is driven since M131 (it was refused while the agent's
+    // freeze had no namespace field)
     let mut p = bridge.clone();
     p.freeze = true;
-    p.layout.iptables = hydo_control::plan::IPTABLES_PLACEHOLDER.into();
-    let mut texts = freeze_schedules(&names[0], &names[1], p.steps);
-    texts.extend(
-        freeze_schedules(&ported, "workload", p.steps)
-            .into_iter()
-            .take(6),
-    );
-    let g = grp(
-        &mut suite,
-        "variant: bridge with faults: [freeze]",
-        &p,
-        texts,
-    )
-    .0;
-    bridge_freezes(&suite.groups[g]);
+    let s1 = hydo_control::GuestState::default();
+    let text = format!("disk=none | run F={}<{}@1#1:100", names[0], names[1]);
+    if let Err(e) =
+        hydo_control::ScheduleController::run(p.clone(), &Schedule::parse(&text).unwrap(), &s1)
+    {
+        panic!("{text} with network: bridge is refused: {e}");
+    }
+    golden.push(format!("driven\tF= with network: bridge\t{text}"));
     // a network setup that fails (an address the scripted ip refuses)
     let mut p = bridge.clone();
     p.net_extra = vec!["10.89.255.254".into()];

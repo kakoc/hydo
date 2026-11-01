@@ -31,6 +31,7 @@
 //! The driven ones are child modules in `src/features/` (they use this module's helpers):
 //! liveness, clock, buggify and the recovery inputs (M122).
 
+use crate::busybox;
 use crate::control::{Controller, Ending, EngineAction, Out, Seen, StopInfo};
 use crate::flow::{Facts, Flow, Fx, Memo, Step};
 use crate::plan::Plan;
@@ -478,8 +479,9 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
             // SEAM(NetFaults): netfault.rs
             GuestToken::Net { .. } => c.n = Some(value),
             GuestToken::OneWay { .. } => c.o = Some(value),
-            // SEAM(Freeze): F= is a knob (freeze.rs); with network: bridge the agent's freeze
-            // and the rules run in the frozen service's namespace (M127)
+            // SEAM(Freeze): freeze.rs reads F= as a knob below; with network: bridge the
+            // trigger binds its queue in the frozen service's namespace (the freeze command's
+            // netns, M131), so no F= is refused any more.
             // SEAM(Clock): T=, driven by features/clock.rs
             GuestToken::Clock { at, delta } => c.t = Some((*at as i64, *delta)),
             // Every other letter is a knob to the shell (`?=*) set_knob`): B= (set_knob's BUGGIFY
@@ -1138,22 +1140,39 @@ fn clock_start(fx: &mut F<'_>, ctx: &Ctx, with_log: bool) -> Step<()> {
 
 fn mount_data(fx: &mut F<'_>, ctx: &Ctx, verdict: &str) -> Step<()> {
     let l = &ctx.plan.layout;
-    let id = fx.send(Command::Mount(Mount {
-        src: l.data_dev.clone(),
-        dst: l.data_dir.clone(),
-        fstype: l.data_fstype.clone(),
-        flags: (!ctx.mount_flags.is_empty()).then(|| ctx.mount_flags.clone()),
-        data: ctx.mount_data.clone(),
-    }))?;
-    if let Err(e) = fx.reply(id)? {
-        // The shell puts busybox mount's own error text here (M127): for an errno that musl's
-        // strerror has a text for, the same words; otherwise (AMBIGUOUS) the agent's refusal,
-        // which names the system call and its errno.
-        let text = e
-            .errno
-            .and_then(|n| busybox_mount_error(&l.data_dev, &l.data_dir, n))
-            .unwrap_or(e.msg);
-        return die_oracle(fx, format!("{verdict} ({text})"));
+    // `MERR=$($BB mount ... 2>&1) || die_oracle "$1 ($MERR)"`: busybox's own words for the
+    // errno of the agent's refusal (crate::busybox, M131), so a shell image and an agent image
+    // give one verdict for one failure; EACCES/EROFS are tried again read-only, as busybox does
+    let mut flags = ctx.mount_flags.clone();
+    let mut merr: Vec<String> = Vec::new();
+    loop {
+        let id = fx.send(Command::Mount(Mount {
+            src: l.data_dev.clone(),
+            dst: l.data_dir.clone(),
+            fstype: l.data_fstype.clone(),
+            flags: (!flags.is_empty()).then(|| flags.clone()),
+            data: ctx.mount_data.clone(),
+        }))?;
+        let e = match fx.reply(id)? {
+            Ok(_) => break,
+            Err(e) => e,
+        };
+        let Some(n) = e.errno else {
+            // not a failed mount(2) (a refusal of the line itself): the agent's words
+            return die_oracle(fx, format!("{verdict} ({})", e.msg));
+        };
+        if busybox::retries_read_only(n, flags.contains(&MountFlag::Ro)) {
+            merr.push(busybox::write_protected(&l.data_dev));
+            flags.push(MountFlag::Ro);
+            continue;
+        }
+        merr.push(busybox::mount_error(
+            &l.data_dev,
+            &l.data_dir,
+            n,
+            l.strerror,
+        ));
+        return die_oracle(fx, format!("{verdict} ({})", merr.join("\n")));
     }
     for d in &ctx.plan.data_dirs {
         post(
@@ -1172,35 +1191,6 @@ fn mount_data(fx: &mut F<'_>, ctx: &Ctx, verdict: &str) -> Step<()> {
         ),
     );
     errlog::after_mount(fx, ctx) // SEAM(ErrorLogs): the data-disk files' line counts
-}
-
-/// What the guest's busybox `mount` (static, musl) prints on stderr when mount(2) fails with
-/// `errno` (busybox `bb_perror_msg("mounting %s on %s failed")` with musl's `strerror` text): the
-/// text hydo-init.sh's mount_data puts in its verdict. M127 found the difference on the Redis
-/// example's lying-disk schedules (`Data consistency error`, EUCLEAN). None for an errno that is
-/// not in this table (the Linux errno numbers of x86_64 and aarch64).
-fn busybox_mount_error(src: &str, dst: &str, errno: i64) -> Option<String> {
-    // musl 1.2's src/errno/__strerror.h, for the errors a mount of a block device can give
-    let text = match errno {
-        1 => "Operation not permitted",
-        2 => "No such file or directory",
-        5 => "I/O error",
-        6 => "No such device or address",
-        12 => "Out of memory",
-        13 => "Permission denied",
-        15 => "Block device required",
-        16 => "Resource busy",
-        19 => "No such device",
-        20 => "Not a directory",
-        22 => "Invalid argument",
-        24 => "No file descriptors available",
-        28 => "No space left on device",
-        30 => "Read-only file system",
-        74 => "Bad message",
-        117 => "Data consistency error",
-        _ => return None,
-    };
-    Some(format!("mount: mounting {src} on {dst} failed: {text}"))
 }
 
 /// start_svc: the old log appended to .log.old, setup, the service, its readiness. Ok(false) when
@@ -2108,20 +2098,6 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn mount_error_is_busybox_text() {
-        // the shell image's verdict on the Redis example's lying-disk seed 4 (M127)
-        assert_eq!(
-            busybox_mount_error("/dev/vda2", "/data", 117).as_deref(),
-            Some("mount: mounting /dev/vda2 on /data failed: Data consistency error")
-        );
-        assert_eq!(
-            busybox_mount_error("/dev/vda2", "/data", 5).as_deref(),
-            Some("mount: mounting /dev/vda2 on /data failed: I/O error")
-        );
-        assert_eq!(busybox_mount_error("/dev/vda2", "/data", 9999), None);
-    }
 
     #[test]
     fn shell_text_helpers() {

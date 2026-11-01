@@ -703,7 +703,7 @@ impl<'a> Model<'a> {
     fn refused_code(&self, id: u64) -> Option<ErrCode> {
         self.items.iter().find_map(|it| match it {
             Item::Got {
-                msg: Msg::Refused(r, _, code, _),
+                msg: Msg::Refused(r, _, code, _, _),
                 ..
             } if *r == id => Some(*code),
             _ => None,

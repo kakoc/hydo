@@ -79,6 +79,8 @@ pub struct Model<'a> {
     main: Vec<usize>,
     k: usize,
     replies: BTreeMap<u64, (usize, Result<Reply, String>)>,
+    /// The errno of each refusal that carried one.
+    errnos: BTreeMap<u64, i64>,
     dones: BTreeMap<u64, (usize, Done)>,
     probes: BTreeMap<u64, (usize, ProbeDone)>,
     exits: BTreeMap<u64, (usize, Exit)>,
@@ -254,6 +256,7 @@ impl<'a> Model<'a> {
             main: Vec::new(),
             k: 0,
             replies: BTreeMap::new(),
+            errnos: BTreeMap::new(),
             dones: BTreeMap::new(),
             probes: BTreeMap::new(),
             exits: BTreeMap::new(),
@@ -278,8 +281,11 @@ impl<'a> Model<'a> {
                     Msg::Reply(id, r) => {
                         m.replies.insert(*id, (i, Ok(r.clone())));
                     }
-                    Msg::Refused(id, _, _, why) => {
+                    Msg::Refused(id, _, _, why, errno) => {
                         m.replies.insert(*id, (i, Err(why.clone())));
+                        if let Some(n) = errno {
+                            m.errnos.insert(*id, *n);
+                        }
                     }
                     Msg::Event(Event::Done(d)) => {
                         m.dones.insert(d.id, (i, d.clone()));
@@ -654,17 +660,45 @@ impl<'a> Model<'a> {
         Ok(())
     }
 
+    /// `MERR=$($BB mount -t ext4 -o "$HYDO_DATA_OPTS" /dev/vda2 /data 2>&1) || die_oracle
+    /// "$1 ($MERR)"`, with busybox mount's own lines (util-linux/mount.c, written out here from
+    /// its text, not from the controller's module): a failed mount(2) prints "mount: mounting
+    /// <src> on <dst> failed: <strerror>" (musl's words, the image's table), EPERM "mount:
+    /// permission denied (are you root?)", and EACCES or EROFS without ro first "mount: <src> is
+    /// write-protected, mounting read-only" and a second, read-only attempt.
     fn mount_data(&mut self, verdict: &str) -> R<()> {
         let (flags, data) = mount_args(&self.plan.data_opts);
-        let id = self.send(Command::Mount(Mount {
-            src: s("/dev/vda2"),
-            dst: s("/data"),
-            fstype: s("ext4"),
-            flags,
-            data,
-        }))?;
-        if let Err(m) = self.reply(id)? {
-            return self.die(format!("{verdict} ({m})"));
+        let mut flags = flags.unwrap_or_default();
+        let mut merr: Vec<String> = Vec::new();
+        loop {
+            let id = self.send(Command::Mount(Mount {
+                src: s("/dev/vda2"),
+                dst: s("/data"),
+                fstype: s("ext4"),
+                flags: (!flags.is_empty()).then(|| flags.clone()),
+                data: data.clone(),
+            }))?;
+            let Err(m) = self.reply(id)? else {
+                break;
+            };
+            let Some(n) = self.errnos.get(&id).copied() else {
+                return self.die(format!("{verdict} ({m})"));
+            };
+            let ro = flags.contains(&MountFlag::Ro);
+            if !ro && (n == 13 || n == 30) {
+                merr.push(s("mount: /dev/vda2 is write-protected, mounting read-only"));
+                flags.push(MountFlag::Ro);
+                continue;
+            }
+            merr.push(if n == 1 {
+                s("mount: permission denied (are you root?)")
+            } else {
+                format!(
+                    "mount: mounting /dev/vda2 on /data failed: {}",
+                    musl_strerror(n, self.plan.layout.strerror)
+                )
+            });
+            return self.die(format!("{verdict} ({})", merr.join("\n")));
         }
         for d in self.plan.data_dirs.clone() {
             self.send(Command::Mkdir(Mkdir {
@@ -1415,6 +1449,21 @@ fn write(path: &str, data: &str, append: bool) -> Command {
 }
 
 /// busybox mount -o, for the data disk options the examples use.
+/// musl's strerror for the codes the scripted agent reports at a mount (src/errno/__strerror.h);
+/// EUCLEAN has words only in the later table.
+fn musl_strerror(n: i64, t: hydo_control::busybox::Strerror) -> &'static str {
+    use hydo_control::busybox::Strerror;
+    match (n, t) {
+        (117, Strerror::MuslEuclean) => "Data consistency error",
+        (22, _) => "Invalid argument",
+        (5, _) => "I/O error",
+        (74, _) => "Bad message",
+        (30, _) => "Read-only file system",
+        (13, _) => "Permission denied",
+        _ => "No error information",
+    }
+}
+
 fn mount_args(opts: &str) -> (Option<Vec<MountFlag>>, Option<String>) {
     let mut f: Vec<MountFlag> = Vec::new();
     let mut d: Vec<&str> = Vec::new();

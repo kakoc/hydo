@@ -1158,31 +1158,66 @@ impl<'a> Model<'a> {
         }
     }
 
+    /// hydo-init-netns.sh's fc_rules <-A|-D> (M131): `ipt="$BB nsenter -n$NSD/$fc_svc
+    /// $HYDO_IPT"`, the pair's packets in the frozen service's namespace; the shell's unquoted
+    /// words, split as the shell splits them.
+    fn fc_rules_netns(&mut self, op: &str) -> R<(u32, String)> {
+        let svc = self.ext.fc_svc.clone();
+        let tgt = self.ext.fc_tgt.clone();
+        let sa = self.sv_addr(&svc);
+        let ta = self.sv_addr(&tgt);
+        let q = "-j NFQUEUE --queue-num 7 --queue-bypass";
+        let gw = "10.89.0.1";
+        let (r1, r2) = if tgt == "workload" {
+            let tp = self.sv_port(&svc);
+            if tp.is_empty() {
+                return Ok((3, String::new()));
+            }
+            (
+                format!("{op} INPUT -s {gw} -d {sa} -p tcp --dport {tp} {q}"),
+                format!("{op} OUTPUT -s {sa} -d {gw} -p tcp --sport {tp} {q}"),
+            )
+        } else {
+            (
+                format!("{op} OUTPUT -s {sa} -d {ta} {q}"),
+                format!("{op} INPUT -s {ta} -d {sa} {q}"),
+            )
+        };
+        // fc_arm's `fc_rules -A > $H/fc.ipt` keeps the output; fc_heal's -D throws it away
+        let cap = if op == "-A" { Some(3000) } else { None };
+        let ns = self.ns_of(&svc);
+        let mut out = String::new();
+        let mut rc = 0;
+        for r in [r1, r2] {
+            let mut argv: Vec<String> = self
+                .plan
+                .layout
+                .iptables
+                .split_whitespace()
+                .map(s)
+                .collect();
+            argv.extend(r.split_whitespace().map(s));
+            let e = self.env(&[]);
+            let (st, o) = self.run_ns(argv, e, cap, ns.clone())?;
+            out.push_str(&o);
+            rc = st;
+            if st != 0 {
+                break;
+            }
+        }
+        Ok((rc, out))
+    }
+
     /// fc_rules <-A|-D>: the iptables runs, (status, output); 3 without addresses or a port.
     fn fc_rules(&mut self, op: &str) -> R<(u32, String)> {
+        if self.plan.bridge {
+            return self.fc_rules_netns(op);
+        }
         let sa = self.sv_addr(&self.ext.fc_svc.clone());
         let ta = self.sv_addr(&self.ext.fc_tgt.clone());
         let mut tp = self.sv_port(&self.ext.fc_tgt.clone());
         let q = "-j NFQUEUE --queue-num 7 --queue-bypass";
-        // hydo-init-netns.sh's fc_rules: ipt="$BB nsenter -n$NSD/$fc_svc $HYDO_IPT"
-        let ns = self.ns_of(&self.ext.fc_svc.clone());
-        let (r1, r2) = if ns.is_some() {
-            if self.ext.fc_tgt == "workload" {
-                tp = self.sv_port(&self.ext.fc_svc.clone());
-                if tp.is_empty() {
-                    return Ok((3, String::new()));
-                }
-                (
-                    format!("{op} INPUT -s 10.89.0.1 -d {sa} -p tcp --dport {tp} {q}"),
-                    format!("{op} OUTPUT -s {sa} -d 10.89.0.1 -p tcp --sport {tp} {q}"),
-                )
-            } else {
-                (
-                    format!("{op} OUTPUT -s {sa} -d {ta} {q}"),
-                    format!("{op} INPUT -s {ta} -d {sa} {q}"),
-                )
-            }
-        } else if self.ext.fc_tgt == "workload" {
+        let (r1, r2) = if self.ext.fc_tgt == "workload" {
             tp = self.sv_port(&self.ext.fc_svc.clone());
             if tp.is_empty() {
                 return Ok((3, String::new()));
@@ -1230,10 +1265,9 @@ impl<'a> Model<'a> {
                 .split_whitespace()
                 .map(s)
                 .collect();
-            // the shell's word splitting (an empty address is no word)
-            argv.extend(r.split_whitespace().map(s));
+            argv.extend(r.split(' ').map(s));
             let e = self.env(&[]);
-            let (st, o) = self.run_ns(argv, e, cap, ns.clone())?;
+            let (st, o) = self.run(argv, e, cap)?;
             out.push_str(&o);
             rc = st;
             if st != 0 {
@@ -1292,7 +1326,8 @@ impl<'a> Model<'a> {
                 },
                 dur_ms: atol(&self.ext.fc_dur) as u64,
                 log: Some(format!("{H}/fc.log")),
-                // hydo-init-netns.sh's fc_arm: HYDO_FC="$BB nsenter -n$NSD/$fc_svc $_fc"
+                // hydo-init-netns.sh's fc_arm: HYDO_FC="$BB nsenter -n$NSD/$fc_svc $_fc"; the
+                // decision (M131): nsenter -n<file> of the helper is the freeze's netns
                 netns: self.ns_of(&self.ext.fc_svc.clone()),
             }))?;
             self.ext.fc_sent = Some((id, self.ext.fc_dur.clone()));

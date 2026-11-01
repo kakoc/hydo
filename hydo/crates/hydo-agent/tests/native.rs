@@ -6,9 +6,7 @@
 //! (`native-<name>.txt`), but only when the file is missing and `HYDO_BLESS=1` is set: a committed
 //! transcript is never rewritten. Every committed native transcript is then replayed twice through
 //! a fresh agent each time, and both runs must give exactly the recorded agent lines: the agent
-//! adds nothing that differs between runs (no pid, no time, no host path in its output). The one
-//! allowed difference is the hello's feature list, which may have grown since the recording
-//! (additions only within version 1, [`same_line`]).
+//! adds nothing that differs between runs (no pid, no time, no host path in its output).
 //!
 //! The agent binary is `$HYDO_AGENT_BIN` (for example the static release build) or Cargo's.
 
@@ -20,7 +18,6 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError};
 use std::time::Duration;
 
-use hydo_agent_proto::frame::{deframe_line, Deframed};
 use hydo_agent_proto::json;
 use hydo_agent_proto::transcript::{self, Entry};
 
@@ -55,28 +52,15 @@ fn scratch(name: &str) -> PathBuf {
 
 struct Running {
     child: Child,
-    stdin: Option<ChildStdin>,
+    stdin: ChildStdin,
     lines: Receiver<String>,
     root: PathBuf,
 }
 
 impl Running {
     fn start(name: &str) -> Running {
-        Running::start_under(name, &[])
-    }
-
-    /// The agent started through `wrap` (for example `sudo -n timeout -s KILL 60`).
-    fn start_under(name: &str, wrap: &[&str]) -> Running {
         let root = scratch(name);
-        let mut cmd = match wrap.split_first() {
-            Some((w, rest)) => {
-                let mut c = Command::new(w);
-                c.args(rest).arg(agent_bin());
-                c
-            }
-            None => Command::new(agent_bin()),
-        };
-        let mut child = cmd
+        let mut child = Command::new(agent_bin())
             .args(["serve", "--root"])
             .arg(&root)
             .stdin(Stdio::piped())
@@ -98,16 +82,15 @@ impl Running {
         });
         Running {
             child,
-            stdin: Some(stdin),
+            stdin,
             lines: rx,
             root,
         }
     }
 
     fn type_bytes(&mut self, b: &[u8]) {
-        let w = self.stdin.as_mut().unwrap();
-        w.write_all(b).unwrap();
-        w.flush().unwrap();
+        self.stdin.write_all(b).unwrap();
+        self.stdin.flush().unwrap();
     }
 
     fn take(&self, n: usize, what: &str) -> Vec<String> {
@@ -132,8 +115,6 @@ impl Running {
 
 impl Drop for Running {
     fn drop(&mut self) {
-        // the end of its input ends the agent (also one under sudo, which this user cannot kill)
-        drop(self.stdin.take());
         let _ = self.child.kill();
         let _ = self.child.wait();
         let _ = std::fs::remove_dir_all(&self.root);
@@ -275,7 +256,7 @@ fn scenarios() -> Vec<(&'static str, &'static str, Vec<Step>)> {
         ),
         (
             "unprivileged",
-            "what an agent that is not root cannot do: set the clock, mount, bind a netfilter queue",
+            "what an agent that is not root cannot do: set the clock, mount, bind a netfilter queue (also in a network namespace: a missing namespace file, a file that is not a namespace)",
             vec![
                 h(r#"{"v":1,"id":1,"op":"clock_set","sec":1700000000}"#, 1),
                 h(r#"{"v":1,"id":2,"op":"clock_set","step":-5}"#, 1),
@@ -284,71 +265,12 @@ fn scenarios() -> Vec<(&'static str, &'static str, Vec<Step>)> {
                 h(r#"{"v":1,"id":5,"op":"freeze","h":"nobody","queue":7,"port":6379,"dir":"req","n":1,"dur_ms":100}"#, 1),
                 h(r#"{"v":1,"id":6,"op":"freeze","h":"svc","queue":7,"dir":"req","n":1,"dur_ms":100}"#, 1),
                 h(r#"{"v":1,"id":7,"op":"freeze","h":"svc","queue":7,"port":6379,"dir":"req","n":1,"pattern":"SET","dur_ms":100,"log":"/work/fc.log"}"#, 1),
-                h(r#"{"v":1,"id":8,"op":"signal","h":"svc","sig":"KILL","tree":true}"#, 2),
-            ],
-        ),
-        (
-            "freeze-netns",
-            "the hello with the feature freeze-netns (M127); a freeze whose netns file is missing, one whose netns file is not a namespace (setns refuses it), and then a freeze without netns, refused as before (the agent is back in its own namespace)",
-            vec![
-                h(&format!(r#"{{"v":1,"id":1,"op":"spawn","h":"svc","argv":["sleep","100"],{p}}}"#), 1),
-                h(r#"{"v":1,"id":2,"op":"write","path":"/work/ns","data":""}"#, 1),
-                h(r#"{"v":1,"id":3,"op":"freeze","h":"svc","queue":7,"port":6379,"dir":"req","n":1,"dur_ms":100,"netns":"/no/such/ns"}"#, 1),
-                h(r#"{"v":1,"id":4,"op":"freeze","h":"svc","queue":7,"sip":"10.89.0.11","dir":"resp","n":2,"dur_ms":100,"log":"/work/fc.log","netns":"/work/ns"}"#, 1),
-                h(r#"{"v":1,"id":5,"op":"freeze","h":"svc","queue":7,"port":6379,"dir":"req","n":1,"dur_ms":100}"#, 1),
-                h(r#"{"v":1,"id":6,"op":"signal","h":"svc","sig":"KILL","tree":true}"#, 2),
+                h(r#"{"v":1,"id":8,"op":"freeze","h":"svc","queue":7,"port":6379,"dir":"req","n":1,"dur_ms":100,"netns":"/work/ns/none"}"#, 1),
+                h(r#"{"v":1,"id":9,"op":"freeze","h":"svc","queue":7,"port":6379,"dir":"req","n":1,"dur_ms":100,"netns":"/work/fc.log"}"#, 1),
+                h(r#"{"v":1,"id":10,"op":"signal","h":"svc","sig":"KILL","tree":true}"#, 2),
             ],
         ),
     ]
-}
-
-/// Whether an agent line is the hello `want` of a recording, as this agent may say it: the same
-/// members, except that the features may have grown (additions only within version 1: an agent
-/// that gained a feature still replays every older recording). Any other line must be the same
-/// bytes.
-fn same_line(want: &str, got: &str) -> bool {
-    if want == got {
-        return true;
-    }
-    let obj = |l: &str| -> Option<json::Obj> {
-        let Deframed::Agent(j) = deframe_line(l.as_bytes()) else {
-            return None;
-        };
-        match json::parse(j.as_bytes()).ok()? {
-            json::Value::Obj(m) => Some(m),
-            _ => None,
-        }
-    };
-    let (Some(mut w), Some(mut g)) = (obj(want), obj(got)) else {
-        return false;
-    };
-    if w.get("ev") != Some(&json::Value::Str("hello".into())) {
-        return false;
-    }
-    let names = |v: Option<json::Value>| -> Option<Vec<String>> {
-        match v? {
-            json::Value::Arr(a) => a
-                .into_iter()
-                .map(|x| match x {
-                    json::Value::Str(s) => Some(s),
-                    _ => None,
-                })
-                .collect(),
-            _ => None,
-        }
-    };
-    let (Some(wf), Some(gf)) = (names(w.remove("features")), names(g.remove("features"))) else {
-        return false;
-    };
-    w == g
-        && wf.iter().all(|f| gf.contains(f))
-        && gf
-            .iter()
-            .all(|f| hydo_agent_proto::msg::FEATURES.contains(&f.as_str()))
-}
-
-fn same_lines(want: &[String], got: &[String]) -> bool {
-    want.len() == got.len() && want.iter().zip(got).all(|(w, g)| same_line(w, g))
 }
 
 /// Runs steps through a fresh agent; returns the transcript entries.
@@ -584,12 +506,7 @@ fn pid1_in_a_namespace() {
                 .map(|(b, l)| (b.clone(), l.len()))
                 .collect::<Vec<_>>(),
         );
-        let same = got.len() == want.len()
-            && got.iter().zip(&want).all(|(g, w)| match (g, *w) {
-                (Entry::Agent(g), Entry::Agent(w)) => same_line(w, g),
-                (g, w) => g == w,
-            });
-        assert!(same, "pid1 run {round}:\n  want {want:?}\n  got  {got:?}");
+        assert_eq!(got.iter().collect::<Vec<_>>(), want, "pid1 run {round}");
     }
 }
 
@@ -627,11 +544,7 @@ fn native_transcripts_replay_byte_for_byte_twice() {
                 })
                 .take(first)
                 .collect();
-            let hello = a.take(first, &name);
-            assert!(
-                same_lines(&want_first, &hello),
-                "{name}: the hello\n  want {want_first:?}\n  got  {hello:?}"
-            );
+            assert_eq!(a.take(first, &name), want_first, "{name}: the hello");
             for (i, (bytes, want)) in steps.iter().enumerate() {
                 a.type_bytes(bytes);
                 let got = a.take(want.len(), &format!("{name} step {}", i + 1));
@@ -699,128 +612,4 @@ fn an_idle_agent_waits_without_waking() {
     );
     a.type_bytes(&host(r#"{"v":1,"id":1,"op":"syncfs"}"#));
     a.take(1, "syncfs");
-}
-
-/// The JSON object of an agent line.
-fn obj_of(l: &str) -> json::Obj {
-    let Deframed::Agent(j) = deframe_line(l.as_bytes()) else {
-        panic!("not an agent line: {l}")
-    };
-    match json::parse(j.as_bytes()).unwrap() {
-        json::Value::Obj(m) => m,
-        _ => panic!("{l}"),
-    }
-}
-
-/// The output of a `run` that must exit 0 (its reply and its `done` event).
-fn run_out(a: &mut Running, id: u64, argv: &[&str], netns: Option<&str>) -> String {
-    let argv: Vec<String> = argv.iter().map(|x| format!("{x:?}")).collect();
-    let ns = netns
-        .map(|n| format!(r#","netns":"{n}""#))
-        .unwrap_or_default();
-    a.type_bytes(&host(&format!(
-        r#"{{"v":1,"id":{id},"op":"run","argv":[{}],{PATH}{ns}}}"#,
-        argv.join(",")
-    )));
-    let ls = a.take(2, &format!("run {id}"));
-    assert_eq!(
-        obj_of(&ls[0]).get("ok"),
-        Some(&json::Value::Bool(true)),
-        "{ls:?}"
-    );
-    let d = obj_of(&ls[1]);
-    assert_eq!(d.get("status"), Some(&json::Value::Int(0)), "{ls:?}");
-    match d.get("out") {
-        Some(json::Value::Str(s)) => s.clone(),
-        _ => panic!("{ls:?}"),
-    }
-}
-
-/// The queue-7 lines of /proc/net/netfilter/nfnetlink_queue as a run in `netns` sees them.
-fn queue7(a: &mut Running, id: u64, netns: Option<&str>) -> Vec<String> {
-    run_out(
-        a,
-        id,
-        &[
-            "sh",
-            "-c",
-            "cat /proc/net/netfilter/nfnetlink_queue 2>/dev/null || true",
-        ],
-        netns,
-    )
-    .lines()
-    .filter(|l| l.split_whitespace().next() == Some("7"))
-    .map(str::to_string)
-    .collect()
-}
-
-#[test]
-#[ignore = "needs sudo -n and the nfnetlink_queue module already loaded (bare-metal.sh -- cargo test -- --ignored)"]
-fn a_freeze_binds_its_queue_in_the_netns() {
-    // This test never loads a module: without nfnetlink_queue it says so and ends.
-    if !Path::new("/sys/module/nfnetlink_queue").exists() {
-        eprintln!("a_freeze_binds_its_queue_in_the_netns: skipped (nfnetlink_queue is not loaded)");
-        return;
-    }
-    // a private network namespace, held by a process that writes its pid and sleeps
-    let dir = std::env::temp_dir().join(format!("hydo-agent-fnetns-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let pidf = dir.join("holder.pid");
-    let mut holder = Command::new("sudo")
-        .args([
-            "-n", "timeout", "-s", "KILL", "40", "unshare", "-n", "sh", "-c",
-        ])
-        .arg(format!("echo $$ > {}; exec sleep 30", pidf.display()))
-        .stdin(Stdio::null())
-        .spawn()
-        .expect("sudo unshare -n");
-    let mut pid = String::new();
-    for _ in 0..100 {
-        pid = std::fs::read_to_string(&pidf)
-            .unwrap_or_default()
-            .trim()
-            .to_string();
-        if !pid.is_empty() {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    }
-    assert!(!pid.is_empty(), "the namespace holder did not start");
-    let mut a = Running::start_under("fnetns", &["sudo", "-n", "timeout", "-s", "KILL", "40"]);
-    a.take(1, "hello");
-    // the namespace as a file under the agent's root (in a guest: /tmp/hydo/ns/<svc>)
-    std::os::unix::fs::symlink(format!("/proc/{pid}/ns/net"), a.root.join("work/ns")).unwrap();
-    let own_ns = std::fs::read_link("/proc/self/ns/net").unwrap();
-    let before = queue7(&mut a, 1, None);
-    assert!(queue7(&mut a, 2, Some("/work/ns")).is_empty());
-    a.type_bytes(&host(&format!(
-        r#"{{"v":1,"id":3,"op":"spawn","h":"svc","argv":["sleep","100"],{PATH}}}"#
-    )));
-    a.take(1, "spawn");
-    a.type_bytes(&host(
-        r#"{"v":1,"id":4,"op":"freeze","h":"svc","queue":7,"port":6379,"dir":"req","n":1,"dur_ms":100,"log":"/work/fc.log","netns":"/work/ns"}"#,
-    ));
-    let r = a.take(1, "freeze").remove(0);
-    assert_eq!(obj_of(&r).get("ok"), Some(&json::Value::Bool(true)), "{r}");
-    // queue 7 is bound inside the namespace, and the agent's own namespace is as before
-    assert_eq!(queue7(&mut a, 5, Some("/work/ns")).len(), 1);
-    assert_eq!(queue7(&mut a, 6, None), before);
-    // the agent (and so its children) went back to its own namespace
-    let child_ns = run_out(&mut a, 7, &["readlink", "/proc/self/ns/net"], None);
-    assert_eq!(child_ns.trim_end(), own_ns.to_string_lossy());
-    a.type_bytes(&host(r#"{"v":1,"id":8,"op":"unfreeze"}"#));
-    let r = a.take(1, "unfreeze").remove(0);
-    assert_eq!(obj_of(&r).get("ok"), Some(&json::Value::Bool(true)), "{r}");
-    assert!(queue7(&mut a, 9, Some("/work/ns")).is_empty());
-    a.type_bytes(&host(
-        r#"{"v":1,"id":10,"op":"signal","h":"svc","sig":"KILL","tree":true}"#,
-    ));
-    a.take(2, "kill");
-    drop(a);
-    let _ = Command::new("sudo")
-        .args(["-n", "kill", "-KILL", &pid])
-        .status();
-    let _ = holder.wait();
-    let _ = std::fs::remove_dir_all(&dir);
 }

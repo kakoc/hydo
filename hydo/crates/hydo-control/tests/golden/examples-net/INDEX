@@ -2,4 +2,4 @@ net-0.jsonl	disk=none | run N=redis@1-10:delay,200ms
 net-1.jsonl	disk=none | run N=etcd1-etcd2@1-15:delay,200ms
 net-2.jsonl	disk=none | run N=redis@2-20:loss,30%
 net-3.jsonl	disk=none | run F=primary<replica@1#1:100
-net-4.jsonl	disk=none | run F=redis<workload@2#0:1
+net-4.jsonl	disk=none | run F=replica<primary@2#0:1

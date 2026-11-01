@@ -24,15 +24,15 @@
 //! neither an address nor a port is not sent (the agent refuses it; hydo_fc counted nothing), its
 //! empty log is written instead.
 //!
-//! With `network: bridge` (hydo-init-netns.sh's fc_arm and fc_rules, M127): the helper runs in
-//! the frozen service's namespace, so the agent's `freeze` carries that namespace in `netns`
-//! (feature `freeze-netns`, the agent binds its netfilter queue there), and the rules run there
-//! too (`run` with `netns`): OUTPUT for what the service sends, INPUT for what it receives, the
-//! workload peer being the bridge's address.
+//! With `network: bridge` (hydo-init-netns.sh's two wrappers, M131): fc_arm runs the helper as
+//! `nsenter -n$NSD/<svc> hydo_fc ...`, here the `freeze` command's `netns` field (feature
+//! `freeze-netns`: the agent binds the queue inside that namespace), and fc_rules puts the pair's
+//! rules into the frozen service's namespace ([`rules_netns`]: OUTPUT holds what it sends, INPUT
+//! what it receives, the workload peer is the bridge's address), each `iptables` a `run` with
+//! that `netns`. The netfilter modules are loaded in the guest's own namespace, as the shell does.
 
 use super::*;
 use crate::flow::Stop;
-use crate::plan::NET_GW;
 use hydo_agent_proto::msg::{Dir, Freeze, Unfreeze, UnfreezeOk, WarnCode};
 
 /// The freeze helper's queue, its log, and the rules' NFQUEUE target.
@@ -263,7 +263,7 @@ fn arm(fx: &mut F<'_>, ctx: &Ctx, fc: &Fc) -> Step<()> {
             pattern: (fc.matching != "-").then(|| fc.matching.clone()),
             dur_ms: atol(&fc.dur).max(0) as u64,
             log: Some(fc_log(ctx)),
-            // hydo-init-netns.sh's fc_arm: `HYDO_FC="$BB nsenter -n$NSD/$fc_svc $_fc"`
+            // hydo-init-netns.sh's fc_arm: HYDO_FC="$BB nsenter -n$NSD/$fc_svc $_fc"
             netns: netns::of(ctx, &fc.svc),
         }))?;
         fx.start(Part::FreezeWatch {
@@ -308,7 +308,7 @@ fn arm(fx: &mut F<'_>, ctx: &Ctx, fc: &Fc) -> Step<()> {
 }
 
 /// fc_rules <-A|-D>: the netfilter rules that queue the pair's packets; (status, output), 3 when
-/// the pair has neither addresses nor a port.
+/// the pair has neither addresses nor a port. With `network: bridge` hydo-init-netns.sh's version.
 fn rules(
     fx: &mut F<'_>,
     ctx: &Ctx,
@@ -316,6 +316,9 @@ fn rules(
     op: &str,
     capture: Option<u32>,
 ) -> Step<(u32, String)> {
+    if ctx.plan.bridge {
+        return rules_netns(fx, ctx, fc, op, capture);
+    }
     let sa = addr(ctx, &fc.svc);
     let ta = addr(ctx, &fc.tgt);
     let mut tp = port(ctx, &fc.tgt);
@@ -328,34 +331,7 @@ fn rules(
         }
     };
     let (mut r1, mut r2) = (w(&[op, "OUTPUT"]), w(&[op, "OUTPUT"]));
-    // hydo-init-netns.sh's fc_rules (network: bridge): the rules in the frozen service's
-    // namespace, OUTPUT for what it sends and INPUT for what it receives; the workload peer is
-    // the bridge's address
-    let ns = netns::of(ctx, &fc.svc);
-    if ns.is_some() {
-        // unquoted in the shell: an empty address is no word at all
-        let words = |v: &[&str]| -> Vec<String> {
-            v.iter()
-                .filter(|x| !x.is_empty())
-                .map(|x| x.to_string())
-                .collect()
-        };
-        if fc.tgt == "workload" {
-            tp = port(ctx, &fc.svc);
-            if tp.is_empty() {
-                return Ok((3, String::new()));
-            }
-            r1 = words(&[
-                op, "INPUT", "-s", NET_GW, "-d", &sa, "-p", "tcp", "--dport", &tp,
-            ]);
-            r2 = words(&[
-                op, "OUTPUT", "-s", &sa, "-d", NET_GW, "-p", "tcp", "--sport", &tp,
-            ]);
-        } else {
-            r1 = words(&[op, "OUTPUT", "-s", &sa, "-d", &ta]);
-            r2 = words(&[op, "INPUT", "-s", &ta, "-d", &sa]);
-        }
-    } else if fc.tgt == "workload" {
+    if fc.tgt == "workload" {
         tp = port(ctx, &fc.svc);
         if tp.is_empty() {
             return Ok((3, String::new()));
@@ -389,6 +365,59 @@ fn rules(
             .map(str::to_string)
             .collect();
         argv.extend(r);
+        let e = env(fx, ctx, &[]);
+        let ran = run(fx, argv, e, capture)?;
+        out.push_str(&ran.out);
+        rc = ran.status;
+        if rc != 0 {
+            break;
+        }
+    }
+    Ok((rc, out))
+}
+
+/// hydo-init-netns.sh's fc_rules <-A|-D>: the pair's packets, in the frozen service's namespace
+/// (`ipt="$BB nsenter -n$NSD/$fc_svc $HYDO_IPT"`). The shell's words are unquoted, so an empty
+/// address leaves its flag without a value, as here (the line is split into words).
+fn rules_netns(
+    fx: &mut F<'_>,
+    ctx: &Ctx,
+    fc: &Fc,
+    op: &str,
+    capture: Option<u32>,
+) -> Step<(u32, String)> {
+    let sa = addr(ctx, &fc.svc);
+    let ta = addr(ctx, &fc.tgt);
+    let q = NFQ.join(" ");
+    let (r1, r2) = if fc.tgt == "workload" {
+        // the workload's clients connect from the bridge's address
+        let tp = port(ctx, &fc.svc);
+        if tp.is_empty() {
+            return Ok((3, String::new()));
+        }
+        let gw = crate::plan::NET_GW;
+        (
+            format!("{op} INPUT -s {gw} -d {sa} -p tcp --dport {tp} {q}"),
+            format!("{op} OUTPUT -s {sa} -d {gw} -p tcp --sport {tp} {q}"),
+        )
+    } else {
+        (
+            format!("{op} OUTPUT -s {sa} -d {ta} {q}"),
+            format!("{op} INPUT -s {ta} -d {sa} {q}"),
+        )
+    };
+    let ns = netns::of(ctx, &fc.svc);
+    let mut out = String::new();
+    let mut rc = 0;
+    for r in [r1, r2] {
+        let mut argv: Vec<String> = ctx
+            .plan
+            .layout
+            .iptables
+            .split_whitespace()
+            .map(str::to_string)
+            .collect();
+        argv.extend(r.split_whitespace().map(str::to_string));
         let e = env(fx, ctx, &[]);
         let ran = run_in(fx, argv, e, capture, ns.clone())?;
         out.push_str(&ran.out);

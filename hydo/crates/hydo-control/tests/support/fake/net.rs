@@ -246,7 +246,10 @@ impl Fake {
     /// service is continued dur later.
     pub(super) fn freeze(&mut self, id: u64, at: u64, f: Freeze) {
         let refuse = |me: &mut Fake, code: ErrCode, msg: &str| {
-            me.emit(at, Msg::Refused(id, "freeze".into(), code, msg.into()));
+            me.emit(
+                at,
+                Msg::Refused(id, "freeze".into(), code, msg.into(), None),
+            );
         };
         if self.world.net.freeze.is_some() {
             return refuse(self, ErrCode::Busy, "a freeze is already armed");
@@ -254,6 +257,12 @@ impl Fake {
         let Some(p) = self.world.procs.get(&f.h).cloned() else {
             return refuse(self, ErrCode::NoSuchHandle, "no process");
         };
+        // the netns field (M131): the agent opens the namespace file first
+        if let Some(ns) = &f.netns {
+            if !self.world.files.contains_key(ns) {
+                return refuse(self, ErrCode::OsError, &format!("open {ns}: ENOENT"));
+            }
+        }
         if self.h(&["bind", &f.h]).is_multiple_of(43) {
             return refuse(self, ErrCode::OsError, "bind nfqueue 7: EPERM (errno 1)");
         }
@@ -382,6 +391,7 @@ impl Fake {
                     "unfreeze".into(),
                     ErrCode::NotFound,
                     "no freeze is armed".into(),
+                    None,
                 ),
             );
             return;

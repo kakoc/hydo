@@ -43,8 +43,21 @@ pub enum SessionError {
     Unexpected { re: u64 },
     /// A reply whose op is not the op of the command it names.
     WrongOp { re: u64, sent: String, got: String },
-    /// The host asked for an op or a feature the hello did not list.
+    /// The host asked for an op the hello did not list.
     NotOffered { what: String },
+    /// The host asked for a command field the agent announces with a feature its hello did not
+    /// list (an agent built before the field was added).
+    MissingFeature { feature: String, agent: String },
+}
+
+/// The message for an agent whose hello lacks `feature` (also the controller's, when it checks
+/// a hello before it sends).
+pub fn missing_feature_message(feature: &str, agent: &str) -> String {
+    format!(
+        "this image's agent (hydo-agent {agent}) does not offer the feature {feature} ({}); \
+         rebuild the image with this hydo ({HYDO_VERSION}), whose agent does",
+        crate::msg::feature_purpose(feature)
+    )
 }
 
 impl fmt::Display for SessionError {
@@ -75,6 +88,9 @@ impl fmt::Display for SessionError {
                 write!(f, "command {re} was {sent}, but the answer is for {got}")
             }
             SessionError::NotOffered { what } => write!(f, "the agent does not offer {what}"),
+            SessionError::MissingFeature { feature, agent } => {
+                f.write_str(&missing_feature_message(feature, agent))
+            }
         }
     }
 }
@@ -204,8 +220,9 @@ impl Session {
         }
         for f in cmd.features() {
             if !self.has_feature(f) {
-                return Err(SessionError::NotOffered {
-                    what: format!("the feature {f}"),
+                return Err(SessionError::MissingFeature {
+                    feature: f.to_string(),
+                    agent: self.hello.agent.clone(),
                 });
             }
         }
@@ -345,10 +362,6 @@ mod tests {
     use crate::msg::*;
 
     fn hello(proto: u64, ops: &[&str]) -> String {
-        hello_with(proto, ops, &[])
-    }
-
-    fn hello_with(proto: u64, ops: &[&str], features: &[&str]) -> String {
         AgentLine::Event {
             v: proto,
             seq: 0,
@@ -356,44 +369,11 @@ mod tests {
                 proto,
                 agent: "0.9.0".into(),
                 ops: ops.iter().map(|s| s.to_string()).collect(),
-                features: features.iter().map(|s| s.to_string()).collect(),
+                features: vec![],
                 pid1: true,
             }),
         }
         .encode()
-    }
-
-    #[test]
-    fn a_field_with_a_feature_needs_the_feature() {
-        let freeze = |netns: Option<&str>| {
-            Command::Freeze(Freeze {
-                h: "redis".into(),
-                queue: 7,
-                sip: None,
-                port: Some(6379),
-                own_port: None,
-                dir: Dir::Req,
-                n: 1,
-                pattern: None,
-                dur_ms: 100,
-                log: None,
-                netns: netns.map(str::to_string),
-            })
-        };
-        // an agent of M117 announces `freeze` only: a freeze in a namespace is not sent to it
-        let mut old = Session::from_hello(&hello_with(1, &["freeze"], &["freeze"])).unwrap();
-        assert!(old.command(freeze(None)).is_ok());
-        assert_eq!(
-            old.command(freeze(Some("/tmp/hydo/ns/redis"))).unwrap_err(),
-            SessionError::NotOffered {
-                what: "the feature freeze-netns".into()
-            }
-        );
-        let mut new =
-            Session::from_hello(&hello_with(1, &["freeze"], &["freeze", "freeze-netns"])).unwrap();
-        assert!(new.command(freeze(Some("/tmp/hydo/ns/redis"))).is_ok());
-        let mut none = Session::from_hello(&hello_with(1, &["freeze"], &[])).unwrap();
-        assert!(none.command(freeze(None)).is_err());
     }
 
     #[test]
@@ -414,6 +394,61 @@ mod tests {
             "{e}"
         );
         assert!(Session::from_hello(&hello(0, &[])).is_err());
+    }
+
+    #[test]
+    fn a_field_behind_a_feature_needs_it() {
+        let freeze = |netns: Option<&str>| {
+            Command::Freeze(Freeze {
+                h: "a".into(),
+                queue: 7,
+                sip: None,
+                port: Some(1),
+                own_port: None,
+                dir: Dir::Req,
+                n: 1,
+                pattern: None,
+                dur_ms: 9,
+                log: None,
+                netns: netns.map(str::to_string),
+            })
+        };
+        let with = |features: &[&str]| {
+            let h = Hello {
+                proto: 1,
+                agent: "0.1.0".into(),
+                ops: vec!["freeze".into()],
+                features: features.iter().map(|s| s.to_string()).collect(),
+                pid1: true,
+            };
+            Session::from_hello(
+                &AgentLine::Event {
+                    v: 1,
+                    seq: 0,
+                    ev: Event::Hello(h),
+                }
+                .encode(),
+            )
+            .unwrap()
+        };
+        // an agent of milestone 117 (only "freeze") arms a freeze in its own namespace only
+        let mut old = with(&["freeze"]);
+        assert!(old.command(freeze(None)).is_ok());
+        let e = old.command(freeze(Some("/tmp/hydo/ns/a"))).unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            format!(
+                "this image's agent (hydo-agent 0.1.0) does not offer the feature freeze-netns (the \
+                 packet trigger inside a service's network namespace (F= with network: bridge)); \
+                 rebuild the image with this hydo ({HYDO_VERSION}), whose agent does"
+            )
+        );
+        assert!(matches!(e, SessionError::MissingFeature { .. }));
+        let mut new = with(FEATURES);
+        assert!(new.command(freeze(Some("/tmp/hydo/ns/a"))).is_ok());
+        // the feature alone is not enough: the field needs the trigger too
+        let mut odd = with(&["freeze-netns"]);
+        assert!(odd.command(freeze(Some("/x"))).is_err());
     }
 
     #[test]
