@@ -628,3 +628,14 @@ front door"): `disk=none dseed=0 | run O=kafka@25-30:resp:loss,100%` gives `kafk
 (that bug is the order service's lookup racing its own in-flight produce, not issue 1484). Other
 checks on the agent control: `disk=none dseed=0 | run` OK `acked=30/30` `f0017db9b378d8e4`, and
 `disk=none dseed=0 | run P=kafka@14+16` (the M129/M133 lost order) OK `a41a29598b2738ea`.
+
+On the shell kind (`hydo-bench confirm --kind shell`, the same images' shell builds, results
+`/var/tmp/m135/confirm-shell`), every trigger but d10's failed twice with one fingerprint and the
+signature, and every control passed: d0 `f3823c5fb59509de`, d1 `88281feb616bbc1e`, d2
+`8a454dfde2e16c80`, d3 `b79868d500d1c069` / `f2dec81fe23a9886`, d4 `e0c32971fc99b8d8` /
+`6ae6aa92727d25d0`, d5 `1f33e100c6615eb6`, d6 `8b88d1a9c2eaea7f`, d7 `de93bec6815cf318`, d8
+`a37e377a57bfde73`, d9 `Q=3` `67c6f9f7f92acd2d`, d11 `cf=255` `4df9e6583e79423c` (order 24), d12
+`a183710476e82968`; the control's known bug twice `4edd5c6d1244cc8c`. d10's `X=front@9~20` passes
+(`e5232a07be7245a2`) because the generic shell init ignores `X=`: d10 has no trigger on the shell
+kind. Measured first on the shell kind: d9 crashes for every `Q=` but `Q=2d`; d11 fails at 8 of
+the 61 points (245, 255, 256, 266, 277, 287, 297, 298).
