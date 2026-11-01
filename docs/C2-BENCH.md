@@ -161,3 +161,72 @@ Repetitions 2 and 3 of the same cells (seeds 2001… and 3001…), merged with r
 d1, d5, d8 and d12 are found in the same repetitions, at the same schedule, on both kinds.
 Per seed, 96 of the 103 seeds both kinds ran in these 18 repetition cells give the same verdict
 class; the seven that differ are explained in section 6.
+
+## 6. Every difference and its classification
+
+1. **`X=` (the stack's timed kill): a designed difference in the shell init, not an agent fault.**
+   The generic shell init (`hydo-init.sh`) has no `X=`; it logs `knob X not in the manifest,
+   ignored`. The host controller gives `X=` the meaning it has in `stack-explore.sh`
+   (hydo-control `HANDOFF.md` decision 12). Everything that `X=` decides differs, and on the agent
+   images it decides as on the original benchmark images:
+   - d10's trigger `X=front@9~20` fails on the agent image (order 10 twice in Kafka, as on the
+     original image) and passes on the shell image;
+   - process+xcf repetition 1, seed 1007 (`… X=front@8~160`): the agent image finds d10 at the same
+     seed as the original image (M108), the shell image passes; in repetition 3 the agent image
+     finds d10 again (seed 3004, item 4 below), the shell image does not;
+   - process+xcf repetition 3, seed 3007 (`… X=front@0~25`, a `cf=257` cut): the shell image ignores
+     the kill and finds d11 (order 16 acked but not marked published); on the agent image the order
+     service is killed 25 ms into order 0, comes back only at the end, and the run takes another
+     path (24 orders acked, no d11);
+   - process+xcf repetition 3, seed 3003 on both d10 and d11 (`cf=147 … X=front@20~151`): on the
+     agent image the killed order service cannot start again after the `cf=` power cut (MySQL's
+     sessions hang on the dead disk), and the generic init's restart gives `ERROR restart after
+     the faults (front)`; `stack-explore.sh` has a path for this (M67: the unacknowledged orders
+     stay unacknowledged and the recovery boot decides), the generic init and the controller do
+     not. An error, not a detection, on one kind only.
+2. **d9's race: timing.** The trigger `Q=4` crashes the order service on the agent image (the
+   original image's panic `slice bounds out of range`) and not on the shell image. Over six `Q=`
+   values and three disk seeds (`hydo/bench/c2-plans/d9q.txt`; the disk seed changes nothing,
+   every run is deterministic) the crash happens on the shell image for `Q=3` and `Q=4d` (6 of 18
+   runs) and on the agent image for `Q=2`, `Q=3`, `Q=4`, `Q=3d` and `Q=4d` (15 of 18). The order
+   service, its environment (the controller's spawn gives it the shell's environment: `HOME`,
+   `TERM`, the init's exports, `HYDO_SVC`/`HYDO_LOG`, the manifest's `env:` through the prelude)
+   and the client are the same; the guests differ in the kernel's console output (`quiet
+   loglevel=1` for agent images, M121), in the init's own work, and in where the engine's run
+   calls return (`rb=16`, M118). The race is reachable on both kinds; the agent kind reaches it
+   with more client settings.
+3. **d11's trigger `cf=238`: timing.** It passes on both manifest kinds (the k-th flush is another
+   write than on the original image, whose init differs); section 7 maps d11's window on both.
+4. **An acknowledged order missing from Kafka after a long Kafka pause, on agent images only: a
+   real difference, not explained.** d10, repetition 3, seed 3004 (`K=redis@10+1
+   P=kafka@16+14`, no `X=`): the agent image gives `VIOLATION kafka order=17 expected=100017
+   got=MISSING (mysql has it: true)` (not d10's signature; it counted as a detection because the
+   control passes that schedule), the shell image passes. Ten variants of the schedule
+   (`d10kp.txt`: the pause moved from order 14 to 18, with and without the Redis kill) on d10 and
+   on the **control** (the fixed order service, no planted defect): the shell kind passes all 20
+   runs; the agent kind fails two, d10 with seed 3004's schedule again and **the control with
+   `P=kafka@14+16`** (`kafka order=15 … MISSING`, `9f3e843a38fc41b7`). In both, the missing order
+   is the second order placed after Kafka was stopped, every order is acknowledged, Kafka was
+   resumed before the retry pass, and the order service logged a Kafka re-check and a duplicate
+   hit for the first order after the pause (`server.kafka_recheck`, `server.kafka_dedup_hit`,
+   order 14 in the control's run). Not ruled out: an order-service bug in the re-check path that
+   the agent image's timing exposes (the fixed order service has one known bug already, README "A
+   bug in the fixed front door"), or a difference in how the controller runs the workload around
+   a long pause (in the control's run the step range hit the workload's 300 s timeout on both
+   kinds; the shell's orphaned client and the agent's are both left running). A candidate whose
+   schedule fails on the control is not counted, so this lowers the agent kind's detections when
+   such a schedule is drawn. Left for C3 (section 8).
+5. **Lying disks: different losses, not detections.** d12 swarm repetition 2 seed 2003
+   (`disk=lying:5 … C=4 R=no`: shell OK, agent `kafka order=1 …`) and d5 random repetition 3 seed
+   3001 (`disk=lying:5 … C=5 M=2`: shell `mysql order=0 … MISSING`, agent `service cannot recover`).
+   A lying disk drops requests by index, and the two kinds' guests make different disk requests
+   (as M126 saw on Redis). Both schedules are of the `lying-disk` class, which hydo-bench does not
+   count as a detection.
+
+The fix found on the way: `hydo-explore` gave every worker an empty start error for an agent image
+explored without a manifest space; it now drives such an image through the controller or refuses
+it with the controller's message (section 1). After M128's fixes were merged (guest programs'
+`HYDO-ASSERT`/`HYDO-HIST` lines now reach an agent run's report), every agent run of this
+campaign was checked for assertion records with `ok:false` that its report lacked: 44 runs had
+such records, every one of them with a VIOLATION verdict already, so no verdict or detection here
+changes (hydo-bench turns an assertion failure into a violation only when the verdict is OK).
