@@ -495,3 +495,70 @@ Checks (bare-metal test machine, results `/var/tmp/kr`): `confirm.py --defects m
 | d11 | 1/3 (3) | 0/3 | 2/3 (13, 4) | 0/3 |
 
 All detections reproduced. Off-signature hits: `mysql table unreadable` after a MySQL kill near the end (harness artefact, like M55's Kafka one) and `M=0` + a MySQL kill (the relaxed setting's documented window). The four schedules that found d11 in M67 give OK on the new image (the cut lands elsewhere). d11's window is about 3 of ~310 cut points and `cf=` is drawn in 40–60% of schedules, so three repetitions cannot separate a per-repetition rate between about 0 and 30%; 0/6 here and 3/6 in M67 are consistent. Branch `bench-m59-kr` (from pre-binlog `57864c6`) is a build recipe only — do not merge it.
+
+## The manifest images (Milestone 135)
+
+Since M135 the benchmark runs on images built from one manifest, `manifest/hydo.yaml` (the
+`-pin-kr` control image's files and configuration as a manifest, M129, `docs/C2-BENCH.md`), with
+`hydo build` and `hydo build --control agent`. Each order service (a defect or a control) gives a
+shell image and an agent image that differ only in what `--control agent` changes.
+
+**Building** (on the bare-metal test machine; no Nix): `build-bench-manifest.sh <work dir>
+<release dir>` with `HYDO_AGENT_BIN` = the pinned hydo-agent (0.2.0, `1f517e04…`,
+docs/BUILD-PINS.md). `<work dir>/benchroot` is the debugfs rdump of the `-pin-kr` control image's
+root; the release dir is a Linux release layout with this tree's `bin/hydo` and `hydo/`. Without
+stem arguments it builds the default set from `$STACK_BUILD` (default `~/hydo/build`): the
+control in full, then every other order service as a copy with `/bin/hydostack` swapped in
+(`agent-patch.sh --swap`; M129 proved a swapped image equal to a full build). `BG=1` adds the
+BUGGIFY order services (`bg-*`), `KEEP=1` keeps images that exist. Output, in `$OUT` (default
+`<work dir>/build`, with `bzImage` and `initramfs-kafka.cpio.gz` linked in):
+
+| stem | order service from | used as |
+|---|---|---|
+| `control` | `explore-bench-m59-control-pin-kr-disk.img` | the control of d8–d12 |
+| `d8-no-order-lock` … `d12-shared-key-buffer` | `explore-bench-m59-<defect>-pin-kr-disk.img` | d8–d12 |
+| `nf` | `explore-nf-disk.img` (the M46 order service) | the control of d1–d7 |
+| `d1-kafka-first` … `d7-skip-last-record` | `explore-bench-<defect>-disk.img` | d1–d7 |
+| `d0-old-front-door` | `explore-disk.img` (the pre-M39 order service) | d0 |
+| `fix` | `explore-fix-disk.img` (the M39 fix; the same binary as `nf`, `1f18f855…`) | the control of d0 |
+| `bg-control`, `bg-d0-…` … `bg-d7-…` (`BG=1`) | `explore-bench-bg-*-disk.img` | `--bg-images` |
+
+The images are `explore-ob-bench-<stem>-disk.img` (shell) and `explore-ob-bench-<stem>-agent-disk.img`
+(agent). Run hydo-bench with `HYDO_BUILD=<that directory>`; `--kind agent` is the default,
+`--kind shell` picks the shell images, `--kind stack` the stack images in this file's older
+sections. `list --images` takes a defect name or `control:<defect>` for the kind's image. Every
+stack-sized guest needs about 6 GiB of the box's memory: run one worker (`--workers 1`) and start
+a step only when `free -m` shows at least 6 GiB available (`c2-cells.sh` waits for it).
+
+**What differs from the stack images.** The generic init (shell kind) or the host controller
+(agent kind) runs the workload instead of `stack-explore.sh`: other console lines, a restart of
+every dead service before the retry pass, no periodic checks, so the fingerprints and some trigger
+points differ from M54–M108's. `Q=` and `M=` are knobs of the manifest; `X=` (the stack's timed
+kill) works on the agent kind only (the generic shell init ignores it; the format reserves the
+letter, so it cannot be a knob). `B=` reaches the order service's BUGGIFY points on both kinds
+(`buggify: true`). stack-explore.sh's M67 path (an order service that cannot come back after the
+workload: no retry pass, the power cut's recovery boot decides) is in the manifest too, below.
+
+**M67's path in the manifest.** After a `cf=` power cut the data disk stops completing writes,
+MySQL's sessions hang, and an order service killed late in the run (`X=front@…`, or `K=front`
+at the last step) cannot start again: it exits. stack-explore.sh then leaves the un-ACKed orders
+un-ACKed, skips the retry pass and ends the workload, so the host's recovery boot gives the
+verdict; without a cut it ends with `ERROR front door restart`. The generic init and the host
+controller end such a run with `ERROR restart after the faults (front)` (M129 saw one, process
+seed 3003). The manifest writes the path with the format's existing features:
+- the order service runs as `/bin/busybox sh /etc/hydo-bench/front.sh`: `/bin/hydostack server`,
+  and when that exits after the workload's last step (the `run:` command leaves
+  `/tmp/hydo-bench-steps-done` after the range that ends at step 30), the script stays up and
+  prints `hydo-bench: the order service exited after the workload's last step (status N); it
+  stays down` (to its log and the console);
+- `ready:` accepts that line as well as `server listening`, so the restart does not end the run;
+- `retry:` sees the line, prints `hydo-bench: the order service cannot restart; no retry pass,
+  the un-ACKed orders stay un-ACKed` and skips the retry pass (marker `/tmp/hydo-bench-no-retry`);
+- the third invariant, `front.restarted`, answers "could not be evaluated" (exit 2) when the retry
+  was skipped, so a run without a cut ends in `ERROR invariant front.restarted could not be
+  evaluated: front door restart: …` unless another invariant is violated (stack-explore.sh's ERROR
+  comes first; here a violation comes first). In a recovery boot it holds.
+A kill or a pause still reaches the order service (faults act on a service's whole process
+tree). An order service that hangs instead of exiting is still `ERROR restart after the faults`
+(stack-explore.sh's `NOT ready` case is not covered). The format has no key for a restart that may
+fail; docs/HISTORY.md "Milestone 135" says what such a key needs to do.
