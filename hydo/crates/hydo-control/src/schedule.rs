@@ -31,10 +31,11 @@
 //! The driven ones are child modules in `src/features/` (they use this module's helpers):
 //! liveness, clock, buggify and the recovery inputs (M122).
 
+use crate::busybox;
 use crate::control::{Controller, Ending, EngineAction, Out, Seen, StopInfo};
 use crate::flow::{Facts, Flow, Fx, Memo, Step};
 use crate::plan::Plan;
-use crate::seams::{Seam, Unsupported};
+use crate::seams::Unsupported;
 use hydo_agent_proto::msg::{
     ClockSet, Command, Event, Mkdir, Mount, MountFlag, Probe, ProbeEnd, Read, Reply, Run, Sig,
     Signal, Spawn, Syncfs, Write,
@@ -476,14 +477,9 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
             // SEAM(NetFaults): netfault.rs
             GuestToken::Net { .. } => c.n = Some(value),
             GuestToken::OneWay { .. } => c.o = Some(value),
-            GuestToken::Freeze(_) if plan.freeze && plan.bridge => {
-                // SEAM(Freeze): freeze.rs. With network: bridge the helper runs in the frozen
-                // service's namespace; the agent's `freeze` has no namespace field.
-                return Err(Unsupported::seam(
-                    Seam::Freeze,
-                    format!("{text} with network: bridge (hydo-agent-proto's freeze has no netns)"),
-                ));
-            }
+            // SEAM(Freeze): freeze.rs reads F= as a knob below; with network: bridge the
+            // trigger binds its queue in the frozen service's namespace (the freeze command's
+            // netns, M131), so no F= is refused any more.
             // SEAM(Clock): T=, driven by features/clock.rs
             GuestToken::Clock { at, delta } => c.t = Some((*at as i64, *delta)),
             // Every other letter is a knob to the shell (`?=*) set_knob`): B= (set_knob's BUGGIFY
@@ -1133,20 +1129,39 @@ fn clock_start(fx: &mut F<'_>, ctx: &Ctx, with_log: bool) -> Step<()> {
 
 fn mount_data(fx: &mut F<'_>, ctx: &Ctx, verdict: &str) -> Step<()> {
     let l = &ctx.plan.layout;
-    let r = call(
-        fx,
-        Command::Mount(Mount {
+    // `MERR=$($BB mount ... 2>&1) || die_oracle "$1 ($MERR)"`: busybox's own words for the
+    // errno of the agent's refusal (crate::busybox, M131), so a shell image and an agent image
+    // give one verdict for one failure; EACCES/EROFS are tried again read-only, as busybox does
+    let mut flags = ctx.mount_flags.clone();
+    let mut merr: Vec<String> = Vec::new();
+    loop {
+        let id = fx.send(Command::Mount(Mount {
             src: l.data_dev.clone(),
             dst: l.data_dir.clone(),
             fstype: l.data_fstype.clone(),
-            flags: (!ctx.mount_flags.is_empty()).then(|| ctx.mount_flags.clone()),
+            flags: (!flags.is_empty()).then(|| flags.clone()),
             data: ctx.mount_data.clone(),
-        }),
-    )?;
-    if let Err(msg) = r {
-        // AMBIGUOUS: the shell puts mount's own error text here; the agent's refusal names the
-        // system call and its errno instead.
-        return die_oracle(fx, format!("{verdict} ({msg})"));
+        }))?;
+        let e = match fx.reply(id)? {
+            Ok(_) => break,
+            Err(e) => e,
+        };
+        let Some(n) = e.errno else {
+            // not a failed mount(2) (a refusal of the line itself): the agent's words
+            return die_oracle(fx, format!("{verdict} ({})", e.msg));
+        };
+        if busybox::retries_read_only(n, flags.contains(&MountFlag::Ro)) {
+            merr.push(busybox::write_protected(&l.data_dev));
+            flags.push(MountFlag::Ro);
+            continue;
+        }
+        merr.push(busybox::mount_error(
+            &l.data_dev,
+            &l.data_dir,
+            n,
+            l.strerror,
+        ));
+        return die_oracle(fx, format!("{verdict} ({})", merr.join("\n")));
     }
     for d in &ctx.plan.data_dirs {
         post(

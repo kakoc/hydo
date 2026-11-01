@@ -47,7 +47,9 @@ pub fn hash(parts: &[&str]) -> u64 {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Msg {
     Reply(u64, Reply),
-    Refused(u64, String, ErrCode, String),
+    /// (re, op, code, msg, errno): the errno only where the agent reports one that the host
+    /// reads (a failed mount, M131)
+    Refused(u64, String, ErrCode, String, Option<i64>),
     Event(Event),
     Kernel(String),
 }
@@ -160,7 +162,10 @@ impl Fake {
                 proto: 1,
                 agent: "0.1.0".into(),
                 ops: Command::NAMES.iter().map(|s| s.to_string()).collect(),
-                features: vec!["freeze".into()],
+                features: hydo_agent_proto::msg::FEATURES
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
                 pid1: true,
             })),
         );
@@ -221,14 +226,14 @@ impl Fake {
                 re: *re,
                 body: body.clone(),
             },
-            Msg::Refused(re, op, err, msg) => AgentLine::Error(ErrorLine {
+            Msg::Refused(re, op, err, msg, errno) => AgentLine::Error(ErrorLine {
                 v: 1,
                 seq: self.seq,
                 re: Some(*re),
                 op: Some(op.clone()),
                 err: err.as_str().into(),
                 msg: msg.clone(),
-                errno: None,
+                errno: *errno,
             }),
             Msg::Event(e) => AgentLine::Event {
                 v: 1,
@@ -345,7 +350,7 @@ impl Fake {
         let at = self.reply_at(salt);
         let t = self.t;
         let refuse = |f: &mut Fake, code: ErrCode, msg: &str| {
-            f.emit(at, Msg::Refused(id, op.clone(), code, msg.into()));
+            f.emit(at, Msg::Refused(id, op.clone(), code, msg.into(), None));
         };
         match hl.cmd {
             Command::Sync(s) => {
@@ -375,9 +380,31 @@ impl Fake {
                     Err((code, msg)) => refuse(self, code, &msg),
                 },
             },
-            Command::Mount(_) => {
-                if self.h(&["mount"]).is_multiple_of(61) {
-                    refuse(self, ErrCode::OsError, "mount: EINVAL (errno 22)");
+            Command::Mount(m) => {
+                // now and then the disk cannot be mounted, with the errno a real agent reports:
+                // a corrupt ext4 (EUCLEAN), a bad superblock (EINVAL), a read error (EIO), a bad
+                // checksum (EBADMSG), or a read-only device (EROFS: busybox tries again read-only,
+                // and that attempt works or fails on its own)
+                let ro = m.flags.iter().flatten().any(|f| *f == MountFlag::Ro);
+                let fails = if ro {
+                    !self.h(&["mount-ro"]).is_multiple_of(2)
+                } else {
+                    self.h(&["mount"]).is_multiple_of(61)
+                };
+                if fails {
+                    let pick = self.h(&["mount-errno", &ro.to_string()]) % 5;
+                    let (n, name) = match pick {
+                        0 if !ro => (30, "EROFS"),
+                        0 | 1 => (117, "errno 117"),
+                        2 => (22, "EINVAL"),
+                        3 => (5, "EIO"),
+                        _ => (74, "errno 74"),
+                    };
+                    let msg = format!("mount {} on {}: {name}", m.src, m.dst);
+                    self.emit(
+                        at,
+                        Msg::Refused(id, op.clone(), ErrCode::OsError, msg, Some(n)),
+                    );
                 } else {
                     self.emit(at, Msg::Reply(id, Reply::Mount(MountOk {})));
                 }

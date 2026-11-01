@@ -1,6 +1,6 @@
 # hydo agent transcript, protocol 1: mkdir, write, append, read as text and as hex, at an offset, a file that is not UTF-8, a missing file, syncfs.
 # Recorded from `hydo-agent serve --root <scratch>` on Linux as an unprivileged user (hydo/crates/hydo-agent/tests/native.rs); never edited. replay: native
-< HYDO-AG 242 65657430 {"agent":"0.1.0","ev":"hello","features":["freeze"],"ops":["sync","spawn","signal","run","probe","write","read","mkdir","mount","syncfs","clock_set","clock_get","qlen","tail","untail","freeze","unfreeze"],"pid1":false,"proto":1,"seq":0,"v":1}
+< HYDO-AG 257 c3d3be4a {"agent":"0.2.0","ev":"hello","features":["freeze","freeze-netns"],"ops":["sync","spawn","signal","run","probe","write","read","mkdir","mount","syncfs","clock_set","clock_get","qlen","tail","untail","freeze","unfreeze"],"pid1":false,"proto":1,"seq":0,"v":1}
 > {"id":1,"op":"mkdir","path":"/work/d/e","v":1}
 < HYDO-AG 45 2f02efe0 {"ok":true,"op":"mkdir","re":1,"seq":1,"v":1}
 > {"data":"hello\n","id":2,"op":"write","path":"/work/d/e/f.txt","v":1}

@@ -89,6 +89,11 @@ pub fn plan_of_image(image: &Path) -> Result<Plan, Unsupported> {
             what: format!("{}: {}", image.display(), e.what),
             ..e
         })?;
+    // The musl table of the image's busybox: the words of an unmountable data disk (M131).
+    let bb = plan.layout.busybox.trim_start_matches('/').to_string();
+    if let Ok(bytes) = hydo_engine::image::embedded_file(image, &bb) {
+        plan.layout.strerror = crate::busybox::Strerror::of_busybox(bytes.as_bytes());
+    }
     // The pinned tc, ip and iptables are image facts: Plan::from_manifest leaves hydo-build's
     // placeholders where the manifest's faults need a tool; the image's manifest.sh has the paths.
     let needed = [&plan.layout.tc, &plan.layout.ip, &plan.layout.iptables]

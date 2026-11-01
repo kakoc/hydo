@@ -278,13 +278,20 @@ has no dependencies.
   `hydo/grpcgen/rustc-stable` (a host-independent `-C metadata`; the tree and `$CARGO_HOME`
   remapped to `/hydo` and `/cargo`), and `hydo-elf-comment` sets the `.comment` linker line to
   `Linker: LLD`. So the bytes do not depend on the build host, the tree's path or the crate cache.
-- **Results (commit of M117):** the same bytes from this Mac and from the bare-metal test
-  machine (`~/hydo-ga2`, its private rustup), and from two clean builds on the Mac:
+- **Results (Milestone 131, hydo-agent 0.2.0: the freeze's `netns` field, feature
+  `freeze-netns`):** the same bytes from two clean builds on this Mac and from a build on the
+  bare-metal test machine (`~/hydo-anf`, its private rustup):
 
   | target | size | sha256 |
   |---|---|---|
-  | x86_64 (`ELF 64-bit LSB pie executable, static-pie linked`) | 665,632 | `ff7652a171f40c80f83c2c6ee871331f046b7c2953faf25e40505bbb12f2a16c` |
-  | aarch64 (`ELF 64-bit LSB executable, statically linked`) | 564,768 | `6a3ea9f8c80e972abda55a58e05fee9de0b7355b3a27f5ae7a8bb560d2f6fac1` |
+  | x86_64 (`ELF 64-bit LSB pie executable, static-pie linked`) | 667,904 | `1f517e04f837658a0f0fb85b0077d29b491d10eca75c2529ba0e67944ad24422` |
+  | aarch64 (`ELF 64-bit LSB executable, statically linked`) | 566,448 | `585f0bdb8cf1d03a3e95d0c8844e85617515939f42d1fe76d02fe8d2c7d72d30` |
+
+  Before (M117, hydo-agent 0.1.0, the same from the Mac and from Linux): x86_64 665,632 bytes
+  `ff7652a171f40c80f83c2c6ee871331f046b7c2953faf25e40505bbb12f2a16c`, aarch64 564,768 bytes
+  `6a3ea9f8c80e972abda55a58e05fee9de0b7355b3a27f5ae7a8bb560d2f6fac1`; every agent image built
+  before M131 carries these, and the host refuses an F= with `network: bridge` on such an image
+  with a message (its hello has no `freeze-netns`).
 
   The C freeze helper it can stand in for (`hydo_fc`, pinned musl gcc) is 68,504 bytes.
 - **In images (Milestone 121):** `hydo-build --control agent` stages exactly these bytes as the

@@ -256,7 +256,7 @@ fn scenarios() -> Vec<(&'static str, &'static str, Vec<Step>)> {
         ),
         (
             "unprivileged",
-            "what an agent that is not root cannot do: set the clock, mount, bind a netfilter queue",
+            "what an agent that is not root cannot do: set the clock, mount, bind a netfilter queue (also in a network namespace: a missing namespace file, a file that is not a namespace)",
             vec![
                 h(r#"{"v":1,"id":1,"op":"clock_set","sec":1700000000}"#, 1),
                 h(r#"{"v":1,"id":2,"op":"clock_set","step":-5}"#, 1),
@@ -265,7 +265,9 @@ fn scenarios() -> Vec<(&'static str, &'static str, Vec<Step>)> {
                 h(r#"{"v":1,"id":5,"op":"freeze","h":"nobody","queue":7,"port":6379,"dir":"req","n":1,"dur_ms":100}"#, 1),
                 h(r#"{"v":1,"id":6,"op":"freeze","h":"svc","queue":7,"dir":"req","n":1,"dur_ms":100}"#, 1),
                 h(r#"{"v":1,"id":7,"op":"freeze","h":"svc","queue":7,"port":6379,"dir":"req","n":1,"pattern":"SET","dur_ms":100,"log":"/work/fc.log"}"#, 1),
-                h(r#"{"v":1,"id":8,"op":"signal","h":"svc","sig":"KILL","tree":true}"#, 2),
+                h(r#"{"v":1,"id":8,"op":"freeze","h":"svc","queue":7,"port":6379,"dir":"req","n":1,"dur_ms":100,"netns":"/work/ns/none"}"#, 1),
+                h(r#"{"v":1,"id":9,"op":"freeze","h":"svc","queue":7,"port":6379,"dir":"req","n":1,"dur_ms":100,"netns":"/work/fc.log"}"#, 1),
+                h(r#"{"v":1,"id":10,"op":"signal","h":"svc","sig":"KILL","tree":true}"#, 2),
             ],
         ),
     ]

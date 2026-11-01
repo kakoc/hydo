@@ -66,8 +66,12 @@ controller's choice.
    agent refuses to start a handle that is still busy, so it would also refuse an early restart.
 5. **A failed setup or provisioning step.** The shell also prints the last 8 lines of the log.
    This is not reproduced (it would need a `read`).
-6. **A failed mount.** The text in parentheses is the agent's refusal message instead of busybox
-   mount's error text. The verdict class is the same.
+6. **A failed mount.** Since M131 the text in parentheses is busybox mount's own text for the
+   errno of the agent's refusal (`src/busybox.rs`: "mount: mounting /dev/vda2 on /data failed:
+   <musl's strerror>", with the musl table of the image's own busybox, the read-only retry of
+   EACCES/EROFS and EPERM's line), so both kinds of image give one verdict. Before M131 it was the
+   agent's message ("mount /dev/vda2 on /data: errno 117"), which the explorer counted as another
+   signature. A refusal without an errno (a refused line) keeps the agent's message.
 7. **Invariant output.** The controller keeps the output on the host and cuts it to its first
    3,000 bytes. The shell's file keeps all of it, so for a longer output the last HYDO-ORACLE line
    that inv_detail reads may be lost.
@@ -397,9 +401,12 @@ model in `tests/support/model/net.rs` checks each):
     every later command of the main part. A background job of the shell keeps the environment of
     its fork; the controller's threads build each command when they send it (M120's approach), so
     a periodic check after the arming has the variable too.
-13. **F= with `network: bridge`** is refused (seam freeze): the helper runs in the frozen
-    service's namespace, and the agent's `freeze` has no namespace field. Doing it needs a
-    protocol addition (`netns` on `freeze`, with a feature name) in hydo-agent-proto and the agent.
+13. **F= with `network: bridge`** is driven since M131: the freeze's optional `netns` field
+    (feature `freeze-netns` in the hello) makes the agent bind the netfilter queue inside the
+    frozen service's namespace (hydo_fc under `nsenter -n<file>`), and the rules are
+    hydo-init-netns.sh's fc_rules, each `iptables` a `run` with that `netns`. An agent without the
+    feature (images built before M131) is refused at the arming with a message that names the
+    feature and says to rebuild the image (`session::missing_feature_message`).
 
 The order against the other extensions (hydo-build's `init_text`; a wrapper spliced later runs
 first): `step_range`: the fakes split, then freeze's (declaration, arming), then hydo-init.sh's;
@@ -571,7 +578,28 @@ with fakes were not run together (no example has both).
   literal `{{name}}` in their commands, as before; changing that changes their goldens.
 - **Limits found on real guests:** hvm's rewind mode is refused under lock-step control, so a
   workload with a busy-wait counter loop (ledger-spin) ends as SPIN on an agent image; `F=` with
-  `network: bridge` stays refused (the agent's `freeze` has no namespace field).
+  `network: bridge` was refused until M131 (below).
+
+## M131: the freeze in a service's namespace, and busybox's words for a failed mount
+
+- **Protocol (additions only):** `freeze` gained the optional `netns`; the hello's features are
+  `freeze` and `freeze-netns` (`msg::FEATURES`); `Command::features()` lists every feature a
+  command needs (it replaced `feature()`), and `Session::command` and the runner refuse a command
+  whose feature the hello lacks with `SessionError::MissingFeature` /
+  `session::missing_feature_message`. The schema grew by the one field (the additions-only check
+  against `hydo/schema/released/agent-v1.json` passes). hydo-agent is 0.2.0; its pinned bytes are
+  in docs/BUILD-PINS.md and `hydo-build/src/agent.rs`.
+- **Controller:** `src/schedule/freeze.rs` sends the freeze with `netns::of(ctx, svc)` and, with
+  `network: bridge`, runs hydo-init-netns.sh's fc_rules (`rules_netns`); `run_cfg` no longer
+  refuses F=. `src/busybox.rs` and `Layout::strerror` (read from the image's busybox by
+  `agent::plan_of_image`) give the mount verdict busybox's words.
+- **Proof, no VM:** the 191 identity-corpus schedules with F= on a bridge that M124 refused are
+  driven and checked against the shell model (`tests/support/model/net.rs` gained the netns
+  fc_rules and the freeze's netns, transliterated from hydo-init-netns.sh; the model's mount_data
+  writes busybox's lines from mount.c's text); `tests/corpus_net.rs` drives redis-bridge's freeze
+  schedules (both pairs, the workload peer, the two recorded ones, freeze_schedules) with two more
+  deliberate mistakes (the queue or a rule outside the namespace). The scripted agent's mount
+  refusals now carry an errno (EUCLEAN, EINVAL, EIO, EBADMSG, EROFS with a read-only retry).
 
 ## Left open
 

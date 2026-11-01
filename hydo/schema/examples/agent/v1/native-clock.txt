@@ -1,5 +1,5 @@
 # hydo agent transcript, protocol 1: reading the realtime and the monotonic clock (the values are those of the recording run).
 # Recorded from `hydo-agent serve --root <scratch>` on Linux as an unprivileged user (hydo/crates/hydo-agent/tests/native.rs); never edited. Not replayed: the times differ in every run.
-< HYDO-AG 242 65657430 {"agent":"0.1.0","ev":"hello","features":["freeze"],"ops":["sync","spawn","signal","run","probe","write","read","mkdir","mount","syncfs","clock_set","clock_get","qlen","tail","untail","freeze","unfreeze"],"pid1":false,"proto":1,"seq":0,"v":1}
+< HYDO-AG 257 c3d3be4a {"agent":"0.2.0","ev":"hello","features":["freeze","freeze-netns"],"ops":["sync","spawn","signal","run","probe","write","read","mkdir","mount","syncfs","clock_set","clock_get","qlen","tail","untail","freeze","unfreeze"],"pid1":false,"proto":1,"seq":0,"v":1}
 > {"id":1,"op":"clock_get","v":1}
-< HYDO-AG 104 11df6a73 {"mono_ms":1566526495,"nsec":861799198,"ok":true,"op":"clock_get","re":1,"sec":1793463984,"seq":1,"v":1}
+< HYDO-AG 104 db9c5a50 {"mono_ms":1615838019,"nsec":385191905,"ok":true,"op":"clock_get","re":1,"sec":1793513296,"seq":1,"v":1}
