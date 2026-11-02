@@ -9,10 +9,14 @@
 //!
 //! Two ways to use it:
 //!
-//! - in-process (the default): [`engine::main_with`] runs the engine over any streams;
-//!   hydo-engine runs one per worker on a thread of the `hydo` process itself whenever that
-//!   process can open the device (`HYDO_ENGINE=inproc` forces it);
-//! - the program `hydo-hvx`, with the C engine's command line and protocol, which hydo-engine
+//! - in-process (the default): [`engine::run`] runs the engine from a typed [`engine::Start`]
+//!   and talks to the host through a [`port::Port`] in values (`hydo-engine-proto`, M142);
+//!   hydo-engine runs one per worker on a thread of the `hydo` process itself, over a
+//!   [`port::ChanPort`], whenever that process can open the device (`HYDO_ENGINE=inproc` forces
+//!   it). The engine reads no schedule text: [`sched::Sched::from_schedule`] arms the module from
+//!   hydo-schedule's typed schedule;
+//! - the program `hydo-hvx`, with the C engine's command line and protocol ([`engine::main_with`]
+//!   reads the command line, [`text::TextPort`] turns the lines into the same values), which hydo-engine
 //!   starts under `hvx-run sudo` when the process cannot open the device (`HYDO_ENGINE=process`
 //!   forces it; `HYDO_HVX_EXPLORE` names another program).
 //!
@@ -32,8 +36,10 @@ pub mod cstr;
 pub mod ctl;
 pub mod fnv;
 pub mod pages;
+pub mod port;
 pub mod pt;
 pub mod sched;
+pub mod text;
 
 #[cfg(target_os = "linux")]
 pub mod engine;

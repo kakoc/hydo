@@ -1,16 +1,22 @@
-//! A schedule's host part, read as `hvx_explore.c`'s `parse_sched` reads it (`strstr` for the
-//! tokens, glibc `strtoull`, the same defaults, refusals and buffer limits), so every schedule,
-//! malformed ones included, arms the module exactly as the C engine does.
+//! What one schedule arms in the module: the values the engine passes to `/dev/hvx` (disk
+//! faults, tick jitter, preemption, extra ticks, vCPU turns, the run budget, the flush cut) and
+//! the guest text it types, computed from hydo-schedule's typed [`Schedule`].
+//!
+//! The engine parses no schedule text (M142): every caller hands it a [`Schedule`] (in process:
+//! hydo-engine; the program `hydo-hvx`: its request reader parses each line with
+//! [`Schedule::parse`]). [`Sched::from_schedule`] maps the typed tokens to the fields the C
+//! engine's `parse_sched` filled, with its defaults (`tjpm` 10, `tjmax` 500000, `xtr` 4, `xtpm`
+//! 500, a burst seed of 1 when `qb=` has no `qbs=`); `tests/parse_vs_c.rs` checks that on every
+//! schedule hydo-schedule accepts the fields are the C parser's (recorded in
+//! `tests/golden/parse_sched_c.txt`) and lists the inputs the C engine ran and hydo-schedule
+//! refuses. Host tokens for the Mac engine only (`pct*`, `spin=`) arm nothing here, as before.
 
 use crate::abi::*;
-use crate::cstr::{atoi, find, strtoul, strtoull, Scan};
+use hydo_schedule::{Disk, GuestToken, HostToken, Schedule};
 
 #[derive(Clone, Copy)]
 pub struct Sched {
-    /// The host part (before `|`), at most 1023 bytes (the C buffer).
-    pub host: [u8; 1024],
-    pub host_len: usize,
-    /// The guest part (after `|` and spaces, trailing new lines and spaces cut), at most 511 bytes.
+    /// The guest part as typed on the console (`run` and the tokens), at most 511 bytes.
     pub guest: [u8; 512],
     pub guest_len: usize,
     pub classes: u32,
@@ -36,8 +42,6 @@ pub struct Sched {
 impl Sched {
     pub fn empty() -> Sched {
         Sched {
-            host: [0; 1024],
-            host_len: 0,
             guest: [0; 512],
             guest_len: 0,
             classes: 0,
@@ -61,273 +65,147 @@ impl Sched {
         }
     }
 
-    pub fn host(&self) -> &[u8] {
-        &self.host[..self.host_len]
-    }
-
     pub fn guest(&self) -> &[u8] {
         &self.guest[..self.guest_len]
     }
 
-    /// `parse_sched`: None where the C function returns -1.
-    pub fn parse(s: &[u8]) -> Option<Sched> {
+    /// The module's values for `s`. hydo-schedule has already refused what the C engine refused
+    /// (and more: see `tests/parse_vs_c.rs`), so this cannot fail.
+    pub fn from_schedule(s: &Schedule) -> Sched {
         let mut sc = Sched::empty();
-        // a C string ends at its first NUL
-        let s = &s[..s.iter().position(|&c| c == 0).unwrap_or(s.len())];
-        let bar = s.iter().position(|&c| c == b'|')?;
-        let h = &s[..bar.min(1023)];
-        sc.host[..h.len()].copy_from_slice(h);
-        sc.host_len = h.len();
-        let mut p = bar + 1;
-        while p < s.len() && s[p] == b' ' {
-            p += 1;
-        }
-        let g = &s[p..];
-        let g = &g[..g.len().min(511)];
-        sc.guest[..g.len()].copy_from_slice(g);
-        sc.guest_len = g.len();
-        while sc.guest_len > 0 && matches!(sc.guest[sc.guest_len - 1], b'\n' | b'\r' | b' ') {
-            sc.guest_len -= 1;
-        }
-        let host = sc.host;
-        let host = &host[..sc.host_len];
-        let mut disk: Vec<u8> = b"none".to_vec();
-        if let Some(i) = find(host, b"disk=") {
-            let mut w = Scan::new(&host[i + 5..]);
-            if let Some(d) = w.word(63) {
-                disk = d.to_vec();
+        let g = s.guest_text();
+        let g = g.as_bytes();
+        // hydo_schedule::GUEST_MAX_BYTES (511) is the C buffer's limit
+        let n = g.len().min(511);
+        sc.guest[..n].copy_from_slice(&g[..n]);
+        sc.guest_len = n;
+        match s.disk() {
+            Disk::None => {}
+            Disk::Cut => {
+                sc.classes = HVX_FAULT_DROP_UNFLUSHED;
+                sc.prob = 100;
+            }
+            Disk::IoErr(p) => {
+                sc.classes = HVX_FAULT_ERROR;
+                sc.prob = p as u32;
+            }
+            Disk::Lying(p) => {
+                sc.classes = HVX_FAULT_DROP;
+                sc.prob = p as u32;
             }
         }
-        if let Some(i) = find(host, b"dseed=") {
-            sc.dseed = strtoull(&host[i + 6..], 16).0;
-        }
-        if disk == b"none" {
-            sc.classes = 0;
-        } else if disk.starts_with(b"ioerr:") {
-            sc.classes = HVX_FAULT_ERROR;
-            sc.prob = atoi(&disk[6..]) as u32;
-        } else if disk == b"cut" {
-            sc.classes = HVX_FAULT_DROP_UNFLUSHED;
-            sc.prob = 100;
-        } else if disk.starts_with(b"lying:") {
-            sc.classes = HVX_FAULT_DROP;
-            sc.prob = atoi(&disk[6..]) as u32;
-        } else {
-            return None;
-        }
-        parse_tj(host, &mut sc)?;
-        parse_preempt(host, &mut sc)?;
-        parse_turns(host, &mut sc)?;
-        if let Some(i) = find(host, b"rb=") {
-            sc.rb = strtoull(&host[i + 3..], 10).0;
-        }
-        sc.cut = find(sc.guest(), b" C=").is_some();
-        if let Some(i) = find(host, b"cf=") {
-            sc.cf = strtoull(&host[i + 3..], 10).0;
-            if sc.cf == 0 || sc.classes != HVX_FAULT_DROP_UNFLUSHED || sc.cut {
-                return None;
+        sc.dseed = s.dseed();
+        let num = |k: &str| match s.host_token(k) {
+            Some(
+                HostToken::Dseed(v)
+                | HostToken::Tj(v)
+                | HostToken::Tjpm(v)
+                | HostToken::Tjmax(v)
+                | HostToken::Tjlo(v)
+                | HostToken::Tjhi(v)
+                | HostToken::Pp(v)
+                | HostToken::Pptsc(v)
+                | HostToken::Xt(v)
+                | HostToken::Xtr(v)
+                | HostToken::Xtpm(v)
+                | HostToken::Xtlo(v)
+                | HostToken::Xthi(v)
+                | HostToken::Xtsc(v)
+                | HostToken::Cf(v)
+                | HostToken::Rb(v)
+                | HostToken::Q(v)
+                | HostToken::Qs(v)
+                | HostToken::Qbs(v)
+                | HostToken::Qm(v)
+                | HostToken::Pct(v)
+                | HostToken::Pctn(v)
+                | HostToken::Pctk(v),
+            ) => Some(*v),
+            _ => None,
+        };
+        // tick jitter: an explicit list, else the seeded form with its defaults
+        if let Some(HostToken::Tjx(l)) = s.host_token("tjx") {
+            for (i, (tick, delay)) in l.iter().take(HVX_TJ_MAX_EXPLICIT).enumerate() {
+                sc.tj.explicit_[i] = hvx_tj_explicit {
+                    tick: *tick,
+                    delay: *delay,
+                };
+                sc.tj.n_explicit += 1;
             }
+            sc.tj_on = sc.tj.n_explicit > 0;
+        } else if let Some(seed) = num("tj") {
+            sc.tj.seed = seed;
+            sc.tj.permille = num("tjpm").map_or(10, |v| v as u32);
+            sc.tj.max_delay = num("tjmax").unwrap_or(500000);
+            sc.tj.tick_lo = num("tjlo").unwrap_or(0);
+            sc.tj.tick_hi = num("tjhi").unwrap_or(0);
+            sc.tj_on = sc.tj.permille != 0 && sc.tj.max_delay != 0;
+        }
+        // preemption and extra ticks
+        sc.pp = num("pp").unwrap_or(0);
+        sc.pptsc = num("pptsc").unwrap_or(0);
+        sc.xt.tsc = num("xtsc").unwrap_or(0);
+        if let Some(HostToken::Xtx(l)) = s.host_token("xtx") {
+            for (i, b) in l.iter().take(HVX_XT_MAX_EXPLICIT).enumerate() {
+                sc.xt.explicit_[i] = *b;
+                sc.xt.n_explicit += 1;
+            }
+            sc.xt_on = sc.xt.n_explicit > 0;
+        } else if let Some(seed) = num("xt") {
+            sc.xt.seed = seed;
+            sc.xt.rate = num("xtr").map_or(4, |v| v as u32);
+            sc.xt.permille = num("xtpm").map_or(500, |v| v as u32);
+            sc.xt.lo = num("xtlo").unwrap_or(0);
+            sc.xt.hi = num("xthi").unwrap_or(0);
+            sc.xt_on = sc.xt.rate != 0 && sc.xt.permille != 0;
+        }
+        // vCPU turns
+        if let Some(q) = num("q") {
+            sc.q = q;
+            sc.q_on = true;
+        }
+        if let Some(qs) = num("qs") {
+            sc.qs = qs;
+            sc.q_on = true;
+        }
+        if let Some(HostToken::Qb { len, q, permille }) = s.host_token("qb") {
+            sc.tc.burst_len = *len;
+            sc.tc.burst_q = *q;
+            sc.tc.burst_permille = *permille as u32;
+            sc.tc.burst_seed = num("qbs").unwrap_or(1);
+            sc.tc_on = true;
+            sc.q_on = true;
+        }
+        if let Some(m) = num("qm") {
+            sc.tc.margin = m;
+            sc.tc_on = true;
+            sc.q_on = true;
+        }
+        sc.rb = num("rb").unwrap_or(0);
+        // the power cut: a guest C= token, or the k-th FLUSH (cf=); cfn counts FLUSHes only
+        sc.cut = s.guest.iter().any(|t| matches!(t, GuestToken::Cut(_)));
+        if let Some(cf) = num("cf") {
+            sc.cf = cf;
             sc.cf_on = true;
             sc.cut = true;
-        } else if find(host, b"cfn").is_some() {
+        } else if s.host_token("cfn").is_some() {
             sc.cf_on = true;
         }
-        Some(sc)
+        sc
     }
-}
-
-/// `host_tok`: the value of `key` where it starts a word of `host`.
-pub fn host_tok<'a>(host: &'a [u8], key: &[u8]) -> Option<&'a [u8]> {
-    let mut p = 0;
-    while let Some(i) = find(&host[p..], key) {
-        let at = p + i;
-        if at == 0 || host[at - 1] == b' ' {
-            return Some(&host[at + key.len()..]);
-        }
-        p = at + key.len();
-    }
-    None
-}
-
-/// The byte after a parsed number (`*end`, 0 at the end of the string).
-fn at(s: &[u8], i: usize) -> u8 {
-    s.get(i).copied().unwrap_or(0)
-}
-
-fn parse_turns(host: &[u8], sc: &mut Sched) -> Option<()> {
-    if let Some(p) = host_tok(host, b"q=") {
-        let (v, n) = strtoull(p, 10);
-        if n == 0 || v == 0 || (at(p, n) != 0 && at(p, n) != b' ') {
-            return None;
-        }
-        sc.q = v;
-        sc.q_on = true;
-    }
-    if let Some(p) = host_tok(host, b"qs=") {
-        let (v, n) = strtoull(p, 16);
-        if n == 0 || v == 0 || (at(p, n) != 0 && at(p, n) != b' ') {
-            return None;
-        }
-        sc.qs = v;
-        sc.q_on = true;
-    }
-    if let Some(p) = host_tok(host, b"qb=") {
-        let (bl, n) = strtoull(p, 10);
-        if n == 0 || at(p, n) != b':' || bl == 0 {
-            return None;
-        }
-        let p = &p[n + 1..];
-        let (bq, n) = strtoull(p, 10);
-        if n == 0 || at(p, n) != b':' || bq == 0 {
-            return None;
-        }
-        let p = &p[n + 1..];
-        let (pm, n) = strtoull(p, 10);
-        if n == 0 || pm > 1000 || (at(p, n) != 0 && at(p, n) != b' ') {
-            return None;
-        }
-        sc.tc.burst_len = bl;
-        sc.tc.burst_q = bq;
-        sc.tc.burst_permille = pm as u32;
-        if sc.tc.burst_seed == 0 {
-            sc.tc.burst_seed = 1;
-        }
-        sc.tc_on = true;
-        sc.q_on = true;
-    }
-    if let Some(p) = host_tok(host, b"qbs=") {
-        let (v, n) = strtoull(p, 16);
-        sc.tc.burst_seed = v;
-        if n == 0 || v == 0 || (at(p, n) != 0 && at(p, n) != b' ') {
-            return None;
-        }
-        if sc.tc.burst_len == 0 {
-            return None;
-        }
-    }
-    if let Some(p) = host_tok(host, b"qm=") {
-        let (v, n) = strtoull(p, 10);
-        sc.tc.margin = v;
-        if n == 0 || v < 8 || (at(p, n) != 0 && at(p, n) != b' ') {
-            return None;
-        }
-        sc.tc_on = true;
-        sc.q_on = true;
-    }
-    Some(())
-}
-
-fn parse_preempt(host: &[u8], sc: &mut Sched) -> Option<()> {
-    if let Some(i) = find(host, b"pp=") {
-        sc.pp = strtoull(&host[i + 3..], 10).0;
-    }
-    if let Some(i) = find(host, b"pptsc=") {
-        sc.pptsc = strtoull(&host[i + 6..], 10).0;
-    }
-    if let Some(i) = find(host, b"xtsc=") {
-        sc.xt.tsc = strtoull(&host[i + 5..], 10).0;
-    }
-    if let Some(i) = find(host, b"xtx=") {
-        let mut p = i + 4;
-        while at(host, p) != 0
-            && at(host, p) != b' '
-            && (sc.xt.n_explicit as usize) < HVX_XT_MAX_EXPLICIT
-        {
-            let (v, n) = strtoull(&host[p..], 10);
-            sc.xt.explicit_[sc.xt.n_explicit as usize] = v;
-            sc.xt.n_explicit += 1;
-            if n == 0 {
-                return None;
-            }
-            let end = p + n;
-            p = if at(host, end) == b',' { end + 1 } else { end };
-        }
-        if at(host, p) != 0 && at(host, p) != b' ' {
-            return None;
-        }
-        sc.xt_on = sc.xt.n_explicit > 0;
-        return Some(());
-    }
-    let Some(i) = find(host, b"xt=") else {
-        return Some(());
-    };
-    sc.xt.seed = strtoull(&host[i + 3..], 16).0;
-    sc.xt.rate = match find(host, b"xtr=") {
-        Some(j) => strtoul(&host[j + 4..], 10).0 as u32,
-        None => 4,
-    };
-    sc.xt.permille = match find(host, b"xtpm=") {
-        Some(j) => strtoul(&host[j + 5..], 10).0 as u32,
-        None => 500,
-    };
-    if let Some(j) = find(host, b"xtlo=") {
-        sc.xt.lo = strtoull(&host[j + 5..], 10).0;
-    }
-    if let Some(j) = find(host, b"xthi=") {
-        sc.xt.hi = strtoull(&host[j + 5..], 10).0;
-    }
-    sc.xt_on = sc.xt.rate != 0 && sc.xt.permille != 0;
-    Some(())
-}
-
-fn parse_tj(host: &[u8], sc: &mut Sched) -> Option<()> {
-    if let Some(i) = find(host, b"tjx=") {
-        let mut p = i + 4;
-        while at(host, p) != 0
-            && at(host, p) != b' '
-            && (sc.tj.n_explicit as usize) < HVX_TJ_MAX_EXPLICIT
-        {
-            let k = sc.tj.n_explicit as usize;
-            let (tick, n) = strtoull(&host[p..], 10);
-            sc.tj.explicit_[k].tick = tick;
-            let end = p + n;
-            if at(host, end) != b':' {
-                return None;
-            }
-            let (delay, n2) = strtoull(&host[end + 1..], 10);
-            sc.tj.explicit_[k].delay = delay;
-            let end = end + 1 + n2;
-            sc.tj.n_explicit += 1;
-            p = if at(host, end) == b',' { end + 1 } else { end };
-        }
-        if at(host, p) != 0 && at(host, p) != b' ' {
-            return None;
-        }
-        sc.tj_on = sc.tj.n_explicit > 0;
-        return Some(());
-    }
-    let Some(i) = find(host, b"tj=") else {
-        return Some(());
-    };
-    sc.tj.seed = strtoull(&host[i + 3..], 16).0;
-    sc.tj.permille = match find(host, b"tjpm=") {
-        Some(j) => strtoul(&host[j + 5..], 10).0 as u32,
-        None => 10,
-    };
-    sc.tj.max_delay = match find(host, b"tjmax=") {
-        Some(j) => strtoull(&host[j + 6..], 10).0,
-        None => 500000,
-    };
-    if let Some(j) = find(host, b"tjlo=") {
-        sc.tj.tick_lo = strtoull(&host[j + 5..], 10).0;
-    }
-    if let Some(j) = find(host, b"tjhi=") {
-        sc.tj.tick_hi = strtoull(&host[j + 5..], 10).0;
-    }
-    sc.tj_on = sc.tj.permille != 0 && sc.tj.max_delay != 0;
-    Some(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn p(s: &str) -> Sched {
+        Sched::from_schedule(&Schedule::parse(s).unwrap())
+    }
+
     #[test]
     fn host_tokens() {
-        let s = Sched::parse(
-            b"disk=cut dseed=4d5cb825dfaab05b tj=7 tjpm=20 rb=16 | run K=redis@11+1 C=24\n",
-        )
-        .unwrap();
+        let s = p("disk=cut dseed=4d5cb825dfaab05b tj=7 tjpm=20 rb=16 | run K=redis@11+1 C=24\n");
         assert_eq!(s.classes, HVX_FAULT_DROP_UNFLUSHED);
         assert_eq!(s.prob, 100);
         assert_eq!(s.dseed, 0x4d5cb825dfaab05b);
@@ -335,24 +213,25 @@ mod tests {
         assert_eq!(s.rb, 16);
         assert!(s.cut);
         assert_eq!(s.guest(), b"run K=redis@11+1 C=24");
-        assert!(Sched::parse(b"disk=bogus | run").is_none());
-        assert!(Sched::parse(b"no bar").is_none());
-        // cf= needs disk=cut and no C=
-        assert!(Sched::parse(b"disk=none cf=3 | run").is_none());
-        let c = Sched::parse(b"disk=cut cf=3 | run").unwrap();
+        let c = p("disk=cut cf=3 | run");
         assert!(c.cf_on && c.cut && c.cf == 3);
-        // q= is a whole word; qm= below 8 is refused; qb= arms bursts
-        let q = Sched::parse(b"disk=none q=5000 qs=ab qb=100:7:250 | run").unwrap();
+        let q = p("disk=none q=5000 qs=ab qb=100:7:250 | run");
         assert!(q.q_on && q.q == 5000 && q.qs == 0xab);
         assert!(q.tc_on && q.tc.burst_len == 100 && q.tc.burst_q == 7 && q.tc.burst_seed == 1);
-        assert!(Sched::parse(b"disk=none qm=4 | run").is_none());
-        assert!(Sched::parse(b"disk=none qbs=3 | run").is_none());
-        let x = Sched::parse(b"disk=none tjx=5:100,9:7 xtx=1000,2000 | run").unwrap();
+        let x = p("disk=none tjx=5:100,9:7 xtx=1000,2000 | run");
         assert_eq!(x.tj.n_explicit, 2);
         assert_eq!(x.tj.explicit_[1], hvx_tj_explicit { tick: 9, delay: 7 });
         assert_eq!(x.xt.n_explicit, 2);
-        assert!(Sched::parse(b"disk=none tjx=5-100 | run").is_none());
-        let e = Sched::parse(b"|").unwrap();
-        assert_eq!(e.guest_len, 0);
+        // what the C refused, hydo-schedule refuses
+        for bad in [
+            "disk=bogus | run",
+            "no bar",
+            "disk=none cf=3 | run",
+            "disk=none qm=4 | run",
+            "disk=none qbs=3 | run",
+            "disk=none tjx=5-100 | run",
+        ] {
+            assert!(Schedule::parse(bad).is_err(), "{bad}");
+        }
     }
 }

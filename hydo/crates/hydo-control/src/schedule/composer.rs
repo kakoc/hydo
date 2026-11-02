@@ -8,10 +8,11 @@
 //! is the knob `W` whose set command is `compose.sh setw`, and the invariants are
 //! `compose.sh verdict | end IDX | check IDX`. Each of those calls is replaced here:
 //!
-//! - [`set_knob`] (`setw`): W= is parsed as `parse_w` parses it and its composition is computed
-//!   (`wplan`): the seed form by hydo-composer's generator ([`hydo_composer::plan`], the Rust
-//!   twin of PLAN_AWK) with PLAN_AWK's filters, the resolved and saved forms as RES_AWK reads them,
-//!   with its messages;
+//! - [`set_knob`] (`setw`): parse_w's variables come from W= as hydo-schedule parsed it
+//!   ([`Compose`]) and its composition is computed (`wplan`): the seed form by hydo-composer's
+//!   generator ([`hydo_composer::plan`], the Rust twin of PLAN_AWK) with PLAN_AWK's filters, the
+//!   resolved form (W's typed fields) and the saved form (the text of compose.saved/<key>) as
+//!   RES_AWK reads them, with its messages;
 //! - [`provision`] (`first`): the project's own provisioning, then every `first` command;
 //! - [`step`] (`step FROM TO`): opens the gate to round TO, starts the daemon the first time, and
 //!   waits until the daemon waits at round TO (the last range: until it drained), or the daemon
@@ -40,6 +41,7 @@ use crate::flow::{Memo, Step, Stop};
 use crate::seams::Unsupported;
 use hydo_agent_proto::msg::{Command, Mkdir, Sig, Spawn};
 use hydo_manifest::py;
+use hydo_schedule::{Compose, GuestToken, Omit, RangeList, ResolvedField, SeedField};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -167,29 +169,41 @@ impl ComposePlan {
 
 // ------------------------------------------------------------------ W= and its composition
 
-/// parse_w's variables, as the shell keeps them (strings; WS a number).
+/// parse_w's variables. W itself is hydo-schedule's [`Compose`] (the shell took its text apart
+/// with `IFS=,` and `case`); what parse_w derives from it is kept typed where only W or the plan
+/// sets it, and as text where a saved composition's words (compose.saved/<key>, a file of the
+/// image, which the shell reads as text) can set it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct WFields {
+    /// `$W`: W's value as printed (canonical; "" for no W= and for `-`).
     pub w: String,
     pub ws: i64,
+    /// `$WP`, `$WR`, `$WT`: the plan's numbers, W's, or a saved composition's words.
     pub wp: String,
-    pub wq: String,
     pub wr: String,
-    pub wn: String,
     pub wt: String,
-    pub wx: String,
-    pub wo: String,
-    pub wv: String,
+    /// `$WQ` (None: `-`, a resolved composition) and `$WN`: the plan's numbers or W's.
+    pub wq: Option<i128>,
+    pub wn: i128,
+    /// `$WX`, `$WO`: the seed form's lists (None: not given, the shell's empty value).
+    pub wx: Option<RangeList>,
+    pub wo: Option<Omit>,
+    /// `$WV`: the resolved composition (None: the seed form).
+    pub wv: Option<Resolved>,
 }
 
-/// Why `wplan` cannot run W on this image.
+/// A resolved composition: W's own (`W=:...`), or the text a saved one (`W=@<key>`) names.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum WFail {
-    /// `$WERR`: setw prints `HYDO-COMPOSE error: $WERR` (empty when an awk program failed).
-    Werr(String),
-    /// The shell itself stops (`$((0x…))` of a seed field that is not hex): no line is printed.
-    Crash,
+pub enum Resolved {
+    Token(Vec<ResolvedField>),
+    Saved(String),
 }
+
+/// Why `wplan` cannot run W on this image: `$WERR`, which setw prints as `HYDO-COMPOSE error:
+/// $WERR` (empty when an awk program failed). (parse_w's other ends -- the shell stopping at
+/// `$((0x…))` of a seed that is not hex, a bad `@` key, a field it does not know -- come from
+/// spellings hydo-schedule refuses before a run.)
+pub type WFail = String;
 
 /// One entry of a composition: (entry number, round, command index, kind, HYDO_SEED), a line of
 /// `$C/plan`.
@@ -221,86 +235,83 @@ fn comma_fields(x: &str) -> Vec<String> {
     v
 }
 
-/// parse_w: the console lines it prints and its fields. `w` is what compose.W holds (the knob's
-/// value; "" when no W= was given).
-pub fn parse_w(cp: &ComposePlan, w: &str) -> (Vec<String>, Result<WFields, WFail>) {
-    let mut lines = Vec::new();
+/// parse_w: W's fields. `w` is the W= token compose.W holds (None when no W= was given). The
+/// shell printed a line for a seed-form field it did not know; hydo-schedule refuses such a
+/// field, so parse_w prints nothing here.
+pub fn parse_w(cp: &ComposePlan, w: Option<&Compose>) -> Result<WFields, WFail> {
     let mut f = WFields {
-        w: if w == "-" {
-            String::new()
-        } else {
-            w.to_string()
+        w: match w {
+            None | Some(Compose::Default) => String::new(),
+            Some(c) => c.to_string(),
         },
         ws: 0,
         wp: cp.parallel.to_string(),
-        wq: cp.per_round.to_string(),
+        wq: Some(cp.per_round as i128),
         wr: cp.round_ms.to_string(),
-        wn: cp.max_commands.to_string(),
+        wn: cp.max_commands as i128,
         wt: cp.budget_ms.to_string(),
         ..WFields::default()
     };
-    if f.w.is_empty() {
-        return (lines, Ok(f));
-    }
-    if let Some(k) = f.w.strip_prefix('@') {
-        if k.is_empty() || k.bytes().any(|c| !matches!(c, b'0'..=b'9' | b'a'..=b'f')) {
-            let e = format!("W={}: @ takes the key of a saved composition (hex)", f.w);
-            return (lines, Err(WFail::Werr(e)));
-        }
-        match cp.saved.get(k) {
+    // the resolved form's start: `WN=0 WT=0 WQ=-`
+    let resolved = |f: &mut WFields| {
+        f.wn = 0;
+        f.wt = "0".into();
+        f.wq = None;
+    };
+    match w {
+        None | Some(Compose::Default) => {}
+        Some(Compose::Saved(k)) => match cp.saved.get(k) {
             Some(c) if !c.trim_end_matches('\n').is_empty() => {
-                f.wv = c.trim_end_matches('\n').to_string()
+                let wv = c.trim_end_matches('\n').to_string();
+                resolved(&mut f);
+                // the saved file's text, as the shell reads it: `IFS=,` and `p[0-9]*)` (the
+                // letter, a digit, then anything)
+                for x in comma_fields(&wv[1..]) {
+                    let digit = x.len() > 1 && x[1..].starts_with(|d: char| d.is_ascii_digit());
+                    match x.chars().next() {
+                        Some('p') if digit => f.wp = x[1..].to_string(),
+                        Some('r') if digit => f.wr = x[1..].to_string(),
+                        Some('t') if digit => f.wt = x[1..].to_string(),
+                        _ => {}
+                    }
+                }
+                f.wv = Some(Resolved::Saved(wv));
             }
             _ => {
-                let e = format!(
+                return Err(format!(
                     "W={}: this image carries no saved composition {k} (build it with the regression that has it)",
                     f.w
-                );
-                return (lines, Err(WFail::Werr(e)));
+                ));
+            }
+        },
+        Some(Compose::Resolved(fields)) => {
+            resolved(&mut f);
+            for x in fields {
+                match x {
+                    ResolvedField::P(n) => f.wp = n.to_string(),
+                    ResolvedField::R(n) => f.wr = n.to_string(),
+                    ResolvedField::T(n) => f.wt = n.to_string(),
+                    _ => {}
+                }
+            }
+            f.wv = Some(Resolved::Token(fields.clone()));
+        }
+        Some(Compose::Seed { seed, fields }) => {
+            f.ws = *seed as i64;
+            for x in fields {
+                match x {
+                    SeedField::P(n) => f.wp = n.to_string(),
+                    SeedField::Q(n) => f.wq = Some(*n as i128),
+                    SeedField::R(n) => f.wr = n.to_string(),
+                    SeedField::N(n) => f.wn = *n as i128,
+                    SeedField::T(n) => f.wt = n.to_string(),
+                    SeedField::X(l) => f.wx = Some(l.clone()),
+                    SeedField::O(o) => f.wo = Some(o.clone()),
+                }
             }
         }
-    } else if f.w.starts_with(':') {
-        f.wv = f.w.clone();
     }
-    if !f.wv.is_empty() {
-        f.wn = "0".into();
-        f.wt = "0".into();
-        f.wq = "-".into();
-        for x in comma_fields(&f.wv[1..]) {
-            // `p[0-9]*)`: the letter, a digit, then anything
-            let digit = x.len() > 1 && x[1..].starts_with(|d: char| d.is_ascii_digit());
-            match x.chars().next() {
-                Some('p') if digit => f.wp = x[1..].to_string(),
-                Some('r') if digit => f.wr = x[1..].to_string(),
-                Some('t') if digit => f.wt = x[1..].to_string(),
-                _ => {}
-            }
-        }
-        return (lines, Ok(f));
-    }
-    let fs = comma_fields(&f.w);
-    let hex = fs.first().cloned().unwrap_or_default();
-    if hex.is_empty() || hex.len() > 16 || !hex.bytes().all(|c| c.is_ascii_hexdigit()) {
-        return (lines, Err(WFail::Crash));
-    }
-    f.ws = u64::from_str_radix(&hex, 16).unwrap_or(0) as i64;
-    for x in fs.iter().skip(1) {
-        let v = x.get(1..).unwrap_or("").to_string();
-        match x.chars().next() {
-            Some('p') => f.wp = v,
-            Some('q') => f.wq = v,
-            Some('r') => f.wr = v,
-            Some('n') => f.wn = v,
-            Some('t') => f.wt = v,
-            Some('x') => f.wx = v,
-            Some('o') => f.wo = v,
-            _ => lines.push(format!(
-                "HYDO-COMPOSE: W={}: unknown field '{x}' ignored",
-                f.w
-            )),
-        }
-    }
-    (lines, Ok(f))
+    Ok(f)
 }
 
 /// awk's numeric value of a string (`x + 0`): its leading number, 0 when there is none.
@@ -340,72 +351,46 @@ pub fn awk_num(s: &str) -> f64 {
     t[..i].parse().unwrap_or(0.0)
 }
 
-/// Whether awk takes a `-v` value or a split piece as a number (a "strnum").
-fn strnum(s: &str) -> bool {
-    let t = s.trim_matches([' ', '\t', '\n']);
-    !t.is_empty() && t.parse::<f64>().is_ok() && !t.contains(['x', 'X', 'n', 'N', 'i', 'I'])
-}
-
-/// PLAN_AWK's `inlist(lst, v)`.
-fn inlist(lst: &str, v: f64) -> bool {
-    for a in lst.split('.') {
-        if a.is_empty() {
-            continue;
-        }
-        if a.contains('-') {
-            let b: Vec<&str> = a.split('-').collect();
-            let lo = awk_num(b.first().copied().unwrap_or(""));
-            let hi = awk_num(b.get(1).copied().unwrap_or(""));
-            if v >= lo && v <= hi {
-                return true;
+/// PLAN_AWK's `inlist(lst, v)` on a range list (awk compares numbers as doubles; an empty list,
+/// the shell's empty `-v` value, holds nothing).
+fn inlist(lst: Option<&RangeList>, v: f64) -> bool {
+    lst.is_some_and(|l| {
+        l.0.iter().any(|r| {
+            if r.span {
+                v >= r.lo as f64 && v <= r.hi as f64
+            } else {
+                v == r.lo as f64
             }
-        } else if v == awk_num(a) {
-            return true;
-        }
-    }
-    false
-}
-
-/// awk's `a == b` of two strings that may be strnums.
-fn awk_eq(a: &str, b: &str) -> bool {
-    if strnum(a) && strnum(b) {
-        awk_num(a) == awk_num(b)
-    } else {
-        a == b
-    }
+        })
+    })
 }
 
 /// PLAN_AWK on this plan: hydo-composer's generator gives the rounds' entries; X, O and N
-/// filter them as the awk does.
+/// filter them as the awk does. Its `-v` values are numbers here (the plan's or W's), which
+/// awk compares as doubles; an omitted command id is never an awk number (it starts with its
+/// kind), so the awk's `==` on it compares strings.
 fn plan_awk(cp: &ComposePlan, steps: i64, f: &WFields) -> Result<Vec<Entry>, WFail> {
     let kinds: Vec<String> = cp.commands.iter().map(|c| c.kind.clone()).collect();
-    let q = awk_num(&f.wq) as i128;
-    let es = hydo_composer::plan(f.ws as i128, q, steps as i128, &kinds)
-        .map_err(|_| WFail::Werr(String::new()))?;
+    let q = f.wq.map_or(0.0, |q| q as f64) as i128;
+    let es =
+        hydo_composer::plan(f.ws as i128, q, steps as i128, &kinds).map_err(|_| WFail::new())?;
     let omitted = |c: usize| -> bool {
-        if !f.wo.chars().any(|x| x.is_ascii_alphabetic()) {
-            return inlist(&f.wo, c as f64);
+        match &f.wo {
+            None => false,
+            Some(Omit::Indices(l)) => inlist(Some(l), c as f64),
+            Some(Omit::Ids(ids)) => ids.iter().any(|a| *a == cp.commands[c].id),
         }
-        f.wo.split('+').any(|a| awk_eq(a, &cp.commands[c].id))
     };
-    // `N > 0 && out >= N`, with awk's comparisons of a -v value
-    let n_num = strnum(&f.wn);
-    let n_pos = if n_num {
-        awk_num(&f.wn) > 0.0
-    } else {
-        f.wn.as_str() > "0"
-    };
+    // `N > 0 && out >= N`
+    let wn = f.wn as f64;
+    let n_pos = wn > 0.0;
     let mut out = Vec::new();
     for (i, r, c, s) in es {
-        if inlist(&f.wx, i as f64) || omitted(c) {
+        if inlist(f.wx.as_ref(), i as f64) || omitted(c) {
             continue;
         }
         let k = out.len();
-        let full = if n_num {
-            k as f64 >= awk_num(&f.wn)
-        } else {
-            k.to_string().as_str() >= f.wn.as_str()
-        };
+        let full = k as f64 >= wn;
         if n_pos && full {
             break;
         }
@@ -420,66 +405,129 @@ fn plan_awk(cp: &ComposePlan, steps: i64, f: &WFields) -> Result<Vec<Entry>, WFa
     Ok(out)
 }
 
-/// RES_AWK on this plan: the entries of a resolved composition, or its one-line message.
-fn res_awk(cp: &ComposePlan, steps: i64, v: &str) -> Result<Vec<Entry>, String> {
-    let ix = |id: &str| cp.commands.iter().position(|c| c.id == id);
-    let all: String = cp.commands.iter().map(|c| format!(" {}", c.id)).collect();
-    let fs: Vec<&str> = v.get(1..).unwrap_or("").split(',').collect();
-    let (mut nc, mut ci): (i64, Vec<usize>) = (-1, Vec::new());
-    let mut out = Vec::new();
+/// One field of a resolved composition as RES_AWK sees it.
+enum RField {
+    /// `p`, `r` or `t` and digits: skipped.
+    Param,
+    /// The command table (the first `c` field): its ids.
+    Table(Vec<String>),
+    /// `<entry>.<round>.<k>.<seed>`: the field's text, the round's and k's words, and the four
+    /// numbers as awk reads them.
+    Entry {
+        x: String,
+        round: String,
+        k: String,
+        n: [f64; 4],
+    },
+    /// Anything else.
+    Other(String),
+}
+
+/// A saved composition's fields (compose.saved/<key>: a file of the image, read as RES_AWK
+/// reads text, `split($0, f, ",")` after the leading `:`).
+fn saved_fields(v: &str) -> Vec<RField> {
     let is_digits = |s: &str| !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit());
-    for x in fs {
+    let mut table = false;
+    let mut out = Vec::new();
+    for x in v.get(1..).unwrap_or("").split(',') {
         let first = x.chars().next();
         if matches!(first, Some('p' | 'r' | 't')) && is_digits(&x[1..]) {
+            out.push(RField::Param);
             continue;
         }
-        if first == Some('c') && nc < 0 {
-            let cs: Vec<&str> = if x.len() > 1 {
-                x[1..].split('+').collect()
+        if first == Some('c') && !table {
+            table = true;
+            let cs: Vec<String> = if x.len() > 1 {
+                x[1..].split('+').map(str::to_string).collect()
             } else {
                 Vec::new()
             };
-            nc = cs.len() as i64;
-            for c in cs {
-                let Some(i) = ix(c) else {
-                    return Err(format!(
-                        "the composition uses command {c}, which this image does not have (commands:{all})"
-                    ));
-                };
-                if !hydo_composer::PLAN_KINDS.contains(&cp.commands[i].kind.as_str()) {
-                    return Err(format!("command {c} is not a driver or anytime command"));
-                }
-                ci.push(i);
-            }
+            out.push(RField::Table(cs));
             continue;
         }
         let e: Vec<&str> = x.split('.').collect();
         if e.len() == 4 && e.iter().all(|p| is_digits(p)) {
-            let k = awk_num(e[2]);
-            if k >= nc as f64 {
-                return Err(format!(
-                    "entry {x} names command {} of a table of {}",
-                    e[2],
-                    nc.max(0)
-                ));
-            }
-            if awk_num(e[1]) >= steps as f64 {
-                return Err(format!(
-                    "entry {x} is in round {}, the plan has {steps} rounds",
-                    e[1]
-                ));
-            }
-            let c = ci[k as usize];
-            out.push(Entry {
-                entry: awk_num(e[0]) as i64,
-                round: awk_num(e[1]) as i64,
-                idx: c,
-                kind: cp.commands[c].kind.clone(),
-                seed: awk_num(e[3]) as i64,
+            out.push(RField::Entry {
+                x: x.to_string(),
+                round: e[1].to_string(),
+                k: e[2].to_string(),
+                n: [awk_num(e[0]), awk_num(e[1]), awk_num(e[2]), awk_num(e[3])],
             });
             continue;
         }
-        return Err(format!("field {x} is not understood"));
+        out.push(RField::Other(x.to_string()));
+    }
+    out
+}
+
+/// W's own resolved fields (hydo-schedule parsed them: one table, before the entries, and every
+/// entry's numbers canonical, so awk's value of each is the number as a double).
+fn token_fields(fs: &[ResolvedField]) -> Vec<RField> {
+    fs.iter()
+        .map(|f| match f {
+            ResolvedField::P(_) | ResolvedField::R(_) | ResolvedField::T(_) => RField::Param,
+            ResolvedField::Commands(ids) => RField::Table(ids.clone()),
+            ResolvedField::Entry {
+                entry,
+                round,
+                command,
+                seed,
+            } => RField::Entry {
+                x: format!("{entry}.{round}.{command}.{seed}"),
+                round: round.to_string(),
+                k: command.to_string(),
+                n: [*entry as f64, *round as f64, *command as f64, *seed as f64],
+            },
+        })
+        .collect()
+}
+
+/// RES_AWK on this plan: the entries of a resolved composition, or its one-line message.
+fn res_awk(cp: &ComposePlan, steps: i64, fs: Vec<RField>) -> Result<Vec<Entry>, String> {
+    let ix = |id: &str| cp.commands.iter().position(|c| c.id == id);
+    let all: String = cp.commands.iter().map(|c| format!(" {}", c.id)).collect();
+    let (mut nc, mut ci): (i64, Vec<usize>) = (-1, Vec::new());
+    let mut out = Vec::new();
+    for x in fs {
+        match x {
+            RField::Param => {}
+            RField::Table(cs) => {
+                nc = cs.len() as i64;
+                for c in cs {
+                    let Some(i) = ix(&c) else {
+                        return Err(format!(
+                            "the composition uses command {c}, which this image does not have (commands:{all})"
+                        ));
+                    };
+                    if !hydo_composer::PLAN_KINDS.contains(&cp.commands[i].kind.as_str()) {
+                        return Err(format!("command {c} is not a driver or anytime command"));
+                    }
+                    ci.push(i);
+                }
+            }
+            RField::Entry { x, round, k, n } => {
+                if n[2] >= nc as f64 {
+                    return Err(format!(
+                        "entry {x} names command {k} of a table of {}",
+                        nc.max(0)
+                    ));
+                }
+                if n[1] >= steps as f64 {
+                    return Err(format!(
+                        "entry {x} is in round {round}, the plan has {steps} rounds"
+                    ));
+                }
+                let c = ci[n[2] as usize];
+                out.push(Entry {
+                    entry: n[0] as i64,
+                    round: n[1] as i64,
+                    idx: c,
+                    kind: cp.commands[c].kind.clone(),
+                    seed: n[3] as i64,
+                });
+            }
+            RField::Other(x) => return Err(format!("field {x} is not understood")),
+        }
     }
     if out.is_empty() {
         return Err("no entry".into());
@@ -490,28 +538,30 @@ fn res_awk(cp: &ComposePlan, steps: i64, v: &str) -> Result<Vec<Entry>, String> 
 /// W's fields and its entries.
 pub type Composition = (WFields, Vec<Entry>);
 
-/// wplan: the console lines parse_w prints, and W's fields and composition on this image.
-pub fn wplan(cp: &ComposePlan, steps: i64, w: &str) -> (Vec<String>, Result<Composition, WFail>) {
-    let (lines, r) = parse_w(cp, w);
-    let f = match r {
-        Ok(f) => f,
-        Err(e) => return (lines, Err(e)),
+/// wplan: W's fields and composition on this image (`w`: the W= token compose.W holds).
+pub fn wplan(cp: &ComposePlan, steps: i64, w: Option<&Compose>) -> Result<Composition, WFail> {
+    let f = parse_w(cp, w)?;
+    let es = match &f.wv {
+        None => plan_awk(cp, steps, &f),
+        Some(v) => {
+            let fs = match v {
+                Resolved::Token(fs) => token_fields(fs),
+                Resolved::Saved(text) => saved_fields(text),
+            };
+            res_awk(cp, steps, fs).map_err(|m| format!("W={}: {m}", f.w))
+        }
     };
-    let es = if f.wv.is_empty() {
-        plan_awk(cp, steps, &f)
-    } else {
-        res_awk(cp, steps, &f.wv).map_err(|m| WFail::Werr(format!("W={}: {m}", f.w)))
-    };
-    (lines, es.map(|es| (f, es)))
+    es.map(|es| (f, es))
 }
 
 /// The daemon's `HYDO-COMPOSE plan` line.
 pub fn plan_line(f: &WFields, steps: i64, n: usize) -> String {
-    if f.wv.is_empty() {
+    if f.wv.is_none() {
         let w = if f.w.is_empty() { "-" } else { &f.w };
+        let wq = f.wq.map_or_else(|| "-".to_string(), |q| q.to_string());
         format!(
-            "HYDO-COMPOSE plan W={w} seed={} p={} q={} r={} n={} rounds={steps} entries={n}",
-            f.ws, f.wp, f.wq, f.wr, f.wn
+            "HYDO-COMPOSE plan W={w} seed={} p={} q={wq} r={} n={} rounds={steps} entries={n}",
+            f.ws, f.wp, f.wr, f.wn
         )
     } else {
         format!(
@@ -537,8 +587,9 @@ pub struct Launched {
 /// The composer's files in $C, as host state of one conversation.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct State {
-    /// compose.W (the knob's value).
-    pub w: String,
+    /// compose.W (the knob's value): the index of the W= token setw was given in the run's
+    /// knobs (the token itself is in the conversation's schedule), None when none was.
+    pub w: Option<usize>,
     /// $C/started: a step ran in this boot.
     pub started: bool,
     /// $C/gate.
@@ -732,30 +783,22 @@ fn guard(fx: &mut F<'_>, entry: Option<i64>) -> Step<()> {
 
 // ------------------------------------------------------------------ the knob, first, step
 
-/// set_knob for the composer's knob W (default `-`): `compose.sh setw VALUE`.
-pub(super) fn set_knob(fx: &mut F<'_>, ctx: &Ctx, value: &str) -> Step<()> {
-    if value == "-" {
+/// set_knob for the composer's knob W (default `-`): `compose.sh setw VALUE`. `i` is the token's
+/// index in the run's knobs (what compose.W remembers).
+pub(super) fn set_knob(fx: &mut F<'_>, ctx: &Ctx, i: usize, w: &Compose) -> Step<()> {
+    if *w == Compose::Default {
         return Ok(());
     }
     let cp = plan(ctx);
-    let v = value.to_string();
+    // the value as the guest's shell saw it, for its lines (printed, not parsed)
+    let value = w.to_string();
     fx.effect(|h, _| {
-        h.compose.w = v;
+        h.compose.w = Some(i);
         Memo::Unit
     });
-    let (lines, r) = wplan(cp, ctx.plan.steps, value);
-    for l in lines {
-        fx.report(l);
-    }
-    match r {
-        Ok(_) => {}
-        Err(WFail::Werr(e)) => {
-            fx.report(format!("HYDO-COMPOSE error: {e}"));
-            return die_oracle(fx, format!("HYDO-ORACLE: ERROR knob W={value} failed"));
-        }
-        Err(WFail::Crash) => {
-            return die_oracle(fx, format!("HYDO-ORACLE: ERROR knob W={value} failed"));
-        }
+    if let Err(e) = wplan(cp, ctx.plan.steps, Some(w)) {
+        fx.report(format!("HYDO-COMPOSE error: {e}"));
+        return die_oracle(fx, format!("HYDO-ORACLE: ERROR knob W={value} failed"));
     }
     log(fx, format!("knob W={value} (test composer (W=))"));
     Ok(())
@@ -990,22 +1033,21 @@ pub(super) fn job(fx: &mut F<'_>, ctx: &Ctx, j: &Job) -> Step<()> {
 fn daemon(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     let cp = plan(ctx);
     let steps = ctx.plan.steps;
-    let w = fx.effect_text(|h, _| h.compose.w.clone());
-    let (lines, r) = wplan(cp, steps, &w);
+    // compose.W: the W= token setw was given (by its index among the run's knobs)
+    let i = match fx.effect(|h, _| Memo::Id(h.compose.w.map_or(0, |i| i as u64 + 1))) {
+        Memo::Id(i) => i as usize,
+        m => unreachable!("memo out of step: {m:?}"),
+    };
+    let w = i.checked_sub(1).map(|i| match &ctx.run.knobs[i] {
+        GuestToken::Compose(w) => w,
+        t => unreachable!("compose.W names {t}, not a W= token"),
+    });
+    let r = wplan(cp, steps, w);
     guard(fx, None)?;
-    for l in lines {
-        fx.report(l);
-    }
     let (f, plan) = match r {
         Ok(x) => x,
-        Err(e) => {
-            let werr = match e {
-                WFail::Werr(m) => {
-                    fx.report(format!("HYDO-COMPOSE error: {m}"));
-                    m
-                }
-                WFail::Crash => String::new(),
-            };
+        Err(werr) => {
+            fx.report(format!("HYDO-COMPOSE error: {werr}"));
             fx.effect(|h, _| {
                 h.compose.died = Some(werr);
                 Memo::Unit
@@ -1461,8 +1503,19 @@ mod tests {
         assert_eq!(awk_num("3x"), 3.0);
         assert_eq!(awk_num(""), 0.0);
         assert_eq!(awk_num(" -2.5e1z"), -25.0);
-        assert!(inlist("0.3-4", 4.0) && inlist("0.3-4", 0.0) && !inlist("0.3-4", 2.0));
-        assert!(strnum("12") && !strnum("") && !strnum("ab"));
+        let w = |v: &str| match GuestToken::parse(&format!("W={v}")).unwrap() {
+            GuestToken::Compose(w) => w,
+            t => panic!("{t:?}"),
+        };
+        let x = match w("00000001,x0.3-4") {
+            Compose::Seed { fields, .. } => match &fields[0] {
+                SeedField::X(l) => l.clone(),
+                f => panic!("{f:?}"),
+            },
+            c => panic!("{c:?}"),
+        };
+        let l = Some(&x);
+        assert!(inlist(l, 4.0) && inlist(l, 0.0) && !inlist(l, 2.0) && !inlist(None, 0.0));
         assert_eq!(comma_fields("a,,b,"), vec!["a", "", "b"]);
         assert_eq!(step_budget(300), 295);
         assert_eq!(step_budget(10), 6);

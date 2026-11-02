@@ -6,7 +6,10 @@
 //! repeats its snapshot's stop number, every command but CONT/END gets exactly one answer, the
 //! run ends with one RESULT).
 
-use hydo_engine::lockstep::{EngineLine, HostCmd, Lockstep, Next, SendAnswer, SnapAnswer};
+use hydo_engine::lockstep::{
+    ChanLink, HostCmd, Link, Lockstep, Next, SendAnswer, SnapAnswer, TextLink,
+};
+use hydo_engine::protocol::{EngineMsg, HostMsg};
 use std::io::Cursor;
 use std::path::PathBuf;
 
@@ -29,8 +32,10 @@ fn transcripts() -> Vec<(String, String)> {
 }
 
 /// Drive a client over the engine half of a transcript, issuing the host half's commands through
-/// the typed API; the bytes it writes must be the host half exactly.
-fn replay(name: &str, text: &str) {
+/// the typed API; the bytes it writes must be the host half exactly, and its own transcript must
+/// be the recorded one. `chan`: over the in-process link (the engine half as values, M142),
+/// else over the text link.
+fn replay(name: &str, text: &str, chan: bool) {
     // serve: the first line is the CTL/RESUME request; `--control one` has none on stdin, nor
     // has an agent image's controlled boot (M121: `agent-boot-*`, `agent-one-*`). A CTL of an
     // agent image restores the host's S1 and starts like a RESUME (why=resume, S1's number).
@@ -55,12 +60,27 @@ fn replay(name: &str, text: &str) {
         .filter_map(|l| l.strip_prefix("< "))
         .map(|l| HostCmd::parse(l).unwrap_or_else(|| panic!("{name}: host line {l:?}")))
         .collect();
+    // M142: every engine line of both engines is a protocol value that prints back byte for byte
     for l in body.iter().filter_map(|l| l.strip_prefix("> ")) {
-        assert!(EngineLine::parse(l).is_some(), "{name}: engine line {l:?}");
+        let m = EngineMsg::parse(l);
+        assert!(
+            !matches!(m, EngineMsg::Other(_)),
+            "{name}: engine line {l:?}"
+        );
+        assert_eq!(m.line(), *l, "{name}: the value's line");
     }
-    let mut r = Cursor::new(engine.into_bytes());
-    let mut w = Vec::new();
-    let mut s = Lockstep::new(&mut r, &mut w);
+    let (htx, hrx) = std::sync::mpsc::channel::<HostMsg>();
+    let (etx, erx) = std::sync::mpsc::channel::<EngineMsg>();
+    for l in engine.lines() {
+        etx.send(EngineMsg::parse(l)).unwrap();
+    }
+    drop(etx);
+    let mut cl = ChanLink::new(htx, erx);
+    let mut tl = TextLink::new(Cursor::new(engine.into_bytes()), Vec::new());
+    let link: &mut dyn Link = if chan { &mut cl } else { &mut tl };
+    let mut log = Vec::new();
+    let want_log: String = body.iter().map(|l| format!("{l}\n")).collect();
+    let mut s = Lockstep::new(link).with_log(&mut log);
     let mut cmds = host.iter();
     let mut last_n = None;
     let mut first_stop = true;
@@ -120,7 +140,9 @@ fn replay(name: &str, text: &str) {
                         HostCmd::End(v) => {
                             let r = s.end(v.as_deref()).unwrap();
                             assert!(cmds.next().is_none());
+                            let w = written(chan, &hrx, &tl);
                             check_host(name, &w, &host);
+                            assert_eq!(String::from_utf8_lossy(&log), want_log, "{name}");
                             assert!(r.extra("stops").is_some());
                             return;
                         }
@@ -130,13 +152,35 @@ fn replay(name: &str, text: &str) {
         }
     };
     assert!(cmds.next().is_none(), "{name}: commands after the RESULT");
+    let w = written(chan, &hrx, &tl);
     check_host(name, &w, &host);
+    assert_eq!(
+        String::from_utf8_lossy(&log),
+        want_log,
+        "{name}: transcript"
+    );
     assert_eq!(
         result.extra("stops").map(|v| v.parse::<u64>().unwrap()),
         last_n,
         "{name}: stops= is the last stop's number"
     );
     assert!(result.extra("typed").is_some() && result.extra("inh").is_some());
+}
+
+/// What the client sent: the values over the channel, or the text link's bytes.
+fn written(
+    chan: bool,
+    hrx: &std::sync::mpsc::Receiver<HostMsg>,
+    tl: &TextLink<Cursor<Vec<u8>>, Vec<u8>>,
+) -> Vec<u8> {
+    if chan {
+        hrx.try_iter()
+            .map(|m| format!("{}\n", m.line()))
+            .collect::<String>()
+            .into_bytes()
+    } else {
+        tl.writer().clone()
+    }
 }
 
 fn check_host(name: &str, written: &[u8], host: &[HostCmd]) {
@@ -151,7 +195,8 @@ fn check_host(name: &str, written: &[u8], host: &[HostCmd]) {
 #[test]
 fn recorded_transcripts_replay() {
     for (name, text) in transcripts() {
-        replay(&name, &text);
+        replay(&name, &text, false);
+        replay(&name, &text, true);
     }
 }
 

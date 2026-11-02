@@ -127,16 +127,18 @@ enum PauseCfg {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct RunCfg {
     guest_text: String,
-    knobs: Vec<(String, String)>,
+    /// The tokens explore_run's token loop hands to set_knob (every letter its `case` does not
+    /// assign itself), typed, in token order.
+    knobs: Vec<GuestToken>,
     k: Option<(String, i64, i64)>,
     c: Option<i64>,
     p: Option<PauseCfg>,
     x: Option<(String, i64, u64)>,
     /// T=: (at, delta seconds).
     t: Option<(i64, i64)>,
-    /// The values of N= and O= as written (NET-FAULTS reads them as the shell does).
-    n: Option<String>,
-    o: Option<String>,
+    /// N= and O= (NET-FAULTS reads their typed fields).
+    n: Option<netfault::NetTok>,
+    o: Option<netfault::NetTok>,
     /// A= (M139): the reactions, in token order.
     a: Vec<hydo_schedule::React>,
 }
@@ -224,7 +226,8 @@ enum Part {
     /// FREEZE: hydo_fc's console lines, from the armed freeze's events.
     FreezeWatch {
         id: u64,
-        dur: String,
+        /// the freeze's duration in ms, as hydo_fc's atol reads it
+        dur: i64,
     },
     /// The supervisor of a service with a restart policy (M134).
     Restart(String),
@@ -473,8 +476,6 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
     // (no driven token depends on the plan since T= and B= are; the remaining seams may)
     let _ = plan;
     for t in &s.guest {
-        let text = t.to_string();
-        let value = text.split_once('=').map(|x| x.1).unwrap_or("").to_string();
         match t {
             GuestToken::Kill { svc, at, down } => {
                 c.k = Some((svc.clone(), *at as i64, (*at + *down) as i64));
@@ -504,8 +505,35 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
                 c.x = Some((svc.clone(), *at as i64, *off_ms));
             }
             // SEAM(NetFaults): netfault.rs
-            GuestToken::Net { .. } => c.n = Some(value),
-            GuestToken::OneWay { .. } => c.o = Some(value),
+            GuestToken::Net {
+                target,
+                from,
+                to,
+                netem,
+            } => {
+                c.n = Some(netfault::NetTok {
+                    target: target.clone(),
+                    from: *from,
+                    to: *to,
+                    dir: None,
+                    netem: netem.clone(),
+                })
+            }
+            GuestToken::OneWay {
+                target,
+                from,
+                to,
+                dir,
+                netem,
+            } => {
+                c.o = Some(netfault::NetTok {
+                    target: target.clone(),
+                    from: *from,
+                    to: *to,
+                    dir: Some(*dir),
+                    netem: netem.clone(),
+                })
+            }
             // SEAM(Freeze): freeze.rs reads F= as a knob below; with network: bridge the
             // trigger binds its queue in the frozen service's namespace (the freeze command's
             // netns, M131), so no F= is refused any more.
@@ -518,7 +546,7 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
             // no fakes or composer; Q= is the stack's) are knobs the manifest does not have, so
             // they are ignored. F= is a knob too: with `faults: [freeze]` set_knob reads it
             // (hydo-init-freeze.sh), else ignored.
-            _ => c.knobs.push((t.letter().to_string(), value)),
+            _ => c.knobs.push(t.clone()),
         }
     }
     Ok(c)
@@ -661,7 +689,7 @@ fn body(fx: &mut F<'_>, part: &Part) -> Step<()> {
         Part::KillTimer { svc, off } => kill_timer(fx, &ctx, svc, *off),
         Part::Compose(j) => composer::job(fx, &ctx, j),
         Part::Live(m) => liveness::live_monitor(fx, &ctx, m),
-        Part::FreezeWatch { id, dur } => freeze::watch(fx, *id, dur),
+        Part::FreezeWatch { id, dur } => freeze::watch(fx, *id, *dur),
         Part::Restart(s) => restart::watch(fx, &ctx, s),
         Part::React(i) => react::watch(fx, &ctx, *i),
     }
@@ -1776,21 +1804,32 @@ fn provision(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
 }
 
 /// set_knob: a manifest knob's `set` command with HYDO_VALUE, unless the value is the default.
-fn set_knob(fx: &mut F<'_>, ctx: &Ctx, letter: &str, value: &str) -> Step<()> {
-    if letter == "W" && ctx.plan.compose.is_some() {
-        return composer::set_knob(fx, ctx, value); // SEAM(Composer): compose.sh setw
+/// `i` is the token's index in `RunCfg::knobs` (the composer remembers which W= it set).
+fn set_knob(fx: &mut F<'_>, ctx: &Ctx, i: usize, t: &GuestToken) -> Step<()> {
+    match t {
+        GuestToken::Compose(w) if ctx.plan.compose.is_some() => {
+            return composer::set_knob(fx, ctx, i, w); // SEAM(Composer): compose.sh setw
+        }
+        GuestToken::Protocol(h) => {
+            if fakes::set_knob(fx, ctx, h)? {
+                return Ok(()); // SEAM(Fakes): H= is pf_add
+            }
+        }
+        // SEAM(Buggify): hydo-init-buggify.sh's set_knob
+        GuestToken::Buggify(_) if ctx.plan.buggify => {
+            return buggify::set_buggify(fx, &token_value(t));
+        }
+        GuestToken::Freeze(f) if ctx.plan.freeze => {
+            // SEAM(Freeze): hydo-init-freeze.sh's set_knob reads F=
+            return freeze::parse_knob(fx, f);
+        }
+        _ => {}
     }
-    if fakes::set_knob(fx, ctx, letter, value)? {
-        return Ok(()); // SEAM(Fakes): H= is pf_add
-    }
-    // SEAM(Buggify): hydo-init-buggify.sh's set_knob
-    if letter == "B" && ctx.plan.buggify {
-        return buggify::set_buggify(fx, value);
-    }
-    if letter == "F" && ctx.plan.freeze {
-        // SEAM(Freeze): hydo-init-freeze.sh's set_knob reads F=
-        return freeze::parse_knob(fx, value);
-    }
+    // a manifest knob (or a letter the image has no extension for): set_knob's `$1` and `$2`
+    let letter = t.letter().to_string();
+    let letter = letter.as_str();
+    let value = token_value(t);
+    let value = value.as_str();
     let k = ctx.plan.knob(letter).filter(|k| !k.default.is_empty());
     let Some(k) = k else {
         log(fx, format!("knob {letter} not in the manifest, ignored"));
@@ -1809,6 +1848,18 @@ fn set_knob(fx: &mut F<'_>, ctx: &Ctx, letter: &str, value: &str) -> Step<()> {
     }
     log(fx, format!("knob {letter}={value} ({})", k.name));
     Ok(())
+}
+
+/// A guest token's value as the guest's shell saw it (set_knob's `$2`, the text after `L=`),
+/// printed from the typed token: canonical, because every schedule the controller is given went
+/// through `Schedule::parse`. It is only printed (log lines, `HYDO_VALUE`, a verdict), never
+/// taken apart again.
+fn token_value(t: &GuestToken) -> String {
+    match t {
+        GuestToken::Knob { value, .. } => value.clone(),
+        // `L=` is two bytes: the letter is one ASCII upper-case letter
+        _ => t.to_string().split_off(2),
+    }
 }
 
 /// `pgrep -f "$HYDO_WORKLOAD_PGREP"`: whether a client request is in flight.
@@ -1970,8 +2021,8 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     let l = &plan.layout;
     let steps = plan.steps;
     log(fx, format!("command: {}", cfg.guest_text));
-    for (letter, value) in &cfg.knobs {
-        set_knob(fx, ctx, letter, value)?;
+    for (i, t) in cfg.knobs.iter().enumerate() {
+        set_knob(fx, ctx, i, t)?;
     }
     for (t, id, msg) in FAULT_DECLS {
         fx.report(decl(t, id, msg));
@@ -1999,7 +2050,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     }
     // SEAM(NetFaults): N= is read here (nsvc, nfrom, nto), with its "N: no service" line.
     let mut net = netfault::Net::default();
-    net.read_n(fx, ctx, cfg.n.as_deref());
+    net.read_n(fx, ctx, cfg.n.as_ref());
     let cat = cfg.c.unwrap_or(-1);
     let (mut psvc, mut pat, mut pup, mut ptime) = (String::new(), -1i64, -1i64, None);
     match &cfg.p {
@@ -2020,7 +2071,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     }
     // SEAM(Clock): T= (tat, tdelta). SEAM(NetFaults): O= (osvc, ofrom, oto, odir).
     let (tat, tdelta) = cfg.t.unwrap_or((-1, 0));
-    net.read_o(fx, ctx, cfg.o.as_deref());
+    net.read_o(fx, ctx, cfg.o.as_ref());
     let (mut xsvc, mut xat, mut xoff) = (String::new(), -1i64, 0u64);
     if let Some((s, at, off)) = &cfg.x {
         xsvc = s.clone();

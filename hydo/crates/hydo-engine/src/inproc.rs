@@ -1,8 +1,10 @@
 //! The in-process hvx engine (M132; the default since M137): every [`Hvx`] method runs the Rust
 //! engine (`hydo-hvx`, the port of the deleted `hvx_explore.c`) on a thread of this process,
-//! which opens `/dev/hvx` itself, instead of starting the engine program. The engine thread
-//! speaks the same protocol over in-process pipes, so every caller (the explorer, `hydo
-//! run`/`repro`, the controller, the lock-step client) works unchanged and gets the same lines.
+//! which opens `/dev/hvx` itself, instead of starting the engine program. Since M142 the host and
+//! the engine thread exchange the protocol's values themselves ([`crate::link::ChanLink`] here,
+//! `hydo_hvx::port::ChanPort` there; no text in between), and the engine is configured with a
+//! typed `hydo_hvx::engine::Start` instead of a command line, so every caller (the explorer, `hydo
+//! run`/`repro`, the controller, the lock-step client) gets the same values as from the program.
 //!
 //! [`chosen`] decides: `HYDO_ENGINE=inproc` always, `HYDO_ENGINE=process` (or `c`) never, and
 //! otherwise exactly when this is Linux, `HYDO_SUDO` is not `1` and this process can read and
@@ -17,10 +19,11 @@
 //! store is always memory.
 
 use crate::hvx::Hvx;
-use crate::process::{Piped, Proc};
-use crate::{BootSpec, EngineError, EngineKind, OneRun};
+use crate::process::Proc;
+use crate::protocol::EngineMsg;
+use crate::{BootSpec, EngineError, OneRun};
 use hydo_schedule::Schedule;
-use std::io::{BufReader, Read, Write};
+use std::io::Write;
 use std::path::Path;
 use std::time::Instant;
 
@@ -121,27 +124,6 @@ fn shared_lock(get: &dyn Fn(&str) -> Option<String>) -> Option<std::fs::File> {
     }
 }
 
-/// The engine program's arguments for `mode`, as `Hvx::argv` builds them for hvx_explore.
-fn args(spec: &BootSpec, flags: &[&str], mode: &str, last: Option<&Schedule>) -> Vec<String> {
-    let mut a = vec!["hydo-hvx".to_string()];
-    a.extend(spec.engine_args(EngineKind::Hvx));
-    a.extend(flags.iter().map(|s| s.to_string()));
-    a.push(mode.into());
-    a.push(spec.kernel.display().to_string());
-    a.push(
-        spec.initrd
-            .as_ref()
-            .map(|p| p.display().to_string())
-            .unwrap_or_default(),
-    );
-    a.push(spec.image.display().to_string());
-    a.push(spec.outdir.display().to_string());
-    if let Some(s) = last {
-        a.push(s.to_string());
-    }
-    a
-}
-
 /// The environment the engine thread sees: this process's, then `env`, then `extra_env`.
 fn lookup(h: &Hvx) -> impl Fn(&str) -> Option<String> + Send + 'static {
     let mut over: Vec<(String, String)> = h.env.clone();
@@ -159,85 +141,155 @@ fn lookup(h: &Hvx) -> impl Fn(&str) -> Option<String> + Send + 'static {
     }
 }
 
+/// What the engine boots: `mode` with the spec's paths and options (`--control` is
+/// `control_one`, `--control boot` is `control_boot`).
+#[cfg(target_os = "linux")]
+fn start_of(
+    spec: &BootSpec,
+    mode: hydo_hvx::engine::Mode,
+    control_one: bool,
+    control_boot: bool,
+) -> hydo_hvx::engine::Start {
+    hydo_hvx::engine::Start {
+        mode,
+        control_one,
+        control_boot,
+        kernel: spec.kernel.clone(),
+        initrd: spec.initrd.clone().unwrap_or_default(),
+        image: spec.image.clone(),
+        outdir: spec.outdir.clone(),
+        // only a value other than the default is passed, as on the program's command line
+        ram_mib: (spec.ram_mib != 1024).then_some(spec.ram_mib as u64),
+        vcpus: (spec.vcpus > 1).then_some(spec.vcpus),
+        cpu_v3: spec.cpu == crate::CpuLevel::V3,
+    }
+}
+
+/// How the engine thread is asked to run (the program's modes).
+#[derive(Clone, Copy)]
+enum How {
+    One,
+    Serve,
+    ControlOne,
+    ControlBootServe,
+    ControlBootOne,
+}
+
+/// Start the engine on a thread: its port is the far end of the returned link; `diag` takes its
+/// diagnostics; `echo`: also its reports' lines, in order with the diagnostics.
 #[cfg(target_os = "linux")]
 fn spawn(
     h: &Hvx,
-    argv: Vec<String>,
-    input: Box<dyn std::io::BufRead + Send>,
-    out: Box<dyn Write + Send>,
+    spec: &BootSpec,
+    how: How,
+    schedule: Option<&Schedule>,
     diag: Box<dyn Write + Send>,
-) -> Result<std::thread::JoinHandle<i32>, EngineError> {
-    use hydo_hvx::engine::{main_with, Io, Options};
+    echo: Option<std::sync::Arc<std::sync::Mutex<Vec<u8>>>>,
+) -> Result<crate::process::Started, EngineError> {
+    use hydo_hvx::engine::{run, Mode, Options};
+    use hydo_hvx::port::ChanPort;
     let get = lookup(h);
     let o = Options::from_lookup(&get);
     let lock = shared_lock(&get);
-    std::thread::Builder::new()
+    let s = schedule.cloned();
+    let one = |s: Option<Schedule>| Mode::One(s.expect("a schedule"));
+    let start = match how {
+        How::One => start_of(spec, one(s), false, false),
+        How::Serve => start_of(spec, Mode::Serve { boot: None }, false, false),
+        How::ControlOne => start_of(spec, one(s), true, false),
+        How::ControlBootServe => start_of(spec, Mode::Serve { boot: s }, false, true),
+        How::ControlBootOne => start_of(spec, one(s), false, true),
+    };
+    let (htx, hrx) = std::sync::mpsc::channel::<crate::protocol::HostMsg>();
+    let (etx, erx) = std::sync::mpsc::channel::<EngineMsg>();
+    let mut port = ChanPort::new(hrx, etx);
+    if let Some(e) = echo {
+        port = port.with_echo(e);
+    }
+    let j = std::thread::Builder::new()
         .name("hvx-engine".into())
         .spawn(move || {
-            let rc = main_with(&argv, o, Io { out, input, diag });
+            let rc = run(start, o, Box::new(port), diag);
             drop(lock); // the shared module lock, held while this engine ran
             rc
         })
-        .map_err(EngineError::Io)
+        .map_err(EngineError::Io)?;
+    Ok(crate::process::Started {
+        proc: Proc::Thread(Some(j)),
+        link: Box::new(crate::link::ChanLink::new(htx, erx)),
+    })
 }
 
 #[cfg(not(target_os = "linux"))]
 fn spawn(
     h: &Hvx,
-    argv: Vec<String>,
-    input: Box<dyn std::io::BufRead + Send>,
-    out: Box<dyn Write + Send>,
+    spec: &BootSpec,
+    how: How,
+    schedule: Option<&Schedule>,
     diag: Box<dyn Write + Send>,
-) -> Result<std::thread::JoinHandle<i32>, EngineError> {
-    let _ = (lookup(h), argv, input, out, diag);
+    echo: Option<std::sync::Arc<std::sync::Mutex<Vec<u8>>>>,
+) -> Result<crate::process::Started, EngineError> {
+    let _ = (lookup(h), spec, how, schedule, diag, echo);
     Err(EngineError::Unsupported(
         "the in-process hvx engine needs Linux and /dev/hvx".into(),
     ))
 }
 
-/// Start the engine on a thread with piped stdin and stdout and stderr appended to `stderr_log`.
-fn start_piped(h: &Hvx, argv: Vec<String>, stderr_log: &Path) -> Result<Piped, EngineError> {
-    let err = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(stderr_log)?;
-    let (in_r, in_w) = std::io::pipe()?;
-    let (out_r, out_w) = std::io::pipe()?;
-    let j = spawn(
-        h,
-        argv,
-        Box::new(BufReader::new(in_r)),
-        Box::new(std::io::LineWriter::new(out_w)),
-        Box::new(err),
-    )?;
-    let out: Box<dyn Read + Send> = Box::new(out_r);
-    Ok(Piped {
-        proc: Proc::Thread(Some(j)),
-        stdin: Box::new(in_w),
-        stdout: BufReader::new(out),
-    })
+/// The engine's diagnostics appended to `stderr_log`.
+fn diag_file(stderr_log: &Path) -> Result<Box<dyn Write + Send>, EngineError> {
+    Ok(Box::new(
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(stderr_log)?,
+    ))
 }
 
-/// `one`: stdout and stderr into one pipe, as `run_one` collects a process's output.
+/// A writer into a shared buffer.
+struct Shared(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+impl Write for Shared {
+    fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+        self.0
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .extend_from_slice(b);
+        Ok(b.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// `one`: the RESULT as a value; the output is the engine's report lines and diagnostics in the
+/// order they were written, as a program's stdout and stderr in one pipe.
 pub(crate) fn one(h: &Hvx, spec: &BootSpec, schedule: &Schedule) -> Result<OneRun, EngineError> {
     let t0 = Instant::now();
-    let (mut r, w) = std::io::pipe()?;
-    let w2 = w.try_clone()?;
-    let (in_r, in_w) = std::io::pipe()?;
-    drop(in_w); // `one` reads no stdin
-    let j = spawn(
+    let buf = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let started = spawn(
         h,
-        args(spec, &[], "one", Some(schedule)),
-        Box::new(BufReader::new(in_r)),
-        Box::new(std::io::LineWriter::new(w)),
-        Box::new(w2),
+        spec,
+        How::One,
+        Some(schedule),
+        Box::new(Shared(buf.clone())),
+        Some(buf.clone()),
     )?;
-    let mut bytes = Vec::new();
-    r.read_to_end(&mut bytes)?;
-    let code = j.join().ok();
+    let crate::process::Started { proc, mut link } = started;
+    // `one` reads no requests; its reports end when the engine thread ends
+    let mut result = None;
+    while let Ok(m) = link.recv() {
+        if let (None, EngineMsg::Result(r)) = (&result, m) {
+            result = Some(*r);
+        }
+    }
+    let code = match proc {
+        Proc::Thread(Some(j)) => j.join().ok(),
+        _ => None,
+    };
+    let bytes = std::mem::take(&mut *buf.lock().unwrap_or_else(|p| p.into_inner()));
     let output = String::from_utf8_lossy(&bytes).into_owned();
     Ok(OneRun {
-        result: output.lines().find_map(crate::protocol::RunResult::parse),
+        result,
         output,
         exit_code: code,
         wall: t0.elapsed(),
@@ -250,9 +302,9 @@ pub(crate) fn serve(
     spec: &BootSpec,
     stderr_log: &Path,
 ) -> Result<Box<dyn crate::Worker>, EngineError> {
-    let p = start_piped(h, args(spec, &[], "serve", None), stderr_log)?;
-    Ok(Box::new(crate::process::ProcessWorker::from_piped(
-        p, true,
+    let s = spawn(h, spec, How::Serve, None, diag_file(stderr_log)?, None)?;
+    Ok(Box::new(crate::process::ProcessWorker::from_started(
+        s, true,
     )?))
 }
 
@@ -263,12 +315,15 @@ pub(crate) fn one_lockstep(
     schedule: &Schedule,
     stderr_log: &Path,
 ) -> Result<crate::ControlledRun, EngineError> {
-    let p = start_piped(
+    let s = spawn(
         h,
-        args(spec, &["--control"], "one", Some(schedule)),
-        stderr_log,
+        spec,
+        How::ControlOne,
+        Some(schedule),
+        diag_file(stderr_log)?,
+        None,
     )?;
-    Ok(crate::ControlledRun::from_piped(p))
+    Ok(crate::ControlledRun::from_started(s))
 }
 
 /// `--control boot serve` (M121).
@@ -278,12 +333,15 @@ pub(crate) fn start_controlled(
     boot: &Schedule,
     stderr_log: &Path,
 ) -> Result<crate::ControlledBoot, EngineError> {
-    let p = start_piped(
+    let s = spawn(
         h,
-        args(spec, &["--control", "boot"], "serve", Some(boot)),
-        stderr_log,
+        spec,
+        How::ControlBootServe,
+        Some(boot),
+        diag_file(stderr_log)?,
+        None,
     )?;
-    Ok(crate::ControlledBoot::from_piped(p, false))
+    Ok(crate::ControlledBoot::from_started(s, false))
 }
 
 /// `--control boot one` (M121).
@@ -293,12 +351,15 @@ pub(crate) fn one_controlled(
     schedule: &Schedule,
     stderr_log: &Path,
 ) -> Result<crate::ControlledRun, EngineError> {
-    let p = start_piped(
+    let s = spawn(
         h,
-        args(spec, &["--control", "boot"], "one", Some(schedule)),
-        stderr_log,
+        spec,
+        How::ControlBootOne,
+        Some(schedule),
+        diag_file(stderr_log)?,
+        None,
     )?;
-    Ok(crate::ControlledRun::from_piped(p))
+    Ok(crate::ControlledRun::from_started(s))
 }
 
 #[cfg(test)]
@@ -307,21 +368,6 @@ mod tests {
 
     #[test]
     fn arguments_and_environment() {
-        let spec = BootSpec {
-            image: "/b/x-disk.img".into(),
-            ram_mib: 2048,
-            vcpus: 2,
-            cpu: crate::CpuLevel::V3,
-            kernel: "/b/bzImage".into(),
-            initrd: Some("/b/initramfs.cpio.gz".into()),
-            outdir: "/o".into(),
-            snapshots: crate::SnapshotStore::Files,
-        };
-        let s = Schedule::parse("disk=none | run").unwrap();
-        assert_eq!(
-            args(&spec, &["--control", "boot"], "one", Some(&s)).join(" "),
-            "hydo-hvx --ram-mib 2048 --vcpus 2 --cpu v3 --control boot one /b/bzImage /b/initramfs.cpio.gz /b/x-disk.img /o disk=none | run"
-        );
         let h = Hvx {
             engine: "/x".into(),
             hvx_run: None,

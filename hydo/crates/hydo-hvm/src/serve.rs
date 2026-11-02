@@ -5,8 +5,12 @@
 //! protocol (M119, M121, M126, M130). The C file's header has the whole protocol; every function
 //! here keeps its C name, and every output line its C text.
 //!
-//! [`main_with`] is the program's `main` over any streams and any environment, so hydo-engine
-//! can run it on a thread of its own process; [`Engine`] is the typed core the protocol drives.
+//! Since M142's typed calls the engine core takes typed values: requests and commands at a stop
+//! come through a [`Port`] (`hydo_hvx::port`: hydo-engine's [`ChanPort`](hydo_hvx::port::ChanPort)
+//! in process, or [`TextPort`](hydo_hvx::text::TextPort) reading hvmx's request lines in the
+//! program), reports go out as [`EngineMsg`] values, and every schedule is a typed
+//! [`Schedule`] (hydo-schedule; the C engine's own host-part parser is not ported). [`run`] is the
+//! typed entry, [`main_with`] the program's `main` (its argv, and the text at the boundary).
 
 use crate::fnv::{fnv, fnv_u64, mix64, OFFSET};
 use crate::layout::*;
@@ -15,7 +19,13 @@ use crate::mem::Mem;
 use crate::virtio::{self, F_DROP, F_ERROR, F_UNFLUSHED};
 use crate::vmm::{now_s, VSnap, VmOpts, Vmm, NSR, SR};
 use crate::{catch_fatal, fatal, say, Diag};
-use hydo_hvx::cstr::{self, find, Scan};
+use hydo_engine_proto::{
+    Answer, DiskOff, EngineMsg, Event, HostCmd, Phase, Ready, Request, RunResult, SendAnswer,
+    Sent, Stop, StopWhy,
+};
+use hydo_hvx::cstr::{self, find};
+use hydo_hvx::port::{Cmd, Port, Req};
+use hydo_schedule::{Disk, HostToken, Schedule};
 use std::io::{BufRead, Read, Write};
 use std::sync::{Arc, Mutex};
 
@@ -47,6 +57,28 @@ pub struct Io {
     pub diag: Box<dyn Write + Send>,
     /// where HVM_ECHO copies the console (the program: stdout)
     pub echo: Option<Box<dyn Write + Send>>,
+}
+
+/// What [`run`] boots and how (hvmx's command line as values).
+pub struct Start {
+    pub mode: Mode,
+    /// `--control`: `one` under lock-step control from S1 (M119).
+    pub control_one: bool,
+    /// `--control boot`: an agent image under lock-step control from its first instruction (M121).
+    pub control_boot: bool,
+    pub kernel: std::path::PathBuf,
+    pub initrd: std::path::PathBuf,
+    pub outdir: std::path::PathBuf,
+    /// `--ram-mib` (None: `HVM_MEM_MB`, else 1024).
+    pub ram_mib: Option<u64>,
+}
+
+pub enum Mode {
+    /// One schedule from a fresh boot, then exit.
+    One(Schedule),
+    /// Boot to S1 (or, with [`Start::control_boot`], under the host's control with this boot
+    /// schedule's `rb=` as the cadence), then serve requests.
+    Serve { boot: Option<Schedule> },
 }
 
 /// The environment the engine reads (getenv in the C engine), as a lookup.
@@ -119,7 +151,6 @@ struct CtlSnap {
 }
 
 /// The lock-step state (`C`).
-#[derive(Default)]
 struct Ctl {
     on: bool,
     /// 1 = the phase's start stop is due, 2 = a RESUME's
@@ -131,13 +162,34 @@ struct Ctl {
     wdone: i32,
     cut: bool,
     tag: String,
-    phase: &'static str,
+    phase: Phase,
     at: u64,
     rb: u64,
     last_x: u64,
     k: Book,
     endv: String,
     rs: RunSt,
+}
+
+impl Default for Ctl {
+    fn default() -> Ctl {
+        Ctl {
+            on: false,
+            start: 0,
+            ended: 0,
+            boot_s1: false,
+            wdone: 0,
+            cut: false,
+            tag: String::new(),
+            phase: Phase::Workload,
+            at: 0,
+            rb: 0,
+            last_x: 0,
+            k: Book::default(),
+            endv: String::new(),
+            rs: RunSt::default(),
+        }
+    }
 }
 
 /// The stop at the first exit after any of several markers.
@@ -171,8 +223,7 @@ pub struct Opts {
 
 /// Everything but the VM (so the run loop's stop hook can borrow it while the VM runs).
 struct Host {
-    out: Box<dyn Write + Send>,
-    input: Box<dyn BufRead + Send>,
+    port: Box<dyn Port>,
     diag: Diag,
     outdir: String,
     o: Opts,
@@ -208,20 +259,22 @@ fn has(hay: &[u8], n: &[u8]) -> bool {
 }
 
 impl Host {
-    fn out_line(&mut self, s: &str) {
-        let _ = self.out.write_all(s.as_bytes());
-        let _ = self.out.write_all(b"\n");
-        let _ = self.out.flush();
+    fn emit(&mut self, m: EngineMsg) {
+        self.port.emit(m);
     }
-    fn out_bytes(&mut self, b: &[u8]) {
-        let _ = self.out.write_all(b);
-        let _ = self.out.flush();
+    fn answer(&mut self, a: Answer) {
+        self.port.emit(EngineMsg::Answer(a));
+    }
+    fn refuse(&mut self, why: String) {
+        self.answer(Answer::Refused(why));
     }
     fn say(&self, s: &str) {
         say(&self.diag, s);
     }
     fn result_err(&mut self, tag: &str, v: &str) {
-        self.out_line(&format!("RESULT {tag} fp=0 wfp=0 secs=0 verdict={v}"));
+        if let Some(r) = RunResult::new(tag, "0", "0", "0", "", v) {
+            self.emit(EngineMsg::Result(Box::new(r)));
+        }
     }
 
     /// `marker_hook`: one of the markers appeared since `from`.
@@ -252,7 +305,7 @@ impl Host {
             on: true,
             start: 1,
             tag: lossy(&ccap(tag.as_bytes().to_vec(), 64)),
-            phase: "workload",
+            phase: Phase::Workload,
             rb: CTL_RB_DEFAULT,
             ..Ctl::default()
         };
@@ -268,7 +321,6 @@ impl Host {
             last_verdict(vm, from)
         }
     }
-    /// type one send now (at the current stop)
     fn ctl_type(&mut self, vm: &mut Vmm, i: usize, print: bool) {
         let retype = self.c.k.s[i].state == Cs::Retype;
         let room = vm.rx_room();
@@ -289,24 +341,22 @@ impl Host {
             let at = self.c.at;
             self.c.k.s[i].sent = at;
             self.c.k.ntyped += 1;
-            let base = if self.c.k.inh != 0 {
-                self.c.k.inh
-            } else {
-                OFFSET
-            };
+            let base = if self.c.k.inh != 0 { self.c.k.inh } else { OFFSET };
             let mut h = fnv_u64(at, base);
             h = fnv(&len.to_le_bytes(), h);
             h = fnv(&self.c.k.s[i].buf, h);
             self.c.k.inh = h;
         }
         if print {
-            let s = format!(
-                "SENT {} id={id} at={}{}",
-                self.c.tag,
-                self.c.at,
-                if retype { " retype=1" } else { "" }
-            );
-            self.out_line(&s);
+            let m = EngineMsg::Sent {
+                tag: self.c.tag.clone(),
+                sent: Sent {
+                    id,
+                    at: self.c.at,
+                    retype,
+                },
+            };
+            self.emit(m);
         }
     }
     /// every send due at this stop: retypes first (id order), then (at, id) order
@@ -344,69 +394,55 @@ impl Host {
             .iter()
             .any(|s| s.state == Cs::Retype || (s.state == Cs::Pending && s.at <= self.c.at))
     }
-    /// a phase change to a new VM: queued input belongs to the old one
     fn ctl_drop_pending(&mut self) {
         for i in 0..self.c.k.s.len() {
             if matches!(self.c.k.s[i].state, Cs::Pending | Cs::Retype) {
                 self.c.k.s[i].state = Cs::Acked;
-                let s = format!("DROP {} id={}", self.c.tag, self.c.k.s[i].id);
-                self.out_line(&s);
+                let m = EngineMsg::Drop {
+                    tag: self.c.tag.clone(),
+                    id: self.c.k.s[i].id,
+                };
+                self.emit(m);
             }
         }
     }
-    fn ctl_snap_cmd(&mut self, vm: &mut Vmm, arg: &[u8]) {
-        let mut sc = Scan::new(arg);
-        let name_b = sc.word(63).map(|w| w.to_vec());
-        let mode_b = if name_b.is_some() {
-            sc.word(15).map(|w| w.to_vec())
-        } else {
-            None
-        };
-        let n = sc.n;
-        let name = lossy(name_b.as_deref().unwrap_or(b""));
-        if n < 1 || (n == 2 && mode_b.as_deref() != Some(b"retype")) {
-            self.out_line("ERR snap bad request");
-            return;
-        }
-        if self.c.phase != "workload" && self.c.phase != "boot" {
-            self.out_line(&format!(
-                "ERR snap {name} only in the workload or boot phase"
-            ));
+    fn ctl_snap_cmd(&mut self, vm: &mut Vmm, name: &str, retype: bool) {
+        if self.c.phase != Phase::Workload && self.c.phase != Phase::Boot {
+            self.refuse(format!("snap {name} only in the workload or boot phase"));
             return;
         }
         if vm.tj.on || self.c.rs.pct_n != 0 {
-            self.out_line(&format!("ERR snap {name} not for tj/pct schedules"));
+            self.refuse(format!("snap {name} not for tj/pct schedules"));
             return;
         }
         if self.c.wdone != 0 {
-            self.out_line(&format!("ERR snap {name} after DISKOFF/CUT"));
+            self.refuse(format!("snap {name} after DISKOFF/CUT"));
             return;
         }
-        let typed: Vec<String> = self
+        let typed: Vec<u64> = self
             .c
             .k
             .s
             .iter()
             .filter(|s| s.state == Cs::Typed)
-            .map(|s| s.id.to_string())
+            .map(|s| s.id)
             .collect();
-        let mut ids = typed.join(",");
-        let il = ids.len();
-        if il >= 512 {
-            ids.truncate(507);
-            ids.push_str(",...");
-        }
-        if il != 0 && n < 2 {
-            self.out_line(&format!("ERR snap {name} unacked={ids}"));
+        if !typed.is_empty() && !retype {
+            let ids = Answer::Snap {
+                name: String::new(),
+                at: 0,
+                retype: typed.clone(),
+            }
+            .line();
+            let ids = ids.rsplit("retype=").next().unwrap_or("").to_string();
+            self.refuse(format!("snap {name} unacked={ids}"));
             return;
         }
         let slot = self
-            .snap_find(&name)
+            .snap_find(name)
             .or_else(|| self.snaps.iter().position(|s| !s.used));
         let Some(slot) = slot else {
-            self.out_line(&format!(
-                "ERR snap {name} no free slot ({CTL_MAX_SNAPS} names)"
-            ));
+            self.refuse(format!("snap {name} no free slot ({CTL_MAX_SNAPS} names)"));
             return;
         };
         {
@@ -434,149 +470,140 @@ impl Host {
         cs.rw = vm.sp.rw_on;
         cs.name = lossy(&ccap(name.as_bytes().to_vec(), 64));
         let at = self.c.at;
-        self.out_line(&format!(
-            "OK snap {name} at={at} retype={}",
-            if il != 0 { ids.as_str() } else { "-" }
-        ));
-        if self.g_agent && self.g_ctl_one && self.c.phase == "boot" && name == "S1" {
+        self.answer(Answer::Snap {
+            name: name.to_string(),
+            at,
+            retype: typed,
+        });
+        if self.g_agent && self.g_ctl_one && self.c.phase == Phase::Boot && name == "S1" {
             self.c.boot_s1 = true; // M121: the workload starts here once the host says CONT
         }
     }
 
-    /// one stop: report, then serve host lines until CONT (false) or END/EOF (true)
-    #[allow(clippy::mut_range_bound)] // p is where the next line starts, not the loop's bound
-    fn ctl_stop(&mut self, vm: &mut Vmm, why: &str) -> bool {
+    /// one stop: report, then serve host commands until CONT (false) or END/EOF (true)
+    fn ctl_stop(&mut self, vm: &mut Vmm, why: StopWhy) -> bool {
         let mut p = self.c.k.evfrom;
         let len = vm.m.console_len as usize;
-        for q in p..len {
-            if vm.console[q] != b'\n' {
-                continue;
+        let mut q = p;
+        while q < len {
+            if vm.console[q] == b'\n' {
+                let mut e = q;
+                if e > p && vm.console[e - 1] == b'\r' {
+                    e -= 1;
+                }
+                self.c.k.nev += 1;
+                let m = EngineMsg::Event {
+                    tag: self.c.tag.clone(),
+                    event: Event {
+                        at: self.c.at,
+                        n: self.c.k.nev,
+                        text: vm.console[p..e].to_vec(),
+                    },
+                };
+                self.emit(m);
+                p = q + 1;
             }
-            let mut e = q;
-            if e > p && vm.console[e - 1] == b'\r' {
-                e -= 1;
-            }
-            self.c.k.nev += 1;
-            let mut line =
-                format!("EVENT {} at={} n={} ", self.c.tag, self.c.at, self.c.k.nev).into_bytes();
-            ctl_esc(&mut line, &vm.console[p..e]);
-            line.push(b'\n');
-            self.out_bytes(&line);
-            p = q + 1;
+            q += 1;
         }
         self.c.k.evfrom = p;
         self.ctl_deliver(vm);
         self.c.k.nstop += 1;
-        let s = format!(
-            "STOP {} at={} n={} phase={} why={why}",
-            self.c.tag, self.c.at, self.c.k.nstop, self.c.phase
-        );
-        self.out_line(&s);
+        let m = EngineMsg::Stop {
+            tag: self.c.tag.clone(),
+            stop: Stop {
+                at: self.c.at,
+                n: self.c.k.nstop,
+                phase: self.c.phase,
+                why,
+            },
+        };
+        self.emit(m);
         loop {
-            let mut ln = Vec::new();
-            match self.input.read_until(b'\n', &mut ln) {
-                Ok(0) | Err(_) => {
+            let cmd = match self.port.command() {
+                Cmd::Closed => {
                     self.c.endv = "ERROR control channel closed".into();
                     return true;
                 }
-                Ok(_) => {}
-            }
-            while matches!(ln.last(), Some(b'\n' | b'\r')) {
-                ln.pop();
-            }
-            if let Some(z) = ln.iter().position(|&c| c == 0) {
-                ln.truncate(z); // a C string ends at its first NUL
-            }
-            if ln == b"CONT" {
-                return false;
-            }
-            if ln.starts_with(b"END") && (ln.len() == 3 || ln[3] == b' ') {
-                let v = if ln.len() > 3 { &ln[4..] } else { &b""[..] };
-                self.c.endv = lossy(&ccap(v.to_vec(), 256));
-                return true;
-            }
-            if let Some(rest) = ln.strip_prefix(b"SEND at=") {
-                let (at, used) = cstr::strtoull(rest, 10);
-                let body = rest.get(used + 1..).map(ctl_unesc);
-                let ok = used != 0 && rest.get(used) == Some(&b' ');
-                let Some(Some(bytes)) = body.filter(|_| ok) else {
-                    self.out_line("ERR send bad request");
-                    continue;
-                };
-                let len = bytes.len();
-                if len == 0 || len > CTL_SEND_MAX {
-                    self.out_line(&format!("ERR send length {len} not in [1, {CTL_SEND_MAX}]"));
+                Cmd::Bad(r) => {
+                    self.refuse(r);
                     continue;
                 }
-                if self.c.k.s.len() >= CTL_MAX_SENDS {
-                    self.out_line(&format!(
-                        "ERR send more than {CTL_MAX_SENDS} sends in one run"
-                    ));
-                    continue;
+                Cmd::Host(c) => c,
+            };
+            match cmd {
+                HostCmd::Cont => return false,
+                HostCmd::End(v) => {
+                    self.c.endv = lossy(&ccap(v.unwrap_or_default().into_bytes(), 256));
+                    return true;
                 }
-                self.c.k.next_id += 1;
-                let id = self.c.k.next_id;
-                self.c.k.s.push(CtlSend {
-                    id,
-                    at,
-                    sent: 0,
-                    state: Cs::Pending,
-                    buf: bytes,
-                });
-                if at <= self.c.at {
-                    let i = self.c.k.s.len() - 1;
-                    self.ctl_type(vm, i, false);
-                    let s = format!("OK send id={id} sent={}", self.c.at);
-                    self.out_line(&s);
-                } else {
-                    self.out_line(&format!("OK send id={id} queued={at}"));
-                }
-            } else if let Some(rest) = ln.strip_prefix(b"ACK ") {
-                let id = cstr::strtoull(rest, 10).0;
-                let mut msg = format!("ERR ack {id} unknown");
-                if let Some(s) = self.c.k.s.iter_mut().find(|s| s.id == id) {
-                    if s.state == Cs::Pending {
-                        msg = format!("ERR ack {id} not typed yet");
+                HostCmd::Send { at, bytes } => {
+                    let len = bytes.len();
+                    if len == 0 || len > CTL_SEND_MAX {
+                        self.refuse(format!("send length {len} not in [1, {CTL_SEND_MAX}]"));
+                        continue;
+                    }
+                    if self.c.k.s.len() >= CTL_MAX_SENDS {
+                        self.refuse(format!("send more than {CTL_MAX_SENDS} sends in one run"));
+                        continue;
+                    }
+                    self.c.k.next_id += 1;
+                    let id = self.c.k.next_id;
+                    self.c.k.s.push(CtlSend {
+                        id,
+                        at,
+                        sent: 0,
+                        state: Cs::Pending,
+                        buf: bytes,
+                    });
+                    if at <= self.c.at {
+                        let i = self.c.k.s.len() - 1;
+                        self.ctl_type(vm, i, false);
+                        let at = self.c.at;
+                        self.answer(Answer::Send(SendAnswer::Typed { id, at }));
                     } else {
-                        s.state = Cs::Acked;
-                        msg = format!("OK ack {id}");
+                        self.answer(Answer::Send(SendAnswer::Queued { id, at }));
                     }
                 }
-                self.out_line(&msg);
-            } else if let Some(rest) = ln.strip_prefix(b"SNAP ") {
-                let rest = rest.to_vec();
-                self.ctl_snap_cmd(vm, &rest);
-            } else if ln == b"DISKOFF" || ln == b"CUT" {
-                let cut = ln[0] == b'C';
-                let no = if !self.g_agent {
-                    Some("only for an agent image (--control boot)")
-                } else if self.c.phase != "workload" {
-                    Some("only in the workload phase")
-                } else if self.c.wdone != 0 {
-                    Some("after DISKOFF/CUT")
-                } else if cut && self.snap_find("S0").is_none() {
-                    Some("without a snapshot S0")
-                } else {
-                    None
-                };
-                if let Some(no) = no {
-                    self.out_line(&format!("ERR {} {no}", if cut { "cut" } else { "diskoff" }));
-                    continue;
+                HostCmd::Ack(id) => {
+                    let a = match self.c.k.s.iter_mut().find(|s| s.id == id) {
+                        None => Answer::Refused(format!("ack {id} unknown")),
+                        Some(s) if s.state == Cs::Pending => {
+                            Answer::Refused(format!("ack {id} not typed yet"))
+                        }
+                        Some(s) => {
+                            s.state = Cs::Acked;
+                            Answer::Ack(id)
+                        }
+                    };
+                    self.answer(a);
                 }
-                self.c.wdone = 1;
-                self.c.cut = cut;
-                if cut {
-                    let s = format!("OK cut at={}", self.c.at);
-                    self.out_line(&s);
-                    return false;
+                HostCmd::Snap { name, retype } => self.ctl_snap_cmd(vm, &name, retype),
+                HostCmd::DiskOff | HostCmd::Cut => {
+                    let cut = matches!(cmd, HostCmd::Cut);
+                    let no = if !self.g_agent {
+                        Some("only for an agent image (--control boot)")
+                    } else if self.c.phase != Phase::Workload {
+                        Some("only in the workload phase")
+                    } else if self.c.wdone != 0 {
+                        Some("after DISKOFF/CUT")
+                    } else if cut && self.snap_find("S0").is_none() {
+                        Some("without a snapshot S0")
+                    } else {
+                        None
+                    };
+                    if let Some(no) = no {
+                        self.refuse(format!("{} {no}", if cut { "cut" } else { "diskoff" }));
+                        continue;
+                    }
+                    self.c.wdone = 1;
+                    self.c.cut = cut;
+                    let at = self.c.at;
+                    if cut {
+                        self.answer(Answer::Cut { at });
+                        return false;
+                    }
+                    self.answer(Answer::DiskOff(DiskOff { at, cut: false }));
                 }
-                let s = format!("OK diskoff at={} cut=0", self.c.at);
-                self.out_line(&s);
-            } else {
-                let mut b = b"ERR unknown command ".to_vec();
-                ctl_esc(&mut b, &ln);
-                b.push(b'\n');
-                self.out_bytes(&b);
             }
         }
     }
@@ -591,11 +618,11 @@ impl Host {
         let hit = self.marker_hook(vm);
         self.c.at = x;
         let why = if hit {
-            Some("marker")
+            Some(StopWhy::Marker)
         } else if self.ctl_due() {
-            Some("send")
+            Some(StopWhy::Send)
         } else if x.wrapping_sub(self.c.k.cad0).is_multiple_of(self.c.rb) {
-            Some("cadence")
+            Some(StopWhy::Cadence)
         } else {
             None
         };
@@ -618,52 +645,6 @@ impl Host {
     }
 }
 
-/// `ctl_esc`: \\ \n \r \t \xHH.
-fn ctl_esc(o: &mut Vec<u8>, p: &[u8]) {
-    for &c in p {
-        match c {
-            b'\\' => o.extend_from_slice(b"\\\\"),
-            b'\n' => o.extend_from_slice(b"\\n"),
-            b'\r' => o.extend_from_slice(b"\\r"),
-            b'\t' => o.extend_from_slice(b"\\t"),
-            c if !(0x20..=0x7e).contains(&c) => {
-                o.extend_from_slice(format!("\\x{c:02x}").as_bytes())
-            }
-            c => o.push(c),
-        }
-    }
-}
-/// the inverse of ctl_esc; None on a malformed escape
-fn ctl_unesc(s: &[u8]) -> Option<Vec<u8>> {
-    let mut o = Vec::with_capacity(s.len());
-    let mut i = 0;
-    while i < s.len() {
-        if s[i] != b'\\' {
-            o.push(s[i]);
-            i += 1;
-            continue;
-        }
-        i += 1;
-        match s.get(i) {
-            Some(b'\\') => o.push(b'\\'),
-            Some(b'n') => o.push(b'\n'),
-            Some(b'r') => o.push(b'\r'),
-            Some(b't') => o.push(b'\t'),
-            Some(b'x')
-                if s.get(i + 1).is_some_and(|c| c.is_ascii_hexdigit())
-                    && s.get(i + 2).is_some_and(|c| c.is_ascii_hexdigit()) =>
-            {
-                o.push(
-                    u8::from_str_radix(std::str::from_utf8(&s[i + 1..i + 3]).unwrap(), 16).unwrap(),
-                );
-                i += 2;
-            }
-            _ => return None,
-        }
-        i += 1;
-    }
-    Some(o)
-}
 
 fn last_verdict(vm: &Vmm, from: usize) -> String {
     let len = vm.m.console_len as usize;
@@ -698,77 +679,7 @@ fn stop_name(s: i32) -> &'static str {
     }
 }
 
-/// the host part's disk policy, as hvx's parse_sched; None if it is not one
-fn parse_disk(host: &[u8]) -> Option<(u64, u32, u32)> {
-    let mut d: Vec<u8> = b"none".to_vec();
-    if let Some(p) = find(host, b"disk=") {
-        if let Some(w) = Scan::new(&host[p + 5..]).word(63) {
-            d = w.to_vec();
-        }
-    }
-    let seed = find(host, b"dseed=")
-        .map(|p| cstr::strtoull(&host[p + 6..], 16).0)
-        .unwrap_or(0);
-    if d == b"none" {
-        return Some((seed, 0, 0));
-    }
-    if let Some(r) = d.strip_prefix(b"ioerr:") {
-        return Some((seed, F_ERROR, cstr::atoi(r) as u32));
-    }
-    if d == b"cut" {
-        return Some((seed, F_UNFLUSHED, 100));
-    }
-    if let Some(r) = d.strip_prefix(b"lying:") {
-        return Some((seed, F_DROP, cstr::atoi(r) as u32));
-    }
-    None
-}
 
-/// the host part's tick jitter (left off: run_once turns it on); None if malformed
-fn parse_tj(host: &[u8]) -> Option<Tjit> {
-    let mut t = Tjit::default();
-    if let Some(p) = find(host, b"tjx=") {
-        let mut p = p + 4;
-        while p < host.len() && host[p] != b' ' && t.n_explicit < TJ_MAX_EXPLICIT {
-            let (k, u) = cstr::strtoull(&host[p..], 10);
-            let e = p + u;
-            if host.get(e) != Some(&b':') {
-                return None;
-            }
-            let (d, u2) = cstr::strtoull(&host[e + 1..], 10);
-            let e2 = e + 1 + u2;
-            t.ek[t.n_explicit] = k;
-            t.ed[t.n_explicit] = d as u32;
-            t.n_explicit += 1;
-            p = if host.get(e2) == Some(&b',') {
-                e2 + 1
-            } else {
-                e2
-            };
-        }
-        if p < host.len() && host[p] != b' ' {
-            return None;
-        }
-        return Some(t);
-    }
-    let Some(p) = find(host, b"tj=") else {
-        return Some(t);
-    };
-    t.seed = cstr::strtoull(&host[p + 3..], 16).0;
-    let num = |key: &[u8], dflt: u64| {
-        find(host, key)
-            .map(|p| cstr::strtoull(&host[p + key.len()..], 10).0)
-            .unwrap_or(dflt)
-    };
-    t.permille = num(b"tjpm=", 10) as u32;
-    t.max_delay = num(b"tjmax=", 1000) as u32;
-    t.lo = num(b"tjlo=", 0);
-    t.hi = num(b"tjhi=", 0);
-    if t.permille == 0 || t.max_delay == 0 {
-        t = Tjit::default();
-    }
-    Some(t)
-}
 fn tj_wanted(t: &Tjit) -> bool {
     t.n_explicit != 0 || (t.permille != 0 && t.max_delay != 0)
 }
@@ -795,35 +706,90 @@ pub fn scan_has_tc(gz: &[u8]) -> bool {
     }
 }
 
-/// The host tokens this engine applies; the others are refused: Some(why, unknown to every engine).
-fn host_token_problem(host: &[u8]) -> Option<(String, bool)> {
-    const OK: &[&str] = &[
-        "disk=", "dseed=", "tj=", "tjpm=", "tjmax=", "tjlo=", "tjhi=", "tjx=", "pct=", "pctn=",
-        "pctk=",
-    ];
-    const HVX_ONLY: &[&str] = &[
-        "rb=", "pp=", "pptsc=", "xt=", "xtr=", "xtpm=", "xtlo=", "xthi=", "xtsc=", "xtx=", "cf=",
-        "q=", "qs=", "qb=", "qbs=", "qm=",
-    ];
-    let words = ccap(host.to_vec(), 1024);
-    for w in words
-        .split(|c| matches!(c, b' ' | b'\t' | b'\r' | b'\n'))
-        .filter(|w| !w.is_empty())
-    {
-        let good = w == b"spin=rewind" || OK.iter().any(|p| w.starts_with(p.as_bytes()));
-        if good {
-            continue;
+/// The host tokens hvx alone applies (the PMU clock, vCPU turns, the k-th-flush cut; `rb=` outside
+/// a lock-step run): the first one's refusal, as the C engine words it.
+fn host_token_problem(s: &Schedule) -> Option<String> {
+    for t in &s.host {
+        let hvx_only = matches!(
+            t,
+            HostToken::Rb(_)
+                | HostToken::Pp(_)
+                | HostToken::Pptsc(_)
+                | HostToken::Xt(_)
+                | HostToken::Xtr(_)
+                | HostToken::Xtpm(_)
+                | HostToken::Xtlo(_)
+                | HostToken::Xthi(_)
+                | HostToken::Xtsc(_)
+                | HostToken::Xtx(_)
+                | HostToken::Cf(_)
+                | HostToken::Cfn
+                | HostToken::Q(_)
+                | HostToken::Qs(_)
+                | HostToken::Qb { .. }
+                | HostToken::Qbs(_)
+                | HostToken::Qm(_)
+        );
+        if hvx_only {
+            let w = t.to_string();
+            let w = &w[..w.len().min(60)];
+            let msg = format!("host token {w} needs hvx (the PMU clock, vCPU turns or a power cut at a disk FLUSH)");
+            return Some(lossy(&ccap(msg.into_bytes(), 200)));
         }
-        let hvx = w == b"cfn" || HVX_ONLY.iter().any(|p| w.starts_with(p.as_bytes()));
-        let t = lossy(&w[..w.len().min(60)]);
-        let msg = if hvx {
-            format!("host token {t} needs hvx (the PMU clock, vCPU turns or a power cut at a disk FLUSH)")
-        } else {
-            format!("unknown host token {t}")
-        };
-        return Some((lossy(&ccap(msg.into_bytes(), 200)), !hvx));
     }
     None
+}
+
+/// The disk policy of the host part (serve.c parse_disk): (seed, classes, probability).
+fn disk_policy(s: &Schedule) -> (u64, u32, u32) {
+    let (c, p) = match s.disk() {
+        Disk::None => (0, 0),
+        Disk::Cut => (F_UNFLUSHED, 100),
+        Disk::IoErr(p) => (F_ERROR, p as u32),
+        Disk::Lying(p) => (F_DROP, p as u32),
+    };
+    (s.dseed(), c, p)
+}
+
+fn num(s: &Schedule, key: &str) -> Option<u64> {
+    match s.host_token(key)? {
+        HostToken::Tj(v)
+        | HostToken::Tjpm(v)
+        | HostToken::Tjmax(v)
+        | HostToken::Tjlo(v)
+        | HostToken::Tjhi(v)
+        | HostToken::Pct(v)
+        | HostToken::Pctn(v)
+        | HostToken::Pctk(v)
+        | HostToken::Rb(v) => Some(*v),
+        _ => None,
+    }
+}
+
+/// The tick jitter of the host part (serve.c parse_tj; left off: run_once turns it on). Its
+/// delays are counted in exits (`tjmax=` default 1000).
+fn tick_jitter(s: &Schedule) -> Tjit {
+    let mut t = Tjit::default();
+    if let Some(HostToken::Tjx(l)) = s.host_token("tjx") {
+        for (tick, delay) in l.iter().take(TJ_MAX_EXPLICIT) {
+            t.ek[t.n_explicit] = *tick;
+            t.ed[t.n_explicit] = *delay as u32;
+            t.n_explicit += 1;
+        }
+        return t;
+    }
+    let Some(seed) = num(s, "tj") else {
+        return t;
+    };
+    t.seed = seed;
+    t.permille = num(s, "tjpm").unwrap_or(10) as u32;
+    t.max_delay = num(s, "tjmax").unwrap_or(1000) as u32;
+    t.lo = num(s, "tjlo").unwrap_or(0);
+    t.hi = num(s, "tjhi").unwrap_or(0);
+    if t.permille == 0 || t.max_delay == 0 {
+        t = Tjit::default();
+    }
+    t
 }
 
 fn append_line(vm: &Vmm, from: usize, prefix: &[u8], out: &mut Vec<u8>, n: usize) {
@@ -1037,9 +1003,9 @@ impl Engine {
         };
         if self.h.c.start != 0 {
             let w = if self.h.c.start == 2 {
-                "resume"
+                StopWhy::Resume
             } else {
-                "start"
+                StopWhy::Start
             };
             if self.h.c.start == 2 {
                 self.h.c.k.nstop = self.h.c.k.nstop.wrapping_sub(1); // the snapshot's own stop, again
@@ -1080,56 +1046,28 @@ impl Engine {
             return self.h.hk.hit;
         }
         self.h.c.at = self.vm.m.exits;
-        if self.h.ctl_stop(&mut self.vm, "exit") {
+        if self.h.ctl_stop(&mut self.vm, StopWhy::Exit) {
             return -3;
         }
         *why = s;
         -1
     }
 
-    /// The lock-step part of a schedule: its rb=<n> taken out (the cadence; 0 = none), and
-    /// whether its run is in the rewind mode. Prints the error RESULT and returns None for a bad rb=.
-    fn ctl_sched(&mut self, tag: &str, s: &mut Vec<u8>) -> Option<(u64, bool)> {
-        let mut bar = s.iter().position(|&c| c == b'|');
-        let rw = self.vm.sp.rw_on || bar.is_some_and(|b| has(&s[..b], b"spin=rewind"));
-        let mut rb = 0;
-        let mut w = 0usize;
-        while let Some(b) = bar {
-            let Some(k) = find(&s[w..], b"rb=") else {
-                break;
-            };
-            let at = w + k;
-            if at >= b {
-                break;
-            }
-            if at != 0 && s[at - 1] != b' ' {
-                w = at + 3;
-                continue;
-            }
-            let (v, used) = cstr::strtoull(&s[at + 3..], 10);
-            let e = at + 3 + used;
-            if used == 0 || !matches!(s.get(e), Some(b' ' | b'|')) {
-                self.h.out_line(&format!(
-                    "RESULT {tag} fp=0 wfp=0 secs=0 verdict=ERROR bad schedule: rb= takes a number of exits"
-                ));
-                return None;
-            }
-            rb = v;
-            s.drain(at..e);
-            w = at;
-            bar = s.iter().position(|&c| c == b'|');
-        }
-        Some((rb, rw))
+    /// The lock-step part of a schedule: its `rb=` taken out (the cadence; 0 = none), and whether
+    /// its run is in the rewind mode (`spin=rewind`, or HVM_SPIN_REWIND=1).
+    fn ctl_sched(&self, s: &Schedule) -> (Schedule, u64, bool) {
+        let rw = self.vm.sp.rw_on || s.host_token("spin").is_some();
+        let rb = num(s, "rb").unwrap_or(0);
+        let mut t = s.clone();
+        t.host.retain(|h| !matches!(h, HostToken::Rb(_)));
+        (t, rb, rw)
     }
 
     /// CTL <tag> <schedule> (after the S1 restore) and `--control one`; an agent image's CTL
     /// restores the host's S1 (`cs`) here and continues its book.
-    fn ctl_request(&mut self, tag: &str, sched: &[u8], cs: Option<usize>) {
-        let mut s = ccap(sched.to_vec(), 4096);
+    fn ctl_request(&mut self, tag: &str, sched: &Schedule, cs: Option<usize>) {
         let base = self.vm.sp.rw_on;
-        let Some((rb, rw)) = self.ctl_sched(tag, &mut s) else {
-            return;
-        };
+        let (s, rb, rw) = self.ctl_sched(sched);
         if let Some(i) = cs {
             let check = self.h.o.check_restore;
             xsnap_restore(&mut self.vm, &self.h.snaps[i].x, check);
@@ -1155,7 +1093,7 @@ impl Engine {
     /// the host took S1 and said CONT, -1 when the guest stopped (`why`)
     fn agent_boot(&mut self, tag: &str, rb: u64, why: &mut i32) -> i32 {
         self.h.ctl_begin(tag);
-        self.h.c.phase = "boot";
+        self.h.c.phase = Phase::Boot;
         if rb != 0 {
             self.h.c.rb = rb;
         }
@@ -1177,16 +1115,25 @@ impl Engine {
         };
         self.save_log(tag, 0);
         let k = &self.h.c.k;
-        let s = format!(
-            "RESULT {tag} fp={:016x} wfp={wfp:016x} secs={:.1} stops={} typed={} inh={:016x} verdict={verdict}",
-            fnv_u64(wfp, wfp),
-            now_s() - t0,
-            k.nstop,
-            k.ntyped,
-            k.inh
-        );
-        self.h.out_line(&s);
+        let extras = format!(" stops={} typed={} inh={:016x}", k.nstop, k.ntyped, k.inh);
+        self.result(tag, fnv_u64(wfp, wfp), wfp, now_s() - t0, &extras, &verdict);
         self.h.ctl_finish();
+    }
+
+    /// A RESULT: `fp`, `wfp`, the run's seconds (one decimal), the extras (` key=value...`).
+    fn result(&mut self, tag: &str, fp: u64, wfp: u64, secs: f64, extras: &str, verdict: &str) {
+        let r = RunResult::new(
+            tag,
+            &format!("{fp:016x}"),
+            &format!("{wfp:016x}"),
+            &format!("{secs:.1}"),
+            extras,
+            verdict,
+        );
+        match r {
+            Some(r) => self.h.emit(EngineMsg::Result(Box::new(r))),
+            None => self.h.say(&format!("hvmx: {tag}: a RESULT that does not read back: {verdict}")),
+        }
     }
     /// RESUME <tag> <snapshot>: continue a controlled run from a SNAP in a fresh VM
     fn ctl_resume(&mut self, tag: &str, name: &str) {
@@ -1213,70 +1160,44 @@ impl Engine {
         }
     }
 
-    fn unsupported(&self, host: &[u8], guest: &[u8]) -> Option<&'static str> {
+    fn unsupported(&self, s: &Schedule) -> Option<&'static str> {
         let att = self.vm.vio.attached();
-        if let Some(d) = find(host, b"disk=") {
-            if !att && !host[d..].starts_with(b"disk=none") {
-                return Some("disk faults and power cuts need the data disk (HVM_DISK)");
-            }
+        if !att && s.host_token("disk").is_some() && s.disk() != Disk::None {
+            return Some("disk faults and power cuts need the data disk (HVM_DISK)");
         }
-        if !att && has(guest, b" C=") {
+        if !att && s.guest_tokens('C').next().is_some() {
             return Some("power cuts need the data disk (HVM_DISK)");
         }
-        if !self.h.initrd_has_tc && (has(guest, b" N=") || has(guest, b" O=")) {
+        let net = s.guest_tokens('N').next().is_some() || s.guest_tokens('O').next().is_some();
+        if !self.h.initrd_has_tc && net {
             return Some("network faults need tc on the arm64 root");
         }
         None
     }
 
-    /// One schedule: arm the host part, type the guest part, run it (`run_once`).
-    fn run_once(&mut self, tag: &str, sched: &[u8], rewound: bool) {
+    /// One schedule: arm the host part, type the guest part, run it (`run_once`). The guest part
+    /// typed is the schedule's guest text after the one space hydo-schedule requires after `|`,
+    /// as the C engine typed the text after `|`.
+    fn run_once(&mut self, tag: &str, s: &Schedule, rewound: bool) {
         let t0 = now_s();
-        let Some(bar) = sched.iter().position(|&c| c == b'|') else {
-            self.h.result_err(tag, "ERROR bad schedule");
-            return;
-        };
-        let host = ccap(sched[..bar].to_vec(), 1024);
-        let mut guest = b" ".to_vec();
-        guest.extend_from_slice(&sched[bar + 1..]);
-        let mut guest = ccap(guest, 1024);
-        while matches!(guest.last(), Some(b'\n' | b' ')) {
-            guest.pop();
-        }
-        if let Some((hw, unknown)) = host_token_problem(&host) {
-            let p = if unknown {
-                "ERROR bad schedule: "
-            } else {
-                "UNSUPPORTED on hvm: "
-            };
-            self.h.result_err(tag, &format!("{p}{hw}"));
+        if let Some(hw) = host_token_problem(s) {
+            self.h.result_err(tag, &format!("UNSUPPORTED on hvm: {hw}"));
             return;
         }
-        if let Some(u) = self.unsupported(&host, &guest) {
+        if let Some(u) = self.unsupported(s) {
             self.h.result_err(tag, &format!("UNSUPPORTED on hvm: {u}"));
             return;
         }
-        let Some((dseed, dcl, dpr)) = parse_disk(&host) else {
-            self.h.result_err(tag, "ERROR bad disk token");
-            return;
+        let (dseed, dcl, dpr) = disk_policy(s);
+        let tj = tick_jitter(s);
+        let pct_seed = num(s, "pct").unwrap_or(0);
+        let pct_n = if s.host_token("pct").is_some() {
+            num(s, "pctn").unwrap_or(0) as u32
+        } else {
+            0
         };
-        let Some(tj) = parse_tj(&host) else {
-            self.h.result_err(tag, "ERROR bad tick-jitter token");
-            return;
-        };
-        let pct_seed = find(&host, b"pct=")
-            .map(|p| cstr::strtoull(&host[p + 4..], 16).0)
-            .unwrap_or(0);
-        let mut pct_n = find(&host, b"pctn=")
-            .map(|p| cstr::strtoull(&host[p + 5..], 10).0 as u32)
-            .unwrap_or(0);
-        let pct_k = find(&host, b"pctk=")
-            .map(|p| cstr::strtoull(&host[p + 5..], 10).0)
-            .unwrap_or(20000);
-        if find(&host, b"pct=").is_none() {
-            pct_n = 0;
-        }
-        let cut = has(&guest, b" C=");
+        let pct_k = num(s, "pctk").unwrap_or(20000);
+        let cut = s.guest_tokens('C').next().is_some();
         let from = self.vm.m.console_len as usize;
         if self.h.c.on && !self.h.g_agent {
             self.h.c.k.evfrom = from; // lock-step: EVENTs start with the workload's console
@@ -1303,10 +1224,10 @@ impl Engine {
             let x = self.vm.m.exits;
             self.vm.pct = Pct::set(pct_seed, pct_n, x, x.wrapping_add(pct_k));
         }
-        let mut line = guest.get(1..).unwrap_or(&[]).to_vec();
-        line.push(b'\n');
-        let line = ccap(line, 1100);
-        if !(self.h.c.on && (guest.is_empty() || self.h.g_agent)) {
+        // the guest part is never empty (hydo-schedule: it starts with "run"); an agent image's
+        // controlled run types nothing (the host does)
+        let line = ccap(format!(" {}\n", s.guest_text()).into_bytes(), 1100);
+        if !(self.h.c.on && self.h.g_agent) {
             self.vm.put_input(&line);
         }
         self.run_rest(rs);
@@ -1381,7 +1302,7 @@ impl Engine {
                     self.vm.put_input(b"go\n");
                 }
                 if self.h.c.on {
-                    self.h.c.phase = "check";
+                    self.h.c.phase = Phase::Check;
                     self.h.c.start = 1;
                 }
                 r = self.run_to(fin, from, &mut why);
@@ -1415,7 +1336,7 @@ impl Engine {
             if self.h.c.on {
                 // a new VM with its own clock: queued input does not carry over
                 self.h.ctl_drop_pending();
-                self.h.c.phase = "recovery";
+                self.h.c.phase = Phase::Recovery;
                 self.h.c.start = 1;
                 self.h.c.k.evfrom = from;
             }
@@ -1446,23 +1367,15 @@ impl Engine {
             ));
             cap(&mut tjinfo);
         }
-        let s = format!(
-            "RESULT {tag} fp={:016x} wfp={wfp:016x} secs={:.1}{tjinfo} verdict={verdict}",
-            fnv_u64(ffp, wfp),
-            now_s() - t0
-        );
-        self.h.out_line(&s);
+        self.result(&tag, fnv_u64(ffp, wfp), wfp, now_s() - t0, &tjinfo, &verdict);
         if self.h.c.on {
             self.h.ctl_finish();
         }
     }
 
     /// one schedule from the restored S1 (serve) or from the provisioned boot (one)
-    fn run_sched(&mut self, tag: &str, sched: &[u8], have_s1: bool) {
-        let forced = sched
-            .iter()
-            .position(|&c| c == b'|')
-            .is_some_and(|b| has(&sched[..b], b"spin=rewind"));
+    fn run_sched(&mut self, tag: &str, sched: &Schedule, have_s1: bool) {
+        let forced = sched.host_token("spin").is_some();
         let base = self.vm.sp.rw_on;
         self.h.spin_hit = false;
         if forced && !self.vm.sp.rw_on {
@@ -1529,54 +1442,37 @@ impl Engine {
         Ok(())
     }
 
-    /// The serve loop of a shell image (RUN, CTL, RESUME, BRANCH, QUIT).
+    /// The serve loop (RUN, CTL, RESUME, BRANCH, QUIT); an agent image runs under control only.
     fn serve_loop(&mut self, agent: bool) {
         loop {
-            let mut ln = Vec::new();
-            match self.h.input.read_until(b'\n', &mut ln) {
-                Ok(0) | Err(_) => return,
-                Ok(_) => {}
-            }
-            if ln.starts_with(b"QUIT") {
-                return;
-            }
-            if ln.starts_with(b"BRANCH ") {
-                self.h.out_line("BRANCHEND ? unsupported on hvm");
-                continue;
-            }
-            if ln.starts_with(b"RESUME ") {
-                let mut sc = Scan::new(&ln);
-                sc.lit("RESUME").ws();
-                let tag = sc.word(63).map(lossy);
-                let name = sc.word(63).map(lossy);
-                let (Some(tag), Some(name)) = (tag, name) else {
+            let (ctl, tag, sched) = match self.h.port.request() {
+                Req::End => return,
+                Req::BadRun => {
                     self.h.result_err("?", "ERROR bad request");
                     continue;
-                };
-                self.ctl_resume(&tag, &name);
-                continue;
-            }
-            let ctl = ln.starts_with(b"CTL ");
-            let rq = if ctl { &ln[4..] } else { &ln[..] };
-            let mut sc = Scan::new(rq);
-            if !ctl {
-                sc.lit("RUN");
-            }
-            let tag = sc.word(63).map(lossy);
-            sc.ws();
-            let off = sc.pos;
-            let Some(tag) = tag.filter(|_| off != 0) else {
-                self.h.result_err("?", "ERROR bad request");
-                continue;
+                }
+                Req::BadBranch | Req::Request(Request::Branch(_)) => {
+                    self.h.emit(EngineMsg::BranchEnd {
+                        tag: "?".into(),
+                        note: "unsupported on hvm".into(),
+                    });
+                    continue;
+                }
+                Req::Request(Request::Quit) => return,
+                Req::Request(Request::Resume { tag, snapshot }) => {
+                    self.ctl_resume(&tag, &snapshot);
+                    continue;
+                }
+                Req::Request(Request::Run { tag, schedule }) => (false, tag, schedule),
+                Req::Request(Request::Ctl { tag, schedule }) => (true, tag, schedule),
             };
-            let sched = rq[off..].to_vec();
             if agent {
                 let cs = self.h.snap_find("S1");
                 let no = if !ctl {
                     Some("an agent image runs under control only (CTL, RESUME)")
                 } else if cs.is_none() {
                     Some("no snapshot S1 (the boot took none)")
-                } else if !agent_guest_ok(&sched) {
+                } else if !sched.guest.is_empty() {
                     Some("an agent image's schedule has the guest part \"run\" only")
                 } else {
                     None
@@ -1599,20 +1495,6 @@ impl Engine {
     }
 }
 
-/// An agent image's schedule has no guest tokens: its guest part is "run" (or empty).
-fn agent_guest_ok(s: &[u8]) -> bool {
-    let Some(bar) = s.iter().position(|&c| c == b'|') else {
-        return true; // run_once refuses it
-    };
-    let mut g = &s[bar + 1..];
-    while g.first() == Some(&b' ') {
-        g = &g[1..];
-    }
-    while matches!(g.last(), Some(b' ' | b'\n' | b'\r')) {
-        g = &g[..g.len() - 1];
-    }
-    g.is_empty() || g == b"run"
-}
 
 fn ram_mib_parse(v: &str, what: &str, diag: &Diag) -> Option<u64> {
     let (n, used) = cstr::strtoull(v.as_bytes(), 10);
@@ -1678,14 +1560,70 @@ pub fn opts_from(get: Lookup, hvmx: bool) -> VmOpts {
     }
 }
 
-/// hvmx's `main` over the given streams, with the environment from `get`; the exit status.
+/// hvmx's `main` over the given streams, with the environment from `get`: the command line and
+/// the request lines are read here (the text boundary); the exit status.
 pub fn main_with(args: &[String], get: Lookup, io: Io) -> i32 {
     let diag: Diag = Arc::new(Mutex::new(io.diag));
-    let d2 = diag.clone();
     let Io {
         out, input, echo, ..
     } = io;
-    catch_fatal(&d2, move || hvmx_main(args, get, out, input, echo, diag))
+    let mut a: Vec<String> = args.to_vec();
+    let mut ram_mib = None;
+    while a.len() > 2 && a[1] == "--ram-mib" {
+        match ram_mib_parse(&a[2], "--ram-mib", &diag) {
+            Some(n) => ram_mib = Some(n),
+            None => return 2,
+        }
+        a.drain(1..3);
+    }
+    let (mut control_one, mut control_boot) = (false, false);
+    if a.len() > 2 && a[1] == "--control" && a[2] == "boot" {
+        control_boot = true;
+        a.drain(1..3);
+    } else if a.len() > 1 && a[1] == "--control" {
+        control_one = true;
+        a.remove(1);
+    }
+    let argc = a.len();
+    let usage = argc < 5
+        || (a[1] != "serve" && a[1] != "one")
+        || (a[1] == "one" && argc < 6)
+        || (control_one && a[1] != "one");
+    if usage {
+        say(&diag, "usage: hvmx [--ram-mib N] serve <Image> <initramfs> <outdir>\n       hvmx [--ram-mib N] [--control] one <Image> <initramfs> <outdir> \"<schedule>\"\n       hvmx [--ram-mib N] --control boot serve|one <Image> <initramfs> <outdir> [\"<schedule>\"]");
+        return 2;
+    }
+    // every schedule is read by hydo-schedule (M142, M143), as on hvx
+    let sched = match a.get(5).map(String::as_str) {
+        None | Some("|") if control_boot => Some(Schedule {
+            host: Vec::new(),
+            guest: Vec::new(),
+        }),
+        None => None,
+        Some(t) => match Schedule::parse(t) {
+            Ok(s) => Some(s),
+            Err(e) => {
+                say(&diag, &format!("hvmx: bad schedule: {e}"));
+                return 2;
+            }
+        },
+    };
+    let mode = if a[1] == "one" {
+        Mode::One(sched.expect("one has a schedule"))
+    } else {
+        Mode::Serve { boot: sched }
+    };
+    let start = Start {
+        mode,
+        control_one,
+        control_boot,
+        kernel: a[2].clone().into(),
+        initrd: a[3].clone().into(),
+        outdir: a[4].clone().into(),
+        ram_mib,
+    };
+    let port = Box::new(hydo_hvx::text::TextPort::new(input, out));
+    run_diag(start, get, port, diag, echo)
 }
 
 /// `main` of the program over the process's own streams and environment.
@@ -1700,15 +1638,37 @@ pub fn main_stdio(args: &[String]) -> i32 {
     main_with(args, &get, io)
 }
 
-fn hvmx_main(
-    args: &[String],
+/// The engine: boot as `start` says and serve the host over `port` (diagnostics to `diag`, the
+/// environment from `get`). The exit status as the program's. One VM per process: a second
+/// engine in a process that already runs one ends with an error.
+pub fn run(
+    start: Start,
     get: Lookup,
-    out: Box<dyn Write + Send>,
-    input: Box<dyn BufRead + Send>,
+    port: Box<dyn Port>,
+    diag: Box<dyn Write + Send>,
     echo: Option<Box<dyn Write + Send>>,
-    diag: Diag,
 ) -> i32 {
-    let mut a: Vec<String> = args.to_vec();
+    run_diag(start, get, port, Arc::new(Mutex::new(diag)), echo)
+}
+
+fn run_diag(
+    start: Start,
+    get: Lookup,
+    port: Box<dyn Port>,
+    diag: Diag,
+    echo: Option<Box<dyn Write + Send>>,
+) -> i32 {
+    let d2 = diag.clone();
+    catch_fatal(&d2, move || engine_main(start, get, port, diag, echo))
+}
+
+fn engine_main(
+    start: Start,
+    get: Lookup,
+    port: Box<dyn Port>,
+    diag: Diag,
+    echo: Option<Box<dyn Write + Send>>,
+) -> i32 {
     let mut ram_mib = 1024;
     if let Some(v) = get("HVM_MEM_MB") {
         match ram_mib_parse(&v, "HVM_MEM_MB", &diag) {
@@ -1716,36 +1676,17 @@ fn hvmx_main(
             None => return 2,
         }
     }
-    while a.len() > 2 && a[1] == "--ram-mib" {
-        match ram_mib_parse(&a[2], "--ram-mib", &diag) {
-            Some(n) => ram_mib = n,
-            None => return 2,
-        }
-        a.drain(1..3);
+    if let Some(n) = start.ram_mib {
+        ram_mib = n;
     }
-    let mut ctl_one = false;
-    let mut agent = false;
-    if a.len() > 2 && a[1] == "--control" && a[2] == "boot" {
-        agent = true;
-        a.drain(1..3);
-    } else if a.len() > 1 && a[1] == "--control" {
-        ctl_one = true;
-        a.remove(1);
-    }
-    let argc = a.len();
-    let usage = argc < 5
-        || (a[1] != "serve" && a[1] != "one")
-        || (a[1] == "one" && argc < 6)
-        || (ctl_one && a[1] != "one");
-    if usage {
-        say(&diag, "usage: hvmx [--ram-mib N] serve <Image> <initramfs> <outdir>\n       hvmx [--ram-mib N] [--control] one <Image> <initramfs> <outdir> \"<schedule>\"\n       hvmx [--ram-mib N] --control boot serve|one <Image> <initramfs> <outdir> [\"<schedule>\"]");
-        return 2;
-    }
-    let mode = a[1].clone();
-    let kernel = std::fs::read(&a[2]).unwrap_or_else(|e| fatal(1, &format!("{}: {e}", a[2])));
-    let initrd = std::fs::read(&a[3]).unwrap_or_else(|e| fatal(1, &format!("{}: {e}", a[3])));
+    let agent = start.control_boot;
+    let read = |p: &std::path::Path| {
+        std::fs::read(p).unwrap_or_else(|e| fatal(1, &format!("{}: {e}", p.display())))
+    };
+    let kernel = read(&start.kernel);
+    let initrd = read(&start.initrd);
     let initrd_has_tc = scan_has_tc(&initrd);
-    let outdir = a[4].clone();
+    let outdir = start.outdir.display().to_string();
     let _ = std::fs::create_dir(&outdir);
     let mut vo = opts_from(get, true);
     vo.ram_size = ram_mib << 20;
@@ -1789,8 +1730,7 @@ fn hvmx_main(
     let mut e = Engine {
         vm,
         h: Host {
-            out,
-            input,
+            port,
             diag,
             outdir,
             o,
@@ -1810,21 +1750,21 @@ fn hvmx_main(
     e.vm.max_exits = 200_000_000;
     if agent {
         // M121: the boot under control; S0 and S1 are the host's SNAPs
-        let tag = if mode != "one" { "boot" } else { "one" };
-        let mut s = ccap(
-            a.get(5)
-                .map(|x| x.as_bytes().to_vec())
-                .unwrap_or_else(|| b"|".to_vec()),
-            4096,
-        );
-        let Some((rb, rw)) = e.ctl_sched(tag, &mut s) else {
-            return 2;
+        let one = matches!(start.mode, Mode::One(_));
+        let tag = if one { "one" } else { "boot" };
+        let boot = match start.mode {
+            Mode::One(s) => s,
+            Mode::Serve { boot } => boot.unwrap_or(Schedule {
+                host: Vec::new(),
+                guest: Vec::new(),
+            }),
         };
-        if !agent_guest_ok(&s) {
+        let (s, rb, rw) = e.ctl_sched(&boot);
+        if !s.guest.is_empty() {
             e.h.say("hvmx: an agent image's schedule has the guest part \"run\" only");
             return 2;
         }
-        e.h.g_ctl_one = mode == "one";
+        e.h.g_ctl_one = one;
         let mut why = 0;
         let r = e.agent_boot(tag, rb, &mut why);
         if r != -4 {
@@ -1837,7 +1777,7 @@ fn hvmx_main(
                     e.h.g_s0 = S0Ref::Slot(i);
                 }
                 e.h.c.boot_s1 = false;
-                e.h.c.phase = "workload";
+                e.h.c.phase = Phase::Workload;
                 e.h.spin_hit = false;
                 e.vm.sp.rw_on = rw; // M130: the rewind mode from S1's stop on
                 e.run_once(tag, &s, rw);
@@ -1850,31 +1790,34 @@ fn hvmx_main(
         if let Some(i) = e.h.snap_find("S0") {
             e.h.g_s0 = S0Ref::Slot(i);
         }
-        e.h.out_line(&format!("READY boot_secs={:.1}", now_s() - t0));
+        e.h.emit(EngineMsg::Ready(Ready::new(now_s() - t0)));
         e.serve_loop(true);
         return 0;
     }
-    if mode == "one" {
-        let spin_auto = e.h.o.spin_auto;
-        if e.boot_to_s1(spin_auto).is_err() {
-            return 1;
+    match start.mode {
+        Mode::One(sched) => {
+            let spin_auto = e.h.o.spin_auto;
+            if e.boot_to_s1(spin_auto).is_err() {
+                return 1;
+            }
+            e.h.say(&format!(
+                "hvmx: provisioned in {:.1} s (fresh boot, no snapshot restore)",
+                now_s() - t0
+            ));
+            if start.control_one {
+                e.ctl_request("one", &sched, None);
+            } else {
+                e.run_sched("one", &sched, spin_auto);
+            }
+            0
         }
-        e.h.say(&format!(
-            "hvmx: provisioned in {:.1} s (fresh boot, no snapshot restore)",
-            now_s() - t0
-        ));
-        let sched = a[5].as_bytes().to_vec();
-        if ctl_one {
-            e.ctl_request("one", &sched, None);
-        } else {
-            e.run_sched("one", &sched, spin_auto);
+        Mode::Serve { .. } => {
+            if e.boot_to_s1(true).is_err() {
+                return 1;
+            }
+            e.h.emit(EngineMsg::Ready(Ready::new(now_s() - t0)));
+            e.serve_loop(false);
+            0
         }
-        return 0;
     }
-    if e.boot_to_s1(true).is_err() {
-        return 1;
-    }
-    e.h.out_line(&format!("READY boot_secs={:.1}", now_s() - t0));
-    e.serve_loop(false);
-    0
 }

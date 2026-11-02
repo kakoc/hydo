@@ -1,0 +1,10 @@
+[package]
+name = "hydo-engine-proto"
+description = "The calls between hydo and its run engines as Rust types (requests, host commands, engine messages, results) and their one text form, the engines' line protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+hydo-schedule = { workspace = true }

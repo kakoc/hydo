@@ -8,6 +8,7 @@ rust-version.workspace = true
 
 [dependencies]
 hydo-schedule = { workspace = true }
+hydo-engine-proto = { workspace = true }
 hydo-hvx = { workspace = true }
 hydo-hvm = { workspace = true }
 libc = "0.2"

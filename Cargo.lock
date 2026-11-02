@@ -416,11 +416,19 @@ version = "0.1.0"
 dependencies = [
  "flate2",
  "hydo-agent-proto",
+ "hydo-engine-proto",
  "hydo-hvm",
  "hydo-hvx",
  "hydo-schedule",
  "libc",
  "sha2",
+]
+
+[[package]]
+name = "hydo-engine-proto"
+version = "0.1.0"
+dependencies = [
+ "hydo-schedule",
 ]
 
 [[package]]
@@ -500,7 +508,9 @@ name = "hydo-hvm"
 version = "0.1.0"
 dependencies = [
  "flate2",
+ "hydo-engine-proto",
  "hydo-hvx",
+ "hydo-schedule",
  "libc",
 ]
 
@@ -509,6 +519,8 @@ name = "hydo-hvx"
 version = "0.1.0"
 dependencies = [
  "cc",
+ "hydo-engine-proto",
+ "hydo-schedule",
  "libc",
  "sha2",
 ]
