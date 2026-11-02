@@ -133,19 +133,12 @@ fn settings(h: &Hvx) -> hydo_config::Env {
         .with_words(&h.extra_env)
 }
 
-/// What the engine boots: `mode` with the spec's paths and options (`--control` is
-/// `control_one`, `--control boot` is `control_boot`).
+/// What the engine boots: `mode` (the program's `--control boot serve|one`) with the spec's
+/// paths and options.
 #[cfg(target_os = "linux")]
-fn start_of(
-    spec: &BootSpec,
-    mode: hydo_hvx::engine::Mode,
-    control_one: bool,
-    control_boot: bool,
-) -> hydo_hvx::engine::Start {
+fn start_of(spec: &BootSpec, mode: hydo_hvx::engine::Mode) -> hydo_hvx::engine::Start {
     hydo_hvx::engine::Start {
         mode,
-        control_one,
-        control_boot,
         kernel: spec.kernel.clone(),
         initrd: spec.initrd.clone().unwrap_or_default(),
         image: spec.image.clone(),
@@ -181,8 +174,8 @@ fn spawn(
     let lock = shared_lock(&Engine::from_env(&e));
     let s = schedule.cloned();
     let start = match how {
-        How::ControlBootServe => start_of(spec, Mode::Serve { boot: s }, false, true),
-        How::ControlBootOne => start_of(spec, Mode::One(s.expect("a schedule")), false, true),
+        How::ControlBootServe => start_of(spec, Mode::Serve { boot: s }),
+        How::ControlBootOne => start_of(spec, Mode::One(s.expect("a schedule"))),
     };
     let (htx, hrx) = std::sync::mpsc::channel::<crate::protocol::HostMsg>();
     let (etx, erx) = std::sync::mpsc::channel::<EngineMsg>();

@@ -4,11 +4,11 @@
 //!
 //! The lines are read as the deleted C engine read them (`hvx_explore.c`: `fgets` in pieces of
 //! at most 4095 bytes, a line cut at its first NUL, `sscanf` words of at most 63 bytes, `strtoull`
-//! numbers), so a host that wrote to the C engine gets the same answers, with one exception: the
-//! schedule of a RUN, CTL or BRANCH is read by hydo-schedule (`Schedule::parse`), which refuses
-//! what the C read loosely (`hydo-hvx/tests/golden/parse_differences.txt`); such a request is
-//! answered as the C answered a schedule it could not read (`RESULT ? ... verdict=ERROR bad
-//! request`, `BRANCHEND ? bad request`).
+//! numbers), so a host that wrote to the C engine gets the same answers, with two exceptions: the
+//! schedule of a CTL is read by hydo-schedule (`Schedule::parse`), which refuses what the C read
+//! loosely (`hydo-hvx/tests/golden/parse_differences.txt`), and the shell-init images' requests
+//! RUN and BRANCH were deleted in Milestone 145; such a request is answered as the C answered a
+//! request it could not read (`RESULT ? ... verdict=ERROR bad request`).
 
 use crate::cstr::{strtoull, Scan};
 use crate::ctl;
@@ -186,9 +186,10 @@ mod tests {
 
     #[test]
     fn requests() {
+        // RUN and BRANCH were the shell-init images' requests (deleted in M145)
         assert_eq!(
             line(read_request(b"RUN a disk=none dseed=1 | run K=redis@5+2\n")),
-            "RUN a disk=none dseed=1 | run K=redis@5+2"
+            "BadRun"
         );
         assert_eq!(
             line(read_request(b"CTL a  disk=none rb=16 | run\n")),
@@ -199,19 +200,18 @@ mod tests {
             line(read_request(
                 b"BRANCH t -3 20 500000 @held disk=cut | run C=3\n"
             )),
-            "BRANCH t -3 20 500000 @held disk=cut | run C=3"
+            "BadRun"
         );
         assert_eq!(line(read_request(b"QUIT\n")), "End");
         // the C engine ran these; hydo-schedule refuses them
         assert_eq!(
-            line(read_request(b"RUN a disk=none bogus=1 | run\n")),
+            line(read_request(b"CTL a disk=none bogus=1 | run\n")),
             "BadRun"
         );
         assert_eq!(
-            line(read_request(b"RUN a disk=none | run  K=redis@5+2\n")),
+            line(read_request(b"CTL a disk=none | run  K=redis@5+2\n")),
             "BadRun"
         );
-        assert_eq!(line(read_request(b"BRANCH t 3 20 | run\n")), "BadBranch");
         assert_eq!(line(read_request(b"RESUME b\n")), "BadRun");
         assert_eq!(line(read_request(b"HELLO\n")), "BadRun");
     }

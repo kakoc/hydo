@@ -1462,10 +1462,6 @@ impl Engine {
                     self.h.result_err("?", "ERROR bad request");
                     continue;
                 }
-                Req::BadBranch => {
-                    self.h.result_err("?", "ERROR bad request");
-                    continue;
-                }
                 Req::Request(Request::Quit) => return,
                 Req::Request(Request::Resume { tag, snapshot }) => {
                     self.ctl_resume(&tag, &snapshot);

@@ -1,10 +1,17 @@
 //! The engine: `hv/hvx/hvx_explore.c` (deleted in M137; `git show d9202e7:hv/hvx/hvx_explore.c`)
 //! and the parts of `hvx_stack_verify.c` it used, in Rust, function by function, driving
 //! `/dev/hvx` from this process. Comments name the C functions and variables they port. The same requests give the same
-//! output lines (RESULT, READY, BRANCHPOINT, the lock-step lines) and the same consoles; the
-//! differences are inside: snapshots stay in memory as their non-zero pages, a fresh VM is filled
-//! with the non-zero pages of what it needs only, fingerprints skip zero pages exactly, and old
-//! VMs are torn down on a helper thread while the next run starts.
+//! output lines (RESULT, READY, the lock-step lines) and the same consoles; the differences are
+//! inside: snapshots stay in memory as their non-zero pages, a fresh VM is filled with the non-zero
+//! pages of what it needs only, fingerprints skip zero pages exactly, and old VMs are torn down on
+//! a helper thread while the next run starts.
+//!
+//! Every image is an agent image (Milestone 136): the engine boots it under lock-step control
+//! from its first instruction (`--control boot serve|one`), the host takes S0 and S1, and every
+//! run is a controlled run from the host's S1 (CTL, RESUME). The shell-init images' paths (the
+//! plain `one`/`serve` modes that booted to the init's markers and typed a schedule's guest part,
+//! RUN, `--control one`, BRANCH and the recovery boot's `oracle` line) were deleted in
+//! Milestone 145; `git show c04ade3:hydo/crates/hydo-hvx/src/engine.rs` has them.
 
 use crate::abi::*;
 use crate::boot;
@@ -27,16 +34,7 @@ use std::time::Instant;
 const EXP_MEM_MIB: u64 = 1024;
 const EXP_MEM_MIN_MIB: u64 = 256;
 const EXP_MEM_MAX_MIB: u64 = 3072;
-const S0_MARKER: &[u8] = b"hydo-explore-ready-S0";
-const S1_MARKER: &[u8] = b"hydo-explore-ready-S1";
-const DONE_MARKER: &[u8] = b"hydo-explore-workload-done";
-const FINAL_MARKER: &[u8] = b"hydo-stack-marker: workload complete";
-const ACKED_PREFIX: &[u8] = b"hydo-explore-acked:";
-const FAILED_PREFIX: &[u8] = b"hydo-explore-failed:";
-const AGENT_PREFIX: &[u8] = b"HYDO-AG ";
-const BRANCH_BUDGET: u64 = 16;
 const BOOT_TSC_STEP: u64 = 0x10000;
-const JIT: &str = "c1sync";
 
 /// The engine's options (the variables hvx_explore and hvx_stack_verify.c read, and hydo-hvx's
 /// own), read once by the program's `main` or by hydo-engine for an in-process engine; since M144
@@ -113,10 +111,6 @@ impl Boot {
     fn p2_mut(&mut self) -> &mut [u8] {
         let (o, l) = (self.p2_off, self.p2_len);
         &mut self.vm.as_mut().expect("a VM").disk_mut()[o..o + l]
-    }
-    /// `mem_find(ubuf + from, ulen - from, needle) >= 0` (with `ulen > from`).
-    fn has_after(&self, from: usize, needle: &[u8]) -> bool {
-        self.ulen() > from && find(&self.ubuf[from..], needle).is_some()
     }
 }
 
@@ -219,12 +213,8 @@ const PH_NAMES: [&str; 21] = [
 ];
 #[derive(Clone, Copy)]
 enum Ph {
-    Fresh = 0,
-    RSnap,
-    RRam,
-    RDisk,
-    RCon,
-    Setup,
+    // 0..=4 (fresh, r_snap, r_ram, r_disk, r_con) were the shell images' restore phases (M145)
+    Setup = 5,
     Work,
     Wfp,
     SaveCon,
@@ -286,10 +276,9 @@ pub struct Core {
     budget: u64,
     c: Ctl,
     snaps: Vec<Option<Box<CtlSnap>>>,
-    s0: Option<Box<Snap>>,
-    s1: Option<Box<Snap>>,
+    /// The engine runs one schedule from a fresh boot (`--control boot one`): the host's SNAP S1
+    /// in the boot starts the workload.
     ctl_one: bool,
-    ctl_boot: bool,
     q_old_quantum: u64,
     q_old_seed: u64,
     q_turns0: u64,
@@ -310,7 +299,6 @@ pub struct Core {
     ph_t0: f64,
     ph_calls: u64,
     ph_extra: String,
-    ph_rsplit: bool,
     /// Coverage tracing (`crate::pt`), when on.
     pt: Option<PtOn>,
     /// HVX_SIM_DRAIN_DROP has dropped its one read.
@@ -776,14 +764,10 @@ impl Core {
         self.ph[Ph::Dirty as usize] += t3 - t1;
     }
 
-    /// The S0 snapshot a recovery restores (the host's under control of an agent image).
+    /// The S0 snapshot a recovery restores (the host's).
     fn s0_ref(&self) -> Option<&Snap> {
-        if self.ctl_boot {
-            let i = self.ctl_find("S0")?;
-            self.snaps[i].as_ref().map(|c| &c.sn)
-        } else {
-            self.s0.as_deref()
-        }
+        let i = self.ctl_find("S0")?;
+        self.snaps[i].as_ref().map(|c| &c.sn)
     }
 
     // ---- coverage tracing (crate::pt) ----
@@ -1006,19 +990,6 @@ impl Core {
         Ok(())
     }
 
-    fn console_dump(&mut self, b: &Boot) {
-        if let Some(p) = &self.o.console_out {
-            if let Ok(mut f) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(p)
-            {
-                let _ = f.write_all(b"\n===== hvx_stack_verify: console of one boot =====\n");
-                let _ = f.write_all(&b.ubuf);
-            }
-        }
-    }
-
     fn save_console(&self, b: &Boot, from: usize, tag: &str, suffix: &str) {
         let path = self.outdir.join(format!("{tag}{suffix}.log"));
         if let Ok(mut f) = std::fs::OpenOptions::new()
@@ -1201,7 +1172,6 @@ impl Core {
         } else {
             None
         };
-        let mut pht = self.pt();
         if let Err(e) = b.vm().set_snapshot(&sn.s) {
             diag!(self, "HVX_SET_SNAPSHOT: {e}");
             return Err(());
@@ -1224,10 +1194,6 @@ impl Core {
             diag!(self, "smp_set: no scheduler state");
             return Err(());
         }
-        if self.ph_rsplit {
-            self.padd(Ph::RSnap, pht);
-            pht = self.pt();
-        }
         let rwp = rw.unwrap_or(&sn.rw);
         let rw_id = if rw.is_none() { Some(sn.id) } else { None };
         let mut reuse_n = (0u64, 0u64);
@@ -1240,10 +1206,6 @@ impl Core {
             _ => sn
                 .ram
                 .load_into_zero(b.vm.as_mut().expect("a VM").mem_mut()),
-        }
-        if self.ph_rsplit {
-            self.padd(Ph::RRam, pht);
-            pht = self.pt();
         }
         match (&dirty, &prev) {
             (Some((_, ddisk)), Some(pv)) => {
@@ -1269,10 +1231,6 @@ impl Core {
                     return Err(());
                 }
             }
-        }
-        if self.ph_rsplit {
-            self.padd(Ph::RDisk, pht);
-            pht = self.pt();
         }
         b.ubuf.clear();
         b.ubuf.extend_from_slice(&sn.con);
@@ -1303,9 +1261,6 @@ impl Core {
         if let Err(e) = b.vm().io(HVX_SET_UNSYNC, &mut io) {
             diag!(self, "HVX_SET_UNSYNC: {e}");
             return Err(());
-        }
-        if self.ph_rsplit {
-            self.padd(Ph::RCon, pht);
         }
         if self.reuse_on && b.vm().dl {
             b.tgt = Some(Tgt {
@@ -1706,9 +1661,7 @@ impl Core {
                 HostCmd::Snap { name, retype } => self.ctl_snap_cmd(b, &name, retype),
                 HostCmd::DiskOff | HostCmd::Cut => {
                     let cut = c == HostCmd::Cut;
-                    let no = if !self.ctl_boot {
-                        Some("only for an agent image (--control boot)")
-                    } else if self.c.phase != "workload" {
+                    let no = if self.c.phase != "workload" {
                         Some("only in the workload phase")
                     } else if self.c.wdone != 0 {
                         Some("after DISKOFF/CUT")
@@ -1803,10 +1756,10 @@ impl Core {
         }
     }
 
-    /// `run_until_any`: the index of the first marker seen after `from`; -1 VM error, -2 wall
-    /// limit, -3 the host ended the run, -4 the host took S1 in a `--control boot one` boot,
-    /// -7 the host said DISKOFF or CUT.
-    fn run_until_any(&mut self, b: &mut Boot, mk: &[&[u8]], from: usize) -> i32 {
+    /// `run_until_any` (the C engine's, without the shell images' console markers): -1 VM error,
+    /// -2 wall limit, -3 the host ended the run, -4 the host took S1 in a `--control boot one`
+    /// boot, -7 the host said DISKOFF or CUT.
+    fn run_until_any(&mut self, b: &mut Boot) -> i32 {
         let t0 = now();
         if self.c.on && self.c.start != 0 {
             let why = if self.c.start == 2 { "resume" } else { "start" };
@@ -1825,24 +1778,6 @@ impl Core {
                 self.c.wdone = 2;
                 return -7;
             }
-        }
-        // markers: where the scan of each may start again (a found one returns)
-        let mut scanned: Vec<usize> = vec![from; mk.len()];
-        let first_hit = |b: &Boot, scanned: &mut Vec<usize>| -> i32 {
-            for (i, m) in mk.iter().enumerate() {
-                if b.ulen() > from && !m.is_empty() {
-                    let st = scanned[i].max(from);
-                    if b.ulen() >= st && find(&b.ubuf[st..], m).is_some() {
-                        return i as i32;
-                    }
-                    scanned[i] = b.ulen().saturating_sub(m.len() - 1).max(from);
-                }
-            }
-            -1
-        };
-        let h = first_hit(b, &mut scanned);
-        if h >= 0 {
-            return h;
         }
         loop {
             let pht = self.pt();
@@ -1866,17 +1801,10 @@ impl Core {
             if self.o.retlog {
                 self.retlog(b, reason);
             }
-            let hit = first_hit(b, &mut scanned);
             if self.c.on
-                && (hit >= 0
-                    || hostcall
-                    || !self.c.capped
-                    || reason != HVX_EXIT_THROTTLE
-                    || self.ctl_due())
+                && (hostcall || !self.c.capped || reason != HVX_EXIT_THROTTLE || self.ctl_due())
             {
-                let why = if hit >= 0 {
-                    "marker"
-                } else if hostcall {
+                let why = if hostcall {
                     "hostcall"
                 } else if reason != HVX_EXIT_THROTTLE {
                     "exit"
@@ -1896,9 +1824,6 @@ impl Core {
                     return -7;
                 }
             }
-            if hit >= 0 {
-                return hit;
-            }
             if reason != HVX_EXIT_THROTTLE {
                 diag!(
                     self,
@@ -1909,62 +1834,6 @@ impl Core {
             }
             if now() - t0 > self.o.wall_secs {
                 return -2;
-            }
-        }
-    }
-
-    /// `run_until_tick` (BRANCH): to tick `target` (0: until the write cache holds writes).
-    fn run_until_tick(&mut self, b: &mut Boot, target: u64, from: usize) -> i32 {
-        let t0 = now();
-        loop {
-            let mut c = hvx_run_ctl {
-                max_insns: self.budget,
-                ..Default::default()
-            };
-            loop {
-                match b.vm().io_once(HVX_RUNC, &mut c) {
-                    Ok(()) => break,
-                    Err(e) if e.raw_os_error() == Some(libc::EINTR) => continue,
-                    Err(e) => {
-                        diag!(self, "hvx_explore: HVX_RUNC: {e}");
-                        return -1;
-                    }
-                }
-            }
-            if self.console_drain(b).is_err() {
-                return -1;
-            }
-            if c.reason != HVX_EXIT_STEP && c.reason != HVX_EXIT_THROTTLE {
-                diag!(
-                    self,
-                    "hvx_explore: guest stopped: reason={} ({})",
-                    c.reason,
-                    boot::exit_reason_name(c.reason)
-                );
-                return -1;
-            }
-            if now() - t0 > self.o.wall_secs {
-                return -2;
-            }
-            for (i, m) in [DONE_MARKER, FINAL_MARKER].iter().enumerate() {
-                if b.has_after(from, m) {
-                    return i as i32 + 1;
-                }
-            }
-            if target == 0 {
-                let mut io = hvx_unsync_io::default();
-                let _ = b.vm().io(HVX_GET_UNSYNC, &mut io);
-                if io.n != 0 {
-                    return 0;
-                }
-                continue;
-            }
-            let mut pm = hvx_pmu::default();
-            if b.vm().io(HVX_GET_PMU, &mut pm).is_err() || pm.period == 0 {
-                return -1;
-            }
-            if pm.next / pm.period >= target {
-                return 0;
             }
         }
     }
@@ -1992,32 +1861,6 @@ impl Core {
             i += 1;
         }
         String::from_utf8_lossy(&v).into_owned()
-    }
-
-    fn append_line(b: &Boot, from: usize, prefix: &[u8], out: &mut Vec<u8>, n: usize) {
-        if b.ulen() <= from {
-            return;
-        }
-        if let Some(at) = find(&b.ubuf[from..], prefix) {
-            let mut p = from + at + prefix.len();
-            while p < b.ulen() && b.ubuf[p] != b'\n' && b.ubuf[p] != b'\r' && out.len() + 2 < n {
-                out.push(b.ubuf[p]);
-                p += 1;
-            }
-        }
-    }
-
-    /// `oracle_cmd`: the recovery boot's `oracle <acked ids> [failed <ids>]\n` (3584 bytes max).
-    fn oracle_cmd(b: &Boot, from: usize) -> Vec<u8> {
-        const N: usize = 3584;
-        let mut o = b"oracle".to_vec();
-        Self::append_line(b, from, ACKED_PREFIX, &mut o, N);
-        if b.has_after(from, FAILED_PREFIX) && o.len() + 8 < N {
-            o.extend_from_slice(b" failed");
-            Self::append_line(b, from, FAILED_PREFIX, &mut o, N);
-        }
-        o.push(b'\n');
-        o
     }
 
     fn result_line(&mut self, tag: &str, fp: u64, wfp: u64, t0: f64, tjinfo: &str, verdict: &str) {
@@ -2109,27 +1952,18 @@ impl Core {
         self.o.vcpus > 1 && self.o.vcpustat
     }
 
-    /// The S0 a power cut's recovery restores: the worker's, or an agent image's host S0.
-    fn take_s0(&mut self) -> Option<(Box<Snap>, Option<usize>)> {
-        if self.ctl_boot {
-            let i = self.ctl_find("S0")?;
-            let mut cs = self.snaps[i].take()?;
-            let sn = std::mem::replace(&mut cs.sn, empty_snap());
-            self.snaps[i] = Some(cs);
-            Some((Box::new(sn), Some(i)))
-        } else {
-            self.s0.take().map(|s| (s, None))
-        }
+    /// The S0 a power cut's recovery restores: the host's, lent out of its slot.
+    fn take_s0(&mut self) -> Option<(Box<Snap>, usize)> {
+        let i = self.ctl_find("S0")?;
+        let mut cs = self.snaps[i].take()?;
+        let sn = std::mem::replace(&mut cs.sn, empty_snap());
+        self.snaps[i] = Some(cs);
+        Some((Box::new(sn), i))
     }
 
-    fn put_s0(&mut self, s: Box<Snap>, slot: Option<usize>) {
-        match slot {
-            Some(i) => {
-                if let Some(cs) = self.snaps[i].as_mut() {
-                    cs.sn = *s;
-                }
-            }
-            None => self.s0 = Some(s),
+    fn put_s0(&mut self, s: Box<Snap>, i: usize) {
+        if let Some(cs) = self.snaps[i].as_mut() {
+            cs.sn = *s;
         }
     }
 
@@ -2143,9 +1977,6 @@ impl Core {
         t0: f64,
         tjinfo_in: &str,
     ) {
-        let wk: [&[u8]; 2] = [DONE_MARKER, FINAL_MARKER];
-        let fin: [&[u8]; 1] = [FINAL_MARKER];
-        let nmk = |n: usize, ab: bool| if ab { 0 } else { n };
         let verdict: String;
         let mut tjinfo = tjinfo_in.to_string();
         ccap(&mut tjinfo, 160);
@@ -2153,7 +1984,6 @@ impl Core {
         *self.c.sc = *sc;
         self.c.from = from;
         self.c.tjinfo = tjinfo_in.to_string();
-        let ab = self.ctl_boot;
         let phc0 = self.ph_calls;
         let pc0 = if self.o.phases {
             self.ph_read(&b)
@@ -2161,7 +1991,7 @@ impl Core {
             PhCtr::default()
         };
         let pht = self.pt();
-        let mut r = self.run_until_any(&mut b, &wk[..nmk(2, ab)], from);
+        let mut r = self.run_until_any(&mut b);
         self.padd(Ph::Work, pht);
         if r == -7 {
             r = 0;
@@ -2192,13 +2022,6 @@ impl Core {
                     rss_kb("RssShmem:"),
                     b.ulen() - from
                 ));
-                if self.o.dirty && !ab {
-                    if let Some(s1) = self.s1.take() {
-                        self.ph_diff("w_ram", &s1.ram, b.vm().mem());
-                        self.ph_diff("w_disk", &s1.rw, b.p2());
-                        self.s1 = Some(s1);
-                    }
-                }
                 self.ph_zskip(&b);
             }
             let pht = self.pt();
@@ -2277,8 +2100,8 @@ impl Core {
                 };
                 let _ = b.vm().io(HVX_SET_PMU, &mut pm);
             }
-            if r == 1 || r == -3 {
-                verdict = if r == -3 && !self.c.endv.is_empty() {
+            if r == -3 {
+                verdict = if !self.c.endv.is_empty() {
                     self.c.endv.clone()
                 } else {
                     Self::last_verdict(&b, from)
@@ -2286,15 +2109,12 @@ impl Core {
                 ffp = wfp;
                 break 'body End::Out;
             }
-            let orc = Self::oracle_cmd(&b, from);
             let pht = self.pt();
             self.save_console(&b, from, tag, "");
             self.padd(Ph::SaveCon, pht);
             if !sc.cut && !self.c.cut {
                 let f2 = b.ulen();
-                if self.set_fault(&b, 0, 0, 0).is_err()
-                    || (!ab && self.put_bytes(&b, b"go\n").is_err())
-                {
+                if self.set_fault(&b, 0, 0, 0).is_err() {
                     verdict = "ERROR harness go".into();
                     break 'body End::Out;
                 }
@@ -2306,7 +2126,7 @@ impl Core {
                 let pht = self.pt();
                 self.c.phase = "check";
                 self.c.start = 1;
-                let r = self.run_until_any(&mut b, &fin[..nmk(1, ab)], f2);
+                let r = self.run_until_any(&mut b);
                 self.padd(Ph::Check, pht);
                 if r < 0 && r != -3 {
                     verdict = if r == -2 {
@@ -2319,13 +2139,6 @@ impl Core {
                 if self.o.phases {
                     let pc2 = self.ph_read(&b);
                     self.ph_delta("c", &pc1, &pc2);
-                    if self.o.dirty && !ab {
-                        if let Some(s1) = self.s1.take() {
-                            self.ph_diff("c_ram", &s1.ram, b.vm().mem());
-                            self.ph_diff("c_disk", &s1.rw, b.p2());
-                            self.s1 = Some(s1);
-                        }
-                    }
                 }
                 let pht = self.pt();
                 ffp = self.fingerprint(&b);
@@ -2341,7 +2154,7 @@ impl Core {
                 break 'body End::Done;
             }
             // the power cut: only the flushed disk survives; recover in a fresh VM from S0
-            if ab && self.ctl_find("S0").is_none() {
+            if self.ctl_find("S0").is_none() {
                 verdict = "ERROR harness no snapshot S0".into();
                 break 'body End::Out;
             }
@@ -2379,7 +2192,7 @@ impl Core {
             drop(durable);
             b = ob;
             from = b.ulen();
-            if self.set_fault(&b, 0, 0, 0).is_err() || (!ab && self.put_bytes(&b, &orc).is_err()) {
+            if self.set_fault(&b, 0, 0, 0).is_err() {
                 verdict = "ERROR harness oracle cmd".into();
                 break 'body End::Out;
             }
@@ -2397,7 +2210,7 @@ impl Core {
                 // M138: the recovery VM's host-call records start at the end of S0's
                 self.c.k.pevfrom = b.pbuf.len();
             }
-            let r = self.run_until_any(&mut b, &fin[..nmk(1, ab)], from);
+            let r = self.run_until_any(&mut b);
             self.padd(Ph::Recov, pht);
             if r < 0 && r != -3 {
                 verdict = if r == -2 {
@@ -2466,16 +2279,13 @@ impl Core {
         }
     }
 
-    /// `run_sched`: arm the schedule's host part, type its guest part, then finish it.
+    /// `run_sched`: arm the schedule's host part (the guest part is the host controller's), then
+    /// finish it.
     fn run_sched(&mut self, mut b: Boot, tag: &str, sc: &Sched) {
         let from = b.ulen();
         let t0 = now();
         let mut tjinfo = String::new();
         self.budget = sc.rb;
-        if self.c.on && !self.ctl_boot {
-            self.c.k.evfrom = from;
-            self.c.k.pevfrom = b.pbuf.len();
-        }
         let fail: Option<&str> = 'setup: {
             if sc.q_on && self.o.vcpus < 2 {
                 break 'setup Some(
@@ -2567,14 +2377,6 @@ impl Core {
                 self.vcpustat(&b, None);
             }
             self.pt_arm(&b);
-            let skip = self.c.on && (sc.guest_len == 0 || self.ctl_boot);
-            if !skip {
-                let mut line = sc.guest().to_vec();
-                line.push(b'\n');
-                if self.put_bytes(&b, &line).is_err() {
-                    break 'setup Some("ERROR harness put_input");
-                }
-            }
             None
         };
         if let Some(v) = fail {
@@ -2632,7 +2434,7 @@ impl Core {
         self.c.from = 0;
         self.c.tjinfo = String::new();
         self.budget = sc.rb;
-        let r = self.run_until_any(&mut b, &[], 0);
+        let r = self.run_until_any(&mut b);
         self.budget = 0;
         (r, b)
     }
@@ -2675,141 +2477,18 @@ impl Core {
         self.c.on = false;
     }
 
-    /// `boot_to_s1`: boot to S0, snapshot, provision to S1; the VM is left at S1.
-    fn boot_to_s1(&mut self, want_s1: bool) -> Option<Boot> {
-        let mut cmd = format!("{} hydo_jit={JIT} hydo_phase=serve", self.e.cmdbase);
-        ccap(&mut cmd, 512);
-        let pt0 = now();
-        let mut b = self.boot_setup(Setup::Boot, &cmd, HVX_FAULT_DROP_UNFLUSHED, false)?;
-        let pt1 = now();
-        let ph = self.o.phases;
-        let bc0 = if ph {
-            self.ph_read(&b)
-        } else {
-            PhCtr::default()
-        };
-        let m0: [&[u8]; 3] = [S0_MARKER, FINAL_MARKER, AGENT_PREFIX];
-        let r0 = self.run_until_any(&mut b, &m0, 0);
-        if r0 == 2 {
-            diag!(self, "hvx_explore: the guest's first process is hydo-agent (an agent image, /etc/hydo/control): boot it with --control boot");
-            return None;
-        }
-        if r0 != 0 {
-            diag!(self, "hvx_explore: no S0 marker");
-            self.console_dump(&b);
-            return None;
-        }
-        let pt2 = now();
-        let bc1 = if ph {
-            self.ph_read(&b)
-        } else {
-            PhCtr::default()
-        };
-        let s0 = self.snap_take(&b)?;
-        let s0_ulen = s0.con.len();
-        self.s0 = Some(Box::new(s0));
-        let pt3 = now();
-        let f = self.fingerprint(&b);
-        diag!(
-            self,
-            "hvx_explore: S0 at {} console bytes, state {f:016x}",
-            b.ulen()
-        );
-        if self.vcpustat_on() {
-            let line = match find(&b.ubuf, b"smp: Brought up") {
-                Some(at) => {
-                    let e = b.ubuf[at..]
-                        .iter()
-                        .position(|&c| c == b'\n')
-                        .map(|n| at + n.min(159))
-                        .unwrap_or(b.ulen().min(at + 159));
-                    String::from_utf8_lossy(&b.ubuf[at..e]).into_owned()
-                }
-                None => "no \"smp: Brought up\" line in the console".into(),
-            };
-            diag!(self, "VCPUSTAT boot: {line}");
-        }
-        if self.put_bytes(&b, b"provision\n").is_err() {
-            return None;
-        }
-        let pt3b = now();
-        let m1: [&[u8]; 2] = [S1_MARKER, FINAL_MARKER];
-        if self.run_until_any(&mut b, &m1, s0_ulen) != 0 {
-            diag!(self, "hvx_explore: no S1 marker");
-            self.console_dump(&b);
-            return None;
-        }
-        let pt4 = now();
-        let bc2 = if ph {
-            self.ph_read(&b)
-        } else {
-            PhCtr::default()
-        };
-        let f = self.fingerprint(&b);
-        diag!(
-            self,
-            "hvx_explore: S1 at {} console bytes, state {f:016x}",
-            b.ulen()
-        );
-        if want_s1 {
-            let t5 = now();
-            let s1 = self.snap_take(&b)?;
-            let t6 = now();
-            if self.o.phases {
-                let keep = std::mem::take(&mut self.ph_extra);
-                self.ph_delta("s0", &bc0, &bc1);
-                self.ph_delta("s1", &bc1, &bc2);
-                let extra = std::mem::replace(&mut self.ph_extra, keep);
-                diag!(
-                    self,
-                    "PHBOOT setup={:.3} to_s0={:.3} snap_s0={:.3} fp_s0={:.3} to_s1={:.3} fp_s1={:.3} snap_s1={:.3} mem={} disk={} p2={} s1_ram_nonzero_pages={} s1_p2_nonzero_pages={} con_s0={} con_s1={} rss_kb={} rss_shmem_kb={}{extra} engine=rust",
-                    pt1 - pt0,
-                    pt2 - pt1,
-                    pt3 - pt2,
-                    pt3b - pt3,
-                    pt4 - pt3b,
-                    t5 - pt4,
-                    t6 - t5,
-                    self.e.mem_size,
-                    self.e.disk_len,
-                    self.e.p2_len,
-                    s1.ram.nonzero_blocks(),
-                    s1.rw.nonzero_blocks(),
-                    s0_ulen,
-                    b.ulen(),
-                    rss_kb("VmRSS:"),
-                    rss_kb("RssShmem:")
-                );
-            }
-            self.s1 = Some(Box::new(s1));
-        } else if self.o.phases {
-            diag!(
-                self,
-                "PHBOOT setup={:.3} to_s0={:.3} snap_s0={:.3} fp_s0={:.3} to_s1={:.3} engine=rust",
-                pt1 - pt0,
-                pt2 - pt1,
-                pt3 - pt2,
-                pt3b - pt3,
-                pt4 - pt3b
-            );
-        }
-        Some(b)
-    }
-
-    /// `fgets(in, 4096, stdin)`: a request line of at most 4095 bytes (a longer line is read as
-    /// several, as the C engine reads it).
     /// The serve loop: READY was sent; requests until QUIT or the end of the link.
     fn serve_loop(&mut self) {
         loop {
             let r = match self.port.request() {
                 Req::End => break,
-                Req::BadBranch | Req::BadRun => {
+                Req::BadRun => {
                     self.no_run("?", "ERROR bad request");
                     continue;
                 }
                 Req::Request(r) => r,
             };
-            let (ctl, tag, sc) = match r {
+            let (tag, sc) = match r {
                 Request::Quit => break,
                 Request::Resume { tag, snapshot } => {
                     if self.o.phases {
@@ -2818,16 +2497,12 @@ impl Core {
                     self.ctl_resume(&tag, &snapshot);
                     continue;
                 }
-                Request::Ctl { tag, schedule } => (true, tag, Sched::from_schedule(&schedule)),
+                Request::Ctl { tag, schedule } => (tag, Sched::from_schedule(&schedule)),
             };
-            if ctl {
-                self.ctl_begin(&tag);
-            }
-            if self.ctl_boot {
+            self.ctl_begin(&tag);
+            {
                 let cs = self.ctl_find("S1");
-                let why = if !ctl {
-                    Some("an agent image runs under control only (CTL, RESUME)")
-                } else if cs.is_none() {
+                let why = if cs.is_none() {
                     Some("no snapshot S1 (the boot took none)")
                 } else if !Self::agent_guest_ok(&sc) {
                     Some("an agent image's schedule has the guest part \"run\" only")
@@ -2857,37 +2532,7 @@ impl Core {
                 self.c.k = k;
                 self.c.start = 2;
                 self.run_sched(b, &tag, &sc);
-                continue;
             }
-            if self.o.phases {
-                self.ph_reset();
-            }
-            let pht = self.pt();
-            let s1id = self.s1.as_ref().map_or(0, |s| s.id);
-            let fresh = self.vm_for(s1id);
-            self.padd(Ph::Fresh, pht);
-            self.ph_rsplit = true;
-            let b = match fresh {
-                Some(mut b) => {
-                    let s1 = self.s1.take().expect("S1");
-                    let ok = self.snap_restore(&mut b, &s1, None).is_ok();
-                    self.s1 = Some(s1);
-                    if ok {
-                        Some(b)
-                    } else {
-                        self.teardown(&mut b);
-                        None
-                    }
-                }
-                None => None,
-            };
-            self.ph_rsplit = false;
-            let Some(b) = b else {
-                self.no_run(&tag, "ERROR harness restore");
-                self.c.on = false;
-                continue;
-            };
-            self.run_sched(b, &tag, &sc);
         }
     }
 }
@@ -3343,10 +2988,6 @@ fn turn_knobs(o: &Options, vm: &Vm, m: &mut Vec<String>) -> Result<(), ()> {
     Ok(())
 }
 
-fn b_set_tj(vb: &Boot, tj: &mut hvx_tjitter) -> bool {
-    vb.vm().io(HVX_SET_TJITTER, tj).is_ok()
-}
-
 fn empty_snap() -> Snap {
     Snap {
         s: hvx_snapshot::zeroed_box(),
@@ -3492,26 +3133,21 @@ fn vcpus_parse(v: &str, what: &str, diag: &mut dyn Write) -> Option<u32> {
     Some(n as u32)
 }
 
-/// The engine program: hvx_explore's command line (`[--ram-mib N] [--vcpus N] [--cpu v2|v3]
-/// [--control [boot]] serve|one <bzImage> <initramfs> <disk.img> <outdir> ["<schedule>"]`)
-/// with `o`'s knobs, on the given streams. Returns the exit status.
-/// How the engine runs: the program's command line (`hydo-hvx`, [`main_with`]) or hydo-engine's
-/// in-process engine ([`run`]).
+/// How the engine runs (the program's `--control boot one|serve`, [`main_with`], or hydo-engine's
+/// in-process engine, [`run`]): an agent image under lock-step control from its first
+/// instruction (M121).
 pub enum Mode {
-    /// One schedule from a fresh boot, then exit.
+    /// One schedule from a fresh boot: the host's SNAP S1 in the boot starts its workload; then
+    /// exit.
     One(Schedule),
-    /// Boot to S1 (or, with [`Start::control_boot`], under the host's control, with this boot
-    /// schedule's `rb=` as cadence; None: an empty one), then serve requests.
+    /// Boot under the host's control (this boot schedule's `rb=` as cadence; None: an empty
+    /// one) until the host ends the boot, then serve CTL/RESUME requests.
     Serve { boot: Option<Schedule> },
 }
 
 /// What [`run`] boots and how.
 pub struct Start {
     pub mode: Mode,
-    /// `--control`: `one` under lock-step control from S1 (M118).
-    pub control_one: bool,
-    /// `--control boot`: an agent image under lock-step control from its first instruction (M121).
-    pub control_boot: bool,
     pub kernel: PathBuf,
     pub initrd: PathBuf,
     pub image: PathBuf,
@@ -3524,8 +3160,11 @@ pub struct Start {
     pub cpu_v3: bool,
 }
 
-/// The program's command line, read as hvx_explore read it, then [`run`] over the text port
-/// (requests and commands on `io.input`, reports on `io.out`).
+/// The program's command line (`[--ram-mib N] [--vcpus N] [--cpu v2|v3] --control boot
+/// serve|one <bzImage> <initramfs> <disk.img> <outdir> ["<schedule>"]`, read as hvx_explore read
+/// it), then [`run`] over the text port (requests and commands on `io.input`, reports on
+/// `io.out`). The plain `one`/`serve` modes and `--control one` (the shell-init images') are
+/// refused since M145.
 pub fn main_with(args: &[String], o: Options, mut io: Io) -> i32 {
     let mut a: Vec<String> = args.to_vec();
     let (mut control_one, mut control_boot) = (false, false);
@@ -3567,7 +3206,14 @@ pub fn main_with(args: &[String], o: Options, mut io: Io) -> i32 {
         a.drain(1..3);
     }
     if a.len() < 6 {
-        let _ = writeln!(io.diag, "usage: {} [--ram-mib N] [--vcpus N] [--cpu v2|v3] [--control [boot]] serve|one <bzImage> <initramfs> <explore-disk.img> <outdir> [\"<schedule>\"]", a.first().map(String::as_str).unwrap_or("hydo-hvx"));
+        let _ = writeln!(io.diag, "usage: {} [--ram-mib N] [--vcpus N] [--cpu v2|v3] --control boot serve|one <bzImage> <initramfs> <disk.img> <outdir> [\"<schedule>\"]", a.first().map(String::as_str).unwrap_or("hydo-hvx"));
+        return 2;
+    }
+    if !control_boot || control_one {
+        let _ = writeln!(
+            io.diag,
+            "hydo-hvx: plain one/serve and --control one were the shell-init images' modes, deleted in Milestone 145; use --control boot serve|one (an agent image)"
+        );
         return 2;
     }
     // the schedule is read by hydo-schedule (M142), as every schedule the engine runs
@@ -3580,7 +3226,7 @@ pub fn main_with(args: &[String], o: Options, mut io: Io) -> i32 {
                 return 2;
             }
         },
-        "serve" if control_boot && a.get(6).is_some_and(|t| t != "|") => match parse(a.get(6)) {
+        "serve" if a.get(6).is_some_and(|t| t != "|") => match parse(a.get(6)) {
             Some(s) => Mode::Serve { boot: Some(s) },
             None => {
                 let _ = writeln!(io.diag, "hvx_explore: bad boot schedule");
@@ -3595,8 +3241,6 @@ pub fn main_with(args: &[String], o: Options, mut io: Io) -> i32 {
     };
     let start = Start {
         mode,
-        control_one,
-        control_boot,
         kernel: PathBuf::from(&a[2]),
         initrd: PathBuf::from(&a[3]),
         image: PathBuf::from(&a[4]),
@@ -3640,7 +3284,6 @@ pub fn run(
     if start.cpu_v3 {
         o.cpu_v3 = true;
     }
-    let (ctl_one, ctl_boot) = (start.control_one, start.control_boot);
     if o.cpu_v3 {
         let _ = writeln!(diag, "hvx_explore: guest CPU x86-64-v3 (AVX/AVX2)");
     }
@@ -3739,10 +3382,7 @@ pub fn run(
         budget: 0,
         c: Ctl::zero(),
         snaps: (0..ctl::MAX_SNAPS).map(|_| None).collect(),
-        s0: None,
-        s1: None,
-        ctl_one,
-        ctl_boot,
+        ctl_one: false,
         q_old_quantum: 0,
         q_old_seed: 0,
         q_turns0: 0,
@@ -3763,7 +3403,6 @@ pub fn run(
         ph_t0: 0.0,
         ph_calls: 0,
         ph_extra: String::new(),
-        ph_rsplit: false,
         pt,
         sim_dropped: false,
         spare: Vec::new(),
@@ -3773,79 +3412,35 @@ pub fn run(
     };
     if let Mode::One(schedule) = &start.mode {
         let sc = Sched::from_schedule(schedule);
-        if core.ctl_boot {
-            if !Core::agent_guest_ok(&sc) {
-                diag!(
-                    core,
-                    "hvx_explore: an agent image's schedule has the guest part \"run\" only"
-                );
-                return 2;
-            }
-            core.ctl_one = true;
-            let (r, mut b) = core.agent_boot(&sc, "one");
-            if r != -4 {
-                core.agent_boot_result(&mut b, "one", r, t_start);
-                core.teardown(&mut b);
-                return 0;
-            }
-            core.c.boot_s1 = false;
-            core.c.phase = "workload";
-            if core.o.phases {
-                core.ph_reset();
-            }
-            core.run_sched(b, "one", &sc);
+        if !Core::agent_guest_ok(&sc) {
+            diag!(
+                core,
+                "hvx_explore: an agent image's schedule has the guest part \"run\" only"
+            );
+            return 2;
+        }
+        core.ctl_one = true;
+        let (r, mut b) = core.agent_boot(&sc, "one");
+        if r != -4 {
+            core.agent_boot_result(&mut b, "one", r, t_start);
+            core.teardown(&mut b);
             return 0;
         }
-        let Some(b) = core.boot_to_s1(false) else {
-            return 1;
-        };
-        if core.o.bootcon {
-            core.save_console(&b, 0, "boot", "");
-        }
-        diag!(
-            core,
-            "hvx_explore: provisioned in {:.1} s (fresh boot, no snapshot restore)",
-            now() - t_start
-        );
+        core.c.boot_s1 = false;
+        core.c.phase = "workload";
         if core.o.phases {
             core.ph_reset();
-        }
-        if core.ctl_one {
-            core.ctl_begin("one");
         }
         core.run_sched(b, "one", &sc);
         return 0;
     }
-    if core.ctl_one {
-        diag!(
-            core,
-            "hvx_explore: --control is for `one`; serve takes CTL requests"
-        );
-        return 2;
-    }
-    if core.ctl_boot {
-        let bsc = match &start.mode {
-            Mode::Serve { boot: Some(s) } => Sched::from_schedule(s),
-            _ => Sched::empty(),
-        };
-        let (r, mut b) = core.agent_boot(&bsc, "boot");
-        core.agent_boot_result(&mut b, "boot", r, t_start);
-        core.teardown(&mut b);
-    } else {
-        let Some(mut b) = core.boot_to_s1(true) else {
-            return 1;
-        };
-        let pht = now();
-        core.teardown(&mut b);
-        if core.o.phases {
-            diag!(
-                core,
-                "PHBOOT teardown={:.3} total={:.3}",
-                now() - pht,
-                now() - t_start
-            );
-        }
-    }
+    let bsc = match &start.mode {
+        Mode::Serve { boot: Some(s) } => Sched::from_schedule(s),
+        _ => Sched::empty(),
+    };
+    let (r, mut b) = core.agent_boot(&bsc, "boot");
+    core.agent_boot_result(&mut b, "boot", r, t_start);
+    core.teardown(&mut b);
     core.emit(EngineMsg::Ready(Ready::new(now() - t_start)));
     core.prep_on = core.o.prepare;
     core.reuse_on = core.o.reuse
