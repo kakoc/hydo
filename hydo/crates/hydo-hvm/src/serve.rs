@@ -1,9 +1,14 @@
-//! hv/hvm/explore/serve.c (`hvmx`) in Rust: the explorer's run engine on the Mac. It boots a
-//! manifest-built arm64 image to its snapshot points S0 ("root mounted") and S1 ("provisioned"),
-//! or, for an agent image, under lock-step control from its first instruction; serves `RUN`,
-//! `CTL`, `RESUME` and `QUIT`; runs `one` schedule from a fresh boot; and speaks hvx's lock-step
-//! protocol (M119, M121, M126, M130). The C file's header has the whole protocol; every function
-//! here keeps its C name, and every output line its C text.
+//! hv/hvm/explore/serve.c (`hvmx`) in Rust: the explorer's run engine on the Mac. It boots an
+//! agent image (every image `hydo build` makes since M136) under lock-step control from its first
+//! instruction, the host taking the snapshots S0 and S1 where it decides; serves `CTL`, `RESUME`
+//! and `QUIT`; runs `one` schedule from a fresh boot under the same control; and speaks hvx's
+//! lock-step protocol (M119, M121, M126, M130). The C file's header has the whole protocol; every
+//! function here keeps its C name, and every output line its C text.
+//!
+//! The shell-init images' paths (a plain boot to the init's S0/S1 markers, `RUN` with the guest
+//! part typed on the console and the init's markers, `--control one` from such an image's S1, and
+//! the engine's own SPIN re-run of a RUN) were deleted in Milestone 145; the C `hvmx` still has
+//! them for one more milestone.
 //!
 //! Since M142's typed calls the engine core takes typed values: requests and commands at a stop
 //! come through a [`Port`] (`hydo_hvx::port`: hydo-engine's [`ChanPort`](hydo_hvx::port::ChanPort)
@@ -23,20 +28,11 @@ use hydo_engine_proto::{
     Answer, DiskOff, EngineMsg, Event, HostCmd, Phase, Ready, Request, RunResult, SendAnswer, Sent,
     Stop, StopWhy,
 };
-use hydo_hvx::cstr::{self, find};
+use hydo_hvx::cstr;
 use hydo_hvx::port::{Cmd, Port, Req};
 use hydo_schedule::{Disk, HostToken, Schedule};
-use std::io::{BufRead, Read, Write};
+use std::io::{BufRead, Write};
 use std::sync::{Arc, Mutex};
-
-const S0_MARKER: &[u8] = b"hydo-explore-ready-S0";
-const S1_MARKER: &[u8] = b"hydo-explore-ready-S1";
-const DONE_MARKER: &[u8] = b"hydo-explore-workload-done";
-const FINAL_MARKER: &[u8] = b"hydo-stack-marker: workload complete";
-const ACKED_PREFIX: &[u8] = b"hydo-explore-acked:";
-const FAILED_PREFIX: &[u8] = b"hydo-explore-failed:";
-/// hydo-agent's framed lines: an agent image booted without --control boot
-const AGENT_PREFIX: &[u8] = b"HYDO-AG ";
 
 const CTL_MAX_SENDS: usize = 1024;
 const CTL_MAX_SNAPS: usize = 8;
@@ -59,13 +55,10 @@ pub struct Io {
     pub echo: Option<Box<dyn Write + Send>>,
 }
 
-/// What [`run`] boots and how (hvmx's command line as values).
+/// What [`run`] boots and how (hvmx's command line as values): an agent image under lock-step
+/// control from its first instruction (`--control boot`, M121).
 pub struct Start {
     pub mode: Mode,
-    /// `--control`: `one` under lock-step control from S1 (M119).
-    pub control_one: bool,
-    /// `--control boot`: an agent image under lock-step control from its first instruction (M121).
-    pub control_boot: bool,
     pub kernel: std::path::PathBuf,
     pub initrd: std::path::PathBuf,
     pub outdir: std::path::PathBuf,
@@ -74,10 +67,11 @@ pub struct Start {
 }
 
 pub enum Mode {
-    /// One schedule from a fresh boot, then exit.
+    /// One schedule from a fresh boot (the host's `SNAP S1` in the boot starts its workload),
+    /// then exit.
     One(Schedule),
-    /// Boot to S1 (or, with [`Start::control_boot`], under the host's control with this boot
-    /// schedule's `rb=` as the cadence), then serve requests.
+    /// Boot under the host's control with this boot schedule's `rb=` as the cadence (None: an
+    /// empty one), then serve requests.
     Serve { boot: Option<Schedule> },
 }
 
@@ -192,28 +186,12 @@ impl Default for Ctl {
     }
 }
 
-/// The stop at the first exit after any of several markers.
-#[derive(Default)]
-struct Hk {
-    m: Vec<&'static [u8]>,
-    hit: i32,
-    from: usize,
-    scan: usize,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum S0Ref {
-    Main,
-    Slot(usize),
-}
-
 /// Settings read once from the environment.
 #[derive(Clone, Debug)]
 pub struct Opts {
     pub vm: VmOpts,
     pub ram_mib: u64,
     pub run_exits: u64,
-    pub spin_auto: bool,
     pub snap_dir: String,
     pub diag: bool,
     pub diag_chunks: Option<String>,
@@ -228,16 +206,11 @@ struct Host {
     outdir: String,
     o: Opts,
     c: Ctl,
-    hk: Hk,
     snaps: Vec<CtlSnap>,
     g_ctl_one: bool,
-    g_agent: bool,
-    s0: XSnap,
-    s1: XSnap,
-    g_s0: S0Ref,
+    /// the host's S0 snapshot slot (the recovery VM's start after a CUT)
+    g_s0: Option<usize>,
     spin_hit: bool,
-    initrd_has_tc: bool,
-    g_boot_rs: RunSt,
 }
 
 /// The engine: one VM and the explorer's state around it.
@@ -253,9 +226,6 @@ fn ccap(mut b: Vec<u8>, cap: usize) -> Vec<u8> {
 }
 fn lossy(b: &[u8]) -> String {
     String::from_utf8_lossy(b).into_owned()
-}
-fn has(hay: &[u8], n: &[u8]) -> bool {
-    find(hay, n).is_some()
 }
 
 impl Host {
@@ -275,24 +245,6 @@ impl Host {
         if let Some(r) = RunResult::new(tag, "0", "0", "0", "", v) {
             self.emit(EngineMsg::Result(Box::new(r)));
         }
-    }
-
-    /// `marker_hook`: one of the markers appeared since `from`.
-    fn marker_hook(&mut self, vm: &Vmm) -> bool {
-        let len = vm.m.console_len as usize;
-        for (i, m) in self.hk.m.iter().enumerate() {
-            let ml = m.len();
-            let mut st = self.hk.scan.saturating_sub(ml);
-            if st < self.hk.from {
-                st = self.hk.from;
-            }
-            if len >= st + ml && has(&vm.console[st..len], m) {
-                self.hk.hit = i as i32;
-                return true;
-            }
-        }
-        self.hk.scan = len;
-        false
     }
 
     fn snap_find(&self, name: &str) -> Option<usize> {
@@ -479,7 +431,7 @@ impl Host {
             at,
             retype: typed,
         });
-        if self.g_agent && self.g_ctl_one && self.c.phase == Phase::Boot && name == "S1" {
+        if self.g_ctl_one && self.c.phase == Phase::Boot && name == "S1" {
             self.c.boot_s1 = true; // M121: the workload starts here once the host says CONT
         }
     }
@@ -584,9 +536,7 @@ impl Host {
                 HostCmd::Snap { name, retype } => self.ctl_snap_cmd(vm, &name, retype),
                 HostCmd::DiskOff | HostCmd::Cut => {
                     let cut = matches!(cmd, HostCmd::Cut);
-                    let no = if !self.g_agent {
-                        Some("only for an agent image (--control boot)")
-                    } else if self.c.phase != Phase::Workload {
+                    let no = if self.c.phase != Phase::Workload {
                         Some("only in the workload phase")
                     } else if self.c.wdone != 0 {
                         Some("after DISKOFF/CUT")
@@ -619,11 +569,8 @@ impl Host {
             return false; // a kick or an observer exit: not a new exit
         }
         self.c.last_x = x;
-        let hit = self.marker_hook(vm);
         self.c.at = x;
-        let why = if hit {
-            Some(StopWhy::Marker)
-        } else if self.ctl_due() {
+        let why = if self.ctl_due() {
             Some(StopWhy::Send)
         } else if x.wrapping_sub(self.c.k.cad0).is_multiple_of(self.c.rb) {
             Some(StopWhy::Cadence)
@@ -645,7 +592,7 @@ impl Host {
             self.c.ended = 3;
             return true;
         }
-        hit
+        false
     }
 }
 
@@ -684,28 +631,6 @@ fn stop_name(s: i32) -> &'static str {
 
 fn tj_wanted(t: &Tjit) -> bool {
     t.n_explicit != 0 || (t.permille != 0 && t.max_delay != 0)
-}
-
-/// Does the (gzip'd cpio) initramfs carry a tc? Its compiled manifest says HYDO_TC='<path>' or HYDO_TC=''.
-pub fn scan_has_tc(gz: &[u8]) -> bool {
-    const KEY: &[u8] = b"\nHYDO_TC='/";
-    const NONE: &[u8] = b"\nHYDO_TC=''";
-    let mut z = flate2::read::GzDecoder::new(gz);
-    let mut buf = vec![0u8; 1 << 16];
-    let mut win: Vec<u8> = Vec::with_capacity(buf.len() + 16);
-    loop {
-        let n = z.read(&mut buf).unwrap_or_default();
-        win.extend_from_slice(&buf[..n]);
-        if has(&win, KEY) {
-            return true;
-        }
-        if has(&win, NONE) || n == 0 {
-            return false;
-        }
-        let keep = win.len().min(15);
-        let cut = win.len() - keep;
-        win.drain(..cut);
-    }
 }
 
 /// The host tokens hvx alone applies (the PMU clock, vCPU turns, the k-th-flush cut; `rb=` outside
@@ -792,35 +717,6 @@ fn tick_jitter(s: &Schedule) -> Tjit {
         t = Tjit::default();
     }
     t
-}
-
-fn append_line(vm: &Vmm, from: usize, prefix: &[u8], out: &mut Vec<u8>, n: usize) {
-    let len = vm.m.console_len as usize;
-    if len <= from {
-        return;
-    }
-    let c = &vm.console[from..len];
-    if let Some(at) = find(c, prefix) {
-        for &b in &c[at + prefix.len()..] {
-            if b == b'\n' || b == b'\r' || out.len() + 2 >= n {
-                break;
-            }
-            out.push(b);
-        }
-    }
-}
-/// the recovery boot's command, as hvx's: "oracle <acked> [failed <ids>]\n" (3584 bytes at most)
-fn oracle_cmd(vm: &Vmm, from: usize) -> Vec<u8> {
-    const N: usize = 3584;
-    let mut out = b"oracle".to_vec();
-    append_line(vm, from, ACKED_PREFIX, &mut out, N);
-    let len = vm.m.console_len as usize;
-    if len > from && has(&vm.console[from..len], FAILED_PREFIX) && out.len() + 8 < N {
-        out.extend_from_slice(b" failed");
-        append_line(vm, from, FAILED_PREFIX, &mut out, N);
-    }
-    out.push(b'\n');
-    out
 }
 
 /// `xsnap_take`
@@ -972,37 +868,11 @@ impl Engine {
         }
     }
 
-    /// returns the index of the marker reached, or -1 (and the stop reason in `why`)
-    fn run_to(&mut self, m: &[&'static [u8]], from: usize, why: &mut i32) -> i32 {
-        if self.h.c.on {
-            return self.ctl_run_to(m, from, why);
-        }
-        self.h.hk = Hk {
-            m: m.to_vec(),
-            hit: -1,
-            from,
-            scan: from,
-        };
-        self.vm.max_exits = self.vm.m.exits + self.h.o.run_exits;
-        let h = &mut self.h;
-        let s = self.vm.run_until(None, &mut |vm| h.marker_hook(vm));
-        *why = s;
-        if s == STOP_MARKER {
-            self.h.hk.hit
-        } else {
-            -1
-        }
-    }
-
-    /// run_to under lock-step: the phase's start (or resume) stop, then stops at markers, due
-    /// sends and the cadence; -3 when the host ended the run (END)
-    fn ctl_run_to(&mut self, m: &[&'static [u8]], from: usize, why: &mut i32) -> i32 {
-        self.h.hk = Hk {
-            m: m.to_vec(),
-            hit: -1,
-            from,
-            scan: from,
-        };
+    /// run one phase under lock-step: the phase's start (or resume) stop, then stops at due sends
+    /// and the cadence; -3 when the host ended the run (END), -4 (--control boot one) at the stop
+    /// where the host took S1 and said CONT, -7 at the host's DISKOFF/CUT, -1 when the guest
+    /// stopped (the reason in `why`)
+    fn run_to(&mut self, why: &mut i32) -> i32 {
         if self.h.c.start != 0 {
             let w = if self.h.c.start == 2 {
                 StopWhy::Resume
@@ -1027,12 +897,6 @@ impl Engine {
                 return -7;
             }
         }
-        let len = self.vm.m.console_len as usize;
-        for (i, mk) in m.iter().enumerate() {
-            if len > from && has(&self.vm.console[from..len], mk) {
-                return i as i32;
-            }
-        }
         self.h.c.last_x = self.vm.m.exits;
         self.h.c.ended = 0;
         self.vm.max_exits = self.vm.m.exits + self.h.o.run_exits;
@@ -1043,9 +907,6 @@ impl Engine {
             3 => return -7,
             0 => {}
             _ => return -3,
-        }
-        if s == STOP_MARKER {
-            return self.h.hk.hit;
         }
         self.h.c.at = self.vm.m.exits;
         if self.h.ctl_stop(&mut self.vm, StopWhy::Exit) {
@@ -1065,20 +926,15 @@ impl Engine {
         (t, rb, rw)
     }
 
-    /// CTL <tag> <schedule> (after the S1 restore) and `--control one`; an agent image's CTL
-    /// restores the host's S1 (`cs`) here and continues its book.
-    fn ctl_request(&mut self, tag: &str, sched: &Schedule, cs: Option<usize>) {
+    /// CTL <tag> <schedule>: restore the host's S1 (snapshot slot `cs`) and continue its book.
+    fn ctl_request(&mut self, tag: &str, sched: &Schedule, cs: usize) {
         let base = self.vm.sp.rw_on;
         let (s, rb, rw) = self.ctl_sched(sched);
-        if let Some(i) = cs {
-            let check = self.h.o.check_restore;
-            xsnap_restore(&mut self.vm, &self.h.snaps[i].x, check);
-        }
+        let check = self.h.o.check_restore;
+        xsnap_restore(&mut self.vm, &self.h.snaps[cs].x, check);
         self.h.ctl_begin(tag);
-        if let Some(i) = cs {
-            self.h.c.k = self.h.snaps[i].k.clone();
-            self.h.c.start = 2; // the first stop is S1's own again
-        }
+        self.h.c.k = self.h.snaps[cs].k.clone();
+        self.h.c.start = 2; // the first stop is S1's own again
         if rb != 0 {
             self.h.c.rb = rb;
         }
@@ -1099,13 +955,12 @@ impl Engine {
         if rb != 0 {
             self.h.c.rb = rb;
         }
-        self.h.g_boot_rs = RunSt {
+        self.h.c.rs = RunSt {
             tag: tag.to_string(),
             t0: now_s(),
             ..RunSt::default()
         };
-        self.h.c.rs = self.h.g_boot_rs.clone();
-        self.run_to(&[], 0, why)
+        self.run_to(why)
     }
     fn agent_boot_result(&mut self, tag: &str, r: i32, why: i32, t0: f64) {
         let mut wfp = 0;
@@ -1164,24 +1019,17 @@ impl Engine {
         }
     }
 
+    /// (the guest part of an agent image's schedule is empty: the guest's faults are the host
+    /// controller's; serve_loop and engine_main refuse any other)
     fn unsupported(&self, s: &Schedule) -> Option<&'static str> {
         let att = self.vm.vio.attached();
         if !att && s.host_token("disk").is_some() && s.disk() != Disk::None {
             return Some("disk faults and power cuts need the data disk (HVM_DISK)");
         }
-        if !att && s.guest_tokens('C').next().is_some() {
-            return Some("power cuts need the data disk (HVM_DISK)");
-        }
-        let net = s.guest_tokens('N').next().is_some() || s.guest_tokens('O').next().is_some();
-        if !self.h.initrd_has_tc && net {
-            return Some("network faults need tc on the arm64 root");
-        }
         None
     }
 
-    /// One schedule: arm the host part, type the guest part, run it (`run_once`). The guest part
-    /// typed is the schedule's guest text after the one space hydo-schedule requires after `|`,
-    /// as the C engine typed the text after `|`.
+    /// One schedule: arm the host part and run it (`run_once`); the host types everything.
     fn run_once(&mut self, tag: &str, s: &Schedule, rewound: bool) {
         let t0 = now_s();
         if let Some(hw) = host_token_problem(s) {
@@ -1201,18 +1049,13 @@ impl Engine {
             0
         };
         let pct_k = num(s, "pctk").unwrap_or(20000);
-        let cut = s.guest_tokens('C').next().is_some();
         let from = self.vm.m.console_len as usize;
-        if self.h.c.on && !self.h.g_agent {
-            self.h.c.k.evfrom = from; // lock-step: EVENTs start with the workload's console
-        }
         self.vm.trace_line(&format!("RUN {tag}"));
         self.vm.vio.set_fault(dseed, dcl, dpr);
         let mut rs = RunSt {
             tag: lossy(&ccap(tag.as_bytes().to_vec(), 64)),
             t0,
             from,
-            cut,
             rewound,
             pct_n,
             ..RunSt::default()
@@ -1228,23 +1071,11 @@ impl Engine {
             let x = self.vm.m.exits;
             self.vm.pct = Pct::set(pct_seed, pct_n, x, x.wrapping_add(pct_k));
         }
-        // the guest part is never empty (hydo-schedule: it starts with "run"); an agent image's
-        // controlled run types nothing (the host does)
-        let line = ccap(format!(" {}\n", s.guest_text()).into_bytes(), 1100);
-        if !(self.h.c.on && self.h.g_agent) {
-            self.vm.put_input(&line);
-        }
         self.run_rest(rs);
     }
 
-    /// the rest of a run, from the workload's start: a RUN goes on here, a RESUME starts here
+    /// the rest of a run, from the workload's start: a CTL goes on here, a RESUME starts here
     fn run_rest(&mut self, rs: RunSt) {
-        let wk: &[&'static [u8]] = if self.h.g_agent {
-            &[]
-        } else {
-            &[DONE_MARKER, FINAL_MARKER]
-        };
-        let fin: &[&'static [u8]] = if self.h.g_agent { &[] } else { &[FINAL_MARKER] };
         let tag = rs.tag.clone();
         let mut tjinfo = rs.tjinfo.clone();
         let t0 = rs.t0;
@@ -1256,7 +1087,7 @@ impl Engine {
         let mut why = 0;
         let mut from = rs.from;
         self.h.c.rs = rs; // lock-step: what a SNAP in this run carries
-        let mut r = self.run_to(wk, from, &mut why);
+        let mut r = self.run_to(&mut why);
         if r == -7 {
             r = 0;
             cut |= self.h.c.cut; // M126: the host's DISKOFF/CUT is its workload marker
@@ -1294,7 +1125,7 @@ impl Engine {
             }
             wfp = self.vm.xfp();
             self.diag(&tag, "w");
-            if r == 1 || r == -3 {
+            if r == -3 {
                 verdict = self.h.ctl_verdict(&self.vm, r, from);
                 ffp = wfp;
                 break 'out;
@@ -1302,14 +1133,11 @@ impl Engine {
             if !cut {
                 // same boot: faults off, heal, check
                 self.vm.vio.set_fault(0, 0, 0);
-                if !self.h.g_agent {
-                    self.vm.put_input(b"go\n");
-                }
                 if self.h.c.on {
                     self.h.c.phase = Phase::Check;
                     self.h.c.start = 1;
                 }
-                r = self.run_to(fin, from, &mut why);
+                r = self.run_to(&mut why);
                 if r < 0 && r != -3 {
                     self.h.spin_hit |= why == STOP_SPIN;
                     verdict = format!("ERROR check: {}", stop_name(why));
@@ -1320,23 +1148,19 @@ impl Engine {
                 verdict = self.h.ctl_verdict(&self.vm, r, from);
                 break 'out;
             }
-            // power cut: only the flushed disk bytes survive; recover from S0
-            let orc = oracle_cmd(&self.vm, from);
+            // power cut: only the flushed disk bytes survive; recover from the host's S0
             let durable = self.vm.vio.disk.clone();
             self.save_log(&tag, from);
             let check = self.h.o.check_restore;
-            match self.h.g_s0 {
-                S0Ref::Main => xsnap_restore(&mut self.vm, &self.h.s0, check),
-                S0Ref::Slot(i) => xsnap_restore(&mut self.vm, &self.h.snaps[i].x, check),
-            }
+            let Some(s0) = self.h.g_s0 else {
+                fatal(3, "hvmx: a power cut without the host's S0 snapshot");
+            };
+            xsnap_restore(&mut self.vm, &self.h.snaps[s0].x, check);
             if let (Some(d), Some(du)) = (&mut self.vm.vio.disk, durable) {
                 d.copy_from_slice(&du);
             }
             self.vm.vio.set_fault(0, 0, 0);
             from = self.vm.m.console_len as usize;
-            if !self.h.g_agent {
-                self.vm.put_input(&orc);
-            }
             if self.h.c.on {
                 // a new VM with its own clock: queued input does not carry over
                 self.h.ctl_drop_pending();
@@ -1344,7 +1168,7 @@ impl Engine {
                 self.h.c.start = 1;
                 self.h.c.k.evfrom = from;
             }
-            r = self.run_to(fin, from, &mut why);
+            r = self.run_to(&mut why);
             if r < 0 && r != -3 {
                 self.h.spin_hit |= why == STOP_SPIN;
                 verdict = format!("ERROR recovery: {}", stop_name(why));
@@ -1356,9 +1180,6 @@ impl Engine {
             log_tag = format!("{tag}.recovery");
         }
         self.save_log(&log_tag, from);
-        if self.h.spin_hit && !rewound && self.h.o.spin_auto && !self.h.c.on {
-            return; // not reported: run_sched re-runs it with rewind
-        }
         if rewound {
             self.h
                 .say(&format!("hvmx: {tag}: reported from a rewind-mode run"));
@@ -1384,124 +1205,34 @@ impl Engine {
         }
     }
 
-    /// one schedule from the restored S1 (serve) or from the provisioned boot (one)
-    fn run_sched(&mut self, tag: &str, sched: &Schedule, have_s1: bool) {
-        let forced = sched.host_token("spin").is_some();
-        let base = self.vm.sp.rw_on;
-        self.h.spin_hit = false;
-        if forced && !self.vm.sp.rw_on {
-            self.vm.sp.rw_on = true;
-        }
-        let rw = self.vm.sp.rw_on;
-        self.run_once(tag, sched, rw);
-        if self.h.spin_hit && !self.vm.sp.rw_on && self.h.o.spin_auto {
-            self.h.say(&format!(
-                "hvmx: {tag} ended as SPIN; running it again with rewind (counter loops)"
-            ));
-            if !have_s1 || self.h.s1.ram.is_none() {
-                fatal(3, "hvmx: no S1 snapshot to re-run from");
-            }
-            let check = self.h.o.check_restore;
-            xsnap_restore(&mut self.vm, &self.h.s1, check);
-            self.vm.sp.rw_on = true;
-            self.h.spin_hit = false;
-            self.run_once(tag, sched, true);
-        }
-        self.vm.sp.rw_on = base;
-    }
-
-    fn boot_to_s1(&mut self, take_s1: bool) -> Result<(), ()> {
-        let mut why = 0;
-        let r0 = self.run_to(&[S0_MARKER, FINAL_MARKER, AGENT_PREFIX], 0, &mut why);
-        if r0 == 2 {
-            self.h.say("hvmx: the guest's first process is hydo-agent (an agent image, /etc/hydo/control): boot it with --control boot");
-            return Err(());
-        }
-        if r0 != 0 {
-            self.h
-                .say(&format!("hvmx: no S0 marker ({})", stop_name(why)));
-            let n = self.vm.m.console_len as usize;
-            self.h.say(&lossy(&self.vm.console[..n]));
-            return Err(());
-        }
-        let dir = self.h.o.snap_dir.clone();
-        xsnap_take(&self.vm, &mut self.h.s0, "s0", &dir);
-        self.h.say(&format!(
-            "hvmx: S0 at {} console bytes, exit {}, state {:016x}",
-            self.vm.m.console_len,
-            self.vm.m.exits,
-            self.vm.xfp()
-        ));
-        let f = self.vm.m.console_len as usize;
-        self.vm.put_input(b"provision\n");
-        if self.run_to(&[S1_MARKER, FINAL_MARKER], f, &mut why) != 0 {
-            self.h
-                .say(&format!("hvmx: no S1 marker ({})", stop_name(why)));
-            let n = self.vm.m.console_len as usize;
-            self.h.say(&lossy(&self.vm.console[f..n]));
-            return Err(());
-        }
-        self.h.say(&format!(
-            "hvmx: S1 at {} console bytes, exit {}, state {:016x}",
-            self.vm.m.console_len,
-            self.vm.m.exits,
-            self.vm.xfp()
-        ));
-        if take_s1 {
-            xsnap_take(&self.vm, &mut self.h.s1, "s1", &dir);
-        }
-        Ok(())
-    }
-
-    /// The serve loop (RUN, CTL, RESUME, BRANCH, QUIT); an agent image runs under control only.
-    fn serve_loop(&mut self, agent: bool) {
+    /// The serve loop (CTL, RESUME, QUIT); any other request line is a bad request.
+    fn serve_loop(&mut self) {
         loop {
-            let (ctl, tag, sched) = match self.h.port.request() {
-                Req::End => return,
-                Req::BadRun => {
-                    self.h.result_err("?", "ERROR bad request");
-                    continue;
-                }
-                Req::BadBranch | Req::Request(Request::Branch(_)) => {
-                    self.h.emit(EngineMsg::BranchEnd {
-                        tag: "?".into(),
-                        note: "unsupported on hvm".into(),
-                    });
-                    continue;
-                }
-                Req::Request(Request::Quit) => return,
+            let (tag, sched) = match self.h.port.request() {
+                Req::End | Req::Request(Request::Quit) => return,
                 Req::Request(Request::Resume { tag, snapshot }) => {
                     self.ctl_resume(&tag, &snapshot);
                     continue;
                 }
-                Req::Request(Request::Run { tag, schedule }) => (false, tag, schedule),
-                Req::Request(Request::Ctl { tag, schedule }) => (true, tag, schedule),
-            };
-            if agent {
-                let cs = self.h.snap_find("S1");
-                let no = if !ctl {
-                    Some("an agent image runs under control only (CTL, RESUME)")
-                } else if cs.is_none() {
-                    Some("no snapshot S1 (the boot took none)")
-                } else if !sched.guest.is_empty() {
-                    Some("an agent image's schedule has the guest part \"run\" only")
-                } else {
-                    None
-                };
-                if let Some(no) = no {
-                    self.h.result_err(&tag, &format!("ERROR {no}"));
+                Req::Request(Request::Ctl { tag, schedule }) => (tag, schedule),
+                Req::BadRun => {
+                    self.h.result_err("?", "ERROR bad request");
                     continue;
                 }
-                self.ctl_request(&tag, &sched, cs);
+            };
+            let Some(cs) = self.h.snap_find("S1") else {
+                self.h
+                    .result_err(&tag, "ERROR no snapshot S1 (the boot took none)");
+                continue;
+            };
+            if !sched.guest.is_empty() {
+                self.h.result_err(
+                    &tag,
+                    "ERROR an agent image's schedule has the guest part \"run\" only",
+                );
                 continue;
             }
-            let check = self.h.o.check_restore;
-            xsnap_restore(&mut self.vm, &self.h.s1, check);
-            if ctl {
-                self.ctl_request(&tag, &sched, None);
-            } else {
-                self.run_sched(&tag, &sched, true);
-            }
+            self.ctl_request(&tag, &sched, cs);
         }
     }
 }
@@ -1591,30 +1322,28 @@ pub fn main_with(args: &[String], o: &HvmOptions, io: Io) -> i32 {
         }
         a.drain(1..3);
     }
-    let (mut control_one, mut control_boot) = (false, false);
-    if a.len() > 2 && a[1] == "--control" && a[2] == "boot" {
-        control_boot = true;
+    let control_boot = a.len() > 2 && a[1] == "--control" && a[2] == "boot";
+    if control_boot {
         a.drain(1..3);
-    } else if a.len() > 1 && a[1] == "--control" {
-        control_one = true;
-        a.remove(1);
+    } else if a.len() > 1 && matches!(a[1].as_str(), "serve" | "one" | "--control") {
+        say(&diag, "hvmx: serve and one without --control boot, and --control one, were the shell-init images' modes and were removed in Milestone 145: every image is an agent image (rebuild an older one with hydo build)");
+        return 2;
     }
     let argc = a.len();
-    let usage = argc < 5
+    let usage = !control_boot
+        || argc < 5
         || (a[1] != "serve" && a[1] != "one")
-        || (a[1] == "one" && argc < 6)
-        || (control_one && a[1] != "one");
+        || (a[1] == "one" && argc < 6);
     if usage {
-        say(&diag, "usage: hvmx [--ram-mib N] serve <Image> <initramfs> <outdir>\n       hvmx [--ram-mib N] [--control] one <Image> <initramfs> <outdir> \"<schedule>\"\n       hvmx [--ram-mib N] --control boot serve|one <Image> <initramfs> <outdir> [\"<schedule>\"]");
+        say(&diag, "usage: hvmx [--ram-mib N] --control boot serve|one <Image> <initramfs> <outdir> [\"<schedule>\"]");
         return 2;
     }
     // every schedule is read by hydo-schedule (M142, M143), as on hvx
     let sched = match a.get(5).map(String::as_str) {
-        None | Some("|") if control_boot => Some(Schedule {
+        None | Some("|") => Some(Schedule {
             host: Vec::new(),
             guest: Vec::new(),
         }),
-        None => None,
         Some(t) => match Schedule::parse(t) {
             Ok(s) => Some(s),
             Err(e) => {
@@ -1630,8 +1359,6 @@ pub fn main_with(args: &[String], o: &HvmOptions, io: Io) -> i32 {
     };
     let start = Start {
         mode,
-        control_one,
-        control_boot,
         kernel: a[2].clone().into(),
         initrd: a[3].clone().into(),
         outdir: a[4].clone().into(),
@@ -1693,13 +1420,11 @@ fn engine_main(
     if let Some(n) = start.ram_mib {
         ram_mib = n;
     }
-    let agent = start.control_boot;
     let read = |p: &std::path::Path| {
         std::fs::read(p).unwrap_or_else(|e| fatal(1, &format!("{}: {e}", p.display())))
     };
     let kernel = read(&start.kernel);
     let initrd = read(&start.initrd);
-    let initrd_has_tc = scan_has_tc(&initrd);
     let outdir = start.outdir.display().to_string();
     let _ = std::fs::create_dir(&outdir);
     let mut vo = opts_from(o, true);
@@ -1707,7 +1432,6 @@ fn engine_main(
     if ram_mib != 1024 {
         say(&diag, &format!("hvmx: guest RAM {ram_mib} MiB"));
     }
-    let spin_rewind = o.spin_rewind.clone();
     if vo.rw_on && !vo.spin_observe {
         say(
             &diag,
@@ -1715,15 +1439,7 @@ fn engine_main(
         );
         return 2;
     }
-    vo.bootargs = format!(
-        "{} {}",
-        vo.bootargs,
-        if agent {
-            "quiet loglevel=1"
-        } else {
-            "hydo_phase=serve"
-        }
-    );
+    vo.bootargs = format!("{} quiet loglevel=1", vo.bootargs);
     let o = Opts {
         vm: vo.clone(),
         ram_mib,
@@ -1732,7 +1448,6 @@ fn engine_main(
             .clone()
             .map(|v| cstr::strtoull0(v.as_bytes()))
             .unwrap_or(50_000_000),
-        spin_auto: spin_rewind.is_none() || spin_rewind.as_deref() == Some("auto"),
         snap_dir: o.snap_dir.clone().unwrap_or_else(|| "/tmp/hvm-snap".into()),
         diag: o.diag,
         diag_chunks: o.diag_chunks.clone(),
@@ -1751,21 +1466,15 @@ fn engine_main(
             outdir,
             o,
             c: Ctl::default(),
-            hk: Hk::default(),
             snaps: (0..CTL_MAX_SNAPS).map(|_| CtlSnap::default()).collect(),
             g_ctl_one: false,
-            g_agent: agent,
-            s0: XSnap::default(),
-            s1: XSnap::default(),
-            g_s0: S0Ref::Main,
+            g_s0: None,
             spin_hit: false,
-            initrd_has_tc,
-            g_boot_rs: RunSt::default(),
         },
     };
     e.vm.max_exits = 200_000_000;
-    if agent {
-        // M121: the boot under control; S0 and S1 are the host's SNAPs
+    // M121: the boot under control; S0 and S1 are the host's SNAPs
+    {
         let one = matches!(start.mode, Mode::One(_));
         let tag = if one { "one" } else { "boot" };
         let boot = match start.mode {
@@ -1789,9 +1498,7 @@ fn engine_main(
         if e.h.g_ctl_one {
             if r == -4 {
                 // the workload from the stop where S1 was taken, as a CTL from S1
-                if let Some(i) = e.h.snap_find("S0") {
-                    e.h.g_s0 = S0Ref::Slot(i);
-                }
+                e.h.g_s0 = e.h.snap_find("S0");
                 e.h.c.boot_s1 = false;
                 e.h.c.phase = Phase::Workload;
                 e.h.spin_hit = false;
@@ -1803,37 +1510,9 @@ fn engine_main(
             }
             return 0;
         }
-        if let Some(i) = e.h.snap_find("S0") {
-            e.h.g_s0 = S0Ref::Slot(i);
-        }
+        e.h.g_s0 = e.h.snap_find("S0");
         e.h.emit(EngineMsg::Ready(Ready::new(now_s() - t0)));
-        e.serve_loop(true);
-        return 0;
-    }
-    match start.mode {
-        Mode::One(sched) => {
-            let spin_auto = e.h.o.spin_auto;
-            if e.boot_to_s1(spin_auto).is_err() {
-                return 1;
-            }
-            e.h.say(&format!(
-                "hvmx: provisioned in {:.1} s (fresh boot, no snapshot restore)",
-                now_s() - t0
-            ));
-            if start.control_one {
-                e.ctl_request("one", &sched, None);
-            } else {
-                e.run_sched("one", &sched, spin_auto);
-            }
-            0
-        }
-        Mode::Serve { .. } => {
-            if e.boot_to_s1(true).is_err() {
-                return 1;
-            }
-            e.h.emit(EngineMsg::Ready(Ready::new(now_s() - t0)));
-            e.serve_loop(false);
-            0
-        }
+        e.serve_loop();
+        0
     }
 }

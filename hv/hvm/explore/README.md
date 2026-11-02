@@ -10,7 +10,7 @@
 |---|---|
 | `serve.c` (`hvmx`) | the run engine. It includes `../hvm.c` and speaks `hvx_explore`'s protocol: `READY`, `RUN <tag> <schedule>`, `RESULT ...`, `QUIT`, and the lock-step requests `CTL` and `RESUME` (Milestone 119). `hvmx one ...` runs one schedule from a fresh boot |
 | `build.sh` | builds and signs `hvmx` (with `../virtio*.c`) |
-| `lockstep-check.sh` | the permanent test of lock-step control (Milestone 119): M116's Mac experiment, and CTL against RUN, through `hydo-engine/examples/hvm_lockstep_check.rs` |
+| `lockstep-check.sh` | the permanent test of lock-step control (Milestone 119; on agent images since Milestone 145): timed input, reactions and SNAP/RESUME branches through `hydo-engine/examples/hvm_lockstep_check.rs`, and `hydo-control/examples/hvm_agent_check.rs` |
 | `build-guest-netns.sh`, `hvm-netns.config`, `netnsboot/` | the second arm64 kernel `Image-explore-netns` (Milestone 99): `Image-explore` plus network namespaces, veth, bridge, IPv6, policy routing, iptables + NFQUEUE; only for manifests with `network: bridge`, `addr:` or `faults: [freeze]` (see "The second kernel" below) |
 | `build-guest.sh`, `hvm-explore.config` | the arm64 kernel `Image-explore`, built on the Linux box: the M48 kernel with `../linux/hvm-virtio.config`, `../services/svc.config`, MBR partitions and loop, and (by default) the HVC idle below. `HVM_IDLE_HVC=0` rebuilds the earlier WFI-idle kernel |
 | `apply-hvcidle.py` | adds `CONFIG_ARM64_HVM_IDLE_HVC`: `cpu_do_idle()` idles through HVC function `0xC6000020` instead of `WFI` (see "Fixed" below) |
@@ -299,11 +299,13 @@ comment above `ctl_esc`.
 - Without CTL, RESUME or `--control` nothing changes. A CTL whose host only answers CONT gives RUN's
   fingerprint, for the quickstart schedules from S1 and from a fresh boot.
 
-`lockstep-check.sh <dir with Image-explore and explore-ob-redis-oci-arm64> <the Redis example's image>
-<out dir> [<ledger-spin's shell image>]` is the permanent test (`hydo-engine/examples/hvm_lockstep_check.rs`). It runs M116's Mac
-experiment and checks M116's values, and it checks CTL against RUN. With the fourth argument it
-also checks CTL against RUN for ledger-spin's schedules in the rewind mode (Milestone 130). Values
-in `docs/HISTORY.md`, Milestones 119 and 130.
+`lockstep-check.sh <dir with Image-explore> <the Redis example's agent image> <out dir>
+[<ledger-spin's agent image>]` is the permanent test (`hydo-engine/examples/hvm_lockstep_check.rs`,
+then `hydo-control/examples/hvm_agent_check.rs`). Since Milestone 145 it runs on agent images only
+(the shell images' RUN and `--control one` were deleted): typed input at exact exit counts from the
+host's S1 and from a fresh boot, reactions to the agent's lines and SNAP/RESUME branches, each
+against its recorded value; with the fourth argument also ledger-spin's schedules in the rewind mode
+(Milestone 130). Values in `docs/HISTORY.md`, Milestones 119, 130 and 145.
 
 ## Commands
 

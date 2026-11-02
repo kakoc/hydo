@@ -31,10 +31,10 @@ use crate::plan::Plan;
 use crate::runner::{Finished, RunError, RunOpts};
 use crate::seams::Unsupported;
 use crate::transcript::Transcript;
-use hydo_engine::lockstep::{Driver, Lockstep, LockstepStart};
+use hydo_engine::lockstep::{Driver, Lockstep};
 use hydo_engine::{
-    BootSpec, BranchOutcome, BranchRequest, Engine, EngineError, EngineKind, OneRun, RunResult,
-    Worker,
+    BootSpec, ControlledEngine, ControlledWorker, Engine, EngineError, EngineKind, OneRun,
+    RunResult, Worker,
 };
 use hydo_schedule::{HostToken, Schedule};
 use std::path::{Path, PathBuf};
@@ -407,7 +407,7 @@ impl Driver for RunDriver<'_> {
 /// An engine for one agent image (see the module documentation).
 #[derive(Clone)]
 pub struct AgentEngine {
-    pub inner: Arc<dyn Engine + Send + Sync>,
+    pub inner: Arc<dyn ControlledEngine + Send + Sync>,
     pub plan: Plan,
     pub cadence: u64,
     /// A SPIN on hvm runs again in the rewind mode (`hydo_config::run::Control::spin_rewind`,
@@ -416,7 +416,7 @@ pub struct AgentEngine {
 }
 
 impl AgentEngine {
-    pub fn new(inner: Arc<dyn Engine + Send + Sync>, plan: Plan) -> AgentEngine {
+    pub fn new(inner: Arc<dyn ControlledEngine + Send + Sync>, plan: Plan) -> AgentEngine {
         let cadence = default_cadence(inner.kind());
         AgentEngine {
             inner,
@@ -432,31 +432,28 @@ impl AgentEngine {
         self
     }
 
-    /// The engine for `image`: Some for an agent image (its plan read from the image), None for a
-    /// shell-init image (run it on `inner` as before).
+    /// The engine for `image`, its plan read from the image. A shell-init image (built before
+    /// Milestone 136) is refused ([`hydo_engine::image::control`]), and so is an agent image whose
+    /// protocol or plan this hydo cannot drive.
     pub fn for_image(
-        inner: Arc<dyn Engine + Send + Sync>,
+        inner: Arc<dyn ControlledEngine + Send + Sync>,
         image: &Path,
-    ) -> Result<Option<AgentEngine>, String> {
-        match hydo_engine::image::control(image).map_err(|e| e.to_string())? {
-            hydo_engine::GuestControl::Shell => Ok(None),
-            hydo_engine::GuestControl::Agent { proto } => {
-                if !hydo_agent_proto::HOST_PROTOCOLS.contains(&proto) {
-                    return Err(format!(
-                        "{}: the image's agent speaks agent protocol {proto}; this hydo knows {:?}",
-                        image.display(),
-                        hydo_agent_proto::HOST_PROTOCOLS
-                    ));
-                }
-                let plan = plan_of_image(image).map_err(|e| {
-                    format!(
-                        "{}: this agent image cannot be run yet: {e}",
-                        image.display()
-                    )
-                })?;
-                Ok(Some(AgentEngine::new(inner, plan)))
-            }
+    ) -> Result<AgentEngine, String> {
+        let proto = hydo_engine::image::control(image).map_err(|e| e.to_string())?;
+        if !hydo_agent_proto::HOST_PROTOCOLS.contains(&proto) {
+            return Err(format!(
+                "{}: the image's agent speaks agent protocol {proto}; this hydo knows {:?}",
+                image.display(),
+                hydo_agent_proto::HOST_PROTOCOLS
+            ));
         }
+        let plan = plan_of_image(image).map_err(|e| {
+            format!(
+                "{}: this agent image cannot be run yet: {e}",
+                image.display()
+            )
+        })?;
+        Ok(AgentEngine::new(inner, plan))
     }
 
     /// Whether the controller drives `schedule` on this image (the cadence and the seams); the
@@ -625,7 +622,7 @@ impl Engine for AgentEngine {
 
 /// A booted agent image (see the module documentation).
 pub struct AgentWorker {
-    inner: Box<dyn Worker>,
+    inner: Box<dyn ControlledWorker>,
     kind: EngineKind,
     booted: Booted,
     cadence: u64,
@@ -694,21 +691,6 @@ impl Worker for AgentWorker {
 
     fn run(&mut self, tag: &str, schedule: &Schedule) -> Result<RunResult, EngineError> {
         self.run_with(tag, schedule, &Policy::Schedule)
-    }
-
-    fn branch(&mut self, _req: &BranchRequest) -> Result<BranchOutcome, EngineError> {
-        Err(EngineError::Unsupported(
-            "BRANCH is not supported for an agent image yet (it runs under control: SNAP, RESUME)"
-                .into(),
-        ))
-    }
-
-    fn lockstep<'a>(
-        &'a mut self,
-        start: &LockstepStart,
-        log: Option<&'a mut dyn std::io::Write>,
-    ) -> Result<Lockstep<'a>, EngineError> {
-        self.inner.lockstep(start, log)
     }
 
     fn close(self: Box<Self>) -> Result<(), EngineError> {

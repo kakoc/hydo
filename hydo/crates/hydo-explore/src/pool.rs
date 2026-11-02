@@ -31,25 +31,10 @@ pub type Res = Map<String, Value>;
 /// (tag, schedule text, result)
 pub type Done = (String, String, Res);
 
-/// A BRANCH request's answer (explore.py Worker.branch): the branch point and its runs.
-#[derive(Clone, Debug, Default)]
-pub struct BranchDone {
-    pub tjlo: Option<u64>,
-    pub held: Option<u64>,
-    /// (sub tag, the run as a plain schedule, result)
-    pub runs: Vec<(String, String, Res)>,
-}
-
-enum Kind {
-    Run,
-    Branch(hydo_engine::BranchRequest, String),
-}
-
 struct Job {
     tag: String,
     text: String,
-    kind: Kind,
-    reply: Sender<(Done, Option<BranchDone>)>,
+    reply: Sender<Done>,
     /// Set when the batch no longer needs the job: a worker drops it unrun.
     cancel: Arc<AtomicBool>,
 }
@@ -129,14 +114,6 @@ fn result_re() -> &'static Regex {
     // hash ctl=; shell images never print them.
     R.get_or_init(|| {
         Regex::new(r"^RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: (?:tj|xt|pct|qbn|qn|stops=|typed=|inh=|ctl=)\S+)*) verdict=(.*)$")
-            .expect("pattern")
-    })
-}
-
-fn branch_re() -> &'static Regex {
-    static R: OnceLock<Regex> = OnceLock::new();
-    R.get_or_init(|| {
-        Regex::new(r"^RESULT (\S+) fp=(\S+) wfp=(\S+) secs=(\S+)((?: (?:tj|pct|qbn|qn)\S+)*) verdict=(.*)$")
             .expect("pattern")
     })
 }
@@ -339,7 +316,7 @@ impl Pool {
             drop(q);
             let raw = "";
             let res = error_result(raw, 0);
-            let _ = job.reply.send(((job.tag, job.text, res), None));
+            let _ = job.reply.send((job.tag, job.text, res));
             return;
         }
         if high {
@@ -487,7 +464,6 @@ impl Pool {
                 Job {
                     tag: tag.clone(),
                     text: text.clone(),
-                    kind: Kind::Run,
                     reply: tx.clone(),
                     cancel: cancel.clone(),
                 },
@@ -519,33 +495,6 @@ impl Pool {
         out
     }
 
-    /// BRANCH requests (hvx only), run side by side; their answers in request order.
-    pub fn branch_all(
-        &self,
-        reqs: Vec<(String, hydo_engine::BranchRequest, String)>,
-    ) -> Vec<BranchDone> {
-        let rxs: Vec<Receiver<(Done, Option<BranchDone>)>> = reqs
-            .into_iter()
-            .map(|(tag, req, sched)| {
-                let (tx, rx) = channel();
-                self.push(
-                    Job {
-                        tag,
-                        text: sched.clone(),
-                        kind: Kind::Branch(req, sched),
-                        reply: tx,
-                        cancel: Arc::new(AtomicBool::new(false)),
-                    },
-                    false,
-                );
-                rx
-            })
-            .collect();
-        rxs.into_iter()
-            .map(|rx| rx.recv().ok().and_then(|(_, b)| b).unwrap_or_default())
-            .collect()
-    }
-
     pub fn close(self) {
         {
             let (m, cv) = &*self.q;
@@ -573,8 +522,8 @@ impl Pool {
 pub struct Batch<'a> {
     pool: &'a Pool,
     ready: VecDeque<Done>,
-    rx: Receiver<(Done, Option<BranchDone>)>,
-    tx: Sender<(Done, Option<BranchDone>)>,
+    rx: Receiver<Done>,
+    tx: Sender<Done>,
     pending: usize,
     cancel: Arc<AtomicBool>,
     high: bool,
@@ -601,7 +550,6 @@ impl Batch<'_> {
             Job {
                 tag: tag.to_string(),
                 text: text.to_string(),
-                kind: Kind::Run,
                 reply: self.tx.clone(),
                 cancel: self.cancel.clone(),
             },
@@ -617,7 +565,7 @@ impl Batch<'_> {
         if self.pending == 0 {
             return None;
         }
-        let ((tag, text, r), _) = self.rx.recv().ok()?;
+        let (tag, text, r) = self.rx.recv().ok()?;
         self.pending -= 1;
         self.pool.cache_put(&tag, &text, &r);
         Some((tag, text, r))
@@ -676,65 +624,57 @@ fn worker_main(
             continue;
         }
         quiet_wait(h.pool.quiet_file.as_deref());
-        match job.kind {
-            Kind::Branch(req, sched) => {
-                let out = run_branch(w.as_mut().expect("a worker"), i, &h, &req, &sched);
-                let _ = job.reply.send(((job.tag, job.text, obj()), Some(out)));
-            }
-            Kind::Run => {
-                let mut res = None;
-                for attempt in 0..2 {
-                    let Some(wk) = w.as_mut() else { break };
-                    let r = match Schedule::parse(&job.text) {
-                        Ok(s) => wk.run(&job.tag, &s),
-                        Err(e) => {
-                            // a schedule the engines would refuse: no run (explore.py sent it and
-                            // got the engine's own error verdict)
-                            res = Some(parse_result(
-                                &format!(
-                                    "RESULT {} fp=0 wfp=0 secs=0 verdict=ERROR refused: {}",
-                                    job.tag, e.message
-                                ),
-                                i,
-                            ));
-                            break;
-                        }
-                    };
-                    match r {
-                        Ok(rr) => {
-                            res = Some(parse_result(&rr.line, i));
-                            break;
-                        }
-                        Err(EngineError::Protocol(line)) if line != "the engine exited" => {
-                            res = Some(parse_result(&line, i));
-                            break;
-                        }
-                        Err(e) => {
-                            if attempt == 1 {
-                                break;
-                            }
-                            eprintln!(
-                                "worker {i}: engine exited during {} ({e}); restarting it",
-                                job.tag
-                            );
-                            if let Some(old) = w.take() {
-                                let _ = old.close();
-                            }
-                            w = start(i, engine.as_ref(), &spec, &h);
-                        }
+        let mut res = None;
+        for attempt in 0..2 {
+            let Some(wk) = w.as_mut() else { break };
+            let r = match Schedule::parse(&job.text) {
+                Ok(s) => wk.run(&job.tag, &s),
+                Err(e) => {
+                    // a schedule the engines would refuse: no run (explore.py sent it and
+                    // got the engine's own error verdict)
+                    res = Some(parse_result(
+                        &format!(
+                            "RESULT {} fp=0 wfp=0 secs=0 verdict=ERROR refused: {}",
+                            job.tag, e.message
+                        ),
+                        i,
+                    ));
+                    break;
+                }
+            };
+            match r {
+                Ok(rr) => {
+                    res = Some(parse_result(&rr.line, i));
+                    break;
+                }
+                Err(EngineError::Protocol(line)) if line != "the engine exited" => {
+                    res = Some(parse_result(&line, i));
+                    break;
+                }
+                Err(e) => {
+                    if attempt == 1 {
+                        break;
                     }
-                }
-                let mut res = res.unwrap_or_else(|| error_result("", i));
-                if !py_str(&res["verdict"]).starts_with("ERROR worker") {
-                    host_checks(&h, &job.tag, &mut res);
-                    host_errlog(&h, &job.tag, &job.text, &mut res);
-                }
-                let _ = job.reply.send(((job.tag, job.text, res), None));
-                if w.is_none() {
-                    give_up(&q);
-                    return;
+                    eprintln!(
+                        "worker {i}: engine exited during {} ({e}); restarting it",
+                        job.tag
+                    );
+                    if let Some(old) = w.take() {
+                        let _ = old.close();
+                    }
+                    w = start(i, engine.as_ref(), &spec, &h);
                 }
             }
+        }
+        let mut res = res.unwrap_or_else(|| error_result("", i));
+        if !py_str(&res["verdict"]).starts_with("ERROR worker") {
+            host_checks(&h, &job.tag, &mut res);
+            host_errlog(&h, &job.tag, &job.text, &mut res);
+        }
+        let _ = job.reply.send((job.tag, job.text, res));
+        if w.is_none() {
+            give_up(&q);
+            return;
         }
     }
     if let Some(x) = w {
@@ -754,57 +694,6 @@ fn give_up(q: &(Mutex<Queue>, Condvar)) {
     jobs.extend(g.low.drain(..));
     drop(g);
     for j in jobs {
-        let _ = j.reply.send(((j.tag, j.text, error_result("", 0)), None));
+        let _ = j.reply.send((j.tag, j.text, error_result("", 0)));
     }
-}
-
-fn run_branch(
-    w: &mut Box<dyn Worker>,
-    i: usize,
-    h: &Host,
-    req: &hydo_engine::BranchRequest,
-    sched: &str,
-) -> BranchDone {
-    let mut out = BranchDone::default();
-    let Ok(o) = w.branch(req) else { return out };
-    out.tjlo = o.tjlo;
-    out.held = o.held;
-    let (host, guest) = sched.split_once('|').unwrap_or((sched, ""));
-    static VM: OnceLock<Regex> = OnceLock::new();
-    let vm = VM.get_or_init(|| Regex::new(r"-v(\d+)$").expect("p"));
-    for rr in o.runs {
-        let Some(c) = branch_re().captures(rr.line.trim()) else {
-            continue;
-        };
-        let sub = c[1].to_string();
-        let mut res = obj();
-        res.insert("fp".into(), json!(&c[2]));
-        res.insert("wfp".into(), json!(&c[3]));
-        res.insert("secs".into(), fl(c[4].parse::<f64>().unwrap_or(0.0)));
-        res.insert("verdict".into(), json!(&c[6]));
-        res.insert("worker".into(), json!(i));
-        let st = match (vm.captures(&sub), out.tjlo.filter(|x| *x != 0)) {
-            (Some(v), Some(lo)) => format!(
-                "{} tj={:x} tjpm={} tjmax={} tjlo={} tjhi=0 rb={} |{}",
-                host.trim_end(),
-                v[1].parse::<u64>().unwrap_or(0),
-                req.permille,
-                req.max_delay,
-                lo,
-                crate::gen::BRANCH_BUDGET,
-                guest
-            ),
-            _ => format!(
-                "{} rb={} |{}",
-                host.trim_end(),
-                crate::gen::BRANCH_BUDGET,
-                guest
-            ),
-        };
-        extras(&mut res, &c[5], false);
-        host_checks(h, &sub, &mut res);
-        host_errlog(h, &sub, &st, &mut res);
-        out.runs.push((sub, st, res));
-    }
-    out
 }

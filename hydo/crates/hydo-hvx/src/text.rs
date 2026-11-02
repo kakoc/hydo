@@ -4,16 +4,16 @@
 //!
 //! The lines are read as the deleted C engine read them (`hvx_explore.c`: `fgets` in pieces of
 //! at most 4095 bytes, a line cut at its first NUL, `sscanf` words of at most 63 bytes, `strtoull`
-//! numbers), so a host that wrote to the C engine gets the same answers, with one exception: the
-//! schedule of a RUN, CTL or BRANCH is read by hydo-schedule (`Schedule::parse`), which refuses
-//! what the C read loosely (`hydo-hvx/tests/golden/parse_differences.txt`); such a request is
-//! answered as the C answered a schedule it could not read (`RESULT ? ... verdict=ERROR bad
-//! request`, `BRANCHEND ? bad request`).
+//! numbers), so a host that wrote to the C engine gets the same answers, with two exceptions: the
+//! schedule of a CTL is read by hydo-schedule (`Schedule::parse`), which refuses what the C read
+//! loosely (`hydo-hvx/tests/golden/parse_differences.txt`), and the shell-init images' requests
+//! RUN and BRANCH were deleted in Milestone 145; such a request is answered as the C answered a
+//! request it could not read (`RESULT ? ... verdict=ERROR bad request`).
 
 use crate::cstr::{strtoull, Scan};
 use crate::ctl;
 use crate::port::{Cmd, Port, Req};
-use hydo_engine_proto::{BranchRequest, EngineMsg, HostCmd, Request};
+use hydo_engine_proto::{EngineMsg, HostCmd, Request};
 use hydo_schedule::Schedule;
 use std::io::{BufRead, Write};
 
@@ -65,40 +65,6 @@ pub fn read_request(inp: &[u8]) -> Req {
     if inp.starts_with(b"QUIT") {
         return Req::End;
     }
-    if inp.starts_with(b"BRANCH ") {
-        let mut s = Scan::new(inp);
-        s.lit("BRANCH").ws();
-        let tag = s.word(63).map(lossy);
-        let nv = s.ws().int();
-        let bpm = s.ws().uint();
-        let bmx = s.ws().ull();
-        let mark = s.ws().word(127).map(lossy);
-        s.ws();
-        let off = if s.ok() { s.pos } else { 0 };
-        let sc = if s.n == 5 && off != 0 {
-            schedule(&inp[off..])
-        } else {
-            None
-        };
-        return match (sc, tag, nv, bpm, bmx, mark) {
-            (
-                Some(schedule),
-                Some(tag),
-                Some(variants),
-                Some(permille),
-                Some(max_delay),
-                Some(marker),
-            ) => Req::Request(Request::Branch(BranchRequest {
-                tag,
-                variants,
-                permille,
-                max_delay,
-                marker,
-                schedule,
-            })),
-            _ => Req::BadBranch,
-        };
-    }
     if inp.starts_with(b"RESUME ") {
         let mut s = Scan::new(inp);
         s.lit("RESUME").ws();
@@ -109,12 +75,12 @@ pub fn read_request(inp: &[u8]) -> Req {
             _ => Req::BadRun,
         };
     }
-    let ctl = inp.starts_with(b"CTL ");
-    let rq = &inp[if ctl { 4 } else { 0 }..];
-    let mut s = Scan::new(rq);
-    if !ctl {
-        s.lit("RUN").ws();
+    // RUN and BRANCH (the shell-init images' requests) were deleted in Milestone 145
+    if !inp.starts_with(b"CTL ") {
+        return Req::BadRun;
     }
+    let rq = &inp[4..];
+    let mut s = Scan::new(rq);
     let tag = s.word(63).map(lossy);
     s.ws();
     let off = if s.ok() { s.pos } else { 0 };
@@ -123,8 +89,7 @@ pub fn read_request(inp: &[u8]) -> Req {
         _ => None,
     };
     match (tag, sc) {
-        (Some(tag), Some(schedule)) if ctl => Req::Request(Request::Ctl { tag, schedule }),
-        (Some(tag), Some(schedule)) => Req::Request(Request::Run { tag, schedule }),
+        (Some(tag), Some(schedule)) => Req::Request(Request::Ctl { tag, schedule }),
         _ => Req::BadRun,
     }
 }
@@ -221,9 +186,10 @@ mod tests {
 
     #[test]
     fn requests() {
+        // RUN and BRANCH were the shell-init images' requests (deleted in M145)
         assert_eq!(
             line(read_request(b"RUN a disk=none dseed=1 | run K=redis@5+2\n")),
-            "RUN a disk=none dseed=1 | run K=redis@5+2"
+            "BadRun"
         );
         assert_eq!(
             line(read_request(b"CTL a  disk=none rb=16 | run\n")),
@@ -234,19 +200,18 @@ mod tests {
             line(read_request(
                 b"BRANCH t -3 20 500000 @held disk=cut | run C=3\n"
             )),
-            "BRANCH t -3 20 500000 @held disk=cut | run C=3"
+            "BadRun"
         );
         assert_eq!(line(read_request(b"QUIT\n")), "End");
         // the C engine ran these; hydo-schedule refuses them
         assert_eq!(
-            line(read_request(b"RUN a disk=none bogus=1 | run\n")),
+            line(read_request(b"CTL a disk=none bogus=1 | run\n")),
             "BadRun"
         );
         assert_eq!(
-            line(read_request(b"RUN a disk=none | run  K=redis@5+2\n")),
+            line(read_request(b"CTL a disk=none | run  K=redis@5+2\n")),
             "BadRun"
         );
-        assert_eq!(line(read_request(b"BRANCH t 3 20 | run\n")), "BadBranch");
         assert_eq!(line(read_request(b"RESUME b\n")), "BadRun");
         assert_eq!(line(read_request(b"HELLO\n")), "BadRun");
     }

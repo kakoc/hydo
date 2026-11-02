@@ -8,7 +8,8 @@
 //! streams switched per seed, no manifest (the stack's names) and every example manifest, hvx and
 //! hvm (with and without a data disk and tc), every sweep, the shrink candidates of every 25th seed
 //! (with a tick range, so seeded jitter becomes an explicit tjx= list, and one step further), the
-//! branch variants of a BRANCH run, the cf= probe, freeze-sweep points, and the composer's
+//! branch variants of a BRANCH run (the request was deleted in M145; its strings stay in the
+//! corpus, which is the recorded one, and are still valid schedules), the cf= probe, freeze-sweep points, and the composer's
 //! resolved, saved and old index forms. Each line is `<backend>\t<schedule>`, deduplicated per
 //! backend in first-seen order.
 //!
@@ -25,7 +26,7 @@
 mod support;
 
 use hydo_explore::compose::{self, OItem};
-use hydo_explore::gen::{Backend, Ex, BRANCH_BUDGET, TJ_MAX};
+use hydo_explore::gen::{Backend, Ex, TJ_MAX};
 use hydo_explore::sched::{Fc, Tj, S};
 use hydo_explore::space::{grpc_targets, Space};
 use hydo_schedule::Schedule;
@@ -142,6 +143,9 @@ fn candidates(c: &mut Corpus, ex: &Ex, s: &S, sd: u64) {
         }
     }
 }
+
+/// The run budget a BRANCH run gave its variants (explore.py `BRANCH_BUDGET`; M145 deleted it).
+const BRANCH_BUDGET: i64 = 16;
 
 fn branch_variants(c: &mut Corpus, ex: &Ex, text: &str, sd: u64) {
     let (host, guest) = text.split_once('|').unwrap();

@@ -15,7 +15,7 @@ use hydo_engine::hvm::{kernel_for, Hvm};
 use hydo_engine::hvx::Hvx;
 use hydo_engine::image::{embedded_compose, embedded_manifest, sha256_file};
 use hydo_engine::protocol::verdict_kind;
-use hydo_engine::{BootSpec, CpuLevel, Engine, RunResult};
+use hydo_engine::{BootSpec, ControlledEngine, CpuLevel, RunResult};
 use hydo_manifest::Guest;
 use hydo_schedule::Schedule;
 use serde_json::{json, Map, Value};
@@ -163,8 +163,9 @@ pub fn mac_kernel_for(ctx: &Ctx, image: &Path, quiet: bool) -> PathBuf {
 
 /// One schedule from a fresh boot on this platform's engine. Writes `engine.log` (everything the
 /// engine printed) into outdir. Returns the RESULT, or None (the engine's output is returned too).
-/// An agent image (`/etc/hydo/control`, M126) runs under the host controller: `policy` is the
-/// schedule's, or recorded transcripts typed again (`hydo repro --transcript`).
+/// Every image is an agent image (`/etc/hydo/control`, M126; a shell-init image is refused since
+/// M145) and runs under the host controller: `policy` is the schedule's, or recorded transcripts
+/// typed again (`hydo repro --transcript`).
 fn run_engine(
     ctx: &Ctx,
     image: &Path,
@@ -176,32 +177,16 @@ fn run_engine(
 ) -> (Option<RunResult>, String) {
     let _ = std::fs::create_dir_all(outdir);
     let s = schedule(sched);
-    // the engine and the boot spec of this platform, then the run: an agent image under the host
-    // controller, every other image as before
-    let one = |eng: Arc<dyn Engine + Send + Sync>, spec: &BootSpec| match AgentEngine::for_image(
-        eng.clone(),
-        image,
-    )
-    .unwrap_or_else(|e| die(&format!("hydo: {e}")))
-    {
-        Some(a) => {
-            if !quiet {
-                println!(
-                    "hydo: an agent image: the host controller drives the run (/etc/hydo/control)"
-                );
-            }
-            a.with_control(&ctx.config.control)
-                .one_with(spec, &s, policy)
+    // the engine and the boot spec of this platform, then the run under the host controller
+    let one = |eng: Arc<dyn ControlledEngine + Send + Sync>, spec: &BootSpec| {
+        let a = AgentEngine::for_image(eng, image).unwrap_or_else(|e| die(&format!("hydo: {e}")));
+        if !quiet {
+            println!(
+                "hydo: an agent image: the host controller drives the run (/etc/hydo/control)"
+            );
         }
-        None => {
-            if !matches!(policy, Policy::Schedule) {
-                die(&format!(
-                    "{} is a shell-init image; only an agent image's run has a control transcript",
-                    image.display()
-                ));
-            }
-            eng.one(spec, &s)
-        }
+        a.with_control(&ctx.config.control)
+            .one_with(spec, &s, policy)
     };
     let run = match ctx.platform {
         Platform::Linux => {

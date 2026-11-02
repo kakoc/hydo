@@ -9,16 +9,15 @@
 
 use hydo_engine_proto::{escape, EngineMsg, HostCmd, HostMsg, Request};
 use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{Arc, Mutex};
 
 /// What the engine reads between runs.
 #[derive(Debug)]
 pub enum Req {
     Request(Request),
-    /// A RUN, CTL or RESUME it cannot read (answered `RESULT ? ... verdict=ERROR bad request`).
+    /// A request it cannot read (answered `RESULT ? ... verdict=ERROR bad request`): one that is
+    /// not CTL, RESUME or QUIT (RUN and BRANCH were deleted in M145), or one of those it cannot
+    /// read.
     BadRun,
-    /// A BRANCH it cannot read (`BRANCHEND ? bad request`).
-    BadBranch,
     /// No more requests (QUIT, or the host closed its end).
     End,
 }
@@ -40,33 +39,20 @@ pub trait Port: Send {
     fn command(&mut self) -> Cmd;
 }
 
-/// Values over channels. `echo`: also append each report's line (and a newline) to this buffer
-/// when it is made, so that a fresh-boot run's output keeps its lines and the engine's
-/// diagnostics in the order they were written (hydo-engine's `one`).
+/// Values over channels.
 pub struct ChanPort {
     rx: Receiver<HostMsg>,
     tx: Sender<EngineMsg>,
-    echo: Option<Arc<Mutex<Vec<u8>>>>,
 }
 
 impl ChanPort {
     pub fn new(rx: Receiver<HostMsg>, tx: Sender<EngineMsg>) -> ChanPort {
-        ChanPort { rx, tx, echo: None }
-    }
-
-    pub fn with_echo(mut self, echo: Arc<Mutex<Vec<u8>>>) -> ChanPort {
-        self.echo = Some(echo);
-        self
+        ChanPort { rx, tx }
     }
 }
 
 impl Port for ChanPort {
     fn emit(&mut self, m: EngineMsg) {
-        if let Some(e) = &self.echo {
-            let mut e = e.lock().unwrap_or_else(|p| p.into_inner());
-            e.extend_from_slice(m.line().as_bytes());
-            e.push(b'\n');
-        }
         // the host may have gone; the engine finishes its run as it would after a closed pipe
         let _ = self.tx.send(m);
     }

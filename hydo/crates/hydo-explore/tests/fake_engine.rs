@@ -1,11 +1,11 @@
 //! hydo-explore end to end on a scripted engine, against explore.py's recorded outputs.
 //!
-//! The scripted engine is this test binary itself: run with `HYDO_FAKE_ENGINE=1` it stands in for
-//! `hvx-run sudo env ... hydo-hvx serve ...` (it is put in `$HYDO_HVX_RUN`, so the explorer
-//! starts it exactly as it starts hvx_explore) and speaks the serve protocol: READY, then a RESULT
-//! for every RUN, BRANCHPOINT/RESULT/BRANCHEND for every BRANCH. Every answer is a pure function of
-//! the schedule text (never of the tag or of the order of requests), so two explorers that ask for
-//! the same schedules get the same answers. It is the port of `tests/fake_engine.py` (until M107;
+//! The scripted engine is this test binary itself: run with `HYDO_FAKE_ENGINE=1` it is the
+//! explorer's scripted engine program (`HYDO_SCRIPTED_ENGINE`, `hydo_explore::scripted`, M145;
+//! until M145 it stood in for `hvx-run sudo env ... hydo-hvx serve ...` and spoke the engine's
+//! RUN/BRANCH protocol of shell images): READY, then a RESULT for every `<tag> <schedule>` line.
+//! Every answer is a pure function of the schedule text (never of the tag or of the order of
+//! requests), so two explorers that ask for the same schedules get the same answers. It is the port of `tests/fake_engine.py` (until M107;
 //! `git show 2a58c4b:hydo/crates/hydo-explore/tests/fake_engine.py`), answer for answer.
 //!
 //! Each scenario runs hydo-explore with its options and compares its outputs file by file —
@@ -25,8 +25,8 @@
 //! Every scenario exercises a path: generators with every option stream, the cf= probe, re-runs,
 //! several shrink chains side by side, tick-jitter shrinking to tjx= lists, failed properties and
 //! the liveness table, error-log kinds (new and known) and their shrinks, a composed plan's W=,
-//! sweeps, the full and the adaptive freeze sweep, protocol and gRPC faults, branching, one
-//! manual schedule.
+//! sweeps, the full and the adaptive freeze sweep, protocol and gRPC faults, one manual schedule
+//! (the branching scenario went with `--branch` in M145).
 //!
 //! Needs cc (the property table compiles hydo_assert_report.c). Arguments: scenario names to run
 //! (default all). `HYDO_BLESS=1` rewrites the goldens from the outputs (the reference since M107).
@@ -121,9 +121,7 @@ fn engine_path() -> PathBuf {
 fn run(prog: &mut Command, dir: &Path, out: &Path) -> String {
     let o = prog
         .env("HYDO_FAKE_ENGINE", "1")
-        .env("HYDO_HVX_RUN", engine_path())
-        .env("HYDO_HVX_EXPLORE", engine_path())
-        .env("HYDO_ENGINE", "process") // the fake program, never the engine in-process
+        .env("HYDO_SCRIPTED_ENGINE", engine_path())
         .env("HYDO_BUILD", dir)
         .env_remove("HYDO_EXPLORE_CACHE")
         .env_remove("HYDO_QUIET_FILE")
@@ -390,17 +388,6 @@ const SCENARIOS: &[(&str, &[&str])] = &[
     (
         "stack_sweep_frontkill",
         &["--sweep", "frontkill", "--timing"],
-    ),
-    (
-        "stack_branch",
-        &[
-            "--seeds",
-            "1-12",
-            "--branch",
-            "hydo-stack-marker:",
-            "--variants",
-            "3",
-        ],
     ),
     (
         "stack_manual",
@@ -869,20 +856,16 @@ mod engine {
         )
     }
 
+    /// `serve <consoles>`: READY, then a RESULT for every `<tag> <schedule>` line until EOF;
+    /// `one <consoles> <schedule>`: one RESULT (`hydo_explore::scripted`).
     pub fn main() {
         let args: Vec<String> = std::env::args().skip(1).collect();
-        let serve = args.iter().any(|a| a == "serve");
-        let consoles = if serve {
-            &args[args.len() - 1]
-        } else {
-            &args[args.len() - 2]
-        };
-        let consoles = Path::new(consoles);
+        let consoles = Path::new(&args[1]);
         std::fs::create_dir_all(consoles).unwrap();
         let stdout = std::io::stdout();
         let mut out = stdout.lock();
-        if !serve {
-            writeln!(out, "{}", answer(consoles, "one", &args[args.len() - 1])).unwrap();
+        if args[0] == "one" {
+            writeln!(out, "{}", answer(consoles, "one", &args[2])).unwrap();
             return;
         }
         writeln!(out, "READY boot_secs=2.5").unwrap();
@@ -896,52 +879,9 @@ mod engine {
                 return;
             }
             let line = buf.strip_suffix('\n').unwrap_or(&buf);
-            if line == "QUIT" {
-                return;
-            }
-            if let Some(rest) = line.strip_prefix("RUN ") {
-                let (tag, sched) = rest.split_once(' ').unwrap();
-                writeln!(out, "{}", answer(consoles, tag, sched)).unwrap();
-                out.flush().unwrap();
-            } else if line.starts_with("BRANCH ") {
-                let f: Vec<&str> = line.splitn(7, ' ').collect();
-                let (tag, n, pm, mx, sched) = (f[1], f[2], f[3], f[4], f[6]);
-                let (host, guest) = sched.split_once('|').unwrap();
-                let host = host.trim_end();
-                if hx(&h(sched, "bp")[..2]).is_multiple_of(4) {
-                    writeln!(out, "BRANCHPOINT {tag} none").unwrap();
-                } else {
-                    let lo = 5 + hx(&h(sched, "lo")[..2]) % 20;
-                    writeln!(
-                        out,
-                        "BRANCHPOINT {tag} tjlo={lo} held={}",
-                        hx(&h(sched, "held")[..1])
-                    )
-                    .unwrap();
-                    writeln!(
-                        out,
-                        "{}",
-                        answer(
-                            consoles,
-                            &format!("{tag}-base"),
-                            &format!("{host} rb=16 |{guest}")
-                        )
-                    )
-                    .unwrap();
-                    let n: u64 = n.parse().unwrap();
-                    for v in 1..=n {
-                        let st = format!(
-                            "{host} tj={v:x} tjpm={pm} tjmax={mx} tjlo={lo} tjhi=0 rb=16 |{guest}"
-                        );
-                        writeln!(out, "{}", answer(consoles, &format!("{tag}-v{v}"), &st)).unwrap();
-                    }
-                }
-                writeln!(out, "BRANCHEND {tag}").unwrap();
-                out.flush().unwrap();
-            } else {
-                writeln!(out, "RESULT ? fp=0 wfp=0 secs=0 verdict=ERROR bad request").unwrap();
-                out.flush().unwrap();
-            }
+            let (tag, sched) = line.split_once(' ').unwrap();
+            writeln!(out, "{}", answer(consoles, tag, sched)).unwrap();
+            out.flush().unwrap();
         }
     }
 }

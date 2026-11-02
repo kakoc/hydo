@@ -43,6 +43,9 @@ pub struct Pool {
     /// `HYDO_EXPLORE_CACHE`: the result cache a deterministic exploration resumes from.
     /// Default: none.
     pub cache: Option<PathBuf>,
+    /// `HYDO_SCRIPTED_ENGINE`: the explorer's tests' scripted engine program instead of the host
+    /// controller over a real engine (M145). Default: none.
+    pub scripted_engine: Option<PathBuf>,
 }
 
 impl Pool {
@@ -50,32 +53,7 @@ impl Pool {
         Pool {
             quiet_file: e.path(HYDO_QUIET_FILE),
             cache: e.path(HYDO_EXPLORE_CACHE),
-        }
-    }
-}
-
-/// The bug benchmark runner (hydo-bench).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Bench {
-    /// `HYDO_BENCH_KIND`: the image kind when `--kind` is not given; None (unset or empty):
-    /// `agent`.
-    pub kind: Option<String>,
-    /// `HYDO_M59_SUFFIX`: the stack images' m59 suffix (an empty value is a value). Default
-    /// `-pin-kr`.
-    pub m59_suffix: String,
-}
-
-impl Default for Bench {
-    fn default() -> Bench {
-        Bench::from_env(&Env::default())
-    }
-}
-
-impl Bench {
-    pub fn from_env(e: &Env) -> Bench {
-        Bench {
-            kind: e.nonempty(HYDO_BENCH_KIND),
-            m59_suffix: e.text(HYDO_M59_SUFFIX).unwrap_or_else(|| "-pin-kr".into()),
+            scripted_engine: e.path_nonempty(HYDO_SCRIPTED_ENGINE),
         }
     }
 }

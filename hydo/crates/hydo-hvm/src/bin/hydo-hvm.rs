@@ -2,7 +2,7 @@
 //! probes after the word `hvm`.
 //!
 //! ```text
-//! hydo-hvm [--ram-mib N] [--control [boot]] serve|one <Image> <initramfs> <outdir> ["<schedule>"]
+//! hydo-hvm [--ram-mib N] --control boot serve|one <Image> <initramfs> <outdir> ["<schedule>"]
 //! hydo-hvm hvm run|print|branch <Image> <initrd> [markers...]
 //! ```
 //!

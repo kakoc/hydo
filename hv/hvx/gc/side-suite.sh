@@ -84,18 +84,23 @@ fi
 ENG=$T/target/release/hydo-hvx
 EX=$T/target/release/examples
 if has repro; then
-  echo ">> the pinned reproducers (three runs each in one serve)"
+  # the pinned reproducers (M145): the stack example's agent images, `hydo run` from a fresh boot
+  # (the host controller over the engine in its process, on $DEV), twice each; `hydo` finds its
+  # guest kernel under <its root>/guest
+  echo ">> the pinned reproducers (two fresh-boot runs each)"
+  P=$O/hydo-prefix; rm -rf $P; mkdir -p $P/bin $P/guest $P/libexec
+  cp $T/target/release/hydo $P/bin/hydo; ln -s $R $P/libexec/hvx-run
+  ln -s $B/bzImage $P/guest/bzImage; ln -s $B/initramfs-kafka.cpio.gz $P/guest/initramfs-kafka.cpio.gz
   S='disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24'
-  for img in explore-disk.img:2403499c9a3f8419 explore-fix-disk.img:f87130453609a5d6; do
-    d=$O/repro-${img%%:*}; sudo rm -rf "$d"; mkdir -p "$d"
-    memwait 10240; quiet
-    out=$(printf 'RUN r1 %s\nRUN r2 %s\nRUN r3 %s\nQUIT\n' "$S" "$S" "$S" | \
-      timeout 3600 $R sudo env HVX_DEV="$DEV" HVX_EXPLORE_PHASES=1 "${FEAT[@]}" "$ENG" serve \
-        $B/bzImage $B/initramfs-kafka.cpio.gz $B/${img%%:*} "$d" 2> "$d/engine.err"); rc=$?
-    echo "$out" > "$d/out.txt"
-    n=$(grep -c "^RESULT r[123] fp=${img##*:}" <<< "$out")
-    check "repro ${img%%:*} x3 ($n of 3)" "$([ "$n" = 3 ] && echo $rc || echo 1)" "$out" ${img##*:}
-    grep -a "^PHASES" "$d/engine.err" | sed 's/^/     /' | cut -c1-200
+  for img in explore-ob-stack-old-disk.img:8fc461db23ef6642 explore-ob-stack-fix-disk.img:aad6a563e2046361; do
+    n=0; all=""
+    for r in 1 2; do
+      d=$O/repro-${img%%:*}-$r; sudo rm -rf "$d"
+      memwait 10240; quiet
+      out=$(timeout 3600 $R sudo env HOME="$HOME" HVX_DEV="$DEV" "${FEAT[@]}" $P/bin/hydo run $B/m145/${img%%:*} "$S" --out "$d" 2>&1); rc=$?
+      [ $rc = 0 ] && grep -qa "^RESULT .* fp=${img##*:}" <<< "$out" && n=$((n+1)); all="$all$out"
+    done
+    check "repro ${img%%:*} x2 ($n of 2)" "$([ "$n" = 2 ] && echo 0 || echo 1)" "$all" ${img##*:}
   done
 fi
 if has lockstep; then

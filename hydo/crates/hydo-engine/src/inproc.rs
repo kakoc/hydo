@@ -21,14 +21,15 @@
 //! store is always memory.
 
 use crate::hvx::Hvx;
+#[cfg(target_os = "linux")]
 use crate::process::Proc;
+#[cfg(target_os = "linux")]
 use crate::protocol::EngineMsg;
-use crate::{BootSpec, EngineError, OneRun};
+use crate::{BootSpec, EngineError};
 use hydo_config::engine::{Choice, Engine};
 use hydo_schedule::Schedule;
 use std::io::Write;
 use std::path::Path;
-use std::time::Instant;
 
 /// Whether `h` runs in this process (see the module comment).
 pub fn chosen(h: &Hvx) -> bool {
@@ -132,19 +133,12 @@ fn settings(h: &Hvx) -> hydo_config::Env {
         .with_words(&h.extra_env)
 }
 
-/// What the engine boots: `mode` with the spec's paths and options (`--control` is
-/// `control_one`, `--control boot` is `control_boot`).
+/// What the engine boots: `mode` (the program's `--control boot serve|one`) with the spec's
+/// paths and options.
 #[cfg(target_os = "linux")]
-fn start_of(
-    spec: &BootSpec,
-    mode: hydo_hvx::engine::Mode,
-    control_one: bool,
-    control_boot: bool,
-) -> hydo_hvx::engine::Start {
+fn start_of(spec: &BootSpec, mode: hydo_hvx::engine::Mode) -> hydo_hvx::engine::Start {
     hydo_hvx::engine::Start {
         mode,
-        control_one,
-        control_boot,
         kernel: spec.kernel.clone(),
         initrd: spec.initrd.clone().unwrap_or_default(),
         image: spec.image.clone(),
@@ -159,15 +153,12 @@ fn start_of(
 /// How the engine thread is asked to run (the program's modes).
 #[derive(Clone, Copy)]
 enum How {
-    One,
-    Serve,
-    ControlOne,
     ControlBootServe,
     ControlBootOne,
 }
 
 /// Start the engine on a thread: its port is the far end of the returned link; `diag` takes its
-/// diagnostics; `echo`: also its reports' lines, in order with the diagnostics.
+/// diagnostics.
 #[cfg(target_os = "linux")]
 fn spawn(
     h: &Hvx,
@@ -175,7 +166,6 @@ fn spawn(
     how: How,
     schedule: Option<&Schedule>,
     diag: Box<dyn Write + Send>,
-    echo: Option<std::sync::Arc<std::sync::Mutex<Vec<u8>>>>,
 ) -> Result<crate::process::Started, EngineError> {
     use hydo_hvx::engine::{run, Mode, Options};
     use hydo_hvx::port::ChanPort;
@@ -183,20 +173,13 @@ fn spawn(
     let o = Options::from_env(&e);
     let lock = shared_lock(&Engine::from_env(&e));
     let s = schedule.cloned();
-    let one = |s: Option<Schedule>| Mode::One(s.expect("a schedule"));
     let start = match how {
-        How::One => start_of(spec, one(s), false, false),
-        How::Serve => start_of(spec, Mode::Serve { boot: None }, false, false),
-        How::ControlOne => start_of(spec, one(s), true, false),
-        How::ControlBootServe => start_of(spec, Mode::Serve { boot: s }, false, true),
-        How::ControlBootOne => start_of(spec, one(s), false, true),
+        How::ControlBootServe => start_of(spec, Mode::Serve { boot: s }),
+        How::ControlBootOne => start_of(spec, Mode::One(s.expect("a schedule"))),
     };
     let (htx, hrx) = std::sync::mpsc::channel::<crate::protocol::HostMsg>();
     let (etx, erx) = std::sync::mpsc::channel::<EngineMsg>();
-    let mut port = ChanPort::new(hrx, etx);
-    if let Some(e) = echo {
-        port = port.with_echo(e);
-    }
+    let port = ChanPort::new(hrx, etx);
     let j = std::thread::Builder::new()
         .name("hvx-engine".into())
         .spawn(move || {
@@ -218,9 +201,8 @@ fn spawn(
     how: How,
     schedule: Option<&Schedule>,
     diag: Box<dyn Write + Send>,
-    echo: Option<std::sync::Arc<std::sync::Mutex<Vec<u8>>>>,
 ) -> Result<crate::process::Started, EngineError> {
-    let _ = (settings(h), spec, how, schedule, diag, echo);
+    let _ = (settings(h), spec, how, schedule, diag);
     Err(EngineError::Unsupported(
         "the in-process hvx engine needs Linux and /dev/hvx".into(),
     ))
@@ -236,87 +218,6 @@ fn diag_file(stderr_log: &Path) -> Result<Box<dyn Write + Send>, EngineError> {
     ))
 }
 
-/// A writer into a shared buffer.
-struct Shared(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
-
-impl Write for Shared {
-    fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
-        self.0
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .extend_from_slice(b);
-        Ok(b.len())
-    }
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
-/// `one`: the RESULT as a value; the output is the engine's report lines and diagnostics in the
-/// order they were written, as a program's stdout and stderr in one pipe.
-pub(crate) fn one(h: &Hvx, spec: &BootSpec, schedule: &Schedule) -> Result<OneRun, EngineError> {
-    let t0 = Instant::now();
-    let buf = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-    let started = spawn(
-        h,
-        spec,
-        How::One,
-        Some(schedule),
-        Box::new(Shared(buf.clone())),
-        Some(buf.clone()),
-    )?;
-    let crate::process::Started { proc, mut link } = started;
-    // `one` reads no requests; its reports end when the engine thread ends
-    let mut result = None;
-    while let Ok(m) = link.recv() {
-        if let (None, EngineMsg::Result(r)) = (&result, m) {
-            result = Some(*r);
-        }
-    }
-    let code = match proc {
-        Proc::Thread(Some(j)) => j.join().ok(),
-        _ => None,
-    };
-    let bytes = std::mem::take(&mut *buf.lock().unwrap_or_else(|p| p.into_inner()));
-    let output = String::from_utf8_lossy(&bytes).into_owned();
-    Ok(OneRun {
-        result,
-        output,
-        exit_code: code,
-        wall: t0.elapsed(),
-    })
-}
-
-/// `serve`: a worker.
-pub(crate) fn serve(
-    h: &Hvx,
-    spec: &BootSpec,
-    stderr_log: &Path,
-) -> Result<Box<dyn crate::Worker>, EngineError> {
-    let s = spawn(h, spec, How::Serve, None, diag_file(stderr_log)?, None)?;
-    Ok(Box::new(crate::process::ProcessWorker::from_started(
-        s, true,
-    )?))
-}
-
-/// `--control one` (M118).
-pub(crate) fn one_lockstep(
-    h: &Hvx,
-    spec: &BootSpec,
-    schedule: &Schedule,
-    stderr_log: &Path,
-) -> Result<crate::ControlledRun, EngineError> {
-    let s = spawn(
-        h,
-        spec,
-        How::ControlOne,
-        Some(schedule),
-        diag_file(stderr_log)?,
-        None,
-    )?;
-    Ok(crate::ControlledRun::from_started(s))
-}
-
 /// `--control boot serve` (M121).
 pub(crate) fn start_controlled(
     h: &Hvx,
@@ -330,9 +231,8 @@ pub(crate) fn start_controlled(
         How::ControlBootServe,
         Some(boot),
         diag_file(stderr_log)?,
-        None,
     )?;
-    Ok(crate::ControlledBoot::from_started(s, false))
+    Ok(crate::ControlledBoot::from_started(s))
 }
 
 /// `--control boot one` (M121).
@@ -348,7 +248,6 @@ pub(crate) fn one_controlled(
         How::ControlBootOne,
         Some(schedule),
         diag_file(stderr_log)?,
-        None,
     )?;
     Ok(crate::ControlledRun::from_started(s))
 }

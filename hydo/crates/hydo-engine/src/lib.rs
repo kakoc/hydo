@@ -1,9 +1,18 @@
 //! One interface to hydo's run engines.
 //!
-//! An engine boots a guest image, takes the two snapshot points every image defines, runs one
-//! schedule at a time and answers with a verdict and fingerprints. Two engines exist today, both
-//! driven with the same typed calls (`hydo-engine-proto`; [`link::Link`] carries them as values to
-//! an engine thread of this process, or as the protocol's lines to an engine program):
+//! Two layers. A [`ControlledEngine`] boots an agent image (every image `hydo build` makes since
+//! Milestone 136) under lock-step control from its first instruction and runs a schedule's host
+//! part from a snapshot the host took, stopping at every numbered stop for the host's commands
+//! ([`lockstep`]); the host controller (`hydo-control`'s `AgentEngine`) drives it and is the
+//! [`Engine`] every caller uses (the explorer, `hydo run`/`repro`, hydo-bench): it boots an image,
+//! takes the two snapshot points, runs one schedule at a time and answers with a verdict and
+//! fingerprints. The shell-init images' plain path (an engine that booted to the init's markers
+//! by itself and typed a schedule's guest part, `RUN`, and its timing branches, `BRANCH`) was
+//! deleted in Milestone 145; such an image is refused by [`image::control`].
+//!
+//! Two controlled engines exist today, both driven with the same typed calls
+//! (`hydo-engine-proto`; [`link::Link`] carries them as values to an engine thread of this
+//! process, or as the protocol's lines to an engine program):
 //!
 //! - [`hvx::Hvx`]: the Rust engine `hydo-hvx` (`hydo/crates/hydo-hvx`) on x86_64 Linux with the
 //!   hvx kernel module (`/dev/hvx`): on a thread of this process when it can open the device,
@@ -12,13 +21,14 @@
 //! - [`hvm::Hvm`]: `hv/hvm/explore/hvmx` on an Apple Silicon Mac (Hypervisor.framework), a
 //!   program.
 //!
-//! Both speak the same protocol (see [`protocol`]): `serve` prints `READY boot_secs=<s>` after
-//! booting to S1, then answers each `RUN <tag> <schedule>` line with one `RESULT` line (hvx also
-//! answers `BRANCH`), and `one` runs a single schedule from a fresh boot and prints its `RESULT`.
+//! Both speak the same protocol (see [`protocol`]): `--control boot serve` stops from the first
+//! instruction until the host has taken S0 and S1 and ended the boot, prints `READY
+//! boot_secs=<s>`, then answers each `CTL`/`RESUME` with a controlled run ending in one `RESULT`
+//! line; `--control boot one` runs a single schedule from a fresh boot the same way.
 //!
 //! The snapshot points ([`SnapshotPoint`]) are the same for every image: S0 (root mounted,
 //! nothing started: the start of every recovery boot) and S1 (services up and provisioned: the
-//! start of every schedule). The recovery boot after a power cut (a guest `C=` token or a host
+//! start of every schedule); the host takes them where its controller decides. The recovery boot after a power cut (a guest `C=` token or a host
 //! `cf=` token) is part of one run: the engine carries the flushed data disk into a VM restored
 //! from S0, and the run's result is that boot's verdict ([`RunResult::recovery`] tells).
 //!
@@ -77,7 +87,7 @@ use std::time::Duration;
 pub use link::{ChanLink, Link, TextLink};
 pub use lockstep::{DiskOff, Driver, Lockstep, LockstepStart};
 pub use process::{ControlledBoot, ControlledRun};
-pub use protocol::{BranchOutcome, BranchRequest, EngineMsg, HostMsg, Ready, Request, RunResult};
+pub use protocol::{EngineMsg, HostMsg, Ready, Request, RunResult};
 
 /// Which engine a spec is for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -134,14 +144,6 @@ pub enum SnapshotPoint {
 }
 
 impl SnapshotPoint {
-    /// The console marker the guest prints when it reaches the point.
-    pub fn marker(self) -> &'static str {
-        match self {
-            SnapshotPoint::S0 => "hydo-explore-ready-S0",
-            SnapshotPoint::S1 => "hydo-explore-ready-S1",
-        }
-    }
-
     /// The snapshot name the host gives the point in an agent image's controlled boot (M121:
     /// there is no marker; the host says `SNAP S0` and `SNAP S1` at stops it chooses).
     pub fn name(self) -> &'static str {
@@ -150,17 +152,6 @@ impl SnapshotPoint {
             SnapshotPoint::S1 => "S1",
         }
     }
-}
-
-/// Who runs an image's guest side (`/etc/hydo/control`, [`image::control`]).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum GuestControl {
-    /// The shell init (`hydo-init.sh`): every image without `/etc/hydo/control`. The engines
-    /// boot it to the S0/S1 markers by themselves.
-    Shell,
-    /// The guest agent `hydo-agent`, speaking agent protocol `proto` (`hydo-build --control
-    /// agent`, M121): boot it with [`Engine::start_controlled`] / [`Engine::one_controlled`].
-    Agent { proto: u64 },
 }
 
 /// What to boot. The defaults are what both engines assume when an option is not passed.
@@ -244,7 +235,7 @@ pub enum EngineError {
     NotReady(String),
     /// The engine answered something that is not its protocol.
     Protocol(String),
-    /// The engine cannot do this (for example a BRANCH on hvm).
+    /// The engine cannot do this (for example a schedule token one engine does not have).
     Unsupported(String),
 }
 
@@ -268,8 +259,10 @@ impl From<std::io::Error> for EngineError {
     }
 }
 
-/// A run engine. Implementations: [`hvx::Hvx`] (a process, or with `HYDO_ENGINE=inproc` the Rust
-/// engine in this process, [`inproc`]) and [`hvm::Hvm`].
+/// What every caller runs schedules with: boot an image to its snapshot points, run one schedule
+/// from a fresh boot or from S1 in a [`Worker`], and answer with a verdict and fingerprints. The
+/// implementation is the host controller over a [`ControlledEngine`] (`hydo-control`'s
+/// `AgentEngine`); tests implement it with scripted results.
 pub trait Engine {
     fn kind(&self) -> EngineKind;
 
@@ -288,42 +281,6 @@ pub trait Engine {
     /// The shell line that reproduces one schedule by hand (report.md's repro line).
     fn repro_line(&self, spec: &BootSpec, schedule: &Schedule) -> String;
 
-    /// Boot an agent image (one whose [`image::control`] is [`GuestControl::Agent`]) under
-    /// lock-step control from its first instruction (M121): the returned boot's session reports
-    /// stops in [`lockstep::Phase::Boot`], the caller takes the snapshots `S0` and `S1` where it
-    /// decides (`SNAP S0`, `SNAP S1`; [`SnapshotPoint::name`]) and ends the boot with END; then
-    /// [`ControlledBoot::ready`] gives the worker. Its [`Worker::lockstep`] runs
-    /// ([`LockstepStart::Run`]) restore the caller's S1 and type nothing (the guest part is `run`);
-    /// [`Worker::run`] and [`Worker::branch`] are refused for such an image. `boot`'s `rb=` is
-    /// the boot's cadence (its other tokens are not used).
-    fn start_controlled(
-        &self,
-        spec: &BootSpec,
-        boot: &Schedule,
-        stderr_log: &std::path::Path,
-    ) -> Result<ControlledBoot, EngineError> {
-        let _ = (spec, boot, stderr_log);
-        Err(EngineError::Unsupported(
-            "booting an agent image under control is not supported by this engine".into(),
-        ))
-    }
-
-    /// The fresh-boot counterpart of [`Engine::start_controlled`] for one schedule: the boot runs
-    /// under control as there, and the caller's `SNAP S1` in the boot phase arms `schedule`'s host
-    /// part and starts the workload phase at that same stop, so the run equals a worker's CTL run
-    /// of `schedule` from that S1 (stop numbers, input hash and fingerprint).
-    fn one_controlled(
-        &self,
-        spec: &BootSpec,
-        schedule: &Schedule,
-        stderr_log: &std::path::Path,
-    ) -> Result<ControlledRun, EngineError> {
-        let _ = (spec, schedule, stderr_log);
-        Err(EngineError::Unsupported(
-            "booting an agent image under control is not supported by this engine".into(),
-        ))
-    }
-
     /// The name of the function behind `fp`/`wfp`. Two engines (or two implementations of one)
     /// with the same name give the same value for the same run, whatever they skip internally
     /// (an exact hash may skip all-zero pages). hvx and hvm both hash with 64-bit FNV-1a.
@@ -333,6 +290,48 @@ pub trait Engine {
 
     /// How many workers this machine can run at once for `spec`: min(hardware threads, available
     /// memory / memory per worker). Callers size their pool with it instead of a fixed number.
+    fn max_workers(&self, spec: &BootSpec) -> usize {
+        machine_workers(spec.ram_mib as u64 * 2 + 256)
+    }
+}
+
+/// A run engine: it boots an agent image (one [`image::control`] accepts) under lock-step control
+/// and runs schedules' host parts under it. Implementations: [`hvx::Hvx`] (the Rust engine in this
+/// process, [`inproc`], or the program `hydo-hvx`) and [`hvm::Hvm`].
+pub trait ControlledEngine {
+    fn kind(&self) -> EngineKind;
+
+    /// Boot an agent image under lock-step control from its first instruction (M121): the
+    /// returned boot's session reports stops in [`lockstep::Phase::Boot`], the caller takes the
+    /// snapshots `S0` and `S1` where it decides (`SNAP S0`, `SNAP S1`; [`SnapshotPoint::name`])
+    /// and ends the boot with END; then [`ControlledBoot::ready`] gives the worker, whose
+    /// [`ControlledWorker::lockstep`] runs ([`LockstepStart::Run`]) restore the caller's S1 and
+    /// type nothing (the guest part is `run`). `boot`'s `rb=` is the boot's cadence (its other
+    /// tokens are not used).
+    fn start_controlled(
+        &self,
+        spec: &BootSpec,
+        boot: &Schedule,
+        stderr_log: &std::path::Path,
+    ) -> Result<ControlledBoot, EngineError>;
+
+    /// The fresh-boot counterpart of [`ControlledEngine::start_controlled`] for one schedule: the
+    /// boot runs under control as there, and the caller's `SNAP S1` in the boot phase arms
+    /// `schedule`'s host part and starts the workload phase at that same stop, so the run equals a
+    /// worker's CTL run of `schedule` from that S1 (stop numbers, input hash and fingerprint).
+    fn one_controlled(
+        &self,
+        spec: &BootSpec,
+        schedule: &Schedule,
+        stderr_log: &std::path::Path,
+    ) -> Result<ControlledRun, EngineError>;
+
+    /// The name of the function behind `fp`/`wfp` ([`Engine::fingerprint_scheme`]).
+    fn fingerprint_scheme(&self) -> &'static str {
+        "fnv1a64-v1"
+    }
+
+    /// How many workers this machine can run at once for `spec` ([`Engine::max_workers`]).
     fn max_workers(&self, spec: &BootSpec) -> usize {
         machine_workers(spec.ram_mib as u64 * 2 + 256)
     }
@@ -388,7 +387,7 @@ pub fn available_mib() -> Option<u64> {
     )
 }
 
-/// A booted engine that runs schedules from S1, one at a time, each in a fresh VM.
+/// A booted image that runs schedules from S1, one at a time, each in a fresh VM ([`Engine::start`]).
 pub trait Worker {
     /// How long the boot to S1 took (the READY line).
     fn boot_secs(&self) -> f64;
@@ -397,31 +396,24 @@ pub trait Worker {
     /// resets its VM to S1 first and computes the fingerprints itself.
     fn run(&mut self, tag: &str, schedule: &Schedule) -> Result<RunResult, EngineError>;
 
-    /// Put the worker's VM back at a snapshot point it owns. The process engines (hvx_explore,
-    /// hvmx) do this inside every RUN, in a fresh VM, so for them it is a no-op; an in-process
-    /// engine may restore only the pages and disk blocks the last run dirtied.
-    fn reset(&mut self, point: SnapshotPoint) -> Result<(), EngineError> {
-        let _ = point;
-        Ok(())
-    }
+    /// Tear the worker down (QUIT) and wait for the engine to exit.
+    fn close(self: Box<Self>) -> Result<(), EngineError>;
+}
 
-    /// Snapshot mid-run and run timing variants from there (hvx's BRANCH; hvm answers Unsupported).
-    fn branch(&mut self, req: &BranchRequest) -> Result<BranchOutcome, EngineError>;
+/// A [`ControlledEngine`]'s booted engine ([`ControlledBoot::ready`]): it runs controlled runs
+/// from the snapshots the host took, one at a time, each in a fresh VM.
+pub trait ControlledWorker {
+    /// How long the boot to S1 took (the READY line).
+    fn boot_secs(&self) -> f64;
 
-    /// Start a run under lock-step control (hvx's CTL/RESUME, [`lockstep`]): the returned session
-    /// reports every stop and waits for the caller's commands until the run's RESULT. No existing
-    /// caller uses it; engines without it answer Unsupported.
+    /// Start a run under lock-step control (`CTL`/`RESUME`, [`lockstep`]): the returned session
+    /// reports every stop and waits for the caller's commands until the run's RESULT.
     /// `log`: also write the transcript (`< ` host lines, `> ` engine lines), request included.
     fn lockstep<'a>(
         &'a mut self,
         start: &LockstepStart,
         log: Option<&'a mut dyn std::io::Write>,
-    ) -> Result<Lockstep<'a>, EngineError> {
-        let _ = (start, log);
-        Err(EngineError::Unsupported(
-            "lock-step control is not supported by this engine".into(),
-        ))
-    }
+    ) -> Result<Lockstep<'a>, EngineError>;
 
     /// One schedule from S1 under a host controller (M126; the design's `run_controlled`): the
     /// engine's CTL request, then `driver` answers every stop until the run's RESULT (the power
@@ -462,7 +454,7 @@ pub trait Worker {
 }
 
 /// The engine for this platform under a release root, with the configuration the program read.
-pub fn native(root: &std::path::Path, config: hydo_config::Env) -> Box<dyn Engine> {
+pub fn native(root: &std::path::Path, config: hydo_config::Env) -> Box<dyn ControlledEngine> {
     match EngineKind::native() {
         EngineKind::Hvx => Box::new(hvx::Hvx::for_release(root, config)),
         EngineKind::Hvm => Box::new(hvm::Hvm::for_release(root, config)),

@@ -13,7 +13,7 @@
 //!   `hydo-grpc-gen`, `hydo-nix-fetch`). It is the only code that reads hydo's variables from the
 //!   environment.
 //! - [`Config`] is the typed configuration, grouped by owner ([`engine::Engine`],
-//!   [`hvx::Options`], [`hvm::Engine`], [`hvm::Options`], [`run::Paths`], [`run::Pool`], [`run::Bench`], [`run::Control`],
+//!   [`hvx::Options`], [`hvm::Engine`], [`hvm::Options`], [`run::Paths`], [`run::Pool`], [`run::Control`],
 //!   [`run::Cli`], [`build::Build`], [`tools::Tools`]); each field's doc comment names its
 //!   variable and default. A program builds it from its [`Env`] and passes the groups down
 //!   explicitly; a library never reads the environment.
@@ -76,7 +76,6 @@ pub struct Config {
     pub hvm: hvm::Engine,
     pub paths: run::Paths,
     pub pool: run::Pool,
-    pub bench: run::Bench,
     pub control: run::Control,
     pub cli: run::Cli,
     pub build: build::Build,
@@ -91,7 +90,6 @@ impl Config {
             hvm: hvm::Engine::from_env(e),
             paths: run::Paths::from_env(e),
             pool: run::Pool::from_env(e),
-            bench: run::Bench::from_env(e),
             control: run::Control::from_env(e),
             cli: run::Cli::from_env(e),
             build: build::Build::from_env(e),

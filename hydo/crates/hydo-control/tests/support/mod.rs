@@ -1,10 +1,16 @@
 //! Shared by the controller's tests: the example manifests, their plans, conversations on the
-//! scripted agent and engine ([`fake`]), the merged log the shell model reads ([`model`]), and
-//! golden files of chunked SHA-256 (the format of hydo-explore's `tests/support`).
+//! scripted agent and engine ([`fake`]), the merged log of a conversation ([`Item`]: what the
+//! agent delivered and what the host did, by stop), and golden files of chunked SHA-256 (the
+//! format of hydo-explore's `tests/support`).
+//!
+//! Until Milestone 145 the conversations were also checked against shell models of the init
+//! (hydo-init.sh and its extensions, written as blocking code); the shell init was deleted in
+//! M136 and its models in M145 (`git show fb54e8d:hydo/crates/hydo-control/tests/support/model.rs`).
+//! What guards the controller now is the recorded transcripts (`tests/golden/`), the replay of
+//! every transcript, and the semantic checks of each test.
 #![allow(dead_code)]
 
 pub mod fake;
-pub mod model;
 
 use fake::{Delivered, Fake, Msg, VmState};
 use hydo_agent_proto::line::HostLine;
@@ -108,10 +114,11 @@ pub fn plan_of(rel: &str) -> Result<Plan, Unsupported> {
     Plan::from_manifest(&hydo_manifest::Manifest::from_validated(data_of(rel)?))
 }
 
-/// [`plan_of`] for the tests whose oracle is the shell model: the model has no restart policies
-/// (M134; the shell init never followed them), so a manifest with one (M141's NATS cluster,
-/// imported from Compose) is left to restart.rs.
-pub fn model_plan_of(rel: &str) -> Result<Plan, Unsupported> {
+/// [`plan_of`] for the recorded corpora (`corpus.rs`, the solo runs): a manifest with a restart
+/// policy (M134; M141's NATS cluster, imported from Compose) is left to restart.rs, as when the
+/// corpora were checked against the shell models, which had none. The refusal's text is the one
+/// recorded in `tests/golden/corpus-quick.txt`, so it still names the deleted model.
+pub fn corpus_plan_of(rel: &str) -> Result<Plan, Unsupported> {
     let plan = plan_of(rel)?;
     if plan
         .services
@@ -136,8 +143,8 @@ pub fn data_of(rel: &str) -> Result<serde_json::Value, Unsupported> {
     Ok(data)
 }
 
-/// One item of a conversation as the shell model reads it: what the agent delivered and what
-/// the host did, in order (at each stop: the deliveries first, then the host's actions).
+/// One item of a conversation: what the agent delivered and what the host did, in order (at each
+/// stop: the deliveries first, then the host's actions).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Item {
     Got {
@@ -443,9 +450,10 @@ pub fn run_schedule(b: &Booted, s: &Schedule) -> Result<Ran, Unsupported> {
     })
 }
 
-/// The recovery boot's `oracle` command as the engine builds it today from a run's report
-/// (hvx_explore.c `oracle_cmd`: the words of the last `hydo-explore-acked:` line, then `failed`
-/// and those of the `hydo-explore-failed:` line when it has any), with its two word lists.
+/// The acknowledged and failed ids a run's report states: the words of its last
+/// `hydo-explore-acked:` and `hydo-explore-failed:` lines (with the `oracle` command the deleted
+/// shell images' engine built from them, hvx_explore.c `oracle_cmd`). The tests check that a power
+/// cut hands the recovery exactly these ([`hydo_control::Ending::PowerCut`]).
 pub fn oracle_of(items: &[Item]) -> (String, Vec<String>, Vec<String>) {
     let last = |prefix: &str| -> Vec<String> {
         items

@@ -13,25 +13,23 @@
 //!
 //! ```text
 //! <hvx-run> sudo env [<extra env>...] <hydo-hvx> [--ram-mib N] [--vcpus N] [--cpu v3]
-//!     one   <bzImage> <initramfs> <image> <outdir> "<schedule>"
-//!     serve <bzImage> <initramfs> <image> <outdir>          (then RUN/BRANCH/QUIT on stdin)
-//!     --control one   ... "<schedule>"                       (lock-step control from S1, M118)
-//!     --control boot serve ... ["<boot schedule>"]           (an agent image, M121)
-//!     --control boot one   ... "<schedule>"
+//!     --control boot serve <bzImage> <initramfs> <image> <outdir> ["<boot schedule>"]
+//!                                                  (then CTL/RESUME/QUIT on stdin; M121)
+//!     --control boot one   <bzImage> <initramfs> <image> <outdir> "<schedule>"
 //! ```
+//!
+//! The plain `one` and `serve` modes, `--control one` and the requests RUN and BRANCH were the
+//! shell-init images' and were deleted in Milestone 145.
 //!
 //! `hvx-run` takes the shared module lock (`flock -s $HYDO_LOCK`) and drops the `sudo` when the
 //! user can open the device; without a wrapper the program is started directly. In this process
 //! the engine thread takes the same shared lock itself ([`crate::inproc`]).
 
-use crate::process::{run_one, ControlledBoot, ControlledRun, ProcessWorker};
-use crate::{BootSpec, Engine, EngineError, EngineKind, OneRun, Worker};
+use crate::process::{ControlledBoot, ControlledRun};
+use crate::{BootSpec, ControlledEngine, EngineError, EngineKind};
 use hydo_schedule::Schedule;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-
-/// A fresh-boot engine process under lock-step control ([`Hvx::one_lockstep`]).
-pub type ControlledOne = ControlledRun;
 
 /// How to start the hvx engine.
 #[derive(Clone, Debug)]
@@ -65,8 +63,8 @@ impl Hvx {
         }
     }
 
-    /// The argv for `mode` (one or serve), without the schedule.
-    pub fn argv(&self, spec: &BootSpec, mode: &str) -> Vec<String> {
+    /// The argv for `mode` (one or serve), without the control flags and the schedule.
+    fn argv(&self, spec: &BootSpec, mode: &str) -> Vec<String> {
         let mut a: Vec<String> = Vec::new();
         if let Some(w) = &self.hvx_run {
             a.push(w.display().to_string());
@@ -96,23 +94,6 @@ impl Hvx {
             c.env(k, v);
         }
         c
-    }
-
-    /// One schedule from a fresh boot under lock-step control (`hvx_explore --control one`): the
-    /// fresh-boot counterpart of [`Worker::lockstep`], to prove that a controlled run from a fresh
-    /// boot equals the same run restored from S1. The engine's stderr goes to `stderr_log`.
-    pub fn one_lockstep(
-        &self,
-        spec: &BootSpec,
-        schedule: &Schedule,
-        stderr_log: &Path,
-    ) -> Result<ControlledOne, EngineError> {
-        if crate::inproc::chosen(self) {
-            return crate::inproc::one_lockstep(self, spec, schedule, stderr_log);
-        }
-        self.check_built()?;
-        let argv = self.control_argv(spec, "one", &["--control"], Some(schedule));
-        ControlledRun::start(self.command(&argv), stderr_log)
     }
 
     /// argv for a controlled mode: `flags` go in front of the mode, `last` after the paths.
@@ -194,38 +175,9 @@ pub(crate) fn is_executable(p: &Path) -> bool {
         .unwrap_or(false)
 }
 
-impl Engine for Hvx {
+impl ControlledEngine for Hvx {
     fn kind(&self) -> EngineKind {
         EngineKind::Hvx
-    }
-
-    fn one(&self, spec: &BootSpec, schedule: &Schedule) -> Result<OneRun, EngineError> {
-        if crate::inproc::chosen(self) {
-            return crate::inproc::one(self, spec, schedule);
-        }
-        self.check_built()?;
-        let mut argv = self.argv(spec, "one");
-        argv.push(schedule.to_string());
-        run_one(self.command(&argv))
-    }
-
-    fn start(&self, spec: &BootSpec, stderr_log: &Path) -> Result<Box<dyn Worker>, EngineError> {
-        if crate::inproc::chosen(self) {
-            return crate::inproc::serve(self, spec, stderr_log);
-        }
-        self.check_built()?;
-        let argv = self.argv(spec, "serve");
-        Ok(Box::new(ProcessWorker::start(
-            self.command(&argv),
-            stderr_log,
-            true,
-        )?))
-    }
-
-    fn repro_line(&self, spec: &BootSpec, schedule: &Schedule) -> String {
-        let mut argv = self.argv(spec, "one");
-        argv.push(format!("\"{schedule}\""));
-        argv.join(" ")
     }
 
     fn start_controlled(
@@ -239,7 +191,7 @@ impl Engine for Hvx {
         }
         self.check_built()?;
         let argv = self.control_argv(spec, "serve", &["--control", "boot"], Some(boot));
-        ControlledBoot::start(self.command(&argv), stderr_log, false)
+        ControlledBoot::start(self.command(&argv), stderr_log)
     }
 
     fn one_controlled(

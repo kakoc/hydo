@@ -3,7 +3,7 @@
 //! `--opt=value`).
 
 use crate::cells::{self, Cell};
-use crate::defects::{Kind, Set};
+use crate::defects::{check_kind, Set};
 use crate::pools::Engines;
 use crate::{analysis, buggify, confirm, listrun};
 use std::path::{Path, PathBuf};
@@ -14,25 +14,23 @@ pub const USAGE: &str = "usage: hydo-bench <command> [options]   (hydo/bench/REA
            [--concurrency] [--more-faults --cf-range LO-HI] [--reactive fault|heal|both]
            [--knob-rule cut|any] [--vcpus N [--turns]]
            [--window N] [--defects all|m59|d1-...,...] [--reps 1-3] [--budget 60] [--workers 3]
-           [--kind agent|stack] --out DIR | --dry
+           --out DIR | --dry
                cells of strategy x defect x repetitions; appends DIR/results.jsonl (--dry: print
                each seed's schedule and start no VM)
   table    DIR...                       the detection table of finished cells (run --table DIR... too)
   confirm  --out DIR [--defects all|m59|...] [--workers 3] [--no-control] [--base] [--bg-images] [--vcpus N]
-           [--kind agent|stack]
                every defect's trigger schedules twice on its image and once on its control
   list     --images IMG[,IMG...] --list FILE --out DIR [--workers 3] [--vcpus N] [--repeat 1|2] [--env K=V]...
-           [--kind agent|stack] [--bg-images]
+           [--bg-images]
                a fixed list of schedules on each image (IMG: an image file, a defect name for its
                image of the kind, or control:<defect> for its control)
   depth1map DEFECT-SWEEP-DIR CONTROL-SWEEP-DIR [--sig REGEX] [--json FILE]
   d7prob   [--seeds 200000]
   addbuggify MAIN.GO [--check]
 
-Images are read from $HYDO_BUILD (default ~/hydo/build). --kind (or $HYDO_BENCH_KIND) picks them: agent (the
-default) = the manifest-built agent images explore-ob-bench-<defect>-agent-disk.img (hydo/bench/build-bench-manifest.sh;
-M135's shell kind went with the shell init in M136), stack = the
-build-stack.sh images (the engine's regression baselines; their m59 set is $HYDO_M59_SUFFIX, default -pin-kr).
+Images are read from $HYDO_BUILD (default ~/hydo/build): the manifest-built agent images
+explore-ob-bench-<defect>-agent-disk.img (hydo/bench/build-bench-manifest.sh). --kind takes only agent (the
+build-stack.sh images, --kind stack, were deleted in Milestone 145; --kind shell in Milestone 136).
 The hvx engine runs in this process when it can open /dev/hvx (run hydo-bench as ~/bin/hvx-run sudo ...);
 otherwise every VM is the program hydo-hvx ($HYDO_HVX_EXPLORE) started through ~/bin/hvx-run ($HYDO_HVX_RUN).";
 
@@ -236,11 +234,8 @@ fn cmd_run(root: &Path, cfg: &hydo_config::Config, o: &Opts) -> Result<(), Strin
         }
         return Ok(());
     }
-    let set = Set::new(
-        Kind::select(o.get("--kind"), &cfg.bench)?,
-        o.flag("--bg-images"),
-        &cfg.bench,
-    );
+    check_kind(o.get("--kind"))?;
+    let set = Set::new(o.flag("--bg-images"));
     let names = Set::names(o.get("--defects").unwrap_or("all"))?;
     let eng = Engines::new(root, v, Vec::new(), cfg);
     cells::run_cell(&c, &set, &eng, &names)
@@ -258,11 +253,8 @@ fn cmd_confirm(root: &Path, cfg: &hydo_config::Config, o: &Opts) -> Result<(), S
         "--kind",
     ])?;
     let out = o.get("--out").ok_or("--out is required")?;
-    let set = Set::new(
-        Kind::select(o.get("--kind"), &cfg.bench)?,
-        o.flag("--bg-images"),
-        &cfg.bench,
-    );
+    check_kind(o.get("--kind"))?;
+    let set = Set::new(o.flag("--bg-images"));
     let names = Set::names(o.get("--defects").unwrap_or("all"))?;
     let eng = Engines::new(root, vcpus(o)?, Vec::new(), cfg);
     confirm::confirm(
@@ -312,11 +304,8 @@ fn cmd_list(root: &Path, cfg: &hydo_config::Config, o: &Opts) -> Result<(), Stri
         "--kind",
         "--bg-images",
     ])?;
-    let set = Set::new(
-        Kind::select(o.get("--kind"), &cfg.bench)?,
-        o.flag("--bg-images"),
-        &cfg.bench,
-    );
+    check_kind(o.get("--kind"))?;
+    let set = Set::new(o.flag("--bg-images"));
     let images = o
         .get("--images")
         .ok_or("--images is required")?

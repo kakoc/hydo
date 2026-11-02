@@ -1,5 +1,5 @@
-//! The other conversations and formats: the shell's solo mode against the shell model, the
-//! transcript file's round trip and its summary for the results document, determinism of two
+//! The other conversations and formats: solo mode (it ends with a verdict and gives one
+//! transcript for one scripted guest), the transcript file's round trip and its summary for the results document, determinism of two
 //! runs, and the lock-step adapter over a scripted hydo_engine::lockstep stream.
 
 mod support;
@@ -13,7 +13,6 @@ use hydo_control::{
 };
 use hydo_engine::lockstep::{escape, Lockstep, TextLink};
 use support::fake::Fake;
-use support::model::{check, Conv};
 use support::{converse, manifests, plan_of};
 
 fn header(conv: &str) -> Header {
@@ -27,19 +26,33 @@ fn header(conv: &str) -> Header {
 }
 
 #[test]
-fn solo_mode_does_what_the_shell_does() {
+fn solo_mode_ends_with_a_verdict_and_one_transcript() {
     let mut n = 0;
     for m in manifests() {
-        let Ok(plan) = support::model_plan_of(&m) else {
+        let Ok(plan) = support::corpus_plan_of(&m) else {
             continue;
         };
         for i in 0..4 {
             let salt = format!("{m} solo {i}");
             let mut ctl = ScheduleController::solo(plan.clone()).unwrap();
             let c = converse(Fake::boot(&salt, 16), &mut ctl, Start::Boot, header("solo"));
-            check(&plan, &c.items, Conv::Solo, "", (&[], &[]), None)
-                .unwrap_or_else(|e| panic!("{m} ({salt}): solo differs from the shell:\n{e}"));
-            assert!(matches!(c.fin.ending, Some(Ending::Verdict(_))));
+            assert!(
+                matches!(c.fin.ending, Some(Ending::Verdict(_))),
+                "{m} ({salt}): {:?}",
+                c.fin.ending
+            );
+            let mut again = ScheduleController::solo(plan.clone()).unwrap();
+            let d = converse(
+                Fake::boot(&salt, 16),
+                &mut again,
+                Start::Boot,
+                header("solo"),
+            );
+            assert_eq!(
+                c.fin.transcript.to_jsonl(),
+                d.fin.transcript.to_jsonl(),
+                "{m} ({salt}): two solo runs differ"
+            );
             n += 1;
         }
     }
@@ -201,15 +214,6 @@ fn a_periodic_check_keeps_the_environment_of_its_start() {
     ] {
         let s: hydo_schedule::Schedule = text.parse().unwrap();
         let r = support::run_schedule(&b, &s).unwrap();
-        check(
-            &plan,
-            &r.run.items,
-            Conv::Run,
-            &s.guest_text(),
-            (&[], &[]),
-            Some(&b.s1.2),
-        )
-        .unwrap_or_else(|e| panic!("{text}: the run differs from the shell:\n{e}"));
         let mut restarted = false;
         for it in &r.run.items {
             let support::Item::Send { by, cmd, .. } = it else {

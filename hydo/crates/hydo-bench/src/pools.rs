@@ -9,7 +9,7 @@
 //! controller cannot drive (for example one without an embedded manifest) is refused with the
 //! controller's message (M129).
 
-use hydo_engine::{hvx, BootSpec, CpuLevel, Engine, SnapshotStore};
+use hydo_engine::{hvx, BootSpec, ControlledEngine, CpuLevel, Engine, SnapshotStore};
 use hydo_explore::pool::{Host, Pool};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -79,8 +79,7 @@ impl Engines {
             known: None,
             pool: self.config.pool.clone(),
         };
-        let engine: Arc<dyn Engine + Send + Sync> = Arc::new(engine);
-        let engine = agent_or(engine, &spec.image, &self.config.control);
+        let engine = agent_engine(Arc::new(engine), &spec.image, &self.config.control);
         Pool::new(
             engine,
             spec,
@@ -92,12 +91,10 @@ impl Engines {
     }
 }
 
-/// `engine` itself for a shell image, the host controller over it for an agent image; exits with
-/// the controller's refusal when it cannot drive the image.
 /// The guest's RAM and CPU level from the manifest an image carries (`guest.ram_mib`,
 /// `guest.cpu`, as the explorer picks them for `--image`; M136: `list` on the onboarding examples
 /// needs them, the benchmark's own manifest has the defaults); 1024 MiB and v2 for an image
-/// without a manifest (the stack images) or without the keys.
+/// without the keys.
 fn guest_of(image: &Path) -> (u32, CpuLevel) {
     let Ok(text) = hydo_engine::image::embedded_manifest(image) else {
         return (1024, CpuLevel::V2);
@@ -115,14 +112,15 @@ fn guest_of(image: &Path) -> (u32, CpuLevel) {
     (ram, cpu)
 }
 
-fn agent_or(
-    engine: Arc<dyn Engine + Send + Sync>,
+/// The host controller over `engine` for the agent image `image`; exits with the controller's
+/// refusal when it cannot drive the image (a shell-init image, M145).
+fn agent_engine(
+    engine: Arc<dyn ControlledEngine + Send + Sync>,
     image: &Path,
     control: &hydo_config::run::Control,
 ) -> Arc<dyn Engine + Send + Sync> {
-    match hydo_control::agent::AgentEngine::for_image(engine.clone(), image) {
-        Ok(None) => engine,
-        Ok(Some(a)) => Arc::new(a.with_control(control)),
+    match hydo_control::agent::AgentEngine::for_image(engine, image) {
+        Ok(a) => Arc::new(a.with_control(control)),
         Err(e) => {
             eprintln!("hydo-bench: {e}");
             std::process::exit(2);
