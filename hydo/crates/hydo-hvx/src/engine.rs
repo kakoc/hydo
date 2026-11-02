@@ -2591,130 +2591,6 @@ impl Core {
         self.budget = 0;
     }
 
-    /// `run_branch`: one base run to the marker, a snapshot there, timing variants from it.
-    #[allow(clippy::too_many_arguments)]
-    fn run_branch(
-        &mut self,
-        mut b: Boot,
-        tag: &str,
-        sc: &Sched,
-        mark: &str,
-        nvar: i32,
-        pm_: u32,
-        mx: u64,
-    ) {
-        let from = b.ulen();
-        let t0 = now();
-        let mut sub = format!("{tag}-base");
-        ccap(&mut sub, 96);
-        self.budget = BRANCH_BUDGET;
-        let fail: Option<&str> = 'b: {
-            if sc.tj_on || sc.rb != 0 || sc.pp != 0 || sc.pptsc != 0 || sc.xt_on || sc.q_on {
-                break 'b Some("ERROR branch: not for timed or rb= schedules");
-            }
-            if self.set_fault(&b, sc.dseed, sc.classes, sc.prob).is_err() {
-                break 'b Some("ERROR harness set_fault");
-            }
-            let mut line = sc.guest().to_vec();
-            line.push(b'\n');
-            if self.put_bytes(&b, &line).is_err() {
-                break 'b Some("ERROR harness put_input");
-            }
-            let r = if let Some(n) = mark.strip_prefix('@') {
-                let mut pm = hvx_pmu::default();
-                if b.vm().io(HVX_GET_PMU, &mut pm).is_err() || pm.period == 0 {
-                    break 'b Some("ERROR branch needs the PMU clock");
-                }
-                let target = if mark != "@held" {
-                    pm.next / pm.period + strtoull(n.as_bytes(), 10).0
-                } else {
-                    0
-                };
-                self.run_until_tick(&mut b, target, from)
-            } else {
-                let mk: [&[u8]; 3] = [mark.as_bytes(), DONE_MARKER, FINAL_MARKER];
-                self.run_until_any(&mut b, &mk, from)
-            };
-            if r < 0 {
-                break 'b Some("ERROR vm workload (before the branch point)");
-            }
-            if r != 0 {
-                self.emit(EngineMsg::BranchPoint {
-                    tag: tag.to_string(),
-                    point: None,
-                });
-                self.finish_sched(b, &sub, sc, from, t0, "");
-                b = Boot::none();
-                break 'b None;
-            }
-            let mut pm = hvx_pmu::default();
-            if b.vm().io(HVX_GET_PMU, &mut pm).is_err() || pm.period == 0 {
-                break 'b Some("ERROR branch needs the PMU clock");
-            }
-            let lo = pm.next / pm.period + 1;
-            let Some(s2) = self.snap_take(&b) else {
-                break 'b Some("ERROR branch snapshot");
-            };
-            self.emit(EngineMsg::BranchPoint {
-                tag: tag.to_string(),
-                point: Some((lo, s2.unsync_n as u64)),
-            });
-            let mut nvar = nvar;
-            if nvar < 0 {
-                self.teardown(&mut b);
-                nvar = -nvar;
-            } else {
-                self.finish_sched(b, &sub, sc, from, t0, "");
-            }
-            b = Boot::none();
-            for v in 1..=nvar {
-                let tv = now();
-                let mut vsub = format!("{tag}-v{v}");
-                ccap(&mut vsub, 96);
-                let mut sv = *sc;
-                sv.tj = hvx_tjitter::default();
-                sv.tj_on = true;
-                sv.tj.seed = v as u64;
-                sv.tj.permille = pm_;
-                sv.tj.max_delay = mx;
-                sv.tj.tick_lo = lo;
-                let vb = self.vm_for(s2.id);
-                let mut ok = None;
-                if let Some(mut vb) = vb {
-                    let good = self.snap_restore(&mut vb, &s2, None).is_ok() && {
-                        let mut tj = sv.tj;
-                        b_set_tj(&vb, &mut tj)
-                    };
-                    if good {
-                        ok = Some(vb);
-                    } else {
-                        self.sched_fail(&mut vb, &vsub, from, tv, "", "ERROR branch restore");
-                        continue;
-                    }
-                }
-                match ok {
-                    Some(vb) => {
-                        let tji = format!(" tjk={}", lo - 1);
-                        self.finish_sched(vb, &vsub, &sv, from, tv, &tji);
-                    }
-                    None => {
-                        let mut nb = Boot::none();
-                        self.sched_fail(&mut nb, &vsub, from, tv, "", "ERROR branch restore");
-                    }
-                }
-            }
-            None
-        };
-        if let Some(v) = fail {
-            self.sched_fail(&mut b, &sub, from, t0, "", v);
-        }
-        self.budget = 0;
-        self.emit(EngineMsg::BranchEnd {
-            tag: tag.to_string(),
-            note: String::new(),
-        });
-    }
-
     /// `ctl_resume`: a controlled run continued from a SNAP, in a fresh VM.
     fn ctl_resume(&mut self, tag: &str, name: &str) {
         let t0 = now();
@@ -2927,19 +2803,7 @@ impl Core {
         loop {
             let r = match self.port.request() {
                 Req::End => break,
-                Req::BadBranch => {
-                    let note = if self.ctl_boot {
-                        "unsupported for an agent image (it runs under control: CTL, RESUME)"
-                    } else {
-                        "bad request"
-                    };
-                    self.emit(EngineMsg::BranchEnd {
-                        tag: "?".into(),
-                        note: note.into(),
-                    });
-                    continue;
-                }
-                Req::BadRun => {
+                Req::BadBranch | Req::BadRun => {
                     self.no_run("?", "ERROR bad request");
                     continue;
                 }
@@ -2947,37 +2811,6 @@ impl Core {
             };
             let (ctl, tag, sc) = match r {
                 Request::Quit => break,
-                Request::Branch(br) => {
-                    if self.ctl_boot {
-                        self.emit(EngineMsg::BranchEnd {
-                            tag: "?".into(),
-                            note: "unsupported for an agent image (it runs under control: CTL, RESUME)"
-                                .into(),
-                        });
-                        continue;
-                    }
-                    let sc = Sched::from_schedule(&br.schedule);
-                    let s1 = self.s1.take().expect("S1");
-                    let b = self.fresh_restore(&s1);
-                    self.s1 = Some(s1);
-                    let Some(b) = b else {
-                        self.emit(EngineMsg::BranchEnd {
-                            tag: br.tag.clone(),
-                            note: "restore failed".into(),
-                        });
-                        continue;
-                    };
-                    self.run_branch(
-                        b,
-                        &br.tag,
-                        &sc,
-                        &br.marker,
-                        br.variants,
-                        br.permille,
-                        br.max_delay,
-                    );
-                    continue;
-                }
                 Request::Resume { tag, snapshot } => {
                     if self.o.phases {
                         self.ph_reset();
@@ -2986,7 +2819,6 @@ impl Core {
                     continue;
                 }
                 Request::Ctl { tag, schedule } => (true, tag, Sched::from_schedule(&schedule)),
-                Request::Run { tag, schedule } => (false, tag, Sched::from_schedule(&schedule)),
             };
             if ctl {
                 self.ctl_begin(&tag);

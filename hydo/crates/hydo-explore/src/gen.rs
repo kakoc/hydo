@@ -18,7 +18,6 @@ use std::sync::OnceLock;
 pub const NORDERS: i64 = 30;
 pub const TJ_MAX: i64 = 500000;
 pub const TJ_EXPLICIT_MAX: usize = 32;
-pub const BRANCH_BUDGET: i64 = 16;
 pub const NF_SALT: u64 = 0x4E46A17C0FFEE046;
 pub const BG_SALT: u64 = 0xB0661F7ED5EED0B6;
 pub const CC_SALT: u64 = 0x51C0C0C0C0C0C051;

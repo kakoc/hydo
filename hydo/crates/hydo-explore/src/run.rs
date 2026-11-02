@@ -19,7 +19,7 @@ use crate::args::{self, Args};
 use crate::compose;
 use crate::errlog::{self, Known};
 use crate::fc;
-use crate::gen::{Backend, Ex, TJ_MAX};
+use crate::gen::{Backend, Ex};
 use crate::md;
 use crate::pool::{self, has_errlog, Host, Pool, Res};
 use crate::py::{dumps_line, head, py_str, round1};
@@ -27,9 +27,9 @@ use crate::report::{self, assert_failures, same_failure, sig_key, verdict_kind};
 use crate::results::{self, Events};
 use crate::sched::S;
 use crate::space::{grpc_targets, Space};
-use hydo_engine::{hvm, hvx, BootSpec, CpuLevel, Engine, SnapshotStore};
+use hydo_engine::{hvm, hvx, BootSpec, ControlledEngine, CpuLevel, Engine, SnapshotStore};
 use hydo_results::{
-    role, Branch, Config, End, ErrorKinds, ErrorShrink, Exploration, ExplorationArtifacts, Failure,
+    role, Config, End, ErrorKinds, ErrorShrink, Exploration, ExplorationArtifacts, Failure,
     Image, Reproduction, Run, ShrinkStep, Start, Summary,
 };
 use serde_json::{json, Map, Value};
@@ -72,8 +72,6 @@ struct Cx {
     argv: Vec<String>,
     /// events.jsonl (opened when the run starts).
     ev: Events,
-    /// The image's guest side is hydo-agent: the host controller drives it (M126).
-    agent: bool,
 }
 
 impl Cx {
@@ -243,7 +241,6 @@ fn setup(a: Args, env: &Env) -> Cx {
         known: Some(known),
         argv: Vec::new(),
         ev: Events::none(),
-        agent: false,
         a,
     };
     let a = cx.a.clone();
@@ -299,10 +296,7 @@ fn setup(a: Args, env: &Env) -> Cx {
         } else {
             cx.build.join(&a.image)
         };
-        if let Ok(hydo_engine::GuestControl::Agent { .. }) = hydo_engine::image::control(&img) {
-            agent_space(&a, &img);
-            cx.agent = true;
-        }
+        agent_space(&img);
         eprintln!("fault space: {}", dumps_line(&sp.describe()));
         sp.apply(&mut cx.ex);
     }
@@ -463,19 +457,17 @@ fn setup(a: Args, env: &Env) -> Cx {
     cx
 }
 
-/// An agent image (M126): the manifest must be one the controller drives, and the options that
-/// need what waits for wave 3 are refused. Every fault kind of the space is driven since the
-/// clock seam (M122: `T=`, `guest.clock_after_cut`) and BUGGIFY (`B=`, `--buggify`) landed.
-fn agent_space(a: &Args, img: &Path) {
+/// The image of a manifest's space (M126): an agent image, whose manifest must be one the
+/// controller drives. Every fault kind of the space is driven since the clock seam (M122: `T=`,
+/// `guest.clock_after_cut`) and BUGGIFY (`B=`, `--buggify`) landed. A shell-init image is refused
+/// (Milestone 145).
+fn agent_space(img: &Path) {
+    if let Err(e) = hydo_engine::image::control(img) {
+        die(&format!("hydo: {e}"));
+    }
     if let Err(e) = hydo_control::agent::plan_of_image(img) {
         die(&format!(
             "hydo: {}: an agent image whose manifest the host controller cannot drive yet: {e}",
-            img.display()
-        ));
-    }
-    if a.branch.is_some() {
-        die(&format!(
-            "hydo: --branch is not supported on an agent image yet ({})",
             img.display()
         ));
     }
@@ -494,7 +486,7 @@ fn make_pool(cx: &Cx) -> Pool {
     if let Some(tm) = cx.a.turn_margin {
         extra.push(format!("{}={tm}", hydo_config::registry::HVX_TURN_MARGIN));
     }
-    let (engine, spec): (Arc<dyn Engine + Send + Sync>, BootSpec) = if cx.ex.backend == Backend::Hvm
+    let (engine, spec): (Arc<dyn ControlledEngine + Send + Sync>, BootSpec) = if cx.ex.backend == Backend::Hvm
     {
         let e = hvm::Hvm {
             hvmx: hvm::program(&cx.env.root, &cx.env.config.hvm),
@@ -539,24 +531,15 @@ fn make_pool(cx: &Cx) -> Pool {
         };
         (Arc::new(e), spec)
     };
-    // An agent image explored without a manifest space (the stack's schedules, as hydo-bench
-    // draws them) goes through the controller too (M129); one it cannot drive (no embedded
-    // manifest, for example a patched stack-explore image) is refused with the controller's
+    // Every image is an agent image driven by the host controller, also one explored without a
+    // manifest space (the stack's schedules, as hydo-bench draws them, M129); one it cannot drive
+    // (a shell-init image, or one without an embedded manifest) is refused with the controller's
     // message instead of every worker failing to start.
-    let stack_agent = cx.ex.space.is_none()
-        && matches!(
-            hydo_engine::image::control(&spec.image),
-            Ok(hydo_engine::GuestControl::Agent { .. })
-        );
-    let engine: Arc<dyn Engine + Send + Sync> = if cx.agent || stack_agent {
+    let engine: Arc<dyn Engine + Send + Sync> =
         match hydo_control::agent::AgentEngine::for_image(engine, &spec.image) {
-            Ok(Some(a)) => Arc::new(a.with_control(&cx.env.config.control)),
-            Ok(None) => die(&format!("{}: not an agent image", spec.image.display())),
+            Ok(a) => Arc::new(a.with_control(&cx.env.config.control)),
             Err(e) => die(&format!("hydo: {e}")),
-        }
-    } else {
-        engine
-    };
+        };
     let (n, spec) = size_pool(cx, engine.as_ref(), spec);
     let host = Host {
         outdir: cx.out.clone(),
@@ -695,9 +678,6 @@ fn run(mut cx: Cx) -> i32 {
         let _ = hydo_results::write_document(&cx.out.join(hydo_results::EXPLORATION_DOC), &doc);
         pool.close();
         return 0;
-    }
-    if cx.a.branch.is_some() {
-        return branch_main(&cx, pool, t0, image_sha);
     }
     let (seeds, items, pre_res, fc_info, labels) = match &cx.a.sweep {
         Some(sw) => {
@@ -1507,8 +1487,6 @@ impl Cx {
     fn mode(&self) -> &'static str {
         if self.a.schedule.is_some() {
             "schedule"
-        } else if self.a.branch.is_some() {
-            "branch"
         } else if self.a.sweep.is_some() {
             "sweep"
         } else {
@@ -1525,10 +1503,10 @@ impl Cx {
                 .as_ref()
                 .map(|s| format!("sweep:{s}"))
                 .unwrap_or_else(|| a.strategy.clone()),
-            seeds: matches!(mode, "seeds" | "branch").then(|| a.seeds.clone()),
+            seeds: (mode == "seeds").then(|| a.seeds.clone()),
             sweep: a.sweep.clone(),
-            branch_marker: a.branch.clone(),
-            variants: a.branch.as_ref().map(|_| a.variants as u64),
+            branch_marker: None,
+            variants: None,
             schedule: a.schedule.clone(),
             argv: self.argv.clone(),
         }
@@ -1641,125 +1619,3 @@ impl Cx {
     }
 }
 
-/// explore.py `branch_main`: each seed's schedule runs to the marker, then timing variants.
-fn branch_main(cx: &Cx, pool: Pool, t0: Instant, image_sha: ShaThread) -> i32 {
-    let a = &cx.a;
-    let (lo, hi) = a
-        .seeds
-        .split_once('-')
-        .and_then(|(l, h)| Some((l.trim().parse::<i64>().ok()?, h.trim().parse::<i64>().ok()?)))
-        .unwrap_or_else(|| die(&format!("explore.py: --seeds {}: lo-hi", a.seeds)));
-    let pm = cx.ex.tj_pm[cx.ex.tj_pm.len() / 2];
-    let marker = a.branch.clone().unwrap_or_default();
-    let reqs: Vec<(String, hydo_engine::BranchRequest, String)> = (lo..=hi)
-        .map(|sd| {
-            let text = cx.render(&cx.ex.generator(&a.strategy, sd as u64));
-            let tag = format!("seed-{sd}");
-            let sched = hydo_schedule::Schedule::parse(&text)
-                .unwrap_or_else(|e| die(&format!("{text}: {e}")));
-            (
-                tag.clone(),
-                hydo_engine::BranchRequest {
-                    tag,
-                    variants: a.variants as i32,
-                    permille: pm as u32,
-                    max_delay: TJ_MAX as u64,
-                    marker: marker.clone(),
-                    schedule: sched,
-                },
-                text,
-            )
-        })
-        .collect();
-    let t1 = Instant::now();
-    let done = pool.branch_all(reqs.clone());
-    let t_sweep = t1.elapsed().as_secs_f64();
-    let (mut fails, mut nrun, mut nbp, mut secs) = (Vec::<Run>::new(), 0usize, 0usize, 0.0f64);
-    for (bi, b) in done.iter().enumerate() {
-        nbp += usize::from(b.tjlo.is_some());
-        for (sub, st, rr) in &b.runs {
-            nrun += 1;
-            secs += rr["secs"].as_f64().unwrap_or(0.0);
-            let mut run = cx.run_record(sub, st, rr, role::BRANCH);
-            run.seed = Some(lo + bi as i64);
-            run.class = Some(cx.ex.finding_class(&cx.parse(st)).to_string());
-            run.branch = Some(Branch {
-                tjlo: b.tjlo,
-                held: b.held,
-            });
-            cx.ev.write(&run);
-            if verdict_kind(&py_str(&rr["verdict"])) != "ok" {
-                fails.push(run);
-            }
-        }
-    }
-    let items: Vec<(String, String)> = fails
-        .iter()
-        .enumerate()
-        .map(|(i, f)| (format!("repro-{i}"), f.schedule.clone()))
-        .collect();
-    let rep = pool.run_all(&items, true);
-    let mut failures = Vec::new();
-    for (i, f) in fails.iter().enumerate() {
-        let tag = format!("repro-{i}");
-        let rr = rep[&tag].1.clone();
-        let mut rr_run = cx.run_record(&tag, &f.schedule, &rr, role::RERUN);
-        rr_run.seed = f.seed;
-        cx.ev.write(&rr_run);
-        failures.push(Failure {
-            signature: sig_key(&f.verdict.text),
-            reproduced: rr.get("fp").map(py_str).as_deref() == Some(f.fingerprints.fp.as_str()),
-            reproductions: vec![repro_of(&tag, Some(&rr))],
-            timing_only: None,
-            run: f.clone(),
-        });
-    }
-    let mut base_sig: HashMap<String, String> = HashMap::new();
-    for f in &failures {
-        let tag = f.run.tag.clone().unwrap_or_default();
-        if let Some(b) = tag.strip_suffix("-base") {
-            base_sig.insert(b.to_string(), report::signature(&f.run.verdict.text));
-        }
-    }
-    for f in failures.iter_mut() {
-        let tag = f.run.tag.clone().unwrap_or_default();
-        let pre = tag
-            .rsplit_once("-v")
-            .map(|x| x.0.to_string())
-            .unwrap_or_else(|| tag.clone());
-        let t = !tag.ends_with("-base")
-            && base_sig.get(&pre) != Some(&report::signature(&f.run.verdict.text));
-        f.timing_only = Some(t);
-    }
-    let summary = Summary {
-        schedules: reqs.len() as u64,
-        branch_points: Some(nbp as u64),
-        runs: Some(nrun as u64),
-        variants_per_point: Some(a.variants as u64),
-        tjpm: Some(pm as u64),
-        sweep_wall_s: Some(round1(t_sweep)),
-        runs_per_hour: Some(round1(nrun as f64 / t_sweep.max(1.0) * 3600.0)),
-        mean_run_s: Some(round1(secs / nrun.max(1) as f64)),
-        failures: failures.len() as u64,
-        reproduced_standalone: Some(failures.iter().filter(|f| f.reproduced).count() as u64),
-        timing_only_failures: Some(
-            failures
-                .iter()
-                .filter(|f| f.timing_only == Some(true))
-                .count() as u64,
-        ),
-        total_wall_s: Some(round1(t0.elapsed().as_secs_f64())),
-        ..Summary::default()
-    };
-    cx.ev.write(&End {
-        summary: summary.clone(),
-        ..End::default()
-    });
-    let mut doc = cx.exploration(pool.workers(), summary, image_sha);
-    doc.failures = failures;
-    let _ = hydo_results::write_document(&cx.out.join(hydo_results::EXPLORATION_DOC), &doc);
-    let _ = std::fs::write(cx.out.join("report.md"), md::report(&doc));
-    pool.close();
-    println!("{}", md::summary_line(&doc));
-    0
-}

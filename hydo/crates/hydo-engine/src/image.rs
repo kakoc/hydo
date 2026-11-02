@@ -19,6 +19,8 @@ pub const ROOT_OFFSET: u64 = 2048 * 512;
 pub enum ImageError {
     /// The file is not in the image (or the image could not be read).
     Missing(String),
+    /// The image (its path) has no `/etc/hydo/control`: a shell-init image ([`control`]).
+    ShellImage(String),
     Io(std::io::Error),
 }
 
@@ -26,6 +28,11 @@ impl fmt::Display for ImageError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ImageError::Missing(m) => f.write_str(m),
+            ImageError::ShellImage(p) => write!(
+                f,
+                "{p}: a shell-init image (no /etc/hydo/control), built before Milestone 136; this \
+                 hydo runs agent images only: rebuild it with hydo build"
+            ),
             ImageError::Io(e) => write!(f, "{e}"),
         }
     }
@@ -106,29 +113,31 @@ pub fn embedded_compose(image: &Path) -> Option<String> {
     t.trim().starts_with('{').then_some(t)
 }
 
-/// Who runs the image's guest side: `/etc/hydo/control` = `agent <protocol>` (an image built
-/// with `hydo-build --control agent`, M121), else the shell init. A control file with any other
-/// text is an error: an image this hydo does not know how to boot.
-pub fn control(image: &Path) -> Result<crate::GuestControl, ImageError> {
+/// The agent protocol of an agent image: its `/etc/hydo/control` = `agent <protocol>` (every
+/// image `hydo build` makes since Milestone 136). An image without the file is a shell-init image,
+/// whose engine path was deleted in Milestone 145: it is refused with [`ImageError::ShellImage`]. A
+/// control file with any other text is an error too: an image this hydo does not know how to boot.
+pub fn control(image: &Path) -> Result<u64, ImageError> {
+    std::fs::metadata(image)?; // a missing image is not a shell-init image
     let text = match embedded_file(image, "etc/hydo/control") {
         Ok(t) => t,
-        Err(ImageError::Missing(_)) => return Ok(crate::GuestControl::Shell),
+        Err(ImageError::Missing(_)) => return Err(ImageError::ShellImage(image.display().to_string())),
         Err(e) => return Err(e),
     };
     parse_control(&text).ok_or_else(|| {
         ImageError::Missing(format!(
-            "{}: /etc/hydo/control says {:?}; this hydo boots \"agent <protocol>\" images and shell-init images",
+            "{}: /etc/hydo/control says {:?}; this hydo boots \"agent <protocol>\" images",
             image.display(),
             text.trim()
         ))
     })
 }
 
-/// The text of `/etc/hydo/control`: `agent <protocol>` and a newline.
-pub fn parse_control(text: &str) -> Option<crate::GuestControl> {
+/// The text of `/etc/hydo/control`: `agent <protocol>` and a newline; the protocol.
+pub fn parse_control(text: &str) -> Option<u64> {
     let mut w = text.split_whitespace();
     match (w.next(), w.next().and_then(|p| p.parse().ok()), w.next()) {
-        (Some("agent"), Some(proto), None) => Some(crate::GuestControl::Agent { proto }),
+        (Some("agent"), Some(proto), None) => Some(proto),
         _ => None,
     }
 }
@@ -155,21 +164,19 @@ pub fn sha256_file(path: &Path) -> std::io::Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_control;
-    use crate::GuestControl;
+    use super::{parse_control, ImageError};
 
     #[test]
     fn control_file() {
-        assert_eq!(
-            parse_control("agent 1\n"),
-            Some(GuestControl::Agent { proto: 1 })
-        );
-        assert_eq!(
-            parse_control("agent 7"),
-            Some(GuestControl::Agent { proto: 7 })
-        );
+        assert_eq!(parse_control("agent 1\n"), Some(1));
+        assert_eq!(parse_control("agent 7"), Some(7));
         for bad in ["", "agent", "agent x", "agent 1 2", "shell", "Agent 1"] {
             assert_eq!(parse_control(bad), None, "{bad:?}");
         }
+        assert_eq!(
+            ImageError::ShellImage("build/explore-disk.img".into()).to_string(),
+            "build/explore-disk.img: a shell-init image (no /etc/hydo/control), built before \
+             Milestone 136; this hydo runs agent images only: rebuild it with hydo build"
+        );
     }
 }

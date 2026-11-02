@@ -6,7 +6,7 @@ pub const USAGE: &str = "usage: hydo explore [--seeds 1-200] [--strategy random|
        [--image IMG] --out DIR [--schedule S] [--sweep KIND] [--manifest hydo.yaml] [--backend hvx|hvm]
        [--timing] [--new-faults] [--durable-only] [--concurrency] [--more-faults] [--preempt] [--buggify]
        [--freeze-call] [--protocol-faults] [--grpc-faults] [--vcpus N --turns [--bursts]] [--cpu v2|v3]
-       [--ram-mib N] [--known-errors FILE] [--errors report|fail] [--branch MARKER]
+       [--ram-mib N] [--known-errors FILE] [--errors report|fail]
        [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...]] ... (explore.py's options)";
 
 #[derive(Clone, Debug)]
@@ -39,8 +39,6 @@ pub struct Args {
     pub fc_links: String,
     pub fc_centres: String,
     pub knob_rule: String,
-    pub branch: Option<String>,
-    pub variants: i64,
     pub durable_only: bool,
     pub new_faults: bool,
     pub concurrency: bool,
@@ -103,8 +101,6 @@ impl Default for Args {
             fc_links: "svc".into(),
             fc_centres: "fail".into(),
             knob_rule: "cut".into(),
-            branch: None,
-            variants: 8,
             durable_only: false,
             new_faults: false,
             concurrency: false,
@@ -156,7 +152,7 @@ const FLAGS: [&str; 16] = [
     "bursts",
 ];
 
-const VALUED: [&str; 42] = [
+const VALUED: [&str; 40] = [
     "seeds",
     "workers",
     "image",
@@ -181,8 +177,6 @@ const VALUED: [&str; 42] = [
     "fc-links",
     "fc-centres",
     "knob-rule",
-    "branch",
-    "variants",
     "fc-nmax",
     "cf-range",
     "pct-exits",
@@ -234,6 +228,13 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             Some((k, v)) => (k, Some(v.to_string())),
             None => (body, None),
         };
+        if key == "branch" || key == "variants" {
+            return Err(format!(
+                "--{key} was removed in Milestone 145: mid-run timing branches were a run of the \
+                 shell-init images (it found nothing tick jitter does not, Milestone 43); use \
+                 --timing"
+            ));
+        }
         let name = if names.contains(&key) {
             key.to_string()
         } else {
@@ -314,8 +315,6 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "fc-links" => a.fc_links = choice("fc-links", v, &["pair", "svc"])?,
             "fc-centres" => a.fc_centres = val,
             "knob-rule" => a.knob_rule = choice("knob-rule", v, &["cut", "any"])?,
-            "branch" => a.branch = Some(val),
-            "variants" => a.variants = int("variants", v)?,
             "fc-nmax" => a.fc_nmax = int("fc-nmax", v)?,
             "cf-range" => a.cf_range = val,
             "pct-exits" => a.pct_exits = val,

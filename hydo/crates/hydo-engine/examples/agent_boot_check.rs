@@ -31,7 +31,7 @@ use hydo_agent_proto::{Command, Event, Incoming, Reply, Session};
 use hydo_engine::hvm::Hvm;
 use hydo_engine::hvx::Hvx;
 use hydo_engine::lockstep::{Lockstep, LockstepStart, Next, SendAnswer, SnapAnswer, StopWhy};
-use hydo_engine::{BootSpec, CpuLevel, Engine, RunResult, SnapshotStore};
+use hydo_engine::{BootSpec, ControlledEngine, CpuLevel, RunResult, SnapshotStore};
 use hydo_schedule::Schedule;
 use std::path::{Path, PathBuf};
 
@@ -464,7 +464,7 @@ fn t0() -> std::time::Instant {
 }
 
 struct Check {
-    engine: Box<dyn Engine>,
+    engine: Box<dyn ControlledEngine>,
     spec: BootSpec,
     sched: Schedule,
     out: PathBuf,
@@ -604,7 +604,7 @@ fn main() {
     t0();
     let a: Vec<String> = std::env::args().skip(1).collect();
     let usage = "usage: agent_boot_check hvx <hvx_explore> <hvx-run|-> <bzImage> <initramfs> <disk.img> <outdir> [rb]\n       agent_boot_check hvm <hvmx> <Image> <image .cpio.gz> <outdir> [rb]";
-    let (engine, spec, rb): (Box<dyn Engine>, BootSpec, String) =
+    let (engine, spec, rb): (Box<dyn ControlledEngine>, BootSpec, String) =
         match a.first().map(String::as_str) {
             Some("hvx") if a.len() >= 7 => {
                 let out = PathBuf::from(&a[6]);
@@ -657,11 +657,9 @@ fn main() {
             }
         };
     match hydo_engine::image::control(&spec.image) {
-        Ok(hydo_engine::GuestControl::Agent { proto }) => {
-            println!("image {}: agent protocol {proto}", spec.image.display())
-        }
-        Ok(c) => {
-            eprintln!("{} is not an agent image ({c:?})", spec.image.display());
+        Ok(proto) => println!("image {}: agent protocol {proto}", spec.image.display()),
+        Err(e @ hydo_engine::image::ImageError::ShellImage(_)) => {
+            eprintln!("{e}");
             std::process::exit(2);
         }
         Err(e) => eprintln!("warning: cannot read /etc/hydo/control: {e}"),

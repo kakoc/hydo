@@ -13,7 +13,7 @@
 use crate::cstr::{strtoull, Scan};
 use crate::ctl;
 use crate::port::{Cmd, Port, Req};
-use hydo_engine_proto::{BranchRequest, EngineMsg, HostCmd, Request};
+use hydo_engine_proto::{EngineMsg, HostCmd, Request};
 use hydo_schedule::Schedule;
 use std::io::{BufRead, Write};
 
@@ -65,40 +65,6 @@ pub fn read_request(inp: &[u8]) -> Req {
     if inp.starts_with(b"QUIT") {
         return Req::End;
     }
-    if inp.starts_with(b"BRANCH ") {
-        let mut s = Scan::new(inp);
-        s.lit("BRANCH").ws();
-        let tag = s.word(63).map(lossy);
-        let nv = s.ws().int();
-        let bpm = s.ws().uint();
-        let bmx = s.ws().ull();
-        let mark = s.ws().word(127).map(lossy);
-        s.ws();
-        let off = if s.ok() { s.pos } else { 0 };
-        let sc = if s.n == 5 && off != 0 {
-            schedule(&inp[off..])
-        } else {
-            None
-        };
-        return match (sc, tag, nv, bpm, bmx, mark) {
-            (
-                Some(schedule),
-                Some(tag),
-                Some(variants),
-                Some(permille),
-                Some(max_delay),
-                Some(marker),
-            ) => Req::Request(Request::Branch(BranchRequest {
-                tag,
-                variants,
-                permille,
-                max_delay,
-                marker,
-                schedule,
-            })),
-            _ => Req::BadBranch,
-        };
-    }
     if inp.starts_with(b"RESUME ") {
         let mut s = Scan::new(inp);
         s.lit("RESUME").ws();
@@ -109,12 +75,12 @@ pub fn read_request(inp: &[u8]) -> Req {
             _ => Req::BadRun,
         };
     }
-    let ctl = inp.starts_with(b"CTL ");
-    let rq = &inp[if ctl { 4 } else { 0 }..];
-    let mut s = Scan::new(rq);
-    if !ctl {
-        s.lit("RUN").ws();
+    // RUN and BRANCH (the shell-init images' requests) were deleted in Milestone 145
+    if !inp.starts_with(b"CTL ") {
+        return Req::BadRun;
     }
+    let rq = &inp[4..];
+    let mut s = Scan::new(rq);
     let tag = s.word(63).map(lossy);
     s.ws();
     let off = if s.ok() { s.pos } else { 0 };
@@ -123,8 +89,7 @@ pub fn read_request(inp: &[u8]) -> Req {
         _ => None,
     };
     match (tag, sc) {
-        (Some(tag), Some(schedule)) if ctl => Req::Request(Request::Ctl { tag, schedule }),
-        (Some(tag), Some(schedule)) => Req::Request(Request::Run { tag, schedule }),
+        (Some(tag), Some(schedule)) => Req::Request(Request::Ctl { tag, schedule }),
         _ => Req::BadRun,
     }
 }

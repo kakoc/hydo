@@ -1,8 +1,9 @@
 //! The calls between hydo and its run engines, as Rust types, and their one text form.
 //!
-//! An engine boots a guest image to its snapshot points, then serves requests: a plain run
-//! ([`Request::Run`]), a run under lock-step control ([`Request::Ctl`], [`Request::Resume`]),
-//! timing variants from a mid-run snapshot ([`Request::Branch`]). During a controlled run it
+//! An engine boots an agent image under lock-step control (the host takes its snapshot points),
+//! then serves requests: a run under lock-step control from a snapshot the host took
+//! ([`Request::Ctl`], [`Request::Resume`]). Every run is controlled; the plain run `RUN` and the
+//! timing branch `BRANCH` of the shell images were deleted in Milestone 145. During a run it
 //! reports what happened up to each numbered stop ([`EngineMsg::Event`], [`EngineMsg::Sent`],
 //! [`EngineMsg::Drop`], [`EngineMsg::Stop`]) and takes the host's commands there ([`HostCmd`]),
 //! answering each but CONT and END ([`Answer`]); every run ends with one [`RunResult`].
@@ -17,12 +18,9 @@
 //! the same whichever way a run went.
 //!
 //! ```text
-//! host -> engine (serve):     RUN <tag> <schedule> | CTL <tag> <schedule> | RESUME <tag> <snapshot>
-//!                             BRANCH <tag> <variants> <permille> <max_delay> <marker> <schedule> | QUIT
+//! host -> engine (serve):     CTL <tag> <schedule> | RESUME <tag> <snapshot> | QUIT
 //! engine -> host:             READY boot_secs=<s>
 //!                             RESULT <tag> fp=<hex16> wfp=<hex16> secs=<s>[ <key>=<value>...] verdict=<text>
-//!                             BRANCHPOINT <tag> tjlo=<k> held=<n> | BRANCHPOINT <tag> none
-//!                             BRANCHEND <tag>[ <note>]
 //! engine -> host, per stop:   EVENT <tag> at=<icount> n=<k> <escaped line>
 //!                             SENT <tag> id=<id> at=<icount>[ retype=1]
 //!                             DROP <tag> id=<id>
@@ -301,39 +299,13 @@ impl HostCmd {
     }
 }
 
-/// One BRANCH request (hvx only): run `schedule` from S1 with rb=16 and no jitter, snapshot at
-/// the first return after `marker` (or `@<N>` ticks, or `@held`), finish the base run unless
-/// `variants` < 0, then run |variants| timing variants from that snapshot.
-#[derive(Clone, Debug, PartialEq)]
-pub struct BranchRequest {
-    pub tag: String,
-    pub variants: i32,
-    pub permille: u32,
-    pub max_delay: u64,
-    pub marker: String,
-    pub schedule: Schedule,
-}
-
-impl BranchRequest {
-    pub fn line(&self) -> String {
-        format!(
-            "BRANCH {} {} {} {} {} {}",
-            self.tag, self.variants, self.permille, self.max_delay, self.marker, self.schedule
-        )
-    }
-}
-
 /// A request to a serving engine.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Request {
-    /// One schedule from S1 (and, after a power cut, its recovery boot from S0).
-    Run {
-        tag: String,
-        schedule: Schedule,
-    },
-    /// The same under lock-step control (M118): the engine stops and waits for [`HostCmd`]s. On
-    /// an agent image's worker (M121) S1 is the snapshot the host took under that name in the
-    /// boot, the guest part must be just `run`, and nothing is typed.
+    /// One schedule's host part from the snapshot S1 the host took in the boot (and, after a
+    /// power cut, its recovery VM from the host's S0), under lock-step control (M118, M121): the
+    /// engine stops and waits for [`HostCmd`]s. The guest part must be just `run`, and nothing is
+    /// typed.
     Ctl {
         tag: String,
         schedule: Schedule,
@@ -343,17 +315,14 @@ pub enum Request {
         tag: String,
         snapshot: String,
     },
-    Branch(BranchRequest),
     Quit,
 }
 
 impl Request {
     pub fn line(&self) -> String {
         match self {
-            Request::Run { tag, schedule } => format!("RUN {tag} {schedule}"),
             Request::Ctl { tag, schedule } => format!("CTL {tag} {schedule}"),
             Request::Resume { tag, snapshot } => format!("RESUME {tag} {snapshot}"),
-            Request::Branch(b) => b.line(),
             Request::Quit => "QUIT".into(),
         }
     }
@@ -656,18 +625,6 @@ impl Ready {
     }
 }
 
-/// The answer to a BRANCH: the branch point and every run made from it.
-#[derive(Clone, Debug, PartialEq, Default)]
-pub struct BranchOutcome {
-    /// `tjlo=` of the BRANCHPOINT line (the first tick after the snapshot), None if never reached.
-    pub tjlo: Option<u64>,
-    /// `held=` of the BRANCHPOINT line (writes in the disk's volatile cache at the point).
-    pub held: Option<u64>,
-    pub runs: Vec<RunResult>,
-    /// The text after the tag on the BRANCHEND line (an error), if any.
-    pub end_note: String,
-}
-
 // ------------------------------------------------------------------------------------ engine side
 
 /// One report of an engine.
@@ -692,16 +649,6 @@ pub enum EngineMsg {
     },
     Answer(Answer),
     Result(Box<RunResult>),
-    /// The branch point of a BRANCH (`point`: `(tjlo, held)`; None: never reached).
-    BranchPoint {
-        tag: String,
-        point: Option<(u64, u64)>,
-    },
-    /// The end of a BRANCH (`note`: empty, or why it ended early).
-    BranchEnd {
-        tag: String,
-        note: String,
-    },
     /// A line of an engine process that is none of the above (text only; the line as read).
     Other(String),
 }
@@ -732,13 +679,6 @@ impl EngineMsg {
             ),
             EngineMsg::Answer(a) => a.line(),
             EngineMsg::Result(r) => r.line.clone(),
-            EngineMsg::BranchPoint { tag, point: None } => format!("BRANCHPOINT {tag} none"),
-            EngineMsg::BranchPoint {
-                tag,
-                point: Some((lo, held)),
-            } => format!("BRANCHPOINT {tag} tjlo={lo} held={held}"),
-            EngineMsg::BranchEnd { tag, note } if note.is_empty() => format!("BRANCHEND {tag}"),
-            EngineMsg::BranchEnd { tag, note } => format!("BRANCHEND {tag} {note}"),
             EngineMsg::Other(l) => l.trim_end_matches(['\n', '\r']).to_string(),
         }
     }
@@ -772,30 +712,6 @@ impl EngineMsg {
                     n: n.strip_prefix("n=")?.parse().ok()?,
                     text: unescape(text)?,
                 },
-            });
-        }
-        if let Some(r) = line.strip_prefix("BRANCHPOINT ") {
-            let (tag, r) = r.split_once(' ').unwrap_or((r, ""));
-            let mut lo = None;
-            let mut held = None;
-            for w in r.split(' ') {
-                if let Some(v) = w.strip_prefix("tjlo=") {
-                    lo = v.parse().ok();
-                } else if let Some(v) = w.strip_prefix("held=") {
-                    held = v.parse().ok();
-                }
-            }
-            return Some(EngineMsg::BranchPoint {
-                tag: tag.to_string(),
-                point: lo.zip(held),
-            });
-        }
-        if let Some(r) = line.strip_prefix("BRANCHEND") {
-            let r = r.trim();
-            let (tag, note) = r.split_once(' ').unwrap_or((r, ""));
-            return Some(EngineMsg::BranchEnd {
-                tag: tag.to_string(),
-                note: note.to_string(),
             });
         }
         let mut w = line.split(' ');
@@ -872,10 +788,6 @@ mod tests {
             "ERR unknown command FOO",
             "RESULT one fp=c513f10aee733aae wfp=1111222233334444 secs=12.3 tjk=3-40 tjn=5 verdict=HYDO-ORACLE: OK acked=20",
             "RESULT ? fp=0 wfp=0 secs=0 verdict=ERROR bad request",
-            "BRANCHPOINT t tjlo=12 held=3",
-            "BRANCHPOINT t none",
-            "BRANCHEND t",
-            "BRANCHEND ? bad request",
             "hvx_explore: S1",
         ] {
             let m = EngineMsg::parse(l);

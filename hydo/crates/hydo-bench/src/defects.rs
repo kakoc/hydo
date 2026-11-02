@@ -67,72 +67,36 @@ pub const M59: [(&str, &str); 5] = [
     ),
 ];
 
-/// The control of d1-d7 on the stack images (the fixed order service in the same guest).
-pub const CONTROL: &str = "explore-nf-disk.img";
-
-/// Which kind of image the benchmark runs (M135). The default is the manifest-built agent images
-/// (`hydo/bench/manifest/hydo.yaml` built with `hydo build` by
-/// `hydo/bench/build-bench-manifest.sh`); `stack` is the hand-written stack images of
-/// `build-stack.sh` (with `stack-explore.sh`), which stay only as the engine's regression
-/// baselines (`deploy-metal.sh`, the pinned reproducers) and as the record of the M54-M108
-/// measurements. M135's third kind, `shell` (the same manifest built for the generic shell init),
-/// went with the shell init in M136.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Kind {
-    Agent,
-    Stack,
-}
-
-impl Kind {
-    pub fn parse(s: &str) -> Result<Kind, String> {
-        match s {
-            "agent" => Ok(Kind::Agent),
-            "stack" => Ok(Kind::Stack),
-            "shell" => Err(
-                "--kind shell was removed in Milestone 136 with the shell init (the manifest images are agent images)"
-                    .into(),
-            ),
-            _ => Err(format!("--kind {s}: agent or stack")),
-        }
-    }
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Kind::Agent => "agent",
-            Kind::Stack => "stack",
-        }
-    }
-
-    /// `--kind` when given, else the configured kind (`HYDO_BENCH_KIND`), else agent.
-    pub fn select(opt: Option<&str>, cfg: &hydo_config::run::Bench) -> Result<Kind, String> {
-        match opt {
-            Some(k) => Kind::parse(k),
-            None => match &cfg.kind {
-                Some(k) => Kind::parse(k),
-                None => Ok(Kind::Agent),
-            },
-        }
+/// The benchmark's images are the manifest-built agent images (`hydo/bench/manifest/hydo.yaml`
+/// built with `hydo build` by `hydo/bench/build-bench-manifest.sh`, M135, M136). The `--kind`
+/// option stays for scripts and takes only `agent`: the hand-written `build-stack.sh` images
+/// (`stack`, shell-init images) were deleted from the benchmark in Milestone 145, and M135's
+/// `shell` kind went with the shell init in M136.
+pub fn check_kind(opt: Option<&str>) -> Result<(), String> {
+    match opt {
+        None | Some("agent") => Ok(()),
+        Some("stack") => Err(
+            "--kind stack was removed in Milestone 145: the build-stack.sh images are shell-init images, which hydo no longer runs (hydo-bench runs the manifest-built agent images)"
+                .into(),
+        ),
+        Some("shell") => Err(
+            "--kind shell was removed in Milestone 136 with the shell init (the manifest images are agent images)"
+                .into(),
+        ),
+        Some(s) => Err(format!("--kind {s}: only agent (the default)")),
     }
 }
 
-/// Which image set: the kind (M135), the stack images' m59 suffix (`HYDO_M59_SUFFIX`, default
-/// `-pin-kr`: the pinned build with the M63 Kafka retention fix and the M67 harness fix, README
-/// "-pin-kr"; `-pin` the earlier set, "" the first build) and `--bg-images` (the d0-d7 order
-/// services with BUGGIFY fault points, M56).
+/// Which image set: `--bg-images` (the d0-d7 order services with BUGGIFY fault points, M56) or
+/// not.
 #[derive(Clone, Debug)]
 pub struct Set {
-    pub kind: Kind,
-    pub m59_suffix: String,
     pub bg_images: bool,
 }
 
 impl Set {
-    pub fn new(kind: Kind, bg_images: bool, cfg: &hydo_config::run::Bench) -> Set {
-        Set {
-            kind,
-            m59_suffix: cfg.m59_suffix.clone(),
-            bg_images,
-        }
+    pub fn new(bg_images: bool) -> Set {
+        Set { bg_images }
     }
 
     pub fn is_m59(name: &str) -> bool {
@@ -159,59 +123,32 @@ impl Set {
     }
 
     pub fn m59_control(&self) -> String {
-        match self.kind {
-            Kind::Stack => format!("explore-bench-m59-control{}-disk.img", self.m59_suffix),
-            _ => self.ob("control"),
-        }
+        self.ob("control")
     }
 
     /// run.py `image_of`.
     pub fn image_of(&self, name: &str) -> String {
-        if self.kind != Kind::Stack {
-            if !Set::known(name) {
-                return String::new();
-            }
-            if self.bg_images && !Set::is_m59(name) {
-                return self.ob(&format!("bg-{name}"));
-            }
-            return self.ob(name);
+        if !Set::known(name) {
+            return String::new();
         }
-        if Set::is_m59(name) {
-            return format!("explore-bench-m59-{name}{}-disk.img", self.m59_suffix);
+        if self.bg_images && !Set::is_m59(name) {
+            return self.ob(&format!("bg-{name}"));
         }
-        if self.bg_images {
-            return format!("explore-bench-bg-{name}-disk.img");
-        }
-        OLD.iter()
-            .find(|(n, ..)| *n == name)
-            .map(|(_, i, _)| i.to_string())
-            .unwrap_or_default()
+        self.ob(name)
     }
 
-    /// run.py `control_of`: the unpatched order service in the same guest. On the stack images d0
-    /// runs the pre-M46 guest, so its control is the fixed order service in that guest
-    /// (explore-fix-disk.img). On the manifest images every order service runs in the one guest
-    /// of the manifest; the controls are the same order services: d0's the M39 fix (`fix`),
-    /// d1-d7's the M46 order service (`nf`), d8-d12's the M59 control (`control`). With
-    /// `--bg-images` d0-d7 share the BUGGIFY control.
+    /// run.py `control_of`: the unpatched order service in the same guest. Every order service
+    /// runs in the one guest of the manifest; the controls are the same order services: d0's the
+    /// M39 fix (`fix`), d1-d7's the M46 order service (`nf`), d8-d12's the M59 control
+    /// (`control`). With `--bg-images` d0-d7 share the BUGGIFY control.
     pub fn control_of(&self, name: &str) -> String {
         if Set::is_m59(name) {
             return self.m59_control();
         }
-        if self.kind != Kind::Stack {
-            if self.bg_images {
-                return self.ob("bg-control");
-            }
-            return self.ob(if name.starts_with("d0-") { "fix" } else { "nf" });
-        }
         if self.bg_images {
-            return "explore-bench-bg-control-disk.img".into();
+            return self.ob("bg-control");
         }
-        if name.starts_with("d0-") {
-            "explore-fix-disk.img".into()
-        } else {
-            CONTROL.into()
-        }
+        self.ob(if name.starts_with("d0-") { "fix" } else { "nf" })
     }
 
     /// `--defects`: `all` (d0-d7), `m59` (d8-d12) or a comma list. An unknown name is an error.
@@ -229,8 +166,9 @@ impl Set {
 
     /// confirm.py `TRIGGERS`: the hand-written schedules that show each defect (every store
     /// durable, honest disk: no M=/R= knobs, disk none or cut). Three of them depend on the
-    /// image's timing and are recorded per kind (README "The triggers on the manifest images"):
-    /// d9's client concurrency, d10's timed kill and d11's flush-cut point.
+    /// image's timing and are recorded where they were measured last (README "The triggers on
+    /// the manifest images"): d9's client concurrency, d10's timed kill and d11's flush-cut
+    /// point.
     pub fn triggers(&self, name: &str) -> Vec<String> {
         if let Some(t) = self.timed_trigger(name) {
             return vec![t];
@@ -259,22 +197,19 @@ impl Set {
 
     /// The triggers whose point moves with the guest's timing.
     fn timed_trigger(&self, name: &str) -> Option<String> {
-        let s = match (name, self.kind) {
-            ("d9-redis-unlocked", Kind::Stack) => "disk=none dseed=0 | run Q=4",
+        let s = match name {
             // of Q=2,3,4,2d,3d,4d the race shows with Q=2, Q=4, Q=3d and Q=4d on the M136 images
             // (the fixed agent, restart_may_fail); M135's images showed it with Q=3 and Q=4d
-            ("d9-redis-unlocked", Kind::Agent) => "disk=none dseed=0 | run Q=2",
-            // M72: the -pin-kr image's timing moved d10's window: X=front@12~20 passes there
-            ("d10-outcome-in-memory", Kind::Stack) if self.m59_suffix != "-pin-kr" => {
-                "disk=none dseed=0 | run X=front@12~20"
-            }
-            ("d10-outcome-in-memory", _) => "disk=none dseed=0 | run X=front@9~20",
-            ("d11-ack-unflushed-flag", Kind::Stack) => "disk=cut dseed=0 cf=238 | run",
+            // (the stack images of M108: Q=4)
+            "d9-redis-unlocked" => "disk=none dseed=0 | run Q=2",
+            // as on the stack images' -pin-kr set (M72)
+            "d10-outcome-in-memory" => "disk=none dseed=0 | run X=front@9~20",
             // M140 (hydo-agent 0.3.0, the host-call port): 11 of the 61 points cf=245..305 fail
             // (248, 258, 259, 269, 270, 271, 281, 282, 293, 302, 303). M136: 9 (249, 261, 262,
             // 272, 273, 283, 284, 294, 304); M135's images failed at 249, 250, 260, 271, 272, 282,
             // 292, 302, 303
-            ("d11-ack-unflushed-flag", Kind::Agent) => "disk=cut dseed=0 cf=270 | run",
+            // (the stack images of M72: cf=238)
+            "d11-ack-unflushed-flag" => "disk=cut dseed=0 cf=270 | run",
             _ => return None,
         };
         Some(s.to_string())
@@ -333,17 +268,13 @@ pub fn sig_match(sig: &str, verdict: &str) -> bool {
 mod tests {
     use super::*;
 
-    fn set(kind: Kind, bg: bool) -> Set {
-        Set {
-            kind,
-            m59_suffix: "-pin-kr".into(),
-            bg_images: bg,
-        }
+    fn set(bg: bool) -> Set {
+        Set { bg_images: bg }
     }
 
     #[test]
-    fn the_kinds_name_their_images() {
-        let a = set(Kind::Agent, false);
+    fn the_images_names() {
+        let a = set(false);
         assert_eq!(
             a.image_of("d8-no-order-lock"),
             "explore-ob-bench-d8-no-order-lock-agent-disk.img"
@@ -364,7 +295,7 @@ mod tests {
             a.control_of("d3-blind-retry"),
             "explore-ob-bench-nf-agent-disk.img"
         );
-        let b = set(Kind::Agent, true);
+        let b = set(true);
         assert_eq!(
             b.image_of("d7-skip-last-record"),
             "explore-ob-bench-bg-d7-skip-last-record-agent-disk.img"
@@ -377,52 +308,34 @@ mod tests {
             b.image_of("d9-redis-unlocked"),
             "explore-ob-bench-d9-redis-unlocked-agent-disk.img"
         );
-        // the stack images keep their names (the engine's regression baselines)
-        let k = set(Kind::Stack, false);
-        assert_eq!(k.image_of("d0-old-front-door"), "explore-disk.img");
-        assert_eq!(k.control_of("d0-old-front-door"), "explore-fix-disk.img");
-        assert_eq!(
-            k.image_of("d9-redis-unlocked"),
-            "explore-bench-m59-d9-redis-unlocked-pin-kr-disk.img"
-        );
-        assert_eq!(k.control_of("d2-batched-publish-flag"), CONTROL);
-        assert_eq!(set(Kind::Agent, false).image_of("d99"), "");
+        assert_eq!(set(false).image_of("d99"), "");
     }
 
     #[test]
-    fn the_stack_triggers_are_unchanged() {
-        let k = set(Kind::Stack, false);
+    fn the_timed_triggers() {
+        let a = set(false);
+        assert_eq!(a.triggers("d9-redis-unlocked"), ["disk=none dseed=0 | run Q=2"]);
         assert_eq!(
-            k.triggers("d9-redis-unlocked"),
-            ["disk=none dseed=0 | run Q=4"]
-        );
-        assert_eq!(
-            k.triggers("d10-outcome-in-memory"),
+            a.triggers("d10-outcome-in-memory"),
             ["disk=none dseed=0 | run X=front@9~20"]
         );
-        let mut pin = set(Kind::Stack, false);
-        pin.m59_suffix = "-pin".into();
         assert_eq!(
-            pin.triggers("d10-outcome-in-memory"),
-            ["disk=none dseed=0 | run X=front@12~20"]
+            a.triggers("d11-ack-unflushed-flag"),
+            ["disk=cut dseed=0 cf=270 | run"]
         );
-        assert_eq!(
-            k.triggers("d11-ack-unflushed-flag"),
-            ["disk=cut dseed=0 cf=238 | run"]
-        );
-        assert_eq!(k.triggers("d3-blind-retry").len(), 2);
+        assert_eq!(a.triggers("d3-blind-retry").len(), 2);
     }
 
     #[test]
-    fn kinds_parse() {
-        assert_eq!(Kind::parse("agent"), Ok(Kind::Agent));
-        assert_eq!(
-            Kind::select(Some("stack"), &Default::default()),
-            Ok(Kind::Stack)
-        );
-        assert!(Kind::parse("bogus").is_err());
-        assert!(Kind::parse("shell")
+    fn kinds() {
+        assert_eq!(check_kind(None), Ok(()));
+        assert_eq!(check_kind(Some("agent")), Ok(()));
+        assert!(check_kind(Some("stack"))
+            .unwrap_err()
+            .contains("removed in Milestone 145"));
+        assert!(check_kind(Some("shell"))
             .unwrap_err()
             .contains("removed in Milestone 136"));
+        assert!(check_kind(Some("bogus")).is_err());
     }
 }

@@ -174,8 +174,7 @@ impl<'a> Lockstep<'a> {
             // the engine reports nothing else during a controlled run
             EngineMsg::Other(_)
             | EngineMsg::Ready(_)
-            | EngineMsg::BranchPoint { .. }
-            | EngineMsg::BranchEnd { .. } => Err(EngineError::Protocol(text(&*self.link, &m))),
+ => Err(EngineError::Protocol(text(&*self.link, &m))),
             m => Ok(m),
         }
     }

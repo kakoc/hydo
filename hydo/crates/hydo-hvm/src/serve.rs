@@ -1462,11 +1462,8 @@ impl Engine {
                     self.h.result_err("?", "ERROR bad request");
                     continue;
                 }
-                Req::BadBranch | Req::Request(Request::Branch(_)) => {
-                    self.h.emit(EngineMsg::BranchEnd {
-                        tag: "?".into(),
-                        note: "unsupported on hvm".into(),
-                    });
+                Req::BadBranch => {
+                    self.h.result_err("?", "ERROR bad request");
                     continue;
                 }
                 Req::Request(Request::Quit) => return,
@@ -1474,7 +1471,6 @@ impl Engine {
                     self.ctl_resume(&tag, &snapshot);
                     continue;
                 }
-                Req::Request(Request::Run { tag, schedule }) => (false, tag, schedule),
                 Req::Request(Request::Ctl { tag, schedule }) => (true, tag, schedule),
             };
             if agent {

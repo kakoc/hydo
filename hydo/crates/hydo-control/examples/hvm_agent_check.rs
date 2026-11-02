@@ -37,14 +37,7 @@ fn main() {
         config: hydo_config::Env::process(),
     });
     let engine = match AgentEngine::for_image(inner, &image) {
-        Ok(Some(e)) => e,
-        Ok(None) => {
-            eprintln!(
-                "hvm_agent_check: {} is a shell-init image (use hvm_lockstep_check run)",
-                image.display()
-            );
-            std::process::exit(2);
-        }
+        Ok(e) => e,
         Err(e) => {
             eprintln!("hvm_agent_check: {e}");
             std::process::exit(2);

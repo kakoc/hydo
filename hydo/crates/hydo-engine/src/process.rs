@@ -1,16 +1,15 @@
-//! A started engine and the workers over it: a fresh-boot `one` run of a program, and a `serve`
-//! worker over a [`Link`] (an engine program's stdin and stdout, or an engine thread of this
+//! A started engine and the sessions and workers over it: a fresh-boot controlled run
+//! ([`ControlledRun`]), a controlled boot ([`ControlledBoot`]) and the `serve` worker it becomes,
+//! each over a [`Link`] (an engine program's stdin and stdout, or an engine thread of this
 //! process, [`crate::inproc`]).
 
 use crate::link::{Link, TextLink};
 use crate::lockstep::{Lockstep, LockstepStart};
-use crate::protocol::{BranchOutcome, BranchRequest, EngineMsg, HostMsg, Request, RunResult};
-use crate::{EngineError, OneRun, Worker};
-use hydo_schedule::Schedule;
+use crate::protocol::{EngineMsg, HostMsg, Request};
+use crate::{ControlledWorker, EngineError};
 use std::io::{BufReader, Read, Write};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
-use std::time::Instant;
 
 /// What runs the engine: a child process, or a thread of this process (its exit status is the
 /// thread's return value).
@@ -42,35 +41,11 @@ pub(crate) struct Started {
     pub(crate) link: Box<dyn Link>,
 }
 
-/// Run `cmd` to completion with stdout and stderr written into ONE pipe (so the text keeps the
-/// order in which the engine wrote it, as Python's `stderr=STDOUT` does) and parse its RESULT.
-pub(crate) fn run_one(mut cmd: Command) -> Result<OneRun, EngineError> {
-    let t0 = Instant::now();
-    let (mut reader, writer) = std::io::pipe()?;
-    cmd.stdin(Stdio::null())
-        .stdout(writer.try_clone()?)
-        .stderr(writer);
-    let mut child = cmd.spawn()?;
-    drop(cmd); // the parent's copies of the write end must be closed, or the read never ends
-    let mut bytes = Vec::new();
-    reader.read_to_end(&mut bytes)?;
-    let status = child.wait()?;
-    let output = String::from_utf8_lossy(&bytes).into_owned();
-    let result = output.lines().find_map(RunResult::parse);
-    Ok(OneRun {
-        result,
-        output,
-        exit_code: status.code(),
-        wall: t0.elapsed(),
-    })
-}
-
-/// A `serve` engine: READY, then one RESULT per RUN.
+/// A `serve` engine after its controlled boot: READY, then one controlled run per CTL/RESUME.
 pub(crate) struct ProcessWorker {
     proc: Proc,
     link: Box<dyn Link>,
     boot_secs: f64,
-    branch: bool,
 }
 
 /// Start `cmd` with stdin/stdout piped (the text link) and stderr appended to `stderr_log`.
@@ -107,37 +82,6 @@ fn read_ready(proc: &mut Proc, link: Box<dyn Link>) -> Result<(f64, Box<dyn Link
     Err(EngineError::NotReady(line))
 }
 
-impl ProcessWorker {
-    /// Start `cmd` with stdin/stdout piped and stderr appended to `stderr_log`, and wait for READY.
-    pub(crate) fn start(
-        cmd: Command,
-        stderr_log: &Path,
-        branch: bool,
-    ) -> Result<ProcessWorker, EngineError> {
-        ProcessWorker::from_started(spawn_piped(cmd, stderr_log)?, branch)
-    }
-
-    /// A serve engine already started (a process or a thread): wait for READY.
-    pub(crate) fn from_started(s: Started, branch: bool) -> Result<ProcessWorker, EngineError> {
-        let Started { mut proc, link } = s;
-        let (boot_secs, link) = read_ready(&mut proc, link)?;
-        Ok(ProcessWorker {
-            proc,
-            link,
-            boot_secs,
-            branch,
-        })
-    }
-
-    /// The text of a report for an error: the line an engine program printed, or the value's line.
-    fn text(&self, m: &EngineMsg) -> String {
-        self.link
-            .last_text()
-            .map(str::to_string)
-            .unwrap_or_else(|| m.line())
-    }
-}
-
 fn check_tag(tag: &str) -> Result<(), EngineError> {
     if tag.is_empty() || tag.contains(char::is_whitespace) || tag.len() > 63 {
         return Err(EngineError::Protocol(format!(
@@ -147,46 +91,9 @@ fn check_tag(tag: &str) -> Result<(), EngineError> {
     Ok(())
 }
 
-impl Worker for ProcessWorker {
+impl ControlledWorker for ProcessWorker {
     fn boot_secs(&self) -> f64 {
         self.boot_secs
-    }
-
-    fn run(&mut self, tag: &str, schedule: &Schedule) -> Result<RunResult, EngineError> {
-        check_tag(tag)?;
-        self.link.send(HostMsg::Request(Request::Run {
-            tag: tag.to_string(),
-            schedule: schedule.clone(),
-        }))?;
-        match self.link.recv()? {
-            EngineMsg::Result(r) => Ok(*r),
-            m => Err(EngineError::Protocol(self.text(&m))),
-        }
-    }
-
-    fn branch(&mut self, req: &BranchRequest) -> Result<BranchOutcome, EngineError> {
-        if !self.branch {
-            return Err(EngineError::Unsupported(
-                "BRANCH is not supported on hvm".into(),
-            ));
-        }
-        self.link
-            .send(HostMsg::Request(Request::Branch(req.clone())))?;
-        let mut out = BranchOutcome::default();
-        loop {
-            match self.link.recv()? {
-                EngineMsg::BranchEnd { note, .. } => {
-                    out.end_note = note;
-                    return Ok(out);
-                }
-                EngineMsg::BranchPoint { point, .. } => {
-                    out.tjlo = point.map(|p| p.0);
-                    out.held = point.map(|p| p.1);
-                }
-                EngineMsg::Result(r) => out.runs.push(*r),
-                _ => {}
-            }
-        }
     }
 
     fn lockstep<'a>(
@@ -214,9 +121,8 @@ impl Worker for ProcessWorker {
     }
 }
 
-/// An engine whose run is under lock-step control from its start: `--control one` (a shell image
-/// from its S1), and since M121 `--control boot one` (an agent image from its first
-/// instruction). `hvx::ControlledOne` and `hvm::ControlledOne` are this type.
+/// An engine whose run is under lock-step control from its first instruction: `--control boot
+/// one` (an agent image, M121; [`crate::ControlledEngine::one_controlled`]).
 pub struct ControlledRun {
     proc: Proc,
     link: Box<dyn Link>,
@@ -259,26 +165,17 @@ impl ControlledRun {
 pub struct ControlledBoot {
     proc: Proc,
     link: Box<dyn Link>,
-    branch: bool,
 }
 
 impl ControlledBoot {
-    pub(crate) fn start(
-        cmd: Command,
-        stderr_log: &Path,
-        branch: bool,
-    ) -> Result<ControlledBoot, EngineError> {
-        Ok(ControlledBoot::from_started(
-            spawn_piped(cmd, stderr_log)?,
-            branch,
-        ))
+    pub(crate) fn start(cmd: Command, stderr_log: &Path) -> Result<ControlledBoot, EngineError> {
+        Ok(ControlledBoot::from_started(spawn_piped(cmd, stderr_log)?))
     }
 
-    pub(crate) fn from_started(s: Started, branch: bool) -> ControlledBoot {
+    pub(crate) fn from_started(s: Started) -> ControlledBoot {
         ControlledBoot {
             proc: s.proc,
             link: s.link,
-            branch,
         }
     }
 
@@ -292,18 +189,13 @@ impl ControlledBoot {
     }
 
     /// After the boot's RESULT: wait for READY and return the worker.
-    pub fn ready(self) -> Result<Box<dyn Worker>, EngineError> {
-        let ControlledBoot {
-            mut proc,
-            link,
-            branch,
-        } = self;
+    pub fn ready(self) -> Result<Box<dyn ControlledWorker>, EngineError> {
+        let ControlledBoot { mut proc, link } = self;
         let (boot_secs, link) = read_ready(&mut proc, link)?;
         Ok(Box::new(ProcessWorker {
             proc,
             link,
             boot_secs,
-            branch,
         }))
     }
 }

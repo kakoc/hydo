@@ -25,8 +25,6 @@ pub enum Group {
     Pool,
     /// [`crate::build::Build`]: inputs of an image build (hydo-build).
     Build,
-    /// [`crate::run::Bench`]: the bug benchmark runner (hydo-bench).
-    Bench,
     /// [`crate::hvm::Engine`] and [`crate::hvm::Options`]: the Mac engine (hydo-engine, hydo-hvm).
     Hvm,
     /// [`crate::run::Control`]: the host controller of agent images (hydo-control).
@@ -86,7 +84,7 @@ pub struct Variable {
     pub doc: &'static str,
 }
 
-/// A variable removed in M144, with why.
+/// A variable removed in M144 or later, with why.
 #[derive(Clone, Copy, Debug)]
 pub struct Removed {
     pub name: &'static str,
@@ -231,12 +229,6 @@ variables! {
     HYDO_QUIET_FILE: Pool, User, "path", "", "hydo-explore, hydo-bench";
     /// A result cache: a deterministic exploration resumes from the results recorded there.
     HYDO_EXPLORE_CACHE: Pool, User, "path", "", "hydo-explore, hydo-bench";
-
-    // ------------------------------------------------------------------ Bench
-    /// The image kind when `--kind` is not given: `agent`, `shell` or `stack` (M135).
-    HYDO_BENCH_KIND: Bench, Developer, "word; empty = unset", "agent", "hydo-bench";
-    /// The stack images' m59 suffix (`-pin` the earlier set, empty the first build).
-    HYDO_M59_SUFFIX: Bench, Developer, "text (empty is a value)", "-pin-kr", "hydo-bench";
 
     // ------------------------------------------------------------------ Hvm
     /// Which Mac engine runs: `c` the C hvmx (one milestone after M143), `inproc` the Rust engine
@@ -514,7 +506,7 @@ variables! {
     // ------------------------------------------------------------------ Passed
 }
 
-/// The variables removed in M144.
+/// The variables removed in M144 and later.
 pub const REMOVED: &[Removed] = &[
     Removed {
         name: "HYDO_SNAP_DIR",
@@ -531,6 +523,14 @@ pub const REMOVED: &[Removed] = &[
     Removed {
         name: "HYDO_SNAPSHOTS",
         why: "chose between file and memory snapshots of the deleted C engine; it changed only the pool's printed line",
+    },
+    Removed {
+        name: "HYDO_BENCH_KIND",
+        why: "M145: hydo-bench's image kind; it runs the manifest-built agent images only (the stack kind, shell-init images, was deleted)",
+    },
+    Removed {
+        name: "HYDO_M59_SUFFIX",
+        why: "M145: the m59 suffix of the deleted stack kind of hydo-bench's images",
     },
     Removed {
         name: "HYDO_CLI",
@@ -564,7 +564,7 @@ pub fn inventory_markdown() -> String {
         "{} user-facing and {} developer-only variables are read from hydo's environment, only \
          by `hydo_config::Env::process` at a program's start; {} test switches are read by test \
          code; {} names are the guest interface, {} are variables of an image's manifest.sh and \
-         {} are set for programs hydo starts. {} variables were removed in M144. Shell scripts \
+         {} are set for programs hydo starts. {} variables were removed (M144, M145). Shell scripts \
          (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not \
          listed here.\n",
         count(Kind::User),
@@ -589,10 +589,6 @@ pub fn inventory_markdown() -> String {
         (
             Group::Pool,
             "The explorer's pool (`hydo_config::run::Pool`)",
-        ),
-        (
-            Group::Bench,
-            "The bug benchmark (`hydo_config::run::Bench`)",
         ),
         (
             Group::Hvm,
@@ -646,7 +642,7 @@ pub fn inventory_markdown() -> String {
             );
         }
     }
-    s += "\n## Removed in M144\n\n| Variable | Why |\n|---|---|\n";
+    s += "\n## Removed\n\n| Variable | Why |\n|---|---|\n";
     for r in REMOVED {
         s += &format!("| `{}` | {} |\n", r.name, r.why);
     }
