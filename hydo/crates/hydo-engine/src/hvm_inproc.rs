@@ -13,7 +13,9 @@
 //! gets it).
 
 use crate::hvm::{disk_for, Hvm};
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 use crate::process::Proc;
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 use crate::protocol::EngineMsg;
 use crate::{BootSpec, EngineError};
 use hydo_schedule::Schedule;

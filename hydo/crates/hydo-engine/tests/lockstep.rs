@@ -1,6 +1,7 @@
 //! Replay the recorded lock-step transcripts (`tests/lockstep/*.txt`, written by
-//! `examples/lockstep_check.rs` on the bare-metal test machine, M118, and `agent-*.txt` by
-//! `examples/agent_boot_check.rs` on both engines, M121; never edited) through the
+//! `examples/lockstep_check.rs` on the bare-metal test machine on the Redis agent image, M145
+//! (M118's were of the shell-init image), and `agent-*.txt` by `examples/agent_boot_check.rs`
+//! on both engines, M121; never edited) through the
 //! typed client: every engine line parses, every host line is what the client writes for the
 //! same call, and the protocol's ordering rules hold (stop numbers count up by one, a resumed run
 //! repeats its snapshot's stop number, every command but CONT/END gets exactly one answer, the
@@ -36,17 +37,14 @@ fn transcripts() -> Vec<(String, String)> {
 /// be the recorded one. `chan`: over the in-process link (the engine half as values, M142),
 /// else over the text link.
 fn replay(name: &str, text: &str, chan: bool) {
-    // serve: the first line is the CTL/RESUME request; `--control one` has none on stdin, nor
-    // has an agent image's controlled boot (M121: `agent-boot-*`, `agent-one-*`). A CTL of an
-    // agent image restores the host's S1 and starts like a RESUME (why=resume, S1's number).
-    let agent = name.starts_with("agent-");
-    let resume = text.starts_with("< RESUME ") || (agent && text.starts_with("< CTL "));
+    // serve: the first line is the CTL/RESUME request; an agent image's controlled boot has none
+    // on stdin (M121: `agent-boot-*`, `agent-one-*`). A CTL restores the host's S1 and starts like
+    // a RESUME (why=resume, S1's number; the shell images' CTL, which started with why=start,
+    // went in M145).
     let request = text.starts_with("< RESUME ") || text.starts_with("< CTL ");
+    let resume = request;
     assert!(
-        request
-            || name.starts_with("one")
-            || name.starts_with("agent-boot")
-            || name.starts_with("agent-one"),
+        request || name.starts_with("agent-boot") || name.starts_with("agent-one"),
         "{name}: no request line"
     );
     let body: Vec<&str> = text.lines().skip(request as usize).collect();
@@ -267,20 +265,24 @@ fn agent_boot_transcripts() {
 fn transcripts_show_the_rules() {
     let all = transcripts();
     let get = |n: &str| &all.iter().find(|(f, _)| f == n).unwrap().1;
-    // a send typed at an exact point: the same stop in a run from S1 and from a fresh boot
-    let sent = |t: &str| {
-        t.lines()
-            .find(|l| l.starts_with("> SENT ") || l.contains("OK send id=1 sent="))
-            .map(|l| l.rsplit("at=").next().unwrap().to_string())
-    };
-    assert_eq!(sent(get("at20000-a.txt")), sent(get("one-at20000.txt")));
+    // a send queued for an exact point is typed there: the run calls before it are capped so
+    // that a stop falls on it
+    let t = get("at2000-a.txt");
+    let queued = t
+        .lines()
+        .find_map(|l| l.strip_prefix("> OK send id=2 queued="))
+        .unwrap();
+    assert!(t.contains(&format!("> SENT at2000-a id=2 at={queued}\n")));
+    assert!(t.contains(&format!("> STOP at2000-a at={queued} ")));
     // the snapshot rule: refused while typed input is unacknowledged, then taken with retype,
     // and the continuation types it again at the snapshot's icount
     let base = get("same-base.txt");
-    assert!(base.contains("> ERR snap same unacked=1"));
-    assert!(base.contains("> OK snap same at="));
-    let cont = get("same-c1.txt");
-    assert!(cont
+    assert!(base.contains("> ERR snap same unacked=3"));
+    let at = base
         .lines()
-        .any(|l| l.starts_with("> SENT same-c1 id=1 at=") && l.ends_with(" retype=1")));
+        .find_map(|l| l.strip_prefix("> OK snap same at="))
+        .and_then(|r| r.split(' ').next())
+        .unwrap();
+    let cont = get("same-c1.txt");
+    assert!(cont.contains(&format!("> SENT same-c1 id=3 at={at} retype=1\n")));
 }

@@ -1215,8 +1215,7 @@ impl Engine {
                     continue;
                 }
                 Req::Request(Request::Ctl { tag, schedule }) => (tag, schedule),
-                // Req::BadRun (and hydo-hvx's BadBranch while it has one)
-                _bad => {
+                Req::BadRun => {
                     self.h.result_err("?", "ERROR bad request");
                     continue;
                 }

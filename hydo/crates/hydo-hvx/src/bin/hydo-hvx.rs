@@ -1,7 +1,8 @@
-//! `hydo-hvx`: the hvx run engine with hvx_explore's command line and protocol (M132).
+//! `hydo-hvx`: the hvx run engine with hvx_explore's command line and protocol (M132), for agent
+//! images (the shell-init images' plain `one`/`serve` and `--control one` were deleted in M145).
 //!
 //! ```text
-//! hydo-hvx [--ram-mib N] [--vcpus N] [--cpu v2|v3] [--control [boot]] serve|one <bzImage> <initramfs> <disk.img> <outdir> ["<schedule>"]
+//! hydo-hvx [--ram-mib N] [--vcpus N] [--cpu v2|v3] --control boot serve|one <bzImage> <initramfs> <disk.img> <outdir> ["<schedule>"]
 //! ```
 
 fn main() {
