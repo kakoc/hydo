@@ -84,7 +84,9 @@ impl Port for ChanPort {
         match self.rx.recv() {
             Ok(HostMsg::Cmd(c)) => Cmd::Host(c),
             // a request at a stop: the text engine answers it as an unknown command
-            Ok(HostMsg::Request(r)) => Cmd::Bad(format!("unknown command {}", escape(r.line().as_bytes()))),
+            Ok(HostMsg::Request(r)) => {
+                Cmd::Bad(format!("unknown command {}", escape(r.line().as_bytes())))
+            }
             Err(_) => Cmd::Closed,
         }
     }

@@ -457,7 +457,11 @@ fn the_engine_arms_what_the_c_parser_armed() {
     for b in bad.iter().take(10) {
         eprintln!("{b}");
     }
-    assert!(bad.is_empty(), "{} inputs: the engine would not arm what the C armed", bad.len());
+    assert!(
+        bad.is_empty(),
+        "{} inputs: the engine would not arm what the C armed",
+        bad.len()
+    );
     let path = dir.join("parse_differences.txt");
     if std::env::var("HYDO_BLESS").as_deref() == Ok("1") {
         std::fs::write(&path, &text).unwrap();
@@ -466,7 +470,9 @@ fn the_engine_arms_what_the_c_parser_armed() {
     let want = std::fs::read_to_string(&path).expect("tests/golden/parse_differences.txt");
     if text != want {
         eprintln!("{text}");
-        panic!("the parser differences are not the recorded ones (tests/golden/parse_differences.txt)");
+        panic!(
+            "the parser differences are not the recorded ones (tests/golden/parse_differences.txt)"
+        );
     }
     println!("{text}");
 }

@@ -16,6 +16,7 @@ use std::time::Instant;
 /// thread's return value).
 pub(crate) enum Proc {
     Child(Child),
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     Thread(Option<std::thread::JoinHandle<i32>>),
 }
 

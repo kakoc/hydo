@@ -14,12 +14,12 @@ use crate::fnv::{fnv, fnv_sched_state, fnv_snapshot, fnv_zskip, BASIS};
 use crate::pages::Pages;
 use crate::port::{Cmd, Port, Req};
 use crate::sched::Sched;
+use crate::vm::{Mapped, Vm, UBUF_CAP};
 use hydo_engine_proto::{
     retype_text, Answer, DiskOff, EngineMsg, Event, HostCmd, Phase, Ready, Request, RunResult,
     SendAnswer, Sent, Stop, StopWhy,
 };
 use hydo_schedule::Schedule;
-use crate::vm::{Mapped, Vm, UBUF_CAP};
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -1630,7 +1630,10 @@ impl Core {
         let name = name.to_string();
         let phase = self.c.phase;
         if phase != "workload" && phase != "boot" {
-            return refuse(self, format!("snap {name} only in the workload or boot phase"));
+            return refuse(
+                self,
+                format!("snap {name} only in the workload or boot phase"),
+            );
         }
         let s = &self.c.sc;
         if phase != "boot" && (s.tj_on || s.xt_on || s.pp != 0 || s.pptsc != 0 || s.q_on || s.cf_on)
@@ -1843,7 +1846,10 @@ impl Core {
                         None
                     };
                     if let Some(no) = no {
-                        refuse(self, format!("{} {no}", if cut { "cut" } else { "diskoff" }));
+                        refuse(
+                            self,
+                            format!("{} {no}", if cut { "cut" } else { "diskoff" }),
+                        );
                         continue;
                     }
                     self.c.wdone = 1;
@@ -4070,7 +4076,7 @@ pub fn run(
                 return 2;
             }
             core.ctl_one = true;
-        let (r, mut b) = core.agent_boot(&sc, "one");
+            let (r, mut b) = core.agent_boot(&sc, "one");
             if r != -4 {
                 core.agent_boot_result(&mut b, "one", r, t_start);
                 core.teardown(&mut b);

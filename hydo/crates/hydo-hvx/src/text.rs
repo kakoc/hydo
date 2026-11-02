@@ -81,16 +81,21 @@ pub fn read_request(inp: &[u8]) -> Req {
             None
         };
         return match (sc, tag, nv, bpm, bmx, mark) {
-            (Some(schedule), Some(tag), Some(variants), Some(permille), Some(max_delay), Some(marker)) => {
-                Req::Request(Request::Branch(BranchRequest {
-                    tag,
-                    variants,
-                    permille,
-                    max_delay,
-                    marker,
-                    schedule,
-                }))
-            }
+            (
+                Some(schedule),
+                Some(tag),
+                Some(variants),
+                Some(permille),
+                Some(max_delay),
+                Some(marker),
+            ) => Req::Request(Request::Branch(BranchRequest {
+                tag,
+                variants,
+                permille,
+                max_delay,
+                marker,
+                schedule,
+            })),
             _ => Req::BadBranch,
         };
     }
@@ -226,13 +231,21 @@ mod tests {
         );
         assert_eq!(line(read_request(b"RESUME b same\n")), "RESUME b same");
         assert_eq!(
-            line(read_request(b"BRANCH t -3 20 500000 @held disk=cut | run C=3\n")),
+            line(read_request(
+                b"BRANCH t -3 20 500000 @held disk=cut | run C=3\n"
+            )),
             "BRANCH t -3 20 500000 @held disk=cut | run C=3"
         );
         assert_eq!(line(read_request(b"QUIT\n")), "End");
         // the C engine ran these; hydo-schedule refuses them
-        assert_eq!(line(read_request(b"RUN a disk=none bogus=1 | run\n")), "BadRun");
-        assert_eq!(line(read_request(b"RUN a disk=none | run  K=redis@5+2\n")), "BadRun");
+        assert_eq!(
+            line(read_request(b"RUN a disk=none bogus=1 | run\n")),
+            "BadRun"
+        );
+        assert_eq!(
+            line(read_request(b"RUN a disk=none | run  K=redis@5+2\n")),
+            "BadRun"
+        );
         assert_eq!(line(read_request(b"BRANCH t 3 20 | run\n")), "BadBranch");
         assert_eq!(line(read_request(b"RESUME b\n")), "BadRun");
         assert_eq!(line(read_request(b"HELLO\n")), "BadRun");
@@ -245,7 +258,17 @@ mod tests {
             Cmd::Bad(r) => format!("ERR {r}"),
             Cmd::Closed => "closed".into(),
         };
-        for l in ["CONT", "END", "END HYDO-ORACLE: OK", "SEND at=5 ping\\n", "ACK 3", "SNAP s", "SNAP s retype", "DISKOFF", "CUT"] {
+        for l in [
+            "CONT",
+            "END",
+            "END HYDO-ORACLE: OK",
+            "SEND at=5 ping\\n",
+            "ACK 3",
+            "SNAP s",
+            "SNAP s retype",
+            "DISKOFF",
+            "CUT",
+        ] {
             assert_eq!(c(l.as_bytes()), l);
         }
         assert_eq!(c(b"SEND at=5ping"), "ERR send bad request");

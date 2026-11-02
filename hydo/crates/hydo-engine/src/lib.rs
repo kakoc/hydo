@@ -72,9 +72,9 @@ use std::fmt;
 use std::path::PathBuf;
 use std::time::Duration;
 
+pub use link::{ChanLink, Link, TextLink};
 pub use lockstep::{DiskOff, Driver, Lockstep, LockstepStart};
 pub use process::{ControlledBoot, ControlledRun};
-pub use link::{ChanLink, Link, TextLink};
 pub use protocol::{BranchOutcome, BranchRequest, EngineMsg, HostMsg, Ready, Request, RunResult};
 
 /// Which engine a spec is for.

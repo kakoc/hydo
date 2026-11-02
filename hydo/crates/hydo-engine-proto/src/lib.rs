@@ -227,11 +227,17 @@ pub struct Sent {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HostCmd {
     /// Type `bytes` (1..=4096) into the serial input at the first stop with icount >= `at`.
-    Send { at: u64, bytes: Vec<u8> },
+    Send {
+        at: u64,
+        bytes: Vec<u8>,
+    },
     /// The guest consumed send `id`.
     Ack(u64),
     /// Snapshot at this stop under `name`.
-    Snap { name: String, retype: bool },
+    Snap {
+        name: String,
+        retype: bool,
+    },
     /// The workload has ended (agent images, M126): at the next CONT the engine takes the workload
     /// fingerprint and switches the disk faults off, as at a shell image's workload marker.
     DiskOff,
@@ -321,13 +327,22 @@ impl BranchRequest {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Request {
     /// One schedule from S1 (and, after a power cut, its recovery boot from S0).
-    Run { tag: String, schedule: Schedule },
+    Run {
+        tag: String,
+        schedule: Schedule,
+    },
     /// The same under lock-step control (M118): the engine stops and waits for [`HostCmd`]s. On
     /// an agent image's worker (M121) S1 is the snapshot the host took under that name in the
     /// boot, the guest part must be just `run`, and nothing is typed.
-    Ctl { tag: String, schedule: Schedule },
+    Ctl {
+        tag: String,
+        schedule: Schedule,
+    },
     /// A controlled run from a snapshot an earlier controlled run of this worker took.
-    Resume { tag: String, snapshot: String },
+    Resume {
+        tag: String,
+        snapshot: String,
+    },
     Branch(BranchRequest),
     Quit,
 }
@@ -489,11 +504,7 @@ pub fn retype_text(ids: &[u64]) -> String {
     if ids.is_empty() {
         return "-".into();
     }
-    let mut s = ids
-        .iter()
-        .map(u64::to_string)
-        .collect::<Vec<_>>()
-        .join(",");
+    let mut s = ids.iter().map(u64::to_string).collect::<Vec<_>>().join(",");
     if s.len() >= 512 {
         s.truncate(512 - 5);
         s.push_str(",...");
@@ -927,7 +938,14 @@ mod tests {
         assert_eq!(r.verdict, "HYDO-ORACLE: OK acked=20");
         assert_eq!(r.kind(), "ok");
         assert_eq!(
-            RunResult::new("one", "c513f10aee733aae", "1111222233334444", "12.3", " tjk=3-40 tjn=5", "HYDO-ORACLE: OK acked=20"),
+            RunResult::new(
+                "one",
+                "c513f10aee733aae",
+                "1111222233334444",
+                "12.3",
+                " tjk=3-40 tjn=5",
+                "HYDO-ORACLE: OK acked=20"
+            ),
             Some(r)
         );
         let e = RunResult::parse("RESULT ? fp=0 wfp=0 secs=0 verdict=ERROR bad request").unwrap();
@@ -936,7 +954,10 @@ mod tests {
         let v = RunResult::parse("RESULT t fp=1 wfp=2 secs=1.0 verdict=").unwrap();
         assert_eq!(v.verdict, "");
         assert_eq!(Ready::new(41.66).line, "READY boot_secs=41.7");
-        assert_eq!(Ready::parse("READY boot_secs=41.7\n").unwrap().boot_secs, 41.7);
+        assert_eq!(
+            Ready::parse("READY boot_secs=41.7\n").unwrap().boot_secs,
+            41.7
+        );
         let ids: Vec<u64> = (1..400).collect();
         let t = retype_text(&ids);
         assert!(t.len() == 511 && t.ends_with(",..."));

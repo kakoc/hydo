@@ -63,7 +63,10 @@ fn replay(name: &str, text: &str, chan: bool) {
     // M142: every engine line of both engines is a protocol value that prints back byte for byte
     for l in body.iter().filter_map(|l| l.strip_prefix("> ")) {
         let m = EngineMsg::parse(l);
-        assert!(!matches!(m, EngineMsg::Other(_)), "{name}: engine line {l:?}");
+        assert!(
+            !matches!(m, EngineMsg::Other(_)),
+            "{name}: engine line {l:?}"
+        );
         assert_eq!(m.line(), *l, "{name}: the value's line");
     }
     let (htx, hrx) = std::sync::mpsc::channel::<HostMsg>();
@@ -137,7 +140,6 @@ fn replay(name: &str, text: &str, chan: bool) {
                         HostCmd::End(v) => {
                             let r = s.end(v.as_deref()).unwrap();
                             assert!(cmds.next().is_none());
-                            drop(s);
                             let w = written(chan, &hrx, &tl);
                             check_host(name, &w, &host);
                             assert_eq!(String::from_utf8_lossy(&log), want_log, "{name}");
@@ -150,10 +152,13 @@ fn replay(name: &str, text: &str, chan: bool) {
         }
     };
     assert!(cmds.next().is_none(), "{name}: commands after the RESULT");
-    drop(s);
     let w = written(chan, &hrx, &tl);
     check_host(name, &w, &host);
-    assert_eq!(String::from_utf8_lossy(&log), want_log, "{name}: transcript");
+    assert_eq!(
+        String::from_utf8_lossy(&log),
+        want_log,
+        "{name}: transcript"
+    );
     assert_eq!(
         result.extra("stops").map(|v| v.parse::<u64>().unwrap()),
         last_n,

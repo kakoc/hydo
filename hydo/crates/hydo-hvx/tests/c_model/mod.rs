@@ -321,4 +321,3 @@ fn parse_tj(host: &[u8], sc: &mut CSched) -> Option<()> {
     sc.tj_on = sc.tj.permille != 0 && sc.tj.max_delay != 0;
     Some(())
 }
-
