@@ -12,7 +12,7 @@
 #   onbox.sh load           kexec -l the debug kernel (nothing reboots yet)
 #   onbox.sh go             checks, then the exclusive module lock, then systemctl kexec
 #   onbox.sh module         (under the debug kernel) build $DBG/hv/hvx/hvx.ko for it and load it as hvx
-#   onbox.sh scan [tag]     kmemleak scan (twice) and every KASAN/UBSAN/lockdep/kmemleak/BUG line since boot
+#   onbox.sh scan [tag]     kmemleak scan (twice) and every KASAN/UBSAN/lockdep/kmemleak/BUG line of the boot's kernel journal
 #
 # Why kexec and not grub-reboot: /boot is on md RAID (md2), and GRUB cannot write its
 # environment block there ("GRUB lacks write support for diskfilter"), so the `save_env
@@ -126,10 +126,13 @@ scan)
     sudo cat /sys/kernel/debug/kmemleak > /var/tmp/m140a/kmemleak-$tag.txt
     echo "kmemleak: $(grep -c '^unreferenced object' /var/tmp/m140a/kmemleak-$tag.txt) unreferenced objects ($(grep -c hvx /var/tmp/m140a/kmemleak-$tag.txt) lines naming hvx)"
   fi
-  sudo dmesg > "$out"
+  # the whole boot's kernel log: hvx's exit histograms rotate the dmesg ring buffer within minutes
+  sudo journalctl -k -b --no-pager > "$out"
   grep -aE 'BUG:|KASAN|UBSAN|WARNING:|possible (circular|recursive)|inconsistent lock|lockdep|INFO: task|soft lockup|rcu.*stall|Oops|general protection|kmemleak:|sleeping function|scheduling while atomic|DEBUG_LOCKS_WARN|list_(add|del) corruption' "$out" \
-    | grep -v 'kasan_multi_shot' > "/var/tmp/m140a/splats-$tag.txt" || true
-  echo "dmesg: $(wc -l < "$out") lines, $(wc -l < "/var/tmp/m140a/splats-$tag.txt") report lines -> /var/tmp/m140a/splats-$tag.txt"
+    | grep -vE 'kasan_multi_shot|RCU lockdep checking is enabled|kmemleak: Kernel memory leak detector initialized|KernelAddressSanitizer initialized' \
+    > "/var/tmp/m140a/splats-$tag.txt" || true
+  dl=$(sudo awk '/debug_locks/{print ($2 == 1 ? "armed" : "OFF (it reported)")}' /proc/lockdep_stats)
+  echo "kernel log: $(wc -l < "$out") lines, lockdep $dl, $(wc -l < "/var/tmp/m140a/splats-$tag.txt") report lines -> /var/tmp/m140a/splats-$tag.txt"
   head -40 "/var/tmp/m140a/splats-$tag.txt";;
 *) sed -n '2,20p' "$0"; exit 2;;
 esac

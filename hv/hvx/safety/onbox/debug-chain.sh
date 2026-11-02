@@ -25,7 +25,7 @@ STEPS=${*:-edge off on port xp rmmod}
 mkdir -p $O
 log() { echo "$(date +%H:%M:%S) $*" | tee -a $O/chain.log; }
 has() { [[ " $STEPS " == *" $1 "* ]]; }
-scan() { bash "$H/safety/onbox/onbox.sh" scan "$1" > $O/scan-$1.txt 2>&1; log "scan $1: $(grep -E '^(kmemleak|dmesg):' $O/scan-$1.txt | tr '\n' ' ')"; }
+scan() { bash "$H/safety/onbox/onbox.sh" scan "$1" > $O/scan-$1.txt 2>&1; log "scan $1: $(grep -E '^(kmemleak|kernel log):' $O/scan-$1.txt | tr '\n' ' ')"; }
 export SUITE_OUT=$O HVX_DEV=/dev/hvx
 log "chain start: $(uname -r), hvx $(cat /sys/module/hvx/srcversion 2>/dev/null)"
 if has edge; then

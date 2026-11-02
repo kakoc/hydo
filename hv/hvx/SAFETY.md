@@ -157,3 +157,12 @@ sudo reboot          # back to GRUB's saved default
 records, overflow, bad commits and staged bytes, the six new ioctls' refusals, the dirty log and
 `HVX_RESET_VM`, 50 VM lifecycles) for the debug kernel to watch; syzkaller does not know those
 ioctls yet.
+
+`onbox.sh scan` reads the whole boot's kernel journal (`journalctl -k -b`), not `dmesg`: hvx's exit
+histograms rotate the ring buffer within minutes, so a report could scroll away between scans. It
+also says whether lockdep is still armed (`debug_locks` in `/proc/lockdep_stats` turns 0 after its
+first report). Milestone 140's run (main's module with Milestone 138's code; docs/HISTORY.md): the
+deploy-metal suite, the pinned reproducers, the lock-step and agent boot checks, the host-call port
+runs, explorations with in-place reuse and the edge test gave every normal-kernel value, with no
+report of any kind and no leaked object; the debug kernel booted in about 90 seconds and the bare-metal machine came
+back to 6.8.0-146 with a plain reboot.
