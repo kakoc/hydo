@@ -81,11 +81,11 @@ mkdir -p "$REL/bin" "$REL/hydo/onboard" "$REL/hv/hvm/explore/out" "$REL/guest" \
 # scripts; `hydo build` is the same builder with the release's tools) and bin/hydo-fetch-image
 # (what fetch-images.sh of `hydo compose` calls), for aarch64-apple-darwin, built with the
 # workspace's pinned toolchain (rust-toolchain.toml), or taken from $HYDO_RUST_BIN_DIR
-BINS="hydo hydo-build hydo-fetch-image"
+BINS="hydo hydo-build hydo-fetch-image hydo-hvm"   # hydo-hvm: the Rust Mac engine (M143), the default
 if [ -n "$HYDO_RUST_BIN_DIR" ]; then
   BD=$HYDO_RUST_BIN_DIR
 else
-  ( cd "$TOP" && cargo build --release --locked -p hydo-cli -p hydo-build -p hydo-compose --target aarch64-apple-darwin ) >&2
+  ( cd "$TOP" && cargo build --release --locked -p hydo-cli -p hydo-build -p hydo-compose -p hydo-hvm --target aarch64-apple-darwin ) >&2
   BD=$TOP/target/aarch64-apple-darwin/release
 fi
 for b in $BINS; do
@@ -101,7 +101,7 @@ mkdir -p "$REL/hydo/history"
 cp "$TOP/hydo/history/hydo_hist.sh" "$REL/hydo/history/"
 # (the property table is made by the explorer itself since M115: no hydo/assert tool in the release)
 cp "$TOP/hv/hvm/hvm" "$REL/hv/hvm/hvm"
-cp "$TOP/hv/hvm/explore/hvmx" "$REL/hv/hvm/explore/hvmx"
+cp "$TOP/hv/hvm/explore/hvmx" "$REL/hv/hvm/explore/hvmx"   # the C engine, HYDO_HVM=c (one milestone after M143)
 cp "$TOP/hv/hvm/hv.entitlements" "$REL/hv/hvm/"
 cp "$A/Image-explore" "$REL/hv/hvm/explore/out/Image-explore"
 cp "$A/busybox" "$A/mke2fs" "$REL/guest/"; chmod 755 "$REL/guest/busybox" "$REL/guest/mke2fs"

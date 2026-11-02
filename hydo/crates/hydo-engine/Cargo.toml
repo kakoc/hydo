@@ -9,6 +9,7 @@ rust-version.workspace = true
 [dependencies]
 hydo-schedule = { workspace = true }
 hydo-hvx = { workspace = true }
+hydo-hvm = { workspace = true }
 libc = "0.2"
 flate2 = { workspace = true }
 sha2 = { workspace = true }

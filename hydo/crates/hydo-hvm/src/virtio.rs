@@ -116,13 +116,13 @@ impl B {
         self.0.extend_from_slice(&v.to_le_bytes());
     }
     fn u64(&mut self, v: u64) {
-        while self.0.len() % 8 != 0 {
+        while !self.0.len().is_multiple_of(8) {
             self.0.push(0);
         }
         self.0.extend_from_slice(&v.to_le_bytes());
     }
     fn align8(&mut self) {
-        while self.0.len() % 8 != 0 {
+        while !self.0.len().is_multiple_of(8) {
             self.0.push(0);
         }
     }

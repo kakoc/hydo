@@ -390,7 +390,8 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         "xcode-select --install",
         false,
     );
-    let hvmx = ctx.p("hv/hvm/explore/hvmx");
+    // the engine hydo runs (M143: bin/hydo-hvm, the Rust engine; HYDO_HVM=c: the C hvmx)
+    let hvmx = hydo_engine::hvm::program(&ctx.root);
     for p in [
         hvmx.clone(),
         ctx.p("hv/hvm/hvm"),
@@ -440,7 +441,10 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
     .unwrap_or_default();
     c.check(
         sig.contains("com.apple.security.hypervisor"),
-        "hvmx signed with the hypervisor entitlement",
+        &format!(
+            "{} signed with the hypervisor entitlement",
+            hvmx.file_name().unwrap_or_default().to_string_lossy()
+        ),
         "run install.sh again",
         false,
     );

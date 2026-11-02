@@ -25,6 +25,9 @@
 //! engine runs on Apple Silicon only; elsewhere the pure parts (the device tree, the devices,
 //! the machine state's layout, the hashes) build and are tested.
 
+// the port keeps the C loops' shape (indices shared by several arrays)
+#![allow(clippy::needless_range_loop)]
+
 pub mod fdt;
 pub mod fnv;
 pub mod layout;

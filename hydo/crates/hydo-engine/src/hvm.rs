@@ -1,4 +1,8 @@
-//! The hvm engine: `hv/hvm/explore/hvmx` (Apple Silicon, Hypervisor.framework).
+//! The hvm engine (Apple Silicon, Hypervisor.framework): since M143 the Rust engine `hydo-hvm`
+//! (`hydo/crates/hydo-hvm`, the port of `hv/hvm/explore/hvmx`), with the same command lines and
+//! protocol; `HYDO_HVM=c` runs the C `hvmx` for one milestone, `HYDO_HVM=inproc` runs the Rust
+//! engine on a thread of this process ([`crate::hvm_inproc`]; one VM per process, and this
+//! process must carry the hypervisor entitlement). See [`program`].
 //!
 //! Command lines, as the Mac CLI and `explore.py --backend hvm` (hvm_backend.py) build them:
 //!
@@ -30,19 +34,35 @@ pub type ControlledOne = ControlledRun;
 /// How to start hvmx.
 #[derive(Clone, Debug)]
 pub struct Hvm {
-    /// The engine binary (`hv/hvm/explore/hvmx`, signed with the hypervisor entitlement).
+    /// The engine program ([`program`]: `hydo-hvm`, or the C `hv/hvm/explore/hvmx`), signed with
+    /// the hypervisor entitlement (a `hydo-hvm` that is not gets signed before it runs).
     pub hvmx: PathBuf,
     /// Environment for the engine process.
     pub env: Vec<(String, String)>,
 }
 
 impl Hvm {
-    /// The release (and repository) layout: `<root>/hv/hvm/explore/hvmx`.
+    /// The release (and repository) layout: the engine [`program`] of `root`.
     pub fn for_release(root: &Path) -> Hvm {
         Hvm {
-            hvmx: root.join("hv").join("hvm").join("explore").join("hvmx"),
+            hvmx: program(root),
             env: Vec::new(),
         }
+    }
+
+    /// The value of `k` for the engine: this value's `env`, else this process's environment.
+    pub(crate) fn lookup(&self, k: &str) -> Option<String> {
+        self.env
+            .iter()
+            .rev()
+            .find(|(a, _)| a == k)
+            .map(|(_, v)| v.clone())
+            .or_else(|| std::env::var(k).ok())
+    }
+
+    /// Whether the engine runs in this process (`HYDO_HVM=inproc`).
+    pub fn in_process(&self) -> bool {
+        self.lookup("HYDO_HVM").as_deref() == Some("inproc")
     }
 
     pub fn argv(&self, spec: &BootSpec, mode: &str) -> Vec<String> {
@@ -71,6 +91,9 @@ impl Hvm {
         if !crate::hvx::is_executable(&self.hvmx) {
             return Err(EngineError::NotBuilt(self.hvmx.clone()));
         }
+        if self.hvmx.file_name().is_some_and(|n| n == "hydo-hvm") {
+            ensure_signed(&self.hvmx).map_err(EngineError::Io)?;
+        }
         Ok(())
     }
 
@@ -84,6 +107,9 @@ impl Hvm {
         schedule: &Schedule,
         stderr_log: &Path,
     ) -> Result<ControlledOne, EngineError> {
+        if self.in_process() {
+            return crate::hvm_inproc::one_lockstep(self, spec, schedule, stderr_log);
+        }
         self.check_built()?;
         let argv = self.control_argv(spec, "one", &["--control"], Some(schedule));
         ControlledRun::start(self.command(spec, &argv), stderr_log)
@@ -107,6 +133,82 @@ impl Hvm {
         }
         argv
     }
+}
+
+/// The Mac engine program of a tree or a release at `root`: `$HYDO_HVM_ENGINE` when set; with
+/// `HYDO_HVM=c` the C engine `hv/hvm/explore/hvmx` (kept for one milestone after M143); else the
+/// Rust engine, a tree's `target/release/hydo-hvm` or a release's `bin/hydo-hvm`; else (a release
+/// built before M143) the C engine.
+pub fn program(root: &Path) -> PathBuf {
+    if let Some(p) = std::env::var_os("HYDO_HVM_ENGINE").filter(|v| !v.is_empty()) {
+        return PathBuf::from(p);
+    }
+    let c = root.join("hv").join("hvm").join("explore").join("hvmx");
+    if std::env::var("HYDO_HVM").as_deref() == Ok("c") {
+        return c;
+    }
+    for p in [
+        root.join("target").join("release").join("hydo-hvm"),
+        root.join("bin").join("hydo-hvm"),
+    ] {
+        if crate::hvx::is_executable(&p) {
+            return p;
+        }
+    }
+    c
+}
+
+/// The hypervisor entitlement (`hv/hvm/hv.entitlements`).
+pub const ENTITLEMENTS: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>com.apple.security.hypervisor</key><true/></dict></plist>
+"#;
+
+/// Sign `prog` ad hoc with the hypervisor entitlement unless it already has it (cargo builds the
+/// program unsigned; Hypervisor.framework refuses a process without it). Checked once per file
+/// version in this process.
+pub fn ensure_signed(prog: &Path) -> std::io::Result<()> {
+    use std::collections::HashSet;
+    use std::sync::Mutex;
+    static DONE: Mutex<Option<HashSet<(PathBuf, std::time::SystemTime)>>> = Mutex::new(None);
+    let mtime = std::fs::metadata(prog)?.modified()?;
+    let key = (prog.to_path_buf(), mtime);
+    let mut done = DONE.lock().unwrap_or_else(|e| e.into_inner());
+    if done.get_or_insert_with(HashSet::new).contains(&key) {
+        return Ok(());
+    }
+    let has = Command::new("codesign")
+        .args(["-d", "--entitlements", "-"])
+        .arg(prog)
+        .output()
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout).contains("com.apple.security.hypervisor")
+                || String::from_utf8_lossy(&o.stderr).contains("com.apple.security.hypervisor")
+        })
+        .unwrap_or(false);
+    if !has {
+        let plist = std::env::temp_dir().join(format!("hydo-hv-{}.entitlements", std::process::id()));
+        std::fs::write(&plist, ENTITLEMENTS)?;
+        let st = Command::new("codesign")
+            .args(["--force", "--entitlements"])
+            .arg(&plist)
+            .args(["-s", "-"])
+            .arg(prog)
+            .output();
+        let _ = std::fs::remove_file(&plist);
+        let st = st?;
+        if !st.status.success() {
+            return Err(std::io::Error::other(format!(
+                "codesign {}: {}",
+                prog.display(),
+                String::from_utf8_lossy(&st.stderr).trim()
+            )));
+        }
+    }
+    let mtime = std::fs::metadata(prog)?.modified()?;
+    done.get_or_insert_with(HashSet::new)
+        .insert((prog.to_path_buf(), mtime));
+    Ok(())
 }
 
 /// The data disk built next to an arm64 initramfs (`X-arm64.cpio.gz` -> `X-arm64-disk.img`), if it exists.
@@ -177,6 +279,9 @@ impl Engine for Hvm {
     }
 
     fn one(&self, spec: &BootSpec, schedule: &Schedule) -> Result<OneRun, EngineError> {
+        if self.in_process() {
+            return crate::hvm_inproc::one(self, spec, schedule);
+        }
         self.check_built()?;
         let mut argv = self.argv(spec, "one");
         argv.push(schedule.to_string());
@@ -184,6 +289,9 @@ impl Engine for Hvm {
     }
 
     fn start(&self, spec: &BootSpec, stderr_log: &Path) -> Result<Box<dyn Worker>, EngineError> {
+        if self.in_process() {
+            return crate::hvm_inproc::serve(self, spec, stderr_log);
+        }
         self.check_built()?;
         let argv = self.argv(spec, "serve");
         Ok(Box::new(ProcessWorker::start(
@@ -209,6 +317,9 @@ impl Engine for Hvm {
         boot: &Schedule,
         stderr_log: &Path,
     ) -> Result<ControlledBoot, EngineError> {
+        if self.in_process() {
+            return crate::hvm_inproc::start_controlled(self, spec, boot, stderr_log);
+        }
         self.check_built()?;
         let argv = self.control_argv(spec, "serve", &["--control", "boot"], Some(boot));
         ControlledBoot::start(self.command(spec, &argv), stderr_log, false)
@@ -220,6 +331,9 @@ impl Engine for Hvm {
         schedule: &Schedule,
         stderr_log: &Path,
     ) -> Result<ControlledRun, EngineError> {
+        if self.in_process() {
+            return crate::hvm_inproc::one_controlled(self, spec, schedule, stderr_log);
+        }
         self.check_built()?;
         let argv = self.control_argv(spec, "one", &["--control", "boot"], Some(schedule));
         ControlledRun::start(self.command(spec, &argv), stderr_log)

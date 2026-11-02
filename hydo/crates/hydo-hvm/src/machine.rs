@@ -37,21 +37,8 @@ impl Default for Gic {
     }
 }
 
-impl Default for Uart {
-    fn default() -> Uart {
-        Uart {
-            ier: 0,
-            lcr: 0,
-            mcr: 0,
-            scr: 0,
-            dll: 0,
-            dlm: 0,
-            fcr: 0,
-        }
-    }
-}
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
 pub struct Uart {
     pub ier: u8,
     pub lcr: u8,

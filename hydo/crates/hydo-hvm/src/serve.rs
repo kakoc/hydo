@@ -440,6 +440,7 @@ impl Host {
     }
 
     /// one stop: report, then serve host lines until CONT (false) or END/EOF (true)
+    #[allow(clippy::mut_range_bound)] // p is where the next line starts, not the loop's bound
     fn ctl_stop(&mut self, vm: &mut Vmm, why: &str) -> bool {
         let mut p = self.c.k.evfrom;
         let len = vm.m.console_len as usize;
@@ -586,7 +587,7 @@ impl Host {
             Some("marker")
         } else if self.ctl_due() {
             Some("send")
-        } else if (x.wrapping_sub(self.c.k.cad0)) % self.c.rb == 0 {
+        } else if x.wrapping_sub(self.c.k.cad0).is_multiple_of(self.c.rb) {
             Some("cadence")
         } else {
             None
@@ -765,10 +766,7 @@ pub fn scan_has_tc(gz: &[u8]) -> bool {
     let mut buf = vec![0u8; 1 << 16];
     let mut win: Vec<u8> = Vec::with_capacity(buf.len() + 16);
     loop {
-        let n = match z.read(&mut buf) {
-            Ok(n) => n,
-            Err(_) => 0,
-        };
+        let n = z.read(&mut buf).unwrap_or_default();
         win.extend_from_slice(&buf[..n]);
         if has(&win, KEY) {
             return true;

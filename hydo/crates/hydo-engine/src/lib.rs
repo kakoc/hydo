@@ -58,6 +58,7 @@
 //!   not a fixed number ([`machine_workers`]).
 
 pub mod hvm;
+pub mod hvm_inproc;
 pub mod hvx;
 pub mod image;
 pub mod inproc;
