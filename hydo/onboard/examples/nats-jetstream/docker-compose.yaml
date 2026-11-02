@@ -1,0 +1,54 @@
+# A three-node NATS JetStream cluster, as NATS users run one locally.
+# Each node reads the same nats-server.conf; its name comes from NATS_NAME.
+# Bump NATS_VERSION to compare releases (2.10.22: Jepsen's crash finding; 2.10.23: the fix).
+services:
+  n1:
+    image: nats:${NATS_VERSION:-2.10.22}-alpine
+    command: ["nats-server", "--config", "/etc/nats/nats-server.conf"]
+    environment:
+      NATS_NAME: n1
+    volumes:
+      - ./nats-server.conf:/etc/nats/nats-server.conf:ro
+      - n1-data:/data
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8222/healthz?js-enabled-only=true"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  n2:
+    image: nats:${NATS_VERSION:-2.10.22}-alpine
+    command: ["nats-server", "--config", "/etc/nats/nats-server.conf"]
+    environment:
+      NATS_NAME: n2
+    volumes:
+      - ./nats-server.conf:/etc/nats/nats-server.conf:ro
+      - n2-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8222/healthz?js-enabled-only=true"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  n3:
+    image: nats:${NATS_VERSION:-2.10.22}-alpine
+    command: ["nats-server", "--config", "/etc/nats/nats-server.conf"]
+    environment:
+      NATS_NAME: n3
+    volumes:
+      - ./nats-server.conf:/etc/nats/nats-server.conf:ro
+      - n3-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8222/healthz?js-enabled-only=true"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+volumes:
+  n1-data:
+  n2-data:
+  n3-data:

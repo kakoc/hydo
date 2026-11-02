@@ -31,6 +31,7 @@ input	hydo/onboard/examples/stack/hydo-errors.yaml	e72c82ce5173231f6f7cc425e23b8
 input	hydo/onboard/examples/stack/hydo-grpcgen.yaml	72b3a42760bb79db3be04fe34d4e7a55645ed133e86008b059f0935cd3f247cf
 input	hydo/onboard/examples/stack/hydo-read.yaml	d3899b9ac926be02576d0f8e9b950bcc174682dc727791d4f1309294b3a1fb68
 input	hydo/onboard/examples/stack/hydo.yaml	369ed2074d0024dcbb5bf2218731bee7526fa006ff0e900aef339cc6cf69fb24
+input	hydo/onboard/examples/nats-jetstream/hydo/hydo.yaml	a7e19bf3c01be56d464b7a6e443792caee1ad45e29fa7ea8be9801cf05965719
 input	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	d8c924f5de6093c0e1f52b2733682fbd4bab850f162a22c443b53fecefe1d900
 input	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	b99571f53a01990549bd599721b01d85a127e59154dc209de1afa0ad3123b946
 input	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	b344fa1f5be236c5a4ad91a58223a3384024e44fede6213d7b276957463e2798
@@ -44,16 +45,16 @@ input	hydo/onboard/examples-mac/redis/hydo-read.yaml	160a4c0a430464a37fd4ea0af6e
 input	hydo/onboard/examples-mac/redis/hydo.yaml	4b085420e84e6e845bb37c4522dedba95fcd50c8d41ca20d8c3c5b68691fd388
 manifest	hydo/onboard/examples/avx2/hydo.yaml	core
 boot	hydo/onboard/examples/avx2/hydo.yaml	hydo/onboard/examples/avx2/hydo.yaml#0	snapshot	9293286b9cdaec81
-counts	hydo/onboard/examples/avx2/hydo.yaml	identity=33 recovery:ok=4 run:cut=4 run:error=3 run:ok=30 run:violation=8 token:C=4 token:K=5 token:P=4 token:Q=1 token:T=32 token:X=4 token:Z=1 written=12
+counts	hydo/onboard/examples/avx2/hydo.yaml	identity=33 recovery:ok=4 refused=1 run:cut=4 run:error=3 run:ok=29 run:violation=8 token:C=4 token:K=3 token:P=4 token:Q=1 token:T=32 token:X=4 token:Z=1 written=11
 boot-transcript	hydo/onboard/examples/avx2/hydo.yaml	9293286b9cdaec81
 chunk	hydo/onboard/examples/avx2/hydo.yaml	0	500	55a3948c0006f19aedd45e9bf645b716a37576fed79c541cd82debd12831c4fc
 chunk	hydo/onboard/examples/avx2/hydo.yaml	1	500	dc9ffd136fb0fa583ca8ecabb7410d7afa299ac398b3196682b57b995211cb8d
 chunk	hydo/onboard/examples/avx2/hydo.yaml	2	500	62efd8e04219b5917e3ce2d49858faa3c8d432beb2cbed14b4a6e4d3af654caf
-chunk	hydo/onboard/examples/avx2/hydo.yaml	3	500	60402eafb74ec249415c57eef61b93ec5e334c3e73fc6ae2584000eda5e9da08
-chunk	hydo/onboard/examples/avx2/hydo.yaml	4	271	77a94c3aa9caa1e91672ffa1240cc8cfae3e57d0b266ef23c6a15d802d9e16d5
+chunk	hydo/onboard/examples/avx2/hydo.yaml	3	500	9a98006b6dee0fbc7c6f8b97c9657347310dc733062efcb159de171168006428
+chunk	hydo/onboard/examples/avx2/hydo.yaml	4	229	2dade7c348dd840dc81f7ef40cf858a47f30b1a46f3c6d44d2ec9a291575a27f
 manifest	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	core
 boot	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	hydo/onboard/examples/compose-voting/hydo-loopback.yaml#0	snapshot	3e5ac7ff708736c9
-counts	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	identity=279 recovery:error=1 recovery:ok=38 recovery:violation=37 run:cut=76 run:error=14 run:ok=102 run:violation=99 token:C=78 token:K=150 token:N=101 token:O=23 token:P=146 token:Q=1 token:T=127 token:X=4 token:Z=1 written=12
+counts	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	identity=279 recovery:error=1 recovery:ok=38 recovery:violation=37 refused=1 run:cut=76 run:error=14 run:ok=102 run:violation=98 token:C=78 token:K=148 token:N=101 token:O=23 token:P=146 token:Q=1 token:T=127 token:X=4 token:Z=1 written=11
 boot-transcript	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	3e5ac7ff708736c9
 chunk	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	0	500	5da8adef6deaac36bca7db9208dbc63c017edfb593f289e59c52203aa8d95b8c
 chunk	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	1	500	20eb33e6f32ee7bfebfd1769b0770cb3ed967398a8f0bd67b5759a2d673ce946
@@ -141,13 +142,13 @@ chunk	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	82	500	42fd8d658fa
 chunk	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	83	500	671caaa649e3b790de86eb4ce2a931b668a65e45836b8731b8108de03e4f9872
 chunk	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	84	500	b23a3930b11f1f3704ad1dfb0bf4f03a1129dc712aa5b2a6ff59c82c0d282436
 chunk	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	85	500	10ccb6c131cf32259a12fe734e4b4f7c08dc2fcda8df3058f085665b847ee808
-chunk	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	86	500	523f19351534246514d318bfdc863442e05fbfb7db9d9f7e603acc31f298da12
-chunk	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	87	500	240f3ab9c30715c998d665455231a0b6becd5fdd2be390c35d5c85cd1f68470e
-chunk	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	88	193	90a491ab1c83e2ab4c5bf337501e0f7325bff4aca2e5847a870386527ddacab7
+chunk	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	86	500	6f4ddcdd1a903e7ca85d902ed99276d7e5f73faff4568956fe56f44800ac0bd5
+chunk	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	87	500	3e78907b03676f0590b435b18ba34e50dbd26225e0315a33f4b1d165cc249a58
+chunk	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	88	75	85a1839c2932f85d3770144d45961621fe5c2826d1eb159004307d3fbaecec8b
 manifest	hydo/onboard/examples/compose-voting/hydo-mac.yaml	core
 boot	hydo/onboard/examples/compose-voting/hydo-mac.yaml	hydo/onboard/examples/compose-voting/hydo-mac.yaml#0	error	a60466fc62613f8a
 boot	hydo/onboard/examples/compose-voting/hydo-mac.yaml	hydo/onboard/examples/compose-voting/hydo-mac.yaml#1	snapshot	47fa15f0bea8f6c5
-counts	hydo/onboard/examples/compose-voting/hydo-mac.yaml	identity=270 recovery:error=2 recovery:ok=39 recovery:violation=28 run:cut=69 run:error=18 run:ok=116 run:violation=79 token:C=72 token:K=154 token:N=97 token:O=25 token:P=145 token:Q=1 token:T=122 token:X=4 token:Z=1 written=12
+counts	hydo/onboard/examples/compose-voting/hydo-mac.yaml	identity=270 recovery:error=2 recovery:ok=39 recovery:violation=28 refused=1 run:cut=69 run:error=18 run:ok=116 run:violation=78 token:C=72 token:K=152 token:N=97 token:O=25 token:P=145 token:Q=1 token:T=122 token:X=4 token:Z=1 written=11
 boot-transcript	hydo/onboard/examples/compose-voting/hydo-mac.yaml	47fa15f0bea8f6c5
 chunk	hydo/onboard/examples/compose-voting/hydo-mac.yaml	0	500	d03d0a59fa8f67fdfbd2ed804ec9ed5592a64c56e7ac13c6024953ca82e7deb8
 chunk	hydo/onboard/examples/compose-voting/hydo-mac.yaml	1	500	a19ee190485cf6240dd5ba11effa72ae246245030de2f977565afa378a976b00
@@ -269,12 +270,12 @@ chunk	hydo/onboard/examples/compose-voting/hydo-mac.yaml	116	500	8255a2529166a99
 chunk	hydo/onboard/examples/compose-voting/hydo-mac.yaml	117	500	a10e45de998cef2ad37dee8f700c234e6129be7645b286317ef29f1178814823
 chunk	hydo/onboard/examples/compose-voting/hydo-mac.yaml	118	500	b4fb1a5369b66fcdbdd556c2058f310b1a2762d4ca459d82e5bf9edd97366232
 chunk	hydo/onboard/examples/compose-voting/hydo-mac.yaml	119	500	2318f3d78f812da80ad77e39f6ef1a70ad6a84932f6866e6ed1a02c1fd0d5d90
-chunk	hydo/onboard/examples/compose-voting/hydo-mac.yaml	120	500	77a4ae7f2795748c6ff41ec19cd49b644bce184feaebdf08e080c3f01e0a12e3
-chunk	hydo/onboard/examples/compose-voting/hydo-mac.yaml	121	500	9a2bc7b532a5c141e58a46dea72a8edf841d8534206f5bab3d5424a3ed691b06
-chunk	hydo/onboard/examples/compose-voting/hydo-mac.yaml	122	353	2ff9f21560e387e2a727bf9da3bd82cd097c9d0687e1ae8ae3a46aa1910e3eb8
+chunk	hydo/onboard/examples/compose-voting/hydo-mac.yaml	120	500	8daec93e4269e7ad1d4344182b513b24985aecd28a6aaa8d62a3b611b682f84b
+chunk	hydo/onboard/examples/compose-voting/hydo-mac.yaml	121	500	aa0562cf4b5fc6e502427a6d1635bb752bc9f0ccfe20c3c71cb2ca21028ab3ab
+chunk	hydo/onboard/examples/compose-voting/hydo-mac.yaml	122	235	c06a6e27907f82b302e70774318d4c5b31a0b4bccf811bee9e23db12bf339f9e
 manifest	hydo/onboard/examples/compose-voting/hydo.generated.yaml	core
 boot	hydo/onboard/examples/compose-voting/hydo.generated.yaml	hydo/onboard/examples/compose-voting/hydo.generated.yaml#0	snapshot	510541aea78a263d
-counts	hydo/onboard/examples/compose-voting/hydo.generated.yaml	identity=272 recovery:error=2 recovery:ok=50 recovery:violation=14 run:cut=66 run:error=23 run:ok=166 run:violation=29 token:C=70 token:K=151 token:N=102 token:O=25 token:P=142 token:Q=1 token:T=121 token:X=4 token:Z=1 written=12
+counts	hydo/onboard/examples/compose-voting/hydo.generated.yaml	identity=272 recovery:error=2 recovery:ok=50 recovery:violation=14 refused=1 run:cut=66 run:error=23 run:ok=165 run:violation=29 token:C=70 token:K=149 token:N=102 token:O=25 token:P=142 token:Q=1 token:T=121 token:X=4 token:Z=1 written=11
 boot-transcript	hydo/onboard/examples/compose-voting/hydo.generated.yaml	510541aea78a263d
 chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	0	500	8f689af09c90487af92f4657055cd355de80a5de5451293cf97d06c49566abd8
 chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	1	500	9087ba6e2336a6a4fc66e82c9b33a60aa0a580251b0dba5eb215ae165f1871b5
@@ -383,13 +384,13 @@ chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	103	500	f514e28a5
 chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	104	500	81a766ec0a889b2949ca4f476dd2524fe8d7bd92e064aef103ad69a8c0f23154
 chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	105	500	97a2ae07f068dee486b6543eac6ed9203d03d97a1fedc9af1b1692a816ebba5f
 chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	106	500	36056e412a421b59a81f50bbce90b5261a4ba12eea8f4e8822f7e5ee41358b22
-chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	107	500	856c18dd58c262ebc30310cee37ad203e7f97f0f2862ed5bf9198ab729797018
-chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	108	444	3784fdf1340d9511109fbcd0d67666f691fa2b385322c7063818f35282613839
+chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	107	500	eb0f31c9e205d5519368c0f821daa1ae63e7f090196ef446f9702ea07a80d177
+chunk	hydo/onboard/examples/compose-voting/hydo.generated.yaml	108	391	50904adf2ff66227fe6c6b0f2db905dcd101e26f002d62b1282d76c6bebdb1b0
 manifest	hydo/onboard/examples/compose-voting/hydo.yaml	core
 boot	hydo/onboard/examples/compose-voting/hydo.yaml	hydo/onboard/examples/compose-voting/hydo.yaml#0	error	2e00f6d7f8ac13e6
 boot	hydo/onboard/examples/compose-voting/hydo.yaml	hydo/onboard/examples/compose-voting/hydo.yaml#1	error	af1d9d562305916f
 boot	hydo/onboard/examples/compose-voting/hydo.yaml	hydo/onboard/examples/compose-voting/hydo.yaml#2	snapshot	47fa15f0bea8f6c5
-counts	hydo/onboard/examples/compose-voting/hydo.yaml	identity=272 recovery:error=2 recovery:ok=45 recovery:violation=24 run:cut=71 run:error=18 run:ok=104 run:violation=91 token:C=73 token:K=152 token:N=98 token:O=24 token:P=144 token:Q=1 token:T=126 token:X=4 token:Z=1 written=12
+counts	hydo/onboard/examples/compose-voting/hydo.yaml	identity=272 recovery:error=2 recovery:ok=45 recovery:violation=24 refused=1 run:cut=71 run:error=18 run:ok=104 run:violation=90 token:C=73 token:K=150 token:N=98 token:O=24 token:P=144 token:Q=1 token:T=126 token:X=4 token:Z=1 written=11
 boot-transcript	hydo/onboard/examples/compose-voting/hydo.yaml	47fa15f0bea8f6c5
 chunk	hydo/onboard/examples/compose-voting/hydo.yaml	0	500	5dbe2af156306c4a197ef69f2188ad0e9d3dfcbfc56a50cdd1ba921399064bbb
 chunk	hydo/onboard/examples/compose-voting/hydo.yaml	1	500	1ad1655a5283cd9d83d381a5f994f8d604667b3bd7a9c7ad5723fa23d68f254d
@@ -510,12 +511,12 @@ chunk	hydo/onboard/examples/compose-voting/hydo.yaml	115	500	e94b4b653abed0eb910
 chunk	hydo/onboard/examples/compose-voting/hydo.yaml	116	500	a7ceeac2428018db07e790384f584844bc932df0d3bfd1bb024b6071fc7b14bf
 chunk	hydo/onboard/examples/compose-voting/hydo.yaml	117	500	1e34d21069428aea32952704937f22b9e0831da686fb4d785422f6b981a2eaa5
 chunk	hydo/onboard/examples/compose-voting/hydo.yaml	118	500	2e3bee2501a6c564e38866302391c90d8a260f0b841cc76c50597e79f425f645
-chunk	hydo/onboard/examples/compose-voting/hydo.yaml	119	500	523efb8441a99625696bab488701c6b7830466cf56a97aa2ded5e1f303cb0a12
-chunk	hydo/onboard/examples/compose-voting/hydo.yaml	120	500	1db08895951b3dc3be1a9617fb13f36d4250a5efee7d21e3a764c8fac6a7331b
-chunk	hydo/onboard/examples/compose-voting/hydo.yaml	121	315	59bba6c4dbbd0b2e8cf1b11b5fb93ea10d4c6a9421ddf6c7c3bcf1b7f8056ce7
+chunk	hydo/onboard/examples/compose-voting/hydo.yaml	119	500	cb8f5300e7bedb9880ee42105a49a9d5163237236e915d92dc63e4e25f40a048
+chunk	hydo/onboard/examples/compose-voting/hydo.yaml	120	500	8cc5eaf186e76f487b56c47eef0fe4a6a064f59be064fd7440b22cd41424d4c4
+chunk	hydo/onboard/examples/compose-voting/hydo.yaml	121	197	756f6ef9680b4654aa28c2673287f3ea5e16c1241f0669070262475ff9b6a755
 manifest	hydo/onboard/examples/etcd/hydo-hist.yaml	core
 boot	hydo/onboard/examples/etcd/hydo-hist.yaml	hydo/onboard/examples/etcd/hydo-hist.yaml#0	snapshot	ec4a0980b72e820c
-counts	hydo/onboard/examples/etcd/hydo-hist.yaml	identity=271 recovery:ok=65 recovery:violation=8 run:cut=73 run:error=15 run:ok=195 token:C=76 token:K=151 token:N=100 token:O=26 token:P=149 token:Q=1 token:T=125 token:X=4 token:Z=1 written=12
+counts	hydo/onboard/examples/etcd/hydo-hist.yaml	identity=271 recovery:ok=65 recovery:violation=8 refused=1 run:cut=73 run:error=15 run:ok=194 token:C=76 token:K=149 token:N=100 token:O=26 token:P=149 token:Q=1 token:T=125 token:X=4 token:Z=1 written=11
 boot-transcript	hydo/onboard/examples/etcd/hydo-hist.yaml	ec4a0980b72e820c
 chunk	hydo/onboard/examples/etcd/hydo-hist.yaml	0	500	eb986a1c74299872d747fa747f49441866cd73403ac820905c2fac28a6f334d8
 chunk	hydo/onboard/examples/etcd/hydo-hist.yaml	1	500	0c5e9d2b38088d5b6ccadce895434489c8518d7dd123214a87852bac81c8a80e
@@ -569,12 +570,11 @@ chunk	hydo/onboard/examples/etcd/hydo-hist.yaml	48	500	4a08a1fcb3f86f1658a073aa0
 chunk	hydo/onboard/examples/etcd/hydo-hist.yaml	49	500	86eb27bc6cf92a6be75bfcf6ce3b35beb12c59a099bec977477ef0d41c1ed857
 chunk	hydo/onboard/examples/etcd/hydo-hist.yaml	50	500	c83fb19b9d348dcece9e295ab2f01d8c45c5baefd76bfb341612e84f438b2da9
 chunk	hydo/onboard/examples/etcd/hydo-hist.yaml	51	500	fd10c9a12b2d489714b59f268acf3a4938c7d9853579da07d3eaa232a89789ab
-chunk	hydo/onboard/examples/etcd/hydo-hist.yaml	52	500	6dabb9f972dbbefe9fae6f650ee4f34076263951d06c102f0b914d81681e999b
-chunk	hydo/onboard/examples/etcd/hydo-hist.yaml	53	500	a70ff75f7b71b1cbdd6d358b00cbd9f96b35a339cc6c289aa2caba54cafc5d2f
-chunk	hydo/onboard/examples/etcd/hydo-hist.yaml	54	32	2628770a9dbee11cb55a05506a97bdb6a6c4343312823d1e74de83ed494b28aa
+chunk	hydo/onboard/examples/etcd/hydo-hist.yaml	52	500	47410cfa9ea1d9372e4110cedda3a993875a1758d3a3223b869a19640855b180
+chunk	hydo/onboard/examples/etcd/hydo-hist.yaml	53	472	af498ac66eeea7d3899d7dfc070c3488143a15abe5d2404b3e437a2d57fc20e5
 manifest	hydo/onboard/examples/etcd/hydo.yaml	core
 boot	hydo/onboard/examples/etcd/hydo.yaml	hydo/onboard/examples/etcd/hydo.yaml#0	snapshot	4b27dd7bb2ff68af
-counts	hydo/onboard/examples/etcd/hydo.yaml	identity=270 recovery:error=2 recovery:ok=48 recovery:violation=22 run:cut=72 run:error=30 run:ok=124 run:violation=56 token:C=74 token:K=150 token:N=95 token:O=27 token:P=148 token:Q=1 token:T=123 token:X=4 token:Z=1 written=12
+counts	hydo/onboard/examples/etcd/hydo.yaml	identity=270 recovery:error=2 recovery:ok=48 recovery:violation=22 refused=1 run:cut=72 run:error=29 run:ok=124 run:violation=56 token:C=74 token:K=148 token:N=95 token:O=27 token:P=148 token:Q=1 token:T=123 token:X=4 token:Z=1 written=11
 boot-transcript	hydo/onboard/examples/etcd/hydo.yaml	4b27dd7bb2ff68af
 chunk	hydo/onboard/examples/etcd/hydo.yaml	0	500	2c6316e7bb4f097ffc72eea0f1487e3d96b187a5c5ffc826793d3413d0126403
 chunk	hydo/onboard/examples/etcd/hydo.yaml	1	500	a9bd32081e76cc71b13f62bd2bd32cbb636ba1813740c463b17ee0f194a4d60d
@@ -630,12 +630,12 @@ chunk	hydo/onboard/examples/etcd/hydo.yaml	50	500	9a2d2ce4ca4c098c658ec41e1d1ad1
 chunk	hydo/onboard/examples/etcd/hydo.yaml	51	500	46c254910652287d2ecd4423b7ffb964585b1b01276c9d98b647f529d33c5880
 chunk	hydo/onboard/examples/etcd/hydo.yaml	52	500	8d0e35f700db9c5b6952f76e63da7a9bc989b8aeee91e7473a24b65d6bb1e796
 chunk	hydo/onboard/examples/etcd/hydo.yaml	53	500	c574d6c1a5d06b64163a8bf2d4486dd82c47ad4cd723ccebfe5826c3fafedb82
-chunk	hydo/onboard/examples/etcd/hydo.yaml	54	500	26448c381676fb3d17e029db0d345de37bf1e1ebaf5eef4317590ffc929571b5
-chunk	hydo/onboard/examples/etcd/hydo.yaml	55	386	b58960bbaac0b53ff3c1c9b232ed07998f47acbea47f3f3fa85dee9302b890be
+chunk	hydo/onboard/examples/etcd/hydo.yaml	54	500	feac58b5fe5622fcb75ccf5a7d4d631f4cda3a1dfb12c7d1b32164a4d07c0072
+chunk	hydo/onboard/examples/etcd/hydo.yaml	55	320	9baa9cb129d017253ffdd9887925ee2fee4c4b02908322c8a4d6e9d42ed21546
 manifest	hydo/onboard/examples/miniflux/hydo-read.yaml	core
 boot	hydo/onboard/examples/miniflux/hydo-read.yaml	hydo/onboard/examples/miniflux/hydo-read.yaml#0	error	cccaafbf624f82a7
 boot	hydo/onboard/examples/miniflux/hydo-read.yaml	hydo/onboard/examples/miniflux/hydo-read.yaml#1	snapshot	108b760bc0dfd72b
-counts	hydo/onboard/examples/miniflux/hydo-read.yaml	identity=287 recovery:error=2 recovery:ok=51 recovery:violation=21 run:cut=74 run:error=31 run:ok=46 run:violation=150 token:C=79 token:K=160 token:N=103 token:O=24 token:P=155 token:Q=1 token:S=45 token:T=135 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/miniflux/hydo-read.yaml	identity=287 recovery:error=2 recovery:ok=51 recovery:violation=21 refused=1 run:cut=74 run:error=31 run:ok=46 run:violation=149 token:C=79 token:K=158 token:N=103 token:O=24 token:P=155 token:Q=1 token:S=45 token:T=135 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/miniflux/hydo-read.yaml	108b760bc0dfd72b
 chunk	hydo/onboard/examples/miniflux/hydo-read.yaml	0	500	dfbfd9a8b36064b18f8b919403b0c9d1280f88599f11631909722132eaf585d8
 chunk	hydo/onboard/examples/miniflux/hydo-read.yaml	1	500	e5363cce03672540120caa190583e55fbb1aa2798477b735e06cc0f76528b2a8
@@ -720,13 +720,13 @@ chunk	hydo/onboard/examples/miniflux/hydo-read.yaml	79	500	bd3df9d3ebd5fd1ff79fc
 chunk	hydo/onboard/examples/miniflux/hydo-read.yaml	80	500	aebd6bf92917c3adc3152b3cc199bdaa8017f02c250c85d3e618a87a8db64594
 chunk	hydo/onboard/examples/miniflux/hydo-read.yaml	81	500	abca9f9cb418b9471c72a8406143bae6f771439d14995b716301b741922c5dfa
 chunk	hydo/onboard/examples/miniflux/hydo-read.yaml	82	500	d7c19f558957f260a22f775805944db9526e61405dc7a1621a40827a7aa434cd
-chunk	hydo/onboard/examples/miniflux/hydo-read.yaml	83	500	0a4d058dea5e169871a6b39a857ce7c59dc7f2550559908465392b1c07235913
-chunk	hydo/onboard/examples/miniflux/hydo-read.yaml	84	500	cf4a1a5c9626288cb1430c5ad7934542f2006a3b6cfadfe8eb1165c47ee0cc78
-chunk	hydo/onboard/examples/miniflux/hydo-read.yaml	85	500	5588aa9fb464f7375cfd7c52558b1798f2a90b16dcd90544547d746555af8f62
-chunk	hydo/onboard/examples/miniflux/hydo-read.yaml	86	140	6e21233411c2f834dea4af6f3cd80b431454c159ffc8b32cfe85a536f78317c1
+chunk	hydo/onboard/examples/miniflux/hydo-read.yaml	83	500	553198286245c0418c48f34825b4920ef78df476dfccf929183d617437e1e5f3
+chunk	hydo/onboard/examples/miniflux/hydo-read.yaml	84	500	fa2c496f8266385ec1a871f68e658822fd52f3941e5785a60f0c01de43bf503a
+chunk	hydo/onboard/examples/miniflux/hydo-read.yaml	85	500	41937b7d839ae67024ee81da467d3482e82001c15af57b563a6f6ea6bb66e84c
+chunk	hydo/onboard/examples/miniflux/hydo-read.yaml	86	16	cd8762c173e31ca3e74ee3d8ba95a337d2854996108c099adf17ceb598f0096b
 manifest	hydo/onboard/examples/miniflux/hydo.yaml	core
 boot	hydo/onboard/examples/miniflux/hydo.yaml	hydo/onboard/examples/miniflux/hydo.yaml#0	snapshot	108b760bc0dfd72b
-counts	hydo/onboard/examples/miniflux/hydo.yaml	identity=282 recovery:error=6 recovery:ok=47 recovery:violation=17 run:cut=70 run:error=17 run:ok=42 run:violation=167 token:C=73 token:K=157 token:N=103 token:O=31 token:P=149 token:Q=1 token:S=50 token:T=129 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/miniflux/hydo.yaml	identity=282 recovery:error=6 recovery:ok=47 recovery:violation=17 refused=1 run:cut=70 run:error=17 run:ok=42 run:violation=166 token:C=73 token:K=155 token:N=103 token:O=31 token:P=149 token:Q=1 token:S=50 token:T=129 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/miniflux/hydo.yaml	108b760bc0dfd72b
 chunk	hydo/onboard/examples/miniflux/hydo.yaml	0	500	bfe567b6c54a10d6fb4dc8b2b61d866df260efa6186d3a1c4478a5b5be3466d2
 chunk	hydo/onboard/examples/miniflux/hydo.yaml	1	500	26b075a491450f46d18535153f9a8d91c1ca77429f22ea56114d0e05b20aa1e9
@@ -818,13 +818,13 @@ chunk	hydo/onboard/examples/miniflux/hydo.yaml	86	500	0f6e73e7ae73014e042315e57d
 chunk	hydo/onboard/examples/miniflux/hydo.yaml	87	500	40c62c9a5353fa004a58dee7894e0af01a90c0001a212a17945f5ed622b3477a
 chunk	hydo/onboard/examples/miniflux/hydo.yaml	88	500	45e5a9c7ba0e6b10fd63ac6276289d14c69a851c7e76e27bd9d8c63726381e86
 chunk	hydo/onboard/examples/miniflux/hydo.yaml	89	500	b11c9a444b404ce06c2176d22da9ece5e7f8db056e5f4d8b2d3eb028583cdfbe
-chunk	hydo/onboard/examples/miniflux/hydo.yaml	90	500	96fc02925327e9cd2e4d748d07ae8bffb6d749005200fd2b69fe56c7428e8b8b
-chunk	hydo/onboard/examples/miniflux/hydo.yaml	91	500	cb1e2a4bc4714644f40c707a233f351935a7751f3da2b9d347fdaf01e8ae7592
-chunk	hydo/onboard/examples/miniflux/hydo.yaml	92	500	2953f3700bd20cf87f740d14c2fa0f8d03d94bab806443c2703ff6ec62c075f5
-chunk	hydo/onboard/examples/miniflux/hydo.yaml	93	248	a7902d48c7969c683dd09ecf8ec828c906a5bff9d75c9b22edd13d68b3f38759
+chunk	hydo/onboard/examples/miniflux/hydo.yaml	90	500	cfe5fdc76924613c9beacda56cb735fefdb5eabf8a49c9a4d50549db4f2bea66
+chunk	hydo/onboard/examples/miniflux/hydo.yaml	91	500	5860e5c3d1addb1a3c5f3469ac79e5484995e5fd1cc1275dd945c0585c130f36
+chunk	hydo/onboard/examples/miniflux/hydo.yaml	92	500	4fd9da91b6f0ff522414dc94c01a3a3a187ab28b7c4d14d6c520ab1c3c3f3aac
+chunk	hydo/onboard/examples/miniflux/hydo.yaml	93	124	6e8331c0eaafce71d5ddfa76f440e86d2d4fcbfc55e7489c77000ecfe96a2309
 manifest	hydo/onboard/examples/node-kv/hydo-mac.yaml	core
 boot	hydo/onboard/examples/node-kv/hydo-mac.yaml	hydo/onboard/examples/node-kv/hydo-mac.yaml#0	snapshot	d27ba14c8e8a4419
-counts	hydo/onboard/examples/node-kv/hydo-mac.yaml	identity=328 recovery:error=3 recovery:ok=74 recovery:violation=14 run:cut=91 run:error=25 run:ok=193 run:violation=33 token:B=180 token:C=92 token:K=171 token:P=160 token:Q=1 token:S=59 token:T=139 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/node-kv/hydo-mac.yaml	identity=328 recovery:error=3 recovery:ok=74 recovery:violation=14 refused=1 run:cut=91 run:error=25 run:ok=192 run:violation=33 token:B=180 token:C=92 token:K=169 token:P=160 token:Q=1 token:S=59 token:T=139 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/node-kv/hydo-mac.yaml	d27ba14c8e8a4419
 chunk	hydo/onboard/examples/node-kv/hydo-mac.yaml	0	500	819d96be2f8b877fdb1c23df846e8eb866201511c327f7ee1634844917075021
 chunk	hydo/onboard/examples/node-kv/hydo-mac.yaml	1	500	57833d88761c47e32a4dd37c508fa44ce376006b6ff8941da058ec0b7a59aa1b
@@ -868,11 +868,11 @@ chunk	hydo/onboard/examples/node-kv/hydo-mac.yaml	38	500	3fc36ffd4c0aae765a5ac04
 chunk	hydo/onboard/examples/node-kv/hydo-mac.yaml	39	500	4053126ddceea8c0e963679c4fb946c14f0b67e37136e5c65c82ba8249966344
 chunk	hydo/onboard/examples/node-kv/hydo-mac.yaml	40	500	8205790f57be8cd52fe4590b1a68dc6aeaf1c425feee6418db06c60bc146c34a
 chunk	hydo/onboard/examples/node-kv/hydo-mac.yaml	41	500	f946b6ddaf3808cfb83179e617b9dba20261aaaa99db7e517ec0ef555aff70eb
-chunk	hydo/onboard/examples/node-kv/hydo-mac.yaml	42	500	f1a63a1bd4c488200f0fdeba5fbaf268fff1ed599b62fd26be0146c5dfad5704
-chunk	hydo/onboard/examples/node-kv/hydo-mac.yaml	43	416	f9077925802dd3181e362adeca9fb46d1a43bac0fc8dd7af6be855c393cae733
+chunk	hydo/onboard/examples/node-kv/hydo-mac.yaml	42	500	547985ec3f7faa855d826feac97be889817976b568a9622c09f36322f4fd3060
+chunk	hydo/onboard/examples/node-kv/hydo-mac.yaml	43	363	6ccfc6bd70e306a99de6472a0e004ecda9365cfda67043861678cfb5365c1346
 manifest	hydo/onboard/examples/node-kv/hydo.yaml	core
 boot	hydo/onboard/examples/node-kv/hydo.yaml	hydo/onboard/examples/node-kv/hydo.yaml#0	snapshot	78b5679268864e80
-counts	hydo/onboard/examples/node-kv/hydo.yaml	identity=307 recovery:error=2 recovery:ok=80 recovery:violation=12 run:cut=94 run:error=29 run:ok=171 run:violation=27 token:B=159 token:C=99 token:K=157 token:P=153 token:Q=1 token:S=45 token:T=136 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/node-kv/hydo.yaml	identity=307 recovery:error=2 recovery:ok=80 recovery:violation=12 refused=1 run:cut=94 run:error=29 run:ok=170 run:violation=27 token:B=159 token:C=99 token:K=155 token:P=153 token:Q=1 token:S=45 token:T=136 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/node-kv/hydo.yaml	78b5679268864e80
 chunk	hydo/onboard/examples/node-kv/hydo.yaml	0	500	445de8e5ef3fc902c2c0c91e7da6dcd179209eae1144cdd147df1cf991f74e49
 chunk	hydo/onboard/examples/node-kv/hydo.yaml	1	500	b943861a7007ccda2258767fc267d6cd00f27bf177bf83fcd3d86da5630409b4
@@ -914,11 +914,11 @@ chunk	hydo/onboard/examples/node-kv/hydo.yaml	36	500	13f977311184211ac9c64f54ceb
 chunk	hydo/onboard/examples/node-kv/hydo.yaml	37	500	52b77285625c8a6781c29cc89383ef2955a886c0ec9a438d2637805cbbcebf87
 chunk	hydo/onboard/examples/node-kv/hydo.yaml	38	500	5369f8982ab65b152e5a64cadb2ec151894ea2f683456c0a2d3744fe103dc754
 chunk	hydo/onboard/examples/node-kv/hydo.yaml	39	500	07677ef39973a7488eae98075e43cc6b9cd27953cd6bec61f56d91fd4f717fb6
-chunk	hydo/onboard/examples/node-kv/hydo.yaml	40	500	1c7db93dc45791bd46a6b1322e75346621dc60bc85d5650a4ddd13052a75f92d
-chunk	hydo/onboard/examples/node-kv/hydo.yaml	41	173	8b1cc7dcc35f73b7a05e84369c48d0560d79a7624365096b10c7eec789083efe
+chunk	hydo/onboard/examples/node-kv/hydo.yaml	40	500	aa4a504c66fc0c4a19e978ff660d8f6aeadd5982f2335c9273413d5ac9a2d29a
+chunk	hydo/onboard/examples/node-kv/hydo.yaml	41	120	c5685490a5f6068ce13e31ad8653b082b4b348b235135ce9f67718a39c46bd8f
 manifest	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml	core
 boot	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml#0	snapshot	13f29050718449df
-counts	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml	identity=316 recovery:ok=90 recovery:violation=1 run:cut=91 run:error=16 run:ok=223 token:B=168 token:C=93 token:K=167 token:P=162 token:Q=1 token:S=59 token:T=141 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml	identity=316 recovery:ok=90 recovery:violation=1 refused=1 run:cut=91 run:error=16 run:ok=222 token:B=168 token:C=93 token:K=165 token:P=162 token:Q=1 token:S=59 token:T=141 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml	13f29050718449df
 chunk	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml	0	500	61424916169ecc3371f2ec910266a8e8783b2621fc0f167659127f9f2ba828ae
 chunk	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml	1	500	d77ae7d4d56717a6c5b0d212fe3a3f01247f8899f746a4303e3721d6be90b2d0
@@ -961,12 +961,12 @@ chunk	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml	37	500	858891081797b183
 chunk	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml	38	500	ea09965e9b3f50d54d376b6264d7ee3c1172283ace44e7d7959ed870f981b0cb
 chunk	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml	39	500	26e78d42892f689f49682a4a8facee672cd02db830f61b37d09eed2050580844
 chunk	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml	40	500	563d0fb37a218c56eadc85d68bbcc1e70d62a28b962ea53aec3aa36c76c52545
-chunk	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml	41	500	ef4f6f4a09851bdad0ede6867bf521634fca5d1e02e734fb4bd6b804867f3f12
-chunk	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml	42	500	5faa9d57eb38bbf75b7a9d17c0ab1c7cfeb459a1a7d9cd80ae0dc0145926a7de
-chunk	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml	43	99	e0121a1190e3617511aae175cfc2273e3e2fbd06d8831522e4cc5b95a1af32dd
+chunk	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml	41	500	397e04b91f458a5e8251c6252ee092eec326581165afad342cbe85dfd1383734
+chunk	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml	42	500	36b47bf59d44c77c89dbd1377481a0f2982a14a685b0481079f3673d88c16bf1
+chunk	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml	43	45	a2975f993af42248bdcd813df1dacbe035203cfd3b780303d5dd7e356bb99af8
 manifest	hydo/onboard/examples/python-kv/hydo-mac.yaml	core
 boot	hydo/onboard/examples/python-kv/hydo-mac.yaml	hydo/onboard/examples/python-kv/hydo-mac.yaml#0	snapshot	bb989a1e0b2c18a4
-counts	hydo/onboard/examples/python-kv/hydo-mac.yaml	identity=317 recovery:error=2 recovery:ok=69 recovery:violation=11 run:cut=82 run:error=24 run:ok=191 run:violation=34 token:B=165 token:C=84 token:K=169 token:P=159 token:Q=1 token:S=49 token:T=143 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/python-kv/hydo-mac.yaml	identity=317 recovery:error=2 recovery:ok=69 recovery:violation=11 refused=1 run:cut=82 run:error=24 run:ok=190 run:violation=34 token:B=165 token:C=84 token:K=167 token:P=159 token:Q=1 token:S=49 token:T=143 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/python-kv/hydo-mac.yaml	bb989a1e0b2c18a4
 chunk	hydo/onboard/examples/python-kv/hydo-mac.yaml	0	500	45c9a1a47ab94d6a1074fed944424e4e48db81f81eec1bb7b939746903e91540
 chunk	hydo/onboard/examples/python-kv/hydo-mac.yaml	1	500	f1578ef6726e708add28287f3ff62f7b837b2b571d3fff7319fc3ea387538c5a
@@ -1008,12 +1008,12 @@ chunk	hydo/onboard/examples/python-kv/hydo-mac.yaml	36	500	006dcdd038104302f225f
 chunk	hydo/onboard/examples/python-kv/hydo-mac.yaml	37	500	da161b7822eb2d789f4c6c280ff4cb38d58d7b673437b2d0fcde129cec27c2cf
 chunk	hydo/onboard/examples/python-kv/hydo-mac.yaml	38	500	9a200ffa915e2124ed3e9a2f4cf0166f922278bfd1c864ba8fe2b1195fe48d3f
 chunk	hydo/onboard/examples/python-kv/hydo-mac.yaml	39	500	69c82143fcbe0df2679885c639715c50acdd8999a0c1a99f8fc8e3fe484794d1
-chunk	hydo/onboard/examples/python-kv/hydo-mac.yaml	40	500	fa0a87c5fc2d666e70573f32c0b42b1fe77549aceaa8ab548dfcd84563ae5ce0
-chunk	hydo/onboard/examples/python-kv/hydo-mac.yaml	41	500	c37c61fffadee3e67b15b44bc296b8d5f3a4a0ebdb8870f71cbaf4dd51b1478a
-chunk	hydo/onboard/examples/python-kv/hydo-mac.yaml	42	96	36984d717eb9a18db00b62dcb31e0d9dca85f39b0f5413ea1775d732fe05536f
+chunk	hydo/onboard/examples/python-kv/hydo-mac.yaml	40	500	6878610b3234e7e228e34124fa658db9a9c91f9bb0cb98e63eaa79092a0a5dd3
+chunk	hydo/onboard/examples/python-kv/hydo-mac.yaml	41	500	4229cf5096e1cad5243540f5f1bfdd49ff9d32570417da5c7ed0382e2e5c7415
+chunk	hydo/onboard/examples/python-kv/hydo-mac.yaml	42	43	6769b2e9718f61c3f74b82752dd802e3408a728da598b653b6c032be9885cee6
 manifest	hydo/onboard/examples/redis-bridge/hydo.yaml	core
 boot	hydo/onboard/examples/redis-bridge/hydo.yaml	hydo/onboard/examples/redis-bridge/hydo.yaml#0	snapshot	0943e07aac57836a
-counts	hydo/onboard/examples/redis-bridge/hydo.yaml	identity=343 recovery:error=8 recovery:ok=51 recovery:violation=61 run:cut=120 run:error=48 run:ok=170 run:violation=104 token:C=124 token:F=88 token:H=267 token:K=178 token:N=121 token:O=36 token:P=166 token:Q=1 token:T=147 token:X=4 token:Z=1 written=99
+counts	hydo/onboard/examples/redis-bridge/hydo.yaml	identity=343 recovery:error=8 recovery:ok=51 recovery:violation=61 refused=1 run:cut=120 run:error=48 run:ok=169 run:violation=104 token:C=124 token:F=88 token:H=267 token:K=176 token:N=121 token:O=36 token:P=166 token:Q=1 token:T=147 token:X=4 token:Z=1 written=98
 boot-transcript	hydo/onboard/examples/redis-bridge/hydo.yaml	0943e07aac57836a
 chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	0	500	c7524a80d04aa5a0b2b0a38e6ff2f45e02315de1bd1ac01d5320dd7521d8d4f1
 chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	1	500	1f5856de7cfab3f6c44ffc96858b7db630d922f9f445f7c805d4b8a038ef9ca6
@@ -1142,35 +1142,34 @@ chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	123	500	926289b784a3dfb0b27bd
 chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	124	500	690e4f59abb273d7592f06d0bb08418019d9be9ce6b3ce3a81fd78cf1445763d
 chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	125	500	7012928c3c683d22bd8043c45378c788b8ec98b01c1199fde81885922efd0fff
 chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	126	500	f8b247797890678afeeaad73e8712db935001dff6797ae6e3b287b0302abcb49
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	127	500	5ca90beb56016bfdcad89cd3b6d1e42a7a778263f436ae4aeab3b71ddaedb11d
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	128	500	41b1ff6b1c94c9c5485cfe5ae4dbb4cdef39ede60a0a9718e62392a538f07ff1
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	129	500	3a64f24b4f7ba4766a36384eb24833b45b593ac972b2af4584529e3494305bd6
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	130	500	d336e113db17cb662e1bcf8ab32d3b73bfb58764815b0a6def8e88146fe1c4a3
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	131	500	f7ef75b3fdbf93a2d0c114f27036b64fd60afefca30781d671ce0744df470bcb
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	132	500	f647935243608b9ff8ebfce686c721025103872fe005b49be0ff2d0b96400eff
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	133	500	4ea980bfdf1b42a60318bab3df62b12e4b35a35ea52e337e4804639b4f8196c6
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	134	500	cea0a906df038da67cc520efa190c5630d1ca755f6a66e41fcdf512a104cc22c
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	135	500	2e4e204f2ea3064865602318516828a48e0dec0462cf2dcbb3424e861434af72
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	136	500	ff3180c3f26b843da88e24f0b33701e41d3978b0d70be317dcddfbcfa3ddab43
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	137	500	bd0728b4e9d58ca3d50043705497cbf7cdbde3c3d067a49a80ef724756f7e4e5
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	138	500	fdbb8540965ab86096e7a8fe76a07434b97a4e497a19c99d92843bd129266ef7
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	139	500	0c66ad745e46215b164ad3a4c1f48d38ea96bc4fc1d094908f3290fc75c76951
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	140	500	e0a6bbc0204ec77b8a580120537fb0996cb6a519b51bccdafa52e590142e2b80
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	141	500	0edcb3e2d4d285e9751ea55aa8cbc0aedf76c18d749c7d9aee7780a3d0b33fc4
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	142	500	08f909ca31bf6bd53634a58ec313534f86fa05a2715b56f147eec7512e1903ac
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	143	500	b8871a1041365209b2315c0cae19c40e0e7a09d2c6a0152fd3799b2f021c1f50
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	144	500	3addb1311a33d125e9011dee3695634c8b94c698ae735fb56c151f77d0edeb67
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	145	500	4563ee9c944a216d5e30a0b2df1a8d72e8a365692f217804ca64d17f5fa30ac1
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	146	500	ccfe108d6aa24a1b8200bddaacb76d16e2d56843690d4f74f87eea6deef420fc
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	147	500	87978e1861a38fa7b1241a082ded136416b501c203420b8a08b8afbebfcc2ed0
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	148	500	8dc06ca285d7ed7b715ed5a616a82ac08b9dad2a48a6fbf61838fbb308edb350
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	149	500	b18622881e562e0e4837a633f92ae2929bbdbb0a39d5394f727199c3c3b70f03
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	150	500	2e512fc9cf0b95ab32c5f9535e959f609439a83cc971712af7117b9f69a77c30
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	151	500	e58ce7451fee22b1a08088340e887c2287d2c831a877cc74ad6afe697fa7474c
-chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	152	109	93f93588d822f4a0824b81b0b5838e77abd957c98a46ec6e8d8d72388c4c436e
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	127	500	499faad0fb1a0adbf373573633074c5cf4e61e39f8cd00f233e4484ad9edc11e
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	128	500	7ff9b253fb2c54e71335a09cdedf9d5fff766ab3f2cf0bba58b6d371e94d9b56
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	129	500	697d56a28c3f62440a3aef0b0a9d5ee24a26c0c5ff66f83dd9a8e465a72e2d08
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	130	500	357e502ab8d6dfbf04aa972fc810cbf8790fb16729b59eadaacb8ad873f56b3e
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	131	500	a02ba41ad9bcfab807e31c27c3a3ae135c8f451bd215d40b6241892de32791ad
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	132	500	d5e3eb26920aef83182dcbc53e3675c609b695fdb085611e6a7ad06a6c8b82f8
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	133	500	0c05fbe4c53f9dbf8a72e555c9470ff0ed1b704d65333e1aecdb62d9b5886330
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	134	500	643b398d88c3dcf149e73228aab51f20792b172603092c3170e32a1cdd4d8eac
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	135	500	05ba8044c11bdcbfbf5c20fc19ae71f9491f6c2bb52c9e9daf7e5b12fcb59e19
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	136	500	48e64f97422a9b3e577e7a23a0461b2b737094ce584301ff4f4593c1aa93069c
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	137	500	6bd53c35154b7bd41441679da8fc742d838a38e70614292512e0abcc121051c3
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	138	500	1d6debba535b898440ab909f62998ee35729471b99500c5e7a340d0598cec64b
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	139	500	287f745bc8298d2a1251a77d0e3d386d4a3262a52de09e2f5160651da63d455d
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	140	500	6aca875bb0cef972d0403572926745fbcace413e037a0838bbbc3d58fc0badc5
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	141	500	d259c723e31c3326183839991c85b1241d8a2754c06b30c315d1fcee9d28c7e5
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	142	500	b3424f28188c708a77e1e0571d107994411f8bb21d5432ee5260ca22d735c663
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	143	500	c97b26c27263e2b6e987a0e5115c73c2937b8cfcc92058c7e27bf449d2e06650
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	144	500	c6a9ac9e89c01253b4247834de34b297ae1bece981fefe47e8ab782d9efd7470
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	145	500	9cb837a494f28294939ced27392fea5f2bb29a107361bca518a9f9b2b4516a60
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	146	500	6a30e0be49945160e9cf3fb45d7f860b9f7170fa5e0c2797261f3bda6f531f91
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	147	500	65fdcc0b79627a759a68372a985d2bed814573d5b4e797fc8f58bb7f328ddc6b
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	148	500	a45782d4105f0fa74cd17a7f946b6b1f45c80e380fd9a5e3aaf8adf0adc88c5f
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	149	500	87ac648ad151a6b9a70e01c8a78b0cc067bec7c0d0a435a4886dd00b65f20b0a
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	150	500	a3e88a4698bebdec839aa5fe43a522ae3766dddd3bcf993d48590a0d50fe5a3f
+chunk	hydo/onboard/examples/redis-bridge/hydo.yaml	151	494	3d269c774b11ece71499a590c5aa6126e5b77b5a074bec6a33511919a0135242
 manifest	hydo/onboard/examples/redis-oci/hydo-metacheck.yaml	core
 boot	hydo/onboard/examples/redis-oci/hydo-metacheck.yaml	hydo/onboard/examples/redis-oci/hydo-metacheck.yaml#0	snapshot	371718237f9fb0d1
-counts	hydo/onboard/examples/redis-oci/hydo-metacheck.yaml	identity=222 recovery:error=3 recovery:ok=51 recovery:violation=22 run:cut=76 run:error=19 run:ok=111 run:violation=30 token:C=77 token:K=123 token:P=122 token:Q=1 token:R=44 token:T=106 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/redis-oci/hydo-metacheck.yaml	identity=222 recovery:error=3 recovery:ok=51 recovery:violation=22 refused=1 run:cut=76 run:error=19 run:ok=110 run:violation=30 token:C=77 token:K=121 token:P=122 token:Q=1 token:R=44 token:T=106 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/redis-oci/hydo-metacheck.yaml	371718237f9fb0d1
 chunk	hydo/onboard/examples/redis-oci/hydo-metacheck.yaml	0	500	a482cc7ab85cb9657941b7e240e01e7b929cc772a09efc59383733736809f6ae
 chunk	hydo/onboard/examples/redis-oci/hydo-metacheck.yaml	1	500	7ef3d382ca0fa435250d633aa207b16956ae8a2714d74a8c67a4fe3d87d37c6c
@@ -1202,12 +1201,12 @@ chunk	hydo/onboard/examples/redis-oci/hydo-metacheck.yaml	26	500	c3770012183e8af
 chunk	hydo/onboard/examples/redis-oci/hydo-metacheck.yaml	27	500	4dd76b8be6a688e6c248c0edd58aae447f3bbf35e41b4ecf8532b9ec3dc79d7c
 chunk	hydo/onboard/examples/redis-oci/hydo-metacheck.yaml	28	500	1f77b973be6047fc687296c07180dae5ff2be240faa42bc420b92905367993a0
 chunk	hydo/onboard/examples/redis-oci/hydo-metacheck.yaml	29	500	8ee19791c9654cb46701a51812a8f33386993d0b2bb6a218ee5e5e5687d38009
-chunk	hydo/onboard/examples/redis-oci/hydo-metacheck.yaml	30	500	1b54e17f70d4275c39ec38889c09566875ee70a3bdae076b1182a910169f358e
-chunk	hydo/onboard/examples/redis-oci/hydo-metacheck.yaml	31	500	5b3bff18533047d2a3d245d48201f13c38ebe3dd975e4d8d95757036938819be
-chunk	hydo/onboard/examples/redis-oci/hydo-metacheck.yaml	32	128	f8bc611c434937517a9a55869a5195367f52ae6c5c7f3201070093d10b621f87
+chunk	hydo/onboard/examples/redis-oci/hydo-metacheck.yaml	30	500	af4af9055a5bba24e13fb8024be2105b1fe39f8846b59fb95d4552e8fe780abf
+chunk	hydo/onboard/examples/redis-oci/hydo-metacheck.yaml	31	500	7c443b23bc1081db760c16a45185b3632269008692f41c8f6450d3f4934e1fc6
+chunk	hydo/onboard/examples/redis-oci/hydo-metacheck.yaml	32	71	ce3483f988f2b129839c3c098c55263df565d88066385ac926b102fbaaae2a6b
 manifest	hydo/onboard/examples/redis-oci/hydo.yaml	core
 boot	hydo/onboard/examples/redis-oci/hydo.yaml	hydo/onboard/examples/redis-oci/hydo.yaml#0	snapshot	b7781c26ce9aff8b
-counts	hydo/onboard/examples/redis-oci/hydo.yaml	identity=219 recovery:error=2 recovery:ok=62 recovery:violation=11 run:cut=75 run:error=14 run:ok=126 run:violation=18 token:C=78 token:K=123 token:P=122 token:Q=1 token:R=42 token:T=105 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/redis-oci/hydo.yaml	identity=219 recovery:error=2 recovery:ok=62 recovery:violation=11 refused=1 run:cut=75 run:error=14 run:ok=125 run:violation=18 token:C=78 token:K=121 token:P=122 token:Q=1 token:R=42 token:T=105 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/redis-oci/hydo.yaml	b7781c26ce9aff8b
 chunk	hydo/onboard/examples/redis-oci/hydo.yaml	0	500	d9ce24d6dc106f0ef387a51cad5c286c9ce7ccf40ca2a96135fa93b0bc2929ff
 chunk	hydo/onboard/examples/redis-oci/hydo.yaml	1	500	b987d58f70b943a60e621484fc110f75bbd5f4719a7b0f1d72798c036edd988d
@@ -1237,12 +1236,11 @@ chunk	hydo/onboard/examples/redis-oci/hydo.yaml	24	500	fe3de959a10da4f40de0329e4
 chunk	hydo/onboard/examples/redis-oci/hydo.yaml	25	500	247a400dfdecda09c707dc2d379d62fddfe1734fc7ca2fd4def6c1c0529c0922
 chunk	hydo/onboard/examples/redis-oci/hydo.yaml	26	500	0bfea116f27b1ce257d2419341c79acff49f547b694f34afdba685687ded5674
 chunk	hydo/onboard/examples/redis-oci/hydo.yaml	27	500	c0de510a1475cac087c2ea3ac311d4ddf7ea7218e5dff06d8cfd93f81f360387
-chunk	hydo/onboard/examples/redis-oci/hydo.yaml	28	500	f37d9b01fe9bfeea72acf09730ace0c0d32dc80431afe9a6c655efc7e990b1a7
-chunk	hydo/onboard/examples/redis-oci/hydo.yaml	29	500	ddf8f5f2c6f6732117c9d1b65762f7cae2cfaf8e7e42c086969507f1459cf260
-chunk	hydo/onboard/examples/redis-oci/hydo.yaml	30	44	41df1602550d0cd6ff611ba18f4f05eecd835bea8bdbdcdb7f773572a190367a
+chunk	hydo/onboard/examples/redis-oci/hydo.yaml	28	500	35defc546c50cc80d7c6bd390182720863dc16d8c3fa3a8e15235f09580e376c
+chunk	hydo/onboard/examples/redis-oci/hydo.yaml	29	491	4d95ce1f0a2d74ff82980822c847a94e36a3bdef87c6816130c9e20e029bc066
 manifest	hydo/onboard/examples/redis-ram/hydo.yaml	core
 boot	hydo/onboard/examples/redis-ram/hydo.yaml	hydo/onboard/examples/redis-ram/hydo.yaml#0	snapshot	a9362b4ee4efcbe4
-counts	hydo/onboard/examples/redis-ram/hydo.yaml	identity=214 recovery:error=12 recovery:ok=43 recovery:violation=18 run:cut=73 run:error=19 run:ok=97 run:violation=39 token:C=77 token:K=120 token:P=117 token:Q=1 token:R=41 token:T=103 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/redis-ram/hydo.yaml	identity=214 recovery:error=12 recovery:ok=43 recovery:violation=18 refused=1 run:cut=73 run:error=19 run:ok=96 run:violation=39 token:C=77 token:K=118 token:P=117 token:Q=1 token:R=41 token:T=103 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/redis-ram/hydo.yaml	a9362b4ee4efcbe4
 chunk	hydo/onboard/examples/redis-ram/hydo.yaml	0	500	9ca06e00195c1a8ff7e68948e95c49597f08b326b49f21744f11476d427f0992
 chunk	hydo/onboard/examples/redis-ram/hydo.yaml	1	500	956c6c572e52755b51b91cb1a5a1658c6a8b51ada2bec43506deb570d98ed907
@@ -1273,12 +1271,12 @@ chunk	hydo/onboard/examples/redis-ram/hydo.yaml	25	500	96c0845a5d160473e841a1100
 chunk	hydo/onboard/examples/redis-ram/hydo.yaml	26	500	79c48df43e6d31f06b2820a8c910076576f7d6cb4b2ca5a7dc3c6c4d5dd681f2
 chunk	hydo/onboard/examples/redis-ram/hydo.yaml	27	500	1e1432306f2d86df55ddaef08b1f8eb29b899a5847495f3c60ba6f2f29d30676
 chunk	hydo/onboard/examples/redis-ram/hydo.yaml	28	500	50d43ca36a7d24005a31b6a8f6c1d6352559b25f4445d5926fa9834b1939d8df
-chunk	hydo/onboard/examples/redis-ram/hydo.yaml	29	500	263746946905160e09c27513de355125a94985f86dd9bb4393aab706b4d8b707
-chunk	hydo/onboard/examples/redis-ram/hydo.yaml	30	500	d38fb7afcd7f6380d58a56fe29669299cbad66ed53772e6cea315ab1b9317be2
-chunk	hydo/onboard/examples/redis-ram/hydo.yaml	31	149	fad0b88273c67271faeee6e740f16c0939b37ba4dd6f007e37aafb5c6e89e718
+chunk	hydo/onboard/examples/redis-ram/hydo.yaml	29	500	d3e19d80a1c9c083348b45d1a7b13455e3b5a52652fb023f862a824f6e7ccbfa
+chunk	hydo/onboard/examples/redis-ram/hydo.yaml	30	500	6996798db13df23f97d9e3f5b23e34defba5e9213826fcc6202f3709a601c062
+chunk	hydo/onboard/examples/redis-ram/hydo.yaml	31	92	9d809b4d0c7d57dc8a5c920c8ee65ad0c415f823807fff12bc7ef3b3dc22ef6c
 manifest	hydo/onboard/examples/redis/hydo-freeze.yaml	core
 boot	hydo/onboard/examples/redis/hydo-freeze.yaml	hydo/onboard/examples/redis/hydo-freeze.yaml#0	snapshot	0f6ea451bec9c4f4
-counts	hydo/onboard/examples/redis/hydo-freeze.yaml	identity=255 recovery:error=2 recovery:ok=65 recovery:violation=11 run:cut=78 run:error=31 run:ok=135 run:violation=25 token:C=82 token:F=80 token:K=141 token:P=132 token:Q=1 token:R=54 token:T=116 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/redis/hydo-freeze.yaml	identity=255 recovery:error=2 recovery:ok=65 recovery:violation=11 refused=1 run:cut=78 run:error=31 run:ok=134 run:violation=25 token:C=82 token:F=80 token:K=139 token:P=132 token:Q=1 token:R=54 token:T=116 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/redis/hydo-freeze.yaml	0f6ea451bec9c4f4
 chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	0	500	4e7444160ef3d25fc2f40536631266ccb37f5501181f758c3615244337514ad9
 chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	1	500	048984a49d19611554c1107a7ee988ab7c12c6fcb9b1baadbd75a31326798c9d
@@ -1321,11 +1319,11 @@ chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	37	500	f01ed1d5c04143f9c2e055
 chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	38	500	634e33cf902a53bb6a919b793ccfffc7e372d9e024661eb8d96aef35d0b9b884
 chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	39	500	f99b0f729fada58b0d69c76a2cc17edd8784dae345f0509adb290ff85624697e
 chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	40	500	6b000a75013d2ffbf6288ee10b06f5ab96c6fac1322467d6dc10bdb067f48eed
-chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	41	500	5da678167d6e373b50ce1ff56bb6be21b83ff609fd4c91cc982a7a2402790a70
-chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	42	280	30907f7dd7f7c8fcce20714fb1b38636437917281d40c78456bdd9c28340d8c8
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	41	500	b493f9e0ec12c186ff7236e9e7af24996323a11fa26a6cf2d767b8e9e7efa470
+chunk	hydo/onboard/examples/redis/hydo-freeze.yaml	42	226	2c3ff21dcbd332bcff46444237928501ca0638cf3d4e20c3823f411fcfbcab82
 manifest	hydo/onboard/examples/redis/hydo-hist.yaml	core
 boot	hydo/onboard/examples/redis/hydo-hist.yaml	hydo/onboard/examples/redis/hydo-hist.yaml#0	snapshot	0fe206755deace6f
-counts	hydo/onboard/examples/redis/hydo-hist.yaml	identity=211 recovery:ok=69 recovery:violation=1 run:cut=70 run:error=12 run:ok=143 token:C=74 token:K=127 token:P=113 token:Q=1 token:R=36 token:T=105 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/redis/hydo-hist.yaml	identity=211 recovery:ok=69 recovery:violation=1 refused=1 run:cut=70 run:error=12 run:ok=142 token:C=74 token:K=125 token:P=113 token:Q=1 token:R=36 token:T=105 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/redis/hydo-hist.yaml	0fe206755deace6f
 chunk	hydo/onboard/examples/redis/hydo-hist.yaml	0	500	44ea75238d1d4af88c8266884451b2d4c352ee8a04001591b44164a9412d4e29
 chunk	hydo/onboard/examples/redis/hydo-hist.yaml	1	500	b1b1e84e38176707c2becb5ccf8b074e2cef6a3dc6bbb019062bc5e35925fd0b
@@ -1357,11 +1355,11 @@ chunk	hydo/onboard/examples/redis/hydo-hist.yaml	26	500	0a83964a9e9ad15f01ea2235
 chunk	hydo/onboard/examples/redis/hydo-hist.yaml	27	500	b4e55cef4020d98da8832d933acfb3d7365f00c32f3bfd58d883abef6838dec7
 chunk	hydo/onboard/examples/redis/hydo-hist.yaml	28	500	87681a3d7ef0782c32294c44ec558895f1f9237de584d39c88a9d33bed83af23
 chunk	hydo/onboard/examples/redis/hydo-hist.yaml	29	500	5448bf3ca7548535d2661cae145e13f70f707688a642e2d4e38c1fca7e6afd03
-chunk	hydo/onboard/examples/redis/hydo-hist.yaml	30	500	58bb4476d769e5e02736bb470492c754f9cb8866a8a62d4a2750fdaa298a1819
-chunk	hydo/onboard/examples/redis/hydo-hist.yaml	31	481	37c6713cde7d55f1ba87a1237efd387630ca1fb9d1d968cde11164b0a28a8367
+chunk	hydo/onboard/examples/redis/hydo-hist.yaml	30	500	4842fc2f26e8dd253d2a29cf62df468a6c475011506984e1429780c61d335070
+chunk	hydo/onboard/examples/redis/hydo-hist.yaml	31	422	7a23156601dcce7dc55ea9233f6578452785f162b6dd986efba0fcb050545680
 manifest	hydo/onboard/examples/redis/hydo-live.yaml	core
 boot	hydo/onboard/examples/redis/hydo-live.yaml	hydo/onboard/examples/redis/hydo-live.yaml#0	snapshot	a13bcd0ff7df6031
-counts	hydo/onboard/examples/redis/hydo-live.yaml	identity=215 recovery:error=2 recovery:ok=32 recovery:violation=32 run:cut=66 run:error=10 run:ok=65 run:violation=88 token:C=67 token:K=126 token:P=120 token:Q=1 token:R=43 token:T=105 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/redis/hydo-live.yaml	identity=215 recovery:error=2 recovery:ok=32 recovery:violation=32 refused=1 run:cut=66 run:error=10 run:ok=64 run:violation=88 token:C=67 token:K=124 token:P=120 token:Q=1 token:R=43 token:T=105 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/redis/hydo-live.yaml	a13bcd0ff7df6031
 chunk	hydo/onboard/examples/redis/hydo-live.yaml	0	500	96fa8b0a4bb2c12895eca7d4d520711b0e6d7f0a67a14c78ebb80b30d9610b80
 chunk	hydo/onboard/examples/redis/hydo-live.yaml	1	500	962b0a938954bbd35acc83e8ebe303e8b234008711e9ff097ad657ad1d1e3505
@@ -1409,12 +1407,12 @@ chunk	hydo/onboard/examples/redis/hydo-live.yaml	42	500	0a411cdd45ef0dfebf02238a
 chunk	hydo/onboard/examples/redis/hydo-live.yaml	43	500	023600893283697fbc83c6aa26fa60d6f8178c4c4d6955f00ef63e70ce32c722
 chunk	hydo/onboard/examples/redis/hydo-live.yaml	44	500	515caab1cf6af2fa5d6c0f683be68f3323042b1163901f74d94d4ecd2ab98753
 chunk	hydo/onboard/examples/redis/hydo-live.yaml	45	500	76644d897c7ffc0d3abf03056129415bcb0cea4ba121e97d71fc126844ba1d96
-chunk	hydo/onboard/examples/redis/hydo-live.yaml	46	500	72931d51b5ac72cd563244f63622ff04c036deb2156b792d7e1aca5a24531b29
-chunk	hydo/onboard/examples/redis/hydo-live.yaml	47	500	3b0d0d3b6cd78c09bd3d2dac712a9d8d6b5e2c1cd620f1fd1ac8354b59b39f48
-chunk	hydo/onboard/examples/redis/hydo-live.yaml	48	142	eb07fedee956dac74b40f98b0708f5da89c61f5deaa630659567bc5f80d56046
+chunk	hydo/onboard/examples/redis/hydo-live.yaml	46	500	38fc13cf19d0da33bd5ac865602a00ce3afc2d990f328b167f7ce85820bb79e3
+chunk	hydo/onboard/examples/redis/hydo-live.yaml	47	500	7418773a26b2959ad7b9f8d579d38388cab0dd7da32a10056420743da6a9f06b
+chunk	hydo/onboard/examples/redis/hydo-live.yaml	48	66	eb999047b6132703b0656de4a55faf2ce12ce0d0e08114a26a8f14b79c362f31
 manifest	hydo/onboard/examples/redis/hydo-netem.yaml	core
 boot	hydo/onboard/examples/redis/hydo-netem.yaml	hydo/onboard/examples/redis/hydo-netem.yaml#0	snapshot	a09922290c28d8c3
-counts	hydo/onboard/examples/redis/hydo-netem.yaml	identity=283 recovery:error=4 recovery:ok=59 recovery:violation=10 run:cut=73 run:error=36 run:ok=153 run:violation=35 token:C=76 token:K=155 token:N=103 token:O=29 token:P=147 token:Q=1 token:R=55 token:T=126 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/redis/hydo-netem.yaml	identity=283 recovery:error=4 recovery:ok=59 recovery:violation=10 refused=1 run:cut=73 run:error=36 run:ok=152 run:violation=35 token:C=76 token:K=153 token:N=103 token:O=29 token:P=147 token:Q=1 token:R=55 token:T=126 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/redis/hydo-netem.yaml	a09922290c28d8c3
 chunk	hydo/onboard/examples/redis/hydo-netem.yaml	0	500	9d29c4040dce456e3690d98b727114d751cee62c1893731838c20c4b52b08151
 chunk	hydo/onboard/examples/redis/hydo-netem.yaml	1	500	c97c0dae7d46ba20cfa3015c430a5b57a0038de65df4ec82d449e4ac730eff75
@@ -1466,12 +1464,12 @@ chunk	hydo/onboard/examples/redis/hydo-netem.yaml	46	500	e7f56d18ff6024a993d6c1d
 chunk	hydo/onboard/examples/redis/hydo-netem.yaml	47	500	73c3fd66ed26bf391602524480f487a5389f7d5a40702676150274aaed2c4b12
 chunk	hydo/onboard/examples/redis/hydo-netem.yaml	48	500	17c3947f6a1ac69f8ef46aed94fa8d9dcaedbc5d83871a2687ba18b496994d3a
 chunk	hydo/onboard/examples/redis/hydo-netem.yaml	49	500	62cda0e2b5b0dfba174c2bd17c29e9d68d5eebb743ae497293df1748fd503179
-chunk	hydo/onboard/examples/redis/hydo-netem.yaml	50	500	cbc1112a61f873ab903f284dd47793012a09763fb012cde986828d1f23335568
-chunk	hydo/onboard/examples/redis/hydo-netem.yaml	51	500	d08407f896ae5d89d489740a198a537e5a84fc9528dd3905b06550008929516b
-chunk	hydo/onboard/examples/redis/hydo-netem.yaml	52	76	2eb3dc19e975be14eb7267f10748d05e3cd9a60faa4ecf46efe7d04ccb252733
+chunk	hydo/onboard/examples/redis/hydo-netem.yaml	50	500	86c2fc01aad28e1be9648ce3910bc7e5a4315dbaa05de3d8123862d3349c6277
+chunk	hydo/onboard/examples/redis/hydo-netem.yaml	51	500	e13f7cc7146014aacc33c129acae0fce79ebd0f9107c749121d8b232ded1ab2c
+chunk	hydo/onboard/examples/redis/hydo-netem.yaml	52	19	aa8b7809d00738c6f8017bc01c8772c830f0cec0fbcf4ac3984cd07a7cd28bc4
 manifest	hydo/onboard/examples/redis/hydo-proxy.yaml	core
 boot	hydo/onboard/examples/redis/hydo-proxy.yaml	hydo/onboard/examples/redis/hydo-proxy.yaml#0	snapshot	da60874a68f9312e
-counts	hydo/onboard/examples/redis/hydo-proxy.yaml	identity=281 recovery:error=11 recovery:ok=83 recovery:violation=16 run:cut=110 run:error=43 run:ok=216 run:violation=26 token:C=118 token:H=259 token:K=151 token:P=151 token:Q=1 token:R=46 token:T=122 token:X=4 token:Z=1 written=114
+counts	hydo/onboard/examples/redis/hydo-proxy.yaml	identity=281 recovery:error=11 recovery:ok=83 recovery:violation=16 refused=1 run:cut=110 run:error=43 run:ok=215 run:violation=26 token:C=118 token:H=259 token:K=149 token:P=151 token:Q=1 token:R=46 token:T=122 token:X=4 token:Z=1 written=113
 boot-transcript	hydo/onboard/examples/redis/hydo-proxy.yaml	da60874a68f9312e
 chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	0	500	ad821bc0b8069501410893581049e435b3cba93b101b7b96dd29c92e39d19a7d
 chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	1	500	820f2be190e548baa13d5b0278e0c57a998899720a4729be4edef11f4181d7a5
@@ -1518,27 +1516,27 @@ chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	41	500	4ce3dde701ca58583d6dca4
 chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	42	500	69e9cfe15a35ee34e0a777cfd0cd047de51d3a50efc0d218f57e63d17f34215f
 chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	43	500	12fcf7751a524a16ddf55facf0a804b57da7d13ebabe48163b5c4893bee526b1
 chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	44	500	5f92ed860579fc994abc0f54876efdd5f06a4fae2ca41c182550b3c5e03afde8
-chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	45	500	eb8569f3f9b1dbd03f346db535a9d7316611f87b369f156c654012b29918a811
-chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	46	500	1a4b22e19a520d8d53dff177bb953ee19823c8575dad9f036700317f908884ce
-chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	47	500	f4781af4ba1873cd7f22a5ea96f1ad338b0d12798d290d1f3d69c8dc3f9c6637
-chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	48	500	66f386af097a43b3bba5ff50e03bd9a2490b58c96aaa95b1c2d796d1437e4c94
-chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	49	500	96d78934f988d729a763e2d846a0b3c37a88e3e380cfc4a9fd97b09620bafb0e
-chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	50	500	c032a801ee13e06ca15a73230334203fb01d057de0c33c619c760e203ce27536
-chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	51	500	754c165f8d488672a6e6de8e6b80a11c35d5ae2be369479f4b4ea63e4dd5eb81
-chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	52	500	3a7b3832dbcaf2fc0282b0fabf709b7d673bd3a4ef8451aee1a2e454387b32e4
-chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	53	500	0299bc5bf5d4cef8a03f0e1ddddf358d449e1de9f7970ba43609790717dda249
-chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	54	500	615390eb2780dbb955c757a6c3ba2fbdb87cfef7285ff21ca7a6c0600c5aa8ed
-chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	55	500	f5c1525ef5fb5ce26373569a6dd5aa2aa94073c88aa32e0870ddc9a7dd7bd963
-chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	56	500	af863761ce231d66170fdfca44d2dc40abdac12f36c2c4863ff4fd6202ac9fcb
-chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	57	500	0442a731b54e47ae6277bc2e34a13f7da00ed39a8ce791dedcb18fbe444045d7
-chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	58	500	87f9e807882a2e8b046400f29f1ab083e4d1643ab1afd048c89b8398f8f21f73
-chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	59	500	62abbd75f0974879866ceb1f6154c5b53258b3070d48428f56241642e05dd738
-chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	60	500	8b36638491a7bc6ade69a8e389d28f44ee3c3c85925743897fbd6b947618064f
-chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	61	500	a7bcc1d99ae639cd806bddcd82492f4aa999249eedf6685fd276ba21a1ff2240
-chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	62	143	72429d0b5eb0671a3fa10e542175059436e1ccb045d8e346f3a31741fbbfbf03
+chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	45	500	5f0b5c228acac2987a8f8ab732ae1ccb438bf5d26835adbe372dbb7f15cb19d5
+chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	46	500	f3f068917b55da6912b1b0f1009a6dcdd70ce9d6476922d92cb542120f3b229c
+chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	47	500	ca753bd0f02730720f0b344729a47e1ecb3200ba547df1169fb81347f584ae57
+chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	48	500	9ed3ffc81e28815c60d772a382b64c39989de6a8d2500578f181eb66b391dcba
+chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	49	500	d84ced75ec45a8815f0c4cb8d0da75170458a4a477bdaac1c4bd7a5e3b2d8ffa
+chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	50	500	33ec1a40a917dfe60fddc3dd9e2ace7ff85090f7fc9b0c10ef70637a7d01fec6
+chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	51	500	d023dd94f89b91103844d056f3a9bb50c5c77bf2cb6d8a9f1dace9c8b6584f86
+chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	52	500	e9a2b77a7a30721f7127697b4208a4e87451c1c2ac3fc04c56b1639136a0a39c
+chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	53	500	bc3acb1ef7fca0c372d115571ac1b78afef1e596af53b815501e28884cc8728d
+chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	54	500	3044ca29d3ccfabb12b7d963427a22b635d69289805b9513ce57e5cf2784766a
+chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	55	500	2856e9aaa60e1c7c1f42e11af37322ec3af7c331cb14965feb7bc9470c98df58
+chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	56	500	4dfd7583bb1d58762a99d5c98de7ae5a83ef01b3a69239d731ba600d810faa48
+chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	57	500	41f3daac64310c5ea6b45db108ad270c8b3aea87e48a792b2ac88922c7e028f1
+chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	58	500	7300b5d719a3fca652ac173414ab4fbf476fbec3ee7ad9df5fabe2119b602a9e
+chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	59	500	f38963a5c724671a56c50a7fc28ff474ec2a2465ce5d658e2f86ec91b3d91ed0
+chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	60	500	210a507e2b6b3fc1137852be08ed2899980ca0e0b9e9b79ca1379ee780249842
+chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	61	500	4ed2cef2a54231e7efc29faa9b299e40b38875db808e2c38e754725255e6636d
+chunk	hydo/onboard/examples/redis/hydo-proxy.yaml	62	81	28179834091c9037843bff0c75516e0d07183d9260529c260692b7a5a8cf6710
 manifest	hydo/onboard/examples/redis/hydo.yaml	core
 boot	hydo/onboard/examples/redis/hydo.yaml	hydo/onboard/examples/redis/hydo.yaml#0	snapshot	0f6ea451bec9c4f4
-counts	hydo/onboard/examples/redis/hydo.yaml	identity=214 recovery:error=3 recovery:ok=63 recovery:violation=6 run:cut=72 run:error=16 run:ok=114 run:violation=26 token:C=74 token:K=124 token:P=118 token:Q=1 token:R=40 token:T=103 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/redis/hydo.yaml	identity=214 recovery:error=3 recovery:ok=63 recovery:violation=6 refused=1 run:cut=72 run:error=16 run:ok=113 run:violation=26 token:C=74 token:K=122 token:P=118 token:Q=1 token:R=40 token:T=103 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/redis/hydo.yaml	0f6ea451bec9c4f4
 chunk	hydo/onboard/examples/redis/hydo.yaml	0	500	609c63c63b0a50d1df212994c2b19f068561da31f4b3faa80085f21bffdecb28
 chunk	hydo/onboard/examples/redis/hydo.yaml	1	500	677264ae32ef03352aae0abce437af212ee8d5b3c959299f96cae11b7eab4165
@@ -1568,11 +1566,11 @@ chunk	hydo/onboard/examples/redis/hydo.yaml	24	500	9724957fe54f66ddde0a6cd257582
 chunk	hydo/onboard/examples/redis/hydo.yaml	25	500	c4cc50c08fcc3569fdaf4243ab729a02d5f47002f4dc80c1feabccc56b1807e2
 chunk	hydo/onboard/examples/redis/hydo.yaml	26	500	bb5cfe01bb7cbd8d5c150ad1c0de138761a77eb8b58bb18f4cbe6ddfaac8a85b
 chunk	hydo/onboard/examples/redis/hydo.yaml	27	500	fbf092ea139d1f125c669a32f501c5264a85ac85389a5f9a01640dba7495632a
-chunk	hydo/onboard/examples/redis/hydo.yaml	28	500	59a4fff3e517bd353a3a6cfd1644232dc25ad652737b04f2157da7d4284e4bf3
-chunk	hydo/onboard/examples/redis/hydo.yaml	29	459	a2565c2f51bcbd65da9d38b965ba0ad7aa7107c7800957e463beca32830d0138
+chunk	hydo/onboard/examples/redis/hydo.yaml	28	500	e42e70cc9d8ca6fbb2de1cb9b4a237d8abc58536adb0cbdb439f47b7a89798e0
+chunk	hydo/onboard/examples/redis/hydo.yaml	29	406	61791b39b922f3235f8663cef84b47c3ef362cade6247c39b05ad9f1e2628de6
 manifest	hydo/onboard/examples/restate-oci/hydo.yaml	core
 boot	hydo/onboard/examples/restate-oci/hydo.yaml	hydo/onboard/examples/restate-oci/hydo.yaml#0	snapshot	7c584b77a5d4bfb3
-counts	hydo/onboard/examples/restate-oci/hydo.yaml	identity=119 recovery:error=2 recovery:ok=31 recovery:violation=8 run:cut=41 run:error=7 run:ok=71 run:violation=11 token:C=42 token:K=70 token:P=79 token:Q=1 token:T=68 token:X=4 token:Z=1 written=11
+counts	hydo/onboard/examples/restate-oci/hydo.yaml	identity=119 recovery:error=2 recovery:ok=31 recovery:violation=8 refused=1 run:cut=41 run:error=7 run:ok=70 run:violation=11 token:C=42 token:K=68 token:P=79 token:Q=1 token:T=68 token:X=4 token:Z=1 written=10
 boot-transcript	hydo/onboard/examples/restate-oci/hydo.yaml	7c584b77a5d4bfb3
 chunk	hydo/onboard/examples/restate-oci/hydo.yaml	0	500	6eaf6d0d8c0d0661331421c95b43f6448f2ec444ac9f9191c10707dcc039821c
 chunk	hydo/onboard/examples/restate-oci/hydo.yaml	1	500	c6897ca127da8509308b19936ff89d45403f851294c5707f33b6474506d24d1e
@@ -1589,11 +1587,11 @@ chunk	hydo/onboard/examples/restate-oci/hydo.yaml	11	500	e7622abd59ac98cc76fa4f5
 chunk	hydo/onboard/examples/restate-oci/hydo.yaml	12	500	2f53b9888ea16968cf001a67fd3d4f18a0e836f129c01632ca915dff88191357
 chunk	hydo/onboard/examples/restate-oci/hydo.yaml	13	500	95508224d6674021fa13f6fd59d6a872f2b43976f657e32db4d2d4a80cb946d2
 chunk	hydo/onboard/examples/restate-oci/hydo.yaml	14	500	16f868022713885d447745db063baabdd28e37e6eab3d477f65e8f9190d1003d
-chunk	hydo/onboard/examples/restate-oci/hydo.yaml	15	500	171b6b65feb938f591bb9141af3f52b7714757bfd2f4d5464cdfdd26f197ae4a
-chunk	hydo/onboard/examples/restate-oci/hydo.yaml	16	325	37bf7d2b6ef603f80a4bcbfd65e8aa90e740a464cf61d0632edf8ac1a1b4f4a7
+chunk	hydo/onboard/examples/restate-oci/hydo.yaml	15	500	06a61f37922daaa84c9bda1d6bf64219e01ac307d947a7c95c2d7b917efef140
+chunk	hydo/onboard/examples/restate-oci/hydo.yaml	16	272	d0c40a7eecdf8d77e173f32262250907700ce3ab163d7c2ec1eefde420ff40e3
 manifest	hydo/onboard/examples/rust-kv/hydo.yaml	core
 boot	hydo/onboard/examples/rust-kv/hydo.yaml	hydo/onboard/examples/rust-kv/hydo.yaml#0	snapshot	337989eadf11ee38
-counts	hydo/onboard/examples/rust-kv/hydo.yaml	identity=367 recovery:error=3 recovery:ok=73 recovery:violation=16 run:cut=92 run:error=26 run:ok=233 run:violation=30 token:B=199 token:C=96 token:K=188 token:N=132 token:O=35 token:P=174 token:Q=1 token:S=65 token:T=155 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/rust-kv/hydo.yaml	identity=367 recovery:error=3 recovery:ok=73 recovery:violation=16 refused=1 run:cut=92 run:error=26 run:ok=232 run:violation=30 token:B=199 token:C=96 token:K=186 token:N=132 token:O=35 token:P=174 token:Q=1 token:S=65 token:T=155 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/rust-kv/hydo.yaml	337989eadf11ee38
 chunk	hydo/onboard/examples/rust-kv/hydo.yaml	0	500	61cc2f7e0e9591e01bafbc1eed9d9cb840de7b4f3629fd21f22c46ceeb47009f
 chunk	hydo/onboard/examples/rust-kv/hydo.yaml	1	500	a517209ed81d0a9911fbdfdccc414bc5fca854f33d91a80577a3ad262dfda3ce
@@ -1661,12 +1659,12 @@ chunk	hydo/onboard/examples/rust-kv/hydo.yaml	62	500	ee57021140f4a49c10ba5da6825
 chunk	hydo/onboard/examples/rust-kv/hydo.yaml	63	500	d407a2e6149f10f41d6fc76aca8f449988d2226bd7617b7afecd84fe21952198
 chunk	hydo/onboard/examples/rust-kv/hydo.yaml	64	500	86b6d62acf20820c5c482e6cef3bb40607e146427b6a119dfeda382bb80edf7e
 chunk	hydo/onboard/examples/rust-kv/hydo.yaml	65	500	b903690cfdd061bd3ea3a58379a64c1552d5210cc402e6a143cf70b7ae5d8472
-chunk	hydo/onboard/examples/rust-kv/hydo.yaml	66	500	71739840aec7a6467eaa2b04ce879031f59c020eaecfb3813878914d483f95ff
-chunk	hydo/onboard/examples/rust-kv/hydo.yaml	67	500	95ce4c3bf977ab2781b0206f5c726d118c23c5c24299cb70c54df9b732920682
-chunk	hydo/onboard/examples/rust-kv/hydo.yaml	68	162	7246e3e827196e4c14e18a12718241c66fd293efc43adf31ddd53f4382d83b83
+chunk	hydo/onboard/examples/rust-kv/hydo.yaml	66	500	5034eb58a91ba2c2de9c8bebd4d11f942a0703862db8751febcd6d1b2f6ed0ff
+chunk	hydo/onboard/examples/rust-kv/hydo.yaml	67	500	64f2652222c45cfb26a05e0b9759f7863756e569ebd8919cab722b369f90c943
+chunk	hydo/onboard/examples/rust-kv/hydo.yaml	68	100	318e97ac6f698eccc9527c438c713e3e795628e54c65ef1374d734a8ec417a00
 manifest	hydo/onboard/examples/shop/hydo.yaml	core
 boot	hydo/onboard/examples/shop/hydo.yaml	hydo/onboard/examples/shop/hydo.yaml#0	snapshot	594be9aedcdd87cf
-counts	hydo/onboard/examples/shop/hydo.yaml	identity=195 recovery:error=7 recovery:ok=26 recovery:violation=56 run:cut=89 run:error=57 run:ok=95 run:violation=233 token:C=92 token:H=373 token:K=110 token:P=112 token:Q=1 token:T=89 token:X=4 token:Z=1 written=279
+counts	hydo/onboard/examples/shop/hydo.yaml	identity=195 recovery:error=7 recovery:ok=26 recovery:violation=56 refused=1 run:cut=89 run:error=57 run:ok=95 run:violation=232 token:C=92 token:H=373 token:K=108 token:P=112 token:Q=1 token:T=89 token:X=4 token:Z=1 written=278
 boot-transcript	hydo/onboard/examples/shop/hydo.yaml	594be9aedcdd87cf
 chunk	hydo/onboard/examples/shop/hydo.yaml	0	500	958556a2a043c24db0d1fa9e248d7dda42cb49ca7a0a5b38704e1fb2b91f97ea
 chunk	hydo/onboard/examples/shop/hydo.yaml	1	500	78f9ead660bc4703169edf183cb64e6486ac670511ea3a7dc8104221044ac2c4
@@ -1723,80 +1721,80 @@ chunk	hydo/onboard/examples/shop/hydo.yaml	51	500	98d079fdf447846116546743348d7a
 chunk	hydo/onboard/examples/shop/hydo.yaml	52	500	05e7b2e7a7b7e74c906d9a68cf2ca91f9b5ed3a52e1f03f845495e4a67f78d89
 chunk	hydo/onboard/examples/shop/hydo.yaml	53	500	7358a88883bf1b6142496d5ab3b749d6c929f66af99872739e4d509a73cf4ad7
 chunk	hydo/onboard/examples/shop/hydo.yaml	54	500	43a28c9a1ff2d32b7383b9df1e3af209db7b02f5b6e37e9419413305d159a4fd
-chunk	hydo/onboard/examples/shop/hydo.yaml	55	500	d953cb3d20f07756aa0d220ad231338a1e15ab68a4359d4e89e8c5522a33cfe2
-chunk	hydo/onboard/examples/shop/hydo.yaml	56	500	7a84ceb5fffbefbf4aeb33d65a69867feb7803177415dfbbe22e46710e998763
-chunk	hydo/onboard/examples/shop/hydo.yaml	57	500	9a90cd3bac80687ef2d511c547f762fb2998d1641683f7816c1a3aff0b43630b
-chunk	hydo/onboard/examples/shop/hydo.yaml	58	500	44ec3ad7b158c8d0b2e87cbe632c94ade9553165313b9f81e74b39f3131bdb4d
-chunk	hydo/onboard/examples/shop/hydo.yaml	59	500	a58931f7eeae5945c84a7a50928e81ece4ddee032e6dda04f9e4ed6786bb9e28
-chunk	hydo/onboard/examples/shop/hydo.yaml	60	500	98571c7125eaa30cfee5f65e0d087d0a560ac83fa2328b96b9da7f0a4115c47e
-chunk	hydo/onboard/examples/shop/hydo.yaml	61	500	58a1860495fbd199578841789c41bc36d7f61c9b094ee6622157609f0d7271b8
-chunk	hydo/onboard/examples/shop/hydo.yaml	62	500	88bd530e06e7b0b846e624dc249b23b70dd699b40defc54b620336a4940a7449
-chunk	hydo/onboard/examples/shop/hydo.yaml	63	500	599a421052d73bd78d9568a4369112b68668433ec7f57888385349a929a63a84
-chunk	hydo/onboard/examples/shop/hydo.yaml	64	500	31e3f08c300da17440912af80f8b4bb117e4b6aef34e204326390d6f5a815b81
-chunk	hydo/onboard/examples/shop/hydo.yaml	65	500	98fb8dcab36291fa676b8ee324f262d07ebd9d18770b70327a9cfa288a7b1fe0
-chunk	hydo/onboard/examples/shop/hydo.yaml	66	500	e49e4d235a767133f5b76e0e26fbac8b70e6d7b7ef21945b2d86379b748484ec
-chunk	hydo/onboard/examples/shop/hydo.yaml	67	500	318efdb48cd825a5c6d89c18940e53508808e72f73dd5ebab9d866ad390907ba
-chunk	hydo/onboard/examples/shop/hydo.yaml	68	500	ecc979f4d60c0b175d12834f28448ad9362ca81b311c574b41c8fff2276e33b4
-chunk	hydo/onboard/examples/shop/hydo.yaml	69	500	554eef2ff557bb9cf50dc607e14998855795457d6f7e08f717551d5d7fbee29c
-chunk	hydo/onboard/examples/shop/hydo.yaml	70	500	ac8549b54c3479e80647b9951c7c72ef497fbdd04a395d064dce511cda5dde6d
-chunk	hydo/onboard/examples/shop/hydo.yaml	71	500	f5170ddd0144f512fdef23347456bb4a91345d2175d8ff35af61d56ca4fe1cd1
-chunk	hydo/onboard/examples/shop/hydo.yaml	72	500	8f61d15d8b323b1252b7b6814486083fbd242fde9f951bfc47937c2add7764dd
-chunk	hydo/onboard/examples/shop/hydo.yaml	73	500	b099ad68bfe8ecfe58c3f5c5f4c9dedb365221a0953696446654fabc705f82a7
-chunk	hydo/onboard/examples/shop/hydo.yaml	74	500	76efaa957aea2df70584c3050c72b3fa73eda497d44fc4714cc799624d44a61e
-chunk	hydo/onboard/examples/shop/hydo.yaml	75	500	7a6b679aad795b7a6c34b35067a58cd06e6d3e4ec2ce69011073b6b895a88aca
-chunk	hydo/onboard/examples/shop/hydo.yaml	76	500	1969f93fa6620fbc65c1c12b44a03463ab685201f5dfa1973b233fcafc719fb0
-chunk	hydo/onboard/examples/shop/hydo.yaml	77	500	1e9c31d5bf773874aaa4bd522d1c038e5b8681d0fa9d1b1d6e7c74208899a438
-chunk	hydo/onboard/examples/shop/hydo.yaml	78	500	b33dd294a5862d1c0dc3e49933675f79dbc03e8b05a1f41c0ab01b03aaa6c25b
-chunk	hydo/onboard/examples/shop/hydo.yaml	79	500	524fd7b54dfa62940ac60bed4934f8ba02d51cf435a6895ec3239e0ec8dc4fb0
-chunk	hydo/onboard/examples/shop/hydo.yaml	80	500	753417fb7ef0ed79fdb5b566ccf6d6b89d363de0ad69bdd824f3e533d11beb31
-chunk	hydo/onboard/examples/shop/hydo.yaml	81	500	86e3cff1b984bc85e70b694dabf118f5709b81454a790620d207b6d34434b17b
-chunk	hydo/onboard/examples/shop/hydo.yaml	82	500	7667b83ee2f3c0ba7674dd883a57eced697384a514d58fcde63cb9b806622196
-chunk	hydo/onboard/examples/shop/hydo.yaml	83	500	4fb4c38213189d6c3dc7542a245ec68a67ec5fcc282523b37eee2173f2316c41
-chunk	hydo/onboard/examples/shop/hydo.yaml	84	500	0fe67eddd8257294025f93bfb3da2411febdccd80bc2787b0c9f2b391f94781f
-chunk	hydo/onboard/examples/shop/hydo.yaml	85	500	2e957d599b468991fae7a4bc3958fe684977bb363b6bcd055d96f9b488cc4276
-chunk	hydo/onboard/examples/shop/hydo.yaml	86	500	1e7144388c6111a1c1fa782a0387a192fb557be0728e88e05fa9c554bdc9d470
-chunk	hydo/onboard/examples/shop/hydo.yaml	87	500	0eb5e09195b9810974cbfddd745175c170e1381a387653c0ad35b667526a02d3
-chunk	hydo/onboard/examples/shop/hydo.yaml	88	500	f3af0cb0162076d065470265693b702878daf8aa108b6c01766ce4a6560d2ead
-chunk	hydo/onboard/examples/shop/hydo.yaml	89	500	0f06e17a9a848ab60acbf33523971212d882338c95a016b21ec8a85184839164
-chunk	hydo/onboard/examples/shop/hydo.yaml	90	500	94320ba7fe26ef43c4d54a2eb178eb981a0812eea3c9cbb0db89db80affad09d
-chunk	hydo/onboard/examples/shop/hydo.yaml	91	500	456cb2d5369e7997fc1b8a43d78c87b91d39f997c34e8f624769f5f19a61cf2a
-chunk	hydo/onboard/examples/shop/hydo.yaml	92	500	ab701221d4c4dcf50333dbece059f40acd0fc6c130a0f17079374a8557effe8c
-chunk	hydo/onboard/examples/shop/hydo.yaml	93	500	4ff41e7e0ffad4d205e47b570aeba733b2e4f8b436e2706020bfd21e61d998b3
-chunk	hydo/onboard/examples/shop/hydo.yaml	94	500	37a904726539caa1a5192aed1a3b14ddc8bf6beeada2bb691ed7f72fd135ba8f
-chunk	hydo/onboard/examples/shop/hydo.yaml	95	500	0fd440c1e78c1810f587a3edfb8ac22ccdc63dc90b7eda6151e13d0ace72ede6
-chunk	hydo/onboard/examples/shop/hydo.yaml	96	500	6d46d71beca1df4724eaca7945227cea005cc0ef91d4382a327bf1a0a55d29e0
-chunk	hydo/onboard/examples/shop/hydo.yaml	97	500	084cb9207005c39383a924d7571b8d542e2da03a18e427d27ef0e54ec3f8b67c
-chunk	hydo/onboard/examples/shop/hydo.yaml	98	500	a72d4b87363ad330e3c97d62a529c8582b0148760aee56a33aeebdd054bb289c
-chunk	hydo/onboard/examples/shop/hydo.yaml	99	500	219d9c2a62a19d1ea8646ecedb46c9636067516a05cbe9f5fbcd5b0395c5f671
-chunk	hydo/onboard/examples/shop/hydo.yaml	100	500	883e6953c5266e6539fe09ce0f5e8a65782533ab88a5f9dd3fcbaa9197d35248
-chunk	hydo/onboard/examples/shop/hydo.yaml	101	500	c40cbd3b9493567dd2e0300408b53fb8f1a9211b67bbda41c84fc8f6535b160b
-chunk	hydo/onboard/examples/shop/hydo.yaml	102	500	d05e7b85fcb518c5fcefc60cc62c6980d43483f897c9ca2e9641ddd0968a7813
-chunk	hydo/onboard/examples/shop/hydo.yaml	103	500	ca531e4c2634c0b2b0b101f3dbe0268da8c947172d69fbcfc04275b7d94db0c4
-chunk	hydo/onboard/examples/shop/hydo.yaml	104	500	f98806c5faf447efbbc019dec219c96d3900951d50cf690ad1e84aaa032c3bf4
-chunk	hydo/onboard/examples/shop/hydo.yaml	105	500	21aa40b1f9830d627f9ffb41ee8a05ea54da3f59c43c6366a3ab75c13664cb96
-chunk	hydo/onboard/examples/shop/hydo.yaml	106	500	62def57abf842b9810df39779999beba150294461a19348cc7f88fa5fa801c3e
-chunk	hydo/onboard/examples/shop/hydo.yaml	107	500	e63db596af11c985569cd842048222e0dcc6dac08df423719bef1299a931a93f
-chunk	hydo/onboard/examples/shop/hydo.yaml	108	500	e26fa209f7ae170943168ae39a09f97476e43c2188610582c31e2c18123d77ce
-chunk	hydo/onboard/examples/shop/hydo.yaml	109	500	119e94135341f04b25f735d34eb9d253ce2c9615b567c3f2b5afb0ed0286fe5c
-chunk	hydo/onboard/examples/shop/hydo.yaml	110	500	f0bd9da3fb2bfc7e7355068e8de6646f6cd2a0c3c0a0d06031c3bfd78c25986e
-chunk	hydo/onboard/examples/shop/hydo.yaml	111	500	b5bb9131c8ac4ae7d2ca58957990eb7535c99a4b0e4cbae0c72d7a75b29b91ff
-chunk	hydo/onboard/examples/shop/hydo.yaml	112	500	07ca6936d35b631151dba98ccd9929e128871f245043f306b9a6f3a5e7149cbe
-chunk	hydo/onboard/examples/shop/hydo.yaml	113	500	1f73b85586ca4dbb2f95e722ab1bbbbdfa6cdf488a0e16362193e28bff9e8e8e
-chunk	hydo/onboard/examples/shop/hydo.yaml	114	500	4cf266e9988e90488959e40e5af6984d1774bcde557212f3956a59f86f2f0266
-chunk	hydo/onboard/examples/shop/hydo.yaml	115	500	e3dd98bdcfcfc5fda14658ab970ac25154483a3a82723da82243df3ebd7d6c50
-chunk	hydo/onboard/examples/shop/hydo.yaml	116	500	a496fe23bf3454caaa43ded93f83f48a7f43b1daeddbf23453ba7e3f6ed3ab47
-chunk	hydo/onboard/examples/shop/hydo.yaml	117	500	d45f036d20abdbe9ebcd8c43d3324d1693ef4f9dc608059bed09027abcea1af8
-chunk	hydo/onboard/examples/shop/hydo.yaml	118	500	da33e8d5cdb5338e830f112abeb1a5ff61614e3f6a1fdd233165beab4bd26e23
-chunk	hydo/onboard/examples/shop/hydo.yaml	119	500	32fa362239e49c621d241e11abe7a7e7b5393c21ac883868b5f88cf53872f98f
-chunk	hydo/onboard/examples/shop/hydo.yaml	120	500	daa079e05348cbae6a8bdffde3d0e2d0d51b6bd0d8b23f56c68c46461deaef3f
-chunk	hydo/onboard/examples/shop/hydo.yaml	121	500	6ffe139cd7d35f69317271c3d409d53c3819fc08021352a598f451db63f5f73a
-chunk	hydo/onboard/examples/shop/hydo.yaml	122	500	5af6b9960adb53f71ae9e48757b0c6171bc130f56e66792ee65060aec341c01a
-chunk	hydo/onboard/examples/shop/hydo.yaml	123	500	c9f7ed605f6b38f6343e478337483d18e01ef9c1e880c5a4740239c8fca5b7f1
-chunk	hydo/onboard/examples/shop/hydo.yaml	124	500	efb1fb607e4a1551d290b041160cf6d7fa37c9a155a0d14532cfd642b0a188b7
-chunk	hydo/onboard/examples/shop/hydo.yaml	125	278	779bf41b7604fcf8ad0517c4d46a22d825c0352693b26dd1ba916f2a27f7966a
+chunk	hydo/onboard/examples/shop/hydo.yaml	55	500	a3950c3a893db3dbaadd8dcc9854a63cc94dfb860aee50dfc1e4b204c0812a7d
+chunk	hydo/onboard/examples/shop/hydo.yaml	56	500	78f5135974504f9d5d36327cd1c048b898d00cb77d21a407f3a0e0b1f9dbf3b3
+chunk	hydo/onboard/examples/shop/hydo.yaml	57	500	c0ba12c797144e674ebb207b6452fbbcf43a206e343823191cf6163ba87ce094
+chunk	hydo/onboard/examples/shop/hydo.yaml	58	500	31e4386590f3535dc60f19ab793dee9f9229768e317d8f7fb1dba6081684f379
+chunk	hydo/onboard/examples/shop/hydo.yaml	59	500	8c9a3c288f3d69c54d7ed378fb97f02e09166afd226934eb19412f7ec7468e01
+chunk	hydo/onboard/examples/shop/hydo.yaml	60	500	827462b4144cc1e98c10e9b711e5306228af080682eb33a75fab59e5f8f55daa
+chunk	hydo/onboard/examples/shop/hydo.yaml	61	500	7cf0269884516b673e60e2c86254be20c82b3447925810ccc1189b824f3e5fdf
+chunk	hydo/onboard/examples/shop/hydo.yaml	62	500	007190343b171cf0e22e84c168189cbb7a4c8b999f5c3f4323113c3dd658baf4
+chunk	hydo/onboard/examples/shop/hydo.yaml	63	500	98a3396f1bcf44e2ac88742931ca1f736d8fd2bcb6fadb0870745bc23987b584
+chunk	hydo/onboard/examples/shop/hydo.yaml	64	500	7dca8ee22923f6ab3db03154f1e1b4fd39e23eccda34cfee571e83774c629049
+chunk	hydo/onboard/examples/shop/hydo.yaml	65	500	49151a76a1eb6e0301baf9a65d1e33a2f6bc5a51fdb4b4411e6c448acf9fed2a
+chunk	hydo/onboard/examples/shop/hydo.yaml	66	500	f739a9c0b578aa90a9211316e2158b9f87d236950fde0879fc7b5ce27670c655
+chunk	hydo/onboard/examples/shop/hydo.yaml	67	500	55111db5e943fde538f8236272fc32ca30d7a4a380bdbd82867b1cadab4dcf85
+chunk	hydo/onboard/examples/shop/hydo.yaml	68	500	139c1e597ae62d7649a58b9c8d285b60b40bc34209590f4dc4b29e9a321e2686
+chunk	hydo/onboard/examples/shop/hydo.yaml	69	500	acd1b0cadf1735c325b559593170e1e51f87e752711188c4bd63117331753ece
+chunk	hydo/onboard/examples/shop/hydo.yaml	70	500	31e89e5fc81ddd0d7b10c93d4dd64ec910bddc885262c842b870db992f356268
+chunk	hydo/onboard/examples/shop/hydo.yaml	71	500	662c9b22be35c35ac3c1e765494abd6be34e66636ca7b1a8b48c5775c48c3543
+chunk	hydo/onboard/examples/shop/hydo.yaml	72	500	d23d49c5587c9d681c91365f08f7aa99418d316c4d991fb8f181f3ba209b924a
+chunk	hydo/onboard/examples/shop/hydo.yaml	73	500	ee60befe728ff965f0686bc572d277fb893ae661d55c9db91e75798147bb319b
+chunk	hydo/onboard/examples/shop/hydo.yaml	74	500	9ac8a993e42ddbbd18d835c9f23ebe4f02a86c899870d9a1dc526ae5a0e9db6c
+chunk	hydo/onboard/examples/shop/hydo.yaml	75	500	9ed33aac6c8be82111fb7a69e280c37c31dd90a73fd691bdbfc2363b0c73243f
+chunk	hydo/onboard/examples/shop/hydo.yaml	76	500	2fe894f4235006b169da68df6660b9377f689115f307e3b6624f0d1e2f36879e
+chunk	hydo/onboard/examples/shop/hydo.yaml	77	500	fe90eecf679a8560b27c5fac3dfd320e488130ebcb4cfe8b902aecea2ca4f136
+chunk	hydo/onboard/examples/shop/hydo.yaml	78	500	e4a0b1652d32a3c2bdbc337011f68f4eed726ad4e80388633222b2cf7d81135a
+chunk	hydo/onboard/examples/shop/hydo.yaml	79	500	db240e2be842158f0b8f3a09aba368f29de833768b2a5c24abdf0142c9332ab6
+chunk	hydo/onboard/examples/shop/hydo.yaml	80	500	47a4fa47c2c4923068e217f6e6139791ce8d8fd68b73f5c002f887be9436c203
+chunk	hydo/onboard/examples/shop/hydo.yaml	81	500	ca0b34b9983ecdfd29e02dca093f84ffaf9c919ed4ee9dc36ca72f9164a1b60f
+chunk	hydo/onboard/examples/shop/hydo.yaml	82	500	788d7ff89eb71a4b52693d7cd426894b328624d5f930d7162fdb8db2e4ab91de
+chunk	hydo/onboard/examples/shop/hydo.yaml	83	500	fbe95ecbf22ed63f28ee820a83faa75d9e0627e0759a88c049babca3a36181a1
+chunk	hydo/onboard/examples/shop/hydo.yaml	84	500	895213f1874ab65a5078b34a0a4ff4e709c4ab940881f9c4bb1df62c8762c5f9
+chunk	hydo/onboard/examples/shop/hydo.yaml	85	500	4c3f5b1dc273754511cf561af38fd796f9011f9e88eed5ff5c7a6ceff0593085
+chunk	hydo/onboard/examples/shop/hydo.yaml	86	500	0cd027eda5fbcc3e422333158990c7c6ea58ef8b3e93db7cd2bf3df07d23d650
+chunk	hydo/onboard/examples/shop/hydo.yaml	87	500	96d7636abfcebe22aae845bf3b461f5a2b7d3c9f21c3cf5d3c101879a12aea73
+chunk	hydo/onboard/examples/shop/hydo.yaml	88	500	cc84dcc60724fee61f96f71cebab36b20984ce85117233bdef94778f1b86aba7
+chunk	hydo/onboard/examples/shop/hydo.yaml	89	500	a83b89bdcb98c18f4dc87d92d946964a31730646c266cc4633a749dc7a7fe38a
+chunk	hydo/onboard/examples/shop/hydo.yaml	90	500	c7924f024cf39438744c32ef888fece022a44e351f2278f10eab8650668d0aa1
+chunk	hydo/onboard/examples/shop/hydo.yaml	91	500	079357aff0c4d7c932d359b8c8aeafcf8038fc1f6975acc9e885b41990e938b6
+chunk	hydo/onboard/examples/shop/hydo.yaml	92	500	061ab6ae1dd2fccf6e0e9a9e19ee6c51ce6d952028ca0d1af00052fe9378bc2f
+chunk	hydo/onboard/examples/shop/hydo.yaml	93	500	39f300262dd17e6b2cc04fd3232ba978961a247649e6e425c0f6c6c80c7e1a6f
+chunk	hydo/onboard/examples/shop/hydo.yaml	94	500	e1848a815e4c94db8110b85e6bcc60078c21b0a1b79692752e24844b42ac5a4b
+chunk	hydo/onboard/examples/shop/hydo.yaml	95	500	3a911ea70ad876332295a86cafdde26143986e5f132fb19d9640d7a1c3982dd8
+chunk	hydo/onboard/examples/shop/hydo.yaml	96	500	bc7793ce68b1c345cf097d39a4b6cb8d31525348fedaaa7bba81d921d03689d3
+chunk	hydo/onboard/examples/shop/hydo.yaml	97	500	e5579c74404bbdbf6c8cb9b8ddd03c2dff9c732cc1dde787b20885c2d4c45d86
+chunk	hydo/onboard/examples/shop/hydo.yaml	98	500	97bdfe2fd8699658952d86ae4a019a3729fc7bda065cb211bdc7d6dcc46b3e67
+chunk	hydo/onboard/examples/shop/hydo.yaml	99	500	cb989e631274e1aa12b719dbec3867e132111a0e064bbd20389b793fa179d11c
+chunk	hydo/onboard/examples/shop/hydo.yaml	100	500	7943ff8d564cd8806d280b5f11a9997dae607257d816a79e824d5fbe883f6667
+chunk	hydo/onboard/examples/shop/hydo.yaml	101	500	7e21a7768a42d3d3e4c69b21e03deef3c466194572d18da527dd3caf6a84ce73
+chunk	hydo/onboard/examples/shop/hydo.yaml	102	500	ab1be341f6680e4ff6108f5ed93b74d6956c0e2b56abb678c69baade0338fe9c
+chunk	hydo/onboard/examples/shop/hydo.yaml	103	500	4d408038126c248b2643e52126b6aef1123ba89c0764dfdca87cbb811c8422ee
+chunk	hydo/onboard/examples/shop/hydo.yaml	104	500	b68b8c2177713acf055ce6f135c154caaed0928a004b0661059454e6d544b828
+chunk	hydo/onboard/examples/shop/hydo.yaml	105	500	4efd8591ba79dfaac3131eb913fd6d63745b4315f8319283e44b717c1bcb8e1f
+chunk	hydo/onboard/examples/shop/hydo.yaml	106	500	68fd8dd9a3209d17ce8f3534858b364fcfdc615692a213dba36d088f917c7f61
+chunk	hydo/onboard/examples/shop/hydo.yaml	107	500	141c52bcdc548025481acebeec32bd228d96f2d37ce6569327316e03b080c5e9
+chunk	hydo/onboard/examples/shop/hydo.yaml	108	500	dcd5ef428171985199c40bc5b62584c7bc6a37f8b56beddf5a75c76e6c7a4717
+chunk	hydo/onboard/examples/shop/hydo.yaml	109	500	3e6241f45f9ea5e519da6b501b1ca341a250aa00f11dc5e62858cf5bd658ca22
+chunk	hydo/onboard/examples/shop/hydo.yaml	110	500	c46a9afff722e1134dbfd0597911aab8b6ee7e35ba978e3631cc980fef722a3e
+chunk	hydo/onboard/examples/shop/hydo.yaml	111	500	9e8d6770bb5d13f3eb79b25fbd3646051ef2df269f9c86bb54c414e3acb91f11
+chunk	hydo/onboard/examples/shop/hydo.yaml	112	500	643c91be2f8587589ef0e5181a1ed7207bc1431e56a50e778e9902b3e3129c4a
+chunk	hydo/onboard/examples/shop/hydo.yaml	113	500	01f191efe4e97de76b65758eb1949388218d0b4192c60f5502bba00741a7b444
+chunk	hydo/onboard/examples/shop/hydo.yaml	114	500	e797e1a5c8c17eae538269a21266ad52c7b3aae6eb3a22e726434148a26d9592
+chunk	hydo/onboard/examples/shop/hydo.yaml	115	500	1fb76183ba0c9f9474f8924632d105d10af46dac258865a6db0634d73642a8b9
+chunk	hydo/onboard/examples/shop/hydo.yaml	116	500	33167b1eb2110111f46ccb3c8f721c660e23a61639a36520d150a0581f8b140a
+chunk	hydo/onboard/examples/shop/hydo.yaml	117	500	1c23796546c20c21bf8edd996a6cb7b8abedd83b1cc9375bf2d36eb22ad167b7
+chunk	hydo/onboard/examples/shop/hydo.yaml	118	500	06f90d47f7cdb0bfc86324ec3ed837230639f3349982d447e12b7575995f28a9
+chunk	hydo/onboard/examples/shop/hydo.yaml	119	500	b8697f92dc66d149c9709fa7481aebea98a062366b30bd116ffcf1f82b707dcb
+chunk	hydo/onboard/examples/shop/hydo.yaml	120	500	6f8f03aadc941ee8f46ed3419a5305d2db8609f7ff38c7f2d625bb9dc8afc44a
+chunk	hydo/onboard/examples/shop/hydo.yaml	121	500	ee8d03dff37f5cc2282a96c8433f6a4afa53dd3df218eb1b5a60973692bfccfd
+chunk	hydo/onboard/examples/shop/hydo.yaml	122	500	c92c346e436d7b8d6a8e2d570e4271d4dde963f5f778df937eba70e16311d172
+chunk	hydo/onboard/examples/shop/hydo.yaml	123	500	6268e5de629be2b78d5a8898c88c6a340eeed4936ad9c1932c79a67163efea69
+chunk	hydo/onboard/examples/shop/hydo.yaml	124	500	bb58474ac1e31d232b2b371e35ac9ee816e2d9d0565fe9d8e16e62c981d9ad98
+chunk	hydo/onboard/examples/shop/hydo.yaml	125	180	ed444a198f03d14badc36cea08fecf00c6d67d16c1335e05fcc3aee1a7f1bcf1
 manifest	hydo/onboard/examples/stack-grpc/hydo.yaml	core
 boot	hydo/onboard/examples/stack-grpc/hydo.yaml	hydo/onboard/examples/stack-grpc/hydo.yaml#0	snapshot	413884e1aa7f6ff8
-counts	hydo/onboard/examples/stack-grpc/hydo.yaml	identity=384 recovery:error=12 recovery:ok=45 recovery:violation=62 run:cut=119 run:error=72 run:ok=32 run:violation=516 token:C=128 token:H=689 token:K=195 token:M=35 token:N=129 token:O=33 token:P=194 token:Q=1 token:R=31 token:T=168 token:X=4 token:Z=1 written=355
+counts	hydo/onboard/examples/stack-grpc/hydo.yaml	identity=384 recovery:error=12 recovery:ok=45 recovery:violation=62 refused=1 run:cut=119 run:error=72 run:ok=32 run:violation=515 token:C=128 token:H=689 token:K=193 token:M=35 token:N=129 token:O=33 token:P=194 token:Q=1 token:R=31 token:T=168 token:X=4 token:Z=1 written=354
 boot-transcript	hydo/onboard/examples/stack-grpc/hydo.yaml	413884e1aa7f6ff8
 chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	0	500	12cf614d1048ee2f6d6e8e8d05bc55ea7186125bb3fdeceb3368100e6acf4ab9
 chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	1	500	2d49f73dde33278f6ab58e6f7309f4b124ed942e9ffdc1241659e9cbed3c2dc2
@@ -1971,136 +1969,136 @@ chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	169	500	5ca23106860ca554d1d98da
 chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	170	500	6c0f46372a6b0bf82505b4c56838468ef5eaa07d66a488b6e5b7f331cea85a55
 chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	171	500	961a2606d3452c1e2325849eba5442b2583f2df9ef6eed5ad3c33aa7f4e74378
 chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	172	500	8f41f22b8f13963ed18563de08d5d6a645b1ba12ca7a4ecb290695dfca3b7a3b
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	173	500	86cefb6bc716771665c6cbeda7cfb6894736026d79d7d57fc034e3fa188b979a
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	174	500	3d15bd2a17fc86dda1433d5660e7667b7545329c528da4d1087fcf43515370e3
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	175	500	03b1c2a3f4b8610ad3bb3e8dda5f5d55c702296090016b1c7da07eae900cca22
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	176	500	49d27f3333e004cf9cb27260bb8011f9866690ab21dbde0fe182599a25160642
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	177	500	a3a7210d34964b0ea30f8502366492e35eb950ed75937ebc1853d8964161a741
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	178	500	630ab36de1cb9d5b651f2b0ddfe33848c6b5863c9f5523e313ac0f87716d2718
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	179	500	f0a2ca02b9d754fb0989c2a2af43ca93bf9e7fe97165197bd75c11f951f7063a
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	180	500	a697b251697ad012e8e3f3192a57e8621809d8bd5350079b41832b6cba0e1f4d
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	181	500	676264cd20549202ea4e60f79940f640eb3dafebeeeb5fdcf1fda2ddfa5a3dc2
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	182	500	73e28560bc2851b1120c1036b6d24262520e17002309da8f6860733bb341dac0
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	183	500	e1e7146a36ee12bd6e1decaa6a25e710c37f5dcb7bd6ea73604dabd2bcd770bc
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	184	500	233c95a8e1c23ef23d008ff6ae8e32358e6d844246922e23a7e91eb4e6211d58
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	185	500	4f12baedca223df0a208cee33793e4a9f1b5fd0a1fc554d5a889d756c0c97e6d
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	186	500	d913ded17d7bdd8bc6565f5e8f9f28a7a6bb3f1a8c35f8f4f7486a5769903bb3
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	187	500	f9629bfe9e3a07cfc6992833d366ebcf5383dbb56986fbd4b790fed0c383ec04
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	188	500	906a3b60bbcfca4c58cb9b53d7fe23432ebb387783b6abbfab68e6121dc707b8
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	189	500	e42bb09b26bc5f48dcdcac0cb9605a23281f7af2fe514b1ac7aebc0f28a1cd84
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	190	500	38f787c5fbc8a429bebc92c15c4c8fc9dafd9dd3fd529275b62a04112d071163
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	191	500	5747a7bb3071e94fe3ee38dc5fb431f8a1bf7eace9e685f5cd6ff1e2f37be0ed
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	192	500	7e374afe8f0a2f6f41c1fbcf68735985aed88ff4b092cffc5d8e0e6346ff2685
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	193	500	484354dd2a8785cdac8e79b2ae7ec91c65a309d57df762794501ff27b714ae6a
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	194	500	16b633435d4fae051a053bae07f901e65a88e351b5d3d2980e6ee9fdcf14dbf0
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	195	500	20616fb9a5f47e0df97544c3b2ba8d766a4274d7a6a652673585852becb0880b
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	196	500	968ff09673c35902bd98ce46eac7731b0ad80555cd6335599301e103a183f902
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	197	500	e4fcee07635a870996497152cab4465ff3f940cc42b85d1b269bff8efc930279
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	198	500	c6dbc081c700dd98f5acc49dbbdf48ec932fc78febf433c0508040b5d4007a8c
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	199	500	e4daae053fd4f59d993fea74e0d3d26bb5c964a65f6d20b62a79c0d4f5931f49
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	200	500	af672697d135982e70e2d4989f7db2fe07e6306e4ab2ba98c4223e99b90ba1dd
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	201	500	c6d0ce09df21ccd80314aa6340993ee00aeed44e91e10ab1e7d9cafdb49f2d7b
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	202	500	93e631af0c531c43d0e454ba416e6190ca859fcce327ffa032c96d93710eb5e5
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	203	500	b8d11278ccc29a5be57fda0501e5814dbc0fa5416e8cbfb857b51ee81c970409
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	204	500	a96054c209c517b11eb7a70aeff7107106a3fb4e696e314bb671a3c92bad8773
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	205	500	005c4a99a43f6803ec767ee2e508c5f05d79d4ce436056cab459c6ac7e577c10
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	206	500	1c808e8553e31c69e5ead82f1740196637e0ca9f154a7a10e8d02cb59664f461
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	207	500	a558d425a1faba61b667aab4705806fea5e4542748a6f92d97c24645d6a711c9
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	208	500	6a9d60d275b8cb6f89a2de164a093fda975b1c1cef4d28856af7e6d8c1f5f7c4
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	209	500	f065b550807169e8582c34946629448d5ef7fe858f2ff04c62869c0c642812fc
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	210	500	f8f42f1dcd866242dddd4141f46c80cf4ab1ddaf7f1c86894c2778973ef18239
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	211	500	a1cc2d971758bac4462a5882f1f34f6e1e91a9022cafba97dead8795be09b0a2
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	212	500	5435c356c375d70695dff209f21463e0548fd10bded2baef11224034c9bb1725
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	213	500	21d9f308cf222c3cfe338e51288de120a046669ae814c29bf4f22c8da9d76989
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	214	500	31bed7aeee06a89033cb08c2e43124589f6646c809b5e22440f039d4fdc65dc9
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	215	500	ab416cb8289be0f9b138b4776d9617fb03d23722163d5ecdd223f9b9466b3db7
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	216	500	8c3df5c845e740c7155587f92eec819a56325f3d8fed564925691b0f429b1f21
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	217	500	3d0e540412ae61cc5a2815b5a547a13f6fc27c4c7863ff8e2522ddd83edb81a4
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	218	500	d7e1cf82186ae2b514a5acc1601d541fa58ba091927689a36cae7189b14809f4
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	219	500	65d3b2326e991d65126860f3f985269bbebed3150acb37e140ae0bd2d2c01f2e
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	220	500	44275c1aa4097d056c0b2d72155929a8c9597f1acca4850d4018c8d8bcb0ebbf
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	221	500	befd8f63fd65040f7d49de7399f69789d0d8f69caac3d7240121711eed934926
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	222	500	1663b32b943e87df97efbf881e9f3a23c5f65ccaa34c1e7ff04014d9744f352f
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	223	500	50506a832a2b0a593475fa236b73594228b050b70ef901a24643c7dd1271c273
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	224	500	505770666f4bf845285e2eadd7488e6d9db833e30e97afc4fbe4344f0fb3fdcc
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	225	500	6cce82ca4da5dfb4ae8ef33cd44c370685d881aea4df173c0add2dd636419b63
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	226	500	8aacf691e3856a1d371c9cccdce10cbc0b9d7243bfb6c3e1292985a1a42ae6a2
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	227	500	dead655a8c33a2e5d2acbbbac2c01db5cbfa9bd48732b02fb705f0bdabc1e17e
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	228	500	54813e5d07be0dd40b6ec652fbcd173f7d81c5278a819928f34a45ba8599e030
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	229	500	2bd84210b66e8006cc81d38e76702ef28db840bbe9ec9893af42085867756a66
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	230	500	a1590ad21af25a897c33f8cdf3d27356ef8c1021bde72c79038af54e6d7da790
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	231	500	ab1ef90929dd8f16f3703c59e7197dc4c11e81bae26bf6c353872a99a26c7405
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	232	500	f60e270cbd3315967baa47121881ff7c6f781b8a59244a10a8ef8ec583ca9659
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	233	500	9051cc9bf729e18c06b34af56815f923a5f3c819a390a210af5deb09962dee5b
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	234	500	5f18db87532095890f35a6bfe958614dd3290246cdc27186f8ed2fd4b9f40aaa
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	235	500	a7f4b3539153247735c65b7f797136213b275f9e16ffbefd1df6f362a03d3ec9
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	236	500	d4bbb14825d292e3b3795b13d4acd5bd09b471d027776f1ca8a58512e19f8697
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	237	500	335f0f7df09dd95408760612fd5019759e5235b125d918674582df425cf29e32
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	238	500	84573eccffda1502d94c743486bf9d9edfe5e5ef680ae1a03d886c03bdfcf55a
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	239	500	d7936b255ac999ce1f03cac9c04bf31a96cd98913d37091912a012eea530329e
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	240	500	a5a4570c30a9a3524d929106890ddf6635e76c1a5a999fd702caeed562f45071
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	241	500	dfbfde4bbe7c554cd22299dfb1772f210deb88efcc1456a96ef0d1c449437683
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	242	500	3108c9c03ea725e99693f57703115db83f3e691c4c95d36f76085269037a9a2a
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	243	500	570e45c03c4d5b820f6c751b76cf0e5e77fcc58873f0b67f3e716167a343f497
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	244	500	60cbefa6f2e48ef225be085a326010f5eae5223fcd8a4fd8fcee7036d2abafea
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	245	500	471c1ea8bdf36e91a93acd16527e8a2d9700743a03bf967fb16cd7f50ed79647
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	246	500	803c30f66a01f48ce0ffa375d3eba0c7146e6381b790b5cf3aa203cd5bc7bf3e
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	247	500	0d6b1a638a6e33c89c95bec5fabbf05a7b55a8444a6a8d89bff749ab68342c8c
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	248	500	7ffdf60f80cdfa551e3b6320f52b4a6f67ac19fb3d54a69a115023858a016d54
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	249	500	b50b5470e61a32f9b8c15c52545a33245aeaf31fee99b70319b01ede21b12122
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	250	500	416f2495c180eec1f74b7b6e5f343fbc787f9d403e6888ac3bebfb0b5c8da377
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	251	500	2fffa2788fd64a3504a7fce3265f0a8f4cec5cb33733592ca640d0c2ac6eb0e2
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	252	500	7503bf95bda49ff199acfc30e27ef09806018be691f68c562e7a98761bf7587e
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	253	500	38ebaf332d98ca6e14fe53682b30ecb2d15a27a82464b4298b4cd0a504317fb1
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	254	500	f8dc57af6ee3a8281d02e5e545dcf20a7ffcb6af22cd1382f650830b3b0b01cb
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	255	500	13bff36613313c9ccc9ebc6e4324f47109516523f5baddfe5bfc1475b7748ec0
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	256	500	a023e489c8588123ddd84dd4842cdcdd9820bd0c212c453dfb51ae76738c7a98
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	257	500	5e1ab2679025a37c79a91d90e8c40ad1a2f2ea0624807aa425555ee9fddc58ea
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	258	500	0f047a6b5b869b3144194128c23a95e0e6ff95177cf09d26bdf1e9ebe003c71b
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	259	500	65e0619fa496ce6f302c077dfaac4b398290bfe3188af3dff3b5136c7b414c46
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	260	500	6ae0d5f2ad8ec347921e305e9a80bf705b42ef7ebbf7bbda5b6fb37c98292f05
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	261	500	510c033a4893050708d2d27187f46f3bd91cc26e87f4165351670e8e26f55a9e
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	262	500	e2258e271a2b154f577509b32672f248072951dd0bb3ee8ac970978b0470a35b
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	263	500	dd9bf60c8e2f4fe9e8e861d736b0d64b67fd87808a77feeb999c94b816268782
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	264	500	b6bd120a39f531f6f94aec3fef1c839a8a8f7b12bef1cd12498ec9ab7507efd4
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	265	500	934420c8d29fcac03f0d0605206bb4cd34527213266800cbc9c1ba57b9c8ed8a
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	266	500	2d43cfb2cfb2bffb121a1728838bbeb405a431484c78abad93685d7390ba1fc8
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	267	500	e943f289e9dc8d2ad40b2c804b229707981040df2504616cb3df25652688439a
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	268	500	07c748156f728cf46c71964975848bb31680d489e8f0e49bc38edd58e14fa7d3
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	269	500	a4a0b3cdd1880def93d972f0eda094bc25adbd3b8c1b4156cc350393b022ae21
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	270	500	5cbc959c255f1d7833aab706e2e9c7d5407a6269ea8515c9fc06001529fbb363
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	271	500	309af5180b0ce8b5a63be4c4a9d24adf6cc08683c1cdbdd86fe13c99a7eedd85
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	272	500	067e2985ef79ecfce9d8691f1e11209935b5aa071e8d609cb2fdc32569b27e6c
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	273	500	5c2d52209df37c417238bff632f493bf22f42ba03b2a5f8beeb7305b15dca614
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	274	500	f861db83421ed3f1fff7cee4d6ff6efd0be1ffcff49f32adaa7984ee34592a92
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	275	500	6b2e8a116cf7e177da8e2539fb639bec84a02682e8934952f54c307c268c9ee1
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	276	500	7ac39dfbb558bc60fa4ca82786fa9c174e778883c92f77ee54f3faa671f9d2ae
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	277	500	84333df4dd0d351150b5e35ac02a8a94946f9ccdfd1b9cb4e5fa9c050fa412d4
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	278	500	528f79e014d32905583fbdf324750b248eb4a35ebf8dfe215c78d1bb07b26ff7
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	279	500	ac3a3d5f537334d3d6dcf0a73f56279ad12fdfe62c3dd7225f66a794185f6496
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	280	500	5a4aac3a125909af3794229272c1512930928adf616a5acbe47eb613600b3fef
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	281	500	ef6cb5e6fbcd678307398a54de2c2b91f0a19ca644cb3a0de0e96a2d4ad49738
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	282	500	cd837b39675e5711383ede504f6bf9c973db0adca3acd0528d10b9fb4174abdc
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	283	500	125e998b6ea5d24fdc0299454952c7f4104f1769d4a800df2c8ea44b4ee06411
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	284	500	91e7573bf533f16a7abfc4f3fa2d81d7f6c1830c5ade55b5766f51c0dee01699
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	285	500	08b440dcce5da0a26b1654ffebef87cdaa732bee57bcfa6f2cf12fc616ca02c7
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	286	500	69fbd265176c47046f566bca67943f40debcdcb40173017e8c4b42ff61fdb0b7
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	287	500	dccea5ee0f22297f5951700725add1717e380579ff5f3e46572dea2efb3f601d
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	288	500	6a5870917cfc9ec798639e01f29737062bb4df76c3c4d681ccc70411b1feaa4c
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	289	500	67b195ac13c2228104e638e5eb212c265f2932a42d2175389e8586db0575a139
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	290	500	994e702b78c4c0f50717c01799283634b6794e0bfd28a81af7ff26e9e8a1d353
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	291	500	861a38c84007e6875c5290c5f90a2bf78ae4d43a5adf1703c85d1d46d6ce5ec5
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	292	500	137ce37aad406159d0410ef0cd62fa1827e2d9be6edf808095111fb5b3c5ac08
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	293	500	e5a8ade1ba64063752e320be18cd7333140b6ed015781a1f6361f1fc758c8c0f
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	294	500	0aa1d3af15c5c446d1b7c5b1c6b740a16d5e9ddd5c643a82cee8e125e9b84d35
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	295	500	f9533f0e73db9b7a4b9506c585a7762b189895b50524d635917e52546e3d9236
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	296	500	e34ccb1821e03ca9a6559e729f2d569db491672a5621a68f7ba2397128b71815
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	297	500	34d7bd2d4170cab7299df767a6409361b65ff600f063650157deb7a33504ec4f
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	298	500	69a4d2a0b4112ff471c1dfb9fb4a352f98c881fd8153e00912481682d77a3789
-chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	299	303	dd4bd67258b582173df91a2714493647f0056d5f5c870d62ba1a9f6ead921f42
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	173	500	66b5936e5e9bceea7c62f72c0119c470f13b6329b823e225b5a00ff26dd810aa
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	174	500	d8daba96036b51b84a19fdede2a7aab93dda6c4469da5875dfea3fd6b4e016f2
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	175	500	d57369548251c4414cd012e9734d63980b5d77f00c9e822d825fb393e72e628f
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	176	500	4a65bac80bb1ffe0d510f15669cc32315cfc09ac289a7888135122f18bf903ac
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	177	500	6802f5bede8fc020d69d2f5a47f2c8dbbfd965d5b3b1d63b22e0f15e9021775f
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	178	500	b0df798f8b5d38a84b034407c919db6dc3911ea788aca0d992eda537556d0082
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	179	500	f53be46c7a486a7f4a98916ce5ecb13d43ea64cd8fcc688e5ee8ccaf8900e79b
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	180	500	346f6111ae05a8c4da285027379d716045a5f1b7971167c24e9313ff0e0c783e
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	181	500	eb67e1583b89d4e940f55976f42376a6faa63d88215d081e2489ebd270b8ce94
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	182	500	c078e10f44794a6f2b9f23451b10f04bb3a3a50bd591a69d6dc085aee759b71f
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	183	500	8987ac25157205b4e4645cc312ada176b5cc9b11e5b80361c9437eb4ef63f19d
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	184	500	602eea319a63dbf9f6e9b9080eaef287d044723d8c757c19783e40492cb9780f
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	185	500	fec5a500d3efe5fdb7fb2aca193421235ead7e02467745f285898bd18f30e212
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	186	500	91368f6a1d7d3221184d79b376fcf1d62ccb781bff404b94f7c9878f0383264a
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	187	500	9e652ac512f60b9b279cb65130ca7c2f143e319dfed4f528a3d14f3e7613d1fb
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	188	500	893994b25b3ab0fd6070256376f802c6bf886f71a142572b211764ac91b2990a
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	189	500	d4a7b31dcead7059551dd848b5ea261367bb97d217a7e2ef6c6607ab876c6e94
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	190	500	596a29afa8d4e778ec9f01ecfdb3c26594f412c062aa05c8b6582ed72c09636f
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	191	500	ec53710a0ab2c24c55af3a5bee7c0a62ab0722d07dc7dd9710ad7cdb44287c4e
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	192	500	7a4921c31c4cb7f22f24b2cd7a566e620c19e806e2d0425455ffe55886339646
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	193	500	3981343ac500024ef390728e40c2673d1ce2250e622309b93d8b0a5a9e5a2fb8
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	194	500	e8d47bdaca36c5412e88c5350e3dd726ffaf0fd326653f4f4919d98dd7d42c7c
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	195	500	05f99d80b0147cd037cc19cc85cbb3e0cf60d295eb78d9d780b27b33306c4f81
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	196	500	f13770c06204e89ea3217789f6462c5dbb3683bedb3d3ee7aa2386cf960057ed
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	197	500	58a5438709dbb6524b9d9a215a2a6fe0718a8289da405ead00ccaaf27b36ed72
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	198	500	997dde33a0e2607f6e0a99d4fcd326206e1fd522137bbb3544f576e14a6a2bb7
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	199	500	e6579615473be10a7743d67069d5238708096791607af0c0e5e64401d5b298e7
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	200	500	093161dcc991604fc173857ac0f6b711d8e54f389a151c84c195a264fb22115b
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	201	500	6b2e9f41748d02e82fcec7765cadbb9dcc826722164d6627528f5f3dc50948b4
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	202	500	4d30ab9e4f57b86845c27ae24a7210852927a817de30ed1bf0f36bc59e3c8735
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	203	500	472fe163efe0221b7294783d4a32afec013584301c486af590da20358e499541
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	204	500	2cedca5a676f0cf1b62d6e13918a43e97704b90de7190a318361493511cec453
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	205	500	8c7421cb6b6beb0912c6653751602088cf9ae74c378db27732b37f2098dffbc2
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	206	500	ce903cea7c6f400ced5fbb53ca10ed4a4a5026f2767f5106c55f6f0adc416639
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	207	500	b32dc1100207b6aedcf38629a9a6aee23f5b770c4e785b0a79750d022bf13da2
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	208	500	4bcd178ed7042ef0a06ede9840004fd30170b3579291b1045005bfc0c32aef2c
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	209	500	27e9cfb4ee5c64d9de877c4b19fe0af69edc0504c7943cb2dd0e3aeb76948621
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	210	500	d10926bf7bc10ea3478ef7b8a582a230bcbafb3971ac35d2abdecaa351f5dd74
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	211	500	7f0238d9999679641f2f9c51d032a705dec38c3136e33fff3e0fe3ccf86dd7ae
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	212	500	9424bc6047ca411f63a92c27c7c3697a3e67ced404c8736af0110a6c9c7c85ca
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	213	500	dd354e7b71a5245b6e8db0c85b0bf72b87975d6fb6128ce0a2d7084eb8ffac8c
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	214	500	eb6f40c3f4c8a56777cbeaab607ccd9e546373e410f50cee72c73da851cc8159
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	215	500	475c7c871cefb6334a46fb87d79078eb4a08473940c226dad9f186855f745674
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	216	500	40ca952b5789ab12bb5bc6a368f9a5bc22615ccc62ca005c937dda3101ecae5b
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	217	500	3891589b12584c1fd7603cc4ae1b61c496ecbc406a18c9a6dcf40abe5d181f5b
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	218	500	ee90586de28b27a34c01ed33b0d5dcb34fb241c00a48cd43cc6d67924a2b979b
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	219	500	6b0af7921806dff41023ab831e280affaf9043b2b6ac961122b5837a43b58d28
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	220	500	e37c3d6b5f5b31b667f5e574abcc7778db64b75b554e7ec556446a918896d0f2
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	221	500	935b121268034407e42bfb974420bf2b92d11b9fed1bde78452bd38bdd80536f
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	222	500	dd372a45e6a1ca2db06fea3478222a93ee572b39961699c91b74cb0d48d62b56
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	223	500	c7638c78f2c4c7afacf0a385938bfe288f708d5e8c42026ee28d80e8dcd72cc4
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	224	500	ef1e343a9688954aa8e8dc72b58a77af6c17070705200ba83216dc67caa95118
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	225	500	2b98589821c01facda310f8345ecc15da5c1e0942c5d9368c2f1d710c61c1ee1
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	226	500	8a8112276a6bbaf2bc01cef78ffddeef9a5bf3a0a960199f3efbed67ecef5651
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	227	500	a5e0bcb7e68970edbf9a9eb278a9f1789535c8fa61b13afd2b2660d07f3e7f93
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	228	500	86b6c4faf132eccd5b709f96230a6abad9052287640ab8d36aae8ca1debbd5c4
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	229	500	69d966ee7d717c28d7727d26221c9d1ea75e70de2bd3c71de3c34975096973b2
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	230	500	6f24218c254787c0b6c5aedb4a7f6e4f82ab9e53ad59203c528d9a114e905bf9
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	231	500	aa44e406a62d8fd1cb65eb292f5deb9481942dc8053cc0fb3d65d2da3105b361
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	232	500	a590a8537306761dcbe054ce844ba119184680970ecd8b2f4fee900804004b48
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	233	500	f0ab438eadaf95483087d6f93655bcc84cb38586f7a02f47ca848a6c557c7160
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	234	500	05962e4bc74a060083d4ed7a0af85b1c76e9bb0bb08f32c7f5645627542201dd
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	235	500	432c86353ab449d3809aaf02e6f4c795d6423e128a9fb44d463a246891691e31
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	236	500	65106915fae604c0b0d8a0d02ec7e806e02d475de6a18ee63cd51a978563b915
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	237	500	87748262b1b2bbf24656678fe3e9c40b48f038f6c5005d5cde3034e0b025e31e
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	238	500	31768264d4391da09ecee750f34bf9d8cca1d4b6b187628b713003bc903cfc1e
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	239	500	a41f7a7673c99d6ce7779f2a7ec36766521e5f4b5b61a3148bac2c27d89a6dca
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	240	500	7c2c3f7f5f4cb966a506d2da0be25255bf3f190f0bf11c3ee10f103fc543d04e
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	241	500	3362d0d133531fcd35d033bc1824805a8d15183ebc4e2ab276e72cc3f9999d42
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	242	500	31171b3b898adee89d07780f1369e187180aede37d0b5ae78813ca1d86ea699a
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	243	500	68bcfb5ce44b8b82abf76d92c7f501de1a18473225098f33b3faa7fccaaa2597
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	244	500	f4c928a898b044827ad4d503d29f6439c29bcecca2052ef9dafc8401d1604615
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	245	500	cd2fa6d144fa20ffaa401422c1afb73f250288686188e88747ae4dc1b4b8eb10
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	246	500	348241f48c0e896470203b81a16b1c57f2b36c50673aa530e48f13a4ee8f193f
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	247	500	3cac1b0fcf0aa77812f146b1f341ae5afc2e5972abcacd0422948b0a33ddd636
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	248	500	80786b00e91a475d6b88da10335bb5fd5997dcca740e5e4627bc18508db2c7e9
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	249	500	67602016491cfb14dea13b906fd3199628a7b65f5714f8f17c17dd7871da835b
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	250	500	1d7ba93891439438d2867c36dc25d552b3f8396156cd563eb7f3353c22a6067f
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	251	500	ad52cf6397bcd098d3d7b885fa0d594bab6f35c1eb1eb5c5f416bc97c56bb3b1
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	252	500	64b94223a14164a620496135f000d62b3c3af17c8cdf8540da9cf679c42196d4
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	253	500	38198d96dcb12042b7ea1e9b59e654edab23c3f59c60e54131b9c4f16a6e8b59
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	254	500	502aa33bb8985720b9eca143934ec685ace147040580606a4beb8348aba10e21
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	255	500	ee68615e5fbc66bccd28fcb520952cae7fd63d4e5a8a98c937bb3eeea20a48d9
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	256	500	3bd144329cf7a37c34c05bc8bf4706a39ea8f4f0406d588c5f88822ed37c32b4
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	257	500	6720dfec86fc68d52eeae5a9f156a217f0b4c846807a1f6b1f9757af1c1e93da
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	258	500	37e55036306b8f6f0ef3c34046cbe0e9cad81b748937f5c47172dcfc2ea85996
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	259	500	05112756c2edf43a4711547a60dd61b89340a74bad94164405888c3fa6e5dee1
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	260	500	83da5c1776c424e109bba04f6f9183e7300ebddeb915f7bd2cd75fd06220e335
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	261	500	269885d6dfd2a02211fb49d686b8cd7e1c6401c1a2784cb03bd98c9f2f687228
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	262	500	4f1cdbcbe549356645f093f0cddefbae9cfee30e10d3bde02506bb12be1b9ba5
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	263	500	87046291546920016f903274cee2756051cc0302227b9346de7913de28f0f7cc
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	264	500	cd0fd5c54494cef1ad22340958913aa930d7f4a2109f2d7c39614eec47cf0e81
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	265	500	5311e4d6a0585893b273cd4932c3e2a27292920b4396277d17e0062bd7615f06
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	266	500	03231b782df51a141503b1c6178090a157170c1b526c2037669c71e676abb685
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	267	500	2aa213de959ca9953fbf61eba13e9f6c7ecf3c50d4781346b139c732e45d7a36
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	268	500	c8e04529c449c8ee1f00297f954d459d4f8c5b5a83b3c4d37142becc69bcaf11
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	269	500	7cc9aa6c18438340481aeb3fcd263b6d37c5bdd6f7ac3aafbbb3efab05c8956f
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	270	500	c1f0aebaad1e2e460b515ba9cd5d04a013c0d292408f4417634eaa4dee48063f
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	271	500	e07b8f98197c68e0017b53c47a2eda305f865dfa81f6b693e2f42bc541a47bc2
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	272	500	cd281f99545feedc96bdca52d02f84491a8870cf6aab4f3f782c06dce6e71f72
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	273	500	263b52ff5485a615d03e8bbf1462cc98219a4a32326317cbf42e79c10ab242c4
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	274	500	48550b46015462b65e74e303dece5e509f583cb6fe9f8d7f82d60d41dff15bdd
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	275	500	84193c71b83fc833ef7e5be401646e7977c8d7ec35a388891698f323e9fb0fc9
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	276	500	854e434e7893ed43ba3503dc87ee6be9de1f12d1cbfedc715a9a03b4d5885242
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	277	500	599b381bc598865cea5dd1da78970f961793e1c8a0e87c1ca45fc6039ab92944
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	278	500	86500a7c95e234c46b467635a596dc91a6826e3b08a757d1eb533ea3dc24080d
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	279	500	141e1af3114c36a23d026edaeb4464bfc991718f9607da9bb32c6b05f9c51004
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	280	500	81a969544310c6f799834ff340dbaca46ee18d42e4a0bccd4ad4c031800fb467
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	281	500	d23479d10c09c2e73e91454637d65b93f1d6599d1b6681861ee733e3a3fdba45
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	282	500	b0cc5ae3f7ae89b0aef09bbdb9da1c3a1a9a729138e5444da0cad46e7a840193
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	283	500	2b3e7b38fb8aedc02bcb479174510c25f55508938ae2040ac2f84ba21151b830
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	284	500	91396910d9acbccd6babe22d231646c76ae76f7e05e5d7e18a4bf28f337fc6d5
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	285	500	189efd812c22f9c63a3a2df6c65e49a6979f2c4a7e4cd028cf5f944fa0aedceb
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	286	500	77a676a7fb836349926c31bf9f4a58a6b0b1fde90eec38faa9bc040494ad9ba2
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	287	500	fd4b3aa8f10981c89e0ad84c61c5cb2111cf007119689de10636a55648a7a242
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	288	500	17bc8f2654b63e7c5b2731e430fabad01ea1ddcc916aed87e86b398657a2fd85
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	289	500	fa2a86c654cef6fdd1c1418e9f45a9a070f46424a7ba460b3ddf72d9c777598e
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	290	500	b9acef5e00c3c9d35bd1aaee4277843e4c6035a6b1331c65ea69e5406e0272ab
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	291	500	bc4407d1d9bded7625235f57650359bc0ab8b0ea32fc92deca56775c8b58e94f
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	292	500	f70b81ec60906929d29e1850dd99b7da18767a7ecd49c3a9ebd06e1170fa222a
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	293	500	53cf5cfad475a89f629f5a9074d91ee0b31dcc2ef55d489492f3eb91d1ceba32
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	294	500	7dad23c21b5d918e082150e0fbe9d59001f7dd9fc7fb341626d52936ebc1bad2
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	295	500	cf022bd2b3ee81daa6ad758be710a62c1799e4a8ba2b61f8b0c636c228d9820f
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	296	500	485c665a08fbc75fa0dec0099f745ca63b8ef467e82a3655a2c0322c803772a8
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	297	500	e4d82b76518fbb39737b3b8ee62acedb6c7002df471fea16c07b26870621982c
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	298	500	01964632445217fd2a8b64078375f2d89433a9487bbaa491e5a6dbcb8e55c9f5
+chunk	hydo/onboard/examples/stack-grpc/hydo.yaml	299	124	a174a20d25b5e180799a20966fff509ee4fed62c78f71acfb59fd5cbf93c66d5
 manifest	hydo/onboard/examples/stack/hydo-errors.yaml	core
 boot	hydo/onboard/examples/stack/hydo-errors.yaml	hydo/onboard/examples/stack/hydo-errors.yaml#0	snapshot	2e4155eb78140ed2
-counts	hydo/onboard/examples/stack/hydo-errors.yaml	identity=288 recovery:error=6 recovery:ok=29 recovery:violation=39 run:cut=74 run:error=20 run:ok=5 run:violation=203 token:C=77 token:K=163 token:M=27 token:N=109 token:O=23 token:P=152 token:Q=1 token:R=28 token:T=132 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/stack/hydo-errors.yaml	identity=288 recovery:error=6 recovery:ok=29 recovery:violation=39 refused=1 run:cut=74 run:error=20 run:ok=5 run:violation=202 token:C=77 token:K=161 token:M=27 token:N=109 token:O=23 token:P=152 token:Q=1 token:R=28 token:T=132 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/stack/hydo-errors.yaml	2e4155eb78140ed2
 chunk	hydo/onboard/examples/stack/hydo-errors.yaml	0	500	d66d9e1875cd2a6a7f80a58a95e50127a9c1e321c993c0fc6bc23915bc625606
 chunk	hydo/onboard/examples/stack/hydo-errors.yaml	1	500	3c665bafe3779247eeb4e80bdf2a5c9b5c89933a2d31dcfb6bd25b9ac2f72da6
@@ -2303,17 +2301,16 @@ chunk	hydo/onboard/examples/stack/hydo-errors.yaml	197	500	cf9ed064cc4f31e6771f5
 chunk	hydo/onboard/examples/stack/hydo-errors.yaml	198	500	9ba22653cb6044ab6e44726cff0e6472d92272a67a773aee7d6603e97d41d8fd
 chunk	hydo/onboard/examples/stack/hydo-errors.yaml	199	500	0462eab2441ed5f0cd657eb4574608dce1adbef49d30bb710178d05dd915a959
 chunk	hydo/onboard/examples/stack/hydo-errors.yaml	200	500	85e38f338a9deea1f5249d7f6abef8e8b3b31f4bf4207ce1c43dbed6ee27ed78
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	201	500	7f737622a0ec24506a00d69d319cb9da7daef0d67f8d3133e5c160d87cb83a68
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	202	500	76c146f70865d7f2530a788f2ada7bd0679c34332ee78cc62b1becec8c5800b6
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	203	500	2635bee42506c81e344cbec32efd6a197e32e27fb18d6dd750c77302e4a08ec9
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	204	500	16bb85878808256ca7c978c0a0cf5fb13ba0534af91c5fa99063a2bf0a456809
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	205	500	82c876a5b0b5834c93d43c083fc45f2b06d19b9da00e76b5b94b672efe5574f2
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	206	500	20b0ca7bf05ca42c66559230fe523df615de1730b5a35fd7c2423f422c39c74a
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	207	500	68c1fffa903adaecd1a354c41ca2c04bb43d66d33e534f7326eaa16b398e3050
-chunk	hydo/onboard/examples/stack/hydo-errors.yaml	208	280	c697cc410573cc84005b6b388f5ac0ae47921e571cf95c0a031bc33ea5d09dcf
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	201	500	fd42cf291a98ae63cd16460011f6e394d8e4a1b0454eba8a6fd69e9fe38a5101
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	202	500	6f16fae49b5efa604ebd14db7c54c731a4a19b9bef069c45823f41a93ec38207
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	203	500	20d803db0007ad14116dfc8a473e9b82d95dd70a2f23713d71d9a75bd84fde21
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	204	500	28fb66dd72cd9dfd53f2cd60778de8e5a4bb944e884d3931c2f90d332e352885
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	205	500	63d0d66671e6690a01a873716abba1fc1d7e6b80183277d873f5b9cc6f7e7120
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	206	500	741e2cb6c39966c2625e7a24d999491c7a7ba31f641737eceb79bdbd2a0336af
+chunk	hydo/onboard/examples/stack/hydo-errors.yaml	207	495	eddcf93a535e4a652218cc9f5108fd898faff7e34d68e742c50a2d3e50adbaa7
 manifest	hydo/onboard/examples/stack/hydo-grpcgen.yaml	core
 boot	hydo/onboard/examples/stack/hydo-grpcgen.yaml	hydo/onboard/examples/stack/hydo-grpcgen.yaml#0	snapshot	8467dbed66e04803
-counts	hydo/onboard/examples/stack/hydo-grpcgen.yaml	identity=301 recovery:error=7 recovery:ok=34 recovery:violation=36 run:cut=77 run:error=24 run:ok=14 run:violation=200 token:C=81 token:K=166 token:M=23 token:N=112 token:O=26 token:P=157 token:Q=1 token:R=25 token:T=136 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/stack/hydo-grpcgen.yaml	identity=301 recovery:error=7 recovery:ok=34 recovery:violation=36 refused=1 run:cut=77 run:error=24 run:ok=14 run:violation=199 token:C=81 token:K=164 token:M=23 token:N=112 token:O=26 token:P=157 token:Q=1 token:R=25 token:T=136 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/stack/hydo-grpcgen.yaml	8467dbed66e04803
 chunk	hydo/onboard/examples/stack/hydo-grpcgen.yaml	0	500	e5bd3182f554de6aca74fea8fa4f2ecab71cb0287aa2defbdae44649327af9b9
 chunk	hydo/onboard/examples/stack/hydo-grpcgen.yaml	1	500	c8e0d73cdfd44cebe4380b1bd301a41557262dbafd113c0cc45b05e730f2c969
@@ -2438,14 +2435,14 @@ chunk	hydo/onboard/examples/stack/hydo-grpcgen.yaml	119	500	c25c47574a1edca601c4
 chunk	hydo/onboard/examples/stack/hydo-grpcgen.yaml	120	500	591be89b88ccaeacc48f684901c663dcbe6967053d5ad47d8ff30a9a29502a97
 chunk	hydo/onboard/examples/stack/hydo-grpcgen.yaml	121	500	b2185695b410964ff6aca79b1afa8f361d14b6fda6c0249967ad0c2dbde1f373
 chunk	hydo/onboard/examples/stack/hydo-grpcgen.yaml	122	500	01803126f5a725a1f3920938454356beef183954bb2c4909342db27b64ce633d
-chunk	hydo/onboard/examples/stack/hydo-grpcgen.yaml	123	500	52a95c1be4bbf0b388a9027816e13beec14b752a0cdc4a7f47985d37166e0527
-chunk	hydo/onboard/examples/stack/hydo-grpcgen.yaml	124	500	c0055e7abc1817d88d1a995624209a28ea6fd3f462683ef1e629b6880b57318d
-chunk	hydo/onboard/examples/stack/hydo-grpcgen.yaml	125	500	9a1f3076dcfaa1181ef7ff13ae36e1d0c14b570c52551eed6f6e122bd4df1ac1
-chunk	hydo/onboard/examples/stack/hydo-grpcgen.yaml	126	500	02bd2d54cc35880c8ba24fd8f67295d45671ccc4bdb29c6759e03f08b4055c93
-chunk	hydo/onboard/examples/stack/hydo-grpcgen.yaml	127	276	a866edf655efe5e41f6db5e0ca4aa495f977af7d0b8f6c84f87905154d684754
+chunk	hydo/onboard/examples/stack/hydo-grpcgen.yaml	123	500	83b79eeb402d2cfab94f192d1c2ed81ea7f9cb2b2eac376c7275f40abe1327ac
+chunk	hydo/onboard/examples/stack/hydo-grpcgen.yaml	124	500	6b4bdb4a08a1abf2e1d277e0b20360fd98610066859d0717a9d4240da0381eca
+chunk	hydo/onboard/examples/stack/hydo-grpcgen.yaml	125	500	cb391c976526d968e344029e5b391ac81c93a303571aaf55ee13ee817194b07d
+chunk	hydo/onboard/examples/stack/hydo-grpcgen.yaml	126	500	59ccb34dcb7638e25e7bd954a1966bef6930487b1f1247e22d32c32cc8b684a7
+chunk	hydo/onboard/examples/stack/hydo-grpcgen.yaml	127	108	8d3a8bad52da692163d7a6c1a888d3f97cf0de80b9f3c5db01cda297eb3014a4
 manifest	hydo/onboard/examples/stack/hydo-read.yaml	core
 boot	hydo/onboard/examples/stack/hydo-read.yaml	hydo/onboard/examples/stack/hydo-read.yaml#0	snapshot	3b2d372425c60b51
-counts	hydo/onboard/examples/stack/hydo-read.yaml	identity=298 recovery:error=12 recovery:ok=13 recovery:violation=53 run:cut=78 run:error=26 run:ok=9 run:violation=199 token:C=82 token:K=155 token:M=25 token:N=103 token:O=28 token:P=150 token:Q=1 token:R=24 token:T=131 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/stack/hydo-read.yaml	identity=298 recovery:error=12 recovery:ok=13 recovery:violation=53 refused=1 run:cut=78 run:error=26 run:ok=9 run:violation=198 token:C=82 token:K=153 token:M=25 token:N=103 token:O=28 token:P=150 token:Q=1 token:R=24 token:T=131 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/stack/hydo-read.yaml	3b2d372425c60b51
 chunk	hydo/onboard/examples/stack/hydo-read.yaml	0	500	a3b2f41463b76898ea8d7c822b9b584112ca016c34141eb387e50e9ec5b32070
 chunk	hydo/onboard/examples/stack/hydo-read.yaml	1	500	aaa50e3d89e23d0f19c2508f08860fc0b09443745741bbb68f140d5e831489e3
@@ -2576,14 +2573,14 @@ chunk	hydo/onboard/examples/stack/hydo-read.yaml	125	500	44809887129eb6bf03f9f36
 chunk	hydo/onboard/examples/stack/hydo-read.yaml	126	500	cf727a6394d43deb17416f689245a62c55b517bef04da21e9e6144dfd70bdd0c
 chunk	hydo/onboard/examples/stack/hydo-read.yaml	127	500	132aaf8e882c877405ef82aefaca76d56608b867577652170194f10cf99f0cdc
 chunk	hydo/onboard/examples/stack/hydo-read.yaml	128	500	ee64e2f77c378c454eb5b80fa396ff52d625dd17b9fa7dc6bf0d57b40c2c58da
-chunk	hydo/onboard/examples/stack/hydo-read.yaml	129	500	6612d9d310e0487944a04b04b89417c8d77684307bfda487dde969962acc4ea1
-chunk	hydo/onboard/examples/stack/hydo-read.yaml	130	500	e5fe36272a157846839f880aa2298c04884ff320971660e3126bac92d346cfbb
-chunk	hydo/onboard/examples/stack/hydo-read.yaml	131	500	c3e42e5252b92955d43ea2bbc6e719a88b3f3f079a676fdfc89734cbda73a8bf
-chunk	hydo/onboard/examples/stack/hydo-read.yaml	132	500	79cd4f0733b89b4ff021088cb0dcb7b20cf23af06c3535e5fbd2053145faf223
-chunk	hydo/onboard/examples/stack/hydo-read.yaml	133	312	5b44e819806c5c4d007477d34dfa7b258616ab2dd51574ff2aeb71660199d85b
+chunk	hydo/onboard/examples/stack/hydo-read.yaml	129	500	75e5653baa9e703e3becdef2ad4bf33c6b5751be2bc492893d18f5ed8f10eee5
+chunk	hydo/onboard/examples/stack/hydo-read.yaml	130	500	7cc115961bc9d17d30b28616e3dec5210fb6839a436b08c8cfe0b1ec740b853c
+chunk	hydo/onboard/examples/stack/hydo-read.yaml	131	500	0c532c69ad839f6d96808b0d6e1dc7a62be6b43267bdcc813396ce717fb33157
+chunk	hydo/onboard/examples/stack/hydo-read.yaml	132	500	d04a9c2c56e0362c11deeabc7f729a103a578cf051e3b473e234105b14113598
+chunk	hydo/onboard/examples/stack/hydo-read.yaml	133	129	edf524bd196740e90496312706a8481da88fa97b1731630e4add8ea0878b8624
 manifest	hydo/onboard/examples/stack/hydo.yaml	core
 boot	hydo/onboard/examples/stack/hydo.yaml	hydo/onboard/examples/stack/hydo.yaml#0	snapshot	fdb465e62a01fc05
-counts	hydo/onboard/examples/stack/hydo.yaml	identity=297 recovery:error=7 recovery:ok=42 recovery:violation=26 run:cut=75 run:error=29 run:ok=13 run:violation=194 token:C=79 token:K=162 token:M=23 token:N=110 token:O=28 token:P=150 token:Q=1 token:R=24 token:T=133 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/stack/hydo.yaml	identity=297 recovery:error=7 recovery:ok=42 recovery:violation=26 refused=1 run:cut=75 run:error=29 run:ok=13 run:violation=193 token:C=79 token:K=160 token:M=23 token:N=110 token:O=28 token:P=150 token:Q=1 token:R=24 token:T=133 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/stack/hydo.yaml	fdb465e62a01fc05
 chunk	hydo/onboard/examples/stack/hydo.yaml	0	500	39d053bfdcb76f5c70ef8370187d60bf7fd3b668aaf59ee7e6f2ce9bbf972d2d
 chunk	hydo/onboard/examples/stack/hydo.yaml	1	500	b473ddb1828a29938f847407289891241952b4c1977a51bf409c66f7cd6bb18b
@@ -2713,14 +2710,14 @@ chunk	hydo/onboard/examples/stack/hydo.yaml	124	500	ce713b717f9419fc57d9c14fde15
 chunk	hydo/onboard/examples/stack/hydo.yaml	125	500	65c1f013468a3cc26198b3298c10681c17283d809c3a787a203e70f4793b9031
 chunk	hydo/onboard/examples/stack/hydo.yaml	126	500	c96b6800fc58991b6215dbe2c813315c16e423301a2b9ecc2fda73f492a606cf
 chunk	hydo/onboard/examples/stack/hydo.yaml	127	500	750acfdd891665236b71a3cbc4d9b7eb1aee0cb3ac37c1eaa711c05322ab7347
-chunk	hydo/onboard/examples/stack/hydo.yaml	128	500	d26e1e97f9e4a60550dc1aa722b3a8e1ec8627e9e6afbabad3c81d0c350264ef
-chunk	hydo/onboard/examples/stack/hydo.yaml	129	500	d9148e66a43e04be1544caadf9f551690c48f7b7e0e7a1929e472f1fdb99ffb7
-chunk	hydo/onboard/examples/stack/hydo.yaml	130	500	0e477813aa9445684afd17372773f644aee3dae40d80110624b5483df21af77c
-chunk	hydo/onboard/examples/stack/hydo.yaml	131	500	ebcdd0a8071bb6872e5b29553ccf537394617c3203aefa2ee1db637db006a3b7
-chunk	hydo/onboard/examples/stack/hydo.yaml	132	63	4b3aca4d672c8523ab688b09922de75cf3f6cd7ac6f3440f950b639dd2b61860
+chunk	hydo/onboard/examples/stack/hydo.yaml	128	500	cdd60f1e84647a2d16446387a5b153063e274816d6eb4bae38009c142b848f5e
+chunk	hydo/onboard/examples/stack/hydo.yaml	129	500	70ab9b839883e6fb4b1c37ea9daab49f3502b427ad28b57f8aaa5ccfb884170e
+chunk	hydo/onboard/examples/stack/hydo.yaml	130	500	535327a7ea8ffd11404a927862c34e3c714b4627d5bbf9045749821fa147c622
+chunk	hydo/onboard/examples/stack/hydo.yaml	131	379	3529291ce16dfb49be96f3f061f83c34f02bac7826e4872321b7e0c12da36bc6
+manifest	hydo/onboard/examples/nats-jetstream/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	core
 boot	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml#0	snapshot	0b0ff40b1a75762b
-counts	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	identity=326 recovery:ok=93 recovery:violation=3 run:cut=96 run:error=20 run:ok=15 run:violation=209 token:C=100 token:K=170 token:P=160 token:Q=1 token:R=53 token:T=143 token:W=182 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	identity=326 recovery:ok=93 recovery:violation=3 refused=1 run:cut=96 run:error=20 run:ok=15 run:violation=208 token:C=100 token:K=168 token:P=160 token:Q=1 token:R=53 token:T=143 token:W=182 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	0b0ff40b1a75762b
 chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	0	500	42a0e168db5ee32ebeb53bd7a968bb9a9e2d615a718ef44069d8f7042eea8788
 chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	1	500	0f761d0beb808c76f4939c0c7130c85e3b37848a8d1c3045a36220d20ea330a6
@@ -3135,26 +3132,24 @@ chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	409	500	523248fc1
 chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	410	500	aa9b361a7ec65f9aef963e162c6f32e89c9cc066e280e0fce44c6a47bb2aa908
 chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	411	500	8f37de6ca2f49737a05e0cef2f0085551321869e4140a6b9f0b0911d2115adbb
 chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	412	500	6c2a7f59fd6f14873543e0860c6d301b6bea52b44d78a1e1eb4dd69ad466f80c
-chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	413	500	ad5ee06b9ddd1ba7b530a4daadcb3fcdfa54f231aaa17f04348232e264b24bbc
-chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	414	500	a6150ed186a0d1b815471ee1b17df4638d103fa439f07cea36813f01aacdea89
-chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	415	500	0a2fabc1296333e52128b831ef690e0e8dee18d45274f53c1c42662411a100a3
-chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	416	500	a8debb8d02b6b56fc862861c82f6e4e2815d5da96a974069a90dc0e32c7b97b7
-chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	417	500	1eb8d11f13857f0819ee42e36dc497b310ed8b4487f93040093bbf933c8b3302
-chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	418	500	a123f641176865705166dee9c27ef7f5e73752222cfb7e4388fd589b20a0f238
-chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	419	500	606c5f3cf351acb7a123ec10b0d9c3892fc4a9877f34b9d4f883bb2c86703f3b
-chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	420	500	ed713a0f648286fa67b3da753041e947ec3ac0bf98c3843ef40617de0294e347
-chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	421	500	a421f9702852c99dae66041b782e99b09c4b0e82fd1a726a085ea9fdea342eeb
-chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	422	500	a98f069e23dffb34dfccac2e82e7c98643dad5501105f5d39c21fc9f6a01344d
-chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	423	500	e3662541a0c50766bb52701ed88063dd725ca27d1fec5176cfb1956af6611861
-chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	424	500	dd54348c994119be816a21cd82fee409d4dfe369290ded8f78058f079a579ff4
-chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	425	500	11a9da8db4cc1827829a6edfc63e61e5f1a177bac2527d03892aec34cc92704c
-chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	426	500	f08435175cedf812e0b3ab3e69ada0989c1f7ec6cd58de2277e704251751ccdc
-chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	427	500	723d479c60c4e2570066bba14a87731aef3f975557ea0b08590632e8f5a09cf7
-chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	428	500	bbd0c29ed60308e1d208d9819a1adb45f15e3df8c70e0f752a31bcbd04240831
-chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	429	206	37c48fc2219af756441030522139261a3b1d9d598fb36e29aaa91cea8ce4ad7c
+chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	413	500	9e67ae18f2e0539fcd084db06faf68040e99ae206a7ae475fcafd40956e16f5e
+chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	414	500	c8fb51d0c06bfad076c73438109a1adf9e6c1c5a626737152261366c90256e89
+chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	415	500	fbd0f0e8c5055a2d613d357199aa39cb5e6f8390021fc59f97a8ad88bde58213
+chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	416	500	cb7df9fecec7f82a55d6e524199dd2a0645f600f6775b55239dadf0283ed1b69
+chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	417	500	9073ec5ae2b8a5322d2d4140d7a5804c0d845618eb0923ead1d2e084a8fbbfb1
+chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	418	500	11076347d2afe0e5f1ac6659b3aa057aa9d300ff7b44d72f946b00b604857232
+chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	419	500	00f5bcb99281e80bb67ed1380ad8dc735240c6fa02c6e9cf42faeabe2dcad1bb
+chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	420	500	83d025e0e9ec6ff5c985dbf06b70cb4f2ec0461f22d4d586b20200c329c95751
+chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	421	500	ab2a431381db6c7780e71310117d8503c1bbfa4236c69f3cbc8e332b04e6cbd3
+chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	422	500	9dac8856eb03109619d52063584ddaee5b9d3873ad209347e251f2c56aa1b0a7
+chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	423	500	8ecf98aa3066caa178b1646ec9b137d01b4711e01026ac7a91f46b7aa6e87fe9
+chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	424	500	8f766c0e238dff73b1170cf6c4aefe01809adfa55347baa1056d52d1ca9c409a
+chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	425	500	feff63d816851f2364dc808ecdfd4550ecfef97ea21f3473750962e2fe6552e0
+chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	426	500	6bcead56919d4cf248221b7e7e10b9e97ef98f12769245477a78b17240085c7b
+chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	427	377	c7818f359ff79e1e581f38db8684aa4b024f3561c4e0718feb888038d7105068
 manifest	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	core
 boot	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml#0	snapshot	bf32fb0e147550de
-counts	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	identity=317 recovery:error=10 recovery:ok=16 recovery:violation=62 run:cut=88 run:error=20 run:ok=3 run:violation=220 token:C=92 token:K=168 token:P=161 token:Q=1 token:R=56 token:T=147 token:W=165 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	identity=317 recovery:error=10 recovery:ok=16 recovery:violation=62 refused=1 run:cut=88 run:error=20 run:ok=3 run:violation=219 token:C=92 token:K=166 token:P=161 token:Q=1 token:R=56 token:T=147 token:W=165 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	bf32fb0e147550de
 chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	0	500	3114ef01ab3040652a1413f8a1309b000bd7aa85a67be48a2c3178b18bccc70e
 chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	1	500	85c97ef80f59ecaf479c296978e7cc0dcdbe0050d1b3b4c5276df5a64310f83a
@@ -3591,27 +3586,25 @@ chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	431	500	e038d0cb0
 chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	432	500	b4ae15444578bce37b1d06d0069732d15db66bef9a3a342f1cf07f05ef502434
 chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	433	500	7f25ee106860f3547ff2b52cb479e2b0e73d80d44dba7a7f544978a8c99368c4
 chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	434	500	ff8193d25eacde783984986a2dbee9955a2087d030c459a3573d106482c790d4
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	435	500	f7b345edaeae2a68abe3f3c729419fe72f2446ec925aa4131e251475f7cb6510
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	436	500	7b2f7b6b7606807734a2e3b4e9ffc019112315c8c3c3d889aa3b765e8448ba0d
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	437	500	1312a950d99bbc23d6d3459526cc5bcc246612c28003b58bbb591e3bad838651
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	438	500	431164f538ff71ed33e84d0400020da1f59eabcdc2af01643bde4c0549a04c89
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	439	500	8fb6896e1ac78353599f3135812de584c11849ed359dad8d548f69842b2df45f
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	440	500	6bcd71e86210f7ea32200e977d2dd3e1af997fae0bd79869eb38195da1f3bcd6
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	441	500	3e3de63ba11b8edf5a625ce3843be150ca0cbca33247318b0dacfa7ae64dbbfc
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	442	500	06227b4ae6d8f0f73376d11601a991b22ac0e036640ebd07a789b7bde96daa99
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	443	500	cde7d55d07ad1e97f91cafdb8a201a329fff659bc868bd2e9184b6be5c519a51
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	444	500	9dc94ef6f9086673db7b35f5e53068f14f98baa29a1fa0ccf48c54666ca3c665
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	445	500	cf0ec4bbc363b406df623665f62c35443f4a50c5bd6fc1d8dd1b927b0ee4c2cf
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	446	500	446392e5d038f98d663a5797850034d9fadb8083efb7bd82186dca380f30b7ac
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	447	500	d2a9f3e1764da668601bbf232577a57a16b068f778ff3d422e2631c84629c4cd
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	448	500	4ed5eb3c06bc23ed1e42b95117f4ab10958a239542e9eb4de7e2abf64675b9a5
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	449	500	a6172d5f2a8ab94677214d7b206205317a0466e9c18cea34409f018856a6bba7
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	450	500	b506c6f8f2f4411b0ff1c03d841f0cf891fb1873b9fc509255fd0fc9540483d3
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	451	500	b1e8b6b088fec7266d04611335c9e8c2876f69b6b1257c9295e725e3edba90a6
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	452	174	aad1b16ae2dde11a8806dc8423416b6797fd65522ecdba6bcd19021902890f87
+chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	435	500	eecce73efcbed8b4db133a038b6afcdf07f9a73815d6a35650477ae2e35ba1d5
+chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	436	500	5c414a86743a54b2abb05faf1e0a45e2e9a623ae7ef382b28bebfeb49d42a6ac
+chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	437	500	6a6f23f275e7be01ac6d2e954d09c6fec74f8561a423be4e43d179124ffe58d0
+chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	438	500	87c79cdff9a67fd4ad999009ad2106fa5cab694cf6b4079c651c7ebed19c2429
+chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	439	500	e92b1a95ff2206bbd838b17b61bde3e8cb861fac59051398e1686a91ac7fee8b
+chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	440	500	7c25532cbc0addffd9de544979a4edfde856d785115088a7c10955bdb8976aec
+chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	441	500	4b2dbd0a46637ea488567367a5c4e43a8d45e19f1afb9be549c76cb604453a9d
+chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	442	500	a9a174b47ebf88ce5f58a29cf54c9cc9f84e3bf3956c6905d764b95c16b2d5b8
+chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	443	500	a18b5b4594a81e9f0b5ba7dabd7e15b28ee7bdde781ae8d79459b0bab9216b40
+chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	444	500	cf495de76e2f6027d67d290d547127cf3eedfc000995c4b72e012e9e6bebba03
+chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	445	500	ee2dd4a15b00a9d7025b421354a04ad758ef4a6830d16a4cc80b22312ddbdb19
+chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	446	500	e0da4610e15e0c95ea1f631a69ecb6a6829480f8bf529d1015f17ae273a44ab1
+chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	447	500	f576bf2f1653fcc9b0394e2dded0d91280f05da7bae13a59515598e6d4ca5247
+chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	448	500	0174481bb89fad2cf6b6ab74661346a0a2f7ad7dfab6367c25f28ea06442c791
+chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	449	500	e9ede97971a7c4d002448f2ed92f48934739992e0ae253e2deb0fad6dd065b0e
+chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	450	284	b7c921e08a738848790552500fe4997e7d9ef92d27427b1ebb89a6e43c8a5288
 manifest	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	core
 boot	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	hydo/onboard/examples/redis-composed/hydo/hydo.yaml#0	snapshot	3d7720fb41e6e09a
-counts	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	identity=305 recovery:error=8 recovery:ok=18 recovery:violation=65 run:cut=91 run:error=16 run:ok=7 run:violation=205 token:C=95 token:K=157 token:P=147 token:Q=1 token:R=57 token:T=128 token:W=173 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	identity=305 recovery:error=8 recovery:ok=18 recovery:violation=65 refused=1 run:cut=91 run:error=16 run:ok=7 run:violation=204 token:C=95 token:K=155 token:P=147 token:Q=1 token:R=57 token:T=128 token:W=173 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	3d7720fb41e6e09a
 chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	0	500	3114ef01ab3040652a1413f8a1309b000bd7aa85a67be48a2c3178b18bccc70e
 chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	1	500	6e51c13354caa055e911100f991ad073872a06792920ccb1ace01358d41788d8
@@ -4028,26 +4021,24 @@ chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	411	500	d2b94dba03b31f
 chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	412	500	390c93ee0a4d381d230406814f23491bd58c996c1961362adaad9e77c62316b4
 chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	413	500	6994132678f11082949b0ac4eabcbd4bbdcc470b8bd6ddea0a44740d20d29c14
 chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	414	500	431c13052e533b350ae9115da1a3fe8c87cbc21f19a0c4eb6b0b72f2cf50e772
-chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	415	500	d2ab78dc39556f418cc6580806e09b99363fdffcd9ce77b92bb3790ef77872d0
-chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	416	500	97578d7d0d3ef4e6087901aa60187b980ab898f2102f9f42aced2f375d13fa39
-chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	417	500	63ba48619dce60005461168dd0c36c7758b62f361e4bc8402a22c7a96b4c7ce6
-chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	418	500	e45414a64f5e60e3ff4f28a3c750fff73fd5ae10e469f35f4ed2413c05dcdc39
-chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	419	500	f2c28d20171d865fd3c0a4bf88b0210cdf890f704532520962df8738fa561366
-chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	420	500	c9cd65f93f4520675078f5926e8474dd96a20ca7d8b8816062a04904c3c6d001
-chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	421	500	69d09666a6526bb7eddabbf0d30262dccaf1e526478b4278f3ab3e553af9ce12
-chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	422	500	be5c1d4aa74ced90b351e10204721402b1a3f124540d1e173f285a81a6dbe9bf
-chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	423	500	e6b6c78dde71513266b1d0d6eea92617ee2baf98c8480865176f4d57e8ab613a
-chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	424	500	d52358b82a7704329fbd984a306f4f6ea52a055c619b03913682f6345b655004
-chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	425	500	44a35e4f4a5f892df3a03319b3d94336caa2cb25b9e6e6502fffe4bd6ed40d93
-chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	426	500	d4c5b725256373a5d35a7e28552b470d08d4304bf0e409eb391af9a8919ed1dc
-chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	427	500	73baa18d41d84da5deede69f454fc7d7621272f00ce5fd0796fd95e3040482e0
-chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	428	500	e45b8bf1914935c3cabf4f60d5136f0ac0e545e78aca3153dd2f42a5b15e5c78
-chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	429	500	cbb07ca11d6d8d4237c8e9042f179f705f7fa99af0afd72a33b6065306f073d3
-chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	430	500	555d30a5670279633d245928643ce27a3c2c715ab3341b1ea75bc999d25b4633
-chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	431	274	238b290e5562c71962fbd184cb7ddf1491f9062851c34fa0339db67285dc69c5
+chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	415	500	13769f8e032c8c19459177c1cba089dfe8c87d0cb2bc259180e7fb41d28961ec
+chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	416	500	548b01d1341b9df76dc61225752e030df66108d39f48b16a2a522e6eecbda4cc
+chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	417	500	26cbf7d66f221b13d021be599b89b91554bd48b1c3794874340441275107a772
+chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	418	500	4d0e82faeb9c1596a6bff029be9542e8942ce2140b13e7f4820e3e980ea67aeb
+chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	419	500	62ba94d21637e4c8e1a80f2f6e3b2edafe694123b42f38c5621b8d692c7e814f
+chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	420	500	eea5e4d88367fc77fb10f5393177d9bcefec5c9e9e04aee65be48b50c4193bfa
+chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	421	500	248dafe74144376ef343e8a98aabebc03e01aa5fdb06c7c122c20345a28dffb7
+chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	422	500	fdd67ed92d6953abe339c322f7777c79fbe78b1d63787ab2335809ff9f165df5
+chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	423	500	d3d03e616cac2547974c3af72758d2bc370923ec0293cc57d3e781ff586768bc
+chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	424	500	24c77bc18465031cafa0f0fb6ab7d5733ffee4a8d2b1f42076446a2d1c83772a
+chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	425	500	e5ffdde6cf09e58e3ee915b85bc9eef7b2e43c1a0216af59265fa08a4b14c3ca
+chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	426	500	7b95cad5ba6ad326fea8b716d7614aa9cd8b3eb3eea12b85b3edd51436947f84
+chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	427	500	29e1684e98ad00d0c78da4ad8cd9063f51ac9f695f7fdfc3f3d8238d668b003d
+chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	428	500	a4cdecea7f5c4a2aa8af5963e26131eb67f54a482ce5f9621ab136743f83f8c8
+chunk	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	429	387	02220b3e41be527fc0ec45218756a1e268c696095d425f7b9d1cf107600a7ed8
 manifest	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	core
 boot	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	hydo/onboard/examples/redis-errors/hydo/hydo.yaml#0	snapshot	3d7720fb41e6e09a
-counts	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	identity=321 recovery:error=7 recovery:ok=20 recovery:violation=64 run:cut=91 run:error=18 run:ok=4 run:violation=222 token:C=93 token:K=163 token:P=163 token:Q=1 token:R=60 token:T=140 token:W=166 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	identity=321 recovery:error=7 recovery:ok=20 recovery:violation=64 refused=1 run:cut=91 run:error=18 run:ok=4 run:violation=221 token:C=93 token:K=161 token:P=163 token:Q=1 token:R=60 token:T=140 token:W=166 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	3d7720fb41e6e09a
 chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	0	500	200d5b6cf758f75b885236de22a68d924fb36a44a4bf56775a0046a8674ae032
 chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	1	500	96debfdd46fd33f3bb6a612586a29558c30c593c3229434338817278da4163ee
@@ -4525,28 +4516,26 @@ chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	472	500	cdb3346305319c91
 chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	473	500	d32b199b0922bdbf570863a19d847a2a251f3dded92ce2e1bf58e882e94d456a
 chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	474	500	169237078f905b69c3cc3e5d5a8e77018b9749701afb5ff402fe792cdf5c4fa6
 chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	475	500	23c3011b88511afabf513d64ebec5887b0e8a1fcafb981b5ddee3e4f898e04a4
-chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	476	500	d15341da11c1d17a5ccd36ee747f8edb3a5625b53add986c6b482a493c2f8169
-chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	477	500	8170bed1d3f7f347b03bbdee21875e4fc632f9cf4125a82586efa4da7618b167
-chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	478	500	a56fa7d0a09a395f4e66b02b271f10fa18ba3d4169a992542570fc1db96e3ac2
-chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	479	500	9ae2d2ac57a5b58525f1a5b81f8cf6863f90d3a197e385c1c70993ee27e6cd9b
-chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	480	500	49323ed80eb2d039d8c8050f78f04d5c8f8c25161a493e7102278e8b9cb35184
-chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	481	500	38d68a875353f5ae5f6409c37ff52f299014a291b304170fa2721d4b202b3f3b
-chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	482	500	81149b155cfd0af88b18ab5b66eed0754f523592ea4af4af3e3cf9807bfde8b0
-chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	483	500	a8e18b28e773d9b4412f1cac92cb3f11c094ffb017e855ea5446a530704b0d12
-chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	484	500	ef73c14eead14a1f1f713aaac21ae2ea9614ad095cb7dfb32539a988c29083b3
-chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	485	500	5bf62816b2bd6ee3c5371e4100c0d29e4eac4b3d696f7ca4e7aa2a4306582be4
-chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	486	500	8e47a42e0651bc046f97cd53865a959d6de66c17c6792f52c6f5ac549e09e547
-chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	487	500	d95028d460c875cdbfcaa72af5887546999f33f20bbde6c9fa29c468cfb726f1
-chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	488	500	734ff1f8c117a95e656772118925ec7fd1ce58a0207d0ee55e0697daee443247
-chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	489	500	a0c31f718809556024f3a580aba79ea55286b4dee8845d79526fb280e1a98760
-chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	490	500	942811c131d03e2a3c31abdae67945217b79a1ca3746c66988056eb3cfaa43fa
-chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	491	500	2b003e4981af390141511f47daa50cea20546a0e672acf3f612e34a2fe273752
-chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	492	500	2127ce0e6898659ce064a0911405d497c0929645e0efd53c0334b1908eb832ae
-chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	493	500	7f980635e7d98d82f4d748c4fc512b705d95e7a3bdc7b9fec0903527b2238a90
-chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	494	172	7d41813fe1452dbc4c47ede9fc04b66d6dba28fb0c80bc0a2d79cdf4c4989195
+chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	476	500	a727841b9faac7112eb6ad8dd1f5c8de5c9ab4c0c93954ae605ae82c528257f5
+chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	477	500	6427a8618345ab86ded2fff6e8f9adb3067355f31a0f3f8ce4782995f006654f
+chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	478	500	d10fc0da86c380ff600f3507410db8a7f5601e3733ffb28e03b63bf0352e97f4
+chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	479	500	94cdb5120f41f56e5b63cb2a92d04681c89728bba691ba7c3f156242695325b5
+chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	480	500	d9d7a786da57aa03a19e9b23d462dc1dec32bade81af4cceee3dae11b3508d37
+chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	481	500	18a8c84611c05e7948cd983b800ab22d99133fb7e19647e4b8af58161cdbd365
+chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	482	500	3d3c167a8949f419997934fd374766a15868d38420371d02972a686c6c843d11
+chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	483	500	4687e3bd254eaaa859cfcc7e834813f7e2512be797c9370a300945ca6acb399f
+chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	484	500	324b4b0d91ce7c96362e3d126e4e41e25d40c4341da3620807a47f25345e5953
+chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	485	500	f766ab2d73de9e49808d3023650570775f8568362b4591def4baf812edcd44e9
+chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	486	500	3843ed9d1a1c8f9eaf2b3faaaa2354150aad9eae21cc738bece25928c10769d4
+chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	487	500	d2345ba3a462578e03725e0a80685d952d539bda0caa1bf914a5171040364fbb
+chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	488	500	d03ea6cc6f61b2408d473b1bb278219ecc71a086c481a8c4aa547b81d5711d16
+chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	489	500	d70aa157f4c896317bfc0ac8547eb910a1ff329c7ce76b6145fda75dc2b733b0
+chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	490	500	9b36b2b5da4a7eab9259e2e67000ab561608902a033f287c4b92096effc4b183
+chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	491	500	afd65eeb2eebfc544d477e6abbaeaff0e71e9990c0b129e79ba7a18b55b72cd8
+chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	492	223	d1f4a4ff9b90e8c14df81261e13b83f70a88896f14f7d81388adb172fca946f9
 manifest	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	core
 boot	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	hydo/onboard/examples-mac/ledger-spin/hydo.yaml#0	snapshot	dd6cf3dfde93c6ec
-counts	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	identity=138 recovery:ok=4 run:cut=4 run:error=14 run:ok=11 run:violation=121 token:C=4 token:K=92 token:P=90 token:Q=1 token:T=73 token:X=4 token:Z=1 written=12
+counts	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	identity=138 recovery:ok=4 refused=1 run:cut=4 run:error=14 run:ok=11 run:violation=120 token:C=4 token:K=90 token:P=90 token:Q=1 token:T=73 token:X=4 token:Z=1 written=11
 boot-transcript	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	dd6cf3dfde93c6ec
 chunk	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	0	500	3ba80f2fa54f2ea3e85689698160836ffdf071c4d5bf25ed016f50fd19ac9910
 chunk	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	1	500	2ec5b43d3fbdeb8c45aefce1f21468ce4f6dd4492d47b3c7993686fcc83a930a
@@ -4596,13 +4585,13 @@ chunk	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	44	500	c06180f9596ee04ee88
 chunk	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	45	500	59ba9a3a381fdcd4d21226cb499720fd674a2ba0d9be75e2c2b3ea011efd3b8c
 chunk	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	46	500	707c0e28eb9769e3eb20d0da078d87d11bf07c9cb4ccf2e846e179d4ef0ed14d
 chunk	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	47	500	3542a9934f8b9f6f33a1b691c11de55111c42bd2ec45d55de99191de0af3dbcc
-chunk	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	48	500	0eb2ffbedad35128d64b1a4440a06cc063892220cb5db2c4b6ceeaa808e991c8
-chunk	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	49	500	55e7a97009b32aa580c5e3ced38401e85b54e56f014b5933f965baafdc1997fe
-chunk	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	50	500	daf0ed75b006d89bf8860da1f588053d768082e4079d464b4aba482c59dadf39
-chunk	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	51	377	cb185d132dbcf930e5b469d4e48dc490710b747ad5217f03d90451c3bcbff674
+chunk	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	48	500	908d0f2807993181d52df574eea25f8431c47880ddd0bcad2c154fcb972bd70d
+chunk	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	49	500	d570f07388126378097772ec953d8e3687f5fcb7d9d98c5f4d2c4c37ab87cfad
+chunk	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	50	500	2fbc1be5b3b2280a391775ae4f36539e9cc531cceeb8f33646808f50dcf4bc28
+chunk	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	51	213	bd40b33300ddd8bb15555897a5fd860e6e88c5931560b2532489a95bf9461246
 manifest	hydo/onboard/examples-mac/ledger/hydo.yaml	core
 boot	hydo/onboard/examples-mac/ledger/hydo.yaml	hydo/onboard/examples-mac/ledger/hydo.yaml#0	snapshot	dd6cf3dfde93c6ec
-counts	hydo/onboard/examples-mac/ledger/hydo.yaml	identity=243 recovery:ok=4 run:cut=4 run:error=16 run:ok=14 run:violation=221 token:C=4 token:K=143 token:N=96 token:O=24 token:P=128 token:Q=1 token:T=113 token:X=4 token:Z=1 written=12
+counts	hydo/onboard/examples-mac/ledger/hydo.yaml	identity=243 recovery:ok=4 refused=1 run:cut=4 run:error=16 run:ok=14 run:violation=220 token:C=4 token:K=141 token:N=96 token:O=24 token:P=128 token:Q=1 token:T=113 token:X=4 token:Z=1 written=11
 boot-transcript	hydo/onboard/examples-mac/ledger/hydo.yaml	dd6cf3dfde93c6ec
 chunk	hydo/onboard/examples-mac/ledger/hydo.yaml	0	500	7555075c724d9c06d2fd3d6ac2aa50d7c4f1a3f2707365df35af871cc800803a
 chunk	hydo/onboard/examples-mac/ledger/hydo.yaml	1	500	c1c015d620404c8b8c988be7c774be80b92caf79e0a24cf6cb52e8fea91df7ce
@@ -4704,13 +4693,12 @@ chunk	hydo/onboard/examples-mac/ledger/hydo.yaml	96	500	8ac1e895912bdaf9a572c592
 chunk	hydo/onboard/examples-mac/ledger/hydo.yaml	97	500	2e2e3dc7bf541b28424eb54f4b117d01b45ce0c6757af9f6a26595107ed7103a
 chunk	hydo/onboard/examples-mac/ledger/hydo.yaml	98	500	a4cd4ef27206a890e769945aeb8196f2869319c2e044c470d1b73d57ca135cc5
 chunk	hydo/onboard/examples-mac/ledger/hydo.yaml	99	500	0fc30da36825c1ebf2b54df8e959e274ffde78ee52e0176014cfeb8873fc8976
-chunk	hydo/onboard/examples-mac/ledger/hydo.yaml	100	500	fbc43062db5102ab8356953e383dbc79efacb7983bce7f44e515c42843991fa9
-chunk	hydo/onboard/examples-mac/ledger/hydo.yaml	101	500	e173a5cd48b43ca348106fdbebb92f82dde077f198f0f97610cc3b4afca32583
-chunk	hydo/onboard/examples-mac/ledger/hydo.yaml	102	500	7af1f22812137ef22ad8ec5a050f4f1f5280baec0d2c7dd76351e3184e951b62
-chunk	hydo/onboard/examples-mac/ledger/hydo.yaml	103	94	5ad25b49fcf99236f2ce8f064311f9383adb4b9531932b9051d6a7aeab6ec744
+chunk	hydo/onboard/examples-mac/ledger/hydo.yaml	100	500	b307be24a41898809f22f7908fec25ce43b06b2fb61e4eb3280d2fb87f666eeb
+chunk	hydo/onboard/examples-mac/ledger/hydo.yaml	101	500	1c9f7c62846cf3943b7e1a314fb427b7c44078551bffba5f7554aef1b22380e2
+chunk	hydo/onboard/examples-mac/ledger/hydo.yaml	102	430	0b687ae93b0a3964f725db931bf50908e75e6c9218e80538c126592c083ee736
 manifest	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	core
 boot	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	hydo/onboard/examples-mac/redis-bridge/hydo.yaml#0	snapshot	0943e07aac57836a
-counts	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	identity=353 recovery:error=10 recovery:ok=62 recovery:violation=51 run:cut=123 run:error=43 run:ok=169 run:violation=117 token:C=128 token:F=103 token:H=276 token:K=185 token:N=125 token:O=30 token:P=186 token:Q=1 token:T=154 token:X=4 token:Z=1 written=99
+counts	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	identity=353 recovery:error=10 recovery:ok=62 recovery:violation=51 refused=1 run:cut=123 run:error=43 run:ok=168 run:violation=117 token:C=128 token:F=103 token:H=276 token:K=183 token:N=125 token:O=30 token:P=186 token:Q=1 token:T=154 token:X=4 token:Z=1 written=98
 boot-transcript	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	0943e07aac57836a
 chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	0	500	ec63cc30a41dccb4a0c97f906bc4bb3292f3d0572adacf3e0e30091800dc7a5b
 chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	1	500	036dd77a50544ba5eb26670973ee318c1a4b9af2c0bdbc64afc401c82d291b3c
@@ -4854,35 +4842,35 @@ chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	138	500	79a9f2e72b549f8cf
 chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	139	500	67923b56445f2bd1cd9bb7a00ccd66086d0cdeaced537d510c6a24a151969dd1
 chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	140	500	9c92bfac13c9b55e52b4f8a198b4ffc7788917f31aff6b9b2f7e5ba0b7c9ba9a
 chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	141	500	ea1f7f462c529d20b09f183cb33b1f6aeeb2636208bd6fed7db2a15597d1c9ad
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	142	500	6a1e420b32037e137ef1f5ac3f62df5f0c9800d239d7ef917481a60db4044b7b
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	143	500	02e2b1d1b92653137ecf385171c663ad92a98e84a9998c4daa41ea4c3d3bb63d
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	144	500	14baed16a0310c78558b8580e2989d39954fe846bca1acd8520902ccc7d00bb2
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	145	500	d07cfac7a413ef5d590514cbbc0fd6ff3298b35668ebcfb89380f34ee5f45be7
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	146	500	bfc8a1df2803f80965b10afe3617cff00f621c082d93351ba767858da7980e1f
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	147	500	fab3b9d7d2b7f20eed779967f58ee05d4847fd69677d8a9930f59df858d00c02
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	148	500	911a3968aec1f2e356a4ee3f32a5f5eb7dab94763aaca8aa81adc2630a78598f
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	149	500	ccb5db5b52b32fcebfa2d704af95e05b378d38450cafcfcda3b0564fefac48a1
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	150	500	4bb3ad105a91cf18bf3cfacb8acc57f6472ea263f6d66083747b587b00b7f6f7
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	151	500	eef3dc72b4750739a6c87f8b41d3e52677098a5ce29b2d61787b452b7c55133f
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	152	500	fb1f1c0a83bf4844a1a98afc898f55d70708c624e7afaea95e88e7776aeadd1e
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	153	500	74af5b3518b1d7d7736def27cc777713bf72545db2f03042bf3aa02dd0f00c64
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	154	500	22494b19c58e08374ca3ea0687a2de118b94ba07e1e487fb24c192be291918ea
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	155	500	c13927c4b78b54b1417612ddd943d6e4c8f57638d58e9e53a14bd93af1d22328
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	156	500	c948a57d259c66f985336e0bb00ceee4d352bc4c1facfb3c7cc399d5192abef6
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	157	500	45244be0d2910c27d5ae866aa586ba899aa9464fbff559626a517753e43824a6
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	158	500	99161464f3eeab485a62d7786824c4e7e98727b83517fa87badd6841627cf480
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	159	500	7e6ff5022e71d71958323d9445604601ccc30fe85ac8df378079cdfc4dfeb7c4
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	160	500	052bc069b86e3063d548b1e86fdd03c83e39e97155e11113ae269b69f19a6335
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	161	500	a671f5e65504648211ac21d4613e8e5dbc50c45ed51a5217959e859d59212074
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	162	500	395f4903b45a8a17fe6b010c3d1919cb3ac08017474e70655c3eefb37eec3680
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	163	500	05b63b56551e5ec2ace78e0c37df8b58f33e7bf21b147737c985c08dc7557194
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	164	500	7bef46276117a85b4bbf1f43a40e8514839fe0e034867278c7d65f4a44b9f179
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	165	500	5464b58d00a1d35b8b840aaa1cce395fc10d892399615af83da43049dd99926b
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	166	500	fd88f7a50b76f60d4607af48f7fa11809e93a2fd3659c53728134464bdc220bf
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	167	173	64f4e87a9c4c3676102caef991d3d63f8460d0ce65cc5ddd0633316583f6a628
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	142	500	274f05d3e71000ea8ffe331fbab49fcd261928aa38e675e95ec063accc2ae678
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	143	500	2970a72245b65c859cc2795d21cbfbb862dd6ebd9af6d1a1a8792f6c1f787951
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	144	500	1f6dbf3bfa585af4971e1a1d5a830fe6d1b8526537586e2c0d42790b9b647bf9
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	145	500	8e5ddd636ba33a2c3c641ee7742f50b62820f041ec2b9719cbeae79e32e70bc9
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	146	500	6693b65d6fa65a16c348d4162f37604e85b4a7c7047cfded3fdba555f41e0684
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	147	500	edc29cf58b142476f473096635159854de5b0c1b769c746623da3b8aab4873df
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	148	500	54ca889b5eb736ed0f5d4ba3ec8517add319e19780ae73302d31089588aa1700
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	149	500	e175ef06803d3a3ad4f03433f59b2f0f1d591a5fe716f2ae3ef3b768c5a37c94
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	150	500	794e5dd7f20c59610e757198c2ed2953852160b9063be55f3cd50a2220fc407e
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	151	500	d7e1bc2bfdc6df11036953be8c27945bb5c01a1ceafe27c5babe09e90d566a7d
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	152	500	d03aa2fa27d1a41a3ec964966b6b99bb39dce0a4431df15854a94c17c85ee1c5
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	153	500	3f7cea26a3daa6235efd25381be0908c85669ec7fdc0a74fca75f6666286329f
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	154	500	fb133a0c93d1df3ca6c960c0bb2b7cf598965a648f0ac5505748182e1e70ba36
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	155	500	5693704620ce69dc34ecf4523814b170bdd4d54fce1072a044a42c9b5a26830f
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	156	500	ef1027dbb48499534ad248b9f5a2817246623fac6f0a2feb9398a3dce8f05055
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	157	500	b17b0dcdf38bbaea88edc540726238737b90e5eeb118f4729b321074b37e1828
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	158	500	8cf50df98a6d5411352b703754ba5996e2fc3b71c8c12643b54cb83bc3ef3b15
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	159	500	1f18a0d71f2167557a3ec61a0d6194912b2b8dcc33962cad039c4af3b4966778
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	160	500	bc54c1a7f206d52494446de8305e915ba276b5a4e73854b9788b9065dc907840
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	161	500	c7b295afca58274f386593505f7e1c958195922423957bee9e864b801c7d39c2
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	162	500	721059b5954083ada820469e8a779df7dcf9f4f344b29dac65d117dddc6d5263
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	163	500	bbc609990d55a22297ecda7c562ecbdb90affff14708423901cfc61aed3bf6cc
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	164	500	e3e0a52ee6aa1ac233e2db39adc6ab967eda5feee327f4fdb4672ace636d4aa4
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	165	500	f504138498ed70b0f22046b242fa36546083f6dbde664bb5b00f0478d34ad315
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	166	500	fb4e30c29a3231d09750397735bfa0b4ae2b5b0ecd8ad888782c49fca8ad4fe5
+chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	167	58	c733edb810dc19ca88d87855bd7847e4371a387773062ef2a50874acfc235192
 manifest	hydo/onboard/examples-mac/redis-ram/hydo.yaml	core
 boot	hydo/onboard/examples-mac/redis-ram/hydo.yaml	hydo/onboard/examples-mac/redis-ram/hydo.yaml#0	snapshot	a9362b4ee4efcbe4
-counts	hydo/onboard/examples-mac/redis-ram/hydo.yaml	identity=277 recovery:error=7 recovery:ok=42 recovery:violation=21 run:cut=70 run:error=32 run:ok=138 run:violation=51 token:C=71 token:K=154 token:N=103 token:O=25 token:P=146 token:Q=1 token:R=50 token:T=126 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples-mac/redis-ram/hydo.yaml	identity=277 recovery:error=7 recovery:ok=42 recovery:violation=21 refused=1 run:cut=70 run:error=32 run:ok=137 run:violation=51 token:C=71 token:K=152 token:N=103 token:O=25 token:P=146 token:Q=1 token:R=50 token:T=126 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples-mac/redis-ram/hydo.yaml	a9362b4ee4efcbe4
 chunk	hydo/onboard/examples-mac/redis-ram/hydo.yaml	0	500	9e1159cefb65b0874477e9a4aa72deba6118f86cdc43c02f5b46580fe8281724
 chunk	hydo/onboard/examples-mac/redis-ram/hydo.yaml	1	500	4995798acddbb7f2952a10ba854a9cb89738c966254d87554a2a0d2e62a2a053
@@ -4940,12 +4928,12 @@ chunk	hydo/onboard/examples-mac/redis-ram/hydo.yaml	52	500	8e706cc80723692c472d7
 chunk	hydo/onboard/examples-mac/redis-ram/hydo.yaml	53	500	d4fd97471f6a20f559b1c8b0da73ab35eec5a61529a3ec23f13479a1e70cec7b
 chunk	hydo/onboard/examples-mac/redis-ram/hydo.yaml	54	500	85d84fafd035312c0b66cb1b4492a8e65ab3b42e1a09c0cc50cdb623a208f48c
 chunk	hydo/onboard/examples-mac/redis-ram/hydo.yaml	55	500	138bf02a33f9d88ff2dafe45eaad7a2fddcf4c0e56079030aa70a36429698e3f
-chunk	hydo/onboard/examples-mac/redis-ram/hydo.yaml	56	500	6ae6c30ac6831fc2037cbb86cd6c8b723d0dd84087b5931d82e794dcebb0387c
-chunk	hydo/onboard/examples-mac/redis-ram/hydo.yaml	57	500	5ba02e15e219cceaf381cce314611d7be13a639183b3691829690ac25ef32968
-chunk	hydo/onboard/examples-mac/redis-ram/hydo.yaml	58	173	31b7e8469b146119b0fc3e582726ab734b3150d7a87889706c875701b7d694cc
+chunk	hydo/onboard/examples-mac/redis-ram/hydo.yaml	56	500	1b79343d625cce2faaa7d7991e715427168e04e4e576596bff24765afa6dbde7
+chunk	hydo/onboard/examples-mac/redis-ram/hydo.yaml	57	500	811b02a42c3984e42093a8dc95c6b86cefa22f3d16ae8aada35da095b63716cf
+chunk	hydo/onboard/examples-mac/redis-ram/hydo.yaml	58	116	a7e9724f9f1f8e21fb96369f918b9d85bd3c4436ef1ae95702340df295b72830
 manifest	hydo/onboard/examples-mac/redis/hydo-hist.yaml	core
 boot	hydo/onboard/examples-mac/redis/hydo-hist.yaml	hydo/onboard/examples-mac/redis/hydo-hist.yaml#0	snapshot	0fe206755deace6f
-counts	hydo/onboard/examples-mac/redis/hydo-hist.yaml	identity=211 recovery:ok=71 recovery:violation=2 run:cut=73 run:error=9 run:ok=143 token:C=75 token:K=119 token:P=119 token:Q=1 token:R=36 token:T=102 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples-mac/redis/hydo-hist.yaml	identity=211 recovery:ok=71 recovery:violation=2 refused=1 run:cut=73 run:error=9 run:ok=142 token:C=75 token:K=117 token:P=119 token:Q=1 token:R=36 token:T=102 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples-mac/redis/hydo-hist.yaml	0fe206755deace6f
 chunk	hydo/onboard/examples-mac/redis/hydo-hist.yaml	0	500	7d58231e1f779e67e36f7635562742d7151145f5f703f1dbf045701931fb0ea6
 chunk	hydo/onboard/examples-mac/redis/hydo-hist.yaml	1	500	1861305e3b90a8aa4c2b8d48eff2e174c77eedece08daf610325131735b4b5e1
@@ -4977,12 +4965,12 @@ chunk	hydo/onboard/examples-mac/redis/hydo-hist.yaml	26	500	3f65b907a325bfc4d1df
 chunk	hydo/onboard/examples-mac/redis/hydo-hist.yaml	27	500	ca93843d957400d365da9ce6e4896feabd775ad527585e83a7266a062e8d86ff
 chunk	hydo/onboard/examples-mac/redis/hydo-hist.yaml	28	500	d2644799417cd88afca6ae7930aca1640e6c6c3c9eda3030df52b82d151a6d8d
 chunk	hydo/onboard/examples-mac/redis/hydo-hist.yaml	29	500	62d54f3e4e31b3e2d711ad0f9ffce745d4eba4c4cfd7c724de16efaf0667d69b
-chunk	hydo/onboard/examples-mac/redis/hydo-hist.yaml	30	500	af59b1196e488762ed15ff61bc16a70ad4617c783374e12de8c3cfb8cca47b1d
-chunk	hydo/onboard/examples-mac/redis/hydo-hist.yaml	31	500	8cb3d49ae643b822f18ccee3464b9f319ddf70a9f0df21c33ef72547c0802903
-chunk	hydo/onboard/examples-mac/redis/hydo-hist.yaml	32	125	66f6a316d7c73bbbf6a35db2ed2c1868b431b538d14ac89446680b64a4fbbae2
+chunk	hydo/onboard/examples-mac/redis/hydo-hist.yaml	30	500	5526035233c70cb136a10d79a4101214ddfd76a82460ce969e7dc595acb1eeb1
+chunk	hydo/onboard/examples-mac/redis/hydo-hist.yaml	31	500	54c6efe906cbc6363fbd8cb4ca7266cf499798c495adb28169acb69e782474c6
+chunk	hydo/onboard/examples-mac/redis/hydo-hist.yaml	32	66	c7ca852035b75041b759aef0d5b40c7564f34d08be3e23cb0cd28e3edb547e6b
 manifest	hydo/onboard/examples-mac/redis/hydo-read.yaml	core
 boot	hydo/onboard/examples-mac/redis/hydo-read.yaml	hydo/onboard/examples-mac/redis/hydo-read.yaml#0	snapshot	6c66150d5132bb76
-counts	hydo/onboard/examples-mac/redis/hydo-read.yaml	identity=290 recovery:error=5 recovery:ok=57 recovery:violation=12 run:cut=74 run:error=28 run:ok=178 run:violation=24 token:C=77 token:K=159 token:N=104 token:O=23 token:P=152 token:Q=1 token:R=56 token:T=130 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples-mac/redis/hydo-read.yaml	identity=290 recovery:error=5 recovery:ok=57 recovery:violation=12 refused=1 run:cut=74 run:error=28 run:ok=178 run:violation=23 token:C=77 token:K=157 token:N=104 token:O=23 token:P=152 token:Q=1 token:R=56 token:T=130 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples-mac/redis/hydo-read.yaml	6c66150d5132bb76
 chunk	hydo/onboard/examples-mac/redis/hydo-read.yaml	0	500	7dfd840f26f9085eb1d77fcce996895a55e110137c56ee39a5c02e7070f15338
 chunk	hydo/onboard/examples-mac/redis/hydo-read.yaml	1	500	9146c50b88ecda836f173ebbd60c43a799b33f0e81be3adbf9cd3aa914f5dbcc
@@ -5033,11 +5021,11 @@ chunk	hydo/onboard/examples-mac/redis/hydo-read.yaml	45	500	3c6cebfe2b23546f7a29
 chunk	hydo/onboard/examples-mac/redis/hydo-read.yaml	46	500	f9ada3d7e38ac0a282a3ae1915e46f22f12d123e919bd5c4843218960a996bc7
 chunk	hydo/onboard/examples-mac/redis/hydo-read.yaml	47	500	afa6b86578a21a175bc26381079a59ccd35f47fc0e920b72df40a5e89023a2a9
 chunk	hydo/onboard/examples-mac/redis/hydo-read.yaml	48	500	21a76f89a55575a8d66390a2e253fcb82337742946e487bf6d73a88a57f961dc
-chunk	hydo/onboard/examples-mac/redis/hydo-read.yaml	49	500	3d7848ee82240270e536bcfc41afd41f54d0c6804cf79167c5b029d7ab6de755
-chunk	hydo/onboard/examples-mac/redis/hydo-read.yaml	50	267	763c9c5b68fdfa48a7f27e88056c1795605044f08d8c873ae01af99558c83be2
+chunk	hydo/onboard/examples-mac/redis/hydo-read.yaml	49	500	cb54becf76139f8ac4784e110fc2c96883aecced702eafc5c4b3b6b6d1541cd7
+chunk	hydo/onboard/examples-mac/redis/hydo-read.yaml	50	214	bc4a2963f6b4588f0c17c788a1e9fe130d29e35b050666b049de3ebdb522d5ad
 manifest	hydo/onboard/examples-mac/redis/hydo.yaml	core
 boot	hydo/onboard/examples-mac/redis/hydo.yaml	hydo/onboard/examples-mac/redis/hydo.yaml#0	snapshot	0f6ea451bec9c4f4
-counts	hydo/onboard/examples-mac/redis/hydo.yaml	identity=286 recovery:error=6 recovery:ok=69 recovery:violation=3 run:cut=78 run:error=25 run:ok=177 run:violation=20 token:C=80 token:K=157 token:N=105 token:O=27 token:P=156 token:Q=1 token:R=55 token:T=131 token:X=4 token:Z=1 written=14
+counts	hydo/onboard/examples-mac/redis/hydo.yaml	identity=286 recovery:error=6 recovery:ok=69 recovery:violation=3 refused=1 run:cut=78 run:error=25 run:ok=176 run:violation=20 token:C=80 token:K=155 token:N=105 token:O=27 token:P=156 token:Q=1 token:R=55 token:T=131 token:X=4 token:Z=1 written=13
 boot-transcript	hydo/onboard/examples-mac/redis/hydo.yaml	0f6ea451bec9c4f4
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	0	500	79b3d5b5756c6d8befc5a4a82572847e80734dbdde06a028d2dbe145c5f1e2a5
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	1	500	4d7f884fab8e22080f417d0c5f509060c2b51b33f088961b98999cbdd1504938
@@ -5094,7 +5082,6 @@ chunk	hydo/onboard/examples-mac/redis/hydo.yaml	51	500	54a30bcdf02046777262f5d07
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	52	500	29532fc746a3bcca0efce84d207df70a635da1aa6978735476f16b09b4b37f2f
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	53	500	9d16a9d87dc69ea84ea4ea3ff70d791d20b94be914407319c06e4e7a5507323c
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	54	500	14aa44ab99b7756c616ff8c107fb1360d28daf729b1143813204139133ca9e45
-chunk	hydo/onboard/examples-mac/redis/hydo.yaml	55	500	2f8b9c342b263434adf2f8990a5a3efdd493a6f2c920a883bccfd31879ffadd1
-chunk	hydo/onboard/examples-mac/redis/hydo.yaml	56	500	b35ffabb8ef4de98163c26bc40c50270c3281327fccf084ba0c83a32024cf91c
-chunk	hydo/onboard/examples-mac/redis/hydo.yaml	57	27	15ec9ddd30085939f8ffd6677012a230c12a202367a0c14202d693657f4833ba
-refused	
+chunk	hydo/onboard/examples-mac/redis/hydo.yaml	55	500	a74630e03585b2643266eb7c566668ae1d1306a637a4c7ba99ce61dcf61d59a9
+chunk	hydo/onboard/examples-mac/redis/hydo.yaml	56	474	3a5f262dc5e763308883e17eadbf9c26e92fe8519be03e7199869bef5a36cfb2
+refused	other=42

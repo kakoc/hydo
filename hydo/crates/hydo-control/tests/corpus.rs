@@ -34,7 +34,7 @@ use hydo_explore::space::{grpc_targets, Space};
 use hydo_schedule::Schedule;
 use std::collections::{BTreeMap, BTreeSet};
 use support::model::{check, Conv};
-use support::{boot, manifests, plan_of, run_schedule, top, Booted};
+use support::{boot, manifests, model_plan_of, run_schedule, top, Booted};
 
 const FLAGS: [&str; 14] = [
     "TIMING",
@@ -312,7 +312,7 @@ fn the_core_controller_does_what_the_shell_init_does() {
     let mut seams: BTreeMap<String, usize> = BTreeMap::new();
     for m in manifests() {
         inputs.push(m.clone());
-        let plan = match plan_of(&m) {
+        let plan = match model_plan_of(&m) {
             Ok(p) => p,
             Err(e) => {
                 golden.push(format!("manifest\t{m}\tnot core: {e}"));

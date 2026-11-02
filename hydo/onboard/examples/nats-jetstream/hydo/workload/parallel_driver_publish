@@ -1,0 +1,16 @@
+#!/bin/sh
+# hydo: timeout=15
+# Publish one unique value to the stream and record what the client saw (Jepsen's queue
+# workload: the value is the operation id). The client gives up after 2 s connecting and
+# 3 s waiting for the JetStream acknowledgement.
+. /hydo/workload/helper_lib.sh
+id=$HYDO_CMD_ID
+out=$(timeout 10 $NJ pub "$id" 2>&1); rc=$?
+echo "$out"
+case $rc in
+  0) echo "$id" >> "$HYDO_ACKED"; echo "$id ack" >> "$HYDO_OUTCOMES"
+     # an SDK-style record (the shell SDK's wire format): reactions (A=) can act on it
+     assert_sometimes nats.publish_acked "a publish was acknowledged by JetStream" ;;
+  1) echo "$id failed" >> "$HYDO_OUTCOMES"; exit 1 ;;     # no server took the request
+  *) echo "$id unknown" >> "$HYDO_OUTCOMES"; exit 1 ;;    # timeout: maybe stored
+esac

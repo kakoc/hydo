@@ -1,0 +1,75 @@
+{
+ "generated_by": "hvx/onboard/hydo-compose",
+ "images": {
+  "nats:2.10.22-alpine": {
+   "index_digest": "sha256:73b0ba5fec5518c5f698597c58d2a3350a2b5ccae43e84c308f8d2da1242deca",
+   "name": "nats",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "nats-server",
+       "--config",
+       "/etc/nats/nats-server.conf"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "NATS_SERVER=2.10.22"
+      ],
+      "ExposedPorts": {
+       "4222/tcp": {},
+       "6222/tcp": {},
+       "8222/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:aa536352f09b109b909e8bfbf9859a40601481bb3742ebc7a09cfaf638622407",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "nats-server",
+       "--config",
+       "/etc/nats/nats-server.conf"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "NATS_SERVER=2.10.22"
+      ],
+      "ExposedPorts": {
+       "4222/tcp": {},
+       "6222/tcp": {},
+       "8222/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:a7f055eca1521c7f5a89ba5f3dcbff015d57b7a929f8653829c4e6f84164ff2b",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "nats:2.10.22-alpine",
+   "registry": "docker.io",
+   "repo": "library/nats",
+   "tag": "2.10.22-alpine"
+  }
+ }
+}
