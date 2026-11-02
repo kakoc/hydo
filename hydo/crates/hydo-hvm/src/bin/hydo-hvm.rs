@@ -13,18 +13,19 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     {
+        // the engine's options, read once here (hydo_config, M144)
+        let o = hydo_hvm::serve::HvmOptions::from_env(&hydo_config::Env::process());
         if args.get(1).map(String::as_str) == Some("hvm") {
             let mut a = args.clone();
             a.remove(1);
-            let get = |k: &str| std::env::var(k).ok();
             std::process::exit(hydo_hvm::hvm_main::main_with(
                 &a,
-                &get,
+                &o,
                 Box::new(std::io::stdout()),
                 Box::new(std::io::stderr()),
             ));
         }
-        std::process::exit(hydo_hvm::serve::main_stdio(&args));
+        std::process::exit(hydo_hvm::serve::main_stdio(&args, &o));
     }
     #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
     {

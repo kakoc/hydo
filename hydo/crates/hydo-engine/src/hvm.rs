@@ -37,32 +37,34 @@ pub struct Hvm {
     /// The engine program ([`program`]: `hydo-hvm`, or the C `hv/hvm/explore/hvmx`), signed with
     /// the hypervisor entitlement (a `hydo-hvm` that is not gets signed before it runs).
     pub hvmx: PathBuf,
-    /// Environment for the engine process.
+    /// Environment for the engine process (on top of this process's); an engine in this process
+    /// reads the configuration variables among them on top of `config`.
     pub env: Vec<(String, String)>,
+    /// The configuration the program read at its start (`hydo_config::Env::process`, M144):
+    /// where the engine runs and, for an engine in this process, its options.
+    pub config: hydo_config::Env,
 }
 
 impl Hvm {
     /// The release (and repository) layout: the engine [`program`] of `root`.
-    pub fn for_release(root: &Path) -> Hvm {
+    pub fn for_release(root: &Path, config: hydo_config::Env) -> Hvm {
         Hvm {
-            hvmx: program(root),
+            hvmx: program(root, &hydo_config::hvm::Engine::from_env(&config)),
             env: Vec::new(),
+            config,
         }
     }
 
-    /// The value of `k` for the engine: this value's `env`, else this process's environment.
-    pub(crate) fn lookup(&self, k: &str) -> Option<String> {
-        self.env
-            .iter()
-            .rev()
-            .find(|(a, _)| a == k)
-            .map(|(_, v)| v.clone())
-            .or_else(|| std::env::var(k).ok())
+    /// The configuration an engine in this process sees: `config`, then `env` on top.
+    pub(crate) fn engine_env(&self) -> hydo_config::Env {
+        self.config
+            .with(self.env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
     }
 
     /// Whether the engine runs in this process (`HYDO_HVM=inproc`).
     pub fn in_process(&self) -> bool {
-        self.lookup("HYDO_HVM").as_deref() == Some("inproc")
+        hydo_config::hvm::Engine::from_env(&self.engine_env()).choice
+            == hydo_config::hvm::Choice::InProcess
     }
 
     pub fn argv(&self, spec: &BootSpec, mode: &str) -> Vec<String> {
@@ -82,7 +84,7 @@ impl Hvm {
             c.env(k, v);
         }
         if let Some(d) = disk_for(&spec.image) {
-            c.env("HVM_DISK", d);
+            c.env(hydo_config::registry::HVM_DISK, d);
         }
         c
     }
@@ -139,12 +141,12 @@ impl Hvm {
 /// `HYDO_HVM=c` the C engine `hv/hvm/explore/hvmx` (kept for one milestone after M143); else the
 /// Rust engine, a tree's `target/release/hydo-hvm` or a release's `bin/hydo-hvm`; else (a release
 /// built before M143) the C engine.
-pub fn program(root: &Path) -> PathBuf {
-    if let Some(p) = std::env::var_os("HYDO_HVM_ENGINE").filter(|v| !v.is_empty()) {
-        return PathBuf::from(p);
+pub fn program(root: &Path, e: &hydo_config::hvm::Engine) -> PathBuf {
+    if let Some(p) = &e.program {
+        return p.clone();
     }
     let c = root.join("hv").join("hvm").join("explore").join("hvmx");
-    if std::env::var("HYDO_HVM").as_deref() == Ok("c") {
+    if e.choice == hydo_config::hvm::Choice::C {
         return c;
     }
     for p in [

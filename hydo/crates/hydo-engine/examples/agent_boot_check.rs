@@ -637,6 +637,7 @@ fn main() {
                         "HVM_SNAP_DIR".into(),
                         out.join("snap").display().to_string(),
                     )],
+                    config: hydo_config::Env::process(),
                 };
                 let spec = BootSpec {
                     image: PathBuf::from(&a[3]),

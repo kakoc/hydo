@@ -519,6 +519,7 @@ name = "hydo-hvm"
 version = "0.1.0"
 dependencies = [
  "flate2",
+ "hydo-config",
  "hydo-engine-proto",
  "hydo-hvx",
  "hydo-schedule",

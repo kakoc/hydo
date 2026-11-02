@@ -465,6 +465,6 @@ pub trait Worker {
 pub fn native(root: &std::path::Path, config: hydo_config::Env) -> Box<dyn Engine> {
     match EngineKind::native() {
         EngineKind::Hvx => Box::new(hvx::Hvx::for_release(root, config)),
-        EngineKind::Hvm => Box::new(hvm::Hvm::for_release(root)),
+        EngineKind::Hvm => Box::new(hvm::Hvm::for_release(root, config)),
     }
 }

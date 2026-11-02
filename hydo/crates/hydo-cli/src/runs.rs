@@ -230,7 +230,7 @@ fn run_engine(
         Platform::Mac => {
             let kernel = mac_kernel_for(ctx, image, quiet);
             let spec = spec_from_args(eargs, image, kernel, None, outdir);
-            one(Arc::new(Hvm::for_release(&ctx.root)), &spec)
+            one(Arc::new(Hvm::for_release(&ctx.root, ctx.config.env.clone())), &spec)
         }
     }
     .unwrap_or_else(|e| die(&format!("cannot start the engine: {e}")));

@@ -10,7 +10,7 @@
 
 use crate::layout::*;
 use crate::machine::{Pct, Tjit};
-use crate::serve::{opts_from, Lookup};
+use crate::serve::{opts_from, HvmOptions};
 use crate::vmm::{now_s, Vmm};
 use crate::{catch_fatal, fatal, say, Diag};
 use hydo_hvx::cstr::{self, Scan};
@@ -101,16 +101,16 @@ fn dump_state(vm: &Vmm, prefix: &str) {
 /// hvm's `main` (`args[0]` is the program, `args[1]` the mode).
 pub fn main_with(
     args: &[String],
-    get: Lookup,
+    o: &HvmOptions,
     out: Box<dyn Write + Send>,
     diag: Box<dyn Write + Send>,
 ) -> i32 {
     let diag: Diag = Arc::new(Mutex::new(diag));
     let d2 = diag.clone();
-    catch_fatal(&d2, move || hvm_main(args, get, out, diag))
+    catch_fatal(&d2, move || hvm_main(args, o, out, diag))
 }
 
-fn hvm_main(args: &[String], get: Lookup, mut out: Box<dyn Write + Send>, diag: Diag) -> i32 {
+fn hvm_main(args: &[String], o: &HvmOptions, mut out: Box<dyn Write + Send>, diag: Diag) -> i32 {
     if args.len() < 4 {
         say(
             &diag,
@@ -121,8 +121,10 @@ fn hvm_main(args: &[String], get: Lookup, mut out: Box<dyn Write + Send>, diag: 
     let mode = args[1].as_str();
     let kernel = std::fs::read(&args[2]).unwrap_or_else(|e| fatal(1, &format!("{}: {e}", args[2])));
     let initrd = std::fs::read(&args[3]).unwrap_or_else(|e| fatal(1, &format!("{}: {e}", args[3])));
-    let mut vo = opts_from(get, false);
-    vo.ram_size = (get("HVM_MEM_MB")
+    let mut vo = opts_from(o, false);
+    vo.ram_size = (o
+        .mem_mb
+        .clone()
         .map(|v| cstr::atoi(v.as_bytes()))
         .unwrap_or(256) as i64 as u64)
         << 20;
@@ -133,15 +135,15 @@ fn hvm_main(args: &[String], get: Lookup, mut out: Box<dyn Write + Send>, diag: 
         );
         return 2;
     }
-    let max_exits = get("HVM_MAX_EXITS").map(|v| cstr::strtoull0(v.as_bytes()));
-    let dump = get("HVM_DUMP");
+    let max_exits = o.max_exits.clone().map(|v| cstr::strtoull0(v.as_bytes()));
+    let dump = o.dump.clone();
     let echo: Option<Box<dyn Write + Send>> = Some(Box::new(std::io::stdout()));
     let echo_on = vo.echo;
     let mut vm = Vmm::new(&vo, &kernel, &initrd, diag.clone(), echo, false);
     if let Some(m) = max_exits {
         vm.max_exits = m;
     }
-    if let Some(p) = get("HVM_PCT") {
+    if let Some(p) = o.pct.clone() {
         let mut sc = Scan::new(p.as_bytes());
         let sd = sc.hex().unwrap_or(0);
         let n = if sc.lit(",").ok() {
@@ -161,7 +163,7 @@ fn hvm_main(args: &[String], get: Lookup, mut out: Box<dyn Write + Send>, diag: 
         };
         vm.pct = Pct::set(sd, n, lo, hi);
     }
-    if let Some(p) = get("HVM_TJ") {
+    if let Some(p) = o.tj.clone() {
         let mut sc = Scan::new(p.as_bytes());
         let mut t = Tjit {
             seed: sc.hex().unwrap_or(0),

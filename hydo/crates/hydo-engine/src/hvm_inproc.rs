@@ -8,8 +8,9 @@
 //! (a second in-process engine while one runs ends with an error naming the limit; a pool of
 //! several workers needs the program), and the process itself must be signed with the hypervisor
 //! entitlement (`codesign --force --entitlements hv/hvm/hv.entitlements -s - <program>`).
-//! The engine thread's environment is this process's, then [`Hvm::env`], then `HVM_DISK` (the
-//! image's data disk, as the program gets it).
+//! The engine thread's options are the configuration the program read at its start
+//! ([`Hvm::config`]), then [`Hvm::env`], then `HVM_DISK` (the image's data disk, as the program
+//! gets it).
 
 use crate::hvm::{disk_for, Hvm};
 use crate::process::Proc;
@@ -20,19 +21,13 @@ use std::io::Write;
 use std::path::Path;
 use std::time::Instant;
 
-/// The environment the engine thread sees.
-fn lookup(h: &Hvm, spec: &BootSpec) -> impl Fn(&str) -> Option<String> + Send + 'static {
-    let mut over: Vec<(String, String)> = h.env.clone();
+/// The engine's options: the configuration, the [`Hvm::env`] pairs, then `HVM_DISK`.
+fn options(h: &Hvm, spec: &BootSpec) -> hydo_config::hvm::Options {
+    let mut e = h.engine_env();
     if let Some(d) = disk_for(&spec.image) {
-        over.push(("HVM_DISK".into(), d.display().to_string()));
+        e = e.with([(hydo_config::registry::HVM_DISK, d.display().to_string())]);
     }
-    move |k: &str| {
-        over.iter()
-            .rev()
-            .find(|(a, _)| a == k)
-            .map(|(_, v)| v.clone())
-            .or_else(|| std::env::var(k).ok())
-    }
+    hydo_config::hvm::Options::from_env(&e)
 }
 
 /// What the engine boots and how (the program's modes).
@@ -56,7 +51,7 @@ fn spawn(
 ) -> Result<crate::process::Started, EngineError> {
     use hydo_hvm::serve::{run, Mode, Start};
     use hydo_hvx::port::ChanPort;
-    let get = lookup(h, spec);
+    let o = options(h, spec);
     let s = schedule.cloned();
     let mode = match how {
         How::One | How::ControlOne | How::ControlBootOne => Mode::One(s.expect("a schedule")),
@@ -81,7 +76,7 @@ fn spawn(
     }
     let j = std::thread::Builder::new()
         .name("hvm-engine".into())
-        .spawn(move || run(start, &get, Box::new(port), diag, None))
+        .spawn(move || run(start, &o, Box::new(port), diag, None))
         .map_err(EngineError::Io)?;
     Ok(crate::process::Started {
         proc: Proc::Thread(Some(j)),
@@ -98,7 +93,7 @@ fn spawn(
     diag: Box<dyn Write + Send>,
     echo: Option<std::sync::Arc<std::sync::Mutex<Vec<u8>>>>,
 ) -> Result<crate::process::Started, EngineError> {
-    let _ = (lookup(h, spec), how, schedule, diag, echo);
+    let _ = (options(h, spec), how, schedule, diag, echo);
     Err(EngineError::Unsupported(
         "the in-process Mac engine needs macOS on Apple Silicon".into(),
     ))

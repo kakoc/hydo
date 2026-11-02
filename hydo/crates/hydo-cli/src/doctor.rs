@@ -361,7 +361,7 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         false,
     );
     // the engine hydo runs (M143: bin/hydo-hvm, the Rust engine; HYDO_HVM=c: the C hvmx)
-    let hvmx = hydo_engine::hvm::program(&ctx.root);
+    let hvmx = hydo_engine::hvm::program(&ctx.root, &ctx.config.hvm);
     for p in [
         hvmx.clone(),
         ctx.p("hv/hvm/hvm"),

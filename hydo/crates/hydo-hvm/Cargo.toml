@@ -14,6 +14,8 @@ hydo-hvx = { workspace = true }
 # the typed engine calls (M142) and the one schedule parser
 hydo-engine-proto = { workspace = true }
 hydo-schedule = { workspace = true }
+# the engine's options, read once by the program's main (M144)
+hydo-config = { workspace = true }
 
 [[bin]]
 name = "hydo-hvm"

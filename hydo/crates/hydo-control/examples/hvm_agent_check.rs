@@ -34,6 +34,7 @@ fn main() {
             "HVM_SNAP_DIR".into(),
             outdir.join("snap").display().to_string(),
         )],
+        config: hydo_config::Env::process(),
     });
     let engine = match AgentEngine::for_image(inner, &image) {
         Ok(Some(e)) => e,

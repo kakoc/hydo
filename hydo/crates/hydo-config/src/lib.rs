@@ -13,7 +13,7 @@
 //!   `hydo-grpc-gen`, `hydo-nix-fetch`). It is the only code that reads hydo's variables from the
 //!   environment.
 //! - [`Config`] is the typed configuration, grouped by owner ([`engine::Engine`],
-//!   [`hvx::Options`], [`run::Paths`], [`run::Pool`], [`run::Bench`], [`run::Control`],
+//!   [`hvx::Options`], [`hvm::Engine`], [`hvm::Options`], [`run::Paths`], [`run::Pool`], [`run::Bench`], [`run::Control`],
 //!   [`run::Cli`], [`build::Build`], [`tools::Tools`]); each field's doc comment names its
 //!   variable and default. A program builds it from its [`Env`] and passes the groups down
 //!   explicitly; a library never reads the environment.
@@ -57,6 +57,7 @@
 pub mod build;
 pub mod engine;
 mod env;
+pub mod hvm;
 pub mod hvx;
 pub mod registry;
 pub mod run;
@@ -71,6 +72,8 @@ pub struct Config {
     /// them with one engine's overrides on top).
     pub env: Env,
     pub engine: engine::Engine,
+    /// The Mac engine's choice (the engine's own options: [`hvm::Options`], read from `env`).
+    pub hvm: hvm::Engine,
     pub paths: run::Paths,
     pub pool: run::Pool,
     pub bench: run::Bench,
@@ -85,6 +88,7 @@ impl Config {
         Config {
             env: e.clone(),
             engine: engine::Engine::from_env(e),
+            hvm: hvm::Engine::from_env(e),
             paths: run::Paths::from_env(e),
             pool: run::Pool::from_env(e),
             bench: run::Bench::from_env(e),

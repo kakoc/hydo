@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-36 user-facing and 44 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 32 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 2 are set for programs hydo starts. 5 variables were removed in M144. Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+41 user-facing and 76 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 32 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 0 are set for programs hydo starts. 5 variables were removed in M144. Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -85,11 +85,53 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_BENCH_KIND` | developer | word; empty = unset | agent | hydo-bench | The image kind when `--kind` is not given: `agent`, `shell` or `stack` (M135). |
 | `HYDO_M59_SUFFIX` | developer | text (empty is a value) | -pin-kr | hydo-bench | The stack images' m59 suffix (`-pin` the earlier set, empty the first build). |
 
+## The Mac engine (`hydo_config::hvm::Engine`, `hydo_config::hvm::Options`)
+
+| Variable | Kind | Type | Default | Readers | What it does |
+|---|---|---|---|---|---|
+| `HYDO_HVM` | user | word: c \| inproc | the program hydo-hvm | hydo-engine, hydo-cli | Which Mac engine runs: `c` the C hvmx (one milestone after M143), `inproc` the Rust engine in this process (one VM per process; the process needs the hypervisor entitlement); else the Rust program `hydo-hvm`. |
+| `HYDO_HVM_ENGINE` | user | path | <root>/target/release/hydo-hvm, else <root>/bin/hydo-hvm, else hv/hvm/explore/hvmx | hydo-engine | The Mac engine program (an empty value means the default). |
+| `HVM_DISK` | user | path | - | hydo-hvm, hvm, hvmx (set by hydo-engine) | The data disk (virtio-blk); hydo-engine sets it for an image with a `-disk.img`. |
+| `HVM_DISK_OUT` | developer | path | - | hydo-hvm hvm, hvm | hvm writes the durable disk image here at its end (flushed bytes only). |
+| `HVM_MEM_MB` | user | number | 1024 (hvm: 256) | hydo-hvm, hvm, hvmx | Guest RAM in MiB (hvmx 256..4096, default 1024; hvm default 256); `--ram-mib` wins. |
+| `HVM_STEP` | developer | number | 64 | hydo-hvm, hvm, hvmx | Virtual ticks of the 24 MHz counter per VM exit. |
+| `HVM_MAX_EXITS` | developer | number | 200000000 | hydo-hvm hvm, hvm | hvm's exit budget. |
+| `HVM_RUN_EXITS` | developer | number | 50000000 | hydo-hvm, hvmx | hvmx's exit budget per phase of a run. |
+| `HVM_ECHO` | developer | flag: set | - | hydo-hvm, hvm, hvmx | Set: copy the console to stdout as it is written. |
+| `HVM_TRACE` | developer | path | - | hydo-hvm, hvm, hvmx | One line per VM exit into this file (and the interrupted PC at each acknowledge). |
+| `HVM_TRACE_WATCH` | developer | number | - | hydo-hvm, hvm, hvmx | With HVM_TRACE: log the guest u64 at this RAM offset at every exit. |
+| `HVM_TRACE_SYSREG` | developer | flag: set | - | hydo-hvm, hvm, hvmx | Set: log unknown system-register traps. |
+| `HVM_BOOTARGS` | developer | text | console=ttyS0 ... random.trust_bootloader=on | hydo-hvm, hvm, hvmx | The guest kernel's command line (hvmx appends `hydo_phase=serve` or `quiet loglevel=1`). |
+| `HVM_SPIN_SECS` | developer | number | 10 | hydo-hvm, hvm, hvmx | Seconds of exit-free host time after which a spin with no provable loop ends the run. |
+| `HVM_SPIN_MS` | developer | number | 5 | hydo-hvm, hvm, hvmx | Milliseconds of exit-free host time before the spin observer looks (a hint only). |
+| `HVM_SPIN_OBSERVE` | developer | flag: not `0` | on | hydo-hvm, hvm, hvmx | `0`: no spin observer (the bare watchdog). |
+| `HVM_SPLOG` | developer | path | - | hydo-hvm, hvm, hvmx | The spin observer's log file. |
+| `HVM_PCT` | developer | text | - | hydo-hvm hvm, hvm | hvm: forced preemption points for the whole run (`<hex seed>,<points>,<first>,<last>`). |
+| `HVM_TJ` | developer | text | - | hydo-hvm hvm, hvm | hvm: tick jitter for the whole run (`<hex seed>,<permille>,<max>[,<lo>,<hi>]`). |
+| `HVM_SOFT_IRQ` | developer | number | 1 (hvm: 0) | hydo-hvm, hvm, hvmx | Deliver IRQs by emulating the exception entry (`0`: the vCPU's IRQ line). |
+| `HVM_DUMP` | developer | path | - | hydo-hvm hvm, hvm | hvm: write `<prefix>.regs` and `<prefix>.ram` at the stop. |
+| `HVM_FAULT` | developer | number | - | hydo-hvm, hvm, hvmx | The disk's fault seed (hvmx: the flush-aware class at probability 0 when unset). |
+| `HVM_FAULT_CLASSES` | developer | list | error | hydo-hvm, hvm, hvmx | The disk's fault classes (`delay,error,drop,reorder,torn,unflushed` or a number). |
+| `HVM_FAULT_PROB` | developer | number | 100 | hydo-hvm, hvm, hvmx | The disk faults' probability in percent. |
+| `HVM_FAULT_MAXDELAY` | developer | number | 8 | hydo-hvm, hvm, hvmx | The longest disk delay in exits. |
+| `HVM_NET` | developer | flag: set | - | hydo-hvm, hvm, hvmx | Set: attach the virtio-net device. |
+| `HVM_NET_RX` | developer | path | - | hydo-hvm, hvm, hvmx | Scripted inbound frames (`[u16 big-endian length][frame]...`). |
+| `HVM_NET_RX_PACE` | developer | number | 4800000 | hydo-hvm, hvm, hvmx | Virtual ticks between two delivered inbound frames. |
+| `HVM_NET_TX_OUT` | developer | path | - | hydo-hvm hvm, hvm | Captured outbound frames are written here at the end (hvm). |
+| `HVM_NET_FAULT` | developer | number | - | hydo-hvm, hvm, hvmx | The network fault seed. |
+| `HVM_NET_FAULT_CLASSES` | developer | list | drop | hydo-hvm, hvm, hvmx | The network fault classes (`drop,corrupt,dup` or a number). |
+| `HVM_NET_FAULT_PROB` | developer | number | 100 | hydo-hvm, hvm, hvmx | The network faults' probability in percent. |
+| `HVM_SNAP_DIR` | user | path | /tmp/hvm-snap | hydo-hvm, hvmx | Where the engine makes (and unlinks at once) its snapshot files. |
+| `HVMX_DIAG` | developer | flag: set | - | hydo-hvm, hvmx | Set: per-component hashes of a run's end state into `<outdir>/<tag>.diag`. |
+| `HVMX_DIAG_CHUNKS` | developer | list | - | hydo-hvm, hvmx | With HVMX_DIAG: raw copies of these 1 MiB chunks of RAM (comma-separated offsets). |
+| `HVMX_CHECK_RESTORE` | developer | flag: set | - | hydo-hvm, hvmx | Set: read the registers back after every restore and report differences. |
+| `HVMX_NO_MLOCK` | developer | flag: set | - | hydo-hvm, hvmx | Set: do not mlock guest RAM. |
+
 ## The host controller (`hydo_config::run::Control`)
 
 | Variable | Kind | Type | Default | Readers | What it does |
 |---|---|---|---|---|---|
-| `HVM_SPIN_REWIND` | user | flag: exactly `0` turns it off | on | hydo-control, hvmx | `0`: the host does not run a SPIN of an agent image on hvm again in the rewind mode (hvmx reads it for a shell image's RUN). |
+| `HVM_SPIN_REWIND` | user | flag: exactly `0` turns it off | on | hydo-control, hydo-hvm, hvmx | `0`: the host does not run a SPIN of an agent image on hvm again in the rewind mode (hvmx reads it for a shell image's RUN). |
 
 ## The `hydo` command (`hydo_config::run::Cli`)
 
@@ -213,8 +255,6 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 
 | Variable | Kind | Type | Default | Readers | What it does |
 |---|---|---|---|---|---|
-| `HVM_DISK` | passed | path | - | set by hydo-engine and hydo-build for hvm/hvmx | The hvm program's disk image. |
-| `HVM_DISK_OUT` | passed | path | - | set by hydo-build for hvm | The hvm program's disk output. |
 
 ## Removed in M144
 

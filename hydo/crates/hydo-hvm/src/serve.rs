@@ -81,8 +81,8 @@ pub enum Mode {
     Serve { boot: Option<Schedule> },
 }
 
-/// The environment the engine reads (getenv in the C engine), as a lookup.
-pub type Lookup<'a> = &'a dyn Fn(&str) -> Option<String>;
+/// The engine's options (hvm.c's and serve.c's environment variables, M144's typed group).
+pub use hydo_config::hvm::Options as HvmOptions;
 
 /// A run from the workload's start on: what run_rest needs, and what a SNAP keeps (`struct runst`).
 #[derive(Clone, Default, Debug)]
@@ -1521,23 +1521,22 @@ fn ram_mib_parse(v: &str, what: &str, diag: &Diag) -> Option<u64> {
 }
 
 /// The settings from the environment (hvm.c's and serve.c's getenv calls).
-pub fn opts_from(get: Lookup, hvmx: bool) -> VmOpts {
-    let f = |k: &str| get(k);
-    let spin_rewind = f("HVM_SPIN_REWIND");
+pub fn opts_from(o: &HvmOptions, hvmx: bool) -> VmOpts {
+    let spin_rewind = o.spin_rewind.clone();
     let mut virt = virtio::Config {
-        disk: f("HVM_DISK"),
-        disk_out: f("HVM_DISK_OUT"),
-        fault: f("HVM_FAULT"),
-        fault_classes: f("HVM_FAULT_CLASSES"),
-        fault_prob: f("HVM_FAULT_PROB"),
-        fault_maxdelay: f("HVM_FAULT_MAXDELAY"),
-        net: f("HVM_NET").is_some(),
-        net_rx: f("HVM_NET_RX"),
-        net_rx_pace: f("HVM_NET_RX_PACE"),
-        net_tx_out: f("HVM_NET_TX_OUT"),
-        net_fault: f("HVM_NET_FAULT"),
-        net_fault_classes: f("HVM_NET_FAULT_CLASSES"),
-        net_fault_prob: f("HVM_NET_FAULT_PROB"),
+        disk: o.disk.clone(),
+        disk_out: o.disk_out.clone(),
+        fault: o.fault.clone(),
+        fault_classes: o.fault_classes.clone(),
+        fault_prob: o.fault_prob.clone(),
+        fault_maxdelay: o.fault_maxdelay.clone(),
+        net: o.net,
+        net_rx: o.net_rx.clone(),
+        net_rx_pace: o.net_rx_pace.clone(),
+        net_tx_out: o.net_tx_out.clone(),
+        net_fault: o.net_fault.clone(),
+        net_fault_classes: o.net_fault_classes.clone(),
+        net_fault_prob: o.net_fault_prob.clone(),
     };
     if hvmx && virt.disk.is_some() && virt.fault.is_none() {
         // negotiate FLUSH: flush-aware class at probability 0
@@ -1545,34 +1544,40 @@ pub fn opts_from(get: Lookup, hvmx: bool) -> VmOpts {
         virt.fault_classes = Some("unflushed".into());
         virt.fault_prob = Some("0".into());
     }
-    let soft = f("HVM_SOFT_IRQ").map(|v| cstr::atoi(v.as_bytes()) != 0);
+    let soft = o.soft_irq.clone().map(|v| cstr::atoi(v.as_bytes()) != 0);
     VmOpts {
         ram_size: 0,
-        step: f("HVM_STEP")
+        step: o
+            .step
+            .clone()
             .map(|v| cstr::strtoull0(v.as_bytes()))
             .unwrap_or(64),
-        echo: f("HVM_ECHO").is_some(),
-        trace: f("HVM_TRACE"),
-        trace_watch: f("HVM_TRACE_WATCH"),
-        trace_sysreg: f("HVM_TRACE_SYSREG").is_some(),
-        spin_secs: f("HVM_SPIN_SECS").map(|v| cstr::atof(&v)).unwrap_or(10.0),
-        kick_s: f("HVM_SPIN_MS")
+        echo: o.echo,
+        trace: o.trace.clone(),
+        trace_watch: o.trace_watch.clone(),
+        trace_sysreg: o.trace_sysreg,
+        spin_secs: o.spin_secs.clone().map(|v| cstr::atof(&v)).unwrap_or(10.0),
+        kick_s: o
+            .spin_ms
+            .clone()
             .map(|v| cstr::atof(&v) / 1000.0)
             .unwrap_or(0.005),
-        spin_observe: f("HVM_SPIN_OBSERVE")
+        spin_observe: o
+            .spin_observe
+            .clone()
             .map(|v| cstr::atoi(v.as_bytes()) != 0)
             .unwrap_or(true),
         rw_on: spin_rewind.as_deref() == Some("1"),
-        splog: f("HVM_SPLOG"),
+        splog: o.splog.clone(),
         soft_irq: soft.unwrap_or(hvmx),
-        bootargs: f("HVM_BOOTARGS").unwrap_or_else(|| BOOTARGS.to_string()),
+        bootargs: o.bootargs.clone().unwrap_or_else(|| BOOTARGS.to_string()),
         virtio: virt,
     }
 }
 
 /// hvmx's `main` over the given streams, with the environment from `get`: the command line and
 /// the request lines are read here (the text boundary); the exit status.
-pub fn main_with(args: &[String], get: Lookup, io: Io) -> i32 {
+pub fn main_with(args: &[String], o: &HvmOptions, io: Io) -> i32 {
     let diag: Diag = Arc::new(Mutex::new(io.diag));
     let Io {
         out, input, echo, ..
@@ -1633,19 +1638,18 @@ pub fn main_with(args: &[String], get: Lookup, io: Io) -> i32 {
         ram_mib,
     };
     let port = Box::new(hydo_hvx::text::TextPort::new(input, out));
-    run_diag(start, get, port, diag, echo)
+    run_diag(start, o, port, diag, echo)
 }
 
-/// `main` of the program over the process's own streams and environment.
-pub fn main_stdio(args: &[String]) -> i32 {
+/// `main` of the program over the process's own streams, with the options its `main` read.
+pub fn main_stdio(args: &[String], o: &HvmOptions) -> i32 {
     let io = Io {
         out: Box::new(std::io::LineWriter::new(std::io::stdout())),
         input: Box::new(std::io::BufReader::new(std::io::stdin())),
         diag: Box::new(std::io::stderr()),
         echo: Some(Box::new(std::io::stdout())),
     };
-    let get = |k: &str| std::env::var(k).ok();
-    main_with(args, &get, io)
+    main_with(args, o, io)
 }
 
 /// The engine: boot as `start` says and serve the host over `port` (diagnostics to `diag`, the
@@ -1653,34 +1657,34 @@ pub fn main_stdio(args: &[String]) -> i32 {
 /// engine in a process that already runs one ends with an error.
 pub fn run(
     start: Start,
-    get: Lookup,
+    o: &HvmOptions,
     port: Box<dyn Port>,
     diag: Box<dyn Write + Send>,
     echo: Option<Box<dyn Write + Send>>,
 ) -> i32 {
-    run_diag(start, get, port, Arc::new(Mutex::new(diag)), echo)
+    run_diag(start, o, port, Arc::new(Mutex::new(diag)), echo)
 }
 
 fn run_diag(
     start: Start,
-    get: Lookup,
+    o: &HvmOptions,
     port: Box<dyn Port>,
     diag: Diag,
     echo: Option<Box<dyn Write + Send>>,
 ) -> i32 {
     let d2 = diag.clone();
-    catch_fatal(&d2, move || engine_main(start, get, port, diag, echo))
+    catch_fatal(&d2, move || engine_main(start, o, port, diag, echo))
 }
 
 fn engine_main(
     start: Start,
-    get: Lookup,
+    o: &HvmOptions,
     port: Box<dyn Port>,
     diag: Diag,
     echo: Option<Box<dyn Write + Send>>,
 ) -> i32 {
     let mut ram_mib = 1024;
-    if let Some(v) = get("HVM_MEM_MB") {
+    if let Some(v) = o.mem_mb.clone() {
         match ram_mib_parse(&v, "HVM_MEM_MB", &diag) {
             Some(n) => ram_mib = n,
             None => return 2,
@@ -1698,12 +1702,12 @@ fn engine_main(
     let initrd_has_tc = scan_has_tc(&initrd);
     let outdir = start.outdir.display().to_string();
     let _ = std::fs::create_dir(&outdir);
-    let mut vo = opts_from(get, true);
+    let mut vo = opts_from(o, true);
     vo.ram_size = ram_mib << 20;
     if ram_mib != 1024 {
         say(&diag, &format!("hvmx: guest RAM {ram_mib} MiB"));
     }
-    let spin_rewind = get("HVM_SPIN_REWIND");
+    let spin_rewind = o.spin_rewind.clone();
     if vo.rw_on && !vo.spin_observe {
         say(
             &diag,
@@ -1723,15 +1727,17 @@ fn engine_main(
     let o = Opts {
         vm: vo.clone(),
         ram_mib,
-        run_exits: get("HVM_RUN_EXITS")
+        run_exits: o
+            .run_exits
+            .clone()
             .map(|v| cstr::strtoull0(v.as_bytes()))
             .unwrap_or(50_000_000),
         spin_auto: spin_rewind.is_none() || spin_rewind.as_deref() == Some("auto"),
-        snap_dir: get("HVM_SNAP_DIR").unwrap_or_else(|| "/tmp/hvm-snap".into()),
-        diag: get("HVMX_DIAG").is_some(),
-        diag_chunks: get("HVMX_DIAG_CHUNKS"),
-        check_restore: get("HVMX_CHECK_RESTORE").is_some(),
-        no_mlock: get("HVMX_NO_MLOCK").is_some(),
+        snap_dir: o.snap_dir.clone().unwrap_or_else(|| "/tmp/hvm-snap".into()),
+        diag: o.diag,
+        diag_chunks: o.diag_chunks.clone(),
+        check_restore: o.check_restore,
+        no_mlock: o.no_mlock,
     };
     let vm = Vmm::new(&vo, &kernel, &initrd, diag.clone(), echo, !o.no_mlock);
     drop(kernel);
