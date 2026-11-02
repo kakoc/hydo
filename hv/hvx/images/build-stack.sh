@@ -13,8 +13,10 @@ cd "$(dirname "$0")/../../.."   # M100: this script lives in hv/hvx/images; ever
 # Output name prefix: images go to build/${STACK_OUT}-{ext4,data,disk}.img (default "stack").
 # Lets two lines of work build their own guest image without overwriting each other's.
 STACK_OUT="${STACK_OUT:-stack}"
-# Source directory of the Go front door (default hydo/stack). The explorer builds from a
-# pinned copy (hydo/explore/stack-src) so its image does not change while hydo/stack is edited.
+# Source directory of the Go front door (default hydo/stack). Until Milestone 146 the explorer
+# images (STACK_OUT=explore*) were built from a pinned copy (hydo/explore/stack-src) and got
+# hydo/explore/stack-explore.sh as a serve mode; both were deleted with the shell images
+# (restore: git show ed706db:hv/hvx/images/build-stack.sh).
 STACK_GO_SRC="${STACK_GO_SRC:-hydo/stack}"
 # Go linker flags for the front door. The default strips symbols. A coverage image
 # (Milestone 41) keeps symbols and links the text at a fixed unique address so an Intel PT
@@ -634,47 +636,6 @@ case "$PHASE" in
 esac
 SINIT
 chmod +x "$R/sbin/init"
-# The explorer images (STACK_OUT=explore* or richcov-*, the whole-system coverage variants) add a command-driven "serve" mode to /sbin/init:
-# hvx/explore/stack-explore.sh is installed as /etc/stack-explore.sh and hooked in at two
-# points. Every other image keeps the init above byte-for-byte.
-case "$STACK_OUT" in explore*|richcov-*) EXPLORE_IMAGE=1;; *) EXPLORE_IMAGE=0;; esac
-if [ "$EXPLORE_IMAGE" = 1 ]; then
-  cp hydo/explore/stack-explore.sh "$R/etc/stack-explore.sh"
-  if [ "${STACK_KAFKA_DIAG:-0}" = 1 ]; then   # diagnostic: dump Kafka's log decisions after the verdict
-    "$PY3" - "$R/etc/stack-explore.sh" <<'PYEOF'
-import sys
-p = sys.argv[1]; s = open(p).read()
-a = '  echo "hydo-stack-marker: workload complete"\n  echo "hydo-boot-marker: launching shell on ttyS0"\n  exec $BB sh\n}\n'
-assert s.count(a) == 1
-d = r'''  echo "hydo-kdiag: uptime=$(UP) realtime=$($BB date +%s)"
-  $BB ls -l /data/kafka-logs/orders-0 2>&1 | $BB sed 's/^/hydo-kdiag: ls: /'
-  $BB grep -a "kafka\.log\|storage" /tmp/broker.log | $BB grep -a -v "Checking for dirty logs\|Checking if flush is needed\|__cluster_metadata" | $BB sed 's/^/hydo-kdiag: /'
-'''
-s = s.replace(a, d + a)
-open(p, "w").write(s)
-PYEOF
-  fi
-  if [ -n "${STACK_ORACLE_WAIT:-}" ]; then   # diagnostic: let N s of guest time pass before the oracle reads
-    "$PY3" - "$R/etc/stack-explore.sh" "$STACK_ORACLE_WAIT" <<'PYEOF'
-import sys
-p, n = sys.argv[1], int(sys.argv[2]); s = open(p).read()
-a = '  /bin/hydostack oracle $NORDERS /tmp/acked /tmp/failed > /tmp/oracle.log 2>&1\n'
-assert s.count(a) == 1
-s = s.replace(a, '  echo "hydo-kdiag: waiting %ds before the oracle (uptime=$(UP))"; $BB sleep %d\n' % (n, n) + a)
-open(p, "w").write(s)
-PYEOF
-  fi
-  "$PY3" - "$R/sbin/init" <<'PYEOF'
-import sys
-p = sys.argv[1]; s = open(p).read()
-a = 'echo "hydo-stack: loopback up"\n'
-b = 'case "$PHASE" in\n'
-assert s.count(a) == 1 and s.count(b) == 1
-s = s.replace(a, a + 'EXPLORE=""; [ "$PHASE" = "serve" ] && { . /etc/stack-explore.sh; explore_s0; }\n')
-s = s.replace(b, '[ -n "$EXPLORE" ] && explore_main\n' + b)
-open(p, "w").write(s)
-PYEOF
-fi
 find "$R" -exec touch --no-dereference -h -d @1600000000 {} + 2>/dev/null || true
 
 # --- 6.3 images: ext4 ro-root (p1) + journaled ext4 data disk (p2) behind a hand-made MBR ---

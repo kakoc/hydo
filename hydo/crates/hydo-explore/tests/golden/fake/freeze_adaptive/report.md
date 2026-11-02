@@ -4,7 +4,7 @@
 |---|---|
 | schedules | 6 |
 | strategy | sweep:freeze |
-| image | explore-disk.img |
+| image | scripted-disk.img |
 | workers | N |
 | sweep_wall_s | N |
 | runs_per_hour | N |

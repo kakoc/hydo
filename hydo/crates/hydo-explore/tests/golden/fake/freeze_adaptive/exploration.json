@@ -16,6 +16,8 @@
       "7-9",
       "--fc-window",
       "4",
+      "--image",
+      "scripted-disk.img",
       "--workers",
       "3",
       "--out",
@@ -23,8 +25,8 @@
     ]
   },
   "image": {
-    "path": "explore-disk.img",
-    "resolved": "<dir>/explore-disk.img"
+    "path": "scripted-disk.img",
+    "resolved": "<dir>/scripted-disk.img"
   },
   "engine": {
     "backend": "hvx",

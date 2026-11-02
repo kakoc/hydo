@@ -1,1 +1,1 @@
-{"schedules": 40, "strategy": "swarm", "image": "explore-disk.img", "workers": N, "sweep_wall_s": N, "runs_per_hour": N, "mean_run_s": 4.5, "worker_boot_s": 2.5, "total_wall_s": N, "failures": 9, "reproduced": 9, "error_kinds_new": 2, "runs_with_new_error_kinds": 40}
+{"schedules": 40, "strategy": "swarm", "image": "scripted-disk.img", "workers": N, "sweep_wall_s": N, "runs_per_hour": N, "mean_run_s": 4.5, "worker_boot_s": 2.5, "total_wall_s": N, "failures": 9, "reproduced": 9, "error_kinds_new": 2, "runs_with_new_error_kinds": 40}

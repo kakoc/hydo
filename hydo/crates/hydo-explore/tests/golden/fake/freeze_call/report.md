@@ -4,7 +4,7 @@
 |---|---|
 | schedules | 40 |
 | strategy | swarm |
-| image | explore-disk.img |
+| image | scripted-disk.img |
 | workers | N |
 | sweep_wall_s | N |
 | runs_per_hour | N |
@@ -33,7 +33,7 @@
 - needs a tick-timing change: no
 - verdict: `HYDO-ORACLE: VIOLATION lost acknowledged write order=20`
 - fingerprint, two runs: `376816de033c523e` / `376816de033c523e` (identical)
-- by hand: `hydo run --image <dir>/explore-disk.img "disk=lying:1 dseed=eac0b527c5ac67d9 | run C=20"`
+- by hand: `hydo run --image <dir>/scripted-disk.img "disk=lying:1 dseed=eac0b527c5ac67d9 | run C=20"`
 
 ### unsafe-knob: `VIOLATION lost acknowledged write`
 
@@ -42,7 +42,7 @@
 - needs a tick-timing change: no
 - verdict: `HYDO-ORACLE: VIOLATION lost acknowledged write order=9`
 - fingerprint, two runs: `813fb0487f0a4769` / `813fb0487f0a4769` (identical)
-- by hand: `hydo run --image <dir>/explore-disk.img "disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no"`
+- by hand: `hydo run --image <dir>/scripted-disk.img "disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no"`
 
 ## Property table over every schedule (hvx/ASSERTIONS.md)
 
@@ -77,7 +77,7 @@ Known list: none; unknown kinds: report. 2 new kinds, 0 only known.
 - first schedule (seed 1): `disk=lying:3 dseed=eac0b527c5ac67d9 | run K=redis@12+2 C=20`
 - minimal schedule (10 shrink runs): `disk=none dseed=eac0b527c5ac67d9 | run K=redis@12+1`
 - run twice: fingerprints `6b450cd54a2e0485` / `6b450cd54a2e0485` (identical), the kind in both runs
-- by hand: `hydo run --image <dir>/explore-disk.img "disk=none dseed=eac0b527c5ac67d9 | run K=redis@12+1"`
+- by hand: `hydo run --image <dir>/scripted-disk.img "disk=none dseed=eac0b527c5ac67d9 | run K=redis@12+1"`
 - expected? `hydo errors accept 07df7023b937 --reason "..."` (or `--during <fault>` to accept it only while a fault is on)
 
 #### `4c53c64297e2` (app): `config reloaded`
