@@ -1,5 +1,5 @@
 //! Route an order service's store calls through the BUGGIFY wrappers (addbuggify.py; the
-//! wrappers live in hydo/stack/buggify.go, M56). build-bench-bg.sh runs it on one version of
+//! wrappers live in hydo/stack/buggify.go, M56). build-order-services.sh (build-bench-bg.sh until M146) runs it on one version of
 //! main.go (a benchmark defect's patched copy of an older one) before building the image:
 //!
 //! ```text

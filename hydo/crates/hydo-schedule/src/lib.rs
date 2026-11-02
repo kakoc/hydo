@@ -5,7 +5,7 @@
 //! (`hydo/crates/hydo-hvx`, `hv/hvm/explore/serve.c`): disk faults, tick jitter, preemption, vCPU
 //! turns, the run budget, a power cut at a FLUSH. Comments that cite `hvx_explore.c` name the C
 //! engine the Rust one was ported from (deleted in M137; `git show d9202e7:hv/hvx/hvx_explore.c`). The guest part is typed on the guest's console
-//! and applied by its init (`hydo/onboard/hydo-init*.sh`, the stack's `stack-explore.sh`): kills,
+//! and applied by its init (`hydo/onboard/hydo-init*.sh`, until M146 also the stack's `stack-explore.sh`): kills,
 //! pauses, network faults, power cuts, clock jumps, protocol faults, freezes, BUGGIFY, the test
 //! composer's composition and the manifest's knobs.
 //!

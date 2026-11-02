@@ -30,7 +30,7 @@ src() {   # <variant>: build/stack-grpc-src/<variant>, the order service + clien
   local d=build/stack-grpc-src/$1
   rm -rf "$d"; mkdir -p "$d"; cp -a hydo/stack/. "$d/"
   case "$1" in
-    old) cp hydo/bench/base/main-0112b48.go "$d/main.go"; rm -f "$d/buggify.go";;   # as hydo/bench/build-bench.sh
+    old) cp hydo/bench/base/main-0112b48.go "$d/main.go"; rm -f "$d/buggify.go";;   # as hydo/bench/build-order-services.sh
     *)
       cat > "$d/target.go" <<'GO'
 package main
