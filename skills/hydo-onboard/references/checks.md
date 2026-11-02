@@ -18,7 +18,8 @@ Every check file can carry `# hydo-msg: <one line>`, the property's description 
 
 Exit status of a `final_`, `always_` or `eventually_` check: `0` = holds, `1` = violated, `2` =
 cannot be evaluated now (the store is down, a read timed out). A check that times out counts as
-2. The last output line is the explanation; it becomes the details of the property's
+2; its time limit is `test.command_timeout` (default 60 s; after a power cut a clustered store
+may need longer to elect its leaders). The last output line is the explanation; it becomes the details of the property's
 `HYDO-ASSERT` record and, for the first violation, of the verdict line
 `HYDO-ORACLE: VIOLATION [<id>] <details>`. Start every check by testing that the store answers,
 and `exit 2` if not, so a killed service is not reported as a violation. An `eventually_` check

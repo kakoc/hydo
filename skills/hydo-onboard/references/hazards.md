@@ -64,5 +64,9 @@ found.
   available; run the binary directly or as an image service.
 - **Kernel modules.** The guest kernel is a fixed Linux 6.6 build; a program that needs a module
   the image does not load (FUSE, special filesystems) is a blocker to report.
+- **busybox tools in checks.** Checks run busybox: `grep -v -x -F -f FILE` with an EMPTY `FILE`
+  matches every line (GNU grep matches none), so "acknowledged ids that were not read back" comes
+  out empty exactly when nothing was read back. Compare sets with `awk` keyed on `FILENAME`, or
+  with `hydo-check`.
 - **Console size.** The guest console holds 64 KiB. Print short lines; do not print every
   acknowledged id.
