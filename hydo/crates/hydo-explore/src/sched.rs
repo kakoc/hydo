@@ -94,6 +94,70 @@ pub struct Fc {
 
 pub type Kinds = Vec<(String, i64)>;
 
+/// `A=<event>[@<at>][+<delay>]:<action>` (M139): a reaction to the guest's first assertion
+/// record of `event` after step `at`; `action` is `cut`, `kill-<svc>`, `stop-<svc>-<ms>` or
+/// `cont-<svc>` (hydo_schedule::React).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Ra {
+    pub event: String,
+    pub at: i64,
+    pub delay: i64,
+    pub action: String,
+}
+
+impl Ra {
+    /// The action's kind: `cut`, `kill`, `stop` or `cont`.
+    pub fn kind(&self) -> &str {
+        self.action.split('-').next().unwrap_or("")
+    }
+
+    /// The service the action acts on (none for a cut).
+    pub fn svc(&self) -> Option<&str> {
+        let mut it = self.action.split('-');
+        it.next();
+        it.next()
+    }
+}
+
+/// The text of one `A=` token.
+pub fn render_a(a: &Ra) -> String {
+    let mut t = format!("A={}", a.event);
+    if a.at > 0 {
+        t.push_str(&format!("@{}", a.at));
+    }
+    if a.delay > 0 {
+        t.push_str(&format!("+{}", a.delay));
+    }
+    t.push(':');
+    t.push_str(&a.action);
+    t
+}
+
+/// One `A=` token's value (after `A=`); Err for a malformed one.
+pub fn parse_a(v: &str) -> Result<Ra, String> {
+    let (head, action) = v
+        .split_once(':')
+        .ok_or_else(|| format!("bad A= token {v}"))?;
+    let num = |x: &str| {
+        x.parse::<i64>()
+            .map_err(|_| format!("bad A= token {v}: {x:?} is not a number"))
+    };
+    let (head, delay) = match head.rsplit_once('+') {
+        Some((h, d)) => (h, num(d)?),
+        None => (head, 0),
+    };
+    let (event, at) = match head.split_once('@') {
+        Some((e, a)) => (e, num(a)?),
+        None => (head, 0),
+    };
+    Ok(Ra {
+        event: event.to_string(),
+        at,
+        delay,
+        action: action.to_string(),
+    })
+}
+
 /// explore.py's schedule dict. `None` / empty = the key is absent.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct S {
@@ -130,6 +194,8 @@ pub struct S {
     /// qb=len:q:pm qbs=seed
     pub qb: Option<(i64, i64, i64, u64)>,
     pub rb: Option<i64>,
+    /// A= reactions (M139), in token order.
+    pub a: Vec<Ra>,
 }
 
 impl S {

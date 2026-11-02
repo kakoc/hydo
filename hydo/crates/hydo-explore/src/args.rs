@@ -6,7 +6,8 @@ pub const USAGE: &str = "usage: hydo explore [--seeds 1-200] [--strategy random|
        [--image IMG] --out DIR [--schedule S] [--sweep KIND] [--manifest hydo.yaml] [--backend hvx|hvm]
        [--timing] [--new-faults] [--durable-only] [--concurrency] [--more-faults] [--preempt] [--buggify]
        [--freeze-call] [--protocol-faults] [--grpc-faults] [--vcpus N --turns [--bursts]] [--cpu v2|v3]
-       [--ram-mib N] [--known-errors FILE] [--errors report|fail] [--branch MARKER] ... (explore.py's options)";
+       [--ram-mib N] [--known-errors FILE] [--errors report|fail] [--branch MARKER]
+       [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...]] ... (explore.py's options)";
 
 #[derive(Clone, Debug)]
 pub struct Args {
@@ -65,6 +66,10 @@ pub struct Args {
     pub known_errors: Option<String>,
     pub errors: Option<String>,
     pub errors_shrink: i64,
+    /// M139: `--reactive fault|heal|both` (None: no reactions).
+    pub reactive: Option<String>,
+    pub react_events: Option<String>,
+    pub heal_events: Option<String>,
 }
 
 impl Default for Args {
@@ -125,6 +130,9 @@ impl Default for Args {
             known_errors: None,
             errors: None,
             errors_shrink: 8,
+            reactive: None,
+            react_events: None,
+            heal_events: None,
         }
     }
 }
@@ -148,7 +156,7 @@ const FLAGS: [&str; 16] = [
     "bursts",
 ];
 
-const VALUED: [&str; 39] = [
+const VALUED: [&str; 42] = [
     "seeds",
     "workers",
     "image",
@@ -188,6 +196,9 @@ const VALUED: [&str; 39] = [
     "known-errors",
     "errors",
     "errors-shrink",
+    "reactive",
+    "react-events",
+    "heal-events",
 ];
 
 fn choice(name: &str, v: &str, ok: &[&str]) -> Result<String, String> {
@@ -318,6 +329,9 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "known-errors" => a.known_errors = Some(val),
             "errors" => a.errors = Some(choice("errors", v, &["report", "fail"])?),
             "errors-shrink" => a.errors_shrink = int("errors-shrink", v)?,
+            "reactive" => a.reactive = Some(choice("reactive", v, &["both", "fault", "heal"])?),
+            "react-events" => a.react_events = Some(val),
+            "heal-events" => a.heal_events = Some(val),
             other => return Err(format!("unrecognized arguments: --{other}")),
         }
         i += 1;

@@ -44,6 +44,7 @@ fn cell(strategy: &str, nf: bool, bg: bool, cc: bool, mf: bool, turns: bool) -> 
         concurrency: cc,
         more_faults: mf,
         cf_range: if mf { Some((1, 309)) } else { None },
+        reactive: None,
         vcpus: if turns { 2 } else { 1 },
         turns,
         window: 0,
