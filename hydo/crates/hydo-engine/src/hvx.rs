@@ -5,7 +5,8 @@
 //! process can open the device (root, or a user in the udev rule's group), otherwise as the
 //! program `hydo-hvx` under the shared-lock wrapper with sudo. `HYDO_ENGINE=inproc` or
 //! `HYDO_ENGINE=process` forces one of the two; `HYDO_SUDO=1` keeps the program with sudo. The
-//! protocol, the lines and every result are the same either way.
+//! values, the transcript lines and every result are the same either way (M142: in this process the
+//! calls are Rust values over channels, [`crate::link::ChanLink`]; to the program they are its lines).
 //!
 //! The program's command lines (the same as the C engine's had):
 //!

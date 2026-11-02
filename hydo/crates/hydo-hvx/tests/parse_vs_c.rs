@@ -1,7 +1,14 @@
-//! The schedule parser against the C engine's own `parse_sched`, for hydo-schedule's sample
-//! corpus and for seeded mutations of it (bytes changed, tokens dropped or doubled, numbers made
-//! huge, negative or not numbers, cut short): the Rust parser must print what the C one printed
-//! for every input, refusals included.
+//! The engine's schedule handling against the C engine's own `parse_sched`, for hydo-schedule's
+//! sample corpus and for seeded mutations of it (bytes changed, tokens dropped or doubled,
+//! numbers made huge, negative or not numbers, cut short).
+//!
+//! Since M142 the engine parses no schedule text: hydo-schedule parses it and the engine arms
+//! [`Sched::from_schedule`]. Two checks: (1) `c_model/` (M132's port of `parse_sched`, kept here
+//! only as the reference) gives the recorded C answers on every input; (2) on every input
+//! hydo-schedule accepts, the engine arms exactly what the C armed (every field but the host
+//! text, which the engine no longer keeps), no input the C refused is accepted, and the inputs the
+//! C engine ran and hydo-schedule refuses are the classes recorded in
+//! `tests/golden/parse_differences.txt` (count, refusal message, one example each).
 //!
 //! The C engine (`hv/hvx/hvx_explore.c`) was deleted in M137, so its answers are recorded in
 //! `tests/golden/parse_sched_c.txt`: the number of inputs and of refusals, then the SHA-256 of
@@ -17,7 +24,11 @@
 //! (Linux with libipt; the C includes `hvx_stack_verify.c`, `hvx_boot.h` and `hvx_abi.h` from
 //! `hv/hvx`, which stay.)
 
+mod c_model;
+
+use c_model::CSched;
 use hydo_hvx::sched::Sched;
+use hydo_schedule::Schedule;
 use sha2::{Digest, Sha256};
 use std::fmt::Write as _;
 use std::io::Write as _;
@@ -65,63 +76,120 @@ int main(void) {
 }
 "#;
 
-fn rust_line(input: &[u8]) -> String {
-    let Some(s) = Sched::parse(input) else {
-        return "REFUSED".into();
-    };
-    let mut o = format!(
-        "host=[{}] guest=[{}] cl={} pr={} ds={:x} cut={} tj={} {:x} {} {} {} {} {}",
-        String::from_utf8_lossy(s.host()),
-        String::from_utf8_lossy(s.guest()),
-        s.classes,
-        s.prob,
-        s.dseed,
-        s.cut as i32,
-        s.tj_on as i32,
-        s.tj.seed,
-        s.tj.max_delay,
-        s.tj.permille,
-        s.tj.n_explicit,
-        s.tj.tick_lo,
-        s.tj.tick_hi
-    );
-    for e in &s.tj.explicit_[..s.tj.n_explicit as usize] {
-        let _ = write!(o, " {}:{}", e.tick, e.delay);
+/// One answer line for parsed fields (the probe's format); `host` is the C buffer's host text.
+macro_rules! fields_line {
+    ($s:expr, $host:expr) => {{
+        let s = $s;
+        let mut o = format!(
+            "host=[{}] guest=[{}] cl={} pr={} ds={:x} cut={} tj={} {:x} {} {} {} {} {}",
+            $host,
+            String::from_utf8_lossy(s.guest()),
+            s.classes,
+            s.prob,
+            s.dseed,
+            s.cut as i32,
+            s.tj_on as i32,
+            s.tj.seed,
+            s.tj.max_delay,
+            s.tj.permille,
+            s.tj.n_explicit,
+            s.tj.tick_lo,
+            s.tj.tick_hi
+        );
+        for e in &s.tj.explicit_[..s.tj.n_explicit as usize] {
+            let _ = write!(o, " {}:{}", e.tick, e.delay);
+        }
+        let _ = write!(
+            o,
+            " rb={} pp={} pptsc={} xt={} {:x} {} {} {} {} {} {}",
+            s.rb,
+            s.pp,
+            s.pptsc,
+            s.xt_on as i32,
+            s.xt.seed,
+            s.xt.rate,
+            s.xt.permille,
+            s.xt.lo,
+            s.xt.hi,
+            s.xt.tsc,
+            s.xt.n_explicit
+        );
+        for e in &s.xt.explicit_[..s.xt.n_explicit as usize] {
+            let _ = write!(o, " {e}");
+        }
+        let _ = write!(
+            o,
+            " cf={} {} q={} {} {:x} tc={} {} {:x} {} {} {}",
+            s.cf_on as i32,
+            s.cf,
+            s.q_on as i32,
+            s.q,
+            s.qs,
+            s.tc_on as i32,
+            s.tc.margin,
+            s.tc.burst_seed,
+            s.tc.burst_len,
+            s.tc.burst_q,
+            s.tc.burst_permille
+        );
+        o
+    }};
+}
+
+/// The C parser's answer line for one input (the test-only model of `parse_sched`).
+fn c_line(input: &[u8]) -> String {
+    match CSched::parse(input) {
+        None => "REFUSED".into(),
+        Some(s) => fields_line!(&s, String::from_utf8_lossy(s.host())),
     }
-    let _ = write!(
-        o,
-        " rb={} pp={} pptsc={} xt={} {:x} {} {} {} {} {} {}",
-        s.rb,
-        s.pp,
-        s.pptsc,
-        s.xt_on as i32,
-        s.xt.seed,
-        s.xt.rate,
-        s.xt.permille,
-        s.xt.lo,
-        s.xt.hi,
-        s.xt.tsc,
-        s.xt.n_explicit
-    );
-    for e in &s.xt.explicit_[..s.xt.n_explicit as usize] {
-        let _ = write!(o, " {e}");
+}
+
+/// The engine's answer for one input since M142: hydo-schedule parses it, and the engine arms
+/// [`Sched::from_schedule`]. Err: hydo-schedule's refusal.
+fn engine_line(input: &str) -> Result<String, String> {
+    let s = Schedule::parse(input).map_err(|e| e.message)?;
+    Ok(fields_line!(&Sched::from_schedule(&s), ""))
+}
+
+/// The line without its host text (the engine keeps no host text: it arms values).
+fn no_host(l: &str) -> &str {
+    l.split_once("] guest=[").map_or(l, |x| x.1)
+}
+
+/// The class of an input the C engine ran and hydo-schedule refuses: which part is refused (the
+/// host part alone first, as hydo-schedule reads it) and what the C did with it instead.
+fn class(input: &str, msg: &str) -> String {
+    let host = input.split_once('|').map_or(input, |x| x.0);
+    if let Err(h) = Schedule::parse(&format!("{host}| run")) {
+        let m = h.message;
+        return if m.contains("appears twice") {
+            "host: a token appears twice (the C read the first one)".into()
+        } else if m.starts_with("host token") || m.starts_with("unknown host token") {
+            "host: a word that is not a known key=value (the C ignored it)".into()
+        } else if m.contains(" without ") || m.contains(" together") {
+            "host: a modifier without its main token, or tjx= with tj= (the C ignored it)".into()
+        } else if m.starts_with("the host part is") {
+            "host: longer than 1023 bytes (the C cut it)".into()
+        } else {
+            let key = m.split_once('=').map_or(m.as_str(), |x| x.0);
+            format!(
+                "host: {key}= with a value that is not a whole number in range or not its form \
+                 (the C read a number prefix, a wrapped number or 0)"
+            )
+        };
     }
-    let _ = write!(
-        o,
-        " cf={} {} q={} {} {:x} tc={} {} {:x} {} {} {}",
-        s.cf_on as i32,
-        s.cf,
-        s.q_on as i32,
-        s.q,
-        s.qs,
-        s.tc_on as i32,
-        s.tc.margin,
-        s.tc.burst_seed,
-        s.tc.burst_len,
-        s.tc.burst_q,
-        s.tc.burst_permille
-    );
-    o
+    if msg.starts_with("the guest part is") {
+        "guest: longer than 511 bytes (the C cut it)".into()
+    } else if msg.starts_with("the guest part starts") || msg.contains("separated by exactly one") {
+        "guest: not in its one layout (one space after '|', then run, one space between tokens; \
+         the C typed it as written)"
+            .into()
+    } else if msg.starts_with("guest token") {
+        "guest: a word that is not <LETTER>=<value> (the C typed it)".into()
+    } else {
+        let l = msg.split_once('=').map_or("?", |x| x.0);
+        format!("guest: a {l}= token its grammar refuses (the C typed it)")
+    }
 }
 
 /// Seeded mutations of a schedule (printable ASCII only, one line each).
@@ -305,56 +373,100 @@ fn c_answers(src: &Path, inputs: &[String]) -> Option<Vec<String>> {
     Some(got)
 }
 
+/// What `parse_vs_c` found, as recorded in `tests/golden/parse_differences.txt`: how the
+/// engine's answers since M142 (hydo-schedule, then [`Sched::from_schedule`]) compare with the C
+/// parser's on every input, and every class of input the C engine ran that hydo-schedule refuses.
+fn differences(inputs: &[String], c: &[String]) -> (String, Vec<String>) {
+    use std::collections::BTreeMap;
+    let mut same = 0usize;
+    let mut both_refuse = 0usize;
+    let mut bad = Vec::new();
+    let mut stricter: BTreeMap<String, (usize, String)> = BTreeMap::new();
+    for (inp, cl) in inputs.iter().zip(c) {
+        let text = inp.replace('\x01', "\n");
+        match (engine_line(&text), cl == "REFUSED") {
+            (Ok(e), false) => {
+                if no_host(&e) == no_host(cl) {
+                    same += 1;
+                } else {
+                    bad.push(format!("input {inp:?}\n  C      {cl}\n  engine {e}"));
+                }
+            }
+            (Ok(e), true) => bad.push(format!(
+                "input {inp:?}: the C refused it and hydo-schedule accepts it ({e})"
+            )),
+            (Err(_), true) => both_refuse += 1,
+            (Err(m), false) => {
+                let e = stricter.entry(class(&text, &m)).or_insert((0, inp.clone()));
+                e.0 += 1;
+            }
+        }
+    }
+    let n_stricter: usize = stricter.values().map(|v| v.0).sum();
+    let mut o = format!(
+        "inputs {}\nboth accept, same armed values {same}\nboth refuse {both_refuse}\n\
+         the C engine ran it, hydo-schedule refuses it {n_stricter}\n",
+        inputs.len()
+    );
+    for (k, (n, ex)) in &stricter {
+        let _ = writeln!(o, "  {n:>6}  {k}  (for example {ex:?})");
+    }
+    (o, bad)
+}
+
 #[test]
-fn parse_sched_matches_the_c_engine() {
+fn the_engine_arms_what_the_c_parser_armed() {
     let inputs = inputs();
-    let rust: Vec<String> = inputs
+    let c: Vec<String> = inputs
         .iter()
-        .map(|inp| rust_line(&inp.replace('\x01', "\n").into_bytes()))
+        .map(|inp| c_line(&inp.replace('\x01', "\n").into_bytes()))
         .collect();
-    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/parse_sched_c.txt");
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden");
     if let Some(src) = std::env::var_os("HYDO_HVX_C_SRC") {
-        if let Some(c) = c_answers(Path::new(&src), &inputs) {
+        if let Some(real) = c_answers(Path::new(&src), &inputs) {
             let mut bad = 0;
-            for ((inp, cl), r) in inputs.iter().zip(&c).zip(&rust) {
-                if r != cl {
+            for ((inp, r), m) in inputs.iter().zip(&real).zip(&c) {
+                if r != m {
                     bad += 1;
                     if bad <= 10 {
-                        eprintln!("input {inp:?}\n  C    {cl}\n  Rust {r}");
+                        eprintln!("input {inp:?}\n  C     {r}\n  model {m}");
                     }
                 }
             }
-            assert_eq!(bad, 0, "{bad} inputs parse differently from the C");
+            assert_eq!(bad, 0, "{bad} inputs: the test's model is not the C");
             if std::env::var("HYDO_BLESS").as_deref() == Ok("1") {
-                std::fs::create_dir_all(golden.parent().unwrap()).unwrap();
-                std::fs::write(&golden, digest(&c)).unwrap();
-                println!("parse_vs_c: recorded {}", golden.display());
+                std::fs::write(dir.join("parse_sched_c.txt"), digest(&real)).unwrap();
+                println!("parse_vs_c: recorded parse_sched_c.txt");
             }
         }
     }
-    let want = std::fs::read_to_string(&golden).expect("tests/golden/parse_sched_c.txt");
-    let have = digest(&rust);
+    // 1. the model gives the recorded answers of the C engine
+    let want = std::fs::read_to_string(dir.join("parse_sched_c.txt")).expect("parse_sched_c.txt");
+    let have = digest(&c);
     if have != want {
         for (h, w) in have.lines().zip(want.lines()) {
             if h != w {
-                eprintln!("differs: Rust {h}\n         C    {w}");
+                eprintln!("differs: model {h}\n         C     {w}");
             }
         }
-        if let Some(i) = have
-            .lines()
-            .zip(want.lines())
-            .position(|(h, w)| h != w)
-            .and_then(|l| l.checked_sub(1))
-        {
-            for (inp, r) in inputs.iter().zip(&rust).skip(i * CHUNK).take(CHUNK).take(5) {
-                eprintln!("  first inputs of the chunk: {inp:?} -> {r}");
-            }
-        }
-        panic!("the Rust parser's answers are not the recorded C answers");
+        panic!("the test's model of parse_sched is not the recorded C answers");
     }
-    let refused = rust.iter().filter(|l| *l == "REFUSED").count();
-    println!(
-        "parse_vs_c: {} inputs ({refused} refused) parsed as the C engine did",
-        inputs.len()
-    );
+    // 2. on every input hydo-schedule accepts, the engine arms what the C armed; nothing the C
+    //    refused is accepted; what the C ran and hydo-schedule refuses is the recorded list
+    let (text, bad) = differences(&inputs, &c);
+    for b in bad.iter().take(10) {
+        eprintln!("{b}");
+    }
+    assert!(bad.is_empty(), "{} inputs: the engine would not arm what the C armed", bad.len());
+    let path = dir.join("parse_differences.txt");
+    if std::env::var("HYDO_BLESS").as_deref() == Ok("1") {
+        std::fs::write(&path, &text).unwrap();
+        println!("parse_vs_c: recorded {}", path.display());
+    }
+    let want = std::fs::read_to_string(&path).expect("tests/golden/parse_differences.txt");
+    if text != want {
+        eprintln!("{text}");
+        panic!("the parser differences are not the recorded ones (tests/golden/parse_differences.txt)");
+    }
+    println!("{text}");
 }

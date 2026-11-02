@@ -12,7 +12,13 @@ use crate::cstr::{atof, find, strtoull, strtoull0, Scan};
 use crate::ctl::{self, Book, Send, SendState};
 use crate::fnv::{fnv, fnv_sched_state, fnv_snapshot, fnv_zskip, BASIS};
 use crate::pages::Pages;
+use crate::port::{Cmd, Port, Req};
 use crate::sched::Sched;
+use hydo_engine_proto::{
+    retype_text, Answer, DiskOff, EngineMsg, Event, HostCmd, Phase, Ready, Request, RunResult,
+    SendAnswer, Sent, Stop, StopWhy,
+};
+use hydo_schedule::Schedule;
 use crate::vm::{Mapped, Vm, UBUF_CAP};
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
@@ -399,7 +405,10 @@ pub struct Core {
     o: Options,
     e: std::sync::Arc<Env>,
     outdir: PathBuf,
-    io: Io,
+    /// The host: typed requests and commands in, typed reports out ([`crate::port`]).
+    port: Box<dyn Port>,
+    /// stderr: diagnostics.
+    diag: Box<dyn Write + std::marker::Send>,
     budget: u64,
     c: Ctl,
     snaps: Vec<Option<Box<CtlSnap>>>,
@@ -428,7 +437,6 @@ pub struct Core {
     ph_calls: u64,
     ph_extra: String,
     ph_rsplit: bool,
-    line_buf: Vec<u8>,
     /// Coverage tracing (`crate::pt`), when on.
     pt: Option<PtOn>,
     /// HVX_SIM_DRAIN_DROP has dropped its one read.
@@ -508,16 +516,31 @@ impl Drop for Core {
 
 macro_rules! diag {
     ($self:ident, $($a:tt)*) => {{
-        let _ = writeln!($self.io.diag, $($a)*);
-        let _ = $self.io.diag.flush();
+        let _ = writeln!($self.diag, $($a)*);
+        let _ = $self.diag.flush();
     }};
 }
 
 impl Core {
-    fn say(&mut self, line: &str) {
-        let _ = self.io.out.write_all(line.as_bytes());
-        let _ = self.io.out.write_all(b"\n");
-        let _ = self.io.out.flush();
+    fn emit(&mut self, m: EngineMsg) {
+        self.port.emit(m);
+    }
+
+    /// A RESULT from its parts (`extras`: empty, or ` <key>=<value>...`). Parts that do not make
+    /// a RESULT the host can read (a cut extras text) go out as the line itself, as before.
+    fn result(&mut self, tag: &str, fp: &str, wfp: &str, secs: &str, extras: &str, verdict: &str) {
+        let m = match RunResult::new(tag, fp, wfp, secs, extras, verdict) {
+            Some(r) => EngineMsg::Result(Box::new(r)),
+            None => EngineMsg::Other(format!(
+                "RESULT {tag} fp={fp} wfp={wfp} secs={secs}{extras} verdict={verdict}"
+            )),
+        };
+        self.emit(m);
+    }
+
+    /// `RESULT <tag> fp=0 wfp=0 secs=0 verdict=<verdict>`: a run that did not happen.
+    fn no_run(&mut self, tag: &str, verdict: &str) {
+        self.result(tag, "0", "0", "0", "", verdict);
     }
 
     fn pt(&self) -> f64 {
@@ -980,7 +1003,7 @@ impl Core {
         let t0 = now();
         let edges = p.cov.join(format!("{tag}.edges"));
         let (n, errs) = match &p.elf {
-            Some(elf) => crate::pt::decode(&buf, elf, &edges, &mut self.io.diag),
+            Some(elf) => crate::pt::decode(&buf, elf, &edges, &mut self.diag),
             // ranges without a decoder program: hvx_explore decoded them against the ELF regions
             // it had, which were none
             None => crate::pt::decode(
@@ -991,7 +1014,7 @@ impl Core {
                     hi: 0,
                 },
                 &edges,
-                &mut self.io.diag,
+                &mut self.diag,
             ),
         };
         let _ = std::fs::write(
@@ -1510,14 +1533,15 @@ impl Core {
             k.inh = fnv(k.inh, &buf);
         }
         if print {
-            let l = format!(
-                "SENT {} id={} at={}{}",
-                self.c.tag,
-                self.c.k.s[i].id,
-                at,
-                if retype { " retype=1" } else { "" }
-            );
-            self.say(&l);
+            let m = EngineMsg::Sent {
+                tag: self.c.tag.clone(),
+                sent: Sent {
+                    id: self.c.k.s[i].id,
+                    at,
+                    retype,
+                },
+            };
+            self.emit(m);
         }
     }
 
@@ -1580,8 +1604,11 @@ impl Core {
             let st = self.c.k.s[i].state;
             if st == SendState::Pending || st == SendState::Retype {
                 self.c.k.s[i].state = SendState::Acked;
-                let l = format!("DROP {} id={}", self.c.tag, self.c.k.s[i].id);
-                self.say(&l);
+                let m = EngineMsg::Drop {
+                    tag: self.c.tag.clone(),
+                    id: self.c.k.s[i].id,
+                };
+                self.emit(m);
             }
         }
     }
@@ -1592,49 +1619,37 @@ impl Core {
             .position(|s| s.as_ref().is_some_and(|s| s.name == name))
     }
 
-    fn ctl_snap_cmd(&mut self, b: &Boot, arg: &[u8]) {
-        let mut sc = Scan::new(arg);
-        let name = sc.word(63).map(|w| String::from_utf8_lossy(w).into_owned());
-        let mode = name.as_ref().and_then(|_| sc.word(15).map(|w| w.to_vec()));
-        let n = sc.n;
-        let name = name.unwrap_or_default();
-        if n < 1 || (n == 2 && mode.as_deref() != Some(b"retype")) {
-            self.say("ERR snap bad request");
-            return;
+    /// SNAP: the snapshot `name` at this stop (`retype`: take it with unacknowledged sends, which
+    /// a RESUME types again).
+    fn ctl_snap_cmd(&mut self, b: &Boot, name: &str, retype: bool) {
+        let refuse = |me: &mut Core, why: String| me.emit(EngineMsg::Answer(Answer::Refused(why)));
+        // the text engine read the name as a word of at most 63 bytes
+        if name.is_empty() || name.len() > 63 || name.contains(|c: char| c.is_ascii_whitespace()) {
+            return refuse(self, "snap bad request".into());
         }
+        let name = name.to_string();
         let phase = self.c.phase;
         if phase != "workload" && phase != "boot" {
-            self.say(&format!(
-                "ERR snap {name} only in the workload or boot phase"
-            ));
-            return;
+            return refuse(self, format!("snap {name} only in the workload or boot phase"));
         }
         let s = &self.c.sc;
         if phase != "boot" && (s.tj_on || s.xt_on || s.pp != 0 || s.pptsc != 0 || s.q_on || s.cf_on)
         {
-            self.say(&format!("ERR snap {name} not for tj/xt/pp/q/cf schedules"));
-            return;
+            return refuse(self, format!("snap {name} not for tj/xt/pp/q/cf schedules"));
         }
         if self.c.wdone != 0 {
-            self.say(&format!("ERR snap {name} after DISKOFF/CUT"));
-            return;
+            return refuse(self, format!("snap {name} after DISKOFF/CUT"));
         }
-        let mut ids = String::new();
-        let mut il = 0usize; // the C buffer's would-be length
-        for s in &self.c.k.s {
-            if s.state == SendState::Typed {
-                let piece = format!("{}{}", if il != 0 { "," } else { "" }, s.id);
-                il += piece.len();
-                ids.push_str(&piece);
-            }
-        }
-        if il >= 512 {
-            ids.truncate(512 - 5);
-            ids.push_str(",...");
-        }
-        if il != 0 && n < 2 {
-            self.say(&format!("ERR snap {name} unacked={ids}"));
-            return;
+        let ids: Vec<u64> = self
+            .c
+            .k
+            .s
+            .iter()
+            .filter(|s| s.state == SendState::Typed)
+            .map(|s| s.id)
+            .collect();
+        if !ids.is_empty() && !retype {
+            return refuse(self, format!("snap {name} unacked={}", retype_text(&ids)));
         }
         let slot = match self.ctl_find(&name) {
             Some(i) => {
@@ -1644,17 +1659,15 @@ impl Core {
             None => match self.snaps.iter().position(|s| s.is_none()) {
                 Some(i) => i,
                 None => {
-                    self.say(&format!(
-                        "ERR snap {name} no free slot ({} names)",
-                        ctl::MAX_SNAPS
-                    ));
-                    return;
+                    return refuse(
+                        self,
+                        format!("snap {name} no free slot ({} names)", ctl::MAX_SNAPS),
+                    );
                 }
             },
         };
         let Some(sn) = self.snap_take(b) else {
-            self.say(&format!("ERR snap {name} snapshot failed"));
-            return;
+            return refuse(self, format!("snap {name} snapshot failed"));
         };
         let mut k = self.c.k.clone();
         for s in &mut k.s {
@@ -1672,37 +1685,22 @@ impl Core {
             tjinfo,
             k,
         }));
-        self.say(&format!(
-            "OK snap {name} at={} retype={}",
-            self.c.at,
-            if il != 0 { ids.as_str() } else { "-" }
-        ));
+        let at = self.c.at;
+        self.emit(EngineMsg::Answer(Answer::Snap {
+            name: name.clone(),
+            at,
+            retype: ids,
+        }));
         if self.ctl_one && self.c.phase == "boot" && name == "S1" {
             self.c.boot_s1 = true;
         }
     }
 
-    /// A host line (getline, the new line and carriage returns cut, up to a NUL). None at EOF.
-    fn host_line(&mut self) -> Option<Vec<u8>> {
-        let mut l = Vec::new();
-        match self.io.input.read_until(b'\n', &mut l) {
-            Ok(0) | Err(_) => None,
-            Ok(_) => {
-                while matches!(l.last(), Some(b'\n') | Some(b'\r')) {
-                    l.pop();
-                }
-                if let Some(z) = l.iter().position(|&c| c == 0) {
-                    l.truncate(z);
-                }
-                Some(l)
-            }
-        }
-    }
-
-    /// `ctl_stop`: report, then serve host lines until CONT (false) or END/EOF (true).
+    /// `ctl_stop`: report, then serve the host's commands until CONT (false) or END or a closed
+    /// link (true).
     fn ctl_stop(&mut self, b: &Boot, why: &str) -> bool {
         let mut p = self.c.k.evfrom;
-        let mut lines = Vec::new();
+        let mut evs = Vec::new();
         let first = p;
         for q in first..b.ulen() {
             if b.ubuf[q] != b'\n' {
@@ -1713,9 +1711,11 @@ impl Core {
                 e -= 1;
             }
             self.c.k.nev += 1;
-            let mut l = format!("EVENT {} at={} n={} ", self.c.tag, self.c.at, self.c.k.nev);
-            ctl::esc(&b.ubuf[p..e], &mut l);
-            lines.push(l);
+            evs.push(Event {
+                at: self.c.at,
+                n: self.c.k.nev,
+                text: b.ubuf[p..e].to_vec(),
+            });
             p = q + 1;
         }
         // M138: the host-call records (one agent line each), after the console's lines
@@ -1729,137 +1729,133 @@ impl Core {
                 e -= 1;
             }
             self.c.k.nev += 1;
-            let mut l = format!("EVENT {} at={} n={} ", self.c.tag, self.c.at, self.c.k.nev);
-            ctl::esc(&b.pbuf[p2..e], &mut l);
-            lines.push(l);
+            evs.push(Event {
+                at: self.c.at,
+                n: self.c.k.nev,
+                text: b.pbuf[p2..e].to_vec(),
+            });
             p2 = q + 1;
         }
-        for l in lines {
-            self.say(&l);
+        for event in evs {
+            let tag = self.c.tag.clone();
+            self.emit(EngineMsg::Event { tag, event });
         }
         self.c.k.evfrom = p;
         self.c.k.pevfrom = p2;
         self.ctl_deliver(b, true);
         self.c.k.nstop = self.c.k.nstop.wrapping_add(1);
-        let l = format!(
-            "STOP {} at={} n={} phase={} why={}",
-            self.c.tag, self.c.at, self.c.k.nstop, self.c.phase, why
-        );
-        self.say(&l);
+        let stop = match (Phase::parse(self.c.phase), StopWhy::parse(why)) {
+            (Some(phase), Some(why)) => EngineMsg::Stop {
+                tag: self.c.tag.clone(),
+                stop: Stop {
+                    at: self.c.at,
+                    n: self.c.k.nstop,
+                    phase,
+                    why,
+                },
+            },
+            _ => EngineMsg::Other(format!(
+                "STOP {} at={} n={} phase={} why={}",
+                self.c.tag, self.c.at, self.c.k.nstop, self.c.phase, why
+            )),
+        };
+        self.emit(stop);
+        let refuse = |me: &mut Core, why: String| me.emit(EngineMsg::Answer(Answer::Refused(why)));
         loop {
-            let Some(ln) = self.host_line() else {
-                self.c.endv = "ERROR control channel closed".into();
-                return true;
+            let c = match self.port.command() {
+                Cmd::Closed => {
+                    self.c.endv = "ERROR control channel closed".into();
+                    return true;
+                }
+                Cmd::Bad(why) => {
+                    refuse(self, why);
+                    continue;
+                }
+                Cmd::Host(c) => c,
             };
-            if ln == b"CONT" {
-                return false;
-            }
-            if ln.starts_with(b"END") && (ln.len() == 3 || ln[3] == b' ') {
-                let mut v = if ln.len() > 3 {
-                    String::from_utf8_lossy(&ln[4..]).into_owned()
-                } else {
-                    String::new()
-                };
-                ccap(&mut v, 256);
-                self.c.endv = v;
-                return true;
-            }
-            if let Some(r) = ln.strip_prefix(b"SEND at=") {
-                let (at, used) = strtoull(r, 10);
-                let rest = &r[used..];
-                let payload = if used == 0 || rest.first() != Some(&b' ') {
-                    None
-                } else {
-                    ctl::unesc(&rest[1..])
-                };
-                let Some(buf) = payload else {
-                    self.say("ERR send bad request");
-                    continue;
-                };
-                let len = buf.len();
-                if len == 0 || len > ctl::SEND_MAX {
-                    self.say(&format!(
-                        "ERR send length {len} not in [1, {}]",
-                        ctl::SEND_MAX
-                    ));
-                    continue;
+            match c {
+                HostCmd::Cont => return false,
+                HostCmd::End(v) => {
+                    let mut v = v.unwrap_or_default();
+                    ccap(&mut v, 256);
+                    self.c.endv = v;
+                    return true;
                 }
-                if self.c.k.s.len() >= ctl::MAX_SENDS {
-                    self.say(&format!(
-                        "ERR send more than {} sends in one run",
-                        ctl::MAX_SENDS
-                    ));
-                    continue;
+                HostCmd::Send { at, bytes: buf } => {
+                    let len = buf.len();
+                    if len == 0 || len > ctl::SEND_MAX {
+                        refuse(
+                            self,
+                            format!("send length {len} not in [1, {}]", ctl::SEND_MAX),
+                        );
+                        continue;
+                    }
+                    if self.c.k.s.len() >= ctl::MAX_SENDS {
+                        refuse(
+                            self,
+                            format!("send more than {} sends in one run", ctl::MAX_SENDS),
+                        );
+                        continue;
+                    }
+                    self.c.k.next_id += 1;
+                    let id = self.c.k.next_id;
+                    self.c.k.s.push(Send {
+                        id,
+                        at,
+                        sent: 0,
+                        state: SendState::Pending,
+                        buf,
+                    });
+                    let a = if at <= self.c.at {
+                        let i = self.c.k.s.len() - 1;
+                        self.ctl_type(b, i, false);
+                        SendAnswer::Typed { id, at: self.c.at }
+                    } else {
+                        SendAnswer::Queued { id, at }
+                    };
+                    self.emit(EngineMsg::Answer(Answer::Send(a)));
                 }
-                self.c.k.next_id += 1;
-                let id = self.c.k.next_id;
-                self.c.k.s.push(Send {
-                    id,
-                    at,
-                    sent: 0,
-                    state: SendState::Pending,
-                    buf,
-                });
-                if at <= self.c.at {
-                    let i = self.c.k.s.len() - 1;
-                    self.ctl_type(b, i, false);
-                    let l = format!("OK send id={id} sent={}", self.c.at);
-                    self.say(&l);
-                } else {
-                    self.say(&format!("OK send id={id} queued={at}"));
-                }
-            } else if let Some(r) = ln.strip_prefix(b"ACK ") {
-                let id = strtoull(r, 10).0;
-                match self.c.k.s.iter().position(|s| s.id == id) {
-                    None => self.say(&format!("ERR ack {id} unknown")),
+                HostCmd::Ack(id) => match self.c.k.s.iter().position(|s| s.id == id) {
+                    None => refuse(self, format!("ack {id} unknown")),
                     Some(i) => {
                         if self.c.k.s[i].state == SendState::Pending {
-                            self.say(&format!("ERR ack {id} not typed yet"));
+                            refuse(self, format!("ack {id} not typed yet"));
                         } else {
                             self.c.k.s[i].state = SendState::Acked;
-                            self.say(&format!("OK ack {id}"));
+                            self.emit(EngineMsg::Answer(Answer::Ack(id)));
                         }
                     }
+                },
+                HostCmd::Snap { name, retype } => self.ctl_snap_cmd(b, &name, retype),
+                HostCmd::DiskOff | HostCmd::Cut => {
+                    let cut = c == HostCmd::Cut;
+                    let no = if !self.ctl_boot {
+                        Some("only for an agent image (--control boot)")
+                    } else if self.c.phase != "workload" {
+                        Some("only in the workload phase")
+                    } else if self.c.wdone != 0 {
+                        Some("after DISKOFF/CUT")
+                    } else if cut && self.c.sc.cut {
+                        Some("for a cf= schedule (its DISKOFF is the cut)")
+                    } else if cut && self.ctl_find("S0").is_none() {
+                        Some("without a snapshot S0")
+                    } else {
+                        None
+                    };
+                    if let Some(no) = no {
+                        refuse(self, format!("{} {no}", if cut { "cut" } else { "diskoff" }));
+                        continue;
+                    }
+                    self.c.wdone = 1;
+                    self.c.cut = cut;
+                    let at = self.c.at;
+                    if cut {
+                        self.emit(EngineMsg::Answer(Answer::Cut { at }));
+                        return false;
+                    }
+                    let cut = self.c.sc.cut;
+                    self.emit(EngineMsg::Answer(Answer::DiskOff(DiskOff { at, cut })));
                 }
-            } else if let Some(r) = ln.strip_prefix(b"SNAP ") {
-                let r = r.to_vec();
-                self.ctl_snap_cmd(b, &r);
-            } else if ln == b"DISKOFF" || ln == b"CUT" {
-                let cut = ln[0] == b'C';
-                let no = if !self.ctl_boot {
-                    Some("only for an agent image (--control boot)")
-                } else if self.c.phase != "workload" {
-                    Some("only in the workload phase")
-                } else if self.c.wdone != 0 {
-                    Some("after DISKOFF/CUT")
-                } else if cut && self.c.sc.cut {
-                    Some("for a cf= schedule (its DISKOFF is the cut)")
-                } else if cut && self.ctl_find("S0").is_none() {
-                    Some("without a snapshot S0")
-                } else {
-                    None
-                };
-                if let Some(no) = no {
-                    self.say(&format!("ERR {} {no}", if cut { "cut" } else { "diskoff" }));
-                    continue;
-                }
-                self.c.wdone = 1;
-                self.c.cut = cut;
-                if cut {
-                    let l = format!("OK cut at={}", self.c.at);
-                    self.say(&l);
-                    return false;
-                }
-                let l = format!(
-                    "OK diskoff at={} cut={}",
-                    self.c.at,
-                    if self.c.sc.cut { 1 } else { 0 }
-                );
-                self.say(&l);
-            } else {
-                let mut l = "ERR unknown command ".to_string();
-                ctl::esc(&ln, &mut l);
-                self.say(&l);
             }
         }
     }
@@ -2145,11 +2141,15 @@ impl Core {
     }
 
     fn result_line(&mut self, tag: &str, fp: u64, wfp: u64, t0: f64, tjinfo: &str, verdict: &str) {
-        let l = format!(
-            "RESULT {tag} fp={fp:016x} wfp={wfp:016x} secs={:.1}{tjinfo} verdict={verdict}",
-            now() - t0
+        let secs = format!("{:.1}", now() - t0);
+        self.result(
+            tag,
+            &format!("{fp:016x}"),
+            &format!("{wfp:016x}"),
+            &secs,
+            tjinfo,
+            verdict,
         );
-        self.say(&l);
     }
 
     /// `sched_fail`: the RESULT of a schedule that failed before its workload; consumes b.
@@ -2759,7 +2759,10 @@ impl Core {
                 break 'b Some("ERROR vm workload (before the branch point)");
             }
             if r != 0 {
-                self.say(&format!("BRANCHPOINT {tag} none"));
+                self.emit(EngineMsg::BranchPoint {
+                    tag: tag.to_string(),
+                    point: None,
+                });
                 self.finish_sched(b, &sub, sc, from, t0, "");
                 b = Boot::none();
                 break 'b None;
@@ -2772,7 +2775,10 @@ impl Core {
             let Some(s2) = self.snap_take(&b) else {
                 break 'b Some("ERROR branch snapshot");
             };
-            self.say(&format!("BRANCHPOINT {tag} tjlo={lo} held={}", s2.unsync_n));
+            self.emit(EngineMsg::BranchPoint {
+                tag: tag.to_string(),
+                point: Some((lo, s2.unsync_n as u64)),
+            });
             let mut nvar = nvar;
             if nvar < 0 {
                 self.teardown(&mut b);
@@ -2823,16 +2829,17 @@ impl Core {
             self.sched_fail(&mut b, &sub, from, t0, "", v);
         }
         self.budget = 0;
-        self.say(&format!("BRANCHEND {tag}"));
+        self.emit(EngineMsg::BranchEnd {
+            tag: tag.to_string(),
+            note: String::new(),
+        });
     }
 
     /// `ctl_resume`: a controlled run continued from a SNAP, in a fresh VM.
     fn ctl_resume(&mut self, tag: &str, name: &str) {
         let t0 = now();
         let Some(i) = self.ctl_find(name) else {
-            self.say(&format!(
-                "RESULT {tag} fp=0 wfp=0 secs=0 verdict=ERROR no snapshot {name}"
-            ));
+            self.no_run(tag, &format!("ERROR no snapshot {name}"));
             return;
         };
         let cs = self.snaps[i].take().expect("snapshot");
@@ -2840,9 +2847,7 @@ impl Core {
         let (sc, from, tjinfo, k) = (cs.sc, cs.from, cs.tjinfo.clone(), cs.k.clone());
         self.snaps[i] = Some(cs);
         let Some(b) = b else {
-            self.say(&format!(
-                "RESULT {tag} fp=0 wfp=0 secs=0 verdict=ERROR harness restore"
-            ));
+            self.no_run(tag, "ERROR harness restore");
             return;
         };
         self.ctl_begin(tag);
@@ -2897,14 +2902,19 @@ impl Core {
             self.save_console(b, 0, tag, "");
         }
         let fp = fnv(wfp, &ffp.to_le_bytes());
-        let l = format!(
-            "RESULT {tag} fp={fp:016x} wfp={wfp:016x} secs={:.1} stops={} typed={} inh={:016x} verdict={verdict}",
-            now() - t0,
-            self.c.k.nstop,
-            self.c.k.ntyped,
-            self.c.k.inh
+        let secs = format!("{:.1}", now() - t0);
+        let extras = format!(
+            " stops={} typed={} inh={:016x}",
+            self.c.k.nstop, self.c.k.ntyped, self.c.k.inh
         );
-        self.say(&l);
+        self.result(
+            tag,
+            &format!("{fp:016x}"),
+            &format!("{wfp:016x}"),
+            &secs,
+            &extras,
+            &verdict,
+        );
         self.c.k = Book::default();
         self.c.on = false;
     }
@@ -3032,102 +3042,71 @@ impl Core {
 
     /// `fgets(in, 4096, stdin)`: a request line of at most 4095 bytes (a longer line is read as
     /// several, as the C engine reads it).
-    fn fgets(&mut self) -> Option<Vec<u8>> {
-        if self.line_buf.is_empty() {
-            match self.io.input.read_until(b'\n', &mut self.line_buf) {
-                Ok(0) | Err(_) => return None,
-                Ok(_) => {}
-            }
-        }
-        let n = self.line_buf.len().min(4095);
-        let rest = self.line_buf.split_off(n);
-        let line = std::mem::replace(&mut self.line_buf, rest);
-        Some(line)
-    }
-
-    /// The serve loop: READY was printed; requests until QUIT or EOF.
+    /// The serve loop: READY was sent; requests until QUIT or the end of the link.
     fn serve_loop(&mut self) {
-        while let Some(raw) = self.fgets() {
-            // a C string ends at its first NUL
-            let inp = match raw.iter().position(|&c| c == 0) {
-                Some(z) => raw[..z].to_vec(),
-                None => raw,
-            };
-            if inp.starts_with(b"QUIT") {
-                break;
-            }
-            if inp.starts_with(b"BRANCH ") && self.ctl_boot {
-                self.say("BRANCHEND ? unsupported for an agent image (it runs under control: CTL, RESUME)");
-                continue;
-            }
-            if inp.starts_with(b"BRANCH ") {
-                let mut s = Scan::new(&inp);
-                s.lit("BRANCH").ws();
-                let tag = s.word(63).map(|w| String::from_utf8_lossy(w).into_owned());
-                let nv = s.ws().int();
-                let bpm = s.ws().uint();
-                let bmx = s.ws().ull();
-                let mark = s
-                    .ws()
-                    .word(127)
-                    .map(|w| String::from_utf8_lossy(w).into_owned());
-                s.ws();
-                let off = if s.ok() { s.pos } else { 0 };
-                let sc = if s.n == 5 && off != 0 {
-                    Sched::parse(&inp[off..])
-                } else {
-                    None
-                };
-                let (Some(sc), Some(tag), Some(nv), Some(bpm), Some(bmx), Some(mark)) =
-                    (sc, tag, nv, bpm, bmx, mark)
-                else {
-                    self.say("BRANCHEND ? bad request");
+        loop {
+            let r = match self.port.request() {
+                Req::End => break,
+                Req::BadBranch => {
+                    let note = if self.ctl_boot {
+                        "unsupported for an agent image (it runs under control: CTL, RESUME)"
+                    } else {
+                        "bad request"
+                    };
+                    self.emit(EngineMsg::BranchEnd {
+                        tag: "?".into(),
+                        note: note.into(),
+                    });
                     continue;
-                };
-                let s1 = self.s1.take().expect("S1");
-                let b = self.fresh_restore(&s1);
-                self.s1 = Some(s1);
-                let Some(b) = b else {
-                    self.say(&format!("BRANCHEND {tag} restore failed"));
-                    continue;
-                };
-                self.run_branch(b, &tag, &sc, &mark, nv, bpm, bmx);
-                continue;
-            }
-            if inp.starts_with(b"RESUME ") {
-                let mut s = Scan::new(&inp);
-                s.lit("RESUME").ws();
-                let tag = s.word(63).map(|w| String::from_utf8_lossy(w).into_owned());
-                let name = s
-                    .ws()
-                    .word(63)
-                    .map(|w| String::from_utf8_lossy(w).into_owned());
-                let (Some(tag), Some(name)) = (tag, name) else {
-                    self.say("RESULT ? fp=0 wfp=0 secs=0 verdict=ERROR bad request");
-                    continue;
-                };
-                if self.o.phases {
-                    self.ph_reset();
                 }
-                self.ctl_resume(&tag, &name);
-                continue;
-            }
-            let ctl = inp.starts_with(b"CTL ");
-            let rq = &inp[if ctl { 4 } else { 0 }..];
-            let mut s = Scan::new(rq);
-            if !ctl {
-                s.lit("RUN").ws();
-            }
-            let tag = s.word(63).map(|w| String::from_utf8_lossy(w).into_owned());
-            s.ws();
-            let off = if s.ok() { s.pos } else { 0 };
-            let sc = match (&tag, off) {
-                (Some(_), o) if o != 0 => Sched::parse(&rq[o..]),
-                _ => None,
+                Req::BadRun => {
+                    self.no_run("?", "ERROR bad request");
+                    continue;
+                }
+                Req::Request(r) => r,
             };
-            let (Some(tag), Some(sc)) = (tag, sc) else {
-                self.say("RESULT ? fp=0 wfp=0 secs=0 verdict=ERROR bad request");
-                continue;
+            let (ctl, tag, sc) = match r {
+                Request::Quit => break,
+                Request::Branch(br) => {
+                    if self.ctl_boot {
+                        self.emit(EngineMsg::BranchEnd {
+                            tag: "?".into(),
+                            note: "unsupported for an agent image (it runs under control: CTL, RESUME)"
+                                .into(),
+                        });
+                        continue;
+                    }
+                    let sc = Sched::from_schedule(&br.schedule);
+                    let s1 = self.s1.take().expect("S1");
+                    let b = self.fresh_restore(&s1);
+                    self.s1 = Some(s1);
+                    let Some(b) = b else {
+                        self.emit(EngineMsg::BranchEnd {
+                            tag: br.tag.clone(),
+                            note: "restore failed".into(),
+                        });
+                        continue;
+                    };
+                    self.run_branch(
+                        b,
+                        &br.tag,
+                        &sc,
+                        &br.marker,
+                        br.variants,
+                        br.permille,
+                        br.max_delay,
+                    );
+                    continue;
+                }
+                Request::Resume { tag, snapshot } => {
+                    if self.o.phases {
+                        self.ph_reset();
+                    }
+                    self.ctl_resume(&tag, &snapshot);
+                    continue;
+                }
+                Request::Ctl { tag, schedule } => (true, tag, Sched::from_schedule(&schedule)),
+                Request::Run { tag, schedule } => (false, tag, Sched::from_schedule(&schedule)),
             };
             if ctl {
                 self.ctl_begin(&tag);
@@ -3144,9 +3123,7 @@ impl Core {
                     None
                 };
                 if let Some(why) = why {
-                    self.say(&format!(
-                        "RESULT {tag} fp=0 wfp=0 secs=0 verdict=ERROR {why}"
-                    ));
+                    self.no_run(&tag, &format!("ERROR {why}"));
                     self.c.k = Book::default();
                     self.c.on = false;
                     continue;
@@ -3160,9 +3137,7 @@ impl Core {
                 let k = snap.k.clone();
                 self.snaps[i] = Some(snap);
                 let Some(b) = b else {
-                    self.say(&format!(
-                        "RESULT {tag} fp=0 wfp=0 secs=0 verdict=ERROR harness restore"
-                    ));
+                    self.no_run(&tag, "ERROR harness restore");
                     self.c.k = Book::default();
                     self.c.on = false;
                     continue;
@@ -3196,9 +3171,7 @@ impl Core {
             };
             self.ph_rsplit = false;
             let Some(b) = b else {
-                self.say(&format!(
-                    "RESULT {tag} fp=0 wfp=0 secs=0 verdict=ERROR harness restore"
-                ));
+                self.no_run(&tag, "ERROR harness restore");
                 self.c.on = false;
                 continue;
             };
@@ -3810,23 +3783,41 @@ fn vcpus_parse(v: &str, what: &str, diag: &mut dyn Write) -> Option<u32> {
 /// The engine program: hvx_explore's command line (`[--ram-mib N] [--vcpus N] [--cpu v2|v3]
 /// [--control [boot]] serve|one <bzImage> <initramfs> <disk.img> <outdir> ["<schedule>"]`)
 /// with `o`'s knobs, on the given streams. Returns the exit status.
-pub fn main_with(args: &[String], mut o: Options, mut io: Io) -> i32 {
-    let t_start = now();
-    let mut ram_mib = EXP_MEM_MIB;
-    if let Some(v) = o.ram_mib_env.clone() {
-        match ram_mib_parse(&v, "HVX_EXPLORE_RAM_MIB", &mut io.diag) {
-            Some(n) => ram_mib = n,
-            None => return 2,
-        }
-    }
-    if let Some(v) = o.vcpus_env.clone() {
-        match vcpus_parse(&v, "HVX_EXPLORE_VCPUS", &mut io.diag) {
-            Some(n) => o.vcpus = n,
-            None => return 2,
-        }
-    }
+/// How the engine runs: the program's command line (`hydo-hvx`, [`main_with`]) or hydo-engine's
+/// in-process engine ([`run`]).
+pub enum Mode {
+    /// One schedule from a fresh boot, then exit.
+    One(Schedule),
+    /// Boot to S1 (or, with [`Start::control_boot`], under the host's control, with this boot
+    /// schedule's `rb=` as cadence; None: an empty one), then serve requests.
+    Serve { boot: Option<Schedule> },
+}
+
+/// What [`run`] boots and how.
+pub struct Start {
+    pub mode: Mode,
+    /// `--control`: `one` under lock-step control from S1 (M118).
+    pub control_one: bool,
+    /// `--control boot`: an agent image under lock-step control from its first instruction (M121).
+    pub control_boot: bool,
+    pub kernel: PathBuf,
+    pub initrd: PathBuf,
+    pub image: PathBuf,
+    pub outdir: PathBuf,
+    /// `--ram-mib` (None: `HVX_EXPLORE_RAM_MIB`, else 1024).
+    pub ram_mib: Option<u64>,
+    /// `--vcpus` (None: `HVX_EXPLORE_VCPUS`, else 1).
+    pub vcpus: Option<u32>,
+    /// `--cpu v3`.
+    pub cpu_v3: bool,
+}
+
+/// The program's command line, read as hvx_explore read it, then [`run`] over the text port
+/// (requests and commands on `io.input`, reports on `io.out`).
+pub fn main_with(args: &[String], o: Options, mut io: Io) -> i32 {
     let mut a: Vec<String> = args.to_vec();
-    let (mut ctl_one, mut ctl_boot) = (false, false);
+    let (mut control_one, mut control_boot) = (false, false);
+    let (mut ram_mib, mut vcpus, mut cpu_v3) = (None, None, false);
     while a.len() > 2
         && matches!(
             a[1].as_str(),
@@ -3834,55 +3825,125 @@ pub fn main_with(args: &[String], mut o: Options, mut io: Io) -> i32 {
         )
     {
         if a[1] == "--control" && a[2] == "boot" {
-            ctl_boot = true;
+            control_boot = true;
             a.drain(1..3);
             continue;
         }
         if a[1] == "--control" {
-            ctl_one = true;
+            control_one = true;
             a.remove(1);
             continue;
         }
         match a[1].as_str() {
             "--ram-mib" => match ram_mib_parse(&a[2], "--ram-mib", &mut io.diag) {
-                Some(n) => ram_mib = n,
+                Some(n) => ram_mib = Some(n),
                 None => return 2,
             },
             "--cpu" => {
                 if a[2] == "v3" {
-                    o.cpu_v3 = true;
+                    cpu_v3 = true;
                 } else if a[2] != "v2" {
                     let _ = writeln!(io.diag, "hvx_explore: --cpu {}: expected v2 or v3", a[2]);
                     return 2;
                 }
             }
             _ => match vcpus_parse(&a[2], "--vcpus", &mut io.diag) {
-                Some(n) => o.vcpus = n,
+                Some(n) => vcpus = Some(n),
                 None => return 2,
             },
         }
         a.drain(1..3);
     }
-    if o.cpu_v3 {
-        let _ = writeln!(io.diag, "hvx_explore: guest CPU x86-64-v3 (AVX/AVX2)");
-    }
     if a.len() < 6 {
         let _ = writeln!(io.diag, "usage: {} [--ram-mib N] [--vcpus N] [--cpu v2|v3] [--control [boot]] serve|one <bzImage> <initramfs> <explore-disk.img> <outdir> [\"<schedule>\"]", a.first().map(String::as_str).unwrap_or("hydo-hvx"));
         return 2;
     }
-    let mode = a[1].clone();
-    let outdir = PathBuf::from(&a[5]);
+    // the schedule is read by hydo-schedule (M142), as every schedule the engine runs
+    let parse = |s: Option<&String>| s.and_then(|t| Schedule::parse(t).ok());
+    let mode = match a[1].as_str() {
+        "one" => match parse(a.get(6)) {
+            Some(s) => Mode::One(s),
+            None => {
+                let _ = writeln!(io.diag, "hvx_explore: bad schedule");
+                return 2;
+            }
+        },
+        "serve" if control_boot && a.get(6).is_some_and(|t| t != "|") => match parse(a.get(6)) {
+            Some(s) => Mode::Serve { boot: Some(s) },
+            None => {
+                let _ = writeln!(io.diag, "hvx_explore: bad boot schedule");
+                return 2;
+            }
+        },
+        "serve" => Mode::Serve { boot: None },
+        m => {
+            let _ = writeln!(io.diag, "hvx_explore: unknown mode {m}");
+            return 2;
+        }
+    };
+    let start = Start {
+        mode,
+        control_one,
+        control_boot,
+        kernel: PathBuf::from(&a[2]),
+        initrd: PathBuf::from(&a[3]),
+        image: PathBuf::from(&a[4]),
+        outdir: PathBuf::from(&a[5]),
+        ram_mib,
+        vcpus,
+        cpu_v3,
+    };
+    let port = Box::new(crate::text::TextPort::new(io.input, io.out));
+    run(start, o, port, io.diag)
+}
+
+/// The engine: boot as `start` says and serve the host over `port` (diagnostics to `diag`).
+/// The exit status as the program's.
+pub fn run(
+    start: Start,
+    mut o: Options,
+    port: Box<dyn Port>,
+    mut diag: Box<dyn Write + std::marker::Send>,
+) -> i32 {
+    let t_start = now();
+    let mut ram_mib = EXP_MEM_MIB;
+    if let Some(v) = o.ram_mib_env.clone() {
+        match ram_mib_parse(&v, "HVX_EXPLORE_RAM_MIB", &mut diag) {
+            Some(n) => ram_mib = n,
+            None => return 2,
+        }
+    }
+    if let Some(v) = o.vcpus_env.clone() {
+        match vcpus_parse(&v, "HVX_EXPLORE_VCPUS", &mut diag) {
+            Some(n) => o.vcpus = n,
+            None => return 2,
+        }
+    }
+    if let Some(n) = start.ram_mib {
+        ram_mib = n;
+    }
+    if let Some(n) = start.vcpus {
+        o.vcpus = n;
+    }
+    if start.cpu_v3 {
+        o.cpu_v3 = true;
+    }
+    let (ctl_one, ctl_boot) = (start.control_one, start.control_boot);
+    if o.cpu_v3 {
+        let _ = writeln!(diag, "hvx_explore: guest CPU x86-64-v3 (AVX/AVX2)");
+    }
+    let outdir = start.outdir.clone();
     let _ = std::fs::create_dir(&outdir);
-    let pt = match pt_setup(&mut o, &outdir, &mut io.diag) {
+    let pt = match pt_setup(&mut o, &outdir, &mut diag) {
         Ok(p) => p,
         Err(()) => return 1,
     };
     if ram_mib != EXP_MEM_MIB {
-        let _ = writeln!(io.diag, "hvx_explore: guest RAM {ram_mib} MiB");
+        let _ = writeln!(diag, "hvx_explore: guest RAM {ram_mib} MiB");
     }
     if o.vcpus > 1 {
         let _ = writeln!(
-            io.diag,
+            diag,
             "hvx_explore: {} vCPUs in in-kernel turns (HVX_VM_SMP_SCHED){}",
             o.vcpus,
             if o.park {
@@ -3892,24 +3953,24 @@ pub fn main_with(args: &[String], mut o: Options, mut io: Io) -> i32 {
             }
         );
     }
-    let map = |p: &str, diag: &mut dyn Write| match Mapped::open(Path::new(p)) {
+    let map = |p: &Path, diag: &mut dyn Write| match Mapped::open(p) {
         Ok(m) => Some(m),
         Err(e) => {
-            let _ = writeln!(diag, "{p}: {e}");
+            let _ = writeln!(diag, "{}: {e}", p.display());
             None
         }
     };
     let (Some(image), Some(initrd), Some(base)) = (
-        map(&a[2], &mut io.diag),
-        map(&a[3], &mut io.diag),
-        map(&a[4], &mut io.diag),
+        map(&start.kernel, &mut diag),
+        map(&start.initrd, &mut diag),
+        map(&start.image, &mut diag),
     ) else {
         return 1;
     };
     let (_p1_off, _p1_len, p2_off, p2_len) = match boot::mbr_partitions(base.bytes()) {
         Ok(p) => p,
         Err(m) => {
-            let _ = writeln!(io.diag, "{m}");
+            let _ = writeln!(diag, "{m}");
             return 1;
         }
     };
@@ -3961,7 +4022,8 @@ pub fn main_with(args: &[String], mut o: Options, mut io: Io) -> i32 {
             base_runs,
         }),
         outdir,
-        io,
+        port,
+        diag,
         budget: 0,
         c: Ctl::zero(),
         snaps: (0..ctl::MAX_SNAPS).map(|_| None).collect(),
@@ -3990,7 +4052,6 @@ pub fn main_with(args: &[String], mut o: Options, mut io: Io) -> i32 {
         ph_calls: 0,
         ph_extra: String::new(),
         ph_rsplit: false,
-        line_buf: Vec::new(),
         pt,
         sim_dropped: false,
         spare: Vec::new(),
@@ -3998,16 +4059,8 @@ pub fn main_with(args: &[String], mut o: Options, mut io: Io) -> i32 {
         fresh_tpl: None,
         o,
     };
-    if mode == "one" {
-        let sc = if a.len() >= 7 {
-            Sched::parse(a[6].as_bytes())
-        } else {
-            None
-        };
-        let Some(sc) = sc else {
-            diag!(core, "hvx_explore: bad schedule");
-            return 2;
-        };
+    if let Mode::One(schedule) = &start.mode {
+        let sc = Sched::from_schedule(schedule);
         if core.ctl_boot {
             if !Core::agent_guest_ok(&sc) {
                 diag!(
@@ -4017,7 +4070,7 @@ pub fn main_with(args: &[String], mut o: Options, mut io: Io) -> i32 {
                 return 2;
             }
             core.ctl_one = true;
-            let (r, mut b) = core.agent_boot(&sc, "one");
+        let (r, mut b) = core.agent_boot(&sc, "one");
             if r != -4 {
                 core.agent_boot_result(&mut b, "one", r, t_start);
                 core.teardown(&mut b);
@@ -4058,15 +4111,10 @@ pub fn main_with(args: &[String], mut o: Options, mut io: Io) -> i32 {
         );
         return 2;
     }
-    if mode != "serve" {
-        diag!(core, "hvx_explore: unknown mode {mode}");
-        return 2;
-    }
     if core.ctl_boot {
-        let bs = a.get(6).map(String::as_str).unwrap_or("|");
-        let Some(bsc) = Sched::parse(bs.as_bytes()) else {
-            diag!(core, "hvx_explore: bad boot schedule");
-            return 2;
+        let bsc = match &start.mode {
+            Mode::Serve { boot: Some(s) } => Sched::from_schedule(s),
+            _ => Sched::empty(),
         };
         let (r, mut b) = core.agent_boot(&bsc, "boot");
         core.agent_boot_result(&mut b, "boot", r, t_start);
@@ -4086,8 +4134,7 @@ pub fn main_with(args: &[String], mut o: Options, mut io: Io) -> i32 {
             );
         }
     }
-    let l = format!("READY boot_secs={:.1}", now() - t_start);
-    core.say(&l);
+    core.emit(EngineMsg::Ready(Ready::new(now() - t_start)));
     core.prep_on = core.o.prepare;
     core.reuse_on = core.o.reuse
         && core.o.vcpus == 1
