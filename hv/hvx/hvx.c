@@ -646,6 +646,10 @@ struct hvx_vblk {
 	/* power cut at the k-th FLUSH (HVX_SET_FLUSHCUT); inert while fc_on == 0 */
 	u32 fc_on, fc_off;
 	u64 fc_target, fc_count, fc_lo, fc_hi, fc_hung;
+	/* dirty-page log of the disk (HVX_VM_DIRTY_LOG, M138): the pages the device wrote;
+	 * NULL without the flag. Covers dl_pages pages (n_disk_pages when allocated). */
+	unsigned long *dl;
+	unsigned int dl_pages;
 };
 
 /*
@@ -993,6 +997,23 @@ struct hvx_vm {
 
 	/* turn-end cost diagnostics (HVX_GET_FTSTAT; fingerprint-neutral) */
 	u64 fts_sched_cyc, fts_sched_turns;
+
+	/* host-call port (HVX_VM_HOSTCALL, M138). hc_out holds committed records [0, hc_out_done)
+	 * and the record being written [hc_out_done, hc_out_len); hc_in holds staged bytes, read
+	 * from hc_in_off. Both buffers exist only with the flag (hc_on), so every other VM runs
+	 * exactly the code it ran before (the ports stay unhandled). */
+	bool hc_on;
+	bool hc_exit;			/* a record was committed: end the run call after this exit */
+	bool hc_ovf;			/* the partial record did not fit */
+	u8  *hc_out, *hc_in;		/* [HVX_HC_SZ] each */
+	u32 hc_out_len, hc_out_done;
+	u32 hc_in_len, hc_in_off;
+	u64 hc_records, hc_errors;	/* statistics */
+
+	/* dirty-page log (HVX_VM_DIRTY_LOG, M138): RAM pages the module wrote (the guest's own
+	 * writes are in the EPT dirty flags) and disk pages the device wrote. NULL without it. */
+	bool dl_on;
+	unsigned long *dl_ram;		/* [BITS_TO_LONGS(n_guest_pages)]; the disk's is vblk.dl */
 };
 
 #define UART_BASE 0x3f8			/* 16550 COM1 base I/O port */
@@ -1664,6 +1685,7 @@ static bool hvx_pmu_ok;			/* CPU + VMX controls can run the branch clock */
  */
 static bool hvx_smm_freeze;		/* PERF_CAPABILITIES.SMM_FREEZE + "load debug controls" */
 static bool hvx_pt_ok;			/* Intel PT usable in VMX non-root, ToPA output, 2 IP ranges */
+static bool hvx_ept_ad;			/* EPT accessed/dirty flags (IA32_VMX_EPT_VPID_CAP bit 21; M138) */
 
 /* The last traced VM's buffer, kept after the VM is freed so that a harness that
  * never asks for the trace (pt_force) can still be read out: HVX_GET_PT / HVX_READ_PT
@@ -2777,10 +2799,13 @@ static bool hvx_guest_rw(struct hvx_vm *vm, u64 gpa, void *buf, u64 len, bool to
 
 		if (chunk > len)
 			chunk = len;
-		if (to_guest)
+		if (to_guest) {
 			memcpy(host, b, chunk);
-		else
+			if (vm->dl_ram)		/* dirty log (M138): a module write into the guest */
+				__set_bit(gpa >> PAGE_SHIFT, vm->dl_ram);
+		} else {
 			memcpy(b, host, chunk);
+		}
 		gpa += chunk; b += chunk; len -= chunk;
 	}
 	return true;
@@ -2800,6 +2825,8 @@ static void disk_write_bytes(struct hvx_vblk *d, u64 doff, const void *src, u64 
 		if (chunk > len)
 			chunk = len;
 		memcpy((u8 *)d->disk_pages[pg] + off, b, chunk);
+		if (d->dl && pg < d->dl_pages)	/* dirty log (M138) */
+			__set_bit(pg, d->dl);
 		doff += chunk; b += chunk; len -= chunk;
 	}
 }
@@ -2824,6 +2851,8 @@ static bool vblk_disk_rw(struct hvx_vm *vm, u64 gpa, u64 doff, u32 len, bool dis
 			chunk = remaining;
 		if (!hvx_guest_rw(vm, gpa, (u8 *)d->disk_pages[pg] + off, chunk, disk_to_guest))
 			return false;
+		if (!disk_to_guest && d->dl && pg < d->dl_pages)	/* dirty log (M138) */
+			__set_bit(pg, d->dl);
 		gpa += chunk; doff += chunk; remaining -= chunk;
 	}
 	return true;
@@ -3428,6 +3457,65 @@ static bool hvx_virtio_pio(struct hvx_vcpu *vcpu, u32 port, bool is_in, u32 size
 }
 
 /*
+ * The host-call port (HVX_VM_HOSTCALL, M138; hvx_abi.h). A DATA OUT appends the low `size`
+ * bytes of RAX (little-endian) to the record being written; a CTL OUT of the record's length
+ * commits it (the writer pads the last OUT, so the bytes written may exceed the length by at
+ * most 3) and ends the run call; a CTL IN reads the magic; an AVAIL IN the staged bytes left;
+ * a DATA IN pops up to `size` staged bytes into RAX (zero-filled past the end). No guest
+ * memory is touched and nothing loops, so a guest can only fill the fixed buffers.
+ */
+static void hvx_hc_pio(struct hvx_vcpu *vcpu, u32 port, bool is_in, u32 size)
+{
+	struct hvx_vm *vm = vcpu->vm;
+	u64 v = 0;
+	u32 k;
+
+	if (is_in) {
+		if (port == HVX_HC_CTL_PORT) {
+			v = HVX_HC_MAGIC;
+		} else if (port == HVX_HC_AVAIL_PORT) {
+			v = vm->hc_in_len - vm->hc_in_off;
+		} else {
+			for (k = 0; k < size && vm->hc_in_off < vm->hc_in_len; k++)
+				v |= (u64)vm->hc_in[vm->hc_in_off++] << (8 * k);
+			if (vm->hc_in_off == vm->hc_in_len)
+				vm->hc_in_off = vm->hc_in_len = 0;
+		}
+		if (size == 1)
+			vcpu->regs.rax = (vcpu->regs.rax & ~0xffULL) | (v & 0xff);
+		else if (size == 2)
+			vcpu->regs.rax = (vcpu->regs.rax & ~0xffffULL) | (v & 0xffff);
+		else
+			vcpu->regs.rax = (u32)v;	/* a 32-bit IN zero-extends RAX */
+		return;
+	}
+	v = vcpu->regs.rax;
+	if (port == HVX_HC_DATA_PORT) {
+		for (k = 0; k < size; k++) {
+			if (vm->hc_out_len >= HVX_HC_SZ) {
+				vm->hc_ovf = true;
+				break;
+			}
+			vm->hc_out[vm->hc_out_len++] = (u8)(v >> (8 * k));
+		}
+	} else if (port == HVX_HC_CTL_PORT && size == 4) {
+		u32 n = vm->hc_out_len - vm->hc_out_done, len = (u32)v;
+
+		if (vm->hc_ovf || len > n || n - len >= 4) {
+			vm->hc_errors++;
+			vm->hc_out_len = vm->hc_out_done;	/* drop the record */
+		} else {
+			vm->hc_out_len = vm->hc_out_done + len;
+			vm->hc_out_done = vm->hc_out_len;
+			vm->hc_records++;
+		}
+		vm->hc_ovf = false;
+		if (!vm->sched_on)
+			vm->hc_exit = true;
+	}
+}
+
+/*
  * Emulate a trapped IN/OUT so guest I/O never reaches the host's physical ports.
  * OUT to the UART transmit register (0x3f8) is captured into the console; a read
  * of the receive register (RBR) pops a queued input byte (milestone 18); a read
@@ -3490,6 +3578,14 @@ static void hvx_pio(struct hvx_vcpu *vcpu)
 	if (!(is_in && (port == HVX_FUZZ_DATA_PORT || port == HVX_FUZZ_STATUS_PORT)) &&
 	    hvx_virtio_pio(vcpu, port, is_in, size))
 		return;
+
+	/* the host-call port (HVX_VM_HOSTCALL, M138); without the flag these ports fall
+	 * through to the unhandled-port path below, as before */
+	if (vm->hc_on && (port == HVX_HC_DATA_PORT || port == HVX_HC_CTL_PORT ||
+			  port == HVX_HC_AVAIL_PORT)) {
+		hvx_hc_pio(vcpu, port, is_in, size);
+		return;
+	}
 
 	if (is_in) {
 		u32 val = 0xffffffff;			/* unhandled port */
@@ -5931,6 +6027,16 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 						vm->sched_stop |= HVX_SCHED_STOP_THROTTLE;
 					continue;
 				}
+				/* host-call port (M138): a committed record ends the run call right
+				 * after its OUT, before the step budget is looked at */
+				if (vm->hc_exit) {
+					vm->hc_exit = false;
+					ex->reason = HVX_EXIT_HOSTCALL;
+					ex->insn_len = 0;
+					ex->qualification = 0;
+					ex->guest_phys = 0;
+					goto out_clear;
+				}
 				if (max_insns && stepped >= max_insns) {
 					ex->reason = HVX_EXIT_STEP;
 					ex->insn_len = 0;
@@ -6510,6 +6616,17 @@ static void hvx_vm_free_pages(struct hvx_vm *vm)
 		vm->vblk.unsync_data = NULL;
 	}
 	vm->vblk.unsync_n = 0;
+	/* M138: the host-call buffers and the dirty log */
+	kvfree(vm->hc_out);
+	kvfree(vm->hc_in);
+	vm->hc_out = vm->hc_in = NULL;
+	vm->hc_on = false;
+	kvfree(vm->dl_ram);
+	kvfree(vm->vblk.dl);
+	vm->dl_ram = NULL;
+	vm->vblk.dl = NULL;
+	vm->vblk.dl_pages = 0;
+	vm->dl_on = false;
 	if (vm->guest_pages) {
 		for (i = 0; i < vm->n_guest_pages; i++)
 			if (vm->guest_pages[i]) free_page(vm->guest_pages[i]);
@@ -6621,6 +6738,8 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 	     (xgetbv(XCR_XFEATURE_ENABLED_MASK) & HVX_XS_MASK) != HVX_XS_MASK))
 		return -ENODEV;			/* guest AVX needs host AVX2 + XCR0 >= x87|SSE|AVX */
 	BUILD_BUG_ON(HVX_XS_SIZE > PAGE_SIZE);
+	if ((cfg->flags & HVX_VM_DIRTY_LOG) && !hvx_ept_ad)
+		return -ENODEV;			/* the RAM log reads the EPT dirty flags */
 
 	n = cfg->mem_size ? DIV_ROUND_UP(cfg->mem_size, PAGE_SIZE) : 64;
 	if (n < MIN_GPAGES)
@@ -6650,10 +6769,20 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 	vm->ept_pt = kvmalloc_array(npt, sizeof(*vm->ept_pt), GFP_KERNEL | __GFP_ZERO);
 	vm->ept_pd = kvmalloc_array(npd, sizeof(*vm->ept_pd), GFP_KERNEL | __GFP_ZERO);
 	vm->vcpu = kvmalloc_array(nv, sizeof(*vm->vcpu), GFP_KERNEL | __GFP_ZERO);
-	if (!vm->guest_pages || !vm->ept_pt || !vm->ept_pd || !vm->vcpu) {
+	if (cfg->flags & HVX_VM_HOSTCALL) {		/* M138: the host-call port's buffers */
+		vm->hc_out = kvzalloc(HVX_HC_SZ, GFP_KERNEL);
+		vm->hc_in = kvzalloc(HVX_HC_SZ, GFP_KERNEL);
+	}
+	if (cfg->flags & HVX_VM_DIRTY_LOG)		/* M138: the RAM part of the dirty log */
+		vm->dl_ram = kvcalloc(BITS_TO_LONGS(n), sizeof(unsigned long), GFP_KERNEL);
+	if (!vm->guest_pages || !vm->ept_pt || !vm->ept_pd || !vm->vcpu ||
+	    ((cfg->flags & HVX_VM_HOSTCALL) && (!vm->hc_out || !vm->hc_in)) ||
+	    ((cfg->flags & HVX_VM_DIRTY_LOG) && !vm->dl_ram)) {
 		hvx_vm_free_pages(vm);
 		return -ENOMEM;
 	}
+	vm->hc_on = !!(cfg->flags & HVX_VM_HOSTCALL);
+	vm->dl_on = !!(cfg->flags & HVX_VM_DIRTY_LOG);
 	vm->n_guest_pages = n;
 	vm->n_ept_pt = npt;
 	vm->n_ept_pd = npd;
@@ -6724,6 +6853,8 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 	build_guest_page_tables(vm);
 	build_guest_system(vm);
 	vm->eptp = build_ept(vm);
+	if (vm->dl_on)
+		vm->eptp |= 1ULL << 6;		/* EPT accessed/dirty flags (the RAM dirty log) */
 
 	/* seed each vCPU to the deterministic power-on defaults (userspace overrides
 	 * via HVX_SET_VCPU + HVX_SET_REGS / HVX_SET_TSC / HVX_SET_SREGS) */
@@ -6921,6 +7052,137 @@ static int hvx_mmap(struct file *filp, struct vm_area_struct *vma)
 	vma->vm_private_data = vm;
 	vma->vm_ops = &hvx_vm_ops;
 	return 0;
+}
+
+/* ---- milestone 138: the dirty-page log and the in-place reset ---- */
+
+/* Fold the EPT dirty flags of guest RAM into dl_ram; with `clear`, clear the flags. The VM is
+ * not running (vm->lock is held), and every run's entry does INVEPT, so a cleared flag is set
+ * again by the guest's next write to that page. */
+static void hvx_dl_fold(struct hvx_vm *vm, bool clear)
+{
+	unsigned int k, i;
+
+	if (!vm->dl_ram)
+		return;
+	for (k = 0; k < vm->n_ept_pt; k++) {
+		u64 *l1 = (u64 *)vm->ept_pt[k];
+
+		for (i = 0; i < EPT_PT_LEAVES; i++) {
+			unsigned int pg = k * EPT_PT_LEAVES + i;
+
+			if (pg >= vm->n_guest_pages)
+				break;
+			if (l1[i] & (1ULL << 9)) {
+				__set_bit(pg, vm->dl_ram);
+				if (clear)
+					l1[i] &= ~(1ULL << 9);
+			}
+		}
+	}
+}
+
+static void hvx_dl_clear(struct hvx_vm *vm)
+{
+	hvx_dl_fold(vm, true);
+	if (vm->dl_ram)
+		bitmap_zero(vm->dl_ram, vm->n_guest_pages);
+	if (vm->vblk.dl)
+		bitmap_zero(vm->vblk.dl, vm->vblk.dl_pages);
+}
+
+/*
+ * HVX_RESET_VM: the state HVX_CREATE_VM (and the first HVX_SET_DISK) left, except the contents
+ * of guest RAM and of the disk, which the caller restores. Every vCPU is cleared and seeded as
+ * hvx_create_vm does (its VMXON, VMCS and FPU pages are kept; the VMCS is not current anywhere:
+ * every run ends with VMCLEAR); the shared device models and buffers, the policies and every
+ * statistic are set as in hvx_create_vm; the disk keeps its pages, its size, the volatile
+ * cache's buffer and its dirty-log bitmap, and everything else of the device goes back to its
+ * first-attach values; the dirty log is cleared.
+ */
+static void hvx_reset_vm(struct hvx_vm *vm)
+{
+	struct hvx_vblk *d = &vm->vblk;
+	unsigned int i, nv = vm->n_vcpus;
+
+	for (i = 0; i < nv; i++) {
+		struct hvx_vcpu *vc = &vm->vcpu[i];
+		unsigned long vmxon = vc->vmxon_page, vmcs = vc->vmcs_page, fx = vc->fx_page;
+
+		memset(vc, 0, sizeof(*vc));
+		vc->vmxon_page = vmxon;
+		vc->vmcs_page = vmcs;
+		vc->fx_page = fx;
+		memset((void *)vmxon, 0, PAGE_SIZE);
+		memset((void *)vmcs, 0, PAGE_SIZE);
+		memset((void *)fx, 0, PAGE_SIZE);
+		hvx_fx_init((u8 *)fx);
+		vc->xcr0 = vm->cpu_v3 ? 1 : 0;
+		seed_vcpu(vc, vm, i);
+	}
+	if (vm->smp_boot)
+		for (i = 1; i < nv; i++)
+			vm->vcpu[i].halted = HVX_HALT_SIPI;
+	vm->cur_vcpu = 0;
+	memset(&vm->sched, 0, sizeof(vm->sched));
+	vm->sched.quantum = HVX_SCHED_QUANTUM;
+	vm->turn_margin = HVX_PMU_MARGIN;
+	memset(&vm->tc, 0, sizeof(vm->tc));
+	vm->sched.cur = nv - 1;
+	vm->sched.tsc_step = 1;
+	vm->sched.tsc_mode = HVX_TSC_COUNTER;
+	vm->sched_stop = 0;
+	vm->tj_on = false;
+	memset(&vm->tj, 0, sizeof(vm->tj));
+	vm->xt_on = false;
+	memset(&vm->xt, 0, sizeof(vm->xt));
+	vm->pmu_period = HVX_PMU_PERIOD;
+	vm->pmu_tick_tsc = HVX_PMU_TICK_TSC;
+
+	vm->console_len = 0;
+	memset(vm->console, 0, sizeof(vm->console));
+	memset(&vm->ioapic, 0, sizeof(vm->ioapic));
+	memset(&vm->uart, 0, sizeof(vm->uart));
+	vm->pic_mask[0] = 0xff;
+	vm->pic_mask[1] = 0xff;
+	vm->input_head = vm->input_tail = 0;
+	memset(vm->input_buf, 0, sizeof(vm->input_buf));
+	vm->fuzz_len = vm->fuzz_off = 0;
+	memset(vm->fuzz_buf, 0, sizeof(vm->fuzz_buf));
+
+	spin_lock(&vm->map_lock);	/* the disk mmap fault handler reads disk_pages (M97) */
+	{
+		unsigned long *pages = d->disk_pages, *dl = d->dl;
+		unsigned int np = d->n_disk_pages, dlp = d->dl_pages;
+		u64 size = d->disk_size;
+		u8 *unsync = d->unsync_data;
+
+		memset(d, 0, sizeof(*d));
+		d->disk_pages = pages;
+		d->n_disk_pages = np;
+		d->disk_size = size;
+		d->unsync_data = unsync;
+		d->dl = dl;
+		d->dl_pages = dlp;
+		if (pages) {		/* HVX_SET_DISK's first-attach values */
+			d->pci_bar0 = (u32)HVX_VBLK_BAR;
+			d->pci_intline = HVX_VBLK_GSI;
+			d->qsize = HVX_VBLK_QSIZE;
+			d->irq_mode = VBLK_IRQ_MODE_INTX;
+			d->msix_control = 0;
+			d->config_msix_vector = HVX_MSIX_NO_VECTOR;
+			d->queue_msix_vector = HVX_MSIX_NO_VECTOR;
+		}
+	}
+	spin_unlock(&vm->map_lock);
+	memset(&vm->vnet, 0, sizeof(vm->vnet));
+	vm->fts_sched_cyc = vm->fts_sched_turns = 0;
+
+	vm->hc_exit = vm->hc_ovf = false;
+	vm->hc_out_len = vm->hc_out_done = 0;
+	vm->hc_in_len = vm->hc_in_off = 0;
+	vm->hc_records = vm->hc_errors = 0;
+	hvx_dl_clear(vm);
 }
 
 static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
@@ -7427,6 +7689,14 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			/* (re)allocate the page-array backing image (M28, the M11 recipe);
 			 * any prior image is freed inside vblk_disk_alloc. */
 			if (vblk_disk_alloc(&vm->vblk, dk.len, &vm->map_lock) < 0) { ret = -ENOMEM; break; }
+			if (vm->dl_on) {	/* M138: the disk part of the dirty log */
+				kvfree(vm->vblk.dl);
+				vm->vblk.dl_pages = 0;
+				vm->vblk.dl = kvcalloc(BITS_TO_LONGS(vm->vblk.n_disk_pages),
+						       sizeof(unsigned long), GFP_KERNEL);
+				if (!vm->vblk.dl) { ret = -ENOMEM; break; }
+				vm->vblk.dl_pages = vm->vblk.n_disk_pages;
+			}
 			/* first attach: default the transport-visible PCI registers */
 			vm->vblk.pci_bar0 = (u32)HVX_VBLK_BAR;
 			vm->vblk.pci_intline = HVX_VBLK_GSI;
@@ -8047,6 +8317,131 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		ret = copy_to_user(uarg, &f, sizeof(f)) ? -EFAULT : 0;
 		break;
 	}
+	case HVX_RESET_VM:
+		if (!vm->n_guest_pages) { ret = -EINVAL; break; }
+		if (vm->pt_on || vm->pt_chunk) { ret = -EBUSY; break; }
+		hvx_dump_exit_stats(vm);	/* one histogram per run, as with a VM per run */
+		hvx_reset_vm(vm);
+		ret = 0;
+		break;
+	case HVX_GET_DIRTY: {
+		struct hvx_dirty dd;
+		struct hvx_vblk *d = &vm->vblk;
+		u64 rb, db;
+
+		if (!vm->n_guest_pages || !vm->dl_on) { ret = -EINVAL; break; }
+		if (copy_from_user(&dd, uarg, sizeof(dd))) { ret = -EFAULT; break; }
+		hvx_dl_fold(vm, !!(dd.flags & HVX_DIRTY_CLEAR));
+		rb = (u64)BITS_TO_LONGS(vm->n_guest_pages) * sizeof(unsigned long);
+		db = d->dl ? (u64)BITS_TO_LONGS(d->dl_pages) * sizeof(unsigned long) : 0;
+		ret = 0;
+		if ((dd.ram_addr && dd.ram_bytes < rb) || (dd.disk_addr && db && dd.disk_bytes < db))
+			ret = -ENOSPC;
+		else if ((dd.ram_addr &&
+			  copy_to_user((void __user *)(unsigned long)dd.ram_addr, vm->dl_ram, rb)) ||
+			 (dd.disk_addr && db &&
+			  copy_to_user((void __user *)(unsigned long)dd.disk_addr, d->dl, db)))
+			ret = -EFAULT;
+		if (ret)
+			break;
+		dd.ram_dirty = bitmap_weight(vm->dl_ram, vm->n_guest_pages);
+		dd.disk_dirty = d->dl ? bitmap_weight(d->dl, d->dl_pages) : 0;
+		dd.ram_bytes = rb;
+		dd.disk_bytes = db;
+		if (dd.flags & HVX_DIRTY_CLEAR) {
+			bitmap_zero(vm->dl_ram, vm->n_guest_pages);
+			if (d->dl)
+				bitmap_zero(d->dl, d->dl_pages);
+		}
+		ret = copy_to_user(uarg, &dd, sizeof(dd)) ? -EFAULT : 0;
+		break;
+	}
+	case HVX_HC_GET: {
+		struct hvx_hc_io io;
+		u32 n;
+
+		if (!vm->n_guest_pages || !vm->hc_on) { ret = -EINVAL; break; }
+		if (copy_from_user(&io, uarg, sizeof(io))) { ret = -EFAULT; break; }
+		n = io.len < vm->hc_out_done ? io.len : vm->hc_out_done;
+		if (n && copy_to_user((void __user *)(unsigned long)io.addr, vm->hc_out, n)) {
+			ret = -EFAULT;
+			break;
+		}
+		memmove(vm->hc_out, vm->hc_out + n, vm->hc_out_len - n);
+		vm->hc_out_len -= n;
+		vm->hc_out_done -= n;
+		io.n = n;
+		io.records = vm->hc_records;
+		io.errors = vm->hc_errors;
+		ret = copy_to_user(uarg, &io, sizeof(io)) ? -EFAULT : 0;
+		break;
+	}
+	case HVX_HC_PUT: {
+		struct hvx_hc_io io;
+
+		if (!vm->n_guest_pages || !vm->hc_on) { ret = -EINVAL; break; }
+		if (copy_from_user(&io, uarg, sizeof(io))) { ret = -EFAULT; break; }
+		if (vm->hc_in_off) {		/* drop what the guest has read */
+			memmove(vm->hc_in, vm->hc_in + vm->hc_in_off, vm->hc_in_len - vm->hc_in_off);
+			vm->hc_in_len -= vm->hc_in_off;
+			vm->hc_in_off = 0;
+		}
+		if (io.len > HVX_HC_SZ - vm->hc_in_len) { ret = -ENOSPC; break; }
+		if (io.len && copy_from_user(vm->hc_in + vm->hc_in_len,
+					     (void __user *)(unsigned long)io.addr, io.len)) {
+			ret = -EFAULT;
+			break;
+		}
+		vm->hc_in_len += io.len;
+		ret = 0;
+		break;
+	}
+	case HVX_HC_GET_STATE: {
+		struct hvx_hc_state st;
+		u32 in = vm->hc_in_len - vm->hc_in_off;
+		u8 __user *a;
+
+		if (!vm->n_guest_pages || !vm->hc_on) { ret = -EINVAL; break; }
+		if (copy_from_user(&st, uarg, sizeof(st))) { ret = -EFAULT; break; }
+		if ((u64)st.cap < (u64)vm->hc_out_len + in) { ret = -ENOSPC; break; }
+		a = (u8 __user *)(unsigned long)st.addr;
+		if ((vm->hc_out_len && copy_to_user(a, vm->hc_out, vm->hc_out_len)) ||
+		    (in && copy_to_user(a + vm->hc_out_len, vm->hc_in + vm->hc_in_off, in))) {
+			ret = -EFAULT;
+			break;
+		}
+		st.out_len = vm->hc_out_len;
+		st.out_done = vm->hc_out_done;
+		st.in_len = in;
+		st.flags = vm->hc_ovf ? HVX_HC_STATE_OVF : 0;
+		ret = copy_to_user(uarg, &st, sizeof(st)) ? -EFAULT : 0;
+		break;
+	}
+	case HVX_HC_SET_STATE: {
+		struct hvx_hc_state st;
+		const u8 __user *a;
+
+		if (!vm->n_guest_pages || !vm->hc_on) { ret = -EINVAL; break; }
+		if (copy_from_user(&st, uarg, sizeof(st))) { ret = -EFAULT; break; }
+		if (st.out_len > HVX_HC_SZ || st.out_done > st.out_len || st.in_len > HVX_HC_SZ) {
+			ret = -EINVAL;
+			break;
+		}
+		a = (const u8 __user *)(unsigned long)st.addr;
+		vm->hc_out_len = vm->hc_out_done = vm->hc_in_len = vm->hc_in_off = 0;
+		vm->hc_ovf = vm->hc_exit = false;
+		if ((st.out_len && copy_from_user(vm->hc_out, a, st.out_len)) ||
+		    (st.in_len && copy_from_user(vm->hc_in, a + st.out_len, st.in_len))) {
+			ret = -EFAULT;
+			break;
+		}
+		vm->hc_out_len = st.out_len;
+		vm->hc_out_done = st.out_done;
+		vm->hc_in_len = st.in_len;
+		vm->hc_ovf = !!(st.flags & HVX_HC_STATE_OVF);
+		ret = 0;
+		break;
+	}
 	default:
 		ret = -ENOTTY;
 	}
@@ -8113,6 +8508,9 @@ static int __init hvx_init(void)
 		pr_err("hvx: EPT lacks 4-level walk or WB memtype; aborting\n");
 		return -ENODEV;
 	}
+	/* M138, HVX_VM_DIRTY_LOG: EPT accessed/dirty flags, and INVEPT, which every run's entry
+	 * does, so a dirty flag cleared between runs is set again by the guest's next write */
+	hvx_ept_ad = (ept_cap & (1ULL << 21)) && (ept_cap & EPT_CAP_INVEPT);
 
 	/* PMU branch clock capability: an architectural PMU v2+ with a GP counter, the
 	 * VMCS load-IA32_PERF_GLOBAL_CTRL controls on both entry and exit, and a way to

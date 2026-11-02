@@ -1,6 +1,6 @@
 # hydo agent transcript, protocol 1: what an agent that is not root cannot do: set the clock, mount, bind a netfilter queue (also in a network namespace: a missing namespace file, a file that is not a namespace).
 # Recorded from `hydo-agent serve --root <scratch>` on Linux as an unprivileged user (hydo/crates/hydo-agent/tests/native.rs); never edited. replay: native
-< HYDO-AG 257 c3d3be4a {"agent":"0.2.0","ev":"hello","features":["freeze","freeze-netns"],"ops":["sync","spawn","signal","run","probe","write","read","mkdir","mount","syncfs","clock_set","clock_get","qlen","tail","untail","freeze","unfreeze"],"pid1":false,"proto":1,"seq":0,"v":1}
+< HYDO-AG 268 32e421ed {"agent":"0.3.0","ev":"hello","features":["freeze","freeze-netns","hostcall"],"ops":["sync","spawn","signal","run","probe","write","read","mkdir","mount","syncfs","clock_set","clock_get","qlen","tail","untail","freeze","unfreeze"],"pid1":false,"proto":1,"seq":0,"v":1}
 > {"id":1,"op":"clock_set","sec":1700000000,"v":1}
 < HYDO-AG 106 bdcfa106 {"err":"os-error","errno":1,"msg":"clock_settime: EPERM","ok":false,"op":"clock_set","re":1,"seq":1,"v":1}
 > {"id":2,"op":"clock_set","step":-5,"v":1}

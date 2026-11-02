@@ -77,6 +77,8 @@ pub struct Book {
     pub ntyped: u64,
     pub inh: u64,
     pub evfrom: usize,
+    /// M138: where the next EVENT line of the host-call records starts.
+    pub pevfrom: usize,
     pub s: Vec<Send>,
 }
 

@@ -17,7 +17,7 @@ pub const PROTO: u64 = 1;
 pub const HOST_PROTOCOLS: std::ops::RangeInclusive<u64> = 1..=1;
 
 /// Optional capabilities an agent of version 1 can announce in its hello.
-pub const FEATURES: &[&str] = &["freeze", "freeze-netns"];
+pub const FEATURES: &[&str] = &["freeze", "freeze-netns", "hostcall"];
 
 /// What each feature of [`FEATURES`] gives, in words (for the host's message when an image's
 /// agent lacks one).
@@ -26,6 +26,10 @@ pub fn feature_purpose(feature: &str) -> &'static str {
         "freeze" => "the packet trigger (F=)",
         "freeze-netns" => {
             "the packet trigger inside a service's network namespace (F= with network: bridge)"
+        }
+        "hostcall" => {
+            "the host-call port: the agent's lines and the host's on an I/O port instead of the \
+             serial line, when the engine offers it (hvx, M138)"
         }
         _ => "an optional capability",
     }

@@ -109,6 +109,34 @@ impl Pages {
         (n, diff, nz, curnz)
     }
 
+    /// The indices of the saved (non-zero) blocks, ascending.
+    pub fn idx(&self) -> &[u32] {
+        &self.idx
+    }
+
+    /// The saved bytes of block `i`, None when it is zero.
+    pub fn block(&self, i: u32) -> Option<&[u8]> {
+        let k = self.idx.binary_search(&i).ok()?;
+        let at = k * BLOCK;
+        let n = BLOCK.min(self.len - i as usize * BLOCK);
+        Some(&self.data[at..at + n])
+    }
+
+    /// M138, an in-place restore: write block `i` of `dst` as a fresh VM restored from these
+    /// pages would hold it: the saved block, else `under`'s (what a fresh VM holds before the
+    /// restore), else zeros.
+    pub fn put_block(&self, under: Option<&Pages>, i: u32, dst: &mut [u8]) {
+        let at = i as usize * BLOCK;
+        if at >= dst.len() {
+            return;
+        }
+        let d = &mut dst[at..(at + BLOCK).min(self.len)];
+        match self.block(i).or_else(|| under.and_then(|u| u.block(i))) {
+            Some(src) => d.copy_from_slice(src),
+            None => d.fill(0),
+        }
+    }
+
     /// The whole saved bytes (a diagnostic: HVX_EXPLORE_DURABLE_OUT).
     pub fn to_vec(&self) -> Vec<u8> {
         let mut v = vec![0u8; self.len];
@@ -136,6 +164,22 @@ mod tests {
         p.load_into(&mut d);
         assert_eq!(d, src);
         assert_eq!(p.to_vec(), src);
+        assert_eq!(p.idx(), &[0, 2, 3]);
+        assert_eq!(p.block(1), None);
+        assert_eq!(p.block(3).unwrap().len(), 700);
+        // put_block: the saved block, else the one under, else zeros
+        let mut under_src = vec![0u8; src.len()];
+        under_src[BLOCK + 3] = 4;
+        let under = Pages::store(&under_src);
+        let mut d = vec![9u8; src.len()];
+        for i in 0..4 {
+            p.put_block(Some(&under), i, &mut d);
+        }
+        let mut want = src.clone();
+        want[BLOCK + 3] = 4;
+        assert_eq!(d, want);
+        p.put_block(None, 1, &mut d);
+        assert_eq!(d, src);
         let mut cur = src.clone();
         assert_eq!(p.diff(&cur), (4, 0, 3, 3));
         cur[5] = 0; // block 0 now zero

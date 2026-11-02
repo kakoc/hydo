@@ -30,6 +30,9 @@ pub enum Why {
     Marker,
     /// The guest stopped.
     Exit,
+    /// M138: the guest committed a host-call record (an agent on the port): its line is seen at
+    /// the instruction that wrote it.
+    Hostcall,
 }
 
 impl Why {
@@ -41,6 +44,7 @@ impl Why {
             Why::Send => "send",
             Why::Marker => "marker",
             Why::Exit => "exit",
+            Why::Hostcall => "hostcall",
         }
     }
 
@@ -52,6 +56,7 @@ impl Why {
             "send" => Why::Send,
             "marker" => Why::Marker,
             "exit" => Why::Exit,
+            "hostcall" => Why::Hostcall,
             _ => return None,
         })
     }

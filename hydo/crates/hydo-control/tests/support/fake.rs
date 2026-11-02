@@ -216,7 +216,8 @@ impl Fake {
                 proto: 1,
                 agent: "0.1.0".into(),
                 ops: Command::NAMES.iter().map(|s| s.to_string()).collect(),
-                features: hydo_agent_proto::msg::FEATURES
+                // the features of the agents the recorded goldens were made with (M131)
+                features: ["freeze", "freeze-netns"]
                     .iter()
                     .map(|s| s.to_string())
                     .collect(),
