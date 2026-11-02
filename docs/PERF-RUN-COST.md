@@ -133,7 +133,8 @@ for how much of the guest time is the deterministic tick landing.
   files written and read cold and warm, teardown) in a VM that never runs.
 - **Drivers.** (M108: the Python summarisers `pyrusage.py`, `phases.py`, `campaign_mix.py`, `drive.py`,
   `scale_table.py` and `scale.sh`, which ran `explore.py`, were deleted; restore them with
-  `git show 705cf98:hv/hvx/perf/<file>`. `serve.sh`, `hvx-run-phases`, `vmcost.c` and `sched/` stay.)
+  `git show 705cf98:hv/hvx/perf/<file>`. M145 deleted `serve.sh` and `hvx-run-phases`, which drove the
+  engine's plain RUN of shell images; restore them from commit c04ade3. `vmcost.c` and `sched/` stay.)
   `hv/hvx/perf/serve.sh` feeds a fixed list of schedules to one engine in serve mode;
   `hv/hvx/perf/hvx-run-phases` is a drop-in `HYDO_HVX_RUN` that only adds the environment variables, so
   `explore.py` ran unchanged; `hv/hvx/perf/pyrusage.py` runs `explore.py` unchanged and prints its own

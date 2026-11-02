@@ -5,9 +5,9 @@
 #
 #   ./deploy-metal.sh              sync userspace sources and the Rust workspace, compile them on
 #                                  the box, run the hand-written suite + the boot verifies + the
-#                                  two pinned reproducers through the run engine (hydo-hvx, the
-#                                  Rust engine; M137) against the module that is ALREADY loaded,
-#                                  print PASS/FAIL per baseline
+#                                  two pinned reproducers (agent images of the stack example, M145:
+#                                  `hydo run`, the host controller over the Rust engine) against
+#                                  the module that is ALREADY loaded, print PASS/FAIL per baseline
 #   ./deploy-metal.sh load         also sync hvx.c/hvx_abi.h/Makefile and rebuild + reload the
 #                                  module first (via ~/bin/hvx-reload: exclusive module lock)
 #   ./deploy-metal.sh flagships    also run the real-service verifies (hydokv, SQLite, Redis,
@@ -16,8 +16,10 @@
 #
 # Every command that opens /dev/hvx runs under ~/bin/hvx-run (shared flock), so a concurrent
 # module reload waits for running VMs instead of killing them. Guest images are expected in
-# ~/hydo/build on the box (built on the build machine, shipped with rsync). The run engine is built
-# with the box's Rust (~/hydo-rust/env.sh) in ~/$HVX_METAL_TREE (cargo build --release -p hydo-hvx).
+# ~/hydo/build on the box (built on the build machine, shipped with rsync); the pinned reproducers'
+# images in ~/hydo/build/m145 (hydo/onboard/examples/stack/build-reproducers.sh). The run engine
+# and `hydo` are built with the box's Rust (~/hydo-rust/env.sh) in ~/$HVX_METAL_TREE (cargo build
+# --release -p hydo-hvx -p hydo-cli).
 # Env: HVX_METAL (the bare-metal machine); HVX_METAL_TREE, the repository's directory in the box's home
 # (default hydo, the main tree; another session's own tree, e.g. hydo-layout, for a run that must
 # not touch the main tree). The engine sources go to ~/$HVX_METAL_TREE/hv/hvx on the box.
@@ -80,9 +82,9 @@ for t in $TESTS $SMPTESTS $HARNESSES; do
   else echo "  COMPILE FAIL: $t"; cat "/tmp/cc-$t.log"; cfail=1; fi
 done
 
-echo ">> building the run engine (hydo-hvx)"
-if [ -f ~/hydo-rust/env.sh ] && ( . ~/hydo-rust/env.sh && cd ~/$TREE && cargo build --release --locked -q -p hydo-hvx ) 2> /tmp/cc-hydo-hvx.log; then :
-else echo "  COMPILE FAIL: hydo-hvx (~/hydo-rust/env.sh and cargo)"; tail -20 /tmp/cc-hydo-hvx.log; cfail=1; fi
+echo ">> building the run engine (hydo-hvx) and hydo"
+if [ -f ~/hydo-rust/env.sh ] && ( . ~/hydo-rust/env.sh && cd ~/$TREE && cargo build --release --locked -q -p hydo-hvx -p hydo-cli ) 2> /tmp/cc-hydo-hvx.log; then :
+else echo "  COMPILE FAIL: hydo-hvx, hydo-cli (~/hydo-rust/env.sh and cargo)"; tail -20 /tmp/cc-hydo-hvx.log; cfail=1; fi
 
 # test -> fingerprints that must ALL appear in its output (empty = rc only)
 declare -A EXP=(
@@ -135,15 +137,19 @@ check "boot (with disk)" "$rc" "$(grep -a 'fp1\|fp_a' <<< "$out")" 36583d533d7c9
 out=$($R sudo timeout 600 ./hvx_smp_boot_verify $B/bzImage $B/initramfs.cpio.gz 2 2>&1); rc=$?
 check "boot (2 vCPUs)" "$rc" "$out" 6584c954c2839491
 
-echo ">> the run engine: the pinned reproducers (a stack VM each; waits for 6 GiB of free memory)"
-E=~/$TREE/target/release/hydo-hvx
+echo ">> the pinned reproducers: the stack example as agent images (M145; a stack VM each; waits for 6 GiB of free memory)"
+# hydo finds its guest kernel under <its root>/guest: a minimal prefix around this tree's hydo
+P=/var/tmp/deploy-metal-hydo; rm -rf $P; mkdir -p $P/bin $P/guest $P/libexec
+cp ~/$TREE/target/release/hydo $P/bin/hydo
+ln -s $B/bzImage $P/guest/bzImage; ln -s $B/initramfs-kafka.cpio.gz $P/guest/initramfs-kafka.cpio.gz
+ln -s $R $P/libexec/hvx-run
 S="disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24"
-for p in explore-disk.img:2403499c9a3f8419 explore-fix-disk.img:f87130453609a5d6; do
+for p in explore-ob-stack-old-disk.img:8fc461db23ef6642 explore-ob-stack-fix-disk.img:aad6a563e2046361; do
   img=${p%%:*}; want=${p##*:}
   n=0; while [ $n -lt 1800 ] && [ "$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)" -lt 6144 ]; do sleep 30; n=$((n+30)); done
-  o=/var/tmp/deploy-metal-pin-$img; sudo rm -rf "$o"; mkdir -p "$o"
-  out=$($R sudo timeout 1800 "$E" one $B/bzImage $B/initramfs-kafka.cpio.gz $B/$img "$o" "$S" 2>&1); rc=$?
-  check "pinned $img" "$rc" "$(grep -a '^RESULT' <<< "$out")" $want
+  o=/var/tmp/deploy-metal-pin-$img; rm -rf "$o"
+  out=$(HYDO_HVX_RUN=$R HYDO_HVX_EXPLORE=~/$TREE/target/release/hydo-hvx timeout 1800 $P/bin/hydo run $B/m145/$img "$S" --out "$o" 2>&1); rc=$?
+  check "pinned $img" "$rc" "$(grep -a '^RESULT' <<< "$out" | grep -oE ' fp=[0-9a-f]{16}')" $want
 done
 
 if [ "$FLAG" = 1 ]; then

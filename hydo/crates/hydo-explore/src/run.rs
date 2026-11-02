@@ -29,8 +29,8 @@ use crate::sched::S;
 use crate::space::{grpc_targets, Space};
 use hydo_engine::{hvm, hvx, BootSpec, ControlledEngine, CpuLevel, Engine, SnapshotStore};
 use hydo_results::{
-    role, Config, End, ErrorKinds, ErrorShrink, Exploration, ExplorationArtifacts, Failure,
-    Image, Reproduction, Run, ShrinkStep, Start, Summary,
+    role, Config, End, ErrorKinds, ErrorShrink, Exploration, ExplorationArtifacts, Failure, Image,
+    Reproduction, Run, ShrinkStep, Start, Summary,
 };
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
@@ -115,47 +115,16 @@ impl Cx {
         a
     }
 
-    fn hvm_repro_line(&self, sched: &str) -> String {
-        let img = self.hvm_image();
-        let env = hvm::disk_for(&img)
-            .map(|d| format!("HVM_DISK={} ", d.display()))
-            .unwrap_or_default();
-        format!(
-            "{}{} {}one {} {} <outdir> \"{}\"",
-            env,
-            hvm::program(&self.env.root, &self.env.config.hvm).display(),
-            self.ram_args()
-                .iter()
-                .map(|x| format!("{x} "))
-                .collect::<String>(),
-            self.hvm_kernel
-                .clone()
-                .unwrap_or_else(|| self.hvm_default_kernel())
-                .display(),
-            img.display(),
-            sched
-        )
-    }
-
-    /// explore.py `by_hand`: the command line that runs one schedule.
-    /// Started by the `hydo` command, on either platform, it names `hydo run` (M107).
+    /// explore.py `by_hand`: the command line that runs one schedule: `hydo run` (M107 when
+    /// started by the `hydo` command; always since M145, which deleted the engine program's plain
+    /// `one` mode that the line named before).
     fn by_hand(&self, sched: &str) -> String {
-        if self.env.cli {
-            return format!(
-                "`hydo run --image {} \"{}\"`",
-                self.build.join(&self.image).display(),
-                sched
-            );
-        }
-        if self.ex.backend == Backend::Hvm {
-            return format!("`{}`", self.hvm_repro_line(sched));
-        }
-        format!(
-            "`~/bin/hvx-run sudo target/release/hydo-hvx {}one ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz ~/hydo/build/{} <outdir> \"{}\"`",
-            self.engine_args().iter().map(|x| format!("{x} ")).collect::<String>(),
-            self.image,
-            sched
-        )
+        let img = if self.ex.backend == Backend::Hvm {
+            self.hvm_image()
+        } else {
+            self.build.join(&self.image)
+        };
+        format!("`hydo run --image {} \"{}\"`", img.display(), sched)
     }
 
     fn render(&self, s: &S) -> String {
@@ -296,7 +265,9 @@ fn setup(a: Args, env: &Env) -> Cx {
         } else {
             cx.build.join(&a.image)
         };
-        agent_space(&img);
+        if cx.env.config.pool.scripted_engine.is_none() {
+            agent_space(&img);
+        }
         eprintln!("fault space: {}", dumps_line(&sp.describe()));
         sp.apply(&mut cx.ex);
     }
@@ -486,60 +457,68 @@ fn make_pool(cx: &Cx) -> Pool {
     if let Some(tm) = cx.a.turn_margin {
         extra.push(format!("{}={tm}", hydo_config::registry::HVX_TURN_MARGIN));
     }
-    let (engine, spec): (Arc<dyn ControlledEngine + Send + Sync>, BootSpec) = if cx.ex.backend == Backend::Hvm
-    {
-        let e = hvm::Hvm {
-            hvmx: hvm::program(&cx.env.root, &cx.env.config.hvm),
-            env: Vec::new(),
-            config: cx.env.config.env.clone(),
+    let (engine, spec): (Arc<dyn ControlledEngine + Send + Sync>, BootSpec) =
+        if cx.ex.backend == Backend::Hvm {
+            let e = hvm::Hvm {
+                hvmx: hvm::program(&cx.env.root, &cx.env.config.hvm),
+                env: Vec::new(),
+                config: cx.env.config.env.clone(),
+            };
+            let spec = BootSpec {
+                image: cx.hvm_image(),
+                ram_mib: cx.ram_mib as u32,
+                vcpus: 1,
+                cpu: CpuLevel::V2,
+                kernel: cx
+                    .hvm_kernel
+                    .clone()
+                    .unwrap_or_else(|| cx.hvm_default_kernel()),
+                initrd: None,
+                outdir: consoles,
+                snapshots: SnapshotStore::Files,
+            };
+            (Arc::new(e), spec)
+        } else {
+            let e = hvx::Hvx {
+                engine: hvx::program(&cx.env.root, &cx.env.config.engine),
+                hvx_run: Some(cx.env.config.paths.hvx_run.clone()),
+                extra_env: extra,
+                env: hvx::wrapper_env(&cx.env.config.engine),
+                config: cx.env.config.env.clone(),
+            };
+            let spec = BootSpec {
+                image: cx.build.join(&cx.image),
+                ram_mib: cx.ram_mib as u32,
+                vcpus: cx.vcpus as u32,
+                cpu: if cx.cpu == "v3" {
+                    CpuLevel::V3
+                } else {
+                    CpuLevel::V2
+                },
+                kernel: cx.build.join("bzImage"),
+                initrd: Some(cx.build.join("initramfs-kafka.cpio.gz")),
+                outdir: consoles,
+                snapshots: SnapshotStore::Files,
+            };
+            (Arc::new(e), spec)
         };
-        let spec = BootSpec {
-            image: cx.hvm_image(),
-            ram_mib: cx.ram_mib as u32,
-            vcpus: 1,
-            cpu: CpuLevel::V2,
-            kernel: cx
-                .hvm_kernel
-                .clone()
-                .unwrap_or_else(|| cx.hvm_default_kernel()),
-            initrd: None,
-            outdir: consoles,
-            snapshots: SnapshotStore::Files,
-        };
-        (Arc::new(e), spec)
-    } else {
-        let e = hvx::Hvx {
-            engine: hvx::program(&cx.env.root, &cx.env.config.engine),
-            hvx_run: Some(cx.env.config.paths.hvx_run.clone()),
-            extra_env: extra,
-            env: hvx::wrapper_env(&cx.env.config.engine),
-            config: cx.env.config.env.clone(),
-        };
-        let spec = BootSpec {
-            image: cx.build.join(&cx.image),
-            ram_mib: cx.ram_mib as u32,
-            vcpus: cx.vcpus as u32,
-            cpu: if cx.cpu == "v3" {
-                CpuLevel::V3
-            } else {
-                CpuLevel::V2
-            },
-            kernel: cx.build.join("bzImage"),
-            initrd: Some(cx.build.join("initramfs-kafka.cpio.gz")),
-            outdir: consoles,
-            snapshots: SnapshotStore::Files,
-        };
-        (Arc::new(e), spec)
-    };
     // Every image is an agent image driven by the host controller, also one explored without a
     // manifest space (the stack's schedules, as hydo-bench draws them, M129); one it cannot drive
     // (a shell-init image, or one without an embedded manifest) is refused with the controller's
     // message instead of every worker failing to start.
-    let engine: Arc<dyn Engine + Send + Sync> =
+    let engine: Arc<dyn Engine + Send + Sync> = if let Some(p) = &cx.env.config.pool.scripted_engine
+    {
+        // the explorer's own tests (crate::scripted)
+        Arc::new(crate::scripted::ScriptedEngine {
+            program: p.clone(),
+            kind: engine.kind(),
+        })
+    } else {
         match hydo_control::agent::AgentEngine::for_image(engine, &spec.image) {
             Ok(a) => Arc::new(a.with_control(&cx.env.config.control)),
             Err(e) => die(&format!("hydo: {e}")),
-        };
+        }
+    };
     let (n, spec) = size_pool(cx, engine.as_ref(), spec);
     let host = Host {
         outdir: cx.out.clone(),
@@ -1618,4 +1597,3 @@ impl Cx {
         }
     }
 }
-

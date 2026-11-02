@@ -229,6 +229,10 @@ variables! {
     HYDO_QUIET_FILE: Pool, User, "path", "", "hydo-explore, hydo-bench";
     /// A result cache: a deterministic exploration resumes from the results recorded there.
     HYDO_EXPLORE_CACHE: Pool, User, "path", "", "hydo-explore, hydo-bench";
+    /// The explorer's tests only (M145): a scripted engine program that answers every schedule as a
+    /// pure function of its text, instead of the host controller over a real engine
+    /// (`hydo_explore::scripted`).
+    HYDO_SCRIPTED_ENGINE: Pool, Developer, "path", "", "hydo-explore";
 
     // ------------------------------------------------------------------ Hvm
     /// Which Mac engine runs: `c` the C hvmx (one milestone after M143), `inproc` the Rust engine
@@ -428,8 +432,6 @@ variables! {
     HYDO_WORLD_BIN: Tests, Test, "path", "built", "hydo-world tests";
     /// The cross-check's first port.
     HYDO_XCHECK_PORT: Tests, Test, "integer", "", "hydo-world tests";
-    /// The engine check's guest RAM.
-    HYDO_RAM_MIB: Tests, Test, "integer", "1024", "hydo-engine examples";
     /// A live etcd for hydo-read's store tests.
     HYDO_TEST_ETCD: Tests, Test, "address", "skipped", "hydo-read tests";
     /// A live Kafka for hydo-read's store tests.
@@ -523,6 +525,10 @@ pub const REMOVED: &[Removed] = &[
     Removed {
         name: "HYDO_SNAPSHOTS",
         why: "chose between file and memory snapshots of the deleted C engine; it changed only the pool's printed line",
+    },
+    Removed {
+        name: "HYDO_RAM_MIB",
+        why: "M145: the guest RAM of the engine check example (engine_check.rs), deleted with the shell images' plain runs",
     },
     Removed {
         name: "HYDO_BENCH_KIND",

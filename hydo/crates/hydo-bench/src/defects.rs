@@ -7,43 +7,23 @@ use regex::Regex;
 use std::path::Path;
 use std::sync::OnceLock;
 
-/// d0-d7 (M54/M56): defect -> (image, signature regex). d0 is the pre-M39 order service (its own,
-/// older guest: it ignores the M46 tokens P= T= O=).
-pub const OLD: [(&str, &str, &str); 8] = [
-    ("d0-old-front-door", "explore-disk.img", r"never ACKed"),
+/// d0-d7 (M54/M56): defect -> signature regex. d0 is the pre-M39 order service.
+pub const OLD: [(&str, &str); 8] = [
+    ("d0-old-front-door", r"never ACKed"),
     (
         "d1-kafka-first",
-        "explore-bench-d1-kafka-first-disk.img",
         r"present \d+ times|told it failed|kafka_exactly_once|told_failed",
     ),
     (
         "d2-batched-publish-flag",
-        "explore-bench-d2-batched-publish-flag-disk.img",
         r"not marked published|acked_marked_published",
     ),
-    (
-        "d3-blind-retry",
-        "explore-bench-d3-blind-retry-disk.img",
-        r"present \d+ times|kafka_exactly_once",
-    ),
-    (
-        "d4-produce-timeout-definite",
-        "explore-bench-d4-produce-timeout-definite-disk.img",
-        r"told it failed|told_failed",
-    ),
-    (
-        "d5-myisam",
-        "explore-bench-d5-myisam-disk.img",
-        r"mysql|in_mysql|published",
-    ),
-    (
-        "d6-client-deadline-definite",
-        "explore-bench-d6-client-deadline-definite-disk.img",
-        r"told it failed|told_failed",
-    ),
+    ("d3-blind-retry", r"present \d+ times|kafka_exactly_once"),
+    ("d4-produce-timeout-definite", r"told it failed|told_failed"),
+    ("d5-myisam", r"mysql|in_mysql|published"),
+    ("d6-client-deadline-definite", r"told it failed|told_failed"),
     (
         "d7-skip-last-record",
-        "explore-bench-d7-skip-last-record-disk.img",
         r"present \d+ times|kafka_exactly_once",
     ),
 ];
@@ -111,7 +91,7 @@ impl Set {
     pub fn sig(name: &str) -> Option<&'static str> {
         OLD.iter()
             .find(|(n, ..)| *n == name)
-            .map(|(_, _, s)| *s)
+            .map(|(_, s)| *s)
             .or_else(|| M59.iter().find(|(n, _)| *n == name).map(|(_, s)| *s))
     }
 
@@ -314,7 +294,10 @@ mod tests {
     #[test]
     fn the_timed_triggers() {
         let a = set(false);
-        assert_eq!(a.triggers("d9-redis-unlocked"), ["disk=none dseed=0 | run Q=2"]);
+        assert_eq!(
+            a.triggers("d9-redis-unlocked"),
+            ["disk=none dseed=0 | run Q=2"]
+        );
         assert_eq!(
             a.triggers("d10-outcome-in-memory"),
             ["disk=none dseed=0 | run X=front@9~20"]

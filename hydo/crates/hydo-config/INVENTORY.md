@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-41 user-facing and 76 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 32 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 0 are set for programs hydo starts. 5 variables were removed in M144. Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+41 user-facing and 75 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 31 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 0 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -77,13 +77,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 |---|---|---|---|---|---|
 | `HYDO_QUIET_FILE` | user | path | - | hydo-explore, hydo-bench | While this file exists, the explorer starts no new VM (waits, checking every 30 s, at most 2 hours): a quiet window on a shared machine. |
 | `HYDO_EXPLORE_CACHE` | user | path | - | hydo-explore, hydo-bench | A result cache: a deterministic exploration resumes from the results recorded there. |
-
-## The bug benchmark (`hydo_config::run::Bench`)
-
-| Variable | Kind | Type | Default | Readers | What it does |
-|---|---|---|---|---|---|
-| `HYDO_BENCH_KIND` | developer | word; empty = unset | agent | hydo-bench | The image kind when `--kind` is not given: `agent`, `shell` or `stack` (M135). |
-| `HYDO_M59_SUFFIX` | developer | text (empty is a value) | -pin-kr | hydo-bench | The stack images' m59 suffix (`-pin` the earlier set, empty the first build). |
+| `HYDO_SCRIPTED_ENGINE` | developer | path | - | hydo-explore | The explorer's tests only (M145): a scripted engine program that answers every schedule as a pure function of its text, instead of the host controller over a real engine (`hydo_explore::scripted`). |
 
 ## The Mac engine (`hydo_config::hvm::Engine`, `hydo_config::hvm::Options`)
 
@@ -205,7 +199,6 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_SKILLS_REF` | test | path | on PATH | hydo-agents tests | The skills-ref program for the skill check. |
 | `HYDO_WORLD_BIN` | test | path | built | hydo-world tests | The hydo-world program for the cross-check. |
 | `HYDO_XCHECK_PORT` | test | integer | - | hydo-world tests | The cross-check's first port. |
-| `HYDO_RAM_MIB` | test | integer | 1024 | hydo-engine examples | The engine check's guest RAM. |
 | `HYDO_TEST_ETCD` | test | address | skipped | hydo-read tests | A live etcd for hydo-read's store tests. |
 | `HYDO_TEST_KAFKA` | test | address | skipped | hydo-read tests | A live Kafka for hydo-read's store tests. |
 | `HYDO_TEST_MYSQL` | test | address | skipped | hydo-read tests | A live MySQL for hydo-read's store tests. |
@@ -256,7 +249,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | Variable | Kind | Type | Default | Readers | What it does |
 |---|---|---|---|---|---|
 
-## Removed in M144
+## Removed
 
 | Variable | Why |
 |---|---|
@@ -264,4 +257,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HVX_SNAP_DIR` | passed to the engine program for the deleted C engine; hydo-hvx never read it (the C verify harnesses in hv/hvx read their own) |
 | `HVX_SNAP_MALLOC` | passed to the engine program for the deleted C engine; hydo-hvx never read it |
 | `HYDO_SNAPSHOTS` | chose between file and memory snapshots of the deleted C engine; it changed only the pool's printed line |
+| `HYDO_RAM_MIB` | M145: the guest RAM of the engine check example (engine_check.rs), deleted with the shell images' plain runs |
+| `HYDO_BENCH_KIND` | M145: hydo-bench's image kind; it runs the manifest-built agent images only (the stack kind, shell-init images, was deleted) |
+| `HYDO_M59_SUFFIX` | M145: the m59 suffix of the deleted stack kind of hydo-bench's images |
 | `HYDO_CLI` | told the explorer program it was started by the deleted Python CLIs; `hydo explore` calls the explorer in its own process |

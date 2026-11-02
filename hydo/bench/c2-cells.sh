@@ -9,8 +9,8 @@
 # <image dir> holds the images build-bench-manifest.sh made (explore-ob-bench-<stem>-disk.img and
 # explore-ob-bench-<stem>-agent-disk.img), plus bzImage and initramfs-kafka.cpio.gz. Each line of
 # <plan file> is `<step name> <hydo-bench arguments without --out and --kind>`; the step runs for
-# every kind in $KINDS (default "shell agent"; `stack` runs the build-stack.sh images in
-# $STACK_BUILD, default ~/hydo/build), into <out dir>/<kind>/<step name>. Waits while
+# every kind in $KINDS (default "agent", the only kind hydo-bench runs since Milestone 145; the
+# `shell` kind went in M136, `stack` in M145), into <out dir>/<kind>/<step name>. Waits while
 # $HYDO_QUIET_FILE (default /var/tmp/hydo-QUIET) exists (the pool also honours it between runs).
 # Every step has a timeout.
 # pid file: <out dir>/cells.pid. $HYDO_TREE (default ~/hydo) is the tree whose hydo-bench runs; the
@@ -22,13 +22,13 @@ T=${HYDO_TREE:-$HOME/hydo}
 B=${HYDO_BENCH_BIN:-$T/target/release/hydo-bench}
 mkdir -p "$out"
 echo $$ > "$out/cells.pid"
-export HYDO_QUIET_FILE=${HYDO_QUIET_FILE:-/var/tmp/hydo-QUIET} HYDO_M59_SUFFIX=-pin-kr
+export HYDO_QUIET_FILE=${HYDO_QUIET_FILE:-/var/tmp/hydo-QUIET}
 export HYDO_HVX_EXPLORE=${HYDO_HVX_EXPLORE:-$T/target/release/hydo-hvx}
 unset HYDO_EXPLORE_CACHE
 log() { echo "$(date -u +%FT%TZ) $*" >> "$out/progress"; }
 while read -r name args; do
   case "$name" in ''|'#'*) continue;; esac
-  for kind in ${KINDS:-shell agent}; do
+  for kind in ${KINDS:-agent}; do
     d=$out/$kind/$name
     [ -f "$d.done" ] && continue
     n=0; while [ -e "$HYDO_QUIET_FILE" ] && [ $n -lt 720 ]; do sleep 10; n=$((n + 1)); done
@@ -36,7 +36,7 @@ while read -r name args; do
     # (the box ran out of memory with seven such VMs, 2026-11-01); run steps with --workers 1
     n=0; while [ "$(awk '/^MemAvailable:/ {print int($2 / 1024)}' /proc/meminfo)" -lt "${MIN_FREE_MIB:-6144}" ] && [ $n -lt 480 ]; do sleep 30; n=$((n + 1)); done
     rm -rf "$d"; mkdir -p "$out/$kind"
-    dir=$imgs; [ "$kind" = stack ] && dir=${STACK_BUILD:-$HOME/hydo/build}
+    dir=$imgs
     log "start $kind $name"
     # shellcheck disable=SC2086
     HYDO_BUILD=$dir timeout -s KILL ${STEP_TIMEOUT:-10800} "$B" $args --kind "$kind" --out "$d" > "$d.out" 2> "$d.err"

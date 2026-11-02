@@ -43,6 +43,9 @@ pub struct Pool {
     /// `HYDO_EXPLORE_CACHE`: the result cache a deterministic exploration resumes from.
     /// Default: none.
     pub cache: Option<PathBuf>,
+    /// `HYDO_SCRIPTED_ENGINE`: the explorer's tests' scripted engine program instead of the host
+    /// controller over a real engine (M145). Default: none.
+    pub scripted_engine: Option<PathBuf>,
 }
 
 impl Pool {
@@ -50,6 +53,7 @@ impl Pool {
         Pool {
             quiet_file: e.path(HYDO_QUIET_FILE),
             cache: e.path(HYDO_EXPLORE_CACHE),
+            scripted_engine: e.path_nonempty(HYDO_SCRIPTED_ENGINE),
         }
     }
 }

@@ -121,7 +121,9 @@ pub fn control(image: &Path) -> Result<u64, ImageError> {
     std::fs::metadata(image)?; // a missing image is not a shell-init image
     let text = match embedded_file(image, "etc/hydo/control") {
         Ok(t) => t,
-        Err(ImageError::Missing(_)) => return Err(ImageError::ShellImage(image.display().to_string())),
+        Err(ImageError::Missing(_)) => {
+            return Err(ImageError::ShellImage(image.display().to_string()))
+        }
         Err(e) => return Err(e),
     };
     parse_control(&text).ok_or_else(|| {

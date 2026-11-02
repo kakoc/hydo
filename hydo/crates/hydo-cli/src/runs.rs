@@ -181,7 +181,9 @@ fn run_engine(
     let one = |eng: Arc<dyn ControlledEngine + Send + Sync>, spec: &BootSpec| {
         let a = AgentEngine::for_image(eng, image).unwrap_or_else(|e| die(&format!("hydo: {e}")));
         if !quiet {
-            println!("hydo: an agent image: the host controller drives the run (/etc/hydo/control)");
+            println!(
+                "hydo: an agent image: the host controller drives the run (/etc/hydo/control)"
+            );
         }
         a.with_control(&ctx.config.control)
             .one_with(spec, &s, policy)

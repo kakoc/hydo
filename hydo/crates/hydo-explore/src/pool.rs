@@ -118,7 +118,6 @@ fn result_re() -> &'static Regex {
     })
 }
 
-
 /// A worker's answer that is not a RESULT line: explore.py's "ERROR worker: <repr(line)>".
 pub fn error_result(raw: &str, worker: usize) -> Res {
     let mut r = obj();
@@ -698,4 +697,3 @@ fn give_up(q: &(Mutex<Queue>, Condvar)) {
         let _ = j.reply.send((j.tag, j.text, error_result("", 0)));
     }
 }
-

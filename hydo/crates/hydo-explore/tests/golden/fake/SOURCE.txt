@@ -19,3 +19,10 @@ scratch paths; up to 4 KiB verbatim, longer ones as a digest (<file>.sha256: the
 count, then the first line, line count and a SHA-256 prefix of every 32 lines). summary.txt is the
 last line the explorer printed. Since M107 hydo-explore is the reference: HYDO_BLESS=1 cargo test -p
 hydo-explore --test fake_engine rewrites them from its output.
+
+M145: the scripted engine is the explorer's test seam `HYDO_SCRIPTED_ENGINE` (src/scripted.rs) instead
+of an engine program speaking RUN/BRANCH (both deleted). With the old "by hand" line patched back
+in, all 17 remaining scenarios gave these files byte for byte; then they were re-recorded once for
+the one intended change: every "by hand" line names `hydo run --image <image> "<schedule>"` (the
+engine program's plain `one` mode it named is gone). The `stack_branch` scenario was deleted with
+`--branch`.

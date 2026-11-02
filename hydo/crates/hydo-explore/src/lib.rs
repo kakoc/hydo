@@ -31,6 +31,7 @@ pub mod results;
 pub mod rng;
 pub mod run;
 pub mod sched;
+pub mod scripted;
 pub mod space;
 
 pub use run::{main_with, Env};

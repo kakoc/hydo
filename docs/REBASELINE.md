@@ -2254,3 +2254,25 @@ M136, VIOLATION `api.reads_acked_categories` now).
 - miniflux-read `disk=none dseed=1 | run C=20 S=off`
   - M136: HYDO-ORACLE: VIOLATION [categories.acked_exactly_once] exactly-once violated: acked c18 is in categories 0 times (of 20 in acked); missing 2: c18, c19
   - M140: HYDO-ORACLE: VIOLATION [categories.acked_exactly_once] exactly-once violated: acked c17 is in categories 0 times (of 20 in acked); missing 3: c17, c18, c19
+
+## 10. The pinned reproducers as agent images (M145, 2026-11-02)
+
+Milestone 145 removed the engines' shell-image path, so the two hand-made shell images that were
+the pinned reproducers since M38/M39 can no longer run. The reproducers are now the stack example
+(`hydo/onboard/examples/stack/hydo.yaml`) built as agent images with the same two order services,
+which `hydo/onboard/examples/stack/build-reproducers.sh` builds from the repository's history with
+the pinned Go 1.26.5 (byte for byte the binaries the old images carried) and then builds into
+images with the bare-metal machine's Nix (M140 part B's tier-B recipe). Each image was built
+twice with identical bytes, and both are identical to M140 part B's images of the same case.
+
+| Image | Order service | Image sha256 | `hydo run` from a fresh boot, twice | Fingerprint |
+|---|---|---|---|---|
+| `explore-ob-stack-old-disk.img` | M38's (git `d26ed1d`, `3ddaf8ba…`) | `e053a633cfd7e757…` | `VIOLATION [stack.exactly_once] order=11 is in kafka (1 times) but the client was never ACKed` | `8fc461db23ef6642` (wfp `88f321c464d7b948`, ctl `86227d78c3d85ba7`) |
+| `explore-ob-stack-fix-disk.img` | M39's fix (git `0112b48`, `1f18f855…`) | `0afcbed997dc8293…` | `OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)` | `aad6a563e2046361` (wfp `6d8fe1825192ece3`, ctl `aa8efc5a7f8698ee`) |
+
+The schedule is the old one, `disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24`, and the
+violated order is the old one, 11. The fresh-boot values equal M140 part B's S1 values for the same
+images (section 9.2, `stack-old`, `stack-fix`). They replace `2403499c9a3f8419` (`explore-disk.img`)
+and `f87130453609a5d6` (`explore-fix-disk.img`) in `hv/hvx/deploy-metal.sh`,
+`hv/hvx/gc/side-suite.sh` and `hv/hvx/safety/side-check.sh`. On the bare-metal machine the images are in
+`~/hydo/build/m145/`.
