@@ -3,8 +3,9 @@
 # example is a new file. "replay: native" ones are replayed byte for byte, twice, by
 # hydo/crates/hydo-agent/tests/native.rs; "replay: pid1" by its ignored test pid1_in_a_namespace
 # (sudo). Checked by hydo/crates/hydo-agent-proto/tests/examples.rs. All eight were recorded again
-# in M131 with hydo-agent 0.2.0, whose hello adds the feature freeze-netns (the M117 recordings
-# are in git history).
+# in M131 with hydo-agent 0.2.0, whose hello adds the feature freeze-netns, and again in M138 with
+# hydo-agent 0.3.0, whose hello adds the feature hostcall (only the hello lines, and the clock
+# transcript's times, changed; the earlier recordings are in git history).
 native-clock.txt                 clock_get (recorded once; the times differ in every run)
 native-files.txt                 mkdir, write, append, read (text, hex, offset), not UTF-8, a missing file, syncfs
 native-hello-sync-refusals.txt   the hello, sync, CAN, and every way a host line is refused

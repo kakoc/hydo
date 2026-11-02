@@ -8,6 +8,9 @@
 //! - Run as `hydo_fc` (its file name), or as `hydo-agent fc <args>`, it is the freeze helper of
 //!   today's images with hydo_fc.c's command line and output (step A3's proof).
 //! - `hydo-agent --version` prints its version and protocol.
+//! - M138: when the kernel command line offers the host-call port (`hydo.hc=1`) and the port
+//!   answers, PID 1 sends its lines there and reads the host's lines from there (`hc`); the
+//!   console then only carries a doorbell byte from the host.
 //!
 //! The protocol is the crate hydo-agent-proto; the agent adds no decision of its own.
 
@@ -15,6 +18,8 @@
 mod agent;
 #[cfg(target_os = "linux")]
 mod fc;
+#[cfg(target_os = "linux")]
+mod hc;
 #[cfg(target_os = "linux")]
 mod nfq;
 #[cfg(target_os = "linux")]
@@ -52,6 +57,7 @@ fn main() {
             output: fd,
             root: None,
             pid1: true,
+            port: hc::Port::open(),
         };
         run(io);
         // the console ended: PID 1 must not exit
@@ -88,6 +94,7 @@ fn main() {
                 output: 1,
                 root,
                 pid1: false,
+                port: None,
             });
         }
         _ => {

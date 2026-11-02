@@ -32,6 +32,18 @@ pub const HVX_VM_PT_TRACE: u32 = 1 << 4;
 pub const HVX_VM_SMP_SCHED: u32 = 1 << 5;
 pub const HVX_VM_SMP_BOOT: u32 = 1 << 6;
 pub const HVX_VM_X86_64_V3: u32 = 1 << 7;
+/// M138: the host-call port (hvx_abi.h).
+pub const HVX_VM_HOSTCALL: u32 = 1 << 8;
+/// M138: the dirty-page log of RAM and disk.
+pub const HVX_VM_DIRTY_LOG: u32 = 1 << 9;
+pub const HVX_EXIT_HOSTCALL: u32 = 0xffff_fffa;
+pub const HVX_HC_DATA_PORT: u16 = 0x05f0;
+pub const HVX_HC_CTL_PORT: u16 = 0x05f4;
+pub const HVX_HC_AVAIL_PORT: u16 = 0x05f8;
+pub const HVX_HC_MAGIC: u32 = 0x4348_5948;
+pub const HVX_HC_SZ: usize = 65536;
+pub const HVX_HC_STATE_OVF: u32 = 1 << 0;
+pub const HVX_DIRTY_CLEAR: u32 = 1 << 0;
 
 pub const HVX_NR_SW_MSR: usize = 11;
 pub const HVX_MSIX_ENTRIES: usize = 4;
@@ -553,6 +565,50 @@ pub const HVX_GET_FTSTAT: u64 = ior::<hvx_ftstat>(60);
 pub const HVX_RESET_FTSTAT: u64 = ioc(0, MAGIC, 61, 0);
 pub const HVX_SET_TURNCTL: u64 = iow::<hvx_turnctl>(62);
 pub const HVX_GET_TURNCTL: u64 = ior::<hvx_turnctl>(63);
+pub const HVX_RESET_VM: u64 = ioc(0, MAGIC, 64, 0);
+pub const HVX_GET_DIRTY: u64 = iowr::<hvx_dirty>(65);
+pub const HVX_HC_GET: u64 = iowr::<hvx_hc_io>(66);
+pub const HVX_HC_PUT: u64 = iow::<hvx_hc_io>(67);
+pub const HVX_HC_GET_STATE: u64 = iowr::<hvx_hc_state>(68);
+pub const HVX_HC_SET_STATE: u64 = iow::<hvx_hc_state>(69);
+
+/// `struct hvx_hc_io` (M138).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct hvx_hc_io {
+    pub addr: u64,
+    pub len: u32,
+    pub n: u32,
+    pub records: u64,
+    pub errors: u64,
+}
+
+/// `struct hvx_hc_state` (M138).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct hvx_hc_state {
+    pub addr: u64,
+    pub cap: u32,
+    pub out_len: u32,
+    pub out_done: u32,
+    pub in_len: u32,
+    pub flags: u32,
+    pub pad: u32,
+}
+
+/// `struct hvx_dirty` (M138).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct hvx_dirty {
+    pub ram_addr: u64,
+    pub ram_bytes: u64,
+    pub disk_addr: u64,
+    pub disk_bytes: u64,
+    pub flags: u32,
+    pub pad: u32,
+    pub ram_dirty: u64,
+    pub disk_dirty: u64,
+}
 
 /// A plain-bytes ABI struct: every bit pattern is a valid value (no references, no enums, no
 /// implicit padding), so it may be zero-initialised and read as bytes.
@@ -616,7 +672,10 @@ pod!(
     hvx_sched,
     hvx_turnctl,
     hvx_ftstat_vcpu,
-    hvx_ftstat
+    hvx_ftstat,
+    hvx_hc_io,
+    hvx_hc_state,
+    hvx_dirty
 );
 
 /// The bytes of a field of a Pod struct (for the fingerprint's field-by-field hashing).

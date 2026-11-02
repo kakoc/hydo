@@ -120,6 +120,9 @@ fn structs_and_ioctls_match_the_header() {
         hvx_pt_config { buf_mib, flags, pad, cr3, lo, hi }
         hvx_pt_status { bytes, buf_bytes, status, ctl, saved, pad }
         hvx_pt_read { offset, len, addr }
+        hvx_hc_io { addr, len, n, records, errors }
+        hvx_hc_state { addr, cap, out_len, out_done, in_len, flags, pad }
+        hvx_dirty { ram_addr, ram_bytes, disk_addr, disk_bytes, flags, pad, ram_dirty, disk_dirty }
     };
     // the explicit pads of the snapshot are not fields in C: check that the next field's offset
     // is the C one (it is in the list) and leave them out
@@ -160,7 +163,13 @@ fn structs_and_ioctls_match_the_header() {
         HVX_GET_FTSTAT,
         HVX_RESET_FTSTAT,
         HVX_SET_TURNCTL,
-        HVX_GET_TURNCTL
+        HVX_GET_TURNCTL,
+        HVX_RESET_VM,
+        HVX_GET_DIRTY,
+        HVX_HC_GET,
+        HVX_HC_PUT,
+        HVX_HC_GET_STATE,
+        HVX_HC_SET_STATE
     );
     let consts: Vec<(String, usize)> = vec![
         (
@@ -194,6 +203,16 @@ fn structs_and_ioctls_match_the_header() {
         ("HVX_SCHED_MAX_VCPUS".into(), HVX_SCHED_MAX_VCPUS),
         ("HVX_TJ_MAX_EXPLICIT".into(), HVX_TJ_MAX_EXPLICIT),
         ("HVX_XT_MAX_EXPLICIT".into(), HVX_XT_MAX_EXPLICIT),
+        ("HVX_VM_HOSTCALL".into(), HVX_VM_HOSTCALL as usize),
+        ("HVX_VM_DIRTY_LOG".into(), HVX_VM_DIRTY_LOG as usize),
+        ("HVX_EXIT_HOSTCALL".into(), HVX_EXIT_HOSTCALL as usize),
+        ("HVX_HC_DATA_PORT".into(), HVX_HC_DATA_PORT as usize),
+        ("HVX_HC_CTL_PORT".into(), HVX_HC_CTL_PORT as usize),
+        ("HVX_HC_AVAIL_PORT".into(), HVX_HC_AVAIL_PORT as usize),
+        ("HVX_HC_MAGIC".into(), HVX_HC_MAGIC as usize),
+        ("HVX_HC_SZ".into(), HVX_HC_SZ),
+        ("HVX_HC_STATE_OVF".into(), HVX_HC_STATE_OVF as usize),
+        ("HVX_DIRTY_CLEAR".into(), HVX_DIRTY_CLEAR as usize),
     ];
     let mut src = String::from(
         "#include <stdio.h>\n#include <stddef.h>\n#include \"hvx_abi.h\"\n\

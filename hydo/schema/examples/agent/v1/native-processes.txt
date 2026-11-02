@@ -1,6 +1,6 @@
 # hydo agent transcript, protocol 1: spawn a process tree, signal it (STOP with waiting, CONT, KILL), exit events with status and signal, a handle used again, a busy handle, kill_after_ms, the environment, output files, a program that does not exist.
 # Recorded from `hydo-agent serve --root <scratch>` on Linux as an unprivileged user (hydo/crates/hydo-agent/tests/native.rs); never edited. replay: native
-< HYDO-AG 257 c3d3be4a {"agent":"0.2.0","ev":"hello","features":["freeze","freeze-netns"],"ops":["sync","spawn","signal","run","probe","write","read","mkdir","mount","syncfs","clock_set","clock_get","qlen","tail","untail","freeze","unfreeze"],"pid1":false,"proto":1,"seq":0,"v":1}
+< HYDO-AG 268 32e421ed {"agent":"0.3.0","ev":"hello","features":["freeze","freeze-netns","hostcall"],"ops":["sync","spawn","signal","run","probe","write","read","mkdir","mount","syncfs","clock_set","clock_get","qlen","tail","untail","freeze","unfreeze"],"pid1":false,"proto":1,"seq":0,"v":1}
 > {"argv":["sh","-c","sleep 100 & sleep 100 & echo up > up; wait"],"cwd":"/work","env":["PATH=/usr/local/bin:/usr/bin:/bin"],"h":"svc","id":1,"op":"spawn","stderr":"/work/svc.log","stdout":"/work/svc.log","v":1}
 < HYDO-AG 45 0502bd60 {"ok":true,"op":"spawn","re":1,"seq":1,"v":1}
 > {"argv":["sh","-c","while [ ! -f up ]; do sleep 0.01; done; echo seen"],"cwd":"/work","env":["PATH=/usr/local/bin:/usr/bin:/bin"],"id":2,"op":"run","v":1}

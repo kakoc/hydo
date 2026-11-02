@@ -74,6 +74,9 @@ pub enum StopWhy {
     Marker,
     /// The guest stopped (the run ends with an error RESULT after this stop).
     Exit,
+    /// M138: the guest committed a record on the host-call port (hvx: an agent that sends its
+    /// lines there); the run call returned at that instruction.
+    Hostcall,
 }
 
 impl StopWhy {
@@ -85,6 +88,7 @@ impl StopWhy {
             "send" => StopWhy::Send,
             "marker" => StopWhy::Marker,
             "exit" => StopWhy::Exit,
+            "hostcall" => StopWhy::Hostcall,
             _ => return None,
         })
     }

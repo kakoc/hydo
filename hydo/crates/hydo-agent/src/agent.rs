@@ -126,6 +126,9 @@ pub struct Io {
     /// Paths the agent opens itself are taken under this directory (native tests).
     pub root: Option<PathBuf>,
     pub pid1: bool,
+    /// M138: the host-call port, when the engine offered it and it answered: the agent's lines
+    /// go there, and the input only rings the bell for the host's lines staged there.
+    pub port: Option<crate::hc::Port>,
 }
 
 pub struct Agent {
@@ -227,7 +230,12 @@ impl Agent {
         }
         self.seq += 1;
         let f = frame(&line.encode());
-        let _ = sys::write_all(self.io.output, f.as_bytes());
+        match &self.io.port {
+            Some(p) => p.write(f.as_bytes()),
+            None => {
+                let _ = sys::write_all(self.io.output, f.as_bytes());
+            }
+        }
     }
 
     fn event(&mut self, ev: Event) {
@@ -388,7 +396,18 @@ impl Agent {
             Ok(n) => n,
             Err(_) => return true,
         };
-        for &b in &buf[..n] {
+        // M138: on the host-call port the serial bytes are only the doorbell; the lines are the
+        // bytes the host staged on the port
+        match self.io.port.as_ref().map(|p| p.read_all()) {
+            Some(staged) => self.feed(&staged),
+            None => self.feed(&buf[..n]),
+        }
+        true
+    }
+
+    /// Handles input bytes: complete lines, the resynchronisation byte, over-long lines.
+    fn feed(&mut self, input: &[u8]) {
+        for &b in input {
             match b {
                 CAN => {
                     if !self.inbuf.is_empty() || self.too_long {
@@ -425,7 +444,6 @@ impl Agent {
                 }
             }
         }
-        true
     }
 
     fn on_line(&mut self, line: &[u8]) {
@@ -586,8 +604,13 @@ impl Agent {
             None => None,
         };
         let nsfd = ns.as_ref().map(|f| f.as_raw_fd());
+        let port = self.io.port.is_some();
         unsafe {
             cmd.pre_exec(move || {
+                if port {
+                    // M138: a service gets no permission for the host-call port
+                    crate::hc::drop_permission();
+                }
                 // The agent blocks SIGCHLD for its signalfd, and a child inherits the mask (the
                 // standard library does not reset it here). A shell started with SIGCHLD blocked
                 // never wakes from `wait` (busybox ash waits in sigsuspend for SIGCHLD), so the

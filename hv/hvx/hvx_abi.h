@@ -133,6 +133,33 @@ struct hvx_config {
 #define HVX_VM_X86_64_V3	(1u << 7)
 
 /*
+ * HVX_VM_HOSTCALL (milestone 138): the paravirtual host-call port of
+ * docs/design/guest-control.md "Phase 2". The guest (hydo-agent, after ioperm) writes a
+ * record as 1/2/4-byte OUTs to HVX_HC_DATA_PORT and ends it with a 4-byte OUT of its exact
+ * length to HVX_HC_CTL_PORT; the module keeps the bytes and HVX_RUN/HVX_RUNC return right
+ * after that OUT with reason HVX_EXIT_HOSTCALL (not with the in-kernel scheduler, where the
+ * record waits for the next return). The host takes the records with HVX_HC_GET and stages
+ * bytes for the guest with HVX_HC_PUT; the guest reads how many are staged from
+ * HVX_HC_AVAIL_PORT and pops them with 1/2/4-byte INs from HVX_HC_DATA_PORT. A 4-byte IN of
+ * HVX_HC_CTL_PORT reads HVX_HC_MAGIC. Every byte is a pure function of the guest's OUTs and the
+ * host's staged bytes; the partial record and the unread staged bytes are VM state that the
+ * host carries with its snapshots (HVX_HC_GET_STATE / HVX_HC_SET_STATE). Without the flag the
+ * ports are unhandled (IN reads all ones, OUT is dropped), as before, and the HC ioctls fail
+ * with EINVAL.
+ */
+#define HVX_VM_HOSTCALL		(1u << 8)
+/*
+ * HVX_VM_DIRTY_LOG (milestone 138): log which 4 KiB pages of guest RAM and of the disk change,
+ * so a host can bring a used VM back to a snapshot by rewriting only those pages
+ * (HVX_GET_DIRTY, HVX_RESET_VM). RAM: the EPT accessed/dirty flags (EPTP bit 6) for the guest's
+ * own writes, plus a bitmap of the pages the module itself writes (virtio DMA into the guest);
+ * the disk: a bitmap of the pages the device writes. Writes the host makes through its mmap
+ * windows are not logged. Invisible to the guest. HVX_CREATE_VM fails with ENODEV on a CPU
+ * without EPT accessed/dirty flags.
+ */
+#define HVX_VM_DIRTY_LOG	(1u << 9)
+
+/*
  * Guest register file. The first 15 fields (rax..r15) are the general-purpose
  * registers loaded/saved around VMLAUNCH by the module's trampoline; their
  * order and offsets are load-bearing (the asm indexes them by byte offset).
@@ -850,6 +877,9 @@ struct hvx_fuzz_input {
 /* HVX_RUNC exit reason: single-step instruction budget reached, guest alive
  * (this is the real Monitor-Trap-Flag basic exit reason, 37). */
 #define HVX_EXIT_STEP		37U
+/* HVX_VM_HOSTCALL: the guest just committed a host-call record (HVX_HC_CTL_PORT); RIP is past
+ * the OUT. Deterministic: the return point is that instruction. */
+#define HVX_EXIT_HOSTCALL	0xfffffffaU
 
 /* Recommended first guest-physical address for userspace-loaded code:
  * pages 0..2 hold the module-built identity page tables. */
@@ -1161,5 +1191,67 @@ struct hvx_turnctl {
 };
 #define HVX_SET_TURNCTL _IOW(HVX_IOC_MAGIC, 62, struct hvx_turnctl)
 #define HVX_GET_TURNCTL _IOR(HVX_IOC_MAGIC, 63, struct hvx_turnctl)
+
+
+/* ---- milestone 138: the host-call port, dirty-page log and in-place reset ---- */
+#define HVX_HC_DATA_PORT	0x05f0	/* OUT 1/2/4: append to the record; IN 1/2/4: pop staged bytes */
+#define HVX_HC_CTL_PORT		0x05f4	/* OUT 4: commit the record (value = its length); IN 4: magic */
+#define HVX_HC_AVAIL_PORT	0x05f8	/* IN 4: staged bytes not yet read */
+#define HVX_HC_MAGIC		0x43485948U	/* "HYHC" */
+#define HVX_HC_SZ		65536	/* each direction's buffer */
+/* HVX_HC_GET: copy (and drop) up to len bytes of committed records; HVX_HC_PUT: stage len bytes
+ * (ENOSPC when they do not fit next to the unread ones). records/errors: totals since the VM
+ * was created or reset (an error is a commit whose length does not match the bytes written or
+ * a record that overflowed the buffer; its bytes are dropped). */
+struct hvx_hc_io {
+	__u64 addr;		/* user buffer */
+	__u32 len;		/* GET: buffer size; PUT: bytes to stage */
+	__u32 n;		/* GET: bytes copied */
+	__u64 records;		/* [GET] records committed */
+	__u64 errors;		/* [GET] records dropped */
+};
+/* HVX_HC_GET_STATE / HVX_HC_SET_STATE: everything of the port a snapshot needs: the output
+ * buffer (committed records not yet taken, then the partial record) and the staged bytes the
+ * guest has not read. Layout at addr: out_len output bytes, then in_len staged bytes. */
+struct hvx_hc_state {
+	__u64 addr;
+	__u32 cap;		/* GET: buffer size (>= 2 * HVX_HC_SZ is always enough) */
+	__u32 out_len;		/* bytes of the output buffer */
+	__u32 out_done;		/* of which committed (the rest is the partial record) */
+	__u32 in_len;		/* staged bytes not yet read */
+	__u32 flags;		/* bit 0: the partial record overflowed */
+	__u32 pad;
+};
+#define HVX_HC_STATE_OVF	(1u << 0)
+/* HVX_GET_DIRTY: one bit per 4 KiB page (bit p of 64-bit word p/64), RAM and disk; set for
+ * every page written since the VM was created or the log was last cleared, except the host's
+ * own mmap writes. HVX_DIRTY_CLEAR clears the log after reading it. A NULL addr skips that
+ * bitmap (ram_bytes/disk_bytes must cover the pages: ceil(pages/64)*8). */
+struct hvx_dirty {
+	__u64 ram_addr;
+	__u64 ram_bytes;
+	__u64 disk_addr;
+	__u64 disk_bytes;
+	__u32 flags;		/* HVX_DIRTY_CLEAR */
+	__u32 pad;
+	__u64 ram_dirty;	/* [out] pages set */
+	__u64 disk_dirty;	/* [out] pages set */
+};
+#define HVX_DIRTY_CLEAR		(1u << 0)
+/*
+ * HVX_RESET_VM: put the VM back into the state HVX_CREATE_VM left it in, except for the contents
+ * of guest RAM and of the disk, which the caller restores itself (with the dirty log, only the
+ * pages that changed): every vCPU's registers, clocks, injection, re-injection and CR2 state,
+ * the LAPIC, IOAPIC, PIC and UART models, the console buffer, the UART receive queue, the fuzz
+ * input, the disk and network device state (the attached disk's pages and size stay), the disk
+ * fault and flush-cut state, the scheduler, timing and turn policies, the host-call port, every
+ * statistic, and the dirty log. Refused (EBUSY) while Intel PT tracing is set up.
+ */
+#define HVX_RESET_VM	_IO(HVX_IOC_MAGIC, 64)
+#define HVX_GET_DIRTY	_IOWR(HVX_IOC_MAGIC, 65, struct hvx_dirty)
+#define HVX_HC_GET	_IOWR(HVX_IOC_MAGIC, 66, struct hvx_hc_io)
+#define HVX_HC_PUT	_IOW(HVX_IOC_MAGIC, 67, struct hvx_hc_io)
+#define HVX_HC_GET_STATE _IOWR(HVX_IOC_MAGIC, 68, struct hvx_hc_state)
+#define HVX_HC_SET_STATE _IOW(HVX_IOC_MAGIC, 69, struct hvx_hc_state)
 
 #endif /* _HVX_ABI_H */

@@ -156,6 +156,20 @@ then fetches the command through the port. Requirements: inert unless the VM opt
 transient input), developed on a side module (`/dev/hvxgc`) and merged only after the full suite
 and the pinned reproducers.
 
+**Built on the side module (M138, hvx only; docs/HISTORY.md "Milestone 138").** What differs from
+the proposal above: the agent is a user-space program, and a `rep outsb` from user space would make
+the module walk the guest's page tables, so a record is written as 4-byte OUTs to a data port
+(0x5f0) and committed by one OUT of its length to a control port (0x5f4); the run call returns at
+that commit (`HVX_EXIT_HOSTCALL`, a `why=hostcall` stop). The host's lines are staged with
+`HVX_HC_PUT` and read by the agent with 4-byte INs (0x5f8 gives the count), after one doorbell
+byte on the serial input. The port's buffers (a partial record, staged bytes not yet read) are
+saved with the engine's snapshots (`HVX_HC_GET_STATE`/`HVX_HC_SET_STATE`), not inside struct
+hvx_snapshot, so every older binary keeps its ABI. The negotiation: the engine offers the port
+(`HYDO_HVX_HOSTCALL=1`: the VM flag `HVX_VM_HOSTCALL` and `hydo.hc=1` on the kernel command line),
+and the agent takes it only when the port answers its magic (hydo-agent 0.3.0, hello feature
+`hostcall`); the engine switches the host's lines to the port when the agent's first record
+arrives there, so an older agent, an older engine or the main module stay on the serial line.
+
 virtio-serial and vsock were considered and not chosen: they carry connection state that
 snapshots break (Firecracker resets vsock connections at a snapshot), they need a third virtio
 device model in the C module with its own deterministic queues and interrupts, and the messages

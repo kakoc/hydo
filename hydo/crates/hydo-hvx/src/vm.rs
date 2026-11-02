@@ -14,6 +14,10 @@ pub struct Vm {
     mem_size: usize,
     disk: *mut u8,
     disk_len: usize,
+    /// M138: the VM has the host-call port (made with HVX_VM_HOSTCALL by a module that has it).
+    pub hc: bool,
+    /// M138: the VM keeps the dirty-page log (HVX_VM_DIRTY_LOG by a module that has it).
+    pub dl: bool,
 }
 
 // SAFETY: the mappings belong to this value only; the module serialises ioctls per VM.
@@ -43,6 +47,8 @@ impl Vm {
             mem_size: 0,
             disk: std::ptr::null_mut(),
             disk_len: 0,
+            hc: false,
+            dl: false,
         })
     }
 
@@ -191,6 +197,84 @@ impl Vm {
     pub fn reset_ftstat(&self) -> io::Result<()> {
         // SAFETY: an _IO request without an argument
         ret(unsafe { libc::ioctl(self.fd.as_raw_fd(), HVX_RESET_FTSTAT as _, 0) })
+    }
+
+    /// HVX_RESET_VM (M138): the VM as HVX_CREATE_VM left it, RAM and disk contents aside.
+    pub fn reset(&self) -> io::Result<()> {
+        // SAFETY: an _IO request without an argument
+        ret(unsafe { libc::ioctl(self.fd.as_raw_fd(), HVX_RESET_VM as _, 0) })
+    }
+
+    /// HVX_GET_DIRTY (M138): the RAM and disk dirty bitmaps (one bit per 4 KiB page), cleared
+    /// after with `clear`. `ram`/`disk` must have room for every page (or be empty to skip).
+    pub fn get_dirty(
+        &self,
+        ram: &mut [u64],
+        disk: &mut [u64],
+        clear: bool,
+    ) -> io::Result<hvx_dirty> {
+        let mut d = hvx_dirty {
+            ram_addr: if ram.is_empty() {
+                0
+            } else {
+                ram.as_mut_ptr() as u64
+            },
+            ram_bytes: (ram.len() * 8) as u64,
+            disk_addr: if disk.is_empty() {
+                0
+            } else {
+                disk.as_mut_ptr() as u64
+            },
+            disk_bytes: (disk.len() * 8) as u64,
+            flags: if clear { HVX_DIRTY_CLEAR } else { 0 },
+            ..Default::default()
+        };
+        self.io(HVX_GET_DIRTY, &mut d)?;
+        Ok(d)
+    }
+
+    /// HVX_HC_GET (M138): append the committed host-call records to `out`.
+    pub fn hc_get(&self, out: &mut Vec<u8>) -> io::Result<hvx_hc_io> {
+        let mut buf = vec![0u8; HVX_HC_SZ];
+        let mut io = hvx_hc_io {
+            addr: buf.as_mut_ptr() as u64,
+            len: buf.len() as u32,
+            ..Default::default()
+        };
+        self.io(HVX_HC_GET, &mut io)?;
+        out.extend_from_slice(&buf[..io.n as usize]);
+        Ok(io)
+    }
+
+    /// HVX_HC_PUT (M138): stage bytes for the guest.
+    pub fn hc_put(&self, p: &[u8]) -> io::Result<()> {
+        let mut io = hvx_hc_io {
+            addr: p.as_ptr() as u64,
+            len: p.len() as u32,
+            ..Default::default()
+        };
+        self.io(HVX_HC_PUT, &mut io)
+    }
+
+    /// HVX_HC_GET_STATE (M138): the port's buffers (output, then the unread staged bytes).
+    pub fn hc_state(&self) -> io::Result<(hvx_hc_state, Vec<u8>)> {
+        let mut buf = vec![0u8; 2 * HVX_HC_SZ];
+        let mut st = hvx_hc_state {
+            addr: buf.as_mut_ptr() as u64,
+            cap: buf.len() as u32,
+            ..Default::default()
+        };
+        self.io(HVX_HC_GET_STATE, &mut st)?;
+        buf.truncate((st.out_len + st.in_len) as usize);
+        Ok((st, buf))
+    }
+
+    /// HVX_HC_SET_STATE (M138).
+    pub fn hc_set_state(&self, st: &hvx_hc_state, bytes: &[u8]) -> io::Result<()> {
+        let mut s = *st;
+        s.addr = bytes.as_ptr() as u64;
+        s.cap = bytes.len() as u32;
+        self.io(HVX_HC_SET_STATE, &mut s)
     }
 }
 

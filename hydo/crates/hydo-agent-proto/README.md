@@ -43,7 +43,7 @@ deadlines a command gives.
   needs, and `Session::command` refuses one whose feature the hello lacks with a message that
   names the feature and says to rebuild the image ("this image's agent (hydo-agent 0.1.0) does
   not offer the feature freeze-netns (...); rebuild the image with this hydo (...), whose agent
-  does"). Features so far: `freeze` (M117), `freeze-netns` (M131, hydo-agent 0.2.0). `tests/schema.rs` fails when the
+  does"). Features so far: `freeze` (M117), `freeze-netns` (M131, hydo-agent 0.2.0), `hostcall` (M138, hydo-agent 0.3.0: the agent can send its lines and read the host's on hvx's host-call port; the engine offers the port and the agent takes it on its own, so no command field depends on it). `tests/schema.rs` fails when the
   generated schema differs from the committed one (`HYDO_BLESS=1` rewrites it) or is not an
   additive change of `hydo/schema/released/agent-v1.json` (a release copies it there with
   `HYDO_RELEASE_SCHEMA=1`). A breaking change is version 2, read beside version 1.
