@@ -1,10 +1,7 @@
-//! The feature controllers of M123 (history, error logs, the composer's rounds) against the
-//! shell they replace.
+//! The feature controllers of M123 (history, error logs, the composer's rounds).
 //!
-//! 1. `features_do_what_the_shell_extensions_do`: the plans the identity corpus (corpus.rs) cannot
-//!    reach yet run on the scripted agent and engine and are checked against the shell model
-//!    (`tests/support/model/m123.rs`, transliterated from hydo-init-history.sh,
-//!    hydo-init-errlog.sh and hydo-composer.sh): the three composed examples that also have an
+//! 1. `the_m123_features_recorded_transcripts`: the plans the identity corpus (corpus.rs) cannot
+//!    reach yet run on the scripted agent and engine: the three composed examples that also have an
 //!    `eventually` check, with that check removed until the liveness controller is merged; and
 //!    variants of redis-composed-hist for the composer's rare paths (commands that outlive the
 //!    drain, a budget, a short workload.timeout for stop_all, a saved composition for
@@ -14,15 +11,16 @@
 //!    three extensions must have been taken at least once.
 //! 2. `plans_as_hydo_build`: the controller's plans hold what hydo-build writes into the image
 //!    (manifest.sh's HYDO_CHECK_* and HYDO_ERR_* lines, compose.list, compose.checks).
-//! 3. `deliberate_mistakes_are_caught`: mistakes put into recorded conversations are caught by
-//!    the model.
 //!
 //! Until M136 three more tests ran the shell files themselves (`w_forms_as_compose_sh`: setw and
 //! plan of the real hydo-composer.sh; `m98_corpora_as_the_awk`: the M98 corpora against
 //! `compose.sh plan`; `errlog_scan_as_the_awk`: EL_SCAN and EL_SUM of hydo-init-errlog.sh against
 //! the controller's port). The shell init and the guest composer were deleted at the switch to
-//! agent images, so those tests went with them (`git show d9202e7:hydo/crates/hydo-control/tests/m123.rs`);
-//! the shell model stays as the frozen description of what the shell images did.
+//! agent images, so those tests went with them (`git show d9202e7:hydo/crates/hydo-control/tests/m123.rs`).
+//! Until Milestone 145 every run was also checked against a shell model of hydo-init-history.sh,
+//! hydo-init-errlog.sh and hydo-composer.sh, and a third test showed that the model caught
+//! deliberate mistakes; both went with the shell init's images (`tests/support/mod.rs`); the
+//! golden is the transcripts of those checked runs.
 
 mod support;
 
@@ -33,7 +31,6 @@ use hydo_schedule::Schedule;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use support::model::{check, Conv};
 use support::{boot, data_of, run_schedule, top, Booted, Item};
 
 // ------------------------------------------------------------------ the plans
@@ -213,43 +210,11 @@ fn class(t: &Transcript) -> &'static str {
 fn boot_ok(plan: &Plan, label: &str) -> Booted {
     for i in 0..30 {
         let salt = format!("{label}#{i}");
-        let mut ctl = hydo_control::ScheduleController::boot(plan.clone()).unwrap();
-        let c = support::converse(
-            support::fake::Fake::boot(&salt, 16),
-            &mut ctl,
-            hydo_control::Start::Boot,
-            hydo_control::Header {
-                controller: String::new(),
-                conversation: "boot".into(),
-                schedule: None,
-                cadence: "default".into(),
-                start: "boot".into(),
-            },
-        );
-        if let Err(e) = check(plan, &c.items, Conv::Boot, "provision", (&[], &[]), None) {
-            panic!("{label}: boot {salt}: the controller differs from the shell:\n{e}");
-        }
         if let Ok(b) = boot(plan, &salt) {
             return b;
         }
     }
     panic!("{label}: no boot");
-}
-
-fn oracle_cmd(acked: &[String], failed: &[String]) -> String {
-    let mut cmd = String::from("oracle");
-    for i in acked {
-        cmd.push(' ');
-        cmd.push_str(i);
-    }
-    if !failed.is_empty() {
-        cmd.push_str(" failed");
-        for i in failed {
-            cmd.push(' ');
-            cmd.push_str(i);
-        }
-    }
-    cmd
 }
 
 /// The paths each extension has, and a line (or a sent command) that shows a run took it.
@@ -316,7 +281,7 @@ const PATHS: &[(&str, &str)] = &[
 ];
 
 #[test]
-fn features_do_what_the_shell_extensions_do() {
+fn the_m123_features_recorded_transcripts() {
     let seeds = if std::env::var_os("HYDO_CONTROL_FULL").is_some() {
         60
     } else {
@@ -366,20 +331,6 @@ fn features_do_what_the_shell_extensions_do() {
                 }
             };
             let ctx = |w: &str| format!("{label}: {text}: {w}");
-            if let Err(e) = check(
-                &plan,
-                &r.run.items,
-                Conv::Run,
-                &s.guest_text(),
-                (&[], &[]),
-                Some(&b.s1.2),
-            ) {
-                panic!(
-                    "{}\n{e}\n--- transcript:\n{}",
-                    ctx("the run differs from the shell"),
-                    r.run.fin.transcript.to_jsonl()
-                );
-            }
             let mut reference = r.run.fin.transcript.clone();
             reference.header.controller = "replay".into();
             assert_eq!(
@@ -390,23 +341,11 @@ fn features_do_what_the_shell_extensions_do() {
             );
             let mut all = r.run.fin.transcript.to_jsonl();
             if let Some(rc) = &r.recovery {
-                let Some(Ending::PowerCut { acked, failed, .. }) = r.run.fin.ending.clone() else {
-                    unreachable!()
-                };
-                if let Err(e) = check(
-                    &plan,
-                    &rc.items,
-                    Conv::Recovery,
-                    &oracle_cmd(&acked, &failed),
-                    (&acked, &failed),
-                    Some(&b.s0.2),
-                ) {
-                    panic!(
-                        "{}\n{e}\n--- transcript:\n{}",
-                        ctx("the recovery differs from the shell"),
-                        rc.fin.transcript.to_jsonl()
-                    );
-                }
+                assert!(
+                    matches!(r.run.fin.ending, Some(Ending::PowerCut { .. })),
+                    "{}",
+                    ctx("a recovery without a power cut")
+                );
                 all.push_str(&rc.fin.transcript.to_jsonl());
                 *counts
                     .entry(format!("recovery:{}", class(&rc.fin.transcript)))
@@ -591,244 +530,6 @@ fn plans_as_hydo_build() {
         n += 1;
     }
     assert!(n > 20);
-}
-
-// ------------------------------------------------------------------ deliberate mistakes
-
-/// Mistakes put into a recorded conversation (as a controller that made them would have sent or
-/// printed them): each must be caught by the model.
-#[test]
-fn deliberate_mistakes_are_caught() {
-    type Mut = fn(&mut Vec<Item>) -> bool;
-    fn edit_report(
-        items: &mut [Item],
-        pick: impl Fn(&str) -> bool,
-        f: impl Fn(&str) -> String,
-    ) -> bool {
-        for it in items.iter_mut() {
-            if let Item::Report { line, .. } = it {
-                if pick(line) {
-                    *line = f(line);
-                    return true;
-                }
-            }
-        }
-        false
-    }
-    let mutations: Vec<(&str, Mut)> = vec![
-        ("an error record's template changed", |v| {
-            edit_report(
-                v,
-                |l| l.starts_with("HYDO-ERRLOG {"),
-                |l| l.replacen("\"tpl\":\"", "\"tpl\":\"x", 1),
-            )
-        }),
-        ("an error record's count changed", |v| {
-            edit_report(
-                v,
-                |l| l.starts_with("HYDO-ERRLOG {"),
-                |l| l.replacen("\"n\":", "\"n\":9", 1),
-            )
-        }),
-        ("the labels of an error kind changed", |v| {
-            edit_report(
-                v,
-                |l| l.starts_with("HYDO-ERRLOG {") && l.contains("\"at\":\"s"),
-                |l| l.replacen("\"at\":\"s", "\"at\":\"r", 1),
-            )
-        }),
-        ("the summary's boot changed", |v| {
-            edit_report(
-                v,
-                |l| l.starts_with("HYDO-ERRLOG-SUM"),
-                |l| l.replace("first", "recovery"),
-            )
-        }),
-        ("an error record after the held assertion records", |v| {
-            let Some(a) = v.iter().position(
-                |i| matches!(i, Item::Report { line, .. } if line.starts_with("HYDO-ERRLOG-SUM")),
-            ) else {
-                return false;
-            };
-            let Some(b) = v[a..].iter().position(
-                |i| matches!(i, Item::Report { line, .. } if line.starts_with("HYDO-ASSERT {")),
-            ) else {
-                return false;
-            };
-            let (x, y) = (v[a].clone(), v[a + b].clone());
-            if let (Item::Report { line: l1, .. }, Item::Report { line: l2, .. }) = (&x, &y) {
-                let (l1, l2) = (l1.clone(), l2.clone());
-                if let Item::Report { line, .. } = &mut v[a] {
-                    *line = l2;
-                }
-                if let Item::Report { line, .. } = &mut v[a + b] {
-                    *line = l1;
-                }
-                return true;
-            }
-            false
-        }),
-        ("a read-back's exit status changed", |v| {
-            edit_report(
-                v,
-                |l| l.starts_with("HYDO-CHECK-FINAL"),
-                |l| l.replace("\"rc\":", "\"rc\":1"),
-            )
-        }),
-        ("a check declaration changed", |v| {
-            edit_report(
-                v,
-                |l| l.starts_with("HYDO-CHECK {"),
-                |l| l.replacen("\"id\":\"", "\"id\":\"z", 1),
-            )
-        }),
-        ("an entry's round changed", |v| {
-            edit_report(
-                v,
-                |l| l.starts_with("HYDO-CMD start i=") && l.contains(" r=1 "),
-                |l| l.replacen(" r=1 ", " r=2 ", 1),
-            )
-        }),
-        ("a command's duration changed", |v| {
-            edit_report(
-                v,
-                |l| l.starts_with("HYDO-CMD end i=") && l.contains(" ms="),
-                |l| l.replacen(" ms=", " ms=1", 1),
-            )
-        }),
-        ("an end status changed", |v| {
-            edit_report(
-                v,
-                |l| l.contains("status=ok"),
-                |l| l.replace("status=ok", "status=failed"),
-            )
-        }),
-        ("the done line's counts changed", |v| {
-            edit_report(
-                v,
-                |l| l.starts_with("HYDO-COMPOSE done"),
-                |l| l.replacen(" ok=", " ok=1", 1),
-            )
-        }),
-        ("the plan line changed", |v| {
-            edit_report(
-                v,
-                |l| l.starts_with("HYDO-COMPOSE plan"),
-                |l| l.replacen("entries=", "entries=1", 1),
-            )
-        }),
-        ("HYDO_SEED changed", |v| {
-            for it in v.iter_mut() {
-                if let Item::Send {
-                    cmd: hydo_agent_proto::msg::Command::Spawn(sp),
-                    ..
-                } = it
-                {
-                    if let Some(e) = sp.env.as_mut() {
-                        if let Some(x) = e.iter_mut().find(|x| x.starts_with("HYDO_SEED=")) {
-                            x.push('7');
-                            return true;
-                        }
-                    }
-                }
-            }
-            false
-        }),
-        ("a composed command's timeout changed", |v| {
-            for it in v.iter_mut() {
-                if let Item::Send {
-                    by,
-                    cmd: hydo_agent_proto::msg::Command::Spawn(sp),
-                    ..
-                } = it
-                {
-                    if by.starts_with("cmd:") {
-                        sp.argv[2] = "61".into();
-                        return true;
-                    }
-                }
-            }
-            false
-        }),
-        ("a launch moved before the gate opened", |v| {
-            // the first launch of round 1 put at the end of round 0's first launch
-            let Some(a) = v.iter().position(|i| matches!(i, Item::Report { by, line, .. } if by == "composer" && line.starts_with("HYDO-CMD start") && line.contains(" r=0 "))) else { return false };
-            let Some(b) = v.iter().position(|i| matches!(i, Item::Report { by, line, .. } if by == "composer" && line.starts_with("HYDO-CMD start") && line.contains(" r=1 "))) else { return false };
-            let it = v.remove(b);
-            v.insert(a + 1, it);
-            true
-        }),
-    ];
-    // the conversations to break: a few runs of the error-log stack, a history example and the
-    // composed plans
-    let mut convs: Vec<(Plan, Vec<Item>, hydo_control::GuestState, String)> = Vec::new();
-    let mut add = |plan: Plan, label: &str, ws: &[&str]| {
-        let b = boot_ok(&plan, label);
-        for w in ws {
-            let s = Schedule::parse(w).unwrap();
-            if let Ok(r) = run_schedule(&b, &s) {
-                convs.push((
-                    plan.clone(),
-                    r.run.items.clone(),
-                    b.s1.2.clone(),
-                    s.guest_text(),
-                ));
-            }
-        }
-    };
-    add(
-        support::plan_of("hydo/onboard/examples/stack/hydo-errors.yaml").unwrap(),
-        "stack-errors",
-        &["disk=none | run", "disk=none | run K=kafka@3+2"],
-    );
-    add(
-        support::plan_of("hydo/onboard/examples/redis/hydo-hist.yaml").unwrap(),
-        "redis-hist",
-        &["disk=none | run"],
-    );
-    let ps = plans();
-    add(
-        ps[2].2.clone(),
-        &ps[2].0,
-        &[
-            "disk=none | run W=0000002a,p4,q2,r100",
-            "disk=none | run W=00000005,p1,q2,r50",
-        ],
-    );
-    add(
-        support::plan_of(HIST).unwrap(),
-        HIST,
-        &[
-            "disk=none | run W=0000002a,p4,q2,r100",
-            "disk=none | run W=00000009,p2,q2,r100",
-        ],
-    );
-    for (plan, items, s1, cmd) in &convs {
-        check(plan, items, Conv::Run, cmd, (&[], &[]), Some(s1))
-            .unwrap_or_else(|e| panic!("unchanged: {e}"));
-    }
-    let mut caught = 0;
-    for (name, f) in &mutations {
-        let mut applied = false;
-        for (plan, items, s1, cmd) in &convs {
-            let mut v = items.clone();
-            if !f(&mut v) {
-                continue;
-            }
-            applied = true;
-            assert!(
-                check(plan, &v, Conv::Run, cmd, (&[], &[]), Some(s1)).is_err(),
-                "not caught: {name}"
-            );
-            caught += 1;
-            break;
-        }
-        assert!(
-            applied,
-            "the mistake could not be put into any conversation: {name}"
-        );
-    }
-    eprintln!("mistakes: {caught} of {} caught", mutations.len());
 }
 
 /// The paths a transcript's text does not show, read from the conversation's items.

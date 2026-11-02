@@ -3,6 +3,14 @@
 Step B1 of `docs/design/guest-control.md` is done on branch `control-core` (docs/HISTORY.md
 "Milestone 120"). Nothing in the product calls this crate yet, and no product behaviour changed.
 
+**Milestone 145:** the shell models this file names as the tests' oracle (`tests/support/model.rs`,
+`model_features.rs`, `model/{fakes,m123,net}.rs`) and the tests that showed they caught deliberate
+mistakes are deleted, with the shell-init images' engine paths. The sections below are the record
+of what they checked when they were written; what guards the controller now is the recorded
+transcripts of those checked runs (`tests/golden/`), the replay of every transcript, the hand-over
+checks and the semantic tests. `git show fb54e8d:hydo/crates/hydo-control/tests/support/model.rs`
+restores a model.
+
 ## What exists
 
 - `src/control.rs`: the `Controller` trait and what it sees and does at a numbered stop.
@@ -723,9 +731,8 @@ only. M136 explained the first and found the second to be a hang (next section).
 
 - **Only agent images.** `hydo-build` makes agent images only; the shell init (`hydo-init.sh`),
   its extensions and the guest composer are deleted (`git show d9202e7:hydo/onboard/<file>`
-  restores them). The shell models in `tests/support/model*.rs` stay: they are now the frozen
-  description of what the shell images did, and the identity corpora keep checking the
-  controller against them. The tests that ran the shell files themselves are gone (m123's
+  restores them). The shell models in `tests/support/model*.rs` stayed one more milestone as the
+  frozen description of what the shell images did (deleted in M145, see the top). The tests that ran the shell files themselves are gone (m123's
   `w_forms_as_compose_sh`, `m98_corpora_as_the_awk`, `errlog_scan_as_the_awk`; fakes'
   `--print-init` checks; the pin of hydo-init-fakes.sh's hash).
 - **`restart_may_fail` (a service whose restart at the heal may fail).** `PlanService::
