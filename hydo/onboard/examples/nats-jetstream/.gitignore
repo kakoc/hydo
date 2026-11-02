@@ -1,0 +1,5 @@
+# hydo (hydo init): the build cache and fetched images
+.hydo/
+hydo/images/
+# the test client built by client/build.sh
+bin/

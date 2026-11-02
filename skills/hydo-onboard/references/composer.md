@@ -48,7 +48,9 @@ so a typo does not silently do nothing.
   `compose.<id>.no_violation`); anything else = the operation failed (recorded, not fatal).
   A `first_` command that fails fails provisioning. An `eventually_` or `finally_` command is an
   invariant: 0 holds, anything else is a violation.
-- Output goes to `/tmp/hydo/compose/log.<entry>`; `HYDO-ASSERT` lines it prints reach the console.
+- Output goes to `/tmp/hydo/compose/log.<entry>`; `HYDO-ASSERT` lines it prints reach the
+  run's report when the command's log is collected. A reaction (`A=`) sees only records written to
+  the console, as the SDKs write them: `printf 'HYDO-ASSERT {...}\n' > /dev/console`.
 
 ## Environment of a command
 

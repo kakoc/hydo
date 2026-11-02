@@ -174,6 +174,10 @@ fn compose_equals_python() {
     let (mut n, mut crashes) = (0, 0);
     for case in &cases {
         let name = s(case, "name").to_string();
+        if bless && gold[&name].is_null() {
+            // a new case (Milestone 141 on): recorded from the Rust answers below
+            gold[&name] = serde_json::json!({"files": {}, "rc": 0, "stdout": "", "stderr": ""});
+        }
         let g = gold[&name].clone();
         let g = &g;
         let d = base.join(&name);
@@ -206,6 +210,25 @@ fn compose_equals_python() {
         let norm = |b: &[u8]| String::from_utf8_lossy(b).replace(&d.display().to_string(), "<DIR>");
         let (out, err) = (norm(&o.stdout), norm(&o.stderr));
         let mut why = Vec::new();
+        if bless && g.get("crash").is_none() {
+            // re-record the answers too, not only the files (a deliberate change of a warning)
+            let e = &mut gold[&name];
+            e["rc"] = serde_json::json!(o.status.code());
+            e["stdout"] = serde_json::json!(out);
+            if e.get("stderr_sha256").is_some() {
+                let h: String = Sha256::digest(err.as_bytes())
+                    .iter()
+                    .map(|x| format!("{x:02x}"))
+                    .collect();
+                e["stderr_sha256"] = serde_json::json!(h);
+                e["stderr"] = serde_json::json!(err.chars().take(1500).collect::<String>());
+            } else {
+                e["stderr"] = serde_json::json!(err);
+            }
+            gold[&name]["files"] = serde_json::json!(files);
+            n += 1;
+            continue;
+        }
         if o.status.code() != g["rc"].as_i64().map(|x| x as i32) {
             why.push(format!("rc {:?} != {}", o.status.code(), g["rc"]));
         }

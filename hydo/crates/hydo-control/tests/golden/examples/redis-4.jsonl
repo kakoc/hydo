@@ -1,7 +1,7 @@
-{"cadence":"default","control":1,"controller":"schedule","conversation":"run","schedule":"disk=none | run P=redis@10~120:300","start":"resume S1"}
+{"cadence":"default","control":1,"controller":"schedule","conversation":"run","schedule":"disk=cut | run P=redis@1~10:4000 C=10","start":"resume S1"}
 {"at":128,"n":1,"seen":16,"t":"stop","why":"resume"}
 {"at":128,"by":"runner","bytes":"\u0018{\"id\":13,\"nonce\":128,\"op\":\"sync\",\"v\":1}\n","id":13,"n":1,"t":"send"}
-{"by":"main","line":"hydo-ob: command: run P=redis@10~120:300","n":1,"t":"note"}
+{"by":"main","line":"hydo-ob: command: run P=redis@1~10:4000 C=10","n":1,"t":"note"}
 {"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"reachable\",\"id\":\"fault.paused\",\"msg\":\"a service was paused (SIGSTOP)\"}","n":1,"t":"report"}
 {"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"sometimes\",\"id\":\"fault.pause_mid_request\",\"msg\":\"a pause began while a client request was in flight\"}","n":1,"t":"report"}
 {"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"reachable\",\"id\":\"fault.clock_back\",\"msg\":\"the realtime clock was stepped backwards\"}","n":1,"t":"report"}
@@ -11,57 +11,83 @@
 {"at":128,"by":"main","bytes":"{\"data\":\"\",\"id\":14,\"op\":\"write\",\"path\":\"/tmp/hydo/acked\",\"v\":1}\n","id":14,"n":1,"t":"send"}
 {"at":128,"by":"main","bytes":"{\"data\":\"\",\"id\":15,\"op\":\"write\",\"path\":\"/tmp/hydo/outcomes\",\"v\":1}\n","id":15,"n":1,"t":"send"}
 {"at":128,"by":"main","bytes":"{\"data\":\"\",\"id\":16,\"op\":\"write\",\"path\":\"/tmp/hydo/workload.log\",\"v\":1}\n","id":16,"n":1,"t":"send"}
-{"at":128,"by":"main","bytes":"{\"append\":true,\"argv\":[\"/bin/busybox\",\"timeout\",\"300\",\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; i=$HYDO_FROM\\nwhile [ $i -lt $HYDO_TO ]; do\\n  r=$(timeout 2 /bin/redis-cli SET k:$i v$i 2>/dev/null)   # a 2 s client deadline\\n  if [ \\\"$r\\\" = OK ]; then echo $i >> $HYDO_ACKED; echo \\\"$i ack\\\" >> $HYDO_OUTCOMES\\n  else echo \\\"$i unknown\\\" >> $HYDO_OUTCOMES; fi\\n  i=$((i + 1))\\ndone\\n\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_FROM=0\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"HYDO_TO=10\",\"TERM=linux\"],\"h\":\"workload\",\"id\":17,\"op\":\"spawn\",\"stderr\":\"/tmp/hydo/workload.log\",\"stdout\":\"/tmp/hydo/workload.log\",\"v\":1}\n","id":17,"n":1,"t":"send"}
+{"at":128,"by":"main","bytes":"{\"append\":true,\"argv\":[\"/bin/busybox\",\"timeout\",\"300\",\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; i=$HYDO_FROM\\nwhile [ $i -lt $HYDO_TO ]; do\\n  r=$(timeout 2 /bin/redis-cli SET k:$i v$i 2>/dev/null)   # a 2 s client deadline\\n  if [ \\\"$r\\\" = OK ]; then echo $i >> $HYDO_ACKED; echo \\\"$i ack\\\" >> $HYDO_OUTCOMES\\n  else echo \\\"$i unknown\\\" >> $HYDO_OUTCOMES; fi\\n  i=$((i + 1))\\ndone\\n\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_FROM=0\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"HYDO_TO=1\",\"TERM=linux\"],\"h\":\"workload\",\"id\":17,\"op\":\"spawn\",\"stderr\":\"/tmp/hydo/workload.log\",\"stdout\":\"/tmp/hydo/workload.log\",\"v\":1}\n","id":17,"n":1,"t":"send"}
 {"at":144,"n":2,"seen":21,"t":"stop","why":"cadence"}
 {"id":13,"n":2,"send":1,"t":"ack"}
 {"id":14,"n":2,"send":2,"t":"ack"}
 {"id":15,"n":2,"send":3,"t":"ack"}
 {"id":16,"n":2,"send":4,"t":"ack"}
 {"id":17,"n":2,"send":5,"t":"ack"}
-{"at":448,"n":21,"seen":22,"t":"stop","why":"cadence"}
-{"by":"main","line":"hydo-ob: workload steps 0..9 rc=0","n":21,"t":"note"}
-{"by":"main","line":"hydo-ob: pause timer for redis armed before step 10 (after 120ms, for 300ms)","n":21,"t":"note"}
-{"at":448,"by":"main","bytes":"{\"append\":true,\"argv\":[\"/bin/busybox\",\"timeout\",\"300\",\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; i=$HYDO_FROM\\nwhile [ $i -lt $HYDO_TO ]; do\\n  r=$(timeout 2 /bin/redis-cli SET k:$i v$i 2>/dev/null)   # a 2 s client deadline\\n  if [ \\\"$r\\\" = OK ]; then echo $i >> $HYDO_ACKED; echo \\\"$i ack\\\" >> $HYDO_OUTCOMES\\n  else echo \\\"$i unknown\\\" >> $HYDO_OUTCOMES; fi\\n  i=$((i + 1))\\ndone\\n\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_FROM=10\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"HYDO_TO=20\",\"TERM=linux\"],\"h\":\"workload\",\"id\":18,\"op\":\"spawn\",\"stderr\":\"/tmp/hydo/workload.log\",\"stdout\":\"/tmp/hydo/workload.log\",\"v\":1}\n","id":18,"n":21,"t":"send"}
-{"at":448,"by":"pause-timer","bytes":"{\"argv\":[\"/bin/busybox\",\"sleep\",\"0.120000\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\"],\"id\":19,\"op\":\"run\",\"v\":1}\n","id":19,"n":21,"t":"send"}
-{"at":464,"n":22,"seen":25,"t":"stop","why":"cadence"}
-{"id":18,"n":22,"send":6,"t":"ack"}
-{"id":19,"n":22,"send":7,"t":"ack"}
-{"at":464,"by":"pause-timer","bytes":"{\"argv\":[\"/bin/busybox\",\"pgrep\",\"-f\",\"i=$HYDO_FROM\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\"],\"id\":20,\"op\":\"run\",\"v\":1}\n","id":20,"n":22,"t":"send"}
-{"at":480,"n":23,"seen":27,"t":"stop","why":"cadence"}
-{"id":20,"n":23,"send":8,"t":"ack"}
-{"at":480,"by":"pause-timer","bytes":"{\"h\":\"redis\",\"id\":21,\"op\":\"signal\",\"sig\":\"STOP\",\"tree\":true,\"v\":1}\n","id":21,"n":23,"t":"send"}
-{"by":"pause-timer","line":"hydo-ob: PAUSED redis (timer, mid_request=true)","n":23,"t":"note"}
-{"by":"pause-timer","line":"HYDO-ASSERT {\"t\":\"reachable\",\"id\":\"fault.paused\",\"ok\":true,\"msg\":\"a service was paused (SIGSTOP)\"}","n":23,"t":"report"}
-{"by":"pause-timer","line":"HYDO-ASSERT {\"t\":\"sometimes\",\"id\":\"fault.pause_mid_request\",\"ok\":true,\"msg\":\"a pause began while a client request was in flight\"}","n":23,"t":"report"}
-{"at":480,"by":"pause-timer","bytes":"{\"argv\":[\"/bin/busybox\",\"sleep\",\"0.300\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\"],\"id\":22,\"op\":\"run\",\"v\":1}\n","id":22,"n":23,"t":"send"}
-{"at":496,"n":24,"seen":29,"t":"stop","why":"cadence"}
-{"id":21,"n":24,"send":9,"t":"ack"}
-{"id":22,"n":24,"send":10,"t":"ack"}
-{"at":512,"n":25,"seen":30,"t":"stop","why":"cadence"}
-{"at":512,"by":"pause-timer","bytes":"{\"h\":\"redis\",\"id\":23,\"op\":\"signal\",\"sig\":\"CONT\",\"tree\":true,\"v\":1}\n","id":23,"n":25,"t":"send"}
-{"by":"pause-timer","line":"hydo-ob: RESUMED redis (timer)","n":25,"t":"note"}
-{"at":528,"n":26,"seen":31,"t":"stop","why":"cadence"}
-{"id":23,"n":26,"send":11,"t":"ack"}
-{"at":768,"n":41,"seen":32,"t":"stop","why":"cadence"}
-{"by":"main","line":"hydo-ob: workload steps 10..19 rc=0","n":41,"t":"note"}
-{"at":768,"by":"main","bytes":"{\"h\":\"redis\",\"id\":24,\"op\":\"signal\",\"sig\":\"CONT\",\"tree\":true,\"v\":1}\n","id":24,"n":41,"t":"send"}
-{"at":768,"by":"main","bytes":"{\"id\":25,\"max\":3000,\"op\":\"read\",\"path\":\"/tmp/hydo/outcomes\",\"v\":1}\n","id":25,"n":41,"t":"send"}
-{"at":784,"n":42,"seen":34,"t":"stop","why":"cadence"}
-{"id":24,"n":42,"send":12,"t":"ack"}
-{"id":25,"n":42,"send":13,"t":"ack"}
-{"at":784,"by":"main","bytes":"{\"data\":\"12\\n\",\"id\":26,\"op\":\"write\",\"path\":\"/tmp/hydo/failed\",\"v\":1}\n","id":26,"n":42,"t":"send"}
-{"at":784,"by":"main","bytes":"{\"id\":27,\"max\":3000,\"op\":\"read\",\"path\":\"/tmp/hydo/acked\",\"v\":1}\n","id":27,"n":42,"t":"send"}
-{"at":800,"n":43,"seen":36,"t":"stop","why":"cadence"}
-{"id":26,"n":43,"send":14,"t":"ack"}
-{"id":27,"n":43,"send":15,"t":"ack"}
-{"by":"main","line":"hydo-explore-acked: 0 2 4 5 6 7 8 9 10 13 14 15 16 17 18 19 ","n":43,"t":"report"}
-{"by":"main","line":"hydo-explore-failed: 12 ","n":43,"t":"report"}
-{"by":"main","line":"hydo-explore-workload-done","n":43,"t":"report"}
-{"action":"disk-faults-off","n":43,"t":"engine"}
-{"by":"main","line":"hydo-ob: command: go","n":43,"t":"note"}
-{"at":800,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; lost=0\\nfor i in $(cat $HYDO_ACKED); do\\n  [ \\\"$(/bin/redis-cli GET k:$i)\\\" = \\\"v$i\\\" ] || { echo \\\"key k:$i lost\\\"; lost=1; break; }\\ndone\\n[ $lost = 0 ] && echo \\\"acked=$(wc -l < $HYDO_ACKED) all present\\\"\\n[ $lost = 0 ]\\n\"],\"capture\":3000,\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\"],\"id\":28,\"op\":\"run\",\"v\":1}\n","id":28,"n":43,"t":"send"}
-{"at":816,"n":44,"seen":38,"t":"stop","why":"cadence"}
-{"id":28,"n":44,"send":16,"t":"ack"}
-{"by":"main","line":"HYDO-ASSERT {\"t\":\"always\",\"id\":\"redis.acked_writes_survive\",\"ok\":true,\"msg\":\"every SET the client saw acknowledged reads back with its value\",\"details\":{\"out\":\"HYDO-ORACLE: OK\"}}","n":44,"t":"report"}
-{"by":"main","line":"HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: HYDO-ORACLE: OK)","n":44,"t":"report"}
-{"end":{"verdict":"HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: HYDO-ORACLE: OK)"},"n":44,"t":"end"}
+{"at":176,"n":4,"seen":22,"t":"stop","why":"cadence"}
+{"by":"main","line":"hydo-ob: workload steps 0..0 rc=0","n":4,"t":"note"}
+{"by":"main","line":"hydo-ob: pause timer for redis armed before step 1 (after 10ms, for 4000ms)","n":4,"t":"note"}
+{"at":176,"by":"main","bytes":"{\"append\":true,\"argv\":[\"/bin/busybox\",\"timeout\",\"300\",\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; i=$HYDO_FROM\\nwhile [ $i -lt $HYDO_TO ]; do\\n  r=$(timeout 2 /bin/redis-cli SET k:$i v$i 2>/dev/null)   # a 2 s client deadline\\n  if [ \\\"$r\\\" = OK ]; then echo $i >> $HYDO_ACKED; echo \\\"$i ack\\\" >> $HYDO_OUTCOMES\\n  else echo \\\"$i unknown\\\" >> $HYDO_OUTCOMES; fi\\n  i=$((i + 1))\\ndone\\n\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_FROM=1\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"HYDO_TO=10\",\"TERM=linux\"],\"h\":\"workload\",\"id\":18,\"op\":\"spawn\",\"stderr\":\"/tmp/hydo/workload.log\",\"stdout\":\"/tmp/hydo/workload.log\",\"v\":1}\n","id":18,"n":4,"t":"send"}
+{"at":176,"by":"pause-timer","bytes":"{\"argv\":[\"/bin/busybox\",\"sleep\",\"0.010000\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\"],\"id\":19,\"op\":\"run\",\"v\":1}\n","id":19,"n":4,"t":"send"}
+{"at":192,"n":5,"seen":25,"t":"stop","why":"cadence"}
+{"id":18,"n":5,"send":6,"t":"ack"}
+{"id":19,"n":5,"send":7,"t":"ack"}
+{"at":192,"by":"pause-timer","bytes":"{\"argv\":[\"/bin/busybox\",\"pgrep\",\"-f\",\"i=$HYDO_FROM\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\"],\"id\":20,\"op\":\"run\",\"v\":1}\n","id":20,"n":5,"t":"send"}
+{"at":208,"n":6,"seen":27,"t":"stop","why":"cadence"}
+{"id":20,"n":6,"send":8,"t":"ack"}
+{"at":208,"by":"pause-timer","bytes":"{\"h\":\"redis\",\"id\":21,\"op\":\"signal\",\"sig\":\"STOP\",\"tree\":true,\"v\":1}\n","id":21,"n":6,"t":"send"}
+{"by":"pause-timer","line":"hydo-ob: PAUSED redis (timer, mid_request=true)","n":6,"t":"note"}
+{"by":"pause-timer","line":"HYDO-ASSERT {\"t\":\"reachable\",\"id\":\"fault.paused\",\"ok\":true,\"msg\":\"a service was paused (SIGSTOP)\"}","n":6,"t":"report"}
+{"by":"pause-timer","line":"HYDO-ASSERT {\"t\":\"sometimes\",\"id\":\"fault.pause_mid_request\",\"ok\":true,\"msg\":\"a pause began while a client request was in flight\"}","n":6,"t":"report"}
+{"at":208,"by":"pause-timer","bytes":"{\"argv\":[\"/bin/busybox\",\"sleep\",\"4.000\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\"],\"id\":22,\"op\":\"run\",\"v\":1}\n","id":22,"n":6,"t":"send"}
+{"at":224,"n":7,"seen":29,"t":"stop","why":"cadence"}
+{"id":21,"n":7,"send":9,"t":"ack"}
+{"id":22,"n":7,"send":10,"t":"ack"}
+{"at":384,"n":17,"seen":30,"t":"stop","why":"cadence"}
+{"at":384,"by":"pause-timer","bytes":"{\"h\":\"redis\",\"id\":23,\"op\":\"signal\",\"sig\":\"CONT\",\"tree\":true,\"v\":1}\n","id":23,"n":17,"t":"send"}
+{"by":"pause-timer","line":"hydo-ob: RESUMED redis (timer)","n":17,"t":"note"}
+{"at":400,"n":18,"seen":31,"t":"stop","why":"cadence"}
+{"id":23,"n":18,"send":11,"t":"ack"}
+{"at":464,"n":22,"seen":32,"t":"stop","why":"cadence"}
+{"by":"main","line":"hydo-ob: workload steps 1..9 rc=0","n":22,"t":"note"}
+{"at":464,"by":"main","bytes":"{\"id\":24,\"max\":3000,\"op\":\"read\",\"path\":\"/tmp/hydo/outcomes\",\"v\":1}\n","id":24,"n":22,"t":"send"}
+{"at":480,"n":23,"seen":33,"t":"stop","why":"cadence"}
+{"id":24,"n":23,"send":12,"t":"ack"}
+{"at":480,"by":"main","bytes":"{\"data\":\"\",\"id\":25,\"op\":\"write\",\"path\":\"/tmp/hydo/failed\",\"v\":1}\n","id":25,"n":23,"t":"send"}
+{"at":480,"by":"main","bytes":"{\"id\":26,\"max\":3000,\"op\":\"read\",\"path\":\"/tmp/hydo/acked\",\"v\":1}\n","id":26,"n":23,"t":"send"}
+{"at":496,"n":24,"seen":35,"t":"stop","why":"cadence"}
+{"id":25,"n":24,"send":13,"t":"ack"}
+{"id":26,"n":24,"send":14,"t":"ack"}
+{"by":"main","line":"hydo-explore-acked: 0 1 2 3 4 6 7 8 9 ","n":24,"t":"report"}
+{"by":"main","line":"hydo-explore-failed: ","n":24,"t":"report"}
+{"at":496,"by":"main","bytes":"{\"h\":\"redis\",\"id\":27,\"op\":\"signal\",\"sig\":\"STOP\",\"tree\":true,\"v\":1}\n","id":27,"n":24,"t":"send"}
+{"by":"main","line":"hydo-ob: POWER CUT before step 10 (all services frozen)","n":24,"t":"note"}
+{"by":"main","line":"hydo-explore-workload-done cut","n":24,"t":"report"}
+{"at":512,"n":25,"seen":36,"t":"stop","why":"cadence"}
+{"id":27,"n":25,"send":15,"t":"ack"}
+{"end":{"cut":{"acked":["0","1","2","3","4","6","7","8","9"],"failed":[]}},"n":25,"t":"end"}
+{"cadence":"default","control":1,"controller":"schedule","conversation":"recovery","schedule":"disk=cut | run P=redis@1~10:4000 C=10","start":"resume S0"}
+{"at":48,"n":1,"seen":9,"t":"stop","why":"resume"}
+{"at":48,"by":"runner","bytes":"\u0018{\"id\":7,\"nonce\":48,\"op\":\"sync\",\"v\":1}\n","id":7,"n":1,"t":"send"}
+{"by":"main","line":"hydo-ob: command: oracle 0 1 2 3 4 6 7 8 9","n":1,"t":"note"}
+{"at":48,"by":"main","bytes":"{\"id\":8,\"op\":\"clock_set\",\"sec\":1767225600,\"v\":1}\n","id":8,"n":1,"t":"send"}
+{"at":64,"n":2,"seen":11,"t":"stop","why":"cadence"}
+{"id":7,"n":2,"send":1,"t":"ack"}
+{"id":8,"n":2,"send":2,"t":"ack"}
+{"by":"main","line":"hydo-ob: realtime clock set to 2026-01-01T00:00:00Z","n":2,"t":"note"}
+{"at":64,"by":"main","bytes":"{\"append\":true,\"data\":\"0\\n1\\n2\\n3\\n4\\n6\\n7\\n8\\n9\\n\",\"id\":9,\"op\":\"write\",\"path\":\"/tmp/hydo/acked\",\"v\":1}\n","id":9,"n":2,"t":"send"}
+{"at":64,"by":"main","bytes":"{\"dst\":\"/data\",\"fstype\":\"ext4\",\"id\":10,\"op\":\"mount\",\"src\":\"/dev/vda2\",\"v\":1}\n","id":10,"n":2,"t":"send"}
+{"at":80,"n":3,"seen":13,"t":"stop","why":"cadence"}
+{"id":9,"n":3,"send":3,"t":"ack"}
+{"id":10,"n":3,"send":4,"t":"ack"}
+{"at":80,"by":"main","bytes":"{\"id\":11,\"op\":\"mkdir\",\"path\":\"/data/redis\",\"v\":1}\n","id":11,"n":3,"t":"send"}
+{"by":"main","line":"hydo-ob: mounted /dev/vda2 on /data (rw)","n":3,"t":"note"}
+{"by":"main","line":"hydo-stack: recovering from log","n":3,"t":"note"}
+{"at":80,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; exec /bin/redis-server /etc/redis.conf\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\"],\"h\":\"redis\",\"id\":12,\"op\":\"spawn\",\"stderr\":\"/tmp/hydo/redis.log\",\"stdout\":\"/tmp/hydo/redis.log\",\"v\":1}\n","id":12,"n":3,"t":"send"}
+{"at":96,"n":4,"seen":15,"t":"stop","why":"cadence"}
+{"id":11,"n":4,"send":5,"t":"ack"}
+{"id":12,"n":4,"send":6,"t":"ack"}
+{"at":96,"by":"main","bytes":"{\"alive\":\"redis\",\"argv\":[\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; /bin/redis-cli ping | grep -q PONG\"],\"deadline_ms\":120000,\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\"],\"every_ms\":1000,\"id\":13,\"op\":\"probe\",\"v\":1}\n","id":13,"n":4,"t":"send"}
+{"at":112,"n":5,"seen":17,"t":"stop","why":"cadence"}
+{"id":13,"n":5,"send":7,"t":"ack"}
+{"by":"main","line":"hydo-ob: redis ready after 2 polls","n":5,"t":"note"}
+{"at":112,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; lost=0\\nfor i in $(cat $HYDO_ACKED); do\\n  [ \\\"$(/bin/redis-cli GET k:$i)\\\" = \\\"v$i\\\" ] || { echo \\\"key k:$i lost\\\"; lost=1; break; }\\ndone\\n[ $lost = 0 ] && echo \\\"acked=$(wc -l < $HYDO_ACKED) all present\\\"\\n[ $lost = 0 ]\\n\"],\"capture\":3000,\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\"],\"id\":14,\"op\":\"run\",\"v\":1}\n","id":14,"n":5,"t":"send"}
+{"at":128,"n":6,"seen":19,"t":"stop","why":"cadence"}
+{"id":14,"n":6,"send":8,"t":"ack"}
+{"by":"main","line":"HYDO-ASSERT {\"t\":\"always\",\"id\":\"redis.acked_writes_survive\",\"ok\":true,\"msg\":\"every SET the client saw acknowledged reads back with its value\",\"details\":{\"out\":\"all 933 fine\"}}","n":6,"t":"report"}
+{"by":"main","line":"HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: all 933 fine)","n":6,"t":"report"}
+{"end":{"verdict":"HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: all 933 fine)"},"n":6,"t":"end"}

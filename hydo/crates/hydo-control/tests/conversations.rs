@@ -30,7 +30,9 @@ fn header(conv: &str) -> Header {
 fn solo_mode_does_what_the_shell_does() {
     let mut n = 0;
     for m in manifests() {
-        let Ok(plan) = plan_of(&m) else { continue };
+        let Ok(plan) = support::model_plan_of(&m) else {
+            continue;
+        };
         for i in 0..4 {
             let salt = format!("{m} solo {i}");
             let mut ctl = ScheduleController::solo(plan.clone()).unwrap();

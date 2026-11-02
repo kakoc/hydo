@@ -1,8 +1,5 @@
-# The schedule corpus of hydo/crates/hydo-schedule/tests/corpus.py (explore.py at commit 2a58c4b;
-# Python 3.15.0 on the Mac), --quick mode, recorded in M107 as chunked SHA-256 (tests/support/mod.rs),
-# with two changes to the script: no cf= on hvm (as ident.py), relative manifest paths as group labels.
-# Restore the script: git show 2a58c4b:hydo/crates/hydo-schedule/tests/corpus.py
-# Re-record from the Rust output (the reference since M107): HYDO_BLESS=1 cargo test -p hydo-explore --test corpus
+# The schedule corpus (--quick mode) as hydo-explore produced it (HYDO_BLESS=1), chunked SHA-256
+# (tests/support/mod.rs). Until M107 it was explore.py's (git show 2a58c4b:hydo/crates/hydo-schedule/tests/corpus.py).
 input	hydo/onboard/examples/avx2/hydo.yaml	c0d18567ef65d9300820b8944ffcee57cd228512eedf147ac7e624b8eff2592a
 input	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	a4ba83796fb727145d516a32229c1896e3fffcbfcfb0ee40b6f447ea4e093ab4
 input	hydo/onboard/examples/compose-voting/hydo-mac.yaml	f31a88f96297c1b4a0de709926c3ac420bce149c69248ff064f54b661c63aac1
@@ -34,6 +31,14 @@ input	hydo/onboard/examples/stack/hydo-errors.yaml	e72c82ce5173231f6f7cc425e23b8
 input	hydo/onboard/examples/stack/hydo-grpcgen.yaml	72b3a42760bb79db3be04fe34d4e7a55645ed133e86008b059f0935cd3f247cf
 input	hydo/onboard/examples/stack/hydo-read.yaml	d3899b9ac926be02576d0f8e9b950bcc174682dc727791d4f1309294b3a1fb68
 input	hydo/onboard/examples/stack/hydo.yaml	369ed2074d0024dcbb5bf2218731bee7526fa006ff0e900aef339cc6cf69fb24
+input	hydo/onboard/examples/nats-jetstream/hydo/hydo.yaml	a7e19bf3c01be56d464b7a6e443792caee1ad45e29fa7ea8be9801cf05965719
+input	hydo/onboard/examples/nats-jetstream/hydo/checks/final_acked_readable	900e87df6b54fa36af827d5c7d246375af4da61bd20b61838640fb1508b546a9
+input	hydo/onboard/examples/nats-jetstream/hydo/fetch-images.sh	b8360f6b9d20162d723336510712e6eba9c919e0899b29b67673f0a433ff20ae
+input	hydo/onboard/examples/nats-jetstream/hydo/hydo-compose.lock.json	319aa2ded0f4f002a2cf8d5e95e2b8db3d7abe2e5551064de3f2b1ebc4b95376
+input	hydo/onboard/examples/nats-jetstream/hydo/known-errors.yaml	8eeb9294ed5a38a17b6b0576f331c7b4041566c30747afcbb162460913407051
+input	hydo/onboard/examples/nats-jetstream/hydo/regressions/README.md	bf69c8d9566826cfbec446e1d3d9702b3cb8fc48b45937ab5d173f8062f3b2ef
+input	hydo/onboard/examples/nats-jetstream/hydo/workload/helper_lib.sh	30aa23c29a4034cbcb303161511b2f4b7716662fe789d6863ff62256153c27aa
+input	hydo/onboard/examples/nats-jetstream/hydo/workload/parallel_driver_publish	a97baf772fb85359ba71f587cc1d5ec0a76593769a714d54c891a59722a2f66e
 input	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	d8c924f5de6093c0e1f52b2733682fbd4bab850f162a22c443b53fecefe1d900
 input	hydo/onboard/examples/redis-composed-hist/hydo/checks/linearizable_redis.kv_linearizable	92ea7d656dcea8c0cf7a2fe340fd6e578876f4465cb969ec3ea11fc8c3e3d161
 input	hydo/onboard/examples/redis-composed-hist/hydo/checks/list_append_redis.lists_append	984afbf105a27022c7de2906d07b0cd268b7642b6006966a06b534dd01979038
@@ -93,5 +98,6 @@ chunk	corpus	1	4096	21a70e3bb3add3f3ef8d28f5e1eb7321440a6568ec3fb4d7d02c393d21ce
 chunk	corpus	2	4096	bfcbef7b8cdeeac0147c38ca43f41565c309aa9da08876ff15c34bf89e0c6489
 chunk	corpus	3	4096	64005ab836065b86b1296014f119ef734cf79c0048e88bea5c5a933b065714af
 chunk	corpus	4	4096	b965d22c17a60612346ed27b3ccc6b0cbdf024368ea6ef46f978590d1d77ea94
-chunk	corpus	5	4096	c7cf8465261d2a5f0ad8dddd6ab7c62564cbcd3c4ac02f794c5e7dbd1ebca4d4
-chunk	corpus	6	2564	82c02dfad45116a54b938aa79d7a3a7ca51f70ff9af44ab87079e42b9e139fea
+chunk	corpus	5	4096	7311defb91cd08101a08a222c515f083d8db9a864a8a08d4752e33781f328e77
+chunk	corpus	6	4096	cbea84c33c5be4a5af159234aa5bf41760fc9786bd95a2e50f91e17af206b44b
+chunk	corpus	7	3382	ba35cc9cc1faeca68a7abff0de879b910c747e65a6ebdf426d01226839a14036

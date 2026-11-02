@@ -108,6 +108,23 @@ pub fn plan_of(rel: &str) -> Result<Plan, Unsupported> {
     Plan::from_manifest(&hydo_manifest::Manifest::from_validated(data_of(rel)?))
 }
 
+/// [`plan_of`] for the tests whose oracle is the shell model: the model has no restart policies
+/// (M134; the shell init never followed them), so a manifest with one (M141's NATS cluster,
+/// imported from Compose) is left to restart.rs.
+pub fn model_plan_of(rel: &str) -> Result<Plan, Unsupported> {
+    let plan = plan_of(rel)?;
+    if plan
+        .services
+        .iter()
+        .any(|s| s.restart != hydo_manifest::Restart::No)
+    {
+        return Err(Unsupported::other(
+            "restart policies: no shell model (their proof is tests/restart.rs)",
+        ));
+    }
+    Ok(plan)
+}
+
 /// The validated manifest as the explorer reads it, with a composer plan's meta as `_compose`
 /// (where hydo_manifest::load puts it).
 pub fn data_of(rel: &str) -> Result<serde_json::Value, Unsupported> {

@@ -1,7 +1,7 @@
 ---
 name: hydo-onboard
 description: Set up deterministic fault testing with hydo for a software project. Writes the repository's hydo/ folder (hydo/hydo.yaml with the services, workload commands in hydo/workload/, properties in hydo/checks/), starting from a docker-compose file when there is one, so that hydo can run the whole system under process kills, pauses, network faults, power cuts, clock jumps and disk faults and replay every failure bit for bit. Use when asked to onboard, add or test a project, repository, service or Docker Compose stack with hydo, to write or fix a hydo.yaml or hydo/ folder, or to add hydo workload commands or checks.
-compatibility: Needs the hydo command line tool (x86_64 Linux with VT-x, or an Apple Silicon Mac) or a checkout of hydo's source repository, a POSIX shell and Python 3.9 or later. Writing the hydo/ folder needs no network; importing a Compose file resolves image digests once.
+compatibility: Needs the hydo command line tool (x86_64 Linux with VT-x, or an Apple Silicon Mac) or a checkout of hydo's source repository and a POSIX shell. Writing the hydo/ folder needs no network; importing a Compose file resolves image digests once.
 metadata:
   hydo-version: "0.1"
 ---
@@ -256,7 +256,7 @@ hydo build hydo/hydo.yaml --check
 
 It checks the schema, the name, executable bit and header of every command and check file, and
 the guest RAM limit. The full build also checks the backend's feature limits (the arm64 build
-refuses `addr:`, `fakes:`, `params:` and others; see references/capabilities.md). Then, if the
+refuses `guest.cpu: v3`; see references/capabilities.md). Then, if the
 user wants a first run now:
 
 ```sh
