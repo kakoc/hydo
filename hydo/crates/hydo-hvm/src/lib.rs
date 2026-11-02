@@ -2,15 +2,16 @@
 //! on Hypervisor.framework: the exit-count clock, the GICv2, the UART, PSCI, the interrupt
 //! delivery rule, tick jitter and forced preemption points), `hv/hvm/virtio*.c` (the block and
 //! network devices with hvx's seeded faults), `hv/hvm/spin_observer.c` (exit-free spin loops,
-//! the rewind mode) and `hv/hvm/explore/serve.c` (the explorer engine `hvmx`: S0/S1, RUN, CTL,
-//! RESUME, the lock-step protocol, the controlled boot of agent images, DISKOFF/CUT, the power
-//! cut's recovery boot) ported function by function, with the same command line, protocol,
-//! output lines and fingerprints.
+//! the rewind mode) and `hv/hvm/explore/serve.c` (the explorer engine `hvmx`: the controlled boot
+//! of agent images with the host's S0/S1, CTL, RESUME, the lock-step protocol, DISKOFF/CUT, the
+//! power cut's recovery boot) ported function by function, with the same command line, protocol,
+//! output lines and fingerprints. The shell-init images' modes (plain `serve`/`one`, `--control
+//! one`, RUN) were deleted in Milestone 145.
 //!
 //! Two ways to use it:
 //!
 //! - the program `hydo-hvm` (the default engine on the Mac): hvmx's command line
-//!   (`hydo-hvm [--ram-mib N] [--control [boot]] serve|one <Image> <initramfs> <outdir>
+//!   (`hydo-hvm [--ram-mib N] --control boot serve|one <Image> <initramfs> <outdir>
 //!   ["<schedule>"]`), plus hvm's (`hydo-hvm hvm run|print|branch <Image> <initrd> <markers>`);
 //!   it must be signed with the hypervisor entitlement (`hv/hvm/hv.entitlements`);
 //! - in-process: [`serve::main_with`] runs the engine over any streams, with its environment
