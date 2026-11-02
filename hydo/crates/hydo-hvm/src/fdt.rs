@@ -121,7 +121,16 @@ pub fn build(
     w.prop_empty("interrupt-controller");
     w.prop_u32s(
         "reg",
-        &[0, GICD_BASE as u32, 0, 0x1000, 0, GICC_BASE as u32, 0, 0x2000],
+        &[
+            0,
+            GICD_BASE as u32,
+            0,
+            0x1000,
+            0,
+            GICC_BASE as u32,
+            0,
+            0x2000,
+        ],
     );
     w.prop_u32("phandle", 1);
     w.endnode();
@@ -140,10 +149,7 @@ pub fn build(
     for &(b, spi) in virtio {
         w.node(&format!("virtio_mmio@{b:x}"));
         w.prop_str("compatible", "virtio,mmio");
-        w.prop_u32s(
-            "reg",
-            &[0, b as u32, 0, crate::virtio::MMIO_SIZE as u32],
-        );
+        w.prop_u32s("reg", &[0, b as u32, 0, crate::virtio::MMIO_SIZE as u32]);
         w.prop_u32s("interrupts", &[0, spi, 4]);
         w.prop_empty("dma-coherent");
         w.endnode();

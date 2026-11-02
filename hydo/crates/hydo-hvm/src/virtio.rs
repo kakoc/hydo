@@ -161,7 +161,13 @@ impl VState {
         for v in [k.classes, k.prob, k.max_delay, k.pad] {
             b.u32(v);
         }
-        for v in [k.req_seq, k.kick_seq, k.fault_count, k.disk_size, k.n_unsync] {
+        for v in [
+            k.req_seq,
+            k.kick_seq,
+            k.fault_count,
+            k.disk_size,
+            k.n_unsync,
+        ] {
             b.u64(v);
         }
         let n = &self.net;
@@ -395,14 +401,11 @@ impl Virtio {
             net_tx: None,
             blk_idx: -1,
             net_idx: -1,
-
         };
         if let Some(dp) = &c.disk {
             let d = std::fs::read(dp).map_err(|e| format!("{dp}: {e}"))?;
             if d.len() % 512 != 0 || d.is_empty() {
-                return Err(format!(
-                    "hvm: {dp}: size must be a nonzero multiple of 512"
-                ));
+                return Err(format!("hvm: {dp}: size must be a nonzero multiple of 512"));
             }
             x.blk_idx = x.v.ndev as i32;
             x.v.ndev += 1;
@@ -510,7 +513,15 @@ impl Virtio {
     }
 
     /// `virtio_mmio`: true if the address was a device's.
-    pub fn mmio(&mut self, ram: &mut Ram, ipa: u64, write: bool, size: u32, val: &mut u64, now: u64) -> bool {
+    pub fn mmio(
+        &mut self,
+        ram: &mut Ram,
+        ipa: u64,
+        write: bool,
+        size: u32,
+        val: &mut u64,
+        now: u64,
+    ) -> bool {
         if ipa < MMIO_BASE || ipa >= MMIO_BASE + self.v.ndev as u64 * MMIO_SIZE {
             return false;
         }
@@ -568,7 +579,8 @@ impl Virtio {
                 let d = &mut self.v.dev[i];
                 if d.drfsel < 2 {
                     let sh = 32 * d.drfsel;
-                    d.drv_features = (d.drv_features & !(0xffff_ffffu64 << sh)) | ((v as u64) << sh);
+                    d.drv_features =
+                        (d.drv_features & !(0xffff_ffffu64 << sh)) | ((v as u64) << sh);
                 }
             }
             0x024 => self.v.dev[i].drfsel = v,
@@ -1105,7 +1117,8 @@ impl Virtio {
         if q.last_avail as u16 == avail_idx {
             return false;
         }
-        let Some(head) = ram.r16(q.avail + 4 + 2u32.wrapping_mul(q.last_avail % q.num) as u64) else {
+        let Some(head) = ram.r16(q.avail + 4 + 2u32.wrapping_mul(q.last_avail % q.num) as u64)
+        else {
             return false;
         };
         let Some((addr, len, flags, _)) = ram.desc(q.desc + head as u64 * 16) else {
@@ -1210,7 +1223,8 @@ impl Virtio {
         let mut any = false;
         let mut last_avail = q.last_avail;
         while last_avail as u16 != avail_idx {
-            let Some(head) = ram.r16(q.avail + 4 + 2u32.wrapping_mul(last_avail % q.num) as u64) else {
+            let Some(head) = ram.r16(q.avail + 4 + 2u32.wrapping_mul(last_avail % q.num) as u64)
+            else {
                 break;
             };
             let mut f = [0u8; NET_FRAME_MAX];

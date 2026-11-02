@@ -52,8 +52,14 @@ fn constants_layouts_and_device_tree() {
     assert_eq!(n("HV_REG_CPSR"), hv::HV_REG_CPSR as u64);
     assert_eq!(n("HV_SIMD_FP_REG_Q0"), hv::HV_SIMD_FP_REG_Q0 as u64);
     assert_eq!(n("HV_INTERRUPT_TYPE_IRQ"), hv::HV_INTERRUPT_TYPE_IRQ as u64);
-    assert_eq!(n("HV_EXIT_REASON_CANCELED"), hv::HV_EXIT_REASON_CANCELED as u64);
-    assert_eq!(n("HV_EXIT_REASON_EXCEPTION"), hv::HV_EXIT_REASON_EXCEPTION as u64);
+    assert_eq!(
+        n("HV_EXIT_REASON_CANCELED"),
+        hv::HV_EXIT_REASON_CANCELED as u64
+    );
+    assert_eq!(
+        n("HV_EXIT_REASON_EXCEPTION"),
+        hv::HV_EXIT_REASON_EXCEPTION as u64
+    );
     assert_eq!(n("exit_size"), 32);
     assert_eq!(n("exit_exception"), 8);
     for (i, r) in hydo_hvm::vmm::SR.iter().enumerate() {
@@ -120,7 +126,13 @@ fn constants_layouts_and_device_tree() {
     }
     let b = &mut v.blk;
     (b.seed, b.classes, b.prob, b.max_delay) = (18, 19, 20, 21);
-    (b.req_seq, b.kick_seq, b.fault_count, b.disk_size, b.n_unsync) = (22, 23, 24, 25, 26);
+    (
+        b.req_seq,
+        b.kick_seq,
+        b.fault_count,
+        b.disk_size,
+        b.n_unsync,
+    ) = (22, 23, 24, 25, 26);
     let t = &mut v.net;
     for i in 0..6 {
         t.mac[i] = 27 + i as u8;

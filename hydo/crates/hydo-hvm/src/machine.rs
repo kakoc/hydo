@@ -37,7 +37,6 @@ impl Default for Gic {
     }
 }
 
-
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
 pub struct Uart {
     pub ier: u8,
@@ -97,7 +96,13 @@ impl Mach {
         for v in [g.dctlr, g.cctlr, g.pmr, g.bpr] {
             put(&mut b, &mut o, &v.to_le_bytes());
         }
-        for a in [&g.enabled[..], &g.pending[..], &g.active[..], &g.cfg[..], &g.group[..]] {
+        for a in [
+            &g.enabled[..],
+            &g.pending[..],
+            &g.active[..],
+            &g.cfg[..],
+            &g.group[..],
+        ] {
             for v in a {
                 put(&mut b, &mut o, &v.to_le_bytes());
             }

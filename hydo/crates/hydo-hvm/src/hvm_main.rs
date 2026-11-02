@@ -17,7 +17,15 @@ use hydo_hvx::cstr::{self, Scan};
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 
-fn print_fp(vm: &Vmm, out: &mut dyn Write, tag: &str, p: [u64; 5], stop: i32, secs: f64, dump: Option<&str>) {
+fn print_fp(
+    vm: &Vmm,
+    out: &mut dyn Write,
+    tag: &str,
+    p: [u64; 5],
+    stop: i32,
+    secs: f64,
+    dump: Option<&str>,
+) {
     if let Some(d) = dump {
         dump_state(vm, d);
     }
@@ -71,7 +79,11 @@ fn dump_state(vm: &Vmm, prefix: &str) {
     for i in 0..31 {
         let _ = writeln!(t, "x{i} {:016x}", s.x[i]);
     }
-    let _ = writeln!(t, "pc {:016x}\ncpsr {:016x}\nfpcr {:016x}\nfpsr {:016x}", s.pc, s.cpsr, s.fpcr, s.fpsr);
+    let _ = writeln!(
+        t,
+        "pc {:016x}\ncpsr {:016x}\nfpcr {:016x}\nfpsr {:016x}",
+        s.pc, s.cpsr, s.fpcr, s.fpsr
+    );
     for i in 0..32 {
         let _ = write!(t, "q{i} ");
         for b in s.q[i].0 {
@@ -87,7 +99,12 @@ fn dump_state(vm: &Vmm, prefix: &str) {
 }
 
 /// hvm's `main` (`args[0]` is the program, `args[1]` the mode).
-pub fn main_with(args: &[String], get: Lookup, out: Box<dyn Write + Send>, diag: Box<dyn Write + Send>) -> i32 {
+pub fn main_with(
+    args: &[String],
+    get: Lookup,
+    out: Box<dyn Write + Send>,
+    diag: Box<dyn Write + Send>,
+) -> i32 {
     let diag: Diag = Arc::new(Mutex::new(diag));
     let d2 = diag.clone();
     catch_fatal(&d2, move || hvm_main(args, get, out, diag))
@@ -95,7 +112,10 @@ pub fn main_with(args: &[String], get: Lookup, out: Box<dyn Write + Send>, diag:
 
 fn hvm_main(args: &[String], get: Lookup, mut out: Box<dyn Write + Send>, diag: Diag) -> i32 {
     if args.len() < 4 {
-        say(&diag, "usage: hvm run|print|branch <Image> <initrd> [markers...]");
+        say(
+            &diag,
+            "usage: hvm run|print|branch <Image> <initrd> [markers...]",
+        );
         return 2;
     }
     let mode = args[1].as_str();
@@ -107,7 +127,10 @@ fn hvm_main(args: &[String], get: Lookup, mut out: Box<dyn Write + Send>, diag: 
         .unwrap_or(256) as i64 as u64)
         << 20;
     if vo.rw_on && !vo.spin_observe {
-        say(&diag, "hvm: HVM_SPIN_REWIND=1 needs the observer (HVM_SPIN_OBSERVE)");
+        say(
+            &diag,
+            "hvm: HVM_SPIN_REWIND=1 needs the observer (HVM_SPIN_OBSERVE)",
+        );
         return 2;
     }
     let max_exits = get("HVM_MAX_EXITS").map(|v| cstr::strtoull0(v.as_bytes()));
@@ -121,9 +144,21 @@ fn hvm_main(args: &[String], get: Lookup, mut out: Box<dyn Write + Send>, diag: 
     if let Some(p) = get("HVM_PCT") {
         let mut sc = Scan::new(p.as_bytes());
         let sd = sc.hex().unwrap_or(0);
-        let n = if sc.lit(",").ok() { sc.uint().unwrap_or(0) } else { 0 };
-        let lo = if sc.lit(",").ok() { sc.ull().unwrap_or(0) } else { 0 };
-        let hi = if sc.lit(",").ok() { sc.ull().unwrap_or(0) } else { 0 };
+        let n = if sc.lit(",").ok() {
+            sc.uint().unwrap_or(0)
+        } else {
+            0
+        };
+        let lo = if sc.lit(",").ok() {
+            sc.ull().unwrap_or(0)
+        } else {
+            0
+        };
+        let hi = if sc.lit(",").ok() {
+            sc.ull().unwrap_or(0)
+        } else {
+            0
+        };
         vm.pct = Pct::set(sd, n, lo, hi);
     }
     if let Some(p) = get("HVM_TJ") {
@@ -132,10 +167,26 @@ fn hvm_main(args: &[String], get: Lookup, mut out: Box<dyn Write + Send>, diag: 
             seed: sc.hex().unwrap_or(0),
             ..Tjit::default()
         };
-        t.permille = if sc.lit(",").ok() { sc.uint().unwrap_or(0) } else { 0 };
-        t.max_delay = if sc.lit(",").ok() { sc.uint().unwrap_or(0) } else { 0 };
-        t.lo = if sc.lit(",").ok() { sc.ull().unwrap_or(0) } else { 0 };
-        t.hi = if sc.lit(",").ok() { sc.ull().unwrap_or(0) } else { 0 };
+        t.permille = if sc.lit(",").ok() {
+            sc.uint().unwrap_or(0)
+        } else {
+            0
+        };
+        t.max_delay = if sc.lit(",").ok() {
+            sc.uint().unwrap_or(0)
+        } else {
+            0
+        };
+        t.lo = if sc.lit(",").ok() {
+            sc.ull().unwrap_or(0)
+        } else {
+            0
+        };
+        t.hi = if sc.lit(",").ok() {
+            sc.ull().unwrap_or(0)
+        } else {
+            0
+        };
         t.on = t.permille != 0 && t.max_delay != 0;
         vm.tj = t;
     }
@@ -161,7 +212,10 @@ fn hvm_main(args: &[String], get: Lookup, mut out: Box<dyn Write + Send>, diag: 
         let (mid, end) = (args[4].as_bytes(), args[5].as_bytes());
         let s1 = vm.run_until(Some(mid), &mut none);
         if s1 != STOP_MARKER {
-            say(&diag, &format!("branch: mid marker not reached (stop {s1})"));
+            say(
+                &diag,
+                &format!("branch: mid marker not reached (stop {s1})"),
+            );
             return 1;
         }
         let vs = vm.vtake();
@@ -175,7 +229,15 @@ fn hvm_main(args: &[String], get: Lookup, mut out: Box<dyn Write + Send>, diag: 
         );
         let sa = vm.run_until(Some(end), &mut none);
         let a = vm.parts();
-        print_fp(&vm, &mut *out, "branch-A (continue)", a, sa, now_s() - t0, dump.as_deref());
+        print_fp(
+            &vm,
+            &mut *out,
+            "branch-A (continue)",
+            a,
+            sa,
+            now_s() - t0,
+            dump.as_deref(),
+        );
         // restore into a FRESH vCPU after trashing RAM
         vm.fresh_vcpu();
         vm.ram.bytes_mut().fill(0xee);
@@ -186,9 +248,21 @@ fn hvm_main(args: &[String], get: Lookup, mut out: Box<dyn Write + Send>, diag: 
         vm.vio.restore(&dsave);
         let sb = vm.run_until(Some(end), &mut none);
         let b = vm.parts();
-        print_fp(&vm, &mut *out, "branch-B (restored)", b, sb, now_s() - t0, dump.as_deref());
+        print_fp(
+            &vm,
+            &mut *out,
+            "branch-B (restored)",
+            b,
+            sb,
+            now_s() - t0,
+            dump.as_deref(),
+        );
         let same = a[4] == b[4];
-        let _ = writeln!(out, "branch: {}", if same { "IDENTICAL" } else { "DIFFERENT" });
+        let _ = writeln!(
+            out,
+            "branch: {}",
+            if same { "IDENTICAL" } else { "DIFFERENT" }
+        );
         let _ = out.flush();
         return if same { 0 } else { 1 };
     }

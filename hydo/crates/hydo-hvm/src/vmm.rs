@@ -274,11 +274,10 @@ impl Vmm {
                 fatal(1, &e)
             }
         };
-        let trace = o.trace.as_ref().and_then(|p| {
-            std::fs::File::create(p)
-                .ok()
-                .map(std::io::BufWriter::new)
-        });
+        let trace = o
+            .trace
+            .as_ref()
+            .and_then(|p| std::fs::File::create(p).ok().map(std::io::BufWriter::new));
         let trace_watch = o
             .trace_watch
             .as_deref()
@@ -330,14 +329,20 @@ impl Vmm {
             } else {
                 ""
             };
-            fatal(1, &format!("FAIL hv_vm_create(NULL) = 0x{:x}{hint}", r as u32));
+            fatal(
+                1,
+                &format!("FAIL hv_vm_create(NULL) = 0x{:x}{hint}", r as u32),
+            );
         }
         vm.map_ram();
         let b = vm.ram.bytes_mut();
         let k = (KERNEL_IPA - RAM_BASE) as usize;
         let i = (INITRD_IPA - RAM_BASE) as usize;
         if k + kernel.len() > b.len() || i + initrd.len() > b.len() {
-            fatal(1, "hvm: the kernel or the initramfs does not fit in guest RAM");
+            fatal(
+                1,
+                "hvm: the kernel or the initramfs does not fit in guest RAM",
+            );
         }
         b[k..k + kernel.len()].copy_from_slice(kernel);
         b[i..i + initrd.len()].copy_from_slice(initrd);
@@ -890,7 +895,9 @@ impl Vmm {
         } else {
             let mut v = if write { self.xget(rt) } else { 0 };
             let now = self.m.vtime;
-            let ours = self.vio.mmio(&mut ramv!(self), ipa, write, size, &mut v, now);
+            let ours = self
+                .vio
+                .mmio(&mut ramv!(self), ipa, write, size, &mut v, now);
             if ours {
                 if !write {
                     self.xset(rt, v);
@@ -949,7 +956,10 @@ impl Vmm {
                 }
                 if op2 == 0 {
                     if rdir {
-                        self.xset(rt, self.m.cntp_cval.wrapping_sub(self.m.vtime) as u32 as u64);
+                        self.xset(
+                            rt,
+                            self.m.cntp_cval.wrapping_sub(self.m.vtime) as u32 as u64,
+                        );
                     } else {
                         self.m.cntp_cval = self
                             .m
@@ -1175,7 +1185,9 @@ impl Vmm {
                     continue;
                 }
                 if obs
-                    && (!self.sp.ob_on || self.sp.ob_hits == 0 || self.rd(HV_REG_PC) != self.sp.ob_pc)
+                    && (!self.sp.ob_on
+                        || self.sp.ob_hits == 0
+                        || self.rd(HV_REG_PC) != self.sp.ob_pc)
                 {
                     let pc = self.rd(HV_REG_PC);
                     self.ob_arm(pc);
@@ -1323,7 +1335,9 @@ impl Vmm {
                 };
                 if let Some(t) = &mut self.trace {
                     let _ = match w {
-                        Some(w) => writeln!(t, "{ex} {ec:x} {pc:x} {cpsr:x} {} w={w:x}", line as i32),
+                        Some(w) => {
+                            writeln!(t, "{ex} {ec:x} {pc:x} {cpsr:x} {} w={w:x}", line as i32)
+                        }
                         None => writeln!(t, "{ex} {ec:x} {pc:x} {cpsr:x} {}", line as i32),
                     };
                 }
@@ -1349,7 +1363,9 @@ impl Vmm {
                         let o = pc - KIMAGE_VA + (KERNEL_IPA - RAM_BASE);
                         if o + 4 <= self.ram_size {
                             let b = self.ram.bytes();
-                            insn = u32::from_le_bytes(b[o as usize..o as usize + 4].try_into().unwrap());
+                            insn = u32::from_le_bytes(
+                                b[o as usize..o as usize + 4].try_into().unwrap(),
+                            );
                         }
                     }
                     if (insn & 0x3fc0_0000) == 0x0840_0000 {

@@ -29,7 +29,8 @@ pub const PG: u64 = 0x4000;
 /// the base of the kernel's linear map of the image (the single-step exclusive-load check)
 pub const KIMAGE_VA: u64 = 0xffff_ffc0_8000_0000;
 
-pub const BOOTARGS: &str = "console=ttyS0 earlycon=uart8250,mmio,0x09000000 clocksource.arm_arch_timer.evtstrm=0 \
+pub const BOOTARGS: &str =
+    "console=ttyS0 earlycon=uart8250,mmio,0x09000000 clocksource.arm_arch_timer.evtstrm=0 \
 nokaslr rdinit=/init loglevel=7 random.trust_bootloader=on";
 
 /// Stop reasons of the run loop (`STOP_*`).

@@ -187,7 +187,8 @@ pub fn ensure_signed(prog: &Path) -> std::io::Result<()> {
         })
         .unwrap_or(false);
     if !has {
-        let plist = std::env::temp_dir().join(format!("hydo-hv-{}.entitlements", std::process::id()));
+        let plist =
+            std::env::temp_dir().join(format!("hydo-hv-{}.entitlements", std::process::id()));
         std::fs::write(&plist, ENTITLEMENTS)?;
         let st = Command::new("codesign")
             .args(["--force", "--entitlements"])

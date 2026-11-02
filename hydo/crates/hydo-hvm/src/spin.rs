@@ -3,12 +3,12 @@
 //! copy-on-write checkpoint taken at every real exit (the rewind mode, `rw_on`). The functions
 //! keep the C names and their order of effects; the statistics live outside the machine state.
 
+use crate::fatal;
 use crate::fnv::{fnv, OFFSET};
 use crate::hv::{self, sr, HV_REG_CPSR, HV_REG_PC, HV_REG_X0};
 use crate::layout::*;
 use crate::machine::Mach;
 use crate::vmm::{VSnap, Vmm};
-use crate::fatal;
 use std::io::Write;
 
 /// The observer's outcomes (`OB_*`).
@@ -419,22 +419,39 @@ impl Vmm {
         self.sp.ob_hits = 0;
         self.sp.ob_have_prev = 0;
         self.sp.ob_unch_prev = false;
-        self.set_sr("hv_vcpu_set_sys_reg(MDSCR_EL1)", sr::MDSCR_EL1, self.sp.ob_mdscr | (1 << 15) | (1 << 13));
+        self.set_sr(
+            "hv_vcpu_set_sys_reg(MDSCR_EL1)",
+            sr::MDSCR_EL1,
+            self.sp.ob_mdscr | (1 << 15) | (1 << 13),
+        );
         self.set_sr("hv_vcpu_set_sys_reg(DBGBVR0_EL1)", sr::DBGBVR0_EL1, pc);
         self.set_sr("hv_vcpu_set_sys_reg(DBGBCR0_EL1)", sr::DBGBCR0_EL1, BCR_ON);
         self.sp.checks += 1;
         if self.sp.splog.is_some() {
             let (ex, cpsr) = (self.m.exits, self.rd(HV_REG_CPSR));
-            self.sp.log(format_args!("arm at exit {ex} pc 0x{pc:x} cpsr 0x{cpsr:x}"));
+            self.sp
+                .log(format_args!("arm at exit {ex} pc 0x{pc:x} cpsr 0x{cpsr:x}"));
         }
     }
     pub fn ob_disarm(&mut self) {
         if !self.sp.ob_on {
             return;
         }
-        self.set_sr("hv_vcpu_set_sys_reg(DBGBCR0_EL1)", sr::DBGBCR0_EL1, self.sp.ob_bcr);
-        self.set_sr("hv_vcpu_set_sys_reg(DBGBVR0_EL1)", sr::DBGBVR0_EL1, self.sp.ob_bvr);
-        self.set_sr("hv_vcpu_set_sys_reg(MDSCR_EL1)", sr::MDSCR_EL1, self.sp.ob_mdscr);
+        self.set_sr(
+            "hv_vcpu_set_sys_reg(DBGBCR0_EL1)",
+            sr::DBGBCR0_EL1,
+            self.sp.ob_bcr,
+        );
+        self.set_sr(
+            "hv_vcpu_set_sys_reg(DBGBVR0_EL1)",
+            sr::DBGBVR0_EL1,
+            self.sp.ob_bvr,
+        );
+        self.set_sr(
+            "hv_vcpu_set_sys_reg(MDSCR_EL1)",
+            sr::MDSCR_EL1,
+            self.sp.ob_mdscr,
+        );
         self.wr(HV_REG_CPSR, self.rd(HV_REG_CPSR) & !(1u64 << 21));
         self.sp.dirty.clear();
         if self.sp.protected {
@@ -524,7 +541,11 @@ impl Vmm {
                 self.sp.steps += 1;
                 return Ok(());
             }
-            if ec == 0x24 && self.sp.protected && e.pa >= RAM_BASE && e.pa < RAM_BASE + self.ram_size {
+            if ec == 0x24
+                && self.sp.protected
+                && e.pa >= RAM_BASE
+                && e.pa < RAM_BASE + self.ram_size
+            {
                 self.dirty_add(e.pa & !(PG - 1));
                 continue;
             }
@@ -637,8 +658,9 @@ impl Vmm {
             self.sp.resolved += 1;
             if self.sp.splog.is_some() {
                 let pc = self.rd(HV_REG_PC);
-                self.sp
-                    .log(format_args!("  resolved: period {p}, canonical +{best} at pc 0x{pc:x}"));
+                self.sp.log(format_args!(
+                    "  resolved: period {p}, canonical +{best} at pc 0x{pc:x}"
+                ));
             }
             return self.spin_deliver();
         }
@@ -653,7 +675,12 @@ impl Vmm {
             self.sp.aff_proven += 1;
             return Ob::NeedRewind;
         }
-        if self.sp.rw_on && self.sp.ck_valid && self.sp.ob_have_prev >= 2 && self.sp.ob_unch_prev && self.dirty_unchanged() {
+        if self.sp.rw_on
+            && self.sp.ck_valid
+            && self.sp.ob_have_prev >= 2
+            && self.sp.ob_unch_prev
+            && self.dirty_unchanged()
+        {
             if let Some(pstar) = self.aff_prove(&cur) {
                 self.sp.aff_proven += 1;
                 if self.sp.splog.is_some() {
@@ -671,8 +698,16 @@ impl Vmm {
                 self.sp.ob_bvr = self.v().sys(sr::DBGBVR0_EL1, self.sp.ob_bvr);
                 self.sp.ob_bcr = self.v().sys(sr::DBGBCR0_EL1, self.sp.ob_bcr);
                 self.v().trap_debug_reg_accesses(true);
-                self.set_sr("hv_vcpu_set_sys_reg(MDSCR_EL1)", sr::MDSCR_EL1, self.sp.ob_mdscr | (1 << 15) | (1 << 13));
-                self.set_sr("hv_vcpu_set_sys_reg(DBGBVR0_EL1)", sr::DBGBVR0_EL1, self.sp.rp_pc);
+                self.set_sr(
+                    "hv_vcpu_set_sys_reg(MDSCR_EL1)",
+                    sr::MDSCR_EL1,
+                    self.sp.ob_mdscr | (1 << 15) | (1 << 13),
+                );
+                self.set_sr(
+                    "hv_vcpu_set_sys_reg(DBGBVR0_EL1)",
+                    sr::DBGBVR0_EL1,
+                    self.sp.rp_pc,
+                );
                 self.set_sr("hv_vcpu_set_sys_reg(DBGBCR0_EL1)", sr::DBGBCR0_EL1, BCR_ON);
                 return Ob::Rewound;
             }
@@ -681,7 +716,8 @@ impl Vmm {
         if self.sp.ob_hits > OB_MAXHITS {
             self.ob_disarm();
             self.sp.notcycle += 1;
-            self.sp.log(format_args!("  gave up after {OB_MAXHITS} hits"));
+            self.sp
+                .log(format_args!("  gave up after {OB_MAXHITS} hits"));
             return Ob::GaveUp;
         }
         self.sp.ob_unch_prev = if self.sp.ob_have_prev != 0 {
@@ -718,9 +754,21 @@ impl Vmm {
     }
 
     fn rp_disarm(&mut self) {
-        self.set_sr("hv_vcpu_set_sys_reg(DBGBCR0_EL1)", sr::DBGBCR0_EL1, self.sp.ob_bcr);
-        self.set_sr("hv_vcpu_set_sys_reg(DBGBVR0_EL1)", sr::DBGBVR0_EL1, self.sp.ob_bvr);
-        self.set_sr("hv_vcpu_set_sys_reg(MDSCR_EL1)", sr::MDSCR_EL1, self.sp.ob_mdscr);
+        self.set_sr(
+            "hv_vcpu_set_sys_reg(DBGBCR0_EL1)",
+            sr::DBGBCR0_EL1,
+            self.sp.ob_bcr,
+        );
+        self.set_sr(
+            "hv_vcpu_set_sys_reg(DBGBVR0_EL1)",
+            sr::DBGBVR0_EL1,
+            self.sp.ob_bvr,
+        );
+        self.set_sr(
+            "hv_vcpu_set_sys_reg(MDSCR_EL1)",
+            sr::MDSCR_EL1,
+            self.sp.ob_mdscr,
+        );
         self.wr(HV_REG_CPSR, self.rd(HV_REG_CPSR) & !(1u64 << 21));
         self.v().trap_debug_reg_accesses(false);
         self.sp.rp_on = false;
@@ -744,7 +792,8 @@ impl Vmm {
         self.sp.aff_resolved += 1;
         if self.sp.splog.is_some() {
             let pc = self.rd(HV_REG_PC);
-            self.sp.log(format_args!("  replay delivered at pc 0x{pc:x}"));
+            self.sp
+                .log(format_args!("  replay delivered at pc 0x{pc:x}"));
         }
         self.spin_deliver()
     }

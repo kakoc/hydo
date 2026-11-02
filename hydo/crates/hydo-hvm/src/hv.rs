@@ -251,9 +251,10 @@ impl Vcpu {
     pub fn get_q(&self, i: u32) -> Q {
         let mut q = Q::default();
         // SAFETY: a valid, 16-byte aligned out-pointer
-        chk("hv_vcpu_get_simd_fp_reg(vcpu, HV_SIMD_FP_REG_Q0 + i, &s->q[i])", unsafe {
-            hv_vcpu_get_simd_fp_reg(self.id, HV_SIMD_FP_REG_Q0 + i, &mut q)
-        });
+        chk(
+            "hv_vcpu_get_simd_fp_reg(vcpu, HV_SIMD_FP_REG_Q0 + i, &s->q[i])",
+            unsafe { hv_vcpu_get_simd_fp_reg(self.id, HV_SIMD_FP_REG_Q0 + i, &mut q) },
+        );
         q
     }
     pub fn set_q(&self, i: u32, q: Q) {

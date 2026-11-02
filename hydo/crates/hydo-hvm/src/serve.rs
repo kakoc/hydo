@@ -289,7 +289,11 @@ impl Host {
             let at = self.c.at;
             self.c.k.s[i].sent = at;
             self.c.k.ntyped += 1;
-            let base = if self.c.k.inh != 0 { self.c.k.inh } else { OFFSET };
+            let base = if self.c.k.inh != 0 {
+                self.c.k.inh
+            } else {
+                OFFSET
+            };
             let mut h = fnv_u64(at, base);
             h = fnv(&len.to_le_bytes(), h);
             h = fnv(&self.c.k.s[i].buf, h);
@@ -453,7 +457,8 @@ impl Host {
                 e -= 1;
             }
             self.c.k.nev += 1;
-            let mut line = format!("EVENT {} at={} n={} ", self.c.tag, self.c.at, self.c.k.nev).into_bytes();
+            let mut line =
+                format!("EVENT {} at={} n={} ", self.c.tag, self.c.at, self.c.k.nev).into_bytes();
             ctl_esc(&mut line, &vm.console[p..e]);
             line.push(b'\n');
             self.out_bytes(&line);
@@ -504,7 +509,9 @@ impl Host {
                     continue;
                 }
                 if self.c.k.s.len() >= CTL_MAX_SENDS {
-                    self.out_line(&format!("ERR send more than {CTL_MAX_SENDS} sends in one run"));
+                    self.out_line(&format!(
+                        "ERR send more than {CTL_MAX_SENDS} sends in one run"
+                    ));
                     continue;
                 }
                 self.c.k.next_id += 1;
@@ -619,7 +626,9 @@ fn ctl_esc(o: &mut Vec<u8>, p: &[u8]) {
             b'\n' => o.extend_from_slice(b"\\n"),
             b'\r' => o.extend_from_slice(b"\\r"),
             b'\t' => o.extend_from_slice(b"\\t"),
-            c if !(0x20..=0x7e).contains(&c) => o.extend_from_slice(format!("\\x{c:02x}").as_bytes()),
+            c if !(0x20..=0x7e).contains(&c) => {
+                o.extend_from_slice(format!("\\x{c:02x}").as_bytes())
+            }
             c => o.push(c),
         }
     }
@@ -644,7 +653,9 @@ fn ctl_unesc(s: &[u8]) -> Option<Vec<u8>> {
                 if s.get(i + 1).is_some_and(|c| c.is_ascii_hexdigit())
                     && s.get(i + 2).is_some_and(|c| c.is_ascii_hexdigit()) =>
             {
-                o.push(u8::from_str_radix(std::str::from_utf8(&s[i + 1..i + 3]).unwrap(), 16).unwrap());
+                o.push(
+                    u8::from_str_radix(std::str::from_utf8(&s[i + 1..i + 3]).unwrap(), 16).unwrap(),
+                );
                 i += 2;
             }
             _ => return None,
@@ -729,7 +740,11 @@ fn parse_tj(host: &[u8]) -> Option<Tjit> {
             t.ek[t.n_explicit] = k;
             t.ed[t.n_explicit] = d as u32;
             t.n_explicit += 1;
-            p = if host.get(e2) == Some(&b',') { e2 + 1 } else { e2 };
+            p = if host.get(e2) == Some(&b',') {
+                e2 + 1
+            } else {
+                e2
+            };
         }
         if p < host.len() && host[p] != b' ' {
             return None;
@@ -783,11 +798,12 @@ pub fn scan_has_tc(gz: &[u8]) -> bool {
 /// The host tokens this engine applies; the others are refused: Some(why, unknown to every engine).
 fn host_token_problem(host: &[u8]) -> Option<(String, bool)> {
     const OK: &[&str] = &[
-        "disk=", "dseed=", "tj=", "tjpm=", "tjmax=", "tjlo=", "tjhi=", "tjx=", "pct=", "pctn=", "pctk=",
+        "disk=", "dseed=", "tj=", "tjpm=", "tjmax=", "tjlo=", "tjhi=", "tjx=", "pct=", "pctn=",
+        "pctk=",
     ];
     const HVX_ONLY: &[&str] = &[
-        "rb=", "pp=", "pptsc=", "xt=", "xtr=", "xtpm=", "xtlo=", "xthi=", "xtsc=", "xtx=", "cf=", "q=",
-        "qs=", "qb=", "qbs=", "qm=",
+        "rb=", "pp=", "pptsc=", "xt=", "xtr=", "xtpm=", "xtlo=", "xthi=", "xtsc=", "xtx=", "cf=",
+        "q=", "qs=", "qb=", "qbs=", "qm=",
     ];
     let words = ccap(host.to_vec(), 1024);
     for w in words
@@ -882,7 +898,10 @@ fn xsnap_restore(vm: &mut Vmm, s: &XSnap, check: bool) {
         let r = vm.vtake();
         for i in 0..31 {
             if r.x[i] != s.v.x[i] {
-                vm.say(&format!("hvmx: restore: x{i} {:x} != {:x}", r.x[i], s.v.x[i]));
+                vm.say(&format!(
+                    "hvmx: restore: x{i} {:x} != {:x}",
+                    r.x[i], s.v.x[i]
+                ));
             }
         }
         if r.pc != s.v.pc || r.cpsr != s.v.cpsr || r.fpcr != s.v.fpcr || r.fpsr != s.v.fpsr {
@@ -910,18 +929,30 @@ impl Engine {
         }
         let vm = &self.vm;
         let path = format!("{}/{tag}.diag", self.h.outdir);
-        let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) else {
+        let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+        else {
             return;
         };
         let s = vm.vtake();
         let mut t = String::new();
         use std::fmt::Write as _;
         let cl = vm.m.console_len;
-        let _ = writeln!(t, "{phase} console {:016x} len {cl}", fnv(&vm.console[..cl as usize], OFFSET));
+        let _ = writeln!(
+            t,
+            "{phase} console {:016x} len {cl}",
+            fnv(&vm.console[..cl as usize], OFFSET)
+        );
         for i in 0..31 {
             let _ = writeln!(t, "{phase} x{i} {:016x}", s.x[i]);
         }
-        let _ = writeln!(t, "{phase} pc {:016x} cpsr {:016x} fpcr {:x} fpsr {:x}", s.pc, s.cpsr, s.fpcr, s.fpsr);
+        let _ = writeln!(
+            t,
+            "{phase} pc {:016x} cpsr {:016x} fpcr {:x} fpsr {:x}",
+            s.pc, s.cpsr, s.fpcr, s.fpsr
+        );
         for i in 0..32 {
             let _ = writeln!(t, "{phase} q{i} {:016x}", fnv(&s.q[i].0, OFFSET));
         }
@@ -938,7 +969,11 @@ impl Engine {
         let ram = vm.ram.bytes();
         let mut o = 0usize;
         while (o as u64) < vm.ram_size {
-            let _ = writeln!(t, "{phase} ram@{o:08x} {:016x}", mix64(&ram[o..o + (1 << 20)], OFFSET));
+            let _ = writeln!(
+                t,
+                "{phase} ram@{o:08x} {:016x}",
+                mix64(&ram[o..o + (1 << 20)], OFFSET)
+            );
             o += 1 << 20;
         }
         let _ = f.write_all(t.as_bytes());
@@ -956,7 +991,11 @@ impl Engine {
 
     fn save_log(&self, tag: &str, from: usize) {
         let path = format!("{}/{tag}.log", self.h.outdir);
-        let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) else {
+        let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+        else {
             return;
         };
         let len = self.vm.m.console_len as usize;
@@ -997,7 +1036,11 @@ impl Engine {
             scan: from,
         };
         if self.h.c.start != 0 {
-            let w = if self.h.c.start == 2 { "resume" } else { "start" };
+            let w = if self.h.c.start == 2 {
+                "resume"
+            } else {
+                "start"
+            };
             if self.h.c.start == 2 {
                 self.h.c.k.nstop = self.h.c.k.nstop.wrapping_sub(1); // the snapshot's own stop, again
             } else {
@@ -1052,7 +1095,9 @@ impl Engine {
         let mut rb = 0;
         let mut w = 0usize;
         while let Some(b) = bar {
-            let Some(k) = find(&s[w..], b"rb=") else { break };
+            let Some(k) = find(&s[w..], b"rb=") else {
+                break;
+            };
             let at = w + k;
             if at >= b {
                 break;
@@ -1199,7 +1244,11 @@ impl Engine {
             guest.pop();
         }
         if let Some((hw, unknown)) = host_token_problem(&host) {
-            let p = if unknown { "ERROR bad schedule: " } else { "UNSUPPORTED on hvm: " };
+            let p = if unknown {
+                "ERROR bad schedule: "
+            } else {
+                "UNSUPPORTED on hvm: "
+            };
             self.h.result_err(tag, &format!("{p}{hw}"));
             return;
         }
@@ -1265,7 +1314,11 @@ impl Engine {
 
     /// the rest of a run, from the workload's start: a RUN goes on here, a RESUME starts here
     fn run_rest(&mut self, rs: RunSt) {
-        let wk: &[&'static [u8]] = if self.h.g_agent { &[] } else { &[DONE_MARKER, FINAL_MARKER] };
+        let wk: &[&'static [u8]] = if self.h.g_agent {
+            &[]
+        } else {
+            &[DONE_MARKER, FINAL_MARKER]
+        };
         let fin: &[&'static [u8]] = if self.h.g_agent { &[] } else { &[FINAL_MARKER] };
         let tag = rs.tag.clone();
         let mut tjinfo = rs.tjinfo.clone();
@@ -1382,7 +1435,8 @@ impl Engine {
             return; // not reported: run_sched re-runs it with rewind
         }
         if rewound {
-            self.h.say(&format!("hvmx: {tag}: reported from a rewind-mode run"));
+            self.h
+                .say(&format!("hvmx: {tag}: reported from a rewind-mode run"));
         }
         if self.h.c.on {
             let k = &self.h.c.k;
@@ -1440,7 +1494,8 @@ impl Engine {
             return Err(());
         }
         if r0 != 0 {
-            self.h.say(&format!("hvmx: no S0 marker ({})", stop_name(why)));
+            self.h
+                .say(&format!("hvmx: no S0 marker ({})", stop_name(why)));
             let n = self.vm.m.console_len as usize;
             self.h.say(&lossy(&self.vm.console[..n]));
             return Err(());
@@ -1456,7 +1511,8 @@ impl Engine {
         let f = self.vm.m.console_len as usize;
         self.vm.put_input(b"provision\n");
         if self.run_to(&[S1_MARKER, FINAL_MARKER], f, &mut why) != 0 {
-            self.h.say(&format!("hvmx: no S1 marker ({})", stop_name(why)));
+            self.h
+                .say(&format!("hvmx: no S1 marker ({})", stop_name(why)));
             let n = self.vm.m.console_len as usize;
             self.h.say(&lossy(&self.vm.console[f..n]));
             return Err(());
@@ -1698,13 +1754,20 @@ fn hvmx_main(
     }
     let spin_rewind = get("HVM_SPIN_REWIND");
     if vo.rw_on && !vo.spin_observe {
-        say(&diag, "hvm: HVM_SPIN_REWIND=1 needs the observer (HVM_SPIN_OBSERVE)");
+        say(
+            &diag,
+            "hvm: HVM_SPIN_REWIND=1 needs the observer (HVM_SPIN_OBSERVE)",
+        );
         return 2;
     }
     vo.bootargs = format!(
         "{} {}",
         vo.bootargs,
-        if agent { "quiet loglevel=1" } else { "hydo_phase=serve" }
+        if agent {
+            "quiet loglevel=1"
+        } else {
+            "hydo_phase=serve"
+        }
     );
     let o = Opts {
         vm: vo.clone(),
@@ -1749,7 +1812,9 @@ fn hvmx_main(
         // M121: the boot under control; S0 and S1 are the host's SNAPs
         let tag = if mode != "one" { "boot" } else { "one" };
         let mut s = ccap(
-            a.get(5).map(|x| x.as_bytes().to_vec()).unwrap_or_else(|| b"|".to_vec()),
+            a.get(5)
+                .map(|x| x.as_bytes().to_vec())
+                .unwrap_or_else(|| b"|".to_vec()),
             4096,
         );
         let Some((rb, rw)) = e.ctl_sched(tag, &mut s) else {
