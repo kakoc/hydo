@@ -1,15 +1,17 @@
 //! The fake outside world's controller (`src/schedule/fakes.rs`, docs/HISTORY.md M125) beyond
-//! the identity corpus (which runs every schedule of the fakes manifests against the shell model,
-//! tests/corpus.rs):
+//! the identity corpus (which records every schedule of the fakes manifests, tests/corpus.rs):
 //!
-//! - the plan reads the targets hydo-build writes (until M136 also: the model was written from
-//!   the shell text hydo-build spliced);
+//! - the plan reads the targets hydo-build writes;
 //! - H= windows are switched where the shell switches them, and healed once;
 //! - the world is carried across a power cut and the recovery's world starts from it;
 //! - a carried world longer than one command is written in pieces;
 //! - the recovery conversation's transcript replays to itself, as the run's does;
-//! - the shell model catches deliberate mistakes in the controller's conversation;
+//! - the world starts before the services, and the carried world is read with the agent's read;
 //! - a few whole transcripts are kept readable (`tests/golden/fakes/`).
+//!
+//! Until Milestone 145 the runs here were also checked against a shell model of
+//! hydo-init-fakes.sh, and a test showed that the model caught deliberate mistakes; both went with
+//! the shell init's images (`tests/support/mod.rs`).
 
 mod support;
 
@@ -18,15 +20,10 @@ use hydo_control::plan::PlanWorld;
 use hydo_control::{Ending, Plan, ReplayController, ScheduleController, Start};
 use hydo_schedule::Schedule;
 use support::fake::{Fake, Msg};
-use support::model::{check, Conv};
 use support::{boot, converse, oracle_of, plan_of, run_schedule, top, Booted, Item, Ran};
 
 const PROXY: &str = "hydo/onboard/examples/redis/hydo-proxy.yaml";
 const GRPC: &str = "hydo/onboard/examples/stack-grpc/hydo.yaml";
-
-// The model (tests/support/model/fakes.rs) transliterates hydo-init-fakes.sh as it was when the
-// shell init was deleted (M136; sha256 4869e5d4…, `git show d9202e7:hydo/onboard/hydo-init-fakes.sh`).
-// The model is now the frozen description of what the shell images did.
 
 fn booted(m: &str) -> Booted {
     let plan = plan_of(m).unwrap_or_else(|e| panic!("{m}: {e}"));
@@ -38,31 +35,10 @@ fn booted(m: &str) -> Booted {
     panic!("{m}: no boot reached S1");
 }
 
-/// A schedule's run (and recovery), checked against the shell model.
+/// A schedule's run (and recovery).
 fn ran(b: &Booted, text: &str) -> Ran {
     let s = Schedule::parse(text).unwrap_or_else(|e| panic!("{text}: {e}"));
     let r = run_schedule(b, &s).unwrap_or_else(|e| panic!("{text}: {e}"));
-    check(
-        &b.plan,
-        &r.run.items,
-        Conv::Run,
-        &s.guest_text(),
-        (&[], &[]),
-        Some(&b.s1.2),
-    )
-    .unwrap_or_else(|e| panic!("{text}: the run differs from the shell:\n{e}"));
-    if let Some(rc) = &r.recovery {
-        let (cmd, a, f) = oracle_of(&r.run.items);
-        check(
-            &b.plan,
-            &rc.items,
-            Conv::Recovery,
-            &cmd,
-            (&a, &f),
-            Some(&b.s0.2),
-        )
-        .unwrap_or_else(|e| panic!("{text}: the recovery differs from the shell:\n{e}"));
-    }
     if std::env::var_os("HYDO_SHOW").is_some() {
         eprintln!("--- {text}\n{}", r.run.fin.transcript.to_jsonl());
         if let Some(rc) = &r.recovery {
@@ -321,7 +297,7 @@ fn the_world_is_carried_across_a_power_cut() {
     }
 }
 
-/// The extension's rare paths, each reached on the scripted world and checked against the model.
+/// The extension's rare paths, each reached on the scripted world.
 #[test]
 fn the_rare_paths_are_reached() {
     let mut hit: std::collections::BTreeMap<&str, usize> = Default::default();
@@ -351,8 +327,6 @@ fn the_rare_paths_are_reached() {
                 start: "boot".into(),
             },
         );
-        check(&plan, &c.items, Conv::Boot, "provision", (&[], &[]), None)
-            .unwrap_or_else(|e| panic!("{salt}: {e}"));
         if matches!(&c.fin.ending, Some(Ending::Verdict(v)) if v.contains("did not start")) {
             *hit.entry("boot: the world does not start").or_default() += 1;
             if notes(&c.items)
@@ -524,338 +498,37 @@ fn the_recovery_transcript_replays_to_itself() {
     assert!(n >= 10, "{n}");
 }
 
-/// A conversation changed as a controller with one mistake would have it; the model must say
-/// where it differs from the shell.
-fn mutant(items: &[Item], f: impl Fn(&mut Vec<Item>) -> bool) -> Option<Vec<Item>> {
-    let mut v = items.to_vec();
-    f(&mut v).then_some(v)
-}
-
 fn pos(items: &[Item], f: impl Fn(&Item) -> bool) -> Option<usize> {
     items.iter().position(f)
-}
-
-fn is_ctl(i: &Item, what: &str) -> bool {
-    matches!(i, Item::Send { cmd: Command::Run(r), .. } if r.argv[0] == "/bin/hydo-world" && r.argv[2] == what)
 }
 
 fn is_spawn(i: &Item, h: &str) -> bool {
     matches!(i, Item::Send { cmd: Command::Spawn(s), .. } if s.h == h)
 }
 
+/// The world starts before the first service, and at a cut that carried a world the controller
+/// reads `world.dump` with the agent's read (what remains of M125's deliberate-mistakes test when
+/// its shell model went, M145).
 #[test]
-fn the_shell_model_catches_deliberate_mistakes() {
+fn the_world_starts_first_and_its_dump_is_read() {
     let b = booted(PROXY);
-    // a clean run with a window, and a cut with its recovery
-    let (mut plain, mut cut) = (None, None);
-    for d in 1..60 {
-        if plain.is_none() {
-            let t = format!("disk=none dseed={d} | run H=redisp@2-5:drop");
-            let r = ran(&b, &t);
-            if verdict(&r).starts_with("HYDO-ORACLE: OK")
-                || verdict(&r).starts_with("HYDO-ORACLE: VIOLATION")
-            {
-                plain = Some((t, r));
-            }
-        }
-        if cut.is_none() {
-            let t = format!("disk=cut dseed={d} | run H=redisp@1-6:drop C=4");
-            let r = ran(&b, &t);
-            if let (Some(rc), Some(Ending::PowerCut { world, .. })) =
-                (&r.recovery, &r.run.fin.ending)
-            {
-                if world.len() > 1
-                    && matches!(&rc.fin.ending, Some(Ending::Verdict(v)) if !v.contains("did not start"))
-                {
-                    cut = Some((t, r));
-                }
-            }
-        }
-    }
-    let (pt, p) = plain.expect("a clean run");
-    let (ct, c) = cut.expect("a cut that carried a world");
-    let plan = &b.plan;
-    let run_ok =
-        |items: &[Item], cmd: &str| check(plan, items, Conv::Run, cmd, (&[], &[]), Some(&b.s1.2));
-    let (ocmd, oa, of) = oracle_of(&c.run.items);
-    let rec_ok = |items: &[Item]| {
-        check(
-            plan,
-            items,
-            Conv::Recovery,
-            &ocmd,
-            (&oa, &of),
-            Some(&b.s0.2),
-        )
-    };
-    let pcmd = Schedule::parse(&pt).unwrap().guest_text();
-    let ccmd = Schedule::parse(&ct).unwrap().guest_text();
-    assert!(run_ok(&p.run.items, &pcmd).is_ok());
-    assert!(run_ok(&c.run.items, &ccmd).is_ok());
-    let rc = c.recovery.as_ref().unwrap();
-    assert!(rec_ok(&rc.items).is_ok());
-
-    type Edit = Box<dyn Fn(&mut Vec<Item>) -> bool>;
-    type Mistake = (&'static str, bool, Edit);
-    let mistakes: Vec<Mistake> = vec![
-        (
-            "the rule switched on after the step it guards started",
-            false,
-            Box::new(|v: &mut Vec<Item>| {
-                let Some(i) = pos(v, |x| is_ctl(x, "on")) else {
-                    return false;
-                };
-                let Some(j) = (i..v.len()).find(|k| is_spawn(&v[*k], "workload")) else {
-                    return false;
-                };
-                let it = v.remove(i);
-                v.insert(j, it);
-                true
-            }),
-        ),
-        (
-            "the token text changed on its way to hydo-world",
-            false,
-            Box::new(|v: &mut Vec<Item>| {
-                for x in v.iter_mut() {
-                    if let Item::Send {
-                        cmd: Command::Run(r),
-                        ..
-                    } = x
-                    {
-                        if r.argv.get(2).is_some_and(|a| a == "on") {
-                            r.argv[4] = r.argv[4].replace("drop", "reset");
-                            return true;
-                        }
-                    }
-                }
-                false
-            }),
-        ),
-        (
-            "the rule never switched off at the end of its window",
-            false,
-            Box::new(|v: &mut Vec<Item>| {
-                let Some(i) = pos(v, |x| is_ctl(x, "off")) else {
-                    return false;
-                };
-                v.remove(i);
-                true
-            }),
-        ),
-        (
-            "no heal at the end of fault injection",
-            false,
-            Box::new(|v: &mut Vec<Item>| {
-                let Some(i) = pos(v, |x| is_ctl(x, "heal")) else {
-                    return false;
-                };
-                v.remove(i);
-                true
-            }),
-        ),
-        (
-            "the step range not cut at the window's end",
-            false,
-            Box::new(|v: &mut Vec<Item>| {
-                // the workload piece [2,5) and [5,20) as one call [2,20)
-                for x in v.iter_mut() {
-                    if let Item::Send {
-                        cmd: Command::Spawn(s),
-                        ..
-                    } = x
-                    {
-                        if let Some(e) = s.env.as_mut() {
-                            if e.iter().any(|x| x == "HYDO_FROM=2") {
-                                for y in e.iter_mut() {
-                                    if y == "HYDO_TO=5" {
-                                        *y = "HYDO_TO=20".into();
-                                        return true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                false
-            }),
-        ),
-        (
-            "the summary left out before the verdict",
-            false,
-            Box::new(|v: &mut Vec<Item>| {
-                let n = v.len();
-                v.retain(
-                    |x| !matches!(x, Item::Report { line, .. } if line.starts_with("hydo-world: ")),
-                );
-                n != v.len()
-            }),
-        ),
-        (
-            "the world's summary not waited for",
-            false,
-            Box::new(|v: &mut Vec<Item>| {
-                let Some(i) = pos(v, |x| is_spawn(x, "fakes:summary")) else {
-                    return false;
-                };
-                let Item::Send { id, .. } = v[i].clone() else {
-                    return false;
-                };
-                let Some(e) = pos(
-                    v,
-                    |x| matches!(x, Item::Got { msg: Msg::Event(hydo_agent_proto::msg::Event::Exit(e)), .. } if e.id == id),
-                ) else {
-                    return false;
-                };
-                let ex = v.remove(e);
-                v.push(ex);
-                true
-            }),
-        ),
-        (
-            "the dump not carried on the acked line",
-            true,
-            Box::new(|v: &mut Vec<Item>| {
-                for x in v.iter_mut() {
-                    if let Item::Report { line, .. } = x {
-                        if line.starts_with("hydo-explore-acked:") && line.contains("w:") {
-                            *line = line.split(" w:").next().unwrap().to_string() + " ";
-                            return true;
-                        }
-                    }
-                }
-                false
-            }),
-        ),
-        (
-            "the hand-over without the carried world",
-            true,
-            Box::new(|v: &mut Vec<Item>| {
-                for x in v.iter_mut() {
-                    if let Item::End {
-                        end: Ending::PowerCut { world, .. },
-                        ..
-                    } = x
-                    {
-                        if world.is_empty() {
-                            return false;
-                        }
-                        world.clear();
-                        return true;
-                    }
-                }
-                false
-            }),
-        ),
-        (
-            "the dump taken before the failed ids were written",
-            true,
-            Box::new(|v: &mut Vec<Item>| {
-                let Some(d) = pos(v, |x| is_spawn(x, "fakes:dump")) else {
-                    return false;
-                };
-                let Some(w) = (0..d).rev().find(|k| matches!(&v[*k], Item::Send { cmd: Command::Write(w), .. } if w.path.ends_with("/failed"))) else { return false };
-                let it = v.remove(d);
-                v.insert(w, it);
-                true
-            }),
-        ),
-    ];
-    let mut caught = 0;
-    for (what, on_cut, f) in &mistakes {
-        let (items, cmd) = if *on_cut {
-            (&c.run.items, &ccmd)
-        } else {
-            (&p.run.items, &pcmd)
-        };
-        let Some(bad) = mutant(items, f) else {
-            panic!("{what}: the runs give no place for this mistake");
-        };
-        let e = run_ok(&bad, cmd).expect_err(what);
-        eprintln!("caught: {what}: {}", e.lines().next().unwrap_or(""));
-        caught += 1;
-    }
-    // the boot: the world started after the first service
-    let mut bt = b.boot.items.clone();
-    let w = pos(&bt, |x| is_spawn(x, "fakes:world")).unwrap();
-    let first = pos(&bt, |x| is_spawn(x, &plan.services[0].name)).unwrap();
-    assert!(w < first);
-    let it = bt.remove(w);
-    bt.insert(first, it);
-    let e = check(plan, &bt, Conv::Boot, "provision", (&[], &[]), None).expect_err("boot order");
-    eprintln!(
-        "caught: the world started after the services: {}",
-        e.lines().next().unwrap_or("")
+    let bt = &b.boot.items;
+    let w = pos(bt, |x| is_spawn(x, "fakes:world")).unwrap();
+    let first = pos(bt, |x| is_spawn(x, &b.plan.services[0].name)).unwrap();
+    assert!(
+        w < first,
+        "the world started after {}",
+        b.plan.services[0].name
     );
-    caught += 1;
-    // the recovery: a record left in the acked file, a record lost from the carry, the world
-    // started without its carry
-    let rmistakes: Vec<(&str, Edit)> = vec![
-        (
-            "a carried record written into the acked ids",
-            Box::new(|v: &mut Vec<Item>| {
-                for x in v.iter_mut() {
-                    if let Item::Send {
-                        cmd: Command::Write(w),
-                        ..
-                    } = x
-                    {
-                        if w.path == "/tmp/hydo/acked" {
-                            w.data.push_str("w:1,e,pay,charge,o1,\n");
-                            return true;
-                        }
-                    }
-                }
-                false
-            }),
-        ),
-        (
-            "a carried record lost",
-            Box::new(|v: &mut Vec<Item>| {
-                for x in v.iter_mut() {
-                    if let Item::Send {
-                        cmd: Command::Write(w),
-                        ..
-                    } = x
-                    {
-                        if w.path == "/tmp/hydo/world.carry" && w.data.contains('\n') {
-                            let mut ls: Vec<&str> = w.data.lines().collect();
-                            ls.pop();
-                            w.data = ls.iter().map(|l| format!("{l}\n")).collect();
-                            return true;
-                        }
-                    }
-                }
-                false
-            }),
-        ),
-        (
-            "the recovery's world started without its carry",
-            Box::new(|v: &mut Vec<Item>| {
-                for x in v.iter_mut() {
-                    if let Item::Send {
-                        cmd: Command::Spawn(s),
-                        ..
-                    } = x
-                    {
-                        if s.h == "fakes:world" {
-                            s.argv[3] = s.argv[3].replace("--carry /tmp/hydo/world.carry", "");
-                            return true;
-                        }
-                    }
-                }
-                false
-            }),
-        ),
-    ];
-    for (what, f) in &rmistakes {
-        let bad = mutant(&rc.items, f).unwrap_or_else(|| panic!("{what}: no place for it"));
-        let e = rec_ok(&bad).expect_err(what);
-        eprintln!("caught: {what}: {}", e.lines().next().unwrap_or(""));
-        caught += 1;
-    }
-    assert_eq!(caught, mistakes.len() + 1 + rmistakes.len());
-    // the read of world.dump is the controller's: a Read reply, kept
+    let cut = (1..60).find_map(|d| {
+        let r = ran(
+            &b,
+            &format!("disk=cut dseed={d} | run H=redisp@1-6:drop C=4"),
+        );
+        matches!(&r.run.fin.ending, Some(Ending::PowerCut { world, .. }) if world.len() > 1)
+            .then_some(r)
+    });
+    let c = cut.expect("a cut that carried a world");
     assert!(c.run.items.iter().any(|i| matches!(
         i,
         Item::Got {
@@ -955,8 +628,7 @@ fn error_logs_with_fakes_print_in_the_shells_order() {
     // The order the shell images had (hydo-build spliced hydo-init-errlog.sh after the fakes, so
     // the console got the error records, then the fakes' summary lines, then the final
     // invariants' assertion records and the verdict line; M127 fix 2, checked against
-    // `hydo-build --print-init` until M136): the controller's report lines in that order, every
-    // run checked against the shell model
+    // `hydo-build --print-init` until M136): the controller's report lines in that order
     let plan = plan_of(PROXY_ERRORS).unwrap_or_else(|e| panic!("{e}"));
     assert!(plan.errors.is_some() && plan.world.is_some());
     let b = (0..20)

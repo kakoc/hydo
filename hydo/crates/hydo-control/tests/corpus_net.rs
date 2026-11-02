@@ -1,9 +1,11 @@
-//! NET-FAULTS, FREEZE and NET-NAMESPACES (docs/HISTORY.md M124) against the shell model.
+//! NET-FAULTS, FREEZE and NET-NAMESPACES (docs/HISTORY.md M124): the controller's recorded
+//! transcripts.
 //!
 //! The identity corpus of every example manifest runs in `corpus.rs`; this test adds what that
-//! corpus does not reach, each run checked against the shell model (`tests/support/model.rs` and
-//! its network part `model_net.rs`, written from hydo-init.sh, hydo-init-links.sh,
-//! hydo-init-freeze.sh and hydo-init-netns.sh) and typed again from its transcript:
+//! corpus does not reach, each run recorded and typed again from its transcript (until
+//! Milestone 145 each was also checked against a shell model of hydo-init.sh,
+//! hydo-init-links.sh, hydo-init-freeze.sh and hydo-init-netns.sh, deleted with the shell init's
+//! images; the goldens are the transcripts of those checked runs):
 //!
 //! 1. schedules written for every shell path of the three features, on the example manifests
 //!    that have them (a port fault, links, network: bridge, the freeze), and on plan variants for
@@ -13,24 +15,19 @@
 //!    packet of every step; M92's adaptive sweep: every 8th packet, then every packet in a
 //!    window of 16 around each failing point), the counts read from the runs' own lines;
 //! 3. solo mode and the boot with the service network;
-//! 4. coverage: every path in [`PATHS`] is reached at least once;
-//! 5. deliberate mistakes: recorded conversations changed in one place each (an order, a missing
-//!    drain poll, a heal line, a namespace, the exported environment, a freeze field, a reply
-//!    not waited for, a missing helper line, a trace line) must each be caught by the model.
+//! 4. coverage: every path in [`PATHS`] is reached at least once.
 //!
 //! Goldens: `tests/golden/corpus-net.txt` (chunked SHA-256 of every transcript, per group) and a
 //! few readable transcripts in `tests/golden/examples-net/`. `HYDO_BLESS=1` re-records them.
 
 mod support;
 
-use hydo_agent_proto::msg::{Command, Sig};
 use hydo_control::{Ending, Plan, Transcript};
 use hydo_explore::gen::Ex;
 use hydo_explore::sched::{Fc, S};
 use hydo_explore::space::Space;
 use hydo_schedule::Schedule;
 use std::collections::{BTreeMap, BTreeSet};
-use support::model::{check, Conv as MConv};
 use support::{boot, plan_of, run_schedule, top, Booted, Conv, Item};
 
 /// Each shell path and a text that shows it was taken (in a note, a report or a verdict).
@@ -167,17 +164,7 @@ struct Suite {
     groups: Vec<Group>,
     reached: BTreeMap<&'static str, usize>,
     runs: usize,
-    /// Runs kept for the mistakes: (schedule, items, plan, guest part, the state at S1).
-    kept: Vec<Kept>,
     readable: Vec<(String, String)>,
-}
-
-struct Kept {
-    text: String,
-    items: Vec<Item>,
-    plan: Plan,
-    cmd: String,
-    s1: hydo_control::GuestState,
 }
 
 impl Suite {
@@ -199,8 +186,8 @@ impl Suite {
         self.groups.len() - 1
     }
 
-    /// Runs one schedule from S1 (and its recovery), checks both against the model and the
-    /// replay against the policy run; None when it is refused.
+    /// Runs one schedule from S1 (and its recovery), checks the hand-over and the replay against
+    /// the policy run; None when it is refused.
     fn run(&mut self, g: usize, b: &Booted, text: &str) -> Option<String> {
         let s = Schedule::parse(text).unwrap_or_else(|e| panic!("{text}: {e}"));
         if !self.groups[g].seen.insert(s.guest_text()) {
@@ -216,20 +203,6 @@ impl Suite {
         };
         let gname = self.groups[g].name.clone();
         let ctx = |w: &str| format!("{gname}: {text}: {w}");
-        if let Err(e) = check(
-            &b.plan,
-            &r.run.items,
-            MConv::Run,
-            &s.guest_text(),
-            (&[], &[]),
-            Some(&b.s1.2),
-        ) {
-            panic!(
-                "{}\n{e}\n--- transcript:\n{}",
-                ctx("the run differs from the shell"),
-                r.run.fin.transcript.to_jsonl()
-            );
-        }
         let mut reference = r.run.fin.transcript.clone();
         reference.header.controller = "replay".into();
         assert_eq!(
@@ -257,24 +230,14 @@ impl Suite {
             else {
                 unreachable!()
             };
-            // as corpus.rs: the recovery against the oracle line built from the report
-            let (cmd, acked, failed) = support::oracle_of(&r.run.items);
+            // as corpus.rs: the hand-over equals the report's acked and failed lines
+            let (_, acked, failed) = support::oracle_of(&r.run.items);
             assert_eq!(
                 (ids.iter().chain(&world).cloned().collect::<Vec<_>>(), f),
                 (acked.clone(), failed.clone()),
                 "{}",
                 ctx("the hand-over differs from the report's acked and failed lines")
             );
-            if let Err(e) = check(
-                &b.plan,
-                &rc.items,
-                MConv::Recovery,
-                &cmd,
-                (&acked, &failed),
-                Some(&b.s0.2),
-            ) {
-                panic!("{}\n{e}", ctx("the recovery differs from the shell"));
-            }
             *self.groups[g]
                 .counts
                 .entry(format!("recovery:{}", class(&rc.fin.transcript)))
@@ -305,15 +268,6 @@ impl Suite {
                 }
             }
         }
-        if self.kept.len() < 400 {
-            self.kept.push(Kept {
-                text: text.to_string(),
-                items: r.run.items.clone(),
-                plan: b.plan.clone(),
-                cmd: s.guest_text(),
-                s1: b.s1.2.clone(),
-            });
-        }
         Some(joined)
     }
 }
@@ -321,7 +275,7 @@ impl Suite {
 fn boot_ok(plan: &Plan, name: &str, suite: &mut Suite) -> Booted {
     for i in 0..20 {
         let salt = format!("{name}#{i}");
-        // every boot, failed or not, is checked against the model
+        // every boot, failed or not, adds to the coverage
         let mut ctl = hydo_control::ScheduleController::boot(plan.clone()).unwrap();
         let c = support::converse(
             support::fake::Fake::boot(&salt, 16),
@@ -335,8 +289,6 @@ fn boot_ok(plan: &Plan, name: &str, suite: &mut Suite) -> Booted {
                 start: "boot".into(),
             },
         );
-        check(plan, &c.items, MConv::Boot, "provision", (&[], &[]), None)
-            .unwrap_or_else(|e| panic!("{name}: boot {salt} differs from the shell:\n{e}"));
         suite.tally(&lines_of(&c));
         if let Ok(b) = boot(plan, &salt) {
             return b;
@@ -361,8 +313,11 @@ fn solo(plan: &Plan, name: &str, suite: &mut Suite) {
                 start: "boot".into(),
             },
         );
-        check(plan, &c.items, MConv::Solo, "", (&[], &[]), None)
-            .unwrap_or_else(|e| panic!("{name} ({salt}): solo differs from the shell:\n{e}"));
+        assert!(
+            matches!(c.fin.ending, Some(Ending::Verdict(_))),
+            "{name} ({salt}): solo ended with {:?}",
+            c.fin.ending
+        );
         suite.tally(&lines_of(&c));
     }
 }
@@ -568,279 +523,13 @@ fn without_liveness(m: &str) -> Plan {
     Plan::from_manifest(&hydo_manifest::Manifest::from_validated(data)).unwrap()
 }
 
-// ------------------------------------------------------------------ deliberate mistakes
-
-type Mutator = fn(&[Item], &Plan) -> Option<Vec<Item>>;
-
-fn main_sends(items: &[Item]) -> Vec<usize> {
-    items
-        .iter()
-        .enumerate()
-        .filter(|(_, i)| matches!(i, Item::Send { by, .. } if by == "main"))
-        .map(|(k, _)| k)
-        .collect()
-}
-
-fn is_tc(c: &Command, what: &str) -> bool {
-    matches!(c, Command::Run(r) if r.argv.first().is_some_and(|a| a.ends_with("/bin/tc"))
-        && r.argv.join(" ").contains(what))
-}
-
-/// The netem qdisc put on before the prio root.
-fn swap_tc_order(items: &[Item], _: &Plan) -> Option<Vec<Item>> {
-    let ms = main_sends(items);
-    for w in ms.windows(2) {
-        let (a, b) = (w[0], w[1]);
-        let (Item::Send { cmd: ca, .. }, Item::Send { cmd: cb, .. }) = (&items[a], &items[b])
-        else {
-            continue;
-        };
-        if is_tc(ca, "root handle 1: prio") && is_tc(cb, "netem") {
-            let (ca, cb) = (ca.clone(), cb.clone());
-            let mut v = items.to_vec();
-            if let Item::Send { cmd, .. } = &mut v[a] {
-                *cmd = cb;
-            }
-            if let Item::Send { cmd, .. } = &mut v[b] {
-                *cmd = ca;
-            }
-            return Some(v);
-        }
-    }
-    None
-}
-
-/// One drain poll left out (its qlen and the answer).
-fn drop_drain_poll(items: &[Item], _: &Plan) -> Option<Vec<Item>> {
-    let k = items
-        .iter()
-        .position(|i| matches!(i, Item::Send { by, cmd: Command::Qlen(_), .. } if by == "main"))?;
-    let Item::Send { id, .. } = items[k] else {
-        unreachable!()
-    };
-    let mut v = items.to_vec();
-    v.retain(|i| match i {
-        Item::Send { id: x, .. } => *x != id,
-        Item::Got { msg, .. } => !matches!(msg, support::fake::Msg::Reply(x, _) if *x == id),
-        _ => true,
-    });
-    Some(v)
-}
-
-/// The heal line with a wrong queue length.
-fn wrong_heal_line(items: &[Item], _: &Plan) -> Option<Vec<Item>> {
-    let mut v = items.to_vec();
-    for i in v.iter_mut() {
-        if let Item::Note { line, .. } = i {
-            if line.contains("network fault lifted: queued=") {
-                *line = line.replacen("queued=", "queued=1", 1);
-                return Some(v);
-            }
-        }
-    }
-    None
-}
-
-/// A service started outside its namespace.
-fn no_namespace(items: &[Item], plan: &Plan) -> Option<Vec<Item>> {
-    let mut v = items.to_vec();
-    for i in v.iter_mut() {
-        if let Item::Send {
-            cmd: Command::Spawn(s),
-            ..
-        } = i
-        {
-            if s.netns.is_some() && plan.service(&s.h).is_some() {
-                s.netns = None;
-                return Some(v);
-            }
-        }
-    }
-    None
-}
-
-/// XTABLES_LOCKFILE missing from the environment of a command after the arming.
-fn lost_export(items: &[Item], _: &Plan) -> Option<Vec<Item>> {
-    let mut v = items.to_vec();
-    let k = v.iter().position(|i| {
-        matches!(
-            i,
-            Item::Send {
-                cmd: Command::Freeze(_),
-                ..
-            }
-        )
-    })?;
-    for i in v.iter_mut().skip(k + 1) {
-        if let Item::Send {
-            by,
-            cmd: Command::Run(r),
-            ..
-        } = i
-        {
-            if by == "main" {
-                let e = r.env.as_mut()?;
-                let n = e.len();
-                e.retain(|x| !x.starts_with("XTABLES_LOCKFILE="));
-                if e.len() < n {
-                    return Some(v);
-                }
-            }
-        }
-    }
-    None
-}
-
-/// The freeze armed for the next packet.
-fn freeze_off_by_one(items: &[Item], _: &Plan) -> Option<Vec<Item>> {
-    let mut v = items.to_vec();
-    for i in v.iter_mut() {
-        if let Item::Send {
-            cmd: Command::Freeze(f),
-            ..
-        } = i
-        {
-            f.n += 1;
-            return Some(v);
-        }
-    }
-    None
-}
-
-/// The freeze's reply arriving only after the controller went on (a call not waited for).
-fn freeze_not_waited(items: &[Item], _: &Plan) -> Option<Vec<Item>> {
-    let k = items.iter().position(|i| {
-        matches!(
-            i,
-            Item::Send {
-                cmd: Command::Freeze(_),
-                ..
-            }
-        )
-    })?;
-    let Item::Send { id, .. } = items[k] else {
-        unreachable!()
-    };
-    let r = items.iter().position(
-        |i| matches!(i, Item::Got { msg: support::fake::Msg::Reply(x, _), .. } if *x == id),
-    )?;
-    let next = items
-        .iter()
-        .enumerate()
-        .skip(r + 1)
-        .find(|(_, i)| matches!(i, Item::Send { by, .. } if by == "main"))?
-        .0;
-    let mut v = items.to_vec();
-    let got = v.remove(r);
-    v.insert(next, got);
-    Some(v)
-}
-
-/// The helper's FROZE line missing.
-fn froze_line_lost(items: &[Item], _: &Plan) -> Option<Vec<Item>> {
-    let k = items.iter().position(
-        |i| matches!(i, Item::Report { by, line, .. } if by == "freeze" && line.starts_with("hydo-fc: FROZE")),
-    )?;
-    let mut v = items.to_vec();
-    v.remove(k);
-    Some(v)
-}
-
-/// A trace line cut short.
-fn trace_line_cut(items: &[Item], _: &Plan) -> Option<Vec<Item>> {
-    let mut v = items.to_vec();
-    for i in v.iter_mut().rev() {
-        if let Item::Report { line, .. } = i {
-            if line.starts_with("hydo-fc-trace: ") && line.len() > 20 {
-                line.truncate(line.len() - 1);
-                return Some(v);
-            }
-        }
-    }
-    None
-}
-
-/// The heal's resume skipped: a SIGCONT the shell sends, missing.
-fn no_cont_after_freeze(items: &[Item], _: &Plan) -> Option<Vec<Item>> {
-    let k = items
-        .iter()
-        .position(|i| matches!(i, Item::Note { line, .. } if line.contains("ended by the init")))?;
-    let c = (0..k).rev().find(
-        |j| matches!(&items[*j], Item::Send { cmd: Command::Signal(s), .. } if s.sig == Sig::Cont),
-    )?;
-    let mut v = items.to_vec();
-    v.remove(c);
-    Some(v)
-}
-
-/// With network: bridge, the freeze's queue bound in the guest's own namespace (M131).
-fn freeze_outside_namespace(items: &[Item], _: &Plan) -> Option<Vec<Item>> {
-    let mut v = items.to_vec();
-    for i in v.iter_mut() {
-        if let Item::Send {
-            cmd: Command::Freeze(f),
-            ..
-        } = i
-        {
-            if f.netns.is_some() {
-                f.netns = None;
-                return Some(v);
-            }
-        }
-    }
-    None
-}
-
-/// With network: bridge, a freeze rule put into the guest's own namespace (M131).
-fn freeze_rule_outside_namespace(items: &[Item], _: &Plan) -> Option<Vec<Item>> {
-    let mut v = items.to_vec();
-    for i in v.iter_mut() {
-        if let Item::Send {
-            cmd: Command::Run(r),
-            ..
-        } = i
-        {
-            if r.netns.is_some() && r.argv.iter().any(|a| a == "NFQUEUE") {
-                r.netns = None;
-                return Some(v);
-            }
-        }
-    }
-    None
-}
-
-const MISTAKES: &[(&str, Mutator)] = &[
-    (
-        "a bridge freeze bound outside the service's namespace",
-        freeze_outside_namespace,
-    ),
-    (
-        "a bridge freeze rule outside the service's namespace",
-        freeze_rule_outside_namespace,
-    ),
-    ("the netem qdisc before the prio root", swap_tc_order),
-    ("a drain poll left out", drop_drain_poll),
-    ("a wrong heal line", wrong_heal_line),
-    ("a service outside its namespace", no_namespace),
-    ("XTABLES_LOCKFILE not exported", lost_export),
-    ("the freeze one packet late", freeze_off_by_one),
-    ("the freeze's reply not waited for", freeze_not_waited),
-    ("the FROZE line missing", froze_line_lost),
-    ("a trace line cut short", trace_line_cut),
-    (
-        "the init's SIGCONT after a freeze missing",
-        no_cont_after_freeze,
-    ),
-];
-
 #[test]
-fn network_faults_freeze_and_namespaces_do_what_the_shell_does() {
+fn network_faults_freeze_and_namespaces_recorded_transcripts() {
     let t0 = std::time::Instant::now();
     let mut suite = Suite {
         groups: Vec::new(),
         reached: BTreeMap::new(),
         runs: 0,
-        kept: Vec::new(),
         readable: Vec::new(),
     };
     let mut inputs: Vec<String> = Vec::new();
@@ -1056,8 +745,6 @@ fn network_faults_freeze_and_namespaces_do_what_the_shell_does() {
             start: "boot".into(),
         },
     );
-    check(&p, &c.items, MConv::Boot, "provision", (&[], &[]), None)
-        .unwrap_or_else(|e| panic!("the failed network setup differs from the shell:\n{e}"));
     suite.tally(&lines_of(&c));
     golden.push(format!(
         "boot\tbridge setup fails\t{}\t{}",
@@ -1078,31 +765,6 @@ fn network_faults_freeze_and_namespaces_do_what_the_shell_does() {
         suite.runs
     );
 
-    // ---------------------------------------------------------- deliberate mistakes
-    let mut caught = Vec::new();
-    for (what, f) in MISTAKES {
-        let (mut applied, mut found) = (0, 0);
-        for k in &suite.kept {
-            let Some(items) = f(&k.items, &k.plan) else {
-                continue;
-            };
-            applied += 1;
-            if check(&k.plan, &items, MConv::Run, &k.cmd, (&[], &[]), Some(&k.s1)).is_err() {
-                found += 1;
-            } else {
-                panic!("the model did not catch \"{what}\" in {}", k.text);
-            }
-            if applied >= 25 {
-                break;
-            }
-        }
-        assert!(
-            applied > 0,
-            "the mistake \"{what}\" applies to no recorded run"
-        );
-        caught.push(format!("mistake\t{what}\tcaught {found} of {applied}"));
-    }
-
     // ---------------------------------------------------------- goldens
     for g in &suite.groups {
         golden.push(format!(
@@ -1122,7 +784,6 @@ fn network_faults_freeze_and_namespaces_do_what_the_shell_does() {
     for (k, n) in &suite.reached {
         golden.push(format!("reached\t{k}\t{n}"));
     }
-    golden.extend(caught);
     eprintln!(
         "corpus_net: {} runs in {:.1} s (sweep: {traces} traces, {points} points, {windows} stride/window points)",
         suite.runs,
@@ -1131,7 +792,7 @@ fn network_faults_freeze_and_namespaces_do_what_the_shell_does() {
     support::check_golden(
         "corpus-net.txt",
         &[
-            "NET-FAULTS, FREEZE and NET-NAMESPACES against the shell model (hydo/crates/hydo-control/tests/corpus_net.rs).",
+            "NET-FAULTS, FREEZE and NET-NAMESPACES: the controller's transcripts (hydo/crates/hydo-control/tests/corpus_net.rs).",
             "Re-record: HYDO_BLESS=1 cargo test -p hydo-control --test corpus_net",
         ],
         &inputs,

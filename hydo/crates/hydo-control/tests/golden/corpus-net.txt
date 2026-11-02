@@ -1,4 +1,4 @@
-# NET-FAULTS, FREEZE and NET-NAMESPACES against the shell model (hydo/crates/hydo-control/tests/corpus_net.rs).
+# NET-FAULTS, FREEZE and NET-NAMESPACES: the controller's transcripts (hydo/crates/hydo-control/tests/corpus_net.rs).
 # Re-record: HYDO_BLESS=1 cargo test -p hydo-control --test corpus_net
 input	hydo/onboard/examples/redis/hydo.yaml	c34c172a137dd89e266d8e4e73288f9d9dc73dadf952d5b9c4a03f3547d5e443
 input	hydo/onboard/examples/redis/hydo-netem.yaml	54ab0ea57ca3c5a6853528a00369d0eec11549d1a89cf3f420c21a2b37419481
@@ -228,15 +228,3 @@ reached	resumed	199
 reached	tc setup failed	11
 reached	unknown N=	9
 reached	unknown O=	9
-mistake	a bridge freeze bound outside the service's namespace	caught 25 of 25
-mistake	a bridge freeze rule outside the service's namespace	caught 25 of 25
-mistake	the netem qdisc before the prio root	caught 25 of 25
-mistake	a drain poll left out	caught 25 of 25
-mistake	a wrong heal line	caught 25 of 25
-mistake	a service outside its namespace	caught 12 of 12
-mistake	XTABLES_LOCKFILE not exported	caught 25 of 25
-mistake	the freeze one packet late	caught 25 of 25
-mistake	the freeze's reply not waited for	caught 25 of 25
-mistake	the FROZE line missing	caught 25 of 25
-mistake	a trace line cut short	caught 25 of 25
-mistake	the init's SIGCONT after a freeze missing	caught 14 of 14

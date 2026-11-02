@@ -4,9 +4,9 @@
 //! `tests/identity.rs`), the manifest is read into the controller's plan; a manifest that needs an
 //! init extension is refused with its seam. For each core manifest:
 //!
-//! 1. it boots on the scripted agent and engine (`tests/support/fake.rs`) to S1, and the boot is
-//!    checked against the shell model (`tests/support/model.rs`, hydo-init.sh written as blocking
-//!    code); a boot the scripted world makes fail is checked too, and the next salt is tried;
+//! 1. it boots on the scripted agent and engine (`tests/support/fake.rs`) to S1, and the boot's
+//!    transcript is recorded; a boot the scripted world makes fail is recorded too, and the next
+//!    salt is tried;
 //! 2. the schedules are those of the identity corpus: every schedule the explorer composes for
 //!    the manifest (random, swarm, process, and swarm-pos for 15+ steps; the option streams
 //!    switched per seed exactly as identity.rs does; hvx, and hvm with and without a data disk
@@ -15,15 +15,17 @@
 //!    when the core controller drives them (the others name their seam), one per guest part; a
 //!    manifest with a fake world (M125) also gets every point of `--sweep protocol` and schedules
 //!    written for the H= paths (`protocol_schedules`);
-//! 3. each runs from S1 (and, after a power cut, its recovery boot from S0); both conversations
-//!    are checked against the shell model, the controller's thread by thread;
+//! 3. each runs from S1 (and, after a power cut, its recovery boot from S0, whose inputs must be
+//!    the acknowledged and failed ids the run's report states);
 //! 4. the run's transcript is typed again by the ReplayController on the same scripted guest, and
 //!    the replay's transcript must equal the policy run's;
 //! 5. the transcripts are recorded as goldens (`tests/golden/corpus-*.txt`: chunked SHA-256 of
 //!    every command, report line and end, per manifest, with counts), and a few whole transcripts
 //!    are kept readable in `tests/golden/examples/`.
 //!
-//! `HYDO_BLESS=1` re-records the goldens; `HYDO_CONTROL_FULL=1` uses the identity test's full
+//! Until Milestone 145 every boot, run and recovery was also checked against a shell model of
+//! hydo-init.sh (deleted with the shell init's images, see `tests/support/mod.rs`); the goldens
+//! are the transcripts of those checked runs. `HYDO_BLESS=1` re-records the goldens; `HYDO_CONTROL_FULL=1` uses the identity test's full
 //! 300 seeds instead of 40.
 
 mod support;
@@ -33,8 +35,7 @@ use hydo_explore::gen::{Backend, Ex};
 use hydo_explore::space::{grpc_targets, Space};
 use hydo_schedule::Schedule;
 use std::collections::{BTreeMap, BTreeSet};
-use support::model::{check, Conv};
-use support::{boot, manifests, model_plan_of, run_schedule, top, Booted};
+use support::{boot, corpus_plan_of, manifests, run_schedule, top, Booted};
 
 const FLAGS: [&str; 14] = [
     "TIMING",
@@ -268,7 +269,7 @@ fn boot_until_ok(plan: &Plan, path: &str, report: &mut Vec<String>) -> Option<Bo
     for i in 0..20 {
         let salt = format!("{path}#{i}");
         let b = boot(plan, &salt).ok();
-        // every boot, failed or not, is checked against the shell model
+        // every boot, failed or not, is recorded
         let mut ctl = hydo_control::ScheduleController::boot(plan.clone()).unwrap();
         let c = support::converse(
             support::fake::Fake::boot(&salt, 16),
@@ -282,9 +283,6 @@ fn boot_until_ok(plan: &Plan, path: &str, report: &mut Vec<String>) -> Option<Bo
                 start: "boot".into(),
             },
         );
-        if let Err(e) = check(plan, &c.items, Conv::Boot, "provision", (&[], &[]), None) {
-            panic!("{path}: boot {salt}: the controller differs from the shell:\n{e}");
-        }
         report.push(format!(
             "boot\t{path}\t{salt}\t{}\t{}",
             class(&c.fin.transcript),
@@ -298,7 +296,7 @@ fn boot_until_ok(plan: &Plan, path: &str, report: &mut Vec<String>) -> Option<Bo
 }
 
 #[test]
-fn the_core_controller_does_what_the_shell_init_does() {
+fn the_core_controllers_transcripts_on_the_identity_corpus() {
     let seeds = if std::env::var_os("HYDO_CONTROL_FULL").is_some() {
         300
     } else {
@@ -312,7 +310,7 @@ fn the_core_controller_does_what_the_shell_init_does() {
     let mut seams: BTreeMap<String, usize> = BTreeMap::new();
     for m in manifests() {
         inputs.push(m.clone());
-        let plan = match model_plan_of(&m) {
+        let plan = match corpus_plan_of(&m) {
             Ok(p) => p,
             Err(e) => {
                 golden.push(format!("manifest\t{m}\tnot core: {e}"));
@@ -357,20 +355,6 @@ fn the_core_controller_does_what_the_shell_init_does() {
             };
             *counts.entry(from.into()).or_default() += 1;
             let ctx = |what: &str| format!("{m}: {text}: {what}");
-            if let Err(e) = check(
-                &plan,
-                &r.run.items,
-                Conv::Run,
-                &s.guest_text(),
-                (&[], &[]),
-                Some(&b.s1.2),
-            ) {
-                panic!(
-                    "{}\n{e}\n--- transcript:\n{}",
-                    ctx("the run differs from the shell"),
-                    r.run.fin.transcript.to_jsonl()
-                );
-            }
             let mut reference = r.run.fin.transcript.clone();
             reference.header.controller = "replay".into();
             assert_eq!(
@@ -393,10 +377,10 @@ fn the_core_controller_does_what_the_shell_init_does() {
                 else {
                     unreachable!()
                 };
-                // the recovery is checked against the oracle line the engine builds today from
-                // the report (with a fake world, its records are words of the acked line; with
-                // guest.clock_after_cut, so is `clock=<epoch>`, which is not an id)
-                let (cmd, acked, failed) = support::oracle_of(&r.run.items);
+                // the hand-over equals the report's acked and failed lines (with a fake world,
+                // its records are words of the acked line; with guest.clock_after_cut, so is
+                // `clock=<epoch>`, which is not an id)
+                let (_, acked, failed) = support::oracle_of(&r.run.items);
                 let words: Vec<String> = acked
                     .iter()
                     .filter(|w| plan.clock_after_cut.is_none() || !w.starts_with("clock="))
@@ -408,20 +392,6 @@ fn the_core_controller_does_what_the_shell_init_does() {
                     "{}",
                     ctx("the hand-over differs from the report's acked and failed lines")
                 );
-                if let Err(e) = check(
-                    &plan,
-                    &rc.items,
-                    Conv::Recovery,
-                    &cmd,
-                    (&acked, &failed),
-                    Some(&b.s0.2),
-                ) {
-                    panic!(
-                        "{}\n{e}\n--- transcript:\n{}",
-                        ctx("the recovery differs from the shell"),
-                        rc.fin.transcript.to_jsonl()
-                    );
-                }
                 *counts
                     .entry(format!("recovery:{}", class(&rc.fin.transcript)))
                     .or_default() += 1;
