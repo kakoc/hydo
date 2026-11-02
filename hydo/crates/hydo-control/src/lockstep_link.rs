@@ -43,6 +43,7 @@ fn why(w: StopWhy) -> Why {
         StopWhy::Send => Why::Send,
         StopWhy::Marker => Why::Marker,
         StopWhy::Exit => Why::Exit,
+        StopWhy::Hostcall => Why::Hostcall,
     }
 }
 

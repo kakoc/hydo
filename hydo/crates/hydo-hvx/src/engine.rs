@@ -87,6 +87,17 @@ pub struct Options {
     /// HYDO_HVX_PREPARE=0: make every fresh VM when it is needed (default in serve mode: the
     /// next one is made on a helper thread while a run runs).
     pub prepare: bool,
+    /// HYDO_HVX_HOSTCALL=1 (M138): offer agent images the host-call port (a module with
+    /// HVX_VM_HOSTCALL; `hydo.hc=1` on the kernel command line of a controlled boot). An agent
+    /// that uses it sends its lines through the port, and the host's lines reach it there.
+    pub hostcall: bool,
+    /// HYDO_HVX_REUSE=1 (M138): keep a used VM and bring it back to the next run's snapshot in
+    /// place (HVX_RESET_VM and the dirty-page log of a module that has them) instead of making
+    /// a fresh VM.
+    pub reuse: bool,
+    /// HYDO_HVX_CHECK_RESET=1: after every in-place restore, compare all of RAM and the disk with
+    /// what a fresh VM would hold, and end the run with an error on a difference.
+    pub check_reset: bool,
 }
 
 impl Options {
@@ -137,6 +148,9 @@ impl Options {
             reaper: not_0("HYDO_HVX_REAPER"),
             check_zero: set_not0("HYDO_HVX_CHECK_ZERO"),
             prepare: not_0("HYDO_HVX_PREPARE"),
+            hostcall: set_not0("HYDO_HVX_HOSTCALL"),
+            reuse: set_not0("HYDO_HVX_REUSE"),
+            check_reset: set_not0("HYDO_HVX_CHECK_RESET"),
         }
     }
 
@@ -167,6 +181,27 @@ struct Boot {
     drained: usize,
     p2_off: usize,
     p2_len: usize,
+    /// M138: the host-call records the guest committed (the agent's lines, when it uses the
+    /// port), in order, as `ubuf` holds the console.
+    pbuf: Vec<u8>,
+    /// M138: the agent sends its lines through the port (its hello came that way), so the
+    /// host's lines go there too.
+    hc_active: bool,
+    /// M138, HYDO_HVX_REUSE: what the VM's RAM and disk were last restored to (None: not
+    /// reusable, as a booted VM or one whose restore failed).
+    tgt: Option<Tgt>,
+    /// M138: the VM comes from the reuse pool; the next restore resets it in place first.
+    reused: bool,
+}
+
+/// M138: the snapshot a reusable VM was restored to: its RAM pages and its data partition's,
+/// so that the next in-place restore knows which pages may differ beside the dirty ones.
+struct Tgt {
+    ram_id: u64,
+    ram_idx: Vec<u32>,
+    /// Some(snapshot id) when the data partition is the snapshot's own, None for a carried one.
+    rw_id: Option<u64>,
+    rw_idx: Vec<u32>,
 }
 
 impl Boot {
@@ -177,6 +212,10 @@ impl Boot {
             drained: 0,
             p2_off: 0,
             p2_len: 0,
+            pbuf: Vec::new(),
+            hc_active: false,
+            tgt: None,
+            reused: false,
         }
     }
     fn vm(&self) -> &Vm {
@@ -213,6 +252,14 @@ struct Snap {
     con: Vec<u8>,
     unsync: Vec<u8>,
     unsync_n: u32,
+    /// M138: the host-call records so far, whether the agent uses the port, and the port's
+    /// buffers (the partial record and the staged bytes the guest has not read).
+    pcon: Vec<u8>,
+    hc_active: bool,
+    hc: Option<(hvx_hc_state, Vec<u8>)>,
+    /// M138: a number of its own, so a reused VM knows whether its RAM already holds this
+    /// snapshot's pages outside the ones the last run wrote.
+    id: u64,
 }
 
 /// `struct ctl_snap`.
@@ -383,6 +430,13 @@ pub struct Core {
     pt: Option<PtOn>,
     /// HVX_SIM_DRAIN_DROP has dropped its one read.
     sim_dropped: bool,
+    /// M138, HYDO_HVX_REUSE: VMs kept for the next runs, with what they hold.
+    spare: Vec<(Vm, Tgt)>,
+    /// M138: reuse is on (asked for, one vCPU, no tracing, a page-aligned data partition).
+    reuse_on: bool,
+    /// M138: the non-zero pages of a fresh VM's RAM (the module's own default tables), which a
+    /// fresh VM keeps under a restore's pages.
+    fresh_tpl: Option<Pages>,
 }
 
 /// `struct ph_ctr`: the counters PHASES reports.
@@ -503,7 +557,15 @@ impl Core {
     // ---- VMs ----
 
     /// `boot_setup`: a VM made here (see [`create_vm`]).
-    fn boot_setup(&mut self, mode: Setup, cmdline: &str, fault_classes: u32) -> Option<Boot> {
+    /// `hc`: offer the host-call port to the guest (M138: `hydo.hc=1` on the command line when
+    /// the VM has the port).
+    fn boot_setup(
+        &mut self,
+        mode: Setup,
+        cmdline: &str,
+        fault_classes: u32,
+        hc: bool,
+    ) -> Option<Boot> {
         let mut m = Vec::new();
         let vm = create_vm(
             &self.e,
@@ -513,6 +575,7 @@ impl Core {
             fault_classes,
             &self.boot_line,
             &mut m,
+            hc,
         );
         self.print_msgs(m);
         Some(self.boot_of(vm?))
@@ -541,6 +604,22 @@ impl Core {
 
     fn teardown(&mut self, b: &mut Boot) {
         b.ubuf = Vec::new();
+        b.pbuf = Vec::new();
+        // M138: a VM whose RAM and disk are known apart from its dirty pages goes to the pool
+        // (and only while the machine has room for one more VM of this size: an idle VM holds
+        // its memory; which VM a run gets never changes its result)
+        let need = (self.e.mem_size + self.e.disk_len) >> 20;
+        let keep = self.reuse_on
+            && self.spare.len() < SPARE_MAX
+            && b.tgt.is_some()
+            && b.vm.as_ref().is_some_and(|v| v.dl)
+            && mem_available_mib().is_none_or(|av| av >= need + 1024);
+        if keep {
+            if let (Some(vm), Some(t)) = (b.vm.take(), b.tgt.take()) {
+                self.spare.push((vm, t));
+            }
+            return;
+        }
         if let Some(vm) = b.vm.take() {
             match &self.reaper {
                 Some(tx) => {
@@ -570,6 +649,7 @@ impl Core {
                     0,
                     &self.boot_line,
                     &mut m,
+                    false,
                 );
                 (vm, m)
             }
@@ -590,6 +670,72 @@ impl Core {
         Some(b)
     }
 
+    /// M138: a VM for a restore of snapshot `id`: from the pool when reuse is on (one that holds
+    /// that snapshot already, else any once the pool is full), else a fresh one.
+    fn vm_for(&mut self, id: u64) -> Option<Boot> {
+        if self.reuse_on {
+            let pick = self.spare.iter().position(|(_, t)| t.ram_id == id).or(
+                if self.spare.len() >= SPARE_MAX {
+                    Some(0)
+                } else {
+                    None
+                },
+            );
+            if let Some(i) = pick {
+                let (vm, t) = self.spare.remove(i);
+                let mut b = self.boot_of(vm);
+                b.tgt = Some(t);
+                b.reused = true;
+                return Some(b);
+            }
+        }
+        let b = self.vm_fresh()?;
+        if self.reuse_on && self.fresh_tpl.is_none() {
+            self.fresh_tpl = Some(Pages::store(b.vm().mem()));
+        }
+        Some(b)
+    }
+
+    /// M138: bring a used VM back to the state HVX_CREATE_VM gave it, apart from RAM and the disk
+    /// (HVX_RESET_VM), after reading and clearing its dirty log: (RAM bitmap, disk bitmap).
+    fn reuse_reset(&mut self, b: &Boot) -> Result<(Vec<u64>, Vec<u64>), ()> {
+        let vm = b.vm();
+        let mut ram = vec![0u64; (vm.mem().len() / 4096).div_ceil(64)];
+        let mut disk = vec![0u64; (vm.disk().len().div_ceil(4096)).div_ceil(64)];
+        if let Err(e) = vm.get_dirty(&mut ram, &mut disk, true) {
+            diag!(self, "HVX_GET_DIRTY: {e}");
+            return Err(());
+        }
+        if let Err(e) = vm.reset() {
+            diag!(self, "HVX_RESET_VM: {e}");
+            return Err(());
+        }
+        // what create_vm sets on a fresh VM (the snapshot then sets all of it again)
+        let mut tsc = hvx_tsc {
+            tsc: 0,
+            step: BOOT_TSC_STEP,
+            aux: 0,
+            count: 0,
+            mode: HVX_TSC_COUNTER,
+        };
+        let mut sregs = boot::fill_sregs();
+        let mut regs = hvx_regs {
+            rip: boot::KERNEL_LOAD_ADDR + boot::KERNEL_ENTRY_OFF,
+            rsi: boot::BOOT_PARAMS_ADDR,
+            rsp: boot::STACK_TOP,
+            rflags: 0x2,
+            ..Default::default()
+        };
+        if vm.io(HVX_SET_TSC, &mut tsc).is_err()
+            || vm.io(HVX_SET_SREGS, &mut sregs).is_err()
+            || vm.io(HVX_SET_REGS, &mut regs).is_err()
+        {
+            diag!(self, "hydo-hvx: setting up a reset VM failed");
+            return Err(());
+        }
+        Ok((ram, disk))
+    }
+
     /// Start making the next fresh VM on a helper thread (when on, and when the machine has
     /// memory for two more VMs of this size).
     fn start_prep(&mut self) {
@@ -605,7 +751,7 @@ impl Core {
             .name("hvx-prepare".into())
             .spawn(move || {
                 let mut m = Vec::new();
-                let vm = create_vm(&e, &o, Setup::Fresh, "console=ttyS0", 0, &bl, &mut m);
+                let vm = create_vm(&e, &o, Setup::Fresh, "console=ttyS0", 0, &bl, &mut m, false);
                 if let Some(v) = &vm {
                     v.populate(e.p2_off as usize, e.p2_len as usize);
                 }
@@ -938,6 +1084,28 @@ impl Core {
         Ok(())
     }
 
+    /// M138: take the committed host-call records into `pbuf`; the first one makes the port
+    /// the agent's channel. Err: the port cannot be read.
+    fn hc_drain(&mut self, b: &mut Boot) -> Result<(), ()> {
+        if !b.vm().hc {
+            return Ok(());
+        }
+        let n0 = b.pbuf.len();
+        let mut add = Vec::new();
+        if let Err(e) = b.vm().hc_get(&mut add) {
+            diag!(self, "HVX_HC_GET: {e}");
+            return Err(());
+        }
+        if b.pbuf.len() + add.len() > UBUF_CAP {
+            add.truncate(UBUF_CAP.saturating_sub(b.pbuf.len()));
+        }
+        b.pbuf.extend_from_slice(&add);
+        if b.pbuf.len() > n0 {
+            b.hc_active = true;
+        }
+        Ok(())
+    }
+
     fn console_dump(&mut self, b: &Boot) {
         if let Some(p) = &self.o.console_out {
             if let Ok(mut f) = std::fs::OpenOptions::new()
@@ -1011,7 +1179,22 @@ impl Core {
         h = fnv(h, &self.e.mem_size.to_le_bytes());
         h = fnv_zskip(h, b.vm().mem());
         h = fnv(h, &(b.p2_len as u64).to_le_bytes());
-        fnv_zskip(h, b.p2())
+        h = fnv_zskip(h, b.p2());
+        // M138: an agent on the host-call port: its records and the port's buffers too (a VM
+        // whose agent never used the port has the fingerprint it always had)
+        if b.hc_active {
+            h = fnv(h, b"hvx-hostcall-v1");
+            h = fnv(h, &(b.pbuf.len() as u64).to_le_bytes());
+            h = fnv(h, &b.pbuf);
+            if let Ok((st, bytes)) = b.vm().hc_state() {
+                h = fnv(h, &st.out_len.to_le_bytes());
+                h = fnv(h, &st.out_done.to_le_bytes());
+                h = fnv(h, &st.in_len.to_le_bytes());
+                h = fnv(h, &st.flags.to_le_bytes());
+                h = fnv(h, &bytes);
+            }
+        }
+        h
     }
 
     fn dump_state(&mut self, b: &Boot, tag: &str, phase: &str) {
@@ -1083,6 +1266,17 @@ impl Core {
             return None;
         }
         unsync.truncate(unsync_bytes(io.n as u64) as usize);
+        let hc = if b.vm().hc {
+            match b.vm().hc_state() {
+                Ok(x) => Some(x),
+                Err(e) => {
+                    diag!(self, "HVX_HC_GET_STATE: {e}");
+                    return None;
+                }
+            }
+        } else {
+            None
+        };
         Some(Snap {
             s,
             smp,
@@ -1091,11 +1285,22 @@ impl Core {
             con: b.ubuf.clone(),
             unsync,
             unsync_n: io.n,
+            pcon: b.pbuf.clone(),
+            hc_active: b.hc_active,
+            hc,
+            id: next_snap_id(),
         })
     }
 
-    /// `snap_restore` into a fresh VM; `rw` replaces the snapshot's data partition.
+    /// `snap_restore` into a fresh VM; `rw` replaces the snapshot's data partition. A VM from the
+    /// reuse pool (M138) is reset in place first and gets only the pages that may differ.
     fn snap_restore(&mut self, b: &mut Boot, sn: &Snap, rw: Option<&Pages>) -> Result<(), ()> {
+        let prev = b.tgt.take();
+        let dirty = if std::mem::take(&mut b.reused) {
+            Some(self.reuse_reset(b)?)
+        } else {
+            None
+        };
         let mut pht = self.pt();
         if let Err(e) = b.vm().set_snapshot(&sn.s) {
             diag!(self, "HVX_SET_SNAPSHOT: {e}");
@@ -1123,13 +1328,48 @@ impl Core {
             self.padd(Ph::RSnap, pht);
             pht = self.pt();
         }
-        sn.ram
-            .load_into_zero(b.vm.as_mut().expect("a VM").mem_mut());
+        let rwp = rw.unwrap_or(&sn.rw);
+        let rw_id = if rw.is_none() { Some(sn.id) } else { None };
+        let mut reuse_n = (0u64, 0u64);
+        match (&dirty, &prev) {
+            (Some((dram, _)), Some(pv)) => {
+                let tpl = self.fresh_tpl.as_ref();
+                let mem = b.vm.as_mut().expect("a VM").mem_mut();
+                reuse_n.0 = restore_ram(mem, sn, tpl, pv, dram);
+            }
+            _ => sn
+                .ram
+                .load_into_zero(b.vm.as_mut().expect("a VM").mem_mut()),
+        }
         if self.ph_rsplit {
             self.padd(Ph::RRam, pht);
             pht = self.pt();
         }
-        rw.unwrap_or(&sn.rw).load_into_zero(b.p2_mut());
+        match (&dirty, &prev) {
+            (Some((_, ddisk)), Some(pv)) => {
+                let e = self.e.clone();
+                let (p2o, p2l) = (b.p2_off, b.p2_len);
+                let disk = b.vm.as_mut().expect("a VM").disk_mut();
+                reuse_n.1 = restore_disk(disk, e.base.bytes(), p2o, p2l, rwp, rw_id, pv, ddisk);
+            }
+            _ => rwp.load_into_zero(b.p2_mut()),
+        }
+        if dirty.is_some() {
+            if self.o.phases {
+                self.ph_extra.push_str(&format!(
+                    " reuse_ram={} reuse_disk={}",
+                    reuse_n.0, reuse_n.1
+                ));
+            }
+            if self.o.check_reset {
+                let tpl = self.fresh_tpl.as_ref();
+                if let Some(m) = check_restored(b.vm(), sn, tpl, self.e.base.bytes(), b.p2_off, rwp)
+                {
+                    diag!(self, "hydo-hvx: HYDO_HVX_CHECK_RESET: {m}");
+                    return Err(());
+                }
+            }
+        }
         if self.ph_rsplit {
             self.padd(Ph::RDisk, pht);
             pht = self.pt();
@@ -1137,6 +1377,19 @@ impl Core {
         b.ubuf.clear();
         b.ubuf.extend_from_slice(&sn.con);
         self.console_rebase(b)?;
+        b.pbuf.clear();
+        b.pbuf.extend_from_slice(&sn.pcon);
+        b.hc_active = sn.hc_active;
+        if b.vm().hc {
+            let (st, bytes) = match &sn.hc {
+                Some((st, bytes)) => (*st, bytes.as_slice()),
+                None => (hvx_hc_state::default(), &[][..]),
+            };
+            if let Err(e) = b.vm().hc_set_state(&st, bytes) {
+                diag!(self, "HVX_HC_SET_STATE: {e}");
+                return Err(());
+            }
+        }
         let mut io = hvx_unsync_io {
             addr: sn.unsync.as_ptr() as u64,
             len: unsync_bytes(sn.unsync_n as u64),
@@ -1154,11 +1407,19 @@ impl Core {
         if self.ph_rsplit {
             self.padd(Ph::RCon, pht);
         }
+        if self.reuse_on && b.vm().dl {
+            b.tgt = Some(Tgt {
+                ram_id: sn.id,
+                ram_idx: sn.ram.idx().to_vec(),
+                rw_id,
+                rw_idx: rwp.idx().to_vec(),
+            });
+        }
         Ok(())
     }
 
     fn fresh_restore(&mut self, sn: &Snap) -> Option<Boot> {
-        let mut b = self.vm_fresh()?;
+        let mut b = self.vm_for(sn.id)?;
         if self.snap_restore(&mut b, sn, None).is_err() {
             self.teardown(&mut b);
             return None;
@@ -1221,7 +1482,18 @@ impl Core {
     fn ctl_type(&mut self, b: &Boot, i: usize, print: bool) {
         let retype = self.c.k.s[i].state == SendState::Retype;
         let buf = self.c.k.s[i].buf.clone();
-        let _ = self.put_bytes(b, &buf);
+        if b.hc_active {
+            // M138: the bytes go to the port, and one byte on the serial input wakes the agent;
+            // a retype after a restore only rings again (the snapshot kept the staged bytes)
+            if !retype {
+                if let Err(e) = b.vm().hc_put(&buf) {
+                    diag!(self, "HVX_HC_PUT: {e}");
+                }
+            }
+            let _ = self.put_bytes(b, &[HC_DOORBELL]);
+        } else {
+            let _ = self.put_bytes(b, &buf);
+        }
         let at = self.c.at;
         let s = &mut self.c.k.s[i];
         s.state = SendState::Typed;
@@ -1443,10 +1715,27 @@ impl Core {
             lines.push(l);
             p = q + 1;
         }
+        // M138: the host-call records (one agent line each), after the console's lines
+        let mut p2 = self.c.k.pevfrom;
+        for q in self.c.k.pevfrom..b.pbuf.len() {
+            if b.pbuf[q] != b'\n' {
+                continue;
+            }
+            let mut e = q;
+            if e > p2 && b.pbuf[e - 1] == b'\r' {
+                e -= 1;
+            }
+            self.c.k.nev += 1;
+            let mut l = format!("EVENT {} at={} n={} ", self.c.tag, self.c.at, self.c.k.nev);
+            ctl::esc(&b.pbuf[p2..e], &mut l);
+            lines.push(l);
+            p2 = q + 1;
+        }
         for l in lines {
             self.say(&l);
         }
         self.c.k.evfrom = p;
+        self.c.k.pevfrom = p2;
         self.ctl_deliver(b, true);
         self.c.k.nstop = self.c.k.nstop.wrapping_add(1);
         let l = format!(
@@ -1688,16 +1977,28 @@ impl Core {
             if self.console_drain(b).is_err() {
                 return -1;
             }
+            // M138: a host-call record ended the run call: take it, stop, and go on
+            let hostcall = reason == HVX_EXIT_HOSTCALL;
+            if hostcall && self.hc_drain(b).is_err() {
+                return -1;
+            }
+            let reason = if hostcall { HVX_EXIT_THROTTLE } else { reason };
             self.padd(Ph::Drain, pht);
             if self.o.retlog {
                 self.retlog(b, reason);
             }
             let hit = first_hit(b, &mut scanned);
             if self.c.on
-                && (hit >= 0 || !self.c.capped || reason != HVX_EXIT_THROTTLE || self.ctl_due())
+                && (hit >= 0
+                    || hostcall
+                    || !self.c.capped
+                    || reason != HVX_EXIT_THROTTLE
+                    || self.ctl_due())
             {
                 let why = if hit >= 0 {
                     "marker"
+                } else if hostcall {
+                    "hostcall"
                 } else if reason != HVX_EXIT_THROTTLE {
                     "exit"
                 } else if self.ctl_due() {
@@ -2172,17 +2473,17 @@ impl Core {
             self.teardown(&mut b);
             self.padd(Ph::RTear, pht);
             let pht = self.pt();
-            let Some(mut ob) = self.vm_fresh() else {
+            let Some((s0, slot)) = self.take_s0() else {
+                verdict = "ERROR harness recovery vm".into();
+                break 'body End::Out;
+            };
+            let Some(mut ob) = self.vm_for(s0.id) else {
+                self.put_s0(s0, slot);
                 verdict = "ERROR harness recovery vm".into();
                 break 'body End::Out;
             };
             self.padd(Ph::RFresh, pht);
             let pht = self.pt();
-            let Some((s0, slot)) = self.take_s0() else {
-                verdict = "ERROR harness recovery vm".into();
-                self.teardown(&mut ob);
-                break 'body End::Out;
-            };
             let ok = self.snap_restore(&mut ob, &s0, Some(&durable)).is_ok();
             self.put_s0(s0, slot);
             if !ok {
@@ -2210,6 +2511,8 @@ impl Core {
                 self.c.phase = "recovery";
                 self.c.start = 1;
                 self.c.k.evfrom = from;
+                // M138: the recovery VM's host-call records start at the end of S0's
+                self.c.k.pevfrom = b.pbuf.len();
             }
             let r = self.run_until_any(&mut b, &fin[..nmk(1, ab)], from);
             self.padd(Ph::Recov, pht);
@@ -2288,6 +2591,7 @@ impl Core {
         self.budget = sc.rb;
         if self.c.on && !self.ctl_boot {
             self.c.k.evfrom = from;
+            self.c.k.pevfrom = b.pbuf.len();
         }
         let fail: Option<&str> = 'setup: {
             if sc.q_on && self.o.vcpus < 2 {
@@ -2485,7 +2789,7 @@ impl Core {
                 sv.tj.permille = pm_;
                 sv.tj.max_delay = mx;
                 sv.tj.tick_lo = lo;
-                let vb = self.vm_fresh();
+                let vb = self.vm_for(s2.id);
                 let mut ok = None;
                 if let Some(mut vb) = vb {
                     let good = self.snap_restore(&mut vb, &s2, None).is_ok() && {
@@ -2554,7 +2858,8 @@ impl Core {
     fn agent_boot(&mut self, sc: &Sched, tag: &str) -> (i32, Boot) {
         let mut cmd = format!("{} quiet loglevel=1", self.e.cmdbase);
         ccap(&mut cmd, 1200);
-        let Some(mut b) = self.boot_setup(Setup::Boot, &cmd, HVX_FAULT_DROP_UNFLUSHED) else {
+        let hc = self.o.hostcall;
+        let Some(mut b) = self.boot_setup(Setup::Boot, &cmd, HVX_FAULT_DROP_UNFLUSHED, hc) else {
             return (-5, Boot::none());
         };
         self.ctl_begin(tag);
@@ -2606,7 +2911,7 @@ impl Core {
         let mut cmd = format!("{} hydo_jit={JIT} hydo_phase=serve", self.e.cmdbase);
         ccap(&mut cmd, 512);
         let pt0 = now();
-        let mut b = self.boot_setup(Setup::Boot, &cmd, HVX_FAULT_DROP_UNFLUSHED)?;
+        let mut b = self.boot_setup(Setup::Boot, &cmd, HVX_FAULT_DROP_UNFLUSHED, false)?;
         let pt1 = now();
         let ph = self.o.phases;
         let bc0 = if ph {
@@ -2868,7 +3173,8 @@ impl Core {
                 self.ph_reset();
             }
             let pht = self.pt();
-            let fresh = self.vm_fresh();
+            let s1id = self.s1.as_ref().map_or(0, |s| s.id);
+            let fresh = self.vm_for(s1id);
             self.padd(Ph::Fresh, pht);
             self.ph_rsplit = true;
             let b = match fresh {
@@ -2898,12 +3204,148 @@ impl Core {
     }
 }
 
+/// M138: at most this many VMs wait in the reuse pool (a power-cut run uses two: the workload's,
+/// restored from S1, and the recovery's, from S0).
+const SPARE_MAX: usize = 2;
+
+/// Set bit `i` of a page bitmap.
+fn bit_set(m: &mut [u64], i: usize) {
+    if let Some(w) = m.get_mut(i / 64) {
+        *w |= 1 << (i % 64);
+    }
+}
+
+/// The set bits of a page bitmap, below `n`.
+fn bits(m: &[u64], n: usize) -> impl Iterator<Item = usize> + '_ {
+    m.iter().enumerate().flat_map(move |(k, &w)| {
+        (0..64)
+            .filter(move |b| w & (1 << b) != 0)
+            .map(move |b| k * 64 + b)
+            .filter(move |&i| i < n)
+    })
+}
+
+/// M138: an in-place restore of RAM: every page the last run wrote (`dirty`), and, when the
+/// VM held another snapshot, every page either snapshot has, rewritten as a fresh VM restored
+/// from `sn` holds it. Returns the pages written.
+fn restore_ram(mem: &mut [u8], sn: &Snap, tpl: Option<&Pages>, pv: &Tgt, dirty: &[u64]) -> u64 {
+    let n = mem.len().div_ceil(4096);
+    let mut set = dirty.to_vec();
+    if pv.ram_id != sn.id {
+        for &i in pv.ram_idx.iter().chain(sn.ram.idx()) {
+            bit_set(&mut set, i as usize);
+        }
+    }
+    let mut k = 0;
+    for i in bits(&set, n) {
+        sn.ram.put_block(tpl, i as u32, mem);
+        k += 1;
+    }
+    k
+}
+
+/// M138: an in-place restore of the disk: every page the device wrote, and, when the data
+/// partition was another one, every page either has, as a fresh VM holds it: the base image
+/// outside the data partition, `rw` (else zeros) inside it. Returns the pages written.
+#[allow(clippy::too_many_arguments)]
+fn restore_disk(
+    disk: &mut [u8],
+    base: &[u8],
+    p2_off: usize,
+    p2_len: usize,
+    rw: &Pages,
+    rw_id: Option<u64>,
+    pv: &Tgt,
+    dirty: &[u64],
+) -> u64 {
+    let n = disk.len().div_ceil(4096);
+    let p2b = p2_off / 4096;
+    let mut set = dirty.to_vec();
+    if rw_id.is_none() || pv.rw_id != rw_id {
+        for &i in pv.rw_idx.iter().chain(rw.idx()) {
+            bit_set(&mut set, p2b + i as usize);
+        }
+    }
+    let mut k = 0;
+    for q in bits(&set, n) {
+        let at = q * 4096;
+        if at >= p2_off && at < p2_off + p2_len {
+            rw.put_block(None, (q - p2b) as u32, &mut disk[p2_off..p2_off + p2_len]);
+        } else {
+            let end = (at + 4096).min(disk.len());
+            let d = &mut disk[at..end];
+            let have = base.len().saturating_sub(at).min(d.len());
+            d[..have].copy_from_slice(&base[at..at + have]);
+            d[have..].fill(0);
+        }
+        k += 1;
+    }
+    k
+}
+
+/// M138, HYDO_HVX_CHECK_RESET: compare every page of a VM restored in place with what a fresh VM
+/// restored from `sn` (and `rw`) holds; the first difference, if any.
+fn check_restored(
+    vm: &Vm,
+    sn: &Snap,
+    tpl: Option<&Pages>,
+    base: &[u8],
+    p2_off: usize,
+    rw: &Pages,
+) -> Option<String> {
+    let mem = vm.mem();
+    let mut want = vec![0u8; 4096];
+    for i in 0..mem.len().div_ceil(4096) {
+        let at = i * 4096;
+        let got = &mem[at..(at + 4096).min(mem.len())];
+        let w = &mut want[..got.len()];
+        match sn
+            .ram
+            .block(i as u32)
+            .or_else(|| tpl.and_then(|t| t.block(i as u32)))
+        {
+            Some(src) => w.copy_from_slice(src),
+            None => w.fill(0),
+        }
+        if got != w {
+            return Some(format!("RAM page {i} differs from a fresh VM's"));
+        }
+    }
+    let disk = vm.disk();
+    let p2_end = p2_off + rw.len();
+    for q in 0..disk.len().div_ceil(4096) {
+        let at = q * 4096;
+        let got = &disk[at..(at + 4096).min(disk.len())];
+        let w = &mut want[..got.len()];
+        if at >= p2_off && at < p2_end {
+            match rw.block(((at - p2_off) / 4096) as u32) {
+                Some(src) => w.copy_from_slice(src),
+                None => w.fill(0),
+            }
+        } else {
+            let have = base.len().saturating_sub(at).min(w.len());
+            w[..have].copy_from_slice(&base[at..at + have]);
+            w[have..].fill(0);
+        }
+        if got != w {
+            return Some(format!("disk page {q} differs from a fresh VM's"));
+        }
+    }
+    None
+}
+
+/// M138: the kernel command line's offer of the host-call port to the agent.
+pub const HC_TOKEN: &str = "hydo.hc=1";
+/// M138: the byte typed on the serial input to wake an agent that reads its lines from the port.
+const HC_DOORBELL: u8 = 0x07;
+
 const PMU_NOTE: &str = "hvx_stack_verify: no usable PMU on this host; using the exit-count clock";
 
 /// `boot_setup`'s VM: the base disk attached; `Setup::Boot` also loads the kernel (a real
 /// boot), `Setup::Fresh` leaves RAM and the data partition zero for a restore (the C engine
 /// loads a kernel there too, which the restore overwrites; `boot_line` is the line it prints
 /// for it). Messages go to `m` (printed by the caller, so a VM can be made on another thread).
+#[allow(clippy::too_many_arguments)]
 fn create_vm(
     e: &Env,
     o: &Options,
@@ -2912,6 +3354,7 @@ fn create_vm(
     fault_classes: u32,
     boot_line: &Option<String>,
     m: &mut Vec<String>,
+    hc_token: bool,
 ) -> Option<Vm> {
     macro_rules! say {
         ($($a:tt)*) => { m.push(format!($($a)*)) };
@@ -2942,6 +3385,12 @@ fn create_vm(
     if o.pt_trace_vm {
         cfg.flags |= HVX_VM_PT_TRACE;
     }
+    if o.hostcall {
+        cfg.flags |= HVX_VM_HOSTCALL;
+    }
+    if o.reuse && vcpus == 1 && !o.pt_trace_vm {
+        cfg.flags |= HVX_VM_DIRTY_LOG;
+    }
     if vcpus > 1 {
         cfg.n_vcpus = vcpus;
         cfg.flags |= HVX_VM_SMP_SCHED;
@@ -2953,7 +3402,17 @@ fn create_vm(
             return None;
         }
     }
-    if let Err(e) = vm.create(&cfg) {
+    // M138: a CPU without EPT dirty flags refuses the log (ENODEV): the VM is then made
+    // without it (and is never reused); every other error is the plain path's below
+    let mut made = false;
+    if cfg.flags & HVX_VM_DIRTY_LOG != 0 {
+        match vm.create(&cfg) {
+            Ok(()) => made = true,
+            Err(_) => cfg.flags &= !HVX_VM_DIRTY_LOG,
+        }
+    }
+    let first = if made { Ok(()) } else { vm.create(&cfg) };
+    if let Err(e) = first {
         if vcpus > 1 && e.raw_os_error() == Some(libc::ENODEV) {
             say!("hvx_stack_verify: {vcpus} vCPUs need the PMU clock; this host has no usable PMU");
             return None;
@@ -2968,6 +3427,13 @@ fn create_vm(
             say!("HVX_CREATE_VM: {e}");
             return None;
         }
+    }
+    // M138: the main module ignores flags it does not know; its HC and dirty ioctls fail
+    if cfg.flags & HVX_VM_HOSTCALL != 0 {
+        vm.hc = vm.hc_get(&mut Vec::new()).is_ok();
+    }
+    if cfg.flags & HVX_VM_DIRTY_LOG != 0 {
+        vm.dl = vm.get_dirty(&mut [], &mut [], false).is_ok();
     }
     if let Err(e) = vm.map_ram(e.mem_size as usize) {
         say!("mmap RAM: {e}");
@@ -3033,6 +3499,13 @@ fn create_vm(
         boot::build_page_tables_and_gdt(vm.mem_mut(), &mut w);
         let image = e.image.bytes();
         let initrd = e.initrd.bytes();
+        let hc_cmd;
+        let cmdline = if hc_token && vm.hc {
+            hc_cmd = format!("{cmdline} {HC_TOKEN}");
+            hc_cmd.as_str()
+        } else {
+            cmdline
+        };
         match boot::load_bzimage_n(vm.mem_mut(), image, initrd, cmdline, ncpus, &mut w) {
             Ok(l) => say!("{l}"),
             Err(m) => {
@@ -3195,7 +3668,17 @@ fn empty_snap() -> Snap {
         con: Vec::new(),
         unsync: Vec::new(),
         unsync_n: 0,
+        pcon: Vec::new(),
+        hc_active: false,
+        hc: None,
+        id: next_snap_id(),
     }
+}
+
+/// M138: a new snapshot number.
+fn next_snap_id() -> u64 {
+    static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 /// `MemAvailable` in MiB.
@@ -3507,6 +3990,9 @@ pub fn main_with(args: &[String], mut o: Options, mut io: Io) -> i32 {
         line_buf: Vec::new(),
         pt,
         sim_dropped: false,
+        spare: Vec::new(),
+        reuse_on: false,
+        fresh_tpl: None,
         o,
     };
     if mode == "one" {
@@ -3600,6 +4086,16 @@ pub fn main_with(args: &[String], mut o: Options, mut io: Io) -> i32 {
     let l = format!("READY boot_secs={:.1}", now() - t_start);
     core.say(&l);
     core.prep_on = core.o.prepare;
+    core.reuse_on = core.o.reuse
+        && core.o.vcpus == 1
+        && core.pt.is_none()
+        && !core.o.pt_trace_vm
+        && core.e.p2_off.is_multiple_of(4096)
+        && core.e.p2_len.is_multiple_of(4096);
+    if core.reuse_on {
+        // the pool replaces the prepared VM
+        core.prep_on = false;
+    }
     core.start_prep();
     core.serve_loop();
     0

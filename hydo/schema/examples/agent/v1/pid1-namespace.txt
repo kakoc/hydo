@@ -1,6 +1,6 @@
 # hydo agent transcript, protocol 1: the agent as the first process of a private PID and mount namespace, on a pty: the hello says pid1, it mounted /proc for its namespace, a tmpfs mount, and an orphaned grandchild reaped by the agent (no zombie is left).
 # Recorded on Linux with `sudo unshare --pid --fork --mount --propagation private hydo-agent`, HYDO_AGENT_TTY = a pty (hydo/crates/hydo-agent/tests/native.rs, pid1_in_a_namespace); never edited. replay: pid1
-< HYDO-AG 256 00b887e5 {"agent":"0.2.0","ev":"hello","features":["freeze","freeze-netns"],"ops":["sync","spawn","signal","run","probe","write","read","mkdir","mount","syncfs","clock_set","clock_get","qlen","tail","untail","freeze","unfreeze"],"pid1":true,"proto":1,"seq":0,"v":1}
+< HYDO-AG 267 e3c56234 {"agent":"0.3.0","ev":"hello","features":["freeze","freeze-netns","hostcall"],"ops":["sync","spawn","signal","run","probe","write","read","mkdir","mount","syncfs","clock_set","clock_get","qlen","tail","untail","freeze","unfreeze"],"pid1":true,"proto":1,"seq":0,"v":1}
 > {"id":1,"nonce":1,"op":"sync","v":1}
 < HYDO-AG 54 f78e175e {"nonce":1,"ok":true,"op":"sync","re":1,"seq":1,"v":1}
 > {"data":"size=1m","dst":"/tmp/m","flags":["nosuid","nodev"],"fstype":"tmpfs","id":2,"op":"mount","src":"none","v":1}
