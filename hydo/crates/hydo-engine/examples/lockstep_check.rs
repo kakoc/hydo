@@ -56,7 +56,26 @@ const END_VERDICT: &str = "LOCKSTEP: ended by the host at its stop";
 
 /// The recorded fingerprint of each group (M145, the Redis agent image `bde714a7…` with
 /// hydo-agent 0.3.0 and the host-call port on). A group not listed is checked for agreement only.
-const RECORDED: &[(&str, &str)] = &[];
+/// Equal values are expected: `at2001` is `at2000` (both typed at the same stop), `br-after` is
+/// `at6000` (a snapshot does not change the run), `lost-cont` is `at2000` (the continuation that
+/// never got the reaction's line is the run that never sent it), and `once16` differs from
+/// `queued16` (the same icount, other run-call returns before it: M118's finding), while at rb=1
+/// the two agree (`rb1-point`). The boot: `RESULT boot fp=130bebddaeec8183`, S1 at icount 819,706.
+const RECORDED: &[(&str, &str)] = &[
+    ("at2000", "160fdb20d65534e8"),
+    ("at2001", "160fdb20d65534e8"),
+    ("at6000", "c88d7edb430648f1"),
+    ("br-after", "c88d7edb430648f1"),
+    ("br-before", "ab3a11cd8f15d505"),
+    ("inert", "a699e483a3c7e1e4"),
+    ("lost-cont", "160fdb20d65534e8"),
+    ("once16", "c30aae82ed48bb6c"),
+    ("queued16", "b7a6b4ec70e8ed2a"),
+    ("rb1-point", "f1d0bf49fec6528e"),
+    ("react0", "91dbebf3d6f528e1"),
+    ("react500", "5d9b4195bc5b9605"),
+    ("two", "d94fdcec1e5c5a19"),
+];
 
 /// A command the host types: the session's `sync(1)` or a `clock_get`.
 #[derive(Clone, Copy, PartialEq, Debug)]
