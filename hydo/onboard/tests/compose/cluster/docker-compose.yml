@@ -1,0 +1,26 @@
+# Three nodes of a cluster, each with its own named volume on /data (Milestone 141: each gets
+# that volume as its /data), and a backup job that shares node1's volume, as in Compose.
+services:
+  node1:
+    image: redis:7.2.4
+    volumes:
+      - node1-data:/data
+  node2:
+    image: redis:7.2.4
+    volumes:
+      - type: volume
+        source: node2-data
+        target: /data/
+  node3:
+    image: redis:7.2.4
+    volumes:
+      - node3-data:/data:rw
+  backup:
+    image: redis:7.2.4
+    volumes:
+      - node1-data:/data
+      - ./missing:/data
+volumes:
+  node1-data:
+  node2-data:
+  node3-data:

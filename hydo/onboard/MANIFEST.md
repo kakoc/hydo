@@ -1571,7 +1571,7 @@ validator before it is written. Example: `examples/compose-voting/` (Docker's ex
 | `depends_on:` (list or map) | `depends_on:`. hydo starts a service only after its dependencies passed their `ready:`, so `service_healthy` and `service_started` both hold. |
 | `depends_on.<job>.condition: service_completed_successfully` | the job service idles (`/.hydo/busybox sleep`) and its command runs once per boot in the `setup:` of every service that waits for it (also before a restart and in crash recovery). |
 | `healthcheck:` (else the image's `HEALTHCHECK`) | `ready: timeout <t> hydo-oci <svc> <test>`: `CMD` as argv, `CMD-SHELL`/a string through `/bin/sh -c`, as the service's `user:` (busybox `chpst`), polled every second; `ready_timeout` = `start_period + interval x retries + 60` s (120..600). Without one: `nc -z -w 2 <addr> <port>`, or `true` (with a TODO) when there is no port. |
-| `volumes:` named / anonymous, the image's `VOLUME`s | a directory `/data/vol/<name>` on the data disk (the fault target; listed in `data.dirs`), mounted on the target with `copy_up` (on first use it gets the image's content, owner and mode, as a Docker named volume). Several services naming one volume share it. `external: true` starts empty (warning). A volume on `/data` is the data disk's root already. |
+| `volumes:` named / anonymous, the image's `VOLUME`s | a directory `/data/vol/<name>` on the data disk (the fault target; listed in `data.dirs`), mounted on the target with `copy_up` (on first use it gets the image's content, owner and mode, as a Docker named volume). Several services naming one volume share it. `external: true` starts empty (warning). A volume on `/data` is the data disk's root already, except when several services have their own named volume on `/data` (the nodes of a cluster): then each gets `{src: /data/vol/<name>, dst: /data}` (services naming one volume share it). |
 | `volumes:` bind mount of an existing file or directory | copied into the read-only root (`root.files`, `/etc/hydo/compose/bind/<n>-<name>`) and mounted on the target; read-only in effect (a warning for a directory not marked `:ro`: if the program writes there, make it a named volume). A source that does not exist becomes an empty data-disk directory (Docker creates it). Host paths `/etc/localtime`, `/etc/timezone`, `/var/run/docker.sock`, `/proc`, `/sys`, `/dev`, ... are skipped with a warning. |
 | `tmpfs:`, `type: tmpfs` | a tmpfs mount (mode 1777, `size=` kept) |
 | `secrets:` with `file:` | the file, copied into the root, mounted on `/run/secrets/<name>` (or `target:`) |
@@ -1617,7 +1617,9 @@ copies the image's directory in. A `dst` the image lacks is created in the image
 (below `/proc`, `/sys`, `/dev`, `/tmp`, `/data` at run time); a `dst` that is a symlink in the image
 is resolved inside the image root, never through to the guest's own directory. Paths use
 `[A-Za-z0-9._@+=,:/-]` only. An image service without `mounts:` gets exactly the launcher it had
-before.
+before. `dst: /data` is allowed only for a `src:` below `/data` and without `copy_up` (Milestone
+141): that data-disk directory becomes the service's `/data`, so the nodes of a cluster, each with
+its own volume on `/data`, do not share one directory (`{src: /data/vol/n1-data, dst: /data}`).
 
 ### What a Compose stack does not get
 

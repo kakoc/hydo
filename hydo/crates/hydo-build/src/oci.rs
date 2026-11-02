@@ -1386,7 +1386,9 @@ fn mount_lines_of(svc: &str, mounts: &[Mount]) -> String {
             // a data-disk directory over the data disk's own bind (made by the head above, so
             // `hmnt` would always say yes): once per boot, guarded by the done file
             let s = mt.src.clone().unwrap_or_default();
-            l.push(format!("    $BB mkdir -p {s} && $BB mount --bind {s} {d} || exit 125"));
+            l.push(format!(
+                "    $BB mkdir -p {s} && $BB mount --bind {s} {d} || exit 125"
+            ));
         } else {
             let s = mt.src.clone().unwrap_or_default();
             l.push(format!("    if ! hmnt {d}; then"));
@@ -1842,8 +1844,11 @@ mod tests {
     #[test]
     fn a_data_disk_directory_on_data() {
         let w = "s: mounts[0]";
-        let ok = mounts_of(Some(json!([{"src": "/data/vol/n1-data", "dst": "/data"}])), "s")
-            .unwrap_or_else(|e| panic!("refused: {}", e.message()));
+        let ok = mounts_of(
+            Some(json!([{"src": "/data/vol/n1-data", "dst": "/data"}])),
+            "s",
+        )
+        .unwrap_or_else(|e| panic!("refused: {}", e.message()));
         assert_eq!(ok.len(), 1);
         assert_eq!(ok[0].dst, "/data");
         let refused = [

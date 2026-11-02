@@ -232,6 +232,28 @@ fn path_ok_re() -> &'static Regex {
     R.get_or_init(|| re(r"^/[A-Za-z0-9._@+=,:/-]*$"))
 }
 
+/// The named volume (`safe_name` of its source) a Compose `volumes:` entry puts on `/data`, if it
+/// is one: the short form `name:/data[:opts]` or the long form `{type: volume, source, target}`.
+fn named_volume_on_data(v: &Y) -> Option<String> {
+    let (typ, src, tgt) = if v.is_map() {
+        (
+            pstr(v.get("type").unwrap_or(&Y::s("volume"))),
+            v.getn("source").clone(),
+            v.getn("target").clone(),
+        )
+    } else {
+        let vs = pstr(v);
+        let parts: Vec<&str> = vs.split(':').collect();
+        if parts.len() < 2 || parts[0].starts_with(['.', '/', '~']) {
+            return None;
+        }
+        ("volume".to_string(), Y::s(parts[0]), Y::s(parts[1]))
+    };
+    let Y::Str(s) = src else { return None };
+    (typ == "volume" && hydo_manifest::py::normpath(&pstr(&tgt)) == "/data" && !s.is_empty())
+        .then(|| safe_name(&s))
+}
+
 /// `re.sub(r"[^A-Za-z0-9._-]", "_", s)`.
 fn safe_name(s: &str) -> String {
     s.chars()
@@ -714,6 +736,8 @@ pub struct Importer<'a> {
     hosts: Vec<(String, Vec<String>)>,
     bind_files: Vec<(String, String)>,
     data_dirs: Vec<String>,
+    /// several services each have their own named volume on /data: mount each on its /data
+    own_data: bool,
     ram: i128,
     data_mib: i128,
     cpu: Option<String>,
@@ -754,6 +778,7 @@ impl<'a> Importer<'a> {
             hosts: Vec::new(),
             bind_files: Vec::new(),
             data_dirs: Vec::new(),
+            own_data: false,
             ram: 256,
             data_mib: 256,
             cpu: None,
@@ -944,6 +969,22 @@ impl<'a> Importer<'a> {
         if order.is_empty() {
             return err("no service left after profiles");
         }
+        // Several services, each with its own named volume on /data (the nodes of a cluster):
+        // each gets that volume as its /data, instead of all sharing the data disk's root.
+        let mut on_data: Vec<String> = Vec::new();
+        for (n, s) in raw.map_items() {
+            if !order.iter().any(|(o, _)| o == n) || !s.is_map() {
+                continue;
+            }
+            for v in as_list(s.get("volumes")) {
+                if let Some(k) = named_volume_on_data(&v) {
+                    if !on_data.contains(&k) {
+                        on_data.push(k);
+                    }
+                }
+            }
+        }
+        self.own_data = on_data.len() > 1;
         for (n, ns) in &order {
             if let Y::Str(_) = n {
             } else {
@@ -1818,6 +1859,24 @@ impl<'a> Importer<'a> {
             self.w.warn("volumes", format!("{wh}: {what} target {} has characters hydo cannot mount (spaces, quotes); skipped", hydo_manifest::py::repr_str(&d)));
             return;
         }
+        let own_volume = self.own_data
+            && what.starts_with("volume ")
+            && what != "volume (anonymous)"
+            && m.src
+                .as_deref()
+                .is_some_and(|s| s.starts_with("/data/vol/"));
+        if d == "/data" && own_volume {
+            // hydo-build mounts a data-disk directory over the image's /data (no copy_up: the
+            // image's own /data is never visible, /data is the data disk)
+            self.notes.push(format!(
+                "{wh}: {what} on /data: several services have their own volume on /data, so it is mounted as this service's /data"
+            ));
+            m.dst = d.clone();
+            m.copy_up = false;
+            seen.push(d);
+            mts.push(m);
+            return;
+        }
         if matches!(
             d.as_str(),
             "/" | "/proc" | "/sys" | "/dev" | "/tmp" | "/data"
@@ -2687,5 +2746,33 @@ mod tests {
         assert_eq!(duration_s(Some(&Y::s("2.5s")), 0).unwrap(), 2);
         assert_eq!(mem_mib(Some(&Y::s("1g"))).unwrap(), Some(1024));
         assert_eq!(mem_mib(Some(&Y::s("512MiB"))).unwrap(), Some(512));
+    }
+
+    #[test]
+    fn named_volumes_on_data() {
+        let m = |t: &str, s: &str, d: &str| {
+            Y::Map(vec![
+                (Y::s("type"), Y::s(t)),
+                (Y::s("source"), Y::s(s)),
+                (Y::s("target"), Y::s(d)),
+            ])
+        };
+        assert_eq!(
+            named_volume_on_data(&Y::s("n1-data:/data")),
+            Some("n1-data".into())
+        );
+        assert_eq!(
+            named_volume_on_data(&Y::s("n1 data:/data/:rw")),
+            Some("n1_data".into())
+        );
+        assert_eq!(
+            named_volume_on_data(&m("volume", "v", "/data")),
+            Some("v".into())
+        );
+        assert_eq!(named_volume_on_data(&Y::s("/data")), None); // anonymous
+        assert_eq!(named_volume_on_data(&Y::s("./d:/data")), None); // a bind mount
+        assert_eq!(named_volume_on_data(&Y::s("v:/data/x")), None);
+        assert_eq!(named_volume_on_data(&m("bind", "./d", "/data")), None);
+        assert_eq!(named_volume_on_data(&m("volume", "", "/data")), None);
     }
 }
