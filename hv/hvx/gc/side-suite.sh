@@ -16,7 +16,8 @@
 # carry the recorded fingerprint. agent: M121's agent boot check on M121's image and on M131's
 # Redis agent image (recorded values with the features off; with the host-call port offered these
 # old agents stay on the serial line, the kernel command line has one more word, so only the
-# check's own comparisons must hold). Results under /var/tmp/m138/suite-<mode>/.
+# check's own comparisons must hold). Results under /var/tmp/m138/suite-<mode>/ ($SUITE_OUT instead of
+# /var/tmp/m138; M140 ran it against the main module under the debug kernel with HVX_DEV=/dev/hvx).
 set -u
 MODE=${1:-off}
 [ $# -gt 0 ] && shift
@@ -30,7 +31,7 @@ H=$(cd "$(dirname "$0")/.." && pwd)	# hv/hvx
 T=$(cd "$H/../.." && pwd)		# the tree
 B=~/hydo/build
 R=~/bin/hvx-run
-O=/var/tmp/m138/suite-$MODE
+O=${SUITE_OUT:-/var/tmp/m138}/suite-$MODE
 BIN=$O/bin
 mkdir -p "$BIN"
 [ -e "$DEV" ] || { echo "side-suite: $DEV is not there (load it with build-hvxgc.sh load)"; exit 1; }
@@ -122,4 +123,4 @@ if has agent; then
 fi
 lock=$(sudo dmesg | grep -aiE 'soft lockup|rcu.*stall|BUG:|Oops|WARNING:' | tail -3)
 [ -n "$lock" ] && { echo ">> host dmesg warnings:"; echo "$lock"; }
-echo "side-suite $MODE ($DEV, srcversion $(cat /sys/module/hvxgc/srcversion 2>/dev/null)): $([ $fail = 0 ] && echo "ALL PASS ($pass checks)" || echo "FAIL ($fail of $((pass+fail)))")"
+echo "side-suite $MODE ($DEV, srcversion $(cat /sys/module/$(basename "$DEV")/srcversion 2>/dev/null)): $([ $fail = 0 ] && echo "ALL PASS ($pass checks)" || echo "FAIL ($fail of $((pass+fail)))")"
