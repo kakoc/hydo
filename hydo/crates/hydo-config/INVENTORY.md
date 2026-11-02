@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-41 user-facing and 75 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 31 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 0 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+41 user-facing and 75 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 32 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 0 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -198,6 +198,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_SHOW` | test | flag: set | - | hydo-control tests | Set: print the fakes test's transcripts. |
 | `HYDO_SKILLS_REF` | test | path | on PATH | hydo-agents tests | The skills-ref program for the skill check. |
 | `HYDO_WORLD_BIN` | test | path | built | hydo-world tests | The hydo-world program for the cross-check. |
+| `HVM_LOCKSTEP_RECORD` | test | flag: set | - | hydo-engine examples | Set: the Mac lock-step check prints its values instead of comparing them (M145). |
 | `HYDO_XCHECK_PORT` | test | integer | - | hydo-world tests | The cross-check's first port. |
 | `HYDO_TEST_ETCD` | test | address | skipped | hydo-read tests | A live etcd for hydo-read's store tests. |
 | `HYDO_TEST_KAFKA` | test | address | skipped | hydo-read tests | A live Kafka for hydo-read's store tests. |

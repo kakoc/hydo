@@ -430,6 +430,8 @@ variables! {
     HYDO_SKILLS_REF: Tests, Test, "path", "on PATH", "hydo-agents tests";
     /// The hydo-world program for the cross-check.
     HYDO_WORLD_BIN: Tests, Test, "path", "built", "hydo-world tests";
+    /// Set: the Mac lock-step check prints its values instead of comparing them (M145).
+    HVM_LOCKSTEP_RECORD: Tests, Test, "flag: set", "", "hydo-engine examples";
     /// The cross-check's first port.
     HYDO_XCHECK_PORT: Tests, Test, "integer", "", "hydo-world tests";
     /// A live etcd for hydo-read's store tests.
