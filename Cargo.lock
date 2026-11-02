@@ -495,6 +495,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hydo-hvm"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "hydo-hvx",
+ "libc",
+]
+
+[[package]]
 name = "hydo-hvx"
 version = "0.1.0"
 dependencies = [
