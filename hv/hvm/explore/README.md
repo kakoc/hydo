@@ -1,5 +1,7 @@
 # The explorer and `hydo.yaml` on the Mac VMM
 
+**Since M143** the engine hydo runs on the Mac is the Rust port of `serve.c` and `../hvm.c`, `hydo/crates/hydo-hvm` (the program `hydo-hvm`, with this program's command line and protocol; `hydo-hvm hvm print|run|branch` are `../hvm`'s boot probes). `hvmx` below is that C engine, kept for one milestone (`HYDO_HVM=c`); every value on this page is the same with either.
+
 **Result:** the explorer with `--backend hvm` (since M102 the Rust `hydo-explore`; the Mac release's `hydo explore` passes it; until M107 `hydo/explore/explore.py`) runs fault schedules against an arm64 guest on this Mac (M2 Pro, macOS 26.4.1) exactly as it does against `hvx_explore` on the Linux box. Projects are built from their `hydo.yaml` with `hydo-build --arch arm64`, and the generic guest init `hydo/onboard/hydo-init.sh` runs unchanged. On the Redis example, with the virtio disk attached, power cuts and seeded disk faults work: 100 swarm schedules gave 37 failures, all in expected classes (lying disk, I/O errors, relaxed `appendfsync`), and all 37 reproduced bit-for-bit. There were no failures with durable settings and an honest disk. Throughput is about 11,500 runs per hour with 4 workers.
 
 ## Pieces
