@@ -19,9 +19,8 @@
 //! store is always memory.
 
 use crate::hvx::Hvx;
-use crate::link::ChanLink;
 use crate::process::Proc;
-use crate::protocol::{EngineMsg, HostMsg};
+use crate::protocol::EngineMsg;
 use crate::{BootSpec, EngineError, OneRun};
 use hydo_schedule::Schedule;
 use std::io::Write;
@@ -201,7 +200,7 @@ fn spawn(
         How::ControlBootServe => start_of(spec, Mode::Serve { boot: s }, false, true),
         How::ControlBootOne => start_of(spec, one(s), false, true),
     };
-    let (htx, hrx) = std::sync::mpsc::channel::<HostMsg>();
+    let (htx, hrx) = std::sync::mpsc::channel::<crate::protocol::HostMsg>();
     let (etx, erx) = std::sync::mpsc::channel::<EngineMsg>();
     let mut port = ChanPort::new(hrx, etx);
     if let Some(e) = echo {
@@ -217,7 +216,7 @@ fn spawn(
         .map_err(EngineError::Io)?;
     Ok(crate::process::Started {
         proc: Proc::Thread(Some(j)),
-        link: Box::new(ChanLink::new(htx, erx)),
+        link: Box::new(crate::link::ChanLink::new(htx, erx)),
     })
 }
 
