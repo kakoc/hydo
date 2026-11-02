@@ -1078,12 +1078,18 @@ fn mounts_of(v: Option<Value>, wh: &str) -> Result<Vec<Mount>, Fail> {
             )));
         }
         let dst = o.get("dst").cloned().unwrap_or(Value::Null);
+        // A directory of the data disk may stand on /data (a Compose volume on /data, one per
+        // service: the nodes of a cluster each with their own store); nothing else may.
+        let data_dir_src = matches!(o.get("src"), Some(Value::String(s))
+            if py::normpath(s).starts_with("/data/") && !format!("{s}/").contains("/../"));
         let dst_ok = match &dst {
             Value::String(d) => {
+                let nd = py::normpath(d);
                 mount_path_ok(d)
                     && !format!("{d}/").contains("/../")
                     && !["/", "/proc", "/sys", "/dev", "/tmp", "/data", "/.hydo"]
-                        .contains(&py::normpath(d).as_str())
+                        .contains(&nd.as_str())
+                    || nd == "/data" && mount_path_ok(d) && data_dir_src
             }
             _ => false,
         };
@@ -1122,11 +1128,17 @@ fn mounts_of(v: Option<Value>, wh: &str) -> Result<Vec<Mount>, Fail> {
                 return Err(m(format!("{w}: size: only with tmpfs: true, e.g. 64m")));
             }
         }
+        let copy_up = o.get("copy_up").is_some_and(py::truthy);
+        if py::normpath(&dst) == "/data" && copy_up {
+            return Err(m(format!(
+                "{w}: copy_up: not on dst '/data' (the image's own /data is never visible: /data is the data disk)"
+            )));
+        }
         out.push(Mount {
             dst: py::normpath(&dst),
             src: src.map(|x| py::str_of(&x)),
             tmpfs: tm,
-            copy_up: o.get("copy_up").is_some_and(py::truthy),
+            copy_up,
             size: size.map(|x| py::str_of(&x)),
         });
     }
@@ -1329,7 +1341,10 @@ fn under_binds(dst: &str) -> bool {
 
 /// `_mount_lines(o)`: the launcher head's mounts, once per boot, under a flock.
 fn mount_lines(o: &OciService) -> String {
-    let svc = &o.svc;
+    mount_lines_of(&o.svc, &o.mounts)
+}
+
+fn mount_lines_of(svc: &str, mounts: &[Mount]) -> String {
     let mut l = vec![
         format!("if [ ! -f /tmp/hydo/oci-mnt.{svc}.done ]; then"),
         format!("  $BB mkdir -p /tmp/hydo; exec 9> /tmp/hydo/oci-mnt.{svc}.lock; $BB flock 9"),
@@ -1339,7 +1354,7 @@ fn mount_lines(o: &OciService) -> String {
         "      [ -e /dev/${l%%:*} ] || $BB ln -s ${l#*:} /dev/${l%%:*}".to_string(),
         "    done".to_string(),
     ];
-    for (k, mt) in o.mounts.iter().enumerate() {
+    for (k, mt) in mounts.iter().enumerate() {
         let d = format!("$R{}", mt.dst);
         if under_binds(&mt.dst) {
             l.push(format!("    [ -e {d} ] || $BB mkdir -p {d}"));
@@ -1367,6 +1382,11 @@ fn mount_lines(o: &OciService) -> String {
             }
             l.push(format!("      $BB mount --bind {t} {d} || exit 125"));
             l.push("    fi".into());
+        } else if mt.dst == "/data" {
+            // a data-disk directory over the data disk's own bind (made by the head above, so
+            // `hmnt` would always say yes): once per boot, guarded by the done file
+            let s = mt.src.clone().unwrap_or_default();
+            l.push(format!("    $BB mkdir -p {s} && $BB mount --bind {s} {d} || exit 125"));
         } else {
             let s = mt.src.clone().unwrap_or_default();
             l.push(format!("    if ! hmnt {d}; then"));
@@ -1814,5 +1834,50 @@ mod tests {
                 Ok(_) => panic!("{v}: accepted"),
             }
         }
+    }
+
+    /// A data-disk directory on /data (each node of a cluster with its own Compose volume on
+    /// /data): accepted without copy_up, refused for any other source, mounted once per boot
+    /// over the data disk's own bind without the `hmnt` test (which that bind always passes).
+    #[test]
+    fn a_data_disk_directory_on_data() {
+        let w = "s: mounts[0]";
+        let ok = mounts_of(Some(json!([{"src": "/data/vol/n1-data", "dst": "/data"}])), "s")
+            .unwrap_or_else(|e| panic!("refused: {}", e.message()));
+        assert_eq!(ok.len(), 1);
+        assert_eq!(ok[0].dst, "/data");
+        let refused = [
+            (
+                json!([{"src": "/data/vol/n1-data", "dst": "/data", "copy_up": true}]),
+                format!("{w}: copy_up: not on dst '/data' (the image's own /data is never visible: /data is the data disk)"),
+            ),
+            (
+                json!([{"src": "/data", "dst": "/data"}]),
+                format!("{w}: dst '/data': an absolute path other than / /proc /sys /dev /tmp /data (letters, digits and ._@+=,:/- only)"),
+            ),
+            (
+                json!([{"src": "/data/../etc", "dst": "/data"}]),
+                format!("{w}: dst '/data': an absolute path other than / /proc /sys /dev /tmp /data (letters, digits and ._@+=,:/- only)"),
+            ),
+            (
+                json!([{"tmpfs": true, "dst": "/data"}]),
+                format!("{w}: dst '/data': an absolute path other than / /proc /sys /dev /tmp /data (letters, digits and ._@+=,:/- only)"),
+            ),
+        ];
+        for (v, want) in refused {
+            match mounts_of(Some(v.clone()), "s") {
+                Err(Fail::Manifest(got)) => assert_eq!(got, want, "{v}"),
+                Err(e) => panic!("{v}: not a manifest refusal: {}", e.message()),
+                Ok(_) => panic!("{v}: accepted"),
+            }
+        }
+        let lines = mount_lines_of("n1", &ok);
+        assert!(
+            lines.contains(
+                "    $BB mkdir -p /data/vol/n1-data && $BB mount --bind /data/vol/n1-data $R/data || exit 125\n"
+            ),
+            "{lines}"
+        );
+        assert!(!lines.contains("hmnt $R/data"), "{lines}");
     }
 }
