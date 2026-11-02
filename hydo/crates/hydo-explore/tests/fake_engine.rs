@@ -125,11 +125,8 @@ fn run(prog: &mut Command, dir: &Path, out: &Path) -> String {
         .env("HYDO_HVX_EXPLORE", engine_path())
         .env("HYDO_ENGINE", "process") // the fake program, never the engine in-process
         .env("HYDO_BUILD", dir)
-        .env("HYDO_SNAP_DIR", dir.join("snap"))
         .env_remove("HYDO_EXPLORE_CACHE")
         .env_remove("HYDO_QUIET_FILE")
-        .env_remove("HYDO_CLI")
-        .env_remove("HYDO_SNAPSHOTS")
         .env_remove("HYDO_BLESS")
         .env(
             "HYDO_FAKE_HIST",

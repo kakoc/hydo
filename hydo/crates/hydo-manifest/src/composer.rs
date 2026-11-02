@@ -1114,8 +1114,8 @@ fn vt(x: &str) -> [i128; 3] {
     ]
 }
 
-/// `check_version(want, have, ...)`.
-pub fn check_version(want: &Value, have: &str, warn: &mut Vec<String>) -> R<()> {
+/// `check_version(want, have, ...)`; `only_warn`: `HYDO_VERSION_CHECK=warn`.
+pub fn check_version(want: &Value, have: &str, only_warn: bool, warn: &mut Vec<String>) -> R<()> {
     let w = py::strip(&str_of(want)).to_string();
     if !pyre::fullmatch(r"(>=)?\d+(\.\d+){0,2}", &w) {
         return Err(err(format!(
@@ -1138,7 +1138,7 @@ pub fn check_version(want: &Value, have: &str, warn: &mut Vec<String>) -> R<()> 
     };
     if !ok {
         let msg = format!("hydo_version: the plan needs hydo {why}, this hydo is {have}");
-        if std::env::var("HYDO_VERSION_CHECK").as_deref() == Ok("warn") {
+        if only_warn {
             warn.push(format!("{msg} (HYDO_VERSION_CHECK=warn: building anyway)"));
         } else {
             return Err(err(format!(

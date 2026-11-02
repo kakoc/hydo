@@ -68,6 +68,8 @@ pub struct Host {
     pub outdir: PathBuf,
     pub onboard: PathBuf,
     pub known: Option<Known>,
+    /// The quiet window and the result cache (`hydo_config::run::Pool`).
+    pub pool: hydo_config::run::Pool,
 }
 
 pub struct Pool {
@@ -98,12 +100,12 @@ pub fn quiet_waited() -> f64 {
     *QUIET_WAITED.lock().expect("lock")
 }
 
-/// While `$HYDO_QUIET_FILE` exists start no new VM: wait, checking every 30 s, at most 2 hours.
-pub fn quiet_wait() {
-    let Some(f) = std::env::var_os("HYDO_QUIET_FILE") else {
+/// While the quiet file (`HYDO_QUIET_FILE`) exists start no new VM: wait, checking every 30 s,
+/// at most 2 hours.
+pub fn quiet_wait(file: Option<&Path>) {
+    let Some(f) = file else {
         return;
     };
-    let f = PathBuf::from(f);
     if !f.exists() {
         return;
     }
@@ -275,11 +277,12 @@ pub fn has_errlog(r: &Res) -> bool {
 // ---------------------------------------------------------------- the pool
 pub const CACHED_TAGS: [&str; 2] = ["seed-", "fctrace-"];
 
-fn cache_file() -> Option<PathBuf> {
-    std::env::var_os("HYDO_EXPLORE_CACHE").map(PathBuf::from)
-}
-
 impl Pool {
+    /// The result cache (`HYDO_EXPLORE_CACHE`).
+    fn cache_file(&self) -> Option<PathBuf> {
+        self.host.pool.cache.clone()
+    }
+
     /// Start `n` workers of `engine` for `spec`; each boots in its own thread.
     pub fn new(
         engine: Arc<dyn Engine + Send + Sync>,
@@ -348,7 +351,7 @@ impl Pool {
     }
 
     fn cache_load(&self) {
-        let Some(f) = cache_file() else { return };
+        let Some(f) = self.cache_file() else { return };
         let Ok(mut fh) = std::fs::File::open(&f) else {
             return;
         };
@@ -384,7 +387,7 @@ impl Pool {
     }
 
     fn cache_get(&self, tag: &str, text: &str) -> Option<Res> {
-        cache_file()?;
+        self.cache_file()?;
         if !CACHED_TAGS.iter().any(|p| tag.starts_with(p)) {
             return None;
         }
@@ -429,7 +432,7 @@ impl Pool {
     }
 
     fn cache_put(&self, tag: &str, text: &str, res: &Res) {
-        let Some(f) = cache_file() else { return };
+        let Some(f) = self.cache_file() else { return };
         if !CACHED_TAGS.iter().any(|p| tag.starts_with(p))
             || py_str(res.get("verdict").unwrap_or(&Value::Null)).starts_with("ERROR worker")
         {
@@ -635,8 +638,9 @@ fn take(q: &(Mutex<Queue>, Condvar)) -> Option<Job> {
     }
 }
 
-fn start(i: usize, engine: &dyn Engine, spec: &BootSpec, outdir: &Path) -> Option<Box<dyn Worker>> {
-    quiet_wait();
+fn start(i: usize, engine: &dyn Engine, spec: &BootSpec, h: &Host) -> Option<Box<dyn Worker>> {
+    let outdir = &h.outdir;
+    quiet_wait(h.pool.quiet_file.as_deref());
     match engine.start(spec, &outdir.join(format!("worker-{i}.err"))) {
         Ok(w) => Some(w),
         Err(e) => {
@@ -659,7 +663,7 @@ fn worker_main(
     h: Host,
     boot: Arc<Mutex<Vec<Option<f64>>>>,
 ) {
-    let mut w = start(i, engine.as_ref(), &spec, &h.outdir);
+    let mut w = start(i, engine.as_ref(), &spec, &h);
     if let Some(x) = &w {
         boot.lock().expect("lock")[i] = Some(x.boot_secs());
     }
@@ -671,7 +675,7 @@ fn worker_main(
         if job.cancel.load(Ordering::SeqCst) {
             continue;
         }
-        quiet_wait();
+        quiet_wait(h.pool.quiet_file.as_deref());
         match job.kind {
             Kind::Branch(req, sched) => {
                 let out = run_branch(w.as_mut().expect("a worker"), i, &h, &req, &sched);
@@ -716,7 +720,7 @@ fn worker_main(
                             if let Some(old) = w.take() {
                                 let _ = old.close();
                             }
-                            w = start(i, engine.as_ref(), &spec, &h.outdir);
+                            w = start(i, engine.as_ref(), &spec, &h);
                         }
                     }
                 }

@@ -117,7 +117,7 @@ fn shell(m: &Value) -> String {
         fc: None,
         ip: Some("IP".into()),
     };
-    compile_shell(&Ctx::standalone(), m, &order, &tools)
+    compile_shell(&Ctx::standalone(Default::default()), m, &order, &tools)
         .map_err(|e| e.message())
         .unwrap()
         .0

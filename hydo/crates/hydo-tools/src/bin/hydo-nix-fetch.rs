@@ -164,7 +164,7 @@ fn main() {
         .timeout_global(Some(std::time::Duration::from_secs(600)))
         .build();
     let mut f = Fetcher {
-        cache: std::env::var("HYDO_NIX_CACHE").unwrap_or_else(|_| "https://cache.nixos.org".into()),
+        cache: hydo_config::Config::process().tools.nix_cache,
         agent: cfg.into(),
         skipped: Vec::new(),
     };

@@ -83,18 +83,23 @@ pub struct Ctx {
     /// ../VERSION for a plan's hydo_version:).
     pub onboard: PathBuf,
     pub release: Release,
+    /// The build's inputs: the tools and guest programs to stage, read from the configuration
+    /// (`hydo_config::build::Build`; the `hydo` command fills the release's paths in).
+    pub inputs: hydo_config::build::Build,
 }
 
 impl Ctx {
     /// The onboard/ directory of a release laid out around the running program, else of this
     /// source tree (as hydo_manifest::LoadOptions::default()); `HYDO_ONBOARD` overrides it.
-    pub fn standalone() -> Ctx {
-        let onboard = std::env::var_os("HYDO_ONBOARD")
-            .map(PathBuf::from)
+    pub fn standalone(inputs: hydo_config::build::Build) -> Ctx {
+        let onboard = inputs
+            .onboard
+            .clone()
             .unwrap_or_else(|| hydo_manifest::LoadOptions::default().onboard_dir);
         Ctx {
             onboard,
             release: Release::None,
+            inputs,
         }
     }
 }
@@ -200,12 +205,15 @@ pub fn tempdir(prefix: &str) -> Result<PathBuf, Fail> {
     Err(Fail::Crash("cannot create a temporary directory".into()))
 }
 
-/// `tool(env, default, check)`: $env, else default; must pass `check`.
-pub fn tool(env: &str, default: &str, check: impl Fn(&str) -> bool) -> Result<String, Fail> {
-    let p = std::env::var(env)
-        .ok()
-        .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| default.to_string());
+/// `tool(env, default, check)`: the input when set and not empty, else default; must pass
+/// `check`. Messages name the input's variable.
+pub fn tool(
+    input: &hydo_config::build::Input,
+    default: &str,
+    check: impl Fn(&str) -> bool,
+) -> Result<String, Fail> {
+    let env = input.var;
+    let p = input.or(default);
     if !check(&p) {
         return Err(Fail::Exit(format!(
             "hydo-build: {env} not found at {p} (set {env})"
@@ -353,6 +361,7 @@ pub fn prepare(
         arch: arch.to_string(),
         sets: sets.to_vec(),
         onboard_dir: ctx.onboard.clone(),
+        version_check_warn: ctx.inputs.version_check_warn,
     };
     let (r, warnings) = hydo_manifest::load_until_images(Path::new(path), &opts);
     for w in &warnings {

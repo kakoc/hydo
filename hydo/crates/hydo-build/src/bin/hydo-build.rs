@@ -5,6 +5,6 @@
 
 fn main() {
     let argv: Vec<String> = std::env::args().skip(1).collect();
-    let ctx = hydo_build::Ctx::standalone();
+    let ctx = hydo_build::Ctx::standalone(hydo_config::Config::process().build);
     std::process::exit(hydo_build::main(&ctx, &argv));
 }

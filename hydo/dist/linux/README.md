@@ -50,9 +50,9 @@ guests through the kernel module, which was not hardened against hostile users.
 existing tools share one lock.
 
 **Changes to existing tools** (defaults unchanged, so other users of the tree see no difference):
-the explorer reads its build directory, lock wrapper and snapshot directory from `HYDO_BUILD`,
-`HYDO_HVX_RUN`, `HYDO_SNAP_DIR` (defaults `~/hydo/build`, `~/bin/hvx-run`, `/var/tmp/hvx-snap`),
-and with `HYDO_CLI` set the report's hand-reproduction line is a `hydo run` command;
+the explorer reads its build directory and lock wrapper from `HYDO_BUILD` and `HYDO_HVX_RUN`
+(defaults `~/hydo/build`, `~/bin/hvx-run`; every variable is listed in
+`hydo/crates/hydo-config/INVENTORY.md`), and `hydo explore` gives it the release's paths;
 `explore/ptedges.h` compiles without libipt under `-DHYDO_NO_LIBIPT` (coverage decoding off),
 so the run engine builds on a machine without `libipt-dev`.
 

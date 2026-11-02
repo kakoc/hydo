@@ -3,7 +3,7 @@
 //! line sums them up, and the exit status is 1 when a check failed. Nothing needs Python (M107).
 
 use crate::ctx::{access, which, Ctx};
-use crate::hvxenv::{dev, dev_usable, devname, lock, snap_dir, uses_sudo};
+use crate::hvxenv::{dev, dev_usable, devname, lock};
 use crate::module::{
     dev_line, loaded_modules, lock_holders, module_ko, srcversion_file, srcversion_loaded,
     uname_release, uname_sys_machine,
@@ -135,8 +135,9 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
             .status()
             .map(|s| s.success())
             .unwrap_or(false);
-    let d = dev();
-    let usable = dev_usable().map(|u| u && std::env::var("HYDO_SUDO").as_deref() != Ok("1"));
+    let e = &ctx.config.engine;
+    let d = dev(e);
+    let usable = dev_usable(e).map(|u| u && !e.sudo);
     if usable.is_some() && Path::new(&d).exists() {
         println!("     {}", dev_line(&d));
     }
@@ -162,26 +163,6 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
                  sudo) gives {d} to a group, after which runs need no sudo -- see README"
             ),
             true,
-        );
-    }
-    let sd = snap_dir();
-    if !uses_sudo() {
-        let p = Path::new(&sd);
-        let parent = Path::new(sd.trim_end_matches('/'))
-            .parent()
-            .map(Path::to_path_buf);
-        let target = if p.is_dir() {
-            p.to_path_buf()
-        } else {
-            parent
-                .filter(|x| !x.as_os_str().is_empty())
-                .unwrap_or_else(|| "/".into())
-        };
-        c.check(
-            access(&target, libc::W_OK | libc::X_OK),
-            &format!("snapshot directory {sd} writable by you"),
-            "set HYDO_SNAP_DIR to a directory you can write (on a real disk, not tmpfs)",
-            false,
         );
     }
     let rel_ = uname_release();
@@ -223,7 +204,7 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         c.check(
             Path::new(&d).exists(),
             &format!("{d} present (HVX_DEV: runs use this side module)"),
-            &format!("hydo module load --name {}", devname()),
+            &format!("hydo module load --name {}", devname(e)),
             false,
         );
     }
@@ -244,7 +225,7 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         "`hydo module load` unloads kvm and kvm_intel (stop KVM virtual machines first)",
         false,
     );
-    let lk = lock();
+    let lk = lock(e);
     println!(
         "     module lock: {} ({} holder(s) now)",
         lk,
@@ -301,25 +282,14 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         false,
     );
     let cwd = std::env::current_dir().unwrap_or_default();
-    let snap_parent = Path::new(sd.trim_end_matches('/'))
-        .parent()
-        .filter(|x| !x.as_os_str().is_empty())
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| "/".into());
-    for (dd, need) in [(cwd.clone(), 2u64), (snap_parent, 4)] {
-        let Some(free) = free_gib(&dd) else { continue };
+    // (until M144 also the snapshot directory, which the deleted C engine wrote)
+    if let Some(free) = free_gib(&cwd) {
         c.check(
-            free >= need as f64,
+            free >= 2.0,
             &format!(
-                "{:.0} GiB free in {} ({} GiB wanted: {})",
+                "{:.0} GiB free in {} (2 GiB wanted: images)",
                 free,
-                dd.display(),
-                need,
-                if dd == cwd {
-                    "images"
-                } else {
-                    "run snapshots, $HYDO_SNAP_DIR"
-                }
+                cwd.display()
             ),
             "free some space",
             true,

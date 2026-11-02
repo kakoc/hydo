@@ -11,6 +11,7 @@ name = "hydo"
 path = "src/main.rs"
 
 [dependencies]
+hydo-config = { workspace = true }
 hydo-schedule = { workspace = true }
 hydo-manifest = { workspace = true }
 hydo-engine = { workspace = true }

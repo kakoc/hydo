@@ -13,9 +13,10 @@ pub mod reflect;
 pub mod yaml;
 
 /// Runs the generator with `argv` (without the program name) and returns the exit status,
-/// printing errors as the Go program did ("hydo-grpc-gen: ...").
-pub fn main_with(argv: &[String]) -> i32 {
-    match gen::run(argv) {
+/// printing errors as the Go program did ("hydo-grpc-gen: ..."). `d`: the defaults of `-arch` and
+/// `-client`, from the configuration the program read at its start.
+pub fn main_with(argv: &[String], d: &gen::Defaults) -> i32 {
+    match gen::run(argv, d) {
         Ok(summary) => {
             print!("{summary}");
             0

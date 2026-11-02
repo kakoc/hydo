@@ -16,6 +16,7 @@ name = "hydo-explore"
 path = "src/bin/hydo-explore.rs"
 
 [dependencies]
+hydo-config = { workspace = true }
 hydo-schedule = { workspace = true }
 hydo-manifest = { workspace = true }
 hydo-engine = { workspace = true }

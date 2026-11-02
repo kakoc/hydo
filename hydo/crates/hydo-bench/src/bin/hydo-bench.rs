@@ -1,12 +1,13 @@
 //! `hydo-bench`: the bug benchmark runner (hydo/bench/README.md). The root (the folder with
 //! `hydo/` and `hv/`): `$HYDO_ROOT`, else the first parent of this program that has both, else
-//! the source tree it was built from.
+//! the source tree it was built from. The configuration is read here, once (`hydo_config`,
+//! M144), and passed down.
 
 use std::path::{Path, PathBuf};
 
-fn root() -> PathBuf {
-    if let Some(r) = std::env::var_os("HYDO_ROOT").filter(|v| !v.is_empty()) {
-        return PathBuf::from(r);
+fn root(paths: &hydo_config::run::Paths) -> PathBuf {
+    if let Some(r) = &paths.root {
+        return r.clone();
     }
     let exe = std::env::current_exe()
         .and_then(|p| p.canonicalize())
@@ -23,5 +24,6 @@ fn root() -> PathBuf {
 
 fn main() {
     let argv: Vec<String> = std::env::args().skip(1).collect();
-    std::process::exit(hydo_bench::main_with(&argv, &root()));
+    let config = hydo_config::Config::process();
+    std::process::exit(hydo_bench::main_with(&argv, &root(&config.paths), &config));
 }

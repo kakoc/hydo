@@ -3,14 +3,9 @@
 #![cfg(target_os = "linux")]
 
 use hydo_hvx::engine::Options;
-use std::collections::HashMap;
 
 fn opts(env: &[(&str, &str)]) -> Options {
-    let m: HashMap<String, String> = env
-        .iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
-        .collect();
-    Options::from_lookup(&|k| m.get(k).cloned())
+    Options::from_env(&hydo_config::Env::from_pairs(env.iter().copied()))
 }
 
 #[test]

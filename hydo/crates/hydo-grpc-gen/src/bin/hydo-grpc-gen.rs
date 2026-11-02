@@ -2,5 +2,6 @@
 
 fn main() {
     let argv: Vec<String> = std::env::args().skip(1).collect();
-    std::process::exit(hydo_grpc_gen::main_with(&argv));
+    let tools = hydo_config::Config::process().tools;
+    std::process::exit(hydo_grpc_gen::main_with(&argv, &tools));
 }

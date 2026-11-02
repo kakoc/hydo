@@ -190,7 +190,8 @@ fn run_engine(
                     "hydo: an agent image: the host controller drives the run (/etc/hydo/control)"
                 );
             }
-            a.one_with(spec, &s, policy)
+            a.with_control(&ctx.config.control)
+                .one_with(spec, &s, policy)
         }
         None => {
             if !matches!(policy, Policy::Schedule) {
@@ -207,9 +208,9 @@ fn run_engine(
             let hvx = Hvx {
                 engine: hvxenv::engine(ctx),
                 hvx_run: Some(ctx.libexec().join("hvx-run")),
-                snap_dir: hvxenv::snap_dir(),
                 extra_env: Vec::new(),
                 env: hvxenv::tool_env(ctx),
+                config: ctx.config.env.clone(),
             };
             if let Some(p) = hvx.missing_program() {
                 die(&format!(

@@ -320,6 +320,7 @@ dependencies = [
 name = "hydo-bench"
 version = "0.1.0"
 dependencies = [
+ "hydo-config",
  "hydo-control",
  "hydo-engine",
  "hydo-explore",
@@ -336,6 +337,7 @@ version = "0.1.0"
 dependencies = [
  "flate2",
  "hydo-agent-proto",
+ "hydo-config",
  "hydo-manifest",
  "libc",
  "regex",
@@ -351,6 +353,7 @@ dependencies = [
  "hydo-build",
  "hydo-compose",
  "hydo-composer",
+ "hydo-config",
  "hydo-control",
  "hydo-engine",
  "hydo-errors",
@@ -390,6 +393,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "hydo-config"
+version = "0.1.0"
+
+[[package]]
 name = "hydo-control"
 version = "0.1.0"
 dependencies = [
@@ -397,6 +404,7 @@ dependencies = [
  "hydo-agent-proto",
  "hydo-build",
  "hydo-composer",
+ "hydo-config",
  "hydo-engine",
  "hydo-errors",
  "hydo-explore",
@@ -416,6 +424,7 @@ version = "0.1.0"
 dependencies = [
  "flate2",
  "hydo-agent-proto",
+ "hydo-config",
  "hydo-engine-proto",
  "hydo-hvm",
  "hydo-hvx",
@@ -448,6 +457,7 @@ name = "hydo-explore"
 version = "0.1.0"
 dependencies = [
  "flate2",
+ "hydo-config",
  "hydo-control",
  "hydo-engine",
  "hydo-errors",
@@ -486,6 +496,7 @@ dependencies = [
  "bytes",
  "h2",
  "http",
+ "hydo-config",
  "hydo-grpc",
  "libyaml-safer",
  "prost",
@@ -519,6 +530,7 @@ name = "hydo-hvx"
 version = "0.1.0"
 dependencies = [
  "cc",
+ "hydo-config",
  "hydo-engine-proto",
  "hydo-schedule",
  "libc",
@@ -558,6 +570,7 @@ version = "0.1.0"
 dependencies = [
  "flate2",
  "hydo-build",
+ "hydo-config",
  "hydo-manifest",
  "lzma-rs",
  "sha2",

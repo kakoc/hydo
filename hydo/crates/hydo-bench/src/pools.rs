@@ -1,11 +1,9 @@
 //! Worker pools over the hvx engine, one per image, as explore.py's `Pool(n, outdir)` started
-//! them for run.py: `$HYDO_BUILD` (default `~/hydo/build`) holds the images, the guest kernel
+//! them for run.py: `HYDO_BUILD` (default `~/hydo/build`) holds the images, the guest kernel
 //! `bzImage` and `initramfs-kafka.cpio.gz`; the engine is the Rust engine in this process when it
 //! can open the device, otherwise the program `hydo-hvx` (`hydo_engine::hvx::program`, or
-//! `$HYDO_HVX_EXPLORE`) started through `~/bin/hvx-run` (or `$HYDO_HVX_RUN`, the box's shared
-//! module lock), with snapshot files in `$HYDO_SNAP_DIR` (default `/var/tmp/hvx-snap`). Snapshots
-//! stay in files unless `HYDO_SNAPSHOTS=memory` (the benchmark runs beside other sessions on a
-//! shared box; either store gives the same fingerprints, M102). An agent image (its
+//! `HYDO_HVX_EXPLORE`) started through `~/bin/hvx-run` (or `HYDO_HVX_RUN`, the box's shared
+//! module lock); the values are the program's `hydo_config::Config` (M144). An agent image (its
 //! `/etc/hydo/control` says `agent`, M121) is run through the host controller
 //! (`hydo_control::agent::AgentEngine`, M126), as `hydo explore` runs one; an agent image the
 //! controller cannot drive (for example one without an embedded manifest) is refused with the
@@ -16,19 +14,6 @@ use hydo_explore::pool::{Host, Pool};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-fn env_path(k: &str, d: PathBuf) -> PathBuf {
-    std::env::var_os(k)
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or(d)
-}
-
-fn home() -> PathBuf {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default()
-}
-
 /// What every pool of one invocation shares.
 #[derive(Clone, Debug)]
 pub struct Engines {
@@ -37,15 +22,23 @@ pub struct Engines {
     pub vcpus: u32,
     /// explore.py's EXTRA_ENV (listrun.py `--env KEY=VAL`).
     pub extra_env: Vec<String>,
+    /// The configuration the program read at its start.
+    pub config: hydo_config::Config,
 }
 
 impl Engines {
-    pub fn new(root: &Path, vcpus: u32, extra_env: Vec<String>) -> Engines {
+    pub fn new(
+        root: &Path,
+        vcpus: u32,
+        extra_env: Vec<String>,
+        config: &hydo_config::Config,
+    ) -> Engines {
         Engines {
             root: root.to_path_buf(),
-            build: env_path("HYDO_BUILD", home().join("hydo").join("build")),
+            build: config.paths.build.clone(),
             vcpus,
             extra_env,
+            config: config.clone(),
         }
     }
 
@@ -62,14 +55,11 @@ impl Engines {
     /// `outdir/worker-<i>.err`). Each boots in its own thread; jobs wait for the boot.
     pub fn pool(&self, image: &str, workers: usize, outdir: &Path) -> Pool {
         let engine = hvx::Hvx {
-            engine: hvx::program(&self.root),
-            hvx_run: Some(env_path("HYDO_HVX_RUN", home().join("bin").join("hvx-run"))),
-            snap_dir: std::env::var("HYDO_SNAP_DIR")
-                .ok()
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| "/var/tmp/hvx-snap".into()),
+            engine: hvx::program(&self.root, &self.config.engine),
+            hvx_run: Some(self.config.paths.hvx_run.clone()),
             extra_env: self.extra_env.clone(),
-            env: Vec::new(),
+            env: hvx::wrapper_env(&self.config.engine),
+            config: self.config.env.clone(),
         };
         let (ram_mib, cpu) = guest_of(&self.build.join(image));
         let spec = BootSpec {
@@ -80,20 +70,17 @@ impl Engines {
             kernel: self.build.join("bzImage"),
             initrd: Some(self.build.join("initramfs-kafka.cpio.gz")),
             outdir: outdir.join("consoles"),
-            snapshots: if std::env::var("HYDO_SNAPSHOTS").as_deref() == Ok("memory") {
-                SnapshotStore::Memory
-            } else {
-                SnapshotStore::Files
-            },
+            snapshots: SnapshotStore::Files,
         };
         let _ = std::fs::create_dir_all(outdir);
         let host = Host {
             outdir: outdir.to_path_buf(),
             onboard: self.root.join("hydo").join("onboard"),
             known: None,
+            pool: self.config.pool.clone(),
         };
         let engine: Arc<dyn Engine + Send + Sync> = Arc::new(engine);
-        let engine = agent_or(engine, &spec.image);
+        let engine = agent_or(engine, &spec.image, &self.config.control);
         Pool::new(
             engine,
             spec,
@@ -128,10 +115,14 @@ fn guest_of(image: &Path) -> (u32, CpuLevel) {
     (ram, cpu)
 }
 
-fn agent_or(engine: Arc<dyn Engine + Send + Sync>, image: &Path) -> Arc<dyn Engine + Send + Sync> {
+fn agent_or(
+    engine: Arc<dyn Engine + Send + Sync>,
+    image: &Path,
+    control: &hydo_config::run::Control,
+) -> Arc<dyn Engine + Send + Sync> {
     match hydo_control::agent::AgentEngine::for_image(engine.clone(), image) {
         Ok(None) => engine,
-        Ok(Some(a)) => Arc::new(a),
+        Ok(Some(a)) => Arc::new(a.with_control(control)),
         Err(e) => {
             eprintln!("hydo-bench: {e}");
             std::process::exit(2);

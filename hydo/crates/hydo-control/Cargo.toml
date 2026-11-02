@@ -9,6 +9,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+hydo-config = { workspace = true }
 hydo-agent-proto = { path = "../hydo-agent-proto" }
 hydo-schedule = { workspace = true }
 hydo-manifest = { workspace = true }

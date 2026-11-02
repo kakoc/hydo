@@ -82,13 +82,18 @@ const SPIN_VERDICT: &str = ": SPIN (guest loops without exits";
 /// a new conversation from S1 (or a new fresh boot), whose stops, sends and verdict are a pure
 /// function of that schedule; the plain run is not reported, as with RUN. A counter loop that
 /// only the rewind mode resolves (ledger-spin) then runs to its verdict. `HVM_SPIN_REWIND=0`
-/// turns it off, as for hvmx.
-pub fn rewind_again(kind: EngineKind, r: &RunResult, s: &Schedule) -> Option<Schedule> {
-    if kind != EngineKind::Hvm
+/// turns it off, as for hvmx (`enabled`: `hydo_config::run::Control::spin_rewind`).
+pub fn rewind_again(
+    kind: EngineKind,
+    r: &RunResult,
+    s: &Schedule,
+    enabled: bool,
+) -> Option<Schedule> {
+    if !enabled
+        || kind != EngineKind::Hvm
         || !r.verdict.starts_with("ERROR")
         || !r.verdict.contains(SPIN_VERDICT)
         || s.host_token("spin").is_some()
-        || std::env::var("HVM_SPIN_REWIND").is_ok_and(|v| v == "0")
     {
         return None;
     }
@@ -405,6 +410,9 @@ pub struct AgentEngine {
     pub inner: Arc<dyn Engine + Send + Sync>,
     pub plan: Plan,
     pub cadence: u64,
+    /// A SPIN on hvm runs again in the rewind mode (`hydo_config::run::Control::spin_rewind`,
+    /// default on; `HVM_SPIN_REWIND=0` turns it off).
+    pub spin_rewind: bool,
 }
 
 impl AgentEngine {
@@ -414,7 +422,14 @@ impl AgentEngine {
             inner,
             plan,
             cadence,
+            spin_rewind: true,
         }
+    }
+
+    /// With the host controller's configuration (M144).
+    pub fn with_control(mut self, c: &hydo_config::run::Control) -> AgentEngine {
+        self.spin_rewind = c.spin_rewind;
+        self
     }
 
     /// The engine for `image`: Some for an agent image (its plan read from the image), None for a
@@ -462,7 +477,9 @@ impl AgentEngine {
     ) -> Result<OneRun, EngineError> {
         let r = self.one_once(spec, schedule, policy)?;
         let again = match (policy, &r.result) {
-            (Policy::Schedule, Some(res)) => rewind_again(self.inner.kind(), res, schedule),
+            (Policy::Schedule, Some(res)) => {
+                rewind_again(self.inner.kind(), res, schedule, self.spin_rewind)
+            }
             _ => None,
         };
         match again {
@@ -576,6 +593,7 @@ impl Engine for AgentEngine {
                     booted: b,
                     cadence: self.cadence,
                     outdir: spec.outdir.clone(),
+                    spin_rewind: self.spin_rewind,
                 }))
             }
             Err(e) => {
@@ -612,6 +630,7 @@ pub struct AgentWorker {
     booted: Booted,
     cadence: u64,
     outdir: PathBuf,
+    spin_rewind: bool,
 }
 
 impl AgentWorker {
@@ -623,7 +642,10 @@ impl AgentWorker {
         policy: &Policy,
     ) -> Result<RunResult, EngineError> {
         let r = self.run_once(tag, schedule, policy)?;
-        match (policy, rewind_again(self.kind, &r, schedule)) {
+        match (
+            policy,
+            rewind_again(self.kind, &r, schedule, self.spin_rewind),
+        ) {
             (Policy::Schedule, Some(again)) => self.run_once(tag, &again, policy),
             _ => Ok(r),
         }
@@ -774,7 +796,7 @@ mod tests {
              inh=855549cd692f7247 verdict=ERROR workload: SPIN (guest loops without exits; run invalid)",
         )
         .unwrap();
-        let again = rewind_again(EngineKind::Hvm, &spin, &s).expect("a SPIN on hvm");
+        let again = rewind_again(EngineKind::Hvm, &spin, &s, true).expect("a SPIN on hvm");
         assert_eq!(
             again.to_string(),
             "disk=none spin=rewind | run P=front@10+2"
@@ -791,17 +813,20 @@ mod tests {
                 "RESULT a fp=1 wfp=2 secs=0 verdict=ERROR {phase}: SPIN (guest loops without exits; run invalid)"
             ))
             .unwrap();
-            assert!(rewind_again(EngineKind::Hvm, &r, &s).is_some(), "{phase}");
+            assert!(
+                rewind_again(EngineKind::Hvm, &r, &s, true).is_some(),
+                "{phase}"
+            );
         }
-        assert!(rewind_again(EngineKind::Hvx, &spin, &s).is_none());
-        assert!(rewind_again(EngineKind::Hvm, &spin, &again).is_none());
+        assert!(rewind_again(EngineKind::Hvx, &spin, &s, true).is_none());
+        assert!(rewind_again(EngineKind::Hvm, &spin, &again, true).is_none());
         for v in [
             "HYDO-ORACLE: OK invariants=2 held",
             "HYDO-ORACLE: VIOLATION [x] out: SPIN (guest loops without exits",
             "ERROR workload: exit budget exhausted",
         ] {
             let r = RunResult::parse(&format!("RESULT a fp=1 wfp=2 secs=0 verdict={v}")).unwrap();
-            assert!(rewind_again(EngineKind::Hvm, &r, &s).is_none(), "{v}");
+            assert!(rewind_again(EngineKind::Hvm, &r, &s, true).is_none(), "{v}");
         }
     }
 

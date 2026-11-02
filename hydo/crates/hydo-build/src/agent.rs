@@ -46,34 +46,40 @@ pub fn control_text() -> String {
     format!("agent {}\n", hydo_agent_proto::PROTO)
 }
 
-/// The agent binary to stage: `$HYDO_AGENT_BIN` (x86_64) or `$HYDO_AGENT_BIN_ARM64`, else
-/// `<build dir>/hydo-agent` or `<build dir>/hydo-agent-arm64` (where build.sh puts them), with
-/// the pinned sha256.
-pub fn binary(bdir: &Path, arm64: bool, io: &mut Io) -> Result<(String, String), Fail> {
-    let (env, name, pin) = if arm64 {
+/// The agent binary to stage: `HYDO_AGENT_BIN` (x86_64) or `HYDO_AGENT_BIN_ARM64` (the
+/// configuration's), else `<build dir>/hydo-agent` or `<build dir>/hydo-agent-arm64` (where
+/// build.sh puts them), with the pinned sha256.
+pub fn binary(
+    ctx: &crate::Ctx,
+    bdir: &Path,
+    arm64: bool,
+    io: &mut Io,
+) -> Result<(String, String), Fail> {
+    let (input, name, pin) = if arm64 {
         (
-            "HYDO_AGENT_BIN_ARM64",
+            &ctx.inputs.agent_bin_arm64,
             "hydo-agent-arm64",
             AGENT_SHA256_ARM64,
         )
     } else {
-        ("HYDO_AGENT_BIN", "hydo-agent", AGENT_SHA256_X86_64)
+        (&ctx.inputs.agent_bin, "hydo-agent", AGENT_SHA256_X86_64)
     };
-    let p = crate::tool(env, &bdir.join(name).to_string_lossy(), |x| {
+    let env = input.var;
+    let p = crate::tool(input, &bdir.join(name).to_string_lossy(), |x| {
         Path::new(x).is_file()
     })
     .map_err(|_| {
         Fail::Exit(format!(
             "hydo-build: {env} not found at {} (set {env}; hydo/crates/hydo-agent/build.sh builds it)",
-            std::env::var(env)
-                .ok()
-                .filter(|v| !v.is_empty())
+            input
+                .nonempty()
+                .map(str::to_string)
                 .unwrap_or_else(|| bdir.join(name).display().to_string())
         ))
     })?;
     let sha = fsx::sha(Path::new(&p))?;
     if sha != pin {
-        if std::env::var("HYDO_AGENT_UNPINNED").is_ok_and(|v| v == "1") {
+        if ctx.inputs.agent_unpinned {
             crate::errln(
                 io,
                 &format!(
