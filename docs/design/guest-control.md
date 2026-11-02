@@ -499,7 +499,13 @@ Steps that can run in parallel are marked with the same letter. Each step lists 
   instruction that wrote it, checked against the PMU branch count), branch equality with a
   staged answer pending at the snapshot.
 - **D2 (later). Reactive strategies** (fault on assertion, heal on no progress, branch at a
-  reaction) measured on `hydo-bench` against the process strategy.
+  reaction) measured on `hydo-bench` against the process strategy. *Done in M139 for the first
+  two, as one schedule token `A=<event>[@<step>][+<ms>]:<action>` (a fault or a heal at the first
+  SDK assertion record of an event; `hydo explore --reactive fault|heal|both`): every reactive run
+  is reproduced by its schedule string and by its control transcript, and the shrinker works on
+  the anchored token. Branching at a reaction was not built (M45 found branching around one
+  moment worse than fresh schedules, and agent images have no mid-run branch in the explorer
+  yet); docs/HISTORY.md "Milestone 139" has the measurement.*
 
 ## Sources
 

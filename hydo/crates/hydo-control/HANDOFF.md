@@ -747,6 +747,45 @@ only. M136 explained the first and found the second to be a hang (next section).
   middle) on M127's and M136's images. The cause is not found yet (AGENTS.md open item 30 d;
   docs/HISTORY.md "Milestone 136").
 
+## Reactions: the schedule token `A=` (M139, design step D2; docs/HISTORY.md "Milestone 139")
+
+- **What.** `A=<event>[@<step>][+<ms>]:cut|kill-<svc>|stop-<svc>-<ms>|cont-<svc>`
+  (`hydo_schedule::React`). `src/features/react.rs` is one flow thread per reaction
+  (`Part::React(i)`, label `react:a<i>`), armed before its step after that step's faults. It waits
+  for the first SDK assertion record of the event on the console after its arming (an `ok:true`
+  of a sometimes/reachable assertion, an `ok:false` of the others), sleeps the delay in the guest
+  (as the timers do) and acts. The console's records become facts (`Facts::asserts`) only for a
+  run with `A=` (`ScheduleController::watch`); every other run keeps none and takes none of the new
+  paths, so every recorded transcript is unchanged (the corpora and goldens pass as they are).
+- **Decisions.**
+  1. Reactions are live during the steps only: after the last step range the main sequence
+     cancels each reaction that has not seen its event and joins the others (a stop finishes, a
+     delayed cut becomes due) before the heal; `C=`'s cut cancels them all.
+  2. A reaction's power cut is only marked by its thread (`State::cut`); the main sequence's
+     workload wait (`react::workload`, used instead of `spawn_wait` when the run has reactions)
+     ends at the exit or at the mark, and the loop then takes `C=`'s cut path. At a reaction's cut
+     the workload's client and every service are SIGSTOPped first, then the ids are read (a `C=`
+     cut reads them first: between two steps no client runs). The log line is `POWER CUT at the
+     reaction A=...`.
+  3. A thread cancelled at the stop where its event is seen does nothing (`Fx::is_cancelled`):
+     the main sequence decided first.
+  4. A reaction naming a service the plan does not have is ignored with `A: no service <svc>,
+     ignored`, as the other tokens are.
+  5. A kill waits for a restart policy's start in progress (as `X=`); the killed service stays
+     down until the heal's restart pass. `cont-<svc>` sends SIGCONT; the `P=` step's own SIGCONT
+     later is a no-op.
+  6. A run with reactions declares `fault.reacted` (reachable) and records it when a kill, stop
+     or cont acts (the cut's record is the recovery boot's verdict).
+- **Proofs** (no VM): `tests/react.rs` on the Redis example and the benchmark's manifest (the
+  scripted engine writes SDK records of each workload call when the schedule has `A=`,
+  `Fake::sdk_records`): each reaction acts at the first stop where its event is seen, not at all
+  when it never comes (an `always` that holds is no event), two runs give one transcript, the
+  ReplayController types it again, `drive::run` over one link takes a reaction's cut into the
+  recovery VM and replays both conversations; a reaction that never fires adds only its
+  declaration (the same commands at the same stops as the schedule without it). On the bare-metal
+  machine: `hydo run`, `hydo repro <run dir>` and `hydo repro --transcript` of a reaction's power
+  cut and of a reaction's kill gave one fingerprint each (docs/HISTORY.md M139).
+
 ## Left open
 
 - **Real guests.** Since M126 the core controller has driven the Redis example's agent image on
