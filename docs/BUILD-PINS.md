@@ -296,24 +296,26 @@ has no dependencies.
   `hydo/grpcgen/rustc-stable` (a host-independent `-C metadata`; the tree and `$CARGO_HOME`
   remapped to `/hydo` and `/cargo`), and `hydo-elf-comment` sets the `.comment` linker line to
   `Linker: LLD`. So the bytes do not depend on the build host, the tree's path or the crate cache.
-- **Candidate, not pinned (Milestone 138, hydo-agent 0.3.0 with the host-call port, hello
-  feature `hostcall`):** the same bytes from this Mac and from the bare-metal test machine
-  (`~/hydo-mod`, its private rustup): x86_64 668,896 bytes
-  `398f297e7425768a6175e58d27eca00d417fec25f0fb8b48842bcbbb53fdb8a6`, aarch64 566,800 bytes
-  `099e54440e04a89798efc5755a73a181c87aa0731f10129bc146f53de9432e87` (the aarch64 one never takes
-  the port: there is none on the Mac). `hydo-build` still stages 0.2.0 (below); M138's proofs
-  swapped 0.3.0 into copies of M136's images with `hv/hvx/images/patch-agent.sh`
-  (`HYDO_AGENT_UNPINNED=1`). Pinning it changes every agent image's bytes and fingerprints, so it
-  waits for the user's decision together with merging the side module.
-- **Results (Milestone 127, hydo-agent 0.2.0 with every child started with an empty signal
-  mask; the version string is unchanged, so the recorded native transcripts still replay):** the
-  same bytes from a build on this Mac and from a build on the bare-metal test machine
-  (`~/hydo-c2l`, its private rustup):
+- **Pinned (Milestone 140; hydo-agent 0.3.0 with the host-call port, hello feature `hostcall`,
+  built in Milestone 138):** the same bytes from this Mac and from the bare-metal machine
+  (M138 in `~/hydo-mod`; M140 again on this Mac and in `~/hydo-nixb` on the bare-metal machine, each with the
+  pinned Rust 1.90.0):
 
   | target | size | sha256 |
   |---|---|---|
-  | x86_64 (`ELF 64-bit LSB pie executable, static-pie linked`) | 668,032 | `b72c5caa38484202541d2a2272726e06ffea674991df7a968fd270894f12239d` |
-  | aarch64 (`ELF 64-bit LSB executable, statically linked`) | 566,528 | `340a1eec749909a65f8fb8990629c36108b9bc8d91b997e6a000d601c21013d9` |
+  | x86_64 (`ELF 64-bit LSB pie executable, static-pie linked`) | 668,896 | `398f297e7425768a6175e58d27eca00d417fec25f0fb8b48842bcbbb53fdb8a6` |
+  | aarch64 (`ELF 64-bit LSB executable, statically linked`) | 566,800 | `099e54440e04a89798efc5755a73a181c87aa0731f10129bc146f53de9432e87` |
+
+  The aarch64 agent never takes the port (the Mac engine has none). Every agent image built since
+  M140 carries these bytes; an image built before (0.2.0, below) still runs, and stays on the
+  serial line because its agent does not know the port.
+
+  Before (Milestone 127, hydo-agent 0.2.0 with every child started with an empty signal mask;
+  the version string is unchanged, so the recorded native transcripts still replayed; the same
+  bytes from this Mac and from the bare-metal machine): x86_64 668,032 bytes
+  `b72c5caa38484202541d2a2272726e06ffea674991df7a968fd270894f12239d`, aarch64 566,528 bytes
+  `340a1eec749909a65f8fb8990629c36108b9bc8d91b997e6a000d601c21013d9`; every image built by
+  Milestone 136 carries these.
 
   Before (Milestone 131, hydo-agent 0.2.0 with the freeze's `netns` field, feature
   `freeze-netns`; children inherited the agent's blocked SIGCHLD, so a shell's `wait` for a

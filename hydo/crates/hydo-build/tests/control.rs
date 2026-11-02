@@ -67,6 +67,26 @@ fn scratch(name: &str) -> PathBuf {
     d
 }
 
+/// The pins are hydo-agent 0.3.0's (Milestone 140) and docs/BUILD-PINS.md's "Pinned" table
+/// lists them: a new agent changes the constants and the table together.
+#[test]
+fn the_pins_are_the_documented_ones() {
+    assert_eq!(
+        agent::AGENT_SHA256_X86_64,
+        "398f297e7425768a6175e58d27eca00d417fec25f0fb8b48842bcbbb53fdb8a6"
+    );
+    assert_eq!(
+        agent::AGENT_SHA256_ARM64,
+        "099e54440e04a89798efc5755a73a181c87aa0731f10129bc146f53de9432e87"
+    );
+    let doc = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../docs/BUILD-PINS.md");
+    let doc = std::fs::read_to_string(&doc).unwrap();
+    let (_, pinned) = doc.split_once("- **Pinned (").expect("no Pinned entry");
+    let (table, _) = pinned.split_once("Before (").unwrap();
+    assert!(table.contains(agent::AGENT_SHA256_X86_64), "{table}");
+    assert!(table.contains(agent::AGENT_SHA256_ARM64), "{table}");
+}
+
 #[test]
 fn staging_and_the_pin() {
     let d = scratch("stage");
