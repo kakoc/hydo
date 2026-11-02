@@ -743,3 +743,35 @@ present 2 times`, `5dad4111935ccd9d`) and passes on its control (on the d1–d7 
 that control's known duplicate). `P=kafka@5+25` with and without `A=client.outcome_unknown@5+500:
 cont-kafka` gives one fingerprint on d4 (`55c8b28686400e7b`): there the order service never writes
 that event, the reaction never acts, and the guest runs exactly as without the token.
+
+## The manifest images with hydo-agent 0.3.0 (Milestone 140)
+
+Since M140 `hydo-build` stages hydo-agent 0.3.0 and the hvx engine offers the host-call port by
+default, so the manifest images were built again and every measurement of the section "The manifest
+images after the switch (Milestone 136)" was repeated on them (docs/HISTORY.md "Milestone 140, part
+B"; results `/var/tmp/m140b/bench` on the bare-metal machine).
+
+**The images** (on the bare-metal machine, `~/hydo-nixb-work/bench/build`, M136's recipe: the control built in
+full twice, every other stem a swap of it, M135's order services, the agent `398f297e…`): control
+`01e51804…` (both full builds the same bytes), d0 `14fa6711…`, d1 `dbd4a533…`, d2 `4981cac7…`, d3
+`45e8a736…`, d4 `bf1cce71…`, d5 `57edb179…`, d6 `a11b0b64…`, d7 `c33e27df…`, d8 `51e97004…`, d9
+`34a31a63…`, d10 `927ca73e…`, d11 `7135ae49…`, d12 `f948c4ee…`, nf and fix `604ccbf0…` (one binary,
+one image).
+
+**Measured (twice each, one fingerprint):** on the control, `disk=none dseed=0 | run` OK
+`acked=30/30` (`9bd4187ceee84ce0`), `P=kafka@14+16` OK `acked=30/30` (`2d1c4f7550477711`), M129's
+ERROR schedule `disk=cut dseed=806555b3e1262cc5 cf=147 | run P=redis@10+3 T=26:-3600 X=front@20~151`
+OK `acked=11/30` from the recovery boot (`ba0500d31518e3a7`), and `disk=cut dseed=0 cf=147 | run
+K=front@29+1` OK `acked=13/30` from the recovery boot (`89876df0f68dc328`; M136: 14 of 30).
+
+**The triggers** (`hydo-bench confirm --kind agent --defects all --base`, then `--defects m59`):
+every trigger of d0–d7 failed twice with one fingerprint and its defect's signature, and every
+control passed it: d0 `146c0ca433eb6125` (fix OK `7c1060ffd26d2f17`), d1 `93467206d7a907a2`, d2
+`5da8bd6595a9edc9`, d3 `3ce808ae504bafeb` / `c8ad1e63af64dfa4`, d4 `8d4240b3b3e32e07` /
+`e3aa54434b60361e`, d5 `f87c0a8984178829`, d6 `e4340cdc003a3691`, d7 `8747f6c3c586c89b`; the
+control's known bug (`O=kafka@25-30:resp:loss,100%`) is still there, twice `7100265d98b18a33`. Of
+d8–d12, d8 `Q=2d` `4718c8a2ad83e4e6`, d9 `Q=2` `0003548497eb22e6` (the M50 panic), d10
+`X=front@9~20` `70e95221b3b8fb24` (order 10 twice) and d12 `Q=2` `f8ae328336bed77d` failed twice with
+their signatures and passed on the control (`a6fda20986a0601c`, `9a9e694973d897ca`,
+`6fcab30b6967a31d`, `9a9e694973d897ca`). d11's M136 trigger `cf=261` passes on these images (OK `acked=25/30`, `8a9d47774107621a`). Measured again (one run per point): d11 fails at 11 of the 61 points `cf=245..305` (248, 258, 259, 269, 270, 271, 281, 282, 293, 302, 303; M136: 249, 261, 262, 272, 273, 283, 284, 294, 304, the same shape one to three flushes earlier). The new trigger (`defects.rs`), the middle of a three-point band, confirmed twice with one fingerprint and the signature and passed on the control: d11 `cf=270` `fd4decb7cadcf63e` (order 25 acknowledged but not marked published; control OK `acked=24/30`, `8fad8ad649885104`).
+
