@@ -1,0 +1,22 @@
+[package]
+name = "hydo-hvm"
+description = "The Mac run engine in Rust: hv/hvm/hvm.c, the virtio devices, the spin observer and hvmx (hv/hvm/explore/serve.c) on Hypervisor.framework; in-process or as the hydo-hvm program (hvmx's command line and protocol)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+libc = "0.2"
+flate2 = { workspace = true }
+# the C library's number parsing as the engines read schedules (hydo_hvx::cstr)
+hydo-hvx = { workspace = true }
+# the typed engine calls (M142) and the one schedule parser
+hydo-engine-proto = { workspace = true }
+hydo-schedule = { workspace = true }
+# the engine's options, read once by the program's main (M144)
+hydo-config = { workspace = true }
+
+[[bin]]
+name = "hydo-hvm"
+path = "src/bin/hydo-hvm.rs"

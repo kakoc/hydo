@@ -125,7 +125,7 @@ impl Cx {
         format!(
             "{}{} {}one {} {} <outdir> \"{}\"",
             env,
-            self.hvm_dir().join("hvmx").display(),
+            hvm::program(&self.env.root, &self.env.config.hvm).display(),
             self.ram_args()
                 .iter()
                 .map(|x| format!("{x} "))
@@ -497,8 +497,9 @@ fn make_pool(cx: &Cx) -> Pool {
     let (engine, spec): (Arc<dyn Engine + Send + Sync>, BootSpec) = if cx.ex.backend == Backend::Hvm
     {
         let e = hvm::Hvm {
-            hvmx: cx.hvm_dir().join("hvmx"),
+            hvmx: hvm::program(&cx.env.root, &cx.env.config.hvm),
             env: Vec::new(),
+            config: cx.env.config.env.clone(),
         };
         let spec = BootSpec {
             image: cx.hvm_image(),

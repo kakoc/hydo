@@ -30,6 +30,7 @@ members = [
     "hydo/crates/hydo-agent-proto",
     "hydo/crates/hydo-control",
     "hydo/crates/hydo-hvx",
+    "hydo/crates/hydo-hvm",
 ]
 exclude = ["sdk", "hydo/onboard/examples"]
 
@@ -62,6 +63,7 @@ hydo-results = { path = "hydo/crates/hydo-results" }
 hydo-agent-proto = { path = "hydo/crates/hydo-agent-proto" }
 hydo-control = { path = "hydo/crates/hydo-control" }
 hydo-hvx = { path = "hydo/crates/hydo-hvx" }
+hydo-hvm = { path = "hydo/crates/hydo-hvm" }
 
 [profile.release]
 opt-level = 3

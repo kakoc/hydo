@@ -42,7 +42,11 @@ fn main() {
                 let k =
                     hvm::kernel_for(&image, None, &root.join("hv/hvm/explore/out/Image-explore"))
                         .expect("kernel");
-                (Box::new(hvm::Hvm::for_release(&root)), k, None)
+                (
+                    Box::new(hvm::Hvm::for_release(&root, hydo_config::Env::process())),
+                    k,
+                    None,
+                )
             }
         };
     let spec = |dir: &str| BootSpec {
