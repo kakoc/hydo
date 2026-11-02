@@ -2,7 +2,8 @@
 //!
 //! An engine boots a guest image, takes the two snapshot points every image defines, runs one
 //! schedule at a time and answers with a verdict and fingerprints. Two engines exist today, both
-//! driven over the same text protocol:
+//! driven with the same typed calls (`hydo-engine-proto`; [`link::Link`] carries them as values to
+//! an engine thread of this process, or as the protocol's lines to an engine program):
 //!
 //! - [`hvx::Hvx`]: the Rust engine `hydo-hvx` (`hydo/crates/hydo-hvx`) on x86_64 Linux with the
 //!   hvx kernel module (`/dev/hvx`): on a thread of this process when it can open the device,
@@ -61,6 +62,7 @@ pub mod hvm;
 pub mod hvx;
 pub mod image;
 pub mod inproc;
+pub mod link;
 pub mod lockstep;
 mod process;
 pub mod protocol;
@@ -70,9 +72,10 @@ use std::fmt;
 use std::path::PathBuf;
 use std::time::Duration;
 
+pub use link::{ChanLink, Link, TextLink};
 pub use lockstep::{DiskOff, Driver, Lockstep, LockstepStart};
 pub use process::{ControlledBoot, ControlledRun};
-pub use protocol::{BranchOutcome, BranchRequest, Ready, RunResult};
+pub use protocol::{BranchOutcome, BranchRequest, EngineMsg, HostMsg, Ready, Request, RunResult};
 
 /// Which engine a spec is for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

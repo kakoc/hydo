@@ -14,6 +14,8 @@ pt = ["dep:cc"]
 
 [dependencies]
 libc = "0.2"
+hydo-schedule = { workspace = true }
+hydo-engine-proto = { workspace = true }
 
 [build-dependencies]
 cc = { version = "1", optional = true }

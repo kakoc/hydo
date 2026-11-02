@@ -22,6 +22,26 @@
 //! the init logs it, so a rewritten guest part would be a different run with a different
 //! fingerprint; a non-canonical one is refused with a message instead.
 //!
+//! # The one parser, and how to add a token
+//!
+//! Since M142 this crate is the only reader of schedule text. The hvx engine takes a typed
+//! [`Schedule`] (`hydo_hvx::sched::Sched::from_schedule` turns it into what the module arms; the
+//! program `hydo-hvx` parses its request lines here too), and the host controller (`hydo-control`)
+//! reads the typed [`GuestToken`]s. To add a token:
+//!
+//! - **a host token**: a variant of [`HostToken`] (`host.rs`: its `key`, its `parse` arm, its
+//!   `Display` arm) and, if it constrains other tokens, a rule in `Schedule::check`. Then the
+//!   engines apply the typed value: hvx in `Sched::from_schedule` (`hydo-hvx/src/sched.rs`) and
+//!   wherever the engine uses that field; the Mac engine `hv/hvm/explore/serve.c` still reads the
+//!   host text with its own C parser until it is ported to Rust (M143), so a host token for the
+//!   Mac is also added there. The explorer (`hydo-explore`) generates and shrinks it.
+//! - **a guest token**: a variant of [`GuestToken`] (`guest.rs`: its letter in [`RESERVED`], its
+//!   `parse` arm, its `Display` arm). The engines only type the guest text into the guest; the host
+//!   controller acts on the typed value (`hydo-control/src/schedule.rs` `run_cfg`, or a module in
+//!   `hydo-control/src/features/`).
+//! - **an engine request or command**: see `hydo-engine-proto` (the typed calls between hydo and
+//!   its engines, and their one text form).
+//!
 //! API contract other crates rely on: [`Schedule::parse`] and `FromStr`, `Display` (the canonical
 //! text), [`Schedule::host_text`] / [`Schedule::guest_text`] (the two halves as the engines see
 //! them), [`Schedule::has_power_cut`] (a `C=` token or a `cf=` host token: a recovery boot follows).

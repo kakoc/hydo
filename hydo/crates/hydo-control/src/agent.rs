@@ -55,11 +55,8 @@ pub fn default_cadence(kind: EngineKind) -> u64 {
 pub fn engine_schedule(s: &Schedule, cadence: u64) -> Result<(Schedule, Schedule), String> {
     let mut full = s.clone();
     match s.host_token("rb") {
-        None => {
-            let t = HostToken::parse(&format!("rb={cadence}")).map_err(|e| e.message)?;
-            full.host.push(t);
-        }
-        Some(t) if t.to_string() == format!("rb={cadence}") => {}
+        None => full.host.push(HostToken::Rb(cadence)),
+        Some(HostToken::Rb(n)) if *n == cadence => {}
         Some(t) => {
             return Err(format!(
                 "an agent image runs at rb={cadence} (its worker boots at that cadence, and a \
@@ -559,8 +556,7 @@ impl Engine for AgentEngine {
 
     fn start(&self, spec: &BootSpec, stderr_log: &Path) -> Result<Box<dyn Worker>, EngineError> {
         let boot_s = Schedule {
-            host: vec![HostToken::parse(&format!("rb={}", self.cadence))
-                .map_err(|e| EngineError::Unsupported(e.message))?],
+            host: vec![HostToken::Rb(self.cadence)],
             guest: Vec::new(),
         };
         let mut cb = self.inner.start_controlled(spec, &boot_s, stderr_log)?;

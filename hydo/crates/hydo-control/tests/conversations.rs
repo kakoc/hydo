@@ -11,7 +11,7 @@ use hydo_control::lockstep_link::LockstepLink;
 use hydo_control::{
     run, Controller, Ending, Header, Out, ScheduleController, Seen, Start, StopInfo, Transcript,
 };
-use hydo_engine::lockstep::{escape, Lockstep};
+use hydo_engine::lockstep::{escape, Lockstep, TextLink};
 use support::fake::Fake;
 use support::model::{check, Conv};
 use support::{converse, manifests, plan_of};
@@ -156,10 +156,9 @@ fn the_lockstep_link_speaks_the_engine_protocol() {
         escape(hello.trim_end().as_bytes()),
         escape(reply.trim_end().as_bytes())
     );
-    let mut r = std::io::Cursor::new(engine.into_bytes());
-    let mut w = Vec::new();
+    let mut tl = TextLink::new(std::io::Cursor::new(engine.into_bytes()), Vec::new());
     {
-        let mut ls = Lockstep::new(&mut r, &mut w);
+        let mut ls = Lockstep::new(&mut tl);
         let mut link = LockstepLink::new(&mut ls);
         let fin = run(&mut link, &mut Tiny, Start::Boot, header("boot")).unwrap();
         assert_eq!(
@@ -170,7 +169,7 @@ fn the_lockstep_link_speaks_the_engine_protocol() {
         assert_eq!(fin.transcript.header.controller, "tiny");
     }
     assert_eq!(
-        String::from_utf8(w).unwrap(),
+        String::from_utf8(tl.writer().clone()).unwrap(),
         "SEND at=10 {\"id\":1,\"op\":\"syncfs\",\"v\":1}\\n\nCONT\nACK 1\nEND HYDO-ORACLE: OK tiny\n"
     );
 }

@@ -474,7 +474,8 @@ Three modules of `src/schedule/`, each called from a one-line `SEAM(...)` hook i
 - **`composer.rs`** is hydo-composer.sh (`/etc/hydo/compose.sh`). `Plan::compose`
   (`ComposePlan`) holds the HYDO_COMPOSE_* parameters, compose.list, compose.checks and
   compose.saved/ as hydo-build stages them. The compose.sh calls of a composed plan are replaced:
-  `setw` in `set_knob` for `W` (parse_w as the shell parses it; the seed form's entries from
+  `setw` in `set_knob` for `W` (parse_w's variables from hydo-schedule's typed `Compose`, and a
+  saved composition's text as the shell reads it, since M142; the seed form's entries from
   hydo-composer's generator with PLAN_AWK's x/o/n filters; RES_AWK with its messages for the
   resolved and saved forms), `first` in `provision`, `step` in `step_range_core`, and `verdict`,
   `end IDX` and `check IDX` in `eval_inv` (`verdict` is answered from the host's state; the other
@@ -505,9 +506,10 @@ checked by the shell model as written here):
    provision.log) is not written; nothing reads it.
 6. **The step's death check.** After `stop_all` the daemon is gone and `$C/done` exists, so a
    later `step` returns 0 at once, as the shell's `kill -0` test does.
-7. **The empty seed (`W=,p2`).** busybox ash's `$((0x))` was not checked; the controller treats it
-   as the shell failing (no `HYDO-COMPOSE error` line, the knob fails). The schedule parser never
-   lets it through (it wants 8 hex digits), nor an unknown field or a key that is not hex.
+7. **The empty seed (`W=,p2`).** busybox ash's `$((0x))` was not checked; the controller treated
+   it as the shell failing (no `HYDO-COMPOSE error` line, the knob fails). The schedule parser
+   never lets it through (it wants 8 hex digits), nor an unknown field or a key that is not hex;
+   since M142 the controller reads W only from the parser's typed value, so these paths are gone.
 8. **Error-log text.** A busybox awk error on an expression the scan cannot compile is reported as
    "error-log scan: awk: <svc>: <the regex crate's message>", not regerror's text. A byte that is
    not UTF-8 in a record becomes U+FFFD in the report line (the shell printed it raw). Busybox's
