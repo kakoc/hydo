@@ -464,6 +464,25 @@ impl ScheduleController {
     }
 }
 
+/// The letter of a single-fault token (K=, P=, X=) the schedule has more than once (M141). A
+/// second one used to replace the first without a word: a schedule meant to kill three nodes of
+/// a cluster killed one.
+fn repeated_fault(s: &Schedule) -> Option<char> {
+    let mut seen = Vec::new();
+    for t in &s.guest {
+        if matches!(
+            t,
+            GuestToken::Kill { .. } | GuestToken::Pause(_) | GuestToken::TimedKill { .. }
+        ) {
+            if seen.contains(&t.letter()) {
+                return Some(t.letter());
+            }
+            seen.push(t.letter());
+        }
+    }
+    None
+}
+
 /// Reads the guest part of a schedule for `plan`, refusing the tokens that are seams.
 fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
     let mut c = RunCfg {
@@ -472,6 +491,11 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
     };
     // (no driven token depends on the plan since T= and B= are; the remaining seams may)
     let _ = plan;
+    if let Some(l) = repeated_fault(s) {
+        return Err(Unsupported::other(format!(
+            "{l}= appears more than once in the schedule; one {l}= token per schedule (several services at once: reactions, A=<event>:kill-<svc> or :stop-<svc>-<ms>)"
+        )));
+    }
     for t in &s.guest {
         let text = t.to_string();
         let value = text.split_once('=').map(|x| x.1).unwrap_or("").to_string();
@@ -2326,5 +2350,20 @@ mod tests {
         let c = chunks(&t);
         assert!(c.iter().all(|x| x.len() <= CHUNK && x.ends_with('\n')));
         assert_eq!(c.concat(), t);
+    }
+
+    #[test]
+    fn a_fault_token_twice_is_refused() {
+        let rep = |t: &str| repeated_fault(&Schedule::parse(t).unwrap());
+        assert_eq!(rep("disk=none | run K=n1@3+4 K=n2@3+4 K=n3@3+4"), Some('K'));
+        assert_eq!(rep("disk=none | run P=a@2+1 K=b@3+1 P=c@4+1"), Some('P'));
+        assert_eq!(
+            rep("disk=none | run K=a@2+1 P=a@3+1 C=12 N=a@1-3:loss,5%"),
+            None
+        );
+        assert_eq!(
+            rep("disk=none | run A=x:kill-n1 A=x:kill-n2 A=x:kill-n3"),
+            None
+        );
     }
 }

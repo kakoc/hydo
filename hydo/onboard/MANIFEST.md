@@ -537,6 +537,10 @@ them in order), waits until the queue is empty (at most the largest delay in for
 `network fault lifted: queued=<n> drained_ms=<ms> left=<n>`. Before 2026-10-23 the qdisc was
 deleted at once and every queued packet was lost, so TCP retransmitted after a timeout.
 
+A schedule holds at most one `K=`, one `P=` and one `X=`: a second one is refused (Milestone
+141; before, it silently replaced the first). To crash or stop several services at once, use
+reactions (`A=<event>:kill-<svc>`, one per service, below).
+
 A token naming a service the manifest does not have is ignored. `hydo explore` draws its
 faults from the manifest (the hydo-explore crate's `space.rs`): kills and pauses from all
 services, network and one-way faults from services with a `port:`, knob values from

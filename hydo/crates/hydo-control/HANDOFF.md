@@ -96,7 +96,10 @@ controller's choice.
     - restart_dead brings the service back at the end, after the timer was joined;
     - at a power cut the timer is stopped.
 13. **Several tokens of one letter.** The last one wins, as in the shell's `case` assignments.
-    Knobs are applied in token order.
+    Knobs are applied in token order. Changed in M141 for `K=`, `P=` and `X=`: a second one is
+    refused (`repeated_fault`), because a user who wrote one kill per node of a cluster got one
+    kill and no word; several services are faulted at once with reactions (`A=…:kill-<svc>`).
+    The other letters keep the shell's rule.
 14. **`sort -n` with equal numbers.** The ties are put in byte order of the whole line (GNU sort's
     last-resort rule). Busybox's rule was not checked; the ids are numbers in practice.
 15. **The recovery boot's `command:` log line** is written as `oracle <acked ids> failed <failed
