@@ -20,8 +20,8 @@ use crate::virtio::{self, F_DROP, F_ERROR, F_UNFLUSHED};
 use crate::vmm::{now_s, VSnap, VmOpts, Vmm, NSR, SR};
 use crate::{catch_fatal, fatal, say, Diag};
 use hydo_engine_proto::{
-    Answer, DiskOff, EngineMsg, Event, HostCmd, Phase, Ready, Request, RunResult, SendAnswer,
-    Sent, Stop, StopWhy,
+    Answer, DiskOff, EngineMsg, Event, HostCmd, Phase, Ready, Request, RunResult, SendAnswer, Sent,
+    Stop, StopWhy,
 };
 use hydo_hvx::cstr::{self, find};
 use hydo_hvx::port::{Cmd, Port, Req};
@@ -341,7 +341,11 @@ impl Host {
             let at = self.c.at;
             self.c.k.s[i].sent = at;
             self.c.k.ntyped += 1;
-            let base = if self.c.k.inh != 0 { self.c.k.inh } else { OFFSET };
+            let base = if self.c.k.inh != 0 {
+                self.c.k.inh
+            } else {
+                OFFSET
+            };
             let mut h = fnv_u64(at, base);
             h = fnv(&len.to_le_bytes(), h);
             h = fnv(&self.c.k.s[i].buf, h);
@@ -645,7 +649,6 @@ impl Host {
     }
 }
 
-
 fn last_verdict(vm: &Vmm, from: usize) -> String {
     let len = vm.m.console_len as usize;
     let c = &vm.console[..len];
@@ -678,7 +681,6 @@ fn stop_name(s: i32) -> &'static str {
         _ => "?",
     }
 }
-
 
 fn tj_wanted(t: &Tjit) -> bool {
     t.n_explicit != 0 || (t.permille != 0 && t.max_delay != 0)
@@ -1132,7 +1134,9 @@ impl Engine {
         );
         match r {
             Some(r) => self.h.emit(EngineMsg::Result(Box::new(r))),
-            None => self.h.say(&format!("hvmx: {tag}: a RESULT that does not read back: {verdict}")),
+            None => self.h.say(&format!(
+                "hvmx: {tag}: a RESULT that does not read back: {verdict}"
+            )),
         }
     }
     /// RESUME <tag> <snapshot>: continue a controlled run from a SNAP in a fresh VM
@@ -1367,7 +1371,14 @@ impl Engine {
             ));
             cap(&mut tjinfo);
         }
-        self.result(&tag, fnv_u64(ffp, wfp), wfp, now_s() - t0, &tjinfo, &verdict);
+        self.result(
+            &tag,
+            fnv_u64(ffp, wfp),
+            wfp,
+            now_s() - t0,
+            &tjinfo,
+            &verdict,
+        );
         if self.h.c.on {
             self.h.ctl_finish();
         }
@@ -1494,7 +1505,6 @@ impl Engine {
         }
     }
 }
-
 
 fn ram_mib_parse(v: &str, what: &str, diag: &Diag) -> Option<u64> {
     let (n, used) = cstr::strtoull(v.as_bytes(), 10);
