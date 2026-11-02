@@ -54,8 +54,6 @@ fn spawn(
     };
     let start = Start {
         mode,
-        control_one: false,
-        control_boot: true,
         kernel: spec.kernel.clone(),
         initrd: spec.image.clone(),
         outdir: spec.outdir.clone(),

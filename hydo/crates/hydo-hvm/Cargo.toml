@@ -8,7 +8,6 @@ rust-version.workspace = true
 
 [dependencies]
 libc = "0.2"
-flate2 = { workspace = true }
 # the C library's number parsing as the engines read schedules (hydo_hvx::cstr)
 hydo-hvx = { workspace = true }
 # the typed engine calls (M142) and the one schedule parser
