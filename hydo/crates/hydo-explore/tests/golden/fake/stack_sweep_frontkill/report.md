@@ -4,7 +4,7 @@
 |---|---|
 | schedules | 40 |
 | strategy | sweep:frontkill |
-| image | explore-disk.img |
+| image | scripted-disk.img |
 | workers | N |
 | sweep_wall_s | N |
 | runs_per_hour | N |
@@ -31,7 +31,7 @@
 - needs a tick-timing change: no
 - verdict: `HYDO-ORACLE: VIOLATION front lost an order order=0`
 - fingerprint, two runs: `cad881312f4e46e3` / `cad881312f4e46e3` (identical)
-- by hand: `hydo run --image <dir>/explore-disk.img "disk=none dseed=0 | run Q=2 X=front@0~0"`
+- by hand: `hydo run --image <dir>/scripted-disk.img "disk=none dseed=0 | run Q=2 X=front@0~0"`
 
 ## Property table over every schedule (hvx/ASSERTIONS.md)
 

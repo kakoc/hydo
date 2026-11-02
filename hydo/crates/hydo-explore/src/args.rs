@@ -3,11 +3,15 @@
 //! default any more: without it the pool is sized from the machine ([`hydo_engine::Engine::max_workers`]).
 
 pub const USAGE: &str = "usage: hydo explore [--seeds 1-200] [--strategy random|swarm|swarm-pos|process] [--workers N]
-       [--image IMG] --out DIR [--schedule S] [--sweep KIND] [--manifest hydo.yaml] [--backend hvx|hvm]
+       --image IMG --out DIR [--schedule S] [--sweep KIND] [--manifest hydo.yaml] [--backend hvx|hvm]
        [--timing] [--new-faults] [--durable-only] [--concurrency] [--more-faults] [--preempt] [--buggify]
        [--freeze-call] [--protocol-faults] [--grpc-faults] [--vcpus N --turns [--bursts]] [--cpu v2|v3]
        [--ram-mib N] [--known-errors FILE] [--errors report|fail]
        [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...]] ... (explore.py's options)";
+
+/// The refusal without `--image` (Milestone 146: explore.py's default, `explore-disk.img`, is a
+/// shell-init image, which hydo has not run since Milestone 145).
+pub const NO_IMAGE: &str = "the following arguments are required: --image (an agent image built with hydo build: a file name in $HYDO_BUILD, or a path; the old default explore-disk.img was a shell-init image and was removed in Milestone 146)";
 
 #[derive(Clone, Debug)]
 pub struct Args {
@@ -75,7 +79,9 @@ impl Default for Args {
         Args {
             seeds: "1-200".into(),
             workers: None,
-            image: "explore-disk.img".into(),
+            // no default since M146 (explore.py's `explore-disk.img` is a shell-init image,
+            // refused since M145): parse refuses an empty one with NO_IMAGE
+            image: String::new(),
             out: String::new(),
             schedule: None,
             no_shrink: false,
@@ -338,6 +344,9 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
     if !out_given {
         return Err("the following arguments are required: --out".into());
     }
+    if a.image.is_empty() {
+        return Err(NO_IMAGE.into());
+    }
     Ok(a)
 }
 
@@ -354,6 +363,8 @@ mod tests {
         let a = p(&[
             "--out",
             "o",
+            "--image",
+            "i.img",
             "--seeds",
             "1-5",
             "--strategy=swarm",
@@ -367,8 +378,22 @@ mod tests {
             ("1-5", "swarm", true, Some(2))
         );
         assert!(p(&["--seeds", "1-5"]).is_err());
-        assert!(p(&["--out", "o", "--strategy", "bogus"]).is_err());
-        assert!(p(&["--out", "o", "--fc"]).is_err());
-        assert!(p(&["--out", "o", "--bursts"]).unwrap().bursts);
+        let i = ["--image", "i.img"];
+        assert!(p(&[&i[..], &["--out", "o", "--strategy", "bogus"]].concat()).is_err());
+        assert!(p(&[&i[..], &["--out", "o", "--fc"]].concat()).is_err());
+        assert!(
+            p(&[&i[..], &["--out", "o", "--bursts"]].concat())
+                .unwrap()
+                .bursts
+        );
+    }
+
+    #[test]
+    fn the_image_has_no_default() {
+        assert_eq!(p(&["--out", "o"]).unwrap_err(), NO_IMAGE);
+        assert_eq!(
+            p(&["--out", "o", "--image", "x.img"]).unwrap().image,
+            "x.img"
+        );
     }
 }

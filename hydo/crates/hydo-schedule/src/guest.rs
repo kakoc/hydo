@@ -1,5 +1,5 @@
 //! The guest part of a schedule: `run` and the tokens the guest's init applies (hydo-init.sh
-//! explore_run and its extensions, the stack's stack-explore.sh).
+//! explore_run and its extensions, and until M146 the stack's stack-explore.sh).
 //!
 //! The engines type the guest part on the guest's serial console and the init logs it, so the
 //! console -- and the run's fingerprint -- contains the text exactly as written. A guest token

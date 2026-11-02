@@ -19,7 +19,7 @@
 //! - `depth1map`: the trigger map of a defect from two depth-1 sweeps (no VM runs).
 //! - `d7prob`: how often the generators draw d7's measured trigger set (no VM runs).
 //! - `addbuggify`: route an order service's store calls through the BUGGIFY wrappers (a build step
-//!   of build-bench-bg.sh).
+//!   of build-order-services.sh; of build-bench-bg.sh until M146).
 //!
 //! The output files (`results.jsonl`, `runs-rep<r>.jsonl`, `confirm.jsonl`, `<image>.jsonl`) and
 //! the printed lines are the Python tools', field for field (json.dumps' separators and key order).

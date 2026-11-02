@@ -1934,7 +1934,7 @@ fn pause_timer(fx: &mut F<'_>, ctx: &Ctx, svc: &str, off: u64, dur: u64) -> Step
     Ok(())
 }
 
-/// The stack's kill_timer (hydo/explore/stack-explore.sh) for X=: after off ms, kill the
+/// The stack's kill_timer (hydo/explore/stack-explore.sh, deleted in M146: `git show ed706db:hydo/explore/stack-explore.sh`) for X=: after off ms, kill the
 /// service's tree (asserting whether a request was in flight). hydo-init.sh has no X= (it reads
 /// it as an unknown knob and the explorer never draws it for a manifest); the controller gives
 /// it the stack's meaning, and the service is restarted by restart_dead at the end.

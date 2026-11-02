@@ -38,6 +38,11 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// The image every scenario names (the scripted engine never opens it). Until M146 the scenarios
+/// took the explorer's default, `explore-disk.img`; that default is gone (a shell-init image), and
+/// the goldens were re-recorded once for the new name.
+const IMAGE: [&str; 2] = ["--image", "scripted-disk.img"];
+
 fn main() {
     if std::env::var_os("HYDO_FAKE_ENGINE").is_some_and(|v| v == "1") {
         engine::main();
@@ -237,12 +242,15 @@ fn scenario(name: &str, args: &[&str]) {
         Ok(p) if !p.trim().is_empty() => {
             let w: Vec<&str> = p.split_whitespace().collect();
             let mut c = Command::new(w[0]);
-            c.args(&w[1..]).args(args).args(["--workers", "2", "--out"]);
+            c.args(&w[1..])
+                .args(args)
+                .args(IMAGE)
+                .args(["--workers", "2", "--out"]);
             c
         }
         _ => {
             let mut c = Command::new(env!("CARGO_BIN_EXE_hydo-explore"));
-            c.args(args).args(["--workers", "3", "--out"]);
+            c.args(args).args(IMAGE).args(["--workers", "3", "--out"]);
             c
         }
     };

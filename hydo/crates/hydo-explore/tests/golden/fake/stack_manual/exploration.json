@@ -9,6 +9,8 @@
     "argv": [
       "--schedule",
       "disk=cut dseed=0 | run C=4 R=everysec",
+      "--image",
+      "scripted-disk.img",
       "--workers",
       "3",
       "--out",
@@ -16,8 +18,8 @@
     ]
   },
   "image": {
-    "path": "explore-disk.img",
-    "resolved": "<dir>/explore-disk.img"
+    "path": "scripted-disk.img",
+    "resolved": "<dir>/scripted-disk.img"
   },
   "engine": {
     "backend": "hvx",

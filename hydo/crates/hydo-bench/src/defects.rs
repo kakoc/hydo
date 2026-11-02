@@ -29,7 +29,7 @@ pub const OLD: [(&str, &str); 8] = [
 ];
 
 /// d8-d12 (M59): harder defects patched into hydo/bench/base/main-m59-control.go, built by
-/// build-bench-m59.sh. d9's signature is the crash oracle ([`crash_verdict`]).
+/// build-order-services.sh (build-bench-m59.sh until M146). d9's signature is the crash oracle ([`crash_verdict`]).
 pub const M59: [(&str, &str); 5] = [
     ("d8-no-order-lock", r"present \d+ times|kafka_exactly_once"),
     ("d9-redis-unlocked", r"front door crashed"),
@@ -224,8 +224,8 @@ pub fn crash_line(outdir: &Path, tag: &str, max: usize) -> Option<String> {
 }
 
 /// run.py `crash_verdict`, the M59 crash oracle (the property "no process crashes", for
-/// the order service only): stack-explore.sh restarts a dead order service before the retry pass
-/// and prints its first panic/fatal-error lines; a SIGKILL (X=, K=) leaves no such line. Applied to
+/// the order service only): stack-explore.sh (deleted in M146) restarted a dead order service before the retry pass
+/// and printed its first panic/fatal-error lines; a SIGKILL (X=, K=) leaves no such line. Applied to
 /// the M59 defects and their control only, so earlier results keep their meaning.
 pub fn crash_verdict(outdir: &Path, tag: &str, verdict: &str, defect: &str) -> String {
     if !Set::is_m59(defect) || verdict_kind(verdict) != "ok" {

@@ -26,3 +26,10 @@ in, all 17 remaining scenarios gave these files byte for byte; then they were re
 the one intended change: every "by hand" line names `hydo run --image <image> "<schedule>"` (the
 engine program's plain `one` mode it named is gone). The `stack_branch` scenario was deleted with
 `--branch`.
+
+Milestone 146: the explorer lost its default `--image` (explore.py's `explore-disk.img`, a shell-init
+image refused since M145), so every scenario passes `--image scripted-disk.img` (the scripted
+engine never opens it). The goldens were re-recorded once for that change; the diff was reviewed:
+in the verbatim files only the image name changed (`image.path`, `image.resolved`, the summary's
+`image`, the report's image row) and `config.argv` gained the two words `--image
+scripted-disk.img`; the digests' files grew by those two argv lines.

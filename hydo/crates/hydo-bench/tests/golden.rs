@@ -6,7 +6,7 @@
 //!   and --vcpus 2 --turns, on the seeds of repetitions 1-3 with budget 60, with each schedule's
 //!   finding class under both knob rules; per configuration the count, the SHA-256 of the lines
 //!   "<seed> <class cut> <class any> <schedule>\n" and the first line;
-//! - addbuggify.golden: addbuggify.py on the nine inputs of build-bench-bg.sh (control and d1-d7 on
+//! - addbuggify.golden: addbuggify.py on the nine inputs of build-bench-bg.sh (deleted in M146; control and d1-d7 on
 //!   base/main-0112b48.go plus the defect patch, d0 on base/main-7e32c4a.go) and on two bases that
 //!   already carry the wrappers: the report line and the SHA-256 of the rewritten file;
 //! - d7prob-*.golden: d7prob.py with 20,000 and 200,000 seeds;

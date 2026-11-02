@@ -4,7 +4,7 @@
 |---|---|
 | schedules | 228 |
 | strategy | sweep:protocol |
-| image | explore-disk.img |
+| image | scripted-disk.img |
 | workers | N |
 | sweep_wall_s | N |
 | runs_per_hour | N |
@@ -31,7 +31,7 @@
 - needs a tick-timing change: no
 - verdict: `HYDO-ORACLE: VIOLATION charged twice order=0`
 - fingerprint, two runs: `41947dc896f68534` / `41947dc896f68534` (identical)
-- by hand: `hydo run --image <dir>/explore-disk.img "disk=none dseed=0 | run H=payments.charge@0-1:drop"`
+- by hand: `hydo run --image <dir>/scripted-disk.img "disk=none dseed=0 | run H=payments.charge@0-1:drop"`
 
 ## Property table over every schedule (hvx/ASSERTIONS.md)
 

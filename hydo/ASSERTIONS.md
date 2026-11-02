@@ -181,7 +181,7 @@ details. `hydo_assert::emit_line(tag, &value)` writes any other one-line record 
 extension point for a history recorder).
 
 For an onboarded project, `buggify: true` in `hydo.yaml` makes the guest init write the
-schedule's `B=` token to `/tmp/hydo-buggify` (`hydo/onboard/MANIFEST.md`), as `stack-explore.sh`
+schedule's `B=` token to `/tmp/hydo-buggify` (`hydo/onboard/MANIFEST.md`), as `stack-explore.sh` (deleted in M146)
 does for the stack. `hydo/onboard/examples/rust-kv` is a complete example.
 
 **JavaScript** (`sdk/js`, package `hydo-assert`, Node.js; no dependencies; CommonJS and ESM;
