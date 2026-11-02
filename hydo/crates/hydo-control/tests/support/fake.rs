@@ -335,8 +335,10 @@ impl Fake {
             .any(|(_, p)| !p.running || p.dying || p.stopped)
     }
 
-    /// The workload's effect: ids [from, to) get outcomes, the ok ones are acknowledged.
-    fn workload(&mut self, from: u64, to: u64, retry: bool) {
+    /// The workload's effect: ids [from, to) get outcomes, the ok ones are acknowledged. The
+    /// outcomes, in order.
+    fn workload(&mut self, from: u64, to: u64, retry: bool) -> Vec<(u64, &'static str)> {
+        let mut got = Vec::new();
         let acked = "/tmp/hydo/acked".to_string();
         let outc = "/tmp/hydo/outcomes".to_string();
         let down = self.any_down();
@@ -387,6 +389,43 @@ impl Fake {
                     .entry(acked.clone())
                     .or_default()
                     .push_str(&format!("{i}\n"));
+            }
+            got.push((i, o));
+        }
+        got
+    }
+
+    /// M139: a schedule with reactions (`A=` in the salt) gets the SDK's assertion records of a
+    /// workload call on the console, each at its order's time and once per (id, outcome) and
+    /// call, as a process of the SDK writes them: the first acknowledged order's
+    /// `server.place_acked`, a failed order's `client.place_failed` and `server.store_error`,
+    /// an unknown one's `client.outcome_unknown`, every order's `order.fine` (an `always` that
+    /// holds: not an event) and a failed order's `order.broken` (an `always` that fails: an
+    /// event). Other schedules get none, so their deliveries are as before.
+    fn sdk_records(&mut self, t: u64, outcomes: &[(u64, &'static str)]) {
+        if !self.salt.contains(" A=") {
+            return;
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        for (k, (i, o)) in outcomes.iter().enumerate() {
+            let mut recs: Vec<(&str, &str, bool)> = vec![("always", "order.fine", true)];
+            match *o {
+                "ok" => recs.push(("sometimes", "server.place_acked", true)),
+                "failed" => {
+                    recs.push(("sometimes", "client.place_failed", true));
+                    recs.push(("sometimes", "server.store_error", true));
+                    recs.push(("always", "order.broken", false));
+                }
+                _ => recs.push(("sometimes", "client.outcome_unknown", true)),
+            }
+            for (ty, id, ok) in recs {
+                if !seen.insert((id, ok)) {
+                    continue;
+                }
+                let line = format!(
+                    "HYDO-ASSERT {{\"t\":\"{ty}\",\"id\":\"{id}\",\"ok\":{ok},\"msg\":\"fake\",\"details\":{{\"order\":{i}}}}}"
+                );
+                self.emit(t + 10 + 30 * k as u64 + 3, Msg::Kernel(line));
             }
         }
     }
@@ -659,7 +698,10 @@ impl Fake {
                         1 => 1,
                         _ => 0,
                     };
-                    self.workload(f, t2, h == "retry");
+                    let got = self.workload(f, t2, h == "retry");
+                    if h == "workload" {
+                        self.sdk_records(t, &got);
+                    }
                     let dur = 10 + 30 * t2.saturating_sub(f);
                     self.emit(
                         t + dur,

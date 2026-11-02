@@ -683,3 +683,63 @@ and M135's order services (franz-go v1.22.2). Hashes: control `96e63d7a…`, d8 
 
 **The triggers on the M136 images** (`hydo-bench confirm --kind agent --defects all --base`,
 results `/var/tmp/m136/bench/confirm` on the bare-metal machine): every trigger of d0–d7 failed twice with one fingerprint and its defect's signature, and every control passed it: d0 `cbbf4fc222f54ca8` (order 11 in Kafka, never acknowledged; fix OK `bba72ff55f35cc98`), d1 `adc48e618fcc6b76`, d2 `37535b22454d4f29`, d3 `2bb4fc57f3c55ec9` / `a18e87bbf308b07f`, d4 `8a11c9e2313997c9` / `93aaa0248e846692`, d5 `b430e80234ab276a`, d6 `ec416019120fc489`, d7 `4abeae3a3020e667`; the control's known bug (`O=kafka@25-30:resp:loss,100%`) is still there, twice `57101737a30caa64`. Of d8–d12 (`--defects m59`), d8 `Q=2d` `c310b97659bbe1b6`, d10 `X=front@9~20` `3e2bdc70fa6bcb84` (order 10 twice) and d12 `Q=2` `e0cab9aa24458f7a` failed twice with their signatures and passed on the control (`d5a4fcd2a8cf5f88`, `2ccfc3c2262bfd26`, `eb8fb562a7603135`); the two timing-dependent triggers moved: M135's d9 `Q=3` and d11 `cf=260` pass on the M136 images. Measured again (one run per point): d9 crashes for `Q=2`, `Q=4`, `Q=3d` and `Q=4d` of `Q=2,3,4,2d,3d,4d`; d11 fails at 9 of the 61 points `cf=245..305` (249, 261, 262, 272, 273, 283, 284, 294, 304; M135: 249, 250, 260, 271, 272, 282, 292, 302, 303, the same shape one flush later). The new triggers (`defects.rs`), confirmed twice with one fingerprint and the signature and passed on the control: d9 `Q=2` `05ff670ada38dab7` (the M50 panic; control `eb8fb562a7603135`), d11 `cf=261` `46be4104b850feec` (order 24 acknowledged but not marked published; control `c2601b12624791af`).
+
+## Reactive exploration (Milestone 139)
+
+`hydo-bench run --reactive fault|heal|both` adds reactions (`A=<event>[@<step>][+<ms>]:<action>`,
+hydo/onboard/MANIFEST.md "Reactions") to a strategy's schedules from their own random stream: the
+host controller applies a fault (a power cut at that instant, a kill, a stop) or a heal (the
+`P=` service resumed) at the first assertion record of an event the order service or its client
+writes (`server.store_error`, `client.outcome_unknown`, ...). `--dry` prints a cell's schedules
+and starts no VM. Plans: `c2-plans/m139.txt` (`px` = `--strategy process --more-faults --cf-range
+1-309`, `pxr` = the same with `--reactive both`; d0–d7 and d10 three repetitions, d11 ten) and
+`c2-plans/m139-modes.txt` (`pxf` = `--reactive fault`, `pxh` = `--reactive heal`), run by
+`c2-cells.sh` with `KINDS=agent` on the M136 images; results `/var/tmp/m139/{cells,modes}` on the
+box (`hydo-bench table` over the step directories).
+
+| defect | px | pxr (both) | pxf (fault) | pxh (heal) |
+|---|---|---|---|---|
+| d0-old-front-door | 3/3 (7\*, 1, 1) | 3/3 (7\*, 2, 1) | 3/3 (7\*, 1, 1) | 3/3 (7\*, 2, 1) |
+| d1-kafka-first | 3/3 (2, 2, 4) | 3/3 (2, 2, 2) | 3/3 (2, 2, 2) | 3/3 (2, 2, 4) |
+| d2-batched-publish-flag | 3/3 (6, 1, 3) | 3/3 (6, 5, 2) | 3/3 (6, 1, 2) | 3/3 (6, 5, 3) |
+| d3-blind-retry | 3/3 (4, 4, 4) | 3/3 (4, 4, 4) | 3/3 (4, 4, 4) | 3/3 (4, 4, 4) |
+| d4-produce-timeout-definite | 3/3 (7\*, 1, 1) | 3/3 (7\*, 18, 7\*) | 3/3 (7\*, 1, 30\*) | 3/3 (7\*, 18, 1) |
+| d5-myisam | 3/3 (7\*, 1, 1) | 3/3 (7\*, 1, 1) | 3/3 (7\*, 1, 1) | 3/3 (7\*, 1, 1) |
+| d6-client-deadline-definite | 3/3 (4, 1, 1) | 3/3 (4, 4, 4) | 3/3 (4, 1, 4) | 3/3 (4, 4, 1) |
+| d7-skip-last-record | 3/3 (17, 9, 4) | 3/3 (17, 9, 6) | 3/3 (17, 9, 4) | 3/3 (17, 9, 6) |
+| d10-outcome-in-memory | 3/3 (7, 44, 10) | 3/3 (7, 44, 10) | 3/3 (7, 44, 10) | 3/3 (7, 44, 10) |
+| by signature, of 27 | 24 | 23 | 23 | 24 |
+| runs to the first detection, sum | 154 | 187 | 183 | 181 |
+| d11-ack-unflushed-flag (ten repetitions) | 2/10 (3, 8) | 2/10 (8, 25) | – | – |
+
+The run of the first detection in each repetition; an asterisk: that detection's verdict is not
+the defect's signature (seed 1007's order-10 duplicate after `X=front@8~160`, which every
+strategy draws). **Negative.** No defect is found more often, and the sums of runs to the first
+detection are larger with every reactive mode. Per seed (the same base schedule in both columns),
+of the 178 seeds of d0–d7 and d10 both px and pxr ran, 168 give the same verdict class; the
+reactions turned 7 violations into passes and 3 passes into violations; of d11's 459 seeds 457 are
+the same, one each way. Three detections came from a reaction where the base schedule passed:
+d1 and d2 in repetition 3 (seed 3002, `A=server.redis_redialed@11:kill-mysql`: run 2 instead of
+4 and 3) and pxr's d11 hit at seed 10025 (`T=19:300 O=kafka@8-10:resp:loss,48%
+A=server.outcome_unknown:kill-front` with `cf=33`; the base schedule passes there, while px's
+second d11 hit, seed 2003, passes with pxr's heal token added). Why the reactions cost more than
+they gave: a reaction that comes early pre-empts the later fault that made the
+base schedule fail (seed 3001: `A=client.place_failed+50:cut` cuts the power at order 4, before
+the base's `C=30`, which is where d4 and d6 fail); a heal resumes Kafka while d7 needs it down to
+the end (seed 3004), or its event never comes (`client.outcome_unknown` is not written when the
+order service answers with an error) and the pause it lengthened to the end hides the base's
+failure (seed 2001, d0, d2, d4, d6). Reactions acted in 504 of the 792 drawn (heals 324 of 370;
+cuts, kills and stops 40–48 %). The lesson of M41–M56 holds: where faults land and in which
+combination matters more than how the next fault is chosen, and a fault anchored to an event the
+system writes lands in a narrower set of places than a seeded one.
+
+The token stays useful by hand, to aim a fault at a moment that is already known to matter
+(`hydo-bench list`, each schedule twice with one fingerprint, `/var/tmp/m139/demo`): `disk=cut
+dseed=0 | run O=kafka@5-30:resp:loss,100% A=client.place_failed+2000:cut` (a power cut two seconds
+after the first failed order, with Kafka's replies lost) fails d4 with its signature (`order=5 is
+in kafka … told it failed`, `dc71e9dd855afb04`) and passes on its control; `disk=none dseed=0 |
+run O=kafka@5-10:resp:loss,100% A=client.outcome_unknown+20:kill-front` fails d10 (`kafka order=5
+present 2 times`, `5dad4111935ccd9d`) and passes on its control (on the d1–d7 control it hits
+that control's known duplicate). `P=kafka@5+25` with and without `A=client.outcome_unknown@5+500:
+cont-kafka` gives one fingerprint on d4 (`55c8b28686400e7b`): there the order service never writes
+that event, the reaction never acts, and the guest runs exactly as without the token.

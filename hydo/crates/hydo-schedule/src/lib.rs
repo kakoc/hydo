@@ -34,7 +34,7 @@ mod num;
 pub use compose::{Compose, Omit, RangeItem, RangeList, ResolvedField, SeedField, WORKLOAD_KINDS};
 pub use guest::{
     Buggify, Direction, Freeze, FreezeDir, GuestToken, NetTarget, Netem, Pause, ProtocolFault,
-    ResetKind, Rule, Status, RESERVED,
+    React, ReactAction, ResetKind, Rule, Status, RESERVED,
 };
 pub use host::{Disk, HostToken, MAX_EXPLICIT};
 
@@ -228,10 +228,13 @@ impl Schedule {
         s
     }
 
-    /// A power cut happens in this run (a guest `C=` or a host `cf=`): a recovery boot follows.
+    /// A power cut can happen in this run (a guest `C=`, a host `cf=`, or a reaction `A=...:cut`
+    /// whose event may come, M139): a recovery boot may follow.
     pub fn has_power_cut(&self) -> bool {
-        self.guest.iter().any(|t| matches!(t, GuestToken::Cut(_)))
-            || self.host_token("cf").is_some()
+        self.guest.iter().any(|t| {
+            matches!(t, GuestToken::Cut(_))
+                || matches!(t, GuestToken::React(r) if r.action == ReactAction::Cut)
+        }) || self.host_token("cf").is_some()
     }
 
     /// True when `text` is a schedule in its canonical form (`parse(text)` prints it back).

@@ -58,6 +58,10 @@ pub(crate) struct Facts {
     pub exits: BTreeMap<u64, Exit>,
     /// Every other event (line, froze, resumed, dropped, warn), in the order the agent wrote them.
     pub events: Vec<Event>,
+    /// The guest's assertion records on the console, in order, as (id, whether the record is
+    /// the assertion's event: `ok:true` of a sometimes/reachable, `ok:false` of the others).
+    /// Kept only for a run with reactions (`A=`, M139); empty otherwise.
+    pub asserts: Vec<(String, bool)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -263,6 +267,12 @@ impl<S, K: Clone> Fx<'_, S, K> {
             self.threads[t].state = State::Cancelled;
         }
         self.record(Memo::Unit);
+    }
+
+    /// Whether this thread was cancelled (it runs once more at the stop of its cancellation, for
+    /// the answers seen up to then).
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled
     }
 
     /// Wait until a thread has finished (or was cancelled).

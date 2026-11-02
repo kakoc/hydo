@@ -11,10 +11,12 @@ use std::path::{Path, PathBuf};
 pub const USAGE: &str = "usage: hydo-bench <command> [options]   (hydo/bench/README.md)
 
   run      --strategy random|swarm|swarm-pos|process [--new-faults] [--buggify] [--bg-images]
-           [--concurrency] [--more-faults --cf-range LO-HI] [--knob-rule cut|any] [--vcpus N [--turns]]
+           [--concurrency] [--more-faults --cf-range LO-HI] [--reactive fault|heal|both]
+           [--knob-rule cut|any] [--vcpus N [--turns]]
            [--window N] [--defects all|m59|d1-...,...] [--reps 1-3] [--budget 60] [--workers 3]
-           [--kind agent|stack] --out DIR
-               cells of strategy x defect x repetitions; appends DIR/results.jsonl
+           [--kind agent|stack] --out DIR | --dry
+               cells of strategy x defect x repetitions; appends DIR/results.jsonl (--dry: print
+               each seed's schedule and start no VM)
   table    DIR...                       the detection table of finished cells (run --table DIR... too)
   confirm  --out DIR [--defects all|m59|...] [--workers 3] [--no-control] [--base] [--bg-images] [--vcpus N]
            [--kind agent|stack]
@@ -40,7 +42,7 @@ struct Opts {
     free: Vec<String>,
 }
 
-const FLAGS: [&str; 10] = [
+const FLAGS: [&str; 11] = [
     "--new-faults",
     "--buggify",
     "--bg-images",
@@ -51,6 +53,7 @@ const FLAGS: [&str; 10] = [
     "--base",
     "--check",
     "--table",
+    "--dry",
 ];
 
 fn parse(argv: &[String]) -> Result<Opts, String> {
@@ -163,6 +166,8 @@ fn cmd_run(root: &Path, o: &Opts) -> Result<(), String> {
         "--workers",
         "--out",
         "--kind",
+        "--reactive",
+        "--dry",
     ])?;
     let strategy = o
         .get("--strategy")
@@ -189,8 +194,20 @@ fn cmd_run(root: &Path, o: &Opts) -> Result<(), String> {
     if more && cf.is_none() {
         return Err("--more-faults needs --cf-range LO-HI (the FLUSH count of the control: explore --schedule \"disk=cut dseed=0 cfn | run\")".into());
     }
+    // M139: reactions (A=) on top of the strategy's schedules, from their own stream
+    let reactive = o.get("--reactive").map(str::to_string);
+    if let Some(r) = &reactive {
+        if !["fault", "heal", "both"].contains(&r.as_str()) {
+            return Err(format!("--reactive {r}: fault, heal or both"));
+        }
+    }
     let (lo, hi) = range(o.get("--reps").unwrap_or("1-3"))?;
-    let out = o.get("--out").ok_or("--out is required")?;
+    let dry = o.flag("--dry");
+    let out = match o.get("--out") {
+        Some(d) => d,
+        None if dry => "",
+        None => return Err("--out is required".into()),
+    };
     let c = Cell {
         strategy: strategy.to_string(),
         knob_rule_any: knob == "any",
@@ -199,6 +216,7 @@ fn cmd_run(root: &Path, o: &Opts) -> Result<(), String> {
         concurrency: o.flag("--concurrency"),
         more_faults: more,
         cf_range: if more { cf } else { None },
+        reactive,
         vcpus: v,
         turns,
         window: o.num("--window", 0)?,
@@ -207,6 +225,17 @@ fn cmd_run(root: &Path, o: &Opts) -> Result<(), String> {
         workers: o.num("--workers", 3)?,
         out: PathBuf::from(out),
     };
+    if dry {
+        // M139: the cell's schedules, one `<seed> <schedule>` line each; no VM is started
+        let ex = c.ex();
+        for &rep in &c.reps {
+            let seeds: Vec<i64> = (rep * 1000 + 1..=rep * 1000 + c.budget).collect();
+            for (sd, text) in cells::schedules(&ex, &c.strategy, &seeds)? {
+                println!("{sd} {text}");
+            }
+        }
+        return Ok(());
+    }
     let set = Set::new(Kind::select(o.get("--kind"))?, o.flag("--bg-images"));
     let names = Set::names(o.get("--defects").unwrap_or("all"))?;
     let eng = Engines::new(root, v, Vec::new());

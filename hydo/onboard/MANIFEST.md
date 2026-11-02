@@ -525,6 +525,7 @@ verdict rules are in `hydo/HISTORIES.md`.
 | `O=<a>-<b>@<from>-<to>:req\|resp:<netem>` | one direction of a link: `req` = packets from `a` to `b`, `resp` = from `b` to `a` |
 | `F=<svc>><peer>@<step>[#<n>][:<match>]:<dur>` | freeze `<svc>` at the n-th packet it **sends** to `<peer>` (`<` = **receives** from) at/after step `<step>`, for `<dur>` ms; only with `freeze` in `faults:` (see "Freeze at a call") |
 | `H=<target>@<from>-<to>:<rule>[,<rule>...]` | a protocol fault on a fake or proxy for steps `[from,to)`: an error, slow, missing or reset answer, or a duplicated / reordered / late / lost webhook; see "Fake outside services" |
+| `A=<event>[@<step>][+<ms>]:<action>` | a reaction (M139): from before step `step` (0 when not written) the host watches the console for the first SDK assertion record of `event` (`ok:true` of a `sometimes`/`reachable`, `ok:false` of the others), waits `ms` of guest time and does `<action>`: `cut` (a power cut at that instant: the workload and every service frozen, then the recovery boot), `kill-<svc>` (down until the heal), `stop-<svc>-<ms>` or `cont-<svc>` (resume a paused service: a pause healed at the first sign of no progress); reactions live during the steps only; see "Reactions" below |
 | `<X>=<value>` | a knob from `knobs:` |
 | host side: `disk=ioerr:<p>` / `lying:<p>` | disk I/O errors / a disk that drops acknowledged writes |
 
@@ -544,6 +545,27 @@ services, network and one-way faults from services with a `port:`, knob values f
 any other image. A knob token that collides with a built-in token (K P N O C T Q X F) is
 rejected. `hydo explore --freeze-call` draws `F=` for a manifest whose `faults:` lists `freeze`;
 `hydo explore --grpc-faults` draws gRPC-level `H=` tokens for a manifest with a gRPC proxy (see "gRPC faults").
+
+### Reactions (`A=`, `hydo explore --reactive`)
+
+A reaction is a fault the host decides during the run, when the system shows something: only
+host control makes it possible (the agent image's controller sees the guest's console at every
+stop). Its event is an assertion id of the system's own SDK records (`HYDO-ASSERT`, every SDK
+writes them to the console), for example `A=client.place_failed:cut` (a power cut the moment a
+client request first fails) or `P=kafka@5+25 A=client.outcome_unknown@5+500:cont-kafka` (Kafka
+paused from step 5 until 500 ms after the first request whose outcome the client could not
+know). A run with reactions is still a pure function of its schedule string and the guest's
+output, so `hydo repro "<schedule>"` and `hydo repro --transcript <control.jsonl>` both reproduce
+it; the shrinker drops a reaction, makes it act at once, arms it from the start or shortens a
+stop, and because the reaction is anchored to its event, dropping another fault does not leave it
+at a meaningless time. A reaction whose event never comes does nothing (its run sends the same
+commands as the schedule without it). `hydo explore --reactive fault|heal|both` draws them on top
+of any strategy from their own random stream (every other field of a seed's schedule stays as it
+was): `fault` adds `A=<event>[@<step>][+<ms>]:cut|kill-<svc>|stop-<svc>-<ms>` to 60% of the
+schedules, `heal` makes 70% of the counted pauses last to the workload's end with a
+`cont-<svc>` reaction at the first no-progress event. On a manifest give the events with
+`--react-events ID,...` and `--heal-events ID,...` (the defaults are the bug benchmark's order
+service's).
 
 ### Freeze at a call (stop a service at an exact point of its traffic)
 

@@ -66,6 +66,9 @@ mod netfault;
 mod netns;
 // restart policies (M134)
 mod restart;
+// reactions, the schedule token A= (M139)
+#[path = "features/react.rs"]
+mod react;
 
 /// What the host knows about the guest at a snapshot, carried into the conversations that resume
 /// from it (the design: host state at a snapshot is the schedule, the seeds and the events so far).
@@ -134,6 +137,8 @@ struct RunCfg {
     /// The values of N= and O= as written (NET-FAULTS reads them as the shell does).
     n: Option<String>,
     o: Option<String>,
+    /// A= (M139): the reactions, in token order.
+    a: Vec<hydo_schedule::React>,
 }
 
 #[derive(Debug)]
@@ -190,6 +195,8 @@ struct Host {
     starting: BTreeSet<String>,
     /// The restart policies' supervisors (schedule/restart.rs).
     restart: restart::State,
+    /// The reactions (M139, features/react.rs).
+    react: react::State,
 }
 
 /// One thread of the controller.
@@ -221,6 +228,8 @@ enum Part {
     },
     /// The supervisor of a service with a restart policy (M134).
     Restart(String),
+    /// A reaction (A=, M139): the index of its token.
+    React(usize),
 }
 
 fn label(p: &Part) -> String {
@@ -233,6 +242,7 @@ fn label(p: &Part) -> String {
         Part::Live(m) => liveness::label(m),
         Part::FreezeWatch { .. } => "freeze".into(),
         Part::Restart(s) => restart::label(s),
+        Part::React(i) => format!("react:a{i}"),
     }
 }
 
@@ -248,6 +258,8 @@ pub struct ScheduleController {
     started: bool,
     /// A fresh boot (no runner sync to wait for).
     fresh: bool,
+    /// The guest's assertion records are facts (a run with reactions, M139).
+    watch: bool,
 }
 
 /// The fault assertions explore_run declares, in its order (type, id, message).
@@ -300,6 +312,7 @@ impl ScheduleController {
     ) -> Result<ScheduleController, Unsupported> {
         let (mount_flags, mount_data) = mount_opts(&plan.data_opts)?;
         let fresh = at.is_none();
+        let watch = !run.a.is_empty();
         let at = at.cloned().unwrap_or_default();
         let ctx = Arc::new(Ctx {
             plan,
@@ -342,6 +355,7 @@ impl ScheduleController {
             fc_armed: None,
             starting: BTreeSet::new(),
             restart: Default::default(),
+            react: Default::default(),
         };
         Ok(ScheduleController {
             flow: Flow::new(host, Part::Main),
@@ -350,6 +364,7 @@ impl ScheduleController {
             waiting_hello: fresh,
             started: false,
             fresh,
+            watch,
         })
     }
 
@@ -496,6 +511,8 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
             // netns, M131), so no F= is refused any more.
             // SEAM(Clock): T=, driven by features/clock.rs
             GuestToken::Clock { at, delta } => c.t = Some((*at as i64, *delta)),
+            // M139: reactions (features/react.rs)
+            GuestToken::React(r) => c.a.push(r.clone()),
             // Every other letter is a knob to the shell (`?=*) set_knob`): B= (set_knob's BUGGIFY
             // branch with `buggify: true`, else an unknown knob), and H=, W=, Q= (core plans have
             // no fakes or composer; Q= is the stack's) are knobs the manifest does not have, so
@@ -596,6 +613,13 @@ impl Controller for ScheduleController {
                     self.facts.events.push(e.clone());
                     new = true;
                 }
+                // M139: a run with reactions keeps the guest's assertion records
+                Seen::Console(line) if self.watch => {
+                    if let Some(r) = react::record_of(line) {
+                        self.facts.asserts.push(r);
+                        new = true;
+                    }
+                }
                 Seen::UnknownEvent(_) | Seen::Console(_) => {}
                 Seen::Broken(why) => {
                     let line = format!("HYDO-ORACLE: ERROR agent protocol: {why}");
@@ -639,6 +663,7 @@ fn body(fx: &mut F<'_>, part: &Part) -> Step<()> {
         Part::Live(m) => liveness::live_monitor(fx, &ctx, m),
         Part::FreezeWatch { id, dur } => freeze::watch(fx, *id, dur),
         Part::Restart(s) => restart::watch(fx, &ctx, s),
+        Part::React(i) => react::watch(fx, &ctx, *i),
     }
 }
 
@@ -1647,6 +1672,12 @@ fn step_range_core(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
 fn step_range_run(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
     let st = if ctx.plan.compose.is_some() {
         composer::step(fx, ctx, a, b)? // SEAM(Composer): compose.sh step FROM TO
+    } else if !ctx.run.a.is_empty() {
+        // M139: the wait also ends at a reaction's power cut
+        match react::workload(fx, ctx, a, b)? {
+            Some(st) => st,
+            None => return Ok(()),
+        }
     } else {
         let e = env(
             fx,
@@ -1949,6 +1980,12 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         let (t, id, msg) = KILL_TIMER_DECL;
         fx.report(decl(t, id, msg));
     }
+    // M139: the reactions (A=), armed before their step
+    let reactions = react::armed(fx, ctx);
+    if !cfg.a.is_empty() {
+        let (t, id, msg) = react::REACT_DECL;
+        fx.report(decl(t, id, msg));
+    }
     // a token naming a service the manifest does not have is ignored
     let known = |s: &str| plan.service(s).is_some();
     let (mut ksvc, mut kat, mut kup) = (String::new(), -1i64, -1i64);
@@ -1996,6 +2033,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     let mut pts: Vec<i64> = [0, kat, kup, cat, pat, pup, tat, xat, steps]
         .into_iter()
         .chain(net.points())
+        .chain(reactions.iter().map(|(_, r)| r.at as i64))
         .filter(|p| *p >= 0 && *p <= steps)
         .collect();
     pts.sort();
@@ -2008,11 +2046,19 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     let (mut down, mut cut, mut paused) = (false, false, false);
     let (mut ptimer, mut xtimer): (Option<usize>, Option<usize>) = (None, None);
     let mut prev: Option<i64> = None;
+    // M139: the reactions' threads, and whether a reaction's power cut ended the steps
+    let mut rthreads: Vec<(usize, usize)> = Vec::new();
+    let mut rcut = false;
     for &p in &pts {
         if let Some(a) = prev {
             if a < p {
                 step_range(fx, ctx, a, p)?;
             }
+        }
+        if !cfg.a.is_empty() && react::cut_due(fx) {
+            cut = true;
+            rcut = true;
+            break;
         }
         if p == cat {
             cut = true;
@@ -2092,9 +2138,39 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         if p == tat {
             clock::clock_jump(fx, p, tdelta)?;
         }
+        // M139: a reaction is armed before its step, after that step's faults
+        for (i, r) in &reactions {
+            if r.at as i64 == p {
+                rthreads.push((*i, fx.start(Part::React(*i))?));
+            }
+        }
         prev = Some(p);
     }
+    if !cfg.a.is_empty() {
+        // M139: reactions are live during the steps only. A power cut stops them all; else the
+        // ones that saw no event are cancelled and the others finish before the heal (a
+        // reaction's power cut whose delay ends now takes the cut's path).
+        for &(i, t) in &rthreads {
+            if !cut && react::fired(fx, i) {
+                fx.join(t)?;
+            } else {
+                fx.cancel(t);
+            }
+        }
+        if !cut && react::cut_due(fx) {
+            cut = true;
+            rcut = true;
+        }
+    }
     if cut {
+        if rcut {
+            // a power cut at an instant of the workload: its client and every service frozen
+            // at once, before the ids are read
+            svc_sig(fx, "workload", Sig::Stop)?;
+            for s in &plan.services {
+                svc_sig(fx, &s.name, Sig::Stop)?;
+            }
+        }
         restart::stop(fx); // no service is started after the cut (M134)
         if let Some(t) = ptimer {
             fx.cancel(t); // no SIGCONT may follow the freeze
@@ -2144,13 +2220,21 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             Memo::Unit
         });
         // NO sync: it would flush the volatile write cache and close the window under test.
-        for s in &plan.services {
-            svc_sig(fx, &s.name, Sig::Stop)?;
+        if rcut {
+            let tok = react::cut_token(ctx, fx);
+            log(
+                fx,
+                format!("POWER CUT at the reaction {tok} (the workload and all services frozen)"),
+            );
+        } else {
+            for s in &plan.services {
+                svc_sig(fx, &s.name, Sig::Stop)?;
+            }
+            log(
+                fx,
+                format!("POWER CUT before step {cat} (all services frozen)"),
+            );
         }
-        log(
-            fx,
-            format!("POWER CUT before step {cat} (all services frozen)"),
-        );
         fx.report("hydo-explore-workload-done cut");
         fx.settle()?;
         return fx.end(ending);

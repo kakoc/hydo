@@ -30,6 +30,8 @@ pub struct Cell {
     pub concurrency: bool,
     pub more_faults: bool,
     pub cf_range: Option<(i64, i64)>,
+    /// M139: `fault`, `heal` or `both` (reactions on top of the strategy's schedules).
+    pub reactive: Option<String>,
     pub vcpus: u32,
     pub turns: bool,
     pub window: usize,
@@ -50,6 +52,8 @@ impl Cell {
             more_faults: self.more_faults,
             cf_range: self.cf_range,
             turns: self.turns,
+            react_fault: matches!(self.reactive.as_deref(), Some("fault" | "both")),
+            react_heal: matches!(self.reactive.as_deref(), Some("heal" | "both")),
             ..Ex::default()
         }
     }
@@ -75,6 +79,9 @@ impl Cell {
         if self.more_faults {
             l.push_str("+xcf");
         }
+        if let Some(r) = &self.reactive {
+            l.push_str(&format!("+react-{r}"));
+        }
         l
     }
 }
@@ -97,6 +104,13 @@ pub fn schedules(ex: &Ex, strategy: &str, seeds: &[i64]) -> Result<Vec<(i64, Str
         if ex.more_faults {
             let p = ex.parse(&text)?;
             text = ex.render(&ex.add_more_faults(p, u, strategy));
+        }
+        if ex.react_fault || ex.react_heal {
+            // M139: the reactions are added last, from their own stream, so a seed's schedule
+            // is the strategy's with A= tokens added (and a pause made to last to the end for a
+            // heal, the disk made `cut` for a reaction's power cut)
+            let p = ex.parse(&text)?;
+            text = ex.render(&ex.add_reactive(p, u));
         }
         out.push((sd, text));
     }
