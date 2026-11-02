@@ -3,15 +3,18 @@
 # lockstep-metal.sh -- the lock-step control check of milestone 118 on the bare-metal test machine
 # (run FROM THE MAC; docs/design/guest-control.md "The channel"; the protocol is described in
 # hydo/crates/hydo-engine/src/lockstep.rs and implemented by the Rust engine, hydo/crates/hydo-hvx).
+# Since milestone 145 it runs on an agent image (the shell-init image it used before cannot run).
 #
 #   hv/hvx/lockstep-metal.sh check
-#       the M116 feasibility experiments as a test: bytes typed into the serial input at exact
-#       icounts, in reaction to a console line, before and after a mid-run snapshot; each twice
-#       from S1, from a fresh boot and from the snapshot; every value must equal the recorded one
-#       (hydo/crates/hydo-engine/examples/lockstep_check.rs). Prints "lockstep_check: ALL PASS".
-#   hv/hvx/lockstep-metal.sh cost <image> "<schedule>" <rb>...
-#       the cost of stopping: the schedule as a plain RUN and as a CTL run whose host answers only
-#       CONT, once per cadence (rb=<n> added; 0 = none), on <image> in ~/hydo/build.
+#       the M116 feasibility experiments as a test: agent commands typed into the guest at exact
+#       icounts, in reaction to the agent's reply line, before and after a mid-run snapshot; each
+#       twice from S1, from a fresh boot and from the snapshot; every value must equal the recorded
+#       one (hydo/crates/hydo-engine/examples/lockstep_check.rs). Prints "lockstep_check: ALL PASS".
+#       The image is IMG (default explore-ob-redis-disk.img; relative to ~/hydo/build, or an
+#       absolute path): examples/redis built with `hydo build` (M140's `bde714a7…`).
+#   hv/hvx/lockstep-metal.sh cost <image> <end> <rb>...
+#       the cost of stopping: a CTL run whose host answers only CONT, ended at S1 + <end> icount,
+#       once per cadence (rb=<n>; 0 = none), on <image> (relative to ~/hydo/build or absolute).
 #
 # It syncs the Rust workspace (never hvx.c or hvx_abi.h) to ~/$HVX_METAL_TREE on the box, builds
 # the check program and the engine program hydo-hvx there with the box's Rust
@@ -29,10 +32,10 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 MODE="${1:-check}"
 [ $# -gt 0 ] && shift
 case "$MODE" in
-  check) IMG=explore-ob-redis-nq-disk.img;;
-  cost) [ $# -ge 3 ] || { echo "usage: $0 cost <image> \"<schedule>\" <rb>..." >&2; exit 2; }
+  check) IMG=${IMG:-explore-ob-redis-disk.img};;
+  cost) [ $# -ge 3 ] || { echo "usage: $0 cost <image> <end> <rb>..." >&2; exit 2; }
         IMG=$1; shift;;
-  *) echo "usage: $0 check | cost <image> \"<schedule>\" <rb>..." >&2; exit 2;;
+  *) echo "usage: $0 check | cost <image> <end> <rb>..." >&2; exit 2;;
 esac
 OUT="${OUT:-/var/tmp/lockstep-$MODE-$(date +%Y%m%d-%H%M%S)}"
 ARGS=""
@@ -50,10 +53,11 @@ cargo build --release --locked -q -p hydo-hvx -p hydo-engine --bin hydo-hvx --ex
 n=0
 while [ -e /var/tmp/hydo-QUIET ] && [ $n -lt 1800 ]; do sleep 5; n=$((n + 5)); done
 B=~/hydo/build
+case "$IMG" in /*) I=$IMG;; *) I=$B/$IMG;; esac
 mkdir -p "$OUT"
 echo ">> lockstep_check $MODE on $IMG, results in $OUT"
 if [ "$ENGINE" = process ]; then RUN=(env HYDO_ENGINE=process); else RUN=(~/bin/hvx-run sudo env HOME="$HOME" HYDO_ENGINE=inproc); fi
 timeout 7200 "${RUN[@]}" target/release/examples/lockstep_check "$MODE" "$HOME/$TREE/target/release/hydo-hvx" ~/bin/hvx-run \
-  "$B/bzImage" "$B/initramfs-kafka.cpio.gz" "$B/$IMG" "$OUT" "$@" 2>&1 | tee "$OUT/out.txt"
+  "$B/bzImage" "$B/initramfs-kafka.cpio.gz" "$I" "$OUT" "$@" 2>&1 | tee "$OUT/out.txt"
 exit "${PIPESTATUS[0]}"
 REMOTE
