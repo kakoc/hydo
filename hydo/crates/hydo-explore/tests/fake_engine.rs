@@ -242,7 +242,10 @@ fn scenario(name: &str, args: &[&str]) {
         Ok(p) if !p.trim().is_empty() => {
             let w: Vec<&str> = p.split_whitespace().collect();
             let mut c = Command::new(w[0]);
-            c.args(&w[1..]).args(args).args(IMAGE).args(["--workers", "2", "--out"]);
+            c.args(&w[1..])
+                .args(args)
+                .args(IMAGE)
+                .args(["--workers", "2", "--out"]);
             c
         }
         _ => {

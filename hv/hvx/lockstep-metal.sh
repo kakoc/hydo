@@ -10,7 +10,7 @@
 #       icounts, in reaction to the agent's reply line, before and after a mid-run snapshot; each
 #       twice from S1, from a fresh boot and from the snapshot; every value must equal the recorded
 #       one (hydo/crates/hydo-engine/examples/lockstep_check.rs). Prints "lockstep_check: ALL PASS".
-#       The image is IMG (default explore-ob-redis-disk.img; relative to ~/hydo/build, or an
+#       The image is IMG (required since M146; relative to ~/hydo/build, or an
 #       absolute path): examples/redis built with `hydo build` (M140's `bde714a7…`).
 #   hv/hvx/lockstep-metal.sh cost <image> <end> <rb>...
 #       the cost of stopping: a CTL run whose host answers only CONT, ended at S1 + <end> icount,
@@ -32,7 +32,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 MODE="${1:-check}"
 [ $# -gt 0 ] && shift
 case "$MODE" in
-  check) IMG=${IMG:-explore-ob-redis-disk.img};;
+  check) [ -n "${IMG:-}" ] || { echo "set IMG to the Redis agent image (examples/redis built with hydo build, M140 bde714a7...; since M146 there is no default: the old one in ~/hydo/build was a shell image)" >&2; exit 2; };;
   cost) [ $# -ge 3 ] || { echo "usage: $0 cost <image> <end> <rb>..." >&2; exit 2; }
         IMG=$1; shift;;
   *) echo "usage: $0 check | cost <image> <end> <rb>..." >&2; exit 2;;

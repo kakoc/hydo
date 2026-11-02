@@ -18,14 +18,15 @@
 > `build-bench-manifest.sh` on the bare-metal machine (section "The manifest images
 > (Milestone 135)" and "The manifest images after the switch (Milestone 136)" at the end, with the
 > triggers recorded on them). `hydo-bench` runs their agent images by default (`--kind agent`;
-> M135's shell images went with the shell init in M136, `--kind shell` is refused), and the hand-written
-> stack images that the older sections below describe with `--kind stack`. The stack images
-> (`build-bench*.sh` with `hv/hvx/images/build-stack.sh` and `hydo/explore/stack-explore.sh`)
-> stay only as the engine's regression baselines (`deploy-metal.sh`, the pinned reproducers on
-> `explore-disk.img` and `explore-fix-disk.img`), as the record of the measurements below, and as
-> the source of the manifest build's root files (the `-pin-kr` control's root); do not delete
-> them. They keep franz-go v1.17.1; the manifest images' order services are built from source
-> with v1.22.2 (`build-order-services.sh`).
+> M135's shell images went with the shell init in M136, `--kind shell` is refused; `--kind stack`,
+> the hand-written stack images that the older sections below describe, was removed in M145).
+> Since Milestone 146 the manifest images are built from sources and pinned Nix store paths only
+> (section "The manifest images from sources (Milestone 146)" at the end): the hand-written stack
+> images and their builders (`build-bench.sh`, `build-bench-m59.sh`, `build-bench-bg.sh`,
+> `hydo/explore/stack-explore.sh`, `hydo/explore/stack-src*/` and `build-stack.sh`'s explorer
+> hooks) were deleted (restore any of them with `git show ed706db:<path>`); the older sections
+> below are the record of what they measured. The order services are built from source by
+> `build-order-services.sh` (franz-go v1.22.2).
 
 Every explorer strategy comparison up to Milestone 45 rested on ONE bug: the pre-M39 front door
 (publish to Kafka, then fail the order because the Redis cache was down). This benchmark gives
@@ -116,7 +117,8 @@ their sequence numbers. Details: `docs/C2-BENCH.md` section 6 item 4.
 - `patches/<defect>.patch` — the defect, a unified diff against `hydo/stack/main.go`
   (generated once by `mkpatches.py`, removed in M108: it read today's `hydo/stack/main.go`, which
   no longer has the code the patches change; the patches apply to `base/main-0112b48.go`).
-- `build-bench.sh` — copies `hydo/stack`, applies a patch, builds
+- `build-bench.sh` (deleted in M146; `build-order-services.sh` and `build-bench-manifest.sh` build
+  the benchmark now) — copied `hydo/stack`, applied a patch, built
   `build/explore-bench-<defect>-disk.img` with `build-stack.sh` (`STACK_OUT=explore-bench-*`
   gets the explorer's serve mode; `STACK_GO_SRC` points at the patched copy). On the build machine
   box the pinned static musl gcc and Redis are gone (M46), so pass `HYDO_GCC_MUSL`,
@@ -539,7 +541,8 @@ builds give the same bytes. Binaries (sha256 prefixes): control `4aefc78f…`, d
 `2c4c5559…`, bg-d3 `06b8bd83…`, bg-d4 `1b563425…`, bg-d5 `65edc90d…`, bg-d6 `a601a240…`, bg-d7
 `3c190f30…`.
 
-**Building the images** (on the bare-metal test machine; no Nix): `ORDER_BIN=<dir>
+**Building the images** (M135's recipe; since M146 the script builds from sources and Nix store
+paths, section "The manifest images from sources (Milestone 146)"; on the bare-metal machine; no Nix): `ORDER_BIN=<dir>
 build-bench-manifest.sh <work dir> <release dir>` with `HYDO_AGENT_BIN` = the pinned hydo-agent
 (0.2.0, `b72c5caa…` since M127, docs/BUILD-PINS.md; the images of M135 were built with M131's `1f517e04…`). `<work dir>/benchroot` is the debugfs rdump of the
 `-pin-kr` control image's root (the MySQL and OpenJDK closures, Kafka's libs, the pinned Redis);

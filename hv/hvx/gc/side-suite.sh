@@ -108,7 +108,7 @@ if has lockstep; then
   d=$O/lockstep; sudo rm -rf "$d"; mkdir -p "$d"; quiet
   out=$(timeout 7200 $R sudo env HOME="$HOME" HVX_DEV="$DEV" HYDO_ENGINE=inproc "${FEAT[@]}" \
     "$EX/lockstep_check" check "$ENG" "$R" $B/bzImage $B/initramfs-kafka.cpio.gz \
-    $B/explore-ob-redis-nq-disk.img "$d" 2>&1); rc=$?
+    "${LOCKSTEP_IMG:?set LOCKSTEP_IMG to the Redis agent image (M140 bde714a7...; the shell image explore-ob-redis-nq was deleted in M146)}" "$d" 2>&1); rc=$?
   echo "$out" > "$d/out.txt"
   check "lockstep_check" "$rc" "$(tail -n 3 <<< "$out")" "ALL PASS"
 fi

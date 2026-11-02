@@ -381,12 +381,19 @@ mod tests {
         let i = ["--image", "i.img"];
         assert!(p(&[&i[..], &["--out", "o", "--strategy", "bogus"]].concat()).is_err());
         assert!(p(&[&i[..], &["--out", "o", "--fc"]].concat()).is_err());
-        assert!(p(&[&i[..], &["--out", "o", "--bursts"]].concat()).unwrap().bursts);
+        assert!(
+            p(&[&i[..], &["--out", "o", "--bursts"]].concat())
+                .unwrap()
+                .bursts
+        );
     }
 
     #[test]
     fn the_image_has_no_default() {
         assert_eq!(p(&["--out", "o"]).unwrap_err(), NO_IMAGE);
-        assert_eq!(p(&["--out", "o", "--image", "x.img"]).unwrap().image, "x.img");
+        assert_eq!(
+            p(&["--out", "o", "--image", "x.img"]).unwrap().image,
+            "x.img"
+        );
     }
 }
