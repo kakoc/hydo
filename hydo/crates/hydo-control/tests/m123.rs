@@ -504,9 +504,12 @@ fn plans_as_hydo_build() {
             fc: None,
             ip: None,
         };
-        let Ok((ms, _)) =
-            hydo_build::shell::compile_shell(&hydo_build::Ctx::standalone(), &m, &order, &tools)
-        else {
+        let Ok((ms, _)) = hydo_build::shell::compile_shell(
+            &hydo_build::Ctx::standalone(Default::default()),
+            &m,
+            &order,
+            &tools,
+        ) else {
             continue;
         };
         for (i, c) in plan.history.iter().enumerate() {

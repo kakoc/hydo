@@ -118,12 +118,13 @@ fn copy_elf_closure(bt: &Option<BundledTc>, binary: &str, r: &Path) -> Result<()
 }
 
 /// `_copy_store_files(paths, R)`: store files and every file their loaders open, from
-/// $HYDO_ARM64_STORE (a directory holding nix/store/...; unset = the host's /nix/store).
-fn copy_store_files(paths: &[String], r: &Path) -> Result<(), Fail> {
-    let root = match std::env::var("HYDO_ARM64_STORE")
-        .ok()
-        .filter(|v| !v.is_empty())
-    {
+/// `store` (`HYDO_ARM64_STORE`: a directory holding nix/store/...; unset = the host's /nix/store).
+fn copy_store_files(
+    paths: &[String],
+    r: &Path,
+    store: &hydo_config::build::Input,
+) -> Result<(), Fail> {
+    let root = match store.nonempty() {
         Some(v) => crate::abspath(Path::new(&v))
             .to_string_lossy()
             .trim_end_matches('/')
@@ -153,11 +154,13 @@ fn copy_store_files(paths: &[String], r: &Path) -> Result<(), Fail> {
 }
 
 /// `_aarch64_tool(env, default)`: an existing aarch64 ELF executable (e_machine 0xb7).
-fn aarch64_tool(bt: &Option<BundledTc>, env: &str, default: &str) -> Result<String, Fail> {
-    let p = std::env::var(env)
-        .ok()
-        .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| default.to_string());
+fn aarch64_tool(
+    bt: &Option<BundledTc>,
+    input: &hydo_config::build::Input,
+    default: &str,
+) -> Result<String, Fail> {
+    let env = input.var;
+    let p = input.or(default);
     if !BundledTc::isfile(bt, &p) {
         return Err(Fail::Exit(format!(
             "hydo-build: {env} not found at {p} (set {env})"
@@ -192,14 +195,14 @@ pub fn build(
 ) -> Result<(), Fail> {
     let bt = BundledTc::new(ctx)?;
     let isfile = |x: &str| BundledTc::isfile(&bt, x);
-    let busybox = tool("HYDO_BUSYBOX_ARM64", BUSYBOX_ARM64, isfile)?;
-    let mke2fs = tool("HYDO_MKE2FS", x86::MKE2FS, isfile)?;
-    let faketime = tool("HYDO_FAKETIME", x86::FAKETIME, isfile)?;
+    let busybox = tool(&ctx.inputs.busybox_arm64, BUSYBOX_ARM64, isfile)?;
+    let mke2fs = tool(&ctx.inputs.mke2fs, x86::MKE2FS, isfile)?;
+    let faketime = tool(&ctx.inputs.faketime, x86::FAKETIME, isfile)?;
     let m = p.data.clone();
     let world = if shell::has_world(&m) {
         Some(aarch64_tool(
             &bt,
-            "HYDO_WORLDBIN_ARM64",
+            &ctx.inputs.worldbin_arm64,
             &bdir.join("hydo-world-arm64").to_string_lossy(),
         )?)
     } else {
@@ -208,7 +211,7 @@ pub fn build(
     let read = if x86::uses_readers(&m)? {
         Some(aarch64_tool(
             &bt,
-            "HYDO_READ_BIN_ARM64",
+            &ctx.inputs.read_bin_arm64,
             &bdir.join("hydo-read-arm64").to_string_lossy(),
         )?)
     } else {
@@ -221,7 +224,7 @@ pub fn build(
     if shell::has_freeze(&m) {
         fcbin = Some(aarch64_tool(
             &bt,
-            "HYDO_FCBIN_ARM64",
+            &ctx.inputs.fcbin_arm64,
             &bdir.join("hydo_fc-arm64").to_string_lossy(),
         )?);
         fc = Some((
@@ -230,9 +233,7 @@ pub fn build(
         ));
     }
     let ip = netns.then(|| IP_ARM64.to_string());
-    let seedrng = std::env::var("HYDO_SEEDRNG_ARM64")
-        .ok()
-        .filter(|v| !v.is_empty());
+    let seedrng = ctx.inputs.seedrng_arm64.nonempty().map(str::to_string);
     let rootsec = section(&m, "root")?;
     let r = bdir.join(format!("{out}-arm64-root"));
     if r.is_dir() {
@@ -242,6 +243,7 @@ pub fn build(
     let store = x86::Store::new(&Ctx {
         onboard: ctx.onboard.clone(),
         release: Release::None,
+        inputs: ctx.inputs.clone(),
     })?;
     let mut set = std::collections::BTreeSet::new();
     for n in pyv::items(pyv::get(rootsec, "nix")?, "root.nix")? {
@@ -261,10 +263,7 @@ pub fn build(
     if let Some(s) = &seedrng {
         put_exec(s, &r.join("bin/hvx_seedrng"))?;
     }
-    let lister = std::env::var("HYDO_BUSYBOX")
-        .ok()
-        .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| LISTER.to_string());
+    let lister = ctx.inputs.busybox.or(LISTER);
     let applets: Vec<String> = match Command::new(&lister).arg("--list").output() {
         Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout)
             .split_whitespace()
@@ -313,9 +312,9 @@ pub fn build(
         "127.0.0.1 localhost\n".to_string()
     };
     x86::default_etc(&r, &hosts)?;
-    let tc = match std::env::var("HYDO_TC_ARM64") {
-        Ok(v) => v,
-        Err(_) => TC_ARM64.to_string(),
+    let tc = match &ctx.inputs.tc_arm64.value {
+        Some(v) => v.clone(),
+        None => TC_ARM64.to_string(),
     };
     if !tc.is_empty() {
         if !BundledTc::isfile(&bt, &tc) {
@@ -330,7 +329,7 @@ pub fn build(
         if fc.is_some() {
             ps.extend(IPT_FILES.iter().map(|f| format!("{IPTABLES_ARM64}/{f}")));
         }
-        copy_store_files(&ps, &r)?;
+        copy_store_files(&ps, &r, &ctx.inputs.arm64_store)?;
     }
     if let Some(fb) = &fcbin {
         let l = x86::under(&r, &format!("{IPTABLES_ARM64}/bin/iptables-legacy"));
@@ -357,7 +356,7 @@ pub fn build(
         ip: ip.clone(),
     };
     x86::write_compiled(ctx, p, manifest_path, &r, &tools)?;
-    let (agent_bin, agent_sha) = crate::agent::binary(bdir, true, io)?;
+    let (agent_bin, agent_sha) = crate::agent::binary(ctx, bdir, true, io)?;
     crate::stage::compose_stage(&m, &r)?;
     let oci_meta = crate::oci::stage(
         &mut p.oci,

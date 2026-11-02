@@ -260,9 +260,9 @@ fn main() {
     let hvx = Hvx {
         engine: PathBuf::from(&a[2]),
         hvx_run: Some(PathBuf::from(&a[3])),
-        snap_dir: std::env::var("HYDO_SNAP_DIR").unwrap_or_else(|_| "/var/tmp/hvx-snap".into()),
         extra_env: vec!["HVX_EXPLORE_WALL_SECS=900".into()],
         env: Vec::new(),
+        config: hydo_config::Env::process(),
     };
     let spec = BootSpec {
         image: PathBuf::from(&a[6]),

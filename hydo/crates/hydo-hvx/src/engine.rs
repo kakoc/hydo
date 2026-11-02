@@ -8,7 +8,7 @@
 
 use crate::abi::*;
 use crate::boot;
-use crate::cstr::{atof, find, strtoull, strtoull0, Scan};
+use crate::cstr::{find, strtoull, strtoull0, Scan};
 use crate::ctl::{self, Book, Send, SendState};
 use crate::fnv::{fnv, fnv_sched_state, fnv_snapshot, fnv_zskip, BASIS};
 use crate::pages::Pages;
@@ -38,136 +38,10 @@ const BRANCH_BUDGET: u64 = 16;
 const BOOT_TSC_STEP: u64 = 0x10000;
 const JIT: &str = "c1sync";
 
-/// The engine's environment knobs (the variables hvx_explore and hvx_stack_verify.c read), read
-/// once. `from_lookup` takes the same names; see `hvx_explore.c` for each.
-#[derive(Clone, Debug)]
-pub struct Options {
-    pub dev: String,
-    pub vcpus: u32,
-    pub park: bool,
-    pub cpu_v3: bool,
-    pub pmu_clock: bool,
-    pub pause_exit: bool,
-    pub pt_trace_vm: bool,
-    pub pause_k: Option<String>,
-    pub wall_secs: f64,
-    pub turn_margin: Option<String>,
-    pub quantum: Option<String>,
-    pub burst: Option<String>,
-    pub quantum_after: bool,
-    pub ftstat: bool,
-    pub cmdline_extra: Option<String>,
-    pub phases: bool,
-    pub no_unsync: bool,
-    pub dump: Option<String>,
-    pub dump_hashonly: bool,
-    pub durable_out: Option<String>,
-    pub bootcon: bool,
-    pub console_out: Option<String>,
-    pub drain_no_retry: bool,
-    pub vcpustat: bool,
-    pub ram_mib_env: Option<String>,
-    pub vcpus_env: Option<String>,
-    /// HVX_EXPLORE_PT_ELF: trace this program's text (coverage, `crate::pt`).
-    pub pt_elf: Option<String>,
-    /// HVX_EXPLORE_PT_RANGES: trace up to two IP ranges instead.
-    pub pt_ranges: Option<String>,
-    /// HVX_EXPLORE_PTMULTI: the external decoder for PT_RANGES traces.
-    pub ptmulti: Option<String>,
-    /// HVX_EXPLORE_PT_MIB: the trace buffer (default 256 MiB).
-    pub pt_mib: Option<String>,
-    /// HVX_EXPLORE_PT_SAVE: keep the raw trace as `<tag>.pt`.
-    pub pt_save: bool,
-    /// HVX_EXPLORE_DIRTY=1 (with PHASES): pages of RAM and of the data disk that differ from S1.
-    pub dirty: bool,
-    /// HVX_EXPLORE_ZSKIP=1 (with PHASES): hash RAM both ways at the workload's end and compare.
-    pub zskip: bool,
-    /// HVX_EXPLORE_RETLOG=1: one `RET` line per run call on stderr.
-    pub retlog: bool,
-    /// HVX_SIM_DRAIN_DROP=<marker>: fail the first console read that shows the marker, once.
-    pub sim_drain_drop: Option<String>,
-    /// HYDO_HVX_REAPER=0: tear old VMs down in line, as the C engine does (default: on a thread).
-    pub reaper: bool,
-    /// HYDO_HVX_CHECK_ZERO=1: verify that a fresh VM's RAM and disk are zero before a restore.
-    pub check_zero: bool,
-    /// HYDO_HVX_PREPARE=0: make every fresh VM when it is needed (default in serve mode: the
-    /// next one is made on a helper thread while a run runs).
-    pub prepare: bool,
-    /// The host-call port (M138; on by default since M140, HYDO_HVX_HOSTCALL=0 turns it off):
-    /// every VM is made with HVX_VM_HOSTCALL, and when the module has the port (its HC ioctls
-    /// answer) a controlled boot of an agent image gets `hydo.hc=1` on its kernel command line.
-    /// An agent that uses it (hydo-agent 0.3.0 and later) sends its lines through the port, and
-    /// the host's lines reach it there; a module without the port or an older agent stays on the
-    /// serial line, unchanged.
-    pub hostcall: bool,
-    /// HYDO_HVX_REUSE=1 (M138): keep a used VM and bring it back to the next run's snapshot in
-    /// place (HVX_RESET_VM and the dirty-page log of a module that has them) instead of making
-    /// a fresh VM.
-    pub reuse: bool,
-    /// HYDO_HVX_CHECK_RESET=1: after every in-place restore, compare all of RAM and the disk with
-    /// what a fresh VM would hold, and end the run with an error on a difference.
-    pub check_reset: bool,
-}
-
-impl Options {
-    pub fn from_lookup(get: &dyn Fn(&str) -> Option<String>) -> Options {
-        let set_not0 = |k: &str| get(k).is_some_and(|v| v != "0");
-        let not_0 = |k: &str| get(k).as_deref() != Some("0");
-        let wall = get("HVX_EXPLORE_WALL_SECS")
-            .map(|v| atof(&v))
-            .filter(|&v| v > 0.0)
-            .unwrap_or(900.0);
-        let dirty = set_not0("HVX_EXPLORE_DIRTY");
-        Options {
-            dev: get("HVX_DEV").unwrap_or_else(|| "/dev/hvx".into()),
-            vcpus: 1,
-            park: set_not0("HVX_VCPU_PARK"),
-            cpu_v3: set_not0("HVX_CPU_V3"),
-            pmu_clock: not_0("HVX_PMU_CLOCK"),
-            pause_exit: not_0("HVX_PAUSE_EXIT"),
-            pt_trace_vm: get("HVX_PT_TRACE_VM").is_some(),
-            pause_k: get("HVX_PAUSE_K"),
-            wall_secs: wall,
-            turn_margin: get("HVX_TURN_MARGIN"),
-            quantum: get("HVX_QUANTUM"),
-            burst: get("HVX_BURST"),
-            quantum_after: get("HVX_QUANTUM_AFTER").is_some(),
-            ftstat: get("HVX_FTSTAT").is_some(),
-            cmdline_extra: get("HVX_EXPLORE_CMDLINE_EXTRA"),
-            phases: set_not0("HVX_EXPLORE_PHASES") || dirty,
-            no_unsync: get("HVX_EXPLORE_NO_UNSYNC").is_some(),
-            dump: get("HVX_EXPLORE_DUMP"),
-            dump_hashonly: get("HVX_EXPLORE_DUMP_HASHONLY").is_some(),
-            durable_out: get("HVX_EXPLORE_DURABLE_OUT"),
-            bootcon: get("HVX_EXPLORE_BOOTCON").is_some(),
-            console_out: get("HVX_CONSOLE_OUT"),
-            drain_no_retry: get("HVX_DRAIN_NO_RETRY").is_some(),
-            vcpustat: get("HVX_EXPLORE_VCPUSTAT").is_some(),
-            ram_mib_env: get("HVX_EXPLORE_RAM_MIB"),
-            vcpus_env: get("HVX_EXPLORE_VCPUS"),
-            pt_elf: get("HVX_EXPLORE_PT_ELF"),
-            pt_ranges: get("HVX_EXPLORE_PT_RANGES"),
-            ptmulti: get("HVX_EXPLORE_PTMULTI"),
-            pt_mib: get("HVX_EXPLORE_PT_MIB"),
-            pt_save: get("HVX_EXPLORE_PT_SAVE").is_some(),
-            dirty,
-            zskip: get("HVX_EXPLORE_ZSKIP").is_some(),
-            retlog: get("HVX_EXPLORE_RETLOG").is_some(),
-            sim_drain_drop: get("HVX_SIM_DRAIN_DROP").filter(|s| !s.is_empty()),
-            reaper: not_0("HYDO_HVX_REAPER"),
-            check_zero: set_not0("HYDO_HVX_CHECK_ZERO"),
-            prepare: not_0("HYDO_HVX_PREPARE"),
-            hostcall: not_0("HYDO_HVX_HOSTCALL"),
-            reuse: set_not0("HYDO_HVX_REUSE"),
-            check_reset: set_not0("HYDO_HVX_CHECK_RESET"),
-        }
-    }
-
-    /// From the process environment.
-    pub fn from_env() -> Options {
-        Options::from_lookup(&|k| std::env::var(k).ok())
-    }
-}
+/// The engine's options (the variables hvx_explore and hvx_stack_verify.c read, and hydo-hvx's
+/// own), read once by the program's `main` or by hydo-engine for an in-process engine; since M144
+/// they are `hydo_config::hvx::Options` (the inventory is `hydo_config::registry`).
+pub use hydo_config::hvx::Options;
 
 /// The inputs every VM is built from (`struct env`).
 struct Env {
@@ -3914,13 +3788,13 @@ pub fn run(
     let t_start = now();
     let mut ram_mib = EXP_MEM_MIB;
     if let Some(v) = o.ram_mib_env.clone() {
-        match ram_mib_parse(&v, "HVX_EXPLORE_RAM_MIB", &mut diag) {
+        match ram_mib_parse(&v, hydo_config::registry::HVX_EXPLORE_RAM_MIB, &mut diag) {
             Some(n) => ram_mib = n,
             None => return 2,
         }
     }
     if let Some(v) = o.vcpus_env.clone() {
-        match vcpus_parse(&v, "HVX_EXPLORE_VCPUS", &mut diag) {
+        match vcpus_parse(&v, hydo_config::registry::HVX_EXPLORE_VCPUS, &mut diag) {
             Some(n) => o.vcpus = n,
             None => return 2,
         }
@@ -4157,12 +4031,13 @@ pub fn run(
     0
 }
 
-/// `main` of the engine program over the process's own streams and environment.
-pub fn main_stdio(args: &[String]) -> i32 {
+/// `main` of the engine program over the process's own streams, with the options its `main`
+/// read from the environment.
+pub fn main_stdio(args: &[String], o: Options) -> i32 {
     let io = Io {
         out: Box::new(std::io::LineWriter::new(std::io::stdout())),
         input: Box::new(std::io::BufReader::new(std::io::stdin())),
         diag: Box::new(std::io::stderr()),
     };
-    main_with(args, Options::from_env(), io)
+    main_with(args, o, io)
 }

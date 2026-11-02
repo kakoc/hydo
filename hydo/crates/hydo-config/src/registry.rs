@@ -1,0 +1,574 @@
+//! The inventory: every `HYDO_*`, `HVX_*` and `HVM_*` name the Rust crates use, with its owner,
+//! kind, type, default, readers and documentation. [`VARIABLES`] is the one list; each entry also
+//! becomes a constant of the same name (`hydo_config::registry::HVX_DEV == "HVX_DEV"`), which is
+//! how code outside this crate names a variable. `INVENTORY.md` next to this crate is this list
+//! printed by [`inventory_markdown`]; a test fails when the two differ.
+//!
+//! Only names of the kinds [`Kind::User`] and [`Kind::Developer`] are read from hydo's own
+//! environment, and only by [`crate::Env::process`]. The other kinds are documented here so the
+//! list is complete: test switches read by test code, the guest interface (names hydo hands to
+//! the guest's commands, or that guest programs read), variables of an image's
+//! `/etc/hydo/manifest.sh` that the host reads back, and names hydo sets for a program it starts.
+
+/// Who owns a variable (which typed group of [`crate::Config`] carries it).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Group {
+    /// [`crate::engine::Engine`]: which hvx engine runs, the device, the module lock, the program.
+    Engine,
+    /// [`crate::hvx::Options`]: the hvx engine's own switches (hydo-hvx).
+    HvxEngine,
+    /// [`crate::hvx::Options`]: the hvx engine's diagnostics (hydo-hvx), for developers.
+    HvxDiagnostics,
+    /// [`crate::run::Paths`]: where images and the shared-lock wrapper are.
+    Paths,
+    /// [`crate::run::Pool`]: the explorer's worker pool.
+    Pool,
+    /// [`crate::build::Build`]: inputs of an image build (hydo-build).
+    Build,
+    /// [`crate::run::Bench`]: the bug benchmark runner (hydo-bench).
+    Bench,
+    /// [`crate::run::Control`]: the host controller of agent images (hydo-control).
+    Control,
+    /// [`crate::run::Cli`]: the `hydo` command.
+    Cli,
+    /// [`crate::tools::Tools`]: helper programs (hydo-nix-fetch, hydo-grpc-gen).
+    Tools,
+    /// Switches of the workspace's tests and examples (read by test code only).
+    Tests,
+    /// The guest interface: set for guest commands or read by guest programs.
+    Guest,
+    /// Shell variables of an image's `/etc/hydo/manifest.sh`.
+    Image,
+    /// Set by hydo for a program it starts.
+    Passed,
+}
+
+/// What kind of name it is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Kind {
+    /// User-facing configuration, read from hydo's environment (through [`crate::Env`]).
+    User,
+    /// Developer-only configuration (diagnostics, a tree's paths, checks), read from hydo's
+    /// environment (through [`crate::Env`]).
+    Developer,
+    /// A test or example switch, read by test code (`tests/`, `examples/`) only.
+    Test,
+    /// The guest interface: hydo never reads it from its own environment.
+    Guest,
+    /// A variable of an image's `/etc/hydo/manifest.sh` (not an environment variable).
+    Image,
+    /// Set by hydo in the environment of a program it starts; hydo does not read it.
+    Passed,
+}
+
+impl Kind {
+    /// Read from hydo's own environment (by [`crate::Env::process`]).
+    pub fn is_host_config(self) -> bool {
+        matches!(self, Kind::User | Kind::Developer)
+    }
+}
+
+/// One entry of the inventory.
+#[derive(Clone, Copy, Debug)]
+pub struct Variable {
+    pub name: &'static str,
+    pub group: Group,
+    pub kind: Kind,
+    /// Its type and how a value is read (for example "flag: set and not `0`").
+    pub ty: &'static str,
+    /// Its default ("" when there is none or it is unset by default).
+    pub default: &'static str,
+    /// Who reads (or, for [`Kind::Guest`] and [`Kind::Passed`], who sets) it.
+    pub readers: &'static str,
+    /// What it does.
+    pub doc: &'static str,
+}
+
+/// A variable removed in M144, with why.
+#[derive(Clone, Copy, Debug)]
+pub struct Removed {
+    pub name: &'static str,
+    pub why: &'static str,
+}
+
+macro_rules! variables {
+    ($( $(#[doc = $doc:literal])* $name:ident: $group:ident, $kind:ident, $ty:literal, $default:literal, $readers:literal; )*) => {
+        $(
+            $(#[doc = $doc])*
+            pub const $name: &str = stringify!($name);
+        )*
+        /// Every variable, in this file's order.
+        pub const VARIABLES: &[Variable] = &[
+            $( Variable {
+                name: stringify!($name),
+                group: Group::$group,
+                kind: Kind::$kind,
+                ty: $ty,
+                default: $default,
+                readers: $readers,
+                doc: concat!($($doc, "\n",)*),
+            }, )*
+        ];
+    };
+}
+
+variables! {
+    // ------------------------------------------------------------------ Engine
+    /// Where the hvx engine runs: `inproc` on a thread of this process, `process` (or `c`) as
+    /// the program `hydo-hvx`; anything else: in this process exactly when this is Linux,
+    /// `HYDO_SUDO` is not `1` and this process can read and write the device.
+    HYDO_ENGINE: Engine, User, "word: inproc | process | c", "auto", "hydo-engine";
+    /// `1`: the engine program runs under sudo even when the user can open the device (the
+    /// release's `libexec/hvx-run` reads it too; `hydo doctor` reports it).
+    HYDO_SUDO: Engine, User, "flag: exactly `1`", "", "hydo-engine, hydo-cli, libexec/hvx-run";
+    /// The hvx device (another name: a side module). An empty value means the default.
+    HVX_DEV: Engine, User, "path", "/dev/hvx", "hydo-engine, hydo-hvx, hydo-cli, libexec/hvx-run";
+    /// The module lock file every run holds shared (a reload holds it exclusively). An empty
+    /// value means the default (in `$SUDO_USER`'s home under sudo).
+    HYDO_LOCK: Engine, User, "path", "~/.hvx-module.lock", "hydo-engine, hydo-cli, libexec/hvx-run";
+    /// The engine program started when the engine does not run in this process (the name is
+    /// the C engine's, deleted in M137).
+    HYDO_HVX_EXPLORE: Engine, User, "path", "<root>/target/release/hydo-hvx, else <root>/bin/hydo-hvx", "hydo-engine";
+
+    // ------------------------------------------------------------------ HvxEngine
+    /// `0` turns the host-call port off (M138; on by default since M140).
+    HYDO_HVX_HOSTCALL: HvxEngine, User, "flag: not `0`", "on", "hydo-hvx";
+    /// `1` (not `0`): keep a used VM and reset it in place for the next run (M138).
+    HYDO_HVX_REUSE: HvxEngine, User, "flag: set and not `0`", "off", "hydo-hvx";
+    /// Not `0`: after every in-place reset, compare RAM and disk with a fresh VM's.
+    HYDO_HVX_CHECK_RESET: HvxEngine, Developer, "flag: set and not `0`", "off", "hydo-hvx";
+    /// Not `0`: check that a fresh VM's RAM and disk are zero before a restore.
+    HYDO_HVX_CHECK_ZERO: HvxEngine, Developer, "flag: set and not `0`", "off", "hydo-hvx";
+    /// `0`: make every fresh VM when it is needed (default: the next one on a helper thread).
+    HYDO_HVX_PREPARE: HvxEngine, Developer, "flag: not `0`", "on", "hydo-hvx";
+    /// `0`: tear old VMs down in line (default: on a helper thread).
+    HYDO_HVX_REAPER: HvxEngine, Developer, "flag: not `0`", "on", "hydo-hvx";
+    /// A run's wall-clock budget in seconds (C `atof`; not positive: the default).
+    HVX_EXPLORE_WALL_SECS: HvxEngine, Developer, "number (C atof)", "900", "hydo-hvx";
+    /// Not `0`: park idle vCPUs (several vCPUs).
+    HVX_VCPU_PARK: HvxEngine, Developer, "flag: set and not `0`", "off", "hydo-hvx";
+    /// Not `0`: the guest CPU is x86-64-v3 (as `--cpu v3`).
+    HVX_CPU_V3: HvxEngine, Developer, "flag: set and not `0`", "off", "hydo-hvx";
+    /// `0` turns the PMU branch clock off.
+    HVX_PMU_CLOCK: HvxEngine, Developer, "flag: not `0`", "on", "hydo-hvx";
+    /// `0` turns PAUSE exits off.
+    HVX_PAUSE_EXIT: HvxEngine, Developer, "flag: not `0`", "on", "hydo-hvx";
+    /// Set: trace the VM with Processor Trace (HVX_VM_PT_TRACE).
+    HVX_PT_TRACE_VM: HvxEngine, Developer, "flag: set (any value)", "off", "hydo-hvx";
+    /// The PAUSE-exit clock step (C strtoull).
+    HVX_PAUSE_K: HvxEngine, Developer, "integer (C strtoull)", "the module's", "hydo-hvx";
+    /// The vCPU turn-end margin (M85; `--turn-margin` of the explorer sets it).
+    HVX_TURN_MARGIN: HvxEngine, Developer, "integer (C strtoull)", "the module's", "hydo-hvx, hydo-explore";
+    /// The vCPU turn length in branches (several vCPUs).
+    HVX_QUANTUM: HvxEngine, Developer, "integer (C strtoull)", "the schedule's", "hydo-hvx";
+    /// Burst turns (M85).
+    HVX_BURST: HvxEngine, Developer, "integer (C strtoull)", "off", "hydo-hvx";
+    /// Set: apply `HVX_QUANTUM` after the boot only.
+    HVX_QUANTUM_AFTER: HvxEngine, Developer, "flag: set (any value)", "off", "hydo-hvx";
+    /// Extra words on the guest kernel's command line.
+    HVX_EXPLORE_CMDLINE_EXTRA: HvxEngine, Developer, "text", "", "hydo-hvx";
+    /// Set: keep the disk's volatile write cache out of snapshots (no HVX_GET/SET_UNSYNC).
+    HVX_EXPLORE_NO_UNSYNC: HvxEngine, Developer, "flag: set (any value)", "off", "hydo-hvx";
+    /// The guest RAM in MiB when `--ram-mib` is not given (256-3072).
+    HVX_EXPLORE_RAM_MIB: HvxEngine, Developer, "integer", "1024", "hydo-hvx";
+    /// The vCPU count when `--vcpus` is not given.
+    HVX_EXPLORE_VCPUS: HvxEngine, Developer, "integer", "1", "hydo-hvx";
+
+    // ------------------------------------------------------------------ HvxDiagnostics
+    /// Not `0`: print the run's phases with their times (also on with `HVX_EXPLORE_DIRTY`).
+    HVX_EXPLORE_PHASES: HvxDiagnostics, Developer, "flag: set and not `0`", "off", "hydo-hvx";
+    /// Not `0` (with PHASES): count the RAM and disk pages that differ from S1.
+    HVX_EXPLORE_DIRTY: HvxDiagnostics, Developer, "flag: set and not `0`", "off", "hydo-hvx";
+    /// Set (with PHASES): hash RAM both ways at the workload's end and compare.
+    HVX_EXPLORE_ZSKIP: HvxDiagnostics, Developer, "flag: set (any value)", "off", "hydo-hvx";
+    /// Set: one `RET` line per run call on stderr.
+    HVX_EXPLORE_RETLOG: HvxDiagnostics, Developer, "flag: set (any value)", "off", "hydo-hvx";
+    /// Set: print the fast-turn statistics.
+    HVX_FTSTAT: HvxDiagnostics, Developer, "flag: set (any value)", "off", "hydo-hvx";
+    /// A directory: dump the final state (RAM, disk) there.
+    HVX_EXPLORE_DUMP: HvxDiagnostics, Developer, "path", "", "hydo-hvx";
+    /// Set (with DUMP): write only the hashes.
+    HVX_EXPLORE_DUMP_HASHONLY: HvxDiagnostics, Developer, "flag: set (any value)", "off", "hydo-hvx";
+    /// A file: write the durable disk after a run there.
+    HVX_EXPLORE_DURABLE_OUT: HvxDiagnostics, Developer, "path", "", "hydo-hvx";
+    /// Set: keep the boot's console.
+    HVX_EXPLORE_BOOTCON: HvxDiagnostics, Developer, "flag: set (any value)", "off", "hydo-hvx";
+    /// A file: copy the console there.
+    HVX_CONSOLE_OUT: HvxDiagnostics, Developer, "path", "", "hydo-hvx";
+    /// Set: do not retry a netem drain.
+    HVX_DRAIN_NO_RETRY: HvxDiagnostics, Developer, "flag: set (any value)", "off", "hydo-hvx";
+    /// Set: print per-vCPU statistics.
+    HVX_EXPLORE_VCPUSTAT: HvxDiagnostics, Developer, "flag: set (any value)", "off", "hydo-hvx";
+    /// Coverage: trace this program's text (needs the `pt` build).
+    HVX_EXPLORE_PT_ELF: HvxDiagnostics, Developer, "path", "", "hydo-hvx";
+    /// Coverage: trace up to two IP ranges instead.
+    HVX_EXPLORE_PT_RANGES: HvxDiagnostics, Developer, "text: ranges", "", "hydo-hvx";
+    /// Coverage: the external decoder for PT_RANGES traces.
+    HVX_EXPLORE_PTMULTI: HvxDiagnostics, Developer, "path", "", "hydo-hvx";
+    /// Coverage: the trace buffer in MiB.
+    HVX_EXPLORE_PT_MIB: HvxDiagnostics, Developer, "integer", "256", "hydo-hvx";
+    /// Set (coverage): keep the raw trace as `<tag>.pt`.
+    HVX_EXPLORE_PT_SAVE: HvxDiagnostics, Developer, "flag: set (any value)", "off", "hydo-hvx";
+    /// A console marker: fail the first console read that shows it, once (a test of the drain).
+    HVX_SIM_DRAIN_DROP: HvxDiagnostics, Developer, "text; empty = unset", "", "hydo-hvx";
+
+    // ------------------------------------------------------------------ Paths
+    /// The folder with `hydo/` and `hv/` for the programs `hydo-explore` and `hydo-bench`. An
+    /// empty value means the default.
+    HYDO_ROOT: Paths, Developer, "path", "the first parent of the program with hydo/ and hv/, else the source tree", "hydo-explore, hydo-bench";
+    /// The images, `bzImage` and `initramfs-kafka.cpio.gz` (the `hydo` command sets the
+    /// release's `guest/`). An empty value means the default.
+    HYDO_BUILD: Paths, User, "path", "~/hydo/build", "hydo-explore, hydo-bench";
+    /// The shared-lock wrapper the engine program is started through (the `hydo` command sets
+    /// the release's `libexec/hvx-run`). An empty value means the default.
+    HYDO_HVX_RUN: Paths, User, "path", "~/bin/hvx-run", "hydo-explore, hydo-bench";
+
+    // ------------------------------------------------------------------ Pool
+    /// While this file exists, the explorer starts no new VM (waits, checking every 30 s, at
+    /// most 2 hours): a quiet window on a shared machine.
+    HYDO_QUIET_FILE: Pool, User, "path", "", "hydo-explore, hydo-bench";
+    /// A result cache: a deterministic exploration resumes from the results recorded there.
+    HYDO_EXPLORE_CACHE: Pool, User, "path", "", "hydo-explore, hydo-bench";
+
+    // ------------------------------------------------------------------ Bench
+    /// The image kind when `--kind` is not given: `agent`, `shell` or `stack` (M135).
+    HYDO_BENCH_KIND: Bench, Developer, "word; empty = unset", "agent", "hydo-bench";
+    /// The stack images' m59 suffix (`-pin` the earlier set, empty the first build).
+    HYDO_M59_SUFFIX: Bench, Developer, "text (empty is a value)", "-pin-kr", "hydo-bench";
+
+    // ------------------------------------------------------------------ Control
+    /// `0`: the host does not run a SPIN of an agent image on hvm again in the rewind mode
+    /// (hvmx reads it for a shell image's RUN).
+    HVM_SPIN_REWIND: Control, User, "flag: exactly `0` turns it off", "on", "hydo-control, hvmx";
+
+    // ------------------------------------------------------------------ Cli
+    /// `linux` or `mac`: run the `hydo` command as the other platform's (the CLI test checks
+    /// the other platform's commands that need no engine).
+    HYDO_CLI_PLATFORM: Cli, Developer, "word: linux | mac", "this binary's platform", "hydo-cli";
+    /// `warn`: a plan whose `hydo_version:` this hydo does not satisfy builds with a warning.
+    HYDO_VERSION_CHECK: Build, User, "word: warn", "refuse", "hydo-build (through hydo-manifest)";
+
+    // ------------------------------------------------------------------ Build
+    /// The product's `onboard/` directory (MANIFEST.md, ../VERSION).
+    HYDO_ONBOARD: Build, Developer, "path", "the release's, else the source tree's", "hydo-build";
+    /// The x86_64 busybox (the `hydo` command sets the release's); on arm64, the host busybox
+    /// that lists the applets.
+    HYDO_BUSYBOX: Build, User, "path; empty = default", "the pinned /nix/store path", "hydo-build";
+    /// The arm64 busybox.
+    HYDO_BUSYBOX_ARM64: Build, User, "path; empty = default", "the pinned /nix/store path", "hydo-build";
+    /// The x86_64 `hvx_seedrng`.
+    HYDO_SEEDRNG: Build, User, "path; empty = default", "<build dir>/hvx_seedrng", "hydo-build";
+    /// The arm64 `hvx_seedrng` (staged only when set).
+    HYDO_SEEDRNG_ARM64: Build, User, "path; empty = unset", "not staged", "hydo-build";
+    /// The `mke2fs` that writes the images.
+    HYDO_MKE2FS: Build, User, "path; empty = default", "the pinned /nix/store path", "hydo-build";
+    /// The `faketime` that runs `mke2fs` (the release's `libexec/faketime` reads it too).
+    HYDO_FAKETIME: Build, User, "path; empty = default", "the pinned /nix/store path", "hydo-build, libexec/faketime";
+    /// The iproute2 closure for network faults (x86_64).
+    HYDO_IPROUTE2: Build, User, "path; empty = default", "the pinned /nix/store path", "hydo-build";
+    /// The iptables closure for the freeze (x86_64).
+    HYDO_IPTABLES: Build, User, "path; empty = default", "the pinned /nix/store path", "hydo-build";
+    /// The guest kernel modules (x86_64).
+    HYDO_MODROOT: Build, User, "path; empty = default", "the pinned /nix/store path", "hydo-build";
+    /// The x86_64 `hydo_fc` (the freeze helper).
+    HYDO_FCBIN: Build, User, "path; empty = default", "<build dir>/hydo_fc", "hydo-build";
+    /// The arm64 `hydo_fc`.
+    HYDO_FCBIN_ARM64: Build, User, "path; empty = default", "<build dir>/hydo_fc-arm64", "hydo-build";
+    /// The x86_64 `hydo-world`.
+    HYDO_WORLDBIN: Build, User, "path; empty = default", "<build dir>/hydo-world", "hydo-build";
+    /// The arm64 `hydo-world`.
+    HYDO_WORLDBIN_ARM64: Build, User, "path; empty = default", "<build dir>/hydo-world-arm64", "hydo-build";
+    /// The x86_64 `hydo-read`.
+    HYDO_READ_BIN: Build, User, "path; empty = default", "<build dir>/hydo-read", "hydo-build";
+    /// The arm64 `hydo-read`.
+    HYDO_READ_BIN_ARM64: Build, User, "path; empty = default", "<build dir>/hydo-read-arm64", "hydo-build";
+    /// The x86_64 `hydo-agent` (its sha256 must be the pinned one).
+    HYDO_AGENT_BIN: Build, User, "path; empty = default", "<build dir>/hydo-agent", "hydo-build";
+    /// The arm64 `hydo-agent`.
+    HYDO_AGENT_BIN_ARM64: Build, User, "path; empty = default", "<build dir>/hydo-agent-arm64", "hydo-build";
+    /// `1`: stage an agent whose sha256 is not the pinned one (with a warning).
+    HYDO_AGENT_UNPINNED: Build, Developer, "flag: exactly `1`", "off", "hydo-build";
+    /// A directory holding `nix/store/...` for arm64 store files (the Mac release's `guest/tc`).
+    HYDO_ARM64_STORE: Build, User, "path; empty = the host's /nix/store", "", "hydo-build";
+    /// The arm64 `tc`; empty: an image without network faults.
+    HYDO_TC_ARM64: Build, User, "path (empty is a value)", "the pinned /nix/store path", "hydo-build";
+    /// The `debugfs` that sets the image's owners and modes.
+    HYDO_DEBUGFS: Build, User, "path; empty = default", "next to mke2fs", "hydo-build";
+    /// Set (not empty): keep the build user's file owners in a Linux release build.
+    HYDO_KEEP_OWNERS: Build, User, "flag: set and not empty", "off", "hydo-build";
+
+    // ------------------------------------------------------------------ Tools
+    /// The binary cache `hydo-nix-fetch` reads.
+    HYDO_NIX_CACHE: Tools, Developer, "URL", "https://cache.nixos.org", "hydo-nix-fetch";
+    /// The default of `hydo-grpc-gen -arch`. An empty value means the default.
+    HYDO_GRPC_ARCH: Tools, User, "word: amd64 | arm64 | amd64,arm64", "amd64", "hydo-grpc-gen";
+    /// The default of `hydo-grpc-gen -client` (the prebuilt clients).
+    HYDO_GRPC_CLIENT: Tools, User, "path", "", "hydo-grpc-gen";
+
+    // ------------------------------------------------------------------ Tests
+    /// `1`: rewrite a test's recorded answers (goldens) from this run's output.
+    HYDO_BLESS: Tests, Test, "flag", "off", "many crates' tests";
+    /// `1`: copy the current schema to the released one (only when a release ships).
+    HYDO_RELEASE_SCHEMA: Tests, Test, "flag", "off", "hydo-results, hydo-agent-proto tests";
+    /// Keep the Compose test's scratch files here.
+    HYDO_COMPOSE_KEEP: Tests, Test, "path", "", "hydo-compose tests";
+    /// Dump the controller tests' transcripts here.
+    HYDO_CONTROL_DUMP: Tests, Test, "path", "", "hydo-control tests";
+    /// Set: the controller tests' full seed ranges.
+    HYDO_CONTROL_FULL: Tests, Test, "flag: set", "off", "hydo-control tests";
+    /// Set: the explorer's identity corpus, quick part only.
+    HYDO_CORPUS_QUICK: Tests, Test, "flag: set", "off", "hydo-explore tests";
+    /// Set: the explorer's identity test in full.
+    HYDO_IDENT_FULL: Tests, Test, "flag: set", "off", "hydo-explore tests";
+    /// Set: write comments naming the recorder into the corpus goldens.
+    HYDO_GOLDEN_FROM: Tests, Test, "flag: set", "off", "hydo-explore tests";
+    /// Dump a golden comparison's inputs here.
+    HYDO_GOLDEN_DUMP: Tests, Test, "path", "", "hydo-composer, hydo-errors tests";
+    /// The saved error-log corpus to compare.
+    HYDO_ERRLOG_CORPUS: Tests, Test, "path", "", "hydo-errors tests";
+    /// `1`: the scripted engine program (the test binary run as the engine).
+    HYDO_FAKE_ENGINE: Tests, Test, "flag", "", "hydo-explore tests";
+    /// Another scripted engine program.
+    HYDO_FAKE_ENGINE_BIN: Tests, Test, "path", "the test binary", "hydo-explore tests";
+    /// Another explorer to run on the scripted engine.
+    HYDO_FAKE_EXPLORER: Tests, Test, "command", "hydo-explore", "hydo-explore tests";
+    /// Not empty: the scripted engine prints history records.
+    HYDO_FAKE_HIST: Tests, Test, "flag: not empty", "", "hydo-explore tests";
+    /// The history checker's dump directory.
+    HYDO_HIST_DUMP: Tests, Test, "path", "", "hydo-history tests";
+    /// Set: the history checker's full corpus.
+    HYDO_HIST_FULL: Tests, Test, "flag: set", "off", "hydo-history tests";
+    /// The deleted C engine's source, to re-record the parser's answers.
+    HYDO_HVX_C_SRC: Tests, Test, "path", "", "hydo-hvx tests";
+    /// The Python used to re-record the old answers (before M107).
+    HYDO_RECORD_PY: Tests, Test, "path", "", "hydo-composer, hydo-errors tests";
+    /// Set: re-record the CLI's answers with the old Python CLIs.
+    HYDO_RECORD_PYTHON: Tests, Test, "flag: set", "", "hydo-cli tests";
+    /// The corpus for re-recording with Python.
+    HYDO_RECORD_PY_CORPUS: Tests, Test, "path", "", "hydo-errors tests";
+    /// The work directory for re-recording with Python.
+    HYDO_RECORD_WORK: Tests, Test, "path", "", "hydo-composer, hydo-errors tests";
+    /// Set: print the fakes test's transcripts.
+    HYDO_SHOW: Tests, Test, "flag: set", "", "hydo-control tests";
+    /// The skills-ref program for the skill check.
+    HYDO_SKILLS_REF: Tests, Test, "path", "on PATH", "hydo-agents tests";
+    /// The hydo-world program for the cross-check.
+    HYDO_WORLD_BIN: Tests, Test, "path", "built", "hydo-world tests";
+    /// The cross-check's first port.
+    HYDO_XCHECK_PORT: Tests, Test, "integer", "", "hydo-world tests";
+    /// The engine check's guest RAM.
+    HYDO_RAM_MIB: Tests, Test, "integer", "1024", "hydo-engine examples";
+    /// A live etcd for hydo-read's store tests.
+    HYDO_TEST_ETCD: Tests, Test, "address", "skipped", "hydo-read tests";
+    /// A live Kafka for hydo-read's store tests.
+    HYDO_TEST_KAFKA: Tests, Test, "address", "skipped", "hydo-read tests";
+    /// A live MySQL for hydo-read's store tests.
+    HYDO_TEST_MYSQL: Tests, Test, "address", "skipped", "hydo-read tests";
+    /// A live PostgreSQL for hydo-read's store tests.
+    HYDO_TEST_POSTGRES: Tests, Test, "address", "skipped", "hydo-read tests";
+    /// A live Redis for hydo-read's store tests.
+    HYDO_TEST_REDIS: Tests, Test, "address", "skipped", "hydo-read tests";
+    /// A port nothing listens on, for hydo-read's store tests.
+    HYDO_TEST_DEADPORT: Tests, Test, "address", "skipped", "hydo-read tests";
+
+    // ------------------------------------------------------------------ Guest
+    /// The workload's step count (for invariants).
+    HYDO_STEPS: Guest, Guest, "integer", "", "set by hydo-control; read by the project's commands";
+    /// The acknowledged ids (for invariants and the recovery).
+    HYDO_ACKED: Guest, Guest, "list", "", "set by hydo-control; read by commands, hydo-read, hydo-world, hydo-grpc";
+    /// The outcomes of the workload's steps.
+    HYDO_OUTCOMES: Guest, Guest, "list", "", "set by hydo-control; read by commands, hydo-read, hydo-grpc";
+    /// The failed ids.
+    HYDO_FAILED: Guest, Guest, "list", "", "set by hydo-control; read by commands, hydo-read";
+    /// The service a command is about.
+    HYDO_SVC: Guest, Guest, "name", "", "set by hydo-control";
+    /// The service's log file.
+    HYDO_LOG: Guest, Guest, "path", "", "set by hydo-control";
+    /// The first step of a workload range.
+    HYDO_FROM: Guest, Guest, "integer", "", "set by hydo-control";
+    /// The last step of a workload range.
+    HYDO_TO: Guest, Guest, "integer", "", "set by hydo-control";
+    /// A knob's value.
+    HYDO_VALUE: Guest, Guest, "text", "", "set by hydo-control";
+    /// A composed command's id.
+    HYDO_CMD: Guest, Guest, "id", "", "set by hydo-control (the composer)";
+    /// A composed command's entry.
+    HYDO_CMD_ID: Guest, Guest, "id", "", "set by hydo-control (the composer)";
+    /// A composed command's round.
+    HYDO_ROUND: Guest, Guest, "integer", "", "set by hydo-control (the composer)";
+    /// A composed command's seed.
+    HYDO_SEED: Guest, Guest, "integer", "", "set by hydo-control (the composer); read by hydo-grpc";
+    /// A composed check's id.
+    HYDO_CHECK: Guest, Guest, "id", "", "set by hydo-control (the composer)";
+    /// The agent's console device (hydo-agent, a guest program with pinned bytes).
+    HYDO_AGENT_TTY: Guest, Guest, "path", "", "hydo-agent (guest)";
+    /// hydo-world's record log.
+    HYDO_WORLD_LOG: Guest, Guest, "path", "", "hydo-world (guest)";
+    /// hydo-world's control socket.
+    HYDO_WORLD_SOCK: Guest, Guest, "path", "", "hydo-world (guest)";
+    /// hydo-grpc: the call records file.
+    HYDO_GRPC_CALLS: Guest, Guest, "path", "", "hydo-grpc (guest)";
+    /// hydo-grpc: write records to the console.
+    HYDO_GRPC_CONSOLE: Guest, Guest, "flag", "", "hydo-grpc (guest)";
+    /// hydo-grpc: the console device.
+    HYDO_GRPC_CONSOLE_DEV: Guest, Guest, "path", "", "hydo-grpc (guest)";
+    /// hydo-grpc: the generated driver's directory.
+    HYDO_GRPC_DIR: Guest, Guest, "path", "", "hydo-grpc (guest)";
+    /// hydo-grpc: the request stream's seed.
+    HYDO_GRPC_SEED: Guest, Guest, "integer", "", "hydo-grpc (guest)";
+    /// hydo-grpc: the state file.
+    HYDO_GRPC_STATE: Guest, Guest, "path", "", "hydo-grpc (guest)";
+    /// hydo-grpc: the server address.
+    HYDO_GRPC_TARGET: Guest, Guest, "address", "", "hydo-grpc (guest)";
+
+    // ------------------------------------------------------------------ Image
+    /// The image's `tc` (manifest.sh), read back by the controller.
+    HYDO_TC: Image, Image, "path", "", "written by hydo-build; read by hydo-control, hydo-engine";
+    /// The image's `ip` (manifest.sh).
+    HYDO_IP: Image, Image, "path", "", "written by hydo-build; read by hydo-control";
+    /// The image's `iptables` (manifest.sh).
+    HYDO_IPT: Image, Image, "path", "", "written by hydo-build; read by hydo-control";
+    /// The image's history checks (manifest.sh).
+    HYDO_CHECKS: Image, Image, "list", "", "written by hydo-build; read by hydo-control";
+
+    // ------------------------------------------------------------------ Passed
+    /// The hvm program's disk image.
+    HVM_DISK: Passed, Passed, "path", "", "set by hydo-engine and hydo-build for hvm/hvmx";
+    /// The hvm program's disk output.
+    HVM_DISK_OUT: Passed, Passed, "path", "", "set by hydo-build for hvm";
+}
+
+/// The variables removed in M144.
+pub const REMOVED: &[Removed] = &[
+    Removed {
+        name: "HYDO_SNAP_DIR",
+        why: "the snapshot directory of the deleted C engine; hydo-hvx keeps snapshots in memory (M132, M137)",
+    },
+    Removed {
+        name: "HVX_SNAP_DIR",
+        why: "passed to the engine program for the deleted C engine; hydo-hvx never read it (the C verify harnesses in hv/hvx read their own)",
+    },
+    Removed {
+        name: "HVX_SNAP_MALLOC",
+        why: "passed to the engine program for the deleted C engine; hydo-hvx never read it",
+    },
+    Removed {
+        name: "HYDO_SNAPSHOTS",
+        why: "chose between file and memory snapshots of the deleted C engine; it changed only the pool's printed line",
+    },
+    Removed {
+        name: "HYDO_CLI",
+        why: "told the explorer program it was started by the deleted Python CLIs; `hydo explore` calls the explorer in its own process",
+    },
+];
+
+/// The variable named `name`.
+pub fn find(name: &str) -> Option<&'static Variable> {
+    VARIABLES.iter().find(|v| v.name == name)
+}
+
+fn doc_line(d: &str) -> String {
+    d.lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// The inventory as Markdown (the text of `INVENTORY.md`).
+pub fn inventory_markdown() -> String {
+    let mut s = String::new();
+    s += "# hydo's environment variables\n\n";
+    s += "Generated from `hydo/crates/hydo-config/src/registry.rs` by \
+          `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails \
+          when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: \
+          `hydo/crates/hydo-config/src/lib.rs`.\n\n";
+    let count = |k: Kind| VARIABLES.iter().filter(|v| v.kind == k).count();
+    s += &format!(
+        "{} user-facing and {} developer-only variables are read from hydo's environment, only \
+         by `hydo_config::Env::process` at a program's start; {} test switches are read by test \
+         code; {} names are the guest interface, {} are variables of an image's manifest.sh and \
+         {} are set for programs hydo starts. {} variables were removed in M144. Shell scripts \
+         (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not \
+         listed here.\n",
+        count(Kind::User),
+        count(Kind::Developer),
+        count(Kind::Test),
+        count(Kind::Guest),
+        count(Kind::Image),
+        count(Kind::Passed),
+        REMOVED.len()
+    );
+    let groups = [
+        (Group::Engine, "Engine (`hydo_config::engine::Engine`)"),
+        (
+            Group::HvxEngine,
+            "The hvx engine (`hydo_config::hvx::Options`)",
+        ),
+        (
+            Group::HvxDiagnostics,
+            "The hvx engine's diagnostics (`hydo_config::hvx::Options`)",
+        ),
+        (Group::Paths, "Paths (`hydo_config::run::Paths`)"),
+        (
+            Group::Pool,
+            "The explorer's pool (`hydo_config::run::Pool`)",
+        ),
+        (
+            Group::Bench,
+            "The bug benchmark (`hydo_config::run::Bench`)",
+        ),
+        (
+            Group::Control,
+            "The host controller (`hydo_config::run::Control`)",
+        ),
+        (Group::Cli, "The `hydo` command (`hydo_config::run::Cli`)"),
+        (Group::Build, "Image builds (`hydo_config::build::Build`)"),
+        (
+            Group::Tools,
+            "Helper programs (`hydo_config::tools::Tools`)",
+        ),
+        (Group::Tests, "Test switches (read by test code only)"),
+        (
+            Group::Guest,
+            "The guest interface (never read from hydo's environment)",
+        ),
+        (
+            Group::Image,
+            "Variables of an image's /etc/hydo/manifest.sh (not environment variables)",
+        ),
+        (Group::Passed, "Set for programs hydo starts"),
+    ];
+    for (g, title) in groups {
+        s += &format!("\n## {title}\n\n");
+        s += "| Variable | Kind | Type | Default | Readers | What it does |\n";
+        s += "|---|---|---|---|---|---|\n";
+        for v in VARIABLES.iter().filter(|v| v.group == g) {
+            s += &format!(
+                "| `{}` | {} | {} | {} | {} | {} |\n",
+                v.name,
+                match v.kind {
+                    Kind::User => "user",
+                    Kind::Developer => "developer",
+                    Kind::Test => "test",
+                    Kind::Guest => "guest",
+                    Kind::Image => "image",
+                    Kind::Passed => "passed",
+                },
+                v.ty.replace('|', "\\|"),
+                if v.default.is_empty() {
+                    "-".to_string()
+                } else {
+                    v.default.to_string()
+                },
+                v.readers,
+                doc_line(v.doc).replace('|', "\\|")
+            );
+        }
+    }
+    s += "\n## Removed in M144\n\n| Variable | Why |\n|---|---|\n";
+    for r in REMOVED {
+        s += &format!("| `{}` | {} |\n", r.name, r.why);
+    }
+    s
+}

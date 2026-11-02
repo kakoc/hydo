@@ -42,9 +42,10 @@
 //!
 //! - **The worker owns its base snapshot.** [`Engine::start`] returns a [`Worker`] that holds S0
 //!   and S1 for its whole life; where they live is the engine's choice, asked for with
-//!   [`BootSpec::snapshots`]: [`SnapshotStore::Files`] (today's default, unchanged) or
-//!   [`SnapshotStore::Memory`] (hvx: the existing `HVX_SNAP_MALLOC=1`; an in-process engine:
-//!   plain memory). Callers never see snapshot files.
+//!   [`BootSpec::snapshots`]: [`SnapshotStore::Files`] or [`SnapshotStore::Memory`]. Since the
+//!   Rust hvx engine (M137) every hvx engine keeps them in memory whatever is asked, and hvm keeps
+//!   its files; the field no longer changes anything but the explorer's printed pool line.
+//!   Callers never see snapshot files.
 //! - **Reset to a snapshot is a worker operation.** [`Worker::reset`] puts the worker's VM back at
 //!   S0 or S1. The process engines do it inside every RUN (the default method says so); an
 //!   in-process engine may do it by copying back only the pages and disk blocks the last run
@@ -187,12 +188,11 @@ pub struct BootSpec {
 /// Where a worker keeps its base snapshots. The choice never changes a result or a fingerprint.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum SnapshotStore {
-    /// Snapshot files (hvx: `$HVX_SNAP_DIR`, hvm: `$HVM_SNAP_DIR`): today's default.
+    /// Snapshot files (the deleted C engine's `HVX_SNAP_DIR`; hvm: `HVM_SNAP_DIR`).
     #[default]
     Files,
-    /// In memory: hvx passes `HVX_SNAP_MALLOC=1` (about 5x faster worker boots and ~21% less per
-    /// run on a spinning disk, docs/PERF-RUN-COST.md); hvm keeps its files (no such switch yet); an
-    /// in-process engine keeps them in its own memory.
+    /// In memory (the deleted C engine's `HVX_SNAP_MALLOC=1`). hydo-hvx always keeps its
+    /// snapshots in memory, so for hvx the two choices are the same since M137.
     Memory,
 }
 
@@ -460,10 +460,10 @@ pub trait Worker {
     fn close(self: Box<Self>) -> Result<(), EngineError>;
 }
 
-/// The engine for this platform with its default configuration under a release root.
-pub fn native(root: &std::path::Path) -> Box<dyn Engine> {
+/// The engine for this platform under a release root, with the configuration the program read.
+pub fn native(root: &std::path::Path, config: hydo_config::Env) -> Box<dyn Engine> {
     match EngineKind::native() {
-        EngineKind::Hvx => Box::new(hvx::Hvx::for_release(root)),
+        EngineKind::Hvx => Box::new(hvx::Hvx::for_release(root, config)),
         EngineKind::Hvm => Box::new(hvm::Hvm::for_release(root)),
     }
 }

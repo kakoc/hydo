@@ -13,6 +13,7 @@ build = "build.rs"
 pt = ["dep:cc"]
 
 [dependencies]
+hydo-config = { workspace = true }
 libc = "0.2"
 hydo-schedule = { workspace = true }
 hydo-engine-proto = { workspace = true }

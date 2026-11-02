@@ -49,6 +49,7 @@ fn run_rust(argv: &[String]) -> (i32, String, String) {
     let ctx = hydo_build::Ctx {
         onboard: repo().join("hydo/onboard"),
         release: hydo_build::Release::None,
+        inputs: Default::default(),
     };
     let mut o: Vec<u8> = Vec::new();
     let mut e: Vec<u8> = Vec::new();

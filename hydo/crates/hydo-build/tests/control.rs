@@ -15,7 +15,7 @@ fn redis() -> String {
 }
 
 fn run(args: &[&str]) -> (i32, String, String) {
-    let ctx = Ctx::standalone();
+    let ctx = Ctx::standalone(Default::default());
     let (mut o, mut e) = (Vec::new(), Vec::new());
     let rc = {
         let mut io = Io {
@@ -97,10 +97,9 @@ fn staging_and_the_pin() {
         out: &mut o,
         err: &mut e,
     };
-    // a binary that is not the pinned agent is refused
-    std::env::remove_var("HYDO_AGENT_UNPINNED");
-    std::env::remove_var("HYDO_AGENT_BIN");
-    let msg = match agent::binary(&d, false, &mut io) {
+    // a binary that is not the pinned agent is refused (no HYDO_AGENT_* configured)
+    let ctx = Ctx::standalone(Default::default());
+    let msg = match agent::binary(&ctx, &d, false, &mut io) {
         Err(hydo_build::Fail::Exit(m)) => m,
         _ => panic!("an unpinned agent was accepted"),
     };

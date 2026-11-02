@@ -89,7 +89,7 @@ fn schemas_like_go() {
         let t = tmp(name);
         let out = t.join("out");
         a.extend(args(&["--out", out.to_str().unwrap(), "--no-build"]));
-        let summary = match hydo_grpc_gen::gen::run(&a) {
+        let summary = match hydo_grpc_gen::gen::run(&a, &Default::default()) {
             Ok(s) => s,
             Err(f) => panic!("{name}: {} (exit {})", f.0, f.1),
         };
@@ -117,7 +117,9 @@ fn schemas_like_go() {
         }
         // the generation is a pure function of its inputs
         let _ = fs::remove_dir_all(&out);
-        hydo_grpc_gen::gen::run(&a).map_err(|f| f.0).unwrap();
+        hydo_grpc_gen::gen::run(&a, &Default::default())
+            .map_err(|f| f.0)
+            .unwrap();
         assert_eq!(files(&out), got, "{name}: two runs differ");
         fs::remove_dir_all(&t).unwrap();
     }
@@ -178,7 +180,7 @@ fn hints_like_go() {
             out.to_str().unwrap(),
             "--no-build",
         ]);
-        let (code, err) = match hydo_grpc_gen::gen::run(&a) {
+        let (code, err) = match hydo_grpc_gen::gen::run(&a, &Default::default()) {
             Ok(_) => (0, String::new()),
             Err(f) if f.1 == 2 => (2, format!("{}\n", f.0)),
             Err(f) => (f.1, format!("hydo-grpc-gen: {}\n", f.0)),
@@ -230,7 +232,9 @@ fn descriptor_sets_like_go() {
             out.to_str().unwrap(),
             "--no-build",
         ]);
-        hydo_grpc_gen::gen::run(&a).map_err(|f| f.0).unwrap();
+        hydo_grpc_gen::gen::run(&a, &Default::default())
+            .map_err(|f| f.0)
+            .unwrap();
         let got = fs::read(out.join("grpc/desc.pb")).unwrap();
         if bless() {
             fs::write(g.join(format!("{name}.out.pb")), &got).unwrap();
@@ -260,7 +264,9 @@ fn descriptor_sets_like_go() {
         t.join("o").to_str().unwrap(),
         "--no-build",
     ]);
-    let e = hydo_grpc_gen::gen::run(&a).err().unwrap();
+    let e = hydo_grpc_gen::gen::run(&a, &Default::default())
+        .err()
+        .unwrap();
     assert_eq!(
         (e.1, e.0),
         (

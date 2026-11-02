@@ -1680,6 +1680,7 @@ pub fn cpio_meta(meta: &HashMap<String, MetaEntry>) -> Meta {
 /// with debugfs (the building user cannot chown), under the frozen clock.
 pub fn fix_ext4(
     meta: &HashMap<String, MetaEntry>,
+    debugfs: &hydo_config::build::Input,
     mke2fs: &str,
     faketime: &str,
     img: &Path,
@@ -1688,16 +1689,12 @@ pub fn fix_ext4(
     if meta.is_empty() {
         return Ok(());
     }
-    let dbg = std::env::var("HYDO_DEBUGFS")
-        .ok()
-        .filter(|x| !x.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            Path::new(mke2fs)
-                .parent()
-                .unwrap_or(Path::new(""))
-                .join("debugfs")
-        });
+    let dbg = debugfs.nonempty().map(PathBuf::from).unwrap_or_else(|| {
+        Path::new(mke2fs)
+            .parent()
+            .unwrap_or(Path::new(""))
+            .join("debugfs")
+    });
     if !dbg.is_file() {
         return Err(Fail::Exit(format!(
             "hydo-build: debugfs not found at {} (set HYDO_DEBUGFS)",

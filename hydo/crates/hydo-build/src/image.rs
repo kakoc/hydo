@@ -118,7 +118,7 @@ pub fn mkfs(
         .env("SOURCE_DATE_EPOCH", "1600000000");
     run_checked(&mut cmd, "mke2fs")?;
     if let (Release::Linux { .. }, Some(s)) = (&ctx.release, src) {
-        if std::env::var_os("HYDO_KEEP_OWNERS").is_none_or(|v| v.is_empty()) {
+        if !ctx.inputs.keep_owners {
             own_by_root(t, out, s)?;
         }
     }

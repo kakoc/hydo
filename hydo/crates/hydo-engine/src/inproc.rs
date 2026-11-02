@@ -9,19 +9,22 @@
 //! [`chosen`] decides: `HYDO_ENGINE=inproc` always, `HYDO_ENGINE=process` (or `c`) never, and
 //! otherwise exactly when this is Linux, `HYDO_SUDO` is not `1` and this process can read and
 //! write the device (`HVX_DEV`, default `/dev/hvx`): as root, or as a user the udev rule gives the
-//! device to. A user who cannot open it gets the program `hydo-hvx` under `hvx-run sudo`.
+//! device to. A user who cannot open it gets the program `hydo-hvx` under `hvx-run sudo`. These
+//! are `hydo_config::engine::Engine`, read from the [`Hvx`]'s configuration with its overrides
+//! on top ([`settings`]); nothing here reads the environment (M144).
 //!
 //! Each engine thread holds the module's shared lock while it runs, as `hvx-run` holds it for a
 //! program: `flock(LOCK_SH)` on `$HYDO_LOCK`, default `.hvx-module.lock` in the home directory
 //! (the invoking user's under sudo: `$SUDO_USER`'s), so a module reload waits for it. The [`Hvx`]
-//! fields map as follows: `engine` and `hvx_run` are not used, `extra_env` (`KEY=VALUE` words)
-//! and `env` are the engine thread's environment on top of this process's, and the snapshot
+//! fields map as follows: `engine` and `hvx_run` are not used, `env` and then `extra_env`
+//! (`KEY=VALUE` words) go on top of `config` for the engine thread's options, and the snapshot
 //! store is always memory.
 
 use crate::hvx::Hvx;
 use crate::process::Proc;
 use crate::protocol::EngineMsg;
 use crate::{BootSpec, EngineError, OneRun};
+use hydo_config::engine::{Choice, Engine};
 use hydo_schedule::Schedule;
 use std::io::Write;
 use std::path::Path;
@@ -29,15 +32,11 @@ use std::time::Instant;
 
 /// Whether `h` runs in this process (see the module comment).
 pub fn chosen(h: &Hvx) -> bool {
-    let get = lookup(h);
-    match get("HYDO_ENGINE").as_deref() {
-        Some("inproc") => true,
-        Some("process") | Some("c") => false,
-        _ => {
-            cfg!(target_os = "linux")
-                && get("HYDO_SUDO").as_deref() != Some("1")
-                && device_usable(&get("HVX_DEV").unwrap_or_else(|| "/dev/hvx".into()))
-        }
+    let e = Engine::from_env(&settings(h));
+    match e.choice {
+        Choice::InProcess => true,
+        Choice::Program => false,
+        Choice::Auto => cfg!(target_os = "linux") && !e.sudo && device_usable(e.dev()),
     }
 }
 
@@ -50,13 +49,14 @@ fn device_usable(dev: &str) -> bool {
     unsafe { libc::access(c.as_ptr(), libc::R_OK | libc::W_OK) == 0 }
 }
 
-/// The module lock file: `$HYDO_LOCK`, else `.hvx-module.lock` in `$SUDO_USER`'s home when this
-/// runs as root under sudo, else in `$HOME`.
+/// The module lock file: the configured one (`HYDO_LOCK`), else `.hvx-module.lock` in
+/// `$SUDO_USER`'s home when this runs as root under sudo, else in `$HOME`.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-fn lock_path(get: &dyn Fn(&str) -> Option<String>) -> Option<std::path::PathBuf> {
-    if let Some(l) = get("HYDO_LOCK").filter(|s| !s.is_empty()) {
-        return Some(l.into());
+fn lock_path(e: &Engine) -> Option<std::path::PathBuf> {
+    if let Some(l) = &e.lock {
+        return Some(l.clone());
     }
+    let get = |k: &str| std::env::var(k).ok();
     // SAFETY: geteuid has no preconditions
     if unsafe { libc::geteuid() } == 0 {
         if let Some(u) = get("SUDO_USER").filter(|u| !u.is_empty() && u != "root") {
@@ -89,9 +89,10 @@ fn home_of(user: &str) -> Option<std::path::PathBuf> {
 /// be opened (no home directory); the engine then runs without it, as a program run without
 /// the wrapper does.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-fn shared_lock(get: &dyn Fn(&str) -> Option<String>) -> Option<std::fs::File> {
+fn shared_lock(e: &Engine) -> Option<std::fs::File> {
     use std::os::unix::io::AsRawFd;
-    let p = lock_path(get)?;
+    let get = |k: &str| std::env::var(k).ok();
+    let p = lock_path(e)?;
     let f = std::fs::OpenOptions::new()
         .read(true)
         .open(&p)
@@ -124,21 +125,11 @@ fn shared_lock(get: &dyn Fn(&str) -> Option<String>) -> Option<std::fs::File> {
     }
 }
 
-/// The environment the engine thread sees: this process's, then `env`, then `extra_env`.
-fn lookup(h: &Hvx) -> impl Fn(&str) -> Option<String> + Send + 'static {
-    let mut over: Vec<(String, String)> = h.env.clone();
-    for w in &h.extra_env {
-        if let Some((k, v)) = w.split_once('=') {
-            over.push((k.to_string(), v.to_string()));
-        }
-    }
-    move |k: &str| {
-        over.iter()
-            .rev()
-            .find(|(a, _)| a == k)
-            .map(|(_, v)| v.clone())
-            .or_else(|| std::env::var(k).ok())
-    }
+/// The configuration the engine thread reads: the program's, then `env`, then `extra_env`.
+fn settings(h: &Hvx) -> hydo_config::Env {
+    h.config
+        .with(h.env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+        .with_words(&h.extra_env)
 }
 
 /// What the engine boots: `mode` with the spec's paths and options (`--control` is
@@ -188,9 +179,9 @@ fn spawn(
 ) -> Result<crate::process::Started, EngineError> {
     use hydo_hvx::engine::{run, Mode, Options};
     use hydo_hvx::port::ChanPort;
-    let get = lookup(h);
-    let o = Options::from_lookup(&get);
-    let lock = shared_lock(&get);
+    let e = settings(h);
+    let o = Options::from_env(&e);
+    let lock = shared_lock(&Engine::from_env(&e));
     let s = schedule.cloned();
     let one = |s: Option<Schedule>| Mode::One(s.expect("a schedule"));
     let start = match how {
@@ -229,7 +220,7 @@ fn spawn(
     diag: Box<dyn Write + Send>,
     echo: Option<std::sync::Arc<std::sync::Mutex<Vec<u8>>>>,
 ) -> Result<crate::process::Started, EngineError> {
-    let _ = (lookup(h), spec, how, schedule, diag, echo);
+    let _ = (settings(h), spec, how, schedule, diag, echo);
     Err(EngineError::Unsupported(
         "the in-process hvx engine needs Linux and /dev/hvx".into(),
     ))
@@ -371,13 +362,13 @@ mod tests {
         let h = Hvx {
             engine: "/x".into(),
             hvx_run: None,
-            snap_dir: "/s".into(),
             extra_env: vec!["HVX_TURN_MARGIN=160".into()],
             env: vec![("HVX_DEV".into(), "/dev/hvxside".into())],
+            config: hydo_config::Env::default(),
         };
-        let get = lookup(&h);
-        assert_eq!(get("HVX_TURN_MARGIN").as_deref(), Some("160"));
-        assert_eq!(get("HVX_DEV").as_deref(), Some("/dev/hvxside"));
+        let e = settings(&h);
+        assert_eq!(e.text("HVX_TURN_MARGIN").as_deref(), Some("160"));
+        assert_eq!(e.text("HVX_DEV").as_deref(), Some("/dev/hvxside"));
         // a device nobody has: the program, unless forced
         assert!(!chosen(&h));
         let mut f = h.clone();
@@ -390,7 +381,7 @@ mod tests {
         let mut l = h.clone();
         l.env.push(("HYDO_LOCK".into(), "/tmp/x.lock".into()));
         assert_eq!(
-            lock_path(&lookup(&l)).as_deref(),
+            lock_path(&Engine::from_env(&settings(&l))).as_deref(),
             Some(std::path::Path::new("/tmp/x.lock"))
         );
     }

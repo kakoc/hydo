@@ -140,7 +140,7 @@ fn vcpus(o: &Opts) -> Result<u32, String> {
     Ok(v)
 }
 
-fn cmd_run(root: &Path, o: &Opts) -> Result<(), String> {
+fn cmd_run(root: &Path, cfg: &hydo_config::Config, o: &Opts) -> Result<(), String> {
     if o.flag("--table") {
         print!(
             "{}",
@@ -236,13 +236,17 @@ fn cmd_run(root: &Path, o: &Opts) -> Result<(), String> {
         }
         return Ok(());
     }
-    let set = Set::new(Kind::select(o.get("--kind"))?, o.flag("--bg-images"));
+    let set = Set::new(
+        Kind::select(o.get("--kind"), &cfg.bench)?,
+        o.flag("--bg-images"),
+        &cfg.bench,
+    );
     let names = Set::names(o.get("--defects").unwrap_or("all"))?;
-    let eng = Engines::new(root, v, Vec::new());
+    let eng = Engines::new(root, v, Vec::new(), cfg);
     cells::run_cell(&c, &set, &eng, &names)
 }
 
-fn cmd_confirm(root: &Path, o: &Opts) -> Result<(), String> {
+fn cmd_confirm(root: &Path, cfg: &hydo_config::Config, o: &Opts) -> Result<(), String> {
     o.check(&[
         "--out",
         "--defects",
@@ -254,9 +258,13 @@ fn cmd_confirm(root: &Path, o: &Opts) -> Result<(), String> {
         "--kind",
     ])?;
     let out = o.get("--out").ok_or("--out is required")?;
-    let set = Set::new(Kind::select(o.get("--kind"))?, o.flag("--bg-images"));
+    let set = Set::new(
+        Kind::select(o.get("--kind"), &cfg.bench)?,
+        o.flag("--bg-images"),
+        &cfg.bench,
+    );
     let names = Set::names(o.get("--defects").unwrap_or("all"))?;
-    let eng = Engines::new(root, vcpus(o)?, Vec::new());
+    let eng = Engines::new(root, vcpus(o)?, Vec::new(), cfg);
     confirm::confirm(
         &set,
         &eng,
@@ -292,7 +300,7 @@ fn list_image(set: &Set, i: &str) -> Result<String, String> {
     })
 }
 
-fn cmd_list(root: &Path, o: &Opts) -> Result<(), String> {
+fn cmd_list(root: &Path, cfg: &hydo_config::Config, o: &Opts) -> Result<(), String> {
     o.check(&[
         "--images",
         "--list",
@@ -304,7 +312,11 @@ fn cmd_list(root: &Path, o: &Opts) -> Result<(), String> {
         "--kind",
         "--bg-images",
     ])?;
-    let set = Set::new(Kind::select(o.get("--kind"))?, o.flag("--bg-images"));
+    let set = Set::new(
+        Kind::select(o.get("--kind"), &cfg.bench)?,
+        o.flag("--bg-images"),
+        &cfg.bench,
+    );
     let images = o
         .get("--images")
         .ok_or("--images is required")?
@@ -318,7 +330,7 @@ fn cmd_list(root: &Path, o: &Opts) -> Result<(), String> {
     if repeat != 1 && repeat != 2 {
         return Err("--repeat: 1 or 2".into());
     }
-    let eng = Engines::new(root, vcpus(o)?, o.all("--env"));
+    let eng = Engines::new(root, vcpus(o)?, o.all("--env"), cfg);
     let t = listrun::run(
         &eng,
         &images,
@@ -361,8 +373,8 @@ fn cmd_addbuggify(o: &Opts) -> Result<(), String> {
     Ok(())
 }
 
-/// The entry point: the exit status.
-pub fn main_with(argv: &[String], root: &Path) -> i32 {
+/// The entry point: the exit status. `cfg` is the configuration the program read at its start.
+pub fn main_with(argv: &[String], root: &Path, cfg: &hydo_config::Config) -> i32 {
     let Some((cmd, rest)) = argv.split_first() else {
         eprintln!("{USAGE}");
         return 2;
@@ -375,11 +387,11 @@ pub fn main_with(argv: &[String], root: &Path) -> i32 {
         }
     };
     let r = match cmd.as_str() {
-        "run" => cmd_run(root, &o),
+        "run" => cmd_run(root, cfg, &o),
         "table" => cells::table(&o.free.iter().map(PathBuf::from).collect::<Vec<_>>())
             .map(|t| print!("{t}")),
-        "confirm" => cmd_confirm(root, &o),
-        "list" => cmd_list(root, &o),
+        "confirm" => cmd_confirm(root, cfg, &o),
+        "list" => cmd_list(root, cfg, &o),
         "depth1map" => cmd_depth1map(&o),
         "d7prob" => o
             .check(&["--seeds"])

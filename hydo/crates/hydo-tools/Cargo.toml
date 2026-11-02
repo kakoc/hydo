@@ -39,6 +39,7 @@ path = "src/bin/hydo-elf-comment.rs"
 
 [dependencies]
 hydo-build = { workspace = true }
+hydo-config = { workspace = true }
 hydo-manifest = { workspace = true }
 sha2 = { workspace = true }
 flate2 = { workspace = true }

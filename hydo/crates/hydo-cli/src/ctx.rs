@@ -17,12 +17,12 @@ pub enum Platform {
 impl Platform {
     /// The platform this binary was built for. `HYDO_CLI_PLATFORM=linux|mac` overrides it; the
     /// CLI test uses that to check the other platform's commands that need no engine.
-    pub fn detect() -> Platform {
-        match std::env::var("HYDO_CLI_PLATFORM").as_deref() {
-            Ok("linux") => Platform::Linux,
-            Ok("mac") => Platform::Mac,
-            _ if cfg!(target_os = "macos") => Platform::Mac,
-            _ => Platform::Linux,
+    pub fn detect(cli: &hydo_config::run::Cli) -> Platform {
+        match cli.platform {
+            Some(hydo_config::run::Platform::Linux) => Platform::Linux,
+            Some(hydo_config::run::Platform::Mac) => Platform::Mac,
+            None if cfg!(target_os = "macos") => Platform::Mac,
+            None => Platform::Linux,
         }
     }
 }
@@ -34,10 +34,12 @@ pub const PROJECT_OUT: &str = ".hydo";
 pub struct Ctx {
     pub platform: Platform,
     pub root: PathBuf,
+    /// The configuration, read once from the environment in `main` (`hydo_config`, M144).
+    pub config: hydo_config::Config,
 }
 
 impl Ctx {
-    pub fn new() -> Ctx {
+    pub fn new(config: hydo_config::Config) -> Ctx {
         // the release root: <root>/bin/hydo, symlinks resolved (the Python CLIs used realpath(__file__))
         let exe = std::env::current_exe()
             .and_then(|p| p.canonicalize())
@@ -48,8 +50,9 @@ impl Ctx {
             .map(Path::to_path_buf)
             .unwrap_or_else(|| PathBuf::from("."));
         Ctx {
-            platform: Platform::detect(),
+            platform: Platform::detect(&config.cli),
             root,
+            config,
         }
     }
 
