@@ -38,6 +38,7 @@ use crate::control::Ending;
 use crate::flow::{Memo, Step};
 use crate::plan::PlanWorld;
 use hydo_agent_proto::msg::{Command, Probe, ProbeEnd, Spawn};
+use hydo_schedule::ProtocolFault;
 use std::collections::BTreeSet;
 
 /// The handle of the world process.
@@ -50,7 +51,8 @@ const DECL: (&str, &str, &str) = (
     "a protocol fault (H=) was switched on",
 );
 
-/// One remembered H= token (a line of `$H/pf.tokens`: `$PF_N $from $to $1`).
+/// One remembered H= token (a line of `$H/pf.tokens`: `$PF_N $from $to $1`; `text` is the
+/// token's value as printed by hydo-schedule).
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Tok {
     n: u64,
@@ -226,40 +228,30 @@ fn pf_known(w: &PlanWorld, t: &str) -> bool {
 }
 
 /// set_knob H: pf_add. Ok(false) when the plan has no world (the letter is then an unknown knob).
-pub(super) fn set_knob(fx: &mut F<'_>, ctx: &Ctx, letter: &str, value: &str) -> Step<bool> {
+pub(super) fn set_knob(fx: &mut F<'_>, ctx: &Ctx, h: &ProtocolFault) -> Step<bool> {
     let Some(w) = world(ctx) else {
         return Ok(false);
     };
-    if letter != "H" {
-        return Ok(false);
-    }
-    pf_add(fx, w, value)?;
+    pf_add(fx, w, h)?;
     Ok(true)
 }
 
 /// pf_add <value of H=>: remember the token; step_range switches its window.
-fn pf_add(fx: &mut F<'_>, w: &PlanWorld, v: &str) -> Step<()> {
-    // tgt=${1%%@*}; rest=${1#*@}; rng=${rest%%:*}; from=${rng%-*}; to=${rng#*-}
-    let tgt = v.split('@').next().unwrap_or("");
-    let rest = v.split_once('@').map(|x| x.1).unwrap_or(v);
-    let rng = rest.split(':').next().unwrap_or("");
-    let from = rng.rsplit_once('-').map(|x| x.0).unwrap_or(rng);
-    let to = rng.split_once('-').map(|x| x.1).unwrap_or(rng);
-    let digits = format!("{from}{to}");
-    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
-        return die_oracle(
-            fx,
-            format!("HYDO-ORACLE: ERROR bad protocol fault H={v} (window)"),
-        );
-    }
-    if rest == v || !rest.contains(':') {
-        return die_oracle(fx, format!("HYDO-ORACLE: ERROR bad protocol fault H={v}"));
-    }
+///
+/// The shell takes the value apart (`tgt=${1%%@*}; rest=${1#*@}; rng=${rest%%:*};
+/// from=${rng%-*}; to=${rng#*-}`) and stops with "bad protocol fault" when the window is not two
+/// numbers or there is no `@`/`:`; hydo-schedule's [`ProtocolFault`] has those pieces and refuses
+/// such a token before a run. What can still happen is a bound beyond the shell's arithmetic
+/// (the old text path's `parse::<i64>()`), which keeps its verdict.
+fn pf_add(fx: &mut F<'_>, w: &PlanWorld, h: &ProtocolFault) -> Step<()> {
+    // the value as the guest's shell saw it, for its lines and `ctl on` (printed, not parsed)
+    let v = h.to_string();
+    let tgt = h.target.as_str();
     if !pf_known(w, tgt) {
         log(fx, format!("H: no fake or proxy {tgt}, ignored"));
         return Ok(());
     }
-    let (Ok(from), Ok(to)) = (from.parse::<i64>(), to.parse::<i64>()) else {
+    let (Ok(from), Ok(to)) = (i64::try_from(h.from), i64::try_from(h.to)) else {
         return die_oracle(
             fx,
             format!("HYDO-ORACLE: ERROR bad protocol fault H={v} (window)"),
@@ -268,7 +260,7 @@ fn pf_add(fx: &mut F<'_>, w: &PlanWorld, v: &str) -> Step<()> {
     if fx.effect_bool(|h, _| h.pf.tokens.is_empty()) {
         fx.report(decl(DECL.0, DECL.1, DECL.2));
     }
-    let text = v.to_string();
+    let text = v.clone();
     let n = match fx.effect(|h, _| {
         let n = h.pf.tokens.len() as u64 + 1;
         h.pf.tokens.push(Tok { n, from, to, text });
@@ -281,7 +273,9 @@ fn pf_add(fx: &mut F<'_>, w: &PlanWorld, v: &str) -> Step<()> {
     Ok(())
 }
 
-/// `$H/pf.tokens` as it stands (it only changes in the token loop, before the steps).
+/// `$H/pf.tokens` as it stands (it only changes in the token loop, before the steps). The memo
+/// holds the file's lines, `n from to <value>`, written by [`pf_add`] from the typed token; the
+/// numbers are read back here, the H= value stays an opaque word that is only printed.
 fn tokens(fx: &mut F<'_>) -> Vec<Tok> {
     let t = fx.effect_text(|h, _| {
         h.pf.tokens
