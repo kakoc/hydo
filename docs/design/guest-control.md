@@ -165,7 +165,8 @@ that commit (`HVX_EXIT_HOSTCALL`, a `why=hostcall` stop). The host's lines are s
 byte on the serial input. The port's buffers (a partial record, staged bytes not yet read) are
 saved with the engine's snapshots (`HVX_HC_GET_STATE`/`HVX_HC_SET_STATE`), not inside struct
 hvx_snapshot, so every older binary keeps its ABI. The negotiation: the engine offers the port
-(`HYDO_HVX_HOSTCALL=1`: the VM flag `HVX_VM_HOSTCALL` and `hydo.hc=1` on the kernel command line),
+(by default since M140, `HYDO_HVX_HOSTCALL=0` turns it off: the VM flag `HVX_VM_HOSTCALL` and,
+when the module has the port, `hydo.hc=1` on the kernel command line),
 and the agent takes it only when the port answers its magic (hydo-agent 0.3.0, hello feature
 `hostcall`); the engine switches the host's lines to the port when the agent's first record
 arrives there, so an older agent, an older engine or the main module stay on the serial line.

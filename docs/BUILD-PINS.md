@@ -139,6 +139,54 @@ stand-in binary itself (commit it, or point `HYDO_SEEDRNG` / the scripts at a sa
 (a) restores "built from pinned tools"; (b) keeps the existing baselines but leaves one
 binary whose build cannot be reproduced.
 
+## Nix on the bare-metal machine (Milestone 140)
+
+The build machine is off limits since 2026-10-30, so in Milestone 140 (user's approval of
+2026-11-02) the bare-metal machine got Nix and became the build machine for the images that need the pinned
+store paths. Everything below is in the session's own directory `~/hydo-nixb-work` on the bare-metal machine;
+nothing is in a shell profile.
+
+- **Nix:** 2.18.9, single-user, `/nix` owned by `ubuntu` (made with `sudo`), installed with the
+  official installer (`releases.nixos.org/nix/nix-2.18.9/install`, sha256 `5e887496…`) and
+  `--no-daemon --no-modify-profile --no-channel-add`. To use it:
+  `. ~/hydo-nixb-work/nixenv.sh` (puts `~/.nix-profile/bin` first on PATH, sets
+  `NIX_CONFIG` with cache.nixos.org as the only substituter, and `NIXPKGS`). Builds run without
+  the sandbox: Ubuntu 24.04 does not let a user create the namespaces it needs
+  (`kernel.apparmor_restrict_unprivileged_userns = 1`), and Nix falls back. The proofs below show
+  that the outputs are the build machine's anyway.
+- **nixpkgs:** the same as the build machine's, NixOS 24.05 at `89c49874fb15f4124bf71ca5f42a04f2ee5825fd`
+  (`/nix/store/f0ddmw6s86y567yg06h5019z72szbzch-source`, substituted from the cache).
+  `pkgsStatic.gcc.cc` evaluates to the pinned `aa1jsl19…-gcc-static-x86_64-unknown-linux-musl-13.2.0`
+  (derivation `5v8gvjag…`) and the Redis expression of "How the two missing derivations were found"
+  to `ky1xq6xa…`, as on the build machine.
+- **What came from where:** of the 51 store paths the build scripts and manifests name, 48 are in
+  cache.nixos.org (checked with each path's `.narinfo`); the three that are not are the two
+  derivations of this file (`aa1jsl19…` gcc, `ky1xq6xa…` Redis) and the unrestorable Python
+  environment. The static gcc was built from its derivation on the bare-metal machine (about half an hour on its 8
+  threads; its build inputs from the cache). MySQL, the JDK, Go 1.26.5 (`pwj3x44p…`), glibc 2.39-52 (`dbcw19ds…`),
+  PostgreSQL 15.6, curl, musl 1.2.6 (`0nlqfwsn…`) and binutils 2.41 (`7v7g86ml…`) were substituted
+  with their closures; Kafka (`prk07apd…`) was put there alone with `hydo-nix-fetch` (no
+  `--closure`), because its closure holds `iproute2-6.8.0` (`dx4fsbxs…`), and that path and
+  `iptables-1.8.10` (`xnrrq638…`) must never be in the host's `/nix/store`: they are roots of the
+  Linux release's bundled closures (`guest/store-closures.txt`), and once present on the host a
+  release build would look them up with `nix-store`, which other sessions do not have on PATH.
+  GC roots: `~/hydo-nixb-work/gcroots/`. Redis was not rebuilt: the stack images use the
+  `redis-server`/`redis-cli` binaries already proven identical to a rebuild (`e66c3fd0…`,
+  `7ecd56f4…`, "Proof" above).
+- **The pinned gcc needs nixpkgs' binutils 2.41 on PATH.** The gcc derivation has no assembler or
+  linker of its own; it runs `as` and `ld` from PATH. With Ubuntu's binutils 2.42 the pinned gcc
+  gives `hvx_seedrng` `e1a84724…` (the same `.text`, but no `.note.gnu.property` section); with
+  nixpkgs 24.05's `binutils-2.41` (`7v7g86ml…`, unwrapped, or its wrapper `bl7gf4cr…`) first on
+  PATH it gives the pinned `c2a440c5…`, and `hydoavx` of the avx2 example equals the one inside the
+  recorded image (`a0e5af37…`). So the build machine's PATH had nixpkgs' binutils 2.41, and every
+  use of the pinned gcc outside it needs `PATH=/nix/store/7v7g86ml…-binutils-2.41/bin:$PATH`.
+- **How the images are built on the bare-metal machine:** the Linux release's tools (M136's prefix: this tree's
+  `hydo`, the release's guest files, tools and faketime) with `nix-store` on PATH, so the
+  manifests' `nix:` closures resolve with `nix-store -qR` as on the build machine; as uid 1000,
+  gid 100 with `HYDO_KEEP_OWNERS=1` (`sudo setpriv --reuid=1000 --regid=100 --clear-groups`),
+  which gives the build machine's owners (its plain `hydo-build` keeps the builder's IDs, and the
+  recorded images have 1000:100). The script is M140's `img.sh` (docs/HISTORY.md Milestone 140).
+
 ## Mac guest kernel for service networks (Milestone 99, no Nix)
 
 The second arm64 guest kernel, `Image-explore-netns` (`hv/hvm/explore/build-guest-netns.sh`), is

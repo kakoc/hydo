@@ -1451,3 +1451,299 @@ invariants are the importer's TODOs). One verdict differs from earlier recording
 The benchmark's manifest images (agent images, `restart_may_fail` on the order service) and their
 triggers on the M136 images: `hydo/bench/README.md` "The manifest images after the switch
 (Milestone 136)".
+
+## 9. hydo-agent 0.3.0 and the host-call port (M140, 2026-11-02)
+
+Milestone 140 pinned hydo-agent 0.3.0 (x86_64 `398f297e…`, aarch64 `099e5444…`, docs/BUILD-PINS.md)
+in `hydo-build` and made the host-call port the hvx engine's default (`HYDO_HVX_HOSTCALL=0` turns it
+off). Every agent image therefore has new bytes, and on hvx with a module that has the port (the
+main module since Milestone 140 part A) the agent's lines and the host's lines travel over the port,
+whose records are part of the fingerprint. This section is the one re-recording of every example
+fingerprint after that change, measured as section 8 was (every recorded schedule twice, both runs
+one fingerprint). Section 8's values are the 0.2.0 images' and stay as the record of M136. The
+hand-written images (stack-explore images, flagships, `deploy-metal.sh`, the pinned reproducers)
+are not agent images and keep every value of sections 1–7.
+
+**The x86_64 images are now all real builds.** The tier-C examples that
+M136 patched from recorded shell images (etcd and its `-hc` images, the shop, the gRPC stack, the
+generated-driver stack, rust-kv, avx2, redis-oci, restate-oci) were built for real on the bare-metal machine
+with Nix installed there (docs/BUILD-PINS.md "Nix on the bare-metal machine").
+user's workflow engine is still patched (its sources are not in this repository).
+
+### 9.1 Mac (hvm), every recorded schedule twice
+
+67 schedules on 19 images, 67 twice identical. Measured again in Milestone 140 on images with hydo-agent 0.3.0 (aarch64 `099e5444…`): every image has new bytes, so every fingerprint and ctl value is new. 64 of 67 verdict lines are word for word the M136 ones; 3 differ (listed at the end). The verdict classes are M128's agent images' (and, where M130, M131 and M134 changed them, theirs): ledger-spin runs under the rewind mode, the redis-bridge freezes run in the namespace, python-kv starts, the gRPC demo violates on the buggy build and passes on the fixed one.
+
+How: M136's release-like prefix and staged example folders (M128's inputs, unchanged) with this
+branch's `hydo`, `hydo-build`, `hydo-explore`, `hvm`, `hvmx` and the pinned arm64 agent; every
+image built twice by `hydo build`, then every schedule run twice with `hydo run --image` (a fresh
+boot each). The Mac engine has no host-call port, so its runs stay on the serial line; the
+fingerprints moved only because the images' bytes did.
+
+Initramfs sha256 prefixes (two builds byte-identical each, initramfs and data disk): redis `3287ec68…`, redis-hist `a02207fa…`, redis-read `44074ee6…`, redis-ram `de9299e9…`, redis-bridge `ec23e76d…`, ledger `60e5c1c4…`, ledger-spin `9fcc4781…`, redis-composed atomic `cb18a467…`, racy `a8ccf05b…`, node-kv `0120fa41…`, python-kv `1e54249a…`, python-kv-hist `c29c0b90…`, rust-kv `7da906b0…`, shop buggy `cffb7543…`, fixed `978a0b96…`, gRPC demo buggy `97945ae1…`, fixed `68503918…`, the voting app `e3cb6df4…`, redis-oci `1a4f2757…`.
+
+
+#### redis
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (redis.acked_writes_survive: acked=20 all present) | `f1ed8926f43acd84` | `0b9e60d528cc2dc7` | yes |
+| `disk=none \| run K=redis@5+2` | OK invariants=1 held (redis.acked_writes_survive: acked=18 all present) | `0f1d8968c551592e` | `ff4caa09a583ed70` | yes |
+| `disk=none \| run P=redis@5+2` | OK invariants=1 held (redis.acked_writes_survive: acked=18 all present) | `3e16adbd26b169f6` | `a30845edf992e360` | yes |
+| `disk=cut \| run C=12 R=everysec` | VIOLATION [redis.acked_writes_survive] key k:0 lost | `f6d694ceb65cd0a1` | `c1c6baa6a88a32a5` | yes |
+| `disk=cut \| run C=12 R=always` | OK invariants=1 held (redis.acked_writes_survive: acked=12 all present) | `9b3b41c2d9d6921d` | `b4f7adea42cc337b` | yes |
+| `disk=none \| run O=redis@5-8:resp:loss,100%` | OK invariants=1 held (redis.acked_writes_survive: acked=17 all present) | `32520901637d3efb` | `99bc0f20aeb15106` | yes |
+| `disk=none \| run N=redis@5-10:loss,60%` | OK invariants=1 held (redis.acked_writes_survive: acked=17 all present) | `c7fab9ec8cc7d26c` | `1ba0f7a39eb8e843` | yes |
+| `disk=none \| run T=10:3600` | OK invariants=1 held (redis.acked_writes_survive: acked=20 all present) | `2d3bf39ec370aa12` | `12b5294b6b4cadc3` | yes |
+
+
+#### redis-hist
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=cut dseed=1 \| run C=12` | OK invariants=0 held (); history OK | `b141a93ed493b3d3` | `625922e1528c1e3c` | yes |
+| `disk=cut dseed=1 \| run C=12 R=everysec` | OK invariants=0 held (); history VIOLATION [redis.kv_linearizable] | `3934af9273c205b5` | `037a11f0d411212e` | yes |
+
+
+#### redis-read
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (redis.acked_writes_survive: subset holds: all 20 items of acked are in redis (redis h... | `f06758ca0247dbd8` | `8476030a9d80c61e` | yes |
+| `disk=cut dseed=1 \| run C=12 R=everysec` | VIOLATION [redis.acked_writes_survive] subset violated: 12 items of 12 in acked not in redis: k:0=v0, k:1=v... | `95d7e1ca3d487825` | `19138a12b5ab46af` | yes |
+
+
+#### redis-ram
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=2 held (redis.acked_writes_survive: acked=20 all present) | `7a59995ac88ef7ce` | `23d53d97e4d64efa` | yes |
+| `disk=cut \| run C=12 R=everysec` | VIOLATION [redis.acked_writes_survive] key k:0 lost | `5ac947f4a7487097` | `93ebd8cf695051da` | yes |
+
+
+#### redis-bridge
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `dddc2303d3d42ccf` | `6a8e130bfbf9fef2` | yes |
+| `disk=none \| run N=primary-replica@5-10:loss,100%` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `79d0a7f4e0e3f363` | `bb902d00160d7286` | yes |
+| `disk=none \| run O=primary-replica@5-10:req:loss,100%` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `8efe5abed105a3a9` | `f2d609514474f032` | yes |
+| `disk=none \| run O=primary@5-8:resp:delay,300ms` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `763b91f2b44aae1f` | `ab4e21b1c8e8ce83` | yes |
+| `disk=none \| run K=replica@5+3` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `501b262abcf67878` | `38e15c68d9963cda` | yes |
+| `disk=cut \| run C=8` | OK invariants=1 held (primary.acked_writes_survive: acked=8 all on the primary) | `aa1c35b41a917b4e` | `1ac708d19e5718f8` | yes |
+| `disk=none \| run F=replica<primary@5#3:2000` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `c5d5ec021d56f506` | `db293b879f216430` | yes |
+| `disk=none \| run F=primary<workload@5#2:1000` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `80ce5234857338c7` | `4ff9110839ed6dfd` | yes |
+| `disk=none \| run H=redisp@3-6:drop` | OK invariants=1 held (primary.acked_writes_survive: acked=13 all on the primary) | `94e11ee5fff0c8ce` | `a31807d7688f461c` | yes |
+
+
+#### ledger
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=2 held (ledger.acked_exactly_once: acked=30 each stored once) | `c862785a330bfab8` | `c9fd7b0f480180cd` | yes |
+| `disk=none \| run O=front@5-8:resp:loss,100%` | OK invariants=2 held (ledger.acked_exactly_once: acked=30 each stored once) | `7efd0546c264d279` | `c15ce94773db279a` | yes |
+| `disk=none \| run O=front@0-30:resp:loss,70%` | VIOLATION [ledger.acked_exactly_once] entry 1 stored 2 times | `a0717cd470073ba2` | `aea4258f9a112981` | yes |
+| `disk=none \| run O=front@0-30:resp:loss,50%` | VIOLATION [ledger.acked_exactly_once] entry 10 stored 2 times | `9a65359fb397b0a3` | `8552ef571c61fb8f` | yes |
+| `disk=none \| run N=front@0-30:loss,60%` | VIOLATION [ledger.acked_exactly_once] entry 9 stored 2 times | `03ab518387ad9e81` | `e50f44fc62acc4da` | yes |
+| `disk=none \| run P=front@10+2` | VIOLATION [ledger.acked_exactly_once] entry 10 stored 2 times | `3a9697e31d03494f` | `382b70a8955072c9` | yes |
+
+
+#### ledger-spin
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=2 held (ledger.acked_exactly_once: acked=30 each stored once) | `25f1123366ea96c6` | `930f998155f77b29` | yes |
+| `disk=none \| run P=front@10+2` | VIOLATION [ledger.acked_exactly_once] entry 10 stored 2 times | `8dd9c5537321c0e2` | `012f769bba1db408` | yes |
+
+
+#### redis-composed
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run W=0000002a,p4,q2,r100` | OK invariants=5 held (compose.commands: started=34 ok=34 failed=0 timeout=0 violation=0 killed=0 skipped=0) | `8e6df1a1d61c89a5` | `64228edfdcc3de50` | yes |
+
+
+#### redis-composed-racy
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run W=0000002a,p4,q2,r100` | VIOLATION [total_conserved] balances sum to 503, not 500 | `e521936cacc3758f` | `cc25282fa6ee57cf` | yes |
+
+
+#### node-kv
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (nkv.oracle: acked=20 all present) | `ab38514eec59f829` | `0141194b466e3bd9` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [nkv.oracle] key k:0 lost (got null) | `376432e7f641b27f` | `8de6e3d2ba8ff5d8` | yes |
+| `disk=cut \| run C=12` | OK invariants=1 held (nkv.oracle: acked=12 all present) | `0ccaca40efede16b` | `202dcc1810826541` | yes |
+| `disk=none \| run K=nkv@8+2 B=1234` | OK invariants=1 held (nkv.oracle: acked=18 all present) | `41e70d32728c4aa4` | `39129eaa9b7e2227` | yes |
+
+
+#### python-kv
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (pykv.oracle: acked=20 all present) | `9d00f01d83b06ac4` | `99d3a6c9bcab4d75` | yes |
+| `disk=none \| run K=pykv@8+2` | OK invariants=1 held (pykv.oracle: acked=18 all present) | `128d1d3b48e64d1b` | `9dac63ed9843b10c` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [pykv.oracle] key k:0 lost (got 'NONE') | `849c3e7fdff7ff7d` | `3b8233343cb49963` | yes |
+| `disk=none \| run B=1234` | OK invariants=1 held (pykv.oracle: acked=18 all present) | `8b0fb5dad694116f` | `91e0931a5e07100c` | yes |
+
+
+#### python-kv-hist
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=cut \| run C=12` | OK invariants=0 held (); history OK | `591de92b60287448` | `133c9c994223dbe4` | yes |
+| `disk=cut \| run C=12 S=never` | OK invariants=0 held (); history VIOLATION [kv.linearizable] | `9f14f5e97552d859` | `4a799f3170dcb41b` | yes |
+
+
+#### rust-kv
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present) | `61439e850cbf3f0b` | `bc6fe53352fa8359` | yes |
+| `disk=cut \| run C=12` | OK invariants=1 held (rkv.oracle: rkv check: acked=12 all present) | `340ee6be11b15054` | `ded68d8cdfcf34f0` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [rkv.oracle] rkv check: acked=12 lost=12 | `5c01cc7f873600a8` | `22168eb0b60f5ac1` | yes |
+| `disk=none \| run K=rkv@8+2` | OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present) | `a3ccc7e44aba8a85` | `0ad74bffbfd87b1f` | yes |
+| `disk=none \| run B=5abc,1000,500` | OK invariants=1 held (rkv.oracle: rkv check: acked=2 all present) | `45f4beefdcc451e5` | `d20fa8483538cd42` | yes |
+| `disk=none \| run B=1234` | OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present) | `30a2e13e3513dcd6` | `243f271a5911baf1` | yes |
+| `disk=none \| run K=rkv@8+2 B=1234` | OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present) | `9becaca62b9a064d` | `31ca45bf4f0d1dfe` | yes |
+| `disk=none \| run P=rkv@5+3` | OK invariants=1 held (rkv.oracle: rkv check: acked=17 all present) | `c79b1f2bf4cf5659` | `53e69be30dff5ad1` | yes |
+
+
+#### shop-buggy
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once) | `b21d94a70f547510` | `0927ec66fcfd9b81` | yes |
+| `disk=none dseed=efb4cfbc49052179 \| run H=payments.charge@0-1:drop` | VIOLATION [payments.charged_at_most_once] payments.charge: ref o0 took effect 3 times (records 1,2,3) | `4918bf71ad909f1f` | `a95a5e731424d505` | yes |
+| `disk=cut dseed=1 \| run H=payments.charge@0-1:drop C=6` | VIOLATION [payments.charged_at_most_once] payments.charge: ref o0 took effect 3 times (records 1,2,3) | `c9ebb0c89f804f43` | `66806064cf1f0f7a` | yes |
+| `disk=none \| run H=payments.charge@6-9:reset,p=50` | VIOLATION [payments.charged_at_most_once] payments.charge: ref o7 took effect 2 times (records 23,26) | `065c010bd255c768` | `c9bf99c5c985c965` | yes |
+
+
+#### shop-fixed
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once) | `6f9ef8fe3c5b9aa5` | `0707ac0014b93d7a` | yes |
+| `disk=none dseed=efb4cfbc49052179 \| run H=payments.charge@0-1:drop` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once) | `884e05caed8206ce` | `95eb07beb9a9a85b` | yes |
+| `disk=cut dseed=1 \| run H=payments.charge@0-1:drop C=6` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 6 effects, every ref at most once) | `d30f33a552194f9b` | `ec7c5b8d2145b6f9` | yes |
+
+
+#### grpc-buggy
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none dseed=d7071eb1f9d436b9 \| run P=redis@16+11 W=5764a73c,p1,q2,r200,n3,x0.2.6.13.26-27.34.46-47,o0.2-3` | VIOLATION [orders.consistent] VIOLATION request_id r1 created 5 orders: o11 o1 o2 o3 o4 | `87140952dd83ad1d` | `e6766eac8f5475fc` | yes |
+
+
+#### grpc-fixed
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none dseed=d7071eb1f9d436b9 \| run P=redis@16+11 W=5764a73c,p1,q2,r200,n3,x0.2.6.13.26-27.34.46-47,o0.2-3` | OK invariants=2 held (compose.commands: started=2 ok=1 failed=1 timeout=0 violation=0 killed=0 skipped=0) | `01b82adb6d3f4ae7` | `9fcb1c71aa47fc8b` | yes |
+
+
+#### voting
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (votes.counted: all 20 acknowledged votes counted) | `d9203d76dbb2365e` | `176d7acdf4d05c6e` | yes |
+| `disk=none \| run K=worker@5+5` | OK invariants=1 held (votes.counted: all 20 acknowledged votes counted) | `267c21b397767be1` | `73f458b22605fd8d` | yes |
+| `disk=cut \| run C=12` | VIOLATION [votes.counted_soon] not satisfied 60.64s after heal, deadline 60s (last check rc=1: too few vote... | `de894df127e2d53c` | `ce1382c7c8092626` | yes |
+| `disk=none \| run N=vote-redis@5-12:loss,100%` | OK invariants=1 held (votes.counted: all 13 acknowledged votes counted) | `b082b693ab94dcf5` | `880937d1be914793` | yes |
+
+
+#### redis-oci
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (redis.acked_writes_survive: acked=20 all present) | `a1e5e9487c32ff5d` | `f7161ddb8479f702` | yes |
+| `disk=cut \| run C=12 R=everysec` | VIOLATION [redis.acked_writes_survive] key k:1 lost | `6b71834cda791fa5` | `a8dee7e04969f117` | yes |
+| `disk=none \| run K=redis@5+2` | OK invariants=1 held (redis.acked_writes_survive: acked=18 all present) | `009d7f67bb41f009` | `cd6f8435f894b551` | yes |
+
+
+#### M136 → M140, fingerprint by fingerprint (Mac)
+
+| example | schedule | M136 fingerprint | M140 fingerprint |
+|---|---|---|---|
+| redis | `disk=none \| run` | `193b67145318d6cf` | `f1ed8926f43acd84` |
+| redis | `disk=none \| run K=redis@5+2` | `7d89169baf52ecc2` | `0f1d8968c551592e` |
+| redis | `disk=none \| run P=redis@5+2` | `1f61a9f4c6743764` | `3e16adbd26b169f6` |
+| redis | `disk=cut \| run C=12 R=everysec` | `fb9c6839e1f6f4f7` | `f6d694ceb65cd0a1` |
+| redis | `disk=cut \| run C=12 R=always` | `431723382cd6f829` | `9b3b41c2d9d6921d` |
+| redis | `disk=none \| run O=redis@5-8:resp:loss,100%` | `1655543a974efcbe` | `32520901637d3efb` |
+| redis | `disk=none \| run N=redis@5-10:loss,60%` | `72ba6bc7c6de2503` | `c7fab9ec8cc7d26c` |
+| redis | `disk=none \| run T=10:3600` | `ee1f3c01eb04616f` | `2d3bf39ec370aa12` |
+| redis-hist | `disk=cut dseed=1 \| run C=12` | `4957be0a6dcb2035` | `b141a93ed493b3d3` |
+| redis-hist | `disk=cut dseed=1 \| run C=12 R=everysec` | `957cb0ad3bb0b259` | `3934af9273c205b5` |
+| redis-read | `disk=none \| run` | `6ae40167e8288b87` | `f06758ca0247dbd8` |
+| redis-read | `disk=cut dseed=1 \| run C=12 R=everysec` | `cdc8de057c26cbb3` | `95d7e1ca3d487825` |
+| redis-ram | `disk=none \| run` | `067dd2c6d54e2ca6` | `7a59995ac88ef7ce` |
+| redis-ram | `disk=cut \| run C=12 R=everysec` | `ca5031a62951d171` | `5ac947f4a7487097` |
+| redis-bridge | `disk=none \| run` | `8fd9e1576dee25c4` | `dddc2303d3d42ccf` |
+| redis-bridge | `disk=none \| run N=primary-replica@5-10:loss,100%` | `c42fb828cb40ea69` | `79d0a7f4e0e3f363` |
+| redis-bridge | `disk=none \| run O=primary-replica@5-10:req:loss,100%` | `022f2184ab03958f` | `8efe5abed105a3a9` |
+| redis-bridge | `disk=none \| run O=primary@5-8:resp:delay,300ms` | `c2bc92c9a0b26ea4` | `763b91f2b44aae1f` |
+| redis-bridge | `disk=none \| run K=replica@5+3` | `2f0c2e49fb70d37a` | `501b262abcf67878` |
+| redis-bridge | `disk=cut \| run C=8` | `bd3d67ef875fb289` | `aa1c35b41a917b4e` |
+| redis-bridge | `disk=none \| run F=replica<primary@5#3:2000` | `c5468c557f44330f` | `c5d5ec021d56f506` |
+| redis-bridge | `disk=none \| run F=primary<workload@5#2:1000` | `e2d9ddbf12753896` | `80ce5234857338c7` |
+| redis-bridge | `disk=none \| run H=redisp@3-6:drop` | `9da67ba88882b5d5` | `94e11ee5fff0c8ce` |
+| ledger | `disk=none \| run` | `0d47c63d0101b506` | `c862785a330bfab8` |
+| ledger | `disk=none \| run O=front@5-8:resp:loss,100%` | `946266e1c874aa0b` | `7efd0546c264d279` |
+| ledger | `disk=none \| run O=front@0-30:resp:loss,70%` | `5af3b8a3cab4723b` | `a0717cd470073ba2` |
+| ledger | `disk=none \| run O=front@0-30:resp:loss,50%` | `61113c627c33395f` | `9a65359fb397b0a3` |
+| ledger | `disk=none \| run N=front@0-30:loss,60%` | `d1536c0e926261c8` | `03ab518387ad9e81` |
+| ledger | `disk=none \| run P=front@10+2` | `fda105a8fa77341b` | `3a9697e31d03494f` |
+| ledger-spin | `disk=none \| run` | `e0518577f10b88c3` | `25f1123366ea96c6` |
+| ledger-spin | `disk=none \| run P=front@10+2` | `2dcb3c0bf16ed0c0` | `8dd9c5537321c0e2` |
+| redis-composed | `disk=none \| run W=0000002a,p4,q2,r100` | `5efdd2f240a987e7` | `8e6df1a1d61c89a5` |
+| redis-composed-racy | `disk=none \| run W=0000002a,p4,q2,r100` | `0d5d1e702e3ac25e` | `e521936cacc3758f` |
+| node-kv | `disk=none \| run` | `f15f18b0c9841e28` | `ab38514eec59f829` |
+| node-kv | `disk=cut \| run C=12 S=never` | `46e0b639fcbcdf95` | `376432e7f641b27f` |
+| node-kv | `disk=cut \| run C=12` | `001f3efd81700a81` | `0ccaca40efede16b` |
+| node-kv | `disk=none \| run K=nkv@8+2 B=1234` | `258ef05237ca123e` | `41e70d32728c4aa4` |
+| python-kv | `disk=none \| run` | `26d1a7ff9f69fc6e` | `9d00f01d83b06ac4` |
+| python-kv | `disk=none \| run K=pykv@8+2` | `2bf54a9ce250ed03` | `128d1d3b48e64d1b` |
+| python-kv | `disk=cut \| run C=12 S=never` | `9860f80fb0e1625b` | `849c3e7fdff7ff7d` |
+| python-kv | `disk=none \| run B=1234` | `d3709c242b3f967a` | `8b0fb5dad694116f` |
+| python-kv-hist | `disk=cut \| run C=12` | `a7a64977623a9b0e` | `591de92b60287448` |
+| python-kv-hist | `disk=cut \| run C=12 S=never` | `88d948c63401bb25` | `9f14f5e97552d859` |
+| rust-kv | `disk=none \| run` | `5777c136b33b2224` | `61439e850cbf3f0b` |
+| rust-kv | `disk=cut \| run C=12` | `74c66bb13973fd34` | `340ee6be11b15054` |
+| rust-kv | `disk=cut \| run C=12 S=never` | `72da87f9b318654b` | `5c01cc7f873600a8` |
+| rust-kv | `disk=none \| run K=rkv@8+2` | `d94833c3a18f8546` | `a3ccc7e44aba8a85` |
+| rust-kv | `disk=none \| run B=5abc,1000,500` | `28e10d55aef58de9` | `45f4beefdcc451e5` |
+| rust-kv | `disk=none \| run B=1234` | `548606cca90e0e00` | `30a2e13e3513dcd6` |
+| rust-kv | `disk=none \| run K=rkv@8+2 B=1234` | `050f2a8526860056` | `9becaca62b9a064d` |
+| rust-kv | `disk=none \| run P=rkv@5+3` | `a853e49fb584b0fc` | `c79b1f2bf4cf5659` |
+| shop-buggy | `disk=none \| run` | `287ec924a7c24266` | `b21d94a70f547510` |
+| shop-fixed | `disk=none \| run` | `4837e65705116cdb` | `6f9ef8fe3c5b9aa5` |
+| shop-buggy | `disk=none dseed=efb4cfbc49052179 \| run H=payments.charge@0-1:drop` | `3ca443aabec98486` | `4918bf71ad909f1f` |
+| shop-fixed | `disk=none dseed=efb4cfbc49052179 \| run H=payments.charge@0-1:drop` | `61a13ebe6297ead4` | `884e05caed8206ce` |
+| shop-buggy | `disk=cut dseed=1 \| run H=payments.charge@0-1:drop C=6` | `9496d19fc5de2a84` | `c9ebb0c89f804f43` |
+| shop-fixed | `disk=cut dseed=1 \| run H=payments.charge@0-1:drop C=6` | `a6999e49d410101a` | `d30f33a552194f9b` |
+| shop-buggy | `disk=none \| run H=payments.charge@6-9:reset,p=50` | `36de7a870a2f929b` | `065c010bd255c768` |
+| grpc-buggy | `disk=none dseed=d7071eb1f9d436b9 \| run P=redis@16+11 W=5764a73c,p1,q2,r200,n3,x0.2.6.13.26-27.34.46-47,o0.2-3` | `1c3ee0d25016e91b` | `87140952dd83ad1d` |
+| grpc-fixed | `disk=none dseed=d7071eb1f9d436b9 \| run P=redis@16+11 W=5764a73c,p1,q2,r200,n3,x0.2.6.13.26-27.34.46-47,o0.2-3` | `00d2c1058ea96480` | `01b82adb6d3f4ae7` |
+| voting | `disk=none \| run` | `3cf409bead783e0e` | `d9203d76dbb2365e` |
+| voting | `disk=none \| run K=worker@5+5` | `e5ea05f9170541b5` | `267c21b397767be1` |
+| voting | `disk=cut \| run C=12` | `ff4dc7a30d3a8c98` | `de894df127e2d53c` |
+| voting | `disk=none \| run N=vote-redis@5-12:loss,100%` | `22b4be3c7a922d35` | `b082b693ab94dcf5` |
+| redis-oci | `disk=none \| run` | `f5368b1e6404ab4c` | `a1e5e9487c32ff5d` |
+| redis-oci | `disk=cut \| run C=12 R=everysec` | `1103323601bea190` | `6b71834cda791fa5` |
+| redis-oci | `disk=none \| run K=redis@5+2` | `e19719312392a8f1` | `009d7f67bb41f009` |
+
+#### Verdict lines that differ from M136 (Mac)
+
+- redis-composed-racy `disk=none | run W=0000002a,p4,q2,r100`
+  - M136: HYDO-ORACLE: VIOLATION [total_conserved] balances sum to 495, not 500
+  - M140: HYDO-ORACLE: VIOLATION [total_conserved] balances sum to 503, not 500
+- shop-buggy `disk=none | run H=payments.charge@6-9:reset,p=50`
+  - M136: HYDO-ORACLE: VIOLATION [payments.charged_at_most_once] payments.charge: ref o7 took effect 2 times (records 24,26)
+  - M140: HYDO-ORACLE: VIOLATION [payments.charged_at_most_once] payments.charge: ref o7 took effect 2 times (records 23,26)
+- voting `disk=cut | run C=12`
+  - M136: HYDO-ORACLE: VIOLATION [votes.counted_soon] not satisfied 60.83s after heal, deadline 60s (last check rc=1: too few votes counted: 0 of 12 acknowledged votes are in PostgreSQL; voter0 (vote a) is not)
+  - M140: HYDO-ORACLE: VIOLATION [votes.counted_soon] not satisfied 60.64s after heal, deadline 60s (last check rc=1: too few votes counted: 0 of 12 acknowledged votes are in PostgreSQL; voter0 (vote a) is not)
