@@ -34,6 +34,7 @@
 use super::*;
 use crate::flow::Stop;
 use hydo_agent_proto::msg::{Dir, Freeze, Unfreeze, UnfreezeOk, WarnCode};
+use hydo_schedule::{Freeze as FreezeTok, FreezeDir};
 
 /// The freeze helper's queue, its log, and the rules' NFQUEUE target.
 const QUEUE: u32 = 7;
@@ -44,87 +45,63 @@ pub const FREEZE_DECL: &str = "HYDO-ASSERT-DECL {\"t\":\"reachable\",\"id\":\"fa
 /// hydo_fc's record at the freeze.
 pub const FREEZE_RECORD: &str = "HYDO-ASSERT {\"t\":\"reachable\",\"id\":\"fault.freeze_call\",\"ok\":true,\"msg\":\"a service was frozen at a call (F=)\"}";
 
-/// An F= token as fc_parse leaves it (the shell's FC, fc_svc, fc_dir, ... as text).
+/// An F= token as fc_parse leaves it (the shell's FC, fc_svc, fc_dir, ...).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct Fc {
     pub svc: String,
     /// `req` (>) or `resp` (<)
-    pub dir: String,
+    pub dir: &'static str,
     pub tgt: String,
-    pub step: String,
-    pub n: String,
+    pub step: u64,
+    /// `#<n>`, 1 when not written
+    pub n: u64,
     /// `-` = every packet
     pub matching: String,
-    pub dur: String,
+    pub dur: u64,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 enum Parsed {
-    Bad(&'static str),
     Ignored(String, String),
     Ok(Fc),
 }
 
-/// fc_parse, as text operations on the token's value.
-fn parse(plan: &Plan, fc: &str) -> Parsed {
-    use netfault::{after_first, after_last, before_first, before_last};
-    let head = before_first(fc, '@');
-    let rest0 = after_first(fc, '@');
-    if head == fc {
-        return Parsed::Bad("no @");
-    }
-    let (dir, svc, tgt) = if head.contains('>') {
-        ("req", before_first(head, '>'), after_first(head, '>'))
-    } else if head.contains('<') {
-        ("resp", before_first(head, '<'), after_first(head, '<'))
-    } else {
-        return Parsed::Bad("no > or <");
+/// fc_parse. The shell takes the value apart with `${FC%%@*}` and the like and refuses a token
+/// without `@`, `>`/`<` or `:<dur>`, or with a step, n or dur that is not a number ("bad freeze
+/// token"); hydo-schedule's [`FreezeTok`] has those pieces and refuses such a token before a
+/// run, so only the services are checked here. (fc_parse also read an empty match string as
+/// "every packet", `-`; hydo-schedule refuses an empty one, so `-` stands for "not written".)
+fn parse(plan: &Plan, fc: &FreezeTok) -> Parsed {
+    let dir = match fc.dir {
+        FreezeDir::Sends => "req",
+        FreezeDir::Receives => "resp",
     };
-    let dur = after_last(rest0, ':');
-    let mut rest = before_last(rest0, ':');
-    if rest == rest0 {
-        return Parsed::Bad("no :<dur>");
-    }
-    let mut matching = "-";
-    if rest.contains(':') {
-        matching = after_first(rest, ':');
-        rest = before_first(rest, ':');
-    }
-    if matching.is_empty() {
-        matching = "-";
-    }
-    let (step, n) = if rest.contains('#') {
-        (before_first(rest, '#'), after_first(rest, '#'))
-    } else {
-        (rest, "1")
-    };
-    let digits = |v: &str| !v.is_empty() && v.bytes().all(|b| b.is_ascii_digit());
-    if !digits(step) || !digits(n) || !digits(dur) {
-        return Parsed::Bad("step, n and dur must be numbers");
-    }
+    let (svc, tgt) = (fc.svc.as_str(), fc.peer.as_str());
     let known = |s: &str| plan.service(s).is_some();
     if !known(svc) || (tgt != "workload" && !known(tgt)) || svc == tgt {
         return Parsed::Ignored(svc.into(), tgt.into());
     }
     Parsed::Ok(Fc {
         svc: svc.into(),
-        dir: dir.into(),
+        dir,
         tgt: tgt.into(),
-        step: step.into(),
-        n: n.into(),
-        matching: matching.into(),
-        dur: dur.into(),
+        step: fc.step,
+        n: fc.n.unwrap_or(1),
+        matching: fc.matching.clone().unwrap_or_else(|| "-".into()),
+        dur: fc.dur_ms,
     })
 }
 
-/// hydo-init-freeze.sh's set_knob for F=: fc_parse with its log line or the ERROR verdict.
-pub(super) fn parse_knob(fx: &mut F<'_>, value: &str) -> Step<()> {
+/// hydo_fc's `atol` of a number the shell passed it as text: C's long arithmetic wraps, so a u64
+/// beyond i64::MAX reads as `v as i64` (what the old text path's atol gave).
+fn c_long(v: u64) -> i64 {
+    v as i64
+}
+
+/// hydo-init-freeze.sh's set_knob for F=: fc_parse with its log line.
+pub(super) fn parse_knob(fx: &mut F<'_>, value: &FreezeTok) -> Step<()> {
     let ctx = fx.shared.ctx.clone();
     match parse(&ctx.plan, value) {
-        Parsed::Bad(why) => die_oracle(
-            fx,
-            format!("HYDO-ORACLE: ERROR bad freeze token F={value} ({why})"),
-        ),
         Parsed::Ignored(s, t) => {
             log(fx, format!("F: no services {s} and {t}, ignored"));
             Ok(())
@@ -145,7 +122,10 @@ pub(super) fn parse_knob(fx: &mut F<'_>, value: &str) -> Step<()> {
 /// The freeze in force after the knobs (the last F= decides: FC is set by each fc_parse, and a
 /// token that is ignored clears it).
 fn effective(ctx: &Ctx) -> Option<Fc> {
-    let (_, v) = ctx.run.knobs.iter().rev().find(|(l, _)| l == "F")?;
+    let v = ctx.run.knobs.iter().rev().find_map(|t| match t {
+        GuestToken::Freeze(f) => Some(f),
+        _ => None,
+    })?;
     match parse(&ctx.plan, v) {
         Parsed::Ok(f) => Some(f),
         _ => None,
@@ -203,7 +183,8 @@ pub(super) fn step_range(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> 
         fx.report(FREEZE_DECL);
     }
     if let Some(fc) = effective(ctx) {
-        let st: i64 = fc.step.parse().unwrap_or(i64::MAX);
+        // (the old text path's `parse().unwrap_or(i64::MAX)`: a step beyond i64 is never reached)
+        let st: i64 = i64::try_from(fc.step).unwrap_or(i64::MAX);
         if !has_mark(fx, "fc.on") && st >= a && st < b {
             step_range_core(fx, ctx, a, st)?;
             arm(fx, ctx, &fc)?;
@@ -259,16 +240,16 @@ fn arm(fx: &mut F<'_>, ctx: &Ctx, fc: &Fc) -> Step<()> {
             port: port_,
             own_port,
             dir: if fc.dir == "req" { Dir::Req } else { Dir::Resp },
-            n: atol(&fc.n).max(0) as u64,
+            n: c_long(fc.n).max(0) as u64,
             pattern: (fc.matching != "-").then(|| fc.matching.clone()),
-            dur_ms: atol(&fc.dur).max(0) as u64,
+            dur_ms: c_long(fc.dur).max(0) as u64,
             log: Some(fc_log(ctx)),
             // hydo-init-netns.sh's fc_arm: HYDO_FC="$BB nsenter -n$NSD/$fc_svc $_fc"
             netns: netns::of(ctx, &fc.svc),
         }))?;
         fx.start(Part::FreezeWatch {
             id,
-            dur: fc.dur.clone(),
+            dur: c_long(fc.dur),
         })?;
         if fx.reply(id)?.is_err() {
             return die_oracle(fx, "HYDO-ORACLE: ERROR freeze helper did not start".into());
@@ -480,7 +461,7 @@ pub(super) fn heal(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     };
     let fired = fx.effect_bool(|_, f| fired_in(f));
     if fired && !fx.effect_bool(|_, f| resumed_in(f)) {
-        let lim = atol(&fc.dur) / 1000 + 30;
+        let lim = c_long(fc.dur) / 1000 + 30;
         let mut n = 0;
         while n < lim {
             let e = env(fx, ctx, &[]);
@@ -526,7 +507,7 @@ pub(super) fn heal(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             fc.step
         ),
     );
-    if fc.n == "0" {
+    if fc.n == 0 {
         let t = read_all(fx, &fc_log(ctx))?;
         for l in trace_lines(&t, 600) {
             fx.report(l);
@@ -613,8 +594,7 @@ fn its_event(e: &Event, id: u64) -> bool {
 }
 
 /// The thread for hydo_fc's console lines: one report (or two) per event, as they are seen.
-pub(super) fn watch(fx: &mut F<'_>, id: u64, dur: &str) -> Step<()> {
-    let dur = atol(dur);
+pub(super) fn watch(fx: &mut F<'_>, id: u64, dur: i64) -> Step<()> {
     let mut k = 0;
     loop {
         let ev = fx
@@ -683,48 +663,49 @@ mod tests {
     #[test]
     fn fc_parse_as_the_shell_reads_it() {
         let p = plan();
-        let ok = |svc: &str, dir: &str, tgt: &str, step: &str, n: &str, m: &str, dur: &str| {
+        let tok = |v: &str| match GuestToken::parse(&format!("F={v}")) {
+            Ok(GuestToken::Freeze(f)) => Ok(f),
+            Ok(t) => panic!("{t:?}"),
+            Err(e) => Err(e),
+        };
+        let parse = |v: &str| parse(&p, &tok(v).unwrap());
+        let ok = |svc: &str, dir: &'static str, tgt: &str, step, n, m: &str, dur| {
             Parsed::Ok(Fc {
                 svc: svc.into(),
-                dir: dir.into(),
+                dir,
                 tgt: tgt.into(),
-                step: step.into(),
-                n: n.into(),
+                step,
+                n,
                 matching: m.into(),
-                dur: dur.into(),
+                dur,
             })
         };
         assert_eq!(
-            parse(&p, "a>b@3#2:abc:500"),
-            ok("a", "req", "b", "3", "2", "abc", "500")
+            parse("a>b@3#2:abc:500"),
+            ok("a", "req", "b", 3, 2, "abc", 500)
         );
         assert_eq!(
-            parse(&p, "a<workload@0:1"),
-            ok("a", "resp", "workload", "0", "1", "-", "1")
+            parse("a<workload@0:1"),
+            ok("a", "resp", "workload", 0, 1, "-", 1)
         );
-        assert_eq!(
-            parse(&p, "a>b@3#0::9"),
-            ok("a", "req", "b", "3", "0", "-", "9")
-        );
-        assert_eq!(
-            parse(&p, "a>b@3:x:y:9"),
-            ok("a", "req", "b", "3", "1", "x:y", "9")
-        );
-        assert_eq!(parse(&p, "a>b"), Parsed::Bad("no @"));
-        assert_eq!(parse(&p, "ab@3:9"), Parsed::Bad("no > or <"));
-        assert_eq!(parse(&p, "a>b@3"), Parsed::Bad("no :<dur>"));
-        assert_eq!(
-            parse(&p, "a>b@x:9"),
-            Parsed::Bad("step, n and dur must be numbers")
-        );
-        assert_eq!(
-            parse(&p, "a>a@1:9"),
-            Parsed::Ignored("a".into(), "a".into())
-        );
-        assert_eq!(
-            parse(&p, "a>z@1:9"),
-            Parsed::Ignored("a".into(), "z".into())
-        );
+        assert_eq!(parse("a>b@3#0:9"), ok("a", "req", "b", 3, 0, "-", 9));
+        assert_eq!(parse("a>b@3:-:9"), ok("a", "req", "b", 3, 1, "-", 9));
+        // what fc_parse read with its own words is refused before a run now: a bad token
+        // ("bad freeze token"), an empty match (fc_parse: every packet) and a match with ':'
+        for bad in [
+            "a>b",
+            "ab@3:9",
+            "a>b@3",
+            "a>b@x:9",
+            "a>b@3#0::9",
+            "a>b@3:x:y:9",
+        ] {
+            assert!(tok(bad).is_err(), "{bad}");
+        }
+        assert_eq!(parse("a>a@1:9"), Parsed::Ignored("a".into(), "a".into()));
+        assert_eq!(parse("a>z@1:9"), Parsed::Ignored("a".into(), "z".into()));
+        assert_eq!(c_long(u64::MAX), atol(&u64::MAX.to_string()));
+        assert_eq!(c_long(42), 42);
         assert_eq!(atol(" 12x"), 12);
         assert_eq!(atol(""), 0);
     }
