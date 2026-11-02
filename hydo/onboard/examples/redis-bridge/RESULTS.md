@@ -53,11 +53,11 @@ acts, and the console shows the replication stall and the catch-up.
 (for example `acted on: vh1:sent=37,dropped=14`). Other draws: 20 kills, 27 pauses, 23 clock
 jumps, 12 freezes, 24 protocol faults, 9 power cuts.
 
-## Milestone 136: agent images (the current values)
+## Milestone 136: agent images with hydo-agent 0.2.0
 
 Since M136 every image is an agent image (the guest agent `hydo-agent` as the first process, the
 host controller driving it; docs/HISTORY.md "Milestone 136"), so every fingerprint above this
-section belongs to a shell-init image of an earlier milestone. The current values, each schedule
+section belongs to a shell-init image of an earlier milestone. Its values, each schedule
 run twice with the same fingerprint (docs/REBASELINE.md section 8, which also says how each image
 was made):
 
@@ -71,3 +71,22 @@ was made):
 | `disk=cut dseed=1 \| run C=8` | OK invariants=1 held (primary.acked_writes_survive: acked=8 all on the primary) | `f237f2cc19c52b43` | yes |
 | `disk=none \| run F=replica<primary@5#3:2000` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `cf3f34ef035a7f4e` | yes |
 | `disk=none \| run H=redisp@3-6:drop` | OK invariants=1 held (primary.acked_writes_survive: acked=13 all on the primary) | `1fb5b228073c9443` | yes |
+
+## Milestone 140: hydo-agent 0.3.0 and the host-call port (the current values)
+
+Since M140 `hydo-build` stages hydo-agent 0.3.0 and the hvx engine offers the host-call port by
+default (docs/HISTORY.md "Milestone 140"), so every image has new bytes and every fingerprint of
+the M136 section above is superseded. The current values, each schedule run twice with the same
+fingerprint (docs/REBASELINE.md section 9, which also says how each image was made; on x86_64 the
+agent's lines travel over the host-call port, on the Mac over the serial line):
+
+**x86_64 (hvx), redis-bridge**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `f1d54ce6976d42f8` | yes |
+| `disk=none \| run N=primary-replica@5-10:loss,100%` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `64337cd16d534b92` | yes |
+| `disk=none \| run K=replica@5+3` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `d37667b70deb571d` | yes |
+| `disk=cut dseed=1 \| run C=8` | OK invariants=1 held (primary.acked_writes_survive: acked=8 all on the primary) | `f66d365cf05528c3` | yes |
+| `disk=none \| run F=replica<primary@5#3:2000` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `0c6ce203fc4ad381` | yes |
+| `disk=none \| run H=redisp@3-6:drop` | OK invariants=1 held (primary.acked_writes_survive: acked=13 all on the primary) | `ba20935e807e328a` | yes |

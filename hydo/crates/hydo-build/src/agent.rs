@@ -19,12 +19,12 @@ use crate::fsx;
 use crate::{outln, Fail, Io};
 use std::path::Path;
 
-/// sha256 of the pinned x86_64 agent (`hydo/crates/hydo-agent/build.sh x86_64`, M127 after M131; M131 `1f517e04…`, M117 `ff7652a1…`).
+/// sha256 of the pinned x86_64 agent (`hydo/crates/hydo-agent/build.sh x86_64`, hydo-agent 0.3.0 with the host-call port, M140; M127 `b72c5caa…`, M131 `1f517e04…`, M117 `ff7652a1…`).
 pub const AGENT_SHA256_X86_64: &str =
-    "b72c5caa38484202541d2a2272726e06ffea674991df7a968fd270894f12239d";
-/// sha256 of the pinned aarch64 agent (`hydo/crates/hydo-agent/build.sh aarch64`, M127 after M131; M131 `585f0bdb…`, M117 `6a3ea9f8…`).
+    "398f297e7425768a6175e58d27eca00d417fec25f0fb8b48842bcbbb53fdb8a6";
+/// sha256 of the pinned aarch64 agent (`hydo/crates/hydo-agent/build.sh aarch64`, hydo-agent 0.3.0, M140; it never takes the port; M127 `340a1eec…`, M131 `585f0bdb…`, M117 `6a3ea9f8…`).
 pub const AGENT_SHA256_ARM64: &str =
-    "340a1eec749909a65f8fb8990629c36108b9bc8d91b997e6a000d601c21013d9";
+    "099e54440e04a89798efc5755a73a181c87aa0731f10129bc146f53de9432e87";
 
 /// `--control <kind>`: `agent` is the only kind of image since M136 (the flag stays for the
 /// scripts that pass it); `shell` is refused with a message that says why.

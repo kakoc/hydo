@@ -469,11 +469,26 @@ pub fn build(
     }
     roots.extend(iproute2.clone());
     roots.extend(iptables.clone());
-    let mut set = std::collections::BTreeSet::new();
+    // One entry per store path name, in name order (the order of a closure taken from /nix/store
+    // alone). A machine with Nix and the release's bundled closures (M140) can reach the same store
+    // path twice, once in /nix/store and once in the bundle; both hold the same content, and copying
+    // it twice would write into the first copy's read-only directories.
+    let mut by_name = std::collections::BTreeMap::new();
     for n in &roots {
-        set.extend(store.closure(n)?);
+        for p in store.closure(n)? {
+            let name = Path::new(&p)
+                .file_name()
+                .map(|x| x.to_string_lossy().into_owned())
+                .unwrap_or_else(|| p.clone());
+            let keep = by_name.get(&name).is_some_and(|q: &String| {
+                q.starts_with("/nix/store/") || !p.starts_with("/nix/store/")
+            });
+            if !keep {
+                by_name.insert(name, p);
+            }
+        }
     }
-    let paths: Vec<String> = set.into_iter().collect();
+    let paths: Vec<String> = by_name.into_values().collect();
     let stamp = bdir.join(format!("{out}-root.closures"));
     let joined = paths.join("\n");
     let reuse = r.is_dir()

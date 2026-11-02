@@ -34,11 +34,11 @@ schedules give the same four fingerprints as the fresh boots.
 replication packets (`REPLCONF ACK`). The report's summary names `guest_kernel
 Image-explore-netns (sha256 806807e7be5f55da)`.
 
-## Milestone 136: agent images (the current values)
+## Milestone 136: agent images with hydo-agent 0.2.0
 
 Since M136 every image is an agent image (the guest agent `hydo-agent` as the first process, the
 host controller driving it; docs/HISTORY.md "Milestone 136"), so every fingerprint above this
-section belongs to a shell-init image of an earlier milestone. The current values, each schedule
+section belongs to a shell-init image of an earlier milestone. Its values, each schedule
 run twice with the same fingerprint (docs/REBASELINE.md section 8, which also says how each image
 was made):
 
@@ -55,3 +55,25 @@ was made):
 | `disk=none \| run F=replica<primary@5#3:2000` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `c5468c557f44330f` | `1993b9669f47ad4e` | yes |
 | `disk=none \| run F=primary<workload@5#2:1000` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `e2d9ddbf12753896` | `db19e485a83060b1` | yes |
 | `disk=none \| run H=redisp@3-6:drop` | OK invariants=1 held (primary.acked_writes_survive: acked=13 all on the primary) | `9da67ba88882b5d5` | `01634ac3903ea950` | yes |
+
+## Milestone 140: hydo-agent 0.3.0 and the host-call port (the current values)
+
+Since M140 `hydo-build` stages hydo-agent 0.3.0 and the hvx engine offers the host-call port by
+default (docs/HISTORY.md "Milestone 140"), so every image has new bytes and every fingerprint of
+the M136 section above is superseded. The current values, each schedule run twice with the same
+fingerprint (docs/REBASELINE.md section 9, which also says how each image was made; on x86_64 the
+agent's lines travel over the host-call port, on the Mac over the serial line):
+
+**Mac (hvm), redis-bridge**
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `dddc2303d3d42ccf` | `6a8e130bfbf9fef2` | yes |
+| `disk=none \| run N=primary-replica@5-10:loss,100%` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `79d0a7f4e0e3f363` | `bb902d00160d7286` | yes |
+| `disk=none \| run O=primary-replica@5-10:req:loss,100%` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `8efe5abed105a3a9` | `f2d609514474f032` | yes |
+| `disk=none \| run O=primary@5-8:resp:delay,300ms` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `763b91f2b44aae1f` | `ab4e21b1c8e8ce83` | yes |
+| `disk=none \| run K=replica@5+3` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `501b262abcf67878` | `38e15c68d9963cda` | yes |
+| `disk=cut \| run C=8` | OK invariants=1 held (primary.acked_writes_survive: acked=8 all on the primary) | `aa1c35b41a917b4e` | `1ac708d19e5718f8` | yes |
+| `disk=none \| run F=replica<primary@5#3:2000` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `c5d5ec021d56f506` | `db293b879f216430` | yes |
+| `disk=none \| run F=primary<workload@5#2:1000` | OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary) | `80ce5234857338c7` | `4ff9110839ed6dfd` | yes |
+| `disk=none \| run H=redisp@3-6:drop` | OK invariants=1 held (primary.acked_writes_survive: acked=13 all on the primary) | `94e11ee5fff0c8ce` | `a31807d7688f461c` | yes |

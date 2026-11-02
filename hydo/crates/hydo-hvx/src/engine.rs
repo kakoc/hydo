@@ -87,9 +87,12 @@ pub struct Options {
     /// HYDO_HVX_PREPARE=0: make every fresh VM when it is needed (default in serve mode: the
     /// next one is made on a helper thread while a run runs).
     pub prepare: bool,
-    /// HYDO_HVX_HOSTCALL=1 (M138): offer agent images the host-call port (a module with
-    /// HVX_VM_HOSTCALL; `hydo.hc=1` on the kernel command line of a controlled boot). An agent
-    /// that uses it sends its lines through the port, and the host's lines reach it there.
+    /// The host-call port (M138; on by default since M140, HYDO_HVX_HOSTCALL=0 turns it off):
+    /// every VM is made with HVX_VM_HOSTCALL, and when the module has the port (its HC ioctls
+    /// answer) a controlled boot of an agent image gets `hydo.hc=1` on its kernel command line.
+    /// An agent that uses it (hydo-agent 0.3.0 and later) sends its lines through the port, and
+    /// the host's lines reach it there; a module without the port or an older agent stays on the
+    /// serial line, unchanged.
     pub hostcall: bool,
     /// HYDO_HVX_REUSE=1 (M138): keep a used VM and bring it back to the next run's snapshot in
     /// place (HVX_RESET_VM and the dirty-page log of a module that has them) instead of making
@@ -148,7 +151,7 @@ impl Options {
             reaper: not_0("HYDO_HVX_REAPER"),
             check_zero: set_not0("HYDO_HVX_CHECK_ZERO"),
             prepare: not_0("HYDO_HVX_PREPARE"),
-            hostcall: set_not0("HYDO_HVX_HOSTCALL"),
+            hostcall: not_0("HYDO_HVX_HOSTCALL"),
             reuse: set_not0("HYDO_HVX_REUSE"),
             check_reset: set_not0("HYDO_HVX_CHECK_RESET"),
         }

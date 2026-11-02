@@ -270,10 +270,11 @@ impl Set {
             }
             ("d10-outcome-in-memory", _) => "disk=none dseed=0 | run X=front@9~20",
             ("d11-ack-unflushed-flag", Kind::Stack) => "disk=cut dseed=0 cf=238 | run",
-            // M136: 9 of the 61 points cf=245..305 fail on the M136 images (249, 261, 262, 272,
-            // 273, 283, 284, 294, 304); M135's images failed at 249, 250, 260, 271, 272, 282,
+            // M140 (hydo-agent 0.3.0, the host-call port): 11 of the 61 points cf=245..305 fail
+            // (248, 258, 259, 269, 270, 271, 281, 282, 293, 302, 303). M136: 9 (249, 261, 262,
+            // 272, 273, 283, 284, 294, 304); M135's images failed at 249, 250, 260, 271, 272, 282,
             // 292, 302, 303
-            ("d11-ack-unflushed-flag", Kind::Agent) => "disk=cut dseed=0 cf=261 | run",
+            ("d11-ack-unflushed-flag", Kind::Agent) => "disk=cut dseed=0 cf=270 | run",
             _ => return None,
         };
         Some(s.to_string())
