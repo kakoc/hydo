@@ -31,10 +31,7 @@ fn main() {
     let (engine, kernel, initrd): (Box<dyn Engine>, PathBuf, Option<PathBuf>) =
         match EngineKind::native() {
             EngineKind::Hvx => {
-                let mut e = hvx::Hvx::for_release(&root);
-                if let Ok(d) = std::env::var("HYDO_SNAP_DIR") {
-                    e.snap_dir = d;
-                }
+                let e = hvx::Hvx::for_release(&root, hydo_config::Env::process());
                 (
                     Box::new(e),
                     root.join("guest/bzImage"),
@@ -56,12 +53,7 @@ fn main() {
         kernel: kernel.clone(),
         initrd: initrd.clone(),
         outdir: outdir.join(dir),
-        // HYDO_SNAPSHOTS=memory: the worker keeps S0/S1 in memory (must not change a fingerprint)
-        snapshots: if std::env::var("HYDO_SNAPSHOTS").as_deref() == Ok("memory") {
-            SnapshotStore::Memory
-        } else {
-            SnapshotStore::Files
-        },
+        snapshots: SnapshotStore::Memory,
     };
     let scheds: Vec<Schedule> = a[4..]
         .iter()

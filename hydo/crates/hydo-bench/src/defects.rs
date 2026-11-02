@@ -103,19 +103,19 @@ impl Kind {
         }
     }
 
-    /// `--kind` when given, else `$HYDO_BENCH_KIND`, else agent.
-    pub fn select(opt: Option<&str>) -> Result<Kind, String> {
+    /// `--kind` when given, else the configured kind (`HYDO_BENCH_KIND`), else agent.
+    pub fn select(opt: Option<&str>, cfg: &hydo_config::run::Bench) -> Result<Kind, String> {
         match opt {
             Some(k) => Kind::parse(k),
-            None => match std::env::var("HYDO_BENCH_KIND") {
-                Ok(k) if !k.is_empty() => Kind::parse(&k),
-                _ => Ok(Kind::Agent),
+            None => match &cfg.kind {
+                Some(k) => Kind::parse(k),
+                None => Ok(Kind::Agent),
             },
         }
     }
 }
 
-/// Which image set: the kind (M135), the stack images' m59 suffix (`$HYDO_M59_SUFFIX`, default
+/// Which image set: the kind (M135), the stack images' m59 suffix (`HYDO_M59_SUFFIX`, default
 /// `-pin-kr`: the pinned build with the M63 Kafka retention fix and the M67 harness fix, README
 /// "-pin-kr"; `-pin` the earlier set, "" the first build) and `--bg-images` (the d0-d7 order
 /// services with BUGGIFY fault points, M56).
@@ -127,10 +127,10 @@ pub struct Set {
 }
 
 impl Set {
-    pub fn new(kind: Kind, bg_images: bool) -> Set {
+    pub fn new(kind: Kind, bg_images: bool, cfg: &hydo_config::run::Bench) -> Set {
         Set {
             kind,
-            m59_suffix: std::env::var("HYDO_M59_SUFFIX").unwrap_or_else(|_| "-pin-kr".into()),
+            m59_suffix: cfg.m59_suffix.clone(),
             bg_images,
         }
     }
@@ -416,7 +416,10 @@ mod tests {
     #[test]
     fn kinds_parse() {
         assert_eq!(Kind::parse("agent"), Ok(Kind::Agent));
-        assert_eq!(Kind::select(Some("stack")), Ok(Kind::Stack));
+        assert_eq!(
+            Kind::select(Some("stack"), &Default::default()),
+            Ok(Kind::Stack)
+        );
         assert!(Kind::parse("bogus").is_err());
         assert!(Kind::parse("shell")
             .unwrap_err()

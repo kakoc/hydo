@@ -7,7 +7,10 @@
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     #[cfg(target_os = "linux")]
-    std::process::exit(hydo_hvx::engine::main_stdio(&args));
+    std::process::exit(hydo_hvx::engine::main_stdio(
+        &args,
+        hydo_config::hvx::Options::from_env(&hydo_config::Env::process()),
+    ));
     #[cfg(not(target_os = "linux"))]
     {
         let _ = args;

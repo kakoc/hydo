@@ -137,6 +137,7 @@ fn the_plan_reads_hydo_builds_targets() {
     let ctx = hydo_build::Ctx {
         onboard: top().join("hydo/onboard"),
         release: hydo_build::Release::None,
+        inputs: Default::default(),
     };
     let run = |m: &str, flag: &str| -> String {
         let (mut out, mut err) = (Vec::new(), Vec::new());

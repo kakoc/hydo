@@ -50,17 +50,14 @@ struct Args {
 
 const USAGE: &str = "usage: hydo-grpc-gen <proto dir> [--hints hints.yaml] --out <dir>   (or --descriptor-set / --reflect instead of <proto dir>)";
 
-fn env_or(k: &str, d: &str) -> String {
-    match std::env::var(k) {
-        Ok(v) if !v.is_empty() => v,
-        _ => d.to_string(),
-    }
-}
+/// The defaults of `-arch` and `-client` (`HYDO_GRPC_ARCH`, `HYDO_GRPC_CLIENT`), read by the
+/// program's `main` (M144).
+pub type Defaults = hydo_config::tools::Tools;
 
 /// The flag listing (Go's flag.PrintDefaults layout).
-pub fn usage() -> String {
-    let arch_def = env_or("HYDO_GRPC_ARCH", "amd64");
-    let client_def = std::env::var("HYDO_GRPC_CLIENT").unwrap_or_default();
+pub fn usage(d: &Defaults) -> String {
+    let arch_def = d.grpc_arch.clone();
+    let client_def = d.grpc_client.clone();
     let mut s = format!("{USAGE}\n");
     let q = |d: &str| {
         if d.is_empty() {
@@ -87,21 +84,21 @@ pub fn usage() -> String {
     s
 }
 
-fn usage_fail(msg: Option<String>) -> Fail {
+fn usage_fail(d: &Defaults, msg: Option<String>) -> Fail {
     let mut s = String::new();
     if let Some(m) = msg {
         s += &m;
         s.push('\n');
     }
-    s += &usage();
+    s += &usage(d);
     Fail(s.trim_end().to_string(), 2)
 }
 
 /// Go's flag package, applied repeatedly so that flags may follow the proto dir.
-fn parse_args(argv: &[String]) -> Result<Args, Fail> {
+fn parse_args(argv: &[String], d: &Defaults) -> Result<Args, Fail> {
     let mut a = Args {
-        arch: env_or("HYDO_GRPC_ARCH", "amd64"),
-        client: std::env::var("HYDO_GRPC_CLIENT").unwrap_or_default(),
+        arch: d.grpc_arch.clone(),
+        client: d.grpc_client.clone(),
         steps: 30,
         ..Default::default()
     };
@@ -124,23 +121,26 @@ fn parse_args(argv: &[String]) -> Result<Args, Fail> {
         }
         let name = s.strip_prefix("--").unwrap_or(&s[1..]);
         if name.starts_with('-') || name.starts_with('=') {
-            return Err(usage_fail(Some(format!("bad flag syntax: {s}"))));
+            return Err(usage_fail(d, Some(format!("bad flag syntax: {s}"))));
         }
         let (name, val) = match name.split_once('=') {
             Some((n, v)) => (n.to_string(), Some(v.to_string())),
             None => (name.to_string(), None),
         };
         if name == "h" || name == "help" {
-            return Err(Fail(usage().trim_end().to_string(), 0));
+            return Err(Fail(usage(d).trim_end().to_string(), 0));
         }
         if name == "no-build" {
             a.no_build = match val.as_deref() {
                 None => true,
                 Some(v) => hydo_grpc::gofmt::parse_bool(v).map_err(|_| {
-                    usage_fail(Some(format!(
-                        "invalid boolean value {} for -no-build: parse error",
-                        hydo_grpc::gofmt::quote(v)
-                    )))
+                    usage_fail(
+                        d,
+                        Some(format!(
+                            "invalid boolean value {} for -no-build: parse error",
+                            hydo_grpc::gofmt::quote(v)
+                        )),
+                    )
                 })?,
             };
             i += 1;
@@ -159,9 +159,10 @@ fn parse_args(argv: &[String]) -> Result<Args, Fail> {
             "I",
         ];
         if !known.contains(&name.as_str()) {
-            return Err(usage_fail(Some(format!(
-                "flag provided but not defined: -{name}"
-            ))));
+            return Err(usage_fail(
+                d,
+                Some(format!("flag provided but not defined: -{name}")),
+            ));
         }
         let v = match val {
             Some(v) => v,
@@ -170,7 +171,10 @@ fn parse_args(argv: &[String]) -> Result<Args, Fail> {
                 match argv.get(i) {
                     Some(v) => v.clone(),
                     None => {
-                        return Err(usage_fail(Some(format!("flag needs an argument: -{name}"))))
+                        return Err(usage_fail(
+                            d,
+                            Some(format!("flag needs an argument: -{name}")),
+                        ))
                     }
                 }
             }
@@ -187,10 +191,13 @@ fn parse_args(argv: &[String]) -> Result<Args, Fail> {
             "I" => a.imports.push(v),
             _ => {
                 a.steps = parse_int0(&v).ok_or_else(|| {
-                    usage_fail(Some(format!(
-                        "invalid value {} for flag -steps: parse error",
-                        hydo_grpc::gofmt::quote(&v)
-                    )))
+                    usage_fail(
+                        d,
+                        Some(format!(
+                            "invalid value {} for flag -steps: parse error",
+                            hydo_grpc::gofmt::quote(&v)
+                        )),
+                    )
                 })?
             }
         }
@@ -477,14 +484,15 @@ fn base_name(p: &str) -> String {
     c.rsplit('/').next().unwrap_or(&c).to_string()
 }
 
-/// The generator; `argv` without the program name. Returns the summary to print on stdout.
-pub fn run(argv: &[String]) -> Result<String, Fail> {
-    let a = parse_args(argv)?;
+/// The generator; `argv` without the program name, `d` the flags' defaults from the
+/// configuration. Returns the summary to print on stdout.
+pub fn run(argv: &[String], d: &Defaults) -> Result<String, Fail> {
+    let a = parse_args(argv, d)?;
     if a.out.is_empty()
         || a.pos.len() > 1
         || a.pos.is_empty() == (a.desc_set.is_empty() && a.reflect.is_empty())
     {
-        return Err(usage_fail(None));
+        return Err(usage_fail(d, None));
     }
     let (files, sources): (Vec<FileBytes>, Vec<String>) = if a.pos.len() == 1 {
         let extra: Vec<PathBuf> = a.imports.iter().map(PathBuf::from).collect();

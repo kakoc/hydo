@@ -612,9 +612,9 @@ fn main() {
                 let e = Hvx {
                     engine: PathBuf::from(&a[1]),
                     hvx_run: (a[2] != "-").then(|| PathBuf::from(&a[2])),
-                    snap_dir: out.join("snap").display().to_string(),
                     extra_env: Vec::new(),
                     env: Vec::new(),
+                    config: hydo_config::Env::process(),
                 };
                 let spec = BootSpec {
                     image: PathBuf::from(&a[5]),
@@ -624,7 +624,6 @@ fn main() {
                     kernel: PathBuf::from(&a[3]),
                     initrd: Some(PathBuf::from(&a[4])),
                     outdir: out.join("consoles"),
-                    // HVX_SNAP_MALLOC=1: S0/S1 in memory (no effect on any result, M118's rule)
                     snapshots: SnapshotStore::Memory,
                 };
                 (Box::new(e), spec, a.get(7).cloned().unwrap_or("16".into()))

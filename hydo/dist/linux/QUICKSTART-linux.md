@@ -190,7 +190,6 @@ builds without Nix. Then: `hydo build hydo.yaml`, `hydo run "disk=none | run"`, 
   freezes the build clock. `HYDO_KEEP_OWNERS=1` keeps the building user's owner IDs instead
   (the image then matches a plain `hydo-build` run by the same user on the Nix build box).
 - `/dev/hvx` is mode 0600, so runs use `sudo` unless you installed the udev rule (section 1).
-  Snapshots go to `/var/tmp/hvx-snap` (`$HYDO_SNAP_DIR`); a run without sudo that cannot write
-  there (the directory was made by earlier sudo runs) uses `/var/tmp/hvx-snap-<your uid>`.
+  The run engine keeps its snapshots in memory (no snapshot directory since the Rust engine).
 - To remove hydo: `hydo module unload`, then `chmod -R u+w ~/.hydo && rm -rf ~/.hydo` (the guest
   tool tree is read-only).

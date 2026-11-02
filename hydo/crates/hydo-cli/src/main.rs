@@ -110,7 +110,7 @@ fn main() {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
     let argv: Vec<String> = std::env::args().collect();
-    let ctx = Ctx::new();
+    let ctx = Ctx::new(hydo_config::Config::process());
     std::process::exit(dispatch(&ctx, &argv));
 }
 

@@ -197,7 +197,7 @@ fn module_load(ctx: &Ctx, name: &str, dry: bool, params: &[String]) -> i32 {
     if udev_rule_path(name).exists() {
         steps.push("sudo udevadm settle".into());
     }
-    let lk = module_lock(name);
+    let lk = module_lock(&ctx.config.engine, name);
     let script = steps.join(" && ");
     println!(
         "hydo: {} lock {} exclusively (waits for running VMs), then: {}",
@@ -221,8 +221,8 @@ fn module_load(ctx: &Ctx, name: &str, dry: bool, params: &[String]) -> i32 {
     0
 }
 
-fn module_unload(name: &str, dry: bool) -> i32 {
-    let lk = module_lock(name);
+fn module_unload(ctx: &Ctx, name: &str, dry: bool) -> i32 {
+    let lk = module_lock(&ctx.config.engine, name);
     if !loaded_modules().iter().any(|m| m == name) {
         println!("hydo: {name} is not loaded");
         return 0;
@@ -292,7 +292,7 @@ fn module_status(ctx: &Ctx, name: &str) -> i32 {
             "not loaded"
         }
     );
-    let lk = module_lock(name);
+    let lk = module_lock(&ctx.config.engine, name);
     println!("  lock {}: {} holder(s) now", lk, lock_holders(&lk));
     0
 }
@@ -665,7 +665,7 @@ pub fn cmd_module(ctx: &Ctx, argv: &[String]) -> i32 {
     match verb.as_str() {
         "build" => module_build(ctx, &name),
         "load" => module_load(ctx, &name, dry, &params),
-        "unload" => module_unload(&name, dry),
+        "unload" => module_unload(ctx, &name, dry),
         _ => module_status(ctx, &name),
     }
 }

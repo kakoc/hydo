@@ -38,25 +38,16 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
-/// Where the explorer runs: the repository or release root (hydo/, hv/), and whether it was
-/// started by the `hydo` command (the reports' "by hand" lines then name `hydo run`).
+/// Where the explorer runs: the repository or release root (hydo/, hv/), whether it was
+/// started by the `hydo` command (the reports' "by hand" lines then name `hydo run`), and the
+/// configuration its program read at its start (M144: the images and the wrapper in
+/// `config.paths`, the pool's quiet window and cache in `config.pool`, the engine in
+/// `config.engine` and `config.env`).
 #[derive(Clone, Debug)]
 pub struct Env {
     pub root: PathBuf,
     pub cli: bool,
-}
-
-fn home() -> PathBuf {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default()
-}
-
-fn env_or(k: &str, d: PathBuf) -> PathBuf {
-    std::env::var_os(k)
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or(d)
+    pub config: hydo_config::Config,
 }
 
 fn die(msg: &str) -> ! {
@@ -238,7 +229,7 @@ fn setup(a: Args, env: &Env) -> Cx {
         },
         ..Ex::default()
     };
-    let build = env_or("HYDO_BUILD", home().join("hydo").join("build"));
+    let build = env.config.paths.build.clone();
     let mut cx = Cx {
         ex,
         out: PathBuf::from(&a.out),
@@ -495,12 +486,13 @@ fn agent_space(a: &Args, img: &Path) {
 }
 
 /// Build the engine and size the pool. The snapshot store: in memory when every worker's VM and
-/// its in-memory S0/S1 fit in the available memory (hvx; HYDO_SNAPSHOTS=files|memory decides).
+/// its in-memory S0/S1 fit in the available memory (hvx; the pool line says which; until M144
+/// `HYDO_SNAPSHOTS=files|memory` decided, for the deleted C engine).
 fn make_pool(cx: &Cx) -> Pool {
     let consoles = cx.out.join("consoles");
     let mut extra = Vec::new();
     if let Some(tm) = cx.a.turn_margin {
-        extra.push(format!("HVX_TURN_MARGIN={tm}"));
+        extra.push(format!("{}={tm}", hydo_config::registry::HVX_TURN_MARGIN));
     }
     let (engine, spec): (Arc<dyn Engine + Send + Sync>, BootSpec) = if cx.ex.backend == Backend::Hvm
     {
@@ -524,14 +516,11 @@ fn make_pool(cx: &Cx) -> Pool {
         (Arc::new(e), spec)
     } else {
         let e = hvx::Hvx {
-            engine: hvx::program(&cx.env.root),
-            hvx_run: Some(env_or("HYDO_HVX_RUN", home().join("bin").join("hvx-run"))),
-            snap_dir: std::env::var("HYDO_SNAP_DIR")
-                .ok()
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| "/var/tmp/hvx-snap".into()),
+            engine: hvx::program(&cx.env.root, &cx.env.config.engine),
+            hvx_run: Some(cx.env.config.paths.hvx_run.clone()),
             extra_env: extra,
-            env: Vec::new(),
+            env: hvx::wrapper_env(&cx.env.config.engine),
+            config: cx.env.config.env.clone(),
         };
         let spec = BootSpec {
             image: cx.build.join(&cx.image),
@@ -560,7 +549,7 @@ fn make_pool(cx: &Cx) -> Pool {
         );
     let engine: Arc<dyn Engine + Send + Sync> = if cx.agent || stack_agent {
         match hydo_control::agent::AgentEngine::for_image(engine, &spec.image) {
-            Ok(Some(a)) => Arc::new(a),
+            Ok(Some(a)) => Arc::new(a.with_control(&cx.env.config.control)),
             Ok(None) => die(&format!("{}: not an agent image", spec.image.display())),
             Err(e) => die(&format!("hydo: {e}")),
         }
@@ -572,6 +561,7 @@ fn make_pool(cx: &Cx) -> Pool {
         outdir: cx.out.clone(),
         onboard: cx.env.root.join("hydo").join("onboard"),
         known: cx.known.clone(),
+        pool: cx.env.config.pool.clone(),
     };
     Pool::new(
         engine,
@@ -594,7 +584,6 @@ fn size_pool(cx: &Cx, engine: &dyn Engine, mut spec: BootSpec) -> (usize, BootSp
     let per_files = ram + img_mib + 256;
     let per_mem = per_files + 2 * (ram + data_partition_mib(&spec.image).unwrap_or(img_mib));
     let avail = hydo_engine::available_mib();
-    let want = std::env::var("HYDO_SNAPSHOTS").ok();
     let hvx = cx.ex.backend == Backend::Hvx;
     let free = free_threads();
     let n = match cx.a.workers {
@@ -603,12 +592,7 @@ fn size_pool(cx: &Cx, engine: &dyn Engine, mut spec: BootSpec) -> (usize, BootSp
         None => engine.max_workers(&spec).min(free),
     };
     let fits = avail.is_some_and(|m| m >= n as u64 * per_mem);
-    let memory = hvx
-        && match want.as_deref() {
-            Some("memory") => true,
-            Some("files") => false,
-            _ => fits,
-        };
+    let memory = hvx && fits;
     if memory {
         spec.snapshots = SnapshotStore::Memory;
     }

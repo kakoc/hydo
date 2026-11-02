@@ -1,0 +1,9 @@
+[package]
+name = "hydo-config"
+description = "Every environment variable hydo reads, in one place: the inventory, a snapshot read once at a program's start, and typed configuration grouped by owner"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]

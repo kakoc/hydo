@@ -90,6 +90,9 @@ pub struct LoadOptions {
     /// The product's `onboard/` directory: a plan's `hydo_version:` is checked against the
     /// VERSION file next to it (hydo/VERSION in the repository, hydo/VERSION in a release).
     pub onboard_dir: PathBuf,
+    /// A plan whose `hydo_version:` this hydo does not satisfy loads with a warning instead of
+    /// being refused (`HYDO_VERSION_CHECK=warn`, `hydo_config::build::Build`). Default off.
+    pub version_check_warn: bool,
 }
 
 impl Default for LoadOptions {
@@ -110,6 +113,7 @@ impl Default for LoadOptions {
                     .join("..")
                     .join("onboard")
             }),
+            version_check_warn: false,
         }
     }
 }
@@ -223,7 +227,12 @@ fn load_inner(
     let as_written = m.clone();
     let params = validate::apply_params(&mut m, &opts.sets)?;
     if let Some(v) = m.get("hydo_version").cloned() {
-        composer::check_version(&v, &composer::engine_version(&opts.onboard_dir), warnings)?;
+        composer::check_version(
+            &v,
+            &composer::engine_version(&opts.onboard_dir),
+            opts.version_check_warn,
+            warnings,
+        )?;
     }
     let folder = composer::scan_folder(&py::dirname(&py::abspath(&p)))?;
     let mut comp = composer::expand(&mut m, folder.as_ref(), warnings)?;

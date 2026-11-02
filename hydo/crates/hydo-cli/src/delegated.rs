@@ -51,9 +51,9 @@ pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
         let probe = hydo_engine::hvx::Hvx {
             engine: engine.clone(),
             hvx_run: None,
-            snap_dir: String::new(),
             extra_env: Vec::new(),
             env: hvxenv::tool_env(ctx),
+            config: ctx.config.env.clone(),
         };
         if let Some(p) = probe.missing_program() {
             die(&format!(
@@ -61,12 +61,12 @@ pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
                 p.display()
             ));
         }
-        // the release's run environment (the lock, the snapshot directory, the bundled tools on
-        // PATH): the explorer reads it, and the engine wrapper it starts inherits it
-        for (k, v) in hvxenv::tool_env(ctx) {
-            std::env::set_var(k, v);
+        // the bundled tools on PATH (the engine wrapper and the tools the explorer starts
+        // inherit it); the release's paths, lock and engine reach the explorer in its
+        // configuration (M144: no hydo variable is set in this process's environment)
+        if let Some((_, path)) = hvxenv::tool_env(ctx).into_iter().find(|(k, _)| k == "PATH") {
+            std::env::set_var("PATH", path);
         }
-        std::env::set_var("HYDO_HVX_EXPLORE", &engine);
     } else {
         let kernel = mac_kernel_for(ctx, &image, true);
         full.push("--backend".into());
@@ -80,6 +80,11 @@ pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
     let env = hydo_explore::Env {
         root: ctx.root.clone(),
         cli: true,
+        config: if linux {
+            hvxenv::explore_config(ctx)
+        } else {
+            ctx.config.clone()
+        },
     };
     let rc = hydo_explore::main_with(&full, &env);
     let i = args.iter().position(|a| a == "--out").unwrap_or(0);

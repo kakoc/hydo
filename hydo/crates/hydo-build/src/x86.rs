@@ -420,14 +420,14 @@ pub fn build(
     let store = Store::new(ctx)?;
     let isfile = |x: &str| store.view(x).is_file();
     let isdir = |x: &str| store.view(x).is_dir();
-    let busybox = tool("HYDO_BUSYBOX", BUSYBOX, isfile)?;
+    let busybox = tool(&ctx.inputs.busybox, BUSYBOX, isfile)?;
     let seedrng = tool(
-        "HYDO_SEEDRNG",
+        &ctx.inputs.seedrng,
         &bdir.join("hvx_seedrng").to_string_lossy(),
         isfile,
     )?;
-    let mke2fs = tool("HYDO_MKE2FS", MKE2FS, isfile)?;
-    let faketime = tool("HYDO_FAKETIME", FAKETIME, isfile)?;
+    let mke2fs = tool(&ctx.inputs.mke2fs, MKE2FS, isfile)?;
+    let faketime = tool(&ctx.inputs.faketime, FAKETIME, isfile)?;
     let m = p.data.clone();
     let faults = shell::fault_kinds(&m);
     let want_tc = faults.iter().any(|f| f == "network" || f == "oneway");
@@ -435,28 +435,28 @@ pub fn build(
     let mut iproute2 = None;
     let mut modroot = None;
     if want_tc || netns {
-        iproute2 = Some(tool("HYDO_IPROUTE2", IPROUTE2, |x| {
+        iproute2 = Some(tool(&ctx.inputs.iproute2, IPROUTE2, |x| {
             isfile(&format!("{x}/bin/tc"))
         })?);
-        modroot = Some(tool("HYDO_MODROOT", MODROOT, isdir)?);
+        modroot = Some(tool(&ctx.inputs.modroot, MODROOT, isdir)?);
     }
     let mut iptables = None;
     let mut fcbin = None;
     if faults.iter().any(|f| f == "freeze") {
-        iptables = Some(tool("HYDO_IPTABLES", IPTABLES, |x| {
+        iptables = Some(tool(&ctx.inputs.iptables, IPTABLES, |x| {
             isfile(&format!("{x}/bin/xtables-legacy-multi"))
         })?);
         fcbin = Some(tool(
-            "HYDO_FCBIN",
+            &ctx.inputs.fcbin,
             &bdir.join("hydo_fc").to_string_lossy(),
             isfile,
         )?);
-        modroot = Some(tool("HYDO_MODROOT", MODROOT, isdir)?);
+        modroot = Some(tool(&ctx.inputs.modroot, MODROOT, isdir)?);
     }
     let mut world = None;
     if shell::has_world(&m) {
         world = Some(tool(
-            "HYDO_WORLDBIN",
+            &ctx.inputs.worldbin,
             &bdir.join("hydo-world").to_string_lossy(),
             isfile,
         )?);
@@ -539,7 +539,7 @@ pub fn build(
     link_applets(&r, &applets)?;
     if uses_readers(&m)? {
         let rb = tool(
-            "HYDO_READ_BIN",
+            &ctx.inputs.read_bin,
             &bdir.join("hydo-read").to_string_lossy(),
             isfile,
         )?;
@@ -623,7 +623,7 @@ pub fn build(
         ip: netns.then(|| format!("{}/bin/ip", iproute2.clone().unwrap_or_default())),
     };
     write_compiled(ctx, p, manifest_path, &r, &tools)?;
-    let (bin, sha) = crate::agent::binary(bdir, false, io)?;
+    let (bin, sha) = crate::agent::binary(ctx, bdir, false, io)?;
     crate::agent::install(&bin, &sha, &r, "/sbin/init", io)?;
     crate::stage::compose_stage(&m, &r)?;
     let oci_meta = crate::oci::stage(
@@ -670,7 +670,14 @@ pub fn build(
         false,
     )?;
     if !oci_meta.is_empty() {
-        crate::oci::fix_ext4(&oci_meta, &mke2fs, &faketime, &ext4, io)?;
+        crate::oci::fix_ext4(
+            &oci_meta,
+            &ctx.inputs.debugfs,
+            &mke2fs,
+            &faketime,
+            &ext4,
+            io,
+        )?;
     }
     image::zero_times(&ext4, false)?;
     let dsec = section(&m, "data")?;

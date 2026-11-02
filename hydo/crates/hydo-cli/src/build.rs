@@ -23,11 +23,10 @@ fn project_out(manifest: &str) -> &'static str {
     }
 }
 
-/// `os.environ.setdefault(k, v)` for the build (the bridge passed these to its subprocess).
-fn setdefault(k: &str, v: &Path) {
-    if std::env::var_os(k).is_none() {
-        std::env::set_var(k, v);
-    }
+/// `os.environ.setdefault(k, v)` for the build (the bridge passed these to its subprocess):
+/// the release's path where the input's variable is not set.
+fn setdefault(i: &mut hydo_config::build::Input, v: &Path) {
+    i.set_default(v.to_string_lossy());
 }
 
 fn no_print_flag(rest: &[String]) -> bool {
@@ -48,6 +47,7 @@ pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
     let mut rest = argv[1..].to_vec();
     let out = take(&mut rest, "--out").unwrap_or_else(|| project_out(&manifest).to_string());
     let guest = ctx.guest();
+    let mut inputs = ctx.config.build.clone();
     let (release, mut hb_argv) = match ctx.platform {
         Platform::Linux => {
             if rest.iter().any(|a| a == "--arch") {
@@ -55,14 +55,14 @@ pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
                     "this is the x86_64 Linux release; arm64 images are built with the Mac release",
                 );
             }
-            setdefault("HYDO_BUSYBOX", &guest.join("busybox"));
-            setdefault("HYDO_SEEDRNG", &guest.join("hvx_seedrng"));
-            setdefault("HYDO_FCBIN", &guest.join("hydo_fc"));
-            setdefault("HYDO_AGENT_BIN", &guest.join("hydo-agent"));
-            setdefault("HYDO_MKE2FS", &ctx.p("tools/bin/mke2fs"));
-            setdefault("HYDO_FAKETIME", &ctx.libexec().join("faketime"));
-            setdefault("HYDO_MODROOT", &guest.join("modules"));
-            setdefault("HYDO_WORLDBIN", &guest.join("hydo-world"));
+            setdefault(&mut inputs.busybox, &guest.join("busybox"));
+            setdefault(&mut inputs.seedrng, &guest.join("hvx_seedrng"));
+            setdefault(&mut inputs.fcbin, &guest.join("hydo_fc"));
+            setdefault(&mut inputs.agent_bin, &guest.join("hydo-agent"));
+            setdefault(&mut inputs.mke2fs, &ctx.p("tools/bin/mke2fs"));
+            setdefault(&mut inputs.faketime, &ctx.libexec().join("faketime"));
+            setdefault(&mut inputs.modroot, &guest.join("modules"));
+            setdefault(&mut inputs.worldbin, &guest.join("hydo-world"));
             if let Some((_, path)) = hvxenv::tool_env(ctx).into_iter().find(|(k, _)| k == "PATH") {
                 std::env::set_var("PATH", path);
             }
@@ -77,15 +77,15 @@ pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
             )
         }
         Platform::Mac => {
-            setdefault("HYDO_BUSYBOX_ARM64", &guest.join("busybox"));
-            setdefault("HYDO_BUSYBOX", &guest.join("busybox-applets"));
-            setdefault("HYDO_MKE2FS", &guest.join("mke2fs"));
-            setdefault("HYDO_FAKETIME", &guest.join("mke2fs"));
-            setdefault("HYDO_WORLDBIN_ARM64", &guest.join("hydo-world"));
-            setdefault("HYDO_READ_BIN_ARM64", &guest.join("hydo-read"));
-            setdefault("HYDO_ARM64_STORE", &guest.join("tc"));
-            setdefault("HYDO_FCBIN_ARM64", &guest.join("hydo_fc"));
-            setdefault("HYDO_AGENT_BIN_ARM64", &guest.join("hydo-agent"));
+            setdefault(&mut inputs.busybox_arm64, &guest.join("busybox"));
+            setdefault(&mut inputs.busybox, &guest.join("busybox-applets"));
+            setdefault(&mut inputs.mke2fs, &guest.join("mke2fs"));
+            setdefault(&mut inputs.faketime, &guest.join("mke2fs"));
+            setdefault(&mut inputs.worldbin_arm64, &guest.join("hydo-world"));
+            setdefault(&mut inputs.read_bin_arm64, &guest.join("hydo-read"));
+            setdefault(&mut inputs.arm64_store, &guest.join("tc"));
+            setdefault(&mut inputs.fcbin_arm64, &guest.join("hydo_fc"));
+            setdefault(&mut inputs.agent_bin_arm64, &guest.join("hydo-agent"));
             (
                 hydo_build::Release::Mac {
                     root: ctx.root.clone(),
@@ -104,6 +104,7 @@ pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
     let bctx = hydo_build::Ctx {
         onboard: ctx.onboard(),
         release,
+        inputs,
     };
     let rc = hydo_build::main(&bctx, &hb_argv);
     // every image is an agent image (M136): hydo run, repro and explore drive it through the host
