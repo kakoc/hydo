@@ -5,9 +5,9 @@
 //!   it.
 //! - `hydo/schema/released/agent-v1.json` is the schema of the last release (until the first
 //!   release ships the agent, the schema of M117, which introduced it); the committed schema must
-//!   be an additive change of it (`hydo_results::compat::breaking`, the check of the results
-//!   format). A release copies the committed schema there (`HYDO_RELEASE_SCHEMA=1`). A breaking
-//!   change needs version 2 (`agent-v2.json`), which the host reads alongside version 1.
+//!   be an additive change of it (`hydo_schema_compat::check`, with the rules of [`rules`]). A
+//!   release copies the committed schema there (`HYDO_RELEASE_SCHEMA=1`). A breaking change needs
+//!   version 2 (`agent-v2.json`), which the host reads alongside version 1.
 //! - Every message kind round-trips through the codec with every field and with the required
 //!   fields only, and what the codec writes is valid by the schema.
 
@@ -16,9 +16,34 @@ mod common;
 use common::{sample, schema_dir, validate};
 use hydo_agent_proto::json::{self, Value};
 use hydo_agent_proto::{AgentLine, HostLine};
+use hydo_schema_compat::{check, Readers, Rules};
 
 fn current() -> String {
     hydo_agent_proto::schema::schema_text()
+}
+
+/// The protocol's rules. Readers::Released: a released host reads a newer agent's lines (it
+/// ignores unknown fields and keeps an unknown event as such, but a known field with a value it
+/// does not know is an error to it), and a newer host reads an older agent's. Two kinds of place
+/// may still gain names:
+/// - a refusal's `err`: the host keeps the code as text (`ErrorLine::err`), so a code added later
+///   is read;
+/// - a command's fields: the agent refuses a name it does not know, but a host sends a new name
+///   only to an agent whose hello offers its feature (`Command::features`), as for a new
+///   optional command field.
+///
+/// Every other name (`warn`'s code, `froze`'s directions, `exit`'s end, …) is closed.
+fn rules() -> Rules {
+    Rules::new(Readers::Released)
+        .open_enum("#/$defs/error/properties/err")
+        .open_enum("#/$defs/command.*")
+}
+
+fn problems(old: &serde_json::Value, new: &serde_json::Value) -> Vec<String> {
+    check(old, new, &rules())
+        .iter()
+        .map(ToString::to_string)
+        .collect()
 }
 
 #[test]
@@ -48,7 +73,7 @@ fn the_schema_only_grows_from_the_released_one() {
     )
     .unwrap();
     let new: serde_json::Value = serde_json::from_str(&current()).unwrap();
-    let b = hydo_results::compat::breaking(&old, &new);
+    let b = problems(&old, &new);
     assert!(
         b.is_empty(),
         "agent protocol version 1 changed in ways an agent or host of the released version cannot \
@@ -71,13 +96,13 @@ fn the_compatibility_check_sees_a_breaking_change() {
         .unwrap();
     codes.retain(|c| c != "busy");
     let old: serde_json::Value = serde_json::from_str(&current()).unwrap();
-    let b = hydo_results::compat::breaking(&old, &new);
+    let b = problems(&old, &new);
     assert!(
-        b.iter().any(|l| l.contains("command.spawn.argv: removed")),
+        b.contains(&"#/$defs/command.spawn/properties/argv: the key is gone".to_string()),
         "{b:?}"
     );
     assert!(
-        b.iter().any(|l| l.contains("\"busy\" no longer allowed")),
+        b.contains(&"#/$defs/error/properties/err/enum: the value \"busy\" is gone".to_string()),
         "{b:?}"
     );
     // a new op is an addition
@@ -87,7 +112,23 @@ fn the_compatibility_check_sees_a_breaking_change() {
         .as_array_mut()
         .unwrap()
         .push(serde_json::json!({"$ref": "#/$defs/command.later"}));
-    assert!(hydo_results::compat::breaking(&old, &grown).is_empty());
+    assert_eq!(problems(&old, &grown), Vec::<String>::new());
+    // a new refusal code and a new signal name are additions; a new warning code is not
+    let add = |v: &mut serde_json::Value, def: &str, field: &str| {
+        v["$defs"][def]["properties"][field]["enum"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!("later"));
+    };
+    let mut grown: serde_json::Value = serde_json::from_str(&current()).unwrap();
+    add(&mut grown, "error", "err");
+    add(&mut grown, "command.signal", "sig");
+    assert_eq!(problems(&old, &grown), Vec::<String>::new());
+    add(&mut grown, "event.warn", "code");
+    assert_eq!(
+        problems(&old, &grown),
+        ["#/$defs/event.warn/properties/code/enum: gained the values \"later\""]
+    );
 }
 
 #[test]
