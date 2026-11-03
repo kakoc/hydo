@@ -8,7 +8,7 @@
 #        boot 2: a fresh VM on that image, no faults: the service recovers, the acked list from
 #                boot 1 is checked
 #   setting: redis appendfsync (always|everysec|no); miniflux synchronous_commit (on|off)
-# Prints the fingerprints and the verdicts. Run from hv/hvm/ after `sh build.sh`; guests in services/guest/.
+# Prints the fingerprints and the verdicts. Run from hv/hvm/ with the engine built and signed (cargo build --release -p hydo-hvm; codesign as in explore/lockstep-check.sh); guests in services/guest/.
 set -e
 cd "$(dirname "$0")/.."
 MODE=$1 SVC=$2 SET=$3 DIR=${4:-/tmp/hvm-svc}
@@ -25,14 +25,14 @@ fp() { grep -o 'stop=[0-9]* exits=[0-9]*\|fp=[0-9a-f]*\|wall=[0-9.]* s' "$1" | t
 verdict() { grep -a 'HYDO-ORACLE' "$1" | tr -d '\r' | head -1; }
 if [ "$MODE" = solo ]; then
   HVM_MEM_MB=$MEM HVM_DISK=$DISK HVM_DISK_OUT="$DIR/solo.img" HVM_BOOTARGS="$BA hydo_phase=solo $KNOB=$SET" \
-    ./hvm run $G/Image-svc $INITRD "$MARK" > "$DIR/solo.txt" 2>&1 || true
+    ../../target/release/hydo-hvm hvm run $G/Image-svc $INITRD "$MARK" > "$DIR/solo.txt" 2>&1 || true
   echo "solo $SVC $SET: $(fp "$DIR/solo.txt")| $(verdict "$DIR/solo.txt")"
   exit 0
 fi
 HVM_MEM_MB=$MEM HVM_DISK=$DISK HVM_DISK_OUT="$DIR/durable.img" HVM_FAULT=1 HVM_FAULT_CLASSES=unflushed HVM_FAULT_PROB=100 \
-  HVM_BOOTARGS="$BA hydo_phase=cut $KNOB=$SET" ./hvm run $G/Image-svc $INITRD "$MARK" > "$DIR/cut.txt" 2>&1 || true
+  HVM_BOOTARGS="$BA hydo_phase=cut $KNOB=$SET" ../../target/release/hydo-hvm hvm run $G/Image-svc $INITRD "$MARK" > "$DIR/cut.txt" 2>&1 || true
 ACKED=$(grep -a '^hydo-acked:' "$DIR/cut.txt" | tr -d '\r' | sed 's/^hydo-acked: //')
 HVM_MEM_MB=$MEM HVM_DISK="$DIR/durable.img" HVM_BOOTARGS="$BA hydo_phase=recover $KNOB=$SET hydo_acked=$ACKED" \
-  ./hvm run $G/Image-svc $INITRD "$MARK" > "$DIR/recover.txt" 2>&1 || true
+  ../../target/release/hydo-hvm hvm run $G/Image-svc $INITRD "$MARK" > "$DIR/recover.txt" 2>&1 || true
 echo "cut $SVC $SET: boot1 $(fp "$DIR/cut.txt")| $(grep -o 'writes held.*held [0-9]*)' "$DIR/cut.txt") | durable $(shasum -a 256 "$DIR/durable.img" | cut -c1-16)"
 echo "cut $SVC $SET: boot2 $(fp "$DIR/recover.txt")| $(verdict "$DIR/recover.txt")"

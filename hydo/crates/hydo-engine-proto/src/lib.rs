@@ -11,7 +11,7 @@
 //! Inside one process these values travel as they are: hydo-engine runs the hvx engine
 //! (`hydo-hvx`) on a thread and the two exchange [`HostMsg`] and [`EngineMsg`] over channels
 //! (M142). Where a process boundary remains (the program `hydo-hvx` for users who cannot open
-//! `/dev/hvx`, and the Mac engine `hv/hvm/explore/hvmx`), each value is one line of text:
+//! `/dev/hvx`, and the Mac engine `hydo-hvm`), each value is one line of text:
 //! [`HostMsg::line`], [`EngineMsg::line`] and [`EngineMsg::parse`] are that text, the protocol
 //! the C engine `hvx_explore.c` defined (M118) and both engines print. The text is the same in
 //! both directions and for both engines, so a transcript (`< ` host lines, `> ` engine lines) reads
@@ -40,7 +40,7 @@
 //! engine report is a variant of [`EngineMsg`] (line and parse). The engines' handling follows:
 //! `hydo-hvx`'s `engine.rs` (typed) and its text reader `text.rs` (lines of the program),
 //! `hydo-engine`'s client ([`lockstep`](../hydo_engine/lockstep/index.html)), and, for the Mac,
-//! `hv/hvm/explore/serve.c` reads and prints the line. The round-trip tests here and
+//! `hydo-hvm`'s `serve.rs` (the Mac engine). The round-trip tests here and
 //! `hydo-engine/tests/lockstep.rs` (every line of the recorded transcripts of both engines prints
 //! back byte for byte) keep the two forms one.
 

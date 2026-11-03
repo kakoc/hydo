@@ -86,9 +86,17 @@ pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
             setdefault(&mut inputs.arm64_store, &guest.join("tc"));
             setdefault(&mut inputs.fcbin_arm64, &guest.join("hydo_fc"));
             setdefault(&mut inputs.agent_bin_arm64, &guest.join("hydo-agent"));
+            // the data disk is formatted in a helper VM by the Mac engine (`hydo-hvm hvm run`),
+            // signed with the hypervisor entitlement first (cargo builds it unsigned); a missing
+            // engine is reported by the build when it runs it
+            let engine = hydo_engine::hvm::program(&ctx.root, &ctx.config.hvm);
+            if engine.is_file() {
+                let _ = hydo_engine::hvm::ensure_signed(&engine);
+            }
             (
                 hydo_build::Release::Mac {
                     root: ctx.root.clone(),
+                    engine,
                 },
                 vec![
                     manifest,

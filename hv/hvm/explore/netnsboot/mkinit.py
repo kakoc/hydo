@@ -13,8 +13,8 @@ holds /init (this directory's init, with the tool paths filled in), busybox and 
 ip, tc, iptables-legacy with exactly the files their loaders open; sorted, fixed mtimes, uid 0,
 gzip -n, so two builds are the same bytes. Boot it with the namespace kernel:
 
-    hv/hvm/hvm print hv/hvm/explore/out/Image-explore-netns <out.cpio.gz> "hydo-boot-marker: launching shell"
-    hv/hvm/hvm branch ... "hydo-netns: ns1 addresses" "hydo-boot-marker: launching shell"
+    target/release/hydo-hvm hvm print hv/hvm/explore/out/Image-explore-netns <out.cpio.gz> "hydo-boot-marker: launching shell"
+    target/release/hydo-hvm hvm branch ... "hydo-netns: ns1 addresses" "hydo-boot-marker: launching shell"
 """
 import os, shutil, subprocess, sys, tempfile
 

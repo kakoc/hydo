@@ -1,7 +1,7 @@
 //! The Mac engine (M143): which engine runs ([`Engine`], read by hydo-engine) and the options of
-//! the Rust engine hydo-hvm ([`Options`]): the variables `hv/hvm/hvm.c`, `virtio.c` and
-//! `explore/serve.c` read, read as they read them. Text fields are numbers the engine reads with
-//! C's `strtoull`/`atoi`/`atof` at the point of use, as the C did.
+//! the Rust engine hydo-hvm ([`Options`]): the variables the C engine (`hv/hvm/hvm.c`, `virtio.c`
+//! and `explore/serve.c`, deleted in M147) read, read as they read them. Text fields are numbers
+//! the engine reads with C's `strtoull`/`atoi`/`atof` at the point of use, as the C did.
 
 use crate::registry::*;
 use crate::Env;
@@ -13,8 +13,6 @@ pub enum Choice {
     /// The Rust engine as the program `hydo-hvm` (one process per worker), the default.
     #[default]
     Program,
-    /// `c`: the C engine `hv/hvm/explore/hvmx` (kept for one milestone after M143).
-    C,
     /// `inproc`: the Rust engine on a thread of this process (one VM per process; the process
     /// needs the hypervisor entitlement).
     InProcess,
@@ -23,7 +21,7 @@ pub enum Choice {
 /// The Mac engine group (hydo-engine).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Engine {
-    /// `HYDO_HVM`: `c`, `inproc`, else the Rust program.
+    /// `HYDO_HVM`: `inproc`, else the program (`c`, the C engine until M147, is the program too).
     pub choice: Choice,
     /// `HYDO_HVM_ENGINE`: the engine program; None (unset or empty): by [`Engine::choice`].
     pub program: Option<PathBuf>,
@@ -33,7 +31,6 @@ impl Engine {
     pub fn from_env(e: &Env) -> Engine {
         Engine {
             choice: match e.text(HYDO_HVM).as_deref() {
-                Some("c") => Choice::C,
                 Some("inproc") => Choice::InProcess,
                 _ => Choice::Program,
             },
@@ -45,13 +42,13 @@ impl Engine {
 /// The Rust Mac engine's options (hydo-hvm), as the C engine read them with `getenv`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Options {
-    /// `HVM_MEM_MB`: guest RAM in MiB (hvmx: 256..4096, default 1024; hvm: default 256).
+    /// `HVM_MEM_MB`: guest RAM in MiB (the engine: 256..4096, default 1024; `hydo-hvm hvm`: default 256).
     pub mem_mb: Option<String>,
     /// `HVM_STEP`: virtual ticks per exit (default 64).
     pub step: Option<String>,
     /// `HVM_MAX_EXITS`: hvm's exit budget (default 2e8).
     pub max_exits: Option<String>,
-    /// `HVM_RUN_EXITS`: hvmx's exit budget per phase (default 50,000,000).
+    /// `HVM_RUN_EXITS`: the engine's exit budget per phase (default 50,000,000).
     pub run_exits: Option<String>,
     /// `HVM_ECHO`, set: the console copied to stdout as it is written.
     pub echo: bool,
@@ -61,7 +58,7 @@ pub struct Options {
     pub trace_watch: Option<String>,
     /// `HVM_TRACE_SYSREG`, set: log unknown system-register traps.
     pub trace_sysreg: bool,
-    /// `HVM_BOOTARGS`: the kernel command line (hvmx appends its own word).
+    /// `HVM_BOOTARGS`: the kernel command line (the engine appends its own words).
     pub bootargs: Option<String>,
     /// `HVM_SPIN_SECS`: give up on an exit-free spin after this much host time (default 10).
     pub spin_secs: Option<String>,
@@ -77,7 +74,7 @@ pub struct Options {
     pub pct: Option<String>,
     /// `HVM_TJ`: hvm's tick jitter for the whole run.
     pub tj: Option<String>,
-    /// `HVM_SOFT_IRQ`: deliver IRQs by emulating the exception entry (hvmx default 1, hvm 0).
+    /// `HVM_SOFT_IRQ`: deliver IRQs by emulating the exception entry (the engine: default 1; `hydo-hvm hvm`: 0).
     pub soft_irq: Option<String>,
     /// `HVM_DUMP`: hvm writes `<prefix>.regs` and `<prefix>.ram` at the stop.
     pub dump: Option<String>,
@@ -85,7 +82,7 @@ pub struct Options {
     pub disk: Option<String>,
     /// `HVM_DISK_OUT`: hvm writes the durable disk image here at its end.
     pub disk_out: Option<String>,
-    /// `HVM_FAULT`: the disk fault seed (hvmx sets the flush-aware class at probability 0
+    /// `HVM_FAULT`: the disk fault seed (the engine sets the flush-aware class at probability 0
     /// when a disk is attached and this is unset).
     pub fault: Option<String>,
     /// `HVM_FAULT_CLASSES`.
@@ -108,7 +105,7 @@ pub struct Options {
     pub net_fault_classes: Option<String>,
     /// `HVM_NET_FAULT_PROB`.
     pub net_fault_prob: Option<String>,
-    /// `HVM_SNAP_DIR`: where hvmx's snapshot files are made and unlinked (default /tmp/hvm-snap).
+    /// `HVM_SNAP_DIR`: where the engine's snapshot files are made and unlinked (default /tmp/hvm-snap).
     pub snap_dir: Option<String>,
     /// `HVMX_DIAG`, set: per-component hashes of a run's end state into `<tag>.diag`.
     pub diag: bool,

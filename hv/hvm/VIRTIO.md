@@ -9,16 +9,18 @@ The fingerprint now covers the device state, the whole disk image, the disk's vo
 
 With no device attached, nothing changes: the M48 boot still gives `81711ada76a4a236` with this `hvm`.
 
+**Since Milestone 147 the C files of this page are deleted.** The devices are the Rust port in `hydo/crates/hydo-hvm/src/virtio.rs` (M143, byte for byte the same state, hashes and fault decisions; its module documentation keeps the fault model's notes), and `hvm` is the Rust program's boot probe, `hydo-hvm hvm run|print|branch`. The C is in git (`git show 145c456:hv/hvm/virtio_blk.c` and so on). The table below names the files as they were.
+
 ## Files
 
 | File | What |
 |---|---|
-| `virtio.h` | the interface `hvm.c` uses, and the environment variables |
-| `virtio.c` | virtio-mmio version 2 transport, setup from the environment, completion timing, snapshot, fingerprint, output files |
-| `virtio_blk.c` | virtio-blk: request servicing, FLUSH, the hvx fault classes, the volatile write cache |
-| `virtio_net.c` | virtio-net: paced scripted RX, captured TX, per-packet drop/corrupt/duplicate |
-| `virtio_int.h` | state shared by the three files above |
-| `cut-test.sh` | the two-boot power cut: workload boot, durable image, recovery boot |
+| `virtio.h` (deleted in M147) | the interface `hvm.c` uses, and the environment variables |
+| `virtio.c` (deleted in M147) | virtio-mmio version 2 transport, setup from the environment, completion timing, snapshot, fingerprint, output files |
+| `virtio_blk.c` (deleted in M147) | virtio-blk: request servicing, FLUSH, the hvx fault classes, the volatile write cache |
+| `virtio_net.c` (deleted in M147) | virtio-net: paced scripted RX, captured TX, per-packet drop/corrupt/duplicate |
+| `virtio_int.h` (deleted in M147) | state shared by the three files above |
+| `cut-test.sh` (deleted in M147) | the two-boot power cut: workload boot, durable image, recovery boot (the two commands are under "How to run") |
 | `linux/hvm-virtio.config` | kernel options added for `Image-virtio`: virtio-mmio, virtio-blk, virtio-net, ext4 |
 | `linux/recs.c`, `linux/init-disk` | the durability workload and checker, and its `/init` (phases `check`, `cut`, `recover`) |
 | `linux/init-net`, `linux/mkarp.py` | `/init` bringing up `eth0` (10.0.0.2/24), and the scripted ARP requests |
@@ -95,16 +97,26 @@ Network (`initramfs-net.cpio.gz`, `HVM_NET=1 HVM_NET_RX=guest/net-rx.bin`):
 
 ```sh
 # the build machine (Linux with Nix), scratch dir: WORK=$PWD sh <repo>/hv/hvm/linux/build-guest.sh; copy out/* to hv/hvm/guest/
-sh build.sh
-HVM_DISK=guest/disk-ext4.img ./hvm print guest/Image-virtio guest/initramfs-disk.cpio.gz "hydo-disk: oracle complete"
-HVM_DISK=guest/disk-ext4.img HVM_FAULT=0x5017E0 HVM_FAULT_CLASSES=drop HVM_FAULT_PROB=10 ./hvm run guest/Image-virtio guest/initramfs-disk.cpio.gz "hydo-disk: oracle complete"
-HVM_DISK=guest/disk-ext4.img ./hvm branch guest/Image-virtio guest/initramfs-disk.cpio.gz "hydo-rec: acked 7" "hydo-disk: oracle complete"
-HVM_FAULT=0x5017E0 HVM_FAULT_CLASSES=unflushed HVM_FAULT_PROB=10 ./cut-test.sh /tmp/cut 16 16
-HVM_NET=1 HVM_NET_RX=guest/net-rx.bin HVM_NET_TX_OUT=/tmp/tx.bin ./hvm run guest/Image-virtio guest/initramfs-net.cpio.gz "hydo-net: done"
+# on the Mac, at the repository root: the engine, signed with the hypervisor entitlement
+cargo build --release -p hydo-hvm
+codesign --force --entitlements hv/hvm/hv.entitlements -s - target/release/hydo-hvm
+cd hv/hvm; H="../../target/release/hydo-hvm hvm"
+HVM_DISK=guest/disk-ext4.img $H print guest/Image-virtio guest/initramfs-disk.cpio.gz "hydo-disk: oracle complete"
+HVM_DISK=guest/disk-ext4.img HVM_FAULT=0x5017E0 HVM_FAULT_CLASSES=drop HVM_FAULT_PROB=10 $H run guest/Image-virtio guest/initramfs-disk.cpio.gz "hydo-disk: oracle complete"
+HVM_DISK=guest/disk-ext4.img $H branch guest/Image-virtio guest/initramfs-disk.cpio.gz "hydo-rec: acked 7" "hydo-disk: oracle complete"
+HVM_NET=1 HVM_NET_RX=guest/net-rx.bin HVM_NET_TX_OUT=/tmp/tx.bin $H run guest/Image-virtio guest/initramfs-net.cpio.gz "hydo-net: done"
+# the two-boot power cut (what cut-test.sh did; here 16 records, 16 fsync'd): boot 1 with the
+# faults, the durable image to /tmp/cut/durable.img; boot 2 a fresh VM on it, no faults
+BA="console=ttyS0 earlycon=uart8250,mmio,0x09000000 clocksource.arm_arch_timer.evtstrm=0 nokaslr rdinit=/init loglevel=7 random.trust_bootloader=on"
+mkdir -p /tmp/cut
+HVM_FAULT=0x5017E0 HVM_FAULT_CLASSES=unflushed HVM_FAULT_PROB=10 HVM_DISK=guest/disk-ext4.img HVM_DISK_OUT=/tmp/cut/durable.img \
+  HVM_BOOTARGS="$BA hydo_phase=cut hydo_n=16 hydo_sync=16" $H run guest/Image-virtio guest/initramfs-disk.cpio.gz "hydo-disk: power cut here"
+HVM_DISK=/tmp/cut/durable.img HVM_BOOTARGS="$BA hydo_phase=recover hydo_n=16 hydo_sync=16" \
+  $H run guest/Image-virtio guest/initramfs-disk.cpio.gz "hydo-disk: oracle complete"
 ```
-Kernel command-line parameters for `init-disk`: `hydo_phase=check|cut|recover`, `hydo_n=<records>`, `hydo_sync=<fsync'd>`. They are passed through `HVM_BOOTARGS`, which replaces the whole command line; `cut-test.sh` shows the base.
+Kernel command-line parameters for `init-disk`: `hydo_phase=check|cut|recover`, `hydo_n=<records>`, `hydo_sync=<fsync'd>`. They are passed through `HVM_BOOTARGS`, which replaces the whole command line; the power cut above shows the base.
 
-## Hook points in `hvm.c` (for merging)
+## Hook points in `hvm.c` (for merging; history: the Rust port in `hydo/crates/hydo-hvm` keeps the same points in `vmm.rs`, `fdt.rs` and `virtio.rs`)
 
 All small, and all inert when no device is attached:
 1. `#include "virtio.h"`.

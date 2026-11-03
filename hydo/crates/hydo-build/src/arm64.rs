@@ -46,7 +46,7 @@ struct BundledTc {
 
 impl BundledTc {
     fn new(ctx: &Ctx) -> Result<Option<BundledTc>, Fail> {
-        let Release::Mac { root } = &ctx.release else {
+        let Release::Mac { root, .. } = &ctx.release else {
             return Ok(None);
         };
         let guest = root.join("guest");

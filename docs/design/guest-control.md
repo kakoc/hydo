@@ -322,7 +322,7 @@ that:
   exactly at an exit, and stretches of guest work without exits cannot be interrupted (open item
   13). Process-level control does not need more.
 
-## Feasibility experiments (code in `hv/guest-control-exp/`)
+## Feasibility experiments (code was in `hv/guest-control-exp/`; its hvx part was deleted with hvx_explore.c in M137, its Mac part with the C Mac engine in M147: `git show 145c456:hv/guest-control-exp/hvm/gc_hvm.c`)
 
 Both experiments type a line (`hydo-agent-ping N`) into the serial input of an unchanged
 onboarded Redis image while its workload runs (`disk=none | run K=redis@5+2`), with the engines'

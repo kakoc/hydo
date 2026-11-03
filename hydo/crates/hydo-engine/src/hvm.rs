@@ -1,18 +1,16 @@
-//! The hvm engine (Apple Silicon, Hypervisor.framework): since M143 the Rust engine `hydo-hvm`
-//! (`hydo/crates/hydo-hvm`, the port of `hv/hvm/explore/hvmx`), with the same command lines and
-//! protocol; `HYDO_HVM=c` runs the C `hvmx` for one milestone, `HYDO_HVM=inproc` runs the Rust
-//! engine on a thread of this process ([`crate::hvm_inproc`]; one VM per process, and this
-//! process must carry the hypervisor entitlement). See [`program`].
+//! The hvm engine (Apple Silicon, Hypervisor.framework): the Rust engine `hydo-hvm`
+//! (`hydo/crates/hydo-hvm`, M143, the port of the C `hvmx`, which was deleted in M147), as a
+//! program; `HYDO_HVM=inproc` runs it on a thread of this process ([`crate::hvm_inproc`]; one VM
+//! per process, and this process must carry the hypervisor entitlement). See [`program`].
 //!
-//! Command lines, as the Mac CLI and `explore.py --backend hvm` (hvm_backend.py) build them:
+//! The command line, as the Mac CLI builds it:
 //!
 //! ```text
-//! [env HVM_DISK=<data disk>] <hvmx> [--ram-mib N] --control boot serve|one <Image> <initramfs> <outdir> ["<schedule>"]
+//! [env HVM_DISK=<data disk>] hydo-hvm [--ram-mib N] --control boot serve|one <Image> <initramfs> <outdir> ["<schedule>"]
 //! ```
 //!
 //! The plain `one` and `serve` modes, `--control one` and the request RUN were the shell-init
-//! images' and are no longer used since Milestone 145 (the C `hvmx`, kept for one more
-//! milestone, still has them; `hydo-hvm` does not).
+//! images' and were deleted in Milestone 145.
 //!
 //! The data disk is `<image without .cpio.gz>-disk.img` next to the initramfs, attached only when
 //! it exists. An image built for the second guest kernel names it in `/etc/hydo/kernel`
@@ -32,7 +30,7 @@ use std::process::Command;
 /// How to start hvmx.
 #[derive(Clone, Debug)]
 pub struct Hvm {
-    /// The engine program ([`program`]: `hydo-hvm`, or the C `hv/hvm/explore/hvmx`), signed with
+    /// The engine program ([`program`]: `hydo-hvm`), signed with
     /// the hypervisor entitlement (a `hydo-hvm` that is not gets signed before it runs).
     pub hvmx: PathBuf,
     /// Environment for the engine process (on top of this process's); an engine in this process
@@ -117,27 +115,19 @@ impl Hvm {
     }
 }
 
-/// The Mac engine program of a tree or a release at `root`: `$HYDO_HVM_ENGINE` when set; with
-/// `HYDO_HVM=c` the C engine `hv/hvm/explore/hvmx` (kept for one milestone after M143); else the
-/// Rust engine, a tree's `target/release/hydo-hvm` or a release's `bin/hydo-hvm`; else (a release
-/// built before M143) the C engine.
+/// The Mac engine program of a tree or a release at `root`: `$HYDO_HVM_ENGINE` when set; else a
+/// tree's `target/release/hydo-hvm` or a release's `bin/hydo-hvm`, the first that is executable;
+/// else the release's path (which then does not exist, and whoever runs it says so).
 pub fn program(root: &Path, e: &hydo_config::hvm::Engine) -> PathBuf {
     if let Some(p) = &e.program {
         return p.clone();
     }
-    let c = root.join("hv").join("hvm").join("explore").join("hvmx");
-    if e.choice == hydo_config::hvm::Choice::C {
-        return c;
+    let tree = root.join("target").join("release").join("hydo-hvm");
+    let release = root.join("bin").join("hydo-hvm");
+    if crate::hvx::is_executable(&tree) {
+        return tree;
     }
-    for p in [
-        root.join("target").join("release").join("hydo-hvm"),
-        root.join("bin").join("hydo-hvm"),
-    ] {
-        if crate::hvx::is_executable(&p) {
-            return p;
-        }
-    }
-    c
+    release
 }
 
 /// The hypervisor entitlement (`hv/hvm/hv.entitlements`).

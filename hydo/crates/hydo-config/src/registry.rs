@@ -235,87 +235,88 @@ variables! {
     HYDO_SCRIPTED_ENGINE: Pool, Developer, "path", "", "hydo-explore";
 
     // ------------------------------------------------------------------ Hvm
-    /// Which Mac engine runs: `c` the C hvmx (one milestone after M143), `inproc` the Rust engine
-    /// in this process (one VM per process; the process needs the hypervisor entitlement); else
-    /// the Rust program `hydo-hvm`.
-    HYDO_HVM: Hvm, User, "word: c | inproc", "the program hydo-hvm", "hydo-engine, hydo-cli";
+    /// Which Mac engine runs: `inproc` the Rust engine in this process (one VM per process; the
+    /// process needs the hypervisor entitlement); else the program `hydo-hvm`. (`c`, the C hvmx,
+    /// was removed with the C engine in M147.)
+    HYDO_HVM: Hvm, User, "word: inproc", "the program hydo-hvm", "hydo-engine, hydo-cli";
     /// The Mac engine program (an empty value means the default).
-    HYDO_HVM_ENGINE: Hvm, User, "path", "<root>/target/release/hydo-hvm, else <root>/bin/hydo-hvm, else hv/hvm/explore/hvmx", "hydo-engine";
+    HYDO_HVM_ENGINE: Hvm, User, "path", "<root>/target/release/hydo-hvm, else <root>/bin/hydo-hvm", "hydo-engine";
     /// The data disk (virtio-blk); hydo-engine sets it for an image with a `-disk.img`.
-    HVM_DISK: Hvm, User, "path", "", "hydo-hvm, hvm, hvmx (set by hydo-engine)";
-    /// hvm writes the durable disk image here at its end (flushed bytes only).
-    HVM_DISK_OUT: Hvm, Developer, "path", "", "hydo-hvm hvm, hvm";
-    /// Guest RAM in MiB (hvmx 256..4096, default 1024; hvm default 256); `--ram-mib` wins.
-    HVM_MEM_MB: Hvm, User, "number", "1024 (hvm: 256)", "hydo-hvm, hvm, hvmx";
+    HVM_DISK: Hvm, User, "path", "", "hydo-hvm (set by hydo-engine)";
+    /// `hydo-hvm hvm` writes the durable disk image here at its end (flushed bytes only).
+    HVM_DISK_OUT: Hvm, Developer, "path", "", "hydo-hvm hvm";
+    /// Guest RAM in MiB (the engine: 256..4096, default 1024; `hydo-hvm hvm`: default 256);
+    /// `--ram-mib` wins.
+    HVM_MEM_MB: Hvm, User, "number", "1024 (hydo-hvm hvm: 256)", "hydo-hvm";
     /// Virtual ticks of the 24 MHz counter per VM exit.
-    HVM_STEP: Hvm, Developer, "number", "64", "hydo-hvm, hvm, hvmx";
-    /// hvm's exit budget.
-    HVM_MAX_EXITS: Hvm, Developer, "number", "200000000", "hydo-hvm hvm, hvm";
-    /// hvmx's exit budget per phase of a run.
-    HVM_RUN_EXITS: Hvm, Developer, "number", "50000000", "hydo-hvm, hvmx";
+    HVM_STEP: Hvm, Developer, "number", "64", "hydo-hvm";
+    /// The exit budget of `hydo-hvm hvm`.
+    HVM_MAX_EXITS: Hvm, Developer, "number", "200000000", "hydo-hvm hvm";
+    /// The engine's exit budget per phase of a run.
+    HVM_RUN_EXITS: Hvm, Developer, "number", "50000000", "hydo-hvm";
     /// Set: copy the console to stdout as it is written.
-    HVM_ECHO: Hvm, Developer, "flag: set", "", "hydo-hvm, hvm, hvmx";
+    HVM_ECHO: Hvm, Developer, "flag: set", "", "hydo-hvm";
     /// One line per VM exit into this file (and the interrupted PC at each acknowledge).
-    HVM_TRACE: Hvm, Developer, "path", "", "hydo-hvm, hvm, hvmx";
+    HVM_TRACE: Hvm, Developer, "path", "", "hydo-hvm";
     /// With HVM_TRACE: log the guest u64 at this RAM offset at every exit.
-    HVM_TRACE_WATCH: Hvm, Developer, "number", "", "hydo-hvm, hvm, hvmx";
+    HVM_TRACE_WATCH: Hvm, Developer, "number", "", "hydo-hvm";
     /// Set: log unknown system-register traps.
-    HVM_TRACE_SYSREG: Hvm, Developer, "flag: set", "", "hydo-hvm, hvm, hvmx";
-    /// The guest kernel's command line (hvmx appends `hydo_phase=serve` or `quiet loglevel=1`).
-    HVM_BOOTARGS: Hvm, Developer, "text", "console=ttyS0 ... random.trust_bootloader=on", "hydo-hvm, hvm, hvmx";
+    HVM_TRACE_SYSREG: Hvm, Developer, "flag: set", "", "hydo-hvm";
+    /// The guest kernel's command line (the engine appends ` quiet loglevel=1`).
+    HVM_BOOTARGS: Hvm, Developer, "text", "console=ttyS0 ... random.trust_bootloader=on", "hydo-hvm";
     /// Seconds of exit-free host time after which a spin with no provable loop ends the run.
-    HVM_SPIN_SECS: Hvm, Developer, "number", "10", "hydo-hvm, hvm, hvmx";
+    HVM_SPIN_SECS: Hvm, Developer, "number", "10", "hydo-hvm";
     /// Milliseconds of exit-free host time before the spin observer looks (a hint only).
-    HVM_SPIN_MS: Hvm, Developer, "number", "5", "hydo-hvm, hvm, hvmx";
+    HVM_SPIN_MS: Hvm, Developer, "number", "5", "hydo-hvm";
     /// `0`: no spin observer (the bare watchdog).
-    HVM_SPIN_OBSERVE: Hvm, Developer, "flag: not `0`", "on", "hydo-hvm, hvm, hvmx";
+    HVM_SPIN_OBSERVE: Hvm, Developer, "flag: not `0`", "on", "hydo-hvm";
     /// The spin observer's log file.
-    HVM_SPLOG: Hvm, Developer, "path", "", "hydo-hvm, hvm, hvmx";
-    /// hvm: forced preemption points for the whole run (`<hex seed>,<points>,<first>,<last>`).
-    HVM_PCT: Hvm, Developer, "text", "", "hydo-hvm hvm, hvm";
-    /// hvm: tick jitter for the whole run (`<hex seed>,<permille>,<max>[,<lo>,<hi>]`).
-    HVM_TJ: Hvm, Developer, "text", "", "hydo-hvm hvm, hvm";
+    HVM_SPLOG: Hvm, Developer, "path", "", "hydo-hvm";
+    /// `hydo-hvm hvm`: forced preemption points for the whole run (`<hex seed>,<points>,<first>,<last>`).
+    HVM_PCT: Hvm, Developer, "text", "", "hydo-hvm hvm";
+    /// `hydo-hvm hvm`: tick jitter for the whole run (`<hex seed>,<permille>,<max>[,<lo>,<hi>]`).
+    HVM_TJ: Hvm, Developer, "text", "", "hydo-hvm hvm";
     /// Deliver IRQs by emulating the exception entry (`0`: the vCPU's IRQ line).
-    HVM_SOFT_IRQ: Hvm, Developer, "number", "1 (hvm: 0)", "hydo-hvm, hvm, hvmx";
-    /// hvm: write `<prefix>.regs` and `<prefix>.ram` at the stop.
-    HVM_DUMP: Hvm, Developer, "path", "", "hydo-hvm hvm, hvm";
-    /// The disk's fault seed (hvmx: the flush-aware class at probability 0 when unset).
-    HVM_FAULT: Hvm, Developer, "number", "", "hydo-hvm, hvm, hvmx";
+    HVM_SOFT_IRQ: Hvm, Developer, "number", "1 (hydo-hvm hvm: 0)", "hydo-hvm";
+    /// `hydo-hvm hvm`: write `<prefix>.regs` and `<prefix>.ram` at the stop.
+    HVM_DUMP: Hvm, Developer, "path", "", "hydo-hvm hvm";
+    /// The disk's fault seed (the engine: the flush-aware class at probability 0 when unset).
+    HVM_FAULT: Hvm, Developer, "number", "", "hydo-hvm";
     /// The disk's fault classes (`delay,error,drop,reorder,torn,unflushed` or a number).
-    HVM_FAULT_CLASSES: Hvm, Developer, "list", "error", "hydo-hvm, hvm, hvmx";
+    HVM_FAULT_CLASSES: Hvm, Developer, "list", "error", "hydo-hvm";
     /// The disk faults' probability in percent.
-    HVM_FAULT_PROB: Hvm, Developer, "number", "100", "hydo-hvm, hvm, hvmx";
+    HVM_FAULT_PROB: Hvm, Developer, "number", "100", "hydo-hvm";
     /// The longest disk delay in exits.
-    HVM_FAULT_MAXDELAY: Hvm, Developer, "number", "8", "hydo-hvm, hvm, hvmx";
+    HVM_FAULT_MAXDELAY: Hvm, Developer, "number", "8", "hydo-hvm";
     /// Set: attach the virtio-net device.
-    HVM_NET: Hvm, Developer, "flag: set", "", "hydo-hvm, hvm, hvmx";
+    HVM_NET: Hvm, Developer, "flag: set", "", "hydo-hvm";
     /// Scripted inbound frames (`[u16 big-endian length][frame]...`).
-    HVM_NET_RX: Hvm, Developer, "path", "", "hydo-hvm, hvm, hvmx";
+    HVM_NET_RX: Hvm, Developer, "path", "", "hydo-hvm";
     /// Virtual ticks between two delivered inbound frames.
-    HVM_NET_RX_PACE: Hvm, Developer, "number", "4800000", "hydo-hvm, hvm, hvmx";
-    /// Captured outbound frames are written here at the end (hvm).
-    HVM_NET_TX_OUT: Hvm, Developer, "path", "", "hydo-hvm hvm, hvm";
+    HVM_NET_RX_PACE: Hvm, Developer, "number", "4800000", "hydo-hvm";
+    /// Captured outbound frames are written here at the end (`hydo-hvm hvm`).
+    HVM_NET_TX_OUT: Hvm, Developer, "path", "", "hydo-hvm hvm";
     /// The network fault seed.
-    HVM_NET_FAULT: Hvm, Developer, "number", "", "hydo-hvm, hvm, hvmx";
+    HVM_NET_FAULT: Hvm, Developer, "number", "", "hydo-hvm";
     /// The network fault classes (`drop,corrupt,dup` or a number).
-    HVM_NET_FAULT_CLASSES: Hvm, Developer, "list", "drop", "hydo-hvm, hvm, hvmx";
+    HVM_NET_FAULT_CLASSES: Hvm, Developer, "list", "drop", "hydo-hvm";
     /// The network faults' probability in percent.
-    HVM_NET_FAULT_PROB: Hvm, Developer, "number", "100", "hydo-hvm, hvm, hvmx";
+    HVM_NET_FAULT_PROB: Hvm, Developer, "number", "100", "hydo-hvm";
     /// Where the engine makes (and unlinks at once) its snapshot files.
-    HVM_SNAP_DIR: Hvm, User, "path", "/tmp/hvm-snap", "hydo-hvm, hvmx";
+    HVM_SNAP_DIR: Hvm, User, "path", "/tmp/hvm-snap", "hydo-hvm";
     /// Set: per-component hashes of a run's end state into `<outdir>/<tag>.diag`.
-    HVMX_DIAG: Hvm, Developer, "flag: set", "", "hydo-hvm, hvmx";
+    HVMX_DIAG: Hvm, Developer, "flag: set", "", "hydo-hvm";
     /// With HVMX_DIAG: raw copies of these 1 MiB chunks of RAM (comma-separated offsets).
-    HVMX_DIAG_CHUNKS: Hvm, Developer, "list", "", "hydo-hvm, hvmx";
+    HVMX_DIAG_CHUNKS: Hvm, Developer, "list", "", "hydo-hvm";
     /// Set: read the registers back after every restore and report differences.
-    HVMX_CHECK_RESTORE: Hvm, Developer, "flag: set", "", "hydo-hvm, hvmx";
+    HVMX_CHECK_RESTORE: Hvm, Developer, "flag: set", "", "hydo-hvm";
     /// Set: do not mlock guest RAM.
-    HVMX_NO_MLOCK: Hvm, Developer, "flag: set", "", "hydo-hvm, hvmx";
+    HVMX_NO_MLOCK: Hvm, Developer, "flag: set", "", "hydo-hvm";
 
     // ------------------------------------------------------------------ Control
     /// `0`: the host does not run a SPIN of an agent image on hvm again in the rewind mode
-    /// (hvmx reads it for a shell image's RUN).
-    HVM_SPIN_REWIND: Control, User, "flag: exactly `0` turns it off", "on", "hydo-control, hydo-hvm, hvmx";
+    /// (`hydo-hvm hvm` reads it too: `1` turns the rewind mode on).
+    HVM_SPIN_REWIND: Control, User, "flag: exactly `0` turns it off", "on", "hydo-control, hydo-hvm";
 
     // ------------------------------------------------------------------ Cli
     /// `linux` or `mac`: run the `hydo` command as the other platform's (the CLI test checks
@@ -416,6 +417,8 @@ variables! {
     HYDO_HIST_FULL: Tests, Test, "flag: set", "off", "hydo-history tests";
     /// The deleted C engine's source, to re-record the parser's answers.
     HYDO_HVX_C_SRC: Tests, Test, "path", "", "hydo-hvx tests";
+    /// A directory with the deleted C Mac engine's sources, to re-record the layout probe's answers.
+    HYDO_HVM_C_SRC: Tests, Test, "path", "", "hydo-hvm tests";
     /// The Python used to re-record the old answers (before M107).
     HYDO_RECORD_PY: Tests, Test, "path", "", "hydo-composer, hydo-errors tests";
     /// Set: re-record the CLI's answers with the old Python CLIs.

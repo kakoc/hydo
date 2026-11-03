@@ -1,6 +1,6 @@
 # The explorer and `hydo.yaml` on the Mac VMM
 
-**Since M143** the engine hydo runs on the Mac is the Rust port of `serve.c` and `../hvm.c`, `hydo/crates/hydo-hvm` (the program `hydo-hvm`, with this program's command line and protocol; `hydo-hvm hvm print|run|branch` are `../hvm`'s boot probes). `hvmx` below is that C engine, kept for one milestone (`HYDO_HVM=c`); every value on this page is the same with either.
+**Since M143** the engine hydo runs on the Mac is the Rust port of `serve.c` and `../hvm.c`, `hydo/crates/hydo-hvm` (the program `hydo-hvm`, with this program's command line and protocol; `hydo-hvm hvm print|run|branch` are `../hvm`'s boot probes). `hvmx` below is that C engine; every value on this page is the same with either. **The C engine was deleted in M147** (`serve.c`, `build.sh`, `../hvm.c`, `../virtio*.c`, `../spin_observer.c`; in git at `145c456`), so read `hvmx` and `../hvm` on this page as `hydo-hvm` and `hydo-hvm hvm`. Since M145 the engine boots only agent images (`--control boot serve|one`); the plain `serve`/`one`, RUN and the shell init's S0/S1 markers described below were the shell images'. The commands at the end are the current ones.
 
 **Result:** the explorer with `--backend hvm` (since M102 the Rust `hydo-explore`; the Mac release's `hydo explore` passes it; until M107 `hydo/explore/explore.py`) runs fault schedules against an arm64 guest on this Mac (M2 Pro, macOS 26.4.1) exactly as it does against `hvx_explore` on the Linux box. Projects are built from their `hydo.yaml` with `hydo-build --arch arm64`, and the generic guest init `hydo/onboard/hydo-init.sh` runs unchanged. On the Redis example, with the virtio disk attached, power cuts and seeded disk faults work: 100 swarm schedules gave 37 failures, all in expected classes (lying disk, I/O errors, relaxed `appendfsync`), and all 37 reproduced bit-for-bit. There were no failures with durable settings and an honest disk. Throughput is about 11,500 runs per hour with 4 workers.
 
@@ -8,8 +8,8 @@
 
 | File | What |
 |---|---|
-| `serve.c` (`hvmx`) | the run engine. It includes `../hvm.c` and speaks `hvx_explore`'s protocol: `READY`, `RUN <tag> <schedule>`, `RESULT ...`, `QUIT`, and the lock-step requests `CTL` and `RESUME` (Milestone 119). `hvmx one ...` runs one schedule from a fresh boot |
-| `build.sh` | builds and signs `hvmx` (with `../virtio*.c`) |
+| `serve.c` (`hvmx`; deleted in M147) | the run engine. It included `../hvm.c` and spoke `hvx_explore`'s protocol: `READY`, `RUN <tag> <schedule>`, `RESULT ...`, `QUIT`, and the lock-step requests `CTL` and `RESUME` (Milestone 119). `hvmx one ...` ran one schedule from a fresh boot. Now `hydo/crates/hydo-hvm/src/serve.rs` (its module documentation has the Mac engine's particulars) |
+| `build.sh` (deleted in M147) | built and signed `hvmx` (with `../virtio*.c`); the engine is now `cargo build --release -p hydo-hvm`, signed by hydo when it runs it |
 | `lockstep-check.sh` | the permanent test of lock-step control (Milestone 119; on agent images since Milestone 145): timed input, reactions and SNAP/RESUME branches through `hydo-engine/examples/hvm_lockstep_check.rs`, and `hydo-control/examples/hvm_agent_check.rs` |
 | `build-guest-netns.sh`, `hvm-netns.config`, `netnsboot/` | the second arm64 kernel `Image-explore-netns` (Milestone 99): `Image-explore` plus network namespaces, veth, bridge, IPv6, policy routing, iptables + NFQUEUE; only for manifests with `network: bridge`, `addr:` or `faults: [freeze]` (see "The second kernel" below) |
 | `build-guest.sh`, `hvm-explore.config` | the arm64 kernel `Image-explore`, built on the Linux box: the M48 kernel with `../linux/hvm-virtio.config`, `../services/svc.config`, MBR partitions and loop, and (by default) the HVC idle below. `HVM_IDLE_HVC=0` rebuilds the earlier WFI-idle kernel |
@@ -134,7 +134,7 @@ The ledger without a disk (first version): 6 schedules, two serve processes and 
 
 **Builds** (two each, byte-identical): `Image-explore` `f80c5655…`; `explore-ob-redis-arm64.cpio.gz` `10f7858a…` (disk `9ddfc929…`, unchanged); `explore-ob-ledger-arm64.cpio.gz` `deb1525d…` (disk `ed04ad2a…`). The two example manifests now list `network` and `oneway` in `faults:`.
 
-**Determinism** (`netfault/check.py`: each schedule in two separate serve processes from the S1 snapshot and once as `hvmx one` from a fresh boot; all three fingerprints equal). The README table schedules on the new kernel and image, same verdicts as before:
+**Determinism** (`netfault/check.py`, deleted in M147 with the C engine it drove: each schedule in two separate serve processes from the S1 snapshot and once as `hvmx one` from a fresh boot; all three fingerprints equal). The README table schedules on the new kernel and image, same verdicts as before:
 
 | Schedule | Fingerprint | Verdict |
 |---|---|---|
@@ -283,8 +283,9 @@ visible on the console; an explorer campaign of 30 schedules; and Docker's votin
 `hvmx --control one ...` runs `one` the same way. This is `hv/hvx/hvx_explore.c`'s lock-step protocol
 (Milestone 118, the design in `docs/design/guest-control.md`), so one host client drives both engines:
 hydo-engine's `lockstep` module (`Worker::lockstep`, `Hvm::one_lockstep`). The only difference is the
-clock: `at=` is the exit count here and hvx's icount there. The full protocol is in `serve.c`'s
-comment above `ctl_esc`.
+clock: `at=` is the exit count here and hvx's icount there. The protocol's lines are in
+hydo-engine-proto's crate documentation, and the Mac engine's particulars in
+`hydo/crates/hydo-hvm/src/serve.rs` (until M147 `serve.c`'s comment above `ctl_esc`).
 
 - The engine stops and waits for the host at the run's start, at the exit where a queued `SEND`
   is due (the bytes are typed there, before the guest runs again, so delivery is exact to the exit),
@@ -315,13 +316,15 @@ WORK=$PWD sh <repo>/hv/hvm/explore/build-guest.sh                               
 WORK=$PWD sh <repo>/hv/hvm/explore/build-idle-m48.sh                            # out/Image-idle (M48 config + HVC idle)
 hydo-build <repo>/hydo/onboard/examples-mac/redis/hydo.yaml --arch arm64 --build-dir ob  # ob/explore-ob-redis-arm64{.cpio.gz,-disk.img}
     # (the hydo-build program: cargo build --release -p hydo-build; or `hydo build` of the Mac release, on the Mac)
-# Mac: copy Image-explore and the two images to hv/hvm/explore/out/, then
-sh hv/hvm/explore/build.sh
+# Mac: copy Image-explore and the two images to hv/hvm/explore/out/, then (the engine is
+# target/release/hydo-hvm, which hydo signs with the hypervisor entitlement before it runs it)
+cargo build --release -p hydo-hvm -p hydo-explore -p hydo-cli
 target/release/hydo-explore --backend hvm --image hv/hvm/explore/out/explore-ob-redis-arm64.cpio.gz \
-    --strategy swarm --new-faults --seeds 1-100 --workers 4 --out /tmp/hvm-redis   # cargo build --release -p hydo-explore
-# one schedule by hand (the report prints this line for each minimal reproducer)
-HVM_DISK=hv/hvm/explore/out/explore-ob-redis-arm64-disk.img hv/hvm/explore/hvmx one \
-    hv/hvm/explore/out/Image-explore hv/hvm/explore/out/explore-ob-redis-arm64.cpio.gz /tmp/o "disk=cut dseed=0 | run C=12 R=everysec"
+    --strategy swarm --new-faults --seeds 1-100 --workers 4 --out /tmp/hvm-redis
+# one schedule by hand (the report prints this line for each minimal reproducer); the host
+# controller drives the agent image, so a schedule runs through `hydo run`, not the engine alone
+target/release/hydo run --image hv/hvm/explore/out/explore-ob-redis-arm64.cpio.gz --out /tmp/o \
+    "disk=cut dseed=0 | run C=12 R=everysec"
 ```
 
 Diagnostics:

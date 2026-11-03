@@ -5,7 +5,7 @@
 //!
 //! - [`ChanLink`]: the hvx engine running on a thread of this process ([`crate::inproc`]); the
 //!   values travel over channels as they are (`hydo_hvx::port::ChanPort` is the engine's end);
-//! - [`TextLink`]: an engine program (the Mac's `hvmx`, or `hydo-hvx` under `hvx-run sudo`); each
+//! - [`TextLink`]: an engine program (the Mac's `hydo-hvm`, or `hydo-hvx` under `hvx-run sudo`); each
 //!   value is its line ([`HostMsg::line`], [`EngineMsg::parse`]) on the program's stdin and stdout.
 //!
 //! Everything above a link (the worker, the lock-step client, the controller, the explorer) sees

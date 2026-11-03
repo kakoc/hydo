@@ -1,6 +1,6 @@
 [package]
 name = "hydo-hvm"
-description = "The Mac run engine in Rust: hv/hvm/hvm.c, the virtio devices, the spin observer and hvmx (hv/hvm/explore/serve.c) on Hypervisor.framework; in-process or as the hydo-hvm program (hvmx's command line and protocol)"
+description = "The Mac run engine: the deterministic arm64 VMM on Hypervisor.framework (ported from the C hvm.c, its virtio devices, its spin observer and hvmx, deleted in M147); in-process or as the hydo-hvm program"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
