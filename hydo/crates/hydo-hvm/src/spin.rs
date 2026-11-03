@@ -2,6 +2,52 @@
 //! (hv/hvm/spin/RESEARCH.md). Exact-repeat loops are resolved in every run; counter loops need the
 //! copy-on-write checkpoint taken at every real exit (the rewind mode, `rw_on`). The functions
 //! keep the C names and their order of effects; the statistics live outside the machine state.
+//! The C file was deleted in Milestone 147 (`git show 145c456:hv/hvm/spin_observer.c`); its
+//! two explanations follow.
+//!
+//! # Exit-free spins: "a provable cycle is idle"
+//!
+//! A guest that loops without any exit gives no deterministic instruction at which to deliver an
+//! interrupt (PROBE.md: no instruction counter on the M2). But on a single vCPU with no exits,
+//! nothing outside the guest can change guest memory, so a loop that returns to EXACTLY the same
+//! register state without writing memory will repeat forever. Every iteration is then the same
+//! state, so delivering the pending interrupt at a canonical point of the cycle gives the same
+//! guest state no matter WHEN the loop was noticed: the host-timed kick is only a hint.
+//!
+//! On a kick (no exit for `HVM_SPIN_MS` of host time) the guest is single-stepped (exact) while
+//! its full register state is hashed after each step, with all of RAM write-protected at stage 2.
+//! If a state repeats and one more full period repeats it again with no write fault, the cycle
+//! is proven. Then the guest is stepped to the cycle's canonical state (the one with the smallest
+//! hash among states where IRQs are unmasked), virtual time jumps to the timer deadline exactly
+//! as at an idle WFI, and the guest resumes: the interrupt is delivered at the next entry.
+//! Anything else (a real exit during stepping, an exclusive load, which stepping would break,
+//! WFE/SEV, no repeat within the step budget) leaves the guest exactly as free-running would and
+//! resumes it. The statistics live outside the machine state because the number of kicks is
+//! host-timed.
+//!
+//! # Counter loops (the rewind mode)
+//!
+//! A loop such as `while (flag) n++;` never returns to the same register state, so the exact-cycle
+//! rule cannot resolve it: the state at the kick is S_entry + k*D, and k (passes since the loop was
+//! entered) depends on WHEN the host-timed kick came.
+//!
+//! The rule: (1) prove the loop never ends without an interrupt: across two observed passes the
+//! full register state changes only in some X registers, by the same constant D each pass
+//! ("induction registers"); memory is unchanged by a pass; and, decoding every instruction of one
+//! stepped period, no instruction reads an induction register except the `add/sub Xi, Xi, #imm`
+//! that updates it. Then the control flow and every load are independent of the induction
+//! registers, so every later pass repeats the same path: the loop is infinite, and every run that
+//! reaches it is eventually kicked. (2) Deliver at a point fixed by the guest alone: rewind to a
+//! checkpoint taken at the last real exit E, re-execute deterministically with a hardware
+//! breakpoint at the loop's canonical PC p* (the smallest PC of the period where IRQs are
+//! unmasked), and deliver at the first arrival there. Execution from E is deterministic and the
+//! breakpoint is exact, so the delivery state does not depend on the kick time.
+//!
+//! The checkpoint is copy-on-write: at every real exit the registers and machine state are saved
+//! and the pages written since the previous exit are re-protected; the first write to a page after
+//! an exit faults (stage 2), the page's old bytes are kept, and the page is unprotected. Rewinding
+//! copies those bytes back. Instructions outside a small decoded set make the proof fail (the run
+//! then stays invalid, as without this mode).
 
 use crate::fatal;
 use crate::fnv::{fnv, OFFSET};

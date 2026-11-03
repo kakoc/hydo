@@ -1009,6 +1009,15 @@ impl Vmm {
     }
 
     // ---------------- interrupt delivery: stepping to the unmasking instruction ----------------
+    // The interrupt delivery rule (hvm.c, M48). Hypervisor.framework delivers a pending IRQ that
+    // the guest has MASKED at entry at a host-timing-dependent instruction after the guest
+    // unmasks it (measured: the interrupted PC differed between runs while every exit matched).
+    // So the line is raised only at an entry where PSTATE.I is clear, where the IRQ is taken at
+    // the entry instruction. An idle WFI is executed with IRQs masked (arm64 cpu_do_idle); there
+    // the guest is single-stepped (exact, deterministic) to the instruction that unmasks, and the
+    // line is raised there. A single step clears the exclusive monitor, so an LL/SC loop never
+    // completes under stepping: the guest must use LSE atomics, and a step that lands on an
+    // exclusive load stops the run with a message.
     fn start_stepping(&mut self) {
         if self.m.stepping != 0 {
             return;

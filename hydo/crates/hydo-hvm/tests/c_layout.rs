@@ -1,6 +1,17 @@
-//! The port's constants, struct layouts and device tree against the C sources (hv/hvm/hvm.c,
-//! virtio.c): `tests/probe.c` includes them, and this test compares every value. Apple Silicon
-//! only (it needs the SDK's Hypervisor.framework headers and clang).
+//! The port's constants, struct layouts and device tree against the C engine (hv/hvm/hvm.c and
+//! virtio.c, deleted in M147). `tests/probe.c` includes the C sources and prints every
+//! Hypervisor.framework constant the port names, the snapshot's system-register lists, `struct
+//! mach` and `struct vstate` filled with distinct values, and two device trees; its answers are
+//! recorded in `tests/golden/c_layout.txt`, and this test compares the Rust values with them.
+//!
+//! To check against the C itself again, or to record the golden anew from it (Apple Silicon with
+//! the SDK's Hypervisor.framework headers and clang), give a directory with the C files:
+//!
+//! ```text
+//! mkdir /tmp/hvm-c && for f in hvm.c virtio.c virtio_blk.c virtio_net.c virtio.h virtio_int.h; do
+//!   git show 145c456:hv/hvm/$f > /tmp/hvm-c/$f; done
+//! HYDO_HVM_C_SRC=/tmp/hvm-c [HYDO_BLESS=1] cargo test -p hydo-hvm --test c_layout
+//! ```
 
 #![cfg(all(target_os = "macos", target_arch = "aarch64"))]
 
@@ -9,29 +20,53 @@ use hydo_hvm::layout::*;
 use hydo_hvm::machine::{Mach, MACH_SIZE};
 use hydo_hvm::virtio::{VState, VSTATE_SIZE};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-fn probe() -> HashMap<String, String> {
+/// The golden's first line.
+const HEADER: &str =
+    "# hv/hvm/hvm.c and virtio*.c (deleted in M147; git show 145c456:hv/hvm/<file>) \
+compiled with tests/probe.c and run on an M2 Pro, macOS 26.4.1\n";
+
+/// The probe's output from the C sources in `src`.
+fn c_probe(src: &Path) -> String {
     let here = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let hvm = here.join("../../../hv/hvm");
     let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("hvm-probe");
     let st = std::process::Command::new("clang")
         .args(["-O1", "-w", "-o"])
         .arg(&out)
         .arg(here.join("tests/probe.c"))
-        .arg(hvm.join("virtio.c"))
-        .arg(hvm.join("virtio_blk.c"))
-        .arg(hvm.join("virtio_net.c"))
+        .arg(src.join("virtio.c"))
+        .arg(src.join("virtio_blk.c"))
+        .arg(src.join("virtio_net.c"))
         .arg("-I")
-        .arg(&hvm)
+        .arg(src)
         .args(["-framework", "Hypervisor"])
         .status()
         .expect("clang");
     assert!(st.success(), "the C probe does not compile");
     let o = std::process::Command::new(&out).output().expect("probe");
-    String::from_utf8(o.stdout)
-        .unwrap()
-        .lines()
+    String::from_utf8(o.stdout).unwrap()
+}
+
+/// The recorded C answers; with `HYDO_HVM_C_SRC` the C's own, compared with the golden first
+/// (`HYDO_BLESS=1` records them instead).
+fn probe() -> HashMap<String, String> {
+    let golden = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden/c_layout.txt");
+    let mut text = std::fs::read_to_string(&golden).unwrap_or_default();
+    if let Some(src) = std::env::var_os("HYDO_HVM_C_SRC") {
+        let c = format!("{HEADER}{}", c_probe(Path::new(&src)));
+        if std::env::var("HYDO_BLESS").as_deref() == Ok("1") {
+            std::fs::create_dir_all(golden.parent().unwrap()).unwrap();
+            std::fs::write(&golden, &c).unwrap();
+            println!("c_layout: recorded {}", golden.display());
+        } else {
+            assert_eq!(c, text, "the C's answers are not the recorded ones");
+        }
+        text = c;
+    }
+    assert!(!text.is_empty(), "no golden {}", golden.display());
+    text.lines()
+        .filter(|l| !l.starts_with('#'))
         .filter_map(|l| l.split_once(' '))
         .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect()

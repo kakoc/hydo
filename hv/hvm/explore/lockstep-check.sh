@@ -12,9 +12,8 @@
 #          control gives one fingerprint, from S1 and from a fresh boot.
 #   lockstep-check.sh <dir with Image-explore> <Redis example image explore-ob-redis-arm64.cpio.gz> \
 #                     <out dir> [<ledger-spin image explore-ob-ledger-spin-arm64.cpio.gz>]
-# The engine is the Rust program hydo-hvm (M143, the default; signed here); ENGINE=c tests the C
-# hvmx instead (kept until open item 37). Exit status 0 when every group agrees. About 5 to 15
-# minutes on an M2 Pro.
+# The engine is the Rust program hydo-hvm (M143; signed here; the C hvmx was deleted in M147).
+# Exit status 0 when every group agrees. About 5 to 15 minutes on an M2 Pro.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
@@ -22,13 +21,8 @@ img=$1; redis=$2; out=$3; spin=${4:-}
 mkdir -p "$out"
 (cd "$root" && cargo build --release --locked -p hydo-hvm -p hydo-engine --example hvm_lockstep_check \
 	&& cargo build --release --locked -p hydo-control --example hvm_agent_check)
-if [ "${ENGINE:-rust}" = c ]; then
-	sh "$here/build.sh"
-	engine=$here/hvmx
-else
-	engine=$root/target/release/hydo-hvm
-	codesign --force --entitlements "$root/hv/hvm/hv.entitlements" -s - "$engine"
-fi
+engine=$root/target/release/hydo-hvm
+codesign --force --entitlements "$root/hv/hvm/hv.entitlements" -s - "$engine"
 bin=$root/target/release/examples/hvm_lockstep_check
 agent=$root/target/release/examples/hvm_agent_check
 rc=0

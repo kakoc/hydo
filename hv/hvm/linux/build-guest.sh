@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build the arm64 guest for hvm.c on a Linux box with nix (the build machine):
+# Build the arm64 guest for the Mac VMM (hydo-hvm; hvm.c before M147) on a Linux box with nix (the build machine):
 # Linux 6.6.35 + the arch_timer.cntpct change + hvm.config, and a busybox initramfs.
 # Outputs in $OUT (default ./out): Image, initramfs.cpio.gz, initramfs-spin.cpio.gz, and for the virtio devices
 # Image-virtio (hvm.config + hvm-virtio.config), initramfs-disk.cpio.gz, initramfs-net.cpio.gz, disk-ext4.img,

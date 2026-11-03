@@ -71,9 +71,10 @@ pub enum Release {
     /// The Linux release at `root`: guest/store with guest/store-closures.txt stands in for the
     /// pinned /nix/store paths, and every root inode is owned by 0:0 (HYDO_KEEP_OWNERS=1 skips it).
     Linux { root: PathBuf },
-    /// The Mac release at `root`: mke2fs runs in a helper VM (hv/hvm/hvm), the aarch64 tc closure
-    /// comes from guest/tc with guest/tc-closure.txt.
-    Mac { root: PathBuf },
+    /// The Mac release at `root`: mke2fs runs in a helper VM (`<engine> hvm run`: the Mac engine
+    /// `hydo-hvm`, signed with the hypervisor entitlement; until M147 the C `hv/hvm/hvm`), the
+    /// aarch64 tc closure comes from guest/tc with guest/tc-closure.txt.
+    Mac { root: PathBuf, engine: PathBuf },
 }
 
 /// What a build needs besides its arguments.
@@ -238,7 +239,7 @@ The image's first process is the guest agent hydo-agent (x86_64: /sbin/init; arm
 control: the host controller runs the services, the workload, the faults and the checks. (Until
 Milestone 136 the default was a shell init; --control agent is still accepted and changes nothing.)
 --arch arm64 builds <NAME>-arm64.cpio.gz instead, one initramfs for the Mac VMM
-(hv/hvm/explore/hvmx), and <NAME>-arm64-disk.img, the data disk.
+(hydo-hvm), and <NAME>-arm64-disk.img, the data disk.
 
 Byte-reproducible like the hand-written image scripts (build-stack.sh): pinned mke2fs run
 under a pinned libfaketime, fixed UUIDs and hash seeds derived from the project name,

@@ -2,7 +2,7 @@
 //!
 //! A schedule is one line, `<host tokens> | run <guest tokens>`, for example
 //! `disk=cut dseed=1 | run C=12 R=everysec`. The host part is applied by the engine
-//! (`hydo/crates/hydo-hvx`, `hv/hvm/explore/serve.c`): disk faults, tick jitter, preemption, vCPU
+//! (`hydo/crates/hydo-hvx`, `hydo/crates/hydo-hvm`): disk faults, tick jitter, preemption, vCPU
 //! turns, the run budget, a power cut at a FLUSH. Comments that cite `hvx_explore.c` name the C
 //! engine the Rust one was ported from (deleted in M137; `git show d9202e7:hv/hvx/hvx_explore.c`). The guest part is typed on the guest's console
 //! and applied by its init (`hydo/onboard/hydo-init*.sh`, until M146 also the stack's `stack-explore.sh`): kills,
@@ -32,9 +32,9 @@
 //! - **a host token**: a variant of [`HostToken`] (`host.rs`: its `key`, its `parse` arm, its
 //!   `Display` arm) and, if it constrains other tokens, a rule in `Schedule::check`. Then the
 //!   engines apply the typed value: hvx in `Sched::from_schedule` (`hydo-hvx/src/sched.rs`) and
-//!   wherever the engine uses that field; the Mac engine `hv/hvm/explore/serve.c` still reads the
-//!   host text with its own C parser until it is ported to Rust (M143), so a host token for the
-//!   Mac is also added there. The explorer (`hydo-explore`) generates and shrinks it.
+//!   wherever the engine uses that field; the Mac engine reads the typed tokens too
+//!   (`hydo-hvm/src/serve.rs`, which refuses the ones it cannot apply), so a host token for the
+//!   Mac is added there. The explorer (`hydo-explore`) generates and shrinks it.
 //! - **a guest token**: a variant of [`GuestToken`] (`guest.rs`: its letter in [`RESERVED`], its
 //!   `parse` arm, its `Display` arm). The engines only type the guest text into the guest; the host
 //!   controller acts on the typed value (`hydo-control/src/schedule.rs` `run_cfg`, or a module in

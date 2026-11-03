@@ -14,8 +14,8 @@ It needed **one small guest-kernel change** (a Kconfig option, below) and no roo
 
 | File | What |
 |---|---|
-| `hvm.c` | the VMM (~680 lines of C): RAM, generated device tree, GICv2 + 16550 UART + PSCI emulation, exit-count clock, snapshot/branch, fingerprint, spin watchdog |
-| `build.sh` | builds `probe` and `hvm` and ad-hoc signs them with the hypervisor entitlement |
+| `hvm.c` (deleted in M147) | the VMM (~680 lines of C at M48): RAM, generated device tree, GICv2 + 16550 UART + PSCI emulation, exit-count clock, snapshot/branch, fingerprint, spin watchdog. Since M143 the engine is its Rust port, `hydo/crates/hydo-hvm` (`vmm.rs`, `machine.rs`, `fdt.rs`; `hvm_main.rs` is this page's `run`/`print`/`branch`), and in M147 the C was deleted (`git show 145c456:hv/hvm/hvm.c`) |
+| `build.sh` | builds `probe` and ad-hoc signs it with the hypervisor entitlement (until M147 also `hvm`) |
 | `linux/build-guest.sh` | builds the guest on a Linux box with nix: kernel `Image`, `initramfs.cpio.gz`, `initramfs-spin.cpio.gz`. Byte-reproducible (checked with a clean rebuild in a fresh directory) |
 | `linux/apply-cntpct.py`, `linux/force-cntpct.patch` | the kernel change (script, and the resulting diff for reading) |
 | `linux/hvm.config` | the kernel configuration, applied on top of `allnoconfig` |
@@ -28,12 +28,16 @@ Pins: kernel source `/nix/store/czg3kwyz7v5i192myvg62i66n83s0940-linux-6.6.35.ta
 ```sh
 # on the build machine (Linux with Nix), in a scratch directory:
 WORK=$PWD sh <repo>/hv/hvm/linux/build-guest.sh        # -> out/Image, out/initramfs*.cpio.gz
-# on the Mac, in hv/hvm/ (copy out/* to guest/ first):
-sh build.sh
-./hvm run    guest/Image guest/initramfs.cpio.gz "hydo-boot-marker: launching shell"   # console + fingerprint
-./hvm print  guest/Image guest/initramfs.cpio.gz "hydo-boot-marker: launching shell"   # fingerprint only
-./hvm branch guest/Image guest/initramfs.cpio.gz "Unpacking initramfs" "hydo-boot-marker: launching shell"
+# on the Mac, at the repository root: the engine, signed with the hypervisor entitlement
+cargo build --release -p hydo-hvm
+codesign --force --entitlements hv/hvm/hv.entitlements -s - target/release/hydo-hvm
+# in hv/hvm/ (copy out/* to guest/ first):
+H="../../target/release/hydo-hvm hvm"
+$H run    guest/Image guest/initramfs.cpio.gz "hydo-boot-marker: launching shell"   # console + fingerprint
+$H print  guest/Image guest/initramfs.cpio.gz "hydo-boot-marker: launching shell"   # fingerprint only
+$H branch guest/Image guest/initramfs.cpio.gz "Unpacking initramfs" "hydo-boot-marker: launching shell"
 ```
+(Until Milestone 147 these were `./hvm run|print|branch`, the C program `sh build.sh` built; `hydo-hvm hvm` takes the same arguments and environment and prints the same lines.)
 Environment: `HVM_MEM_MB` (default 256), `HVM_STEP` (virtual ticks per exit, default 64), `HVM_ECHO=1`, `HVM_MAX_EXITS`, `HVM_SPIN_SECS` (give up on an exit-free spin after this much host time, default 10), `HVM_SPIN_MS` (exit-free host time before the spin observer looks, default 5), `HVM_SPIN_OBSERVE=0` (no observer), `HVM_SPIN_REWIND=1` (also resolve counter loops; slower), `HVM_SPLOG=<file>`, `HVM_BOOTARGS`, `HVM_TRACE=<file>` (one line per exit, plus the interrupted PC at every interrupt acknowledge), `HVM_DUMP=<prefix>` (registers and RAM at the stop), `HVM_TRACE_SYSREG=1`.
 
 ## Reference numbers (256 MiB guest)
@@ -68,7 +72,7 @@ With the option off the code is unchanged. The change is needed only because the
 
 ## Limits and what remains
 
-- **A guest that loops without exits stops the clock** -- now resolved in most cases by `spin_observer.c` (see `spin/RESEARCH.md`, "In the main engine"); the rest of this item describes the bare watchdog (`HVM_SPIN_OBSERVE=0`). This is the PROBE.md blocker, now shown on real Linux. `/bin/spinwait` arms a 100 ms timer and spins in user space waiting for the signal. No exit happens, so the timer interrupt is never delivered and virtual time stays at 0.039 s. `hvm`'s watchdog reports it after `HVM_SPIN_SECS` of host time: `SPIN: no VM exit for 3 s ... pc 0x4001c0 cpsr 0x1000`. It then stops the run as invalid instead of hanging or producing a host-timed result. Code that polls the clock is fine, because every counter read is an exit. Pure memory-flag spins in user space, such as busy-wait locks or some JIT safepoint polls, are not. hvx solved this with the PMU branch clock (M33); there is no counter on the M2 to do the same.
+- **A guest that loops without exits stops the clock** -- now resolved in most cases by the spin observer (`hydo/crates/hydo-hvm/src/spin.rs`; `spin_observer.c` until M147; see `spin/RESEARCH.md`, "In the main engine"); the rest of this item describes the bare watchdog (`HVM_SPIN_OBSERVE=0`). This is the PROBE.md blocker, now shown on real Linux. `/bin/spinwait` arms a 100 ms timer and spins in user space waiting for the signal. No exit happens, so the timer interrupt is never delivered and virtual time stays at 0.039 s. `hvm`'s watchdog reports it after `HVM_SPIN_SECS` of host time: `SPIN: no VM exit for 3 s ... pc 0x4001c0 cpsr 0x1000`. It then stops the run as invalid instead of hanging or producing a host-timed result. Code that polls the clock is fine, because every counter read is an exit. Pure memory-flag spins in user space, such as busy-wait locks or some JIT safepoint polls, are not. hvx solved this with the PMU branch clock (M33); there is no counter on the M2 to do the same.
 - **Interrupt latency is coarser than on hardware.** An interrupt waits for the next exit where the guest has interrupts unmasked. Compute-bound code without exits delays the tick. This is deterministic but changes the guest's timing.
 - **One vCPU.** Several vCPUs would need deterministic interleaving, which hvx does with an instruction quantum (M19); here there is no counter to define a quantum.
 - **Devices for real services:** virtio-mmio block and network devices (the MMIO exits already carry everything a decoder needs), and a fault-injection layer like hvx's M22/M24. The MMIO hole is below RAM, at `0x08000000`–`0x09000fff`, so RAM up to 4 GiB already works, and more is a constant change.

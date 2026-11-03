@@ -103,8 +103,8 @@ pub fn mkfs(
     src: Option<&Path>,
     journal: bool,
 ) -> Result<(), Fail> {
-    if let Release::Mac { root } = &ctx.release {
-        return mac_mkfs(ctx, root, out, mib, uuid, seed, src, journal);
+    if let Release::Mac { root, engine } = &ctx.release {
+        return mac_mkfs(ctx, root, engine, out, mib, uuid, seed, src, journal);
     }
     truncate_new(out, mib)?;
     let mut cmd = Command::new(&t.faketime);
@@ -199,12 +199,14 @@ fn own_by_root(t: &MkfsTools, out: &Path, src: &Path) -> Result<(), Fail> {
 }
 
 /// The Mac release's mkfs: the same mke2fs options, run by the static arm64 mke2fs inside a
-/// helper VM (hvm) on the raw file, instead of the host's mke2fs under libfaketime. hydo-build
-/// zeroes every time field afterwards, so the image is a pure function of the options.
+/// helper VM (`<engine> hvm run`, the Mac engine's boot probe) on the raw file, instead of the
+/// host's mke2fs under libfaketime. hydo-build zeroes every time field afterwards, so the image is
+/// a pure function of the options.
 #[allow(clippy::too_many_arguments)]
 fn mac_mkfs(
     _ctx: &Ctx,
     rel: &Path,
+    engine: &Path,
     out: &Path,
     mib: u64,
     uuid: &str,
@@ -222,7 +224,6 @@ fn mac_mkfs(
     args.extend(mke2fs_args("", uuid, seed, journal));
     args.push("/dev/vda".into());
     let guest = rel.join("guest");
-    let hvm = rel.join("hv").join("hvm").join("hvm");
     let kernel = rel.join("hv/hvm/explore/out/Image-explore");
     let tmp = crate::tempdir("hydo-mkfs-")?;
     let res = (|| -> Result<(), Fail> {
@@ -252,7 +253,8 @@ fn mac_mkfs(
         let initrd = tmp.join("mkfs.cpio.gz");
         crate::cpio::write_cpio_gz(&root, &initrd, fsx::FIXED_MTIME as u64, None, false)?;
         let abs = crate::abspath(out);
-        let p = Command::new(&hvm)
+        let p = Command::new(engine)
+            .arg("hvm")
             .arg("run")
             .arg(&kernel)
             .arg(&initrd)
@@ -262,7 +264,7 @@ fn mac_mkfs(
             .stderr(Stdio::piped())
             .stdout(Stdio::piped())
             .output()
-            .map_err(|e| Fail::Die(format!("cannot run {}: {e}", hvm.display())))?;
+            .map_err(|e| Fail::Die(format!("cannot run {}: {e}", engine.display())))?;
         let mut con = p.stdout.clone();
         con.extend_from_slice(&p.stderr);
         let con = String::from_utf8_lossy(&con).into_owned();

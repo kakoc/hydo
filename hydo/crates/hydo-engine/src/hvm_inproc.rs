@@ -1,5 +1,5 @@
 //! The in-process Mac engine (M143): with `HYDO_HVM=inproc` every [`Hvm`] method runs the Rust
-//! engine (`hydo-hvm`, the port of `hv/hvm/explore/hvmx`) on a thread of this process. As for hvx
+//! engine (`hydo-hvm`, the port of the C `hvmx`, deleted in M147) on a thread of this process. As for hvx
 //! (M142), the two sides exchange typed values over channels ([`crate::link::ChanLink`] here,
 //! `hydo_hvx::port::ChanPort` in the engine) and no text in between; the engine is configured
 //! with a typed `hydo_hvm::serve::Start`, so the schedule is never printed and read back.

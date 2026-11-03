@@ -56,7 +56,9 @@ Build outputs (`SHA256SUMS`): `Image-svc` `24400b35dbb7be03…`, `redis.cpio.gz`
 
 ```sh
 # Linux box, scratch dir:  WORK=$PWD sh <repo>/hv/hvm/services/build.sh;  copy out/* to hv/hvm/services/guest/
-cd hv/hvm && sh build.sh
+# the engine (run.sh runs ../../target/release/hydo-hvm hvm run; the C ./hvm until M147), signed:
+cargo build --release -p hydo-hvm && codesign --force --entitlements hv/hvm/hv.entitlements -s - target/release/hydo-hvm
+cd hv/hvm
 sh services/run.sh solo redis always
 sh services/run.sh cut redis everysec /tmp/r      # -> VIOLATION key k:0 lost
 sh services/run.sh cut miniflux off /tmp/m        # -> VIOLATION category c15 stored 0 times

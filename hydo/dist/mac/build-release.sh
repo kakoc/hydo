@@ -66,11 +66,7 @@ fi
   echo "assets do not match assets.sha256 (pinned); remove hydo/dist/mac/assets and fetch again" >&2
   ( cd "$A" && shasum -a 256 -c "$D/assets.sha256" | grep -v ': OK$' ) >&2; exit 1; }
 
-# --- 2. the VMM binaries (signed again by install.sh on the user's Mac) ---
-sh "$TOP/hv/hvm/build.sh" >/dev/null 2>&1
-sh "$TOP/hv/hvm/explore/build.sh" >/dev/null 2>&1
-
-# --- 3. the release tree ---
+# --- 2. the release tree ---
 REL=$OUTDIR/hydo-mac-$VERSION
 rm -rf "$REL"
 # the release tree mirrors the repository: hydo/ (the product) and hv/hvm/ (the Mac engine)
@@ -81,7 +77,7 @@ mkdir -p "$REL/bin" "$REL/hydo/onboard" "$REL/hv/hvm/explore/out" "$REL/guest" \
 # scripts; `hydo build` is the same builder with the release's tools) and bin/hydo-fetch-image
 # (what fetch-images.sh of `hydo compose` calls), for aarch64-apple-darwin, built with the
 # workspace's pinned toolchain (rust-toolchain.toml), or taken from $HYDO_RUST_BIN_DIR
-BINS="hydo hydo-build hydo-fetch-image hydo-hvm"   # hydo-hvm: the Rust Mac engine (M143), the default
+BINS="hydo hydo-build hydo-fetch-image hydo-hvm"   # hydo-hvm: the Mac engine (M143; signed by install.sh)
 if [ -n "$HYDO_RUST_BIN_DIR" ]; then
   BD=$HYDO_RUST_BIN_DIR
 else
@@ -100,8 +96,6 @@ echo "$VERSION" > "$REL/hydo/VERSION"     # what a plan's hydo_version: is check
 mkdir -p "$REL/hydo/history"
 cp "$TOP/hydo/history/hydo_hist.sh" "$REL/hydo/history/"
 # (the property table is made by the explorer itself since M115: no hydo/assert tool in the release)
-cp "$TOP/hv/hvm/hvm" "$REL/hv/hvm/hvm"
-cp "$TOP/hv/hvm/explore/hvmx" "$REL/hv/hvm/explore/hvmx"   # the C engine, HYDO_HVM=c (one milestone after M143)
 cp "$TOP/hv/hvm/hv.entitlements" "$REL/hv/hvm/"
 cp "$A/Image-explore" "$REL/hv/hvm/explore/out/Image-explore"
 cp "$A/busybox" "$A/mke2fs" "$REL/guest/"; chmod 755 "$REL/guest/busybox" "$REL/guest/mke2fs"
@@ -152,7 +146,7 @@ cp "$D/QUICKSTART-mac.md" "$REL/QUICKSTART-mac.md"
 echo "$VERSION" > "$REL/VERSION"
 ( cd "$REL" && find . -type f ! -name SHA256SUMS | LC_ALL=C sort | xargs shasum -a 256 > SHA256SUMS )
 
-# --- 4. the tarball ---
+# --- 3. the tarball ---
 ( cd "$OUTDIR" && COPYFILE_DISABLE=1 tar --uid 0 --gid 0 --uname root --gname wheel -czf "hydo-mac-$VERSION.tar.gz" "hydo-mac-$VERSION" )
 ls -la "$OUTDIR/hydo-mac-$VERSION.tar.gz"
 shasum -a 256 "$OUTDIR/hydo-mac-$VERSION.tar.gz"

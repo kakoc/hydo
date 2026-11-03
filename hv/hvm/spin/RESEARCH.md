@@ -199,6 +199,14 @@ counter-loop rewind from `hvm-spin-count.c`, with the two divergence fixes (HVC 
 when a kick lands away from the armed PC), included by `../hvm.c`, so `hvm` and
 `explore/hvmx` both have it. The side files here stay as the research versions.
 
+Since Milestone 143 the main engine is the Rust port `hydo/crates/hydo-hvm` (the observer in
+`src/spin.rs`, whose module documentation keeps both rules), and in Milestone 147 the C main
+engine (`../hvm.c`, `../spin_observer.c`, `../explore/serve.c`) was deleted; read `hvm` below as
+`hydo-hvm hvm` and `hvmx` as `hydo-hvm`. Since Milestone 130 the rewind decision under lock-step
+control is the host's: the engine runs a `spin=rewind` schedule in the rewind mode, and the host
+controller runs an agent image's SPIN again with `spin=rewind` (the `auto` re-run below was the
+shell images' RUN).
+
 **Defaults.**
 - **Observer on** (`HVM_SPIN_OBSERVE=0` restores the bare watchdog). It does nothing until a
   kick: with no exit-free stretch longer than `HVM_SPIN_MS` it never arms. Unloaded, the M48
@@ -271,8 +279,10 @@ fully merged code, with the 50 ms kick interval except where stated.
 
 ## Files
 
-- `../spin_observer.c`: both resolvers as used by `hvm` and `hvmx` (see "In the main engine").
-- `hvm-spin.c`: the exact-cycle resolver (the M48 `hvm.c` plus the observer).
+- `../spin_observer.c` (deleted in M147; now `hydo/crates/hydo-hvm/src/spin.rs`): both resolvers
+  as used by `hvm` and `hvmx` (see "In the main engine").
+- `hvm-spin.c`: the exact-cycle resolver (the M48 `hvm.c` plus the observer); a standalone
+  research VMM that needs none of the deleted files.
 - `hvm-spin-count.c`: `hvm-spin.c` plus the counter-loop rule, behind `HVM_SPIN_REWIND=1`.
   With the variable unset it behaves the same.
 - `hvm-spin-v1-rollback.c`: the first version, superseded.
@@ -289,4 +299,8 @@ Build:
 /usr/bin/clang -O2 -Wall -arch arm64 -o hvm-spin-count hvm-spin-count.c -framework Hypervisor
 codesign --force --entitlements ../hv.entitlements -s - hvm-spin-count
 HVM_SPIN_REWIND=1 ./hvm-spin-count print guest/Image guest/initramfs-count.cpio.gz "hydo-boot-marker: launching shell"
+# the main engine (out/int-variants.sh): the Rust program, built and signed at the repository root
+#   cargo build --release -p hydo-hvm
+#   codesign --force --entitlements hv/hvm/hv.entitlements -s - target/release/hydo-hvm
+HVM_SPIN_REWIND=1 ../../../target/release/hydo-hvm hvm print guest/Image guest/initramfs-count.cpio.gz "hydo-boot-marker: launching shell"
 ```

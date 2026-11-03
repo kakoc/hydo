@@ -2,13 +2,61 @@
 //! agent image (every image `hydo build` makes since M136) under lock-step control from its first
 //! instruction, the host taking the snapshots S0 and S1 where it decides; serves `CTL`, `RESUME`
 //! and `QUIT`; runs `one` schedule from a fresh boot under the same control; and speaks hvx's
-//! lock-step protocol (M119, M121, M126, M130). The C file's header has the whole protocol; every
-//! function here keeps its C name, and every output line its C text.
+//! lock-step protocol (M119, M121, M126, M130); the protocol's lines are in hydo-engine-proto's
+//! crate documentation. Every function here keeps its C name, and every output line its C text.
+//! The C engine was deleted in Milestone 147 (`git show 145c456:hv/hvm/explore/serve.c`).
 //!
 //! The shell-init images' paths (a plain boot to the init's S0/S1 markers, `RUN` with the guest
 //! part typed on the console and the init's markers, `--control one` from such an image's S1, and
-//! the engine's own SPIN re-run of a RUN) were deleted in Milestone 145; the C `hvmx` still has
-//! them for one more milestone.
+//! the engine's own SPIN re-run of a RUN) were deleted in Milestone 145.
+//!
+//! # What is particular to the Mac engine (from serve.c's header)
+//!
+//! - **The clock is the exit count.** `at=` in every EVENT, SENT, STOP and SEND is `M.exits`,
+//!   where hvx has the instruction clock. A queued send is typed at the first stop whose exit
+//!   count is at least its `at`, before the guest runs again (exact to the exit). Kicks and the
+//!   spin observer's own exits are not exits, so every stop is a pure function of the run.
+//! - **The cadence** is the schedule's `rb=<n>` (exits from the phase's start), default 65,536.
+//! - **Stops** (`why`): `start` before a phase runs, `resume` after a RESUME restore, `send` at
+//!   the exit where a queued send is due, `cadence`, and `exit` when the guest stops (halt, idle,
+//!   exit budget, SPIN) before the run's error RESULT.
+//! - **SNAP** is refused while a typed send is not acknowledged unless `retype` is given: input
+//!   still in the UART's receive queue is in no snapshot (M116), so RESUME types every such send
+//!   again right after the restore; queued sends are part of the snapshot. SNAP is refused for
+//!   schedules with tick jitter (`tj=`) or forced preemption points (`pct=`). At most 8 snapshots;
+//!   a second SNAP with a name replaces the first.
+//! - **The controlled boot** (M121): an agent image has hydo-agent as `/init` and no S0/S1
+//!   markers; the host takes `SNAP S0` and `SNAP S1` in the boot phase, END prints
+//!   `RESULT boot ...` and then READY. A CTL restores the host's S1, arms the host part, types
+//!   nothing (guest part `run`) and its first stop is `why=resume` with S1's stop number. With
+//!   `--control boot one` the host's `SNAP S1` arms the host part and the run goes on in
+//!   `phase=workload` from that stop. The kernel command line gets ` quiet loglevel=1`.
+//! - **DISKOFF and CUT** (M126): DISKOFF ends the workload (at the host's CONT the workload
+//!   fingerprint `wfp` is taken, the disk faults and timing tokens go off, and the run goes on in
+//!   `phase=check`); CUT is a power cut (the workload fingerprint is taken, only the flushed disk
+//!   bytes survive, and the run goes on in a VM restored from the host's S0 in
+//!   `phase=recovery`, queued input DROPped). END in the check or recovery phase fingerprints
+//!   there (`fp = fnv(wfp, that)`).
+//! - **The data disk** (`HVM_DISK=<NAME>-arm64-disk.img`, the virtio-blk device): `disk=none`,
+//!   `ioerr:P`, `cut` and `lying:P` with `dseed=` arm hvx's seeded fault classes (the same seed
+//!   gives the same per-request decisions). The disk boots with the flush-aware class armed at
+//!   probability 0, so the guest negotiates FLUSH (write-back caching) as hvx's guests do.
+//! - **Timing tokens counted in exits:** forced preemption points (`pct=<hex seed> pctn=<points>
+//!   [pctk=<exits>, default 20000]`: that many seeded exits among the first `pctk` of the workload
+//!   make the timer due at once; the RESULT gains `pctf=` and `pctw=`) and tick jitter (`tj=`,
+//!   `tjx=`: timer interrupts delayed by a seeded number of exits; the RESULT gains `tjk=` and
+//!   `tjn=`). Host tokens only hvx applies (`pp=`, `xt*`, `q*`, `cf=`, `cfn`) are refused.
+//! - **Exit-free spin loops** ([`crate::spin`], hv/hvm/spin/RESEARCH.md): exact-repeat loops are
+//!   resolved in every run; counter loops need the rewind mode (a copy-on-write checkpoint at
+//!   every exit, several times slower), which the host chooses: a schedule with `spin=rewind` (or
+//!   `HVM_SPIN_REWIND=1`) runs its workload, check and recovery phases in it, and a SNAP keeps the
+//!   mode for its RESUME. The rewind mode keeps the stops pure (the checkpoint is taken at the
+//!   loop top of every exit after the stop hook, and the guest makes no exit between it and the
+//!   rewind). A SPIN under control is not re-run here: the host runs the schedule again with
+//!   `spin=rewind` (hydo-control, M130). A schedule that completes plainly gives the same
+//!   fingerprint with the rewind mode on.
+//! - **Guest RAM:** `--ram-mib N` before the mode, else `HVM_MEM_MB`, else 1024 MiB; 256..4096.
+//!   Snapshots keep RAM in an unlinked file in `HVM_SNAP_DIR` (default `/tmp/hvm-snap`).
 //!
 //! Since M142's typed calls the engine core takes typed values: requests and commands at a stop
 //! come through a [`Port`] (`hydo_hvx::port`: hydo-engine's [`ChanPort`](hydo_hvx::port::ChanPort)

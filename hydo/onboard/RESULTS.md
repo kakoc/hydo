@@ -110,7 +110,7 @@ the earlier fetch) and built with `hydo-build --arch arm64`: `explore-ob-redis-o
 (the release kernel, HVC idle, with `tc`), `hvmx` built from `main` (`hv/hvm/explore/build.sh`).
 
 Each schedule ran in two separate `hvmx serve` processes (restored from the S1 snapshot) and once
-as `hvmx one` (a fresh boot), with `hv/hvm/explore/netfault/check.py`. All three fingerprints are
+as `hvmx one` (a fresh boot), with `hv/hvm/explore/netfault/check.py` (deleted in M147). All three fingerprints are
 equal for every schedule:
 
 | schedule | verdict | fingerprint |

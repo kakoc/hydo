@@ -10,7 +10,7 @@ the user guide; it is shipped inside the release.
 | Path | What |
 |---|---|
 | `bin/hydo`, `bin/hydo-build`, `bin/hydo-fetch-image` | the Rust programs (`aarch64-apple-darwin`, built by `build-release.sh` or taken from `$HYDO_RUST_BIN_DIR`): `hydo` is the one CLI (`hydo/crates/hydo-cli`; the same program as on Linux, with the same behaviour since Milestone 107), `hydo-build` the image builder with its own command line (for scripts), `hydo-fetch-image` what the `fetch-images.sh` of `hydo compose` calls. The Python CLI (`hydo/dist/mac/hydo`) and the Python behind it were deleted in Milestone 107 |
-| `hv/hvm/hvm`, `hv/hvm/explore/hvmx` | the VMM and the explorer engine, re-signed by `install.sh` on the user's Mac |
+| `bin/hydo-hvm`, `hv/hvm/hv.entitlements` | the Mac engine (`hydo/crates/hydo-hvm`, Rust since Milestone 143; the C `hvm` and `hvmx` were deleted in Milestone 147), signed with the hypervisor entitlement by `install.sh` on the user's Mac; it runs every guest, `hydo build`'s helper VM included |
 | `hv/hvm/explore/out/Image-explore` | the arm64 kernel (`hv/hvm/explore/build-guest.sh`, HVC idle) |
 | `guest/busybox`, `guest/mke2fs` | static arm64 busybox 1.36.1 and e2fsprogs 1.47.0 (aarch64 nixpkgs) |
 | `guest/busybox-applets[.txt]` | the applet set to link, as the Linux build links it |
@@ -28,9 +28,9 @@ its applet list (asked from an x86 busybox, which cannot run on a Mac), and a pi
 run under `libfaketime` for the data disk. The release provides the first two as files, and
 `hydo build` makes the data disk differently (since Milestone 103 the Rust builder's Mac release
 mode, `hydo_build::Release::Mac`):
-- it starts a helper VM with `hvm`: the release kernel plus a two-file initramfs (busybox and
+- it starts a helper VM with `hydo-hvm hvm run`: the release kernel plus a two-file initramfs (busybox and
   the static arm64 `mke2fs`), with the empty data-disk file attached as the virtio disk;
-- the guest runs `mke2fs` with exactly `hydo-build`'s options on `/dev/vda`, and `hvm` writes
+- the guest runs `mke2fs` with exactly `hydo-build`'s options on `/dev/vda`, and the engine writes
   the disk back (`HVM_DISK_OUT`);
 - `mke2fs` records whether `char` is signed on the machine that ran it (superblock `s_flags`:
   1 on x86, 2 on arm64); `hydo build` writes the x86 value, as a Linux build of the same

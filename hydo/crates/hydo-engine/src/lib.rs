@@ -18,8 +18,9 @@
 //!   hvx kernel module (`/dev/hvx`): on a thread of this process when it can open the device,
 //!   otherwise as the program `hydo-hvx` under the shared-lock wrapper (`hvx-run`, with sudo).
 //!   It replaced the C `hv/hvx/hvx_explore` (M132; deleted in M137).
-//! - [`hvm::Hvm`]: `hv/hvm/explore/hvmx` on an Apple Silicon Mac (Hypervisor.framework), a
-//!   program.
+//! - [`hvm::Hvm`]: the Rust engine `hydo-hvm` on an Apple Silicon Mac (Hypervisor.framework), a
+//!   program, or in this process with `HYDO_HVM=inproc`. It replaced the C `hvmx` (M143; deleted
+//!   in M147).
 //!
 //! Both speak the same protocol (see [`protocol`]): `--control boot serve` stops from the first
 //! instruction until the host has taken S0 and S1 and ended the boot, prints `READY
@@ -94,7 +95,7 @@ pub use protocol::{EngineMsg, HostMsg, Ready, Request, RunResult};
 pub enum EngineKind {
     /// The Rust hvx engine (`hydo-hvx`; x86_64 Linux, VT-x, the hvx kernel module).
     Hvx,
-    /// `hv/hvm/explore/hvmx` (Apple Silicon, Hypervisor.framework).
+    /// The Rust Mac engine `hydo-hvm` (Apple Silicon, Hypervisor.framework).
     Hvm,
 }
 

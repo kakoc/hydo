@@ -2,7 +2,25 @@
 //! virtio_blk.c and virtio_net.c: a block device with hvx's seeded disk faults and the M26
 //! volatile write cache, and a minimal network device with scripted, paced receive and captured
 //! transmit. Everything is driven by guest MMIO exits and the virtual clock, and all state that is
-//! not a buffer ([`VState`]) is hashed with its exact C layout.
+//! not a buffer ([`VState`]) is hashed with its exact C layout. The C files were deleted in
+//! Milestone 147 (`git show 145c456:hv/hvm/virtio_blk.c` and so on); their notes follow.
+//!
+//! A kick services the queue at once, and its completion interrupt is raised when the virtual
+//! clock reaches the kick time plus the latency (the M16 discipline). All device state, the disk
+//! image and the disk's volatile write cache are in the snapshot and the fingerprint.
+//! `HVM_DISK_OUT` gets the durable image at the end: flushed bytes only, the volatile write cache
+//! is lost, as at a power cut.
+//!
+//! The disk's faults give the same decisions as hvx's for the same seed: a request's 64-bit roll
+//! is `fault_roll(seed, request index)` over every request (reads, writes, flushes), a fault
+//! applies when `(roll % 100) < prob`, and the class is chosen among the enabled, applicable
+//! classes in the fixed order DELAY, ERROR, DROP, TORN, DROP_UNFLUSHED by `((roll >> 8) % n)`.
+//! REORDER permutes a kick's used-ring entries with the per-kick roll
+//! `fault_mix((seed ^ 0xD15EA5E5C0FFEE11) + (kick+1)*GOLDEN)`. DELAY latencies are in exits of
+//! virtual time (hvx: instructions); a completion is at kick time + (16 + summed delays) exits.
+//! Two differences from hvx, both making the model more faithful: the volatile cache has no size
+//! cap (hvx holds at most 256 writes of up to 8 KiB and persists anything larger), and request
+//! types other than IN/OUT/FLUSH answer UNSUPP instead of being treated as writes.
 
 use crate::fnv::{fnv, fnv_u64};
 use crate::machine::{mix, GOLDEN};

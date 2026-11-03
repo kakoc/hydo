@@ -360,11 +360,10 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         "xcode-select --install",
         false,
     );
-    // the engine hydo runs (M143: bin/hydo-hvm, the Rust engine; HYDO_HVM=c: the C hvmx)
+    // the engine hydo runs (bin/hydo-hvm, the Rust engine; it also runs `hydo build`'s mkfs VM)
     let hvmx = hydo_engine::hvm::program(&ctx.root, &ctx.config.hvm);
     for p in [
         hvmx.clone(),
-        ctx.p("hv/hvm/hvm"),
         ctx.p("hv/hvm/explore/out/Image-explore"),
         ctx.guest().join("busybox"),
         ctx.guest().join("mke2fs"),

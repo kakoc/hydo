@@ -1,6 +1,6 @@
 [package]
 name = "hydo-engine"
-description = "One interface to hydo's run engines: hvx (the Rust engine hydo-hvx, in-process or as a program) and hvm (hv/hvm/explore/hvmx)"
+description = "One interface to hydo's run engines: hvx (the Rust engine hydo-hvx, in-process or as a program) and hvm (the Rust engine hydo-hvm, as a program or in-process)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

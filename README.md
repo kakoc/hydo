@@ -30,7 +30,7 @@ formats may still change between versions.
                 ▼                                        ▼
    hv/hvx — Linux engine                     hv/hvm — Mac engine
    a VT-x kernel module (/dev/hvx)           arm64 Linux on Apple Silicon
-   + the run engine hydo-hvx (Rust)          through Hypervisor.framework (hvmx)
+   + the run engine hydo-hvx (Rust)          through Hypervisor.framework (hydo-hvm, Rust)
 ```
 
 - **The product** builds a guest image from a project description, drives an engine through one
@@ -48,7 +48,8 @@ hv/hvx/        the Linux engine: hvx.c (module), hvx_abi.h (ioctl ABI), module t
                harnesses, images/ (guest kernel and hand-written images), safety/ (KASAN kernel
                and syzkaller), deploy-metal.sh (regression suite); its run engine is the Rust
                crate hydo/crates/hydo-hvx (M132; the C hvx_explore.c was deleted in M137)
-hv/hvm/        the Mac engine: hvm.c, virtio devices, explore/serve.c (hvmx), arm64 guest kernels
+hv/hvm/        the Mac engine's hardware probes, arm64 guest kernels and write-ups; its run engine
+               is the Rust crate hydo/crates/hydo-hvm (M143; the C hvm.c and hvmx were deleted in M147)
 hydo/crates/   the Rust workspace (see below)
 hydo/onboard/  the guest-side init and its extensions (shell, inside every image), MANIFEST.md
                (the project format), examples
@@ -97,8 +98,9 @@ cargo fmt --check
   `make -C hv/hvx` builds `hvx.ko`; `hv/hvx/deploy-metal.sh` runs the engine's regression suite on
   such a machine. Bare metal is best; a VM works if it exposes nested VT-x, but the exact branch
   clock needs a working PMU and does not work on Intel hybrid CPUs.
-- **The Mac engine** needs an Apple Silicon Mac: `hv/hvm/build.sh` builds `hvm`, and
-  `hv/hvm/explore/build.sh` builds `hvmx`.
+- **The Mac engine** needs an Apple Silicon Mac: `cargo build --release -p hydo-hvm` builds the
+  program `hydo-hvm`, which hydo signs with the hypervisor entitlement (`hv/hvm/hv.entitlements`)
+  before it runs it.
 - **Guest images** are reproducible only with the pinned toolchain listed in `docs/BUILD-PINS.md`.
 
 ## Using it on a project

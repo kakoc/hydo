@@ -1,4 +1,5 @@
-/* The C side of tests/c_layout.rs: hv/hvm/hvm.c and virtio.c themselves (no main), printing the
+/* The C side of tests/c_layout.rs (used only with HYDO_HVM_C_SRC: the C sources, deleted in M147, from
+ * git): hv/hvm/hvm.c and virtio.c themselves (no main), printing the
  * Hypervisor.framework constants the port hard-codes, the hash of struct mach and struct vstate
  * filled with known values, and the device tree for two configurations. */
 #define HVM_NO_MAIN

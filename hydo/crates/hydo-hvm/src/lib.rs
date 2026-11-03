@@ -6,7 +6,11 @@
 //! of agent images with the host's S0/S1, CTL, RESUME, the lock-step protocol, DISKOFF/CUT, the
 //! power cut's recovery boot) ported function by function, with the same command line, protocol,
 //! output lines and fingerprints. The shell-init images' modes (plain `serve`/`one`, `--control
-//! one`, RUN) were deleted in Milestone 145.
+//! one`, RUN) were deleted in Milestone 145, and the C engine itself in Milestone 147 (its files
+//! are in git: `git show 145c456:hv/hvm/hvm.c`; `tests/c_layout.rs` keeps the C's recorded struct
+//! layouts and constants). The notes of the C files' headers are in [`vmm`], [`spin`],
+//! [`virtio`] and [`serve`]; the hardware probes and the boot write-ups are hv/hvm/PROBE.md,
+//! BOOT.md and VIRTIO.md.
 //!
 //! Two ways to use it:
 //!
