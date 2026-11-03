@@ -304,7 +304,7 @@ checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 name = "hydo-agent-proto"
 version = "0.1.0"
 dependencies = [
- "hydo-results",
+ "hydo-schema-compat",
  "serde_json",
 ]
 
@@ -541,6 +541,7 @@ dependencies = [
 name = "hydo-manifest"
 version = "0.1.0"
 dependencies = [
+ "hydo-schema-compat",
  "indexmap",
  "libc",
  "regex",
@@ -555,6 +556,7 @@ dependencies = [
 name = "hydo-results"
 version = "0.1.0"
 dependencies = [
+ "hydo-schema-compat",
  "schemars",
  "serde",
  "serde_json",
@@ -563,6 +565,13 @@ dependencies = [
 [[package]]
 name = "hydo-schedule"
 version = "0.1.0"
+
+[[package]]
+name = "hydo-schema-compat"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
 
 [[package]]
 name = "hydo-tools"

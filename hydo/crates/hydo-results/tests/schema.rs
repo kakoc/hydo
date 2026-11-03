@@ -4,10 +4,13 @@
 //!   a change of the committed schema, reviewed in its diff. `HYDO_BLESS=1` rewrites it.
 //! - `hydo/schema/released/results-v1.json` is the schema of the last release (the first one is
 //!   the schema of M115, when the format was introduced); the committed schema must be an
-//!   additive change of it ([`hydo_results::compat::breaking`]). A release copies the committed
+//!   additive change of it (`hydo_schema_compat::check` with [`Readers::Released`]: readers built
+//!   for the released schema read what is written now, ignoring unknown fields and record types
+//!   and nothing else, so a known field may not widen either). A release copies the committed
 //!   schema there (`HYDO_RELEASE_SCHEMA=1` does it). A breaking change needs a new version
 //!   (`results-v2.json`, read alongside version 1), never an edit of version 1.
 
+use hydo_schema_compat::{check, Readers, Rules};
 use std::path::{Path, PathBuf};
 
 fn schema_dir() -> PathBuf {
@@ -47,7 +50,10 @@ fn the_schema_only_grows_from_the_released_one() {
     )
     .unwrap();
     let new = hydo_results::schema();
-    let b = hydo_results::compat::breaking(&old, &new);
+    let b: Vec<String> = check(&old, &new, &Rules::new(Readers::Released))
+        .iter()
+        .map(ToString::to_string)
+        .collect();
     assert!(
         b.is_empty(),
         "results version 1 changed in ways a reader of the released schema cannot survive:\n  {}\n\

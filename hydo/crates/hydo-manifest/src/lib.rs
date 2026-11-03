@@ -21,7 +21,6 @@
 //! Where hydo-build itself stops with a Python exception (a traceback, not a ManifestError), the
 //! input is refused here too, with a message that starts with [`py::CRASH_PREFIX`].
 
-pub mod compat;
 pub mod composer;
 pub mod migrate;
 pub mod model;

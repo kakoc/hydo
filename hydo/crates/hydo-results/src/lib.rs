@@ -17,13 +17,13 @@
 //! is never renamed, removed or given another meaning; that needs a new version, which readers
 //! read alongside this one. Readers ignore fields and record types they do not know
 //! ([`reader`]). The JSON Schema `hydo/schema/results-v1.json` is generated from these types
-//! ([`schema`]) and checked against the last released one ([`compat`]); the documents under
+//! ([`schema`]) and checked against the last released one (`tests/schema.rs`, with the
+//! `hydo-schema-compat` check); the documents under
 //! `hydo/schema/examples/results/v1/` were recorded from real runs and must parse forever.
 //!
 //! The format is experimental until hydo 1.0, and it follows the additions-only rule from
 //! version 1 on.
 
-pub mod compat;
 pub mod reader;
 pub mod v1;
 

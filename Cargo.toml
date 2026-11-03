@@ -27,6 +27,7 @@ members = [
     "hydo/crates/hydo-grpc",
     "hydo/crates/hydo-grpc-gen",
     "hydo/crates/hydo-results",
+    "hydo/crates/hydo-schema-compat",
     "hydo/crates/hydo-agent-proto",
     "hydo/crates/hydo-control",
     "hydo/crates/hydo-hvx",

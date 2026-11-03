@@ -6,7 +6,7 @@
 //! - `hydo/schema/project-v1.json`: the schema, generated from `src/model.rs`.
 //! - `hydo/schema/released/project-v1.json`: the schema of format 1 as the last hydo release
 //!   shipped it. It is replaced only when a release ships (by the current schema, which this test
-//!   proves to be an addition to it), never edited by hand.
+//!   proves to be an addition to it, with `hydo-schema-compat`'s check), never edited by hand.
 //! - `hydo/schema/examples/project/v1/<case>/`: one document each (`hydo/hydo.yaml` with its
 //!   folder, or one `*.yaml` / `*.json` file) and `model.json`, the model it reads into. `INDEX`
 //!   lists every case; a case is never removed or changed, a later format adds its own.
@@ -19,7 +19,8 @@ use serde_json::Value;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use hydo_manifest::{compat, migrate, model, LoadOptions};
+use hydo_manifest::{migrate, model, LoadOptions};
+use hydo_schema_compat::{check, Readers, Rules};
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -62,7 +63,13 @@ fn schema_file_is_generated_from_the_model() {
 fn schema_changed_only_by_additions_since_the_release() {
     let released = read_json(&root().join("hydo/schema/released/project-v1.json"));
     let now = model::schema();
-    let problems = compat::problems(&released, &now);
+    // Readers::Current: only hydo reads a project, and an older hydo refuses a key or value it
+    // does not know on purpose (`hydo_version:` names the release a project needs), so a format-1
+    // schema may widen what it accepts; it may not refuse or reread a document it accepted.
+    let problems: Vec<String> = check(&released, &now, &Rules::new(Readers::Current))
+        .iter()
+        .map(ToString::to_string)
+        .collect();
     assert!(
         problems.is_empty(),
         "format {} may only gain optional keys and values; a breaking change needs format {} (MANIFEST.md, \"The project format\"):\n  {}",

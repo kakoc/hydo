@@ -37,7 +37,10 @@ deadlines a command gives.
 
 - The agent refuses an unknown field, op or version and a repeated id, with a refusal, and keeps
   serving. The host ignores unknown fields of agent lines and reports an unknown event as such.
-- Additions only within version 1: new ops, events, optional fields and names. A new optional
+- Additions only within version 1: new ops, events, optional fields, and new names in two kinds of
+  place only: a refusal's `err` (the host keeps the code as text) and a command's fields (gated by a
+  feature, as below). Every other name (`warn`'s code, `froze`'s directions, `exit`'s end, …) is
+  closed: a released host refuses an agent line with a name it does not know. A new optional
   command field also gets a feature name in the hello (`msg::FEATURES`), so a host never sends a
   field an older agent of the same version would refuse: `Command::features` lists what a command
   needs, and `Session::command` refuses one whose feature the hello lacks with a message that
@@ -45,8 +48,8 @@ deadlines a command gives.
   not offer the feature freeze-netns (...); rebuild the image with this hydo (...), whose agent
   does"). Features so far: `freeze` (M117), `freeze-netns` (M131, hydo-agent 0.2.0), `hostcall` (M138, hydo-agent 0.3.0: the agent can send its lines and read the host's on hvx's host-call port; the engine offers the port and the agent takes it on its own, so no command field depends on it). `tests/schema.rs` fails when the
   generated schema differs from the committed one (`HYDO_BLESS=1` rewrites it) or is not an
-  additive change of `hydo/schema/released/agent-v1.json` (a release copies it there with
-  `HYDO_RELEASE_SCHEMA=1`). A breaking change is version 2, read beside version 1.
+  additive change of `hydo/schema/released/agent-v1.json` (`hydo-schema-compat`'s check, M148, with
+  these rules; a release copies it there with `HYDO_RELEASE_SCHEMA=1`). A breaking change is version 2, read beside version 1.
 - The host reads every released version (`msg::HOST_PROTOCOLS`) and refuses a newer agent with a
   message naming both: "this image's agent (hydo-agent 0.9.0) speaks agent protocol 2; this hydo
   (0.1.0) knows agent protocol 1..1; upgrade hydo".

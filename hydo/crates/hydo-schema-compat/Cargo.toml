@@ -1,0 +1,13 @@
+# hydo-schema-compat: the one check of the additions-only rule of hydo's versioned formats
+# (docs/HISTORY.md M148). Each format's schema test (hydo-manifest, hydo-results, hydo-agent-proto)
+# uses it as a dev-dependency, so no format crate depends on another one.
+[package]
+name = "hydo-schema-compat"
+description = "hydo's additions-only rule as a check of two JSON Schemas: the released schema of a format version and the one generated now"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde_json = { workspace = true }
