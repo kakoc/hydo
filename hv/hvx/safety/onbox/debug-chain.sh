@@ -63,7 +63,7 @@ if has xp; then
   EQ=$T/target/release/examples/engine_equiv
   mkdir -p $O/xp
   bash "$G/xp.sh" $O/xp/redis-check HVX_DEV=/dev/hvx HYDO_HVX_REUSE=1 HYDO_HVX_CHECK_RESET=1 -- \
-    --image $HOME/c3-work/img/redis_hydo/b1/explore-ob-redis-disk.img \
+    --image $HOME/hydo-nixb-work/img/redis_hydo/b1/explore-ob-redis-disk.img \
     --manifest hydo/onboard/examples/redis/hydo.yaml --strategy swarm --seeds 1-40 --workers 1
   log "xp redis reuse+check: $(tail -1 $O/xp/redis-check.log)"
   "$EQ" $M/xp/redis-fresh $O/xp/redis-check > $O/xp/redis-eq-m138.txt 2>&1
