@@ -18,5 +18,5 @@ publish = false
 [dependencies]
 
 [dev-dependencies]
-hydo-results = { path = "../hydo-results" }
+hydo-schema-compat = { path = "../hydo-schema-compat" }
 serde_json = { version = "1", features = ["preserve_order"] }
