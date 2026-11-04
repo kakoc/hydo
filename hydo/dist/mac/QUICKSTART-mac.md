@@ -5,14 +5,13 @@ clock jumps, disk errors, a disk that loses acknowledged writes, and power cuts.
 run is deterministic, each failure it finds comes back as a short schedule string that replays
 bit-for-bit. This guide takes you from installing to your first exploration and a reproduced
 failure. It needs an Apple Silicon Mac (M1 or later) with macOS 13 or later, and about ten
-minutes. You do not need a Linux machine, root, or any other software beyond Apple's Command
-Line Tools, which provide `cc` (install them with `xcode-select --install` if `cc --version`
-asks you to).
+minutes. You do not need a Linux machine, root, a compiler, Python, Go, Rust, Nix or Docker:
+the release is complete as it is.
 
 ## 1. Install
 
-Unpack the release and run its installer. It copies hydo into `~/.hydo`, signs the two
-virtual-machine binaries on your Mac, and checks the Mac.
+Unpack the release and run its installer. It copies hydo into `~/.hydo`, signs the
+virtual-machine engine (`bin/hydo-hvm`) on your Mac, and checks the Mac.
 
 ```sh
 tar xzf hydo-mac-0.1.0.tar.gz
@@ -22,7 +21,7 @@ export PATH="$HOME/.hydo/bin:$PATH"
 
 The installer changes nothing outside `~/.hydo`. Add `--add-to-path` if you want it to put
 `~/.hydo/bin` on your PATH in your shell startup file. `hydo doctor` repeats the checks at any
-time.
+time; on a complete installation it ends with `doctor: all checks passed`.
 
 ## 2. Run the bundled example: Redis
 
@@ -94,7 +93,7 @@ hydo run "disk=none | run P=front@10+2"
 The first ends `OK ... acked=30 each stored once`. On the way it prints that a run ended at a
 counter loop and was run again in rewind mode: the counting loop needs the slower mode, which
 hydo switches to on its own. The second pauses the web server for two requests, the client's
-retry stores entry 10 twice, and the invariant catches it (`entry 10 stored twice`). This
+retry stores entry 10 twice, and the invariant catches it (`entry 10 stored 2 times`). This
 example's server is deliberately not idempotent. Each command gives the same fingerprint every
 time. A busy-wait run takes about ten seconds instead of one.
 
@@ -108,22 +107,30 @@ hydo explore --seeds 1-20 --strategy swarm
 hydo report
 ```
 
-The report lists every failure kind with its minimal schedule, the class hydo puts it in, and a
-command that reproduces it. In this example you should see failures that are all expected kinds:
-the disk that loses acknowledged writes (`lying`), injected disk errors (`ioerr`), and the
-relaxed `appendfsync` settings. With the default settings and an honest disk Redis loses
-nothing.
+hydo runs as many virtual machines at once as the Mac's cores and memory allow; add
+`--workers 2` to keep it to two. The report lists every failure kind with its minimal schedule,
+the class hydo puts it in, and a command that reproduces it. In this example you should see
+failures that are all expected kinds: the disk that loses acknowledged writes (`lying-disk`),
+injected disk errors (`io-errors`), and the relaxed `appendfsync` settings (`unsafe-knob`). With
+the default settings and an honest disk Redis loses nothing.
 
 ## 4. Reproduce a failure
 
 Copy a minimal schedule from the report and run it:
 
 ```sh
-hydo repro "disk=lying:1 dseed=… | run C=9"
+hydo repro "disk=lying:3 dseed=… | run C=20"
 ```
 
 It ends with the same verdict and the same fingerprint every time. The console of the run is
-saved under `hydo-out/runs/`, so you can read what the software printed.
+saved under `hydo-out/runs/`, so you can read what the software printed. To run every failure of
+the exploration again and compare each fingerprint with the recorded one:
+
+```sh
+hydo repro hydo-out/explore
+```
+
+It ends `hydo: N of N reproduced with the recorded fingerprint`.
 
 ## 5. Onboard your own project
 
@@ -159,8 +166,17 @@ get them:
 List each file under `root.files:` with a path relative to `hydo.yaml`. `root.nix:` needs a Nix
 store on this Mac and is not supported by the Mac build yet.
 
-Then the same three commands as above: `hydo build hydo.yaml`, `hydo run "disk=none | run"`,
-`hydo explore`.
+Then the same three commands as above: `hydo build hydo/hydo.yaml` (or `hydo build hydo.yaml`
+for a single file), `hydo run "disk=none | run"`, `hydo explore`. `hydo build hydo/hydo.yaml
+--check` checks the folder without building.
+
+The release carries every guest file the arm64 build stages, so these work from it as well:
+- `network: bridge`, `addr:` and `faults: [freeze]`: each service in its own network namespace,
+  link faults between services and a freeze at an exact packet. Such an image is built for the
+  release's second guest kernel (`Image-explore-netns`); the build says so, records it in the
+  image, and `hydo run` and `hydo explore` boot that kernel by themselves;
+- `fakes:` and `proxies:` (fake outside services and protocol faults), and the ready-made store
+  readers `hydo-read` and `hydo-check` in invariants and checks.
 
 ## What the Mac version does not do yet
 

@@ -347,19 +347,8 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         "update macOS",
         false,
     );
-    let cc = Command::new("xcrun")
-        .args(["--find", "cc"])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false);
-    c.check(
-        cc,
-        "a C compiler (the explorer compiles its property-table tool)",
-        "xcode-select --install",
-        false,
-    );
+    // (no C compiler: nothing on the Mac compiles C since the property table moved into the
+    // explorer, M115; codesign is part of macOS)
     // the engine hydo runs (bin/hydo-hvm, the Rust engine; it also runs `hydo build`'s mkfs VM)
     let hvmx = hydo_engine::hvm::program(&ctx.root, &ctx.config.hvm);
     for p in [
@@ -368,6 +357,7 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         ctx.guest().join("busybox"),
         ctx.guest().join("mke2fs"),
         ctx.guest().join("tc-closure.txt"),
+        ctx.guest().join("hydo-agent"),
     ] {
         c.check(
             p.exists(),
@@ -379,6 +369,17 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
     for p in [
         ctx.p("hv/hvm/explore/out/Image-explore-netns"),
         ctx.guest().join("hydo_fc"),
+        // the pinned aarch64 ip and iptables, in the release's store tree (HYDO_ARM64_STORE)
+        ctx.guest()
+            .join("tc")
+            .join(hydo_build::arm64::IP_ARM64.trim_start_matches('/')),
+        ctx.guest().join("tc").join(
+            format!(
+                "{}/bin/xtables-legacy-multi",
+                hydo_build::arm64::IPTABLES_ARM64
+            )
+            .trim_start_matches('/'),
+        ),
     ] {
         c.check(
             p.exists(),

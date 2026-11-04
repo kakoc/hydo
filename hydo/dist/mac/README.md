@@ -1,25 +1,42 @@
 # The Mac release of hydo
 
 `build-release.sh` turns the Mac backend into a self-contained tarball that a user installs with
-one command and runs with no Linux machine, no root and no other software beyond the macOS
-Command Line Tools (for `cc`; since Milestone 107 nothing in the release uses Python). `hydo/dist/mac/QUICKSTART-mac.md` at the top of the repository is
-the user guide; it is shipped inside the release.
+one command and runs with no Linux machine, no root and no other software: since Milestone 107
+nothing in the release uses Python, and since Milestone 150 nothing on the Mac needs a C compiler
+(`hydo doctor` no longer asks for the Command Line Tools; `codesign` is part of macOS).
+`hydo/dist/mac/QUICKSTART-mac.md` at the top of the repository is the user guide; it is shipped
+inside the release.
 
 ## What is in a release
 
 | Path | What |
 |---|---|
-| `bin/hydo`, `bin/hydo-build`, `bin/hydo-fetch-image` | the Rust programs (`aarch64-apple-darwin`, built by `build-release.sh` or taken from `$HYDO_RUST_BIN_DIR`): `hydo` is the one CLI (`hydo/crates/hydo-cli`; the same program as on Linux, with the same behaviour since Milestone 107), `hydo-build` the image builder with its own command line (for scripts), `hydo-fetch-image` what the `fetch-images.sh` of `hydo compose` calls. The Python CLI (`hydo/dist/mac/hydo`) and the Python behind it were deleted in Milestone 107 |
+| `bin/hydo`, `bin/hydo-build`, `bin/hydo-fetch-image` | the Rust programs (`aarch64-apple-darwin`, built by `build-release.sh` or taken from `$HYDO_RUST_BIN_DIR`): `hydo` is the one CLI (`hydo/crates/hydo-cli`; the same program as on Linux, with the same behaviour since Milestone 107), with the host controller that drives every image's guest agent (Milestone 136), `hydo-build` the image builder with its own command line (for scripts), `hydo-fetch-image` what the `fetch-images.sh` of `hydo compose` calls |
 | `bin/hydo-hvm`, `hv/hvm/hv.entitlements` | the Mac engine (`hydo/crates/hydo-hvm`, Rust since Milestone 143; the C `hvm` and `hvmx` were deleted in Milestone 147), signed with the hypervisor entitlement by `install.sh` on the user's Mac; it runs every guest, `hydo build`'s helper VM included |
 | `hv/hvm/explore/out/Image-explore` | the arm64 kernel (`hv/hvm/explore/build-guest.sh`, HVC idle) |
+| `hv/hvm/explore/out/Image-explore-netns` | the second arm64 kernel (`hv/hvm/explore/build-guest-netns.sh`, `806807e7…`, docs/BUILD-PINS.md): `Image-explore` plus network namespaces, veth, bridge and NFQUEUE, for manifests with `network: bridge`, `addr:` or `faults: [freeze]` (Milestone 99; shipped since Milestone 150) |
+| `guest/hydo-agent` | the guest agent (`hydo/crates/hydo-agent`, 0.3.0, aarch64 `099e5444…`), every image's first process; built from the tree by `hydo/crates/hydo-agent/build.sh`, and `hydo build` checks its pinned sha256 |
+| `guest/hydo-world` | the in-guest program of `fakes:` and `proxies:` (`hydo/crates/hydo-world`, built from the tree, `fefcca66…`) |
+| `guest/hydo-read` | `hydo-read` and, through a link in the image, `hydo-check` (`hydo/crates/hydo-read`, built from the tree; `build-release.sh` checks the pinned Mac build `88576fa8…`; shipped since Milestone 150) |
+| `guest/hydo_fc` | the freeze helper (`hydo/onboard/hydo_fc.c` built for aarch64 with the pinned Arm GNU toolchain, `499f654e…`), which `hydo build` stages for `faults: [freeze]` (an agent image freezes with the agent's own packet trigger; open item 30 in AGENTS.md; shipped since Milestone 150) |
 | `guest/busybox`, `guest/mke2fs` | static arm64 busybox 1.36.1 and e2fsprogs 1.47.0 (aarch64 nixpkgs) |
 | `guest/busybox-applets[.txt]` | the applet set to link, as the Linux build links it |
-| `guest/tc/`, `guest/tc-closure.txt` | the pinned aarch64 `tc` (iproute2 6.8.0) and every file its loader opens, at their `/nix/store` paths, for network faults |
-| `hydo/onboard/`, `hydo/history/hydo_hist.sh` | the guest-side files `hydo build` puts into images (the generic init and every extension, the test composer's guest runner, the history recorder) and the manifest format (`hydo guide manifest`) |
+| `guest/tc/`, `guest/tc-closure.txt`, `guest/netns-closure.txt` | the pinned aarch64 `tc` and `ip` (iproute2 6.8.0), the iptables 1.8.10 files the freeze uses, and every file their loader opens, at their `/nix/store` paths; `guest/tc` is the release's `HYDO_ARM64_STORE` |
+| `hydo/onboard/MANIFEST.md`, `hydo/history/hydo_hist.sh`, `hydo/VERSION` | the manifest format (`hydo guide manifest`), the history recorder `hydo build` stages for a manifest with `checks:`, and the version a plan's `hydo_version:` is checked against |
 | `examples/redis/` | the Redis example, with its arm64 binaries under `files/` (works offline) |
 | `examples/ledger-spin/` | the busy-wait example (`hydo/onboard/examples-mac/ledger-spin`), with `bin/spin_load` and `bin/spin_count` (static arm64, `hv/hvm/spin/spinvar.c`; `$HYDO_SPIN_BIN` when filling `assets/`) |
 | `skill/hydo-onboard/` | the onboarding skill (Agent Skills format, any AI tool) that writes a project's `hydo/` folder; `hydo guide`, `hydo skill install` and `hydo init` read it (`bin/hydo` also carries a built-in copy) |
-| `install.sh`, `hydo/dist/mac/QUICKSTART-mac.md`, `VERSION`, `SHA256SUMS` | |
+| `install.sh`, `QUICKSTART-mac.md`, `VERSION`, `SHA256SUMS` | |
+
+The shell init and its extensions (`hydo-init.sh`, `hydo-init-*.sh`, the guest composer) are not
+in a release any more: they were deleted in Milestone 136, when every image became an agent image.
+
+In the Mac release mode, `hydo build` takes its guest tools from the release (each one can still
+be replaced with its hydo-config variable, `hydo/crates/hydo-config/INVENTORY.md`): `guest/busybox`
+(`HYDO_BUSYBOX_ARM64`), `guest/busybox-applets` (`HYDO_BUSYBOX`), `guest/mke2fs` (`HYDO_MKE2FS`),
+`guest/hydo-agent` (`HYDO_AGENT_BIN_ARM64`), `guest/hydo-world` (`HYDO_WORLDBIN_ARM64`),
+`guest/hydo-read` (`HYDO_READ_BIN_ARM64`), `guest/hydo_fc` (`HYDO_FCBIN_ARM64`) and the store tree
+`guest/tc` (`HYDO_ARM64_STORE`).
 
 ## How `hydo build` works without Linux
 
@@ -42,7 +59,9 @@ For network faults the arm64 builder copies the pinned aarch64 `tc` and the file
 opens (found with `hydo-elfdeps`, `hydo/crates/hydo-tools`) from the host's `/nix/store`. The release ships
 those files under `guest/tc/`, and `hydo build` points the existence check and the copy at that
 tree (the Rust builder's Mac release mode), so the image gets the
-same paths, bytes and modes as a Linux build.
+same paths, bytes and modes as a Linux build. The same tree holds `ip` and the iptables files
+for service networks and the freeze (the builder reads them from `HYDO_ARM64_STORE`, which the
+release sets to `guest/tc`).
 
 **Checked:** for the Redis example the Mac-built data disk is byte-identical to the Linux-built
 one (`9ddfc929…`), and every file of the root image, including the 23 files of the `tc`
@@ -56,15 +75,78 @@ project lists its arm64 files under `root.files:` instead (hydo/dist/mac/QUICKST
 ## Building a release
 
 ```sh
-HYDO_KERNEL=<path to Image-explore> hydo/dist/mac/build-release.sh [OUTDIR]
+HYDO_KERNEL=<Image-explore> HYDO_KERNEL_NETNS=<Image-explore-netns> HYDO_FC_BIN=<hydo_fc-arm64> \
+  HYDO_SPIN_BIN=<dir> hydo/dist/mac/build-release.sh [OUTDIR]
 ```
 
-The first run fills `hydo/dist/mac/assets/` (git-ignored): the kernel from `$HYDO_KERNEL`, and
-busybox, `mke2fs`, the applet list and the Redis example's files over ssh from a Linux machine
-with these nixpkgs store paths (`$HYDO_BUILD_HOST`, default the build machine). Every asset is
-checked against `assets.sha256`. After that the release builds offline in a few seconds.
+The first run fills `hydo/dist/mac/assets/` (git-ignored), and every asset is checked against
+`assets.sha256`:
+- the two kernels from `$HYDO_KERNEL` and `$HYDO_KERNEL_NETNS` (`hv/hvm/explore/out/` on the
+  Mac that built them; `Image-explore-netns` is built without Nix on any x86_64 Linux machine,
+  docs/BUILD-PINS.md);
+- the freeze helper from `$HYDO_FC_BIN`: `hydo/onboard/hydo_fc.c` compiled with the pinned Arm GNU
+  Toolchain 13.3.Rel1 (`aarch64-none-linux-gnu-gcc -static -O2 -Wall`, docs/BUILD-PINS.md). The
+  toolchain is an x86_64 Linux program; on a Mac it runs in an x86_64 Linux container (Milestone
+  150: the toolchain archive checked by its sha256, unpacked inside the container, because the
+  Mac's file system ignores case, and two compilations gave the pinned `499f654e…`);
+- `ip` and the iptables files from the public Nix binary cache with `hydo-nix-fetch --closure`
+  (built from the tree; it checks every archive's hash), then exactly the files `hydo-elfdeps
+  --root` lists for them (`assets/netns/`, `assets/netns-closure.txt`); no Linux machine needed;
+- busybox, `mke2fs`, the applet list, the `tc` closure and the Redis example's files over ssh
+  from a Linux machine with these nixpkgs store paths (`$HYDO_BUILD_HOST`, default the build
+  machine).
+
+After that the release builds offline in about a minute (most of it the Rust builds).
 The Redis files are copied with `tar`, so the libraries' symlinks survive; the one absolute
 symlink (`libgcc_s.so.1` into another store path) is made relative, because hydo-build checks
 that each source file exists on the host. In the guest it resolves to the same file.
 
+**Two runs give the same tarball.** The script sets every file's time to 0, clears extended
+attributes, lists the files in sorted order (`gnutar` format, owner `root:wheel`, no extended
+attributes, ACLs or file flags) and compresses with `gzip -n` (no name or time). The Rust Mac
+programs are the same bytes when they are built in the same target directory; built in another
+directory they differ only in the Mach-O `LC_UUID` (and the page hash of the ad-hoc signature
+that covers it), because Apple's linker derives the UUID from the object files' paths.
+
 Nothing is published by the script; the tarball stays in `OUTDIR`.
+
+## Milestone 150: the release built and checked
+
+Built from `main` at `3431aaa` plus this milestone's changes, twice from clean target
+directories: the same tarball both times (`hydo-mac-0.1.0.tar.gz`; its size and sha256 are in
+docs/HISTORY.md "Milestone 150"). Installed into a clean prefix and run with a PATH of the
+prefix's `bin`, `/usr/bin`, `/bin`, `/usr/sbin` and `/sbin`, with traps for `python`,
+`python3`, `pip`, `go`, `cargo`, `rustc`, `rustup`, `nix`, `cc`, `clang`, `gcc`, `make`,
+`xcrun` and `docker` in front, which log every call and fail: nothing called them. `hydo doctor`: all checks
+passed (0 failed, 0 warnings). Every schedule below ran twice with the same fingerprint (`fp=`)
+and control-transcript hash (`ctl=`):
+
+| example | schedule | verdict | fp | ctl |
+|---|---|---|---|---|
+| redis (image `e1e97c53…`, disk `9ddfc929…`) | `disk=none \| run` | OK, acked=20 all present | `76bce7dce084f41e` | `0b9e60d528cc2dc7` |
+| redis | `disk=cut \| run C=12 R=everysec` | VIOLATION, key k:0 lost | `0f139f3fc3398595` | `c1c6baa6a88a32a5` |
+| redis | `disk=none \| run O=redis@5-10:resp:loss,100%` | OK, acked=15 all present | `e0c65f9a0d99f99b` | `4f21d3b71f10701c` |
+| redis | `disk=none tj=7 tjpm=500 tjmax=500 \| run` | OK, acked=20 (`tjk=9-20 tjn=5`) | `11f5e98285489afa` | `87ffd5e894a2c08e` |
+| ledger-spin (image `c0746ab8…`) | `disk=none \| run` | OK, acked=30 each stored once (rewind mode) | `82eac6c01b9b1398` | `930f998155f77b29` |
+| ledger-spin | `disk=none \| run P=front@10+2` | VIOLATION, entry 10 stored 2 times | `66cec8d81248181f` | `012f769bba1db408` |
+| redis-composed (image `3a72431d…`) | `disk=none \| run W=0000002a,p4,q2,r100` | OK, 34 commands ok | `ea17ecba892046cb` | `64228edfdcc3de50` |
+| redis-composed | `hydo repro --regressions` (`lost-update`) | PASS | `404f330457dca5cb` | |
+| redis-bridge (image `37d0d5de…`, disk `26f4a507…`, `Image-explore-netns`) | `disk=none \| run` | OK, acked=16 | `61df76df4baf4b99` | `6a8e130bfbf9fef2` |
+| redis-bridge | `disk=none \| run N=primary-replica@5-10:loss,100%` | OK, acked=16 (5 packets dropped each way) | `a1142c131ca4a1d0` | `bb902d00160d7286` |
+| redis-bridge | `disk=none \| run F=replica<primary@5#3:2000` | OK, acked=16 (FROZE at resp #3, SET k:7) | `b8aa1f2c0cc32eee` | `db293b879f216430` |
+| redis-bridge | `disk=cut \| run C=8` | OK, acked=8 | `6fd3c2db1a622c51` | `1ac708d19e5718f8` |
+| redis, store reader (`examples-mac/redis/hydo-read.yaml`, image `4ec4923c…`) | `disk=none \| run` | OK, subset holds (20 of 20) | `2b92dd0393d345f1` | `8476030a9d80c61e` |
+| redis, store reader | `disk=cut \| run C=12 R=everysec` | VIOLATION, 12 of 12 acknowledged items missing | `6e226296c6c172be` | `557e45d1698ad7cc` |
+
+The Redis, ledger-spin and Redis power-cut values equal the agent-image values of Milestones 143
+and 147. `hydo explore --seeds 1-20 --strategy swarm --workers 2` on Redis: 11 failures, all 11
+reproduced (classes `lying-disk`, `unsafe-knob`, `io-errors`), minimal schedules
+`disk=lying:3 dseed=eac0b527c5ac67d9 | run C=20` (`49ac9358094e92cb`) and
+`disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no` (`bfd9875c8eb3c9ec`), each twice identical; a
+second exploration gave the same 40 runs with the same fingerprints; `hydo repro` of the first
+minimal schedule gave its fingerprint twice, and `hydo repro hydo-out/explore` reproduced 13 of
+13. `hydo report`, `hydo repro <run dir>` (REPRODUCED), `hydo init`, `hydo guide`,
+`hydo skill install --agent claude` and `hydo build hydo/hydo.yaml --check` worked as the
+quickstart says. redis-composed, redis-bridge and the store reader are not shipped as examples:
+they were built from copies of `hydo/onboard/examples-mac/` whose `src:` paths point at the
+release's `examples/redis/files`.
