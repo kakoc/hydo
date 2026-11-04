@@ -1,9 +1,13 @@
 # The Linux release of hydo
 
 `build-release.sh` turns the bare-metal backend (the `hvx` kernel module and the Rust programs
-`hydo`, `hydo-hvx` (the run engine as a program; since M137 it replaces `hvx_explore`), `hydo-build`
-and `hydo-fetch-image`) into a self-contained tarball for x86_64 Linux machines with Intel
-VT-x. A user installs it with one command and drives everything with one `hydo` command; no
+`hydo`, `hydo-hvx` (the run engine as a program; since M137 it replaces `hvx_explore`), `hydo-build`,
+`hydo-fetch-image` and `hydo-grpc-gen`) into a self-contained tarball for x86_64 Linux machines
+with Intel VT-x. Every image it builds is an agent image (M136): the guest's first process is
+`guest/hydo-agent` (the pinned 0.3.0, M140), and the host controller inside `hydo` drives it;
+on hvx the agent and the host talk over the host-call port by default (`HYDO_HVX_HOSTCALL=0`
+turns it off, M140). The configuration variables are listed in
+`hydo/crates/hydo-config/INVENTORY.md` (M144). A user installs it with one command and drives everything with one `hydo` command; no
 Nix, no `~/hydo` tree and no hand-written lock scripts are needed. `QUICKSTART-linux.md` is the
 user guide; it is shipped as the release's `README.md`. The Mac counterpart is
 `hydo/dist/mac/` (same verbs, same release pattern).
@@ -11,11 +15,17 @@ user guide; it is shipped as the release's `README.md`. The Mac counterpart is
 ## The `hydo` command
 
 `bin/hydo` is the Rust CLI (`hydo/crates/hydo-cli`), a static `x86_64-unknown-linux-musl`
-binary; `bin/hydo-build` (the image builder with its own command line, for scripts) and
-`bin/hydo-fetch-image` (what the `fetch-images.sh` of `hydo compose` calls) come with it.
-`build-release.sh` builds the three with the workspace's pinned toolchain (the TLS code of
-`hydo-fetch-image` compiles some C: `musl-gcc` when present, else the host's `cc`), or takes
-them from `$HYDO_RUST_BIN_DIR`. Since Milestone 107 the release contains no Python and
+binary; `bin/hydo-hvx` (the run engine as a program), `bin/hydo-build` (the image builder with
+its own command line, for scripts), `bin/hydo-fetch-image` (what the `fetch-images.sh` of `hydo
+compose` calls) and `bin/hydo-grpc-gen` (a shell wrapper that runs `libexec/hydo-grpc-gen`, the
+gRPC driver generator, with `--client` defaulting to `guest/`, where the static client
+`guest/hydo-grpc` is) come with it. `build-release.sh` builds them with the workspace's pinned
+toolchain (the TLS code of `hydo-fetch-image` compiles some C: `musl-gcc` when present, else the
+host's `cc`), or takes them from `$HYDO_RUST_BIN_DIR`. It also builds the guest programs from
+this tree: `guest/hydo-agent` (`hydo/crates/hydo-agent/build.sh`, checked against its pin by
+`hydo-build`), `guest/hydo-world`, `guest/hydo-read` (`hydo/crates/hydo-read/build.sh`; its
+bytes depend on the kind of host that builds it, docs/BUILD-PINS.md) and `guest/hydo-grpc`
+(`hydo/grpcgen/build-client.sh`, pinned `3926d137…`). Since Milestone 107 the release contains no Python and
 needs none; the Python CLI (`hydo/dist/linux/hydo`) and every Python module behind it are
 deleted (commit `2a58c4b` has them). The Mac release's `hydo` is the same program and behaves
 the same (Milestone 107); only `hydo module` is Linux-only.
@@ -28,7 +38,7 @@ the same (Milestone 107); only `hydo module` is Linux-only.
 | `hydo module udev install\|remove\|status [--name N] [--group G] [--dry-run]` | optional: with sudo, writes `/etc/udev/rules.d/70-hydo-N.rules` (`KERNEL=="N", SUBSYSTEM=="misc", GROUP="G", MODE="0660"`), creates the group if missing, adds the user, reloads udev and applies the rule to a loaded device; `remove` deletes the rule and sets the device back to root:root 0600. `install.sh --udev [--udev-group G] [--udev-name N]` runs `install` |
 | `hydo module status [--name N]` | loaded or not, `srcversion` of the loaded and the release-built module, device mode, KVM, how many processes hold the lock (read from `/proc/locks`, no lock taken) |
 | `hydo build [hydo.yaml]` | the Rust image builder (`hydo/crates/hydo-build`, since Milestone 103) with the bundled tools, into `./hydo-out` (`./.hydo` for a project's `hydo/hydo.yaml`, the default manifest) |
-| `hydo run [IMG] "<schedule>"` | the run engine (`hydo/crates/hydo-hvx`) on a thread of `hydo`, holding the module lock shared, when the user can open `/dev/hvx`; otherwise `libexec/hvx-run sudo env HVX_SNAP_DIR=… bin/hydo-hvx [--ram-mib/--cpu from the image's manifest] one guest/bzImage guest/initramfs-kafka.cpio.gz IMG <dir> "<schedule>"` (M137); writes `result.json` |
+| `hydo run [IMG] "<schedule>"` | the host controller drives the agent image (`/etc/hydo/control`) through the run engine (`hydo/crates/hydo-hvx`): on a thread of `hydo`, holding the module lock shared, when the user can open `/dev/hvx`; otherwise as `libexec/hvx-run sudo env … bin/hydo-hvx [--ram-mib/--cpu from the image's manifest] one --control boot guest/bzImage guest/initramfs-kafka.cpio.gz IMG <dir> "<schedule>"` (M137); writes `result.json` and the control transcripts |
 | `hydo repro <run dir \| explore dir \| "<schedule>">` | re-runs a `result.json`, or every failure and minimal schedule of an exploration's `exploration.json`, from a fresh boot, and compares fingerprints |
 | `hydo explore [IMG] [explorer options]` | the explorer (`hydo/crates/hydo-explore`) in the same process (default `--seeds 1-20 --out hydo-out/explore`; workers sized from the machine) |
 | `hydo report [DIR]` | prints `report.md` |
@@ -36,10 +46,11 @@ the same (Milestone 107); only `hydo module` is Linux-only.
 **sudo only when needed.** `hydo run` and `hydo explore` call `libexec/hvx-run sudo env …`;
 `hvx-run` drops the `sudo` when the user can read and write the device (`$HVX_DEV`, default
 `/dev/hvx`), which the optional udev rule above allows, and passes `HVX_DEV` through `sudo`
-when it keeps it. `HYDO_SUDO=1` keeps sudo. `hydo doctor` reports which case applies. A run
-without sudo uses `/var/tmp/hvx-snap-<uid>` when `/var/tmp/hvx-snap` exists but is not
-writable (earlier sudo runs made it root's). The rule's meaning: anyone in the group can run
-guests through the kernel module, which was not hardened against hostile users.
+when it keeps it. `HYDO_SUDO=1` keeps sudo. `hydo doctor` reports which case applies. The
+engine keeps its snapshots in memory (no snapshot directory since M144). The rule's meaning:
+anyone in the group can run guests through the kernel module, which was not hardened against
+hostile users. As root (or with the udev rule) the engine runs inside `hydo` and takes the
+module lock itself; both ways give the same fingerprints (checked in M149).
 
 **Side modules.** With `HVX_DEV=/dev/N`, runs use the side module `N` (built and loaded with
 `--name N`) and hold its lock file (`<lock>.N`) instead of the main one.
@@ -52,9 +63,9 @@ existing tools share one lock.
 **Changes to existing tools** (defaults unchanged, so other users of the tree see no difference):
 the explorer reads its build directory and lock wrapper from `HYDO_BUILD` and `HYDO_HVX_RUN`
 (defaults `~/hydo/build`, `~/bin/hvx-run`; every variable is listed in
-`hydo/crates/hydo-config/INVENTORY.md`), and `hydo explore` gives it the release's paths;
-`explore/ptedges.h` compiles without libipt under `-DHYDO_NO_LIBIPT` (coverage decoding off),
-so the run engine builds on a machine without `libipt-dev`.
+`hydo/crates/hydo-config/INVENTORY.md`), and `hydo explore` gives it the release's paths. The
+release's engine is built without coverage decoding (the cargo feature `pt` and libipt are not
+used), so Intel PT traces are not decoded by it.
 
 ## How `hydo build` works without Nix
 
@@ -88,6 +99,13 @@ ships all of them (`guest/`, `tools/`), and `hydo build` points `hydo-build` at 
   `mke2fs.conf`): root `aec24305…`, netem root `b0fe5081…`. Three things had to be pinned
   for that: the time zone of the frozen clock, `MKE2FS_CONFIG`, and the umask.
 
+- M149, agent images, the release built from `main` after M148 and installed into clean prefixes on
+  the bare-metal machine (no Nix used, owners normalised): the repository's own
+  `examples/redis/hydo.yaml` (with its `~/hydo/build` paths given by a fake home) gives
+  `bde714a7…`, `redis-bridge` `490d7240…`, `redis-composed` `39d9e74f…` and
+  `redis-composed-read` (which stages `guest/hydo-read`) `ecb7f1e0…`, each byte for byte the
+  image M140 built with the tree's `hydo` and the M107 release's tools.
+
 `root.nix:` still needs `nix-store` on the build machine (the closure is resolved there).
 
 ## Building a release
@@ -100,13 +118,23 @@ The first run fills `hydo/dist/linux/assets/` (git-ignored) from the build machi
 `$HYDO_BUILD_HOST` (default the build machine): the kernel and initramfs from
 `~/hydo/build`, every Nix store path named in the script (all gc-rooted there, see
 docs/BUILD-PINS.md), and `hvx_seedrng`/`hydo_fc` compiled there with the pinned musl gcc
-(`hvx_seedrng` comes out as the pinned `c2a440c5…`). Every asset is checked against
-`assets.sha256`; `HYDO_PIN=1` writes that file when it is missing (a maintainer, once). After
-that the release builds offline in seconds on the Mac or any Linux machine. The tarball is
-about 45 MB. Nothing is published by the script.
+(`hvx_seedrng` comes out as the pinned `c2a440c5…`). `HYDO_ASSETS_FROM=DIR` copies the same
+files from a local directory instead (the bare-metal machine keeps a matching copy in
+`~/hydo-layout-assets`; M149 built from it, since the build machine is off limits). Every asset
+is checked against `assets.sha256`; `HYDO_PIN=1` writes that file when it is missing (a
+maintainer, once). After that the release builds offline (about 4 minutes on the bare-metal
+test machine from clean Rust targets, most of it compiling). The tarball is about 59 MB.
+Nothing is published by the script.
 
-The kernel module and the run engine are compiled on the user's machine by `install.sh` (they
-must match the running kernel and the release's `hvx_abi.h`).
+The tarball is reproducible with GNU tar: file times are set to 1600000000, entries are sorted,
+owners are root:0 and gzip writes no name or time stamp, and the umask is 022. M149 built it
+twice on the bare-metal machine from clean Rust targets (`target/`, the agent's and
+hydo-read's own target directories removed in between): both tarballs had the same sha256. On
+a Mac, BSD tar keeps the owner but not the file times, so a Mac-built tarball is not
+reproducible (and its `hydo-read` bytes differ: they depend on the build host).
+
+Only the kernel module is compiled on the user's machine, by `install.sh` (it must match the
+running kernel); `--no-module` skips it.
 
 ## Not done
 
