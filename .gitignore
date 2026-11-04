@@ -1,4 +1,4 @@
-# build outputs (guest images, kernels, staged root trees) are produced on the build box
+# build outputs (guest images, kernels, staged root trees) are produced on the build machine
 /build/
 /target/
 # kernel-module and C build artefacts
@@ -16,8 +16,9 @@ Module.symvers
 *.partA-bak
 .DS_Store
 __pycache__/
-# local machine details (addresses, logins); never commit
+# local machine details (addresses, logins) and how the scripts reach the machines; never commit
 /AGENTS.local.md
+/machines.local.sh
 # hydo-read keeps its own Cargo workspace (its bytes are inside guest images)
 /hydo/crates/hydo-read/target/
 /hydo/crates/hydo-agent/target/

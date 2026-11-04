@@ -18,7 +18,7 @@
 //! stop at or after S1 + [`END_AT`]. Each group of runs (twice from S1 and, where the design asks
 //! for it, from a fresh boot, a snapshot's continuations, the same sends without the snapshot)
 //! must give one fingerprint, and it must be the recorded value ([`RECORDED`]: measured by this
-//! program on the bare-metal test machine in M145, the first run recording, the second
+//! program on the bare-metal machine in M145, the first run recording, the second
 //! reproducing; the M116/M118 values were the shell image's). Continuations from a snapshot must
 //! also report their base's stop count and input hash. Transcripts go to `<outdir>/transcripts/`;
 //! `hydo-engine/tests/lockstep/` keeps a few of them. `hv/hvx/lockstep-metal.sh` runs it.
@@ -27,7 +27,7 @@
 //! once per given cadence (`rb=<n>`), and prints the engine's seconds, the stops and the host's
 //! wall time.
 //!
-//! Every VM goes through `<hvx-run>` (the box's shared module lock), or runs in this process when
+//! Every VM goes through `<hvx-run>` (the bare-metal machine's shared module lock), or runs in this process when
 //! it can open the device. Not a cargo test: it needs the hvx module and the image.
 
 use hydo_agent_proto::frame::{deframe_line, Deframed};

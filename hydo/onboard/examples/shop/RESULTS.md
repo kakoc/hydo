@@ -7,13 +7,13 @@ service (`email`). One planted bug: `src/charge_buggy.go` gives every retry of a
 idempotency key, so a charge that took effect but whose answer was lost is taken again.
 `src/charge_fixed.go` keys the charge by the order.
 
-All runs on the bare-metal test machine, one VM at a time, with `hvx_explore` built from this branch
+All runs on the bare-metal machine, one VM at a time, with `hvx_explore` built from this branch
 (commit `ec099a3`, which includes the 3584-byte recovery command). Results under
-`/var/tmp/m80-fakes/` on the box.
+`/var/tmp/m80-fakes/` on the bare-metal machine.
 
 ## Images
 
-Built on the build box with `build.sh` (pinned Go 1.26.5, standard library only; pinned
+Built on the build machine with `build.sh` (pinned Go 1.26.5, standard library only; pinned
 `hvx_seedrng` `c2a440c5…`):
 
 | image | sha256 | notes |
@@ -98,7 +98,7 @@ them and the checks saw both boots (OK).
 
 The same `hydo.yaml`, built for arm64 with a Mac release made from branch `arm64-parity` (plus
 `guest/hydo-world`), on the M2 Pro. Programs cross-built with the pinned Go 1.26.5 of the build
-box (`SHOP_GOARCH=arm64 build.sh`): `hydo-world-arm64` `7bc58006…`, `shop-buggy` `5d0411e8…`,
+machine (`SHOP_GOARCH=arm64 build.sh`): `hydo-world-arm64` `7bc58006…`, `shop-buggy` `5d0411e8…`,
 `shop-fixed` `1163302d…`, each twice byte-identical. Images (`hydo build hydo.yaml --set
 variant=<v> --set bin=<dir>`, two builds each identical): buggy `explore-ob-shop-arm64.cpio.gz`
 `219efa57…`, fixed `665eeb8b…`, data disk `359c73c4…` (both).

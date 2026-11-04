@@ -19,7 +19,7 @@ a later checkpoint skips part of a committed transaction and the database goes c
 |---|---|
 | `walrace.c` | the workload + checker, written from the public description only: writers, checkpointers and readers on one WAL database, each its own connection, all concurrent; every committed transaction recorded; check = every committed row present with its value + `PRAGMA integrity_check` = ok |
 | `hydo.yaml` | the manifest: no service, one workload, one invariant; `params: v` builds 3.51.2 (`3510200`, default) or 3.51.3 (`--set v=3510300`) |
-| `build.sh` | builds `bin/walrace-<v>` statically from the official amalgamation zips (sha256-pinned) on the bare-metal test machine (Ubuntu gcc 13.3.0, static glibc); byte-identical across builds |
+| `build.sh` | builds `bin/walrace-<v>` statically from the official amalgamation zips (sha256-pinned) on the bare-metal machine (Ubuntu gcc 13.3.0, static glibc); byte-identical across builds |
 | `hunt.py` | the blind explorer for this target (below); removed in M108 with the other research scripts (`git show 705cf98:hydo/knownbugs/sqlite/hunt.py`, with the explorer of commit `2a58c4b`) |
 | `hydo-cpudiag.yaml` | diagnostic copy of the manifest that prints per-CPU counters (several-vCPU sanity check only) |
 | `hydo-reset.yaml` | the manifest for walrace's reset mode (frequent WAL restarts; section "A workload that restarts the WAL often") |
@@ -38,7 +38,7 @@ autocheckpoint). `hunt.py` reuses `explore.py`'s worker pool and tick-jitter for
 generates three arms: `timing` (jitter only), `workload` (`S` only), `both`. Run i is a pure
 function of (i, salt), and its schedule string alone reproduces it.
 
-## Results (2026-10-18, bare-metal test machine, 1 worker; results in `/var/tmp/m48-sqlite`)
+## Results (2026-10-18, bare-metal machine, 1 worker; results in `/var/tmp/m48-sqlite`)
 
 **Not found.** No run violated the invariant, on hydo or natively.
 
@@ -83,11 +83,11 @@ Images used by the hydo runs (built by `hydo-build` from this manifest; walrace 
 `2ff12b40…`; `hunt1` used an earlier walrace (`41c8f4b`). Rebuilding from this commit gives
 new hashes (the program changed).
 
-Commands (box, `~/hydo-sqlite/hvx/knownbugs/sqlite`):
+Commands (the bare-metal machine, `~/hydo-sqlite/hvx/knownbugs/sqlite`):
 `python3 hunt.py --image explore-ob-kb-sqlite-3510200-disk.img --fixed explore-ob-kb-sqlite-3510300-disk.img --runs 1000 --workers 1 --arms workload,both --salt 0xB4 --out /var/tmp/m48-sqlite/hunt4`;
 native controls: `/var/tmp/m48-sqlite/native*.sh`, `aimed-native.sh`.
 
-## Several vCPUs with branch-counted turns (2026-10-23, bare-metal test machine, 2 workers; results in `/var/tmp/sqlsmp`)
+## Several vCPUs with branch-counted turns (2026-10-23, bare-metal machine, 2 workers; results in `/var/tmp/sqlsmp`)
 
 **Not found.** The question: now that hvx can run a guest on several vCPUs that take turns of
 an exact, seeded number of guest conditional branches (Milestones 66 and 69), can a blind
@@ -193,7 +193,7 @@ side (a shape that resets the WAL far more often, e.g. a writer that waits for a
 checkpointed WAL before committing) or a module change that makes turn ends cheaper or puts
 short turns only around WAL activity, not more runs of this search.
 
-Commands (box, `~/hydo-sqlsmp/hvx/knownbugs/sqlite`):
+Commands (the bare-metal machine, `~/hydo-sqlsmp/hvx/knownbugs/sqlite`):
 `python3 hunt.py --image explore-ob-kb-sqlite-3510200-pin-disk.img --fixed explore-ob-kb-sqlite-3510300-pin-disk.img --runs 3000 --workers 2 --batch 16 --max-wall 12600 --arms workload,both --salt 0x5D7E --vcpus 2 --turns --build ~/hydo-sqlsmp/build --snap-dir /var/tmp/sqlsmp/snap --wall-secs 2400 --stop-after 1 --out /var/tmp/sqlsmp/hunt2`
 (4 vCPUs: `--vcpus 4 --salt 0x4C9A --max-wall 5400 --out /var/tmp/sqlsmp/hunt4`; default
 turns: `--vcpus 4 --salt 0x4D00 --max-wall 2700 --out /var/tmp/sqlsmp/hunt4d`, without
@@ -202,7 +202,7 @@ turns: `--vcpus 4 --salt 0x4D00 --max-wall 2700 --out /var/tmp/sqlsmp/hunt4d`, w
 the two `-pin` images, plus the diagnostic image `explore-ob-kb-sqlite-cpudiag-3510200-disk.img`
 (sha256 `3fe3c705…`, built by `hydo-build hydo-cpudiag.yaml` on the build machine).
 
-## A workload that restarts the WAL often (2026-10-24, bare-metal test machine; results in `/var/tmp/walreset`)
+## A workload that restarts the WAL often (2026-10-24, bare-metal machine; results in `/var/tmp/walreset`)
 
 **Found natively; found under hydo only in an aimed run, not in the blind hunt.**
 
@@ -243,7 +243,7 @@ the two `-pin` images, plus the diagnostic image `explore-ob-kb-sqlite-cpudiag-3
   number at offset 12 cannot be used: it is a per-connection counter.) The counter is on in
   reset mode and off in the default shape unless `WALRACE_COUNT=1`; `WALRACE_COUNT=0` turns it
   off in reset mode. `WALRACE_SEED_FILE` and `WALRACE_SYNC_OFF=1` (`PRAGMA synchronous=OFF`)
-  exist for native runs only. The box's `/var/tmp` is on spinning disks, where every
+  exist for native runs only. The bare-metal machine's `/var/tmp` is on spinning disks, where every
   checkpoint fsync costs milliseconds; under hydo the disk is fast and synchronous stays NORMAL.
 - **The default shape is unchanged in logic.** Every new path checks a flag that is off by
   default, so a seed gives the same shape and the same operations as before. The binary bytes
@@ -266,7 +266,7 @@ blind:
 Nothing forces the checkpoint-start/commit ordering. The threads only commit and checkpoint as
 fast as they can, and the operating system (or hydo) picks the interleaving.
 
-### Native results (box, Xeon E3-1270 v6, at most 3 CPUs; one walrace process per CPU)
+### Native results (the bare-metal machine, Xeon E3-1270 v6, at most 3 CPUs; one walrace process per CPU)
 
 | run | version | shape | CPUs | runs | corrupt | WAL restarts per run |
 |---|---|---|---|---|---|---|
@@ -298,13 +298,13 @@ fast as they can, and the operating system (or hydo) picks the interleaving.
   is many more commits per run.
 - **CPU sharing.** Until 08:45 the `p1-1`/`p1-2` processes kept running beside `f2-1`/`f3-2`
   and `nc0-1`/`def-2`, so those runs shared their pinned CPU with a second walrace process.
-  The box also had load average 17–24 from other sessions throughout.
+  The bare-metal machine also had load average 17–24 from other sessions throughout.
 
 ### Under hydo (images built from commit `0e84384`)
 
 Images: `explore-ob-kb-sqlite-reset-3510200-disk.img` (sha256 `69c30374…`) and
 `…-3510300-disk.img` (`2d1b1034…`), built by `hydo-build hydo-reset.yaml` on the build machine,
-in `~/hydo-walreset/build` on the bare-metal test machine. Module `CA5BF8BF2A0D66B312A68EF`.
+in `~/hydo-walreset/build` on the bare-metal machine. Module `CA5BF8BF2A0D66B312A68EF`.
 `hvx_explore` was built from this tree.
 
 | run | what | runs | time | violations | WAL restarts per run |
@@ -332,7 +332,7 @@ VIOLATION … read of committed transaction 8389540 failed: database disk image 
 | on 3.51.3, twice | OK, all 23,104 transactions present, integrity ok, `2f07b796991449b5` both times |
 
 A third 3.51.3 run was killed by the host's out-of-memory killer while other sessions filled
-the box's memory; it was retried as the second run above.
+the bare-metal machine's memory; it was retried as the second run above.
 
 The hunt's own re-run matched (`rerun_same`). Shrinking took 6 tries:
 - Without the shorter period (`pp`), the run passes (`99bc3cc0a765db00`). Without the
@@ -362,7 +362,7 @@ of guest time per run. It was the lever in the aimed find. Natively, corruption 
 170 blind runs, or about 10 runs of the failing seeds, at about 1,300 restarts per run. At
 10–70 times fewer restarts per run, the blind hunt's 87 + 10 runs were expected to give fewer
 than one corruption. Of `h1`'s 87 runs, only 21 used the shorter period, and only 11 had the
-natively failing shape (PASSIVE checkpoints, checkpointers that never yield). On this box,
+natively failing shape (PASSIVE checkpoints, checkpointers that never yield). On the bare-metal machine,
 under this load, a hydo run took 20–80 s of wall time (about 2 minutes for the aimed seed with
 `pp`).
 
@@ -373,7 +373,7 @@ under this load, a hydo run took 20–80 s of wall time (about 2 minutes for the
   autocheckpoint, with no separate checkpointer threads);
 - far more runs of the `pp` arm.
 
-Commands (box, `~/hydo-walreset`):
+Commands (the bare-metal machine, `~/hydo-walreset`):
 - native: `BIN=bin3 WALRACE_SYNC_OFF=1 sh native.sh 3510200 reset 100000 600 1 <tag>` (one
   walrace at a time, pinned with `taskset`; `SEEDS="32efe18d 55b6d768"` repeats fixed seeds;
   stop with `touch /var/tmp/walreset/STOP-<tag>`);

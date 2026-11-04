@@ -8,7 +8,7 @@ branch-from-snapshot give identical full-state fingerprints. One-vCPU guests are
 unchanged (the 25-check regression gate passes with every fingerprint unchanged).
 
 Developed on a side-by-side module `hvxsmp2.ko` (`/dev/hvxsmp2`, built by
-`hv/hvx/smp2/build-hvxsmp2.sh` in `~/hydo-smp2` on the bare-metal test machine). The main `hvx.ko`
+`hv/hvx/smp2/build-hvxsmp2.sh` in `~/hydo-smp2` on the bare-metal machine). The main `hvx.ko`
 was not touched. `hvxsmp2` was unloaded at the end.
 
 ## What was built
@@ -100,7 +100,7 @@ side had to be fixed after testing. The walls were in the harness and in tuning:
    test between CPUs (`check_tsc_sync_target`) runs and reports nothing: with one VM
    clock and serialized vCPUs the TSC never goes backwards across CPUs.
 
-## Results (bare-metal test machine, `/dev/hvxsmp2`, quantum 2^20, pause_k 4)
+## Results (bare-metal machine, `/dev/hvxsmp2`, quantum 2^20, pause_k 4)
 
 | vCPUs | config | boot wall | turns | fingerprint (fresh x2, branch@marker, branch@turn) |
 |---|---|---|---|---|

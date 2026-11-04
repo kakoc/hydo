@@ -24,8 +24,8 @@ Redis connection without a lock (the order service panics), d12 shared Kafka key
 
 ## Setup
 
-- Bare-metal test machine, main `hvx.ko` srcversion `CA5BF8BF2A0D66B312A68EF` (not reloaded). Userspace
-  built fresh from this branch in `~/hydo-bench2`. Results in `/var/tmp/bench2` on the box.
+- Bare-metal machine, main `hvx.ko` srcversion `CA5BF8BF2A0D66B312A68EF` (not reloaded). Userspace
+  built fresh from this branch in `~/hydo-bench2`. Results in `/var/tmp/bench2` on the bare-metal machine.
 - `run.py` exactly as in M54/M62: 3 repetitions x at most 60 runs, early stop at the first
   detection, seeds `rep*1000+1..`, 1 worker, `--window 1` (the control VM is the second VM).
   A detection is a durable-settings VIOLATION whose schedule passes on the control; it is re-run
@@ -120,7 +120,7 @@ concurrency, which is the same seed in both cells.
 - d12 without concurrency: 2 vCPUs changed which schedules fail and were a little earlier in two
   of three repetitions; not enough data to claim faster.
 - Cost: a two-vCPU run took about 43 s against about 15 s for one vCPU in the no-concurrency
-  cells (sum of run times; box load differed between the cells, so this is approximate). Fine
+  cells (sum of run times; machine load differed between the cells, so this is approximate). Fine
   turns are much dearer (a `q=1118` run took 363 s).
 
 ## Not verified
@@ -134,5 +134,5 @@ concurrency, which is the same seed in both cells.
 
 `run.py` / `confirm.py` (`--vcpus`, `--turns`), `smp_ident.py`, `listrun.py` (`--vcpus`,
 `--repeat`, `--env`, crash line), `smp_cells.sh`, `smp_after.sh`, `smp_after2.sh`,
-`smp-d9-q2*.list`; `hv/hvx/hvx_explore.c` (`HVX_EXPLORE_VCPUSTAT`). Box: `/var/tmp/bench2/<cell>`,
+`smp-d9-q2*.list`; `hv/hvx/hvx_explore.c` (`HVX_EXPLORE_VCPUSTAT`). Bare-metal machine: `/var/tmp/bench2/<cell>`,
 `confirm-v2`, `diag`, `probe-v1`, `probe-v2`, `probe-v1t`, `probe-ctl`, `cells.log`.

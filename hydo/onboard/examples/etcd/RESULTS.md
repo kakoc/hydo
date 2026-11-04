@@ -1,8 +1,8 @@
-# etcd example — results (2026-10-21/22, bare-metal test machine)
+# etcd example — results (2026-10-21/22, bare-metal machine)
 
-Images built by `examples/etcd/build.sh <version>` on the build box with the pinned toolchain
+Images built by `examples/etcd/build.sh <version>` on the build machine with the pinned toolchain
 (`hvx_seedrng` `c2a440c5…`, docs/BUILD-PINS.md), run with `hvx_explore` / `explore.py` from this
-branch, one VM at a time. Results under `/var/tmp/m59-etcd` on the box (`standin/` holds an
+branch, one VM at a time. Results under `/var/tmp/m59-etcd` on the bare-metal machine (`standin/` holds an
 earlier pass whose images carried the stand-in `hvx_seedrng` `01adf1bd…`; superseded).
 
 | image | etcd tarball sha256 | disk image sha256 |
@@ -65,7 +65,7 @@ failures on both. The process strategy pauses a member only between workload ste
 member (the leader) to stall while requests are in flight. Timed pauses (`P=svc@at~off:dur`,
 drawn by `--new-faults` under the random/swarm strategies) are the next thing to try.
 
-Cost: 20–37 s per schedule (the box was shared with other sessions), 0.7–2.2 h per 100 seeds.
+Cost: 20–37 s per schedule (the bare-metal machine was shared with other sessions), 0.7–2.2 h per 100 seeds.
 
 ## Rebuilt with the netem drain (2026-10-23, M77)
 
@@ -122,7 +122,7 @@ pausing etcd2 at step 26 or etcd3 at step 25 gives `members disagree` only, paus
 (for one or two steps) or 27 also makes a client's revision go back (at step 27 it is client 1,
 86 then 85), and pausing etcd1 itself gives no failure. Why the one-revision lead appears only
 together with the later pause was not investigated. On 3.5.6-nq all six failing schedules of the
-sweep pass. Results: `/var/tmp/m78-etcd` on the box (`A`, `B`, `D`, `E` = `run_list.py` outputs,
+sweep pass. Results: `/var/tmp/m78-etcd` on the bare-metal machine (`A`, `B`, `D`, `E` = `run_list.py` outputs,
 `runs/one5*` = the fresh-boot runs, `results.txt`).
 
 ## Milestone 136: agent images with hydo-agent 0.2.0

@@ -1,6 +1,6 @@
-# Onboarding v1 — proof results (2026-10-18, bare-metal test machine)
+# Onboarding v1 — proof results (2026-10-18, bare-metal machine)
 
-Images built by `hydo-build` on the build box (byte-identical across rebuilds), run with
+Images built by `hydo-build` on the build machine (byte-identical across rebuilds), run with
 `hvx_explore one` / `explore.py` from the merged main. Results under `/var/tmp/m47-onboard`.
 
 | image | sha256 (disk) |
@@ -45,7 +45,7 @@ naming the same orders and pass on fix. Tables: `docs/REBASELINE.md` section 7.1
 | `disk=none dseed=1 \| run C=12 R=everysec` | VIOLATION `[redis.acked_writes_survive] key k:3 lost` (Redis's documented fsync window) | `e4f65d61d3320ada` (on the re-baselined `explore-ob-redis-pin` image it loses `k:2`; see docs/REBASELINE.md) |
 | `disk=none dseed=1 \| run K=redis@5+3 P=redis@12+2 T=8:-86400` | OK, acked=15 (kill window + two 2 s client timeouts) | `eb3cc8787ec1e261` |
 
-## Liveness invariants (`type: eventually`) on Redis (2026-10-21, bare-metal test machine)
+## Liveness invariants (`type: eventually`) on Redis (2026-10-21, bare-metal machine)
 
 Manifest `examples/redis/hydo-live.yaml` (the Redis example + a `retry:` that re-sends every
 SET not yet acknowledged + `redis.pending_resolved`: every SET whose outcome was unknown is
@@ -81,7 +81,7 @@ linux/amd64 manifest digest `sha256:9341b654…` and the linux/arm64 one `sha256
 id / config `sha256:9b38108e…` amd64, `sha256:0b4893f5…` arm64). The image's own entrypoint
 (`docker-entrypoint.sh` → `gosu redis`) starts the server; only `CMD` is replaced.
 
-Builds (build box, each built twice in separate build directories, byte-identical):
+Builds (build machine, each built twice in separate build directories, byte-identical):
 
 | image | sha256 |
 |---|---|
@@ -94,7 +94,7 @@ amd64 image to `--arch arm64`, is refused. Existing manifests build byte-identic
 hydo-build: `examples/redis` `0dd509c2…` (same as main), arm64 `hydo/onboard/examples-mac/redis`
 cpio `10f7858a…` / disk `9ddfc929…` (the values in `hv/hvm/explore/README.md`), and `examples/stack` (FRONT=fix) disk `37a2ff6a…` with both main's and the new hydo-build.
 
-Runs on the bare-metal test machine (`hvx_explore one`, results `/var/tmp/m59-oci`), each twice:
+Runs on the bare-metal machine (`hvx_explore one`, results `/var/tmp/m59-oci`), each twice:
 
 | schedule | verdict | fingerprint |
 |---|---|---|
@@ -104,7 +104,7 @@ Runs on the bare-metal test machine (`hvx_explore one`, results `/var/tmp/m59-oc
 
 ### The arm64 image booted on the Mac (2026-10-21, M2 Pro, `hvmx`)
 
-The arm64 image was fetched again on the build box (`fetch-image.sh`; the OCI layout is identical to
+The arm64 image was fetched again on the build machine (`fetch-image.sh`; the OCI layout is identical to
 the earlier fetch) and built with `hydo-build --arch arm64`: `explore-ob-redis-oci-arm64.cpio.gz`
 `f575448a…`, disk `d4116ff4…`, the same bytes as the M59 build. Kernel `Image-explore` `f80c5655…`
 (the release kernel, HVC idle, with `tc`), `hvmx` built from `main` (`hv/hvm/explore/build.sh`).
@@ -122,7 +122,7 @@ equal for every schedule:
 | `disk=cut \| run C=12` (power cut, `appendfsync always`) | OK, acked=12 | `9bfe88561695340d` |
 | `disk=cut \| run C=12 R=everysec` (power cut) | VIOLATION `key k:1 lost` (Redis's documented fsync window) | `73b907b554f95f1a` |
 
-The box's three schedules on the Mac (same check, all identical); the verdicts equal the x86_64
+The bare-metal machine's three schedules on the Mac (same check, all identical); the verdicts equal the x86_64
 ones above:
 
 | schedule | verdict | fingerprint |
@@ -154,7 +154,7 @@ ones above:
 prints two (`skopeo-1.15.1-man` first), so without `skopeo` on `PATH` the script failed. It now
 uses the output that has `bin/skopeo`; re-fetched with it, the OCI layout is identical.
 
-## Lifting a network fault no longer drops netem's queued packets (2026-10-23, bare-metal test machine)
+## Lifting a network fault no longer drops netem's queued packets (2026-10-23, bare-metal machine)
 
 **Cause.** Every network fault (`N=`, `O=`, link faults) is a netem qdisc on `lo`, and lifting it
 ran `tc qdisc del dev lo root`. In the guest kernel (6.6.35) deleting the qdisc runs
@@ -176,7 +176,7 @@ network fault never call it.
 `net.no_retransmission`, Tcp RetransSegs from `/proc/net/snmp` must be 0). Old init = main's
 `hydo-init.sh` (`explore-ob-redis-netem-main`, `74c45491…`); new init (`explore-ob-redis-netem-nq`,
 `c7bc532a…`, two builds identical). New-image runs were each run twice with identical
-fingerprints. Results `/var/tmp/nq/b1` on the box.
+fingerprints. Results `/var/tmp/nq/b1` on the bare-metal machine.
 
 | schedule | old init | new init |
 |---|---|---|
@@ -240,10 +240,10 @@ machine, `hvx_explore` `38455ace…`; Rust hydo-read `64452374…` x86_64, `8857
 | `examples-mac/redis/hydo-read.yaml`, Mac (cpio `5592645f…`; Go `50d13de5…`) | `disk=none \| run` | OK `subset holds: all 20 items of acked are in redis (redis has 20 items)` | `d5577a4f26cffe1b` | `9bfed6578c82ffd0` |
 | the same | `disk=cut dseed=1 \| run C=12 R=everysec` | VIOLATION `subset violated: 12 items of 12 in acked not in redis: k:0=v0, ...` | `52eea0ecf13fb256` | `6b01ba56f975e9ce` |
 
-The stack images with the Go binary rebuilt on the bare-metal test machine equal the M88 images
+The stack images with the Go binary rebuilt on the bare-metal machine equal the M88 images
 byte for byte, so the Rust stack images differ from them only in `/bin/hydo-read`. The other
 seven recorded stack violations and four OK schedules give Go's verdict lines too (HISTORY M112);
-miniflux: `examples/miniflux/RESULTS.md`. Images in `~/hydo-prd/build/img` on the box.
+miniflux: `examples/miniflux/RESULTS.md`. Images in `~/hydo-prd/build/img` on the bare-metal machine.
 
 ## Milestone 136: agent images with hydo-agent 0.2.0
 

@@ -2,7 +2,7 @@
 //! them for run.py: `HYDO_BUILD` (default `~/hydo/build`) holds the images, the guest kernel
 //! `bzImage` and `initramfs-kafka.cpio.gz`; the engine is the Rust engine in this process when it
 //! can open the device, otherwise the program `hydo-hvx` (`hydo_engine::hvx::program`, or
-//! `HYDO_HVX_EXPLORE`) started through `~/bin/hvx-run` (or `HYDO_HVX_RUN`, the box's shared
+//! `HYDO_HVX_EXPLORE`) started through `~/bin/hvx-run` (or `HYDO_HVX_RUN`, the bare-metal machine's shared
 //! module lock); the values are the program's `hydo_config::Config` (M144). An agent image (its
 //! `/etc/hydo/control` says `agent`, M121) is run through the host controller
 //! (`hydo_control::agent::AgentEngine`, M126), as `hydo explore` runs one; an agent image the

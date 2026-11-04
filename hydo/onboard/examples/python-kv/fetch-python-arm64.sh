@@ -5,23 +5,24 @@
 # tkinter, turtledemo, ensurepip, lib2to3, pydoc_data, the config dir, the -O/-OO .pyc files),
 # its extension modules, and exactly the shared libraries the loader opens for them
 # (hydo-elfdeps, hydo/crates/hydo-tools), at their /nix/store paths.
-# Needs ssh to a Linux machine with nix that has (or can substitute) the store path:
+# Needs a Linux machine with nix (the build machine, or with HYDO_NIX_MACHINE=bare-metal the
+# bare-metal machine; reached through machines.local.sh, machines.sh at the repository root) that has (or can substitute) the store path:
 #     nix build --max-jobs 0 --system aarch64-linux nixpkgs#python3   (prints the path below)
 # Also copies the SDK (sdk/python/src/hydo_assert, without __pycache__) to files/opt/pykv/.
 # Usage: fetch-python-arm64.sh   (checks the python files against files.sha256; FETCH_WRITE_SUMS=1 rewrites it)
-#   [HYDO_BUILD_HOST=build-machine]
+#   [HYDO_NIX_MACHINE=build|bare-metal]
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../../../.." && pwd)
-HOST=${HYDO_BUILD_HOST:?}
+. "$REPO/machines.sh"; need_nix_machine
 PY=/nix/store/ic0l2ykss28lr7r4by14inb3pqw87yza-python3-3.11.9     # aarch64-linux, nixpkgs#python3
-# hydo-elfdeps (hydo/crates/hydo-tools), built here as a static x86_64 program that runs on $HOST
+# hydo-elfdeps (hydo/crates/hydo-tools), built here as a static x86_64 program that runs on that machine
 (cd "$REPO" && cargo build --release --locked -p hydo-tools --no-default-features --bin hydo-elfdeps --target x86_64-unknown-linux-musl) >&2
 ELFDEPS=$REPO/target/x86_64-unknown-linux-musl/release/hydo-elfdeps
 
-ssh "$HOST" "mkdir -p /tmp/hydo-pyfetch && cat > /tmp/hydo-pyfetch/hydo-elfdeps && chmod 755 /tmp/hydo-pyfetch/hydo-elfdeps" < "$ELFDEPS"
+on_nix_machine "mkdir -p /tmp/hydo-pyfetch && cat > /tmp/hydo-pyfetch/hydo-elfdeps && chmod 755 /tmp/hydo-pyfetch/hydo-elfdeps" < "$ELFDEPS"
 rm -rf "$HERE/files"; mkdir -p "$HERE/files"
-ssh "$HOST" "set -e; P=$PY; L=\$P/lib/python3.11
+on_nix_machine "set -e; P=$PY; L=\$P/lib/python3.11
   [ -e \$P/bin/python3.11 ] || { echo 'missing \$P: nix build --max-jobs 0 --system aarch64-linux nixpkgs#python3' >&2; exit 1; }
   cd /
   { find \${L#/} -mindepth 1 \\( -path '*/test' -o -path '*/idlelib' -o -path '*/tkinter' -o -path '*/turtledemo' \

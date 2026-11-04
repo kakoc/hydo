@@ -398,7 +398,7 @@ scale this is the dominant cost **and a hard feasibility wall**:
   fit.**
 - **This is the one item that needs an L0-side change to confirm:** raising `-m 4096` in
   `run-l1.sh` (host-side, in the shared L0 KVM). The physical host has 31 GB (`CLAUDE.md`), but
-  L1 is a QEMU VM with a subset, and **the box is shared** — a large `-m` must be sized against
+  L1 is a QEMU VM with a subset, and **the build machine is shared** — a large `-m` must be sized against
   the other tenants (never a broad `pkill`; scoped to `l1-hvx`). Flag for the user: **decide the
   L1 RAM budget before landing GB-scale snapshot/branch.** Rough sizing: for a snapshot+branch of
   an `R`-GiB guest + `D`-GiB disk you want L1 ≳ `2*(R+D)` + headroom. For a 3 GiB guest + 4 GiB
@@ -420,7 +420,7 @@ scale this is the dominant cost **and a hard feasibility wall**:
     branch cost tractable without raising L1 much.
 
 **Recommendation:** land Rung 3 with **file-backed snapshot** (or ro-root so only the small data
-disk is snapshotted), and raise L1 `-m` modestly after confirming the shared-box budget with the
+disk is snapshotted), and raise L1 `-m` modestly after confirming the shared build machine's budget with the
 user. Treat COW snapshot as a later optimization.
 
 ---
@@ -482,7 +482,7 @@ risk; both are testable without Linux, so they land and prove first.
 - **L1 RAM ceiling blocks GB-scale snapshot/branch (the L0-side item).** 4 GiB L1 cannot
   double-buffer a multi-GB guest+disk. *Mitigation: ro-root (snapshot only the small data disk)
   and/or file-backed snapshot for the landing; raise `run-l1.sh` `-m` after sizing against the
-  shared box with the user; COW snapshot as the eventual real fix.* **This is the one risk that
+  shared build machine with the user; COW snapshot as the eventual real fix.* **This is the one risk that
   needs an L0-side change to confirm — surface it to the user before R3.5.**
 - **mkfs-at-scale / journal reproducibility.** A rw ext4 journal is a new byte-reproducibility
   surface; one un-pinned byte breaks the whole-disk fingerprint. *Mitigation: ro root + small rw
@@ -507,7 +507,7 @@ risk; both are testable without Linux, so they land and prove first.
 
 - **Needs an L0-side change (decide before R3.5):** the **L1 RAM budget**. `run-l1.sh` launches
   L1 with `-m 4096`; GB-scale snapshot/branch needs more, sized against the **shared** L0 KVM
-  box (never a broad `pkill`; scope to `l1-hvx`). Options if L1 cannot grow: ro-root
+  host, the build machine (never a broad `pkill`; scope to `l1-hvx`). Options if L1 cannot grow: ro-root
   single-copy snapshot, or file-backed snapshot. **This is the single hard external dependency.**
 - **Could block GB-scale determinism (watch items):** (a) the ext4 **journal** on a rw root —
   prefer ro-root + a small rw data disk to sidestep it entirely; (b) any un-pinned **mkfs**

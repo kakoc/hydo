@@ -2,7 +2,7 @@
 
 Stage 1 of `hv/hvx/SMP_PLAN.md`: hand-written guests only, no real Linux SMP, no explorer
 work. Developed on the side-by-side module `hvxsmp.ko` (`/dev/hvxsmp`, built by
-`hv/hvx/smp/build-hvxsmp.sh` in `~/hydo-smp` on the bare-metal test machine). The main `hvx.ko` was
+`hv/hvx/smp/build-hvxsmp.sh` in `~/hydo-smp` on the bare-metal machine). The main `hvx.ko` was
 never touched. `hvxsmp` was unloaded at the end.
 
 ## What was built (`hv/hvx/hvx.c`, `hv/hvx/hvx_abi.h`)
@@ -50,7 +50,7 @@ never touched. `hvxsmp` was unloaded at the end.
 
 ## Tests (`hv/hvx/hvx_sched_*_test.c`, helpers in `hv/hvx/hvx_sched_util.h`)
 
-All on `/dev/hvxsmp`, bare-metal test machine, final module unless noted.
+All on `/dev/hvxsmp`, bare-metal machine, final module unless noted.
 
 - **(a) `hvx_sched_pmu_test` — PASS (6.0 s).** N0 = 150,000,000 and N1 = 50,000,017
   branches: own counts exact, total 200,000,017, 0 overshoots, 3 runs identical. Turn

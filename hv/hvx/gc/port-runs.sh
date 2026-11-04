@@ -1,5 +1,5 @@
 #!/bin/bash
-# M138, on the bare-metal test machine: `hydo run` of schedules on agent images with the engine on
+# M138, on the bare-metal machine: `hydo run` of schedules on agent images with the engine on
 # the side module (HVX_DEV, default /dev/hvxgc), over the serial line and over the host-call port
 # (HYDO_HVX_HOSTCALL=1), each twice from a fresh boot, then `hydo repro --transcript` of the
 # first port run's control transcript. Every VM goes through ~/bin/hvx-run; a stack-sized image

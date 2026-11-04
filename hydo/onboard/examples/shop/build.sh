@@ -2,7 +2,7 @@
 # Build the shop demo (hydo.yaml in this directory): hydo-world (Rust, hydo/crates/hydo-world), the two shop binaries (the
 # planted bug and the fix: src/charge_buggy.go / src/charge_fixed.go, chosen by the Go build tag
 # "fixed"), and the two images build/explore-ob-shop-buggy-disk.img and -fixed-disk.img.
-# Run from the repository root on the build box; needs build/hvx_seedrng built with the pinned
+# Run from the repository root on the build machine; needs build/hvx_seedrng built with the pinned
 # musl gcc (docs/BUILD-PINS.md) or HYDO_SEEDRNG. Pinned Go toolchain, standard library only.
 #   hydo/onboard/examples/shop/build.sh [binaries]     (binaries: stop after the three programs)
 #   SHOP_IMG=<prefix> (default explore-ob-shop) names the images <prefix>-buggy / <prefix>-fixed

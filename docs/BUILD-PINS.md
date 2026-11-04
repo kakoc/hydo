@@ -146,7 +146,7 @@ The build machine is off limits since 2026-10-30, so in Milestone 140 (user's ap
 store paths. Everything below is in the session's own directory `~/hydo-nixb-work` on the bare-metal machine;
 nothing is in a shell profile.
 
-- **Nix:** 2.18.9, single-user, `/nix` owned by `ubuntu` (made with `sudo`), installed with the
+- **Nix:** 2.18.9, single-user, `/nix` owned by the machine's login user (made with `sudo`), installed with the
   official installer (`releases.nixos.org/nix/nix-2.18.9/install`, sha256 `5e887496…`) and
   `--no-daemon --no-modify-profile --no-channel-add`. To use it:
   `. ~/hydo-nixb-work/nixenv.sh` (puts `~/.nix-profile/bin` first on PATH, sets

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build syzkaller with the /dev/hvx description (Milestone 97). Runs on the bare-metal test machine or
+# Build syzkaller with the /dev/hvx description (Milestone 97). Runs on the bare-metal machine or
 # the build machine (it only builds). Output: $SAFETY/syzkaller/bin/{syz-manager,
 # linux_amd64/syz-executor,...}.
 # Pins: syzkaller commit SYZ_COMMIT, Go GO_VERSION (official tarball by sha256, unpacked in

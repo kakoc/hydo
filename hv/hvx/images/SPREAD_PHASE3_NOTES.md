@@ -58,7 +58,7 @@ KNOWN substrate limit (NOT this change; reproduces identically in BOTH modes, so
 issue in `hvx.c` (hydo-16's), which the original Phase-3 never hit (it ran 30). Campaigns are capped at
 nprog<=30 (the proven-clean range).
 
-Reproduce (on the box, L1 up, harness already built into /tmp/hvx-src):
+Reproduce (on the build machine, L1 up, harness already built into /tmp/hvx-src):
 ```
 HVX_SEARCH_MODE=guided bash hv/hvx/run-spread3-search.sh 30 1   # reachability-guided (corpus)
 HVX_SEARCH_MODE=random bash hv/hvx/run-spread3-search.sh 30 1   # blind-random baseline

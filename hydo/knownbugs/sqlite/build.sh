@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build walrace-<v> (static) for SQLite 3.51.2 and 3.51.3 from the official amalgamation
-# zips, pinned by sha256. Run on the bare-metal test machine (Ubuntu 24.04, gcc 13.3.0, static glibc):
+# zips, pinned by sha256. Run on the bare-metal machine (Ubuntu 24.04, gcc 13.3.0, static glibc):
 #   sh hydo/knownbugs/sqlite/build.sh [outdir, default: bin/ next to this script]
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)

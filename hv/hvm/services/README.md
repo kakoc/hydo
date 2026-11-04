@@ -55,7 +55,7 @@ The power cut is the two-boot model of `cut-test.sh` and hvx M27. In boot 1 ever
 Build outputs (`SHA256SUMS`): `Image-svc` `24400b35dbb7be03…`, `redis.cpio.gz` `9d0d7f0a4c922e80…`, `miniflux.cpio.gz` `14c7a1b47f114b86…`, `redis-disk.img` `3bd2539ab11eeae2…`, `pg-disk.img` `81fb3fee1224710…`. A clean rebuild for byte-identity was not checked separately. The inputs are pinned and the packing is fixed: sorted cpio with fixed mtimes, `gzip -n`, and `E2FSPROGS_FAKE_TIME`.
 
 ```sh
-# Linux box, scratch dir:  WORK=$PWD sh <repo>/hv/hvm/services/build.sh;  copy out/* to hv/hvm/services/guest/
+# the build machine (Linux with Nix), scratch dir:  WORK=$PWD sh <repo>/hv/hvm/services/build.sh;  copy out/* to hv/hvm/services/guest/
 # the engine (run.sh runs ../../target/release/hydo-hvm hvm run; the C ./hvm until M147), signed:
 cargo build --release -p hydo-hvm && codesign --force --entitlements hv/hvm/hv.entitlements -s - target/release/hydo-hvm
 cd hv/hvm

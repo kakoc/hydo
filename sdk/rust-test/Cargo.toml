@@ -2,6 +2,7 @@
 name = "hydo-test"
 version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
 rust-version = "1.70"
 description = "hydo's test SDK for Rust: write the test as drivers and checks plus a system() builder; the binary emits hydo's plan (on the host) and runs the drivers and checks (in the guest)"
 publish = false

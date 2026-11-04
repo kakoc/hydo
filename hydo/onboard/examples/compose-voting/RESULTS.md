@@ -63,7 +63,7 @@ edit that moved `result` to port 81 is gone: `vote` and `result` both listen on 
 new import (`network: bridge`, bridge addresses, no port-collision warning).
 
 **Build.** On the bare-metal machine with the Linux release's `hydo build` (no Nix; the build
-box was unavailable). The five amd64 images were fetched again by the digests in
+machine was unavailable). The five amd64 images were fetched again by the digests in
 `fetch-images.sh` with `hydo/onboard/fetch_image.py` (no skopeo on the bare-metal machine or the Mac).
 - `hydo-loopback.yaml` -> `4f6be9f3…`/`87555754…` instead of M84's `5d49ad99…`. The only
   difference is file owners: the release sets every staged file to 0:0, while M84's plain build machine

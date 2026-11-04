@@ -1,5 +1,5 @@
 #!/bin/sh
-# M95 helper for the bare-metal test machine: run-box.sh over a list, two VMs at a time.
+# M95 helper for the bare-metal machine: run-box.sh over a list, two VMs at a time.
 #   batch-box.sh <list>      list lines: <tag>|<image>|<ram-mib>|<schedule>
 # A finished tag (its .out exists) is skipped, so a re-run continues. Pid in $OUT/batch.<list name>.pid.
 set -u

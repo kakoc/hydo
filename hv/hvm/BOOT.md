@@ -16,7 +16,7 @@ It needed **one small guest-kernel change** (a Kconfig option, below) and no roo
 |---|---|
 | `hvm.c` (deleted in M147) | the VMM (~680 lines of C at M48): RAM, generated device tree, GICv2 + 16550 UART + PSCI emulation, exit-count clock, snapshot/branch, fingerprint, spin watchdog. Since M143 the engine is its Rust port, `hydo/crates/hydo-hvm` (`vmm.rs`, `machine.rs`, `fdt.rs`; `hvm_main.rs` is this page's `run`/`print`/`branch`), and in M147 the C was deleted (`git show 145c456:hv/hvm/hvm.c`) |
 | `build.sh` | builds `probe` and ad-hoc signs it with the hypervisor entitlement (until M147 also `hvm`) |
-| `linux/build-guest.sh` | builds the guest on a Linux box with nix: kernel `Image`, `initramfs.cpio.gz`, `initramfs-spin.cpio.gz`. Byte-reproducible (checked with a clean rebuild in a fresh directory) |
+| `linux/build-guest.sh` | builds the guest on the build machine (Linux with nix): kernel `Image`, `initramfs.cpio.gz`, `initramfs-spin.cpio.gz`. Byte-reproducible (checked with a clean rebuild in a fresh directory) |
 | `linux/apply-cntpct.py`, `linux/force-cntpct.patch` | the kernel change (script, and the resulting diff for reading) |
 | `linux/hvm.config` | the kernel configuration, applied on top of `allnoconfig` |
 | `linux/init`, `linux/cntvct.c`, `linux/spinwait.c` | the initramfs `/init`; a user program that reads the virtual counter directly; the spin-wait demonstration |

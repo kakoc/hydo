@@ -13,7 +13,7 @@ exactness, and added an opt-in burst turn mode so that dense switching is afford
 average.
 
 Developed on a side-by-side module `hvxft.ko` (`/dev/hvxft`, built by
-`hv/hvx/fastturn/build-hvxft.sh` in `~/hydo-ft` on the bare-metal test machine). The main `hvx.ko` was
+`hv/hvx/fastturn/build-hvxft.sh` in `~/hydo-ft` on the bare-metal machine). The main `hvx.ko` was
 not touched or reloaded. The side module was unloaded at the end.
 
 ## 1. Where a turn end's time goes
@@ -26,7 +26,7 @@ into its parts with the host TSC, count landing steps, and record the PMU overfl
 loop of N branches each in turns of Q branches and prints the breakdown.
 
 Breakdown per turn end, before any change, Q = 1,000, the tightest loop (`dec rcx; jnz`,
-2 instructions per branch), box under load (other sessions' VMs), host cycles at 3.8 GHz:
+2 instructions per branch), the bare-metal machine under load (other sessions' VMs), host cycles at 3.8 GHz:
 
 | part | cycles | µs |
 |---|---|---|
@@ -189,15 +189,15 @@ All on `/dev/hvxft` with the final module.
   candidates as documented. A small `explore.py --vcpus 2 --turns --bursts --turn-margin 160`
   run through the serve workers (`hv/hvx/fastturn/explore_dev.py`, removed in M108) was started but stopped by
   hand: one worker died at start-up without a message and the other was still writing its
-  S0/S1 snapshots after 15 minutes while the box's disk was saturated by seven other
+  S0/S1 snapshots after 15 minutes while the bare-metal machine's disk was saturated by seven other
   explorers. So **serve mode (restore from S1, then `qb=`) was not checked**; only `one`.
 
 ## 5. Before and after
 
-The box was shared throughout. The numbers marked *quiet* were taken while the other
+The bare-metal machine was shared throughout. The numbers marked *quiet* were taken while the other
 session's agents (`~/hydo-asw`, `~/hydo-pf`) held back (`/var/tmp/hydo-QUIET`,
 `hv/hvx/fastturn/quiet.sh`), but two VMs of a third session and a native 3-thread workload kept
-running (load average about 8 on the 4-core, 8-thread box), so even the quiet numbers vary
+running (load average about 8 on the 4-core, 8-thread bare-metal machine), so even the quiet numbers vary
 by about 10–15%. Everything else was measured under heavier load (load 10–29).
 
 **Per turn end, hand-written loop, Q = 1,000** (`ft_cost`, µs per turn end, two vCPUs,
@@ -273,4 +273,4 @@ side 1.24 / 0.86 s (default turns: most turns end at HLT; the landings are ticks
 `qm=`), `hydo/explore/explore.py` (`--bursts`, `--turn-margin`), `hydo/explore/hvm_backend.py`
 (drops `qb` on the Mac), `hydo/explore/bursts_ident.py`, and `hv/hvx/fastturn/`:
 `build-hvxft.sh`, `Makefile.hvxft`, `ft_cost.c`, `ab.sh`, `stage1.sh`, `meas.sh`, `meas2.sh`,
-`quiet.sh`, `waitdone.sh`. Box results: `/var/tmp/fastturn`.
+`quiet.sh`, `waitdone.sh`. Results on the bare-metal machine: `/var/tmp/fastturn`.

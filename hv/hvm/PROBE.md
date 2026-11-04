@@ -59,4 +59,4 @@ The framework gives us almost everything hvx's model needs. Exits are determinis
 - kpc host counters (needs root).
 - EL0 (user mode) behaviour of the trapped `CNTPCT` read, and the guest-kernel counter patch.
 - M3/M4 machines (guest EL2, emulated PMU, guest `CNTHCTL_EL2`).
-- Exit latency comparison with hvx on the bare-metal test machine, which was not measured here.
+- Exit latency comparison with hvx on the bare-metal machine, which was not measured here.

@@ -15,7 +15,7 @@
 #     -> <out dir>/explore-ob-stack-old-disk.img, <out dir>/explore-ob-stack-fix-disk.img
 #   TWICE=1   build each image a second time and compare the bytes (the second copy is deleted)
 #
-# Prerequisites (an x86_64 Linux machine; Milestone 140's setup of the bare-metal test machine):
+# Prerequisites (an x86_64 Linux machine; Milestone 140's setup of the bare-metal machine):
 #   - HYDO_PREFIX: an installed Linux release (hydo/dist/linux; its guest/, tools/, libexec/ are
 #     used, its bin/hydo is replaced by this tree's target/release/hydo, built with
 #     `cargo build --release -p hydo-cli`); default ~/hydo-rf-work/prefix-rf

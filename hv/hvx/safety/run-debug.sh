@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Boot the debug test kernel in a QEMU/KVM VM with nested VMX, load hvx.ko, run the module
 # tests and short real-Linux boots under hvx, and report every KASAN / UBSAN / lockdep /
-# kmemleak / BUG / WARNING splat (Milestone 97). Runs ON THE BUILD MACHINE BUILD BOX after
-# build-kernel.sh and build-debug.sh. Never on the bare-metal test machine (KVM there would turn VMX
+# kmemleak / BUG / WARNING splat (Milestone 97). Runs ON THE BUILD MACHINE after
+# build-kernel.sh and build-debug.sh. Never on the bare-metal machine (KVM there would turn VMX
 # on next to the shared hvx module).
 #   run-debug.sh [test,test,...]     default: every test in the initramfs
 # Env: VM_MEM (MiB, default 6144: hvx_bigram_test needs a 3 GiB guest), VM_CPUS (2),

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build the service guests for the Mac VMM (hydo-hvm) on a Linux box with nix (the build machine):
+# Build the service guests for the Mac VMM (hydo-hvm) on a Linux machine with nix (the build machine):
 #   - Image-svc:            the M48 kernel (Linux 6.6.35 + FORCE_CNTPCT) with ../linux/hvm.config +
 #                           ../linux/hvm-virtio.config (virtio-mmio disk/net, ext4) + svc.config
 #   - redis.cpio.gz:        busybox + redis 7.2.4 (aarch64 nixpkgs, only the files the loader opens)

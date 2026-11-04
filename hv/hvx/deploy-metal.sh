@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# deploy-metal.sh -- regression runner for the dedicated bare-metal test machine (run FROM THE MAC).
+# deploy-metal.sh -- regression runner for the dedicated bare-metal machine (run FROM THE MAC).
 # hvx runs directly on that host (no nested L1), so this replaces deploy-hvx.sh there.
 #
 #   ./deploy-metal.sh              sync userspace sources and the Rust workspace, compile them on
-#                                  the box, run the hand-written suite + the boot verifies + the
+#                                  the bare-metal machine, run the hand-written suite + the boot verifies + the
 #                                  two pinned reproducers (agent images of the stack example, M145:
 #                                  `hydo run`, the host controller over the Rust engine) against
 #                                  the module that is ALREADY loaded, print PASS/FAIL per baseline
@@ -16,16 +16,17 @@
 #
 # Every command that opens /dev/hvx runs under ~/bin/hvx-run (shared flock), so a concurrent
 # module reload waits for running VMs instead of killing them. Guest images are expected in
-# ~/hydo/build on the box (built on the build machine, shipped with rsync); the pinned reproducers'
+# ~/hydo/build on the bare-metal machine (built on the build machine, shipped with rsync); the pinned reproducers'
 # images in ~/hydo/build/m145 (hydo/onboard/examples/stack/build-reproducers.sh). The run engine
-# and `hydo` are built with the box's Rust (~/hydo-rust/env.sh) in ~/$HVX_METAL_TREE (cargo build
+# and `hydo` are built with the bare-metal machine's Rust (~/hydo-rust/env.sh) in ~/$HVX_METAL_TREE (cargo build
 # --release -p hydo-hvx -p hydo-cli).
-# Env: HVX_METAL (the bare-metal machine); HVX_METAL_TREE, the repository's directory in the box's home
+# The bare-metal machine is reached through machines.local.sh (machines.sh at the repository root).
+# Env: HVX_METAL_TREE, the repository's directory in the bare-metal machine's home
 # (default hydo, the main tree; another session's own tree, e.g. hydo-layout, for a run that must
-# not touch the main tree). The engine sources go to ~/$HVX_METAL_TREE/hv/hvx on the box.
+# not touch the main tree). The engine sources go to ~/$HVX_METAL_TREE/hv/hvx on the bare-metal machine.
 set -euo pipefail
 
-BOX="${HVX_METAL:?}"
+. "$(cd "$(dirname "$0")/../.." && pwd)/machines.sh"; need_bare_metal; BOX="$BARE_METAL"
 TREE="${HVX_METAL_TREE:-hydo}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 LOAD=0; FLAG=0
@@ -47,17 +48,17 @@ HARNESSES="hvx_boot_verify hvx_disk_boot_verify hvx_smp_boot_verify hvx_bug_veri
 hvx_rootfs_verify hvx_system_verify hvx_jvm_verify hvx_kafka_verify hvx_mysql_verify"
 
 # Explicit file list: userspace sources only. hvx.c/hvx_abi.h go over only with `load`,
-# so a plain run never overwrites a newer module source that is being worked on on the box.
+# so a plain run never overwrites a newer module source that is being worked on on the bare-metal machine.
 FILES="hvx_boot.h hvx_sched_util.h"
 for t in $TESTS $SMPTESTS $HARNESSES; do FILES="$FILES $t.c"; done
 [ $LOAD = 1 ] && FILES="$FILES hvx.c hvx_abi.h Makefile"
-echo ">> syncing to $BOX:$TREE/hv/hvx/ ($([ $LOAD = 1 ] && echo 'with' || echo 'without') module sources) and the Rust workspace"
-ssh -o BatchMode=yes "$BOX" "mkdir -p $TREE/hv/hvx"
+echo ">> syncing to ~/$TREE/hv/hvx/ on the bare-metal machine ($([ $LOAD = 1 ] && echo 'with' || echo 'without') module sources) and the Rust workspace"
+on_bare_metal "mkdir -p $TREE/hv/hvx"
 (cd "$HERE" && rsync -az $FILES "$BOX:$TREE/hv/hvx/")
 # the run engine's sources (the Rust workspace's crates; never hvx.c or hvx_abi.h)
 (cd "$HERE/../.." && rsync -azR --exclude target Cargo.toml Cargo.lock rust-toolchain.toml .cargo hydo/crates "$BOX:$TREE/")
 
-ssh -o BatchMode=yes "$BOX" "TREE=$TREE LOAD=$LOAD FLAG=$FLAG TESTS='$TESTS' SMPTESTS='$SMPTESTS' HARNESSES='$HARNESSES' bash -s" <<'REMOTE'
+on_bare_metal "TREE=$TREE LOAD=$LOAD FLAG=$FLAG TESTS='$TESTS' SMPTESTS='$SMPTESTS' HARNESSES='$HARNESSES' bash -s" <<'REMOTE'
 set -u
 cd ~/$TREE/hv/hvx
 B=~/hydo/build

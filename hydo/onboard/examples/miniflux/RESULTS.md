@@ -1,10 +1,10 @@
-# miniflux end to end — results (2026-10-18/19, bare-metal test machine)
+# miniflux end to end — results (2026-10-18/19, bare-metal machine)
 
 The first project onboarded that we did not write: miniflux v2.3.3 (a Go RSS reader) on
 PostgreSQL 15.6. The manifest is the one the `hydo-onboard` skill produced in its dry run
 (`.claude/skills/hydo-onboard/example-miniflux.yaml`); the only change is `src: miniflux`
 (the binary is copied next to the manifest by `build.sh`). Results under
-`/var/tmp/m48-miniflux` on the box.
+`/var/tmp/m48-miniflux` on the bare-metal machine.
 
 **Build.** `git clone --depth 1 --branch v2.3.3 https://github.com/miniflux/v2.git`, then
 `CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS=-mod=readonly go build -trimpath -buildvcs=false
@@ -101,7 +101,7 @@ table: `docs/REBASELINE.md` section 7.1.
 ## With the store readers in Rust (2026-10-31, M112)
 
 `hydo-read.yaml` (M88: the PostgreSQL loops replaced by `hydo-check`) with the Rust `hydo-read`
-(`hydo/crates/hydo-read`, `64452374…`), built on the bare-metal test machine: image `162da151…`.
+(`hydo/crates/hydo-read`, `64452374…`), built on the bare-metal machine: image `162da151…`.
 The image cannot be the M88 build's bytes with only the binary swapped, because a root without
 `root.size_mib` is sized from `du -sm` of the staged tree and that depends on the host's file
 system, so the Go binary was built into a new image on the same machine too (`303199af…`). Every

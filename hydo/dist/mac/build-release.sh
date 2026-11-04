@@ -17,8 +17,9 @@
 #     hydo-nix-fetch (hydo/crates/hydo-tools; it checks every archive's hash), so no Linux machine
 #     is needed for them;
 #   - busybox, mke2fs, the applet list, the tc closure and the Redis example's files: the
-#     aarch64-linux nixpkgs store paths below, copied over ssh from $HYDO_BUILD_HOST (a Linux
-#     machine with nix; default the build machine).
+#     aarch64-linux nixpkgs store paths below, copied from a Linux machine with nix: the build
+#     machine, or with HYDO_NIX_MACHINE=bare-metal the bare-metal machine, reached through
+#     machines.local.sh (machines.sh at the repository root).
 # Built from this tree on every run, with the workspace's pinned Rust toolchain: bin/hydo,
 # bin/hydo-build, bin/hydo-fetch-image and bin/hydo-hvm (aarch64-apple-darwin, or taken from
 # $HYDO_RUST_BIN_DIR), guest/hydo-agent (hydo-build checks its pinned sha256), guest/hydo-world
@@ -35,7 +36,7 @@ OUTDIR=${1:-$D/out}
 mkdir -p "$OUTDIR"
 OUTDIR=$(cd "$OUTDIR" && pwd)
 A=$D/assets
-HOST=${HYDO_BUILD_HOST:?}
+HYDO_REPO=$TOP; . "$TOP/machines.sh"   # the machine with the store paths (only to fetch assets)
 BUSYBOX=/nix/store/zbc5fx2yszji1a4aw2ff46m0p99c6yxb-busybox-static-aarch64-unknown-linux-musl-1.36.1/bin/busybox
 MKE2FS=/nix/store/gnavnl9lh7lwi3kzvf0rzlw3zzplg32i-e2fsprogs-static-aarch64-unknown-linux-musl-1.47.0-bin/bin/mke2fs
 LISTER=/nix/store/ahw5fkq085k5ppdsylyd475xlxb18pz1-busybox-static-x86_64-unknown-linux-musl-1.37.0/bin/busybox
@@ -53,8 +54,9 @@ mkdir -p "$A"
 fetch() {   # fetch <remote path> <local name>
   [ -f "$A/$2" ] && return 0
   mkdir -p "$(dirname "$A/$2")"
-  echo "fetching $2 from $HOST"
-  scp -q "$HOST:$1" "$A/$2"
+  need_nix_machine
+  echo "fetching $2 from the machine with the Nix store paths"
+  rsync -q -L "$NIX_MACHINE:$1" "$A/$2"
 }
 
 # --- 1. assets ---
@@ -79,22 +81,24 @@ if [ ! -f "$A/ledger-spin/spin_load" ]; then
 fi
 fetch "$MKE2FS" mke2fs
 # the applet set the Linux build of hydo-build --arch arm64 links (the x86 build of busybox's --list)
-[ -f "$A/busybox-applets.txt" ] || ssh "$HOST" "$LISTER --list" > "$A/busybox-applets.txt"
+[ -f "$A/busybox-applets.txt" ] || { need_nix_machine; on_nix_machine "$LISTER --list"; } > "$A/busybox-applets.txt"
 if [ ! -d "$A/redis" ]; then   # tar keeps the libraries' symlinks, as hydo-build's copy does on Linux
   mkdir -p "$A/redis"
   srcs=$(sed -n 's/.*{src: \/\(nix\/store\/[^,]*\), dst:.*/\1/p' "$REDIS_MANIFEST" | tr '\n' ' ')
-  echo "fetching the Redis example's files from $HOST"
-  ssh "$HOST" "cd / && tar cf - $srcs" | ( cd "$A/redis" && tar xf - )
+  need_nix_machine
+  echo "fetching the Redis example's files from the machine with the Nix store paths"
+  on_nix_machine "cd / && tar cf - $srcs" | ( cd "$A/redis" && tar xf - )
   find "$A/redis" -type d -exec chmod u+w {} +   # files keep the store's read-only modes, as on Linux
 fi
-if [ ! -d "$A/tc" ]; then   # tc and every file its loader opens (hydo-elfdeps, hydo/crates/hydo-tools, on $HOST)
-  # a static x86_64 build (rust-lld, .cargo/config.toml), so $HOST needs nothing but /nix/store
+if [ ! -d "$A/tc" ]; then   # tc and every file its loader opens (hydo-elfdeps, hydo/crates/hydo-tools, on that machine)
+  # a static x86_64 build (rust-lld, .cargo/config.toml), so that machine needs nothing but /nix/store
   ( cd "$TOP" && cargo build --release --locked -p hydo-tools --no-default-features --bin hydo-elfdeps --target x86_64-unknown-linux-musl ) >&2
-  scp -q "$TOP/target/x86_64-unknown-linux-musl/release/hydo-elfdeps" "$HOST:/dev/shm/hydo-elfdeps"
-  ssh "$HOST" "chmod 755 /dev/shm/hydo-elfdeps && /dev/shm/hydo-elfdeps $TC" > "$A/tc-closure.txt"
+  need_nix_machine
+  rsync -q "$TOP/target/x86_64-unknown-linux-musl/release/hydo-elfdeps" "$NIX_MACHINE:/dev/shm/hydo-elfdeps"
+  on_nix_machine "chmod 755 /dev/shm/hydo-elfdeps && /dev/shm/hydo-elfdeps $TC" > "$A/tc-closure.txt"
   echo "$TC" >> "$A/tc-closure.txt"
   mkdir -p "$A/tc"
-  ssh "$HOST" "cd / && tar cf - $(sed 's#^/##' "$A/tc-closure.txt" | tr '\n' ' ')" | ( cd "$A/tc" && tar xf - )
+  on_nix_machine "cd / && tar cf - $(sed 's#^/##' "$A/tc-closure.txt" | tr '\n' ' ')" | ( cd "$A/tc" && tar xf - )
   find "$A/tc" -type d -exec chmod u+w {} +
 fi
 if [ ! -d "$A/netns" ]; then   # ip, the iptables files and every file their loader opens, from the public cache

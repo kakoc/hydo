@@ -887,7 +887,7 @@ up 1 node, 2 CPUs". New values only (the old image was not run on 2 vCPUs for th
 With the Kafka kill at order 10 above, all eight scenarios of 7.2 now have 2-vCPU values. No verdict
 differs in kind from 1 vCPU; the only detail that moved is the MySQL-relaxed first pass (22 instead of
 24 orders acknowledged before the retry). Raw results: `/var/tmp/pf-smp/<tag>.{log,console,done}` on the
-box (tags `k-mysql10`, `k-kafka20`, `k-redis10`, `n-mysql`, `n-redis`, `n-kafka`, `relaxed1`, `relaxed2`),
+bare-metal machine (tags `k-mysql10`, `k-kafka20`, `k-redis10`, `n-mysql`, `n-redis`, `n-kafka`, `relaxed1`, `relaxed2`),
 runner `~/hydo-pf/pf-smp.sh`.
 
 **Verdict changes.** None in kind. F2 names order 8 instead of order 2, the same kind of shift as the
@@ -942,9 +942,8 @@ invariants' verdict line (and, on the Mac, the history checks' verdict where the
   (etcd and its tools from Nix), the shop (its two programs built with Nix's Go), the gRPC stack
   (the order service with franz-go v1.22.2, which `stack-grpc/build.sh` takes from `hydo/stack`
   since M135, and the stack's closures), the generated-driver stack (the stack's closures and the
-  generated folder), rust-kv's x86_64 build, avx2 (`hydoavx` from Nix's gcc), redis-oci and
-  restate-oci (their OCI layouts; `hydo-fetch-image` could fetch them, not tried), and the
-  workflow engine (the user's project).
+  generated folder), rust-kv's x86_64 build, avx2 (`hydoavx` from Nix's gcc), redis-oci
+  and restate-oci (their OCI layouts; `hydo-fetch-image` could fetch them, not tried).
 
 ### 8.1 Mac (hvm), every recorded schedule twice
 
@@ -1119,7 +1118,7 @@ buggy build and passes on the fixed one.
 
 ### 8.2 x86_64 (hvx), every recorded schedule twice
 
-128 schedules on 38 images (`hydo-bench list --repeat 2 --workers 1`; a pool boots each image with
+126 schedules on 37 images (`hydo-bench list --repeat 2 --workers 1`; a pool boots each image with
 its manifest's `guest.ram_mib` and `guest.cpu`, which hydo-bench learned in M136), all twice
 identical. Results on the bare-metal machine: `/var/tmp/m136/list/<name>/` (`<image>.jsonl` with `fp` and `fp2`,
 consoles and control transcripts). The verdicts are the shell images' of sections 4 and 7 and of
@@ -1128,7 +1127,7 @@ violates order 11 on the old order service and passes on the fixed one, every 7.
 7.1's verdict and order, the shop's planted bug and the gRPC stack's planted duplicate are found,
 etcd 3.5.5 shows 14685's revision split at `C=30` and its history check flags the second
 symptom, 3.5.6 passes both; `compose-voting/hydo.generated.yaml` ends in ERROR by design (its
-invariants are the importer's TODOs). One verdict differs from earlier recordings, by timing:
+invariants are the importer's TODOs).
 
 
 #### redis (`redis_hydo`)
@@ -1307,10 +1306,6 @@ invariants are the importer's TODOs). One verdict differs from earlier recording
 | `disk=none dseed=1 \| run` | OK checks=1 held (etcd.kv_linearizable: 183 operations on 90 keys linearizable) | `f9142657ac4708ac` | yes |
 | `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | OK checks=1 held (etcd.kv_linearizable: 187 operations on 90 keys linearizable) | `55e6b1dda9a9b14e` | yes |
 
-
-| schedule | verdict | fingerprint | twice |
-|---|---|---|---|
-
 #### voting (`compose-voting_hydo`)
 
 | schedule | verdict | fingerprint | twice |
@@ -1468,7 +1463,6 @@ are not agent images and keep every value of sections 1–7.
 M136 patched from recorded shell images (etcd and its `-hc` images, the shop, the gRPC stack, the
 generated-driver stack, rust-kv, avx2, redis-oci, restate-oci) were built for real on the bare-metal machine
 with Nix installed there (docs/BUILD-PINS.md "Nix on the bare-metal machine").
-user's workflow engine is still patched (its sources are not in this repository).
 
 ### 9.1 Mac (hvm), every recorded schedule twice
 
@@ -1752,18 +1746,15 @@ Initramfs sha256 prefixes (two builds byte-identical each, initramfs and data di
 
 126 schedules on 37 images (`hydo-bench list --repeat 2` on the bare-metal machine: one boot per image under
 lock-step control, every schedule twice from S1; the host-call port on, the engine's default since
-M140; the main module `B5E97B37504F1A5F508BA30`), 128 twice identical. Redis's `disk=none | run`
+M140; the main module `B5E97B37504F1A5F508BA30`), 126 twice identical. Redis's `disk=none | run`
 from a fresh boot with `hydo run` gives the S1 value `e7de012271d99d0a`. Every image was built for
 real with hydo-agent 0.3.0 (x86_64 `398f297e…`), each twice with the same bytes (docs/HISTORY.md
-"Milestone 140, part B" lists the hashes and how each compares with M136's image), except the
-workflow engine (an outside project), which was patched from its recorded image
-twice with the same bytes. 114 of 128 verdict lines are word for word the M136 ones; 14 differ
-(listed at the end): 11 in timing words only (retransmission counts, times, revisions, which
-service's restart failed first under I/O errors, which acknowledged ids a cut lost), and 3 in
+"Milestone 140, part B" lists the hashes and how each compares with M136's image). 113 of 126
+verdict lines are word for word the M136 ones; 13 differ (listed at the end): 11 in timing words only (retransmission counts, times, revisions, which
+service's restart failed first under I/O errors, which acknowledged ids a cut lost), and 2 in
 their verdict class, each also with the port off (`HYDO_HVX_HOSTCALL=0`, so the new agent's timing
 moved them, not the port): etcd-hc-3.5.5's `K=etcd1@10+1 P=etcd3@26+1` (VIOLATION in M136, OK now;
-M78's schedule is known to be timing-fragile on the `-hc` images, open item 20), the workflow
-engine's freeze point (OK in M136, VIOLATION now), and miniflux's `P=postgres@10~50:4000` (OK in
+M78's schedule is known to be timing-fragile on the `-hc` images, open item 20), and miniflux's `P=postgres@10~50:4000` (OK in
 M136, VIOLATION `api.reads_acked_categories` now).
 
 
@@ -1942,10 +1933,6 @@ M136, VIOLATION `api.reads_acked_categories` now).
 |---|---|---|---|
 | `disk=none dseed=1 \| run` | OK checks=1 held (etcd.kv_linearizable: 183 operations on 90 keys linearizable) | `fe88a223de851b5a` | yes |
 | `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | OK checks=1 held (etcd.kv_linearizable: 189 operations on 90 keys linearizable) | `3c036a3f62a06536` | yes |
-
-
-| schedule | verdict | fingerprint | twice |
-|---|---|---|---|
 
 #### voting (`compose-voting_hydo`)
 

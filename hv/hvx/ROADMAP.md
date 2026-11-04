@@ -78,7 +78,7 @@ catches a real bug. The full timeline is in `CLAUDE.md`; the summary:
 | **VMX bring-up** | M1–M3 | Own VMCS, EPT, `/dev/hvx` userspace device (a mini-KVM ioctl API) |
 | **Determinism engine** | M4–M9 | Deterministic RDTSC, the MTF instruction clock, instruction-clock TSC, snapshot / branch / replay, the canonical fingerprint + four-check verify harness |
 | **Real-Linux road** | M10–M16 | PIO/serial console, 256 MiB RAM, deterministic CPUID/MSR, sregs persistence, and finally a real Linux 6.6.35 kernel booting to the busybox shell **bit-for-bit deterministically** (`640ece2f900fe5b3`), branch-from-snapshot included |
-| **Fast clock** | M17 | **BLOCKED by hardware** — the L0 CPU is a hybrid i7-13700HX and KVM hardcodes guest-PMU-off on hybrid silicon; no vPMU in L1, so no fast instruction clock on this box (not a config toggle) |
+| **Fast clock** | M17 | **BLOCKED by hardware** — the L0 CPU is a hybrid i7-13700HX and KVM hardcodes guest-PMU-off on hybrid silicon; no vPMU in L1, so no fast instruction clock on the build machine (not a config toggle) |
 | **Interactivity + SMP** | M18–M19 | Serial input (interactive shell), deterministic multi-vCPU via an MTF instruction-quantum round-robin |
 | **Devices** | M20–M21, M23 | Deterministic virtio-blk disk over MSI-X (real Linux reads `/dev/vda`); deterministic virtio-net (real Linux answers a scripted ARP) |
 | **Fault injection** | M22, M24 | Seeded, deterministic disk faults and network faults |
@@ -303,11 +303,11 @@ rung above is designed around them.
   any byte of build drift moves the fingerprint. The discipline — pinned toolchain store paths
   (busybox, musl), fixed mtimes, sorted names, `gzip -n`, and (from Rung 1) pinned mkfs
   UUID/timestamps — must extend to every new binary and rootfs. This has already bitten twice
-  (the busybox store-path pin drifted as the shared box's nix store churned), so treat it as
+  (the busybox store-path pin drifted as the shared build machine's nix store churned), so treat it as
   recurring maintenance, not a one-time setup.
 - **The nested-L1 safety model is absolute.** All hvx work happens inside a throwaway nested
   L1 (L0 = host, never touched; L1 = our root VM; L2 = the guest). We have no host root, so
-  this is enforced by construction: never `insmod`/`sudo` on the host. The box is **shared**
+  this is enforced by construction: never `insmod`/`sudo` on the host. The build machine is **shared**
   with unrelated `qemu-system` TCG jobs — **scoped kills only** (`pkill -f l1-hvx`, never a
   broad `pkill qemu-system`). Restart L1 on any wedge via `run-l1.sh`. For these
   userspace-heavy rungs, expect **boot-to-a-wall / decode-the-fault / fix-the-rootfs**

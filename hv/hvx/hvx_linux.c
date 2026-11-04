@@ -37,7 +37,7 @@
  *     string (C escapes \n \r \t \\ are honoured); once the "~ #" prompt appears
  *     the string is fed once, and the loader watches for HVX_EXPECT (default
  *     "hydo-interactive") in the console to declare the command ran. This is used
- *     for the end-to-end demo because a live TTY over the double-ssh hop is
+ *     for the end-to-end demo because a live TTY over two nested remote shells is
  *     unreliable; live typing is the same HVX_PUT_INPUT code path.
  *
  * STATUS: WORKING as of M14 (first real Linux serial output), M15 (boots to the

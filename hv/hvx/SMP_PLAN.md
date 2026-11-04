@@ -94,7 +94,7 @@ behaviour sits behind an opt-in flag plus `n_vcpus > 1`.
 
 - **AP start-up.** Recommended: standard INIT then SIPI, as KVM does. It needs the
   "unrestricted guest" control and real-mode segment set-up in `setup_vmcs`, with the IA-32e
-  entry control derived from the guest's EFER; the Xeon box supports it. The alternative, the
+  entry control derived from the guest's EFER; the bare-metal machine's Xeon supports it. The alternative, the
   ACPI multiprocessor wake-up mailbox, keeps the CPUs in 64-bit mode but means turning ACPI
   on (the guests run `acpi=off`) and polling a mailbox in RAM, and its availability outside TDX
   in Linux 6.6 is unconfirmed.

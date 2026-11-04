@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# F0 native sanity (on L0/the box, NOT under hvx): TWO spread fs-backend brokers sharing ONE
+# F0 native sanity (on L0/the build machine, NOT under hvx): TWO spread fs-backend brokers sharing ONE
 # data-dir, driven by the FULL mini-Jepsen op-program runner (spread-drv, no args -> runProgram).
 # Confirms fs multi-broker sharing + the consistency oracle end-to-end before the VM build. The
 # crash op X is OMITTED here (it needs root-owned /b<i>.pid, exercised in-guest where /init is

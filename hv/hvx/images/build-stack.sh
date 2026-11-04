@@ -6,7 +6,7 @@
 # snapshot); MySQL's datadir, Kafka's log.dirs and Redis's AOF share one small
 # journaled-ext4 rw disk (p2 = the fault target). The switch_root initramfs is the
 # generic build/initramfs-kafka.cpio.gz. The prelude (sections 1-5) is build-kafka.sh's.
-# Run on the build box:  ./dev.sh "bash hv/hvx/images/build-stack.sh"  (the first run downloads the
+# Run on the build machine:  ./dev.sh "bash hv/hvx/images/build-stack.sh"  (the first run downloads the
 # Go modules pinned by hydo/stack/go.sum into build/stack-gomod).
 set -euo pipefail
 cd "$(dirname "$0")/../../.."   # M100: this script lives in hv/hvx/images; every path below is relative to the repository root
@@ -87,7 +87,7 @@ fi
 [ -x "$FAKETIME_BIN" ] || { echo "error: faketime not found (set HYDO_FAKETIME)" >&2; exit 1; }
 FAKE_TS="2020-09-13 16:26:40"
 # libfaketime reads FAKE_TS in the local time zone; it is 1600000000 only in UTC+4, the zone of the
-# Nix build box (UTC+4) that made every recorded image. FAKE_TZ (POSIX notation for UTC+4)
+# Nix build machine that made every recorded image. FAKE_TZ (POSIX notation for UTC+4)
 # is set on every faketime call, so a build in another zone gets the same bytes.
 FAKE_TZ=UTC-4
 

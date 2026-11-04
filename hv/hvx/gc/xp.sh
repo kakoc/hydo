@@ -1,5 +1,5 @@
 #!/bin/bash
-# M138, on the bare-metal test machine: one exploration with this tree's explorer, the engine in
+# M138, on the bare-metal machine: one exploration with this tree's explorer, the engine in
 # the explorer's process on the side module (HVX_DEV, default /dev/hvxgc), the whole explorer
 # under ~/bin/hvx-run sudo. Extra NAME=value words before `--` go into the environment (for
 # example HYDO_HVX_REUSE=1).

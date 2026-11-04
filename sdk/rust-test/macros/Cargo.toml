@@ -2,6 +2,7 @@
 name = "hydo-test-macros"
 version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
 rust-version = "1.70"
 description = "#[hydo_test::driver] and #[hydo_test::check] (no dependencies: the attribute is parsed by hand)"
 publish = false

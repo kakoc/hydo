@@ -15,7 +15,7 @@ ioctl interface and of the device models a guest program drives. Everything live
 | prove a fix inert | the bare-metal machine, side module `/dev/hvxsafe` | real hardware, recorded fingerprints |
 
 Never start a KVM guest on the bare-metal machine. Boot it into a debug kernel only with the
-user's approval, and only by the on-box method below (Milestone 140). On the
+user's approval, and only by the method that runs on the bare-metal machine below (Milestone 140). On the
 build machine, check `free -m` first: the VM steps refuse to start unless enough memory is
 available (`campaign.sh` waits up to `WAIT_MIN` minutes and stops its VMs if available memory
 falls below `MEM_FLOOR`), because other people's jobs share that host.
@@ -36,7 +36,7 @@ bytes.
 ```
 safety.sh build          # on the bare-metal machine: kernel, bundles "debug" (this tree's hvx.c)
                          # and "debug-orig" (main's hvx.c), syzkaller, fuzzing image
-safety.sh push           # box -> Mac -> build machine
+safety.sh push           # bare-metal machine -> Mac -> build machine
 safety.sh debug          # boot it, run every test, print PASS/SKIP/FAIL and every splat
 safety.sh debug hvx_repro_txlen,hvx_virtio_pci_test     # a subset
 ```
@@ -127,11 +127,11 @@ the user's approval.
   it the default.
 - **Why kexec and not `grub-reboot`.** `/boot` is on md RAID (md2), and GRUB cannot write its
   environment block there (the generated `grub.cfg` says "GRUB lacks write support for diskfilter").
-  `grub-reboot` relies on GRUB clearing `next_entry` with `save_env` at boot; on this box that write
+  `grub-reboot` relies on GRUB clearing `next_entry` with `save_env` at boot; on this machine that write
   fails, so the entry would be booted on every reboot, and a hang would never fall back. `kexec`
   starts the debug kernel from the running one without GRUB; every later reboot (a plain one, a
   panic, which reboots after 30 s because of `panic=30`, a soft lockup through `softlockup_panic=1`,
-  or the provider's panel after a hang) goes through the firmware and GRUB's saved default. Ubuntu
+  or a power cycle by the machine's owner after a hang) goes through the firmware and GRUB's saved default. Ubuntu
   24.04's kexec-tools does not take over normal reboots (no `LOAD_KEXEC`, no init script).
 - **GRUB's default.** The bare-metal machine had a newer Ubuntu kernel installed but never booted (6.8.0-147, which
   `/boot/vmlinuz` and GRUB's entry 0 pointed at), so a plain reboot would not have returned to the

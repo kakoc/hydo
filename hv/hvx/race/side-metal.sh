@@ -1,5 +1,5 @@
 #!/bin/bash
-# The hand-written suite + both boot verifies of hv/hvx/deploy-metal.sh, run on the box against
+# The hand-written suite + both boot verifies of hv/hvx/deploy-metal.sh, run on the bare-metal machine against
 # a side-by-side module (default /dev/hvxpre) through the devshim LD_PRELOAD. Sources from
 # the tree this script is in; the main hvx.ko and ~/hydo are not touched.
 set -u

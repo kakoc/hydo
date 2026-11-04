@@ -6,7 +6,7 @@
 # directory on a small rw disk (p2 = the fault target). The switch_root initramfs is the
 # Kafka one (build/initramfs-kafka.cpio.gz, built by build-kafka.sh) -- it is generic.
 # The prelude (sections 1-5) is the same pinned, byte-reproducible one build-kafka.sh uses.
-# Run on the build box:  ./dev.sh "bash hv/hvx/images/build-mysql.sh"
+# Run on the build machine:  ./dev.sh "bash hv/hvx/images/build-mysql.sh"
 set -euo pipefail
 cd "$(dirname "$0")/../../.."   # M100: this script lives in hv/hvx/images; every path below is relative to the repository root
 mkdir -p build
@@ -74,7 +74,7 @@ fi
 [ -x "$FAKETIME_BIN" ] || { echo "error: faketime not found (set HYDO_FAKETIME)" >&2; exit 1; }
 FAKE_TS="2020-09-13 16:26:40"
 # libfaketime reads FAKE_TS in the local time zone; it is 1600000000 only in UTC+4, the zone of the
-# Nix build box (UTC+4) that made every recorded image. FAKE_TZ (POSIX notation for UTC+4)
+# Nix build machine that made every recorded image. FAKE_TZ (POSIX notation for UTC+4)
 # is set on every faketime call, so a build in another zone gets the same bytes.
 FAKE_TZ=UTC-4
 

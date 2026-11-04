@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the guest-AVX example (run from the repository root on the build box):
+# Build the guest-AVX example (run from the repository root on the build machine):
 #   hydo/onboard/examples/avx2/build.sh [hydo-build options]
 # Compiles hydoavx.c with the pinned static musl gcc (docs/BUILD-PINS.md) and runs hydo-build.
 # Output: build/explore-ob-avx2-disk.img

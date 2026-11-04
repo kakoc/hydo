@@ -2,6 +2,7 @@
 name = "hydo-assert"
 version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
 rust-version = "1.70"
 description = "hydo's assertion SDK for Rust guest programs: always / sometimes / reachable / unreachable / eventually and BUGGIFY fault points, wire-compatible with the Go SDK (hvx/ASSERTIONS.md)"
 publish = false

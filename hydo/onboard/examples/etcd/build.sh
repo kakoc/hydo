@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the etcd example for one etcd release (run from the repository root on the build box):
+# Build the etcd example for one etcd release (run from the repository root on the build machine):
 #   hydo/onboard/examples/etcd/build.sh [VERSION]      # default 3.6.15
 # Downloads the official static release tarball etcd-v<VERSION>-linux-amd64.tar.gz from GitHub
 # into $HYDO_ETCD_DL (default ~/hydo-etcd-dl/v<VERSION>), checks it against the sha256 pinned

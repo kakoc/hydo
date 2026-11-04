@@ -2,7 +2,7 @@
 # Build the root disk of syzkaller's fuzzing VMs (Milestone 97): a small ext4 image with the
 # pinned static busybox, an sshd (the build machine's OpenSSH and its shared libraries), the
 # hvx.ko built for the debug kernel (loaded at boot), and root's authorized key. Runs on the
-# bare-metal test machine (Ubuntu: OpenSSH, fakeroot, mke2fs) after build-debug.sh. No root needed:
+# bare-metal machine (Ubuntu: OpenSSH, fakeroot, mke2fs) after build-debug.sh. No root needed:
 # fakeroot makes every file owned by root inside the image. It only builds; the image boots
 # on the build machine (campaign.sh). Output: $SAFETY/syz/{image-$BUNDLE.ext4,id_syz,id_syz.pub}.
 set -euo pipefail

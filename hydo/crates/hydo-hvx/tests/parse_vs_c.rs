@@ -13,7 +13,7 @@
 //! The C engine (`hv/hvx/hvx_explore.c`) was deleted in M137, so its answers are recorded in
 //! `tests/golden/parse_sched_c.txt`: the number of inputs and of refusals, then the SHA-256 of
 //! every chunk of `CHUNK` answer lines, so a difference is placed within a chunk. They were
-//! recorded on the bare-metal test machine by compiling `hvx_explore.c` with its `main` renamed
+//! recorded on the bare-metal machine by compiling `hvx_explore.c` with its `main` renamed
 //! and the probe below that prints every field `parse_sched` fills. To check against the C itself
 //! again (line by line), or to record the golden anew from it, give the C file:
 //!

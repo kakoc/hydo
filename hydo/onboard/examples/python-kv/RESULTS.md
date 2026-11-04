@@ -7,7 +7,7 @@ scratch prefix; at most two VMs at a time.
 
 - Programs: `pykv.py` (an asyncio TCP server with an append-only log on `/data`, and its client
   and oracle) and the SDK copied to `/opt/pykv/hydo_assert`.
-- Python: the pinned aarch64-linux CPython 3.11.9 of the build box's nixpkgs
+- Python: the pinned aarch64-linux CPython 3.11.9 of the build machine's nixpkgs
   (`/nix/store/ic0l2ykss28lr7r4by14inb3pqw87yza-python3-3.11.9`), staged by
   `fetch-python-arm64.sh` (interpreter, standard library without test/idlelib/tkinter/… and
   without the `-O`/`-OO` `.pyc` files, extension modules, and the shared libraries of 15 other store paths that
@@ -54,7 +54,7 @@ report's property table shows the program's own properties: `kv.acked_durable` 1
 
 - The oracle (`pykv.py check`) writes the catalog, because the server starts before the
   explorer's snapshot point and its own catalog lines are not in the per-run consoles.
-- No x86_64 (bare-metal) manifest: the bare-metal test machine was crowded, and the coordinator asked
+- No x86_64 (bare-metal) manifest: the bare-metal machine was crowded, and the coordinator asked
   for the Mac path. A Linux manifest would list the x86_64 python3 store path under `root.nix`.
 
 ## The Python history recorder (Milestone 96, 2026-10-30)

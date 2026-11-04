@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# lockstep-metal.sh -- the lock-step control check of milestone 118 on the bare-metal test machine
+# lockstep-metal.sh -- the lock-step control check of milestone 118 on the bare-metal machine
 # (run FROM THE MAC; docs/design/guest-control.md "The channel"; the protocol is described in
 # hydo/crates/hydo-engine/src/lockstep.rs and implemented by the Rust engine, hydo/crates/hydo-hvx).
 # Since milestone 145 it runs on an agent image (the shell-init image it used before cannot run).
@@ -16,17 +16,18 @@
 #       the cost of stopping: a CTL run whose host answers only CONT, ended at S1 + <end> icount,
 #       once per cadence (rb=<n>; 0 = none), on <image> (relative to ~/hydo/build or absolute).
 #
-# It syncs the Rust workspace (never hvx.c or hvx_abi.h) to ~/$HVX_METAL_TREE on the box, builds
-# the check program and the engine program hydo-hvx there with the box's Rust
+# It syncs the Rust workspace (never hvx.c or hvx_abi.h) to ~/$HVX_METAL_TREE on the bare-metal machine, builds
+# the check program and the engine program hydo-hvx there with the bare-metal machine's Rust
 # (~/hydo-rust/env.sh), waits while /var/tmp/hydo-QUIET exists, and runs the check program as a
 # whole under ~/bin/hvx-run sudo (the shared module lock), so the engine runs in its process
 # (M137; ENGINE=process runs the hydo-hvx program per VM instead). No module is loaded or reloaded.
-# Env: HVX_METAL (the bare-metal machine); HVX_METAL_TREE (default hydo; a session's own tree, for
+# The bare-metal machine is reached through machines.local.sh (machines.sh at the repository root).
+# Env: HVX_METAL_TREE (default hydo; a session's own tree, for
 # example hydo-ls, keeps the main tree's binaries untouched); OUT (default
 # /var/tmp/lockstep-<mode>-<date>-<time>, a new directory per run).
 set -euo pipefail
 
-BOX="${HVX_METAL:?}"
+. "$(cd "$(dirname "$0")/../.." && pwd)/machines.sh"; need_bare_metal; BOX="$BARE_METAL"
 TREE="${HVX_METAL_TREE:-hydo}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 MODE="${1:-check}"
@@ -41,11 +42,11 @@ OUT="${OUT:-/var/tmp/lockstep-$MODE-$(date +%Y%m%d-%H%M%S)}"
 ARGS=""
 for a in "$@"; do ARGS="$ARGS $(printf '%q' "$a")"; done
 
-echo ">> syncing the Rust workspace to $BOX:$TREE/"
-ssh -o BatchMode=yes "$BOX" "mkdir -p $TREE"
+echo ">> syncing the Rust workspace to ~/$TREE/ on the bare-metal machine"
+on_bare_metal "mkdir -p $TREE"
 (cd "$ROOT" && rsync -azR --exclude target Cargo.toml Cargo.lock rust-toolchain.toml .cargo hydo/crates "$BOX:$TREE/")
 
-ssh -o BatchMode=yes "$BOX" "TREE=$TREE MODE=$MODE IMG=$IMG OUT=$OUT ENGINE=${ENGINE:-inproc} bash -s -- $ARGS" <<'REMOTE'
+on_bare_metal "TREE=$TREE MODE=$MODE IMG=$IMG OUT=$OUT ENGINE=${ENGINE:-inproc} bash -s -- $ARGS" <<'REMOTE'
 set -euo pipefail
 cd ~/"$TREE"
 . ~/hydo-rust/env.sh

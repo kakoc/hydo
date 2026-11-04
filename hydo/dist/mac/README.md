@@ -40,7 +40,7 @@ be replaced with its hydo-config variable, `hydo/crates/hydo-config/INVENTORY.md
 
 ## How `hydo build` works without Linux
 
-`hydo-build --arch arm64` needs three things from a Linux build box today: an arm64 busybox,
+`hydo-build --arch arm64` needs three things from a Linux build machine today: an arm64 busybox,
 its applet list (asked from an x86 busybox, which cannot run on a Mac), and a pinned `mke2fs`
 run under `libfaketime` for the data disk. The release provides the first two as files, and
 `hydo build` makes the data disk differently (since Milestone 103 the Rust builder's Mac release
@@ -92,9 +92,9 @@ The first run fills `hydo/dist/mac/assets/` (git-ignored), and every asset is ch
 - `ip` and the iptables files from the public Nix binary cache with `hydo-nix-fetch --closure`
   (built from the tree; it checks every archive's hash), then exactly the files `hydo-elfdeps
   --root` lists for them (`assets/netns/`, `assets/netns-closure.txt`); no Linux machine needed;
-- busybox, `mke2fs`, the applet list, the `tc` closure and the Redis example's files over ssh
-  from a Linux machine with these nixpkgs store paths (`$HYDO_BUILD_HOST`, default the build
-  machine).
+- busybox, `mke2fs`, the applet list, the `tc` closure and the Redis example's files from
+  the build machine, which has these nixpkgs store paths (reached through the git-ignored
+  `machines.local.sh`, see `machines.sh`).
 
 After that the release builds offline in about a minute (most of it the Rust builds).
 The Redis files are copied with `tar`, so the libraries' symlinks survive; the one absolute

@@ -2,6 +2,7 @@
 name = "redis-composed-rs"
 version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
 publish = false
 description = "examples/redis-composed written with hydo-test: the same commands and checks as the shell version, in one Rust binary"
 

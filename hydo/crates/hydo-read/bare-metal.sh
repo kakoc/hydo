@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# native-test.sh on the bare-metal test machine, which has no /nix: the stores' closures are taken
+# native-test.sh on the bare-metal machine, which has no /nix: the stores' closures are taken
 # out of the recorded example images (MySQL 8.4.10, the JDK and the Kafka 3.5.0 libs and the
 # static Redis from explore-ob-stack-read-fix, PostgreSQL 15.6 from explore-ob-miniflux-read),
 # etcd 3.5.6 from its release tarball (sha256 pinned), and native-test.sh runs in a chroot that

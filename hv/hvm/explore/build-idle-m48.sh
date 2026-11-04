@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build the M48 kernel configuration (../linux/hvm.config) plus CONFIG_ARM64_HVM_IDLE_HVC
-# (apply-hvcidle.py) on the Linux build box: Image-idle, for the spin observer
+# (apply-hvcidle.py) on the Linux build machine: Image-idle, for the spin observer
 # (../spin/hvm-spin.c) and the M48-style boots. The M48 Image itself is unchanged
 # (../linux/build-guest.sh). Output: $OUT/Image-idle (default ./out). Byte-reproducible.
 set -e

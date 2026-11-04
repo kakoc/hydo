@@ -138,7 +138,7 @@ Users are expected to run hydo locally (a developer's Linux machine or Mac) and 
 
 - The Linux backend needs bare metal or a VM with nested VT-x, a kernel module, and root (or the optional udev rule) for the device. Hosted CI runners are usually VMs: nested virtualisation and loading a kernel module may not be allowed, and without a PMU the exact branch clock is not available (the exit-count clock is used instead; fingerprints then differ from PMU-clock runs).
 - The Mac backend needs Apple Silicon and no root.
-- The search budget is limited by one machine: today tens to a few hundred runs per hour on a 4-core box. Spreading the explorer over several machines would multiply the budget, but is not planned now.
+- The search budget is limited by one machine: today tens to a few hundred runs per hour on a 4-core machine. Spreading the explorer over several machines would multiply the budget, but is not planned now.
 
 ### Known blind spots (to be discussed later)
 

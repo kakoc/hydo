@@ -2,13 +2,14 @@
 # Build the self-contained x86_64 Linux release of hydo (see hydo/dist/linux/README.md):
 #     hydo/dist/linux/build-release.sh [OUTDIR]        -> OUTDIR/hydo-linux-<version>/ and its .tar.gz
 #
-# Runs on any machine with sh, ssh, tar, sha256sum/shasum and cargo (the Mac works, with
+# Runs on any machine with sh, rsync, tar, sha256sum/shasum and cargo (the Mac works, with
 # HYDO_RUST_BIN_DIR or a C cross compiler for the musl target). The
 # guest and host-tool pieces are fetched once into hydo/dist/linux/assets/ (pinned by sha256 in
-# assets.sha256) from $HYDO_BUILD_HOST, a Linux machine with the pinned nixpkgs store paths
-# below (docs/BUILD-PINS.md; default the build machine):
+# assets.sha256) from a Linux machine with the pinned nixpkgs store paths below (docs/BUILD-PINS.md):
+# the build machine, or with HYDO_NIX_MACHINE=bare-metal the bare-metal machine, reached through
+# machines.local.sh (machines.sh at the repository root):
 #   guest/bzImage, guest/initramfs-kafka.cpio.gz   the guest kernel + its switch_root initramfs
-#                                                  (~/hydo/build on the build box, build-linux.sh)
+#                                                  (~/hydo/build on the build machine, build-linux.sh)
 #   guest/busybox                                  static busybox 1.37.0 (every image's /bin)
 #   guest/hvx_seedrng, guest/hydo_fc               static helpers, compiled there with the pinned
 #                                                  musl gcc from hv/hvx/images/hvx_seedrng.c, hydo/onboard/hydo_fc.c
@@ -19,7 +20,7 @@
 #                                                  glibc, run on the user's machine by libexec/faketime
 #   redis/{redis-server,redis-cli}                 the Redis example's static binaries
 # HYDO_ASSETS_FROM=DIR copies these files from a local directory of the same layout instead of
-# fetching them (for example a copy kept on the bare-metal test machine; each file is still
+# fetching them (for example a copy kept on the bare-metal machine; each file is still
 # checked against assets.sha256). With HYDO_PIN=1 a missing assets.sha256 is written from the
 # fetched files (once, by a maintainer). Once assets/ is filled the release builds offline.
 # Users of the release need no Nix.
@@ -35,7 +36,7 @@ VERSION=${HYDO_VERSION:-0.1.0}
 OUTDIR=${1:-$D/out}
 A=$D/assets
 GB=$TOP/target/dist-linux     # the guest programs built from this tree (not assets: they are not pinned here)
-HOST=${HYDO_BUILD_HOST:?}
+HYDO_REPO=$TOP; . "$TOP/machines.sh"   # the machine with the store paths (only to fetch assets)
 BUSYBOX=/nix/store/ahw5fkq085k5ppdsylyd475xlxb18pz1-busybox-static-x86_64-unknown-linux-musl-1.37.0/bin/busybox
 E2FS=/nix/store/24s0phlx9kly7x7qb8gal3mmn51ndmlx-e2fsprogs-1.47.0-bin
 FAKETIME=/nix/store/fs0gp7zyfjnbvaq82yvwbcsvqh7876d1-libfaketime-0.9.10
@@ -48,7 +49,7 @@ MUSL_ROOT=/nix/store/0nlqfwsn4qpx1453gb4zvx6dvn3121l4-musl-static-x86_64-unknown
 MODS="sch_prio sch_netem cls_u32 x_tables ip_tables iptable_filter xt_tcpudp xt_NFQUEUE nfnetlink nfnetlink_queue llc stp bridge veth"
 if command -v sha256sum >/dev/null; then SHA="sha256sum"; else SHA="shasum -a 256"; fi
 
-# --- 1. assets (fetched once, in one ssh session; the build host keeps nothing afterwards) ---
+# --- 1. assets (fetched once, in one remote session; that machine keeps nothing afterwards) ---
 if [ ! -f "$A/.complete" ] && [ -n "$HYDO_ASSETS_FROM" ]; then
   [ -d "$A" ] && chmod -R u+w "$A" && rm -rf "$A"; mkdir -p "$A"
   echo "copying the release assets from $HYDO_ASSETS_FROM"
@@ -57,8 +58,9 @@ if [ ! -f "$A/.complete" ] && [ -n "$HYDO_ASSETS_FROM" ]; then
 fi
 if [ ! -f "$A/.complete" ]; then
   [ -d "$A" ] && chmod -R u+w "$A" && rm -rf "$A"; mkdir -p "$A"
-  echo "fetching the release assets from $HOST"
-  ( cd "$TOP" && tar --no-xattrs -cf - hv/hvx/images/hvx_seedrng.c hydo/onboard/hydo_fc.c ) | ssh "$HOST" "
+  need_nix_machine
+  echo "fetching the release assets from the machine with the Nix store paths"
+  ( cd "$TOP" && tar --no-xattrs -cf - hv/hvx/images/hvx_seedrng.c hydo/onboard/hydo_fc.c ) | on_nix_machine "
     set -e
     W=\$(mktemp -d /dev/shm/hydo-linux-release.XXXXXX); trap 'chmod -R u+w \$W; rm -rf \$W' EXIT
     cd \$W && tar xf - >&2

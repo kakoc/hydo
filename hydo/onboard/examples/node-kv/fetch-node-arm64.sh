@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Stage the aarch64-linux Node.js for hydo-mac.yaml into files/ (git-ignored): nodejs-slim 22.2.0
 # from the pinned nixpkgs (NixOS 24.05, revision 89c4987; docs/BUILD-PINS.md), fetched from the
-# nixpkgs binary cache on a Linux machine with nix ($HYDO_BUILD_HOST, default the build machine build
-# box), and only the shared libraries its loader opens (found with hydo-elfdeps, hydo/crates/hydo-tools).
+# nixpkgs binary cache on a Linux machine with nix (the build machine, or with
+# HYDO_NIX_MACHINE=bare-metal the bare-metal machine; machines.sh at the repository root), and only the shared libraries its loader opens (found with hydo-elfdeps, hydo/crates/hydo-tools).
 # The one absolute symlink (libgcc_s.so.1 into another store path) is made relative, as the
 # Redis example of the Mac release does; in the guest it resolves to the same file.
 # Usage: hydo/onboard/examples/node-kv/fetch-node-arm64.sh     (checks files.sha256 at the end)
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-HOST=${HYDO_BUILD_HOST:?}
+. "$(cd "$HERE/../../../.." && pwd)/machines.sh"; need_nix_machine
 NODE=/nix/store/vh315js3yiw2j58jfm5m934snawzzykw-nodejs-slim-22.2.0
 FILES="
 $NODE/bin/node
@@ -35,7 +35,7 @@ $NODE/bin/node
 /nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libstdc++.so.6.0.32
 "
 rel=$(for f in $FILES; do printf '%s ' "${f#/}"; done)
-ssh "$HOST" "nix-store -r $NODE >/dev/null 2>&1 && cd / && tar cf - $rel" | (mkdir -p "$HERE/files" && cd "$HERE/files" && tar xf - && chmod -R u+w nix)
+on_nix_machine "nix-store -r $NODE >/dev/null 2>&1 && cd / && tar cf - $rel" | (mkdir -p "$HERE/files" && cd "$HERE/files" && tar xf - && chmod -R u+w nix)
 L="$HERE/files/nix/store/x884b7ks41l0zvfvdw1m3xb0l3j1yjlc-gcc-13.2.0-lib/lib/libgcc_s.so.1"
 case $(readlink "$L") in
   /*) ln -sfn ../../pp8jrab5a9qfpn3la57r37x8kw2hrcil-gcc-13.2.0-libgcc/lib/libgcc_s.so.1 "$L" ;;

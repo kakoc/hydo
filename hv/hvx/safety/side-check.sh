@@ -1,33 +1,33 @@
 #!/usr/bin/env bash
 # Prove that a module change is inert for valid use (Milestone 97). Run FROM THE MAC.
 # Builds this tree's hvx.c as a SIDE module hvxsafe.ko (device /dev/hvxsafe) in
-# ~/hydo-safety on the bare-metal test machine, loads it next to the shared hvx.ko (which is never
+# ~/hydo-safety on the bare-metal machine, loads it next to the shared hvx.ko (which is never
 # touched), and runs the whole hv/hvx/deploy-metal.sh suite (31 checks: 24 hand-written tests,
 # 4 several-vCPU tests, 3 boots) plus the two pinned explorer reproducers against it, one VM
 # at a time, every VM through ~/bin/hvx-run, through the devshim LD_PRELOAD that sends
 # open("/dev/hvx") to /dev/hvxsafe. Every expected fingerprint is the recorded baseline.
 #   side-check.sh [build|run|unload|all]   (default all = build, load, run; unload is separate)
-# It waits (up to 2 hours) while /var/tmp/hydo-QUIET exists on the box.
+# It waits (up to 2 hours) while /var/tmp/hydo-QUIET exists on the bare-metal machine.
 set -euo pipefail
-BOX="${HVX_METAL:?}"
+. "$(cd "$(dirname "$0")/../../.." && pwd)/machines.sh"; need_bare_metal; BOX="$BARE_METAL"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 HVX="$(cd "$HERE/.." && pwd)"
 what=${1:-all}
 
 if [ "$what" = unload ]; then
-  ssh -o BatchMode=yes "$BOX" "lsmod | grep -q '^hvxsafe ' && sudo rmmod hvxsafe; lsmod | grep '^hvx' || true"
+  on_bare_metal "lsmod | grep -q '^hvxsafe ' && sudo rmmod hvxsafe; lsmod | grep '^hvx' || true"
   exit 0
 fi
 
 if [ "$what" = build ] || [ "$what" = all ]; then
-  ssh -o BatchMode=yes "$BOX" 'mkdir -p ~/hydo-safety/hvxsafe ~/hydo-safety/hvx/race ~/hydo-safety/hvx/explore'
+  on_bare_metal 'mkdir -p ~/hydo-safety/hvxsafe ~/hydo-safety/hvx/race ~/hydo-safety/hvx/explore'
   rsync -az "$HVX/hvx.c" "$HVX/hvx_abi.h" "$BOX:hydo-safety/hvxsafe/"
   rsync -az "$HVX/hvx_abi.h" "$HVX/hvx_boot.h" "$HVX/hvx_sched_util.h" "$HVX"/hvx_*_test.c "$HVX"/hvx_test.c \
     "$HVX"/hvx_verify.c "$HVX"/hvx_*_verify.c "$BOX:hydo-safety/hvx/"
-  # the run engine (hydo-hvx, Rust since M137): the workspace, built on the box below
+  # the run engine (hydo-hvx, Rust since M137): the workspace, built on the bare-metal machine below
   (cd "$HVX/../.." && rsync -azR --exclude target Cargo.toml Cargo.lock rust-toolchain.toml .cargo hydo/crates "$BOX:hydo-safety/ws/")
   rsync -az "$HVX/race/devshim.c" "$BOX:hydo-safety/hvx/race/"
-  ssh -o BatchMode=yes "$BOX" 'cd ~/hydo-safety/hvxsafe && cp -f hvx.c hvxsafe.c && cat > Makefile <<"EOF"
+  on_bare_metal 'cd ~/hydo-safety/hvxsafe && cp -f hvx.c hvxsafe.c && cat > Makefile <<"EOF"
 obj-m := hvxsafe.o
 ccflags-y := -DHVX_DEVNAME=\"hvxsafe\"
 OBJECT_FILES_NON_STANDARD_hvxsafe.o := y
@@ -36,11 +36,11 @@ all:
 	$(MAKE) -C $(KDIR) M=$(CURDIR) modules
 EOF
 make 2>&1 | grep -E " error |warning: " ; test -f hvxsafe.ko && modinfo -F srcversion hvxsafe.ko'
-  ssh -o BatchMode=yes "$BOX" "lsmod | grep -q '^hvxsafe ' && sudo rmmod hvxsafe; sudo insmod ~/hydo-safety/hvxsafe/hvxsafe.ko && ls -la /dev/hvxsafe && sudo dmesg | grep 'hvx.*hvxsafe\|/dev/hvxsafe' | tail -2"
+  on_bare_metal "lsmod | grep -q '^hvxsafe ' && sudo rmmod hvxsafe; sudo insmod ~/hydo-safety/hvxsafe/hvxsafe.ko && ls -la /dev/hvxsafe && sudo dmesg | grep 'hvx.*hvxsafe\|/dev/hvxsafe' | tail -2"
 fi
 [ "$what" = build ] && exit 0
 
-ssh -o BatchMode=yes "$BOX" 'bash -s' <<'REMOTE'
+on_bare_metal 'bash -s' <<'REMOTE'
 set -u
 cd ~/hydo-safety/hvx
 B=~/hydo/build; R=~/bin/hvx-run; DEV=/dev/hvxsafe; T=~/hydo-safety/bin

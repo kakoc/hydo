@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the miniflux example from its manifest (run from the repository root on the build box).
+# Build the miniflux example from its manifest (run from the repository root on the build machine).
 # 1. miniflux v2.3.3, static and byte-reproducible (sha256 dd8e2456…):
 #      git clone --depth 1 --branch v2.3.3 https://github.com/miniflux/v2.git && cd v2
 #      CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS=-mod=readonly go build -trimpath -buildvcs=false \

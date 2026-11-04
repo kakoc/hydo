@@ -1,7 +1,7 @@
 # Kafka loses acked orders after a large forward clock jump
 
 Investigation of the open finding in CLAUDE.md Milestone 63 (2026-10-22). Branch
-`worktree-agent-a48ef760a3ebe6df6`. No module change. Results on the bare-metal test machine under
+`worktree-agent-a48ef760a3ebe6df6`. No module change. Results on the bare-metal machine under
 `/var/tmp/kclock`.
 
 ## The finding
@@ -200,7 +200,7 @@ alert on clock steps.
 ## How the images were built and run
 
 Build (build machine, tree `~/hydo-kclock`, `build/kbuild.sh <name> [env...]` builds one image,
-removes the intermediates and copies the disk to the box):
+removes the intermediates and copies the disk to the bare-metal machine):
 ```
 build/kbuild.sh explore-kclock-diag  STACK_KAFKA_DIAG=1
 build/kbuild.sh explore-kclock-dwait STACK_KAFKA_DIAG=1 STACK_ORACLE_WAIT=10   # before the fix was made the default
@@ -210,7 +210,7 @@ build/kbuild.sh explore-kclock-fwait STACK_KAFKA_DIAG=1 STACK_ORACLE_WAIT=10
 `STACK_KAFKA_DIAG`, `STACK_ORACLE_WAIT` and `STACK_KAFKA_EXTRA` (extra broker lines) are
 new diagnostic switches in `build-stack.sh`; unset, they leave the image unchanged.
 
-Runs (bare-metal test machine): `/var/tmp/kclock/sweep.py <image> <outdir> <list>` (a copy of the
+Runs (bare-metal machine): `/var/tmp/kclock/sweep.py <image> <outdir> <list>` (a copy of the
 Milestone 63 serve-mode driver pointed at `~/hydo-kclock/hvx/hvx_explore`). Results:
 `orig1`, `diag1`, `diag-2`, `dwait-1`, `dwait-2`, `fix-1`, `fix-2`, `fwait-1`,
 `s116-binlog-pin`, `s116-kclock-fix`, `broad-fix`.
