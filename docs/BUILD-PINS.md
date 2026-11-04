@@ -207,7 +207,10 @@ The default kernel `Image-explore` (`f80c5655…`, Nix cross gcc) is not rebuilt
 The same toolchain builds the freeze helper for aarch64:
 `aarch64-none-linux-gnu-gcc -static -O2 -Wall hydo/onboard/hydo_fc.c -o hydo_fc-arm64` gives
 `499f654e05b712601601c9286fa4c4836e28f31fd7e03e3443228f2fc5060c4e` (twice, in different
-directories; glibc static, the toolchain's own sysroot).
+directories; glibc static, the toolchain's own sysroot). Milestone 150 gave the same bytes twice
+on the Mac, with the toolchain archive (checked by its sha256) unpacked and run inside an x86_64
+Linux container (unpacked inside the container because the Mac's file system ignores case); the
+Mac release ships that file as `guest/hydo_fc`.
 
 The aarch64 user-space tools of these images come from the public Nix binary cache, taken with
 `hydo-nix-fetch --closure <dir> <path>` (`hydo/crates/hydo-tools`; until M108 `hydo/dist/linux/nix_cache_fetch.py`, which gives the same tree; it checks each archive's FileHash and NarHash;
@@ -221,6 +224,11 @@ are read but not written, none of them used):
 
 The files each image gets are exactly those `hydo-elfdeps --root <dir>` (`hydo/crates/hydo-tools`) lists for
 the binaries above (glibc 2.39-52, libmnl, zlib, xz, bzip2, zstd, elfutils from the same closure).
+Since Milestone 150 the Mac release ships those files: `hydo/dist/mac/build-release.sh` fetches
+the two store paths with `hydo-nix-fetch --closure` into `assets/netns-store`, keeps the 28 paths
+`hydo-elfdeps --root` lists for `bin/ip` and the four iptables files (`assets/netns-closure.txt`,
+each file pinned in `hydo/dist/mac/assets.sha256`), and puts them into the release's
+`guest/tc` tree.
 
 ## Rust: the workspace toolchain and the release binaries (Milestone 101)
 

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install hydo for Apple Silicon Macs from an unpacked release directory:
 #     ./install.sh [--prefix DIR] [--add-to-path]
-# Copies the release into DIR (default ~/.hydo), signs the two VMM binaries on this Mac with the
+# Copies the release into DIR (default ~/.hydo), signs the engine bin/hydo-hvm on this Mac with the
 # hypervisor entitlement, and runs `hydo doctor`. It installs nothing outside DIR and needs no
 # sudo. Your shell startup file is changed only with --add-to-path.
 set -e
@@ -26,7 +26,7 @@ if [ "$SRC" != "$(cd "$PREFIX" 2>/dev/null && pwd)" ]; then
   mkdir -p "$PREFIX"
   ( cd "$SRC" && tar cf - . ) | ( cd "$PREFIX" && tar xf - )
 fi
-# a downloaded archive carries the quarantine attribute; the VMM binaries must be signed on
+# a downloaded archive carries the quarantine attribute; the engine binary must be signed on
 # this Mac with the hypervisor entitlement (an ad-hoc signature is enough): bin/hydo-hvm, the
 # Mac engine (it also runs `hydo build`'s helper VM)
 xattr -dr com.apple.quarantine "$PREFIX" 2>/dev/null || true

@@ -2,25 +2,52 @@
 # Build the self-contained Mac release of hydo (see hydo/dist/mac/README.md):
 #     hydo/dist/mac/build-release.sh [OUTDIR]        -> OUTDIR/hydo-mac-<version>/ and its .tar.gz
 #
-# Runs on an Apple Silicon Mac. The guest pieces are arm64 Linux binaries; they are fetched once
-# into hydo/dist/mac/assets/ (pinned by sha256 in assets.sha256), from:
+# Runs on an Apple Silicon Mac. The guest pieces are arm64 Linux binaries. The ones that are not
+# built here from this tree are fetched once into hydo/dist/mac/assets/ (pinned by sha256 in
+# assets.sha256), from:
 #   - the arm64 kernel Image-explore: $HYDO_KERNEL, a file built by hv/hvm/explore/build-guest.sh
 #     (with the HVC idle, the default);
-#   - busybox, mke2fs and the Redis example's files: the aarch64-linux nixpkgs store paths below,
-#     copied over ssh from $HYDO_BUILD_HOST (a Linux machine with nix; default the build machine).
+#   - the second arm64 kernel Image-explore-netns (for network: bridge, addr: and the freeze):
+#     $HYDO_KERNEL_NETNS, a file built by hv/hvm/explore/build-guest-netns.sh (docs/BUILD-PINS.md);
+#   - the freeze helper hydo_fc: $HYDO_FC_BIN, hydo/onboard/hydo_fc.c compiled for aarch64 with the
+#     pinned Arm GNU toolchain (docs/BUILD-PINS.md; the toolchain is an x86_64 Linux program, so on
+#     a Mac it runs in an x86_64 Linux container);
+#   - the aarch64 ip and iptables files (service networks and the freeze): the pinned nixpkgs store
+#     paths of hydo/crates/hydo-build/src/arm64.rs, from the public Nix binary cache with
+#     hydo-nix-fetch (hydo/crates/hydo-tools; it checks every archive's hash), so no Linux machine
+#     is needed for them;
+#   - busybox, mke2fs, the applet list, the tc closure and the Redis example's files: the
+#     aarch64-linux nixpkgs store paths below, copied over ssh from $HYDO_BUILD_HOST (a Linux
+#     machine with nix; default the build machine).
+# Built from this tree on every run, with the workspace's pinned Rust toolchain: bin/hydo,
+# bin/hydo-build, bin/hydo-fetch-image and bin/hydo-hvm (aarch64-apple-darwin, or taken from
+# $HYDO_RUST_BIN_DIR), guest/hydo-agent (hydo-build checks its pinned sha256), guest/hydo-world
+# and guest/hydo-read (checked here against its pinned sha256, docs/BUILD-PINS.md "hydo-read").
 # Once assets/ is filled, the release builds offline. Users of the release need no Linux machine.
+# Two runs give the same tarball: every file's time is set to 0, the archive lists the files in a
+# sorted order with no owner, extended attributes or ACLs, and gzip writes no name or time.
 set -e
+umask 022
 D=$(cd "$(dirname "$0")" && pwd)
 TOP=$(cd "$D/../../.." && pwd)
 VERSION=${HYDO_VERSION:-0.1.0}
 OUTDIR=${1:-$D/out}
+mkdir -p "$OUTDIR"
+OUTDIR=$(cd "$OUTDIR" && pwd)
 A=$D/assets
 HOST=${HYDO_BUILD_HOST:?}
 BUSYBOX=/nix/store/zbc5fx2yszji1a4aw2ff46m0p99c6yxb-busybox-static-aarch64-unknown-linux-musl-1.36.1/bin/busybox
 MKE2FS=/nix/store/gnavnl9lh7lwi3kzvf0rzlw3zzplg32i-e2fsprogs-static-aarch64-unknown-linux-musl-1.47.0-bin/bin/mke2fs
 LISTER=/nix/store/ahw5fkq085k5ppdsylyd475xlxb18pz1-busybox-static-x86_64-unknown-linux-musl-1.37.0/bin/busybox
 REDIS_MANIFEST=$TOP/hydo/onboard/examples-mac/redis/hydo.yaml
-TC=$(sed -n 's/^pub const TC_ARM64: &str = "\(.*\)";$/\1/p' "$TOP/hydo/crates/hydo-build/src/arm64.rs")   # the pinned aarch64 tc
+ARM64_RS=$TOP/hydo/crates/hydo-build/src/arm64.rs
+TC=$(sed -n 's/^pub const TC_ARM64: &str = "\(.*\)";$/\1/p' "$ARM64_RS")   # the pinned aarch64 tc
+IP=$(sed -n 's/^pub const IP_ARM64: &str = "\(.*\)";$/\1/p' "$ARM64_RS")   # the pinned aarch64 ip
+IPT=$(sed -n 's/^pub const IPTABLES_ARM64: &str = "\(.*\)";$/\1/p' "$ARM64_RS")   # the pinned aarch64 iptables
+# the iptables files hydo-build stages for the freeze (IPT_FILES in arm64.rs)
+IPT_FILES="bin/xtables-legacy-multi lib/xtables/libxt_NFQUEUE.so lib/xtables/libxt_tcp.so lib/xtables/libxt_standard.so"
+# guest/hydo-read as hydo/crates/hydo-read/build.sh builds it on a Mac (docs/BUILD-PINS.md)
+READ_SHA=88576fa899570cc7f826a7e05f701f0aa3245cdd3f8be4f4adea8367d9b8842e
 
 mkdir -p "$A"
 fetch() {   # fetch <remote path> <local name>
@@ -34,6 +61,14 @@ fetch() {   # fetch <remote path> <local name>
 if [ ! -f "$A/Image-explore" ]; then
   [ -n "$HYDO_KERNEL" ] || { echo "set HYDO_KERNEL to an Image-explore built by hv/hvm/explore/build-guest.sh" >&2; exit 1; }
   cp "$HYDO_KERNEL" "$A/Image-explore"
+fi
+if [ ! -f "$A/Image-explore-netns" ]; then
+  [ -n "$HYDO_KERNEL_NETNS" ] || { echo "set HYDO_KERNEL_NETNS to an Image-explore-netns built by hv/hvm/explore/build-guest-netns.sh" >&2; exit 1; }
+  cp "$HYDO_KERNEL_NETNS" "$A/Image-explore-netns"
+fi
+if [ ! -f "$A/hydo_fc" ]; then
+  [ -n "$HYDO_FC_BIN" ] || { echo "set HYDO_FC_BIN to hydo/onboard/hydo_fc.c built for aarch64 with the pinned toolchain (docs/BUILD-PINS.md)" >&2; exit 1; }
+  cp "$HYDO_FC_BIN" "$A/hydo_fc"
 fi
 fetch "$BUSYBOX" busybox
 # the busy-wait example's two static arm64 programs (hv/hvm/spin/spinvar.c, MODE=1 and MODE=5,
@@ -62,6 +97,20 @@ if [ ! -d "$A/tc" ]; then   # tc and every file its loader opens (hydo-elfdeps, 
   ssh "$HOST" "cd / && tar cf - $(sed 's#^/##' "$A/tc-closure.txt" | tr '\n' ' ')" | ( cd "$A/tc" && tar xf - )
   find "$A/tc" -type d -exec chmod u+w {} +
 fi
+if [ ! -d "$A/netns" ]; then   # ip, the iptables files and every file their loader opens, from the public cache
+  ( cd "$TOP" && cargo build --release --locked -p hydo-tools --target aarch64-apple-darwin --bin hydo-nix-fetch --bin hydo-elfdeps ) >&2
+  T=$TOP/target/aarch64-apple-darwin/release
+  rm -rf "$A/netns-store"
+  "$T/hydo-nix-fetch" --closure "$A/netns-store" "${IP%/bin/ip}" "$IPT" >&2
+  paths=$IP
+  for f in $IPT_FILES; do paths="$paths $IPT/$f"; done
+  { "$T/hydo-elfdeps" --root "$A/netns-store" $paths; for p in $paths; do echo "$p"; done; } \
+    | LC_ALL=C sort -u > "$A/netns-closure.txt"
+  mkdir -p "$A/netns"
+  ( cd "$A/netns-store" && tar cf - $(sed 's#^/##' "$A/netns-closure.txt" | tr '\n' ' ') ) | ( cd "$A/netns" && tar xf - )
+  find "$A/netns" -type d -exec chmod u+w {} +
+  chmod -R u+w "$A/netns-store" && rm -rf "$A/netns-store"
+fi
 ( cd "$A" && shasum -a 256 -c "$D/assets.sha256" >/dev/null ) || {
   echo "assets do not match assets.sha256 (pinned); remove hydo/dist/mac/assets and fetch again" >&2
   ( cd "$A" && shasum -a 256 -c "$D/assets.sha256" | grep -v ': OK$' ) >&2; exit 1; }
@@ -72,12 +121,13 @@ rm -rf "$REL"
 # the release tree mirrors the repository: hydo/ (the product) and hv/hvm/ (the Mac engine)
 mkdir -p "$REL/bin" "$REL/hydo/onboard" "$REL/hv/hvm/explore/out" "$REL/guest" \
          "$REL/examples" "$REL/skill"
-# the programs, all Rust (M107: no Python anywhere in the release): bin/hydo (the one CLI,
+# the programs, all Rust (no Python anywhere in the release since M107): bin/hydo (the one CLI,
 # hydo/crates/hydo-cli), bin/hydo-build (the image builder with its own command line, for
-# scripts; `hydo build` is the same builder with the release's tools) and bin/hydo-fetch-image
-# (what fetch-images.sh of `hydo compose` calls), for aarch64-apple-darwin, built with the
-# workspace's pinned toolchain (rust-toolchain.toml), or taken from $HYDO_RUST_BIN_DIR
-BINS="hydo hydo-build hydo-fetch-image hydo-hvm"   # hydo-hvm: the Mac engine (M143; signed by install.sh)
+# scripts; `hydo build` is the same builder with the release's tools), bin/hydo-fetch-image
+# (what fetch-images.sh of `hydo compose` calls) and bin/hydo-hvm (the Mac engine, M143; the only
+# one since M147; signed by install.sh), for aarch64-apple-darwin, built with the workspace's
+# pinned toolchain (rust-toolchain.toml), or taken from $HYDO_RUST_BIN_DIR
+BINS="hydo hydo-build hydo-fetch-image hydo-hvm"
 if [ -n "$HYDO_RUST_BIN_DIR" ]; then
   BD=$HYDO_RUST_BIN_DIR
 else
@@ -88,30 +138,47 @@ for b in $BINS; do
   file "$BD/$b" | grep -q 'Mach-O 64-bit executable arm64' || { echo "$BD/$b is not an arm64 Mac binary" >&2; exit 1; }
   cp "$BD/$b" "$REL/bin/$b"; chmod 755 "$REL/bin/$b"
 done
-# the format reference (`hydo guide manifest`; the history recorder for a manifest with checks:
-# follows); the shell init and its extensions are gone since M136 (every image's first process is
-# guest/hydo-agent)
+# the format reference (`hydo guide manifest`) and the history recorder that hydo-build stages for
+# a manifest with checks:; the shell init and its extensions are gone since M136 (every image's
+# first process is guest/hydo-agent, driven by the host controller inside bin/hydo)
 cp "$TOP/hydo/onboard/MANIFEST.md" "$REL/hydo/onboard/"
 echo "$VERSION" > "$REL/hydo/VERSION"     # what a plan's hydo_version: is checked against
 mkdir -p "$REL/hydo/history"
 cp "$TOP/hydo/history/hydo_hist.sh" "$REL/hydo/history/"
 # (the property table is made by the explorer itself since M115: no hydo/assert tool in the release)
 cp "$TOP/hv/hvm/hv.entitlements" "$REL/hv/hvm/"
-cp "$A/Image-explore" "$REL/hv/hvm/explore/out/Image-explore"
+# both arm64 kernels: hydo-build records Image-explore-netns in an image that needs it
+# (/etc/hydo/kernel) and the engine boots the kernel the image names
+cp "$A/Image-explore" "$A/Image-explore-netns" "$REL/hv/hvm/explore/out/"
 cp "$A/busybox" "$A/mke2fs" "$REL/guest/"; chmod 755 "$REL/guest/busybox" "$REL/guest/mke2fs"
 # guest/hydo-world: the in-guest program of fakes: and proxies: (hydo/crates/hydo-world, Rust since
 # M111), a static aarch64 musl build made here on the Mac; `hydo build` stages it
 HYDO_WORLD_ARCH=arm64 bash "$TOP/hydo/crates/hydo-world/build.sh" "$REL/guest/hydo-world" >&2
 chmod 755 "$REL/guest/hydo-world"
-cp "$A/busybox-applets.txt" "$A/tc-closure.txt" "$REL/guest/"
+cp "$A/busybox-applets.txt" "$A/tc-closure.txt" "$A/netns-closure.txt" "$REL/guest/"
 cp -R "$A/tc" "$REL/guest/tc"
+# ip and the iptables files go into the same tree: guest/tc is the Mac release's HYDO_ARM64_STORE,
+# where hydo-build looks for the pinned aarch64 store paths (the files both closures share, glibc,
+# libmnl, libxtables and the compression libraries, are the same files)
+( cd "$A/netns" && tar cf - . ) | ( cd "$REL/guest/tc" && tar xf - )
 printf '#!/bin/sh\n# stands in for `busybox --list` (hydo-build asks it for the applet set)\ncat "$(dirname "$0")/busybox-applets.txt"\n' > "$REL/guest/busybox-applets"
 chmod 755 "$REL/guest/busybox-applets"
-# the guest agent of agent images (hydo build --control agent, M121; driven by the host controller,
-# M126): the aarch64 build of hydo/crates/hydo-agent/build.sh (byte-reproducible, no C toolchain),
-# as guest/hydo-agent (the CLI's default HYDO_AGENT_BIN_ARM64); hydo-build checks its pinned sha256
-"$TOP/hydo/crates/hydo-agent/build.sh" aarch64 "$A/agent" >&2
-cp "$A/agent/hydo-agent-arm64" "$REL/guest/hydo-agent"; chmod 755 "$REL/guest/hydo-agent"
+# the freeze helper hydo-build stages for `faults: [freeze]` (agent images freeze with the agent's
+# own packet trigger, but the builder still stages it, AGENTS.md open item 30)
+cp "$A/hydo_fc" "$REL/guest/hydo_fc"; chmod 755 "$REL/guest/hydo_fc"
+# guest/hydo-read (hydo-read and, through a link, hydo-check, for manifests whose commands call
+# them; M112): hydo/crates/hydo-read/build.sh, pure Rust, the pinned bytes on any Mac
+bash "$TOP/hydo/crates/hydo-read/build.sh" aarch64 "$OUTDIR/.hydo-read" >&2
+[ "$(shasum -a 256 "$OUTDIR/.hydo-read/hydo-read-arm64" | cut -d' ' -f1)" = "$READ_SHA" ] || {
+  echo "the aarch64 hydo-read is not the pinned build $READ_SHA (docs/BUILD-PINS.md, \"hydo-read\")" >&2; exit 1; }
+cp "$OUTDIR/.hydo-read/hydo-read-arm64" "$REL/guest/hydo-read"; chmod 755 "$REL/guest/hydo-read"
+rm -rf "$OUTDIR/.hydo-read"
+# the guest agent, every image's first process (M136; driven by the host controller, M126): the
+# aarch64 build of hydo/crates/hydo-agent/build.sh (byte-reproducible, no C toolchain), as
+# guest/hydo-agent (the CLI's default HYDO_AGENT_BIN_ARM64); hydo-build checks its pinned sha256
+"$TOP/hydo/crates/hydo-agent/build.sh" aarch64 "$OUTDIR/.hydo-agent" >&2
+cp "$OUTDIR/.hydo-agent/hydo-agent-arm64" "$REL/guest/hydo-agent"; chmod 755 "$REL/guest/hydo-agent"
+rm -rf "$OUTDIR/.hydo-agent"
 # the Redis example: the Mac manifest with every /nix/store src made relative to files/
 mkdir -p "$REL/examples/redis"
 cp -R "$A/redis" "$REL/examples/redis/files"
@@ -146,7 +213,13 @@ cp "$D/QUICKSTART-mac.md" "$REL/QUICKSTART-mac.md"
 echo "$VERSION" > "$REL/VERSION"
 ( cd "$REL" && find . -type f ! -name SHA256SUMS | LC_ALL=C sort | xargs shasum -a 256 > SHA256SUMS )
 
-# --- 3. the tarball ---
-( cd "$OUTDIR" && COPYFILE_DISABLE=1 tar --uid 0 --gid 0 --uname root --gname wheel -czf "hydo-mac-$VERSION.tar.gz" "hydo-mac-$VERSION" )
+# --- 3. the tarball (the same bytes from the same inputs) ---
+# no extended attributes (a downloaded or copied file carries com.apple.* ones), every time 0
+xattr -cr "$REL" 2>/dev/null || true
+find "$REL" -exec env TZ=UTC touch -h -t 197001010000 {} +
+( cd "$OUTDIR" && find "hydo-mac-$VERSION" | LC_ALL=C sort > ".hydo-mac-$VERSION.list" \
+  && COPYFILE_DISABLE=1 tar --uid 0 --gid 0 --uname root --gname wheel --no-xattrs --no-acls \
+       --no-fflags --no-mac-metadata --format gnutar -n -T ".hydo-mac-$VERSION.list" -cf - | gzip -n -9 > "hydo-mac-$VERSION.tar.gz" \
+  && rm ".hydo-mac-$VERSION.list" )
 ls -la "$OUTDIR/hydo-mac-$VERSION.tar.gz"
 shasum -a 256 "$OUTDIR/hydo-mac-$VERSION.tar.gz"
