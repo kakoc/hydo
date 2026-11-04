@@ -43,7 +43,7 @@ busy-SPIN** (it waits out the dead broker's shared-log lease); because the guest
 the deterministic clock barely advances and the driver's metric-gated drain cannot reach
 `messages==0` within its (virtual-time) budget. Symptom: an hvx boot that would finish in ~4 s
 instead runs indefinitely at 100% vCPU — it even saturates the L1 dev VM's single vCPU hard
-enough to drop its ssh. Reproduced twice; the fault-free (crash-omitted) run always finishes in
+enough to drop its remote-shell session. Reproduced twice; the fault-free (crash-omitted) run always finishes in
 ~3.8 s and is `consistent`. Diagnosis: this is spread's fs-backend failover behavior (a
 lease/lock timeout), not a harness bug — the loopback survivor legitimately waits for the lease.
 Consequence: **`spread_crash` defaults to 0** (crash omitted). It is opt-in via the kernel
@@ -66,7 +66,7 @@ build-time symlinks into the tmpfs so /init can write the broker pids on the rea
   the no-arg op-program runner).
 - `hv/hvx/images/native-spread2-smoke.sh` — F0 native (L0) sanity for 2-broker fs sharing.
 
-## Reproduce (on the box)
+## Reproduce (on the build machine)
 ```
 cd ~/hydo && hv/hvx/images/build-spread2.sh && bash hv/hvx/deploy-hvx.sh
 bash hv/hvx/run-spread2-demo.sh all         # serve + replay + roundtrip + branch + fault (crash=0)
@@ -76,7 +76,7 @@ SPREAD_CRASH=1 bash hv/hvx/run-spread2-demo.sh serve
 
 ## L1 hygiene learned
 - Recover a wedged L1 with `kill -9 $(cat ~/l1/l1.pid)` then `bash ~/hydo/hv/hvx/run-l1.sh`.
-  Do NOT `pkill -f l1-hvx` from an ssh command — the pattern matches your own command string and
+  Do NOT `pkill -f l1-hvx` from a remote-shell command — the pattern matches your own command string and
   self-kills the session (RC 255). Use the pidfile.
 - For a possibly-hanging boot, cap `hvx_linux` itself with `timeout <n>` so it self-terminates
   and cannot leave an orphan pegging L1.

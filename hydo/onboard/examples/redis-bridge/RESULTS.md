@@ -11,7 +11,7 @@ the offset the replica acknowledged) after every step.
 
 ## Build
 
-On the bare-metal test machine, through the Linux release's `hydo build` (no Nix; installed in
+On the bare-metal machine, through the Linux release's `hydo build` (no Nix; installed in
 `~/hydo-netns/rel` from `~/hydo-lrel/final`, overlaid with this branch's `hydo/onboard`, and with
 the guest kernel's `llc`, `stp`, `bridge` and `veth` modules added; see Milestone 95 in
 `docs/HISTORY.md` for where those came from). `hydo-world` was built on the Mac with Go 1.26.5

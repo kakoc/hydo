@@ -78,11 +78,11 @@ CRNG otherwise), an in-guest HTTP driver, loopback, the `fs` backend on a rw dis
   the state fingerprint / exit stats) later.
 
 ## Build machine workflow (all on the build machine; hvx runs in a nested L1)
-- Sync build machine→box: `cd ~/mine/rust/my_projects/hydo && ./dev.sh "<cmd>"` (rsync, excludes target/build/.git; runs on box, CC=clang).
+- Sync the Mac's tree to the build machine: `cd ~/mine/rust/my_projects/hydo && ./dev.sh "<cmd>"` (rsync, excludes target/build/.git; runs on the build machine, CC=clang).
 - L1 (the nested dev VM) is UP (`~/hydo/hv/hvx/run-l1.sh` on the build machine, idempotent = wedge recovery; template needed staging to `~/l1/cloud-init/`). L1 is reached through its forwarded port 2222 with the key `~/l1/id_l1`.
 - Build rootfs/kernel: `./dev.sh "hv/hvx/images/build-linux.sh"` → `~/hydo/build/{bzImage, initramfs-*.cpio.gz, *-disk.img}`.
-- Build + load hvx: `~/hydo/hv/hvx/deploy-hvx.sh [load]` (on box → into L1).
-- **Safety: scoped kills only — `pkill -f l1-hvx`, NEVER a broad `pkill qemu-system` (a sibling `repeat` TCG job shares this box). Never touch L0.**
+- Build + load hvx: `~/hydo/hv/hvx/deploy-hvx.sh [load]` (on the build machine → into L1).
+- **Safety: scoped kills only — `pkill -f l1-hvx`, NEVER a broad `pkill qemu-system` (a sibling `repeat` TCG job shares this machine). Never touch L0.**
 
 ## Status
 - 2026-08-23: recon complete; L1 up + verified (gcc 13, headers, /dev/kvm, ~3.5 GB free).

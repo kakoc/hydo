@@ -37,7 +37,7 @@ pub struct Hvx {
     /// The engine program (`hydo-hvx`; see [`program`]), used when the engine does not run in
     /// this process.
     pub engine: PathBuf,
-    /// The shared-lock wrapper (`libexec/hvx-run`, or the box's `~/bin/hvx-run`); None: run the
+    /// The shared-lock wrapper (`libexec/hvx-run`, or the bare-metal machine's `~/bin/hvx-run`); None: run the
     /// engine directly (as root, or as a user who can open the device).
     pub hvx_run: Option<PathBuf>,
     /// Extra `KEY=VALUE` words put after `sudo env` (explore.py's EXTRA_ENV); an engine in this

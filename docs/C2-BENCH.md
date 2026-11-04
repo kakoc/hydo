@@ -8,7 +8,7 @@
 
 Step C2 of `docs/design/guest-control.md` asks whether a strategy finds each planted defect of the
 bug benchmark (`hydo/bench`, defects d0–d12) as often on agent images as on shell images. This
-file holds the answer for the bare-metal test machine (hvx). The criterion is a strategy's
+file holds the answer for the bare-metal machine (hvx). The criterion is a strategy's
 detection rate, not single verdicts, because a change of guest timing changes which schedule
 finds what.
 
@@ -58,7 +58,7 @@ stack's explorer images stay shell-only.
 gives a shell image and an agent image of each defect from the same files:
 
 - **Files:** those of the `-pin-kr` control image (`explore-bench-m59-control-pin-kr-disk.img`),
-  dumped with `debugfs rdump` on the bare-metal test machine: the 65 store paths of its
+  dumped with `debugfs rdump` on the bare-metal machine: the 65 store paths of its
   `/nix/store` that are not in the pinned iproute2 closure (MySQL 8.4.10 and OpenJDK 17 with their
   closures; hydo-build stages the iproute2 closure itself, from the same pinned path), Kafka's
   libs and the pinned Redis. `front-door` is the defect's order service, `/bin/hydostack` of its
@@ -81,7 +81,7 @@ gives a shell image and an agent image of each defect from the same files:
   and some timings differ from M108's. The comparison is between this manifest's shell and agent
   images; the original images' M108 results are given beside them.
 
-**Building on the bare-metal test machine** (no Nix): `hydo/bench/build-bench-manifest.sh` runs this
+**Building on the bare-metal machine** (no Nix): `hydo/bench/build-bench-manifest.sh` runs this
 tree's `hydo build` in a release layout (the Linux release's `guest/`, `tools/` and `libexec/`, this
 tree's `bin/hydo` and `hydo/onboard`) twice per image, with `--control shell` and `--control agent`.
 The control pair and d8 were built in full; every other defect's pair is a copy of the control
@@ -98,7 +98,7 @@ partitions by their SHA-256):
 | the manifest's control: the shell build patched vs the agent build | same tree (14,425 entries, 9,966 files, every owner and mode) |
 | d8: the control pair with d8's order service swapped in (`--swap`) vs d8 built in full | same tree for the shell pair (14,424 entries, 9,965 files) and for the agent pair (14,425 entries, 9,966 files) |
 
-Images (sha256 prefixes; in `~/c2b-work/bm/{shell,agent}` on the box, under hydo-bench's names):
+Images (sha256 prefixes; in `~/c2b-work/bm/{shell,agent}` on the bare-metal machine, under hydo-bench's names):
 control shell `01fc889be9b8d807`, agent `50e6ee9a4903e85c`; d8 (built) shell `821d2f989e6cad69`,
 agent `36ac86dd40f28bd9`.
 
@@ -115,7 +115,7 @@ agent `36ac86dd40f28bd9`.
 
 Each defect's hand-written trigger runs twice on its image (both runs gave the same fingerprint
 in every row below) and once on the control of the same kind. "M108" is the original benchmark
-image's result from M108's proof (`/var/tmp/m108/rs` on the box).
+image's result from M108's proof (`/var/tmp/m108/rs` on the bare-metal machine).
 
 | defect | trigger | M108 (original image) | shell (manifest) | agent (manifest) |
 |---|---|---|---|---|

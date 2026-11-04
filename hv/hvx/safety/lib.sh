@@ -8,7 +8,7 @@ SAFETY_NIXPKGS=/nix/store/f0ddmw6s86y567yg06h5019z72szbzch-source	# NixOS 24.05 
 # with nix the script runs inside nix-shell with the given packages (and without the
 # cc-wrapper's userspace hardening flags, which the kernel sets itself); elsewhere it uses
 # the system tools. While $QUIET_FILE exists (another session measures timing on the
-# bare-metal test machine) the whole process group is stopped with SIGSTOP and continued after.
+# bare-metal machine) the whole process group is stopped with SIGSTOP and continued after.
 safety_build() {
 	local script=$1 log=$2 pid rc stopped=0
 	shift 2

@@ -600,7 +600,7 @@ The KVM path also has its own baselines (`det64` = `ed882eafa4643e09`, `timer64
 
 The intended successor to the slow MTF clock is a **guest-only PMU counter**
 (INST_RETIRED.ANY) — the near-native technique the KVM path uses (`src/pmu.rs`,
-~33× faster). On this box it is **blocked at the hardware+kernel level, not a config
+~33× faster). On the build machine it is **blocked at the hardware+kernel level, not a config
 toggle**:
 
 - The L0 CPU is a **13th-Gen i7-13700HX (Raptor Lake, HYBRID: P-cores + E-cores)**.
@@ -612,7 +612,7 @@ toggle**:
 
 The VMX load/save-`PERF_GLOBAL_CTRL` controls **are** present, so the design is
 directly implementable on a **non-hybrid host** (a Xeon or pre-Alder-Lake Core). The
-recommendation on this box is **Option 3: stay on the exact MTF clock (M5)** — it is
+recommendation on the build machine is **Option 3: stay on the exact MTF clock (M5)** — it is
 exact and deterministic, only slow. Whole-boot free-run determinism (M16) does not
 need the fast clock. What the fast clock would unblock: single-step ICOUNT boots →
 instruction-exact divergence bisection à la the KVM path, and an ICOUNT-tied boot
@@ -701,6 +701,6 @@ page-table bit is an observable input that must be tamed.
 | `hv/hvx/hvx_linux.c` | The bzImage loader / real-Linux runner (free-run loop, console drain, fault dump). |
 | `hv/hvx/hvx_boot_verify.c`, `hvx_disk_boot_verify.c`, `hvx_net_boot_verify.c` | Whole-boot determinism harnesses (no-disk / with-disk / with-net). |
 | `hv/hvx/hvx_*_test.c` | Per-milestone unit tests (M3–M23) proving each capability + fingerprint. |
-| `hv/hvx/hvx_pmu_probe.c` | M17 capability probe (reports the vPMU is unavailable on this box). |
+| `hv/hvx/hvx_pmu_probe.c` | M17 capability probe (reports the vPMU is unavailable on the build machine). |
 | `hv/hvx/deploy-hvx.sh`, `run-l1.sh`, `run-*-demo.sh`, `cloud-init/` | L1 sandbox bring-up, build+load+test, and demo runners. |
 | `src/*.rs` | The **predecessor** KVM-based hydo (design reference; see `README.md`). |

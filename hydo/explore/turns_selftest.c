@@ -17,7 +17,7 @@
  *      works and halts.
  *   E  seeded turn lengths (the qs= token's policy) give a different, reproducible result.
  *
- * Build on the box: cc -O2 -o turns_selftest turns_selftest.c   (in hydo/explore)
+ * Build on the bare-metal machine: cc -O2 -o turns_selftest turns_selftest.c   (in hydo/explore)
  * Run:  ~/bin/hvx-run sudo ./turns_selftest
  */
 #define HVX_STACK_NO_MAIN

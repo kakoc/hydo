@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# The hvx safety net on the bare-metal test machine itself (Milestone 140): a debug kernel built
-# from the box's own running config, booted ONCE with kexec, so hvx.c runs under KASAN, kmemleak,
+# The hvx safety net on the bare-metal machine itself (Milestone 140): a debug kernel built
+# from the bare-metal machine's own running config, booted ONCE with kexec, so hvx.c runs under KASAN, kmemleak,
 # UBSAN and lockdep on the real hardware (the PMU clock, several vCPUs and Intel PT included,
-# which the nested VM of SAFETY.md cannot reach). Run ON THE BOX, from a tree in your own
-# directory. Booting the box into it needs the user's approval every time.
+# which the nested VM of SAFETY.md cannot reach). Run ON THE BARE-METAL MACHINE, from a tree in your own
+# directory. Booting the bare-metal machine into it needs the user's approval every time.
 #
 #   onbox.sh build          unpack the pinned 6.8.12 tarball, config, make bzImage modules (nice 19)
 #   onbox.sh install        modules into /lib/modules/<rel>, bzImage and initramfs into $DBG/boot,
@@ -18,7 +18,7 @@
 # environment block there ("GRUB lacks write support for diskfilter"), so the `save_env
 # next_entry` that makes a grub-reboot entry one-time fails at boot and the entry would be
 # booted again on every reboot. A kexec'ed kernel is never in GRUB: any reboot (a plain one, a
-# panic with panic=30, or the provider's panel after a hang) goes through the firmware and GRUB's
+# panic with panic=30, or a power cycle after a hang) goes through the firmware and GRUB's
 # saved default. The debug kernel is not in /boot, so update-grub never lists it.
 set -euo pipefail
 DBG=${DBG:-$HOME/hydo-dbg}

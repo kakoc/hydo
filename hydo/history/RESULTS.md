@@ -1,8 +1,8 @@
-# History checkers on real systems — results (2026-10-24, bare-metal test machine)
+# History checkers on real systems — results (2026-10-24, bare-metal machine)
 
-Images built on the build box from branch `history-checkers` with the pinned tools
+Images built on the build machine from branch `history-checkers` with the pinned tools
 (`hvx_seedrng` `c2a440c5…`, docs/BUILD-PINS.md); each built twice, byte-identical. In
-`~/hydo/build` on the box:
+`~/hydo/build` on the bare-metal machine:
 
 | image | manifest | sha256 |
 |---|---|---|
@@ -14,7 +14,7 @@ Images built on the build box from branch `history-checkers` with the pinned too
 at a time, through `~/bin/hvx-run`. "Fresh boot" = `hvx_explore one` then `hydo-check` on its
 output directory; "snapshot" = explore.py's worker pool (`serve`, every schedule from the S1
 snapshot), whose `host_checks()` hook produced the verdicts shown. Results:
-`/var/tmp/m80-hist/` on the box (`r2`, `r3` fresh boots, `s55`, `s56` snapshot runs).
+`/var/tmp/m80-hist/` on the bare-metal machine (`r2`, `r3` fresh boots, `s55`, `s56` snapshot runs).
 
 ## Redis (`explore-ob-redis-hc`)
 
@@ -91,7 +91,7 @@ these four operations explains, whether or not the unknown-outcome put took effe
 
 A history line is 40–60 bytes; the etcd run records about 370 events and its whole console is 22 KB (64 KiB allowed),
 including the three ~1.1 KB range-read lines), the Redis run about 120. The host check takes
-under a second per run (Python, the box's 3.12). The recording itself moves guest timing, which
+under a second per run (Python, the bare-metal machine's 3.12). The recording itself moves guest timing, which
 is why the M78 schedule stopped hitting 14685's window on the new image.
 
 ## The test composer with history checks (`explore-ob-redis-composed-hc`)

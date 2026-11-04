@@ -5,7 +5,7 @@
  *   hvx_repro <case>      case = pmu | txlen | unsync | repins | vqloop | pcishift | diskrace | all | bigalloc
  *
  * RUN ONLY INSIDE THE DEBUG TEST VM (hv/hvx/safety/run-debug.sh), never against a shared module
- * on the bare-metal test machine: on an unfixed module several of them oops the kernel or hold a CPU
+ * on the bare-metal machine: on an unfixed module several of them oops the kernel or hold a CPU
  * with interrupts off forever. On a fixed module every case ends in well under a minute and
  * exits 0; the debug kernel must log no KASAN/UBSAN/lockdep splat while it runs.
  *

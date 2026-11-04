@@ -2,16 +2,16 @@
 # Build the hvx debug test kernel (Milestone 97). Output: $SAFETY/kbuild/{bzImage,vmlinux,.config}
 # and the kernel tree the module is built against ($SAFETY/kbuild/linux).
 #
-# Where: the bare-metal test machine (Ubuntu 24.04 gcc 13.3; needs flex, bison, libssl-dev, libelf-dev,
+# Where: the bare-metal machine (Ubuntu 24.04 gcc 13.3; needs flex, bison, libssl-dev, libelf-dev,
 # bc) or the build machine (nixpkgs 24.05 gcc 13.2 through nix-shell). It only builds; it
-# never boots the kernel, so it is safe on the bare-metal test machine. The two compilers give different
+# never boots the kernel, so it is safe on the bare-metal machine. The two compilers give different
 # bytes; a kernel is reproducible on the machine that built it (same inputs, same identity
 # variables, same compiler). The VMs that boot it run on the build machine (run-debug.sh, syz/).
 #
 # Inputs are pinned: the kernel tarball by sha256 (kernel.org), the config by
 # kernel/hvx-debug.config, the build identity by the KBUILD_* variables below.
 # Needs about 9 GB of disk while it builds (KASAN + debug info). Low priority (nice 19),
-# JOBS (default 6) parallel jobs, and paused while $QUIET_FILE exists (the bare-metal test machine's
+# JOBS (default 6) parallel jobs, and paused while $QUIET_FILE exists (the bare-metal machine's
 # other sessions measure timing then).
 set -euo pipefail
 SAFETY=${SAFETY:-$HOME/hydo-safety}

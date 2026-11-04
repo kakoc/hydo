@@ -115,7 +115,7 @@ hydo/dist/linux/build-release.sh [OUTDIR]          # -> OUTDIR/hydo-linux-<versi
 ```
 
 The first run fills `hydo/dist/linux/assets/` (git-ignored) from the build machine
-`$HYDO_BUILD_HOST` (default the build machine): the kernel and initramfs from
+(reached through the git-ignored `machines.local.sh`, see `machines.sh`): the kernel and initramfs from
 `~/hydo/build`, every Nix store path named in the script (all gc-rooted there, see
 docs/BUILD-PINS.md), and `hvx_seedrng`/`hydo_fc` compiled there with the pinned musl gcc
 (`hvx_seedrng` comes out as the pinned `c2a440c5…`). `HYDO_ASSETS_FROM=DIR` copies the same

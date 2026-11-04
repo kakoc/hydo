@@ -3,7 +3,7 @@
 # HYDO_REDIS_OUT overrides) in a private directory, then build the example images and print
 # their sha256. See docs/BUILD-PINS.md.
 #
-# Usage on the build box:  PROOF=~/hydo-pins-proof hv/hvx/images/pins-proof.sh   (run from the tree root)
+# Usage on the build machine:  PROOF=~/hydo-pins-proof hv/hvx/images/pins-proof.sh   (run from the tree root)
 # The tree is expected at $PROOF/hydo; HOME is set to $PROOF so the manifests' ~/hydo/build/...
 # sources resolve inside the proof directory, never to the real ~/hydo/build.
 set -euo pipefail
@@ -36,7 +36,7 @@ if [ "${STACK:-1}" = 1 ]; then
   SB="${STACK_BDIR:-$PROOF/hydo/build}"
   mkdir -p "$SB"
   [ "$SB" = "$PROOF/hydo/build" ] || cp build/hvx_seedrng "$SB/hvx_seedrng"
-  cp "${FRONT_BIN:-/home/user/hydo/build/explore-fix-hydostack}" build/explore-fix-hydostack
+  cp "${FRONT_BIN:-$HOME/hydo/build/explore-fix-hydostack}" build/explore-fix-hydostack
   HOME="$PROOF" HYDO_BUILD_BIN="$HB" bash hydo/onboard/examples/stack/build.sh --build-dir "$SB"
   sha256sum "$SB/explore-ob-stack-fix-disk.img"
 fi

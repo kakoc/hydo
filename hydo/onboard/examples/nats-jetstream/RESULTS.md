@@ -1,6 +1,6 @@
 # NATS JetStream: results (Milestone 141)
 
-The first outside project onboarded end to end the way an outside user would: a
+The first third-party project onboarded end to end the way an outside user would: a
 `docker-compose.yaml` for a three-node JetStream cluster written as a NATS user writes one, then
 only the onboarding skill (`hydo guide`) and the `hydo` command built from main
 (`3a9986e`), on the Mac backend (hvm, Apple M2 Pro, `network: bridge` with the second guest

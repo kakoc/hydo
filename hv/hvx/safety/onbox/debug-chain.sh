@@ -1,5 +1,5 @@
 #!/bin/bash
-# M140, ON THE BOX under the debug kernel (onbox.sh): the checks of the main module's M138 code,
+# M140, ON THE BARE-METAL MACHINE under the debug kernel (onbox.sh): the checks of the main module's M138 code,
 # one VM at a time, every VM through ~/bin/hvx-run, against /dev/hvx (this tree's hvx.c loaded
 # by `onbox.sh module`). deploy-metal's suite runs from the Mac before this
 # (HVX_METAL_TREE=hydo-dbg hv/hvx/deploy-metal.sh). Results in /var/tmp/m140a, progress in

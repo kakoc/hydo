@@ -348,7 +348,7 @@ echo "built build/sqlite3 ($(stat -c%s build/sqlite3) bytes, static) from $SQLIT
 #     against an e2fsprogs that does honor it);
 #   * -E lazy_itable_init=0,lazy_journal_init=0 so nothing is written lazily/nondeterministically;
 #   * the mke2fs (e2fsprogs) AND faketime binaries are PINNED to fixed nix store paths (with a
-#     fallback scan / nix-build), so the TOOLS themselves can't drift as the shared box's nix
+#     fallback scan / nix-build), so the TOOLS themselves can't drift as the shared  nix
 #     store churns -- the same recurring drift class that moved the busybox pin (M21/M23) and,
 #     via the host mke2fs version, this fs image (M27).
 # 16 MiB / 1 KiB blocks; no journal (ext2) to keep the guest module set + mount path minimal.
@@ -356,7 +356,7 @@ echo "built build/sqlite3 ($(stat -c%s build/sqlite3) bytes, static) from $SQLIT
 MKE2FS="${HYDO_MKE2FS:-}"
 if [ -z "$MKE2FS" ]; then
   # PIN the exact e2fsprogs build; fall back to the first store match only if GC'd. (The two
-  # 1.47.0 builds present on the box produce byte-identical images, so the fallback is safe.)
+  # 1.47.0 builds present on the build machine produce byte-identical images, so the fallback is safe.)
   MKE2FS=/nix/store/24s0phlx9kly7x7qb8gal3mmn51ndmlx-e2fsprogs-1.47.0-bin/bin/mke2fs
   [ -x "$MKE2FS" ] || MKE2FS=$(ls /nix/store/*e2fsprogs-*-bin/bin/mke2fs 2>/dev/null | head -1 || true)
 fi
@@ -378,7 +378,7 @@ if [ -z "$FAKETIME_BIN" ] || [ ! -x "$FAKETIME_BIN" ]; then
 fi
 FAKE_TS="2020-09-13 16:26:40"   # == SOURCE_DATE_EPOCH 1600000000, frozen for every mke2fs time field
 # libfaketime reads FAKE_TS in the local time zone; it is 1600000000 only in UTC+4, the zone of the
-# Nix build box (UTC+4) that made every recorded image. FAKE_TZ (POSIX notation for UTC+4)
+# Nix build machine that made every recorded image. FAKE_TZ (POSIX notation for UTC+4)
 # is set on every faketime call, so a build in another zone gets the same bytes.
 FAKE_TZ=UTC-4
 
@@ -1846,7 +1846,7 @@ KAFKA_DATA_MIB=128
 : > build/kafka-ext4.img; truncate -s $(( KAFKA_EXT4_MIB * 1024 * 1024 )) build/kafka-ext4.img
 # mke2fs -d copies directory entries in the HOST's readdir order. The top-level dir of the
 # ro-root keeps the heavy nix/ and opt/ subtrees across builds while bin/ sbin/ etc/ app/
-# are deleted and recreated, and on the build box's ext4 a small (linear) directory then
+# are deleted and recreated, and on the build machine's ext4 a small (linear) directory then
 # lists its entries in an order that depends on that deletion history -- the first build
 # after a recipe change produced a different image from the next one. Rebuild the
 # top-level directory fresh, entries moved in sorted order, so its listing is a pure
@@ -2050,7 +2050,7 @@ SPREAD_BIN="${HYDO_SPREAD_BIN:-$HOME/spread/target/release/spread}"
 [ -x "$SPREAD_BIN" ] || { echo "error: spread binary not found at $SPREAD_BIN (set HYDO_SPREAD_BIN)" >&2; exit 1; }
 SPREAD_BIN=$(realpath "$SPREAD_BIN")
 # ELF interpreter (an absolute /nix/store path baked into the binary). Prefer patchelf, fall
-# back to readelf (patchelf is not in the default profile on the box; readelf is).
+# back to readelf (patchelf is not in the default profile on the build machine; readelf is).
 SPREAD_INTERP=$(patchelf --print-interpreter "$SPREAD_BIN" 2>/dev/null || true)
 [ -n "$SPREAD_INTERP" ] || SPREAD_INTERP=$(readelf -l "$SPREAD_BIN" 2>/dev/null | grep -oE '/nix/store/[^]]+' | head -1 || true)
 [ -n "$SPREAD_INTERP" ] || { echo "error: could not read spread's ELF interpreter (patchelf/readelf)" >&2; exit 1; }

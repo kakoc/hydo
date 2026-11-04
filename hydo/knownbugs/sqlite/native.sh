@@ -1,7 +1,7 @@
 #!/bin/sh
 # native.sh <v> <word: reset|default> <first> <count> <cpus> <tag> [steps]
 # One walrace process at a time, pinned to <cpus>; seed i = splitmix-ish of i; results one line per seed.
-# Env: WALRACE_SYNC_OFF=1 (the box's /var/tmp is on a spinning disk), WALRACE_COUNT=1 for default.
+# Env: WALRACE_SYNC_OFF=1 (the bare-metal machine's /var/tmp is on a spinning disk), WALRACE_COUNT=1 for default.
 # SEEDS="<hex> <hex>": cycle through these seeds instead; BIN / WALRACE_BINDIR: where walrace-<v>
 # lives (default ~/hydo-walreset/bin, i.e. build.sh's output dir). Stop: touch /var/tmp/walreset/STOP-<tag>.
 # Results: /var/tmp/walreset/native-<tag>.txt; a corrupt database is kept as n-<tag>/viol-<i>.db.

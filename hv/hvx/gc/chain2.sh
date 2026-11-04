@@ -1,5 +1,5 @@
 #!/bin/bash
-# M138, on the bare-metal test machine, after chain.sh (waits for its CHAIN-END, at most 12 h):
+# M138, on the bare-metal machine, after chain.sh (waits for its CHAIN-END, at most 12 h):
 # the timing runs, then the gRPC stack's lock-step hang over the serial line and the port.
 G=$(cd "$(dirname "$0")" && pwd)
 M=/var/tmp/m138

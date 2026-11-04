@@ -217,7 +217,7 @@ services").
 - Images do not depend on who builds them or where: `hydo build` sets every file in the root
   image to owner root, uses a fixed umask, ignores the machine's `/etc/mke2fs.conf`, and
   freezes the build clock. `HYDO_KEEP_OWNERS=1` keeps the building user's owner IDs instead
-  (the image then matches a plain `hydo-build` run by the same user on the Nix build box).
+  (the image then matches a plain `hydo-build` run by the same user on the Nix build machine).
 - `/dev/hvx` is mode 0600, so runs use `sudo` unless you installed the udev rule (section 1).
   The run engine keeps its snapshots in memory (it writes no snapshot directory).
 - To remove hydo: `hydo module unload`, then `chmod -R u+w ~/.hydo && rm -rf ~/.hydo` (the guest

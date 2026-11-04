@@ -121,7 +121,7 @@ their sequence numbers. Details: `docs/C2-BENCH.md` section 6 item 4.
   the benchmark now) — copied `hydo/stack`, applied a patch, built
   `build/explore-bench-<defect>-disk.img` with `build-stack.sh` (`STACK_OUT=explore-bench-*`
   gets the explorer's serve mode; `STACK_GO_SRC` points at the patched copy). On the build machine
-  box the pinned static musl gcc and Redis are gone (M46), so pass `HYDO_GCC_MUSL`,
+  the pinned static musl gcc and Redis are gone (M46), so pass `HYDO_GCC_MUSL`,
   `HYDO_MUSL_ROOT`, `HYDO_REDIS_OUT` as M46 did. A build takes ~15 s.
 - `hydo-bench confirm` (`hydo/crates/hydo-bench`; confirm.py until M108) — runs every trigger twice
   on its defect image (both must be the same VIOLATION fingerprint) and once on the control (must be OK).
@@ -222,7 +222,7 @@ irrelevant `R=everysec` (class unsafe-knob). swarm+nf, rep 3, 300 runs (34 min):
 hit at run 207 is one of the 30% that do not trigger (an earlier `K=mysql@4+4`); no detection.
 
 **Verdict:** d7 is a placement blind spot, not just short exploration: plain random/swarm never
-reach it, and with the new faults the expected wait is ~2,800 runs (~4.3 h of box time) for
+reach it, and with the new faults the expected wait is ~2,800 runs (~4.3 h of machine time) for
 random and ~5,900 (~9 h) for swarm. The tail sweep finds it in 9 minutes.
 
 ## BUGGIFY fault points (Milestone 56)
@@ -284,7 +284,7 @@ oracle, which calls any un-ACKed order found in Kafka a violation (a lost ACK is
 
 ## Milestone 56: positioned faults, a fault process, the depth-1 sweep, and the knob rule
 
-Box results in `/var/tmp/m56-pos/` (driver `drive.sh`, 2 workers); trigger maps and tables
+Results on the bare-metal machine in `/var/tmp/m56-pos/` (driver `drive.sh`, 2 workers); trigger maps and tables
 copied to `hydo/bench/m56/`. Module srcversion `7CA13762C89AF3BF16F2CCF` (the M49 build).
 
 **Knob rule (now the default).** A relaxed `M=`/`R=` knob makes a run `unsafe-knob` only with a
@@ -308,7 +308,7 @@ stop; every detection reproduced its fingerprint):
 | d6 | 3/3 (4, 1, 1) | 3/3 (49, 19, 19) | swarm+nf 3/3 (5, 13, 1) |
 | d7 | **3/3 (28, 27, 4)** | 1/3 (-, 30, -) | none 0/3 |
 | detections / 24 | **24** | 21 | 21 |
-| box time, 24 cells | 1.0 h | 2.4 h | swarm ≈ 2.3 h (3 workers) |
+| machine time, 24 cells | 1.0 h | 2.4 h | swarm ≈ 2.3 h (3 workers) |
 
 `process` (a Jepsen-style staggered fault process, 2–4 different faults in consecutive windows)
 finds every defect in every repetition, with medians of 1–4 runs on six of eight. One of its 24
@@ -334,7 +334,7 @@ the control at the same point (`depth1map.py`):
 | d4 | 14 | N 6, K 4, P 3, O 1 | **0** — d4 needs two faults (slow Kafka + a cut) |
 | d0 | 4 (of 384) | K 4 | **0** — d0 needs two faults (Redis kill + a cut) |
 
-d1, d2, d5 were not swept (box budget; every strategy finds them within a few runs). The d4
+d1, d2, d5 were not swept (machine-time budget; every strategy finds them within a few runs). The d4
 and d0 "triggers" are all `kafka order=N present 2 times`: the control's own duplicate bug
 (below) landing on different points because the patched front door shifts timing — attribution
 by "passes on the control" is not exact for a timing-dependent base bug; the signature check
@@ -417,6 +417,7 @@ A cell gives the repetitions that detected the defect, the run of the first dete
 repetition, and the median. Every detection reproduced its fingerprint, matched its defect's
 oracle line and passed on the control (no candidate was rejected). Module srcversion
 `38E88060EEC5F955DFDFD03`. Results are in `/var/tmp/m59-bench/<strategy>/results.jsonl` on
+the bare-metal machine.
 
 | defect | random+cc | swarm+cc | process+cc | swarm+bg+cc | random (no cc) |
 |---|---|---|---|---|---|
@@ -698,7 +699,7 @@ and starts no VM. Plans: `c2-plans/m139.txt` (`px` = `--strategy process --more-
 1-309`, `pxr` = the same with `--reactive both`; d0–d7 and d10 three repetitions, d11 ten) and
 `c2-plans/m139-modes.txt` (`pxf` = `--reactive fault`, `pxh` = `--reactive heal`), run by
 `c2-cells.sh` with `KINDS=agent` on the M136 images; results `/var/tmp/m139/{cells,modes}` on the
-box (`hydo-bench table` over the step directories).
+bare-metal machine (`hydo-bench table` over the step directories).
 
 | defect | px | pxr (both) | pxf (fault) | pxh (heal) |
 |---|---|---|---|---|

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build hvx.ko against the debug kernel, the hand-written tests and the reproducers (static),
 # and the initramfs of the debug test VM (Milestone 97). Runs where build-kernel.sh ran (the
-# bare-metal test machine or the build machine); it only builds. Output: $SAFETY/debug/{hvx.ko,
+# bare-metal machine or the build machine); it only builds. Output: $SAFETY/debug/{hvx.ko,
 # initramfs.cpio.gz}, which run-debug.sh boots on the build machine.
 set -euo pipefail
 SAFETY=${SAFETY:-$HOME/hydo-safety}

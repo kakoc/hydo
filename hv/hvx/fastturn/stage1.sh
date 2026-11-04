@@ -1,7 +1,7 @@
 #!/bin/bash
 # The stage-1/2 scheduler tests against the side module, with their recorded numbers
 # (hv/hvx/SMP_STAGE1.md, hv/hvx/SMP_STAGE2.md), plus the burst test (hv/hvx/FASTTURN.md).
-# On the box, from ~/hydo-ft/hvx:
+# On the bare-metal machine, from ~/hydo-ft/hvx:
 #   fastturn/stage1.sh [/dev/hvxft]
 # FT_MARGIN=<n> passes a turn-end margin to the tests (hvx_sched_util.h applies it).
 set -u

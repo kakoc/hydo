@@ -51,7 +51,7 @@ Built on the build machine with the pinned `hvx_seedrng` (`c2a440c5…`) from co
 `params:` path); two builds identical. `hvx_explore one`, twice each: `disk=none dseed=1 | run`
 OK `ecfd264f2e19865f`; `disk=cut dseed=1 | run C=12` OK `0d8d109d8a1eca66`. The SDK's records
 are in both consoles (`hydo_assert_report`: 0 violations). The other schedules were moved to
-the Mac because the box was crowded.
+the Mac because the bare-metal machine was crowded.
 
 ## Milestone 136: agent images with hydo-agent 0.2.0
 

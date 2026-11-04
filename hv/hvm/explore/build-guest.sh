@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build the arm64 kernel for manifest-built guests (hydo/onboard/hydo-build --arch arm64) on the
-# build machine: the same Linux 6.6.35 + arch_timer.cntpct change as
+# Linux build machine: the same Linux 6.6.35 + arch_timer.cntpct change as
 # ../linux/build-guest.sh, with ../linux/hvm.config + ../linux/hvm-virtio.config (virtio-mmio disk
 # and network, ext4) + ../services/svc.config (the syscalls real services need) + hvm-explore.config
 # (the loop driver, for a manifest image run without a disk; the qdiscs for network faults).

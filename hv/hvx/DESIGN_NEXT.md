@@ -25,7 +25,7 @@ EPT/MMIO decode, no kernel run-loop changes** in the minimal landing — so it c
 none of the nested-L1 hazard that every prior device milestone did.
 
 The other three candidates are evaluated and declined at the end; the short version:
-candidate 4 (fast instruction clock) is hardware-BLOCKED on this hybrid box and its only
+candidate 4 (fast instruction clock) is hardware-BLOCKED on the hybrid build machine and its only
 consumer (divergence bisection) is moot because free-run is already deterministic;
 candidates 2 and 3 (fuller TCP stack / multi-VM) are larger, riskier, and are far more
 compelling built *on top of* a working flagship than before one exists.
@@ -350,14 +350,14 @@ reproduces the schedule. Two additions:
 ## 8. Why not the other candidates
 
 **Candidate 4 — a fast instruction clock for instruction-exact bisection.** Declined: it is
-BLOCKED at the hardware level on this box and its only consumer is moot here. M17 established
+BLOCKED at the hardware level on the build machine and its only consumer is moot here. M17 established
 with direct evidence that the L0 CPU is a hybrid i7-13700HX, that KVM hardcodes guest-vPMU-off
 on hybrid silicon (`enable_pmu` stays `N` even after a successful reload with `enable_pmu=1`),
 and that the nested L1 therefore has **no architectural PMU at all** (`CPUID.0AH = 0`, every
 PMU MSR `#GP`s). There is no counter to count with — not a config toggle. The VMX-preemption
 timer that *is* available counts scaled TSC ticks, not retired instructions, so it cannot
 substitute. And critically, the *purpose* of a fast clock — bisecting the first diverging
-instruction between two runs — is moot on this box because M16 already proved free-run is
+instruction between two runs — is moot on the build machine because M16 already proved free-run is
 **fully deterministic**: there is no divergence to bisect. The only real unblocks are a
 non-hybrid host (which the project does not have) or patching host KVM (forbidden: no host
 root, and the gate exists precisely because hybrid vPMU counts are unreliable). Re-designing

@@ -6,7 +6,7 @@
 #   VARIANT=planted  cur with a planted defect (Place publishes an already-published order again)
 # The client in every image is the cur client, built with one added file (target.go: dial
 # $HYDO_GRPC_TARGET when it is set), so it reaches the order service through the proxy.
-# Output: build/explore-ob-stack-grpc-$VARIANT-disk.img. Run from anywhere on the build box;
+# Output: build/explore-ob-stack-grpc-$VARIANT-disk.img. Run from anywhere on the build machine;
 # tool pins as in build-stack.sh (Go) and hydo-build (HYDO_SEEDRNG, HYDO_WORLDBIN, ...).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"

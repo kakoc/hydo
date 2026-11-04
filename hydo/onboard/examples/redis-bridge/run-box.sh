@@ -1,5 +1,5 @@
 #!/bin/sh
-# M95 helper for the bare-metal test machine: run ONE schedule as a fresh boot and keep its output.
+# M95 helper for the bare-metal machine: run ONE schedule as a fresh boot and keep its output.
 #   run-box.sh <tag> <image> <ram-mib> "<schedule>"     (output: $OUT/<tag>.{out,err}, $OUT/<tag>/)
 # Waits (at most 30 min) while /var/tmp/hydo-QUIET exists; every VM goes through ~/bin/hvx-run.
 # The caller starts at most two at a time. The pid is in $OUT/<tag>.pid while it runs.

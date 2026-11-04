@@ -75,7 +75,7 @@ owner, below.
   tokens, then make seeded turns fixed, then lengthen the turns 8x toward 2^20.
 - `hvm_backend.hvm_supported` drops `q` (the Mac has no PMU clock).
 
-## Tests and numbers (bare-metal test machine, main `hvx.ko` srcversion C907B1D09F5370F6CC93B45)
+## Tests and numbers (bare-metal machine, main `hvx.ko` srcversion C907B1D09F5370F6CC93B45)
 
 **One vCPU is byte-identical.**
 
@@ -163,4 +163,4 @@ check-then-act race; PASS):
 count in `boot_setup`, the two branch checks), `hv/hvx/hvx_explore.c` (`--vcpus`, `q=`/`qs=`,
 snapshots), `hydo/explore/explore.py`, `hydo/explore/hvm_backend.py`,
 `hydo/explore/turns_selftest.c` (build: `cc -O2 -o turns_selftest turns_selftest.c` in
-`hydo/explore`), `hydo/explore/turns_ident.py`. Box results: `/var/tmp/turns`.
+`hydo/explore`), `hydo/explore/turns_ident.py`. Results on the bare-metal machine: `/var/tmp/turns`.

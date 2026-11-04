@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Run a syzkaller campaign against /dev/hvx (Milestone 97). Runs ON THE BUILD MACHINE BUILD BOX, which
-# has nested KVM; never on the bare-metal test machine. Inputs (from build-kernel/-debug/-syzkaller/
+# Run a syzkaller campaign against /dev/hvx (Milestone 97). Runs ON THE BUILD MACHINE, which
+# has nested KVM; never on the bare-metal machine. Inputs (from build-kernel/-debug/-syzkaller/
 # -image, shipped by safety.sh push): $SAFETY/debug/{bzImage,hvx.ko}, $SAFETY/kbuild/vmlinux,
 # $SAFETY/syzkaller/bin, $SAFETY/syz/{image.ext4,id_syz}.
 #
@@ -111,7 +111,7 @@ smoke)
 start)
   [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null && { echo "already running (pid $(cat "$PIDF"))"; exit 1; }
   launch "$C/long" "${3:-4}" $(( ${2:-10} * 3600 )) || exit 3
-  echo "campaign: pid $(cat "$PIDF"), log $C/long/manager.log, web UI 127.0.0.1:${HTTP_PORT:-56741} (ssh -L)"
+  echo "campaign: pid $(cat "$PIDF"), log $C/long/manager.log, web UI 127.0.0.1:${HTTP_PORT:-56741} (reach it through a forwarded port)"
   ;;
 status)
   if [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null; then echo "running (pid $(cat "$PIDF"))"; else echo "not running"; fi

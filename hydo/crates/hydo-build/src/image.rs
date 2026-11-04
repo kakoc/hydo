@@ -14,7 +14,7 @@ use std::process::{Command, Stdio};
 
 pub const FAKE_TS: &str = "2020-09-13 16:26:40";
 /// libfaketime reads FAKE_TS in the local time zone; every recorded image was built in UTC+4
-/// (the Nix build box's zone), where FAKE_TS is exactly FIXED_MTIME. TZ=UTC-4 is POSIX notation
+/// (the Nix build machine's zone), where FAKE_TS is exactly FIXED_MTIME. TZ=UTC-4 is POSIX notation
 /// for UTC+4, set on every faketime'd call, so a build in any zone gets the same bytes.
 pub const FAKE_TZ: &str = "UTC-4";
 

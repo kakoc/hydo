@@ -7,7 +7,7 @@
 # building it does NOT rebuild the slow spread/JVM/redis closures or clobber their images.
 # The heavy JDK closure + kafka jars staged onto build/rootfs-kafka-root are PRESERVED across
 # runs by §2l.2's own reuse logic (rm -rf build/rootfs-kafka-root to force a fresh copy).
-# Run on the box via ./dev.sh "hv/hvx/images/build-kafka.sh"  (or scp it over and run it directly).
+# Run on the build machine via ./dev.sh "hv/hvx/images/build-kafka.sh"  (or copy it over and run it directly).
 set -euo pipefail
 cd "$(dirname "$0")/../../.."   # M100: this script lives in hv/hvx/images; every path below is relative to the repository root
 mkdir -p build
@@ -75,7 +75,7 @@ fi
 [ -x "$FAKETIME_BIN" ] || { echo "error: faketime not found (set HYDO_FAKETIME)" >&2; exit 1; }
 FAKE_TS="2020-09-13 16:26:40"
 # libfaketime reads FAKE_TS in the local time zone; it is 1600000000 only in UTC+4, the zone of the
-# Nix build box (UTC+4) that made every recorded image. FAKE_TZ (POSIX notation for UTC+4)
+# Nix build machine that made every recorded image. FAKE_TZ (POSIX notation for UTC+4)
 # is set on every faketime call, so a build in another zone gets the same bytes.
 FAKE_TZ=UTC-4
 

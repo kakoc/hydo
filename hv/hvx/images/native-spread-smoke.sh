@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# F0 native sanity (on L0/the box, NOT under hvx): start ONE spread fs-backend broker,
+# F0 native sanity (on L0/the build machine, NOT under hvx): start ONE spread fs-backend broker,
 # poll /healthz with spread-drv, then run the single-broker `smoke` oracle against it.
 # Confirms the driver's smoke subcommand + spread's fs backend end-to-end before the
 # full rootfs build. Output goes to stdout.

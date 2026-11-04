@@ -8,9 +8,11 @@ version = "0.1.0"
 description = "Assertion SDK for programs tested under hydo, a deterministic hypervisor (always/sometimes properties, BUGGIFY fault points, bounded liveness)"
 readme = "README.md"
 requires-python = ">=3.8"
+license = {text = "Apache-2.0"}
 dependencies = []
 classifiers = [
     "Private :: Do Not Upload",   # not published; PyPI refuses this classifier
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Operating System :: POSIX :: Linux",
     "Topic :: Software Development :: Testing",

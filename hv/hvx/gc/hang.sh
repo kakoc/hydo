@@ -1,5 +1,5 @@
 #!/bin/bash
-# M138, on the bare-metal test machine: open item 30 (d), the lock-step hang of M127's gRPC stack
+# M138, on the bare-metal machine: open item 30 (d), the lock-step hang of M127's gRPC stack
 # seed 6 (M136: TIMEOUT workload, the agent's last console frame cut in the middle), on a copy of
 # M136's planted gRPC stack image with hydo-agent 0.3.0, over the serial line and over the
 # host-call port, each once (a hang takes the engine's 900 s wall limit). Alone, with >= 6 GiB.

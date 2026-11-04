@@ -52,8 +52,8 @@ There are three kinds of examples, by what their images need.
    of recorded images (`~/hydo-prd`); both kinds were built in that chroot with this branch's
    `hydo build` (as uid 1000, gid 100, `HYDO_KEEP_OWNERS=1`, as M112 did).
 3. **Patched from the recorded shell image (tier C).** etcd, the shop, the gRPC stack, the
-   generated-driver stack, the error-log stack, rust-kv, avx2, the OCI examples and the user's
-   workflow engine need inputs only the build machine can stage. Their agent images were made
+   generated-driver stack, the error-log stack, rust-kv, avx2 and the OCI examples need inputs
+   only the build machine can stage. Their agent images were made
    from the recorded shell images by `hv/hvx/images/patch-agent.sh`.
 
 ### The patch, and its proof against a real build
@@ -99,7 +99,7 @@ build. Every row below ran with the fixes that could change it:
   only a workload with a shell `wait` for a background job meets; of the examples only etcd's
   workload has one, and the etcd rows ran on images patched with the fixed agent (`b72c5caa…`).
 - Rows with guest-program records (the stack, the shop, rust-kv, miniflux, etcd, the history
-  examples) ran after M128's console fix was merged (2026-11-01 03:19 box time); the stack and
+  examples) ran after M128's console fix was merged (2026-11-01 03:19 on the bare-metal machine's clock); the stack and
   shop agent explorations that ran before it were run again and their old results set aside
   (`/var/tmp/m127/old-controller*`).
 - The composed history example's agent row ran after fix 4; etcd's agent rows after fix 3.
@@ -299,8 +299,6 @@ Other differences, one by one:
   "ERROR front restart failed", the shell run OK. The restart's readiness check runs during the
   loss window; the agent's readiness polls are timed by the host (HANDOFF decision 3).
   **Timing, from a recorded controller decision; not proven.**
-  violation on the agent image twice (`eba88737fd17c6a8`, 342,273 stops, the agent's packet
-  (agent twice `8ddcb88b45d54f93`). Transcript replay of the freeze run REPRODUCED.
 
 ## Not run
 
@@ -314,7 +312,6 @@ left; each is listed with what would run it:
   memory stop (`/var/tmp/m127/broken-nohvx/compose-voting_hydo-swarm-shell/cache.jsonl`), no
   agent seeds; a run takes 75 s with one worker.
 - miniflux-read, restate-oci, etcd 3.5.6 history (`-hc`), etcd 3.6.x.
-  schedule ran.
 - The pinned reproducers' own images (`explore-disk.img`, `explore-fix-disk.img`) cannot be
   agent images: their init is `stack-explore.sh` and they carry no manifest (M129's finding); the
   reproducer's schedule ran on the onboarding stack's old and fixed images instead (above).

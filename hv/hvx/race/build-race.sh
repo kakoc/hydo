@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build the calibration-race guest on the bare-metal test machine: a static hydorace, and an
+# Build the calibration-race guest on the bare-metal machine: a static hydorace, and an
 # initramfs = the stock busybox initramfs + a second cpio that replaces /init and
 # adds /bin/hydorace (the kernel extracts concatenated archives in order).
 set -euo pipefail

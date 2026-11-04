@@ -1,5 +1,5 @@
 //! Replay the recorded lock-step transcripts (`tests/lockstep/*.txt`, written by
-//! `examples/lockstep_check.rs` on the bare-metal test machine on the Redis agent image, M145
+//! `examples/lockstep_check.rs` on the bare-metal machine on the Redis agent image, M145
 //! (M118's were of the shell-init image), and `agent-*.txt` by `examples/agent_boot_check.rs`
 //! on both engines, M121; never edited) through the
 //! typed client: every engine line parses, every host line is what the client writes for the
