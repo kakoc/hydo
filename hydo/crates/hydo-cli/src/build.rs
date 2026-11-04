@@ -63,6 +63,7 @@ pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
             setdefault(&mut inputs.faketime, &ctx.libexec().join("faketime"));
             setdefault(&mut inputs.modroot, &guest.join("modules"));
             setdefault(&mut inputs.worldbin, &guest.join("hydo-world"));
+            setdefault(&mut inputs.read_bin, &guest.join("hydo-read"));
             if let Some((_, path)) = hvxenv::tool_env(ctx).into_iter().find(|(k, _)| k == "PATH") {
                 std::env::set_var("PATH", path);
             }

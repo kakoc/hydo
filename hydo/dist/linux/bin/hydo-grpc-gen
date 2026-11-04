@@ -1,0 +1,9 @@
+#!/bin/sh
+# hydo-grpc-gen <proto dir> [--hints hints.yaml] --out <dir>
+#   (or --descriptor-set set.pb / --reflect host:port instead of <proto dir>)
+# The release's gRPC driver generator (MANIFEST.md "gRPC services: generated drivers"): the
+# program libexec/hydo-grpc-gen, with its --client defaulting to the release's guest/ directory,
+# which holds the prebuilt static client guest/hydo-grpc (x86_64). $HYDO_GRPC_CLIENT names
+# another directory of clients.
+P=$(cd "$(dirname "$0")/.." && pwd)
+HYDO_GRPC_CLIENT=${HYDO_GRPC_CLIENT:-$P/guest} exec "$P/libexec/hydo-grpc-gen" "$@"

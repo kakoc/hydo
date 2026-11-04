@@ -237,6 +237,7 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         g.join("initramfs-kafka.cpio.gz"),
         g.join("busybox"),
         g.join("hvx_seedrng"),
+        g.join("hydo-agent"),
         ctx.p("tools/bin/mke2fs"),
         g.join("store-closures.txt"),
         g.join("store").join("nix").join("store"),

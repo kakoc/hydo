@@ -2276,3 +2276,26 @@ images (section 9.2, `stack-old`, `stack-fix`). They replace `2403499c9a3f8419` 
 and `f87130453609a5d6` (`explore-fix-disk.img`) in `hv/hvx/deploy-metal.sh`,
 `hv/hvx/gc/side-suite.sh` and `hv/hvx/safety/side-check.sh`. On the bare-metal machine the images are in
 `~/hydo/build/m145/`.
+
+## 11. The Linux release (M149, 2026-11-04)
+
+The Linux release tarball built from M149's branch (`hydo-linux-0.1.0.tar.gz`, sha256
+`3083f40f9abe43ae…`, twice with the same bytes), installed with `install.sh --no-module` into
+clean prefixes on the bare-metal machine (main module `B5E97B37504F1A5F508BA30`, the host-call port on),
+each schedule run twice with `hydo run` from a fresh boot, as the user (the engine as
+`bin/hydo-hvx` under sudo) and, for the first two rows, also as root (the engine inside `hydo`);
+every pair identical, and both ways equal. The release's Redis example has its own manifest text
+(`src: files/redis-…`), so its image and values are new; the other rows are repository examples
+built with the installed release, whose images have M140's bytes and whose values are section 9.2's.
+
+| image (sha256) | schedule | verdict | fingerprint |
+|---|---|---|---|
+| release `examples/redis` (`afd27220c09d9745…`) | `disk=none \| run` | OK (acked=20 all present) | `9a42e3d59c3b3a53` |
+| release `examples/redis` | `disk=cut \| run C=12 R=everysec` | VIOLATION key k:1 lost | `63736100f744c3ff` |
+| release `examples/redis` | `disk=lying:3 dseed=eac0b527c5ac67d9 \| run C=20` (minimal, from the exploration) | VIOLATION key k:3 lost | `29910066ab8efc9d` |
+| release `examples/redis` | `disk=cut dseed=1f16055b6d41c6d9 \| run C=9 R=no` (minimal, from the exploration) | VIOLATION key k:0 lost | `9b99edc5bee28261` |
+| release `examples/redis/hydo-netem.yaml` (`2f62fa5c5001c1b9…`) | `disk=none \| run N=redis@3-6:delay,300ms` | OK (retrans=0) | `45d3cf4cd815fb53` |
+| repository `examples/redis` (`bde714a7…`) | `disk=none \| run` | OK | `e7de012271d99d0a` (9.2) |
+| `redis-bridge` (`490d7240…`) | the six schedules of 9.2 | as 9.2 | as 9.2 |
+| `redis-composed` (`39d9e74f…`) | the two schedules of 9.2, and `repro --regressions` | as 9.2 (PASS `aa64393559c1ad8c`) | as 9.2 |
+| `redis-composed-read` (`ecb7f1e0…`) | `disk=none dseed=1 \| run W=0000002a,p4,q2,r100` | OK | `ab1689254694d5cd` (9.2) |

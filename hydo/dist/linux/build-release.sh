@@ -18,14 +18,23 @@
 #   tools/bin/{mke2fs,debugfs}, tools/lib/*        e2fsprogs 1.47.0 + libfaketime 0.9.10 with their
 #                                                  glibc, run on the user's machine by libexec/faketime
 #   redis/{redis-server,redis-cli}                 the Redis example's static binaries
-# With HYDO_PIN=1 a missing assets.sha256 is written from the fetched files (once, by a maintainer).
-# Once assets/ is filled the release builds offline. Users of the release need no Nix.
+# HYDO_ASSETS_FROM=DIR copies these files from a local directory of the same layout instead of
+# fetching them (for example a copy kept on the bare-metal test machine; each file is still
+# checked against assets.sha256). With HYDO_PIN=1 a missing assets.sha256 is written from the
+# fetched files (once, by a maintainer). Once assets/ is filled the release builds offline.
+# Users of the release need no Nix.
+# Everything else is built here from this tree with the pinned Rust toolchain: the programs
+# (bin/), the guest agent (guest/hydo-agent, checked against its pin by hydo-build), hydo-world,
+# hydo-read and the gRPC client hydo-grpc. The tarball's bytes depend only on the inputs (fixed
+# file times, owners and order; gzip without a time stamp).
 set -e
+umask 022
 D=$(cd "$(dirname "$0")" && pwd)
 TOP=$(cd "$D/../../.." && pwd)
 VERSION=${HYDO_VERSION:-0.1.0}
 OUTDIR=${1:-$D/out}
 A=$D/assets
+GB=$TOP/target/dist-linux     # the guest programs built from this tree (not assets: they are not pinned here)
 HOST=${HYDO_BUILD_HOST:?}
 BUSYBOX=/nix/store/ahw5fkq085k5ppdsylyd475xlxb18pz1-busybox-static-x86_64-unknown-linux-musl-1.37.0/bin/busybox
 E2FS=/nix/store/24s0phlx9kly7x7qb8gal3mmn51ndmlx-e2fsprogs-1.47.0-bin
@@ -40,6 +49,12 @@ MODS="sch_prio sch_netem cls_u32 x_tables ip_tables iptable_filter xt_tcpudp xt_
 if command -v sha256sum >/dev/null; then SHA="sha256sum"; else SHA="shasum -a 256"; fi
 
 # --- 1. assets (fetched once, in one ssh session; the build host keeps nothing afterwards) ---
+if [ ! -f "$A/.complete" ] && [ -n "$HYDO_ASSETS_FROM" ]; then
+  [ -d "$A" ] && chmod -R u+w "$A" && rm -rf "$A"; mkdir -p "$A"
+  echo "copying the release assets from $HYDO_ASSETS_FROM"
+  ( cd "$HYDO_ASSETS_FROM" && tar cf - guest tools redis ) | ( cd "$A" && tar xpf - )
+  touch "$A/.complete"
+fi
 if [ ! -f "$A/.complete" ]; then
   [ -d "$A" ] && chmod -R u+w "$A" && rm -rf "$A"; mkdir -p "$A"
   echo "fetching the release assets from $HOST"
@@ -94,10 +109,12 @@ mkdir -p "$REL/bin" "$REL/libexec/bin" "$REL/hydo/onboard" \
 # libexec/hvx-run with sudo when the user cannot open the device; M137: it replaces hvx_explore,
 # so install.sh compiles nothing for it), bin/hydo-build (the image builder with its own
 # command line, for scripts; `hydo build` is the same builder with the release's tools) and
-# bin/hydo-fetch-image (what fetch-images.sh of `hydo compose` calls), static x86_64 musl
+# bin/hydo-fetch-image (what fetch-images.sh of `hydo compose` calls), and the gRPC driver
+# generator (libexec/hydo-grpc-gen, started by the wrapper bin/hydo-grpc-gen, which points its
+# --client at the release's guest/hydo-grpc; MANIFEST.md "gRPC services"), static x86_64 musl
 # binaries. Built here with the workspace's pinned toolchain (rust-toolchain.toml; rustup adds
 # the musl target; the TLS code of hydo-fetch-image compiles some C, with musl-gcc when present,
-# else the host's cc), or taken from $HYDO_RUST_BIN_DIR (a directory with the four) when they
+# else the host's cc), or taken from $HYDO_RUST_BIN_DIR (a directory with the five) when they
 # were built elsewhere.
 BINS="hydo hydo-hvx hydo-build hydo-fetch-image"
 if [ -n "$HYDO_RUST_BIN_DIR" ]; then
@@ -107,25 +124,29 @@ else
     CC_x86_64_unknown_linux_musl=$(command -v musl-gcc || command -v cc); export CC_x86_64_unknown_linux_musl
   fi
   ( cd "$TOP" && { rustup target add x86_64-unknown-linux-musl >/dev/null 2>&1 || true; } &&
-    cargo build --release --locked -p hydo-cli -p hydo-hvx -p hydo-build -p hydo-compose --target x86_64-unknown-linux-musl ) >&2
+    cargo build --release --locked -p hydo-cli -p hydo-hvx -p hydo-build -p hydo-compose -p hydo-grpc-gen \
+      --target x86_64-unknown-linux-musl ) >&2
   BD=$TOP/target/x86_64-unknown-linux-musl/release
 fi
-for b in $BINS; do
+for b in $BINS hydo-grpc-gen; do
   file -L "$BD/$b" 2>/dev/null | grep -q 'x86-64.*static' || { echo "$BD/$b is not a static x86_64 binary" >&2; exit 1; }
-  cp "$BD/$b" "$REL/bin/$b"; chmod 755 "$REL/bin/$b"
 done
+for b in $BINS; do cp "$BD/$b" "$REL/bin/$b"; chmod 755 "$REL/bin/$b"; done
+cp "$BD/hydo-grpc-gen" "$REL/libexec/hydo-grpc-gen"
 cp "$D/libexec/hvx-run" "$D/libexec/faketime" "$REL/libexec/"
 cp "$D/libexec/bin/debugfs" "$REL/libexec/bin/"
-chmod 755 "$REL/libexec/hvx-run" "$REL/libexec/faketime" "$REL/libexec/bin/debugfs"
-# the format reference (`hydo guide manifest`) and hydo_fc.c, the source of guest/hydo_fc (the
-# history recorder follows); the shell init and its extensions are gone since M136 (every image's
-# first process is guest/hydo-agent)
+cp "$D/bin/hydo-grpc-gen" "$REL/bin/hydo-grpc-gen"
+chmod 755 "$REL/libexec/hvx-run" "$REL/libexec/faketime" "$REL/libexec/bin/debugfs" \
+          "$REL/libexec/hydo-grpc-gen" "$REL/bin/hydo-grpc-gen"
+# the format reference (`hydo guide manifest`) and hydo_fc.c, the source of guest/hydo_fc;
+# the shell init and its extensions are gone since M136 (every image's first process is
+# guest/hydo-agent, driven by the host controller inside bin/hydo)
 cp "$TOP/hydo/onboard/hydo_fc.c" "$TOP/hydo/onboard/MANIFEST.md" "$REL/hydo/onboard/"
 echo "$VERSION" > "$REL/hydo/VERSION"     # what a plan's hydo_version: is checked against
+# the history recorder for shell workloads (MANIFEST.md "History checks")
 mkdir -p "$REL/hydo/history"
 cp "$TOP/hydo/history/hydo_hist.sh" "$REL/hydo/history/"
-# the property-table tool the explorer compiles on the fly, and the assertion protocol it reads
-# (the property table is made by the explorer itself since M115: no hydo/assert tool in the release)
+# the assertion protocol the SDKs write and the explorer's property table reads
 cp "$TOP/hydo/ASSERTIONS.md" "$REL/hydo/"
 # the kernel module's sources (hydo module build)
 cp "$TOP/hv/hvx/hvx.c" "$TOP/hv/hvx/hvx_abi.h" "$TOP/hv/hvx/Makefile" "$REL/module/"
@@ -136,8 +157,8 @@ chmod 755 "$REL/guest/busybox" "$REL/guest/hvx_seedrng" "$REL/guest/hydo_fc" "$R
 # the guest agent of agent images (hydo build --control agent, M121; driven by the host controller,
 # M126): built here byte-reproducibly (hydo/crates/hydo-agent/build.sh, no C toolchain); hydo-build
 # checks its sha256 against the pin in docs/BUILD-PINS.md when it stages it
-"$TOP/hydo/crates/hydo-agent/build.sh" x86_64 "$A/agent" >&2
-cp "$A/agent/hydo-agent" "$REL/guest/hydo-agent"; chmod 755 "$REL/guest/hydo-agent"
+"$TOP/hydo/crates/hydo-agent/build.sh" x86_64 "$GB/agent" >&2
+cp "$GB/agent/hydo-agent" "$REL/guest/hydo-agent"; chmod 755 "$REL/guest/hydo-agent"
 # guest/hydo-world: the in-guest program of fakes: and proxies: (hydo/crates/hydo-world, Rust since
 # M111), a static x86_64 musl build that needs no build machine; `hydo build` stages it
 # ($HYDO_RUST_BIN_DIR/hydo-world when the binaries were built elsewhere)
@@ -148,6 +169,15 @@ else
 fi
 file -L "$REL/guest/hydo-world" | grep -q 'x86-64.*static' || { echo "guest/hydo-world is not a static x86_64 binary" >&2; exit 1; }
 chmod 755 "$REL/guest/hydo-world"
+# guest/hydo-read (also hydo-check): the ready-made store readers (hydo/crates/hydo-read, its own
+# Cargo workspace; MANIFEST.md "Store readers"), staged by `hydo build` only for manifests that
+# call them; its bytes depend on the kind of host that builds it (docs/BUILD-PINS.md "hydo-read")
+"$TOP/hydo/crates/hydo-read/build.sh" x86_64 "$GB/read" >&2
+cp "$GB/read/hydo-read" "$REL/guest/hydo-read"; chmod 755 "$REL/guest/hydo-read"
+# guest/hydo-grpc: the generated drivers' static client (hydo/crates/hydo-grpc; the same bytes on a
+# Mac and on Linux, docs/BUILD-PINS.md "The gRPC client"), copied into a project by hydo-grpc-gen
+"$TOP/hydo/grpcgen/build-client.sh" --out "$GB/grpc" amd64 >&2
+cp "$GB/grpc/hydo-grpc" "$REL/guest/hydo-grpc"; chmod 755 "$REL/guest/hydo-grpc"
 # the Redis example (hydo/onboard/examples/redis) with its binaries under files/
 cp "$A/redis/redis-server" "$A/redis/redis-cli" "$REL/examples/redis/files/"
 chmod 755 "$REL/examples/redis/files/"*
@@ -165,8 +195,15 @@ cp "$D/QUICKSTART-linux.md" "$REL/README.md"
 echo "$VERSION" > "$REL/VERSION"
 ( cd "$REL" && find . -type f ! -name SHA256SUMS | LC_ALL=C sort | sed 's#^\./##' | xargs $SHA > SHA256SUMS )
 
-# --- 3. the tarball (owner root, fixed order; the store's read-only modes are kept) ---
-( cd "$OUTDIR" && COPYFILE_DISABLE=1 tar --no-xattrs --uid 0 --gid 0 --uname root --gname root -czf "hydo-linux-$VERSION.tar.gz" "hydo-linux-$VERSION" 2>/dev/null \
-  || tar --owner=0 --group=0 --sort=name -czf "hydo-linux-$VERSION.tar.gz" "hydo-linux-$VERSION" )
+# --- 3. the tarball (owner root, fixed order and file times, gzip without a name or time stamp,
+# so two builds from the same inputs give the same bytes; the store's read-only modes are kept).
+# GNU tar (Linux); BSD tar (a Mac) only keeps the owner and order, its file times are the build's.
+TGZ=hydo-linux-$VERSION.tar.gz
+if tar --version 2>/dev/null | grep -q 'GNU tar'; then
+  ( cd "$OUTDIR" && tar --format=gnu --sort=name --mtime=@1600000000 --owner=root:0 --group=root:0 \
+      -cf - "hydo-linux-$VERSION" | gzip -n -9 > "$TGZ" )
+else
+  ( cd "$OUTDIR" && COPYFILE_DISABLE=1 tar --no-xattrs --uid 0 --gid 0 --uname root --gname root -czf "$TGZ" "hydo-linux-$VERSION" )
+fi
 ls -la "$OUTDIR/hydo-linux-$VERSION.tar.gz"
 $SHA "$OUTDIR/hydo-linux-$VERSION.tar.gz"

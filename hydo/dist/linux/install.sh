@@ -51,7 +51,7 @@ if [ -f "$P/guest/store.tar" ]; then
 fi
 
 cd "$P"
-chmod 755 bin/hydo bin/hydo-hvx bin/hydo-build bin/hydo-fetch-image
+chmod 755 bin/hydo bin/hydo-hvx bin/hydo-build bin/hydo-fetch-image bin/hydo-grpc-gen libexec/hydo-grpc-gen
 
 if [ $MODULE = 1 ]; then
   if [ -d "/lib/modules/$(uname -r)/build" ]; then

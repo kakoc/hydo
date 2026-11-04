@@ -592,6 +592,25 @@
           ],
           "default": true
         },
+        "restart": {
+          "description": "What hydo does when the service's process ends by itself while the test runs, in Docker\nCompose's words: no (the default: it stays down until the heal), always, unless-stopped,\non-failure, on-failure:<max>. Followed by agent images (MANIFEST.md \"Restart policies\").",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RestartPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "restart_may_fail": {
+          "description": "true: the restart at the heal (after the faults, before workload.retry) may fail. If the\nservice does not come back then, the run goes on without workload.retry; a power cut at\nthe k-th flush (cf=) still reaches its recovery boot, which gives the verdict; without a\ncut the verdict is ERROR naming the service. Default false: a service that does not come\nback is at once ERROR (MANIFEST.md \"A restart after the faults that may fail\").",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": false
+        },
         "description": {
           "anyOf": [
             {
@@ -711,6 +730,21 @@
           "items": {
             "$ref": "#/$defs/Text"
           }
+        }
+      ]
+    },
+    "RestartPolicy": {
+      "description": "Docker Compose's restart: words: no (the default), always, unless-stopped, on-failure or on-failure:<max> (0 = no limit); false (a bare YAML no) means no.",
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^(no|always|unless-stopped|on-failure(:[0-9]+)?)$"
+        },
+        {
+          "const": false
+        },
+        {
+          "$ref": "#/$defs/ParamRef"
         }
       ]
     },
