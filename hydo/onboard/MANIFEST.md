@@ -1282,7 +1282,7 @@ folder that contains the name, a script or a compiled program); every other mani
 byte-identical image. Build the binary
 first with `hydo/crates/hydo-read/build.sh` (Rust 1.90.0, static musl, byte-reproducible on a given
 build host; it writes `build/hydo-read` for x86_64 and `build/hydo-read-arm64` for `--arch arm64`,
-or point `HYDO_READ_BIN` / `HYDO_READ_BIN_ARM64` at them; the Mac release ships the arm64 one as
+or point `HYDO_READ_BIN` / `HYDO_READ_BIN_ARM64` at them; the Linux release ships the x86_64 one and the Mac release the arm64 one as
 `guest/hydo-read`); example `hydo/onboard/examples-mac/redis/hydo-read.yaml`. From a program under test (an SDK, not
 an invariant), run the same binary with `--id`/`--console` so the record reaches the console.
 Examples: `examples/stack/hydo-read.yaml`, `examples/miniflux/hydo-read.yaml`; tests against real
@@ -1672,8 +1672,9 @@ The generator copies the clients from `--client DIR` (`$HYDO_GRPC_CLIENT`): `DIR
 amd64 and `DIR/hydo-grpc.<arch>` for another architecture. In this repository
 `hydo/onboard/hydo-grpc-gen` builds the generator for the host and the clients of `--arch` with
 `hydo/grpcgen/build-client.sh` (the pinned Rust toolchain and the two `*-unknown-linux-musl`
-targets, `docs/BUILD-PINS.md`), then runs it with `--client` pointing at them. (Neither release
-ships the generator or the clients yet.) Put `grpc/` at `/etc/hydo/grpc` and the client at
+targets, `docs/BUILD-PINS.md`), then runs it with `--client` pointing at them. (The Linux release ships the generator as
+`bin/hydo-grpc-gen`, whose `--client` defaults to its `guest/` directory with the x86_64 client
+`guest/hydo-grpc`; the Mac release does not ship it yet.) Put `grpc/` at `/etc/hydo/grpc` and the client at
 `/bin/hydo-grpc` (the starter section does).
 
 ### What the client does

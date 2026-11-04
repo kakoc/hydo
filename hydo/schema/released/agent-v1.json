@@ -101,6 +101,10 @@
           "minimum": 0,
           "type": "integer"
         },
+        "netns": {
+          "description": "Bind the netfilter queue inside this network namespace (a path such as /tmp/hydo/ns/a): netfilter queues are per namespace, so the trigger reads the packets that namespace's rules queue, as hydo_fc does under `nsenter -n<file>`. Only the queue's socket is made there; the agent stays in its own namespace. Needs the feature `freeze-netns`.",
+          "type": "string"
+        },
         "op": {
           "const": "freeze",
           "description": "The command.",
