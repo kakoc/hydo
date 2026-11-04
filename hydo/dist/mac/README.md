@@ -112,7 +112,7 @@ Nothing is published by the script; the tarball stays in `OUTDIR`.
 
 ## Milestone 150: the release built and checked
 
-Built from `main` at `3431aaa` plus this milestone's changes, twice from clean target
+Built from `main` at `85e3f4c` (with M149) plus this milestone's changes, twice from clean target
 directories: the same tarball both times (`hydo-mac-0.1.0.tar.gz`; its size and sha256 are in
 docs/HISTORY.md "Milestone 150"). Installed into a clean prefix and run with a PATH of the
 prefix's `bin`, `/usr/bin`, `/bin`, `/usr/sbin` and `/sbin`, with traps for `python`,
