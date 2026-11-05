@@ -12,12 +12,12 @@ inside the release.
 | Path | What |
 |---|---|
 | `bin/hydo`, `bin/hydo-build`, `bin/hydo-fetch-image` | the Rust programs (`aarch64-apple-darwin`, built by `build-release.sh` or taken from `$HYDO_RUST_BIN_DIR`): `hydo` is the one CLI (`hydo/crates/hydo-cli`; the same program as on Linux, with the same behaviour since Milestone 107), with the host controller that drives every image's guest agent (Milestone 136), `hydo-build` the image builder with its own command line (for scripts), `hydo-fetch-image` what the `fetch-images.sh` of `hydo compose` calls |
-| `bin/hydo-hvm`, `hv/hvm/hv.entitlements` | the Mac engine (`hydo/crates/hydo-hvm`, Rust since Milestone 143; the C `hvm` and `hvmx` were deleted in Milestone 147), signed with the hypervisor entitlement by `install.sh` on the user's Mac; it runs every guest, `hydo build`'s helper VM included |
+| `bin/hydo-hvm`, `hv/hvm/hv.entitlements` | the Mac engine (`hydo/crates/hydo-hvm`, Rust since Milestone 143; the C `hvm` and `hvmx` were deleted in Milestone 147), signed with the hypervisor entitlement on the user's Mac by `hydo setup` (by `install.sh` before Milestone 154); it runs every guest, `hydo build`'s helper VM included |
 | `hv/hvm/explore/out/Image-explore` | the arm64 kernel (`hv/hvm/explore/build-guest.sh`, HVC idle) |
 | `hv/hvm/explore/out/Image-explore-netns` | the second arm64 kernel (`hv/hvm/explore/build-guest-netns.sh`, `806807e7…`, docs/BUILD-PINS.md): `Image-explore` plus network namespaces, veth, bridge and NFQUEUE, for manifests with `network: bridge`, `addr:` or `faults: [freeze]` (Milestone 99; shipped since Milestone 150) |
 | `guest/hydo-agent` | the guest agent (`hydo/crates/hydo-agent`, 0.3.0, aarch64 `099e5444…`), every image's first process; built from the tree by `hydo/crates/hydo-agent/build.sh`, and `hydo build` checks its pinned sha256 |
 | `guest/hydo-world` | the in-guest program of `fakes:` and `proxies:` (`hydo/crates/hydo-world`, built from the tree, `fefcca66…`) |
-| `guest/hydo-read` | `hydo-read` and, through a link in the image, `hydo-check` (`hydo/crates/hydo-read`, built from the tree; `build-release.sh` checks the pinned Mac build `88576fa8…`; shipped since Milestone 150) |
+| `guest/hydo-read` | `hydo-read` and, through a link in the image, `hydo-check` (`hydo/crates/hydo-read`, built from the tree; `build-release.sh` and `hydo setup` check the pinned Mac build `88576fa8…` of `guest-programs.sha256`; shipped since Milestone 150) |
 | `guest/hydo_fc` | the freeze helper (`hydo/onboard/hydo_fc.c` built for aarch64 with the pinned Arm GNU toolchain, `499f654e…`), which `hydo build` stages for `faults: [freeze]` (an agent image freezes with the agent's own packet trigger; open item 30 in AGENTS.md; shipped since Milestone 150) |
 | `guest/busybox`, `guest/mke2fs` | static arm64 busybox 1.36.1 and e2fsprogs 1.47.0 (aarch64 nixpkgs) |
 | `guest/busybox-applets[.txt]` | the applet set to link, as the Linux build links it |
@@ -26,7 +26,7 @@ inside the release.
 | `examples/redis/` | the Redis example, with its arm64 binaries under `files/` (works offline) |
 | `examples/ledger-spin/` | the busy-wait example (`hydo/onboard/examples-mac/ledger-spin`), with `bin/spin_load` and `bin/spin_count` (static arm64, `hv/hvm/spin/spinvar.c`; `$HYDO_SPIN_BIN` when filling `assets/`) |
 | `skill/hydo-onboard/` | the onboarding skill (Agent Skills format, any AI tool) that writes a project's `hydo/` folder; `hydo guide`, `hydo skill install` and `hydo init` read it (`bin/hydo` also carries a built-in copy) |
-| `install.sh`, `QUICKSTART-mac.md`, `VERSION`, `SHA256SUMS` | |
+| `install.sh`, `QUICKSTART-mac.md`, `VERSION`, `SHA256SUMS` | `install.sh` copies the release into the prefix and runs `hydo setup` and `hydo doctor` there (Milestone 154); `hydo setup` checks every file of `SHA256SUMS` and the pins built into `hydo` (`assets.sha256` mapped to the release paths, and `guest-programs.sha256`), removes the quarantine attribute, signs `bin/hydo-hvm` and records the signed bytes in `.hydo-setup` |
 
 The shell init and its extensions (`hydo-init.sh`, `hydo-init-*.sh`, the guest composer) are not
 in a release any more: they were deleted in Milestone 136, when every image became an agent image.
@@ -110,7 +110,19 @@ that covers it), because Apple's linker derives the UUID from the object files' 
 
 Nothing is published by the script; the tarball stays in `OUTDIR`.
 
-## Milestone 153: the current tarball
+## Milestone 154: the current tarball
+
+Built twice on this Mac from M154's branch (on `main` = `ba16a4b`) from clean target
+directories, with the same bytes both times: `hydo-mac-0.1.0.tar.gz`, 29,829,740 bytes, sha256
+`2cced36ce7657acbba805851b4636a6e71588ed96753b12585883d8da95b1072`. `install.sh` now copies the
+release and runs `hydo setup` and `hydo doctor` (the checks and the signing are in `hydo`), and
+`build-release.sh` compiles the four Mac programs with the tree and the Cargo home remapped to
+`/hydo` and `/cargo` (both computed when it runs), so no program carries the building user's
+home directory any more; `bin/hydo-build` also lost its compiled-in checkout path. Installed into
+a clean prefix with the same PATH and stubs as below, it gave every M150 value of the release's
+own examples, each schedule twice (docs/HISTORY.md, "Milestone 154").
+
+## Milestone 153: the tarball before
 
 Built twice on this Mac from `main` = `a4d9531` (after M151's wording changes) from clean target
 directories, with the same bytes both times: `hydo-mac-0.1.0.tar.gz`, 29,786,366 bytes, sha256

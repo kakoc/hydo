@@ -191,13 +191,13 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
     c.check(
         built.is_some(),
         "hvx.ko built by this release",
-        "hydo module build",
+        "hydo module install (or only build it: hydo module build)",
         true,
     );
     c.check(
         mods.iter().any(|m| m == "hvx") && Path::new("/dev/hvx").exists(),
         "hvx module loaded, /dev/hvx present",
-        "hydo module load",
+        "hydo module install",
         false,
     );
     if d != "/dev/hvx" {
@@ -252,7 +252,7 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
     c.check(
         access(&ctx.p("bin/hydo-hvx"), libc::X_OK),
         "run engine present (bin/hydo-hvx; it runs inside hydo when /dev/hvx is usable)",
-        "run install.sh again",
+        "unpack the release again and run its install.sh",
         false,
     );
     let out = Command::new(ctx.libexec().join("faketime"))
@@ -282,6 +282,7 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         &fix,
         false,
     );
+    installation(&mut c, ctx);
     let cwd = std::env::current_dir().unwrap_or_default();
     // (until M144 also the snapshot directory, which the deleted C engine wrote)
     if let Some(free) = free_gib(&cwd) {
@@ -297,6 +298,55 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         );
     }
     c.summary()
+}
+
+/// What `hydo setup --check` would say (M154): one line per damaged file (the fix is to unpack the
+/// release again), one per step setup has not taken (the fix is `hydo setup`), or one line that
+/// all matched. A development tree (no SHA256SUMS) gets a warning instead.
+fn installation(c: &mut Checks, ctx: &Ctx) {
+    let r = crate::setup::inspect_ctx(ctx);
+    if !r.release {
+        c.check(
+            false,
+            &format!(
+                "an unpacked hydo release in {} (SHA256SUMS)",
+                ctx.root.display()
+            ),
+            "not a release: the installation's files are not checked (`hydo setup --check` needs one)",
+            true,
+        );
+        return;
+    }
+    for d in r.damaged.iter().take(10) {
+        c.check(
+            false,
+            &format!("release file {}", d.line()),
+            "unpack the release again and run its install.sh (hydo setup repairs no file)",
+            false,
+        );
+    }
+    if r.damaged.len() > 10 {
+        println!("     ... and {} more damaged files", r.damaged.len() - 10);
+    }
+    for s in &r.pending {
+        c.check(
+            false,
+            &format!("set up: {} is not done", s.describe()),
+            "hydo setup",
+            false,
+        );
+    }
+    if r.damaged.is_empty() && r.pending.is_empty() {
+        c.check(
+            true,
+            &format!(
+                "the installation matches the release: {} files and store entries checked, {} pinned in this hydo (hydo setup --check)",
+                r.checked, r.pinned
+            ),
+            "",
+            false,
+        );
+    }
 }
 
 fn free_gib(p: &Path) -> Option<f64> {
@@ -416,9 +466,10 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
             "{} signed with the hypervisor entitlement",
             hvmx.file_name().unwrap_or_default().to_string_lossy()
         ),
-        "run install.sh again",
+        "hydo setup",
         false,
     );
+    installation(&mut c, ctx);
     let cwd = std::env::current_dir().unwrap_or_default();
     if let Some(free) = free_gib(&cwd) {
         c.check(
