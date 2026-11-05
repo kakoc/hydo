@@ -1526,7 +1526,12 @@ needs `--cpu v3` too (the report's repro line includes it). Without the key noth
 
 Inside the image: `/etc/hydo/hydo.yaml` (the manifest as written), `/etc/hydo/manifest.sh`
 (compiled), `/etc/hydo/prelude.sh` (env + shell helpers), `/etc/hydo/control` (`agent 1`: boot
-under the host's lock-step control) and `/sbin/init` (the pinned `hydo-agent`; on arm64 `/init`).
+under the host's lock-step control), `/etc/hydo/image.json` (the guest kernel the image was built
+for, by sha256, and the fingerprint epoch; since M155) and `/sbin/init` (the pinned `hydo-agent`;
+on arm64 `/init`). Next to the image, `hydo build` writes `<image file>.json`: the hydo version
+and commit that built it, the manifest's sha256 and the service images' digests. A run boots the
+kernel the image names and refuses to run when this hydo does not have it (`hydo/PRODUCT.md`, "An
+image keeps working after hydo is upgraded").
 
 ## Limits of v1
 

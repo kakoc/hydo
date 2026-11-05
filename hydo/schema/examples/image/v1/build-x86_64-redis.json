@@ -1,0 +1,32 @@
+{
+  "v": 1,
+  "type": "build",
+  "image": {
+    "file": "explore-ob-redis-disk.img",
+    "sha256": "eb8a9cb19ccedc96df2f584b5958e05ea3708a24328860930079b8f2367de547"
+  },
+  "record": {
+    "v": 1,
+    "type": "image",
+    "arch": "x86_64",
+    "epoch": 1,
+    "kernel": {
+      "file": "bzImage",
+      "sha256": "0a9ede352483e1718a8583e35afa3e82791c8223e40c0a888d39b0530158e9d3",
+      "version": "6.6.35",
+      "cmdline": "root=/dev/vda1 ro rootfstype=ext4 console=ttyS0 earlyprintk=ttyS0 loglevel=8 nokaslr acpi=off x2apic_phys quiet loglevel=1"
+    },
+    "initrd": {
+      "file": "initramfs-kafka.cpio.gz",
+      "sha256": "d074d764c76ce11932d5ff445cd468de38fdca8dd0db02f85fde3817ff997230"
+    }
+  },
+  "hydo": {
+    "version": "0.1.0",
+    "commit": "26882eaf101b798999203a0eb3635045ce72ec77"
+  },
+  "manifest": {
+    "path": "hydo.yaml",
+    "sha256": "c34c172a137dd89e266d8e4e73288f9d9dc73dadf952d5b9c4a03f3547d5e443"
+  }
+}
