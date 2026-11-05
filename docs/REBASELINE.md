@@ -1566,6 +1566,8 @@ Initramfs sha256 prefixes (two builds byte-identical each, initramfs and data di
 
 #### node-kv
 
+Superseded by section 12 (M152: the package file's license field changed the image bytes).
+
 | schedule | verdict | fingerprint | ctl | twice |
 |---|---|---|---|---|
 | `disk=none \| run` | OK invariants=1 held (nkv.oracle: acked=20 all present) | `ab38514eec59f829` | `0141194b466e3bd9` | yes |
@@ -2286,3 +2288,51 @@ built with the installed release, whose images have M140's bytes and whose value
 | `redis-bridge` (`490d7240…`) | the six schedules of 9.2 | as 9.2 | as 9.2 |
 | `redis-composed` (`39d9e74f…`) | the two schedules of 9.2, and `repro --regressions` | as 9.2 (PASS `aa64393559c1ad8c`) | as 9.2 |
 | `redis-composed-read` (`ecb7f1e0…`) | `disk=none dseed=1 \| run W=0000002a,p4,q2,r100` | OK | `ab1689254694d5cd` (9.2) |
+
+## 12. The node-kv example with the Apache-2.0 package file (M152, 2026-11-05)
+
+Milestone 152 set the JavaScript SDK's `package.json` license field to `Apache-2.0` and removed its
+`conformance` script (it named the Go-binary harnesses deleted in M110). The node-kv example copies
+that file into its images (`/app/node_modules/hydo-assert/package.json`), so the node-kv images have
+new bytes and new fingerprints; no other image contains the file. Only the Mac image is recorded
+(section 9.1); there is no recorded x86_64 node-kv image. These values supersede section 9.1's
+node-kv table.
+
+How: a release prefix built from this branch with `hydo/dist/mac/build-release.sh` (the cached
+`assets/`, hydo-agent `099e5444…`) and installed with `install.sh --prefix`; the aarch64 Node.js and
+its libraries fetched from the public Nix cache with `hydo-nix-fetch --closure` and staged as
+`fetch-node-arm64.sh` stages them (its file list, `chmod -R u+w`, the one absolute symlink made
+relative; every file as in `files.sha256`); `hydo build hydo-mac.yaml` twice into two directories,
+then every schedule twice with `hydo run --image` (a fresh boot each), one VM at a time.
+
+Images (two builds byte-identical each): before the change (the tree at `a4d9531`) initramfs
+`ce00049267a22a84…`, after it `2ac9dc0cdc32c57b…`; the root disk `d031f382…` and the data disk
+`9dba2707…` are the same before and after. Unpacked, the two initramfs trees differ only in
+`app/node_modules/hydo-assert/package.json` (the license line and the removed script line); every
+other path has the same bytes, mode and owner.
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (nkv.oracle: acked=20 all present) | `3def1ce155691292` | `0141194b466e3bd9` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [nkv.oracle] key k:0 lost (got null) | `59bd74f26a0e3d97` | `8de6e3d2ba8ff5d8` | yes |
+| `disk=cut \| run C=12` | OK invariants=1 held (nkv.oracle: acked=12 all present) | `33c406be62f5df36` | `202dcc1810826541` | yes |
+| `disk=none \| run K=nkv@8+2 B=1234` | OK invariants=1 held (nkv.oracle: acked=18 all present) | `ae1db81f2458fe15` | `39129eaa9b7e2227` | yes |
+
+The verdict lines and the ctl values are section 9.1's word for word: the guest behaves the same,
+only the image bytes moved. Fingerprint by fingerprint:
+
+| schedule | section 9.1 (M140) | the tree before M152 (= M143's runs) | M152 |
+|---|---|---|---|
+| `disk=none \| run` | `ab38514eec59f829` | `0ce0c2a34c0509d0` | `3def1ce155691292` |
+| `disk=cut \| run C=12 S=never` | `376432e7f641b27f` | `5df3ab5506474f11` | `59bd74f26a0e3d97` |
+| `disk=cut \| run C=12` | `0ccaca40efede16b` | `14932bc02067c1dd` | `33c406be62f5df36` |
+| `disk=none \| run K=nkv@8+2 B=1234` | `41e70d32728c4aa4` | `400119ed741b8151` | `ae1db81f2458fe15` |
+
+**Section 9.1's node-kv values are not reproduced from the tree.** The image built from `a4d9531`
+before the change (`ce000492…`) is not section 9.1's (`0120fa41…`) and gives the middle column, each
+schedule twice identical, with 9.1's ctl values; Milestone 143 built the same `ce000492…` image and
+measured the same four fingerprints with both Mac engines. M140 built its images from M128's staged
+folders, which were not kept, so the difference was not traced to a file. The image's bytes do
+depend on the staged files' modes: the same staging with every Node.js file read-only (as in the Nix
+store) gives a third initramfs, `87a25da8…`. The values above are what the repository's own staging
+gives.
