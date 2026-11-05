@@ -110,7 +110,21 @@ that covers it), because Apple's linker derives the UUID from the object files' 
 
 Nothing is published by the script; the tarball stays in `OUTDIR`.
 
-## Milestone 154: the current tarball
+## Milestone 155: the current tarball
+
+`hydo-mac-0.1.0.tar.gz`, 29,926,376 bytes, sha256
+`3ad2b456ed71473b1c153806d40e147a85487bdc83d4ce2f0aea97c567341a17`, built twice on the Mac from
+M155's branch (`b662589`, one tree path, clean target directories) with the same bytes. Every image
+it builds carries `/etc/hydo/image.json` (the guest kernel by sha256 and the fingerprint epoch) and
+gets a build record `<image>.json` beside it; `hydo run` boots the kernel the image names. Installed
+into a clean prefix: `setup` and `doctor` all checks passed; Redis `a3447614…` `disk=none | run`
+`67e5d6469f1a90a5`, `disk=cut | run C=12 R=everysec` `a6870a92a1bbf0ae`, one-way loss
+`ed3651af0bf0fb7e`, tick jitter `aad758f1a6d55892`; `hydo explore --seeds 1-20 --strategy swarm
+--workers 2` 11 failures (minimal `0441476f5fd74d0b`, `d6120f56fdef3f28`), `repro hydo-out/explore`
+13 of 13; ledger-spin `aa732142c0f5567f` and `3b4dd4910d2a6123`; each twice (fingerprint epoch 1;
+docs/REBASELINE.md 13.4, docs/HISTORY.md "Milestone 155").
+
+## Milestone 154: the tarball before
 
 Built twice on this Mac from M154's branch (on `main` = `ba16a4b`) from clean target
 directories, with the same bytes both times: `hydo-mac-0.1.0.tar.gz`, 29,829,740 bytes, sha256

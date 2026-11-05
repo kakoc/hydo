@@ -189,7 +189,7 @@ was made):
 | `disk=cut \| run C=12` | VIOLATION [votes.counted_soon] not satisfied 60.83s after heal, deadline 60s (last check rc=1: too few vote... | `ff4dc7a30d3a8c98` | `64b7f90f3b5cd36e` | yes |
 | `disk=none \| run N=vote-redis@5-12:loss,100%` | OK invariants=1 held (votes.counted: all 13 acknowledged votes counted) | `22b4be3c7a922d35` | `aa587576ffe76bf2` | yes |
 
-## Milestone 140: hydo-agent 0.3.0 and the host-call port (the current values)
+## Milestone 140: hydo-agent 0.3.0 and the host-call port
 
 Since M140 `hydo-build` stages hydo-agent 0.3.0 and the hvx engine offers the host-call port by
 default (docs/HISTORY.md "Milestone 140"), so every image has new bytes and every fingerprint of
@@ -228,3 +228,44 @@ agent's lines travel over the host-call port, on the Mac over the serial line):
 | `disk=none \| run K=worker@5+5` | OK invariants=1 held (votes.counted: all 20 acknowledged votes counted) | `267c21b397767be1` | `73f458b22605fd8d` | yes |
 | `disk=cut \| run C=12` | VIOLATION [votes.counted_soon] not satisfied 60.64s after heal, deadline 60s (last check rc=1: too few vote... | `de894df127e2d53c` | `ce1382c7c8092626` | yes |
 | `disk=none \| run N=vote-redis@5-12:loss,100%` | OK invariants=1 held (votes.counted: all 13 acknowledged votes counted) | `b082b693ab94dcf5` | `880937d1be914793` | yes |
+
+## Milestone 155: the image record (the current values)
+
+Since M155 every image carries `/etc/hydo/image.json` (the guest kernel it was built for, by
+sha256, and the fingerprint epoch; docs/HISTORY.md "Milestone 155"), so every image has new bytes
+and every fingerprint of the M140 section above is superseded; the agent, the engines and the
+controller are M140's, so the verdicts are M140's (docs/REBASELINE.md section 13 lists the lines
+that differ). These are fingerprint epoch 1. The current values, each schedule run twice with the
+same fingerprint (docs/REBASELINE.md section 13, which also says how each image was made):
+
+**x86_64 (hvx), voting**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=1 held (votes.counted: all 20 acknowledged votes counted) | `8b1cab74b5df78ee` | yes |
+| `disk=none dseed=1 \| run K=worker@5+5` | OK invariants=1 held (votes.counted: all 20 acknowledged votes counted) | `35353f1cca523a17` | yes |
+| `disk=none dseed=1 \| run C=12` | VIOLATION [votes.counted_soon] not satisfied 60.70s after heal, deadline 60s (last check rc=1: too few vote... | `5af8f850f95131e7` | yes |
+| `disk=none dseed=1 \| run N=vote-redis@5-12:loss,100%` | OK invariants=1 held (votes.counted: all 13 acknowledged votes counted) | `b5d3770c329759f3` | yes |
+
+**x86_64 (hvx), voting-generated**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | ERROR invariant todo.acked_operations_survive could not be evaluated: TODO: write the invariants (hydo.yaml) | `3dc653254503ef08` | yes |
+| `disk=none dseed=1 \| run K=worker@5+5` | ERROR invariant todo.acked_operations_survive could not be evaluated: TODO: write the invariants (hydo.yaml) | `6912170e3ec0c396` | yes |
+
+**x86_64 (hvx), voting-loopback**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=1 held (votes.counted: all 20 acknowledged votes counted) | `14cb5f53eff7257c` | yes |
+| `disk=none dseed=1 \| run K=worker@5+5` | OK invariants=1 held (votes.counted: all 20 acknowledged votes counted) | `483eb5d5d556df17` | yes |
+
+**Mac (hvm), voting**
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (votes.counted: all 20 acknowledged votes counted) | `43733e843f702aac` | `f4a6471774a0d569` | yes |
+| `disk=none \| run K=worker@5+5` | OK invariants=1 held (votes.counted: all 20 acknowledged votes counted) | `51104aebf127569b` | `f530e788c6cc833f` | yes |
+| `disk=cut \| run C=12` | VIOLATION [votes.counted_soon] not satisfied 60.64s after heal, deadline 60s (last check rc=1: too few vote... | `0933dc3789d8653a` | `36baf4229229cd1c` | yes |
+| `disk=none \| run N=vote-redis@5-12:loss,100%` | OK invariants=1 held (votes.counted: all 13 acknowledged votes counted) | `d4b302ed2c44ceca` | `720f005b311db7de` | yes |
