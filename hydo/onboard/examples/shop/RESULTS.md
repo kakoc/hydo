@@ -165,7 +165,7 @@ was made):
 | `disk=none dseed=efb4cfbc49052179 \| run H=payments.charge@0-1:drop` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once) | `61a13ebe6297ead4` | `c22306de0f9f6947` | yes |
 | `disk=cut dseed=1 \| run H=payments.charge@0-1:drop C=6` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 6 effects, every ref at most once) | `a6999e49d410101a` | `e1634bd4c544b877` | yes |
 
-## Milestone 140: hydo-agent 0.3.0 and the host-call port (the current values)
+## Milestone 140: hydo-agent 0.3.0 and the host-call port
 
 Since M140 `hydo-build` stages hydo-agent 0.3.0 and the hvx engine offers the host-call port by
 default (docs/HISTORY.md "Milestone 140"), so every image has new bytes and every fingerprint of
@@ -207,3 +207,47 @@ agent's lines travel over the host-call port, on the Mac over the serial line):
 | `disk=none \| run` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once) | `6f9ef8fe3c5b9aa5` | `0707ac0014b93d7a` | yes |
 | `disk=none dseed=efb4cfbc49052179 \| run H=payments.charge@0-1:drop` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once) | `884e05caed8206ce` | `95eb07beb9a9a85b` | yes |
 | `disk=cut dseed=1 \| run H=payments.charge@0-1:drop C=6` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 6 effects, every ref at most once) | `d30f33a552194f9b` | `ec7c5b8d2145b6f9` | yes |
+
+## Milestone 155: the image record (the current values)
+
+Since M155 every image carries `/etc/hydo/image.json` (the guest kernel it was built for, by
+sha256, and the fingerprint epoch; docs/HISTORY.md "Milestone 155"), so every image has new bytes
+and every fingerprint of the M140 section above is superseded; the agent, the engines and the
+controller are M140's, so the verdicts are M140's (docs/REBASELINE.md section 13 lists the lines
+that differ). These are fingerprint epoch 1. The current values, each schedule run twice with the
+same fingerprint (docs/REBASELINE.md section 13, which also says how each image was made):
+
+**x86_64 (hvx), shop-buggy**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once) | `09ae7938ecf3bea1` | yes |
+| `disk=none dseed=efb4cfbc49052179 \| run H=payments.charge@0-1:drop` | VIOLATION [payments.charged_at_most_once] payments.charge: ref o0 took effect 3 times (records 1,2,3) | `9ef09b5fe0d3a244` | yes |
+| `disk=none dseed=fbb60485ae17b0ba \| run H=payments.charge@6-9:reset,p=50` | VIOLATION [payments.charged_at_most_once] payments.charge: ref o7 took effect 2 times (records 25,26) | `62a2cd4d5c3ed5c3` | yes |
+| `disk=cut dseed=1 \| run H=payments.charge@0-1:drop C=6` | VIOLATION [payments.charged_at_most_once] payments.charge: ref o0 took effect 3 times (records 1,2,3) | `c9ae5f3ea2da0df3` | yes |
+
+**x86_64 (hvx), shop-fixed**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once) | `d779faa3dbb1199c` | yes |
+| `disk=none dseed=efb4cfbc49052179 \| run H=payments.charge@0-1:drop` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once) | `f159969cab5825c6` | yes |
+| `disk=none dseed=fbb60485ae17b0ba \| run H=payments.charge@6-9:reset,p=50` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once) | `cc26d265f48957ca` | yes |
+| `disk=cut dseed=1 \| run H=payments.charge@0-1:drop C=6` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 6 effects, every ref at most once) | `309a10a5cc83c3b5` | yes |
+
+**Mac (hvm), shop-buggy**
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once) | `61ffe63cbc129405` | `826e4ec0225b2c54` | yes |
+| `disk=none dseed=efb4cfbc49052179 \| run H=payments.charge@0-1:drop` | VIOLATION [payments.charged_at_most_once] payments.charge: ref o0 took effect 3 times (records 1,2,3) | `9d1af8f92957f335` | `5dc99b20820664bb` | yes |
+| `disk=cut dseed=1 \| run H=payments.charge@0-1:drop C=6` | VIOLATION [payments.charged_at_most_once] payments.charge: ref o0 took effect 3 times (records 1,2,3) | `1091377a63d61bd8` | `f013583309d54686` | yes |
+| `disk=none \| run H=payments.charge@6-9:reset,p=50` | VIOLATION [payments.charged_at_most_once] payments.charge: ref o7 took effect 2 times (records 23,26) | `bc0b730de9eca400` | `f5397144a2781746` | yes |
+
+**Mac (hvm), shop-fixed**
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once) | `4fe68ccdf8a48174` | `597c4a89c39ff4f7` | yes |
+| `disk=none dseed=efb4cfbc49052179 \| run H=payments.charge@0-1:drop` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once) | `7863ce11fc7b8b77` | `fed12be8a59f8f63` | yes |
+| `disk=cut dseed=1 \| run H=payments.charge@0-1:drop C=6` | OK invariants=5 held (payments.charged_at_most_once: payments.charge: 6 effects, every ref at most once) | `bd59301989bf12b0` | `b86e3f5a800e5cc0` | yes |

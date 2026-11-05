@@ -104,11 +104,13 @@ build() {   # <variant> <dir>
   asuser /usr/bin/flock "$HOME/.hydo-imgbuild.lock" /usr/bin/nice -n 10 /usr/bin/env -C "$ex" \
     "$P/bin/hydo" build hydo.yaml --out "$d" > "$d.log" 2>&1 || { tail -20 "$d.log" >&2; return 1; }
   mv "$d/explore-ob-stack-disk.img" "$d/img"
+  mv "$d/explore-ob-stack-disk.img.json" "$d/img.json"   # the build record (M155)
   sudo -n rm -rf "$d"/*-root "$d"/*-ext4.img "$d"/*-data.img "$d"/*.closures 2>/dev/null || true
 }
 for v in "$@"; do
   build "$v" "$W/b1-$v"
   mv "$W/b1-$v/img" "$OUT/explore-ob-stack-$v-disk.img"
+  mv "$W/b1-$v/img.json" "$OUT/explore-ob-stack-$v-disk.img.json"
   echo "image $v: explore-ob-stack-$v-disk.img sha256 $(sha "$OUT/explore-ob-stack-$v-disk.img" | cut -c1-16)"
   if [ "${TWICE:-0}" = 1 ]; then
     build "$v" "$W/b2-$v"

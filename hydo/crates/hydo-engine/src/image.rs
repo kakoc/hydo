@@ -9,7 +9,7 @@ use flate2::read::GzDecoder;
 use sha2::{Digest, Sha256};
 use std::fmt;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 /// hydo-build puts the root filesystem at LBA 2048.
@@ -142,6 +142,104 @@ pub fn parse_control(text: &str) -> Option<u64> {
         (Some("agent"), Some(proto), None) => Some(proto),
         _ => None,
     }
+}
+
+/// The image record an image carries (`/etc/hydo/image.json`, Milestone 155), or None for an
+/// image built before it. A record this hydo cannot read (a newer version) is an error.
+pub fn image_record(image: &Path) -> Result<Option<hydo_image::ImageRecord>, String> {
+    match embedded_file(image, hydo_image::RECORD_PATH) {
+        Ok(t) => hydo_image::parse_record(&t)
+            .map(Some)
+            .map_err(|e| format!("{}: {e}", image.display())),
+        Err(ImageError::Missing(_)) => Ok(None),
+        Err(e) => Err(format!("{}: {e}", image.display())),
+    }
+}
+
+/// The files a run boots an image with ([`boot_files`]).
+#[derive(Clone, Debug)]
+pub struct BootFiles {
+    pub kernel: PathBuf,
+    pub initrd: Option<PathBuf>,
+    /// The image's record (None: built before Milestone 155).
+    pub record: Option<hydo_image::ImageRecord>,
+    /// A line for the user: the warning for an image without the record (given once per image
+    /// per process).
+    pub note: Option<String>,
+}
+
+static WARNED: std::sync::Mutex<Vec<PathBuf>> = std::sync::Mutex::new(Vec::new());
+
+/// The kernel (and the x86_64 initramfs) to boot `image` with (Milestone 155). With an image
+/// record, the files the record names, looked up by sha256 in the default files' directories and
+/// `dirs` (`given`, a kernel the user named, must be the recorded one); a file this hydo does not
+/// have is refused with `hydo_image::kernels::missing_message`. Without a record (an image built
+/// before M155) today's choice: `given`, else an arm64 image's `/etc/hydo/kernel` (M99), else
+/// the default, with a one-line warning.
+pub fn boot_files(
+    image: &Path,
+    default_kernel: &Path,
+    default_initrd: Option<&Path>,
+    given: Option<&Path>,
+    dirs: &[PathBuf],
+) -> Result<BootFiles, String> {
+    // an image that is not there or cannot be read is refused later, by the step that opens it,
+    // with its own words
+    let (rec, readable) = match embedded_file(image, hydo_image::RECORD_PATH) {
+        Ok(t) => (
+            Some(hydo_image::parse_record(&t).map_err(|e| format!("{}: {e}", image.display()))?),
+            true,
+        ),
+        Err(ImageError::Missing(_)) => (None, image.is_file()),
+        Err(_) => (None, false),
+    };
+    let Some(rec) = rec else {
+        if !readable {
+            return Ok(BootFiles {
+                kernel: given.unwrap_or(default_kernel).to_path_buf(),
+                initrd: default_initrd.map(Path::to_path_buf),
+                record: None,
+                note: None,
+            });
+        }
+        let kernel = if image.to_string_lossy().ends_with(".cpio.gz") {
+            crate::hvm::kernel_for(image, given, default_kernel)?
+        } else {
+            given.unwrap_or(default_kernel).to_path_buf()
+        };
+        let mut w = WARNED.lock().expect("lock");
+        let note = (!w.iter().any(|p| p == image)).then(|| {
+            w.push(image.to_path_buf());
+            hydo_image::kernels::no_record_warning(image)
+        });
+        return Ok(BootFiles {
+            kernel,
+            initrd: default_initrd.map(Path::to_path_buf),
+            record: None,
+            note,
+        });
+    };
+    let mut search: Vec<PathBuf> = Vec::new();
+    for d in [
+        default_kernel.parent(),
+        default_initrd.and_then(Path::parent),
+    ]
+    .into_iter()
+    .flatten()
+    .map(Path::to_path_buf)
+    .chain(dirs.iter().cloned())
+    {
+        if !search.contains(&d) {
+            search.push(d);
+        }
+    }
+    let f = hydo_image::kernels::find(image, &rec, &search, given)?;
+    Ok(BootFiles {
+        kernel: f.kernel,
+        initrd: f.initrd,
+        record: Some(rec),
+        note: None,
+    })
 }
 
 /// The manifest an image carries (`/etc/hydo/hydo.yaml`, whatever its format).

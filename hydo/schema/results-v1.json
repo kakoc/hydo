@@ -38,6 +38,15 @@
             "null"
           ]
         },
+        "epoch": {
+          "description": "The fingerprint epoch of that hydo (documents only; added in M155): fingerprints of one\nepoch are comparable, across epochs only verdicts are. Absent: before M155, epoch 1.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
         "tag": {
           "description": "The explorer's name for the run (`seed-3`, `repro-3`, `shrink-1-0`, `min-a`, ...).",
           "type": [
@@ -260,10 +269,100 @@
             "string",
             "null"
           ]
+        },
+        "epoch": {
+          "description": "The fingerprint epoch of the hydo that built the image (its `/etc/hydo/image.json`, added\nin M155; absent for an image built before).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "kernel": {
+          "description": "The guest kernel the image names (its record), as `<file> (Linux <version>, sha256 <hex>)`\n(added in M155).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "built_by": {
+          "description": "The hydo that built the image, from the build record next to it (`<image>.json`, M155).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BuiltBy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "manifest_sha256": {
+          "description": "SHA-256 of the manifest the image was built from (the build record, M155).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "services": {
+          "description": "The Docker/OCI images of its services with their digests (the build record, M155).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ServiceImage"
+          }
         }
       },
       "required": [
         "path"
+      ]
+    },
+    "BuiltBy": {
+      "description": "The hydo that built an image (added in M155).",
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "version"
+      ]
+    },
+    "ServiceImage": {
+      "description": "A service built from a Docker/OCI image (added in M155).",
+      "type": "object",
+      "properties": {
+        "service": {
+          "type": "string"
+        },
+        "image": {
+          "description": "The image as the manifest gives it.",
+          "type": "string"
+        },
+        "digest": {
+          "description": "The image manifest's digest (`sha256:...`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "config_digest": {
+          "description": "The image configuration's digest.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "service",
+        "image"
       ]
     },
     "Engine": {
@@ -824,6 +923,15 @@
             "string",
             "null"
           ]
+        },
+        "epoch": {
+          "description": "The fingerprint epoch of that hydo (added in M155; absent: before M155, epoch 1).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
         },
         "mode": {
           "description": "`seeds`, `sweep`, `branch` or `schedule`.",
@@ -1616,6 +1724,15 @@
             "string",
             "null"
           ]
+        },
+        "epoch": {
+          "description": "The fingerprint epoch of that hydo (added in M155; absent: before M155, epoch 1).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
         },
         "mode": {
           "description": "`seeds`, `sweep`, `branch` or `schedule`.",

@@ -30,6 +30,17 @@ Every run and every exploration reports in one versioned format, so a CI job or 
 
 The schema is `hydo/schema/results-v1.json`, generated from the Rust types (`hydo/crates/hydo-results`), and `hydo/schema/examples/results/v1/` holds documents recorded from real runs. Every record carries `"v": 1` and a `"type"`. Within version 1 only additions are made (new optional fields, new record types); renaming, removing or changing a field needs version 2, read alongside version 1. A reader must ignore fields and record types it does not know; the crate's reader does exactly that and is what hydo's own commands use. The format is experimental until hydo 1.0, and it keeps the additions-only rule from version 1 on (a test fails on any other change against the last released schema).
 
+## An image keeps working after hydo is upgraded (M155)
+
+An image records what shapes its runs but is not inside it, so an image built today still runs, and reproduces, after hydo is upgraded:
+
+- Inside every image, `/etc/hydo/image.json` names the guest kernel the image was built for by its SHA-256 (with its file name, Linux version and the kernel command line hydo uses, for people) and the **fingerprint epoch** of the hydo that built it. Nothing that changes with every hydo release is in it, so two hydo versions of one epoch build the same image bytes.
+- Next to the image, `hydo build` writes `<image file>.json`: the hydo version and commit that built it, the manifest's SHA-256 and the service images' digests. Every `result.json` carries the same facts in its `image` object, and the running hydo's version and epoch.
+- A run boots the kernel the image names, found by its SHA-256 among the kernels this hydo has (a release's `guest/` kernels, a source tree's build outputs). When this hydo does not have it, the run is refused with a message that names the kernel, its version and the hydo version that built the image, and says to install that version's kernel or rebuild the image. An image built before M155 has no record and boots this hydo's default kernel, with a one-line warning.
+- The fingerprint epoch increases whenever a change of the engine or the host controller moves fingerprints. Within one epoch, `hydo repro` requires the same fingerprint; across epochs fingerprints are not comparable, and `hydo repro` (also `--transcript`) compares the verdicts instead and says so. The explorer's result cache only answers from its own epoch.
+
+The two records are one versioned format (`hydo/schema/image-v1.json`, crate `hydo/crates/hydo-image`, additions only within version 1).
+
 ## Two kinds of projects
 
 **Infrastructure** (message brokers, databases, consensus systems, caches). The properties are generic: acknowledged writes survive, replicas agree, histories are consistent. hydo finds this class well (durability windows, crash consistency, members diverging, as with etcd issue 14685).

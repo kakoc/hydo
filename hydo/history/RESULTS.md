@@ -161,7 +161,7 @@ was made):
 | `disk=cut \| run C=12` | OK invariants=0 held (); history OK | `a7a64977623a9b0e` | `59f9219faa984ef8` | yes |
 | `disk=cut \| run C=12 S=never` | OK invariants=0 held (); history VIOLATION [kv.linearizable] | `88d948c63401bb25` | `f9cb1876c15427a0` | yes |
 
-## Milestone 140: hydo-agent 0.3.0 and the host-call port (the current values)
+## Milestone 140: hydo-agent 0.3.0 and the host-call port
 
 Since M140 `hydo-build` stages hydo-agent 0.3.0 and the hvx engine offers the host-call port by
 default (docs/HISTORY.md "Milestone 140"), so every image has new bytes and every fingerprint of
@@ -210,3 +210,56 @@ agent's lines travel over the host-call port, on the Mac over the serial line):
 |---|---|---|---|---|
 | `disk=cut \| run C=12` | OK invariants=0 held (); history OK | `591de92b60287448` | `133c9c994223dbe4` | yes |
 | `disk=cut \| run C=12 S=never` | OK invariants=0 held (); history VIOLATION [kv.linearizable] | `9f14f5e97552d859` | `4a799f3170dcb41b` | yes |
+
+## Milestone 155: the image record (the current values)
+
+Since M155 every image carries `/etc/hydo/image.json` (the guest kernel it was built for, by
+sha256, and the fingerprint epoch; docs/HISTORY.md "Milestone 155"), so every image has new bytes
+and every fingerprint of the M140 section above is superseded; the agent, the engines and the
+controller are M140's, so the verdicts are M140's (docs/REBASELINE.md section 13 lists the lines
+that differ). These are fingerprint epoch 1. The current values, each schedule run twice with the
+same fingerprint (docs/REBASELINE.md section 13, which also says how each image was made):
+
+**x86_64 (hvx), redis-hist**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=cut dseed=1 \| run C=12` | OK checks=2 held (redis.kv_linearizable: 32 operations on 20 keys linearizable) | `e8ad171a302c2cb8` | yes |
+| `disk=cut dseed=1 \| run C=12 R=everysec` | VIOLATION [redis.kv_linearizable] key k:1: an acknowledged write is lost or a read is stale: a read that be... | `1f6af4c6d0049ca5` | yes |
+
+**x86_64 (hvx), redis-composed-hist**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=cut dseed=1 \| run C=12 W=0000002a,p4,q2,r100` | OK invariants=1 held (compose.commands: no composed workload ran in this boot) \| checks=2 held (redis.kv_li... | `1c36820149f28af3` | yes |
+| `disk=cut dseed=1 \| run C=12 R=everysec W=0000002a,p4,q2,r100` | VIOLATION [redis.kv_linearizable] key k:12: an acknowledged write is lost or a read is stale: a read that b... | `9acfad5318e6d3b8` | yes |
+
+**x86_64 (hvx), etcd-hc-3.5.5**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK checks=1 held (etcd.kv_linearizable: 183 operations on 90 keys linearizable) | `784287e70cae4395` | yes |
+| `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | OK checks=1 held (etcd.kv_linearizable: 189 operations on 90 keys linearizable) | `d47eb5a57df4dc44` | yes |
+
+**x86_64 (hvx), etcd-hc-3.5.6**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK checks=1 held (etcd.kv_linearizable: 183 operations on 90 keys linearizable) | `06f59cfe18040d1d` | yes |
+| `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | OK checks=1 held (etcd.kv_linearizable: 187 operations on 90 keys linearizable) | `7cf68773b8ba60da` | yes |
+
+**Mac (hvm), redis-hist**
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=cut dseed=1 \| run C=12` | OK invariants=0 held (); history OK | `0b3af533ea748e5f` | `625922e1528c1e3c` | yes |
+| `disk=cut dseed=1 \| run C=12 R=everysec` | OK invariants=0 held (); history VIOLATION [redis.kv_linearizable] | `a33fd1d16cdc3728` | `037a11f0d411212e` | yes |
+
+**Mac (hvm), python-kv-hist**
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=cut \| run C=12` | OK invariants=0 held (); history OK | `ee666af6229fc2e5` | `133c9c994223dbe4` | yes |
+| `disk=cut \| run C=12 S=never` | OK invariants=0 held (); history VIOLATION [kv.linearizable] | `458abf5f089819cb` | `4a799f3170dcb41b` | yes |
+
+redis-oci has no Mac table in any RESULTS.md (no heading `Mac (hvm), redis-oci` exists); its new values are only in table.md.

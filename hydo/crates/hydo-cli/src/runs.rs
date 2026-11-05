@@ -11,9 +11,9 @@ use crate::hvxenv;
 use crate::pyjson::{head, py_str, tail};
 use hydo_control::agent::AgentEngine;
 use hydo_control::drive::Policy;
-use hydo_engine::hvm::{kernel_for, Hvm};
+use hydo_engine::hvm::Hvm;
 use hydo_engine::hvx::Hvx;
-use hydo_engine::image::{embedded_compose, embedded_manifest, sha256_file};
+use hydo_engine::image::{boot_files, embedded_compose, embedded_manifest, sha256_file};
 use hydo_engine::protocol::verdict_kind;
 use hydo_engine::{BootSpec, ControlledEngine, CpuLevel, RunResult};
 use hydo_manifest::Guest;
@@ -148,9 +148,16 @@ pub fn mac_kernel(ctx: &Ctx) -> PathBuf {
     ctx.p("hv/hvm/explore/out/Image-explore")
 }
 
-/// The kernel for an image (hvm_backend.kernel_for); a refusal ends the command with `hydo: `.
+/// The kernel for an image: the one its record names (Milestone 155, by sha256 among this hydo's
+/// kernels), else the one `/etc/hydo/kernel` names (M99), else the default; a refusal ends the
+/// command with `hydo: `.
 pub fn mac_kernel_for(ctx: &Ctx, image: &Path, quiet: bool) -> PathBuf {
-    let k = kernel_for(image, None, &mac_kernel(ctx)).unwrap_or_else(|msg| die(&msg));
+    let b = boot_files(image, &mac_kernel(ctx), None, None, &[ctx.guest()])
+        .unwrap_or_else(|msg| die(&msg));
+    if let Some(n) = &b.note {
+        eprintln!("hydo: {n}");
+    }
+    let k = b.kernel;
     if !quiet && k != mac_kernel(ctx) {
         let rel = k.strip_prefix(&ctx.root).unwrap_or(&k);
         println!(
@@ -203,13 +210,19 @@ fn run_engine(
                     p.display()
                 ));
             }
-            let spec = spec_from_args(
-                eargs,
+            // the kernel and initramfs the image's record names (Milestone 155)
+            let b = boot_files(
                 image,
-                hvxenv::bzimage(ctx),
-                Some(hvxenv::initrd(ctx)),
-                &abspath(outdir),
-            );
+                &hvxenv::bzimage(ctx),
+                Some(&hvxenv::initrd(ctx)),
+                None,
+                &[ctx.p("build")],
+            )
+            .unwrap_or_else(|msg| die(&msg));
+            if let Some(n) = &b.note {
+                eprintln!("hydo: {n}");
+            }
+            let spec = spec_from_args(eargs, image, b.kernel, b.initrd, &abspath(outdir));
             one(Arc::new(hvx), &spec)
         }
         Platform::Mac => {
@@ -379,11 +392,9 @@ fn run_document(
     let mut run = hydo_explore::results::run_of("one", sched, res, &consoles);
     run.tag = None;
     run.hydo_version = Some(env!("CARGO_PKG_VERSION").into());
-    run.image = Some(hydo_results::Image {
-        path: image.display().to_string(),
-        resolved: None,
-        sha256: image_sha,
-    });
+    run.epoch = hydo_explore::results::this_epoch();
+    let p = image.display().to_string();
+    run.image = Some(hydo_explore::results::image_of(&p, image, image_sha));
     let mut engine = hydo_results::Engine {
         backend: Some(
             match platform {
@@ -454,6 +465,18 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
     let sched = args[0].clone();
     let outdir = outdir.map(PathBuf::from).unwrap_or_else(new_run_dir);
     let eargs = engine_args(&image, None, None, 1);
+    if let Ok(Some(r)) = hydo_engine::image::image_record(&image) {
+        if r.epoch != hydo_image::EPOCH {
+            println!(
+                "hydo: note: {} was built at fingerprint epoch {} and this hydo is at epoch {}: \
+                 fingerprints recorded with the hydo that built it are not comparable with this \
+                 run's (its verdicts are)",
+                image.display(),
+                r.epoch,
+                hydo_image::EPOCH
+            );
+        }
+    }
     let res = run_one(ctx, &image, &sched, &outdir, &eargs, false);
     let res = host_checks(&outdir, res, false);
     let res = errors_one(&outdir, &sched, res, known.as_deref());
@@ -482,6 +505,36 @@ struct ReproItem {
     sched: String,
     fp: String,
     eargs: Vec<String>,
+    /// The fingerprint epoch the run was recorded at (None: before M155, epoch 1).
+    epoch: Option<u64>,
+    /// The recorded verdict (compared when the epochs differ).
+    verdict: String,
+}
+
+/// Whether a repeated run gives the recorded one's answer: the fingerprint within one epoch,
+/// the verdict's class across epochs (M155). Returns (same, the label for the line).
+fn repro_same(it: &ReproItem, fp: &str, verdict: &str) -> (bool, &'static str) {
+    match hydo_image::comparable(it.epoch) {
+        hydo_image::Compare::Fingerprints => {
+            let ok = fp == it.fp;
+            (ok, if ok { "REPRODUCED" } else { "DIFFERENT" })
+        }
+        hydo_image::Compare::Verdicts { .. } => {
+            let ok = verdict_kind(verdict) == verdict_kind(&it.verdict);
+            (ok, if ok { "SAME VERDICT" } else { "DIFFERENT" })
+        }
+    }
+}
+
+/// The plain sentence for a recorded epoch other than this hydo's, once.
+fn epoch_note(epoch: Option<u64>) -> Option<String> {
+    match hydo_image::comparable(epoch) {
+        hydo_image::Compare::Fingerprints => None,
+        hydo_image::Compare::Verdicts { recorded, now } => Some(format!(
+            "hydo: {}",
+            hydo_image::other_epoch_note(recorded, now)
+        )),
+    }
 }
 
 /// An exploration's document (the results reader); a directory without one is an error.
@@ -531,6 +584,8 @@ fn repro_list(ctx: &Ctx, d: &Path) -> Vec<ReproItem> {
                 sched: run.schedule.clone(),
                 fp: run.fingerprints.fp.clone(),
                 eargs,
+                epoch: run.epoch,
+                verdict: run.verdict.text.clone(),
             }];
         }
         hydo_results::Results::Exploration { .. } => exploration_of(d),
@@ -557,6 +612,8 @@ fn repro_list(ctx: &Ctx, d: &Path) -> Vec<ReproItem> {
             sched: f.run.schedule.clone(),
             fp: f.run.fingerprints.fp.clone(),
             eargs: eargs.clone(),
+            epoch: doc.epoch,
+            verdict: f.run.verdict.text.clone(),
         });
     }
     for x in &doc.shrinks {
@@ -570,6 +627,12 @@ fn repro_list(ctx: &Ctx, d: &Path) -> Vec<ReproItem> {
                 .and_then(|c| c.fp.clone())
                 .unwrap_or_else(|| "None".into()),
             eargs: eargs.clone(),
+            epoch: doc.epoch,
+            verdict: x
+                .confirmations
+                .first()
+                .and_then(|c| c.verdict.clone())
+                .unwrap_or_default(),
         });
     }
     out
@@ -595,6 +658,9 @@ pub fn cmd_repro(ctx: &Ctx, argv: &[String]) -> i32 {
             return 0;
         }
         let base = d.join(format!("repro-{}", strftime("%Y%m%d-%H%M%S")));
+        if let Some(n) = epoch_note(items[0].epoch) {
+            println!("{n}");
+        }
         let mut same = 0;
         for (k, it) in items.iter().enumerate() {
             let dir = base.join(format!("{k:03}"));
@@ -612,11 +678,11 @@ pub fn cmd_repro(ctx: &Ctx, argv: &[String]) -> i32 {
             );
             write_run_document(&dir, &run);
             let fp = py_str(&res["fp"]);
-            let ok = fp == it.fp;
+            let (ok, word) = repro_same(it, &fp, &py_str(&res["verdict"]));
             same += ok as usize;
             println!(
                 "{:<12} {}  fp={} (recorded {})  {}\n             {}",
-                if ok { "REPRODUCED" } else { "DIFFERENT" },
+                word,
                 it.label,
                 fp,
                 it.fp,
@@ -625,9 +691,14 @@ pub fn cmd_repro(ctx: &Ctx, argv: &[String]) -> i32 {
             );
         }
         println!(
-            "hydo: {} of {} reproduced with the recorded fingerprint (consoles under {})",
+            "hydo: {} of {} reproduced with the recorded {} (consoles under {})",
             same,
             items.len(),
+            if epoch_note(items[0].epoch).is_some() {
+                "verdict"
+            } else {
+                "fingerprint"
+            },
             base.display()
         );
         return if same == items.len() { 0 } else { 1 };
@@ -637,49 +708,61 @@ pub fn cmd_repro(ctx: &Ctx, argv: &[String]) -> i32 {
 
 // ---------------------------------------------------------------- transcripts (agent images, M126)
 
-/// The recorded run next to a transcript: (image, engine options, fp, ctl) from a run directory's
-/// result.json, or from the exploration whose `consoles/` holds it (its events.jsonl).
-fn recorded_of(
-    t: &Path,
-) -> (
-    Option<PathBuf>,
-    Option<Vec<String>>,
-    Option<String>,
-    Option<String>,
-) {
+/// The recorded run next to a transcript.
+#[derive(Default)]
+struct Recorded {
+    image: Option<PathBuf>,
+    eargs: Option<Vec<String>>,
+    fp: Option<String>,
+    ctl: Option<String>,
+    /// The fingerprint epoch it was recorded at (None: before M155, epoch 1).
+    epoch: Option<u64>,
+    verdict: Option<String>,
+}
+
+/// The recorded run next to a transcript: from a run directory's result.json, or from the
+/// exploration whose `consoles/` holds it (its events.jsonl; the epoch from its start record).
+fn recorded_of(t: &Path) -> Recorded {
     let dir = t.parent().unwrap_or(Path::new("."));
     if let Ok(hydo_results::Results::Run { run, .. }) = hydo_results::read_dir(dir) {
-        return (
-            run.image.as_ref().map(|i| PathBuf::from(&i.path)),
-            run.engine.as_ref().and_then(|e| e.args.clone()),
-            Some(run.fingerprints.fp.clone()),
-            run.fingerprints.ctl.clone(),
-        );
+        return Recorded {
+            image: run.image.as_ref().map(|i| PathBuf::from(&i.path)),
+            eargs: run.engine.as_ref().and_then(|e| e.args.clone()),
+            fp: Some(run.fingerprints.fp.clone()),
+            ctl: run.fingerprints.ctl.clone(),
+            epoch: run.epoch,
+            verdict: Some(run.verdict.text.clone()),
+        };
     }
     let name = t
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
     let Some(tag) = name.strip_suffix(".control.jsonl") else {
-        return (None, None, None, None);
+        return Recorded::default();
     };
     let ev = dir.parent().unwrap_or(Path::new(".")).join("events.jsonl");
     let text = std::fs::read_to_string(ev).unwrap_or_default();
+    let mut epoch = None;
     for l in text.lines() {
         let Ok(v) = serde_json::from_str::<Value>(l) else {
             continue;
         };
+        if v["type"] == "start" {
+            epoch = v["epoch"].as_u64();
+        }
         if v["type"] == "run" && v["tag"] == tag {
             let fps = &v["fingerprints"];
-            return (
-                None,
-                None,
-                fps["fp"].as_str().map(str::to_string),
-                fps["ctl"].as_str().map(str::to_string),
-            );
+            return Recorded {
+                fp: fps["fp"].as_str().map(str::to_string),
+                ctl: fps["ctl"].as_str().map(str::to_string),
+                epoch,
+                verdict: v["verdict"]["text"].as_str().map(str::to_string),
+                ..Recorded::default()
+            };
         }
     }
-    (None, None, None, None)
+    Recorded::default()
 }
 
 /// `hydo repro --transcript <control.jsonl> [--image IMG] [--out DIR]`: type a recorded run's
@@ -709,7 +792,8 @@ fn cmd_transcript(ctx: &Ctx, file: &str, mut args: Vec<String>) -> i32 {
         .schedule
         .clone()
         .unwrap_or_else(|| die(&format!("{file}: the transcript names no schedule")));
-    let (rec_image, rec_eargs, rec_fp, rec_ctl) = recorded_of(&path);
+    let rec = recorded_of(&path);
+    let (rec_image, rec_eargs, rec_fp, rec_ctl) = (rec.image, rec.eargs, rec.fp, rec.ctl);
     let outdir = take(&mut args, "--out")
         .map(PathBuf::from)
         .unwrap_or_else(new_run_dir);
@@ -764,11 +848,26 @@ fn cmd_transcript(ctx: &Ctx, file: &str, mut args: Vec<String>) -> i32 {
             "OTHER commands or stops than recorded"
         }
     );
-    let same_fp = rec_fp.as_ref().is_none_or(|f| *f == fp);
-    let ok = same_fp && same_records;
+    // another fingerprint epoch (M155): the fingerprint and the transcript's stops are not
+    // comparable, the verdict is
+    let (ok, word) = match hydo_image::comparable(rec.epoch) {
+        hydo_image::Compare::Fingerprints => {
+            let same_fp = rec_fp.as_ref().is_none_or(|f| *f == fp);
+            let ok = same_fp && same_records;
+            (ok, if ok { "REPRODUCED" } else { "DIFFERENT" })
+        }
+        hydo_image::Compare::Verdicts { recorded, now } => {
+            println!("hydo: {}", hydo_image::other_epoch_note(recorded, now));
+            let ok = rec
+                .verdict
+                .as_deref()
+                .is_none_or(|v| verdict_kind(v) == verdict_kind(&py_str(&res["verdict"])));
+            (ok, if ok { "SAME VERDICT" } else { "DIFFERENT" })
+        }
+    };
     println!(
         "{}  {}\n             {}",
-        if ok { "REPRODUCED" } else { "DIFFERENT" },
+        word,
         sched,
         head(&py_str(&res["verdict"]), 160)
     );

@@ -85,9 +85,9 @@ P=/var/tmp/m97-side/hydo-prefix; rm -rf $P; mkdir -p $P/bin $P/guest $P/libexec
 cp $T/hydo $P/bin/hydo; ln -s $R $P/libexec/hvx-run
 ln -s $B/bzImage $P/guest/bzImage; ln -s $B/initramfs-kafka.cpio.gz $P/guest/initramfs-kafka.cpio.gz
 S='disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24'
-for img in explore-ob-stack-old-disk.img:8fc461db23ef6642 explore-ob-stack-fix-disk.img:aad6a563e2046361; do
+for img in explore-ob-stack-old-disk.img:1dc3677fb94053cf explore-ob-stack-fix-disk.img:ba0aa0612502a1df; do
   sudo rm -rf /var/tmp/m97-side/${img%%:*}	# written by the sudo run
-  out=$(cd $T && run timeout 1800 env HOME="$HOME" $P/bin/hydo run $B/m145/${img%%:*} "$S" --out /var/tmp/m97-side/${img%%:*}); rc=$?
+  out=$(cd $T && run timeout 1800 env HOME="$HOME" $P/bin/hydo run $B/m155/${img%%:*} "$S" --out /var/tmp/m97-side/${img%%:*}); rc=$?
   echo "$out" > /var/tmp/m97-side/${img%%:*}.out; check "repro ${img%%:*} (rc=$rc)" "$rc" "$out" ${img##*:}
 done
 lock=$(sudo dmesg | grep -aiE 'soft lockup|rcu.*stall|BUG:|Oops' | tail -3)

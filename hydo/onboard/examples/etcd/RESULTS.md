@@ -163,7 +163,7 @@ was made):
 | `disk=none dseed=1 \| run` | OK checks=1 held (etcd.kv_linearizable: 183 operations on 90 keys linearizable) | `f9142657ac4708ac` | yes |
 | `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | OK checks=1 held (etcd.kv_linearizable: 187 operations on 90 keys linearizable) | `55e6b1dda9a9b14e` | yes |
 
-## Milestone 140: hydo-agent 0.3.0 and the host-call port (the current values)
+## Milestone 140: hydo-agent 0.3.0 and the host-call port
 
 Since M140 `hydo-build` stages hydo-agent 0.3.0 and the hvx engine offers the host-call port by
 default (docs/HISTORY.md "Milestone 140"), so every image has new bytes and every fingerprint of
@@ -200,3 +200,42 @@ agent's lines travel over the host-call port, on the Mac over the serial line):
 |---|---|---|---|
 | `disk=none dseed=1 \| run` | OK checks=1 held (etcd.kv_linearizable: 183 operations on 90 keys linearizable) | `fe88a223de851b5a` | yes |
 | `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | OK checks=1 held (etcd.kv_linearizable: 189 operations on 90 keys linearizable) | `3c036a3f62a06536` | yes |
+
+## Milestone 155: the image record (the current values)
+
+Since M155 every image carries `/etc/hydo/image.json` (the guest kernel it was built for, by
+sha256, and the fingerprint epoch; docs/HISTORY.md "Milestone 155"), so every image has new bytes
+and every fingerprint of the M140 section above is superseded; the agent, the engines and the
+controller are M140's, so the verdicts are M140's (docs/REBASELINE.md section 13 lists the lines
+that differ). These are fingerprint epoch 1. The current values, each schedule run twice with the
+same fingerprint (docs/REBASELINE.md section 13, which also says how each image was made):
+
+**x86_64 (hvx), etcd-3.5.5**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=3 held (etcd.acked_puts_readable: acked=90 all readable) | `2a17ced62ad6a7db` | yes |
+| `disk=cut dseed=1 \| run C=30` | VIOLATION [etcd.members_agree] members disagree: revisions 99 98 98; k89 mod_revisions 97 97 97 | `6ffb0aa93ceef86e` | yes |
+| `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | VIOLATION [client.revisions_monotonic] /tmp/hydo/rev.2: revision 82 (get-k80@127.0.0.12:12379) after 83 (ge... | `0967af85386e3b6f` | yes |
+
+**x86_64 (hvx), etcd-3.5.6**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK invariants=3 held (etcd.acked_puts_readable: acked=90 all readable) | `e0e0a2756b78e8fa` | yes |
+| `disk=cut dseed=1 \| run C=30` | OK invariants=3 held (etcd.acked_puts_readable: acked=90 all readable) | `151706a66875664b` | yes |
+| `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | OK invariants=3 held (etcd.acked_puts_readable: acked=90 all readable) | `942bb76fd89ceda3` | yes |
+
+**x86_64 (hvx), etcd-hc-3.5.5**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK checks=1 held (etcd.kv_linearizable: 183 operations on 90 keys linearizable) | `784287e70cae4395` | yes |
+| `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | OK checks=1 held (etcd.kv_linearizable: 189 operations on 90 keys linearizable) | `d47eb5a57df4dc44` | yes |
+
+**x86_64 (hvx), etcd-hc-3.5.6**
+
+| schedule | verdict | fingerprint | twice |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK checks=1 held (etcd.kv_linearizable: 183 operations on 90 keys linearizable) | `06f59cfe18040d1d` | yes |
+| `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | OK checks=1 held (etcd.kv_linearizable: 187 operations on 90 keys linearizable) | `7cf68773b8ba60da` | yes |

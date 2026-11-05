@@ -625,6 +625,7 @@ pub fn build(
     write_compiled(ctx, p, manifest_path, &r, &tools)?;
     let (bin, sha) = crate::agent::binary(ctx, bdir, false, io)?;
     crate::agent::install(&bin, &sha, &r, "/sbin/init", io)?;
+    crate::record::write_inside(&r, "x86_64", false)?;
     crate::stage::compose_stage(&m, &r)?;
     let oci_meta = crate::oci::stage(
         &mut p.oci,
@@ -713,5 +714,6 @@ pub fn build(
             dmib
         ),
     );
-    image::print_shas(io, &[&ext4, &data, &disk])
+    image::print_shas(io, &[&ext4, &data, &disk])?;
+    crate::record::write_sidecar(&disk, None, "x86_64", false, manifest_path, &p.oci, io)
 }

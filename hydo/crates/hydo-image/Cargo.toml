@@ -1,0 +1,17 @@
+[package]
+name = "hydo-image"
+description = "hydo's image record: what shapes an image's runs but is not inside it (the guest kernel by sha256, the fingerprint epoch) in /etc/hydo/image.json, and the build record <image>.json next to it; the kernels this hydo knows and how a run finds the one an image names"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+build = "build.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+schemars = "1"
+
+[dev-dependencies]
+hydo-schema-compat = { path = "../hydo-schema-compat" }

@@ -1,0 +1,32 @@
+{
+  "v": 1,
+  "type": "build",
+  "image": {
+    "file": "explore-ob-redis-bridge-arm64.cpio.gz",
+    "sha256": "bec8a25f149afbf430ca2237be445e9525d10f00872d4d9a8186b34d327828b9"
+  },
+  "disk": {
+    "file": "explore-ob-redis-bridge-arm64-disk.img",
+    "sha256": "26f4a507c5d924d92dbc4bf16cfea2f71cb2779e6cb5616c8f010a22d9803b00"
+  },
+  "record": {
+    "v": 1,
+    "type": "image",
+    "arch": "arm64",
+    "epoch": 1,
+    "kernel": {
+      "file": "Image-explore-netns",
+      "sha256": "806807e7be5f55dae342f796ccc6e20c35514b3684a8c0d4633901a8ac0aa609",
+      "version": "6.6.35",
+      "cmdline": "console=ttyS0 earlycon=uart8250,mmio,0x09000000 clocksource.arm_arch_timer.evtstrm=0 nokaslr rdinit=/init loglevel=7 random.trust_bootloader=on quiet loglevel=1"
+    }
+  },
+  "hydo": {
+    "version": "0.1.0",
+    "commit": "26882eaf101b798999203a0eb3635045ce72ec77"
+  },
+  "manifest": {
+    "path": "hydo.yaml",
+    "sha256": "f51de27a59bce29b03c285a4f6231c8c5afbc3e4450d22835c651e834e0ecd21"
+  }
+}

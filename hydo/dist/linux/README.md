@@ -140,7 +140,16 @@ Since M153 the five host programs are compiled with the tree and the Cargo home 
 their panic messages name no directory of the machine that built them; before, they carried
 the builder's home directory. This changes only those programs' bytes, no image.
 
-**The current tarball (M154)**, built twice on the bare-metal machine from M154's branch (on
+**The current tarball (M155)**, built twice on the bare-metal machine from M155's branch
+(`b662589`), from clean Rust targets, with the same bytes both times: `hydo-linux-0.1.0.tar.gz`,
+59,563,571 bytes, sha256 `d557c3416664e0fb426d22495390bc5ba8063fa1d3789b42e304f2134e6e5a8a`.
+Since M155 every image it builds carries `/etc/hydo/image.json` (the guest kernel by sha256 and the
+fingerprint epoch) and gets a build record `<image>.json` beside it, and `hydo run` boots the kernel
+the image names (from `guest/`), so the quickstart's image and fingerprints are new (fingerprint
+epoch 1; QUICKSTART-linux.md, docs/REBASELINE.md 13.4). Installed with `--no-module` into clean
+prefixes it gave them twice, as the user and as root (docs/HISTORY.md, "Milestone 155").
+
+**The tarball of M154**, built twice on the bare-metal machine from M154's branch (on
 `main` = `ba16a4b`), from clean Rust targets, with the same bytes both times:
 `hydo-linux-0.1.0.tar.gz`, 59,463,651 bytes, sha256
 `71cfd64678346de8b14a7d4fcd371d7afcec5ed28b3395c3f36b8abc7e13bec0`. Installed with

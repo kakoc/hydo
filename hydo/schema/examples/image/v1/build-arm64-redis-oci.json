@@ -1,0 +1,39 @@
+{
+  "v": 1,
+  "type": "build",
+  "image": {
+    "file": "explore-ob-redis-oci-arm64.cpio.gz",
+    "sha256": "8364b670defa9a51f05b5ade18f7973dad758e62a1250cf582cafaaa0ff46259"
+  },
+  "disk": {
+    "file": "explore-ob-redis-oci-arm64-disk.img",
+    "sha256": "d4116ff4f1738acc64ab3720665bab738a6d226be09b3777c16c938f911f39b4"
+  },
+  "record": {
+    "v": 1,
+    "type": "image",
+    "arch": "arm64",
+    "epoch": 1,
+    "kernel": {
+      "file": "Image-explore",
+      "sha256": "f80c565589f1fecf9ccd49d33cb0717c7a15d5cddf3bb3bec7f2dd2b335b51ac",
+      "version": "6.6.35",
+      "cmdline": "console=ttyS0 earlycon=uart8250,mmio,0x09000000 clocksource.arm_arch_timer.evtstrm=0 nokaslr rdinit=/init loglevel=7 random.trust_bootloader=on quiet loglevel=1"
+    }
+  },
+  "hydo": {
+    "version": "0.1.0",
+    "commit": "26882eaf101b798999203a0eb3635045ce72ec77"
+  },
+  "manifest": {
+    "path": "hydo.yaml",
+    "sha256": "733f0017a04d2b1488a80cf5ee41bbebd842495576ff443595b332930faf8f6f"
+  },
+  "services": [
+    {
+      "service": "redis",
+      "image": "redis-7.2.4-arm64.docker.tar",
+      "config_digest": "sha256:0b4893f528c4ecef3b9ba9f0cb3921c25d7e6088317ad3af6d1e4dc01a6de7cc"
+    }
+  ]
+}

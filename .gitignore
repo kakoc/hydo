@@ -22,3 +22,4 @@ __pycache__/
 # hydo-read keeps its own Cargo workspace (its bytes are inside guest images)
 /hydo/crates/hydo-read/target/
 /hydo/crates/hydo-agent/target/
+/hydo/COMMIT

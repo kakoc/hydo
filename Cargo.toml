@@ -27,6 +27,7 @@ members = [
     "hydo/crates/hydo-grpc",
     "hydo/crates/hydo-grpc-gen",
     "hydo/crates/hydo-results",
+    "hydo/crates/hydo-image",
     "hydo/crates/hydo-schema-compat",
     "hydo/crates/hydo-agent-proto",
     "hydo/crates/hydo-control",
@@ -61,6 +62,7 @@ hydo-build = { path = "hydo/crates/hydo-build" }
 hydo-grpc = { path = "hydo/crates/hydo-grpc" }
 hydo-grpc-gen = { path = "hydo/crates/hydo-grpc-gen" }
 hydo-results = { path = "hydo/crates/hydo-results" }
+hydo-image = { path = "hydo/crates/hydo-image" }
 hydo-agent-proto = { path = "hydo/crates/hydo-agent-proto" }
 hydo-control = { path = "hydo/crates/hydo-control" }
 hydo-hvx = { path = "hydo/crates/hydo-hvx" }

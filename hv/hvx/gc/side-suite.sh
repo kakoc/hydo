@@ -92,12 +92,12 @@ if has repro; then
   cp $T/target/release/hydo $P/bin/hydo; ln -s $R $P/libexec/hvx-run
   ln -s $B/bzImage $P/guest/bzImage; ln -s $B/initramfs-kafka.cpio.gz $P/guest/initramfs-kafka.cpio.gz
   S='disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24'
-  for img in explore-ob-stack-old-disk.img:8fc461db23ef6642 explore-ob-stack-fix-disk.img:aad6a563e2046361; do
+  for img in explore-ob-stack-old-disk.img:1dc3677fb94053cf explore-ob-stack-fix-disk.img:ba0aa0612502a1df; do
     n=0; all=""
     for r in 1 2; do
       d=$O/repro-${img%%:*}-$r; sudo rm -rf "$d"
       memwait 10240; quiet
-      out=$(timeout 3600 $R sudo env HOME="$HOME" HVX_DEV="$DEV" "${FEAT[@]}" $P/bin/hydo run $B/m145/${img%%:*} "$S" --out "$d" 2>&1); rc=$?
+      out=$(timeout 3600 $R sudo env HOME="$HOME" HVX_DEV="$DEV" "${FEAT[@]}" $P/bin/hydo run $B/m155/${img%%:*} "$S" --out "$d" 2>&1); rc=$?
       [ $rc = 0 ] && grep -qa "^RESULT .* fp=${img##*:}" <<< "$out" && n=$((n+1)); all="$all$out"
     done
     check "repro ${img%%:*} x2 ($n of 2)" "$([ "$n" = 2 ] && echo 0 || echo 1)" "$all" ${img##*:}
