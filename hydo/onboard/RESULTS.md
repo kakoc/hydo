@@ -720,14 +720,16 @@ agent's lines travel over the host-call port, on the Mac over the serial line):
 | `disk=none \| run` | OK invariants=2 held (ledger.acked_exactly_once: acked=30 each stored once) | `25f1123366ea96c6` | `930f998155f77b29` | yes |
 | `disk=none \| run P=front@10+2` | VIOLATION [ledger.acked_exactly_once] entry 10 stored 2 times | `8dd9c5537321c0e2` | `012f769bba1db408` | yes |
 
-**Mac (hvm), node-kv**
+**Mac (hvm), node-kv** (the values of Milestone 152, image `2ac9dc0c…`: the SDK's `package.json`
+inside the image now says `Apache-2.0`; docs/REBASELINE.md section 12; the M140 values are in
+docs/HISTORY.md "Milestone 152")
 
 | schedule | verdict | fingerprint | ctl | twice |
 |---|---|---|---|---|
-| `disk=none \| run` | OK invariants=1 held (nkv.oracle: acked=20 all present) | `ab38514eec59f829` | `0141194b466e3bd9` | yes |
-| `disk=cut \| run C=12 S=never` | VIOLATION [nkv.oracle] key k:0 lost (got null) | `376432e7f641b27f` | `8de6e3d2ba8ff5d8` | yes |
-| `disk=cut \| run C=12` | OK invariants=1 held (nkv.oracle: acked=12 all present) | `0ccaca40efede16b` | `202dcc1810826541` | yes |
-| `disk=none \| run K=nkv@8+2 B=1234` | OK invariants=1 held (nkv.oracle: acked=18 all present) | `41e70d32728c4aa4` | `39129eaa9b7e2227` | yes |
+| `disk=none \| run` | OK invariants=1 held (nkv.oracle: acked=20 all present) | `3def1ce155691292` | `0141194b466e3bd9` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [nkv.oracle] key k:0 lost (got null) | `59bd74f26a0e3d97` | `8de6e3d2ba8ff5d8` | yes |
+| `disk=cut \| run C=12` | OK invariants=1 held (nkv.oracle: acked=12 all present) | `33c406be62f5df36` | `202dcc1810826541` | yes |
+| `disk=none \| run K=nkv@8+2 B=1234` | OK invariants=1 held (nkv.oracle: acked=18 all present) | `ae1db81f2458fe15` | `39129eaa9b7e2227` | yes |
 
 **Mac (hvm), grpc-buggy**
 

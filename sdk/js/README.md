@@ -209,8 +209,11 @@ tx.ok(hh.append('x', '1'), hh.readResult('y', '1', '2'));
   `tests/cases/defs.rs` and run `HYDO_BLESS=1 cargo test --test cases` there; this test then
   runs it. A format change starts in the Rust SDK too: after it is blessed, this test fails on
   the lines this package must change. No other language is needed to run it.
-- `package.json` still names the deleted Go-binary scripts in its `conformance` script: the
-  file is copied into the node-kv example's images, so changing it would change their bytes.
+- `package.json`, `index.js` and `index.mjs` are copied into the node-kv example's images, so
+  a change to any of them changes those images' bytes and every node-kv fingerprint (the last
+  such change, the `Apache-2.0` license field and the removed `conformance` script of the
+  deleted Go-binary harnesses, re-recorded them in milestone 152; docs/REBASELINE.md has the
+  values).
 
 ## Example
 
