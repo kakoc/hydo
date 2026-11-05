@@ -368,6 +368,7 @@ pub fn build(
     )?;
     // the agent is the kernel's first process itself (rdinit=/init): no shell before it
     crate::agent::install(&agent_bin, &agent_sha, &r, "/init", io)?;
+    crate::record::write_inside(&r, "arm64", netns_k)?;
     let dsec = section(&m, "data")?;
     let dmib = pyv::get(dsec, "size_mib")?
         .map(|v| pyv::int(v, "data.size_mib"))
@@ -410,6 +411,15 @@ pub fn build(
         ),
     );
     image::print_shas(io, &[&cpio, &disk])?;
+    crate::record::write_sidecar(
+        &cpio,
+        Some(&disk),
+        "arm64",
+        netns_k,
+        manifest_path,
+        &p.oci,
+        io,
+    )?;
     if netns_k {
         let mut why = Vec::new();
         if netns {

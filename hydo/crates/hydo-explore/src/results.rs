@@ -14,6 +14,51 @@ use std::io::Write;
 use std::path::Path;
 use std::sync::Mutex;
 
+/// The image of a run or an exploration as the results format reports it: the path as given
+/// (`path`), the file opened (`file`) when it differs, its sha256 when known, and what its records
+/// say (Milestone 155): the fingerprint epoch and the guest kernel from `/etc/hydo/image.json`,
+/// the hydo that built it, the manifest's sha256 and the service images' digests from the build
+/// record `<image>.json`. An image without the records (built before M155) gets none of those.
+pub fn image_of(path: &str, file: &Path, sha256: Option<String>) -> hydo_results::Image {
+    let f = file.display().to_string();
+    let mut im = hydo_results::Image {
+        resolved: (f != path).then_some(f),
+        path: path.to_string(),
+        sha256,
+        ..hydo_results::Image::default()
+    };
+    if let Ok(Some(r)) = hydo_engine::image::image_record(file) {
+        im.epoch = Some(r.epoch);
+        im.kernel = Some(format!(
+            "{} (Linux {}, sha256 {})",
+            r.kernel.file, r.kernel.version, r.kernel.sha256
+        ));
+    }
+    if let Some(b) = hydo_image::read_sidecar(file) {
+        im.built_by = Some(hydo_results::BuiltBy {
+            version: b.hydo.version,
+            commit: b.hydo.commit,
+        });
+        im.manifest_sha256 = Some(b.manifest.sha256);
+        im.services = b
+            .services
+            .into_iter()
+            .map(|s| hydo_results::ServiceImage {
+                service: s.service,
+                image: s.image,
+                digest: s.digest,
+                config_digest: s.config_digest,
+            })
+            .collect();
+    }
+    im
+}
+
+/// The running hydo's fingerprint epoch, for a document (M155).
+pub fn this_epoch() -> Option<u64> {
+    Some(hydo_image::EPOCH)
+}
+
 /// Result keys only the host keeps (never written as they are): the history checks' findings
 /// and HYDO-ASSERT records, and the error-log analysis.
 pub const CHECKS: &str = "_checks";

@@ -1081,7 +1081,7 @@ fn convert(old: &Path, new: &Path) {
         r.image = Some(hydo_results::Image {
             path: sv(&j["image"]).unwrap_or_default(),
             sha256: sv(&j["image_sha256"]),
-            resolved: None,
+            ..hydo_results::Image::default()
         });
         r.result_line = sv(&j["line"]);
         r.engine = Some(hydo_results::Engine {

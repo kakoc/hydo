@@ -223,12 +223,25 @@ fn setup(a: Args, env: &Env) -> Cx {
                 img.display()
             ))
         });
-        if hvm::image_kernel(&img).is_some() {
-            let k = hvm::kernel_for(&img, cx.hvm_kernel.as_deref(), &cx.hvm_default_kernel())
-                .unwrap_or_else(|e| die(&e));
-            eprintln!("guest kernel: {} (recorded in the image)", k.display());
-            cx.hvm_kernel = Some(k);
+        // the kernel the image's record names (M155; before it, /etc/hydo/kernel, M99)
+        let b = hydo_engine::image::boot_files(
+            &img,
+            &cx.hvm_default_kernel(),
+            None,
+            cx.hvm_kernel.as_deref(),
+            &[],
+        )
+        .unwrap_or_else(|e| die(&format!("hydo: {e}")));
+        if let Some(n) = &b.note {
+            eprintln!("hydo: {n}");
         }
+        if b.kernel != cx.hvm_default_kernel() {
+            eprintln!(
+                "guest kernel: {} (recorded in the image)",
+                b.kernel.display()
+            );
+        }
+        cx.hvm_kernel = Some(b.kernel);
     }
     let base = Path::new(&a.image)
         .file_name()
@@ -500,6 +513,23 @@ fn make_pool(cx: &Cx) -> Pool {
                 outdir: consoles,
                 snapshots: SnapshotStore::Files,
             };
+            // the kernel and initramfs the image's record names (M155)
+            let mut spec = spec;
+            if cx.env.config.pool.scripted_engine.is_none() {
+                let b = hydo_engine::image::boot_files(
+                    &spec.image,
+                    &spec.kernel,
+                    spec.initrd.as_deref(),
+                    None,
+                    &[],
+                )
+                .unwrap_or_else(|e| die(&format!("hydo: {e}")));
+                if let Some(n) = &b.note {
+                    eprintln!("hydo: {n}");
+                }
+                spec.kernel = b.kernel;
+                spec.initrd = b.initrd;
+            }
             (Arc::new(e), spec)
         };
     // Every image is an agent image driven by the host controller, also one explored without a
@@ -1529,17 +1559,13 @@ impl Cx {
     }
 
     fn image_info(&self, sha: Option<String>) -> Image {
-        let f = self.image_file().display().to_string();
-        Image {
-            resolved: (f != self.image).then_some(f),
-            path: self.image.clone(),
-            sha256: sha,
-        }
+        crate::results::image_of(&self.image, &self.image_file(), sha)
     }
 
     fn start_record(&self, workers: usize) -> Start {
         Start {
             hydo_version: Some(env!("CARGO_PKG_VERSION").into()),
+            epoch: crate::results::this_epoch(),
             mode: self.mode().into(),
             config: self.config(),
             image: self.image_info(None),
@@ -1552,6 +1578,7 @@ impl Cx {
         let sha = sha.and_then(|h| h.join().ok()).flatten();
         Exploration {
             hydo_version: Some(env!("CARGO_PKG_VERSION").into()),
+            epoch: crate::results::this_epoch(),
             mode: self.mode().into(),
             config: self.config(),
             image: self.image_info(sha),

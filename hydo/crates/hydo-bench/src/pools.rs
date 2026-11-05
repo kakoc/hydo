@@ -62,13 +62,30 @@ impl Engines {
             config: self.config.env.clone(),
         };
         let (ram_mib, cpu) = guest_of(&self.build.join(image));
+        // the kernel and initramfs the image's record names (M155); an image without the record
+        // boots the build directory's, with a warning
+        let img = self.build.join(image);
+        let b = hydo_engine::image::boot_files(
+            &img,
+            &self.build.join("bzImage"),
+            Some(&self.build.join("initramfs-kafka.cpio.gz")),
+            None,
+            &[],
+        )
+        .unwrap_or_else(|e| {
+            eprintln!("hydo-bench: {e}");
+            std::process::exit(2)
+        });
+        if let Some(n) = &b.note {
+            eprintln!("hydo-bench: {n}");
+        }
         let spec = BootSpec {
-            image: self.build.join(image),
+            image: img,
             ram_mib,
             vcpus: self.vcpus,
             cpu,
-            kernel: self.build.join("bzImage"),
-            initrd: Some(self.build.join("initramfs-kafka.cpio.gz")),
+            kernel: b.kernel,
+            initrd: b.initrd,
             outdir: outdir.join("consoles"),
             snapshots: SnapshotStore::Files,
         };

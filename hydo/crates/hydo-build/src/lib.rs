@@ -28,6 +28,7 @@ pub mod image;
 pub mod oci;
 pub mod pyjson;
 pub mod pyv;
+pub mod record;
 pub mod shell;
 pub mod stage;
 pub mod tarball;

@@ -2,6 +2,7 @@
   "v": 1,
   "type": "exploration",
   "hydo_version": "0.1.0",
+  "epoch": 1,
   "mode": "sweep",
   "config": {
     "strategy": "sweep:freeze",

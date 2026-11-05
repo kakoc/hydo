@@ -134,6 +134,45 @@ pub struct Image {
     /// SHA-256 of the image file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sha256: Option<String>,
+    /// The fingerprint epoch of the hydo that built the image (its `/etc/hydo/image.json`, added
+    /// in M155; absent for an image built before).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epoch: Option<u64>,
+    /// The guest kernel the image names (its record), as `<file> (Linux <version>, sha256 <hex>)`
+    /// (added in M155).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kernel: Option<String>,
+    /// The hydo that built the image, from the build record next to it (`<image>.json`, M155).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub built_by: Option<BuiltBy>,
+    /// SHA-256 of the manifest the image was built from (the build record, M155).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manifest_sha256: Option<String>,
+    /// The Docker/OCI images of its services with their digests (the build record, M155).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub services: Vec<ServiceImage>,
+}
+
+/// The hydo that built an image (added in M155).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct BuiltBy {
+    pub version: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
+}
+
+/// A service built from a Docker/OCI image (added in M155).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ServiceImage {
+    pub service: String,
+    /// The image as the manifest gives it.
+    pub image: String,
+    /// The image manifest's digest (`sha256:...`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub digest: Option<String>,
+    /// The image configuration's digest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config_digest: Option<String>,
 }
 
 /// The engine and the machine it gave the guest.
@@ -337,6 +376,10 @@ pub struct Run {
     /// The hydo that wrote the document (documents only).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hydo_version: Option<String>,
+    /// The fingerprint epoch of that hydo (documents only; added in M155): fingerprints of one
+    /// epoch are comparable, across epochs only verdicts are. Absent: before M155, epoch 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epoch: Option<u64>,
     /// The explorer's name for the run (`seed-3`, `repro-3`, `shrink-1-0`, `min-a`, ...).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
@@ -722,6 +765,9 @@ pub struct Start {
     pub ty: StartType,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hydo_version: Option<String>,
+    /// The fingerprint epoch of that hydo (added in M155; absent: before M155, epoch 1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epoch: Option<u64>,
     /// `seeds`, `sweep`, `branch` or `schedule`.
     pub mode: String,
     pub config: Config,
@@ -746,6 +792,9 @@ pub struct Exploration {
     pub ty: ExplorationType,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hydo_version: Option<String>,
+    /// The fingerprint epoch of that hydo (added in M155; absent: before M155, epoch 1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epoch: Option<u64>,
     /// `seeds`, `sweep`, `branch` or `schedule`.
     pub mode: String,
     pub config: Config,

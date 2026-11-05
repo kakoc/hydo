@@ -1,0 +1,237 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "hydo image records, version 1",
+  "description": "Either record (the schema's root).",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/ImageRecord"
+    },
+    {
+      "$ref": "#/$defs/BuildRecord"
+    }
+  ],
+  "$defs": {
+    "ImageRecord": {
+      "description": "`/etc/hydo/image.json`: what an image needs from the hydo that runs it.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/ImageType"
+        },
+        "arch": {
+          "description": "`x86_64` or `arm64`.",
+          "type": "string"
+        },
+        "epoch": {
+          "description": "The fingerprint epoch of the hydo that built the image ([`EPOCH`]).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "kernel": {
+          "$ref": "#/$defs/Kernel"
+        },
+        "initrd": {
+          "description": "x86_64: the initramfs the kernel starts first (it mounts the image's root and starts the\nagent); arm64 images are their own initramfs.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FileRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "arch",
+        "epoch",
+        "kernel"
+      ]
+    },
+    "ImageType": {
+      "description": "The `type` of this record: always `\"image\"`.",
+      "type": "string",
+      "enum": [
+        "image"
+      ]
+    },
+    "Kernel": {
+      "description": "The guest kernel an image was built for.",
+      "type": "object",
+      "properties": {
+        "file": {
+          "description": "The kernel's file name as hydo ships it (`bzImage`, `Image-explore`, `Image-explore-netns`).",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "SHA-256 of the kernel file: the identity a run looks the kernel up by.",
+          "type": "string"
+        },
+        "version": {
+          "description": "The Linux version, for people (`6.6.35`).",
+          "type": "string"
+        },
+        "cmdline": {
+          "description": "The kernel command line hydo boots an agent image with, for people (the engine is the\nauthority; the hvx engine adds `hydo.hc=1` when the module offers the host-call port).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file",
+        "sha256",
+        "version",
+        "cmdline"
+      ]
+    },
+    "FileRef": {
+      "description": "A file by name and sha256.",
+      "type": "object",
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "file",
+        "sha256"
+      ]
+    },
+    "BuildRecord": {
+      "description": "`<image file>.json`: how and from what an image was built (written by `hydo build`).",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/BuildType"
+        },
+        "image": {
+          "description": "The image file (an x86_64 `*-disk.img`, an arm64 `*.cpio.gz`).",
+          "$ref": "#/$defs/FileRef"
+        },
+        "disk": {
+          "description": "arm64: the data disk next to the initramfs.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FileRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "record": {
+          "description": "The record inside the image.",
+          "$ref": "#/$defs/ImageRecord"
+        },
+        "hydo": {
+          "$ref": "#/$defs/Hydo"
+        },
+        "manifest": {
+          "$ref": "#/$defs/Manifest"
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ServiceImage"
+          }
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "image",
+        "record",
+        "hydo",
+        "manifest"
+      ]
+    },
+    "BuildType": {
+      "description": "The `type` of this record: always `\"build\"`.",
+      "type": "string",
+      "enum": [
+        "build"
+      ]
+    },
+    "Hydo": {
+      "description": "The hydo that built an image.",
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "version"
+      ]
+    },
+    "Manifest": {
+      "description": "The manifest an image was built from.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "The path as given to `hydo build`.",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "SHA-256 of that file.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ]
+    },
+    "ServiceImage": {
+      "description": "A service built from a Docker/OCI image (`services[].image:`).",
+      "type": "object",
+      "properties": {
+        "service": {
+          "description": "The service's name.",
+          "type": "string"
+        },
+        "image": {
+          "description": "The image reference as the manifest gives it.",
+          "type": "string"
+        },
+        "digest": {
+          "description": "The image manifest's digest (`sha256:...`), when the image was read by one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "config_digest": {
+          "description": "The image configuration's digest.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "service",
+        "image"
+      ]
+    }
+  }
+}

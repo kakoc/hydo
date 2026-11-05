@@ -345,6 +345,13 @@ impl Pool {
             }
             st.pos += line.len() as u64;
             if let Ok(rec) = serde_json::from_str::<Value>(line) {
+                // a result of another fingerprint epoch is not this hydo's answer (M155; an entry
+                // without one was written before M155, epoch 1)
+                if hydo_image::comparable(rec["epoch"].as_u64())
+                    != hydo_image::Compare::Fingerprints
+                {
+                    continue;
+                }
                 let k = (
                     py_str(&rec["image"]),
                     py_str(&rec["engine"]),
@@ -437,7 +444,7 @@ impl Pool {
                 cons.insert(suffix.into(), json!(dst.display().to_string()));
             }
         }
-        let rec = json!({"image": image, "engine": engine, "text": text, "result": res, "consoles": cons});
+        let rec = json!({"image": image, "engine": engine, "text": text, "result": res, "consoles": cons, "epoch": hydo_image::EPOCH});
         if let Ok(mut fh) = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
