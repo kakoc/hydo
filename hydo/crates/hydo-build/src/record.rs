@@ -33,11 +33,21 @@ pub fn write_sidecar(
     oci: &[OciService],
     io: &mut Io,
 ) -> Result<(), Fail> {
+    // an image file next to the manifest is named relative to it (no build machine's paths)
+    let mdir = crate::abspath(Path::new(manifest_path));
+    let mdir = if mdir.is_dir() {
+        mdir
+    } else {
+        mdir.parent().map(Path::to_path_buf).unwrap_or_default()
+    };
     let services = oci
         .iter()
         .map(|s| hydo_image::ServiceImage {
             service: s.svc.clone(),
-            image: s.path.clone(),
+            image: crate::abspath(Path::new(&s.path))
+                .strip_prefix(&mdir)
+                .map(|r| r.display().to_string())
+                .unwrap_or_else(|_| s.path.clone()),
             digest: s.img.manifest_digest.clone(),
             config_digest: Some(s.img.config_digest.clone()).filter(|d| !d.is_empty()),
         })
