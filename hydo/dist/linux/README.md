@@ -133,6 +133,21 @@ hydo-read's own target directories removed in between): both tarballs had the sa
 a Mac, BSD tar keeps the owner but not the file times, so a Mac-built tarball is not
 reproducible (and its `hydo-read` bytes differ: they depend on the build host).
 
+Since M153 the five host programs are compiled with the tree and the Cargo home remapped to
+`/hydo` and `/cargo` (`--remap-path-prefix`, as the guest programs' builds already did), so
+their panic messages name no directory of the machine that built them; before, they carried
+the builder's home directory. This changes only those programs' bytes, no image.
+
+**The current tarball (M153)**, built twice on the bare-metal machine from `main` = `a4d9531`
+plus M153's script change, from clean Rust targets, with the same bytes both times:
+`hydo-linux-0.1.0.tar.gz`, 59,414,879 bytes, sha256
+`a257f54b4e02fdf514ff084f0db2baaece6a6e96ab32ca6b44baa7cffd2fa6c9` (96 files). Installed with
+`install.sh --no-module` into a clean prefix, it gave every value of M149 (docs/HISTORY.md,
+"Milestone 153"). It differs from M149's tarball in the release's README, MANIFEST.md, the
+comments of `libexec/faketime` and `libexec/hvx-run` (M151's wording), and in `bin/hydo`
+(which carries MANIFEST.md), `bin/hydo-build`, `bin/hydo-fetch-image` and
+`libexec/hydo-grpc-gen` (the remapped paths).
+
 Only the kernel module is compiled on the user's machine, by `install.sh` (it must match the
 running kernel); `--no-module` skips it.
 

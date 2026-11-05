@@ -125,7 +125,13 @@ else
   if [ -z "$CC_x86_64_unknown_linux_musl" ] && [ "$(uname -s)" = Linux ]; then
     CC_x86_64_unknown_linux_musl=$(command -v musl-gcc || command -v cc); export CC_x86_64_unknown_linux_musl
   fi
+  # the tree and the Cargo home are remapped to /hydo and /cargo (as the guest programs' builds
+  # do), so the programs' panic messages name no directory of the building machine (M153: they
+  # named the builder's home); RUSTFLAGS replaces the target's rustflags of .cargo/config.toml,
+  # so +crt-static is repeated here
+  CH=$(cd "${CARGO_HOME:-$HOME/.cargo}" 2>/dev/null && pwd || echo "${CARGO_HOME:-$HOME/.cargo}")
   ( cd "$TOP" && { rustup target add x86_64-unknown-linux-musl >/dev/null 2>&1 || true; } &&
+    RUSTFLAGS="-C target-feature=+crt-static --remap-path-prefix=$TOP=/hydo --remap-path-prefix=$CH=/cargo" \
     cargo build --release --locked -p hydo-cli -p hydo-hvx -p hydo-build -p hydo-compose -p hydo-grpc-gen \
       --target x86_64-unknown-linux-musl ) >&2
   BD=$TOP/target/x86_64-unknown-linux-musl/release

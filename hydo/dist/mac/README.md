@@ -110,6 +110,22 @@ that covers it), because Apple's linker derives the UUID from the object files' 
 
 Nothing is published by the script; the tarball stays in `OUTDIR`.
 
+## Milestone 153: the current tarball
+
+Built twice on this Mac from `main` = `a4d9531` (after M151's wording changes) from clean target
+directories, with the same bytes both times: `hydo-mac-0.1.0.tar.gz`, 29,786,366 bytes, sha256
+`251e0bb3022b48bec0bcd3ecaef7e7bb2cbf9baf8515b44fd198350e71544539`. It differs from M150's
+tarball in `hydo/onboard/MANIFEST.md` (M151's wording), in `bin/hydo` (which carries that file),
+and in `bin/hydo-build` and `bin/hydo-hvm`, whose `LC_UUID` and source paths name the checkout
+they were built in (see "Two runs give the same tarball"). Installed into a clean prefix with the
+same PATH and traps as below, it gave every value of the M150 table: the bundled Redis and
+ledger-spin examples, the exploration and the regressions bit for bit. The three examples built
+from copies under the user's own directory (redis-composed, redis-bridge, the store reader) get
+other root images and `fp=` values, with the same `ctl=`, because their `src:` paths name the
+copy's directory and the manifest text is inside the image; built from copies at M150's directory
+they give M150's images (`3a72431d…`, `37d0d5de…`, `4ec4923c…`) and every `fp=` of the table
+(docs/HISTORY.md, "Milestone 153").
+
 ## Milestone 150: the release built and checked
 
 Built from `main` at `85e3f4c` (with M149) plus this milestone's changes, twice from clean target
