@@ -668,6 +668,10 @@ fn cli_matches_golden() {
             &["module", "udev", "remove", "--dry-run"],
             &["module", "status", "extra"],
             &["module", "load", "--name"],
+            &["module", "install", "--dry-run", "--name", "side"],
+            &["module", "install", "--name", "Bad"],
+            &["module", "uninstall", "--dry-run"],
+            &["module", "uninstall", "--name", "Bad"],
         ],
     );
     // M107: one behaviour on both platforms (no Python reference: the Rust CLI's answers)
@@ -695,6 +699,22 @@ fn cli_matches_golden() {
                 &["run", "--out", "o", "--known-errors", "k.yaml"],
                 &["repro", "missing.cpio.gz", "--regressions"],
                 &["explore", "missing.cpio.gz"],
+            ],
+        );
+    }
+    // M154: `hydo setup` on a root that is not an unpacked release (no SHA256SUMS), and its usage
+    for plat in ["linux", "mac"] {
+        n += same(
+            &root,
+            plat,
+            nothing,
+            &[
+                &["setup", "--check"],
+                &["setup", "--verify"],
+                &["setup"],
+                &["setup", "--check", "--verify"],
+                &["setup", "--check", "--add-to-path"],
+                &["setup", "--bogus"],
             ],
         );
     }

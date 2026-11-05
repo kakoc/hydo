@@ -32,7 +32,9 @@ the same (Milestone 107); only `hydo module` is Linux-only.
 
 | verb | what it runs underneath |
 |---|---|
-| `hydo doctor` | checks: Intel CPU, `vmx` flag (VT-x on in firmware), bare metal, a usable PMU (non-hybrid, `arch_perfmon`; otherwise it says the exit-count clock is used), `cc`/`make`/`flock`/`xz`/`sudo`/`modinfo`, password-less sudo, kernel headers, lockdown, the module (built, loaded, same `srcversion` as this release), `kvm_intel` not loaded, release files, the run engine, the bundled `mke2fs`, disk space |
+| `hydo setup [--check \| --verify] [--add-to-path]` | (M154; `install.sh` ran it as shell before) checks every file of `SHA256SUMS` and the pins built into `hydo` (`assets.sha256` mapped to the release paths, and `guest-programs.sha256`: `guest/hydo-agent`, `hydo-world`, `hydo-read`, `hydo-grpc`), unpacks `guest/store.tar` into `guest/store` with `tar -xpf` and deletes the tar, makes `bin/*` and `libexec/*` executable, and writes `.hydo-setup`, the record of the unpacked tree (every entry's kind, mode, sha256 or link target), against which later checks compare it. A damaged file is refused, never repaired. `--check` only reports (0 nothing to do, 1 damaged, 3 steps left); `--verify` checks the files only (`install.sh` runs it on the unpacked release before it replaces an earlier installation); `--add-to-path` adds `export PATH=…` to `~/.zshrc` for zsh, else `~/.bashrc` |
+| `hydo doctor` | checks: Intel CPU, `vmx` flag (VT-x on in firmware), bare metal, a usable PMU (non-hybrid, `arch_perfmon`; otherwise it says the exit-count clock is used), `cc`/`make`/`flock`/`xz`/`sudo`/`modinfo`, password-less sudo, kernel headers, lockdown, the module (built, loaded, same `srcversion` as this release), `kvm_intel` not loaded, release files, the run engine, the bundled `mke2fs`, what `hydo setup --check` would fix (M154), disk space |
+| `hydo module install\|uninstall [--name N] [--dry-run]` | (M154) `install`: `build` when the release's build is missing, built from other sources or for another kernel (`modinfo -F vermagic`), then `load`; nothing when this release's build is loaded. `uninstall`: `unload`, then delete `module/build/N` (a udev rule stays). `install.sh` runs `hydo module install` unless `--no-module` |
 | `hydo module build [--name N]` | `make -C /lib/modules/$(uname -r)/build` on `module/hvx.c`; with `--name` a side copy `N.ko` with device `/dev/N` (`-DHVX_DEVNAME`, the `hv/hvx/tdet/build-hvxtd.sh` pattern) |
 | `hydo module load\|unload [--name N] [--dry-run] [--param K=V]` | under `flock -x` on the module lock: `rmmod hvx`, `rmmod kvm_intel kvm` if loaded, `insmod`. A side module gets its own lock file (`<lock>.N`) and never touches `hvx` or KVM |
 | `hydo module udev install\|remove\|status [--name N] [--group G] [--dry-run]` | optional: with sudo, writes `/etc/udev/rules.d/70-hydo-N.rules` (`KERNEL=="N", SUBSYSTEM=="misc", GROUP="G", MODE="0660"`), creates the group if missing, adds the user, reloads udev and applies the rule to a loaded device; `remove` deletes the rule and sets the device back to root:root 0600. `install.sh --udev [--udev-group G] [--udev-name N]` runs `install` |
@@ -83,7 +85,7 @@ ships all of them (`guest/`, `tools/`), and `hydo build` points `hydo-build` at 
   so a plain `hydo-build` no longer depends on the machine's zone either), and `MKE2FS_CONFIG` names no file, so `mke2fs` uses its built-in defaults as on
   the build machine instead of the machine's `/etc/mke2fs.conf`;
 - the guest-side closures are `guest/store.tar` (a GNU tar with the store's read-only modes,
-  unpacked by `install.sh`) and `guest/store-closures.txt` (`nix-store -qR` of each root). The
+  unpacked by `hydo setup`) and `guest/store-closures.txt` (`nix-store -qR` of each root). The
   builder's Linux release mode (`hydo_build::Release::Linux`) resolves the pinned `/nix/store`
   paths into that tree, only when the machine does not have them;
 - the umask is 022, and after the root image is made every inode's owner is set to 0:0 with the
@@ -138,7 +140,18 @@ Since M153 the five host programs are compiled with the tree and the Cargo home 
 their panic messages name no directory of the machine that built them; before, they carried
 the builder's home directory. This changes only those programs' bytes, no image.
 
-**The current tarball (M153)**, built twice on the bare-metal machine from `main` = `a4d9531`
+**The current tarball (M154)**, built twice on the bare-metal machine from M154's branch (on
+`main` = `ba16a4b`), from clean Rust targets, with the same bytes both times:
+`hydo-linux-0.1.0.tar.gz`, 59,463,651 bytes, sha256
+`71cfd64678346de8b14a7d4fcd371d7afcec5ed28b3395c3f36b8abc7e13bec0`. Installed with
+`install.sh --no-module` into a clean prefix, it gave every value of M149 and M153, as the user
+and as root (docs/HISTORY.md, "Milestone 154"). It differs from M153's tarball in `install.sh`
+(it only copies and runs `hydo`), the release's README (the install section), `bin/hydo`
+(`hydo setup`, the doctor's installation check, `hydo module install|uninstall`) and
+`bin/hydo-build`, which no longer carries the building checkout's path (`hydo-manifest`'s
+compiled-in `CARGO_MANIFEST_DIR`, missed by M153's scan).
+
+**The tarball of M153**, built twice on the bare-metal machine from `main` = `a4d9531`
 plus M153's script change, from clean Rust targets, with the same bytes both times:
 `hydo-linux-0.1.0.tar.gz`, 59,414,879 bytes, sha256
 `a257f54b4e02fdf514ff084f0db2baaece6a6e96ab32ca6b44baa7cffd2fa6c9` (96 files). Installed with
@@ -148,8 +161,13 @@ comments of `libexec/faketime` and `libexec/hvx-run` (M151's wording), and in `b
 (which carries MANIFEST.md), `bin/hydo-build`, `bin/hydo-fetch-image` and
 `libexec/hydo-grpc-gen` (the remapped paths).
 
-Only the kernel module is compiled on the user's machine, by `install.sh` (it must match the
-running kernel); `--no-module` skips it.
+Only the kernel module is compiled on the user's machine, by `hydo module install` (it must
+match the running kernel), which `install.sh` runs unless `--no-module`. Since M154 `install.sh`
+only copies the unpacked release into the prefix and runs `hydo` commands (`setup --verify` on
+the unpacked release, then `setup`, `module install`, `module udev install` with `--udev`, and
+`doctor`); every check and step it did in shell before is in `hydo/crates/hydo-cli/src/setup.rs`
+and `src/module.rs`, so other ways of installing (a package manager, a download into a cache)
+can run the same steps.
 
 ## Not done
 

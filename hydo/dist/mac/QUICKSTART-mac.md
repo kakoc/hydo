@@ -10,8 +10,8 @@ the release is complete as it is.
 
 ## 1. Install
 
-Unpack the release and run its installer. It copies hydo into `~/.hydo`, signs the
-virtual-machine engine (`bin/hydo-hvm`) on your Mac, and checks the Mac.
+Unpack the release and run its installer. It copies hydo into `~/.hydo` and runs
+`hydo setup` there, then `hydo doctor`.
 
 ```sh
 tar xzf hydo-mac-0.1.0.tar.gz
@@ -19,9 +19,20 @@ tar xzf hydo-mac-0.1.0.tar.gz
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
-The installer changes nothing outside `~/.hydo`. Add `--add-to-path` if you want it to put
-`~/.hydo/bin` on your PATH in your shell startup file. `hydo doctor` repeats the checks at any
-time; on a complete installation it ends with `doctor: all checks passed`.
+`hydo setup` checks that this Mac can run hydo (Apple Silicon, macOS 13 or later,
+Hypervisor.framework), checks every file against the release's `SHA256SUMS` and against the
+sha256 pins built into `hydo` (the guest kernels, the guest tools and the guest programs),
+removes the quarantine attribute a download leaves on the files, and signs the
+virtual-machine engine (`bin/hydo-hvm`) on your Mac with the hypervisor entitlement. A damaged
+or incomplete download is refused with the name of each file that does not match. Running
+`hydo setup` again does nothing on a complete installation; `hydo setup --check` only reports
+(exit status 0: nothing to do, 1: a file is damaged, 3: setup has steps left).
+
+The installer changes nothing outside `~/.hydo` and needs no sudo. Add `--add-to-path` if you
+want it to put `~/.hydo/bin` on your PATH in your shell startup file (`~/.zshrc` for zsh,
+`~/.bash_profile` for bash). `hydo doctor` repeats the checks at any time, including what
+`hydo setup --check` would fix; on a complete installation it ends with
+`doctor: all checks passed`.
 
 ## 2. Run the bundled example: Redis
 

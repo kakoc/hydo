@@ -47,8 +47,6 @@ IP=$(sed -n 's/^pub const IP_ARM64: &str = "\(.*\)";$/\1/p' "$ARM64_RS")   # the
 IPT=$(sed -n 's/^pub const IPTABLES_ARM64: &str = "\(.*\)";$/\1/p' "$ARM64_RS")   # the pinned aarch64 iptables
 # the iptables files hydo-build stages for the freeze (IPT_FILES in arm64.rs)
 IPT_FILES="bin/xtables-legacy-multi lib/xtables/libxt_NFQUEUE.so lib/xtables/libxt_tcp.so lib/xtables/libxt_standard.so"
-# guest/hydo-read as hydo/crates/hydo-read/build.sh builds it on a Mac (docs/BUILD-PINS.md)
-READ_SHA=88576fa899570cc7f826a7e05f701f0aa3245cdd3f8be4f4adea8367d9b8842e
 
 mkdir -p "$A"
 fetch() {   # fetch <remote path> <local name>
@@ -129,13 +127,18 @@ mkdir -p "$REL/bin" "$REL/hydo/onboard" "$REL/hv/hvm/explore/out" "$REL/guest" \
 # hydo/crates/hydo-cli), bin/hydo-build (the image builder with its own command line, for
 # scripts; `hydo build` is the same builder with the release's tools), bin/hydo-fetch-image
 # (what fetch-images.sh of `hydo compose` calls) and bin/hydo-hvm (the Mac engine, M143; the only
-# one since M147; signed by install.sh), for aarch64-apple-darwin, built with the workspace's
+# one since M147; signed on the user's Mac by `hydo setup`), for aarch64-apple-darwin, built with the workspace's
 # pinned toolchain (rust-toolchain.toml), or taken from $HYDO_RUST_BIN_DIR
 BINS="hydo hydo-build hydo-fetch-image hydo-hvm"
 if [ -n "$HYDO_RUST_BIN_DIR" ]; then
   BD=$HYDO_RUST_BIN_DIR
 else
-  ( cd "$TOP" && cargo build --release --locked -p hydo-cli -p hydo-build -p hydo-compose -p hydo-hvm --target aarch64-apple-darwin ) >&2
+  # the tree and the Cargo home are remapped to /hydo and /cargo (as the Linux release's programs
+  # and the guest programs are built), so the programs' panic messages name no directory of the
+  # building Mac (M154; until M153 they named the builder's home); both are found at run time
+  CH=$(cd "${CARGO_HOME:-$HOME/.cargo}" 2>/dev/null && pwd || echo "${CARGO_HOME:-$HOME/.cargo}")
+  ( cd "$TOP" && RUSTFLAGS="--remap-path-prefix=$TOP=/hydo --remap-path-prefix=$CH=/cargo" \
+    cargo build --release --locked -p hydo-cli -p hydo-build -p hydo-compose -p hydo-hvm --target aarch64-apple-darwin ) >&2
   BD=$TOP/target/aarch64-apple-darwin/release
 fi
 for b in $BINS; do
@@ -173,8 +176,6 @@ cp "$A/hydo_fc" "$REL/guest/hydo_fc"; chmod 755 "$REL/guest/hydo_fc"
 # guest/hydo-read (hydo-read and, through a link, hydo-check, for manifests whose commands call
 # them; M112): hydo/crates/hydo-read/build.sh, pure Rust, the pinned bytes on any Mac
 bash "$TOP/hydo/crates/hydo-read/build.sh" aarch64 "$OUTDIR/.hydo-read" >&2
-[ "$(shasum -a 256 "$OUTDIR/.hydo-read/hydo-read-arm64" | cut -d' ' -f1)" = "$READ_SHA" ] || {
-  echo "the aarch64 hydo-read is not the pinned build $READ_SHA (docs/BUILD-PINS.md, \"hydo-read\")" >&2; exit 1; }
 cp "$OUTDIR/.hydo-read/hydo-read-arm64" "$REL/guest/hydo-read"; chmod 755 "$REL/guest/hydo-read"
 rm -rf "$OUTDIR/.hydo-read"
 # the guest agent, every image's first process (M136; driven by the host controller, M126): the
@@ -183,6 +184,11 @@ rm -rf "$OUTDIR/.hydo-read"
 "$TOP/hydo/crates/hydo-agent/build.sh" aarch64 "$OUTDIR/.hydo-agent" >&2
 cp "$OUTDIR/.hydo-agent/hydo-agent-arm64" "$REL/guest/hydo-agent"; chmod 755 "$REL/guest/hydo-agent"
 rm -rf "$OUTDIR/.hydo-agent"
+# the guest programs built here must be the pinned builds of guest-programs.sha256, which bin/hydo
+# carries and `hydo setup` checks (M154; until then this script checked hydo-read's pin alone)
+( cd "$REL" && shasum -a 256 -c "$D/guest-programs.sha256" >/dev/null ) || {
+  echo "a guest program built here is not its pinned build (guest-programs.sha256, docs/BUILD-PINS.md)" >&2
+  ( cd "$REL" && shasum -a 256 -c "$D/guest-programs.sha256" 2>/dev/null | grep -v ': OK$' ) >&2; exit 1; }
 # the Redis example: the Mac manifest with every /nix/store src made relative to files/
 mkdir -p "$REL/examples/redis"
 cp -R "$A/redis" "$REL/examples/redis/files"

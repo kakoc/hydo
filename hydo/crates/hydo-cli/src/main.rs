@@ -6,10 +6,10 @@
 //! its own engine.
 //!
 //! Commands: run, repro (incl. --regressions: hydo-composer), save (hydo-composer), report,
-//! doctor, module (Linux), errors and run/repro's error kinds (hydo-errors), history checks
-//! (hydo-history), compose (hydo-compose), guide/skill/init (hydo-agents), migrate (hydo-manifest,
-//! src/migrate.rs), build (hydo-build, src/build.rs), explore (hydo-explore). No command runs
-//! Python.
+//! setup (src/setup.rs, M154), doctor, module (Linux), errors and run/repro's error kinds
+//! (hydo-errors), history checks (hydo-history), compose (hydo-compose), guide/skill/init
+//! (hydo-agents), migrate (hydo-manifest, src/migrate.rs), build (hydo-build, src/build.rs),
+//! explore (hydo-explore). No command runs Python.
 
 mod build;
 mod ctx;
@@ -20,6 +20,7 @@ mod migrate;
 mod module;
 mod pyjson;
 mod runs;
+mod setup;
 
 use ctx::{Ctx, Platform};
 
@@ -29,9 +30,12 @@ const HELP_LINUX: &str = r#"hydo -- deterministic fault testing on an x86_64 Lin
     hydo guide   [TOPIC | --list]                  print the onboarding guide for any AI tool (the skill's SKILL.md)
     hydo skill   install --agent claude|codex|cursor|copilot|gemini|all [--user] | --to DIR
                                                    copy the onboarding skill where an AI tool reads skills
+    hydo setup   [--check | --verify] [--add-to-path]
+                                                   make this unpacked release usable (install.sh runs it)
     hydo doctor                                    check this machine and the installation
-    hydo module build|load|unload|status [--name NAME] [--dry-run]
-                                                   build and (un)load the hvx kernel module
+    hydo module install|uninstall|build|load|unload|status [--name NAME] [--dry-run]
+                                                   build for this kernel and load (install), or unload
+                                                   and delete (uninstall) the hvx kernel module
     hydo module udev install|remove|status [--name NAME] [--group GROUP] [--dry-run]
                                                    optional: give /dev/hvx to a group, so runs need no sudo
     hydo compose <docker-compose.yaml> [--out hydo.yaml] [hydo-compose options]
@@ -72,6 +76,8 @@ const HELP_MAC: &str = r#"hydo -- deterministic fault testing on an Apple Silico
     hydo guide   [TOPIC | --list]                  print the onboarding guide for any AI tool (the skill's SKILL.md)
     hydo skill   install --agent claude|codex|cursor|copilot|gemini|all [--user] | --to DIR
                                                    copy the onboarding skill where an AI tool reads skills
+    hydo setup   [--check | --verify] [--add-to-path]
+                                                   make this unpacked release usable (install.sh runs it)
     hydo doctor                                    check this Mac and the installation
     hydo compose <docker-compose.yaml> [--out hydo.yaml] [hydo-compose options]
                                                    start a hydo.yaml from a Compose file (MANIFEST.md)
@@ -132,6 +138,7 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
         "errors" => delegated::cmd_errors(ctx, rest),
         "check-history" => hydo_history::cli::main(rest),
         "migrate" => migrate::cmd_migrate(rest),
+        "setup" => setup::cmd_setup(ctx, rest),
         "doctor" if linux => doctor::cmd_doctor_linux(ctx),
         "doctor" => doctor::cmd_doctor_mac(ctx),
         "module" if linux => module::cmd_module(ctx, rest),

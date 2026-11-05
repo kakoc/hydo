@@ -1,4 +1,7 @@
-//! `hydo module build|load|unload|status` and `hydo module udev install|remove|status` (Linux).
+//! `hydo module build|install|uninstall|load|unload|status` and `hydo module udev install|remove|status`
+//! (Linux). `install` (build for the running kernel when needed, then load under the exclusive
+//! module lock) and `uninstall` (unload, delete the build) came with M154, when the release's
+//! install.sh stopped building the module itself; it runs `hydo module install` unless --no-module.
 
 use crate::ctx::{die, take, Ctx};
 use crate::hvxenv::{dev_usable_at, module_lock};
@@ -104,6 +107,14 @@ fn module_build(ctx: &Ctx, name: &str) -> i32 {
         die(&format!(
             "no kernel headers at {kdir} (install them, e.g. `sudo apt install linux-headers-$(uname -r)`)"
         ));
+    }
+    for t in ["cc", "make"] {
+        if crate::ctx::which(t).is_none() {
+            die(&format!(
+                "building the kernel module needs a C compiler (cc) and make, and {t} is not on PATH \
+                 (Debian/Ubuntu: sudo apt install build-essential)"
+            ));
+        }
     }
     let ko = module_ko(ctx, name);
     let bd = ko.parent().unwrap_or(Path::new(".")).to_path_buf();
@@ -242,6 +253,110 @@ fn module_unload(ctx: &Ctx, name: &str, dry: bool) -> i32 {
     }
     if name == "hvx" {
         println!("hydo: hvx unloaded (`sudo modprobe kvm_intel` gives VT-x back to KVM)");
+    }
+    0
+}
+
+/// Why the module must be built (again) before it is loaded: None when this release's build is
+/// current (built from the release's sources for the running kernel).
+fn build_needed(ctx: &Ctx, name: &str) -> Option<String> {
+    let ko = module_ko(ctx, name);
+    if !ko.is_file() {
+        return Some("not built yet".into());
+    }
+    let bd = ko.parent().unwrap_or(Path::new("."));
+    let src = ctx.p("module");
+    for (from, to) in [
+        ("hvx.c".to_string(), format!("{name}.c")),
+        ("hvx_abi.h".to_string(), "hvx_abi.h".to_string()),
+    ] {
+        if std::fs::read(src.join(&from)).ok() != std::fs::read(bd.join(&to)).ok() {
+            return Some(format!(
+                "module/{from} differs from the copy it was built from"
+            ));
+        }
+    }
+    let running = uname_release();
+    let vermagic = Command::new("modinfo")
+        .args(["-F", "vermagic"])
+        .arg(&ko)
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .unwrap_or_default();
+    match vermagic.split_whitespace().next() {
+        Some(k) if k == running => None,
+        Some(k) => Some(format!("built for kernel {k}, this machine runs {running}")),
+        None => Some("its kernel version cannot be read (modinfo)".into()),
+    }
+}
+
+/// `hydo module install`: build the module for the running kernel when needed, then load it
+/// under the exclusive module lock (`hydo module load`). Nothing happens when this release's
+/// build is loaded already, so it can run again safely.
+fn module_install(ctx: &Ctx, name: &str, dry: bool, params: &[String]) -> i32 {
+    if !is_name(name) {
+        die("--name: lowercase letters, digits and '_' (it becomes the module and device name)");
+    }
+    if let Some(why) = build_needed(ctx, name) {
+        println!(
+            "hydo: {} {name}.ko ({why})",
+            if dry { "would build" } else { "building" }
+        );
+        if !dry {
+            module_build(ctx, name);
+        }
+    }
+    let built = srcversion_file(&module_ko(ctx, name));
+    let live = srcversion_loaded(name);
+    if loaded_modules().iter().any(|m| m == name) && built.is_some() && built == live {
+        println!(
+            "hydo: {name} is installed: loaded from this release's build (srcversion {}), /dev/{name} {}",
+            live.unwrap_or_default(),
+            if Path::new(&format!("/dev/{name}")).exists() {
+                "present"
+            } else {
+                "missing"
+            }
+        );
+        return 0;
+    }
+    module_load(ctx, name, dry, params)
+}
+
+/// `hydo module uninstall`: unload the module (under the exclusive lock) and delete this
+/// release's build of it. The udev rule, if any, stays (`hydo module udev remove`).
+fn module_uninstall(ctx: &Ctx, name: &str, dry: bool) -> i32 {
+    if !is_name(name) {
+        die("--name: lowercase letters, digits and '_'");
+    }
+    let rc = module_unload(ctx, name, dry);
+    if rc != 0 {
+        return rc;
+    }
+    let bd = ctx.p("module/build").join(name);
+    if bd.exists() {
+        println!(
+            "hydo: {} {}",
+            if dry { "would delete" } else { "deleting" },
+            bd.display()
+        );
+        if !dry {
+            if let Err(e) = std::fs::remove_dir_all(&bd) {
+                die(&format!("cannot delete {}: {e}", bd.display()));
+            }
+        }
+    }
+    if udev_rule_path(name).exists() {
+        println!(
+            "hydo: the udev rule {} stays (`hydo module udev remove{}` deletes it)",
+            udev_rule_path(name).display(),
+            if name == "hvx" {
+                String::new()
+            } else {
+                format!(" --name {name}")
+            }
+        );
     }
     0
 }
@@ -630,9 +745,19 @@ fn module_udev(verb: &str, name: &str, group: &str, mode: &str, dry: bool, addus
 
 pub fn cmd_module(ctx: &Ctx, argv: &[String]) -> i32 {
     let mut args = argv.to_vec();
-    if args.is_empty() || !["build", "load", "unload", "status", "udev"].contains(&args[0].as_str())
+    if args.is_empty()
+        || ![
+            "build",
+            "install",
+            "uninstall",
+            "load",
+            "unload",
+            "status",
+            "udev",
+        ]
+        .contains(&args[0].as_str())
     {
-        die("usage: hydo module build|load|unload|status [--name NAME] [--dry-run] [--param KEY=VALUE ...]\n       \
+        die("usage: hydo module build|install|uninstall|load|unload|status [--name NAME] [--dry-run] [--param KEY=VALUE ...]\n       \
              hydo module udev install|remove|status [--name NAME] [--group GROUP] [--mode 0660] [--no-adduser] [--dry-run]");
     }
     let verb = args.remove(0);
@@ -664,6 +789,8 @@ pub fn cmd_module(ctx: &Ctx, argv: &[String]) -> i32 {
     }
     match verb.as_str() {
         "build" => module_build(ctx, &name),
+        "install" => module_install(ctx, &name, dry, &params),
+        "uninstall" => module_uninstall(ctx, &name, dry),
         "load" => module_load(ctx, &name, dry, &params),
         "unload" => module_unload(ctx, &name, dry),
         _ => module_status(ctx, &name),

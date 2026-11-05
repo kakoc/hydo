@@ -71,7 +71,7 @@ if [ ! -f "$A/.complete" ]; then
     $GCC_MUSL -static -O2 -Wall -B $MUSL_ROOT/lib hydo/onboard/hydo_fc.c -o out/guest/hydo_fc >&2
     ( cd $KMODS/.. && for m in $MODS; do find 6.6.35 -name \$m.ko.xz; done | sort | tar cf - -T - ) | ( cd out/guest/modules && tar xf - )
     # the guest-side closures as ONE GNU tar with their exact (read-only) modes: hydo-build copies
-    # them with cp -a, so the image gets the store's modes; install.sh unpacks it (GNU tar sets a
+    # them with cp -a, so the image gets the store's modes; `hydo setup` unpacks it (GNU tar sets a
     # read-only directory's mode only after its contents, which a re-packed tree would not survive)
     for p in $IPROUTE2 $IPTABLES; do nix-store -qR \$p | sort > \$(basename \$p).closure; done
     sort -u *.closure | sed 's#^/##' | ( cd / && tar --sort=name --owner=0 --group=0 --numeric-owner -cf - -T - ) > out/guest/store.tar
@@ -109,7 +109,7 @@ mkdir -p "$REL/bin" "$REL/libexec/bin" "$REL/hydo/onboard" \
 # hydo/crates/hydo-cli; the run engine runs inside it when the user can open /dev/hvx, M137),
 # bin/hydo-hvx (the same run engine as a program, hydo/crates/hydo-hvx, which hydo starts under
 # libexec/hvx-run with sudo when the user cannot open the device; M137: it replaces hvx_explore,
-# so install.sh compiles nothing for it), bin/hydo-build (the image builder with its own
+# so nothing is compiled for it on the user's machine), bin/hydo-build (the image builder with its own
 # command line, for scripts; `hydo build` is the same builder with the release's tools) and
 # bin/hydo-fetch-image (what fetch-images.sh of `hydo compose` calls), and the gRPC driver
 # generator (libexec/hydo-grpc-gen, started by the wrapper bin/hydo-grpc-gen, which points its
@@ -186,6 +186,13 @@ cp "$GB/read/hydo-read" "$REL/guest/hydo-read"; chmod 755 "$REL/guest/hydo-read"
 # Mac and on Linux, docs/BUILD-PINS.md "The gRPC client"), copied into a project by hydo-grpc-gen
 "$TOP/hydo/grpcgen/build-client.sh" --out "$GB/grpc" amd64 >&2
 cp "$GB/grpc/hydo-grpc" "$REL/guest/hydo-grpc"; chmod 755 "$REL/guest/hydo-grpc"
+# the guest programs built here must be the pinned builds of guest-programs.sha256, which bin/hydo
+# carries and `hydo setup` checks (M154; hydo-read's bytes depend on the kind of building host)
+( cd "$REL" && $SHA -c "$D/guest-programs.sha256" >/dev/null ) || {
+  echo "a guest program built here is not its pinned build (guest-programs.sha256, docs/BUILD-PINS.md)" >&2
+  ( cd "$REL" && $SHA -c "$D/guest-programs.sha256" 2>/dev/null | grep -v ': OK$' ) >&2; exit 1; }
+# (assets.sha256, the asset pins, is carried by bin/hydo too: `hydo setup` checks every asset at
+# its place in the release)
 # the Redis example (hydo/onboard/examples/redis) with its binaries under files/
 cp "$A/redis/redis-server" "$A/redis/redis-cli" "$REL/examples/redis/files/"
 chmod 755 "$REL/examples/redis/files/"*

@@ -1,46 +1,35 @@
 #!/bin/sh
 # Install hydo for Apple Silicon Macs from an unpacked release directory:
 #     ./install.sh [--prefix DIR] [--add-to-path]
-# Copies the release into DIR (default ~/.hydo), signs the engine bin/hydo-hvm on this Mac with the
-# hypervisor entitlement, and runs `hydo doctor`. It installs nothing outside DIR and needs no
-# sudo. Your shell startup file is changed only with --add-to-path.
+# Copies the release into DIR (default ~/.hydo). Everything else is the hydo program's (M154):
+#   hydo setup    checks this Mac (Apple Silicon, macOS 13 or later, Hypervisor.framework) and
+#                 every file against SHA256SUMS and the sha256 pins built into hydo, removes the
+#                 quarantine attribute of a download, and signs the engine bin/hydo-hvm on this
+#                 Mac with the hypervisor entitlement (--add-to-path: also puts DIR/bin on PATH in
+#                 your shell startup file);
+#   hydo doctor   checks this Mac and the installation.
+# It installs nothing outside DIR and needs no sudo.
 set -e
 SRC=$(cd "$(dirname "$0")" && pwd)
 PREFIX="$HOME/.hydo"
-ADD_PATH=0
+SETUP=
 while [ $# -gt 0 ]; do
   case "$1" in
     --prefix) PREFIX=$2; shift 2 ;;
-    --add-to-path) ADD_PATH=1; shift ;;
-    -h|--help) sed -n '2,7p' "$0"; exit 0 ;;
+    --add-to-path) SETUP=--add-to-path; shift ;;
+    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
     *) echo "install.sh: unknown option $1" >&2; exit 2 ;;
   esac
 done
-
-[ "$(uname -s)" = Darwin ] && [ "$(uname -m)" = arm64 ] || { echo "hydo needs an Apple Silicon Mac (M1 or later)." >&2; exit 1; }
-major=$(sw_vers -productVersion | cut -d. -f1)
-[ "$major" -ge 13 ] || { echo "hydo needs macOS 13 or later (found $(sw_vers -productVersion))." >&2; exit 1; }
-[ "$(sysctl -n kern.hv_support 2>/dev/null)" = 1 ] || { echo "This Mac does not offer Hypervisor.framework (kern.hv_support is not 1)." >&2; exit 1; }
 
 if [ "$SRC" != "$(cd "$PREFIX" 2>/dev/null && pwd)" ]; then
   mkdir -p "$PREFIX"
   ( cd "$SRC" && tar cf - . ) | ( cd "$PREFIX" && tar xf - )
 fi
-# a downloaded archive carries the quarantine attribute; the engine binary must be signed on
-# this Mac with the hypervisor entitlement (an ad-hoc signature is enough): bin/hydo-hvm, the
-# Mac engine (it also runs `hydo build`'s helper VM)
-xattr -dr com.apple.quarantine "$PREFIX" 2>/dev/null || true
-for b in "$PREFIX/bin/hydo-hvm"; do
-  codesign --force --entitlements "$PREFIX/hv/hvm/hv.entitlements" -s - "$b" 2>/dev/null
-done
-chmod 755 "$PREFIX/bin/hydo" "$PREFIX/bin/hydo-build" "$PREFIX/bin/hydo-fetch-image"
-
-if [ $ADD_PATH = 1 ]; then
-  rc="$HOME/.zshrc"; [ -n "$BASH_VERSION" ] && rc="$HOME/.bash_profile"
-  line="export PATH=\"$PREFIX/bin:\$PATH\""
-  grep -qxF "$line" "$rc" 2>/dev/null || { echo "$line" >> "$rc"; echo "added $PREFIX/bin to PATH in $rc"; }
-fi
-
+# macOS refuses to start a downloaded program that still carries the quarantine attribute, so
+# bin/hydo is cleared before it runs (hydo setup clears the other files)
+xattr -d com.apple.quarantine "$PREFIX/bin/hydo" 2>/dev/null || true
+"$PREFIX/bin/hydo" setup $SETUP || { echo "install.sh: hydo setup failed (see above; hydo needs an Apple Silicon Mac)" >&2; exit 1; }
 "$PREFIX/bin/hydo" doctor
 echo
 echo "hydo $(cat "$PREFIX/VERSION") is installed in $PREFIX."

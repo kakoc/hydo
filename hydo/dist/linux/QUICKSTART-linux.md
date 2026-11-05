@@ -29,23 +29,37 @@ tar xzf hydo-linux-0.1.0.tar.gz
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
-The installer checks the files against `SHA256SUMS`, copies the release into `~/.hydo`, compiles
-the `hvx` kernel module for your kernel, and runs `hydo doctor`. The run engine needs no
-compiling: it is Rust, and it runs inside `hydo` itself when you can open `/dev/hvx` (as root, or
-after `hydo module udev install`), or as the program `bin/hydo-hvx` under `sudo` when you cannot.
-It changes nothing outside `~/.hydo` and does not load the module. If the module is already
-loaded (a machine where someone else manages it), `./hydo-linux-0.1.0/install.sh --no-module`
-skips building it; `hydo doctor` then warns that `hvx.ko` was not built by this release.
+The installer copies the release into `~/.hydo`; everything else is done by the `hydo` program:
 
-Load the module (this unloads `kvm_intel` and `kvm` if they are loaded):
+- `hydo setup` checks every file against the release's `SHA256SUMS` and against the sha256 pins
+  built into `hydo` (the guest kernel, the guest tools, the disk-image tools and the guest
+  programs), unpacks the guest tool tree and makes the programs executable. A damaged or
+  incomplete download is refused before it replaces an earlier installation. Running
+  `hydo setup` again does nothing on a complete installation; `hydo setup --check` only reports
+  (exit status 0: nothing to do, 1: a file is damaged, 3: setup has steps left).
+- `hydo module install` builds the `hvx` kernel module for your running kernel and loads it under
+  the module lock (see below). Loading asks for `sudo` and unloads `kvm_intel` and `kvm` if they
+  are loaded. Run again, it does nothing while this release's module is loaded; after a kernel
+  update it builds the module again. `hydo module uninstall` unloads it and deletes the build.
+- `hydo doctor` checks this machine and the installation.
+
+The run engine needs no compiling: it is Rust, and it runs inside `hydo` itself when you can open
+`/dev/hvx` (as root, or after `hydo module udev install`), or as the program `bin/hydo-hvx` under
+`sudo` when you cannot. The installer writes nothing outside `~/.hydo` except your shell startup
+file (only with `--add-to-path`) and the udev rule (only with `--udev`). If the module is already
+loaded (a machine where someone else manages it), `./hydo-linux-0.1.0/install.sh --no-module`
+skips `hydo module install`; `hydo doctor` then warns that `hvx.ko` was not built by this
+release. If the module could not be installed (for example without kernel headers or a C
+compiler), fix what the message says, then run:
 
 ```sh
-hydo module load
+hydo module install
 hydo doctor
 ```
 
 `hydo doctor` checks VT-x, the PMU, the kernel headers, whether `kvm_intel` is loaded, the
-module and its device, sudo and disk space; every line says what to do when a check
+module and its device, sudo, the installation's files (what `hydo setup --check` would fix) and
+disk space; every line says what to do when a check
 fails. `hydo module status` shows whether the module is loaded, whether it was built from this
 release's source (the same `srcversion`), and how many runs hold the module lock right now.
 
@@ -72,9 +86,9 @@ a group member crash the machine or worse. Give the group only to people you wou
 sudo on that machine.
 
 **The module lock.** Every run holds a shared lock on `~/.hvx-module.lock` (`$HYDO_LOCK`) for as
-long as its virtual machine exists; `hydo module load` and `hydo module unload` take the same
+long as its virtual machine exists; `hydo module install`, `load`, `unload` and `uninstall` take the same
 lock exclusively, so they wait until no run is in progress instead of pulling the module from
-under a running VM. `--dry-run` prints what `load`/`unload` would do. Other tools that open
+under a running VM. `--dry-run` prints what they would do. Other tools that open
 `/dev/hvx` should use the same lock (`flock -s ~/.hvx-module.lock <command>`).
 
 ## 2. Run the bundled example: Redis
@@ -220,5 +234,5 @@ services").
   (the image then matches a plain `hydo-build` run by the same user on the Nix build machine).
 - `/dev/hvx` is mode 0600, so runs use `sudo` unless you installed the udev rule (section 1).
   The run engine keeps its snapshots in memory (it writes no snapshot directory).
-- To remove hydo: `hydo module unload`, then `chmod -R u+w ~/.hydo && rm -rf ~/.hydo` (the guest
+- To remove hydo: `hydo module uninstall`, then `chmod -R u+w ~/.hydo && rm -rf ~/.hydo` (the guest
   tool tree is read-only).

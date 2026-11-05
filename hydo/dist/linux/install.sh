@@ -1,19 +1,23 @@
 #!/bin/sh
 # Install hydo for x86_64 Linux (Intel VT-x) from an unpacked release directory:
 #     ./install.sh [--prefix DIR] [--add-to-path] [--no-module] [--udev [--udev-group G] [--udev-name N]]
-# Checks the release's SHA256SUMS, copies it into DIR (default ~/.hydo), compiles the hvx kernel
-# module for the running kernel, and runs `hydo doctor`. The run engine is Rust and comes built
-# (inside bin/hydo, and as bin/hydo-hvx for runs that need sudo; M137): nothing to compile for it.
-# It needs no root and installs nothing outside DIR; it does NOT load the module (that needs
-# sudo: `hydo module load`). Your shell startup file is changed only with --add-to-path.
-# --udev (optional, asks for sudo once): installs a udev rule that gives /dev/hvx to group G
-# (default hydo, created if missing; you are added to it), mode 0660, so runs need no sudo.
-# Anyone in that group can run guests through the kernel module: give it only to people you
-# would give sudo. --udev-name N does the same for a side module's device /dev/N.
+# Copies the release into DIR (default ~/.hydo; an earlier hydo installation there is replaced,
+# any other non-empty directory refused). Everything else is the hydo program's (M154):
+#   hydo setup            checks every file against SHA256SUMS and the sha256 pins built into
+#                         hydo, unpacks the guest store tree, makes the programs executable
+#                         (--add-to-path: also puts DIR/bin on PATH in your shell startup file);
+#   hydo module install   builds the hvx kernel module for the running kernel and loads it (sudo;
+#                         this unloads kvm_intel and kvm); --no-module skips it;
+#   hydo module udev install   only with --udev (asks for sudo once): a udev rule gives /dev/hvx
+#                         to group G (default hydo, created if missing; you are added to it), mode
+#                         0660, so runs need no sudo. Anyone in that group can run guests through
+#                         the kernel module: give it only to people you would give sudo.
+#                         --udev-name N does the same for a side module's device /dev/N;
+#   hydo doctor           checks this machine and the installation.
 set -e
 SRC=$(cd "$(dirname "$0")" && pwd)
 PREFIX="$HOME/.hydo"
-ADD_PATH=0
+SETUP=
 MODULE=1
 UDEV=0
 UDEV_GROUP=hydo
@@ -21,21 +25,19 @@ UDEV_NAME=hvx
 while [ $# -gt 0 ]; do
   case "$1" in
     --prefix) PREFIX=$2; shift 2 ;;
-    --add-to-path) ADD_PATH=1; shift ;;
+    --add-to-path) SETUP=--add-to-path; shift ;;
     --no-module) MODULE=0; shift ;;
     --udev) UDEV=1; shift ;;
     --udev-group) UDEV_GROUP=$2; shift 2 ;;
     --udev-name) UDEV_NAME=$2; shift 2 ;;
-    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
     *) echo "install.sh: unknown option $1" >&2; exit 2 ;;
   esac
 done
 
-[ "$(uname -s)" = Linux ] && [ "$(uname -m)" = x86_64 ] || { echo "hydo's Linux release needs x86_64 Linux (on an Apple Silicon Mac use the Mac release)." >&2; exit 1; }
-[ $MODULE = 0 ] || command -v cc >/dev/null || { echo "hydo needs a C compiler (cc) to build its kernel module (Debian/Ubuntu: sudo apt install build-essential), or --no-module." >&2; exit 1; }
-
-( cd "$SRC" && sha256sum -c --quiet SHA256SUMS ) || { echo "the release does not match its SHA256SUMS (a damaged download?)" >&2; exit 1; }
-
+# the unpacked release is checked before it replaces anything (this also fails on a machine that
+# cannot run its x86_64 Linux programs)
+"$SRC/bin/hydo" setup --verify || { echo "install.sh: the release cannot be installed (see above)" >&2; exit 1; }
 if [ "$SRC" != "$(cd "$PREFIX" 2>/dev/null && pwd)" ]; then
   if [ -d "$PREFIX" ] && [ -n "$(ls -A "$PREFIX")" ]; then     # replace an earlier install, nothing else
     [ -f "$PREFIX/bin/hydo" ] && [ -f "$PREFIX/VERSION" ] || { echo "$PREFIX exists and is not a hydo installation; choose another --prefix" >&2; exit 1; }
@@ -45,37 +47,13 @@ if [ "$SRC" != "$(cd "$PREFIX" 2>/dev/null && pwd)" ]; then
   ( cd "$SRC" && tar cf - . ) | ( cd "$PREFIX" && tar xpf - )
 fi
 P=$(cd "$PREFIX" && pwd)
-# the guest-side Nix closures (tc, iptables) keep their read-only modes: unpack them here
-if [ -f "$P/guest/store.tar" ]; then
-  mkdir -p "$P/guest/store" && tar -C "$P/guest/store" -xpf "$P/guest/store.tar" && rm -f "$P/guest/store.tar"
-fi
 
-cd "$P"
-chmod 755 bin/hydo bin/hydo-hvx bin/hydo-build bin/hydo-fetch-image bin/hydo-grpc-gen libexec/hydo-grpc-gen
-
-if [ $MODULE = 1 ]; then
-  if [ -d "/lib/modules/$(uname -r)/build" ]; then
-    bin/hydo module build || echo "building the kernel module failed (see above); fix it, then: hydo module build"
-  else
-    echo "no kernel headers for $(uname -r): the module is not built (install them, then: hydo module build)"
-  fi
-fi
-
-if [ $UDEV = 1 ]; then
-  echo
-  echo "installing the udev rule for /dev/$UDEV_NAME (group $UDEV_GROUP, mode 0660); this asks for sudo once"
-  bin/hydo module udev install --name "$UDEV_NAME" --group "$UDEV_GROUP" || echo "the udev rule was not installed (see above); runs keep using sudo"
-fi
-
-if [ $ADD_PATH = 1 ]; then
-  rc="$HOME/.bashrc"; [ -n "$ZSH_VERSION" ] || [ "$(basename "${SHELL:-}")" = zsh ] && rc="$HOME/.zshrc"
-  line="export PATH=\"$P/bin:\$PATH\""
-  grep -qxF "$line" "$rc" 2>/dev/null || { echo "$line" >> "$rc"; echo "added $P/bin to PATH in $rc"; }
-fi
-
+"$P/bin/hydo" setup $SETUP
+[ $MODULE = 0 ] || "$P/bin/hydo" module install || echo "the kernel module was not installed (see above); fix it, then: hydo module install"
+[ $UDEV = 0 ] || "$P/bin/hydo" module udev install --name "$UDEV_NAME" --group "$UDEV_GROUP" || echo "the udev rule was not installed (see above); runs keep using sudo"
 echo
 "$P/bin/hydo" doctor || true
 echo
 echo "hydo $(cat "$P/VERSION") is installed in $P."
-echo "Next: export PATH=\"$P/bin:\$PATH\"; hydo module load (if doctor says so); then follow $P/README.md"
+echo "Next: export PATH=\"$P/bin:\$PATH\"; then follow $P/README.md"
 echo "(first step: cp -R \"$P/examples/redis\" ~/hydo-redis && cd ~/hydo-redis && hydo build hydo.yaml)"

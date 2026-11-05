@@ -90,8 +90,9 @@ pub struct Ctx {
 }
 
 impl Ctx {
-    /// The onboard/ directory of a release laid out around the running program, else of this
-    /// source tree (as hydo_manifest::LoadOptions::default()); `HYDO_ONBOARD` overrides it.
+    /// The onboard/ directory of a release laid out around the running program, else of the
+    /// source tree it was built in (as hydo_manifest::LoadOptions::default()); `HYDO_ONBOARD`
+    /// overrides it.
     pub fn standalone(inputs: hydo_config::build::Build) -> Ctx {
         let onboard = inputs
             .onboard
