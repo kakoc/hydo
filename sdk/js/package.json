@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "hydo's assertion SDK for Node.js: always/sometimes/reachable/unreachable/eventually properties and BUGGIFY fault points, written to the guest console in the Go SDK's exact wire format.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "main": "./index.js",
   "types": "./index.d.ts",
   "exports": {
@@ -44,7 +44,6 @@
     "node": ">=16"
   },
   "scripts": {
-    "test": "node --test test/unit.test.js test/history.test.js",
-    "conformance": "bash test/conformance.sh && bash test/history-conformance.sh"
+    "test": "node --test test/unit.test.js test/history.test.js"
   }
 }
