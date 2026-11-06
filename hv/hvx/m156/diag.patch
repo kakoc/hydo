@@ -1,0 +1,141 @@
+--- a/hv/hvx/hvx.c
++++ b/hv/hvx/hvx.c
+@@ -120,6 +120,18 @@
+ #include <linux/timekeeping.h>	/* ktime_get_ns: exit-histogram wall-time (diagnostic) */
+ 
+ #include "hvx_abi.h"
++#include <asm/nmi.h>	/* M156 DIAGNOSTIC: self-NMIs */
++static unsigned int m156_nmi;	/* M156 DIAGNOSTIC: a self-NMI every m156_nmi-th exit of a PMU-clock vCPU (0 = off) */
++module_param(m156_nmi, uint, 0644);
++static DEFINE_PER_CPU(int, m156_nmi_pending);
++static int m156_nmi_fn(unsigned int type, struct pt_regs *regs)
++{
++	if (this_cpu_read(m156_nmi_pending)) {
++		this_cpu_write(m156_nmi_pending, 0);
++		return NMI_HANDLED;
++	}
++	return NMI_DONE;
++}
+ 
+ MODULE_LICENSE("GPL");
+ 
+@@ -886,6 +898,11 @@
+ 	/* turn-end cost diagnostics (HVX_GET_FTSTAT; host-side only, fingerprint-neutral) */
+ 	struct hvx_ftstat_vcpu fts;
+ 	bool fts_tgt_turn;		/* the current landing aims at a turn end, not a tick */
++	/* M156 DIAGNOSTIC: the last entry and LVTPC state */
++	u64 m156_n, m156_got, m156_masked, m156_free, m156_over_logged;
++	u64 m156_host, m156_nmi, m156_k, m156_sent;
++	u32 m156_lvt, m156_reason;
++	bool m156_step;
+ };
+ 
+ struct hvx_vm {
+@@ -5278,7 +5295,7 @@
+ 			 */
+ 			while (vcpu->pmu_total >= vcpu->pmu_next) {
+ 				if (vcpu->pmu_total > vcpu->pmu_next || !vcpu->pmu_step)
+-					vcpu->pmu_over++;
++				{ vcpu->pmu_over++; if (vcpu->m156_over_logged++ < 20) pr_info("hvx: M156 TICK-OVERSHOOT vcpu=%u total=%llu next=%llu step=%d n=%llu got=%llu lvt=%#x reason=%u rip=%#llx\n", vcpu->index, vcpu->pmu_total, vcpu->pmu_next, vcpu->m156_step, vcpu->m156_n, vcpu->m156_got, vcpu->m156_lvt, vcpu->m156_reason, vcpu->regs.rip); }
+ 				bool xtra = false;
+ 
+ 				if (vm->xt_on)
+@@ -5339,7 +5356,7 @@
+ 
+ 			if (!sc->turn_over && vcpu->pmu_total >= sc->turn_end) {
+ 				if (vcpu->pmu_total > sc->turn_end || !vcpu->pmu_step)
+-					sc->overshoots++;
++				{ sc->overshoots++; if (vcpu->m156_over_logged++ < 20) pr_info("hvx: M156 TURN-OVERSHOOT vcpu=%u total=%llu end=%llu step=%d n=%llu got=%llu lvt=%#x reason=%u rip=%#llx\n", vcpu->index, vcpu->pmu_total, sc->turn_end, vcpu->m156_step, vcpu->m156_n, vcpu->m156_got, vcpu->m156_lvt, vcpu->m156_reason, vcpu->regs.rip); }
+ 				sc->turn_over = 1;
+ 			}
+ 			if (sc->turn_over || vm->sched_stop) {
+@@ -5485,6 +5502,8 @@
+ 			}
+ 			vcpu->pmu_n = n;
+ 			vcpu->pmu_step = step;
++			vcpu->m156_n = n; vcpu->m156_step = step;
++			if (!step) { vcpu->m156_lvt = hvx_lvtpc_read(); vcpu->m156_free++; if (vcpu->m156_lvt & 0x10000) vcpu->m156_masked++; }
+ 			/*
+ 			 * PMC0 = -n (a legacy PMC write sign-extends bit 31 to bit 47). A
+ 			 * landing step after a landing step keeps the counter running from
+@@ -5530,6 +5549,15 @@
+ 		asm volatile("mov %0, %%cr2" :: "r" (vcpu->cr2));
+ 		if (xs && vcpu->xcr0 != host_xcr0)
+ 			xsetbv(XCR_XFEATURE_ENABLED_MASK, vcpu->xcr0);	/* validated */
++		if (vcpu->pmu_live) {	/* M156 DIAGNOSTIC: did PMC0 count in root mode since its base? */
++			u64 g156 = rd(MSR_PERF_GLOBAL_CTRL), p156 = rd(MSR_PMC0) & HVX_PMU_MASK;
++
++			if (g156 || p156 != vcpu->pmu_base) {
++				vcpu->m156_host++;
++				if (vcpu->m156_over_logged++ < 20)
++					pr_info("hvx: M156 HOSTCOUNT vcpu=%u gctl=%#llx pmc0=%#llx base=%#llx cur=%#llx step=%d reason=%u nmi=%llu total=%llu\n", vcpu->index, g156, p156, vcpu->pmu_base, vcpu->pmu_cur, vcpu->pmu_step, vcpu->m156_reason, vcpu->m156_nmi, vcpu->pmu_total);
++			}
++		}
+ 		ft_hw = rdtsc();	/* DIAGNOSTIC */
+ 		ok = pt_live ? hvx_vmx_run_pt(&vcpu->regs, resume, vm->pt_ctl)
+ 			     : hvx_vmx_run(&vcpu->regs, resume);
+@@ -5584,6 +5612,17 @@
+ 			}
+ 			ft_c = ft_n;
+ 			vcpu->pmu_total += got;
++			vcpu->m156_got = got;
++			if (m156_nmi && ++vcpu->m156_k % m156_nmi == 0) {	/* M156 DIAGNOSTIC */
++				this_cpu_write(m156_nmi_pending, 1);
++				vcpu->m156_sent++;
++				if (hvx_host_x2apic) {
++					wrmsrl(0x830, (rd(0x802) << 32) | 0x4400);
++				} else {
++					writel(readl(hvx_lapic + 0x20) & 0xff000000U, hvx_lapic + 0x310);
++					writel(0x4400, hvx_lapic + 0x300);
++				}
++			}
+ 			vcpu->br_own += got;
+ 			vcpu->pmu_n = 0;
+ 			if (got || !vcpu->pmu_step)
+@@ -5601,6 +5640,7 @@
+ 
+ 		reason = (u32)vmread(VM_EXIT_REASON);
+ 		basic = reason & 0xffff;
++		vcpu->m156_reason = basic;
+ 
+ 		/*
+ 		 * DIAGNOSTIC: count EVERY VM-exit by basic reason (including the ones
+@@ -5704,6 +5744,7 @@
+ 		if (basic == EXIT_REASON_EXC_NMI && !(reason & 0x80000000U) &&
+ 		    ((u32)vmread(VM_EXIT_INTR_INFO) & 0x80000700U) == 0x80000200U) {
+ 			asm volatile("int $2" ::: "memory");
++			vcpu->m156_nmi++;
+ 			if (++safety >= HVX_SAFETY_CAP && !sched) {
+ 				ex->reason = HVX_EXIT_THROTTLE;
+ 				ex->insn_len = 0;
+@@ -6923,6 +6964,8 @@
+ 
+ 		if (!total)
+ 			continue;
++		if (vc->m156_masked || vc->m156_over_logged || vc->m156_nmi || vc->m156_sent)
++			pr_info("hvx: M156 vcpu=%u free_entries=%llu lvtpc_masked_at_free_entry=%llu logged=%llu hostcount=%llu nmi_exits=%llu self_nmis=%llu\n", i, vc->m156_free, vc->m156_masked, vc->m156_over_logged, vc->m156_host, vc->m156_nmi, vc->m156_sent);
+ 		pr_info("hvx: EXIT-HISTOGRAM vcpu=%u total=%llu run_ns=%llu (%llu.%03llu ms) exits/s=%llu icount=%llu rdtsc=%llu reinjected=%llu\n",
+ 			i, total, ns, ns / 1000000ULL, (ns / 1000ULL) % 1000ULL,
+ 			eps, vc->icount, vc->rdtsc_count, vc->reinj_count);
+@@ -8566,9 +8609,13 @@
+ 		}
+ 	}
+ 
++	err = register_nmi_handler(NMI_LOCAL, m156_nmi_fn, 0, HVX_DEVNAME);	/* M156 DIAGNOSTIC */
++	if (err)
++		return err;
+ 	err = misc_register(&hvx_miscdev);
+ 	if (err) {
+ 		pr_err("hvx: misc_register failed: %d\n", err);
++		unregister_nmi_handler(NMI_LOCAL, HVX_DEVNAME);	/* M156 DIAGNOSTIC */
+ 		if (hvx_lapic)
+ 			iounmap(hvx_lapic);
+ 		return err;
+@@ -8584,6 +8631,7 @@
+ 		iounmap(hvx_lapic);
+ 	misc_deregister(&hvx_miscdev);
+ 	pr_info("hvx: unloaded\n");
++	unregister_nmi_handler(NMI_LOCAL, HVX_DEVNAME);	/* M156 DIAGNOSTIC */
+ }
+ 
+ module_init(hvx_init);
