@@ -114,6 +114,7 @@
 #include <linux/uaccess.h>
 #include <asm/msr.h>
 #include <asm/io.h>
+#include <asm/nmi.h>		/* register_nmi_handler: chaos_nmi (M156) */
 #include <linux/random.h>
 #include <asm/fpu/api.h>	/* kernel_fpu_begin/end: protect host FPU/XMM (M14) */
 #include <asm/fpu/xcr.h>	/* xgetbv/xsetbv: guest XCR0 (HVX_VM_X86_64_V3) */
@@ -174,6 +175,20 @@ module_param(ft_opt, uint, 0644);
 static inline bool hvx_chaos_preempt(void)
 {
 	return chaos_preempt && (get_random_u32() % 1000) < chaos_preempt;
+}
+/* chaos_nmi=N (M156): every N-th VM exit of a PMU-clock vCPU, send this CPU an NMI in root mode,
+ * between the exit and the next entry, where a host NMI (the perf-based watchdog's) can arrive; the
+ * module's own NMI handler claims it, and perf's handler runs as for any NMI. Testing only: with
+ * pmu_guard=0 it makes M156's miscount happen on demand, with pmu_guard=1 no result may change. */
+static unsigned int chaos_nmi;
+module_param(chaos_nmi, uint, 0644);
+static DEFINE_PER_CPU(int, hvx_chaos_nmi_pending);
+static int hvx_chaos_nmi_handler(unsigned int type, struct pt_regs *regs)
+{
+	if (!this_cpu_read(hvx_chaos_nmi_pending))
+		return NMI_DONE;
+	this_cpu_write(hvx_chaos_nmi_pending, 0);
+	return NMI_HANDLED;
 }
 MODULE_AUTHOR("hydo");
 MODULE_DESCRIPTION("hydo VT-x milestone 27: FLAGSHIP on UNMODIFIED Redis (redis-server + redis-cli co-located over the in-kernel 127.0.0.1 loopback) reproducing Redis's documented AOF durability window -- appendfsync=always SURVIVES a faithful volatile-cache power loss while everysec LOSES the last acked writes -- bit-for-bit (replay + branch-from-snapshot). Builds on the M26 UNMODIFIED-SQLite committed-row-loss flagship (seeded virtio-blk DROP fault) and the flush-aware DROP power-loss model (HVX_FAULT_DROP_UNFLUSHED, VIRTIO_BLK_F_FLUSH advertised only when armed); adds a deterministic idle heartbeat + CRNG seed for co-located loopback services. Inert when unused, so every prior fingerprint is preserved");
@@ -332,6 +347,7 @@ enum {
 	GUEST_IA32_EFER = 0x2806,
 	HOST_IA32_EFER = 0x2c02,
 	GUEST_IA32_PERF_GLOBAL = 0x2808, HOST_IA32_PERF_GLOBAL = 0x2c04,
+	VM_EXIT_MSR_LOAD_ADDR = 0x2008, VM_ENTRY_MSR_LOAD_ADDR = 0x200a,
 	/* 64-bit read-only */
 	GUEST_PHYS_ADDR = 0x2400,
 	/* 32-bit control */
@@ -824,10 +840,12 @@ struct hvx_vcpu {
 	u64 pmu_cur;			/* PMC0 value read at the last exit */
 	bool pmu_carry;			/* PMC0 still counts from a landing step: the next step
 					 * can keep it instead of re-programming it (FASTTURN.md) */
+	bool pmu_guarded;		/* this run counts in the guest only (pmu_guard, M156) */
 	u64 pmu_total, pmu_next;	/* guest branches retired / next tick target (in the snapshot) */
 	u64 pmu_ticks, pmu_over, pmu_steps, pmu_land;	/* statistics */
 	u32 pmu_flat;			/* consecutive landing steps that retired no branch */
 	u64 pmu_hops;			/* statistics: branch-free stretches skipped (see HVX_PMU_HOP_STEPS) */
+	u64 chaos_nmi_k;		/* exits counted for chaos_nmi */
 	u64 tj_applied, tj_hash, tj_last;	/* tick-jitter statistics (HVX_GET_TJITTER) */
 	u64 xt_applied, xt_hash, xt_first, xt_last;	/* inserted-tick statistics (HVX_GET_XTICK) */
 	/* in-kernel scheduler (HVX_VM_SMP_SCHED); see struct hvx_sched in hvx_abi.h */
@@ -1669,6 +1687,27 @@ static inline u32 seg_ar(u16 ar)
 #define HVX_PMU_TICK_ICOUNT	2048ULL
 #define HVX_PMU_TICK_GUARD	256U		/* THROTTLE-cadence weight of one tick */
 #define HVX_PMU_LVT_VECTOR	0xf2		/* host POSTED_INTR_VECTOR: handler only EOIs */
+/*
+ * The branch counter counts in the guest only (M156). The VMCS loads IA32_PERF_GLOBAL_CTRL = 1 on
+ * entry and 0 on exit, but a host NMI that arrives in root mode between an exit and the next entry
+ * runs perf's NMI handler, which ends by writing IA32_PERF_GLOBAL_CTRL with every counter enabled.
+ * PMC0 then counted the host's own conditional branches up to the next entry, and a landing step
+ * whose counter was kept running (or one programmed before the NMI) added them to the guest's count:
+ * the next tick or turn end landed early, a host-timing-dependent difference (hvx_sched_sweep_test,
+ * about one run in 40; a self-NMI in root mode reproduced it every time). With pmu_guard (the
+ * default) PERFEVTSEL0 is enabled only while the guest runs: the VM-entry MSR-load area writes the
+ * event, the VM-exit MSR-load area writes 0, and root mode keeps it 0, so nothing the host does
+ * between two entries can count. No guest-visible value changes when no NMI arrives.
+ * pmu_guard=0: the old behaviour (for A/B timing).
+ */
+static unsigned int pmu_guard = 1;
+module_param(pmu_guard, uint, 0644);
+#define HVX_PMU_MSR_AREA	2048		/* offset in fx_page: [0] entry load, [1] exit load */
+struct hvx_msr_ent {			/* a VM-entry/exit MSR-load area entry (SDM 25.7.2, 25.8.2) */
+	u32 index;
+	u32 reserved;
+	u64 value;
+};
 #define APIC_LVTPC_OFF		0x340
 static bool hvx_pmu_ok;			/* CPU + VMX controls can run the branch clock */
 /*
@@ -1854,6 +1893,17 @@ static inline void hvx_lvtpc_write(u32 v)
 	else
 		writel(v, hvx_lapic + APIC_LVTPC_OFF);
 }
+/* chaos_nmi: an NMI to this CPU (its own APIC ID, physical destination, level assert) */
+static void hvx_chaos_nmi_send(void)
+{
+	this_cpu_write(hvx_chaos_nmi_pending, 1);
+	if (hvx_host_x2apic) {
+		wrmsrl(0x830, (rd(0x802) << 32) | 0x4400);
+	} else {
+		writel(readl(hvx_lapic + 0x20) & 0xff000000U, hvx_lapic + 0x310);
+		writel(0x4400, hvx_lapic + 0x300);
+	}
+}
 
 static int setup_vmcs(struct hvx_vcpu *vcpu, bool mtf)
 {
@@ -1959,8 +2009,21 @@ static int setup_vmcs(struct hvx_vcpu *vcpu, bool mtf)
 	VMW(PF_EC_MATCH, 0);
 	VMW(CR3_TARGET_COUNT, 0);
 	VMW(VM_EXIT_MSR_STORE_CNT, 0);
-	VMW(VM_EXIT_MSR_LOAD_CNT, 0);
-	VMW(VM_ENTRY_MSR_LOAD_CNT, 0);
+	if (vcpu->pmu_live && vcpu->pmu_guarded) {
+		/* M156 (see pmu_guard): PERFEVTSEL0 = the branch event while the guest runs, 0 in
+		 * root mode, switched by the VM entry and the VM exit themselves */
+		struct hvx_msr_ent *a = (struct hvx_msr_ent *)(vcpu->fx_page + HVX_PMU_MSR_AREA);
+
+		a[0] = (struct hvx_msr_ent){ .index = MSR_PERFEVTSEL0, .value = HVX_PMU_EVTSEL };
+		a[1] = (struct hvx_msr_ent){ .index = MSR_PERFEVTSEL0, .value = 0 };
+		VMW(VM_ENTRY_MSR_LOAD_ADDR, __pa(&a[0]));
+		VMW(VM_EXIT_MSR_LOAD_ADDR, __pa(&a[1]));
+		VMW(VM_ENTRY_MSR_LOAD_CNT, 1);
+		VMW(VM_EXIT_MSR_LOAD_CNT, 1);
+	} else {
+		VMW(VM_EXIT_MSR_LOAD_CNT, 0);
+		VMW(VM_ENTRY_MSR_LOAD_CNT, 0);
+	}
 	VMW(VM_ENTRY_INTR_INFO, 0);
 	VMW(VM_ENTRY_EXC_EC, 0);
 	VMW(VM_ENTRY_INSN_LEN, 0);
@@ -5198,7 +5261,10 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 		wrmsrl(MSR_PERFEVTSEL0, 0);
 		wrmsrl(MSR_PERF_GLOBAL_OVF, 1);			/* drop a stale PMC0 overflow */
 		hvx_lvtpc_write(HVX_PMU_LVT_VECTOR);		/* fixed vector, unmasked */
-		wrmsrl(MSR_PERFEVTSEL0, HVX_PMU_EVTSEL);
+		/* M156: with the guard the event is enabled by each VM entry and disabled by
+		 * each exit (setup_vmcs), so it stays 0 in root mode */
+		vcpu->pmu_guarded = !!pmu_guard;
+		wrmsrl(MSR_PERFEVTSEL0, vcpu->pmu_guarded ? 0 : HVX_PMU_EVTSEL);
 		if (!vcpu->pmu_next)
 			vcpu->pmu_next = vm->pmu_period;
 		vcpu->pmu_carry = false;	/* the first entry programs PMC0 */
@@ -5584,6 +5650,8 @@ static int hvx_run_vcpu(struct hvx_vcpu *vcpu, struct hvx_exit *ex,
 			}
 			ft_c = ft_n;
 			vcpu->pmu_total += got;
+			if (chaos_nmi && ++vcpu->chaos_nmi_k % chaos_nmi == 0)
+				hvx_chaos_nmi_send();	/* testing only (M156) */
 			vcpu->br_own += got;
 			vcpu->pmu_n = 0;
 			if (got || !vcpu->pmu_step)
@@ -6738,6 +6806,7 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 	     (xgetbv(XCR_XFEATURE_ENABLED_MASK) & HVX_XS_MASK) != HVX_XS_MASK))
 		return -ENODEV;			/* guest AVX needs host AVX2 + XCR0 >= x87|SSE|AVX */
 	BUILD_BUG_ON(HVX_XS_SIZE > PAGE_SIZE);
+	BUILD_BUG_ON(HVX_XS_SIZE > HVX_PMU_MSR_AREA);	/* M156: the MSR-load areas follow it in fx_page */
 	if ((cfg->flags & HVX_VM_DIRTY_LOG) && !hvx_ept_ad)
 		return -ENODEV;			/* the RAM log reads the EPT dirty flags */
 
@@ -8566,9 +8635,16 @@ static int __init hvx_init(void)
 		}
 	}
 
+	err = register_nmi_handler(NMI_LOCAL, hvx_chaos_nmi_handler, 0, HVX_DEVNAME);	/* chaos_nmi */
+	if (err) {
+		if (hvx_lapic)
+			iounmap(hvx_lapic);
+		return err;
+	}
 	err = misc_register(&hvx_miscdev);
 	if (err) {
 		pr_err("hvx: misc_register failed: %d\n", err);
+		unregister_nmi_handler(NMI_LOCAL, HVX_DEVNAME);
 		if (hvx_lapic)
 			iounmap(hvx_lapic);
 		return err;
@@ -8583,6 +8659,7 @@ static void __exit hvx_exit(void)
 	if (hvx_lapic)
 		iounmap(hvx_lapic);
 	misc_deregister(&hvx_miscdev);
+	unregister_nmi_handler(NMI_LOCAL, HVX_DEVNAME);
 	pr_info("hvx: unloaded\n");
 }
 
