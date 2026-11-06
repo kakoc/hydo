@@ -56,7 +56,9 @@ echo ">> syncing to ~/$TREE/hv/hvx/ on the bare-metal machine ($([ $LOAD = 1 ] &
 on_bare_metal "mkdir -p $TREE/hv/hvx"
 (cd "$HERE" && rsync -az $FILES "$BOX:$TREE/hv/hvx/")
 # the run engine's sources (the Rust workspace's crates; never hvx.c or hvx_abi.h)
-(cd "$HERE/../.." && rsync -azR --exclude target Cargo.toml Cargo.lock rust-toolchain.toml .cargo hydo/crates "$BOX:$TREE/")
+(cd "$HERE/../.." && rsync -azR --exclude target Cargo.toml Cargo.lock rust-toolchain.toml .cargo hydo/crates \
+    hydo/dist/linux/assets.sha256 hydo/dist/linux/guest-programs.sha256 \
+    hydo/dist/mac/assets.sha256 hydo/dist/mac/guest-programs.sha256 "$BOX:$TREE/")
 
 on_bare_metal "TREE=$TREE LOAD=$LOAD FLAG=$FLAG TESTS='$TESTS' SMPTESTS='$SMPTESTS' HARNESSES='$HARNESSES' bash -s" <<'REMOTE'
 set -u
