@@ -140,7 +140,15 @@ Since M153 the five host programs are compiled with the tree and the Cargo home 
 their panic messages name no directory of the machine that built them; before, they carried
 the builder's home directory. This changes only those programs' bytes, no image.
 
-**The current tarball (M155)**, built twice on the bare-metal machine from M155's branch
+**The current tarball (M156's rebuild)**, built twice on the bare-metal machine from `main` =
+`6b4e066` (M156's PMU-clock fix in `module/hvx.c`), from clean Rust targets, with the same bytes
+both times: `hydo-linux-0.1.0.tar.gz`, 59,565,462 bytes, sha256
+`98168977048ee4e9a2d4a8fea1214ac86d443a6c892012c74c2f5b85b22d4c34`. Against M155's tarball only
+`module/hvx.c`, `SHA256SUMS` and the commit compiled into `bin/hydo` and `bin/hydo-build` differ;
+installed with `--no-module` into clean prefixes it gave every M155 value, twice, as the user and
+as root (docs/HISTORY.md, "Milestone 156", the addendum "The Linux tarball rebuilt with the fix").
+
+**The tarball of M155**, built twice on the bare-metal machine from M155's branch
 (`b662589`), from clean Rust targets, with the same bytes both times: `hydo-linux-0.1.0.tar.gz`,
 59,563,571 bytes, sha256 `d557c3416664e0fb426d22495390bc5ba8063fa1d3789b42e304f2134e6e5a8a`.
 Since M155 every image it builds carries `/etc/hydo/image.json` (the guest kernel by sha256 and the

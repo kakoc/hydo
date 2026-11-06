@@ -2926,7 +2926,9 @@ the record, in `~/hydo/build/m145/`) still give.
 ### 13.4 The releases' examples
 
 Both tarballs of M155 (`hydo-linux-0.1.0.tar.gz` `d557c341…`, `hydo-mac-0.1.0.tar.gz`
-`3ad2b456…`; docs/HISTORY.md "Milestone 155"), installed into clean prefixes, each schedule twice:
+`3ad2b456…`; docs/HISTORY.md "Milestone 155"), installed into clean prefixes, each schedule twice.
+The Linux tarball rebuilt with M156's module fix (`98168977…`, docs/HISTORY.md "Milestone 156")
+gave every Linux value of this table again, twice each, as the user and as root:
 
 | release | image (sha256) | schedule | verdict | fingerprint |
 |---|---|---|---|---|
