@@ -1,0 +1,8 @@
+#!/bin/sh
+# hydo: within=120 after=heal poll=2
+# hydo-msg: after the faults heal, every replica holds exactly primary's rows
+# A differential check over the workloads' tables (hydo-sql's dump source). Raise within= if a
+# replica needs longer to catch up after a lossy link.
+rc=0
+hydo-sql check equal --show 3 --left 'primary=dump primary' --right 'replica=dump replica' || rc=$?
+exit $rc

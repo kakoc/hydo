@@ -21,6 +21,7 @@ __pycache__/
 /machines.local.sh
 # hydo-read keeps its own Cargo workspace (its bytes are inside guest images)
 /hydo/crates/hydo-read/target/
+/hydo/crates/hydo-sql/target/
 /hydo/crates/hydo-agent/target/
 /hydo/COMMIT
 # the local compile cache of this repository and its worktrees (.cargo/rustc-wrapper.sh; docs/CI.md)

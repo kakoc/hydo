@@ -64,6 +64,7 @@ pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
             setdefault(&mut inputs.modroot, &guest.join("modules"));
             setdefault(&mut inputs.worldbin, &guest.join("hydo-world"));
             setdefault(&mut inputs.read_bin, &guest.join("hydo-read"));
+            setdefault(&mut inputs.sql_bin, &guest.join("hydo-sql"));
             if let Some((_, path)) = hvxenv::tool_env(ctx).into_iter().find(|(k, _)| k == "PATH") {
                 std::env::set_var("PATH", path);
             }
@@ -84,6 +85,7 @@ pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
             setdefault(&mut inputs.faketime, &guest.join("mke2fs"));
             setdefault(&mut inputs.worldbin_arm64, &guest.join("hydo-world"));
             setdefault(&mut inputs.read_bin_arm64, &guest.join("hydo-read"));
+            setdefault(&mut inputs.sql_bin_arm64, &guest.join("hydo-sql"));
             setdefault(&mut inputs.arm64_store, &guest.join("tc"));
             setdefault(&mut inputs.fcbin_arm64, &guest.join("hydo_fc"));
             setdefault(&mut inputs.agent_bin_arm64, &guest.join("hydo-agent"));

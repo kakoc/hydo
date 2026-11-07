@@ -27,6 +27,7 @@ mod pyjson;
 mod runs;
 mod setup;
 mod skillupdate;
+mod sqlgen;
 
 use ctx::{Ctx, Platform};
 
@@ -179,6 +180,9 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
         // M165: `hydo diff --help`, `hydo explain --help` (the main help is a recorded answer)
         "diff" => diff::cmd_diff(ctx, rest),
         "explain" => explain::cmd_explain(ctx, rest),
+        // ready-made SQL workloads and checks for the hydo/ folder (`hydo sql-gen --help`; the
+        // main help is a recorded answer)
+        "sql-gen" => sqlgen::cmd_sql_gen(rest),
         "save" => runs::cmd_save(ctx, rest),
         "errors" => delegated::cmd_errors(ctx, rest),
         "check-history" => hydo_history::cli::main(rest),

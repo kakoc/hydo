@@ -1,0 +1,6 @@
+#!/bin/sh
+# hydo: timeout=20
+# hand: sqld's durability mode, set once through its admin API (the knob D's value; strong at
+# first) after the schema exists. With the default params the primary's ready command sets it
+# again after every start (RESULTS.md, finding 3).
+exec sh /etc/sqld-durability.sh

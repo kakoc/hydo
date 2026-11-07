@@ -416,6 +416,11 @@ variables! {
     HYDO_READ_BIN: Build, User, "path; empty = default", "<build dir>/hydo-read", "hydo-build";
     /// The arm64 `hydo-read`.
     HYDO_READ_BIN_ARM64: Build, User, "path; empty = default", "<build dir>/hydo-read-arm64", "hydo-build";
+    /// The x86_64 `hydo-sql` (the ready-made SQL workloads and checks), staged only when a command
+    /// calls it.
+    HYDO_SQL_BIN: Build, User, "path; empty = default", "<build dir>/hydo-sql", "hydo-build";
+    /// The arm64 `hydo-sql`.
+    HYDO_SQL_BIN_ARM64: Build, User, "path; empty = default", "<build dir>/hydo-sql-arm64", "hydo-build";
     /// The x86_64 `hydo-agent` (its sha256 must be the pinned one).
     HYDO_AGENT_BIN: Build, User, "path; empty = default", "<build dir>/hydo-agent", "hydo-build";
     /// The arm64 `hydo-agent`.
