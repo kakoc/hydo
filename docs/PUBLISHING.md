@@ -80,9 +80,9 @@ A published crate holds only the files inside its directory, and its build may n
 repository. What did not, and how each is fixed:
 
 - **Files read at compile time from outside the crate.** `hydo-cli`'s `setup.rs` compiled in
-  `hydo/dist/<platform>/assets.sha256` and `guest-programs.sha256`, and `hydo-agents`' build
-  script embedded `skills/hydo-onboard/` and `hydo/onboard/MANIFEST.md`. Each crate now reads
-  them through links inside its directory (`hydo-cli/pins/<platform>/*.sha256`,
+  `hydo/dist/<platform>/assets.sha256` and `guest-programs.sha256`, `hydo-image`'s `releases.rs` the
+  release index `hydo/dist/releases.txt` (Milestone 162), and `hydo-agents`' build script embedded `skills/hydo-onboard/` and `hydo/onboard/MANIFEST.md`. Each crate now reads
+  them through links inside its directory (`hydo-cli/pins/<platform>/*.sha256`, `hydo-image/pins/releases.txt`,
   `hydo-agents/embed/hydo-onboard` and `embed/MANIFEST.md`); git keeps the links, the tree
   builds the same bytes through them, and `cargo package` copies the linked files' contents
   into the package. Each published crate also has a link `LICENSE -> ../../../LICENSE`.
@@ -104,7 +104,12 @@ repository. What did not, and how each is fixed:
   tests and their recorded answers stay in the repository (cargo prints "ignoring test …" for
   each while it packs); the largest package is about 140 KiB compressed.
 - **The installed layout.** A `hydo` installed by cargo lives in `~/.cargo/bin` with no release
-  around it; the release root it uses is `$HYDO_HOME/versions/<its version>`.
+  around it, and took `~/.cargo` as its release root. Now, when the program's prefix is not an
+  unpacked release (no `SHA256SUMS`) and cargo's install record `.crates2.json` there names the
+  package `hydo`, the release root is `$HYDO_HOME/versions/<its version>` (`hydo-cli/src/ctx.rs`,
+  `installed_root`); plain `hydo setup` then does what `hydo setup --get` does, and
+  `hydo doctor` names `hydo setup --get` as the fix for every missing release file. Every other
+  layout (a release, the CLI tests' release-like roots, a tree's `target/`) is unchanged.
 - **Nothing calls a guest program, a tree path or a tool at build time.** The crates' build
   scripts are the three above (`hydo-agents`, `hydo-image`, and `hydo-hvx`'s, which compiles C
   only with the cargo feature `pt`).

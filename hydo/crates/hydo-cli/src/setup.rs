@@ -1177,6 +1177,16 @@ pub fn cmd_setup(ctx: &Ctx, argv: &[String]) -> i32 {
             2,
         );
     }
+    // a hydo installed by cargo (M169) whose version is not installed yet: plain `hydo setup`
+    // installs it, as `hydo setup --get` does
+    if get.is_none()
+        && !check
+        && !verify
+        && ctx.cargo_installed
+        && !ctx.root.join("SHA256SUMS").exists()
+    {
+        get = Some(None);
+    }
     let cache = cache_of(ctx, offline);
     if let Some(f) = &archive {
         match cache.import(f) {
@@ -1224,10 +1234,16 @@ pub fn cmd_setup(ctx: &Ctx, argv: &[String]) -> i32 {
         if add_path && print_add_to_path(&cache.home.bin(), ctx.platform) != 0 {
             return 1;
         }
-        println!(
-            "hydo setup: hydo {version} is installed; run it as {}",
-            cache.program(&version).display()
-        );
+        if ctx.cargo_installed && version == cache.own_version {
+            println!(
+                "hydo setup: hydo {version} is installed; this hydo (installed by cargo) uses it"
+            );
+        } else {
+            println!(
+                "hydo setup: hydo {version} is installed; run it as {}",
+                cache.program(&version).display()
+            );
+        }
         return 0;
     }
     let root = &ctx.root;

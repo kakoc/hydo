@@ -85,6 +85,13 @@ echo "hydo doctor: exit status $rc"
 
 if [ "${HYDO_REHEARSAL_LINUX:-0}" = 1 ]; then
   echo "== 5. cargo check --target x86_64-unknown-linux-musl of the packed hydo"
+  # ring (rustls, for the registry pulls and the install cache's downloads) compiles C for the
+  # target in its build script: without a musl cross gcc, clang with --target does it (ring
+  # needs no libc headers)
+  if ! command -v x86_64-linux-musl-gcc > /dev/null && command -v clang > /dev/null; then
+    export CC_x86_64_unknown_linux_musl=clang
+    export CFLAGS_x86_64_unknown_linux_musl=--target=x86_64-unknown-linux-musl
+  fi
   ( cd "$WORK" && CARGO_HOME="$WORK/home" RUSTC="$RUSTC_BIN" \
       "$CARGO_BIN" check --locked --offline --target x86_64-unknown-linux-musl \
       --manifest-path "$WORK/registry/hydo-$("$H" --version | cut -d' ' -f2)/Cargo.toml" \

@@ -9,7 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 # What is published to crates.io (docs/PUBLISHING.md): the sources only; the tests and their
 # recorded answers stay in the repository.
-include = ["/src/**", "/Cargo.toml", "/LICENSE", "/build.rs"]
+include = ["/src/**", "/Cargo.toml", "/LICENSE", "/build.rs", "/pins/**"]
 build = "build.rs"
 
 [dependencies]
