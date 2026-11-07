@@ -3,14 +3,16 @@
 # changes are marked `hand:`. RESULTS.md says what was hunted and found.
 #
 # Stripe is a fake (hydo-world, `fakes:` below). Medusa's Stripe provider calls
-# https://api.stripe.com with certificate checks and has no option for another base URL, while
-# hydo's fakes speak plain HTTP; so a TLS front (`stripe_tls`, socat from alpine/socat) holds a
-# certificate for api.stripe.com signed by a test CA (tls/, made for this example), /etc/hosts
-# sends api.stripe.com to it, and Medusa trusts the CA through NODE_EXTRA_CA_CERTS.
+# https://api.stripe.com with certificate checks and has no option for another base URL, so the
+# fake answers HTTPS for that name (`tls:`): hydo makes a test CA and a certificate for
+# api.stripe.com, maps the name to the fake in /etc/hosts and makes the guest and every image
+# trust the CA (Node.js through NODE_EXTRA_CA_CERTS, which hydo sets). Medusa writes into its own
+# image at run time (~/.config, schema snapshots in node_modules), which Docker's writable layer
+# allows: `writable: true` gives it the same here.
 #
 # Build and run on Linux (the KVM engine works without hydo's kernel module):
 #   sh ../app/build-app.sh                          # the Medusa image, saved into images/
-#   sh fetch-images.sh                              # postgres, redis, socat by digest
+#   sh fetch-images.sh                              # postgres, redis by digest
 #   hydo build hydo.yaml
 #   hydo run --backend kvm "disk=none | run"
 #   hydo explore --backend kvm --seeds 1-20 --strategy process --protocol-faults
@@ -35,12 +37,6 @@ root:
       10.89.0.11 postgres
       10.89.0.12 redis
       10.89.0.13 medusa
-      10.89.0.20 stripe_tls
-      10.89.0.20 api.stripe.com
-  files:   # hand: the test CA and the TLS front's certificate for api.stripe.com
-    - {src: tls/ca.pem, dst: /hydo/tls/ca.pem}
-    - {src: tls/api.pem, dst: /hydo/tls/api.pem}
-    - {src: tls/api.key, dst: /hydo/tls/api.key}
 
 services:
   # Compose service postgres
@@ -77,22 +73,12 @@ services:
       - {tmpfs: true, dst: /run, copy_up: true}
       - {tmpfs: true, dst: /dev/shm, size: 64m}
       - {src: /data/vol/redis_data, dst: /data}   # hand: redis_data as its own /data (the image chowns its /data)
-  # hand: the TLS front for api.stripe.com (not in the Compose file: production talks to Stripe)
-  - name: stripe_tls
-    image: {x86_64: images/socat-amd64.docker.tar}
-    image_ref: "sha256:c1ad67b3a41457ba4c4c28574e4b003f0ade5d728463b74f3f456c9a0607314a"   # alpine/socat:1.8.0.3
-    entrypoint: [socat, "OPENSSL-LISTEN:443,reuseaddr,fork,cert=/hydo/tls/api.pem,key=/hydo/tls/api.key,verify=0", "TCP:10.89.0.1:9101"]
-    addr: 10.89.0.20
-    port: 443
-    ready: "nc -z -w 2 10.89.0.20 443"
-    restart: "always"
-    mounts:
-      - {src: /hydo/tls, dst: /hydo/tls}
   # Compose service medusa (built from ../app; saved with `docker save`)
   # ready: from Compose healthcheck
   - name: medusa
     image: {x86_64: images/medusa-shop-amd64.docker.tar}
-    image_ref: "sha256:56393269f15c40ed58ae0e594b2158d4083599c30d89ad103c186d127958e9ec"   # medusa-shop:hydo, app/build-app.sh
+    image_ref: "sha256:5b952a435e9edb964c2b7cff5024fc87b4721aff3c7024d1b3924ff76ba8f364"   # medusa-shop:hydo, app/build-app.sh
+    writable: true   # hand: Medusa writes into its own image (~/.config, node_modules), as a container may
     cmd: [sh, "-c", "./node_modules/.bin/medusa db:migrate && exec ./node_modules/.bin/medusa start"]
     env:
       DATABASE_URL: "postgres://postgres:postgres@postgres:5432/medusa-store"
@@ -104,10 +90,9 @@ services:
       AUTH_CORS: "http://localhost:9000"
       JWT_SECRET: "change-me"
       COOKIE_SECRET: "change-me"
-      NODE_EXTRA_CA_CERTS: "/hydo/tls/ca.pem"   # hand: trust the test CA (the fake Stripe's TLS front)
     port: 9000
     addr: 10.89.0.13
-    depends_on: [postgres, redis, stripe_tls]
+    depends_on: [postgres, redis]
     ready: "timeout 30 hydo-oci medusa wget -q -O- http://localhost:9000/health"
     ready_timeout: 600   # hand: Medusa's start under the exit clock
     restart: "unless-stopped"
@@ -115,24 +100,7 @@ services:
       - {src: /etc/hosts, dst: /etc/hosts}
       - {tmpfs: true, dst: /run, copy_up: true}
       - {tmpfs: true, dst: /dev/shm, size: 64m}
-      - {src: /hydo/tls, dst: /hydo/tls}            # hand: the test CA
       - {src: /hydo/workload, dst: /hydo/workload}  # hand: the test client runs with this image's node
-      - {tmpfs: true, dst: /root}                   # hand: the Medusa CLI writes ~/.config (a container has a writable layer)
-      # hand: db:migrate writes an empty schema snapshot into each module without migrations (Docker: the writable layer)
-      - {tmpfs: true, dst: /server/node_modules/@medusajs/auth-emailpass/dist/migrations}
-      - {tmpfs: true, dst: /server/node_modules/@medusajs/cache-inmemory/dist/migrations}
-      - {tmpfs: true, dst: /server/node_modules/@medusajs/event-bus-redis/dist/migrations}
-      - {tmpfs: true, dst: /server/node_modules/@medusajs/file/dist/migrations}
-      - {tmpfs: true, dst: /server/node_modules/@medusajs/fulfillment-manual/dist/migrations}
-      - {tmpfs: true, dst: /server/node_modules/@medusajs/locking/dist/migrations}
-      - {tmpfs: true, dst: /server/node_modules/@medusajs/notification-local/dist/migrations}
-      - {tmpfs: true, dst: /server/node_modules/@medusajs/payment-stripe/dist/migrations}
-      - {tmpfs: true, dst: /server/node_modules/@medusajs/locking-redis/dist/migrations}
-      - {tmpfs: true, dst: /server/node_modules/@medusajs/file-local/dist/migrations}
-      - {tmpfs: true, dst: /server/node_modules/@medusajs/analytics/dist/migrations}
-      - {tmpfs: true, dst: /server/node_modules/@medusajs/analytics-local/dist/migrations}
-      - {tmpfs: true, dst: /server/node_modules/@medusajs/caching/dist/migrations}
-      - {tmpfs: true, dst: /server/node_modules/@medusajs/event-bus-local/dist/migrations}
 
 # hand: Stripe, faked. Medusa's provider (stripe-node) creates a PaymentIntent per payment
 # session (manual capture), reads it to authorize, captures, cancels and refunds. Every intent
@@ -142,6 +110,7 @@ services:
 fakes:
   - name: stripe
     port: 9101
+    tls: {hosts: [api.stripe.com]}   # hand: HTTPS on 10.89.0.1:443 for the name stripe-node calls
     idempotency: header:Idempotency-Key
     routes:
       - name: intent_capture
