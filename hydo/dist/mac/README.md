@@ -123,7 +123,23 @@ configurations and build recipes, the list and the notices, reproducible like th
 archives come from a sources cache: `HYDO_SOURCES_FROM=DIR`, else `hydo/dist/mac/sources/` (not
 tracked), filled once from the machine with the Nix store paths by `hydo/dist/fetch-sources.sh`.
 
-## The current tarball
+## The current tarball and its sources archive (Milestone 158)
+
+`hydo-mac-0.1.0.tar.gz`, 30,270,684 bytes, sha256
+`5c02e7f364424e97aad67a7fa91b73d29a8466e5fe17ea4bd540edc06dac9806`, and
+`hydo-mac-0.1.0-sources.tar.gz`, 690,029,509 bytes, sha256
+`d97e7dc7f08aa2e4ba21c7bc0594b978bc8457d3d96977c438918abda0b94272` (87 entries; 46 source files under
+`upstream/`), built twice on this Mac from commit `e29c664` (M158's license work; one tree path,
+clean target directories) with the same bytes; the sources archive built on the bare-metal machine
+from the same commit and sources has the same bytes too. Against the tarball built from `ce6071c`
+it adds `LICENSE`, `THIRD-PARTY.md` and 325 files under `licenses/`, and only `QUICKSTART-mac.md`
+(the new section "Licenses and source code" at its end), `SHA256SUMS`, `bin/hydo` and
+`bin/hydo-build` (the compiled-in commit with the Mach-O `LC_UUID` and signature page hashes, 120
+bytes each) differ; no guest file or asset. Installed into a clean prefix (no Python, Go, cargo,
+compiler, `xcrun` or Docker called) it gave every Mac value of docs/REBASELINE.md 13.4, twice each
+(docs/HISTORY.md, "Milestone 158").
+
+## Built from `ce6071c` (superseded)
 
 `hydo-mac-0.1.0.tar.gz`, 29,925,257 bytes, sha256
 `d6a274058ab6037d164c02ed3fe4ae73d8e5b960f85c079eab6628314329ef2e`, built twice on the Mac from

@@ -152,7 +152,21 @@ Since M153 the five host programs are compiled with the tree and the Cargo home 
 their panic messages name no directory of the machine that built them; before, they carried
 the builder's home directory. This changes only those programs' bytes, no image.
 
-**The current tarball**, built twice on the bare-metal machine from the final pre-release commit
+**The current tarball and its sources archive (M158)**, built twice on the bare-metal machine from
+commit `e29c664` (M158's license work), from clean Rust targets, with the same bytes both times:
+`hydo-linux-0.1.0.tar.gz`, 59,912,364 bytes, sha256
+`6afadef4889a8a91e31024269b4c23fa00b35ee21aa7fc8a96dfc098a5364ff1`, and
+`hydo-linux-0.1.0-sources.tar.gz`, 421,394,032 bytes, sha256
+`f8109487f973165c0172850ed3b79807e42ba88f03350d5f76f4ca39c0cd0cea` (120 entries; 86 source files
+under `upstream/`). Against the tarball built from `ce6071c` the tarball adds `LICENSE`,
+`THIRD-PARTY.md` and 373 files under `licenses/`, and only `README.md` (the new section "Licenses
+and source code" at its end), `SHA256SUMS` and the commit compiled into `bin/hydo` and
+`bin/hydo-build` (40 bytes each) differ; no guest file or asset. `hydo module build` from it gives
+srcversion `14D39A96F319623EC2AD8D1`; installed with `--no-module` into clean prefixes it gave
+every value of docs/REBASELINE.md 13.4, twice, as the user and as root (docs/HISTORY.md,
+"Milestone 158").
+
+**The tarball built from `ce6071c` (superseded)**, built twice on the bare-metal machine from the final pre-release commit
 `ce6071c` (after M157 and the history pass), from clean Rust targets, with the same bytes both
 times: `hydo-linux-0.1.0.tar.gz`, 59,560,865 bytes, sha256
 `114e4160d8a0b704af2789eb5566da7c58be603b43cd51ae20964c0180a8c19e`. Against the tarball built from
