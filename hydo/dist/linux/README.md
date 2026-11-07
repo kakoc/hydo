@@ -140,7 +140,15 @@ Since M153 the five host programs are compiled with the tree and the Cargo home 
 their panic messages name no directory of the machine that built them; before, they carried
 the builder's home directory. This changes only those programs' bytes, no image.
 
-**The current tarball (M156's rebuild)**, built twice on the bare-metal machine from `main` =
+**The current tarball**, built twice on the bare-metal machine from `main` = `e744b8c`, from
+clean Rust targets, with the same bytes both times: `hydo-linux-0.1.0.tar.gz`, 59,565,449 bytes,
+sha256 `e9538ed9fdf6719682fce2cf38c42c182ca9f0b1dc4a8edbfa0057f6b9d8b59c`. Against M156's rebuild only
+`SHA256SUMS` and the commit compiled into `bin/hydo` and `bin/hydo-build` differ; installed with
+`--no-module` into clean prefixes it gave every value of docs/REBASELINE.md 13.4, twice, as the
+user and as root (docs/HISTORY.md, "Milestone 156", the addendum "Both tarballs built from
+`e744b8c`").
+
+**The tarball of M156's rebuild**, built twice on the bare-metal machine from `main` =
 `6b4e066` (M156's PMU-clock fix in `module/hvx.c`), from clean Rust targets, with the same bytes
 both times: `hydo-linux-0.1.0.tar.gz`, 59,565,462 bytes, sha256
 `98168977048ee4e9a2d4a8fea1214ac86d443a6c892012c74c2f5b85b22d4c34`. Against M155's tarball only

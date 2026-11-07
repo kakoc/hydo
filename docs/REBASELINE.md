@@ -2928,7 +2928,9 @@ the record, in `~/hydo/build/m145/`) still give.
 Both tarballs of M155 (`hydo-linux-0.1.0.tar.gz` `d557c341…`, `hydo-mac-0.1.0.tar.gz`
 `3ad2b456…`; docs/HISTORY.md "Milestone 155"), installed into clean prefixes, each schedule twice.
 The Linux tarball rebuilt with M156's module fix (`98168977…`, docs/HISTORY.md "Milestone 156")
-gave every Linux value of this table again, twice each, as the user and as root:
+gave every Linux value of this table again, twice each, as the user and as root. Both tarballs
+built from `e744b8c` (`e9538ed9…`, `098c8773…`; docs/HISTORY.md "Milestone 156", the addendum
+"Both tarballs built from `e744b8c`") gave every value of this table, twice each:
 
 | release | image (sha256) | schedule | verdict | fingerprint |
 |---|---|---|---|---|

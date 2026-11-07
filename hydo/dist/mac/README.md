@@ -110,7 +110,17 @@ that covers it), because Apple's linker derives the UUID from the object files' 
 
 Nothing is published by the script; the tarball stays in `OUTDIR`.
 
-## Milestone 155: the current tarball
+## The current tarball
+
+`hydo-mac-0.1.0.tar.gz`, 29,926,313 bytes, sha256
+`098c8773b110916f9b21a78a926ffc3c4ae9a47d3339120f38a467bb1b9d780e`, built twice on the Mac from
+`main` = `e744b8c` (one tree path, clean target directories) with the same bytes. Against M155's
+tarball only `SHA256SUMS`, the commit compiled into `bin/hydo` and `bin/hydo-build`, and the Mach-O
+`LC_UUID` of `bin/hydo-fetch-image` and `bin/hydo-hvm` (another tree path) differ. Installed into a
+clean prefix it gave every Mac value of docs/REBASELINE.md 13.4, twice each (docs/HISTORY.md,
+"Milestone 156", the addendum "Both tarballs built from `e744b8c`").
+
+## Milestone 155
 
 `hydo-mac-0.1.0.tar.gz`, 29,926,376 bytes, sha256
 `3ad2b456ed71473b1c153806d40e147a85487bdc83d4ce2f0aea97c567341a17`, built twice on the Mac from
