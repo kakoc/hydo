@@ -1047,10 +1047,17 @@ fn lines(s: &str) -> Vec<&str> {
 }
 
 /// inv_detail: the invariant's own HYDO-ORACLE line (prefix and OK/VIOLATION stripped), or its
-/// last line that is not blank and not an assertion record.
+/// last line that is not blank and not an assertion record. Only a line that starts with
+/// `HYDO-ORACLE:` (after spaces) is the check's own verdict line: a line that merely mentions the
+/// tag (hydo-check's usage text describes `--oracle` as `end with a "HYDO-ORACLE: OK|..." line`)
+/// is ordinary output.
 pub fn inv_detail(out: &str) -> String {
     let ls = lines(out);
-    if let Some(l) = ls.iter().rev().find(|l| l.contains("HYDO-ORACLE:")) {
+    if let Some(l) = ls
+        .iter()
+        .rev()
+        .find(|l| l.trim_start_matches(' ').starts_with("HYDO-ORACLE:"))
+    {
         let i = l.rfind("HYDO-ORACLE:").unwrap_or(0);
         let mut d = l[i + "HYDO-ORACLE:".len()..].trim_start_matches(' ');
         if let Some(r) = d.strip_prefix("OK") {
@@ -2381,6 +2388,14 @@ mod tests {
             "lost 2"
         );
         assert_eq!(inv_detail("HYDO-ORACLE: OK\n"), "HYDO-ORACLE: OK");
+        // hydo-check's usage text mentions the tag inside a line: its last line is the detail
+        assert_eq!(
+            inv_detail(
+                "  --oracle  end with a \"HYDO-ORACLE: OK|VIOLATION|ERROR <explanation>\" line\nequal could not be evaluated: usage\n"
+            ),
+            "equal could not be evaluated: usage"
+        );
+        assert_eq!(inv_detail("x\n  HYDO-ORACLE: VIOLATION lost 1\n"), "lost 1");
         assert_eq!(inv_detail("a\nHYDO-ASSERT {}\n  \n"), "a");
         assert_eq!(inv_detail(""), "");
         assert_eq!(

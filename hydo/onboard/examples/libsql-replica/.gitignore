@@ -1,0 +1,6 @@
+# built or fetched here, never committed
+hydo/images/
+hydo-out/
+.hydo/
+client/bin/
+client/target/

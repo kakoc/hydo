@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=20
+# One bank transfer as a transaction, to the primary or the replica (the seed chooses; the
+# replica forwards writes to the primary). Records ack / failed / unknown.
+exec /bin/sqlgen transfer seed

@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=20
+# One list-append transaction (1..4 appends and reads over 6 keys), to the primary or the
+# replica as the seed chooses, recorded as history "la" for the host's list-append checker.
+exec /bin/sqlgen txn seed

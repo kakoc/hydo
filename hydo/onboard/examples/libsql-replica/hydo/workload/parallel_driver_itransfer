@@ -1,0 +1,6 @@
+#!/bin/sh
+# hydo: timeout=20
+# One bank transfer as an interactive transaction (read both balances, write the new values,
+# one statement per request in one Hrana stream), to the primary or the replica as the seed
+# chooses. A lost update shows as a changed bank total.
+exec /bin/sqlgen itransfer seed
