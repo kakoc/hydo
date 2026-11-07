@@ -622,7 +622,9 @@ with fakes run together only on a test manifest (decision 9; no example has both
   plain run is not kept (its files are overwritten by the second run's). serve.c runs a CTL,
   RESUME or `--control boot one` with `spin=rewind` in the rewind mode (before M130 it refused
   it); why the stops stay pure is in serve.c's lock-step header. Test:
-  `agent::tests::a_spin_on_hvm_runs_again_in_rewind_mode`.
+  `agent::tests::a_spin_on_hvm_runs_again_in_rewind_mode`. Since M161 (the KVM branch) the same holds for
+  the KVM engine (`EngineKind::Kvm`): it ends a run at once as a SPIN when it proves a counter loop
+  outside the rewind mode, and runs `spin=rewind` schedules in its own rewind mode.
 - **Decision:** the escalation is the host's, not the engine's, because the engine cannot undo a
   conversation; the alternative, the rewind mode for every agent run on hvm, costs a stage-2
   write fault per first write to each page after every exit, for the same results (a plain

@@ -1205,7 +1205,7 @@ impl Engine {
             };
             xsnap_restore(&mut self.vm, &self.h.snaps[s0].x, check);
             if let (Some(d), Some(du)) = (&mut self.vm.vio.disk, durable) {
-                d.copy_from_slice(&du);
+                *d = du;
             }
             self.vm.vio.set_fault(0, 0, 0);
             from = self.vm.m.console_len as usize;

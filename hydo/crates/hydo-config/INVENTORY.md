@@ -144,7 +144,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 
 | Variable | Kind | Type | Default | Readers | What it does |
 |---|---|---|---|---|---|
-| `HVM_SPIN_REWIND` | user | flag: exactly `0` turns it off | on | hydo-control, hydo-hvm | `0`: the host does not run a SPIN of an agent image on hvm again in the rewind mode (`hydo-hvm hvm` reads it too: `1` turns the rewind mode on). |
+| `HVM_SPIN_REWIND` | user | flag: exactly `0` turns it off | on | hydo-control, hydo-hvm | `0`: the host does not run a SPIN of an agent image on hvm or kvm again in the rewind mode (`hydo-hvm hvm` reads it too: `1` turns the rewind mode on). |
 
 ## The `hydo` command (`hydo_config::run::Cli`)
 

@@ -254,6 +254,9 @@ impl Hypervisor for Kvm {
             thread: Arc::new(AtomicU64::new(0)),
             stepping: false,
             rf_at: None,
+            ram: ram as u64,
+            ram_len: len,
+            dirty: None,
         };
         let mut c = Box::<kvm_cpuid2>::default();
         let t = crate::cpuid::table();
@@ -306,6 +309,11 @@ pub struct KvmCpu {
     /// where the observer set RFLAGS.RF for a jump to itself (cleared again on disarming when the
     /// instruction did not run)
     rf_at: Option<u64>,
+    /// guest RAM (memory slot 0)
+    ram: u64,
+    ram_len: usize,
+    /// the dirty-page log's bitmap while the log is on ([`Cpu::dirty_log`])
+    dirty: Option<Vec<u64>>,
 }
 
 // SAFETY: the kvm_run page is owned by this value and used by one thread at a time (the engine's)
@@ -688,6 +696,74 @@ impl Cpu for KvmCpu {
         }
         self.stepping = step.is_some();
         self.set(KVM_SET_GUEST_DEBUG, &d, "KVM_SET_GUEST_DEBUG");
+    }
+
+    fn run_flags(&self) -> [u8; 3] {
+        let h = self.head();
+        [
+            h.ready_for_interrupt_injection,
+            h.if_flag,
+            h.request_interrupt_window,
+        ]
+    }
+
+    fn set_run_flags(&mut self, f: [u8; 3]) {
+        let h = self.head_mut();
+        h.ready_for_interrupt_injection = f[0];
+        h.if_flag = f[1];
+        h.request_interrupt_window = f[2];
+    }
+
+    fn dirty_log(&mut self, on: bool) {
+        let region = kvm_userspace_memory_region {
+            slot: 0,
+            flags: if on { KVM_MEM_LOG_DIRTY_PAGES } else { 0 },
+            guest_phys_addr: 0,
+            memory_size: self.ram_len as u64,
+            userspace_addr: self.ram,
+        };
+        // SAFETY: the region of `Kvm::fresh` again, with the log's flag
+        let r = unsafe {
+            ioctl(
+                self._vm.as_raw_fd(),
+                KVM_SET_USER_MEMORY_REGION,
+                &region as *const _ as u64,
+            )
+        };
+        if let Err(e) = chk("KVM_SET_USER_MEMORY_REGION (dirty log)", r) {
+            crate::fatal(1, &e);
+        }
+        self.dirty = on.then(|| vec![0u64; (self.ram_len / 4096).div_ceil(64)]);
+    }
+
+    fn take_dirty(&mut self, out: &mut Vec<u64>) {
+        let Some(bm) = self.dirty.as_mut() else {
+            return;
+        };
+        let log = kvm_dirty_log {
+            slot: 0,
+            padding1: 0,
+            dirty_bitmap: bm.as_mut_ptr() as u64,
+        };
+        // SAFETY: the bitmap has a bit for every page of the slot
+        let r = unsafe {
+            ioctl(
+                self._vm.as_raw_fd(),
+                KVM_GET_DIRTY_LOG,
+                &log as *const _ as u64,
+            )
+        };
+        if let Err(e) = chk("KVM_GET_DIRTY_LOG", r) {
+            crate::fatal(1, &e);
+        }
+        for (i, w) in bm.iter().enumerate() {
+            let mut w = *w;
+            while w != 0 {
+                let b = w.trailing_zeros() as u64;
+                out.push(i as u64 * 64 + b);
+                w &= w - 1;
+            }
+        }
     }
 
     fn kicker(&self) -> Box<dyn Fn() + Send + Sync> {
