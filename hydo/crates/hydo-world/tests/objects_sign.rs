@@ -2,7 +2,7 @@
 //! `hydo-world` program: a payment intent created with a currency is read back with it, a capture
 //! changes its status, a read of an unknown id is answered 404 and takes no effect, and the
 //! creation's webhook carries `t=<ts>,v1=<HMAC-SHA256 of "<ts>.<body>">` under the endpoint
-//! secret (src/objects.rs, src/sign.rs). Fixed ports from `HYDO_OBJECTS_PORT` (default 38760).
+//! secret (src/objects.rs, src/sign.rs). Fixed ports 38761 and 38762.
 
 use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
@@ -44,10 +44,7 @@ fn http(port: u16, method: &str, path: &str, body: &str) -> (String, String) {
 
 #[test]
 fn objects_and_signed_webhooks() {
-    let base: u16 = std::env::var("HYDO_OBJECTS_PORT")
-        .ok()
-        .and_then(|p| p.parse().ok())
-        .unwrap_or(38760);
+    let base: u16 = 38760;
     let (stripe, hook) = (base + 1, base + 2);
     let dir = std::env::temp_dir().join(format!("hydo-world-objects-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);

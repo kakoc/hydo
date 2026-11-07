@@ -85,10 +85,24 @@ fn a_local_tag_is_not_resolved_and_fetch_images_says_how_to_make_the_file() {
     // nothing pinned the image, so the lock file has no entry for it
     let lock = std::fs::read_to_string(d.join("shop/hydo-compose.lock.json")).unwrap_or_default();
     assert!(!lock.contains("medusa-shop"), "{lock}");
-    // run while the file is missing: it stops with the command, without fetching anything
+    // run while the file is missing: it stops with the command, without fetching anything (a
+    // hydo-fetch-image that fails if it is ever called comes first on PATH)
+    let bin = d.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    std::fs::write(bin.join("hydo-fetch-image"), "#!/bin/sh\nexit 1\n").unwrap();
+    std::fs::set_permissions(
+        bin.join("hydo-fetch-image"),
+        std::os::unix::fs::PermissionsExt::from_mode(0o755),
+    )
+    .unwrap();
+    let path = format!(
+        "{}:{}",
+        bin.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
     let o = Command::new("sh")
         .arg(d.join("shop/fetch-images.sh"))
-        .env("HYDO_FETCH_IMAGE", "/bin/false")
+        .env("PATH", path.clone())
         .output()
         .unwrap();
     assert_eq!(o.status.code(), Some(1));
@@ -98,7 +112,7 @@ fn a_local_tag_is_not_resolved_and_fetch_images_says_how_to_make_the_file() {
     std::fs::create_dir_all(d.join("shop/images/medusa-shop-hydo-arm64-oci")).unwrap();
     let o = Command::new("sh")
         .arg(d.join("shop/fetch-images.sh"))
-        .env("HYDO_FETCH_IMAGE", "/bin/false")
+        .env("PATH", path.clone())
         .output()
         .unwrap();
     assert_eq!(
