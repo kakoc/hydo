@@ -49,7 +49,7 @@ pub struct Assertion {
     pub(crate) id: Cow<'static, str>,
     pub(crate) msg: Cow<'static, str>,
     pub(crate) loc: Option<Loc>,
-    /// for a BUGGIFY point: the point's own id (the assertion id is "buggify.<id>")
+    /// for a BUGGIFY point: the point's own id (the assertion id is `buggify.<id>`)
     pub(crate) bg_id: Option<Cow<'static, str>>,
     pub(crate) hits: AtomicU64,
     seen: [AtomicBool; 2],

@@ -7,7 +7,7 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
 
-/// One details value. Build it with `From`/`Into` from Rust values, or with the [`details!`]
+/// One details value. Build it with `From`/`Into` from Rust values, or with the [`details!`](crate::details!)
 /// macro (`crate::details!`).
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
