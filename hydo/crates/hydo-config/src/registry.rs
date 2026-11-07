@@ -351,7 +351,7 @@ variables! {
     HYDO_BACKEND: Kvm, User, "word: hvx | kvm", "hvx", "hydo-cli";
 
     // ------------------------------------------------------------------ Control
-    /// `0`: the host does not run a SPIN of an agent image on hvm again in the rewind mode
+    /// `0`: the host does not run a SPIN of an agent image on hvm or kvm again in the rewind mode
     /// (`hydo-hvm hvm` reads it too: `1` turns the rewind mode on).
     HVM_SPIN_REWIND: Control, User, "flag: exactly `0` turns it off", "on", "hydo-control, hydo-hvm";
 

@@ -1,9 +1,9 @@
-"""Operation histories for hydo's host-side checkers (hvx/HISTORIES.md).
+"""Operation histories for hydo's host-side checkers (hydo/HISTORIES.md).
 
 A workload client records every operation it performs -- the invocation before the request,
 the completion after the reply -- and the host checks the whole history after the run
 (linearizability of a register / CAS object per key, Elle-style list-append). The lines are byte
-for byte those of the Go recorder (hvx/stack/hydohist)::
+for byte those of the Go recorder (sdk/go/hydohist)::
 
     HYDO-HIST <history> <process> <invoke|ok|fail|info> <time-ns> <f> <arg>...
 

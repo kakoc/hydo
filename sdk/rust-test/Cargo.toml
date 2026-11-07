@@ -4,18 +4,24 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 rust-version = "1.70"
-description = "hydo's test SDK for Rust: write the test as drivers and checks plus a system() builder; the binary emits hydo's plan (on the host) and runs the drivers and checks (in the guest)"
+description = "Test SDK for hydo, a deterministic hypervisor: a test as one Rust program (a system() builder plus driver and check functions) that writes hydo's plan on the host and runs the drivers and checks in the guest"
+repository = "https://github.com/kakoc/hydo"
+homepage = "https://github.com/kakoc/hydo"
+documentation = "https://docs.rs/hydo-test"
+readme = "README.md"
+keywords = ["testing", "deterministic", "fault-injection", "simulation", "hydo"]
+categories = ["development-tools::testing"]
+include = ["src/**", "Cargo.toml", "README.md", "LICENSE"]
+# Not published until the user decides about code-first tests (docs/PUBLISHING.md).
 publish = false
 
-# Its own workspace: the repository root's Cargo.toml is the (unrelated) hydo KVM crate.
+# Its own workspace: not a member of the repository's workspace, because this crate is compiled
+# into recorded guest programs (redis-composed-rs) and Cargo's symbol hashes depend on the
+# package's path and lock file.
 [workspace]
-members = ["macros"]
+members = ["macros", "cargo-hydo"]
 
 [dependencies]
 hydo-test-macros = { path = "macros", version = "0.1.0" }
 hydo-assert = { path = "../rust", version = "0.1.0" }   # the assertion SDK (sdk/rust), re-exported
 inventory = "0.3"
-
-[[bin]]
-name = "cargo-hydo"
-path = "src/bin/cargo-hydo.rs"

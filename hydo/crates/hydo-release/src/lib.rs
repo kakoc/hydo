@@ -21,6 +21,9 @@
 //!   tar with fixed times, owners and order and gzip without a name or time, so two builds from
 //!   the same inputs give the same bytes on Linux and on a Mac.
 //!
+//! It also checks that the crates `cargo install hydo` builds can be published to crates.io and
+//! build from there alone ([`publish`], Milestone 169; `cargo test -p hydo-release --test crates`).
+//!
 //! # The component list (format 1)
 //!
 //! ```text
@@ -72,6 +75,7 @@ pub mod check;
 pub mod glob;
 pub mod model;
 pub mod notices;
+pub mod publish;
 pub mod rust;
 pub mod sources;
 

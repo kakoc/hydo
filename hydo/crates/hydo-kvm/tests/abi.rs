@@ -38,6 +38,7 @@ fn types_and_numbers_match_linux_kvm_h() {
     }
     let mut want = layout! {
         kvm_userspace_memory_region as "kvm_userspace_memory_region" { slot, flags, guest_phys_addr, memory_size, userspace_addr }
+        kvm_dirty_log as "kvm_dirty_log" { slot, padding1, dirty_bitmap }
         kvm_regs as "kvm_regs" { rax, rbx, rcx, rdx, rsi, rdi, rsp, rbp, r8, r15, rip, rflags }
         kvm_segment as "kvm_segment" { base, limit, selector, present, dpl, db, s, l, g, avl, unusable }
         kvm_dtable as "kvm_dtable" { base, limit }
@@ -158,6 +159,8 @@ fn types_and_numbers_match_linux_kvm_h() {
         KVM_GET_VCPU_MMAP_SIZE,
         KVM_GET_SUPPORTED_CPUID,
         KVM_CREATE_VCPU,
+        KVM_GET_DIRTY_LOG,
+        KVM_MEM_LOG_DIRTY_PAGES,
         KVM_SET_USER_MEMORY_REGION,
         KVM_SET_TSS_ADDR,
         KVM_SET_IDENTITY_MAP_ADDR,

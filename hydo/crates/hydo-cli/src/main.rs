@@ -9,13 +9,16 @@
 //! setup (src/setup.rs, M154), doctor, module (Linux), errors and run/repro's error kinds
 //! (hydo-errors), history checks (hydo-history), compose (hydo-compose), guide/skill/init
 //! (hydo-agents), migrate (hydo-manifest, src/migrate.rs), build (hydo-build, src/build.rs),
-//! explore (hydo-explore). No command runs Python.
+//! explore (hydo-explore), diff and explain (src/diff.rs, src/explain.rs, M165: where two runs
+//! first differ). No command runs Python.
 
 mod build;
 mod cache;
 mod ctx;
 mod delegated;
+mod diff;
 mod doctor;
+mod explain;
 mod fetch;
 mod hvxenv;
 mod migrate;
@@ -30,7 +33,7 @@ use ctx::{Ctx, Platform};
 const HELP_LINUX: &str = r#"hydo -- deterministic fault testing on an x86_64 Linux machine with VT-x (the hvx backend).
 
     hydo init    [--dir DIR] [--name NAME]         start a repository's hydo/ folder and its AGENTS.md section
-    hydo --version                                 print this hydo's version
+    hydo --version | -V                            print this hydo's version (and commit)
     hydo guide   [TOPIC | --list]                  this hydo's facts for onboarding, and how to get the skill
     hydo skill   install --agent claude|codex|cursor|copilot|gemini|all [--user] | --to DIR
                                                    copy the onboarding skill where an AI tool reads skills
@@ -83,7 +86,7 @@ yourself (see `hydo module udev`; HYDO_SUDO=1 forces sudo). One static program; 
 const HELP_MAC: &str = r#"hydo -- deterministic fault testing on an Apple Silicon Mac (the hvm backend).
 
     hydo init    [--dir DIR] [--name NAME]         start a repository's hydo/ folder and its AGENTS.md section
-    hydo --version                                 print this hydo's version
+    hydo --version | -V                            print this hydo's version (and commit)
     hydo guide   [TOPIC | --list]                  this hydo's facts for onboarding, and how to get the skill
     hydo skill   install --agent claude|codex|cursor|copilot|gemini|all [--user] | --to DIR
                                                    copy the onboarding skill where an AI tool reads skills
@@ -150,17 +153,6 @@ fn main() {
 fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
     let cmd = argv.get(1).map(String::as_str).unwrap_or("");
     let rest = if argv.len() > 2 { &argv[2..] } else { &[] };
-    if matches!(cmd, "--version" | "version") {
-        match hydo_image::hydo_commit() {
-            Some(c) => println!(
-                "hydo {} (commit {})",
-                hydo_image::hydo_version(),
-                &c[..c.len().min(12)]
-            ),
-            None => println!("hydo {}", hydo_image::hydo_version()),
-        }
-        return 0;
-    }
     if cmd == "skill" && rest.first().map(String::as_str) == Some("update") {
         return skillupdate::cmd_skill_update(ctx, &rest[1..]);
     }
@@ -169,12 +161,24 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
     }
     let linux = ctx.platform == Platform::Linux;
     match cmd {
+        // the version this program was built as, and the commit when it is known (a tree's git, a
+        // release's hydo/COMMIT, a crates.io package's .cargo_vcs_info.json: hydo-image's build.rs)
+        "--version" | "-V" => {
+            match hydo_image::hydo_commit() {
+                Some(c) => println!("hydo {} ({c})", hydo_image::hydo_version()),
+                None => println!("hydo {}", hydo_image::hydo_version()),
+            }
+            0
+        }
         "compose" => delegated::cmd_compose(ctx, rest),
         "build" => build::cmd_build(ctx, rest),
         "run" => runs::cmd_run(ctx, rest),
         "repro" => runs::cmd_repro(ctx, rest),
         "explore" => delegated::cmd_explore(ctx, rest),
         "report" => delegated::cmd_report(ctx, rest),
+        // M165: `hydo diff --help`, `hydo explain --help` (the main help is a recorded answer)
+        "diff" => diff::cmd_diff(ctx, rest),
+        "explain" => explain::cmd_explain(ctx, rest),
         "save" => runs::cmd_save(ctx, rest),
         "errors" => delegated::cmd_errors(ctx, rest),
         "check-history" => hydo_history::cli::main(rest),

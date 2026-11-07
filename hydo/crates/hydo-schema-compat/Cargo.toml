@@ -8,6 +8,8 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+# Not published to crates.io: `cargo install hydo` does not need it (docs/PUBLISHING.md).
+publish = false
 
 [dependencies]
 serde_json = { workspace = true }

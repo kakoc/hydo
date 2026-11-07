@@ -1,10 +1,11 @@
 //! hydo's assertion SDK for Rust guest programs: the way a program running under hydo (hvx or
-//! the Mac VMM) describes its invariants. Same API surface,
-//! same wire format and same deduplication rules as the Go SDK (`hvx/stack/hydoassert`); the
-//! contract is `hvx/ASSERTIONS.md`.
+//! the Mac VMM) describes its invariants. The same API, wire format and deduplication rules
+//! as the Go, Python and JavaScript SDKs (`sdk/go`, `sdk/python`, `sdk/js`); the contract is
+//! `hydo/ASSERTIONS.md`. This crate is the reference: the shared cases in `sdk/cases` are
+//! written by its tests.
 //!
 //! ```ignore
-//! use hydo_assert::{declare, details, hydo_always, hydo_buggify, hydo_reachable};
+//! use hydo_assert::{declare, details, hydo_always, hydo_always_cmp, hydo_buggify, hydo_reachable};
 //! use std::time::Duration;
 //!
 //! declare! {
@@ -16,6 +17,7 @@
 //!     hydo_assert::catalog();                          // once, early: the HYDO-ASSERT-DECL lines
 //!     ACKED.check(got == want, details!{"key": k, "got": got});
 //!     hydo_always!(n <= cap, "the log never exceeds its cap", {"n": n});
+//!     hydo_always_cmp!(n, "<=", cap, "kv.log_size" => "the log stays under its cap");
 //!     hydo_reachable!("kv.recovered" => "the server replayed a non-empty log");
 //!     if hydo_buggify!("kv.put.lost_reply" => "the write lands but the reply is lost") { return; }
 //!     hydo_assert::setup_complete();
@@ -40,15 +42,14 @@ mod json;
 mod macros;
 mod sink;
 
-pub use assertion::{
-    always, always_or_unreachable, catalog, emit_line, reachable, register, setup_complete, sometimes, unreachable, Assertion, Type,
-};
+pub use assertion::{always, always_or_unreachable, catalog, reachable, register, setup_complete, sometimes, unreachable, Assertion};
 pub use buggify::{buggify, Point};
 pub use eventually::{eventually, Liveness, Watch};
 pub use json::{Details, Value};
 
+// Only the macros use these; they are public because a macro expands in the user's crate.
 #[doc(hidden)]
-pub use assertion::__register_static;
+pub use assertion::{Type, __register_static};
 
 /// The Go SDK's `D`: a details object.
 pub type D = Details;

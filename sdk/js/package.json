@@ -1,9 +1,25 @@
 {
   "name": "hydo-assert",
   "version": "0.1.0",
-  "private": true,
-  "description": "hydo's assertion SDK for Node.js: always/sometimes/reachable/unreachable/eventually properties and BUGGIFY fault points, written to the guest console in the Go SDK's exact wire format.",
+  "description": "Assertion SDK for Node.js programs tested under hydo, a deterministic hypervisor: always/sometimes/reachable/unreachable/eventually properties, BUGGIFY fault points and operation histories",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kakoc/hydo.git",
+    "directory": "sdk/js"
+  },
+  "homepage": "https://github.com/kakoc/hydo/tree/main/sdk/js#readme",
+  "bugs": {
+    "url": "https://github.com/kakoc/hydo/issues"
+  },
+  "keywords": [
+    "testing",
+    "assertions",
+    "deterministic",
+    "fault-injection",
+    "simulation",
+    "hydo"
+  ],
   "main": "./index.js",
   "types": "./index.d.ts",
   "exports": {

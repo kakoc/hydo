@@ -3,6 +3,12 @@
 //! MANIFEST.md into the binary, so that `hydo guide`, `hydo skill install` and `hydo init` work
 //! from the `hydo` binary alone. A release that ships the skill folder (skill/hydo-onboard/) still
 //! reads the skill from disk first (src/lib.rs); the guide is always the built-in one.
+//!
+//! All three are read through the links in this crate's embed/ folder (embed/hydo-onboard ->
+//! skills/hydo-onboard, embed/guide -> hydo/guide, embed/MANIFEST.md -> hydo/onboard/MANIFEST.md),
+//! never from outside the crate: the crate published to crates.io carries the linked files'
+//! contents there (docs/PUBLISHING.md), and the tree reads the repository's files through the same
+//! links.
 
 use std::fmt::Write as _;
 use std::os::unix::fs::PermissionsExt;
@@ -43,13 +49,9 @@ fn walk(dir: &Path, rel: &str, out: &mut Vec<(String, PathBuf, u32)>, dirs: &mut
 
 fn main() {
     let here = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    let repo = here.join("../../..").canonicalize().unwrap();
-    let skill = repo.join("skills/hydo-onboard");
-    let guide = repo.join("hydo/guide");
-    let manifest = repo
-        .join("hydo/onboard/MANIFEST.md")
-        .canonicalize()
-        .unwrap();
+    let skill = here.join("embed/hydo-onboard");
+    let guide = here.join("embed/guide");
+    let manifest = here.join("embed/MANIFEST.md").canonicalize().unwrap();
     let mut files = Vec::new();
     let mut dirs = Vec::new();
     let mut src = String::new();

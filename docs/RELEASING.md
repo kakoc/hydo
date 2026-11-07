@@ -9,7 +9,8 @@ docs/PUBLISHING.md lists every place hydo is published.
 ## 1. Before building
 
 1. Decide the version (`hydo/VERSION`, and `HYDO_VERSION` for the release scripts; AGENTS.md open
-   item 40 says what a version change moves).
+   item 40 says what a version change moves). The SDKs carry the same version (docs/PUBLISHING.md,
+   "The next version", lists the files and the images a version change moves).
 2. On the final commit: `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`
    and `cargo test --locked --release --workspace` pass. Among them:
    - `public_content` (no machine details, no value of the local list, in any tracked file);
@@ -17,7 +18,9 @@ docs/PUBLISHING.md lists every place hydo is published.
      are complete (every file of `assets.sha256` and `guest-programs.sha256` and every literal
      destination of `build-release.sh` belongs to a component; every component has a license, its
      full license texts and a source, a copyleft one its source archive pinned by sha256; every
-     Rust crate compiled into a shipped program has a license and license texts).
+     Rust crate compiled into a shipped program has a license and license texts);
+   - `hydo-release`'s `sdks` tests: every SDK package has this version, Apache-2.0 and the
+     repository, and the Go module `sdk/go` holds the frozen copy's code.
 3. `git grep -i` the competitor names AGENTS.md "No other product in hydo's space" names: only
    citations in research notes.
 
@@ -140,6 +143,16 @@ is published and only then (a line names a file that must exist at
 Never change a line that is there. `cargo test -p hydo-image` checks the format. The release
 tarballs and `build-release.sh` do not change for this: the index is in the program, not in the
 release.
+
+## 10. Publish the SDKs (the user decides; with the release)
+
+Publish every SDK with the release's version, in the order and with the commands of
+docs/PUBLISHING.md: the four assertion SDKs, `hydo-assert` on crates.io, on PyPI and on npm, and
+the tag `sdk/go/v<version>` for the Go module. The Rust test SDK (`hydo-test`,
+`hydo-test-macros`, `cargo-hydo`) is not published (`publish = false`) until the user decides
+about code-first tests.
+An uploaded version can never be replaced on any of them (only yanked, deprecated or retracted),
+so run each dry run first.
 
 ## Releasing the onboarding skill (separate from hydo releases)
 

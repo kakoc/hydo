@@ -7,7 +7,7 @@
 //! the reference with `git show 2a58c4b:hydo/dist/linux/hydo` and `.../mac/hydo`), then the
 //! deliberate unifications of M107 (one behaviour on both platforms, docs/HISTORY.md, Milestone
 //! 107) were applied to the answers they change, and nothing else. From now on the Rust CLI is
-//! the reference: `HYDO_BLESS=1 cargo test -p hydo-cli --test equivalence` rewrites the golden
+//! the reference: `HYDO_BLESS=1 cargo test -p hydo --test equivalence` rewrites the golden
 //! from the Rust output; review its diff like code.
 //!
 //! Each case runs from one release-like root (bin/hydo, a symlinked hydo/, hv/ and

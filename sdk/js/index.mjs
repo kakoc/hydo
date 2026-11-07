@@ -12,12 +12,9 @@ export const {
   buggify,
   catalog,
   setupComplete,
-  emitLine,
-  toJSON,
   Assertion,
   Liveness,
   Watch,
   Point,
-  types,
 } = m;
 export default m;

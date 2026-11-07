@@ -19,7 +19,7 @@
 # ~/hydo/build on the bare-metal machine (built on the build machine, shipped with rsync); the pinned reproducers'
 # images in ~/hydo/build/m155 (hydo/onboard/examples/stack/build-reproducers.sh; rebuilt with the image record in M155). The run engine
 # and `hydo` are built with the bare-metal machine's Rust (~/hydo-rust/env.sh) in ~/$HVX_METAL_TREE (cargo build
-# --release -p hydo-hvx -p hydo-cli).
+# --release -p hydo-hvx -p hydo).
 # The bare-metal machine is reached through machines.local.sh (machines.sh at the repository root).
 # Env: HVX_METAL_TREE, the repository's directory in the bare-metal machine's home
 # (default hydo, the main tree; another session's own tree, e.g. hydo-layout, for a run that must
@@ -86,8 +86,8 @@ for t in $TESTS $SMPTESTS $HARNESSES; do
 done
 
 echo ">> building the run engine (hydo-hvx) and hydo"
-if [ -f ~/hydo-rust/env.sh ] && ( . ~/hydo-rust/env.sh && cd ~/$TREE && cargo build --release --locked -q -p hydo-hvx -p hydo-cli ) 2> /tmp/cc-hydo-hvx.log; then :
-else echo "  COMPILE FAIL: hydo-hvx, hydo-cli (~/hydo-rust/env.sh and cargo)"; tail -20 /tmp/cc-hydo-hvx.log; cfail=1; fi
+if [ -f ~/hydo-rust/env.sh ] && ( . ~/hydo-rust/env.sh && cd ~/$TREE && cargo build --release --locked -q -p hydo-hvx -p hydo ) 2> /tmp/cc-hydo-hvx.log; then :
+else echo "  COMPILE FAIL: hydo-hvx, hydo (~/hydo-rust/env.sh and cargo)"; tail -20 /tmp/cc-hydo-hvx.log; cfail=1; fi
 
 # test -> fingerprints that must ALL appear in its output (empty = rc only)
 declare -A EXP=(

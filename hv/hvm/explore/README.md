@@ -318,7 +318,7 @@ hydo-build <repo>/hydo/onboard/examples-mac/redis/hydo.yaml --arch arm64 --build
     # (the hydo-build program: cargo build --release -p hydo-build; or `hydo build` of the Mac release, on the Mac)
 # Mac: copy Image-explore and the two images to hv/hvm/explore/out/, then (the engine is
 # target/release/hydo-hvm, which hydo signs with the hypervisor entitlement before it runs it)
-cargo build --release -p hydo-hvm -p hydo-explore -p hydo-cli
+cargo build --release -p hydo-hvm -p hydo-explore -p hydo
 target/release/hydo-explore --backend hvm --image hv/hvm/explore/out/explore-ob-redis-arm64.cpio.gz \
     --strategy swarm --new-faults --seeds 1-100 --workers 4 --out /tmp/hvm-redis
 # one schedule by hand (the report prints this line for each minimal reproducer); the host

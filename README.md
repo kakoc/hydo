@@ -85,8 +85,8 @@ hydo/onboard/  the guest-side init and its extensions (shell, inside every image
 hydo/          other product parts: readers/ (store readers),
                grpcgen/ (gRPC driver generator), stack/ (the example order system), bench/ (the
                bug benchmark), dist/ (release packaging)
-sdk/           assertion SDKs for programs under test: Rust (the reference), Python, JavaScript;
-               the Go SDK is hydo/stack/hydoassert
+sdk/           assertion SDKs for programs under test: Rust (the reference), Go, Python,
+               JavaScript (docs/PUBLISHING.md: their registry packages)
 skills/        hydo-onboard, an Agent Skill that writes a project's hydo/ folder
 docs/          HISTORY.md (every milestone with its evidence), REBASELINE.md, BUILD-PINS.md
 ```
@@ -109,7 +109,7 @@ docs/          HISTORY.md (every milestone with its evidence), REBASELINE.md, BU
 | `hydo-world` | The program inside the guest that serves `fakes:` and `proxies:` (HTTP, gRPC, TCP), applies `H=` protocol faults and records what the outside world saw (a static musl binary in every such image). |
 | `hydo-bench` | The bug benchmark: how well explorer strategies find the planted defects (not shipped). |
 | `hydo-tools` | Build-machine helpers: Nix-cache fetch and unpack, cpio extraction, ELF library lists (not shipped). |
-| `hydo-cli` | The `hydo` command. |
+| `hydo-cli` | The `hydo` command (package `hydo`, the name `cargo install hydo` uses; docs/PUBLISHING.md). |
 
 The formats between the parts (the schedule language, the project format, the SDKs' output lines)
 are defined by their implementations and their tests; the tests' recorded examples are the

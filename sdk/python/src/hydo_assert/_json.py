@@ -1,6 +1,6 @@
 """A JSON encoder that writes exactly what Go's encoding/json writes for the same data.
 
-The Go SDK (hvx/stack/hydoassert) encodes its records with json.Marshal. To be byte-identical:
+The Go SDK (sdk/go/hydoassert) encodes its records with json.Marshal. To be byte-identical:
 
 - object keys are sorted by their UTF-8 bytes (Go sorts map keys that way);
 - strings are escaped as Go escapes them: ``"`` ``\\`` ``\\b`` ``\\f`` ``\\n`` ``\\r`` ``\\t``,

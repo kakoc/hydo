@@ -1,8 +1,8 @@
-//! Operation histories for hydo's host-side checkers (hvx/HISTORIES.md): record every
+//! Operation histories for hydo's host-side checkers (hydo/HISTORIES.md): record every
 //! operation a client performs -- the invocation before the request, the completion after the
 //! reply -- and the host checks the whole history after the run (linearizability of a register /
 //! CAS object per key, Elle-style list-append). The same lines as the Go recorder
-//! (`hvx/stack/hydohist`) and the shell helper `hydo_hist`:
+//! (`sdk/go/hydohist`) and the shell helper `hydo_hist`:
 //!
 //! ```text
 //! HYDO-HIST <history> <process> <invoke|ok|fail|info> <time-ns> <f> <arg>...

@@ -113,7 +113,7 @@ agent's lines travel over the host-call port, on the Mac over the serial line):
 | `disk=none \| run K=rkv@8+2 B=1234` | OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present) | `9becaca62b9a064d` | `31ca45bf4f0d1dfe` | yes |
 | `disk=none \| run P=rkv@5+3` | OK invariants=1 held (rkv.oracle: rkv check: acked=17 all present) | `c79b1f2bf4cf5659` | `53e69be30dff5ad1` | yes |
 
-## Milestone 155: the image record (the current values)
+## Milestone 155: the image record (superseded by "Milestone 163" below)
 
 Since M155 every image carries `/etc/hydo/image.json` (the guest kernel it was built for, by
 sha256, and the fingerprint epoch; docs/HISTORY.md "Milestone 155"), so every image has new bytes
@@ -143,3 +143,34 @@ same fingerprint (docs/REBASELINE.md section 13, which also says how each image 
 | `disk=none \| run B=1234` | OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present) | `dbc272cd3cc600ec` | `243f271a5911baf1` | yes |
 | `disk=none \| run K=rkv@8+2 B=1234` | OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present) | `0178e70f40b959a5` | `31ca45bf4f0d1dfe` | yes |
 | `disk=none \| run P=rkv@5+3` | OK invariants=1 held (rkv.oracle: rkv check: acked=17 all present) | `6e6269b2af51beab` | `53e69be30dff5ad1` | yes |
+
+## Milestone 163: the SDK cleanup (the current values)
+
+Milestone 163 cleaned up the assertion SDKs' APIs before their first publication (the named
+comparison helpers and `emit_line` removed, internals hidden; docs/HISTORY.md "Milestone 163").
+The records the remaining calls write are unchanged, but `rkv` compiles the Rust SDK and now calls `hydo_always_cmp!(s.size, "<=", MAX_LOG, ..)` instead of the removed `hydo_always_less_than_or_equal_to!`, so the image has new bytes and new
+fingerprints. Every verdict line is the earlier one word for word; each schedule ran twice with
+the same fingerprint (docs/REBASELINE.md section 16, which also says how the images were made).
+Fingerprint epoch 1.
+
+**x86_64 (hvx), rust-kv** (`explore-ob-rust-kv-v2`, disk `ef1b4c5d…`)
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present) | `d184b981aeb40784` | `f8463ecaf1560f12` | yes |
+| `disk=cut \| run C=12` | OK invariants=1 held (rkv.oracle: rkv check: acked=12 all present) | `a9cdd32d8953d7f2` | `9003b2c60348a405` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [rkv.oracle] rkv check: acked=12 lost=12 | `9e590e418c25edae` | `50d7001af4588bc1` | yes |
+| `disk=none \| run K=rkv@8+2 B=1234` | OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present) | `eb37594cfd033c85` | `20741d9f13ac3585` | yes |
+
+**Mac (hvm), rust-kv** (initramfs `c450aacb…`)
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present) | `5e1d844bdf412e73` | `bc6fe53352fa8359` | yes |
+| `disk=cut \| run C=12` | OK invariants=1 held (rkv.oracle: rkv check: acked=12 all present) | `ac2bfa6ddc729e9f` | `ded68d8cdfcf34f0` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [rkv.oracle] rkv check: acked=12 lost=12 | `3a4be66e14c4c051` | `22168eb0b60f5ac1` | yes |
+| `disk=none \| run K=rkv@8+2` | OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present) | `bf97e6e506a17a14` | `0ad74bffbfd87b1f` | yes |
+| `disk=none \| run B=5abc,1000,500` | OK invariants=1 held (rkv.oracle: rkv check: acked=2 all present) | `839345b237fb6bef` | `d20fa8483538cd42` | yes |
+| `disk=none \| run B=1234` | OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present) | `1f691ae7e24d1f34` | `243f271a5911baf1` | yes |
+| `disk=none \| run K=rkv@8+2 B=1234` | OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present) | `aa0b8c437f8b33f4` | `31ca45bf4f0d1dfe` | yes |
+| `disk=none \| run P=rkv@5+3` | OK invariants=1 held (rkv.oracle: rkv check: acked=17 all present) | `a55085a1fe310ad9` | `53e69be30dff5ad1` | yes |

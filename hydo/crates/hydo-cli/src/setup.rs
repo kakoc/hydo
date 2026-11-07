@@ -51,14 +51,18 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+// The four pin lists are hydo/dist/<platform>/*.sha256, read through the links in this crate's
+// pins/ folder, so that the crate published to crates.io carries them (cargo copies a linked
+// file's content into the package; docs/PUBLISHING.md).
+
 /// The Linux release's pinned assets, as `assets.sha256` lists them (paths of the asset tree).
-pub const LINUX_ASSETS: &str = include_str!("../../../dist/linux/assets.sha256");
+pub const LINUX_ASSETS: &str = include_str!("../pins/linux/assets.sha256");
 /// The Mac release's pinned assets.
-pub const MAC_ASSETS: &str = include_str!("../../../dist/mac/assets.sha256");
+pub const MAC_ASSETS: &str = include_str!("../pins/mac/assets.sha256");
 /// The Linux release's guest programs built from the tree, by release path.
-pub const LINUX_GUEST: &str = include_str!("../../../dist/linux/guest-programs.sha256");
+pub const LINUX_GUEST: &str = include_str!("../pins/linux/guest-programs.sha256");
 /// The Mac release's guest programs built from the tree, by release path.
-pub const MAC_GUEST: &str = include_str!("../../../dist/mac/guest-programs.sha256");
+pub const MAC_GUEST: &str = include_str!("../pins/mac/guest-programs.sha256");
 
 /// setup's record, at the release root.
 pub const RECORD: &str = ".hydo-setup";
@@ -1173,6 +1177,16 @@ pub fn cmd_setup(ctx: &Ctx, argv: &[String]) -> i32 {
             2,
         );
     }
+    // a hydo installed by cargo (M169) whose version is not installed yet: plain `hydo setup`
+    // installs it, as `hydo setup --get` does
+    if get.is_none()
+        && !check
+        && !verify
+        && ctx.cargo_installed
+        && !ctx.root.join("SHA256SUMS").exists()
+    {
+        get = Some(None);
+    }
     let cache = cache_of(ctx, offline);
     if let Some(f) = &archive {
         match cache.import(f) {
@@ -1220,10 +1234,16 @@ pub fn cmd_setup(ctx: &Ctx, argv: &[String]) -> i32 {
         if add_path && print_add_to_path(&cache.home.bin(), ctx.platform) != 0 {
             return 1;
         }
-        println!(
-            "hydo setup: hydo {version} is installed; run it as {}",
-            cache.program(&version).display()
-        );
+        if ctx.cargo_installed && version == cache.own_version {
+            println!(
+                "hydo setup: hydo {version} is installed; this hydo (installed by cargo) uses it"
+            );
+        } else {
+            println!(
+                "hydo setup: hydo {version} is installed; run it as {}",
+                cache.program(&version).display()
+            );
+        }
         return 0;
     }
     let root = &ctx.root;

@@ -3013,3 +3013,192 @@ Fingerprint by fingerprint (section 13.1, M155 → M157): node-kv `eb0811dba0a01
 No other recorded value moved: the other source files M157 changed are compiled into recorded
 programs or modules, and each gives the same bytes before and after (docs/HISTORY.md
 "Milestone 157").
+
+## 15. node-kv with the publishable JavaScript package file (M160, 2026-11-07)
+
+Milestone 160 prepared the SDKs for their registries (docs/PUBLISHING.md). npm refuses a package
+marked `"private": true`, so `sdk/js/package.json` lost that field and gained `repository`,
+`homepage`, `bugs` and `keywords`, and its description now says what hydo is. The node-kv example
+copies that file into its images (`/app/node_modules/hydo-assert/package.json`), so the node-kv
+images have new bytes and new fingerprints; no other image contains the file. Every other SDK
+change of M160 is outside the images or byte-neutral (docs/HISTORY.md "Milestone 160"). The
+engines, the controller, the agent and the guest kernels did not change, so the fingerprint epoch
+stays 1 (an image built before M160 still gives its section 14 values). These values supersede
+section 14's node-kv table.
+
+How: M157's staged node-kv inputs and `sdk/js` (the release prefix of M155, whose image builder is
+`main`'s, and the staged Node.js), checked against `main` (`dbb1df8`: the same `sdk/js` and
+node-kv files apart from the README, which no image contains). `hydo build hydo-mac.yaml` once
+with `main`'s `package.json` (initramfs `ae2bbb9b231f295c…`, section 14's, byte for byte) and twice
+with this milestone's (two builds byte-identical); then every recorded schedule twice with
+`hydo run --image` from a fresh boot, one VM at a time.
+
+Images: initramfs `a15ec5d60932ec2b…` (`a15ec5d60932ec2be98d748e64a43522dbd31025c33ab1c5f5a14cc5060bf799`);
+the root disk `d031f382…` and the data disk `9dba2707…` are the same as before. Unpacked, the
+before and after initramfs have the same 492 paths, modes and owners, and only
+`app/node_modules/hydo-assert/package.json` differs.
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (nkv.oracle: acked=20 all present) | `d5ecbd4819dd31ba` | `0141194b466e3bd9` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [nkv.oracle] key k:0 lost (got null) | `453377f5c45e05b8` | `bfdec020a46f3dcf` | yes |
+| `disk=cut \| run C=12` | OK invariants=1 held (nkv.oracle: acked=12 all present) | `426f966e55917bef` | `202dcc1810826541` | yes |
+| `disk=none \| run K=nkv@8+2 B=1234` | OK invariants=1 held (nkv.oracle: acked=18 all present) | `cfeb973e2598ce99` | `39129eaa9b7e2227` | yes |
+
+The verdict lines are section 14's word for word. Three ctl values are section 14's; the
+`C=12 S=never` run's moved (`8de6e3d2ba8ff5d8` → `bfdec020a46f3dcf`): its boot transcript
+(`control.boot.jsonl`, 52 lines) and its run's (`control.jsonl`, 48 lines) are M157's line for
+line, and in the recovery transcript (`control.recovery.jsonl`, 36 lines) only the last four lines
+differ: the oracle's two report lines and the end come two stops later (`n` 761 at the cadence
+stop `at=19392` instead of 759 at `19264`). The likely reason, not traced further: the oracle
+(`nkv.cjs check`) loads the SDK, Node.js reads and parses the SDK's `package.json` to resolve its
+`exports`, and the file grew from 1,141 to 1,511 bytes, which moves the check's end across a
+cadence stop. M152's change of the same file (one shorter line) moved no ctl value.
+
+Fingerprint by fingerprint (section 14, M157 → M160): `5f47c9a775cd40a8` → `d5ecbd4819dd31ba`,
+`3146b75677356b19` → `453377f5c45e05b8`, `1cbb888242587805` → `426f966e55917bef`,
+`772d0ca8f633d3be` → `cfeb973e2598ce99`.
+
+## 16. The assertion SDKs' API cleanup (M163, 2026-11-07)
+
+Milestone 163 removed and hid parts of the four assertion SDKs before their first publication
+(docs/HISTORY.md "Milestone 163"): the named comparison helpers, `emit_line`, the exported
+assertion-type constants and a few internals. Every record the remaining calls write is
+unchanged (the shared cases' output files did not change), but SDK sources are inside four
+recorded images, and three examples' programs call `cmp` now instead of a removed helper:
+
+- **node-kv** (Mac): `sdk/js/index.js` and `index.mjs` (`/app/node_modules/hydo-assert/`) and
+  the example's own `nkv-server.mjs`;
+- **python-kv** and **python-kv-hist** (Mac): `sdk/python/src/hydo_assert/*.py`
+  (`/opt/pykv/hydo_assert/`) and `pykv.py`;
+- **rust-kv** (Mac `explore-ob-rust-kv-arm64`, x86_64 `explore-ob-rust-kv-v2`): `/bin/rkv`, which
+  compiles the Rust SDK and the example's `src/main.rs`.
+
+No other recorded image contains an SDK file or a program built from one: the redis-composed-rs
+guest binary (hydo-test with the Rust SDK; no recorded image since M86) was built before and
+after at one path from clean target directories and has the same bytes (x86_64 `40959716…`,
+aarch64 `fc5bbb31…`), and the order service uses the frozen Go copy in `hydo/stack`, which did
+not change. The engines, the controller, the agent and the guest kernels did not change, so the
+fingerprint epoch stays 1 (an image built before M163 still gives its section 13–15 values).
+These values supersede section 15's node-kv table, section 14's python-kv and python-kv-hist
+tables, and section 13's rust-kv tables (13.1 and 13.2).
+
+**How, on the Mac.** M158's Mac release (`hydo-mac-0.1.0.tar.gz` `5c02e7f3…`, whose image builder
+is `main`'s) installed into a scratch prefix with its `install.sh`; Node.js 22.2.0 and CPython
+3.11.9 for aarch64 fetched from the public Nix cache with `hydo-nix-fetch --closure` and staged
+with the file lists and steps of `fetch-node-arm64.sh` and `fetch-python-arm64.sh` (CPython's
+list made with `hydo-elfdeps --root` on a copy of the closure in which the one absolute
+`libgcc_s.so.1` link is relative, open item 42 d; every file as in the examples'
+`files.sha256`); `rkv` built with `build-rkv.sh aarch64`. Before: the sources of `d0c2999` (the
+packaging branch, Milestone 160). After: this milestone's. `hydo build` once before and twice
+after. The before builds of node-kv, python-kv and python-kv-hist are byte for byte sections 15
+and 14 (initramfs `a15ec5d6…`, `3d7c2130…`, `1c03cd40…`), so the staging is the recorded one.
+The before build of rust-kv is not section 13.1's image (`11204bc3…`, not `23b33864…`): `rkv`'s
+bytes depend on the absolute path of the checkout it is built in (Cargo's `-C metadata` of a path
+dependency includes the path; open item 24), and the path of M155's build was not recorded; its
+root and data disks are 13.1's. Every after pair is byte-identical. Unpacked, each after
+initramfs has the same paths, modes and owners as its before initramfs (node-kv 492 entries,
+python-kv 1,897, python-kv-hist 1,898, rust-kv 459), and only the files listed above differ; the
+root and data disks are the same before and after. Then every recorded schedule twice with
+`hydo run --image` from a fresh boot, one VM at a time.
+
+**How, on the bare-metal machine.** M155's recipe for the case `rust-kv-v2` (its `img.sh`: tier C,
+built as uid 1000 gid 100 with `HYDO_KEEP_OWNERS=1`, M155's image builder, the pinned agent
+`398f297e…`, hydo-world `082592ae…`), in this milestone's own tree and work directory. Before:
+M155's staged example, `rkv` included, gives M155's disk `20fb50e4…` byte for byte, and its four
+schedules with `hydo run` from a fresh boot give section 13.2's four fingerprints, each twice.
+After: `rkv` built from this milestone's sources with M155's fake-home recipe at this
+milestone's own path, twice with the same bytes (`615fec22…`); the image twice with the same bytes
+(`ef1b4c5d079a19a6…`). The before and after root file systems have the same 2,519 entries,
+modes and owners, and only `/bin/rkv` differs. Every recorded schedule twice with `hydo run
+--image` from a fresh boot through `~/bin/hvx-run` and the loaded main module, one VM at a time.
+
+Every verdict line is the earlier one word for word, and every schedule gave one fingerprint both
+times.
+
+#### node-kv (Mac), initramfs `39d38e81…`
+
+`39d38e81ed7c16c393b852429f1a663fd97a7a37ce8c9f28ab4e725590bd8537`; root disk `d031f382…`, data disk
+`9dba2707…` (section 15's).
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (nkv.oracle: acked=20 all present) | `9a4166f95ce564f1` | `0141194b466e3bd9` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [nkv.oracle] key k:0 lost (got null) | `eae9b3e9d9df7262` | `bfdec020a46f3dcf` | yes |
+| `disk=cut \| run C=12` | OK invariants=1 held (nkv.oracle: acked=12 all present) | `db0ced2ee18e2182` | `202dcc1810826541` | yes |
+| `disk=none \| run K=nkv@8+2 B=1234` | OK invariants=1 held (nkv.oracle: acked=18 all present) | `258c878ca6f94d50` | `0c5914e7cd7b1a58` | yes |
+
+Section 15 → M163: `d5ecbd4819dd31ba` → `9a4166f95ce564f1`, `453377f5c45e05b8` →
+`eae9b3e9d9df7262`, `426f966e55917bef` → `db0ced2ee18e2182`, `cfeb973e2598ce99` →
+`258c878ca6f94d50`. Three ctl values are section 15's; the `K=nkv@8+2 B=1234` run's moved
+(`39129eaa9b7e2227` → `0c5914e7cd7b1a58`) with the same verdict (not traced further: the server's
+and the SDK's code is shorter, which moves guest time).
+
+#### python-kv (Mac), initramfs `0796b216…`
+
+`0796b2166f663d8be289517d28cf817ee45dba0ab677335a48d4cf2ae3842420`; root disk `93c5d2ca…`, data
+disk `cefe8bbd…` (section 14's).
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (pykv.oracle: acked=20 all present) | `77662a4dc66660b4` | `99d3a6c9bcab4d75` | yes |
+| `disk=none \| run K=pykv@8+2` | OK invariants=1 held (pykv.oracle: acked=18 all present) | `d218c9200955852c` | `9dac63ed9843b10c` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [pykv.oracle] key k:0 lost (got 'NONE') | `67c1be61543262ec` | `3b8233343cb49963` | yes |
+| `disk=none \| run B=1234` | OK invariants=1 held (pykv.oracle: acked=18 all present) | `9de124f239acb2d2` | `ece160c3964f7f03` | yes |
+
+#### python-kv-hist (Mac), initramfs `08d77aa7…`
+
+`08d77aa7933e01f2b22f7a5aa34ded346809aec2fd53e707477194e18b55854d`; root disk `03d395df…`, data
+disk `1cb55573…` (section 14's).
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=cut \| run C=12` | OK invariants=0 held (); history OK | `c784a2d6d224eb47` | `133c9c994223dbe4` | yes |
+| `disk=cut \| run C=12 S=never` | OK invariants=0 held (); history VIOLATION [kv.linearizable] | `4e0ea385f449db81` | `4a799f3170dcb41b` | yes |
+
+Section 14 → M163: python-kv `f37f7b2513c61d0c` → `77662a4dc66660b4`, `0dc1f942d30494c2` →
+`d218c9200955852c`, `bd9cb77e5587ec31` → `67c1be61543262ec`, `5bf4fc7e7881d4d9` →
+`9de124f239acb2d2`; python-kv-hist `618b9d4430b2089e` → `c784a2d6d224eb47`, `78c99aebf1097a15` →
+`4e0ea385f449db81`. Every ctl value is section 14's.
+
+#### rust-kv (Mac), initramfs `c450aacb…`
+
+`c450aacb054240740d4a14dcbe314fa3b0c04e7a68db5c99c7391ddca4b4bace` (`rkv` aarch64 `735b28de…`); root
+disk `e19be506…`, data disk `99dbc1be…` (section 13.1's).
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present) | `5e1d844bdf412e73` | `bc6fe53352fa8359` | yes |
+| `disk=cut \| run C=12` | OK invariants=1 held (rkv.oracle: rkv check: acked=12 all present) | `ac2bfa6ddc729e9f` | `ded68d8cdfcf34f0` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [rkv.oracle] rkv check: acked=12 lost=12 | `3a4be66e14c4c051` | `22168eb0b60f5ac1` | yes |
+| `disk=none \| run K=rkv@8+2` | OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present) | `bf97e6e506a17a14` | `0ad74bffbfd87b1f` | yes |
+| `disk=none \| run B=5abc,1000,500` | OK invariants=1 held (rkv.oracle: rkv check: acked=2 all present) | `839345b237fb6bef` | `d20fa8483538cd42` | yes |
+| `disk=none \| run B=1234` | OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present) | `1f691ae7e24d1f34` | `243f271a5911baf1` | yes |
+| `disk=none \| run K=rkv@8+2 B=1234` | OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present) | `aa0b8c437f8b33f4` | `31ca45bf4f0d1dfe` | yes |
+| `disk=none \| run P=rkv@5+3` | OK invariants=1 held (rkv.oracle: rkv check: acked=17 all present) | `a55085a1fe310ad9` | `53e69be30dff5ad1` | yes |
+
+Section 13.1 → M163: `547f7b419affd943` → `5e1d844bdf412e73`, `6d32a2e7ac9aecce` →
+`ac2bfa6ddc729e9f`, `c221cba5d3298571` → `3a4be66e14c4c051`, `3d188ff780a5d993` →
+`bf97e6e506a17a14`, `439f45f7fe19dff7` → `839345b237fb6bef`, `dbc272cd3cc600ec` →
+`1f691ae7e24d1f34`, `0178e70f40b959a5` → `aa0b8c437f8b33f4`, `6e6269b2af51beab` →
+`a55085a1fe310ad9`. Every ctl value is section 13.1's.
+
+#### rust-kv (x86_64, `explore-ob-rust-kv-v2`), disk `ef1b4c5d…`
+
+`ef1b4c5d079a19a6321d53fc9d29a56dced928c4cc4a9fba1fc7cf97a8994882` (`rkv` x86_64
+`615fec228c11f5b4…`).
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present) | `d184b981aeb40784` | `f8463ecaf1560f12` | yes |
+| `disk=cut \| run C=12` | OK invariants=1 held (rkv.oracle: rkv check: acked=12 all present) | `a9cdd32d8953d7f2` | `9003b2c60348a405` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [rkv.oracle] rkv check: acked=12 lost=12 | `9e590e418c25edae` | `50d7001af4588bc1` | yes |
+| `disk=none \| run K=rkv@8+2 B=1234` | OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present) | `eb37594cfd033c85` | `20741d9f13ac3585` | yes |
+
+Section 13.2 → M163: `2db6fdcc217982c3` → `d184b981aeb40784`, `9391d8a94083dd30` →
+`a9cdd32d8953d7f2`, `4ce661597e641723` → `9e590e418c25edae`, `faa3c2c7c56207c8` →
+`eb37594cfd033c85`. Section 13.2 recorded no ctl values; the before image gave `ca38cb4162fbb2b6`,
+`9003b2c60348a405`, `50d7001af4588bc1` and `20741d9f13ac3585` with `hydo run`, so three are
+unchanged; in the `disk=none | run` transcript (47 lines both times) only the last four lines
+differ: the oracle's report and the end come 13 stops earlier (`n` 23,353 at `at=852874`
+instead of 23,366 at `853080`), because the new `rkv` runs different code.

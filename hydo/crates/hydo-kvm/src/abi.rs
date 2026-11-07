@@ -40,6 +40,17 @@ pub struct kvm_userspace_memory_region {
     pub userspace_addr: u64,
 }
 
+/// `struct kvm_dirty_log` (the bitmap pointer member of its union).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct kvm_dirty_log {
+    pub slot: u32,
+    pub padding1: u32,
+    pub dirty_bitmap: u64,
+}
+/// The memory slot's flag that starts KVM's dirty-page log.
+pub const KVM_MEM_LOG_DIRTY_PAGES: u32 = 1;
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct kvm_regs {
@@ -407,6 +418,7 @@ pub const KVM_CHECK_EXTENSION: u64 = io(0x03);
 pub const KVM_GET_VCPU_MMAP_SIZE: u64 = io(0x04);
 pub const KVM_GET_SUPPORTED_CPUID: u64 = iowr(0x05, std::mem::size_of::<kvm_cpuid2_header>());
 pub const KVM_CREATE_VCPU: u64 = io(0x41);
+pub const KVM_GET_DIRTY_LOG: u64 = iow(0x42, std::mem::size_of::<kvm_dirty_log>());
 pub const KVM_SET_USER_MEMORY_REGION: u64 =
     iow(0x46, std::mem::size_of::<kvm_userspace_memory_region>());
 pub const KVM_SET_TSS_ADDR: u64 = io(0x47);
@@ -480,5 +492,7 @@ mod tests {
         assert_eq!(KVM_INTERRUPT, 0x4004_ae86);
         assert_eq!(KVM_GET_REGS, 0x8090_ae81);
         assert_eq!(KVM_SET_SREGS, 0x4138_ae84);
+        assert_eq!(size_of::<kvm_dirty_log>(), 16);
+        assert_eq!(KVM_GET_DIRTY_LOG, 0x4010_ae42);
     }
 }
