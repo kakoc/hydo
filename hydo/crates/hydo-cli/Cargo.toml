@@ -36,6 +36,7 @@ hydo-build = { workspace = true }
 hydo-results = { workspace = true }
 hydo-image = { workspace = true }
 hydo-control = { workspace = true }
+hydo-agent-proto = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 flate2 = { workspace = true }
