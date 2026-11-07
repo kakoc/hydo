@@ -1,0 +1,42 @@
+No EFI environment detected.
+early console in extract_kernel
+input_data: 0x00000000038ed2cc
+input_len: 0x0000000000a5a0ad
+output: 0x0000000001000000
+output_len: 0x00000000032f3450
+kernel_total_size: 0x0000000002830000
+needed_size: 0x0000000003400000
+trampoline_32bit: 0x0000000000000000
+
+
+KASLR disabled: 'nokaslr' on cmdline.
+
+
+Decompressing Linux... No EFI environment detected.
+Parsing ELF... No relocation needed... done.
+Booting the kernel (entry_offset: 0x0000000000000080).
+[    0.000000] Linux version 6.6.35 (nixbld@localhost) (gcc (GCC) 13.2.0, GNU ld (GNU Binutils) 2.41) #1-NixOS SMP PREEMPT_DYNAMIC Fri Jun 21 12:38:50 UTC 2024
+[    0.000000] Command line: root=/dev/vda1 ro rootfstype=ext4 console=ttyS0 earlyprintk=ttyS0 loglevel=8 nokaslr acpi=off x2apic_phys quiet loglevel=1 hydo.hc=1
+[    0.000000] Disabled fast string operations
+[    0.000000] BIOS-provided physical RAM map:
+[    0.000000] BIOS-e820: [mem 0x0000000000000000-0x000000000009fbff] usable
+[    0.000000] BIOS-e820: [mem 0x0000000000100000-0x000000003fffffff] usable
+[    0.000000] printk: bootconsole [earlyser0] enabled
+Poking KASLR using RDTSC...
+ÿ
+==================================================
+  hydo: initramfs reached (M33 Kafka ext4 ro-root + switch_root)
+==================================================
+hydo-kafka-boot: insmod virtio ok
+hydo-kafka-boot: insmod virtio_ring ok
+hydo-kafka-boot: insmod virtio_pci_legacy_dev ok
+hydo-kafka-boot: insmod virtio_pci_modern_dev ok
+hydo-kafka-boot: insmod virtio_pci ok
+hydo-kafka-boot: insmod virtio_blk ok
+hydo-kafka-boot: insmod crc16 ok
+hydo-kafka-boot: insmod crc32c_generic ok
+hydo-kafka-boot: insmod mbcache ok
+hydo-kafka-boot: insmod jbd2 ok
+hydo-kafka-boot: insmod ext4 ok
+hydo-kafka-boot: insmod ext2 ok
+hydo-kafka-boot: mounted /dev/vda1 ext4 read-only at /newroot; switching root

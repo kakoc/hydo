@@ -1,0 +1,84 @@
+{
+  "v": 1,
+  "type": "timeline",
+  "run_dir": "runs/cut",
+  "verdict": {
+    "kind": "violation",
+    "text": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost"
+  },
+  "conversations": [
+    {
+      "conversation": "boot",
+      "first_stop": 22057,
+      "last_stop": 22922,
+      "end": "at snapshot S1",
+      "snapshots": "every stop"
+    },
+    {
+      "conversation": "run",
+      "first_stop": 22922,
+      "last_stop": 23181,
+      "end": "power cut",
+      "snapshots": "every stop"
+    },
+    {
+      "conversation": "recovery",
+      "first_stop": 23182,
+      "last_stop": 24042,
+      "end": "verdict: HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost",
+      "snapshots": "none (live sessions only)"
+    }
+  ],
+  "total": 6,
+  "offset": 0,
+  "events": [
+    {
+      "point": "boot:22922",
+      "conversation": "boot",
+      "stop": 22922,
+      "at": 841608,
+      "kind": "end",
+      "text": "end at snapshot S1",
+      "details": {
+        "snapshot": "S1"
+      }
+    },
+    {
+      "point": "run:23170",
+      "conversation": "run",
+      "stop": 23170,
+      "at": 853693,
+      "kind": "fault",
+      "text": "hydo-ob: POWER CUT before step 12 (all services frozen)"
+    },
+    {
+      "point": "run:23181",
+      "conversation": "run",
+      "stop": 23181,
+      "at": 853854,
+      "kind": "end",
+      "text": "end: power cut, acknowledged [0 1 2 3 4 5 6 7 8 9 10 11], failed []",
+      "details": {
+        "cut": {
+          "acked": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "10",
+            "11"
+          ],
+          "failed": []
+        }
+      }
+    }
+  ],
+  "truncated": true,
+  "next": "hydo inspect events runs/cut --kind fault,verdict,end --limit 3 --offset 3"
+}

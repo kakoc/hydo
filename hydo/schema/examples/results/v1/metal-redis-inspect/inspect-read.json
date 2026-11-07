@@ -1,0 +1,22 @@
+{
+  "v": 1,
+  "type": "inspect",
+  "op": "read",
+  "at": {
+    "point": "run:23170",
+    "conversation": "run",
+    "stop": 23170,
+    "at": 853693
+  },
+  "path": "/data/redis/appendonlydir/appendonly.aof.1.incr.aof",
+  "file": {
+    "text": "$3\r\nSET\r\n$3\r\nk:8\r\n$2\r\nv8\r\n*3\r\n$3\r\nSET\r\n$3\r\nk:9\r\n$2\r\nv9\r\n*3\r\n$3\r\nSET\r\n$4\r\nk:10\r\n$3\r\nv10\r\n*3\r\n$3\r\nSET\r\n$4\r\nk:11\r\n$3\r\nv11\r\n",
+    "bytes": 387,
+    "offset": 267,
+    "truncated": true
+  },
+  "cost": {
+    "wall_ms": 441,
+    "stops": 24
+  }
+}

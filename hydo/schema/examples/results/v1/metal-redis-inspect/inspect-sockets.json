@@ -1,0 +1,44 @@
+{
+  "v": 1,
+  "type": "inspect",
+  "op": "sockets",
+  "at": {
+    "point": "run:23170",
+    "conversation": "run",
+    "stop": 23170,
+    "at": 853693
+  },
+  "sockets": [
+    {
+      "proto": "tcp",
+      "local": "127.0.0.1:6379",
+      "state": "LISTEN",
+      "send_queue": 0,
+      "recv_queue": 0
+    },
+    {
+      "proto": "tcp",
+      "local": "127.0.0.1:58980",
+      "remote": "127.0.0.1:6379",
+      "state": "TIME_WAIT",
+      "send_queue": 0,
+      "recv_queue": 0
+    },
+    {
+      "proto": "tcp",
+      "local": "127.0.0.1:58878",
+      "remote": "127.0.0.1:6379",
+      "state": "TIME_WAIT",
+      "send_queue": 0,
+      "recv_queue": 0
+    }
+  ],
+  "truncated": true,
+  "cost": {
+    "wall_ms": 345,
+    "stops": 110
+  },
+  "notes": [
+    "the guest's own network namespace; with network: bridge each service has its own (--service NAME)"
+  ]
+}

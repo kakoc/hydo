@@ -400,7 +400,11 @@ fn service_of(text: &str, json: &Value) -> Option<String> {
     let mut w = t.split_whitespace();
     let first = w.next()?;
     if first.chars().all(|c| c.is_ascii_uppercase()) {
-        return w.next().map(str::to_string);
+        // `KILLED redis ...`, not `POWER CUT ...` or `NET FAULT ...`
+        return w
+            .next()
+            .filter(|s| !s.chars().all(|c| c.is_ascii_uppercase()))
+            .map(str::to_string);
     }
     None
 }
@@ -575,7 +579,7 @@ pub fn cmd(rest: &[String]) -> Result<Value, Problem> {
     let all = events(&rec);
     let matching: Vec<TimelineEvent> = all
         .into_iter()
-        .filter(|e| kinds.is_empty() || kinds.iter().any(|k| *k == e.kind))
+        .filter(|e| kinds.is_empty() || kinds.contains(&e.kind))
         .filter(|e| conv.as_ref().is_none_or(|c| *c == e.conversation))
         .filter(|e| {
             grep.as_ref().is_none_or(|g| {

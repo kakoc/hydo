@@ -1,0 +1,50 @@
+{
+  "v": 1,
+  "type": "inspect",
+  "op": "ps",
+  "at": {
+    "point": "run:23170",
+    "conversation": "run",
+    "stop": 23170,
+    "at": 853693
+  },
+  "processes": [
+    {
+      "pid": 1,
+      "ppid": 0,
+      "state": "R",
+      "rss_kib": 512,
+      "threads": 1,
+      "command": "/sbin/init"
+    },
+    {
+      "pid": 78,
+      "ppid": 1,
+      "state": "S",
+      "rss_kib": 3712,
+      "threads": 5,
+      "command": "/bin/redis-server 127.0.0.1:6379"
+    },
+    {
+      "pid": 92,
+      "ppid": 1,
+      "state": "S",
+      "rss_kib": 256,
+      "threads": 1,
+      "command": "/bin/busybox timeout 300 /bin/busybox sh -c . /etc/hydo/prelude.sh; i=$HYDO_FROM"
+    },
+    {
+      "pid": 95,
+      "ppid": 1,
+      "state": "S",
+      "rss_kib": 256,
+      "threads": 1,
+      "command": "timeout 2 /bin/redis-cli SET k:0 v0"
+    }
+  ],
+  "truncated": true,
+  "cost": {
+    "wall_ms": 488,
+    "stops": 779
+  }
+}

@@ -704,3 +704,121 @@ mod tests {
         assert!(likely_of(&nf, 1024).unwrap().contains("not found"));
     }
 }
+
+/// The recorded runs of `tests/fixtures/inspect/` (real hvx runs of the Redis example and broken
+/// copies of it): what the host layer and the timeline say, and that reading never writes.
+#[cfg(test)]
+mod fixtures {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn fixture(name: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/inspect")
+            .join(name)
+    }
+
+    /// Every file's bytes, by name.
+    fn files(d: &Path) -> Vec<(String, Vec<u8>)> {
+        let mut v: Vec<(String, Vec<u8>)> = std::fs::read_dir(d)
+            .unwrap()
+            .flatten()
+            .map(|e| {
+                (
+                    e.file_name().to_string_lossy().into_owned(),
+                    std::fs::read(e.path()).unwrap(),
+                )
+            })
+            .collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn a_service_that_exits_at_start_is_named_with_its_status() {
+        let d = fixture("badconf");
+        let before = files(&d);
+        let rec = Recorded::load(&d).unwrap();
+        let g = host(&rec).unwrap();
+        assert_eq!(g.failure, "service-exited");
+        assert_eq!(g.service.as_deref(), Some("redis"));
+        let p = g.process.as_ref().unwrap();
+        assert_eq!((p.handle.as_str(), p.status, p.signal), ("redis", 1, None));
+        assert_eq!(g.probe.as_ref().unwrap().why, "died");
+        assert_eq!(g.verdict_at.as_ref().unwrap().point, "boot:22257");
+        // the timeline has the exit at its stop, from the replayed agent events (hvx)
+        let ev = super::super::timeline::events(&rec);
+        let exit = ev.iter().find(|e| e.kind == "exit").unwrap();
+        assert_eq!(exit.point.as_deref(), Some("boot:22247"));
+        assert_eq!(exit.service.as_deref(), Some("redis"));
+        assert_eq!(files(&d), before, "inspecting changed the recorded run");
+    }
+
+    #[test]
+    fn a_sigkill_nobody_sent_in_provisioning() {
+        let d = fixture("oom");
+        let before = files(&d);
+        let rec = Recorded::load(&d).unwrap();
+        let g = host(&rec).unwrap();
+        assert_eq!(g.failure, "provision");
+        let p = g.process.as_ref().unwrap();
+        assert_eq!(
+            (p.signal_name.as_deref(), p.signal_by_hydo),
+            (Some("KILL"), Some(false))
+        );
+        assert!(
+            g.likely[0].contains("out-of-memory killer"),
+            "{:?}",
+            g.likely
+        );
+        assert_eq!(files(&d), before);
+    }
+
+    #[test]
+    fn a_power_cut_run_has_three_conversations_and_its_points() {
+        use super::super::drive::Target;
+        use super::super::{target_of, timeline};
+        let d = fixture("cut");
+        let before = files(&d);
+        let rec = Recorded::load(&d).unwrap();
+        let g = host(&rec).unwrap();
+        assert_eq!(g.failure, "violation");
+        let end = rec.end().unwrap();
+        assert_eq!(end.conv, Conv::Recovery);
+        // snapshots: the workload yes, the recovery boot no
+        let before_cut = Target {
+            conv: Conv::Run,
+            stop: 23170,
+        };
+        assert!(rec.snapshot_ok(before_cut).is_ok());
+        assert!(rec.snapshot_ok(end).is_err());
+        assert_eq!(target_of(&rec, "run:23170").unwrap(), before_cut);
+        assert_eq!(target_of(&rec, "end").unwrap(), end);
+        for bad in ["run:1", "nowhere:3", "run:x", "recovery:99999999"] {
+            let p = target_of(&rec, bad).unwrap_err();
+            assert_eq!(p.code, "bad-point", "{bad}");
+            assert!(!p.try_.is_empty(), "{bad}");
+        }
+        let ev = timeline::events(&rec);
+        let cut = ev.iter().find(|e| e.kind == "fault").unwrap();
+        assert_eq!(cut.point.as_deref(), Some("run:23170"));
+        assert_eq!(cut.service, None, "POWER CUT names no service");
+        // the documents are results documents, paged
+        let dir = d.display().to_string();
+        let doc = timeline::cmd(&[dir.clone(), "--kind".into(), "fault,verdict".into()]).unwrap();
+        match hydo_results::reader::document(&doc.to_string()).unwrap() {
+            hydo_results::reader::Record::Timeline(t) => {
+                assert!(t
+                    .events
+                    .iter()
+                    .all(|e| e.kind == "fault" || e.kind == "verdict"));
+                assert!(!t.truncated);
+            }
+            r => panic!("{r:?}"),
+        }
+        let page = timeline::cmd(&[dir, "--limit".into(), "2".into()]).unwrap();
+        assert_eq!(page["truncated"], true);
+        assert!(page["next"].as_str().unwrap().contains("--offset 2"));
+        assert_eq!(files(&d), before);
+    }
+}

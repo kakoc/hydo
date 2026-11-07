@@ -447,7 +447,7 @@ fn ls_script(path: &str) -> String {
     format!(
         "if [ -d {p} ]; then cd {p} || exit 1; for f in .* *; do case \"$f\" in .|..) continue;; esac; \
          [ -e \"$f\" ] || [ -L \"$f\" ] || continue; stat -c '%F|%s|%a|%U|%Y|%n' -- \"$f\"; \
-         [ -L \"$f\" ] && echo \"->$(readlink -- \"$f\")\"; done; \
+         if [ -L \"$f\" ]; then echo \"->$(readlink -- \"$f\")\"; fi; done; true; \
          else stat -c '%F|%s|%a|%U|%Y|%n' -- {p}; fi"
     )
 }

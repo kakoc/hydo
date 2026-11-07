@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "type": "inspect-error",
+  "op": "logs",
+  "code": "usage",
+  "message": "no service \"db\" in this image (its services: redis)",
+  "try": [
+    "hydo inspect logs <session> redis"
+  ]
+}

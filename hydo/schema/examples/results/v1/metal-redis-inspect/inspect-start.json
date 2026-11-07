@@ -1,0 +1,30 @@
+{
+  "v": 1,
+  "type": "inspect",
+  "op": "start",
+  "session": {
+    "id": "i-30dd7d9e",
+    "run_dir": "/work/runs/cut",
+    "at": {
+      "point": "run:23170",
+      "conversation": "run",
+      "stop": 23170,
+      "at": 853693
+    },
+    "state": "snapshot",
+    "status": "ready",
+    "idle_timeout_s": 900,
+    "engine": "hvx",
+    "calls": 0
+  },
+  "at": {
+    "point": "run:23170",
+    "conversation": "run",
+    "stop": 23170,
+    "at": 853693
+  },
+  "cost": {
+    "wall_ms": 7238,
+    "stops": 23172
+  }
+}

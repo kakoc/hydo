@@ -1,0 +1,159 @@
+{
+  "v": 1,
+  "type": "run",
+  "hydo_version": "0.1.0",
+  "epoch": 1,
+  "schedule": "disk=none | run",
+  "image": {
+    "path": "/work/hydo-out/explore-ob-redis-oom-disk.img",
+    "sha256": "9a2bde3a8682a19f5ce51ce19cfdc5e8b1af65f9e2c6405882b508c45cf0614b",
+    "epoch": 1,
+    "kernel": "bzImage (Linux 6.6.35, sha256 0a9ede352483e1718a8583e35afa3e82791c8223e40c0a888d39b0530158e9d3)",
+    "built_by": {
+      "version": "0.1.0",
+      "commit": "fc6cd6f6bf2cb7d270b005b601b3029a157dbd1e"
+    },
+    "manifest_sha256": "a052468618746f0d1be3cfeb19101907a3175be2609a93f4c811a87206c8e986"
+  },
+  "engine": {
+    "backend": "hvx",
+    "args": [
+      "--ram-mib",
+      "256"
+    ],
+    "ram_mib": 256,
+    "module_srcversion": "14D39A96F319623EC2AD8D1"
+  },
+  "verdict": {
+    "kind": "error",
+    "text": "HYDO-ORACLE: ERROR provision failed"
+  },
+  "fingerprints": {
+    "fp": "5bb29ba3997bd7bf",
+    "wfp": "4ca42d3e9ffa9fa2"
+  },
+  "findings": [
+    {
+      "kind": "invariant",
+      "id": "ERROR provision failed",
+      "status": "error",
+      "message": "HYDO-ORACLE: ERROR provision failed",
+      "details": {
+        "signature": "ERROR provision failed"
+      }
+    }
+  ],
+  "secs": 5.3,
+  "result_line": "RESULT one fp=5bb29ba3997bd7bf wfp=4ca42d3e9ffa9fa2 secs=5.3 stops=23329 typed=12 inh=5fb0d2e33f977ff8 verdict=HYDO-ORACLE: ERROR provision failed",
+  "artifacts": {
+    "consoles": [
+      "one.log"
+    ],
+    "engine_log": "engine.log"
+  },
+  "control": [
+    {
+      "conversation": "boot",
+      "controller": "schedule",
+      "cadence": "rb=16",
+      "hash": "e392638d499b5bb6",
+      "sends": 12,
+      "stops": 17,
+      "transcript": "control.boot.jsonl"
+    }
+  ],
+  "diagnosis": {
+    "summary": "the provisioning command failed (killed by SIGKILL, status 137)",
+    "failure": "provision",
+    "verdict_at": {
+      "point": "boot:23329",
+      "conversation": "boot",
+      "stop": 23329,
+      "at": 2688415
+    },
+    "process": {
+      "handle": "provision",
+      "command": "echo filling a cache\na=0123456789abcdef; while :; do a=\"$a$a\"; done",
+      "status": 137,
+      "signal": 9,
+      "signal_name": "KILL",
+      "signal_by_hydo": false,
+      "at": {
+        "point": "boot:23329",
+        "conversation": "boot",
+        "stop": 23329,
+        "at": 2688415
+      }
+    },
+    "exits": [
+      {
+        "handle": "provision",
+        "command": "echo filling a cache\na=0123456789abcdef; while :; do a=\"$a$a\"; done",
+        "status": 137,
+        "signal": 9,
+        "signal_name": "KILL",
+        "signal_by_hydo": false,
+        "at": {
+          "point": "boot:23329",
+          "conversation": "boot",
+          "stop": 23329,
+          "at": 2688415
+        }
+      }
+    ],
+    "likely": [
+      "the kernel's out-of-memory killer: [   13.760807] Out of memory: Killed process 88 (busybox) total-vm:394628kB, anon-rss:198316kB, file-rss:0kB, shmem-rss:0kB, UID:0 pgtables:440kB oom_score_adj:0"
+    ],
+    "kernel": [
+      "[   13.755825] busybox invoked oom-killer: gfp_mask=0x140dca(GFP_HIGHUSER_MOVABLE|__GFP_COMP|__GFP_ZERO), order=0, oom_score_adj=0",
+      "[   13.760152] oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null),cpuset=/,mems_allowed=0,global_oom,task_memcg=/,task=busybox,pid=88,uid=0",
+      "[   13.760807] Out of memory: Killed process 88 (busybox) total-vm:394628kB, anon-rss:198316kB, file-rss:0kB, shmem-rss:0kB, UID:0 pgtables:440kB oom_score_adj:0"
+    ],
+    "evidence_status": "collected",
+    "evidence_note": "read in the guest at boot:23329 by a replay of the run (the recorded run is unchanged)",
+    "evidence": [
+      {
+        "what": "the log of redis",
+        "source": "/tmp/hydo/redis.log",
+        "text": "77:C 01 Jan 2026 00:00:00.073 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.\n77:C 01 Jan 2026 00:00:00.073 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo\n77:C 01 Jan 2026 00:00:00.073 * Redis version=7.2.4, bits=64, commit=00000000, modified=0, pid=77, just started\n77:C 01 Jan 2026 00:00:00.073 * Configuration loaded\n77:M 01 Jan 2026 00:00:00.073 * Increased maximum number of open files to 10032 (it was originally set to 1024).\n77:M 01 Jan 2026 00:00:00.073 * monotonic clock: POSIX clock_gettime\n77:M 01 Jan 2026 00:00:00.078 * Running mode=standalone, port=6379.\n77:M 01 Jan 2026 00:00:00.083 * Server initialized\n77:M 01 Jan 2026 00:00:00.094 * Creating AOF base file appendonly.aof.1.base.rdb on server start\n77:M 01 Jan 2026 00:00:00.108 * Creating AOF incr file appendonly.aof.1.incr.aof on server start\n77:M 01 Jan 2026 00:00:00.108 * Ready to accept connections tcp\n",
+        "bytes": 1247,
+        "truncated": false
+      },
+      {
+        "what": "the provisioning's log",
+        "source": "/tmp/hydo/provision.log",
+        "text": "filling a cache\n",
+        "bytes": 16,
+        "truncated": false
+      },
+      {
+        "what": "the kernel's messages",
+        "source": "dmesg | grep -E 'Out of memory|oom-kill|Killed process|segfault|general protection|Kernel panic|BUG:|Oops|blocked for more than|page allocation failure' | tail -n 20; echo '--- the last lines'; dmesg | tail -n 15",
+        "text": "[   13.755825] busybox invoked oom-killer: gfp_mask=0x140dca(GFP_HIGHUSER_MOVABLE|__GFP_COMP|__GFP_ZERO), order=0, oom_score_adj=0\n[   13.760152] oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null),cpuset=/,mems_allowed=0,global_oom,task_memcg=/,task=busybox,pid=88,uid=0\n[   13.760807] Out of memory: Killed process 88 (busybox) total-vm:394628kB, anon-rss:198316kB, file-rss:0kB, shmem-rss:0kB, UID:0 pgtables:440kB oom_score_adj:0\n--- the last lines\n[   13.759644] 23 total pagecache pages\n[   13.759726] 0 pages in swap cache\n[   13.759807] Free swap  = 0kB\n[   13.759824] Total swap = 0kB\n[   13.759824] 65438 pages RAM\n[   13.759824] 0 pages HighMem/MovableOnly\n[   13.759824] 10566 pages reserved\n[   13.759824] 0 pages cma reserved\n[   13.759824] 0 pages hwpoisoned\n[   13.759824] Tasks state (memory values in pages):\n[   13.759824] [  pid  ]   uid  tgid total_vm      rss pgtables_bytes swapents oom_score_adj name\n[   13.759824] [     77]     0    77     5055      384    61440        0             0 redis-server\n[   13.760070] [     88]     0    88    98657    49579   450560        0             0 busybox\n[   13.760152] oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null),cpuset=/,mems_allowed=0,global_oom,task_memcg=/,task=busybox,pid=88,uid=0\n[   13.760807] Out of memory: Killed process 88 (busybox) total-vm:394628kB, anon-rss:198316kB, file-rss:0kB, shmem-rss:0kB, UID:0 pgtables:440kB oom_score_adj:0\n",
+        "bytes": 1423,
+        "truncated": false,
+        "status": 0
+      },
+      {
+        "what": "memory",
+        "source": "free -m",
+        "text": "              total        used        free      shared  buff/cache   available\nMem:            214          17         194           0           3         192\nSwap:             0           0           0\n",
+        "bytes": 204,
+        "truncated": false,
+        "status": 0
+      },
+      {
+        "what": "processes",
+        "source": "ps -o pid,ppid,stat,rss,args",
+        "text": "PID   PPID  STAT RSS  COMMAND\n    1     0 S     512 /sbin/init\n    2     0 SW      0 [kthreadd]\n    3     2 SW      0 [pool_workqueue_]\n    4     2 IW<     0 [kworker/R-rcu_g]\n    5     2 IW<     0 [kworker/R-rcu_p]\n    6     2 IW<     0 [kworker/R-slub_]\n    7     2 IW<     0 [kworker/R-netns]\n    8     2 IW      0 [kworker/0:0-rcu]\n    9     2 IW<     0 [kworker/0:0H-ev]\n   10     2 IW      0 [kworker/0:1-eve]\n   11     2 IW      0 [kworker/u2:0-ev]\n   12     2 IW      0 [kworker/u2:1-ev]\n   13     2 IW<     0 [kworker/R-mm_pe]\n   14     2 IW      0 [rcu_tasks_kthre]\n   15     2 IW      0 [rcu_tasks_rude_]\n   16     2 IW      0 [rcu_tasks_trace]\n   17     2 SW      0 [ksoftirqd/0]\n   18     2 IW      0 [rcu_preempt]\n   19     2 SW      0 [migration/0]\n   20     2 SW      0 [idle_inject/0]\n   21     2 SW      0 [cpuhp/0]\n   22     2 SW      0 [kdevtmpfs]\n   23     2 IW<     0 [kworker/R-inet_]\n   24     2 IW      0 [kworker/u2:2-ev]\n   25     2 SW      0 [kauditd]\n   26     2 SW      0 [khungtaskd]\n   27     2 SW      0 [oom_reaper]\n   28     2 IW      0 [kworker/u2:3]\n   29     2 IW<     0 [kworker/R-write]\n   30     2 SW      0 [kcompactd0]\n   31     2 SWN     0 [ksmd]\n   32     2 IW<     0 [kworker/R-kinte]\n   33     2 IW<     0 [kworker/R-kbloc]\n   34     2 IW<     0 [kworker/R-blkcg]\n   35     2 IW<     0 [kworker/R-devfr]\n   36     2 IW<     0 [kworker/0:1H-kb]\n   37     2 SW      0 [kswapd0]\n   38     2 IW<     0 [kworker/R-kthro]\n   39     2 IW<     0 [kworker/R-mld]\n   40     2 IW<     0 [kworker/R-ipv6_]\n   47     2 IW<     0 [kworker/R-kstrp]\n   48     2 IW<     0 [kworker/u3:0]\n   68     2 IW<     0 [kworker/R-ext4-]\n   74     2 SW      0 [jbd2/vda2-8]\n   75     2 IW<     0 [kworker/R-ext4-]\n   76     2 SW      0 [ext4lazyinit]\n   77     1 D    1536 /bin/redis-server 127.0.0.1:6379\n   98     1 S     512 /bin/busybox sh -c /bin/busybox mkdir -p /tmp/hydo-inspect; ( ps -o pid,ppid,stat,rss,args 2>/dev/null || ps ) >/tmp/hydo-inspect/104.out 2>/tmp/hydo-inspect/104.err </dev/null\n  100    98 R     512 ps -o pid,ppid,stat,rss,args\n",
+        "bytes": 2076,
+        "truncated": false,
+        "status": 0
+      }
+    ],
+    "next": [
+      "hydo inspect start runs/oom --at end",
+      "hydo inspect events runs/oom --kind exit,probe,fault,verdict"
+    ]
+  }
+}

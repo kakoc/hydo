@@ -104,9 +104,9 @@ pub fn machine(ctx: &Ctx, rec: &Recorded, outdir: &Path) -> Result<Machine, Prob
         ));
     }
     let _ = std::fs::create_dir_all(outdir);
-    let (eng, spec) = crate::runs::controlled_engine(ctx, &rec.image, outdir, &rec.eargs, true);
-    let a =
-        AgentEngine::for_image(eng, &rec.image).map_err(|e| Problem::new("refused", e, vec![]))?;
+    let image = rec.image()?;
+    let (eng, spec) = crate::runs::controlled_engine(ctx, &image, outdir, &rec.eargs, true);
+    let a = AgentEngine::for_image(eng, &image).map_err(|e| Problem::new("refused", e, vec![]))?;
     Ok(Machine {
         eng: a.inner.clone(),
         spec,
@@ -444,6 +444,11 @@ pub fn call(ctx: &Ctx, id: &str, req: Req) -> Result<Value, Problem> {
         .read_line(&mut r)
         .map_err(|e| Problem::new("engine", format!("session {id}: {e}"), vec![]))?;
     if r.trim().is_empty() {
+        // a session that was just stopped closes the connection while it ends
+        std::thread::sleep(Duration::from_millis(200));
+        if !server_alive(ctx, id) {
+            return Err(no_session(ctx, id));
+        }
         return Err(Problem::new(
             "engine",
             format!(
@@ -723,10 +728,13 @@ pub fn serve(ctx: &Ctx, id: &str) -> i32 {
     }
 }
 
+/// What marks a live session ready (the daemon, the stops the replay took).
+type ReadyFn<'d> = Box<dyn FnOnce(&mut Daemon, u64) + 'd>;
+
 /// Calls of a live session: announces the session ready before waiting for the first one.
 struct FirstReady<'d> {
     d: &'d mut Daemon,
-    ready: Option<Box<dyn FnOnce(&mut Daemon, u64) + 'd>>,
+    ready: Option<ReadyFn<'d>>,
 }
 
 impl Calls for FirstReady<'_> {

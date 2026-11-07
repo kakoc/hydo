@@ -77,7 +77,8 @@ impl Target {
 pub struct Recorded {
     pub dir: PathBuf,
     pub doc: hydo_results::Run,
-    pub image: PathBuf,
+    /// The image path the result document names (see [`Recorded::image`]).
+    pub image_text: String,
     /// The schedule with its cadence (the transcripts' header).
     pub schedule: Schedule,
     pub eargs: Vec<String>,
@@ -134,17 +135,42 @@ impl Recorded {
             .as_ref()
             .map(|i| i.path.clone())
             .unwrap_or_default();
-        let image = resolve(&image_text, dir).ok_or_else(|| {
+        let eargs = doc
+            .engine
+            .as_ref()
+            .and_then(|e| e.args.clone())
+            .unwrap_or_default();
+        let backend = doc
+            .engine
+            .as_ref()
+            .and_then(|e| e.backend.clone())
+            .unwrap_or_default();
+        Ok(Recorded {
+            dir: dir.to_path_buf(),
+            doc,
+            image_text,
+            schedule,
+            eargs,
+            backend,
+            transcripts,
+        })
+    }
+
+    /// The run's image, which a replay needs: the very file the run used (its sha256 checked when
+    /// the result records one).
+    pub fn image(&self) -> Result<PathBuf, Problem> {
+        let image = resolve(&self.image_text, &self.dir).ok_or_else(|| {
             Problem::new(
                 "no-run",
                 format!(
-                    "the run's image {image_text:?} is not there any more (result.json image.path); \
-                     inspection replays the run on the very same image"
+                    "the run's image {:?} is not there any more (result.json image.path); \
+                     inspection replays the run on the very same image",
+                    self.image_text
                 ),
                 vec!["rebuild the image with the same hydo and manifest (hydo build), then run the schedule again".into()],
             )
         })?;
-        if let Some(want) = doc.image.as_ref().and_then(|i| i.sha256.as_deref()) {
+        if let Some(want) = self.doc.image.as_ref().and_then(|i| i.sha256.as_deref()) {
             if let Ok(have) = hydo_engine::image::sha256_file(&image) {
                 if have != want {
                     return Err(Problem::new(
@@ -159,31 +185,13 @@ impl Recorded {
                         vec![format!(
                             "hydo run {} \"{}\" --out <new run dir>   (inspect the new run)",
                             image.display(),
-                            doc.schedule
+                            self.doc.schedule
                         )],
                     ));
                 }
             }
         }
-        let eargs = doc
-            .engine
-            .as_ref()
-            .and_then(|e| e.args.clone())
-            .unwrap_or_default();
-        let backend = doc
-            .engine
-            .as_ref()
-            .and_then(|e| e.backend.clone())
-            .unwrap_or_default();
-        Ok(Recorded {
-            dir: dir.to_path_buf(),
-            doc,
-            image,
-            schedule,
-            eargs,
-            backend,
-            transcripts,
-        })
+        Ok(image)
     }
 
     pub fn transcript(&self, c: Conv) -> Option<&Transcript> {
