@@ -847,29 +847,32 @@
     {
       "id": "hvx/redis-proxy",
       "platform": "hvx",
-      "recorded": "docs/REBASELINE.md 13.2",
+      "recorded": "hydo-bench rebaseline --write, 2026-11-07",
       "build": {
         "stage": "redis",
         "dir": "hydo/onboard/examples/redis",
         "manifest": "hydo-proxy.yaml",
         "args": []
       },
-      "sha256": "8ae51a080bac376b7eb9b7e836957bf264889ede016366cdca1703b39d3b82fc",
+      "sha256": "af1c004d13385c276fa42777e6c66a78eecfa950f853c2cb252be03a29acca32",
       "runs": [
         {
           "schedule": "disk=none | run",
           "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)",
-          "fp": "ca9f41a4ba161da6"
+          "fp": "960cd91b0f278e64",
+          "ctl": "450f6e7e775e908e"
         },
         {
           "schedule": "disk=none | run H=redisp@2-5:drop",
           "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=17 all present)",
-          "fp": "d849b15699b028f4"
+          "fp": "9d8aacb6e0290a67",
+          "ctl": "3bcea8a5a933c6a8"
         },
         {
           "schedule": "disk=none | run H=redisp@1-3:reset K=redis@4+2",
           "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=16 all present)",
-          "fp": "348442b1011e7081"
+          "fp": "89a1101f3e032997",
+          "ctl": "cebc3c93bcc6d04b"
         }
       ]
     },
@@ -900,14 +903,14 @@
     {
       "id": "hvx/redis-composed",
       "platform": "hvx",
-      "recorded": "docs/REBASELINE.md 13.2",
+      "recorded": "hydo-bench rebaseline --write, 2026-11-07",
       "build": {
         "stage": "redis",
         "dir": "hydo/onboard/examples/redis-composed/hydo",
         "manifest": "hydo.yaml",
         "args": []
       },
-      "sha256": "e419d321de1d681a4e3e7e9459696b734b2b1d807901ce3aa35a3ea9de4816ef",
+      "sha256": "b1aab4e1e4e4918eb6bb007afe090bef936d3dc4f724920a26cde9a1edf37696",
       "runs": [
         {
           "schedule": "disk=none dseed=1 | run W=0000002a,p4,q2,r100",
@@ -924,14 +927,14 @@
     {
       "id": "hvx/redis-composed-hist",
       "platform": "hvx",
-      "recorded": "docs/REBASELINE.md 13.2",
+      "recorded": "hydo-bench rebaseline --write, 2026-11-07",
       "build": {
         "stage": "redis",
         "dir": "hydo/onboard/examples/redis-composed-hist/hydo",
         "manifest": "hydo.yaml",
         "args": []
       },
-      "sha256": "777366e0e8547419308b317c1ff29e284c135ea584971fd01de817b08d070184",
+      "sha256": "8a663811106c1862668cba226dd4ada1ce132ba850369e167bbb2c8ca318ff39",
       "runs": [
         {
           "schedule": "disk=cut dseed=1 | run C=12 W=0000002a,p4,q2,r100",
@@ -948,14 +951,14 @@
     {
       "id": "hvx/redis-composed-read",
       "platform": "hvx",
-      "recorded": "docs/REBASELINE.md 13.2",
+      "recorded": "hydo-bench rebaseline --write, 2026-11-07",
       "build": {
         "stage": "redis",
         "dir": "hydo/onboard/examples/redis-composed-read/hydo",
         "manifest": "hydo.yaml",
         "args": []
       },
-      "sha256": "c059e1520ea261ccb6ae3b636874e864f23cd67889fb6e5f63a32fdd9d339e99",
+      "sha256": "693a4f94d5f10b0b19ea7c68b371338c54832bcd329552e001559947f5a7abbe",
       "runs": [
         {
           "schedule": "disk=none dseed=1 | run W=0000002a,p4,q2,r100",
@@ -972,14 +975,14 @@
     {
       "id": "hvx/redis-errors",
       "platform": "hvx",
-      "recorded": "docs/REBASELINE.md 13.2",
+      "recorded": "hydo-bench rebaseline --write, 2026-11-07",
       "build": {
         "stage": "redis",
         "dir": "hydo/onboard/examples/redis-errors/hydo",
         "manifest": "hydo.yaml",
         "args": []
       },
-      "sha256": "7a2ba166094b37f0949d56b69aebb6678dbbf1944c5fc7eec395c86764fbce1f",
+      "sha256": "1d0d7d3daec46a21298f0e05cf5cce475fef6d40a023165f34162ea2dd9b80e5",
       "runs": [
         {
           "schedule": "disk=none dseed=1 | run W=0000002a,p4,q2,r100",
@@ -996,51 +999,57 @@
     {
       "id": "hvx/redis-bridge",
       "platform": "hvx",
-      "recorded": "docs/REBASELINE.md 13.2",
+      "recorded": "hydo-bench rebaseline --write, 2026-11-07",
       "build": {
         "stage": "redis",
         "dir": "hydo/onboard/examples/redis-bridge",
         "manifest": "hydo.yaml",
         "args": []
       },
-      "sha256": "8ecaee354130f88385c2ea73cb583472750afe5cc3e79079dcd439ef4aff09e3",
+      "sha256": "78087be83e1a3af66b27505a2f0aaddeb1a0b6cd887d998553faefb0b9703a07",
       "runs": [
         {
           "schedule": "disk=none | run",
           "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
-          "fp": "c69c6175a12c2b34"
+          "fp": "934d9d978178350a",
+          "ctl": "fa71476e540c0120"
         },
         {
           "schedule": "disk=none | run N=primary-replica@5-10:loss,100%",
           "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
-          "fp": "b88ae0563c9149f8"
+          "fp": "127b20441ccbda92",
+          "ctl": "86e3a99ac65d9214"
         },
         {
           "schedule": "disk=none | run K=replica@5+3",
           "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
-          "fp": "07f944e0703ecd6a"
+          "fp": "ae2af2c553c42428",
+          "ctl": "cbae799a363b0cca"
         },
         {
           "schedule": "disk=cut dseed=1 | run C=8",
           "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=8 all on the primary)",
-          "fp": "3e52d47fb9193f55"
+          "fp": "e486f9f811a26888",
+          "ctl": "d2c05261a98bfe20"
         },
         {
           "schedule": "disk=none | run F=replica<primary@5#3:2000",
           "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
-          "fp": "2c2b25bc68bb109b"
+          "fp": "070a0bd2e37fbf56",
+          "ctl": "b47bc2cd19a61e71"
         },
         {
           "schedule": "disk=none | run H=redisp@3-6:drop",
           "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=13 all on the primary)",
-          "fp": "a085504c6559a1d1"
+          "fp": "651c75f4ee7ee886",
+          "ctl": "fe9f4b7517ba6930"
         }
       ]
     },
     {
       "id": "hvx/rust-kv",
       "platform": "hvx",
-      "recorded": "docs/REBASELINE.md 16",
+      "recorded": "hydo-bench rebaseline --write, 2026-11-07",
       "build": {
         "stage": "rust-kv",
         "dir": "hydo/onboard/examples/rust-kv",
@@ -1048,30 +1057,30 @@
         "args": [],
         "owners": "keep"
       },
-      "sha256": "ef1b4c5d079a19a6321d53fc9d29a56dced928c4cc4a9fba1fc7cf97a8994882",
+      "sha256": "4cea0193bfc77e25bc1f29cf341ba18cf1cfd43c04944b5d417aed940b0db81c",
       "runs": [
         {
           "schedule": "disk=none | run",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present)",
-          "fp": "d184b981aeb40784",
+          "fp": "f5f4b53ba4e3b49f",
           "ctl": "f8463ecaf1560f12"
         },
         {
           "schedule": "disk=cut | run C=12",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=12 all present)",
-          "fp": "a9cdd32d8953d7f2",
+          "fp": "bd0b2efee1ae4caf",
           "ctl": "9003b2c60348a405"
         },
         {
           "schedule": "disk=cut | run C=12 S=never",
           "verdict": "VIOLATION [rkv.oracle] rkv check: acked=12 lost=12",
-          "fp": "9e590e418c25edae",
+          "fp": "549e2da121a15041",
           "ctl": "50d7001af4588bc1"
         },
         {
           "schedule": "disk=none | run K=rkv@8+2 B=1234",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present)",
-          "fp": "eb37594cfd033c85",
+          "fp": "56b80f81f055adb7",
           "ctl": "20741d9f13ac3585"
         }
       ]
@@ -1159,8 +1168,8 @@
     {
       "id": "hvx/shop-buggy",
       "platform": "hvx",
-      "recorded": "docs/REBASELINE.md 13.2",
-      "note": "the image carries the folder of its program (--set bin=, in /etc/hydo/params): these values were recorded with the inputs folder ~/hydo-m155-work/in on the bare-metal machine; another inputs folder gives other bytes and fingerprints",
+      "recorded": "hydo-bench rebaseline --write, 2026-11-07",
+      "note": "the image carries the folder of its program (--set bin=, in /etc/hydo/params): these values were recorded with the inputs folder ~/hydo-m164-work/w/in on the bare-metal machine (0.2.0's re-baseline); another inputs folder gives other bytes and fingerprints",
       "build": {
         "stage": "shop",
         "dir": "hydo/onboard/examples/shop",
@@ -1173,35 +1182,39 @@
         ],
         "owners": "keep"
       },
-      "sha256": "0d62722969e1a88375c2875b2f8d23be4b392de2892bbd3370a22845213d6f11",
+      "sha256": "27a88f0c084b4f540631f27bf7a2dab168e10621c52f2740f95a3f9163240c03",
       "runs": [
         {
           "schedule": "disk=none dseed=1 | run",
           "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once)",
-          "fp": "09ae7938ecf3bea1"
+          "fp": "306aa98dcab9c44d",
+          "ctl": "3faa9611c6b8897b"
         },
         {
           "schedule": "disk=none dseed=efb4cfbc49052179 | run H=payments.charge@0-1:drop",
           "verdict": "VIOLATION [payments.charged_at_most_once] payments.charge: ref o0 took effect 3 times (records 1,2,3)",
-          "fp": "9ef09b5fe0d3a244"
+          "fp": "f5671b7378083f50",
+          "ctl": "98a4ac63183ede2f"
         },
         {
           "schedule": "disk=none dseed=fbb60485ae17b0ba | run H=payments.charge@6-9:reset,p=50",
           "verdict": "VIOLATION [payments.charged_at_most_once] payments.charge: ref o7 took effect 2 times (records 25,26)",
-          "fp": "62a2cd4d5c3ed5c3"
+          "fp": "44cc6db42a0299c6",
+          "ctl": "40c39aa4529c007a"
         },
         {
           "schedule": "disk=cut dseed=1 | run H=payments.charge@0-1:drop C=6",
           "verdict": "VIOLATION [payments.charged_at_most_once] payments.charge: ref o0 took effect 3 times (records 1,2,3)",
-          "fp": "c9ae5f3ea2da0df3"
+          "fp": "e3e3b8713725ee53",
+          "ctl": "d61a89d4d5d71535"
         }
       ]
     },
     {
       "id": "hvx/shop-fixed",
       "platform": "hvx",
-      "recorded": "docs/REBASELINE.md 13.2",
-      "note": "the image carries the folder of its program (--set bin=, in /etc/hydo/params): these values were recorded with the inputs folder ~/hydo-m155-work/in on the bare-metal machine; another inputs folder gives other bytes and fingerprints",
+      "recorded": "hydo-bench rebaseline --write, 2026-11-07",
+      "note": "the image carries the folder of its program (--set bin=, in /etc/hydo/params): these values were recorded with the inputs folder ~/hydo-m164-work/w/in on the bare-metal machine (0.2.0's re-baseline); another inputs folder gives other bytes and fingerprints",
       "build": {
         "stage": "shop",
         "dir": "hydo/onboard/examples/shop",
@@ -1214,27 +1227,31 @@
         ],
         "owners": "keep"
       },
-      "sha256": "6624e195215755f9ca24d81b09c0ebc5ec65ad8bcf9d06be88a5492583a94816",
+      "sha256": "e0ca9c6b27b6ee85e5e9175d03c5d3a5800942b6e808f07b7ada1d4e1d91d87b",
       "runs": [
         {
           "schedule": "disk=none dseed=1 | run",
           "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once)",
-          "fp": "d779faa3dbb1199c"
+          "fp": "a39853917114dbda",
+          "ctl": "30533edabec04683"
         },
         {
           "schedule": "disk=none dseed=efb4cfbc49052179 | run H=payments.charge@0-1:drop",
           "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once)",
-          "fp": "f159969cab5825c6"
+          "fp": "4b759072c59a4e4f",
+          "ctl": "4d5b587472aa91a8"
         },
         {
           "schedule": "disk=none dseed=fbb60485ae17b0ba | run H=payments.charge@6-9:reset,p=50",
           "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once)",
-          "fp": "cc26d265f48957ca"
+          "fp": "b6774ea98d4518e3",
+          "ctl": "457c06075a3b815c"
         },
         {
           "schedule": "disk=cut dseed=1 | run H=payments.charge@0-1:drop C=6",
           "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 6 effects, every ref at most once)",
-          "fp": "309a10a5cc83c3b5"
+          "fp": "486a08d6c03bbe73",
+          "ctl": "57d6d66bb4ee3731"
         }
       ]
     },
@@ -1794,7 +1811,7 @@
     {
       "id": "hvx/stack-grpc-cur",
       "platform": "hvx",
-      "recorded": "docs/REBASELINE.md 13.2",
+      "recorded": "hydo-bench rebaseline --write, 2026-11-07",
       "build": {
         "stage": "stack-grpc-cur",
         "dir": "hydo/onboard/examples/stack-grpc",
@@ -1802,17 +1819,19 @@
         "args": [],
         "owners": "keep"
       },
-      "sha256": "b47fdf019b8f37875a36a24217ecfb0663d2841013db5634ae6c5713924ce9e8",
+      "sha256": "5e845aa33f7c8ecc175254e33c3efe36ba596f3b3835f2460bcd68bfcd5762f4",
       "runs": [
         {
           "schedule": "disk=none dseed=1 | run",
           "verdict": "OK invariants=4 held (mysql.amounts_valid: rows with a wrong amount: 0)",
-          "fp": "1727a83353d9d2be"
+          "fp": "ad895d8056ef030a",
+          "ctl": "d8a03e7e45dd85ca"
         },
         {
           "schedule": "disk=none dseed=1 | run H=orders.place@10-13:drop",
           "verdict": "OK invariants=4 held (mysql.amounts_valid: rows with a wrong amount: 0)",
-          "fp": "ad2d115c82989fda"
+          "fp": "0ca25f55f4b623b5",
+          "ctl": "40980387316f2658"
         }
       ],
       "big": true
@@ -1820,7 +1839,7 @@
     {
       "id": "hvx/stack-grpc-old",
       "platform": "hvx",
-      "recorded": "docs/REBASELINE.md 13.2",
+      "recorded": "hydo-bench rebaseline --write, 2026-11-07",
       "build": {
         "stage": "stack-grpc-old",
         "dir": "hydo/onboard/examples/stack-grpc",
@@ -1828,17 +1847,19 @@
         "args": [],
         "owners": "keep"
       },
-      "sha256": "7e5159f3124be6cda511f1fb2e8012c5a68be28f3b00ed5bca6d5b48a00b4b5f",
+      "sha256": "dfcac2c3424490e732cfbbbc329ea8f0e1a78327be28508901dc25577941eb8f",
       "runs": [
         {
           "schedule": "disk=none dseed=1 | run",
           "verdict": "OK invariants=4 held (mysql.amounts_valid: rows with a wrong amount: 0)",
-          "fp": "d0f18e1652e0e731"
+          "fp": "bf45bc02f650b0e1",
+          "ctl": "9d64cc721a8b7ea9"
         },
         {
           "schedule": "disk=none dseed=1 | run H=orders.place@10-13:drop",
           "verdict": "OK invariants=4 held (mysql.amounts_valid: rows with a wrong amount: 0)",
-          "fp": "b77a87a60dc14f6c"
+          "fp": "5aa46281ee9b2984",
+          "ctl": "38c07fce8ff74e16"
         }
       ],
       "big": true
@@ -1846,7 +1867,7 @@
     {
       "id": "hvx/stack-grpc-planted",
       "platform": "hvx",
-      "recorded": "docs/REBASELINE.md 13.2",
+      "recorded": "hydo-bench rebaseline --write, 2026-11-07",
       "build": {
         "stage": "stack-grpc-planted",
         "dir": "hydo/onboard/examples/stack-grpc",
@@ -1854,17 +1875,19 @@
         "args": [],
         "owners": "keep"
       },
-      "sha256": "6d3e4cfc86f8b715d751fff81202523ca7f0dd647f71864ffcb87bc26933b197",
+      "sha256": "e3b1781e0ada9d1eebda0006224ca2c2ba4c1d563db8522e3feccd018d2dbab6",
       "runs": [
         {
           "schedule": "disk=none dseed=1 | run",
           "verdict": "OK invariants=4 held (mysql.amounts_valid: rows with a wrong amount: 0)",
-          "fp": "47055f125f26994f"
+          "fp": "41cb66d1e0c56b14",
+          "ctl": "d8a03e7e45dd85ca"
         },
         {
           "schedule": "disk=none dseed=1 | run H=orders.place@10-13:drop",
           "verdict": "VIOLATION [stack.exactly_once] kafka order=10 present 2 times (must be exactly once)",
-          "fp": "8786ec4211bfbecd"
+          "fp": "23d43b1e38007e9c",
+          "ctl": "67678171571bd379"
         }
       ],
       "big": true
@@ -1872,7 +1895,7 @@
     {
       "id": "hvx/stackgen",
       "platform": "hvx",
-      "recorded": "docs/REBASELINE.md 13.2",
+      "recorded": "hydo-bench rebaseline --write, 2026-11-07",
       "build": {
         "stage": "stackgen",
         "dir": "hydo/onboard/examples/stackgen",
@@ -1880,22 +1903,25 @@
         "args": [],
         "owners": "keep"
       },
-      "sha256": "3ca09cc84191b18fc4436de1ce0929e9c36624c8792d12cef0e008832da9447a",
+      "sha256": "8d1952d6c35c608991dd1e458470ef22fa8e29c25d6560b82181083e67fb2ba1",
       "runs": [
         {
           "schedule": "disk=none | run",
           "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
-          "fp": "42c34b875d91ad13"
+          "fp": "5985d82ff79201a8",
+          "ctl": "85153cde73e25837"
         },
         {
           "schedule": "disk=none | run K=front@10+2",
           "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
-          "fp": "34b626826e68fe5f"
+          "fp": "4d31e88a1b14f99e",
+          "ctl": "1a07f232f2ac13db"
         },
         {
           "schedule": "disk=cut | run C=15",
           "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
-          "fp": "4103289e58dd5177"
+          "fp": "38454f3abf915399",
+          "ctl": "d287a252013b860f"
         }
       ],
       "big": true
@@ -2025,7 +2051,7 @@
       "id": "kvm/release-redis",
       "platform": "kvm",
       "recorded": "docs/HISTORY.md Milestone 159",
-      "note": "recorded on the build machine with hv/kvm/kvm-check.sh (docs/HISTORY.md Milestone 159, kernel bzImage-kvm d50fbc67...); not checked since",
+      "note": "recorded on the build machine with hv/kvm/kvm-check.sh (docs/HISTORY.md Milestone 159, kernel bzImage-kvm d50fbc67...); checked for 0.2.0 on the build machine with --thorough (two fresh boots each; the stack images taken from the hvx builds)",
       "build": {
         "stage": "release",
         "dir": "release/examples/redis",
@@ -2080,7 +2106,7 @@
       "id": "kvm/release-redis-netem",
       "platform": "kvm",
       "recorded": "docs/HISTORY.md Milestone 159",
-      "note": "recorded on the build machine with hv/kvm/kvm-check.sh (docs/HISTORY.md Milestone 159, kernel bzImage-kvm d50fbc67...); not checked since",
+      "note": "recorded on the build machine with hv/kvm/kvm-check.sh (docs/HISTORY.md Milestone 159, kernel bzImage-kvm d50fbc67...); checked for 0.2.0 on the build machine with --thorough (two fresh boots each; the stack images taken from the hvx builds)",
       "build": {
         "stage": "release",
         "dir": "release/examples/redis",
@@ -2100,7 +2126,7 @@
       "id": "kvm/stack-old",
       "platform": "kvm",
       "recorded": "docs/HISTORY.md Milestone 159",
-      "note": "recorded on the build machine with hv/kvm/kvm-check.sh (docs/HISTORY.md Milestone 159, kernel bzImage-kvm d50fbc67...); not checked since; the image is the pinned reproducer of docs/REBASELINE.md 13.3 (hvx/stack-old)",
+      "note": "recorded on the build machine with hv/kvm/kvm-check.sh (docs/HISTORY.md Milestone 159, kernel bzImage-kvm d50fbc67...); checked for 0.2.0 on the build machine with --thorough (two fresh boots each; the stack images taken from the hvx builds); the image is the pinned reproducer of docs/REBASELINE.md 13.3 (hvx/stack-old)",
       "build": {
         "stage": "stack-old",
         "dir": "hydo/onboard/examples/stack",
@@ -2122,7 +2148,7 @@
       "id": "kvm/stack-fix",
       "platform": "kvm",
       "recorded": "docs/HISTORY.md Milestone 159",
-      "note": "recorded on the build machine with hv/kvm/kvm-check.sh (docs/HISTORY.md Milestone 159, kernel bzImage-kvm d50fbc67...); not checked since; the image is the pinned reproducer of docs/REBASELINE.md 13.3 (hvx/stack-fix)",
+      "note": "recorded on the build machine with hv/kvm/kvm-check.sh (docs/HISTORY.md Milestone 159, kernel bzImage-kvm d50fbc67...); checked for 0.2.0 on the build machine with --thorough (two fresh boots each; the stack images taken from the hvx builds); the image is the pinned reproducer of docs/REBASELINE.md 13.3 (hvx/stack-fix)",
       "build": {
         "stage": "stack-fix",
         "dir": "hydo/onboard/examples/stack",
