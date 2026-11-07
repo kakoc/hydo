@@ -42,6 +42,10 @@ pub struct Ctx {
     /// Installed by `cargo install` (no release around the program): the root is this version's
     /// directory of the install cache ([`installed_root`]), which `hydo setup --get` fills.
     pub cargo_installed: bool,
+    /// Built in a checkout (`<checkout>/target/.../hydo`, no release around the program): the
+    /// checkout. Such a hydo takes its release files from the install cache as a cargo-installed
+    /// one does (`cargo_installed` is true too), and `hydo doctor` says so first.
+    pub checkout: Option<PathBuf>,
 }
 
 impl Ctx {
@@ -56,7 +60,12 @@ impl Ctx {
             .map(Path::to_path_buf)
             .unwrap_or_else(|| PathBuf::from("."));
         crate::module::set_host_root(config.cli.host_root.clone());
-        let installed = installed_root(&root, &config.cli.cache.home);
+        let checkout = checkout_of(&exe, &root);
+        let installed = installed_root(&root, &config.cli.cache.home).or_else(|| {
+            checkout
+                .as_ref()
+                .map(|_| version_root(&config.cli.cache.home))
+        });
         let cargo_installed = installed.is_some();
         let root = installed.unwrap_or(root);
         let platform = Platform::detect(&config.cli);
@@ -67,6 +76,7 @@ impl Ctx {
             config,
             kvm,
             cargo_installed,
+            checkout,
         }
     }
 
@@ -134,7 +144,36 @@ pub fn installed_root(prefix: &Path, cache_home: &Path) -> Option<PathBuf> {
     if !record.contains("\"hydo ") {
         return None;
     }
-    Some(hydo_image::store::Home::new(cache_home.to_path_buf()).version(hydo_image::hydo_version()))
+    Some(version_root(cache_home))
+}
+
+/// This hydo version's directory of the install cache (`<cache home>/versions/<version>`).
+fn version_root(cache_home: &Path) -> PathBuf {
+    hydo_image::store::Home::new(cache_home.to_path_buf()).version(hydo_image::hydo_version())
+}
+
+/// The checkout a `hydo` was built in, when it runs from that checkout's cargo target directory
+/// (`<checkout>/target/release/hydo`, `<checkout>/target/<triple>/release/hydo`) and no release is
+/// around it (`root`, the program's parent's parent, has no `SHA256SUMS`). A checkout is a
+/// directory with `Cargo.toml`, `hydo/VERSION` and `hydo/crates/hydo-cli`. Such a hydo has none of
+/// a release's files (guest kernels, engine programs, tools; the TigerBeetle onboarding found
+/// `hydo doctor` failing ten checks and `hydo build` naming version 0.0.0), so it uses the install
+/// cache's copy of its own version's release, as a cargo-installed hydo does (Milestone 169).
+/// A copy of the program in a release-like prefix (deploy-metal.sh, the rebaseline prefix, the CLI
+/// test) is not inside a checkout's target directory and keeps its own root.
+pub fn checkout_of(exe: &Path, root: &Path) -> Option<PathBuf> {
+    if root.join("SHA256SUMS").exists() {
+        return None;
+    }
+    exe.ancestors()
+        .filter(|a| a.file_name().is_some_and(|n| n == "target"))
+        .filter_map(Path::parent)
+        .find(|c| {
+            c.join("Cargo.toml").is_file()
+                && c.join("hydo").join("VERSION").is_file()
+                && c.join("hydo").join("crates").join("hydo-cli").is_dir()
+        })
+        .map(Path::to_path_buf)
 }
 
 /// `hydo: <msg>` on stderr and exit with status 1.
@@ -262,5 +301,51 @@ pub fn pjoin(a: &str, b: &str) -> String {
         format!("{a}{b}")
     } else {
         format!("{a}/{b}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::checkout_of;
+    use std::path::Path;
+
+    fn checkout(at: &Path) {
+        std::fs::create_dir_all(at.join("hydo/crates/hydo-cli")).unwrap();
+        std::fs::write(at.join("Cargo.toml"), "[workspace]\n").unwrap();
+        std::fs::write(at.join("hydo/VERSION"), "0.1.0\n").unwrap();
+    }
+
+    /// A hydo in a checkout's target directory (also a cross build's) is a checkout build; a copy
+    /// in a release-like prefix, a release, or a target directory outside a checkout is not.
+    #[test]
+    fn checkout_builds_are_recognised() {
+        let d = std::env::temp_dir().join(format!("hydo-ctx-checkout-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        let t = d.join("tree");
+        checkout(&t);
+        let exe = t.join("target/release/hydo");
+        assert_eq!(checkout_of(&exe, &t.join("target")), Some(t.clone()));
+        let cross = t.join("target/x86_64-unknown-linux-musl/release/hydo");
+        assert_eq!(
+            checkout_of(&cross, &t.join("target/x86_64-unknown-linux-musl")),
+            Some(t.clone())
+        );
+        // a release unpacked inside the checkout keeps its own root
+        let rel = t.join("target/rel");
+        std::fs::create_dir_all(&rel).unwrap();
+        std::fs::write(rel.join("SHA256SUMS"), "").unwrap();
+        assert_eq!(checkout_of(&rel.join("bin/hydo"), &rel), None);
+        // a prefix with the program copied in (deploy-metal.sh, the rebaseline prefix)
+        let p = d.join("prefix");
+        assert_eq!(checkout_of(&p.join("bin/hydo"), &p), None);
+        // a target directory whose parent is not a hydo checkout
+        let other = d.join("other");
+        std::fs::create_dir_all(other.join("target/release")).unwrap();
+        std::fs::write(other.join("Cargo.toml"), "").unwrap();
+        assert_eq!(
+            checkout_of(&other.join("target/release/hydo"), &other.join("target")),
+            None
+        );
+        let _ = std::fs::remove_dir_all(&d);
     }
 }

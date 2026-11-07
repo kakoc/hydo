@@ -117,6 +117,13 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 ```
 
+- **The `hydo` command from this tree:** `cargo build --release -p hydo` gives `target/release/hydo`,
+  which reports this tree's version and commit (`hydo --version`). A checkout has none of a
+  release's files (guest kernels, engine programs, tools), so such a `hydo` uses its version's
+  release from the install cache, as a `cargo install`ed one does: `target/release/hydo setup --get
+  <version>` fetches it once (`hydo doctor` names the command), and the tree's `hydo` then runs over
+  it.
+
 - **The Linux engine** needs an x86_64 machine with Intel VT-x and the running kernel's headers:
   `make -C hv/hvx` builds `hvx.ko`; `hv/hvx/deploy-metal.sh` runs the engine's regression suite on
   such a machine. Bare metal is best; a VM works if it exposes nested VT-x, but the exact branch
