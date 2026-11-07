@@ -87,9 +87,13 @@ agent's events. It also lists each conversation's stops and where snapshots are 
 
 ## What each engine supports
 
-The same code drives every engine through the lock-step protocol. hvx (the bare-metal machine)
-and hvm (the Mac) were run; KVM serves the same `SNAP`/`RESUME` (M161) and was not run with
-`hydo inspect`. Stops that cannot be snapshotted are live on every engine.
+The same code drives every engine through the lock-step protocol. hvx (the bare-metal machine):
+the diagnosis with its evidence for a service that exits at start, a readiness check that never
+passes and an out-of-memory kill in provisioning; snapshot sessions in the workload, live sessions
+in a recovery boot, one-shot calls; the stack's pinned reproducer. hvm (the Mac): the evidence of
+the same three failures, a snapshot session before a power cut and a live one in the recovery
+boot. KVM serves the same `SNAP`/`RESUME` (M161) and was not run with `hydo inspect`. Stops that
+cannot be snapshotted are live on every engine.
 
 ## Costs
 
