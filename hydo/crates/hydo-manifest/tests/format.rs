@@ -177,8 +177,12 @@ fn every_example_reads_into_its_recorded_model() {
     for c in cases() {
         // valid today: the validator accepts it on at least one architecture
         let valid = ["x86_64", "arm64"].iter().any(|arch| {
+            // the examples are permanent and some pin the hydo they were written for
+            // (`hydo_version: "0.1"`); that pin is a build-time check against this hydo's
+            // version, not part of the format, so it only warns here
             let opts = LoadOptions {
                 arch: arch.to_string(),
+                version_check_warn: true,
                 ..LoadOptions::default()
             };
             matches!(hydo_manifest::load_until_images(&c.doc, &opts).0, Ok(l) if hydo_manifest::check_document(&l).is_ok())

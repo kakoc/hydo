@@ -380,8 +380,11 @@ release_examples() {   # the release's own examples, as a user builds them
 
 # --------------------------------------------------------------------------------------- build
 rmtree() {   # a build's outputs, with their read-only store folders (Linux: owned by another uid too)
-  if [ "$PLAT" = hvm ]; then chmod -R u+w "$@" 2> /dev/null || true; rm -rf "$@"
-  else sudo -n rm -rf "$@"; fi
+  chmod -R u+w "$@" 2> /dev/null || true; rm -rf "$@" 2> /dev/null || true
+  # what is left is another uid's (a `keep` build's) and needs sudo; a machine without sudo (the
+  # KVM engine's, as its login user) never makes such builds of its own
+  [ "$PLAT" = hvm ] && return 0
+  local p; for p in "$@"; do [ -e "$p" ] || [ -L "$p" ] || continue; sudo -n rm -rf "$p" || return 1; done
 }
 build() {   # normal|keep <dir> <manifest> <out> [args]
   local owners=$1 dir=$2 man=$3 out=$4; shift 4
