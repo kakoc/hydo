@@ -1,0 +1,33 @@
+# cargo-nextest's configuration for the workspace (Milestone 171; docs/CI.md "Test tiers").
+# cargo-nextest 0.9.148 is the pinned version (CI installs it by sha256).
+#
+# nextest runs every test in its own process and the test programs side by side, which is why a
+# run of the per-push tier takes a fraction of `cargo test`'s time; `cargo test --locked --release
+# --workspace` stays the full tier (it also runs the documentation examples, which nextest does
+# not).
+
+[profile.default]
+# a test still running after a minute is reported as slow (and left running)
+slow-timeout = { period = "60s" }
+# every failure is listed, as `cargo test --no-fail-fast` does
+fail-fast = false
+
+[profile.ci]
+slow-timeout = { period = "60s" }
+fail-fast = false
+# the failures' output again at the end of the run, after the progress lines
+failure-output = "immediate-final"
+
+# every test's time, for docs/CI.md's table of the slowest tests (target/nextest/ci/junit.xml)
+[profile.ci.junit]
+path = "junit.xml"
+
+# The tests that cannot run in full on a runner print why when they pass (docs/CI.md, "What does
+# not run, and why"); their output is shown at the end of the run.
+[[profile.ci.overrides]]
+filter = '''
+  binary_id(hydo-agents::public_content) | binary_id(hydo-agents::skill_check)
+  | (binary_id(hydo-errors::equivalence) & test(=recorded_files))
+  | (binary_id(hydo::equivalence) & test(=cli_matches_golden))
+'''
+success-output = "final"

@@ -12,6 +12,7 @@ DIR="${HYDO_REMOTE_DIR:-hydo}"
 
 rsync -az --delete \
   --exclude target \
+  --exclude .sccache \
   --exclude build \
   --exclude '.git' \
   --exclude machines.local.sh \

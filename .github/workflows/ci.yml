@@ -1,16 +1,19 @@
-# hydo's continuous integration. docs/CI.md says what runs, what is skipped where and why, and
-# how long it takes.
+# hydo's continuous integration, the per-push tier. docs/CI.md says what runs, what is skipped
+# where and why, and how long it takes; ci-full.yml is the full tier (every test, release mode).
 #
 # - rust: the Cargo workspace on Linux (x86_64) and macOS (Apple Silicon): formatting, clippy
-#   with every warning an error, and the whole test suite in release mode, as docs/RELEASING.md
-#   step 1 asks before a release. No test boots a guest: a GitHub runner has neither the hvx
-#   kernel module nor access to Hypervisor.framework.
+#   with every warning an error, and the `fast` tests (ci/test-tiers.txt) of the packages the
+#   change can affect (ci/affected-packages.sh), with cargo-nextest in the `ci` profile (the
+#   release profile without link-time optimisation). No test boots a guest: a GitHub runner has
+#   neither the hvx kernel module nor access to Hypervisor.framework.
 # - guest-programs: the guest agent and the store reader, which keep their own Cargo
 #   workspaces and lock files (their bytes are inside recorded images), on Linux.
 # - sdks: the assertion SDKs: the Rust reference, the Rust test SDK, and the Go (sdk/go and the
 #   order service's copy), Python and JavaScript SDKs against the shared cases in sdk/cases.
 #
 # Every action is pinned by commit. The workflow needs no secret and only reads the repository.
+# The compile cache (sccache) lives in this repository's GitHub Actions cache only: no developer
+# machine reads or writes it, and no outside cache server or bucket is used.
 name: ci
 
 on:
@@ -40,16 +43,42 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15]
+        include:
+          - os: ubuntu-24.04
+            nextest: cargo-nextest-0.9.148-x86_64-unknown-linux-gnu.tar.gz
+            nextest_sha256: 223ba936714cc861a9cdedad5a8eb664dfdd69d6fbdf6cea6aa8184f523290dc
+          - os: macos-15
+            nextest: cargo-nextest-0.9.148-universal-apple-darwin.tar.gz
+            nextest_sha256: 6c23b7fb4ca82c571fc8dfedbab45bfa773d45918f933170c85d21cd7f4b852b
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
+    env:
+      # sccache with the GitHub Actions cache as its only storage (set up by sccache-action)
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: sccache
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # the history, for the change's base commit (ci/affected-packages.sh)
+          fetch-depth: 0
       - name: Install the pinned Rust toolchain (rust-toolchain.toml)
         run: rustup toolchain install && rustc --version && cargo --version
+      - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.18.0
+      # the Cargo registry and the compiled dependencies (the workspace's own crates come from
+      # sccache: a fresh checkout's files are newer than any cached build, so Cargo compiles them)
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Install cargo-nextest 0.9.148 (checked against its sha256)
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/nextest.tar.gz" \
+            "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.148/${{ matrix.nextest }}"
+          echo "${{ matrix.nextest_sha256 }}  $RUNNER_TEMP/nextest.tar.gz" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar xzf "$RUNNER_TEMP/nextest.tar.gz" -C "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/cargo-nextest" nextest --version
       # The skill check (hydo-agents' skill_check) also runs the Agent Skills reference
       # validator when HYDO_SKILLS_REF names it; its PyPI package installs it as `agentskills`.
       - name: Install the Agent Skills validator (skills-ref 0.1.1)
@@ -61,19 +90,26 @@ jobs:
         run: cargo fmt --all --check
       - name: cargo clippy
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
-      - name: cargo test
-        # --no-fail-fast: one failing test binary does not hide the other binaries' results
-        run: cargo test --locked --release --workspace --no-fail-fast
-      # A passing test's own output is hidden by the test harness; these print the checks that
-      # cannot run on a runner, with the reason each test gives (docs/CI.md lists them).
-      - name: What the tests skipped, and why
+      - name: Which packages the change can affect
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: |
-          # --workspace (not -p) keeps the features of the run above, so nothing is rebuilt
-          t="cargo test --locked --release --workspace -q"
-          # (-q prints a progress dot in front of a line a test prints: grep -o drops it)
-          $t --test public_content -- --nocapture 2>&1 | grep -o 'public_content: .*'
-          $t --test skill_check -- --nocapture 2>&1 | grep -o 'skills-ref: .*'
-          $t --test equivalence -- --nocapture --exact recorded_files cli_matches_golden 2>&1 | grep -oE '(SKIPPED|cli): .*'
+          packages=$(sh ci/affected-packages.sh "${BASE:-none}")
+          echo "$packages"
+          if [ "$packages" = ALL ]; then
+            echo "PACKAGES=--workspace" >> "$GITHUB_ENV"
+          else
+            # the tier check and the tracked-files check run on every change
+            echo "PACKAGES=$(printf '%s\nhydo-release\nhydo-agents\n' "$packages" | sort -u | sed 's/^/-p /' | tr '\n' ' ')" >> "$GITHUB_ENV"
+          fi
+      - name: Tests (the fast tier, cargo nextest, profile ci)
+        run: |
+          filter=$(sh ci/tier-filter.sh fast)
+          echo "packages: $PACKAGES"
+          cargo nextest run --locked --cargo-profile ci --profile ci $PACKAGES -E "$filter"
+      - name: sccache's statistics
+        if: always()
+        run: sccache --show-stats
 
   guest-programs:
     name: guest programs (ubuntu-24.04)

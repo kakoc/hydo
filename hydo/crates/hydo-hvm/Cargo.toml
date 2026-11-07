@@ -11,6 +11,10 @@ homepage.workspace = true
 # recorded answers stay in the repository.
 include = ["/src/**", "/Cargo.toml", "/LICENSE"]
 
+[lib]
+# no documentation example to test (hydo-release tests/test_tiers.rs checks it stays so)
+doctest = false
+
 [dependencies]
 libc = "0.2"
 # the C library's number parsing as the engines read schedules (hydo_hvx::cstr)

@@ -15,8 +15,8 @@
 //! (59,262 cases). The stream must be identical.
 //!
 //! `HYDO_BLESS=1 cargo test -p hydo-composer --test equivalence` re-records both goldens from the
-//! Rust answers (after a deliberate change, or when a pinned plan folder changed: the test says
-//! which). `HYDO_RECORD_PY=<py_ref.py output> HYDO_RECORD_WORK=<its --work dir>` records from a
+//! Rust answers after a deliberate change. A pinned plan folder whose files changed fails the test
+//! only through the answers; the test prints which folders changed (Milestone 171). `HYDO_RECORD_PY=<py_ref.py output> HYDO_RECORD_WORK=<its --work dir>` records from a
 //! saved Python stream instead (how the goldens were made).
 
 mod common;
@@ -966,11 +966,14 @@ fn composer_matches_recorded_python() {
             .filter(|p| folder_pin(Path::new(&resolve(s(p, "dir"), &work))) != s(p, "pin"))
             .map(|p| s(p, "dir").to_string())
             .collect();
-        assert!(
-            changed.is_empty(),
-            "pinned plan folders changed since the recording: {changed:?}; check the change, then \
-             re-record with HYDO_BLESS=1"
-        );
+        // the folders' digests decide nothing: the answers below do (Milestone 171); printed so
+        // that a failing comparison names the folders that changed
+        if !changed.is_empty() {
+            eprintln!(
+                "pinned plan folders changed since the recording: {changed:?}; the answers \
+                 decide; if they differ, check the change, then re-record with HYDO_BLESS=1"
+            );
+        }
     }
     let _ = std::fs::remove_dir_all(&work);
     golden::check(

@@ -18,8 +18,11 @@
 //! The input set is pinned in the same file (`I` lines: each repository manifest candidate, the
 //! guest files that `--print-shell` reads (until M136 also the shell init files `--print-init`
 //! read), each with the SHA-256 of its
-//! bytes, or of its whole `hydo/` folder for a folder plan), so `git ls-files` does not decide it:
-//! when an input changed or vanished since the recording, the test fails and names it. Recorded
+//! bytes, or of its whole `hydo/` folder for a folder plan), so `git ls-files` does not decide it.
+//! The digests do not decide the verdict, the answers do (Milestone 171): an input whose bytes
+//! changed but whose answers did not (a description edited in a JSON file the builder refuses at
+//! the top level) passes, and when an answer differs the failure also names the inputs that
+//! changed or vanished since the recording. Recorded
 //! answers of other tests (`*/tests/golden*`) and the Python unit tests' fixtures
 //! (`hydo/onboard/tests`) are not in the pinned set.
 //!
@@ -484,21 +487,22 @@ fn print_and_check_outputs_match_hydo_build() {
     let golden = (mode == Mode::Golden).then(read_golden);
 
     // the pinned inputs: manifest candidates and the guest files the outputs contain
+    let mut changed: Vec<String> = Vec::new();
     let (pinned, guest): (Vec<String>, Vec<String>) = match &golden {
         Some(g) => {
-            let changed: Vec<String> = g
+            // A changed input fails the test only through its answers (below): an edit that
+            // changes no answer (a description in a JSON file the builder refuses at the top
+            // level) passes. The names go into the failure message.
+            changed = g
                 .inputs
                 .iter()
                 .chain(&g.guest)
                 .filter(|(rel, d)| &input_digest(&root, rel) != d)
                 .map(|(rel, _)| rel.clone())
                 .collect();
-            assert!(
-                changed.is_empty(),
-                "{} repository inputs changed (or vanished) since the answers were recorded: {changed:?}\n\
-                 If the change is deliberate, re-record from Rust with HYDO_BLESS=1 and review the diff.",
-                changed.len()
-            );
+            if !changed.is_empty() {
+                eprintln!("{}", changed_note(&changed));
+            }
             let names = |v: &[(String, String)]| v.iter().map(|(r, _)| r.clone()).collect();
             (names(&g.inputs), names(&g.guest))
         }
@@ -707,5 +711,24 @@ fn print_and_check_outputs_match_hydo_build() {
     for m in mismatches.iter().take(25) {
         eprintln!("MISMATCH {m}\n");
     }
-    assert!(mismatches.is_empty(), "{} mismatches", mismatches.len());
+    assert!(
+        mismatches.is_empty(),
+        "{} mismatches{}",
+        mismatches.len(),
+        if changed.is_empty() {
+            String::new()
+        } else {
+            format!("\n{}", changed_note(&changed))
+        }
+    );
+}
+
+/// What a failure says about pinned inputs whose bytes differ from the recording.
+fn changed_note(changed: &[String]) -> String {
+    format!(
+        "{} pinned repository inputs changed (or vanished) since the answers were recorded: \
+         {changed:?}\nThe answers decide: the test fails only when an answer differs. If the \
+         change is deliberate, re-record from Rust with HYDO_BLESS=1 and review the diff.",
+        changed.len()
+    )
 }

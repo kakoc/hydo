@@ -11,4 +11,8 @@ homepage.workspace = true
 # recorded answers stay in the repository.
 include = ["/src/**", "/Cargo.toml", "/LICENSE"]
 
+[lib]
+# no documentation example to test (hydo-release tests/test_tiers.rs checks it stays so)
+doctest = false
+
 [dependencies]

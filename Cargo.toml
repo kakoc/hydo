@@ -79,6 +79,18 @@ lto = "thin"
 codegen-units = 1
 strip = true
 
+# The tests' profile for the per-push tier and for development (Milestone 171; docs/CI.md): the
+# release profile's code and semantics (opt-level 3, no debug assertions, no overflow checks, so
+# a test behaves as under `cargo test --release`), without its link-time optimisation and with
+# parallel code generation, which made every test program a minutes-long link. Release binaries
+# (`--release`, the tarballs, the pinned guest programs) keep [profile.release].
+[profile.ci]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = false
+strip = false # symbols kept for test backtraces
+
 # The gRPC client's tests generate deeply nested messages (recursive schemas); unoptimized,
 # they take minutes. Only debug builds are affected (the release client is built with --release).
 [profile.dev.package.hydo-grpc]

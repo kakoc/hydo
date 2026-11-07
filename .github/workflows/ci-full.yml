@@ -1,0 +1,80 @@
+# hydo's continuous integration, the full tier (Milestone 171; docs/CI.md "Test tiers"): every
+# test of the workspace in release mode, as docs/RELEASING.md step 1 asks before a release, with
+# the documentation examples, on Linux and macOS. It runs every night on the default branch, on
+# demand (Actions, "ci-full", Run workflow; or `gh workflow run ci-full.yml --ref <branch>`), and
+# on a pull request that carries the label `full-ci`.
+#
+# Every action is pinned by commit. The workflow needs no secret and only reads the repository.
+# The compile cache (sccache) lives in this repository's GitHub Actions cache only.
+name: ci-full
+
+on:
+  schedule:
+    # every night at 02:17 UTC
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+  pull_request:
+    types: [labeled, synchronize, opened, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-full-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
+
+jobs:
+  rust:
+    name: rust full (${{ matrix.os }})
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: sccache
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the pinned Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install && rustc --version && cargo --version
+      - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.18.0
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: full
+      - name: Install the Agent Skills validator (skills-ref 0.1.1)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/skills-ref"
+          "$RUNNER_TEMP/skills-ref/bin/pip" install --quiet skills-ref==0.1.1
+          echo "HYDO_SKILLS_REF=$RUNNER_TEMP/skills-ref/bin/agentskills" >> "$GITHUB_ENV"
+      - name: cargo test (every test, release mode)
+        # --no-fail-fast: one failing test binary does not hide the other binaries' results
+        run: cargo test --locked --release --workspace --no-fail-fast
+      # A passing test's own output is hidden by the test harness; these print the checks that
+      # cannot run on a runner, with the reason each test gives (docs/CI.md lists them).
+      - name: What the tests skipped, and why
+        run: |
+          # --workspace (not -p) keeps the features of the run above, so nothing is rebuilt
+          t="cargo test --locked --release --workspace -q"
+          # (-q prints a progress dot in front of a line a test prints: grep -o drops it)
+          $t --test public_content -- --nocapture 2>&1 | grep -o 'public_content: .*'
+          $t --test skill_check -- --nocapture 2>&1 | grep -o 'skills-ref: .*'
+          $t --test equivalence -- --nocapture --exact recorded_files cli_matches_golden 2>&1 | grep -oE '(SKIPPED|cli): .*'
+      - name: sccache's statistics
+        if: always()
+        run: sccache --show-stats
