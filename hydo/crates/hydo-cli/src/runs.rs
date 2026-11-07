@@ -463,7 +463,7 @@ pub fn run_to_dir(
     let (r, _) = run_engine(ctx, image, sched, outdir, &eargs, true, &Policy::Schedule);
     let res = host_checks(outdir, result_map(&r?), true);
     let res = errors_one(outdir, sched, res, None);
-    let run = run_document(outdir, image, image_sha, sched, &eargs, &res, ctx.platform);
+    let run = run_document(outdir, image, image_sha, sched, &eargs, &res, ctx.backend_name());
     write_run_document(outdir, &run);
     Some(run)
 }
