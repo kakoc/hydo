@@ -4,7 +4,9 @@ Each pattern is a check file in `hydo/checks/` (or the `cmd:` of an `invariants:
 numbered-steps manifest; the body is the same). Exit 0 = holds, 1 = violated, 2 = cannot be
 evaluated now. Print one line of details last. Files: `$HYDO_ACKED` (one acknowledged id per
 line), `$HYDO_OUTCOMES` (`<id> ack|failed|unknown`, the last line per id wins), `$HYDO_FAILED`
-(ids whose last outcome was `failed`). Where a ready-made `hydo-check` line exists it is shown
+(ids whose last outcome was `failed`). After a power cut the recovery boot's checks get
+`$HYDO_ACKED` and `$HYDO_FAILED` carried over, and an empty `$HYDO_OUTCOMES`: a check that
+looks up only the ids listed in `$HYDO_OUTCOMES` checks nothing there. Where a ready-made `hydo-check` line exists it is shown
 first; use the shell version where `hydo-read` is not available (`hydo guide capabilities`) or the store is
 not one it reads.
 

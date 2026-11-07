@@ -1,0 +1,23 @@
+#!/bin/sh
+# hydo: timeout=120
+# Create the accounts 1..8 (ledger 700, code 10, no balance limits), before any fault.
+. ${HYDO_WORKLOAD:-/hydo/workload}/helper_tb.sh
+stmt="create_accounts"
+i=1; sep=" "
+while [ $i -le $TB_ACCOUNTS ]; do
+  stmt="$stmt$sep id=$i code=10 ledger=700"; sep=","; i=$((i + 1))
+done
+for attempt in 1 2 3 4 5; do
+  n=$(tb_create 20 "$stmt" | grep -c -x -E 'created|exists')
+  [ "$n" = "$TB_ACCOUNTS" ] && { echo "accounts: $TB_ACCOUNTS created"; exit 0; }
+  echo "attempt $attempt: $n of $TB_ACCOUNTS accounts confirmed"
+done
+# A failed provisioning shows only "ERROR provision failed": say on the console why.
+{
+  echo "first_accounts: the cluster did not confirm the accounts"
+  free -m
+  ps -o pid,rss,args | grep '[t]igerbeetle'
+  dmesg | grep -i -E 'out of memory|oom-kill|killed process' | tail -5
+  tail -n 3 /tmp/hydo/*.log 2>/dev/null
+} > /dev/console 2>&1
+exit 1

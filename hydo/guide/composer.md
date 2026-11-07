@@ -61,7 +61,7 @@ so a typo does not silently do nothing.
 | `HYDO_ROUND` | the round it started in |
 | `HYDO_SEED` | a number from the composition's random stream, for the command's own choices |
 | `HYDO_ACKED` | file: append one id per line for every operation the client saw acknowledged (carried across a power cut) |
-| `HYDO_OUTCOMES` | file: append `<id> ack\|failed\|unknown` per attempt (the last line per id wins) |
+| `HYDO_OUTCOMES` | file: append `<id> ack\|failed\|unknown` per attempt (the last line per id wins); NOT carried across a power cut: in the recovery boot it is empty, so a check that needs the unknown ids must find them in the store itself |
 | `HYDO_FAILED` | file (checks only): ids whose last outcome was `failed` |
 | the manifest's `env:` | exported to every command; `shell:` helpers are sourced too |
 
