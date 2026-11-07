@@ -1,0 +1,49 @@
+# libSQL server (sqld): one primary and one read replica, as a libSQL user runs them.
+# Clients talk HTTP (Hrana over HTTP, /v2/pipeline) to either node; the replica serves reads
+# from its own copy and forwards writes to the primary over gRPC (port 5001).
+services:
+  primary:
+    image: ghcr.io/tursodatabase/libsql-server:${SQLD_VERSION:-v0.24.33}
+    platform: linux/amd64
+    environment:
+      SQLD_NODE: primary
+      SQLD_DB_PATH: /var/lib/sqld/primary.db
+      SQLD_HTTP_LISTEN_ADDR: 0.0.0.0:8080
+      SQLD_GRPC_LISTEN_ADDR: 0.0.0.0:5001
+    ports:
+      - "8080:8080"
+      - "5001:5001"
+    volumes:
+      - primary-data:/var/lib/sqld
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    restart: unless-stopped
+
+  replica:
+    image: ghcr.io/tursodatabase/libsql-server:${SQLD_VERSION:-v0.24.33}
+    platform: linux/amd64
+    environment:
+      SQLD_NODE: replica
+      SQLD_PRIMARY_URL: http://primary:5001
+      SQLD_DB_PATH: /var/lib/sqld/replica.db
+      SQLD_HTTP_LISTEN_ADDR: 0.0.0.0:8080
+    ports:
+      - "8081:8080"
+    volumes:
+      - replica-data:/var/lib/sqld
+    depends_on:
+      primary:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    restart: unless-stopped
+
+volumes:
+  primary-data:
+  replica-data:

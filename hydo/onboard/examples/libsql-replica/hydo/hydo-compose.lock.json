@@ -1,0 +1,71 @@
+{
+ "generated_by": "hvx/onboard/hydo-compose",
+ "images": {
+  "ghcr.io/tursodatabase/libsql-server:v0.24.33": {
+   "index_digest": "sha256:f8ca0134cdded747793888e48591aece07647d9d598d3ac229aabfa93159ca88",
+   "name": "ghcr.io/tursodatabase/libsql-server",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "/bin/sqld"
+      ],
+      "Entrypoint": [
+       "/usr/local/bin/docker-wrapper.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "5001/tcp": {},
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "root",
+      "Volumes": {
+       "/var/lib/sqld": {}
+      },
+      "WorkingDir": "/var/lib/sqld"
+     },
+     "digest": "sha256:756fb4d34447cfa9507dceb3a8e680435d7f2173e2aa680f44a1329e774f7d31",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "/bin/sqld"
+      ],
+      "Entrypoint": [
+       "/usr/local/bin/docker-wrapper.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "5001/tcp": {},
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "root",
+      "Volumes": {
+       "/var/lib/sqld": {}
+      },
+      "WorkingDir": "/var/lib/sqld"
+     },
+     "digest": "sha256:d2184b6faf4ccea9b480180467279d682e7aca9217cd8234655885dabfac8a23",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "ghcr.io/tursodatabase/libsql-server:v0.24.33",
+   "registry": "ghcr.io",
+   "repo": "tursodatabase/libsql-server",
+   "tag": "v0.24.33"
+  }
+ }
+}

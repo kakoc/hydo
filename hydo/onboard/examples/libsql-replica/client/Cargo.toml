@@ -1,0 +1,18 @@
+[package]
+name = "sqlgen"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "A seeded SQL workload for libSQL's server (sqld) over Hrana HTTP: bank transfers and list-append transactions with hydo history records."
+publish = false
+
+[dependencies]
+hydo-assert = { path = "../../../../../sdk/rust" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[workspace]

@@ -1,0 +1,13 @@
+#!/bin/sh
+# hydo: timeout=60
+# The schema and the bank's accounts, on the primary, before the window under test (idempotent;
+# the primary's ready command has set its durability mode to strong). The replica must have them
+# too before the workload starts, so wait until it serves them.
+/bin/sqlgen init || exit 1
+i=0
+while [ $i -lt 60 ]; do
+  out=$(/bin/sqlgen total replica) && case "$out" in *"total "*) echo "$out"; exit 0;; esac
+  i=$((i + 1)); sleep 1
+done
+echo "the replica did not receive the schema within 60 s: $out"
+exit 1

@@ -1,0 +1,7 @@
+#!/bin/sh
+# hydo: history=lap consistency=strict-serializable
+# hydo-msg: on the primary, the SQL transactions are strict-serializable: no acknowledged append is lost, also across a power cut
+# History lap holds the transactions the client sent to the primary, and the appends of those it
+# sent to the replica (every write executes on the primary; the replica's reads may be stale and
+# are left out). The final read-back: every list, read in one transaction on the primary.
+exec /bin/sqlgen read-all primary 9998
