@@ -280,7 +280,7 @@ struct P256Share {
 
 impl ActiveKeyExchange for P256Share {
     fn complete(self: Box<Self>, peer: &[u8]) -> Result<SharedSecret, Error> {
-        // TLS sends uncompressed points only (RFC 8446 4.2.8.2)
+        // TLS sends uncompressed points only (RFC 8446, the key share of secp256r1)
         if peer.first() != Some(&4) {
             return Err(Error::General(
                 "secp256r1 key share is not an uncompressed point".into(),

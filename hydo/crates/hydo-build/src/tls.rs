@@ -43,6 +43,12 @@ pub const BUNDLES: &[&str] = &[
     "etc/ssl/ca-bundle.pem",
     "etc/ssl/cert.pem",
 ];
+/// Source directories of the distributions' bundle tools, given the CA when an image has them:
+/// update-ca-certificates (Debian, Ubuntu, Alpine) and update-ca-trust (RHEL, Fedora).
+pub const ANCHORS: &[(&str, &str)] = &[
+    ("usr/local/share/ca-certificates", "hydo-test-ca.crt"),
+    ("etc/pki/ca-trust/source/anchors", "hydo-test-ca.pem"),
+];
 
 /// The variables set for every program (unless the manifest sets them): OpenSSL, Go, Ruby,
 /// Python's httpx and curl read SSL_CERT_FILE; Python's requests REQUESTS_CA_BUNDLE (it keeps

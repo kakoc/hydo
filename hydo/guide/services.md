@@ -32,7 +32,12 @@ rules that matter most:
 - `provision`: schemas, topics, users: what must exist before the window under test. Seed data
   that belongs to the test is a `first_<name>` command instead.
 - Images: `image:` plus `mounts:` (bind, volume, tmpfs) and `user:`; tools inside an image run as
-  `hydo-oci <service> <command>`.
+  `hydo-oci <service> <command>`. An image root is read-only; a program that writes into its own
+  files (a cache in its home directory, files generated into its install directory: the error is
+  often `ENOENT` or "Read-only file system") needs `writable: true`, a container's writable layer
+  kept on the data disk: it survives a kill, and a power cut as far as it was flushed (`hydo guide
+  manifest`, "A writable root for image services"). Prefer it to a list of tmpfs mounts found by
+  trial.
 
 Guest settings: `guest.ram_mib` (default 1024) must hold every service; `guest.cpu: v3` when a
 binary needs AVX or AVX2 (x86_64 only); `guest.clock_after_cut: 60` when a check compares times

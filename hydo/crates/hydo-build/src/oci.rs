@@ -1868,6 +1868,13 @@ fn trust_image(t: &mut Tree, tt: &TlsTrust, env: &mut Vec<(String, String)>) -> 
             }
         }
     }
+    // where the distributions' own tools look when an entrypoint rebuilds the bundle
+    // (update-ca-certificates on Debian and Alpine, update-ca-trust on RHEL), so a rebuild keeps it
+    for (dir, file) in crate::tls::ANCHORS {
+        if t.resolve_dir(&Tree::parts(dir)?, false)?.is_some() {
+            t.put_file(&format!("{dir}/{file}"), tt.ca_pem.as_bytes(), 0o644)?;
+        }
+    }
     let bundle = match done.first() {
         Some(r) => format!("/{r}"),
         None => {
