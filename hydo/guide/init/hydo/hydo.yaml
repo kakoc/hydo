@@ -6,7 +6,7 @@
 name: @NAME@
 description: TODO one line about the system under test
 format: 1                        # the project format (experimental until hydo 1.0; additions only)
-hydo_version: "0.1"              # the hydo this project was made for
+hydo_version: "0.2"              # the hydo this project was made for
 
 guest:
   ram_mib: 1024                  # must hold every service (256..3072 on x86_64, 256..4096 on arm64)

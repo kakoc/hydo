@@ -12,7 +12,7 @@
 #       hydo explore --seeds 1-40 --strategy swarm   the new kinds of the disk faults, each shrunk
 name: redis-errors
 description: The composed Redis example with error logs as findings (known kinds in hydo/known-errors.yaml).
-hydo_version: "0.1"
+hydo_version: "0.2"
 format: 1
 
 params:
