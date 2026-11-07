@@ -19,8 +19,8 @@ does.
 Files: `hydo/crates/hydo-history` (parser + checkers in Rust, M105; the command line is
 `hydo check-history`, also the crate's `hydo-hist-check` binary; it replaced the Python
 `hydohist.py` and `hydo-check`, deleted in M107, with the same answers, which its tests keep as
-recorded files), `hydo/history/hydo_hist.sh` (shell recorder), `hydo/stack/hydohist` (Go recorder, package
-`hydostack/hydohist`), `hydo/onboard/hydo-init-history.sh` (guest init extension).
+recorded files), `hydo/history/hydo_hist.sh` (shell recorder), `sdk/go/hydohist` (Go recorder, package
+`github.com/kakoc/hydo/sdk/go/hydohist`; `hydo/stack/hydohist` is the order service's frozen copy), `hydo/onboard/hydo-init-history.sh` (guest init extension).
 
 ## Record format (fixed)
 
@@ -227,7 +227,7 @@ hydo_hist kv 0 ok write k1 "$(hydo_hist_enc "$value")@$rev"   # a free-form valu
 Records go to `/dev/console` (`HYDO_HIST_OUT=<file>|off` overrides). The time comes from
 `/proc/uptime` (10 ms resolution).
 
-**Go** (`hydo/stack/hydohist`, import `hydostack/hydohist`):
+**Go** (`sdk/go/hydohist`, import `github.com/kakoc/hydo/sdk/go/hydohist`):
 
 ```go
 kv := hydohist.New("kv")

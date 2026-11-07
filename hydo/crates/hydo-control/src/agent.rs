@@ -47,6 +47,7 @@ pub fn default_cadence(kind: EngineKind) -> u64 {
     match kind {
         EngineKind::Hvx => 16,
         EngineKind::Hvm => 64,
+        EngineKind::Kvm => 64,
     }
 }
 
@@ -75,14 +76,16 @@ pub fn engine_schedule(s: &Schedule, cadence: u64) -> Result<(Schedule, Schedule
 /// cannot resolve (serve.c's `stop_name(STOP_SPIN)`, after "ERROR workload: " and the like).
 const SPIN_VERDICT: &str = ": SPIN (guest loops without exits";
 
-/// The schedule to run again in hvm's rewind mode (M130), or None: a run on hvm whose verdict is
-/// a SPIN and whose schedule has no `spin=rewind`. hvmx re-runs a shell image's SPIN run in the
+/// The schedule to run again in the engine's rewind mode (M130; the KVM engine's since M161), or
+/// None: a run on hvm or kvm whose verdict is a SPIN and whose schedule has no `spin=rewind`. hvmx re-runs a shell image's SPIN run in the
 /// rewind mode itself (`HVM_SPIN_REWIND=auto`, M57), but under lock-step control it cannot: the
 /// host's conversation has happened. So the host does it: the same schedule with `spin=rewind`,
 /// a new conversation from S1 (or a new fresh boot), whose stops, sends and verdict are a pure
 /// function of that schedule; the plain run is not reported, as with RUN. A counter loop that
-/// only the rewind mode resolves (ledger-spin) then runs to its verdict. `HVM_SPIN_REWIND=0`
-/// turns it off, as for hvmx (`enabled`: `hydo_config::run::Control::spin_rewind`).
+/// only the rewind mode resolves (ledger-spin) then runs to its verdict. The KVM engine ends a
+/// run at once as a SPIN when it proves a counter loop outside the rewind mode, so its runs take
+/// the same way (M161). `HVM_SPIN_REWIND=0` turns it off for both engines, as for hvmx
+/// (`enabled`: `hydo_config::run::Control::spin_rewind`).
 pub fn rewind_again(
     kind: EngineKind,
     r: &RunResult,
@@ -90,7 +93,7 @@ pub fn rewind_again(
     enabled: bool,
 ) -> Option<Schedule> {
     if !enabled
-        || kind != EngineKind::Hvm
+        || !matches!(kind, EngineKind::Hvm | EngineKind::Kvm)
         || !r.verdict.starts_with("ERROR")
         || !r.verdict.contains(SPIN_VERDICT)
         || s.host_token("spin").is_some()
@@ -410,7 +413,7 @@ pub struct AgentEngine {
     pub inner: Arc<dyn ControlledEngine + Send + Sync>,
     pub plan: Plan,
     pub cadence: u64,
-    /// A SPIN on hvm runs again in the rewind mode (`hydo_config::run::Control::spin_rewind`,
+    /// A SPIN on hvm or kvm runs again in the rewind mode (`hydo_config::run::Control::spin_rewind`,
     /// default on; `HVM_SPIN_REWIND=0` turns it off).
     pub spin_rewind: bool,
 }
@@ -483,7 +486,7 @@ impl AgentEngine {
             Some(s) => {
                 let mut r2 = self.one_once(spec, &s, policy)?;
                 r2.output = format!(
-                    "{}hydo: the run ended as SPIN; ran it again in hvm's rewind mode ({s})\n{}",
+                    "{}hydo: the run ended as SPIN; ran it again in the engine's rewind mode ({s})\n{}",
                     r.output, r2.output
                 );
                 r2.wall += r.wall;
@@ -801,6 +804,12 @@ mod tests {
             );
         }
         assert!(rewind_again(EngineKind::Hvx, &spin, &s, true).is_none());
+        // the KVM engine's rewind mode (M161)
+        assert_eq!(
+            rewind_again(EngineKind::Kvm, &spin, &s, true).map(|s| s.to_string()),
+            Some("disk=none spin=rewind | run P=front@10+2".to_string())
+        );
+        assert!(rewind_again(EngineKind::Kvm, &spin, &s, false).is_none());
         assert!(rewind_again(EngineKind::Hvm, &spin, &again, true).is_none());
         for v in [
             "HYDO-ORACLE: OK invariants=2 held",

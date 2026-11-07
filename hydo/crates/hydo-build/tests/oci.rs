@@ -129,7 +129,7 @@ fn oci_staging_matches_hydo_oci() {
     unsafe {
         libc::umask(0o022);
     }
-    let tmp =std::env::temp_dir().join(format!("hydo-build-oci-{}", std::process::id()));
+    let tmp = std::env::temp_dir().join(format!("hydo-build-oci-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).unwrap();
     let busybox = golden_dir().join("busybox");

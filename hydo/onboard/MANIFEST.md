@@ -468,7 +468,7 @@ The host controller polls `eventually` invariants as monitors (one per invariant
 that have them (until M136 `hydo-build` spliced `hydo-liveness.sh` into the shell init for
 them). Example: `examples/redis/hydo-live.yaml`.
 
-The program under test can still use the assertion SDK (`hydo/stack/hydoassert`) for
+The program under test can still use an assertion SDK (`sdk/`, docs/PUBLISHING.md) for
 properties that need to see inside it; both kinds of record mix on the console.
 
 ### History checks (`checks:`)
@@ -487,7 +487,7 @@ verdict rules are in `hydo/HISTORIES.md`.
   (an executable sources `/etc/hydo/prelude.sh` to get it):
   `hydo_hist <history> <process> <invoke|ok|fail|info> <f> <args>...` (and `hydo_hist_enc` for
   free-form values). Give every concurrent client its own process number. Programs use the
-  recorder of their SDK, all writing the same lines: Go `hydo/stack/hydohist`, Rust
+  recorder of their SDK, all writing the same lines: Go `sdk/go/hydohist`, Rust
   `hydo_assert::history`, JavaScript `hydo-assert/history` (`sdk/js/history.js`) and Python
   `hydo_assert.history` (Milestone 96).
 - `final:` runs after the workload, `retry` and healing (no cut), or in the recovery boot after a

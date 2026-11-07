@@ -5,6 +5,11 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+# What is published to crates.io (docs/PUBLISHING.md): the sources only; the tests and their
+# recorded answers stay in the repository.
+include = ["/src/**", "/Cargo.toml", "/LICENSE"]
 
 [dependencies]
 hydo-config = { workspace = true }
@@ -13,10 +18,12 @@ hydo-engine-proto = { workspace = true }
 hydo-image = { workspace = true }
 hydo-hvx = { workspace = true }
 hydo-hvm = { workspace = true }
+hydo-kvm = { workspace = true }
 libc = "0.2"
 flate2 = { workspace = true }
 sha2 = { workspace = true }
 
 [dev-dependencies]
 # the agent_boot_check example (M121) drives hydo-agent through the protocol's host session
-hydo-agent-proto = { workspace = true }
+# (path only: dev-dependencies are left out of the published manifest, docs/PUBLISHING.md)
+hydo-agent-proto = { path = "../hydo-agent-proto" }

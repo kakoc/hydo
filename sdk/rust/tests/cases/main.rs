@@ -121,7 +121,6 @@ fn execute(p: &model::Prog) -> String {
             },
             Step::Catalog => ha::catalog(),
             Step::SetupComplete => ha::setup_complete(),
-            Step::EmitLine { tag, v } => ha::emit_line(tag, &v.rust()),
             Step::History { name } => hists.push(ha::history::History::new(name)),
             Step::Invoke { h, proc_, f, args: a2 } => {
                 let v = args(a2);

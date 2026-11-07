@@ -25,20 +25,20 @@ function capture(fn) {
 }
 
 test('encoder: Go formats for JS-only values', () => {
-  assert.strictEqual(ha.toJSON({ b: 1, a: undefined, f() {}, s: Symbol('x') }), '{"b":1}');
-  assert.strictEqual(ha.toJSON([undefined, () => 1]), '[null,null]');
-  assert.strictEqual(ha.toJSON(new Set([3, 1])), '[3,1]');
-  assert.strictEqual(ha.toJSON(new Map([[2, 'x'], ['10', 'y']])), '{"10":"y","2":"x"}');
-  assert.strictEqual(ha.toJSON(new Date(0)), '"1970-01-01T00:00:00.000Z"');
-  assert.strictEqual(ha.toJSON(Buffer.from([255])), '"/w=="');
-  assert.strictEqual(ha.toJSON(new Float64Array([0.5, -0])), '[0.5,-0]');
-  assert.strictEqual(ha.toJSON('\udc00 😀 \ud83d'), '"\\ufffd 😀 \\ufffd"');
+  assert.strictEqual(ha._toJSON({ b: 1, a: undefined, f() {}, s: Symbol('x') }), '{"b":1}');
+  assert.strictEqual(ha._toJSON([undefined, () => 1]), '[null,null]');
+  assert.strictEqual(ha._toJSON(new Set([3, 1])), '[3,1]');
+  assert.strictEqual(ha._toJSON(new Map([[2, 'x'], ['10', 'y']])), '{"10":"y","2":"x"}');
+  assert.strictEqual(ha._toJSON(new Date(0)), '"1970-01-01T00:00:00.000Z"');
+  assert.strictEqual(ha._toJSON(Buffer.from([255])), '"/w=="');
+  assert.strictEqual(ha._toJSON(new Float64Array([0.5, -0])), '[0.5,-0]');
+  assert.strictEqual(ha._toJSON('\udc00 😀 \ud83d'), '"\\ufffd 😀 \\ufffd"');
   const c = { a: 1 };
   c.self = c;
-  assert.strictEqual(ha.toJSON(c), null);
-  assert.strictEqual(ha.toJSON({ x: NaN }), null);
+  assert.strictEqual(ha._toJSON(c), null);
+  assert.strictEqual(ha._toJSON({ x: NaN }), null);
   const shared = { k: 1 };
-  assert.strictEqual(ha.toJSON({ a: shared, b: shared }), '{"a":{"k":1},"b":{"k":1}}'); // not a cycle
+  assert.strictEqual(ha._toJSON({ a: shared, b: shared }), '{"a":{"k":1},"b":{"k":1}}'); // not a cycle
 });
 
 test('dedup: one record per (assertion, outcome); sometimes false never written', () => {
@@ -69,14 +69,14 @@ test('an unencodable record is dropped and still counts as seen (as in Go)', () 
   assert.strictEqual(out, '');
 });
 
-test('details that are not an object are written as {"value": ...}; helpers add fields', () => {
+test('details that are not an object are written as {"value": ...}; cmp adds fields', () => {
   const a = ha.always('u.v', 'v');
   const b = ha.always('u.m', 'm');
   const m = new Map([['x', 1]]);
   const out = capture(() => {
     a.check(true, 'just text');
     a.check(false, [1, 2]);
-    b.lessThanOrEqualTo(1n, 2, m);
+    b.cmp(1n, '<=', 2, m);
   });
   assert.deepStrictEqual(out.trim().split('\n'), [
     'HYDO-ASSERT {"t":"always","id":"u.v","ok":true,"msg":"v","details":{"value":"just text"}}',
@@ -86,13 +86,11 @@ test('details that are not an object are written as {"value": ...}; helpers add 
   assert.strictEqual(m.get('op'), '<=');
 });
 
-test('emitLine and setupComplete', () => {
+test('setupComplete', () => {
   const out = capture(() => {
-    assert.strictEqual(ha.emitLine('HYDO-HISTORY', { op: 'put', k: '<1>' }), true);
-    assert.strictEqual(ha.emitLine('HYDO-HISTORY', { bad: Infinity }), false);
     ha.setupComplete();
   });
-  assert.strictEqual(out, 'HYDO-HISTORY {"k":"\\u003c1\\u003e","op":"put"}\nHYDO-SETUP-COMPLETE\n');
+  assert.strictEqual(out, 'HYDO-SETUP-COMPLETE\n');
 });
 
 test('eventually: awaitCond (async) in time and late', async () => {

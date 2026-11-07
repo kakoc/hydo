@@ -1,5 +1,5 @@
 //! The Rust-only surface: call-site macros (file/line, registered before main), declare!,
-//! catalog order, the async eventually, emit_line, and the noop feature. One test function,
+//! catalog order, the async eventually, and the noop feature. One test function,
 //! because the SDK's state (sink, seen flags, BUGGIFY configuration) is per process.
 use hydo_assert::{declare, details, hydo_always, hydo_buggify, hydo_eventually, hydo_reachable, hydo_sometimes, hydo_unreachable, Value};
 use std::time::Duration;
@@ -37,7 +37,7 @@ async fn macros_and_catalog() {
     hydo_sometimes!(true, "plain message is the id");
     hydo_reachable!("m.reached" => "reached a line");
     hydo_unreachable!("m.bad" => "a line that must not run", {"why": "test"});
-    hydo_assert::hydo_always_greater_than_or_equal_to!(5u64, 3u64, "m.ge" => "five is at least three");
+    assert!(hydo_assert::hydo_always_cmp!(5u64, ">=", 3u64, "m.ge" => "five is at least three"));
     let fired = LOST.fire(());
     let fired2 = hydo_buggify!("m.site_point" => "a call-site fault point");
     assert_eq!((fired, fired2), (!cfg!(feature = "noop"), !cfg!(feature = "noop")));
@@ -50,7 +50,6 @@ async fn macros_and_catalog() {
     let mut w = BACK.begin();
     assert!(w.done(()));
     NEVER.hit(());
-    hydo_assert::emit_line("HYDO-EXT", &details! {"b": 1, "a": "x"}.into());
     hydo_assert::setup_complete();
 
     let text = std::fs::read_to_string(&out).unwrap();
@@ -79,6 +78,5 @@ async fn macros_and_catalog() {
     assert!(has(r#"HYDO-BUGGIFY {"seed":"5","enable_pm":1000,"fire_pm":1000,"enabled":["m.lost_reply","m.site_point"]}"#), "{}", text);
     assert!(has(r#""id":"m.async","ok":true"#) && has(r#""within_ms":1000"#), "{}", text);
     assert!(has(r#"HYDO-ASSERT {"t":"unreachable","id":"m.never","ok":false"#), "{}", text);
-    assert!(has(r#"HYDO-EXT {"a":"x","b":1}"#), "{}", text);
     assert_eq!(*lines.last().unwrap(), "HYDO-SETUP-COMPLETE");
 }

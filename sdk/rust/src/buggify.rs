@@ -61,7 +61,7 @@ fn parse_u64(s: &str, radix: u32) -> Option<u64> {
 }
 
 /// One declared fault point. Its catalog entry is a sometimes assertion `buggify.<id>`
-/// ("fault point fired: <msg>"), recorded when it first fires.
+/// (`fault point fired: <msg>`), recorded when it first fires.
 #[repr(transparent)]
 pub struct Point(pub(crate) Assertion);
 

@@ -7,8 +7,8 @@
 #   kernel module nor access to Hypervisor.framework.
 # - guest-programs: the guest agent and the store reader, which keep their own Cargo
 #   workspaces and lock files (their bytes are inside recorded images), on Linux.
-# - sdks: the assertion SDKs: the Rust reference, the Rust test SDK, and the Go, Python and
-#   JavaScript SDKs against the shared cases in sdk/cases.
+# - sdks: the assertion SDKs: the Rust reference, the Rust test SDK, and the Go (sdk/go and the
+#   order service's copy), Python and JavaScript SDKs against the shared cases in sdk/cases.
 #
 # Every action is pinned by commit. The workflow needs no secret and only reads the repository.
 name: ci
@@ -133,14 +133,19 @@ jobs:
         with:
           go-version: "1.26.5"
           cache-dependency-path: hydo/stack/go.sum
-      - name: Go SDK (hydo/stack/hydoassert, hydo/stack/hydohist)
-        working-directory: hydo/stack
+      # -v for the shared cases' summary (how many ran, which were skipped and why)
+      - name: Go SDK (sdk/go, the public module)
+        working-directory: sdk/go
         env:
           GOTOOLCHAIN: local
         run: |
           go version
-          # -v for the shared cases' summary (how many ran, which were skipped and why)
-          go test -count=1 -v ./hydoassert/... ./hydohist/... 2>&1 | grep -E 'cases_test.go:|^(ok|FAIL|--- FAIL)'
+          go test -count=1 -v ./... 2>&1 | grep -E 'cases_test.go:|^(ok|FAIL|--- FAIL)'
+      - name: Go SDK, the copy the order service builds with (hydo/stack/hydoassert, hydo/stack/hydohist)
+        working-directory: hydo/stack
+        env:
+          GOTOOLCHAIN: local
+        run: go test -count=1 -v ./hydoassert/... ./hydohist/... 2>&1 | grep -E 'cases_test.go:|^(ok|FAIL|--- FAIL)'
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: |

@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-41 user-facing and 76 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 33 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 0 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+47 user-facing and 87 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 34 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 0 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -121,11 +121,30 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HVMX_CHECK_RESTORE` | developer | flag: set | - | hydo-hvm | Set: read the registers back after every restore and report differences. |
 | `HVMX_NO_MLOCK` | developer | flag: set | - | hydo-hvm | Set: do not mlock guest RAM. |
 
+## The KVM engine (`hydo_config::kvm::Engine`, `hydo_config::kvm::Options`)
+
+| Variable | Kind | Type | Default | Readers | What it does |
+|---|---|---|---|---|---|
+| `HYDO_KVM` | user | word: process | in this process | hydo-engine | Where the KVM engine runs: `process` as the program `hydo-kvm`; else on a thread of this process (KVM allows several VMs in one process). |
+| `HYDO_KVM_ENGINE` | developer | path | <root>/target/release/hydo-kvm, else <root>/bin/hydo-kvm | hydo-engine | The KVM engine program (an empty value means the default). |
+| `HYDO_KVM_KERNEL` | user | path | bzImage-kvm, by sha256 | hydo-engine, hydo-cli | The KVM engine's guest kernel (else the twin of the image's recorded x86_64 kernel, `bzImage-kvm`, found by sha256 where the image's kernel is looked up). |
+| `HYDO_KVM_DEV` | developer | path | /dev/kvm | hydo-kvm, hydo-cli | The KVM device. |
+| `HYDO_KVM_STEP` | developer | number | 2500 | hydo-kvm | Nanoseconds of the guest's clock per VM exit. |
+| `HYDO_KVM_RUN_EXITS` | developer | number | 50000000 | hydo-kvm | The engine's exit budget per phase of a run. |
+| `HYDO_KVM_SPIN_SECS` | developer | number | 10 | hydo-kvm | Seconds of host time without a VM exit after which the run ends as a SPIN. |
+| `HYDO_KVM_SPIN_MS` | developer | number | 5 | hydo-kvm | Milliseconds of host time without a VM exit before the spin observer looks for a cycle (a hint only: what it decides does not depend on when it looks). |
+| `HYDO_KVM_TRACE` | developer | path | - | hydo-kvm | One line per VM exit into this file. |
+| `HYDO_KVM_ECHO` | developer | flag: set | - | hydo-kvm | Set: copy the console to stdout as it is written (the program). |
+| `HYDO_KVM_DIAG` | developer | flag: set | - | hydo-kvm | Set: per-component hashes of a run's end state into `<outdir>/<tag>.diag`. |
+| `HYDO_KVM_DIAG_RAM` | developer | number | 0 | hydo-kvm | With HYDO_KVM_DIAG: the first this many MiB of guest RAM are written next to each fingerprint (`<outdir>/<tag>.<phase>.ram`). |
+| `HYDO_KVM_TRACE_UNKNOWN` | developer | flag: set | - | hydo-kvm | Set: log every MSR access and I/O port the engine's model does not know. |
+| `HYDO_BACKEND` | user | word: hvx \| kvm | hvx | hydo-cli | `kvm`: the `hydo` command runs x86_64 images on the KVM engine instead of hvx (Linux; `--backend kvm` does the same for one command). |
+
 ## The host controller (`hydo_config::run::Control`)
 
 | Variable | Kind | Type | Default | Readers | What it does |
 |---|---|---|---|---|---|
-| `HVM_SPIN_REWIND` | user | flag: exactly `0` turns it off | on | hydo-control, hydo-hvm | `0`: the host does not run a SPIN of an agent image on hvm again in the rewind mode (`hydo-hvm hvm` reads it too: `1` turns the rewind mode on). |
+| `HVM_SPIN_REWIND` | user | flag: exactly `0` turns it off | on | hydo-control, hydo-hvm | `0`: the host does not run a SPIN of an agent image on hvm or kvm again in the rewind mode (`hydo-hvm hvm` reads it too: `1` turns the rewind mode on). |
 
 ## The `hydo` command (`hydo_config::run::Cli`)
 
@@ -133,6 +152,9 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 |---|---|---|---|---|---|
 | `HYDO_CLI_PLATFORM` | developer | word: linux \| mac | this binary's platform | hydo-cli | `linux` or `mac`: run the `hydo` command as the other platform's (the CLI test checks the other platform's commands that need no engine). |
 | `HYDO_CLI_HOST_ROOT` | developer | path; empty = `/` | / | hydo-cli | A directory read in place of `/` for the host's kernel-module state (`/proc/modules`, `/proc/locks`, `/sys/module`, `/dev`, `/etc/udev/rules.d`): the CLI test sets an empty one, so its recorded answers are those of a host without hvx, KVM or the udev rule. |
+| `HYDO_HOME` | user | path | ~/.hydo | hydo-cli | The install cache (Milestone 162, docs/design/install-cache.md): `store/` (release archives and guest kernels by sha256), `versions/<version>/` (releases `hydo setup --get` installed), `bin/hydo` (the current one). An empty value means the default. |
+| `HYDO_RELEASE_URL` | user | URL | https://github.com/kakoc/hydo/releases/download | hydo-cli | Where releases are fetched from: `<value>/v<version>/<file>`. HTTPS only (plain `http://` only to a loopback host). An empty value means the default. |
+| `HYDO_OFFLINE` | user | flag: set and not `0` | - | hydo-cli | Set and not `0`: never use the network (`hydo setup`, and the kernel lookup of runs); what the install cache does not have is refused with its URL (`--offline` does the same). |
 
 ## Image builds (`hydo_config::build::Build`)
 
@@ -178,6 +200,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_BLESS` | test | flag | off | many crates' tests | `1`: rewrite a test's recorded answers (goldens) from this run's output. |
 | `HYDO_RELEASE_SCHEMA` | test | flag | off | hydo-results, hydo-agent-proto tests | `1`: copy the current schema to the released one (only when a release ships). |
 | `HYDO_COMPOSE_KEEP` | test | path | - | hydo-compose tests | Keep the Compose test's scratch files here. |
+| `HYDO_KVM_HEADERS` | test | path | /usr/include | hydo-kvm tests | Where the KVM ABI probe finds `linux/kvm.h` (the Linux UAPI headers). |
 | `HYDO_CONTROL_DUMP` | test | path | - | hydo-control tests | Dump the controller tests' transcripts here. |
 | `HYDO_CONTROL_FULL` | test | flag: set | off | hydo-control tests | Set: the controller tests' full seed ranges. |
 | `HYDO_CORPUS_QUICK` | test | flag: set | off | hydo-explore tests | Set: the explorer's identity corpus, quick part only. |

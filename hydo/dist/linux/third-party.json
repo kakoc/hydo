@@ -24,7 +24,7 @@
       ],
       "manifest": "Cargo.toml",
       "packages": [
-        "hydo-cli",
+        "hydo",
         "hydo-hvx",
         "hydo-build",
         "hydo-compose",

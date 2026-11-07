@@ -7,7 +7,8 @@ use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU32, AtomicU64, Ordering::*};
 use std::sync::{Mutex, MutexGuard};
 
-/// An assertion type as it appears on the wire (`"t"`).
+/// An assertion type as it appears on the wire (`"t"`). Only the SDK's macros name it.
+#[doc(hidden)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Type {
     Always,
@@ -48,7 +49,7 @@ pub struct Assertion {
     pub(crate) id: Cow<'static, str>,
     pub(crate) msg: Cow<'static, str>,
     pub(crate) loc: Option<Loc>,
-    /// for a BUGGIFY point: the point's own id (the assertion id is "buggify.<id>")
+    /// for a BUGGIFY point: the point's own id (the assertion id is `buggify.<id>`)
     pub(crate) bg_id: Option<Cow<'static, str>>,
     pub(crate) hits: AtomicU64,
     seen: [AtomicBool; 2],
@@ -116,9 +117,6 @@ impl Assertion {
     }
     pub fn msg(&self) -> &str {
         &self.msg
-    }
-    pub fn kind(&self) -> Type {
-        self.t
     }
 
     /// Evaluates an always / always_or_unreachable / sometimes assertion and returns `cond`.
@@ -298,23 +296,6 @@ pub fn catalog() {
 /// faults may begin, and this is a good snapshot/branch point.
 pub fn setup_complete() {
     sink::write_line(b"HYDO-SETUP-COMPLETE\n");
-}
-
-/// Writes one record line `<tag> <json>` through the same sink, with one write. This is the
-/// extension point for other line formats (a history recorder, for example): `tag` must be
-/// one word without spaces. A value that contains a NaN or an infinity writes nothing.
-pub fn emit_line(tag: &str, rec: &Value) {
-    if !sink::active() {
-        return;
-    }
-    let mut s = String::with_capacity(64);
-    s.push_str(tag);
-    s.push(' ');
-    if crate::json::write_value(&mut s, rec).is_err() {
-        return;
-    }
-    s.push('\n');
-    sink::write_line(s.as_bytes());
 }
 
 /// Declares an always property at run time (registered now, in the catalog in this order).

@@ -13,7 +13,8 @@
 //!   `hydo-grpc-gen`, `hydo-nix-fetch`). It is the only code that reads hydo's variables from the
 //!   environment.
 //! - [`Config`] is the typed configuration, grouped by owner ([`engine::Engine`],
-//!   [`hvx::Options`], [`hvm::Engine`], [`hvm::Options`], [`run::Paths`], [`run::Pool`], [`run::Control`],
+//!   [`hvx::Options`], [`hvm::Engine`], [`hvm::Options`], [`kvm::Engine`], [`kvm::Options`],
+//!   [`run::Paths`], [`run::Pool`], [`run::Control`],
 //!   [`run::Cli`], [`build::Build`], [`tools::Tools`]); each field's doc comment names its
 //!   variable and default. A program builds it from its [`Env`] and passes the groups down
 //!   explicitly; a library never reads the environment.
@@ -59,6 +60,7 @@ pub mod engine;
 mod env;
 pub mod hvm;
 pub mod hvx;
+pub mod kvm;
 pub mod registry;
 pub mod run;
 pub mod tools;
@@ -74,6 +76,9 @@ pub struct Config {
     pub engine: engine::Engine,
     /// The Mac engine's choice (the engine's own options: [`hvm::Options`], read from `env`).
     pub hvm: hvm::Engine,
+    /// The KVM engine's choice, kernel, device and the `hydo` command's backend (the engine's
+    /// own options: [`kvm::Options`], read from `env`).
+    pub kvm: kvm::Engine,
     pub paths: run::Paths,
     pub pool: run::Pool,
     pub control: run::Control,
@@ -88,6 +93,7 @@ impl Config {
             env: e.clone(),
             engine: engine::Engine::from_env(e),
             hvm: hvm::Engine::from_env(e),
+            kvm: kvm::Engine::from_env(e),
             paths: run::Paths::from_env(e),
             pool: run::Pool::from_env(e),
             control: run::Control::from_env(e),

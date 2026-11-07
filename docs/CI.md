@@ -11,26 +11,27 @@ credentials), pins every action by commit, and runs every step with `bash -eo pi
 | `rust (ubuntu-24.04)` | GitHub's Linux x86_64 runner | `cargo fmt --all --check`, `cargo clippy --locked --workspace --all-targets -- -D warnings`, `cargo test --locked --release --workspace --no-fail-fast`, then a step that prints what the tests skipped | about 15 minutes (25 without a warm cache) |
 | `rust (macos-15)` | GitHub's macOS Apple Silicon runner | the same | about 25 minutes |
 | `guest programs (ubuntu-24.04)` | Linux | the guest agent (`hydo/crates/hydo-agent`: its native tests, then the agent as PID 1 of its own PID and mount namespace, which needs `sudo -n` and runs because the runner has password-less sudo) and the store reader (`hydo/crates/hydo-read`); both keep their own Cargo workspaces and lock files | under 1 minute |
-| `sdks` | Linux | the Rust SDK (`sdk/rust`, the reference that writes `sdk/cases/`), the Rust test SDK (`sdk/rust-test`), the Go SDK (`hydo/stack/hydoassert`, `hydo/stack/hydohist`) with Go 1.26.5, the Python SDK with Python 3.9 and 3.13, the JavaScript SDK with Node 22 | about 1.5 minutes |
+| `sdks` | Linux | the Rust SDK (`sdk/rust`, the reference that writes `sdk/cases/`), the Rust test SDK (`sdk/rust-test`), the Go SDK (the public module `sdk/go`, and the frozen copy `hydo/stack/hydoassert` and `hydo/stack/hydohist` the order service builds with) with Go 1.26.5, the Python SDK with Python 3.9 and 3.13, the JavaScript SDK with Node 22 | about 1.5 minutes |
 
 The three steps of the `rust` jobs are the checks docs/RELEASING.md step 1 asks for before a
 release. The skill check (`hydo-agents`' `skill_check`) also runs the Agent Skills reference
 validator: the job installs `skills-ref` 0.1.1 from PyPI into a virtual environment and names
 its program (`agentskills`) in `HYDO_SKILLS_REF`.
 
-**Why a run takes 15 to 25 minutes.** Almost all of it is compiling the workspace's 26 crates
-and their 126 test programs with the release profile (thin LTO, one codegen unit) on the
+**Why a run takes 15 to 25 minutes.** Almost all of it is compiling the workspace's 27 crates
+and their test programs with the release profile (thin LTO, one codegen unit) on the
 runner's 3 or 4 cores: about 11 minutes on Linux and 18 on macOS with the dependencies from the
 cache. `Swatinem/rust-cache` keeps the Cargo registry and the compiled
 dependencies (they compile in seconds from the cache), but not the workspace's own crates: a
 fresh checkout's source files are newer than any cached build, so Cargo compiles them again.
-The tests themselves take 3 (Linux) to 5 (macOS) minutes: 382 pass on Linux and 381 on macOS, 0 fail, 2 are ignored (below). The `rust` job of a commit that changes no Rust is as
+The tests themselves take 3 (Linux) to 5 (macOS) minutes; 2 are ignored (below), none may fail. The `rust` job of a commit that changes no Rust is as
 long as one that does.
 
 ## What does not run, and why
 
 Nothing in CI boots a guest: a GitHub runner has neither the hvx kernel module (`/dev/hvx`)
-nor access to Hypervisor.framework. So `hv/hvx/deploy-metal.sh`, the pinned reproducers, the
+nor access to Hypervisor.framework. (A Linux runner does have `/dev/kvm`, so the KVM engine of
+Milestone 159 could boot guests there; that is not part of this minimal workflow.) So `hv/hvx/deploy-metal.sh`, the pinned reproducers, the
 flagship verifies, the hand-written C module tests, the lock-step and agent boot checks and the
 release builds stay on the bare-metal machine and the Mac (docs/RELEASING.md, AGENTS.md).
 
@@ -65,7 +66,7 @@ the `rust` jobs prints the run-time reasons:
 
 ## Tests changed so that they do not depend on the machine (Milestone 167)
 
-- `hydo-cli`'s `cli_matches_golden` recorded the answers of a machine without the hvx module,
+- The `hydo` command's `cli_matches_golden` (package `hydo`, directory `hydo/crates/hydo-cli`) recorded the answers of a machine without the hvx module,
   KVM, `/dev/hvx`, the udev rule or a `debugfs` on PATH. A Linux runner has `kvm` loaded
   (`hydo module load --dry-run` then planned `sudo rmmod kvm`) and Ubuntu's `debugfs`, which
   changed how a Mac case reads an image; the bare-metal machine has hvx loaded. `hydo` now reads
@@ -74,7 +75,7 @@ the `rust` jobs prints the run-time reasons:
   paths and writes are unchanged), and the test sets an empty directory there and a PATH whose
   directories holding a `debugfs` are replaced by symlink copies without it. No recorded answer
   changed.
-- `hydo-cli`'s `agents_equivalence`, `hydo-compose`'s `equivalence` and `hydo-build`'s `oci`
+- The `hydo` command's `agents_equivalence`, `hydo-compose`'s `equivalence` and `hydo-build`'s `oci`
   record file modes. They now set the process's umask to 022, and the first two copy their
   inputs (the skill folder, the Compose fixtures) with the modes git gives a checkout under
   umask 022, so a umask of 002 (common for users on Linux) or a checkout made with it gives the
@@ -99,5 +100,5 @@ cargo test --locked --release --workspace
 ```
 
 The SDKs: `cargo test` in `sdk/rust` and `sdk/rust-test`, `GOTOOLCHAIN=go1.26.5 go test ./...`
-in `hydo/stack/hydoassert`, `python3 -m unittest discover -s sdk/python/tests`, and
+in `sdk/go`, `python3 -m unittest discover -s sdk/python/tests`, and
 `node --test` in `sdk/js`.

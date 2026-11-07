@@ -196,6 +196,21 @@ fn run_engine(
             .one_with(spec, &s, policy)
     };
     let run = match ctx.platform {
+        Platform::Linux if ctx.kvm => {
+            // the KVM build of the image's recorded kernel, and the image's initramfs
+            let dirs = [ctx.guest(), ctx.p("build"), ctx.p("hv/kvm/linux/out")];
+            let b = hydo_engine::kvm::boot_files(image, &dirs, ctx.config.kvm.kernel.as_deref())
+                .unwrap_or_else(|msg| die(&msg));
+            if let Some(n) = &b.note {
+                eprintln!("hydo: {n}");
+            }
+            let spec = spec_from_args(eargs, image, b.kernel, Some(b.initrd), &abspath(outdir));
+            if spec.vcpus != 1 || spec.cpu != CpuLevel::V2 {
+                die("the KVM engine runs one vCPU at the v2 CPU level (--vcpus and guest.cpu: v3 need hvx)");
+            }
+            let k = hydo_engine::kvm::Kvm::for_release(&ctx.root, ctx.config.env.clone());
+            one(Arc::new(k), &spec)
+        }
         Platform::Linux => {
             let hvx = Hvx {
                 engine: hvxenv::engine(ctx),
@@ -380,7 +395,7 @@ fn run_document(
     sched: &str,
     eargs: &[String],
     res: &Map<String, Value>,
-    platform: Platform,
+    backend: &str,
 ) -> hydo_results::Run {
     let mut consoles = Vec::new();
     for suffix in ["", ".recovery"] {
@@ -396,13 +411,7 @@ fn run_document(
     let p = image.display().to_string();
     run.image = Some(hydo_explore::results::image_of(&p, image, image_sha));
     let mut engine = hydo_results::Engine {
-        backend: Some(
-            match platform {
-                Platform::Linux => "hvx",
-                Platform::Mac => "hvm",
-            }
-            .into(),
-        ),
+        backend: Some(backend.into()),
         args: Some(eargs.to_vec()),
         ..hydo_results::Engine::default()
     };
@@ -416,7 +425,7 @@ fn run_document(
         }
         i += 2;
     }
-    if platform == Platform::Linux {
+    if backend == "hvx" {
         engine.module_srcversion = std::fs::read_to_string("/sys/module/hvx/srcversion")
             .ok()
             .map(|s| s.trim().to_string());
@@ -438,6 +447,33 @@ fn run_document(
         .get_or_insert_with(Default::default)
         .engine_log = Some("engine.log".into());
     run
+}
+
+/// One schedule from a fresh boot into `outdir`, quietly, with the host's checks and
+/// `result.json`, as `hydo run` makes it (for `hydo explain`, M165). None when the run produced no
+/// RESULT line (its engine.log says why).
+pub fn run_to_dir(
+    ctx: &Ctx,
+    image: &Path,
+    image_sha: Option<String>,
+    sched: &str,
+    outdir: &Path,
+) -> Option<hydo_results::Run> {
+    let eargs = engine_args(image, None, None, 1);
+    let (r, _) = run_engine(ctx, image, sched, outdir, &eargs, true, &Policy::Schedule);
+    let res = host_checks(outdir, result_map(&r?), true);
+    let res = errors_one(outdir, sched, res, None);
+    let run = run_document(
+        outdir,
+        image,
+        image_sha,
+        sched,
+        &eargs,
+        &res,
+        ctx.backend_name(),
+    );
+    write_run_document(outdir, &run);
+    Some(run)
 }
 
 fn write_run_document(outdir: &Path, run: &hydo_results::Run) {
@@ -488,7 +524,7 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         &sched,
         &eargs,
         &res,
-        ctx.platform,
+        ctx.backend_name(),
     );
     write_run_document(&outdir, &run);
     println!(
@@ -507,13 +543,37 @@ struct ReproItem {
     eargs: Vec<String>,
     /// The fingerprint epoch the run was recorded at (None: before M155, epoch 1).
     epoch: Option<u64>,
-    /// The recorded verdict (compared when the epochs differ).
+    /// The recorded verdict (compared when the epochs or the engines differ).
     verdict: String,
+    /// The engine that recorded it (`hvx`, `hvm`, `kvm`; None: not recorded).
+    backend: Option<String>,
 }
 
-/// Whether a repeated run gives the recorded one's answer: the fingerprint within one epoch,
-/// the verdict's class across epochs (M155). Returns (same, the label for the line).
-fn repro_same(it: &ReproItem, fp: &str, verdict: &str) -> (bool, &'static str) {
+/// The recorded engine when it is not the one this hydo runs (each engine has its own
+/// fingerprints, so only verdicts compare between them).
+fn other_engine<'a>(recorded: Option<&'a str>, now: &str) -> Option<&'a str> {
+    recorded.filter(|b| !b.is_empty() && *b != now)
+}
+
+/// The plain sentence for a run recorded by another engine, once.
+fn engine_note(recorded: Option<&str>, now: &str) -> Option<String> {
+    other_engine(recorded, now).map(|b| {
+        format!(
+            "hydo: the recorded run is from the {b} engine and this hydo runs the {now} engine: \
+             fingerprints of different engines are not comparable, so the verdicts are compared \
+             instead (hydo repro --backend {b} repeats it on its own engine where that engine runs)"
+        )
+    })
+}
+
+/// Whether a repeated run gives the recorded one's answer: the fingerprint within one epoch and
+/// one engine, the verdict's class across epochs (M155) or engines. Returns (same, the label for
+/// the line).
+fn repro_same(it: &ReproItem, now: &str, fp: &str, verdict: &str) -> (bool, &'static str) {
+    if other_engine(it.backend.as_deref(), now).is_some() {
+        let ok = verdict_kind(verdict) == verdict_kind(&it.verdict);
+        return (ok, if ok { "SAME VERDICT" } else { "DIFFERENT" });
+    }
     match hydo_image::comparable(it.epoch) {
         hydo_image::Compare::Fingerprints => {
             let ok = fp == it.fp;
@@ -586,6 +646,7 @@ fn repro_list(ctx: &Ctx, d: &Path) -> Vec<ReproItem> {
                 eargs,
                 epoch: run.epoch,
                 verdict: run.verdict.text.clone(),
+                backend: run.engine.as_ref().and_then(|e| e.backend.clone()),
             }];
         }
         hydo_results::Results::Exploration { .. } => exploration_of(d),
@@ -614,6 +675,7 @@ fn repro_list(ctx: &Ctx, d: &Path) -> Vec<ReproItem> {
             eargs: eargs.clone(),
             epoch: doc.epoch,
             verdict: f.run.verdict.text.clone(),
+            backend: e.backend.clone(),
         });
     }
     for x in &doc.shrinks {
@@ -633,6 +695,7 @@ fn repro_list(ctx: &Ctx, d: &Path) -> Vec<ReproItem> {
                 .first()
                 .and_then(|c| c.verdict.clone())
                 .unwrap_or_default(),
+            backend: e.backend.clone(),
         });
     }
     out
@@ -658,9 +721,16 @@ pub fn cmd_repro(ctx: &Ctx, argv: &[String]) -> i32 {
             return 0;
         }
         let base = d.join(format!("repro-{}", strftime("%Y%m%d-%H%M%S")));
-        if let Some(n) = epoch_note(items[0].epoch) {
+        let now = ctx.backend_name();
+        let by_verdict = if let Some(n) = engine_note(items[0].backend.as_deref(), now) {
             println!("{n}");
-        }
+            true
+        } else if let Some(n) = epoch_note(items[0].epoch) {
+            println!("{n}");
+            true
+        } else {
+            false
+        };
         let mut same = 0;
         for (k, it) in items.iter().enumerate() {
             let dir = base.join(format!("{k:03}"));
@@ -674,11 +744,11 @@ pub fn cmd_repro(ctx: &Ctx, argv: &[String]) -> i32 {
                 &it.sched,
                 &it.eargs,
                 &res,
-                ctx.platform,
+                ctx.backend_name(),
             );
             write_run_document(&dir, &run);
             let fp = py_str(&res["fp"]);
-            let (ok, word) = repro_same(it, &fp, &py_str(&res["verdict"]));
+            let (ok, word) = repro_same(it, now, &fp, &py_str(&res["verdict"]));
             same += ok as usize;
             println!(
                 "{:<12} {}  fp={} (recorded {})  {}\n             {}",
@@ -694,11 +764,7 @@ pub fn cmd_repro(ctx: &Ctx, argv: &[String]) -> i32 {
             "hydo: {} of {} reproduced with the recorded {} (consoles under {})",
             same,
             items.len(),
-            if epoch_note(items[0].epoch).is_some() {
-                "verdict"
-            } else {
-                "fingerprint"
-            },
+            if by_verdict { "verdict" } else { "fingerprint" },
             base.display()
         );
         return if same == items.len() { 0 } else { 1 };
@@ -718,6 +784,8 @@ struct Recorded {
     /// The fingerprint epoch it was recorded at (None: before M155, epoch 1).
     epoch: Option<u64>,
     verdict: Option<String>,
+    /// The engine that recorded it (a run directory's result.json; None: not known).
+    backend: Option<String>,
 }
 
 /// The recorded run next to a transcript: from a run directory's result.json, or from the
@@ -732,6 +800,7 @@ fn recorded_of(t: &Path) -> Recorded {
             ctl: run.fingerprints.ctl.clone(),
             epoch: run.epoch,
             verdict: Some(run.verdict.text.clone()),
+            backend: run.engine.as_ref().and_then(|e| e.backend.clone()),
         };
     }
     let name = t
@@ -793,6 +862,13 @@ fn cmd_transcript(ctx: &Ctx, file: &str, mut args: Vec<String>) -> i32 {
         .clone()
         .unwrap_or_else(|| die(&format!("{file}: the transcript names no schedule")));
     let rec = recorded_of(&path);
+    if let Some(b) = other_engine(rec.backend.as_deref(), ctx.backend_name()) {
+        // the transcript's stops are counted in its engine's clock: another engine cannot type it
+        die(&format!(
+            "{file}: a transcript recorded by the {b} engine; its stops are that engine's, so \
+             it is typed again only by it (hydo repro --backend {b} --transcript {file})"
+        ));
+    }
     let (rec_image, rec_eargs, rec_fp, rec_ctl) = (rec.image, rec.eargs, rec.fp, rec.ctl);
     let outdir = take(&mut args, "--out")
         .map(PathBuf::from)
@@ -824,7 +900,7 @@ fn cmd_transcript(ctx: &Ctx, file: &str, mut args: Vec<String>) -> i32 {
         &sched,
         &eargs,
         &res,
-        ctx.platform,
+        ctx.backend_name(),
     );
     write_run_document(&outdir, &run_doc);
     let fp = py_str(&res["fp"]);

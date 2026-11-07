@@ -7,10 +7,15 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+# What is published to crates.io (docs/PUBLISHING.md): the sources only; the tests and their
+# recorded answers stay in the repository.
+include = ["/src/**", "/Cargo.toml", "/LICENSE"]
 
 [dependencies]
 hydo-config = { workspace = true }
-hydo-agent-proto = { path = "../hydo-agent-proto" }
+hydo-agent-proto = { workspace = true }
 hydo-schedule = { workspace = true }
 hydo-manifest = { workspace = true }
 hydo-engine = { workspace = true }
@@ -23,9 +28,11 @@ regex = "1"
 regex-automata = "0.4"
 
 [dev-dependencies]
-hydo-explore = { workspace = true }
-hydo-errors = { workspace = true }
-hydo-history = { workspace = true }
+# Path only (no version), so they are left out of the published manifest: hydo-explore depends on
+# this crate, and a versioned dev-dependency cycle cannot be published (docs/PUBLISHING.md).
+hydo-explore = { path = "../hydo-explore" }
+hydo-errors = { path = "../hydo-errors" }
+hydo-history = { path = "../hydo-history" }
 flate2 = { workspace = true }
 # tests/fakes.rs and tests/features.rs: the init, manifest.sh and compose.list hydo-build writes
-hydo-build = { workspace = true }
+hydo-build = { path = "../hydo-build" }

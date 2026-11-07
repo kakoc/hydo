@@ -75,7 +75,7 @@ class Store(object):
             os.fsync(self.f.fileno())
         self.data[k] = v
         self.entries += 1
-        LOG_SIZE.less_than_or_equal_to(self.entries, MAX_ENTRIES)
+        LOG_SIZE.cmp(self.entries, "<=", MAX_ENTRIES)
 
 
 async def serve(d, port):

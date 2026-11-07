@@ -1,0 +1,26 @@
+[package]
+name = "hydo-kvm"
+description = "The KVM run engine: deterministic x86_64 guests on stock Linux KVM (/dev/kvm) with an exit-count clock, the engine's own PIC and the Mac engine's devices and protocol; in-process or as the hydo-kvm program"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+# What is published to crates.io (docs/PUBLISHING.md): the sources only; the tests and their
+# recorded answers stay in the repository.
+include = ["/src/**", "/Cargo.toml", "/LICENSE"]
+
+[dependencies]
+libc = "0.2"
+# the boot recipe, the C library's number parsing and the engine's port (hydo_hvx::{boot, cstr, port, text})
+hydo-hvx = { workspace = true }
+# the Mac engine's virtio devices, hashes and preemption points, used as they are
+hydo-hvm = { workspace = true }
+hydo-engine-proto = { workspace = true }
+hydo-schedule = { workspace = true }
+hydo-config = { workspace = true }
+
+[[bin]]
+name = "hydo-kvm"
+path = "src/bin/hydo-kvm.rs"

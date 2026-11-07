@@ -117,7 +117,8 @@ pub enum HostToken {
     Pctn(u64),
     /// `pctk=<exits>` (default 20000).
     Pctk(u64),
-    /// `spin=rewind`: run this schedule in hvm's rewind mode (serve.c).
+    /// `spin=rewind`: run this schedule in the engine's rewind mode (hvm, serve.c; the KVM
+    /// engine since Milestone 161).
     SpinRewind,
 }
 

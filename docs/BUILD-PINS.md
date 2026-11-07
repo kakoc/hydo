@@ -448,3 +448,74 @@ lists: the bootstrap GCC's `xgcc-13.2.0-libgcc` (`nda0h04b…`) is the pinned tr
 `stdenv.__bootPackages.stdenv.__bootPackages.stdenv.__bootPackages.stdenv.cc.cc` (now its own
 entry), and the Mac list's util-linux path lacks its `-bin` suffix (`y065hayr…-2.39.4-bin`;
 left until the Mac release is rebuilt, AGENTS.md open item 44).
+
+## The KVM engine's guest kernel (Milestone 159)
+
+`bzImage-kvm` is the x86_64 guest kernel of the KVM engine (`hydo/crates/hydo-kvm`,
+docs/design/kvm-engine.md): Linux 6.6.35 from kernel.org (`linux-6.6.35.tar.xz`, sha256
+`fce3ee728712ed063aa8c14a8756c8ff8c7a46ba3827f61d2b04a73c7cf5dd9e`, the Mac netns kernel's
+tarball) with `hv/kvm/linux/hydo-kvm-guest.patch`, allnoconfig plus `hv/kvm/linux/hydo-kvm.config`,
+built by `hv/kvm/linux/kernel.nix` with the pinned nixpkgs (NixOS 24.05 `89c49874`,
+`/nix/store/f0ddmw6s86y567yg06h5019z72szbzch-source`): its gcc 13.2.0, binutils, bc, bison, flex,
+perl, python3 and elfutils. `hv/kvm/linux/build-kernel.sh` runs it (`nice -n 19`, `JOBS=8`;
+`CHECK=1` rebuilds it with `nix-build --check`, which fails unless the bytes are the same).
+
+| file | sha256 |
+|---|---|
+| `bzImage-kvm` | `d50fbc67261a2544404d7a5f3e7a79cabe3b0a2e1f455158ccc5369d878d6207` |
+| `bzImage-kvm.config` | `412c482c740b37f05c68d951b0b358775d4f72cb54b1e1948eaf7c6a81f564e5` |
+
+Proof (Milestone 159): `nix-build` and `nix-build --check` on the build machine (sandboxed), the
+same bytes; the store path is `7hqyd9n0…-hydo-kvm-guest-kernel-6.6.35`; the RDTSC audit of its
+`vmlinux` (`hv/kvm/linux/audit-rdtsc.sh`) lists the same 10 sites as before. The pin before it,
+`319b234edf4c74ab1983928c133a27b105e2a7bad36a12f4470e8f554b987e48` (store path
+`5kp5mg03…`, the recipe without M159's accessed-bit flush), was built the same way, and the
+bare-metal machine's single-user Nix (no sandbox) built that store path with the same bytes (as
+it did for the two earlier versions of the recipe, `c35de6f1…` and `1b4939d6…`); M159 rebuilt it
+from the transplanted recipe with `nix-build --check`, the same bytes again. The current pin was
+not built on the bare-metal machine. The recipe has no build-id notes (the
+kernel's and the vDSO's): with them, a build outside Nix's sandbox on the bare-metal machine gave
+the vDSO another build-id (20 bytes of `raw_data` in `.rodata`), and the kernel's own build-id was
+computed before `scripts/sorttable` sorted its tables. A `--check` rebuild outside the sandbox
+still differed once in the compressed payload of `bzImage` (with equal `vmlinux` bytes): pin with
+a sandboxed Nix. The sha256 is recorded in
+`hydo/crates/hydo-kvm/src/kernel.rs` (`KERNEL`), paired with the hvx guest kernel an image records
+(`0a9ede35…`).
+
+## Headless Chromium and the GUI driver (Milestone 166, an experiment)
+
+`hydo/onboard/examples/compose-voting-browser/` (docs/design/gui-testing.md) puts a real browser
+into the voting app's image. Its inputs are pinned as follows; `fetch-inputs.sh [amd64|arm64]`
+fetches them and checks each against its sha256.
+
+- **Headless Chromium:** the OCI image `chromedp/headless-shell:156.0.8078.48`, fetched by
+  manifest digest with `hydo-fetch-image` (the tag was 16 days old when it was pinned):
+  - index `sha256:3da74b0945e4f80f00f0310bcda9f76cee283539ebd200a053a7bebf3de89423`;
+  - linux/amd64 `sha256:21eb1d28a091ed52a382359a35a82c5233af7387d9e822206f6b1abef4bc5d3e`
+    (config `sha256:6b9ec6bd80da…`, two gzip layers; the docker-save archive `hydo-fetch-image`
+    writes is 157,400,064 bytes, sha256 `9dc037679d92ed3b62e120ddf29c1948ce3669601cad92394f67b3fd9c0fb3ff`);
+  - linux/arm64 `sha256:3aa177f0d221ae85bc483407d2f4f2644a148066029d314f4c5ca99db1f39d8b`
+    (config `sha256:45e1945d18ef…`; archive 152,088,064 bytes).
+  It is Debian 12 slim, Chromium's headless shell (`/headless-shell/headless-shell`, 242,863,328
+  bytes on amd64) and the DejaVu fonts. A Nix store path from the pinned nixpkgs (24.05, Chromium
+  125) was not used: its closure (GTK, Mesa, X libraries, systemd) is several hundred paths, and
+  the OCI image needs no new mechanism.
+- **The two CDN scripts** the vote page loads (served in the guest by busybox `httpd`):
+  `http://code.jquery.com/jquery-latest.min.js` (jQuery 1.11.1, 95,786 bytes, sha256
+  `540bc6dec1dd4b92ea4d3fb903f69eabf6d919afd48f4e312b163c28cff0f441`) and
+  `https://cdnjs.cloudflare.com/ajax/libs/jquery-cookie/1.4.1/jquery.cookie.js` (3,121 bytes,
+  sha256 `b84161c9fbf7520cd14e7019f92120bd87a928a074156e91a992eba9fc9436e8`). Both MIT; neither
+  is in the repository.
+- **The driver `hydo-gui`** (`gui-driver/`, its own Cargo workspace, no dependencies): Rust 1.90.0
+  with the musl targets, linked by `rust-lld` with `+crt-static`, the checkout path and
+  `$CARGO_HOME` remapped (`gui-driver/build.sh`, hydo-read's recipe). As for hydo-read, the bytes
+  depend on the build host:
+
+  | target | built on | size | sha256 |
+  |---|---|---|---|
+  | x86_64 | aarch64-apple-darwin (the Mac) | 567,824 | `1309e324c3bc92b4b8b87b9fee9e35196ff6dbe4aeee14851076ca3af23ea175` |
+  | aarch64 | aarch64-apple-darwin (the Mac) | 499,912 | `7a23deaf578b8236ce5934d09ed89d2a44a7637bd40f4fcc9d67a4ffff3cdeeb` |
+
+  The recorded x86_64 image carries the first. An earlier revision of the source built to
+  `eb28a7232b1aaa04…` (565,200 bytes) on the Mac and `deef7a2cc6adf6bc…` (565,192 bytes) on the
+  bare-metal machine.

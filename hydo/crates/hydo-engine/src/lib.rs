@@ -10,7 +10,7 @@
 //! by itself and typed a schedule's guest part, `RUN`, and its timing branches, `BRANCH`) was
 //! deleted in Milestone 145; such an image is refused by [`image::control`].
 //!
-//! Two controlled engines exist today, both driven with the same typed calls
+//! Three controlled engines exist today, all driven with the same typed calls
 //! (`hydo-engine-proto`; [`link::Link`] carries them as values to an engine thread of this
 //! process, or as the protocol's lines to an engine program):
 //!
@@ -21,8 +21,11 @@
 //! - [`hvm::Hvm`]: the Rust engine `hydo-hvm` on an Apple Silicon Mac (Hypervisor.framework), a
 //!   program, or in this process with `HYDO_HVM=inproc`. It replaced the C `hvmx` (M143; deleted
 //!   in M147).
+//! - [`kvm::Kvm`]: the Rust engine `hydo-kvm` on x86_64 Linux with stock KVM (`/dev/kvm`, no
+//!   kernel module): the Mac engine's exit-count clock and protocol with x86_64 devices
+//!   (docs/design/kvm-engine.md); in this process by default, or the program `hydo-kvm`.
 //!
-//! Both speak the same protocol (see [`protocol`]): `--control boot serve` stops from the first
+//! All speak the same protocol (see [`protocol`]): `--control boot serve` stops from the first
 //! instruction until the host has taken S0 and S1 and ended the boot, prints `READY
 //! boot_secs=<s>`, then answers each `CTL`/`RESUME` with a controlled run ending in one `RESULT`
 //! line; `--control boot one` runs a single schedule from a fresh boot the same way.
@@ -75,6 +78,7 @@ pub mod hvm_inproc;
 pub mod hvx;
 pub mod image;
 pub mod inproc;
+pub mod kvm;
 pub mod link;
 pub mod lockstep;
 mod process;
@@ -97,6 +101,9 @@ pub enum EngineKind {
     Hvx,
     /// The Rust Mac engine `hydo-hvm` (Apple Silicon, Hypervisor.framework).
     Hvm,
+    /// The KVM engine `hydo-kvm` (x86_64 Linux with `/dev/kvm`, no kernel module; chosen with
+    /// `--backend kvm` or `HYDO_BACKEND=kvm`, never the native default).
+    Kvm,
 }
 
 impl EngineKind {
@@ -113,6 +120,7 @@ impl EngineKind {
         match self {
             EngineKind::Hvx => "hvx",
             EngineKind::Hvm => "hvm",
+            EngineKind::Kvm => "kvm",
         }
     }
 }
@@ -459,5 +467,6 @@ pub fn native(root: &std::path::Path, config: hydo_config::Env) -> Box<dyn Contr
     match EngineKind::native() {
         EngineKind::Hvx => Box::new(hvx::Hvx::for_release(root, config)),
         EngineKind::Hvm => Box::new(hvm::Hvm::for_release(root, config)),
+        EngineKind::Kvm => Box::new(kvm::Kvm::for_release(root, config)),
     }
 }

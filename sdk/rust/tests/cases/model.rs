@@ -468,7 +468,6 @@ pub enum Step {
         op: &'static str,
         right: i64,
         d: Option<V>,
-        helper: Option<&'static str>,
     },
     Begin {
         a: usize,
@@ -492,10 +491,6 @@ pub enum Step {
     },
     Catalog,
     SetupComplete,
-    EmitLine {
-        tag: &'static str,
-        v: V,
-    },
     History {
         name: &'static str,
     },
@@ -609,27 +604,6 @@ impl Prog {
             op,
             right,
             d,
-            helper: None,
-        });
-    }
-    /// A comparison through the named helper of the SDKs that have one (JavaScript,
-    /// Python); the others call cmp with the helper's operator.
-    pub fn cmp_helper(&mut self, a: usize, helper: &'static str, left: i64, right: i64, d: Option<V>) {
-        let op = match helper {
-            "greater_than" => ">",
-            "greater_than_or_equal_to" => ">=",
-            "less_than" => "<",
-            "less_than_or_equal_to" => "<=",
-            _ => panic!("helper {}", helper),
-        };
-        assert!(matches!(self.kind(a), "always" | "always_or_unreachable" | "sometimes"));
-        self.push(Step::Cmp {
-            a,
-            left,
-            op,
-            right,
-            d,
-            helper: Some(helper),
         });
     }
     pub fn begin(&mut self, a: usize) -> usize {
@@ -660,9 +634,6 @@ impl Prog {
     }
     pub fn setup_complete(&mut self) {
         self.push(Step::SetupComplete);
-    }
-    pub fn emit_line(&mut self, tag: &'static str, v: V) {
-        self.push(Step::EmitLine { tag, v });
     }
     pub fn history(&mut self, name: &'static str) -> usize {
         self.push(Step::History { name });
@@ -738,10 +709,6 @@ impl Prog {
                 | Step::Expire { d: Some(v), .. }
                 | Step::Await { d: Some(v), .. }
                 | Step::Fire { d: Some(v), .. } => val(v, &mut n),
-                Step::EmitLine { v, .. } => {
-                    n.insert("emit_line");
-                    val(v, &mut n);
-                }
                 Step::Invoke { args, .. } | Step::Ok { args, .. } | Step::Record { args, .. } => {
                     if args.iter().any(|a| a.strings().iter().any(|s| s.is_raw())) {
                         n.insert("raw_hist");
@@ -820,15 +787,12 @@ fn step_json(s: &Step) -> String {
             f.push(("a", a.to_string()));
             f.extend(det(d));
         }
-        Step::Cmp { a, left, op, right, d, helper } => {
+        Step::Cmp { a, left, op, right, d } => {
             f.push(("do", jstr("cmp")));
             f.push(("a", a.to_string()));
             f.push(("left", V::Int(*left).json()));
             f.push(("op", jstr(op)));
             f.push(("right", V::Int(*right).json()));
-            if let Some(h) = helper {
-                f.push(("helper", jstr(h)));
-            }
             f.extend(det(d));
         }
         Step::Begin { a } => {
@@ -860,11 +824,6 @@ fn step_json(s: &Step) -> String {
         }
         Step::Catalog => f.push(("do", jstr("catalog"))),
         Step::SetupComplete => f.push(("do", jstr("setup_complete"))),
-        Step::EmitLine { tag, v } => {
-            f.push(("do", jstr("emit_line")));
-            f.push(("tag", jstr(tag)));
-            f.push(("value", v.json()));
-        }
         Step::History { name } => {
             f.push(("do", jstr("history")));
             f.push(("name", jstr(name)));

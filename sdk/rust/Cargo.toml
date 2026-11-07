@@ -4,10 +4,19 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 rust-version = "1.70"
-description = "hydo's assertion SDK for Rust guest programs: always / sometimes / reachable / unreachable / eventually and BUGGIFY fault points, wire-compatible with the Go SDK (hvx/ASSERTIONS.md)"
-publish = false
+description = "Assertion SDK for programs tested under hydo, a deterministic hypervisor: always, sometimes, reachable, unreachable and eventually properties, BUGGIFY fault points and operation histories"
+repository = "https://github.com/kakoc/hydo"
+homepage = "https://github.com/kakoc/hydo"
+documentation = "https://docs.rs/hydo-assert"
+readme = "README.md"
+keywords = ["testing", "assertions", "deterministic", "fault-injection", "simulation"]
+categories = ["development-tools::testing"]
+# The tests read the shared cases in ../cases, which are not in the package.
+include = ["src/**", "Cargo.toml", "README.md", "LICENSE"]
 
-# Its own workspace: the repository root's Cargo.toml is the (unrelated) hydo KVM crate.
+# Its own workspace: not a member of the repository's workspace, because this crate is compiled
+# into recorded guest programs (rust-kv's rkv) and Cargo's symbol hashes depend on the package's
+# path and lock file.
 [workspace]
 
 [features]

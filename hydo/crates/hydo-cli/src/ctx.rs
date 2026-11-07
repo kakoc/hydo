@@ -36,6 +36,12 @@ pub struct Ctx {
     pub root: PathBuf,
     /// The configuration, read once from the environment in `main` (`hydo_config`, M144).
     pub config: hydo_config::Config,
+    /// Linux: run x86_64 images on the KVM engine (`--backend kvm` or `HYDO_BACKEND=kvm`)
+    /// instead of hvx.
+    pub kvm: bool,
+    /// Installed by `cargo install` (no release around the program): the root is this version's
+    /// directory of the install cache ([`installed_root`]), which `hydo setup --get` fills.
+    pub cargo_installed: bool,
 }
 
 impl Ctx {
@@ -50,10 +56,45 @@ impl Ctx {
             .map(Path::to_path_buf)
             .unwrap_or_else(|| PathBuf::from("."));
         crate::module::set_host_root(config.cli.host_root.clone());
+        let installed = installed_root(&root, &config.cli.cache.home);
+        let cargo_installed = installed.is_some();
+        let root = installed.unwrap_or(root);
+        let platform = Platform::detect(&config.cli);
+        let kvm = platform == Platform::Linux && config.kvm.backend.as_deref() == Some("kvm");
         Ctx {
-            platform: Platform::detect(&config.cli),
+            platform,
             root,
             config,
+            kvm,
+            cargo_installed,
+        }
+    }
+
+    /// Choose the engine from `--backend hvx|kvm` (removed from `args`); the default is
+    /// `HYDO_BACKEND`, else hvx. The Mac has one engine.
+    pub fn take_backend(&mut self, args: &mut Vec<String>) {
+        let Some(b) = take(args, "--backend") else {
+            if let Some(b) = self.config.kvm.backend.as_deref() {
+                if hydo_config::kvm::Backend::parse(b).is_none() {
+                    die(&format!("HYDO_BACKEND={b}: expected hvx or kvm"));
+                }
+            }
+            return;
+        };
+        match (self.platform, hydo_config::kvm::Backend::parse(&b)) {
+            (Platform::Linux, Some(hydo_config::kvm::Backend::Kvm)) => self.kvm = true,
+            (Platform::Linux, Some(hydo_config::kvm::Backend::Hvx)) => self.kvm = false,
+            (Platform::Mac, _) => die("--backend: the Mac has one engine (hvm)"),
+            (_, None) => die(&format!("--backend {b}: expected hvx or kvm")),
+        }
+    }
+
+    /// The engine's name in run documents (`hvx`, `kvm` or `hvm`).
+    pub fn backend_name(&self) -> &'static str {
+        match (self.platform, self.kvm) {
+            (Platform::Mac, _) => "hvm",
+            (Platform::Linux, true) => "kvm",
+            (Platform::Linux, false) => "hvx",
         }
     }
 
@@ -76,6 +117,24 @@ impl Ctx {
     pub fn libexec(&self) -> PathBuf {
         self.p("libexec")
     }
+}
+
+/// The release root of a `hydo` that `cargo install` put into `<prefix>/bin` (Milestone 169,
+/// docs/PUBLISHING.md): `<cache home>/versions/<this hydo's version>`, the directory
+/// `hydo setup --get` fills with this version's release (Milestone 162), whether it exists yet or
+/// not (until it does, `hydo doctor` names what is missing). Recognised by cargo's install record
+/// `.crates2.json` in the prefix naming the package `hydo`, and only when the prefix is not an
+/// unpacked release itself (no `SHA256SUMS`); every other layout (a release, a test's
+/// release-like root, a tree's `target/`) keeps the program's own parent's parent.
+pub fn installed_root(prefix: &Path, cache_home: &Path) -> Option<PathBuf> {
+    if prefix.join("SHA256SUMS").exists() {
+        return None;
+    }
+    let record = std::fs::read_to_string(prefix.join(".crates2.json")).ok()?;
+    if !record.contains("\"hydo ") {
+        return None;
+    }
+    Some(hydo_image::store::Home::new(cache_home.to_path_buf()).version(hydo_image::hydo_version()))
 }
 
 /// `hydo: <msg>` on stderr and exit with status 1.
