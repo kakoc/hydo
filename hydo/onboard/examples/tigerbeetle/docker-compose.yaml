@@ -1,0 +1,36 @@
+# A three-replica TigerBeetle cluster, as TigerBeetle's own documentation runs one under Docker
+# Compose (docs/operating/deploying/docker.md of TigerBeetle 0.17.9), with the release pinned.
+#
+# The documentation formats each replica's data file once, before `docker compose up`:
+#   docker run --security-opt seccomp=unconfined -v $(pwd)/data:/data \
+#     ghcr.io/tigerbeetle/tigerbeetle:0.17.9 \
+#     format --cluster=0 --replica=0 --replica-count=3 /data/0_0.tigerbeetle
+# (and the same for replicas 1 and 2). TigerBeetle validates --addresses as IP addresses, which is
+# why the documentation uses network_mode: host and the ports 3001-3003 on one machine.
+services:
+  tigerbeetle_0:
+    image: ghcr.io/tigerbeetle/tigerbeetle:${TB_VERSION:-0.17.9}
+    command: "start --addresses=0.0.0.0:3001,0.0.0.0:3002,0.0.0.0:3003 /data/0_0.tigerbeetle"
+    network_mode: host
+    volumes:
+      - ./data:/data
+    security_opt:
+      - "seccomp=unconfined"
+
+  tigerbeetle_1:
+    image: ghcr.io/tigerbeetle/tigerbeetle:${TB_VERSION:-0.17.9}
+    command: "start --addresses=0.0.0.0:3001,0.0.0.0:3002,0.0.0.0:3003 /data/0_1.tigerbeetle"
+    network_mode: host
+    volumes:
+      - ./data:/data
+    security_opt:
+      - "seccomp=unconfined"
+
+  tigerbeetle_2:
+    image: ghcr.io/tigerbeetle/tigerbeetle:${TB_VERSION:-0.17.9}
+    command: "start --addresses=0.0.0.0:3001,0.0.0.0:3002,0.0.0.0:3003 /data/0_2.tigerbeetle"
+    network_mode: host
+    volumes:
+      - ./data:/data
+    security_opt:
+      - "seccomp=unconfined"

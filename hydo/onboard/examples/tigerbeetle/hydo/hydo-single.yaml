@@ -1,0 +1,52 @@
+# One TigerBeetle replica (a cluster of one), the same workload and checks as hydo.yaml: what
+# fits in hydo's x86_64 guest with the release binary (hydo.yaml, "MEMORY"; RESULTS.md).
+#
+#   sh fetch-tigerbeetle.sh
+#   hydo build hydo/hydo-single.yaml                     # TigerBeetle 0.17.9
+#   hydo build hydo/hydo-single.yaml --set tb=0.16.29
+format: 1
+name: tigerbeetle-single
+description: "TigerBeetle, one replica: every acknowledged transfer survives crashes, pauses, clock jumps and power cuts, and balances stay the sum of their transfers"
+hydo_version: "0.1"
+
+params:
+  tb: "0.17.9"
+
+guest:
+  ram_mib: 3072   # the replica allocates 2.1 GiB at start
+  cpu: v3         # the release binary is built for x86-64-v3 with AES-NI
+
+data:
+  size_mib: 1536  # the formatted data file is 1.06 GiB
+  dirs: [tb]
+
+root:
+  files:
+    - {src: "../bin/{{tb}}/tigerbeetle", dst: /opt/tb/tigerbeetle, mode: "0755"}
+
+env:
+  TB_ADDRESSES: "127.0.0.1:3001"
+
+errors: true   # error logs as findings (see services)
+
+services:
+  - name: tigerbeetle_0
+    setup: "[ -f /data/tb/0_0.tigerbeetle ] || /opt/tb/tigerbeetle format --cluster=0 --replica=0 --replica-count=1 /data/tb/0_0.tigerbeetle"
+    cmd: /opt/tb/tigerbeetle start --addresses=127.0.0.1:3001 --cache-grid=64MiB /data/tb/0_0.tigerbeetle
+    port: 3001
+    ready: "nc -z -w 2 127.0.0.1 3001"
+    ready_timeout: 300
+    errors: {format: none, match: "error\\(|panic"}   # TigerBeetle logs error(<scope>): ... and panics
+
+workload:
+  steps: 20
+  timeout: 300
+
+test:
+  parallel: 4
+  per_round: 2
+  round_ms: 500
+  command_timeout: 60
+  drain_timeout: 60
+
+faults: [kill, pause, cut, clock, disk]

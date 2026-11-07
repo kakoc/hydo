@@ -1,0 +1,101 @@
+# A three-replica TigerBeetle cluster (docker-compose.yaml, from TigerBeetle's documentation),
+# onboarded into hydo. Started from `hydo compose docker-compose.yaml --out hydo/hydo.yaml
+# --images-dir images`; the hand changes are marked "hand:".
+#
+#   sh fetch-tigerbeetle.sh                       # the release binaries by sha256 (network, once)
+#   hydo build hydo/hydo.yaml                     # TigerBeetle 0.17.9
+#   hydo build hydo/hydo.yaml --set tb=0.16.29    # another release (fetch-tigerbeetle.sh lists them)
+#
+# Compose import warnings, and what was done about them:
+# - network_mode: host was ignored and every service got its own namespace. hand: TigerBeetle's
+#   --addresses must name each replica's own address, so they are the services' addr: values
+#   (the Compose file's 0.0.0.0:3001..3003 only work with one shared host network).
+# - security_opt: seccomp=unconfined (for io_uring) is not needed: the guest has no seccomp
+#   filter.
+# - no healthcheck and no port: hand: ready = the replica listens; port = its replica port.
+# - bind ./data on /data was not added: the data disk's root is /data, shared, which is what the
+#   Compose file means (one directory, one data file per replica).
+# - hand: the services run the release binary (fetch-tigerbeetle.sh) instead of the image
+#   ghcr.io/tigerbeetle/tigerbeetle, so that the workload can run the same binary's client
+#   (`tigerbeetle repl`) from outside the replicas' namespaces (hydo-oci runs a command inside a
+#   service's namespace).
+# - the Compose file has no format step (the documentation formats each data file once by hand):
+#   hand: `setup:` formats the data file when it is missing.
+#
+# MEMORY: one replica of the release binary allocates 2.1 GiB at start (1.4 GiB with
+# --development, which also turns direct I/O off) whatever --cache-grid says, so three replicas
+# need more RAM than hydo's x86_64 guest has (3072 MiB). This manifest boots and runs out of
+# memory; hydo-single.yaml runs one replica. RESULTS.md, "Memory".
+format: 1
+name: tigerbeetle
+description: "TigerBeetle, three replicas: every acknowledged transfer survives crashes, pauses, partitions, clock jumps and power cuts, and balances stay the sum of their transfers"
+hydo_version: "0.1"
+
+params:
+  tb: "0.17.9"            # hand: the TigerBeetle release (bin/<version>/tigerbeetle)
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 3072   # hand: the most hydo's x86_64 guest has; not enough for three replicas (above)
+  cpu: v3         # hand: the release binary is built for x86-64-v3 with AES-NI
+
+data:
+  size_mib: 3584  # hand: each formatted data file is 1.06 GiB (the whole disk must stay under 4 GiB)
+  dirs: [tb]
+
+root:
+  files:
+    - {src: "../bin/{{tb}}/tigerbeetle", dst: /opt/tb/tigerbeetle, mode: "0755"}
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 tigerbeetle_0
+      10.89.0.12 tigerbeetle_1
+      10.89.0.13 tigerbeetle_2
+
+env:
+  TB_ADDRESSES: "10.89.0.11:3001,10.89.0.12:3002,10.89.0.13:3003"
+
+errors: true   # error logs as findings (see services)
+
+services:
+  # Compose service tigerbeetle_0 (image ghcr.io/tigerbeetle/tigerbeetle:0.17.9)
+  - name: tigerbeetle_0
+    setup: "[ -f /data/tb/0_0.tigerbeetle ] || /opt/tb/tigerbeetle format --cluster=0 --replica=0 --replica-count=3 /data/tb/0_0.tigerbeetle"
+    cmd: /opt/tb/tigerbeetle start --addresses=10.89.0.11:3001,10.89.0.12:3002,10.89.0.13:3003 --cache-grid=64MiB /data/tb/0_0.tigerbeetle
+    addr: 10.89.0.11
+    port: 3001
+    ready: "nc -z -w 2 10.89.0.11 3001"
+    ready_timeout: 300
+    errors: {format: none, match: "error\\(|panic"}   # TigerBeetle logs error(<scope>): ... and panics
+  - name: tigerbeetle_1
+    setup: "[ -f /data/tb/0_1.tigerbeetle ] || /opt/tb/tigerbeetle format --cluster=0 --replica=1 --replica-count=3 /data/tb/0_1.tigerbeetle"
+    cmd: /opt/tb/tigerbeetle start --addresses=10.89.0.11:3001,10.89.0.12:3002,10.89.0.13:3003 --cache-grid=64MiB /data/tb/0_1.tigerbeetle
+    addr: 10.89.0.12
+    port: 3002
+    ready: "nc -z -w 2 10.89.0.12 3002"
+    ready_timeout: 300
+    errors: {format: none, match: "error\\(|panic"}   # TigerBeetle logs error(<scope>): ... and panics
+  - name: tigerbeetle_2
+    setup: "[ -f /data/tb/0_2.tigerbeetle ] || /opt/tb/tigerbeetle format --cluster=0 --replica=2 --replica-count=3 /data/tb/0_2.tigerbeetle"
+    cmd: /opt/tb/tigerbeetle start --addresses=10.89.0.11:3001,10.89.0.12:3002,10.89.0.13:3003 --cache-grid=64MiB /data/tb/0_2.tigerbeetle
+    addr: 10.89.0.13
+    port: 3003
+    ready: "nc -z -w 2 10.89.0.13 3003"
+    ready_timeout: 300
+    errors: {format: none, match: "error\\(|panic"}   # TigerBeetle logs error(<scope>): ... and panics
+
+workload:
+  steps: 20
+  timeout: 300
+
+test:
+  parallel: 4
+  per_round: 2
+  round_ms: 500
+  command_timeout: 60
+  drain_timeout: 60
+
+faults: [kill, pause, network, oneway, cut, clock, disk]

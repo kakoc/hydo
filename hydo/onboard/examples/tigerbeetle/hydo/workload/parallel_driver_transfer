@@ -1,0 +1,26 @@
+#!/bin/sh
+# hydo: timeout=40
+# One transfer between two of the accounts, chosen from HYDO_SEED; its id encodes what it moves
+# (helper_tb.sh). An attempt without an answer in 10 s is unknown and is sent again with the same
+# id: TigerBeetle answers `exists` when the first attempt was applied, so the transfer applies at
+# most once and the client learns the outcome.
+. ${HYDO_WORKLOAD:-/hydo/workload}/helper_tb.sh
+set -- $(transfer_of "$HYDO_SEED" "$HYDO_CMD_ID")
+id=$1 dr=$2 cr=$3 amt=$4
+for attempt in 1 2 3; do
+  status=$(tb_create 10 "create_transfers id=$id debit_account_id=$dr credit_account_id=$cr amount=$amt ledger=700 code=10")
+  case $status in
+    created|exists)
+      echo "$id" >> "$HYDO_ACKED"; echo "$id ack" >> "$HYDO_OUTCOMES"
+      echo "transfer $id: $status (attempt $attempt)"; exit 0 ;;
+    "")
+      echo "$id unknown" >> "$HYDO_OUTCOMES"
+      echo "transfer $id: no answer (attempt $attempt)" ;;
+    *)
+      # exists_with_different_*: the id was applied with other fields, which this client never sent
+      echo "$id failed" >> "$HYDO_OUTCOMES"
+      case $status in exists_with_different_*) echo "transfer $id: $status"; exit 100 ;; esac
+      echo "transfer $id: $status"; exit 1 ;;
+  esac
+done
+exit 1
