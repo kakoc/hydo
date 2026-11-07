@@ -140,7 +140,18 @@ Since M153 the five host programs are compiled with the tree and the Cargo home 
 their panic messages name no directory of the machine that built them; before, they carried
 the builder's home directory. This changes only those programs' bytes, no image.
 
-**The current tarball**, built twice on the bare-metal machine from `main` = `e744b8c`, from
+**The current tarball**, built twice on the bare-metal machine from the final pre-release commit
+`ce6071c` (after M157 and the history pass), from clean Rust targets, with the same bytes both
+times: `hydo-linux-0.1.0.tar.gz`, 59,560,865 bytes, sha256
+`114e4160d8a0b704af2789eb5566da7c58be603b43cd51ae20964c0180a8c19e`. Against the tarball built from
+`e744b8c` only `SHA256SUMS`, `bin/hydo` (it carries MANIFEST.md) and `bin/hydo-build` (the
+compiled-in commit), `hydo/onboard/MANIFEST.md`, `hydo/ASSERTIONS.md` and the comments of
+`module/hvx.c` and `module/hvx_abi.h` differ (M157's wording); `hydo module build` from it gives
+srcversion `14D39A96F319623EC2AD8D1`, the loaded main module's. Installed with `--no-module` into
+clean prefixes it gave every value of docs/REBASELINE.md 13.4, twice, as the user and as root
+(docs/HISTORY.md, "Milestone 157", the addendum "Both tarballs rebuilt from the final commit").
+
+**The tarball built from `e744b8c`**, built twice on the bare-metal machine from `main` = `e744b8c`, from
 clean Rust targets, with the same bytes both times: `hydo-linux-0.1.0.tar.gz`, 59,565,449 bytes,
 sha256 `e9538ed9fdf6719682fce2cf38c42c182ca9f0b1dc4a8edbfa0057f6b9d8b59c`. Against M156's rebuild only
 `SHA256SUMS` and the commit compiled into `bin/hydo` and `bin/hydo-build` differ; installed with

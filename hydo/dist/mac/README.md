@@ -112,6 +112,18 @@ Nothing is published by the script; the tarball stays in `OUTDIR`.
 
 ## The current tarball
 
+`hydo-mac-0.1.0.tar.gz`, 29,925,257 bytes, sha256
+`d6a274058ab6037d164c02ed3fe4ae73d8e5b960f85c079eab6628314329ef2e`, built twice on the Mac from
+the final pre-release commit `ce6071c` (after M157 and the history pass; one tree path, clean
+target directories) with the same bytes. Against the tarball built from `e744b8c` only
+`SHA256SUMS`, `bin/hydo` (it carries MANIFEST.md) and `bin/hydo-build` (the compiled-in commit),
+`hydo/onboard/MANIFEST.md` (M157's wording), and the Mach-O `LC_UUID` of the programs (another tree
+path; `bin/hydo-fetch-image` and `bin/hydo-hvm` differ in only those bytes) differ. Installed into a
+clean prefix it gave every Mac value of docs/REBASELINE.md 13.4, twice each (docs/HISTORY.md,
+"Milestone 157", the addendum "Both tarballs rebuilt from the final commit").
+
+## Built from `e744b8c`
+
 `hydo-mac-0.1.0.tar.gz`, 29,926,313 bytes, sha256
 `098c8773b110916f9b21a78a926ffc3c4ae9a47d3339120f38a467bb1b9d780e`, built twice on the Mac from
 `main` = `e744b8c` (one tree path, clean target directories) with the same bytes. Against M155's
