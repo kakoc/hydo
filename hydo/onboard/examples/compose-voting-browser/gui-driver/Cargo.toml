@@ -1,0 +1,29 @@
+# hydo-gui: the voter at the screen of compose-voting-browser (Milestone 166). A small static
+# program that starts headless Chromium with --remote-debugging-pipe, opens the vote page, clicks a
+# button with real mouse events, and reports what the page then SHOWS (docs/design/gui-testing.md).
+#
+# Not a member of the repository's workspace (hydo/onboard/examples is excluded): its bytes are
+# inside the example's guest image. No dependencies (std only), so its lock file names only itself.
+# Build the static guest binaries with build.sh.
+[package]
+name = "hydo-gui"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+rust-version = "1.90"
+publish = false
+
+[[bin]]
+name = "hydo-gui"
+path = "src/main.rs"
+
+[dependencies]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[workspace]

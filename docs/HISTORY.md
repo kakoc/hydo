@@ -2859,3 +2859,59 @@ Branch `worktree-agent-a5a8d501f58e6ce7f` from `main` = `dbb1df8`. The one known
 - **Linux from clean prefixes** (M158's `q.sh`, `root.sh`, `mod.sh`; no trap called): `doctor` 0 failed, 2 warnings; Redis image `d255fb2b…` (data `2d52cd04…`, built twice the same); `disk=none | run` `1893d8c55d7704d9` and `disk=cut | run C=12 R=everysec` `3520af95868b4e8f`, twice each as the user and as root (in-process; `strace` shows `bin/hydo` and no `hydo-hvx`); `hydo repro` REPRODUCED; `hydo explore --seeds 1-20 --strategy swarm --workers 2` 11 failures, all reproduced, minimal schedules `747a6fbfbceecaa3` and `89105a398516a2ea`, as the user and as root; `hydo repro hydo-out/explore` 13 of 13; netem image `bd4c979f…` `0a706d74e43f2f4b` twice; `init` and `build --check` OK; `hydo module build` srcversion `14D39A96F319623EC2AD8D1` (built only).
 - **Content scans:** the tarball scan's report equals M158's line for line; the files hydo writes in the Linux sources archive (now 20) contain no value of the local list, no home path, no remote-shell word and no competitor name; the derivation closure archive contains none of them either.
 - **Checks:** `cargo fmt --check` and `cargo clippy --locked --workspace --all-targets -- -D warnings` pass on the Mac and on the bare-metal machine; `cargo test --locked --release -p hydo-release -p hydo-agents --test third_party --test public_content` passes on the Mac (with the local list); `cargo test --locked --release --workspace` passes on the Mac (126 test binaries, 381 passed, 0 failed, 2 ignored; M158's 379 plus the two new tests). On the bare-metal machine (umask 022) four equivalence tests fail for that host's reasons (file modes, the loaded `hvx` module in `hydo module status`, a Mac-only image message): `agents_as_recorded`, `built_in_skill_as_recorded`, `cli_matches_golden` and `compose_equals_python`; they fail the same way there on M158's commit `e29c664`; with the machine's login umask 002 `hydo-build`'s `oci` test also fails on directory modes.
+
+### Milestone 166 — DONE (an experiment: a GUI application tested through a real browser in the guest. Headless Chromium 156 drives Docker's voting app; an acknowledgement is what the page SHOWS after a click; the screen is checked against the backend. Chromium is deterministic under hvx with nothing special: two fresh-boot runs give one fingerprint, and the screenshots are pixel-identical. A vote the screen showed as cast is lost at a power cut while the worker is down, and the results page stays down after a database restart; both twice with one fingerprint. On the Mac (arm64, hvm) the clean run and the power cut give the same verdicts, each twice with one fingerprint; 2026-11-07)
+
+Branch `worktree-agent-acb2048b713e4492a` from `main` = `afa1186`. The existing `compose-voting` example and every recorded value are unchanged. The manifests are named `gui.yaml` and `gui-mac.yaml`, not `hydo*.yaml`, because hydo-control's and hydo-explore's identity corpora run every `examples/*/hydo*.yaml`, and their goldens would otherwise have to be re-recorded. The design and its results are in `docs/design/gui-testing.md`, and the example is `hydo/onboard/examples/compose-voting-browser/` (its `RESULTS.md` has every schedule). No workspace crate changed.
+
+- **What was built:** the voting app's manifest plus two services.
+  - `browser` is `chromedp/headless-shell:156.0.8078.48` by digest (docs/BUILD-PINS.md "Headless Chromium and the GUI driver"). It is an image service whose process is `sleep infinity`.
+  - `cdn` is busybox `httpd` with jQuery 1.11.1 and jquery-cookie 1.4.1, under the public CDNs' names. The vote page draws its confirmation with jQuery from `code.jquery.com`, and without that no voter would ever see a vote confirmed.
+  - `gui-driver/` is `hydo-gui`, a static Rust program of about 870 lines with no dependencies. It speaks the Chrome DevTools Protocol as NUL-terminated JSON over `--remote-debugging-pipe` (file descriptors 3 and 4), clicks with `Input.dispatchMouseEvent` and reads the page with `Runtime.evaluate`.
+  - The pipe was chosen because it needs nothing in the image beyond the browser: no WebSocket, no port, no language runtime and no automation library.
+- **The workload:** voter i opens the vote page and clicks Cats or Dogs. The id `voter<i>-<option>` is acknowledged only when the page then shows that vote as cast: the button is disabled with the check icon and the other button is dimmed. Each voter's screenshot sha256 goes to the console.
+- **The invariants:**
+  - `screen.confirmed_counted_soon` (eventually, 60 s) and `screen.confirmed_counted` (final): every screen-confirmed vote is in PostgreSQL with the option the screen showed.
+  - `results.screen_agrees_soon` (eventually, 60 s): the results page, rendered by Chromium, shows PostgreSQL's total and percentages.
+  - `results.page_live` (`always_or_unreachable`, every 2 s while the workload runs): the results page shows a total whenever PostgreSQL answers.
+- **x86_64** (the bare-metal machine; the Linux release `58aab3b1…` installed with `--no-module` into `~/hydo-gui/pfx`; the loaded main module `14D39A96F319623EC2AD8D1`; every run through `~/bin/hvx-run`, one VM at a time and only with at least 8 GiB available):
+  - The image is `f84c3412…`, 3,356,491,776 bytes, built twice with the same bytes in 165 s. That is 537 MB more than the voting app.
+  - Guest RAM is 3072 MiB. A run from a fresh boot takes 41–51 s of wall time.
+  - Each schedule was run twice, and each pair gave one fingerprint:
+    - `disk=none dseed=1 | run`: OK `f4c8cd57de61b337`.
+    - `K=worker@5+10 C=12`: VIOLATION `screen.confirmed_counted_soon`, `0d240a50bec1aa87`. The screen confirmed 12 votes and PostgreSQL counts 5. After recovery, the results page shows 5 votes.
+    - `K=db@5+5`: VIOLATION `results.page_live`, `b22f460ebda8308c`. The results page is refused while PostgreSQL answers, because the result app and the worker stop when the database restarts.
+    - `C=12`: OK `e5a45f361ca3f0fa`.
+    - `K=worker@5+5`: OK `61e4268bee3514ec`.
+    - `N=vote-redis@5-12:loss,100%`: OK `d335d99370201477`. For voters 5 to 11 the screen showed `500 Internal Server Error`, not a confirmation.
+  - Every engine counter (stops, typed, inh, ctl, wfp) was the same in both runs of each pair. An earlier version of the manifest gave `e923c6a7e6709266` twice from its first clean run on.
+- **Determinism:** nothing was needed beyond quiet-browser flags:
+  - `--headless --no-sandbox --disable-gpu --disable-dev-shm-usage`;
+  - no background networking, component updates, extensions, sync or crash reporter;
+  - a fixed window and scale (640×400), `--lang=en-US`, `TZ=UTC`, and the image's DejaVu fonts.
+
+  `--single-process` was not needed. Which flags determinism needs was not tested. Every Cats confirmation in every run is the same PNG (`d390623351ec3f40…`), and so is every Dogs one (`b6f25aab…`) and every 500 page (`534a4542…`). A copy of the manifest that prints three PNGs as base64 (not committed, fingerprint `eb2d8d8d6510d4c7` twice) took them out of the guest; they are in the example's `screens/`.
+- **What the browser changed about the known bug:** `C=12` alone loses votes with `../compose-voting`'s wget workload, but loses nothing at a browser's pace.
+  - A vote takes about 0.3 s of guest time, and the .NET worker's 100 ms poll moves each vote into PostgreSQL before the next one.
+  - So the loss needs the worker to fall behind, which this example makes happen with a kill.
+- **What hydo's heal hides:** a service stopped by a fault is restarted at the heal. So an after-the-run check saw a working results page after `K=db@5+5` (an earlier image: OK `c3e107e35c19113f` twice). Only the check during the workload sees the outage.
+- **Found natively** (the browser image unpacked in a private network namespace on the bare-metal machine): Chromium answers every load with `net::ERR_INTERNET_DISCONNECTED` when the namespace has only `lo`. With `network: bridge` it has `eth0`, so it works.
+- **The Mac (arm64),** with the Mac release installed into a scratch prefix and the second guest kernel:
+  - `gui-mac.yaml` (4096 MiB, because the root is the initramfs in guest RAM) gives the initramfs `a3e7bb62…` (504,557,344 bytes, built in 11 minutes) and the data disk `8670640…`.
+  - `disk=none | run` gave OK `0155008471df8611` twice (stops 18,349, ctl `1aadc4006d294a61`).
+  - `disk=cut | run K=worker@5+10 C=12` gave VIOLATION `screen.confirmed_counted_soon` `91c1e47f1e3e27d8` twice (stops 27,700, ctl `cdd5892e269126e1`): "the screen confirmed 12 votes, PostgreSQL counts 4 of them; voter4 (its screen showed the vote for a as cast) is not counted". On the Mac's clock, the kill reached the worker before it had taken voter 4's vote.
+  - Each run took 205–275 s of wall time on a Mac that other sessions were also using.
+  - Every Cats confirmation is the PNG `23efcf607a2fdc8e…`. That is not the x86_64 PNG: the fonts, Skia and the CPU are the same kinds, but the builds differ.
+  - The arm64 image was built only once, so its byte-for-byte reproducibility was not checked.
+- **Checks:**
+  - `cargo fmt --check` and `cargo clippy -D warnings` pass for the driver (its own workspace).
+  - `cargo fmt --check` of the workspace passes.
+  - `cargo test --locked --release --workspace --no-fail-fast` passes on the Mac: 126 test binaries, 381 passed, 0 failed, 2 ignored. That includes `public_content` with the local list and the license test `third_party`.
+  - A first run with the manifests named `hydo.yaml` and `hydo-mac.yaml` failed hydo-control's identity corpus. That corpus runs every `examples/*/hydo*.yaml`, so the manifests were renamed rather than the goldens re-recorded.
+- **Left** (AGENTS.md open item 45):
+  - a results check that tolerates votes arriving while it reads, so that it could run during the workload;
+  - a screenshot reference to compare with;
+  - one browser kept for the whole run;
+  - an explorer campaign on this image;
+  - text input and TLS pages;
+  - the Mac's other fault schedules and a second Mac build.
