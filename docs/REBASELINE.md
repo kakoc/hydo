@@ -3252,7 +3252,7 @@ instead of 23,366 at `853080`), because the new `rkv` runs different code.
 
 ## 17. hydo 0.2.0 (2026-11-07)
 
-The first re-baseline made with `hydo-bench rebaseline` alone (docs/HISTORY.md "Milestone 176"):
+The first re-baseline made with `hydo-bench rebaseline` alone (docs/HISTORY.md "Milestone 177"):
 the values are in `hydo/onboard/recorded.json`; this section records only the decisions.
 
 **The fingerprint epoch stays 1.** AGENTS.md "The image records" raises it with a change of an
