@@ -16,7 +16,9 @@
 # 4. The installed `hydo`: --version, guide, init and doctor (doctor fails until `hydo setup
 #    --get` has fetched the version's files; its exit status is printed, not checked).
 # 5. With HYDO_REHEARSAL_LINUX=1 also `cargo check --target x86_64-unknown-linux-musl` of the
-#    packed `hydo` (the Linux-only code, which a Mac build does not compile).
+#    packed `hydo` (the Linux-only code, which a Mac build does not compile; on a Mac without a
+#    musl cross gcc, ring's C goes through clang with declarations for four libc headers).
+# The installed `hydo` keeps its install cache in WORK/hydo-home ($HYDO_HOME), not in ~/.hydo.
 #
 # HYDO_REHEARSAL_DIRTY=1 packs an uncommitted tree (`--allow-dirty`; the packages then record
 # no commit). HYDO_REHEARSAL_TOOLCHAIN names the toolchain of the install (default: the one
@@ -78,7 +80,8 @@ fi
 H="$WORK/install/bin/hydo"
 ls -l "$WORK/install/bin"
 
-echo "== 4. the installed hydo"
+echo "== 4. the installed hydo (its install cache in $WORK/hydo-home, not ~/.hydo)"
+export HYDO_HOME="$WORK/hydo-home"
 "$H" --version
 "$H" guide | head -3
 mkdir -p "$WORK/proj"
@@ -91,11 +94,17 @@ echo "hydo doctor: exit status $rc"
 if [ "${HYDO_REHEARSAL_LINUX:-0}" = 1 ]; then
   echo "== 5. cargo check --target x86_64-unknown-linux-musl of the packed hydo"
   # ring (rustls, for the registry pulls and the install cache's downloads) compiles C for the
-  # target in its build script: without a musl cross gcc, clang with --target does it (ring
-  # needs no libc headers)
+  # target in its build script. Without a musl cross gcc, clang with --target does it, given
+  # declarations for the four libc headers ring includes beyond clang's own (a check only: the
+  # objects are never linked or run)
   if ! command -v x86_64-linux-musl-gcc > /dev/null && command -v clang > /dev/null; then
+    STUBS="$WORK/musl-stubs"
+    mkdir -p "$STUBS"
+    printf '#define assert(x) ((void)0)\n' > "$STUBS/assert.h"
+    printf '#include <stddef.h>\nvoid *memcpy(void *, const void *, size_t);\nvoid *memmove(void *, const void *, size_t);\nvoid *memset(void *, int, size_t);\nint memcmp(const void *, const void *, size_t);\n' > "$STUBS/string.h"
+    printf 'void abort(void);\n' > "$STUBS/stdlib.h"
     export CC_x86_64_unknown_linux_musl=clang
-    export CFLAGS_x86_64_unknown_linux_musl=--target=x86_64-unknown-linux-musl
+    export CFLAGS_x86_64_unknown_linux_musl="--target=x86_64-unknown-linux-musl -I$STUBS"
   fi
   ( cd "$WORK" && CARGO_HOME="$WORK/home" RUSTC="$RUSTC_BIN" \
       "$CARGO_BIN" check --locked --offline --target x86_64-unknown-linux-musl \
