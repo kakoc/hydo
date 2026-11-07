@@ -791,7 +791,9 @@ fn ran_of(r: &hydo_explore::pool::Res, secs: f64, dir: &Path) -> Ran {
         None
     };
     Ran {
-        verdict: recorded::verdict_line(&verdict, None),
+        // a history check replaces the pool's verdict and keeps the guest's as guest_verdict:
+        // the same line as a fresh boot's run document gives
+        verdict: recorded::verdict_line(&verdict, s("guest_verdict").as_deref()),
         fp,
         ctl: s("ctl"),
         wfp: s("wfp"),

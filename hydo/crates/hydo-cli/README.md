@@ -36,7 +36,7 @@ anything is downloaded: the onboarding guide is built into the program.
 ## First run
 
 ```sh
-cp -R ~/.hydo/versions/0.1.0/examples/redis ~/hydo-redis && cd ~/hydo-redis
+cp -R ~/.hydo/versions/0.2.0/examples/redis ~/hydo-redis && cd ~/hydo-redis
 hydo build hydo.yaml
 hydo run "disk=none | run"
 hydo run "disk=cut | run C=12 R=everysec"

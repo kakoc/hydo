@@ -11,7 +11,7 @@
 #       disk=cut | run C=12 R=everysec W=0000002a,p4,q2,r100   -> VIOLATION: acknowledged writes lost
 name: redis-composed-hist
 description: Redis driven by composed commands; the recorded histories are checked on the host.
-hydo_version: "0.1"
+hydo_version: "0.2"
 format: 1
 
 root:

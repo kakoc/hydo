@@ -221,10 +221,9 @@ the steps above; a hydo release ships the skill as it is in the tree (`skill/hyd
 inside `bin/hydo`). Users get a skill release in two ways:
 
 - **Claude Code** reads the marketplace `.claude-plugin/marketplace.json` at the repository root
-  (staged at `hydo/dist/skill/marketplace.json` until hydo 0.2.0, user decision 2026-11-07, so
-  the skill and a hydo with its guide topics go out together: at the 0.2.0 release, `git mv
-  hydo/dist/skill/marketplace.json .claude-plugin/marketplace.json` in the release commit)
-  (`/plugin marketplace add kakoc/hydo`, then `/plugin install hydo-onboard@hydo`). Its plugin
+  (there since hydo 0.2.0's release commit; until then it was staged at
+  `hydo/dist/skill/marketplace.json`, so that the skill and a hydo with its guide topics went out
+  together, user decision 2026-11-07) (`/plugin marketplace add kakoc/hydo`, then `/plugin install hydo-onboard@hydo`). Its plugin
   entry names the skill folder and the version. Claude Code offers an update when that version
   changes on the default branch (`claude plugin update hydo-onboard@hydo`, the `/plugin` panel,
   or by itself when the user turned on auto-update for the marketplace, which is off by default

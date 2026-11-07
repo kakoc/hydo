@@ -28,7 +28,7 @@ fn plan_lists_every_function_in_a_fixed_order() {
     let sys = System::new("t").service(Service::new("db", "/bin/db").ready("true").port(5432)).steps(8)
         .faults(&[Fault::Kill, Fault::Cut]).regression("r", "disk=none dseed=1 | run", Expect::Ok);
     let j = sys.plan_json("/tmp/g", "/bin/t", &regs);
-    for want in ["\"format\": 1", "\"hydo_version\": \"0.1\"", "\"kind\": \"parallel_driver\"", "\"timeout\": 7",
+    for want in ["\"format\": 1", "\"hydo_version\": \"0.2\"", "\"kind\": \"parallel_driver\"", "\"timeout\": 7",
                  "\"run\": [\n", "\"/bin/t\"", "\"driver\"", "\"place\"", "\"within\": 9", "\"after\": \"start\"",
                  "a \\\"quoted\\\" message", "\"faults\": [\n", "\"expect\": \"ok\""] {
         assert!(j.contains(want), "missing {:?} in\n{}", want, j);

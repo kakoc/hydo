@@ -265,6 +265,10 @@ the `hydo` command of both releases. The pins:
   and a Linux machine otherwise compile different code). Proof (M111 sources): this Mac and the
   bare-metal machine built the same files, x86_64 `082592ae…` (2,285,944 bytes, static-pie)
   and arm64 `fefcca66…` (1,902,328 bytes); two checkouts at different paths gave the same files.
+  Since 0.2.0 (the workspace version is in Cargo's `-C metadata` of every crate, AGENTS.md open
+  item 40) the pins are x86_64 `bdafadb3…` (`bdafadb3d65b0e742c1b0b238fab8c95f8f8f20d65efa4f27249a613006cb08c`)
+  and arm64 `60c7c9c4…` (`60c7c9c4f92ac7cb1af94189a64485169e6b186ee174777656a184bf0e2613e1`),
+  the same sizes, built on this Mac and on the bare-metal machine.
   Extra crates (Cargo.lock): tokio 1.54.1 (current-thread runtime), h2 0.4.20, http 1.5.0,
   bytes 1.12.1, httparse 1.10.1. It replaces the Go program of `hydo/onboard/world/` (Go 1.26.5,
   `2da400f3…` x86_64), whose bytes are in the images built before M111.
@@ -298,6 +302,10 @@ from go.dev it still builds `orderd-arm64` `a87ca7fa…` (M96).
   machine; `hydo-grpc.arm64` (`ELF 64-bit LSB executable, ARM aarch64, statically linked`, 2.6 MB)
   `fd762fa06b352d0e…` (Mac; the bare-metal machine's private rustup has no aarch64 musl
   target). The Go clients were 10.6 MB (`c772698c…`, nixpkgs Go) and `686b9e57…` (arm64, go.dev Go).
+  Since 0.2.0 (the workspace version is in Cargo's `-C metadata`, and the client sends
+  `hydo-grpc/<version>` as its user agent) the pins are `f2ad5e72…`
+  (`f2ad5e72e59dfd02f950fd55757ef799a2b76141d8112159354a0be734019aa6`) and arm64 `55445870…`
+  (`55445870a2e1120481362224415877e90a45c9cd46195cff5c53dcb561cfa574`).
 - **Well-known imports:** `hydo/crates/hydo-grpc-gen/src/wkt.pb` holds the descriptors of
   `google/protobuf/*.proto` exactly as protocompile v0.14.1 with protobuf-go v1.35.2 produced them
   for the Go generator (sha256 `f9696902ad5a824e…`), so a schema that imports them is the same

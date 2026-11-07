@@ -14,7 +14,7 @@
 format: 1
 name: libsql-replica
 description: "libSQL server (sqld): a primary and a read replica; seeded SQL transactions checked for a constant bank total, serializable list-append histories and replica convergence"
-hydo_version: "0.1"
+hydo_version: "0.2"
 
 network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
 

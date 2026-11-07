@@ -3249,3 +3249,36 @@ Section 13.2 → M163: `2db6fdcc217982c3` → `d184b981aeb40784`, `9391d8a94083d
 unchanged; in the `disk=none | run` transcript (47 lines both times) only the last four lines
 differ: the oracle's report and the end come 13 stops earlier (`n` 23,353 at `at=852874`
 instead of 23,366 at `853080`), because the new `rkv` runs different code.
+
+## 17. hydo 0.2.0 (2026-11-07)
+
+The first re-baseline made with `hydo-bench rebaseline` alone (docs/HISTORY.md "Milestone 177"):
+the values are in `hydo/onboard/recorded.json`; this section records only the decisions.
+
+**The fingerprint epoch stays 1.** AGENTS.md "The image records" raises it with a change of an
+engine, the host controller, the agent pin or a guest kernel that moves a recorded fingerprint.
+None of those moved for 0.2.0: what moved is the bytes of images, so each such image has a new
+sha256 and new values, and an image built before 0.2.0 still gives its old values (`hydo repro`
+compares them exactly). The causes, all inside images: the workspace version is in Cargo's
+`-C metadata`, so `guest/hydo-world` (images with `fakes:` or `proxies:`) and `guest/hydo-grpc`
+(generated gRPC drivers; it also sends `hydo-grpc/0.2.0` as its user agent) have new bytes; the
+SDK versions are in rust-kv's and redis-composed-rs's programs, node-kv's `package.json` and
+python-kv's `__init__.py`; and the composed plans pin `hydo_version: "0.2"` (a 0.2 hydo refuses
+"0.1"), whose text is inside their images. M175's KVM engine fix moved no recorded value.
+
+**What moved.** The Mac (`hvm`): 11 of 21 images have new bytes (redis-bridge, redis-composed and
+its racy build, node-kv, python-kv, python-kv-hist, rust-kv, the shop's two builds, the gRPC
+demo's two builds), 38 of 75 runs have a new fingerprint or ctl value. The bare-metal machine
+(`hvx`): 13 of 39 images (redis-proxy, redis-composed, redis-composed-hist, redis-composed-read,
+redis-errors, redis-bridge, rust-kv, the shop's two builds, the three stack-grpc images, the stack
+with generated drivers), 30 of 131 runs. KVM (`kvm`, the build machine): none of 4 images and
+none of 11 runs. Every verdict is unchanged; every moved run gave the same values twice. This also
+ends open item 53's moved entries: rust-kv (built at `/tmp/hydo-rebaseline-rkv`), the x86_64 shop
+(inputs folder `~/hydo-m164-work/w/in`, the list's note) and stack-grpc now hold values the tree
+reproduces.
+
+**Two fixes the run needed.** A pool run whose history check replaced the guest's verdict
+recorded other words than a fresh boot of the same run (`hydo-bench` now takes the pool's
+`guest_verdict`), and `stage.sh` called `sudo` to delete every build output (it now deletes the
+user's own files without it, so the KVM entries run on a machine without sudo). `hydo-bench`'s
+default mode has no worker pool for the KVM engine, so the KVM entries run with `--thorough`.
