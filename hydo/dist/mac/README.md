@@ -110,6 +110,19 @@ that covers it), because Apple's linker derives the UUID from the object files' 
 
 Nothing is published by the script; the tarball stays in `OUTDIR`.
 
+Since M158 the script also writes the license notices and the sources archive (docs/RELEASING.md).
+Before the release tree is checksummed, `hydo-release notices` (hydo/crates/hydo-release) writes
+`LICENSE`, `licenses/` and `THIRD-PARTY.md` from `hydo/dist/mac/third-party.json`, the list of
+what every shipped file is, under which license and where its source is; it fails the build when
+a file of the tree, a Nix store path in it or a Rust crate has no entry, license or text. After
+the tarball, `hydo-release sources` writes `OUTDIR/hydo-mac-<version>-sources.tar.gz`: the exact
+upstream source archives of every third-party component (pinned by sha256 in the list; among
+them the Arm GNU Toolchain's 311 MB source snapshot, for the glibc and libgcc in
+`guest/hydo_fc`), the nixpkgs tree that built the Nix-built ones, our kernel patches,
+configurations and build recipes, the list and the notices, reproducible like the tarball. Its
+archives come from a sources cache: `HYDO_SOURCES_FROM=DIR`, else `hydo/dist/mac/sources/` (not
+tracked), filled once from the machine with the Nix store paths by `hydo/dist/fetch-sources.sh`.
+
 ## The current tarball
 
 `hydo-mac-0.1.0.tar.gz`, 29,925,257 bytes, sha256

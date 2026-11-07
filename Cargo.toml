@@ -33,6 +33,7 @@ members = [
     "hydo/crates/hydo-control",
     "hydo/crates/hydo-hvx",
     "hydo/crates/hydo-hvm",
+    "hydo/crates/hydo-release",
 ]
 exclude = ["sdk", "hydo/onboard/examples"]
 

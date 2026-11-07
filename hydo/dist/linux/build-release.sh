@@ -1,6 +1,8 @@
 #!/bin/sh
 # Build the self-contained x86_64 Linux release of hydo (see hydo/dist/linux/README.md):
-#     hydo/dist/linux/build-release.sh [OUTDIR]        -> OUTDIR/hydo-linux-<version>/ and its .tar.gz
+#     hydo/dist/linux/build-release.sh [OUTDIR]        -> OUTDIR/hydo-linux-<version>/ and its .tar.gz,
+#                                                         and OUTDIR/hydo-linux-<version>-sources.tar.gz
+#                                                         (the corresponding source, M158; docs/RELEASING.md)
 #
 # Runs on any machine with sh, rsync, tar, sha256sum/shasum and cargo (the Mac works, with
 # HYDO_RUST_BIN_DIR or a C cross compiler for the musl target). The
@@ -208,6 +210,15 @@ cp -R "$TOP/skills/hydo-onboard" "$REL/skill/"
 cp "$D/install.sh" "$REL/install.sh"; chmod 755 "$REL/install.sh"
 cp "$D/QUICKSTART-linux.md" "$REL/README.md"
 echo "$VERSION" > "$REL/VERSION"
+# the license notices (M158): LICENSE (hydo's Apache-2.0), licenses/ (the kernel module's GPL-2.0,
+# the full license texts of every third-party component, from hydo/dist/licenses/, and of every
+# Rust crate compiled into a program, from its registry source) and THIRD-PARTY.md, generated from
+# third-party.json by hydo-release (hydo/crates/hydo-release; built here for this machine). It
+# checks the list first, and after writing that every file of the release tree and every Nix
+# store path in it belongs to a component; anything missing fails the build (docs/RELEASING.md)
+( cd "$TOP" && cargo build --release --locked -q -p hydo-release ) >&2
+HR=$TOP/target/release/hydo-release
+CARGO=$(command -v cargo) "$HR" notices linux --repo "$TOP" --version "$VERSION" "$REL"
 ( cd "$REL" && find . -type f ! -name SHA256SUMS | LC_ALL=C sort | sed 's#^\./##' | xargs $SHA > SHA256SUMS )
 
 # --- 3. the tarball (owner root, fixed order and file times, gzip without a name or time stamp,
@@ -222,3 +233,32 @@ else
 fi
 ls -la "$OUTDIR/hydo-linux-$VERSION.tar.gz"
 $SHA "$OUTDIR/hydo-linux-$VERSION.tar.gz"
+
+# --- 4. the sources archive that accompanies the tarball (M158): the exact upstream source archives
+# of every third-party component (pinned by sha256 in third-party.json), our patches,
+# configurations and build recipes, the component list and the notices. The archives come from a
+# sources cache: $HYDO_SOURCES_FROM (a directory with the files by name, for example a copy kept
+# on the bare-metal machine), else hydo/dist/linux/sources/, filled once from the machine with
+# the Nix store paths by hydo/dist/fetch-sources.sh. hydo-release writes it with fixed times,
+# owners and order and gzip without a time stamp, so two builds give the same bytes.
+SRC=${HYDO_SOURCES_FROM:-$D/sources}
+CARGO=$(command -v cargo) "$HR" fetch-list linux --repo "$TOP" --cache "$SRC" > "$OUTDIR/.sources-missing.tsv"
+if [ -s "$OUTDIR/.sources-missing.tsv" ]; then
+  if [ -n "$HYDO_SOURCES_FROM" ]; then
+    echo "$HYDO_SOURCES_FROM lacks these sources (or has other bytes):" >&2; cut -f1 "$OUTDIR/.sources-missing.tsv" >&2; exit 1
+  fi
+  mkdir -p "$SRC"; need_nix_machine
+  echo "fetching $(wc -l < "$OUTDIR/.sources-missing.tsv" | tr -d ' ') source archives on the machine with the Nix store paths"
+  ( cd "$OUTDIR" && cp "$TOP/hydo/dist/fetch-sources.sh" .fetch-sources.sh && tar cf - .fetch-sources.sh .sources-missing.tsv && rm .fetch-sources.sh ) | on_nix_machine "
+    set -e
+    command -v nix-store >/dev/null || . ~/hydo-nixb-work/nixenv.sh
+    W=\$(mktemp -d /var/tmp/hydo-sources.XXXXXX); trap 'chmod -R u+w \$W; rm -rf \$W' EXIT
+    cd \$W && tar xf - >&2
+    sh .fetch-sources.sh .sources-missing.tsv out >&2
+    cd out && tar cf - .
+  " | ( cd "$SRC" && tar xf - )
+fi
+rm -f "$OUTDIR/.sources-missing.tsv"
+CARGO=$(command -v cargo) "$HR" sources linux --repo "$TOP" --version "$VERSION" --cache "$SRC" \
+  --out "$OUTDIR/hydo-linux-$VERSION-sources.tar.gz"
+ls -la "$OUTDIR/hydo-linux-$VERSION-sources.tar.gz"

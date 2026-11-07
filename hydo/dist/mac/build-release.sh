@@ -1,6 +1,8 @@
 #!/bin/sh
 # Build the self-contained Mac release of hydo (see hydo/dist/mac/README.md):
-#     hydo/dist/mac/build-release.sh [OUTDIR]        -> OUTDIR/hydo-mac-<version>/ and its .tar.gz
+#     hydo/dist/mac/build-release.sh [OUTDIR]        -> OUTDIR/hydo-mac-<version>/ and its .tar.gz,
+#                                                       and OUTDIR/hydo-mac-<version>-sources.tar.gz
+#                                                       (the corresponding source, M158; docs/RELEASING.md)
 #
 # Runs on an Apple Silicon Mac. The guest pieces are arm64 Linux binaries. The ones that are not
 # built here from this tree are fetched once into hydo/dist/mac/assets/ (pinned by sha256 in
@@ -221,6 +223,15 @@ cp -R "$TOP/skills/hydo-onboard" "$REL/skill/"
 cp "$D/install.sh" "$REL/install.sh"; chmod 755 "$REL/install.sh"
 cp "$D/QUICKSTART-mac.md" "$REL/QUICKSTART-mac.md"
 echo "$VERSION" > "$REL/VERSION"
+# the license notices (M158): LICENSE (hydo's Apache-2.0), licenses/ (the full license texts of
+# every third-party component, from hydo/dist/licenses/, and of every Rust crate compiled into a
+# program, from its registry source) and THIRD-PARTY.md, generated from third-party.json by
+# hydo-release (hydo/crates/hydo-release; built here for this Mac). It checks the list first, and
+# after writing that every file of the release tree and every Nix store path in it belongs to a
+# component; anything missing fails the build (docs/RELEASING.md)
+( cd "$TOP" && cargo build --release --locked -q -p hydo-release ) >&2
+HR=$TOP/target/release/hydo-release
+CARGO=$(command -v cargo) "$HR" notices mac --repo "$TOP" --version "$VERSION" "$REL"
 ( cd "$REL" && find . -type f ! -name SHA256SUMS | LC_ALL=C sort | xargs shasum -a 256 > SHA256SUMS )
 
 # --- 3. the tarball (the same bytes from the same inputs) ---
@@ -233,3 +244,33 @@ find "$REL" -exec env TZ=UTC touch -h -t 197001010000 {} +
   && rm ".hydo-mac-$VERSION.list" )
 ls -la "$OUTDIR/hydo-mac-$VERSION.tar.gz"
 shasum -a 256 "$OUTDIR/hydo-mac-$VERSION.tar.gz"
+
+# --- 4. the sources archive that accompanies the tarball (M158): the exact upstream source archives
+# of every third-party component (pinned by sha256 in third-party.json; among them the Arm GNU
+# Toolchain's source snapshot, whose glibc and libgcc are in guest/hydo_fc), our kernel patches,
+# configurations and build recipes, the component list and the notices. The archives come from a
+# sources cache: $HYDO_SOURCES_FROM (a directory with the files by name), else
+# hydo/dist/mac/sources/, filled once from the machine with the Nix store paths by
+# hydo/dist/fetch-sources.sh. hydo-release writes it with fixed times, owners and order and gzip
+# without a time stamp, so two builds give the same bytes (and the same as on Linux).
+SRC=${HYDO_SOURCES_FROM:-$D/sources}
+CARGO=$(command -v cargo) "$HR" fetch-list mac --repo "$TOP" --cache "$SRC" > "$OUTDIR/.sources-missing.tsv"
+if [ -s "$OUTDIR/.sources-missing.tsv" ]; then
+  if [ -n "$HYDO_SOURCES_FROM" ]; then
+    echo "$HYDO_SOURCES_FROM lacks these sources (or has other bytes):" >&2; cut -f1 "$OUTDIR/.sources-missing.tsv" >&2; exit 1
+  fi
+  mkdir -p "$SRC"; need_nix_machine
+  echo "fetching $(wc -l < "$OUTDIR/.sources-missing.tsv" | tr -d ' ') source archives on the machine with the Nix store paths"
+  ( cd "$OUTDIR" && cp "$TOP/hydo/dist/fetch-sources.sh" .fetch-sources.sh && COPYFILE_DISABLE=1 tar --no-xattrs -cf - .fetch-sources.sh .sources-missing.tsv && rm .fetch-sources.sh ) | on_nix_machine "
+    set -e
+    command -v nix-store >/dev/null || . ~/hydo-nixb-work/nixenv.sh
+    W=\$(mktemp -d /var/tmp/hydo-sources.XXXXXX); trap 'chmod -R u+w \$W; rm -rf \$W' EXIT
+    cd \$W && tar xf - >&2
+    sh .fetch-sources.sh .sources-missing.tsv out >&2
+    cd out && tar cf - .
+  " | ( cd "$SRC" && tar xf - )
+fi
+rm -f "$OUTDIR/.sources-missing.tsv"
+CARGO=$(command -v cargo) "$HR" sources mac --repo "$TOP" --version "$VERSION" --cache "$SRC" \
+  --out "$OUTDIR/hydo-mac-$VERSION-sources.tar.gz"
+ls -la "$OUTDIR/hydo-mac-$VERSION-sources.tar.gz"

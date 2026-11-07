@@ -451,6 +451,7 @@ Milestones 1–32 ran inside the nested L1 VM on the build machine, before 2026-
 
 ## Where to look
 
+- `docs/RELEASING.md`: the release checklist (build each tarball and its sources archive twice, compare, verify from clean prefixes, scan, collect, publish) and how to keep the component lists `hydo/dist/<platform>/third-party.json` complete (M158).
 - `hydo/PRODUCT.md`: hydo from a user's point of view — what it offers, the known gaps, and the user's decision on each (2026-10-24): approved and in progress (history checkers, protocol faults and fake outside services, a Rust SDK, Docker Compose import), to document only (CI mode, running locally and in CI, scale, blind spots), not decided (test composer, fast-forwarded time).
 - `hv/hvx/hvx.c` (the module), `hv/hvx/hvx_abi.h` (the ioctl ABI shared with userspace), `hv/hvx/hvx_boot.h` (the bzImage loader recipe), and the `hv/hvx/hvx_*_test.c` and `hv/hvx/hvx_*_verify.c` tests and harnesses.
 - `hydo/crates/` (the Rust workspace; `hydo-explore` is the explorer, `hydo-bench` the benchmark runner), `hydo/explore/` (notes on vCPU turns and search research; the stack explorer's guest side was deleted in M146), `hydo/stack/` (the order service and the assertion SDK), `hydo/bench/` (the bug benchmark: patches, bases, build scripts, results), `hydo/onboard/` (manifests), `hv/hvx/pt/` (Processor Trace tools), `hv/hvx/race/` (race calibration and side-module scripts), `hydo/cutflush/` (flush-cut findings), `hv/hvx/tdet/` (the SMI test and its side module).

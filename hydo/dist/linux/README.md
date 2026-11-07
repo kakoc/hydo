@@ -128,6 +128,18 @@ maintainer, once). After that the release builds offline (about 4 minutes on the
 test machine from clean Rust targets, most of it compiling). The tarball is about 59 MB.
 Nothing is published by the script.
 
+Since M158 the script also writes the license notices and the sources archive (docs/RELEASING.md).
+Before the release tree is checksummed, `hydo-release notices` (hydo/crates/hydo-release) writes
+`LICENSE`, `licenses/` and `THIRD-PARTY.md` from `hydo/dist/linux/third-party.json`, the list of
+what every shipped file is, under which license and where its source is; it fails the build when
+a file of the tree, a Nix store path in it or a Rust crate has no entry, license or text. After
+the tarball, `hydo-release sources` writes `OUTDIR/hydo-linux-<version>-sources.tar.gz`: the
+exact upstream source archives of every third-party component (pinned by sha256 in the list),
+the nixpkgs tree that built them, our build recipes, the list and the notices, reproducible like
+the tarball. Its archives come from a sources cache: `HYDO_SOURCES_FROM=DIR` (the bare-metal
+machine keeps one in `~/hydo-m158-sources`), else `hydo/dist/linux/sources/` (not tracked),
+filled once on the machine with the Nix store paths by `hydo/dist/fetch-sources.sh`.
+
 The tarball is reproducible with GNU tar: file times are set to 1600000000, entries are sorted,
 owners are root:0 and gzip writes no name or time stamp, and the umask is 022. M149 built it
 twice on the bare-metal machine from clean Rust targets (`target/`, the agent's and

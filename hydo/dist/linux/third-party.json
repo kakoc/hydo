@@ -1,0 +1,1882 @@
+{
+  "format": 1,
+  "platform": "linux",
+  "about": [
+    "What every file of the Linux release is, under which license, and where its source is (Milestone 158).",
+    "hydo-release (hydo/crates/hydo-release) checks this list (cargo test -p hydo-release), writes the release's LICENSE, licenses/ and THIRD-PARTY.md from it, and builds the sources archive; the format is described in hydo/crates/hydo-release/src/lib.rs and docs/RELEASING.md.",
+    "Third-party license texts are copied from each component's source archive into hydo/dist/licenses/<archive name>/."
+  ],
+  "nixpkgs": {
+    "rev": "89c49874fb15f4124bf71ca5f42a04f2ee5825fd",
+    "store_path": "/nix/store/f0ddmw6s86y567yg06h5019z72szbzch-source",
+    "archive": "nixpkgs-89c49874fb15.tar.gz",
+    "sha256": "e168ee61d8e3beae91ed80fdcade22f58eb69aa07ea8465457b375c4492ed705",
+    "url": "https://github.com/NixOS/nixpkgs/tree/89c49874fb15f4124bf71ca5f42a04f2ee5825fd"
+  },
+  "rust": [
+    {
+      "files": [
+        "bin/hydo",
+        "bin/hydo-hvx",
+        "bin/hydo-build",
+        "bin/hydo-fetch-image",
+        "libexec/hydo-grpc-gen"
+      ],
+      "manifest": "Cargo.toml",
+      "packages": [
+        "hydo-cli",
+        "hydo-hvx",
+        "hydo-build",
+        "hydo-compose",
+        "hydo-grpc-gen"
+      ],
+      "target": "x86_64-unknown-linux-musl"
+    },
+    {
+      "files": [
+        "guest/hydo-world"
+      ],
+      "manifest": "Cargo.toml",
+      "packages": [
+        "hydo-world"
+      ],
+      "target": "x86_64-unknown-linux-musl"
+    },
+    {
+      "files": [
+        "guest/hydo-grpc"
+      ],
+      "manifest": "Cargo.toml",
+      "packages": [
+        "hydo-grpc"
+      ],
+      "target": "x86_64-unknown-linux-musl"
+    },
+    {
+      "files": [
+        "guest/hydo-agent"
+      ],
+      "manifest": "hydo/crates/hydo-agent/Cargo.toml",
+      "packages": [
+        "hydo-agent"
+      ],
+      "target": "x86_64-unknown-linux-musl"
+    },
+    {
+      "files": [
+        "guest/hydo-read"
+      ],
+      "manifest": "hydo/crates/hydo-read/Cargo.toml",
+      "packages": [
+        "hydo-read"
+      ],
+      "target": "x86_64-unknown-linux-musl"
+    }
+  ],
+  "rust_overrides": [
+    {
+      "name": "libyaml-safer",
+      "version": "0.3.0",
+      "license": "MIT",
+      "reason": "its Cargo.toml has no license field, only license-file = LICENSE-MIT (the MIT license)"
+    }
+  ],
+  "components": [
+    {
+      "id": "hydo",
+      "name": "hydo",
+      "version": "@release",
+      "license": "Apache-2.0",
+      "files": [
+        "bin/hydo",
+        "bin/hydo-hvx",
+        "bin/hydo-build",
+        "bin/hydo-fetch-image",
+        "bin/hydo-grpc-gen",
+        "libexec/hvx-run",
+        "libexec/faketime",
+        "libexec/bin/debugfs",
+        "libexec/hydo-grpc-gen",
+        "hydo/**",
+        "skill/**",
+        "examples/redis/hydo.yaml",
+        "examples/redis/hydo-netem.yaml",
+        "guest/hydo-agent",
+        "guest/hydo-world",
+        "guest/hydo-read",
+        "guest/hydo-grpc",
+        "guest/hydo_fc",
+        "guest/hvx_seedrng",
+        "install.sh",
+        "README.md",
+        "VERSION",
+        "SHA256SUMS",
+        "LICENSE",
+        "THIRD-PARTY.md",
+        "licenses/**"
+      ],
+      "texts": [
+        "LICENSE"
+      ],
+      "repo": [
+        "LICENSE",
+        "hydo/onboard/hydo_fc.c",
+        "hv/hvx/images/hvx_seedrng.c",
+        "hydo/dist/linux/build-release.sh",
+        "hydo/dist/linux/assets.sha256",
+        "hydo/dist/linux/guest-programs.sha256",
+        "hydo/dist/linux/third-party.json",
+        "hydo/dist/fetch-sources.sh",
+        "docs/BUILD-PINS.md",
+        "docs/RELEASING.md"
+      ],
+      "note": "hydo's own programs, scripts and documents. guest/hydo_fc and guest/hvx_seedrng are hydo's C programs (hydo/onboard/hydo_fc.c, hv/hvx/images/hvx_seedrng.c) compiled statically with the pinned musl gcc (docs/BUILD-PINS.md); they contain musl 1.2.6 and GCC 13.2.0's libgcc (below). The rest of hydo's source is its repository at the commit `hydo --version` names."
+    },
+    {
+      "id": "hvx-module",
+      "name": "hvx kernel module (source)",
+      "version": "@release",
+      "license": "GPL-2.0-only AND (GPL-2.0-only WITH Linux-syscall-note OR Apache-2.0)",
+      "files": [
+        "module/**"
+      ],
+      "texts": [
+        "hv/hvx/LICENSE-GPL-2.0",
+        "hv/hvx/LICENSE.md"
+      ],
+      "repo": [
+        "hv/hvx/hvx.c",
+        "hv/hvx/hvx_abi.h",
+        "hv/hvx/Makefile",
+        "hv/hvx/LICENSE-GPL-2.0",
+        "hv/hvx/LICENSE.md"
+      ],
+      "note": "The kernel module's source, built on the user's machine by `hydo module build`. hvx.c is GPL-2.0-only; hvx_abi.h, the ioctl interface, is GPL-2.0-only WITH Linux-syscall-note OR Apache-2.0 (licenses/hydo/hv/hvx/LICENSE.md)."
+    },
+    {
+      "id": "rust-std",
+      "name": "Rust standard library",
+      "version": "1.90.0",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        "bin/hydo",
+        "bin/hydo-hvx",
+        "bin/hydo-build",
+        "bin/hydo-fetch-image",
+        "libexec/hydo-grpc-gen",
+        "guest/hydo-agent",
+        "guest/hydo-world",
+        "guest/hydo-read",
+        "guest/hydo-grpc"
+      ],
+      "texts": [
+        "hydo/dist/licenses/rust-1.90.0/COPYRIGHT-library.html",
+        "hydo/dist/licenses/rust-1.90.0/licenses/"
+      ],
+      "sources": [
+        {
+          "url": [
+            "https://static.rust-lang.org/dist/rustc-1.90.0-src.tar.xz"
+          ],
+          "from": "url"
+        }
+      ],
+      "note": "The standard library (std, core, alloc and their dependencies) of the pinned Rust 1.90.0 is compiled into every Rust program. COPYRIGHT-library.html is the toolchain's list of the library's third-party code and licenses. Its source is rustc-1.90.0-src.tar.xz (sha256 6bfeaddd90ffda2f063492b092bfed925c4b8c701579baf4b1316e021470daac)."
+    },
+    {
+      "id": "rust-musl",
+      "name": "musl C library (Rust's x86_64-unknown-linux-musl target)",
+      "version": "1.2.3",
+      "license": "MIT",
+      "files": [
+        "bin/hydo",
+        "bin/hydo-hvx",
+        "bin/hydo-build",
+        "bin/hydo-fetch-image",
+        "libexec/hydo-grpc-gen",
+        "guest/hydo-agent",
+        "guest/hydo-world",
+        "guest/hydo-read",
+        "guest/hydo-grpc"
+      ],
+      "texts": [
+        "hydo/dist/licenses/musl-1.2.3/COPYRIGHT"
+      ],
+      "sources": [
+        {
+          "file": "musl-1.2.3.tar.gz",
+          "sha256": "7d5b0b6062521e4627e099e4c9dc8248d32a30285e959b7eecaa780cf8cfd4a4",
+          "url": [
+            "https://musl.libc.org/releases/musl-1.2.3.tar.gz"
+          ],
+          "from": "nix:x86_64-linux:pkgsStatic.stdenv.cc.libc:musl-1.2.3.tar.gz"
+        }
+      ],
+      "note": "Rust's musl target links its self-contained libc.a and crt objects (musl 1.2.3) statically into every Linux program."
+    },
+    {
+      "id": "rust-llvm-runtime",
+      "name": "LLVM libunwind and compiler-rt (Rust's musl target)",
+      "version": "Rust 1.90.0",
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "files": [
+        "bin/hydo",
+        "bin/hydo-hvx",
+        "bin/hydo-build",
+        "bin/hydo-fetch-image",
+        "libexec/hydo-grpc-gen",
+        "guest/hydo-agent",
+        "guest/hydo-world",
+        "guest/hydo-read",
+        "guest/hydo-grpc"
+      ],
+      "texts": [
+        "hydo/dist/licenses/rust-1.90.0/licenses/Apache-2.0.txt",
+        "hydo/dist/licenses/rust-1.90.0/licenses/LLVM-exception.txt"
+      ],
+      "sources": [
+        {
+          "url": [
+            "https://static.rust-lang.org/dist/rustc-1.90.0-src.tar.xz"
+          ],
+          "from": "url"
+        }
+      ],
+      "note": "Rust's musl target links LLVM's libunwind and compiler-rt's crtbegin/crtend objects statically (their source is src/llvm-project in rustc-1.90.0-src.tar.xz)."
+    },
+    {
+      "id": "protobuf-wkt",
+      "name": "Protocol Buffers well-known type descriptors",
+      "version": "protobuf-go 1.35.2",
+      "license": "BSD-3-Clause",
+      "files": [
+        "libexec/hydo-grpc-gen"
+      ],
+      "texts": [
+        "hydo/dist/licenses/protobuf-v25.0/LICENSE",
+        "hydo/dist/licenses/protobuf-go-1.35.2/LICENSE"
+      ],
+      "sources": [
+        {
+          "url": [
+            "https://github.com/protocolbuffers/protobuf-go/tree/v1.35.2"
+          ],
+          "from": "url"
+        }
+      ],
+      "repo": [
+        "hydo/crates/hydo-grpc-gen/src/wkt.pb"
+      ],
+      "note": "hydo-grpc-gen carries the descriptors of google/protobuf/*.proto (Protocol Buffers, Google) as protobuf-go 1.35.2 builds them, recorded in wkt.pb."
+    },
+    {
+      "id": "linux",
+      "name": "Linux kernel",
+      "version": "6.6.35",
+      "license": "GPL-2.0-only WITH Linux-syscall-note",
+      "files": [
+        "guest/bzImage",
+        "guest/modules/**",
+        "guest/initramfs-kafka.cpio.gz"
+      ],
+      "texts": [
+        "hydo/dist/licenses/linux-6.6.35/COPYING",
+        "hydo/dist/licenses/linux-6.6.35/LICENSES/"
+      ],
+      "sources": [
+        {
+          "file": "linux-6.6.35.tar.xz",
+          "sha256": "fce3ee728712ed063aa8c14a8756c8ff8c7a46ba3827f61d2b04a73c7cf5dd9e",
+          "url": [
+            "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.6.35.tar.xz"
+          ],
+          "from": "nix:x86_64-linux:linux_6_6:linux-6.6.35.tar.xz"
+        },
+        {
+          "file": "linux-6.6.35-nixpkgs.config",
+          "sha256": "974062fca38b9003f09c7feaf198b9a5aea953a30596473fc0492b67c84729df",
+          "url": [],
+          "from": "nix-cache:/nix/store/nqw0fhjqidfc609ix7hlwvjq7hppx6mh-linux-config-6.6.35"
+        }
+      ],
+      "repo": [
+        "hv/hvx/images/build-linux.sh"
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "linux_6_6",
+          "out": [
+            "/nix/store/rp8637p734k6rshqjqlnfdm97b4jn8w9-linux-6.6.35"
+          ]
+        }
+      ],
+      "note": "guest/bzImage and the modules under guest/modules/ (and the modules inside guest/initramfs-kafka.cpio.gz) are nixpkgs's linux_6_6 output byte for byte (checked against cache.nixos.org in Milestone 158). nixpkgs applies its patches pkgs/os-specific/linux/kernel/{bridge-stp-helper,request-key-helper,randstruct-provide-seed-5.19}.patch and generates the configuration (upstream/linux-6.6.35-nixpkgs.config, the exact .config) from pkgs/os-specific/linux/kernel/common-config.nix. The initramfs (assembled by hv/hvx/images/build-linux.sh section 2l.6) holds this kernel's modules, busybox 1.37.0 and hydo's init script."
+    },
+    {
+      "id": "busybox-1.37.0",
+      "name": "BusyBox",
+      "version": "1.37.0",
+      "license": "GPL-2.0-only",
+      "files": [
+        "guest/busybox",
+        "guest/initramfs-kafka.cpio.gz"
+      ],
+      "texts": [
+        "hydo/dist/licenses/busybox-1.37.0/"
+      ],
+      "sources": [
+        {
+          "file": "busybox-1.37.0.tar.bz2",
+          "sha256": "3311dff32e746499f4df0d5df04d7eb396382d7e108bb9250e7b519b837043a4",
+          "url": [
+            "https://busybox.net/downloads/busybox-1.37.0.tar.bz2"
+          ],
+          "from": "url"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "out": [
+            "/nix/store/ahw5fkq085k5ppdsylyd475xlxb18pz1-busybox-static-x86_64-unknown-linux-musl-1.37.0"
+          ],
+          "note": "Substituted from cache.nixos.org (deriver rnr9smwj912vyija4w0w7pv9va3zb4h3-busybox-static-x86_64-unknown-linux-musl-1.37.0.drv), built by nixpkgs's pkgsStatic.busybox recipe (pkgs/os-specific/linux/busybox) of a nixpkgs revision newer than the one above that was not recorded."
+        }
+      ],
+      "note": "A static musl build; it contains musl 1.2.6 (below). The source archive is busybox.net's (its sha256 matches busybox.net's .sha256 file); the recipe that configured it is nixpkgs's busybox recipe, of which upstream/nixpkgs-89c49874fb15.tar.gz holds the 1.36.1 version."
+    },
+    {
+      "id": "musl-1.2.6",
+      "name": "musl C library",
+      "version": "1.2.6",
+      "license": "MIT",
+      "files": [
+        "guest/busybox",
+        "guest/hvx_seedrng",
+        "guest/hydo_fc",
+        "guest/initramfs-kafka.cpio.gz"
+      ],
+      "texts": [
+        "hydo/dist/licenses/musl-1.2.6/COPYRIGHT"
+      ],
+      "sources": [
+        {
+          "file": "musl-1.2.6.tar.gz",
+          "sha256": "d585fd3b613c66151fc3249e8ed44f77020cb5e6c1e635a616d3f9f82460512a",
+          "url": [
+            "https://musl.libc.org/releases/musl-1.2.6.tar.gz"
+          ],
+          "from": "url"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "out": [
+            "/nix/store/0nlqfwsn4qpx1453gb4zvx6dvn3121l4-musl-static-x86_64-unknown-linux-musl-1.2.6"
+          ],
+          "note": "Substituted from cache.nixos.org (deriver qb610gzkgc0k52sgm3brkdv5d21jyi7n-musl-static-x86_64-unknown-linux-musl-1.2.6.drv)."
+        }
+      ],
+      "note": "Statically linked into busybox and into hydo's two static helpers."
+    },
+    {
+      "id": "gcc",
+      "name": "GCC runtime libraries (libgcc, libgcc_s, libstdc++)",
+      "version": "13.2.0",
+      "license": "GPL-3.0-or-later WITH GCC-exception-3.1",
+      "files": [
+        "guest/hvx_seedrng",
+        "guest/hydo_fc",
+        "examples/redis/files/redis-server",
+        "examples/redis/files/redis-cli",
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/gcc-13.2.0/"
+      ],
+      "sources": [
+        {
+          "file": "gcc-13.2.0.tar.xz",
+          "sha256": "e275e76442a6067341a27f04c5c6b83d8613144004c0413528863dc6b5c743da",
+          "url": [
+            "https://ftp.gnu.org/gnu/gcc/gcc-13.2.0/gcc-13.2.0.tar.xz"
+          ],
+          "from": "nix:x86_64-linux:stdenv.cc.cc:gcc-13.2.0.tar.xz"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "stdenv.cc.cc",
+          "out": [
+            "/nix/store/p44qan69linp3ii0xrviypsw2j4qdcp2-gcc-13.2.0-lib",
+            "/nix/store/ygbwizd4kj74myzla7drrckl3ah6ppl2-gcc-13.2.0-libgcc",
+            "/nix/store/nda0h04bakn2damsd06vkscwi5ds4qjd-xgcc-13.2.0-libgcc"
+          ]
+        },
+        {
+          "system": "x86_64-linux",
+          "attr": "pkgsStatic.gcc.cc",
+          "out": [
+            "/nix/store/aa1jsl19ywwfpqp0438vqbncc7sndnyw-gcc-static-x86_64-unknown-linux-musl-13.2.0"
+          ],
+          "note": "The pinned static musl gcc that compiled hydo_fc and hvx_seedrng (its libgcc is linked into them)."
+        }
+      ],
+      "note": "Under the GCC Runtime Library Exception; included with its source for completeness."
+    },
+    {
+      "id": "glibc",
+      "name": "GNU C Library",
+      "version": "2.39-52",
+      "license": "LGPL-2.1-or-later",
+      "files": [
+        "tools/lib/ld-linux-x86-64.so.2",
+        "tools/lib/libc.so.6",
+        "tools/lib/libdl.so.2",
+        "tools/lib/libm.so.6",
+        "tools/lib/libpthread.so.0",
+        "tools/lib/librt.so.1",
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/glibc-2.39/"
+      ],
+      "sources": [
+        {
+          "file": "glibc-2.39.tar.xz",
+          "sha256": "f77bd47cf8170c57365ae7bf86696c118adb3b120d3259c64c502d3dc1e2d926",
+          "url": [
+            "https://ftp.gnu.org/gnu/glibc/glibc-2.39.tar.xz"
+          ],
+          "from": "nix:x86_64-linux:glibc:glibc-2.39.tar.xz"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "glibc",
+          "out": [
+            "/nix/store/dbcw19dshdwnxdv5q2g6wldj6syyvq7l-glibc-2.39-52"
+          ]
+        }
+      ],
+      "note": "nixpkgs patches glibc 2.39 to the 2.39 branch (pkgs/development/libraries/glibc/2.39-master.patch) and applies its own patches from that directory. Parts of glibc are under other licenses (LICENSES)."
+    },
+    {
+      "id": "e2fsprogs",
+      "name": "e2fsprogs",
+      "version": "1.47.0",
+      "license": "GPL-2.0-or-later AND LGPL-2.0-or-later AND MIT",
+      "files": [
+        "tools/bin/mke2fs",
+        "tools/bin/debugfs",
+        "tools/lib/libext2fs.so.2",
+        "tools/lib/libe2p.so.2",
+        "tools/lib/libcom_err.so.2",
+        "tools/lib/libss.so.2"
+      ],
+      "texts": [
+        "hydo/dist/licenses/e2fsprogs-1.47.0/NOTICE"
+      ],
+      "sources": [
+        {
+          "file": "e2fsprogs-1.47.0.tar.gz",
+          "sha256": "6667afde56eef0c6af26684974400e4d2288ea49e9441bf5e6229195d51a3578",
+          "url": [
+            "https://downloads.sourceforge.net/project/e2fsprogs/e2fsprogs/v1.47.0/e2fsprogs-1.47.0.tar.gz"
+          ],
+          "from": "nix:x86_64-linux:e2fsprogs:e2fsprogs-1.47.0.tar.gz"
+        },
+        {
+          "file": "e2fsprogs-fix-glibcism.patch",
+          "sha256": "0bf2263e241ec8fa8d6ea1c4b8d8b884121f81b2487d4c811318e11141d6ccbd",
+          "url": [
+            "https://raw.githubusercontent.com/void-linux/void-packages/9583597eb3e6e6b33f61dbc615d511ce030bc443/srcpkgs/e2fsprogs/patches/fix-glibcism.patch"
+          ],
+          "from": "nix:x86_64-linux:e2fsprogs:fix-glibcism.patch"
+        },
+        {
+          "file": "e2fsprogs-mke2fs-avoid-incompatible-features.patch",
+          "sha256": "603d752b8b366eabf4aefcebc6d6a2a1dccba77ced50b94e94f51fd57729c516",
+          "url": [
+            "https://git.kernel.org/pub/scm/fs/ext2/e2fsprogs.git/plain/debian/patches/disable-metadata_csum_seed-and-orphan_file-by-default?h=debian/master&id=3fb3d18baba90e5d48d94f4c0b79b2d271b0c913"
+          ],
+          "from": "nix:x86_64-linux:e2fsprogs:mke2fs-avoid-incompatible-features.patch"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "e2fsprogs",
+          "out": [
+            "/nix/store/24s0phlx9kly7x7qb8gal3mmn51ndmlx-e2fsprogs-1.47.0-bin",
+            "/nix/store/z7xcz7wn2r72dv9404myw6199z9wpna4-e2fsprogs-1.47.0"
+          ]
+        }
+      ],
+      "note": "mke2fs and debugfs run on the user's machine with their own loader (libexec/faketime, libexec/bin/debugfs); the programs are GPL-2.0, libext2fs and libe2p LGPL-2.0, libcom_err and libss MIT-style (NOTICE)."
+    },
+    {
+      "id": "util-linux",
+      "name": "util-linux libraries (libblkid, libuuid)",
+      "version": "2.39.4",
+      "license": "LGPL-2.1-or-later AND BSD-3-Clause",
+      "files": [
+        "tools/lib/libblkid.so.1",
+        "tools/lib/libuuid.so.1"
+      ],
+      "texts": [
+        "hydo/dist/licenses/util-linux-2.39.4/libblkid/COPYING",
+        "hydo/dist/licenses/util-linux-2.39.4/libuuid/COPYING",
+        "hydo/dist/licenses/util-linux-2.39.4/Documentation/licenses/COPYING.LGPL-2.1-or-later",
+        "hydo/dist/licenses/util-linux-2.39.4/Documentation/licenses/COPYING.BSD-3-Clause"
+      ],
+      "sources": [
+        {
+          "file": "util-linux-2.39.4.tar.xz",
+          "sha256": "6c4f8723dafd41c39d93ecbf16509fc88c33cd5bd3277880ae5a1d97a014fd0e",
+          "url": [
+            "https://cdn.kernel.org/pub/linux/utils/util-linux/v2.39/util-linux-2.39.4.tar.xz"
+          ],
+          "from": "nix:x86_64-linux:util-linuxMinimal:util-linux-2.39.4.tar.xz"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "util-linuxMinimal",
+          "out": [
+            "/nix/store/6m893g3rjzmz96vmrra89lcad6w2n93z-util-linux-minimal-2.39.4-lib"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "libfaketime",
+      "name": "libfaketime",
+      "version": "0.9.10",
+      "license": "GPL-2.0-only",
+      "files": [
+        "tools/lib/libfaketime.so.1"
+      ],
+      "texts": [
+        "hydo/dist/licenses/libfaketime-0.9.10/COPYING"
+      ],
+      "sources": [
+        {
+          "file": "libfaketime-0.9.10.tar.gz",
+          "sha256": "ddde08cf169a6a30d2acd6f6ca00bdc78ea0b9aaae0b489057ff576b8f9c1c33",
+          "url": [
+            "https://github.com/wolfcw/libfaketime/archive/v0.9.10.tar.gz"
+          ],
+          "from": "nix:x86_64-linux:libfaketime:source"
+        },
+        {
+          "file": "libfaketime-0001-libfaketime.c-wrap-timespec_get-in-TIME_UTC-macro.patch",
+          "sha256": "2b0c0fefabf40d7356ef7a7f601bf050e3dd28c01c55d6d048a7b10ffb85398a",
+          "url": [
+            "https://github.com/wolfcw/libfaketime/commit/e0e6b79568d36a8fd2b3c41f7214769221182128.patch"
+          ],
+          "from": "nix:x86_64-linux:libfaketime:0001-libfaketime.c-wrap-timespec_get-in-TIME_UTC-macro.patch"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "libfaketime",
+          "out": [
+            "/nix/store/fs0gp7zyfjnbvaq82yvwbcsvqh7876d1-libfaketime-0.9.10"
+          ]
+        }
+      ],
+      "note": "The source archive is the fixed-output directory nixpkgs fetched from GitHub, packed as a .tar.gz (sorted, fixed times)."
+    },
+    {
+      "id": "redis",
+      "name": "Redis (static, for the Redis example)",
+      "version": "7.2.4",
+      "license": "BSD-3-Clause AND BSD-2-Clause AND MIT AND BSL-1.0",
+      "files": [
+        "examples/redis/files/redis-server",
+        "examples/redis/files/redis-cli"
+      ],
+      "texts": [
+        "hydo/dist/licenses/redis-7.2.4/"
+      ],
+      "sources": [
+        {
+          "file": "redis-7.2.4.tar.gz",
+          "sha256": "8d104c26a154b29fd67d6568b4f375212212ad41e0c2caa3d66480e78dbd3b59",
+          "url": [
+            "https://download.redis.io/releases/redis-7.2.4.tar.gz"
+          ],
+          "from": "nix:x86_64-linux:pkgsStatic.redis:redis-7.2.4.tar.gz"
+        },
+        {
+          "file": "redis-pr-12887.diff",
+          "sha256": "55910c4a15bb0a49f984b2477df42f13de14972e355995b56f0bf19f2f98dd6f",
+          "url": [
+            "https://github.com/redis/redis/pull/12887.diff"
+          ],
+          "from": "nix:x86_64-linux:pkgsStatic.redis:12887.diff"
+        },
+        {
+          "file": "redis-5.0-use-system-jemalloc.patch",
+          "sha256": "54f45fa129dcb64924ccbad7116417dcb8791e665a097a0969fc8e1b4d3b2b33",
+          "url": [
+            "https://gitlab.archlinux.org/archlinux/packaging/packages/redis/-/raw/102cc861713c796756abd541bf341a4512eb06e6/redis-5.0-use-system-jemalloc.patch"
+          ],
+          "from": "nix:x86_64-linux:pkgsStatic.redis:redis-5.0-use-system-jemalloc.patch"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "pkgsStatic.redis (with doCheck = false)",
+          "out": [
+            "/nix/store/ky1xq6xa88qhwwagnh4anm4sjl3c7vyk-redis-static-x86_64-unknown-linux-musl-7.2.4"
+          ]
+        }
+      ],
+      "note": "Built from its derivation (docs/BUILD-PINS.md); it bundles Lua 5.1.5, hiredis, linenoise, hdr_histogram and fpconv (their texts are under deps/), and links jemalloc 5.3.0 and musl 1.2.3 statically."
+    },
+    {
+      "id": "jemalloc-static",
+      "name": "jemalloc",
+      "version": "5.3.0",
+      "license": "BSD-2-Clause",
+      "files": [
+        "examples/redis/files/redis-server",
+        "examples/redis/files/redis-cli"
+      ],
+      "texts": [
+        "hydo/dist/licenses/jemalloc-5.3.0/COPYING"
+      ],
+      "sources": [
+        {
+          "file": "jemalloc-5.3.0.tar.bz2",
+          "sha256": "2db82d1e7119df3e71b7640219b6dfe84789bc0537983c3b7ac4f7189aecfeaa",
+          "url": [
+            "https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2"
+          ],
+          "from": "nix:x86_64-linux:pkgsStatic.jemalloc:jemalloc-5.3.0.tar.bz2"
+        },
+        {
+          "file": "jemalloc-d00ecee6a8df.patch",
+          "sha256": "3798b8231189e124808058aae681919eb35e7a0764d9f970f5287698fd329787",
+          "url": [
+            "https://github.com/jemalloc/jemalloc/commit/d00ecee6a8dfa90afcb1bbc0858985c17bef6559.patch"
+          ],
+          "from": "nix:x86_64-linux:pkgsStatic.jemalloc:d00ecee6a8dfa90afcb1bbc0858985c17bef6559.patch"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "pkgsStatic.jemalloc",
+          "out": [
+            "/nix/store/q546cmpk55iwim6c1l2q0wkp41rl4600-jemalloc-static-x86_64-unknown-linux-musl-5.3.0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "musl-1.2.3-static",
+      "name": "musl C library (nixpkgs static, in Redis)",
+      "version": "1.2.3",
+      "license": "MIT",
+      "files": [
+        "examples/redis/files/redis-server",
+        "examples/redis/files/redis-cli"
+      ],
+      "texts": [
+        "hydo/dist/licenses/musl-1.2.3/COPYRIGHT"
+      ],
+      "sources": [
+        {
+          "file": "musl-1.2.3.tar.gz",
+          "sha256": "7d5b0b6062521e4627e099e4c9dc8248d32a30285e959b7eecaa780cf8cfd4a4",
+          "url": [
+            "https://musl.libc.org/releases/musl-1.2.3.tar.gz"
+          ],
+          "from": "nix:x86_64-linux:pkgsStatic.stdenv.cc.libc:musl-1.2.3.tar.gz"
+        },
+        {
+          "file": "musl-300-relative.patch",
+          "sha256": "56609dfb6f9bd5dbd14e630a02617e3a31ac1ef3c42fb3a0a91a98c57c6eca41",
+          "url": [
+            "https://raw.githubusercontent.com/openwrt/openwrt/87606e25afac6776d1bbc67ed284434ec5a832b4/toolchain/musl/patches/300-relative.patch"
+          ],
+          "from": "nix:x86_64-linux:pkgsStatic.stdenv.cc.libc:300-relative.patch"
+        },
+        {
+          "file": "musl-751bee0ee727.patch",
+          "sha256": "a82c35df64c249a66b9084a6b436fc43cb9fcadf2c00977000292f7f0ba88bfd",
+          "url": [
+            "https://git.musl-libc.org/cgit/musl/patch/?id=751bee0ee727e8d8b003c87cff77ac76f1dbecd6"
+          ],
+          "from": "nix:x86_64-linux:pkgsStatic.stdenv.cc.libc:?id=751bee0ee727e8d8b003c87cff77ac76f1dbecd6"
+        },
+        {
+          "file": "musl-iconv.c",
+          "sha256": "f79a2930a2e5bb0624321589edf8b889d1e9b603e01e6b7ae214616605b3fdd7",
+          "url": [
+            "https://git.alpinelinux.org/aports/plain/main/musl/iconv.c?id=a3d97e95f766c9c378194ee49361b375f093b26f"
+          ],
+          "from": "nix:x86_64-linux:pkgsStatic.stdenv.cc.libc:iconv.c"
+        },
+        {
+          "file": "musl-sys-cdefs.h",
+          "sha256": "30bb6d7e0e0b61fcd95d830c376c829a614bce4683c1b97e06c201ec2c6e839a",
+          "url": [
+            "https://git.alpinelinux.org/aports/plain/main/libc-dev/sys-cdefs.h?id=7ca0ed62d4c0d713d9c7dd5b9a077fba78bce578"
+          ],
+          "from": "nix:x86_64-linux:pkgsStatic.stdenv.cc.libc:sys-cdefs.h"
+        },
+        {
+          "file": "musl-sys-queue.h",
+          "sha256": "c13407edd0e33be73cae72514cb234f8612e1c0e54401c9448daffd3a240158b",
+          "url": [
+            "https://git.alpinelinux.org/aports/plain/main/libc-dev/sys-queue.h?id=7ca0ed62d4c0d713d9c7dd5b9a077fba78bce578"
+          ],
+          "from": "nix:x86_64-linux:pkgsStatic.stdenv.cc.libc:sys-queue.h"
+        },
+        {
+          "file": "musl-sys-tree.h",
+          "sha256": "e1e498a79bf160a5766fa560f2b07b206fe89fe21a62600c77d72e00a6992f92",
+          "url": [
+            "https://git.alpinelinux.org/aports/plain/main/libc-dev/sys-tree.h?id=7ca0ed62d4c0d713d9c7dd5b9a077fba78bce578"
+          ],
+          "from": "nix:x86_64-linux:pkgsStatic.stdenv.cc.libc:sys-tree.h"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "pkgsStatic.stdenv.cc.libc",
+          "out": [
+            "/nix/store/i8pym5y37685awfi5qm86ff3sjkymjrf-musl-static-x86_64-unknown-linux-musl-1.2.3"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "iproute2",
+      "name": "iproute2",
+      "version": "6.8.0",
+      "license": "GPL-2.0-only",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/iproute2-6.8.0/COPYING"
+      ],
+      "sources": [
+        {
+          "file": "iproute2-6.8.0.tar.xz",
+          "sha256": "03a6cca3d71a908d1f15f7b495be2b8fe851f941458dc4664900d7f45fcf68ce",
+          "url": [
+            "https://cdn.kernel.org/pub/linux/utils/net/iproute2/iproute2-6.8.0.tar.xz"
+          ],
+          "from": "nix:x86_64-linux:iproute2:iproute2-6.8.0.tar.xz"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "iproute2",
+          "out": [
+            "/nix/store/dx4fsbxs5v82l9lzmjkpkhx5ygqcwm69-iproute2-6.8.0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "iptables",
+      "name": "iptables",
+      "version": "1.8.10",
+      "license": "GPL-2.0-only",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/iptables-1.8.10/COPYING"
+      ],
+      "sources": [
+        {
+          "file": "iptables-1.8.10.tar.xz",
+          "sha256": "5cc255c189356e317d070755ce9371eb63a1b783c34498fb8c30264f3cc59c9c",
+          "url": [
+            "https://www.netfilter.org/projects/iptables/files/iptables-1.8.10.tar.xz"
+          ],
+          "from": "nix:x86_64-linux:iptables:iptables-1.8.10.tar.xz"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "iptables",
+          "out": [
+            "/nix/store/xnrrq638db6170pg7dvz84f8nr1q2wvi-iptables-1.8.10"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "nghttp2",
+      "name": "nghttp2 (library)",
+      "version": "1.61.0",
+      "license": "MIT",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/nghttp2-1.61.0/COPYING"
+      ],
+      "sources": [
+        {
+          "file": "nghttp2-1.61.0.tar.bz2",
+          "sha256": "4e8cf7ec32d4c5a430966242d72035d255cd9470a8766d61eed7a0190dd544fd",
+          "url": [
+            "https://github.com/nghttp2/nghttp2/releases/download/v1.61.0/nghttp2-1.61.0.tar.bz2"
+          ],
+          "from": "nix:x86_64-linux:nghttp2:nghttp2-1.61.0.tar.bz2"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "nghttp2",
+          "out": [
+            "/nix/store/1mnr6x4rzy15hqgv2vbd72v5mkbkx186-nghttp2-1.61.0-lib"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "libnftnl",
+      "name": "libnftnl",
+      "version": "1.2.6",
+      "license": "GPL-2.0-or-later",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/libnftnl-1.2.6/COPYING"
+      ],
+      "sources": [
+        {
+          "file": "libnftnl-1.2.6.tar.xz",
+          "sha256": "ceeaea2cd92147da19f13a35a7f1a4bc2767ff897e838e4b479cf54b59c777f4",
+          "url": [
+            "https://netfilter.org/projects/libnftnl/files/libnftnl-1.2.6.tar.xz"
+          ],
+          "from": "nix:x86_64-linux:libnftnl:libnftnl-1.2.6.tar.xz"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "libnftnl",
+          "out": [
+            "/nix/store/2w5pw3852vhr17g1pisa6iszhf9kb6gh-libnftnl-1.2.6"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "zstd",
+      "name": "Zstandard (library)",
+      "version": "1.5.6",
+      "license": "BSD-3-Clause OR GPL-2.0-only",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/zstd-1.5.6/LICENSE",
+        "hydo/dist/licenses/zstd-1.5.6/COPYING"
+      ],
+      "sources": [
+        {
+          "file": "zstd-1.5.6.tar.gz",
+          "sha256": "ffff28cc61273c735d751ee0436b988f487684d0a4cd279768ced03979584b8a",
+          "url": [
+            "https://github.com/facebook/zstd/archive/v1.5.6.tar.gz"
+          ],
+          "from": "nix:x86_64-linux:zstd:source"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "zstd",
+          "out": [
+            "/nix/store/4xr9868xjcvyqz6jjzrp5snr19afq3bf-zstd-1.5.6"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bash",
+      "name": "GNU Bash",
+      "version": "5.2p26",
+      "license": "GPL-3.0-or-later",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/bash-5.2/COPYING"
+      ],
+      "sources": [
+        {
+          "file": "bash-5.2.tar.gz",
+          "sha256": "a139c166df7ff4471c5e0733051642ee5556c1cc8a4a78f145583c5c81ab32fb",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2.tar.gz"
+          ],
+          "from": "nix:x86_64-linux:bash:bash-5.2.tar.gz"
+        },
+        {
+          "file": "bash52-001",
+          "sha256": "f42f2fee923bc2209f406a1892772121c467f44533bedfe00a176139da5d310a",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-001"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-001"
+        },
+        {
+          "file": "bash52-002",
+          "sha256": "45cc5e1b876550eee96f95bffb36c41b6cb7c07d33f671db5634405cd00fd7b8",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-002"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-002"
+        },
+        {
+          "file": "bash52-003",
+          "sha256": "6a090cdbd334306fceacd0e4a1b9e0b0678efdbbdedbd1f5842035990c8abaff",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-003"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-003"
+        },
+        {
+          "file": "bash52-004",
+          "sha256": "38827724bba908cf5721bd8d4e595d80f02c05c35f3dd7dbc4cd3c5678a42512",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-004"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-004"
+        },
+        {
+          "file": "bash52-005",
+          "sha256": "ece0eb544368b3b4359fb8464caa9d89c7a6743c8ed070be1c7d599c3675d357",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-005"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-005"
+        },
+        {
+          "file": "bash52-006",
+          "sha256": "d1e0566a257d149a0d99d450ce2885123f9995e9c01d0a5ef6df7044a72a468c",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-006"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-006"
+        },
+        {
+          "file": "bash52-007",
+          "sha256": "2500a3fc21cb08133f06648a017cebfa27f30ea19c8cbe8dfefdf16227cfd490",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-007"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-007"
+        },
+        {
+          "file": "bash52-008",
+          "sha256": "6b4bd92fd0099d1bab436b941875e99e0cb3c320997587182d6267af1844b1e8",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-008"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-008"
+        },
+        {
+          "file": "bash52-009",
+          "sha256": "f95a817882eaeb0cb78bce82859a86bbb297a308ced730ebe449cd504211d3cd",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-009"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-009"
+        },
+        {
+          "file": "bash52-010",
+          "sha256": "c7705e029f752507310ecd7270aef437e8043a9959e4d0c6065a82517996c1cd",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-010"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-010"
+        },
+        {
+          "file": "bash52-011",
+          "sha256": "831b5f25bf3e88625f3ab315043be7498907c551f86041fa3b914123d79eb6f4",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-011"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-011"
+        },
+        {
+          "file": "bash52-012",
+          "sha256": "2fb107ce1fb8e93f36997c8b0b2743fc1ca98a454c7cc5a3fcabec533f67d42c",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-012"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-012"
+        },
+        {
+          "file": "bash52-013",
+          "sha256": "094b4fd81bc488a26febba5d799689b64d52a5505b63e8ee854f48d356bc7ce6",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-013"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-013"
+        },
+        {
+          "file": "bash52-014",
+          "sha256": "3ef9246f2906ef1e487a0a3f4c647ae1c289cbd8459caa7db5ce118ef136e624",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-014"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-014"
+        },
+        {
+          "file": "bash52-015",
+          "sha256": "ef73905169db67399a728e238a9413e0d689462cb9b72ab17a05dba51221358a",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-015"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-015"
+        },
+        {
+          "file": "bash52-016",
+          "sha256": "155853bc5bd10e40a9bea369fb6f50a203a7d0358e9e32321be0d9fa21585915",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-016"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-016"
+        },
+        {
+          "file": "bash52-017",
+          "sha256": "1c48cecbc9b7b4217990580203b7e1de19c4979d0bd2c0e310167df748df2c89",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-017"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-017"
+        },
+        {
+          "file": "bash52-018",
+          "sha256": "4641dd49dd923b454dd0a346277907090410f5d60a29a2de3b82c98e49aaaa80",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-018"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-018"
+        },
+        {
+          "file": "bash52-019",
+          "sha256": "325c26860ad4bba8558356c4ab914ac57e7b415dac6f5aae86b9b05ccb7ed282",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-019"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-019"
+        },
+        {
+          "file": "bash52-020",
+          "sha256": "b6fc252aeb95ce67c9b017d29d81e8a5e285db4bf20d4ec8cdca35892be5c01d",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-020"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-020"
+        },
+        {
+          "file": "bash52-021",
+          "sha256": "8334b88117ad047598f23581aeb0c66c0248cdd77abc3b4e259133aa307650cd",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-021"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-021"
+        },
+        {
+          "file": "bash52-022",
+          "sha256": "78b5230a49594ec30811e72dcd0f56d1089710ec7828621022d08507aa57e470",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-022"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-022"
+        },
+        {
+          "file": "bash52-023",
+          "sha256": "af905502e2106c8510ba2085aa2b56e64830fc0fdf6ee67ebb459ac11696dcd3",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-023"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-023"
+        },
+        {
+          "file": "bash52-024",
+          "sha256": "971534490117eb05d97d7fd81f5f9d8daf927b4d581231844ffae485651b02c3",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-024"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-024"
+        },
+        {
+          "file": "bash52-025",
+          "sha256": "5138f487e7cf71a6323dc81d22419906f1535b89835cc2ff68847e1a35613075",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-025"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-025"
+        },
+        {
+          "file": "bash52-026",
+          "sha256": "96ee1f549aa0b530521e36bdc0ba7661602cfaee409f7023cac744dd42852eac",
+          "url": [
+            "https://ftp.gnu.org/gnu/bash/bash-5.2-patches/bash52-026"
+          ],
+          "from": "nix:x86_64-linux:bash:bash52-026"
+        },
+        {
+          "file": "bash-fix-static.patch",
+          "sha256": "5c714c43a7974d178da32c1d113cab7d012fd6b285f3e5c56d064fe18a152859",
+          "url": [
+            "https://cgit.freebsd.org/ports/plain/shells/bash/files/patch-configure?id=3e147a1f594751a68fea00a28090d0792bee0b51"
+          ],
+          "from": "nix:x86_64-linux:bash:fix-static.patch"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "bash",
+          "out": [
+            "/nix/store/5jw69mbaj5dg4l2bj58acg3gxywfszpj-bash-5.2p26"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "brotli",
+      "name": "brotli (library)",
+      "version": "1.1.0",
+      "license": "MIT",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/brotli-1.1.0/LICENSE"
+      ],
+      "sources": [
+        {
+          "file": "brotli-1.1.0.tar.gz",
+          "sha256": "6aa8dce7724fcbac041b89094a1dc21a4207f2b163defefbf4f36f0df3d88480",
+          "url": [
+            "https://github.com/google/brotli/archive/v1.1.0.tar.gz"
+          ],
+          "from": "nix:x86_64-linux:brotli:source"
+        },
+        {
+          "file": "brotli-revert-runpath.patch",
+          "sha256": "5b72d8dc48e81cfef862c28e39c610af3a3e7f41dba283af11b9ce89bb4de933",
+          "url": [
+            "https://github.com/google/brotli/commit/f842c1bcf9264431cd3b15429a72b7dafbe80509.patch"
+          ],
+          "from": "nix:x86_64-linux:brotli:revert-runpath.patch"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "brotli",
+          "out": [
+            "/nix/store/7cwwdxh9a362gschq1363b6alj45d1w1-brotli-1.1.0-lib"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "libpsl",
+      "name": "libpsl",
+      "version": "0.21.5",
+      "license": "MIT",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/libpsl-0.21.5/"
+      ],
+      "sources": [
+        {
+          "file": "libpsl-0.21.5.tar.lz",
+          "sha256": "9a9f6a8c6edba650cf9ea55475cd172dd28487316804e9c73202d97572cd3a2d",
+          "url": [
+            "https://github.com/rockdaboot/libpsl/releases/download/0.21.5/libpsl-0.21.5.tar.lz"
+          ],
+          "from": "nix:x86_64-linux:libpsl:libpsl-0.21.5.tar.lz"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "libpsl",
+          "out": [
+            "/nix/store/7z6vjm7ff66cdgvpph9hg1vk5j2j5cpf-libpsl-0.21.5"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bzip2",
+      "name": "bzip2 (library)",
+      "version": "1.0.8",
+      "license": "bzip2-1.0.6",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/bzip2-1.0.8/LICENSE"
+      ],
+      "sources": [
+        {
+          "file": "bzip2-1.0.8.tar.gz",
+          "sha256": "ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269",
+          "url": [
+            "https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz"
+          ],
+          "from": "nix:x86_64-linux:bzip2:bzip2-1.0.8.tar.gz"
+        },
+        {
+          "file": "bzip2-1.0.6.2-autoconfiscated.patch",
+          "sha256": "40cb9f97a7df2555555597aca6f9026c5a41ebef91d659ead7af3b8c4b148ebd",
+          "url": [
+            "https://ftp.suse.com/pub/people/sbrabec/bzip2/for_downstream/bzip2-1.0.6.2-autoconfiscated.patch"
+          ],
+          "from": "nix:x86_64-linux:bzip2:bzip2-1.0.6.2-autoconfiscated.patch"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "bzip2",
+          "out": [
+            "/nix/store/b5jymh5kq8l3cam1yx2qypf7cjdhgil5-bzip2-1.0.8"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "libnl",
+      "name": "libnl",
+      "version": "3.8.0",
+      "license": "LGPL-2.1-only",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/libnl-3.8.0/COPYING"
+      ],
+      "sources": [
+        {
+          "file": "libnl-3.8.0.tar.gz",
+          "sha256": "4b89fd7b35a153ae80e09169fea26f5ee17c7bc8b0e58bc74151bd2ef22d51b8",
+          "url": [
+            "https://github.com/thom311/libnl/archive/libnl3_8_0.tar.gz"
+          ],
+          "from": "nix:x86_64-linux:libnl:source"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "libnl",
+          "out": [
+            "/nix/store/bk5kcmjxx01zkknsr488d7jqc22yg8p0-libnl-3.8.0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "libpcap",
+      "name": "libpcap",
+      "version": "1.10.4",
+      "license": "BSD-3-Clause",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/libpcap-1.10.4/LICENSE"
+      ],
+      "sources": [
+        {
+          "file": "libpcap-1.10.4.tar.gz",
+          "sha256": "ed19a0383fad72e3ad435fd239d7cd80d64916b87269550159d20e47160ebe5f",
+          "url": [
+            "https://www.tcpdump.org/release/libpcap-1.10.4.tar.gz"
+          ],
+          "from": "nix:x86_64-linux:libpcap:libpcap-1.10.4.tar.gz"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "libpcap",
+          "out": [
+            "/nix/store/f19a2nipifsvznkmlahw97mnkmsg99w6-libpcap-1.10.4"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "openssl",
+      "name": "OpenSSL (libraries)",
+      "version": "3.0.14",
+      "license": "Apache-2.0",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/openssl-3.0.14/LICENSE.txt"
+      ],
+      "sources": [
+        {
+          "file": "openssl-3.0.14.tar.gz",
+          "sha256": "eeca035d4dd4e84fc25846d952da6297484afa0650a6f84c682e39df3a4123ca",
+          "url": [
+            "https://www.openssl.org/source/openssl-3.0.14.tar.gz"
+          ],
+          "from": "nix:x86_64-linux:openssl:openssl-3.0.14.tar.gz"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "openssl",
+          "out": [
+            "/nix/store/gkx5bfa7kf83wgh94s6vr93vn356w081-openssl-3.0.14"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "libmnl",
+      "name": "libmnl",
+      "version": "1.0.5",
+      "license": "LGPL-2.1-or-later",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/libmnl-1.0.5/COPYING"
+      ],
+      "sources": [
+        {
+          "file": "libmnl-1.0.5.tar.bz2",
+          "sha256": "274b9b919ef3152bfb3da3a13c950dd60d6e2bcd54230ffeca298d03b40d0525",
+          "url": [
+            "https://netfilter.org/projects/libmnl/files/libmnl-1.0.5.tar.bz2"
+          ],
+          "from": "nix:x86_64-linux:libmnl:libmnl-1.0.5.tar.bz2"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "libmnl",
+          "out": [
+            "/nix/store/h7yr54h34zxqf7lla3fapl2zihcg87dw-libmnl-1.0.5"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "krb5",
+      "name": "MIT Kerberos (libraries)",
+      "version": "1.21.2",
+      "license": "MIT",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/krb5-1.21.2/NOTICE"
+      ],
+      "sources": [
+        {
+          "file": "krb5-1.21.2.tar.gz",
+          "sha256": "9560941a9d843c0243a71b17a7ac6fe31c7cebb5bce3983db79e52ae7e850491",
+          "url": [
+            "https://kerberos.org/dist/krb5/1.21/krb5-1.21.2.tar.gz"
+          ],
+          "from": "nix:x86_64-linux:libkrb5:krb5-1.21.2.tar.gz"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "libkrb5",
+          "out": [
+            "/nix/store/h8k60sk584k2kfidxm27gg2m5zwqrc4q-libkrb5-1.21.2"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "elfutils",
+      "name": "elfutils (libraries)",
+      "version": "0.191",
+      "license": "GPL-2.0-or-later OR LGPL-3.0-or-later",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/elfutils-0.191/"
+      ],
+      "sources": [
+        {
+          "file": "elfutils-0.191.tar.bz2",
+          "sha256": "df76db71366d1d708365fc7a6c60ca48398f14367eb2b8954efc8897147ad871",
+          "url": [
+            "https://sourceware.org/elfutils/ftp/0.191/elfutils-0.191.tar.bz2"
+          ],
+          "from": "nix:x86_64-linux:elfutils:elfutils-0.191.tar.bz2"
+        },
+        {
+          "file": "elfutils-fix-aarch64_fregs.patch",
+          "sha256": "cef9dca11910c770303f1e767a18c0daf705ae817ec830b6310479b92e83013b",
+          "url": [
+            "https://git.alpinelinux.org/aports/plain/main/elfutils/fix-aarch64_fregs.patch?id=2e3d4976eeffb4704cf83e2cc3306293b7c7b2e9"
+          ],
+          "from": "nix:x86_64-linux:elfutils:fix-aarch64_fregs.patch"
+        },
+        {
+          "file": "elfutils-musl-asm-ptrace-h.patch",
+          "sha256": "f03d703dc76002413f4cd04e82c1da79365885df65fbd4eb660f1de42ee41ba9",
+          "url": [
+            "https://git.alpinelinux.org/aports/plain/main/elfutils/musl-asm-ptrace-h.patch?id=2e3d4976eeffb4704cf83e2cc3306293b7c7b2e9"
+          ],
+          "from": "nix:x86_64-linux:elfutils:musl-asm-ptrace-h.patch"
+        },
+        {
+          "file": "elfutils-musl-macros.patch",
+          "sha256": "b69e8ed5346c4c032c15ef2fc372cc10d4ffbc0bba3a6c80f3ea73813847780f",
+          "url": [
+            "https://git.alpinelinux.org/aports/plain/main/elfutils/musl-macros.patch?id=2e3d4976eeffb4704cf83e2cc3306293b7c7b2e9"
+          ],
+          "from": "nix:x86_64-linux:elfutils:musl-macros.patch"
+        },
+        {
+          "file": "elfutils-musl-strndupa.patch",
+          "sha256": "edd69e8498f5b74c0fb50cd3bfefd1a6eaaab39360fc4627673adc7f6a3f2dbd",
+          "url": [
+            "https://git.alpinelinux.org/aports/plain/main/elfutils/musl-strndupa.patch?id=2e3d4976eeffb4704cf83e2cc3306293b7c7b2e9"
+          ],
+          "from": "nix:x86_64-linux:elfutils:musl-strndupa.patch"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "elfutils",
+          "out": [
+            "/nix/store/i7p108mj9mkwgb0c7cz9n3xzkqkpdlb0-elfutils-0.191"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "libssh2",
+      "name": "libssh2",
+      "version": "1.11.0",
+      "license": "BSD-3-Clause",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/libssh2-1.11.0/COPYING"
+      ],
+      "sources": [
+        {
+          "file": "libssh2-1.11.0.tar.gz",
+          "sha256": "3736161e41e2693324deb38c26cfdc3efe6209d634ba4258db1cecff6a5ad461",
+          "url": [
+            "https://www.libssh2.org/download/libssh2-1.11.0.tar.gz"
+          ],
+          "from": "nix:x86_64-linux:libssh2:libssh2-1.11.0.tar.gz"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "libssh2",
+          "out": [
+            "/nix/store/j88xz5sjcq93za73gjjvlxmb9zr8gnnv-libssh2-1.11.0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "libnetfilter_conntrack",
+      "name": "libnetfilter_conntrack",
+      "version": "1.0.9",
+      "license": "GPL-2.0-or-later",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/libnetfilter_conntrack-1.0.9/COPYING"
+      ],
+      "sources": [
+        {
+          "file": "libnetfilter_conntrack-1.0.9.tar.bz2",
+          "sha256": "67bd9df49fe34e8b82144f6dfb93b320f384a8ea59727e92ff8d18b5f4b579a8",
+          "url": [
+            "https://netfilter.org/projects/libnetfilter_conntrack/files/libnetfilter_conntrack-1.0.9.tar.bz2"
+          ],
+          "from": "nix:x86_64-linux:libnetfilter_conntrack:libnetfilter_conntrack-1.0.9.tar.bz2"
+        },
+        {
+          "file": "libnetfilter_conntrack-21ee35dde73aec5eba35290587d479218c6dd824.patch",
+          "sha256": "134ff1840a287589c399cd9464d7c789bfa8cf5e870d451167cf979ea5403703",
+          "url": [
+            "https://git.netfilter.org/libnetfilter_conntrack/patch/?id=21ee35dde73aec5eba35290587d479218c6dd824"
+          ],
+          "from": "nix:x86_64-linux:libnetfilter_conntrack:?id=21ee35dde73aec5eba35290587d479218c6dd824"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "libnetfilter_conntrack",
+          "out": [
+            "/nix/store/klr3cn365naqgppkzk40xfc026ga3znr-libnetfilter_conntrack-1.0.9"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "xz",
+      "name": "XZ Utils (liblzma)",
+      "version": "5.4.7",
+      "license": "LicenseRef-public-domain",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/xz-5.4.7/"
+      ],
+      "sources": [
+        {
+          "file": "xz-5.4.7.tar.xz",
+          "sha256": "016182c70bb5c7c9eb3465030e3a7f6baa25e17b0e8c0afe92772e6021843ce2",
+          "url": [
+            "https://github.com/tukaani-project/xz/releases/download/v5.4.7/xz-5.4.7.tar.xz"
+          ],
+          "from": "nix:x86_64-linux:xz:xz-5.4.7.tar.xz"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "xz",
+          "out": [
+            "/nix/store/m55z476dllpljb3ipcy87r7whjb8qiiy-xz-5.4.7"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "libnfnetlink",
+      "name": "libnfnetlink",
+      "version": "1.0.2",
+      "license": "GPL-2.0-only",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/libnfnetlink-1.0.2/COPYING"
+      ],
+      "sources": [
+        {
+          "file": "libnfnetlink-1.0.2.tar.bz2",
+          "sha256": "b064c7c3d426efb4786e60a8e6859b82ee2f2c5e49ffeea640cfe4fe33cbc376",
+          "url": [
+            "https://www.netfilter.org/projects/libnfnetlink/files/libnfnetlink-1.0.2.tar.bz2"
+          ],
+          "from": "nix:x86_64-linux:libnfnetlink:libnfnetlink-1.0.2.tar.bz2"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "libnfnetlink",
+          "out": [
+            "/nix/store/mp0r5d5lx2izxcxixan9v3405pckawln-libnfnetlink-1.0.2"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "libunistring",
+      "name": "GNU libunistring",
+      "version": "1.1",
+      "license": "LGPL-3.0-or-later OR GPL-2.0-or-later",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/libunistring-1.1/"
+      ],
+      "sources": [
+        {
+          "file": "libunistring-1.1.tar.gz",
+          "sha256": "a2252beeec830ac444b9f68d6b38ad883db19919db35b52222cf827c385bdb6a",
+          "url": [
+            "https://ftp.gnu.org/gnu/libunistring/libunistring-1.1.tar.gz"
+          ],
+          "from": "nix:x86_64-linux:libunistring:libunistring-1.1.tar.gz"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "libunistring",
+          "out": [
+            "/nix/store/n07l5k5kwxd7954wl7xk6v0qwxz536m3-libunistring-1.1"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "libidn2",
+      "name": "GNU libidn2",
+      "version": "2.3.7",
+      "license": "LGPL-3.0-or-later OR GPL-2.0-or-later",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/libidn2-2.3.7/"
+      ],
+      "sources": [
+        {
+          "file": "libidn2-2.3.7.tar.gz",
+          "sha256": "4c21a791b610b9519b9d0e12b8097bf2f359b12f8dd92647611a929e6bfd7d64",
+          "url": [
+            "https://ftp.gnu.org/gnu/libidn/libidn2-2.3.7.tar.gz"
+          ],
+          "from": "url"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "libidn2",
+          "out": [
+            "/nix/store/psfazaip7ywf3vzxfd6ngjn9zwmla7gl-libidn2-2.3.7"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "db",
+      "name": "Berkeley DB",
+      "version": "5.3.28",
+      "license": "Sleepycat",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/db-5.3.28/LICENSE"
+      ],
+      "sources": [
+        {
+          "file": "db-5.3.28.tar.gz",
+          "sha256": "e0a992d740709892e81f9d93f06daf305cf73fb81b545afe72478043172c3628",
+          "url": [
+            "https://download.oracle.com/berkeley-db/db-5.3.28.tar.gz"
+          ],
+          "from": "nix:x86_64-linux:db:db-5.3.28.tar.gz"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "db",
+          "out": [
+            "/nix/store/qm6mrsxygi0bpsjrdxbxqmq2s3d98fyg-db-5.3.28"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "curl",
+      "name": "curl (libcurl)",
+      "version": "8.7.1",
+      "license": "curl",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/curl-8.7.1/COPYING"
+      ],
+      "sources": [
+        {
+          "file": "curl-8.7.1.tar.xz",
+          "sha256": "6fea2aac6a4610fbd0400afb0bcddbe7258a64c63f1f68e5855ebc0c659710cd",
+          "url": [
+            "https://curl.se/download/curl-8.7.1.tar.xz"
+          ],
+          "from": "nix:x86_64-linux:curl:curl-8.7.1.tar.xz"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "curl",
+          "out": [
+            "/nix/store/r62f73svq8h53m30yhrr4gk5l4r99a4f-curl-8.7.1"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "publicsuffix-list",
+      "name": "Public Suffix List",
+      "version": "0-unstable-2024-01-07",
+      "license": "MPL-2.0",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/publicsuffix-list-5db9b65997e3/LICENSE"
+      ],
+      "sources": [
+        {
+          "file": "publicsuffix-list-5db9b65997e3.tar.gz",
+          "sha256": "71f55d9c1c547ef579a2bc157e898db36985b1c3f908ba35ad411c5d462b051f",
+          "url": [
+            "https://github.com/publicsuffix/list/archive/5db9b65997e3c9230ac4353b01994c2ae9667cb9.tar.gz"
+          ],
+          "from": "nix:x86_64-linux:publicsuffix-list:source"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "publicsuffix-list",
+          "out": [
+            "/nix/store/syyj75f8n8xq85z9366zhg8a7k1194sp-publicsuffix-list-0-unstable-2024-01-07"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "zlib",
+      "name": "zlib",
+      "version": "1.3.1",
+      "license": "Zlib",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/zlib-1.3.1/LICENSE"
+      ],
+      "sources": [
+        {
+          "file": "zlib-1.3.1.tar.gz",
+          "sha256": "9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23",
+          "url": [
+            "https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz"
+          ],
+          "from": "nix:x86_64-linux:zlib:zlib-1.3.1.tar.gz"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "zlib",
+          "out": [
+            "/nix/store/v2ny69wp81ch6k4bxmp4lnhh77r0n4h1-zlib-1.3.1"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "keyutils",
+      "name": "keyutils (libkeyutils)",
+      "version": "1.6.3",
+      "license": "LGPL-2.1-or-later",
+      "files": [
+        "guest/store.tar",
+        "guest/store-closures.txt"
+      ],
+      "texts": [
+        "hydo/dist/licenses/keyutils-1.6.3/"
+      ],
+      "sources": [
+        {
+          "file": "keyutils-1.6.3.tar.gz",
+          "sha256": "a61d5706136ae4c05bd48f86186bcfdbd88dd8bd5107e3e195c924cfc1b39bb4",
+          "url": [
+            "https://git.kernel.org/pub/scm/linux/kernel/git/dhowells/keyutils.git/snapshot/keyutils-1.6.3.tar.gz"
+          ],
+          "from": "nix:x86_64-linux:keyutils:keyutils-1.6.3.tar.gz"
+        },
+        {
+          "file": "keyutils-lore-20230301.patch",
+          "sha256": "3ab0bcd5ec0d860517fc3f710878aef66e1cfbd1ec593460a3853b2470e76fb1",
+          "url": [
+            "https://lore.kernel.org/keyrings/20230301134250.301819-1-hi@alyssa.is/raw"
+          ],
+          "from": "nix:x86_64-linux:keyutils:raw"
+        }
+      ],
+      "nix": [
+        {
+          "system": "x86_64-linux",
+          "attr": "keyutils",
+          "out": [
+            "/nix/store/y7kg61krb67xnff277j6wanl3hbj5wv4-keyutils-1.6.3-lib"
+          ]
+        }
+      ]
+    }
+  ]
+}
