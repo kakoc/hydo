@@ -513,12 +513,18 @@ fn run_vm(o: &Opts, image: &Path, schedule: &str, dir: &Path) -> Ran {
 }
 
 /// Hash a file tree into `h`: every path (sorted), its kind, executable bit and contents; a
-/// symbolic link by its target; `target` and `.git` folders left out.
-fn hash_tree(h: &mut sha2::Sha256, root: &Path, rel: &Path) {
+/// symbolic link by its target (or, with `follow`, by what it points to); `target` and `.git`
+/// folders left out.
+fn hash_tree(h: &mut sha2::Sha256, root: &Path, rel: &Path, follow: bool) {
     use sha2::Digest;
     use std::os::unix::fs::PermissionsExt;
     let p = root.join(rel);
-    let Ok(m) = std::fs::symlink_metadata(&p) else {
+    let m = if follow {
+        std::fs::metadata(&p)
+    } else {
+        std::fs::symlink_metadata(&p)
+    };
+    let Ok(m) = m else {
         h.update(format!("missing {}\n", rel.display()));
         return;
     };
@@ -535,7 +541,7 @@ fn hash_tree(h: &mut sha2::Sha256, root: &Path, rel: &Path) {
             if n == "target" || n == ".git" {
                 continue;
             }
-            hash_tree(h, root, &rel.join(n));
+            hash_tree(h, root, &rel.join(n), follow);
         }
     } else {
         let exec = m.permissions().mode() & 0o111 != 0;
@@ -588,55 +594,65 @@ fn input_key(o: &Opts, img: &Image) -> Result<String, String> {
         h.update(sha_file(&r.join("SHA256SUMS")));
     }
     for rel in ["hydo/history", "hydo/VERSION"] {
-        hash_tree(&mut h, &o.root, Path::new(rel));
+        hash_tree(&mut h, &o.root, Path::new(rel), false);
     }
     for l in String::from_utf8_lossy(&out.stdout).lines() {
         let l = l.trim();
         if !l.is_empty() {
-            hash_tree(&mut h, &o.root, Path::new(l));
+            hash_tree(&mut h, &o.root, Path::new(l), false);
         }
     }
     Ok(hex(&h.finalize()))
 }
 
-/// The image builder's identity: the sha256 of the prefix's `hydo-build` with the commit it was
-/// built from blanked out. The commit is compiled in (for the build record next to an image, never
-/// inside it), so without this every new commit, even one of documentation only, would rebuild
-/// every image. The commit is the tree's `hydo/COMMIT`, else `git rev-parse HEAD`, as
-/// `hydo-image`'s build script takes it.
+/// The image builder's identity: its sources, not its program. The program `hydo-build` has the
+/// commit it was built from compiled in (for the build record next to an image, never inside it),
+/// and on the Mac its UUID and signature follow from that, so the program's sha256 changes with
+/// every commit, even a documentation-only one. Hashed instead: `Cargo.lock`,
+/// `rust-toolchain.toml` and every file of `hydo-build` and of the workspace crates it depends on
+/// (from their `Cargo.toml`s; links followed, as the compiler reads them). A change in those
+/// crates rebuilds the images once; the run cache still holds when the bytes come out the same.
 fn builder_id(o: &Opts) -> String {
     use sha2::{Digest, Sha256};
-    let Ok(mut b) = std::fs::read(o.prefix().join("bin").join("hydo-build")) else {
-        return String::new();
-    };
-    let commit = std::fs::read_to_string(o.root.join("hydo").join("COMMIT"))
-        .ok()
-        .map(|t| t.trim().to_string())
-        .filter(|t| !t.is_empty())
-        .or_else(|| {
-            Command::new("git")
-                .arg("-C")
-                .arg(&o.root)
-                .args(["rev-parse", "HEAD"])
-                .output()
-                .ok()
-                .filter(|x| x.status.success())
-                .map(|x| String::from_utf8_lossy(&x.stdout).trim().to_string())
-        })
-        .unwrap_or_default();
-    let c = commit.as_bytes();
-    if c.len() >= 12 {
-        let mut i = 0;
-        while i + c.len() <= b.len() {
-            if &b[i..i + c.len()] == c {
-                b[i..i + c.len()].fill(b'0');
-                i += c.len();
-            } else {
-                i += 1;
+    let crates = o.root.join("hydo").join("crates");
+    let dir_of = |name: &str| crates.join(if name == "hydo" { "hydo-cli" } else { name });
+    let mut todo = vec!["hydo-build".to_string()];
+    let mut seen = std::collections::BTreeSet::new();
+    while let Some(c) = todo.pop() {
+        if !seen.insert(c.clone()) {
+            continue;
+        }
+        let toml = std::fs::read_to_string(dir_of(&c).join("Cargo.toml")).unwrap_or_default();
+        let mut deps = false;
+        for l in toml.lines() {
+            let t = l.trim();
+            if t.starts_with('[') {
+                deps = t.ends_with("dependencies]") && !t.contains("dev-dependencies");
+                continue;
+            }
+            if deps {
+                if let Some(n) = t.split(['=', ' ', '.']).next() {
+                    if n.starts_with("hydo") && dir_of(n).join("Cargo.toml").is_file() {
+                        todo.push(n.to_string());
+                    }
+                }
             }
         }
     }
-    hex(&Sha256::digest(&b))
+    let mut h = Sha256::new();
+    for f in ["Cargo.lock", "rust-toolchain.toml"] {
+        hash_tree(&mut h, &o.root, Path::new(f), true);
+    }
+    for c in &seen {
+        h.update(format!("crate {c}\n"));
+        hash_tree(
+            &mut h,
+            &crates,
+            dir_of(c).strip_prefix(&crates).unwrap_or(Path::new(c)),
+            true,
+        );
+    }
+    hex(&h.finalize())
 }
 
 /// What decides a run's values in the default mode, for the run cache: the platform, the
