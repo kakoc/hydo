@@ -68,5 +68,6 @@ found.
   matches every line (GNU grep matches none), so "acknowledged ids that were not read back" comes
   out empty exactly when nothing was read back. Compare sets with `awk` keyed on `FILENAME`, or
   with `hydo-check`.
-- **Console size.** The guest console holds 64 KiB. Print short lines; do not print every
-  acknowledged id.
+- **Console size.** The guest console holds 64 KiB per VM on hvx (`hydo run` warns when a run
+  wrote more) and 4 MiB on the KVM engine and the Mac. Print short lines; do not print every
+  acknowledged id. A long history (thousands of operations) fits on the KVM engine or the Mac.

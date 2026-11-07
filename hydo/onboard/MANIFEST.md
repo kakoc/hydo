@@ -1542,8 +1542,9 @@ image keeps working after hydo is upgraded").
   3072 MiB on x86_64 (hvx keeps RAM below the 4th-GiB MMIO hole) and 4096 MiB on arm64.
 - Images are files on the build machine (no registry pulls); one root per image service, not
   a merged root; no xattrs/capabilities, devices or FIFOs from layers; no zstd layers.
-- The guest console is 64 KiB: a workload that prints every acknowledged id should print
-  short ids, or the done marker can be lost.
+- The guest console keeps 64 KiB per VM on hvx (the kernel module's buffer; `hydo run` warns
+  when a run wrote more) and 4 MiB on the KVM engine and the Mac: a workload that prints every
+  acknowledged id should print short ids, or the done marker can be lost.
 - One data disk, ext4. The workload's step count is the unit of fault placement.
 
 ## From Docker Compose
@@ -1716,7 +1717,7 @@ for an API that documents a stronger promise.
 **Records.** Every attempt is two lines in the history recorder's format (`HYDO-HIST`,
 `hydo/HISTORIES.md`), history `grpc` (`record.history:`), in `/tmp/hydo/grpc/calls`
 (`$HYDO_GRPC_CALLS`) with the bodies, and on the guest console without them (`record.console:
-brief`, the default; `full` or `off`), so a few hundred calls fit in the 64 KiB console:
+brief`, the default; `full` or `off`), so a few hundred calls fit in hvx's 64 KiB console:
 
 ```
 HYDO-HIST grpc <process> invoke <time> <rpc> <op> <request JSON>

@@ -66,7 +66,7 @@ exploration should keep going (or the scenario is wrong).
 
 ## Determinism and volume
 
-hvx keeps at most 64 KiB of console per VM, so SDKs must not flood it. The Go, Rust and JavaScript SDKs emit each
+hvx keeps at most 64 KiB of console per VM (the KVM engine and the Mac 4 MiB), so SDKs must not flood it. The Go, Rust and JavaScript SDKs emit each
 (assertion, outcome) pair once per process (the first pass and the first failure, with the
 details of that first one) and never emit a `sometimes` that evaluated false. The output is a
 pure function of the program's evaluation sequence: no clocks, no host state, catalog in
