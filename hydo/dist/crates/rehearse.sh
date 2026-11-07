@@ -36,6 +36,11 @@ for c in $CRATES; do PKGS+=(-p "$c"); done
 
 echo "== 1. cargo package (${#PKGS[@]} arguments: $(echo $CRATES | wc -w | tr -d ' ') crates)"
 rm -rf "$TOP/target/package"
+# cargo unpacks the packed crates of its temporary registry into the Cargo home
+# (registry/src/-<hash>/<crate>-<version>) and reuses such a directory on the next run even when
+# the package changed (the version is the same): remove our crates' leftovers there first
+CH="${CARGO_HOME:-$HOME/.cargo}"
+for c in $CRATES; do rm -rf "$CH"/registry/src/-*/"$c"-[0-9]*; done
 ( cd "$TOP" && cargo package --locked "${DIRTY[@]}" "${PKGS[@]}" )
 
 echo "== 2. the stand-in registry: $WORK/registry"
