@@ -315,6 +315,10 @@ pub struct Halt<'t> {
     target: Option<u64>,
     taker: &'t mut dyn Taker,
     pub taken: Option<StopInfo>,
+    /// The agent's events the replay saw before the target (exits, ends of commands and probes,
+    /// refusals), each with its stop, as the agent's JSON line: on hvx the agent's lines go over
+    /// the host-call port, so the run's console has none of them.
+    pub events: Vec<(StopInfo, serde_json::Value)>,
 }
 
 impl<'t> Halt<'t> {
@@ -328,6 +332,7 @@ impl<'t> Halt<'t> {
             target,
             taker,
             taken: None,
+            events: Vec::new(),
         }
     }
 }
@@ -338,8 +343,16 @@ impl Controller for Halt<'_> {
     }
 
     fn step(&mut self, stop: &StopInfo, seen: &[Seen], out: &mut Out) {
-        if self.taken.is_none() && self.target.is_some_and(|t| stop.n >= t) {
-            self.taken = Some(*stop);
+        if self.taken.is_none() {
+            // what the stop saw happened before it (the taken stop included)
+            for s in seen {
+                if let Some(v) = event_json(s) {
+                    self.events.push((*stop, v));
+                }
+            }
+            if self.target.is_some_and(|t| stop.n >= t) {
+                self.taken = Some(*stop);
+            }
         }
         if self.taken.is_some() {
             self.taker.step(stop, seen, out)
@@ -347,6 +360,27 @@ impl Controller for Halt<'_> {
             self.inner.step(stop, seen, out)
         }
     }
+}
+
+/// An agent event or refusal as the agent's own JSON line (without its sequence number).
+pub fn event_json(s: &Seen) -> Option<serde_json::Value> {
+    use hydo_agent_proto::line::AgentLine;
+    use hydo_agent_proto::msg::Event;
+    let text = match s {
+        Seen::Event(ev @ (Event::Exit(_) | Event::Done(_) | Event::Probe(_))) => AgentLine::Event {
+            v: hydo_agent_proto::msg::PROTO,
+            seq: 0,
+            ev: ev.clone(),
+        }
+        .encode(),
+        Seen::Refused { error, .. } => AgentLine::Error(error.clone()).encode(),
+        _ => return None,
+    };
+    let mut v: serde_json::Value = serde_json::from_str(&text).ok()?;
+    if let Some(o) = v.as_object_mut() {
+        o.remove("seq");
+    }
+    Some(v)
 }
 
 /// Takes the stop's snapshot and ends the conversation there.
@@ -446,12 +480,14 @@ pub enum Held {
 }
 
 /// What reaching a stop cost.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Reach {
     /// The stop as the replay reached it.
     pub stop: Option<StopInfo>,
     /// Stops the replay took (every conversation up to the target).
     pub stops: u64,
+    /// The agent's events the replay saw before the target ([`Halt::events`]).
+    pub events: Vec<(Conv, StopInfo, serde_json::Value)>,
 }
 
 /// Counts the stops a conversation took (the last stop's number less the first's).
@@ -526,6 +562,10 @@ impl Machine {
                 header(Conv::Boot, &rec.schedule, "boot"),
             )?;
             reach.stop = halt.taken.filter(|_| target.conv == Conv::Boot);
+            let ev = std::mem::take(&mut halt.events);
+            reach
+                .events
+                .extend(ev.into_iter().map(|(s, v)| (Conv::Boot, s, v)));
             f
         };
         reach.stops += stops_of(&boot_fin, None);
@@ -583,6 +623,10 @@ impl Machine {
                 header(Conv::Run, &rec.schedule, "resume S1"),
             )?;
             let taken = halt.taken;
+            let ev = std::mem::take(&mut halt.events);
+            reach
+                .events
+                .extend(ev.into_iter().map(|(s, v)| (Conv::Run, s, v)));
             reach.stops += stops_of(&f, Some(s_first(&f)));
             if let Some(v) = diverged(&f) {
                 return Err(divergence(rec, &v));
@@ -611,6 +655,10 @@ impl Machine {
                     header(Conv::Recovery, &rec.schedule, "resume S0"),
                 )?;
                 reach.stop = halt.taken;
+                let ev = std::mem::take(&mut halt.events);
+                reach
+                    .events
+                    .extend(ev.into_iter().map(|(s, v)| (Conv::Recovery, s, v)));
                 reach.stops += stops_of(&f2, Some(s_first(&f2)));
                 if let Some(v) = diverged(&f2) {
                     return Err(divergence(rec, &v));

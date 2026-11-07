@@ -130,12 +130,16 @@ fn likely_of(p: &ProcessEnd, ram: u64) -> Option<String> {
 
 /// The diagnosis from the run's own files (no VM). None for a passing run.
 pub fn host(rec: &Recorded) -> Option<Diagnosis> {
+    host_from(rec, agent_events(rec))
+}
+
+/// [`host`] from the given agent events.
+fn host_from(rec: &Recorded, evs: Vec<AgentEv>) -> Option<Diagnosis> {
     let v = rec.doc.verdict.text.clone();
     let kind = rec.doc.verdict.kind.as_str();
     if kind == "ok" {
         return None;
     }
-    let evs = agent_events(rec);
     let end = rec.end();
     let mut d = Diagnosis {
         verdict_at: end.map(|t| run_point(rec, t)),
@@ -357,15 +361,51 @@ impl Taker for Batch {
 
 const TAIL: u64 = 3000;
 
-/// Read in the guest at the verdict's stop, by one replay. Fills `d.evidence` and `d.kernel`.
-pub fn evidence(ctx: &Ctx, rec: &Recorded, d: &mut Diagnosis) {
+/// The replayed agent events of a run (conversation, stop, the agent's line).
+pub type Replayed = Vec<(Conv, StopInfo, Value)>;
+
+/// The evidence, and when the run's consoles carry no agent lines (hvx's host-call port), the
+/// diagnosis made again from the agent events the replay saw. The replayed events are returned.
+pub fn with_evidence(ctx: &Ctx, rec: &Recorded, d: Diagnosis) -> (Diagnosis, Replayed) {
+    let mut d = d;
+    let ev = evidence(ctx, rec, &mut d);
+    let console = agent_events(rec);
+    let has_agent = console
+        .iter()
+        .any(|a| matches!(a.kind, "exit" | "done" | "probe" | "refused"));
+    if has_agent || ev.is_empty() {
+        return (d, ev);
+    }
+    let mut evs = console;
+    evs.extend(
+        ev.iter()
+            .filter_map(|(c, s, v)| super::timeline::replayed(rec, *c, s.n, s.at, v.clone())),
+    );
+    let Some(mut d2) = host_from(rec, evs) else {
+        return (d, ev);
+    };
+    for k in d.kernel.drain(..) {
+        if !d2.kernel.contains(&k) {
+            d2.kernel.push(k);
+        }
+    }
+    d2.evidence_status = d.evidence_status;
+    d2.evidence_note = d.evidence_note;
+    d2.evidence = d.evidence;
+    refine(&mut d2);
+    (d2, ev)
+}
+
+/// Read in the guest at the verdict's stop, by one replay. Fills `d.evidence` and `d.kernel`;
+/// returns the agent events the replay saw.
+pub fn evidence(ctx: &Ctx, rec: &Recorded, d: &mut Diagnosis) -> Replayed {
     let Some(target) = rec.end() else {
         d.evidence_status = "not-collected".into();
         d.evidence_note = Some("the run has no recorded end".into());
-        return;
+        return Vec::new();
     };
     let tmp = super::session::scratch(ctx, "diagnose");
-    let r = (|| -> Result<Batch, Problem> {
+    let r = (|| -> Result<(Batch, Replayed), Problem> {
         let m = super::session::machine(ctx, rec, &tmp)?;
         let mut works = plan_works(&m.plan, d);
         let mut b = Batch {
@@ -373,16 +413,17 @@ pub fn evidence(ctx: &Ctx, rec: &Recorded, d: &mut Diagnosis) {
             i: 0,
             stops: 0,
         };
-        m.reach(rec, target, &mut b, false, &tmp.join("engine.err"))?;
-        Ok(b)
+        let (_, reach) = m.reach(rec, target, &mut b, false, &tmp.join("engine.err"))?;
+        Ok((b, reach.events))
     })();
     let _ = std::fs::remove_dir_all(&tmp);
     match r {
         Err(p) => {
             d.evidence_status = "failed".into();
             d.evidence_note = Some(p.message);
+            Vec::new()
         }
-        Ok(b) => {
+        Ok((b, events)) => {
             d.evidence_status = "collected".into();
             d.evidence_note = Some(format!(
                 "read in the guest at {} by a replay of the run (the recorded run is unchanged)",
@@ -401,6 +442,7 @@ pub fn evidence(ctx: &Ctx, rec: &Recorded, d: &mut Diagnosis) {
                 }
             }
             refine(d);
+            events
         }
     }
 }
@@ -440,7 +482,7 @@ fn plan_works(plan: &Plan, d: &Diagnosis) -> Vec<(String, String, Work)> {
     let ex = |script: String, ns: Option<String>, k: u64| {
         Work::exec(bb, script, env(plan), ns, super::TIMEOUT_MS, 100 + k, TAIL)
     };
-    if let (Some(s), "service-not-ready") = (&d.service, d.failure.as_str()) {
+    if let (Some(s), "service-not-ready" | "other") = (&d.service, d.failure.as_str()) {
         if let Some(sv) = plan.service(s) {
             let ns = netns_of(plan, Some(s)).ok().flatten();
             v.push((
@@ -580,7 +622,7 @@ pub fn cmd(ctx: &Ctx, rest: &[String]) -> Result<Value, Problem> {
         }
     };
     if ev {
-        evidence(ctx, &rec, &mut d);
+        d = with_evidence(ctx, &rec, d).0;
         d.next.retain(|n| !n.contains("--evidence"));
     }
     let doc = DiagnosisDoc {
@@ -599,8 +641,22 @@ pub fn for_run(ctx: &Ctx, dir: &Path, evidence_on: bool) -> Option<Diagnosis> {
     let rec = Recorded::load(dir).ok()?;
     let mut d = host(&rec)?;
     if evidence_on && rec.doc.verdict.kind == "error" {
-        evidence(ctx, &rec, &mut d);
+        let (d2, ev) = with_evidence(ctx, &rec, d);
+        d = d2;
         d.next.retain(|n| !n.contains("--evidence"));
+        // keep what the replay saw of the agent when the consoles do not have it (hvx), so that
+        // `hydo inspect events` shows the exits and readiness checks without another replay
+        let console = agent_events(&rec);
+        if !ev.is_empty()
+            && !console
+                .iter()
+                .any(|a| matches!(a.kind, "exit" | "done" | "probe"))
+        {
+            let _ = std::fs::write(
+                dir.join(super::timeline::AGENT_EVENTS),
+                super::timeline::agent_events_file(&ev),
+            );
+        }
     }
     Some(d)
 }

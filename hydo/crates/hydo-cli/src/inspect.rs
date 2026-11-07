@@ -115,9 +115,6 @@ pub enum Req {
     Stop,
 }
 
-/// The ops that do guest work, for the help and the errors.
-pub const OPS: &[&str] = &["exec", "read", "ls", "logs", "ps", "sockets", "advance"];
-
 impl Req {
     pub fn op(&self) -> &'static str {
         match self {

@@ -24,7 +24,6 @@ pub struct Sent {
     pub h: Option<String>,
     pub text: String,
     pub json: Value,
-    pub stop: u64,
 }
 
 /// One event of the agent (or a kernel or guest line) from an engine console.
@@ -46,7 +45,7 @@ pub fn sends(rec: &Recorded, c: Conv) -> BTreeMap<u64, Sent> {
         return m;
     };
     for r in &t.records {
-        if let Record::Send { n, id, bytes, .. } = r {
+        if let Record::Send { id, bytes, .. } = r {
             let v: Value = serde_json::from_str(bytes.trim_start_matches('\u{18}').trim_end())
                 .unwrap_or(Value::Null);
             let op = v
@@ -63,7 +62,6 @@ pub fn sends(rec: &Recorded, c: Conv) -> BTreeMap<u64, Sent> {
                     h,
                     text,
                     json: v,
-                    stop: *n,
                 },
             );
         }
@@ -133,18 +131,54 @@ fn console_of(rec: &Recorded, c: Conv) -> Option<String> {
         Conv::Run => "one.agent.log",
         Conv::Recovery => "one.recovery.agent.log",
     };
-    let t = std::fs::read_to_string(rec.dir.join(f)).ok()?;
-    // only the engine's raw console (with the agent's framed lines)
-    (c != Conv::Boot || t.contains("HYDO-AG ")).then_some(t)
+    std::fs::read_to_string(rec.dir.join(f)).ok()
+}
+
+/// The agent's events a replay of the run saw (`hydo run` writes them when the run's consoles
+/// have none: on hvx the agent's lines go over the host-call port, not the console). One JSON
+/// object per line: `conversation`, `stop`, `at`, `line` (the agent's line without its number).
+pub const AGENT_EVENTS: &str = "agent-events.jsonl";
+
+/// One replayed agent event as a timeline event.
+pub fn replayed(rec: &Recorded, c: Conv, stop: u64, at: u64, v: Value) -> Option<AgentEv> {
+    let cmds = sends(rec, c);
+    let (kind, text) = describe(&v, &cmds)?;
+    Some(AgentEv {
+        conv: c,
+        stop: Some(stop),
+        at: Some(at),
+        kind,
+        json: v,
+        text,
+    })
+}
+
+/// The lines of [`AGENT_EVENTS`] for the replayed events of a run.
+pub fn agent_events_file(events: &[(Conv, hydo_control::StopInfo, Value)]) -> String {
+    let mut s = String::new();
+    for (c, st, v) in events {
+        s.push_str(
+            &serde_json::to_string(
+                &json!({"conversation": c.name(), "stop": st.n, "at": st.at, "line": v}),
+            )
+            .unwrap_or_default(),
+        );
+        s.push('\n');
+    }
+    s
 }
 
 /// The agent's events (and kernel and guest lines) of every conversation's engine console.
 pub fn agent_events(rec: &Recorded) -> Vec<AgentEv> {
     let mut out = Vec::new();
+    let mut framed = Vec::new();
     for c in Conv::ALL {
         let Some(text) = console_of(rec, c) else {
             continue;
         };
+        if text.contains("HYDO-AG ") {
+            framed.push(c);
+        }
         let stops: Vec<(u64, u64, u64)> = rec
             .transcript(c)
             .map(|t| {
@@ -205,6 +239,25 @@ pub fn agent_events(rec: &Recorded) -> Vec<AgentEv> {
                     });
                 }
             }
+        }
+    }
+    // conversations whose console has no agent lines: what a replay saw, when it was kept
+    if let Ok(t) = std::fs::read_to_string(rec.dir.join(AGENT_EVENTS)) {
+        for l in t.lines() {
+            let Ok(v) = serde_json::from_str::<Value>(l) else {
+                continue;
+            };
+            let Some(c) = v["conversation"].as_str().and_then(Conv::parse) else {
+                continue;
+            };
+            if framed.contains(&c) {
+                continue;
+            }
+            let (n, at) = (
+                v["stop"].as_u64().unwrap_or(0),
+                v["at"].as_u64().unwrap_or(0),
+            );
+            out.extend(replayed(rec, c, n, at, v["line"].clone()));
         }
     }
     out

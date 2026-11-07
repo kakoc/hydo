@@ -4,7 +4,7 @@ description: Set up deterministic fault testing with hydo for a software project
 license: Apache-2.0
 compatibility: Needs the hydo command line tool, 0.1.0 or later (x86_64 Linux, or an Apple Silicon Mac); the skill offers to install it. Every hydo fact comes from the installed hydo (hydo guide); the skill itself needs no network.
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   hydo-min: "0.1.0"
 ---
 
@@ -85,8 +85,11 @@ It must print `OK` before you go on.
 
 Use the "Build and run" commands of `hydo guide workflow`: build the image, run one schedule
 without faults twice (it must pass, with the same fingerprint both times), then explore. A first
-run that fails points at the folder or at a real bug: read the console files that `hydo run`
-names before changing anything.
+run that fails points at the folder or at a real bug. Before changing anything, read why: the
+`hydo: diagnosis:` lines `hydo run` prints and the `diagnosis` in the run directory's
+`result.json`; then, when your hydo has `hydo inspect` (`hydo inspect --help`), look inside the
+failed run at the stop that matters (`hydo guide inspect`). Do not add debug commands to the
+image to find a cause: that changes the run's timing, and the failure can go away.
 
 ## 5. Report
 
