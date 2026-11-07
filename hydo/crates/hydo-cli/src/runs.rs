@@ -425,6 +425,15 @@ fn run_document(
         }
     }
     let mut run = hydo_explore::results::run_of("one", sched, res, &consoles);
+    // faults after the workload's last step do nothing (hydo_control::names::step_warnings)
+    if let (Ok(plan), Ok(s)) = (
+        hydo_control::agent::plan_of_image(image),
+        hydo_schedule::Schedule::parse(sched),
+    ) {
+        let mut w = hydo_control::names::step_warnings(&plan, &s);
+        w.append(&mut run.warnings);
+        run.warnings = w;
+    }
     run.tag = None;
     run.hydo_version = Some(env!("CARGO_PKG_VERSION").into());
     run.epoch = hydo_explore::results::this_epoch();
@@ -496,6 +505,14 @@ pub fn run_to_dir(
     Some(run)
 }
 
+/// A run's warnings (results `warnings`: faults that do nothing, a pass that checked nothing, a
+/// reaction that never fired), one `hydo: warning:` line each.
+pub fn print_warnings(run: &hydo_results::Run) {
+    for w in &run.warnings {
+        println!("hydo: warning: {w}");
+    }
+}
+
 fn write_run_document(outdir: &Path, run: &hydo_results::Run) {
     let _ = hydo_results::write_document(&outdir.join(hydo_results::RUN_DOC), run);
 }
@@ -551,9 +568,7 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         ctx.backend_name(),
     );
     write_run_document(&outdir, &run);
-    for w in &run.warnings {
-        println!("hydo: warning: {w}");
-    }
+    print_warnings(&run);
     println!(
         "hydo: run directory {}   (hydo repro {}  runs it again and compares fp=)",
         outdir.display(),
@@ -774,6 +789,7 @@ pub fn cmd_repro(ctx: &Ctx, argv: &[String]) -> i32 {
                 ctx.backend_name(),
             );
             write_run_document(&dir, &run);
+            print_warnings(&run);
             let fp = py_str(&res["fp"]);
             let (ok, word) = repro_same(it, now, &fp, &py_str(&res["verdict"]));
             same += ok as usize;

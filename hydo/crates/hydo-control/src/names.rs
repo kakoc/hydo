@@ -240,3 +240,42 @@ fn check_token(plan: &Plan, t: &GuestToken) -> Result<(), String> {
         }
     }
 }
+
+/// The step a token's fault starts at (None for a token without one: `B=`, `W=`, `Q=`, knobs).
+fn start_step(t: &GuestToken) -> Option<u64> {
+    match t {
+        GuestToken::Kill { at, .. }
+        | GuestToken::TimedKill { at, .. }
+        | GuestToken::Pause(Pause::Steps { at, .. })
+        | GuestToken::Pause(Pause::Timer { at, .. })
+        | GuestToken::Cut(at)
+        | GuestToken::Clock { at, .. } => Some(*at),
+        GuestToken::Net { from, .. } | GuestToken::OneWay { from, .. } => Some(*from),
+        GuestToken::Protocol(h) => Some(h.from),
+        GuestToken::Freeze(f) => Some(f.step),
+        GuestToken::React(r) => Some(r.at),
+        _ => None,
+    }
+}
+
+/// Faults that start after the workload's last step (a warning, not a refusal): the controller
+/// drops every fault point beyond `workload.steps` (with test commands: the rounds), so such a
+/// token does nothing and the run is the run without it. A fault at the last step itself runs
+/// after the workload's last request, before the heal and the checks, which is a fault of its
+/// own (a power cut after the last acknowledgement), so it is not warned about. One sentence
+/// per token.
+pub fn step_warnings(plan: &Plan, s: &Schedule) -> Vec<String> {
+    let steps = u64::try_from(plan.steps).unwrap_or(0);
+    s.guest
+        .iter()
+        .filter_map(|t| {
+            let at = start_step(t)?;
+            (at > steps).then(|| {
+                format!(
+                    "{t} starts at step {at}, after the workload's last step ({steps}): it does \
+                     nothing, and the run is the run without it"
+                )
+            })
+        })
+        .collect()
+}

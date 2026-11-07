@@ -261,3 +261,43 @@ fn last_outcomes_keeps_the_last_line_per_id_in_numeric_order() {
     let got = hydo_control::schedule::last_outcomes("10 unknown\n2 failed\n10 ack\n2 unknown\n1\n");
     assert_eq!(got, vec!["1", "2 unknown", "10 ack"]);
 }
+
+#[test]
+fn a_fault_after_the_last_step_is_warned_about() {
+    let p = plan("hydo/onboard/examples/redis/hydo.yaml");
+    assert_eq!(p.steps, 20);
+    let w = |s: &str| hydo_control::names::step_warnings(&p, &Schedule::parse(s).unwrap());
+    assert_eq!(
+        w("disk=none | run K=redis@40+2"),
+        vec![
+            "K=redis@40+2 starts at step 40, after the workload's last step (20): it does \
+              nothing, and the run is the run without it"
+                .to_string()
+        ]
+    );
+    assert_eq!(w("disk=cut | run C=21 T=30:60 P=redis@25+1").len(), 3);
+    // at the last step: after the last request, before the heal (a power cut there is a test)
+    assert!(w("disk=cut | run C=20 K=redis@20+3 T=19:60").is_empty());
+}
+
+/// Every recorded schedule's faults start within its workload.
+#[test]
+fn no_recorded_fault_starts_after_the_last_step() {
+    let top = support::top();
+    let text = std::fs::read_to_string(top.join("hydo/onboard/recorded.json")).unwrap();
+    let doc: serde_json::Value = serde_json::from_str(&text).unwrap();
+    for img in doc["images"].as_array().unwrap() {
+        let b = &img["build"];
+        let rel = manifest_of(
+            img["platform"].as_str().unwrap(),
+            b["dir"].as_str().unwrap(),
+            b["manifest"].as_str().unwrap(),
+        );
+        let p = plan(&rel);
+        for r in img["runs"].as_array().unwrap() {
+            let s = r["schedule"].as_str().unwrap();
+            let w = hydo_control::names::step_warnings(&p, &Schedule::parse(s).unwrap());
+            assert!(w.is_empty(), "{} ({rel}): {s}: {w:?}", img["id"]);
+        }
+    }
+}

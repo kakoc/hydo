@@ -544,6 +544,9 @@ fn agent_space(img: &Path, schedule: Option<&str>) {
         if let Err(e) = hydo_control::names::check(&plan, &s) {
             die(&format!("hydo explore: --schedule: {e}"));
         }
+        for w in hydo_control::names::step_warnings(&plan, &s) {
+            eprintln!("hydo explore: warning: --schedule: {w}");
+        }
     }
     eprintln!(
         "agent image: the host controller drives {} (/etc/hydo/control)",

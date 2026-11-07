@@ -64,6 +64,11 @@ fn every_generated_schedule_names_only_what_the_manifest_has() {
                     if let Err(e) = hydo_control::names::check(&plan, &sc) {
                         panic!("{m} ({backend:?}, {strategy}, seed {seed}): {text}: {e}");
                     }
+                    let w = hydo_control::names::step_warnings(&plan, &sc);
+                    assert!(
+                        w.is_empty(),
+                        "{m} ({backend:?}, {strategy}, seed {seed}): {w:?}"
+                    );
                     n += 1;
                 }
             }
