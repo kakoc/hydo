@@ -38,11 +38,15 @@ fn walk(dir: &Path, rel: &str, out: &mut Vec<(String, PathBuf, u32)>, dirs: &mut
         if md.is_dir() {
             walk(&p, &r, out, dirs);
         } else {
-            out.push((
-                r,
-                p.canonicalize().unwrap(),
-                md.permissions().mode() & 0o7777,
-            ));
+            // the mode git records (0755 or 0644), not the checkout's: a tree unpacked under umask
+            // 002 has 0664 and 0775 files, and those modes went into `hydo init`'s files and
+            // made the binary depend on the umask of whoever unpacked the tree (Milestone 172)
+            let mode = if md.permissions().mode() & 0o111 != 0 {
+                0o755
+            } else {
+                0o644
+            };
+            out.push((r, p.canonicalize().unwrap(), mode));
         }
     }
 }

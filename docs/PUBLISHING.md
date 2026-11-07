@@ -6,7 +6,7 @@ nothing is published until the user decides to; the packages' metadata and the d
 are prepared in the tree (Milestone 160; the APIs were cleaned up before their first
 publication in Milestone 163).
 
-The `hydo` program itself is published through the Homebrew tap (docs/RELEASING.md step 8, `brew install kakoc/tap/hydo`) and the release index (step 9); this file covers the SDKs, the crates of `cargo install hydo`, and (last section) the onboarding skill, which has its own releases.
+The `hydo` program itself is published through the GitHub release (docs/RELEASING.md step 7: the two tarballs, the two sources archives and, since 0.2.0, the Mac programs' signatures asset `hydo-mac-<version>-signatures.tar.gz`, docs/design/signing.md), the Homebrew tap (step 8, `brew install kakoc/tap/hydo`) and the release index (step 9); this file covers the SDKs, the crates of `cargo install hydo`, and (last section) the onboarding skill, which has its own releases.
 
 | SDK | registry | name | code-level name | directory |
 |---|---|---|---|---|

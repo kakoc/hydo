@@ -12,6 +12,10 @@
 # machines.local.sh (machines.sh at the repository root):
 #   guest/bzImage, guest/initramfs-kafka.cpio.gz   the guest kernel + its switch_root initramfs
 #                                                  (~/hydo/build on the build machine, build-linux.sh)
+#   guest/bzImage-kvm                              the KVM engine's guest kernel (M172; ~/hydo/build on
+#                                                  that machine, built there by hv/kvm/linux/build-kernel.sh
+#                                                  with OUT=~/hydo/build: pin it with a sandboxed Nix,
+#                                                  docs/BUILD-PINS.md "The KVM engine's guest kernel")
 #   guest/busybox                                  static busybox 1.37.0 (every image's /bin)
 #   guest/hvx_seedrng, guest/hydo_fc               static helpers, compiled there with the pinned
 #                                                  musl gcc from hv/hvx/images/hvx_seedrng.c, hydo/onboard/hydo_fc.c
@@ -67,7 +71,7 @@ if [ ! -f "$A/.complete" ]; then
     W=\$(mktemp -d /dev/shm/hydo-linux-release.XXXXXX); trap 'chmod -R u+w \$W; rm -rf \$W' EXIT
     cd \$W && tar xf - >&2
     mkdir -p out/guest/modules out/tools/bin out/tools/lib out/redis
-    cp ~/hydo/build/bzImage ~/hydo/build/initramfs-kafka.cpio.gz out/guest/
+    cp ~/hydo/build/bzImage ~/hydo/build/bzImage-kvm ~/hydo/build/initramfs-kafka.cpio.gz out/guest/
     cp $BUSYBOX out/guest/busybox
     $GCC_MUSL -static -O2 -Wall -B $MUSL_ROOT/lib hv/hvx/images/hvx_seedrng.c -o out/guest/hvx_seedrng >&2
     $GCC_MUSL -static -O2 -Wall -B $MUSL_ROOT/lib hydo/onboard/hydo_fc.c -o out/guest/hydo_fc >&2
@@ -85,7 +89,7 @@ if [ ! -f "$A/.complete" ]; then
       ldd \$b | sed -n 's#.*=> \(/nix/store/[^ ]*\) .*#\1#p; s#^\s*\(/nix/store/[^ ]*ld-linux-x86-64.so.2\) .*#\1#p'
     done | sort -u | while read l; do cp -L \$l out/tools/lib/\$(basename \$l); done
     cp $REDIS/bin/redis-server $REDIS/bin/redis-cli out/redis/
-    chmod -R u+w out/tools out/redis out/guest/bzImage out/guest/initramfs-kafka.cpio.gz out/guest/busybox
+    chmod -R u+w out/tools out/redis out/guest/bzImage out/guest/bzImage-kvm out/guest/initramfs-kafka.cpio.gz out/guest/busybox
     cd out && tar cf - .
   " | ( cd "$A" && tar xpf - )
   touch "$A/.complete"
@@ -111,7 +115,9 @@ mkdir -p "$REL/bin" "$REL/libexec/bin" "$REL/hydo/onboard" \
 # hydo/crates/hydo-cli; the run engine runs inside it when the user can open /dev/hvx, M137),
 # bin/hydo-hvx (the same run engine as a program, hydo/crates/hydo-hvx, which hydo starts under
 # libexec/hvx-run with sudo when the user cannot open the device; M137: it replaces hvx_explore,
-# so nothing is compiled for it on the user's machine), bin/hydo-build (the image builder with its own
+# so nothing is compiled for it on the user's machine), bin/hydo-kvm (the KVM engine as a program,
+# hydo/crates/hydo-kvm, which hydo starts with HYDO_KVM=process; by default it runs inside hydo too;
+# M172: in the release since 0.2.0, with guest/bzImage-kvm), bin/hydo-build (the image builder with its own
 # command line, for scripts; `hydo build` is the same builder with the release's tools) and
 # bin/hydo-fetch-image (what fetch-images.sh of `hydo compose` calls), and the gRPC driver
 # generator (libexec/hydo-grpc-gen, started by the wrapper bin/hydo-grpc-gen, which points its
@@ -120,7 +126,7 @@ mkdir -p "$REL/bin" "$REL/libexec/bin" "$REL/hydo/onboard" \
 # the musl target; the TLS code of hydo-fetch-image compiles some C, with musl-gcc when present,
 # else the host's cc), or taken from $HYDO_RUST_BIN_DIR (a directory with the five) when they
 # were built elsewhere.
-BINS="hydo hydo-hvx hydo-build hydo-fetch-image"
+BINS="hydo hydo-hvx hydo-kvm hydo-build hydo-fetch-image"
 if [ -n "$HYDO_RUST_BIN_DIR" ]; then
   BD=$HYDO_RUST_BIN_DIR
 else
@@ -134,7 +140,7 @@ else
   CH=$(cd "${CARGO_HOME:-$HOME/.cargo}" 2>/dev/null && pwd || echo "${CARGO_HOME:-$HOME/.cargo}")
   ( cd "$TOP" && { rustup target add x86_64-unknown-linux-musl >/dev/null 2>&1 || true; } &&
     RUSTFLAGS="-C target-feature=+crt-static --remap-path-prefix=$TOP=/hydo --remap-path-prefix=$CH=/cargo" \
-    cargo build --release --locked -p hydo -p hydo-hvx -p hydo-build -p hydo-compose -p hydo-grpc-gen \
+    cargo build --release --locked -p hydo -p hydo-hvx -p hydo-kvm -p hydo-build -p hydo-compose -p hydo-grpc-gen \
       --target x86_64-unknown-linux-musl ) >&2
   BD=$TOP/target/x86_64-unknown-linux-musl/release
 fi

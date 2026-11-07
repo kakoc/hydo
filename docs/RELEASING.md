@@ -1,8 +1,9 @@
 # Releasing hydo
 
-The steps of a release, in order. Each release is two tarballs and the two sources archives that
-accompany them; nothing is published until step 7, and step 8 points the Homebrew tap at the new
-Mac tarball. The onboarding skill is released on its own (the last section). The history of how
+The steps of a release, in order. Each release is two tarballs, the two sources archives that
+accompany them and, since 0.2.0, the Mac programs' signatures asset
+`hydo-mac-<version>-signatures.tar.gz` (docs/design/signing.md); nothing is published until
+step 7, and step 8 points the Homebrew tap at the new Mac tarball. The onboarding skill is released on its own (the last section). The history of how
 each step was first done is in docs/HISTORY.md (Milestones 149, 150, 153–158, 168 and 170).
 docs/PUBLISHING.md lists every place hydo is published.
 
@@ -65,15 +66,46 @@ filled once from the machine with the Nix store paths).
   an own tree made from an archive of the commit's tracked files, with `hydo/COMMIT` holding the
   full commit hash, from clean Rust targets (`target/`, `hydo/crates/hydo-agent/target/`,
   `hydo/crates/hydo-read/target/` removed):
-  `HYDO_ASSETS_FROM=~/hydo-layout-assets HYDO_SOURCES_FROM=<cache> sh hydo/dist/linux/build-release.sh <out>`,
-  with `~/hydo-rust/env.sh` sourced. Twice, into two output directories.
+  `HYDO_ASSETS_FROM=<assets> HYDO_SOURCES_FROM=<cache> sh hydo/dist/linux/build-release.sh <out>`,
+  with `~/hydo-rust/env.sh` sourced. Twice, into two output directories. The assets directory
+  must hold every file of `assets.sha256` and nothing else: since 0.2.0 that includes the KVM
+  engine's guest kernel `guest/bzImage-kvm` (`d50fbc67…`, built with a sandboxed Nix,
+  docs/BUILD-PINS.md "The KVM engine's guest kernel"). `~/hydo-layout-assets` on the bare-metal
+  machine is 0.1.0's set, without the KVM kernel; leave it so, because other trees build 0.1.0
+  from it and the script copies the whole directory and counts its files. Milestone 172 used `~/hydo-m172-assets`, hard links to it plus `guest/bzImage-kvm`. The sources cache
+  must hold the M158 addendum's files (`~/hydo-m159-sources` on the bare-metal machine;
+  `~/hydo-m158-sources` lacks busybox's recipe).
 - **Mac, on this Mac.** Check `df -h /` (two builds and the sources archives need several GB).
   Build from the same archive at one fixed tree path for both builds (the Mach-O `LC_UUID`
   depends on it), from clean target directories, with the assets copied from
   `hydo/dist/mac/assets/` of the main checkout: `HYDO_SOURCES_FROM=<cache> sh hydo/dist/mac/build-release.sh <out>`.
   Twice.
 - The two builds of each platform must give the same sha256 for the tarball and for the
-  sources archive.
+  sources archive. The Mac tarball is unsigned at this point (the linker's ad-hoc signatures);
+  step 2a makes the published one.
+
+## 2a. Sign and notarize the Mac programs (since 0.2.0)
+
+On this Mac, with the Developer ID key in the login keychain (codesign asks once whether it may
+use it) and the notarytool credentials stored as the keychain profile `hydo-notary`:
+
+```
+sh hydo/dist/mac/sign-release.sh <out>/hydo-mac-<version>.tar.gz <sign out>
+```
+
+It signs `bin/hydo`, `bin/hydo-build`, `bin/hydo-fetch-image` and `bin/hydo-hvm` (with the
+hypervisor entitlement) with the hardened runtime and a secure timestamp, submits them to Apple's
+notary service in one zip and waits for `Accepted` (at most 3 hours, `HYDO_NOTARY_TIMEOUT`; the
+answer and the log go to `notary-submit.json` and `notary-log.json`), writes the signatures asset
+`<sign out>/hydo-mac-<version>-signatures.tar.gz`, and makes the signed tarball
+`<sign out>/signed/hydo-mac-<version>.tar.gz` from the unsigned one with
+`attach-signatures.sh`. Then prove it as a user would: attach the asset to the other unsigned
+build of step 2 (`sh hydo/dist/mac/attach-signatures.sh <out 2>/hydo-mac-<version>.tar.gz
+<asset> <check out>`) and compare the sha256 with the signed tarball's. The signed tarball is the
+one every later step uses and step 7 publishes as `hydo-mac-<version>.tar.gz`; the unsigned one is
+not published. A stapled ticket is not possible for command-line programs (docs/design/signing.md).
+If this step is skipped, the release is unsigned as 0.1.0 was, and `hydo setup` signs the engine
+ad hoc on each user's Mac.
 
 ## 3. Compare with the previous tarballs
 
@@ -90,9 +122,19 @@ the changes the release intends may differ (for example `SHA256SUMS`, the commit
   each twice, as the user and again as root (the engine in-process); no trap called. In a second
   clean prefix with the machine's compiler on PATH, `hydo module build` must build the loaded
   module's srcversion (build only; never load or unload a module for this).
-- **Mac**: `install.sh --prefix <new> --add-to-path` with stubs for Python, Go, cargo, rustc,
-  rustup, Nix, the compilers, `make`, `xcrun` and Docker; `hydo setup`, `hydo doctor`, the
-  quickstart with every Mac value of docs/REBASELINE.md, each twice; no stub called.
+- **Linux with KVM** (since 0.2.0; the build machine, as its login user, at most two VMs, no
+  module touched): `install.sh --no-module` into a new prefix; `hydo doctor --backend kvm`; the
+  quickstart with `--backend kvm` (the values of docs/design/kvm-engine.md for the Redis image:
+  `bfa03053d51bec8a` and `8ed16d6da60c34c6`), each twice, and the exploration with `hydo repro`
+  of it.
+- **Mac** (the signed tarball): `install.sh --prefix <new> --add-to-path` with stubs for Python,
+  Go, cargo, rustc, rustup, Nix, the compilers, `make`, `xcrun` and Docker; `hydo setup` (it must
+  not sign `bin/hydo-hvm` again: its record has no `signed` line), `hydo doctor` (it names the
+  Developer ID), the quickstart with every Mac value of docs/REBASELINE.md, each twice; no stub
+  called. On the installed programs: `codesign --verify --strict --verbose=2`, `codesign -dvv`
+  (the Developer ID, the team, `flags=0x10000(runtime)`, a timestamp), and Gatekeeper's verdict
+  `spctl --assess --type open --context context:primary-signature -v` ("accepted, source=Notarized
+  Developer ID"; `--type execute` assesses app bundles only).
 
 ## 5. Scan the contents
 
@@ -101,20 +143,22 @@ file's bytes for the values of the local list (AGENTS.local.md, whole words, any
 paths, remote-shell words, dotted quads and the competitor names. Matches may only be in
 third-party files and must be explained. For each sources archive, scan the files hydo writes
 (`README.md`, `THIRD-PARTY.md`, `third-party.json`, `hydo/`); the upstream archives are third-party
-as they are.
+as they are. Scan the signed Mac tarball (not only the unsigned one) and the signatures asset too.
 
 ## 6. Collect and record
 
-- Put the four files into `hydo/dist/out/` of the main checkout (the previous ones into
-  `hydo/dist/out/before/`) and write `SHA256SUMS` with all four lines.
+- Put the five files (the two tarballs, the Mac one signed, the two sources archives and the
+  signatures asset) into `hydo/dist/out/` of the main checkout (the previous ones into
+  `hydo/dist/out/before/`) and write `SHA256SUMS` with all five lines.
 - Record the values: AGENTS.md (the current tarballs, a milestone line and the index),
   docs/HISTORY.md (a milestone section), the release READMEs (`hydo/dist/*/README.md`).
 
 ## 7. Publish (the user decides)
 
-Create the GitHub release for the tag of the final commit and upload all four files and
+Create the GitHub release for the tag of the final commit and upload all five files and
 `SHA256SUMS`. The release notes name the sources archive as the corresponding source of the
-third-party software in the tarballs. Keep every sources archive available for as long as its
+third-party software in the tarballs, and say that the Mac tarball is the unsigned build of the tag
+with the signatures asset attached (`hydo/dist/mac/attach-signatures.sh`, docs/design/signing.md). Keep every sources archive available for as long as its
 tarball is offered (and at least three years after the last download of it, as GPL-2.0 section 3
 asks of a written offer).
 
@@ -146,7 +190,7 @@ is published and only then (a line names a file that must exist at
 - `archive <version> linux <sha256> hydo-linux-<version>.tar.gz` and the same for `mac`, with the
   sha256 of the published `SHA256SUMS` asset;
 - one `file <version> <platform> <sha256> <path>` line per guest kernel and initramfs in each
-  tarball (today `guest/bzImage` and `guest/initramfs-kafka.cpio.gz` for Linux,
+  tarball (today `guest/bzImage`, `guest/bzImage-kvm` (since 0.2.0) and `guest/initramfs-kafka.cpio.gz` for Linux,
   `hv/hvm/explore/out/Image-explore` and `Image-explore-netns` for the Mac), with the sha256 of
   the tarball's own `SHA256SUMS` line.
 

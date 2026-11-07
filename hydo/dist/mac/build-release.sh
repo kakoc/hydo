@@ -129,7 +129,9 @@ mkdir -p "$REL/bin" "$REL/hydo/onboard" "$REL/hv/hvm/explore/out" "$REL/guest" \
 # hydo/crates/hydo-cli), bin/hydo-build (the image builder with its own command line, for
 # scripts; `hydo build` is the same builder with the release's tools), bin/hydo-fetch-image
 # (what fetch-images.sh of `hydo compose` calls) and bin/hydo-hvm (the Mac engine, M143; the only
-# one since M147; signed on the user's Mac by `hydo setup`), for aarch64-apple-darwin, built with the workspace's
+# one since M147; unsigned here; the published release carries
+# its Developer ID signature, attached by sign-release.sh or attach-signatures.sh, M172, and `hydo setup` signs
+# an unsigned one ad hoc on the user's Mac), for aarch64-apple-darwin, built with the workspace's
 # pinned toolchain (rust-toolchain.toml), or taken from $HYDO_RUST_BIN_DIR
 BINS="hydo hydo-build hydo-fetch-image hydo-hvm"
 if [ -n "$HYDO_RUST_BIN_DIR" ]; then
@@ -232,18 +234,13 @@ echo "$VERSION" > "$REL/VERSION"
 ( cd "$TOP" && cargo build --release --locked -q -p hydo-release ) >&2
 HR=$TOP/target/release/hydo-release
 CARGO=$(command -v cargo) "$HR" notices mac --repo "$TOP" --version "$VERSION" "$REL"
-( cd "$REL" && find . -type f ! -name SHA256SUMS | LC_ALL=C sort | xargs shasum -a 256 > SHA256SUMS )
 
-# --- 3. the tarball (the same bytes from the same inputs) ---
-# no extended attributes (a downloaded or copied file carries com.apple.* ones), every time 0
-xattr -cr "$REL" 2>/dev/null || true
-find "$REL" -exec env TZ=UTC touch -h -t 197001010000 {} +
-( cd "$OUTDIR" && find "hydo-mac-$VERSION" | LC_ALL=C sort > ".hydo-mac-$VERSION.list" \
-  && COPYFILE_DISABLE=1 tar --uid 0 --gid 0 --uname root --gname wheel --no-xattrs --no-acls \
-       --no-fflags --no-mac-metadata --format gnutar -n -T ".hydo-mac-$VERSION.list" -cf - | gzip -n -9 > "hydo-mac-$VERSION.tar.gz" \
-  && rm ".hydo-mac-$VERSION.list" )
-ls -la "$OUTDIR/hydo-mac-$VERSION.tar.gz"
-shasum -a 256 "$OUTDIR/hydo-mac-$VERSION.tar.gz"
+# --- 3. the tarball (the same bytes from the same inputs): SHA256SUMS, no extended attributes,
+# every time 0, sorted, no owners, gzip without a name or time (pack-release.sh, which
+# attach-signatures.sh also uses to pack the signed release; docs/design/signing.md). The programs
+# are unsigned here (the linker's ad-hoc signature): the published tarball is this one with the
+# Developer ID signatures attached (sign-release.sh, Milestone 172)
+sh "$D/pack-release.sh" "$REL"
 
 # --- 4. the sources archive that accompanies the tarball (M158): the exact upstream source archives
 # of every third-party component (pinned by sha256 in third-party.json; among them the Arm GNU
