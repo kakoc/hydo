@@ -1,0 +1,147 @@
+# hydo's continuous integration. docs/CI.md says what runs, what is skipped where and why, and
+# how long it takes.
+#
+# - rust: the Cargo workspace on Linux (x86_64) and macOS (Apple Silicon): formatting, clippy
+#   with every warning an error, and the whole test suite in release mode, as docs/RELEASING.md
+#   step 1 asks before a release. No test boots a guest: a GitHub runner has neither the hvx
+#   kernel module nor access to Hypervisor.framework.
+# - guest-programs: the guest agent and the store reader, which keep their own Cargo
+#   workspaces and lock files (their bytes are inside recorded images), on Linux.
+# - sdks: the assertion SDKs: the Rust reference, the Rust test SDK, and the Go, Python and
+#   JavaScript SDKs against the shared cases in sdk/cases.
+#
+# Every action is pinned by commit. The workflow needs no secret and only reads the repository.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
+
+jobs:
+  rust:
+    name: rust (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the pinned Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install && rustc --version && cargo --version
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      # The skill check (hydo-agents' skill_check) also runs the Agent Skills reference
+      # validator when HYDO_SKILLS_REF names it; its PyPI package installs it as `agentskills`.
+      - name: Install the Agent Skills validator (skills-ref 0.1.1)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/skills-ref"
+          "$RUNNER_TEMP/skills-ref/bin/pip" install --quiet skills-ref==0.1.1
+          echo "HYDO_SKILLS_REF=$RUNNER_TEMP/skills-ref/bin/agentskills" >> "$GITHUB_ENV"
+      - name: cargo fmt --check
+        run: cargo fmt --all --check
+      - name: cargo clippy
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: cargo test
+        # --no-fail-fast: one failing test binary does not hide the other binaries' results
+        run: cargo test --locked --release --workspace --no-fail-fast
+      # A passing test's own output is hidden by the test harness; these print the checks that
+      # cannot run on a runner, with the reason each test gives (docs/CI.md lists them).
+      - name: What the tests skipped, and why
+        run: |
+          cargo test --locked --release -q -p hydo-agents --test public_content -- --nocapture
+          cargo test --locked --release -q -p hydo-agents --test skill_check -- --nocapture 2>&1 | grep -i 'skills-ref'
+          cargo test --locked --release -q -p hydo-errors --test equivalence recorded_files -- --nocapture
+          cargo test --locked --release -q -p hydo-cli --test equivalence cli_matches_golden -- --nocapture 2>&1 | grep '^cli: '
+
+  guest-programs:
+    name: guest programs (ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the pinned Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install && rustc --version
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: |
+            hydo/crates/hydo-agent -> target
+            hydo/crates/hydo-read -> target
+      - name: hydo-agent (the guest agent's native tests, as an unprivileged user)
+        working-directory: hydo/crates/hydo-agent
+        run: cargo test --locked
+      # The store tests need live MySQL, PostgreSQL, Kafka, Redis and etcd servers
+      # (native-test.sh starts them); without their address variables each one says so.
+      - name: hydo-read (the store reader and its checks)
+        working-directory: hydo/crates/hydo-read
+        run: |
+          cargo test --locked
+          cargo test --locked -q --test stores -- --nocapture 2>&1 | grep 'skipped'
+
+  sdks:
+    name: sdks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the pinned Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install && rustc --version
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: |
+            sdk/rust -> target
+            sdk/rust-test -> target
+      - name: Rust SDK (sdk/rust, the reference; compares with sdk/cases)
+        working-directory: sdk/rust
+        run: cargo test
+      - name: Rust test SDK (sdk/rust-test)
+        working-directory: sdk/rust-test
+        run: cargo test --locked --workspace
+      # Go 1.26.5 is the Go of the guest images and gives the shared cases' exact bytes; with Go
+      # 1.27 or later the cases that need invalid UTF-8 are skipped (cases_test.go says why).
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.5"
+          cache-dependency-path: hydo/stack/go.sum
+      - name: Go SDK (hydo/stack/hydoassert, hydo/stack/hydohist)
+        working-directory: hydo/stack
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          go version
+          # -v for the shared cases' summary (how many ran, which were skipped and why);
+          # the shell's pipefail keeps a failing test a failing step
+          go test -count=1 -v ./hydoassert/... ./hydohist/... 2>&1 | grep -E 'cases_test.go:|^(ok|FAIL|--- FAIL)'
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: |
+            3.9
+            3.13
+      - name: Python SDK (sdk/python, an old and a current Python)
+        run: |
+          python3.9 -m unittest discover -s sdk/python/tests
+          python3.13 -m unittest discover -s sdk/python/tests
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - name: JavaScript SDK (sdk/js)
+        working-directory: sdk/js
+        run: node --version && node --test
