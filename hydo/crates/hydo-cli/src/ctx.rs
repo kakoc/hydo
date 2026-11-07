@@ -49,6 +49,7 @@ impl Ctx {
             .and_then(Path::parent)
             .map(Path::to_path_buf)
             .unwrap_or_else(|| PathBuf::from("."));
+        crate::module::set_host_root(config.cli.host_root.clone());
         Ctx {
             platform: Platform::detect(&config.cli),
             root,

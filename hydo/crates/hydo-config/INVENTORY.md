@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-41 user-facing and 75 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 33 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 0 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+41 user-facing and 76 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 33 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 0 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -132,6 +132,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | Variable | Kind | Type | Default | Readers | What it does |
 |---|---|---|---|---|---|
 | `HYDO_CLI_PLATFORM` | developer | word: linux \| mac | this binary's platform | hydo-cli | `linux` or `mac`: run the `hydo` command as the other platform's (the CLI test checks the other platform's commands that need no engine). |
+| `HYDO_CLI_HOST_ROOT` | developer | path; empty = `/` | / | hydo-cli | A directory read in place of `/` for the host's kernel-module state (`/proc/modules`, `/proc/locks`, `/sys/module`, `/dev`, `/etc/udev/rules.d`): the CLI test sets an empty one, so its recorded answers are those of a host without hvx, KVM or the udev rule. |
 
 ## Image builds (`hydo_config::build::Build`)
 
