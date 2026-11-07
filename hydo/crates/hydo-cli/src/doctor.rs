@@ -339,7 +339,7 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         c.check(
             p.exists(),
             &format!("present: {}", rel(ctx, &p)),
-            "reinstall",
+            reinstall(ctx),
             false,
         );
     }
@@ -394,11 +394,33 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
     c.summary()
 }
 
+/// The fix for a missing installation file: unpack the release again, or, for a `hydo` installed
+/// by `cargo install` (M169), fetch this version's files.
+fn reinstall(ctx: &Ctx) -> &'static str {
+    if ctx.cargo_installed {
+        "hydo setup --get (installs this version's files into the install cache)"
+    } else {
+        "reinstall"
+    }
+}
+
 /// What `hydo setup --check` would say (M154): one line per damaged file (the fix is to unpack the
 /// release again), one per step setup has not taken (the fix is `hydo setup`), or one line that
 /// all matched. A development tree (no SHA256SUMS) gets a warning instead.
 fn installation(c: &mut Checks, ctx: &Ctx) {
     let r = crate::setup::inspect_ctx(ctx);
+    if !r.release && ctx.cargo_installed {
+        c.check(
+            false,
+            &format!(
+                "this version's release files in {} (hydo was installed by cargo)",
+                ctx.root.display()
+            ),
+            "hydo setup --get",
+            false,
+        );
+        return;
+    }
     if !r.release {
         c.check(
             false,
@@ -507,7 +529,7 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         c.check(
             p.exists(),
             &format!("present: {}", rel(ctx, &p)),
-            "reinstall",
+            reinstall(ctx),
             false,
         );
     }

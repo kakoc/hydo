@@ -301,6 +301,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 
 [[package]]
+name = "hydo"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "hydo-agents",
+ "hydo-build",
+ "hydo-compose",
+ "hydo-composer",
+ "hydo-config",
+ "hydo-control",
+ "hydo-engine",
+ "hydo-errors",
+ "hydo-explore",
+ "hydo-history",
+ "hydo-image",
+ "hydo-kvm",
+ "hydo-manifest",
+ "hydo-results",
+ "hydo-schedule",
+ "libc",
+ "serde_json",
+ "sha2",
+ "tar",
+ "ureq",
+]
+
+[[package]]
 name = "hydo-agent-proto"
 version = "0.1.0"
 dependencies = [
@@ -344,33 +371,6 @@ dependencies = [
  "regex",
  "serde_json",
  "sha2",
-]
-
-[[package]]
-name = "hydo-cli"
-version = "0.1.0"
-dependencies = [
- "flate2",
- "hydo-agents",
- "hydo-build",
- "hydo-compose",
- "hydo-composer",
- "hydo-config",
- "hydo-control",
- "hydo-engine",
- "hydo-errors",
- "hydo-explore",
- "hydo-history",
- "hydo-image",
- "hydo-kvm",
- "hydo-manifest",
- "hydo-results",
- "hydo-schedule",
- "libc",
- "serde_json",
- "sha2",
- "tar",
- "ureq",
 ]
 
 [[package]]

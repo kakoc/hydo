@@ -17,8 +17,9 @@
 use crate::kernels::{Known, Role, KNOWN};
 use std::sync::OnceLock;
 
-/// `hydo/dist/releases.txt`.
-pub const INDEX_TEXT: &str = include_str!("../../../dist/releases.txt");
+/// `hydo/dist/releases.txt`, read through the link `pins/releases.txt` in this crate, so that the
+/// crate published to crates.io carries it (docs/PUBLISHING.md).
+pub const INDEX_TEXT: &str = include_str!("../pins/releases.txt");
 
 /// A release archive the index pins.
 #[derive(Clone, Debug, PartialEq, Eq)]

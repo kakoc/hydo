@@ -151,6 +151,15 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
     }
     let linux = ctx.platform == Platform::Linux;
     match cmd {
+        // the version this program was built as, and the commit when it is known (a tree's git, a
+        // release's hydo/COMMIT, a crates.io package's .cargo_vcs_info.json: hydo-image's build.rs)
+        "--version" | "-V" => {
+            match hydo_image::hydo_commit() {
+                Some(c) => println!("hydo {} ({c})", hydo_image::hydo_version()),
+                None => println!("hydo {}", hydo_image::hydo_version()),
+            }
+            0
+        }
         "compose" => delegated::cmd_compose(ctx, rest),
         "build" => build::cmd_build(ctx, rest),
         "run" => runs::cmd_run(ctx, rest),

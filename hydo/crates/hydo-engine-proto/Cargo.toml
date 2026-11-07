@@ -5,6 +5,11 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+# What is published to crates.io (docs/PUBLISHING.md): the sources only; the tests and their
+# recorded answers stay in the repository.
+include = ["/src/**", "/Cargo.toml", "/LICENSE"]
 
 [dependencies]
 hydo-schedule = { workspace = true }

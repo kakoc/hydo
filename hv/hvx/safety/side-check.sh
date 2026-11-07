@@ -54,7 +54,7 @@ hvx_net_fault_test hvx_bug_f0_test hvx_fuzzresume_test hvx_pmu_test hvx_bigram_t
 SMPTESTS="hvx_sched_pmu_test hvx_sched_race_test hvx_sipi_test hvx_sched_sweep_test"
 for t in $TESTS $SMPTESTS hvx_boot_verify hvx_disk_boot_verify hvx_smp_boot_verify; do
   cc -O2 -Wall -o $T/$t $t.c 2>/dev/null || echo "COMPILE FAIL $t"; done
-( . ~/hydo-rust/env.sh && cd ~/hydo-safety/ws && cargo build --release --locked -q -p hydo-hvx -p hydo-cli ) && cp ~/hydo-safety/ws/target/release/hydo-hvx ~/hydo-safety/ws/target/release/hydo $T/ || echo "COMPILE FAIL hydo-hvx, hydo-cli"
+( . ~/hydo-rust/env.sh && cd ~/hydo-safety/ws && cargo build --release --locked -q -p hydo-hvx -p hydo ) && cp ~/hydo-safety/ws/target/release/hydo-hvx ~/hydo-safety/ws/target/release/hydo $T/ || echo "COMPILE FAIL hydo-hvx, hydo"
 declare -A EXP=(
   [hvx_virtio_iso_test]="7e586473f6e494d7" [hvx_virtio_pci_test]="3f95ef833747f3ec"
   [hvx_fault_test]="91170d4dbf101c5b 88f680fc22cc9bb0 9090286f3fc59682" [hvx_net_test]="0e2b7acf2f4f94ee"
