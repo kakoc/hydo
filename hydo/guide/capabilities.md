@@ -2,7 +2,7 @@
 
 hydo has two backends and two ways to build. Check this table before using a feature; `hydo
 build --check` validates the schema only, and the full `hydo build` refuses a feature the
-backend lacks. State of hydo 0.1 (2026-10-30).
+backend lacks. State of hydo 0.2 (2026-11-07).
 
 The `hydo/` folder (the test composer), `hydo guide`, `hydo skill` and `hydo init` need a release
 built on 2026-10-24 or later (older tarballs fail with "No module named 'hydo_composer'" or lack
@@ -11,8 +11,11 @@ Milestone 136 every image's first process is the guest agent `hydo-agent`, drive
 itself (restart policies and `restart_may_fail:` need it); a release built before M136 makes
 shell-init images, which still run but follow neither key.
 
-- **Linux release** (`hydo` from `hydo-linux-0.1.0`): x86_64 guests on an Intel VT-x machine.
-- **Mac release** (`hydo` from `hydo-mac-0.1.0`): arm64 guests on an Apple Silicon Mac.
+- **Linux release** (`hydo` from `hydo-linux-0.2.0`): x86_64 guests on an Intel VT-x machine.
+  Since 0.2.0 it also runs them on stock Linux KVM without hydo's kernel module (`--backend
+  kvm` or `HYDO_BACKEND=kvm`; one vCPU, no `guest.cpu: v3`, its own fingerprints; the release
+  README's "Run without the kernel module (KVM)").
+- **Mac release** (`hydo` from `hydo-mac-0.2.0`): arm64 guests on an Apple Silicon Mac.
 - The arm64 build (`hydo-build --arch arm64`, which the Mac release runs) supports every manifest
   feature except `guest.cpu: v3` (Milestone 96). `network: bridge`, `addr:` and `faults: [freeze]`
   build the image for a second Mac guest kernel, `Image-explore-netns`, which the image records and

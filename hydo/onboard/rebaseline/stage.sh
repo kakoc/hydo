@@ -193,7 +193,7 @@ linux_prepare() {
         bash "$T/hydo/bench/build-order-services.sh" "$IN/orders" fix
       install -m 0755 "$IN/orders/fix-hydostack" "$ST/$X/stackgen/front-door"
       mkdir -p "$IN/grpc-client"
-      have "$IN/grpc-client/hydo-grpc" 3926d13712772cceb3d93c5be9ba5884e6bee4e49f29fca04b8d065c47a4228d \
+      have "$IN/grpc-client/hydo-grpc" f2ad5e72e59dfd02f950fd55757ef799a2b76141d8112159354a0be734019aa6 \
         || "$T/hydo/grpcgen/build-client.sh" --out "$IN/grpc-client" amd64
       ( cd "$T" && HYDO_GRPC_CLIENT=$IN/grpc-client "$T/target/release/hydo-grpc-gen" hydo/stack/proto \
           --hints hydo/stack/grpc-hints.yaml --out "$ST/$X/stackgen/grpcgen" );;
@@ -340,7 +340,7 @@ mac_prepare() {
       copy $X/shop; mkdir -p "$ST/build"
       gobuild "$ST/$X/shop/src" "$ST/build/shop-buggy" arm64
       gobuild "$ST/$X/shop/src" "$ST/build/shop-fixed" arm64 -tags=fixed;;
-    mac-grpc)   # orderd for arm64, the generated drivers with the arm64 client (pinned fd762fa0...)
+    mac-grpc)   # orderd for arm64, the generated drivers with the arm64 client (pinned 55445870...)
       copy hydo/grpcgen; mac_redis_files hydo/grpcgen/demo
       mkdir -p "$ST/hydo/grpcgen/demo/build"
       ( cd "$ST/hydo/grpcgen" && GOPATH=$W/go GOMODCACHE=$IN/gomod GOCACHE=$W/go-cache GOFLAGS=-mod=readonly GOTOOLCHAIN=local \
@@ -348,9 +348,9 @@ mac_prepare() {
           -o demo/build/orderd-arm64 ./demo/orderd )
       say "orderd-arm64 sha256 $(sha "$ST/hydo/grpcgen/demo/build/orderd-arm64" | cut -c1-16)"
       mkdir -p "$IN/grpc-client"
-      [ -f "$IN/grpc-client/hydo-grpc.arm64" ] && [ "$(sha "$IN/grpc-client/hydo-grpc.arm64" | cut -c1-8)" = fd762fa0 ] \
+      [ -f "$IN/grpc-client/hydo-grpc.arm64" ] && [ "$(sha "$IN/grpc-client/hydo-grpc.arm64" | cut -c1-8)" = 55445870 ] \
         || "$T/hydo/grpcgen/build-client.sh" --out "$IN/grpc-client" amd64 arm64
-      [ "$(sha "$IN/grpc-client/hydo-grpc.arm64" | cut -c1-8)" = fd762fa0 ] || die "the arm64 gRPC client is not the pinned fd762fa0..."
+      [ "$(sha "$IN/grpc-client/hydo-grpc.arm64" | cut -c1-8)" = 55445870 ] || die "the arm64 gRPC client is not the pinned 55445870..."
       ( cd "$ST" && HYDO_GRPC_CLIENT=$IN/grpc-client "$T/target/release/hydo-grpc-gen" hydo/grpcgen/demo/proto \
           --hints hydo/grpcgen/demo/hints.yaml --out hydo/grpcgen/demo/build/gen --arch amd64,arm64 );;
     mac-voting)   # the arm64 images as docker save archives (fetch-images-mac.sh, network once)
@@ -380,8 +380,11 @@ release_examples() {   # the release's own examples, as a user builds them
 
 # --------------------------------------------------------------------------------------- build
 rmtree() {   # a build's outputs, with their read-only store folders (Linux: owned by another uid too)
-  if [ "$PLAT" = hvm ]; then chmod -R u+w "$@" 2> /dev/null || true; rm -rf "$@"
-  else sudo -n rm -rf "$@"; fi
+  chmod -R u+w "$@" 2> /dev/null || true; rm -rf "$@" 2> /dev/null || true
+  # what is left is another uid's (a `keep` build's) and needs sudo; a machine without sudo (the
+  # KVM engine's, as its login user) never makes such builds of its own
+  [ "$PLAT" = hvm ] && return 0
+  local p; for p in "$@"; do [ -e "$p" ] || [ -L "$p" ] || continue; sudo -n rm -rf "$p" || return 1; done
 }
 build() {   # normal|keep <dir> <manifest> <out> [args]
   local owners=$1 dir=$2 man=$3 out=$4; shift 4

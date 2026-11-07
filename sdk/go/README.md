@@ -10,7 +10,7 @@ use only the standard library and need Go 1.22 or later (Go 1.21's `encoding/jso
 `\b` and `\f` as `\u0008` and `\u000c`, which are not the SDK's bytes).
 
 ```sh
-go get github.com/kakoc/hydo/sdk/go@v0.1.0
+go get github.com/kakoc/hydo/sdk/go@v0.2.0
 ```
 
 ```go
@@ -114,7 +114,7 @@ so with them the cases that need invalid UTF-8 are skipped (and reported).
 ## Publishing
 
 Go has no registry upload: a version is a git tag on the repository, `sdk/go/v<version>` for a
-module in the `sdk/go` directory (for example `sdk/go/v0.1.0`), and the Go module proxy fetches
+module in the `sdk/go` directory (for example `sdk/go/v0.2.0`), and the Go module proxy fetches
 it from GitHub on the first `go get`. A tag, once fetched, is cached by the proxy for good: a
 release cannot be replaced, only retracted with a `retract` directive in a later version.
 [`docs/PUBLISHING.md`](../../docs/PUBLISHING.md) has the steps.

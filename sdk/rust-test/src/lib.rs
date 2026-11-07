@@ -52,7 +52,7 @@ pub mod prelude {
 }
 
 /// The engine version this SDK writes into the plan (`hydo_version`), and the plan format.
-pub const HYDO_VERSION: &str = "0.1";
+pub const HYDO_VERSION: &str = "0.2";
 pub const PLAN_FORMAT: u32 = 1;
 
 // ------------------------------------------------------------------ results

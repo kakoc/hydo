@@ -29,7 +29,7 @@
 format: 1
 name: tigerbeetle
 description: "TigerBeetle, three replicas: every acknowledged transfer survives crashes, pauses, partitions, clock jumps and power cuts, and balances stay the sum of their transfers"
-hydo_version: "0.1"
+hydo_version: "0.2"
 
 params:
   tb: "0.17.9"            # hand: the TigerBeetle release (bin/<version>/tigerbeetle)

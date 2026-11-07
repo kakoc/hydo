@@ -28,10 +28,12 @@ hydo doctor
 ```
 
 The formula (https://github.com/kakoc/homebrew-tap) installs the prebuilt Mac release and runs
-`hydo setup`, which checks every file and signs the virtual-machine engine with the hypervisor
-entitlement. Alternatively, download `hydo-mac-<version>.tar.gz` (or, for Linux on x86_64 with
-Intel VT-x, `hydo-linux-<version>.tar.gz`) from https://github.com/kakoc/hydo/releases, unpack it
-and run its `install.sh`; the tarball's README or `QUICKSTART-mac.md` takes it from there.
+`hydo setup`, which checks every file. Since 0.2.0 the Mac programs come signed with the project's
+Developer ID and notarized by Apple (docs/design/signing.md). Alternatively, download
+`hydo-mac-<version>.tar.gz` (or, for Linux on x86_64 with Intel VT-x,
+`hydo-linux-<version>.tar.gz`) from https://github.com/kakoc/hydo/releases, unpack it and run its
+`install.sh`; the tarball's README or `QUICKSTART-mac.md` takes it from there. Since 0.2.0 the
+Linux release also runs guests on stock Linux KVM, without hydo's kernel module (`--backend kvm`).
 
 To onboard a project with an AI coding tool, use hydo's onboarding skill: run
 `hydo skill install --agent claude` (or `codex`, `cursor`, `copilot`, `gemini`) in the repository,
