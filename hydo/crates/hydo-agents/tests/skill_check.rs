@@ -337,7 +337,16 @@ fn check_plugin(root: &Path, d: &Path, r: &mut Report) {
             ));
         }
     }
-    let mp = root.join(".claude-plugin/marketplace.json");
+    // The marketplace goes live at `.claude-plugin/marketplace.json`; until the next hydo release it
+    // is staged at `hydo/dist/skill/marketplace.json` (docs/RELEASING.md, "Releasing the skill").
+    let mp = [
+        ".claude-plugin/marketplace.json",
+        "hydo/dist/skill/marketplace.json",
+    ]
+    .iter()
+    .map(|p| root.join(p))
+    .find(|p| p.exists())
+    .unwrap_or_else(|| root.join(".claude-plugin/marketplace.json"));
     let Ok(m) = std::fs::read(&mp)
         .map_err(|e| e.to_string())
         .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).map_err(|e| e.to_string()))
@@ -454,7 +463,6 @@ fn copy_tree() -> PathBuf {
     std::fs::create_dir_all(d.join("hydo/onboard/examples/redis-composed")).unwrap();
     for (from, to) in [
         ("skills", "."),
-        (".claude-plugin", "."),
         ("hydo/guide", "hydo"),
         (
             "hydo/onboard/examples/redis-composed/hydo",
@@ -470,6 +478,17 @@ fn copy_tree() -> PathBuf {
             .success();
         assert!(ok, "cp {from}");
     }
+    // The copy always has the marketplace at its live place, wherever the tree keeps it now.
+    let mp = [
+        ".claude-plugin/marketplace.json",
+        "hydo/dist/skill/marketplace.json",
+    ]
+    .iter()
+    .map(|p| t.join(p))
+    .find(|p| p.exists())
+    .expect("the marketplace file");
+    std::fs::create_dir_all(d.join(".claude-plugin")).unwrap();
+    std::fs::copy(mp, d.join(".claude-plugin/marketplace.json")).unwrap();
     for tool in [".claude/skills", ".agents/skills"] {
         std::fs::create_dir_all(d.join(tool)).unwrap();
         std::os::unix::fs::symlink(

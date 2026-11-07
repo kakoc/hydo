@@ -412,7 +412,7 @@ skill"); publishing it is the user's decision, like everything else here.
 | Channel | What | Updated by |
 |---|---|---|
 | GitHub release `skill-v<version>` | `hydo-skill-<version>.tar.gz` and `SHA256SUMS`, read by `hydo skill update` | docs/RELEASING.md, "Releasing the onboarding skill", step 5 |
-| Claude Code marketplace `.claude-plugin/marketplace.json` on `main` (`/plugin marketplace add kakoc/hydo`, `/plugin install hydo-onboard@hydo`) | the folder `skills/hydo-onboard/` as the plugin `hydo-onboard`, at the version its entry names | the same section, step 3 |
+| Claude Code marketplace `.claude-plugin/marketplace.json` on `main` (staged at `hydo/dist/skill/marketplace.json` until 0.2.0) (`/plugin marketplace add kakoc/hydo`, `/plugin install hydo-onboard@hydo`) | the folder `skills/hydo-onboard/` as the plugin `hydo-onboard`, at the version its entry names | the same section, step 3 |
 
 The skill is published separately from hydo (Milestone 170), so its process can improve between
 hydo releases while the facts always come from the user's own hydo (`hydo guide`):
