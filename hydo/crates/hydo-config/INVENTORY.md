@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-48 user-facing and 87 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 34 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 4 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+50 user-facing and 87 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 34 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 4 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -176,6 +176,8 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_FCBIN_ARM64` | user | path; empty = default | <build dir>/hydo_fc-arm64 | hydo-build | The arm64 `hydo_fc`. |
 | `HYDO_WORLDBIN` | user | path; empty = default | <build dir>/hydo-world | hydo-build | The x86_64 `hydo-world`. |
 | `HYDO_WORLDBIN_ARM64` | user | path; empty = default | <build dir>/hydo-world-arm64 | hydo-build | The arm64 `hydo-world`. |
+| `HYDO_WORLDBIN_TLS` | user | path; empty = default | <build dir>/hydo-world-tls | hydo-build | The x86_64 `hydo-world-tls` (hydo-world with the TLS front), staged instead of `hydo-world` for manifests whose fakes or proxies have `tls:`. |
+| `HYDO_WORLDBIN_TLS_ARM64` | user | path; empty = default | <build dir>/hydo-world-tls-arm64 | hydo-build | The arm64 `hydo-world-tls`. |
 | `HYDO_READ_BIN` | user | path; empty = default | <build dir>/hydo-read | hydo-build | The x86_64 `hydo-read`. |
 | `HYDO_READ_BIN_ARM64` | user | path; empty = default | <build dir>/hydo-read-arm64 | hydo-build | The arm64 `hydo-read`. |
 | `HYDO_AGENT_BIN` | user | path; empty = default | <build dir>/hydo-agent | hydo-build | The x86_64 `hydo-agent` (its sha256 must be the pinned one). |

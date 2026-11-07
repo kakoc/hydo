@@ -207,6 +207,9 @@ pub fn world_config(m: &Value) -> String {
                 routes.push(Value::Object(d));
             }
             c.insert("routes".into(), Value::Array(routes));
+            if let Some(t) = crate::tls::world_entry(e) {
+                c.insert("tls".into(), t);
+            }
             lst.push(Value::Object(c));
         }
         cfg.insert(kind.into(), Value::Array(lst));

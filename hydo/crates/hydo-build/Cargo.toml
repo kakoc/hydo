@@ -29,6 +29,15 @@ sha2 = { workspace = true }
 flate2 = { workspace = true }
 regex = "1"
 libc = "0.2"
+# the test CA and certificates of `tls:` fakes and proxies (src/tls.rs): deterministic ECDSA
+# (RFC 6979) in pure Rust
+p256 = { version = "0.13", default-features = false, features = ["ecdsa", "std"] }
+
+[dev-dependencies]
+# a TLS client's certificate check and a TLS server's key loader, for src/tls.rs's tests
+rustls-pki-types = "1"
+webpki = { package = "rustls-webpki", version = "0.103", default-features = false, features = ["ring", "std"] }
+ring = "0.17"
 
 # zlib's own deflate, so an arm64 initramfs gets the bytes Python's gzip module wrote. The static
 # musl build (the Linux release) has no zlib to link and keeps the pure-Rust backend; it does not

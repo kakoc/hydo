@@ -32,6 +32,7 @@ pub mod record;
 pub mod shell;
 pub mod stage;
 pub mod tarball;
+pub mod tls;
 pub mod x86;
 
 use hydo_manifest::py;

@@ -592,8 +592,8 @@ R	^	<tmp>/cases/v-network-bad.json --arch x86_64 []	err	"network: loopback or br
 R	^	<tmp>/cases/v-network-bad.json --arch arm64 []	err	"network: loopback or bridge (got 5)"
 R	^	<tmp>/cases/v-svc-notmap.json --arch x86_64 []	err	"services[0]: must be a mapping"
 R	^	<tmp>/cases/v-svc-notmap.json --arch arm64 []	err	"services[0]: must be a mapping"
-R	^	<tmp>/cases/v-svc-unknown.json --arch x86_64 []	err	"services[0]: unknown field(s) bar, foo (known: addr, cmd, de…#288ffb3f9bc67201"
-R	^	<tmp>/cases/v-svc-unknown.json --arch arm64 []	err	"services[0]: unknown field(s) bar, foo (known: addr, cmd, de…#288ffb3f9bc67201"
+R	^	<tmp>/cases/v-svc-unknown.json --arch x86_64 []	err	"services[0]: unknown field(s) bar, foo (known: addr, cmd, de…#766d8d05c606127a"
+R	^	<tmp>/cases/v-svc-unknown.json --arch arm64 []	err	"services[0]: unknown field(s) bar, foo (known: addr, cmd, de…#766d8d05c606127a"
 R	^	<tmp>/cases/v-svc-noname.json --arch x86_64 []	err	"services[0]: missing required field 'name'"
 R	^	<tmp>/cases/v-svc-noname.json --arch arm64 []	err	"services[0]: missing required field 'name'"
 R	^	<tmp>/cases/v-svc-badname.json --arch x86_64 []	err	"services[0]: name 'A' must match [a-z][a-z0-9_]* (it becomes a shell identifier)"
@@ -1040,14 +1040,14 @@ R	^	<tmp>/mutants/m8.json --arch x86_64 []	err	"knobs[1]: missing required field
 R	^	<tmp>/mutants/m9.json --arch x86_64 []	err	"data.dirs: invalid type: string \"10.89.0.7\", expected a list…#22c514cfe1b7ca83"
 R	^	<tmp>/mutants/m10.json --arch x86_64 []	err	"knobs[2].values[3]: {{p}} is not a declared parameter"
 R	^	<tmp>/mutants/m11.json --arch x86_64 []	ok	d:320d19b2 w:4f53cda1 c:ba89b1cd m:74234e98
-R	^	<tmp>/mutants/m12.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#5b9c4ffb7a1a996d"
+R	^	<tmp>/mutants/m12.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#1497f65bf499106f"
 R	^	<tmp>/mutants/m13.json --arch x86_64 []	ok	d:17561046 w:4f53cda1 c:6408ae6d m:74234e98
 R	^	<tmp>/mutants/m14.json --arch x86_64 []	ok	d:3a9f4a35 w:4f53cda1 c:0c2c45e0 m:74234e98
 R	^	<tmp>/mutants/m15.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
 R	^	<tmp>/mutants/m16.json --arch x86_64 []	err	"root.files[3].bogus: unknown field `bogus`, expected one of …#d4f8be1eaa606ed1"
 R	^	<tmp>/mutants/m17.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
-R	^	<tmp>/mutants/m18.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#5b9c4ffb7a1a996d"
-R	^	<tmp>/mutants/m19.json --arch x86_64 []	err	"services[3]: unknown field(s) bogus (known: addr, cmd, depen…#0eea583c0f2a7217"
+R	^	<tmp>/mutants/m18.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#1497f65bf499106f"
+R	^	<tmp>/mutants/m19.json --arch x86_64 []	err	"services[3]: unknown field(s) bogus (known: addr, cmd, depen…#9b1026111284e28f"
 R	^	<tmp>/mutants/m20.json --arch x86_64 []	err	"root: unknown field(s) bogus (known: description, dirs, file…#2a60bb009ebe595e"
 R	^	<tmp>/mutants/m21.json --arch x86_64 []	err	"invariants[1].msg: a string (or a whole number), not {} (pro…#e0775afe5b650e31"
 R	^	<tmp>/mutants/m22.json --arch x86_64 []	err	"services[4]: duplicate service name 'redis'"
@@ -1090,14 +1090,14 @@ R	^	<tmp>/mutants/m58.json --arch x86_64 []	ok	d:14c91e57 w:4f53cda1 c:87dc6636 
 R	^	<tmp>/mutants/m59.json --arch x86_64 []	ok	d:eaa566ee w:4f53cda1 c:fda119ab m:74234e98
 R	^	<tmp>/mutants/m60.json --arch x86_64 []	ok	d:e83d3da3 w:4f53cda1 c:479cb9c7 m:74234e98
 R	^	<tmp>/mutants/m61.json --arch x86_64 []	err	"faults: unknown kind '10.89.0.7' (known: clock, cut, disk, f…#db1f6baffdc532b4"
-R	^	<tmp>/mutants/m62.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m62.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m63.json --arch x86_64 []	err	"services[0].errors: format must be one of auto, redis, none"
 R	^	<tmp>/mutants/m64.json --arch x86_64 []	err	"services[0]: port must be a number"
 R	^	<tmp>/mutants/m65.json --arch x86_64 []	err	"workload: unknown field(s) bogus (known: description, proces…#cebd0249b1ab7fc7"
-R	^	<tmp>/mutants/m66.json --arch x86_64 []	err	"proxies[0]: unknown field(s) a (known: addr, description, id…#65418e147f783efd"
+R	^	<tmp>/mutants/m66.json --arch x86_64 []	err	"proxies[0]: unknown field(s) a (known: addr, description, id…#b8770db14e0c21d9"
 R	^	<tmp>/mutants/m67.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: unhashable type in faults:"
 R	^	<tmp>/mutants/m68.json --arch x86_64 []	ok	d:27b5c4d4 w:4f53cda1 c:b6f91509 m:74234e98
-R	^	<tmp>/mutants/m69.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m69.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m70.json --arch x86_64 []	err	"invariants[1]: missing required field 'cmd'"
 R	^	<tmp>/mutants/m71.json --arch x86_64 []	ok	d:34f4b2f9 w:4f53cda1 c:bdde82d9 m:74234e98
 R	^	<tmp>/mutants/m72.json --arch x86_64 []	err	"services[0]: missing required field 'name'"
@@ -1115,7 +1115,7 @@ R	^	<tmp>/mutants/m83.json --arch x86_64 []	ok	d:6dc1dd59 w:4f53cda1 c:faf74721 
 R	^	<tmp>/mutants/m84.json --arch x86_64 []	err	"invariants[2]: duplicate id 'redis.ping'"
 R	^	<tmp>/mutants/m85.json --arch x86_64 []	ok	d:8663119b w:4f53cda1 c:64ae710e m:74234e98
 R	^	<tmp>/mutants/m86.json --arch x86_64 []	err	"root.files[1].mode: a string (or a whole number), not {'a': …#d135a836385be1af"
-R	^	<tmp>/mutants/m87.json --arch x86_64 []	err	"proxies[0]: unknown field(s) bogus (known: addr, description…#8bae621a439b6bc8"
+R	^	<tmp>/mutants/m87.json --arch x86_64 []	err	"proxies[0]: unknown field(s) bogus (known: addr, description…#39ab29f01e29319e"
 R	^	<tmp>/mutants/m88.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m89.json --arch x86_64 []	ok	d:48bc77c2 w:4f53cda1 c:a5aaaa38 m:74234e98
 R	^	<tmp>/mutants/m90.json --arch x86_64 []	err	"services[0]: port must be a number"
@@ -1131,7 +1131,7 @@ R	^	<tmp>/mutants/m99.json --arch x86_64 []	err	"root: unknown field(s) i, k, l 
 R	^	<tmp>/mutants/m100.json --arch x86_64 []	ok	d:2d16dbf7 w:4f53cda1 c:e336b135 m:74234e98
 R	^	<tmp>/mutants/m101.json --arch x86_64 []	ok	d:dcad97f3 w:4f53cda1 c:458113c9 m:74234e98
 R	^	<tmp>/mutants/m102.json --arch x86_64 []	err	"services[0]: field 'cmd' must be a str"
-R	^	<tmp>/mutants/m103.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m103.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m104.json --arch x86_64 []	err	"proxies[0]: field 'name' must be a str"
 R	^	<tmp>/mutants/m105.json --arch x86_64 []	err	"root.files[0].bogus: unknown field `bogus`, expected one of …#d480ca515181064b"
 R	^	<tmp>/mutants/m106.json --arch x86_64 []	err	"services[0].port: {{p}} is not a declared parameter"
@@ -2317,7 +2317,7 @@ R	^	<tmp>/mutants/m1285.json --arch x86_64 []	ok	d:08d67261 w:4f53cda1 c:21a35fd
 R	^	<tmp>/mutants/m1286.json --arch x86_64 []	err	"root.files[1].bogus: unknown field `bogus`, expected one of …#e1c71f82bfed0a9a"
 R	^	<tmp>/mutants/m1287.json --arch x86_64 []	err	"test.commands[3]: kind must be one of first, parallel_driver…#6b1508941b7267ec"
 R	^	<tmp>/mutants/m1288.json --arch x86_64 []	ok	d:4b70a46a w:4f53cda1 c:8c5e862f m:74234e98
-R	^	<tmp>/mutants/m1289.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#286a64e1f238b7e2"
+R	^	<tmp>/mutants/m1289.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#260118747e2b0a14"
 R	^	<tmp>/mutants/m1290.json --arch x86_64 []	err	"test.commands[1]: unknown field(s) a"
 R	^	<tmp>/mutants/m1291.json --arch x86_64 []	ok	d:1708cb41 w:4f53cda1 c:be3f8fed m:74234e98
 R	^	<tmp>/mutants/m1292.json --arch x86_64 []	err	"workload.steps: between 1 and 1000"
@@ -2329,11 +2329,11 @@ R	^	<tmp>/mutants/m1297.json --arch x86_64 []	ok	d:4c5043ca w:4f53cda1 c:a621e08
 R	^	<tmp>/mutants/m1298.json --arch x86_64 []	err	"test.commands[0]: timeout is whole seconds in [1, 3600]"
 R	^	<tmp>/mutants/m1299.json --arch x86_64 []	err	"services[1]: depends_on names unknown service 'a'"
 R	^	<tmp>/mutants/m1300.json --arch x86_64 []	err	"root.files[2].mode: a string (or a whole number), not ['x'] …#40738adebfd6883b"
-R	^	<tmp>/mutants/m1301.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m1301.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m1302.json --arch x86_64 []	ok	d:cb6d8b86 w:4f53cda1 c:bff6585d m:74234e98
 R	^	<tmp>/mutants/m1303.json --arch x86_64 []	ok	d:e80b3d3b w:4f53cda1 c:5db908bb m:74234e98
 R	^	<tmp>/mutants/m1304.json --arch x86_64 []	err	"test.commands[2]: kind must be one of first, parallel_driver…#f479ee237b7a480a"
-R	^	<tmp>/mutants/m1305.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#286a64e1f238b7e2"
+R	^	<tmp>/mutants/m1305.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#260118747e2b0a14"
 R	^	<tmp>/mutants/m1306.json --arch x86_64 []	ok	d:d2bfb90a w:4f53cda1 c:7ad5a290 m:74234e98
 R	^	<tmp>/mutants/m1307.json --arch x86_64 []	err	"services[1]: depends_on names unknown service 0"
 R	^	<tmp>/mutants/m1308.json --arch x86_64 []	err	"test.commands[3].run: an argv list of strings (exec'd, no sh…#90f3aed9d6c87726"
@@ -2553,7 +2553,7 @@ R	^	<tmp>/mutants/m1521.json --arch x86_64 []	err	"invariants[0]: unknown field(
 R	^	<tmp>/mutants/m1522.json --arch x86_64 []	err	"invariants[1]: unknown field(s) bogus (known: after, cmd, de…#c22424a74973d803"
 R	^	<tmp>/mutants/m1523.json --arch x86_64 []	err	"data.size_mib: invalid type: boolean `false`, expected a who…#c26304e6651c5e2f"
 R	^	<tmp>/mutants/m1524.json --arch x86_64 []	err	"workload: missing required field 'steps'"
-R	^	<tmp>/mutants/m1525.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m1525.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m1526.json --arch x86_64 []	err	"invariants[1].final: invalid type: string \"10.89.0.7\", expec…#b719d6aea17ce896"
 R	^	<tmp>/mutants/m1527.json --arch x86_64 []	err	"invariants: at least one invariant (or one entry in checks:)…#2cc2f7924780106c"
 R	^	<tmp>/mutants/m1528.json --arch x86_64 []	ok	d:b8e7fe9c w:4f53cda1 c:b24e26c8 m:74234e98
@@ -2569,7 +2569,7 @@ R	^	<tmp>/mutants/m1537.json --arch x86_64 []	err	"services: must be a list (it 
 R	^	<tmp>/mutants/m1538.json --arch x86_64 []	ok	d:5c30b787 w:4f53cda1 c:8375941b m:74234e98
 R	^	<tmp>/mutants/m1539.json --arch x86_64 []	err	"faults: unknown kind 'v3' (known: clock, cut, disk, freeze, …#e01a559177eaf9fc"
 R	^	<tmp>/mutants/m1540.json --arch x86_64 []	err	"faults: unknown kind 'x' (known: clock, cut, disk, freeze, k…#6412764adec769d6"
-R	^	<tmp>/mutants/m1541.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m1541.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m1542.json --arch x86_64 []	err	"workload.retry: a string (or a whole number), not {'a': 1} (…#9e9e722da34e2173"
 R	^	<tmp>/mutants/m1543.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
 R	^	<tmp>/mutants/m1544.json --arch x86_64 []	err	"data.dirs: invalid type: string \"eventually\", expected a lis…#202da98e4057cc49"
@@ -2579,13 +2579,13 @@ R	^	<tmp>/mutants/m1547.json --arch x86_64 []	ok	d:b9cd8948 w:4f53cda1 c:8264d9d
 R	^	<tmp>/mutants/m1548.json --arch x86_64 []	err	"invariants[1]: every is a whole number of seconds >= 1"
 R	^	<tmp>/mutants/m1549.json --arch x86_64 []	err	"services[0]: must be a mapping"
 R	^	<tmp>/mutants/m1550.json --arch x86_64 []	err	"root.files[2]: invalid type: null, expected a mapping (proje…#2971f13564fc0271"
-R	^	<tmp>/mutants/m1551.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m1551.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m1552.json --arch x86_64 []	err	"root.files[2].dst: a string (or a whole number), not [] (pro…#4ef86507d25b0193"
 R	^	<tmp>/mutants/m1553.json --arch x86_64 []	err	"root.files: invalid type: string \"x\", expected a list (proje…#a9a3856e8be106ae"
 R	^	<tmp>/mutants/m1554.json --arch x86_64 []	err	"workload: unknown field(s) bogus (known: description, proces…#cebd0249b1ab7fc7"
 R	^	<tmp>/mutants/m1555.json --arch x86_64 []	err	"workload: field 'steps' must be a int"
 R	^	<tmp>/mutants/m1556.json --arch x86_64 []	ok	d:6db3b810 w:4f53cda1 c:a22a2842 m:74234e98
-R	^	<tmp>/mutants/m1557.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m1557.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m1558.json --arch x86_64 []	err	"services: must be a list (it may be empty: a project that is only a workload)"
 R	^	<tmp>/mutants/m1559.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: int object is not iterable"
 R	^	<tmp>/mutants/m1560.json --arch x86_64 []	err	"workload: required (steps + run)"
@@ -2612,7 +2612,7 @@ R	^	<tmp>/mutants/m1580.json --arch x86_64 []	ok	d:ab562165 w:4f53cda1 c:ba0527c
 R	^	<tmp>/mutants/m1581.json --arch x86_64 []	err	"top level: missing required field 'name'"
 R	^	<tmp>/mutants/m1582.json --arch x86_64 []	ok	d:bd817333 w:4f53cda1 c:c12a79f1 m:74234e98
 R	^	<tmp>/mutants/m1583.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
-R	^	<tmp>/mutants/m1584.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m1584.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m1585.json --arch x86_64 []	err	"faults: unknown kind 'x' (known: clock, cut, disk, freeze, k…#6412764adec769d6"
 R	^	<tmp>/mutants/m1586.json --arch x86_64 []	ok	d:9c1ccf78 w:4f53cda1 c:cf0ab6d7 m:74234e98
 R	^	<tmp>/mutants/m1587.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
@@ -2624,7 +2624,7 @@ R	^	<tmp>/mutants/m1592.json --arch x86_64 []	err	"invariants[0]: unknown field(
 R	^	<tmp>/mutants/m1593.json --arch x86_64 []	ok	d:48b5d1c2 w:4f53cda1 c:b82b25ab m:74234e98
 R	^	<tmp>/mutants/m1594.json --arch x86_64 []	err	"description: a string, a number or true/false, not ['kill', …#df7a88cae6285bc3"
 R	^	<tmp>/mutants/m1595.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: unhashable type in faults:"
-R	^	<tmp>/mutants/m1596.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m1596.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m1597.json --arch x86_64 []	err	"faults: unknown kind 'A b' (known: clock, cut, disk, freeze,…#1aa583f852838b3c"
 R	^	<tmp>/mutants/m1598.json --arch x86_64 []	err	"services[0]: missing required field 'ready'"
 R	^	<tmp>/mutants/m1599.json --arch x86_64 []	err	"root.files[0].bogus: unknown field `bogus`, expected one of …#d480ca515181064b"
@@ -2636,7 +2636,7 @@ R	^	<tmp>/mutants/m1604.json --arch x86_64 []	err	"workload.steps: between 1 and
 R	^	<tmp>/mutants/m1605.json --arch x86_64 []	err	"workload: required (steps + run)"
 R	^	<tmp>/mutants/m1606.json --arch x86_64 []	err	"invariants[0]: missing required field 'id'"
 R	^	<tmp>/mutants/m1607.json --arch x86_64 []	err	"root.files[0].dst: a string (or a whole number), not True (p…#cd0a102acb71603f"
-R	^	<tmp>/mutants/m1608.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m1608.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m1609.json --arch x86_64 []	ok	d:fe01f44b w:4f53cda1 c:57e3595b m:74234e98
 R	^	<tmp>/mutants/m1610.json --arch x86_64 []	ok	d:c67b9622 w:4f53cda1 c:a625750c m:74234e98
 R	^	<tmp>/mutants/m1611.json --arch x86_64 []	err	"services[0].ready: {{p}} is not a declared parameter"
@@ -2763,7 +2763,7 @@ R	^	<tmp>/mutants/m1731.json --arch x86_64 []	err	"workload: missing required fi
 R	^	<tmp>/mutants/m1732.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m1733.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m1734.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m1735.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m1735.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m1736.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m1737.json --arch x86_64 []	err	"services[0]: port must be a number"
 R	^	<tmp>/mutants/m1738.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -2818,7 +2818,7 @@ R	^	<tmp>/mutants/m1786.json --arch x86_64 []	err	"root.files[9]: invalid type: 
 R	^	<tmp>/mutants/m1787.json --arch x86_64 []	err	"root.files[26].src: a string (or a whole number), not {'a': …#bdd6fbde755dfcb4"
 R	^	<tmp>/mutants/m1788.json --arch x86_64 []	err	"root.text: invalid type: string \"eventually\", expected a map…#085c337c9601ed6c"
 R	^	<tmp>/mutants/m1789.json --arch x86_64 []	ok	d:1d9ba754 w:4f53cda1 c:2cc797e5 m:74234e98
-R	^	<tmp>/mutants/m1790.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m1790.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m1791.json --arch x86_64 []	err	"root.files[26].src: a string (or a whole number), not {} (pr…#a271997871d9b2eb"
 R	^	<tmp>/mutants/m1792.json --arch x86_64 []	ok	d:d0cc76eb w:4f53cda1 c:0b600bc6 m:74234e98
 R	^	<tmp>/mutants/m1793.json --arch x86_64 []	ok	d:208c9c84 w:4f53cda1 c:5e517114 m:74234e98
@@ -3094,7 +3094,7 @@ R	^	<tmp>/mutants/m2062.json --arch x86_64 []	err	"services[0] (vote): image <tm
 R	^	<tmp>/mutants/m2063.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2064.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2065.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
-R	^	<tmp>/mutants/m2066.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#5b9c4ffb7a1a996d"
+R	^	<tmp>/mutants/m2066.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#1497f65bf499106f"
 R	^	<tmp>/mutants/m2067.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2068.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2069.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
@@ -3131,7 +3131,7 @@ R	^	<tmp>/mutants/m2099.json --arch x86_64 []	err	"services[0]: must be a mappin
 R	^	<tmp>/mutants/m2100.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2101.json --arch x86_64 []	err	"faults: unknown kind 'k' (known: clock, cut, disk, freeze, k…#10d3e2603427206d"
 R	^	<tmp>/mutants/m2102.json --arch x86_64 []	err	"data: unknown field(s) x (known: description, dirs, mount, size_mib)"
-R	^	<tmp>/mutants/m2103.json --arch x86_64 []	err	"services[3]: unknown field(s) bogus (known: addr, cmd, depen…#0eea583c0f2a7217"
+R	^	<tmp>/mutants/m2103.json --arch x86_64 []	err	"services[3]: unknown field(s) bogus (known: addr, cmd, depen…#9b1026111284e28f"
 R	^	<tmp>/mutants/m2104.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2105.json --arch x86_64 []	err	"services[4]: missing required field 'ready'"
 R	^	<tmp>/mutants/m2106.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '5000')"
@@ -3153,7 +3153,7 @@ R	^	<tmp>/mutants/m2121.json --arch x86_64 []	err	"services[0] (vote): image <tm
 R	^	<tmp>/mutants/m2122.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2123.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2124.json --arch x86_64 []	err	"services[2]: depends_on names unknown service {}"
-R	^	<tmp>/mutants/m2125.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m2125.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m2126.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2127.json --arch x86_64 []	err	"services[2]: addr 10.89.0.13 is used by two services"
 R	^	<tmp>/mutants/m2128.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
@@ -3173,7 +3173,7 @@ R	^	<tmp>/mutants/m2141.json --arch x86_64 []	err	"services[0] (vote): image <tm
 R	^	<tmp>/mutants/m2142.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: 'int' object is not iterable"
 R	^	<tmp>/mutants/m2143.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2144.json --arch x86_64 []	err	"services[2]: name '1' must match [a-z][a-z0-9_]* (it becomes a shell identifier)"
-R	^	<tmp>/mutants/m2145.json --arch x86_64 []	err	"services[3]: unknown field(s) bogus (known: addr, cmd, depen…#0eea583c0f2a7217"
+R	^	<tmp>/mutants/m2145.json --arch x86_64 []	err	"services[3]: unknown field(s) bogus (known: addr, cmd, depen…#9b1026111284e28f"
 R	^	<tmp>/mutants/m2146.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2147.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
 R	^	<tmp>/mutants/m2148.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
@@ -3219,7 +3219,7 @@ R	^	<tmp>/mutants/m2187.json --arch x86_64 []	err	"name: use lowercase letters, 
 R	^	<tmp>/mutants/m2188.json --arch x86_64 []	err	"services[0]: missing required field 'name'"
 R	^	<tmp>/mutants/m2189.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2190.json --arch x86_64 []	err	"workload: required (steps + run)"
-R	^	<tmp>/mutants/m2191.json --arch x86_64 []	err	"services[4]: unknown field(s) bogus (known: addr, cmd, depen…#84954239fb82a81c"
+R	^	<tmp>/mutants/m2191.json --arch x86_64 []	err	"services[4]: unknown field(s) bogus (known: addr, cmd, depen…#a57a8a080dcbe902"
 R	^	<tmp>/mutants/m2192.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2193.json --arch x86_64 []	err	"top level: missing required field 'name'"
 R	^	<tmp>/mutants/m2194.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
@@ -3227,7 +3227,7 @@ R	^	<tmp>/mutants/m2195.json --arch x86_64 []	err	"services[0] (vote): image <tm
 R	^	<tmp>/mutants/m2196.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2197.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2198.json --arch x86_64 []	err	"services[0]: addr '1': with network: bridge, an address in 1…#f979657f88026669"
-R	^	<tmp>/mutants/m2199.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#5b9c4ffb7a1a996d"
+R	^	<tmp>/mutants/m2199.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#1497f65bf499106f"
 R	^	<tmp>/mutants/m2200.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2201.json --arch x86_64 []	err	"services[2]: depends_on names unknown service 'k'"
 R	^	<tmp>/mutants/m2202.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
@@ -3245,11 +3245,11 @@ R	^	<tmp>/mutants/m2213.json --arch x86_64 []	err	"root: unknown field(s) bogus 
 R	^	<tmp>/mutants/m2214.json --arch x86_64 []	err	"root: unknown field(s) bogus (known: description, dirs, file…#2a60bb009ebe595e"
 R	^	<tmp>/mutants/m2215.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2216.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
-R	^	<tmp>/mutants/m2217.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#286a64e1f238b7e2"
+R	^	<tmp>/mutants/m2217.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#260118747e2b0a14"
 R	^	<tmp>/mutants/m2218.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2219.json --arch x86_64 []	err	"services[0]: depends_on names unknown service 'redis'"
 R	^	<tmp>/mutants/m2220.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
-R	^	<tmp>/mutants/m2221.json --arch x86_64 []	err	"services[4]: unknown field(s) bogus (known: addr, cmd, depen…#84954239fb82a81c"
+R	^	<tmp>/mutants/m2221.json --arch x86_64 []	err	"services[4]: unknown field(s) bogus (known: addr, cmd, depen…#a57a8a080dcbe902"
 R	^	<tmp>/mutants/m2222.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2223.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2224.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got 'True')"
@@ -3269,7 +3269,7 @@ R	^	<tmp>/mutants/m2237.json --arch x86_64 []	err	"services[0] (vote): image <tm
 R	^	<tmp>/mutants/m2238.json --arch x86_64 []	err	"invariants[0]: within: is only for type: eventually"
 R	^	<tmp>/mutants/m2239.json --arch x86_64 []	err	"services[2]: missing required field 'ready'"
 R	^	<tmp>/mutants/m2240.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
-R	^	<tmp>/mutants/m2241.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#286a64e1f238b7e2"
+R	^	<tmp>/mutants/m2241.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#260118747e2b0a14"
 R	^	<tmp>/mutants/m2242.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2243.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2244.json --arch x86_64 []	err	"invariants[1]: missing required field 'cmd'"
@@ -3307,7 +3307,7 @@ R	^	<tmp>/mutants/m2275.json --arch x86_64 []	err	"services[0] (vote): image <tm
 R	^	<tmp>/mutants/m2276.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: 'str' object …#523e5ddbab3bba74"
 R	^	<tmp>/mutants/m2277.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m2278.json --arch x86_64 []	err	"faults: unknown kind None (known: clock, cut, disk, freeze, …#5157d4033a9ba354"
-R	^	<tmp>/mutants/m2279.json --arch x86_64 []	err	"services[4]: unknown field(s) bogus (known: addr, cmd, depen…#84954239fb82a81c"
+R	^	<tmp>/mutants/m2279.json --arch x86_64 []	err	"services[4]: unknown field(s) bogus (known: addr, cmd, depen…#a57a8a080dcbe902"
 R	^	<tmp>/mutants/m2280.json --arch x86_64 []	err	"root.files[0].src: {{version}} is not a declared parameter"
 R	^	<tmp>/mutants/m2281.json --arch x86_64 []	ok	d:490295cf w:4f53cda1 c:685d4e49 m:74234e98
 R	^	<tmp>/mutants/m2282.json --arch x86_64 []	err	"faults: unknown kind 5000 (known: clock, cut, disk, freeze, …#1a67571385fbf520"
@@ -3344,7 +3344,7 @@ R	^	<tmp>/mutants/m2312.json --arch x86_64 []	err	"checks[0]: missing required f
 R	^	<tmp>/mutants/m2313.json --arch x86_64 []	err	"top level: missing required field 'name'"
 R	^	<tmp>/mutants/m2314.json --arch x86_64 []	err	"root.files[0].src: {{version}} is not a declared parameter"
 R	^	<tmp>/mutants/m2315.json --arch x86_64 []	err	"faults: unknown kind 5000 (known: clock, cut, disk, freeze, …#1a67571385fbf520"
-R	^	<tmp>/mutants/m2316.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#5b9c4ffb7a1a996d"
+R	^	<tmp>/mutants/m2316.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#1497f65bf499106f"
 R	^	<tmp>/mutants/m2317.json --arch x86_64 []	ok	d:4d9457f3 w:4f53cda1 c:ed78eabb m:74234e98
 R	^	<tmp>/mutants/m2318.json --arch x86_64 []	ok	d:f1c7076c w:4f53cda1 c:c071ffbf m:74234e98
 R	^	<tmp>/mutants/m2319.json --arch x86_64 []	err	"root.files[1].dst: a string (or a whole number), not {'a': 1…#e37b6f80141fc60d"
@@ -3368,7 +3368,7 @@ R	^	<tmp>/mutants/m2336.json --arch x86_64 []	err	"services[1].cmd: {{p}} is not
 R	^	<tmp>/mutants/m2337.json --arch x86_64 []	ok	d:2ccc924d w:4f53cda1 c:a8561fcc m:74234e98
 R	^	<tmp>/mutants/m2338.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '4096')"
 R	^	<tmp>/mutants/m2339.json --arch x86_64 []	ok	d:0d876838 w:4f53cda1 c:a30e260d m:74234e98
-R	^	<tmp>/mutants/m2340.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m2340.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m2341.json --arch x86_64 []	err	"services[2]: field 'cmd' must be a str"
 R	^	<tmp>/mutants/m2342.json --arch x86_64 []	ok	d:66520325 w:4f53cda1 c:2432cf60 m:74234e98
 R	^	<tmp>/mutants/m2343.json --arch x86_64 []	err	"root: unknown field(s) bogus (known: description, dirs, file…#2a60bb009ebe595e"
@@ -3377,7 +3377,7 @@ R	^	<tmp>/mutants/m2345.json --arch x86_64 []	err	"env.EPS: a string, a number o
 R	^	<tmp>/mutants/m2346.json --arch x86_64 []	err	"workload: unknown field(s) bogus (known: description, proces…#cebd0249b1ab7fc7"
 R	^	<tmp>/mutants/m2347.json --arch x86_64 []	ok	d:7d805731 w:4f53cda1 c:13f1dd98 m:74234e98
 R	^	<tmp>/mutants/m2348.json --arch x86_64 []	ok	d:dcaa8c2b w:4f53cda1 c:52589f81 m:74234e98
-R	^	<tmp>/mutants/m2349.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m2349.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m2350.json --arch x86_64 []	ok	d:bd83c383 w:4f53cda1 c:b54396f0 m:74234e98
 R	^	<tmp>/mutants/m2351.json --arch x86_64 []	ok	d:f55cae5e w:4f53cda1 c:699e6853 m:74234e98
 R	^	<tmp>/mutants/m2352.json --arch x86_64 []	err	"root: unknown field(s) i, k, l (known: description, dirs, fi…#64444df04771102a"
@@ -3399,7 +3399,7 @@ R	^	<tmp>/mutants/m2367.json --arch x86_64 []	err	"invariants[2].id: {{p}} is no
 R	^	<tmp>/mutants/m2368.json --arch x86_64 []	err	"faults: unknown kind 5000 (known: clock, cut, disk, freeze, …#1a67571385fbf520"
 R	^	<tmp>/mutants/m2369.json --arch x86_64 []	err	"faults: unknown kind 'eventually' (known: clock, cut, disk, …#4e832b432aa0c2a5"
 R	^	<tmp>/mutants/m2370.json --arch x86_64 []	err	"services[1]: addr 'eventually' must be a loopback address 12…#b06cdb5f1163db6d"
-R	^	<tmp>/mutants/m2371.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#5b9c4ffb7a1a996d"
+R	^	<tmp>/mutants/m2371.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#1497f65bf499106f"
 R	^	<tmp>/mutants/m2372.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
 R	^	<tmp>/mutants/m2373.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: unhashable type in faults:"
 R	^	<tmp>/mutants/m2374.json --arch x86_64 []	ok	d:e6d81487 w:4f53cda1 c:a084f7af m:74234e98
@@ -3422,7 +3422,7 @@ R	^	<tmp>/mutants/m2390.json --arch x86_64 []	err	"root.files[0].src: {{version}
 R	^	<tmp>/mutants/m2391.json --arch x86_64 []	err	"workload: missing required field 'steps'"
 R	^	<tmp>/mutants/m2392.json --arch x86_64 []	err	"services[2].port: {{p}} is not a declared parameter"
 R	^	<tmp>/mutants/m2393.json --arch x86_64 []	err	"data: unknown field(s) bogus (known: description, dirs, mount, size_mib)"
-R	^	<tmp>/mutants/m2394.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m2394.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m2395.json --arch x86_64 []	err	"provision: a string (or a whole number), not ['kill', 'freez…#53172a1193cce279"
 R	^	<tmp>/mutants/m2396.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: 'int' object …#9a09befbd6965a92"
 R	^	<tmp>/mutants/m2397.json --arch x86_64 []	err	"root.text./etc/group: a string (or a whole number), not ['x'…#33264c66d911e215"
@@ -3434,7 +3434,7 @@ R	^	<tmp>/mutants/m2402.json --arch x86_64 []	err	"invariants[3]: duplicate id '
 R	^	<tmp>/mutants/m2403.json --arch x86_64 []	err	"invariants[3]: duplicate id 'categories.failed_not_applied'"
 R	^	<tmp>/mutants/m2404.json --arch x86_64 []	err	"root.files[0].mode: a string (or a whole number), not [] (pr…#cc621a77734402ca"
 R	^	<tmp>/mutants/m2405.json --arch x86_64 []	err	"knobs[0]: unknown field(s) bogus (known: default, descriptio…#192daea86c27a275"
-R	^	<tmp>/mutants/m2406.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m2406.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m2407.json --arch x86_64 []	err	"workload.timeout: invalid type: string \"127.0.0.1\", expected…#115e07c945ad085a"
 R	^	<tmp>/mutants/m2408.json --arch x86_64 []	ok	d:73a5bead w:4f53cda1 c:e727cbf4 m:74234e98
 R	^	<tmp>/mutants/m2409.json --arch x86_64 []	err	"services[1]: depends_on names unknown service {'a': 1}"
@@ -3446,7 +3446,7 @@ R	^	<tmp>/mutants/m2414.json --arch x86_64 []	ok	d:9b173635 w:4f53cda1 c:fb28cd8
 R	^	<tmp>/mutants/m2415.json --arch x86_64 []	err	"services[1]: missing required field 'ready'"
 R	^	<tmp>/mutants/m2416.json --arch x86_64 []	ok	d:1966b4f7 w:4f53cda1 c:21eea69b m:74234e98
 R	^	<tmp>/mutants/m2417.json --arch x86_64 []	err	"invariants[1].id: {{p}} is not a declared parameter"
-R	^	<tmp>/mutants/m2418.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#286a64e1f238b7e2"
+R	^	<tmp>/mutants/m2418.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#260118747e2b0a14"
 R	^	<tmp>/mutants/m2419.json --arch x86_64 []	ok	d:9dafb355 w:4f53cda1 c:663c9066 m:74234e98
 R	^	<tmp>/mutants/m2420.json --arch x86_64 []	err	"invariants[2].msg: a string (or a whole number), not True (p…#35b6a9e74d5d13fd"
 R	^	<tmp>/mutants/m2421.json --arch x86_64 []	ok	d:b748cd2a w:4f53cda1 c:01b39cad m:74234e98
@@ -3475,7 +3475,7 @@ R	^	<tmp>/mutants/m2443.json --arch x86_64 []	err	"knobs[0]: unknown field(s) bo
 R	^	<tmp>/mutants/m2444.json --arch x86_64 []	ok	d:6302d0c1 w:4f53cda1 c:f79a5630 m:74234e98
 R	^	<tmp>/mutants/m2445.json --arch x86_64 []	ok	d:4cac18dc w:4f53cda1 c:798321cb m:74234e98
 R	^	<tmp>/mutants/m2446.json --arch x86_64 []	ok	d:c577ee98 w:4f53cda1 c:1b6b01e8 m:74234e98
-R	^	<tmp>/mutants/m2447.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#286a64e1f238b7e2"
+R	^	<tmp>/mutants/m2447.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#260118747e2b0a14"
 R	^	<tmp>/mutants/m2448.json --arch x86_64 []	err	"knobs[0].name: {{p}} is not a declared parameter"
 R	^	<tmp>/mutants/m2449.json --arch x86_64 []	err	"root.nix: invalid type: mapping, expected a list (project fo…#81e93ec4a44cdbda"
 R	^	<tmp>/mutants/m2450.json --arch x86_64 []	err	"root.files[0].bogus: unknown field `bogus`, expected one of …#d480ca515181064b"
@@ -3485,7 +3485,7 @@ R	^	<tmp>/mutants/m2453.json --arch x86_64 []	ok	d:06bf5cab w:4f53cda1 c:c7cee96
 R	^	<tmp>/mutants/m2454.json --arch x86_64 []	ok	d:201d7f24 w:4f53cda1 c:a025e5df m:74234e98
 R	^	<tmp>/mutants/m2455.json --arch x86_64 []	ok	d:d0542637 w:4f53cda1 c:1a1eb8e7 m:74234e98
 R	^	<tmp>/mutants/m2456.json --arch x86_64 []	err	"services[0].setup: a string (or a whole number), not ['kill'…#0d0880b3467bd36e"
-R	^	<tmp>/mutants/m2457.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#286a64e1f238b7e2"
+R	^	<tmp>/mutants/m2457.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#260118747e2b0a14"
 R	^	<tmp>/mutants/m2458.json --arch x86_64 []	err	"invariants[2]: missing required field 'id'"
 R	^	<tmp>/mutants/m2459.json --arch x86_64 []	err	"invariants[1]: unknown field(s) x (known: after, cmd, descri…#b7c657c07cc2bdd3"
 R	^	<tmp>/mutants/m2460.json --arch x86_64 []	err	"invariants[2]: unknown field(s) freeze, kill (known: after, …#1c940ed074dfd45f"
@@ -3571,7 +3571,7 @@ R	^	<tmp>/mutants/m2539.json --arch x86_64 []	err	"workload: missing required fi
 R	^	<tmp>/mutants/m2540.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m2541.json --arch x86_64 []	err	"test.round_ms: a whole number in [10, 60000] (got ['kill', 'freeze'])"
 R	^	<tmp>/mutants/m2542.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m2543.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#5b9c4ffb7a1a996d"
+R	^	<tmp>/mutants/m2543.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#1497f65bf499106f"
 R	^	<tmp>/mutants/m2544.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m2545.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m2546.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -3599,7 +3599,7 @@ R	^	<tmp>/mutants/m2567.json --arch x86_64 []	err	"workload: missing required fi
 R	^	<tmp>/mutants/m2568.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m2569.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m2570.json --arch x86_64 []	err	"services[1]: {{p}} is not a declared parameter"
-R	^	<tmp>/mutants/m2571.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#5b9c4ffb7a1a996d"
+R	^	<tmp>/mutants/m2571.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#1497f65bf499106f"
 R	^	<tmp>/mutants/m2572.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m2573.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m2574.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -3673,7 +3673,7 @@ R	^	<tmp>/mutants/m2641.json --arch x86_64 []	ok	d:e3f52cf8 w:4f53cda1 c:2d1a198
 R	^	<tmp>/mutants/m2642.json --arch x86_64 []	err	"root.files[1]: missing field `dst` (project format 1; the sc…#387791da26e0060e"
 R	^	<tmp>/mutants/m2643.json --arch x86_64 []	err	"faults: unknown kind -1 (known: clock, cut, disk, freeze, ki…#355e5315d2e79ff4"
 R	^	<tmp>/mutants/m2644.json --arch x86_64 []	ok	d:6f89ef21 w:4f53cda1 c:39b68f97 m:74234e98
-R	^	<tmp>/mutants/m2645.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m2645.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m2646.json --arch x86_64 []	err	"root.files[2]: missing field `src` (project format 1; the sc…#cfd4ade5c69ffc6c"
 R	^	<tmp>/mutants/m2647.json --arch x86_64 []	err	"knobs[1]: duplicate token S"
 R	^	<tmp>/mutants/m2648.json --arch x86_64 []	ok	d:952d582c w:4f53cda1 c:1baebdeb m:74234e98
@@ -3719,7 +3719,7 @@ R	^	<tmp>/mutants/m2687.json --arch x86_64 []	err	"root.files[5]: invalid type: 
 R	^	<tmp>/mutants/m2688.json --arch x86_64 []	err	"root.files[5].dst: a string (or a whole number), not ['kill'…#bdd5056000c6d97b"
 R	^	<tmp>/mutants/m2689.json --arch x86_64 []	ok	d:a92785c2 w:4f53cda1 c:94aa20e4 m:74234e98
 R	^	<tmp>/mutants/m2690.json --arch x86_64 []	err	"root.files[2]: invalid type: string \"\", expected a mapping (…#b68e20ae2e5b51cb"
-R	^	<tmp>/mutants/m2691.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m2691.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m2692.json --arch x86_64 []	err	"faults: unknown kind 'x' (known: clock, cut, disk, freeze, k…#6412764adec769d6"
 R	^	<tmp>/mutants/m2693.json --arch x86_64 []	ok	d:68f30ad5 w:4f53cda1 c:6e41fd77 m:74234e98
 R	^	<tmp>/mutants/m2694.json --arch x86_64 []	err	"workload: unknown field(s) bogus (known: description, proces…#cebd0249b1ab7fc7"
@@ -3733,7 +3733,7 @@ R	^	<tmp>/mutants/m2701.json --arch x86_64 []	ok	d:624cc849 w:4f53cda1 c:012f08c
 R	^	<tmp>/mutants/m2702.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
 R	^	<tmp>/mutants/m2703.json --arch x86_64 []	err	"data: unknown field(s) bogus (known: description, dirs, mount, size_mib)"
 R	^	<tmp>/mutants/m2704.json --arch x86_64 []	err	"invariants: at least one invariant (or one entry in checks:)…#2cc2f7924780106c"
-R	^	<tmp>/mutants/m2705.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m2705.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m2706.json --arch x86_64 []	ok	d:0c30315d w:4f53cda1 c:b36d7fb4 m:74234e98
 R	^	<tmp>/mutants/m2707.json --arch x86_64 []	err	"services[0]: port must be a number"
 R	^	<tmp>/mutants/m2708.json --arch x86_64 []	ok	d:9c46d96d w:4f53cda1 c:b97127c3 m:74234e98
@@ -3822,7 +3822,7 @@ R	^	<tmp>/mutants/m2790.json --arch x86_64 []	err	"data.dirs[0]: a string (or a 
 R	^	<tmp>/mutants/m2791.json --arch x86_64 []	err	"buggify: must be true or false"
 R	^	<tmp>/mutants/m2792.json --arch x86_64 []	ok	d:5856bfaf w:4f53cda1 c:9fe5d0e8 m:74234e98
 R	^	<tmp>/mutants/m2793.json --arch x86_64 []	err	"root.files[0]: missing field `src` (project format 1; the sc…#995df533c1ff08e2"
-R	^	<tmp>/mutants/m2794.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m2794.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m2795.json --arch x86_64 []	err	"root.files: invalid type: string \"v3\", expected a list (proj…#347c1c2a48d0f4f2"
 R	^	<tmp>/mutants/m2796.json --arch x86_64 []	err	"workload: required (steps + run)"
 R	^	<tmp>/mutants/m2797.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
@@ -3859,7 +3859,7 @@ R	^	<tmp>/mutants/m2827.json --arch x86_64 []	err	"services[1]: depends_on names
 R	^	<tmp>/mutants/m2828.json --arch x86_64 []	err	"root.files[0].mode: a string (or a whole number), not ['x'] …#383b36b1f7c93cae"
 R	^	<tmp>/mutants/m2829.json --arch x86_64 []	ok	d:8f2d2ad2 w:4f53cda1 c:dd6ed066 m:74234e98
 R	^	<tmp>/mutants/m2830.json --arch x86_64 []	ok	d:951f2833 w:4f53cda1 c:83a11936 m:74234e98
-R	^	<tmp>/mutants/m2831.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m2831.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m2832.json --arch x86_64 []	err	"invariants[1]: type must be always, always_or_unreachable or eventually"
 R	^	<tmp>/mutants/m2833.json --arch x86_64 []	err	"faults: unknown kind '' (known: clock, cut, disk, freeze, ki…#23c69c639ef56816"
 R	^	<tmp>/mutants/m2834.json --arch x86_64 []	err	"invariants[0]: missing required field 'id'"
@@ -3909,7 +3909,7 @@ R	^	<tmp>/mutants/m2877.json --arch x86_64 []	err	"data: {{p}} is not a declared
 R	^	<tmp>/mutants/m2878.json --arch x86_64 []	err	"services[0]: missing required field 'ready'"
 R	^	<tmp>/mutants/m2879.json --arch x86_64 []	err	"proxies[0]: missing required field 'name'"
 R	^	<tmp>/mutants/m2880.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m2881.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m2881.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m2882.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m2883.json --arch x86_64 []	err	"knobs[0].values[1]: {{p}} is not a declared parameter"
 R	^	<tmp>/mutants/m2884.json --arch x86_64 []	err	"services[0]: name '127.0.0.1' must match [a-z][a-z0-9_]* (it…#3005bfe4375827b9"
@@ -3920,14 +3920,14 @@ R	^	<tmp>/mutants/m2888.json --arch x86_64 []	err	"workload: missing required fi
 R	^	<tmp>/mutants/m2889.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m2890.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m2891.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m2892.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m2892.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m2893.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m2894.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m2895.json --arch x86_64 []	err	"test: must be a mapping"
 R	^	<tmp>/mutants/m2896.json --arch x86_64 []	err	"services[0].port: {{p}} is not a declared parameter"
 R	^	<tmp>/mutants/m2897.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m2898.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m2899.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m2899.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m2900.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m2901.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m2902.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -3974,7 +3974,7 @@ R	^	<tmp>/mutants/m2942.json --arch x86_64 []	err	"test.checks[0].run: an argv l
 R	^	<tmp>/mutants/m2943.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m2944.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m2945.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m2946.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m2946.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m2947.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m2948.json --arch x86_64 []	err	"hydo_version: the plan needs hydo 4096.0.x, this hydo is 0.1…#25077cd9c6e27d38"
 R	^	<tmp>/mutants/m2949.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -4073,7 +4073,7 @@ R	^	<tmp>/mutants/m3041.json --arch x86_64 []	err	"workload: missing required fi
 R	^	<tmp>/mutants/m3042.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.1.0…#a430c5333d027fb6"
 R	^	<tmp>/mutants/m3043.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m3044.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m3045.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m3045.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m3046.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m3047.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m3048.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -4113,7 +4113,7 @@ R	^	<tmp>/mutants/m3081.json --arch x86_64 []	err	"test: unknown field(s) bogus 
 R	^	<tmp>/mutants/m3082.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m3083.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m3084.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m3085.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m3085.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m3086.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m3087.json --arch x86_64 []	err	"params: must be a mapping of name: default value"
 R	^	<tmp>/mutants/m3088.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -4153,7 +4153,7 @@ R	^	<tmp>/mutants/m3121.json --arch x86_64 []	err	"services[0]: missing required
 R	^	<tmp>/mutants/m3122.json --arch x86_64 []	err	"services[0]: field 'name' must be a str"
 R	^	<tmp>/mutants/m3123.json --arch x86_64 []	err	"services[0] (redis): image <tmp>/mutants/redis-7.2.4-amd64.d…#58b30f0fa145bce4"
 R	^	<tmp>/mutants/m3124.json --arch x86_64 []	err	"data: {{p}} is not a declared parameter"
-R	^	<tmp>/mutants/m3125.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m3125.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m3126.json --arch x86_64 []	err	"knobs[0]: unknown field(s) x (known: default, description, n…#4da075689f1bdb13"
 R	^	<tmp>/mutants/m3127.json --arch x86_64 []	err	"faults: unknown kind 'A b' (known: clock, cut, disk, freeze,…#1aa583f852838b3c"
 R	^	<tmp>/mutants/m3128.json --arch x86_64 []	err	"services[0] (redis): image <tmp>/mutants/redis-7.2.4-amd64.d…#58b30f0fa145bce4"
@@ -4164,7 +4164,7 @@ R	^	<tmp>/mutants/m3132.json --arch x86_64 []	err	"invariants[0]: id 'A b': lett
 R	^	<tmp>/mutants/m3133.json --arch x86_64 []	err	"services[0]: missing required field 'ready'"
 R	^	<tmp>/mutants/m3134.json --arch x86_64 []	err	"services[0] (redis): image <tmp>/mutants/redis-7.2.4-amd64.d…#58b30f0fa145bce4"
 R	^	<tmp>/mutants/m3135.json --arch x86_64 []	err	"services[0] (redis): image <tmp>/mutants/redis-7.2.4-amd64.d…#58b30f0fa145bce4"
-R	^	<tmp>/mutants/m3136.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m3136.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m3137.json --arch x86_64 []	err	"services[0] (redis): image <tmp>/mutants/redis-7.2.4-amd64.d…#58b30f0fa145bce4"
 R	^	<tmp>/mutants/m3138.json --arch x86_64 []	err	"invariants[0]: unknown field(s) bogus (known: after, cmd, de…#cc796248e472a6a1"
 R	^	<tmp>/mutants/m3139.json --arch x86_64 []	err	"invariants[1]: unknown field(s) a (known: after, cmd, descri…#7b058b8ca2b1f4c6"
@@ -4186,7 +4186,7 @@ R	^	<tmp>/mutants/m3154.json --arch x86_64 []	err	"services[0] (redis): image <t
 R	^	<tmp>/mutants/m3155.json --arch x86_64 []	err	"services[0] (redis): image <tmp>/mutants/redis-7.2.4-amd64.d…#58b30f0fa145bce4"
 R	^	<tmp>/mutants/m3156.json --arch x86_64 []	err	"workload: unknown field(s) bogus (known: description, proces…#cebd0249b1ab7fc7"
 R	^	<tmp>/mutants/m3157.json --arch x86_64 []	err	"services[0] (redis): image <tmp>/mutants/redis-7.2.4-amd64.d…#58b30f0fa145bce4"
-R	^	<tmp>/mutants/m3158.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m3158.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m3159.json --arch x86_64 []	err	"invariants: at least one invariant (or one entry in checks:)…#2cc2f7924780106c"
 R	^	<tmp>/mutants/m3160.json --arch x86_64 []	err	"services[1]: duplicate service name 'redis'"
 R	^	<tmp>/mutants/m3161.json --arch x86_64 []	err	"services[0] (redis): image <tmp>/mutants/127.0.0.1 does not …#eed242d199feca17"
@@ -4208,7 +4208,7 @@ R	^	<tmp>/mutants/m3176.json --arch x86_64 []	err	"services[0] (redis): image <t
 R	^	<tmp>/mutants/m3177.json --arch x86_64 []	err	"knobs[0]: token must be one capital letter other than K N C …#338c70d08b8ec9c6"
 R	^	<tmp>/mutants/m3178.json --arch x86_64 []	err	"services[0] (redis): image <tmp>/mutants/redis-7.2.4-amd64.d…#58b30f0fa145bce4"
 R	^	<tmp>/mutants/m3179.json --arch x86_64 []	err	"faults: unknown kind 5000 (known: clock, cut, disk, freeze, …#1a67571385fbf520"
-R	^	<tmp>/mutants/m3180.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m3180.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m3181.json --arch x86_64 []	err	"services[0] (redis): image <tmp>/mutants/redis-7.2.4-amd64.d…#58b30f0fa145bce4"
 R	^	<tmp>/mutants/m3182.json --arch x86_64 []	err	"services[0] (redis): image <tmp>/mutants/redis-7.2.4-amd64.d…#58b30f0fa145bce4"
 R	^	<tmp>/mutants/m3183.json --arch x86_64 []	err	"services[0] (redis): image <tmp>/mutants/redis-7.2.4-amd64.d…#58b30f0fa145bce4"
@@ -4340,7 +4340,7 @@ R	^	<tmp>/mutants/m3308.json --arch x86_64 []	err	"knobs[0]: token must be one c
 R	^	<tmp>/mutants/m3309.json --arch x86_64 []	err	"invariants: at least one invariant (or one entry in checks:)…#2cc2f7924780106c"
 R	^	<tmp>/mutants/m3310.json --arch x86_64 []	err	"workload: unknown field(s) bogus (known: description, proces…#cebd0249b1ab7fc7"
 R	^	<tmp>/mutants/m3311.json --arch x86_64 []	ok	d:07ee1d0f w:4f53cda1 c:d064600b m:74234e98
-R	^	<tmp>/mutants/m3312.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m3312.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m3313.json --arch x86_64 []	err	"knobs[0]: field 'default' must be a str"
 R	^	<tmp>/mutants/m3314.json --arch x86_64 []	ok	d:da9e0c88 w:4f53cda1 c:f2b6dc25 m:74234e98
 R	^	<tmp>/mutants/m3315.json --arch x86_64 []	err	"data.dirs[0]: {{p}} is not a declared parameter"
@@ -4388,7 +4388,7 @@ R	^	<tmp>/mutants/m3356.json --arch x86_64 []	err	"workload.steps: between 1 and
 R	^	<tmp>/mutants/m3357.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: bool object is not iterable"
 R	^	<tmp>/mutants/m3358.json --arch x86_64 []	ok	d:2a2af0f8 w:4f53cda1 c:207a09f1 m:74234e98
 R	^	<tmp>/mutants/m3359.json --arch x86_64 []	ok	d:acbac4d5 w:4f53cda1 c:7edbd02c m:74234e98
-R	^	<tmp>/mutants/m3360.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m3360.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m3361.json --arch x86_64 []	err	"workload: unknown field(s) bogus (known: description, proces…#cebd0249b1ab7fc7"
 R	^	<tmp>/mutants/m3362.json --arch x86_64 []	err	"services[0]: field 'name' must be a str"
 R	^	<tmp>/mutants/m3363.json --arch x86_64 []	ok	d:cdf3aab3 w:4f53cda1 c:fe257549 m:74234e98
@@ -4412,7 +4412,7 @@ R	^	<tmp>/mutants/m3380.json --arch x86_64 []	ok	d:f4d0d3f7 w:4f53cda1 c:96b6659
 R	^	<tmp>/mutants/m3381.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
 R	^	<tmp>/mutants/m3382.json --arch x86_64 []	err	"root.files[1].dst: a string (or a whole number), not False (…#23564a67c3130c7e"
 R	^	<tmp>/mutants/m3383.json --arch x86_64 []	ok	d:e8f85864 w:4f53cda1 c:d3e58701 m:74234e98
-R	^	<tmp>/mutants/m3384.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m3384.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m3385.json --arch x86_64 []	err	"services[0]: name '4096' must match [a-z][a-z0-9_]* (it beco…#3cbdbd6814c8f0e7"
 R	^	<tmp>/mutants/m3386.json --arch x86_64 []	ok	d:2345de4d w:4f53cda1 c:6e68b02d m:74234e98
 R	^	<tmp>/mutants/m3387.json --arch x86_64 []	ok	d:0c8d575c w:4f53cda1 c:558d009f m:74234e98
@@ -4447,14 +4447,14 @@ R	^	<tmp>/mutants/m3415.json --arch x86_64 []	ok	d:7f615e86 w:4f53cda1 c:20a209c
 R	^	<tmp>/mutants/m3416.json --arch x86_64 []	err	"checks[0]: unknown field(s) bogus (known: consistency, descr…#575a73523a014db6"
 R	^	<tmp>/mutants/m3417.json --arch x86_64 []	err	"checks[2]: id 'redis.kv_linearizable' is already used by an …#ddf0cbec8b53b28d"
 R	^	<tmp>/mutants/m3418.json --arch x86_64 []	err	"services[0]: missing required field 'cmd'"
-R	^	<tmp>/mutants/m3419.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m3419.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m3420.json --arch x86_64 []	err	"knobs[0]: field 'token' must be a str"
 R	^	<tmp>/mutants/m3421.json --arch x86_64 []	ok	d:e80a771f w:4f53cda1 c:5c1dde44 m:74234e98
 R	^	<tmp>/mutants/m3422.json --arch x86_64 []	err	"workload: unknown field(s) bogus (known: description, proces…#cebd0249b1ab7fc7"
 R	^	<tmp>/mutants/m3423.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
 R	^	<tmp>/mutants/m3424.json --arch x86_64 []	err	"invariants[0]: field 'id' must be a str"
 R	^	<tmp>/mutants/m3425.json --arch x86_64 []	err	"invariants[1]: missing required field 'id'"
-R	^	<tmp>/mutants/m3426.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m3426.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m3427.json --arch x86_64 []	err	"invariants[1]: type must be always, always_or_unreachable or eventually"
 R	^	<tmp>/mutants/m3428.json --arch x86_64 []	ok	d:53b4109d w:4f53cda1 c:266e203e m:74234e98
 R	^	<tmp>/mutants/m3429.json --arch x86_64 []	ok	d:ed07f450 w:4f53cda1 c:29d759b3 m:74234e98
@@ -4464,7 +4464,7 @@ R	^	<tmp>/mutants/m3432.json --arch x86_64 []	err	"invariants[1]: unknown field(
 R	^	<tmp>/mutants/m3433.json --arch x86_64 []	err	"invariants[0]: unknown field(s) a (known: after, cmd, descri…#c83c65d43bde64bf"
 R	^	<tmp>/mutants/m3434.json --arch x86_64 []	err	"knobs[0].name: a string (or a whole number), not [] (project…#29f55776841cf99b"
 R	^	<tmp>/mutants/m3435.json --arch x86_64 []	err	"services[0]: field 'ready' must be a str"
-R	^	<tmp>/mutants/m3436.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m3436.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m3437.json --arch x86_64 []	err	"knobs[0]: unknown field(s) bogus (known: default, descriptio…#192daea86c27a275"
 R	^	<tmp>/mutants/m3438.json --arch x86_64 []	err	"services[0]: missing required field 'ready'"
 R	^	<tmp>/mutants/m3439.json --arch x86_64 []	ok	d:bc8b3ee6 w:4f53cda1 c:380e9b3d m:74234e98
@@ -4493,7 +4493,7 @@ R	^	<tmp>/mutants/m3461.json --arch x86_64 []	err	"invariants[0].msg: a string (
 R	^	<tmp>/mutants/m3462.json --arch x86_64 []	err	"faults: unknown kind 'eventually' (known: clock, cut, disk, …#4e832b432aa0c2a5"
 R	^	<tmp>/mutants/m3463.json --arch x86_64 []	ok	d:c5de5c1e w:4f53cda1 c:ec399461 m:74234e98
 R	^	<tmp>/mutants/m3464.json --arch x86_64 []	err	"invariants[0]: missing required field 'id'"
-R	^	<tmp>/mutants/m3465.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m3465.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m3466.json --arch x86_64 []	err	"workload: missing required field 'steps'"
 R	^	<tmp>/mutants/m3467.json --arch x86_64 []	err	"root.files[0]: missing field `dst` (project format 1; the sc…#b3b7d9292d1b6f48"
 R	^	<tmp>/mutants/m3468.json --arch x86_64 []	err	"faults: unknown kind -1 (known: clock, cut, disk, freeze, ki…#355e5315d2e79ff4"
@@ -4516,8 +4516,8 @@ R	^	<tmp>/mutants/m3484.json --arch x86_64 []	ok	d:628f43df w:4f53cda1 c:6a8842b
 R	^	<tmp>/mutants/m3485.json --arch x86_64 []	err	"data: unknown field(s) a, e, l, n, t, u, v, y (known: descri…#c81fef5701575c91"
 R	^	<tmp>/mutants/m3486.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '5000')"
 R	^	<tmp>/mutants/m3487.json --arch x86_64 []	err	"invariants[0]: missing required field 'cmd'"
-R	^	<tmp>/mutants/m3488.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
-R	^	<tmp>/mutants/m3489.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m3488.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
+R	^	<tmp>/mutants/m3489.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m3490.json --arch x86_64 []	err	"services[0]: field 'cmd' must be a str"
 R	^	<tmp>/mutants/m3491.json --arch x86_64 []	err	"invariants[0]: unknown field(s) bogus (known: after, cmd, de…#cc796248e472a6a1"
 R	^	<tmp>/mutants/m3492.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: unhashable type in faults:"
@@ -4553,7 +4553,7 @@ R	^	<tmp>/mutants/m3521.json --arch x86_64 []	err	"knobs[0].values: {{p}} is not
 R	^	<tmp>/mutants/m3522.json --arch x86_64 []	err	"faults: unknown kind True (known: clock, cut, disk, freeze, …#4a1b72c8e9ec157e"
 R	^	<tmp>/mutants/m3523.json --arch x86_64 []	err	"knobs[0]: token must be one capital letter other than K N C …#338c70d08b8ec9c6"
 R	^	<tmp>/mutants/m3524.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
-R	^	<tmp>/mutants/m3525.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m3525.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m3526.json --arch x86_64 []	err	"root.files[1].mode: a string (or a whole number), not True (…#2f7958f034356993"
 R	^	<tmp>/mutants/m3527.json --arch x86_64 []	err	"services[0]: missing required field 'ready'"
 R	^	<tmp>/mutants/m3528.json --arch x86_64 []	err	"root.text: invalid type: list, expected a mapping (project f…#2d78f3100a493383"
@@ -4606,7 +4606,7 @@ R	^	<tmp>/mutants/m3574.json --arch x86_64 []	err	"root.files[0].src: a string (
 R	^	<tmp>/mutants/m3575.json --arch x86_64 []	ok	d:93f5464f w:4f53cda1 c:0d4f8b75 m:74234e98
 R	^	<tmp>/mutants/m3576.json --arch x86_64 []	err	"root.files[1]: invalid type: string \"v3\", expected a mapping…#80b14fee36cc9b47"
 R	^	<tmp>/mutants/m3577.json --arch x86_64 []	err	"description: a string, a number or true/false, not {} (proje…#45c15fb276d68dd6"
-R	^	<tmp>/mutants/m3578.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m3578.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m3579.json --arch x86_64 []	err	"knobs[0]: unknown field(s) bogus (known: default, descriptio…#192daea86c27a275"
 R	^	<tmp>/mutants/m3580.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: unhashable type in faults:"
 R	^	<tmp>/mutants/m3581.json --arch x86_64 []	err	"invariants[0]: unknown field(s) bogus (known: after, cmd, de…#cc796248e472a6a1"
@@ -4714,7 +4714,7 @@ R	^	<tmp>/mutants/m3682.json --arch x86_64 []	err	"faults: unknown kind '1' (kno
 R	^	<tmp>/mutants/m3683.json --arch x86_64 []	err	"services[0] (restate): image <tmp>/mutants/restate-1.7.13-am…#67f163d9e03461fe"
 R	^	<tmp>/mutants/m3684.json --arch x86_64 []	err	"guest: {{p}} is not a declared parameter"
 R	^	<tmp>/mutants/m3685.json --arch x86_64 []	err	"services[0] (restate): image <tmp>/mutants/restate-1.7.13-am…#67f163d9e03461fe"
-R	^	<tmp>/mutants/m3686.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m3686.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m3687.json --arch x86_64 []	err	"services: must be a list (it may be empty: a project that is only a workload)"
 R	^	<tmp>/mutants/m3688.json --arch x86_64 []	err	"services[0]: missing required field 'cmd'"
 R	^	<tmp>/mutants/m3689.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 4096] (got ['x…#7f8da8a2a0397006"
@@ -4833,7 +4833,7 @@ R	^	<tmp>/mutants/m3801.json --arch x86_64 []	err	"fakes[0].routes[1]: must be a
 R	^	<tmp>/mutants/m3802.json --arch x86_64 []	err	"fakes[1]: routes: at least one"
 R	^	<tmp>/mutants/m3803.json --arch x86_64 []	ok	d:6eae27ed w:4f53cda1 c:aeb35971 m:74234e98
 R	^	<tmp>/mutants/m3804.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
-R	^	<tmp>/mutants/m3805.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m3805.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m3806.json --arch x86_64 []	ok	d:ea7a558a w:4f53cda1 c:b31db368 m:74234e98
 R	^	<tmp>/mutants/m3807.json --arch x86_64 []	err	"fakes[1]: port: required, a TCP port number"
 R	^	<tmp>/mutants/m3808.json --arch x86_64 []	err	"data.dirs: invalid type: string \"\", expected a list (project…#a918e382fad06f20"
@@ -4848,8 +4848,8 @@ R	^	<tmp>/mutants/m3816.json --arch x86_64 []	err	"invariants[4]: field 'cmd' mu
 R	^	<tmp>/mutants/m3817.json --arch x86_64 []	err	"invariants[5]: unknown field(s) ., 0, 1, 7, 8, 9 (known: aft…#b8ee78206384ad49"
 R	^	<tmp>/mutants/m3818.json --arch x86_64 []	ok	d:8e9f0840 w:4f53cda1 c:220afe3d m:74234e98
 R	^	<tmp>/mutants/m3819.json --arch x86_64 []	err	"services[0]: port must be a number"
-R	^	<tmp>/mutants/m3820.json --arch x86_64 []	err	"fakes[0]: unknown field(s) bogus (known: addr, description, …#5f5d45aed01eceeb"
-R	^	<tmp>/mutants/m3821.json --arch x86_64 []	err	"fakes[0]: unknown field(s) bogus (known: addr, description, …#5f5d45aed01eceeb"
+R	^	<tmp>/mutants/m3820.json --arch x86_64 []	err	"fakes[0]: unknown field(s) bogus (known: addr, description, …#fa51abb487ce9501"
+R	^	<tmp>/mutants/m3821.json --arch x86_64 []	err	"fakes[0]: unknown field(s) bogus (known: addr, description, …#fa51abb487ce9501"
 R	^	<tmp>/mutants/m3822.json --arch x86_64 []	err	"invariants[1]: {{p}} is not a declared parameter"
 R	^	<tmp>/mutants/m3823.json --arch x86_64 []	err	"fakes[1].routes[0]: unknown field(s) bogus (known: body, cod…#fc5277e216583e48"
 R	^	<tmp>/mutants/m3824.json --arch x86_64 []	err	"fakes[1].routes[0]: unknown field(s) bogus (known: body, cod…#fc5277e216583e48"
@@ -4879,10 +4879,10 @@ R	^	<tmp>/mutants/m3847.json --arch x86_64 []	err	"invariants[1]: unknown field(
 R	^	<tmp>/mutants/m3848.json --arch x86_64 []	err	"invariants[3]: unknown field(s) bogus (known: after, cmd, de…#de4ac01f91bee045"
 R	^	<tmp>/mutants/m3849.json --arch x86_64 []	err	"knobs[2]: duplicate token R"
 R	^	<tmp>/mutants/m3850.json --arch x86_64 []	ok	d:1891dde3 w:4f53cda1 c:5e72d62a m:74234e98
-R	^	<tmp>/mutants/m3851.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#5b9c4ffb7a1a996d"
+R	^	<tmp>/mutants/m3851.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#1497f65bf499106f"
 R	^	<tmp>/mutants/m3852.json --arch x86_64 []	ok	d:c6b1e24a w:4f53cda1 c:772f207c m:74234e98
 R	^	<tmp>/mutants/m3853.json --arch x86_64 []	err	"services[1].ready_timeout: invalid type: string \"eventually\"…#dec3a35ad09a1d47"
-R	^	<tmp>/mutants/m3854.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#5b9c4ffb7a1a996d"
+R	^	<tmp>/mutants/m3854.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#1497f65bf499106f"
 R	^	<tmp>/mutants/m3855.json --arch x86_64 []	err	"services[4]: duplicate service name 'kafka'"
 R	^	<tmp>/mutants/m3856.json --arch x86_64 []	err	"knobs[1]: missing required field 'default'"
 R	^	<tmp>/mutants/m3857.json --arch x86_64 []	err	"services[2]: must be a mapping"
@@ -4917,7 +4917,7 @@ R	^	<tmp>/mutants/m3885.json --arch x86_64 []	crash	"hydo-build stops here with 
 R	^	<tmp>/mutants/m3886.json --arch x86_64 []	err	"knobs[1]: unknown field(s) bogus (known: default, descriptio…#139cc62bbb4ec30f"
 R	^	<tmp>/mutants/m3887.json --arch x86_64 []	err	"knobs[1]: field 'token' must be a str"
 R	^	<tmp>/mutants/m3888.json --arch x86_64 []	ok	d:18ab047c w:4f53cda1 c:508eb6d6 m:74234e98
-R	^	<tmp>/mutants/m3889.json --arch x86_64 []	err	"services[3]: unknown field(s) bogus (known: addr, cmd, depen…#0eea583c0f2a7217"
+R	^	<tmp>/mutants/m3889.json --arch x86_64 []	err	"services[3]: unknown field(s) bogus (known: addr, cmd, depen…#9b1026111284e28f"
 R	^	<tmp>/mutants/m3890.json --arch x86_64 []	err	"invariants[2]: unknown field(s) bogus (known: after, cmd, de…#3ca9b4afc54bdb1f"
 R	^	<tmp>/mutants/m3891.json --arch x86_64 []	ok	d:0e71f708 w:4f53cda1 c:a21a627a m:74234e98
 R	^	<tmp>/mutants/m3892.json --arch x86_64 []	err	"services: must be a list (it may be empty: a project that is only a workload)"
@@ -4934,9 +4934,9 @@ R	^	<tmp>/mutants/m3902.json --arch x86_64 []	ok	d:482ca128 w:4f53cda1 c:f48a267
 R	^	<tmp>/mutants/m3903.json --arch x86_64 []	err	"data: unknown field(s) bogus (known: description, dirs, mount, size_mib)"
 R	^	<tmp>/mutants/m3904.json --arch x86_64 []	ok	d:7333f1ec w:4f53cda1 c:98f99767 m:74234e98
 R	^	<tmp>/mutants/m3905.json --arch x86_64 []	ok	d:55c1b629 w:4f53cda1 c:779dd316 m:74234e98
-R	^	<tmp>/mutants/m3906.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#5b9c4ffb7a1a996d"
+R	^	<tmp>/mutants/m3906.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#1497f65bf499106f"
 R	^	<tmp>/mutants/m3907.json --arch x86_64 []	err	"workload: field 'steps' must be a int"
-R	^	<tmp>/mutants/m3908.json --arch x86_64 []	err	"services[3]: unknown field(s) bogus (known: addr, cmd, depen…#0eea583c0f2a7217"
+R	^	<tmp>/mutants/m3908.json --arch x86_64 []	err	"services[3]: unknown field(s) bogus (known: addr, cmd, depen…#9b1026111284e28f"
 R	^	<tmp>/mutants/m3909.json --arch x86_64 []	err	"services[3]: depends_on names unknown service '1'"
 R	^	<tmp>/mutants/m3910.json --arch x86_64 []	ok	d:2aa9ecbe w:4f53cda1 c:49eec976 m:74234e98
 R	^	<tmp>/mutants/m3911.json --arch x86_64 []	err	"knobs[0]: unknown field(s) bogus (known: default, descriptio…#192daea86c27a275"
@@ -4952,7 +4952,7 @@ R	^	<tmp>/mutants/m3920.json --arch x86_64 []	ok	d:b724c83b w:4f53cda1 c:a45c742
 R	^	<tmp>/mutants/m3921.json --arch x86_64 []	err	"services[0].errors: a mapping (format, level, match, ignore,…#d3e4fb8064bd0fe1"
 R	^	<tmp>/mutants/m3922.json --arch x86_64 []	ok	d:2572c993 w:4f53cda1 c:4e6be96d m:74234e98
 R	^	<tmp>/mutants/m3923.json --arch x86_64 []	err	"services[3]: name 'A b' must match [a-z][a-z0-9_]* (it becom…#ffb5aed8c444c590"
-R	^	<tmp>/mutants/m3924.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#5b9c4ffb7a1a996d"
+R	^	<tmp>/mutants/m3924.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#1497f65bf499106f"
 R	^	<tmp>/mutants/m3925.json --arch x86_64 []	ok	d:151d364a w:4f53cda1 c:47200a76 m:74234e98
 R	^	<tmp>/mutants/m3926.json --arch x86_64 []	ok	d:b56afeab w:4f53cda1 c:5c44720d m:74234e98
 R	^	<tmp>/mutants/m3927.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: unhashable type in faults:"
@@ -4988,7 +4988,7 @@ R	^	<tmp>/mutants/m3956.json --arch x86_64 []	ok	d:b2da6223 w:4f53cda1 c:3c5fb09
 R	^	<tmp>/mutants/m3957.json --arch x86_64 []	err	"services[3]: depends_on names unknown service 'kill'"
 R	^	<tmp>/mutants/m3958.json --arch x86_64 []	err	"root.nix: invalid type: string \"x\", expected a list (project…#5041286af9bfea49"
 R	^	<tmp>/mutants/m3959.json --arch x86_64 []	ok	d:e66b8002 w:4f53cda1 c:b5732b5e m:74234e98
-R	^	<tmp>/mutants/m3960.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#286a64e1f238b7e2"
+R	^	<tmp>/mutants/m3960.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#260118747e2b0a14"
 R	^	<tmp>/mutants/m3961.json --arch x86_64 []	ok	d:08438b64 w:4f53cda1 c:ff1333df m:74234e98
 R	^	<tmp>/mutants/m3962.json --arch x86_64 []	err	"root.text./etc/kafka/log4j.properties: a string (or a whole …#478bcd0efea6bd9d"
 R	^	<tmp>/mutants/m3963.json --arch x86_64 []	err	"workload: unknown field(s) bogus (known: description, proces…#cebd0249b1ab7fc7"
@@ -5018,10 +5018,10 @@ R	^	<tmp>/mutants/m3986.json --arch x86_64 []	ok	d:e4a9810a w:4f53cda1 c:6b1fd12
 R	^	<tmp>/mutants/m3987.json --arch x86_64 []	err	"faults: unknown kind 'x' (known: clock, cut, disk, freeze, k…#6412764adec769d6"
 R	^	<tmp>/mutants/m3988.json --arch x86_64 []	err	"services[3]: field 'ready' must be a str"
 R	^	<tmp>/mutants/m3989.json --arch x86_64 []	ok	d:7c0326ec w:4f53cda1 c:b4a8370a m:74234e98
-R	^	<tmp>/mutants/m3990.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#286a64e1f238b7e2"
+R	^	<tmp>/mutants/m3990.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#260118747e2b0a14"
 R	^	<tmp>/mutants/m3991.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: int object is not iterable"
 R	^	<tmp>/mutants/m3992.json --arch x86_64 []	ok	d:c9ee95d4 w:4f53cda1 c:7a8f050e m:74234e98
-R	^	<tmp>/mutants/m3993.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m3993.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m3994.json --arch x86_64 []	err	"knobs[2]: duplicate token M"
 R	^	<tmp>/mutants/m3995.json --arch x86_64 []	err	"invariants[1]: type must be always, always_or_unreachable or eventually"
 R	^	<tmp>/mutants/m3996.json --arch x86_64 []	err	"root.files[4]: missing field `dst` (project format 1; the sc…#d022697bf9b92c44"
@@ -5031,7 +5031,7 @@ R	^	<tmp>/mutants/m3999.json --arch x86_64 []	err	"data.dirs: invalid type: stri
 R	^	<tmp>/mutants/m4000.json --arch x86_64 []	err	"root.files[4]: invalid type: string \"10.89.0.7\", expected a …#e3bcaec0d940c937"
 R	^	<tmp>/mutants/m4001.json --arch x86_64 []	err	"services[3]: depends_on names unknown service '127.0.0.1'"
 R	^	<tmp>/mutants/m4002.json --arch x86_64 []	err	"invariants[0]: unknown field(s) bogus (known: after, cmd, de…#cc796248e472a6a1"
-R	^	<tmp>/mutants/m4003.json --arch x86_64 []	err	"services[3]: unknown field(s) bogus (known: addr, cmd, depen…#0eea583c0f2a7217"
+R	^	<tmp>/mutants/m4003.json --arch x86_64 []	err	"services[3]: unknown field(s) bogus (known: addr, cmd, depen…#9b1026111284e28f"
 R	^	<tmp>/mutants/m4004.json --arch x86_64 []	ok	d:474a24c3 w:4f53cda1 c:8fed74c7 m:74234e98
 R	^	<tmp>/mutants/m4005.json --arch x86_64 []	err	"root.files[4].src: a string (or a whole number), not False (…#96dd75eb3536dac9"
 R	^	<tmp>/mutants/m4006.json --arch x86_64 []	err	"root.files[5].bogus: unknown field `bogus`, expected one of …#b0ac0896d5318eb4"
@@ -5060,10 +5060,10 @@ R	^	<tmp>/mutants/m4028.json --arch x86_64 []	err	"faults: unknown kind 'k' (kno
 R	^	<tmp>/mutants/m4029.json --arch x86_64 []	ok	d:097d90b8 w:4f53cda1 c:1a903575 m:74234e98
 R	^	<tmp>/mutants/m4030.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
 R	^	<tmp>/mutants/m4031.json --arch x86_64 []	ok	d:ccfe34b2 w:4f53cda1 c:331c343c m:74234e98
-R	^	<tmp>/mutants/m4032.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#5b9c4ffb7a1a996d"
+R	^	<tmp>/mutants/m4032.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#1497f65bf499106f"
 R	^	<tmp>/mutants/m4033.json --arch x86_64 []	err	"invariants[3]: field 'id' must be a str"
 R	^	<tmp>/mutants/m4034.json --arch x86_64 []	ok	d:66a30715 w:4f53cda1 c:05898969 m:74234e98
-R	^	<tmp>/mutants/m4035.json --arch x86_64 []	err	"services[3]: unknown field(s) bogus (known: addr, cmd, depen…#0eea583c0f2a7217"
+R	^	<tmp>/mutants/m4035.json --arch x86_64 []	err	"services[3]: unknown field(s) bogus (known: addr, cmd, depen…#9b1026111284e28f"
 R	^	<tmp>/mutants/m4036.json --arch x86_64 []	err	"services[2]: depends_on names unknown service 'kafka'"
 R	^	<tmp>/mutants/m4037.json --arch x86_64 []	err	"root.files[2].dst: a string (or a whole number), not {'a': 1…#e1ecf3c7104503d7"
 R	^	<tmp>/mutants/m4038.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: bool object is not iterable"
@@ -5082,7 +5082,7 @@ R	^	<tmp>/mutants/m4050.json --arch x86_64 []	err	"root.nix: invalid type: strin
 R	^	<tmp>/mutants/m4051.json --arch x86_64 []	err	"invariants[3]: field 'id' must be a str"
 R	^	<tmp>/mutants/m4052.json --arch x86_64 []	ok	d:757e4087 w:4f53cda1 c:68db5d24 m:74234e98
 R	^	<tmp>/mutants/m4053.json --arch x86_64 []	err	"invariants[1].cmd: {{p}} is not a declared parameter"
-R	^	<tmp>/mutants/m4054.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#286a64e1f238b7e2"
+R	^	<tmp>/mutants/m4054.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#260118747e2b0a14"
 R	^	<tmp>/mutants/m4055.json --arch x86_64 []	err	"env.KAFKA_CLUSTER_ID: a string, a number or true/false, not …#b9204ca1691ae475"
 R	^	<tmp>/mutants/m4056.json --arch x86_64 []	err	"invariants[0].final: invalid type: integer `4096`, expected …#47106ee5f662b0b6"
 R	^	<tmp>/mutants/m4057.json --arch x86_64 []	ok	d:60183c0a w:4f53cda1 c:3db08574 m:74234e98
@@ -5097,7 +5097,7 @@ R	^	<tmp>/mutants/m4065.json --arch x86_64 []	err	"services[0]: field 'name' mus
 R	^	<tmp>/mutants/m4066.json --arch x86_64 []	ok	d:06884d8c w:4f53cda1 c:e815de05 m:74234e98
 R	^	<tmp>/mutants/m4067.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: int object is not iterable"
 R	^	<tmp>/mutants/m4068.json --arch x86_64 []	err	"services[2]: field 'name' must be a str"
-R	^	<tmp>/mutants/m4069.json --arch x86_64 []	err	"services[1]: unknown field(s) a (known: addr, cmd, depends_o…#fedad768293448c8"
+R	^	<tmp>/mutants/m4069.json --arch x86_64 []	err	"services[1]: unknown field(s) a (known: addr, cmd, depends_o…#0d80664073d1f0fc"
 R	^	<tmp>/mutants/m4070.json --arch x86_64 []	err	"knobs[0].values[2]: a string, a number or true/false, not {}…#8618cdc7fdc34f0e"
 R	^	<tmp>/mutants/m4071.json --arch x86_64 []	err	"services[1]: field 'cmd' must be a str"
 R	^	<tmp>/mutants/m4072.json --arch x86_64 []	err	"services[0]: missing required field 'name'"
@@ -5122,7 +5122,7 @@ R	^	<tmp>/mutants/m4090.json --arch x86_64 []	ok	d:a85fc173 w:4f53cda1 c:e3f315f
 R	^	<tmp>/mutants/m4091.json --arch x86_64 []	ok	d:5525975e w:4f53cda1 c:08ccb237 m:74234e98
 R	^	<tmp>/mutants/m4092.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
 R	^	<tmp>/mutants/m4093.json --arch x86_64 []	ok	d:d93cd36b w:4f53cda1 c:5dcbe5d1 m:74234e98
-R	^	<tmp>/mutants/m4094.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#286a64e1f238b7e2"
+R	^	<tmp>/mutants/m4094.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, depen…#260118747e2b0a14"
 R	^	<tmp>/mutants/m4095.json --arch x86_64 []	err	"services[0]: must be a mapping"
 R	^	<tmp>/mutants/m4096.json --arch x86_64 []	ok	d:c2204879 w:4f53cda1 c:d0fd8803 m:74234e98
 R	^	<tmp>/mutants/m4097.json --arch x86_64 []	err	"workload: unknown field(s) bogus (known: description, proces…#cebd0249b1ab7fc7"
@@ -5138,13 +5138,13 @@ R	^	<tmp>/mutants/m4106.json --arch x86_64 []	err	"faults: unknown kind False (k
 R	^	<tmp>/mutants/m4107.json --arch x86_64 []	err	"invariants[2]: an invariant with final: false needs every:"
 R	^	<tmp>/mutants/m4108.json --arch x86_64 []	ok	d:6e0fcc6a w:4f53cda1 c:fa50834b m:74234e98
 R	^	<tmp>/mutants/m4109.json --arch x86_64 []	err	"invariants[0]: unknown field(s) bogus (known: after, cmd, de…#cc796248e472a6a1"
-R	^	<tmp>/mutants/m4110.json --arch x86_64 []	err	"services[3]: unknown field(s) bogus (known: addr, cmd, depen…#0eea583c0f2a7217"
+R	^	<tmp>/mutants/m4110.json --arch x86_64 []	err	"services[3]: unknown field(s) bogus (known: addr, cmd, depen…#9b1026111284e28f"
 R	^	<tmp>/mutants/m4111.json --arch x86_64 []	err	"knobs[1]: field 'token' must be a str"
 R	^	<tmp>/mutants/m4112.json --arch x86_64 []	ok	d:f865c028 w:4f53cda1 c:21e15373 m:74234e98
 R	^	<tmp>/mutants/m4113.json --arch x86_64 []	err	"root.files[2].src: a string (or a whole number), not ['kill'…#8b3d8b6f93f4da9d"
 R	^	<tmp>/mutants/m4114.json --arch x86_64 []	err	"root.files[0]: invalid type: string \"x\", expected a mapping …#d51786e50215d0fe"
 R	^	<tmp>/mutants/m4115.json --arch x86_64 []	ok	d:8e7b20e1 w:4f53cda1 c:e645e439 m:74234e98
-R	^	<tmp>/mutants/m4116.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#5b9c4ffb7a1a996d"
+R	^	<tmp>/mutants/m4116.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#1497f65bf499106f"
 R	^	<tmp>/mutants/m4117.json --arch x86_64 []	ok	d:f7e3c7d8 w:4f53cda1 c:ffeb6260 m:74234e98
 R	^	<tmp>/mutants/m4118.json --arch x86_64 []	ok	d:d2031be5 w:4f53cda1 c:7c2a6157 m:74234e98
 R	^	<tmp>/mutants/m4119.json --arch x86_64 []	err	"services[1]: must be a mapping"
@@ -5166,11 +5166,11 @@ R	^	<tmp>/mutants/m4134.json --arch x86_64 []	err	"knobs[1]: unknown field(s) bo
 R	^	<tmp>/mutants/m4135.json --arch x86_64 []	err	"faults: unknown kind 'eventually' (known: clock, cut, disk, …#4e832b432aa0c2a5"
 R	^	<tmp>/mutants/m4136.json --arch x86_64 []	err	"services[2]: port must be a number"
 R	^	<tmp>/mutants/m4137.json --arch x86_64 []	ok	d:bf918cb7 w:4f53cda1 c:fcba7581 m:74234e98
-R	^	<tmp>/mutants/m4138.json --arch x86_64 []	err	"services[2]: unknown field(s) a (known: addr, cmd, depends_o…#96a309c0248f51d4"
+R	^	<tmp>/mutants/m4138.json --arch x86_64 []	err	"services[2]: unknown field(s) a (known: addr, cmd, depends_o…#79a119d6e8b2a005"
 R	^	<tmp>/mutants/m4139.json --arch x86_64 []	err	"root.files[1]: missing field `src` (project format 1; the sc…#1cf8c818367c2f91"
 R	^	<tmp>/mutants/m4140.json --arch x86_64 []	err	"knobs[0]: token must be one capital letter other than K N C …#338c70d08b8ec9c6"
 R	^	<tmp>/mutants/m4141.json --arch x86_64 []	err	"invariants[1]: missing required field 'cmd'"
-R	^	<tmp>/mutants/m4142.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
+R	^	<tmp>/mutants/m4142.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#fd429b830b1b9af5"
 R	^	<tmp>/mutants/m4143.json --arch x86_64 []	err	"services[0]: must be a mapping"
 R	^	<tmp>/mutants/m4144.json --arch x86_64 []	err	"workload.steps: between 1 and 1000"
 R	^	<tmp>/mutants/m4145.json --arch x86_64 []	err	"services[0]: missing required field 'name'"

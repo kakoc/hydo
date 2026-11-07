@@ -16,6 +16,7 @@ const OCI_KEYS: &[&str] = &[
     "user",
     "env",
     "mounts",
+    "writable",
 ];
 const ARCHES: &[&str] = &["x86_64", "arm64"];
 
