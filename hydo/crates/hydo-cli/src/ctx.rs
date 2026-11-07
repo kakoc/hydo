@@ -36,6 +36,9 @@ pub struct Ctx {
     pub root: PathBuf,
     /// The configuration, read once from the environment in `main` (`hydo_config`, M144).
     pub config: hydo_config::Config,
+    /// Linux: run x86_64 images on the KVM engine (`--backend kvm` or `HYDO_BACKEND=kvm`)
+    /// instead of hvx.
+    pub kvm: bool,
 }
 
 impl Ctx {
@@ -49,10 +52,41 @@ impl Ctx {
             .and_then(Path::parent)
             .map(Path::to_path_buf)
             .unwrap_or_else(|| PathBuf::from("."));
+        let platform = Platform::detect(&config.cli);
+        let kvm = platform == Platform::Linux && config.kvm.backend.as_deref() == Some("kvm");
         Ctx {
-            platform: Platform::detect(&config.cli),
+            platform,
             root,
             config,
+            kvm,
+        }
+    }
+
+    /// Choose the engine from `--backend hvx|kvm` (removed from `args`); the default is
+    /// `HYDO_BACKEND`, else hvx. The Mac has one engine.
+    pub fn take_backend(&mut self, args: &mut Vec<String>) {
+        let Some(b) = take(args, "--backend") else {
+            if let Some(b) = self.config.kvm.backend.as_deref() {
+                if hydo_config::kvm::Backend::parse(b).is_none() {
+                    die(&format!("HYDO_BACKEND={b}: expected hvx or kvm"));
+                }
+            }
+            return;
+        };
+        match (self.platform, hydo_config::kvm::Backend::parse(&b)) {
+            (Platform::Linux, Some(hydo_config::kvm::Backend::Kvm)) => self.kvm = true,
+            (Platform::Linux, Some(hydo_config::kvm::Backend::Hvx)) => self.kvm = false,
+            (Platform::Mac, _) => die("--backend: the Mac has one engine (hvm)"),
+            (_, None) => die(&format!("--backend {b}: expected hvx or kvm")),
+        }
+    }
+
+    /// The engine's name in run documents (`hvx`, `kvm` or `hvm`).
+    pub fn backend_name(&self) -> &'static str {
+        match (self.platform, self.kvm) {
+            (Platform::Mac, _) => "hvm",
+            (Platform::Linux, true) => "kvm",
+            (Platform::Linux, false) => "hvx",
         }
     }
 

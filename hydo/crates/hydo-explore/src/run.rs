@@ -67,6 +67,10 @@ struct Cx {
     vcpus: i64,
     cpu: String,
     hvm_kernel: Option<PathBuf>,
+    /// `--backend kvm`: the KVM engine (hydo-kvm). Its schedules are drawn as the Mac engine's
+    /// (the tokens both apply: no `cf=`, `pp=` or `xt*`; forced preemption points), its images are
+    /// the x86_64 images hvx boots.
+    kvm: bool,
     known: Option<Known>,
     /// The explorer's command line (the results' configuration).
     argv: Vec<String>,
@@ -75,6 +79,11 @@ struct Cx {
 }
 
 impl Cx {
+    /// The image is an arm64 initramfs (the Mac engine), not an x86_64 disk.
+    fn arm(&self) -> bool {
+        self.ex.backend == Backend::Hvm && !self.kvm
+    }
+
     fn hvm_dir(&self) -> PathBuf {
         self.env.root.join("hv").join("hvm").join("explore")
     }
@@ -119,7 +128,7 @@ impl Cx {
     /// started by the `hydo` command; always since M145, which deleted the engine program's plain
     /// `one` mode that the line named before).
     fn by_hand(&self, sched: &str) -> String {
-        let img = if self.ex.backend == Backend::Hvm {
+        let img = if self.arm() {
             self.hvm_image()
         } else {
             self.build.join(&self.image)
@@ -188,12 +197,16 @@ fn setup(a: Args, env: &Env) -> Cx {
     if a.fc_adaptive && a.sweep.as_deref() != Some("freeze") {
         die("explore.py: --fc-adaptive goes with --sweep freeze");
     }
+    let kvm = a.backend == "kvm";
     let ex = Ex {
-        backend: if a.backend == "hvm" {
+        backend: if a.backend == "hvm" || kvm {
             Backend::Hvm
         } else {
             Backend::Hvx
         },
+        // the KVM engine has the image's disk and its tc, as hvx
+        hvm_disk: kvm,
+        hvm_tc: kvm,
         ..Ex::default()
     };
     let build = env.config.paths.build.clone();
@@ -207,13 +220,14 @@ fn setup(a: Args, env: &Env) -> Cx {
         vcpus: 1,
         cpu: "v2".into(),
         hvm_kernel: a.hvm_kernel.as_ref().map(PathBuf::from),
+        kvm,
         known: Some(known),
         argv: Vec::new(),
         ev: Events::none(),
         a,
     };
     let a = cx.a.clone();
-    if cx.ex.backend == Backend::Hvm {
+    if cx.arm() {
         let img = cx.hvm_image();
         cx.ex.hvm_disk = hvm::disk_for(&img).is_some();
         // explore.py stopped here with a traceback for a file that is not an arm64 initramfs
@@ -251,7 +265,7 @@ fn setup(a: Args, env: &Env) -> Cx {
     {
         let sp = if let Some(m) = &a.manifest {
             Space::from_path(Path::new(m))
-        } else if cx.ex.backend == Backend::Hvm {
+        } else if cx.arm() {
             let img = cx.hvm_image();
             let text = hydo_engine::image::embedded_manifest(&img)
                 .unwrap_or_else(|_| die(&format!("no etc/hydo/hydo.yaml in {}", cx.image)));
@@ -273,7 +287,7 @@ fn setup(a: Args, env: &Env) -> Cx {
             Space::from_text(&text, comp)
         };
         let sp = sp.unwrap_or_else(|e| die(&e));
-        let img = if cx.ex.backend == Backend::Hvm {
+        let img = if cx.arm() {
             cx.hvm_image()
         } else {
             cx.build.join(&a.image)
@@ -303,7 +317,7 @@ fn setup(a: Args, env: &Env) -> Cx {
             None => ("default", json!(1024)),
         },
     };
-    let (lo, hi) = if cx.ex.backend == Backend::Hvx {
+    let (lo, hi) = if cx.ex.backend == Backend::Hvx || cx.kvm {
         (256, 3072)
     } else {
         (256, 4096)
@@ -470,68 +484,99 @@ fn make_pool(cx: &Cx) -> Pool {
     if let Some(tm) = cx.a.turn_margin {
         extra.push(format!("{}={tm}", hydo_config::registry::HVX_TURN_MARGIN));
     }
-    let (engine, spec): (Arc<dyn ControlledEngine + Send + Sync>, BootSpec) =
-        if cx.ex.backend == Backend::Hvm {
-            let e = hvm::Hvm {
-                hvmx: hvm::program(&cx.env.root, &cx.env.config.hvm),
-                env: Vec::new(),
-                config: cx.env.config.env.clone(),
-            };
-            let spec = BootSpec {
-                image: cx.hvm_image(),
-                ram_mib: cx.ram_mib as u32,
-                vcpus: 1,
-                cpu: CpuLevel::V2,
-                kernel: cx
-                    .hvm_kernel
-                    .clone()
-                    .unwrap_or_else(|| cx.hvm_default_kernel()),
-                initrd: None,
-                outdir: consoles,
-                snapshots: SnapshotStore::Files,
-            };
-            (Arc::new(e), spec)
-        } else {
-            let e = hvx::Hvx {
-                engine: hvx::program(&cx.env.root, &cx.env.config.engine),
-                hvx_run: Some(cx.env.config.paths.hvx_run.clone()),
-                extra_env: extra,
-                env: hvx::wrapper_env(&cx.env.config.engine),
-                config: cx.env.config.env.clone(),
-            };
-            let spec = BootSpec {
-                image: cx.build.join(&cx.image),
-                ram_mib: cx.ram_mib as u32,
-                vcpus: cx.vcpus as u32,
-                cpu: if cx.cpu == "v3" {
-                    CpuLevel::V3
-                } else {
-                    CpuLevel::V2
-                },
-                kernel: cx.build.join("bzImage"),
-                initrd: Some(cx.build.join("initramfs-kafka.cpio.gz")),
-                outdir: consoles,
-                snapshots: SnapshotStore::Files,
-            };
-            // the kernel and initramfs the image's record names (M155)
-            let mut spec = spec;
-            if cx.env.config.pool.scripted_engine.is_none() {
-                let b = hydo_engine::image::boot_files(
-                    &spec.image,
-                    &spec.kernel,
-                    spec.initrd.as_deref(),
-                    None,
-                    &[],
-                )
-                .unwrap_or_else(|e| die(&format!("hydo: {e}")));
-                if let Some(n) = &b.note {
-                    eprintln!("hydo: {n}");
-                }
-                spec.kernel = b.kernel;
-                spec.initrd = b.initrd;
-            }
-            (Arc::new(e), spec)
+    let (engine, spec): (Arc<dyn ControlledEngine + Send + Sync>, BootSpec) = if cx.kvm {
+        let e = hydo_engine::kvm::Kvm::for_release(&cx.env.root, cx.env.config.env.clone());
+        let image = cx.build.join(&cx.image);
+        let mut spec = BootSpec {
+            image,
+            ram_mib: cx.ram_mib as u32,
+            vcpus: 1,
+            cpu: CpuLevel::V2,
+            kernel: PathBuf::new(),
+            initrd: None,
+            outdir: consoles,
+            snapshots: SnapshotStore::Memory,
         };
+        if cx.env.config.pool.scripted_engine.is_none() {
+            // the KVM build of the image's recorded kernel, and its initramfs (hydo-kvm)
+            let dirs = [
+                cx.build.clone(),
+                cx.env.root.join("hv").join("kvm").join("linux").join("out"),
+            ];
+            let b = hydo_engine::kvm::boot_files(
+                &spec.image,
+                &dirs,
+                cx.env.config.kvm.kernel.as_deref(),
+            )
+            .unwrap_or_else(|e| die(&format!("hydo: {e}")));
+            if let Some(n) = &b.note {
+                eprintln!("hydo: {n}");
+            }
+            spec.kernel = b.kernel;
+            spec.initrd = Some(b.initrd);
+        }
+        (Arc::new(e), spec)
+    } else if cx.ex.backend == Backend::Hvm {
+        let e = hvm::Hvm {
+            hvmx: hvm::program(&cx.env.root, &cx.env.config.hvm),
+            env: Vec::new(),
+            config: cx.env.config.env.clone(),
+        };
+        let spec = BootSpec {
+            image: cx.hvm_image(),
+            ram_mib: cx.ram_mib as u32,
+            vcpus: 1,
+            cpu: CpuLevel::V2,
+            kernel: cx
+                .hvm_kernel
+                .clone()
+                .unwrap_or_else(|| cx.hvm_default_kernel()),
+            initrd: None,
+            outdir: consoles,
+            snapshots: SnapshotStore::Files,
+        };
+        (Arc::new(e), spec)
+    } else {
+        let e = hvx::Hvx {
+            engine: hvx::program(&cx.env.root, &cx.env.config.engine),
+            hvx_run: Some(cx.env.config.paths.hvx_run.clone()),
+            extra_env: extra,
+            env: hvx::wrapper_env(&cx.env.config.engine),
+            config: cx.env.config.env.clone(),
+        };
+        let spec = BootSpec {
+            image: cx.build.join(&cx.image),
+            ram_mib: cx.ram_mib as u32,
+            vcpus: cx.vcpus as u32,
+            cpu: if cx.cpu == "v3" {
+                CpuLevel::V3
+            } else {
+                CpuLevel::V2
+            },
+            kernel: cx.build.join("bzImage"),
+            initrd: Some(cx.build.join("initramfs-kafka.cpio.gz")),
+            outdir: consoles,
+            snapshots: SnapshotStore::Files,
+        };
+        // the kernel and initramfs the image's record names (M155)
+        let mut spec = spec;
+        if cx.env.config.pool.scripted_engine.is_none() {
+            let b = hydo_engine::image::boot_files(
+                &spec.image,
+                &spec.kernel,
+                spec.initrd.as_deref(),
+                None,
+                &[],
+            )
+            .unwrap_or_else(|e| die(&format!("hydo: {e}")));
+            if let Some(n) = &b.note {
+                eprintln!("hydo: {n}");
+            }
+            spec.kernel = b.kernel;
+            spec.initrd = b.initrd;
+        }
+        (Arc::new(e), spec)
+    };
     // Every image is an agent image driven by the host controller, also one explored without a
     // manifest space (the stack's schedules, as hydo-bench draws them, M129); one it cannot drive
     // (a shell-init image, or one without an embedded manifest) is refused with the controller's
@@ -1479,7 +1524,7 @@ impl Cx {
     }
 
     fn image_file(&self) -> PathBuf {
-        if self.ex.backend == Backend::Hvm {
+        if self.arm() {
             self.hvm_image()
         } else {
             self.build.join(&self.image)
@@ -1522,7 +1567,7 @@ impl Cx {
     }
 
     fn engine_info(&self, workers: usize) -> hydo_results::Engine {
-        let hvm_b = self.ex.backend == Backend::Hvm;
+        let hvm_b = self.arm();
         let guest_kernel = if hvm_b {
             hvm::image_kernel(&self.hvm_image()).map(|(_, sha)| {
                 let k = self
@@ -1541,13 +1586,22 @@ impl Cx {
             None
         };
         hydo_results::Engine {
-            backend: Some(if hvm_b { "hvm" } else { "hvx" }.into()),
+            backend: Some(
+                if hvm_b {
+                    "hvm"
+                } else if self.kvm {
+                    "kvm"
+                } else {
+                    "hvx"
+                }
+                .into(),
+            ),
             args: Some(self.engine_args()),
             ram_mib: Some(self.ram_mib as u64),
             vcpus: Some(self.vcpus as u64),
             cpu: Some(self.cpu.clone()),
             guest_kernel,
-            module_srcversion: if hvm_b {
+            module_srcversion: if hvm_b || self.kvm {
                 None
             } else {
                 std::fs::read_to_string("/sys/module/hvx/srcversion")

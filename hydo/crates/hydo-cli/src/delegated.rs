@@ -46,7 +46,14 @@ pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
         }
     }
     let mut full: Vec<String> = Vec::new();
-    if linux {
+    if linux && ctx.kvm {
+        // the KVM engine runs in this process; the bundled debugfs reads the image's manifest
+        if let Some((_, path)) = hvxenv::tool_env(ctx).into_iter().find(|(k, _)| k == "PATH") {
+            std::env::set_var("PATH", path);
+        }
+        full.push("--backend".into());
+        full.push("kvm".into());
+    } else if linux {
         let engine = hvxenv::engine(ctx);
         let probe = hydo_engine::hvx::Hvx {
             engine: engine.clone(),

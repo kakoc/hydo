@@ -370,7 +370,7 @@
       "type": "object",
       "properties": {
         "backend": {
-          "description": "`hvx` (the Linux kernel module) or `hvm` (Hypervisor.framework on the Mac).",
+          "description": "`hvx` (the Linux kernel module), `hvm` (Hypervisor.framework on the Mac) or `kvm` (stock Linux KVM).",
           "type": [
             "string",
             "null"
