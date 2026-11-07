@@ -123,7 +123,13 @@ fn rust_case(mpath: &Path, arch: &str, rrs: &Path, busybox: &Path) -> Value {
 
 #[test]
 fn oci_staging_matches_hydo_oci() {
-    let tmp = std::env::temp_dir().join(format!("hydo-build-oci-{}", std::process::id()));
+    // The recorded modes are those of directories made under umask 022; a umask of 002
+    // (common for users on Linux) gave other modes (M167).
+    // SAFETY: umask only sets the process's file creation mask.
+    unsafe {
+        libc::umask(0o022);
+    }
+    let tmp =std::env::temp_dir().join(format!("hydo-build-oci-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).unwrap();
     let busybox = golden_dir().join("busybox");

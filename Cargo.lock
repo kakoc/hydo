@@ -375,6 +375,7 @@ version = "0.1.0"
 dependencies = [
  "flate2",
  "hydo-manifest",
+ "libc",
  "libyaml-safer",
  "regex",
  "serde",
