@@ -1121,8 +1121,7 @@ impl<'a> Importer<'a> {
             {
                 continue;
             }
-            if ks == "network_mode" && s.get("network_mode").map(pstr).as_deref() == Some("host")
-            {
+            if ks == "network_mode" && s.get("network_mode").map(pstr).as_deref() == Some("host") {
                 // Docker's host network: every service sees every other on one localhost, so
                 // the program's own arguments often name peers as 0.0.0.0:<port> or
                 // localhost:<port>, which point at the service itself inside its own namespace.
