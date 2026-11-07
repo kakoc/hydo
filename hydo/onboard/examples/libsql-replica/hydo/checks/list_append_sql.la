@@ -1,0 +1,7 @@
+#!/bin/sh
+# hydo: history=la consistency=serializable
+# hydo-msg: all SQL list-append transactions, on either node, are serializable (no aborted or duplicated append, no dependency cycle)
+# History la holds every transaction, also those sent to the replica, which may serve stale reads
+# (so no real-time order is claimed here; list_append_sql.lap claims it for the primary). The
+# final read-back: every list, read in one transaction on the primary.
+exec /bin/sqlgen read-all primary 9999

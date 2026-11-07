@@ -261,10 +261,35 @@ fn setup(a: Args, env: &Env) -> Cx {
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default();
-    if a.manifest.is_some() || a.image.starts_with("explore-ob-") || base.starts_with("explore-ob-")
-    {
+    let named = a.manifest.is_some()
+        || a.image.starts_with("explore-ob-")
+        || base.starts_with("explore-ob-");
+    // Every image hydo build makes carries its manifest (M136), whatever the file is called: an
+    // image copied or renamed away from its explore-ob-* name keeps its own fault space instead
+    // of silently getting the built-in one (whose services the image does not have).
+    let carried = if named || cx.env.config.pool.scripted_engine.is_some() {
+        None
+    } else if cx.arm() {
+        hydo_engine::image::embedded_manifest(&cx.hvm_image())
+            .ok()
+            .map(|t| {
+                (
+                    t,
+                    hydo_engine::image::embedded_file(&cx.hvm_image(), "etc/hydo/compose.json")
+                        .ok(),
+                )
+            })
+    } else {
+        let img = cx.build.join(&a.image);
+        hydo_engine::image::debugfs_cat(&img, "etc/hydo/hydo.yaml")
+            .ok()
+            .map(|t| (t, hydo_engine::image::embedded_compose(&img)))
+    };
+    if named || carried.is_some() {
         let sp = if let Some(m) = &a.manifest {
             Space::from_path(Path::new(m))
+        } else if let Some((text, comp)) = carried {
+            Space::from_text(&text, comp.and_then(|t| serde_json::from_str(&t).ok()))
         } else if cx.arm() {
             let img = cx.hvm_image();
             let text = hydo_engine::image::embedded_manifest(&img)

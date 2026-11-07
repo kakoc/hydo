@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=20
+# The list-append transaction of parallel_driver_txn, run interactively (one statement per
+# request in one Hrana stream), to the primary or the replica as the seed chooses.
+exec /bin/sqlgen itxn seed
