@@ -971,7 +971,7 @@ same fingerprint (docs/REBASELINE.md section 13, which also says how each image 
 | `disk=none \| run` | OK invariants=2 held (ledger.acked_exactly_once: acked=30 each stored once) | `e32475acef7341b4` | `930f998155f77b29` | yes |
 | `disk=none \| run P=front@10+2` | VIOLATION [ledger.acked_exactly_once] entry 10 stored 2 times | `0caf9beb9125978d` | `012f769bba1db408` | yes |
 
-**Mac (hvm), node-kv**
+**Mac (hvm), node-kv** (superseded by "Milestone 157" at the end of this file)
 
 | schedule | verdict | fingerprint | ctl | twice |
 |---|---|---|---|---|
@@ -991,3 +991,19 @@ same fingerprint (docs/REBASELINE.md section 13, which also says how each image 
 | schedule | verdict | fingerprint | ctl | twice |
 |---|---|---|---|---|
 | `disk=none dseed=d7071eb1f9d436b9 \| run P=redis@16+11 W=5764a73c,p1,q2,r200,n3,x0.2.6.13.26-27.34.46-47,o0.2-3` | OK invariants=2 held (compose.commands: started=2 ok=1 failed=1 timeout=0 violation=0 killed=0 skipped=0) | `ec450ee463da3f5d` | `9fcb1c71aa47fc8b` | yes |
+
+## Milestone 157: node-kv with the SDK comment reworded (the current values)
+
+Milestone 157 reworded a comment in `sdk/js/index.js`, which node-kv copies into its image, so
+the node-kv image has new bytes (initramfs `ae2bbb9b231f295c…`) and new fingerprints; the verdict
+lines and the ctl values are Milestone 155's. Each schedule ran twice with the same fingerprint
+(docs/REBASELINE.md section 14). Fingerprint epoch 1.
+
+**Mac (hvm), node-kv**
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (nkv.oracle: acked=20 all present) | `5f47c9a775cd40a8` | `0141194b466e3bd9` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [nkv.oracle] key k:0 lost (got null) | `3146b75677356b19` | `8de6e3d2ba8ff5d8` | yes |
+| `disk=cut \| run C=12` | OK invariants=1 held (nkv.oracle: acked=12 all present) | `1cbb888242587805` | `202dcc1810826541` | yes |
+| `disk=none \| run K=nkv@8+2 B=1234` | OK invariants=1 held (nkv.oracle: acked=18 all present) | `772d0ca8f633d3be` | `39129eaa9b7e2227` | yes |

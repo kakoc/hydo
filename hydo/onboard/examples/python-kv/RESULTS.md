@@ -134,7 +134,7 @@ controller are M140's, so the verdicts are M140's (docs/REBASELINE.md section 13
 that differ). These are fingerprint epoch 1. The current values, each schedule run twice with the
 same fingerprint (docs/REBASELINE.md section 13, which also says how each image was made):
 
-**Mac (hvm), python-kv**
+**Mac (hvm), python-kv** (superseded by "Milestone 157" below)
 
 | schedule | verdict | fingerprint | ctl | twice |
 |---|---|---|---|---|
@@ -143,9 +143,33 @@ same fingerprint (docs/REBASELINE.md section 13, which also says how each image 
 | `disk=cut \| run C=12 S=never` | VIOLATION [pykv.oracle] key k:0 lost (got 'NONE') | `fc139f93a791ec46` | `3b8233343cb49963` | yes |
 | `disk=none \| run B=1234` | OK invariants=1 held (pykv.oracle: acked=18 all present) | `ed2d03a6970eb0bd` | `ece160c3964f7f03` | yes |
 
-**Mac (hvm), python-kv-hist**
+**Mac (hvm), python-kv-hist** (superseded by "Milestone 157" below)
 
 | schedule | verdict | fingerprint | ctl | twice |
 |---|---|---|---|---|
 | `disk=cut \| run C=12` | OK invariants=0 held (); history OK | `ee666af6229fc2e5` | `133c9c994223dbe4` | yes |
 | `disk=cut \| run C=12 S=never` | OK invariants=0 held (); history VIOLATION [kv.linearizable] | `458abf5f089819cb` | `4a799f3170dcb41b` | yes |
+
+## Milestone 157: the SDK comment reworded (the current values)
+
+Milestone 157 reworded a comment in `sdk/python/src/hydo_assert/_core.py`, which both images
+contain (`/opt/pykv/hydo_assert/_core.py`), so they have new bytes (initramfs python-kv
+`3d7c2130b76cdd8e…`, python-kv-hist `1c03cd40f532ac95…`) and new fingerprints; the verdict lines
+and the ctl values are Milestone 155's. Each schedule ran twice with the same fingerprint
+(docs/REBASELINE.md section 14). Fingerprint epoch 1.
+
+**Mac (hvm), python-kv**
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (pykv.oracle: acked=20 all present) | `f37f7b2513c61d0c` | `99d3a6c9bcab4d75` | yes |
+| `disk=none \| run K=pykv@8+2` | OK invariants=1 held (pykv.oracle: acked=18 all present) | `0dc1f942d30494c2` | `9dac63ed9843b10c` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [pykv.oracle] key k:0 lost (got 'NONE') | `bd9cb77e5587ec31` | `3b8233343cb49963` | yes |
+| `disk=none \| run B=1234` | OK invariants=1 held (pykv.oracle: acked=18 all present) | `5bf4fc7e7881d4d9` | `ece160c3964f7f03` | yes |
+
+**Mac (hvm), python-kv-hist**
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=cut \| run C=12` | OK invariants=0 held (); history OK | `618b9d4430b2089e` | `133c9c994223dbe4` | yes |
+| `disk=cut \| run C=12 S=never` | OK invariants=0 held (); history VIOLATION [kv.linearizable] | `78c99aebf1097a15` | `4a799f3170dcb41b` | yes |
