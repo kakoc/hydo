@@ -31,6 +31,7 @@ input	hydo/onboard/examples/stack/hydo-errors.yaml	e72c82ce5173231f6f7cc425e23b8
 input	hydo/onboard/examples/stack/hydo-grpcgen.yaml	72b3a42760bb79db3be04fe34d4e7a55645ed133e86008b059f0935cd3f247cf
 input	hydo/onboard/examples/stack/hydo-read.yaml	d3899b9ac926be02576d0f8e9b950bcc174682dc727791d4f1309294b3a1fb68
 input	hydo/onboard/examples/stack/hydo.yaml	369ed2074d0024dcbb5bf2218731bee7526fa006ff0e900aef339cc6cf69fb24
+input	hydo/onboard/examples/medusa/hydo/hydo.yaml	3c1bbf890f4bda462b3c0fe9bc1ee5cdbf39792463b19c9d9db59d858b2eefd8
 input	hydo/onboard/examples/nats-jetstream/hydo/hydo.yaml	a7e19bf3c01be56d464b7a6e443792caee1ad45e29fa7ea8be9801cf05965719
 input	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	d8c924f5de6093c0e1f52b2733682fbd4bab850f162a22c443b53fecefe1d900
 input	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	b99571f53a01990549bd599721b01d85a127e59154dc209de1afa0ad3123b946
@@ -2714,6 +2715,7 @@ chunk	hydo/onboard/examples/stack/hydo.yaml	128	500	cdd60f1e84647a2d16446387a5b1
 chunk	hydo/onboard/examples/stack/hydo.yaml	129	500	70ab9b839883e6fb4b1c37ea9daab49f3502b427ad28b57f8aaa5ccfb884170e
 chunk	hydo/onboard/examples/stack/hydo.yaml	130	500	535327a7ea8ffd11404a927862c34e3c714b4627d5bbf9045749821fa147c622
 chunk	hydo/onboard/examples/stack/hydo.yaml	131	379	3529291ce16dfb49be96f3f061f83c34f02bac7826e4872321b7e0c12da36bc6
+manifest	hydo/onboard/examples/medusa/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/nats-jetstream/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	core
 boot	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml#0	snapshot	0b0ff40b1a75762b

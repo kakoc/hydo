@@ -1,0 +1,25 @@
+#!/bin/sh
+# hydo-msg: every order is paid exactly once: one live payment, authorized at Stripe and not cancelled there
+# Joins Medusa's books (order -> payment collection -> payment, whose data.id is the Stripe
+# PaymentIntent) with what the fake Stripe saw (hydo-world's record).
+. /hydo/workload/helper_sql.sh
+t=/tmp/hydo-check-paid.$$
+Q "select o.id, count(p.id), coalesce(string_agg(p.data->>'id', ' '), '')
+   from \"order\" o
+   left join order_payment_collection opc on opc.order_id = o.id and opc.deleted_at is null
+   left join payment p on p.payment_collection_id = opc.payment_collection_id
+        and p.deleted_at is null and p.canceled_at is null
+   where o.deleted_at is null and o.canceled_at is null
+   group by o.id order by o.id" > $t.orders || { echo "cannot read the orders"; exit 2; }
+W_CREATED | sort -u > $t.created
+W intent_cancel | sort -u > $t.canceled
+bad=0
+while IFS='|' read -r order n intents; do
+  [ -n "$order" ] || continue
+  if [ "$n" != 1 ]; then echo "order $order has $n live payments ($intents)"; bad=$((bad + 1)); continue; fi
+  if ! grep -qx "$intents" $t.created; then echo "order $order: its intent $intents was never created at Stripe"; bad=$((bad + 1)); fi
+  if grep -qx "$intents" $t.canceled; then echo "order $order: its intent $intents was cancelled at Stripe"; bad=$((bad + 1)); fi
+done < $t.orders
+orders=$(grep -c . $t.orders)
+if [ $bad -gt 0 ]; then echo "$bad of $orders orders not paid exactly once"; exit 1; fi
+echo "$orders orders, each paid once"

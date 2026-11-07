@@ -1,0 +1,33 @@
+#!/bin/sh
+# hydo-msg: the shop never sells more hoodies than it has, and its inventory books agree with its orders
+# Medusa keeps orders (order module) and stock (inventory module) in separate modules, joined by a
+# workflow: placing an order reserves its units. After the faults: the units sold (live orders)
+# never exceed the stock, every unit sold is reserved, and the level's reserved count is the sum
+# of its reservations.
+. /hydo/workload/helper_sql.sh
+row=$(Q "
+  select
+    (select coalesce(sum(oi.quantity), 0) from order_item oi
+       join \"order\" o on o.id = oi.order_id and oi.version = o.version
+       join order_line_item li on li.id = oi.item_id
+       where li.variant_sku = 'HOODIE-M' and o.deleted_at is null and o.canceled_at is null
+         and o.status <> 'canceled' and oi.deleted_at is null),
+    il.stocked_quantity, il.reserved_quantity,
+    (select coalesce(sum(r.quantity), 0) from reservation_item r
+       where r.inventory_item_id = il.inventory_item_id and r.deleted_at is null)
+  from inventory_level il join inventory_item ii on ii.id = il.inventory_item_id
+  where ii.sku = 'HOODIE-M' and il.deleted_at is null") || { echo "cannot read the inventory"; exit 2; }
+[ -n "$row" ] || { echo "no inventory level for HOODIE-M"; exit 2; }
+IFS='|' read -r sold stocked reserved reservations <<EOF
+$row
+EOF
+state="sold=$sold stocked=$stocked reserved=$reserved reservations=$reservations"
+# an order whose current version lists a line item twice (two order changes made the same version)
+dup=$(Q "select o.id || ' v' || o.version || ' ' || oi.item_id || ' x' || count(*) from order_item oi
+  join \"order\" o on o.id = oi.order_id and oi.version = o.version and oi.deleted_at is null
+  group by o.id, o.version, oi.item_id having count(*) > 1")
+[ -z "$dup" ] || echo "line items listed twice at an order's version: $(echo $dup | cut -c1-300)"
+if [ "$sold" -gt "$stocked" ]; then echo "oversold: $state"; exit 1; fi
+if [ "$reserved" != "$reservations" ]; then echo "the level's reserved count is not its reservations: $state"; exit 1; fi
+if [ "$reservations" != "$sold" ]; then echo "units sold and units reserved differ: $state"; exit 1; fi
+echo "$state"

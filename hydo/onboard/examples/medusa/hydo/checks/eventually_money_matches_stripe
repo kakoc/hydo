@@ -1,0 +1,35 @@
+#!/bin/sh
+# hydo: within=120 after=heal poll=5
+# hydo-msg: Medusa's books and Stripe agree on every payment, within 120 s after the faults end: captured on both sides or neither, the same number of refunds, and never more refunded than captured
+# An `eventually` check, not a `final` one: Medusa writes a capture or refund row first and then
+# calls Stripe (deleting the row if the call fails), so while a call is in flight (an answer held
+# by a network fault, stripe-node waiting up to 80 s) the books show a refund Stripe has not made
+# yet. As a final check that window was reported as a violation; it converged within 30 s.
+# For each payment Medusa recorded (its data.id is the PaymentIntent): captures and refunds in
+# Medusa's tables against the captures and refunds that took effect at the fake Stripe. The fake's
+# record keeps a request's ref and idempotency key, not its amount, so refunds at Stripe are
+# compared by count; amounts are compared inside Medusa (refunded <= captured).
+. /hydo/workload/helper_sql.sh
+t=/tmp/hydo-check-money.$$
+Q "select p.data->>'id', p.id,
+          (select count(*) from capture c where c.payment_id = p.id and c.deleted_at is null),
+          (select count(*) from refund r where r.payment_id = p.id and r.deleted_at is null),
+          (select coalesce(sum(c.amount), 0) from capture c where c.payment_id = p.id and c.deleted_at is null),
+          (select coalesce(sum(r.amount), 0) from refund r where r.payment_id = p.id and r.deleted_at is null)
+   from payment p where p.deleted_at is null and p.data ? 'id' order by p.id" > $t.p || {
+  echo "cannot read the payments"; exit 2; }
+W intent_capture > $t.cap
+W refund > $t.ref
+bad=0
+while IFS='|' read -r pi pay mcap mref capamt refamt; do
+  [ -n "$pi" ] || continue
+  scap=$(grep -cx "$pi" $t.cap)
+  sref=$(grep -cx "$pi" $t.ref)
+  if [ "$mcap" -gt 0 ] && [ "$scap" = 0 ]; then echo "$pay ($pi): captured in Medusa, never at Stripe"; bad=$((bad + 1)); fi
+  if [ "$mcap" = 0 ] && [ "$scap" -gt 0 ]; then echo "$pay ($pi): captured at Stripe, not in Medusa"; bad=$((bad + 1)); fi
+  if [ "$mref" != "$sref" ]; then echo "$pay ($pi): $mref refunds in Medusa, $sref at Stripe"; bad=$((bad + 1)); fi
+  if awk -v a="$refamt" -v b="$capamt" 'BEGIN { exit !(a > b) }'; then echo "$pay ($pi): refunded $refamt of $capamt captured"; bad=$((bad + 1)); fi
+done < $t.p
+n=$(grep -c . $t.p)
+if [ $bad -gt 0 ]; then echo "$bad disagreements between Medusa and Stripe over $n payments"; exit 1; fi
+echo "$n payments: $(grep -c . $t.cap) captures and $(grep -c . $t.ref) refunds at Stripe, as in Medusa"

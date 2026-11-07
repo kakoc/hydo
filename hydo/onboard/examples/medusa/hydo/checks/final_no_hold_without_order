@@ -1,0 +1,24 @@
+#!/bin/sh
+# hydo-msg: no customer's money stays held at Stripe without an order: every intent Medusa authorized belongs to a live order or was cancelled
+# Medusa authorizes a payment by reading its PaymentIntent (the fake answers "requires_capture":
+# the customer confirmed, the money is held). If placing the order then fails, its workflow must
+# cancel the intent. Intents Medusa never authorized (a checkout refused before payment, for
+# example out of stock) are not counted: Medusa never saw them held.
+. /hydo/workload/helper_sql.sh
+t=/tmp/hydo-check-hold.$$
+Q "select p.data->>'id' from \"order\" o
+   join order_payment_collection opc on opc.order_id = o.id and opc.deleted_at is null
+   join payment p on p.payment_collection_id = opc.payment_collection_id
+        and p.deleted_at is null and p.canceled_at is null
+   where o.deleted_at is null and o.canceled_at is null" > $t.q || { echo "cannot read the orders"; exit 2; }
+sort -u $t.q > $t.orders
+W_ALL intent_get | sort -u > $t.authorized
+W intent_cancel | sort -u > $t.canceled
+minus $t.authorized $t.orders > $t.a
+held=$(minus $t.a $t.canceled)
+if [ -n "$held" ]; then
+  echo "held without an order: $(echo $held | cut -c1-300)"
+  echo "$(echo "$held" | grep -c .) of $(grep -c . $t.authorized) authorized intents held without an order"
+  exit 1
+fi
+echo "$(grep -c . $t.authorized) authorized intents: $(grep -c . $t.orders) in orders, $(grep -c . $t.canceled) cancelled"

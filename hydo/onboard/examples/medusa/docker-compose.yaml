@@ -1,0 +1,59 @@
+# The shop as its team runs it: Medusa's backend (app/, built by app/build-app.sh), PostgreSQL and
+# Redis, after Medusa's Docker guide (postgres:15-alpine, redis:7-alpine; migrations before the
+# server starts). Payments go to Stripe (api.stripe.com over HTTPS) with the key below.
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: medusa-store
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d medusa-store"]
+      interval: 2s
+      retries: 30
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      retries: 30
+    restart: unless-stopped
+
+  medusa:
+    build: ./app
+    image: medusa-shop:hydo
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "9000:9000"
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/medusa-store
+      REDIS_URL: redis://redis:6379
+      STRIPE_API_KEY: sk_test_hydo_fake_key
+      STRIPE_WEBHOOK_SECRET: whsec_hydo_fake_secret
+      STORE_CORS: http://localhost:8000
+      ADMIN_CORS: http://localhost:9000
+      AUTH_CORS: http://localhost:9000
+      JWT_SECRET: change-me
+      COOKIE_SECRET: change-me
+    command: ["sh", "-c", "./node_modules/.bin/medusa db:migrate && exec ./node_modules/.bin/medusa start"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:9000/health"]
+      interval: 2s
+      retries: 60
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -1,0 +1,9 @@
+#!/bin/sh
+# hydo: timeout=600
+# The test's store (app/src/scripts/hydo-seed.ts: a region paid through Stripe, a warehouse,
+# shipping, a publishable key, one hoodie with 5 units) and an operator account for the admin
+# API. Runs once, before the snapshot every run starts from.
+set -e
+hydo-oci medusa sh -c 'SHOP_STOCK=5 ./node_modules/.bin/medusa exec ./src/scripts/hydo-seed.js'
+hydo-oci medusa ./node_modules/.bin/medusa user -e admin@shop.test -p admin-secret
+cat /data/shop/seed.json

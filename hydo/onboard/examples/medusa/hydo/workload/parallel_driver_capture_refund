@@ -1,0 +1,9 @@
+#!/bin/sh
+# hydo: timeout=90
+# The back office: take the money for one order (capture its payment) and refund 10 of it, through
+# Medusa's admin API as the operator would (helper_client.mjs capture-refund). The order is chosen
+# by the seed among the orders placed so far.
+out=$(hydo-oci medusa node /hydo/workload/helper_client.mjs capture-refund "$HYDO_SEED" 2>&1); rc=$?
+echo "$out"
+echo "capture-refund $HYDO_CMD_ID: rc=$rc $(echo "$out" | tail -1 | cut -c1-160)" > /dev/console
+[ $rc = 0 ] || exit 1
