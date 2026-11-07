@@ -81,8 +81,8 @@ I	hydo/crates/hydo-manifest/tests/fixtures/folders/regressions-only/hydo/hydo.ya
 I	hydo/crates/hydo-manifest/tests/fixtures/folders/saved-key/hydo/hydo.yaml	c49532c1aabe4e123f31acd6a7d45821433658ccf428af04ddda353f4a3c2848
 I	hydo/crates/hydo-manifest/tests/fixtures/folders/two-schedules/hydo/hydo.yaml	2c3b77759f05c4420d6739d08778d52ecb8240bbfbfad3dbd5c4b74b9d1cf36c
 I	hydo/crates/hydo-manifest/tests/fixtures/yaml_cases.json	1bd685d8d18a6f8e195254a21c50ce058763fa33b7373bff3923051a8da663ed
-I	hydo/dist/linux/third-party.json	de5fe985b4b61c36f8dccfb67363a26375210321aa14d13fabc089894ae0d9d6
-I	hydo/dist/mac/third-party.json	2bd72aa24a3c879f40daf3a73150be3ca5d37ee8406ffac8cb26aab1c1db6e37
+I	hydo/dist/linux/third-party.json	b5fd07a3649081dd03b31380d76579b1b48e59c3b232bb04a845e703eb95e1a6
+I	hydo/dist/mac/third-party.json	2de5f938a5c9ecc1411ee40ef3fc3013baef44288ff98efc4651c0f2c2912448
 I	hydo/grpcgen/demo/hints.yaml	61f215d0658471d8dcecd611de222f8af6628583f4d2689b9064f9529c14c0f3
 I	hydo/grpcgen/demo/hydo-mac.yaml	8df424c6576e59769fc88a8c9dc6611980d33df4b273b9be7c6d43c6eba73403
 I	hydo/grpcgen/demo/hydo.yaml	2f7ec93857b9dbdb43bd901fb530463933b707e95d21bf2633132a9e056f4fb2
