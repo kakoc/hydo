@@ -2930,7 +2930,9 @@ Both tarballs of M155 (`hydo-linux-0.1.0.tar.gz` `d557c341…`, `hydo-mac-0.1.0.
 The Linux tarball rebuilt with M156's module fix (`98168977…`, docs/HISTORY.md "Milestone 156")
 gave every Linux value of this table again, twice each, as the user and as root. Both tarballs
 built from `e744b8c` (`e9538ed9…`, `098c8773…`; docs/HISTORY.md "Milestone 156", the addendum
-"Both tarballs built from `e744b8c`") gave every value of this table, twice each:
+"Both tarballs built from `e744b8c`") gave every value of this table, twice each, and so did both
+tarballs built from the final commit `ce6071c` (`114e4160…`, `d6a27405…`; docs/HISTORY.md
+"Milestone 157", the addendum "Both tarballs rebuilt from the final commit"):
 
 | release | image (sha256) | schedule | verdict | fingerprint |
 |---|---|---|---|---|
