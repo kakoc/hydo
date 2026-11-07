@@ -2988,3 +2988,91 @@ Branch from the SDK packaging branch (Milestone 160, `d0c2999`), merged with `ma
 - **Found:** the rust-kv Mac before build is not section 13.1's image (`11204bc3…`, not `23b33864…`), because `rkv`'s bytes depend on the absolute path of the checkout: not only through `build-rkv.sh`'s remap order (open item 24) but through Cargo's `-C metadata`, which hashes a path dependency's path (swapping the remaps was tried: the bytes still differ between a checkout under `$HOME` and one outside it, so the script was left as it was). The new values are recorded with `rkv` built at one fixed path outside `$HOME` (Mac) and at the M155 recipe's fake-home layout in this milestone's work directory (x86_64).
 - **Registry dry runs** (nothing uploaded): `cargo publish --dry-run --registry crates-io` for `hydo-assert` (14 files, 91.1 KiB, verified build); for `hydo-test`, `hydo-test-macros` and `cargo-hydo` it now refuses (`publish = false`). PyPI: `python -m build` (sdist and wheel, from a copy) and `twine check --strict` pass; the wheel installs into a fresh environment, imports, and has no helper methods or `emit_line`. npm: `npm publish --dry-run --registry https://registry.npmjs.org/` (11 files, 22.2 kB). Go: `go mod tidy` changes nothing, `go vet` passes, a clean consumer module (`replace` to the tree) runs and builds for linux/amd64.
 - **Checks:** `cargo fmt --check`, `cargo clippy --locked --workspace --all-targets -- -D warnings` and `cargo test --locked --release --workspace` on the Mac after merging `main`: clean; 107 test binaries, 413 passed, 0 failed, 2 ignored (`public_content` 2 of 2, `sdks` 2 of 2). Three goldens re-recorded with `HYDO_BLESS=1`, each diff only the changed inputs: `hydo-build`'s and `hydo-manifest`'s answers (the repository's JSON files tried as manifests: the five removed case files gone, `programs/js.json`, `programs/python.json` and M160's `sdk/js/package.json` with new sha256s, the latter's refusal now naming its new `bugs` field, and M158's two `third-party.json` files added; in `hydo-manifest` also temporary-file numbers shifted by the changed file count), and `hydo-cli`'s (`hydo guide manifest` and `hydo skill install`: M160's `MANIFEST.md` and `references/checks.md` and this milestone's `references/sdks.md`). M160 had left the first and third stale (the lead's run found `hydo-build`'s). `sdk/rust-test` `cargo test --workspace` and `sdk/rust` `cargo test --features serde_json` pass too.
+
+### Milestone 165 — DONE (explaining a failure, first piece: `hydo diff <run A> <run B>` shows where two runs first differ, in stop number and guest time, at the levels hydo records without engine changes; `hydo explain <image> "<schedule>"` runs a failing schedule's neighbours and diffs against the closest passing one; a new results document `diff.json`; proven on the pinned reproducers, the Redis quickstart's minimal schedule and an arm64 run; no fingerprint, golden or engine changed; 2026-11-07)
+
+**Why.** hydo finds and shrinks a failing schedule, and every run reproduces bit for bit, but the cause is left to a person reading consoles. Two deterministic runs that differ only a little are the same run up to an exact point; that point and what surrounds it is the first thing to show. The design, the table of levels, the alignment, which pairs are useful and what deeper levels need are in `docs/design/explain.md`.
+
+**What was built.**
+- `hydo/crates/hydo-cli/src/diff.rs`: a run directory is read as events per conversation (boot, run, recovery, result): every `send`, `engine`, `snap` and `end` record of the control transcripts, the controller's notes and reports, and the guest's own console lines from the merged `<tag>.log` (each placed at the stop of the report it precedes, which is how `hydo_control::agent::console_text` wrote it), each with its stop number and guest time. The comparison key drops a command's `id` and `nonce`, stop numbers and times, and the controller's echo of the schedule (`hydo-ob: command: run …`, which differs whenever the schedules do). Myers' diff aligns the keys per conversation. The report: the first difference (with four shared events before it, the events only A or only B has, grouped under the controller note they came after, and what differs inside events of one family, e.g. `env: only in A: HYDO_TO=11; only in B: HYDO_TO=24`, `hydo-explore-acked: only in B: 11`, an assertion's JSON fields); the guest-time divergence (the last shared event at the same stop and time, and where the next one is in each run); the first difference in what the checks judge (the acknowledged and failed lists, verdicts, `end` records, history, fake-world and error-log records, a failing assertion, or an assertion both runs write there with other content; an extra passing evaluation made at another time does not count); the records of a kind only one run writes (an assertion id the other never reports); every difference counted by conversation and level. When nothing differs at these levels the report says whether the fingerprints are equal or not.
+- `hydo/crates/hydo-cli/src/explain.rs`: the neighbours of a schedule are every guest token removed once, every fault with a step (`K P X N O C T H`) moved one step earlier and later (a window `a-b` moves whole), and `disk=none` instead of the disk faults; only schedules hydo-schedule parses. Each runs as a fresh boot (one VM at a time, `runs::run_to_dir`, the same files and `result.json` as `hydo run`), gets `diff.json` and `diff.txt` against the failing run, and the table names its verdict, where it first differs and the first judged difference in one line. The report shown is that of the neighbour with another verdict whose first difference comes latest. `--with "<schedule>"`, `--with-image IMG2`, `--max N`; a run already in the output directory with the same schedule and image is reused. `hydo explain <run dir>` takes the failing run from a run directory.
+- Results format, version 1, additions only: the document `diff.json` (`"type": "diff"`, `hydo_results::Diff` with `DiffSide`, `Divergence`, `DiffLine`, `DiffPoint`, `DiffCount`), a new root alternative of the schema (`hydo/schema/results-v1.json` regenerated; the compatibility test against `released/results-v1.json` passes), `Record::Diff` and `read_diff` in the reader, `DIFF_DOC`, and the example `hydo/schema/examples/results/v1/metal-stack-diff/diff.json` (the diff of (a) below; `tests/examples.rs` now requires a `diff` example). `diff.txt` and `explain.txt` are views.
+- The main help text was not changed, because it is a recorded answer of the CLI golden (`hydo-cli/tests/golden/cli.jsonl`); `hydo diff --help` and `hydo explain --help` print their own usage. Adding the two lines to the help means re-recording that golden on purpose.
+
+**Proof on the bare-metal machine** (tree `~/hydo-explain`, work in `/var/tmp/m165`, one VM at a time through `~/bin/hvx-run`, the loaded main module `14D39A96F319623EC2AD8D1`; a prefix like deploy-metal's with this tree's `hydo`). The runs of this tree's `hydo` give the recorded fingerprints: old order service `1dc3677fb94053cf` (ctl `e873020651036931`), fixed `ba0aa0612502a1df` (ctl `07c598044a68e5be`), the Redis quickstart's minimal schedule `89105a398516a2ea` (docs/REBASELINE.md 13.4).
+
+(a) **The pinned reproducer on the old against the fixed order service** (`hydo run` each, then `hydo diff`). The report, shortened:
+
+```
+The runs booted different images (A sha256 dc8f8a89e9a7…, B sha256 1de40b6a2681…)
+The first difference:
+  in the run conversation, at stop 88905, guest time 8156677 in A and stop 90405, guest time 8174718 in B; level controller.
+    = run      A stop 88875 | B stop 89702  control        probe /bin/redis-cli -p 6379 ping | grep -q PONG (until ready)
+  Only in A:
+    - run        stop 88905  controller     hydo-ob: redis ready after 0 polls
+  Only in B:
+    + run        stop 90405  control        run n=$(SQL -e "SELECT COUNT(*) FROM stack.orders WHERE amount <> 100000 + id" …
+    + run        stop 90442  assertion      assert mysql.amounts_valid ok=true: …
+    + run        stop 90703  controller     hydo-ob: redis ready after 1 polls
+Guest time:
+  The runs share their stops and guest times up to stop 22923, guest time 841628 in the boot conversation (…).
+The first difference in what the checks judge:
+  in the run conversation, at stop 89825, guest time 8200716 in A and stop 91648, guest time 8232010 in B; level outcome.
+    - run        stop 89825  outcome        hydo-explore-acked: 0 1 2 3 4 5 6 7 8 9 10 12 13 … 23
+    + run        stop 91648  outcome        hydo-explore-acked: 0 1 2 3 4 5 6 7 8 9 10 11 12 13 … 23
+  What differs: hydo-explore-acked: only in B: 11
+Records of a kind only one run writes (…), first occurrence:
+      (after hydo-ob: KILLED redis before step 11)
+    + run        stop 89667  assertion      assert server.redis_redialed ok=true: the front door re-dialed Redis after its connection broke
+    + run        stop 89667  assertion      assert server.cache_write_skipped ok=true: a Redis cache write failed and was skipped; the order was still ACKed {"error":"dial tcp 127.0.0.1:6379: connect: connection refused","order":11}
+All differences: 9 places.
+```
+
+Judgment: useful. The first judged difference is exactly the bug: order 11 is acknowledged by the fixed service and not by the old one, and the records only the fixed code writes say why, at the right moment (right after the kill of Redis before step 11): its cache write for order 11 failed, was skipped, and the order was still acknowledged; the old service failed the order instead (M38's bug). Noise: the first difference itself (Redis became ready after 0 polls in one run and 1 poll in the other, so a periodic check ran in one run only) is timing, and the guest times differ from the boot on because the images differ. A first version of the rules picked those extra passing checks (`mysql.amounts_valid`, `server.place_acked`) as the first difference and the first judged difference; the rules above (records only one run writes listed apart, an extra passing evaluation not judged) were made from that report.
+
+(b) **The Redis quickstart's minimal schedule** `disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no` (`hydo explain` on the quickstart image `d255fb2b…`; five neighbours):
+
+```
+  ok        without C=9                    first difference in run at stop 22946 (control)
+            judged: hydo-explore-acked: only in B: 9 10 11 12 13 14 15 16 17 18 19
+  ok        without R=no                   first difference in run at stop 22922 (control)
+            judged: redis.acked_writes_survive: ok: A false B true
+  violation with C=9 moved to C=8          first difference in run at stop 22946 (control)
+            judged: hydo-explore-acked: only in A: 8
+  violation with C=9 moved to C=10         first difference in run at stop 22946 (control)
+            judged: hydo-explore-acked: only in B: 9
+  violation with disk=none instead of disk=cut   no difference in the records, other fingerprints
+```
+
+The report against `without R=no` (`b/n02/diff.txt`): the first difference is at stop 22922, guest time 841608 in both runs: only A sends `redis-cli CONFIG SET appendfsync no` and notes `knob R=no`; the runs then share every event at times shifted by that command (the next shared event is at stop 22946 in A and 22922 in B); the first judged difference is in the recovery boot: `assert redis.acked_writes_survive ok=false … key k:0 lost` against `ok=true … acked=9 all present`. The closest passing neighbour by the rule (`without C=9`, whose first difference comes at stop 22946) only shows that without the power cut the workload runs to its end.
+
+Judgment: correct, but it explains little that the schedule does not already say. The first difference is the knob itself and the next is the verdict; what happens in between (Redis acknowledges writes it has not written to the disk, and the cut drops them) is below the recorded levels: the diff of `disk=cut` against `disk=none` finds no difference at all in the records while the fingerprints differ, which is the disk's content. This is the case for the disk-request level of the design. The table is the useful part here: moving the cut moves the first lost key with it.
+
+(c) **The pinned reproducer's neighbours on the old order service** (`hydo explain` on `explore-ob-stack-old-disk.img`; six neighbours, each a fresh stack boot of about 40 seconds; the five Redis runs of (b) took about 3 seconds each):
+
+```
+  ok        without K=redis@11+1                     first difference in run at stop 87634 (control)
+            judged: hydo-explore-acked: only in B: 11
+  ok        without C=24                             first difference in run at stop 88905 (control)
+            judged: hydo-explore-acked: only in B: 24 25 26 27 28 29 11
+  violation with K=redis@11+1 moved to K=redis@10+1  first difference in run at stop 87634 (control)
+            judged: hydo-explore-acked: only in A: 10; only in B: 11
+  violation with K=redis@11+1 moved to K=redis@12+1  first difference in run at stop 87634 (control)
+            judged: hydo-explore-acked: only in A: 12; only in B: 11
+  violation with C=24 moved to C=23                  first difference in run at stop 88905 (control)
+            judged: hydo-explore-acked: only in A: 23
+  violation with C=24 moved to C=25                  first difference in run at stop 88905 (control)
+            judged: hydo-explore-acked: only in B: 24
+```
+
+The report against `without C=24` (the closest passing neighbour): the runs share every event at the same stop and guest time up to stop 88905 (Redis ready again after the kill); then A's workload runs steps 12..23 and B's 12..29 followed by the end-of-run retry (`spawn [retry] /bin/hydostack retry`); the first judged difference: B's acknowledged list has `24 25 26 27 28 29 11`, so the retry acknowledged order 11. The report against `without K=redis@11+1` points at the workload's segmentation (`env: only in A: HYDO_TO=11; only in B: HYDO_TO=24`) and then at `hydo-explore-acked: only in B: 11`.
+
+Judgment: useful, mostly through the table: the order the client never got acknowledged follows the kill (kill before step 10 loses order 10, before step 12 loses order 12), and without the cut the end-of-run retry acknowledges order 11, which together say "the order in flight when Redis is killed is published but not acknowledged". The old image writes no assertions of its own, so the report cannot show the failed cache write directly; (a) shows it from the fixed image's side. Noise: none in the first differences (each is the schedule's token acting); the per-level counts are long.
+
+(d) **arm64 on this Mac** (the M158 Mac release from `hydo/dist/out`, unpacked into a scratch prefix, `hydo setup`, its Redis example built): `disk=cut | run C=12 R=everysec` VIOLATION `a6870a92a1bbf0ae` (docs/REBASELINE.md 13.4's value) and `disk=cut | run C=12` OK `1785bbb72e7ffba2`; the two run directories diffed with this tree's `hydo diff` (run on the bare-metal machine; the diff reads files only): first difference at stop 153 (exit-count time 9728) in both runs, `CONFIG SET appendfsync $HYDO_VALUE` and `knob R=everysec` only in A; first judged difference in the recovery boot at stop 345 against 407: `key k:0 lost` against `acked=12 all present`. The same shape as (b).
+
+**What was noise, in general.** With two images: guest times from the boot on, periodic checks that run in one run only, and assertions only one image's code writes (now listed apart). With two schedules of one image: nothing before the first difference (it is always where the schedule's token first acts, at the same stop and time in both runs), and the first difference is often the token itself, so the first judged difference and the table carry the information.
+
+**Checks.** `cargo fmt --check` passes; `cargo clippy --locked --release --workspace --all-targets -- -D warnings` passes on this Mac and on the bare-metal machine; `cargo test --locked --release --workspace` passes on this Mac (126 test binaries, 387 passed, 0 failed, 2 ignored: M159's 381 plus six new unit tests of `diff.rs` and `explain.rs`), with `public_content` (the local list), `third_party` and the results schema, reader and example tests among them. On the bare-metal machine the same five tests fail as before M165 for that host's reasons (`cli_matches_golden` on the loaded `hvx` module and a Mac-only message, `agents_as_recorded`, `built_in_skill_as_recorded` and `compose_equals_python` on file modes, `oci_staging_matches_hydo_oci` on the login umask; M159's notes), and every other test passes. No recorded fingerprint, transcript or golden changed: the runs above give the recorded values, and `run_to_dir` only reuses `hydo run`'s steps.
+
+**Left (docs/design/explain.md "What deeper levels need later"; open item 49).** The agent's replies are not in the transcript (only `seen`), so the client's own view of each step (the outcomes file) is missing; service logs are read only with `errors:`; packets, disk requests and guest memory at a stop need engine additions (a frame log, a request log, a hash at stop N by replaying the transcript, then a binary search over stops); instruction level needs the module's tracing paths per run. `hydo explain` runs its neighbours one after the other (no pool); its neighbours are generated from the schedule text, not from the shrinker's last round (the explorer could keep its passing shrink candidates); the explorer's own run directories (`consoles/<tag>.*`) are not read by `hydo diff` yet (it reads `hydo run` directories); `hydo explain` was not run on the Mac (no Mac build of this tree; the Mac part is `hydo diff` of two Mac runs).

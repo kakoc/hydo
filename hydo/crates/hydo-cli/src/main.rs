@@ -9,13 +9,16 @@
 //! setup (src/setup.rs, M154), doctor, module (Linux), errors and run/repro's error kinds
 //! (hydo-errors), history checks (hydo-history), compose (hydo-compose), guide/skill/init
 //! (hydo-agents), migrate (hydo-manifest, src/migrate.rs), build (hydo-build, src/build.rs),
-//! explore (hydo-explore). No command runs Python.
+//! explore (hydo-explore), diff and explain (src/diff.rs, src/explain.rs, M165: where two runs
+//! first differ). No command runs Python.
 
 mod build;
 mod cache;
 mod ctx;
 mod delegated;
+mod diff;
 mod doctor;
+mod explain;
 mod fetch;
 mod hvxenv;
 mod migrate;
@@ -154,6 +157,9 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
         "repro" => runs::cmd_repro(ctx, rest),
         "explore" => delegated::cmd_explore(ctx, rest),
         "report" => delegated::cmd_report(ctx, rest),
+        // M165: `hydo diff --help`, `hydo explain --help` (the main help is a recorded answer)
+        "diff" => diff::cmd_diff(ctx, rest),
+        "explain" => explain::cmd_explain(ctx, rest),
         "save" => runs::cmd_save(ctx, rest),
         "errors" => delegated::cmd_errors(ctx, rest),
         "check-history" => hydo_history::cli::main(rest),
