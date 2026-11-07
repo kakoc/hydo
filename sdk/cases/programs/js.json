@@ -36,7 +36,7 @@
     {"do":"cmp","a":6,"left":{"int":"3"},"op":"\u003c=","right":{"int":"5"}},
     {"do":"cmp","a":6,"left":{"int":"7"},"op":"\u003c","right":{"int":"5"},"details":{"map":[["extra","e"]]}},
     {"do":"cmp","a":6,"left":{"int":"1"},"op":"??","right":{"int":"1"}},
-    {"do":"cmp","a":7,"left":{"int":"1"},"op":"\u003e","right":{"int":"2"},"helper":"greater_than"},
+    {"do":"cmp","a":7,"left":{"int":"1"},"op":"\u003e","right":{"int":"2"}},
     {"do":"cmp","a":7,"left":{"int":"2"},"op":"==","right":{"int":"2"}},
     {"do":"check","a":8,"cond":true,"details":{"map":[["f",{"f64":"NaN"}]]}},
     {"do":"check","a":8,"cond":true,"details":{"map":[["f",{"int":"1"}]]}},

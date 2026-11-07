@@ -1,22 +1,33 @@
 [build-system]
-requires = ["setuptools>=61"]
+# setuptools 77 is the first that takes an SPDX expression as `project.license` (PEP 639).
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "hydo-assert"
 version = "0.1.0"
-description = "Assertion SDK for programs tested under hydo, a deterministic hypervisor (always/sometimes properties, BUGGIFY fault points, bounded liveness)"
+description = "Assertion SDK for programs tested under hydo, a deterministic hypervisor (always/sometimes properties, BUGGIFY fault points, bounded liveness, operation histories)"
 readme = "README.md"
 requires-python = ">=3.8"
-license = {text = "Apache-2.0"}
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 dependencies = []
+keywords = ["testing", "assertions", "deterministic", "fault-injection", "simulation", "hydo"]
 classifiers = [
-    "Private :: Do Not Upload",   # not published; PyPI refuses this classifier
-    "License :: OSI Approved :: Apache Software License",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
     "Operating System :: POSIX :: Linux",
     "Topic :: Software Development :: Testing",
+    "Typing :: Typed",
 ]
+
+[project.urls]
+Homepage = "https://github.com/kakoc/hydo"
+Documentation = "https://github.com/kakoc/hydo/tree/main/sdk/python#readme"
+Repository = "https://github.com/kakoc/hydo"
+Issues = "https://github.com/kakoc/hydo/issues"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

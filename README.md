@@ -73,8 +73,8 @@ hydo/onboard/  the guest-side init and its extensions (shell, inside every image
 hydo/          other product parts: readers/ (store readers),
                grpcgen/ (gRPC driver generator), stack/ (the example order system), bench/ (the
                bug benchmark), dist/ (release packaging)
-sdk/           assertion SDKs for programs under test: Rust (the reference), Python, JavaScript;
-               the Go SDK is hydo/stack/hydoassert
+sdk/           assertion SDKs for programs under test: Rust (the reference), Go, Python,
+               JavaScript (docs/PUBLISHING.md: their registry packages)
 skills/        hydo-onboard, an Agent Skill that writes a project's hydo/ folder
 docs/          HISTORY.md (every milestone with its evidence), REBASELINE.md, BUILD-PINS.md
 ```

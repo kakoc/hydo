@@ -74,11 +74,11 @@ def _parse_u64(s, rx, base):
 class Point(object):
     """One declared fault point (create it with buggify())."""
 
-    __slots__ = ("id", "assertion", "_hits")
+    __slots__ = ("id", "_assertion", "_hits")
 
     def __init__(self, id, msg):
         self.id = id
-        self.assertion = _core.declare(_core.SOMETIMES, "buggify." + id, "fault point fired: " + msg)
+        self._assertion = _core.declare(_core.SOMETIMES, "buggify." + id, "fault point fired: " + msg)
         self._hits = 0
 
     def __repr__(self):
@@ -101,7 +101,7 @@ class Point(object):
         if fire:
             d = _core.details_dict(details)
             d["hit"] = k
-            self.assertion._record(True, d)
+            self._assertion._record(True, d)
         return fire
 
 

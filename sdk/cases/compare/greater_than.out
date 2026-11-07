@@ -1,3 +1,0 @@
-HYDO-ASSERT {"t":"always","id":"c.greater_than","ok":true,"msg":"always greater_than","details":{"k":"v","left":2,"op":"\u003e","right":1}}
-HYDO-ASSERT {"t":"always","id":"c.greater_than","ok":false,"msg":"always greater_than","details":{"left":1,"op":"\u003e","right":2}}
-HYDO-ASSERT {"t":"sometimes","id":"c.s_greater_than","ok":true,"msg":"sometimes greater_than","details":{"left":2,"op":"\u003e","right":1}}

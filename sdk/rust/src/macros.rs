@@ -126,49 +126,18 @@ macro_rules! __cmp_macro {
 }
 
 /// `hydo_always_cmp!(left, ">=", right, "message" [, {details}])`: a numeric comparison that
-/// must always hold (details carry left/op/right). Also the named forms below.
+/// must always hold; `op` is one of `<`, `<=`, `==`, `!=`, `>=`, `>` (any other is false), and
+/// the details carry `left`, `op` and `right`. Returns the comparison's result.
 #[macro_export]
 macro_rules! hydo_always_cmp {
     ($l:expr, $op:literal, $r:expr, $($t:tt)+) => { $crate::__cmp_macro!(Always, $op, $l, $r, $($t)+) };
 }
-/// `hydo_sometimes_cmp!(left, "<", right, "message" [, {details}])`.
+/// `hydo_sometimes_cmp!(left, "<", right, "message" [, {details}])`: a numeric comparison that
+/// must be true at least once (only a true outcome is recorded).
 #[macro_export]
 macro_rules! hydo_sometimes_cmp {
     ($l:expr, $op:literal, $r:expr, $($t:tt)+) => { $crate::__cmp_macro!(Sometimes, $op, $l, $r, $($t)+) };
 }
-#[macro_export]
-macro_rules! hydo_always_greater_than {
-    ($l:expr, $r:expr, $($t:tt)+) => { $crate::__cmp_macro!(Always, ">", $l, $r, $($t)+) };
-}
-#[macro_export]
-macro_rules! hydo_always_greater_than_or_equal_to {
-    ($l:expr, $r:expr, $($t:tt)+) => { $crate::__cmp_macro!(Always, ">=", $l, $r, $($t)+) };
-}
-#[macro_export]
-macro_rules! hydo_always_less_than {
-    ($l:expr, $r:expr, $($t:tt)+) => { $crate::__cmp_macro!(Always, "<", $l, $r, $($t)+) };
-}
-#[macro_export]
-macro_rules! hydo_always_less_than_or_equal_to {
-    ($l:expr, $r:expr, $($t:tt)+) => { $crate::__cmp_macro!(Always, "<=", $l, $r, $($t)+) };
-}
-#[macro_export]
-macro_rules! hydo_sometimes_greater_than {
-    ($l:expr, $r:expr, $($t:tt)+) => { $crate::__cmp_macro!(Sometimes, ">", $l, $r, $($t)+) };
-}
-#[macro_export]
-macro_rules! hydo_sometimes_greater_than_or_equal_to {
-    ($l:expr, $r:expr, $($t:tt)+) => { $crate::__cmp_macro!(Sometimes, ">=", $l, $r, $($t)+) };
-}
-#[macro_export]
-macro_rules! hydo_sometimes_less_than {
-    ($l:expr, $r:expr, $($t:tt)+) => { $crate::__cmp_macro!(Sometimes, "<", $l, $r, $($t)+) };
-}
-#[macro_export]
-macro_rules! hydo_sometimes_less_than_or_equal_to {
-    ($l:expr, $r:expr, $($t:tt)+) => { $crate::__cmp_macro!(Sometimes, "<=", $l, $r, $($t)+) };
-}
-
 /// `hydo_buggify!("id" [=> "message"] [, {details}])` -> bool: a fault point at this line.
 /// Use as `if hydo_buggify!("kafka.lost_ack" => "the write lands but the reply is lost") { ... }`.
 #[macro_export]

@@ -5,8 +5,8 @@
 // true (always, alwaysOrUnreachable, unreachable), what should happen at least once
 // (sometimes, reachable), what must happen within a deadline (eventually), and where a
 // dependency may misbehave (buggify fault points). Records go to the guest console in the
-// wire format of the Go SDK (hvx/stack/hydoassert), byte for byte, with the same
-// deduplication rules; hvx/ASSERTIONS.md is the contract.
+// wire format of the Rust, Go and Python SDKs, byte for byte, with the same deduplication
+// rules; hydo/ASSERTIONS.md is the contract.
 //
 // Wire format, one record per line, each written with a single write():
 //
@@ -212,7 +212,7 @@ function encodeValue(v, stack) {
 }
 
 // toJSON returns the Go encoding of a details value, or null if it cannot be encoded (it holds
-// a NaN, an infinity or a cycle). Exported for tests and for record kinds built on emitLine.
+// a NaN, an infinity or a cycle). Exported as _toJSON for the SDK's tests only.
 function toJSON(v) {
   try {
     return encodeValue(v, []);
@@ -234,16 +234,6 @@ function detailsJSON(d) {
 
 function emitRaw(prefix, json) {
   writeLine(Buffer.from(prefix + ' ' + json + '\n', 'utf8'));
-}
-
-// emitLine writes one line `<tag> <json of value>` through the same sink, with one write.
-// It is the extension point for other one-line record kinds (for example a history
-// recorder). Returns false (and writes nothing) if the value cannot be encoded.
-function emitLine(tag, value) {
-  const j = toJSON(value);
-  if (j === null) return false;
-  emitRaw(String(tag), j);
-  return true;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -287,8 +277,6 @@ class Assertion {
     this.seen = [false, false]; // outcome already emitted by this process: [false, true]
   }
 
-  get type() { return this.t; }
-
   record(ok, d) {
     const i = ok ? 1 : 0;
     if (this.seen[i]) return;
@@ -327,12 +315,6 @@ class Assertion {
     const ok = f ? f(left, right) : false;
     return this.check(ok, withFields(d, { left, op, right }));
   }
-
-  // The named comparison helpers; the records are those of cmp.
-  greaterThan(left, right, d) { return this.cmp(left, '>', right, d); }
-  greaterThanOrEqualTo(left, right, d) { return this.cmp(left, '>=', right, d); }
-  lessThan(left, right, d) { return this.cmp(left, '<', right, d); }
-  lessThanOrEqualTo(left, right, d) { return this.cmp(left, '<=', right, d); }
 }
 
 function declare(t, id, msg) {
@@ -592,19 +574,12 @@ module.exports = {
   buggify,
   catalog,
   setupComplete,
-  emitLine,
-  toJSON,
   Assertion,
   Liveness,
   Watch,
   Point,
-  types: Object.freeze({
-    ALWAYS: T_ALWAYS,
-    ALWAYS_OR_UNREACHABLE: T_ALWAYS_OR_UNREACHABLE,
-    SOMETIMES: T_SOMETIMES,
-    REACHABLE: T_REACHABLE,
-    UNREACHABLE: T_UNREACHABLE,
-    EVENTUALLY: T_EVENTUALLY,
-  }),
+  // For the SDK's own tests only (not part of the API): the Go encoding of a value, and a
+  // reset of the process state.
+  _toJSON: toJSON,
   _reset,
 };

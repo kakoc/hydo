@@ -4,7 +4,15 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 rust-version = "1.70"
-description = "#[hydo_test::driver] and #[hydo_test::check] (no dependencies: the attribute is parsed by hand)"
+description = "The #[driver] and #[check] attributes of hydo-test, the test SDK for hydo (a deterministic hypervisor); use them through hydo-test"
+repository = "https://github.com/kakoc/hydo"
+homepage = "https://github.com/kakoc/hydo"
+documentation = "https://docs.rs/hydo-test"
+readme = "README.md"
+keywords = ["testing", "deterministic", "hydo"]
+categories = ["development-tools::testing"]
+include = ["src/**", "Cargo.toml", "README.md", "LICENSE"]
+# Not published until the user decides about code-first tests (docs/PUBLISHING.md).
 publish = false
 
 [lib]
