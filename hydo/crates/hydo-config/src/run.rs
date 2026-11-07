@@ -61,8 +61,8 @@ impl Pool {
 /// The host controller of agent images (hydo-control).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Control {
-    /// Not `HVM_SPIN_REWIND=0`: a SPIN of an agent image on hvm runs again in the rewind mode
-    /// (M130). Default on.
+    /// Not `HVM_SPIN_REWIND=0`: a SPIN of an agent image on hvm or kvm runs again in the rewind
+    /// mode (M130; kvm since M161). Default on.
     pub spin_rewind: bool,
 }
 

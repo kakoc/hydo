@@ -22,9 +22,11 @@
 //! cap (hvx holds at most 256 writes of up to 8 KiB and persists anything larger), and request
 //! types other than IN/OUT/FLUSH answer UNSUPP instead of being treated as writes.
 
+use crate::disk::Disk;
 use crate::fnv::{fnv, fnv_u64};
 use crate::machine::{mix, GOLDEN};
 use hydo_hvx::cstr;
+use std::sync::Arc;
 
 /// device i at MMIO_BASE + i * MMIO_SIZE
 pub const MMIO_BASE: u64 = 0x0a00_0000;
@@ -227,7 +229,8 @@ pub struct Unsync {
     pub doff: u64,
     pub len: u32,
     pub valid: u32,
-    pub data: Vec<u8>,
+    /// shared by the copies of the cache (snapshots, checkpoints): never changed once held
+    pub data: Arc<[u8]>,
 }
 
 /// How the devices are configured (virtio.h's environment variables, read once).
@@ -252,20 +255,20 @@ pub struct Config {
 #[derive(Clone, Debug)]
 pub struct Save {
     s: VState,
-    disk: Option<Vec<u8>>,
-    tx: Option<Vec<u8>>,
+    disk: Option<Disk>,
+    tx: Option<Arc<Vec<u8>>>,
     cache: Vec<Unsync>,
 }
 
 pub struct Virtio {
     pub v: VState,
     pub vs: VStats,
-    /// the stable-media image (flushed bytes)
-    pub disk: Option<Vec<u8>>,
+    /// the stable-media image (flushed bytes), copy-on-write ([`crate::disk`])
+    pub disk: Option<Disk>,
     /// the volatile write cache, insertion order (`v.blk.n_unsync` entries)
     pub cache: Vec<Unsync>,
     net_rx: Vec<Vec<u8>>,
-    net_tx: Option<Vec<u8>>,
+    net_tx: Option<Arc<Vec<u8>>>,
     pub blk_idx: i32,
     pub net_idx: i32,
 }
@@ -350,6 +353,9 @@ const TX_SALT: u64 = 0x0054_0000_0000_0000;
 pub struct Ram<'a> {
     pub b: &'a mut [u8],
     pub base: u64,
+    /// When set, the index (offset / 4096) of every page a device writes is appended (the KVM
+    /// engine's rewind mode keeps a copy of guest RAM in step with the pages written).
+    pub dirty: Option<&'a mut Vec<u64>>,
 }
 
 impl Ram<'_> {
@@ -375,6 +381,9 @@ impl Ram<'_> {
         match self.ok(gpa, buf.len() as u64) {
             Some(o) => {
                 self.b[o..o + buf.len()].copy_from_slice(buf);
+                if let (Some(d), false) = (self.dirty.as_mut(), buf.is_empty()) {
+                    d.extend((o as u64 >> 12)..=((o + buf.len() - 1) as u64 >> 12));
+                }
                 true
             }
             None => false,
@@ -421,7 +430,7 @@ impl Virtio {
             net_idx: -1,
         };
         if let Some(dp) = &c.disk {
-            let d = std::fs::read(dp).map_err(|e| format!("{dp}: {e}"))?;
+            let d = Disk::open(dp).map_err(|e| format!("{dp}: {e}"))?;
             if d.len() % 512 != 0 || d.is_empty() {
                 return Err(format!("hvm: {dp}: size must be a nonzero multiple of 512"));
             }
@@ -456,7 +465,7 @@ impl Virtio {
                 .map(|p| cstr::strtoull0(p.as_bytes()))
                 .unwrap_or(4_800_000);
             x.v.net.rx_next_at = x.v.net.pace;
-            x.net_tx = Some(vec![0u8; NET_TX_CAP]);
+            x.net_tx = Some(Arc::new(vec![0u8; NET_TX_CAP]));
             if let Some(rp) = &c.net_rx {
                 let f = std::fs::read(rp).map_err(|e| format!("{rp}: {e}"))?;
                 let mut p = 0;
@@ -695,7 +704,7 @@ impl Virtio {
     pub fn hash(&self, mut h: u64) -> u64 {
         h = fnv(&self.v.bytes(), h);
         if let Some(d) = &self.disk {
-            h = fnv(&d[..self.v.blk.disk_size as usize], h);
+            d.for_each(self.v.blk.disk_size as usize, |b| h = fnv(b, h));
         }
         for c in self.cache.iter().take(self.v.blk.n_unsync as usize) {
             h = fnv_u64(c.doff, h);
@@ -721,10 +730,10 @@ impl Virtio {
     pub fn restore(&mut self, s: &Save) {
         self.v = s.s;
         if let (Some(d), Some(sd)) = (&mut self.disk, &s.disk) {
-            d.copy_from_slice(sd);
+            *d = sd.clone();
         }
         if let (Some(t), Some(st)) = (&mut self.net_tx, &s.tx) {
-            t.copy_from_slice(st);
+            *t = st.clone();
         }
         self.cache = s.cache.clone();
     }
@@ -732,7 +741,7 @@ impl Virtio {
     /// `virtio_finish`: HVM_DISK_OUT (stable media only) and HVM_NET_TX_OUT.
     pub fn finish(&self, c: &Config) {
         if let (Some(o), Some(d)) = (&c.disk_out, &self.disk) {
-            if let Err(e) = std::fs::write(o, &d[..self.v.blk.disk_size as usize]) {
+            if let Err(e) = d.write_file(o, self.v.blk.disk_size as usize) {
                 eprintln!("{o}: {e}");
             }
         }
@@ -860,10 +869,17 @@ impl Virtio {
             return false;
         };
         let disk = self.disk.as_mut().unwrap();
+        // through a buffer: the guest's range is checked whole first, as the slice copy did
+        let mut buf = vec![0u8; r.len()];
         if to_guest {
-            ram.write(gpa, &disk[r])
+            disk.read(r.start, &mut buf);
+            ram.write(gpa, &buf)
         } else {
-            ram.read(gpa, &mut disk[r])
+            if !ram.read(gpa, &mut buf) {
+                return false;
+            }
+            disk.write(r.start, &buf);
+            true
         }
     }
 
@@ -879,7 +895,7 @@ impl Virtio {
             doff,
             len,
             valid: 1,
-            data,
+            data: data.into(),
         });
         self.v.blk.n_unsync += 1;
         self.vs.held += 1;
@@ -916,7 +932,7 @@ impl Virtio {
         let disk = self.disk.as_mut().unwrap();
         for c in &self.cache {
             if c.valid != 0 {
-                disk[c.doff as usize..c.doff as usize + c.len as usize].copy_from_slice(&c.data);
+                disk.write(c.doff as usize, &c.data[..c.len as usize]);
                 self.vs.committed += 1;
             }
         }
@@ -1218,7 +1234,7 @@ impl Virtio {
         if at + 2 + n > NET_TX_CAP as u64 {
             return;
         }
-        let t = self.net_tx.as_mut().unwrap();
+        let t = Arc::make_mut(self.net_tx.as_mut().unwrap());
         let at = at as usize;
         t[at] = (n >> 8) as u8;
         t[at + 1] = n as u8;

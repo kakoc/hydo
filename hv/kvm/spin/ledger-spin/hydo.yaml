@@ -1,0 +1,67 @@
+# The Mac's ledger-spin example (hydo/onboard/examples-mac/ledger-spin) for x86_64, the KVM engine's
+# check of exit-free loops (docs/design/kvm-engine.md, Milestone 161): every request busy-waits in
+# user space for a timer signal, without a system call or a clock read; every tenth one counts
+# while it waits, a loop only the rewind mode resolves. bin/spin_load and bin/spin_count are
+# hv/kvm/spin/spinvar.c built by hv/kvm/spin/build.sh (MODE=1 and MODE=5).
+#   sh hv/kvm/spin/build.sh && hydo build hv/kvm/spin/ledger-spin/hydo.yaml
+#   hydo run --backend kvm --image hydo-out/explore-ob-ledger-spin-disk.img "disk=none | run"
+# The CGI is deliberately not idempotent: when a request is applied but its answer is lost
+# (the server paused or killed mid-request, the client timing out), the client's retry stores
+# the entry twice -- the invariant catches it.
+name: ledger-spin
+description: the ledger with a busy-wait per request; every acknowledged entry must be stored exactly once.
+
+root:
+  files:
+    - {src: www, dst: /www}
+    - {src: bin/spin_load, dst: /bin/spin_load, mode: "0755"}
+    - {src: bin/spin_count, dst: /bin/spin_count, mode: "0755"}
+
+data:
+  size_mib: 64
+  dirs: [ledger]
+
+provision: ": > /data/ledger/entries"
+
+services:
+  - name: front
+    cmd: /bin/busybox httpd -f -p 127.0.0.1:8080 -h /www
+    ready: wget -q -T 2 -O- http://127.0.0.1:8080/cgi-bin/ping | grep -q pong
+    port: 8080
+
+workload:
+  steps: 30
+  process: wget
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      r=$(wget -q -T 2 -O- "http://127.0.0.1:8080/cgi-bin/put?id=$i" 2>/dev/null)
+      if [ "$r" = "OK $i" ]; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      i=$((i + 1))
+    done
+  retry: |
+    for i in $(awk '{ o[$1] = $2 } END { for (i in o) if (o[i] != "ack") print i }' $HYDO_OUTCOMES | sort -n); do
+      r=$(wget -q -T 2 -O- "http://127.0.0.1:8080/cgi-bin/put?id=$i" 2>/dev/null)
+      if [ "$r" = "OK $i" ]; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES; fi
+    done
+
+invariants:
+  - id: ledger.acked_exactly_once
+    msg: every entry the client saw acknowledged is stored exactly once
+    cmd: |
+      for i in $(cat $HYDO_ACKED); do
+        n=$(grep -cx "$i" /data/ledger/entries)
+        [ "$n" = 1 ] || { echo "entry $i stored $n times"; exit 1; }
+      done
+      echo "acked=$(wc -l < $HYDO_ACKED) each stored once"
+  - id: ledger.no_duplicates
+    msg: no entry is ever stored twice
+    every: 1
+    final: true
+    cmd: |
+      d=$(sort /data/ledger/entries | uniq -d | head -1)
+      [ -z "$d" ] || { echo "entry $d stored twice"; exit 1; }
+      echo "no duplicates ($(wc -l < /data/ledger/entries) entries)"
+
+faults: [kill, pause, clock]

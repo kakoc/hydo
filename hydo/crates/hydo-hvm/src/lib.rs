@@ -26,13 +26,15 @@
 //! fingerprints; [`serve::Engine`]: one schedule, a lock-step stop); the text protocol is the
 //! adapter in [`serve`].
 //!
-//! `unsafe` is confined to [`hv`] (the framework's functions) and [`mem`] (page mappings). The
+//! `unsafe` is confined to [`hv`] (the framework's functions), [`mem`] (page mappings) and
+//! [`disk`] (the disk image's read-only mapping). The
 //! engine runs on Apple Silicon only; elsewhere the pure parts (the device tree, the devices,
 //! the machine state's layout, the hashes) build and are tested.
 
 // the port keeps the C loops' shape (indices shared by several arrays)
 #![allow(clippy::needless_range_loop)]
 
+pub mod disk;
 pub mod fdt;
 pub mod fnv;
 pub mod layout;

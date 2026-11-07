@@ -23,7 +23,10 @@
 #      reproduced;
 #   7. a kill, a pause, a clock step, an I/O error, tick jitter and forced preemption points,
 #      each twice the same;
-#   8. a network fault (the release's hydo-netem.yaml), twice the same.
+#   8. a network fault (the release's hydo-netem.yaml), twice the same;
+#   9. with SPIN_BIN=<dir with spin_load and spin_count from hv/kvm/spin/build.sh> (Milestone 161):
+#      the ledger-spin example (counter loops without exits), each run on each CPU of $CPUS twice:
+#      one fingerprint, OK, and the run went through the rewind mode.
 # Every wait has a time limit (`timeout`). It writes only under OUT.
 set -u
 HYDO=${HYDO:?HYDO=<hydo of this tree>}
@@ -138,6 +141,42 @@ if [ -f "$NIMG" ]; then
   IMG=$IMG0
 else
   bad "the netem image was not built"
+fi
+
+# 9. counter loops without exits: the ledger-spin example, resolved in the rewind mode
+if [ -n "${SPIN_BIN:-}" ]; then
+  LS=$OUT/ledger-spin
+  LIMG=$LS/hydo-out/explore-ob-ledger-spin-disk.img
+  if [ ! -f "$LIMG" ]; then
+    here=$(cd "$(dirname "$0")" && pwd)
+    mkdir -p "$LS/bin"
+    cp -R "$here/spin/ledger-spin/hydo.yaml" "$here/spin/ledger-spin/www" "$LS/"
+    cp "$SPIN_BIN/spin_load" "$SPIN_BIN/spin_count" "$LS/bin/"
+    (cd "$LS" && timeout "$T" "$REL/bin/hydo" build hydo.yaml >> "$LOG" 2>&1)
+  fi
+  if [ -f "$LIMG" ]; then
+    say "ledger-spin image: $(sha256sum "$LIMG" | cut -c1-16)..."
+    IMG0=$IMG; IMG=$LIMG
+    s="disk=none | run"
+    first=; same=0; n=0; rw=0
+    for c in $CPUS; do
+      for k in 1 2; do
+        r=$(run "$OUT/r-ls" "$s" "$c")
+        grep -q "ran it again in the engine's rewind mode" "$OUT/r-ls/engine.log" 2>/dev/null && rw=$((rw + 1))
+        [ -z "$first" ] && first=$r
+        [ "$r" = "$first" ] && same=$((same + 1))
+        n=$((n + 1))
+      done
+    done
+    say "  ledger-spin: $s: $first ($same of $n the same, $rw through the rewind mode)"
+    case "$first" in
+      *"HYDO-ORACLE: OK"*) if [ "$same" = "$n" ] && [ "$rw" = "$n" ]; then ok "counter loops: ledger-spin $n runs, one result"; else bad "counter loops: ledger-spin ($same of $n the same, $rw rewound)"; fi ;;
+      *) bad "counter loops: ledger-spin ($first)" ;;
+    esac
+    IMG=$IMG0
+  else
+    bad "the ledger-spin image was not built"
+  fi
 fi
 
 say "kvm-check: $pass passed, $fail failed ($(date -u))"
