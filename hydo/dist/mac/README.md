@@ -1,4 +1,4 @@
-# The Mac release of hydo
+removes the quarantine attribute, signs `bin/hydo-hvm` when it lacks the hypervisor entitlement (an unsigned build; a signed release is left as it is, M172) and records the signed bytes in `.hydo-setup` |# The Mac release of hydo
 
 `build-release.sh` turns the Mac backend into a self-contained tarball that a user installs with
 one command and runs with no Linux machine, no root and no other software: since Milestone 107
@@ -19,7 +19,7 @@ step 8).
 | Path | What |
 |---|---|
 | `bin/hydo`, `bin/hydo-build`, `bin/hydo-fetch-image` | the Rust programs (`aarch64-apple-darwin`, built by `build-release.sh` or taken from `$HYDO_RUST_BIN_DIR`): `hydo` is the one CLI (`hydo/crates/hydo-cli`; the same program as on Linux, with the same behaviour since Milestone 107), with the host controller that drives every image's guest agent (Milestone 136), `hydo-build` the image builder with its own command line (for scripts), `hydo-fetch-image` what the `fetch-images.sh` of `hydo compose` calls |
-| `bin/hydo-hvm`, `hv/hvm/hv.entitlements` | the Mac engine (`hydo/crates/hydo-hvm`, Rust since Milestone 143; the C `hvm` and `hvmx` were deleted in Milestone 147), signed with the hypervisor entitlement on the user's Mac by `hydo setup` (by `install.sh` before Milestone 154); it runs every guest, `hydo build`'s helper VM included |
+| `bin/hydo-hvm`, `hv/hvm/hv.entitlements` | the Mac engine (`hydo/crates/hydo-hvm`, Rust since Milestone 143; the C `hvm` and `hvmx` were deleted in Milestone 147), signed since Milestone 172 with the project's Developer ID (hardened runtime, secure timestamp, notarized; the hypervisor entitlement), the signature attached to the reproducible unsigned build (docs/design/signing.md); an unsigned build is signed ad hoc with the entitlement on the user's Mac by `hydo setup` (by `install.sh` before Milestone 154); it runs every guest, `hydo build`'s helper VM included |
 | `hv/hvm/explore/out/Image-explore` | the arm64 kernel (`hv/hvm/explore/build-guest.sh`, HVC idle) |
 | `hv/hvm/explore/out/Image-explore-netns` | the second arm64 kernel (`hv/hvm/explore/build-guest-netns.sh`, `806807e7…`, docs/BUILD-PINS.md): `Image-explore` plus network namespaces, veth, bridge and NFQUEUE, for manifests with `network: bridge`, `addr:` or `faults: [freeze]` (Milestone 99; shipped since Milestone 150) |
 | `guest/hydo-agent` | the guest agent (`hydo/crates/hydo-agent`, 0.3.0, aarch64 `099e5444…`), every image's first process; built from the tree by `hydo/crates/hydo-agent/build.sh`, and `hydo build` checks its pinned sha256 |
@@ -116,6 +116,17 @@ directory they differ only in the Mach-O `LC_UUID` (and the page hash of the ad-
 that covers it), because Apple's linker derives the UUID from the object files' paths.
 
 Nothing is published by the script; the tarball stays in `OUTDIR`.
+
+**Signed programs (Milestone 172, docs/design/signing.md).** The tarball `build-release.sh` writes
+is unsigned (the linker's ad-hoc signatures) and is not published. `sign-release.sh <tarball>
+<out>` (the key's owner, once per release) signs the four programs with the Developer ID, the
+hardened runtime and a secure timestamp (`bin/hydo-hvm` with the hypervisor entitlement),
+notarizes them (`notarytool`, keychain profile `hydo-notary`), writes the signatures asset
+`hydo-mac-<version>-signatures.tar.gz` (each program's signature blob, and the sha256 of each
+program unsigned and signed) and the signed tarball. `attach-signatures.sh <unsigned tarball>
+<signatures> <out>` gives anyone the published, signed tarball byte for byte from a build of the
+release's commit (both scripts pack with `pack-release.sh`, the packing step of
+`build-release.sh`).
 
 Since M158 the script also writes the license notices and the sources archive (docs/RELEASING.md).
 Before the release tree is checksummed, `hydo-release notices` (hydo/crates/hydo-release) writes

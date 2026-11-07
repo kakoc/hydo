@@ -685,3 +685,14 @@ iterations) is not an infinite loop, so nothing is proven: it runs on and, when 
 `HYDO_KVM_SPIN_SECS`, ends the run as a SPIN, as before; S0 and
 S1 are two RAM bases (S0 could be kept as the pages where it differs from S1); the image file's
 page cache counts in each process's resident set (shared and reclaimable, but visible in RSS).
+
+## Milestone 172: in the Linux release
+
+The Linux release ships the engine from 0.2.0 on: `bin/hydo-kvm` (the program; by default the
+engine runs inside `hydo`) and `guest/bzImage-kvm` (a pinned asset, `d50fbc67…`, with its own
+entry in the component list and its recipe in the sources archive). `hydo doctor` reports the
+engine's files and the state of `/dev/kvm`; the release's QUICKSTART has a section "Run without the
+kernel module (KVM)". The 0.2.0 candidate, installed with `install.sh --no-module` on the build
+machine, gave this document's values for the release's Redis image (`bfa03053d51bec8a`,
+`8ed16d6da60c34c6`, netem `0fcb6905c8f54cd1`, the exploration's 46 runs twice the same);
+docs/HISTORY.md "Milestone 172".

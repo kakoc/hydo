@@ -61,8 +61,8 @@ filled once from the machine with the Nix store paths).
   must hold every file of `assets.sha256` and nothing else: since 0.2.0 that includes the KVM
   engine's guest kernel `guest/bzImage-kvm` (`d50fbc67…`, built with a sandboxed Nix,
   docs/BUILD-PINS.md "The KVM engine's guest kernel"). `~/hydo-layout-assets` on the bare-metal
-  machine is 0.1.0's set (without it, and other trees' builds of 0.1.0 rely on that); Milestone
-  172 used `~/hydo-m172-assets`, hard links to it plus `guest/bzImage-kvm`. The sources cache
+  machine is 0.1.0's set, without the KVM kernel; leave it so, because other trees build 0.1.0
+  from it and the script copies the whole directory and counts its files. Milestone 172 used `~/hydo-m172-assets`, hard links to it plus `guest/bzImage-kvm`. The sources cache
   must hold the M158 addendum's files (`~/hydo-m159-sources` on the bare-metal machine;
   `~/hydo-m158-sources` lacks busybox's recipe).
 - **Mac, on this Mac.** Check `df -h /` (two builds and the sources archives need several GB).
@@ -133,7 +133,7 @@ file's bytes for the values of the local list (AGENTS.local.md, whole words, any
 paths, remote-shell words, dotted quads and the competitor names. Matches may only be in
 third-party files and must be explained. For each sources archive, scan the files hydo writes
 (`README.md`, `THIRD-PARTY.md`, `third-party.json`, `hydo/`); the upstream archives are third-party
-as they are.
+as they are. Scan the signed Mac tarball (not only the unsigned one) and the signatures asset too.
 
 ## 6. Collect and record
 

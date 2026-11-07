@@ -473,7 +473,9 @@ same bytes; the store path is `7hqyd9n0…-hydo-kvm-guest-kernel-6.6.35`; the RD
 bare-metal machine's single-user Nix (no sandbox) built that store path with the same bytes (as
 it did for the two earlier versions of the recipe, `c35de6f1…` and `1b4939d6…`); M159 rebuilt it
 from the transplanted recipe with `nix-build --check`, the same bytes again. The current pin was
-not built on the bare-metal machine. The recipe has no build-id notes (the
+not built on the bare-metal machine. Since Milestone 172 it is an asset of the Linux release (`guest/bzImage-kvm` in
+`hydo/dist/linux/assets.sha256`); the release builds took it from the build machine's store path
+`7hqyd9n0…` (sandboxed Nix), whose bytes are the pin. The recipe has no build-id notes (the
 kernel's and the vDSO's): with them, a build outside Nix's sandbox on the bare-metal machine gave
 the vDSO another build-id (20 bytes of `raw_data` in `.rodata`), and the kernel's own build-id was
 computed before `scripts/sorttable` sorted its tables. A `--check` rebuild outside the sandbox

@@ -633,6 +633,9 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         let authority = t.lines().find_map(|l| l.strip_prefix("Authority="));
         let team = t.lines().find_map(|l| l.strip_prefix("TeamIdentifier="));
         match (authority, team) {
+            (Some(a), Some(team)) if a.contains(&format!("({team})")) => {
+                println!("     signature: {a}")
+            }
             (Some(a), Some(team)) => println!("     signature: {a} (team {team})"),
             _ if t.contains("Signature=adhoc") => {
                 println!("     signature: ad hoc (signed on this Mac)")
