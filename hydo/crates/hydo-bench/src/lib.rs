@@ -18,6 +18,9 @@
 //! - `list`: a fixed list of schedules on one or more images (listrun.py).
 //! - `depth1map`: the trigger map of a defect from two depth-1 sweeps (no VM runs).
 //! - `d7prob`: how often the generators draw d7's measured trigger set (no VM runs).
+//! - `rebaseline`: every recorded example run of the machine's platform (hydo/onboard/recorded.json)
+//!   checked or re-recorded: each image built twice from the tree, each schedule run twice from
+//!   fresh boots, verdict changes, nondeterminism and unreproducible builds reported (M164).
 //! - `addbuggify`: route an order service's store calls through the BUGGIFY wrappers (a build step
 //!   of build-order-services.sh; of build-bench-bg.sh until M146).
 //!
@@ -32,5 +35,7 @@ pub mod confirm;
 pub mod defects;
 pub mod listrun;
 pub mod pools;
+pub mod rebaseline;
+pub mod recorded;
 
 pub use cli::main_with;

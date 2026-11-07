@@ -550,6 +550,15 @@ variables! {
     HYDO_CHECKS: Image, Image, "list", "", "written by hydo-build; read by hydo-control";
 
     // ------------------------------------------------------------------ Passed
+    /// `hydo-bench rebaseline`'s work folder, for its staging script
+    /// (`hydo/onboard/rebaseline/stage.sh`, M164).
+    HYDO_REBASE_WORK: Passed, Passed, "path", "", "set by hydo-bench rebaseline for hydo/onboard/rebaseline/stage.sh";
+    /// The folder of the inputs the staging script makes or fetches once (M164).
+    HYDO_REBASE_INPUTS: Passed, Passed, "path", "", "set by hydo-bench rebaseline for hydo/onboard/rebaseline/stage.sh";
+    /// The platform being re-baselined: `hvx`, `hvm` or `kvm` (M164).
+    HYDO_REBASE_PLATFORM: Passed, Passed, "text", "", "set by hydo-bench rebaseline for hydo/onboard/rebaseline/stage.sh";
+    /// The unpacked release whose guest files the staging script's prefix uses (M164).
+    HYDO_REBASE_RELEASE: Passed, Passed, "path", "", "set by hydo-bench rebaseline for hydo/onboard/rebaseline/stage.sh";
 }
 
 /// The variables removed in M144 and later.

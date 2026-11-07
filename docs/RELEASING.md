@@ -18,6 +18,15 @@ done is in docs/HISTORY.md (Milestones 149, 150, 153–158).
      Rust crate compiled into a shipped program has a license and license texts).
 3. `git grep -i` the competitor names AGENTS.md "No other product in hydo's space" names: only
    citations in research notes.
+4. The recorded example values are those of the final commit: `hydo-bench rebaseline --check` on
+   the bare-metal machine (every `hvx` image of `hydo/onboard/recorded.json`) and on a Mac (every
+   `hvm` image) exits 0 (docs/REBASELINE.md "How to re-baseline"). Exit status 1 is a verdict
+   change, a run whose two repetitions differ or an image that does not build twice to the same
+   bytes: find the cause before the release, because a user who rebuilds an example would see it.
+   Exit status 3 means only values moved: re-record with `--write`, review the list's diff and
+   commit it (with a raised `hydo_image::EPOCH` when an engine, the controller, the agent pin or a
+   guest kernel moved them). If this step is skipped, the release ships examples whose documented
+   values may no longer be what they give.
 
 ### When a shipped file, a pinned asset or a crate changes
 

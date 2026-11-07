@@ -5,7 +5,7 @@
 use crate::cells::{self, Cell};
 use crate::defects::{check_kind, Set};
 use crate::pools::Engines;
-use crate::{analysis, buggify, confirm, listrun};
+use crate::{analysis, buggify, confirm, listrun, rebaseline};
 use std::path::{Path, PathBuf};
 
 pub const USAGE: &str = "usage: hydo-bench <command> [options]   (hydo/bench/README.md)
@@ -27,6 +27,14 @@ pub const USAGE: &str = "usage: hydo-bench <command> [options]   (hydo/bench/REA
   depth1map DEFECT-SWEEP-DIR CONTROL-SWEEP-DIR [--sig REGEX] [--json FILE]
   d7prob   [--seeds 200000]
   addbuggify MAIN.GO [--check]
+  rebaseline [--check | --write [--accept-verdicts]] [--only NAME[,NAME...]] [--platform hvx|hvm|kvm]
+           [--jobs 1] [--changed-only] [--build-only] [--reuse-builds | --no-build] [--work DIR] [--inputs DIR]
+           [--release DIR] [--list FILE] [--timeout 3600] [--env K=V]...
+               every recorded example run of this machine's platform (hydo/onboard/recorded.json):
+               each image built twice from the tree, each schedule run twice from fresh boots, a
+               report of verdict changes, nondeterminism and unreproducible builds
+               (docs/REBASELINE.md \"How to re-baseline\"); exit 1 on any of those, 3 when only
+               values moved and --check did not write them
 
 Images are read from $HYDO_BUILD (default ~/hydo/build): the manifest-built agent images
 explore-ob-bench-<defect>-agent-disk.img (hydo/bench/build-bench-manifest.sh). --kind takes only agent (the
@@ -40,7 +48,7 @@ struct Opts {
     free: Vec<String>,
 }
 
-const FLAGS: [&str; 11] = [
+const FLAGS: [&str; 17] = [
     "--new-faults",
     "--buggify",
     "--bg-images",
@@ -52,6 +60,12 @@ const FLAGS: [&str; 11] = [
     "--check",
     "--table",
     "--dry",
+    "--write",
+    "--accept-verdicts",
+    "--changed-only",
+    "--reuse-builds",
+    "--no-build",
+    "--build-only",
 ];
 
 fn parse(argv: &[String]) -> Result<Opts, String> {
@@ -332,6 +346,102 @@ fn cmd_list(root: &Path, cfg: &hydo_config::Config, o: &Opts) -> Result<(), Stri
     Ok(())
 }
 
+fn cmd_rebaseline(root: &Path, cfg: &hydo_config::Config, o: &Opts) -> Result<i32, String> {
+    o.check(&[
+        "--check",
+        "--write",
+        "--accept-verdicts",
+        "--only",
+        "--platform",
+        "--jobs",
+        "--changed-only",
+        "--reuse-builds",
+        "--no-build",
+        "--build-only",
+        "--work",
+        "--inputs",
+        "--release",
+        "--list",
+        "--timeout",
+        "--env",
+    ])?;
+    if o.flag("--check") && o.flag("--write") {
+        return Err("--check and --write exclude each other".into());
+    }
+    if o.flag("--accept-verdicts") && !o.flag("--write") {
+        return Err("--accept-verdicts goes with --write".into());
+    }
+    if o.flag("--reuse-builds") && o.flag("--no-build") {
+        return Err("--reuse-builds and --no-build exclude each other".into());
+    }
+    if !o.free.is_empty() {
+        return Err(format!(
+            "rebaseline takes no arguments: {}",
+            o.free.join(" ")
+        ));
+    }
+    let platform = o
+        .get("--platform")
+        .unwrap_or(rebaseline::default_platform())
+        .to_string();
+    if !["hvx", "hvm", "kvm"].contains(&platform.as_str()) {
+        return Err(format!("--platform {platform}: hvx, hvm or kvm"));
+    }
+    let abs = |p: &str| -> PathBuf {
+        let p = PathBuf::from(p);
+        if p.is_absolute() {
+            p
+        } else {
+            std::env::current_dir().unwrap_or_default().join(p)
+        }
+    };
+    let work = o.get("--work").map(abs).unwrap_or_else(|| {
+        cfg.env
+            .home()
+            .join(".cache")
+            .join("hydo-rebaseline")
+            .join(&platform)
+    });
+    let extra_env = o
+        .all("--env")
+        .iter()
+        .map(|kv| {
+            kv.split_once('=')
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .ok_or(format!("--env {kv}: KEY=VALUE"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let opts = rebaseline::Opts {
+        root: root.canonicalize().unwrap_or(root.to_path_buf()),
+        list: o
+            .get("--list")
+            .map(abs)
+            .unwrap_or_else(|| root.join("hydo").join("onboard").join("recorded.json")),
+        inputs: o
+            .get("--inputs")
+            .map(abs)
+            .unwrap_or_else(|| work.join("in")),
+        work,
+        release: o.get("--release").map(abs),
+        platform,
+        only: o
+            .get("--only")
+            .map(|s| s.split(',').map(str::to_string).collect())
+            .unwrap_or_default(),
+        write: o.flag("--write"),
+        accept_verdicts: o.flag("--accept-verdicts"),
+        jobs: o.num("--jobs", 1)?,
+        changed_only: o.flag("--changed-only"),
+        reuse_builds: o.flag("--reuse-builds"),
+        no_build: o.flag("--no-build"),
+        build_only: o.flag("--build-only"),
+        timeout: o.num("--timeout", 3600)?,
+        quiet_file: cfg.pool.quiet_file.clone(),
+        extra_env,
+    };
+    rebaseline::rebaseline(&opts)
+}
+
 fn cmd_depth1map(o: &Opts) -> Result<(), String> {
     o.check(&["--sig", "--json"])?;
     let [d, c] = o.free.as_slice() else {
@@ -387,6 +497,23 @@ pub fn main_with(argv: &[String], root: &Path, cfg: &hydo_config::Config) -> i32
             .and_then(|_| o.num("--seeds", 200000i64))
             .map(|n| print!("{}", analysis::d7prob(n))),
         "addbuggify" => cmd_addbuggify(&o),
+        "rebaseline" => {
+            return match cmd_rebaseline(root, cfg, &o) {
+                Ok(code) => code,
+                Err(e) => {
+                    eprintln!("hydo-bench: {e}");
+                    if e.starts_with("unknown option")
+                        || e.contains("exclude each other")
+                        || e.contains("goes with")
+                        || e.starts_with("--")
+                    {
+                        2
+                    } else {
+                        1
+                    }
+                }
+            }
+        }
         "-h" | "--help" | "help" => {
             println!("{USAGE}");
             Ok(())
