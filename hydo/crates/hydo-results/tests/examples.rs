@@ -188,6 +188,9 @@ fn note(s: &mut Seen, r: &Record) {
         Record::End(_) => {
             s.types.insert("end".into());
         }
+        Record::Diff(_) => {
+            s.types.insert("diff".into());
+        }
     }
 }
 
@@ -238,7 +241,7 @@ fn every_example_parses_and_is_valid() {
         }
     }
     assert!(n > 0, "no examples");
-    for t in ["run", "exploration", "start", "shrink", "end"] {
+    for t in ["run", "exploration", "start", "shrink", "end", "diff"] {
         assert!(seen.types.contains(t), "no example has a {t} record");
     }
     for k in ["invariant", "assertion", "history-check", "error-log"] {

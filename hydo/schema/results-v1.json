@@ -17,6 +17,9 @@
     },
     {
       "$ref": "#/$defs/End"
+    },
+    {
+      "$ref": "#/$defs/Diff"
     }
   ],
   "$defs": {
@@ -1790,6 +1793,312 @@
       "type": "string",
       "enum": [
         "end"
+      ]
+    },
+    "Diff": {
+      "description": "`diff.json`: where two runs first differ (`hydo diff`, `hydo explain`; added in M165). The\nruns are aligned event by event, per conversation (the control transcripts' commands, notes\nand reports, and the guest's console lines); `first` is the first event that differs,\n`timing` the first shared event the two runs reach at another stop or guest time, and\n`first_outcome` the first difference in what the checks judge (acknowledged lists,\nassertions, history records, verdicts) among records both runs write.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/DiffType"
+        },
+        "hydo_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "a": {
+          "$ref": "#/$defs/DiffSide"
+        },
+        "b": {
+          "$ref": "#/$defs/DiffSide"
+        },
+        "neighbour": {
+          "description": "`hydo explain`: how run B's schedule was made from run A's (`without K=redis@11+1`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "levels": {
+          "description": "The sources compared (`control`, `console`, `result`).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "identical": {
+          "description": "No difference at the levels compared.",
+          "type": "boolean"
+        },
+        "first": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Divergence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Divergence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "first_outcome": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Divergence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "one_sided": {
+          "description": "Records of a kind the other run never writes (an assertion id it never reports), each at\nits first occurrence: often code only one of two images has.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DiffLine"
+          },
+          "default": []
+        },
+        "counts": {
+          "description": "Every difference, counted by conversation and level.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DiffCount"
+          },
+          "default": []
+        },
+        "hunks": {
+          "description": "The number of separate places where the runs differ.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "a",
+        "b",
+        "identical"
+      ]
+    },
+    "DiffType": {
+      "description": "The `type` of this record: always `\"diff\"`.",
+      "type": "string",
+      "enum": [
+        "diff"
+      ]
+    },
+    "DiffSide": {
+      "description": "One of the two runs of a diff (added in M165).",
+      "type": "object",
+      "properties": {
+        "dir": {
+          "description": "The run directory.",
+          "type": "string"
+        },
+        "schedule": {
+          "type": "string"
+        },
+        "image_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict": {
+          "$ref": "#/$defs/Verdict"
+        },
+        "fingerprints": {
+          "$ref": "#/$defs/Fingerprints"
+        }
+      },
+      "required": [
+        "dir",
+        "schedule",
+        "verdict",
+        "fingerprints"
+      ]
+    },
+    "Divergence": {
+      "description": "A place where two runs part (added in M165).",
+      "type": "object",
+      "properties": {
+        "conversation": {
+          "description": "The conversation it is in.",
+          "type": "string"
+        },
+        "level": {
+          "description": "The level of its first differing event (`timing` for a guest-time divergence).",
+          "type": "string"
+        },
+        "a": {
+          "description": "Where it is in run A and in run B (the first differing event, or, on the side that has\nnone, the next shared event).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiffPoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "b": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiffPoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "context": {
+          "description": "The events both runs share right before it, oldest first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DiffLine"
+          },
+          "default": []
+        },
+        "lines": {
+          "description": "The differing events: those only A has (`a` set) and those only B has (`b` set).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DiffLine"
+          },
+          "default": []
+        },
+        "details": {
+          "description": "What differs inside two events of the same kind (`only in B: 11`, `env: only in A: ...`).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "conversation",
+        "level"
+      ]
+    },
+    "DiffPoint": {
+      "description": "Where an event of one run is in that run (added in M165): its conversation, the number of the\nstop that saw it (the control transcript's `n`) and the engine's virtual clock at it (hvx's\ninstruction clock, hvm's exit count).",
+      "type": "object",
+      "properties": {
+        "conversation": {
+          "description": "`boot`, `run` or `recovery`.",
+          "type": "string"
+        },
+        "stop": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "at": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "conversation"
+      ]
+    },
+    "DiffLine": {
+      "description": "One event of a diff (added in M165): its level, its text, and where it is in each run (absent\non the side that does not have it).",
+      "type": "object",
+      "properties": {
+        "level": {
+          "description": "`control` (a command the host typed, an engine action), `controller` (the host\ncontroller's notes and reports), `guest` (a line the guest printed), `assertion`,\n`assertion-decl`, `history`, `fake-world`, `error-log`, `composer`, `outcome` (the\nacknowledged and failed lists, the end of a conversation) or `verdict`.",
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "a": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiffPoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "b": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiffPoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "after": {
+          "description": "The host controller's last note before it in the run that has it (`hydo-ob: KILLED redis\nbefore step 11`): where in the workload it happened.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "level",
+        "text"
+      ]
+    },
+    "DiffCount": {
+      "description": "How many events of one level one run has and the other does not (added in M165).",
+      "type": "object",
+      "properties": {
+        "conversation": {
+          "type": "string"
+        },
+        "level": {
+          "type": "string"
+        },
+        "only_a": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "only_b": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "conversation",
+        "level",
+        "only_a",
+        "only_b"
       ]
     }
   }
