@@ -288,7 +288,10 @@ changed in hydo in this work (each in its own commit, with a test or a proof).
    `fb4341ae9ce0c5fc`) with the same control transcript (`a7245f9c1b8b4cdb`), the same console and
    the same verdict; `hydo diff` found no difference at any level it records. On the next image
    the same schedule gave one fingerprint in 14 of 14 runs (4 pinned to a performance core, 4 to
-   an efficiency core, 6 unpinned), and on the final image in 2 of 2. Not explained.
+   an efficiency core, 6 unpinned), and on the final image in 2 of 2. Not explained. (Both were
+   fresh boots without a power cut, so friction 19's cause, a restored snapshot, does not apply.
+   Later, on the final image rebuilt from this folder with the same bytes, three pairs of
+   simultaneous runs gave `212221ec4b83cb9b` six times.)
 19. **A snapshot run that differs from a fresh boot (KVM engine).** On the image "set once" of
    finding 3, every schedule tried gives one fingerprint from a fresh boot (`hydo run`) and
    another from the explorer's worker, which restores its snapshot S1 for every run; each is the
