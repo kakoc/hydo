@@ -1431,11 +1431,14 @@ fn scripts(o: &OciService, home: &str, shares: Option<&str>) -> (String, String)
         BINDS.join(" ")
     );
     if let Some(owner) = shares {
-        // the shared tree first, then the binds and mounts on this service's own mount of it
+        // the shared tree first, then the binds and mounts on this service's own mount of it.
+        // Once per boot: /proc/mounts decides, because busybox `mountpoint` compares the device
+        // with the parent's, and a bind of the same root file system has the same device (a
+        // restart stacked a second bind over the first and hid the service's own mounts).
         head = head.replacen(
             "for d in",
             &format!(
-                "$BB mountpoint -q $R || $BB mount --bind /oci/{owner} $R || exit 125\nfor d in"
+                "$BB grep -q \" $R \" /proc/mounts || $BB mount --bind /oci/{owner} $R || exit 125\nfor d in"
             ),
             1,
         );
