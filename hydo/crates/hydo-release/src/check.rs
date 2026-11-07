@@ -14,13 +14,20 @@ fn is_hex64(s: &str) -> bool {
 }
 
 /// Every component has an id, a name, a version, a license, files, license texts that exist, and
-/// a source; a copyleft component's source archive is included and pinned; source files are
-/// pinned by sha256 and named once; repository files exist.
+/// a source; a copyleft component's source archive is included and pinned, and when Nix built
+/// it, its build recipe too (the attribute of an included nixpkgs tree, or its derivation
+/// closure); source files are pinned by sha256 and named once; repository files exist.
 pub fn components(repo: &Path, p: Platform, list: &List) -> Vec<String> {
     let lp = p.list_path();
     let mut errs = Vec::new();
     let mut ids = BTreeSet::new();
     let mut files: BTreeMap<&str, (&str, &str)> = BTreeMap::new();
+    let included_files: BTreeSet<&str> = list
+        .components
+        .iter()
+        .flat_map(|c| c.included_sources().map(|(f, _)| f))
+        .chain([list.nixpkgs.archive.as_str()])
+        .collect();
     for c in &list.components {
         let at = format!("{lp}: component {:?}", c.id);
         if c.id.is_empty() || !ids.insert(c.id.as_str()) {
@@ -118,6 +125,39 @@ pub fn components(repo: &Path, p: Platform, list: &List) -> Vec<String> {
                 if !o.starts_with("/nix/store/") || o[11..].contains('/') {
                     errs.push(format!("{at}: nix out {o:?} is not a store path"));
                 }
+            }
+            if let Some(d) = &n.drv {
+                if !d.starts_with("/nix/store/") || d[11..].contains('/') || !d.ends_with(".drv") {
+                    errs.push(format!(
+                        "{at}: nix drv {d:?} is not the store path of a derivation"
+                    ));
+                }
+            }
+            for (k, f) in [("nixpkgs", &n.nixpkgs), ("recipe", &n.recipe)] {
+                if let Some(f) = f {
+                    if !included_files.contains(f.as_str()) {
+                        errs.push(format!(
+                            "{at}: its nix \"{k}\" names {f}, which no component includes: add it to the \"sources\" (with \"file\", \"sha256\" and \"from\") of the component it belongs to"
+                        ));
+                    }
+                }
+            }
+            if n.nixpkgs.is_some() && n.attr.is_none() {
+                errs.push(format!(
+                    "{at}: its nix entry names the nixpkgs tree {} but not the attribute that built {}: add \"attr\"",
+                    n.nixpkgs.as_deref().unwrap_or(""),
+                    n.out.join(", ")
+                ));
+            }
+            // A copyleft component built by Nix must have its build recipe in the sources
+            // archive: the attribute of an included nixpkgs tree that built it (the pinned one,
+            // or the tree "nixpkgs" names), or its recovered derivation closure ("recipe").
+            if crate::copyleft(&c.license) && n.attr.is_none() && n.recipe.is_none() {
+                errs.push(format!(
+                    "{at}: its license {:?} is copyleft and Nix built {}, but its build recipe is not recorded: name the nixpkgs attribute that built it (\"attr\"; with \"nixpkgs\" when the tree is not the pinned one, included as a source), or include its derivation closure (\"recipe\", a source fetched with fetch-sources.sh's nix-recipe:)",
+                    c.license,
+                    n.out.join(", ")
+                ));
             }
         }
     }

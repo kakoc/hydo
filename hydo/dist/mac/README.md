@@ -123,10 +123,19 @@ configurations and build recipes, the list and the notices, reproducible like th
 archives come from a sources cache: `HYDO_SOURCES_FROM=DIR`, else `hydo/dist/mac/sources/` (not
 tracked), filled once from the machine with the Nix store paths by `hydo/dist/fetch-sources.sh`.
 
-## The current tarball and its sources archive (Milestone 158)
+## The current tarball and its sources archive (Milestone 158 and its addendum)
+
+**The sources archive since the Milestone 158 addendum:** `hydo-mac-0.1.0-sources.tar.gz`,
+690,031,169 bytes, sha256 `27527e482e299b75fa60df0194deb90d6f180165bec3d1d80e53061d6b1b850e`, built
+by `hydo-release` from commit `1a88c31` twice on this Mac and twice on the bare-metal machine, with
+the same bytes all four times (the archive does not depend on the building host). Against M158's (`d97e7dc7…`) only
+three of hydo's own files in it differ: `hydo/dist/fetch-sources.sh`, `docs/BUILD-PINS.md` and
+`docs/RELEASING.md`; every upstream archive and the member list are the same. The tarball did not
+change: regenerating its `LICENSE`, `licenses/` and `THIRD-PARTY.md` with that commit gives the
+same 429 files, so the tarball of M158 below stays the current one.
 
 `hydo-mac-0.1.0.tar.gz`, 30,270,684 bytes, sha256
-`5c02e7f364424e97aad67a7fa91b73d29a8466e5fe17ea4bd540edc06dac9806`, and
+`5c02e7f364424e97aad67a7fa91b73d29a8466e5fe17ea4bd540edc06dac9806`, and (until the addendum)
 `hydo-mac-0.1.0-sources.tar.gz`, 690,029,509 bytes, sha256
 `d97e7dc7f08aa2e4ba21c7bc0594b978bc8457d3d96977c438918abda0b94272` (87 entries; 46 source files under
 `upstream/`), built twice on this Mac from commit `e29c664` (M158's license work; one tree path,
