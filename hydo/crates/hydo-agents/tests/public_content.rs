@@ -17,7 +17,10 @@
 //! and names between the lines `<!-- public-content-forbidden: begin -->` and
 //! `<!-- public-content-forbidden: end -->`, one `` - `value` `` per line. When the file exists,
 //! no tracked file at all (recorded data included) may contain one of them as a word
-//! (case-insensitive). Without the file (a fresh clone, a release tarball) that part is skipped.
+//! (case-insensitive), except as the owner in the project's public names (`PublicNames`): the
+//! repositories `github.com/<owner>/hydo` and `github.com/<owner>/homebrew-tap`, and the Homebrew
+//! tap `<owner>/tap` with its formula `<owner>/tap/hydo`. Without the file (a fresh clone, a
+//! release tarball) that part is skipped.
 //! Run from a tree that is not a git checkout, the test only says so.
 
 use regex::Regex;
@@ -160,6 +163,49 @@ impl Rules {
     }
 }
 
+/// The project's public names, which carry the GitHub owner's name because the owner published
+/// them: the repository `github.com/<owner>/hydo` (its releases, the packages' repository field),
+/// the Homebrew tap's repository `github.com/<owner>/homebrew-tap`, and the tap and its formula as
+/// `brew` names them, `<owner>/tap` and `<owner>/tap/hydo` (Milestone 168). The owner in each is
+/// replaced by `<owner>` before the concrete values are looked for; the same name anywhere else
+/// on the line still fails.
+struct PublicNames {
+    github: Regex,
+    tap: Regex,
+}
+
+impl PublicNames {
+    fn new() -> PublicNames {
+        PublicNames {
+            github: Regex::new(
+                r"(?i)(github\.com/)[A-Za-z0-9-]+(/(?:hydo|homebrew-tap)(?:[^A-Za-z0-9_-]|$))",
+            )
+            .unwrap(),
+            tap: Regex::new(
+                r"(^|[^A-Za-z0-9_./~-])[A-Za-z0-9-]+(/tap(?:/hydo)?(?:[^A-Za-z0-9_/-]|$))",
+            )
+            .unwrap(),
+        }
+    }
+
+    /// The line with the owner in each public name replaced by `<owner>`.
+    fn hide_owner(&self, line: &str) -> String {
+        if !line.contains('/') {
+            return line.to_string();
+        }
+        // a match takes the character after it, so adjacent names need another pass
+        let mut s = line.to_string();
+        loop {
+            let next = self.github.replace_all(&s, "${1}<owner>${2}");
+            let next = self.tap.replace_all(&next, "${1}<owner>${2}").into_owned();
+            if next == s {
+                return s;
+            }
+            s = next;
+        }
+    }
+}
+
 /// One case-insensitive whole-word pattern per concrete value.
 fn value_patterns(values: &[String]) -> Vec<(String, Regex)> {
     values
@@ -207,6 +253,39 @@ fn rules_catch_what_they_should() {
     assert!(pats[0].1.is_match("rsync f ALPHA-ONE:dir/"));
     assert!(!pats[0].1.is_match("alpha-ones"));
     assert!(pats[1].1.is_match("as beta@two."));
+    // the project's public names hide their owner's name, and only there
+    let owner = value_patterns(&["owner1".to_string()]);
+    let names = PublicNames::new();
+    for (line, caught) in [
+        ("module github.com/owner1/hydo/sdk/go", false),
+        ("\"url\": \"git+https://github.com/Owner1/hydo.git\"", false),
+        (
+            "https://github.com/owner1/hydo/releases/download/v0.1.0/x.tar.gz",
+            false,
+        ),
+        ("https://github.com/owner1/homebrew-tap", false),
+        ("brew install owner1/tap/hydo", false),
+        (
+            "`brew tap owner1/tap` and `brew audit owner1/tap/hydo`",
+            false,
+        ),
+        ("brew untap owner1/tap owner1/tap", false),
+        (
+            "see https://github.com/owner1/hydo and /home/owner1/x",
+            true,
+        ),
+        ("https://github.com/owner1/hydo-other", true),
+        ("https://github.com/owner1/other", true),
+        ("owner1/tap/other", true),
+        ("/home/owner1/tap", true),
+        ("owner1@machine", true),
+    ] {
+        assert_eq!(
+            owner[0].1.is_match(&names.hide_owner(line)),
+            caught,
+            "{line}"
+        );
+    }
 }
 
 #[test]
@@ -232,6 +311,7 @@ fn tracked_files_have_no_machine_access_details() {
         }
     };
     let pats = value_patterns(&values);
+    let names = PublicNames::new();
     let r = Rules::new();
     let mut problems = Vec::new();
     let mut checked = 0;
@@ -251,8 +331,9 @@ fn tracked_files_have_no_machine_access_details() {
                     problems.push(format!("{path}:{}: {why}: {}", n + 1, shown()));
                 }
             }
+            let public = names.hide_owner(line);
             for (_, re) in &pats {
-                if re.is_match(line) {
+                if re.is_match(&public) {
                     problems.push(format!(
                         "{path}:{}: a value listed in AGENTS.local.md: {}",
                         n + 1,

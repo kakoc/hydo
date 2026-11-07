@@ -18,6 +18,21 @@ its default retention; it reproduces the SQLite 3.51.2 WAL-reset corruption.
 **Status: experimental.** The engines and the product work and are tested, but interfaces and
 formats may still change between versions.
 
+## Install
+
+On an Apple Silicon Mac with macOS 13 or later, the easiest way is Homebrew:
+
+```sh
+brew install kakoc/tap/hydo
+hydo doctor
+```
+
+The formula (https://github.com/kakoc/homebrew-tap) installs the prebuilt Mac release and runs
+`hydo setup`, which checks every file and signs the virtual-machine engine with the hypervisor
+entitlement. Alternatively, download `hydo-mac-<version>.tar.gz` (or, for Linux on x86_64 with
+Intel VT-x, `hydo-linux-<version>.tar.gz`) from https://github.com/kakoc/hydo/releases, unpack it
+and run its `install.sh`; the tarball's README or `QUICKSTART-mac.md` takes it from there.
+
 ## How it fits together
 
 ```
